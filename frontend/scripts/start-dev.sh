@@ -7,7 +7,7 @@ set -euo pipefail
 # Change to the frontend directory (where this script is located, go up one level)
 cd "$(dirname "$0")/.."
 
-PORT=${PORT:-5173}
+PORT=${PORT:-3000}
 
 echo "[start-dev] ensuring port ${PORT} is free..."
 
