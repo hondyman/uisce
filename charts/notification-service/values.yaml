@@ -1,0 +1,242 @@
+# Notification Service Helm Values
+# Multi-channel alerting and messaging service
+
+replicaCount: 2
+
+image:
+  repository: semlayerprodacr.azurecr.io/semlayer/notification-service
+  pullPolicy: IfNotPresent
+  tag: ""
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  create: true
+  annotations: {}
+  name: ""
+
+podAnnotations:
+  prometheus.io/scrape: "true"
+  prometheus.io/port: "9090"
+  prometheus.io/path: "/metrics"
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  runAsGroup: 1000
+  fsGroup: 1000
+
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop:
+    - ALL
+
+service:
+  type: ClusterIP
+  port: 8080
+  metricsPort: 9090
+
+ingress:
+  enabled: false
+
+resources:
+  limits:
+    cpu: "1"
+    memory: 2Gi
+  requests:
+    cpu: "250m"
+    memory: 512Mi
+
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 70
+  targetMemoryUtilizationPercentage: 80
+
+nodeSelector:
+  kubernetes.azure.com/agentpool: app
+
+tolerations: []
+
+affinity:
+  podAntiAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+    - weight: 100
+      podAffinityTerm:
+        labelSelector:
+          matchExpressions:
+          - key: app.kubernetes.io/name
+            operator: In
+            values:
+            - notification-service
+        topologyKey: topology.kubernetes.io/zone
+
+topologySpreadConstraints:
+- maxSkew: 1
+  topologyKey: topology.kubernetes.io/zone
+  whenUnsatisfiable: ScheduleAnyway
+  labelSelector:
+    matchLabels:
+      app.kubernetes.io/name: notification-service
+
+livenessProbe:
+  httpGet:
+    path: /healthz
+    port: 8080
+  initialDelaySeconds: 15
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 3
+
+readinessProbe:
+  httpGet:
+    path: /readyz
+    port: 8080
+  initialDelaySeconds: 5
+  periodSeconds: 5
+  timeoutSeconds: 3
+  failureThreshold: 3
+
+startupProbe:
+  httpGet:
+    path: /healthz
+    port: 8080
+  initialDelaySeconds: 5
+  periodSeconds: 5
+  timeoutSeconds: 3
+  failureThreshold: 30
+
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 1
+
+# Notification Service Configuration
+config:
+  database:
+    host: semlayer-postgresql.postgres.database.azure.com
+    port: 5432
+    name: notifications
+    sslMode: require
+    maxConnections: 20
+
+  cache:
+    enabled: true
+    host: semlayer-redis.redis.cache.windows.net
+    port: 6380
+    tls: true
+
+  # Message queue
+  queue:
+    type: servicebus
+    namespace: semlayer-servicebus
+    queueName: notifications
+    maxConcurrency: 50
+
+  # Notification channels
+  channels:
+    email:
+      enabled: true
+      provider: sendgrid
+      fromAddress: notifications@semlayer.io
+      rateLimit: 1000/minute
+    sms:
+      enabled: true
+      provider: twilio
+      rateLimit: 100/minute
+    slack:
+      enabled: true
+      rateLimit: 500/minute
+    teams:
+      enabled: true
+      rateLimit: 500/minute
+    webhook:
+      enabled: true
+      timeout: 30s
+      retries: 3
+    push:
+      enabled: true
+      provider: firebase
+
+  # Template management
+  templates:
+    storage: database
+    caching: true
+    cacheTTL: 3600
+
+  # Rate limiting
+  rateLimiting:
+    enabled: true
+    perTenant: true
+    defaultLimit: 10000/hour
+
+  # Retry settings
+  retry:
+    maxAttempts: 5
+    backoff: exponential
+    initialDelay: 1s
+    maxDelay: 5m
+
+  # Multi-tenant
+  multiTenant:
+    enabled: true
+    isolation: schema
+
+env:
+- name: LOG_LEVEL
+  value: "info"
+- name: LOG_FORMAT
+  value: "json"
+- name: ENVIRONMENT
+  value: "production"
+
+secrets:
+  useAzureKeyVault: true
+  keyVaultName: semlayer-prod-kv
+  keys:
+  - name: database-password
+    secretName: db-password
+  - name: redis-password
+    secretName: redis-password
+  - name: sendgrid-api-key
+    secretName: sendgrid-api-key
+  - name: twilio-auth-token
+    secretName: twilio-auth-token
+  - name: slack-bot-token
+    secretName: slack-bot-token
+
+extraVolumes:
+- name: config
+  configMap:
+    name: notification-service-config
+- name: templates
+  configMap:
+    name: notification-templates
+- name: tmp
+  emptyDir: {}
+
+extraVolumeMounts:
+- name: config
+  mountPath: /app/config
+  readOnly: true
+- name: templates
+  mountPath: /app/templates
+  readOnly: true
+- name: tmp
+  mountPath: /tmp
+
+istio:
+  enabled: true
+  virtualService:
+    enabled: true
+    timeout: 30s
+    retries:
+      attempts: 3
+      perTryTimeout: 10s
+      retryOn: "5xx,reset,connect-failure"
+  destinationRule:
+    enabled: true

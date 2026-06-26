@@ -1,0 +1,44 @@
+name: Hybrid Stack CI
+
+on: [push, pull_request]
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    services:
+      trino:
+        image: trinodb/trino:latest
+        ports: ['8080:8080']
+
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup CUE
+        run: |
+          curl -sSfL https://github.com/cuelang/cue/releases/download/v0.5.0/cue_0.5.0_linux_amd64.tar.gz | tar -xz
+          sudo mv cue /usr/local/bin/
+          
+      - name: Validate CUE pack
+        run: cue vet ./cue
+          
+      - name: Setup Node
+        uses: actions/setup-node@v3
+        with:
+            node-version: 18
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Setup Go
+        uses: actions/setup-go@v4
+        with:
+            go-version: '1.21'
+            
+      - name: Run Backend Tests
+        run: go test ./backend/...
+
+      - name: Dry-run Semantic Diff
+        run: |
+          # Placeholder for dry-run script
+          echo "Executing dry-run diff against staging..."
+          # node scripts/dryrun-diff.js

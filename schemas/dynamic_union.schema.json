@@ -1,0 +1,104 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Dynamic Union Table Contract",
+  "description": "Schema for dynamic union table definitions in the semantic layer",
+  "type": "object",
+  "properties": {
+    "node_id": {
+      "type": "string",
+      "description": "Unique identifier for the union table node"
+    },
+    "node_type": {
+      "type": "string",
+      "enum": ["dynamic_union"],
+      "description": "Type of semantic node"
+    },
+    "name": {
+      "type": "string",
+      "description": "Human-readable name for the union table"
+    },
+    "description": {
+      "type": "string",
+      "description": "Description of the union table purpose"
+    },
+    "source_tables": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "List of source table names to union",
+      "minItems": 1
+    },
+    "union_type": {
+      "type": "string",
+      "enum": ["UNION ALL", "UNION"],
+      "default": "UNION ALL",
+      "description": "Type of union operation"
+    },
+    "union_sql": {
+      "type": "string",
+      "description": "Generated SQL for the union operation"
+    },
+    "table_aliases": {
+      "type": "object",
+      "description": "Optional aliases for source tables",
+      "additionalProperties": {
+        "type": "string"
+      }
+    },
+    "tags": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Tags for categorization and filtering"
+    },
+    "owner": {
+      "type": "string",
+      "description": "Owner/steward responsible for this union"
+    },
+    "version": {
+      "type": "string",
+      "description": "Version of the union definition"
+    },
+    "golden_path": {
+      "type": "boolean",
+      "default": false,
+      "description": "Whether this union is part of the golden path"
+    },
+    "schema_hash": {
+      "type": "string",
+      "description": "Hash of the schema for drift detection"
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Creation timestamp"
+    },
+    "updated_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Last update timestamp"
+    },
+    "review_status": {
+      "type": "string",
+      "enum": ["draft", "pending_review", "approved", "rejected"],
+      "default": "draft",
+      "description": "Current review status"
+    },
+    "review_comments": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "user": { "type": "string" },
+          "comment": { "type": "string" },
+          "timestamp": { "type": "string", "format": "date-time" },
+          "action": { "type": "string" }
+        }
+      },
+      "description": "Review comments and audit trail"
+    }
+  },
+  "required": ["node_id", "node_type", "source_tables", "union_sql", "owner", "version"]
+}

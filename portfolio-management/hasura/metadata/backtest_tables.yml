@@ -1,0 +1,461 @@
+---
+# Hasura Metadata - backtest_tables.yml
+# GraphQL configuration for backtest engine
+
+tables:
+- table:
+    schema: public
+    name: backtest_results
+  object_relationships:
+  - name: recommendation
+    using:
+      foreign_key_constraint_on: recommendation_id
+  - name: portfolio
+    using:
+      foreign_key_constraint_on: portfolio_id
+  array_relationships:
+  - name: monte_carlo_results
+    using:
+      foreign_key_constraint_on:
+        column: backtest_result_id
+        table:
+          schema: public
+          name: monte_carlo_results
+  - name: comparison_1
+    using:
+      foreign_key_constraint_on:
+        column: backtest_id_1
+        table:
+          schema: public
+          name: backtest_comparisons
+  - name: comparison_2
+    using:
+      foreign_key_constraint_on:
+        column: backtest_id_2
+        table:
+          schema: public
+          name: backtest_comparisons
+  select_permissions:
+  - role: user
+    permission:
+      columns:
+      - id
+      - recommendation_id
+      - portfolio_id
+      - simulation_type
+      - start_date
+      - end_date
+      - baseline_return
+      - recommendation_return
+      - alpha_generated
+      - beta_adjusted_return
+      - sharpe_ratio_baseline
+      - sharpe_ratio_recommended
+      - max_drawdown_baseline
+      - max_drawdown_recommended
+      - tax_savings_accumulated
+      - transaction_costs
+      - net_benefit
+      - confidence
+      - simulation_data
+      - created_at
+      filter:
+        portfolio:
+          user_id:
+            _eq: X-Hasura-User-Id
+  insert_permissions:
+  - role: user
+    permission:
+      check:
+        portfolio:
+          user_id:
+            _eq: X-Hasura-User-Id
+      columns:
+      - recommendation_id
+      - portfolio_id
+      - simulation_type
+      - start_date
+      - end_date
+      - baseline_return
+      - recommendation_return
+      - alpha_generated
+      - net_benefit
+      - confidence
+      - simulation_data
+
+- table:
+    schema: public
+    name: historical_prices
+  select_permissions:
+  - role: user
+    permission:
+      columns:
+      - id
+      - ticker
+      - date
+      - open_price
+      - high_price
+      - low_price
+      - close_price
+      - volume
+      - adjusted_close
+      - source
+      filter: {}
+  insert_permissions:
+  - role: admin
+    permission:
+      check: {}
+      columns:
+      - ticker
+      - date
+      - open_price
+      - high_price
+      - low_price
+      - close_price
+      - volume
+      - adjusted_close
+      - source
+
+- table:
+    schema: public
+    name: monte_carlo_results
+  object_relationships:
+  - name: backtest_result
+    using:
+      foreign_key_constraint_on: backtest_result_id
+  select_permissions:
+  - role: user
+    permission:
+      columns:
+      - id
+      - backtest_result_id
+      - simulation_day
+      - path_id
+      - portfolio_value
+      - daily_return
+      - cumulative_return
+      - max_drawdown_to_date
+      - created_at
+      filter:
+        backtest_result:
+          portfolio:
+            user_id:
+              _eq: X-Hasura-User-Id
+
+- table:
+    schema: public
+    name: backtest_comparisons
+  object_relationships:
+  - name: portfolio
+    using:
+      foreign_key_constraint_on: portfolio_id
+  - name: recommendation_1
+    using:
+      foreign_key_constraint_on: recommendation_id_1
+  - name: recommendation_2
+    using:
+      foreign_key_constraint_on: recommendation_id_2
+  - name: backtest_result_1
+    using:
+      foreign_key_constraint_on: backtest_id_1
+  - name: backtest_result_2
+    using:
+      foreign_key_constraint_on: backtest_id_2
+  select_permissions:
+  - role: user
+    permission:
+      columns:
+      - id
+      - portfolio_id
+      - recommendation_id_1
+      - recommendation_id_2
+      - backtest_id_1
+      - backtest_id_2
+      - winner
+      - winner_confidence
+      - performance_diff
+      - risk_adjusted_diff
+      - created_at
+      filter:
+        portfolio:
+          user_id:
+            _eq: X-Hasura-User-Id
+---
+# Hasura Actions - backtest_actions.yml
+
+actions:
+- name: runBacktest
+  definition:
+    kind: synchronous
+    arguments:
+    - name: recommendation_id
+      type: uuid!
+    - name: portfolio_id
+      type: uuid!
+    - name: start_date
+      type: DateTime!
+    - name: end_date
+      type: DateTime!
+    output_type: BacktestResult!
+    headers:
+    - name: Content-Type
+      value: application/json
+  handler:
+    url_from_env: BACKTEST_SERVICE_URL
+    request_transform:
+      url: /api/backtest/run
+      method: POST
+      body: '{"recommendation_id":"{{$body.input.recommendation_id}}","portfolio_id":"{{$body.input.portfolio_id}}","start_date":"{{$body.input.start_date}}","end_date":"{{$body.input.end_date}}"}'
+      content_type: application/json
+
+- name: compareBacktests
+  definition:
+    kind: synchronous
+    arguments:
+    - name: portfolio_id
+      type: uuid!
+    - name: recommendation_id_1
+      type: uuid!
+    - name: recommendation_id_2
+      type: uuid!
+    output_type: BacktestComparison!
+    headers:
+    - name: Content-Type
+      value: application/json
+  handler:
+    url_from_env: BACKTEST_SERVICE_URL
+    request_transform:
+      url: /api/backtest/compare
+      method: POST
+      body: '{"portfolio_id":"{{$body.input.portfolio_id}}","recommendation_id_1":"{{$body.input.recommendation_id_1}}","recommendation_id_2":"{{$body.input.recommendation_id_2}}"}'
+      content_type: application/json
+
+- name: getBacktestResults
+  definition:
+    kind: synchronous
+    arguments:
+    - name: portfolio_id
+      type: uuid!
+    - name: limit
+      type: Int
+    output_type: '[BacktestResultItem!]!'
+    headers:
+    - name: Content-Type
+      value: application/json
+  handler:
+    url_from_env: BACKTEST_SERVICE_URL
+    request_transform:
+      url: /api/backtest/results?portfolio_id={{$body.input.portfolio_id}}&limit={{$body.input.limit}}
+      method: GET
+---
+# Custom Types - backtest_types.yml
+
+types:
+  BacktestResult:
+    description: Result of a backtest simulation
+    fields:
+      id:
+        type: ID!
+        description: Backtest result ID
+      recommendation_id:
+        type: ID!
+        description: Recommendation being tested
+      portfolio_id:
+        type: ID!
+        description: Portfolio being tested
+      simulation_type:
+        type: String!
+        description: Type of simulation (HISTORICAL, FORWARD, MONTE_CARLO)
+      start_date:
+        type: DateTime!
+        description: Simulation start date
+      end_date:
+        type: DateTime!
+        description: Simulation end date
+      baseline_return:
+        type: Float!
+        description: Return of baseline portfolio
+      recommendation_return:
+        type: Float!
+        description: Return with recommendation applied
+      alpha_generated:
+        type: Float!
+        description: Alpha generated by recommendation
+      beta_adjusted_return:
+        type: Float
+        description: Beta-adjusted return
+      sharpe_ratio_baseline:
+        type: Float
+        description: Sharpe ratio of baseline portfolio
+      sharpe_ratio_recommended:
+        type: Float
+        description: Sharpe ratio with recommendation
+      max_drawdown_baseline:
+        type: Float
+        description: Maximum drawdown of baseline
+      max_drawdown_recommended:
+        type: Float
+        description: Maximum drawdown with recommendation
+      tax_savings_accumulated:
+        type: Float
+        description: Tax savings from loss harvesting
+      transaction_costs:
+        type: Float
+        description: Estimated transaction costs
+      net_benefit:
+        type: Float
+        description: Total net benefit (alpha + tax savings - costs)
+      confidence:
+        type: Float
+        description: Model confidence score (0-1)
+      simulation_data:
+        type: JSON
+        description: Detailed daily simulation data
+      created_at:
+        type: DateTime!
+        description: When backtest was created
+
+  BacktestResultItem:
+    description: Backtest result summary
+    fields:
+      id:
+        type: ID!
+      recommendation_id:
+        type: ID!
+      alpha_generated:
+        type: Float!
+      net_benefit:
+        type: Float!
+      confidence:
+        type: Float!
+      created_at:
+        type: DateTime!
+
+  BacktestComparison:
+    description: Comparison between two recommendations
+    fields:
+      id:
+        type: ID!
+        description: Comparison ID
+      portfolio_id:
+        type: ID!
+        description: Portfolio being compared
+      recommendation_id_1:
+        type: ID!
+        description: First recommendation
+      recommendation_id_2:
+        type: ID!
+        description: Second recommendation
+      backtest_id_1:
+        type: ID!
+        description: First backtest result
+      backtest_id_2:
+        type: ID!
+        description: Second backtest result
+      winner:
+        type: String!
+        description: Winner (recommendation_1, recommendation_2, or tied)
+      winner_confidence:
+        type: Float!
+        description: Confidence in winner
+      performance_diff:
+        type: Float!
+        description: Performance difference
+      risk_adjusted_diff:
+        type: Float!
+        description: Risk-adjusted return difference
+
+  DailySimulation:
+    description: Daily simulation data point
+    fields:
+      date:
+        type: DateTime!
+      baseline_value:
+        type: Float!
+      recommendation_value:
+        type: Float!
+      baseline_return:
+        type: Float!
+      recommendation_return:
+        type: Float!
+      difference:
+        type: Float!
+      cumulative_alpha:
+        type: Float!
+      tax_event_triggered:
+        type: Boolean!
+      tax_savings_incremental:
+        type: Float!
+
+  MonteCarloPath:
+    description: Monte Carlo simulation path
+    fields:
+      path_id:
+        type: Int!
+      final_value:
+        type: Float!
+      final_return:
+        type: Float!
+      max_drawdown:
+        type: Float!
+      percentile:
+        type: Float!
+---
+
+# GraphQL Queries
+
+# Example: Get backtest results for portfolio
+# query GetBacktestResults($portfolioId: uuid!, $limit: Int) {
+#   backtest_results(
+#     where: {portfolio_id: {_eq: $portfolioId}}
+#     order_by: {created_at: desc}
+#     limit: $limit
+#   ) {
+#     id
+#     recommendation_id
+#     simulation_type
+#     baseline_return
+#     recommendation_return
+#     alpha_generated
+#     net_benefit
+#     confidence
+#     created_at
+#   }
+# }
+
+# Example: Run backtest mutation
+# mutation RunBacktest(
+#   $rec_id: uuid!
+#   $port_id: uuid!
+#   $start: DateTime!
+#   $end: DateTime!
+# ) {
+#   runBacktest(
+#     recommendation_id: $rec_id
+#     portfolio_id: $port_id
+#     start_date: $start
+#     end_date: $end
+#   ) {
+#     id
+#     alpha_generated
+#     net_benefit
+#     confidence
+#   }
+# }
+
+# Example: Compare recommendations
+# mutation CompareBacktests(
+#   $port: uuid!
+#   $rec1: uuid!
+#   $rec2: uuid!
+# ) {
+#   compareBacktests(
+#     portfolio_id: $port
+#     recommendation_id_1: $rec1
+#     recommendation_id_2: $rec2
+#   ) {
+#     winner
+#     winner_confidence
+#     performance_diff
+#   }
+# }

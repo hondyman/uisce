@@ -1,0 +1,111 @@
+{
+    "name": "trade_settlement_with_ai_audit",
+    "description": "Trade settlement workflow with automated AI-generated audit documentation",
+    "version": "1.0.0",
+    "nodes": {
+        "validate_trade": {
+            "id": "validate_trade",
+            "type": "ACTIVITY",
+            "config": {
+                "activityName": "ValidateTrade",
+                "inputMapping": {
+                    "trade": "$.context.trade"
+                }
+            },
+            "next": "compliance_check"
+        },
+        "compliance_check": {
+            "id": "compliance_check",
+            "type": "ACTIVITY",
+            "config": {
+                "activityName": "ActivityCheckCompliance",
+                "tradeType": "equity",
+                "jurisdiction": "US"
+            },
+            "next": "settlement_risk"
+        },
+        "settlement_risk": {
+            "id": "settlement_risk",
+            "type": "ACTIVITY",
+            "config": {
+                "activityName": "ActivityPredictSettlementRisk",
+                "inputMapping": {
+                    "counterparty": "$.context.trade.counterparty",
+                    "amount": "$.context.trade.value"
+                },
+                "outputMapping": {
+                    "riskScore": "$.context.riskScore"
+                }
+            },
+            "next": "risk_decision"
+        },
+        "risk_decision": {
+            "id": "risk_decision",
+            "type": "BRANCH",
+            "config": {
+                "conditionField": "$.context.riskScore",
+                "operator": "gt",
+                "value": 0.7,
+                "trueNext": "manual_review",
+                "falseNext": "auto_settle"
+            }
+        },
+        "manual_review": {
+            "id": "manual_review",
+            "type": "ACTIVITY",
+            "config": {
+                "activityName": "ActivityUserInteraction",
+                "viewDefinitionName": "settlement_review_form",
+                "title": "High-Risk Settlement Review",
+                "description": "This trade has been flagged for manual review due to elevated risk score"
+            },
+            "next": "execute_settlement"
+        },
+        "auto_settle": {
+            "id": "auto_settle",
+            "type": "ACTIVITY",
+            "config": {
+                "activityName": "ExecuteSettlement",
+                "mode": "automatic"
+            },
+            "next": "generate_audit_summary"
+        },
+        "execute_settlement": {
+            "id": "execute_settlement",
+            "type": "ACTIVITY",
+            "config": {
+                "activityName": "ExecuteSettlement",
+                "mode": "manual_approved"
+            },
+            "next": "generate_audit_summary"
+        },
+        "generate_audit_summary": {
+            "id": "generate_audit_summary",
+            "type": "ACTIVITY",
+            "config": {
+                "activityName": "ActivityGenerateContent",
+                "prompt": "You are an auditor. Based on the following final workflow state, write a concise, one-paragraph summary of the trade settlement process, including the final outcome and any exceptions that occurred.\n\n### Workflow Context\nTrade ID: {{.context.trade.id}}\nValue: {{.context.trade.value}}\nCounterparty: {{.context.trade.counterparty}}\nRisk Score: {{.context.riskScore}}\nSettlement Status: {{.context.settlementStatus}}\n\n### Write a professional audit summary:"
+            },
+            "output_mapping": {
+                "auditSummary": "$.result"
+            },
+            "next": "persist_audit"
+        },
+        "persist_audit": {
+            "id": "persist_audit",
+            "type": "ACTIVITY",
+            "config": {
+                "activityName": "DurableLedgerWrite",
+                "entryType": "TRADE_SETTLEMENT_AUDIT",
+                "inputMapping": {
+                    "tradeId": "$.context.trade.id",
+                    "auditSummary": "$.context.auditSummary",
+                    "riskScore": "$.context.riskScore",
+                    "completedAt": "$.context.completedAt"
+                }
+            },
+            "next": null
+        }
+    },
+    "startNodeId": "validate_trade"
+}

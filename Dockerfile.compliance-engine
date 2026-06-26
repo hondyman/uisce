@@ -1,0 +1,31 @@
+# Compliance Engine Dockerfile
+FROM golang:1.23-alpine AS builder
+
+WORKDIR /build
+
+# Copy only what we need for this service
+COPY backend/services/compliance-engine/go.mod backend/services/compliance-engine/go.sum ./
+RUN go mod download
+
+# Copy source code
+COPY backend/services/compliance-engine .
+
+# Build the binary
+RUN CGO_ENABLED=0 GOOS=linux go build -o /app/compliance-engine ./cmd/compliance-engine
+
+# Final stage
+FROM alpine:latest
+
+RUN apk update && apk --no-cache add --allow-untrusted ca-certificates wget
+
+WORKDIR /app
+
+# Copy binary
+COPY --from=builder /app/compliance-engine .
+
+# Copy policy files
+COPY backend/services/compliance-engine/policy ./policy
+
+EXPOSE 8090
+
+CMD ["./compliance-engine"]

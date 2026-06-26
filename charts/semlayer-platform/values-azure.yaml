@@ -1,0 +1,429 @@
+# Azure-specific Helm values for Semlayer Platform
+
+global:
+  # Azure Container Registry
+  image:
+    registry: semlayerprodacr.azurecr.io
+    repository: semlayer
+    pullPolicy: IfNotPresent
+
+  # Multi-region settings
+  cloud: azure
+  region: eastus
+  environment: production
+
+  # Domain configuration
+  domain: semlayer.io
+  ingressClass: azure/application-gateway
+
+  # TLS settings - using Azure Key Vault
+  tls:
+    enabled: true
+    # Certificates stored in Key Vault
+    keyVaultCertificateName: semlayer-tls
+
+  # Service mesh - use Azure Service Mesh (Istio-based) or OSM
+  serviceMesh:
+    type: istio # or "osm" for Open Service Mesh
+    enabled: true
+    mtls:
+      mode: STRICT
+
+  # Multi-tenancy
+  tenancy:
+    isolation: namespace
+    defaultTier: standard
+
+  # Azure Database for PostgreSQL
+  postgresql:
+    host: semlayer-prod-postgres.postgres.database.azure.com
+    port: 5432
+    database: semlayer
+    sslmode: require
+    # Credentials from Azure Key Vault
+    existingSecret: azure-keyvault-secrets
+    secretKeys:
+      username: postgresql-username
+      password: postgresql-password
+
+  # Azure Cache for Redis
+  redis:
+    host: semlayer-prod-redis.redis.cache.windows.net
+    port: 6380
+    ssl: true
+    # Credentials from Azure Key Vault
+    existingSecret: azure-keyvault-secrets
+    secretKeys:
+      password: redis-primary-key
+
+  # Azure Service Bus
+  serviceBus:
+    namespace: semlayer-prod-servicebus.servicebus.windows.net
+    # Using Managed Identity for auth
+    useManagedIdentity: true
+
+  # Azure Key Vault
+  keyVault:
+    name: semlayer-prod-kv
+    tenantId: "" # Set via --set
+
+  # Azure AD / Entra ID
+  azureAD:
+    tenantId: "" # Set via --set
+    enabled: true
+
+  # Observability - Azure Monitor
+  observability:
+    azureMonitor:
+      enabled: true
+      workspaceId: "" # Set via --set
+    prometheus:
+      enabled: true
+    applicationInsights:
+      enabled: true
+      connectionString: "" # Set via --set
+
+# =============================================================================
+# API Gateway Configuration
+# =============================================================================
+api-gateway:
+  enabled: true
+
+  replicaCount: 3
+
+  image:
+    tag: "1.0.0"
+
+  resources:
+    requests:
+      cpu: 250m
+      memory: 256Mi
+    limits:
+      cpu: 1000m
+      memory: 512Mi
+
+  autoscaling:
+    enabled: true
+    minReplicas: 3
+    maxReplicas: 50
+    targetCPUUtilizationPercentage: 60
+
+  # Azure Application Gateway Ingress
+  ingress:
+    enabled: true
+    className: azure-application-gateway
+    annotations:
+      appgw.ingress.kubernetes.io/ssl-redirect: "true"
+      appgw.ingress.kubernetes.io/backend-protocol: "http"
+      appgw.ingress.kubernetes.io/connection-draining: "true"
+      appgw.ingress.kubernetes.io/connection-draining-timeout: "30"
+      appgw.ingress.kubernetes.io/cookie-based-affinity: "false"
+      appgw.ingress.kubernetes.io/request-timeout: "60"
+      appgw.ingress.kubernetes.io/waf-policy-for-path: "/subscriptions/{subId}/resourceGroups/{rgName}/providers/Microsoft.Network/applicationGatewayWebApplicationFirewallPolicies/semlayer-prod-waf-policy"
+    hosts:
+    - host: api.semlayer.io
+      paths:
+      - path: /
+        pathType: Prefix
+    tls:
+    - secretName: semlayer-tls
+      hosts:
+      - api.semlayer.io
+
+  # Azure AD authentication
+  auth:
+    provider: azure-ad
+    tenantId: "" # Set via --set
+    clientId: "" # Set via --set
+    audience: api://semlayer
+
+  # Workload Identity for Azure services
+  serviceAccount:
+    annotations:
+      azure.workload.identity/client-id: "" # Set via --set
+      azure.workload.identity/tenant-id: "" # Set via --set
+
+  podLabels:
+    azure.workload.identity/use: "true"
+
+# =============================================================================
+# Semantic Engine Configuration
+# =============================================================================
+semantic-engine:
+  enabled: true
+
+  replicaCount: 2
+
+  resources:
+    requests:
+      cpu: 500m
+      memory: 512Mi
+    limits:
+      cpu: 2000m
+      memory: 2Gi
+
+  serviceAccount:
+    annotations:
+      azure.workload.identity/client-id: ""
+      azure.workload.identity/tenant-id: ""
+
+  podLabels:
+    azure.workload.identity/use: "true"
+
+# =============================================================================
+# Cube.js API Configuration
+# =============================================================================
+cube-api:
+  enabled: true
+
+  replicaCount: 5
+
+  resources:
+    requests:
+      cpu: 500m
+      memory: 1Gi
+    limits:
+      cpu: 2000m
+      memory: 4Gi
+
+  autoscaling:
+    enabled: true
+    minReplicas: 5
+    maxReplicas: 100
+
+  # Cube workers tolerate Spot instances
+  tolerations:
+  - key: "kubernetes.azure.com/scalesetpriority"
+    operator: "Equal"
+    value: "spot"
+    effect: "NoSchedule"
+
+  nodeSelector:
+    workload: cube
+
+  serviceAccount:
+    annotations:
+      azure.workload.identity/client-id: ""
+      azure.workload.identity/tenant-id: ""
+
+  podLabels:
+    azure.workload.identity/use: "true"
+
+# =============================================================================
+# Governance Engine Configuration
+# =============================================================================
+governance-engine:
+  enabled: true
+
+  replicaCount: 3
+
+  resources:
+    requests:
+      cpu: 250m
+      memory: 256Mi
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+
+  serviceAccount:
+    annotations:
+      azure.workload.identity/client-id: ""
+      azure.workload.identity/tenant-id: ""
+
+  podLabels:
+    azure.workload.identity/use: "true"
+
+# =============================================================================
+# AI Builder Configuration
+# =============================================================================
+ai-builder:
+  enabled: true
+
+  replicaCount: 2
+
+  resources:
+    requests:
+      cpu: 1000m
+      memory: 2Gi
+    limits:
+      cpu: 4000m
+      memory: 8Gi
+
+  # GPU support for AI inference
+  nodeSelector:
+    workload: ai
+    # agentpool: gpu  # Uncomment for GPU nodes
+
+  tolerations:
+  - key: "nvidia.com/gpu"
+    operator: "Exists"
+    effect: "NoSchedule"
+
+  serviceAccount:
+    annotations:
+      azure.workload.identity/client-id: ""
+      azure.workload.identity/tenant-id: ""
+
+  podLabels:
+    azure.workload.identity/use: "true"
+
+  # Azure OpenAI integration
+  azureOpenAI:
+    enabled: true
+    endpoint: "" # Set via --set
+    deploymentName: gpt-4
+
+# =============================================================================
+# Compliance Engine Configuration
+# =============================================================================
+compliance-engine:
+  enabled: true
+
+  replicaCount: 2
+
+  serviceAccount:
+    annotations:
+      azure.workload.identity/client-id: ""
+      azure.workload.identity/tenant-id: ""
+
+  podLabels:
+    azure.workload.identity/use: "true"
+
+# =============================================================================
+# Audit Service Configuration
+# =============================================================================
+audit-service:
+  enabled: true
+
+  replicaCount: 3
+
+  # Use Azure Blob Storage for long-term audit log storage
+  storage:
+    type: azure-blob
+    containerName: audit-logs
+    storageAccountName: "" # Set via --set
+
+  serviceAccount:
+    annotations:
+      azure.workload.identity/client-id: ""
+      azure.workload.identity/tenant-id: ""
+
+  podLabels:
+    azure.workload.identity/use: "true"
+
+# =============================================================================
+# Data Services - Use Azure Managed Services
+# =============================================================================
+postgresql:
+  enabled: false # Using Azure Database for PostgreSQL
+
+redis-cluster:
+  enabled: false # Using Azure Cache for Redis
+
+rabbitmq:
+  enabled: false # Using Azure Service Bus
+
+# =============================================================================
+# Observability - Azure Monitor Integration
+# =============================================================================
+monitoring:
+  enabled: true
+
+  # Prometheus for custom metrics (alongside Azure Monitor)
+  prometheus:
+    prometheusSpec:
+      retention: 7d # Short retention, Azure Monitor for long-term
+      storageSpec:
+        volumeClaimTemplate:
+          spec:
+            storageClassName: managed-premium
+            resources:
+              requests:
+                storage: 50Gi
+
+  grafana:
+    enabled: true
+    # Azure AD authentication for Grafana
+    grafana.ini:
+      auth.azuread:
+        enabled: true
+        allow_sign_up: true
+        client_id: "" # Set via --set
+        client_secret: "" # Set via --set
+        scopes: openid email profile
+        auth_url: https://login.microsoftonline.com/{tenant}/oauth2/v2.0/authorize
+        token_url: https://login.microsoftonline.com/{tenant}/oauth2/v2.0/token
+
+    # Azure Monitor data source
+    additionalDataSources:
+    - name: Azure Monitor
+      type: grafana-azure-monitor-datasource
+      access: proxy
+      jsonData:
+        cloudName: azuremonitor
+        subscriptionId: "" # Set via --set
+        tenantId: "" # Set via --set
+        clientId: "" # Set via --set
+      secureJsonData:
+        clientSecret: "" # Set via --set
+
+# =============================================================================
+# Azure-specific Storage Classes
+# =============================================================================
+storageClasses:
+- name: managed-premium
+  provisioner: disk.csi.azure.com
+  parameters:
+    skuName: Premium_LRS
+  reclaimPolicy: Retain
+  volumeBindingMode: WaitForFirstConsumer
+  allowVolumeExpansion: true
+
+- name: managed-premium-zrs
+  provisioner: disk.csi.azure.com
+  parameters:
+    skuName: Premium_ZRS
+  reclaimPolicy: Retain
+  volumeBindingMode: WaitForFirstConsumer
+  allowVolumeExpansion: true
+
+# =============================================================================
+# Azure Key Vault SecretProviderClass
+# =============================================================================
+secretProviderClass:
+  enabled: true
+  provider: azure
+  parameters:
+    usePodIdentity: "false"
+    useVMManagedIdentity: "false"
+    clientID: "" # Workload Identity client ID
+    keyvaultName: semlayer-prod-kv
+    tenantId: "" # Azure AD tenant ID
+    objects: |
+      array:
+        - |
+          objectName: postgresql-password
+          objectType: secret
+        - |
+          objectName: redis-primary-key
+          objectType: secret
+        - |
+          objectName: cube-api-secret
+          objectType: secret
+
+# =============================================================================
+# Network Policies (Azure CNI)
+# =============================================================================
+networkPolicies:
+  enabled: true
+
+  defaultDeny: true
+
+  # Azure-specific egress rules
+  egressRules:
+  - name: allow-azure-services
+    to:
+    - ipBlock:
+        cidr: 168.63.129.16/32 # Azure metadata service
+    - ipBlock:
+        cidr: 169.254.169.254/32 # Instance metadata

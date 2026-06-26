@@ -1,0 +1,590 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>RBAC Role Management - Enhanced Forms</title>
+  <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+  <link rel="preconnect" href="https://fonts.gstatic.com/" crossorigin />
+  <link
+    rel="stylesheet"
+    href="https://fonts.googleapis.com/css2?display=swap&family=Inter:wght@400;500;600;700;900&family=Noto+Sans:wght@400;500;700;900"
+  />
+  <style>
+    body {
+      font-family: Inter, "Noto Sans", sans-serif;
+    }
+    
+    /* Tooltip styles */
+    .tooltip {
+      position: relative;
+    }
+    
+    .tooltip::after {
+      content: attr(data-tooltip);
+      position: absolute;
+      bottom: 100%;
+      left: 50%;
+      transform: translateX(-50%);
+      margin-bottom: 8px;
+      padding: 6px 12px;
+      background-color: #1f2937;
+      color: white;
+      font-size: 12px;
+      border-radius: 6px;
+      white-space: nowrap;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.3s;
+      z-index: 10;
+    }
+    
+    .tooltip:hover::after {
+      opacity: 1;
+    }
+    
+    /* Action button styles */
+    .action-btn {
+      width: 36px;
+      height: 36px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 6px;
+      transition: all 0.2s;
+      cursor: pointer;
+    }
+    
+    .action-btn-view {
+      color: #3d87f5;
+    }
+    
+    .action-btn-view:hover {
+      background-color: #dbeafe;
+    }
+    
+    .action-btn-edit {
+      color: #16a34a;
+    }
+    
+    .action-btn-edit:hover {
+      background-color: #dcfce7;
+    }
+    
+    .action-btn-delete {
+      color: #dc2626;
+    }
+    
+    .action-btn-delete:hover {
+      background-color: #fee2e2;
+    }
+  </style>
+</head>
+<body class="bg-slate-50">
+  <!-- SECTION 1: ROLE SUMMARY / LIST VIEW -->
+  <section id="role-summary" class="min-h-screen bg-slate-50">
+    <!-- Header -->
+    <header class="flex items-center justify-between border-b border-[#e7ecf4] px-10 py-3 bg-white">
+      <div class="flex items-center gap-4">
+        <div class="w-8 h-8 bg-gradient-to-br from-[#3d87f5] to-[#2d6fd4] rounded-lg flex items-center justify-center">
+          <span style="font-size: 18px">🔐</span>
+        </div>
+        <h1 class="text-lg font-bold text-[#0d131c]">CloudRBAC</h1>
+      </div>
+      <div class="flex items-center gap-9">
+        <a href="#" class="text-[#0d131c] text-sm font-medium hover:text-[#3d87f5] transition-colors">Dashboard</a>
+        <a href="#" class="text-[#0d131c] text-sm font-medium hover:text-[#3d87f5] transition-colors">Roles</a>
+        <a href="#" class="text-[#0d131c] text-sm font-medium hover:text-[#3d87f5] transition-colors">Users</a>
+        <a href="#" class="text-[#0d131c] text-sm font-medium hover:text-[#3d87f5] transition-colors">Groups</a>
+      </div>
+      <div class="w-10 h-10 bg-gradient-to-br from-blue-400 to-blue-600 rounded-full"></div>
+    </header>
+
+    <!-- Main Content -->
+    <div class="px-10 py-8">
+      <div class="max-w-7xl mx-auto">
+        <!-- Title and Create Button -->
+        <div class="flex items-center justify-between mb-6">
+          <h2 class="text-3xl font-bold text-[#0d131c]">Roles</h2>
+          <button class="px-4 py-2 bg-[#3d87f5] text-white text-sm font-semibold rounded-lg hover:bg-[#2d6fd4] transition-colors shadow-sm">
+            + Create Role
+          </button>
+        </div>
+
+        <!-- Filters and Search -->
+        <div class="bg-white rounded-lg border border-[#e7ecf4] mb-6 p-4">
+          <div class="space-y-4">
+            <!-- Search Bar -->
+            <div class="flex gap-4">
+              <div class="flex-1 relative">
+                <svg class="absolute left-3 top-3 w-5 h-5 text-[#496a9c]" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+                </svg>
+                <input
+                  type="text"
+                  placeholder="Search roles by name, key, or description..."
+                  class="w-full pl-10 pr-4 py-2 border border-[#ced9e8] rounded-lg bg-slate-50 focus:outline-none focus:ring-2 focus:ring-[#3d87f5] text-sm"
+                />
+              </div>
+            </div>
+
+            <!-- Filter Controls -->
+            <div class="flex gap-3 flex-wrap">
+              <div class="flex items-center gap-2">
+                <svg class="w-4 h-4 text-[#496a9c]" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4"></path>
+                </svg>
+                <select class="px-3 py-2 border border-[#ced9e8] rounded-lg bg-white text-sm focus:outline-none focus:ring-2 focus:ring-[#3d87f5]">
+                  <option>All Levels</option>
+                  <option>System</option>
+                  <option>Organization</option>
+                  <option>Team</option>
+                  <option>Project</option>
+                  <option>External</option>
+                </select>
+              </div>
+
+              <select class="px-3 py-2 border border-[#ced9e8] rounded-lg bg-white text-sm focus:outline-none focus:ring-2 focus:ring-[#3d87f5] ml-auto">
+                <option>Sort by Name</option>
+                <option>Sort by Level</option>
+                <option>Sort by Users</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <!-- Results Count -->
+        <div class="mb-4 text-sm text-[#496a9c]">Showing 5 of 5 roles</div>
+
+        <!-- Roles Table -->
+        <div class="bg-white rounded-lg border border-[#e7ecf4] overflow-hidden">
+          <div class="overflow-x-auto">
+            <table class="w-full">
+              <thead>
+                <tr class="border-b border-[#e7ecf4] bg-slate-50">
+                  <th class="px-6 py-4 text-left text-xs font-semibold text-[#0d131c] uppercase tracking-wider">Role</th>
+                  <th class="px-6 py-4 text-left text-xs font-semibold text-[#0d131c] uppercase tracking-wider">Key</th>
+                  <th class="px-6 py-4 text-left text-xs font-semibold text-[#0d131c] uppercase tracking-wider">Level</th>
+                  <th class="px-6 py-4 text-left text-xs font-semibold text-[#0d131c] uppercase tracking-wider">Description</th>
+                  <th class="px-6 py-4 text-center text-xs font-semibold text-[#0d131c] uppercase tracking-wider">Permissions</th>
+                  <th class="px-6 py-4 text-center text-xs font-semibold text-[#0d131c] uppercase tracking-wider">Users</th>
+                  <th class="px-6 py-4 text-center text-xs font-semibold text-[#0d131c] uppercase tracking-wider">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                <!-- Row 1: Administrator -->
+                <tr class="border-b border-[#e7ecf4] hover:bg-slate-50 transition-colors">
+                  <td class="px-6 py-4">
+                    <div class="font-medium text-[#0d131c]">Administrator</div>
+                    <div class="text-xs text-[#496a9c]">Created 2024-01-15</div>
+                  </td>
+                  <td class="px-6 py-4">
+                    <code class="text-sm bg-slate-100 px-2 py-1 rounded text-[#0d131c] font-mono">admin</code>
+                  </td>
+                  <td class="px-6 py-4">
+                    <span class="inline-block px-3 py-1 rounded-full text-xs font-semibold bg-red-50 text-red-700 border border-red-200">System</span>
+                  </td>
+                  <td class="px-6 py-4 max-w-xs">
+                    <p class="text-sm text-[#496a9c] truncate">Full access to all features and data.</p>
+                  </td>
+                  <td class="px-6 py-4 text-center">
+                    <span class="inline-block bg-blue-50 text-blue-700 px-3 py-1 rounded-full text-sm font-medium">24</span>
+                  </td>
+                  <td class="px-6 py-4 text-center">
+                    <span class="text-sm font-medium text-[#0d131c]">3</span>
+                  </td>
+                  <td class="px-6 py-4">
+                    <div class="flex items-center justify-center gap-2">
+                      <!-- View Icon -->
+                      <button class="action-btn action-btn-view tooltip" data-tooltip="View">
+                        <svg class="w-4 h-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path>
+                        </svg>
+                      </button>
+                      <!-- Edit Icon -->
+                      <button class="action-btn action-btn-edit tooltip" data-tooltip="Edit">
+                        <svg class="w-4 h-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path>
+                        </svg>
+                      </button>
+                      <!-- Delete Icon -->
+                      <button class="action-btn action-btn-delete tooltip" data-tooltip="Delete">
+                        <svg class="w-4 h-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+                        </svg>
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+
+                <!-- Row 2: Manager -->
+                <tr class="border-b border-[#e7ecf4] hover:bg-slate-50 transition-colors">
+                  <td class="px-6 py-4">
+                    <div class="font-medium text-[#0d131c]">Manager</div>
+                    <div class="text-xs text-[#496a9c]">Created 2024-01-20</div>
+                  </td>
+                  <td class="px-6 py-4">
+                    <code class="text-sm bg-slate-100 px-2 py-1 rounded text-[#0d131c] font-mono">manager</code>
+                  </td>
+                  <td class="px-6 py-4">
+                    <span class="inline-block px-3 py-1 rounded-full text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-200">Organization</span>
+                  </td>
+                  <td class="px-6 py-4 max-w-xs">
+                    <p class="text-sm text-[#496a9c] truncate">Manage users, roles, and basic settings.</p>
+                  </td>
+                  <td class="px-6 py-4 text-center">
+                    <span class="inline-block bg-blue-50 text-blue-700 px-3 py-1 rounded-full text-sm font-medium">18</span>
+                  </td>
+                  <td class="px-6 py-4 text-center">
+                    <span class="text-sm font-medium text-[#0d131c]">12</span>
+                  </td>
+                  <td class="px-6 py-4">
+                    <div class="flex items-center justify-center gap-2">
+                      <button class="action-btn action-btn-view tooltip" data-tooltip="View">
+                        <svg class="w-4 h-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path>
+                        </svg>
+                      </button>
+                      <button class="action-btn action-btn-edit tooltip" data-tooltip="Edit">
+                        <svg class="w-4 h-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path>
+                        </svg>
+                      </button>
+                      <button class="action-btn action-btn-delete tooltip" data-tooltip="Delete">
+                        <svg class="w-4 h-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+                        </svg>
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+
+                <!-- Row 3: Editor -->
+                <tr class="border-b border-[#e7ecf4] hover:bg-slate-50 transition-colors">
+                  <td class="px-6 py-4">
+                    <div class="font-medium text-[#0d131c]">Editor</div>
+                    <div class="text-xs text-[#496a9c]">Created 2024-02-01</div>
+                  </td>
+                  <td class="px-6 py-4">
+                    <code class="text-sm bg-slate-100 px-2 py-1 rounded text-[#0d131c] font-mono">editor</code>
+                  </td>
+                  <td class="px-6 py-4">
+                    <span class="inline-block px-3 py-1 rounded-full text-xs font-semibold bg-green-50 text-green-700 border border-green-200">Team</span>
+                  </td>
+                  <td class="px-6 py-4 max-w-xs">
+                    <p class="text-sm text-[#496a9c] truncate">Create and edit content within assigned teams.</p>
+                  </td>
+                  <td class="px-6 py-4 text-center">
+                    <span class="inline-block bg-blue-50 text-blue-700 px-3 py-1 rounded-full text-sm font-medium">12</span>
+                  </td>
+                  <td class="px-6 py-4 text-center">
+                    <span class="text-sm font-medium text-[#0d131c]">45</span>
+                  </td>
+                  <td class="px-6 py-4">
+                    <div class="flex items-center justify-center gap-2">
+                      <button class="action-btn action-btn-view tooltip" data-tooltip="View">
+                        <svg class="w-4 h-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path>
+                        </svg>
+                      </button>
+                      <button class="action-btn action-btn-edit tooltip" data-tooltip="Edit">
+                        <svg class="w-4 h-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path>
+                        </svg>
+                      </button>
+                      <button class="action-btn action-btn-delete tooltip" data-tooltip="Delete">
+                        <svg class="w-4 h-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+                        </svg>
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+
+                <!-- Row 4: Viewer -->
+                <tr class="border-b border-[#e7ecf4] hover:bg-slate-50 transition-colors">
+                  <td class="px-6 py-4">
+                    <div class="font-medium text-[#0d131c]">Viewer</div>
+                    <div class="text-xs text-[#496a9c]">Created 2024-02-05</div>
+                  </td>
+                  <td class="px-6 py-4">
+                    <code class="text-sm bg-slate-100 px-2 py-1 rounded text-[#0d131c] font-mono">viewer</code>
+                  </td>
+                  <td class="px-6 py-4">
+                    <span class="inline-block px-3 py-1 rounded-full text-xs font-semibold bg-purple-50 text-purple-700 border border-purple-200">Project</span>
+                  </td>
+                  <td class="px-6 py-4 max-w-xs">
+                    <p class="text-sm text-[#496a9c] truncate">View project details and progress.</p>
+                  </td>
+                  <td class="px-6 py-4 text-center">
+                    <span class="inline-block bg-blue-50 text-blue-700 px-3 py-1 rounded-full text-sm font-medium">5</span>
+                  </td>
+                  <td class="px-6 py-4 text-center">
+                    <span class="text-sm font-medium text-[#0d131c]">120</span>
+                  </td>
+                  <td class="px-6 py-4">
+                    <div class="flex items-center justify-center gap-2">
+                      <button class="action-btn action-btn-view tooltip" data-tooltip="View">
+                        <svg class="w-4 h-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path>
+                        </svg>
+                      </button>
+                      <button class="action-btn action-btn-edit tooltip" data-tooltip="Edit">
+                        <svg class="w-4 h-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path>
+                        </svg>
+                      </button>
+                      <button class="action-btn action-btn-delete tooltip" data-tooltip="Delete">
+                        <svg class="w-4 h-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+                        </svg>
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+
+                <!-- Row 5: Guest -->
+                <tr class="border-b border-[#e7ecf4] hover:bg-slate-50 transition-colors">
+                  <td class="px-6 py-4">
+                    <div class="font-medium text-[#0d131c]">Guest</div>
+                    <div class="text-xs text-[#496a9c]">Created 2024-02-10</div>
+                  </td>
+                  <td class="px-6 py-4">
+                    <code class="text-sm bg-slate-100 px-2 py-1 rounded text-[#0d131c] font-mono">guest</code>
+                  </td>
+                  <td class="px-6 py-4">
+                    <span class="inline-block px-3 py-1 rounded-full text-xs font-semibold bg-amber-50 text-amber-700 border border-amber-200">External</span>
+                  </td>
+                  <td class="px-6 py-4 max-w-xs">
+                    <p class="text-sm text-[#496a9c] truncate">Limited access to public information.</p>
+                  </td>
+                  <td class="px-6 py-4 text-center">
+                    <span class="inline-block bg-blue-50 text-blue-700 px-3 py-1 rounded-full text-sm font-medium">2</span>
+                  </td>
+                  <td class="px-6 py-4 text-center">
+                    <span class="text-sm font-medium text-[#0d131c]">200</span>
+                  </td>
+                  <td class="px-6 py-4">
+                    <div class="flex items-center justify-center gap-2">
+                      <button class="action-btn action-btn-view tooltip" data-tooltip="View">
+                        <svg class="w-4 h-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path>
+                        </svg>
+                      </button>
+                      <button class="action-btn action-btn-edit tooltip" data-tooltip="Edit">
+                        <svg class="w-4 h-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path>
+                        </svg>
+                      </button>
+                      <button class="action-btn action-btn-delete tooltip" data-tooltip="Delete">
+                        <svg class="w-4 h-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+                        </svg>
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <hr class="my-12" />
+
+  <!-- SECTION 2: ROLE ENTRY / CREATE FORM -->
+  <section id="role-form" class="min-h-screen bg-slate-50 py-8">
+    <div class="flex items-center justify-center min-h-screen">
+      <div class="w-full max-w-2xl bg-white rounded-lg shadow-lg">
+        <!-- Header -->
+        <div class="flex items-center justify-between border-b border-[#e7ecf4] px-6 py-4">
+          <h1 class="text-2xl font-bold text-[#0d131c]">Create New Role</h1>
+          <button class="p-1 hover:bg-slate-100 rounded-lg transition-colors" title="Close">
+            <svg class="w-6 h-6 text-[#496a9c]" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+            </svg>
+          </button>
+        </div>
+
+        <!-- Content -->
+        <div class="p-6 space-y-6 max-h-[calc(100vh-200px)] overflow-y-auto">
+          <!-- Basic Information Section -->
+          <div>
+            <h2 class="text-lg font-semibold text-[#0d131c] mb-4">Basic Information</h2>
+            <div class="space-y-4">
+              <!-- Role Key -->
+              <div>
+                <label class="block text-sm font-medium text-[#0d131c] mb-2">
+                  Role Key <span class="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g., admin, editor, viewer"
+                  class="w-full px-4 py-2 border border-[#ced9e8] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#3d87f5] bg-slate-50"
+                />
+              </div>
+
+              <!-- Role Name -->
+              <div>
+                <label class="block text-sm font-medium text-[#0d131c] mb-2">
+                  Role Name <span class="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g., Administrator, Editor"
+                  class="w-full px-4 py-2 border border-[#ced9e8] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#3d87f5] bg-slate-50"
+                />
+              </div>
+
+              <!-- Description -->
+              <div>
+                <label class="block text-sm font-medium text-[#0d131c] mb-2">Description</label>
+                <textarea
+                  placeholder="Describe the purpose and responsibilities of this role"
+                  rows="3"
+                  class="w-full px-4 py-2 border border-[#ced9e8] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#3d87f5] bg-slate-50"
+                ></textarea>
+              </div>
+
+              <!-- Role Level -->
+              <div>
+                <label class="block text-sm font-medium text-[#0d131c] mb-2">
+                  Role Level <span class="text-red-500">*</span>
+                </label>
+                <select class="w-full px-4 py-2 border border-[#ced9e8] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#3d87f5] bg-slate-50">
+                  <option>Select role level</option>
+                  <option>System</option>
+                  <option>Organization</option>
+                  <option>Team</option>
+                  <option>Project</option>
+                  <option>External</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <!-- Permissions Section -->
+          <div>
+            <div class="flex items-center justify-between mb-4">
+              <h2 class="text-lg font-semibold text-[#0d131c]">Permissions</h2>
+              <span class="text-sm text-[#496a9c]">0 selected</span>
+            </div>
+
+            <div class="space-y-6">
+              <!-- Dashboard Category -->
+              <div>
+                <h3 class="text-sm font-semibold text-[#0d131c] mb-3">Dashboard</h3>
+                <div class="space-y-2 ml-4">
+                  <label class="flex items-start gap-3 p-3 rounded-lg hover:bg-slate-50 cursor-pointer transition-colors">
+                    <input type="checkbox" class="w-5 h-5 rounded border-[#ced9e8] border-2 bg-transparent text-[#3d87f5] mt-0.5 focus:ring-0" />
+                    <div>
+                      <p class="text-sm font-medium text-[#0d131c]">View Dashboard</p>
+                      <p class="text-xs text-[#496a9c]">Access to dashboard analytics</p>
+                    </div>
+                  </label>
+                </div>
+              </div>
+
+              <!-- User Management Category -->
+              <div>
+                <h3 class="text-sm font-semibold text-[#0d131c] mb-3">User Management</h3>
+                <div class="space-y-2 ml-4">
+                  <label class="flex items-start gap-3 p-3 rounded-lg hover:bg-slate-50 cursor-pointer transition-colors">
+                    <input type="checkbox" class="w-5 h-5 rounded border-[#ced9e8] border-2 bg-transparent text-[#3d87f5] mt-0.5 focus:ring-0" />
+                    <div>
+                      <p class="text-sm font-medium text-[#0d131c]">Manage Users</p>
+                      <p class="text-xs text-[#496a9c]">Create, update, and delete users</p>
+                    </div>
+                  </label>
+                  <label class="flex items-start gap-3 p-3 rounded-lg hover:bg-slate-50 cursor-pointer transition-colors">
+                    <input type="checkbox" class="w-5 h-5 rounded border-[#ced9e8] border-2 bg-transparent text-[#3d87f5] mt-0.5 focus:ring-0" />
+                    <div>
+                      <p class="text-sm font-medium text-[#0d131c]">Manage Roles</p>
+                      <p class="text-xs text-[#496a9c]">Create and modify roles</p>
+                    </div>
+                  </label>
+                </div>
+              </div>
+
+              <!-- Settings Category -->
+              <div>
+                <h3 class="text-sm font-semibold text-[#0d131c] mb-3">Settings</h3>
+                <div class="space-y-2 ml-4">
+                  <label class="flex items-start gap-3 p-3 rounded-lg hover:bg-slate-50 cursor-pointer transition-colors">
+                    <input type="checkbox" class="w-5 h-5 rounded border-[#ced9e8] border-2 bg-transparent text-[#3d87f5] mt-0.5 focus:ring-0" />
+                    <div>
+                      <p class="text-sm font-medium text-[#0d131c]">Edit Settings</p>
+                      <p class="text-xs text-[#496a9c]">Modify system and role settings</p>
+                    </div>
+                  </label>
+                </div>
+              </div>
+
+              <!-- Reports Category -->
+              <div>
+                <h3 class="text-sm font-semibold text-[#0d131c] mb-3">Reports</h3>
+                <div class="space-y-2 ml-4">
+                  <label class="flex items-start gap-3 p-3 rounded-lg hover:bg-slate-50 cursor-pointer transition-colors">
+                    <input type="checkbox" class="w-5 h-5 rounded border-[#ced9e8] border-2 bg-transparent text-[#3d87f5] mt-0.5 focus:ring-0" />
+                    <div>
+                      <p class="text-sm font-medium text-[#0d131c]">Create Reports</p>
+                      <p class="text-xs text-[#496a9c]">Generate and manage reports</p>
+                    </div>
+                  </label>
+                </div>
+              </div>
+
+              <!-- Data Category -->
+              <div>
+                <h3 class="text-sm font-semibold text-[#0d131c] mb-3">Data</h3>
+                <div class="space-y-2 ml-4">
+                  <label class="flex items-start gap-3 p-3 rounded-lg hover:bg-slate-50 cursor-pointer transition-colors">
+                    <input type="checkbox" class="w-5 h-5 rounded border-[#ced9e8] border-2 bg-transparent text-[#3d87f5] mt-0.5 focus:ring-0" />
+                    <div>
+                      <p class="text-sm font-medium text-[#0d131c]">Export Data</p>
+                      <p class="text-xs text-[#496a9c]">Export system data to files</p>
+                    </div>
+                  </label>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Footer -->
+        <div class="flex justify-end gap-3 border-t border-[#e7ecf4] px-6 py-4 bg-slate-50">
+          <button class="px-4 py-2 rounded-lg border border-[#ced9e8] bg-white text-[#0d131c] font-medium hover:bg-slate-100 transition-colors">
+            Cancel
+          </button>
+          <button class="px-4 py-2 rounded-lg bg-[#3d87f5] text-white font-medium hover:bg-[#2d6fd4] transition-colors flex items-center gap-2">
+            <svg class="w-4 h-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
+            </svg>
+            Create Role
+          </button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <script>
+    // Add smooth scroll behavior
+    document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+      anchor.addEventListener('click', function (e) {
+        e.preventDefault();
+        const target = document.querySelector(this.getAttribute('href'));
+        if (target) {
+          target.scrollIntoView({ behavior: 'smooth' });
+        }
+      });
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,347 @@
+# Cube.js WAF & Security Configuration
+# Phase 7: Security Hardening
+
+# =============================================================================
+# CLOUDFLARE WAF CONFIGURATION
+# =============================================================================
+# This configuration is designed for Cloudflare WAF but can be adapted for
+# AWS WAF, Azure Front Door, or nginx ModSecurity.
+
+# -----------------------------------------------------------------------------
+# 1. RATE LIMITING RULES
+# -----------------------------------------------------------------------------
+
+rate_limits:
+  # Global rate limit per IP
+  global:
+    path: "/cubejs-api/*"
+    requests_per_minute: 300
+    action: block
+    response_code: 429
+    headers:
+      Retry-After: "60"
+
+  # Per-tenant rate limit (based on X-Tenant-ID header)
+  per_tenant:
+    enterprise:
+      requests_per_minute: 1000
+      burst_limit: 100
+    standard:
+      requests_per_minute: 300
+      burst_limit: 50
+    starter:
+      requests_per_minute: 100
+      burst_limit: 20
+
+  # SQL API rate limit (stricter)
+  sql_api:
+    path: "/cubejs-api/v1/sql"
+    requests_per_minute: 60
+    action: challenge
+    description: "SQL API requires stricter limits due to resource intensity"
+
+  # Pre-aggregation refresh endpoint
+  preagg_refresh:
+    path: "/cubejs-api/v1/pre-aggregations/*"
+    requests_per_minute: 30
+    action: block
+    allowed_ips:
+    - "10.0.0.0/8" # Internal VPC
+    - "172.16.0.0/12" # Kubernetes cluster
+
+# -----------------------------------------------------------------------------
+# 2. IP ALLOWLISTS / BLOCKLISTS
+# -----------------------------------------------------------------------------
+
+ip_access:
+  # SQL API restricted to internal/VPN only
+  sql_api_allowlist:
+    path: "/cubejs-api/v1/sql"
+    mode: allowlist
+    ips:
+    - "10.0.0.0/8" # AWS VPC
+    - "172.16.0.0/12" # GCP VPC
+    - "192.168.0.0/16" # Private networks
+    - "203.0.113.0/24" # Office VPN egress
+    action_on_deny: block
+    response_code: 403
+
+  # Admin endpoints - highly restricted
+  admin_allowlist:
+    paths:
+    - "/cubejs-api/v1/pre-aggregations/jobs"
+    - "/cubejs-api/v1/pre-aggregations/queue"
+    - "/_health"
+    - "/_ready"
+    - "/metrics"
+    mode: allowlist
+    ips:
+    - "10.0.0.0/8"
+    - "127.0.0.1"
+    action_on_deny: block
+
+  # Global blocklist (known bad actors)
+  global_blocklist:
+    enabled: true
+    source: "cloudflare_threat_intelligence"
+    threat_score_threshold: 50
+    categories:
+    - "bot"
+    - "scanner"
+    - "credential_stuffing"
+
+# -----------------------------------------------------------------------------
+# 3. CUSTOM WAF RULES
+# -----------------------------------------------------------------------------
+
+custom_rules:
+  # Block requests without required authentication
+  require_auth_headers:
+    name: "Block missing auth"
+    expression: |
+      (http.request.uri.path contains "/cubejs-api/v1/load" or
+       http.request.uri.path contains "/cubejs-api/v1/sql") and
+      not any(http.request.headers["authorization"][*] contains "Bearer") and
+      not any(http.request.headers["x-tenant-id"][*] ne "")
+    action: block
+    priority: 1
+    enabled: true
+
+  # Block SQL injection patterns
+  sql_injection_block:
+    name: "SQL Injection Protection"
+    expression: |
+      (http.request.uri.query contains "UNION" or
+       http.request.uri.query contains "SELECT" or
+       http.request.uri.query contains "DROP" or
+       http.request.uri.query contains "DELETE" or
+       http.request.uri.query contains "--" or
+       http.request.uri.query contains "/*" or
+       http.request.body contains "UNION SELECT")
+    action: block
+    priority: 2
+    enabled: true
+
+  # Block oversized requests
+  request_size_limit:
+    name: "Request Size Limit"
+    expression: |
+      http.request.body.size > 1048576
+    action: block
+    priority: 3
+    description: "Block requests larger than 1MB"
+
+  # Block suspicious user agents
+  block_bad_user_agents:
+    name: "Block Suspicious User Agents"
+    expression: |
+      (http.user_agent contains "sqlmap" or
+       http.user_agent contains "nikto" or
+       http.user_agent contains "nmap" or
+       http.user_agent contains "masscan" or
+       http.user_agent eq "")
+    action: challenge
+    priority: 4
+
+  # Enforce tenant isolation
+  tenant_header_validation:
+    name: "Tenant Header Validation"
+    expression: |
+      http.request.uri.path contains "/cubejs-api/" and
+      (not any(http.request.headers["x-tenant-id"][*] matches "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"))
+    action: block
+    priority: 5
+    description: "Ensure tenant_id is valid UUID format"
+
+# -----------------------------------------------------------------------------
+# 4. MANAGED RULESETS
+# -----------------------------------------------------------------------------
+
+managed_rulesets:
+  cloudflare_managed:
+    enabled: true
+    rules:
+    - id: "efb7b8c949ac4650a09736fc376e9aee" # OWASP Core Ruleset
+      enabled: true
+      action: block
+    - id: "c2e184081120413c86c3ab7e14069605" # Log4j
+      enabled: true
+      action: block
+
+  owasp_modsecurity:
+    enabled: true
+    paranoia_level: 2
+    rules:
+    - id: "942100" # SQL Injection
+      enabled: true
+    - id: "941100" # XSS
+      enabled: true
+    - id: "930100" # Path Traversal
+      enabled: true
+
+# -----------------------------------------------------------------------------
+# 5. RESPONSE HEADERS
+# -----------------------------------------------------------------------------
+
+security_headers:
+  # Strict Transport Security
+  Strict-Transport-Security: "max-age=31536000; includeSubDomains; preload"
+
+  # Prevent clickjacking
+  X-Frame-Options: "DENY"
+
+  # XSS Protection
+  X-Content-Type-Options: "nosniff"
+  X-XSS-Protection: "1; mode=block"
+
+  # Content Security Policy
+  Content-Security-Policy: "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'"
+
+  # Referrer Policy
+  Referrer-Policy: "strict-origin-when-cross-origin"
+
+  # Permissions Policy
+  Permissions-Policy: "geolocation=(), microphone=(), camera=()"
+
+# -----------------------------------------------------------------------------
+# 6. JWT VALIDATION REQUIREMENTS
+# -----------------------------------------------------------------------------
+
+jwt_policy:
+  # All API endpoints require JWT (except health checks)
+  required_paths:
+  - "/cubejs-api/v1/load"
+  - "/cubejs-api/v1/sql"
+  - "/cubejs-api/v1/subscribe"
+  - "/cubejs-api/v1/dry-run"
+
+  # JWT configuration
+  algorithm: "RS256"
+  issuer: "${CUBEJS_JWT_ISSUER}"
+  audience: "cube-api"
+
+  # Required claims
+  required_claims:
+  - "tenant_id"
+  - "datasource_id"
+  - "sub" # user identifier
+  - "exp" # expiration
+  - "iat" # issued at
+
+  # Optional role-based claims
+  role_claims:
+    admin:
+    - "cube:admin"
+    - "cube:preagg:manage"
+    analyst:
+    - "cube:query"
+    - "cube:explore"
+    viewer:
+    - "cube:query:read"
+
+  # Token expiration limits
+  max_token_age_hours: 24
+  clock_skew_seconds: 60
+
+# -----------------------------------------------------------------------------
+# 7. CORS CONFIGURATION
+# -----------------------------------------------------------------------------
+
+cors:
+  allowed_origins:
+  - "https://*.semlayer.io"
+  - "https://localhost:3000" # Development only
+
+  allowed_methods:
+  - "GET"
+  - "POST"
+  - "OPTIONS"
+
+  allowed_headers:
+  - "Authorization"
+  - "Content-Type"
+  - "X-Tenant-ID"
+  - "X-Tenant-Datasource-ID"
+  - "X-Request-ID"
+
+  exposed_headers:
+  - "X-Request-ID"
+  - "X-Response-Time"
+
+  max_age_seconds: 86400
+  credentials: true
+
+# -----------------------------------------------------------------------------
+# 8. LOGGING & MONITORING
+# -----------------------------------------------------------------------------
+
+logging:
+  # Log all blocked requests
+  blocked_requests:
+    enabled: true
+    destination: "cloudflare_analytics"
+    include_headers: true
+    include_body: false # Privacy
+
+  # Log rate limit hits
+  rate_limit_events:
+    enabled: true
+    alert_threshold: 100 # Alert if > 100 rate limits/hour
+
+  # Log authentication failures
+  auth_failures:
+    enabled: true
+    alert_threshold: 50
+
+# -----------------------------------------------------------------------------
+# 9. ALERTING
+# -----------------------------------------------------------------------------
+
+alerts:
+# High rate limit activity
+- name: "High Rate Limit Activity"
+  condition: "rate_limit_count > 500 in 5m"
+  severity: "warning"
+  channels: [ "slack", "pagerduty" ]
+
+# WAF blocks spike
+- name: "WAF Block Spike"
+  condition: "waf_block_count > 100 in 5m"
+  severity: "critical"
+  channels: [ "slack", "pagerduty" ]
+
+# SQL injection attempt
+- name: "SQL Injection Attempt"
+  condition: "rule:sql_injection_block triggered"
+  severity: "critical"
+  channels: [ "slack", "pagerduty", "security_team" ]
+
+# Missing auth headers (possible misconfiguration)
+- name: "Auth Header Missing"
+  condition: "rule:require_auth_headers > 50 in 10m"
+  severity: "warning"
+  channels: [ "slack" ]
+
+# =============================================================================
+# DEPLOYMENT NOTES
+# =============================================================================
+#
+# Cloudflare:
+#   1. Import this config via Cloudflare Terraform provider
+#   2. Test in "log" mode before switching to "block"
+#   3. Monitor Cloudflare Analytics for false positives
+#
+# AWS WAF:
+#   1. Convert rules to AWS WAF JSON format
+#   2. Deploy via CloudFormation or Terraform
+#   3. Associate with ALB/CloudFront distribution
+#
+# nginx (ModSecurity):
+#   1. Install ModSecurity module
+#   2. Convert rules to SecRule format
+#   3. Test with DetectionOnly before enforcing
+#
+# Testing:
+#   - Run `bin/waf-test.sh` to verify rules don't block legitimate traffic
+#   - Test with sample JWT tokens for each tier
+#   - Verify rate limits with load testing tool

@@ -1,0 +1,615 @@
+[
+  {
+    "model_type": "household",
+    "display_name": "Household",
+    "ownership_type": "Percent-based",
+    "category": "organization",
+    "description": "Primary portfolio container for a household or family unit",
+    "suggested_attributes": [
+      {"key": "original_name", "value_type": "string"},
+      {"key": "display_name", "value_type": "string"},
+      {"key": "currency_factor", "value_type": "string"},
+      {"key": "inception_date", "value_type": "date"},
+      {"key": "status", "value_type": "string", "values": ["active", "inactive", "archived"]}
+    ]
+  },
+  {
+    "model_type": "person_node",
+    "display_name": "Client",
+    "ownership_type": "Percent-based",
+    "category": "organization",
+    "description": "Individual client or person with potential ownership interests",
+    "suggested_attributes": [
+      {"key": "original_name", "value_type": "string"},
+      {"key": "display_name", "value_type": "string"},
+      {"key": "date_of_birth", "value_type": "date"},
+      {"key": "role", "value_type": "string", "values": ["owner", "trustee", "beneficiary", "advisor"]},
+      {"key": "contact_email", "value_type": "email"}
+    ]
+  },
+  {
+    "model_type": "prospect",
+    "display_name": "Prospect",
+    "ownership_type": "Percent-based",
+    "category": "organization",
+    "description": "Prospective client not yet active",
+    "suggested_attributes": [
+      {"key": "original_name", "value_type": "string"},
+      {"key": "prospect_status", "value_type": "string", "values": ["lead", "qualified", "proposed"]},
+      {"key": "acquisition_date", "value_type": "date"},
+      {"key": "expected_assets", "value_type": "numeric"}
+    ]
+  },
+  {
+    "model_type": "managed_partnership",
+    "display_name": "Managed Fund",
+    "ownership_type": "Share-based,Value-based",
+    "category": "fund",
+    "description": "Managed fund or partnership vehicle with multiple investors",
+    "suggested_attributes": [
+      {"key": "original_name", "value_type": "string"},
+      {"key": "fund_type", "value_type": "string", "values": ["closed", "open", "interval"]},
+      {"key": "nav_per_share", "value_type": "numeric"},
+      {"key": "total_nav", "value_type": "numeric"}
+    ]
+  },
+  {
+    "model_type": "holding_company",
+    "display_name": "Holding Company",
+    "ownership_type": "Percent-based",
+    "category": "fund",
+    "description": "Corporate holding company with subsidiaries and investments",
+    "suggested_attributes": [
+      {"key": "original_name", "value_type": "string"},
+      {"key": "incorporation_date", "value_type": "date"},
+      {"key": "jurisdiction", "value_type": "string"},
+      {"key": "tax_id", "value_type": "string"}
+    ]
+  },
+  {
+    "model_type": "manager",
+    "display_name": "Manager",
+    "ownership_type": "Percent-based",
+    "category": "organization",
+    "description": "Investment manager entity",
+    "suggested_attributes": [
+      {"key": "original_name", "value_type": "string"},
+      {"key": "aum", "value_type": "numeric"},
+      {"key": "management_fee_bps", "value_type": "numeric"}
+    ]
+  },
+  {
+    "model_type": "fund",
+    "display_name": "Private Fund",
+    "ownership_type": "Value-based",
+    "category": "fund",
+    "description": "Private investment fund vehicle",
+    "suggested_attributes": [
+      {"key": "original_name", "value_type": "string"},
+      {"key": "fund_vintage", "value_type": "year"},
+      {"key": "fund_life_years", "value_type": "numeric"},
+      {"key": "target_size", "value_type": "numeric"}
+    ]
+  },
+  {
+    "model_type": "trust",
+    "display_name": "Trust",
+    "ownership_type": "Percent-based",
+    "category": "organization",
+    "description": "Legal trust entity with trustees and beneficiaries",
+    "suggested_attributes": [
+      {"key": "original_name", "value_type": "string"},
+      {"key": "trust_type", "value_type": "string", "values": ["revocable", "irrevocable", "charitable", "spendthrift"]},
+      {"key": "creation_date", "value_type": "date"},
+      {"key": "trustee_name", "value_type": "string"}
+    ]
+  },
+  {
+    "model_type": "vehicle",
+    "display_name": "Vehicle",
+    "ownership_type": "Percent-based",
+    "category": "container",
+    "description": "Generic investment vehicle container",
+    "suggested_attributes": [
+      {"key": "original_name", "value_type": "string"},
+      {"key": "vehicle_type", "value_type": "string"}
+    ]
+  },
+  {
+    "model_type": "financial_account",
+    "display_name": "Holding Account",
+    "ownership_type": "Percent-based",
+    "category": "container",
+    "description": "Financial account at custodian or broker",
+    "suggested_attributes": [
+      {"key": "original_name", "value_type": "string"},
+      {"key": "account_number", "value_type": "string"},
+      {"key": "custodian", "value_type": "string"},
+      {"key": "account_type", "value_type": "string", "values": ["taxable", "ira", "401k", "529", "roth", "rollover"]},
+      {"key": "opening_date", "value_type": "date"}
+    ]
+  },
+  {
+    "model_type": "sleeve",
+    "display_name": "Sleeve",
+    "ownership_type": "Percent-based",
+    "category": "container",
+    "description": "Portfolio sleeve or sub-allocation with defined strategy",
+    "suggested_attributes": [
+      {"key": "original_name", "value_type": "string"},
+      {"key": "allocation_percentage", "value_type": "numeric"},
+      {"key": "strategy", "value_type": "string", "values": ["growth", "income", "conservative", "aggressive"]},
+      {"key": "rebalance_frequency", "value_type": "string", "values": ["quarterly", "semiannual", "annual"]}
+    ]
+  },
+  {
+    "model_type": "annuity",
+    "display_name": "Annuity",
+    "ownership_type": "Value-based",
+    "category": "insurance",
+    "description": "Annuity insurance product",
+    "suggested_attributes": [
+      {"key": "original_name", "value_type": "string"},
+      {"key": "annuity_type", "value_type": "string", "values": ["fixed", "variable", "indexed"]},
+      {"key": "issue_date", "value_type": "date"},
+      {"key": "annuitant_age", "value_type": "numeric"},
+      {"key": "guaranteed_rate", "value_type": "numeric"}
+    ]
+  },
+  {
+    "model_type": "art",
+    "display_name": "Art",
+    "ownership_type": "Share-based,Value-based",
+    "category": "alternative",
+    "description": "Art as alternative asset. Available only to firms with Addepar access after Sept 12, 2025",
+    "suggested_attributes": [
+      {"key": "original_name", "value_type": "string"},
+      {"key": "artist_name", "value_type": "string"},
+      {"key": "artwork_title", "value_type": "string"},
+      {"key": "appraised_value", "value_type": "numeric"},
+      {"key": "acquisition_date", "value_type": "date"}
+    ]
+  },
+  {
+    "model_type": "bond",
+    "display_name": "Bond",
+    "ownership_type": "Share-based",
+    "category": "security",
+    "description": "Fixed income bond security",
+    "suggested_attributes": [
+      {"key": "cusip", "value_type": "string"},
+      {"key": "maturity_date", "value_type": "date"},
+      {"key": "original_name", "value_type": "string"},
+      {"key": "coupon_rate", "value_type": "numeric"},
+      {"key": "bond_type", "value_type": "string", "values": ["government", "corporate", "municipal", "convertible"]}
+    ]
+  },
+  {
+    "model_type": "car",
+    "display_name": "Car",
+    "ownership_type": "Share-based,Value-based",
+    "category": "alternative",
+    "description": "Vehicle as asset. Available only to firms with Addepar access after Sept 12, 2025",
+    "suggested_attributes": [
+      {"key": "original_name", "value_type": "string"},
+      {"key": "make", "value_type": "string"},
+      {"key": "model", "value_type": "string"},
+      {"key": "year", "value_type": "year"},
+      {"key": "vin", "value_type": "string"},
+      {"key": "current_value", "value_type": "numeric"}
+    ]
+  },
+  {
+    "model_type": "certificate_of_deposit",
+    "display_name": "Certificate of Deposit",
+    "ownership_type": "Share-based",
+    "category": "security",
+    "description": "Certificate of deposit fixed rate security",
+    "suggested_attributes": [
+      {"key": "original_name", "value_type": "string"},
+      {"key": "issuer", "value_type": "string"},
+      {"key": "maturity_date", "value_type": "date"},
+      {"key": "interest_rate", "value_type": "numeric"},
+      {"key": "term_months", "value_type": "numeric"}
+    ]
+  },
+  {
+    "model_type": "closed_end_fund",
+    "display_name": "Closed End Fund",
+    "ownership_type": "Share-based",
+    "category": "security",
+    "description": "Closed-end mutual fund with fixed number of shares",
+    "suggested_attributes": [
+      {"key": "original_name", "value_type": "string"},
+      {"key": "ticker", "value_type": "string"},
+      {"key": "nav_per_share", "value_type": "numeric"},
+      {"key": "market_price", "value_type": "numeric"},
+      {"key": "distribution_yield", "value_type": "numeric"}
+    ]
+  },
+  {
+    "model_type": "cmo",
+    "display_name": "CMO",
+    "ownership_type": "Share-based",
+    "category": "security",
+    "description": "Collateralized mortgage obligation",
+    "suggested_attributes": [
+      {"key": "original_name", "value_type": "string"},
+      {"key": "cusip", "value_type": "string"},
+      {"key": "coupon", "value_type": "numeric"},
+      {"key": "wam", "value_type": "numeric", "description": "Weighted average maturity"},
+      {"key": "class", "value_type": "string", "values": ["A", "B", "Z"]}
+    ]
+  },
+  {
+    "model_type": "collectible",
+    "display_name": "Collectible",
+    "ownership_type": "Share-based,Value-based",
+    "category": "alternative",
+    "description": "Collectible asset. Available only to firms with Addepar access after Sept 12, 2025",
+    "suggested_attributes": [
+      {"key": "original_name", "value_type": "string"},
+      {"key": "item_type", "value_type": "string", "values": ["watch", "coin", "memorabilia", "sports", "other"]},
+      {"key": "condition_grade", "value_type": "string", "values": ["mint", "excellent", "very_good", "good", "fair"]},
+      {"key": "valuation", "value_type": "numeric"}
+    ]
+  },
+  {
+    "model_type": "convertible_note",
+    "display_name": "Convertible Note",
+    "ownership_type": "Share-based",
+    "category": "derivative",
+    "description": "Convertible debt instrument with equity upside",
+    "suggested_attributes": [
+      {"key": "original_name", "value_type": "string"},
+      {"key": "issuer", "value_type": "string"},
+      {"key": "conversion_price", "value_type": "numeric"},
+      {"key": "maturity_date", "value_type": "date"},
+      {"key": "interest_rate", "value_type": "numeric"}
+    ]
+  },
+  {
+    "model_type": "generic_asset",
+    "display_name": "Custom Asset",
+    "ownership_type": "Any",
+    "category": "custom",
+    "description": "Catch-all for custom or unspecified investment types not in this list",
+    "suggested_attributes": [
+      {"key": "original_name", "value_type": "string"},
+      {"key": "asset_type_custom", "value_type": "string"},
+      {"key": "description", "value_type": "text"}
+    ]
+  },
+  {
+    "model_type": "cash",
+    "display_name": "Currency",
+    "ownership_type": "Share-based",
+    "category": "cash",
+    "description": "Cash or currency holdings",
+    "suggested_attributes": [
+      {"key": "original_name", "value_type": "string"},
+      {"key": "currency_code", "value_type": "string"},
+      {"key": "balance", "value_type": "numeric"}
+    ]
+  },
+  {
+    "model_type": "digital_asset",
+    "display_name": "Digital Asset",
+    "ownership_type": "Share-based",
+    "category": "digital",
+    "description": "Digital assets including cryptocurrencies and blockchain tokens",
+    "suggested_attributes": [
+      {"key": "original_name", "value_type": "string"},
+      {"key": "asset_code", "value_type": "string", "values": ["BTC", "ETH", "USDC", "other"]},
+      {"key": "wallet_address", "value_type": "string"},
+      {"key": "quantity", "value_type": "numeric"},
+      {"key": "block_chain", "value_type": "string", "values": ["ethereum", "bitcoin", "solana", "other"]}
+    ]
+  },
+  {
+    "model_type": "etf",
+    "display_name": "ETF",
+    "ownership_type": "Share-based",
+    "category": "security",
+    "description": "Exchange-traded fund trading on public exchanges",
+    "suggested_attributes": [
+      {"key": "cusip", "value_type": "string"},
+      {"key": "ticker", "value_type": "string"},
+      {"key": "original_name", "value_type": "string"},
+      {"key": "expense_ratio", "value_type": "numeric"},
+      {"key": "net_assets", "value_type": "numeric"}
+    ]
+  },
+  {
+    "model_type": "etn",
+    "display_name": "ETN",
+    "ownership_type": "Share-based",
+    "category": "derivative",
+    "description": "Exchange-traded note with no fund structure",
+    "suggested_attributes": [
+      {"key": "original_name", "value_type": "string"},
+      {"key": "ticker", "value_type": "string"},
+      {"key": "issuer", "value_type": "string"},
+      {"key": "underlying_index", "value_type": "string"}
+    ]
+  },
+  {
+    "model_type": "forward_contract",
+    "display_name": "Forward Contract",
+    "ownership_type": "Share-based",
+    "category": "derivative",
+    "description": "OTC forward contract for future delivery",
+    "suggested_attributes": [
+      {"key": "original_name", "value_type": "string"},
+      {"key": "underlying_type", "value_type": "string"},
+      {"key": "delivery_price", "value_type": "numeric"},
+      {"key": "settlement_date", "value_type": "date"},
+      {"key": "notional_amount", "value_type": "numeric"}
+    ]
+  },
+  {
+    "model_type": "futures_contract",
+    "display_name": "Futures Contract",
+    "ownership_type": "Share-based",
+    "category": "derivative",
+    "description": "Exchange-traded futures contract",
+    "suggested_attributes": [
+      {"key": "original_name", "value_type": "string"},
+      {"key": "underlying_type", "value_type": "string"},
+      {"key": "delivery_price", "value_type": "numeric"},
+      {"key": "expiration_date", "value_type": "date"},
+      {"key": "contract_size", "value_type": "numeric"}
+    ]
+  },
+  {
+    "model_type": "hedge_fund",
+    "display_name": "Hedge Fund",
+    "ownership_type": "Share-based,Value-based",
+    "category": "alternative",
+    "description": "Hedge fund investment. Available only to firms with Addepar access after Sept 12, 2025",
+    "suggested_attributes": [
+      {"key": "original_name", "value_type": "string"},
+      {"key": "strategy", "value_type": "string"},
+      {"key": "aum", "value_type": "numeric"},
+      {"key": "min_investment", "value_type": "numeric"}
+    ]
+  },
+  {
+    "model_type": "historical_segment",
+    "display_name": "Historical Segment",
+    "ownership_type": "Value-based",
+    "category": "legacy",
+    "description": "Historical data segments for legacy account structures",
+    "suggested_attributes": [
+      {"key": "original_name", "value_type": "string"},
+      {"key": "start_date", "value_type": "date"},
+      {"key": "end_date", "value_type": "date"}
+    ]
+  },
+  {
+    "model_type": "loan",
+    "display_name": "Loan",
+    "ownership_type": "Value-based",
+    "category": "debt",
+    "description": "Loan or debt security asset",
+    "suggested_attributes": [
+      {"key": "original_name", "value_type": "string"},
+      {"key": "borrower", "value_type": "string"},
+      {"key": "principal", "value_type": "numeric"},
+      {"key": "interest_rate", "value_type": "numeric"},
+      {"key": "maturity_date", "value_type": "date"}
+    ]
+  },
+  {
+    "model_type": "master_limited_partnership",
+    "display_name": "Master Limited Partnership",
+    "ownership_type": "Share-based",
+    "category": "security",
+    "description": "Master limited partnership traded on exchanges",
+    "suggested_attributes": [
+      {"key": "original_name", "value_type": "string"},
+      {"key": "ticker", "value_type": "string"},
+      {"key": "distribution_yield", "value_type": "numeric"},
+      {"key": "sector", "value_type": "string", "values": ["energy", "infrastructure", "real_estate"]}
+    ]
+  },
+  {
+    "model_type": "money_market_fund",
+    "display_name": "Money Market Fund",
+    "ownership_type": "Share-based",
+    "category": "security",
+    "description": "Money market mutual fund",
+    "suggested_attributes": [
+      {"key": "original_name", "value_type": "string"},
+      {"key": "ticker", "value_type": "string"},
+      {"key": "yield", "value_type": "numeric"},
+      {"key": "nav", "value_type": "numeric"}
+    ]
+  },
+  {
+    "model_type": "mutual_fund",
+    "display_name": "Mutual Fund",
+    "ownership_type": "Share-based",
+    "category": "security",
+    "description": "Open-end mutual fund with daily pricing",
+    "suggested_attributes": [
+      {"key": "original_name", "value_type": "string"},
+      {"key": "ticker", "value_type": "string"},
+      {"key": "expense_ratio", "value_type": "numeric"},
+      {"key": "fund_type", "value_type": "string", "values": ["equity", "bond", "balanced", "money_market"]},
+      {"key": "nav", "value_type": "numeric"}
+    ]
+  },
+  {
+    "model_type": "option",
+    "display_name": "Option",
+    "ownership_type": "Share-based",
+    "category": "derivative",
+    "description": "Options contract for equity, index, or currency",
+    "suggested_attributes": [
+      {"key": "original_name", "value_type": "string"},
+      {"key": "underlying", "value_type": "string"},
+      {"key": "option_type", "value_type": "string", "values": ["call", "put"]},
+      {"key": "strike_price", "value_type": "numeric"},
+      {"key": "expiration_date", "value_type": "date"}
+    ]
+  },
+  {
+    "model_type": "preferred_stock",
+    "display_name": "Preferred Stock",
+    "ownership_type": "Share-based",
+    "category": "security",
+    "description": "Preferred stock with fixed dividend",
+    "suggested_attributes": [
+      {"key": "original_name", "value_type": "string"},
+      {"key": "ticker", "value_type": "string"},
+      {"key": "dividend_rate", "value_type": "numeric"},
+      {"key": "issuer", "value_type": "string"}
+    ]
+  },
+  {
+    "model_type": "private_equity_fund",
+    "display_name": "Private Equity Fund",
+    "ownership_type": "Share-based,Value-based",
+    "category": "alternative",
+    "description": "Private equity fund investment. Available only to firms with Addepar access after Sept 12, 2025",
+    "suggested_attributes": [
+      {"key": "original_name", "value_type": "string"},
+      {"key": "fund_vintage", "value_type": "year"},
+      {"key": "target_irr", "value_type": "numeric"},
+      {"key": "commitment_amount", "value_type": "numeric"}
+    ]
+  },
+  {
+    "model_type": "private_investment",
+    "display_name": "Private Investment",
+    "ownership_type": "Share-based,Value-based",
+    "category": "alternative",
+    "description": "Direct private investment. Available only to firms with Addepar access after Sept 12, 2025",
+    "suggested_attributes": [
+      {"key": "original_name", "value_type": "string"},
+      {"key": "company_name", "value_type": "string"},
+      {"key": "investment_date", "value_type": "date"},
+      {"key": "fair_value", "value_type": "numeric"}
+    ]
+  },
+  {
+    "model_type": "promissory_note",
+    "display_name": "Promissory Note",
+    "ownership_type": "Share-based,Value-based",
+    "category": "debt",
+    "description": "Promissory note. Available only to firms with Addepar access after Sept 12, 2025",
+    "suggested_attributes": [
+      {"key": "original_name", "value_type": "string"},
+      {"key": "issuer", "value_type": "string"},
+      {"key": "face_value", "value_type": "numeric"},
+      {"key": "maturity_date", "value_type": "date"}
+    ]
+  },
+  {
+    "model_type": "real_estate",
+    "display_name": "Real Estate",
+    "ownership_type": "Share-based,Value-based",
+    "category": "alternative",
+    "description": "Real estate property. Available only to firms with Addepar access after Sept 12, 2025",
+    "suggested_attributes": [
+      {"key": "original_name", "value_type": "string"},
+      {"key": "property_address", "value_type": "string"},
+      {"key": "property_type", "value_type": "string", "values": ["residential", "commercial", "industrial", "land"]},
+      {"key": "acquisition_date", "value_type": "date"},
+      {"key": "valuation", "value_type": "numeric"}
+    ]
+  },
+  {
+    "model_type": "reit",
+    "display_name": "REIT",
+    "ownership_type": "Share-based",
+    "category": "security",
+    "description": "Real estate investment trust",
+    "suggested_attributes": [
+      {"key": "original_name", "value_type": "string"},
+      {"key": "ticker", "value_type": "string"},
+      {"key": "dividend_yield", "value_type": "numeric"},
+      {"key": "property_type", "value_type": "string", "values": ["residential", "office", "retail", "industrial", "healthcare"]}
+    ]
+  },
+  {
+    "model_type": "stock",
+    "display_name": "Stock",
+    "ownership_type": "Share-based",
+    "category": "security",
+    "description": "Common or preferred equity stock",
+    "suggested_attributes": [
+      {"key": "original_name", "value_type": "string"},
+      {"key": "ticker", "value_type": "string"},
+      {"key": "cusip", "value_type": "string"},
+      {"key": "sector", "value_type": "string"},
+      {"key": "market_cap", "value_type": "numeric"}
+    ]
+  },
+  {
+    "model_type": "structured_product",
+    "display_name": "Structured Product",
+    "ownership_type": "Share-based",
+    "category": "structured",
+    "description": "Structured investment product with embedded derivatives",
+    "suggested_attributes": [
+      {"key": "original_name", "value_type": "string"},
+      {"key": "issuer", "value_type": "string"},
+      {"key": "underlying_reference", "value_type": "string"},
+      {"key": "maturity_date", "value_type": "date"},
+      {"key": "knock_out_level", "value_type": "numeric"}
+    ]
+  },
+  {
+    "model_type": "uit",
+    "display_name": "UIT",
+    "ownership_type": "Share-based",
+    "category": "security",
+    "description": "Unit investment trust with fixed portfolio",
+    "suggested_attributes": [
+      {"key": "original_name", "value_type": "string"},
+      {"key": "ticker", "value_type": "string"},
+      {"key": "termination_date", "value_type": "date"},
+      {"key": "number_of_units", "value_type": "numeric"}
+    ]
+  },
+  {
+    "model_type": "unknown_security",
+    "display_name": "Unknown Security",
+    "ownership_type": "Share-based",
+    "category": "legacy",
+    "description": "Catch-all for unidentified or legacy securities",
+    "suggested_attributes": [
+      {"key": "original_name", "value_type": "string"},
+      {"key": "description", "value_type": "text"},
+      {"key": "last_updated", "value_type": "date"}
+    ]
+  },
+  {
+    "model_type": "venture_capital",
+    "display_name": "Venture Capital",
+    "ownership_type": "Share-based,Value-based",
+    "category": "alternative",
+    "description": "Venture capital investments. Available only to firms with Addepar access after Sept 12, 2025",
+    "suggested_attributes": [
+      {"key": "original_name", "value_type": "string"},
+      {"key": "company_stage", "value_type": "string", "values": ["seed", "series_a", "series_b", "late_stage"]},
+      {"key": "investment_date", "value_type": "date"},
+      {"key": "valuation", "value_type": "numeric"}
+    ]
+  },
+  {
+    "model_type": "warrant",
+    "display_name": "Warrant",
+    "ownership_type": "Share-based",
+    "category": "derivative",
+    "description": "Stock warrant with long-term exercise rights",
+    "suggested_attributes": [
+      {"key": "original_name", "value_type": "string"},
+      {"key": "underlying_stock", "value_type": "string"},
+      {"key": "strike_price", "value_type": "numeric"},
+      {"key": "expiration_date", "value_type": "date"}
+    ]
+  }
+]

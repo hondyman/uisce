@@ -1,0 +1,16 @@
+-- Rollback Alternative Investment Management Schema
+
+DROP VIEW IF EXISTS client_alt_allocation;
+DROP VIEW IF EXISTS upcoming_capital_calls;
+DROP VIEW IF EXISTS alt_investment_performance;
+
+DROP TRIGGER IF EXISTS alternative_investments_updated_at ON alternative_investments;
+DROP TRIGGER IF EXISTS capital_calls_updated_at ON capital_calls;
+DROP TRIGGER IF EXISTS distributions_updated_at ON distributions;
+
+DROP FUNCTION IF EXISTS update_alternative_investment_timestamp();
+
+DROP TABLE IF EXISTS alt_investment_documents CASCADE;
+DROP TABLE IF EXISTS distributions CASCADE;
+DROP TABLE IF EXISTS capital_calls CASCADE;
+DROP TABLE IF EXISTS alternative_investments CASCADE;

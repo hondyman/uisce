@@ -1,0 +1,101 @@
+.container {
+  padding: 24px;
+}
+
+.formContainer {
+  margin-bottom: 24px;
+}
+
+.formGrid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+}
+
+.actionsCard {
+  margin-bottom: 24px;
+}
+
+.actionItem {
+  margin-bottom: 12px;
+  padding: 12px;
+  border: 1px solid #f0f0f0;
+  border-radius: 4px;
+  background-color: #fafafa;
+}
+
+.actionGrid {
+  display: grid;
+  grid-template-columns: auto 1fr 2fr 2fr auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.percentBadge {
+  font-weight: bold;
+  min-width: 50px;
+}
+
+.addActionButton {
+  width: 100%;
+}
+
+.triggersCard {
+  margin-top: 24px;
+}
+
+@media (max-width: 1024px) {
+  .formGrid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .actionGrid {
+    grid-template-columns: auto 1fr auto;
+  }
+}
+
+@media (max-width: 768px) {
+  .formGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .actionGrid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Versioning and Collaboration Styles */
+.tabContent {
+  padding: 16px 0;
+}
+
+.commentItem {
+  margin-bottom: 12px;
+}
+
+.commentAuthor {
+  margin-left: 8px;
+}
+
+.commentEmail {
+  margin-left: 8px;
+  color: #999;
+}
+
+.commentTimestamp {
+  font-size: 12px;
+  color: #999;
+}
+
+.versionTimeline {
+  margin: 16px 0;
+}
+
+.approvalStatus {
+  color: #faad14;
+}
+
+.approvalStatusApproved {
+  color: #52c41a;
+}
+

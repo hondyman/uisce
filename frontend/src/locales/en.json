@@ -1,0 +1,228 @@
+{
+  "relationships": {
+    "id": "ID",
+    "predicate": "Predicate",
+    "description": "Description",
+    "subject": "Subject Type",
+    "object": "Object Type",
+    "active": "Active",
+    "create": "Create Relationship",
+    "select_edge_type": "Edge Type",
+    "select_node": "Select related node to link"
+  },
+
+  "node_type": {
+    "semantic_term": "Semantic Term",
+    "business_term": "Business Term",
+    "semantic_column": "Semantic Column",
+    "database_column": "Database Column",
+    "semantic_model": "Semantic Model"
+  }
+  ,
+  "global_search": {
+    "placeholder": "Search business & semantic terms..."
+  },
+  "tab": {
+    "add_business_term": "Add Business Term",
+    "add_semantic_term": "Add Semantic Term",
+    "business_terms": "Business Terms",
+    "semantic_terms": "Semantic Terms"
+  },
+  "stats": {
+    "total_business_terms": "Total Business Terms",
+    "with_relationships": "With Relationships",
+    "without_relationships": "Without Relationships"
+  },
+  "terms": {
+    "no_semantic_terms": "No semantic terms found"
+  },
+  "global_loading": {
+    "business_glossary": "Loading business glossary...",
+    "business_terms": "Loading business terms..."
+  },
+  "global_error": {
+    "business_glossary": "Error Loading Business Glossary"
+  ,
+    "business_terms": "Error Loading Business Terms"
+  },
+  "metadata": {
+    "type": "Type:",
+    "id": "ID:"
+  },
+  "term": {
+    "edit": "Edit Term",
+    "details": "Term Details",
+    "delete": "Delete Term"
+  }
+  ,
+  "view": {
+    "tree": "Tree View",
+    "flat": "Flat View"
+  },
+  "no_results": {
+    "title": "No terms found",
+    "description": "No business terms match your search"
+  },
+  "glossary": {
+    "title": "Business Glossary - Relationships"
+  },
+  "relationships_table": {
+    "source": "Source Node",
+    "target": "Target Node",
+    "relationship_type": "Relationship Type",
+    "edge_type_id": "Edge Type ID",
+    "created": "Created",
+    "none_found": "No relationships found for this term"
+  },
+  "filters": {
+    "with_relationships": "With Relationships",
+    "without_relationships": "Without Relationships",
+    "clear_filter": "Clear filter"
+  },
+  "back": {
+    "to_overview": "Back to overview"
+  },
+  "language": {
+    "label": "Language"
+  },
+  "search": {
+    "placeholder": "Type to search...",
+    "clear": "Clear search",
+    "results_count": "{{count}} result",
+    "results_count_plural": "{{count}} results",
+    "keyboard_hint": "↑↓ to navigate • Enter to select • Esc to close",
+    "no_results": "No results found",
+    "no_results_subtext": "Try adjusting your search terms"
+  },
+  "node": {
+    "untitled": "Untitled"
+  },
+  "field": {
+    "description": "Description",
+    "type": "Type",
+    "status": "Status"
+  },
+  "button": {
+    "close": "Close"
+  },
+  "status": {
+    "active": "Active",
+    "inactive": "Inactive"
+  },
+  "scheduler": {
+    "dashboard": "Scheduler Dashboard",
+    "jobs": "Jobs",
+    "executions": "Executions",
+    "dependencies": "Dependencies",
+    "calendars": "Calendars",
+    "notifications": "Notifications",
+    "compliance": "Compliance",
+    "createJob": "Create Job",
+    "editJob": "Edit Job",
+    "viewJob": "View Job",
+    "runNow": "Run Now",
+    "cancel": "Cancel",
+    "resubmit": "Resubmit",
+    "refresh": "Refresh",
+    "retry": "Retry",
+    "save": "Save",
+    "delete": "Delete",
+    "edit": "Edit",
+    "activate": "Activate",
+    "deactivate": "Deactivate",
+    "status": {
+      "pending": "Pending",
+      "queued": "Queued",
+      "running": "Running",
+      "completed": "Completed",
+      "failed": "Failed",
+      "cancelled": "Cancelled",
+      "paused": "Paused",
+      "waitingDependency": "Waiting for Dependency",
+      "waitingCalendar": "Waiting for Calendar",
+      "retrying": "Retrying",
+      "skipped": "Skipped"
+    },
+    "fields": {
+      "name": "Name",
+      "description": "Description",
+      "type": "Type",
+      "status": "Status",
+      "priority": "Priority",
+      "schedule": "Schedule",
+      "timezone": "Timezone",
+      "duration": "Duration",
+      "started": "Started",
+      "completed": "Completed",
+      "attempt": "Attempt",
+      "triggeredBy": "Triggered By",
+      "nextRun": "Next Run",
+      "lastRun": "Last Run"
+    },
+    "tabs": {
+      "general": "General",
+      "schedule": "Schedule",
+      "dependencies": "Dependencies",
+      "retry": "Retry Policy",
+      "notifications": "Notifications",
+      "overview": "Overview",
+      "auditLogs": "Audit Logs",
+      "slaTracking": "SLA Tracking",
+      "reports": "Reports",
+      "workingHours": "Working Hours",
+      "holidays": "Holidays",
+      "content": "Content",
+      "recipients": "Recipients",
+      "preview": "Preview"
+    },
+    "dependency": {
+      "finishToStart": "Finish to Start",
+      "startToStart": "Start to Start",
+      "finishToFinish": "Finish to Finish",
+      "startToFinish": "Start to Finish"
+    },
+    "scheduleType": {
+      "cron": "Cron Expression",
+      "interval": "Fixed Interval",
+      "calendar": "Business Calendar",
+      "relative": "Relative Schedule"
+    },
+    "days": {
+      "mon": "Monday",
+      "tue": "Tuesday",
+      "wed": "Wednesday",
+      "thu": "Thursday",
+      "fri": "Friday",
+      "sat": "Saturday",
+      "sun": "Sunday"
+    },
+    "event": {
+      "jobStarted": "Job Started",
+      "jobCompleted": "Job Completed",
+      "jobFailed": "Job Failed",
+      "jobRetrying": "Job Retrying",
+      "jobCancelled": "Job Cancelled",
+      "slaWarning": "SLA Warning",
+      "slaBreach": "SLA Breach"
+    },
+    "metrics": {
+      "totalJobs": "Total Jobs",
+      "activeJobs": "Active Jobs",
+      "runningJobs": "Running",
+      "pendingJobs": "Pending",
+      "failedToday": "Failed Today",
+      "successRate": "Success Rate",
+      "totalExecutions": "Total Executions",
+      "slaBreaches": "SLA Breaches",
+      "avgRetries": "Avg Retries"
+    },
+    "empty": {
+      "noJobs": "No jobs configured yet",
+      "noExecutions": "No executions yet",
+      "noCalendars": "No business calendars yet",
+      "noTemplates": "No notification templates yet"
+    }
+  }
+  
+}
+

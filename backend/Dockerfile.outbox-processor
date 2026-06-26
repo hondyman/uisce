@@ -1,0 +1,26 @@
+FROM golang:1.25-alpine AS builder
+
+WORKDIR /app
+
+# Copy isolated go mod files
+COPY cmd/outbox-processor/go.mod cmd/outbox-processor/go.sum ./
+
+# Download dependencies
+RUN go mod download
+
+# Copy source code
+COPY cmd/outbox-processor/ .
+
+# Build the worker
+RUN CGO_ENABLED=0 GOOS=linux go build -o outbox-processor .
+
+# Final stage
+FROM alpine:latest
+
+RUN apk --no-cache add ca-certificates
+
+WORKDIR /root/
+
+COPY --from=builder /app/outbox-processor .
+
+CMD ["./outbox-processor"]

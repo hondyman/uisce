@@ -1,0 +1,16 @@
+/* APIKeysPage styles */
+
+.key-preview {
+  font-family: "Courier New", monospace;
+  font-size: 0.8125rem;
+  background: rgba(0, 0, 0, 0.2);
+  padding: 4px 8px;
+  border-radius: 4px;
+  color: #93c5fd;
+  word-break: break-all;
+}
+
+.badge-revoked {
+  background: rgba(220, 38, 38, 0.2);
+  color: #f87171;
+}

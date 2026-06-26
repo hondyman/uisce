@@ -1,0 +1,214 @@
+"""
+Semantic Layer Schema
+Defines GraphQL operations for managing semantic models, views, and relationships
+"""
+
+scalar UUID
+scalar Timestamp
+
+"""
+SemanticAsset represents the core and custom semantic models/views for a business entity
+"""
+type SemanticAsset {
+  id: UUID!
+  tenantId: UUID!
+  datasourceId: UUID!
+  businessEntityId: UUID!
+  coreModelId: UUID
+  coreViewId: UUID
+  customModelId: UUID
+  customViewId: UUID
+  sourceTables: [String!]
+  createdAt: Timestamp!
+  updatedAt: Timestamp!
+}
+
+"""
+RelationshipSuggestion represents an AI-generated relationship recommendation
+"""
+type RelationshipSuggestion {
+  id: UUID!
+  tenantId: UUID!
+  datasourceId: UUID!
+  sourceEntityId: UUID!
+  targetEntityId: UUID!
+  confidence: Float!
+  rationale: String
+  scoringBreakdown: ScoringBreakdown!
+  accepted: Boolean!
+  acceptedAt: Timestamp
+  createdAt: Timestamp!
+  updatedAt: Timestamp!
+}
+
+"""
+ScoringBreakdown contains individual signal scores for relationship confidence
+"""
+type ScoringBreakdown {
+  foreignKeyPresence: Float!
+  joinFrequency: Float!
+  nameSimilarity: Float!
+  textSimilarity: Float!
+  edgeTypePrior: Float!
+}
+
+"""
+SemanticModel represents a generated or custom model
+"""
+type SemanticModel {
+  id: UUID!
+  name: String!
+  type: String! # "core" or "custom"
+  description: String
+  sourceKeys: [String!]
+  createdAt: Timestamp!
+}
+
+"""
+SemanticView represents a generated or custom view
+"""
+type SemanticView {
+  id: UUID!
+  name: String!
+  type: String! # "core" or "custom"
+  description: String
+  selectedColumns: [String!]
+  createdAt: Timestamp!
+}
+
+"""
+ObjectGraphNode represents a node in the object graph
+"""
+type ObjectGraphNode {
+  id: UUID!
+  name: String!
+  type: String!
+  linksTo: [UUID!]!
+  linksFrom: [UUID!]!
+}
+
+"""
+ObjectGraphPath represents a traversed path through the object graph
+"""
+type ObjectGraphPath {
+  nodes: [UUID!]!
+  path: String!
+}
+
+"""
+RelationshipSuggestionList is a paginated list of suggestions
+"""
+type RelationshipSuggestionList {
+  suggestions: [RelationshipSuggestion!]!
+  count: Int!
+}
+
+# ============================================================================
+# Input Types
+# ============================================================================
+
+input GenerateCoreModelInput {
+  entityId: UUID!
+  modelName: String!
+  sourceKeys: [String!]!
+}
+
+input GenerateCoreViewInput {
+  entityId: UUID!
+  viewName: String!
+  selectedColumns: [String!]!
+}
+
+input CreateCustomModelInput {
+  entityId: UUID!
+  modelName: String!
+  expression: String!
+  sourceKeys: [String!]!
+}
+
+input CreateCustomViewInput {
+  entityId: UUID!
+  viewName: String!
+  expression: String!
+  sourceKeys: [String!]!
+}
+
+input ApplyRelationshipSuggestionInput {
+  suggestionId: UUID!
+}
+
+input TraverseGraphInput {
+  startNodeId: UUID!
+  dotPath: String!
+}
+
+# ============================================================================
+# Queries
+# ============================================================================
+
+type Query {
+  """
+  Get semantic assets for a business entity
+  """
+  semanticAssets(entityId: UUID!): SemanticAsset!
+
+  """
+  Get relationship suggestions for a business entity
+  """
+  relationshipSuggestions(
+    entityId: UUID!
+    limit: Int = 20
+    minConfidence: Float = 0.5
+  ): RelationshipSuggestionList!
+
+  """
+  Get linked models for a business entity
+  """
+  linkedModels(entityId: UUID!): [SemanticModel!]!
+
+  """
+  Get related objects (linked entities)
+  """
+  relatedObjects(entityId: UUID!): ObjectGraphNode!
+
+  """
+  Traverse an object graph using dot notation
+  """
+  traverseObjectGraph(input: TraverseGraphInput!): ObjectGraphPath!
+}
+
+# ============================================================================
+# Mutations
+# ============================================================================
+
+type Mutation {
+  """
+  Generate a core model from source tables
+  """
+  generateCoreModel(input: GenerateCoreModelInput!): SemanticModel!
+
+  """
+  Generate a core view from selected columns
+  """
+  generateCoreView(input: GenerateCoreViewInput!): SemanticView!
+
+  """
+  Create a custom model with a user-defined expression
+  """
+  createCustomModel(input: CreateCustomModelInput!): SemanticModel!
+
+  """
+  Create a custom view with a user-defined expression
+  """
+  createCustomView(input: CreateCustomViewInput!): SemanticView!
+
+  """
+  Apply a relationship suggestion and create an edge
+  """
+  applyRelationshipSuggestion(input: ApplyRelationshipSuggestionInput!): RelationshipSuggestion!
+
+  """
+  Traverse the object graph using dot notation
+  """
+  traverseObjectGraph(input: TraverseGraphInput!): ObjectGraphPath!
+}

@@ -1,0 +1,92 @@
+table:
+  name: bp_branch_analytics_extended
+  schema: public
+object_relationships:
+  - name: step
+    using:
+      foreign_key_constraint_on: step_id
+  - name: tenant
+    using:
+      foreign_key_constraint_on: tenant_id
+insert_permissions:
+  - role: user
+    permission:
+      check:
+        tenant_id:
+          _eq: X-Hasura-Tenant-Id
+      columns:
+        - tenant_id
+        - step_id
+        - branch_id
+        - metric_period
+        - branch_selection_count
+        - branch_completion_count
+        - branch_abandonment_count
+        - branch_timeout_count
+        - avg_duration_ms
+        - p50_duration_ms
+        - p95_duration_ms
+        - p99_duration_ms
+        - std_dev_duration_ms
+        - user_satisfaction_avg
+        - error_rate
+        - success_rate
+select_permissions:
+  - role: user
+    permission:
+      columns:
+        - id
+        - tenant_id
+        - step_id
+        - branch_id
+        - metric_period
+        - branch_selection_count
+        - branch_completion_count
+        - branch_abandonment_count
+        - branch_timeout_count
+        - avg_duration_ms
+        - p50_duration_ms
+        - p95_duration_ms
+        - p99_duration_ms
+        - std_dev_duration_ms
+        - user_satisfaction_avg
+        - error_rate
+        - success_rate
+        - anomaly_score
+        - anomaly_detected
+        - created_at
+        - updated_at
+      filter:
+        tenant_id:
+          _eq: X-Hasura-Tenant-Id
+update_permissions:
+  - role: user
+    permission:
+      columns:
+        - branch_selection_count
+        - branch_completion_count
+        - branch_abandonment_count
+        - branch_timeout_count
+        - avg_duration_ms
+        - p50_duration_ms
+        - p95_duration_ms
+        - p99_duration_ms
+        - std_dev_duration_ms
+        - user_satisfaction_avg
+        - error_rate
+        - success_rate
+        - anomaly_score
+        - anomaly_detected
+        - updated_at
+      filter:
+        tenant_id:
+          _eq: X-Hasura-Tenant-Id
+      check:
+        tenant_id:
+          _eq: X-Hasura-Tenant-Id
+delete_permissions:
+  - role: user
+    permission:
+      filter:
+        tenant_id:
+          _eq: X-Hasura-Tenant-Id

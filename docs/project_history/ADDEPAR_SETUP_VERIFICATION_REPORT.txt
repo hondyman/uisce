@@ -1,0 +1,246 @@
+==========================================================================
+  ADDEPAR-COMPETITIVE WEALTH PLATFORM - DEPLOYMENT REPORT
+==========================================================================
+
+Database: wealth_app
+Date: 
+           timestamp           
+-------------------------------
+ 2025-10-29 23:07:48.557799-04
+(1 row)
+
+
+==========================================================================
+PART 1: TABLE VERIFICATION
+==========================================================================
+       table_name       | row_count | unique_model_types 
+------------------------+-----------+--------------------
+ entities               |         8 |                  5
+ entity_attributes      |         6 |                   
+ entity_market_data     |         5 |                   
+ model_type_definitions |        15 |                   
+ position_transactions  |         3 |                   
+ positions              |         5 |                   
+(6 rows)
+
+
+==========================================================================
+PART 2: MODEL TYPES (15 Addepar-Compatible)
+==========================================================================
+      code      |  display_name  | category  | is_system | is_active 
+----------------+----------------+-----------+-----------+-----------
+ BOND           | Bond           | ASSET     | t         | t
+ STOCK          | Stock          | ASSET     | t         | t
+ ETF            | ETF            | ASSET     | t         | t
+ MUTUAL_FUND    | Mutual Fund    | ASSET     | t         | t
+ CASH           | Cash           | ASSET     | t         | t
+ REAL_ESTATE    | Real Estate    | ASSET     | t         | t
+ PRIVATE_EQUITY | Private Equity | ASSET     | t         | t
+ CRYPTOCURRENCY | Cryptocurrency | ASSET     | t         | t
+ OPTION         | Option         | ASSET     | t         | t
+ CLIENT         | Client         | ENTITY    | t         | t
+ HOUSEHOLD      | Household      | ENTITY    | t         | t
+ TRUST          | Trust          | ENTITY    | t         | t
+ ACCOUNT        | Account        | CONTAINER | t         | t
+ PORTFOLIO      | Portfolio      | CONTAINER | t         | t
+ INSTITUTION    | Institution    | ENTITY    | t         | t
+(15 rows)
+
+
+==========================================================================
+PART 3: SAMPLE PORTFOLIO
+==========================================================================
+             portfolio_id             |    portfolio_name     | model_type | status | num_holdings | total_value | total_cost_basis | total_gain_loss | return_pct 
+--------------------------------------+-----------------------+------------+--------+--------------+-------------+------------------+-----------------+------------
+ df6b2386-095c-4bd1-9739-67296fb54f25 | Growth Portfolio 2025 | PORTFOLIO  | ACTIVE |            5 |   710000.00 |        641000.00 |        69000.00 |      10.76
+(1 row)
+
+
+==========================================================================
+PART 4: PORTFOLIO HOLDINGS
+==========================================================================
+   holding_name   | ticker | holding_type |   shares    | current_price | current_market_value | cost_basis | unrealized_gain_loss | return_pct 
+------------------+--------+--------------+-------------+---------------+----------------------+------------+----------------------+------------
+ SPDR S&P 500 ETF | SPY    | ETF          | 1000.000000 |      330.0000 |    330000.0000000000 |  300000.00 |     30000.0000000000 |      10.00
+ AGG ETF          | AGG    | ETF          | 2000.000000 |       73.5000 |    147000.0000000000 |  150000.00 |     -3000.0000000000 |      -2.00
+ Apple Inc        | AAPL   | STOCK        |  500.000000 |      204.0000 |    102000.0000000000 |   90000.00 |     12000.0000000000 |      13.33
+ Microsoft Corp   | MSFT   | STOCK        |  300.000000 |      340.0000 |    102000.0000000000 |   72000.00 |     30000.0000000000 |      41.67
+ Cash Position    |        | CASH         |             |        1.0000 |             29000.00 |   29000.00 |                 0.00 |       0.00
+(5 rows)
+
+
+==========================================================================
+PART 5: VIEWS VERIFICATION
+==========================================================================
+           viewname           | exists | type 
+------------------------------+--------+------
+ v_entity_holdings            | t      | View
+ v_entity_portfolio_summary   | t      | View
+ v_entity_positions_hierarchy | t      | View
+(3 rows)
+
+
+==========================================================================
+PART 6: FUNCTIONS VERIFICATION
+==========================================================================
+          function_name          | overloads |   type   
+---------------------------------+-----------+----------
+ calculate_portfolio_performance |         1 | Function
+ find_or_create_entity           |         1 | Function
+ get_entity_market_value         |         1 | Function
+ migrate_securities_to_entities  |         1 | Function
+(4 rows)
+
+
+==========================================================================
+PART 7: INDEXES VERIFICATION
+==========================================================================
+       tablename       |           indexname           | exists 
+-----------------------+-------------------------------+--------
+ entities              | entities_pkey                 | t
+ entities              | idx_entities_cusip            | t
+ entities              | idx_entities_deleted          | t
+ entities              | idx_entities_external_id      | t
+ entities              | idx_entities_legacy_client    | t
+ entities              | idx_entities_legacy_portfolio | t
+ entities              | idx_entities_legacy_security  | t
+ entities              | idx_entities_model_type       | t
+ entities              | idx_entities_status           | t
+ entities              | idx_entities_tenant           | t
+ entities              | idx_entities_ticker           | t
+ entity_market_data    | entity_market_data_pkey       | t
+ entity_market_data    | entity_market_data_unique     | t
+ entity_market_data    | idx_entity_market_data_date   | t
+ entity_market_data    | idx_entity_market_data_entity | t
+ entity_market_data    | idx_entity_market_data_time   | t
+ position_transactions | idx_pos_trans_entity          | t
+ position_transactions | idx_pos_trans_position        | t
+ position_transactions | idx_pos_trans_tenant          | t
+ position_transactions | idx_pos_trans_trade_date      | t
+ position_transactions | idx_pos_trans_type            | t
+ position_transactions | position_transactions_pkey    | t
+ positions             | idx_positions_active          | t
+ positions             | idx_positions_as_of_date      | t
+ positions             | idx_positions_owned           | t
+ positions             | idx_positions_owner           | t
+ positions             | idx_positions_status          | t
+ positions             | idx_positions_tenant          | t
+ positions             | idx_positions_unique          | t
+ positions             | positions_pkey                | t
+(30 rows)
+
+
+==========================================================================
+PART 8: CONSTRAINTS VERIFICATION
+==========================================================================
+      table_name       |                 constraint_name                  | constraint_type | constraint_count 
+-----------------------+--------------------------------------------------+-----------------+------------------
+ entities              | entities_created_by_fkey                         | FOREIGN KEY     |                1
+ entities              | entities_legacy_client_id_fkey                   | FOREIGN KEY     |                1
+ entities              | entities_legacy_household_id_fkey                | FOREIGN KEY     |                1
+ entities              | entities_legacy_portfolio_id_fkey                | FOREIGN KEY     |                1
+ entities              | entities_legacy_security_id_fkey                 | FOREIGN KEY     |                1
+ entities              | entities_model_type_fkey                         | FOREIGN KEY     |                1
+ entities              | entities_tenant_id_fkey                          | FOREIGN KEY     |                1
+ entities              | entities_updated_by_fkey                         | FOREIGN KEY     |                1
+ entities              | fk_entities_created_by                           | FOREIGN KEY     |                1
+ entities              | fk_entities_model_type                           | FOREIGN KEY     |                1
+ entities              | fk_entities_tenant_id                            | FOREIGN KEY     |                1
+ entities              | fk_entities_updated_by                           | FOREIGN KEY     |                1
+ entities              | entities_pkey                                    | PRIMARY KEY     |                1
+ position_transactions | fk_pos_trans_created_by                          | FOREIGN KEY     |                1
+ position_transactions | fk_pos_trans_entity_id                           | FOREIGN KEY     |                1
+ position_transactions | fk_pos_trans_position_id                         | FOREIGN KEY     |                1
+ position_transactions | fk_pos_trans_tenant_id                           | FOREIGN KEY     |                1
+ position_transactions | position_transactions_created_by_fkey            | FOREIGN KEY     |                1
+ position_transactions | position_transactions_entity_id_fkey             | FOREIGN KEY     |                1
+ position_transactions | position_transactions_legacy_transaction_id_fkey | FOREIGN KEY     |                1
+ position_transactions | position_transactions_position_id_fkey           | FOREIGN KEY     |                1
+ position_transactions | position_transactions_tax_lot_id_fkey            | FOREIGN KEY     |                1
+ position_transactions | position_transactions_tenant_id_fkey             | FOREIGN KEY     |                1
+ position_transactions | position_transactions_pkey                       | PRIMARY KEY     |                1
+ positions             | fk_positions_created_by                          | FOREIGN KEY     |                1
+ positions             | fk_positions_legacy_holding_id                   | FOREIGN KEY     |                1
+ positions             | fk_positions_owned_id                            | FOREIGN KEY     |                1
+ positions             | fk_positions_owner_id                            | FOREIGN KEY     |                1
+ positions             | fk_positions_tenant_id                           | FOREIGN KEY     |                1
+ positions             | positions_created_by_fkey                        | FOREIGN KEY     |                1
+ positions             | positions_legacy_holding_id_fkey                 | FOREIGN KEY     |                1
+ positions             | positions_owned_id_fkey                          | FOREIGN KEY     |                1
+ positions             | positions_owner_id_fkey                          | FOREIGN KEY     |                1
+ positions             | positions_tenant_id_fkey                         | FOREIGN KEY     |                1
+ positions             | positions_pkey                                   | PRIMARY KEY     |                1
+(35 rows)
+
+
+==========================================================================
+PART 9: SECURITY (RLS) VERIFICATION
+==========================================================================
+ schemaname |       tablename       | security_type | is_enabled 
+------------+-----------------------+---------------+------------
+ public     | entities              | RLS           | t
+ public     | entity_attributes     | RLS           | t
+ public     | entity_market_data    | RLS           | t
+ public     | position_transactions | RLS           | t
+ public     | positions             | RLS           | t
+(5 rows)
+
+
+==========================================================================
+PART 10: SAMPLE TRANSACTIONS
+==========================================================================
+  holding_name  | transaction_type | trade_date |   units    |  price   |  amount  | fees  
+----------------+------------------+------------+------------+----------+----------+-------
+ Apple Inc      | DIVIDEND         | 2025-10-29 | 500.000000 |   0.3600 |   180.00 |  0.00
+ Microsoft Corp | BUY              | 2024-02-20 | 300.000000 | 240.0000 | 72000.00 | 50.00
+ Apple Inc      | BUY              | 2024-01-15 | 500.000000 | 180.0000 | 90000.00 | 50.00
+(3 rows)
+
+
+==========================================================================
+PART 11: PERFORMANCE - QUERY EXECUTION
+==========================================================================
+
+Query: SELECT * FROM v_entity_holdings LIMIT 10;
+Timing is on.
+             position_id              |         portfolio_entity_id          |    portfolio_name     | portfolio_type |          holding_entity_id           | holding_type |   holding_name   | ticker | cusip |   shares    |  units   | ownership_percentage | cost_basis | average_cost_per_unit | current_price | current_market_value | unrealized_gain_loss |         return_pct         | as_of_date | status |              tenant_id               
+--------------------------------------+--------------------------------------+-----------------------+----------------+--------------------------------------+--------------+------------------+--------+-------+-------------+----------+----------------------+------------+-----------------------+---------------+----------------------+----------------------+----------------------------+------------+--------+--------------------------------------
+ cda89c0b-8a8e-44f6-b0be-aff597edccbb | df6b2386-095c-4bd1-9739-67296fb54f25 | Growth Portfolio 2025 | PORTFOLIO      | d2cfd615-2a58-4eb0-844c-2e07b87167c9 | STOCK        | Apple Inc        | AAPL   |       |  500.000000 |          |                      |   90000.00 |              180.0000 |      204.0000 |    102000.0000000000 |     12000.0000000000 |    13.33333333333333333300 | 2025-10-29 | ACTIVE | f47ac10b-58cc-4372-a567-0e02b2c3d479
+ a3a172c5-582d-4549-97e0-a6fd4c06ff61 | df6b2386-095c-4bd1-9739-67296fb54f25 | Growth Portfolio 2025 | PORTFOLIO      | bf6567d6-0399-47c1-b6d3-595cfd748208 | STOCK        | Microsoft Corp   | MSFT   |       |  300.000000 |          |                      |   72000.00 |              240.0000 |      340.0000 |    102000.0000000000 |     30000.0000000000 |    41.66666666666666666700 | 2025-10-29 | ACTIVE | f47ac10b-58cc-4372-a567-0e02b2c3d479
+ d5cd12a1-ca66-4c32-8645-3c31644aa43a | df6b2386-095c-4bd1-9739-67296fb54f25 | Growth Portfolio 2025 | PORTFOLIO      | c42b001c-d9ca-449d-9957-a9b0213aacb8 | ETF          | SPDR S&P 500 ETF | SPY    |       | 1000.000000 |          |                      |  300000.00 |              300.0000 |      330.0000 |    330000.0000000000 |     30000.0000000000 |    10.00000000000000000000 | 2025-10-29 | ACTIVE | f47ac10b-58cc-4372-a567-0e02b2c3d479
+ 59b2f53b-9463-42cb-b33a-4fcb803a9caa | df6b2386-095c-4bd1-9739-67296fb54f25 | Growth Portfolio 2025 | PORTFOLIO      | d05222ef-7be0-4862-95d8-edac1ead03d7 | ETF          | AGG ETF          | AGG    |       | 2000.000000 |          |                      |  150000.00 |               75.0000 |       73.5000 |    147000.0000000000 |     -3000.0000000000 |    -2.00000000000000000000 | 2025-10-29 | ACTIVE | f47ac10b-58cc-4372-a567-0e02b2c3d479
+ 710ee04a-4754-49ce-a0eb-87599da1d1f9 | df6b2386-095c-4bd1-9739-67296fb54f25 | Growth Portfolio 2025 | PORTFOLIO      | c391a570-afbc-4cc0-a221-ad5d38c869ba | CASH         | Cash Position    |        |       |             | 1.000000 |                      |   29000.00 |                       |        1.0000 |             29000.00 |                 0.00 | 0.000000000000000000000000 | 2025-10-29 | ACTIVE | f47ac10b-58cc-4372-a567-0e02b2c3d479
+(5 rows)
+
+Time: 0.467 ms
+Timing is off.
+
+==========================================================================
+DEPLOYMENT SUMMARY
+==========================================================================
+      status       
+-------------------
+ ✅ Entities: 8
+ ✅ Positions: 5
+ ✅ Transactions: 3
+ ✅ Model Types: 15
+ ✅ Market Data: 5
+(5 rows)
+
+
+==========================================================================
+STATUS: ✅ ADDEPAR PLATFORM READY FOR DEPLOYMENT
+==========================================================================
+
+Next Steps:
+  1. Deploy Hasura GraphQL Engine
+  2. Configure PostgreSQL connection
+  3. Track tables and views in Hasura
+  4. Test GraphQL queries
+  5. Build React frontend
+
+For detailed information, see:
+  - ADDEPAR_IMPLEMENTATION_GUIDE.md
+  - ADDEPAR_QUICK_START_SUMMARY.md
+  - ADDEPAR_API_EXAMPLES.md
+

@@ -1,0 +1,14 @@
+# github.com/hondyman/semlayer/backend/internal/api [github.com/hondyman/semlayer/backend/internal/api.test]
+internal/api/api.go:3247:5: syntax error: unexpected newline in argument list; possibly missing comma or )
+internal/api/api.go:3288:4: syntax error: unexpected ) after top level declaration
+internal/api/api.go:3299:77: method has multiple receivers
+internal/api/api.go:3299:77: syntax error: unexpected {, expected name
+internal/api/api.go:3304:4: syntax error: unexpected ) after top level declaration
+internal/api/api.go:3305:71: method has multiple receivers
+internal/api/api.go:3305:71: syntax error: unexpected {, expected name
+internal/api/api.go:3579:4: syntax error: unexpected ) after top level declaration
+internal/api/api.go:3580:45: syntax error: unexpected {, expected name
+internal/api/api.go:3596:4: syntax error: unexpected ) after top level declaration
+internal/api/api.go:3596:4: too many errors
+FAIL	github.com/hondyman/semlayer/backend/internal/api [build failed]
+FAIL

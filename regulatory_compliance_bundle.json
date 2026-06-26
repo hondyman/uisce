@@ -1,0 +1,234 @@
+{
+  "bundle_id": "regulatory_compliance_bundle",
+  "domain": "regulatory",
+  "audience": ["compliance_officer", "executive", "auditor"],
+  "version": "v1.0.0",
+  "owner": "patrick",
+  "tags": ["regulatory", "compliance", "capital", "liquidity", "risk"],
+  "functions": [
+    {
+      "name": "SUMX",
+      "class": "DAX-Iterator",
+      "badge": "🟨",
+      "description": "Returns the sum of an expression evaluated over a table."
+    },
+    {
+      "name": "AVERAGEX",
+      "class": "DAX-Iterator",
+      "badge": "🟨",
+      "description": "Calculates the average of an expression evaluated over a table."
+    },
+    {
+      "name": "FILTER",
+      "class": "DAX-Iterator",
+      "badge": "🟨",
+      "description": "Returns a table that represents a subset of another table or expression."
+    },
+    {
+      "name": "DIVIDE",
+      "class": "DAX-Logical",
+      "badge": "🟧",
+      "description": "Performs division and returns alternate result or BLANK() on division by 0."
+    },
+    {
+      "name": "MINX",
+      "class": "DAX-Iterator",
+      "badge": "🟨",
+      "description": "Returns the minimum value of an expression evaluated over a table."
+    },
+    {
+      "name": "MAXX",
+      "class": "DAX-Iterator",
+      "badge": "🟨",
+      "description": "Returns the maximum value of an expression evaluated over a table."
+    }
+  ],
+  "metrics": [
+    {
+      "node_id": "liquidity_coverage_ratio",
+      "category": "liquidity_risk",
+      "description": "High-quality liquid assets relative to net cash outflows over 30 days.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "DIVIDE(SUMX({assets_table}, {high_quality_assets}), SUMX({outflows_table}, {net_cash_outflows}))",
+        "arguments": {
+          "assets_table": "table:high_quality_liquid_assets",
+          "high_quality_assets": "field:amount",
+          "outflows_table": "table:net_cash_outflows",
+          "net_cash_outflows": "field:amount"
+        }
+      },
+      "badge": "🟨",
+      "function_class": "DAX-Iterator",
+      "functions_used": ["SUMX", "DIVIDE"],
+      "governance": { "status": "golden" }
+    },
+    {
+      "node_id": "net_stable_funding_ratio",
+      "category": "funding_risk",
+      "description": "Available stable funding relative to required stable funding over one year.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "DIVIDE(SUMX({funding_table}, {available_stable_funding}), SUMX({requirements_table}, {required_stable_funding}))",
+        "arguments": {
+          "funding_table": "table:available_stable_funding",
+          "available_stable_funding": "field:amount",
+          "requirements_table": "table:required_stable_funding",
+          "required_stable_funding": "field:amount"
+        }
+      },
+      "badge": "🟨",
+      "function_class": "DAX-Iterator",
+      "functions_used": ["SUMX", "DIVIDE"],
+      "governance": { "status": "golden" }
+    },
+    {
+      "node_id": "capital_adequacy_ratio",
+      "category": "capital_adequacy",
+      "description": "Regulatory capital as a percentage of risk-weighted assets.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "DIVIDE(SUMX({capital_table}, {regulatory_capital}), SUMX({assets_table}, {risk_weighted_assets}))",
+        "arguments": {
+          "capital_table": "table:regulatory_capital",
+          "regulatory_capital": "field:amount",
+          "assets_table": "table:risk_weighted_assets",
+          "risk_weighted_assets": "field:weighted_amount"
+        }
+      },
+      "badge": "🟨",
+      "function_class": "DAX-Iterator",
+      "functions_used": ["SUMX", "DIVIDE"],
+      "governance": { "status": "golden" }
+    },
+    {
+      "node_id": "tier1_capital_ratio",
+      "category": "capital_quality",
+      "description": "Tier 1 capital as a percentage of risk-weighted assets.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "DIVIDE(SUMX({capital_table}, {tier1_capital}), SUMX({assets_table}, {risk_weighted_assets}))",
+        "arguments": {
+          "capital_table": "table:tier1_capital",
+          "tier1_capital": "field:amount",
+          "assets_table": "table:risk_weighted_assets",
+          "risk_weighted_assets": "field:weighted_amount"
+        }
+      },
+      "badge": "🟨",
+      "function_class": "DAX-Iterator",
+      "functions_used": ["SUMX", "DIVIDE"],
+      "governance": { "status": "golden" }
+    },
+    {
+      "node_id": "leverage_ratio",
+      "category": "leverage",
+      "description": "Tier 1 capital as a percentage of total exposure.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "DIVIDE(SUMX({capital_table}, {tier1_capital}), SUMX({exposure_table}, {total_exposure}))",
+        "arguments": {
+          "capital_table": "table:tier1_capital",
+          "tier1_capital": "field:amount",
+          "exposure_table": "table:total_exposure",
+          "total_exposure": "field:amount"
+        }
+      },
+      "badge": "🟨",
+      "function_class": "DAX-Iterator",
+      "functions_used": ["SUMX", "DIVIDE"],
+      "governance": { "status": "golden" }
+    },
+    {
+      "node_id": "counterparty_credit_risk",
+      "category": "credit_risk",
+      "description": "Credit valuation adjustment for derivative exposures.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "SUMX({derivatives_table}, {credit_valuation_adjustment})",
+        "arguments": {
+          "derivatives_table": "table:derivative_exposures",
+          "credit_valuation_adjustment": "field:cva_amount"
+        }
+      },
+      "badge": "🟨",
+      "function_class": "DAX-Iterator",
+      "functions_used": ["SUMX"],
+      "governance": { "status": "draft" }
+    },
+    {
+      "node_id": "operational_risk_capital",
+      "category": "operational_risk",
+      "description": "Capital requirement for operational risk losses.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "SUMX({losses_table}, {operational_loss}) * {scaling_factor}",
+        "arguments": {
+          "losses_table": "table:operational_losses",
+          "operational_loss": "field:amount",
+          "scaling_factor": "field:risk_multiplier"
+        }
+      },
+      "badge": "🟨",
+      "function_class": "DAX-Iterator",
+      "functions_used": ["SUMX"],
+      "governance": { "status": "draft" }
+    },
+    {
+      "node_id": "large_exposure_limit",
+      "category": "concentration_risk",
+      "description": "Largest exposure as a percentage of eligible capital.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "DIVIDE(MAXX({exposures_table}, {exposure_amount}), SUMX({capital_table}, {eligible_capital}))",
+        "arguments": {
+          "exposures_table": "table:counterparty_exposures",
+          "exposure_amount": "field:amount",
+          "capital_table": "table:eligible_capital",
+          "eligible_capital": "field:amount"
+        }
+      },
+      "badge": "🟨",
+      "function_class": "DAX-Iterator",
+      "functions_used": ["MAXX", "SUMX", "DIVIDE"],
+      "governance": { "status": "golden" }
+    },
+    {
+      "node_id": "market_risk_capital",
+      "category": "market_risk",
+      "description": "Capital requirement for market risk exposures.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "SUMX({positions_table}, {value_at_risk}) * {confidence_factor}",
+        "arguments": {
+          "positions_table": "table:trading_positions",
+          "value_at_risk": "field:var_amount",
+          "confidence_factor": "field:risk_multiplier"
+        }
+      },
+      "badge": "🟨",
+      "function_class": "DAX-Iterator",
+      "functions_used": ["SUMX"],
+      "governance": { "status": "golden" }
+    },
+    {
+      "node_id": "stress_testing_buffer",
+      "category": "stress_testing",
+      "description": "Additional capital buffer for stress scenarios.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "SUMX({scenarios_table}, {stress_loss}) - SUMX({capital_table}, {available_capital})",
+        "arguments": {
+          "scenarios_table": "table:stress_test_results",
+          "stress_loss": "field:projected_loss",
+          "capital_table": "table:available_capital",
+          "available_capital": "field:amount"
+        }
+      },
+      "badge": "🟨",
+      "function_class": "DAX-Iterator",
+      "functions_used": ["SUMX"],
+      "governance": { "status": "draft" }
+    }
+  ]
+}

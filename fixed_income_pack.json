@@ -1,0 +1,177 @@
+{
+  "bundle_id": "fixed_income_pack",
+  "domain": "fixed_income",
+  "audience": ["portfolio_manager", "risk", "executive"],
+  "version": "v1.0.0",
+  "owner": "patrick",
+  "tags": ["fixed_income", "pricing", "yield", "duration", "spread", "attribution"],
+  "metrics": [
+    {
+      "node_id": "clean_price",
+      "category": "pricing",
+      "description": "Market price excluding accrued interest.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "DIVIDE({dirty_price} - {accrued_interest}, 1)",
+        "arguments": {
+          "dirty_price": "field:dirty_price",
+          "accrued_interest": "calc:accrued_interest"
+        }
+      },
+      "badge": "🟧",
+      "function_class": "DAX-Logical",
+      "functions_used": ["DIVIDE"],
+      "governance": { "status": "golden" }
+    },
+    {
+      "node_id": "accrued_interest",
+      "category": "pricing",
+      "description": "Interest earned since last coupon payment.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "DIVIDE({coupon_rate} * {face_value} * {days_since_coupon}, {days_in_period})",
+        "arguments": {
+          "coupon_rate": "field:coupon_rate",
+          "face_value": "field:face_value",
+          "days_since_coupon": "field:days_since_coupon",
+          "days_in_period": "field:days_in_period"
+        }
+      },
+      "badge": "🟧",
+      "function_class": "DAX-Logical",
+      "functions_used": ["DIVIDE"],
+      "governance": { "status": "golden" }
+    },
+    {
+      "node_id": "yield_to_maturity",
+      "category": "yield",
+      "description": "Internal rate of return of all future cash flows until maturity.",
+      "financial_calc": {
+        "type": "excel_formula",
+        "formula": "=YIELD({settlement_date}, {maturity_date}, {coupon_rate}, {price}, {redemption}, {frequency}, {basis})",
+        "arguments": {
+          "settlement_date": "field:settlement_date",
+          "maturity_date": "field:maturity_date",
+          "coupon_rate": "field:coupon_rate",
+          "price": "field:clean_price",
+          "redemption": "field:redemption_value",
+          "frequency": "field:coupon_frequency",
+          "basis": "field:day_count_basis"
+        }
+      },
+      "badge": "🟩",
+      "function_class": "DAX-Financial",
+      "functions_used": ["YIELD"],
+      "governance": { "status": "golden" }
+    },
+    {
+      "node_id": "yield_to_worst",
+      "category": "yield",
+      "description": "Lowest yield possible without issuer default, considering calls and puts.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "MINX({yield_scenarios}, [yield])",
+        "arguments": {
+          "yield_scenarios": "table:call_and_maturity_yields"
+        }
+      },
+      "badge": "🟨",
+      "function_class": "DAX-Iterator",
+      "functions_used": ["MINX"],
+      "governance": { "status": "golden" }
+    },
+    {
+      "node_id": "macaulay_duration",
+      "category": "duration",
+      "description": "Weighted average time to receive bond cash flows.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "DIVIDE(SUMX({cash_flows}, {pv_cash_flow} * {time_period}), {price})",
+        "arguments": {
+          "cash_flows": "table:bond_cash_flows",
+          "pv_cash_flow": "field:pv_cash_flow",
+          "time_period": "field:time_period",
+          "price": "field:clean_price"
+        }
+      },
+      "badge": "🟨",
+      "function_class": "DAX-Iterator",
+      "functions_used": ["SUMX", "DIVIDE"],
+      "governance": { "status": "golden" }
+    },
+    {
+      "node_id": "modified_duration",
+      "category": "duration",
+      "description": "Price sensitivity to yield changes.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "DIVIDE({macaulay_duration}, (1 + DIVIDE({ytm}, {coupon_frequency})))",
+        "arguments": {
+          "macaulay_duration": "calc:macaulay_duration",
+          "ytm": "calc:yield_to_maturity",
+          "coupon_frequency": "field:coupon_frequency"
+        }
+      },
+      "badge": "🟧",
+      "function_class": "DAX-Logical",
+      "functions_used": ["DIVIDE"],
+      "governance": { "status": "golden" }
+    },
+    {
+      "node_id": "convexity",
+      "category": "duration",
+      "description": "Second-order sensitivity to yield changes.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "DIVIDE(SUMX({cash_flows}, {pv_cash_flow} * {time_period} * ({time_period} + 1)), {price} * (1 + {ytm})^2)",
+        "arguments": {
+          "cash_flows": "table:bond_cash_flows",
+          "pv_cash_flow": "field:pv_cash_flow",
+          "time_period": "field:time_period",
+          "price": "field:clean_price",
+          "ytm": "calc:yield_to_maturity"
+        }
+      },
+      "badge": "🟨",
+      "function_class": "DAX-Iterator",
+      "functions_used": ["SUMX", "DIVIDE", "POWER"],
+      "governance": { "status": "draft" }
+    },
+    {
+      "node_id": "oas",
+      "category": "spread",
+      "description": "Option-adjusted spread over benchmark curve.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "CALCULATE_SPREAD({price}, {benchmark_curve}, {cash_flows}, REMOVE_OPTION_VALUE)",
+        "arguments": {
+          "price": "field:clean_price",
+          "benchmark_curve": "field:benchmark_curve",
+          "cash_flows": "table:bond_cash_flows"
+        }
+      },
+      "badge": "🟩",
+      "function_class": "DAX-Financial",
+      "functions_used": ["CALCULATE_SPREAD"],
+      "governance": { "status": "draft" }
+    },
+    {
+      "node_id": "total_return",
+      "category": "attribution",
+      "description": "Coupon return + price return + reinvestment income.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "{coupon_return} + {price_return} + {reinvestment_income}",
+        "arguments": {
+          "coupon_return": "calc:coupon_return",
+          "price_return": "calc:price_return",
+          "reinvestment_income": "calc:reinvestment_income"
+        }
+      },
+      "badge": "🟧",
+      "function_class": "DAX-Logical",
+      "functions_used": ["ADD"],
+      "governance": { "status": "golden" }
+    }
+  ]
+}

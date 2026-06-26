@@ -1,0 +1,46 @@
+cubes:
+  - name: Account
+    sql_table: account
+    title: Account
+
+    measures:
+      - name: count
+        type: count
+      - name: total_balance
+        sql: balance
+        type: sum
+
+    dimensions:
+      - name: id
+        sql: id
+        type: string
+        primary_key: true
+        title: Account ID
+      - name: account_number
+        sql: account_number
+        type: string
+        title: Account Number
+      - name: account_type
+        sql: account_type
+        type: string
+        title: Account Type
+      - name: status
+        sql: status
+        type: string
+        title: Account Status
+      - name: balance
+        sql: balance
+        type: number
+        title: Account Balance
+      - name: created_date
+        sql: created_date
+        type: time
+        title: Created Date
+      - name: primary_contact
+        sql: primary_contact
+        type: string
+        title: Primary Contact
+      - name: approval_date
+        sql: approval_date
+        type: time
+        title: Approval Date

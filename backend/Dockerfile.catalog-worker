@@ -1,0 +1,37 @@
+FROM golang:1.25-alpine AS builder
+
+# Install git for go mod download
+RUN apk add --no-cache git
+
+WORKDIR /workspace
+
+# Copy repo-level and backend module files so local replace directives resolve
+COPY go.mod go.sum ./
+COPY backend/go.mod backend/go.sum ./backend/
+COPY backend/ ./backend/
+
+# Copy catalog-worker module files
+COPY backend/cmd/catalog-worker/go.mod backend/cmd/catalog-worker/go.sum ./cmd/catalog-worker/
+
+# Download dependencies from the module directory so replace ../../ resolves
+WORKDIR /workspace/cmd/catalog-worker
+RUN go mod download
+
+# Copy source code
+WORKDIR /workspace
+COPY backend/cmd/catalog-worker/ ./cmd/catalog-worker/
+
+# Build the worker
+WORKDIR /workspace/cmd/catalog-worker
+RUN CGO_ENABLED=0 GOOS=linux go build -o catalog-worker .
+
+# Final stage
+FROM alpine:latest
+
+RUN apk --no-cache add ca-certificates
+
+WORKDIR /root/
+
+COPY --from=builder /workspace/cmd/catalog-worker/catalog-worker .
+
+CMD ["./catalog-worker"]

@@ -1,0 +1,20 @@
+          table_name          |    legacy_type    | uuid_type 
+------------------------------+-------------------+-----------
+ catalog_edge                 | uuid              | 
+ catalog_node                 | uuid              | 
+ catalog_node_vw              | uuid              | 
+ entity_schema                | uuid              | 
+ fabric_defn                  | uuid              | 
+ reference_data               | uuid              | 
+ semantic_mapping_ignores     | uuid              | 
+ semantic_mapping_suggestions | uuid              | 
+ suggestion_feedback          | uuid              | 
+ tenant_chart                 | uuid              | 
+ uma_rebalance_requests       | character varying | 
+ view_overrides               | uuid              | 
+ views                        | uuid              | 
+(13 rows)
+
+psql:phaseb_playbook.sql:27: ERROR:  column "tenant_datasource_id_uuid" does not exist
+LINE 1: ...ECT 'catalog_node' AS tbl, COUNT(*) FILTER (WHERE tenant_dat...
+                                                             ^

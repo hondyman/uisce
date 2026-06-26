@@ -1,0 +1,16 @@
+# Tenant A - Custom Measures
+
+cube:
+  - name: positions
+    measures:
+      # Add tenant-specific measure: market value in USD
+      - name: mv_usd
+        sql: market_value * fx_rate_usd
+        type: sum
+        description: "Market value converted to USD"
+      
+      # Custom compliance measure
+      - name: restricted_securities_value
+        sql: "CASE WHEN is_restricted THEN market_value ELSE 0 END"
+        type: sum
+        description: "Total value of restricted securities"

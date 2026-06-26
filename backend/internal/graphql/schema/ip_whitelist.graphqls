@@ -1,0 +1,29 @@
+scalar UUID
+scalar Timestamp
+
+type IpWhitelistEntry {
+    id:         UUID!
+    tenantId:  UUID
+    ipAddress: String!
+    description:String
+    createdAt: Timestamp!
+    updatedAt: Timestamp!
+}
+
+input IpWhitelistEntryInput {
+    tenantId:  UUID
+    ipAddress: String!
+    description:String
+}
+
+type Query {
+    ipWhitelistEntries: [IpWhitelistEntry!]!
+    ipWhitelistEntry(id: UUID!): IpWhitelistEntry
+    ipWhitelistEntriesByTenant(tenantId: UUID!): [IpWhitelistEntry!]!
+}
+
+type Mutation {
+    createIpWhitelistEntry(input: IpWhitelistEntryInput!): IpWhitelistEntry!
+    updateIpWhitelistEntry(id: UUID!, input: IpWhitelistEntryInput!): IpWhitelistEntry!
+    deleteIpWhitelistEntry(id: UUID!): Boolean!
+}

@@ -1,0 +1,559 @@
+# Network Policies for Semlayer on Azure AKS
+# Zero-trust network architecture
+
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-all
+  namespace: semlayer-control
+spec:
+  podSelector: {}
+  policyTypes:
+  - Ingress
+  - Egress
+---
+# Allow DNS resolution
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-dns
+  namespace: semlayer-control
+spec:
+  podSelector: {}
+  policyTypes:
+  - Egress
+  egress:
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: kube-system
+    ports:
+    - protocol: UDP
+      port: 53
+    - protocol: TCP
+      port: 53
+---
+# API Gateway ingress from Ingress Controller
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: api-gateway-ingress
+  namespace: semlayer-control
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: api-gateway
+  policyTypes:
+  - Ingress
+  ingress:
+  # From ingress controller
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: ingress-nginx
+    ports:
+    - protocol: TCP
+      port: 8080
+  # From Istio ingress
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: istio-system
+    ports:
+    - protocol: TCP
+      port: 8080
+  # Prometheus scraping
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: monitoring
+    ports:
+    - protocol: TCP
+      port: 9090
+---
+# API Gateway egress
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: api-gateway-egress
+  namespace: semlayer-control
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: api-gateway
+  policyTypes:
+  - Egress
+  egress:
+  # To internal services
+  - to:
+    - podSelector:
+        matchLabels:
+          app.kubernetes.io/name: semantic-engine
+    ports:
+    - protocol: TCP
+      port: 8080
+  - to:
+    - podSelector:
+        matchLabels:
+          app.kubernetes.io/name: rule-engine
+    ports:
+    - protocol: TCP
+      port: 8080
+  - to:
+    - podSelector:
+        matchLabels:
+          app.kubernetes.io/name: compliance-engine
+    ports:
+    - protocol: TCP
+      port: 8080
+  - to:
+    - podSelector:
+        matchLabels:
+          app.kubernetes.io/name: ai-builder
+    ports:
+    - protocol: TCP
+      port: 8080
+  # To Azure Database for PostgreSQL
+  - to:
+    - ipBlock:
+        cidr: 10.0.0.0/8
+    ports:
+    - protocol: TCP
+      port: 5432
+  # To Azure Cache for Redis
+  - to:
+    - ipBlock:
+        cidr: 10.0.0.0/8
+    ports:
+    - protocol: TCP
+      port: 6380
+---
+# Semantic Engine policies
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: semantic-engine-ingress
+  namespace: semlayer-control
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: semantic-engine
+  policyTypes:
+  - Ingress
+  ingress:
+  # From API Gateway
+  - from:
+    - podSelector:
+        matchLabels:
+          app.kubernetes.io/name: api-gateway
+    ports:
+    - protocol: TCP
+      port: 8080
+  # Prometheus scraping
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: monitoring
+    ports:
+    - protocol: TCP
+      port: 9090
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: semantic-engine-egress
+  namespace: semlayer-control
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: semantic-engine
+  policyTypes:
+  - Egress
+  egress:
+  # To Cube.js
+  - to:
+    - podSelector:
+        matchLabels:
+          app.kubernetes.io/name: cube-api
+    ports:
+    - protocol: TCP
+      port: 4000
+    - protocol: TCP
+      port: 15432
+  # To database
+  - to:
+    - ipBlock:
+        cidr: 10.0.0.0/8
+    ports:
+    - protocol: TCP
+      port: 5432
+  # To Redis
+  - to:
+    - ipBlock:
+        cidr: 10.0.0.0/8
+    ports:
+    - protocol: TCP
+      port: 6380
+---
+# Cube API policies
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: cube-api-ingress
+  namespace: semlayer-control
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: cube-api
+  policyTypes:
+  - Ingress
+  ingress:
+  # From Semantic Engine
+  - from:
+    - podSelector:
+        matchLabels:
+          app.kubernetes.io/name: semantic-engine
+    ports:
+    - protocol: TCP
+      port: 4000
+    - protocol: TCP
+      port: 15432
+  # Prometheus scraping
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: monitoring
+    ports:
+    - protocol: TCP
+      port: 9090
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: cube-api-egress
+  namespace: semlayer-control
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: cube-api
+  policyTypes:
+  - Egress
+  egress:
+  # To database (data warehouse)
+  - to:
+    - ipBlock:
+        cidr: 10.0.0.0/8
+    ports:
+    - protocol: TCP
+      port: 5432
+  # To Redis
+  - to:
+    - ipBlock:
+        cidr: 10.0.0.0/8
+    ports:
+    - protocol: TCP
+      port: 6380
+  # To Azure Blob Storage (pre-aggregations)
+  - to:
+    - ipBlock:
+        cidr: 0.0.0.0/0
+    ports:
+    - protocol: TCP
+      port: 443
+---
+# Rule Engine policies
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: rule-engine-ingress
+  namespace: semlayer-control
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: rule-engine
+  policyTypes:
+  - Ingress
+  ingress:
+  # From API Gateway
+  - from:
+    - podSelector:
+        matchLabels:
+          app.kubernetes.io/name: api-gateway
+    ports:
+    - protocol: TCP
+      port: 8080
+  # From other services that need ABAC
+  - from:
+    - podSelector:
+        matchLabels:
+          app.kubernetes.io/name: semantic-engine
+    ports:
+    - protocol: TCP
+      port: 8080
+  # Prometheus scraping
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: monitoring
+    ports:
+    - protocol: TCP
+      port: 9090
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: rule-engine-egress
+  namespace: semlayer-control
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: rule-engine
+  policyTypes:
+  - Egress
+  egress:
+  # To database
+  - to:
+    - ipBlock:
+        cidr: 10.0.0.0/8
+    ports:
+    - protocol: TCP
+      port: 5432
+  # To Redis
+  - to:
+    - ipBlock:
+        cidr: 10.0.0.0/8
+    ports:
+    - protocol: TCP
+      port: 6380
+---
+# Compliance Engine policies
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: compliance-engine-ingress
+  namespace: semlayer-control
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: compliance-engine
+  policyTypes:
+  - Ingress
+  ingress:
+  # From API Gateway
+  - from:
+    - podSelector:
+        matchLabels:
+          app.kubernetes.io/name: api-gateway
+    ports:
+    - protocol: TCP
+      port: 8080
+  # Prometheus scraping
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: monitoring
+    ports:
+    - protocol: TCP
+      port: 9090
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: compliance-engine-egress
+  namespace: semlayer-control
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: compliance-engine
+  policyTypes:
+  - Egress
+  egress:
+  # To database
+  - to:
+    - ipBlock:
+        cidr: 10.0.0.0/8
+    ports:
+    - protocol: TCP
+      port: 5432
+  # To Redis
+  - to:
+    - ipBlock:
+        cidr: 10.0.0.0/8
+    ports:
+    - protocol: TCP
+      port: 6380
+  # To Azure Service Bus
+  - to:
+    - ipBlock:
+        cidr: 0.0.0.0/0
+    ports:
+    - protocol: TCP
+      port: 5671
+    - protocol: TCP
+      port: 443
+  # To Azure Blob Storage (audit logs)
+  - to:
+    - ipBlock:
+        cidr: 0.0.0.0/0
+    ports:
+    - protocol: TCP
+      port: 443
+---
+# AI Builder policies
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: ai-builder-ingress
+  namespace: semlayer-control
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: ai-builder
+  policyTypes:
+  - Ingress
+  ingress:
+  # From API Gateway
+  - from:
+    - podSelector:
+        matchLabels:
+          app.kubernetes.io/name: api-gateway
+    ports:
+    - protocol: TCP
+      port: 8080
+  # Prometheus scraping
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: monitoring
+    ports:
+    - protocol: TCP
+      port: 9090
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: ai-builder-egress
+  namespace: semlayer-control
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: ai-builder
+  policyTypes:
+  - Egress
+  egress:
+  # To database
+  - to:
+    - ipBlock:
+        cidr: 10.0.0.0/8
+    ports:
+    - protocol: TCP
+      port: 5432
+  # To Redis
+  - to:
+    - ipBlock:
+        cidr: 10.0.0.0/8
+    ports:
+    - protocol: TCP
+      port: 6380
+  # To Azure ML / OpenAI
+  - to:
+    - ipBlock:
+        cidr: 0.0.0.0/0
+    ports:
+    - protocol: TCP
+      port: 443
+  # To Azure Blob Storage (model storage)
+  - to:
+    - ipBlock:
+        cidr: 0.0.0.0/0
+    ports:
+    - protocol: TCP
+      port: 443
+---
+# Notification Service policies
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: notification-service-ingress
+  namespace: semlayer-control
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: notification-service
+  policyTypes:
+  - Ingress
+  ingress:
+  # From API Gateway
+  - from:
+    - podSelector:
+        matchLabels:
+          app.kubernetes.io/name: api-gateway
+    ports:
+    - protocol: TCP
+      port: 8080
+  # From other services that send notifications
+  - from:
+    - podSelector:
+        matchLabels:
+          app.kubernetes.io/name: compliance-engine
+    ports:
+    - protocol: TCP
+      port: 8080
+  - from:
+    - podSelector:
+        matchLabels:
+          app.kubernetes.io/name: rule-engine
+    ports:
+    - protocol: TCP
+      port: 8080
+  # Prometheus scraping
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: monitoring
+    ports:
+    - protocol: TCP
+      port: 9090
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: notification-service-egress
+  namespace: semlayer-control
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: notification-service
+  policyTypes:
+  - Egress
+  egress:
+  # To database
+  - to:
+    - ipBlock:
+        cidr: 10.0.0.0/8
+    ports:
+    - protocol: TCP
+      port: 5432
+  # To Redis
+  - to:
+    - ipBlock:
+        cidr: 10.0.0.0/8
+    ports:
+    - protocol: TCP
+      port: 6380
+  # To Azure Service Bus
+  - to:
+    - ipBlock:
+        cidr: 0.0.0.0/0
+    ports:
+    - protocol: TCP
+      port: 5671
+    - protocol: TCP
+      port: 443
+  # To external notification providers (SendGrid, Twilio, Slack, etc.)
+  - to:
+    - ipBlock:
+        cidr: 0.0.0.0/0
+    ports:
+    - protocol: TCP
+      port: 443

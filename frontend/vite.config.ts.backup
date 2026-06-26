@@ -1,0 +1,192 @@
+import { defineConfig, loadEnv } from 'vite';
+import react from '@vitejs/plugin-react';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+// __dirname workaround for ESM
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+export default defineConfig(async ({ mode }) => {
+  // Load environment variables so server-side config (like proxy) respects .env.local
+  const env = loadEnv(mode, process.cwd(), '');
+  const plugins: any[] = [react()];
+
+  // Try to load optional plugins if installed
+  try {
+    let visualizer: any;
+    try {
+      ({ visualizer } = await import('vite-plugin-visualizer'));
+    } catch (e) {
+      ({ visualizer } = await import('rollup-plugin-visualizer'));
+    }
+    plugins.push(
+      visualizer({ filename: 'dist/stats.html', open: false, gzipSize: true, brotliSize: true, json: true, template: 'sunburst' })
+    );
+  } catch (e) {}
+
+  try {
+    const monacoPluginModule: any = await import('vite-plugin-monaco-editor');
+    const monacoFactory: any = monacoPluginModule && (monacoPluginModule.default || monacoPluginModule);
+    if (typeof monacoFactory === 'function') {
+      plugins.push(monacoFactory({}));
+    }
+  } catch (e) {}
+
+  return {
+    plugins,
+    resolve: {
+      dedupe: ['react', 'react-dom'],
+      alias: {
+        'monaco-yaml': path.resolve(__dirname, 'src/shims/monaco-yaml-shim.ts'),
+        '@': path.resolve(__dirname, 'src'),
+        react: path.resolve(__dirname, 'node_modules/react'),
+        'react-dom': path.resolve(__dirname, 'node_modules/react-dom'),
+      },
+    },
+    server: {
+      host: '127.0.0.1',
+      port: Number(process.env.PORT) || 5173,
+      strictPort: true,
+      // Hardened proxy settings:
+      // - Dedicated `/api/profiler` route with long timeouts for long-running profiler jobs.
+      // - General `/api` forwarding with reasonable timeouts.
+      // - xfwd/changeOrigin to preserve upstream expectations.
+      // Toggle proxying in development by setting VITE_USE_PROXY=true in your `.env.local`.
+      proxy: ((): Record<string, any> => {
+        const useProxy = (env.VITE_USE_PROXY || env.VITE_USE_PROXY === 'true' ? env.VITE_USE_PROXY : process.env.VITE_USE_PROXY || 'false').toString().toLowerCase() === 'true';
+        if (!useProxy) return {};
+  const backendTarget = (env.VITE_BACKEND_TARGET || process.env.VITE_BACKEND_TARGET) || 'http://localhost:29080';
+        const apiBase = (env.VITE_API_BASE_URL || process.env.VITE_API_BASE_URL) || backendTarget;
+
+        return {
+          // Special-case profiler endpoints which may run for a long time.
+          '/api/profiler': {
+            target: backendTarget,
+            changeOrigin: true,
+            secure: false,
+            xfwd: true,
+            ws: false, // profiler endpoints are not websockets; disable ws for stability
+            // Keep long timeouts for profiling runs (10 minutes)
+            timeout: 10 * 60 * 1000,
+            proxyTimeout: 10 * 60 * 1000,
+            // Provide helpful logging on proxy errors to ease debugging
+            onError(err: any, _req: any, res: any) {
+              // eslint-disable-next-line no-console
+              console.error('[vite proxy] /api/profiler error', err && err.message ? err.message : err);
+              try {
+                if (!res.headersSent) {
+                  res.writeHead && res.writeHead(502);
+                  res.end && res.end('Proxy error');
+                }
+              } catch (e) {}
+            },
+          },
+
+          // Generic API proxy. Use this when you want the frontend origin to mask backend origins (avoid configuring CORS).
+          '/api': {
+            target: apiBase,
+            changeOrigin: true,
+            secure: false,
+            xfwd: true,
+            ws: false,
+            // Shorter timeout for regular API calls (2 minutes)
+            timeout: 2 * 60 * 1000,
+            proxyTimeout: 2 * 60 * 1000,
+            // Helpful dev-time logging: print proxied request details so we can
+            // confirm the dev server is forwarding /api calls to the intended target.
+            configure(proxy: any, options: any) {
+              try {
+                proxy.on && proxy.on('proxyReq', (_proxyReq: any, req: any) => {
+                  // eslint-disable-next-line no-console
+                  console.log('[vite proxy] proxying request', { method: req.method, url: req.url, target: options.target });
+                });
+                proxy.on && proxy.on('error', (err: any, req: any) => {
+                  // eslint-disable-next-line no-console
+                  console.error('[vite proxy] proxy error', err && err.message ? err.message : err, { url: req && req.url });
+                });
+              } catch (e) {}
+            },
+            onError(err: any, _req: any, res: any) {
+              // eslint-disable-next-line no-console
+              console.error('[vite proxy] /api error', err && err.message ? err.message : err);
+              try {
+                if (!res.headersSent) {
+                  res.writeHead && res.writeHead(502);
+                  res.end && res.end('Proxy error');
+                }
+              } catch (e) {}
+            },
+          },
+        };
+      })(),
+    },
+    optimizeDeps: {
+      include: [
+        '@mui/material',
+        '@mui/x-date-pickers',
+        '@mui/x-date-pickers/LocalizationProvider',
+        '@mui/x-date-pickers/AdapterDateFns',
+        '@mui/x-date-pickers/DatePicker',
+        '@mui/icons-material',
+        'chart.js',
+        'chartjs-adapter-date-fns',
+        'react-chartjs-2',
+        'react-diff-view',
+  'diff',
+      ],
+      exclude: [
+        'echarts', 
+        'zrender', 
+        'echarts-for-react',
+        // Common problematic dependencies that may cause issues with Vite's dep optimizer
+        'monaco-editor',
+        'monaco-yaml',
+        '@monaco-editor/react',
+        // Add any other dependencies that cause optimization issues
+      ],
+    },
+    // Note: monaco-yaml is dynamically imported at runtime. Avoid pre-bundling it
+    // to prevent dependency resolution issues with certain language server packages.
+    build: {
+      chunkSizeWarningLimit: 2300,
+      rollupOptions: {
+        external: ['echarts', 'zrender', 'echarts-for-react'],
+        output: {
+          globals: { echarts: 'echarts', zrender: 'zrender', 'echarts-for-react': 'EChartsReact' },
+          manualChunks(id: string) {
+            if (!id.includes('node_modules')) return undefined;
+            if (id.includes('node_modules/react')) return 'vendor-react';
+            if (id.includes('node_modules/react-dom')) return 'vendor-react';
+            if (id.includes('node_modules/reactflow')) return 'vendor-reactflow';
+            if (id.includes('node_modules') && /(?:^|\/)(@(apache\-)?echarts|echarts|zrender|echarts-for-react|react-echarts)/.test(id)) {
+              return 'vendor-echarts';
+            }
+            if (id.includes('node_modules/react-chartjs-2') || id.includes('node_modules/chart.js')) return 'vendor-chartjs';
+            if (id.includes('node_modules/recharts')) return 'vendor-recharts';
+            if (id.includes('node_modules/react-diff-view') || id.includes('node_modules/react-diff-viewer')) return 'vendor-diff';
+            if (id.includes('node_modules/monaco-editor/esm/vs/language/')) return 'vendor-monaco-languages';
+            if (id.includes('node_modules/monaco-editor/esm/vs/basic-languages/')) return 'vendor-monaco-basic-languages';
+            if (id.includes('node_modules/monaco-editor')) return 'vendor-monaco-core';
+            if (id.includes('node_modules/highlight.js')) return 'vendor-highlight';
+            if (id.includes('node_modules/refractor')) return 'vendor-refractor';
+            if (id.includes('node_modules/@mui/material')) return 'vendor-mui-material';
+            if (id.includes('node_modules/@mui/icons-material')) return 'vendor-mui-icons';
+            if (id.includes('node_modules/@mui/lab')) return 'vendor-mui-lab';
+            if (id.includes('node_modules/@emotion')) return 'vendor-emotion';
+            if (id.includes('node_modules/@mui/')) return 'vendor-mui-shared';
+            const parts = id.split('node_modules/')[1].split('/');
+            let pkg = parts[0];
+            if (pkg && pkg.startsWith('@') && parts.length > 1) {
+              pkg = `${pkg}/${parts[1]}`;
+            }
+            return `vendor-${pkg.replace('/', '_').replace('@', '')}`;
+          },
+        },
+      },
+      commonjsOptions: {
+        transformMixedEsModules: true,
+      },
+    },
+  };
+});

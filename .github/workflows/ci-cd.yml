@@ -1,0 +1,431 @@
+# GitHub Actions CI/CD Pipeline for Semlayer
+# Build, test, security scan, and deploy
+
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches:
+    - main
+    - develop
+    - 'release/**'
+    tags:
+    - 'v*'
+  pull_request:
+    branches:
+    - main
+    - develop
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_PREFIX: ${{ github.repository }}
+
+jobs:
+  # ==========================================================================
+  # Build and Test
+  # ==========================================================================
+  build-backend:
+    name: Build Backend
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: '1.22'
+        cache: true
+        cache-dependency-path: backend/go.sum
+
+    - name: Generate Version
+      id: version
+      run: |
+        if [[ "${{ github.ref }}" == refs/tags/* ]]; then
+          VERSION=${GITHUB_REF#refs/tags/}
+        else
+          VERSION=$(git describe --tags --always --dirty)-${{ github.run_number }}
+        fi
+        echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+    - name: Run Tests
+      working-directory: backend
+      run: |
+        go test -v -race -coverprofile=coverage.out ./...
+        go tool cover -func=coverage.out
+
+    - name: Upload Coverage
+      uses: codecov/codecov-action@v4
+      with:
+        files: backend/coverage.out
+        flags: backend
+
+    - name: Build Binaries
+      working-directory: backend
+      run: |
+        CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w -X main.Version=${{ steps.version.outputs.version }}" -o bin/api-gateway ./cmd/api-gateway
+        CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w -X main.Version=${{ steps.version.outputs.version }}" -o bin/semantic-engine ./cmd/semantic-engine
+        CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w -X main.Version=${{ steps.version.outputs.version }}" -o bin/governance-engine ./cmd/governance-engine
+
+    - name: Upload Artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: backend-binaries
+        path: backend/bin/
+
+  build-frontend:
+    name: Build Frontend
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+        cache: 'pnpm'
+        cache-dependency-path: frontend/pnpm-lock.yaml
+
+    - name: Install pnpm
+      run: npm install -g pnpm
+
+    - name: Install Dependencies
+      working-directory: frontend
+      run: pnpm install --frozen-lockfile
+
+    - name: Run Tests
+      working-directory: frontend
+      run: pnpm test -- --coverage
+
+    - name: Build
+      working-directory: frontend
+      run: pnpm build
+
+    - name: Upload Artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: frontend-build
+        path: frontend/dist/
+
+  # ==========================================================================
+  # Security Scanning
+  # ==========================================================================
+  security-scan:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    needs: [ build-backend, build-frontend ]
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Run Trivy vulnerability scanner (filesystem)
+      uses: aquasecurity/trivy-action@master
+      with:
+        scan-type: 'fs'
+        scan-ref: '.'
+        format: 'sarif'
+        output: 'trivy-results.sarif'
+        severity: 'CRITICAL,HIGH'
+
+    - name: Upload Trivy scan results
+      uses: github/codeql-action/upload-sarif@v3
+      with:
+        sarif_file: 'trivy-results.sarif'
+
+    - name: Run Snyk
+      uses: snyk/actions/node@master
+      continue-on-error: true
+      env:
+        SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+      with:
+        args: --all-projects --severity-threshold=high
+
+    - name: Run Gosec
+      uses: securego/gosec@master
+      with:
+        args: '-no-fail -fmt sarif -out gosec-results.sarif ./backend/...'
+
+    - name: Upload Gosec results
+      uses: github/codeql-action/upload-sarif@v3
+      with:
+        sarif_file: 'gosec-results.sarif'
+
+  # ==========================================================================
+  # Build and Push Docker Images
+  # ==========================================================================
+  docker-build:
+    name: Build Docker Images
+    runs-on: ubuntu-latest
+    needs: [ build-backend, build-frontend, security-scan ]
+    if: github.event_name != 'pull_request'
+
+    strategy:
+      matrix:
+        service:
+        - api-gateway
+        - semantic-engine
+        - governance-engine
+        - cube-api
+        - ai-builder
+        - compliance-engine
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+    - name: Log in to Container Registry
+      uses: docker/login-action@v3
+      with:
+        registry: ${{ env.REGISTRY }}
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Extract metadata
+      id: meta
+      uses: docker/metadata-action@v5
+      with:
+        images: ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/${{ matrix.service }}
+        tags: |
+          type=ref,event=branch
+          type=ref,event=pr
+          type=semver,pattern={{version}}
+          type=semver,pattern={{major}}.{{minor}}
+          type=sha,prefix=
+
+    - name: Build and push
+      uses: docker/build-push-action@v5
+      with:
+        context: .
+        file: ./backend/Dockerfile.${{ matrix.service }}
+        push: true
+        tags: ${{ steps.meta.outputs.tags }}
+        labels: ${{ steps.meta.outputs.labels }}
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+        build-args: |
+          VERSION=${{ needs.build-backend.outputs.version }}
+
+    - name: Run Trivy vulnerability scanner
+      uses: aquasecurity/trivy-action@master
+      with:
+        image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/${{ matrix.service }}:${{ github.sha }}
+        format: 'sarif'
+        output: 'trivy-${{ matrix.service }}.sarif'
+        severity: 'CRITICAL,HIGH'
+
+    - name: Upload Trivy scan results
+      uses: github/codeql-action/upload-sarif@v3
+      with:
+        sarif_file: 'trivy-${{ matrix.service }}.sarif'
+
+  # ==========================================================================
+  # Deploy to Staging
+  # ==========================================================================
+  deploy-staging:
+    name: Deploy to Staging
+    runs-on: ubuntu-latest
+    needs: [ docker-build ]
+    if: github.ref == 'refs/heads/develop'
+    environment: staging
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: us-east-1
+
+    - name: Update kubeconfig
+      run: |
+        aws eks update-kubeconfig --region us-east-1 --name semlayer-staging
+
+    - name: Deploy with Helm
+      run: |
+        helm upgrade --install semlayer-staging ./charts/semlayer-platform \
+          --namespace semlayer-control \
+          --create-namespace \
+          -f ./charts/semlayer-platform/values.yaml \
+          -f ./charts/semlayer-platform/values-staging.yaml \
+          --set global.image.tag=${{ github.sha }} \
+          --wait --timeout 10m
+
+    - name: Run Smoke Tests
+      run: |
+        kubectl -n semlayer-control wait --for=condition=ready pod -l app=api-gateway --timeout=300s
+        curl -f https://api-staging.semlayer.io/health || exit 1
+
+    - name: Notify Slack
+      if: always()
+      uses: 8398a7/action-slack@v3
+      with:
+        status: ${{ job.status }}
+        text: "Staging deployment ${{ job.status }}"
+        webhook_url: ${{ secrets.SLACK_WEBHOOK }}
+
+  # ==========================================================================
+  # Deploy to Production (Canary)
+  # ==========================================================================
+  deploy-production-canary:
+    name: Deploy to Production (Canary)
+    runs-on: ubuntu-latest
+    needs: [ docker-build ]
+    if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')
+    environment: production-canary
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: us-east-1
+
+    - name: Update kubeconfig
+      run: |
+        aws eks update-kubeconfig --region us-east-1 --name semlayer-prod-us
+
+    - name: Deploy Canary (10% traffic)
+      run: |
+        helm upgrade --install semlayer-canary ./charts/semlayer-platform \
+          --namespace semlayer-canary \
+          --create-namespace \
+          -f ./charts/semlayer-platform/values.yaml \
+          -f ./charts/semlayer-platform/values-production.yaml \
+          --set global.image.tag=${{ github.sha }} \
+          --set global.canary.enabled=true \
+          --set global.canary.weight=10 \
+          --wait --timeout 15m
+
+    - name: Monitor Canary SLOs (15 minutes)
+      run: |
+        # Query Prometheus for error rates and latency
+        for i in {1..15}; do
+          ERROR_RATE=$(curl -s "http://prometheus:9090/api/v1/query?query=rate(http_requests_total{status=~\"5..\",deployment=\"canary\"}[5m])/rate(http_requests_total{deployment=\"canary\"}[5m])*100" | jq '.data.result[0].value[1]' -r)
+          P99_LATENCY=$(curl -s "http://prometheus:9090/api/v1/query?query=histogram_quantile(0.99,rate(http_request_duration_seconds_bucket{deployment=\"canary\"}[5m]))" | jq '.data.result[0].value[1]' -r)
+          
+          echo "Minute $i: Error Rate: ${ERROR_RATE}%, P99 Latency: ${P99_LATENCY}s"
+          
+          # Fail if error rate > 1% or p99 > 2s
+          if (( $(echo "$ERROR_RATE > 1" | bc -l) )) || (( $(echo "$P99_LATENCY > 2" | bc -l) )); then
+            echo "SLO breach detected! Rolling back canary..."
+            helm rollback semlayer-canary
+            exit 1
+          fi
+          
+          sleep 60
+        done
+
+  # ==========================================================================
+  # Deploy to Production (Full)
+  # ==========================================================================
+  deploy-production:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    needs: [ deploy-production-canary ]
+    environment: production
+
+    strategy:
+      matrix:
+        region:
+        - us-east-1
+        - eu-west-1
+        - ap-southeast-1
+      max-parallel: 1 # Deploy regions sequentially
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: ${{ matrix.region }}
+
+    - name: Update kubeconfig
+      run: |
+        aws eks update-kubeconfig --region ${{ matrix.region }} --name semlayer-prod-${{ matrix.region }}
+
+    - name: Deploy with Helm
+      run: |
+        helm upgrade --install semlayer ./charts/semlayer-platform \
+          --namespace semlayer-control \
+          -f ./charts/semlayer-platform/values.yaml \
+          -f ./charts/semlayer-platform/values-production.yaml \
+          -f ./charts/semlayer-platform/values-${{ matrix.region }}.yaml \
+          --set global.image.tag=${{ github.sha }} \
+          --set global.region=${{ matrix.region }} \
+          --wait --timeout 20m
+
+    - name: Verify Deployment
+      run: |
+        kubectl -n semlayer-control wait --for=condition=ready pod -l app.kubernetes.io/part-of=semlayer --timeout=600s
+
+        # Run integration tests
+        kubectl -n semlayer-control run integration-test \
+          --image=${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/integration-tests:${{ github.sha }} \
+          --restart=Never \
+          --rm \
+          --wait \
+          --timeout=10m
+
+    - name: Notify on Success
+      if: success()
+      uses: 8398a7/action-slack@v3
+      with:
+        status: success
+        text: "Production deployment to ${{ matrix.region }} successful! :rocket:"
+        webhook_url: ${{ secrets.SLACK_WEBHOOK }}
+
+    - name: Notify on Failure
+      if: failure()
+      uses: 8398a7/action-slack@v3
+      with:
+        status: failure
+        text: "Production deployment to ${{ matrix.region }} FAILED! :fire:"
+        webhook_url: ${{ secrets.SLACK_WEBHOOK }}
+
+  # ==========================================================================
+  # Cleanup Canary
+  # ==========================================================================
+  cleanup-canary:
+    name: Cleanup Canary
+    runs-on: ubuntu-latest
+    needs: [ deploy-production ]
+    if: always()
+
+    steps:
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: us-east-1
+
+    - name: Update kubeconfig
+      run: |
+        aws eks update-kubeconfig --region us-east-1 --name semlayer-prod-us
+
+    - name: Delete Canary
+      run: |
+        helm uninstall semlayer-canary --namespace semlayer-canary || true
+        kubectl delete namespace semlayer-canary || true

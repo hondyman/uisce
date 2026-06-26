@@ -1,0 +1,909 @@
+# ============================================================================
+# Addepar Hierarchical Ownership GraphQL Schema
+# ============================================================================
+# This schema enables:
+# - Recursive ownership tree traversal (ownership DAG)
+# - Temporal "as-of" queries for historical positions
+# - ABAC-enforced access control per entity type
+# - Flexible attribute filtering (JSONB entity_attributes)
+# - Workday-style business object relationships
+#
+# Compatible with:
+# - Hasura (auto-tracked from PostgreSQL)
+# - gqlgen + Go resolvers
+# - Apollo Server with custom resolvers
+# ============================================================================
+
+# ============================================================================
+# Scalars
+# ============================================================================
+
+"""UUID scalar – unique identifier"""
+scalar UUID
+
+"""ISO 8601 DateTime"""
+scalar Time
+
+"""ISO 8601 Date"""
+scalar Date
+
+"""
+JSON scalar – supports any valid JSON value:
+string, number, boolean, object, array, null
+Used for flexible entity attributes (JSONB)
+"""
+scalar JSON
+
+# ============================================================================
+# Core Entity Types
+# ============================================================================
+
+"""
+Represents a business entity in the ownership hierarchy.
+Examples: Household, Client, Trust, Financial Account, Stock, Bond, etc.
+"""
+type Entity {
+  """Unique identifier"""
+  id: UUID!
+
+  """
+  Model type discriminator (e.g., 'household', 'stock', 'trust')
+  Determines the entity's role in the ownership hierarchy
+  """
+  modelType: String!
+
+  """
+  Tenant ID for multi-tenant isolation.
+  Used implicitly in ABAC and RLS policies.
+  """
+  tenantId: UUID!
+
+  """
+  Original name from source system
+  (e.g., legacy ticker, original account ID)
+  """
+  originalName: String!
+
+  """User-friendly display name (e.g., "Growth Portfolio 2025")"""
+  displayName: String
+
+  """
+  Currency factor for multi-currency support.
+  Typically base currency code (USD, EUR, GBP, etc.)
+  """
+  currencyFactor: String!
+
+  """Ownership model: PERCENT_BASED, SHARE_BASED, or VALUE_BASED"""
+  ownershipType: OwnershipType!
+
+  """Status: ACTIVE, INACTIVE, CLOSED, PENDING"""
+  status: EntityStatus!
+
+  """Is this entity actively managed?"""
+  isActive: Boolean!
+
+  """
+  Dynamic attributes stored as JSONB.
+  Examples:
+    - bond: { cusip, maturity_date, coupon_rate }
+    - stock: { ticker, sector, market_cap }
+    - household: { preferred_currency, domicile }
+  """
+  attributes: [EntityAttribute!]!
+
+  """
+  Positions where this entity is the owner.
+  Returns all active child positions.
+  """
+  owned(
+    """Filter by owned entity type"""
+    ownershipType: OwnershipTypeFilter
+    """Include terminated positions (if asOf is provided)"""
+    includeTerminated: Boolean = false
+    """Historical snapshot date"""
+    asOf: Date
+  ): [Position!]!
+
+  """
+  Positions where this entity is owned.
+  Returns all active parent positions.
+  """
+  owners(
+    """Filter by owner entity type"""
+    ownershipType: OwnershipTypeFilter
+    """Include terminated positions"""
+    includeTerminated: Boolean = false
+    """Historical snapshot date"""
+    asOf: Date
+  ): [Position!]!
+
+  """Creation timestamp (UTC)"""
+  createdAt: Time!
+
+  """Last update timestamp (UTC)"""
+  updatedAt: Time!
+
+  """User who created this entity"""
+  createdBy: UUID!
+
+  """User who last updated this entity"""
+  updatedBy: UUID
+
+  """Soft delete timestamp (if entity is deleted)"""
+  deletedAt: Time
+}
+
+"""
+Represents an attribute (key-value pair) of an entity.
+Stored in entity_attributes table, supports flexible typing.
+"""
+type EntityAttribute {
+  """Unique identifier"""
+  id: UUID!
+
+  """Parent entity ID"""
+  entityId: UUID!
+
+  """Attribute key (e.g., 'cusip', 'maturity_date', 'sector')"""
+  key: String!
+
+  """
+  Attribute value – can be string, number, boolean, object, or array.
+  Type is inferred from JSON structure or validated against model metadata.
+  """
+  value: JSON!
+
+  """Optional: Human-readable description"""
+  description: String
+
+  """Creation timestamp"""
+  createdAt: Time!
+
+  """Last update timestamp"""
+  updatedAt: Time!
+}
+
+"""
+Represents an ownership relationship between two entities.
+Examples:
+  - Household owns Person_node (PERCENT_BASED, 100%)
+  - Trust owns Real_estate (VALUE_BASED, $500K)
+  - Fund owns Stock (SHARE_BASED, 1000 shares)
+"""
+type Position {
+  """Unique identifier"""
+  id: UUID!
+
+  """Entity that owns the position (owner)"""
+  ownerId: UUID!
+
+  """Entity that is owned (child)"""
+  ownedId: UUID!
+
+  """Resolved owner entity"""
+  owner: Entity!
+
+  """Resolved owned entity"""
+  owned: Entity!
+
+  """Ownership model: PERCENT_BASED, SHARE_BASED, or VALUE_BASED"""
+  ownershipType: OwnershipType!
+
+  """
+  Ownership percentage (0-100).
+  Only populated for PERCENT_BASED positions.
+  """
+  ownershipPercentage: Float
+
+  """
+  Number of shares/units owned.
+  Only populated for SHARE_BASED positions.
+  """
+  shares: Float
+
+  """
+  Value in base currency.
+  Only populated for VALUE_BASED positions.
+  """
+  value: Float
+
+  """Average cost per unit (for calculations)"""
+  averageCostPerUnit: Float
+
+  """Average market price (for calculations)"""
+  averageMarketPrice: Float
+
+  """Date position was opened"""
+  inceptingDate: Date
+
+  """Date position was closed (null if still open)"""
+  terminatingDate: Date
+
+  """Current status: ACTIVE, INACTIVE, CLOSED, PENDING"""
+  status: PositionStatus!
+
+  """Is this position currently active?"""
+  isActive: Boolean!
+
+  """Creation timestamp"""
+  createdAt: Time!
+
+  """Last update timestamp"""
+  updatedAt: Time!
+
+  """User who created this position"""
+  createdBy: UUID!
+}
+
+"""
+Recursive node for hierarchical ownership traversal.
+Represents an entity + its children at that depth level.
+"""
+type OwnershipNode {
+  """The entity at this node"""
+  entity: Entity!
+
+  """
+  The position linking parent to this entity
+  (null if this is the root)
+  """
+  position: Position
+
+  """
+  Child nodes (entities owned by this entity).
+  Populated up to the requested depth.
+  """
+  children: [OwnershipNode!]!
+
+  """Current depth in tree (0 = root)"""
+  depth: Int!
+
+  """Total child count at this node"""
+  childCount: Int!
+}
+
+"""
+Metadata about a model type in the Addepar system.
+Defines entity types, hierarchy rules, and suggested attributes.
+"""
+type ModelTypeDefinition {
+  """Internal model type code (discriminator)"""
+  modelType: String!
+
+  """Human-readable display name"""
+  displayName: String!
+
+  """Default ownership model for this type"""
+  ownershipType: OwnershipType!
+
+  """Description and usage notes"""
+  description: String
+
+  """Is this type hierarchical (can own other types)?"""
+  isHierarchical: Boolean!
+
+  """Level in hierarchy (0=root, 1=containers, 2=subcontainers, 3=assets)"""
+  hierarchyLevel: Int
+
+  """Suggested attributes for this type"""
+  suggestedAttributes: [ModelTypeAttribute!]!
+
+  """
+  Allowed parent types for this entity.
+  Empty if this is a top-level or leaf type.
+  """
+  allowedParents: [String!]!
+
+  """
+  Allowed child types for this entity.
+  Empty if this is a leaf node.
+  """
+  allowedChildren: [String!]!
+
+  """Can this type have multiple parents?"""
+  allowsMultipleParents: Boolean!
+
+  """Maximum number of children allowed (null = unlimited)"""
+  maxChildren: Int
+}
+
+"""Metadata about a suggested attribute for a model type"""
+type ModelTypeAttribute {
+  """Attribute key"""
+  key: String!
+
+  """
+  Expected value type:
+  string, date, numeric, boolean, enum, object, array
+  """
+  valueType: String!
+
+  """Is this attribute required?"""
+  isRequired: Boolean!
+
+  """Is this attribute searchable/filterable?"""
+  isSearchable: Boolean!
+
+  """Priority/display order (higher = more important)"""
+  priority: Int
+
+  """Description"""
+  description: String
+
+  """Optional validation rules (JSON schema fragment)"""
+  validationRule: JSON
+}
+
+"""
+Hierarchy rule: defines allowed parent → child relationships.
+Used by ABAC and entity creation validators.
+"""
+type HierarchyRule {
+  """Unique identifier"""
+  id: UUID!
+
+  """Parent model type"""
+  parentModelType: String!
+
+  """Child model type"""
+  childModelType: String!
+
+  """Is this relationship allowed?"""
+  allowed: Boolean!
+
+  """Allowed ownership types for this relationship"""
+  ownershipTypes: [OwnershipType!]!
+
+  """Maximum children of this type (null = unlimited)"""
+  maxChildren: Int
+
+  """Minimum children of this type (null = no minimum)"""
+  minChildren: Int
+
+  """Description"""
+  description: String
+
+  """Can child have only this parent type?"""
+  isExclusive: Boolean!
+
+  """Creation timestamp"""
+  createdAt: Time!
+}
+
+# ============================================================================
+# Enums
+# ============================================================================
+
+"""Ownership model types"""
+enum OwnershipType {
+  """Percentage-based ownership (0-100%)"""
+  PERCENT_BASED
+
+  """Share-based ownership (discrete units)"""
+  SHARE_BASED
+
+  """Value-based ownership (USD amount)"""
+  VALUE_BASED
+}
+
+"""Entity status"""
+enum EntityStatus {
+  ACTIVE
+  INACTIVE
+  CLOSED
+  PENDING
+}
+
+"""Position status"""
+enum PositionStatus {
+  ACTIVE
+  INACTIVE
+  CLOSED
+  PENDING
+}
+
+# ============================================================================
+# Input Types (Filters & Arguments)
+# ============================================================================
+
+"""Filter entities by various criteria"""
+input EntityFilter {
+  """Model type (exact match or in list)"""
+  modelType: StringFilter
+
+  """Ownership type"""
+  ownershipType: OwnershipTypeFilter
+
+  """Entity status"""
+  status: EntityStatusFilter
+
+  """Filter by attribute key-value pair"""
+  attribute: EntityAttributeFilter
+
+  """Logical AND – all conditions must be true"""
+  AND: [EntityFilter!]
+
+  """Logical OR – at least one condition must be true"""
+  OR: [EntityFilter!]
+
+  """Logical NOT"""
+  NOT: EntityFilter
+}
+
+"""Filter by string (exact, contains, in list)"""
+input StringFilter {
+  """Exact match"""
+  eq: String
+
+  """Contains substring"""
+  contains: String
+
+  """Case-insensitive contains"""
+  containsIgnoreCase: String
+
+  """In list"""
+  in: [String!]
+
+  """Not in list"""
+  notIn: [String!]
+
+  """Regex match (if DB supports)"""
+  regex: String
+}
+
+"""Filter by ownership type"""
+input OwnershipTypeFilter {
+  eq: OwnershipType
+  in: [OwnershipType!]
+}
+
+"""Filter by entity status"""
+input EntityStatusFilter {
+  eq: EntityStatus
+  in: [EntityStatus!]
+}
+
+"""Filter by position status"""
+input PositionStatusFilter {
+  eq: PositionStatus
+  in: [PositionStatus!]
+}
+
+"""Filter by attribute (for JSONB entity_attributes)"""
+input EntityAttributeFilter {
+  """Attribute key"""
+  key: StringFilter!
+
+  """Attribute value filter"""
+  value: JSONFilter!
+}
+
+"""Filter JSON values (JSONB)"""
+input JSONFilter {
+  """Exact match"""
+  eq: JSON
+
+  """Contains (for objects/arrays)"""
+  contains: JSON
+
+  """Greater than (for numeric)"""
+  gt: Float
+
+  """Greater than or equal"""
+  gte: Float
+
+  """Less than"""
+  lt: Float
+
+  """Less than or equal"""
+  lte: Float
+
+  """In list"""
+  in: [JSON!]
+}
+
+"""Order by clause"""
+input EntityOrderBy {
+  """Field to order by"""
+  field: EntityOrderField!
+
+  """Sort direction"""
+  direction: OrderDirection = ASC
+}
+
+"""Fields available for ordering"""
+enum EntityOrderField {
+  MODEL_TYPE
+  ORIGINAL_NAME
+  DISPLAY_NAME
+  CREATED_AT
+  UPDATED_AT
+}
+
+"""Sort direction"""
+enum OrderDirection {
+  ASC
+  DESC
+}
+
+# ============================================================================
+# Query Root
+# ============================================================================
+
+type Query {
+  """
+  Retrieve a single entity by ID with ABAC access check.
+  Resolves to null if entity not found or user lacks read permission.
+  """
+  entity(id: UUID!): Entity
+
+  """
+  List entities with filtering, ordering, and pagination.
+  Respects tenant scope (from context) and ABAC permissions.
+  """
+  entities(
+    """Where clause (AND, OR, NOT supported)"""
+    where: EntityFilter
+
+    """Order results"""
+    orderBy: [EntityOrderBy!]
+
+    """Maximum results (default 20, max 1000)"""
+    limit: Int = 20
+
+    """Offset for pagination"""
+    offset: Int = 0
+  ): [Entity!]!
+
+  """
+  Aggregate statistics on entities.
+  Useful for dashboards.
+  """
+  entitiesAggregate(
+    where: EntityFilter
+  ): EntityAggregate!
+
+  """
+  Traverse the hierarchical ownership tree starting from a root entity.
+  Returns the entire subtree up to specified depth.
+  Respects temporal "as-of" date for historical positions.
+  Enforces ABAC at each node.
+
+  Example:
+    ownershipTree(
+      rootId: "household-123",
+      depth: 3,
+      includeAttributes: true,
+      asOf: "2025-09-30"
+    ) { entity { displayName }, children { ... } }
+  """
+  ownershipTree(
+    """Root entity ID (usually a Household)"""
+    rootId: UUID!
+
+    """
+    Maximum depth to traverse (default 3).
+    Prevents excessive recursion.
+    """
+    depth: Int = 3
+
+    """Include entity attributes in response?"""
+    includeAttributes: Boolean = true
+
+    """
+    Historical snapshot date.
+    Returns positions active on this date.
+    Null = current date.
+    """
+    asOf: Date
+  ): OwnershipNode!
+
+  """
+  Reverse ownership search: find all entities that own the specified entity.
+  Useful for "show me who owns this stock" queries.
+  """
+  ownershipChain(
+    """Target entity ID (e.g., a specific stock)"""
+    targetId: UUID!
+
+    """Maximum depth to traverse"""
+    depth: Int = 5
+
+    """Historical snapshot date"""
+    asOf: Date
+  ): [OwnershipNode!]!
+
+  """
+  Get all model type definitions (business entity types).
+  Includes hierarchy rules and suggested attributes.
+  """
+  modelTypes(
+    """Filter by hierarchy level"""
+    hierarchyLevel: Int
+  ): [ModelTypeDefinition!]!
+
+  """
+  Get metadata for a single model type.
+  """
+  modelType(modelType: String!): ModelTypeDefinition
+
+  """
+  Get hierarchy rules for a parent-child pair.
+  Useful for validation before creating positions.
+  """
+  hierarchyRules(
+    parentModelType: String!
+    childModelType: String!
+  ): [HierarchyRule!]!
+
+  """
+  Get allowed child types for a parent type.
+  Used in UI dropdowns and dynamic forms.
+  """
+  allowedChildren(parentModelType: String!): [ModelTypeDefinition!]!
+
+  """
+  Get allowed parent types for a child type.
+  """
+  allowedParents(childModelType: String!): [ModelTypeDefinition!]!
+
+  """
+  Search entities by full-text query across all attributes and display names.
+  Useful for entity lookup/autocomplete.
+  """
+  searchEntities(
+    """Search term"""
+    query: String!
+
+    """Filter by model types"""
+    modelTypes: [String!]
+
+    """Max results"""
+    limit: Int = 20
+  ): [Entity!]!
+
+  """
+  Get aggregated portfolio metrics (market value, positions, etc.).
+  Used for dashboard summaries.
+  """
+  portfolioMetrics(
+    """Root entity (typically household or person)"""
+    rootId: UUID!
+
+    """Snapshot date"""
+    asOf: Date
+  ): PortfolioMetrics!
+}
+
+"""Aggregate statistics on entity query results"""
+type EntityAggregate {
+  count: Int!
+  maxCreatedAt: Time
+  minCreatedAt: Time
+  countByModelType: [ModelTypeCount!]!
+}
+
+"""Count of entities by model type"""
+type ModelTypeCount {
+  modelType: String!
+  count: Int!
+}
+
+"""Portfolio-level summary metrics"""
+type PortfolioMetrics {
+  """Root entity ID"""
+  rootId: UUID!
+
+  """Snapshot date"""
+  asOf: Date!
+
+  """Total market value across all holdings"""
+  totalMarketValue: Float!
+
+  """Total cost basis"""
+  totalCostBasis: Float!
+
+  """Unrealized gain/loss"""
+  unrealizedGainLoss: Float!
+
+  """Portfolio return percentage"""
+  portfolioReturnPct: Float!
+
+  """Number of direct positions"""
+  positionCount: Int!
+
+  """Number of underlying assets"""
+  assetCount: Int!
+
+  """
+  Holdings breakdown by model type.
+  E.g., "STOCK: $500K, BOND: $300K, CASH: $200K"
+  """
+  holdingsByType: [HoldingByType!]!
+
+  """
+  Top 10 positions by market value.
+  Useful for pie charts.
+  """
+  topHoldings: [Position!]!
+}
+
+"""Holding value by asset type"""
+type HoldingByType {
+  modelType: String!
+  count: Int!
+  marketValue: Float!
+  costBasis: Float!
+  unrealizedGainLoss: Float!
+  returnPct: Float!
+}
+
+# ============================================================================
+# Mutation Root (Optional – for creating/updating entities)
+# ============================================================================
+
+type Mutation {
+  """Create a new entity with automatic type validation"""
+  createEntity(input: CreateEntityInput!): CreateEntityPayload!
+
+  """Update an entity"""
+  updateEntity(id: UUID!, input: UpdateEntityInput!): UpdateEntityPayload!
+
+  """Delete an entity (soft delete)"""
+  deleteEntity(id: UUID!): DeleteEntityPayload!
+
+  """Create a position (ownership relationship) with hierarchy validation"""
+  createPosition(input: CreatePositionInput!): CreatePositionPayload!
+
+  """Update a position"""
+  updatePosition(id: UUID!, input: UpdatePositionInput!): UpdatePositionPayload!
+
+  """Close/terminate a position"""
+  closePosition(id: UUID!, terminatingDate: Date!): ClosePositionPayload!
+
+  """Bulk import model types from JSON"""
+  importModelTypes(input: ImportModelTypesInput!): ImportModelTypesPayload!
+}
+
+"""Input for creating an entity"""
+input CreateEntityInput {
+  modelType: String!
+  originalName: String!
+  displayName: String
+  ownershipType: OwnershipType!
+  currencyFactor: String!
+  attributes: [CreateAttributeInput!]
+}
+
+"""Input for creating an attribute"""
+input CreateAttributeInput {
+  key: String!
+  value: JSON!
+}
+
+"""Payload for createEntity"""
+type CreateEntityPayload {
+  success: Boolean!
+  entity: Entity
+  errors: [String!]!
+}
+
+"""Input for updating an entity"""
+input UpdateEntityInput {
+  displayName: String
+  status: EntityStatus
+  attributes: [UpdateAttributeInput!]
+}
+
+"""Input for updating an attribute"""
+input UpdateAttributeInput {
+  key: String!
+  value: JSON
+  delete: Boolean
+}
+
+"""Payload for updateEntity"""
+type UpdateEntityPayload {
+  success: Boolean!
+  entity: Entity
+  errors: [String!]!
+}
+
+"""Payload for deleteEntity"""
+type DeleteEntityPayload {
+  success: Boolean!
+  errors: [String!]!
+}
+
+"""Input for creating a position"""
+input CreatePositionInput {
+  ownerId: UUID!
+  ownedId: UUID!
+  ownershipType: OwnershipType!
+  ownershipPercentage: Float
+  shares: Float
+  value: Float
+  inceptingDate: Date
+}
+
+"""Payload for createPosition"""
+type CreatePositionPayload {
+  success: Boolean!
+  position: Position
+  errors: [String!]!
+}
+
+"""Input for updating a position"""
+input UpdatePositionInput {
+  ownershipPercentage: Float
+  shares: Float
+  value: Float
+}
+
+"""Payload for updatePosition"""
+type UpdatePositionPayload {
+  success: Boolean!
+  position: Position
+  errors: [String!]!
+}
+
+"""Payload for closePosition"""
+type ClosePositionPayload {
+  success: Boolean!
+  position: Position
+  errors: [String!]!
+}
+
+"""Input for bulk importing model types"""
+input ImportModelTypesInput {
+  jsonPayload: String!
+}
+
+"""Payload for importModelTypes"""
+type ImportModelTypesPayload {
+  success: Boolean!
+  importedCount: Int!
+  errors: [String!]!
+}
+
+# ============================================================================
+# Subscription Root (Optional – for real-time updates)
+# ============================================================================
+
+type Subscription {
+  """Subscribe to entity changes (create, update, delete)"""
+  entityChanged(
+    tenantId: UUID!
+    modelTypes: [String!]
+  ): EntityChangedSubscription!
+
+  """Subscribe to position changes"""
+  positionChanged(
+    tenantId: UUID!
+  ): PositionChangedSubscription!
+}
+
+"""Entity change event"""
+type EntityChangedSubscription {
+  event: ChangeEvent!
+  entity: Entity!
+  timestamp: Time!
+}
+
+"""Position change event"""
+type PositionChangedSubscription {
+  event: ChangeEvent!
+  position: Position!
+  timestamp: Time!
+}
+
+"""Change event type"""
+enum ChangeEvent {
+  CREATED
+  UPDATED
+  DELETED
+}
+
+# ============================================================================
+# End of Schema
+# ============================================================================

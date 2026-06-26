@@ -1,0 +1,23 @@
+syntax = "proto3";
+
+package analytics;
+
+service AnalyticsEngine {
+  rpc CalculateRegression (RegressionRequest) returns (RegressionResponse) {}
+}
+
+message DataItem {
+  double value = 1;
+}
+
+message RegressionRequest {
+  repeated DataItem independent_data = 1;
+  repeated DataItem dependent_data = 2;
+}
+
+message RegressionResponse {
+  double alpha = 1;
+  double beta = 2;
+  double r_squared = 3;
+  string status = 4;
+}

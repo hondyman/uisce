@@ -1,0 +1,18 @@
+-- Rollback Fee Billing Schema
+
+DROP VIEW IF EXISTS fee_calc_pending_approval;
+DROP VIEW IF EXISTS client_billing_summary;
+DROP VIEW IF EXISTS monthly_revenue_summary;
+
+DROP TRIGGER IF EXISTS fee_schedules_updated_at ON fee_schedules;
+DROP TRIGGER IF EXISTS client_fee_assignments_updated_at ON client_fee_assignments;
+DROP TRIGGER IF EXISTS fee_calculations_updated_at ON fee_calculations;
+DROP TRIGGER IF EXISTS high_water_marks_updated_at ON high_water_marks;
+
+DROP FUNCTION IF EXISTS update_fee_billing_timestamp();
+
+DROP TABLE IF EXISTS revenue_recognition_schedule CASCADE;
+DROP TABLE IF EXISTS high_water_marks CASCADE;
+DROP TABLE IF EXISTS fee_calculations CASCADE;
+DROP TABLE IF EXISTS client_fee_assignments CASCADE;
+DROP TABLE IF EXISTS fee_schedules CASCADE;

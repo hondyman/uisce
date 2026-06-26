@@ -1,0 +1,354 @@
+# Prometheus Alert Rules for Calendar Service Security Monitoring
+# Place this file in prometheus configuration directory and reference in prometheus.yml
+
+groups:
+- name: calendar-service-security
+  interval: 30s
+  rules:
+
+  # ====================================================
+  # Authentication Alerts
+  # ====================================================
+
+  - alert: HighAuthFailureRate
+    expr: |
+      (sum(rate(auth_requests_total{status="failure"}[5m])) /
+       sum(rate(auth_requests_total[5m]))) > 0.1
+    for: 5m
+    labels:
+      severity: warning
+      component: security
+    annotations:
+      summary: "High authentication failure rate detected"
+      description: |
+        Authentication failure rate is {{ $value | humanizePercentage }} on {{ $labels.instance }}
+        Threshold: 10%
+        Expected: Less than 10% failures
+        Action: Review authentication logs for potential attacks or misconfigurations
+
+  - alert: CriticalAuthFailureRate
+    expr: |
+      (sum(rate(auth_requests_total{status="failure"}[1m])) /
+       sum(rate(auth_requests_total[1m]))) > 0.25
+    for: 2m
+    labels:
+      severity: critical
+      component: security
+    annotations:
+      summary: "CRITICAL: Authentication failure rate exceeded 25%"
+      description: |
+        Authentication failure rate is {{ $value | humanizePercentage }}
+        This may indicate a security incident or widespread misconfiguration
+        Action: Immediate investigation required
+
+  - alert: InvalidTokenErrors
+    expr: rate(auth_requests_total{status="failure", reason="invalid_token"}[5m]) > 1
+    for: 5m
+    labels:
+      severity: medium
+      component: security
+    annotations:
+      summary: "High rate of invalid token errors"
+      description: "{{ $value }} invalid tokens per second"
+
+  - alert: ExpiredTokenErrors
+    expr: rate(auth_requests_total{status="failure", reason="expired"}[5m]) > 2
+    for: 5m
+    labels:
+      severity: low
+      component: security
+    annotations:
+      summary: "High rate of expired token errors"
+      description: "{{ $value }} expired tokens per second - may indicate token config issues"
+
+  # ====================================================
+  # Authorization Alerts
+  # ====================================================
+
+  - alert: AuthorizationFailuresSpike
+    expr: increase(authorization_failures_total[1m]) > 50
+    for: 5m
+    labels:
+      severity: warning
+      component: security
+    annotations:
+      summary: "Spike in authorization failures"
+      description: |
+        {{ $value }} authorization failures in the last minute
+        Tenant: {{ $labels.tenant_id }}
+        Resource: {{ $labels.resource_type }}
+        Reason: {{ $labels.reason }}
+
+  - alert: CriticalAuthzFailures
+    expr: increase(authorization_failures_total[5m]) > 100
+    for: 1m
+    labels:
+      severity: critical
+      component: security
+    annotations:
+      summary: "CRITICAL: Authorization failures exceed 100 in 5 minutes"
+      description: |
+        {{ $value }} failures detected
+        This may indicate permission misconfiguration or privilege escalation attempt
+
+  # ====================================================
+  # Rate Limiting Alerts
+  # ====================================================
+
+  - alert: RateLimitAbuse
+    expr: sum(rate(rate_limit_exceeded_total[5m])) by (tenant_id) > 5
+    for: 5m
+    labels:
+      severity: warning
+      component: security
+    annotations:
+      summary: "Rate limit abuse detected"
+      description: |
+        Tenant {{ $labels.tenant_id }} exceeded rate limits
+        Violations per 5 minutes: {{ $value }}
+        Action: Review tenant API usage, consider temporary throttling
+
+  - alert: SeveralTenantsRateLimited
+    expr: count(rate_limit_exceeded_total > 0) > 5
+    for: 10m
+    labels:
+      severity: warning
+      component: security
+    annotations:
+      summary: "Multiple tenants hitting rate limits"
+      description: |
+        {{ $value }} tenants are hitting rate limits
+        This may indicate:
+        1. Legitimate traffic spike
+        2. DDoS attack
+        3. Misconfigured clients
+        Action: Check traffic patterns and adjust limits if needed
+
+  # ====================================================
+  # Token Revocation Alerts
+  # ====================================================
+
+  - alert: TokenRevocationSpike
+    expr: increase(tokens_revoked_total[1h]) > 10
+    for: 10m
+    labels:
+      severity: critical
+      component: security
+    annotations:
+      summary: "Unusual token revocation activity detected"
+      description: |
+        {{ $value }} tokens revoked in the last hour
+        Reason: {{ $labels.reason }}
+        This may indicate:
+        1. Compromised credentials
+        2. Admin revoking user sessions
+        3. Security incident
+        Action: Investigate revocation reason immediately
+
+  - alert: MassTokenRevocation
+    expr: increase(tokens_revoked_total[5m]) > 50
+    for: 2m
+    labels:
+      severity: critical
+      component: security
+    annotations:
+      summary: "CRITICAL: Mass token revocation event"
+      description: |
+        {{ $value }} tokens revoked in 5 minutes (measure: {{ $labels.reason }})
+        This is highly suspicious and indicates potential:
+        1. Account compromise
+        2. Security breach
+        Action: Immediate investigation and potential incident response
+
+  # ====================================================
+  # Audit Logging Alerts
+  # ====================================================
+
+  - alert: AuditLoggingGap
+    expr: (time() - timestamp(max by() (audit_logs_written_total))) > 3600
+    for: 10m
+    labels:
+      severity: warning
+      component: compliance
+    annotations:
+      summary: "Audit logging gap detected"
+      description: |
+        No audit logs written for {{ $value | humanizeDuration }}
+        This violates compliance requirements
+        Status: Check audit log pipeline health
+
+  - alert: CriticalAuditLoggingFailure
+    expr: (time() - timestamp(max by() (audit_logs_written_total))) > 7200
+    for: 5m
+    labels:
+      severity: critical
+      component: compliance
+    annotations:
+      summary: "CRITICAL: Audit logging offline for 2+ hours"
+      description: |
+        Audit logs not being written!
+        Compliance: VIOLATED
+        Action: Immediate remediation required - check database, event streaming
+
+  - alert: AuditLogWriteLatency
+    expr: histogram_quantile(0.95, audit_log_write_duration_seconds) > 1
+    for: 5m
+    labels:
+      severity: warning
+      component: performance
+    annotations:
+      summary: "High audit log write latency"
+      description: |
+        95th percentile latency: {{ $value | humanizeDuration }}
+        Performance may impact user requests
+        Action: Review database performance
+
+  # ====================================================
+  # Compliance Alerts
+  # ====================================================
+
+  - alert: DataResidencyComplianceFailed
+    expr: compliance_checks_passed{check_type="data_residency"} == 0
+    for: 1m
+    labels:
+      severity: critical
+      component: compliance
+    annotations:
+      summary: "Data residency compliance check FAILED"
+      description: |
+        Tenant data is not in compliant region
+        Status: FAILED
+        Action: Immediate investigation - potential regulatory violation
+
+  - alert: AuditCompletenessCheckFailed
+    expr: compliance_checks_passed{check_type="audit_completeness"} == 0
+    for: 5m
+    labels:
+      severity: critical
+      component: compliance
+    annotations:
+      summary: "Audit completeness compliance check FAILED"
+      description: |
+        Audit logs are incomplete or missing
+        Status: FAILED
+        Action: Verify audit log pipeline
+
+  - alert: EncryptionComplianceFailed
+    expr: compliance_checks_passed{check_type="encryption"} == 0
+    for: 1m
+    labels:
+      severity: critical
+      component: compliance
+    annotations:
+      summary: "Encryption compliance check FAILED"
+      description: |
+        Data encryption is not properly configured
+        Status: FAILED
+        Action: Verify TLS/encryption settings
+
+  # ====================================================
+  # Data Residency Alerts
+  # ====================================================
+
+  - alert: DataResidencyViolation
+    expr: increase(data_residency_violations_total[1h]) > 0
+    for: 5m
+    labels:
+      severity: critical
+      component: compliance
+    annotations:
+      summary: "Data residency violation detected"
+      description: |
+        Tenant {{ $labels.tenant_id }}: Data access from disallowed region {{ $labels.region }}
+        Violations in last hour: {{ $value }}
+        Action: Investigate and block unauthorized access
+
+  # ====================================================
+  # Security Events
+  # ====================================================
+
+  - alert: SecurityEventSpike
+    expr: increase(security_events_total[1m]) > 100
+    for: 5m
+    labels:
+      severity: warning
+      component: security
+    annotations:
+      summary: "Spike in security events"
+      description: |
+        {{ $value }} security events in the last minute
+        Type: {{ $labels.event_type }}
+        This may indicate an attack or misconfiguration
+
+  # ====================================================
+  # HTTP Request Errors
+  # ====================================================
+
+  - alert: HighHTTPErrorRate
+    expr: |
+      (sum(rate(http_requests_total{status_code=~"5.."}[5m])) /
+       sum(rate(http_requests_total[5m]))) > 0.05
+    for: 5m
+    labels:
+      severity: warning
+      component: api
+    annotations:
+      summary: "High HTTP 5xx error rate"
+      description: |
+        Error rate: {{ $value | humanizePercentage }}
+        Threshold: 5%
+        Endpoint: {{ $labels.endpoint }}
+        Action: Review service logs
+
+  - alert: AuthenticationEndpointErrors
+    expr: rate(http_requests_total{endpoint=~"/auth.*", status_code=~"5.."}[5m]) > 0.1
+    for: 5m
+    labels:
+      severity: warning
+      component: security
+    annotations:
+      summary: "Authentication endpoint experiencing errors"
+      description: |
+        {{ $value }} errors per second on authentication endpoints
+        Action: Check auth service health
+
+  # ====================================================
+  # Performance Alerts
+  # ====================================================
+
+  - alert: HighRequestLatency
+    expr: histogram_quantile(0.95, http_request_duration_seconds) > 5
+    for: 5m
+    labels:
+      severity: warning
+      component: performance
+    annotations:
+      summary: "High request latency detected"
+      description: |
+        95th percentile latency: {{ $value | humanizeDuration }}
+        Threshold: 5 seconds
+        Endpoint: {{ $labels.endpoint }}
+        Action: Investigate backend performance
+
+  - alert: CriticalLatency
+    expr: histogram_quantile(0.99, http_request_duration_seconds) > 10
+    for: 5m
+    labels:
+      severity: critical
+      component: performance
+    annotations:
+      summary: "CRITICAL: Request latency exceeds 10 seconds"
+      description: |
+        99th percentile latency: {{ $value | humanizeDuration }}
+        User experience severely impacted
+        Action: Immediate investigation
+  # ====================================================
+  # Alertmanager Integration
+  # ====================================================
+
+  # Route these alerts to appropriate teams:
+  # severity: critical  -> PagerDuty/on-call engineer
+  # severity: warning   -> Slack #alerts channel
+  # severity: low       -> Email digest
+  # component: compliance -> Compliance team + Slack
+  # component: security -> Security team + console

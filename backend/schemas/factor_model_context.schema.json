@@ -1,0 +1,88 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "https://semlayer.io/schemas/factor_model_context/v1",
+    "title": "FactorModelContext",
+    "type": "object",
+    "required": [
+        "portfolio",
+        "positions",
+        "factor_exposures",
+        "factor_covariance",
+        "tenant_id"
+    ],
+    "properties": {
+        "portfolio": {
+            "type": "object",
+            "required": [
+                "id",
+                "aum"
+            ],
+            "properties": {
+                "id": {
+                    "type": "string",
+                    "format": "uuid"
+                },
+                "aum": {
+                    "type": "number",
+                    "minimum": 0
+                }
+            }
+        },
+        "positions": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "required": [
+                    "security_id",
+                    "market_value"
+                ],
+                "properties": {
+                    "security_id": {
+                        "type": "string",
+                        "format": "uuid"
+                    },
+                    "market_value": {
+                        "type": "number",
+                        "minimum": 0
+                    }
+                }
+            }
+        },
+        "factor_exposures": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "required": [
+                    "security_id",
+                    "factor_id",
+                    "exposure"
+                ],
+                "properties": {
+                    "security_id": {
+                        "type": "string",
+                        "format": "uuid"
+                    },
+                    "factor_id": {
+                        "type": "string"
+                    },
+                    "exposure": {
+                        "type": "number"
+                    }
+                }
+            }
+        },
+        "factor_covariance": {
+            "type": "object",
+            "additionalProperties": {
+                "type": "object",
+                "additionalProperties": {
+                    "type": "number"
+                }
+            }
+        },
+        "tenant_id": {
+            "type": "string",
+            "format": "uuid"
+        }
+    }
+}

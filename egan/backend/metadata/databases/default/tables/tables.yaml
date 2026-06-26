@@ -1,0 +1,21 @@
+- table:
+    schema: public
+    name: validation_rules
+  array_relationships:
+  - name: criteria
+    using:
+      foreign_key_constraint_on:
+        column: rule_id
+        table:
+          schema: public
+          name: rule_criteria
+- table:
+    schema: public
+    name: rule_criteria
+  object_relationships:
+  - name: rule
+    using:
+      foreign_key_constraint_on: rule_id
+- table:
+    schema: public
+    name: calculated_fields

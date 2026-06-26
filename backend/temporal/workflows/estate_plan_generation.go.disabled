@@ -1,0 +1,217 @@
+package workflows
+
+import (
+	"time"
+
+	"github.com/hondyman/semlayer/backend/internal/wealth"
+
+"go.temporal.io/sdk/temporal"
+	"go.temporal.io/sdk/workflow"
+)
+
+// EstatePlanGenerationWorkflow orchestrates estate planning scenario generation
+func EstatePlanGenerationWorkflow(ctx workflow.Context, input EstatePlanGenerationInput) (*EstatePlanGenerationResult, error) {
+	logger := workflow.GetLogger(ctx)
+	logger.Info("Starting estate plan generation workflow", "familyID", input.FamilyID)
+
+	// Workflow options
+	ao := workflow.ActivityOptions{
+		StartToCloseTimeout: 5 * time.Minute,
+		RetryPolicy: &temporal.RetryPolicy{
+			MaximumAttempts: 3,
+		},
+	}
+	ctx = workflow.WithActivityOptions(ctx, ao)
+
+	result := &EstatePlanGenerationResult{
+		FamilyID:  input.FamilyID,
+		Scenarios: []wealth.EstatePlanScenario{},
+	}
+
+	// Step 1: Get family profile
+	var profile wealth.FamilyProfile
+	err := workflow.ExecuteActivity(ctx, GetFamilyProfileActivity, input.FamilyID).Get(ctx, &profile)
+	if err != nil {
+		logger.Error("Failed to get family profile", "error", err)
+		return nil, err
+	}
+	logger.Info("Retrieved family profile", "networth", profile.TotalNetworth.String())
+
+	// Step 2: Validate eligibility for estate planning
+	var eligible bool
+	err = workflow.ExecuteActivity(ctx, ValidateEstatePlanningEligibilityActivity, profile).Get(ctx, &eligible)
+	if err != nil {
+		return nil, err
+	}
+
+	if !eligible {
+		logger.Info("Family not eligible for estate planning")
+		result.Message = "Net worth below estate tax threshold - no estate planning required"
+		return result, nil
+	}
+
+	// Step 3: Calculate baseline (no planning) scenario
+	var baseline wealth.EstatePlanScenario
+	err = workflow.ExecuteActivity(ctx, CalculateBaselineScenarioActivity, profile).Get(ctx, &baseline)
+	if err != nil {
+		return nil, err
+	}
+	result.Scenarios = append(result.Scenarios, baseline)
+	logger.Info("Calculated baseline scenario", "tax", baseline.BaselineEstateTax.String())
+
+	// Step 4: Get applicable strategy templates
+	var templates []StrategyTemplate
+	err = workflow.ExecuteActivity(ctx, GetApplicableStrategiesActivity, profile).Get(ctx, &templates)
+	if err != nil {
+		return nil, err
+	}
+	logger.Info("Found applicable strategies", "count", len(templates))
+
+	// Step 5: Generate scenarios in parallel (up to 10 concurrent)
+	maxConcurrent := 10
+	if input.MaxScenarios > 0 && input.MaxScenarios < maxConcurrent {
+		maxConcurrent = input.MaxScenarios
+	}
+
+	scenarios := []workflow.Future{}
+	for i, template := range templates {
+		if input.MaxScenarios > 0 && i >= input.MaxScenarios {
+			break
+		}
+
+		// Execute scenario generation for each strategy
+		future := workflow.ExecuteActivity(ctx, GenerateScenarioActivity, GenerateScenarioInput{
+			FamilyProfile: profile,
+			Strategy:      template,
+			Baseline:      baseline,
+		})
+		scenarios = append(scenarios, future)
+
+		// Limit concurrent executions
+		if len(scenarios) >= maxConcurrent {
+			// Wait for one to complete before starting more
+			for _, f := range scenarios {
+				var scenario wealth.EstatePlanScenario
+				if err := f.Get(ctx, &scenario); err == nil {
+					result.Scenarios = append(result.Scenarios, scenario)
+				}
+			}
+			scenarios = []workflow.Future{}
+		}
+	}
+
+	// Wait for remaining scenarios
+	for _, future := range scenarios {
+		var scenario wealth.EstatePlanScenario
+		if err := future.Get(ctx, &scenario); err != nil {
+			logger.Warn("Scenario generation failed", "error", err)
+			continue
+		}
+		result.Scenarios = append(result.Scenarios, scenario)
+	}
+
+	logger.Info("Generated scenarios", "total", len(result.Scenarios))
+
+	// Step 6: Rank scenarios
+	err = workflow.ExecuteActivity(ctx, RankScenariosActivity, RankScenariosInput{
+		FamilyID:  input.FamilyID,
+		Scenarios: result.Scenarios,
+	}).Get(ctx, &result.Scenarios)
+	if err != nil {
+		return nil, err
+	}
+
+	// Step 7: Generate AI narratives for top scenarios
+	if input.GenerateNarratives {
+		topScenarios := result.Scenarios
+		if len(topScenarios) > 5 {
+			topScenarios = topScenarios[:5] // Only narratives for top 5
+		}
+
+		for i := range topScenarios {
+			var narrative string
+			err := workflow.ExecuteActivity(ctx, GenerateNarrativeActivity, topScenarios[i]).Get(ctx, &narrative)
+			if err != nil {
+				logger.Warn("Narrative generation failed", "scenario", topScenarios[i].ScenarioName, "error", err)
+				continue
+			}
+			result.Scenarios[i].NarrativeExplanation = &narrative
+		}
+	}
+
+	// Step 8: Save scenarios to database
+	err = workflow.ExecuteActivity(ctx, SaveScenariosActivity, SaveScenariosInput{
+		FamilyID:  input.FamilyID,
+		Scenarios: result.Scenarios,
+	}).Get(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	// Step 9: Update family estate plan status
+	err = workflow.ExecuteActivity(ctx, UpdateEstatePlanStatusActivity, UpdateEstatePlanStatusInput{
+		FamilyID: input.FamilyID,
+		Status:   "IN_PROGRESS",
+	}).Get(ctx, nil)
+	if err != nil {
+		logger.Warn("Failed to update status", "error", err)
+	}
+
+	result.Message = "Estate plan generation complete"
+	result.ScenariosGenerated = len(result.Scenarios)
+
+	logger.Info("Estate plan generation workflow complete", "scenarios", result.ScenariosGenerated)
+	return result, nil
+}
+
+// EstatePlanGenerationInput is the input to the workflow
+type EstatePlanGenerationInput struct {
+	FamilyID           string   `json:"family_id"`
+	MaxScenarios       int      `json:"max_scenarios"`       // Limit number of scenarios (0 = no limit)
+	GenerateNarratives bool     `json:"generate_narratives"` // Generate AI narratives
+	IncludeStrategies  []string `json:"include_strategies"`  // Filter to specific strategies
+}
+
+// EstatePlanGenerationResult is the workflow result
+type EstatePlanGenerationResult struct {
+	FamilyID           string                      `json:"family_id"`
+	Scenarios          []wealth.EstatePlanScenario `json:"scenarios"`
+	ScenariosGenerated int                         `json:"scenarios_generated"`
+	Message            string                      `json:"message"`
+}
+
+// StrategyTemplate represents a strategy template from the database
+type StrategyTemplate struct {
+	TemplateID       string                 `json:"template_id"`
+	StrategyType     string                 `json:"strategy_type"`
+	TemplateName     string                 `json:"template_name"`
+	Configuration    map[string]interface{} `json:"configuration"`
+	MinNetworth      *float64               `json:"min_networth"`
+	RequiresMarried  bool                   `json:"requires_married"`
+	RequiresChildren bool                   `json:"requires_children"`
+}
+
+// GenerateScenarioInput is input for scenario generation activity
+type GenerateScenarioInput struct {
+	FamilyProfile wealth.FamilyProfile      `json:"family_profile"`
+	Strategy      StrategyTemplate          `json:"strategy"`
+	Baseline      wealth.EstatePlanScenario `json:"baseline"`
+}
+
+// RankScenariosInput is input for ranking activity
+type RankScenariosInput struct {
+	FamilyID  string                      `json:"family_id"`
+	Scenarios []wealth.EstatePlanScenario `json:"scenarios"`
+}
+
+// SaveScenariosInput is input for saving scenarios
+type SaveScenariosInput struct {
+	FamilyID  string                      `json:"family_id"`
+	Scenarios []wealth.EstatePlanScenario `json:"scenarios"`
+}
+
+// UpdateEstatePlanStatusInput is input for status update
+type UpdateEstatePlanStatusInput struct {
+	FamilyID string `json:"family_id"`
+	Status   string `json:"status"`
+}

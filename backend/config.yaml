@@ -1,0 +1,95 @@
+yaml_dir: ./models
+driver: postgres
+# Using remote Postgres server
+dsn: "postgres://postgres:postgres@100.84.126.19:5432/alpha?sslmode=disable"
+aggregates_dsn: "postgres://postgres:postgres@100.84.126.19:5432/northwinds?sslmode=disable"
+# Run backend locally on port 8080
+port: 8080
+pg_port: 5432
+graphql_url: "http://100.84.126.19:8080/v1/graphql"
+jwt_secret: "test-jwt-secret"
+# Temporal configuration for remote server
+temporal_host: "100.84.126.19"
+temporal_port: "7233"
+
+# =============================================================================
+# Multi-Source Calc Engine Configuration
+# =============================================================================
+# Enable this for StarRocks (hot) + Trino (cold) tiered architecture
+# When disabled, uses PostgreSQL-only engine (default)
+
+calc_engine:
+  enable_multi_source: false # Set to true to enable StarRocks/Trino routing
+  hot_cold_boundary_days: 90 # Queries older than this go to cold tier
+  force_hot_tier: false # Set to true to always use StarRocks
+
+  # StarRocks - Hot Tier (Real-time analytics, < 90 days)
+  # Uses MySQL protocol on port 9030
+  starrocks:
+    host: "100.84.126.19" # remote StarRocks server
+    port: 9030
+    user: "root"
+    password: ""
+    database: "semantic_layer"
+    timeout: "30s"
+    max_conns: 20
+
+  # Trino - Cold Tier (Historical Iceberg/Parquet)
+  trino:
+    host: "trino" # or localhost for local dev
+    port: 8090
+    user: "admin"
+    password: ""
+    catalog: "iceberg"
+    schema: "wealth"
+    timeout: "5m"
+
+  # Cube.js Semantic Layer Bridge
+  cube:
+    api_url: "http://cube:4000" # or localhost:4000 for local dev
+    enabled: true
+    rollup_only: true # Enforce pre-aggregation governance
+
+# =============================================================================
+# Audit & Snapshot Plane Configuration
+# =============================================================================
+# Immutable audit trail using Kafka + Iceberg + Trino architecture
+# Captures all scheduler jobs, governance changes, compliance violations
+
+audit:
+  # Kafka Event Bus
+  kafka:
+    brokers:
+    - "localhost:19092"
+    consumer_group: "audit-sink-group"
+
+  # Trino Query Engine (Iceberg connector)
+  trino:
+    host: "localhost"
+    port: 8090
+    catalog: "iceberg"
+    schema: "audit"
+
+  # Iceberg REST Catalog
+  iceberg:
+    catalog_uri: "http://localhost:8181"
+    warehouse: "s3://warehouse/audit"
+
+  # S3-compatible Storage (MinIO)
+  s3:
+    endpoint: "http://localhost:9000"
+    access_key: "minioadmin"
+    secret_key: "minioadmin"
+    bucket: "warehouse"
+
+  # AI Narrative Service
+  ai:
+    # Uses OPENAI_API_KEY environment variable
+    model: "gpt-4"
+    enabled: true
+
+  # Retention & PII
+  retention_days: 90
+  pii_fields:
+  - "user_email"
+  - "customer_name"

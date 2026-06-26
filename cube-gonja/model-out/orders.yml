@@ -1,0 +1,45 @@
+cubes:
+- name: orders
+  sql_table: public.orders
+  data_source: default
+  title: Orders
+
+  joins:
+  - name: customers
+    sql: "INNER JOIN customers ON orders.customer_id = customers.customer_id"
+    relationship: many_to_one
+
+  measures:
+  - name: count
+    type: count
+
+  - name: total_revenue
+    type: sum
+    sql: amount
+
+  - name: customer_count
+    type: count_distinct
+    sql: customers.customer_id
+
+  dimensions:
+
+  - name: id
+    sql: id
+    type: number
+    primary_key: true
+
+  - name: amount
+    sql: amount
+    type: number
+
+  - name: customer_id
+    sql: customer_id
+    type: string
+
+  - name: customer_name
+    sql: customers.name
+    type: string
+
+  - name: order_date
+    sql: order_date
+    type: time

@@ -1,0 +1,251 @@
+"""
+Improved GraphQL schema for Workday-inspired Business Object Linking
+Includes pagination, error handling, and multi-tenant security
+"""
+
+enum EdgeType {
+  REFERENCE
+  COMPOSITION
+  ASSOCIATION
+  FOREIGN_KEY
+}
+
+enum Direction {
+  OUTBOUND
+  INBOUND
+}
+
+enum FieldType {
+  TEXT
+  EMAIL
+  NUMBER
+  CURRENCY
+  DATE
+  DATETIME
+  BOOLEAN
+  JSON
+  ARRAY
+  IMAGE
+  REFERENCE
+}
+
+"""
+Business Object Field (Member Attribute)
+Represents a single field/attribute in a Business Object
+"""
+type Field {
+  id: ID!
+  key: String!
+  name: String!
+  displayName: String!
+  technicalName: String
+  type: FieldType!
+  isCore: Boolean!
+  isRequired: Boolean!
+  isSystem: Boolean!
+  description: String
+  referenceEntity: String
+  sequence: Int!
+  createdAt: String!
+  createdBy: String
+  lastModifiedAt: String!
+  lastModifiedBy: String
+}
+
+"""
+Business Object Definition
+Represents a complete Business Object with core and custom fields
+"""
+type BusinessObject {
+  id: ID!
+  name: String!
+  displayName: String
+  kind: String!
+  description: String
+  coreFields: [Field!]!
+  customFields: [Field!]!
+  createdAt: String!
+  updatedAt: String!
+}
+
+type RelatedObject {
+  edgeId: ID!
+  direction: Direction!
+  edgeType: EdgeType!
+  cardinality: String
+  source: BusinessObject!
+  target: BusinessObject!
+  confidence: Float
+}
+
+type RelationshipSuggestion {
+  id: ID!
+  title: String!
+  description: String!
+  sourceEntity: String!
+  targetEntity: String!
+  edgeType: EdgeType!
+  cardinality: String
+  fkColumn: String
+  confidence: Float!
+  reasoning: String!
+  dismissible: Boolean!
+}
+
+type RelationshipSuggestionPage {
+  suggestions: [RelationshipSuggestion!]!
+  total: Int!
+  hasMore: Boolean!
+}
+
+type CatalogNode {
+  id: ID!
+  tenantId: ID!
+  datasourceId: ID!
+  name: String!
+  kind: String!
+  description: String
+  createdAt: String!
+}
+
+type CatalogEdge {
+  id: ID!
+  tenantId: ID!
+  datasourceId: ID!
+  sourceId: ID!
+  targetId: ID!
+  edgeType: EdgeType!
+  cardinality: String
+  fkTable: String
+  fkColumn: String
+  pkTable: String
+  pkColumn: String
+  confidence: Float!
+  suggested: Boolean!
+  createdBy: String
+  createdAt: String!
+}
+
+type ApplyRelationshipResult {
+  success: Boolean!
+  edge: CatalogEdge
+  error: String
+}
+
+type DismissRelationshipResult {
+  success: Boolean!
+  auditId: ID
+  error: String
+}
+
+type Query {
+  """
+  Retrieve all related objects for a given entity in both directions
+  """
+  getRelatedObjects(
+    tenantId: ID!
+    datasourceId: ID!
+    entity: String!
+  ): [RelatedObject!]!
+
+  """
+  Get paginated relationship suggestions with caching support
+  """
+  getRelationshipSuggestions(
+    tenantId: ID!
+    datasourceId: ID!
+    entity: String!
+    limit: Int = 5
+    offset: Int = 0
+  ): RelationshipSuggestionPage!
+
+  """
+  Get a specific catalog node with full details
+  """
+  getCatalogNode(
+    tenantId: ID!
+    datasourceId: ID!
+    name: String!
+  ): CatalogNode
+
+  """
+  Get all edges for a given source or target node
+  """
+  getCatalogEdges(
+    tenantId: ID!
+    datasourceId: ID!
+    nodeId: ID!
+    direction: Direction
+  ): [CatalogEdge!]!
+}
+
+type Mutation {
+  """
+  Apply a suggested relationship, creating a new edge
+  """
+  applyRelationship(
+    tenantId: ID!
+    datasourceId: ID!
+    sourceEntity: String!
+    targetEntity: String!
+    edgeType: EdgeType!
+    cardinality: String
+    fkColumn: String
+    confidence: Float
+  ): ApplyRelationshipResult!
+
+  """
+  Dismiss a suggestion, recording user feedback for model tuning
+  """
+  dismissRelationshipSuggestion(
+    tenantId: ID!
+    datasourceId: ID!
+    suggestionId: ID!
+    reason: String
+  ): DismissRelationshipResult!
+
+  """
+  Create a manual edge without suggestion
+  """
+  createRelationshipEdge(
+    tenantId: ID!
+    datasourceId: ID!
+    sourceId: ID!
+    targetId: ID!
+    edgeType: EdgeType!
+    cardinality: String
+    fkColumn: String
+    confidence: Float = 1.0
+    createdBy: String
+  ): ApplyRelationshipResult!
+
+  """
+  Update an existing edge metadata
+  """
+  updateRelationshipEdge(
+    tenantId: ID!
+    datasourceId: ID!
+    edgeId: ID!
+    cardinality: String
+    confidence: Float
+  ): ApplyRelationshipResult!
+
+  """
+  Delete an edge
+  """
+  deleteRelationshipEdge(
+    tenantId: ID!
+    datasourceId: ID!
+    edgeId: ID!
+  ): DismissRelationshipResult!
+}
+
+type Subscription {
+  """
+  Subscribe to relationship changes in real-time
+  """
+  relationshipEdgeUpdated(
+    tenantId: ID!
+    datasourceId: ID!
+  ): CatalogEdge!
+}

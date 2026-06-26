@@ -1,0 +1,14 @@
+{
+  "name": "plan_query",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "tenant_id": { "type": "string" },
+      "region": { "type": "string" },
+      "business_object": { "type": "string" },
+      "dimensions": { "type": "array", "items": { "type": "string" } },
+      "measures": { "type": "array", "items": { "type": "string" } }
+    },
+    "required": ["tenant_id", "region", "business_object"]
+  }
+}

@@ -1,0 +1,264 @@
+{
+  "multi_dialect_metric_mappings": {
+    "description": "Cross-engine SQL implementations for unified financial services metrics",
+    "version": "1.0.0",
+    "last_updated": "2025-09-13",
+    "metrics": [
+      {
+        "node_id": "net_interest_margin",
+        "category": "profitability",
+        "description": "Net interest income as a percentage of average earning assets",
+        "governance": "golden",
+        "audience": ["executive", "risk_officer", "compliance"],
+        "neutral_formula": "DIVIDE(SUMX(interest_income_table, interest_income) - SUMX(interest_expense_table, interest_expense), AVERAGEX(assets_table, average_assets))",
+        "dialects": {
+          "sqlserver": {
+            "view_definition": "CREATE VIEW net_interest_margin AS SELECT (SUM(ii.amount) - SUM(ie.amount)) / NULLIF(AVG(a.average_balance), 0) AS value FROM interest_income ii JOIN interest_expense ie ON ii.entity_id = ie.entity_id AND ii.as_of_date = ie.as_of_date JOIN assets a ON ii.entity_id = a.entity_id AND ii.as_of_date = a.as_of_date GROUP BY ii.entity_id, ii.as_of_date;",
+            "preaggregation": "CREATE CLUSTERED COLUMNSTORE INDEX cci_nim ON net_interest_margin;",
+            "performance_notes": "Use columnstore for analytical workloads"
+          },
+          "oracle": {
+            "view_definition": "CREATE VIEW net_interest_margin AS SELECT (SUM(ii.amount) - SUM(ie.amount)) / NULLIF(AVG(a.average_balance), 0) AS value FROM interest_income ii JOIN interest_expense ie ON ii.entity_id = ie.entity_id AND ii.as_of_date = ie.as_of_date JOIN assets a ON ii.entity_id = a.entity_id AND ii.as_of_date = a.as_of_date GROUP BY ii.entity_id, ii.as_of_date;",
+            "preaggregation": "CREATE MATERIALIZED VIEW LOG ON interest_income WITH ROWID; CREATE MATERIALIZED VIEW mv_nim REFRESH FAST AS SELECT * FROM net_interest_margin;",
+            "performance_notes": "Use materialized view logs for incremental refresh"
+          },
+          "postgres": {
+            "view_definition": "CREATE VIEW net_interest_margin AS SELECT (SUM(ii.amount) - SUM(ie.amount)) / NULLIF(AVG(a.average_balance)::DECIMAL, 0) AS value FROM interest_income ii JOIN interest_expense ie ON ii.entity_id = ie.entity_id AND ii.as_of_date = ie.as_of_date JOIN assets a ON ii.entity_id = a.entity_id AND ii.as_of_date = a.as_of_date GROUP BY ii.entity_id, ii.as_of_date;",
+            "preaggregation": "CREATE MATERIALIZED VIEW mv_nim AS SELECT * FROM net_interest_margin; CREATE INDEX idx_nim_entity_date ON mv_nim(entity_id, as_of_date);",
+            "performance_notes": "Materialized views with concurrent indexing"
+          },
+          "snowflake": {
+            "view_definition": "CREATE VIEW net_interest_margin AS SELECT (SUM(ii.amount) - SUM(ie.amount)) / NULLIF(AVG(a.average_balance), 0) AS value FROM interest_income ii JOIN interest_expense ie ON ii.entity_id = ie.entity_id AND ii.as_of_date = ie.as_of_date JOIN assets a ON ii.entity_id = a.entity_id AND ii.as_of_date = a.as_of_date GROUP BY ii.entity_id, ii.as_of_date;",
+            "preaggregation": "ALTER TABLE net_interest_margin CLUSTER BY (entity_id, as_of_date);",
+            "performance_notes": "Automatic clustering for query optimization"
+          },
+          "iceberg": {
+            "view_definition": "CREATE TABLE net_interest_margin USING iceberg PARTITIONED BY (year(as_of_date)) AS SELECT entity_id, as_of_date, (SUM(ii.amount) - SUM(ie.amount)) / NULLIF(AVG(a.average_balance), 0) AS value FROM interest_income ii JOIN interest_expense ie ON ii.entity_id = ie.entity_id AND ii.as_of_date = ie.as_of_date JOIN assets a ON ii.entity_id = a.entity_id AND ii.as_of_date = a.as_of_date GROUP BY ii.entity_id, ii.as_of_date;",
+            "preaggregation": "ALTER TABLE net_interest_margin ADD PARTITION FIELD year(as_of_date);",
+            "performance_notes": "Partition by year for time-series optimization"
+          }
+        }
+      },
+      {
+        "node_id": "sharpe_ratio",
+        "category": "risk_adjusted_performance",
+        "description": "Risk-adjusted return using Sharpe Ratio",
+        "governance": "golden",
+        "audience": ["portfolio_manager", "risk_manager"],
+        "neutral_formula": "DIVIDE(AVERAGEX(returns_table, portfolio_returns) - risk_free_rate, STDEVX.P(returns_table, portfolio_returns))",
+        "dialects": {
+          "sqlserver": {
+            "view_definition": "CREATE VIEW sharpe_ratio AS SELECT (AVG(pr.daily_return) - rfr.risk_free_rate) / NULLIF(STDEV(pr.daily_return), 0) AS value FROM portfolio_returns pr CROSS JOIN (SELECT TOP 1 risk_free_rate FROM risk_free_rates ORDER BY as_of_date DESC) rfr GROUP BY pr.entity_id, pr.as_of_date;",
+            "preaggregation": "CREATE NONCLUSTERED INDEX idx_sharpe ON sharpe_ratio(entity_id, as_of_date) INCLUDE (value);",
+            "performance_notes": "Include computed columns in covering indexes"
+          },
+          "oracle": {
+            "view_definition": "CREATE VIEW sharpe_ratio AS SELECT (AVG(pr.daily_return) - rfr.risk_free_rate) / NULLIF(STDDEV(pr.daily_return), 0) AS value FROM portfolio_returns pr CROSS JOIN (SELECT risk_free_rate FROM risk_free_rates WHERE rownum = 1 ORDER BY as_of_date DESC) rfr GROUP BY pr.entity_id, pr.as_of_date;",
+            "preaggregation": "CREATE BITMAP INDEX idx_sharpe_entity ON sharpe_ratio(entity_id); CREATE BITMAP INDEX idx_sharpe_date ON sharpe_ratio(as_of_date);",
+            "performance_notes": "Bitmap indexes for low-cardinality dimensions"
+          },
+          "postgres": {
+            "view_definition": "CREATE VIEW sharpe_ratio AS SELECT (AVG(pr.daily_return) - rfr.risk_free_rate) / NULLIF(STDDEV(pr.daily_return), 0) AS value FROM portfolio_returns pr CROSS JOIN (SELECT risk_free_rate FROM risk_free_rates ORDER BY as_of_date DESC LIMIT 1) rfr GROUP BY pr.entity_id, pr.as_of_date;",
+            "preaggregation": "CREATE MATERIALIZED VIEW mv_sharpe AS SELECT * FROM sharpe_ratio; CREATE INDEX CONCURRENTLY idx_sharpe_gist ON mv_sharpe USING GIST (entity_id, as_of_date);",
+            "performance_notes": "GiST indexes for multi-column optimization"
+          },
+          "snowflake": {
+            "view_definition": "CREATE VIEW sharpe_ratio AS SELECT (AVG(pr.daily_return) - rfr.risk_free_rate) / NULLIF(STDDEV(pr.daily_return), 0) AS value FROM portfolio_returns pr CROSS JOIN (SELECT risk_free_rate FROM risk_free_rates ORDER BY as_of_date DESC LIMIT 1) rfr GROUP BY pr.entity_id, pr.as_of_date;",
+            "preaggregation": "ALTER TABLE sharpe_ratio SET CLUSTERING KEY = (entity_id, as_of_date);",
+            "performance_notes": "Micro-partitioning with clustering keys"
+          },
+          "iceberg": {
+            "view_definition": "CREATE TABLE sharpe_ratio USING iceberg PARTITIONED BY (entity_id) AS SELECT pr.entity_id, pr.as_of_date, (AVG(pr.daily_return) - rfr.risk_free_rate) / NULLIF(STDDEV(pr.daily_return), 0) AS value FROM portfolio_returns pr CROSS JOIN (SELECT risk_free_rate FROM risk_free_rates ORDER BY as_of_date DESC LIMIT 1) rfr GROUP BY pr.entity_id, pr.as_of_date;",
+            "preaggregation": "ALTER TABLE sharpe_ratio ADD PARTITION FIELD entity_id;",
+            "performance_notes": "Partition by entity for tenant isolation"
+          }
+        }
+      },
+      {
+        "node_id": "value_at_risk",
+        "category": "market_risk",
+        "description": "Maximum expected loss over a specific time period at a given confidence level",
+        "governance": "golden",
+        "audience": ["trader", "portfolio_manager", "risk_manager"],
+        "neutral_formula": "STDEVX.P(returns_table, portfolio_returns) * SQRT(holding_period) * confidence_factor",
+        "dialects": {
+          "sqlserver": {
+            "view_definition": "CREATE VIEW value_at_risk AS SELECT STDEV(pr.daily_return) * SQRT(hp.holding_days) * cf.confidence_multiplier AS value FROM portfolio_returns pr CROSS JOIN (SELECT TOP 1 holding_days FROM holding_periods) hp CROSS JOIN (SELECT TOP 1 confidence_multiplier FROM confidence_factors) cf GROUP BY pr.entity_id, pr.as_of_date;",
+            "preaggregation": "CREATE CLUSTERED COLUMNSTORE INDEX cci_var ON value_at_risk WITH (COMPRESSION_DELAY = 0);",
+            "performance_notes": "Columnstore with immediate compression for risk metrics"
+          },
+          "oracle": {
+            "view_definition": "CREATE VIEW value_at_risk AS SELECT STDDEV(pr.daily_return) * SQRT(hp.holding_days) * cf.confidence_multiplier AS value FROM portfolio_returns pr CROSS JOIN (SELECT holding_days FROM holding_periods WHERE rownum = 1) hp CROSS JOIN (SELECT confidence_multiplier FROM confidence_factors WHERE rownum = 1) cf GROUP BY pr.entity_id, pr.as_of_date;",
+            "preaggregation": "CREATE MATERIALIZED VIEW mv_var REFRESH COMPLETE START WITH SYSDATE NEXT SYSDATE + 1/24 AS SELECT * FROM value_at_risk;",
+            "performance_notes": "Scheduled refresh for daily risk calculations"
+          },
+          "postgres": {
+            "view_definition": "CREATE VIEW value_at_risk AS SELECT STDDEV(pr.daily_return) * SQRT(hp.holding_days::DOUBLE PRECISION) * cf.confidence_multiplier AS value FROM portfolio_returns pr CROSS JOIN (SELECT holding_days FROM holding_periods LIMIT 1) hp CROSS JOIN (SELECT confidence_multiplier FROM confidence_factors LIMIT 1) cf GROUP BY pr.entity_id, pr.as_of_date;",
+            "preaggregation": "CREATE MATERIALIZED VIEW mv_var AS SELECT * FROM value_at_risk WITH DATA; REFRESH MATERIALIZED VIEW CONCURRENTLY mv_var;",
+            "performance_notes": "Concurrent refresh to avoid blocking queries"
+          },
+          "snowflake": {
+            "view_definition": "CREATE VIEW value_at_risk AS SELECT STDDEV(pr.daily_return) * SQRT(hp.holding_days) * cf.confidence_multiplier AS value FROM portfolio_returns pr CROSS JOIN (SELECT holding_days FROM holding_periods LIMIT 1) hp CROSS JOIN (SELECT confidence_multiplier FROM confidence_factors LIMIT 1) cf GROUP BY pr.entity_id, pr.as_of_date;",
+            "preaggregation": "CREATE DYNAMIC TABLE dt_var TARGET_LAG = '1 hour' AS SELECT * FROM value_at_risk;",
+            "performance_notes": "Dynamic tables for automatic refresh based on lag targets"
+          },
+          "iceberg": {
+            "view_definition": "CREATE TABLE value_at_risk USING iceberg TBLPROPERTIES ('write.update.mode'='merge-on-read') AS SELECT pr.entity_id, pr.as_of_date, STDDEV(pr.daily_return) * SQRT(hp.holding_days) * cf.confidence_multiplier AS value FROM portfolio_returns pr CROSS JOIN (SELECT holding_days FROM holding_periods LIMIT 1) hp CROSS JOIN (SELECT confidence_multiplier FROM confidence_factors LIMIT 1) cf GROUP BY pr.entity_id, pr.as_of_date;",
+            "preaggregation": "ALTER TABLE value_at_risk SET TBLPROPERTIES ('write.merge.mode'='merge-on-read');",
+            "performance_notes": "Merge-on-read for frequent updates"
+          }
+        }
+      },
+      {
+        "node_id": "beta_coefficient",
+        "category": "market_risk",
+        "description": "Portfolio beta relative to market benchmark",
+        "governance": "golden",
+        "audience": ["portfolio_manager", "risk_manager"],
+        "neutral_formula": "DIVIDE(SUMX(correlation_table, (portfolio_return - portfolio_mean) * (market_return - market_mean)), SUMX(correlation_table, POWER(market_return - market_mean, 2)))",
+        "dialects": {
+          "sqlserver": {
+            "view_definition": "CREATE VIEW beta_coefficient AS SELECT SUM((pmr.portfolio_return - pm.avg_portfolio) * (pmr.market_return - mm.avg_market)) / NULLIF(SUM(POWER(pmr.market_return - mm.avg_market, 2)), 0) AS value FROM portfolio_market_returns pmr CROSS JOIN (SELECT AVG(portfolio_return) as avg_portfolio FROM portfolio_market_returns) pm CROSS JOIN (SELECT AVG(market_return) as avg_market FROM portfolio_market_returns) mm GROUP BY pmr.entity_id, pmr.as_of_date;",
+            "preaggregation": "CREATE NONCLUSTERED INDEX idx_beta_covering ON beta_coefficient(entity_id, as_of_date, value);",
+            "performance_notes": "Covering index for beta calculations"
+          },
+          "oracle": {
+            "view_definition": "CREATE VIEW beta_coefficient AS SELECT SUM((pmr.portfolio_return - pm.avg_portfolio) * (pmr.market_return - mm.avg_market)) / NULLIF(SUM(POWER(pmr.market_return - mm.avg_market, 2)), 0) AS value FROM portfolio_market_returns pmr CROSS JOIN (SELECT AVG(portfolio_return) avg_portfolio FROM portfolio_market_returns) pm CROSS JOIN (SELECT AVG(market_return) avg_market FROM portfolio_market_returns) mm GROUP BY pmr.entity_id, pmr.as_of_date;",
+            "preaggregation": "CREATE MATERIALIZED VIEW mv_beta ENABLE QUERY REWRITE AS SELECT * FROM beta_coefficient;",
+            "performance_notes": "Query rewrite for complex statistical calculations"
+          },
+          "postgres": {
+            "view_definition": "CREATE VIEW beta_coefficient AS SELECT SUM((pmr.portfolio_return - pm.avg_portfolio) * (pmr.market_return - mm.avg_market)) / NULLIF(SUM(POWER(pmr.market_return - mm.avg_market, 2)), 0) AS value FROM portfolio_market_returns pmr CROSS JOIN (SELECT AVG(portfolio_return)::DECIMAL as avg_portfolio FROM portfolio_market_returns) pm CROSS JOIN (SELECT AVG(market_return)::DECIMAL as avg_market FROM portfolio_market_returns) mm GROUP BY pmr.entity_id, pmr.as_of_date;",
+            "preaggregation": "CREATE MATERIALIZED VIEW mv_beta AS SELECT * FROM beta_coefficient; CREATE INDEX idx_beta_partial ON mv_beta(entity_id, as_of_date) WHERE value IS NOT NULL;",
+            "performance_notes": "Partial indexes for non-null values"
+          },
+          "snowflake": {
+            "view_definition": "CREATE VIEW beta_coefficient AS SELECT SUM((pmr.portfolio_return - pm.avg_portfolio) * (pmr.market_return - mm.avg_market)) / NULLIF(SUM(POWER(pmr.market_return - mm.avg_market, 2)), 0) AS value FROM portfolio_market_returns pmr CROSS JOIN (SELECT AVG(portfolio_return) as avg_portfolio FROM portfolio_market_returns) pm CROSS JOIN (SELECT AVG(market_return) as avg_market FROM portfolio_market_returns) mm GROUP BY pmr.entity_id, pmr.as_of_date;",
+            "preaggregation": "ALTER TABLE beta_coefficient ADD SEARCH OPTIMIZATION;",
+            "performance_notes": "Search optimization for complex analytical queries"
+          },
+          "iceberg": {
+            "view_definition": "CREATE TABLE beta_coefficient USING iceberg PARTITIONED BY (entity_id, year(as_of_date)) AS SELECT pmr.entity_id, pmr.as_of_date, SUM((pmr.portfolio_return - pm.avg_portfolio) * (pmr.market_return - mm.avg_market)) / NULLIF(SUM(POWER(pmr.market_return - mm.avg_market, 2)), 0) AS value FROM portfolio_market_returns pmr CROSS JOIN (SELECT AVG(portfolio_return) as avg_portfolio FROM portfolio_market_returns) pm CROSS JOIN (SELECT AVG(market_return) as avg_market FROM portfolio_market_returns) mm GROUP BY pmr.entity_id, pmr.as_of_date;",
+            "preaggregation": "ALTER TABLE beta_coefficient ADD PARTITION FIELD year(as_of_date);",
+            "performance_notes": "Multi-level partitioning for analytical workloads"
+          }
+        }
+      },
+      {
+        "node_id": "effective_interest_income",
+        "category": "income_recognition",
+        "description": "Interest income using the effective interest rate method",
+        "governance": "golden",
+        "audience": ["controller", "finance", "regulator", "audit"],
+        "neutral_formula": "opening_carrying_amount * effective_interest_rate",
+        "dialects": {
+          "sqlserver": {
+            "view_definition": "CREATE VIEW effective_interest_income AS SELECT oca.opening_carrying_amount * eir.effective_interest_rate AS value FROM opening_carrying_amounts oca JOIN effective_interest_rates eir ON oca.entity_id = eir.entity_id AND oca.as_of_date = eir.as_of_date;",
+            "preaggregation": "CREATE CLUSTERED INDEX idx_eii ON effective_interest_income(entity_id, as_of_date);",
+            "performance_notes": "Clustered index on primary key columns"
+          },
+          "oracle": {
+            "view_definition": "CREATE VIEW effective_interest_income AS SELECT oca.opening_carrying_amount * eir.effective_interest_rate AS value FROM opening_carrying_amounts oca JOIN effective_interest_rates eir ON oca.entity_id = eir.entity_id AND oca.as_of_date = eir.as_of_date;",
+            "preaggregation": "CREATE INDEX idx_eii_entity ON effective_interest_income(entity_id) COMPRESS; CREATE INDEX idx_eii_date ON effective_interest_income(as_of_date) COMPRESS;",
+            "performance_notes": "Compressed indexes for storage efficiency"
+          },
+          "postgres": {
+            "view_definition": "CREATE VIEW effective_interest_income AS SELECT (oca.opening_carrying_amount * eir.effective_interest_rate)::DECIMAL(20,4) AS value FROM opening_carrying_amounts oca JOIN effective_interest_rates eir ON oca.entity_id = eir.entity_id AND oca.as_of_date = eir.as_of_date;",
+            "preaggregation": "CREATE MATERIALIZED VIEW mv_eii AS SELECT * FROM effective_interest_income; CREATE INDEX idx_eii_brin ON mv_eii USING BRIN (as_of_date);",
+            "performance_notes": "BRIN indexes for time-series data"
+          },
+          "snowflake": {
+            "view_definition": "CREATE VIEW effective_interest_income AS SELECT oca.opening_carrying_amount * eir.effective_interest_rate AS value FROM opening_carrying_amounts oca JOIN effective_interest_rates eir ON oca.entity_id = eir.entity_id AND oca.as_of_date = eir.as_of_date;",
+            "preaggregation": "ALTER TABLE effective_interest_income CLUSTER BY (entity_id, as_of_date);",
+            "performance_notes": "Automatic micro-partitioning"
+          },
+          "iceberg": {
+            "view_definition": "CREATE TABLE effective_interest_income USING iceberg PARTITIONED BY (entity_id) AS SELECT oca.entity_id, oca.as_of_date, oca.opening_carrying_amount * eir.effective_interest_rate AS value FROM opening_carrying_amounts oca JOIN effective_interest_rates eir ON oca.entity_id = eir.entity_id AND oca.as_of_date = eir.as_of_date;",
+            "preaggregation": "ALTER TABLE effective_interest_income ADD PARTITION FIELD entity_id;",
+            "performance_notes": "Partition by entity for tenant-based access patterns"
+          }
+        }
+      },
+      {
+        "node_id": "spot_conversion",
+        "category": "conversion",
+        "description": "Convert transaction amount from source to reporting currency using spot FX rate",
+        "governance": "golden",
+        "audience": ["portfolio_manager", "treasury", "regulator"],
+        "neutral_formula": "amount_source * spot_rate",
+        "dialects": {
+          "sqlserver": {
+            "view_definition": "CREATE VIEW spot_conversion AS SELECT asc.amount_source_currency * sfr.spot_fx_rate AS value FROM amount_source_currency asc JOIN spot_fx_rate sfr ON asc.entity_id = sfr.entity_id AND asc.as_of_date = sfr.as_of_date;",
+            "preaggregation": "CREATE NONCLUSTERED INDEX idx_spot ON spot_conversion(entity_id, as_of_date, value);",
+            "performance_notes": "Covering index for FX conversion queries"
+          },
+          "oracle": {
+            "view_definition": "CREATE VIEW spot_conversion AS SELECT asc.amount_source_currency * sfr.spot_fx_rate AS value FROM amount_source_currency asc JOIN spot_fx_rate sfr ON asc.entity_id = sfr.entity_id AND asc.as_of_date = sfr.as_of_date;",
+            "preaggregation": "CREATE MATERIALIZED VIEW mv_spot REFRESH FAST AS SELECT * FROM spot_conversion;",
+            "performance_notes": "Fast refresh for real-time FX data"
+          },
+          "postgres": {
+            "view_definition": "CREATE VIEW spot_conversion AS SELECT (asc.amount_source_currency * sfr.spot_fx_rate)::DECIMAL(20,4) AS value FROM amount_source_currency asc JOIN spot_fx_rate sfr ON asc.entity_id = sfr.entity_id AND asc.as_of_date = sfr.as_of_date;",
+            "preaggregation": "CREATE MATERIALIZED VIEW mv_spot AS SELECT * FROM spot_conversion WITH DATA; CREATE UNIQUE INDEX idx_spot_unique ON mv_spot(entity_id, as_of_date);",
+            "performance_notes": "Unique constraints for data integrity"
+          },
+          "snowflake": {
+            "view_definition": "CREATE VIEW spot_conversion AS SELECT asc.amount_source_currency * sfr.spot_fx_rate AS value FROM amount_source_currency asc JOIN spot_fx_rate sfr ON asc.entity_id = sfr.entity_id AND asc.as_of_date = sfr.as_of_date;",
+            "preaggregation": "CREATE DYNAMIC TABLE dt_spot TARGET_LAG = '15 minutes' AS SELECT * FROM spot_conversion;",
+            "performance_notes": "Low latency for FX trading applications"
+          },
+          "iceberg": {
+            "view_definition": "CREATE TABLE spot_conversion USING iceberg TBLPROPERTIES ('write.update.mode'='copy-on-write') AS SELECT asc.entity_id, asc.as_of_date, asc.amount_source_currency * sfr.spot_fx_rate AS value FROM amount_source_currency asc JOIN spot_fx_rate sfr ON asc.entity_id = sfr.entity_id AND asc.as_of_date = sfr.as_of_date;",
+            "preaggregation": "ALTER TABLE spot_conversion SET TBLPROPERTIES ('write.update.mode'='copy-on-write');",
+            "performance_notes": "Copy-on-write for immutable FX rates"
+          }
+        }
+      }
+    ],
+    "deployment_strategy": {
+      "phases": [
+        {
+          "phase": 1,
+          "name": "Foundation Setup",
+          "tasks": [
+            "Create semantic layer schema in each target engine",
+            "Deploy base tables and relationships",
+            "Set up cross-engine testing framework"
+          ]
+        },
+        {
+          "phase": 2,
+          "name": "Core Metrics Deployment",
+          "tasks": [
+            "Deploy golden status metrics first",
+            "Implement preaggregation strategies",
+            "Validate results consistency across engines"
+          ]
+        },
+        {
+          "phase": 3,
+          "name": "Advanced Features",
+          "tasks": [
+            "Deploy draft metrics with appropriate warnings",
+            "Implement calculation groups and composite models",
+            "Set up monitoring and alerting"
+          ]
+        },
+        {
+          "phase": 4,
+          "name": "Optimization & Scaling",
+          "tasks": [
+            "Performance tuning per engine",
+            "Implement caching strategies",
+            "Set up automated refresh schedules"
+          ]
+        }
+      ],
+      "validation_approach": {
+        "cross_engine_consistency": "Run identical test queries across all engines and compare results within tolerance",
+        "performance_benchmarks": "Measure query execution time and resource usage per engine",
+        "data_quality_checks": "Implement automated tests for null handling, division by zero, and edge cases"
+      }
+    }
+  }
+}

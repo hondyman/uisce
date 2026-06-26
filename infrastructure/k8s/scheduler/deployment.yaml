@@ -1,0 +1,194 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: semlayer-scheduler
+  labels:
+    app: semlayer-scheduler
+    component: scheduler
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: semlayer-scheduler
+  template:
+    metadata:
+      labels:
+        app: semlayer-scheduler
+        component: scheduler
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9090"
+        prometheus.io/path: "/metrics"
+    spec:
+      serviceAccountName: semlayer-scheduler
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+      containers:
+      - name: scheduler
+        image: semlayer/scheduler:latest
+        imagePullPolicy: Always
+        ports:
+        - name: metrics
+          containerPort: 9090
+          protocol: TCP
+        env:
+        # Temporal configuration
+        - name: TEMPORAL_HOST
+          value: "temporal-frontend.temporal:7233"
+        - name: TEMPORAL_NAMESPACE
+          value: "semlayer"
+
+        # Database configuration (Cosmos DB for PostgreSQL)
+        - name: DB_PRIMARY_HOST
+          valueFrom:
+            secretKeyRef:
+              name: semlayer-db-credentials
+              key: host
+        - name: DB_PRIMARY_PORT
+          value: "5432"
+        - name: DB_NAME
+          value: "citus"
+        - name: DB_USER
+          valueFrom:
+            secretKeyRef:
+              name: semlayer-db-credentials
+              key: username
+        - name: DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: semlayer-db-credentials
+              key: password
+        - name: DB_SSL_MODE
+          value: "require"
+        - name: DB_MAX_CONNECTIONS
+          value: "50"
+
+        # Read replicas (optional)
+        - name: DB_READ_REPLICA_EU
+          valueFrom:
+            secretKeyRef:
+              name: semlayer-db-credentials
+              key: replica-eu
+              optional: true
+        - name: DB_READ_REPLICA_ASIA
+          valueFrom:
+            secretKeyRef:
+              name: semlayer-db-credentials
+              key: replica-asia
+              optional: true
+
+        # Region
+        - name: REGION
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.labels['topology.kubernetes.io/region']
+
+        # Logging
+        - name: LOG_LEVEL
+          value: "info"
+
+        resources:
+          requests:
+            cpu: 200m
+            memory: 256Mi
+          limits:
+            cpu: 1000m
+            memory: 512Mi
+
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 9090
+          initialDelaySeconds: 10
+          periodSeconds: 30
+          timeoutSeconds: 5
+
+        readinessProbe:
+          httpGet:
+            path: /readyz
+            port: 9090
+          initialDelaySeconds: 5
+          periodSeconds: 10
+          timeoutSeconds: 5
+
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchLabels:
+                  app: semlayer-scheduler
+              topologyKey: kubernetes.io/hostname
+
+      topologySpreadConstraints:
+      - maxSkew: 1
+        topologyKey: topology.kubernetes.io/zone
+        whenUnsatisfiable: ScheduleAnyway
+        labelSelector:
+          matchLabels:
+            app: semlayer-scheduler
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: semlayer-scheduler
+  labels:
+    app: semlayer-scheduler
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: semlayer-scheduler
+  labels:
+    app: semlayer-scheduler
+spec:
+  ports:
+  - name: metrics
+    port: 9090
+    targetPort: metrics
+  selector:
+    app: semlayer-scheduler
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: semlayer-scheduler-pdb
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: semlayer-scheduler
+---
+# ServiceMonitor for Prometheus Operator
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: semlayer-scheduler
+  labels:
+    app: semlayer-scheduler
+spec:
+  selector:
+    matchLabels:
+      app: semlayer-scheduler
+  endpoints:
+  - port: metrics
+    interval: 30s
+    path: /metrics
+---
+# Secret template (create actual secret via sealed-secrets or external-secrets)
+apiVersion: v1
+kind: Secret
+metadata:
+  name: semlayer-db-credentials
+  labels:
+    app: semlayer-scheduler
+type: Opaque
+stringData:
+  host: "semlayer-citus-production.postgres.cosmos.azure.com"
+  username: "semlayeradmin"
+  password: "REPLACE_WITH_ACTUAL_PASSWORD"
+  replica-eu: ""
+  replica-asia: ""

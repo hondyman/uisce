@@ -1,0 +1,18 @@
+version: 2
+
+models:
+  - name: holdings_preagg
+    description: "Canonical holdings pre-aggregation using precedence SETTLED > EOD > SOD"
+    columns:
+      - name: account_id
+        tests:
+          - not_null
+      - name: security_id
+        tests:
+          - not_null
+      - name: valuation_date
+        tests:
+          - not_null
+      - name: market_value_resolved
+        tests:
+          - not_null

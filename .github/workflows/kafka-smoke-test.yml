@@ -1,0 +1,46 @@
+name: Kafka / Redpanda Smoke Test
+
+on:
+  push:
+    branches: [ main, hardening/migrations-alpha-fixes-tests ]
+  pull_request:
+
+jobs:
+  redpanda-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run Redpanda smoke script
+        env:
+          DOCKER_BUILDKIT: 1
+        run: |
+          # Pull and run Redpanda
+          docker pull docker.redpanda.com/redpandadata/redpanda:latest
+          docker run -d --name semlayer-redpanda-ci -p 9092:9092 -p 8082:8082 docker.redpanda.com/redpandadata/redpanda:latest \
+            redpanda start --overprovisioned --smp 1 --memory 1G --reserve-memory 0M --check=false
+
+          # Wait for readiness
+          for i in $(seq 1 60); do
+            if docker exec semlayer-redpanda-ci rpk cluster info >/dev/null 2>&1; then
+              echo "Redpanda ready"
+              break
+            fi
+            echo "Waiting for Redpanda... ($i)"
+            sleep 1
+          done
+
+          # Create topic and produce/consume
+          docker exec semlayer-redpanda-ci rpk topic create semlayer-smoke
+          docker exec -i semlayer-redpanda-ci rpk topic produce semlayer-smoke -k smoke -f '%v{json}\n' <<'EOF'
+{"msg":"hello from GH Actions smoke test"}
+EOF
+
+          # Try to consume (with timeout)
+          timeout 20 docker exec semlayer-redpanda-ci rpk topic consume semlayer-smoke -o start -n 1 -f '%k %v\n'
+
+      - name: Cleanup Redpanda
+        if: always()
+        run: |
+          docker rm -f semlayer-redpanda-ci || true

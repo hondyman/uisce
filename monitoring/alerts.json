@@ -1,0 +1,43 @@
+[
+  {
+    "schemaId": "builtin:alerting.profile",
+    "scope": "environment",
+    "value": {
+      "name": "Semlayer Performance Alerts",
+      "rules": [
+        {
+          "name": "High Access Evaluation Latency",
+          "description": "Access evaluation latency is too high",
+          "query": "semlayer.access_evaluation.duration:percentile(95) > 30",
+          "severity": "CRITICAL",
+          "tags": ["performance", "hot-path", "semlayer"],
+          "enabled": true
+        },
+        {
+          "name": "Cache Performance Degradation",
+          "description": "Cache hit ratio has dropped significantly",
+          "query": "semlayer.cache.hit_ratio < 70",
+          "severity": "WARNING",
+          "tags": ["cache", "performance", "semlayer"],
+          "enabled": true
+        },
+        {
+          "name": "Governance Drift Backlog",
+          "description": "Too many drifted claims awaiting action",
+          "query": "semlayer.governance.drift_backlog > 100",
+          "severity": "WARNING",
+          "tags": ["governance", "drift", "semlayer"],
+          "enabled": true
+        },
+        {
+          "name": "Conversational Error Spike",
+          "description": "Conversational query success rate has dropped",
+          "query": "semlayer.conversational.success_rate < 85",
+          "severity": "CRITICAL",
+          "tags": ["conversational", "adoption", "semlayer"],
+          "enabled": true
+        }
+      ]
+    }
+  }
+]

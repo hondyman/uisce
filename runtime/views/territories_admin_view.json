@@ -1,0 +1,58 @@
+{
+  "name": "territories_admin_view",
+  "title": "Territories View (Admin)",
+  "description": "Auto-generated semantic model for table territories.",
+  "public": "role in (steward,admin)",
+  "meta": {
+    "admin_variant": true,
+    "generated_at": "2025-10-01T18:21:07Z",
+    "root_cube": "territories"
+  },
+  "cubes": [
+    {
+      "join_path": "territories",
+      "includes": [
+        {
+          "name": "count"
+        }
+      ]
+    },
+    {
+      "join_path": "territories.region",
+      "prefix": true,
+      "includes": [
+        {
+          "name": "*"
+        }
+      ]
+    },
+    {
+      "join_path": "territories.employee_territories",
+      "prefix": true,
+      "includes": [
+        {
+          "name": "*"
+        }
+      ]
+    },
+    {
+      "join_path": "territories.employee_territories.employees",
+      "prefix": true,
+      "includes": [
+        {
+          "name": "*"
+        }
+      ]
+    }
+  ],
+  "folders": [
+    {
+      "name": "Metrics",
+      "includes": [
+        {
+          "member": "count"
+        }
+      ]
+    }
+  ]
+}

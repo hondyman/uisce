@@ -1,0 +1,86 @@
+table:
+  name: bp_nl_configurations
+  schema: public
+object_relationships:
+  - name: step
+    using:
+      foreign_key_constraint_on: step_id
+  - name: tenant
+    using:
+      foreign_key_constraint_on: tenant_id
+insert_permissions:
+  - role: user
+    permission:
+      check:
+        tenant_id:
+          _eq: X-Hasura-Tenant-Id
+      columns:
+        - tenant_id
+        - step_id
+        - nl_query
+        - nl_query_embedding
+        - intent_extraction
+        - entity_recognition
+        - condition_synthesis
+        - requires_human_approval
+        - store_pattern
+        - pattern_category
+        - llm_model
+        - llm_temperature
+        - llm_max_tokens
+        - created_by
+select_permissions:
+  - role: user
+    permission:
+      columns:
+        - id
+        - tenant_id
+        - step_id
+        - nl_query
+        - nl_query_embedding
+        - intent_extraction
+        - entity_recognition
+        - condition_synthesis
+        - field_validation_passed
+        - field_validation_errors
+        - validation_suggestions
+        - requires_human_approval
+        - human_approval_status
+        - generated_branching_config
+        - store_pattern
+        - pattern_category
+        - similar_configs_found
+        - llm_model
+        - llm_temperature
+        - llm_max_tokens
+        - created_by
+        - reviewed_by
+        - created_at
+        - updated_at
+      filter:
+        tenant_id:
+          _eq: X-Hasura-Tenant-Id
+update_permissions:
+  - role: user
+    permission:
+      columns:
+        - field_validation_passed
+        - field_validation_errors
+        - validation_suggestions
+        - human_approval_status
+        - generated_branching_config
+        - similar_configs_found
+        - reviewed_by
+        - updated_at
+      filter:
+        tenant_id:
+          _eq: X-Hasura-Tenant-Id
+      check:
+        tenant_id:
+          _eq: X-Hasura-Tenant-Id
+delete_permissions:
+  - role: user
+    permission:
+      filter:
+        tenant_id:
+          _eq: X-Hasura-Tenant-Id

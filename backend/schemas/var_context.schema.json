@@ -1,0 +1,95 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "https://semlayer.io/schemas/var_context/v1",
+    "title": "VaRContext",
+    "type": "object",
+    "required": [
+        "portfolio",
+        "method",
+        "confidence_levels",
+        "tenant_id"
+    ],
+    "properties": {
+        "portfolio": {
+            "type": "object",
+            "required": [
+                "id",
+                "aum"
+            ],
+            "properties": {
+                "id": {
+                    "type": "string",
+                    "format": "uuid"
+                },
+                "aum": {
+                    "type": "number",
+                    "minimum": 0
+                }
+            }
+        },
+        "method": {
+            "type": "string",
+            "enum": [
+                "historical",
+                "parametric"
+            ]
+        },
+        "returns": {
+            "type": "array",
+            "items": {
+                "type": "number"
+            }
+        },
+        "confidence_levels": {
+            "type": "array",
+            "items": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+            },
+            "minItems": 1
+        },
+        "factor_exposures": {
+            "type": "object",
+            "additionalProperties": {
+                "type": "number"
+            }
+        },
+        "factor_covariance": {
+            "type": "object",
+            "additionalProperties": {
+                "type": "object",
+                "additionalProperties": {
+                    "type": "number"
+                }
+            }
+        },
+        "tenant_id": {
+            "type": "string",
+            "format": "uuid"
+        }
+    },
+    "oneOf": [
+        {
+            "required": [
+                "returns"
+            ],
+            "properties": {
+                "method": {
+                    "const": "historical"
+                }
+            }
+        },
+        {
+            "required": [
+                "factor_exposures",
+                "factor_covariance"
+            ],
+            "properties": {
+                "method": {
+                    "const": "parametric"
+                }
+            }
+        }
+    ]
+}

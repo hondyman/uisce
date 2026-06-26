@@ -1,0 +1,221 @@
+version: '3.8'
+
+services:
+  # ============================================
+  # Core Infrastructure
+  # ============================================
+
+  postgres:
+    image: postgres:15
+    container_name: rebalance-postgres
+    environment:
+      POSTGRES_DB: portfolio
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./schema.sql:/docker-entrypoint-initdb.d/01-init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - rebalancing
+
+  temporal:
+    image: temporalio/auto-setup:latest
+    container_name: rebalance-temporal
+    environment:
+      - DB=postgresql
+      - DB_PORT=5432
+      - POSTGRES_USER=postgres
+      - POSTGRES_PWD=postgres
+      - POSTGRES_SEEDS=postgres
+    ports:
+      - "7233:7233"
+      - "7234:7234"
+      - "7235:7235"
+      - "7239:7239"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:7233/"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - rebalancing
+
+  temporal-ui:
+    image: temporalio/ui:latest
+    container_name: rebalance-temporal-ui
+    ports:
+      - "8081:8080"
+    environment:
+      TEMPORAL_ADDRESS: temporal:7233
+    depends_on:
+      - temporal
+    networks:
+      - rebalancing
+
+  redpanda:
+    image: docker.redpanda.com/redpandadata/redpanda:latest
+    container_name: rebalance-redpanda
+    hostname: redpanda
+    command: ["redpanda", "start", "--overprovisioned", "--smp", "1", "--memory", "1G", "--reserve-memory", "0M", "--check=false"]
+    ports:
+      - "9092:9092"   # Kafka broker
+      - "8082:8082"   # Pandaproxy (HTTP Kafka API)
+    networks:
+      - rebalancing
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "rpk", "cluster", "info"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Update service envs to use Kafka brokers and depend on redpanda
+  # (replacing direct references to RabbitMQ URL)
+
+  hasura:
+    image: hasura/graphql-engine:latest
+    container_name: rebalance-hasura
+    ports:
+      - "8080:8080"
+    environment:
+      HASURA_GRAPHQL_DATABASE_URL: postgres://postgres:postgres@postgres:5432/portfolio
+      HASURA_GRAPHQL_ENABLE_CONSOLE: "true"
+      HASURA_GRAPHQL_ADMIN_SECRET: ${HASURA_SECRET:-secret}
+      HASURA_GRAPHQL_JWT_SECRET: '{"type":"HS256","key":"your-256-bit-secret"}'
+      HASURA_GRAPHQL_UNAUTHORIZED_ROLE: anonymous
+      HASURA_GRAPHQL_LOG_LEVEL: info
+      HASURA_GRAPHQL_ENABLE_TELEMETRY: "false"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - rebalancing
+
+  redis:
+    image: redis:7-alpine
+    container_name: rebalance-redis
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - rebalancing
+
+  # ============================================
+  # Backend Services
+  # ============================================
+
+  rebalance-api:
+    build:
+      context: ./api
+      dockerfile: Dockerfile
+    container_name: rebalance-api
+    ports:
+      - "8090:8080"
+    environment:
+      TEMPORAL_HOST: temporal
+      TEMPORAL_PORT: 7233
+      HASURA_URL: http://hasura:8080/v1/graphql
+      HASURA_ADMIN_SECRET: ${HASURA_SECRET:-secret}
+      KAFKA_BROKERS: redpanda:9092
+      REDIS_URL: redis://redis:6379
+      PORT: "8080"
+      XAI_API_KEY: ${XAI_API_KEY}
+      FINNHUB_API_KEY: ${FINNHUB_API_KEY}
+    depends_on:
+      temporal:
+        condition: service_healthy
+      redpanda:
+        condition: service_healthy
+      hasura:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - rebalancing
+    restart: unless-stopped
+
+  rebalance-worker:
+    build:
+      context: ./worker
+      dockerfile: Dockerfile
+    container_name: rebalance-worker
+    environment:
+      TEMPORAL_HOST: temporal
+      TEMPORAL_PORT: 7233
+      HASURA_URL: http://hasura:8080/v1/graphql
+      HASURA_ADMIN_SECRET: ${HASURA_SECRET:-secret}
+      KAFKA_BROKERS: redpanda:9092
+      REDIS_URL: redis://redis:6379
+      XAI_API_KEY: ${XAI_API_KEY}
+      FINNHUB_API_KEY: ${FINNHUB_API_KEY}
+    depends_on:
+      temporal:
+        condition: service_healthy
+      redpanda:
+        condition: service_healthy
+      hasura:
+        condition: service_healthy
+    networks:
+      - rebalancing
+    restart: unless-stopped
+
+  # ============================================
+  # Frontend (React Dashboard)
+  # ============================================
+
+  rebalance-frontend:
+    build:
+      context: ../frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_API_URL: http://localhost:8090
+        VITE_GRAPHQL_URL: http://localhost:8080/v1/graphql
+    container_name: rebalance-frontend
+    ports:
+      - "3000:3000"
+    environment:
+      VITE_API_URL: http://localhost:8090
+      VITE_GRAPHQL_URL: http://localhost:8080/v1/graphql
+      VITE_TEMPORAL_UI_URL: http://localhost:8081
+    depends_on:
+      - hasura
+      - rebalance-api
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - rebalancing
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+
+networks:
+  rebalancing:
+    driver: bridge

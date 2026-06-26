@@ -1,0 +1,34 @@
+id: card_rebalance_alert
+type: FeedCard
+version: 1.0.0
+name: Rebalance Alert
+status: draft
+persona: persona_market_strategist
+eligibility:
+- "tracking_error(portfolio_id, target_model_id) > threshold('tracking_error_threshold')"
+bindings:
+  data:
+  - cube.tracking_error_by_portfolio
+fields:
+- portfolio_id
+- current_tracking_error
+- suggested_action
+tone:
+  variant: action_prompt
+disclosures:
+- "Rebalancing may trigger transaction costs and tax events"
+ctas:
+- id: rebalance_now
+  label: Rebalance now
+  action: InitiateRebalance
+  approval_required: true
+- id: schedule_rebalance
+  label: Schedule rebalance
+  action: ScheduleRebalance
+  approval_required: false
+rank:
+  score: "current_tracking_error * 5 + portfolio_size_rank(portfolio_id)"
+suppression:
+- "delivered_within_days(14)"
+lineage:
+- starrocks.tracking_error_mv

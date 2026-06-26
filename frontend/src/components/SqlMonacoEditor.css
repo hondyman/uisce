@@ -1,0 +1,25 @@
+/* SqlMonacoEditor.css */
+.sql-monaco-editor {
+  position: relative;
+  border: 1px solid #e1e5e9;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.sql-monaco-editor .monaco-editor {
+  border-radius: 4px;
+}
+
+/* Unmapped parameter styling - red text */
+.unmapped-parameter {
+  color: #dc3545 !important;
+  font-weight: 600;
+  text-decoration: underline;
+  text-decoration-color: #dc3545;
+  text-decoration-style: wavy;
+}
+
+/* Hover effect for unmapped parameters */
+.unmapped-parameter:hover {
+  background-color: rgba(220, 53, 69, 0.1);
+}

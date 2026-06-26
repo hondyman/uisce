@@ -1,0 +1,851 @@
+main.go:152: Loaded configuration: DSN=postgres://postgres:postgres@localhost:5432/alpha?sslmode=disable
+{"level":"info","ts":1770297480.4966881,"caller":"server/main.go:185","msg":"Database connection established successfully"}
+{"level":"info","ts":1770297480.4967492,"caller":"server/main.go:186","msg":"Connection pool configured: MaxOpen=50, MaxIdle=10, MaxLifetime=10m0s, MaxIdleTime=5m0s"}
+{"level":"info","ts":1770297480.496769,"caller":"server/main.go:206","msg":"🤖 AI Orchestration worker started with 5 strategies"}
+{"level":"info","ts":1770297480.496779,"caller":"observability/dynatrace_manager.go:30","msg":"Dynatrace environment variables not set, disabling Dynatrace integration."}
+{"level":"info","ts":1770297480.496795,"caller":"services/performance_monitor.go:436","msg":"pprof endpoints available at /debug/pprof/"}
+{"level":"info","ts":1770297480.4968262,"caller":"server/main.go:1154","msg":"✅ Trino Audit Service initialized"}
+2026/02/05 08:18:00 INFO  No logger configured for temporal client. Created default one.
+{"level":"warn","ts":1770297480.565682,"caller":"server/main.go:1179","msg":"Warning: Failed to initialize Temporal worker: failed to create Temporal client: failed reaching server: no children to pick from (metrics will not compute automatically)"}
+{"level":"info","ts":1770297480.6499698,"caller":"logging/logging.go:39","msg":"semantic_cache.go:51: Warning: Redis connection failed, semantic view caching disabled: dial tcp: lookup redis: no such host\n"}
+{"level":"info","ts":1770297480.650023,"caller":"server/main.go:1209","msg":"✅ Semantic view cache initialized at redis:6379"}
+{"level":"info","ts":1770297480.7349498,"caller":"logging/logging.go:39","msg":"middleware.go:37: Warning: Redis connection failed, ABAC policy caching disabled: dial tcp: lookup redis: no such host\n"}
+{"level":"info","ts":1770297480.734998,"caller":"server/main.go:1216","msg":"✅ ABAC policy cache middleware initialized"}
+DEBUG: SetupRouter INVOKED! [Version 3]
+{"level":"info","ts":1770297480.73506,"caller":"api/api.go:420","msg":"RequestTracingMiddleware registered on router"}
+{"level":"info","ts":1770297480.735091,"caller":"services/qos_manager.go:98","msg":"Refreshing Tenant Quotas"}
+{"level":"info","ts":1770297480.742477,"caller":"api/api.go:565","msg":"Aggregates database connection established at postgres://postgres:postgres@host.docker.internal:5432/northwinds?sslmode=disable"}
+{"level":"info","ts":1770297480.742615,"caller":"api/api.go:638","msg":"Audit and Semantic publishers initialized for Kafka"}
+{"level":"info","ts":1770297480.742683,"caller":"audit/worker.go:37","msg":"AsyncAuditService started with 5 workers"}
+[GIN-debug] [WARNING] Running in "debug" mode. Switch to "release" mode in production.
+ - using env:	export GIN_MODE=release
+ - using code:	gin.SetMode(gin.ReleaseMode)
+
+[GIN-debug] GET    /audit/job-runs           --> github.com/hondyman/semlayer/backend/internal/audit.(*AuditAPIHandler).GetJobRuns-fm (2 handlers)
+[GIN-debug] GET    /audit/job-runs/:run_id   --> github.com/hondyman/semlayer/backend/internal/audit.(*AuditAPIHandler).GetJobRun-fm (2 handlers)
+[GIN-debug] GET    /audit/dag-runs           --> github.com/hondyman/semlayer/backend/internal/audit.(*AuditAPIHandler).GetDAGRuns-fm (2 handlers)
+[GIN-debug] GET    /audit/changesets         --> github.com/hondyman/semlayer/backend/internal/audit.(*AuditAPIHandler).GetChangeSets-fm (2 handlers)
+[GIN-debug] GET    /audit/changesets/:changeset_id --> github.com/hondyman/semlayer/backend/internal/audit.(*AuditAPIHandler).GetChangeSet-fm (2 handlers)
+[GIN-debug] GET    /audit/violations         --> github.com/hondyman/semlayer/backend/internal/audit.(*AuditAPIHandler).GetComplianceViolations-fm (2 handlers)
+[GIN-debug] GET    /audit/violations/:violation_id --> github.com/hondyman/semlayer/backend/internal/audit.(*AuditAPIHandler).GetComplianceViolation-fm (2 handlers)
+[GIN-debug] GET    /audit/semantic/:semantic_term_id/lineage --> github.com/hondyman/semlayer/backend/internal/audit.(*AuditAPIHandler).GetSemanticLineage-fm (2 handlers)
+[GIN-debug] GET    /audit/semantic/:semantic_term_id/versions --> github.com/hondyman/semlayer/backend/internal/audit.(*AuditAPIHandler).GetSemanticVersions-fm (2 handlers)
+[GIN-debug] GET    /audit/ai-narratives      --> github.com/hondyman/semlayer/backend/internal/audit.(*AuditAPIHandler).GetAINarratives-fm (2 handlers)
+[GIN-debug] GET    /audit/dashboard/slo      --> github.com/hondyman/semlayer/backend/internal/audit.(*AuditAPIHandler).GetSLODashboard-fm (2 handlers)
+[GIN-debug] GET    /audit/dashboard/compliance --> github.com/hondyman/semlayer/backend/internal/audit.(*AuditAPIHandler).GetComplianceDashboard-fm (2 handlers)
+[GIN-debug] GET    /audit/dashboard/governance --> github.com/hondyman/semlayer/backend/internal/audit.(*AuditAPIHandler).GetGovernanceDashboard-fm (2 handlers)
+{"level":"info","ts":1770297480.7457962,"caller":"api/api.go:1036","msg":"Audit Trino & Snapshot Plane routes registered at /api/audit-trino/*"}
+2026/02/05 08:18:00 INFO  No logger configured for temporal client. Created default one.
+Warning: Failed to connect to Ignite: failed to connect to ignite: failed to open connection: dial tcp: lookup ignite: no such host. Cache operations will be skipped.
+[ROUTES-DUMP-START]
+[ROUTE] POST /_debug/validation-rules-proxy
+[ROUTE] GET /_routes
+[ROUTE] POST /ai/analyze-signal
+[ROUTE] POST /ai/explain-portfolio
+[ROUTE] POST /ai/generate-constraints
+[ROUTE] POST /analytics/layout
+[ROUTE] GET /api/debug/headers
+[ROUTE] POST /api/events/tenant-instance-created
+[ROUTE] POST /api/instance/clone-from-goldcopy
+[ROUTE] POST /api/instance/sync-connections-from-goldcopy
+[ROUTE] GET /api/intelligence/storage/plans
+[ROUTE] POST /api/intelligence/storage/plans/generate
+[ROUTE] GET /api/intelligence/storage/plans/{id}
+[ROUTE] POST /api/intelligence/storage/plans/{id}/execute
+[ROUTE] POST /api/intelligence/storage/plans/{id}/status
+[ROUTE] GET /api/layouts
+[ROUTE] POST /api/layouts
+[ROUTE] DELETE /api/layouts/{id}
+[ROUTE] GET /api/layouts/{id}
+[ROUTE] PUT /api/layouts/{id}
+[ROUTE] POST /api/rag/search
+[ROUTE] POST /api/rag/upload
+[ROUTE] GET /api/scheduler/governance/audit
+[ROUTE] GET /api/scheduler/governance/audit/entity/{type}/{id}
+[ROUTE] GET /api/scheduler/governance/audit/stats
+[ROUTE] GET /api/scheduler/governance/changesets
+[ROUTE] POST /api/scheduler/governance/changesets
+[ROUTE] GET /api/scheduler/governance/changesets/{id}
+[ROUTE] POST /api/scheduler/governance/changesets/{id}/apply
+[ROUTE] POST /api/scheduler/governance/changesets/{id}/approve
+[ROUTE] POST /api/scheduler/governance/changesets/{id}/reject
+[ROUTE] POST /api/scheduler/governance/changesets/{id}/rollback
+[ROUTE] GET /api/scheduler/governance/policies
+[ROUTE] POST /api/scheduler/governance/policies
+[ROUTE] GET /api/scheduler/governance/policies/{id}
+[ROUTE] PATCH /api/scheduler/governance/policies/{id}
+[ROUTE] DELETE /api/scheduler/governance/policies/{id}
+[ROUTE] GET /api/v1/folders/
+[ROUTE] GET /api/v1/folders/{id}/analytics
+[ROUTE] GET /api/v1/folders/{id}/diff
+[ROUTE] POST /api/v1/folders/{id}/items
+[ROUTE] GET /api/v1/page-layouts
+[ROUTE] POST /api/v1/page-layouts
+[ROUTE] DELETE /api/v1/page-layouts/{id}
+[ROUTE] GET /api/v1/page-layouts/{id}
+[ROUTE] PUT /api/v1/page-layouts/{id}
+[ROUTE] GET /api/v1/pipelines
+[ROUTE] POST /api/v1/pipelines
+[ROUTE] GET /api/v1/pipelines/activities/safe
+[ROUTE] GET /api/v1/pipelines/{id}
+[ROUTE] PUT /api/v1/pipelines/{id}
+[ROUTE] DELETE /api/v1/pipelines/{id}
+[ROUTE] POST /api/v1/pipelines/{id}/execute
+[ROUTE] POST /api/v1/pipelines/{id}/simulate
+[ROUTE] GET /api/v1/reports/
+[ROUTE] POST /api/v1/reports/
+[ROUTE] GET /api/v1/reports/{id}
+[ROUTE] PUT /api/v1/reports/{id}
+[ROUTE] DELETE /api/v1/reports/{id}
+[ROUTE] GET /api/_debug/amqp-metrics
+[ROUTE] POST /api/_debug/publish-event
+[ROUTE] POST /api/_debug/validation-rules-proxy
+[ROUTE] POST /api/abbreviations/
+[ROUTE] GET /api/abbreviations/
+[ROUTE] POST /api/abbreviations/expand
+[ROUTE] GET /api/abbreviations/export
+[ROUTE] POST /api/abbreviations/scan
+[ROUTE] POST /api/abbreviations/suggest
+[ROUTE] POST /api/abbreviations/validate
+[ROUTE] DELETE /api/abbreviations/{id}/
+[ROUTE] GET /api/abbreviations/{id}/
+[ROUTE] PUT /api/abbreviations/{id}/
+[ROUTE] POST /api/admin/cube/sync
+[ROUTE] POST /api/admin/eval/run
+[ROUTE] PUT /api/admin/llm/config
+[ROUTE] GET /api/admin/llm/config
+[ROUTE] POST /api/admin/llm/test
+[ROUTE] GET /api/admin/quotas
+[ROUTE] POST /api/admin/quotas
+[ROUTE] POST /api/ai/generate-dag
+[ROUTE] POST /api/ai/field-recommendations
+[ROUTE] POST /api/ai/generate-layout
+[ROUTE] POST /api/ai/generate-validation
+[ROUTE] GET /api/ai/layouts
+[ROUTE] POST /api/ai/mark-adopted
+[ROUTE] POST /api/altinvest/
+[ROUTE] POST /api/altinvest/capital-call
+[ROUTE] GET /api/altinvest/client/{clientId}
+[ROUTE] POST /api/api/cube/dry-run
+[ROUTE] POST /api/api/cube/generate
+[ROUTE] POST /api/api/cube/generate/{boID}
+[ROUTE] GET /api/api/cube/meta
+[ROUTE] GET /api/api/cube/pre-aggregations
+[ROUTE] GET /api/api/cube/preview
+[ROUTE] POST /api/api/cube/query
+[ROUTE] POST /api/api/metrics/
+[ROUTE] GET /api/api/metrics/
+[ROUTE] GET /api/api/metrics/{metricID}/
+[ROUTE] PUT /api/api/metrics/{metricID}/
+[ROUTE] DELETE /api/api/metrics/{metricID}/
+[ROUTE] GET /api/api/metrics/{metricID}/anomalies
+[ROUTE] POST /api/api/metrics/{metricID}/compute/anomaly
+[ROUTE] POST /api/api/metrics/{metricID}/compute/pop
+[ROUTE] GET /api/api/metrics/{metricID}/runs
+[ROUTE] POST /api/api/process-analytics/analyze-bottlenecks
+[ROUTE] GET /api/api/process-analytics/bottlenecks
+[ROUTE] GET /api/api/process-analytics/dashboard
+[ROUTE] GET /api/api/process-analytics/predict-duration
+[ROUTE] GET /api/api/process-analytics/recommendations
+[ROUTE] GET /api/api/process-analytics/step-performance
+[ROUTE] GET /api/api/process-benchmarking/best-practices
+[ROUTE] POST /api/api/process-benchmarking/calculate-score
+[ROUTE] GET /api/api/process-benchmarking/gap-analysis
+[ROUTE] GET /api/api/process-benchmarking/industry
+[ROUTE] GET /api/api/process-benchmarking/peers
+[ROUTE] GET /api/api/process-benchmarking/score
+[ROUTE] GET /api/api/process-monitor/active-instances
+[ROUTE] GET /api/api/process-monitor/instance/{workflowID}
+[ROUTE] GET /api/api/process-monitor/instance/{workflowID}/history
+[ROUTE] POST /api/api/process-monitor/intervene
+[ROUTE] GET /api/api/process-monitor/stats
+[ROUTE] GET /api/api/process-monitor/ws
+[ROUTE] POST /api/api/process-optimization/analyze
+[ROUTE] GET /api/api/process-optimization/applied
+[ROUTE] POST /api/api/process-optimization/apply/{suggestionID}
+[ROUTE] POST /api/api/process-optimization/auto-tune/enable
+[ROUTE] GET /api/api/process-optimization/auto-tune/status
+[ROUTE] POST /api/api/process-optimization/dismiss/{suggestionID}
+[ROUTE] GET /api/api/process-optimization/forecast/{suggestionID}
+[ROUTE] GET /api/api/process-optimization/suggestions
+[ROUTE] POST /api/api/rdl/evaluate/
+[ROUTE] POST /api/api/rdl/evaluate/portfolio
+[ROUTE] POST /api/api/rdl/evaluate/tlh
+[ROUTE] GET /api/api/rdl/rules/
+[ROUTE] POST /api/api/rdl/rules/
+[ROUTE] GET /api/api/rdl/rules/{ruleID}/
+[ROUTE] PUT /api/api/rdl/rules/{ruleID}/
+[ROUTE] DELETE /api/api/rdl/rules/{ruleID}/
+[ROUTE] GET /api/api/rdl/templates/
+[ROUTE] GET /api/api/rdl/templates/{templateID}
+[ROUTE] POST /api/api/rdl/validate
+[ROUTE] POST /api/api/rules/
+[ROUTE] GET /api/api/rules/
+[ROUTE] DELETE /api/api/rules/{ruleID}/
+[ROUTE] GET /api/api/rules/{ruleID}/
+[ROUTE] PUT /api/api/rules/{ruleID}/
+[ROUTE] POST /api/api/v1/timeouts
+[ROUTE] GET /api/api/v1/timeouts/pending
+[ROUTE] POST /api/api/v1/timeouts/{id}/escalate
+[ROUTE] POST /api/api/v1/triggers
+[ROUTE] GET /api/api/v1/triggers
+[ROUTE] GET /api/api/v1/triggers/events
+[ROUTE] GET /api/api/v1/triggers/executions
+[ROUTE] GET /api/api/v1/triggers/objects
+[ROUTE] GET /api/api/v1/triggers/operators
+[ROUTE] GET /api/api/v1/triggers/types
+[ROUTE] PUT /api/api/v1/triggers/{id}
+[ROUTE] DELETE /api/api/v1/triggers/{id}
+[ROUTE] POST /api/audit-trino/*
+[ROUTE] GET /api/audit-trino/*
+[ROUTE] PATCH /api/audit-trino/*
+[ROUTE] TRACE /api/audit-trino/*
+[ROUTE] PUT /api/audit-trino/*
+[ROUTE] CONNECT /api/audit-trino/*
+[ROUTE] HEAD /api/audit-trino/*
+[ROUTE] DELETE /api/audit-trino/*
+[ROUTE] OPTIONS /api/audit-trino/*
+[ROUTE] GET /api/audit/events
+[ROUTE] GET /api/audit/stats
+[ROUTE] GET /api/audit/changes
+[ROUTE] POST /api/audit/events/tenant-update
+[ROUTE] GET /api/audit/history/{entityType}/{entityId}
+[ROUTE] GET /api/audit/history/{entityType}/{entityId}/at/{timestamp}
+[ROUTE] POST /api/audit/restore/{entityType}/{entityId}
+[ROUTE] POST /api/auth/login
+[ROUTE] POST /api/auth/logout
+[ROUTE] GET /api/auth/me
+[ROUTE] POST /api/auth/refresh
+[ROUTE] POST /api/auth/register
+[ROUTE] PUT /api/auth/users/{userId}/preferences/
+[ROUTE] GET /api/auth/users/{userId}/preferences/
+[ROUTE] POST /api/billing/calculate
+[ROUTE] POST /api/billing/schedules
+[ROUTE] POST /api/bp-designer/save
+[ROUTE] GET /api/bp-designer/{bpDefId}
+[ROUTE] GET /api/bp-notifications/analytics
+[ROUTE] GET /api/bp-notifications/digests/pending
+[ROUTE] POST /api/bp-notifications/digests/process
+[ROUTE] GET /api/bp-notifications/logs
+[ROUTE] GET /api/bp-notifications/logs/{id}
+[ROUTE] GET /api/bp-notifications/preferences
+[ROUTE] PUT /api/bp-notifications/preferences
+[ROUTE] POST /api/bp-notifications/send
+[ROUTE] POST /api/bp-notifications/send-batch
+[ROUTE] GET /api/bp-notifications/templates
+[ROUTE] POST /api/bp-notifications/templates
+[ROUTE] PUT /api/bp-notifications/templates/{id}
+[ROUTE] DELETE /api/bp-notifications/templates/{id}
+[ROUTE] GET /api/bp-notifications/templates/{id}
+[ROUTE] POST /api/bp-notifications/templates/{id}/render
+[ROUTE] POST /api/bp-notifications/webhook/action/{id}
+[ROUTE] POST /api/bp-notifications/webhook/clicked/{id}
+[ROUTE] POST /api/bp-notifications/webhook/delivered/{id}
+[ROUTE] POST /api/bp-notifications/webhook/opened/{id}
+[ROUTE] POST /api/bp/start-execution
+[ROUTE] POST /api/bundles/
+[ROUTE] GET /api/bundles/
+[ROUTE] GET /api/bundles/{bundleID}/
+[ROUTE] PUT /api/bundles/{bundleID}/
+[ROUTE] POST /api/bundles/{bundleID}/certify
+[ROUTE] POST /api/bundles/{bundleID}/deprecate
+[ROUTE] PUT /api/bundles/{bundleID}/policies
+[ROUTE] POST /api/bundles/{bundleID}/publish
+[ROUTE] POST /api/business-entities/{entityID}/create-custom-model
+[ROUTE] POST /api/business-entities/{entityID}/create-custom-view
+[ROUTE] POST /api/business-entities/{entityID}/generate-core-model
+[ROUTE] POST /api/business-entities/{entityID}/generate-core-view
+[ROUTE] GET /api/business-entities/{entityID}/related-objects
+[ROUTE] GET /api/business-entities/{entityID}/semantic-assets
+[ROUTE] POST /api/business-entities/{entityID}/traverse-graph
+[ROUTE] POST /api/business-objects/execute-sql
+[ROUTE] POST /api/business-objects/generate-sql
+[ROUTE] POST /api/business-objects/generate-sql-semantic
+[ROUTE] GET /api/business-objects/list
+[ROUTE] GET /api/business-objects/{id}/validations
+[ROUTE] GET /api/business-objects/{id}/validations/schema
+[ROUTE] GET /api/business-objects/
+[ROUTE] POST /api/business-objects/
+[ROUTE] PUT /api/business-objects/{id}
+[ROUTE] PATCH /api/business-objects/{id}
+[ROUTE] DELETE /api/business-objects/{id}
+[ROUTE] GET /api/business-objects/{id}
+[ROUTE] GET /api/business-objects/{id}/fields
+[ROUTE] GET /api/business-objects/{id}/relationships
+[ROUTE] DELETE /api/business-objects/{id}/subtypes/{subtypeId}
+[ROUTE] POST /api/business-objects/{id}/subtypes/{subtypeId}/rename
+[ROUTE] POST /api/business-term-edges
+[ROUTE] DELETE /api/business-term-edges
+[ROUTE] GET /api/business-term-edges
+[ROUTE] GET /api/business-term-edges-test
+[ROUTE] DELETE /api/business-term-edges/{id}
+[ROUTE] POST /api/business-term/suggestion-feedback
+[ROUTE] POST /api/business-term/suggestions
+[ROUTE] GET /api/business-terms
+[ROUTE] POST /api/business-terms
+[ROUTE] POST /api/business-terms/search
+[ROUTE] DELETE /api/business-terms/{id}
+[ROUTE] PUT /api/business-terms/{id}
+[ROUTE] POST /api/calc/vectorized
+[ROUTE] POST /api/calc/
+[ROUTE] POST /api/calc/preview
+[ROUTE] GET /api/calculations/
+[ROUTE] POST /api/calculations/
+[ROUTE] POST /api/calculations/explain
+[ROUTE] GET /api/calculations/{name}
+[ROUTE] PATCH /api/calculations/{id}
+[ROUTE] GET /api/calculations/{id}/explain
+[ROUTE] GET /api/catalog/nodes
+[ROUTE] POST /api/catalog/scan
+[ROUTE] GET /api/catalog/tables
+[ROUTE] POST /api/catalog/{datasourceId}/refresh-charts
+[ROUTE] GET /api/catalog/business-terms/{id}
+[ROUTE] PUT /api/catalog/business-terms/{id}/compliance
+[ROUTE] POST /api/catalog/business-terms/{id}/mappings
+[ROUTE] DELETE /api/catalog/business-terms/{id}/mappings/{semId}
+[ROUTE] GET /api/catalog/nodes
+[ROUTE] GET /api/catalog/semantic-terms-by-table/{tableId}
+[ROUTE] GET /api/chart/{datasourceId}/debug
+[ROUTE] GET /api/chart/{datasourceId}/health
+[ROUTE] GET /api/chart/{datasourceId}/{chartType}
+[ROUTE] GET /api/charts/{datasourceId}
+[ROUTE] POST /api/charts/{datasourceId}/refresh
+[ROUTE] POST /api/connections/test
+[ROUTE] GET /api/connections/
+[ROUTE] POST /api/connections/
+[ROUTE] DELETE /api/connections/{id}
+[ROUTE] GET /api/connections/{id}
+[ROUTE] PUT /api/connections/{id}
+[ROUTE] GET /api/connections/{id}/datasources
+[ROUTE] POST /api/connections/{id}/link/{datasourceId}
+[ROUTE] POST /api/connections/{id}/test
+[ROUTE] DELETE /api/connections/{id}/unlink/{datasourceId}
+[ROUTE] POST /api/copilot/generate-audit-summary
+[ROUTE] POST /api/copilot/generate-node
+[ROUTE] POST /api/copilot/generate-rego
+[ROUTE] POST /api/crud
+[ROUTE] PUT /api/crud
+[ROUTE] DELETE /api/crud
+[ROUTE] GET /api/custom-components
+[ROUTE] POST /api/custom-components
+[ROUTE] GET /api/custom-components/export
+[ROUTE] POST /api/custom-components/import
+[ROUTE] POST /api/custom-components/test-api
+[ROUTE] DELETE /api/custom-components/{id}
+[ROUTE] GET /api/custom-components/{id}
+[ROUTE] PUT /api/custom-components/{id}
+[ROUTE] POST /api/dashboards/
+[ROUTE] GET /api/dashboards/public
+[ROUTE] GET /api/dashboards/templates
+[ROUTE] GET /api/dashboards/user/{userId}
+[ROUTE] GET /api/dashboards/{id}
+[ROUTE] PUT /api/dashboards/{id}
+[ROUTE] DELETE /api/dashboards/{id}
+[ROUTE] POST /api/dashboards/{id}/duplicate
+[ROUTE] GET /api/data-domains/
+[ROUTE] POST /api/data-domains/
+[ROUTE] GET /api/data-domains/search
+[ROUTE] PUT /api/data-domains/{id}/
+[ROUTE] DELETE /api/data-domains/{id}/
+[ROUTE] GET /api/data-domains/{id}/
+[ROUTE] GET /api/dax/categories
+[ROUTE] POST /api/dax/execute
+[ROUTE] GET /api/dax/functions
+[ROUTE] GET /api/dax/functions/{functionName}
+[ROUTE] GET /api/debug/business-objects/{id}
+[ROUTE] GET /api/debug/edges/{id}
+[ROUTE] POST /api/edge-types
+[ROUTE] GET /api/edge-types
+[ROUTE] GET /api/edge-types/{id}
+[ROUTE] PATCH /api/edge-types/{id}
+[ROUTE] DELETE /api/edge-types/{id}
+[ROUTE] GET /api/edge-types/{id}/properties
+[ROUTE] POST /api/edge-types/{id}/properties
+[ROUTE] PATCH /api/edge-types/{id}/properties/{propName}
+[ROUTE] DELETE /api/edge-types/{id}/properties/{propName}
+[ROUTE] GET /api/entities
+[ROUTE] GET /api/entities/resolve
+[ROUTE] GET /api/entities/{name}
+[ROUTE] GET /api/entity-schema/
+[ROUTE] POST /api/entity-schema/
+[ROUTE] POST /api/events/market
+[ROUTE] GET /api/execution-logs/
+[ROUTE] POST /api/fabric/cubes/generate-from-table
+[ROUTE] GET /api/fabric/extensions
+[ROUTE] POST /api/fabric/extensions
+[ROUTE] GET /api/fabric/extensions/compatibility-report
+[ROUTE] GET /api/fabric/joins/{datasourceId}
+[ROUTE] GET /api/fabric/joins/{datasourceId}/table/{tableName}
+[ROUTE] GET /api/fabric/models
+[ROUTE] GET /api/fabric/models/definition
+[ROUTE] POST /api/fabric/models/generate
+[ROUTE] POST /api/fabric/models/generate-defaults
+[ROUTE] POST /api/fabric/models/metadata
+[ROUTE] POST /api/fabric/models/validate
+[ROUTE] POST /api/fabric/models/{id}/calculations
+[ROUTE] GET /api/fabric/models/{id}/calculations
+[ROUTE] DELETE /api/fabric/models/{id}/calculations/{calc_id}
+[ROUTE] GET /api/funds
+[ROUTE] GET /api/glossary/business-terms
+[ROUTE] GET /api/glossary/edges
+[ROUTE] POST /api/glossary/edges
+[ROUTE] PUT /api/glossary/edges/{id}
+[ROUTE] DELETE /api/glossary/edges/{id}
+[ROUTE] GET /api/glossary/semantic-terms
+[ROUTE] GET /api/glossary/semantic-terms/export/cube-yaml
+[ROUTE] GET /api/glossary/semantic-terms/{id}/cube-definition
+[ROUTE] POST /api/glossary/terms
+[ROUTE] DELETE /api/glossary/terms/{id}
+[ROUTE] PUT /api/glossary/terms/{id}
+[ROUTE] POST /api/households/
+[ROUTE] GET /api/households/{id}/entities
+[ROUTE] POST /api/households/{id}/entities
+[ROUTE] POST /api/instances/{instanceId}/assign-to-me
+[ROUTE] POST /api/instances/{instanceId}/unassign
+[ROUTE] POST /api/integrations/execute/{installationId}
+[ROUTE] GET /api/integrations/executions
+[ROUTE] GET /api/integrations/executions/{executionId}
+[ROUTE] POST /api/integrations/install
+[ROUTE] GET /api/integrations/installed
+[ROUTE] DELETE /api/integrations/installed/{installationId}
+[ROUTE] GET /api/integrations/installed/{installationId}
+[ROUTE] PUT /api/integrations/installed/{installationId}/config
+[ROUTE] GET /api/integrations/installed/{installationId}/stats
+[ROUTE] PUT /api/integrations/installed/{installationId}/toggle
+[ROUTE] GET /api/integrations/marketplace
+[ROUTE] GET /api/integrations/marketplace/category/{category}
+[ROUTE] GET /api/integrations/marketplace/{integrationKey}
+[ROUTE] GET /api/integrations/oauth/authorize/{installationId}
+[ROUTE] GET /api/integrations/oauth/callback
+[ROUTE] POST /api/integrations/test/{installationId}
+[ROUTE] GET /api/ip-whitelist
+[ROUTE] GET /api/lineage/{datasourceId}/{lineageType}
+[ROUTE] GET /api/lineage/dual
+[ROUTE] GET /api/lineage/node/{id}/graph
+[ROUTE] GET /api/lineage/node/{id}/impact
+[ROUTE] GET /api/lookup-values
+[ROUTE] GET /api/lookups
+[ROUTE] POST /api/lookups
+[ROUTE] PUT /api/lookups/{id}
+[ROUTE] DELETE /api/lookups/{id}
+[ROUTE] GET /api/lookups/{id}/export
+[ROUTE] POST /api/lookups/{id}/propagate
+[ROUTE] GET /api/lookups/{id}/values
+[ROUTE] POST /api/lookups/{id}/values
+[ROUTE] PUT /api/lookups/{id}/values/{valueId}
+[ROUTE] DELETE /api/lookups/{id}/values/{valueId}
+[ROUTE] GET /api/marketplace/items
+[ROUTE] POST /api/marketplace/items/add-to-tenant
+[ROUTE] GET /api/marketplace/items/{id}
+[ROUTE] GET /api/marketplace/items/{id}/feedback
+[ROUTE] POST /api/marketplace/items/{id}/feedback
+[ROUTE] GET /api/marketplace/items/{id}/parameters
+[ROUTE] GET /api/marketplace/tenant-items
+[ROUTE] GET /api/marketplace/tenant-items/{id}
+[ROUTE] PUT /api/marketplace/tenant-items/{id}
+[ROUTE] DELETE /api/marketplace/tenant-items/{id}
+[ROUTE] GET /api/marketplace/validation-rules
+[ROUTE] POST /api/mcp
+[ROUTE] GET /api/metadata/{datasourceId}
+[ROUTE] GET /api/metrics-registry/
+[ROUTE] GET /api/metrics-registry/golden-path/readiness
+[ROUTE] POST /api/metrics-registry/refresh-atomic
+[ROUTE] GET /api/metrics-registry/{metricID}
+[ROUTE] POST /api/metrics-registry/{metricID}/compute-comparisons
+[ROUTE] POST /api/metrics-registry/{metricID}/compute-pop
+[ROUTE] POST /api/metrics-registry/{metricID}/detect-anomalies
+[ROUTE] GET /api/metrics-registry/{metricID}/history
+[ROUTE] POST /api/metrics-registry/{metricID}/promote-golden
+[ROUTE] GET /api/metrics/{fundId}
+[ROUTE] GET /api/micro-bundles
+[ROUTE] POST /api/micro-bundles
+[ROUTE] GET /api/micro-bundles/{id}
+[ROUTE] GET /api/migrations/
+[ROUTE] POST /api/migrations/
+[ROUTE] GET /api/migrations/{id}
+[ROUTE] POST /api/migrations/{id}/approve
+[ROUTE] POST /api/migrations/{id}/reject
+[ROUTE] GET /api/models
+[ROUTE] POST /api/models/clone
+[ROUTE] POST /api/models/custom
+[ROUTE] POST /api/models/generated
+[ROUTE] POST /api/models/regenerate
+[ROUTE] GET /api/models/version
+[ROUTE] GET /api/models/{model_id}
+[ROUTE] PATCH /api/models/{model_id}
+[ROUTE] DELETE /api/models/{model_id}
+[ROUTE] GET /api/my-approvals/
+[ROUTE] GET /api/nba/catalog
+[ROUTE] POST /api/nba/complete
+[ROUTE] POST /api/nba/dismiss
+[ROUTE] POST /api/nba/execute
+[ROUTE] GET /api/nba/recommendations
+[ROUTE] GET /api/nba/signals
+[ROUTE] GET /api/nba/stats
+[ROUTE] GET /api/nba/stream
+[ROUTE] POST /api/nlq/ask
+[ROUTE] POST /api/nlq/feedback
+[ROUTE] GET /api/node-types
+[ROUTE] POST /api/node-types
+[ROUTE] PATCH /api/node-types/{id}
+[ROUTE] DELETE /api/node-types/{id}
+[ROUTE] GET /api/node-types/{id}
+[ROUTE] GET /api/node-types/{id}/nodes
+[ROUTE] POST /api/node-types/{id}/properties
+[ROUTE] GET /api/node-types/{id}/properties
+[ROUTE] PATCH /api/node-types/{id}/properties/{propName}
+[ROUTE] DELETE /api/node-types/{id}/properties/{propName}
+[ROUTE] POST /api/object/{ObjectType}
+[ROUTE] GET /api/policies
+[ROUTE] POST /api/policies
+[ROUTE] POST /api/policies/simulate
+[ROUTE] DELETE /api/policies/{id}
+[ROUTE] GET /api/policies/{id}
+[ROUTE] POST /api/profiler/profile
+[ROUTE] GET /api/profiler/results
+[ROUTE] GET /api/profiler/status/{jobId}
+[ROUTE] GET /api/rbac/audit
+[ROUTE] GET /api/rbac/delegations
+[ROUTE] POST /api/rbac/delegations
+[ROUTE] GET /api/rbac/delegations/user/{userId}
+[ROUTE] PUT /api/rbac/delegations/{delegationId}
+[ROUTE] DELETE /api/rbac/delegations/{delegationId}
+[ROUTE] POST /api/rbac/delegations/{delegationId}/log
+[ROUTE] POST /api/rbac/field-permissions
+[ROUTE] GET /api/rbac/field-permissions
+[ROUTE] GET /api/rbac/field-permissions/user/{userId}/resource/{resourceType}/{resourceId}
+[ROUTE] GET /api/rbac/permissions
+[ROUTE] POST /api/rbac/permissions/check
+[ROUTE] GET /api/rbac/permissions/user/{userId}
+[ROUTE] GET /api/rbac/roles
+[ROUTE] POST /api/rbac/roles
+[ROUTE] GET /api/rbac/roles/{roleId}
+[ROUTE] PUT /api/rbac/roles/{roleId}
+[ROUTE] DELETE /api/rbac/roles/{roleId}
+[ROUTE] POST /api/rbac/roles/{roleId}/assign
+[ROUTE] DELETE /api/rbac/roles/{roleId}/unassign/{userId}
+[ROUTE] GET /api/rbac/roles/{roleId}/users
+[ROUTE] GET /api/rbac/teams
+[ROUTE] POST /api/rbac/teams
+[ROUTE] GET /api/rbac/teams/{teamId}/members
+[ROUTE] POST /api/rbac/teams/{teamId}/members
+[ROUTE] DELETE /api/rbac/teams/{teamId}/members/{userId}
+[ROUTE] GET /api/rbac/users
+[ROUTE] POST /api/rbac/users
+[ROUTE] GET /api/rbac/users/{userId}/roles
+[ROUTE] POST /api/relationships/discover
+[ROUTE] POST /api/relationships/existing
+[ROUTE] POST /api/relationships/apply
+[ROUTE] POST /api/relationships/bo/inherit
+[ROUTE] GET /api/relationships/bo/{boId}
+[ROUTE] POST /api/relationships/infer
+[ROUTE] POST /api/relationships/physical
+[ROUTE] GET /api/relationships/physical/{tableId}
+[ROUTE] POST /api/relationships/remove
+[ROUTE] POST /api/relationships/suggestions/dismiss
+[ROUTE] POST /api/relationships/suggestions/generate
+[ROUTE] POST /api/relationships/suggestions/generate-lineage
+[ROUTE] POST /api/relationships/table-mapping/recommend
+[ROUTE] GET /api/relationships/{entityID}
+[ROUTE] GET /api/relationships/{entityID}/objects
+[ROUTE] GET /api/relationships/{entityID}/suggestions
+[ROUTE] GET /api/roles/
+[ROUTE] POST /api/roles/
+[ROUTE] POST /api/rules/generate-cue
+[ROUTE] POST /api/rules/simulate
+[ROUTE] POST /api/semantic-mapping/apply
+[ROUTE] POST /api/semantic-mapping/backfill-physical-mappings
+[ROUTE] POST /api/semantic-mapping/backfill-sql-properties
+[ROUTE] POST /api/semantic-mapping/enrich/apply
+[ROUTE] POST /api/semantic-mapping/enrich/auto
+[ROUTE] POST /api/semantic-mapping/enrich/suggest
+[ROUTE] POST /api/semantic-mapping/generate
+[ROUTE] POST /api/semantic-mapping/hierarchies/create
+[ROUTE] POST /api/semantic-mapping/hierarchies/generate
+[ROUTE] POST /api/semantic-mapping/populate-bo-terms
+[ROUTE] POST /api/semantic-mapping/wizard/apply
+[ROUTE] POST /api/semantic-mapping/wizard/approve/{id}
+[ROUTE] GET /api/semantic-mapping/wizard/created
+[ROUTE] POST /api/semantic-mapping/wizard/enrich-from-feedback
+[ROUTE] POST /api/semantic-mapping/wizard/generate
+[ROUTE] GET /api/semantic-mapping/wizard/pending
+[ROUTE] GET /api/semantic-mappings
+[ROUTE] POST /api/semantic-mappings/apply-custom
+[ROUTE] POST /api/semantic-mappings/business-term-edges
+[ROUTE] POST /api/semantic-mappings/edges
+[ROUTE] POST /api/semantic-mappings/enhanced-match
+[ROUTE] POST /api/semantic-mappings/ignore
+[ROUTE] POST /api/semantic-mappings/replace
+[ROUTE] POST /api/semantic-mappings/upsert-business-term-edge
+[ROUTE] GET /api/semantic-terms
+[ROUTE] POST /api/semantic-terms
+[ROUTE] GET /api/semantic-terms/explain
+[ROUTE] POST /api/semantic-terms/resolve
+[ROUTE] POST /api/semantic-terms/resolve-expression
+[ROUTE] POST /api/semantic-terms/search
+[ROUTE] POST /api/semantic-terms/suggest
+[ROUTE] GET /api/semantic-terms/{id}/suggest-business-terms
+[ROUTE] GET /api/semantic/bundles/{domain}
+[ROUTE] GET /api/semantic/bundles/{bundleName}
+[ROUTE] GET /api/semantic/objects
+[ROUTE] POST /api/slack/callback
+[ROUTE] GET /api/slack/install
+[ROUTE] POST /api/slack/interactive
+[ROUTE] GET /api/succession/metrics/{advisorId}
+[ROUTE] POST /api/succession/plans
+[ROUTE] GET /api/succession/recommend/{advisorId}
+[ROUTE] POST /api/taxplan/detect/{clientId}
+[ROUTE] GET /api/taxplan/opportunities/{clientId}
+[ROUTE] GET /api/templates/{node_id}
+[ROUTE] POST /api/templates/{node_id}/promote
+[ROUTE] GET /api/templates/{node_id}/versions
+[ROUTE] GET /api/templates/
+[ROUTE] GET /api/templates/categories
+[ROUTE] GET /api/templates/categories/{key}/templates
+[ROUTE] GET /api/templates/category/{category}
+[ROUTE] POST /api/templates/clone/{id}
+[ROUTE] GET /api/templates/clones
+[ROUTE] GET /api/templates/clones/{id}
+[ROUTE] DELETE /api/templates/clones/{id}
+[ROUTE] PUT /api/templates/clones/{id}/notes
+[ROUTE] GET /api/templates/featured
+[ROUTE] PUT /api/templates/ratings/{ratingId}/helpful
+[ROUTE] GET /api/templates/{key}
+[ROUTE] POST /api/templates/{id}/rate
+[ROUTE] GET /api/templates/{id}/ratings
+[ROUTE] GET /api/templates/{id}/stats
+[ROUTE] POST /api/temporal
+[ROUTE] GET /api/tenants
+[ROUTE] GET /api/tenants/accessible
+[ROUTE] GET /api/tenants/all
+[ROUTE] GET /api/tenants/debug
+[ROUTE] PATCH /api/tenants/{tenant_id}/datasources/{datasource_id}/models/{model_id}
+[ROUTE] POST /api/tenants/{tenantId}/ip-whitelist
+[ROUTE] DELETE /api/tenants/{tenantId}/ip-whitelist
+[ROUTE] GET /api/tenants/{tenantId}/ip-whitelist
+[ROUTE] GET /api/user/{id}
+[ROUTE] GET /api/users
+[ROUTE] POST /api/users/{user_id}/roles/
+[ROUTE] GET /api/users/{user_id}/roles/
+[ROUTE] DELETE /api/users/{user_id}/roles/{role_id}
+[ROUTE] GET /api/validation-rule-cores
+[ROUTE] POST /api/validation-rule-cores
+[ROUTE] GET /api/validation-rule-cores/{id}
+[ROUTE] GET /api/validation-rule-cores/{id}/impact
+[ROUTE] POST /api/validation-rules
+[ROUTE] GET /api/validation-rules
+[ROUTE] GET /api/validation-rules/schema
+[ROUTE] PATCH /api/validation-rules/{id}
+[ROUTE] DELETE /api/validation-rules/{id}
+[ROUTE] GET /api/validation-rules/{id}
+[ROUTE] GET /api/validation-rules/{id}/audit
+[ROUTE] POST /api/validation-rules/{id}/execute
+[ROUTE] POST /api/validation-rules/{id}/simulate-with-instance
+[ROUTE] GET /api/views
+[ROUTE] POST /api/views
+[ROUTE] POST /api/views/apply
+[ROUTE] GET /api/views/compare
+[ROUTE] POST /api/views/reject
+[ROUTE] POST /api/views/validate
+[ROUTE] GET /api/views/{name}
+[ROUTE] PUT /api/views/{name}
+[ROUTE] DELETE /api/views/{name}
+[ROUTE] GET /api/views/{name}/download
+[ROUTE] GET /api/views/{name}/suggestions
+[ROUTE] GET /api/views/{name}/validate
+[ROUTE] POST /api/workflow-timeout-triggers/
+[ROUTE] GET /api/workflow-timeout-triggers/
+[ROUTE] GET /api/workflow-timeout-triggers/{triggerId}/
+[ROUTE] PUT /api/workflow-timeout-triggers/{triggerId}/
+[ROUTE] DELETE /api/workflow-timeout-triggers/{triggerId}/
+[ROUTE] POST /api/workflow-timeout-triggers/{triggerId}/test
+[ROUTE] GET /api/workflows/{workflowId}/events
+[ROUTE] GET /api/workflows/initiatable
+[ROUTE] POST /api/workflows/{bpDefId}/can-initiate
+[ROUTE] GET /api/ws
+[ROUTE] POST /api/ws/token
+[ROUTE] GET /health
+[ROUTE] GET /layouts
+[ROUTE] POST /layouts
+[ROUTE] GET /layouts/{id}
+[ROUTE] DELETE /layouts/{id}
+[ROUTE] POST /publish/validate
+[ROUTE] GET /reports/definitions/
+[ROUTE] POST /reports/definitions/
+[ROUTE] PUT /reports/definitions/{id}
+[ROUTE] DELETE /reports/definitions/{id}
+[ROUTE] GET /reports/definitions/{id}
+[ROUTE] POST /reports/definitions/{id}/publish
+[ROUTE] GET /reports/extensions/
+[ROUTE] POST /reports/extensions/
+[ROUTE] GET /reports/extensions/{id}
+[ROUTE] PUT /reports/extensions/{id}
+[ROUTE] DELETE /reports/extensions/{id}
+[ROUTE] GET /reports/instances/
+[ROUTE] GET /reports/instances/{id}
+[ROUTE] GET /reports/instances/{id}/download
+[ROUTE] GET /reports/packages
+[ROUTE] POST /reports/provision
+[ROUTE] POST /reports/render
+[ROUTE] POST /reports/render/async
+[ROUTE] POST /reports/schedules/
+[ROUTE] GET /reports/schedules/
+[ROUTE] DELETE /reports/schedules/{id}
+[ROUTE] GET /reports/schedules/{id}
+[ROUTE] PUT /reports/schedules/{id}
+[ROUTE] GET /scheduler/ai/suggestions
+[ROUTE] POST /scheduler/ai/suggestions/{id}/accept
+[ROUTE] POST /scheduler/ai/suggestions/{id}/dismiss
+[ROUTE] GET /scheduler/dags
+[ROUTE] POST /scheduler/dags
+[ROUTE] DELETE /scheduler/dags/{id}
+[ROUTE] GET /scheduler/dags/{id}
+[ROUTE] PATCH /scheduler/dags/{id}
+[ROUTE] POST /scheduler/dags/{id}/run
+[ROUTE] GET /scheduler/dags/{id}/runs
+[ROUTE] GET /scheduler/jobs
+[ROUTE] POST /scheduler/jobs
+[ROUTE] PATCH /scheduler/jobs/{id}
+[ROUTE] DELETE /scheduler/jobs/{id}
+[ROUTE] GET /scheduler/jobs/{id}
+[ROUTE] POST /scheduler/jobs/{id}/run
+[ROUTE] GET /scheduler/jobs/{id}/runs
+[ROUTE] GET /scheduler/runs/dags/{id}
+[ROUTE] GET /scheduler/runs/jobs/{id}
+[ROUTE] GET /scheduler/stats
+[ROUTE] GET /test-root-route
+[ROUTE] HEAD /v1/graphql
+[ROUTE] OPTIONS /v1/graphql
+[ROUTE] PATCH /v1/graphql
+[ROUTE] GET /v1/graphql
+[ROUTE] TRACE /v1/graphql
+[ROUTE] CONNECT /v1/graphql
+[ROUTE] DELETE /v1/graphql
+[ROUTE] POST /v1/graphql
+[ROUTE] PUT /v1/graphql
+[ROUTE] GET /values/constraints
+[ROUTE] POST /values/constraints
+[ROUTE] POST /values/profiles
+[ROUTE] GET /values/profiles/{clientID}
+[ROUTE] PUT /values/profiles/{clientID}
+[ROUTE] GET /values/signals
+[ROUTE] POST /values/signals
+[ROUTE] POST /values/themes
+[ROUTE] GET /values/themes
+[ROUTES-DUMP-END]
+{"level":"info","ts":1770297480.7818198,"caller":"server/main.go:1241","msg":"Insurance calculation templates initialized successfully"}
+{"level":"info","ts":1770297480.79489,"caller":"server/main.go:1248","msg":"Private markets calculation templates initialized successfully"}
+{"level":"info","ts":1770297480.8006248,"caller":"server/main.go:1255","msg":"Quant finance calculation templates initialized successfully"}
+{"level":"info","ts":1770297480.806737,"caller":"server/main.go:1262","msg":"Risk management calculation templates initialized successfully"}
+{"level":"info","ts":1770297480.812176,"caller":"server/main.go:1269","msg":"Compliance and regulatory calculation templates initialized successfully"}
+{"level":"warn","ts":1770297480.812196,"caller":"server/main.go:1349","msg":"Dynatrace URL and API token not configured - capacity metrics collection disabled"}
+{"level":"info","ts":1770297480.812535,"caller":"workers/edge_queue_worker.go:59","msg":"🚀 Edge queue worker started"}
+{"level":"info","ts":1770297480.81478,"caller":"server/main.go:1515","msg":"✅ Lineage engine initialized (via SetupRouter)"}
+{"level":"info","ts":1770297480.814812,"caller":"server/main.go:1523","msg":"✅ Cost-Based Query Optimizer initialized"}
+{"level":"info","ts":1770297480.814833,"caller":"server/main.go:1536","msg":"✅ Unified Observability + SLO Engine disabled to save resources"}
+{"level":"info","ts":1770297480.814852,"caller":"server/main.go:1538","msg":"✅ All handlers registered including semantic CBO telemetry and advisor"}
+{"level":"info","ts":1770297480.81487,"caller":"server/main.go:1564","msg":"✅ Audit logs endpoint registered at /api/audit-logs"}
+{"level":"info","ts":1770297480.814924,"caller":"audit/worker.go:37","msg":"AsyncAuditService started with 5 workers"}
+{"level":"info","ts":1770297480.814935,"caller":"server/main.go:1591","msg":"✅ Bitemporal audit history endpoints registered"}
+{"level":"info","ts":1770297480.814964,"caller":"server/main.go:1618","msg":"✅ What-If Simulation Engine initialized at /api/simulation"}
+{"level":"info","ts":1770297480.8149838,"caller":"server/main.go:1621","msg":"Initializing Change Review System..."}
+2026/02/05 08:18:00 INFO  No logger configured for temporal client. Created default one.
+{"level":"warn","ts":1770297480.877642,"caller":"server/main.go:1644","msg":"Failed to create Temporal client for CRS: failed reaching server: no children to pick from"}
+{"level":"info","ts":1770297480.877729,"caller":"server/main.go:1665","msg":"✅ Change Review System initialized"}
+{"level":"info","ts":1770297480.877752,"caller":"server/main.go:1685","msg":"Initializing NL Intelligence Layer..."}
+{"level":"info","ts":1770297480.877774,"caller":"server/main.go:1690","msg":"Initializing API Studio..."}
+{"level":"info","ts":1770297480.8777962,"caller":"server/main.go:1698","msg":"Initializing Page Studio..."}
+{"level":"info","ts":1770297480.877857,"caller":"server/main.go:1711","msg":"Initializing Semantic Intelligence..."}
+{"level":"info","ts":1770297480.877889,"caller":"server/main.go:1716","msg":"Initializing Experience Governance..."}
+{"level":"info","ts":1770297480.877933,"caller":"server/main.go:1726","msg":"Initializing Component Extensibility..."}
+{"level":"info","ts":1770297480.877965,"caller":"server/main.go:1735","msg":"Initializing Runtime Superpowers..."}
+{"level":"info","ts":1770297480.8779972,"caller":"server/main.go:1743","msg":"Initializing Compliance Engine..."}
+{"level":"info","ts":1770297480.878033,"caller":"server/main.go:1753","msg":"Initializing Testing & Quality Automation..."}
+{"level":"info","ts":1770297480.878069,"caller":"server/main.go:1764","msg":"Initializing App Platform..."}
+{"level":"info","ts":1770297480.878101,"caller":"server/main.go:1773","msg":"Initializing Advanced Semantic Intelligence..."}
+{"level":"info","ts":1770297480.878138,"caller":"server/main.go:1783","msg":"Initializing UX Intelligence..."}
+{"level":"info","ts":1770297480.8781781,"caller":"server/main.go:1796","msg":"Initializing AI Governance..."}
+{"level":"info","ts":1770297480.878211,"caller":"server/main.go:1805","msg":"Initializing Autonomous Runtime..."}
+{"level":"info","ts":1770297480.878253,"caller":"server/main.go:1815","msg":"Initializing Security Intelligence..."}
+{"level":"info","ts":1770297480.8782861,"caller":"server/main.go:1824","msg":"Initializing Tenant Intelligence..."}
+{"level":"info","ts":1770297480.878317,"caller":"server/main.go:1833","msg":"✅ API Studio initialized"}
+{"level":"info","ts":1770297480.8783438,"caller":"server/main.go:1834","msg":"✅ Page Studio initialized"}
+{"level":"info","ts":1770297480.8783722,"caller":"server/main.go:1851","msg":"Server starting on http://localhost:8080"}
+{"level":"info","ts":1770297480.8784,"caller":"server/main.go:1852","msg":"Swagger UI available at: http://localhost:8080/swagger/index.html"}
+2026/02/05 08:18:03 INFO  No logger configured for temporal client. Created default one.
+{"level":"info","ts":1770297485.497544,"caller":"server/main.go:243","msg":"🚀 Starting background schema initialization..."}
+{"level":"info","ts":1770297485.4977899,"caller":"server/main.go:230","msg":"Ensuring views table exists..."}
+{"level":"info","ts":1770297485.509176,"caller":"server/main.go:234","msg":"Ensured views table exists"}
+{"level":"info","ts":1770297485.509237,"caller":"server/main.go:230","msg":"Ensuring catalog_edge_type exists..."}
+{"level":"info","ts":1770297485.509823,"caller":"server/main.go:234","msg":"Ensured catalog_edge_type exists"}
+{"level":"info","ts":1770297485.509855,"caller":"server/main.go:230","msg":"Ensuring tenant_chart exists..."}
+{"level":"info","ts":1770297485.510247,"caller":"server/main.go:234","msg":"Ensured tenant_chart exists"}
+{"level":"info","ts":1770297485.510277,"caller":"server/main.go:230","msg":"Ensuring catalog_edge exists..."}
+{"level":"info","ts":1770297485.511563,"caller":"server/main.go:234","msg":"Ensured catalog_edge exists"}
+{"level":"info","ts":1770297485.511598,"caller":"server/main.go:230","msg":"Ensuring catalog_node exists..."}
+{"level":"info","ts":1770297485.51234,"caller":"server/main.go:234","msg":"Ensured catalog_node exists"}
+{"level":"info","ts":1770297485.5123708,"caller":"server/main.go:230","msg":"Ensuring catalog_node columns exists..."}
+{"level":"info","ts":1770297485.513281,"caller":"server/main.go:234","msg":"Ensured catalog_node columns exists"}
+{"level":"info","ts":1770297485.5133061,"caller":"server/main.go:230","msg":"Ensuring catalog_node_type exists..."}
+{"level":"warn","ts":1770297485.5344892,"caller":"server/main.go:232","msg":"Warning: Failed to ensure catalog_node_type: ERROR: insert or update on table \"catalog_edge_type\" violates foreign key constraint \"catalog_edge_type_catalog_node_type_fk\" (SQLSTATE 23503)"}
+{"level":"info","ts":1770297485.534577,"caller":"server/main.go:230","msg":"Ensuring simulation schema exists..."}
+{"level":"info","ts":1770297485.535298,"caller":"server/main.go:234","msg":"Ensured simulation schema exists"}
+{"level":"warn","ts":1770297485.5359879,"caller":"server/main.go:553","msg":"Warning: Failed to initialize private markets schema: failed to execute private markets schema: ERROR: syntax error at or near \"EXISTS\" (SQLSTATE 42601)"}
+{"level":"info","ts":1770297485.537384,"caller":"server/main.go:628","msg":"Ensured entity_registry table exists"}
+{"level":"info","ts":1770297485.537833,"caller":"server/main.go:679","msg":"Ensured validation rules tables exist"}
+{"level":"info","ts":1770297485.5382469,"caller":"server/main.go:719","msg":"Ensured validation rule cores table exists"}
+{"level":"info","ts":1770297485.539254,"caller":"server/main.go:818","msg":"Ensured metric registry tables exist"}
+{"level":"info","ts":1770297485.539391,"caller":"server/main.go:842","msg":"Ensured semantic assets table exists"}
+{"level":"info","ts":1770297485.539793,"caller":"server/main.go:881","msg":"Ensured relationship suggestions table exists"}
+{"level":"warn","ts":1770297485.540009,"caller":"server/main.go:897","msg":"Warning: Failed to create suggestion audit table: ERROR: column \"suggestion_id\" does not exist (SQLSTATE 42703)"}
+{"level":"info","ts":1770297485.540043,"caller":"server/main.go:230","msg":"Ensuring pending_semantic_mappings exists..."}
+{"level":"info","ts":1770297485.5404491,"caller":"server/main.go:234","msg":"Ensured pending_semantic_mappings exists"}
+{"level":"info","ts":1770297485.540475,"caller":"server/main.go:230","msg":"Ensuring term_ai_feedback exists..."}
+{"level":"info","ts":1770297485.540839,"caller":"server/main.go:234","msg":"Ensured term_ai_feedback exists"}
+{"level":"info","ts":1770297485.540865,"caller":"server/main.go:230","msg":"Ensuring edge_creation_queue exists..."}
+{"level":"info","ts":1770297485.5412,"caller":"server/main.go:234","msg":"Ensured edge_creation_queue exists"}
+{"level":"info","ts":1770297485.5412421,"caller":"server/main.go:230","msg":"Ensuring edge_creation_dlq exists..."}
+{"level":"info","ts":1770297485.541505,"caller":"server/main.go:234","msg":"Ensured edge_creation_dlq exists"}
+{"level":"info","ts":1770297485.5415308,"caller":"server/main.go:230","msg":"Ensuring bo_term_metadata exists..."}
+{"level":"info","ts":1770297485.5418198,"caller":"server/main.go:234","msg":"Ensured bo_term_metadata exists"}
+{"level":"info","ts":1770297485.541846,"caller":"server/main.go:230","msg":"Ensuring calculation_definitions exists..."}
+{"level":"info","ts":1770297485.542263,"caller":"server/main.go:234","msg":"Ensured calculation_definitions exists"}
+{"level":"info","ts":1770297485.54228,"caller":"server/main.go:230","msg":"Ensuring calculation_dependencies exists..."}
+{"level":"info","ts":1770297485.54256,"caller":"server/main.go:234","msg":"Ensured calculation_dependencies exists"}
+{"level":"info","ts":1770297485.5430999,"caller":"server/main.go:230","msg":"Ensuring core_identities_schema exists..."}
+{"level":"info","ts":1770297485.5432441,"caller":"server/main.go:234","msg":"Ensured core_identities_schema exists"}
+{"level":"info","ts":1770297485.54356,"caller":"server/main.go:230","msg":"Ensuring datasource_enhancements_schema exists..."}
+{"level":"info","ts":1770297485.546679,"caller":"server/main.go:234","msg":"Ensured datasource_enhancements_schema exists"}
+{"level":"info","ts":1770297485.546995,"caller":"server/main.go:230","msg":"Ensuring business_objects_schema exists..."}
+{"level":"info","ts":1770297485.5477061,"caller":"server/main.go:234","msg":"Ensured business_objects_schema exists"}
+{"level":"info","ts":1770297485.548021,"caller":"server/main.go:230","msg":"Ensuring workday_schema exists..."}
+{"level":"info","ts":1770297485.5484002,"caller":"server/main.go:234","msg":"Ensured workday_schema exists"}
+{"level":"info","ts":1770297485.548411,"caller":"server/main.go:230","msg":"Ensuring ensure_gold_copy_tenant exists..."}
+{"level":"info","ts":1770297485.548556,"caller":"server/main.go:234","msg":"Ensured ensure_gold_copy_tenant exists"}
+{"level":"info","ts":1770297485.548564,"caller":"server/main.go:230","msg":"Ensuring ensure_display_name_tenant exists..."}
+{"level":"info","ts":1770297485.548714,"caller":"server/main.go:234","msg":"Ensured ensure_display_name_tenant exists"}
+{"level":"info","ts":1770297485.548723,"caller":"server/main.go:230","msg":"Ensuring ensure_description_tenant exists..."}
+{"level":"info","ts":1770297485.548942,"caller":"server/main.go:234","msg":"Ensured ensure_description_tenant exists"}
+{"level":"info","ts":1770297485.54895,"caller":"server/main.go:230","msg":"Ensuring ensure_is_active_tenant exists..."}
+{"level":"info","ts":1770297485.549162,"caller":"server/main.go:234","msg":"Ensured ensure_is_active_tenant exists"}
+{"level":"info","ts":1770297485.5494301,"caller":"server/main.go:230","msg":"Ensuring bo_datasource_schema exists..."}
+{"level":"info","ts":1770297485.5497012,"caller":"server/main.go:234","msg":"Ensured bo_datasource_schema exists"}
+{"level":"info","ts":1770297485.550024,"caller":"server/main.go:230","msg":"Ensuring notification_engine_schema exists..."}
+{"level":"info","ts":1770297485.552269,"caller":"server/main.go:234","msg":"Ensured notification_engine_schema exists"}
+{"level":"info","ts":1770297485.552444,"caller":"server/main.go:230","msg":"Ensuring ai_orchestration_schema exists..."}
+{"level":"info","ts":1770297485.552593,"caller":"server/main.go:234","msg":"Ensured ai_orchestration_schema exists"}
+{"level":"info","ts":1770297485.552865,"caller":"server/main.go:230","msg":"Ensuring cleanup_legacy_lineage exists..."}
+{"level":"info","ts":1770297485.553117,"caller":"server/main.go:234","msg":"Ensured cleanup_legacy_lineage exists"}
+{"level":"info","ts":1770297485.553129,"caller":"server/main.go:1133","msg":"✅ Relational lineage repository initialized"}
+{"level":"info","ts":1770297485.55314,"caller":"server/main.go:1135","msg":"✅ Background schema initialization complete"}
+[REQ] GET /api/bp-notifications/logs Headers:Content-Type=,Authorization=,Origin=,X-Tenant-ID=,X-Tenant-Instance-ID= Body:
+[DEBUG-MARKER] path=/api/bp-notifications/logs method=GET contains_bo=false
+[MW-EXEC] Middleware executing for GET /api/bp-notifications/logs
+{"level":"info","ts":1770297486.065254,"caller":"api/request_trace_middleware.go:40","msg":"RequestTrace Start: id=d3fd9cc9-5878-421b-a18a-92897679e1d1 method=GET path=/api/bp-notifications/logs tenant="}
+[TRACE START] id=d3fd9cc9-5878-421b-a18a-92897679e1d1 method=GET path=/api/bp-notifications/logs tenant=
+{"level":"info","ts":1770297486.0695329,"caller":"api/request_trace_middleware.go:48","msg":"RequestTrace End: id=d3fd9cc9-5878-421b-a18a-92897679e1d1 method=GET path=/api/bp-notifications/logs tenant= status=200 handler="}
+[TRACE END] id=d3fd9cc9-5878-421b-a18a-92897679e1d1 method=GET path=/api/bp-notifications/logs tenant= status=200 handler=
+2026/02/05 08:18:06 INFO  No logger configured for temporal client. Created default one.
+2026/02/05 08:18:09 INFO  No logger configured for temporal client. Created default one.
+{"level":"info","ts":1770297490.363343,"caller":"server/main.go:1860","msg":"Shutdown signal received, starting graceful shutdown..."}
+{"level":"info","ts":1770297490.3635762,"caller":"server/main.go:1873","msg":"Graceful shutdown complete"}

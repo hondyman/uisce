@@ -1,0 +1,8 @@
+ALTER TABLE IF EXISTS business_process_step
+ADD COLUMN IF NOT EXISTS condition_expr_type TEXT DEFAULT 'starlark',
+ADD COLUMN IF NOT EXISTS approval_chain JSONB DEFAULT '{}',
+ADD COLUMN IF NOT EXISTS routing_rules JSONB DEFAULT '{}',
+ADD COLUMN IF NOT EXISTS delay_expr_type TEXT DEFAULT 'starlark',
+ADD COLUMN IF NOT EXISTS delay_expr TEXT DEFAULT '',
+ADD COLUMN IF NOT EXISTS sla_expr_type TEXT DEFAULT 'starlark',
+ADD COLUMN IF NOT EXISTS sla_expr TEXT DEFAULT '';

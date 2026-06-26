@@ -1,0 +1,6 @@
+driver: postgres
+dsn: "postgres://postgres:postgres@host.docker.internal:5432/alpha?sslmode=disable"
+port: ":8000"
+jwt_secret: "semlayer_jwt_secret_key_minimum_32_chars_long"
+environment: development
+enable_security: false

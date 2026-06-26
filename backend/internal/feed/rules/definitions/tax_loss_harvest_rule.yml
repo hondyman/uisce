@@ -1,0 +1,23 @@
+# Tax Loss Harvest Rule (CEL-based)
+
+id: rule_tax_loss_harvest
+type: CardRule
+version: 1.0.0
+card_id: tax_loss_harvest
+persona: planning_specialist
+
+eligibility:
+  # Client must have unrealized loss > 1%, taxable account, and not restricted
+  expression: |
+    client.Portfolio.UnrealizedLossPct < -0.01 &&
+    client.Profile.TaxStatus == "taxable" &&
+    !client.Compliance.IsRestricted
+
+rank:
+  # Higher loss = higher priority
+  expression: "abs(client.Portfolio.UnrealizedLossPct) * 100.0"
+
+metadata:
+  description: "Tax loss harvesting opportunity for taxable accounts"
+  priority: "high"
+  approval_required: true

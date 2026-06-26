@@ -1,0 +1,25 @@
+name: Frontend E2E
+
+on:
+  pull_request:
+    branches: [ main ]
+  push:
+    branches: [ main ]
+
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - name: Use Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: 18
+    - name: Install frontend deps
+      working-directory: frontend
+      run: npm ci
+    - name: Start backend (if needed)
+      run: echo "Assumes backend API is available; configure service or mock as needed"
+    - name: Run Cypress tests
+      working-directory: frontend
+      run: npm run cy:run

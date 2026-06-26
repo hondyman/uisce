@@ -1,0 +1,168 @@
+groups:
+- name: cube-semantic-slos
+  rules:
+  # P95 Latency SLO - alert if > 2s for 5 minutes
+  - alert: CubeLatencySLOBreach
+    expr: |
+      histogram_quantile(0.95,
+        sum(rate(cube_query_duration_seconds_bucket[5m])) by (le, tenant_id)
+      ) > 2
+    for: 5m
+    labels:
+      severity: warning
+      service: cube-semantic
+    annotations:
+      summary: "Cube p95 latency SLO breach for tenant {{ $labels.tenant_id }}"
+      description: "p95 latency is {{ $value | humanizeDuration }} (SLO: 2s)"
+      runbook_url: "https://runbooks.semlayer.io/cube/latency-slo-breach"
+
+  # P95 Latency Critical - alert if > 5s for 2 minutes
+  - alert: CubeLatencyCritical
+    expr: |
+      histogram_quantile(0.95,
+        sum(rate(cube_query_duration_seconds_bucket[2m])) by (le, tenant_id)
+      ) > 5
+    for: 2m
+    labels:
+      severity: critical
+      service: cube-semantic
+    annotations:
+      summary: "Critical: Cube p95 latency > 5s for tenant {{ $labels.tenant_id }}"
+      description: "p95 latency is {{ $value | humanizeDuration }}"
+      runbook_url: "https://runbooks.semlayer.io/cube/latency-critical"
+
+  # Pre-aggregation Hit Rate SLO - alert if < 85% for 10 minutes
+  - alert: CubeRollupHitRateLow
+    expr: |
+      (
+        sum(rate(cube_preaggregation_usage_total{state="hit"}[10m])) by (tenant_id)
+        /
+        sum(rate(cube_preaggregation_usage_total[10m])) by (tenant_id)
+      ) < 0.85
+    for: 10m
+    labels:
+      severity: warning
+      service: cube-semantic
+    annotations:
+      summary: "Pre-aggregation hit rate below SLO for tenant {{ $labels.tenant_id }}"
+      description: "Hit rate is {{ $value | humanizePercentage }} (SLO: 85%)"
+      runbook_url: "https://runbooks.semlayer.io/cube/rollup-hit-rate"
+
+  # Error Rate SLO - alert if > 1% for 5 minutes
+  - alert: CubeErrorRateHigh
+    expr: |
+      (
+        sum(rate(cube_query_total{status="error"}[5m])) by (tenant_id)
+        /
+        sum(rate(cube_query_total[5m])) by (tenant_id)
+      ) > 0.01
+    for: 5m
+    labels:
+      severity: warning
+      service: cube-semantic
+    annotations:
+      summary: "Cube error rate > 1% for tenant {{ $labels.tenant_id }}"
+      description: "Error rate is {{ $value | humanizePercentage }}"
+      runbook_url: "https://runbooks.semlayer.io/cube/error-rate-high"
+
+  # Cache Eviction Rate - alert if Redis eviction rate > 5%
+  - alert: CubeCacheEvictionHigh
+    expr: |
+      rate(redis_evicted_keys_total{service="cube-redis"}[5m])
+      /
+      rate(redis_db_keys{service="cube-redis"}[5m]) > 0.05
+    for: 5m
+    labels:
+      severity: warning
+      service: cube-semantic
+    annotations:
+      summary: "Redis cache eviction rate > 5%"
+      description: "Consider scaling Redis or tuning TTL policies"
+      runbook_url: "https://runbooks.semlayer.io/cube/cache-eviction"
+
+- name: cube-parity-migration
+  rules:
+  # Parity Pass Rate - alert if < 99.9% during migration
+  - alert: CubeParityMismatchDetected
+    expr: |
+      (
+        sum(rate(cube_parity_matches_total[5m]))
+        /
+        sum(rate(cube_parity_comparisons_total[5m]))
+      ) < 0.999
+    for: 5m
+    labels:
+      severity: critical
+      service: cube-parity
+    annotations:
+      summary: "Cube/Legacy parity mismatch detected"
+      description: "Parity pass rate is {{ $value | humanizePercentage }} (target: 99.9%)"
+      runbook_url: "https://runbooks.semlayer.io/cube/parity-mismatch"
+
+  # Parity Service Down
+  - alert: CubeParityServiceDown
+    expr: up{job="cube-parity"} == 0
+    for: 1m
+    labels:
+      severity: critical
+      service: cube-parity
+    annotations:
+      summary: "Cube parity service is down"
+      description: "The parity comparison service is not responding"
+      runbook_url: "https://runbooks.semlayer.io/cube/parity-service-down"
+
+- name: cube-refresh-health
+  rules:
+  # Refresh Worker Lag - alert if refresh is > 15 minutes behind
+  - alert: CubeRefreshLagHigh
+    expr: |
+      time() - cube_refresh_last_success_timestamp_seconds > 900
+    for: 5m
+    labels:
+      severity: warning
+      service: cube-semantic
+    annotations:
+      summary: "Cube pre-aggregation refresh is lagging"
+      description: "Last successful refresh was {{ $value | humanizeDuration }} ago"
+      runbook_url: "https://runbooks.semlayer.io/cube/refresh-lag"
+
+  # Refresh Failures
+  - alert: CubeRefreshFailures
+    expr: |
+      increase(cube_refresh_failures_total[15m]) > 3
+    for: 5m
+    labels:
+      severity: warning
+      service: cube-semantic
+    annotations:
+      summary: "Multiple Cube refresh failures detected"
+      description: "{{ $value }} refresh failures in the last 15 minutes"
+      runbook_url: "https://runbooks.semlayer.io/cube/refresh-failures"
+
+- name: cube-tenant-provisioning
+  rules:
+  # Tenant Provisioning Failures
+  - alert: TenantProvisioningFailed
+    expr: |
+      increase(tenant_provision_failures_total[1h]) > 0
+    for: 1m
+    labels:
+      severity: warning
+      service: tenant-automation
+    annotations:
+      summary: "Tenant provisioning failure detected"
+      description: "{{ $value }} provisioning failures in the last hour"
+      runbook_url: "https://runbooks.semlayer.io/tenant/provisioning-failure"
+
+  # Tenant Drift Detected
+  - alert: TenantConfigDrift
+    expr: |
+      tenant_config_drift_detected == 1
+    for: 5m
+    labels:
+      severity: warning
+      service: tenant-automation
+    annotations:
+      summary: "Tenant configuration drift detected"
+      description: "Desired state does not match actual state for tenant {{ $labels.tenant_id }}"
+      runbook_url: "https://runbooks.semlayer.io/tenant/config-drift"

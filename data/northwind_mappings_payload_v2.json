@@ -1,0 +1,43 @@
+{
+  "mappings": [
+    {
+      "database_column": {
+        "node_id": "79d93b73-3caa-56dc-84c9-c10111bdfd8e",
+        "tenant_id": "910638ba-a459-4a3f-bb2d-78391b0595f6",
+        "tenant_datasource_id": "982aef38-418f-46dc-acd0-35fe8f3b97b0",
+        "data_type": "character varying",
+        "connection": "northwind_default",
+        "schema": "public",
+        "table": "customers",
+        "column": "company_name"
+      },
+      "semantic_term_id": "7d868c69-f0dd-4dfd-afd0-1480705558fa"
+    },
+    {
+      "database_column": {
+        "node_id": "e6785348-7e44-5077-aa46-942ecbbfd69e",
+        "tenant_id": "910638ba-a459-4a3f-bb2d-78391b0595f6",
+        "tenant_datasource_id": "982aef38-418f-46dc-acd0-35fe8f3b97b0",
+        "data_type": "character varying",
+        "connection": "northwind_default",
+        "schema": "public",
+        "table": "customers",
+        "column": "customer_id"
+      },
+      "semantic_term_id": "02e41dd7-b77c-4f47-a12e-6c8c656d41c5"
+    },
+    {
+      "database_column": {
+        "node_id": "12fc6ca2-adc3-5a04-8b31-53d908294384",
+        "tenant_id": "910638ba-a459-4a3f-bb2d-78391b0595f6",
+        "tenant_datasource_id": "982aef38-418f-46dc-acd0-35fe8f3b97b0",
+        "data_type": "smallint",
+        "connection": "northwind_default",
+        "schema": "public",
+        "table": "employees",
+        "column": "employee_id"
+      },
+      "semantic_term_id": "8031c000-847a-48e0-9b3c-a3e41293d195"
+    }
+  ]
+}

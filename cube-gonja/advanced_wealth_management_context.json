@@ -1,0 +1,172 @@
+{
+  "data_sources": {
+    "wealth_portfolio": "wealth_db"
+  },
+  "dimensions": {
+    "wealth_portfolio": [
+      {
+        "name": "portfolio_id",
+        "sql": "portfolio_id",
+        "type": "string",
+        "primary_key": true
+      },
+      {
+        "name": "client_id",
+        "sql": "client_id",
+        "type": "string"
+      },
+      {
+        "name": "asset_class",
+        "sql": "asset_class",
+        "type": "string"
+      },
+      {
+        "name": "geography",
+        "sql": "geography",
+        "type": "string"
+      },
+      {
+        "name": "sector",
+        "sql": "sector",
+        "type": "string"
+      }
+    ]
+  },
+  "measures": {
+    "wealth_portfolio": [
+      {
+        "name": "expense_ratio",
+        "sql": "total_expenses / average_assets",
+        "type": "number",
+        "format": "percent"
+      },
+      {
+        "name": "turnover_ratio",
+        "sql": "LEAST(purchases, sales) / average_portfolio_value",
+        "type": "number",
+        "format": "percent"
+      },
+      {
+        "name": "liquidity_ratio",
+        "sql": "liquid_assets / total_portfolio_value",
+        "type": "number",
+        "format": "percent"
+      },
+      {
+        "name": "tax_drag",
+        "sql": "pre_tax_return - after_tax_return",
+        "type": "number",
+        "format": "percent"
+      },
+      {
+        "name": "effective_tax_rate",
+        "sql": "taxes_paid / realized_gains",
+        "type": "number",
+        "format": "percent"
+      },
+      {
+        "name": "funding_ratio",
+        "sql": "present_value_assets / present_value_liabilities",
+        "type": "number",
+        "format": "percent"
+      },
+      {
+        "name": "behavior_gap",
+        "sql": "portfolio_return - investor_return",
+        "type": "number",
+        "format": "percent"
+      }
+    ]
+  },
+  "portfolio_efficiency_metrics": {
+    "wealth_portfolio": [
+      {
+        "name": "expense_ratio_calc",
+        "type": "expense_ratio",
+        "total_expenses": 150000,
+        "average_assets": 10000000
+      },
+      {
+        "name": "turnover_ratio_calc",
+        "type": "turnover_ratio",
+        "purchases": 5000000,
+        "sales": 4500000,
+        "average_portfolio_value": 10000000
+      },
+      {
+        "name": "liquidity_ratio_calc",
+        "type": "liquidity_ratio",
+        "liquid_assets": 2500000,
+        "total_portfolio_value": 10000000
+      }
+    ]
+  },
+  "tax_aware_metrics": {
+    "wealth_portfolio": [
+      {
+        "name": "tax_drag_calc",
+        "type": "tax_drag",
+        "pre_tax_return": 0.12,
+        "after_tax_return": 0.09
+      },
+      {
+        "name": "effective_tax_rate_calc",
+        "type": "effective_tax_rate",
+        "taxes_paid": 18000,
+        "realized_gains": 200000
+      }
+    ]
+  },
+  "goal_based_metrics": {
+    "wealth_portfolio": [
+      {
+        "name": "funding_ratio_calc",
+        "type": "funding_ratio",
+        "present_value_assets": 8500000,
+        "present_value_liabilities": 8000000
+      },
+      {
+        "name": "probability_of_success_calc",
+        "type": "probability_of_success",
+        "goal_cash_flows": [50000, 55000, 60000, 65000, 70000],
+        "inflation_assumptions": [0.02, 0.025, 0.03],
+        "asset_projections": [10000000, 10500000, 11000000, 11500000, 12000000],
+        "simulations": 10000
+      }
+    ]
+  },
+  "behavioral_metrics": {
+    "wealth_portfolio": [
+      {
+        "name": "behavior_gap_calc",
+        "type": "behavior_gap",
+        "portfolio_return": 0.11,
+        "investor_return": 0.08
+      },
+      {
+        "name": "diversification_score_calc",
+        "type": "diversification_score",
+        "asset_class_weights": {
+          "equity": 0.6,
+          "fixed_income": 0.3,
+          "alternatives": 0.1
+        },
+        "geography_weights": {
+          "us": 0.7,
+          "international": 0.3
+        },
+        "sector_weights": {
+          "technology": 0.25,
+          "healthcare": 0.2,
+          "financials": 0.15,
+          "consumer": 0.4
+        },
+        "factor_weights": {
+          "growth": 0.5,
+          "value": 0.3,
+          "momentum": 0.2
+        }
+      }
+    ]
+  }
+}

@@ -1,0 +1,22 @@
+FROM golang:1.25-alpine AS builder
+WORKDIR /app
+
+# Copy service sources and shared libs (so replace directives can resolve)
+COPY ./services/governance ./services/governance
+COPY ./libs ./libs
+
+# Ensure module dependencies are downloaded within the service directory
+WORKDIR /app/services/governance
+RUN go mod download
+
+# Build the service from its directory
+WORKDIR /app/services/governance
+RUN CGO_ENABLED=0 GOOS=linux go build -o /app/governance ./cmd/main.go
+
+# Final image
+FROM alpine:latest
+RUN apk update && apk --no-cache add --allow-untrusted ca-certificates
+WORKDIR /root/
+COPY --from=builder /app/governance .
+EXPOSE 8084
+CMD ["./governance"]

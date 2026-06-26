@@ -1,0 +1,58 @@
+table:
+  name: catalog_edge
+  schema: public
+select_permissions:
+  - role: anonymous
+    permission:
+      columns:
+        - id
+        - tenant_datasource_id
+        - source_node_id
+        - target_node_id
+        - relationship_type
+        - properties
+        - created_at
+        - edge_type_id
+        - edge_type_name
+        - updated_at
+        - tenant_id
+        - core_id
+
+
+      filter: {}
+  - role: steward
+    permission:
+      columns:
+        - id
+        - tenant_datasource_id
+        - source_node_id
+        - target_node_id
+        - relationship_type
+        - properties
+        - created_at
+        - edge_type_id
+        - edge_type_name
+        - updated_at
+        - tenant_id
+        - core_id
+
+
+      filter: {}
+  - role: user
+    permission:
+      columns:
+        - id
+        - tenant_datasource_id
+        - source_node_id
+        - target_node_id
+        - relationship_type
+        - properties
+        - created_at
+        - edge_type_id
+        - edge_type_name
+        - updated_at
+        - tenant_id
+        - core_id
+
+
+      filter: {}

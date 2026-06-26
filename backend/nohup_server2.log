@@ -1,0 +1,42 @@
+{"level":"info","ts":1761192893.2624152,"caller":"server/main.go:90","msg":"Database connection established successfully"}
+{"level":"info","ts":1761192893.262509,"caller":"server/main.go:91","msg":"Connection pool configured: MaxOpen=50, MaxIdle=10, MaxLifetime=10m0s, MaxIdleTime=5m0s"}
+{"level":"info","ts":1761192893.262538,"caller":"services/performance_monitor.go:145","msg":"Performance monitoring started"}
+{"level":"info","ts":1761192893.262552,"caller":"observability/dynatrace_manager.go:30","msg":"Dynatrace environment variables not set, disabling Dynatrace integration."}
+{"level":"info","ts":1761192893.262561,"caller":"services/performance_monitor.go:436","msg":"pprof endpoints available at /debug/pprof/"}
+{"level":"warn","ts":1761192893.265385,"caller":"server/main.go:144","msg":"Warning: Failed to create views table: ERROR: cannot drop index ux_views_tenant_ds_name because constraint ux_views_tenant_ds_name on table views requires it (SQLSTATE 2BP01)"}
+{"level":"info","ts":1761192893.26569,"caller":"server/main.go:172","msg":"Ensured fabric_defn table exists"}
+{"level":"warn","ts":1761192893.266172,"caller":"server/main.go:182","msg":"Warning: Failed to initialize private markets schema: failed to execute private markets schema: ERROR: syntax error at or near \"NOT\" (SQLSTATE 42601)"}
+{"level":"info","ts":1761192893.2675278,"caller":"server/main.go:257","msg":"Ensured entity_registry table exists"}
+{"level":"info","ts":1761192893.2679732,"caller":"server/main.go:306","msg":"Ensured validation rules tables exist"}
+{"level":"info","ts":1761192893.2680042,"caller":"logging/logging.go:39","msg":"2025/10/23 00:14:53 [DEV] Seeded API key for user tester@example.com: sk_1761192893267998000\n"}
+2025/10/23 00:14:53 INFO  No logger configured for temporal client. Created default one.
+{"level":"info","ts":1761192893.278324,"caller":"server/main.go:320","msg":"Insurance calculation templates initialized successfully"}
+{"level":"info","ts":1761192893.285776,"caller":"server/main.go:327","msg":"Private markets calculation templates initialized successfully"}
+{"level":"info","ts":1761192893.289692,"caller":"server/main.go:334","msg":"Quant finance calculation templates initialized successfully"}
+{"level":"warn","ts":1761192893.2899258,"caller":"api/api.go:364","msg":"Temporal client not available at startup: failed reaching server: connection error: desc = \"transport: Error while dialing: dial tcp [::1]:7233: connect: connection refused\""}
+{"level":"info","ts":1761192893.294267,"caller":"server/main.go:341","msg":"Risk management calculation templates initialized successfully"}
+{"level":"info","ts":1761192893.297462,"caller":"server/main.go:348","msg":"Compliance and regulatory calculation templates initialized successfully"}
+{"level":"warn","ts":1761192893.297477,"caller":"server/main.go:382","msg":"Dynatrace URL and API token not configured - capacity metrics collection disabled"}
+{"level":"info","ts":1761192893.297493,"caller":"server/main.go:417","msg":"Server starting on http://localhost:18080"}
+{"level":"info","ts":1761192893.2975051,"caller":"server/main.go:418","msg":"Swagger UI available at: http://localhost:18080/swagger/index.html"}
+{"level":"info","ts":1761192899.5169752,"caller":"audit/service.go:116","msg":"Audit event logged","event_id":"026bc76e-a118-485d-829d-9be3a4cfc8af","event_type":"data_access","user_id":"anonymous","resource_type":"api_endpoint","resource_id":"/api/temporal/workflows/test-run-42/signal"}
+Request completed in 4.620375ms
+{"level":"info","ts":1761192953.263027,"caller":"services/performance_monitor.go:360","msg":"Performance Stats: requests=0, avg_duration=0s, cache_hit_rate=0.00%, active=0, errors=0"}
+{"level":"info","ts":1761192982.659301,"caller":"audit/service.go:116","msg":"Audit event logged","event_id":"9fd362a4-6bdc-4c05-921a-139b4831f4dd","event_type":"data_access","user_id":"anonymous","resource_type":"api_endpoint","resource_id":"/api"}
+Request completed in 3.583958ms
+{"level":"info","ts":1761193013.262563,"caller":"services/performance_monitor.go:360","msg":"Performance Stats: requests=0, avg_duration=0s, cache_hit_rate=0.00%, active=0, errors=0"}
+{"level":"info","ts":1761193026.090838,"caller":"audit/service.go:116","msg":"Audit event logged","event_id":"ca79643c-b945-4a53-9f53-04103c75f5cd","event_type":"data_access","user_id":"anonymous","resource_type":"api_endpoint","resource_id":"/api/templates"}
+Request completed in 7.922667ms
+{"level":"info","ts":1761193073.261654,"caller":"services/performance_monitor.go:360","msg":"Performance Stats: requests=0, avg_duration=0s, cache_hit_rate=0.00%, active=0, errors=0"}
+{"level":"info","ts":1761193133.261158,"caller":"services/performance_monitor.go:360","msg":"Performance Stats: requests=0, avg_duration=0s, cache_hit_rate=0.00%, active=0, errors=0"}
+{"level":"info","ts":1761193193.2593641,"caller":"services/performance_monitor.go:360","msg":"Performance Stats: requests=0, avg_duration=0s, cache_hit_rate=0.00%, active=0, errors=0"}
+{"level":"info","ts":1761193253.2592509,"caller":"services/performance_monitor.go:360","msg":"Performance Stats: requests=0, avg_duration=0s, cache_hit_rate=0.00%, active=0, errors=0"}
+{"level":"info","ts":1761193259.3916621,"caller":"audit/service.go:116","msg":"Audit event logged","event_id":"354240af-e82e-4774-b10c-3478d41e6aa1","event_type":"data_access","user_id":"anonymous","resource_type":"api_endpoint","resource_id":"/api/temporal/workflows/test-run-42/signal"}
+Request completed in 1.799292ms
+{"level":"info","ts":1761193266.8675761,"caller":"audit/service.go:116","msg":"Audit event logged","event_id":"83002619-32f3-4f91-9cb3-06dc949d3771","event_type":"data_access","user_id":"anonymous","resource_type":"api_endpoint","resource_id":"/api/temporal/taskqueue/describe"}
+Request completed in 1.447667ms
+{"level":"info","ts":1761193313.258704,"caller":"services/performance_monitor.go:360","msg":"Performance Stats: requests=0, avg_duration=0s, cache_hit_rate=0.00%, active=0, errors=0"}
+{"level":"info","ts":1761193373.257577,"caller":"services/performance_monitor.go:360","msg":"Performance Stats: requests=0, avg_duration=0s, cache_hit_rate=0.00%, active=0, errors=0"}
+{"level":"info","ts":1761193433.256686,"caller":"services/performance_monitor.go:360","msg":"Performance Stats: requests=0, avg_duration=0s, cache_hit_rate=0.00%, active=0, errors=0"}
+{"level":"info","ts":1761193463.434068,"caller":"audit/service.go:116","msg":"Audit event logged","event_id":"61c66708-b8c2-4acc-8d65-06be1b7beeee","event_type":"data_access","user_id":"anonymous","resource_type":"api_endpoint","resource_id":"/api/temporal/workflows/test-live-17611934633N/signal"}
+Request completed in 2.154708ms

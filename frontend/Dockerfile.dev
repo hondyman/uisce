@@ -1,0 +1,25 @@
+FROM node:18-alpine
+RUN apk add --no-cache bash lsof
+WORKDIR /app
+
+# Copy package files
+COPY package*.json ./
+
+# Install dependencies
+RUN npm install
+# Copy frontend package files so we can install frontend-specific deps before copying the whole repo
+COPY frontend/package*.json ./frontend/
+# Also install frontend's dependencies directly to ensure local node_modules exist (vite, MUI etc)
+WORKDIR /app/frontend
+RUN npm install --legacy-peer-deps
+WORKDIR /app
+
+# Copy application code
+COPY . .
+
+# Expose port for Vite dev server
+EXPOSE 5173
+
+# Default command (will be overridden by docker-compose)
+# Run the frontend workspace dev script via npm workspaces
+CMD ["npm", "run", "dev", "--workspace=frontend"]

@@ -1,0 +1,264 @@
+# AI Builder Helm Values
+# ML model training and inference service
+
+replicaCount: 2
+
+image:
+  repository: semlayerprodacr.azurecr.io/semlayer/ai-builder
+  pullPolicy: IfNotPresent
+  tag: ""
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  create: true
+  annotations:
+    # Workload Identity for Azure ML access
+    azure.workload.identity/client-id: ""
+  name: ""
+
+podAnnotations:
+  prometheus.io/scrape: "true"
+  prometheus.io/port: "9090"
+  prometheus.io/path: "/metrics"
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  runAsGroup: 1000
+  fsGroup: 1000
+
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: false # ML frameworks need write access
+  capabilities:
+    drop:
+    - ALL
+
+service:
+  type: ClusterIP
+  port: 8080
+  metricsPort: 9090
+  grpcPort: 9091
+
+ingress:
+  enabled: false
+
+resources:
+  limits:
+    cpu: "8"
+    memory: 32Gi
+    # GPU support for training
+    # nvidia.com/gpu: "1"
+  requests:
+    cpu: "2"
+    memory: 8Gi
+
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 70
+  targetMemoryUtilizationPercentage: 80
+  # Custom metrics for ML workloads
+  metrics:
+  - type: Pods
+    pods:
+      metric:
+        name: inference_queue_length
+      target:
+        type: AverageValue
+        averageValue: 100
+
+nodeSelector:
+  kubernetes.azure.com/agentpool: app
+  # For GPU nodes:
+  # accelerator: nvidia-tesla-t4
+
+tolerations:
+- key: "workload"
+  operator: "Equal"
+  value: "ml"
+  effect: "NoSchedule"
+
+affinity:
+  podAntiAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+    - weight: 100
+      podAffinityTerm:
+        labelSelector:
+          matchExpressions:
+          - key: app.kubernetes.io/name
+            operator: In
+            values:
+            - ai-builder
+        topologyKey: topology.kubernetes.io/zone
+
+topologySpreadConstraints:
+- maxSkew: 1
+  topologyKey: topology.kubernetes.io/zone
+  whenUnsatisfiable: ScheduleAnyway
+  labelSelector:
+    matchLabels:
+      app.kubernetes.io/name: ai-builder
+
+livenessProbe:
+  httpGet:
+    path: /healthz
+    port: 8080
+  initialDelaySeconds: 60
+  periodSeconds: 30
+  timeoutSeconds: 10
+  failureThreshold: 3
+
+readinessProbe:
+  httpGet:
+    path: /readyz
+    port: 8080
+  initialDelaySeconds: 30
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 3
+
+startupProbe:
+  httpGet:
+    path: /healthz
+    port: 8080
+  initialDelaySeconds: 30
+  periodSeconds: 10
+  timeoutSeconds: 10
+  failureThreshold: 60 # Allow longer startup for model loading
+
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 1
+
+# AI Builder Configuration
+config:
+  database:
+    host: semlayer-postgresql.postgres.database.azure.com
+    port: 5432
+    name: ai_builder
+    sslMode: require
+    maxConnections: 20
+
+  cache:
+    enabled: true
+    host: semlayer-redis.redis.cache.windows.net
+    port: 6380
+    tls: true
+
+  # Model storage
+  modelStorage:
+    type: azure-blob
+    container: ml-models
+    accountName: semlayermlstorage
+
+  # Azure ML integration
+  azureML:
+    enabled: true
+    workspaceName: semlayer-ml-workspace
+    resourceGroup: semlayer-ml-rg
+    subscriptionId: ""
+
+  # Model registry
+  modelRegistry:
+    enabled: true
+    backend: azure-ml
+
+  # Inference settings
+  inference:
+    maxBatchSize: 32
+    timeout: 30s
+    maxConcurrentRequests: 100
+    enableBatching: true
+
+  # Training settings
+  training:
+    maxConcurrentJobs: 5
+    defaultTimeout: 24h
+    gpuEnabled: false
+
+  # Feature store integration
+  featureStore:
+    enabled: true
+    backend: feast
+
+  # Multi-tenant
+  multiTenant:
+    enabled: true
+    isolation: namespace
+
+env:
+- name: LOG_LEVEL
+  value: "info"
+- name: LOG_FORMAT
+  value: "json"
+- name: ENVIRONMENT
+  value: "production"
+- name: PYTHONUNBUFFERED
+  value: "1"
+
+secrets:
+  useAzureKeyVault: true
+  keyVaultName: semlayer-prod-kv
+  keys:
+  - name: database-password
+    secretName: db-password
+  - name: redis-password
+    secretName: redis-password
+  - name: azure-storage-key
+    secretName: storage-key
+
+extraVolumes:
+- name: config
+  configMap:
+    name: ai-builder-config
+- name: models
+  emptyDir:
+    sizeLimit: 50Gi
+- name: tmp
+  emptyDir:
+    sizeLimit: 10Gi
+- name: shm
+  emptyDir:
+    medium: Memory
+    sizeLimit: 8Gi
+
+extraVolumeMounts:
+- name: config
+  mountPath: /app/config
+  readOnly: true
+- name: models
+  mountPath: /app/models
+- name: tmp
+  mountPath: /tmp
+- name: shm
+  mountPath: /dev/shm
+
+istio:
+  enabled: true
+  virtualService:
+    enabled: true
+    timeout: 60s
+    retries:
+      attempts: 2
+      perTryTimeout: 30s
+      retryOn: "5xx,reset"
+  destinationRule:
+    enabled: true
+    trafficPolicy:
+      connectionPool:
+        tcp:
+          maxConnections: 200
+        http:
+          h2UpgradePolicy: UPGRADE
+          http1MaxPendingRequests: 200
+          http2MaxRequests: 200
+      outlierDetection:
+        consecutive5xxErrors: 5
+        interval: 30s
+        baseEjectionTime: 60s
+        maxEjectionPercent: 50

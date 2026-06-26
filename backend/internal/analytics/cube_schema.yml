@@ -1,0 +1,291 @@
+# Cube Semantic Layer Schema (StarRocks Lakehouse)
+# All data sources query from Iceberg via StarRocks
+
+cubes:
+- name: Trades
+  sql: >
+    SELECT * FROM iceberg_catalog.wealth.trades
+
+  # Multi-tenant security
+  public: false
+
+  measures:
+  - name: count
+    type: count
+
+  - name: total_volume
+    type: sum
+    sql: abs(quantity)
+
+  - name: total_notional
+    type: sum
+    sql: notional
+
+  - name: net_pnl
+    type: sum
+    sql: quantity * (price - cost_basis)
+
+  dimensions:
+  - name: tenant_id
+    sql: tenant_id
+    type: string
+    primary_key: true
+
+  - name: event_time
+    sql: event_time
+    type: time
+
+  - name: trade_date
+    sql: trade_date
+    type: time
+
+  - name: portfolio_id
+    sql: portfolio_id
+    type: string
+
+  - name: symbol
+    sql: symbol
+    type: string
+
+  - name: side
+    sql: side
+    type: string
+
+  - name: currency
+    sql: currency
+    type: string
+
+  - name: basis_id
+    sql: basis_id
+    type: string
+
+  # Pre-aggregations for performance (backed by StarRocks MVs)
+  pre_aggregations:
+  - name: daily_rollup
+    measures:
+    - count
+    - total_volume
+    - total_notional
+    dimensions:
+    - tenant_id
+    - trade_date
+    - portfolio_id
+    time_dimension: trade_date
+    granularity: day
+    partition_granularity: month
+
+  # Row-level security
+  segments:
+  - name: tenant_filter
+    sql: "{tenant_id} = '${SECURITY_CONTEXT.tenant_id}'"
+
+- name: DailyPnL
+  # Uses StarRocks materialized view for fast aggregation
+  sql: >
+    SELECT * FROM wealth_analytics.daily_pnl_mv
+
+  public: false
+
+  measures:
+  - name: total_trades
+    type: sum
+    sql: total_trades
+
+  - name: total_volume
+    type: sum
+    sql: total_volume
+
+  - name: total_notional
+    type: sum
+    sql: total_notional
+
+  - name: buy_notional
+    type: sum
+    sql: buy_notional
+
+  - name: sell_notional
+    type: sum
+    sql: sell_notional
+
+  dimensions:
+  - name: tenant_id
+    sql: tenant_id
+    type: string
+    primary_key: true
+
+  - name: trade_date
+    sql: trade_date
+    type: time
+
+  - name: portfolio_id
+    sql: portfolio_id
+    type: string
+
+  - name: desk_id
+    sql: desk_id
+    type: string
+
+  - name: currency
+    sql: currency
+    type: string
+
+  segments:
+  - name: tenant_filter
+    sql: "{tenant_id} = '${SECURITY_CONTEXT.tenant_id}'"
+
+- name: Compliance
+  sql: >
+    SELECT * FROM iceberg_catalog.wealth.compliance_events
+
+  public: false
+
+  measures:
+  - name: count
+    type: count
+
+  - name: breach_count
+    type: count
+    filters:
+    - sql: "{CUBE}.status = 'Fail'"
+
+  - name: warning_count
+    type: count
+    filters:
+    - sql: "{CUBE}.status = 'Warning'"
+
+  - name: breach_rate
+    type: number
+    sql: 100.0 * {breach_count} / NULLIF({count}, 0)
+    format: percent
+
+  dimensions:
+  - name: tenant_id
+    sql: tenant_id
+    type: string
+    primary_key: true
+
+  - name: event_time
+    sql: event_time
+    type: time
+
+  - name: rule_id
+    sql: rule_id
+    type: string
+
+  - name: rule_name
+    sql: rule_name
+    type: string
+
+  - name: portfolio_id
+    sql: portfolio_id
+    type: string
+
+  - name: status
+    sql: status
+    type: string
+
+  - name: severity
+    sql: severity
+    type: string
+
+  segments:
+  - name: tenant_filter
+    sql: "{tenant_id} = '${SECURITY_CONTEXT.tenant_id}'"
+
+- name: Audit
+  sql: >
+    SELECT * FROM iceberg_catalog.wealth.audit_log
+
+  public: false
+
+  measures:
+  - name: count
+    type: count
+
+  dimensions:
+  - name: tenant_id
+    sql: tenant_id
+    type: string
+    primary_key: true
+
+  - name: event_time
+    sql: event_time
+    type: time
+
+  - name: trace_id
+    sql: trace_id
+    type: string
+
+  - name: actor_id
+    sql: actor_id
+    type: string
+
+  - name: actor_type
+    sql: actor_type
+    type: string
+
+  - name: action
+    sql: action
+    type: string
+
+  - name: resource_type
+    sql: resource_type
+    type: string
+
+  - name: outcome
+    sql: outcome
+    type: string
+
+  segments:
+  - name: tenant_filter
+    sql: "{tenant_id} = '${SECURITY_CONTEXT.tenant_id}'"
+
+- name: Holdings
+  # Uses StarRocks materialized view
+  sql: >
+    SELECT * FROM wealth_analytics.holdings_summary_mv
+
+  public: false
+
+  measures:
+  - name: net_position
+    type: sum
+    sql: net_position
+
+  - name: total_notional
+    type: sum
+    sql: total_notional
+
+  - name: trade_count
+    type: sum
+    sql: trade_count
+
+  dimensions:
+  - name: tenant_id
+    sql: tenant_id
+    type: string
+    primary_key: true
+
+  - name: portfolio_id
+    sql: portfolio_id
+    type: string
+
+  - name: symbol
+    sql: symbol
+    type: string
+
+  - name: currency
+    sql: currency
+    type: string
+
+  - name: first_trade
+    sql: first_trade
+    type: time
+
+  - name: last_trade
+    sql: last_trade
+    type: time
+
+  segments:
+  - name: tenant_filter
+    sql: "{tenant_id} = '${SECURITY_CONTEXT.tenant_id}'"

@@ -1,0 +1,329 @@
+# ArgoCD ApplicationSet for Multi-Region Deployment
+# GitOps configuration for global Semlayer deployment
+
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: semlayer-platform
+  namespace: argocd
+spec:
+  generators:
+  # Generate applications for each region/cluster
+  - matrix:
+      generators:
+      # Cluster generator
+      - clusters:
+          selector:
+            matchLabels:
+              semlayer.io/platform: "true"
+      # Values generator for environment-specific config
+      - list:
+          elements:
+          - tier: control
+            namespace: semlayer-control
+          - tier: data
+            namespace: semlayer-data
+          - tier: observability
+            namespace: semlayer-system
+
+  template:
+    metadata:
+      name: "semlayer-{{tier}}-{{name}}"
+      labels:
+        app.kubernetes.io/part-of: semlayer
+        semlayer.io/tier: "{{tier}}"
+        semlayer.io/region: "{{metadata.labels.region}}"
+    spec:
+      project: semlayer
+
+      source:
+        repoURL: https://github.com/semlayer/semlayer.git
+        targetRevision: HEAD
+        path: "gitops/overlays/{{metadata.labels.environment}}/{{tier}}"
+
+        # Helm values from cluster-specific files
+        helm:
+          valueFiles:
+          - values.yaml
+          - "values-{{metadata.labels.region}}.yaml"
+          parameters:
+          - name: global.region
+            value: "{{metadata.labels.region}}"
+          - name: global.environment
+            value: "{{metadata.labels.environment}}"
+          - name: global.clusterName
+            value: "{{name}}"
+
+      destination:
+        server: "{{server}}"
+        namespace: "{{namespace}}"
+
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
+          allowEmpty: false
+        syncOptions:
+        - CreateNamespace=true
+        - PrunePropagationPolicy=foreground
+        - PruneLast=true
+        - ServerSideApply=true
+        retry:
+          limit: 5
+          backoff:
+            duration: 5s
+            factor: 2
+            maxDuration: 3m
+
+      # Health checks
+      ignoreDifferences:
+      - group: apps
+        kind: Deployment
+        jsonPointers:
+        - /spec/replicas # Ignore replica count (HPA manages it)
+      - group: autoscaling
+        kind: HorizontalPodAutoscaler
+        jsonPointers:
+        - /spec/minReplicas
+        - /spec/maxReplicas
+---
+# ArgoCD Project for Semlayer
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: semlayer
+  namespace: argocd
+spec:
+  description: Semlayer Enterprise Platform
+
+  # Source repositories
+  sourceRepos:
+  - https://github.com/semlayer/semlayer.git
+  - https://charts.bitnami.com/bitnami
+  - https://prometheus-community.github.io/helm-charts
+  - https://grafana.github.io/helm-charts
+
+  # Destination clusters and namespaces
+  destinations:
+  - namespace: semlayer-*
+    server: https://kubernetes.default.svc
+  - namespace: semlayer-*
+    server: https://eks-us-east-1.semlayer.io
+  - namespace: semlayer-*
+    server: https://eks-eu-west-1.semlayer.io
+  - namespace: semlayer-*
+    server: https://eks-ap-southeast-1.semlayer.io
+
+  # Cluster resource allow list
+  clusterResourceWhitelist:
+  - group: ''
+    kind: Namespace
+  - group: networking.k8s.io
+    kind: NetworkPolicy
+  - group: policy
+    kind: PodSecurityPolicy
+  - group: rbac.authorization.k8s.io
+    kind: ClusterRole
+  - group: rbac.authorization.k8s.io
+    kind: ClusterRoleBinding
+
+  # Namespace resource allow list
+  namespaceResourceWhitelist:
+  - group: '*'
+    kind: '*'
+
+  # Roles
+  roles:
+  - name: platform-admin
+    description: Full access to semlayer project
+    policies:
+    - p, proj:semlayer:platform-admin, applications, *, semlayer/*, allow
+    - p, proj:semlayer:platform-admin, repositories, *, semlayer/*, allow
+    groups:
+    - semlayer-platform-admins
+
+  - name: developer
+    description: Read-only access, sync allowed
+    policies:
+    - p, proj:semlayer:developer, applications, get, semlayer/*, allow
+    - p, proj:semlayer:developer, applications, sync, semlayer/*, allow
+    groups:
+    - semlayer-developers
+
+  - name: viewer
+    description: Read-only access
+    policies:
+    - p, proj:semlayer:viewer, applications, get, semlayer/*, allow
+    groups:
+    - semlayer-viewers
+---
+# Staging Application (single region)
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: semlayer-staging
+  namespace: argocd
+  finalizers:
+  - resources-finalizer.argocd.argoproj.io
+spec:
+  project: semlayer
+
+  source:
+    repoURL: https://github.com/semlayer/semlayer.git
+    targetRevision: develop
+    path: charts/semlayer-platform
+    helm:
+      valueFiles:
+      - values.yaml
+      - values-staging.yaml
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: semlayer-control
+
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+    - CreateNamespace=true
+    retry:
+      limit: 3
+      backoff:
+        duration: 5s
+        factor: 2
+        maxDuration: 1m
+---
+# Production US Application
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: semlayer-production-us
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+  finalizers:
+  - resources-finalizer.argocd.argoproj.io
+spec:
+  project: semlayer
+
+  source:
+    repoURL: https://github.com/semlayer/semlayer.git
+    targetRevision: main
+    path: charts/semlayer-platform
+    helm:
+      valueFiles:
+      - values.yaml
+      - values-production.yaml
+      - values-us-east-1.yaml
+      parameters:
+      - name: global.region
+        value: us-east-1
+      - name: global.environment
+        value: production
+
+  destination:
+    server: https://eks-us-east-1.semlayer.io
+    namespace: semlayer-control
+
+  syncPolicy:
+    # Manual sync for production - requires approval
+    syncOptions:
+    - CreateNamespace=true
+    - PrunePropagationPolicy=foreground
+    retry:
+      limit: 3
+      backoff:
+        duration: 10s
+        factor: 2
+        maxDuration: 3m
+---
+# Production EU Application
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: semlayer-production-eu
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+  finalizers:
+  - resources-finalizer.argocd.argoproj.io
+spec:
+  project: semlayer
+
+  source:
+    repoURL: https://github.com/semlayer/semlayer.git
+    targetRevision: main
+    path: charts/semlayer-platform
+    helm:
+      valueFiles:
+      - values.yaml
+      - values-production.yaml
+      - values-eu-west-1.yaml
+      parameters:
+      - name: global.region
+        value: eu-west-1
+      - name: global.environment
+        value: production
+      - name: global.dataResidency.enabled
+        value: "true"
+      - name: global.dataResidency.region
+        value: eu
+
+  destination:
+    server: https://eks-eu-west-1.semlayer.io
+    namespace: semlayer-control
+
+  syncPolicy:
+    syncOptions:
+    - CreateNamespace=true
+    - PrunePropagationPolicy=foreground
+    retry:
+      limit: 3
+      backoff:
+        duration: 10s
+        factor: 2
+        maxDuration: 3m
+---
+# Production APAC Application
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: semlayer-production-apac
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "3"
+  finalizers:
+  - resources-finalizer.argocd.argoproj.io
+spec:
+  project: semlayer
+
+  source:
+    repoURL: https://github.com/semlayer/semlayer.git
+    targetRevision: main
+    path: charts/semlayer-platform
+    helm:
+      valueFiles:
+      - values.yaml
+      - values-production.yaml
+      - values-ap-southeast-1.yaml
+      parameters:
+      - name: global.region
+        value: ap-southeast-1
+      - name: global.environment
+        value: production
+
+  destination:
+    server: https://eks-ap-southeast-1.semlayer.io
+    namespace: semlayer-control
+
+  syncPolicy:
+    syncOptions:
+    - CreateNamespace=true
+    - PrunePropagationPolicy=foreground
+    retry:
+      limit: 3
+      backoff:
+        duration: 10s
+        factor: 2
+        maxDuration: 3m

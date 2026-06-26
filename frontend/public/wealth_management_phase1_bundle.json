@@ -1,0 +1,181 @@
+{
+  "bundle_id": "wealth_management_phase1_bundle",
+  "domain": "wealth_management",
+  "audience": "advisor",
+  "version": "v1.0.0",
+  "owner": "patrick",
+  "tags": ["wealth_management", "phase1", "portfolio", "performance", "risk", "income"],
+  "metrics": [
+    {
+      "node_id": "portfolio_allocation_pct",
+      "category": "composition",
+      "description": "Percentage of portfolio value allocated to each asset class, sector, or region.",
+      "financial_calc": {
+        "type": "formula",
+        "formula": "({asset_class_value} / {total_portfolio_value})",
+        "arguments": {
+          "asset_class_value": "SUM(value_by_class)",
+          "total_portfolio_value": "SUM(portfolio_value)"
+        }
+      },
+      "governance": { "status": "golden" }
+    },
+    {
+      "node_id": "asset_class_exposure",
+      "category": "composition",
+      "description": "Portfolio exposure by asset class.",
+      "financial_calc": {
+        "type": "formula",
+        "formula": "({asset_class_value} / {total_portfolio_value})",
+        "arguments": {
+          "asset_class_value": "SUM(value_by_class)",
+          "total_portfolio_value": "SUM(portfolio_value)"
+        }
+      },
+      "governance": { "status": "golden" }
+    },
+    {
+      "node_id": "portfolio_twr",
+      "category": "performance",
+      "description": "Time-weighted rate of return excluding impact of cash flows.",
+      "financial_calc": {
+        "type": "formula",
+        "formula": "GEOMEAN(1 + {subperiod_returns}) - 1",
+        "arguments": {
+          "subperiod_returns": "ARRAY_AGG(period_return)"
+        }
+      },
+      "governance": { "status": "draft" }
+    },
+    {
+      "node_id": "portfolio_mwr",
+      "category": "performance",
+      "description": "Money-weighted rate of return including timing of cash flows.",
+      "financial_calc": {
+        "type": "excel_formula",
+        "formula": "=XIRR({net_cash_flows}, {dates})",
+        "arguments": {
+          "net_cash_flows": "ARRAY_AGG(net_cash_flow)",
+          "dates": "ARRAY_AGG(transaction_date)"
+        }
+      },
+      "governance": { "status": "draft" }
+    },
+    {
+      "node_id": "annualized_return",
+      "category": "performance",
+      "description": "Annualized return over a given period.",
+      "financial_calc": {
+        "type": "formula",
+        "formula": "((1 + {total_return}) ^ (1 / {years})) - 1",
+        "arguments": {
+          "total_return": "calc:total_return",
+          "years": "field:number_of_years"
+        }
+      },
+      "governance": { "status": "golden" }
+    },
+    {
+      "node_id": "portfolio_volatility",
+      "category": "risk",
+      "description": "Annualized standard deviation of returns.",
+      "financial_calc": {
+        "type": "formula",
+        "formula": "STDEV({periodic_returns}) * SQRT({periods_per_year})",
+        "arguments": {
+          "periodic_returns": "ARRAY_AGG(period_return)",
+          "periods_per_year": "field:periods_per_year"
+        }
+      },
+      "governance": { "status": "golden" }
+    },
+    {
+      "node_id": "sharpe_ratio",
+      "category": "risk_adjusted_performance",
+      "description": "Risk-adjusted return using Sharpe Ratio.",
+      "financial_calc": {
+        "type": "formula",
+        "formula": "({annualized_return} - {risk_free_rate}) / {portfolio_volatility}",
+        "arguments": {
+          "annualized_return": "calc:annualized_return",
+          "risk_free_rate": "field:risk_free_rate",
+          "portfolio_volatility": "calc:portfolio_volatility"
+        }
+      },
+      "governance": { "status": "golden" }
+    },
+    {
+      "node_id": "sortino_ratio",
+      "category": "risk_adjusted_performance",
+      "description": "Downside-risk-adjusted return using Sortino Ratio.",
+      "financial_calc": {
+        "type": "formula",
+        "formula": "({annualized_return} - {risk_free_rate}) / {downside_deviation}",
+        "arguments": {
+          "annualized_return": "calc:annualized_return",
+          "risk_free_rate": "field:risk_free_rate",
+          "downside_deviation": "calc:downside_deviation"
+        }
+      },
+      "governance": { "status": "draft" }
+    },
+    {
+      "node_id": "beta",
+      "category": "risk",
+      "description": "Portfolio beta relative to benchmark.",
+      "financial_calc": {
+        "type": "formula",
+        "formula": "COVAR({portfolio_returns}, {benchmark_returns}) / VAR({benchmark_returns})",
+        "arguments": {
+          "portfolio_returns": "ARRAY_AGG(portfolio_return)",
+          "benchmark_returns": "ARRAY_AGG(benchmark_return)"
+        }
+      },
+      "governance": { "status": "draft" }
+    },
+    {
+      "node_id": "alpha",
+      "category": "risk_adjusted_performance",
+      "description": "Excess return over benchmark given beta.",
+      "financial_calc": {
+        "type": "formula",
+        "formula": "{portfolio_return} - ({risk_free_rate} + {beta} * ({benchmark_return} - {risk_free_rate}))",
+        "arguments": {
+          "portfolio_return": "calc:annualized_return",
+          "risk_free_rate": "field:risk_free_rate",
+          "beta": "calc:beta",
+          "benchmark_return": "calc:benchmark_annualized_return"
+        }
+      },
+      "governance": { "status": "draft" }
+    },
+    {
+      "node_id": "max_drawdown",
+      "category": "risk",
+      "description": "Largest peak-to-trough loss over period.",
+      "financial_calc": {
+        "type": "formula",
+        "formula": "MIN(({trough_value} - {peak_value}) / {peak_value})",
+        "arguments": {
+          "trough_value": "calc:rolling_min_value",
+          "peak_value": "calc:rolling_max_value"
+        }
+      },
+      "governance": { "status": "draft" }
+    },
+    {
+      "node_id": "dividend_yield",
+      "category": "income",
+      "description": "Annual dividends divided by current portfolio value.",
+      "financial_calc": {
+        "type": "formula",
+        "formula": "SUM({annualized_dividends}) / {total_portfolio_value}",
+        "arguments": {
+          "annualized_dividends": "field:annualized_dividends",
+          "total_portfolio_value": "SUM(portfolio_value)"
+        }
+      },
+      "governance": { "status": "golden" }
+    }
+  ]
+}

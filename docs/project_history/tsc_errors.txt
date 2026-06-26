@@ -1,0 +1,537 @@
+frontend/src/__tests__/ValidationRulesBuilder.test.tsx(28,23): error TS2322: Type '{ children: ReactElement<any, string | JSXElementConstructor<any>>; value: { tenant: { id: string; name: string; }; datasource: { id: string; name: string; }; }; }' is not assignable to type 'IntrinsicAttributes & TenantProviderProps'.
+  Property 'value' does not exist on type 'IntrinsicAttributes & TenantProviderProps'.
+frontend/src/__tests__/ValidationRulesBuilder.test.tsx(45,27): error TS2322: Type '{ children: Element; value: { tenant: null; datasource: null; }; }' is not assignable to type 'IntrinsicAttributes & TenantProviderProps'.
+  Property 'value' does not exist on type 'IntrinsicAttributes & TenantProviderProps'.
+frontend/src/api/__tests__/updateNodeType.test.tsx(14,52): error TS2561: Object literal may only specify known properties, but 'tenantId' does not exist in type 'Partial<NodeType> & { id: string; }'. Did you mean to write 'tenant_id'?
+frontend/src/api/__tests__/updateNodeType.test.tsx(60,48): error TS2345: Argument of type 'string' is not assignable to parameter of type 'Record<string, any>'.
+frontend/src/api/__tests__/updateNodeType.test.tsx(61,62): error TS2554: Expected 1 arguments, but got 2.
+frontend/src/ClaimsTable.tsx(98,7): error TS2552: Cannot find name 'notification'. Did you mean 'useNotification'?
+frontend/src/ClaimsTable.tsx(103,7): error TS2552: Cannot find name 'notification'. Did you mean 'useNotification'?
+frontend/src/components/AccessAwareNavigation.tsx(65,83): error TS2322: Type '"datasource"' is not assignable to type 'ScopeLevel'.
+frontend/src/components/aso/OptimizationActions.tsx(185,43): error TS2339: Property 'tenant_ids' does not exist on type 'User'.
+frontend/src/components/bp/ProcessBuilder.tsx(230,49): error TS2339: Property 'isLoading' does not exist on type 'UseMutationResult<any, Error, BusinessProcess, unknown>'.
+  Property 'isLoading' does not exist on type 'Override<MutationObserverIdleResult<any, Error, BusinessProcess, unknown>, { mutate: UseMutateFunction<any, Error, BusinessProcess, unknown>; }> & { ...; }'.
+frontend/src/components/bp/ProcessBuilder.tsx(233,28): error TS2339: Property 'isLoading' does not exist on type 'UseMutationResult<any, Error, BusinessProcess, unknown>'.
+  Property 'isLoading' does not exist on type 'Override<MutationObserverIdleResult<any, Error, BusinessProcess, unknown>, { mutate: UseMutateFunction<any, Error, BusinessProcess, unknown>; }> & { ...; }'.
+frontend/src/components/bp/ProcessBuilder.tsx(239,54): error TS2339: Property 'isLoading' does not exist on type 'UseMutationResult<any, Error, string, unknown>'.
+  Property 'isLoading' does not exist on type 'Override<MutationObserverIdleResult<any, Error, string, unknown>, { mutate: UseMutateFunction<any, Error, string, unknown>; }> & { ...; }'.
+frontend/src/components/bp/ProcessBuilder.tsx(242,30): error TS2339: Property 'isLoading' does not exist on type 'UseMutationResult<any, Error, string, unknown>'.
+  Property 'isLoading' does not exist on type 'Override<MutationObserverIdleResult<any, Error, string, unknown>, { mutate: UseMutateFunction<any, Error, string, unknown>; }> & { ...; }'.
+frontend/src/components/BPBuilder/BusinessProcessBuilderEnhanced.tsx(1081,17): error TS2552: Cannot find name 'showNotification'. Did you mean 'useNotification'?
+frontend/src/components/BPBuilder/ProcessMonitorDashboard.tsx(91,38): error TS2709: Cannot use namespace 'ProcessEvent' as a type.
+frontend/src/components/EditEdgeDialog.tsx(64,11): error TS2339: Property 'edge_type_name' does not exist on type 'EdgeType'.
+frontend/src/components/EditEdgeDialog.tsx(64,32): error TS2339: Property 'edge_type_name' does not exist on type 'EdgeType'.
+frontend/src/components/ExpressionBuilder/__tests__/AdvancedConditionBuilder.test.tsx(255,7): error TS2353: Object literal may only specify known properties, and 'fieldType' does not exist in type 'Condition'.
+frontend/src/components/ExpressionBuilder/__tests__/AdvancedConditionBuilder.test.tsx(292,9): error TS2353: Object literal may only specify known properties, and 'fieldType' does not exist in type 'Condition'.
+frontend/src/components/ExpressionBuilder/__tests__/AdvancedConditionBuilder.test.tsx(305,9): error TS2353: Object literal may only specify known properties, and 'fieldType' does not exist in type 'Condition'.
+frontend/src/components/ExpressionBuilder/__tests__/AdvancedConditionBuilder.test.tsx(318,9): error TS2353: Object literal may only specify known properties, and 'fieldType' does not exist in type 'Condition'.
+frontend/src/components/ExpressionBuilder/__tests__/AdvancedConditionBuilder.test.tsx(331,9): error TS2353: Object literal may only specify known properties, and 'fieldType' does not exist in type 'Condition'.
+frontend/src/components/ExpressionBuilder/__tests__/AdvancedConditionBuilder.test.tsx(344,9): error TS2353: Object literal may only specify known properties, and 'fieldType' does not exist in type 'Condition'.
+frontend/src/components/ExpressionBuilder/__tests__/AdvancedConditionBuilder.test.tsx(359,9): error TS2353: Object literal may only specify known properties, and 'fieldType' does not exist in type 'Condition'.
+frontend/src/components/ExpressionBuilder/__tests__/AdvancedConditionBuilder.test.tsx(372,9): error TS2353: Object literal may only specify known properties, and 'fieldType' does not exist in type 'Condition'.
+frontend/src/components/ExpressionBuilder/__tests__/AdvancedConditionBuilder.test.tsx(385,9): error TS2353: Object literal may only specify known properties, and 'fieldType' does not exist in type 'Condition'.
+frontend/src/components/ExpressionBuilder/__tests__/AdvancedConditionBuilder.test.tsx(398,9): error TS2353: Object literal may only specify known properties, and 'fieldType' does not exist in type 'Condition'.
+frontend/src/components/ExpressionBuilder/__tests__/AdvancedConditionBuilder.test.tsx(411,9): error TS2353: Object literal may only specify known properties, and 'fieldType' does not exist in type 'Condition'.
+frontend/src/components/ExpressionBuilder/__tests__/AdvancedConditionBuilder.test.tsx(426,9): error TS2353: Object literal may only specify known properties, and 'fieldType' does not exist in type 'Condition'.
+frontend/src/components/ExpressionBuilder/__tests__/AdvancedConditionBuilder.test.tsx(439,9): error TS2353: Object literal may only specify known properties, and 'fieldType' does not exist in type 'Condition'.
+frontend/src/components/ExpressionBuilder/__tests__/AdvancedConditionBuilder.test.tsx(454,9): error TS2353: Object literal may only specify known properties, and 'fieldType' does not exist in type 'Condition'.
+frontend/src/components/ExpressionBuilder/__tests__/AdvancedConditionBuilder.test.tsx(467,9): error TS2353: Object literal may only specify known properties, and 'fieldType' does not exist in type 'Condition'.
+frontend/src/components/ExpressionBuilder/__tests__/AdvancedConditionBuilder.test.tsx(480,9): error TS2353: Object literal may only specify known properties, and 'fieldType' does not exist in type 'Condition'.
+frontend/src/components/ExpressionBuilder/__tests__/AdvancedConditionBuilder.test.tsx(604,9): error TS2353: Object literal may only specify known properties, and 'fieldType' does not exist in type 'Condition'.
+frontend/src/components/ExpressionBuilder/__tests__/AdvancedConditionBuilder.test.tsx(613,34): error TS2352: Conversion of type '{ id: string; field: string; operator: string; value: string; fieldType: string; }' to type 'Condition' may be a mistake because neither type sufficiently overlaps with the other. If this was intentional, convert the expression to 'unknown' first.
+  Property 'type' is missing in type '{ id: string; field: string; operator: string; value: string; fieldType: string; }' but required in type 'Condition'.
+frontend/src/components/governance/BusinessTermReviewDrawer.tsx(6,37): error TS7031: Binding element 'draft' implicitly has an 'any' type.
+frontend/src/components/governance/BusinessTermReviewDrawer.tsx(6,44): error TS7031: Binding element 'onClose' implicitly has an 'any' type.
+frontend/src/components/governance/BusinessTermReviewDrawer.tsx(57,49): error TS7006: Parameter 't' implicitly has an 'any' type.
+frontend/src/components/governance/BusinessTermReviewDrawer.tsx(59,43): error TS7006: Parameter 'c' implicitly has an 'any' type.
+frontend/src/components/governance/SuggestionsTable.tsx(7,29): error TS7031: Binding element 'drafts' implicitly has an 'any' type.
+frontend/src/components/governance/SuggestionsTable.tsx(7,37): error TS7031: Binding element 'onSelect' implicitly has an 'any' type.
+frontend/src/components/governance/SuggestionsTable.tsx(22,34): error TS7006: Parameter 'draft' implicitly has an 'any' type.
+frontend/src/components/pop/LineageVisualizer.tsx(86,23): error TS2339: Property 'layout' does not exist on type 'void'.
+frontend/src/components/pop/LineageVisualizer.tsx(97,8): error TS2339: Property 'on' does not exist on type 'void'.
+frontend/src/components/pop/LineageVisualizer.tsx(106,8): error TS2339: Property 'style' does not exist on type 'void'.
+frontend/src/components/pop/LineageVisualizer.tsx(165,21): error TS2339: Property 'zoom' does not exist on type 'never'.
+frontend/src/components/pop/LineageVisualizer.tsx(165,40): error TS2339: Property 'zoom' does not exist on type 'never'.
+frontend/src/components/pop/LineageVisualizer.tsx(171,21): error TS2339: Property 'zoom' does not exist on type 'never'.
+frontend/src/components/pop/LineageVisualizer.tsx(171,40): error TS2339: Property 'zoom' does not exist on type 'never'.
+frontend/src/components/pop/LineageVisualizer.tsx(177,21): error TS2339: Property 'fit' does not exist on type 'never'.
+frontend/src/components/pop/PoPMetricExplorer.tsx(2,10): error TS2300: Duplicate identifier 'useNotification'.
+frontend/src/components/pop/PoPMetricExplorer.tsx(20,10): error TS2300: Duplicate identifier 'useNotification'.
+frontend/src/components/pop/PoPMetricExplorer.tsx(205,40): error TS2304: Cannot find name 'result'.
+frontend/src/components/pop/PoPMetricExplorer.tsx(389,44): error TS2322: Type 'string | undefined' is not assignable to type 'string'.
+  Type 'undefined' is not assignable to type 'string'.
+frontend/src/components/pop/PoPMetricExplorer.tsx(401,46): error TS2322: Type 'string | undefined' is not assignable to type 'string'.
+  Type 'undefined' is not assignable to type 'string'.
+frontend/src/components/rulefabric/index.ts(13,3): error TS2614: Module '"./RuleGovernance"' has no exported member 'RuleGovernance'. Did you mean to use 'import RuleGovernance from "./RuleGovernance"' instead?
+frontend/src/components/rulefabric/index.ts(14,3): error TS2724: '"./RuleGovernance"' has no exported member named 'VersionHistoryPanel'. Did you mean 'VersionHistory'?
+frontend/src/components/rulefabric/index.ts(15,3): error TS2724: '"./RuleGovernance"' has no exported member named 'ApprovalWorkflowPanel'. Did you mean 'ApprovalWorkflow'?
+frontend/src/components/rulefabric/index.ts(16,3): error TS2724: '"./RuleGovernance"' has no exported member named 'ImpactAnalysisPanel'. Did you mean 'ImpactAnalysis'?
+frontend/src/components/rulefabric/index.ts(17,3): error TS2614: Module '"./RuleGovernance"' has no exported member 'ConflictDetectionPanel'. Did you mean to use 'import ConflictDetectionPanel from "./RuleGovernance"' instead?
+frontend/src/components/rulefabric/UnifiedRuleEditor.tsx(45,10): error TS2724: '"../ExpressionBuilder/AdvancedConditionBuilder"' has no exported member named 'AdvancedConditionBuilder'. Did you mean 'AdvancedConditionBuilderProps'?
+frontend/src/components/rulefabric/UnifiedRuleEditor.tsx(997,32): error TS7006: Parameter 'tree' implicitly has an 'any' type.
+frontend/src/components/ScopeSelectorDialog.tsx(295,106): error TS2339: Property 'datasourceName' does not exist on type 'OperatingScope'.
+frontend/src/components/TenantSwitcher.tsx(65,9): error TS2367: This comparison appears to be unintentional because the types 'ScopeLevel' and '"datasource"' have no overlap.
+frontend/src/components/TenantSwitcher.tsx(197,25): error TS2339: Property 'datasourceName' does not exist on type 'OperatingScope'.
+frontend/src/components/TermForm.tsx(87,11): error TS2304: Cannot find name 'devWarn'.
+frontend/src/components/TermForm.tsx(92,9): error TS2304: Cannot find name 'devWarn'.
+frontend/src/components/UnifiedSemanticBuilder/__tests__/MonacoSchema.test.tsx(8,30): error TS2339: Property 'tenant_instance_id' does not exist on type '{ name: { type: string; description: string; }; extends: { type: string; description: string; }; datasource_id: { type: string; description: string; }; sql: { type: string; description: string; }; sql_table: { ...; }; ... 6 more ...; refreshKey: { ...; }; }'.
+frontend/src/components/validation/ValidationRuleEditor.tsx(631,19): error TS2322: Type '{ id: string; name: string; description: string; condition: string | object; severity: "error"; targetEntity: string | undefined; fieldName: string | undefined; }[]' is not assignable to type 'RuleForCloning[]'.
+  Type '{ id: string; name: string; description: string; condition: string | object; severity: "error"; targetEntity: string | undefined; fieldName: string | undefined; }' is not assignable to type 'RuleForCloning'.
+    Types of property 'targetEntity' are incompatible.
+      Type 'string | undefined' is not assignable to type 'string'.
+        Type 'undefined' is not assignable to type 'string'.
+frontend/src/components/ValidationRules/ValidationRulesWithFacets.tsx(596,7): error TS2304: Cannot find name 'notification'.
+frontend/src/components/ValidationRules/ValidationRulesWithFacets.tsx(599,25): error TS2345: Argument of type '{ title: string; description: string; }' is not assignable to parameter of type 'string'.
+frontend/src/components/ValidationRules/ValidationRulesWithFacets.tsx(660,9): error TS2552: Cannot find name 'notification'. Did you mean 'useNotification'?
+frontend/src/components/ValidationRules/ValidationRulesWithFacets.tsx(662,9): error TS2304: Cannot find name 'notification'.
+frontend/src/components/ValidationRules/ValidationRulesWithFacets.tsx(667,7): error TS2304: Cannot find name 'notification'.
+frontend/src/contexts/AccessContext.tsx(264,7): error TS2322: Type '"datasource"' is not assignable to type 'ScopeLevel'.
+frontend/src/features/altinvest/AltInvestDashboard.tsx(39,26): error TS2347: Untyped function calls may not accept type arguments.
+frontend/src/features/connections/pages/Connections.tsx(351,57): error TS7006: Parameter 'conn' implicitly has an 'any' type.
+frontend/src/features/dashboard/ClientDashboard.tsx(49,59): error TS2709: Cannot use namespace 'Layout' as a type.
+frontend/src/features/dashboard/ClientDashboard.tsx(85,74): error TS2709: Cannot use namespace 'Layout' as a type.
+frontend/src/features/dashboard/ClientDashboard.tsx(86,19): error TS2709: Cannot use namespace 'Layout' as a type.
+frontend/src/features/dashboard/ClientDashboard.tsx(112,39): error TS2709: Cannot use namespace 'Layout' as a type.
+frontend/src/features/dashboard/ClientDashboard.tsx(112,75): error TS2709: Cannot use namespace 'Layout' as a type.
+frontend/src/features/documents/DocumentVaultUI.tsx(41,3): error TS2304: Cannot find name 'useEffect'.
+frontend/src/features/fabric/components/TenantManagementView.tsx(115,27): error TS2769: No overload matches this call.
+  Overload 1 of 4, '(value: string | number | Date): Date', gave the following error.
+    Argument of type 'string | undefined' is not assignable to parameter of type 'string | number | Date'.
+      Type 'undefined' is not assignable to type 'string | number | Date'.
+  Overload 2 of 4, '(value: string | number): Date', gave the following error.
+    Argument of type 'string | undefined' is not assignable to parameter of type 'string | number'.
+      Type 'undefined' is not assignable to type 'string | number'.
+frontend/src/features/fabric/components/TenantManagementView.tsx(115,61): error TS2769: No overload matches this call.
+  Overload 1 of 4, '(value: string | number | Date): Date', gave the following error.
+    Argument of type 'string | undefined' is not assignable to parameter of type 'string | number | Date'.
+      Type 'undefined' is not assignable to type 'string | number | Date'.
+  Overload 2 of 4, '(value: string | number): Date', gave the following error.
+    Argument of type 'string | undefined' is not assignable to parameter of type 'string | number'.
+      Type 'undefined' is not assignable to type 'string | number'.
+frontend/src/features/fabric/components/TenantManagementView.tsx(167,18): error TS2769: No overload matches this call.
+  Overload 1 of 4, '(value: string | number | Date): Date', gave the following error.
+    Argument of type 'string | undefined' is not assignable to parameter of type 'string | number | Date'.
+      Type 'undefined' is not assignable to type 'string | number | Date'.
+  Overload 2 of 4, '(value: string | number): Date', gave the following error.
+    Argument of type 'string | undefined' is not assignable to parameter of type 'string | number'.
+      Type 'undefined' is not assignable to type 'string | number'.
+frontend/src/features/fabric/components/TenantManagementView.tsx(183,29): error TS2769: No overload matches this call.
+  Overload 1 of 4, '(value: string | number | Date): Date', gave the following error.
+    Argument of type 'string | undefined' is not assignable to parameter of type 'string | number | Date'.
+      Type 'undefined' is not assignable to type 'string | number | Date'.
+  Overload 2 of 4, '(value: string | number): Date', gave the following error.
+    Argument of type 'string | undefined' is not assignable to parameter of type 'string | number'.
+      Type 'undefined' is not assignable to type 'string | number'.
+frontend/src/features/fabric/components/TenantManagementView.tsx(259,12): error TS2769: No overload matches this call.
+  Overload 1 of 3, '(props: { href: string; } & ButtonOwnProps & Omit<ButtonBaseOwnProps, "classes"> & CommonProps & Omit<Omit<DetailedHTMLProps<AnchorHTMLAttributes<HTMLAnchorElement>, HTMLAnchorElement>, "ref"> & { ...; }, "children" | ... 24 more ... | "startIcon">): Element', gave the following error.
+    Type '{ children: string; fullWidth: true; justifyContent: string; startIcon: Element; onClick: () => void; variant: "text" | "contained"; disableElevation: true; sx: { textTransform: "none"; color: "text.primary" | "primary.contrastText"; bgcolor: "transparent" | "primary.main"; '&:hover': { ...; }; }; }' is not assignable to type 'IntrinsicAttributes & { href: string; } & ButtonOwnProps & Omit<ButtonBaseOwnProps, "classes"> & CommonProps & Omit<...>'.
+      Property 'justifyContent' does not exist on type 'IntrinsicAttributes & { href: string; } & ButtonOwnProps & Omit<ButtonBaseOwnProps, "classes"> & CommonProps & Omit<...>'.
+  Overload 2 of 3, '(props: { component: ElementType<any, keyof IntrinsicElements>; } & ButtonOwnProps & Omit<ButtonBaseOwnProps, "classes"> & CommonProps & Omit<...>): Element | null', gave the following error.
+    Property 'component' is missing in type '{ children: string; fullWidth: true; justifyContent: string; startIcon: Element; onClick: () => void; variant: "text" | "contained"; disableElevation: true; sx: { textTransform: "none"; color: "text.primary" | "primary.contrastText"; bgcolor: "transparent" | "primary.main"; '&:hover': { ...; }; }; }' but required in type '{ component: ElementType<any, keyof IntrinsicElements>; }'.
+  Overload 3 of 3, '(props: DefaultComponentProps<ExtendButtonBaseTypeMap<ButtonTypeMap<{}, "button">>>): Element | null', gave the following error.
+    Type '{ children: string; fullWidth: true; justifyContent: string; startIcon: Element; onClick: () => void; variant: "text" | "contained"; disableElevation: true; sx: { textTransform: "none"; color: "text.primary" | "primary.contrastText"; bgcolor: "transparent" | "primary.main"; '&:hover': { ...; }; }; }' is not assignable to type 'IntrinsicAttributes & ButtonOwnProps & Omit<ButtonBaseOwnProps, "classes"> & CommonProps & Omit<...>'.
+      Property 'justifyContent' does not exist on type 'IntrinsicAttributes & ButtonOwnProps & Omit<ButtonBaseOwnProps, "classes"> & CommonProps & Omit<...>'.
+frontend/src/features/fabric/components/TenantManagementView.tsx(275,12): error TS2769: No overload matches this call.
+  Overload 1 of 3, '(props: { href: string; } & ButtonOwnProps & Omit<ButtonBaseOwnProps, "classes"> & CommonProps & Omit<Omit<DetailedHTMLProps<AnchorHTMLAttributes<HTMLAnchorElement>, HTMLAnchorElement>, "ref"> & { ...; }, "children" | ... 24 more ... | "startIcon">): Element', gave the following error.
+    Type '{ children: string; fullWidth: true; justifyContent: string; startIcon: Element; onClick: () => void; variant: "text" | "contained"; disableElevation: true; sx: { textTransform: "none"; color: "text.primary" | "primary.contrastText"; bgcolor: "transparent" | "primary.main"; '&:hover': { ...; }; }; }' is not assignable to type 'IntrinsicAttributes & { href: string; } & ButtonOwnProps & Omit<ButtonBaseOwnProps, "classes"> & CommonProps & Omit<...>'.
+      Property 'justifyContent' does not exist on type 'IntrinsicAttributes & { href: string; } & ButtonOwnProps & Omit<ButtonBaseOwnProps, "classes"> & CommonProps & Omit<...>'.
+  Overload 2 of 3, '(props: { component: ElementType<any, keyof IntrinsicElements>; } & ButtonOwnProps & Omit<ButtonBaseOwnProps, "classes"> & CommonProps & Omit<...>): Element | null', gave the following error.
+    Property 'component' is missing in type '{ children: string; fullWidth: true; justifyContent: string; startIcon: Element; onClick: () => void; variant: "text" | "contained"; disableElevation: true; sx: { textTransform: "none"; color: "text.primary" | "primary.contrastText"; bgcolor: "transparent" | "primary.main"; '&:hover': { ...; }; }; }' but required in type '{ component: ElementType<any, keyof IntrinsicElements>; }'.
+  Overload 3 of 3, '(props: DefaultComponentProps<ExtendButtonBaseTypeMap<ButtonTypeMap<{}, "button">>>): Element | null', gave the following error.
+    Type '{ children: string; fullWidth: true; justifyContent: string; startIcon: Element; onClick: () => void; variant: "text" | "contained"; disableElevation: true; sx: { textTransform: "none"; color: "text.primary" | "primary.contrastText"; bgcolor: "transparent" | "primary.main"; '&:hover': { ...; }; }; }' is not assignable to type 'IntrinsicAttributes & ButtonOwnProps & Omit<ButtonBaseOwnProps, "classes"> & CommonProps & Omit<...>'.
+      Property 'justifyContent' does not exist on type 'IntrinsicAttributes & ButtonOwnProps & Omit<ButtonBaseOwnProps, "classes"> & CommonProps & Omit<...>'.
+frontend/src/features/fabric/components/TenantManagementView.tsx(291,12): error TS2769: No overload matches this call.
+  Overload 1 of 3, '(props: { href: string; } & ButtonOwnProps & Omit<ButtonBaseOwnProps, "classes"> & CommonProps & Omit<Omit<DetailedHTMLProps<AnchorHTMLAttributes<HTMLAnchorElement>, HTMLAnchorElement>, "ref"> & { ...; }, "children" | ... 24 more ... | "startIcon">): Element', gave the following error.
+    Type '{ children: string; fullWidth: true; justifyContent: string; startIcon: Element; onClick: () => void; variant: "text" | "contained"; disableElevation: true; sx: { textTransform: "none"; color: "text.primary" | "primary.contrastText"; bgcolor: "transparent" | "primary.main"; '&:hover': { ...; }; }; }' is not assignable to type 'IntrinsicAttributes & { href: string; } & ButtonOwnProps & Omit<ButtonBaseOwnProps, "classes"> & CommonProps & Omit<...>'.
+      Property 'justifyContent' does not exist on type 'IntrinsicAttributes & { href: string; } & ButtonOwnProps & Omit<ButtonBaseOwnProps, "classes"> & CommonProps & Omit<...>'.
+  Overload 2 of 3, '(props: { component: ElementType<any, keyof IntrinsicElements>; } & ButtonOwnProps & Omit<ButtonBaseOwnProps, "classes"> & CommonProps & Omit<...>): Element | null', gave the following error.
+    Property 'component' is missing in type '{ children: string; fullWidth: true; justifyContent: string; startIcon: Element; onClick: () => void; variant: "text" | "contained"; disableElevation: true; sx: { textTransform: "none"; color: "text.primary" | "primary.contrastText"; bgcolor: "transparent" | "primary.main"; '&:hover': { ...; }; }; }' but required in type '{ component: ElementType<any, keyof IntrinsicElements>; }'.
+  Overload 3 of 3, '(props: DefaultComponentProps<ExtendButtonBaseTypeMap<ButtonTypeMap<{}, "button">>>): Element | null', gave the following error.
+    Type '{ children: string; fullWidth: true; justifyContent: string; startIcon: Element; onClick: () => void; variant: "text" | "contained"; disableElevation: true; sx: { textTransform: "none"; color: "text.primary" | "primary.contrastText"; bgcolor: "transparent" | "primary.main"; '&:hover': { ...; }; }; }' is not assignable to type 'IntrinsicAttributes & ButtonOwnProps & Omit<ButtonBaseOwnProps, "classes"> & CommonProps & Omit<...>'.
+      Property 'justifyContent' does not exist on type 'IntrinsicAttributes & ButtonOwnProps & Omit<ButtonBaseOwnProps, "classes"> & CommonProps & Omit<...>'.
+frontend/src/features/fabric/components/TenantManagementView.tsx(307,12): error TS2769: No overload matches this call.
+  Overload 1 of 3, '(props: { href: string; } & ButtonOwnProps & Omit<ButtonBaseOwnProps, "classes"> & CommonProps & Omit<Omit<DetailedHTMLProps<AnchorHTMLAttributes<HTMLAnchorElement>, HTMLAnchorElement>, "ref"> & { ...; }, "children" | ... 24 more ... | "startIcon">): Element', gave the following error.
+    Type '{ children: string; fullWidth: true; justifyContent: string; startIcon: Element; onClick: () => void; variant: "text" | "contained"; disableElevation: true; sx: { textTransform: "none"; color: "text.primary" | "primary.contrastText"; bgcolor: "transparent" | "primary.main"; '&:hover': { ...; }; }; }' is not assignable to type 'IntrinsicAttributes & { href: string; } & ButtonOwnProps & Omit<ButtonBaseOwnProps, "classes"> & CommonProps & Omit<...>'.
+      Property 'justifyContent' does not exist on type 'IntrinsicAttributes & { href: string; } & ButtonOwnProps & Omit<ButtonBaseOwnProps, "classes"> & CommonProps & Omit<...>'.
+  Overload 2 of 3, '(props: { component: ElementType<any, keyof IntrinsicElements>; } & ButtonOwnProps & Omit<ButtonBaseOwnProps, "classes"> & CommonProps & Omit<...>): Element | null', gave the following error.
+    Property 'component' is missing in type '{ children: string; fullWidth: true; justifyContent: string; startIcon: Element; onClick: () => void; variant: "text" | "contained"; disableElevation: true; sx: { textTransform: "none"; color: "text.primary" | "primary.contrastText"; bgcolor: "transparent" | "primary.main"; '&:hover': { ...; }; }; }' but required in type '{ component: ElementType<any, keyof IntrinsicElements>; }'.
+  Overload 3 of 3, '(props: DefaultComponentProps<ExtendButtonBaseTypeMap<ButtonTypeMap<{}, "button">>>): Element | null', gave the following error.
+    Type '{ children: string; fullWidth: true; justifyContent: string; startIcon: Element; onClick: () => void; variant: "text" | "contained"; disableElevation: true; sx: { textTransform: "none"; color: "text.primary" | "primary.contrastText"; bgcolor: "transparent" | "primary.main"; '&:hover': { ...; }; }; }' is not assignable to type 'IntrinsicAttributes & ButtonOwnProps & Omit<ButtonBaseOwnProps, "classes"> & CommonProps & Omit<...>'.
+      Property 'justifyContent' does not exist on type 'IntrinsicAttributes & ButtonOwnProps & Omit<ButtonBaseOwnProps, "classes"> & CommonProps & Omit<...>'.
+frontend/src/features/fabric/components/TenantManagementView.tsx(323,12): error TS2769: No overload matches this call.
+  Overload 1 of 3, '(props: { href: string; } & ButtonOwnProps & Omit<ButtonBaseOwnProps, "classes"> & CommonProps & Omit<Omit<DetailedHTMLProps<AnchorHTMLAttributes<HTMLAnchorElement>, HTMLAnchorElement>, "ref"> & { ...; }, "children" | ... 24 more ... | "startIcon">): Element', gave the following error.
+    Type '{ children: string; fullWidth: true; justifyContent: string; startIcon: Element; onClick: () => void; variant: "text" | "contained"; disableElevation: true; sx: { textTransform: "none"; color: "text.primary" | "primary.contrastText"; bgcolor: "transparent" | "primary.main"; '&:hover': { ...; }; }; }' is not assignable to type 'IntrinsicAttributes & { href: string; } & ButtonOwnProps & Omit<ButtonBaseOwnProps, "classes"> & CommonProps & Omit<...>'.
+      Property 'justifyContent' does not exist on type 'IntrinsicAttributes & { href: string; } & ButtonOwnProps & Omit<ButtonBaseOwnProps, "classes"> & CommonProps & Omit<...>'.
+  Overload 2 of 3, '(props: { component: ElementType<any, keyof IntrinsicElements>; } & ButtonOwnProps & Omit<ButtonBaseOwnProps, "classes"> & CommonProps & Omit<...>): Element | null', gave the following error.
+    Property 'component' is missing in type '{ children: string; fullWidth: true; justifyContent: string; startIcon: Element; onClick: () => void; variant: "text" | "contained"; disableElevation: true; sx: { textTransform: "none"; color: "text.primary" | "primary.contrastText"; bgcolor: "transparent" | "primary.main"; '&:hover': { ...; }; }; }' but required in type '{ component: ElementType<any, keyof IntrinsicElements>; }'.
+  Overload 3 of 3, '(props: DefaultComponentProps<ExtendButtonBaseTypeMap<ButtonTypeMap<{}, "button">>>): Element | null', gave the following error.
+    Type '{ children: string; fullWidth: true; justifyContent: string; startIcon: Element; onClick: () => void; variant: "text" | "contained"; disableElevation: true; sx: { textTransform: "none"; color: "text.primary" | "primary.contrastText"; bgcolor: "transparent" | "primary.main"; '&:hover': { ...; }; }; }' is not assignable to type 'IntrinsicAttributes & ButtonOwnProps & Omit<ButtonBaseOwnProps, "classes"> & CommonProps & Omit<...>'.
+      Property 'justifyContent' does not exist on type 'IntrinsicAttributes & ButtonOwnProps & Omit<ButtonBaseOwnProps, "classes"> & CommonProps & Omit<...>'.
+frontend/src/features/fabric/components/TenantManagementView.tsx(556,33): error TS2769: No overload matches this call.
+  Overload 1 of 4, '(value: string | number | Date): Date', gave the following error.
+    Argument of type 'string | undefined' is not assignable to parameter of type 'string | number | Date'.
+      Type 'undefined' is not assignable to type 'string | number | Date'.
+  Overload 2 of 4, '(value: string | number): Date', gave the following error.
+    Argument of type 'string | undefined' is not assignable to parameter of type 'string | number'.
+      Type 'undefined' is not assignable to type 'string | number'.
+frontend/src/features/fabric/components/TenantManagementView.tsx(697,13): error TS2322: Type '{ tenantId: string; onSubmit: (ipAddress: string, label: string, description: string) => Promise<void>; onCancel: () => void; }' is not assignable to type 'IntrinsicAttributes & AddIPFormProps'.
+  Property 'tenantId' does not exist on type 'IntrinsicAttributes & AddIPFormProps'. Did you mean '_tenantId'?
+frontend/src/features/household/HouseholdDashboard.tsx(43,26): error TS2347: Untyped function calls may not accept type arguments.
+frontend/src/features/messaging/SecureMessaging.tsx(38,26): error TS2304: Cannot find name 'useRef'.
+frontend/src/features/metadata/components/EvidenceBundleTimeline.tsx(64,40): error TS2709: Cannot use namespace 'EvidenceBundle' as a type.
+frontend/src/features/metadata/components/EvidenceBundleTimeline.tsx(83,10): error TS7006: Parameter 's' implicitly has an 'any' type.
+frontend/src/features/metadata/components/EvidenceBundleTimeline.tsx(111,37): error TS2709: Cannot use namespace 'Artifact' as a type.
+frontend/src/features/metadata/components/EvidenceBundleTimeline.tsx(150,38): error TS2709: Cannot use namespace 'StageEvidence' as a type.
+frontend/src/features/metadata/components/EvidenceBundleTimeline.tsx(234,33): error TS7006: Parameter 'stage' implicitly has an 'any' type.
+frontend/src/features/metadata/components/EvidenceBundleTimeline.tsx(234,40): error TS7006: Parameter 'index' implicitly has an 'any' type.
+frontend/src/features/metadata/pages/ComplianceReportPage.tsx(49,40): error TS2709: Cannot use namespace 'ComplianceReport' as a type.
+frontend/src/features/metadata/pages/ComplianceReportPage.tsx(189,19): error TS2769: No overload matches this call.
+  Overload 1 of 2, '(props: { component: ElementType<any, keyof IntrinsicElements>; } & ChipOwnProps & CommonProps & Omit<any, "children" | ... 15 more ... | "skipFocusWhenDisabled">): Element | null', gave the following error.
+    Type '"large"' is not assignable to type 'OverridableStringUnion<"small" | "medium", ChipPropsSizeOverrides> | undefined'.
+  Overload 2 of 2, '(props: DefaultComponentProps<ChipTypeMap<{}, "div">>): Element | null', gave the following error.
+    Type '"large"' is not assignable to type 'OverridableStringUnion<"small" | "medium", ChipPropsSizeOverrides> | undefined'.
+frontend/src/features/metadata/pages/ComplianceReportPage.tsx(234,42): error TS7006: Parameter 'change' implicitly has an 'any' type.
+frontend/src/features/metadata/pages/ComplianceReportPage.tsx(234,50): error TS7006: Parameter 'idx' implicitly has an 'any' type.
+frontend/src/features/metadata/pages/ComplianceReportPage.tsx(319,56): error TS7006: Parameter 'test' implicitly has an 'any' type.
+frontend/src/features/metadata/pages/ComplianceReportPage.tsx(319,62): error TS7006: Parameter 'idx' implicitly has an 'any' type.
+frontend/src/features/metadata/pages/ComplianceReportPage.tsx(347,40): error TS7006: Parameter 'approval' implicitly has an 'any' type.
+frontend/src/features/metadata/pages/ComplianceReportPage.tsx(347,50): error TS7006: Parameter 'idx' implicitly has an 'any' type.
+frontend/src/features/metadata/pages/ComplianceReportPage.tsx(430,56): error TS7006: Parameter 'event' implicitly has an 'any' type.
+frontend/src/features/metadata/pages/ComplianceReportPage.tsx(430,63): error TS7006: Parameter 'idx' implicitly has an 'any' type.
+frontend/src/features/model-change/pages/ModelChangeStatusPage.tsx(121,40): error TS2322: Type 'null' is not assignable to type 'ReportInfo | undefined'.
+frontend/src/features/onboarding/OnboardingWizard.tsx(331,26): error TS7006: Parameter 'data' implicitly has an 'any' type.
+frontend/src/features/onboarding/OnboardingWizard.tsx(338,26): error TS7006: Parameter 'data' implicitly has an 'any' type.
+frontend/src/features/onboarding/OnboardingWizard.tsx(345,26): error TS7006: Parameter 'data' implicitly has an 'any' type.
+frontend/src/features/onboarding/OnboardingWizard.tsx(352,26): error TS7006: Parameter 'data' implicitly has an 'any' type.
+frontend/src/features/onboarding/OnboardingWizard.tsx(360,26): error TS7006: Parameter 'data' implicitly has an 'any' type.
+frontend/src/features/onboarding/OnboardingWizard.tsx(367,26): error TS7006: Parameter 'data' implicitly has an 'any' type.
+frontend/src/features/onboarding/OnboardingWizard.tsx(375,26): error TS7006: Parameter 'data' implicitly has an 'any' type.
+frontend/src/features/scheduler/pages/ComplianceDashboardPage.tsx(11,3): error TS2305: Module '"../../../types/scheduler"' has no exported member 'AuditLogEntry'.
+frontend/src/features/scheduler/pages/ComplianceDashboardPage.tsx(54,26): error TS2551: Property 'getAuditLogs' does not exist on type 'typeof import("/Users/eganpj/GitHub/semlayer/frontend/src/features/scheduler/services/schedulerService")'. Did you mean 'getAuditLog'?
+frontend/src/features/scheduler/pages/ComplianceDashboardPage.tsx(60,37): error TS2353: Object literal may only specify known properties, and 'page' does not exist in type 'JobListFilters'.
+frontend/src/features/scheduler/pages/ComplianceDashboardPage.tsx(61,26): error TS2551: Property 'listAllExecutions' does not exist on type 'typeof import("/Users/eganpj/GitHub/semlayer/frontend/src/features/scheduler/services/schedulerService")'. Did you mean 'listExecutions'?
+frontend/src/features/scheduler/pages/ComplianceDashboardPage.tsx(546,29): error TS2339: Property 'sla_seconds' does not exist on type 'Job'.
+frontend/src/features/scheduler/pages/ComplianceDashboardPage.tsx(546,47): error TS2339: Property 'sla_seconds' does not exist on type 'Job'.
+frontend/src/features/scheduler/pages/DependencyVisualizerPage.tsx(13,3): error TS2724: '"../../../types/scheduler"' has no exported member named 'Dependency'. Did you mean 'JobDependency'?
+frontend/src/features/scheduler/pages/DependencyVisualizerPage.tsx(72,62): error TS2353: Object literal may only specify known properties, and 'page' does not exist in type 'JobListFilters'.
+frontend/src/features/scheduler/pages/DependencyVisualizerPage.tsx(73,28): error TS2339: Property 'jobs' does not exist on type 'PaginatedResponse<Job>'.
+frontend/src/features/scheduler/pages/DependencyVisualizerPage.tsx(77,46): error TS2339: Property 'jobs' does not exist on type 'PaginatedResponse<Job>'.
+frontend/src/features/scheduler/pages/DependencyVisualizerPage.tsx(77,62): error TS7006: Parameter 'job' implicitly has an 'any' type.
+frontend/src/features/scheduler/pages/DependencyVisualizerPage.tsx(79,78): error TS2345: Argument of type '{ page: number; limit: number; }' is not assignable to parameter of type 'number'.
+frontend/src/features/scheduler/pages/DependencyVisualizerPage.tsx(80,28): error TS2339: Property 'executions' does not exist on type 'PaginatedResponse<JobExecution>'.
+frontend/src/features/scheduler/pages/DependencyVisualizerPage.tsx(81,51): error TS2339: Property 'executions' does not exist on type 'PaginatedResponse<JobExecution>'.
+frontend/src/features/scheduler/pages/DependencyVisualizerPage.tsx(313,54): error TS2339: Property 'type' does not exist on type 'Job'.
+frontend/src/features/scheduler/pages/DependencyVisualizerPage.tsx(353,55): error TS2339: Property 'type' does not exist on type 'JobDependency'.
+frontend/src/features/scheduler/pages/DependencyVisualizerPage.tsx(415,7): error TS2322: Type 'RefObject<SVGSVGElement | null>' is not assignable to type 'LegacyRef<SVGSVGElement> | undefined'.
+  Type 'RefObject<SVGSVGElement | null>' is not assignable to type 'RefObject<SVGSVGElement>'.
+    Type 'SVGSVGElement | null' is not assignable to type 'SVGSVGElement'.
+      Type 'null' is not assignable to type 'SVGSVGElement'.
+frontend/src/features/scheduler/pages/DependencyVisualizerPage.tsx(536,27): error TS2339: Property 'type' does not exist on type 'Job'.
+frontend/src/features/scheduler/pages/DependencyVisualizerPage.tsx(624,47): error TS2339: Property 'type' does not exist on type 'Job'.
+frontend/src/features/scheduler/pages/DependencyVisualizerPage.tsx(689,26): error TS2339: Property 'type' does not exist on type 'Job'.
+frontend/src/features/scheduler/pages/ExecutionsListPage.tsx(37,47): error TS2551: Property 'listAllExecutions' does not exist on type 'typeof import("/Users/eganpj/GitHub/semlayer/frontend/src/features/scheduler/services/schedulerService")'. Did you mean 'listExecutions'?
+frontend/src/features/scheduler/pages/NotificationTemplatesPage.tsx(50,55): error TS2551: Property 'channel' does not exist on type 'NotificationTemplate'. Did you mean 'channels'?
+frontend/src/features/scheduler/pages/NotificationTemplatesPage.tsx(51,51): error TS2339: Property 'event_type' does not exist on type 'NotificationTemplate'.
+frontend/src/features/scheduler/pages/NotificationTemplatesPage.tsx(61,30): error TS2551: Property 'deleteNotificationTemplate' does not exist on type 'typeof import("/Users/eganpj/GitHub/semlayer/frontend/src/features/scheduler/services/schedulerService")'. Did you mean 'listNotificationTemplates'?
+frontend/src/features/scheduler/pages/NotificationTemplatesPage.tsx(71,30): error TS2551: Property 'updateNotificationTemplate' does not exist on type 'typeof import("/Users/eganpj/GitHub/semlayer/frontend/src/features/scheduler/services/schedulerService")'. Did you mean 'updateNotificationRule'?
+frontend/src/features/scheduler/pages/NotificationTemplatesPage.tsx(73,30): error TS2339: Property 'is_active' does not exist on type 'NotificationTemplate'.
+frontend/src/features/scheduler/pages/NotificationTemplatesPage.tsx(118,42): error TS2339: Property 'is_active' does not exist on type 'NotificationTemplate'.
+frontend/src/features/scheduler/pages/NotificationTemplatesPage.tsx(123,42): error TS2551: Property 'channel' does not exist on type 'NotificationTemplate'. Did you mean 'channels'?
+frontend/src/features/scheduler/pages/NotificationTemplatesPage.tsx(128,42): error TS2551: Property 'channel' does not exist on type 'NotificationTemplate'. Did you mean 'channels'?
+frontend/src/features/scheduler/pages/NotificationTemplatesPage.tsx(243,9): error TS2741: Property '[NotificationChannel.IN_APP]' is missing in type '{ email: string; slack: string; webhook: string; sms: string; teams: string; pagerduty: string; }' but required in type 'Record<NotificationChannel, string>'.
+frontend/src/features/scheduler/pages/NotificationTemplatesPage.tsx(263,37): error TS2339: Property 'localized_content' does not exist on type 'NotificationTemplate'.
+frontend/src/features/scheduler/pages/NotificationTemplatesPage.tsx(264,14): error TS2339: Property 'localized_content' does not exist on type 'NotificationTemplate'.
+frontend/src/features/scheduler/pages/NotificationTemplatesPage.tsx(265,25): error TS2339: Property 'subject_template' does not exist on type 'NotificationTemplate'.
+frontend/src/features/scheduler/pages/NotificationTemplatesPage.tsx(265,58): error TS2339: Property 'body_template' does not exist on type 'NotificationTemplate'.
+frontend/src/features/scheduler/pages/NotificationTemplatesPage.tsx(267,51): error TS2339: Property 'localized_content' does not exist on type 'NotificationTemplate'.
+frontend/src/features/scheduler/pages/NotificationTemplatesPage.tsx(270,63): error TS2339: Property 'is_active' does not exist on type 'NotificationTemplate'.
+frontend/src/features/scheduler/pages/NotificationTemplatesPage.tsx(273,58): error TS2551: Property 'channel' does not exist on type 'NotificationTemplate'. Did you mean 'channels'?
+frontend/src/features/scheduler/pages/NotificationTemplatesPage.tsx(274,14): error TS7053: Element implicitly has an 'any' type because expression of type 'any' can't be used to index type 'Record<NotificationChannel, string>'.
+frontend/src/features/scheduler/pages/NotificationTemplatesPage.tsx(274,36): error TS2551: Property 'channel' does not exist on type 'NotificationTemplate'. Did you mean 'channels'?
+frontend/src/features/scheduler/pages/NotificationTemplatesPage.tsx(280,57): error TS2339: Property 'is_active' does not exist on type 'NotificationTemplate'.
+frontend/src/features/scheduler/pages/NotificationTemplatesPage.tsx(282,29): error TS2339: Property 'is_active' does not exist on type 'NotificationTemplate'.
+frontend/src/features/scheduler/pages/NotificationTemplatesPage.tsx(284,23): error TS2339: Property 'is_active' does not exist on type 'NotificationTemplate'.
+frontend/src/features/scheduler/pages/NotificationTemplatesPage.tsx(297,65): error TS2339: Property 'event_type' does not exist on type 'NotificationTemplate'.
+frontend/src/features/scheduler/pages/NotificationTemplatesPage.tsx(298,35): error TS2339: Property 'event_type' does not exist on type 'NotificationTemplate'.
+frontend/src/features/scheduler/pages/NotificationTemplatesPage.tsx(298,59): error TS2339: Property 'event_type' does not exist on type 'NotificationTemplate'.
+frontend/src/features/scheduler/pages/NotificationTemplatesPage.tsx(300,22): error TS2339: Property 'is_active' does not exist on type 'NotificationTemplate'.
+frontend/src/features/scheduler/pages/NotificationTemplatesPage.tsx(335,19): error TS2339: Property 'recipients' does not exist on type 'NotificationTemplate'.
+frontend/src/features/scheduler/pages/NotificationTemplatesPage.tsx(335,42): error TS2339: Property 'recipients' does not exist on type 'NotificationTemplate'.
+frontend/src/features/scheduler/pages/NotificationTemplatesPage.tsx(337,61): error TS2339: Property 'recipients' does not exist on type 'NotificationTemplate'.
+frontend/src/features/scheduler/pages/NotificationTemplatesPage.tsx(364,5): error TS2353: Object literal may only specify known properties, and 'channel' does not exist in type 'Partial<NotificationTemplate> | (() => Partial<NotificationTemplate>)'.
+frontend/src/features/scheduler/pages/NotificationTemplatesPage.tsx(377,24): error TS2551: Property 'getNotificationTemplate' does not exist on type 'typeof import("/Users/eganpj/GitHub/semlayer/frontend/src/features/scheduler/services/schedulerService")'. Did you mean 'listNotificationTemplates'?
+frontend/src/features/scheduler/pages/NotificationTemplatesPage.tsx(378,15): error TS7006: Parameter 'template' implicitly has an 'any' type.
+frontend/src/features/scheduler/pages/NotificationTemplatesPage.tsx(381,16): error TS7006: Parameter 'err' implicitly has an 'any' type.
+frontend/src/features/scheduler/pages/NotificationTemplatesPage.tsx(404,32): error TS2551: Property 'updateNotificationTemplate' does not exist on type 'typeof import("/Users/eganpj/GitHub/semlayer/frontend/src/features/scheduler/services/schedulerService")'. Did you mean 'updateNotificationRule'?
+frontend/src/features/scheduler/pages/NotificationTemplatesPage.tsx(406,32): error TS2551: Property 'createNotificationTemplate' does not exist on type 'typeof import("/Users/eganpj/GitHub/semlayer/frontend/src/features/scheduler/services/schedulerService")'. Did you mean 'createNotificationRule'?
+frontend/src/features/scheduler/pages/NotificationTemplatesPage.tsx(424,17): error TS2339: Property 'localized_content' does not exist on type 'Partial<NotificationTemplate>'.
+frontend/src/features/scheduler/pages/NotificationTemplatesPage.tsx(426,19): error TS2339: Property 'localized_content' does not exist on type 'Partial<NotificationTemplate>'.
+frontend/src/features/scheduler/pages/NotificationTemplatesPage.tsx(435,19): error TS2339: Property 'localized_content' does not exist on type 'Partial<NotificationTemplate>'.
+frontend/src/features/scheduler/pages/NotificationTemplatesPage.tsx(439,19): error TS2339: Property 'localized_content' does not exist on type 'Partial<NotificationTemplate>'.
+frontend/src/features/scheduler/pages/NotificationTemplatesPage.tsx(449,38): error TS2339: Property 'localized_content' does not exist on type 'Partial<NotificationTemplate>'.
+frontend/src/features/scheduler/pages/NotificationTemplatesPage.tsx(555,37): error TS2551: Property 'channel' does not exist on type 'Partial<NotificationTemplate>'. Did you mean 'channels'?
+frontend/src/features/scheduler/pages/NotificationTemplatesPage.tsx(573,37): error TS2339: Property 'event_type' does not exist on type 'Partial<NotificationTemplate>'.
+frontend/src/features/scheduler/pages/NotificationTemplatesPage.tsx(592,39): error TS2339: Property 'is_active' does not exist on type 'Partial<NotificationTemplate>'.
+frontend/src/features/scheduler/pages/NotificationTemplatesPage.tsx(614,41): error TS2339: Property 'localized_content' does not exist on type 'Partial<NotificationTemplate>'.
+frontend/src/features/scheduler/pages/NotificationTemplatesPage.tsx(625,64): error TS2339: Property 'localized_content' does not exist on type 'Partial<NotificationTemplate>'.
+frontend/src/features/scheduler/pages/NotificationTemplatesPage.tsx(648,25): error TS2551: Property 'channel' does not exist on type 'Partial<NotificationTemplate>'. Did you mean 'channels'?
+frontend/src/features/scheduler/pages/NotificationTemplatesPage.tsx(655,37): error TS2339: Property 'localized_content' does not exist on type 'Partial<NotificationTemplate>'.
+frontend/src/features/scheduler/pages/NotificationTemplatesPage.tsx(668,35): error TS2339: Property 'localized_content' does not exist on type 'Partial<NotificationTemplate>'.
+frontend/src/features/scheduler/pages/NotificationTemplatesPage.tsx(700,35): error TS2339: Property 'recipients' does not exist on type 'Partial<NotificationTemplate>'.
+frontend/src/features/scheduler/pages/NotificationTemplatesPage.tsx(702,66): error TS2551: Property 'channel' does not exist on type 'Partial<NotificationTemplate>'. Did you mean 'channels'?
+frontend/src/features/scheduler/pages/NotificationTemplatesPage.tsx(704,70): error TS2551: Property 'channel' does not exist on type 'Partial<NotificationTemplate>'. Did you mean 'channels'?
+frontend/src/features/scheduler/pages/NotificationTemplatesPage.tsx(708,25): error TS2551: Property 'channel' does not exist on type 'Partial<NotificationTemplate>'. Did you mean 'channels'?
+frontend/src/features/scheduler/pages/NotificationTemplatesPage.tsx(720,25): error TS2551: Property 'channel' does not exist on type 'Partial<NotificationTemplate>'. Did you mean 'channels'?
+frontend/src/features/scheduler/pages/NotificationTemplatesPage.tsx(746,39): error TS2339: Property 'localized_content' does not exist on type 'Partial<NotificationTemplate>'.
+frontend/src/features/scheduler/pages/NotificationTemplatesPage.tsx(757,35): error TS2551: Property 'channel' does not exist on type 'Partial<NotificationTemplate>'. Did you mean 'channels'?
+frontend/src/features/scheduler/pages/NotificationTemplatesPage.tsx(791,28): error TS2339: Property 'localized_content' does not exist on type 'Partial<NotificationTemplate>'.
+frontend/src/features/scheduler/pages/NotificationTemplatesPage.tsx(810,44): error TS2339: Property 'recipients' does not exist on type 'Partial<NotificationTemplate>'.
+frontend/src/features/security/pages/AuditLogsPage.tsx(23,29): error TS2339: Property 'value' does not exist on type 'never'.
+frontend/src/features/security/pages/AuditLogsPage.tsx(24,47): error TS2339: Property 'value' does not exist on type 'never'.
+frontend/src/features/security/pages/RoleManagementPage.tsx(63,21): error TS2339: Property 'value' does not exist on type 'never'.
+frontend/src/features/security/pages/RoleManagementPage.tsx(64,39): error TS2339: Property 'value' does not exist on type 'never'.
+frontend/src/features/taxplan/TaxDashboard.tsx(38,26): error TS2347: Untyped function calls may not accept type arguments.
+frontend/src/features/tenants/components/__tests__/LookupsManagementTab.test.tsx(102,26): error TS2304: Cannot find name 'within'.
+frontend/src/features/tenants/components/InstancesTab.tsx(78,33): error TS2339: Property 'config' does not exist on type 'TenantInstance'.
+frontend/src/features/tenants/components/InstancesTab.tsx(78,64): error TS2339: Property 'config' does not exist on type 'TenantInstance'.
+frontend/src/features/tenants/components/InstancesTab.tsx(78,97): error TS2339: Property 'config' does not exist on type 'TenantInstance'.
+frontend/src/features/tenants/components/InstancesTab.tsx(326,32): error TS2339: Property 'config' does not exist on type 'TenantInstance'.
+frontend/src/features/tenants/components/InstancesTab.tsx(326,66): error TS2339: Property 'config' does not exist on type 'TenantInstance'.
+frontend/src/features/tenants/components/InstancesTab.tsx(326,118): error TS2339: Property 'config' does not exist on type 'TenantInstance'.
+frontend/src/features/tenants/components/InstancesTab.tsx(330,79): error TS2339: Property 'config' does not exist on type 'TenantInstance'.
+frontend/src/features/tenants/components/ProductsTab.tsx(162,26): error TS2339: Property 'is_active' does not exist on type 'TenantProduct & { version: number; }'.
+frontend/src/features/workflow/pages/GenUIApprovalInboxPage.tsx(7,25): error TS2339: Property 'loading' does not exist on type 'UseQueryResult<LayoutSchema, Error>'.
+frontend/src/features/workflow/pages/GenUIApprovalInboxPage.tsx(32,94): error TS2322: Type 'Error' is not assignable to type 'string | number | boolean | ReactElement<any, string | JSXElementConstructor<any>> | Iterable<ReactNode> | ReactPortal | null | undefined'.
+frontend/src/features/workflow/pages/GenUIApprovalInboxPage.tsx(37,33): error TS2322: Type '{ layout: any; onFormSubmit: (formId: string, data: Record<string, any>) => Promise<void>; }' is not assignable to type 'IntrinsicAttributes & GenUIRendererProps'.
+  Property 'layout' does not exist on type 'IntrinsicAttributes & GenUIRendererProps'.
+frontend/src/features/workflow/pages/NotificationCenterPage.tsx(34,7): error TS2322: Type '{ tenant: Tenant; datasource: DataSource; userId: string; }' is not assignable to type 'IntrinsicAttributes'.
+  Property 'tenant' does not exist on type 'IntrinsicAttributes'.
+frontend/src/genui/components/CardWidget.tsx(2,15): error TS2724: '"../schema"' has no exported member named 'CardComponent'. Did you mean 'GridComponent'?
+frontend/src/genui/components/ChartWidget.tsx(18,15): error TS2305: Module '"../schema"' has no exported member 'ChartComponent'.
+frontend/src/genui/components/ChartWidget.tsx(26,27): error TS2339: Property 'isLoading' does not exist on type 'InteropQueryResult<any, OperationVariables>'.
+frontend/src/genui/components/ChartWidget.tsx(67,29): error TS7006: Parameter 'field' implicitly has an 'any' type.
+frontend/src/genui/components/ChartWidget.tsx(67,36): error TS7006: Parameter 'idx' implicitly has an 'any' type.
+frontend/src/genui/components/ChartWidget.tsx(87,29): error TS7006: Parameter 'field' implicitly has an 'any' type.
+frontend/src/genui/components/ChartWidget.tsx(87,36): error TS7006: Parameter 'idx' implicitly has an 'any' type.
+frontend/src/genui/components/ChartWidget.tsx(107,29): error TS7006: Parameter 'field' implicitly has an 'any' type.
+frontend/src/genui/components/ChartWidget.tsx(107,36): error TS7006: Parameter 'idx' implicitly has an 'any' type.
+frontend/src/genui/components/DisclosureBanner.tsx(2,15): error TS2305: Module '"../schema"' has no exported member 'DisclosureBanner'.
+frontend/src/genui/components/FormWidget.tsx(2,15): error TS2305: Module '"../schema"' has no exported member 'FormComponent'.
+frontend/src/genui/components/FormWidget.tsx(32,26): error TS7006: Parameter 'field' implicitly has an 'any' type.
+frontend/src/genui/components/FormWidget.tsx(97,32): error TS7006: Parameter 'opt' implicitly has an 'any' type.
+frontend/src/genui/components/GridWidget.tsx(29,32): error TS18048: 'def.columns' is possibly 'undefined'.
+frontend/src/genui/components/TimelineWidget.tsx(2,15): error TS2305: Module '"../schema"' has no exported member 'TimelineComponent'.
+frontend/src/genui/components/TimelineWidget.tsx(17,26): error TS7006: Parameter 'event' implicitly has an 'any' type.
+frontend/src/genui/components/TimelineWidget.tsx(17,33): error TS7006: Parameter 'idx' implicitly has an 'any' type.
+frontend/src/genui/GenUIDashboardPage.tsx(11,41): error TS2339: Property 'isLoading' does not exist on type 'UseMutationResult<IntentResponse, Error, IntentRequest, unknown>'.
+frontend/src/genui/hooks.ts(21,13): error TS2749: 'LayoutSchema' refers to a value, but is being used as a type here. Did you mean 'typeof LayoutSchema'?
+frontend/src/genui/hooks.ts(76,21): error TS2749: 'LayoutSchema' refers to a value, but is being used as a type here. Did you mean 'typeof LayoutSchema'?
+frontend/src/genui/hooks.ts(95,21): error TS2749: 'LayoutSchema' refers to a value, but is being used as a type here. Did you mean 'typeof LayoutSchema'?
+frontend/src/genui/Renderer.tsx(16,15): error TS2339: Property 'description' does not exist on type '{ title: string; rows: { items: { w: number; component: { id: string; type: "chart" | "grid" | "rebalance_proposal" | "metric_card"; title?: string | undefined; subtitle?: string | undefined; binding?: { ...; } | undefined; columns?: any[] | undefined; actions?: any[] | undefined; pagination?: any; }; }[]; height?: ...'.
+frontend/src/genui/Renderer.tsx(16,72): error TS2339: Property 'description' does not exist on type '{ title: string; rows: { items: { w: number; component: { id: string; type: "chart" | "grid" | "rebalance_proposal" | "metric_card"; title?: string | undefined; subtitle?: string | undefined; binding?: { ...; } | undefined; columns?: any[] | undefined; actions?: any[] | undefined; pagination?: any; }; }[]; height?: ...'.
+frontend/src/genui/Renderer.tsx(18,46): error TS2339: Property 'layout' does not exist on type '{ title: string; rows: { items: { w: number; component: { id: string; type: "chart" | "grid" | "rebalance_proposal" | "metric_card"; title?: string | undefined; subtitle?: string | undefined; binding?: { ...; } | undefined; columns?: any[] | undefined; actions?: any[] | undefined; pagination?: any; }; }[]; height?: ...'.
+frontend/src/genui/Renderer.tsx(19,17): error TS2339: Property 'components' does not exist on type '{ title: string; rows: { items: { w: number; component: { id: string; type: "chart" | "grid" | "rebalance_proposal" | "metric_card"; title?: string | undefined; subtitle?: string | undefined; binding?: { ...; } | undefined; columns?: any[] | undefined; actions?: any[] | undefined; pagination?: any; }; }[]; height?: ...'.
+frontend/src/genui/Renderer.tsx(19,33): error TS7006: Parameter 'component' implicitly has an 'any' type.
+frontend/src/genui/Renderer.tsx(33,14): error TS2749: 'ComponentSchema' refers to a value, but is being used as a type here. Did you mean 'typeof ComponentSchema'?
+frontend/src/genui/schema.ts(11,22): error TS2554: Expected 2-3 arguments, but got 1.
+frontend/src/hooks/useAuditGraphHooks.ts(37,13): error TS2304: Cannot find name 'ChangeSetEvent'.
+frontend/src/pages/bundles/bp-designer/BPDesignerPage.tsx(112,28): error TS2552: Cannot find name 'useNotification'. Did you mean 'notification'?
+frontend/src/pages/bundles/bp-designer/BPDesignerPage.tsx(124,28): error TS2552: Cannot find name 'useNotification'. Did you mean 'notification'?
+frontend/src/pages/bundles/bp-designer/BPDesignerPage.tsx(127,28): error TS2552: Cannot find name 'useNotification'. Did you mean 'notification'?
+frontend/src/pages/BusinessProcessListPage.tsx(136,7): error TS2304: Cannot find name 'notification'.
+frontend/src/pages/ClientPortal/Dashboard.tsx(140,48): error TS2709: Cannot use namespace 'Layout' as a type.
+frontend/src/pages/ClientPortal/Dashboard.tsx(174,32): error TS2709: Cannot use namespace 'Layout' as a type.
+frontend/src/pages/ClientPortal/Dashboard.tsx(184,40): error TS2709: Cannot use namespace 'Layout' as a type.
+frontend/src/pages/ClientPortal/Dashboard.tsx(208,39): error TS2709: Cannot use namespace 'Layout' as a type.
+frontend/src/pages/ClientPortal/Dashboard.tsx(222,22): error TS2709: Cannot use namespace 'Layout' as a type.
+frontend/src/pages/Compliance/WorkflowReplayViewer.tsx(8,3): error TS2305: Module '"@mui/material"' has no exported member 'Timeline'.
+frontend/src/pages/Compliance/WorkflowReplayViewer.tsx(9,3): error TS2305: Module '"@mui/material"' has no exported member 'TimelineItem'.
+frontend/src/pages/Compliance/WorkflowReplayViewer.tsx(10,3): error TS2305: Module '"@mui/material"' has no exported member 'TimelineSeparator'.
+frontend/src/pages/Compliance/WorkflowReplayViewer.tsx(11,3): error TS2305: Module '"@mui/material"' has no exported member 'TimelineConnector'.
+frontend/src/pages/Compliance/WorkflowReplayViewer.tsx(12,3): error TS2305: Module '"@mui/material"' has no exported member 'TimelineContent'.
+frontend/src/pages/Compliance/WorkflowReplayViewer.tsx(13,3): error TS2305: Module '"@mui/material"' has no exported member 'TimelineDot'.
+frontend/src/pages/Compliance/WorkflowReplayViewer.tsx(14,3): error TS2305: Module '"@mui/material"' has no exported member 'TimelineOppositeContent'.
+frontend/src/pages/edges/EdgeTypeFormModal.tsx(347,42): error TS2769: No overload matches this call.
+  Overload 1 of 2, '(predicate: (value: NodeType, index: number, obj: NodeType[]) => value is NodeType, thisArg?: any): NodeType | undefined', gave the following error.
+    Argument of type '(nt: NodeType) => boolean' is not assignable to parameter of type '(value: NodeType, index: number, obj: NodeType[]) => value is NodeType'.
+      Types of parameters 'nt' and 'value' are incompatible.
+        Type 'import("/Users/eganpj/GitHub/semlayer/frontend/src/api/nodeTypes").NodeType' is not assignable to type 'import("/Users/eganpj/GitHub/semlayer/frontend/src/types/nodeTypes").NodeType'.
+          Types of property 'properties' are incompatible.
+            Type 'import("/Users/eganpj/GitHub/semlayer/frontend/src/api/nodeTypes").NodeProperty[]' is not assignable to type 'import("/Users/eganpj/GitHub/semlayer/frontend/src/types/nodeTypes").NodeProperty[]'.
+              Type 'import("/Users/eganpj/GitHub/semlayer/frontend/src/api/nodeTypes").NodeProperty' is not assignable to type 'import("/Users/eganpj/GitHub/semlayer/frontend/src/types/nodeTypes").NodeProperty'.
+                Types of property 'data_type' are incompatible.
+                  Type 'string' is not assignable to type '"string" | "boolean" | "integer" | "date" | "float" | "json" | "text" | "array"'.
+  Overload 2 of 2, '(predicate: (value: NodeType, index: number, obj: NodeType[]) => unknown, thisArg?: any): NodeType | undefined', gave the following error.
+    Argument of type '(nt: NodeType) => boolean' is not assignable to parameter of type '(value: NodeType, index: number, obj: NodeType[]) => unknown'.
+      Types of parameters 'nt' and 'value' are incompatible.
+        Type 'import("/Users/eganpj/GitHub/semlayer/frontend/src/api/nodeTypes").NodeType' is not assignable to type 'import("/Users/eganpj/GitHub/semlayer/frontend/src/types/nodeTypes").NodeType'.
+          Types of property 'properties' are incompatible.
+            Type 'import("/Users/eganpj/GitHub/semlayer/frontend/src/api/nodeTypes").NodeProperty[]' is not assignable to type 'import("/Users/eganpj/GitHub/semlayer/frontend/src/types/nodeTypes").NodeProperty[]'.
+              Type 'import("/Users/eganpj/GitHub/semlayer/frontend/src/api/nodeTypes").NodeProperty' is not assignable to type 'import("/Users/eganpj/GitHub/semlayer/frontend/src/types/nodeTypes").NodeProperty'.
+                Types of property 'data_type' are incompatible.
+                  Type 'string' is not assignable to type '"string" | "boolean" | "integer" | "date" | "float" | "json" | "text" | "array"'.
+frontend/src/pages/edges/EdgeTypeFormModal.tsx(348,41): error TS2769: No overload matches this call.
+  Overload 1 of 2, '(predicate: (value: NodeType, index: number, obj: NodeType[]) => value is NodeType, thisArg?: any): NodeType | undefined', gave the following error.
+    Argument of type '(nt: NodeType) => boolean' is not assignable to parameter of type '(value: NodeType, index: number, obj: NodeType[]) => value is NodeType'.
+      Types of parameters 'nt' and 'value' are incompatible.
+        Type 'import("/Users/eganpj/GitHub/semlayer/frontend/src/api/nodeTypes").NodeType' is not assignable to type 'import("/Users/eganpj/GitHub/semlayer/frontend/src/types/nodeTypes").NodeType'.
+          Types of property 'properties' are incompatible.
+            Type 'import("/Users/eganpj/GitHub/semlayer/frontend/src/api/nodeTypes").NodeProperty[]' is not assignable to type 'import("/Users/eganpj/GitHub/semlayer/frontend/src/types/nodeTypes").NodeProperty[]'.
+              Type 'import("/Users/eganpj/GitHub/semlayer/frontend/src/api/nodeTypes").NodeProperty' is not assignable to type 'import("/Users/eganpj/GitHub/semlayer/frontend/src/types/nodeTypes").NodeProperty'.
+                Types of property 'data_type' are incompatible.
+                  Type 'string' is not assignable to type '"string" | "boolean" | "integer" | "date" | "float" | "json" | "text" | "array"'.
+  Overload 2 of 2, '(predicate: (value: NodeType, index: number, obj: NodeType[]) => unknown, thisArg?: any): NodeType | undefined', gave the following error.
+    Argument of type '(nt: NodeType) => boolean' is not assignable to parameter of type '(value: NodeType, index: number, obj: NodeType[]) => unknown'.
+      Types of parameters 'nt' and 'value' are incompatible.
+        Type 'import("/Users/eganpj/GitHub/semlayer/frontend/src/api/nodeTypes").NodeType' is not assignable to type 'import("/Users/eganpj/GitHub/semlayer/frontend/src/types/nodeTypes").NodeType'.
+          Types of property 'properties' are incompatible.
+            Type 'import("/Users/eganpj/GitHub/semlayer/frontend/src/api/nodeTypes").NodeProperty[]' is not assignable to type 'import("/Users/eganpj/GitHub/semlayer/frontend/src/types/nodeTypes").NodeProperty[]'.
+              Type 'import("/Users/eganpj/GitHub/semlayer/frontend/src/api/nodeTypes").NodeProperty' is not assignable to type 'import("/Users/eganpj/GitHub/semlayer/frontend/src/types/nodeTypes").NodeProperty'.
+                Types of property 'data_type' are incompatible.
+                  Type 'string' is not assignable to type '"string" | "boolean" | "integer" | "date" | "float" | "json" | "text" | "array"'.
+frontend/src/pages/edges/EdgeTypeSetupPage.tsx(241,11): error TS2322: Type 'import("/Users/eganpj/GitHub/semlayer/frontend/src/api/nodeTypes").NodeType[]' is not assignable to type 'import("/Users/eganpj/GitHub/semlayer/frontend/src/types/nodeTypes").NodeType[]'.
+  Type 'import("/Users/eganpj/GitHub/semlayer/frontend/src/api/nodeTypes").NodeType' is not assignable to type 'import("/Users/eganpj/GitHub/semlayer/frontend/src/types/nodeTypes").NodeType'.
+    Types of property 'properties' are incompatible.
+      Type 'import("/Users/eganpj/GitHub/semlayer/frontend/src/api/nodeTypes").NodeProperty[]' is not assignable to type 'import("/Users/eganpj/GitHub/semlayer/frontend/src/types/nodeTypes").NodeProperty[]'.
+        Type 'import("/Users/eganpj/GitHub/semlayer/frontend/src/api/nodeTypes").NodeProperty' is not assignable to type 'import("/Users/eganpj/GitHub/semlayer/frontend/src/types/nodeTypes").NodeProperty'.
+          Types of property 'data_type' are incompatible.
+            Type 'string' is not assignable to type '"string" | "boolean" | "integer" | "date" | "float" | "json" | "text" | "array"'.
+frontend/src/pages/ESG/ESGDashboard.tsx(22,3): error TS2305: Module '"@mui/icons-material"' has no exported member 'Eco'.
+frontend/src/pages/glossary/BusinessTermsTab.tsx(195,13): error TS2339: Property 'semantic_columns' does not exist on type '{ business_terms: CatalogNode[]; semantic_terms: SemanticTerm[]; semantic_edges: CatalogEdge[]; }'.
+frontend/src/pages/glossary/GlossaryFlowView.tsx(109,80): error TS2551: Property 'subject_node_type_id' does not exist on type 'CatalogEdge'. Did you mean 'object_node_type_id'?
+frontend/src/pages/glossary/GlossaryFlowView.tsx(115,32): error TS2551: Property 'subject_node_type_id' does not exist on type 'CatalogEdge'. Did you mean 'object_node_type_id'?
+frontend/src/pages/glossary/SemanticTermsTab.tsx(245,13): error TS2322: Type '{ semanticAssets: any; onAssetSelect: (asset: EnhancedSelectedAsset) => void; highlightedItem: string | null; searchTerm: string | undefined; onEditTerm: ((term: CatalogNode) => void) | undefined; onDeleteTerm: ((term: CatalogNode) => void) | undefined; selectedIds: string[]; onSelectionChange: Dispatch<...>; onDele...' is not assignable to type 'IntrinsicAttributes & SemanticTermsTreeProps'.
+  Property 'onEditTerm' does not exist on type 'IntrinsicAttributes & SemanticTermsTreeProps'.
+frontend/src/pages/governance/AIBusinessTermSuggestionsPage.tsx(57,28): error TS7006: Parameter 'draft' implicitly has an 'any' type.
+frontend/src/pages/governance/BusinessTermDetail.tsx(91,72): error TS7006: Parameter 'st' implicitly has an 'any' type.
+frontend/src/pages/governance/BusinessTermDetail.tsx(116,28): error TS7031: Binding element 'open' implicitly has an 'any' type.
+frontend/src/pages/governance/BusinessTermDetail.tsx(116,34): error TS7031: Binding element 'onClose' implicitly has an 'any' type.
+frontend/src/pages/governance/BusinessTermDetail.tsx(116,43): error TS7031: Binding element 'businessTermId' implicitly has an 'any' type.
+frontend/src/pages/governance/ComplianceDashboard.tsx(138,24): error TS7031: Binding element 'title' implicitly has an 'any' type.
+frontend/src/pages/governance/ComplianceDashboard.tsx(138,31): error TS7031: Binding element 'value' implicitly has an 'any' type.
+frontend/src/pages/governance/ComplianceDashboard.tsx(138,38): error TS7031: Binding element 'color' implicitly has an 'any' type.
+frontend/src/pages/MigrationReviewPage.tsx(213,20): error TS18048: 'migration.extractedIntent.preconditions.length' is possibly 'undefined'.
+frontend/src/pages/MigrationReviewPage.tsx(219,26): error TS18048: 'migration.extractedIntent.preconditions' is possibly 'undefined'.
+frontend/src/pages/MigrationReviewPage.tsx(226,20): error TS18048: 'migration.extractedIntent.actions.length' is possibly 'undefined'.
+frontend/src/pages/MigrationReviewPage.tsx(232,26): error TS18048: 'migration.extractedIntent.actions' is possibly 'undefined'.
+frontend/src/pages/nodes/NodeTypeFormModal.tsx(36,3): error TS2322: Type '"string" | "number" | "boolean" | "date" | "array"' is not assignable to type '"string" | "number" | "boolean" | "date"'.
+  Type '"array"' is not assignable to type '"string" | "number" | "boolean" | "date"'.
+frontend/src/pages/nodes/NodeTypeFormModal.tsx(39,3): error TS2322: Type '"string" | "boolean" | "integer" | "date" | "float" | "json" | "text" | "array"' is not assignable to type '"string" | "boolean" | "integer" | "date" | "float" | "json" | "text" | undefined'.
+  Type '"array"' is not assignable to type '"string" | "boolean" | "integer" | "date" | "float" | "json" | "text" | undefined'.
+frontend/src/pages/nodes/NodeTypeFormModal.tsx(40,3): error TS2322: Type '"select" | "date" | "text" | "checkbox" | "chips" | "lookup" | "code-editor"' is not assignable to type '"select" | "date" | "text" | "checkbox" | "lookup" | "code-editor"'.
+  Type '"chips"' is not assignable to type '"select" | "date" | "text" | "checkbox" | "lookup" | "code-editor"'.
+frontend/src/pages/nodes/NodeTypeFormModal.tsx(43,3): error TS2322: Type '"number" | "select" | "text" | "textarea" | "checkbox" | "date-picker" | "json-editor" | "chips" | "lookup" | "code-editor"' is not assignable to type '"number" | "select" | "text" | "textarea" | "checkbox" | "date-picker" | "json-editor" | "code-editor" | undefined'.
+  Type '"chips"' is not assignable to type '"number" | "select" | "text" | "textarea" | "checkbox" | "date-picker" | "json-editor" | "code-editor" | undefined'.
+frontend/src/pages/nodes/NodeTypeFormModal.tsx(304,42): error TS2345: Argument of type 'string' is not assignable to parameter of type 'Record<string, any>'.
+frontend/src/pages/nodes/NodeTypeFormModal.tsx(330,68): error TS2561: Object literal may only specify known properties, but 'tenantId' does not exist in type 'Partial<NodeType> & { id: string; }'. Did you mean to write 'tenant_id'?
+frontend/src/pages/nodes/NodeTypeFormModal.tsx(341,49): error TS2345: Argument of type '{ tenant_id: string; catalog_type_name: string; description: string; parent_type_id: string | null; is_active: boolean; config: { [key: string]: any; }; properties: NodeProperty[]; }' is not assignable to parameter of type 'Partial<NodeType>'.
+  Types of property 'properties' are incompatible.
+    Type 'import("/Users/eganpj/GitHub/semlayer/frontend/src/types/nodeTypes").NodeProperty[]' is not assignable to type 'import("/Users/eganpj/GitHub/semlayer/frontend/src/api/nodeTypes").NodeProperty[]'.
+      Type 'import("/Users/eganpj/GitHub/semlayer/frontend/src/types/nodeTypes").NodeProperty' is not assignable to type 'import("/Users/eganpj/GitHub/semlayer/frontend/src/api/nodeTypes").NodeProperty'.
+        Types of property 'lookup_id' are incompatible.
+          Type 'string | null | undefined' is not assignable to type 'string | undefined'.
+            Type 'null' is not assignable to type 'string | undefined'.
+frontend/src/pages/nodes/NodeTypeFormModal.tsx(351,83): error TS2554: Expected 1 arguments, but got 2.
+frontend/src/pages/nodes/NodeTypeFormModal.tsx(354,72): error TS2345: Argument of type 'string' is not assignable to parameter of type 'Record<string, any>'.
+frontend/src/pages/nodes/NodeTypeFormModal.tsx(381,44): error TS2345: Argument of type 'string' is not assignable to parameter of type 'Record<string, any>'.
+frontend/src/pages/nodes/NodeTypeSetupPage.tsx(48,88): error TS2554: Expected 0-1 arguments, but got 2.
+frontend/src/pages/nodes/NodeTypeSetupPage.tsx(66,36): error TS2345: Argument of type 'import("/Users/eganpj/GitHub/semlayer/frontend/src/api/nodeTypes").NodeType[]' is not assignable to parameter of type 'import("/Users/eganpj/GitHub/semlayer/frontend/src/types/nodeTypes").NodeType[]'.
+  Type 'import("/Users/eganpj/GitHub/semlayer/frontend/src/api/nodeTypes").NodeType' is not assignable to type 'import("/Users/eganpj/GitHub/semlayer/frontend/src/types/nodeTypes").NodeType'.
+    Types of property 'properties' are incompatible.
+      Type 'import("/Users/eganpj/GitHub/semlayer/frontend/src/api/nodeTypes").NodeProperty[]' is not assignable to type 'import("/Users/eganpj/GitHub/semlayer/frontend/src/types/nodeTypes").NodeProperty[]'.
+        Type 'import("/Users/eganpj/GitHub/semlayer/frontend/src/api/nodeTypes").NodeProperty' is not assignable to type 'import("/Users/eganpj/GitHub/semlayer/frontend/src/types/nodeTypes").NodeProperty'.
+          Types of property 'data_type' are incompatible.
+            Type 'string' is not assignable to type '"string" | "boolean" | "integer" | "date" | "float" | "json" | "text" | "array"'.
+frontend/src/pages/nodes/NodeTypeSetupPage.tsx(72,26): error TS2345: Argument of type 'import("/Users/eganpj/GitHub/semlayer/frontend/src/api/nodeTypes").NodeType[]' is not assignable to parameter of type 'import("/Users/eganpj/GitHub/semlayer/frontend/src/types/nodeTypes").NodeType[]'.
+  Type 'import("/Users/eganpj/GitHub/semlayer/frontend/src/api/nodeTypes").NodeType' is not assignable to type 'import("/Users/eganpj/GitHub/semlayer/frontend/src/types/nodeTypes").NodeType'.
+    Types of property 'properties' are incompatible.
+      Type 'import("/Users/eganpj/GitHub/semlayer/frontend/src/api/nodeTypes").NodeProperty[]' is not assignable to type 'import("/Users/eganpj/GitHub/semlayer/frontend/src/types/nodeTypes").NodeProperty[]'.
+        Type 'import("/Users/eganpj/GitHub/semlayer/frontend/src/api/nodeTypes").NodeProperty' is not assignable to type 'import("/Users/eganpj/GitHub/semlayer/frontend/src/types/nodeTypes").NodeProperty'.
+          Types of property 'data_type' are incompatible.
+            Type 'string' is not assignable to type '"string" | "boolean" | "integer" | "date" | "float" | "json" | "text" | "array"'.
+frontend/src/pages/nodes/NodeTypeSetupPage.tsx(89,40): error TS2345: Argument of type '{ id: string; tenantId: string; }' is not assignable to parameter of type 'string'.
+frontend/src/pages/nodes/NodeTypeSetupPage.tsx(218,11): error TS2322: Type 'NodeType[] | NodeType[]' is not assignable to type 'NodeType[]'.
+  Type 'import("/Users/eganpj/GitHub/semlayer/frontend/src/api/nodeTypes").NodeType[]' is not assignable to type 'import("/Users/eganpj/GitHub/semlayer/frontend/src/types/nodeTypes").NodeType[]'.
+    Type 'import("/Users/eganpj/GitHub/semlayer/frontend/src/api/nodeTypes").NodeType' is not assignable to type 'import("/Users/eganpj/GitHub/semlayer/frontend/src/types/nodeTypes").NodeType'.
+      Types of property 'properties' are incompatible.
+        Type 'import("/Users/eganpj/GitHub/semlayer/frontend/src/api/nodeTypes").NodeProperty[]' is not assignable to type 'import("/Users/eganpj/GitHub/semlayer/frontend/src/types/nodeTypes").NodeProperty[]'.
+          Type 'import("/Users/eganpj/GitHub/semlayer/frontend/src/api/nodeTypes").NodeProperty' is not assignable to type 'import("/Users/eganpj/GitHub/semlayer/frontend/src/types/nodeTypes").NodeProperty'.
+            Types of property 'data_type' are incompatible.
+              Type 'string' is not assignable to type '"string" | "boolean" | "integer" | "date" | "float" | "json" | "text" | "array"'.
+frontend/src/pages/nodes/NodeTypeSetupPage.tsx(230,9): error TS2322: Type 'import("/Users/eganpj/GitHub/semlayer/frontend/src/api/nodeTypes").NodeType[]' is not assignable to type 'import("/Users/eganpj/GitHub/semlayer/frontend/src/types/nodeTypes").NodeType[]'.
+  Type 'import("/Users/eganpj/GitHub/semlayer/frontend/src/api/nodeTypes").NodeType' is not assignable to type 'import("/Users/eganpj/GitHub/semlayer/frontend/src/types/nodeTypes").NodeType'.
+    Types of property 'properties' are incompatible.
+      Type 'import("/Users/eganpj/GitHub/semlayer/frontend/src/api/nodeTypes").NodeProperty[]' is not assignable to type 'import("/Users/eganpj/GitHub/semlayer/frontend/src/types/nodeTypes").NodeProperty[]'.
+        Type 'import("/Users/eganpj/GitHub/semlayer/frontend/src/api/nodeTypes").NodeProperty' is not assignable to type 'import("/Users/eganpj/GitHub/semlayer/frontend/src/types/nodeTypes").NodeProperty'.
+          Types of property 'data_type' are incompatible.
+            Type 'string' is not assignable to type '"string" | "boolean" | "integer" | "date" | "float" | "json" | "text" | "array"'.
+frontend/src/pages/Onboarding/ClientOnboardingWizard.tsx(595,22): error TS7006: Parameter 'acceptedFiles' implicitly has an 'any' type.
+frontend/src/pages/simulation/RebalancingWizard.tsx(95,53): error TS2345: Argument of type '{ boId: string; deltaType: string; changes: { type: "TO_TARGET_WEIGHTS" | "TO_NEW_TARGET"; constraints: { avoidShortTermGains: boolean; capSector: boolean; sectorCapValue: number; sectorCapName: string; }; }; }' is not assignable to parameter of type 'SimulationDelta'.
+  Property 'scenarioId' is missing in type '{ boId: string; deltaType: string; changes: { type: "TO_TARGET_WEIGHTS" | "TO_NEW_TARGET"; constraints: { avoidShortTermGains: boolean; capSector: boolean; sectorCapValue: number; sectorCapName: string; }; }; }' but required in type 'SimulationDelta'.
+frontend/src/pages/TabbedModal/__tests__/SearchBar.accessibility.test.tsx(19,7): error TS2322: Type '{ id: string; type: string; label: string; nodeId: string; tableName: string; }[]' is not assignable to type 'SearchResult[]'.
+  Type '{ id: string; type: string; label: string; nodeId: string; tableName: string; }' is not assignable to type 'SearchResult'.
+    Types of property 'type' are incompatible.
+      Type 'string' is not assignable to type '"table" | "column"'.
+frontend/src/pages/TabbedModal/SearchBar.tsx(28,41): error TS2686: 'React' refers to a UMD global, but the current file is a module. Consider adding an import instead.
+frontend/src/pages/TabbedModal/SearchBar.tsx(54,9): error TS17001: JSX elements cannot have multiple attributes with the same name.
+frontend/src/pages/TabbedModal/tabs/SemanticCatalogView.tsx(88,11): error TS2322: Type 'string | undefined' is not assignable to type 'string'.
+  Type 'undefined' is not assignable to type 'string'.
+frontend/src/pages/WealthTransfer/GiftTrackingDashboard.tsx(7,3): error TS2305: Module '"@mui/material"' has no exported member 'Timeline'.
+frontend/src/pages/WealthTransfer/GiftTrackingDashboard.tsx(8,3): error TS2305: Module '"@mui/material"' has no exported member 'TimelineItem'.
+frontend/src/pages/WealthTransfer/GiftTrackingDashboard.tsx(9,3): error TS2305: Module '"@mui/material"' has no exported member 'TimelineSeparator'.
+frontend/src/pages/WealthTransfer/GiftTrackingDashboard.tsx(10,3): error TS2305: Module '"@mui/material"' has no exported member 'TimelineConnector'.
+frontend/src/pages/WealthTransfer/GiftTrackingDashboard.tsx(11,3): error TS2305: Module '"@mui/material"' has no exported member 'TimelineContent'.
+frontend/src/pages/WealthTransfer/GiftTrackingDashboard.tsx(12,3): error TS2305: Module '"@mui/material"' has no exported member 'TimelineDot'.
+frontend/src/pages/WealthTransfer/GiftTrackingDashboard.tsx(13,3): error TS2305: Module '"@mui/material"' has no exported member 'TimelineOppositeContent'.
+frontend/src/pages/WealthTransfer/WealthTransferFlow.tsx(68,26): error TS2347: Untyped function calls may not accept type arguments.
+frontend/src/pages/WealthTransfer/WealthTransferFlow.tsx(99,35): error TS18046: 'd' is of type 'unknown'.
+frontend/src/pages/WealthTransfer/WealthTransferFlow.tsx(104,22): error TS18046: 'd' is of type 'unknown'.
+frontend/src/pages/WealthTransfer/WealthTransferFlow.tsx(104,50): error TS18046: 'd' is of type 'unknown'.
+frontend/src/pages/WealthTransfer/WealthTransferFlow.tsx(104,91): error TS18046: 'd' is of type 'unknown'.
+frontend/src/pages/WealthTransfer/WealthTransferFlow.tsx(119,32): error TS18046: 'd' is of type 'unknown'.
+frontend/src/pages/WealthTransfer/WealthTransferFlow.tsx(123,21): error TS18046: 'd' is of type 'unknown'.
+frontend/src/pages/WealthTransfer/WealthTransferFlow.tsx(123,47): error TS18046: 'd' is of type 'unknown'.
+frontend/src/pages/WealthTransfer/WealthTransferFlow.tsx(134,18): error TS18046: 'd' is of type 'unknown'.
+frontend/src/types/access.ts(75,3): error TS2300: Duplicate identifier 'instanceId'.
+frontend/src/types/access.ts(76,3): error TS2300: Duplicate identifier 'instanceName'.
+frontend/src/types/access.ts(83,3): error TS2300: Duplicate identifier 'instanceId'.
+frontend/src/types/access.ts(84,3): error TS2300: Duplicate identifier 'instanceName'.
+frontend/src/types/access.ts(223,13): error TS2339: Property 'datasourceName' does not exist on type 'OperatingScope'.
+frontend/src/types/access.ts(223,46): error TS2339: Property 'datasourceName' does not exist on type 'OperatingScope'.
+frontend/src/utils/propertyHelpers.ts(99,14): error TS2339: Property 'validation' does not exist on type 'NodePropertyConfig'.
+frontend/src/utils/propertyHelpers.ts(99,58): error TS2339: Property 'validation' does not exist on type 'NodePropertyConfig'.
+frontend/src/utils/propertyHelpers.ts(99,128): error TS2339: Property 'validation' does not exist on type 'NodePropertyConfig'.
+frontend/src/utils/propertyHelpers.ts(100,14): error TS2339: Property 'validation' does not exist on type 'NodePropertyConfig'.
+frontend/src/utils/propertyHelpers.ts(100,58): error TS2339: Property 'validation' does not exist on type 'NodePropertyConfig'.
+frontend/src/utils/propertyHelpers.ts(100,128): error TS2339: Property 'validation' does not exist on type 'NodePropertyConfig'.
+frontend/src/utils/propertyHelpers.ts(104,14): error TS2339: Property 'validation' does not exist on type 'NodePropertyConfig'.
+frontend/src/utils/propertyHelpers.ts(104,73): error TS2339: Property 'validation' does not exist on type 'NodePropertyConfig'.
+frontend/src/utils/propertyHelpers.ts(104,154): error TS2339: Property 'validation' does not exist on type 'NodePropertyConfig'.
+frontend/src/utils/propertyHelpers.ts(105,14): error TS2339: Property 'validation' does not exist on type 'NodePropertyConfig'.
+frontend/src/utils/propertyHelpers.ts(105,73): error TS2339: Property 'validation' does not exist on type 'NodePropertyConfig'.
+frontend/src/utils/propertyHelpers.ts(105,153): error TS2339: Property 'validation' does not exist on type 'NodePropertyConfig'.
+frontend/src/utils/propertyHelpers.ts(106,14): error TS2339: Property 'validation' does not exist on type 'NodePropertyConfig'.
+frontend/src/utils/propertyHelpers.ts(107,40): error TS2339: Property 'validation' does not exist on type 'NodePropertyConfig'.
+frontend/src/utils/propertyHelpers.ts(117,12): error TS2339: Property 'validation' does not exist on type 'NodePropertyConfig'.
+frontend/src/utils/propertyHelpers.ts(118,14): error TS2339: Property 'validation' does not exist on type 'NodePropertyConfig'.
+frontend/src/utils/propertyHelpers.ts(118,73): error TS2339: Property 'validation' does not exist on type 'NodePropertyConfig'.
+frontend/src/utils/propertyHelpers.ts(118,156): error TS2339: Property 'validation' does not exist on type 'NodePropertyConfig'.
+frontend/src/utils/propertyHelpers.ts(119,14): error TS2339: Property 'validation' does not exist on type 'NodePropertyConfig'.
+frontend/src/utils/propertyHelpers.ts(119,73): error TS2339: Property 'validation' does not exist on type 'NodePropertyConfig'.
+frontend/src/utils/propertyHelpers.ts(119,155): error TS2339: Property 'validation' does not exist on type 'NodePropertyConfig'.
+frontend/src/utils/propertyHelpers.ts(130,12): error TS2339: Property 'validation' does not exist on type 'NodePropertyConfig'.
+frontend/src/utils/propertyHelpers.ts(130,32): error TS2339: Property 'validation' does not exist on type 'NodePropertyConfig'.
+frontend/src/utils/propertyHelpers.ts(131,18): error TS2339: Property 'validation' does not exist on type 'NodePropertyConfig'.
+frontend/src/utils/propertyHelpers.ts(141,12): error TS2339: Property 'format' does not exist on type 'NodePropertyConfig'.
+frontend/src/utils/propertyHelpers.ts(144,19): error TS2339: Property 'format' does not exist on type 'NodePropertyConfig'.
+frontend/src/utils/propertyHelpers.ts(152,12): error TS2339: Property 'validation' does not exist on type 'NodePropertyConfig'.
+frontend/src/utils/propertyHelpers.ts(153,21): error TS2339: Property 'validation' does not exist on type 'NodePropertyConfig'.
+frontend/src/utils/propertyHelpers.ts(153,73): error TS2339: Property 'validation' does not exist on type 'NodePropertyConfig'.
+frontend/src/utils/propertyHelpers.ts(154,21): error TS2339: Property 'validation' does not exist on type 'NodePropertyConfig'.
+frontend/src/utils/propertyHelpers.ts(154,73): error TS2339: Property 'validation' does not exist on type 'NodePropertyConfig'.
+frontend/src/utils/propertyHelpers.ts(155,21): error TS2339: Property 'validation' does not exist on type 'NodePropertyConfig'.
+frontend/src/utils/propertyHelpers.ts(155,81): error TS2339: Property 'validation' does not exist on type 'NodePropertyConfig'.
+frontend/src/utils/propertyHelpers.ts(156,21): error TS2339: Property 'validation' does not exist on type 'NodePropertyConfig'.
+frontend/src/utils/propertyHelpers.ts(156,81): error TS2339: Property 'validation' does not exist on type 'NodePropertyConfig'.
+frontend/src/utils/propertyHelpers.ts(157,21): error TS2339: Property 'validation' does not exist on type 'NodePropertyConfig'.
+frontend/src/utils/propertyHelpers.ts(157,77): error TS2339: Property 'validation' does not exist on type 'NodePropertyConfig'.

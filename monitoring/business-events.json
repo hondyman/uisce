@@ -1,0 +1,98 @@
+[
+  {
+    "eventType": "semlayer.access_evaluation",
+    "title": "Access Evaluation Completed",
+    "description": "An access evaluation decision has been made",
+    "properties": {
+      "tenant_id": {
+        "type": "string",
+        "displayName": "Tenant ID"
+      },
+      "user_id": {
+        "type": "string",
+        "displayName": "User ID (Hashed)"
+      },
+      "asset_id": {
+        "type": "string",
+        "displayName": "Asset ID"
+      },
+      "decision": {
+        "type": "string",
+        "displayName": "Decision",
+        "enum": ["allow", "deny", "partial"]
+      },
+      "cache_hit": {
+        "type": "boolean",
+        "displayName": "Cache Hit"
+      },
+      "duration_ms": {
+        "type": "number",
+        "displayName": "Duration (ms)"
+      }
+    }
+  },
+  {
+    "eventType": "semlayer.governance.action",
+    "title": "Governance Action Performed",
+    "description": "A governance steward has performed an action",
+    "properties": {
+      "action_type": {
+        "type": "string",
+        "displayName": "Action Type",
+        "enum": ["approve", "reject", "simulate", "grant", "revoke"]
+      },
+      "steward_id": {
+        "type": "string",
+        "displayName": "Steward ID (Hashed)"
+      },
+      "tenant_id": {
+        "type": "string",
+        "displayName": "Tenant ID"
+      },
+      "target_type": {
+        "type": "string",
+        "displayName": "Target Type",
+        "enum": ["claim", "policy", "user", "asset"]
+      },
+      "target_id": {
+        "type": "string",
+        "displayName": "Target ID"
+      },
+      "duration_ms": {
+        "type": "number",
+        "displayName": "Duration (ms)"
+      }
+    }
+  },
+  {
+    "eventType": "semlayer.conversational.query",
+    "title": "Conversational Query Processed",
+    "description": "A conversational NL query has been processed",
+    "properties": {
+      "conversation_id": {
+        "type": "string",
+        "displayName": "Conversation ID"
+      },
+      "tenant_id": {
+        "type": "string",
+        "displayName": "Tenant ID"
+      },
+      "user_id": {
+        "type": "string",
+        "displayName": "User ID (Hashed)"
+      },
+      "query_length": {
+        "type": "number",
+        "displayName": "Query Length"
+      },
+      "turns_count": {
+        "type": "number",
+        "displayName": "Turns in Conversation"
+      },
+      "success": {
+        "type": "boolean",
+        "displayName": "Success"
+      }
+    }
+  }
+]

@@ -1,0 +1,36 @@
+cubes:
+  - name: test_context
+    sql_table: "test_context_default.data"
+    data_source: default
+
+    joins:
+      - name: related
+        sql: "{CUBE}.id = related.{CUBE}_id"
+        relationship: one_to_many
+
+    dimensions:
+      - name: id
+        sql: "{CUBE}.id"
+        type: number
+        primary_key: true
+
+      - name: name
+        sql: "{CUBE}.name"
+        type: string
+
+    measures:
+      - name: count
+        type: count
+
+    # Test SQL_UTILS
+    dimensions:
+      - name: created_at_converted
+        sql: "CONVERT_TZ(created_at, @@session.time_zone, '+00:00')"
+        type: time
+
+      - name: updated_at_converted
+        sql: "CONVERT_TZ(updated_at, @@session.time_zone, '+00:00')"
+        type: time
+
+    # Test COMPILE_CONTEXT
+    sql_table: "test_context_default.data"

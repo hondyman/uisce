@@ -1,0 +1,25 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "ClientInvestor",
+  "type": "object",
+  "properties": {
+    "name": { "type": "string" },
+    "contact_details": {
+      "type": "object",
+      "properties": {
+        "email": { "type": "string", "format": "email" },
+        "phone": { "type": "string" }
+      },
+      "required": ["email"]
+    },
+    "risk_tolerance": { "type": "string", "enum": ["Low", "Medium", "High"] },
+    "age": { "type": "integer", "minimum": 0 },
+    "tax_id": { "type": ["string", "null"] },
+    "org_type": { "type": ["string", "null"] },
+    "signatories": { "type": "array", "items": { "type": "string" } },
+    "generations": { "type": "integer" },
+    "aggregated_reporting": { "type": "boolean" },
+    "custom_fields": { "type": ["object", "null"] }
+  },
+  "required": ["name", "contact_details", "risk_tolerance"]
+}

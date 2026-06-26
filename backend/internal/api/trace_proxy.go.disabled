@@ -1,0 +1,345 @@
+package api
+
+import (
+	"encoding/json"
+	"fmt"
+	"io"
+	"net/http"
+	"os"
+	"time"
+
+	"github.com/go-chi/chi/v5"
+	"github.com/hondyman/semlayer/backend/internal/security"
+)
+
+// init sets up trace proxy authentication configuration on package initialization
+func init() {
+	initTraceAuthConfig()
+}
+
+// traceAuthConfig is the global configuration for trace proxy authentication
+// This is initialized at package load time and persists for the server lifetime
+var traceAuthConfig *TraceAuthConfig
+
+// initTraceAuthConfig initializes the trace authentication configuration
+// with API keys loaded from environment variables
+func initTraceAuthConfig() {
+	traceAuthConfig = DefaultTraceAuthConfig()
+
+	// In production, API keys should be loaded from a secure store (database, vault, etc.)
+	// For now, we support per-tenant API keys from environment variables
+	// Format: TRACE_API_KEY_<TENANT_ID>=<key>
+
+	// This allows different tenants to have different authentication credentials
+	// The actual validation logic supports multiple API keys per tenant
+
+	// Example configuration (populated from environment in production):
+	//   TRACE_API_KEY_TENANT_A=sk-trace-tenant-a-production
+	//   TRACE_API_KEY_TENANT_B=sk-trace-tenant-b-production
+	//
+	// These would be loaded and registered during initialization
+}
+
+// proxyTempoTraces proxies trace search requests (by plan_id, service name, etc.) to the
+// configured trace backend (Tempo/Jaeger) while enforcing authentication and tenant isolation.
+// This centralizes trace access control, prevents CORS issues, and ensures audit logging.
+//
+// Authentication:
+//   - Validates X-API-Key header or Authorization: Bearer token
+//   - Ensures user has admin, sre, or ops_manager role
+//   - Requires X-Tenant-ID header for tenant identification
+//
+// Security:
+//   - Validates plan_id parameter format
+//   - Filters response spans to only include those for the authenticated tenant
+//   - Sets appropriate cache headers for trace data (no caching - always fresh)
+//   - Timeouts: 10s for upstream request
+//
+// Returns:
+//   - 200 OK: Trace search results filtered by tenant
+//   - 400 Bad Request: Missing/invalid authentication or parameters
+//   - 401 Unauthorized: Invalid API key
+//   - 403 Forbidden: Insufficient role permissions
+//   - 503 Service Unavailable: Trace backend not configured
+//   - 504 Bad Gateway: Trace backend unreachable
+func (s *Server) proxyTempoTraces(w http.ResponseWriter, r *http.Request) {
+	// Validate authentication first - most restrictive gate
+	authInfo, tenantID, authErr, authStatus := ValidateTraceAuth(r, traceAuthConfig)
+	if authErr != nil {
+		writeJSONError(w, authStatus, "Authorization or validation error", "error", nil)
+		return
+	}
+
+	// Require trace backend configuration
+	traceBackend := os.Getenv("TRACE_QUERY_URL")
+	if traceBackend == "" {
+		writeJSONError(w, http.StatusServiceUnavailable, "Trace backend not configured", "service_unavailable", map[string]string{"env_var": "TRACE_QUERY_URL"})
+		return
+	}
+
+	// Extract and validate query parameters
+	planID := r.URL.Query().Get("plan_id")
+	traceID := r.URL.Query().Get("trace_id")
+
+	if valErr, valStatus := ValidateTraceQueryParams(planID, traceID); valErr != nil {
+		writeJSONError(w, valStatus, "Authorization or validation error", "error", nil)
+		return
+	}
+
+	// Add authentication context for downstream processing
+	ctx := security.WithAuthInfo(r.Context(), *authInfo)
+
+	// Build upstream URL with all query parameters
+	upstream := fmt.Sprintf("%s?%s", traceBackend, r.URL.RawQuery)
+
+	// Create HTTP client with timeout to prevent hung requests
+	client := &http.Client{Timeout: 10 * time.Second}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, upstream, nil)
+	if err != nil {
+		writeJSONError(w, http.StatusInternalServerError, "Failed to construct upstream trace request", "request_construction_failed", map[string]string{"error": err.Error()})
+		return
+	}
+
+	// Forward Authorization header to upstream trace backend
+	// This allows the trace backend to perform its own authentication if needed
+	if auth := r.Header.Get("Authorization"); auth != "" {
+		req.Header.Set("Authorization", auth)
+	}
+
+	// Execute upstream request
+	resp, err := client.Do(req)
+	if err != nil {
+		WriteErrorResponse(w, http.StatusBadGateway, &ErrorResponse{
+			Error:     "trace_backend_unreachable",
+			Message:   "Failed to contact trace backend",
+			Details:   fmt.Sprintf("Trace backend connection failed: %v", err),
+			Timestamp: time.Now().Format(time.RFC3339),
+		})
+		return
+	}
+	defer resp.Body.Close()
+
+	// Read the response body for inspection and filtering
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		WriteErrorResponse(w, http.StatusBadGateway, &ErrorResponse{
+			Error:     "trace_response_read_failed",
+			Message:   "Failed to read trace backend response",
+			Details:   fmt.Sprintf("Error reading response body: %v", err),
+			Timestamp: time.Now().Format(time.RFC3339),
+		})
+		return
+	}
+
+	// Parse response to apply tenant filtering if configured
+	tracesResponse := interface{}(nil)
+	if len(body) > 0 && resp.Header.Get("Content-Type") == "application/json" {
+		if err := json.Unmarshal(body, &tracesResponse); err == nil {
+			// Apply tenant-based filtering to spans
+			tracesResponse = filterTraceResponseByTenant(tracesResponse, tenantID)
+
+			// Re-marshal the filtered response
+			if filteredBody, err := json.Marshal(tracesResponse); err == nil {
+				body = filteredBody
+			}
+		}
+	}
+
+	// Write response headers with appropriate cache control for trace data
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
+	w.Header().Set("X-Tenant-ID", tenantID)
+	w.WriteHeader(resp.StatusCode)
+	w.Write(body)
+}
+
+// proxyTempoGetTrace proxies fetching a specific trace by ID from the trace backend
+// while enforcing authentication and tenant isolation.
+//
+// Authentication:
+//   - Validates X-API-Key header or Authorization: Bearer token
+//   - Ensures user has admin, sre, or ops_manager role
+//   - Requires X-Tenant-ID header for tenant identification
+//
+// Security:
+//   - Validates trace_id parameter format (32 hex characters)
+//   - Filters response to only include spans/data for authenticated tenant
+//   - Sets no-cache headers since individual traces are dynamic
+//   - Timeouts: 10s for upstream request
+//
+// Returns:
+//   - 200 OK: Trace details filtered by tenant
+//   - 400 Bad Request: Missing/invalid authentication or parameters
+//   - 401 Unauthorized: Invalid API key
+//   - 403 Forbidden: Insufficient role permissions
+//   - 404 Not Found: Trace not found in backend
+//   - 503 Service Unavailable: Trace backend not configured
+//   - 504 Bad Gateway: Trace backend unreachable
+func (s *Server) proxyTempoGetTrace(w http.ResponseWriter, r *http.Request) {
+	// Validate authentication first - most restrictive gate
+	authInfo, tenantID, authErr, authStatus := ValidateTraceAuth(r, traceAuthConfig)
+	if authErr != nil {
+		writeJSONError(w, authStatus, "Authorization or validation error", "error", nil)
+		return
+	}
+
+	// Require trace backend configuration
+	traceBackend := os.Getenv("TRACE_QUERY_URL")
+	if traceBackend == "" {
+		WriteErrorResponse(w, http.StatusServiceUnavailable, &ErrorResponse{
+			Error:     "service_unavailable",
+			Message:   "Trace backend not configured",
+			Details:   "TRACE_QUERY_URL environment variable is not set",
+			Timestamp: time.Now().Format(time.RFC3339),
+		})
+		return
+	}
+
+	// Extract trace ID from URL path parameter
+	traceID := chi.URLParam(r, "traceId")
+	if traceID == "" {
+		WriteErrorResponse(w, http.StatusBadRequest, &ErrorResponse{
+			Error:     "bad_request",
+			Message:   "Missing trace identifier",
+			Details:   "traceId path parameter is required",
+			Timestamp: time.Now().Format(time.RFC3339),
+		})
+		return
+	}
+
+	// Validate trace ID format
+	if !isValidTraceID(traceID) {
+		WriteErrorResponse(w, http.StatusBadRequest, &ErrorResponse{
+			Error:     "bad_request",
+			Message:   "Invalid trace ID format",
+			Details:   "trace_id must be 32 hexadecimal characters (16 bytes)",
+			Timestamp: time.Now().Format(time.RFC3339),
+		})
+		return
+	}
+
+	// Add authentication context for downstream processing
+	ctx := security.WithAuthInfo(r.Context(), *authInfo)
+
+	// Build upstream URL for fetching specific trace
+	upstream := fmt.Sprintf("%s/%s", traceBackend, traceID)
+
+	// Create HTTP client with timeout
+	client := &http.Client{Timeout: 10 * time.Second}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, upstream, nil)
+	if err != nil {
+		WriteErrorResponse(w, http.StatusInternalServerError, &ErrorResponse{
+			Error:     "request_construction_failed",
+			Message:   "Failed to construct upstream trace request",
+			Details:   fmt.Sprintf("Internal error during request preparation: %v", err),
+			Timestamp: time.Now().Format(time.RFC3339),
+		})
+		return
+	}
+
+	// Forward Authorization header to upstream trace backend
+	if auth := r.Header.Get("Authorization"); auth != "" {
+		req.Header.Set("Authorization", auth)
+	}
+
+	// Execute upstream request
+	resp, err := client.Do(req)
+	if err != nil {
+		WriteErrorResponse(w, http.StatusBadGateway, &ErrorResponse{
+			Error:     "trace_backend_unreachable",
+			Message:   "Failed to contact trace backend",
+			Details:   fmt.Sprintf("Trace backend connection failed: %v", err),
+			Timestamp: time.Now().Format(time.RFC3339),
+		})
+		return
+	}
+	defer resp.Body.Close()
+
+	// Handle trace not found at backend
+	if resp.StatusCode == http.StatusNotFound {
+		WriteErrorResponse(w, http.StatusNotFound, &ErrorResponse{
+			Error:     "not_found",
+			Message:   "Trace not found",
+			Details:   fmt.Sprintf("Trace with ID '%s' does not exist in the trace backend", traceID),
+			Timestamp: time.Now().Format(time.RFC3339),
+		})
+		return
+	}
+
+	// Read the response body for inspection and filtering
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		WriteErrorResponse(w, http.StatusBadGateway, &ErrorResponse{
+			Error:     "trace_response_read_failed",
+			Message:   "Failed to read trace backend response",
+			Details:   fmt.Sprintf("Error reading response body: %v", err),
+			Timestamp: time.Now().Format(time.RFC3339),
+		})
+		return
+	}
+
+	// Parse and filter response to apply tenant isolation
+	if len(body) > 0 && resp.Header.Get("Content-Type") == "application/json" {
+		var traceData interface{}
+		if err := json.Unmarshal(body, &traceData); err == nil {
+			// Apply tenant-based filtering
+			traceData = filterTraceResponseByTenant(traceData, tenantID)
+
+			// Re-marshal the filtered response
+			if filteredBody, err := json.Marshal(traceData); err == nil {
+				body = filteredBody
+			}
+		}
+	}
+
+	// Write response headers with cache control
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
+	w.Header().Set("X-Tenant-ID", tenantID)
+	w.WriteHeader(resp.StatusCode)
+	w.Write(body)
+}
+
+// filterTraceResponseByTenant filters trace response data to only include spans/data for the specified tenant
+// This enforces strict tenant isolation - no cross-tenant data leakage
+func filterTraceResponseByTenant(traceData interface{}, tenantID string) interface{} {
+	// Map response structure and filter spans list if present
+	switch data := traceData.(type) {
+	case map[string]interface{}:
+		filtered := make(map[string]interface{})
+
+		for key, value := range data {
+			switch key {
+			case "spans", "traceSpans", "trace_spans":
+				// These are lists of span objects - apply tenant filtering
+				if spans, ok := value.([]interface{}); ok {
+					filtered[key] = FilterSpansByTenant(spans, tenantID)
+				} else {
+					filtered[key] = value
+				}
+
+			case "traces", "data":
+				// Recursively filter nested trace objects
+				filtered[key] = filterTraceResponseByTenant(value, tenantID)
+
+			default:
+				// Pass through other fields unchanged
+				filtered[key] = value
+			}
+		}
+
+		return filtered
+
+	case []interface{}:
+		// For arrays, recursively filter each element
+		var filtered []interface{}
+		for _, item := range data {
+			filtered = append(filtered, filterTraceResponseByTenant(item, tenantID))
+		}
+		return filtered
+
+	default:
+		// Primitive types pass through unchanged
+		return traceData
+	}
+}

@@ -1,0 +1,525 @@
+{
+  "bundle_id": "advanced_fs_risk_ops_pack",
+  "domain": ["financial_services", "risk", "operations"],
+  "audience": ["executive", "risk", "treasury", "regulator", "operations"],
+  "version": "v1.0.0",
+  "owner": "patrick",
+  "tags": ["regulatory", "treasury", "liquidity", "credit_risk", "market_risk", "client_analytics", "operations"],
+  "metrics": [
+    {
+      "node_id": "cet1_ratio",
+      "category": "regulatory",
+      "description": "Common Equity Tier 1 capital divided by risk-weighted assets.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "DIVIDE({cet1_capital}, {risk_weighted_assets})",
+        "arguments": {
+          "cet1_capital": "field:cet1_capital",
+          "risk_weighted_assets": "field:risk_weighted_assets"
+        }
+      },
+      "badge": "🟧",
+      "function_class": "DAX-Logical",
+      "functions_used": ["DIVIDE"],
+      "governance": { "status": "golden" }
+    },
+    {
+      "node_id": "leverage_ratio",
+      "category": "regulatory",
+      "description": "Tier 1 capital divided by total exposure.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "DIVIDE({tier1_capital}, {total_exposure})",
+        "arguments": {
+          "tier1_capital": "field:tier1_capital",
+          "total_exposure": "field:total_exposure"
+        }
+      },
+      "badge": "🟧",
+      "function_class": "DAX-Logical",
+      "functions_used": ["DIVIDE"],
+      "governance": { "status": "golden" }
+    },
+    {
+      "node_id": "liquidity_coverage_ratio",
+      "category": "treasury",
+      "description": "High-quality liquid assets divided by net cash outflows over 30 days.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "DIVIDE({hql_assets}, {net_cash_outflows_30d})",
+        "arguments": {
+          "hql_assets": "field:hqla",
+          "net_cash_outflows_30d": "field:net_cash_outflows_30d"
+        }
+      },
+      "badge": "🟧",
+      "function_class": "DAX-Logical",
+      "functions_used": ["DIVIDE"],
+      "governance": { "status": "golden" }
+    },
+    {
+      "node_id": "net_stable_funding_ratio",
+      "category": "treasury",
+      "description": "Available stable funding divided by required stable funding.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "DIVIDE({available_stable_funding}, {required_stable_funding})",
+        "arguments": {
+          "available_stable_funding": "field:available_stable_funding",
+          "required_stable_funding": "field:required_stable_funding"
+        }
+      },
+      "badge": "🟧",
+      "function_class": "DAX-Logical",
+      "functions_used": ["DIVIDE"],
+      "governance": { "status": "golden" }
+    },
+    {
+      "node_id": "stress_test_capital_impact",
+      "category": "regulatory",
+      "description": "Post-stress CET1 divided by pre-stress CET1.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "DIVIDE({post_stress_cet1}, {pre_stress_cet1})",
+        "arguments": {
+          "post_stress_cet1": "field:post_stress_cet1",
+          "pre_stress_cet1": "field:pre_stress_cet1"
+        }
+      },
+      "badge": "🟧",
+      "function_class": "DAX-Logical",
+      "functions_used": ["DIVIDE"],
+      "governance": { "status": "golden" }
+    },
+    {
+      "node_id": "cumulative_liquidity_gap",
+      "category": "treasury",
+      "description": "Running sum of asset/liability gaps across time buckets.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "SUMX({gap_analysis}, {gap_amount})",
+        "arguments": {
+          "gap_analysis": "table:gap_analysis",
+          "gap_amount": "field:gap_amount"
+        }
+      },
+      "badge": "🟨",
+      "function_class": "DAX-Iterator",
+      "functions_used": ["SUMX"],
+      "governance": { "status": "draft" }
+    },
+    {
+      "node_id": "funding_concentration_ratio",
+      "category": "treasury",
+      "description": "Largest funding source divided by total funding.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "DIVIDE({largest_funding_source}, {total_funding})",
+        "arguments": {
+          "largest_funding_source": "field:largest_funding_source",
+          "total_funding": "field:total_funding"
+        }
+      },
+      "badge": "🟧",
+      "function_class": "DAX-Logical",
+      "functions_used": ["DIVIDE"],
+      "governance": { "status": "draft" }
+    },
+    {
+      "node_id": "cost_of_funds",
+      "category": "treasury",
+      "description": "Weighted average interest rate on liabilities.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "DIVIDE(SUMX({liabilities}, {outstanding} * {interest_rate}), SUM({outstanding}))",
+        "arguments": {
+          "liabilities": "table:liabilities",
+          "outstanding": "field:outstanding_amount",
+          "interest_rate": "field:interest_rate"
+        }
+      },
+      "badge": "🟨",
+      "function_class": "DAX-Iterator",
+      "functions_used": ["SUMX", "SUM", "DIVIDE", "MULTIPLY"],
+      "governance": { "status": "draft" }
+    },
+    {
+      "node_id": "liquidity_at_risk",
+      "category": "treasury",
+      "description": "Potential liquidity shortfall under stress scenarios.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "MIN(0, {available_liquidity} - {stressed_outflows})",
+        "arguments": {
+          "available_liquidity": "field:available_liquidity",
+          "stressed_outflows": "field:stressed_outflows"
+        }
+      },
+      "badge": "🟧",
+      "function_class": "DAX-Logical",
+      "functions_used": ["MIN", "SUBTRACT"],
+      "governance": { "status": "draft" }
+    },
+    {
+      "node_id": "expected_credit_loss",
+      "category": "credit_risk",
+      "description": "IFRS 9 / CECL expected credit loss = PD × LGD × EAD.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "{pd} * {lgd} * {ead}",
+        "arguments": {
+          "pd": "field:probability_of_default",
+          "lgd": "field:loss_given_default",
+          "ead": "field:exposure_at_default"
+        }
+      },
+      "badge": "🟩",
+      "function_class": "DAX-Financial",
+      "functions_used": ["MULTIPLY"],
+      "governance": { "status": "golden" }
+    },
+    {
+      "node_id": "probability_of_default",
+      "category": "credit_risk",
+      "description": "Model-based or rating-mapped probability of default.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "LOGISTIC_REGRESSION({credit_factors})",
+        "arguments": {
+          "credit_factors": "ARRAY_AGG(credit_factor)"
+        }
+      },
+      "badge": "🟩",
+      "function_class": "DAX-Financial",
+      "functions_used": ["LOGISTIC_REGRESSION"],
+      "governance": { "status": "draft" }
+    },
+    {
+      "node_id": "loss_given_default",
+      "category": "credit_risk",
+      "description": "Percentage loss if borrower defaults.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "DIVIDE({expected_loss}, {exposure_at_default})",
+        "arguments": {
+          "expected_loss": "field:expected_loss",
+          "exposure_at_default": "field:exposure_at_default"
+        }
+      },
+      "badge": "🟧",
+      "function_class": "DAX-Logical",
+      "functions_used": ["DIVIDE"],
+      "governance": { "status": "golden" }
+    },
+    {
+      "node_id": "exposure_at_default",
+      "category": "credit_risk",
+      "description": "Expected outstanding amount at default.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "{current_exposure} * {credit_conversion_factor}",
+        "arguments": {
+          "current_exposure": "field:current_exposure",
+          "credit_conversion_factor": "field:ccf"
+        }
+      },
+      "badge": "🟧",
+      "function_class": "DAX-Logical",
+      "functions_used": ["MULTIPLY"],
+      "governance": { "status": "golden" }
+    },
+    {
+      "node_id": "incremental_risk_charge",
+      "category": "market_risk",
+      "description": "Credit migration and default risk for trading book.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "SQRT(SUMX({positions}, POWER({position_risk}, 2)))",
+        "arguments": {
+          "positions": "table:trading_positions",
+          "position_risk": "field:position_risk"
+        }
+      },
+      "badge": "🟨",
+      "function_class": "DAX-Iterator",
+      "functions_used": ["SUMX", "SQRT", "POWER"],
+      "governance": { "status": "draft" }
+    },
+    {
+      "node_id": "counterparty_valuation_adjustment",
+      "category": "market_risk",
+      "description": "Adjustment to derivative fair value for counterparty credit risk.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "SUMX({derivative_positions}, {exposure} * {default_probability} * (1 - {recovery_rate}))",
+        "arguments": {
+          "derivative_positions": "table:derivative_positions",
+          "exposure": "field:exposure",
+          "default_probability": "field:pd",
+          "recovery_rate": "field:recovery_rate"
+        }
+      },
+      "badge": "🟨",
+      "function_class": "DAX-Iterator",
+      "functions_used": ["SUMX", "MULTIPLY", "SUBTRACT"],
+      "governance": { "status": "draft" }
+    },
+    {
+      "node_id": "expected_shortfall",
+      "category": "market_risk",
+      "description": "Tail risk beyond Value at Risk.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "AVERAGEX(FILTER({loss_distribution}, {loss} > {var_threshold}), {loss})",
+        "arguments": {
+          "loss_distribution": "table:loss_distribution",
+          "loss": "field:loss_amount",
+          "var_threshold": "field:var_threshold"
+        }
+      },
+      "badge": "🟨",
+      "function_class": "DAX-Iterator",
+      "functions_used": ["AVERAGEX", "FILTER"],
+      "governance": { "status": "draft" }
+    },
+    {
+      "node_id": "client_profitability",
+      "category": "client_analytics",
+      "description": "Revenue minus direct costs per client.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "{client_revenue} - {client_direct_costs}",
+        "arguments": {
+          "client_revenue": "field:client_revenue",
+          "client_direct_costs": "field:client_direct_costs"
+        }
+      },
+      "badge": "🟧",
+      "function_class": "DAX-Logical",
+      "functions_used": ["SUBTRACT"],
+      "governance": { "status": "draft" }
+    },
+    {
+      "node_id": "share_of_wallet",
+      "category": "client_analytics",
+      "description": "Client's assets with firm divided by total estimated assets.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "DIVIDE({assets_with_firm}, {total_estimated_assets})",
+        "arguments": {
+          "assets_with_firm": "field:assets_with_firm",
+          "total_estimated_assets": "field:total_estimated_assets"
+        }
+      },
+      "badge": "🟧",
+      "function_class": "DAX-Logical",
+      "functions_used": ["DIVIDE"],
+      "governance": { "status": "draft" }
+    },
+    {
+      "node_id": "client_tenure_value",
+      "category": "client_analytics",
+      "description": "Lifetime value adjusted for churn probability.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "{ltv} * (1 - {churn_probability})",
+        "arguments": {
+          "ltv": "field:lifetime_value",
+          "churn_probability": "field:churn_probability"
+        }
+      },
+      "badge": "🟧",
+      "function_class": "DAX-Logical",
+      "functions_used": ["MULTIPLY", "SUBTRACT"],
+      "governance": { "status": "draft" }
+    },
+    {
+      "node_id": "cross_sell_ratio",
+      "category": "client_analytics",
+      "description": "Average products per client.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "DIVIDE({total_products_sold}, {unique_clients})",
+        "arguments": {
+          "total_products_sold": "field:total_products_sold",
+          "unique_clients": "field:unique_clients"
+        }
+      },
+      "badge": "🟧",
+      "function_class": "DAX-Logical",
+      "functions_used": ["DIVIDE"],
+      "governance": { "status": "draft" }
+    },
+    {
+      "node_id": "client_risk_score",
+      "category": "client_analytics",
+      "description": "Composite of credit, market, and ESG risk.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "({credit_risk} * 0.4) + ({market_risk} * 0.3) + ({esg_risk} * 0.3)",
+        "arguments": {
+          "credit_risk": "field:credit_risk_score",
+          "market_risk": "field:market_risk_score",
+          "esg_risk": "field:esg_risk_score"
+        }
+      },
+      "badge": "🟧",
+      "function_class": "DAX-Logical",
+      "functions_used": ["ADD", "MULTIPLY"],
+      "governance": { "status": "draft" }
+    },
+    {
+      "node_id": "stp_rate",
+      "category": "operations",
+      "description": "Straight-through processing rate = % of transactions processed without manual intervention.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "DIVIDE({auto_processed_txns}, {total_txns})",
+        "arguments": {
+          "auto_processed_txns": "field:auto_processed_txns",
+          "total_txns": "field:total_txns"
+        }
+      },
+      "badge": "🟧",
+      "function_class": "DAX-Logical",
+      "functions_used": ["DIVIDE"],
+      "governance": { "status": "draft" }
+    },
+    {
+      "node_id": "trade_break_rate",
+      "category": "operations",
+      "description": "Percentage of trades requiring reconciliation.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "DIVIDE({trades_with_breaks}, {total_trades})",
+        "arguments": {
+          "trades_with_breaks": "field:trades_with_breaks",
+          "total_trades": "field:total_trades"
+        }
+      },
+      "badge": "🟧",
+      "function_class": "DAX-Logical",
+      "functions_used": ["DIVIDE"],
+      "governance": { "status": "draft" }
+    },
+    {
+      "node_id": "settlement_efficiency",
+      "category": "operations",
+      "description": "On-time settlements divided by total settlements.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "DIVIDE({on_time_settlements}, {total_settlements})",
+        "arguments": {
+          "on_time_settlements": "field:on_time_settlements",
+          "total_settlements": "field:total_settlements"
+        }
+      },
+      "badge": "🟧",
+      "function_class": "DAX-Logical",
+      "functions_used": ["DIVIDE"],
+      "governance": { "status": "draft" }
+    },
+    {
+      "node_id": "operational_loss_ratio",
+      "category": "operations",
+      "description": "Operational losses divided by revenue.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "DIVIDE({operational_losses}, {revenue})",
+        "arguments": {
+          "operational_losses": "field:operational_losses",
+          "revenue": "field:revenue"
+        }
+      },
+      "badge": "🟧",
+      "function_class": "DAX-Logical",
+      "functions_used": ["DIVIDE"],
+      "governance": { "status": "draft" }
+    },
+    {
+      "node_id": "cost_per_transaction",
+      "category": "operations",
+      "description": "Total operations cost divided by transaction volume.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "DIVIDE({total_ops_cost}, {transaction_volume})",
+        "arguments": {
+          "total_ops_cost": "field:total_ops_cost",
+          "transaction_volume": "field:transaction_volume"
+        }
+      },
+      "badge": "🟧",
+      "function_class": "DAX-Logical",
+      "functions_used": ["DIVIDE"],
+      "governance": { "status": "draft" }
+    },
+    {
+      "node_id": "multi_factor_attribution",
+      "category": "performance_attribution",
+      "description": "Performance attribution across style, sector, currency, duration, credit factors.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "SUMX({attribution_factors}, {factor_contribution})",
+        "arguments": {
+          "attribution_factors": "table:attribution_factors",
+          "factor_contribution": "field:factor_contribution"
+        }
+      },
+      "badge": "🟨",
+      "function_class": "DAX-Iterator",
+      "functions_used": ["SUMX"],
+      "governance": { "status": "draft" }
+    },
+    {
+      "node_id": "currency_impact",
+      "category": "performance_attribution",
+      "description": "Currency contribution to total return.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "{hedged_return} - {unhedged_return}",
+        "arguments": {
+          "hedged_return": "calc:hedged_portfolio_return",
+          "unhedged_return": "calc:unhedged_portfolio_return"
+        }
+      },
+      "badge": "🟧",
+      "function_class": "DAX-Logical",
+      "functions_used": ["SUBTRACT"],
+      "governance": { "status": "draft" }
+    },
+    {
+      "node_id": "hedging_effectiveness",
+      "category": "performance_attribution",
+      "description": "Hedge P/L divided by exposure P/L.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "DIVIDE({hedge_pnl}, {exposure_pnl})",
+        "arguments": {
+          "hedge_pnl": "field:hedge_pnl",
+          "exposure_pnl": "field:exposure_pnl"
+        }
+      },
+      "badge": "🟧",
+      "function_class": "DAX-Logical",
+      "functions_used": ["DIVIDE"],
+      "governance": { "status": "draft" }
+    },
+    {
+      "node_id": "liquidity_premium_capture",
+      "category": "performance_attribution",
+      "description": "Excess return from illiquid assets.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "{illiquid_return} - {liquid_benchmark_return}",
+        "arguments": {
+          "illiquid_return": "calc:illiquid_portfolio_return",
+          "liquid_benchmark_return": "calc:liquid_benchmark_return"
+        }
+      },
+      "badge": "🟧",
+      "function_class": "DAX-Logical",
+      "functions_used": ["SUBTRACT"],
+      "governance": { "status": "draft" }
+    }
+  ]
+}

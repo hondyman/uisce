@@ -1,0 +1,12 @@
+.viewEditorTitle {
+  margin: 0;
+}
+
+.validationIssuesList {
+  margin: 8px 0 0 20px;
+  padding: 0;
+}
+
+.validationIssueItem {
+  margin-bottom: 4px;
+}

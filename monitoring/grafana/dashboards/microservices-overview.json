@@ -1,0 +1,93 @@
+{
+  "dashboard": {
+    "id": null,
+    "title": "Semlayer Microservices Overview",
+    "tags": ["semlayer", "microservices"],
+    "timezone": "browser",
+    "panels": [
+      {
+        "id": 1,
+        "title": "AI Builder Request Rate",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "rate(http_requests_total{job=\"ai-builder\"}[5m])",
+            "legendFormat": "Requests/sec"
+          }
+        ],
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 0,
+          "y": 0
+        }
+      },
+      {
+        "id": 2,
+        "title": "Compliance Engine Events Processed",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "compliance_events_total",
+            "legendFormat": "Events"
+          }
+        ],
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 12,
+          "y": 0
+        }
+      },
+      {
+        "id": 3,
+        "title": "Workflow Compliance Checks",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "workflow_checks_total",
+            "legendFormat": "Checks"
+          }
+        ],
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 0,
+          "y": 8
+        }
+      },
+      {
+        "id": 4,
+        "title": "RabbitMQ Queue Length",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "rabbitmq_queue_messages{queue=~\"compliance.*|workflow.*|abac.*|temporal.*\"}",
+            "legendFormat": "{{queue}}"
+          }
+        ],
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 12,
+          "y": 8
+        }
+      }
+    ],
+    "time": {
+      "from": "now-1h",
+      "to": "now"
+    },
+    "timepicker": {},
+    "templating": {
+      "list": []
+    },
+    "annotations": {
+      "list": []
+    },
+    "refresh": "5s",
+    "schemaVersion": 27,
+    "version": 0,
+    "links": []
+  }
+}

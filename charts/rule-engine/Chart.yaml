@@ -1,0 +1,14 @@
+apiVersion: v2
+name: rule-engine
+description: Rule Engine - ABAC policy evaluation and rule processing
+type: application
+version: 1.0.0
+appVersion: "1.0.0"
+
+maintainers:
+- name: Semlayer Platform Team
+  email: platform@semlayer.io
+
+annotations:
+  category: governance
+  component: rules

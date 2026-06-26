@@ -1,0 +1,2 @@
+# github.com/eganpj/semlayer/backend/internal/scanner
+internal/scanner/service.go:48:2: declared and not used: oldHash

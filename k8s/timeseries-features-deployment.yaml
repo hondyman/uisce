@@ -1,0 +1,564 @@
+---
+# Namespace
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: timeseries-features
+  labels:
+    app: semlayer
+    component: timeseries-features
+    phase: 3.22
+---
+# ServiceAccount with RBAC
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: timeseries-features
+  namespace: timeseries-features
+  labels:
+    app: semlayer
+---
+# ClusterRole for required permissions
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: timeseries-features
+  labels:
+    app: semlayer
+rules:
+- apiGroups: [ "" ]
+  resources: [ "configmaps" ]
+  verbs: [ "get", "list", "watch" ]
+- apiGroups: [ "" ]
+  resources: [ "secrets" ]
+  verbs: [ "get", "list" ]
+- apiGroups: [ "" ]
+  resources: [ "pods" ]
+  verbs: [ "get", "list" ]
+- apiGroups: [ "apps" ]
+  resources: [ "deployments" ]
+  verbs: [ "get", "list" ]
+---
+# ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: timeseries-features
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: timeseries-features
+subjects:
+- kind: ServiceAccount
+  name: timeseries-features
+  namespace: timeseries-features
+---
+# ConfigMap for service configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: timeseries-features-config
+  namespace: timeseries-features
+  labels:
+    app: semlayer
+    component: timeseries-features
+data:
+  LOG_LEVEL: "INFO"
+  API_PORT: "8001"
+  WORKERS: "4"
+  TIMEOUT: "30"
+  SERVICE_NAME: "timeseries-features"
+
+  # Feature service parameters
+  DECOMPOSITION_PERIOD_DEFAULT: "7"
+  DECOMPOSITION_METHOD_DEFAULT: "additive"
+  FORECASTING_HORIZONS: "1,24,168,720"
+  FORECASTING_MODEL_DEFAULT: "ensemble"
+  ANOMALY_CONTAMINATION: "0.05"
+  ANOMALY_VOTING_THRESHOLD: "2"
+
+  # Feature defaults
+  FOURIER_HARMONICS: "3"
+  LAG_FEATURES: "1,7,14,30"
+  ROLLING_WINDOWS: "7,14,30"
+  ACF_MAX_LAG: "30"
+
+  # Monitoring
+  PROMETHEUS_PORT: "9090"
+  METRICS_ENABLED: "true"
+---
+# Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: timeseries-features
+  namespace: timeseries-features
+  labels:
+    app: semlayer
+    component: timeseries-features
+    version: "3.22"
+spec:
+  replicas: 3
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+
+  selector:
+    matchLabels:
+      app: semlayer
+      component: timeseries-features
+
+  template:
+    metadata:
+      name: timeseries-features
+      labels:
+        app: semlayer
+        component: timeseries-features
+        version: "3.22"
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9090"
+        prometheus.io/path: "/metrics"
+
+    spec:
+      serviceAccountName: timeseries-features
+
+      # Security context
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+
+      # Init container for setup
+      initContainers:
+      - name: setup
+        image: busybox:latest
+        command: [ 'sh', '-c', 'echo "Timeseries Features Service v3.22 starting..." && date' ]
+
+      containers:
+      - name: timeseries-features
+        image: semlayer/timeseries-features:3.22.0
+        imagePullPolicy: IfNotPresent
+
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
+
+        ports:
+        - name: api
+          containerPort: 8001
+          protocol: TCP
+        - name: metrics
+          containerPort: 9090
+          protocol: TCP
+
+        # Environment variables from ConfigMap
+        envFrom:
+        - configMapRef:
+            name: timeseries-features-config
+
+        env:
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: POD_IP
+          valueFrom:
+            fieldRef:
+              fieldPath: status.podIP
+
+        # Liveness probe
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: api
+            scheme: HTTP
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+
+        # Readiness probe
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: api
+            scheme: HTTP
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+
+        # Startup probe (for slower startups)
+        startupProbe:
+          httpGet:
+            path: /health
+            port: api
+            scheme: HTTP
+          failureThreshold: 30
+          periodSeconds: 2
+
+        # Resource requests and limits
+        resources:
+          requests:
+            cpu: 500m
+            memory: 512Mi
+          limits:
+            cpu: 2000m
+            memory: 2Gi
+
+        # Volume mounts
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp
+        - name: cache
+          mountPath: /cache
+
+        # Lifecycle hooks
+        lifecycle:
+          preStop:
+            exec:
+              command: [ "/bin/sh", "-c", "sleep 15" ]
+
+      # Volumes
+      volumes:
+      - name: tmp
+        emptyDir: {}
+      - name: cache
+        emptyDir: {}
+
+      # Pod disruption settings
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: component
+                  operator: In
+                  values:
+                  - timeseries-features
+              topologyKey: kubernetes.io/hostname
+---
+# Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: timeseries-features
+  namespace: timeseries-features
+  labels:
+    app: semlayer
+    component: timeseries-features
+  annotations:
+    service.beta.kubernetes.io/aws-load-balancer-type: "nlb"
+spec:
+  type: ClusterIP
+
+  selector:
+    app: semlayer
+    component: timeseries-features
+
+  ports:
+  - name: api
+    port: 8001
+    targetPort: api
+    protocol: TCP
+  - name: metrics
+    port: 9090
+    targetPort: metrics
+    protocol: TCP
+
+  sessionAffinity: ClientIP
+  sessionAffinityConfig:
+    clientIP:
+      timeoutSeconds: 10800
+---
+# HeadlessService for StatefulSet communications
+apiVersion: v1
+kind: Service
+metadata:
+  name: timeseries-features-headless
+  namespace: timeseries-features
+  labels:
+    app: semlayer
+    component: timeseries-features
+spec:
+  clusterIP: None
+
+  selector:
+    app: semlayer
+    component: timeseries-features
+
+  ports:
+  - name: api
+    port: 8001
+    targetPort: api
+---
+# HorizontalPodAutoscaler
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: timeseries-features
+  namespace: timeseries-features
+  labels:
+    app: semlayer
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: timeseries-features
+
+  minReplicas: 3
+  maxReplicas: 10
+
+  metrics:
+  # CPU-based scaling (70% target)
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+
+  # Memory-based scaling (80% target)
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 80
+
+  # Custom metric: API request rate
+  - type: Pods
+    pods:
+      metric:
+        name: http_requests_per_second
+      target:
+        type: AverageValue
+        averageValue: "1000"
+
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      policies:
+      - type: Percent
+        value: 50
+        periodSeconds: 60
+
+    scaleUp:
+      stabilizationWindowSeconds: 0
+      policies:
+      - type: Percent
+        value: 100
+        periodSeconds: 30
+      - type: Pods
+        value: 2
+        periodSeconds: 30
+      selectPolicy: Max
+---
+# PodDisruptionBudget
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: timeseries-features
+  namespace: timeseries-features
+  labels:
+    app: semlayer
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels:
+      app: semlayer
+      component: timeseries-features
+  unhealthyPodEvictionPolicy: AlwaysAllow
+---
+# NetworkPolicy
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: timeseries-features
+  namespace: timeseries-features
+  labels:
+    app: semlayer
+spec:
+  podSelector:
+    matchLabels:
+      app: semlayer
+      component: timeseries-features
+
+  policyTypes:
+  - Ingress
+  - Egress
+
+  ingress:
+  # Allow from API gateway
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: api-gateway
+    - podSelector:
+        matchLabels:
+          component: api-gateway
+    ports:
+    - protocol: TCP
+      port: 8001
+
+  # Allow prometheus scraping
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: monitoring
+    - podSelector:
+        matchLabels:
+          component: prometheus
+    ports:
+    - protocol: TCP
+      port: 9090
+
+  egress:
+  # Allow DNS
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          name: kube-system
+    ports:
+    - protocol: UDP
+      port: 53
+
+  # Allow external services (DB, message queues)
+  - to:
+    - podSelector: {}
+    ports:
+    - protocol: TCP
+      port: 5432
+    - protocol: TCP
+      port: 9092
+---
+# ServiceMonitor for Prometheus (if using Prometheus Operator)
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: timeseries-features
+  namespace: timeseries-features
+  labels:
+    app: semlayer
+    prometheus: kube-prometheus
+spec:
+  selector:
+    matchLabels:
+      app: semlayer
+      component: timeseries-features
+
+  endpoints:
+  - port: metrics
+    interval: 30s
+    path: /metrics
+    scrapeTimeout: 10s
+---
+# PrometheusRule for alerting
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: timeseries-features-alerts
+  namespace: timeseries-features
+  labels:
+    app: semlayer
+    prometheus: kube-prometheus
+spec:
+  groups:
+  - name: timeseries-features.rules
+    interval: 30s
+    rules:
+    # Alert: High decomposition latency
+    - alert: TimeSeriesDecompositionHighLatency
+      expr: |
+        histogram_quantile(0.95, timeseries_decomposition_duration_seconds_bucket) > 5
+      for: 5m
+      labels:
+        severity: warning
+        component: timeseries-features
+      annotations:
+        summary: "High decomposition latency"
+        description: "P95 decomposition latency > 5s"
+
+    # Alert: High forecast error
+    - alert: TimeSeriesForecastHighError
+      expr: |
+        timeseries_forecast_rmse > 10
+      for: 10m
+      labels:
+        severity: warning
+        component: timeseries-features
+      annotations:
+        summary: "High forecast RMSE"
+        description: "Forecast RMSE > 10"
+
+    # Alert: Anomaly detection failures
+    - alert: TimeSeriesAnomalyDetectionFailures
+      expr: |
+        increase(timeseries_anomaly_detection_errors_total[5m]) > 5
+      for: 5m
+      labels:
+        severity: critical
+        component: timeseries-features
+      annotations:
+        summary: "Anomaly detection failing"
+        description: "{{ $value }} anomaly detection failures in last 5 minutes"
+
+    # Alert: Pod CPU usage high
+    - alert: TimeSeriesFeaturesHighCPU
+      expr: |
+        rate(container_cpu_usage_seconds_total{pod=~"timeseries-features-.*"}[5m]) > 1.5
+      for: 10m
+      labels:
+        severity: warning
+        component: timeseries-features
+      annotations:
+        summary: "High CPU usage"
+        description: "CPU usage > 1.5 cores"
+
+    # Alert: Pod memory usage high
+    - alert: TimeSeriesFeaturesHighMemory
+      expr: |
+        container_memory_usage_bytes{pod=~"timeseries-features-.*"} / 1024 / 1024 / 1024 > 1.5
+      for: 10m
+      labels:
+        severity: warning
+        component: timeseries-features
+      annotations:
+        summary: "High memory usage"
+        description: "Memory usage > 1.5 GB"
+
+    # Alert: API error rate high
+    - alert: TimeSeriesFeaturesHighErrorRate
+      expr: |
+        (rate(http_requests_total{status=~"5.."}[5m]) / rate(http_requests_total[5m])) > 0.05
+      for: 5m
+      labels:
+        severity: critical
+        component: timeseries-features
+      annotations:
+        summary: "High API error rate"
+        description: "Error rate > 5%"
+
+    # Alert: Pods not ready
+    - alert: TimeSeriesFeaturesPodsNotReady
+      expr: |
+        kube_deployment_status_replicas_ready{deployment="timeseries-features"} < 2
+      for: 5m
+      labels:
+        severity: critical
+        component: timeseries-features
+      annotations:
+        summary: "Not enough pods ready"
+        description: "Less than 2 pods ready"

@@ -1,0 +1,41 @@
+======================================
+Phase 4: E2E Testing
+======================================
+
+Tokens generated successfully
+
+[1;33m=== SECTION 1: Authentication Tests ===[0m
+[0;32m✓ PASS[0m [1] Missing JWT token returns 401
+[0;32m✓ PASS[0m [2] Invalid JWT token returns 401
+
+[1;33m=== SECTION 2: Calendar Endpoints ===[0m
+[0;32m✓ PASS[0m [3] Create calendar for Tenant A
+[0;32m✓ PASS[0m [4] List calendars
+[0;32m✓ PASS[0m [5] Get calendar
+[0;32m✓ PASS[0m [6] Update calendar
+
+[1;33m=== SECTION 3: Cross-Tenant Security ===[0m
+[0;32m✓ PASS[0m [7] Cross-tenant access blocked (GET)
+[0;32m✓ PASS[0m [8] Cross-tenant access blocked (PUT)
+[0;32m✓ PASS[0m [9] Cross-tenant access blocked (DELETE)
+
+[1;33m=== SECTION 4: Availability Endpoints ===[0m
+[0;32m✓ PASS[0m [10] Check availability
+
+[1;33m=== SECTION 5: Blackout Endpoints ===[0m
+[0;32m✓ PASS[0m [11] Create blackout
+[0;31m✗ FAIL[0m [12] Get blackout occurrences: Got 400
+
+[1;33m=== SECTION 6: Tenant Management ===[0m
+[0;32m✓ PASS[0m [13] Get tenant
+
+[1;33m=== SECTION 7: Cleanup ===[0m
+[0;32m✓ PASS[0m [14] Delete calendar
+
+[1;33m=====================================[0m
+Test Summary:
+Total:  14
+Passed: [0;32m13[0m
+Failed: [0;31m1[0m
+[1;33m=====================================[0m
+[0;31m✗ Some tests failed[0m

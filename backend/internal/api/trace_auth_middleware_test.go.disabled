@@ -1,0 +1,445 @@
+package api
+
+import (
+	"context"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"testing"
+
+	"github.com/hondyman/semlayer/backend/internal/security"
+)
+
+// TestValidateTraceAuthMissingAPIKey tests that missing API key returns unauthorized
+func TestValidateTraceAuthMissingAPIKey(t *testing.T) {
+	config := DefaultTraceAuthConfig()
+	req := httptest.NewRequest("GET", "/traces", nil)
+	req.Header.Set("X-Tenant-ID", "tenant-123")
+
+	authInfo, _, errResp, status := ValidateTraceAuth(req, config)
+
+	if authInfo != nil {
+		t.Error("Expected nil authInfo, got non-nil")
+	}
+	if status != http.StatusUnauthorized {
+		t.Errorf("Expected status %d, got %d", http.StatusUnauthorized, status)
+	}
+	if errResp == nil || errResp.Error != "unauthorized" {
+		t.Error("Expected unauthorized error response")
+	}
+}
+
+// TestValidateTraceAuthInvalidAPIKey tests that invalid API key returns unauthorized
+func TestValidateTraceAuthInvalidAPIKey(t *testing.T) {
+	config := DefaultTraceAuthConfig()
+	config.APIKeys["valid-key"] = []string{"admin"}
+
+	req := httptest.NewRequest("GET", "/traces", nil)
+	req.Header.Set("X-API-Key", "invalid-key")
+	req.Header.Set("X-Tenant-ID", "tenant-123")
+
+	authInfo, _, errResp, status := ValidateTraceAuth(req, config)
+
+	if authInfo != nil {
+		t.Error("Expected nil authInfo, got non-nil")
+	}
+	if status != http.StatusUnauthorized {
+		t.Errorf("Expected status %d, got %d", http.StatusUnauthorized, status)
+	}
+	if errResp == nil || errResp.Error != "unauthorized" {
+		t.Error("Expected unauthorized error response")
+	}
+}
+
+// TestValidateTraceAuthMissingTenantID tests that missing tenant ID returns bad request
+func TestValidateTraceAuthMissingTenantID(t *testing.T) {
+	config := DefaultTraceAuthConfig()
+	config.APIKeys["valid-key"] = []string{"admin"}
+
+	req := httptest.NewRequest("GET", "/traces", nil)
+	req.Header.Set("X-API-Key", "valid-key")
+
+	authInfo, _, errResp, status := ValidateTraceAuth(req, config)
+
+	if authInfo != nil {
+		t.Error("Expected nil authInfo, got non-nil")
+	}
+	if status != http.StatusBadRequest {
+		t.Errorf("Expected status %d, got %d", http.StatusBadRequest, status)
+	}
+	if errResp == nil || errResp.Error != "bad_request" {
+		t.Error("Expected bad_request error response")
+	}
+}
+
+// TestValidateTraceAuthInsufficientRole tests that insufficient role returns forbidden
+func TestValidateTraceAuthInsufficientRole(t *testing.T) {
+	config := DefaultTraceAuthConfig()
+	// API key has 'viewer' role, which is not in ValidRoles
+	config.APIKeys["limited-key"] = []string{"viewer"}
+
+	req := httptest.NewRequest("GET", "/traces", nil)
+	req.Header.Set("X-API-Key", "limited-key")
+	req.Header.Set("X-Tenant-ID", "tenant-123")
+
+	authInfo, _, errResp, status := ValidateTraceAuth(req, config)
+
+	if authInfo != nil {
+		t.Error("Expected nil authInfo, got non-nil")
+	}
+	if status != http.StatusForbidden {
+		t.Errorf("Expected status %d, got %d", http.StatusForbidden, status)
+	}
+	if errResp == nil || errResp.Error != "forbidden" {
+		t.Error("Expected forbidden error response")
+	}
+}
+
+// TestValidateTraceAuthSuccess tests successful authentication with valid API key
+func TestValidateTraceAuthSuccess(t *testing.T) {
+	config := DefaultTraceAuthConfig()
+	config.APIKeys["valid-key"] = []string{"admin"}
+
+	req := httptest.NewRequest("GET", "/traces", nil)
+	req.Header.Set("X-API-Key", "valid-key")
+	req.Header.Set("X-Tenant-ID", "tenant-123")
+	req.Header.Set("X-User-ID", "user-456")
+
+	authInfo, tenantID, errResp, status := ValidateTraceAuth(req, config)
+
+	if errResp != nil {
+		t.Errorf("Unexpected error: %v", errResp)
+	}
+	if status != 0 {
+		t.Errorf("Expected status 0 on success, got %d", status)
+	}
+	if authInfo == nil {
+		t.Fatal("Expected authInfo, got nil")
+	}
+	if authInfo.UserID != "user-456" {
+		t.Errorf("Expected UserID 'user-456', got '%s'", authInfo.UserID)
+	}
+	if tenantID != "tenant-123" {
+		t.Errorf("Expected tenantID 'tenant-123', got '%s'", tenantID)
+	}
+	if len(authInfo.TenantIDs) != 1 || authInfo.TenantIDs[0] != "tenant-123" {
+		t.Error("Expected TenantIDs to contain 'tenant-123'")
+	}
+	if len(authInfo.Roles) != 1 || authInfo.Roles[0] != "admin" {
+		t.Error("Expected Roles to contain 'admin'")
+	}
+}
+
+// TestValidateTraceAuthBearerToken tests authentication with Bearer token in Authorization header
+func TestValidateTraceAuthBearerToken(t *testing.T) {
+	config := DefaultTraceAuthConfig()
+	config.APIKeys["bearer-key-123"] = []string{"sre"}
+
+	req := httptest.NewRequest("GET", "/traces", nil)
+	req.Header.Set("Authorization", "Bearer bearer-key-123")
+	req.Header.Set("X-Tenant-ID", "tenant-999")
+
+	authInfo, _, errResp, _ := ValidateTraceAuth(req, config)
+
+	if errResp != nil {
+		t.Errorf("Unexpected error: %v", errResp)
+	}
+	if authInfo == nil {
+		t.Fatal("Expected authInfo, got nil")
+	}
+	if len(authInfo.Roles) != 1 || authInfo.Roles[0] != "sre" {
+		t.Error("Expected Roles to contain 'sre'")
+	}
+}
+
+// TestValidateTraceQueryParamsMissingBoth tests validation with both plan_id and trace_id missing
+func TestValidateTraceQueryParamsMissingBoth(t *testing.T) {
+	errResp, status := ValidateTraceQueryParams("", "")
+
+	if status != http.StatusBadRequest {
+		t.Errorf("Expected status %d, got %d", http.StatusBadRequest, status)
+	}
+	if errResp == nil || errResp.Error != "bad_request" {
+		t.Error("Expected bad_request error")
+	}
+}
+
+// TestValidateTraceQueryParamsValidPlanID tests validation with valid plan_id
+func TestValidateTraceQueryParamsValidPlanID(t *testing.T) {
+	errResp, status := ValidateTraceQueryParams("plan-123", "")
+
+	if errResp != nil {
+		t.Errorf("Unexpected error: %v", errResp)
+	}
+	if status != 0 {
+		t.Errorf("Expected status 0, got %d", status)
+	}
+}
+
+// TestValidateTraceQueryParamsInvalidTraceID tests validation with invalid trace_id format
+func TestValidateTraceQueryParamsInvalidTraceID(t *testing.T) {
+	errResp, status := ValidateTraceQueryParams("", "invalid-trace-id")
+
+	if status != http.StatusBadRequest {
+		t.Errorf("Expected status %d, got %d", http.StatusBadRequest, status)
+	}
+	if errResp == nil || errResp.Error != "bad_request" {
+		t.Error("Expected bad_request error")
+	}
+}
+
+// TestValidateTraceQueryParamsValidTraceID tests validation with valid trace_id
+func TestValidateTraceQueryParamsValidTraceID(t *testing.T) {
+	// Valid trace ID: 32 hex characters
+	validTraceID := "0123456789abcdef0123456789abcdef"
+	errResp, status := ValidateTraceQueryParams("", validTraceID)
+
+	if errResp != nil {
+		t.Errorf("Unexpected error: %v", errResp)
+	}
+	if status != 0 {
+		t.Errorf("Expected status 0, got %d", status)
+	}
+}
+
+// TestIsValidPlanID tests plan ID format validation
+func TestIsValidPlanID(t *testing.T) {
+	tests := []struct {
+		planID string
+		valid  bool
+	}{
+		{"", false},
+		{"plan-123", true},
+		{"plan_456", true},
+		{"plan.789", true},
+		{"PLAN-ABC", true},
+		{"plan@invalid", false},
+		{"plan;drop", false},
+		{">plan", false},
+		{string(make([]byte, 257)), false}, // Too long
+	}
+
+	for _, tt := range tests {
+		result := isValidPlanID(tt.planID)
+		if result != tt.valid {
+			t.Errorf("isValidPlanID(%q) = %v, expected %v", tt.planID, result, tt.valid)
+		}
+	}
+}
+
+// TestIsValidTraceID tests trace ID format validation
+func TestIsValidTraceID(t *testing.T) {
+	tests := []struct {
+		traceID string
+		valid   bool
+	}{
+		{"", false},
+		{"0123456789abcdef0123456789abcdef", true},
+		{"0123456789ABCDEF0123456789ABCDEF", true},
+		{"0123456789abcdef0123456789abcde", false},   // Too short
+		{"0123456789abcdef0123456789abcdef0", false}, // Too long
+		{"0123456789abcdef0123456789abcdeg", false},  // Invalid hex char
+		{"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx", false},  // All invalid hex
+	}
+
+	for _, tt := range tests {
+		result := isValidTraceID(tt.traceID)
+		if result != tt.valid {
+			t.Errorf("isValidTraceID(%q) = %v, expected %v", tt.traceID, result, tt.valid)
+		}
+	}
+}
+
+// TestExtractAPIKeyFromHeader tests API key extraction from X-API-Key header
+func TestExtractAPIKeyFromHeader(t *testing.T) {
+	req := httptest.NewRequest("GET", "/", nil)
+	req.Header.Set("X-API-Key", "my-api-key")
+
+	key := extractAPIKey(req)
+	if key != "my-api-key" {
+		t.Errorf("Expected 'my-api-key', got '%s'", key)
+	}
+}
+
+// TestExtractAPIKeyFromAuthHeader tests API key extraction from Authorization header
+func TestExtractAPIKeyFromAuthHeader(t *testing.T) {
+	req := httptest.NewRequest("GET", "/", nil)
+	req.Header.Set("Authorization", "Bearer my-bearer-token")
+
+	key := extractAPIKey(req)
+	if key != "my-bearer-token" {
+		t.Errorf("Expected 'my-bearer-token', got '%s'", key)
+	}
+}
+
+// TestFilterSpansByTenant tests span filtering by tenant ID
+func TestFilterSpansByTenant(t *testing.T) {
+	spans := []interface{}{
+		map[string]interface{}{
+			"traceID": "trace-1",
+			"tags": []interface{}{
+				map[string]interface{}{
+					"key":   "tenant_id",
+					"value": "tenant-123",
+				},
+			},
+		},
+		map[string]interface{}{
+			"traceID": "trace-2",
+			"tags": []interface{}{
+				map[string]interface{}{
+					"key":   "tenant_id",
+					"value": "tenant-456",
+				},
+			},
+		},
+		map[string]interface{}{
+			"traceID": "trace-3",
+			"tags": []interface{}{
+				map[string]interface{}{
+					"key":   "tenant_id",
+					"value": "tenant-123",
+				},
+			},
+		},
+	}
+
+	filtered := FilterSpansByTenant(spans, "tenant-123")
+
+	if len(filtered) != 2 {
+		t.Errorf("Expected 2 filtered spans, got %d", len(filtered))
+	}
+}
+
+// TestFilterSpansByTenantEmptyTenant tests filtering with empty tenant ID
+func TestFilterSpansByTenantEmptyTenant(t *testing.T) {
+	spans := []interface{}{
+		map[string]interface{}{"traceID": "trace-1"},
+	}
+
+	filtered := FilterSpansByTenant(spans, "")
+
+	if len(filtered) != len(spans) {
+		t.Error("Expected empty tenant ID to return all spans")
+	}
+}
+
+// TestFilterSpansByTenantEmptySpans tests filtering with empty spans list
+func TestFilterSpansByTenantEmptySpans(t *testing.T) {
+	filtered := FilterSpansByTenant([]interface{}{}, "tenant-123")
+
+	if len(filtered) != 0 {
+		t.Error("Expected empty spans to return empty filtered list")
+	}
+}
+
+// TestWriteErrorResponseSerialization tests that error responses are properly serialized
+func TestWriteErrorResponseSerialization(t *testing.T) {
+	w := httptest.NewRecorder()
+	errResp := &ErrorResponse{
+		Error:     "test_error",
+		Message:   "Test error message",
+		Details:   "Test details",
+		Timestamp: "2025-02-09T12:00:00Z",
+	}
+
+	WriteErrorResponse(w, http.StatusBadRequest, errResp)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("Expected status %d, got %d", http.StatusBadRequest, w.Code)
+	}
+
+	if w.Header().Get("Content-Type") != "application/json" {
+		t.Error("Expected Content-Type: application/json")
+	}
+
+	var response ErrorResponse
+	if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
+		t.Fatalf("Failed to unmarshal response: %v", err)
+	}
+
+	if response.Error != "test_error" {
+		t.Errorf("Expected error 'test_error', got '%s'", response.Error)
+	}
+}
+
+// TestAuthInfoInContext tests that auth info is properly stored and retrieved from context
+func TestAuthInfoInContext(t *testing.T) {
+	authInfo := security.AuthInfo{
+		UserID:    "user-123",
+		Roles:     []string{"admin"},
+		TenantIDs: []string{"tenant-456"},
+	}
+
+	ctx := security.WithAuthInfo(context.Background(), authInfo)
+
+	retrieved, ok := security.AuthInfoFromContext(ctx)
+	if !ok {
+		t.Fatal("Expected to retrieve auth info from context")
+	}
+
+	if retrieved.UserID != authInfo.UserID {
+		t.Errorf("Expected UserID '%s', got '%s'", authInfo.UserID, retrieved.UserID)
+	}
+
+	if len(retrieved.Roles) != 1 || retrieved.Roles[0] != "admin" {
+		t.Error("Expected admin role in retrieved auth info")
+	}
+}
+
+// TestValidateTraceAuthWithBothAPIKeyAndAuthHeader tests priority when both headers are present
+func TestValidateTraceAuthWithBothAPIKeyAndAuthHeader(t *testing.T) {
+	config := DefaultTraceAuthConfig()
+	config.APIKeys["x-api-key-value"] = []string{"admin"}
+
+	req := httptest.NewRequest("GET", "/traces", nil)
+	// X-API-Key should take priority
+	req.Header.Set("X-API-Key", "x-api-key-value")
+	req.Header.Set("Authorization", "Bearer different-key")
+	req.Header.Set("X-Tenant-ID", "tenant-123")
+
+	authInfo, _, errResp, _ := ValidateTraceAuth(req, config)
+
+	if errResp != nil {
+		t.Errorf("Unexpected error: %v", errResp)
+	}
+	if authInfo == nil {
+		t.Fatal("Expected successful auth")
+	}
+}
+
+// BenchmarkValidateTraceAuth benchmarks authentication validation performance
+func BenchmarkValidateTraceAuth(b *testing.B) {
+	config := DefaultTraceAuthConfig()
+	config.APIKeys["perf-test-key"] = []string{"admin"}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		req := httptest.NewRequest("GET", "/traces", nil)
+		req.Header.Set("X-API-Key", "perf-test-key")
+		req.Header.Set("X-Tenant-ID", "tenant-123")
+
+		ValidateTraceAuth(req, config)
+	}
+}
+
+// BenchmarkFilterSpansByTenant benchmarks span filtering performance
+func BenchmarkFilterSpansByTenant(b *testing.B) {
+	spans := make([]interface{}, 100)
+	for i := 0; i < 100; i++ {
+		spans[i] = map[string]interface{}{
+			"traceID": "trace-" + string(rune(i)),
+			"tags": []interface{}{
+				map[string]interface{}{
+					"key":   "tenant_id",
+					"value": "tenant-123",
+				},
+			},
+		}
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		FilterSpansByTenant(spans, "tenant-123")
+	}
+}

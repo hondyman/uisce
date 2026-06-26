@@ -1,0 +1,36 @@
+.semantic-layout-builder-grid {
+  display: grid;
+  gap: 8px;
+  padding: 16px;
+}
+
+.semantic-layout-builder-grid-lines-col {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  border-left: 1px solid rgba(51, 65, 85, 0.3);
+}
+
+.semantic-layout-builder-grid-lines-row {
+  position: absolute;
+  left: 0;
+  right: 0;
+  border-top: 1px solid rgba(51, 65, 85, 0.3);
+}
+
+.semantic-layout-builder-component {
+  position: relative;
+  background-color: rgb(51, 65, 85);
+  border-radius: 0.5rem;
+  padding: 1rem;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.semantic-layout-builder-component:hover {
+  box-shadow: 0 0 0 2px rgb(168, 85, 247);
+}
+
+.semantic-layout-builder-component.selected {
+  box-shadow: 0 0 0 2px rgb(168, 85, 247);
+}

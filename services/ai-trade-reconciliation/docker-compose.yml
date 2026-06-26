@@ -1,0 +1,223 @@
+version: '3.8'
+
+services:
+  # ============================================================================
+  # DATABASE LAYER
+  # ============================================================================
+  
+  atr-db:
+    image: postgres:15-alpine
+    container_name: atr-db
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: alpha
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./db/migrations:/docker-entrypoint-initdb.d
+      - ./db/audit_logs.sql:/docker-entrypoint-initdb.d/02_audit_logs.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - atr-network
+    restart: unless-stopped
+
+  # ============================================================================
+  # TEMPORAL ORCHESTRATION
+  # ============================================================================
+  
+  temporal:
+    image: temporaliotest/temporal:latest
+    container_name: atr-temporal
+    ports:
+      - "7233:7233"
+      - "7234:7234"
+      - "7235:7235"
+    environment:
+      - DB=postgres
+      - DB_PORT=5432
+      - POSTGRES_USER=postgres
+      - POSTGRES_PWD=postgres
+      - POSTGRES_SEEDS=atr-db
+      - POSTGRES_DB=temporal
+    depends_on:
+      atr-db:
+        condition: service_healthy
+    networks:
+      - atr-network
+    restart: unless-stopped
+
+  temporal-ui:
+    image: temporalio/ui:latest
+    container_name: atr-temporal-ui
+    ports:
+      - "8081:8080"
+    environment:
+      - TEMPORAL_ADDRESS=temporal:7233
+      - TEMPORAL_CORS_ORIGINS=http://localhost:3000
+    depends_on:
+      - temporal
+    networks:
+      - atr-network
+    restart: unless-stopped
+
+  # ============================================================================
+  # BACKEND API SERVICE
+  # ============================================================================
+  
+  atr-backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        - GO_VERSION=1.24
+    container_name: atr-backend
+    ports:
+      - "8080:8080"
+    environment:
+      # Database Configuration
+      - DATABASE_URL=postgres://postgres:postgres@atr-db:5432/alpha?sslmode=disable
+      - DB_HOST=atr-db
+      - DB_PORT=5432
+      - DB_USER=postgres
+      - DB_PASSWORD=postgres
+      - DB_NAME=alpha
+      
+      # Temporal Configuration
+      - TEMPORAL_HOST=temporal
+      - TEMPORAL_PORT=7233
+      - TEMPORAL_NAMESPACE=default
+      - TEMPORAL_TASK_QUEUE=reconciliation
+      
+      # API Configuration
+      - PORT=8080
+      - GIN_MODE=debug
+      - LOG_LEVEL=info
+      
+      # Cache Configuration (Phase 3)
+      - CACHE_TTL=300s
+      - CACHE_ENABLED=true
+      
+      # Audit Logging Configuration (Phase 3)
+      - AUDIT_ENABLED=true
+      - AUDIT_QUEUE_SIZE=1000
+      
+      # Metrics Configuration (Phase 3)
+      - METRICS_ENABLED=true
+      
+      # API Keys
+      - XAI_API_KEY=${XAI_API_KEY:-}
+    
+    depends_on:
+      atr-db:
+        condition: service_healthy
+      temporal:
+        condition: service_started
+    
+    volumes:
+      - ./backend:/app/backend
+      - ./logs:/app/logs
+    
+    networks:
+      - atr-network
+    
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    
+    restart: unless-stopped
+
+  # ============================================================================
+  # FRONTEND APPLICATION
+  # ============================================================================
+  
+  atr-frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        - VITE_API_BASE_URL=http://localhost:8080
+    container_name: atr-frontend
+    ports:
+      - "3000:3000"
+    environment:
+      - VITE_API_BASE_URL=http://localhost:8080
+      - VITE_API_TIMEOUT=30000
+      - VITE_CACHE_ENABLED=true
+      - VITE_DEBUG=false
+    depends_on:
+      - atr-backend
+    volumes:
+      - ./frontend:/app/frontend
+      - /app/frontend/node_modules
+    networks:
+      - atr-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    restart: unless-stopped
+
+  # ============================================================================
+  # MONITORING & OBSERVABILITY (Optional)
+  # ============================================================================
+  
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: atr-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+    networks:
+      - atr-network
+    restart: unless-stopped
+    profiles:
+      - monitoring
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: atr-grafana
+    ports:
+      - "3001:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_INSTALL_PLUGINS=grafana-piechart-panel
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./monitoring/grafana/dashboards:/etc/grafana/provisioning/dashboards
+      - ./monitoring/grafana/datasources:/etc/grafana/provisioning/datasources
+    depends_on:
+      - prometheus
+    networks:
+      - atr-network
+    restart: unless-stopped
+    profiles:
+      - monitoring
+
+volumes:
+  postgres_data:
+    driver: local
+  prometheus_data:
+    driver: local
+  grafana_data:
+    driver: local
+
+networks:
+  atr-network:
+    driver: bridge

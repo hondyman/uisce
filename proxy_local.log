@@ -1,0 +1,3 @@
+2026/01/20 17:45:33 proxy starting on :29080; rule=http://127.0.0.1:8091 backend=http://127.0.0.1:8082 hasura=http://127.0.0.1:8085
+2026/01/20 17:45:43 http: proxy error: dial tcp 127.0.0.1:8082: connect: connection refused
+2026/01/20 17:45:43 GET /api/catalog/nodes 1.6245ms

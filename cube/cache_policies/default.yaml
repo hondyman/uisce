@@ -1,0 +1,151 @@
+# Cube.js Cache Policy Registry
+# Phase 8: Cost & Performance Tuning
+#
+# This registry defines per-tenant and per-tier cache TTL policies.
+# The adaptive TTL controller reads this file and adjusts TTLs dynamically
+# based on cache hit ratios within the bounded min/max values.
+
+version: "1.0"
+
+defaults:
+  # Global defaults applied when no tenant or tier match
+  ttl_seconds: 300 # 5 minutes
+  ttl_min_seconds: 60 # 1 minute floor
+  ttl_max_seconds: 900 # 15 minute ceiling
+  adaptive: true # Enable adaptive TTL adjustment
+  hit_ratio_target: 0.90 # Target 90% cache hit rate
+
+tiers:
+  # Enterprise tier: prioritize latency over cost
+  enterprise:
+    ttl_seconds: 120
+    ttl_min_seconds: 30
+    ttl_max_seconds: 600
+    adaptive: true
+    hit_ratio_target: 0.95
+    priority: high
+    max_entries: 100000
+    eviction_policy: lru
+
+  # Standard tier: balanced approach
+  standard:
+    ttl_seconds: 300
+    ttl_min_seconds: 60
+    ttl_max_seconds: 900
+    adaptive: true
+    hit_ratio_target: 0.85
+    priority: normal
+    max_entries: 50000
+    eviction_policy: lru
+
+  # Starter tier: cost-optimized
+  starter:
+    ttl_seconds: 600
+    ttl_min_seconds: 120
+    ttl_max_seconds: 1800
+    adaptive: true
+    hit_ratio_target: 0.80
+    priority: low
+    max_entries: 10000
+    eviction_policy: lfu
+
+time_windows:
+  # Business hours: shorter TTL for fresher data
+  business_hours:
+    start: "09:00"
+    end: "17:00"
+    timezone: "America/New_York"
+    ttl_multiplier: 0.5 # Cut TTL in half during business hours
+
+  # After hours: longer TTL to reduce compute
+  after_hours:
+    start: "17:00"
+    end: "09:00"
+    timezone: "America/New_York"
+    ttl_multiplier: 2.0 # Double TTL after hours
+
+  # Weekend: maximum caching
+  weekend:
+    days: [ "Saturday", "Sunday" ]
+    ttl_multiplier: 3.0 # Triple TTL on weekends
+
+cube_overrides:
+  # Hot cubes with high query frequency need shorter TTLs
+  hot_cubes:
+  - name: "PortfolioHoldings"
+    ttl_seconds: 60
+    adaptive: false # Fixed TTL for real-time data
+
+  - name: "Trades"
+    ttl_seconds: 30
+    adaptive: false
+
+  - name: "Positions"
+    ttl_seconds: 60
+    adaptive: false
+
+  # Cold cubes with historical data can have longer TTLs
+  cold_cubes:
+  - name: "HistoricalTrades"
+    ttl_seconds: 3600 # 1 hour
+    ttl_max_seconds: 86400 # Up to 24 hours
+
+  - name: "MonthlyPerformance"
+    ttl_seconds: 7200 # 2 hours
+    ttl_max_seconds: 86400
+
+tenant_overrides:
+  # Specific tenant configurations (by tenant_id)
+  # These override tier defaults
+  # Example:
+  # "tenant-abc-123":
+  #   tier: enterprise
+  #   ttl_seconds: 90
+  #   custom_time_windows:
+  #     - name: market_close
+  #       start: "16:00"
+  #       end: "16:30"
+  #       ttl_multiplier: 0.25
+
+adaptive_controller:
+  # Configuration for the adaptive TTL controller
+  enabled: true
+  evaluation_interval_seconds: 60
+
+  # Thresholds for TTL adjustment
+  increase_threshold: 0.95 # Increase TTL when hit ratio >= 95%
+  decrease_threshold: 0.80 # Decrease TTL when hit ratio <= 80%
+
+  # Adjustment step sizes
+  increase_step_percent: 20 # Increase TTL by 20%
+  decrease_step_percent: 10 # Decrease TTL by 10%
+
+  # Cooldown to prevent thrashing
+  cooldown_seconds: 300 # Wait 5 minutes between adjustments
+
+  # Metrics to publish
+  metrics:
+  - name: cube_cache_ttl_current_seconds
+    type: gauge
+    labels: [ tenant_id, cube_name, tier ]
+
+  - name: cube_cache_adaptive_adjustments_total
+    type: counter
+    labels: [ tenant_id, direction ]
+
+redis:
+  # Redis cluster configuration for cache backend
+  cluster_mode: true
+  namespace_prefix: "cube:cache:"
+
+  # Connection settings
+  max_connections: 100
+  connect_timeout_ms: 1000
+  read_timeout_ms: 500
+
+  # Memory management
+  maxmemory_policy: allkeys-lru
+
+  # Monitoring
+  metrics_enabled: true
+  slowlog_threshold_ms: 10

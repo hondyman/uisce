@@ -1,0 +1,16 @@
+=== RUN   TestDeleteSubtype_LookupById
+{"level":"info","ts":1766096807.946795,"caller":"metadata/businessobject_service.go:128","msg":"DEBUG: GetBusinessObject - tenantID: a1e674c5-47c3-4e80-8a06-426e5b684ab8, boKey: 860e12fd-d0f2-40ce-a9a4-129fa61d1590, isUUID: true"}
+{"level":"info","ts":1766096807.947523,"caller":"metadata/businessobject_service.go:533","msg":"DEBUG: loadBOSubtypesAndFields start - bo.id=860e12fd-d0f2-40ce-a9a4-129fa61d1590 tenant=a1e674c5-47c3-4e80-8a06-426e5b684ab8"}
+{"level":"info","ts":1766096807.947617,"caller":"metadata/businessobject_service.go:581","msg":"DEBUG: no child BOs found for parent 860e12fd-d0f2-40ce-a9a4-129fa61d1590 with tenant a1e674c5-47c3-4e80-8a06-426e5b684ab8 — trying fallback query without tenant filter"}
+{"level":"info","ts":1766096807.9476402,"caller":"metadata/businessobject_service.go:592","msg":"DEBUG: fallback found 0 child BOs for parent 860e12fd-d0f2-40ce-a9a4-129fa61d1590"}
+{"level":"info","ts":1766096807.947645,"caller":"metadata/businessobject_service.go:596","msg":"DEBUG: loading 0 child BO(s) for parent 860e12fd-d0f2-40ce-a9a4-129fa61d1590 (tenant a1e674c5-47c3-4e80-8a06-426e5b684ab8)"}
+{"level":"info","ts":1766096807.947708,"caller":"metadata/businessobject_service.go:159","msg":"DEBUG: GetBusinessObject result - id=860e12fd-d0f2-40ce-a9a4-129fa61d1590 subtypes=1"}
+{"level":"info","ts":1766096807.947849,"caller":"metadata/businessobject_service.go:128","msg":"DEBUG: GetBusinessObject - tenantID: a1e674c5-47c3-4e80-8a06-426e5b684ab8, boKey: 860e12fd-d0f2-40ce-a9a4-129fa61d1590, isUUID: true"}
+{"level":"info","ts":1766096807.9479208,"caller":"metadata/businessobject_service.go:533","msg":"DEBUG: loadBOSubtypesAndFields start - bo.id=860e12fd-d0f2-40ce-a9a4-129fa61d1590 tenant=a1e674c5-47c3-4e80-8a06-426e5b684ab8"}
+{"level":"info","ts":1766096807.9479349,"caller":"metadata/businessobject_service.go:581","msg":"DEBUG: no child BOs found for parent 860e12fd-d0f2-40ce-a9a4-129fa61d1590 with tenant a1e674c5-47c3-4e80-8a06-426e5b684ab8 — trying fallback query without tenant filter"}
+{"level":"info","ts":1766096807.947947,"caller":"metadata/businessobject_service.go:592","msg":"DEBUG: fallback found 0 child BOs for parent 860e12fd-d0f2-40ce-a9a4-129fa61d1590"}
+{"level":"info","ts":1766096807.947951,"caller":"metadata/businessobject_service.go:596","msg":"DEBUG: loading 0 child BO(s) for parent 860e12fd-d0f2-40ce-a9a4-129fa61d1590 (tenant a1e674c5-47c3-4e80-8a06-426e5b684ab8)"}
+{"level":"info","ts":1766096807.947981,"caller":"metadata/businessobject_service.go:159","msg":"DEBUG: GetBusinessObject result - id=860e12fd-d0f2-40ce-a9a4-129fa61d1590 subtypes=0"}
+--- PASS: TestDeleteSubtype_LookupById (0.00s)
+PASS
+ok  	github.com/hondyman/semlayer/backend/internal/metadata	0.393s

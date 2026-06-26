@@ -1,0 +1,46 @@
+# Prometheus configuration for Cube.js dev environment
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+rule_files:
+- /etc/prometheus/rules/*.yaml
+
+alerting:
+  alertmanagers:
+  - static_configs:
+    - targets: []
+
+scrape_configs:
+# Prometheus self-monitoring
+- job_name: prometheus
+  static_configs:
+  - targets: [ 'localhost:9090' ]
+
+# Cube.js API metrics
+- job_name: cube-api
+  static_configs:
+  - targets: [ 'cube:4000' ]
+  metrics_path: /metrics
+  scheme: http
+
+# Cube Parity service metrics
+- job_name: cube-parity
+  static_configs:
+  - targets: [ 'cube-parity:8090' ]
+  metrics_path: /metrics
+  scheme: http
+
+# Redis metrics (via redis_exporter if added)
+- job_name: redis
+  static_configs:
+  - targets: [ 'redis:6379' ]
+  metrics_path: /metrics
+  scheme: http
+
+# StarRocks metrics
+- job_name: starrocks-fe
+  static_configs:
+  - targets: [ 'starrocks-fe:8030' ]
+  metrics_path: /metrics
+  scheme: http

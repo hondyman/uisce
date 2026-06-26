@@ -1,0 +1,124 @@
+package analytics
+
+import (
+	"testing"
+
+	"github.com/DATA-DOG/go-sqlmock"
+	"github.com/google/uuid"
+	"github.com/hondyman/semlayer/backend/internal/cube"
+	"github.com/jmoiron/sqlx"
+	"github.com/stretchr/testify/require"
+)
+
+func TestPruneMissingColumnsFromExtension(t *testing.T) {
+	svc := &SemanticModelService{DB: nil}
+
+	ext := &cube.Cube{
+		Name: "ext",
+		Dimensions: map[string]map[string]any{
+			"d1": {"sql": "missing_col"},
+			"d2": {"sql": "present_col"},
+		},
+		Measures: map[string]map[string]any{
+			"m1": {"sql": "missing_col"},
+		},
+		Joins: map[string]map[string]any{
+			"j1": {"sql": "${CUBE}.missing_col = ${other}.id"},
+		},
+	}
+
+	cols := map[string]struct{}{
+		"present_col": {},
+		"id":          {},
+	}
+
+	issues := svc.PruneMissingColumnsFromExtension(ext, cols, "base")
+	require.NotNil(t, issues)
+	// Should have removed missing_col references (dimension d1, measure m1, join j1)
+	// Verify issues contain codes for pruned items
+	found := 0
+	for _, it := range issues {
+		if it.Code == "MISSING_COLUMN_PRUNED" {
+			found++
+		}
+	}
+	require.GreaterOrEqual(t, found, 1)
+}
+
+func TestSaveExtensionModelRejectsSelfExtend(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	defer db.Close()
+	sqlxDB := sqlx.NewDb(db, "postgres")
+	svc := NewSemanticModelService(sqlxDB)
+
+	// tenant id query
+	tenantID := uuid.New()
+	mock.ExpectQuery(`SELECT t.id FROM public.tenants`).WithArgs(sqlmock.AnyArg()).WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(tenantID))
+
+	// GetModelDefinition current row
+	resolvedBytes := []byte(`{"cubes":[{"name":"base_cube"}]}`)
+	rows := sqlmock.NewRows([]string{"id", "tenant_id", "tenant_datasource_id", "model_key", "version", "status", "title", "description", "source_config", "resolved_config", "created_by", "is_current"}).AddRow(uuid.New(), uuid.New(), uuid.New(), "/base", 1, "draft", "base", "", "{}", string(resolvedBytes), uuid.Nil, true)
+	mock.ExpectQuery(`SELECT \* FROM public.fabric_defn WHERE tenant_datasource_id = \$1 AND model_key = \$2 AND is_current = true`).WithArgs(sqlmock.AnyArg(), "/base").WillReturnRows(rows)
+
+	// Call SaveExtensionModel with ModelKey equal to BaseModelKey to trigger self-extend error
+	dsID := uuid.New()
+	req := SaveExtensionModelRequest{
+		BaseModelKey: "/base",
+		ModelKey:     "/base",
+		Title:        "t",
+		Description:  "d",
+		Status:       "draft",
+		ModelObject:  cube.Cube{},
+		ActorID:      uuid.Nil,
+	}
+
+	_, _, err = svc.SaveExtensionModel(dsID, req)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "cannot extend itself")
+
+	require.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestValidateJoinsWithCatalogFKs(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	defer db.Close()
+	sqlxDB := sqlx.NewDb(db, "postgres")
+	svc := NewSemanticModelService(sqlxDB)
+
+	// Mock FK edges query
+	// We'll simulate one FK: public.orders.customer_id -> public.customers.id
+	props := `{"columns":[{"source_column":"customer_id","target_column":"id"}]}`
+	rows := sqlmock.NewRows([]string{"properties", "source_table_path", "target_table_path"}).
+		AddRow(props, "/public/orders", "/public/customers")
+	mock.ExpectQuery("FROM public\\.catalog_edge").
+		WithArgs(sqlmock.AnyArg()).
+		WillReturnRows(rows)
+
+	// Build an extension with a join that matches and one that doesn't
+	ext := &cube.Cube{
+		Name:  "orders",
+		Joins: map[string]map[string]any{},
+	}
+	// Matching FK join
+	ext.Joins["customers"] = map[string]any{
+		"sql": "${CUBE}.customer_id = ${customers}.id",
+	}
+	// Non-matching columns for same pair
+	ext.Joins["customers_bad"] = map[string]any{
+		"sql": "${CUBE}.foo = ${customers}.bar",
+	}
+
+	issues := svc.ValidateJoinsWithCatalogFKs(uuid.New(), ext)
+	// Should warn at least about the bad join
+	var hasBad bool
+	for _, is := range issues {
+		if is.Code == "JOIN_COLUMNS_NOT_IN_FK" || is.Code == "JOIN_NOT_IN_CATALOG_FK" {
+			hasBad = true
+		}
+	}
+	require.True(t, hasBad)
+
+	require.NoError(t, mock.ExpectationsWereMet())
+}

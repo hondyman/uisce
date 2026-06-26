@@ -1,0 +1,318 @@
+{
+    "version": 3,
+    "sources": [
+        {
+            "name": "default",
+            "kind": "postgres",
+            "tables": [
+                {
+                    "table": {
+                        "schema": "public",
+                        "name": "tenant_product_datasource"
+                    },
+                    "object_relationships": [
+                        {
+                            "name": "tenant_product",
+                            "using": {
+                                "foreign_key_constraint_on": "tenant_product_id"
+                            }
+                        },
+                        {
+                            "name": "alpha_datasource",
+                            "using": {
+                                "foreign_key_constraint_on": "alpha_tenant_instance_id"
+                            }
+                        },
+                        {
+                            "name": "connection",
+                            "using": {
+                                "foreign_key_constraint_on": "connection_id"
+                            }
+                        }
+                    ],
+                    "array_relationships": [
+                        {
+                            "name": "integrity_checks_history",
+                            "using": {
+                                "foreign_key_constraint_on": {
+                                    "column": "datasource_id",
+                                    "table": {
+                                        "schema": "public",
+                                        "name": "datasource_integrity_checks"
+                                    }
+                                }
+                            }
+                        },
+                        {
+                            "name": "health_checks_history",
+                            "using": {
+                                "foreign_key_constraint_on": {
+                                    "column": "datasource_id",
+                                    "table": {
+                                        "schema": "public",
+                                        "name": "datasource_health_checks"
+                                    }
+                                }
+                            }
+                        },
+                        {
+                            "name": "schema_snapshots",
+                            "using": {
+                                "foreign_key_constraint_on": {
+                                    "column": "datasource_id",
+                                    "table": {
+                                        "schema": "public",
+                                        "name": "datasource_schema_snapshots"
+                                    }
+                                }
+                            }
+                        }
+                    ],
+                    "select_permissions": [
+                        {
+                            "role": "user",
+                            "permission": {
+                                "columns": "*",
+                                "filter": {},
+                                "allow_aggregations": true
+                            }
+                        }
+                    ],
+                    "insert_permissions": [
+                        {
+                            "role": "user",
+                            "permission": {
+                                "columns": "*",
+                                "check": {}
+                            }
+                        }
+                    ],
+                    "update_permissions": [
+                        {
+                            "role": "user",
+                            "permission": {
+                                "columns": "*",
+                                "filter": {}
+                            }
+                        }
+                    ],
+                    "delete_permissions": [
+                        {
+                            "role": "user",
+                            "permission": {
+                                "filter": {}
+                            }
+                        }
+                    ]
+                },
+                {
+                    "table": {
+                        "schema": "public",
+                        "name": "datasource_integrity_checks"
+                    },
+                    "object_relationships": [
+                        {
+                            "name": "datasource",
+                            "using": {
+                                "foreign_key_constraint_on": "datasource_id"
+                            }
+                        }
+                    ],
+                    "select_permissions": [
+                        {
+                            "role": "user",
+                            "permission": {
+                                "columns": "*",
+                                "filter": {},
+                                "allow_aggregations": true
+                            }
+                        }
+                    ],
+                    "insert_permissions": [
+                        {
+                            "role": "user",
+                            "permission": {
+                                "columns": "*",
+                                "check": {}
+                            }
+                        }
+                    ],
+                    "update_permissions": [
+                        {
+                            "role": "user",
+                            "permission": {
+                                "columns": "*",
+                                "filter": {}
+                            }
+                        }
+                    ]
+                },
+                {
+                    "table": {
+                        "schema": "public",
+                        "name": "datasource_schema_snapshots"
+                    },
+                    "object_relationships": [
+                        {
+                            "name": "datasource",
+                            "using": {
+                                "foreign_key_constraint_on": "datasource_id"
+                            }
+                        },
+                        {
+                            "name": "previous_snapshot",
+                            "using": {
+                                "foreign_key_constraint_on": "previous_snapshot_id"
+                            }
+                        }
+                    ],
+                    "select_permissions": [
+                        {
+                            "role": "user",
+                            "permission": {
+                                "columns": "*",
+                                "filter": {}
+                            }
+                        }
+                    ],
+                    "insert_permissions": [
+                        {
+                            "role": "user",
+                            "permission": {
+                                "columns": "*",
+                                "check": {}
+                            }
+                        }
+                    ],
+                    "update_permissions": [
+                        {
+                            "role": "user",
+                            "permission": {
+                                "columns": "*",
+                                "filter": {}
+                            }
+                        }
+                    ]
+                },
+                {
+                    "table": {
+                        "schema": "public",
+                        "name": "datasource_health_checks"
+                    },
+                    "object_relationships": [
+                        {
+                            "name": "datasource",
+                            "using": {
+                                "foreign_key_constraint_on": "datasource_id"
+                            }
+                        }
+                    ],
+                    "select_permissions": [
+                        {
+                            "role": "user",
+                            "permission": {
+                                "columns": "*",
+                                "filter": {},
+                                "allow_aggregations": true
+                            }
+                        }
+                    ],
+                    "insert_permissions": [
+                        {
+                            "role": "user",
+                            "permission": {
+                                "columns": "*",
+                                "check": {}
+                            }
+                        }
+                    ]
+                },
+                {
+                    "table": {
+                        "schema": "public",
+                        "name": "connections"
+                    },
+                    "object_relationships": [
+                        {
+                            "name": "tenant",
+                            "using": {
+                                "foreign_key_constraint_on": "tenant_id"
+                            }
+                        }
+                    ],
+                    "array_relationships": [
+                        {
+                            "name": "datasources",
+                            "using": {
+                                "foreign_key_constraint_on": {
+                                    "column": "connection_id",
+                                    "table": {
+                                        "schema": "public",
+                                        "name": "tenant_product_datasource"
+                                    }
+                                }
+                            }
+                        }
+                    ],
+                    "select_permissions": [
+                        {
+                            "role": "user",
+                            "permission": {
+                                "columns": [
+                                    "id",
+                                    "tenant_id",
+                                    "name",
+                                    "type",
+                                    "host",
+                                    "port",
+                                    "database",
+                                    "schema",
+                                    "metadata",
+                                    "is_active",
+                                    "last_tested_at",
+                                    "last_test_status",
+                                    "created_at",
+                                    "updated_at"
+                                ],
+                                "filter": {}
+                            }
+                        }
+                    ],
+                    "insert_permissions": [
+                        {
+                            "role": "user",
+                            "permission": {
+                                "columns": "*",
+                                "check": {}
+                            }
+                        }
+                    ],
+                    "update_permissions": [
+                        {
+                            "role": "user",
+                            "permission": {
+                                "columns": "*",
+                                "filter": {}
+                            }
+                        }
+                    ]
+                },
+                {
+                    "table": {
+                        "schema": "public",
+                        "name": "data_classification_templates"
+                    },
+                    "select_permissions": [
+                        {
+                            "role": "user",
+                            "permission": {
+                                "columns": "*",
+                                "filter": {}
+                            }
+                        }
+                    ]
+                }
+            ]
+        }
+    ]
+}

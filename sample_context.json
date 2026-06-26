@@ -1,0 +1,96 @@
+{
+  "data_sources": {
+    "customers": "default",
+    "orders": "default"
+  },
+  "dimensions": {
+    "customers": [
+      {
+        "name": "id",
+        "sql": "id",
+        "type": "number",
+        "primary_key": true
+      },
+      {
+        "name": "name",
+        "sql": "name",
+        "type": "string"
+      },
+      {
+        "name": "state",
+        "sql": "state",
+        "type": "string"
+      },
+      {
+        "name": "city",
+        "sql": "city",
+        "type": "string"
+      }
+    ],
+    "orders": [
+      {
+        "name": "id",
+        "sql": "id",
+        "type": "number",
+        "primary_key": true
+      },
+      {
+        "name": "customer_id",
+        "sql": "customer_id",
+        "type": "number"
+      },
+      {
+        "name": "amount",
+        "sql": "amount",
+        "type": "number"
+      },
+      {
+        "name": "status",
+        "sql": "status",
+        "type": "string"
+      }
+    ]
+  },
+  "hierarchies": {
+    "customers": [
+      {
+        "name": "location",
+        "title": "Customer Location",
+        "levels": ["state", "city"],
+        "public": true
+      }
+    ],
+    "orders": [
+      {
+        "name": "status_hierarchy",
+        "title": "Order Status Hierarchy",
+        "levels": ["status"],
+        "public": true
+      }
+    ]
+  },
+  "segments": {
+    "customers": [
+      {
+        "name": "sf_customers",
+        "description": "Customers from San Francisco",
+        "sql": "{CUBE}.city = 'San Francisco'",
+        "public": true
+      },
+      {
+        "name": "ca_customers",
+        "description": "Customers from California",
+        "sql": "{CUBE}.state = 'CA'",
+        "public": true
+      }
+    ],
+    "orders": [
+      {
+        "name": "completed_orders",
+        "description": "Completed orders",
+        "sql": "{CUBE}.status = 'completed'",
+        "public": true
+      }
+    ]
+  }
+}

@@ -1,0 +1,29 @@
+.approvalDescription {
+  margin: 4px 0;
+  color: #595959;
+  font-size: 13px;
+}
+
+.approvalMeta {
+  margin: 4px 0;
+  color: #8c8c8c;
+  font-size: 12px;
+}
+
+.modalApprovalInfo {
+  margin-bottom: 16px;
+  padding: 12px;
+  background-color: #fafafa;
+  border-radius: 4px;
+}
+
+.modalApprovalInfo h4 {
+  margin-bottom: 8px;
+  color: #262626;
+}
+
+.modalApprovalInfo p {
+  margin-bottom: 8px;
+  color: #595959;
+  font-size: 13px;
+}

@@ -1,0 +1,101 @@
+apiVersion: v2
+name: semlayer-platform
+description: Semlayer Enterprise Wealth Management Platform - Umbrella Helm Chart
+type: application
+version: 1.0.0
+appVersion: "1.0.0"
+
+maintainers:
+- name: Semlayer Platform Team
+  email: platform@semlayer.io
+
+dependencies:
+# Core Services
+- name: api-gateway
+  version: "1.0.0"
+  repository: "file://../api-gateway"
+  condition: api-gateway.enabled
+
+- name: semantic-engine
+  version: "1.0.0"
+  repository: "file://../semantic-engine"
+  condition: semantic-engine.enabled
+
+- name: cube-api
+  version: "1.0.0"
+  repository: "file://../cube-api"
+  condition: cube-api.enabled
+
+- name: governance-engine
+  version: "1.0.0"
+  repository: "file://../governance-engine"
+  condition: governance-engine.enabled
+
+- name: ai-builder
+  version: "1.0.0"
+  repository: "file://../ai-builder"
+  condition: ai-builder.enabled
+
+- name: compliance-engine
+  version: "1.0.0"
+  repository: "file://../compliance-engine"
+  condition: compliance-engine.enabled
+
+# Supporting Services
+- name: notification-service
+  version: "1.0.0"
+  repository: "file://../notification-service"
+  condition: notification-service.enabled
+
+- name: audit-service
+  version: "1.0.0"
+  repository: "file://../audit-service"
+  condition: audit-service.enabled
+
+- name: tenant-manager
+  version: "1.0.0"
+  repository: "file://../tenant-manager"
+  condition: tenant-manager.enabled
+
+# Data Services (optional - can use managed services)
+- name: postgresql
+  version: "13.2.24"
+  repository: "https://charts.bitnami.com/bitnami"
+  condition: postgresql.enabled
+
+- name: redis-cluster
+  version: "9.1.3"
+  repository: "https://charts.bitnami.com/bitnami"
+  condition: redis-cluster.enabled
+  alias: redis
+
+- name: rabbitmq
+  version: "12.5.6"
+  repository: "https://charts.bitnami.com/bitnami"
+  condition: rabbitmq.enabled
+
+# Observability (optional)
+- name: kube-prometheus-stack
+  version: "55.5.0"
+  repository: "https://prometheus-community.github.io/helm-charts"
+  condition: monitoring.enabled
+  alias: monitoring
+
+- name: loki-stack
+  version: "2.9.11"
+  repository: "https://grafana.github.io/helm-charts"
+  condition: logging.enabled
+  alias: logging
+
+- name: jaeger
+  version: "0.71.14"
+  repository: "https://jaegertracing.github.io/helm-charts"
+  condition: tracing.enabled
+
+keywords:
+- wealth-management
+- semantic-layer
+- multi-tenant
+- enterprise
+- cube
+- analytics

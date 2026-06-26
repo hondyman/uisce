@@ -1,0 +1,87 @@
+# AlertManager Configuration
+
+global:
+  resolve_timeout: 5m
+  slack_api_url: '' # Set this via environment variable or secret
+  pagerduty_url: 'https://events.pagerduty.com/v2/enqueue'
+
+# Default receiver for alerts
+route:
+  receiver: 'default'
+  group_by: [ 'alertname', 'cluster', 'service' ]
+  group_wait: 10s
+  group_interval: 10s
+  repeat_interval: 12h
+
+  # Sub-routes for different alert types
+  routes:
+  # Critical alerts - page on-call
+  - match:
+      severity: critical
+    receiver: 'pagerduty'
+    group_wait: 5s
+    repeat_interval: 1h
+
+  # Warning alerts - slack notification
+  - match:
+      severity: warning
+    receiver: 'slack-warnings'
+    group_wait: 30s
+    repeat_interval: 4h
+
+  # Info alerts - no notification (just stored)
+  - match:
+      severity: info
+    receiver: 'devnull'
+    group_wait: 1m
+    repeat_interval: 24h
+
+# Alert receivers
+receivers:
+# Default receiver (no notifications)
+- name: 'default'
+
+# PagerDuty for critical alerts
+- name: 'pagerduty'
+  pagerduty_configs:
+  - routing_key: '' # Set via environment variable
+    description: '{{ .GroupLabels.alertname }} - {{ .CommonAnnotations.summary }}'
+    details:
+      firing: '{{ template "pagerduty.default.instances" .Alerts.Firing }}'
+      resolved: '{{ template "pagerduty.default.instances" .Alerts.Resolved }}'
+
+# Slack for warning alerts
+- name: 'slack-warnings'
+  slack_configs:
+  - api_url: '' # Set via environment variable
+    channel: '#alerts-warnings'
+    title: '⚠️  {{ .GroupLabels.alertname }}'
+    text: '{{ .CommonAnnotations.description }}'
+    send_resolved: true
+    color: '{{ if eq .Status "firing" }}warning{{ else }}good{{ end }}'
+    actions:
+    - type: button
+      text: 'View Grafana Dashboard'
+      url: 'http://localhost:3000/'
+    - type: button
+      text: 'View Prometheus'
+      url: 'http://localhost:9090/'
+
+# Dev/null receiver (silent)
+- name: 'devnull'
+
+# Inhibition rules (suppress some alerts)
+inhibit_rules:
+# Don't alert on pod creation during high load
+- source_match:
+    severity: 'critical'
+  target_match:
+    severity: 'warning'
+  equal: [ 'alertname', 'service' ]
+
+# Suppress low priority if high priority exists
+- source_match:
+    severity: 'warning'
+  target_match:
+    severity: 'info'
+  equal: [ 'service' ]

@@ -1,0 +1,24 @@
+{
+  "name": "catalog-events-iceberg-sink",
+  "config": {
+    "connector.class": "org.apache.iceberg.connect.IcebergSinkConnector",
+    "tasks.max": "1",
+
+    "topics": "catalog-change-events",
+
+    "iceberg.catalog.name": "ws_catalog",
+    "iceberg.catalog.type": "hadoop",
+    "iceberg.catalog.warehouse": "s3://your-bucket/iceberg",
+
+    "key.converter": "org.apache.kafka.connect.storage.StringConverter",
+    "value.converter": "io.confluent.connect.avro.AvroConverter",
+    "value.converter.schema.registry.url": "http://schema-registry:8081",
+
+    "iceberg.table.auto-create": "true",
+    "iceberg.table.default.write.format": "PARQUET",
+    "iceberg.tables": "catalog_events",
+
+    "behavior.on.error": "fail",
+    "errors.tolerance": "none"
+  }
+}

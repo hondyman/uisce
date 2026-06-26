@@ -1,0 +1,58 @@
+cubes:
+  - name: Client
+    sql_table: client
+    title: Client
+
+    measures:
+      - name: count
+        type: count
+      - name: total_net_worth
+        sql: net_worth
+        type: sum
+
+    dimensions:
+      - name: id
+        sql: id
+        type: string
+        primary_key: true
+        title: Client ID
+      - name: first_name
+        sql: first_name
+        type: string
+        title: First Name
+      - name: last_name
+        sql: last_name
+        type: string
+        title: Last Name
+      - name: email
+        sql: email
+        type: string
+        title: Email Address
+      - name: phone
+        sql: phone
+        type: string
+        title: Phone Number
+      - name: date_of_birth
+        sql: date_of_birth
+        type: time
+        title: Date of Birth
+      - name: net_worth
+        sql: net_worth
+        type: number
+        title: Net Worth
+      - name: country
+        sql: country
+        type: string
+        title: Country of Residence
+      - name: accredited_investor
+        sql: accredited_investor
+        type: string
+        title: Accredited Investor Status
+      - name: kyc_status
+        sql: kyc_status
+        type: string
+        title: KYC Status
+      - name: aml_status
+        sql: aml_status
+        type: string
+        title: AML Status

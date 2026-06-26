@@ -1,0 +1,143 @@
+table:
+  name: bp_execution_steps
+  schema: public
+object_relationships:
+  - name: execution
+    using:
+      foreign_key_constraint_on: bp_execution_id
+insert_permissions:
+  - role: steward
+    permission:
+      check:
+        execution:
+          tenant_id:
+            _eq: X-Hasura-Tenant-Id
+      columns:
+        - bp_execution_id
+        - bp_step_id
+        - step_order
+        - step_status
+        - started_at
+        - completed_at
+        - duration_minutes
+        - result_data
+        - error_message
+        - assigned_to
+        - assigned_at
+        - completed_by
+  - role: user
+    permission:
+      check:
+        execution:
+          tenant_id:
+            _eq: X-Hasura-Tenant-Id
+      columns:
+        - bp_execution_id
+        - bp_step_id
+        - step_order
+        - step_status
+        - started_at
+        - completed_at
+        - duration_minutes
+        - result_data
+        - error_message
+        - assigned_to
+        - assigned_at
+        - completed_by
+select_permissions:
+  - role: anonymous
+    permission:
+      columns:
+        - id
+        - bp_execution_id
+        - step_order
+        - step_status
+        - started_at
+        - completed_at
+      filter: {}
+  - role: steward
+    permission:
+      columns:
+        - id
+        - bp_execution_id
+        - bp_step_id
+        - step_order
+        - step_status
+        - started_at
+        - completed_at
+        - duration_minutes
+        - result_data
+        - error_message
+        - assigned_to
+        - assigned_at
+        - completed_by
+      filter:
+        execution:
+          tenant_id:
+            _eq: X-Hasura-Tenant-Id
+  - role: user
+    permission:
+      columns:
+        - id
+        - bp_execution_id
+        - bp_step_id
+        - step_order
+        - step_status
+        - started_at
+        - completed_at
+        - duration_minutes
+        - result_data
+        - error_message
+        - assigned_to
+        - assigned_at
+        - completed_by
+      filter:
+        execution:
+          tenant_id:
+            _eq: X-Hasura-Tenant-Id
+update_permissions:
+  - role: steward
+    permission:
+      columns:
+        - bp_step_id
+        - step_order
+        - step_status
+        - started_at
+        - completed_at
+        - duration_minutes
+        - result_data
+        - error_message
+        - assigned_to
+        - assigned_at
+        - completed_by
+      filter:
+        execution:
+          tenant_id:
+            _eq: X-Hasura-Tenant-Id
+      check: null
+  - role: user
+    permission:
+      columns:
+        - bp_step_id
+        - step_order
+        - step_status
+        - started_at
+        - completed_at
+        - duration_minutes
+        - result_data
+        - error_message
+        - assigned_to
+        - assigned_at
+        - completed_by
+      filter:
+        execution:
+          tenant_id:
+            _eq: X-Hasura-Tenant-Id
+      check: null
+delete_permissions:
+  - role: steward
+    permission:
+      filter:
+        execution:
+          tenant_id:
+            _eq: X-Hasura-Tenant-Id

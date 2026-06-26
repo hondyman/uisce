@@ -1,0 +1,238 @@
+{
+  "bundle_id": "wealth_management_dax_examples",
+  "domain": "wealth_management",
+  "audience": ["advisor", "analyst", "developer"],
+  "version": "v1.0.0",
+  "owner": "patrick",
+  "tags": ["wealth_management", "dax", "examples", "advanced_analytics"],
+  "description": "Examples of wealth management metrics using DAX functions for advanced analytics",
+  "examples": [
+    {
+      "metric_id": "ytd_portfolio_return_dax",
+      "name": "YTD Portfolio Return (DAX)",
+      "description": "Year-to-date portfolio return using DAX time intelligence functions",
+      "category": "performance",
+      "dax_formula": "TOTALYTD([Portfolio Return], 'Calendar'[Date])",
+      "traditional_formula": "SUM(CASE WHEN date_part('year', transaction_date) = date_part('year', CURRENT_DATE) THEN amount END)",
+      "advantages": [
+        "Automatic context awareness",
+        "Handles fiscal year end dates",
+        "Works with any date dimension",
+        "Consistent with Power BI/Excel"
+      ],
+      "governance_status": "golden"
+    },
+    {
+      "metric_id": "rolling_12m_volatility_dax",
+      "name": "12-Month Rolling Volatility (DAX)",
+      "description": "12-month rolling volatility using DAX date functions",
+      "category": "risk",
+      "dax_formula": "STDEVX.P(FILTER('Portfolio', 'Portfolio'[Date] >= DATEADD('Calendar'[Date], -12, MONTH)), [Monthly Return])",
+      "traditional_formula": "STDDEV(returns) OVER (ORDER BY date ROWS BETWEEN 11 PRECEDING AND CURRENT ROW)",
+      "advantages": [
+        "Flexible date ranges",
+        "Handles missing data gracefully",
+        "Context-aware filtering",
+        "Easy to modify periods"
+      ],
+      "governance_status": "golden"
+    },
+    {
+      "metric_id": "top_5_holdings_dax",
+      "name": "Top 5 Holdings by Value (DAX)",
+      "description": "Top 5 portfolio holdings using DAX ranking functions",
+      "category": "composition",
+      "dax_formula": "TOPN(5, 'Portfolio', [Market Value], DESC)",
+      "traditional_formula": "SELECT * FROM portfolio WHERE market_value IN (SELECT market_value FROM portfolio ORDER BY market_value DESC LIMIT 5)",
+      "advantages": [
+        "Dynamic ranking",
+        "Handles ties properly",
+        "Context-aware (filters apply)",
+        "Easy to change number of items"
+      ],
+      "governance_status": "golden"
+    },
+    {
+      "metric_id": "sharpe_ratio_quartile_dax",
+      "name": "Sharpe Ratio Quartile (DAX)",
+      "description": "Sharpe ratio quartile ranking using DAX statistical functions",
+      "category": "risk_adjusted_performance",
+      "dax_formula": "SWITCH(TRUE(), [Sharpe Ratio] >= PERCENTILEX.INC('Portfolio', [Sharpe Ratio], 0.75), \"Q4 (Top)\", [Sharpe Ratio] >= PERCENTILEX.INC('Portfolio', [Sharpe Ratio], 0.5), \"Q3\", [Sharpe Ratio] >= PERCENTILEX.INC('Portfolio', [Sharpe Ratio], 0.25), \"Q2\", \"Q1 (Bottom)\")",
+      "traditional_formula": "CASE WHEN sharpe_ratio >= (SELECT PERCENTILE_CONT(0.75) WITHIN GROUP (ORDER BY sharpe_ratio) FROM portfolio) THEN 'Q4 (Top)' ... END",
+      "advantages": [
+        "Dynamic quartiles",
+        "Easy to modify buckets",
+        "Readable logic",
+        "Context-aware"
+      ],
+      "governance_status": "draft"
+    },
+    {
+      "metric_id": "benchmark_correlation_dax",
+      "name": "Benchmark Correlation (DAX)",
+      "description": "Portfolio correlation with benchmark using DAX statistical functions",
+      "category": "risk",
+      "dax_formula": "CORR('Portfolio', [Portfolio Return], [Benchmark Return])",
+      "traditional_formula": "COVAR_POP(portfolio_return, benchmark_return) / (STDDEV_POP(portfolio_return) * STDDEV_POP(benchmark_return))",
+      "advantages": [
+        "Single function call",
+        "Handles NULL values",
+        "Standard statistical method",
+        "Easy to understand"
+      ],
+      "governance_status": "golden"
+    },
+    {
+      "metric_id": "conditional_risk_level_dax",
+      "name": "Conditional Risk Level (DAX)",
+      "description": "Risk level classification using DAX logical functions",
+      "category": "risk",
+      "dax_formula": "SWITCH(TRUE(), [Volatility] > 0.25, \"High Risk\", [Volatility] > 0.15, \"Medium Risk\", [Volatility] > 0.05, \"Low Risk\", \"Very Low Risk\")",
+      "traditional_formula": "CASE WHEN volatility > 0.25 THEN 'High Risk' WHEN volatility > 0.15 THEN 'Medium Risk' WHEN volatility > 0.05 THEN 'Low Risk' ELSE 'Very Low Risk' END",
+      "advantages": [
+        "More readable than nested CASE",
+        "Easy to modify thresholds",
+        "Can handle complex conditions",
+        "Excel-compatible syntax"
+      ],
+      "governance_status": "golden"
+    },
+    {
+      "metric_id": "yoy_growth_rate_dax",
+      "name": "Year-over-Year Growth Rate (DAX)",
+      "description": "YoY growth using DAX time intelligence",
+      "category": "performance",
+      "dax_formula": "([Portfolio Value] - CALCULATE([Portfolio Value], SAMEPERIODLASTYEAR('Calendar'[Date]))) / CALCULATE([Portfolio Value], SAMEPERIODLASTYEAR('Calendar'[Date]))",
+      "traditional_formula": "(current_value - LAG(current_value, 12) OVER (ORDER BY date)) / LAG(current_value, 12) OVER (ORDER BY date)",
+      "advantages": [
+        "Handles calendar irregularities",
+        "Works with any date dimension",
+        "Automatic period alignment",
+        "Context-aware"
+      ],
+      "governance_status": "golden"
+    },
+    {
+      "metric_id": "weighted_avg_beta_dax",
+      "name": "Weighted Average Beta (DAX)",
+      "description": "Portfolio beta weighted by position size using DAX iterators",
+      "category": "risk",
+      "dax_formula": "SUMX('Portfolio', [Weight] * [Beta])",
+      "traditional_formula": "SUM(weight * beta) FROM portfolio",
+      "advantages": [
+        "Context-aware weighting",
+        "Handles filtered contexts",
+        "Easy to modify weighting logic",
+        "Consistent with other DAX metrics"
+      ],
+      "governance_status": "golden"
+    },
+    {
+      "metric_id": "selected_benchmark_return_dax",
+      "name": "Selected Benchmark Return (DAX)",
+      "description": "Dynamic benchmark return based on user selection using DAX information functions",
+      "category": "performance",
+      "dax_formula": "IF(HASONEVALUE('Benchmark'[Name]), VALUES('Benchmark'[Return]), BLANK())",
+      "traditional_formula": "CASE WHEN (SELECT COUNT(DISTINCT name) FROM benchmark WHERE active = true) = 1 THEN (SELECT return FROM benchmark WHERE active = true) ELSE NULL END",
+      "advantages": [
+        "Dynamic based on user selection",
+        "Handles multi-selection gracefully",
+        "Clear error handling",
+        "Context-aware"
+      ],
+      "governance_status": "draft"
+    },
+    {
+      "metric_id": "upside_capture_ytd_dax",
+      "name": "YTD Upside Capture (DAX)",
+      "description": "Year-to-date upside capture ratio using DAX time intelligence and filtering",
+      "category": "risk_adjusted_performance",
+      "dax_formula": "AVERAGEX(FILTER('Portfolio', [Benchmark Return] > 0 && 'Calendar'[Date] >= DATEADD(TODAY(), -1, YEAR)), [Portfolio Return] / [Benchmark Return])",
+      "traditional_formula": "AVG(portfolio_return / benchmark_return) FROM portfolio WHERE benchmark_return > 0 AND date >= DATEADD(YEAR, -1, GETDATE())",
+      "advantages": [
+        "Combines time intelligence and filtering",
+        "Handles complex conditions elegantly",
+        "Context-aware date ranges",
+        "Readable formula logic"
+      ],
+      "governance_status": "draft"
+    }
+  ],
+  "dax_function_usage_guide": {
+    "time_intelligence": {
+      "common_patterns": [
+        "TOTALYTD([Measure], 'Date'[Date]) - Year-to-date totals",
+        "DATEADD('Date'[Date], -1, MONTH) - Previous month",
+        "SAMEPERIODLASTYEAR('Date'[Date]) - Year-over-year comparisons",
+        "PARALLELPERIOD('Date'[Date], -1, QUARTER) - Parallel quarter analysis"
+      ],
+      "wealth_management_use_cases": [
+        "YTD portfolio performance",
+        "Rolling returns (3M, 6M, 12M)",
+        "Quarterly performance comparisons",
+        "Inception-to-date calculations"
+      ]
+    },
+    "statistical": {
+      "common_patterns": [
+        "STDEVX.P('Table', [Expression]) - Population standard deviation",
+        "RANKX('Table', [Expression], , DESC) - Ranking with ties",
+        "PERCENTILEX.INC('Table', [Expression], 0.95) - 95th percentile",
+        "CORR('Table', [Expr1], [Expr2]) - Correlation coefficient"
+      ],
+      "wealth_management_use_cases": [
+        "Volatility calculations",
+        "Performance ranking",
+        "Risk quantile analysis",
+        "Benchmark correlation"
+      ]
+    },
+    "iterators": {
+      "common_patterns": [
+        "SUMX('Table', [Weight] * [Value]) - Weighted sums",
+        "AVERAGEX(FILTER('Table', [Condition]), [Expression]) - Conditional averages",
+        "TOPN(10, 'Table', [SortExpression]) - Top N analysis"
+      ],
+      "wealth_management_use_cases": [
+        "Weighted average calculations",
+        "Portfolio attribution",
+        "Top holdings analysis",
+        "Sector exposure calculations"
+      ]
+    },
+    "logical": {
+      "common_patterns": [
+        "SWITCH([Value], 1, \"Low\", 2, \"Medium\", 3, \"High\", \"Unknown\") - Multi-condition logic",
+        "IF(ISBLANK([Value]), 0, [Value]) - Null handling",
+        "COALESCE([Primary], [Secondary], [Default]) - Fallback values"
+      ],
+      "wealth_management_use_cases": [
+        "Risk level classification",
+        "Performance categorization",
+        "Missing data handling",
+        "Conditional formatting"
+      ]
+    },
+    "information": {
+      "common_patterns": [
+        "HASONEVALUE('Table'[Column]) - Single value detection",
+        "SELECTEDVALUE('Table'[Column], \"Multiple\") - Selected value with default",
+        "ISFILTERED('Table'[Column]) - Direct filter detection"
+      ],
+      "wealth_management_use_cases": [
+        "Dynamic benchmark selection",
+        "Context-aware calculations",
+        "User selection validation",
+        "Drill-down state detection"
+      ]
+    }
+  },
+  "implementation_notes": {
+    "parser_integration": "Extend semantic layer formula parser to recognize DAX syntax",
+    "context_handling": "Implement proper evaluation context for row, filter, and query contexts",
+    "performance_optimization": "Cache frequently used DAX calculations, especially time intelligence functions",
+    "governance_workflow": "DAX functions marked as 'draft' require steward review before production use",
+    "testing_strategy": "Unit tests for each DAX function with sample wealth management data",
+    "documentation": "Auto-generate function reference from DAX engine metadata"
+  }
+}

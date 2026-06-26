@@ -1,0 +1,606 @@
+{
+  "bundle_id": "comprehensive_financial_services_super_bundle",
+  "domain": ["wealth_management", "financial_services", "fixed_income", "esg", "alternatives", "risk", "operations"],
+  "audience": ["advisor", "client", "executive", "portfolio_manager", "risk", "regulator", "impact_team", "treasury", "operations"],
+  "version": "v4.0.0",
+  "owner": "patrick",
+  "tags": [
+    "wealth_management",
+    "portfolio",
+    "performance",
+    "risk",
+    "income",
+    "client_kpi",
+    "business_efficiency",
+    "banking",
+    "insurance",
+    "asset_management",
+    "capital_markets",
+    "fixed_income",
+    "pricing",
+    "yield",
+    "duration",
+    "spread",
+    "attribution",
+    "esg",
+    "sustainability",
+    "impact",
+    "alternatives",
+    "private_equity",
+    "venture_capital",
+    "real_assets",
+    "regulatory",
+    "treasury",
+    "liquidity",
+    "credit_risk",
+    "market_risk",
+    "client_analytics",
+    "operations"
+  ],
+  "functions": [
+    {
+      "name": "ADD",
+      "class": "DAX-Logical",
+      "badge": "🟧",
+      "description": "Returns the result of adding two numbers."
+    },
+    {
+      "name": "SUBTRACT",
+      "class": "DAX-Logical",
+      "badge": "🟧",
+      "description": "Returns the result of subtracting two numbers."
+    },
+    {
+      "name": "MULTIPLY",
+      "class": "DAX-Logical",
+      "badge": "🟧",
+      "description": "Returns the result of multiplying two numbers."
+    },
+    {
+      "name": "DIVIDE",
+      "class": "DAX-Logical",
+      "badge": "🟧",
+      "description": "Returns the result of dividing two numbers."
+    },
+    {
+      "name": "SUM",
+      "class": "DAX-Aggregator",
+      "badge": "🟨",
+      "description": "Returns the sum of all numbers in a column."
+    },
+    {
+      "name": "SUMX",
+      "class": "DAX-Iterator",
+      "badge": "🟨",
+      "description": "Returns the sum of an expression evaluated for each row in a table."
+    },
+    {
+      "name": "AVERAGE",
+      "class": "DAX-Aggregator",
+      "badge": "🟨",
+      "description": "Returns the average (arithmetic mean) of all the numbers in a column."
+    },
+    {
+      "name": "AVERAGEX",
+      "class": "DAX-Iterator",
+      "badge": "🟨",
+      "description": "Returns the average of an expression evaluated for each row in a table."
+    },
+    {
+      "name": "MIN",
+      "class": "DAX-Aggregator",
+      "badge": "🟧",
+      "description": "Returns the smallest value in a column."
+    },
+    {
+      "name": "MAX",
+      "class": "DAX-Aggregator",
+      "badge": "🟧",
+      "description": "Returns the largest value in a column."
+    },
+    {
+      "name": "COUNT",
+      "class": "DAX-Aggregator",
+      "badge": "🟨",
+      "description": "Counts the number of rows in a table."
+    },
+    {
+      "name": "DISTINCTCOUNT",
+      "class": "DAX-Aggregator",
+      "badge": "🟨",
+      "description": "Counts the number of distinct values in a column."
+    },
+    {
+      "name": "FILTER",
+      "class": "DAX-Iterator",
+      "badge": "🟨",
+      "description": "Returns a table that represents a subset of another table."
+    },
+    {
+      "name": "CALCULATE",
+      "class": "DAX-Iterator",
+      "badge": "🟨",
+      "description": "Evaluates an expression in a modified filter context."
+    },
+    {
+      "name": "XIRR",
+      "class": "DAX-Financial",
+      "badge": "🟩",
+      "description": "Returns the internal rate of return for a schedule of cash flows."
+    },
+    {
+      "name": "XNPV",
+      "class": "DAX-Financial",
+      "badge": "🟩",
+      "description": "Returns the net present value for a schedule of cash flows."
+    },
+    {
+      "name": "YIELD",
+      "class": "DAX-Financial",
+      "badge": "🟩",
+      "description": "Returns the yield on a security that pays periodic interest."
+    },
+    {
+      "name": "DURATION",
+      "class": "DAX-Financial",
+      "badge": "🟩",
+      "description": "Returns the Macaulay duration of a security."
+    },
+    {
+      "name": "MDURATION",
+      "class": "DAX-Financial",
+      "badge": "🟩",
+      "description": "Returns the modified duration of a security."
+    },
+    {
+      "name": "CONVEXITY",
+      "class": "DAX-Financial",
+      "badge": "🟩",
+      "description": "Returns the convexity of a security."
+    },
+    {
+      "name": "PERCENTILEX.INC",
+      "class": "DAX-Financial",
+      "badge": "🟩",
+      "description": "Returns the k-th percentile of values in a range."
+    },
+    {
+      "name": "SQRT",
+      "class": "DAX-Math",
+      "badge": "🟧",
+      "description": "Returns the square root of a number."
+    },
+    {
+      "name": "POWER",
+      "class": "DAX-Math",
+      "badge": "🟧",
+      "description": "Returns the result of a number raised to a power."
+    },
+    {
+      "name": "LOG",
+      "class": "DAX-Math",
+      "badge": "🟧",
+      "description": "Returns the logarithm of a number to the base you specify."
+    },
+    {
+      "name": "CUMULATIVE_IRR",
+      "class": "DAX-Financial",
+      "badge": "🟩",
+      "description": "Returns the cumulative internal rate of return."
+    },
+    {
+      "name": "LOGISTIC_REGRESSION",
+      "class": "DAX-Statistical",
+      "badge": "🟩",
+      "description": "Returns the result of logistic regression analysis."
+    }
+  ],
+  "metrics": [
+    {
+      "node_id": "portfolio_allocation_pct",
+      "category": "composition",
+      "description": "Percentage of portfolio value allocated to each asset class, sector, or region.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "DIVIDE(SUMX({asset_class_table}, {asset_class_value}), SUM({total_portfolio_value}))",
+        "arguments": {
+          "asset_class_table": "table:asset_class_breakdown",
+          "asset_class_value": "field:value",
+          "total_portfolio_value": "field:portfolio_value"
+        }
+      },
+      "badge": "🟨",
+      "function_class": "DAX-Iterator",
+      "functions_used": ["SUMX", "SUM", "DIVIDE"],
+      "governance": { "status": "golden" }
+    },
+    {
+      "node_id": "net_interest_margin",
+      "category": "banking",
+      "description": "Net interest income divided by average earning assets.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "DIVIDE(SUM({interest_income}) - SUM({interest_expense}), AVERAGE({earning_assets}))",
+        "arguments": {
+          "interest_income": "field:interest_income",
+          "interest_expense": "field:interest_expense",
+          "earning_assets": "field:earning_assets"
+        }
+      },
+      "badge": "🟨",
+      "function_class": "DAX-Iterator",
+      "functions_used": ["SUM", "AVERAGE", "DIVIDE"],
+      "governance": { "status": "golden" }
+    },
+    {
+      "node_id": "loss_ratio",
+      "category": "insurance",
+      "description": "Incurred losses divided by earned premiums.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "DIVIDE(SUM({incurred_losses}), SUM({earned_premiums}))",
+        "arguments": {
+          "incurred_losses": "field:incurred_losses",
+          "earned_premiums": "field:earned_premiums"
+        }
+      },
+      "badge": "🟨",
+      "function_class": "DAX-Iterator",
+      "functions_used": ["SUM", "DIVIDE"],
+      "governance": { "status": "golden" }
+    },
+    {
+      "node_id": "value_at_risk",
+      "category": "capital_markets",
+      "description": "Maximum expected loss over a period at a given confidence level.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "PERCENTILEX.INC({loss_distribution}, {confidence_level})",
+        "arguments": {
+          "loss_distribution": "ARRAY_AGG(loss_amount)",
+          "confidence_level": "field:confidence_level"
+        }
+      },
+      "badge": "🟩",
+      "function_class": "DAX-Financial",
+      "functions_used": ["PERCENTILEX.INC"],
+      "governance": { "status": "draft" }
+    },
+    {
+      "node_id": "yield_to_maturity",
+      "category": "yield",
+      "description": "Internal rate of return of all future cash flows until maturity.",
+      "financial_calc": {
+        "type": "excel_formula",
+        "formula": "=YIELD({settlement_date}, {maturity_date}, {coupon_rate}, {price}, {redemption}, {frequency}, {basis})",
+        "arguments": {
+          "settlement_date": "field:settlement_date",
+          "maturity_date": "field:maturity_date",
+          "coupon_rate": "field:coupon_rate",
+          "price": "field:clean_price",
+          "redemption": "field:redemption_value",
+          "frequency": "field:coupon_frequency",
+          "basis": "field:day_count_basis"
+        }
+      },
+      "badge": "🟩",
+      "function_class": "DAX-Financial",
+      "functions_used": ["YIELD"],
+      "governance": { "status": "golden" }
+    },
+    {
+      "node_id": "esg_composite_score",
+      "category": "esg",
+      "description": "Weighted blend of Environmental, Social, and Governance sub-scores.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "({E_score} * {E_weight}) + ({S_score} * {S_weight}) + ({G_score} * {G_weight})",
+        "arguments": {
+          "E_score": "field:E_score",
+          "E_weight": "field:E_weight",
+          "S_score": "field:S_score",
+          "S_weight": "field:S_weight",
+          "G_score": "field:G_score",
+          "G_weight": "field:G_weight"
+        }
+      },
+      "badge": "🟧",
+      "function_class": "DAX-Logical",
+      "functions_used": ["ADD", "MULTIPLY"],
+      "governance": { "status": "golden" }
+    },
+    {
+      "node_id": "carbon_intensity",
+      "category": "esg",
+      "description": "CO₂e emissions per million USD revenue.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "DIVIDE({total_emissions}, DIVIDE({revenue}, 1000000))",
+        "arguments": {
+          "total_emissions": "field:total_emissions",
+          "revenue": "field:revenue"
+        }
+      },
+      "badge": "🟧",
+      "function_class": "DAX-Logical",
+      "functions_used": ["DIVIDE"],
+      "governance": { "status": "golden" }
+    },
+    {
+      "node_id": "renewable_energy_pct",
+      "category": "esg",
+      "description": "Percentage of energy consumption from renewable sources.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "DIVIDE({renewable_energy}, {total_energy})",
+        "arguments": {
+          "renewable_energy": "field:renewable_energy_consumption",
+          "total_energy": "field:total_energy_consumption"
+        }
+      },
+      "badge": "🟨",
+      "function_class": "DAX-Iterator",
+      "functions_used": ["DIVIDE"],
+      "governance": { "status": "golden" }
+    },
+    {
+      "node_id": "board_diversity_pct",
+      "category": "esg",
+      "description": "Percentage of board seats held by under-represented groups.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "DIVIDE({diverse_board_members}, {total_board_members})",
+        "arguments": {
+          "diverse_board_members": "field:diverse_board_members",
+          "total_board_members": "field:total_board_members"
+        }
+      },
+      "badge": "🟧",
+      "function_class": "DAX-Logical",
+      "functions_used": ["DIVIDE"],
+      "governance": { "status": "golden" }
+    },
+    {
+      "node_id": "sustainable_revenue_pct",
+      "category": "esg",
+      "description": "Revenue from products/services aligned to sustainability taxonomy.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "DIVIDE({sustainable_revenue}, {total_revenue})",
+        "arguments": {
+          "sustainable_revenue": "field:sustainable_revenue",
+          "total_revenue": "field:total_revenue"
+        }
+      },
+      "badge": "🟧",
+      "function_class": "DAX-Logical",
+      "functions_used": ["DIVIDE"],
+      "governance": { "status": "golden" }
+    },
+    {
+      "node_id": "esg_adjusted_return",
+      "category": "esg_performance",
+      "description": "Portfolio return adjusted for ESG risk score.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "{portfolio_return} - ({esg_risk_score} * {risk_penalty_factor})",
+        "arguments": {
+          "portfolio_return": "calc:annualized_return",
+          "esg_risk_score": "field:esg_risk_score",
+          "risk_penalty_factor": "field:risk_penalty_factor"
+        }
+      },
+      "badge": "🟧",
+      "function_class": "DAX-Logical",
+      "functions_used": ["SUBTRACT", "MULTIPLY"],
+      "governance": { "status": "draft" }
+    },
+    {
+      "node_id": "green_alpha",
+      "category": "esg_performance",
+      "description": "Excess return vs. ESG benchmark.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "{portfolio_return} - {esg_benchmark_return}",
+        "arguments": {
+          "portfolio_return": "calc:annualized_return",
+          "esg_benchmark_return": "calc:esg_benchmark_annualized_return"
+        }
+      },
+      "badge": "🟧",
+      "function_class": "DAX-Logical",
+      "functions_used": ["SUBTRACT"],
+      "governance": { "status": "draft" }
+    },
+    {
+      "node_id": "irr_private_equity",
+      "category": "alternatives",
+      "description": "Internal rate of return for private equity or venture capital investments.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "XIRR({cash_flows}, {dates})",
+        "arguments": {
+          "cash_flows": "ARRAY_AGG(cash_flow)",
+          "dates": "ARRAY_AGG(transaction_date)"
+        }
+      },
+      "badge": "🟩",
+      "function_class": "DAX-Financial",
+      "functions_used": ["XIRR"],
+      "governance": { "status": "golden" }
+    },
+    {
+      "node_id": "moic",
+      "category": "alternatives",
+      "description": "Multiple on invested capital.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "DIVIDE({total_value}, {invested_capital})",
+        "arguments": {
+          "total_value": "field:total_value",
+          "invested_capital": "field:invested_capital"
+        }
+      },
+      "badge": "🟧",
+      "function_class": "DAX-Logical",
+      "functions_used": ["DIVIDE"],
+      "governance": { "status": "golden" }
+    },
+    {
+      "node_id": "tvpi",
+      "category": "alternatives",
+      "description": "Total value to paid-in capital (DPI + RVPI).",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "DIVIDE({total_value}, {paid_in_capital})",
+        "arguments": {
+          "total_value": "field:total_value",
+          "paid_in_capital": "field:paid_in_capital"
+        }
+      },
+      "badge": "🟧",
+      "function_class": "DAX-Logical",
+      "functions_used": ["DIVIDE"],
+      "governance": { "status": "golden" }
+    },
+    {
+      "node_id": "cet1_ratio",
+      "category": "regulatory",
+      "description": "Common Equity Tier 1 capital divided by risk-weighted assets.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "DIVIDE({cet1_capital}, {risk_weighted_assets})",
+        "arguments": {
+          "cet1_capital": "field:cet1_capital",
+          "risk_weighted_assets": "field:risk_weighted_assets"
+        }
+      },
+      "badge": "🟧",
+      "function_class": "DAX-Logical",
+      "functions_used": ["DIVIDE"],
+      "governance": { "status": "golden" }
+    },
+    {
+      "node_id": "liquidity_coverage_ratio",
+      "category": "treasury",
+      "description": "High-quality liquid assets divided by net cash outflows over 30 days.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "DIVIDE({hql_assets}, {net_cash_outflows_30d})",
+        "arguments": {
+          "hql_assets": "field:hqla",
+          "net_cash_outflows_30d": "field:net_cash_outflows_30d"
+        }
+      },
+      "badge": "🟧",
+      "function_class": "DAX-Logical",
+      "functions_used": ["DIVIDE"],
+      "governance": { "status": "golden" }
+    },
+    {
+      "node_id": "expected_credit_loss",
+      "category": "credit_risk",
+      "description": "IFRS 9 / CECL expected credit loss = PD × LGD × EAD.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "{pd} * {lgd} * {ead}",
+        "arguments": {
+          "pd": "field:probability_of_default",
+          "lgd": "field:loss_given_default",
+          "ead": "field:exposure_at_default"
+        }
+      },
+      "badge": "🟩",
+      "function_class": "DAX-Financial",
+      "functions_used": ["MULTIPLY"],
+      "governance": { "status": "golden" }
+    },
+    {
+      "node_id": "counterparty_valuation_adjustment",
+      "category": "market_risk",
+      "description": "Adjustment to derivative fair value for counterparty credit risk.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "SUMX({derivative_positions}, {exposure} * {default_probability} * (1 - {recovery_rate}))",
+        "arguments": {
+          "derivative_positions": "table:derivative_positions",
+          "exposure": "field:exposure",
+          "default_probability": "field:pd",
+          "recovery_rate": "field:recovery_rate"
+        }
+      },
+      "badge": "🟨",
+      "function_class": "DAX-Iterator",
+      "functions_used": ["SUMX", "MULTIPLY", "SUBTRACT"],
+      "governance": { "status": "draft" }
+    },
+    {
+      "node_id": "client_profitability",
+      "category": "client_analytics",
+      "description": "Revenue minus direct costs per client.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "{client_revenue} - {client_direct_costs}",
+        "arguments": {
+          "client_revenue": "field:client_revenue",
+          "client_direct_costs": "field:client_direct_costs"
+        }
+      },
+      "badge": "🟧",
+      "function_class": "DAX-Logical",
+      "functions_used": ["SUBTRACT"],
+      "governance": { "status": "draft" }
+    },
+    {
+      "node_id": "share_of_wallet",
+      "category": "client_analytics",
+      "description": "Client's assets with firm divided by total estimated assets.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "DIVIDE({assets_with_firm}, {total_estimated_assets})",
+        "arguments": {
+          "assets_with_firm": "field:assets_with_firm",
+          "total_estimated_assets": "field:total_estimated_assets"
+        }
+      },
+      "badge": "🟧",
+      "function_class": "DAX-Logical",
+      "functions_used": ["DIVIDE"],
+      "governance": { "status": "draft" }
+    },
+    {
+      "node_id": "stp_rate",
+      "category": "operations",
+      "description": "Straight-through processing rate = % of transactions processed without manual intervention.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "DIVIDE({auto_processed_txns}, {total_txns})",
+        "arguments": {
+          "auto_processed_txns": "field:auto_processed_txns",
+          "total_txns": "field:total_txns"
+        }
+      },
+      "badge": "🟧",
+      "function_class": "DAX-Logical",
+      "functions_used": ["DIVIDE"],
+      "governance": { "status": "draft" }
+    },
+    {
+      "node_id": "trade_break_rate",
+      "category": "operations",
+      "description": "Percentage of trades requiring reconciliation.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "DIVIDE({trades_with_breaks}, {total_trades})",
+        "arguments": {
+          "trades_with_breaks": "field:trades_with_breaks",
+          "total_trades": "field:total_trades"
+        }
+      },
+      "badge": "🟧",
+      "function_class": "DAX-Logical",
+      "functions_used": ["DIVIDE"],
+      "governance": { "status": "draft" }
+    }
+  ]
+}

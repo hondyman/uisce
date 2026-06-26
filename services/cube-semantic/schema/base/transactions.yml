@@ -1,0 +1,68 @@
+cube:
+  - name: transactions
+    sql_table: portfolio.transactions
+    data_source: starrocks  # Recent transactions in hot tier
+    
+    dimensions:
+      - name: tenant_id
+        sql: tenant_id
+        type: string
+        meta:
+          required_for_rls: true
+      
+      - name: transaction_id
+        sql: transaction_id
+        type: string
+        primary_key: true
+      
+      - name: account_id
+        sql: account_id
+        type: string
+      
+      - name: security_id
+        sql: security_id
+        type: string
+      
+      - name: transaction_date
+        sql: transaction_date
+        type: time
+      
+      - name: transaction_type
+        sql: transaction_type
+        type: string
+    
+    measures:
+      - name: transaction_count
+        type: count
+      
+      - name: total_amount
+        sql: amount
+        type: sum
+      
+      - name: avg_amount
+        sql: amount
+        type: avg
+      
+      - name: trade_volume
+        sql: quantity
+        type: sum
+    
+    pre_aggregations:
+      - name: transactions_daily
+        type: rollup
+        external: true
+        data_source: starrocks
+        partition_granularity: day
+        time_dimension: transaction_date
+        measure_references:
+          - transaction_count
+          - total_amount
+          - trade_volume
+        dimension_references:
+          - tenant_id
+          - account_id
+          - transaction_type
+        refresh_key:
+          every: 5 minute
+          incremental: true
+          update_window: 7 day

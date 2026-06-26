@@ -1,0 +1,36 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: calendar-service
+  namespace: calendar
+rules:
+# ConfigMap access for dynamic config reload
+- apiGroups: [ "" ]
+  resources: [ "configmaps" ]
+  verbs: [ "get", "watch", "list" ]
+
+# Secrets access (if needed for service-to-service auth)
+- apiGroups: [ "" ]
+  resources: [ "secrets" ]
+  verbs: [ "get" ]
+
+# Pod information for topology awareness
+- apiGroups: [ "" ]
+  resources: [ "pods" ]
+  verbs: [ "get", "list", "watch" ]
+
+# Service info
+- apiGroups: [ "" ]
+  resources: [ "services" ]
+  verbs: [ "get", "list" ]
+
+# Status updates (optional - for leader election)
+- apiGroups: [ "" ]
+  resources: [ "configmaps" ]
+  resourceNames: [ "calendar-service-lock" ]
+  verbs: [ "get", "update" ]
+
+# Event recording for audit trail
+- apiGroups: [ "" ]
+  resources: [ "events" ]
+  verbs: [ "create", "patch" ]

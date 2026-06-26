@@ -1,0 +1,491 @@
+package api
+
+import (
+	"bytes"
+	"encoding/json"
+	"io"
+	"net/http"
+	"net/http/httptest"
+	"testing"
+
+	"github.com/go-chi/chi/v5"
+)
+
+// TestProxyTempoTracesWithValidAuth tests tracing search with valid authentication
+func TestProxyTempoTracesWithValidAuth(t *testing.T) {
+	// Create a mock trace backend
+	mockBackend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Get("plan_id") == "plan-123" {
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"traces": []map[string]interface{}{
+					{
+						"traceID": "trace-1",
+						"spans": []map[string]interface{}{
+							{
+								"spanID": "span-1",
+								"tags": []map[string]string{
+									{"key": "tenant_id", "value": "tenant-123"},
+								},
+							},
+						},
+					},
+				},
+			})
+		} else {
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer mockBackend.Close()
+
+	t.Setenv("TRACE_QUERY_URL", mockBackend.URL)
+
+	// Create server with auth config
+	server := &Server{}
+	router := chi.NewRouter()
+	router.Get("/traces", server.proxyTempoTraces)
+
+	// Setup auth config with test API key
+	traceAuthConfig.APIKeys["test-key"] = []string{"admin"}
+
+	// Make authenticated request
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest("GET", "/traces?plan_id=plan-123", nil)
+	req.Header.Set("X-API-Key", "test-key")
+	req.Header.Set("X-Tenant-ID", "tenant-123")
+
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("Expected status %d, got %d", http.StatusOK, w.Code)
+	}
+
+	if w.Header().Get("Content-Type") != "application/json" {
+		t.Error("Expected Content-Type: application/json")
+	}
+
+	if w.Header().Get("X-Tenant-ID") != "tenant-123" {
+		t.Error("Expected X-Tenant-ID header in response")
+	}
+}
+
+// TestProxyTempoTracesWithoutAuth tests that requests without auth are rejected
+func TestProxyTempoTracesWithoutAuth(t *testing.T) {
+	t.Setenv("TRACE_QUERY_URL", "http://localhost:3100")
+
+	server := &Server{}
+	router := chi.NewRouter()
+	router.Get("/traces", server.proxyTempoTraces)
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest("GET", "/traces?plan_id=plan-123", nil)
+	// Deliberately omit X-API-Key and X-Tenant-ID
+
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusUnauthorized {
+		t.Errorf("Expected status %d, got %d", http.StatusUnauthorized, w.Code)
+	}
+
+	var errResp ErrorResponse
+	json.NewDecoder(w.Body).Decode(&errResp)
+	if errResp.Error != "unauthorized" {
+		t.Errorf("Expected 'unauthorized' error, got '%s'", errResp.Error)
+	}
+}
+
+// TestProxyTempoTracesWithInvalidAPIKey tests that invalid API keys are rejected
+func TestProxyTempoTracesWithInvalidAPIKey(t *testing.T) {
+	t.Setenv("TRACE_QUERY_URL", "http://localhost:3100")
+
+	server := &Server{}
+	router := chi.NewRouter()
+	router.Get("/traces", server.proxyTempoTraces)
+
+	// Ensure the invalid key is not in config
+	traceAuthConfig.APIKeys = make(map[string][]string)
+	traceAuthConfig.APIKeys["valid-key"] = []string{"admin"}
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest("GET", "/traces?plan_id=plan-123", nil)
+	req.Header.Set("X-API-Key", "invalid-key")
+	req.Header.Set("X-Tenant-ID", "tenant-123")
+
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusUnauthorized {
+		t.Errorf("Expected status %d, got %d", http.StatusUnauthorized, w.Code)
+	}
+}
+
+// TestProxyTempoTracesWithoutTenantID tests that requests without X-Tenant-ID are rejected
+func TestProxyTempoTracesWithoutTenantID(t *testing.T) {
+	t.Setenv("TRACE_QUERY_URL", "http://localhost:3100")
+
+	server := &Server{}
+	router := chi.NewRouter()
+	router.Get("/traces", server.proxyTempoTraces)
+
+	traceAuthConfig.APIKeys = make(map[string][]string)
+	traceAuthConfig.APIKeys["test-key"] = []string{"admin"}
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest("GET", "/traces?plan_id=plan-123", nil)
+	req.Header.Set("X-API-Key", "test-key")
+	// Omit X-Tenant-ID
+
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("Expected status %d, got %d", http.StatusBadRequest, w.Code)
+	}
+}
+
+// TestProxyTempoTracesWithoutQueryParams tests that missing query parameters are rejected
+func TestProxyTempoTracesWithoutQueryParams(t *testing.T) {
+	t.Setenv("TRACE_QUERY_URL", "http://localhost:3100")
+
+	server := &Server{}
+	router := chi.NewRouter()
+	router.Get("/traces", server.proxyTempoTraces)
+
+	traceAuthConfig.APIKeys = make(map[string][]string)
+	traceAuthConfig.APIKeys["test-key"] = []string{"admin"}
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest("GET", "/traces", nil) // No query params
+	req.Header.Set("X-API-Key", "test-key")
+	req.Header.Set("X-Tenant-ID", "tenant-123")
+
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("Expected status %d, got %d", http.StatusBadRequest, w.Code)
+	}
+}
+
+// TestProxyTempoTracesBackendNotConfigured tests behavior when trace backend is not configured
+func TestProxyTempoTracesBackendNotConfigured(t *testing.T) {
+	t.Setenv("TRACE_QUERY_URL", "")
+
+	server := &Server{}
+	router := chi.NewRouter()
+	router.Get("/traces", server.proxyTempoTraces)
+
+	traceAuthConfig.APIKeys = make(map[string][]string)
+	traceAuthConfig.APIKeys["test-key"] = []string{"admin"}
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest("GET", "/traces?plan_id=plan-123", nil)
+	req.Header.Set("X-API-Key", "test-key")
+	req.Header.Set("X-Tenant-ID", "tenant-123")
+
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusServiceUnavailable {
+		t.Errorf("Expected status %d, got %d", http.StatusServiceUnavailable, w.Code)
+	}
+
+	var errResp ErrorResponse
+	json.NewDecoder(w.Body).Decode(&errResp)
+	if errResp.Error != "service_unavailable" {
+		t.Errorf("Expected 'service_unavailable' error, got '%s'", errResp.Error)
+	}
+}
+
+// TestProxyTempoTracesBackendUnreachable tests behavior when trace backend is unreachable
+func TestProxyTempoTracesBackendUnreachable(t *testing.T) {
+	t.Setenv("TRACE_QUERY_URL", "http://unreachable-backend:3100")
+
+	server := &Server{}
+	router := chi.NewRouter()
+	router.Get("/traces", server.proxyTempoTraces)
+
+	traceAuthConfig.APIKeys = make(map[string][]string)
+	traceAuthConfig.APIKeys["test-key"] = []string{"admin"}
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest("GET", "/traces?plan_id=plan-123", nil)
+	req.Header.Set("X-API-Key", "test-key")
+	req.Header.Set("X-Tenant-ID", "tenant-123")
+
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadGateway {
+		t.Errorf("Expected status %d, got %d", http.StatusBadGateway, w.Code)
+	}
+
+	var errResp ErrorResponse
+	json.NewDecoder(w.Body).Decode(&errResp)
+	if errResp.Error != "trace_backend_unreachable" {
+		t.Errorf("Expected 'trace_backend_unreachable' error, got '%s'", errResp.Error)
+	}
+}
+
+// TestProxyTempoGetTraceWithValidAuth tests fetching a specific trace with valid authentication
+func TestProxyTempoGetTraceWithValidAuth(t *testing.T) {
+	mockBackend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		pathParam := r.URL.Path
+		if bytes.Contains([]byte(pathParam), []byte("0123456789abcdef0123456789abcdef")) {
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"traceID": "0123456789abcdef0123456789abcdef",
+				"spans": []map[string]interface{}{
+					{
+						"spanID": "span-1",
+						"tags": []map[string]string{
+							{"key": "tenant_id", "value": "tenant-123"},
+						},
+					},
+				},
+			})
+		} else {
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer mockBackend.Close()
+
+	t.Setenv("TRACE_QUERY_URL", mockBackend.URL)
+
+	server := &Server{}
+	router := chi.NewRouter()
+	router.Get("/traces/{traceId}", server.proxyTempoGetTrace)
+
+	traceAuthConfig.APIKeys = make(map[string][]string)
+	traceAuthConfig.APIKeys["test-key"] = []string{"admin"}
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest("GET", "/traces/0123456789abcdef0123456789abcdef", nil)
+	req.Header.Set("X-API-Key", "test-key")
+	req.Header.Set("X-Tenant-ID", "tenant-123")
+
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("Expected status %d, got %d", http.StatusOK, w.Code)
+		t.Logf("Response body: %s", w.Body.String())
+	}
+}
+
+// TestProxyTempoGetTraceWithInvalidTraceID tests that invalid trace IDs are rejected
+func TestProxyTempoGetTraceWithInvalidTraceID(t *testing.T) {
+	t.Setenv("TRACE_QUERY_URL", "http://localhost:3100")
+
+	server := &Server{}
+	router := chi.NewRouter()
+	router.Get("/traces/{traceId}", server.proxyTempoGetTrace)
+
+	traceAuthConfig.APIKeys = make(map[string][]string)
+	traceAuthConfig.APIKeys["test-key"] = []string{"admin"}
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest("GET", "/traces/invalid-trace-id", nil)
+	req.Header.Set("X-API-Key", "test-key")
+	req.Header.Set("X-Tenant-ID", "tenant-123")
+
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("Expected status %d, got %d", http.StatusBadRequest, w.Code)
+	}
+
+	var errResp ErrorResponse
+	if err := json.NewDecoder(w.Body).Decode(&errResp); err == nil {
+		if errResp.Error != "bad_request" {
+			t.Errorf("Expected 'bad_request' error, got '%s'", errResp.Error)
+		}
+	}
+}
+
+// TestProxyTempoGetTraceWithoutTraceID tests that missing trace ID is rejected
+func TestProxyTempoGetTraceWithoutTraceID(t *testing.T) {
+	t.Setenv("TRACE_QUERY_URL", "http://localhost:3100")
+
+	server := &Server{}
+	router := chi.NewRouter()
+	router.Get("/traces/{traceId}", server.proxyTempoGetTrace)
+
+	traceAuthConfig.APIKeys = make(map[string][]string)
+	traceAuthConfig.APIKeys["test-key"] = []string{"admin"}
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest("GET", "/traces/", nil)
+	req.Header.Set("X-API-Key", "test-key")
+	req.Header.Set("X-Tenant-ID", "tenant-123")
+
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("Expected status %d, got %d", http.StatusBadRequest, w.Code)
+	}
+}
+
+// TestProxyTempoGetTraceNotFound tests behavior when trace is not found in backend
+func TestProxyTempoGetTraceNotFound(t *testing.T) {
+	mockBackend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"error": "trace not found",
+		})
+	}))
+	defer mockBackend.Close()
+
+	t.Setenv("TRACE_QUERY_URL", mockBackend.URL)
+
+	server := &Server{}
+	router := chi.NewRouter()
+	router.Get("/traces/{traceId}", server.proxyTempoGetTrace)
+
+	traceAuthConfig.APIKeys = make(map[string][]string)
+	traceAuthConfig.APIKeys["test-key"] = []string{"admin"}
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest("GET", "/traces/0123456789abcdef0123456789abcdef", nil)
+	req.Header.Set("X-API-Key", "test-key")
+	req.Header.Set("X-Tenant-ID", "tenant-123")
+
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusNotFound {
+		t.Errorf("Expected status %d, got %d", http.StatusNotFound, w.Code)
+	}
+}
+
+// TestProxyTempoGetTraceWithoutAuth tests that unauthenticated requests are rejected
+func TestProxyTempoGetTraceWithoutAuth(t *testing.T) {
+	t.Setenv("TRACE_QUERY_URL", "http://localhost:3100")
+
+	server := &Server{}
+	router := chi.NewRouter()
+	router.Get("/traces/{traceId}", server.proxyTempoGetTrace)
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest("GET", "/traces/0123456789abcdef0123456789abcdef", nil)
+	// Omit authentication
+
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusUnauthorized {
+		t.Errorf("Expected status %d, got %d", http.StatusUnauthorized, w.Code)
+	}
+}
+
+// TestCacheControlHeaders tests that trace responses have appropriate cache headers
+func TestCacheControlHeaders(t *testing.T) {
+	mockBackend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		io.WriteString(w, `{"traces":[]}`)
+	}))
+	defer mockBackend.Close()
+
+	t.Setenv("TRACE_QUERY_URL", mockBackend.URL)
+
+	server := &Server{}
+	router := chi.NewRouter()
+	router.Get("/traces", server.proxyTempoTraces)
+
+	traceAuthConfig.APIKeys = make(map[string][]string)
+	traceAuthConfig.APIKeys["test-key"] = []string{"admin"}
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest("GET", "/traces?plan_id=plan-123", nil)
+	req.Header.Set("X-API-Key", "test-key")
+	req.Header.Set("X-Tenant-ID", "tenant-123")
+
+	router.ServeHTTP(w, req)
+
+	cacheControl := w.Header().Get("Cache-Control")
+	if cacheControl != "no-cache, no-store, must-revalidate" {
+		t.Errorf("Expected proper cache control header, got: %s", cacheControl)
+	}
+}
+
+// TestTenantIsolationInResponse tests that trace responses are filtered by tenant
+func TestTenantIsolationInResponse(t *testing.T) {
+	mockBackend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		// Return traces from multiple tenants
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"spans": []interface{}{
+				map[string]interface{}{
+					"spanID": "span-1",
+					"tags": []map[string]string{
+						{"key": "tenant_id", "value": "tenant-123"},
+					},
+				},
+				map[string]interface{}{
+					"spanID": "span-2",
+					"tags": []map[string]string{
+						{"key": "tenant_id", "value": "tenant-999"},
+					},
+				},
+			},
+		})
+	}))
+	defer mockBackend.Close()
+
+	t.Setenv("TRACE_QUERY_URL", mockBackend.URL)
+
+	server := &Server{}
+	router := chi.NewRouter()
+	router.Get("/traces", server.proxyTempoTraces)
+
+	traceAuthConfig.APIKeys = make(map[string][]string)
+	traceAuthConfig.APIKeys["test-key"] = []string{"admin"}
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest("GET", "/traces?plan_id=plan-123", nil)
+	req.Header.Set("X-API-Key", "test-key")
+	req.Header.Set("X-Tenant-ID", "tenant-123")
+
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("Expected status %d, got %d", http.StatusOK, w.Code)
+	}
+
+	// Parse response and verify only tenant-123 spans are included
+	var response map[string]interface{}
+	if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
+		t.Fatalf("Failed to decode response: %v", err)
+	}
+
+	if spans, ok := response["spans"].([]interface{}); ok {
+		if len(spans) != 1 {
+			t.Errorf("Expected 1 filtered span, got %d", len(spans))
+		}
+	}
+}
+
+// TestMultipleRoleAccess tests that users with different authorized roles can access traces
+func TestMultipleRoleAccess(t *testing.T) {
+	roles := []string{"admin", "sre", "ops_manager"}
+
+	for _, role := range roles {
+		mockBackend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(map[string]interface{}{"traces": []interface{}{}})
+		}))
+		defer mockBackend.Close()
+
+		t.Setenv("TRACE_QUERY_URL", mockBackend.URL)
+
+		server := &Server{}
+		router := chi.NewRouter()
+		router.Get("/traces", server.proxyTempoTraces)
+
+		traceAuthConfig.APIKeys = make(map[string][]string)
+		traceAuthConfig.APIKeys["test-key"] = []string{role}
+
+		w := httptest.NewRecorder()
+		req := httptest.NewRequest("GET", "/traces?plan_id=plan-123", nil)
+		req.Header.Set("X-API-Key", "test-key")
+		req.Header.Set("X-Tenant-ID", "tenant-123")
+
+		router.ServeHTTP(w, req)
+
+		if w.Code != http.StatusOK {
+			t.Errorf("Expected status %d for role %s, got %d", http.StatusOK, role, w.Code)
+		}
+	}
+}

@@ -1,0 +1,434 @@
+{
+  "bundle_id": "dax_functions_extension",
+  "domain": "semantic_layer",
+  "audience": ["developer", "analyst", "steward"],
+  "version": "v1.0.0",
+  "owner": "patrick",
+  "tags": ["dax", "functions", "time_intelligence", "financial", "statistical"],
+  "description": "DAX-style functions extension for semantic layer - Power BI/Tabular model compatible functions for advanced analytics",
+  "functions": {
+    "time_intelligence": [
+      {
+        "function_name": "DATESYTD",
+        "category": "time_intelligence",
+        "description": "Returns a table with a column of dates for the year-to-date period",
+        "syntax": "DATESYTD(<dates>[, <year_end_date>])",
+        "parameters": [
+          {"name": "dates", "type": "date_table", "description": "A column containing dates"},
+          {"name": "year_end_date", "type": "date", "description": "Optional year end date", "optional": true}
+        ],
+        "return_type": "table",
+        "examples": [
+          "CALCULATE([Total Sales], DATESYTD('Date'[Date]))",
+          "CALCULATE([Portfolio Value], DATESYTD('Calendar'[Date]))"
+        ],
+        "wealth_management_use": "YTD performance, YTD income calculations"
+      },
+      {
+        "function_name": "TOTALYTD",
+        "category": "time_intelligence",
+        "description": "Evaluates the year-to-date value of an expression",
+        "syntax": "TOTALYTD(<expression>, <dates>[, <filter>][, <year_end_date>])",
+        "parameters": [
+          {"name": "expression", "type": "expression", "description": "Expression to evaluate"},
+          {"name": "dates", "type": "date_table", "description": "A column containing dates"},
+          {"name": "filter", "type": "expression", "description": "Optional filter expression", "optional": true},
+          {"name": "year_end_date", "type": "date", "description": "Optional year end date", "optional": true}
+        ],
+        "return_type": "scalar",
+        "examples": [
+          "TOTALYTD([Portfolio Return], 'Calendar'[Date])",
+          "TOTALYTD([Dividend Income], 'Calendar'[Date], 'Portfolio'[Status] = \"Active\")"
+        ],
+        "wealth_management_use": "YTD portfolio returns, YTD dividend income"
+      },
+      {
+        "function_name": "DATEADD",
+        "category": "time_intelligence",
+        "description": "Returns a table with a column of dates shifted by a specified number of intervals",
+        "syntax": "DATEADD(<dates>, <number_of_intervals>, <interval>)",
+        "parameters": [
+          {"name": "dates", "type": "date_table", "description": "A column containing dates"},
+          {"name": "number_of_intervals", "type": "integer", "description": "Number of intervals to shift"},
+          {"name": "interval", "type": "string", "description": "Interval type: YEAR, QUARTER, MONTH, DAY"}
+        ],
+        "return_type": "table",
+        "examples": [
+          "CALCULATE([Portfolio Return], DATEADD('Calendar'[Date], -1, MONTH))",
+          "CALCULATE([Benchmark Return], DATEADD('Calendar'[Date], -3, MONTH))"
+        ],
+        "wealth_management_use": "Rolling 3M, 6M, 12M returns, period-over-period comparisons"
+      },
+      {
+        "function_name": "SAMEPERIODLASTYEAR",
+        "category": "time_intelligence",
+        "description": "Returns a table with a column of dates shifted by one year",
+        "syntax": "SAMEPERIODLASTYEAR(<dates>)",
+        "parameters": [
+          {"name": "dates", "type": "date_table", "description": "A column containing dates"}
+        ],
+        "return_type": "table",
+        "examples": [
+          "CALCULATE([Portfolio Return], SAMEPERIODLASTYEAR('Calendar'[Date]))"
+        ],
+        "wealth_management_use": "Year-over-year return comparisons"
+      },
+      {
+        "function_name": "PARALLELPERIOD",
+        "category": "time_intelligence",
+        "description": "Returns a table with a column of dates representing a parallel period",
+        "syntax": "PARALLELPERIOD(<dates>, <number_of_intervals>, <interval>)",
+        "parameters": [
+          {"name": "dates", "type": "date_table", "description": "A column containing dates"},
+          {"name": "number_of_intervals", "type": "integer", "description": "Number of intervals to shift"},
+          {"name": "interval", "type": "string", "description": "Interval type: YEAR, QUARTER, MONTH, DAY"}
+        ],
+        "return_type": "table",
+        "examples": [
+          "CALCULATE([Portfolio Return], PARALLELPERIOD('Calendar'[Date], -1, QUARTER))"
+        ],
+        "wealth_management_use": "Compare same quarter across different years"
+      }
+    ],
+    "financial": [
+      {
+        "function_name": "XIRR",
+        "category": "financial",
+        "description": "Returns the internal rate of return for a schedule of cash flows",
+        "syntax": "XIRR(<values>, <dates>[, <guess>])",
+        "parameters": [
+          {"name": "values", "type": "number_table", "description": "A column containing cash flow values"},
+          {"name": "dates", "type": "date_table", "description": "A column containing cash flow dates"},
+          {"name": "guess", "type": "number", "description": "Optional initial guess for IRR", "optional": true}
+        ],
+        "return_type": "scalar",
+        "examples": [
+          "XIRR('CashFlows'[Amount], 'CashFlows'[Date])",
+          "XIRR('Portfolio'[CashFlow], 'Portfolio'[TransactionDate])"
+        ],
+        "wealth_management_use": "Money-weighted returns, IRR calculations for portfolios"
+      },
+      {
+        "function_name": "XNPV",
+        "category": "financial",
+        "description": "Returns the net present value for a schedule of cash flows",
+        "syntax": "XNPV(<rate>, <values>, <dates>)",
+        "parameters": [
+          {"name": "rate", "type": "number", "description": "Discount rate"},
+          {"name": "values", "type": "number_table", "description": "A column containing cash flow values"},
+          {"name": "dates", "type": "date_table", "description": "A column containing cash flow dates"}
+        ],
+        "return_type": "scalar",
+        "examples": [
+          "XNPV(0.05, 'CashFlows'[Amount], 'CashFlows'[Date])"
+        ],
+        "wealth_management_use": "Discounted portfolio values, NPV calculations"
+      }
+    ],
+    "statistical": [
+      {
+        "function_name": "STDEVX.P",
+        "category": "statistical",
+        "description": "Returns the standard deviation of an expression evaluated for each row in a table (population)",
+        "syntax": "STDEVX.P(<table>, <expression>)",
+        "parameters": [
+          {"name": "table", "type": "table", "description": "Table containing the rows for which the expression will be evaluated"},
+          {"name": "expression", "type": "expression", "description": "Expression to evaluate for each row of the table"}
+        ],
+        "return_type": "scalar",
+        "examples": [
+          "STDEVX.P('Portfolio', [Monthly Return])",
+          "STDEVX.P(FILTER('Portfolio', [Asset Class] = \"Equity\"), [Monthly Return])"
+        ],
+        "wealth_management_use": "Volatility calculations, tracking error"
+      },
+      {
+        "function_name": "VARX.P",
+        "category": "statistical",
+        "description": "Returns the variance of an expression evaluated for each row in a table (population)",
+        "syntax": "VARX.P(<table>, <expression>)",
+        "parameters": [
+          {"name": "table", "type": "table", "description": "Table containing the rows for which the expression will be evaluated"},
+          {"name": "expression", "type": "expression", "description": "Expression to evaluate for each row of the table"}
+        ],
+        "return_type": "scalar",
+        "examples": [
+          "VARX.P('Portfolio', [Monthly Return])"
+        ],
+        "wealth_management_use": "Variance calculations for risk metrics"
+      },
+      {
+        "function_name": "COVARIANCE.P",
+        "category": "statistical",
+        "description": "Returns the covariance of two expressions evaluated for each row in a table (population)",
+        "syntax": "COVARIANCE.P(<table>, <expression1>, <expression2>)",
+        "parameters": [
+          {"name": "table", "type": "table", "description": "Table containing the rows for which the expressions will be evaluated"},
+          {"name": "expression1", "type": "expression", "description": "First expression"},
+          {"name": "expression2", "type": "expression", "description": "Second expression"}
+        ],
+        "return_type": "scalar",
+        "examples": [
+          "COVARIANCE.P('Portfolio', [Portfolio Return], [Benchmark Return])"
+        ],
+        "wealth_management_use": "Beta calculations, correlation analysis"
+      },
+      {
+        "function_name": "CORR",
+        "category": "statistical",
+        "description": "Returns the correlation coefficient of two expressions",
+        "syntax": "CORR(<table>, <expression1>, <expression2>)",
+        "parameters": [
+          {"name": "table", "type": "table", "description": "Table containing the rows for which the expressions will be evaluated"},
+          {"name": "expression1", "type": "expression", "description": "First expression"},
+          {"name": "expression2", "type": "expression", "description": "Second expression"}
+        ],
+        "return_type": "scalar",
+        "examples": [
+          "CORR('Portfolio', [Portfolio Return], [Benchmark Return])"
+        ],
+        "wealth_management_use": "Benchmark correlation, diversification analysis"
+      },
+      {
+        "function_name": "RANKX",
+        "category": "statistical",
+        "description": "Returns the ranking of a number in a list of numbers",
+        "syntax": "RANKX(<table>, <expression>[, <value>][, <order>][, <ties>])",
+        "parameters": [
+          {"name": "table", "type": "table", "description": "Table containing the rows for which the expression will be evaluated"},
+          {"name": "expression", "type": "expression", "description": "Expression to evaluate for each row of the table"},
+          {"name": "value", "type": "scalar", "description": "Optional value to rank", "optional": true},
+          {"name": "order", "type": "integer", "description": "Optional sort order (0=DESC, 1=ASC)", "optional": true},
+          {"name": "ties", "type": "integer", "description": "Optional ties handling method", "optional": true}
+        ],
+        "return_type": "scalar",
+        "examples": [
+          "RANKX('Portfolio', [Total Return], , 0)",
+          "RANKX(ALL('Portfolio'), [Sharpe Ratio])"
+        ],
+        "wealth_management_use": "Top holdings ranking, performance quartiles"
+      },
+      {
+        "function_name": "PERCENTILEX.INC",
+        "category": "statistical",
+        "description": "Returns the k-th percentile of an expression evaluated for each row in a table",
+        "syntax": "PERCENTILEX.INC(<table>, <expression>, <k>)",
+        "parameters": [
+          {"name": "table", "type": "table", "description": "Table containing the rows for which the expression will be evaluated"},
+          {"name": "expression", "type": "expression", "description": "Expression to evaluate for each row of the table"},
+          {"name": "k", "type": "number", "description": "Percentile value (0 to 1)"}
+        ],
+        "return_type": "scalar",
+        "examples": [
+          "PERCENTILEX.INC('Portfolio', [Monthly Return], 0.95)",
+          "PERCENTILEX.INC('Portfolio', [Drawdown], 0.99)"
+        ],
+        "wealth_management_use": "VaR calculations, risk quantiles"
+      }
+    ],
+    "iterators": [
+      {
+        "function_name": "SUMX",
+        "category": "iterator",
+        "description": "Returns the sum of an expression evaluated for each row in a table",
+        "syntax": "SUMX(<table>, <expression>)",
+        "parameters": [
+          {"name": "table", "type": "table", "description": "Table containing the rows for which the expression will be evaluated"},
+          {"name": "expression", "type": "expression", "description": "Expression to evaluate for each row of the table"}
+        ],
+        "return_type": "scalar",
+        "examples": [
+          "SUMX('Portfolio', [Weight] * [Return])",
+          "SUMX(FILTER('Portfolio', [Asset Class] = \"Equity\"), [Market Value])"
+        ],
+        "wealth_management_use": "Weighted averages, portfolio attribution"
+      },
+      {
+        "function_name": "AVERAGEX",
+        "category": "iterator",
+        "description": "Returns the average of an expression evaluated for each row in a table",
+        "syntax": "AVERAGEX(<table>, <expression>)",
+        "parameters": [
+          {"name": "table", "type": "table", "description": "Table containing the rows for which the expression will be evaluated"},
+          {"name": "expression", "type": "expression", "description": "Expression to evaluate for each row of the table"}
+        ],
+        "return_type": "scalar",
+        "examples": [
+          "AVERAGEX('Portfolio', [Monthly Return])",
+          "AVERAGEX(FILTER('Portfolio', [Sector] = \"Technology\"), [Beta])"
+        ],
+        "wealth_management_use": "Average returns, sector analysis"
+      },
+      {
+        "function_name": "FILTER",
+        "category": "iterator",
+        "description": "Returns a table with only the rows that meet the condition",
+        "syntax": "FILTER(<table>, <condition>)",
+        "parameters": [
+          {"name": "table", "type": "table", "description": "Table to filter"},
+          {"name": "condition", "type": "expression", "description": "Filter condition"}
+        ],
+        "return_type": "table",
+        "examples": [
+          "FILTER('Portfolio', [Asset Class] = \"Equity\")",
+          "FILTER('Portfolio', [Return] > 0.05 && [Volatility] < 0.15)"
+        ],
+        "wealth_management_use": "Sector-specific metrics, risk-filtered portfolios"
+      },
+      {
+        "function_name": "TOPN",
+        "category": "iterator",
+        "description": "Returns the top N rows of a table based on an expression",
+        "syntax": "TOPN(<n_value>, <table>, <orderBy_expression>[, <order>])",
+        "parameters": [
+          {"name": "n_value", "type": "integer", "description": "Number of rows to return"},
+          {"name": "table", "type": "table", "description": "Table to get top rows from"},
+          {"name": "orderBy_expression", "type": "expression", "description": "Expression to order by"},
+          {"name": "order", "type": "integer", "description": "Optional sort order (0=DESC, 1=ASC)", "optional": true}
+        ],
+        "return_type": "table",
+        "examples": [
+          "TOPN(10, 'Portfolio', [Market Value])",
+          "TOPN(5, 'Portfolio', [Sharpe Ratio], 0)"
+        ],
+        "wealth_management_use": "Top holdings, top performing assets"
+      }
+    ],
+    "logical": [
+      {
+        "function_name": "SWITCH",
+        "category": "logical",
+        "description": "Evaluates an expression and returns different values based on the result",
+        "syntax": "SWITCH(<expression>, <value1>, <result1>[, <value2>, <result2>]...[, <else>])",
+        "parameters": [
+          {"name": "expression", "type": "expression", "description": "Expression to evaluate"},
+          {"name": "value1", "type": "scalar", "description": "First value to match"},
+          {"name": "result1", "type": "scalar", "description": "Result if expression equals value1"},
+          {"name": "value2", "type": "scalar", "description": "Second value to match", "optional": true},
+          {"name": "result2", "type": "scalar", "description": "Result if expression equals value2", "optional": true},
+          {"name": "else", "type": "scalar", "description": "Default result if no matches", "optional": true}
+        ],
+        "return_type": "scalar",
+        "examples": [
+          "SWITCH([Risk Level], 1, \"Low\", 2, \"Medium\", 3, \"High\", \"Unknown\")",
+          "SWITCH([Sharpe Ratio], [Sharpe Ratio] > 2, \"Excellent\", [Sharpe Ratio] > 1, \"Good\", \"Poor\")"
+        ],
+        "wealth_management_use": "Risk band classification, performance categorization"
+      },
+      {
+        "function_name": "IF",
+        "category": "logical",
+        "description": "Checks a condition and returns one value if TRUE, another if FALSE",
+        "syntax": "IF(<logical_test>, <value_if_true>[, <value_if_false>])",
+        "parameters": [
+          {"name": "logical_test", "type": "expression", "description": "Logical condition to test"},
+          {"name": "value_if_true", "type": "scalar", "description": "Value to return if condition is true"},
+          {"name": "value_if_false", "type": "scalar", "description": "Value to return if condition is false", "optional": true}
+        ],
+        "return_type": "scalar",
+        "examples": [
+          "IF([Portfolio Return] > 0, \"Positive\", \"Negative\")",
+          "IF(ISBLANK([Benchmark Return]), 0, [Portfolio Return] - [Benchmark Return])"
+        ],
+        "wealth_management_use": "Conditional formatting, null handling"
+      },
+      {
+        "function_name": "BLANK",
+        "category": "logical",
+        "description": "Returns a blank value",
+        "syntax": "BLANK()",
+        "parameters": [],
+        "return_type": "scalar",
+        "examples": [
+          "IF([Portfolio Value] = 0, BLANK(), [Portfolio Value])"
+        ],
+        "wealth_management_use": "Null value representation in calculations"
+      },
+      {
+        "function_name": "COALESCE",
+        "category": "logical",
+        "description": "Returns the first non-blank value from a list of expressions",
+        "syntax": "COALESCE(<expression1>, <expression2>[, <expression3>]...)",
+        "parameters": [
+          {"name": "expression1", "type": "expression", "description": "First expression to check"},
+          {"name": "expression2", "type": "expression", "description": "Second expression to check"},
+          {"name": "expression3", "type": "expression", "description": "Third expression to check", "optional": true}
+        ],
+        "return_type": "scalar",
+        "examples": [
+          "COALESCE([Portfolio Return], [Benchmark Return], 0)",
+          "COALESCE([Custom Benchmark], [Default Benchmark])"
+        ],
+        "wealth_management_use": "Fallback values, default calculations"
+      }
+    ],
+    "information": [
+      {
+        "function_name": "ISFILTERED",
+        "category": "information",
+        "description": "Returns TRUE if a column is being filtered directly",
+        "syntax": "ISFILTERED(<column>)",
+        "parameters": [
+          {"name": "column", "type": "column", "description": "Column to check for direct filtering"}
+        ],
+        "return_type": "boolean",
+        "examples": [
+          "IF(ISFILTERED('Portfolio'[Asset Class]), \"Filtered by Asset Class\", \"All Asset Classes\")"
+        ],
+        "wealth_management_use": "Dynamic titles, conditional calculations based on user selections"
+      },
+      {
+        "function_name": "HASONEVALUE",
+        "category": "information",
+        "description": "Returns TRUE if a column has only one distinct value in the current context",
+        "syntax": "HASONEVALUE(<column>)",
+        "parameters": [
+          {"name": "column", "type": "column", "description": "Column to check"}
+        ],
+        "return_type": "boolean",
+        "examples": [
+          "IF(HASONEVALUE('Portfolio'[Client ID]), VALUES('Portfolio'[Client ID]), \"Multiple Clients\")"
+        ],
+        "wealth_management_use": "Dynamic labels, single-value detection"
+      },
+      {
+        "function_name": "SELECTEDVALUE",
+        "category": "information",
+        "description": "Returns the value when the context has been filtered down to one distinct value",
+        "syntax": "SELECTEDVALUE(<column>[, <alternate_result>])",
+        "parameters": [
+          {"name": "column", "type": "column", "description": "Column to get the selected value from"},
+          {"name": "alternate_result", "type": "scalar", "description": "Value to return if multiple values are selected", "optional": true}
+        ],
+        "return_type": "scalar",
+        "examples": [
+          "SELECTEDVALUE('Benchmark'[Name], \"Multiple Benchmarks\")",
+          "SELECTEDVALUE('Portfolio'[Time Period])"
+        ],
+        "wealth_management_use": "Dynamic benchmark selection, context-aware calculations"
+      },
+      {
+        "function_name": "ISINSCOPE",
+        "category": "information",
+        "description": "Returns TRUE if the specified column is in the current scope",
+        "syntax": "ISINSCOPE(<column>)",
+        "parameters": [
+          {"name": "column", "type": "column", "description": "Column to check for scope"}
+        ],
+        "return_type": "boolean",
+        "examples": [
+          "IF(ISINSCOPE('Calendar'[Year]), \"Year Level\", \"Month Level\")"
+        ],
+        "wealth_management_use": "Multi-grain metrics, hierarchy-aware calculations"
+      }
+    ]
+  },
+  "implementation_notes": {
+    "parser_integration": "Extend semantic layer parser to recognize DAX function syntax",
+    "execution_engine": "Implement DAX functions in calculation engine with proper context handling",
+    "governance": "Tag advanced functions for steward review before client-facing use",
+    "ui_integration": "Add DAX function palette to metric builder with tooltips and examples",
+    "performance": "Implement efficient execution paths for iterator functions",
+    "compatibility": "Ensure Excel formula compatibility where applicable"
+  }
+}

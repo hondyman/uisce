@@ -1,0 +1,98 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://explorer.example.com/schemas/wealth_metrics.schema.json",
+  "title": "Wealth Management Metrics Contract",
+  "description": "Versioned schema for risk, tax, liquidity, goal-based, and behavioral wealth metrics.",
+  "type": "object",
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "pattern": "^v[0-9]+\\.[0-9]+$",
+      "description": "Semantic version of the metric schema"
+    },
+    "as_of_date": {
+      "type": "string",
+      "format": "date",
+      "description": "Date the metrics were calculated"
+    },
+    "client_id": {
+      "type": "string",
+      "description": "Immutable client identifier"
+    },
+    "risk_adjusted": {
+      "type": "object",
+      "properties": {
+        "sharpe_ratio": { "type": "number" },
+        "sortino_ratio": { "type": "number" }
+      },
+      "required": ["sharpe_ratio", "sortino_ratio"]
+    },
+    "drawdown": {
+      "type": "object",
+      "properties": {
+        "max_drawdown_pct": { "type": "number" },
+        "upside_capture_ratio": { "type": "number" },
+        "downside_capture_ratio": { "type": "number" }
+      },
+      "required": ["max_drawdown_pct"]
+    },
+    "tax_efficiency": {
+      "type": "object",
+      "properties": {
+        "tax_drag_pct": { "type": "number" },
+        "effective_tax_rate_pct": { "type": "number" }
+      }
+    },
+    "liquidity": {
+      "type": "object",
+      "properties": {
+        "liquidity_ratio_pct": { "type": "number" },
+        "turnover_ratio_pct": { "type": "number" }
+      }
+    },
+    "goal_alignment": {
+      "type": "object",
+      "properties": {
+        "funding_ratio": { "type": "number" },
+        "probability_of_success_pct": { "type": "number" }
+      }
+    },
+    "behavioral": {
+      "type": "object",
+      "properties": {
+        "behavior_gap_pct": { "type": "number" },
+        "diversification_score": { "type": "number" }
+      }
+    },
+    "assumptions": {
+      "type": "object",
+      "properties": {
+        "risk_free_rate": { "type": "number" },
+        "benchmark_id": { "type": "string" },
+        "inflation_rate_assumed": { "type": "number" }
+      },
+      "required": ["risk_free_rate", "benchmark_id"]
+    },
+    "audit": {
+      "type": "object",
+      "properties": {
+        "formula_version": { "type": "string" },
+        "data_source_versions": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "calculation_timestamp": { "type": "string", "format": "date-time" }
+      },
+      "required": ["formula_version", "data_source_versions", "calculation_timestamp"]
+    }
+  },
+  "required": [
+    "schema_version",
+    "as_of_date",
+    "client_id",
+    "risk_adjusted",
+    "drawdown",
+    "assumptions",
+    "audit"
+  ]
+}

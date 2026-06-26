@@ -1,0 +1,98 @@
+{
+  "data_sources": {
+    "test_types_formats": "default"
+  },
+  "dimensions": {
+    "test_types_formats": [
+      {
+        "name": "id",
+        "sql": "id",
+        "type": "number",
+        "primary_key": true,
+        "format": "id"
+      },
+      {
+        "name": "name",
+        "sql": "name",
+        "type": "string"
+      },
+      {
+        "name": "created_at",
+        "sql": "created_at",
+        "type": "time"
+      },
+      {
+        "name": "latitude",
+        "sql": "lat",
+        "type": "number",
+        "format": "latitude"
+      },
+      {
+        "name": "longitude",
+        "sql": "lng",
+        "type": "number",
+        "format": "longitude"
+      }
+    ]
+  },
+  "measures": {
+    "test_types_formats": [
+      {
+        "name": "count",
+        "type": "count"
+      },
+      {
+        "name": "total_amount",
+        "sql": "SUM(amount)",
+        "type": "sum",
+        "format": "currency"
+      },
+      {
+        "name": "avg_amount",
+        "sql": "AVG(amount)",
+        "type": "avg",
+        "format": "currency"
+      },
+      {
+        "name": "min_amount",
+        "sql": "MIN(amount)",
+        "type": "min",
+        "format": "currency"
+      },
+      {
+        "name": "max_amount",
+        "sql": "MAX(amount)",
+        "type": "max",
+        "format": "currency"
+      },
+      {
+        "name": "count_distinct_users",
+        "sql": "COUNT(DISTINCT user_id)",
+        "type": "countDistinct"
+      },
+      {
+        "name": "count_distinct_approx_users",
+        "sql": "COUNT(DISTINCT user_id)",
+        "type": "countDistinctApprox"
+      },
+      {
+        "name": "running_total",
+        "sql": "SUM(amount)",
+        "type": "runningTotal",
+        "format": "currency"
+      },
+      {
+        "name": "percent_of_total",
+        "sql": "SUM(amount) / SUM(SUM(amount)) OVER ()",
+        "type": "number",
+        "format": "percent"
+      }
+    ]
+  },
+  "hierarchies": {
+    "test_types_formats": []
+  },
+  "segments": {
+    "test_types_formats": []
+  }
+}

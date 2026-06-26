@@ -1,0 +1,83 @@
+type Query {
+  valueExplain(termId: String!, entityType: String!, entityId: ID!, timestamp: DateTime): ValueExplain!
+  valueExplainDiff(termId: String!, entityType: String!, entityId: ID!, evalA: DateTime!, evalB: DateTime!): ValueExplainDiff!
+}
+
+type ValueExplain {
+  header: ExplainHeader!
+  summary: ExplainSummary
+  lineage: ExplainLineage!
+  rows: [ExplainRow!]!
+  evaluationPath: [ExplainStep!]!
+  sql: ExplainSQL
+  anomalies: [ExplainAnomaly!]!
+  actions: ExplainActions!
+}
+
+type ExplainHeader {
+  termId: String!
+  entityType: String!
+  entityId: ID!
+  value: JSON
+  evaluatedAt: DateTime!
+  evaluatorVersion: String!
+}
+
+type ExplainSummary {
+  humanReadable: String!
+  stats: JSON
+}
+
+type ExplainLineage {
+  semanticTerm: SemanticTerm!
+  physicalColumns: [PhysicalColumn!]!
+}
+
+type SemanticTerm {
+  id: String!
+  expression: String
+}
+
+type PhysicalColumn {
+  table: String!
+  column: String!
+}
+
+type ExplainRow {
+  key: JSON!
+  fields: JSON!
+  included: Boolean!
+}
+
+type ExplainStep {
+  step: Int!
+  action: String!
+  description: String!
+  details: JSON
+}
+
+type ExplainSQL {
+  text: String!
+}
+
+type ExplainAnomaly {
+  type: String!
+  severity: String!
+  message: String!
+  suggestedAction: String
+}
+
+type ExplainActions {
+  canRecompute: Boolean!
+  canOpenTerm: Boolean!
+  canStartBp: Boolean!
+}
+
+type ValueExplainDiff {
+  termId: String!
+  delta: Float
+  changes: [String!]!
+}
+
+scalar JSON
+scalar DateTime

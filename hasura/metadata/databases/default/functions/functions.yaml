@@ -1,0 +1,9 @@
+# metadata/databases/default/functions/functions.yaml
+# Track the publish function as a mutation
+- function:
+    schema: public
+    name: publish_fabric_defn
+  configuration:
+    exposed_as: mutation
+    custom_name: publish_fabric_defn
+    session_argument: null  # we pass actor_id explicitly via GraphQL args

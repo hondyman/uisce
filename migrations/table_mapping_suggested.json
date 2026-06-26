@@ -1,0 +1,13 @@
+{
+  "public.performance_metrics": "f2a3b1c4-7a6d-4b2e-9c3d-111111111111",
+  "public.pop_metrics": "f2a3b1c4-7a6d-4b2e-9c3d-222222222222",
+  "public.pop_computations": "f2a3b1c4-7a6d-4b2e-9c3d-333333333333",
+  "public.pop_anomalies": "f2a3b1c4-7a6d-4b2e-9c3d-444444444444",
+  "public.integration_metrics": "f2a3b1c4-7a6d-4b2e-9c3d-555555555555",
+  "public.api_metrics_current_month": "f2a3b1c4-7a6d-4b2e-9c3d-666666666666",
+  "public.api_metrics_next_month": "f2a3b1c4-7a6d-4b2e-9c3d-777777777777",
+  "semantic_layer.preaggregated_metrics": "f2a3b1c4-7a6d-4b2e-9c3d-888888888888",
+  "public.private_markets_fund_metrics": "f2a3b1c4-7a6d-4b2e-9c3d-999999999999",
+  "public.prepared_statement_metrics": "f2a3b1c4-7a6d-4b2e-9c3d-aaaaaaaaaaaa",
+  "public.bp_branch_metrics": "f2a3b1c4-7a6d-4b2e-9c3d-bbbbbbbbbbbb"
+}

@@ -1,0 +1,7 @@
+{
+  "recommendations": [
+    "bazelbuild.vscode-starlark",
+    "stackbuild.bazel-stack-vscode",
+    "ms-vscode.vscode-json"
+  ]
+}

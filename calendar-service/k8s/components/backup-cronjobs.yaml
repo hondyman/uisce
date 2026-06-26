@@ -1,0 +1,179 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: postgres-backup
+  namespace: calendar
+  labels:
+    app: calendar-service
+    component: backup
+spec:
+  # CronJob schedule: Daily at 2 AM UTC
+  schedule: "0 2 * * *"
+
+  # Keep last 3 successful and 1 failed job
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 1
+
+  # Job timeout
+  startingDeadlineSeconds: 3600 # 1 hour
+
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      template:
+        metadata:
+          labels:
+            app: calendar-service
+            component: backup
+        spec:
+          serviceAccountName: calendar-service
+
+          containers:
+          - name: postgres-backup
+            image: postgres:15-alpine
+
+            command:
+            - /bin/sh
+            - -c
+            - |
+              set -e
+
+              echo "Starting PostgreSQL backup..."
+
+              # Backup filename with timestamp
+              BACKUP_FILE="/backups/calendar-$(date +%Y%m%d-%H%M%S).sql.gz"
+
+              # Perform backup
+              pg_dump \
+                -h "$DB_HOST" \
+                -p "$DB_PORT" \
+                -U "$DB_USER" \
+                -d "$DB_NAME" \
+                -v \
+                --no-password \
+                | gzip > "$BACKUP_FILE"
+
+              echo "Backup completed: $BACKUP_FILE"
+
+              # Calculate backup size
+              SIZE=$(du -h "$BACKUP_FILE" | cut -f1)
+              echo "Backup size: $SIZE"
+
+              # Verify backup integrity
+              echo "Verifying backup..."
+              gunzip -t "$BACKUP_FILE" && echo "Backup integrity verified" || exit 1
+
+              # Clean up old backups (keep 7 days)
+              echo "Cleaning up old backups..."
+              find /backups -name "calendar-*.sql.gz" -mtime +7 -delete
+
+              echo "Backup job completed successfully"
+
+            env:
+            - name: DB_HOST
+              valueFrom:
+                secretKeyRef:
+                  name: calendar-secrets
+                  key: DB_HOST
+            - name: DB_PORT
+              valueFrom:
+                secretKeyRef:
+                  name: calendar-secrets
+                  key: DB_PORT
+            - name: DB_USER
+              valueFrom:
+                secretKeyRef:
+                  name: calendar-secrets
+                  key: DB_USER
+            - name: DB_NAME
+              valueFrom:
+                secretKeyRef:
+                  name: calendar-secrets
+                  key: DB_NAME
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: calendar-secrets
+                  key: DB_PASSWORD
+
+            resources:
+              requests:
+                memory: "256Mi"
+                cpu: "100m"
+              limits:
+                memory: "512Mi"
+                cpu: "500m"
+
+            volumeMounts:
+            - name: backup-storage
+              mountPath: /backups
+
+          restartPolicy: OnFailure
+
+          volumes:
+          - name: backup-storage
+            persistentVolumeClaim:
+              claimName: backup-pvc
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: backup-pvc
+  namespace: calendar
+spec:
+  accessModes:
+  - ReadWriteOnce
+  storageClassName: standard
+  resources:
+    requests:
+      storage: 100Gi
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: redis-snapshot
+  namespace: calendar
+spec:
+  schedule: "0 3 * * *" # 3 AM UTC daily
+
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+          - name: redis-backup
+            image: redis:7-alpine
+            command:
+            - /bin/sh
+            - -c
+            - |
+              set -e
+
+              echo "Starting Redis snapshot..."
+
+              # Connect to Redis and trigger snapshot
+              redis-cli -h redis.default.svc.cluster.local \
+                        -p 6379 \
+                        BGSAVE
+
+              echo "Redis snapshot initiated"
+
+              # Wait for background save
+              sleep 10
+
+              # Verify backup
+              redis-cli -h redis.default.svc.cluster.local \
+                        -p 6379 \
+                        LASTSAVE
+
+              echo "Redis snapshot completed"
+
+            resources:
+              requests:
+                memory: "128Mi"
+                cpu: "100m"
+              limits:
+                memory: "256Mi"
+                cpu: "200m"
+
+          restartPolicy: OnFailure

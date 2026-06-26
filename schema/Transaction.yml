@@ -1,0 +1,42 @@
+cubes:
+  - name: Transaction
+    sql_table: transaction
+    title: Transaction
+
+    measures:
+      - name: count
+        type: count
+      - name: total_amount
+        sql: amount
+        type: sum
+
+    dimensions:
+      - name: id
+        sql: id
+        type: string
+        primary_key: true
+        title: Transaction ID
+      - name: amount
+        sql: amount
+        type: number
+        title: Amount
+      - name: currency
+        sql: currency
+        type: string
+        title: Currency
+      - name: type
+        sql: type
+        type: string
+        title: Transaction Type
+      - name: status
+        sql: status
+        type: string
+        title: Status
+      - name: created_date
+        sql: created_date
+        type: time
+        title: Created Date
+      - name: description
+        sql: description
+        type: string
+        title: Description

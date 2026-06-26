@@ -1,0 +1,293 @@
+[
+  {
+    "id": "cust.id",
+    "node_name": "customer.id",
+    "description": "Customer identifier (Customers.CustomerID)",
+    "source": "northwind",
+    "data_type": "varchar",
+    "metadata": { "length": 5 }
+  },
+  {
+    "id": "cust.company_name",
+    "node_name": "customer.company_name",
+    "description": "Company name (Customers.CompanyName)",
+    "source": "northwind",
+    "data_type": "varchar",
+    "metadata": { "length": 40 }
+  },
+  {
+    "id": "cust.contact_name",
+    "node_name": "customer.contact_name",
+    "description": "Contact person name (Customers.ContactName)",
+    "source": "northwind",
+    "data_type": "varchar",
+    "metadata": { "length": 30 }
+  },
+  {
+    "id": "cust.contact_title",
+    "node_name": "customer.contact_title",
+    "description": "Contact title (Customers.ContactTitle)",
+    "source": "northwind",
+    "data_type": "varchar",
+    "metadata": { "length": 30 }
+  },
+  {
+    "id": "cust.address",
+    "node_name": "customer.address",
+    "description": "Street address (Customers.Address)",
+    "source": "northwind",
+    "data_type": "varchar",
+    "metadata": { "length": 60 }
+  },
+  {
+    "id": "cust.city",
+    "node_name": "customer.city",
+    "description": "City (Customers.City)",
+    "source": "northwind",
+    "data_type": "varchar",
+    "metadata": { "length": 15 }
+  },
+  {
+    "id": "cust.region",
+    "node_name": "customer.region",
+    "description": "Region (Customers.Region)",
+    "source": "northwind",
+    "data_type": "varchar",
+    "metadata": { "length": 15 }
+  },
+  {
+    "id": "cust.postal_code",
+    "node_name": "customer.postal_code",
+    "description": "Postal code (Customers.PostalCode)",
+    "source": "northwind",
+    "data_type": "varchar",
+    "metadata": { "length": 10 }
+  },
+  {
+    "id": "cust.country",
+    "node_name": "customer.country",
+    "description": "Country (Customers.Country)",
+    "source": "northwind",
+    "data_type": "varchar",
+    "metadata": { "length": 15 }
+  },
+  {
+    "id": "cust.phone",
+    "node_name": "customer.phone",
+    "description": "Phone (Customers.Phone)",
+    "source": "northwind",
+    "data_type": "varchar",
+    "metadata": { "length": 24 }
+  },
+  {
+    "id": "cust.fax",
+    "node_name": "customer.fax",
+    "description": "Fax (Customers.Fax)",
+    "source": "northwind",
+    "data_type": "varchar",
+    "metadata": { "length": 24 }
+  },
+
+  {
+    "id": "emp.id",
+    "node_name": "employee.id",
+    "description": "Employee identifier (Employees.EmployeeID)",
+    "source": "northwind",
+    "data_type": "int"
+  },
+  {
+    "id": "emp.last_name",
+    "node_name": "employee.last_name",
+    "description": "Last name (Employees.LastName)",
+    "source": "northwind",
+    "data_type": "varchar",
+    "metadata": { "length": 20 }
+  },
+  {
+    "id": "emp.first_name",
+    "node_name": "employee.first_name",
+    "description": "First name (Employees.FirstName)",
+    "source": "northwind",
+    "data_type": "varchar",
+    "metadata": { "length": 10 }
+  },
+  {
+    "id": "emp.title",
+    "node_name": "employee.title",
+    "description": "Title (Employees.Title)",
+    "source": "northwind",
+    "data_type": "varchar",
+    "metadata": { "length": 30 }
+  },
+  {
+    "id": "emp.birth_date",
+    "node_name": "employee.birth_date",
+    "description": "Birth date (Employees.BirthDate)",
+    "source": "northwind",
+    "data_type": "date"
+  },
+  {
+    "id": "emp.hire_date",
+    "node_name": "employee.hire_date",
+    "description": "Hire date (Employees.HireDate)",
+    "source": "northwind",
+    "data_type": "date"
+  },
+  {
+    "id": "emp.address",
+    "node_name": "employee.address",
+    "description": "Address (Employees.Address)",
+    "source": "northwind",
+    "data_type": "varchar",
+    "metadata": { "length": 60 }
+  },
+  {
+    "id": "emp.home_phone",
+    "node_name": "employee.home_phone",
+    "description": "Home phone (Employees.HomePhone)",
+    "source": "northwind",
+    "data_type": "varchar",
+    "metadata": { "length": 24 }
+  },
+
+  {
+    "id": "sup.id",
+    "node_name": "supplier.id",
+    "description": "Supplier identifier (Suppliers.SupplierID)",
+    "source": "northwind",
+    "data_type": "int"
+  },
+  {
+    "id": "sup.company_name",
+    "node_name": "supplier.company_name",
+    "description": "Company name (Suppliers.CompanyName)",
+    "source": "northwind",
+    "data_type": "varchar",
+    "metadata": { "length": 40 }
+  },
+  {
+    "id": "sup.contact_name",
+    "node_name": "supplier.contact_name",
+    "description": "Contact name (Suppliers.ContactName)",
+    "source": "northwind",
+    "data_type": "varchar",
+    "metadata": { "length": 30 }
+  },
+
+  {
+    "id": "prod.id",
+    "node_name": "product.id",
+    "description": "Product identifier (Products.ProductID)",
+    "source": "northwind",
+    "data_type": "int"
+  },
+  {
+    "id": "prod.product_name",
+    "node_name": "product.product_name",
+    "description": "Product name (Products.ProductName)",
+    "source": "northwind",
+    "data_type": "varchar",
+    "metadata": { "length": 40 }
+  },
+  {
+    "id": "prod.supplier_id",
+    "node_name": "product.supplier_id",
+    "description": "Supplier id (Products.SupplierID)",
+    "source": "northwind",
+    "data_type": "int"
+  },
+  {
+    "id": "prod.category_id",
+    "node_name": "product.category_id",
+    "description": "Category id (Products.CategoryID)",
+    "source": "northwind",
+    "data_type": "int"
+  },
+  {
+    "id": "prod.unit_price",
+    "node_name": "product.unit_price",
+    "description": "Unit price (Products.UnitPrice)",
+    "source": "northwind",
+    "data_type": "money"
+  },
+  {
+    "id": "ord.id",
+    "node_name": "order.id",
+    "description": "Order identifier (Orders.OrderID)",
+    "source": "northwind",
+    "data_type": "int"
+  },
+  {
+    "id": "ord.customer_id",
+    "node_name": "order.customer_id",
+    "description": "Customer id (Orders.CustomerID)",
+    "source": "northwind",
+    "data_type": "varchar",
+    "metadata": { "length": 5 }
+  },
+  {
+    "id": "ord.employee_id",
+    "node_name": "order.employee_id",
+    "description": "Employee id (Orders.EmployeeID)",
+    "source": "northwind",
+    "data_type": "int"
+  },
+  {
+    "id": "ord.order_date",
+    "node_name": "order.order_date",
+    "description": "Order date (Orders.OrderDate)",
+    "source": "northwind",
+    "data_type": "datetime"
+  },
+  {
+    "id": "od.order_id",
+    "node_name": "order_detail.order_id",
+    "description": "Order ID (Order Details.OrderID)",
+    "source": "northwind",
+    "data_type": "int"
+  },
+  {
+    "id": "od.product_id",
+    "node_name": "order_detail.product_id",
+    "description": "Product ID (Order Details.ProductID)",
+    "source": "northwind",
+    "data_type": "int"
+  },
+  {
+    "id": "od.unit_price",
+    "node_name": "order_detail.unit_price",
+    "description": "Unit price (Order Details.UnitPrice)",
+    "source": "northwind",
+    "data_type": "money"
+  },
+  {
+    "id": "ship.id",
+    "node_name": "shipper.id",
+    "description": "Shipper identifier (Shippers.ShipperID)",
+    "source": "northwind",
+    "data_type": "int"
+  },
+  {
+    "id": "ship.company_name",
+    "node_name": "shipper.company_name",
+    "description": "Shipper company name (Shippers.CompanyName)",
+    "source": "northwind",
+    "data_type": "varchar",
+    "metadata": { "length": 40 }
+  },
+  {
+    "id": "region.region_id",
+    "node_name": "region.region_id",
+    "description": "Region ID (Region.RegionID)",
+    "source": "northwind",
+    "data_type": "int"
+  },
+  {
+    "id": "territory.territory_id",
+    "node_name": "territory.territory_id",
+    "description": "Territory ID (Territories.TerritoryID)",
+    "source": "northwind",
+    "data_type": "varchar",
+    "metadata": { "length": 20 }
+  }
+]

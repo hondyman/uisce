@@ -1,0 +1,192 @@
+name: Verify Snapshot Backfill
+
+'on':
+  pull_request:
+    paths:
+    - 'backend/migrations/20260207_add_region_to_snapshots_and_preaggs.up.sql'
+  workflow_dispatch: {}
+
+jobs:
+  verify-snapshot-backfill:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: alpha
+        ports:
+        - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 10s --health-timeout 5s --health-retries 5
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: '1.25'
+
+    - name: Install psql client
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y postgresql-client jq
+
+    - name: "Preflight: Trino / SSH secret validation (fail on misconfig)"
+      id: preflight
+      continue-on-error: true
+      env:
+        TRINO_USER: ${{ secrets.TRINO_USER }}
+        TRINO_PASSWORD: ${{ secrets.TRINO_PASSWORD }}
+        TRINO_HOST: ${{ secrets.TRINO_HOST }}
+        SSH_HOST: ${{ secrets.SSH_HOST }}
+        SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+        REMOTE_TRINO_HOST: ${{ secrets.REMOTE_TRINO_HOST }}
+        REMOTE_TRINO_PORT: ${{ secrets.REMOTE_TRINO_PORT }}
+      run: |
+        echo "Running preflight Trino/SSH secret validation"
+        MSG="Preflight check passed"
+        OK=true
+        # If Trino credentials provided, require either TRINO_HOST (preferred) OR a complete SSH tunnel config
+        if [ -n "$TRINO_USER" ] && [ -n "$TRINO_PASSWORD" ]; then
+          if [ -z "$TRINO_HOST" ]; then
+            if [ -z "$SSH_HOST" ] || [ -z "$SSH_PRIVATE_KEY" ] || [ -z "$REMOTE_TRINO_HOST" ] || [ -z "$REMOTE_TRINO_PORT" ]; then
+              MSG="TRINO_USER/TRINO_PASSWORD set but neither TRINO_HOST nor complete SSH tunnel config present. Set TRINO_HOST (preferred) or provide SSH_HOST, SSH_PRIVATE_KEY, REMOTE_TRINO_HOST, REMOTE_TRINO_PORT."
+              OK=false
+            fi
+          fi
+        fi
+        echo "ok=$OK" >> $GITHUB_OUTPUT
+        echo "msg<<EOF" >> $GITHUB_OUTPUT
+        echo "$MSG" >> $GITHUB_OUTPUT
+        echo "EOF" >> $GITHUB_OUTPUT
+
+    - name: Post comment on PR if preflight failed
+      if: ${{ steps.preflight.outputs.ok == 'false' && github.event_name == 'pull_request' }}
+      uses: actions/github-script@v6
+      with:
+        github-token: ${{ secrets.GITHUB_TOKEN }}
+        script: |
+          const pr = context.payload.pull_request.number;
+          const body = `:warning: **Preflight failed** — ${{ steps.preflight.outputs.msg }}\n\nPlease set **TRINO_HOST** (preferred) or provide complete SSH tunnel secrets: **SSH_HOST**, **SSH_PRIVATE_KEY**, **REMOTE_TRINO_HOST**, **REMOTE_TRINO_PORT**. See docs/TRINO_BACKFILL_README.md for details.`;
+          await github.issues.createComment({owner: context.repo.owner, repo: context.repo.repo, issue_number: pr, body});
+
+    - name: Fail early if preflight failed
+      if: ${{ steps.preflight.outputs.ok == 'false' }}
+      run: |
+        echo "Preflight failed; aborting workflow"
+        exit 1
+
+    - name: Trino connectivity check (if TRINO_HOST provided)
+      if: ${{ secrets.TRINO_HOST != '' }}
+      env:
+        TRINO_HOST: ${{ secrets.TRINO_HOST }}
+        TRINO_PORT: ${{ secrets.TRINO_PORT }}
+      run: |
+        echo "Checking Trino connectivity ($TRINO_HOST:$TRINO_PORT)"
+        bash scripts/check_trino_connectivity.sh
+
+    - name: Wait for Postgres
+      env:
+        PGPASSWORD: postgres
+      run: |
+        echo "Waiting for Postgres to be ready..."
+        for i in {1..30}; do
+          if pg_isready -h localhost -U postgres -d alpha -q; then
+            echo "Postgres is ready"
+            break
+          fi
+          sleep 2
+        done
+
+    - name: Run migrations
+      env:
+        DATABASE_URL: postgres://postgres:postgres@localhost:5432/alpha?sslmode=disable
+      run: |
+        echo "Running migrations via migration runner"
+        go run ./backend/migrations/cmd/migrate.go || (echo "Migration runner failed" && exit 1)
+
+    - name: Prepare sample snapshot and catalog_node rows
+      env:
+        DATABASE_URL: postgres://postgres:postgres@localhost:5432/alpha?sslmode=disable
+      run: |
+        echo "Creating sample data for snapshot backfill test"
+        psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "CREATE SCHEMA IF NOT EXISTS iceberg.audit;"
+        psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "CREATE TABLE IF NOT EXISTS iceberg.audit.semantic_snapshots (snapshot_id VARCHAR PRIMARY KEY, tenant_id VARCHAR, definition VARCHAR, region VARCHAR);
+        INSERT INTO iceberg.audit.semantic_snapshots (snapshot_id, tenant_id, definition, region) VALUES ('snap-001', 't1', '{}', NULL) ON CONFLICT DO NOTHING;"
+
+        psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "CREATE TABLE IF NOT EXISTS public.catalog_node (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), properties JSONB);
+        INSERT INTO public.catalog_node (properties) VALUES ('{"snapshot_id":"snap-001","region":"eu-west"}') ON CONFLICT DO NOTHING;"
+
+    - name: Run snapshot backfill SQL (example)
+      env:
+        DATABASE_URL: postgres://postgres:postgres@localhost:5432/alpha?sslmode=disable
+      run: |
+        echo "Running sample backfill SQL"
+        psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "UPDATE iceberg.audit.semantic_snapshots ss SET region = coalesce((SELECT n.properties->>'region' FROM public.catalog_node n WHERE n.properties->>'snapshot_id' = ss.snapshot_id LIMIT 1), ss.region);"
+
+    - name: Verify snapshot backfill
+      env:
+        DATABASE_URL: postgres://postgres:postgres@localhost:5432/alpha?sslmode=disable
+      run: |
+        COUNT=$(psql "$DATABASE_URL" -t -c "SELECT COUNT(*) FROM iceberg.audit.semantic_snapshots WHERE region IS NULL;" | tr -d '[:space:]')
+        echo "Null region count: $COUNT"
+        if [ "$COUNT" -ne 0 ]; then
+          echo "ERROR: Found $COUNT snapshot rows with NULL region. Backfill failed."
+          exit 1
+        fi
+        echo "Snapshot backfill verification passed: 0 nulls."
+
+    - name: Run integration test (Go)
+      env:
+        DATABASE_URL: postgres://postgres:postgres@localhost:5432/alpha?sslmode=disable
+        INTEGRATION_TEST: 'true'
+      run: |
+        echo "Running integration test: TestBackfillSnapshotsIntegration"
+        go test ./backend/internal/audit -run TestBackfillSnapshotsIntegration -v
+
+    - name: (Fallback) Setup SSH tunnel to Trino
+      if: ${{ secrets.SSH_HOST != '' && secrets.SSH_PRIVATE_KEY != '' && secrets.TRINO_HOST == '' }}
+      run: |
+        echo "Setting up SSH tunnel to Trino (fallback; prefer direct Tailscale TRINO_HOST)"
+        sudo apt-get update && sudo apt-get install -y autossh
+        echo "Writing private key..."
+        echo "${{ secrets.SSH_PRIVATE_KEY }}" > /tmp/id_rsa
+        chmod 600 /tmp/id_rsa
+        SSH_PORT=${{ secrets.SSH_PORT }}
+        if [ -z "$SSH_PORT" ]; then
+          SSH_PORT=22
+        fi
+        REMOTE_TRINO_HOST=${{ secrets.REMOTE_TRINO_HOST }}
+        REMOTE_TRINO_PORT=${{ secrets.REMOTE_TRINO_PORT }}
+        echo "Starting autossh tunnel to ${REMOTE_TRINO_HOST}:${REMOTE_TRINO_PORT} via ${{ secrets.SSH_HOST }}"
+        AUTOSSH_PORT=0 autossh -f -M 0 -N -o StrictHostKeyChecking=no -i /tmp/id_rsa -L 9999:${REMOTE_TRINO_HOST}:${REMOTE_TRINO_PORT} -p $SSH_PORT ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}
+        echo "TRINO_HOST=localhost" >> $GITHUB_ENV
+        echo "TRINO_PORT=9999" >> $GITHUB_ENV
+        # Pass through repo-provided trino user/password/catalog/schema secrets if present
+        if [ -n "${{ secrets.TRINO_USER }}" ]; then echo "TRINO_USER=${{ secrets.TRINO_USER }}" >> $GITHUB_ENV; fi
+        if [ -n "${{ secrets.TRINO_PASSWORD }}" ]; then echo "TRINO_PASSWORD=${{ secrets.TRINO_PASSWORD }}" >> $GITHUB_ENV; fi
+        if [ -n "${{ secrets.TRINO_CATALOG }}" ]; then echo "TRINO_CATALOG=${{ secrets.TRINO_CATALOG }}" >> $GITHUB_ENV; fi
+        if [ -n "${{ secrets.TRINO_SCHEMA }}" ]; then echo "TRINO_SCHEMA=${{ secrets.TRINO_SCHEMA }}" >> $GITHUB_ENV; fi
+
+    - name: "Trino backfill verification (if TRINO secrets provided) — preferred: direct Tailscale access; fallback: SSH tunnel"
+      if: ${{ (secrets.TRINO_HOST != '' || secrets.SSH_HOST != '') && (secrets.TRINO_USER != '' && secrets.TRINO_PASSWORD != '') }}
+      env:
+        TRINO_HOST: ${{ secrets.TRINO_HOST }}
+        TRINO_PORT: ${{ secrets.TRINO_PORT }}
+        TRINO_USER: ${{ secrets.TRINO_USER }}
+        TRINO_PASSWORD: ${{ secrets.TRINO_PASSWORD }}
+        TRINO_CATALOG: ${{ secrets.TRINO_CATALOG }}
+        TRINO_SCHEMA: ${{ secrets.TRINO_SCHEMA }}
+        # Optional test specifics
+        TRINO_TEST_SNAP_IDS: ${{ secrets.TRINO_TEST_SNAP_IDS }}
+        TRINO_EXPECTED_REGIONS: ${{ secrets.TRINO_EXPECTED_REGIONS }}
+      run: |
+        echo "Running Trino backfill integration test (will prefer direct TRINO_HOST; using SSH tunnel only if TRINO_HOST isn't set)"
+        go test ./backend/internal/audit -run TestTrinoSnapshotBackfillIntegration -v
+
+    - name: Success
+      run: echo "Snapshot backfill verification succeeded"

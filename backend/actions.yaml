@@ -1,0 +1,219 @@
+actions:
+  - name: SimulatePolicyRun
+    definition:
+      kind: synchronous
+      type: mutation
+      arguments:
+        - name: policy_id
+          type: uuid!
+        - name: from_ds
+          type: String!
+        - name: to_ds
+          type: String!
+        - name: migration_sql
+          type: String
+      output_type: SimulationResult # Reusing the type from multi-sim
+      handler: http://policy-gate:8080/api/fabric/models/simulate
+    permissions:
+      - role: user
+  - name: simulate_multi_policy_run
+    definition:
+      kind: synchronous
+      type: mutation # It's a long-running operation, better as mutation
+      arguments:
+        - name: from_ds
+          type: String!
+        - name: to_ds
+          type: String!
+        - name: migration_sql
+          type: String
+      output_type: MultiSimulationResult
+      handler: http://policy-gate:8080/api/fabric/models/simulate-multi
+    permissions:
+      - role: user
+  - name: simulate_historical_replay
+    definition:
+      kind: synchronous
+      type: mutation # It's a long-running operation, better as mutation
+      arguments:
+        - name: from_date
+          type: date!
+        - name: to_date
+          type: date!
+        - name: bucket_size
+          type: String! # "week" or "month"
+      output_type: "[HistoricalReplayCell!]!"
+      handler: http://policy-gate:8080/api/fabric/models/simulate-historical-replay
+    permissions:
+      - role: user
+  - name: ReEvaluateViolation
+    definition:
+      kind: synchronous
+      type: query
+      arguments:
+        - name: violation_id
+          type: uuid!
+      output_type: ExplainResult
+      handler: http://policy-gate:8080/api/fabric/models/re-evaluate
+    permissions:
+      - role: user
+
+custom_types:
+  objects:
+    - name: MatchDetail
+      fields:
+        - name: selector
+          type: String!
+        - name: path
+          type: String!
+        - name: value
+          type: String!
+    - name: ExplainResult
+      fields:
+        - name: rule_id
+          type: String!
+        - name: severity
+          type: String!
+        - name: message
+          type: String!
+        - name: explain
+          type: "[MatchDetail!]!"
+    - name: Violation
+      fields:
+        - name: rule_id
+          type: String!
+        - name: severity
+          type: String!
+        - name: message
+          type: String!
+        - name: qualified_path
+          type: String!
+        - name: explain
+          type: "[MatchDetail!]!"
+    - name: SimulationSummary
+      fields:
+        - name: breaking
+          type: Int!
+        - name: medium
+          type: Int!
+        - name: low
+          type: Int!
+    - name: SimulationResult
+      fields:
+        - name: policy_id
+          type: String!
+        - name: summary
+          type: SimulationSummary!
+        - name: violations
+          type: "[Violation!]!"
+        - name: changelog_md
+          type: String
+    - name: MultiSimulationResult
+      fields:
+        - name: policy_results
+          type: "[SimulationResult!]!"
+    - name: HistoricalReplayCell
+      fields:
+        - name: policy_id
+          type: String!
+        - name: policy_name
+          type: String!
+        - name: time_bucket
+          type: String!
+        - name: total_runs
+          type: Int!
+        - name: blocked_runs
+          type: Int!
+        - name: top_violation_codes
+          type: "[String!]!"
+    - name: ImpactSummary
+      fields:
+        - name: total_runs
+          type: Int!
+        - name: changed_decisions
+          type: Int!
+        - name: blocks_added
+          type: Int!
+        - name: blocks_removed
+          type: Int!
+        - name: top_new_violation_codes
+          type: "[String!]!"
+        - name: top_removed_violation_codes
+          type: "[String!]!"
+    - name: DecisionDiff
+      fields:
+        - name: run_id
+          type: String!
+        - name: timestamp
+          type: timestamptz!
+        - name: change_id
+          type: String!
+        - name: decision_a
+          type: String!
+        - name: decision_b
+          type: String!
+        - name: violations_a
+          type: "[Violation!]!"
+        - name: violations_b
+          type: "[Violation!]!"
+        - name: violations_added
+          type: "[Violation!]!"
+        - name: violations_removed
+          type: "[Violation!]!"
+    - name: ImpactComparisonResult
+      fields:
+        - name: summary
+          type: ImpactSummary!
+        - name: timeline
+          type: "[DecisionDiff!]!"
+    - name: ReplayRun
+      fields:
+        - name: change_id
+          type: String!
+        - name: timestamp
+          type: timestamptz!
+        - name: policy_id
+          type: String!
+        - name: decision
+          type: String!
+        - name: summary
+          type: SimulationSummary!
+        - name: violations
+          type: "[Violation!]!"
+  - name: compare_policy_versions
+    definition:
+      kind: synchronous
+      type: mutation
+      arguments:
+        - name: policy_id
+          type: String!
+        - name: version_a
+          type: Int!
+        - name: version_b
+          type: Int!
+        - name: from_date
+          type: date!
+        - name: to_date
+          type: date!
+        - name: differences_only
+          type: Boolean
+      output_type: ImpactComparisonResult
+      handler: http://policy-gate:8080/api/fabric/models/compare-policy-versions
+    permissions:
+      - role: user
+  - name: heatmap_cell_detail
+    definition:
+      kind: synchronous
+      type: query
+      arguments:
+        - name: context
+          type: String!
+        - name: filters
+          type: jsonb!
+      output_type: "[HeatmapCellDetailRun!]!"
+      handler: http://policy-gate:8080/api/fabric/models/heatmap-cell-detail
+    permissions:
+      - role: user
+  input_objects: []
+  scalars: []
+  enums: []

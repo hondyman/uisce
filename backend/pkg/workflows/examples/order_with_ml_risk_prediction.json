@@ -1,0 +1,183 @@
+{
+    "name": "order_with_ml_risk_prediction",
+    "description": "Order processing workflow with XGBoost-based settlement risk prediction and intelligent routing",
+    "version": "1.0.0",
+    "nodes": {
+        "validate_order": {
+            "id": "validate_order",
+            "type": "ACTIVITY",
+            "config": {
+                "activityName": "ValidateOrder",
+                "inputMapping": {
+                    "order": "$.context.order"
+                }
+            },
+            "next": "extract_risk_features"
+        },
+        "extract_risk_features": {
+            "id": "extract_risk_features",
+            "type": "TRANSFORM",
+            "config": {
+                "outputMapping": {
+                    "line_item_count": "$.context.order_details.length",
+                    "is_cross_border": "$.context.order.ship_country != $.context.customer.country ? 1 : 0",
+                    "customer_country": "$.context.customer.country",
+                    "customer_trade_history_count": "$.context.customer.order_count",
+                    "customer_previous_fails": "$.context.customer.settlement_fails || 0",
+                    "is_missing_postal_code": "$.context.order.ship_postal_code ? 0 : 1",
+                    "is_missing_ship_date": "$.context.order.ship_date ? 0 : 1",
+                    "order_freight_cost": "$.context.order.freight",
+                    "order_total_value": "$.context.order.total_value",
+                    "shipper_id": "$.context.order.ship_via",
+                    "days_until_required": "14"
+                }
+            },
+            "next": "predict_settlement_risk"
+        },
+        "predict_settlement_risk": {
+            "id": "predict_settlement_risk",
+            "type": "ACTIVITY",
+            "config": {
+                "activityName": "ActivityGetSettlementRiskML",
+                "predictionServiceURL": "http://prediction-service:5000/predict"
+            },
+            "output_mapping": {
+                "risk_score": "$.result.settlement_risk_score",
+                "risk_category": "$.result.risk_category",
+                "using_fallback": "$.result.using_fallback"
+            },
+            "next": "risk_based_routing"
+        },
+        "risk_based_routing": {
+            "id": "risk_based_routing",
+            "type": "BRANCH",
+            "config": {
+                "conditionField": "$.context.risk_score",
+                "operator": "gte",
+                "value": 0.75,
+                "trueNext": "critical_risk_review",
+                "falseNext": "check_high_risk"
+            }
+        },
+        "check_high_risk": {
+            "id": "check_high_risk",
+            "type": "BRANCH",
+            "config": {
+                "conditionField": "$.context.risk_score",
+                "operator": "gte",
+                "value": 0.5,
+                "trueNext": "high_risk_approval",
+                "falseNext": "normal_processing"
+            }
+        },
+        "critical_risk_review": {
+            "id": "critical_risk_review",
+            "type": "ACTIVITY",
+            "config": {
+                "activityName": "ActivityUserInteraction",
+                "viewDefinitionName": "critical_risk_review_form",
+                "title": "CRITICAL: Settlement Risk Review Required",
+                "description": "This order has been flagged as CRITICAL risk by the ML model. Manual review required before processing.",
+                "assignTo": "risk_management_team",
+                "escalationTimeoutMinutes": 30
+            },
+            "next": "review_decision"
+        },
+        "high_risk_approval": {
+            "id": "high_risk_approval",
+            "type": "ACTIVITY",
+            "config": {
+                "activityName": "ActivityUserInteraction",
+                "viewDefinitionName": "high_risk_approval_form",
+                "title": "High Risk Settlement Approval",
+                "description": "This order has elevated settlement risk. Manager approval required.",
+                "assignTo": "operations_manager"
+            },
+            "next": "review_decision"
+        },
+        "review_decision": {
+            "id": "review_decision",
+            "type": "BRANCH",
+            "config": {
+                "conditionField": "$.context.review_approved",
+                "operator": "eq",
+                "value": true,
+                "trueNext": "manual_settlement_processing",
+                "falseNext": "order_rejected"
+            }
+        },
+        "order_rejected": {
+            "id": "order_rejected",
+            "type": "ACTIVITY",
+            "config": {
+                "activityName": "SendNotification",
+                "template": "order_rejected",
+                "to": "$.context.customer.email",
+                "reason": "Settlement risk too high"
+            },
+            "next": "log_rejection"
+        },
+        "log_rejection": {
+            "id": "log_rejection",
+            "type": "ACTIVITY",
+            "config": {
+                "activityName": "DurableLedgerWrite",
+                "entryType": "ORDER_REJECTED",
+                "inputMapping": {
+                    "orderId": "$.context.order.id",
+                    "reason": "SETTLEMENT_RISK_HIGH",
+                    "riskScore": "$.context.risk_score"
+                }
+            },
+            "next": null
+        },
+        "normal_processing": {
+            "id": "normal_processing",
+            "type": "ACTIVITY",
+            "config": {
+                "activityName": "ProcessOrder",
+                "mode": "automatic",
+                "settlementType": "standard"
+            },
+            "next": "generate_audit_summary"
+        },
+        "manual_settlement_processing": {
+            "id": "manual_settlement_processing",
+            "type": "ACTIVITY",
+            "config": {
+                "activityName": "ProcessOrder",
+                "mode": "manual_approved",
+                "settlementType": "enhanced_monitoring"
+            },
+            "next": "generate_audit_summary"
+        },
+        "generate_audit_summary": {
+            "id": "generate_audit_summary",
+            "type": "ACTIVITY",
+            "config": {
+                "activityName": "ActivityGenerateContent",
+                "prompt": "Generate an audit summary for Order {{.context.order.id}}. Risk Score: {{.context.risk_score}}, Category: {{.context.risk_category}}. Settlement Status: {{.context.settlement_status}}."
+            },
+            "output_mapping": {
+                "audit_summary": "$.result"
+            },
+            "next": "persist_to_ledger"
+        },
+        "persist_to_ledger": {
+            "id": "persist_to_ledger",
+            "type": "ACTIVITY",
+            "config": {
+                "activityName": "DurableLedgerWrite",
+                "entryType": "ORDER_SETTLED",
+                "inputMapping": {
+                    "orderId": "$.context.order.id",
+                    "riskScore": "$.context.risk_score",
+                    "auditSummary": "$.context.audit_summary",
+                    "processingMode": "$.context.processing_mode"
+                }
+            },
+            "next": null
+        }
+    },
+    "startNodeId": "validate_order"
+}

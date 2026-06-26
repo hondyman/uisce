@@ -1,0 +1,17 @@
+extends: default
+
+# Ignore Hasura exported metadata files which contain long inline templates and
+# JSON strings that trigger strict line-length and indentation rules.
+ignore: |
+  hasura/metadata/*.yaml
+
+rules:
+  # Allow long lines (Hasura templates, JSON bodies, connection strings)
+  line-length:
+    max: 1000
+    level: warning
+
+  # Don't fail the CI on indentation edge-cases from generated metadata; warn instead
+  indentation:
+    spaces: 2
+    level: warning

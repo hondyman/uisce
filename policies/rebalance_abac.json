@@ -1,0 +1,100 @@
+{
+  "version": "2.0",
+  "id": "rebalance-policy-set",
+  "policies": [
+    {
+      "id": "rebalance-advisor-office-hours",
+      "description": "Allow advisors to rebalance portfolios during office hours from office IP",
+      "effect": "allow",
+      "subject": {
+        "role": ["advisor", "manager"],
+        "department": ["wealth", "advisory"]
+      },
+      "action": "rebalance",
+      "resource": "portfolio:*",
+      "condition": {
+        "time_window": {
+          "start": "09:00",
+          "end": "17:00",
+          "timezone": "America/New_York",
+          "days": ["mon", "tue", "wed", "thu", "fri"]
+        },
+        "location": {
+          "ip_range": ["192.168.1.0/24", "203.0.113.0/24"],
+          "geofence": {
+            "latitude": 40.7128,
+            "longitude": -74.0060,
+            "radius_km": 10
+          }
+        },
+        "delegation": {
+          "allowed": true,
+          "max_duration_days": 30,
+          "requires_approval": true
+        }
+      }
+    },
+    {
+      "id": "rebalance-automated-off-hours",
+      "description": "Allow automated rebalancing outside office hours for Tax-Loss Harvesting",
+      "effect": "allow",
+      "subject": {
+        "role": "system",
+        "name": ["rebalancer-bot", "tax-harvester"]
+      },
+      "action": ["rebalance", "execute_trades"],
+      "resource": "portfolio:*",
+      "condition": {
+        "constraint": {
+          "max_portfolio_value": 10000000,
+          "tax_harvest_only": true,
+          "exclude_list": ["restricted_symbols"]
+        },
+        "approval": {
+          "auto_approved": true,
+          "threshold_usd": 50000
+        }
+      }
+    },
+    {
+      "id": "rebalance-manager-override",
+      "description": "Allow managers to override rebalance policies for high-value clients",
+      "effect": "allow",
+      "subject": {
+        "role": "manager",
+        "level": ["senior", "director"]
+      },
+      "action": ["rebalance", "approve_rebalance", "execute_trades"],
+      "resource": "portfolio:*",
+      "condition": {
+        "time_window": {
+          "start": "08:00",
+          "end": "18:00"
+        },
+        "approval": {
+          "requires_2fa": true,
+          "audit_required": true,
+          "escalation_enabled": true
+        }
+      }
+    },
+    {
+      "id": "rebalance-deny-suspicious",
+      "description": "Deny rebalance if too many trades or unusual patterns detected",
+      "effect": "deny",
+      "subject": {
+        "any": true
+      },
+      "action": "rebalance",
+      "resource": "portfolio:*",
+      "condition": {
+        "anomaly": {
+          "trades_exceeding_threshold": 50,
+          "concentration_ratio": 0.9,
+          "sector_concentration": 0.8,
+          "rapid_repeated_trades": true
+        }
+      }
+    }
+  ]
+}

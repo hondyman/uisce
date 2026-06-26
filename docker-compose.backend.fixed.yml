@@ -1,0 +1,129 @@
+version: '3.8'
+
+services:
+  hasura:
+    image: hasura/graphql-engine:v2.37.0.cli-migrations-v3
+    environment:
+      HASURA_GRAPHQL_DATABASE_URL: "postgresql://postgres:postgres@host.docker.internal:5432/alpha"
+      HASURA_GRAPHQL_ADMIN_SECRET: ${HASURA_ADMIN_SECRET:-adminsecret}
+      HASURA_GRAPHQL_DEV_MODE: "true"
+      HASURA_GRAPHQL_CORS_DOMAIN: "*"
+    ports:
+      - "8080:8080"
+
+  redpanda:
+    image: docker.redpanda.com/redpandadata/redpanda:latest
+    container_name: redpanda
+    hostname: redpanda
+    command: ["redpanda", "start", "--overprovisioned", "--smp", "1", "--memory", "1G", "--reserve-memory", "0M", "--check=false"]
+    ports:
+      - "9092:9092"   # Kafka broker
+      - "8082:8082"   # Pandaproxy (HTTP Kafka API)
+    networks:
+      - default
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "rpk", "cluster", "info"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  temporal:
+    image: temporalio/auto-setup:latest
+    environment:
+      DB: postgres12
+      POSTGRES_USER: temporal
+      POSTGRES_PASSWORD: temporal
+      POSTGRES_DB: temporal
+      POSTGRES_HOST: host.docker.internal
+      DB_PORT: 5432
+      TEMPORAL_BROADCAST_ADDRESS: temporal
+    ports:
+      - "7233:7233"
+      - "6933:6933"
+    healthcheck:
+      test: ["CMD", "temporal", "workflow", "list", "--address", "localhost:7233", "--limit", "1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  temporal-ui:
+    image: temporalio/ui:latest
+    ports:
+      - "8081:8080"
+    environment:
+      TEMPORAL_ADDRESS: temporal:7233
+    depends_on:
+      - temporal
+
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    environment:
+      PORT: ${PORT:-3000}
+    ports:
+      - "3000:3000"
+    depends_on:
+      - hasura
+      - redpanda
+      - temporal
+
+  workflow-service:
+    build:
+      context: .
+      dockerfile: backend/cmd/workflow-service/Dockerfile
+    environment:
+      HASURA_URL: http://hasura:8080
+      HASURA_ADMIN_SECRET: ${HASURA_ADMIN_SECRET:-adminsecret}
+      KAFKA_BROKERS: redpanda:9092
+      WORKFLOW_SERVICE_PORT: 8082
+    ports:
+      - "8082:8082"
+    depends_on:
+      - hasura
+      - redpanda
+      - temporal
+
+  screen-builder-service:
+    build:
+      context: .
+      dockerfile: backend/cmd/screen-builder-service/Dockerfile
+    environment:
+      HASURA_URL: http://hasura:8080
+      HASURA_ADMIN_SECRET: ${HASURA_ADMIN_SECRET:-adminsecret}
+      SCREEN_BUILDER_SERVICE_PORT: 8083
+    ports:
+      - "8083:8083"
+    depends_on:
+      - hasura
+
+  rule-engine:
+    build:
+      context: .
+      dockerfile: backend/cmd/rule-engine-service/Dockerfile
+    environment:
+      PORT: 8083
+      DATABASE_URL: "postgresql://postgres:postgres@host.docker.internal:5432/alpha"
+      KAFKA_BROKERS: "redpanda:9092"
+    ports:
+      - "8083:8083"
+    depends_on:
+      - hasura
+
+  # Proxy removed: local module path issues. Use api-gateway (8001) instead.
+
+  runner:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    entrypoint: ["/bin/sh", "-c"]
+    tty: true
+
+volumes:
+  rabbitmq_data:
+
+networks:
+  default:
+    name: backend_default
+    driver: bridge

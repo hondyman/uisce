@@ -1,0 +1,5 @@
+# Copy to .local_env (or source manually) for local runs
+# Postgres is expected on localhost (not in Docker)
+DATABASE_URL=postgres://postgres:postgres@localhost:5432/semlayer?sslmode=disable
+KAFKA_BROKERS=localhost:9092
+PORT=8080

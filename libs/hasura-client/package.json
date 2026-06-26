@@ -1,0 +1,21 @@
+{
+  "name": "@semlayer/hasura-client",
+  "version": "1.0.0",
+  "description": "Hasura GraphQL client for SemLayer services",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "test": "jest"
+  },
+  "dependencies": {
+    "graphql": "^16.6.0",
+    "graphql-request": "^6.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "typescript": "^5.0.0",
+    "jest": "^29.0.0"
+  }
+}

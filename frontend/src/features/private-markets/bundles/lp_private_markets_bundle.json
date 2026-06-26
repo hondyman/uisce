@@ -1,0 +1,156 @@
+{
+  "bundle_id": "lp_private_markets_bundle",
+  "domain": "private_markets",
+  "audience": "limited_partner",
+  "version": "v1.0.0",
+  "owner": "patrick",
+  "tags": ["lp", "performance", "liquidity", "benchmarking"],
+  "description": "Curated registry pack of metrics most relevant to Limited Partners — optimized for liquidity monitoring, performance attribution, and benchmark-relative analysis.",
+  "metrics": [
+    {
+      "node_id": "private_markets_net_irr",
+      "name": "Net IRR",
+      "type": "measure",
+      "category": "Performance",
+      "subcategory": "IRR",
+      "financial_calc": {
+        "type": "excel_formula",
+        "formula": "=XIRR({cash_flows}, {dates})",
+        "arguments": {
+          "cash_flows": "ARRAY_AGG(net_cash_flow)",
+          "dates": "ARRAY_AGG(transaction_date)"
+        }
+      },
+      "description": "Net Internal Rate of Return calculated using Excel XIRR function"
+    },
+    {
+      "node_id": "private_markets_xirr",
+      "name": "XIRR",
+      "type": "measure",
+      "category": "Performance",
+      "subcategory": "IRR",
+      "financial_calc": {
+        "type": "excel_formula",
+        "formula": "=XIRR({cash_flows}, {dates})",
+        "arguments": {
+          "cash_flows": "ARRAY_AGG(net_cash_flow)",
+          "dates": "ARRAY_AGG(transaction_date)"
+        }
+      },
+      "description": "Extended Internal Rate of Return with irregular cash flows"
+    },
+    {
+      "node_id": "private_markets_dpi",
+      "name": "DPI",
+      "type": "measure",
+      "category": "Performance",
+      "subcategory": "Multiples",
+      "financial_calc": {
+        "type": "excel_formula",
+        "formula": "=SUM({distributions}) / SUM({paid_in_capital})",
+        "arguments": {
+          "distributions": "ARRAY_AGG(distribution_amount)",
+          "paid_in_capital": "ARRAY_AGG(paid_in_amount)"
+        }
+      },
+      "description": "Distributions to Paid-In Capital ratio"
+    },
+    {
+      "node_id": "private_markets_tvpi",
+      "name": "TVPI",
+      "type": "measure",
+      "category": "Performance",
+      "subcategory": "Multiples",
+      "financial_calc": {
+        "type": "excel_formula",
+        "formula": "=(SUM({distributions}) + SUM({residual_value})) / SUM({paid_in_capital})",
+        "arguments": {
+          "distributions": "ARRAY_AGG(distribution_amount)",
+          "residual_value": "ARRAY_AGG(residual_value)",
+          "paid_in_capital": "ARRAY_AGG(paid_in_amount)"
+        }
+      },
+      "description": "Total Value to Paid-In Capital ratio"
+    },
+    {
+      "node_id": "private_markets_rvpi",
+      "name": "RVPI",
+      "type": "measure",
+      "category": "Performance",
+      "subcategory": "Multiples",
+      "financial_calc": {
+        "type": "excel_formula",
+        "formula": "=SUM({residual_value}) / SUM({paid_in_capital})",
+        "arguments": {
+          "residual_value": "ARRAY_AGG(residual_value)",
+          "paid_in_capital": "ARRAY_AGG(paid_in_amount)"
+        }
+      },
+      "description": "Residual Value to Paid-In Capital ratio"
+    },
+    {
+      "node_id": "private_markets_pme",
+      "name": "PME",
+      "type": "measure",
+      "category": "Performance",
+      "subcategory": "Benchmarking",
+      "financial_calc": {
+        "type": "excel_formula",
+        "formula": "=PME({cash_flows}, {benchmark_returns})",
+        "arguments": {
+          "cash_flows": "ARRAY_AGG(net_cash_flow)",
+          "benchmark_returns": "ARRAY_AGG(benchmark_return)"
+        }
+      },
+      "description": "Public Market Equivalent benchmark comparison"
+    },
+    {
+      "node_id": "private_markets_j_curve",
+      "name": "J-Curve",
+      "type": "measure",
+      "category": "Performance",
+      "subcategory": "Cash Flow",
+      "financial_calc": {
+        "type": "excel_formula",
+        "formula": "=CUMULATIVE_SUM({net_cash_flows})",
+        "arguments": {
+          "net_cash_flows": "ARRAY_AGG(net_cash_flow ORDER BY transaction_date)"
+        }
+      },
+      "description": "Cumulative cash flow pattern over time"
+    }
+  ],
+  "modules": [
+    "FundSelector",
+    "IRRCurveChart",
+    "JCurvePlot",
+    "MultipleOverlayPanel",
+    "BenchmarkComparison",
+    "LiquidityPanel"
+  ],
+  "governance": {
+    "steward_group": "lp_stewards",
+    "review_cycle": "quarterly",
+    "audit_required": true,
+    "change_approval": "steward_approval"
+  },
+  "data_sources": [
+    {
+      "name": "fund_performance",
+      "type": "database",
+      "schema": "private_markets",
+      "tables": ["funds", "cash_flows", "valuations", "benchmarks"]
+    },
+    {
+      "name": "market_data",
+      "type": "api",
+      "provider": "bloomberg",
+      "endpoints": ["equity_indices", "bond_yields"]
+    }
+  ],
+  "sla": {
+    "data_freshness": "daily",
+    "query_performance": "< 5 seconds",
+    "uptime": "99.9%"
+  }
+}

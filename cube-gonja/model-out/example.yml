@@ -1,0 +1,17 @@
+cubes:
+  - name: example
+    sql_table: example
+    data_source: default
+    title: Example
+
+    measures:
+      - name: count
+        type: count
+
+    dimensions:
+      
+      - name: id
+        sql: id
+        type: number
+        primary_key: true
+      

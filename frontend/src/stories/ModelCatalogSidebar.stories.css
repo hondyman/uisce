@@ -1,0 +1,14 @@
+.story-container {
+  height: 600px;
+  display: flex;
+}
+
+.sidebar-wrapper {
+  width: 420px;
+  height: 100%;
+}
+
+.workspace {
+  flex: 1;
+  padding: 20px;
+}

@@ -1,0 +1,11 @@
+.sta-option { display:flex; flex-direction:column; padding:6px 10px; }
+.sta-option-top-row { display:flex; align-items:center; gap:6px; }
+.sta-option-primary { font-size:13px; font-weight:500; }
+.sta-option-secondary { font-size:11px; opacity:0.7; }
+.sta-match { background: #ffe58a; padding:0 2px; border-radius:2px; }
+.sta-clear-btn { background:transparent; border:none; cursor:pointer; font-size:14px; line-height:1; width:20px; height:20px; display:inline-flex; align-items:center; justify-content:center; color:#64748b; margin-right:4px; border-radius:4px; }
+.sta-clear-btn:hover { background:#e2e8f0; color:#334155; }
+.sta-badge { font-size:10px; font-weight:600; text-transform:uppercase; letter-spacing:.5px; padding:2px 6px; border-radius:10px; background:#e2e8f0; color:#475569; line-height:1; }
+.sta-badge-table { background:#eef2ff; color:#3730a3; }
+.sta-badge-view { background:#ecfdf5; color:#065f46; }
+.sta-badge-column { background:#fef3c7; color:#92400e; }

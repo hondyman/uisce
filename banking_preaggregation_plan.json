@@ -1,0 +1,75 @@
+{
+  "bundle_id": "banking_lending_preaggregation_plan",
+  "domain": "banking",
+  "version": "v1.0.0",
+  "description": "Preaggregation plan for banking and lending metrics",
+  "metrics": [
+    {
+      "node_id": "net_interest_margin",
+      "preaggregation": {
+        "type": "batch",
+        "schedule": "daily",
+        "source_tables": ["interest_income", "interest_expense", "average_assets"],
+        "aggregation_rules": [
+          {
+            "group_by": ["date", "branch"],
+            "measures": [
+              {"field": "interest_income", "function": "SUM"},
+              {"field": "interest_expense", "function": "SUM"},
+              {"field": "average_assets", "function": "AVG"}
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "node_id": "loan_loss_provision_ratio",
+      "preaggregation": {
+        "type": "batch",
+        "schedule": "monthly",
+        "source_tables": ["loan_loss_provisions", "loans_outstanding"],
+        "aggregation_rules": [
+          {
+            "group_by": ["date", "loan_type"],
+            "measures": [
+              {"field": "provision_amount", "function": "SUM"},
+              {"field": "outstanding_amount", "function": "SUM"}
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "node_id": "return_on_assets",
+      "preaggregation": {
+        "type": "batch",
+        "schedule": "quarterly",
+        "source_tables": ["net_income", "total_assets"],
+        "aggregation_rules": [
+          {
+            "group_by": ["date", "business_unit"],
+            "measures": [
+              {"field": "net_income", "function": "SUM"},
+              {"field": "total_assets", "function": "AVG"}
+            ]
+          }
+        ]
+      }
+    }
+  ],
+  "dependencies": {
+    "required_tables": [
+      "interest_income",
+      "interest_expense",
+      "average_assets",
+      "loan_loss_provisions",
+      "loans_outstanding",
+      "net_income",
+      "total_assets"
+    ],
+    "data_quality_checks": [
+      {"table": "interest_income", "check": "not_null", "fields": ["amount", "date"]},
+      {"table": "total_assets", "check": "positive", "fields": ["amount"]}
+    ]
+  }
+}

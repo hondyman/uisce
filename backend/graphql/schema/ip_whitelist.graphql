@@ -1,0 +1,28 @@
+type IpWhitelistEntry {
+  id: ID!
+  tenantId: ID
+  ipAddress: String!
+  description: String
+  createdAt: String!
+  updatedAt: String!
+}
+
+input IpWhitelistEntryInput {
+  tenantId: ID
+  ipAddress: String!
+  description: String
+}
+
+# Queries
+extend type Query {
+  ipWhitelistEntries: [IpWhitelistEntry!]!
+  ipWhitelistEntry(id: ID!): IpWhitelistEntry
+  ipWhitelistEntriesByTenant(tenantId: ID!): [IpWhitelistEntry!]!
+}
+
+# Mutations
+extend type Mutation {
+  createIpWhitelistEntry(input: IpWhitelistEntryInput!): IpWhitelistEntry!
+  updateIpWhitelistEntry(id: ID!, input: IpWhitelistEntryInput!): IpWhitelistEntry!
+  deleteIpWhitelistEntry(id: ID!): Boolean!
+}

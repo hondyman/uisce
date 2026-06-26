@@ -1,0 +1,95 @@
+{
+    "name": "Customer Onboarding with Child Pipelines",
+    "description": "Demonstrates parent pipeline calling child pipelines for KYC and Address Validation",
+    "startNodeId": "node_start",
+    "globalState": {
+        "customer_id": "CUST-12345",
+        "customer_name": "John Doe",
+        "customer_address": {
+            "street": "123 Main St",
+            "city": "New York",
+            "state": "NY",
+            "zip": "10001"
+        }
+    },
+    "nodes": {
+        "node_start": {
+            "id": "node_start",
+            "type": "ACTIVITY",
+            "name": "Initialize Onboarding",
+            "config": {
+                "activityName": "ActivityLogEvent",
+                "message": "Starting customer onboarding"
+            },
+            "nextNodeId": "node_kyc_check"
+        },
+        "node_kyc_check": {
+            "id": "node_kyc_check",
+            "type": "CHILD_PIPELINE",
+            "name": "Run KYC Verification",
+            "config": {
+                "pipeline_id": "pl_kyc_verification_v2",
+                "input_mapping": {
+                    "customer_id": "$.customer_id",
+                    "customer_name": "$.customer_name"
+                },
+                "result_path": "$.results.kyc_check"
+            },
+            "nextNodeId": "node_address_validation"
+        },
+        "node_address_validation": {
+            "id": "node_address_validation",
+            "type": "CHILD_PIPELINE",
+            "name": "Validate Customer Address",
+            "config": {
+                "pipeline_id": "pl_address_validation",
+                "input_mapping": {
+                    "address": "$.customer_address",
+                    "validation_date": "$.now"
+                },
+                "result_path": "$.results.address_validation"
+            },
+            "nextNodeId": "node_branch"
+        },
+        "node_branch": {
+            "id": "node_branch",
+            "type": "BRANCH",
+            "name": "Check KYC Status",
+            "branches": [
+                {
+                    "targetNodeId": "node_approve",
+                    "condition": "$.results.kyc_check.status == 'APPROVED'"
+                },
+                {
+                    "targetNodeId": "node_reject",
+                    "condition": "$.results.kyc_check.status == 'REJECTED'"
+                }
+            ]
+        },
+        "node_approve": {
+            "id": "node_approve",
+            "type": "ACTIVITY",
+            "name": "Approve Customer",
+            "config": {
+                "activityName": "ActivityUpdateCustomerStatus",
+                "status": "APPROVED"
+            },
+            "nextNodeId": "node_end"
+        },
+        "node_reject": {
+            "id": "node_reject",
+            "type": "ACTIVITY",
+            "name": "Reject Customer",
+            "config": {
+                "activityName": "ActivityUpdateCustomerStatus",
+                "status": "REJECTED"
+            },
+            "nextNodeId": "node_end"
+        },
+        "node_end": {
+            "id": "node_end",
+            "type": "END",
+            "name": "Complete Onboarding"
+        }
+    }
+}

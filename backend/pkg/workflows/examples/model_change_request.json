@@ -1,0 +1,61 @@
+{
+    "id": "bp-model-change-001",
+    "name": "Model Change Request",
+    "version": "1.0.0",
+    "steps": [
+        {
+            "id": "step_1",
+            "name": "Risk Analysis",
+            "type": "Interpretation",
+            "category": "LLM",
+            "config": {
+                "profile_id": "risk-analyst-gpt4",
+                "prompt_template": "Analyze the risk of the following model change: {{model_change_description}}",
+                "input_context": {
+                    "model_change_description": "Increasing equity exposure by 5% in conservative portfolios."
+                },
+                "output_variable": "risk_assessment"
+            },
+            "next_step_id": "step_2"
+        },
+        {
+            "id": "step_2",
+            "name": "Compliance Review",
+            "type": "Review",
+            "category": "Human",
+            "config": {
+                "title": "Review Risk Analysis",
+                "description": "Please review the AI-generated risk assessment.",
+                "routing_rule": {
+                    "type": "StaticGroup",
+                    "static_groups": [
+                        "Compliance"
+                    ]
+                }
+            },
+            "next_step_id": "step_3"
+        },
+        {
+            "id": "step_3",
+            "name": "Approval",
+            "type": "Approval",
+            "category": "Human",
+            "config": {
+                "title": "Final Approval",
+                "routing_rule": {
+                    "type": "StaticGroup",
+                    "static_groups": [
+                        "Managers"
+                    ]
+                }
+            },
+            "next_step_id": "end"
+        },
+        {
+            "id": "end",
+            "name": "End",
+            "type": "Completion",
+            "category": "Structural"
+        }
+    ]
+}

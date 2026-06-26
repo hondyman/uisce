@@ -1,0 +1,19 @@
+# Welcome Message Rule (CEL-based)
+
+id: rule_welcome_message
+type: CardRule
+version: 1.0.0
+card_id: welcome_message
+persona: planning_specialist
+
+eligibility:
+  # Always show welcome message
+  expression: "true"
+
+rank:
+  # Low priority, baseline score
+  expression: "1.0"
+
+metadata:
+  description: "Welcome message for all clients"
+  priority: "low"

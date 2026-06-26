@@ -1,0 +1,26 @@
+syntax = "proto3";
+
+package analytics;
+
+option go_package = "github.com/hondyman/semlayer/backend/internal/analytics/proto";
+
+service AnalyticsEngine {
+  rpc CalculateRegression (RegressionRequest) returns (RegressionResponse) {}
+}
+
+message VerificationData {
+    string date = 1;
+    double value = 2;
+}
+
+message RegressionRequest {
+  repeated VerificationData independent_data = 1; // "X" values (e.g. Market Return) - simplified for 1-factor for now, can be List of Lists later
+  repeated VerificationData dependent_data = 2;   // "y" values (e.g. Portfolio Return)
+}
+
+message RegressionResponse {
+  double alpha = 1;
+  double beta = 2;
+  double r_squared = 3;
+  string status = 4;
+}

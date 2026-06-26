@@ -1,0 +1,60 @@
+table:
+  name: alpha_tenant_instance
+  schema: public
+array_relationships:
+- name: tenant_product_datasources
+  using:
+    foreign_key_constraint_on:
+      column: alpha_tenant_instance_id
+      table:
+        name: tenant_product_datasource
+        schema: public
+select_permissions:
+- role: user
+  permission:
+    columns:
+    - id
+    - datasource_name
+    - datasource_code
+    - is_active
+    - config
+    - created_at
+    - updated_at
+    - datasource_type
+    filter: {}
+- role: steward
+  permission:
+    columns:
+    - id
+    - datasource_name
+    - datasource_code
+    - is_active
+    - config
+    - created_at
+    - updated_at
+    - datasource_type
+    filter: {}
+insert_permissions:
+- role: admin
+  permission:
+    check: {}
+    columns:
+    - datasource_name
+    - datasource_code
+    - is_active
+    - config
+    - datasource_type
+update_permissions:
+- role: admin
+  permission:
+    columns:
+    - datasource_name
+    - datasource_code
+    - is_active
+    - config
+    - datasource_type
+    filter: {}
+delete_permissions:
+- role: admin
+  permission:
+    filter: {}

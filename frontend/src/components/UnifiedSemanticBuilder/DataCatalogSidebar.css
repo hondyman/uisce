@@ -1,0 +1,341 @@
+/* DataCatalogSidebar.css - Compact & Collapsed */
+
+.data-catalog-sidebar {
+  width: 280px;
+  height: 100%;
+  background-color: #f8f9fa;
+  border-right: 1px solid #dee2e6;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.sidebar-header {
+  padding: 12px;
+  border-bottom: 1px solid #dee2e6;
+  background-color: #e9ecef;
+}
+
+.sidebar-header h3 {
+  margin: 0 0 8px 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: #495057;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.search-container {
+  position: relative;
+}
+
+.search-icon {
+  position: absolute;
+  left: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #495057;
+  z-index: 1;
+  font-size: 14px;
+}
+
+.search-input.enhanced {
+  width: 100%;
+  padding: 6px 8px 6px 32px;
+  border: 1px solid #ced4da;
+  border-radius: 6px;
+  font-size: 12px;
+  outline: none;
+  background-color: #ffffff;
+  color: #495057;
+  transition: all 0.2s ease;
+}
+
+.search-input.enhanced:focus {
+  border-color: #6c757d;
+  box-shadow: 0 0 0 1px rgba(108, 117, 125, 0.1);
+}
+
+.tables-container {
+  flex: 1;
+  overflow: auto;
+  padding: 6px;
+  background-color: #f8f9fa;
+}
+
+.schema-group {
+  margin-bottom: 8px;
+  background-color: #f1f3f4;
+  border-radius: 8px;
+  border: 1px solid #e9ecef;
+  overflow: hidden;
+}
+
+.schema-header.clickable {
+  display: flex;
+  align-items: center;
+  padding: 10px 12px;
+  cursor: pointer;
+  background-color: #e9ecef;
+  font-weight: 600;
+  color: #495057;
+  font-size: 13px;
+  gap: 8px;
+  transition: background-color 0.2s ease;
+}
+
+.schema-header.clickable:hover {
+  background-color: #dee2e6;
+}
+
+.schema-name {
+  flex-grow: 1;
+}
+
+.schema-table-count {
+  font-size: 11px;
+  color: #6c757d;
+  background-color: #ced4da;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-weight: 500;
+}
+
+.tables-list-in-schema {
+  padding: 4px;
+}
+
+.table-item.enhanced {
+  margin-bottom: 4px;
+  border: 1px solid #dee2e6;
+  border-radius: 8px;
+  background-color: #ffffff;
+  overflow: hidden;
+}
+
+.tables-list-in-schema .table-item.enhanced {
+  margin: 0 0 4px 0;
+}
+
+.table-header.clickable {
+  display: flex;
+  align-items: center;
+  padding: 8px 12px;
+  cursor: pointer;
+  background-color: #e9ecef;
+  transition: background-color 0.2s ease;
+}
+
+.table-header.clickable > * {
+  margin-right: 6px;
+}
+
+.table-header.clickable > *:last-child {
+  margin-right: 0;
+}
+
+.table-header.clickable:hover {
+  background-color: #dee2e6;
+}
+
+.table-name.enhanced {
+  font-size: 12px;
+  font-weight: 600;
+  color: #495057;
+  font-family: monospace;
+  /* Remove any flex properties to keep it left-aligned */
+}
+
+.column-count.enhanced {
+  font-size: 10px;
+  color: #6c757d;
+  font-weight: 500;
+  /* This will sit right next to the table name */
+}
+
+.columns-list {
+  background-color: #ffffff;
+}
+
+.column-item.enhanced {
+  padding: 6px 10px;
+  cursor: pointer;
+  border-left: 2px solid #dee2e6;
+  transition: all 0.15s ease;
+  position: relative;
+}
+
+.column-item.enhanced:hover {
+  background-color: #f8f9fa;
+}
+
+.column-item.enhanced.selected {
+  background-color: #e2e6ea;
+  border-left-color: #6c757d;
+}
+
+.column-info.enhanced {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.column-header.enhanced {
+  display: flex;
+  align-items: center;
+}
+
+.column-name-section {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.column-constraints {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 8px;
+}
+
+.constraint-icon {
+  font-size: 12px;
+  cursor: help;
+  color: white;
+  padding: 2px 6px;
+  border-radius: 4px;
+  line-height: 1;
+  font-weight: 600;
+}
+
+.constraint-icon.primary {
+  background-color: #f59e0b;
+}
+
+.constraint-icon.foreign {
+  background-color: #8b5cf6;
+}
+
+
+.column-name.enhanced {
+  font-size: 11px;
+  font-weight: 600;
+  color: #495057;
+  font-family: monospace;
+}
+
+.column-type-section {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  margin-left: 6px;
+  flex-shrink: 0;
+}
+
+.column-type.enhanced {
+  font-size: 9px;
+  color: #6c757d;
+  font-family: monospace;
+  background-color: #e9ecef;
+  padding: 1px 3px;
+  border-radius: 2px;
+  font-weight: 500;
+}
+
+.mapping-indicator.enhanced {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+.mapping-info {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.mapping-type.enhanced {
+  font-size: 8px;
+  color: #059669;
+  background-color: #d1fae5;
+  padding: 1px 3px;
+  border-radius: 2px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.business-term-info {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 2px;
+}
+
+.business-term-icon {
+  font-size: 12px;
+  opacity: 0.85;
+  cursor: help;
+  position: relative;
+}
+
+.business-term-name {
+  font-size: 9px;
+  color: #6c757d;
+  font-weight: 500;
+  font-style: italic;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+}
+
+/* Tooltip */
+.business-term-icon::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  bottom: 120%;
+  left: 50%;
+  transform: translateX(-50%);
+  background-color: #343a40;
+  color: white;
+  padding: 4px 6px;
+  border-radius: 4px;
+  font-size: 10px;
+  white-space: nowrap;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.2s, visibility 0.2s;
+  z-index: 1000;
+  pointer-events: none;
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.business-term-icon:hover::after {
+  opacity: 1;
+  visibility: visible;
+}
+
+/* Column Actions Panel Styles */
+.column-title-container {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.column-actions-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: #212529; /* A very dark gray, almost black */
+  margin: 0;
+}
+
+.column-actions-panel .column-type-badge.enhanced {
+  color: #343a40; /* Darker gray for better visibility */
+}

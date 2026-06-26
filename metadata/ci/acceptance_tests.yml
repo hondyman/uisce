@@ -1,0 +1,41 @@
+name: acceptance-suite-mvp
+description: CI acceptance tests for Advisor Review + 3 MVP cards
+
+jobs:
+- id: publish_and_validate_metadata
+  steps:
+  - checkout
+  - run: validate-yaml-syntax metadata/**/*.yml
+  - run: registry-cli publish --dir metadata --dry-run # verifies publishability
+  - run: registry-cli publish --dir metadata --validate-only # compile checks (expressions)
+
+- id: unit_policy_tests
+  steps:
+  - run: go test ./pkg/policy -run TestCELEvalEligibility
+  - run: go test ./pkg/policy -run TestRegoSmoke # ensure Rego modules load
+
+- id: integration_curation_delivery
+  env:
+    TEST_DATABASE_DSN: ${{ secrets.TEST_DATABASE_DSN }}
+  steps:
+  - run: docker-compose up -d postgres starrocks-fe starrocks-be nessie
+  - run: go test ./... -run TestCurationDeliveryIntegration -v
+  - run: script/assert_feed_card_delivery.sh card_dividend_income tenant=test_t1 client=test_c1
+
+- id: temporal_and_uar
+  env:
+    TEST_DATABASE_DSN: ${{ secrets.TEST_DATABASE_DSN }}
+  steps:
+  - run: start-temporal-local
+  - run: go test ./pkg/canonical -run TestUARWriteAndVerify -v
+  - run: go test ./internal/feed/workflows -run TestAdvisorWorkflowSLA -v
+
+- id: acceptance_end_to_end
+  steps:
+  - run: script/e2e_run.sh --scenario basic-mvp
+  # performs:
+  # - create client
+  # - seed holdings
+  # - trigger card
+  # - click CTA
+  # - verify UAR and queue item

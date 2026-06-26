@@ -1,0 +1,10 @@
+.error-boundary {
+  padding: 32px;
+  color: red;
+  background: #fff0f0;
+}
+
+.error-boundary pre {
+  white-space: pre-wrap;
+  word-break: break-all;
+}

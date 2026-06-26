@@ -1,0 +1,12 @@
+version: 3
+sources:
+- name: wealth_app
+  kind: postgres
+  configuration:
+    connection_info:
+      database_url:
+        from_env: WEALTH_APP_DATABASE_URL
+    isolation_level: read-committed
+    use_prepared_statements: false
+    ssl_mode: disable
+  tables: []

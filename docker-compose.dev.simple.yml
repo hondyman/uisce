@@ -1,0 +1,166 @@
+# ============================================================================
+# PORT ALLOCATION (Loaded from .env.ports)
+# ============================================================================
+# NEVER hardcode ports. Load from .env.ports using variable substitution.
+# This ensures the single source of truth (PORTS) is always used.
+#
+# To start services: docker compose --env-file .env.ports -f docker-compose.dev.simple.yml up -d
+
+services:
+  # ==========================================
+  # INFRASTRUCTURE SERVICES
+  # ==========================================
+
+  # GraphQL API
+  hasura:
+    image: hasura/graphql-engine:v2.46.0
+    container_name: semlayer-hasura
+    restart: unless-stopped
+    environment:
+      - HASURA_GRAPHQL_DATABASE_URL=postgres://postgres:postgres@host.docker.internal:${PORT_POSTGRES_HOST}/alpha?sslmode=disable
+      - HASURA_GRAPHQL_ENABLE_CONSOLE=true
+      - HASURA_GRAPHQL_DEV_MODE=true
+      - HASURA_GRAPHQL_ADMIN_SECRET=${HASURA_ADMIN_SECRET:-newadminsecretkey}
+      - HASURA_GRAPHQL_JWT_SECRET={"type":"HS256","key":"${JWT_SECRET:-development_jwt_secret_key_that_is_long_enough_for_hasura_requirements}"}
+      - HASURA_GRAPHQL_UNAUTHORIZED_ROLE=anonymous
+      - HASURA_GRAPHQL_ENABLE_CORS=true
+      - HASURA_GRAPHQL_CORS_DOMAIN=http://localhost:${PORT_VITE_DEV_SERVER},http://localhost:${PORT_BACKEND_API},http://localhost:${PORT_LEGACY_GATEWAY}
+    ports:
+      - "${PORT_HASURA_GRAPHQL}:8080"
+    networks:
+      - semlayer
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8080/healthz || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Message Queue
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    container_name: semlayer-rabbitmq
+    restart: unless-stopped
+    environment:
+      - RABBITMQ_DEFAULT_USER=guest
+      - RABBITMQ_DEFAULT_PASS=guest
+    ports:
+      - "${PORT_RABBITMQ_AMQP}:5672"
+      - "${PORT_RABBITMQ_MANAGEMENT}:15672"
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    networks:
+      - semlayer
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Temporal Workflow Engine
+  temporal:
+    image: temporalio/auto-setup:1.22.0
+    container_name: semlayer-temporal
+    restart: unless-stopped
+    environment:
+      - DB=postgresql
+      - DB_PORT=${PORT_POSTGRES_HOST}
+      - POSTGRES_USER=postgres
+      - POSTGRES_PWD=postgres
+      - POSTGRES_SEEDS=host.docker.internal
+      - ENABLE_ES=false
+    ports:
+      - "${PORT_TEMPORAL_SERVER}:7233"
+    networks:
+      - semlayer
+
+  # Temporal UI
+  temporal-ui:
+    image: temporalio/ui:2.21.3
+    container_name: semlayer-temporal-ui
+    restart: unless-stopped
+    environment:
+      - TEMPORAL_ADDRESS=temporal:7233
+    ports:
+      - "${PORT_TEMPORAL_UI}:8080"
+    depends_on:
+      - temporal
+    networks:
+      - semlayer
+
+  # ==========================================
+  # BACKEND SERVICES (Build from source)
+  # ==========================================
+
+  backend:
+    build:
+      context: .
+      dockerfile: ./backend/Dockerfile
+    container_name: semlayer-backend
+    restart: unless-stopped
+    environment:
+      - HASURA_ENDPOINT=http://hasura:8080
+      - TEMPORAL_HOSTPORT=temporal:${PORT_TEMPORAL_SERVER}
+      - POSTGRES_HOST=host.docker.internal
+      - POSTGRES_PORT=${PORT_POSTGRES_HOST}
+      - POSTGRES_DB=alpha
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - RABBIT_URL=amqp://guest:guest@rabbitmq:5672/
+      - JWT_SECRET=${JWT_SECRET:-development-secret-key}
+    ports:
+      - "${PORT_BACKEND_API}:8080"
+    depends_on:
+      hasura:
+        condition: service_healthy
+      temporal:
+        condition: service_started
+      rabbitmq:
+        condition: service_healthy
+    volumes:
+      - ./backend/config.yaml:/app/config.yaml:ro
+    networks:
+      - semlayer
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8080/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  fabric-builder:
+    build:
+      context: .
+      dockerfile: ./services/fabric-builder/Dockerfile
+    container_name: semlayer-fabric-builder
+    restart: unless-stopped
+    environment:
+      - HASURA_ENDPOINT=http://hasura:8080
+      - TEMPORAL_HOSTPORT=temporal:${PORT_TEMPORAL_SERVER}
+      - POSTGRES_HOST=host.docker.internal
+      - POSTGRES_PORT=${PORT_POSTGRES_HOST}
+      - POSTGRES_DB=alpha
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - RABBIT_URL=amqp://guest:guest@rabbitmq:5672/
+      - JWT_SECRET=${JWT_SECRET:-development-secret-key}
+      - HTTP_PORT=${PORT_FABRIC_BUILDER}
+    ports:
+      - "${PORT_FABRIC_BUILDER}:${PORT_FABRIC_BUILDER}"
+    depends_on:
+      - backend
+      - hasura
+      - temporal
+    networks:
+      - semlayer
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8081/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+networks:
+  semlayer:
+    driver: bridge
+
+volumes:
+  rabbitmq_data:

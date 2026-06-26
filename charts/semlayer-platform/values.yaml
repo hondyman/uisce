@@ -1,0 +1,640 @@
+# Semlayer Platform - Global Configuration Values
+# Override these per environment (staging, production-us, production-eu, etc.)
+
+global:
+  # Container image settings
+  image:
+    registry: ghcr.io
+    repository: semlayer
+    pullPolicy: IfNotPresent
+    pullSecrets: []
+
+  # Multi-region settings
+  region: us-east-1
+  environment: production
+
+  # Domain configuration
+  domain: semlayer.io
+  ingressClass: nginx
+
+  # TLS settings
+  tls:
+    enabled: true
+    issuer: letsencrypt-prod
+
+  # Service mesh
+  istio:
+    enabled: true
+    mtls:
+      mode: STRICT
+
+  # Multi-tenancy
+  tenancy:
+    isolation: namespace # namespace | schema | row-level
+    defaultTier: standard # enterprise | business | standard
+
+  # Database connections (can be overridden per service)
+  postgresql:
+    host: postgresql.semlayer-data.svc.cluster.local
+    port: 5432
+    database: semlayer
+    sslmode: require
+
+  redis:
+    host: redis-master.semlayer-data.svc.cluster.local
+    port: 6379
+
+  rabbitmq:
+    host: rabbitmq.semlayer-data.svc.cluster.local
+    port: 5672
+
+  # Observability
+  observability:
+    prometheus:
+      enabled: true
+    jaeger:
+      enabled: true
+      endpoint: jaeger-collector.semlayer-system:14268
+    loki:
+      enabled: true
+
+  # Security
+  security:
+    podSecurityStandards: restricted
+    networkPolicies: true
+    secretsEncryption: true
+
+# =============================================================================
+# API Gateway Configuration
+# =============================================================================
+api-gateway:
+  enabled: true
+
+  replicaCount: 3
+
+  image:
+    tag: "1.0.0"
+
+  resources:
+    requests:
+      cpu: 250m
+      memory: 256Mi
+    limits:
+      cpu: 1000m
+      memory: 512Mi
+
+  autoscaling:
+    enabled: true
+    minReplicas: 3
+    maxReplicas: 50
+    targetCPUUtilizationPercentage: 60
+    targetMemoryUtilizationPercentage: 70
+
+  service:
+    type: ClusterIP
+    port: 8080
+
+  ingress:
+    enabled: true
+    annotations:
+      kubernetes.io/ingress.class: nginx
+      nginx.ingress.kubernetes.io/rate-limit: "100"
+      nginx.ingress.kubernetes.io/rate-limit-window: "1m"
+      cert-manager.io/cluster-issuer: letsencrypt-prod
+    hosts:
+    - host: api.semlayer.io
+      paths:
+      - path: /
+        pathType: Prefix
+    tls:
+    - secretName: api-gateway-tls
+      hosts:
+      - api.semlayer.io
+
+  # Auth configuration
+  auth:
+    provider: okta
+    issuerUrl: https://semlayer.okta.com
+    audience: api://semlayer
+
+  # Rate limiting
+  rateLimit:
+    global:
+      requestsPerMinute: 10000
+    perTenant:
+      requestsPerMinute: 1000
+    perUser:
+      requestsPerMinute: 100
+
+  # Health checks
+  livenessProbe:
+    httpGet:
+      path: /health/live
+      port: http
+    initialDelaySeconds: 10
+    periodSeconds: 10
+
+  readinessProbe:
+    httpGet:
+      path: /health/ready
+      port: http
+    initialDelaySeconds: 5
+    periodSeconds: 5
+
+# =============================================================================
+# Semantic Engine Configuration
+# =============================================================================
+semantic-engine:
+  enabled: true
+
+  replicaCount: 2
+
+  image:
+    tag: "1.0.0"
+
+  resources:
+    requests:
+      cpu: 500m
+      memory: 512Mi
+    limits:
+      cpu: 2000m
+      memory: 2Gi
+
+  autoscaling:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 30
+    targetCPUUtilizationPercentage: 70
+
+  service:
+    type: ClusterIP
+    port: 8081
+    grpcPort: 9090
+
+  # Configuration
+  config:
+    schemaRefreshInterval: 5m
+    cacheEnabled: true
+    cacheTTL: 1h
+
+# =============================================================================
+# Cube.js API Configuration
+# =============================================================================
+cube-api:
+  enabled: true
+
+  replicaCount: 5
+
+  image:
+    repository: cubejs/cube
+    tag: "v0.35.0"
+
+  resources:
+    requests:
+      cpu: 500m
+      memory: 1Gi
+    limits:
+      cpu: 2000m
+      memory: 4Gi
+
+  autoscaling:
+    enabled: true
+    minReplicas: 5
+    maxReplicas: 100
+    metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+    - type: Pods
+      pods:
+        metric:
+          name: cube_query_queue_depth
+        target:
+          type: AverageValue
+          averageValue: "50"
+
+  # Cube.js specific settings
+  cube:
+    apiSecret: "" # Set via external secret
+    devMode: false
+
+    # Pre-aggregation settings
+    preAggregations:
+      externalRefresh: true
+      rollupOnly: false
+
+    # Query queue
+    queryQueue:
+      concurrency: 4
+      executionTimeout: 300
+      orphanedTimeout: 120
+
+    # Caching
+    cache:
+      enabled: true
+      type: redis
+
+  # Refresh workers (separate deployment)
+  refreshWorker:
+    enabled: true
+    replicaCount: 3
+    resources:
+      requests:
+        cpu: 1000m
+        memory: 2Gi
+      limits:
+        cpu: 4000m
+        memory: 8Gi
+
+# =============================================================================
+# Governance Engine Configuration
+# =============================================================================
+governance-engine:
+  enabled: true
+
+  replicaCount: 3
+
+  image:
+    tag: "1.0.0"
+
+  resources:
+    requests:
+      cpu: 250m
+      memory: 256Mi
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+
+  autoscaling:
+    enabled: true
+    minReplicas: 3
+    maxReplicas: 20
+    targetCPUUtilizationPercentage: 70
+
+  # OPA integration
+  opa:
+    enabled: true
+    image:
+      repository: openpolicyagent/opa
+      tag: "0.60.0"
+    resources:
+      requests:
+        cpu: 100m
+        memory: 128Mi
+      limits:
+        cpu: 500m
+        memory: 512Mi
+
+  # Policy configuration
+  policy:
+    refreshInterval: 30s
+    decisionLogsEnabled: true
+
+# =============================================================================
+# AI Builder Configuration
+# =============================================================================
+ai-builder:
+  enabled: true
+
+  replicaCount: 2
+
+  image:
+    tag: "1.0.0"
+
+  resources:
+    requests:
+      cpu: 1000m
+      memory: 2Gi
+      nvidia.com/gpu: 0 # Set to 1 for GPU inference
+    limits:
+      cpu: 4000m
+      memory: 8Gi
+      nvidia.com/gpu: 0
+
+  autoscaling:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 20
+    targetCPUUtilizationPercentage: 70
+
+  # Node selector for GPU nodes (when needed)
+  nodeSelector: {} # workload: ai
+
+  tolerations: []
+    # - key: nvidia.com/gpu
+    #   operator: Exists
+    #   effect: NoSchedule
+
+  # Model configuration
+  models:
+    nlq:
+      enabled: true
+      modelPath: /models/nlq
+    recommendations:
+      enabled: true
+      modelPath: /models/recommendations
+
+# =============================================================================
+# Compliance Engine Configuration
+# =============================================================================
+compliance-engine:
+  enabled: true
+
+  replicaCount: 2
+
+  image:
+    tag: "1.0.0"
+
+  resources:
+    requests:
+      cpu: 500m
+      memory: 512Mi
+    limits:
+      cpu: 2000m
+      memory: 2Gi
+
+  autoscaling:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 10
+    targetCPUUtilizationPercentage: 70
+
+  # Compliance rules
+  rules:
+    refreshInterval: 5m
+
+  # Regulatory frameworks
+  frameworks:
+  - SOC2
+  - GDPR
+  - SOX
+  - FINRA
+  - MiFID2
+
+# =============================================================================
+# Notification Service Configuration
+# =============================================================================
+notification-service:
+  enabled: true
+
+  replicaCount: 2
+
+  image:
+    tag: "1.0.0"
+
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+  # Notification channels
+  channels:
+    email:
+      enabled: true
+      provider: ses # ses | sendgrid | smtp
+    slack:
+      enabled: true
+    webhook:
+      enabled: true
+    pagerduty:
+      enabled: true
+
+# =============================================================================
+# Audit Service Configuration
+# =============================================================================
+audit-service:
+  enabled: true
+
+  replicaCount: 3
+
+  image:
+    tag: "1.0.0"
+
+  resources:
+    requests:
+      cpu: 250m
+      memory: 256Mi
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+
+  # Audit log retention
+  retention:
+    hot: 30d # In PostgreSQL
+    warm: 1y # In S3/GCS
+    cold: 7y # Glacier/Archive
+
+  # Immutability
+  immutable:
+    enabled: true
+    signingKey: "" # Set via external secret
+
+# =============================================================================
+# Tenant Manager Configuration
+# =============================================================================
+tenant-manager:
+  enabled: true
+
+  replicaCount: 2
+
+  image:
+    tag: "1.0.0"
+
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+  # Tenant provisioning
+  provisioning:
+    autoProvision: false # Requires manual approval
+    defaultQuotas:
+      maxUsers: 100
+      maxQueries: 10000
+      maxStorage: 100Gi
+
+# =============================================================================
+# Data Services (Development/Staging only - use managed services in production)
+# =============================================================================
+postgresql:
+  enabled: false # Use AWS RDS / GCP Cloud SQL in production
+
+  auth:
+    postgresPassword: "" # Set via external secret
+    database: semlayer
+
+  primary:
+    resources:
+      requests:
+        cpu: 500m
+        memory: 1Gi
+      limits:
+        cpu: 2000m
+        memory: 4Gi
+    persistence:
+      size: 100Gi
+      storageClass: gp3
+
+  readReplicas:
+    replicaCount: 2
+    resources:
+      requests:
+        cpu: 250m
+        memory: 512Mi
+      limits:
+        cpu: 1000m
+        memory: 2Gi
+
+redis-cluster:
+  enabled: false # Use AWS ElastiCache / GCP Memorystore in production
+
+  cluster:
+    nodes: 6
+    replicas: 1
+
+  redis:
+    resources:
+      requests:
+        cpu: 250m
+        memory: 256Mi
+      limits:
+        cpu: 1000m
+        memory: 1Gi
+
+rabbitmq:
+  enabled: false # Use AWS MSK / GCP Pub/Sub in production
+
+  auth:
+    username: semlayer
+    password: "" # Set via external secret
+
+  clustering:
+    enabled: true
+    replicaCount: 3
+
+  resources:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+    limits:
+      cpu: 1000m
+      memory: 2Gi
+
+# =============================================================================
+# Observability
+# =============================================================================
+monitoring:
+  enabled: true
+
+  prometheus:
+    prometheusSpec:
+      retention: 15d
+      storageSpec:
+        volumeClaimTemplate:
+          spec:
+            storageClassName: gp3
+            resources:
+              requests:
+                storage: 100Gi
+
+  grafana:
+    enabled: true
+    adminPassword: "" # Set via external secret
+
+  alertmanager:
+    enabled: true
+    config:
+      route:
+        receiver: default
+        group_by: [ 'alertname', 'severity' ]
+        group_wait: 30s
+        group_interval: 5m
+        repeat_interval: 4h
+      receivers:
+      - name: default
+        pagerduty_configs:
+        - service_key: "" # Set via external secret
+
+logging:
+  enabled: true
+
+  loki:
+    persistence:
+      enabled: true
+      size: 100Gi
+      storageClassName: gp3
+
+  promtail:
+    enabled: true
+
+tracing:
+  enabled: true
+
+  storage:
+    type: elasticsearch
+    options:
+      es:
+        server-urls: http://elasticsearch:9200
+        index-prefix: jaeger
+
+# =============================================================================
+# Network Policies
+# =============================================================================
+networkPolicies:
+  enabled: true
+
+  # Default deny all ingress
+  defaultDeny: true
+
+  # Allow specific traffic patterns
+  allowRules:
+  - name: allow-api-gateway
+    from:
+    - namespaceSelector:
+        matchLabels:
+          name: istio-system
+    to:
+    - podSelector:
+        matchLabels:
+          app: api-gateway
+
+  - name: allow-internal-services
+    from:
+    - namespaceSelector:
+        matchLabels:
+          name: semlayer-control
+    to:
+    - podSelector: {}
+
+# =============================================================================
+# Pod Disruption Budgets
+# =============================================================================
+podDisruptionBudgets:
+  api-gateway:
+    minAvailable: 2
+  semantic-engine:
+    minAvailable: 1
+  cube-api:
+    minAvailable: 3
+  governance-engine:
+    minAvailable: 2
+
+# =============================================================================
+# Service Accounts
+# =============================================================================
+serviceAccount:
+  create: true
+  annotations:
+    # For AWS IRSA
+    # eks.amazonaws.com/role-arn: arn:aws:iam::123456789:role/semlayer-role
+    # For GCP Workload Identity
+    # iam.gke.io/gcp-service-account: semlayer@project.iam.gserviceaccount.com

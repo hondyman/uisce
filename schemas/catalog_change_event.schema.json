@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "CatalogChangeEvent",
+  "type": "object",
+  "properties": {
+    "eventId": { "type": "string", "format": "uuid" },
+    "entityType": { "type": "string" },
+    "changeType": { "type": "string", "enum": ["insert", "update", "delete"] },
+    "tenantId": { "type": "string", "format": "uuid" },
+    "occurredAt": { "type": "string", "format": "date-time" },
+    "before": {
+      "type": ["object", "null"],
+      "additionalProperties": { "type": "string" },
+      "description": "Previous version of the entity as a flat map"
+    },
+    "after": {
+      "type": ["object", "null"],
+      "additionalProperties": { "type": "string" },
+      "description": "New version of the entity as a flat map"
+    },
+    "source": { "type": "string" }
+  },
+  "required": ["eventId", "entityType", "changeType", "tenantId", "occurredAt", "source"],
+  "additionalProperties": false
+}

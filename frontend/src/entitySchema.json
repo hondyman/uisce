@@ -1,0 +1,37 @@
+{
+  "client_investors": {
+    "label": "Client/Investor",
+    "subtypes": [
+      { "key": "IndividualInvestor", "label": "Individual Investor" },
+      { "key": "InstitutionalInvestor", "label": "Institutional Investor" },
+      { "key": "FamilyOffice", "label": "Family Office" }
+    ],
+    "fields": [
+      { "key": "name", "label": "Full Name / Organization Name", "type": "text", "required": true, "placeholder": "Enter a name" },
+      { "key": "contact_details", "label": "Contact Details", "type": "json", "required": true, "placeholder": "{\"email\": \"...\", \"phone\": \"...\"}" },
+      { "key": "risk_tolerance", "label": "Risk Tolerance", "type": "select", "required": true, "options": ["Low", "Medium", "High"] },
+      { "key": "age", "label": "Age", "type": "number", "required": true, "appliesTo": ["IndividualInvestor"] },
+      { "key": "tax_id", "label": "Tax ID", "type": "text", "required": false, "appliesTo": ["IndividualInvestor"] },
+      { "key": "org_type", "label": "Organization Type", "type": "text", "required": true, "placeholder": "e.g., Pension Fund, Endowment", "appliesTo": ["InstitutionalInvestor"] },
+      { "key": "signatories", "label": "Authorized Signatories", "type": "tag-input", "required": true, "appliesTo": ["InstitutionalInvestor"] },
+      { "key": "generations", "label": "Generations Served", "type": "number", "required": true, "appliesTo": ["FamilyOffice"] },
+      { "key": "aggregated_reporting", "label": "Aggregated Reporting", "type": "switch", "required": false, "appliesTo": ["FamilyOffice"] },
+      { "key": "custom_fields", "label": "Custom Fields", "type": "json", "required": false }
+    ]
+  },
+  "portfolios": {
+    "label": "Portfolio",
+    "subtypes": [
+      { "key": "DiscretionaryPortfolio", "label": "Discretionary Portfolio" },
+      { "key": "NonDiscretionaryPortfolio", "label": "Non-Discretionary Portfolio" },
+      { "key": "ModelPortfolio", "label": "Model Portfolio" }
+    ],
+    "fields": [
+      { "key": "benchmark", "label": "Benchmark", "type": "text", "required": true, "placeholder": "e.g., S&P 500" },
+      { "key": "advisor_discretion", "label": "Advisor Has Discretion", "type": "switch", "required": true, "appliesTo": ["DiscretionaryPortfolio"] },
+      { "key": "client_approval_required", "label": "Client Approval Required", "type": "switch", "required": true, "appliesTo": ["NonDiscretionaryPortfolio"] },
+      { "key": "template_id", "label": "Model Template ID", "type": "text", "required": true, "placeholder": "Enter the UUID of the model", "appliesTo": ["ModelPortfolio"] },
+      { "key": "custom_fields", "label": "Custom Fields", "type": "json", "required": false }
+    ]
+  }
+}

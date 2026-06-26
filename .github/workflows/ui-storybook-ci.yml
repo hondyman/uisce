@@ -1,0 +1,32 @@
+name: UI Storybook CI
+
+on:
+  push:
+    paths:
+    - 'ui/**'
+  pull_request:
+    paths:
+    - 'ui/**'
+
+jobs:
+  build-storybook:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - name: Use Node.js 18
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+    - name: Install dependencies
+      run: |
+        cd ui
+        npm ci
+    - name: Build Storybook
+      run: |
+        cd ui
+        npm run build-storybook
+    - name: Upload Storybook artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: storybook-static
+        path: ui/build-storybook

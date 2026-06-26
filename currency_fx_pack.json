@@ -1,0 +1,210 @@
+{
+  "bundle_id": "currency_fx_pack",
+  "domain": "currency_fx",
+  "audience": ["portfolio_manager", "treasury", "risk", "executive", "regulator"],
+  "version": "v1.0.0",
+  "owner": "patrick",
+  "tags": ["fx", "currency", "translation", "conversion", "exposure", "attribution", "hedging"],
+  "defaults": {
+    "preaggregate": {
+      "enabled": true,
+      "grain": "daily",
+      "rollups": ["monthly", "quarterly", "yearly"],
+      "partition_keys": ["portfolio_id", "currency_pair"],
+      "watermark_field": "as_of_date",
+      "snapshot": false
+    }
+  },
+  "metrics": [
+    {
+      "node_id": "spot_conversion",
+      "category": "conversion",
+      "description": "Convert transaction amount from source to reporting currency using spot FX rate on transaction date.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "{amount_source} * {spot_rate}",
+        "arguments": {
+          "amount_source": "field:amount_source_currency",
+          "spot_rate": "field:spot_fx_rate"
+        }
+      },
+      "badge": "🟩",
+      "function_class": "DAX-Financial",
+      "functions_used": ["MULTIPLY"],
+      "governance": { "status": "golden" }
+    },
+    {
+      "node_id": "average_period_rate",
+      "category": "conversion",
+      "description": "Average FX rate over reporting period for P&L translation.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "AVERAGEX(FILTER({fx_rates}, {date} >= {period_start} && {date} <= {period_end}), {fx_rate})",
+        "arguments": {
+          "fx_rates": "table:fx_rates",
+          "date": "field:date",
+          "period_start": "field:period_start",
+          "period_end": "field:period_end",
+          "fx_rate": "field:fx_rate"
+        }
+      },
+      "badge": "🟨",
+      "function_class": "DAX-Iterator",
+      "functions_used": ["AVERAGEX", "FILTER"],
+      "governance": { "status": "golden" }
+    },
+    {
+      "node_id": "closing_rate_translation",
+      "category": "translation",
+      "description": "Translate monetary assets/liabilities at period-end closing rate.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "{balance_foreign} * {closing_rate}",
+        "arguments": {
+          "balance_foreign": "field:balance_foreign_currency",
+          "closing_rate": "field:fx_rate_closing"
+        }
+      },
+      "badge": "🟩",
+      "function_class": "DAX-Financial",
+      "functions_used": ["MULTIPLY"],
+      "governance": { "status": "golden" }
+    },
+    {
+      "node_id": "net_fx_exposure",
+      "category": "exposure",
+      "description": "FX assets minus FX liabilities per currency.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "{fx_assets} - {fx_liabilities}",
+        "arguments": {
+          "fx_assets": "field:fx_assets",
+          "fx_liabilities": "field:fx_liabilities"
+        }
+      },
+      "badge": "🟧",
+      "function_class": "DAX-Logical",
+      "functions_used": ["SUBTRACT"],
+      "governance": { "status": "golden" }
+    },
+    {
+      "node_id": "open_fx_position",
+      "category": "exposure",
+      "description": "Unhedged FX exposure after derivatives.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "{net_fx_exposure} - {hedged_amount}",
+        "arguments": {
+          "net_fx_exposure": "calc:net_fx_exposure",
+          "hedged_amount": "field:hedged_amount"
+        }
+      },
+      "badge": "🟧",
+      "function_class": "DAX-Logical",
+      "functions_used": ["SUBTRACT"],
+      "governance": { "status": "golden" }
+    },
+    {
+      "node_id": "fx_delta",
+      "category": "risk",
+      "description": "Sensitivity of portfolio value to 1% FX move.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "{portfolio_value} * 0.01",
+        "arguments": {
+          "portfolio_value": "field:portfolio_value"
+        }
+      },
+      "badge": "🟩",
+      "function_class": "DAX-Financial",
+      "functions_used": ["MULTIPLY"],
+      "governance": { "status": "draft" }
+    },
+    {
+      "node_id": "currency_contribution_to_return",
+      "category": "performance_attribution",
+      "description": "Portion of total portfolio return attributable to currency movements.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "{portfolio_return_base} - {portfolio_return_local}",
+        "arguments": {
+          "portfolio_return_base": "calc:portfolio_return_in_base_currency",
+          "portfolio_return_local": "calc:portfolio_return_in_local_currency"
+        }
+      },
+      "badge": "🟧",
+      "function_class": "DAX-Logical",
+      "functions_used": ["SUBTRACT"],
+      "governance": { "status": "golden" }
+    },
+    {
+      "node_id": "hedging_effectiveness",
+      "category": "performance_attribution",
+      "description": "Hedge P/L divided by exposure P/L.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "DIVIDE({hedge_pl}, {exposure_pl})",
+        "arguments": {
+          "hedge_pl": "field:hedge_profit_loss",
+          "exposure_pl": "field:exposure_profit_loss"
+        }
+      },
+      "badge": "🟧",
+      "function_class": "DAX-Logical",
+      "functions_used": ["DIVIDE"],
+      "governance": { "status": "golden" }
+    },
+    {
+      "node_id": "cta_balance",
+      "category": "regulatory",
+      "description": "Cumulative translation adjustment (CTA) reserve for FX translation of foreign operations.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "COALESCE({cta_prior}, 0) + {cta_movement}",
+        "arguments": {
+          "cta_prior": "field:cta_prior",
+          "cta_movement": "field:cta_movement"
+        }
+      },
+      "badge": "🟧",
+      "function_class": "DAX-Logical",
+      "functions_used": ["COALESCE", "ADD"],
+      "governance": { "status": "golden" }
+    },
+    {
+      "node_id": "realised_fx_gain_loss",
+      "category": "pnl",
+      "description": "FX gain/loss from settlement of FX transactions.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "{settlement_amount_base} - {contracted_amount_base}",
+        "arguments": {
+          "settlement_amount_base": "field:settlement_amount_base",
+          "contracted_amount_base": "field:contracted_amount_base"
+        }
+      },
+      "badge": "🟧",
+      "function_class": "DAX-Logical",
+      "functions_used": ["SUBTRACT"],
+      "governance": { "status": "golden" }
+    },
+    {
+      "node_id": "unrealised_fx_gain_loss",
+      "category": "pnl",
+      "description": "FX gain/loss from remeasurement of open positions.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "({current_fx_rate} - {prior_fx_rate}) * {open_position_foreign}",
+        "arguments": {
+          "current_fx_rate": "field:current_fx_rate",
+          "prior_fx_rate": "field:prior_fx_rate",
+          "open_position_foreign": "field:open_position_foreign"
+        }
+      },
+      "badge": "🟩",
+      "function_class": "DAX-Financial",
+      "functions_used": ["SUBTRACT", "MULTIPLY"],
+      "governance": { "status": "golden" }
+    }
+  ]
+}

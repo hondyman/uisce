@@ -1,0 +1,535 @@
+{
+  "bundle_id": "full_multi_dialect_unified_super_bundle",
+  "description": "Complete multi-dialect DAX-to-SQL translation for unified financial services super-bundle",
+  "version": "1.0.0",
+  "last_updated": "2025-09-13",
+  "engines": ["sql_server", "oracle", "postgres", "snowflake", "iceberg"],
+  "metrics": [
+    {
+      "node_id": "portfolio_allocation_pct",
+      "neutral_formula": "DIVIDE(SUMX(asset_class_table, asset_class_value), SUM(total_portfolio_value))",
+      "dax_formula": "DIVIDE(SUMX(asset_class_table, asset_class_value), SUM(total_portfolio_value))",
+      "sql_server": "SELECT CASE WHEN SUM(total_portfolio_value) <> 0 THEN SUM(asset_class_value) / SUM(total_portfolio_value) ELSE NULL END AS portfolio_allocation_pct FROM wealth_management",
+      "oracle": "SELECT CASE WHEN SUM(total_portfolio_value) <> 0 THEN SUM(asset_class_value) / SUM(total_portfolio_value) ELSE NULL END AS portfolio_allocation_pct FROM wealth_management",
+      "postgres": "SELECT CASE WHEN SUM(total_portfolio_value) <> 0 THEN SUM(asset_class_value) / SUM(total_portfolio_value) ELSE NULL END AS portfolio_allocation_pct FROM wealth_management",
+      "snowflake": "SELECT IFF(SUM(total_portfolio_value) <> 0, SUM(asset_class_value) / SUM(total_portfolio_value), NULL) AS portfolio_allocation_pct FROM wealth_management",
+      "iceberg": "SELECT IF(SUM(total_portfolio_value) != 0, SUM(asset_class_value) / SUM(total_portfolio_value), NULL) AS portfolio_allocation_pct FROM wealth_management",
+      "preaggregation": {
+        "enabled": true,
+        "grain": "monthly",
+        "rollups": ["quarterly", "yearly"],
+        "snapshot": false
+      },
+      "governance": "golden",
+      "audience": ["advisor", "portfolio_manager"]
+    },
+    {
+      "node_id": "net_interest_margin",
+      "neutral_formula": "DIVIDE(SUM(interest_income) - SUM(interest_expense), AVERAGE(earning_assets))",
+      "dax_formula": "DIVIDE(SUM(interest_income) - SUM(interest_expense), AVERAGE(earning_assets))",
+      "sql_server": "SELECT CASE WHEN AVG(earning_assets) <> 0 THEN (SUM(interest_income) - SUM(interest_expense)) / AVG(earning_assets) ELSE NULL END AS net_interest_margin FROM banking",
+      "oracle": "SELECT CASE WHEN AVG(earning_assets) <> 0 THEN (SUM(interest_income) - SUM(interest_expense)) / AVG(earning_assets) ELSE NULL END AS net_interest_margin FROM banking",
+      "postgres": "SELECT CASE WHEN AVG(earning_assets) <> 0 THEN (SUM(interest_income) - SUM(interest_expense)) / AVG(earning_assets) ELSE NULL END AS net_interest_margin FROM banking",
+      "snowflake": "SELECT IFF(AVG(earning_assets) <> 0, (SUM(interest_income) - SUM(interest_expense)) / AVG(earning_assets), NULL) AS net_interest_margin FROM banking",
+      "iceberg": "SELECT IF(AVG(earning_assets) != 0, (SUM(interest_income) - SUM(interest_expense)) / AVG(earning_assets), NULL) AS net_interest_margin FROM banking",
+      "preaggregation": {
+        "enabled": true,
+        "grain": "monthly",
+        "rollups": ["quarterly", "yearly"],
+        "snapshot": false
+      },
+      "governance": "golden",
+      "audience": ["executive", "treasury", "risk"]
+    },
+    {
+      "node_id": "loss_ratio",
+      "neutral_formula": "DIVIDE(SUM(incurred_losses), SUM(earned_premiums))",
+      "dax_formula": "DIVIDE(SUM(incurred_losses), SUM(earned_premiums))",
+      "sql_server": "SELECT CASE WHEN SUM(earned_premiums) <> 0 THEN SUM(incurred_losses) / SUM(earned_premiums) ELSE NULL END AS loss_ratio FROM insurance",
+      "oracle": "SELECT CASE WHEN SUM(earned_premiums) <> 0 THEN SUM(incurred_losses) / SUM(earned_premiums) ELSE NULL END AS loss_ratio FROM insurance",
+      "postgres": "SELECT CASE WHEN SUM(earned_premiums) <> 0 THEN SUM(incurred_losses) / SUM(earned_premiums) ELSE NULL END AS loss_ratio FROM insurance",
+      "snowflake": "SELECT IFF(SUM(earned_premiums) <> 0, SUM(incurred_losses) / SUM(earned_premiums), NULL) AS loss_ratio FROM insurance",
+      "iceberg": "SELECT IF(SUM(earned_premiums) != 0, SUM(incurred_losses) / SUM(earned_premiums), NULL) AS loss_ratio FROM insurance",
+      "preaggregation": {
+        "enabled": true,
+        "grain": "monthly",
+        "rollups": ["quarterly", "yearly"],
+        "snapshot": false
+      },
+      "governance": "golden",
+      "audience": ["executive", "risk", "actuary"]
+    },
+    {
+      "node_id": "value_at_risk",
+      "neutral_formula": "PERCENTILEX.INC(loss_distribution, confidence_level)",
+      "dax_formula": "PERCENTILEX.INC(loss_distribution, confidence_level)",
+      "sql_server": "SELECT PERCENTILE_CONT(confidence_level) WITHIN GROUP (ORDER BY loss_amount) AS value_at_risk FROM capital_markets",
+      "oracle": "SELECT PERCENTILE_CONT(confidence_level) WITHIN GROUP (ORDER BY loss_amount) AS value_at_risk FROM capital_markets",
+      "postgres": "SELECT PERCENTILE_CONT(confidence_level) WITHIN GROUP (ORDER BY loss_amount) AS value_at_risk FROM capital_markets",
+      "snowflake": "SELECT PERCENTILE_CONT(confidence_level) WITHIN GROUP (ORDER BY loss_amount) AS value_at_risk FROM capital_markets",
+      "iceberg": "SELECT PERCENTILE_CONT(confidence_level) WITHIN GROUP (ORDER BY loss_amount) AS value_at_risk FROM capital_markets",
+      "preaggregation": {
+        "enabled": true,
+        "grain": "daily",
+        "rollups": ["weekly", "monthly"],
+        "snapshot": false
+      },
+      "governance": "draft",
+      "audience": ["risk", "portfolio_manager"]
+    },
+    {
+      "node_id": "yield_to_maturity",
+      "neutral_formula": "YIELD(settlement_date, maturity_date, coupon_rate, price, redemption, frequency, basis)",
+      "dax_formula": "YIELD(settlement_date, maturity_date, coupon_rate, price, redemption, frequency, basis)",
+      "sql_server": "SELECT dbo.YIELD_FUNCTION(settlement_date, maturity_date, coupon_rate, price, redemption, frequency, basis) AS yield_to_maturity FROM fixed_income",
+      "oracle": "SELECT YIELD_FUNCTION(settlement_date, maturity_date, coupon_rate, price, redemption, frequency, basis) AS yield_to_maturity FROM fixed_income",
+      "postgres": "SELECT yield_function(settlement_date, maturity_date, coupon_rate, price, redemption, frequency, basis) AS yield_to_maturity FROM fixed_income",
+      "snowflake": "SELECT YIELD_FUNCTION(settlement_date, maturity_date, coupon_rate, price, redemption, frequency, basis) AS yield_to_maturity FROM fixed_income",
+      "iceberg": "SELECT yield_function(settlement_date, maturity_date, coupon_rate, price, redemption, frequency, basis) AS yield_to_maturity FROM fixed_income",
+      "preaggregation": {
+        "enabled": true,
+        "grain": "monthly",
+        "rollups": ["quarterly", "yearly"],
+        "snapshot": false
+      },
+      "governance": "golden",
+      "audience": ["portfolio_manager", "risk"]
+    },
+    {
+      "node_id": "esg_composite_score",
+      "neutral_formula": "(E_score * E_weight) + (S_score * S_weight) + (G_score * G_weight)",
+      "dax_formula": "(E_score * E_weight) + (S_score * S_weight) + (G_score * G_weight)",
+      "sql_server": "SELECT (E_score * E_weight) + (S_score * S_weight) + (G_score * G_weight) AS esg_composite_score FROM esg",
+      "oracle": "SELECT (E_score * E_weight) + (S_score * S_weight) + (G_score * G_weight) AS esg_composite_score FROM esg",
+      "postgres": "SELECT (E_score * E_weight) + (S_score * S_weight) + (G_score * G_weight) AS esg_composite_score FROM esg",
+      "snowflake": "SELECT (E_score * E_weight) + (S_score * S_weight) + (G_score * G_weight) AS esg_composite_score FROM esg",
+      "iceberg": "SELECT (E_score * E_weight) + (S_score * S_weight) + (G_score * G_weight) AS esg_composite_score FROM esg",
+      "preaggregation": {
+        "enabled": true,
+        "grain": "quarterly",
+        "rollups": ["yearly"],
+        "snapshot": false
+      },
+      "governance": "golden",
+      "audience": ["portfolio_manager", "impact_team"]
+    },
+    {
+      "node_id": "carbon_intensity",
+      "neutral_formula": "DIVIDE(SUM(emissions), SUM(revenue))",
+      "dax_formula": "DIVIDE(SUM(emissions), SUM(revenue))",
+      "sql_server": "SELECT CASE WHEN SUM(revenue) <> 0 THEN SUM(emissions) / SUM(revenue) ELSE NULL END AS carbon_intensity FROM esg",
+      "oracle": "SELECT CASE WHEN SUM(revenue) <> 0 THEN SUM(emissions) / SUM(revenue) ELSE NULL END AS carbon_intensity FROM esg",
+      "postgres": "SELECT CASE WHEN SUM(revenue) <> 0 THEN SUM(emissions) / SUM(revenue) ELSE NULL END AS carbon_intensity FROM esg",
+      "snowflake": "SELECT IFF(SUM(revenue) <> 0, SUM(emissions) / SUM(revenue), NULL) AS carbon_intensity FROM esg",
+      "iceberg": "SELECT IF(SUM(revenue) != 0, SUM(emissions) / SUM(revenue), NULL) AS carbon_intensity FROM esg",
+      "preaggregation": {
+        "enabled": true,
+        "grain": "yearly",
+        "rollups": [],
+        "snapshot": true
+      },
+      "governance": "golden",
+      "audience": ["impact_team", "regulator"]
+    },
+    {
+      "node_id": "renewable_energy_pct",
+      "neutral_formula": "DIVIDE(SUM(renewable_energy), SUM(total_energy))",
+      "dax_formula": "DIVIDE(SUM(renewable_energy), SUM(total_energy))",
+      "sql_server": "SELECT CASE WHEN SUM(total_energy) <> 0 THEN SUM(renewable_energy) / SUM(total_energy) ELSE NULL END AS renewable_energy_pct FROM esg",
+      "oracle": "SELECT CASE WHEN SUM(total_energy) <> 0 THEN SUM(renewable_energy) / SUM(total_energy) ELSE NULL END AS renewable_energy_pct FROM esg",
+      "postgres": "SELECT CASE WHEN SUM(total_energy) <> 0 THEN SUM(renewable_energy) / SUM(total_energy) ELSE NULL END AS renewable_energy_pct FROM esg",
+      "snowflake": "SELECT IFF(SUM(total_energy) <> 0, SUM(renewable_energy) / SUM(total_energy), NULL) AS renewable_energy_pct FROM esg",
+      "iceberg": "SELECT IF(SUM(total_energy) != 0, SUM(renewable_energy) / SUM(total_energy), NULL) AS renewable_energy_pct FROM esg",
+      "preaggregation": {
+        "enabled": true,
+        "grain": "yearly",
+        "rollups": [],
+        "snapshot": true
+      },
+      "governance": "golden",
+      "audience": ["impact_team", "investor"]
+    },
+    {
+      "node_id": "board_diversity_pct",
+      "neutral_formula": "DIVIDE(SUM(diverse_board_members), SUM(total_board_members))",
+      "dax_formula": "DIVIDE(SUM(diverse_board_members), SUM(total_board_members))",
+      "sql_server": "SELECT CASE WHEN SUM(total_board_members) <> 0 THEN SUM(diverse_board_members) / SUM(total_board_members) ELSE NULL END AS board_diversity_pct FROM esg",
+      "oracle": "SELECT CASE WHEN SUM(total_board_members) <> 0 THEN SUM(diverse_board_members) / SUM(total_board_members) ELSE NULL END AS board_diversity_pct FROM esg",
+      "postgres": "SELECT CASE WHEN SUM(total_board_members) <> 0 THEN SUM(diverse_board_members) / SUM(total_board_members) ELSE NULL END AS board_diversity_pct FROM esg",
+      "snowflake": "SELECT IFF(SUM(total_board_members) <> 0, SUM(diverse_board_members) / SUM(total_board_members), NULL) AS board_diversity_pct FROM esg",
+      "iceberg": "SELECT IF(SUM(total_board_members) != 0, SUM(diverse_board_members) / SUM(total_board_members), NULL) AS board_diversity_pct FROM esg",
+      "preaggregation": {
+        "enabled": true,
+        "grain": "yearly",
+        "rollups": [],
+        "snapshot": true
+      },
+      "governance": "golden",
+      "audience": ["impact_team", "investor"]
+    },
+    {
+      "node_id": "sustainable_revenue_pct",
+      "neutral_formula": "DIVIDE(SUM(sustainable_revenue), SUM(total_revenue))",
+      "dax_formula": "DIVIDE(SUM(sustainable_revenue), SUM(total_revenue))",
+      "sql_server": "SELECT CASE WHEN SUM(total_revenue) <> 0 THEN SUM(sustainable_revenue) / SUM(total_revenue) ELSE NULL END AS sustainable_revenue_pct FROM esg",
+      "oracle": "SELECT CASE WHEN SUM(total_revenue) <> 0 THEN SUM(sustainable_revenue) / SUM(total_revenue) ELSE NULL END AS sustainable_revenue_pct FROM esg",
+      "postgres": "SELECT CASE WHEN SUM(total_revenue) <> 0 THEN SUM(sustainable_revenue) / SUM(total_revenue) ELSE NULL END AS sustainable_revenue_pct FROM esg",
+      "snowflake": "SELECT IFF(SUM(total_revenue) <> 0, SUM(sustainable_revenue) / SUM(total_revenue), NULL) AS sustainable_revenue_pct FROM esg",
+      "iceberg": "SELECT IF(SUM(total_revenue) != 0, SUM(sustainable_revenue) / SUM(total_revenue), NULL) AS sustainable_revenue_pct FROM esg",
+      "preaggregation": {
+        "enabled": true,
+        "grain": "yearly",
+        "rollups": [],
+        "snapshot": true
+      },
+      "governance": "golden",
+      "audience": ["impact_team", "investor"]
+    },
+    {
+      "node_id": "esg_adjusted_return",
+      "neutral_formula": "portfolio_return + (esg_score * adjustment_factor)",
+      "dax_formula": "portfolio_return + (esg_score * adjustment_factor)",
+      "sql_server": "SELECT portfolio_return + (esg_score * adjustment_factor) AS esg_adjusted_return FROM esg",
+      "oracle": "SELECT portfolio_return + (esg_score * adjustment_factor) AS esg_adjusted_return FROM esg",
+      "postgres": "SELECT portfolio_return + (esg_score * adjustment_factor) AS esg_adjusted_return FROM esg",
+      "snowflake": "SELECT portfolio_return + (esg_score * adjustment_factor) AS esg_adjusted_return FROM esg",
+      "iceberg": "SELECT portfolio_return + (esg_score * adjustment_factor) AS esg_adjusted_return FROM esg",
+      "preaggregation": {
+        "enabled": true,
+        "grain": "monthly",
+        "rollups": ["quarterly", "yearly"],
+        "snapshot": false
+      },
+      "governance": "golden",
+      "audience": ["portfolio_manager", "impact_team"]
+    },
+    {
+      "node_id": "green_alpha",
+      "neutral_formula": "esg_adjusted_return - benchmark_return",
+      "dax_formula": "esg_adjusted_return - benchmark_return",
+      "sql_server": "SELECT esg_adjusted_return - benchmark_return AS green_alpha FROM esg",
+      "oracle": "SELECT esg_adjusted_return - benchmark_return AS green_alpha FROM esg",
+      "postgres": "SELECT esg_adjusted_return - benchmark_return AS green_alpha FROM esg",
+      "snowflake": "SELECT esg_adjusted_return - benchmark_return AS green_alpha FROM esg",
+      "iceberg": "SELECT esg_adjusted_return - benchmark_return AS green_alpha FROM esg",
+      "preaggregation": {
+        "enabled": true,
+        "grain": "monthly",
+        "rollups": ["quarterly", "yearly"],
+        "snapshot": false
+      },
+      "governance": "golden",
+      "audience": ["portfolio_manager", "impact_team"]
+    },
+    {
+      "node_id": "irr_private_equity",
+      "neutral_formula": "XIRR(cashflows, dates)",
+      "dax_formula": "XIRR(cashflows, dates)",
+      "sql_server": "SELECT dbo.XIRR_FUNCTION(cashflows, dates) AS irr_private_equity FROM alternatives",
+      "oracle": "SELECT XIRR_FUNCTION(cashflows, dates) AS irr_private_equity FROM alternatives",
+      "postgres": "SELECT xirr_function(cashflows, dates) AS irr_private_equity FROM alternatives",
+      "snowflake": "SELECT XIRR_FUNCTION(cashflows, dates) AS irr_private_equity FROM alternatives",
+      "iceberg": "SELECT xirr_function(cashflows, dates) AS irr_private_equity FROM alternatives",
+      "preaggregation": {
+        "enabled": true,
+        "grain": "quarterly",
+        "rollups": ["yearly"],
+        "snapshot": false
+      },
+      "governance": "golden",
+      "audience": ["portfolio_manager", "investor"]
+    },
+    {
+      "node_id": "moic",
+      "neutral_formula": "DIVIDE(SUM(distributions), SUM(invested_capital))",
+      "dax_formula": "DIVIDE(SUM(distributions), SUM(invested_capital))",
+      "sql_server": "SELECT CASE WHEN SUM(invested_capital) <> 0 THEN SUM(distributions) / SUM(invested_capital) ELSE NULL END AS moic FROM alternatives",
+      "oracle": "SELECT CASE WHEN SUM(invested_capital) <> 0 THEN SUM(distributions) / SUM(invested_capital) ELSE NULL END AS moic FROM alternatives",
+      "postgres": "SELECT CASE WHEN SUM(invested_capital) <> 0 THEN SUM(distributions) / SUM(invested_capital) ELSE NULL END AS moic FROM alternatives",
+      "snowflake": "SELECT IFF(SUM(invested_capital) <> 0, SUM(distributions) / SUM(invested_capital), NULL) AS moic FROM alternatives",
+      "iceberg": "SELECT IF(SUM(invested_capital) != 0, SUM(distributions) / SUM(invested_capital), NULL) AS moic FROM alternatives",
+      "preaggregation": {
+        "enabled": true,
+        "grain": "quarterly",
+        "rollups": ["yearly"],
+        "snapshot": false
+      },
+      "governance": "golden",
+      "audience": ["portfolio_manager", "investor"]
+    },
+    {
+      "node_id": "tvpi",
+      "neutral_formula": "DIVIDE(SUM(distributions) + SUM(remaining_value), SUM(invested_capital))",
+      "dax_formula": "DIVIDE(SUM(distributions) + SUM(remaining_value), SUM(invested_capital))",
+      "sql_server": "SELECT CASE WHEN SUM(invested_capital) <> 0 THEN (SUM(distributions) + SUM(remaining_value)) / SUM(invested_capital) ELSE NULL END AS tvpi FROM alternatives",
+      "oracle": "SELECT CASE WHEN SUM(invested_capital) <> 0 THEN (SUM(distributions) + SUM(remaining_value)) / SUM(invested_capital) ELSE NULL END AS tvpi FROM alternatives",
+      "postgres": "SELECT CASE WHEN SUM(invested_capital) <> 0 THEN (SUM(distributions) + SUM(remaining_value)) / SUM(invested_capital) ELSE NULL END AS tvpi FROM alternatives",
+      "snowflake": "SELECT IFF(SUM(invested_capital) <> 0, (SUM(distributions) + SUM(remaining_value)) / SUM(invested_capital), NULL) AS tvpi FROM alternatives",
+      "iceberg": "SELECT IF(SUM(invested_capital) != 0, (SUM(distributions) + SUM(remaining_value)) / SUM(invested_capital), NULL) AS tvpi FROM alternatives",
+      "preaggregation": {
+        "enabled": true,
+        "grain": "quarterly",
+        "rollups": ["yearly"],
+        "snapshot": false
+      },
+      "governance": "golden",
+      "audience": ["portfolio_manager", "investor"]
+    },
+    {
+      "node_id": "cet1_ratio",
+      "neutral_formula": "DIVIDE(SUM(cet1_capital), SUM(risk_weighted_assets))",
+      "dax_formula": "DIVIDE(SUM(cet1_capital), SUM(risk_weighted_assets))",
+      "sql_server": "SELECT CASE WHEN SUM(risk_weighted_assets) <> 0 THEN SUM(cet1_capital) / SUM(risk_weighted_assets) ELSE NULL END AS cet1_ratio FROM banking",
+      "oracle": "SELECT CASE WHEN SUM(risk_weighted_assets) <> 0 THEN SUM(cet1_capital) / SUM(risk_weighted_assets) ELSE NULL END AS cet1_ratio FROM banking",
+      "postgres": "SELECT CASE WHEN SUM(risk_weighted_assets) <> 0 THEN SUM(cet1_capital) / SUM(risk_weighted_assets) ELSE NULL END AS cet1_ratio FROM banking",
+      "snowflake": "SELECT IFF(SUM(risk_weighted_assets) <> 0, SUM(cet1_capital) / SUM(risk_weighted_assets), NULL) AS cet1_ratio FROM banking",
+      "iceberg": "SELECT IF(SUM(risk_weighted_assets) != 0, SUM(cet1_capital) / SUM(risk_weighted_assets), NULL) AS cet1_ratio FROM banking",
+      "preaggregation": {
+        "enabled": true,
+        "grain": "monthly",
+        "rollups": ["quarterly", "yearly"],
+        "snapshot": false
+      },
+      "governance": "golden",
+      "audience": ["executive", "regulator", "risk"]
+    },
+    {
+      "node_id": "liquidity_coverage_ratio",
+      "neutral_formula": "DIVIDE(SUM(hql_assets), SUM(net_cash_outflows_30d))",
+      "dax_formula": "DIVIDE(SUM(hql_assets), SUM(net_cash_outflows_30d))",
+      "sql_server": "SELECT CASE WHEN SUM(net_cash_outflows_30d) <> 0 THEN SUM(hql_assets) / SUM(net_cash_outflows_30d) ELSE NULL END AS liquidity_coverage_ratio FROM banking",
+      "oracle": "SELECT CASE WHEN SUM(net_cash_outflows_30d) <> 0 THEN SUM(hql_assets) / SUM(net_cash_outflows_30d) ELSE NULL END AS liquidity_coverage_ratio FROM banking",
+      "postgres": "SELECT CASE WHEN SUM(net_cash_outflows_30d) <> 0 THEN SUM(hql_assets) / SUM(net_cash_outflows_30d) ELSE NULL END AS liquidity_coverage_ratio FROM banking",
+      "snowflake": "SELECT IFF(SUM(net_cash_outflows_30d) <> 0, SUM(hql_assets) / SUM(net_cash_outflows_30d), NULL) AS liquidity_coverage_ratio FROM banking",
+      "iceberg": "SELECT IF(SUM(net_cash_outflows_30d) != 0, SUM(hql_assets) / SUM(net_cash_outflows_30d), NULL) AS liquidity_coverage_ratio FROM banking",
+      "preaggregation": {
+        "enabled": true,
+        "grain": "monthly",
+        "rollups": ["quarterly", "yearly"],
+        "snapshot": false
+      },
+      "governance": "golden",
+      "audience": ["treasury", "risk", "regulator"]
+    },
+    {
+      "node_id": "expected_credit_loss",
+      "neutral_formula": "SUM(probability_of_default * exposure_at_default * loss_given_default)",
+      "dax_formula": "SUM(probability_of_default * exposure_at_default * loss_given_default)",
+      "sql_server": "SELECT SUM(probability_of_default * exposure_at_default * loss_given_default) AS expected_credit_loss FROM risk",
+      "oracle": "SELECT SUM(probability_of_default * exposure_at_default * loss_given_default) AS expected_credit_loss FROM risk",
+      "postgres": "SELECT SUM(probability_of_default * exposure_at_default * loss_given_default) AS expected_credit_loss FROM risk",
+      "snowflake": "SELECT SUM(probability_of_default * exposure_at_default * loss_given_default) AS expected_credit_loss FROM risk",
+      "iceberg": "SELECT SUM(probability_of_default * exposure_at_default * loss_given_default) AS expected_credit_loss FROM risk",
+      "preaggregation": {
+        "enabled": true,
+        "grain": "monthly",
+        "rollups": ["quarterly", "yearly"],
+        "snapshot": false
+      },
+      "governance": "golden",
+      "audience": ["risk", "credit_officer"]
+    },
+    {
+      "node_id": "counterparty_valuation_adjustment",
+      "neutral_formula": "SUM(valuation_adjustment)",
+      "dax_formula": "SUM(valuation_adjustment)",
+      "sql_server": "SELECT SUM(valuation_adjustment) AS counterparty_valuation_adjustment FROM risk",
+      "oracle": "SELECT SUM(valuation_adjustment) AS counterparty_valuation_adjustment FROM risk",
+      "postgres": "SELECT SUM(valuation_adjustment) AS counterparty_valuation_adjustment FROM risk",
+      "snowflake": "SELECT SUM(valuation_adjustment) AS counterparty_valuation_adjustment FROM risk",
+      "iceberg": "SELECT SUM(valuation_adjustment) AS counterparty_valuation_adjustment FROM risk",
+      "preaggregation": {
+        "enabled": true,
+        "grain": "monthly",
+        "rollups": ["quarterly", "yearly"],
+        "snapshot": false
+      },
+      "governance": "golden",
+      "audience": ["risk", "treasury"]
+    },
+    {
+      "node_id": "client_profitability",
+      "neutral_formula": "DIVIDE(SUM(revenue) - SUM(cost), SUM(revenue))",
+      "dax_formula": "DIVIDE(SUM(revenue) - SUM(cost), SUM(revenue))",
+      "sql_server": "SELECT CASE WHEN SUM(revenue) <> 0 THEN (SUM(revenue) - SUM(cost)) / SUM(revenue) ELSE NULL END AS client_profitability FROM operations",
+      "oracle": "SELECT CASE WHEN SUM(revenue) <> 0 THEN (SUM(revenue) - SUM(cost)) / SUM(revenue) ELSE NULL END AS client_profitability FROM operations",
+      "postgres": "SELECT CASE WHEN SUM(revenue) <> 0 THEN (SUM(revenue) - SUM(cost)) / SUM(revenue) ELSE NULL END AS client_profitability FROM operations",
+      "snowflake": "SELECT IFF(SUM(revenue) <> 0, (SUM(revenue) - SUM(cost)) / SUM(revenue), NULL) AS client_profitability FROM operations",
+      "iceberg": "SELECT IF(SUM(revenue) != 0, (SUM(revenue) - SUM(cost)) / SUM(revenue), NULL) AS client_profitability FROM operations",
+      "preaggregation": {
+        "enabled": true,
+        "grain": "monthly",
+        "rollups": ["quarterly", "yearly"],
+        "snapshot": false
+      },
+      "governance": "golden",
+      "audience": ["operations", "executive"]
+    },
+    {
+      "node_id": "share_of_wallet",
+      "neutral_formula": "DIVIDE(SUM(client_revenue), SUM(total_client_spend))",
+      "dax_formula": "DIVIDE(SUM(client_revenue), SUM(total_client_spend))",
+      "sql_server": "SELECT CASE WHEN SUM(total_client_spend) <> 0 THEN SUM(client_revenue) / SUM(total_client_spend) ELSE NULL END AS share_of_wallet FROM operations",
+      "oracle": "SELECT CASE WHEN SUM(total_client_spend) <> 0 THEN SUM(client_revenue) / SUM(total_client_spend) ELSE NULL END AS share_of_wallet FROM operations",
+      "postgres": "SELECT CASE WHEN SUM(total_client_spend) <> 0 THEN SUM(client_revenue) / SUM(total_client_spend) ELSE NULL END AS share_of_wallet FROM operations",
+      "snowflake": "SELECT IFF(SUM(total_client_spend) <> 0, SUM(client_revenue) / SUM(total_client_spend), NULL) AS share_of_wallet FROM operations",
+      "iceberg": "SELECT IF(SUM(total_client_spend) != 0, SUM(client_revenue) / SUM(total_client_spend), NULL) AS share_of_wallet FROM operations",
+      "preaggregation": {
+        "enabled": true,
+        "grain": "monthly",
+        "rollups": ["quarterly", "yearly"],
+        "snapshot": false
+      },
+      "governance": "golden",
+      "audience": ["operations", "sales"]
+    }
+  ],
+  "function_mapping_appendix": {
+    "description": "DAX-to-SQL function mapping reference for cross-engine consistency",
+    "mappings": [
+      {
+        "function_class": "Logical",
+        "dax_function": "DIVIDE(a,b,alt)",
+        "neutral_semantic": "Safe division",
+        "sql_server": "CASE WHEN b <> 0 THEN a / b ELSE alt END",
+        "oracle": "CASE WHEN b <> 0 THEN a / b ELSE alt END",
+        "postgres": "CASE WHEN b <> 0 THEN a / b ELSE alt END",
+        "snowflake": "IFF(b <> 0, a / b, alt)",
+        "iceberg": "IF(b != 0, a / b, alt)",
+        "notes": "Avoid division by zero"
+      },
+      {
+        "function_class": "Logical",
+        "dax_function": "COALESCE(a,b)",
+        "neutral_semantic": "First non-null",
+        "sql_server": "COALESCE(a,b)",
+        "oracle": "COALESCE(a,b)",
+        "postgres": "COALESCE(a,b)",
+        "snowflake": "COALESCE(a,b)",
+        "iceberg": "COALESCE(a,b)",
+        "notes": ""
+      },
+      {
+        "function_class": "Aggregator",
+        "dax_function": "SUM(column)",
+        "neutral_semantic": "Sum of values",
+        "sql_server": "SUM(column)",
+        "oracle": "SUM(column)",
+        "postgres": "SUM(column)",
+        "snowflake": "SUM(column)",
+        "iceberg": "SUM(column)",
+        "notes": ""
+      },
+      {
+        "function_class": "Iterator",
+        "dax_function": "SUMX(table,expr)",
+        "neutral_semantic": "Sum over filtered set",
+        "sql_server": "SUM(expr)",
+        "oracle": "SUM(expr)",
+        "postgres": "SUM(expr)",
+        "snowflake": "SUM(expr)",
+        "iceberg": "SUM(expr)",
+        "notes": "Push filter into WHERE"
+      },
+      {
+        "function_class": "Iterator",
+        "dax_function": "AVERAGEX(table,expr)",
+        "neutral_semantic": "Avg over filtered set",
+        "sql_server": "AVG(expr)",
+        "oracle": "AVG(expr)",
+        "postgres": "AVG(expr)",
+        "snowflake": "AVG(expr)",
+        "iceberg": "AVG(expr)",
+        "notes": ""
+      },
+      {
+        "function_class": "Iterator",
+        "dax_function": "FILTER(table,condition)",
+        "neutral_semantic": "Subset of table",
+        "sql_server": "WHERE condition",
+        "oracle": "WHERE condition",
+        "postgres": "WHERE condition",
+        "snowflake": "WHERE condition",
+        "iceberg": "WHERE condition",
+        "notes": ""
+      },
+      {
+        "function_class": "Aggregator",
+        "dax_function": "DISTINCTCOUNT(column)",
+        "neutral_semantic": "Distinct count",
+        "sql_server": "COUNT(DISTINCT column)",
+        "oracle": "COUNT(DISTINCT column)",
+        "postgres": "COUNT(DISTINCT column)",
+        "snowflake": "COUNT(DISTINCT column)",
+        "iceberg": "COUNT(DISTINCT column)",
+        "notes": ""
+      },
+      {
+        "function_class": "Time Intelligence",
+        "dax_function": "DATEADD(date,n,unit)",
+        "neutral_semantic": "Shift date",
+        "sql_server": "DATEADD(unit, n, date)",
+        "oracle": "date + INTERVAL 'n' unit",
+        "postgres": "date + INTERVAL 'n' unit",
+        "snowflake": "DATEADD(unit, n, date)",
+        "iceberg": "DATE_ADD(date, INTERVAL n unit)",
+        "notes": "Unit syntax varies"
+      },
+      {
+        "function_class": "Time Intelligence",
+        "dax_function": "TOTALYTD(expr,date)",
+        "neutral_semantic": "YTD sum",
+        "sql_server": "SUM(expr) OVER (PARTITION BY YEAR(date) ORDER BY date ROWS UNBOUNDED PRECEDING)",
+        "oracle": "SUM(expr) OVER (PARTITION BY EXTRACT(YEAR FROM date) ORDER BY date ROWS UNBOUNDED PRECEDING)",
+        "postgres": "SUM(expr) OVER (PARTITION BY EXTRACT(YEAR FROM date) ORDER BY date ROWS UNBOUNDED PRECEDING)",
+        "snowflake": "SUM(expr) OVER (PARTITION BY YEAR(date) ORDER BY date ROWS UNBOUNDED PRECEDING)",
+        "iceberg": "SUM(expr) OVER (PARTITION BY YEAR(date) ORDER BY date ROWS UNBOUNDED PRECEDING)",
+        "notes": "Needs date dimension"
+      },
+      {
+        "function_class": "Financial",
+        "dax_function": "PERCENTILEX.INC(table,expr,p)",
+        "neutral_semantic": "Percentile incl.",
+        "sql_server": "PERCENTILE_CONT(p) WITHIN GROUP (ORDER BY expr)",
+        "oracle": "PERCENTILE_CONT(p) WITHIN GROUP (ORDER BY expr)",
+        "postgres": "PERCENTILE_CONT(p) WITHIN GROUP (ORDER BY expr)",
+        "snowflake": "PERCENTILE_CONT(p) WITHIN GROUP (ORDER BY expr)",
+        "iceberg": "PERCENTILE_CONT(p) WITHIN GROUP (ORDER BY expr)",
+        "notes": ""
+      },
+      {
+        "function_class": "Financial",
+        "dax_function": "STDEVX.P(table,expr)",
+        "neutral_semantic": "Std dev population",
+        "sql_server": "STDEV(expr)",
+        "oracle": "STDDEV(expr)",
+        "postgres": "STDDEV(expr)",
+        "snowflake": "STDDEV(expr)",
+        "iceberg": "STDDEV(expr)",
+        "notes": ""
+      },
+      {
+        "function_class": "Financial",
+        "dax_function": "XIRR(cashflows,dates)",
+        "neutral_semantic": "IRR irregular",
+        "sql_server": "UDF",
+        "oracle": "UDF",
+        "postgres": "UDF",
+        "snowflake": "UDF",
+        "iceberg": "UDF",
+        "notes": "Implement per engine"
+      },
+      {
+        "function_class": "Financial",
+        "dax_function": "YIELD(...)",
+        "neutral_semantic": "Bond yield",
+        "sql_server": "UDF",
+        "oracle": "UDF",
+        "postgres": "UDF",
+        "snowflake": "UDF",
+        "iceberg": "UDF",
+        "notes": "Implement per engine"
+      }
+    ]
+  }
+}

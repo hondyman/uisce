@@ -1,0 +1,14 @@
+.pageContainer {
+  padding: 20px;
+}
+
+.searchRow {
+  margin-bottom: 16px;
+}
+
+.entityRow {
+  padding: 8px; display: flex; justify-content: space-between; align-items: center; cursor: pointer; border-bottom: 1px solid #f0f0f0;
+}
+.entityRow:hover {
+  background-color: #f9f9f9;
+}

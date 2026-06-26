@@ -1,0 +1,57 @@
+cube:
+  - name: positions
+    sql_table: portfolio.positions
+    data_source: starrocks  # Hot tier for real-time queries
+    
+    dimensions:
+      - name: tenant_id
+        sql: tenant_id
+        type: string
+        meta:
+          required_for_rls: true
+      
+      - name: account_id
+        sql: account_id
+        type: string
+      
+      - name: security_id
+        sql: security_id
+        type: string
+      
+      - name: trade_date
+        sql: trade_date
+        type: time
+    
+    measures:
+      - name: market_value
+        sql: market_value
+        type: sum
+        meta:
+          fs_class: FIN_STMT
+      
+      - name: quantity
+        sql: quantity
+        type: sum
+      
+      - name: position_count
+        type: count
+    
+    pre_aggregations:
+      - name: positions_by_date
+        type: rollup
+        external: true
+        data_source: starrocks
+        partition_granularity: day
+        time_dimension: trade_date
+        measure_references:
+          - market_value
+          - quantity
+          - position_count
+        dimension_references:
+          - tenant_id
+          - account_id
+          - security_id
+        refresh_key:
+          every: 5 minute
+          incremental: true
+          update_window: 7 day

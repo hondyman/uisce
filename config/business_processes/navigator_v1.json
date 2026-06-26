@@ -1,0 +1,399 @@
+{
+  "id": "navigator_v1",
+  "name": "Navigator: Cash Flow Forecasting & Capital Management",
+  "description": "Complete PE fund cash flow forecasting, reconciliation, and exposure management workflow",
+  "version": "1.0.0",
+  "created_date": "2025-10-30",
+  "audit_level": "full",
+  "retention_days": 3650,
+  "enabled": true,
+
+  "inputs": {
+    "commitment_id": "string (UUID)",
+    "fund_id": "string",
+    "commitment_amount": "number",
+    "paid_in_capital": "number",
+    "distributed_capital": "number",
+    "current_nav": "number",
+    "strategy_type": "string (buyout|vc|debt|infrastructure|etc)",
+    "target_irr_pct": "number",
+    "target_tvpi": "number",
+    "fund_status": "string"
+  },
+
+  "steps": [
+    {
+      "step_id": "step_1_load_commitment",
+      "name": "Load Fund Commitment Data",
+      "type": "data_entry",
+      "description": "Fetch commitment details from Navigator schema",
+      "enabled": true,
+      "timeout": "30s",
+      "retry_policy": {
+        "max_retries": 3,
+        "backoff_multiplier": 2.0,
+        "initial_interval": "1s"
+      },
+      "validations": [
+        {
+          "field": "commitment_amount",
+          "operator": "greater_than",
+          "value": 0,
+          "error_message": "Commitment amount must be positive"
+        },
+        {
+          "field": "paid_in_capital",
+          "operator": "less_than_or_equal",
+          "value": "{commitment_amount}",
+          "error_message": "PICC cannot exceed commitment"
+        }
+      ]
+    },
+
+    {
+      "step_id": "step_2_validate_authorization",
+      "name": "Validate Authorization (ABAC)",
+      "type": "integrate",
+      "description": "Check ABAC policies for fund access and forecast generation permission",
+      "activity": "ABACCheckNavigator",
+      "input_mapping": {
+        "commitment_id": "$.commitment_id",
+        "fund_manager": "$.fund_manager",
+        "fund_size": "$.commitment_amount"
+      },
+      "compensating_action": "deny_access",
+      "timeout": "10s"
+    },
+
+    {
+      "step_id": "step_3_calibrate_yale_model",
+      "name": "Calibrate Yale Model Parameters",
+      "type": "integrate",
+      "description": "Auto-calibrate call rate, growth rate, bow factor to target IRR/TVPI",
+      "activity": "CalibrateYaleModel",
+      "input_mapping": {
+        "commitment": "$.commitment_amount",
+        "picc": "$.paid_in_capital",
+        "dcc": "$.distributed_capital",
+        "nav": "$.current_nav",
+        "params": {
+          "callRate": 0.22,
+          "growthRate": 0.03,
+          "yieldRate": 0.00,
+          "bowFactor": 1.5,
+          "terminationYears": 10,
+          "targetIRR": "$.target_irr_pct",
+          "targetTVPI": "$.target_tvpi"
+        }
+      },
+      "output_mapping": {
+        "calibrated_params": "$.result"
+      },
+      "timeout": "60s",
+      "retry_policy": {
+        "max_retries": 2,
+        "backoff_multiplier": 1.5
+      }
+    },
+
+    {
+      "step_id": "step_4_generate_base_forecast",
+      "name": "Generate Base Case Forecast",
+      "type": "integrate",
+      "description": "Run Yale model with calibrated parameters for base case (50th percentile)",
+      "activity": "GenerateCashFlowForecast",
+      "input_mapping": {
+        "commitmentID": "$.commitment_id",
+        "commitment": "$.commitment_amount",
+        "picc": "$.paid_in_capital",
+        "dcc": "$.distributed_capital",
+        "nav": "$.current_nav",
+        "params": "$.calibrated_params"
+      },
+      "output_mapping": {
+        "base_forecast": "$.result"
+      },
+      "timeout": "120s",
+      "retry_policy": {
+        "max_retries": 1
+      }
+    },
+
+    {
+      "step_id": "step_5_run_monte_carlo",
+      "name": "Run Monte Carlo Simulation (10k scenarios)",
+      "type": "integrate",
+      "description": "Generate probabilistic forecasts with confidence intervals (p5, p25, p75, p95)",
+      "activity": "RunMonteCarloSimulation",
+      "input_mapping": {
+        "commitment": "$.commitment_amount",
+        "picc": "$.paid_in_capital",
+        "dcc": "$.distributed_capital",
+        "nav": "$.current_nav",
+        "params": "$.calibrated_params",
+        "numSimulations": 10000
+      },
+      "output_mapping": {
+        "stochastic_forecast": "$.result",
+        "mpc": "$.result.P95Percentile"
+      },
+      "timeout": "300s"
+    },
+
+    {
+      "step_id": "step_6_apply_benchmark_refinement",
+      "name": "Apply Benchmark Refinement",
+      "type": "integrate",
+      "description": "Adjust forecast based on fund pacing vs. comparable fund benchmarks",
+      "activity": "ApplyBenchmarkRefinement",
+      "input_mapping": {
+        "commitment": "$.commitment_amount",
+        "picc": "$.paid_in_capital",
+        "projections": "$.base_forecast.projections"
+      },
+      "output_mapping": {
+        "refined_forecast": "$.result"
+      },
+      "timeout": "60s"
+    },
+
+    {
+      "step_id": "step_7_store_forecast_result",
+      "name": "Store Forecast in Hasura",
+      "type": "integrate",
+      "description": "Insert cash_flow_forecasts records for base case and stochastic scenarios",
+      "activity": "HasuraInsertCashFlowForecasts",
+      "input_mapping": {
+        "commitment_id": "$.commitment_id",
+        "calibration_id": "$.calibration_id",
+        "base_forecast": "$.refined_forecast",
+        "stochastic_forecast": "$.stochastic_forecast",
+        "scenarios": ["base_case", "upside", "downside"]
+      },
+      "timeout": "30s"
+    },
+
+    {
+      "step_id": "step_8_update_commitment_snapshot",
+      "name": "Update Position Snapshot",
+      "type": "integrate",
+      "description": "Record latest PICC, DCC, NAV, TVPI in fund_position_snapshots",
+      "activity": "HasuraInsertPositionSnapshot",
+      "input_mapping": {
+        "commitment_id": "$.commitment_id",
+        "paid_in_capital": "$.paid_in_capital",
+        "distributed_capital": "$.distributed_capital",
+        "nav": "$.current_nav",
+        "snapshot_date": "now()"
+      },
+      "timeout": "30s"
+    },
+
+    {
+      "step_id": "step_9_check_liquidity_needs",
+      "name": "Calculate Liquidity Needs (12M MPC)",
+      "type": "condition",
+      "description": "Check if projected capital calls exceed available liquidity",
+      "conditions": {
+        "logic": "or",
+        "rules": [
+          {
+            "field": "$.mpc",
+            "operator": "greater_than",
+            "value": 5000000,
+            "label": "MPC > $5M"
+          },
+          {
+            "field": "$.stochastic_forecast.P95Percentile",
+            "operator": "greater_than",
+            "value": "$available_cash_balance",
+            "label": "MPC exceeds available cash"
+          }
+        ]
+      },
+      "true_step": "step_10_escalate_liquidity_alert",
+      "false_step": "step_12_publish_forecast_event"
+    },
+
+    {
+      "step_id": "step_10_escalate_liquidity_alert",
+      "name": "Escalate Liquidity Alert",
+      "type": "notify",
+      "description": "Notify treasury team of liquidity requirement",
+      "recipients": ["treasury_team"],
+      "template": "navigator_liquidity_alert",
+      "subject": "High capital call forecast - Action required",
+      "urgency": "high",
+      "data_mapping": {
+        "fund_name": "$.fund_name",
+        "mpc_12m": "$.mpc",
+        "p95_percentile": "$.stochastic_forecast.P95Percentile",
+        "liquidity_gap": "$.mpc - $cash_balance",
+        "recommendation": "Review commitment pacing or secure additional credit facility"
+      }
+    },
+
+    {
+      "step_id": "step_11_check_reconciliation_needed",
+      "name": "Check if Reconciliation Needed",
+      "type": "condition",
+      "description": "Determine if capital statement reconciliation is due",
+      "conditions": {
+        "logic": "or",
+        "rules": [
+          {
+            "field": "days_since_last_reconciliation",
+            "operator": "greater_than",
+            "value": 90,
+            "label": "More than 90 days since reconciliation"
+          }
+        ]
+      },
+      "true_step": "step_13_reconcile_capital_activity",
+      "false_step": "step_12_publish_forecast_event"
+    },
+
+    {
+      "step_id": "step_12_publish_forecast_event",
+      "name": "Publish Forecast Event",
+      "type": "integrate",
+      "description": "Publish to Redpanda/Kafka for downstream consumers (reporting, dashboards, alerts)",
+      "activity": "PublishToKafka",
+      "input_mapping": {
+        "exchange": "navigator.forecasts",
+        "routing_key": "forecast.generated",
+        "message": {
+          "event_type": "forecast_generated",
+          "commitment_id": "$.commitment_id",
+          "fund_name": "$.fund_name",
+          "base_forecast": "$.refined_forecast",
+          "stochastic_forecast": "$.stochastic_forecast",
+          "mpc": "$.mpc",
+          "timestamp": "now()"
+        }
+      },
+      "timeout": "15s"
+    },
+
+    {
+      "step_id": "step_13_reconcile_capital_activity",
+      "name": "Reconcile Capital Activity",
+      "type": "integrate",
+      "description": "Three-way matching: fund statement vs. bank transactions vs. internal ledger",
+      "activity": "ReconcileCapitalActivity",
+      "input_mapping": {
+        "commitment_id": "$.commitment_id",
+        "fund_statement_data": "$.fund_statement",
+        "bank_transactions": "$.bank_feed",
+        "internal_records": "$.internal_ledger",
+        "tolerance_pct": 0.5
+      },
+      "output_mapping": {
+        "reconciliation_result": "$.result"
+      },
+      "timeout": "180s",
+      "retry_policy": {
+        "max_retries": 2
+      }
+    },
+
+    {
+      "step_id": "step_14_store_reconciliation",
+      "name": "Store Reconciliation Results",
+      "type": "integrate",
+      "description": "Insert reconciliation_records with matching status and exceptions",
+      "activity": "HasuraInsertReconciliation",
+      "input_mapping": {
+        "commitment_id": "$.commitment_id",
+        "reconciliation_result": "$.reconciliation_result"
+      },
+      "timeout": "30s"
+    },
+
+    {
+      "step_id": "step_15_flag_exceptions",
+      "name": "Handle Reconciliation Exceptions",
+      "type": "condition",
+      "description": "Check for unmatched transactions or variance thresholds",
+      "conditions": {
+        "logic": "or",
+        "rules": [
+          {
+            "field": "$.reconciliation_result.status",
+            "operator": "equals",
+            "value": "exception",
+            "label": "Reconciliation exception"
+          },
+          {
+            "field": "$.reconciliation_result.variance_pct",
+            "operator": "greater_than",
+            "value": 1.0,
+            "label": "Variance > 1%"
+          }
+        ]
+      },
+      "true_step": "step_16_notify_operations",
+      "false_step": "step_17_complete"
+    },
+
+    {
+      "step_id": "step_16_notify_operations",
+      "name": "Notify Operations Team",
+      "type": "notify",
+      "description": "Create task for operations to manually reconcile exceptions",
+      "recipients": ["operations_team"],
+      "template": "navigator_reconciliation_exception",
+      "subject": "Reconciliation Exception - Manual Review Required",
+      "urgency": "medium",
+      "create_task": true
+    },
+
+    {
+      "step_id": "step_17_complete",
+      "name": "Workflow Complete",
+      "type": "complete",
+      "description": "Mark workflow as successfully completed",
+      "output_mapping": {
+        "commitment_id": "$.commitment_id",
+        "forecast_status": "generated",
+        "mpc": "$.mpc",
+        "reconciliation_status": "$.reconciliation_result.status"
+      }
+    }
+  ],
+
+  "error_handlers": [
+    {
+      "trigger": "any_step_failure",
+      "description": "Log all workflow failures to audit trail",
+      "action": "publish_audit_event",
+      "mapping": {
+        "event_type": "workflow_failed",
+        "commitment_id": "$.commitment_id",
+        "failed_step": "$.failed_step",
+        "error_message": "$.error",
+        "timestamp": "now()"
+      }
+    }
+  ],
+
+  "compensation_handlers": [
+    {
+      "trigger": "step_3_failure",
+      "description": "Use default Yale parameters if calibration fails",
+      "action": "use_defaults",
+      "params": {
+        "callRate": 0.20,
+        "growthRate": 0.025,
+        "bowFactor": 1.5,
+        "terminationYears": 10
+      }
+    },
+    {
+      "trigger": "step_5_failure",
+      "description": "Continue with base case if Monte Carlo fails",
+      "action": "continue",
+      "use_step": "step_6_apply_benchmark_refinement"
+    }
+  ]
+}

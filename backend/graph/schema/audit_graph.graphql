@@ -1,0 +1,332 @@
+# Audit Graph Schema Extensions
+# These extend the existing GraphQL schema with audit explorer and ChangeSet types
+
+scalar DateTime
+scalar JSON
+
+# ============================================
+# Enums
+# ============================================
+
+enum ChangeSetStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  APPLIED
+  FAILED
+}
+
+enum ChangeSetSource {
+  MANUAL
+  AI_PROPOSED
+  SYSTEM
+}
+
+enum AuditEventType {
+  AUDIT_EVENT
+  JOB_RUN
+  DAG_RUN
+  CHANGESET_EVENT
+  COMPLIANCE_EVENT
+  INCIDENT
+  SEMANTIC_SNAPSHOT
+  AI_SUGGESTION
+}
+
+enum ImpactedEntityType {
+  SEMANTIC_TERM
+  JOB
+  DAG
+  BUSINESS_TERM
+  PAGE
+  API
+  BO
+  DATASET
+}
+
+enum RiskLevel {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+# ============================================
+# Types
+# ============================================
+
+type ChangeSet {
+  id: ID!
+  tenantId: String!
+  title: String!
+  description: String!
+  status: ChangeSetStatus!
+  source: ChangeSetSource!
+  risk: RiskLevel
+  createdBy: String!
+  createdAt: DateTime!
+  updatedAt: DateTime!
+  approvedBy: String
+  approvedAt: DateTime
+  rejectionReason: String
+  history: [ChangeSetEvent!]!
+  impactedEntities: [ImpactedEntity!]!
+  sourceEventId: ID
+}
+
+type ChangeSetEvent {
+  id: ID!
+  type: String!
+  actor: String!
+  timestamp: DateTime!
+  details: JSON
+}
+
+type ImpactedEntity {
+  id: ID!
+  nodeId: ID!
+  entityType: ImpactedEntityType!
+  name: String
+  qualifiedPath: String
+}
+
+type ChangeSetConnection {
+  items: [ChangeSet!]!
+  totalCount: Int!
+}
+
+type AuditEvent {
+  id: ID!
+  type: AuditEventType!
+  tenantId: String!
+  timestamp: DateTime!
+  status: String
+  artifactType: String
+  artifactId: String
+  title: String
+  semanticContext: JSON
+  complianceContext: JSON
+  aiNarrative: JSON
+  metadata: JSON
+}
+
+type EntityAudit {
+  entityType: String!
+  entityId: String!
+  tenantIds: [String!]!
+  timeline: [AuditEvent!]!
+  changes: [AuditEvent!]!
+  compliance: [AuditEvent!]!
+  aiInsights: JSON
+}
+
+type Incident {
+  id: ID!
+  tenants: [String!]!
+  startTs: DateTime!
+  endTs: DateTime
+  eventCount: Int!
+  status: String!
+  aiRootCause: JSON
+  aiNarrative: JSON
+  relatedChangeSet: ChangeSet
+}
+
+type AIExplanation {
+  narrative: String!
+  rootCause: String!
+  blastRadius: String!
+  impactedTenants: [String!]
+  recommendedFix: String!
+  suggestedChangeSetSummary: String!
+  confidence: Float
+}
+
+type AIAssessment {
+  narrative: String!
+  riskLevel: RiskLevel!
+  riskRationale: String!
+  complianceNotes: String!
+  recommendedChecks: [String!]!
+}
+
+type AuditSummary {
+  tenantId: String!
+  totalAuditEvents: Int!
+  totalJobRuns: Int!
+  failedJobRuns: Int!
+  totalDAGRuns: Int!
+  failedDAGRuns: Int!
+  totalIncidents: Int!
+  totalComplianceEvents: Int!
+  appliedChangesets: Int!
+  lastEventTime: DateTime!
+}
+
+type RemediationChain {
+  initialFailure: AuditEvent!
+  aiSuggestion: JSON!
+  changeSet: ChangeSet!
+  semanticSnapshots: [JSON!]!
+  subsequentRuns: [AuditEvent!]!
+  successIndicators: [String!]!
+}
+
+# ============================================
+# Input Types
+# ============================================
+
+input ChangeSetFilter {
+  tenantIds: [String!]
+  status: [ChangeSetStatus!]
+  source: [ChangeSetSource!]
+  createdBy: [String!]
+  text: String
+  riskLevels: [RiskLevel!]
+}
+
+input Pagination {
+  limit: Int = 50
+  offset: Int = 0
+}
+
+input Sort {
+  field: String!
+  direction: String!
+}
+
+input AuditEventsFilter {
+  types: [AuditEventType!]
+  status: [String!]
+  artifactTypes: [String!]
+  riskLevels: [RiskLevel!]
+  actors: [String!]
+}
+
+input ImpactedEntityInput {
+  id: ID!
+  nodeId: ID!
+  entityType: ImpactedEntityType!
+}
+
+input ChangeSetFromAIInput {
+  title: String!
+  description: String!
+  tenantId: String!
+  sourceEventId: ID!
+  impactedEntities: [ImpactedEntityInput!]!
+}
+
+input AuditRecordInput {
+  id: ID!
+  type: AuditEventType!
+  tenantId: String!
+  timestamp: DateTime!
+  status: String
+  artifactType: String
+  artifactId: String
+  semanticContext: JSON
+  complianceContext: JSON
+  metadata: JSON
+}
+
+# ============================================
+# Query Extensions
+# ============================================
+
+extend type Query {
+  # ChangeSet queries
+  changeSets(
+    filter: ChangeSetFilter
+    pagination: Pagination
+    sort: Sort
+  ): ChangeSetConnection!
+
+  changeSet(id: ID!): ChangeSet
+
+  # Audit event queries
+  auditEvents(
+    tenantIds: [String!]!
+    from: DateTime!
+    to: DateTime!
+    filter: AuditEventsFilter
+    sort: Sort
+    pagination: Pagination
+  ): [AuditEvent!]!
+
+  auditEventById(id: ID!): AuditEvent
+
+  entityAudit(
+    entityType: String!
+    entityId: String!
+    tenantIds: [String!]!
+    from: DateTime!
+    to: DateTime!
+  ): EntityAudit!
+
+  # Incident queries
+  incidents(
+    tenantIds: [String!]!
+    from: DateTime!
+    to: DateTime!
+    sort: Sort
+    pagination: Pagination
+  ): [Incident!]!
+
+  incidentById(id: ID!): Incident!
+
+  # Summary queries
+  auditSummary(
+    tenantIds: [String!]!
+    from: DateTime!
+    to: DateTime!
+  ): [AuditSummary!]!
+
+  summarizeTenantActivity(
+    tenantId: String!
+    from: DateTime!
+    to: DateTime!
+  ): AIExplanation!
+
+  summarizeIncident(
+    incidentId: ID!
+  ): AIExplanation!
+
+  getRemediationChain(
+    initialEventId: ID!
+  ): RemediationChain
+}
+
+# ============================================
+# Mutation Extensions
+# ============================================
+
+extend type Mutation {
+  # ChangeSet mutations
+  createChangeSetFromAI(
+    input: ChangeSetFromAIInput!
+  ): ChangeSet!
+
+  createChangeSet(
+    input: ChangeSetFromAIInput!
+  ): ChangeSet!
+
+  approveChangeSet(
+    id: ID!
+  ): ChangeSet!
+
+  rejectChangeSet(
+    id: ID!
+    reason: String!
+  ): ChangeSet!
+
+  # AI mutations
+  explainAudit(
+    tenantIds: [String!]!
+    records: [AuditRecordInput!]!
+  ): AIExplanation!
+
+  assessChangeSet(
+    id: ID!
+  ): AIAssessment!
+}

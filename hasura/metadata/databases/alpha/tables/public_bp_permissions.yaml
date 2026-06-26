@@ -1,0 +1,19 @@
+table:
+  name: bp_permissions
+  schema: public
+select_permissions:
+  - role: user
+    permission:
+      columns:
+        - id
+        - tenant_id
+        - permission_key
+        - permission_name
+        - description
+        - resource_type
+        - action
+        - is_system
+        - created_at
+      filter:
+        tenant_id:
+          _eq: X-Hasura-Tenant-Id

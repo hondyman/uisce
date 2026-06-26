@@ -1,0 +1,2199 @@
+{
+  "version": 3,
+  "sources": [
+    {
+      "name": "alpha",
+      "kind": "postgres",
+      "tables": [
+        {
+          "table": {
+            "name": "alpha_datasource",
+            "schema": "public"
+          },
+          "array_relationships": [
+            {
+              "name": "tenant_product_datasources",
+              "using": {
+                "foreign_key_constraint_on": {
+                  "column": "alpha_tenant_instance_id",
+                  "table": {
+                    "name": "tenant_product_datasource",
+                    "schema": "public"
+                  }
+                }
+              }
+            }
+          ],
+          "select_permissions": [
+            {
+              "role": "anonymous",
+              "permission": {
+                "columns": [
+                  "id",
+                  "datasource_name",
+                  "datasource_code",
+                  "datasource_type"
+                ],
+                "filter": {}
+              }
+            },
+            {
+              "role": "steward",
+              "permission": {
+                "columns": [
+                  "id",
+                  "datasource_name",
+                  "datasource_code",
+                  "is_active",
+                  "config",
+                  "created_at",
+                  "updated_at",
+                  "datasource_type"
+                ],
+                "filter": {}
+              }
+            },
+            {
+              "role": "user",
+              "permission": {
+                "columns": [
+                  "id",
+                  "datasource_name",
+                  "datasource_code",
+                  "is_active",
+                  "config",
+                  "created_at",
+                  "updated_at",
+                  "datasource_type"
+                ],
+                "filter": {}
+              }
+            }
+          ]
+        },
+        {
+          "table": {
+            "name": "alpha_product",
+            "schema": "public"
+          },
+          "array_relationships": [
+            {
+              "name": "tenant_products",
+              "using": {
+                "foreign_key_constraint_on": {
+                  "column": "alpha_product_id",
+                  "table": {
+                    "name": "tenant_product",
+                    "schema": "public"
+                  }
+                }
+              }
+            }
+          ],
+          "select_permissions": [
+            {
+              "role": "anonymous",
+              "permission": {
+                "columns": [
+                  "id",
+                  "product_name",
+                  "is_active",
+                  "product_code"
+                ],
+                "filter": {}
+              }
+            },
+            {
+              "role": "steward",
+              "permission": {
+                "columns": [
+                  "id",
+                  "product_name",
+                  "is_active",
+                  "product_code",
+                  "status",
+                  "created_at",
+                  "updated_at"
+                ],
+                "filter": {}
+              }
+            },
+            {
+              "role": "user",
+              "permission": {
+                "columns": [
+                  "id",
+                  "product_name",
+                  "is_active",
+                  "product_code",
+                  "status",
+                  "created_at",
+                  "updated_at"
+                ],
+                "filter": {}
+              }
+            }
+          ]
+        },
+        {
+          "table": {
+            "name": "bp_execution_steps",
+            "schema": "public"
+          },
+          "object_relationships": [
+            {
+              "name": "execution",
+              "using": {
+                "foreign_key_constraint_on": "bp_execution_id"
+              }
+            }
+          ],
+          "insert_permissions": [
+            {
+              "role": "steward",
+              "permission": {
+                "check": {
+                  "execution": {
+                    "tenant_id": {
+                      "_eq": "X-Hasura-Tenant-Id"
+                    }
+                  }
+                },
+                "columns": [
+                  "bp_execution_id",
+                  "bp_step_id",
+                  "step_order",
+                  "step_status",
+                  "started_at",
+                  "completed_at",
+                  "duration_minutes",
+                  "result_data",
+                  "error_message",
+                  "assigned_to",
+                  "assigned_at",
+                  "completed_by"
+                ]
+              }
+            },
+            {
+              "role": "user",
+              "permission": {
+                "check": {
+                  "execution": {
+                    "tenant_id": {
+                      "_eq": "X-Hasura-Tenant-Id"
+                    }
+                  }
+                },
+                "columns": [
+                  "bp_execution_id",
+                  "bp_step_id",
+                  "step_order",
+                  "step_status",
+                  "started_at",
+                  "completed_at",
+                  "duration_minutes",
+                  "result_data",
+                  "error_message",
+                  "assigned_to",
+                  "assigned_at",
+                  "completed_by"
+                ]
+              }
+            }
+          ],
+          "select_permissions": [
+            {
+              "role": "anonymous",
+              "permission": {
+                "columns": [
+                  "id",
+                  "bp_execution_id",
+                  "step_order",
+                  "step_status",
+                  "started_at",
+                  "completed_at"
+                ],
+                "filter": {}
+              }
+            },
+            {
+              "role": "steward",
+              "permission": {
+                "columns": [
+                  "id",
+                  "bp_execution_id",
+                  "bp_step_id",
+                  "step_order",
+                  "step_status",
+                  "started_at",
+                  "completed_at",
+                  "duration_minutes",
+                  "result_data",
+                  "error_message",
+                  "assigned_to",
+                  "assigned_at",
+                  "completed_by"
+                ],
+                "filter": {
+                  "execution": {
+                    "tenant_id": {
+                      "_eq": "X-Hasura-Tenant-Id"
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "role": "user",
+              "permission": {
+                "columns": [
+                  "id",
+                  "bp_execution_id",
+                  "bp_step_id",
+                  "step_order",
+                  "step_status",
+                  "started_at",
+                  "completed_at",
+                  "duration_minutes",
+                  "result_data",
+                  "error_message",
+                  "assigned_to",
+                  "assigned_at",
+                  "completed_by"
+                ],
+                "filter": {
+                  "execution": {
+                    "tenant_id": {
+                      "_eq": "X-Hasura-Tenant-Id"
+                    }
+                  }
+                }
+              }
+            }
+          ],
+          "update_permissions": [
+            {
+              "role": "steward",
+              "permission": {
+                "columns": [
+                  "bp_step_id",
+                  "step_order",
+                  "step_status",
+                  "started_at",
+                  "completed_at",
+                  "duration_minutes",
+                  "result_data",
+                  "error_message",
+                  "assigned_to",
+                  "assigned_at",
+                  "completed_by"
+                ],
+                "filter": {
+                  "execution": {
+                    "tenant_id": {
+                      "_eq": "X-Hasura-Tenant-Id"
+                    }
+                  }
+                },
+                "check": null
+              }
+            },
+            {
+              "role": "user",
+              "permission": {
+                "columns": [
+                  "bp_step_id",
+                  "step_order",
+                  "step_status",
+                  "started_at",
+                  "completed_at",
+                  "duration_minutes",
+                  "result_data",
+                  "error_message",
+                  "assigned_to",
+                  "assigned_at",
+                  "completed_by"
+                ],
+                "filter": {
+                  "execution": {
+                    "tenant_id": {
+                      "_eq": "X-Hasura-Tenant-Id"
+                    }
+                  }
+                },
+                "check": null
+              }
+            }
+          ],
+          "delete_permissions": [
+            {
+              "role": "steward",
+              "permission": {
+                "filter": {
+                  "execution": {
+                    "tenant_id": {
+                      "_eq": "X-Hasura-Tenant-Id"
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        },
+        {
+          "table": {
+            "name": "bp_executions",
+            "schema": "public"
+          },
+          "object_relationships": [
+            {
+              "name": "business_process",
+              "using": {
+                "foreign_key_constraint_on": "business_process_id"
+              }
+            },
+            {
+              "name": "tenant",
+              "using": {
+                "foreign_key_constraint_on": "tenant_id"
+              }
+            }
+          ],
+          "array_relationships": [
+            {
+              "name": "execution_steps",
+              "using": {
+                "foreign_key_constraint_on": {
+                  "column": "bp_execution_id",
+                  "table": {
+                    "name": "bp_execution_steps",
+                    "schema": "public"
+                  }
+                }
+              }
+            }
+          ],
+          "insert_permissions": [
+            {
+              "role": "steward",
+              "permission": {
+                "check": {
+                  "tenant_id": {
+                    "_eq": "X-Hasura-Tenant-Id"
+                  }
+                },
+                "set": {
+                  "initiated_at": "now()"
+                },
+                "columns": [
+                  "tenant_id",
+                  "business_process_id",
+                  "workflow_id",
+                  "entity_id",
+                  "initiated_by",
+                  "execution_status",
+                  "current_step_order",
+                  "metadata"
+                ]
+              }
+            },
+            {
+              "role": "user",
+              "permission": {
+                "check": {
+                  "tenant_id": {
+                    "_eq": "X-Hasura-Tenant-Id"
+                  }
+                },
+                "set": {
+                  "initiated_at": "now()"
+                },
+                "columns": [
+                  "tenant_id",
+                  "business_process_id",
+                  "workflow_id",
+                  "entity_id",
+                  "initiated_by",
+                  "execution_status",
+                  "current_step_order",
+                  "metadata"
+                ]
+              }
+            }
+          ],
+          "select_permissions": [
+            {
+              "role": "anonymous",
+              "permission": {
+                "columns": [
+                  "id",
+                  "business_process_id",
+                  "execution_status",
+                  "initiated_at",
+                  "completed_at"
+                ],
+                "filter": {}
+              }
+            },
+            {
+              "role": "steward",
+              "permission": {
+                "columns": [
+                  "id",
+                  "tenant_id",
+                  "business_process_id",
+                  "workflow_id",
+                  "entity_id",
+                  "initiated_by",
+                  "initiated_at",
+                  "completed_at",
+                  "execution_status",
+                  "current_step_order",
+                  "total_duration_minutes",
+                  "error_message",
+                  "metadata"
+                ],
+                "filter": {
+                  "tenant_id": {
+                    "_eq": "X-Hasura-Tenant-Id"
+                  }
+                }
+              }
+            },
+            {
+              "role": "user",
+              "permission": {
+                "columns": [
+                  "id",
+                  "tenant_id",
+                  "business_process_id",
+                  "workflow_id",
+                  "entity_id",
+                  "initiated_by",
+                  "initiated_at",
+                  "completed_at",
+                  "execution_status",
+                  "current_step_order",
+                  "total_duration_minutes",
+                  "error_message",
+                  "metadata"
+                ],
+                "filter": {
+                  "tenant_id": {
+                    "_eq": "X-Hasura-Tenant-Id"
+                  }
+                }
+              }
+            }
+          ],
+          "update_permissions": [
+            {
+              "role": "steward",
+              "permission": {
+                "columns": [
+                  "execution_status",
+                  "current_step_order",
+                  "completed_at",
+                  "total_duration_minutes",
+                  "error_message",
+                  "metadata"
+                ],
+                "filter": {
+                  "tenant_id": {
+                    "_eq": "X-Hasura-Tenant-Id"
+                  }
+                },
+                "check": null
+              }
+            },
+            {
+              "role": "user",
+              "permission": {
+                "columns": [
+                  "execution_status",
+                  "current_step_order",
+                  "completed_at",
+                  "total_duration_minutes",
+                  "error_message",
+                  "metadata"
+                ],
+                "filter": {
+                  "tenant_id": {
+                    "_eq": "X-Hasura-Tenant-Id"
+                  }
+                },
+                "check": null
+              }
+            }
+          ],
+          "delete_permissions": [
+            {
+              "role": "steward",
+              "permission": {
+                "filter": {
+                  "tenant_id": {
+                    "_eq": "X-Hasura-Tenant-Id"
+                  }
+                }
+              }
+            }
+          ]
+        },
+        {
+          "table": {
+            "name": "bp_steps",
+            "schema": "public"
+          },
+          "object_relationships": [
+            {
+              "name": "business_process",
+              "using": {
+                "foreign_key_constraint_on": "process_id"
+              }
+            }
+          ],
+          "insert_permissions": [
+            {
+              "role": "steward",
+              "permission": {
+                "check": {
+                  "business_process": {
+                    "tenant_id": {
+                      "_eq": "X-Hasura-Tenant-Id"
+                    }
+                  }
+                },
+                "set": {
+                  "created_at": "now()"
+                },
+                "columns": [
+                  "process_id",
+                  "step_order",
+                  "step_type",
+                  "step_name",
+                  "duration_hours",
+                  "config"
+                ]
+              }
+            },
+            {
+              "role": "user",
+              "permission": {
+                "check": {
+                  "business_process": {
+                    "tenant_id": {
+                      "_eq": "X-Hasura-Tenant-Id"
+                    }
+                  }
+                },
+                "set": {
+                  "created_at": "now()"
+                },
+                "columns": [
+                  "process_id",
+                  "step_order",
+                  "step_type",
+                  "step_name",
+                  "duration_hours",
+                  "config"
+                ]
+              }
+            }
+          ],
+          "select_permissions": [
+            {
+              "role": "anonymous",
+              "permission": {
+                "columns": [
+                  "id",
+                  "process_id",
+                  "step_order",
+                  "step_type",
+                  "step_name",
+                  "duration_hours",
+                  "created_at"
+                ],
+                "filter": {}
+              }
+            },
+            {
+              "role": "steward",
+              "permission": {
+                "columns": [
+                  "id",
+                  "process_id",
+                  "step_order",
+                  "step_type",
+                  "step_name",
+                  "duration_hours",
+                  "config",
+                  "created_at"
+                ],
+                "filter": {
+                  "business_process": {
+                    "tenant_id": {
+                      "_eq": "X-Hasura-Tenant-Id"
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "role": "user",
+              "permission": {
+                "columns": [
+                  "id",
+                  "process_id",
+                  "step_order",
+                  "step_type",
+                  "step_name",
+                  "duration_hours",
+                  "config",
+                  "created_at"
+                ],
+                "filter": {
+                  "business_process": {
+                    "tenant_id": {
+                      "_eq": "X-Hasura-Tenant-Id"
+                    }
+                  }
+                }
+              }
+            }
+          ],
+          "update_permissions": [
+            {
+              "role": "steward",
+              "permission": {
+                "columns": [
+                  "step_order",
+                  "step_type",
+                  "step_name",
+                  "duration_hours",
+                  "config"
+                ],
+                "filter": {
+                  "business_process": {
+                    "tenant_id": {
+                      "_eq": "X-Hasura-Tenant-Id"
+                    }
+                  }
+                },
+                "check": null
+              }
+            },
+            {
+              "role": "user",
+              "permission": {
+                "columns": [
+                  "step_order",
+                  "step_type",
+                  "step_name",
+                  "duration_hours",
+                  "config"
+                ],
+                "filter": {
+                  "business_process": {
+                    "tenant_id": {
+                      "_eq": "X-Hasura-Tenant-Id"
+                    }
+                  }
+                },
+                "check": null
+              }
+            }
+          ],
+          "delete_permissions": [
+            {
+              "role": "steward",
+              "permission": {
+                "filter": {
+                  "business_process": {
+                    "tenant_id": {
+                      "_eq": "X-Hasura-Tenant-Id"
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        },
+        {
+          "table": {
+            "name": "business_processes",
+            "schema": "public"
+          },
+          "object_relationships": [
+            {
+              "name": "tenant",
+              "using": {
+                "foreign_key_constraint_on": "tenant_id"
+              }
+            }
+          ],
+          "array_relationships": [
+            {
+              "name": "executions",
+              "using": {
+                "foreign_key_constraint_on": {
+                  "column": "business_process_id",
+                  "table": {
+                    "name": "bp_executions",
+                    "schema": "public"
+                  }
+                }
+              }
+            },
+            {
+              "name": "steps",
+              "using": {
+                "foreign_key_constraint_on": {
+                  "column": "process_id",
+                  "table": {
+                    "name": "bp_steps",
+                    "schema": "public"
+                  }
+                }
+              }
+            }
+          ],
+          "insert_permissions": [
+            {
+              "role": "steward",
+              "permission": {
+                "check": {
+                  "tenant_id": {
+                    "_eq": "X-Hasura-Tenant-Id"
+                  }
+                },
+                "set": {
+                  "created_at": "now()"
+                },
+                "columns": [
+                  "tenant_id",
+                  "process_name"
+                ]
+              }
+            },
+            {
+              "role": "user",
+              "permission": {
+                "check": {
+                  "tenant_id": {
+                    "_eq": "X-Hasura-Tenant-Id"
+                  }
+                },
+                "set": {
+                  "created_at": "now()"
+                },
+                "columns": [
+                  "tenant_id",
+                  "process_name"
+                ]
+              }
+            }
+          ],
+          "select_permissions": [
+            {
+              "role": "anonymous",
+              "permission": {
+                "columns": [
+                  "id",
+                  "process_name",
+                  "created_at"
+                ],
+                "filter": {}
+              }
+            },
+            {
+              "role": "steward",
+              "permission": {
+                "columns": [
+                  "id",
+                  "tenant_id",
+                  "process_name",
+                  "created_at"
+                ],
+                "filter": {
+                  "tenant_id": {
+                    "_eq": "X-Hasura-Tenant-Id"
+                  }
+                }
+              }
+            },
+            {
+              "role": "user",
+              "permission": {
+                "columns": [
+                  "id",
+                  "tenant_id",
+                  "process_name",
+                  "created_at"
+                ],
+                "filter": {
+                  "tenant_id": {
+                    "_eq": "X-Hasura-Tenant-Id"
+                  }
+                }
+              }
+            }
+          ],
+          "update_permissions": [
+            {
+              "role": "steward",
+              "permission": {
+                "columns": [
+                  "process_name"
+                ],
+                "filter": {
+                  "tenant_id": {
+                    "_eq": "X-Hasura-Tenant-Id"
+                  }
+                },
+                "check": null
+              }
+            },
+            {
+              "role": "user",
+              "permission": {
+                "columns": [
+                  "process_name"
+                ],
+                "filter": {
+                  "tenant_id": {
+                    "_eq": "X-Hasura-Tenant-Id"
+                  }
+                },
+                "check": null
+              }
+            }
+          ],
+          "delete_permissions": [
+            {
+              "role": "steward",
+              "permission": {
+                "filter": {
+                  "tenant_id": {
+                    "_eq": "X-Hasura-Tenant-Id"
+                  }
+                }
+              }
+            }
+          ]
+        },
+        {
+          "table": {
+            "name": "catalog_edge",
+            "schema": "public"
+          },
+          "select_permissions": [
+            {
+              "role": "anonymous",
+              "permission": {
+                "columns": [
+                  "id",
+                  "tenant_datasource_id",
+                  "source_node_id",
+                  "target_node_id",
+                  "relationship_type",
+                  "properties",
+                  "created_at",
+                  "edge_type_id",
+                  "updated_at",
+                  "tenant_id",
+                  "core_id",
+                  "cardinality",
+                  "fk_table",
+                  "fk_column",
+                  "pk_table",
+                  "pk_column",
+                  "confidence",
+                  "suggested",
+                  "created_by"
+                ],
+                "filter": {}
+              }
+            },
+            {
+              "role": "steward",
+              "permission": {
+                "columns": [
+                  "id",
+                  "tenant_datasource_id",
+                  "source_node_id",
+                  "target_node_id",
+                  "relationship_type",
+                  "properties",
+                  "created_at",
+                  "edge_type_id",
+                  "updated_at",
+                  "tenant_id",
+                  "core_id",
+                  "cardinality",
+                  "fk_table",
+                  "fk_column",
+                  "pk_table",
+                  "pk_column",
+                  "confidence",
+                  "suggested",
+                  "created_by"
+                ],
+                "filter": {}
+              }
+            },
+            {
+              "role": "user",
+              "permission": {
+                "columns": [
+                  "id",
+                  "tenant_datasource_id",
+                  "source_node_id",
+                  "target_node_id",
+                  "relationship_type",
+                  "properties",
+                  "created_at",
+                  "edge_type_id",
+                  "updated_at",
+                  "tenant_id",
+                  "core_id",
+                  "cardinality",
+                  "fk_table",
+                  "fk_column",
+                  "pk_table",
+                  "pk_column",
+                  "confidence",
+                  "suggested",
+                  "created_by"
+                ],
+                "filter": {}
+              }
+            }
+          ]
+        },
+        {
+          "table": {
+            "name": "catalog_edge_type",
+            "schema": "public"
+          },
+          "select_permissions": [
+            {
+              "role": "anonymous",
+              "permission": {
+                "columns": [
+                  "id",
+                  "predicate",
+                  "description",
+                  "subject_node_type_id",
+                  "object_node_type_id",
+                  "properties",
+                  "is_active",
+                  "created_at",
+                  "updated_at",
+                  "tenant_id",
+                  "core_id"
+                ],
+                "filter": {}
+              }
+            },
+            {
+              "role": "steward",
+              "permission": {
+                "columns": [
+                  "id",
+                  "predicate",
+                  "description",
+                  "subject_node_type_id",
+                  "object_node_type_id",
+                  "properties",
+                  "is_active",
+                  "created_at",
+                  "updated_at",
+                  "tenant_id",
+                  "core_id"
+                ],
+                "filter": {}
+              }
+            },
+            {
+              "role": "user",
+              "permission": {
+                "columns": [
+                  "id",
+                  "predicate",
+                  "description",
+                  "subject_node_type_id",
+                  "object_node_type_id",
+                  "properties",
+                  "is_active",
+                  "created_at",
+                  "updated_at",
+                  "tenant_id",
+                  "core_id"
+                ],
+                "filter": {}
+              }
+            }
+          ]
+        },
+        {
+          "table": {
+            "name": "catalog_node",
+            "schema": "public"
+          },
+          "select_permissions": [
+            {
+              "role": "anonymous",
+              "permission": {
+                "columns": [
+                  "id",
+                  "tenant_datasource_id",
+                  "node_type_id",
+                  "node_name",
+                  "description",
+                  "properties",
+                  "qualified_path",
+                  "parent_id",
+                  "created_at",
+                  "updated_at",
+                  "tenant_id",
+                  "core_id",
+                  "is_alpha",
+                  "schema_hash",
+                  "lineage",
+                  "data_quality_contract",
+                  "sla",
+                  "steward_group",
+                  "golden_path",
+                  "parent_type_id",
+                  "config",
+                  "embedding"
+                ],
+                "filter": {}
+              }
+            },
+            {
+              "role": "steward",
+              "permission": {
+                "columns": [
+                  "id",
+                  "tenant_datasource_id",
+                  "node_type_id",
+                  "node_name",
+                  "description",
+                  "properties",
+                  "qualified_path",
+                  "parent_id",
+                  "created_at",
+                  "updated_at",
+                  "tenant_id",
+                  "core_id",
+                  "is_alpha",
+                  "schema_hash",
+                  "lineage",
+                  "data_quality_contract",
+                  "sla",
+                  "steward_group",
+                  "golden_path",
+                  "parent_type_id",
+                  "config",
+                  "embedding"
+                ],
+                "filter": {}
+              }
+            },
+            {
+              "role": "user",
+              "permission": {
+                "columns": [
+                  "id",
+                  "tenant_datasource_id",
+                  "node_type_id",
+                  "node_name",
+                  "description",
+                  "properties",
+                  "qualified_path",
+                  "parent_id",
+                  "created_at",
+                  "updated_at",
+                  "tenant_id",
+                  "core_id",
+                  "is_alpha",
+                  "schema_hash",
+                  "lineage",
+                  "data_quality_contract",
+                  "sla",
+                  "steward_group",
+                  "golden_path",
+                  "parent_type_id",
+                  "config",
+                  "embedding"
+                ],
+                "filter": {}
+              }
+            }
+          ]
+        },
+        {
+          "table": {
+            "name": "catalog_node_type",
+            "schema": "public"
+          },
+          "select_permissions": [
+            {
+              "role": "anonymous",
+              "permission": {
+                "columns": [
+                  "id",
+                  "tenant_dataource_id",
+                  "catalog_type_name",
+                  "description",
+                  "is_active",
+                  "parent_type_id",
+                  "config",
+                  "created_at",
+                  "updated_at",
+                  "tenant_id",
+                  "core_id",
+                  "properties"
+                ],
+                "filter": {}
+              }
+            },
+            {
+              "role": "steward",
+              "permission": {
+                "columns": [
+                  "id",
+                  "tenant_dataource_id",
+                  "catalog_type_name",
+                  "description",
+                  "is_active",
+                  "parent_type_id",
+                  "config",
+                  "created_at",
+                  "updated_at",
+                  "tenant_id",
+                  "core_id",
+                  "properties"
+                ],
+                "filter": {}
+              }
+            },
+            {
+              "role": "user",
+              "permission": {
+                "columns": [
+                  "id",
+                  "tenant_dataource_id",
+                  "catalog_type_name",
+                  "description",
+                  "is_active",
+                  "parent_type_id",
+                  "config",
+                  "created_at",
+                  "updated_at",
+                  "tenant_id",
+                  "core_id",
+                  "properties"
+                ],
+                "filter": {}
+              }
+            }
+          ]
+        },
+        {
+          "table": {
+            "name": "notifications",
+            "schema": "public"
+          },
+          "object_relationships": [
+            {
+              "name": "tenant",
+              "using": {
+                "foreign_key_constraint_on": "tenant_id"
+              }
+            },
+            {
+              "name": "user",
+              "using": {
+                "foreign_key_constraint_on": "user_id"
+              }
+            }
+          ],
+          "insert_permissions": [
+            {
+              "role": "steward",
+              "permission": {
+                "check": {
+                  "tenant_id": {
+                    "_eq": "X-Hasura-Tenant-Id"
+                  }
+                },
+                "columns": [
+                  "tenant_id",
+                  "user_id",
+                  "type",
+                  "subject",
+                  "message",
+                  "delivery_status"
+                ]
+              }
+            },
+            {
+              "role": "user",
+              "permission": {
+                "check": {
+                  "tenant_id": {
+                    "_eq": "X-Hasura-Tenant-Id"
+                  }
+                },
+                "columns": [
+                  "tenant_id",
+                  "user_id",
+                  "type",
+                  "subject",
+                  "message",
+                  "delivery_status"
+                ]
+              }
+            }
+          ],
+          "select_permissions": [
+            {
+              "role": "anonymous",
+              "permission": {
+                "columns": [
+                  "id",
+                  "type",
+                  "subject",
+                  "created_at"
+                ],
+                "filter": {}
+              }
+            },
+            {
+              "role": "steward",
+              "permission": {
+                "columns": [
+                  "id",
+                  "tenant_id",
+                  "user_id",
+                  "type",
+                  "subject",
+                  "message",
+                  "delivery_status",
+                  "read_at",
+                  "created_at",
+                  "updated_at"
+                ],
+                "filter": {
+                  "tenant_id": {
+                    "_eq": "X-Hasura-Tenant-Id"
+                  }
+                }
+              }
+            },
+            {
+              "role": "user",
+              "permission": {
+                "columns": [
+                  "id",
+                  "tenant_id",
+                  "user_id",
+                  "type",
+                  "subject",
+                  "message",
+                  "delivery_status",
+                  "read_at",
+                  "created_at",
+                  "updated_at"
+                ],
+                "filter": {
+                  "tenant_id": {
+                    "_eq": "X-Hasura-Tenant-Id"
+                  }
+                }
+              }
+            }
+          ],
+          "update_permissions": [
+            {
+              "role": "steward",
+              "permission": {
+                "columns": [
+                  "read_at",
+                  "delivery_status"
+                ],
+                "filter": {
+                  "tenant_id": {
+                    "_eq": "X-Hasura-Tenant-Id"
+                  }
+                },
+                "check": null
+              }
+            },
+            {
+              "role": "user",
+              "permission": {
+                "columns": [
+                  "read_at",
+                  "delivery_status"
+                ],
+                "filter": {
+                  "tenant_id": {
+                    "_eq": "X-Hasura-Tenant-Id"
+                  }
+                },
+                "check": null
+              }
+            }
+          ],
+          "delete_permissions": [
+            {
+              "role": "steward",
+              "permission": {
+                "filter": {
+                  "tenant_id": {
+                    "_eq": "X-Hasura-Tenant-Id"
+                  }
+                }
+              }
+            }
+          ]
+        },
+        {
+          "table": {
+            "name": "portfolios",
+            "schema": "public"
+          },
+          "object_relationships": [
+            {
+              "name": "tenant",
+              "using": {
+                "foreign_key_constraint_on": "tenant_id"
+              }
+            }
+          ],
+          "insert_permissions": [
+            {
+              "role": "steward",
+              "permission": {
+                "check": {
+                  "tenant_id": {
+                    "_eq": "X-Hasura-Tenant-Id"
+                  }
+                },
+                "columns": [
+                  "tenant_id",
+                  "client_id",
+                  "type",
+                  "benchmark",
+                  "asset_allocation_targets",
+                  "performance_metrics",
+                  "advisor_discretion"
+                ]
+              }
+            },
+            {
+              "role": "user",
+              "permission": {
+                "check": {
+                  "tenant_id": {
+                    "_eq": "X-Hasura-Tenant-Id"
+                  }
+                },
+                "columns": [
+                  "tenant_id",
+                  "client_id",
+                  "type",
+                  "benchmark",
+                  "asset_allocation_targets",
+                  "performance_metrics",
+                  "advisor_discretion"
+                ]
+              }
+            }
+          ],
+          "select_permissions": [
+            {
+              "role": "steward",
+              "permission": {
+                "columns": [
+                  "id",
+                  "tenant_id",
+                  "client_id",
+                  "type",
+                  "benchmark",
+                  "asset_allocation_targets",
+                  "performance_metrics",
+                  "advisor_discretion"
+                ],
+                "filter": {
+                  "tenant_id": {
+                    "_eq": "X-Hasura-Tenant-Id"
+                  }
+                }
+              }
+            },
+            {
+              "role": "user",
+              "permission": {
+                "columns": [
+                  "id",
+                  "tenant_id",
+                  "client_id",
+                  "type",
+                  "benchmark",
+                  "asset_allocation_targets",
+                  "performance_metrics",
+                  "advisor_discretion"
+                ],
+                "filter": {
+                  "tenant_id": {
+                    "_eq": "X-Hasura-Tenant-Id"
+                  }
+                }
+              }
+            }
+          ],
+          "update_permissions": [
+            {
+              "role": "steward",
+              "permission": {
+                "columns": [
+                  "type",
+                  "benchmark",
+                  "asset_allocation_targets",
+                  "performance_metrics",
+                  "advisor_discretion"
+                ],
+                "filter": {
+                  "tenant_id": {
+                    "_eq": "X-Hasura-Tenant-Id"
+                  }
+                },
+                "check": null
+              }
+            },
+            {
+              "role": "user",
+              "permission": {
+                "columns": [
+                  "type",
+                  "benchmark",
+                  "asset_allocation_targets",
+                  "performance_metrics",
+                  "advisor_discretion"
+                ],
+                "filter": {
+                  "tenant_id": {
+                    "_eq": "X-Hasura-Tenant-Id"
+                  }
+                },
+                "check": null
+              }
+            }
+          ],
+          "delete_permissions": [
+            {
+              "role": "steward",
+              "permission": {
+                "filter": {
+                  "tenant_id": {
+                    "_eq": "X-Hasura-Tenant-Id"
+                  }
+                }
+              }
+            }
+          ]
+        },
+        {
+          "table": {
+            "name": "tenant_chart",
+            "schema": "public"
+          },
+          "select_permissions": [
+            {
+              "role": "anonymous",
+              "permission": {
+                "columns": [
+                  "id",
+                  "tenant_datasource_id",
+                  "chart_name",
+                  "chart",
+                  "created_at",
+                  "updated_at"
+                ],
+                "filter": {}
+              }
+            },
+            {
+              "role": "steward",
+              "permission": {
+                "columns": [
+                  "id",
+                  "tenant_datasource_id",
+                  "chart_name",
+                  "chart",
+                  "created_at",
+                  "updated_at"
+                ],
+                "filter": {}
+              }
+            },
+            {
+              "role": "user",
+              "permission": {
+                "columns": [
+                  "id",
+                  "tenant_datasource_id",
+                  "chart_name",
+                  "chart",
+                  "created_at",
+                  "updated_at"
+                ],
+                "filter": {}
+              }
+            }
+          ]
+        },
+        {
+          "table": {
+            "name": "tenant_datasources",
+            "schema": "public"
+          }
+        },
+        {
+          "table": {
+            "name": "tenant_instance",
+            "schema": "public"
+          },
+          "object_relationships": [
+            {
+              "name": "tenant",
+              "using": {
+                "foreign_key_constraint_on": "tenant_id"
+              }
+            }
+          ],
+          "array_relationships": [
+            {
+              "name": "tenant_products",
+              "using": {
+                "foreign_key_constraint_on": {
+                  "column": "tenant_instance_id",
+                  "table": {
+                    "name": "tenant_product",
+                    "schema": "public"
+                  }
+                }
+              }
+            }
+          ],
+          "select_permissions": [
+            {
+              "role": "anonymous",
+              "permission": {
+                "columns": [
+                  "id",
+                  "tenant_id",
+                  "instance_name",
+                  "display_name",
+                  "description",
+                  "is_active",
+                  "url",
+                  "config"
+                ],
+                "filter": {}
+              }
+            },
+            {
+              "role": "steward",
+              "permission": {
+                "columns": [
+                  "id",
+                  "tenant_id",
+                  "instance_name",
+                  "config",
+                  "is_active",
+                  "url",
+                  "display_name",
+                  "description",
+                  "status",
+                  "created_at",
+                  "updated_at"
+                ],
+                "filter": {}
+              }
+            },
+            {
+              "role": "user",
+              "permission": {
+                "columns": [
+                  "id",
+                  "tenant_id",
+                  "instance_name",
+                  "config",
+                  "is_active",
+                  "url",
+                  "display_name",
+                  "description",
+                  "status",
+                  "created_at",
+                  "updated_at"
+                ],
+                "filter": {}
+              }
+            }
+          ]
+        },
+        {
+          "table": {
+            "name": "tenant_product",
+            "schema": "public"
+          },
+          "object_relationships": [
+            {
+              "name": "alpha_product",
+              "using": {
+                "foreign_key_constraint_on": "alpha_product_id"
+              }
+            },
+            {
+              "name": "tenant_instance",
+              "using": {
+                "foreign_key_constraint_on": "tenant_instance_id"
+              }
+            }
+          ],
+          "array_relationships": [
+            {
+              "name": "tenant_product_datasources",
+              "using": {
+                "foreign_key_constraint_on": {
+                  "column": "tenant_product_id",
+                  "table": {
+                    "name": "tenant_product_datasource",
+                    "schema": "public"
+                  }
+                }
+              }
+            }
+          ],
+          "select_permissions": [
+            {
+              "role": "anonymous",
+              "permission": {
+                "columns": [
+                  "id",
+                  "tenant_instance_id",
+                  "alpha_product_id",
+                  "created_at",
+                  "updated_at",
+                  "version",
+                  "is_active"
+                ],
+                "filter": {}
+              }
+            },
+            {
+              "role": "steward",
+              "permission": {
+                "columns": [
+                  "id",
+                  "tenant_instance_id",
+                  "alpha_product_id",
+                  "created_at",
+                  "updated_at",
+                  "version",
+                  "is_active"
+                ],
+                "filter": {}
+              }
+            },
+            {
+              "role": "user",
+              "permission": {
+                "columns": [
+                  "id",
+                  "tenant_instance_id",
+                  "alpha_product_id",
+                  "created_at",
+                  "updated_at",
+                  "version",
+                  "is_active"
+                ],
+                "filter": {}
+              }
+            }
+          ],
+          "update_permissions": [
+            {
+              "role": "anonymous",
+              "permission": {
+                "columns": [
+                  "version",
+                  "is_active",
+                  "tenant_instance_id"
+                ],
+                "filter": {},
+                "check": {}
+              }
+            },
+            {
+              "role": "user",
+              "permission": {
+                "columns": [
+                  "version",
+                  "is_active",
+                  "tenant_instance_id"
+                ],
+                "filter": {},
+                "check": {}
+              }
+            }
+          ]
+        },
+        {
+          "table": {
+            "name": "tenant_product_datasource",
+            "schema": "public"
+          },
+          "object_relationships": [
+            {
+              "name": "alpha_datasource",
+              "using": {
+                "foreign_key_constraint_on": "alpha_tenant_instance_id"
+              }
+            },
+            {
+              "name": "tenant_product",
+              "using": {
+                "foreign_key_constraint_on": "tenant_product_id"
+              }
+            }
+          ],
+          "select_permissions": [
+            {
+              "role": "anonymous",
+              "permission": {
+                "columns": [
+                  "id",
+                  "tenant_product_id",
+                  "alpha_tenant_instance_id",
+                  "is_active",
+                  "source_name"
+                ],
+                "filter": {}
+              }
+            },
+            {
+              "role": "steward",
+              "permission": {
+                "columns": [
+                  "id",
+                  "tenant_product_id",
+                  "alpha_tenant_instance_id",
+                  "is_active",
+                  "config",
+                  "created_at",
+                  "updated_at",
+                  "source_name"
+                ],
+                "filter": {}
+              }
+            },
+            {
+              "role": "user",
+              "permission": {
+                "columns": [
+                  "id",
+                  "tenant_product_id",
+                  "alpha_tenant_instance_id",
+                  "is_active",
+                  "config",
+                  "created_at",
+                  "updated_at",
+                  "source_name"
+                ],
+                "filter": {}
+              }
+            }
+          ],
+          "update_permissions": [
+            {
+              "role": "anonymous",
+              "permission": {
+                "columns": [
+                  "tenant_product_id",
+                  "alpha_tenant_instance_id",
+                  "is_active",
+                  "config",
+                  "source_name"
+                ],
+                "filter": {},
+                "check": {}
+              }
+            },
+            {
+              "role": "user",
+              "permission": {
+                "columns": [
+                  "tenant_product_id",
+                  "alpha_tenant_instance_id",
+                  "is_active",
+                  "config",
+                  "source_name"
+                ],
+                "filter": {},
+                "check": {}
+              }
+            }
+          ]
+        },
+        {
+          "table": {
+            "name": "tenants",
+            "schema": "public"
+          },
+          "array_relationships": [
+            {
+              "name": "tenant_instances",
+              "using": {
+                "foreign_key_constraint_on": {
+                  "column": "tenant_id",
+                  "table": {
+                    "name": "tenant_instance",
+                    "schema": "public"
+                  }
+                }
+              }
+            }
+          ],
+          "select_permissions": [
+            {
+              "role": "anonymous",
+              "permission": {
+                "columns": [
+                  "id",
+                  "display_name",
+                  "description",
+                  "is_active",
+                  "gold_copy"
+                ],
+                "filter": {},
+                "allow_aggregations": true
+              }
+            },
+            {
+              "role": "steward",
+              "permission": {
+                "columns": [
+                  "id",
+                  "name",
+                  "created_at",
+                  "updated_at",
+                  "display_name",
+                  "description",
+                  "is_active",
+                  "gold_copy",
+                  "tenant_code",
+                  "status"
+                ],
+                "filter": {}
+              }
+            },
+            {
+              "role": "user",
+              "permission": {
+                "columns": [
+                  "id",
+                  "name",
+                  "created_at",
+                  "updated_at",
+                  "display_name",
+                  "description",
+                  "is_active",
+                  "gold_copy",
+                  "tenant_code",
+                  "status"
+                ],
+                "filter": {}
+              }
+            }
+          ]
+        },
+        {
+          "table": {
+            "name": "users",
+            "schema": "public"
+          },
+          "object_relationships": [
+            {
+              "name": "tenant",
+              "using": {
+                "foreign_key_constraint_on": "tenant_id"
+              }
+            }
+          ],
+          "array_relationships": [
+            {
+              "name": "notifications",
+              "using": {
+                "foreign_key_constraint_on": {
+                  "column": "user_id",
+                  "table": {
+                    "name": "notifications",
+                    "schema": "public"
+                  }
+                }
+              }
+            }
+          ],
+          "insert_permissions": [
+            {
+              "role": "user",
+              "permission": {
+                "check": {
+                  "tenant_id": {
+                    "_eq": "X-Hasura-Tenant-Id"
+                  }
+                },
+                "columns": [
+                  "username",
+                  "email",
+                  "tenant_id"
+                ]
+              }
+            }
+          ],
+          "select_permissions": [
+            {
+              "role": "anonymous",
+              "permission": {
+                "columns": [
+                  "id",
+                  "username",
+                  "first_name",
+                  "last_name"
+                ],
+                "filter": {}
+              }
+            },
+            {
+              "role": "steward",
+              "permission": {
+                "columns": [
+                  "id",
+                  "username",
+                  "email",
+                  "tenant_id",
+                  "first_name",
+                  "last_name"
+                ],
+                "filter": {
+                  "tenant_id": {
+                    "_eq": "X-Hasura-Tenant-Id"
+                  }
+                }
+              }
+            },
+            {
+              "role": "user",
+              "permission": {
+                "columns": [
+                  "id",
+                  "username",
+                  "email",
+                  "tenant_id",
+                  "first_name",
+                  "last_name"
+                ],
+                "filter": {
+                  "tenant_id": {
+                    "_eq": "X-Hasura-Tenant-Id"
+                  }
+                }
+              }
+            }
+          ],
+          "update_permissions": [
+            {
+              "role": "user",
+              "permission": {
+                "columns": [
+                  "username",
+                  "email",
+                  "first_name",
+                  "last_name"
+                ],
+                "filter": {
+                  "tenant_id": {
+                    "_eq": "X-Hasura-Tenant-Id"
+                  }
+                },
+                "check": null
+              }
+            }
+          ],
+          "delete_permissions": [
+            {
+              "role": "steward",
+              "permission": {
+                "filter": {
+                  "tenant_id": {
+                    "_eq": "X-Hasura-Tenant-Id"
+                  }
+                }
+              }
+            }
+          ]
+        },
+        {
+          "table": {
+            "name": "workflow_abac_policies",
+            "schema": "public"
+          }
+        }
+      ],
+      "configuration": {
+        "connection_info": {
+          "database_url": "postgres://postgres:postgres@host.docker.internal:5432/alpha",
+          "isolation_level": "read-committed",
+          "pool_settings": {
+            "connection_lifetime": 600,
+            "max_connections": 50
+          },
+          "use_prepared_statements": true
+        }
+      }
+    }
+  ],
+  "actions": [
+    {
+      "name": "scan_datasource",
+      "definition": {
+        "handler": "http://backend:8080/api/catalog/scan",
+        "output_type": "ScanDatasourceOutput",
+        "forward_client_headers": true,
+        "arguments": [
+          {
+            "name": "datasource_id",
+            "type": "uuid"
+          }
+        ],
+        "type": "mutation",
+        "kind": "synchronous",
+        "timeout": 300
+      },
+      "comment": "Scan a datasource for metadata",
+      "permissions": [
+        {
+          "role": "admin"
+        },
+        {
+          "role": "user"
+        },
+        {
+          "role": "anonymous"
+        }
+      ]
+    },
+    {
+      "name": "test_datasource_connection",
+      "definition": {
+        "handler": "http://backend:8080/api/actions/test_connection",
+        "output_type": "TestConnectionOutput",
+        "forward_client_headers": true,
+        "arguments": [
+          {
+            "name": "connection_details",
+            "type": "String!"
+          }
+        ],
+        "type": "mutation",
+        "kind": "synchronous"
+      },
+      "comment": "Test a datasource connection string",
+      "permissions": [
+        {
+          "role": "admin"
+        },
+        {
+          "role": "user"
+        },
+        {
+          "role": "anonymous"
+        }
+      ]
+    }
+  ],
+  "custom_types": {
+    "objects": [
+      {
+        "name": "ScanDatasourceOutput",
+        "fields": [
+          {
+            "name": "results",
+            "type": "[ScanResult!]!"
+          },
+          {
+            "name": "status",
+            "type": "String"
+          },
+          {
+            "name": "message",
+            "type": "String"
+          }
+        ]
+      },
+      {
+        "name": "ScanResult",
+        "fields": [
+          {
+            "name": "datasource_id",
+            "type": "uuid"
+          },
+          {
+            "name": "name",
+            "type": "String"
+          },
+          {
+            "name": "success",
+            "type": "Boolean"
+          },
+          {
+            "name": "error",
+            "type": "String"
+          },
+          {
+            "name": "added",
+            "type": "Int"
+          },
+          {
+            "name": "updated",
+            "type": "Int"
+          },
+          {
+            "name": "removed",
+            "type": "Int"
+          }
+        ]
+      },
+      {
+        "name": "TestConnectionOutput",
+        "fields": [
+          {
+            "name": "success",
+            "type": "Boolean!"
+          },
+          {
+            "name": "message",
+            "type": "String"
+          }
+        ]
+      }
+    ]
+  }
+}

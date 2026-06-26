@@ -1,0 +1,65 @@
+- table:
+    name: alpha_datasource
+    schema: public
+- table:
+    name: alpha_product
+    schema: public
+- table:
+    name: api_definitions
+    schema: public
+- table:
+    name: products
+    schema: public
+- table:
+    name: tenant_datasources
+    schema: public
+- table:
+    name: tenant_instance
+    schema: public
+  array_relationships:
+    - name: tenant_products
+      using:
+        foreign_key_constraint_on:
+          column: tenant_instance_id
+          table:
+            name: tenant_product
+            schema: public
+- table:
+    name: tenant_product
+    schema: public
+  object_relationships:
+    - name: alpha_product
+      using:
+        foreign_key_constraint_on: alpha_product_id
+    - name: tenant_instance
+      using:
+        foreign_key_constraint_on: tenant_instance_id
+  array_relationships:
+    - name: tenant_product_datasources
+      using:
+        foreign_key_constraint_on:
+          column: tenant_product_id
+          table:
+            name: tenant_product_datasource
+            schema: public
+- table:
+    name: tenant_product_datasource
+    schema: public
+  object_relationships:
+    - name: alpha_datasource
+      using:
+        foreign_key_constraint_on: alpha_datasource_id
+    - name: tenant_product
+      using:
+        foreign_key_constraint_on: tenant_product_id
+- table:
+    name: tenants
+    schema: public
+  array_relationships:
+    - name: tenant_instances
+      using:
+        foreign_key_constraint_on:
+          column: tenant_id
+          table:
+            name: tenant_instance
+            schema: public

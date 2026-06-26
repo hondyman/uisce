@@ -1,0 +1,32 @@
+/* SemanticPalette.module.css */
+
+.paletteTooltip {
+  --tooltip-left: 0px;
+  --tooltip-top: 0px;
+  left: var(--tooltip-left);
+  top: var(--tooltip-top);
+}
+.tooltipTitle {
+  font-weight: 700;
+}
+.tooltipDesc {
+  font-size: 12px;
+  margin-top: 4px;
+}
+
+.extends-button-wrapper {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.extends-disabled-indicator {
+  background: transparent;
+  border: none;
+  padding: 0;
+  cursor: default;
+}
+.extends-disabled-icon {
+  font-size: 12px;
+  color: #666;
+  line-height: 1;
+}

@@ -1,0 +1,22 @@
+-- Rollback Client Portal Schema
+
+DROP VIEW IF EXISTS client_dashboard_summary;
+DROP VIEW IF EXISTS active_onboarding_sessions;
+
+DROP TRIGGER IF EXISTS onboarding_sessions_updated_at ON onboarding_sessions;
+DROP TRIGGER IF EXISTS dashboard_widgets_updated_at ON dashboard_widgets;
+DROP TRIGGER IF EXISTS client_goals_updated_at ON client_goals;
+
+DROP FUNCTION IF EXISTS update_portal_timestamp();
+
+DROP TABLE IF EXISTS recommended_actions CASCADE;
+DROP TABLE IF EXISTS consent_preferences CASCADE;
+DROP TABLE IF EXISTS client_sessions CASCADE;
+DROP TABLE IF EXISTS scenario_simulations CASCADE;
+DROP TABLE IF EXISTS notifications CASCADE;
+DROP TABLE IF EXISTS secure_messages CASCADE;
+DROP TABLE IF EXISTS client_goals CASCADE;
+DROP TABLE IF EXISTS dashboard_widgets CASCADE;
+DROP TABLE IF EXISTS e_signatures CASCADE;
+DROP TABLE IF EXISTS uploaded_documents CASCADE;
+DROP TABLE IF EXISTS onboarding_sessions CASCADE;

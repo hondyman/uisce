@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Vite + React</title>
+    <!-- Inter + Material Symbols Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;900&display=swap" rel="stylesheet" />
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-200..200" rel="stylesheet" />
+    <style>
+      .material-symbols-outlined {
+        font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        font-size: 20px;
+      }
+    </style>
+  </head>
+  <body class="font-display bg-background-light dark:bg-background-dark">
+    <div id="root"></div>
+    <!-- Dev convenience: auto-seed a dev tenant/datasource in localStorage when running on localhost
+         so the BP Designer and other tenant-scoped UIs can load without manual localStorage seeding. -->
+    <script>
+      (function () {
+        try {
+          var host = window.location.hostname;
+          if (host === 'localhost' || host === '127.0.0.1') {
+            if (!localStorage.getItem('selected_tenant')) {
+              localStorage.setItem('selected_tenant', JSON.stringify({ id: '00000000-0000-0000-0000-000000000000', display_name: 'Dev Tenant' }));
+            }
+            if (!localStorage.getItem('selected_datasource')) {
+              localStorage.setItem('selected_datasource', JSON.stringify({ id: '11111111-1111-1111-1111-111111111111', source_name: 'dev' }));
+            }
+          }
+        } catch (e) {
+          // ignore
+        }
+      })();
+    </script>
+    <script type="module" src="../src/main.tsx"></script>
+  </body>
+</html>

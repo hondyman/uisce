@@ -1,0 +1,130 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "https://semlayer.io/schemas/compliance_context/v1",
+    "title": "ComplianceContext",
+    "description": "Input context for compliance rule evaluation (Whitepaper §7)",
+    "type": "object",
+    "required": [
+        "portfolio",
+        "positions",
+        "cash",
+        "tenant_id"
+    ],
+    "properties": {
+        "portfolio": {
+            "type": "object",
+            "required": [
+                "id",
+                "aum"
+            ],
+            "properties": {
+                "id": {
+                    "type": "string",
+                    "format": "uuid"
+                },
+                "aum": {
+                    "type": "number",
+                    "minimum": 0
+                },
+                "strategy": {
+                    "type": "string"
+                },
+                "benchmark_id": {
+                    "type": "string"
+                }
+            }
+        },
+        "positions": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "required": [
+                    "security_id",
+                    "market_value"
+                ],
+                "properties": {
+                    "security_id": {
+                        "type": "string",
+                        "format": "uuid"
+                    },
+                    "quantity": {
+                        "type": "number"
+                    },
+                    "market_value": {
+                        "type": "number",
+                        "minimum": 0
+                    },
+                    "issuer_id": {
+                        "type": "string"
+                    },
+                    "sector": {
+                        "type": "string"
+                    },
+                    "country": {
+                        "type": "string"
+                    },
+                    "rating": {
+                        "type": "string"
+                    },
+                    "esg_score": {
+                        "type": "number",
+                        "minimum": 0,
+                        "maximum": 10
+                    }
+                }
+            }
+        },
+        "cash": {
+            "type": "object",
+            "required": [
+                "closing_balance",
+                "currency"
+            ],
+            "properties": {
+                "closing_balance": {
+                    "type": "number"
+                },
+                "currency": {
+                    "type": "string",
+                    "pattern": "^[A-Z]{3}$"
+                }
+            }
+        },
+        "benchmark": {
+            "type": "object",
+            "properties": {
+                "sector_weights": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "number"
+                    }
+                },
+                "issuer_weights": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "number"
+                    }
+                }
+            }
+        },
+        "risk": {
+            "type": "object",
+            "properties": {
+                "tracking_error": {
+                    "type": "number",
+                    "minimum": 0
+                },
+                "var_95": {
+                    "type": "number",
+                    "minimum": 0
+                }
+            }
+        },
+        "tenant_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Usice Architecture §6.2: Multi-tenant isolation"
+        }
+    },
+    "additionalProperties": false
+}

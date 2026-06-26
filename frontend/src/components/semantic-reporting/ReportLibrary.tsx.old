@@ -1,0 +1,397 @@
+/**
+ * Report Library Component
+ * 
+ * Displays a library of available reports with search, filtering,
+ * and ability to run reports or customize with extensions.
+ */
+
+import React, { useState } from 'react';
+import {
+  Box,
+  Typography,
+  Card,
+  CardContent,
+  CardActions,
+  Grid,
+  TextField,
+  InputAdornment,
+  Chip,
+  Button,
+  IconButton,
+  Menu,
+  MenuItem,
+  Tab,
+  Tabs,
+  Select,
+  FormControl,
+  InputLabel,
+  Alert,
+  CircularProgress,
+  Tooltip,
+  Badge,
+} from '@mui/material';
+import {
+  Search,
+  PlayArrow,
+  Edit,
+  MoreVert,
+  Add,
+  Star,
+  StarBorder,
+  Schedule,
+  History,
+  Description,
+  BarChart,
+  PieChart,
+} from '@mui/icons-material';
+import { useReportDefinitions, useRenderReport } from '../../hooks/useSemanticReporting';
+import { ReportDefinition, RenderReportRequest } from '../../api/semanticReporting';
+import { useTenant } from '../../contexts/TenantContext';
+import { devLog } from '../../utils/devLogger';
+
+interface ReportLibraryProps {
+  onEditReport?: (reportId: string) => void;
+  onCreateExtension?: (baseReportId: string) => void;
+  onViewHistory?: (reportId: string) => void;
+}
+
+const ReportLibrary: React.FC<ReportLibraryProps> = ({
+  onEditReport,
+  onCreateExtension,
+  onViewHistory,
+}) => {
+  const { isSelected } = useTenant();
+  const [searchTerm, setSearchTerm] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState<string>('all');
+  const [selectedStatus, setSelectedStatus] = useState<string>('published');
+  const [tabValue, setTabValue] = useState(0);
+  const [favorites, setFavorites] = useState<Set<string>>(new Set());
+  const [menuAnchor, setMenuAnchor] = useState<null | HTMLElement>(null);
+  const [menuReportId, setMenuReportId] = useState<string | null>(null);
+
+  // Fetch reports
+  const { data: reports, isLoading, error } = useReportDefinitions({
+    status: selectedStatus !== 'all' ? selectedStatus : undefined,
+    category: selectedCategory !== 'all' ? selectedCategory : undefined,
+  });
+
+  const renderMutation = useRenderReport();
+
+  // Get unique categories
+  const categories = React.useMemo(() => {
+    if (!reports) return [];
+    const cats = new Set(reports.map(r => r.category).filter(Boolean));
+    return Array.from(cats);
+  }, [reports]);
+
+  // Filter reports
+  const filteredReports = React.useMemo(() => {
+    if (!reports) return [];
+    
+    let filtered = reports;
+    
+    // Search filter
+    if (searchTerm) {
+      const term = searchTerm.toLowerCase();
+      filtered = filtered.filter(r =>
+        r.display_name.toLowerCase().includes(term) ||
+        r.description?.toLowerCase().includes(term) ||
+        r.tags?.some(t => t.toLowerCase().includes(term))
+      );
+    }
+    
+    // Tab filter
+    if (tabValue === 1) {
+      filtered = filtered.filter(r => favorites.has(r.id));
+    } else if (tabValue === 2) {
+      filtered = filtered.filter(r => r.is_core);
+    } else if (tabValue === 3) {
+      filtered = filtered.filter(r => !r.is_core);
+    }
+    
+    return filtered;
+  }, [reports, searchTerm, tabValue, favorites]);
+
+  const handleRunReport = async (report: ReportDefinition) => {
+    const request: RenderReportRequest = {
+      report_definition_id: report.id,
+      output_format: 'html',
+    };
+    
+    try {
+      const instance = await renderMutation.mutateAsync(request);
+      // Could navigate to a report viewer
+      devLog('Report instance created:', instance);
+    } catch (err) {
+      console.error('Failed to render report:', err);
+    }
+  };
+
+  const toggleFavorite = (reportId: string) => {
+    setFavorites(prev => {
+      const next = new Set(prev);
+      if (next.has(reportId)) {
+        next.delete(reportId);
+      } else {
+        next.add(reportId);
+      }
+      return next;
+    });
+  };
+
+  const handleMenuOpen = (event: React.MouseEvent<HTMLElement>, reportId: string) => {
+    setMenuAnchor(event.currentTarget);
+    setMenuReportId(reportId);
+  };
+
+  const handleMenuClose = () => {
+    setMenuAnchor(null);
+    setMenuReportId(null);
+  };
+
+  const getReportIcon = (reportType: string) => {
+    switch (reportType) {
+      case 'dashboard':
+        return <BarChart />;
+      case 'interactive':
+        return <PieChart />;
+      default:
+        return <Description />;
+    }
+  };
+
+  if (!isSelected) {
+    return (
+      <Box sx={{ p: 3 }}>
+        <Alert severity="warning">
+          Please select a tenant and datasource to view reports.
+        </Alert>
+      </Box>
+    );
+  }
+
+  return (
+    <Box sx={{ p: 3 }}>
+      {/* Header */}
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+        <Typography variant="h5" component="h1">
+          Report Library
+        </Typography>
+        <Button
+          variant="contained"
+          startIcon={<Add />}
+          onClick={() => onEditReport?.('new')}
+        >
+          New Report
+        </Button>
+      </Box>
+
+      {/* Tabs */}
+      <Tabs value={tabValue} onChange={(_, v) => setTabValue(v)} sx={{ mb: 2 }}>
+        <Tab label="All Reports" />
+        <Tab 
+          label={
+            <Badge badgeContent={favorites.size} color="primary">
+              Favorites
+            </Badge>
+          } 
+        />
+        <Tab label="Core Reports" />
+        <Tab label="Custom Reports" />
+      </Tabs>
+
+      {/* Filters */}
+      <Box sx={{ display: 'flex', gap: 2, mb: 3 }}>
+        <TextField
+          placeholder="Search reports..."
+          size="small"
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+          InputProps={{
+            startAdornment: (
+              <InputAdornment position="start">
+                <Search />
+              </InputAdornment>
+            ),
+          }}
+          sx={{ width: 300 }}
+        />
+        
+        <FormControl size="small" sx={{ width: 150 }}>
+          <InputLabel>Category</InputLabel>
+          <Select
+            value={selectedCategory}
+            label="Category"
+            onChange={(e) => setSelectedCategory(e.target.value)}
+          >
+            <MenuItem value="all">All Categories</MenuItem>
+            {categories.map(cat => (
+              <MenuItem key={cat} value={cat}>{cat}</MenuItem>
+            ))}
+          </Select>
+        </FormControl>
+
+        <FormControl size="small" sx={{ width: 150 }}>
+          <InputLabel>Status</InputLabel>
+          <Select
+            value={selectedStatus}
+            label="Status"
+            onChange={(e) => setSelectedStatus(e.target.value)}
+          >
+            <MenuItem value="all">All Status</MenuItem>
+            <MenuItem value="published">Published</MenuItem>
+            <MenuItem value="draft">Draft</MenuItem>
+          </Select>
+        </FormControl>
+      </Box>
+
+      {/* Loading / Error */}
+      {isLoading && (
+        <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
+          <CircularProgress />
+        </Box>
+      )}
+
+      {error && (
+        <Alert severity="error" sx={{ mb: 2 }}>
+          Failed to load reports: {(error as Error).message}
+        </Alert>
+      )}
+
+      {/* Report Grid */}
+      <Grid container spacing={3}>
+        {filteredReports.map(report => (
+          <Grid item xs={12} sm={6} md={4} lg={3} key={report.id}>
+            <Card 
+              sx={{ 
+                height: '100%', 
+                display: 'flex', 
+                flexDirection: 'column',
+                '&:hover': { boxShadow: 4 }
+              }}
+            >
+              <CardContent sx={{ flexGrow: 1 }}>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 1 }}>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    {getReportIcon(report.report_type)}
+                    <Typography variant="subtitle1" component="h2" noWrap>
+                      {report.display_name}
+                    </Typography>
+                  </Box>
+                  <IconButton 
+                    size="small" 
+                    onClick={() => toggleFavorite(report.id)}
+                  >
+                    {favorites.has(report.id) ? (
+                      <Star color="warning" fontSize="small" />
+                    ) : (
+                      <StarBorder fontSize="small" />
+                    )}
+                  </IconButton>
+                </Box>
+
+                <Typography variant="body2" color="text.secondary" sx={{ mb: 2, minHeight: 40 }}>
+                  {report.description || 'No description'}
+                </Typography>
+
+                <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap' }}>
+                  {report.is_core && (
+                    <Chip label="Core" size="small" color="primary" variant="outlined" />
+                  )}
+                  {report.category && (
+                    <Chip label={report.category} size="small" variant="outlined" />
+                  )}
+                  <Chip 
+                    label={report.status} 
+                    size="small" 
+                    color={report.status === 'published' ? 'success' : 'default'}
+                  />
+                </Box>
+              </CardContent>
+
+              <CardActions sx={{ justifyContent: 'space-between', px: 2, pb: 2 }}>
+                <Box>
+                  <Tooltip title="Run Report">
+                    <IconButton 
+                      size="small" 
+                      color="primary"
+                      onClick={() => handleRunReport(report)}
+                      disabled={renderMutation.isPending}
+                    >
+                      <PlayArrow />
+                    </IconButton>
+                  </Tooltip>
+                  {!report.is_core && (
+                    <Tooltip title="Edit Report">
+                      <IconButton 
+                        size="small"
+                        onClick={() => onEditReport?.(report.id)}
+                      >
+                        <Edit />
+                      </IconButton>
+                    </Tooltip>
+                  )}
+                </Box>
+
+                <IconButton 
+                  size="small"
+                  onClick={(e) => handleMenuOpen(e, report.id)}
+                >
+                  <MoreVert />
+                </IconButton>
+              </CardActions>
+            </Card>
+          </Grid>
+        ))}
+      </Grid>
+
+      {/* Empty State */}
+      {!isLoading && filteredReports.length === 0 && (
+        <Box sx={{ textAlign: 'center', py: 8 }}>
+          <Description sx={{ fontSize: 64, color: 'text.secondary', mb: 2 }} />
+          <Typography variant="h6" color="text.secondary">
+            No reports found
+          </Typography>
+          <Typography color="text.secondary" sx={{ mb: 2 }}>
+            {searchTerm ? 'Try adjusting your search criteria' : 'Create your first report to get started'}
+          </Typography>
+          <Button 
+            variant="contained" 
+            startIcon={<Add />}
+            onClick={() => onEditReport?.('new')}
+          >
+            Create Report
+          </Button>
+        </Box>
+      )}
+
+      {/* Context Menu */}
+      <Menu
+        anchorEl={menuAnchor}
+        open={Boolean(menuAnchor)}
+        onClose={handleMenuClose}
+      >
+        <MenuItem onClick={() => {
+          handleMenuClose();
+          onCreateExtension?.(menuReportId!);
+        }}>
+          <Add sx={{ mr: 1 }} /> Create Extension
+        </MenuItem>
+        <MenuItem onClick={() => {
+          handleMenuClose();
+          // Open schedule dialog
+        }}>
+          <Schedule sx={{ mr: 1 }} /> Schedule
+        </MenuItem>
+        <MenuItem onClick={() => {
+          handleMenuClose();
+          onViewHistory?.(menuReportId!);
+        }}>
+          <History sx={{ mr: 1 }} /> View History
+        </MenuItem>
+      </Menu>
+    </Box>
+  );
+};
+
+export default ReportLibrary;

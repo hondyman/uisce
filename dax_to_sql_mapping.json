@@ -1,0 +1,590 @@
+{
+  "dax_to_sql_mapping_guide": {
+    "description": "Complete mapping of DAX formulas from unified financial services super-bundle to SQL equivalents for DirectQuery semantic layer",
+    "purpose": "Enable Power BI DirectQuery to leverage DAX-like logic pre-implemented in the semantic layer",
+    "implementation_strategy": "Create SQL views/materialized views with these formulas, then expose as measures in semantic layer",
+    "mappings": [
+      {
+        "metric_id": "net_interest_margin",
+        "dax_formula": "DIVIDE(SUMX({interest_income_table}, {interest_income}) - SUMX({interest_expense_table}, {interest_expense}), AVERAGEX({assets_table}, {average_assets}))",
+        "sql_equivalent": "SELECT (SUM(ii.amount) - SUM(ie.amount)) / AVG(a.average_balance) AS net_interest_margin FROM interest_income ii CROSS JOIN interest_expense ie CROSS JOIN assets a",
+        "view_definition": "CREATE VIEW net_interest_margin AS SELECT (SUM(ii.amount) - SUM(ie.amount)) / AVG(a.average_balance) AS value FROM interest_income ii, interest_expense ie, assets a GROUP BY entity_id, as_of_date",
+        "directquery_compatibility": "High - Simple aggregations fold well"
+      },
+      {
+        "metric_id": "loan_loss_provision_ratio",
+        "dax_formula": "DIVIDE(SUMX({provisions_table}, {loan_loss_provisions}), SUMX({loans_table}, {total_loans}))",
+        "sql_equivalent": "SELECT SUM(lp.provision_amount) / SUM(l.outstanding_balance) AS loan_loss_provision_ratio FROM loan_provisions lp, loans l",
+        "view_definition": "CREATE VIEW loan_loss_provision_ratio AS SELECT SUM(lp.provision_amount) / SUM(l.outstanding_balance) AS value FROM loan_provisions lp JOIN loans l ON lp.entity_id = l.entity_id AND lp.as_of_date = l.as_of_date GROUP BY entity_id, as_of_date",
+        "directquery_compatibility": "High - Standard ratio calculation"
+      },
+      {
+        "metric_id": "credit_risk_concentration",
+        "dax_formula": "DIVIDE(SUMX(FILTER({loans_table}, {loan_amount} > {concentration_threshold}), {loan_amount}), SUMX({loans_table}, {loan_amount}))",
+        "sql_equivalent": "SELECT SUM(CASE WHEN l.principal_amount > ct.threshold THEN l.principal_amount ELSE 0 END) / SUM(l.principal_amount) AS credit_risk_concentration FROM loans l CROSS JOIN concentration_thresholds ct",
+        "view_definition": "CREATE VIEW credit_risk_concentration AS SELECT SUM(CASE WHEN l.principal_amount > ct.large_borrower_threshold THEN l.principal_amount ELSE 0 END) / SUM(l.principal_amount) AS value FROM loans l CROSS JOIN (SELECT large_borrower_threshold FROM concentration_thresholds) ct GROUP BY entity_id, as_of_date",
+        "directquery_compatibility": "Medium - Conditional aggregation may require tuning"
+      },
+      {
+        "metric_id": "deposit_stability_ratio",
+        "dax_formula": "DIVIDE(SUMX(FILTER({deposits_table}, {deposit_type} = 'stable'), {deposit_amount}), SUMX({deposits_table}, {deposit_amount}))",
+        "sql_equivalent": "SELECT SUM(CASE WHEN d.stability_classification = 'stable' THEN d.balance ELSE 0 END) / SUM(d.balance) AS deposit_stability_ratio FROM deposits d",
+        "view_definition": "CREATE VIEW deposit_stability_ratio AS SELECT SUM(CASE WHEN d.stability_classification = 'stable' THEN d.balance ELSE 0 END) / SUM(d.balance) AS value FROM deposits d GROUP BY entity_id, as_of_date",
+        "directquery_compatibility": "High - Conditional sum with CASE statement"
+      },
+      {
+        "metric_id": "cost_to_income_ratio",
+        "dax_formula": "DIVIDE(SUMX({expenses_table}, {operating_expenses}), SUMX({income_table}, {operating_income}))",
+        "sql_equivalent": "SELECT SUM(e.amount) / SUM(i.amount) AS cost_to_income_ratio FROM operating_expenses e, operating_income i",
+        "view_definition": "CREATE VIEW cost_to_income_ratio AS SELECT SUM(e.amount) / SUM(i.amount) AS value FROM operating_expenses e JOIN operating_income i ON e.entity_id = i.entity_id AND e.as_of_date = i.as_of_date GROUP BY entity_id, as_of_date",
+        "directquery_compatibility": "High - Simple ratio"
+      },
+      {
+        "metric_id": "return_on_assets",
+        "dax_formula": "DIVIDE(SUMX({income_table}, {net_income}), AVERAGEX({assets_table}, {total_assets}))",
+        "sql_equivalent": "SELECT SUM(i.net_income) / AVG(a.total_assets) AS return_on_assets FROM income i, assets a",
+        "view_definition": "CREATE VIEW return_on_assets AS SELECT SUM(i.net_income) / AVG(a.total_assets) AS value FROM income i JOIN assets a ON i.entity_id = a.entity_id AND i.as_of_date = a.as_of_date GROUP BY entity_id, as_of_date",
+        "directquery_compatibility": "High - Standard ROA calculation"
+      },
+      {
+        "metric_id": "return_on_equity",
+        "dax_formula": "DIVIDE(SUMX({income_table}, {net_income}), AVERAGEX({equity_table}, {total_equity}))",
+        "sql_equivalent": "SELECT SUM(i.net_income) / AVG(e.total_equity) AS return_on_equity FROM income i, equity e",
+        "view_definition": "CREATE VIEW return_on_equity AS SELECT SUM(i.net_income) / AVG(e.total_equity) AS value FROM income i JOIN equity e ON i.entity_id = e.entity_id AND i.as_of_date = e.as_of_date GROUP BY entity_id, as_of_date",
+        "directquery_compatibility": "High - Standard ROE calculation"
+      },
+      {
+        "metric_id": "loan_to_deposit_ratio",
+        "dax_formula": "DIVIDE(SUMX({loans_table}, {loan_balance}), SUMX({deposits_table}, {deposit_balance}))",
+        "sql_equivalent": "SELECT SUM(l.outstanding_balance) / SUM(d.balance) AS loan_to_deposit_ratio FROM loans l, deposits d",
+        "view_definition": "CREATE VIEW loan_to_deposit_ratio AS SELECT SUM(l.outstanding_balance) / SUM(d.balance) AS value FROM loans l JOIN deposits d ON l.entity_id = d.entity_id AND l.as_of_date = d.as_of_date GROUP BY entity_id, as_of_date",
+        "directquery_compatibility": "High - Simple ratio"
+      },
+      {
+        "metric_id": "non_performing_loan_ratio",
+        "dax_formula": "DIVIDE(SUMX(FILTER({loans_table}, {performance_status} = 'non_performing'), {loan_balance}), SUMX({loans_table}, {loan_balance}))",
+        "sql_equivalent": "SELECT SUM(CASE WHEN l.performance_status = 'non_performing' THEN l.outstanding_balance ELSE 0 END) / SUM(l.outstanding_balance) AS non_performing_loan_ratio FROM loans l",
+        "view_definition": "CREATE VIEW non_performing_loan_ratio AS SELECT SUM(CASE WHEN l.performance_status = 'non_performing' THEN l.outstanding_balance ELSE 0 END) / SUM(l.outstanding_balance) AS value FROM loans l GROUP BY entity_id, as_of_date",
+        "directquery_compatibility": "High - Conditional ratio"
+      },
+      {
+        "metric_id": "capital_adequacy_ratio",
+        "dax_formula": "DIVIDE(SUMX({capital_table}, {regulatory_capital}), SUMX({assets_table}, {risk_weighted_assets}))",
+        "sql_equivalent": "SELECT SUM(rc.amount) / SUM(rwa.weighted_balance) AS capital_adequacy_ratio FROM regulatory_capital rc, risk_weighted_assets rwa",
+        "view_definition": "CREATE VIEW capital_adequacy_ratio AS SELECT SUM(rc.amount) / SUM(rwa.weighted_balance) AS value FROM regulatory_capital rc JOIN risk_weighted_assets rwa ON rc.entity_id = rwa.entity_id AND rc.as_of_date = rwa.as_of_date GROUP BY entity_id, as_of_date",
+        "directquery_compatibility": "High - Regulatory ratio"
+      },
+      {
+        "metric_id": "combined_ratio",
+        "dax_formula": "DIVIDE(SUMX({claims_table}, {claims_paid}) + SUMX({expenses_table}, {underwriting_expenses}), SUMX({premiums_table}, {earned_premiums}))",
+        "sql_equivalent": "SELECT (SUM(c.amount) + SUM(ue.amount)) / SUM(ep.amount) AS combined_ratio FROM claims c, underwriting_expenses ue, earned_premiums ep",
+        "view_definition": "CREATE VIEW combined_ratio AS SELECT (SUM(c.amount) + SUM(ue.amount)) / SUM(ep.amount) AS value FROM claims c JOIN underwriting_expenses ue ON c.entity_id = ue.entity_id AND c.as_of_date = ue.as_of_date JOIN earned_premiums ep ON c.entity_id = ep.entity_id AND c.as_of_date = ep.as_of_date GROUP BY entity_id, as_of_date",
+        "directquery_compatibility": "High - Insurance combined ratio"
+      },
+      {
+        "metric_id": "loss_ratio",
+        "dax_formula": "DIVIDE(SUMX({claims_table}, {claims_paid}), SUMX({premiums_table}, {earned_premiums}))",
+        "sql_equivalent": "SELECT SUM(c.amount) / SUM(ep.amount) AS loss_ratio FROM claims c, earned_premiums ep",
+        "view_definition": "CREATE VIEW loss_ratio AS SELECT SUM(c.amount) / SUM(ep.amount) AS value FROM claims c JOIN earned_premiums ep ON c.entity_id = ep.entity_id AND c.as_of_date = ep.as_of_date GROUP BY entity_id, as_of_date",
+        "directquery_compatibility": "High - Insurance loss ratio"
+      },
+      {
+        "metric_id": "expense_ratio",
+        "dax_formula": "DIVIDE(SUMX({expenses_table}, {underwriting_expenses}), SUMX({premiums_table}, {written_premiums}))",
+        "sql_equivalent": "SELECT SUM(ue.amount) / SUM(wp.amount) AS expense_ratio FROM underwriting_expenses ue, written_premiums wp",
+        "view_definition": "CREATE VIEW expense_ratio AS SELECT SUM(ue.amount) / SUM(wp.amount) AS value FROM underwriting_expenses ue JOIN written_premiums wp ON ue.entity_id = wp.entity_id AND ue.as_of_date = wp.as_of_date GROUP BY entity_id, as_of_date",
+        "directquery_compatibility": "High - Insurance expense ratio"
+      },
+      {
+        "metric_id": "underwriting_profit",
+        "dax_formula": "SUMX({premiums_table}, {earned_premiums}) - SUMX({claims_table}, {claims_paid}) - SUMX({expenses_table}, {underwriting_expenses})",
+        "sql_equivalent": "SELECT SUM(ep.amount) - SUM(c.amount) - SUM(ue.amount) AS underwriting_profit FROM earned_premiums ep, claims c, underwriting_expenses ue",
+        "view_definition": "CREATE VIEW underwriting_profit AS SELECT SUM(ep.amount) - SUM(c.amount) - SUM(ue.amount) AS value FROM earned_premiums ep JOIN claims c ON ep.entity_id = c.entity_id AND ep.as_of_date = c.as_of_date JOIN underwriting_expenses ue ON ep.entity_id = ue.entity_id AND ep.as_of_date = ue.as_of_date GROUP BY entity_id, as_of_date",
+        "directquery_compatibility": "High - Simple arithmetic"
+      },
+      {
+        "metric_id": "retention_ratio",
+        "dax_formula": "DIVIDE(SUMX({premiums_table}, {net_premiums}), SUMX({premiums_table}, {gross_premiums}))",
+        "sql_equivalent": "SELECT SUM(p.net_amount) / SUM(p.gross_amount) AS retention_ratio FROM premiums p",
+        "view_definition": "CREATE VIEW retention_ratio AS SELECT SUM(p.net_amount) / SUM(p.gross_amount) AS value FROM premiums p GROUP BY entity_id, as_of_date",
+        "directquery_compatibility": "High - Retention ratio"
+      },
+      {
+        "metric_id": "claims_frequency",
+        "dax_formula": "DIVIDE(DISTINCTCOUNT({claims_table}, {claim_id}), SUMX({policies_table}, {exposure_units}))",
+        "sql_equivalent": "SELECT COUNT(DISTINCT c.id) / SUM(p.exposure_amount) AS claims_frequency FROM claims c, policies p",
+        "view_definition": "CREATE VIEW claims_frequency AS SELECT COUNT(DISTINCT c.id) / SUM(p.exposure_amount) AS value FROM claims c JOIN policies p ON c.entity_id = p.entity_id AND c.as_of_date = p.as_of_date GROUP BY entity_id, as_of_date",
+        "directquery_compatibility": "High - Frequency calculation"
+      },
+      {
+        "metric_id": "claims_severity",
+        "dax_formula": "DIVIDE(SUMX({claims_table}, {claim_amount}), DISTINCTCOUNT({claims_table}, {claim_id}))",
+        "sql_equivalent": "SELECT SUM(c.amount) / COUNT(DISTINCT c.id) AS claims_severity FROM claims c",
+        "view_definition": "CREATE VIEW claims_severity AS SELECT SUM(c.amount) / COUNT(DISTINCT c.id) AS value FROM claims c GROUP BY entity_id, as_of_date",
+        "directquery_compatibility": "High - Severity calculation"
+      },
+      {
+        "metric_id": "reserve_adequacy_ratio",
+        "dax_formula": "DIVIDE(SUMX({reserves_table}, {outstanding_reserves}), SUMX({actuarial_table}, {ultimate_losses}))",
+        "sql_equivalent": "SELECT SUM(lr.amount) / SUM(ap.projected_amount) AS reserve_adequacy_ratio FROM loss_reserves lr, actuarial_projections ap",
+        "view_definition": "CREATE VIEW reserve_adequacy_ratio AS SELECT SUM(lr.amount) / SUM(ap.projected_amount) AS value FROM loss_reserves lr JOIN actuarial_projections ap ON lr.entity_id = ap.entity_id AND lr.as_of_date = ap.as_of_date GROUP BY entity_id, as_of_date",
+        "directquery_compatibility": "High - Reserve adequacy"
+      },
+      {
+        "metric_id": "policyholder_surplus_ratio",
+        "dax_formula": "DIVIDE(SUMX({surplus_table}, {policyholder_surplus}), SUMX({liabilities_table}, {total_liabilities}))",
+        "sql_equivalent": "SELECT SUM(ps.amount) / SUM(l.amount) AS policyholder_surplus_ratio FROM policyholder_surplus ps, liabilities l",
+        "view_definition": "CREATE VIEW policyholder_surplus_ratio AS SELECT SUM(ps.amount) / SUM(l.amount) AS value FROM policyholder_surplus ps JOIN liabilities l ON ps.entity_id = l.entity_id AND ps.as_of_date = l.as_of_date GROUP BY entity_id, as_of_date",
+        "directquery_compatibility": "High - Surplus ratio"
+      },
+      {
+        "metric_id": "value_at_risk",
+        "dax_formula": "STDEVX.P({returns_table}, {portfolio_returns}) * SQRT({holding_period}) * {confidence_factor}",
+        "sql_equivalent": "SELECT STDDEV_POP(pr.daily_return) * SQRT(hp.holding_days) * cf.confidence_multiplier AS value_at_risk FROM portfolio_returns pr CROSS JOIN (SELECT holding_days FROM holding_periods) hp CROSS JOIN (SELECT confidence_multiplier FROM confidence_factors) cf",
+        "view_definition": "CREATE VIEW value_at_risk AS SELECT STDDEV_POP(pr.daily_return) * SQRT(hp.holding_days) * cf.confidence_multiplier AS value FROM portfolio_returns pr CROSS JOIN (SELECT holding_days FROM holding_periods LIMIT 1) hp CROSS JOIN (SELECT confidence_multiplier FROM confidence_factors LIMIT 1) cf GROUP BY entity_id, as_of_date",
+        "directquery_compatibility": "Medium - Statistical functions may need optimization"
+      },
+      {
+        "metric_id": "sharpe_ratio",
+        "dax_formula": "DIVIDE(AVERAGEX({returns_table}, {portfolio_returns}) - {risk_free_rate}, STDEVX.P({returns_table}, {portfolio_returns}))",
+        "sql_equivalent": "SELECT (AVG(pr.daily_return) - rfr.risk_free_rate) / STDDEV_POP(pr.daily_return) AS sharpe_ratio FROM portfolio_returns pr CROSS JOIN risk_free_rates rfr",
+        "view_definition": "CREATE VIEW sharpe_ratio AS SELECT (AVG(pr.daily_return) - rfr.risk_free_rate) / STDDEV_POP(pr.daily_return) AS value FROM portfolio_returns pr CROSS JOIN (SELECT risk_free_rate FROM risk_free_rates LIMIT 1) rfr GROUP BY entity_id, as_of_date",
+        "directquery_compatibility": "Medium - Statistical ratio"
+      },
+      {
+        "metric_id": "portfolio_turnover",
+        "dax_formula": "DIVIDE(SUMX({trades_table}, ABS({trade_amount})), 2 * AVERAGEX({portfolio_table}, {portfolio_value}))",
+        "sql_equivalent": "SELECT SUM(ABS(t.transaction_amount)) / (2 * AVG(pv.total_value)) AS portfolio_turnover FROM trades t, portfolio_values pv",
+        "view_definition": "CREATE VIEW portfolio_turnover AS SELECT SUM(ABS(t.transaction_amount)) / (2 * AVG(pv.total_value)) AS value FROM trades t JOIN portfolio_values pv ON t.entity_id = pv.entity_id AND t.as_of_date = pv.as_of_date GROUP BY entity_id, as_of_date",
+        "directquery_compatibility": "High - Turnover calculation"
+      },
+      {
+        "metric_id": "beta_coefficient",
+        "dax_formula": "DIVIDE(SUMX({correlation_table}, ({portfolio_return} - {portfolio_mean}) * ({market_return} - {market_mean})), SUMX({correlation_table}, POWER({market_return} - {market_mean}, 2)))",
+        "sql_equivalent": "SELECT SUM((pr.portfolio_return - pm.portfolio_average) * (mr.market_return - mm.market_average)) / SUM(POWER(mr.market_return - mm.market_average, 2)) AS beta_coefficient FROM portfolio_market_returns pmr CROSS JOIN (SELECT AVG(portfolio_return) as portfolio_average FROM portfolio_market_returns) pm CROSS JOIN (SELECT AVG(market_return) as market_average FROM portfolio_market_returns) mm",
+        "view_definition": "CREATE VIEW beta_coefficient AS SELECT SUM((pmr.portfolio_return - pm.portfolio_average) * (pmr.market_return - mm.market_average)) / SUM(POWER(pmr.market_return - mm.market_average, 2)) AS value FROM portfolio_market_returns pmr CROSS JOIN (SELECT AVG(portfolio_return) as portfolio_average FROM portfolio_market_returns) pm CROSS JOIN (SELECT AVG(market_return) as market_average FROM portfolio_market_returns) mm GROUP BY entity_id, as_of_date",
+        "directquery_compatibility": "Low - Complex correlation calculation, may need pre-computation"
+      },
+      {
+        "metric_id": "tracking_error",
+        "dax_formula": "STDEVX.P({active_returns_table}, {active_return})",
+        "sql_equivalent": "SELECT STDDEV_POP(ar.active_return) AS tracking_error FROM active_returns ar",
+        "view_definition": "CREATE VIEW tracking_error AS SELECT STDDEV_POP(ar.active_return) AS value FROM active_returns ar GROUP BY entity_id, as_of_date",
+        "directquery_compatibility": "Medium - Standard deviation"
+      },
+      {
+        "metric_id": "information_ratio",
+        "dax_formula": "DIVIDE(AVERAGEX({active_returns_table}, {active_return}), STDEVX.P({active_returns_table}, {active_return}))",
+        "sql_equivalent": "SELECT AVG(ar.active_return) / STDDEV_POP(ar.active_return) AS information_ratio FROM active_returns ar",
+        "view_definition": "CREATE VIEW information_ratio AS SELECT AVG(ar.active_return) / STDDEV_POP(ar.active_return) AS value FROM active_returns ar GROUP BY entity_id, as_of_date",
+        "directquery_compatibility": "Medium - Information ratio"
+      },
+      {
+        "metric_id": "maximum_drawdown",
+        "dax_formula": "MINX({drawdown_table}, {drawdown_amount})",
+        "sql_equivalent": "SELECT MIN(dd.drawdown) AS maximum_drawdown FROM rolling_drawdowns dd",
+        "view_definition": "CREATE VIEW maximum_drawdown AS SELECT MIN(dd.drawdown) AS value FROM rolling_drawdowns dd GROUP BY entity_id, as_of_date",
+        "directquery_compatibility": "High - Simple minimum"
+      },
+      {
+        "metric_id": "sortino_ratio",
+        "dax_formula": "DIVIDE(AVERAGEX({returns_table}, {portfolio_return}) - {risk_free_rate}, STDEVX.P(FILTER({returns_table}, {portfolio_return} < {risk_free_rate}), {portfolio_return}))",
+        "sql_equivalent": "SELECT (AVG(pr.daily_return) - rfr.risk_free_rate) / STDDEV_POP(CASE WHEN pr.daily_return < rfr.risk_free_rate THEN pr.daily_return ELSE NULL END) AS sortino_ratio FROM portfolio_returns pr CROSS JOIN risk_free_rates rfr",
+        "view_definition": "CREATE VIEW sortino_ratio AS SELECT (AVG(pr.daily_return) - rfr.risk_free_rate) / STDDEV_POP(CASE WHEN pr.daily_return < rfr.risk_free_rate THEN pr.daily_return ELSE NULL END) AS value FROM portfolio_returns pr CROSS JOIN (SELECT risk_free_rate FROM risk_free_rates LIMIT 1) rfr GROUP BY entity_id, as_of_date",
+        "directquery_compatibility": "Medium - Downside deviation"
+      },
+      {
+        "metric_id": "alpha_coefficient",
+        "dax_formula": "AVERAGEX({returns_table}, {portfolio_return}) - ({risk_free_rate} + {beta} * (AVERAGEX({market_table}, {market_return}) - {risk_free_rate}))",
+        "sql_equivalent": "SELECT AVG(pr.daily_return) - (rfr.risk_free_rate + b.beta_coefficient * (AVG(mr.daily_return) - rfr.risk_free_rate)) AS alpha_coefficient FROM portfolio_returns pr CROSS JOIN risk_free_rates rfr CROSS JOIN (SELECT beta_coefficient FROM beta_coefficients LIMIT 1) b CROSS JOIN market_returns mr",
+        "view_definition": "CREATE VIEW alpha_coefficient AS SELECT AVG(pr.daily_return) - (rfr.risk_free_rate + b.beta_coefficient * (AVG(mr.daily_return) - rfr.risk_free_rate)) AS value FROM portfolio_returns pr CROSS JOIN (SELECT risk_free_rate FROM risk_free_rates LIMIT 1) rfr CROSS JOIN (SELECT beta_coefficient FROM beta_coefficients LIMIT 1) b CROSS JOIN market_returns mr GROUP BY entity_id, as_of_date",
+        "directquery_compatibility": "Medium - Alpha calculation"
+      },
+      {
+        "metric_id": "win_rate",
+        "dax_formula": "DIVIDE(DISTINCTCOUNT(FILTER({trades_table}, {trade_pnl} > 0), {trade_id}), DISTINCTCOUNT({trades_table}, {trade_id}))",
+        "sql_equivalent": "SELECT COUNT(DISTINCT CASE WHEN t.profit_loss > 0 THEN t.id ELSE NULL END) / COUNT(DISTINCT t.id) AS win_rate FROM trades t",
+        "view_definition": "CREATE VIEW win_rate AS SELECT COUNT(DISTINCT CASE WHEN t.profit_loss > 0 THEN t.id ELSE NULL END) / COUNT(DISTINCT t.id) AS value FROM trades t GROUP BY entity_id, as_of_date",
+        "directquery_compatibility": "High - Win rate calculation"
+      },
+      {
+        "metric_id": "liquidity_coverage_ratio",
+        "dax_formula": "DIVIDE(SUMX({assets_table}, {high_quality_assets}), SUMX({outflows_table}, {net_cash_outflows}))",
+        "sql_equivalent": "SELECT SUM(hqla.amount) / SUM(nco.amount) AS liquidity_coverage_ratio FROM high_quality_liquid_assets hqla, net_cash_outflows nco",
+        "view_definition": "CREATE VIEW liquidity_coverage_ratio AS SELECT SUM(hqla.amount) / SUM(nco.amount) AS value FROM high_quality_liquid_assets hqla JOIN net_cash_outflows nco ON hqla.entity_id = nco.entity_id AND hqla.as_of_date = nco.as_of_date GROUP BY entity_id, as_of_date",
+        "directquery_compatibility": "High - LCR calculation"
+      },
+      {
+        "metric_id": "net_stable_funding_ratio",
+        "dax_formula": "DIVIDE(SUMX({funding_table}, {available_stable_funding}), SUMX({requirements_table}, {required_stable_funding}))",
+        "sql_equivalent": "SELECT SUM(asf.amount) / SUM(rsf.amount) AS net_stable_funding_ratio FROM available_stable_funding asf, required_stable_funding rsf",
+        "view_definition": "CREATE VIEW net_stable_funding_ratio AS SELECT SUM(asf.amount) / SUM(rsf.amount) AS value FROM available_stable_funding asf JOIN required_stable_funding rsf ON asf.entity_id = rsf.entity_id AND asf.as_of_date = rsf.as_of_date GROUP BY entity_id, as_of_date",
+        "directquery_compatibility": "High - NSFR calculation"
+      },
+      {
+        "metric_id": "tier1_capital_ratio",
+        "dax_formula": "DIVIDE(SUMX({capital_table}, {tier1_capital}), SUMX({assets_table}, {risk_weighted_assets}))",
+        "sql_equivalent": "SELECT SUM(t1c.amount) / SUM(rwa.weighted_amount) AS tier1_capital_ratio FROM tier1_capital t1c, risk_weighted_assets rwa",
+        "view_definition": "CREATE VIEW tier1_capital_ratio AS SELECT SUM(t1c.amount) / SUM(rwa.weighted_amount) AS value FROM tier1_capital t1c JOIN risk_weighted_assets rwa ON t1c.entity_id = rwa.entity_id AND t1c.as_of_date = rwa.as_of_date GROUP BY entity_id, as_of_date",
+        "directquery_compatibility": "High - Tier 1 ratio"
+      },
+      {
+        "metric_id": "leverage_ratio",
+        "dax_formula": "DIVIDE(SUMX({capital_table}, {tier1_capital}), SUMX({exposure_table}, {total_exposure}))",
+        "sql_equivalent": "SELECT SUM(t1c.amount) / SUM(te.amount) AS leverage_ratio FROM tier1_capital t1c, total_exposure te",
+        "view_definition": "CREATE VIEW leverage_ratio AS SELECT SUM(t1c.amount) / SUM(te.amount) AS value FROM tier1_capital t1c JOIN total_exposure te ON t1c.entity_id = te.entity_id AND t1c.as_of_date = te.as_of_date GROUP BY entity_id, as_of_date",
+        "directquery_compatibility": "High - Leverage ratio"
+      },
+      {
+        "metric_id": "large_exposure_limit",
+        "dax_formula": "DIVIDE(MAXX({exposures_table}, {exposure_amount}), SUMX({capital_table}, {eligible_capital}))",
+        "sql_equivalent": "SELECT MAX(ce.amount) / SUM(ec.amount) AS large_exposure_limit FROM counterparty_exposures ce, eligible_capital ec",
+        "view_definition": "CREATE VIEW large_exposure_limit AS SELECT MAX(ce.amount) / SUM(ec.amount) AS value FROM counterparty_exposures ce JOIN eligible_capital ec ON ce.entity_id = ec.entity_id AND ce.as_of_date = ec.as_of_date GROUP BY entity_id, as_of_date",
+        "directquery_compatibility": "High - Large exposure limit"
+      },
+      {
+        "metric_id": "market_risk_capital",
+        "dax_formula": "SUMX({positions_table}, {value_at_risk}) * {confidence_factor}",
+        "sql_equivalent": "SELECT SUM(tp.var_amount) * cf.risk_multiplier AS market_risk_capital FROM trading_positions tp CROSS JOIN confidence_factors cf",
+        "view_definition": "CREATE VIEW market_risk_capital AS SELECT SUM(tp.var_amount) * cf.risk_multiplier AS value FROM trading_positions tp CROSS JOIN (SELECT risk_multiplier FROM confidence_factors LIMIT 1) cf GROUP BY entity_id, as_of_date",
+        "directquery_compatibility": "High - Market risk capital"
+      },
+      {
+        "metric_id": "patient_satisfaction_score",
+        "dax_formula": "AVERAGEX({surveys_table}, {satisfaction_rating})",
+        "sql_equivalent": "SELECT AVG(ps.rating) AS patient_satisfaction_score FROM patient_surveys ps",
+        "view_definition": "CREATE VIEW patient_satisfaction_score AS SELECT AVG(ps.rating) AS value FROM patient_surveys ps GROUP BY entity_id, as_of_date",
+        "directquery_compatibility": "High - Simple average"
+      },
+      {
+        "metric_id": "average_length_of_stay",
+        "dax_formula": "AVERAGEX({admissions_table}, {length_of_stay})",
+        "sql_equivalent": "SELECT AVG(ha.days) AS average_length_of_stay FROM hospital_admissions ha",
+        "view_definition": "CREATE VIEW average_length_of_stay AS SELECT AVG(ha.days) AS value FROM hospital_admissions ha GROUP BY entity_id, as_of_date",
+        "directquery_compatibility": "High - Average LOS"
+      },
+      {
+        "metric_id": "readmission_rate",
+        "dax_formula": "DIVIDE(SUMX({readmissions_table}, {readmission_count}), SUMX({discharges_table}, {total_discharges}))",
+        "sql_equivalent": "SELECT SUM(r.count) / SUM(pd.count) AS readmission_rate FROM readmissions r, patient_discharges pd",
+        "view_definition": "CREATE VIEW readmission_rate AS SELECT SUM(r.count) / SUM(pd.count) AS value FROM readmissions r JOIN patient_discharges pd ON r.entity_id = pd.entity_id AND r.as_of_date = pd.as_of_date GROUP BY entity_id, as_of_date",
+        "directquery_compatibility": "High - Readmission rate"
+      },
+      {
+        "metric_id": "bed_occupancy_rate",
+        "dax_formula": "DIVIDE(SUMX({occupancy_table}, {occupied_beds}), SUMX({capacity_table}, {total_beds}))",
+        "sql_equivalent": "SELECT SUM(bo.count) / SUM(bc.count) AS bed_occupancy_rate FROM bed_occupancy bo, bed_capacity bc",
+        "view_definition": "CREATE VIEW bed_occupancy_rate AS SELECT SUM(bo.count) / SUM(bc.count) AS value FROM bed_occupancy bo JOIN bed_capacity bc ON bo.entity_id = bc.entity_id AND bo.as_of_date = bc.as_of_date GROUP BY entity_id, as_of_date",
+        "directquery_compatibility": "High - Bed occupancy"
+      },
+      {
+        "metric_id": "average_cost_per_patient",
+        "dax_formula": "DIVIDE(SUMX({costs_table}, {treatment_cost}), SUMX({patients_table}, {patient_count}))",
+        "sql_equivalent": "SELECT SUM(tc.amount) / SUM(pc.count) AS average_cost_per_patient FROM treatment_costs tc, patient_counts pc",
+        "view_definition": "CREATE VIEW average_cost_per_patient AS SELECT SUM(tc.amount) / SUM(pc.count) AS value FROM treatment_costs tc JOIN patient_counts pc ON tc.entity_id = pc.entity_id AND tc.as_of_date = pc.as_of_date GROUP BY entity_id, as_of_date",
+        "directquery_compatibility": "High - Average cost"
+      },
+      {
+        "metric_id": "infection_rate",
+        "dax_formula": "DIVIDE(SUMX({infections_table}, {infection_count}), SUMX({patient_days_table}, {total_patient_days})) * 1000",
+        "sql_equivalent": "SELECT (SUM(hi.count) / SUM(pd.days)) * 1000 AS infection_rate FROM hospital_infections hi, patient_days pd",
+        "view_definition": "CREATE VIEW infection_rate AS SELECT (SUM(hi.count) / SUM(pd.days)) * 1000 AS value FROM hospital_infections hi JOIN patient_days pd ON hi.entity_id = pd.entity_id AND hi.as_of_date = pd.as_of_date GROUP BY entity_id, as_of_date",
+        "directquery_compatibility": "High - Infection rate"
+      },
+      {
+        "metric_id": "physician_productivity",
+        "dax_formula": "DIVIDE(SUMX({visits_table}, {patient_visits}), SUMX({physicians_table}, {physician_count}))",
+        "sql_equivalent": "SELECT SUM(pv.count) / SUM(ap.count) AS physician_productivity FROM patient_visits pv, active_physicians ap",
+        "view_definition": "CREATE VIEW physician_productivity AS SELECT SUM(pv.count) / SUM(ap.count) AS value FROM patient_visits pv JOIN active_physicians ap ON pv.entity_id = ap.entity_id AND pv.as_of_date = ap.as_of_date GROUP BY entity_id, as_of_date",
+        "directquery_compatibility": "High - Physician productivity"
+      },
+      {
+        "metric_id": "medication_error_rate",
+        "dax_formula": "DIVIDE(SUMX({errors_table}, {error_count}), SUMX({doses_table}, {total_doses})) * 1000",
+        "sql_equivalent": "SELECT (SUM(me.count) / SUM(da.count)) * 1000 AS medication_error_rate FROM medication_errors me, doses_administered da",
+        "view_definition": "CREATE VIEW medication_error_rate AS SELECT (SUM(me.count) / SUM(da.count)) * 1000 AS value FROM medication_errors me JOIN doses_administered da ON me.entity_id = da.entity_id AND me.as_of_date = da.as_of_date GROUP BY entity_id, as_of_date",
+        "directquery_compatibility": "High - Medication error rate"
+      },
+      {
+        "metric_id": "emergency_wait_time",
+        "dax_formula": "AVERAGEX({wait_times_table}, {wait_minutes})",
+        "sql_equivalent": "SELECT AVG(ewt.minutes) AS emergency_wait_time FROM emergency_wait_times ewt",
+        "view_definition": "CREATE VIEW emergency_wait_time AS SELECT AVG(ewt.minutes) AS value FROM emergency_wait_times ewt GROUP BY entity_id, as_of_date",
+        "directquery_compatibility": "High - Average wait time"
+      },
+      {
+        "metric_id": "revenue_per_bed",
+        "dax_formula": "DIVIDE(SUMX({revenue_table}, {total_revenue}), SUMX({beds_table}, {bed_count}))",
+        "sql_equivalent": "SELECT SUM(hr.amount) / SUM(ab.count) AS revenue_per_bed FROM hospital_revenue hr, available_beds ab",
+        "view_definition": "CREATE VIEW revenue_per_bed AS SELECT SUM(hr.amount) / SUM(ab.count) AS value FROM hospital_revenue hr JOIN available_beds ab ON hr.entity_id = ab.entity_id AND hr.as_of_date = ab.as_of_date GROUP BY entity_id, as_of_date",
+        "directquery_compatibility": "High - Revenue per bed"
+      },
+      {
+        "metric_id": "sales_per_square_foot",
+        "dax_formula": "DIVIDE(SUMX({sales_table}, {annual_sales}), SUMX({stores_table}, {square_footage}))",
+        "sql_equivalent": "SELECT SUM(ss.revenue) / SUM(sd.area_sqft) AS sales_per_square_foot FROM store_sales ss, store_dimensions sd",
+        "view_definition": "CREATE VIEW sales_per_square_foot AS SELECT SUM(ss.revenue) / SUM(sd.area_sqft) AS value FROM store_sales ss JOIN store_dimensions sd ON ss.entity_id = sd.entity_id AND ss.as_of_date = sd.as_of_date GROUP BY entity_id, as_of_date",
+        "directquery_compatibility": "High - Sales per sq ft"
+      },
+      {
+        "metric_id": "inventory_turnover_ratio",
+        "dax_formula": "DIVIDE(SUMX({sales_table}, {cost_of_goods_sold}), AVERAGEX({inventory_table}, {average_inventory}))",
+        "sql_equivalent": "SELECT SUM(s.cogs) / AVG(il.value) AS inventory_turnover_ratio FROM sales_data s, inventory_levels il",
+        "view_definition": "CREATE VIEW inventory_turnover_ratio AS SELECT SUM(s.cogs) / AVG(il.value) AS value FROM sales_data s JOIN inventory_levels il ON s.entity_id = il.entity_id AND s.as_of_date = il.as_of_date GROUP BY entity_id, as_of_date",
+        "directquery_compatibility": "High - Inventory turnover"
+      },
+      {
+        "metric_id": "customer_acquisition_cost",
+        "dax_formula": "DIVIDE(SUMX({marketing_table}, {marketing_spend}), SUMX({customers_table}, {new_customers}))",
+        "sql_equivalent": "SELECT SUM(me.amount) / SUM(nca.count) AS customer_acquisition_cost FROM marketing_expenses me, new_customer_acquisitions nca",
+        "view_definition": "CREATE VIEW customer_acquisition_cost AS SELECT SUM(me.amount) / SUM(nca.count) AS value FROM marketing_expenses me JOIN new_customer_acquisitions nca ON me.entity_id = nca.entity_id AND me.as_of_date = nca.as_of_date GROUP BY entity_id, as_of_date",
+        "directquery_compatibility": "High - CAC calculation"
+      },
+      {
+        "metric_id": "gross_margin_percentage",
+        "dax_formula": "DIVIDE(SUMX({sales_table}, {gross_profit}), SUMX({sales_table}, {total_sales}))",
+        "sql_equivalent": "SELECT SUM(sr.profit) / SUM(sr.revenue) AS gross_margin_percentage FROM sales_revenue sr",
+        "view_definition": "CREATE VIEW gross_margin_percentage AS SELECT SUM(sr.profit) / SUM(sr.revenue) AS value FROM sales_revenue sr GROUP BY entity_id, as_of_date",
+        "directquery_compatibility": "High - Gross margin"
+      },
+      {
+        "metric_id": "average_transaction_value",
+        "dax_formula": "DIVIDE(SUMX({transactions_table}, {transaction_amount}), SUMX({transactions_table}, {transaction_count}))",
+        "sql_equivalent": "SELECT SUM(ct.amount) / SUM(ct.count) AS average_transaction_value FROM customer_transactions ct",
+        "view_definition": "CREATE VIEW average_transaction_value AS SELECT SUM(ct.amount) / SUM(ct.count) AS value FROM customer_transactions ct GROUP BY entity_id, as_of_date",
+        "directquery_compatibility": "High - Average transaction value"
+      },
+      {
+        "metric_id": "customer_lifetime_value",
+        "dax_formula": "SUMX({customers_table}, {average_purchase_value} * {purchase_frequency} * {customer_lifespan})",
+        "sql_equivalent": "SELECT SUM(cs.avg_value * cs.frequency * cs.years) AS customer_lifetime_value FROM customer_segments cs",
+        "view_definition": "CREATE VIEW customer_lifetime_value AS SELECT SUM(cs.avg_value * cs.frequency * cs.years) AS value FROM customer_segments cs GROUP BY entity_id, as_of_date",
+        "directquery_compatibility": "High - CLV calculation"
+      },
+      {
+        "metric_id": "shrinkage_rate",
+        "dax_formula": "DIVIDE(SUMX({shrinkage_table}, {shrinkage_amount}), SUMX({inventory_table}, {total_inventory_value}))",
+        "sql_equivalent": "SELECT SUM(isv.value) / SUM(iv.amount) AS shrinkage_rate FROM inventory_shrinkage isv, inventory_value iv",
+        "view_definition": "CREATE VIEW shrinkage_rate AS SELECT SUM(isv.value) / SUM(iv.amount) AS value FROM inventory_shrinkage isv JOIN inventory_value iv ON isv.entity_id = iv.entity_id AND isv.as_of_date = iv.as_of_date GROUP BY entity_id, as_of_date",
+        "directquery_compatibility": "High - Shrinkage rate"
+      },
+      {
+        "metric_id": "conversion_rate",
+        "dax_formula": "DIVIDE(SUMX({purchases_table}, {purchase_count}), SUMX({traffic_table}, {visitor_count}))",
+        "sql_equivalent": "SELECT SUM(sp.count) / SUM(st.count) AS conversion_rate FROM store_purchases sp, store_traffic st",
+        "view_definition": "CREATE VIEW conversion_rate AS SELECT SUM(sp.count) / SUM(st.count) AS value FROM store_purchases sp JOIN store_traffic st ON sp.entity_id = st.entity_id AND sp.as_of_date = st.as_of_date GROUP BY entity_id, as_of_date",
+        "directquery_compatibility": "High - Conversion rate"
+      },
+      {
+        "metric_id": "employee_productivity",
+        "dax_formula": "DIVIDE(SUMX({sales_table}, {total_sales}), SUMX({labor_table}, {total_hours}))",
+        "sql_equivalent": "SELECT SUM(ss.revenue) / SUM(eh.hours) AS employee_productivity FROM store_sales ss, employee_hours eh",
+        "view_definition": "CREATE VIEW employee_productivity AS SELECT SUM(ss.revenue) / SUM(eh.hours) AS value FROM store_sales ss JOIN employee_hours eh ON ss.entity_id = eh.entity_id AND ss.as_of_date = eh.as_of_date GROUP BY entity_id, as_of_date",
+        "directquery_compatibility": "High - Employee productivity"
+      },
+      {
+        "metric_id": "seasonal_sales_index",
+        "dax_formula": "DIVIDE(SUMX({current_table}, {current_sales}), AVERAGEX({seasonal_table}, {seasonal_average}))",
+        "sql_equivalent": "SELECT SUM(cps.revenue) / AVG(sa.avg_revenue) AS seasonal_sales_index FROM current_period_sales cps, seasonal_averages sa",
+        "view_definition": "CREATE VIEW seasonal_sales_index AS SELECT SUM(cps.revenue) / AVG(sa.avg_revenue) AS value FROM current_period_sales cps JOIN seasonal_averages sa ON cps.entity_id = sa.entity_id AND cps.as_of_date = sa.as_of_date GROUP BY entity_id, as_of_date",
+        "directquery_compatibility": "High - Seasonal index"
+      },
+      {
+        "metric_id": "effective_interest_income",
+        "dax_formula": "{opening_carrying_amount} * {effective_interest_rate}",
+        "sql_equivalent": "SELECT oca.opening_carrying_amount * eir.effective_interest_rate AS effective_interest_income FROM opening_carrying_amounts oca, effective_interest_rates eir",
+        "view_definition": "CREATE VIEW effective_interest_income AS SELECT oca.opening_carrying_amount * eir.effective_interest_rate AS value FROM opening_carrying_amounts oca JOIN effective_interest_rates eir ON oca.entity_id = eir.entity_id AND oca.as_of_date = eir.as_of_date",
+        "directquery_compatibility": "High - EIR calculation"
+      },
+      {
+        "metric_id": "premium_discount_amortization",
+        "dax_formula": "({effective_interest_income} - {coupon_cash_received})",
+        "sql_equivalent": "SELECT (eii.value - ccr.coupon_cash_received) AS premium_discount_amortization FROM effective_interest_income eii, coupon_cash_received ccr",
+        "view_definition": "CREATE VIEW premium_discount_amortization AS SELECT (eii.value - ccr.coupon_cash_received) AS value FROM effective_interest_income eii JOIN coupon_cash_received ccr ON eii.entity_id = ccr.entity_id AND eii.as_of_date = ccr.as_of_date",
+        "directquery_compatibility": "High - Amortization calculation"
+      },
+      {
+        "metric_id": "carrying_amount_rollforward",
+        "dax_formula": "{opening_carrying_amount} + {effective_interest_income} - {coupon_cash_received} + {premium_discount_amortization} - {credit_loss_allowance_change} + {fx_remeasurement}",
+        "sql_equivalent": "SELECT oca.opening_carrying_amount + eii.value - ccr.coupon_cash_received + pda.value - clac.ecl_closing + clac.ecl_opening + fr.fx_remeasurement AS carrying_amount_rollforward FROM opening_carrying_amounts oca JOIN effective_interest_income eii ON oca.entity_id = eii.entity_id AND oca.as_of_date = eii.as_of_date JOIN coupon_cash_received ccr ON oca.entity_id = ccr.entity_id AND oca.as_of_date = ccr.as_of_date JOIN premium_discount_amortization pda ON oca.entity_id = pda.entity_id AND oca.as_of_date = pda.as_of_date JOIN credit_loss_allowance_change clac ON oca.entity_id = clac.entity_id AND oca.as_of_date = clac.as_of_date JOIN fx_remeasurement fr ON oca.entity_id = fr.entity_id AND oca.as_of_date = fr.as_of_date",
+        "view_definition": "CREATE VIEW carrying_amount_rollforward AS SELECT oca.opening_carrying_amount + eii.value - ccr.coupon_cash_received + pda.value - clac.ecl_closing + clac.ecl_opening + fr.fx_remeasurement AS value FROM opening_carrying_amounts oca JOIN effective_interest_income eii ON oca.entity_id = eii.entity_id AND oca.as_of_date = eii.as_of_date JOIN coupon_cash_received ccr ON oca.entity_id = ccr.entity_id AND oca.as_of_date = ccr.as_of_date JOIN premium_discount_amortization pda ON oca.entity_id = pda.entity_id AND oca.as_of_date = pda.as_of_date JOIN credit_loss_allowance_change clac ON oca.entity_id = clac.entity_id AND oca.as_of_date = clac.as_of_date JOIN fx_remeasurement fr ON oca.entity_id = fr.entity_id AND oca.as_of_date = fr.as_of_date",
+        "directquery_compatibility": "Medium - Complex rollforward, may need optimization"
+      },
+      {
+        "metric_id": "fair_value_change_pnl_trading",
+        "dax_formula": "{fair_value_current} - {fair_value_prior}",
+        "sql_equivalent": "SELECT fvc.fair_value_current - fvp.fair_value_prior AS fair_value_change_pnl_trading FROM fair_value_current fvc, fair_value_prior fvp",
+        "view_definition": "CREATE VIEW fair_value_change_pnl_trading AS SELECT fvc.fair_value_current - fvp.fair_value_prior AS value FROM fair_value_current fvc JOIN fair_value_prior fvp ON fvc.entity_id = fvp.entity_id AND fvc.as_of_date = fvp.as_of_date",
+        "directquery_compatibility": "High - FV change P&L"
+      },
+      {
+        "metric_id": "fair_value_change_oci_afs",
+        "dax_formula": "{fair_value_current} - {amortised_cost_current}",
+        "sql_equivalent": "SELECT fvc.fair_value_current - acc.carrying_amount_rollforward AS fair_value_change_oci_afs FROM fair_value_current fvc, carrying_amount_rollforward acc",
+        "view_definition": "CREATE VIEW fair_value_change_oci_afs AS SELECT fvc.fair_value_current - acc.value AS value FROM fair_value_current fvc JOIN carrying_amount_rollforward acc ON fvc.entity_id = acc.entity_id AND fvc.as_of_date = acc.as_of_date",
+        "directquery_compatibility": "High - FV change OCI"
+      },
+      {
+        "metric_id": "realised_gain_loss_disposal",
+        "dax_formula": "{consideration_received} - {carrying_amount_at_sale}",
+        "sql_equivalent": "SELECT cr.consideration_received - cas.carrying_amount_at_sale AS realised_gain_loss_disposal FROM consideration_received cr, carrying_amount_at_sale cas",
+        "view_definition": "CREATE VIEW realised_gain_loss_disposal AS SELECT cr.consideration_received - cas.carrying_amount_at_sale AS value FROM consideration_received cr JOIN carrying_amount_at_sale cas ON cr.entity_id = cas.entity_id AND cr.as_of_date = cas.as_of_date",
+        "directquery_compatibility": "High - Realised G/L"
+      },
+      {
+        "metric_id": "credit_loss_allowance_change",
+        "dax_formula": "{ecl_closing} - {ecl_opening}",
+        "sql_equivalent": "SELECT eclc.ecl_closing - ecli.ecl_opening AS credit_loss_allowance_change FROM ecl_closing eclc, ecl_opening ecli",
+        "view_definition": "CREATE VIEW credit_loss_allowance_change AS SELECT eclc.ecl_closing - ecli.ecl_opening AS value FROM ecl_closing eclc JOIN ecl_opening ecli ON eclc.entity_id = ecli.entity_id AND eclc.as_of_date = ecli.as_of_date",
+        "directquery_compatibility": "High - ECL change"
+      },
+      {
+        "metric_id": "fx_remeasurement",
+        "dax_formula": "({closing_rate} - {average_rate}) * {monetary_balance_foreign}",
+        "sql_equivalent": "SELECT (fxc.fx_rate_closing - fxa.fx_rate_avg_period) * mbf.monetary_balance_foreign AS fx_remeasurement FROM fx_rate_closing fxc, fx_rate_avg_period fxa, monetary_balance_foreign mbf",
+        "view_definition": "CREATE VIEW fx_remeasurement AS SELECT (fxc.fx_rate_closing - fxa.fx_rate_avg_period) * mbf.monetary_balance_foreign AS value FROM fx_rate_closing fxc JOIN fx_rate_avg_period fxa ON fxc.entity_id = fxa.entity_id AND fxc.as_of_date = fxa.as_of_date JOIN monetary_balance_foreign mbf ON fxc.entity_id = mbf.entity_id AND fxc.as_of_date = mbf.as_of_date",
+        "directquery_compatibility": "High - FX remeasurement"
+      },
+      {
+        "metric_id": "fx_translation_reserve_oci",
+        "dax_formula": "COALESCE({cta_prior}, 0) + {cta_movement}",
+        "sql_equivalent": "SELECT COALESCE(ctap.cta_prior, 0) + ctam.cta_movement AS fx_translation_reserve_oci FROM cta_prior ctap, cta_movement ctam",
+        "view_definition": "CREATE VIEW fx_translation_reserve_oci AS SELECT COALESCE(ctap.cta_prior, 0) + ctam.cta_movement AS value FROM cta_prior ctap JOIN cta_movement ctam ON ctap.entity_id = ctam.entity_id AND ctap.as_of_date = ctam.as_of_date",
+        "directquery_compatibility": "High - CTA reserve"
+      },
+      {
+        "metric_id": "equity_method_share_of_profit",
+        "dax_formula": "{investee_net_income} * {ownership_pct}",
+        "sql_equivalent": "SELECT ini.investee_net_income * op.ownership_pct AS equity_method_share_of_profit FROM investee_net_income ini, ownership_pct op",
+        "view_definition": "CREATE VIEW equity_method_share_of_profit AS SELECT ini.investee_net_income * op.ownership_pct AS value FROM investee_net_income ini JOIN ownership_pct op ON ini.entity_id = op.entity_id AND ini.as_of_date = op.as_of_date",
+        "directquery_compatibility": "High - Equity method profit"
+      },
+      {
+        "metric_id": "equity_method_carrying_value",
+        "dax_formula": "{opening_carrying_value} + {equity_method_share_of_profit} - {dividends_received} + {oci_adjustment} + {fx_translation}",
+        "sql_equivalent": "SELECT ocv.opening_carrying_value + emsop.value - dr.dividends_received + oca.oci_adjustment + ftr.value AS equity_method_carrying_value FROM opening_carrying_value ocv JOIN equity_method_share_of_profit emsop ON ocv.entity_id = emsop.entity_id AND ocv.as_of_date = emsop.as_of_date JOIN dividends_received dr ON ocv.entity_id = dr.entity_id AND ocv.as_of_date = dr.as_of_date JOIN oci_adjustment oca ON ocv.entity_id = oca.entity_id AND ocv.as_of_date = oca.as_of_date JOIN fx_translation_reserve_oci ftr ON ocv.entity_id = ftr.entity_id AND ocv.as_of_date = ftr.as_of_date",
+        "view_definition": "CREATE VIEW equity_method_carrying_value AS SELECT ocv.opening_carrying_value + emsop.value - dr.dividends_received + oca.oci_adjustment + ftr.value AS value FROM opening_carrying_value ocv JOIN equity_method_share_of_profit emsop ON ocv.entity_id = emsop.entity_id AND ocv.as_of_date = emsop.as_of_date JOIN dividends_received dr ON ocv.entity_id = dr.entity_id AND ocv.as_of_date = dr.as_of_date JOIN oci_adjustment oca ON ocv.entity_id = oca.entity_id AND ocv.as_of_date = oca.as_of_date JOIN fx_translation_reserve_oci ftr ON ocv.entity_id = ftr.entity_id AND ocv.as_of_date = ftr.as_of_date",
+        "directquery_compatibility": "Medium - Complex equity method calculation"
+      },
+      {
+        "metric_id": "nci_share_of_profit",
+        "dax_formula": "{subsidiary_profit} * {nci_pct}",
+        "sql_equivalent": "SELECT sp.subsidiary_profit * np.nci_pct AS nci_share_of_profit FROM subsidiary_profit sp, nci_pct np",
+        "view_definition": "CREATE VIEW nci_share_of_profit AS SELECT sp.subsidiary_profit * np.nci_pct AS value FROM subsidiary_profit sp JOIN nci_pct np ON sp.entity_id = np.entity_id AND sp.as_of_date = np.as_of_date",
+        "directquery_compatibility": "High - NCI share"
+      },
+      {
+        "metric_id": "impairment_loss_incurred",
+        "dax_formula": "MAX(0, {carrying_amount} - {recoverable_amount})",
+        "sql_equivalent": "SELECT GREATEST(0, ca.carrying_amount - ra.recoverable_amount) AS impairment_loss_incurred FROM carrying_amount ca, recoverable_amount ra",
+        "view_definition": "CREATE VIEW impairment_loss_incurred AS SELECT GREATEST(0, ca.carrying_amount - ra.recoverable_amount) AS value FROM carrying_amount ca JOIN recoverable_amount ra ON ca.entity_id = ra.entity_id AND ca.as_of_date = ra.as_of_date",
+        "directquery_compatibility": "High - Impairment loss"
+      },
+      {
+        "metric_id": "dividend_income_accrual",
+        "dax_formula": "SUMX(FILTER({dividend_events}, {ex_date} <= {period_end}), {dividend_amount})",
+        "sql_equivalent": "SELECT SUM(de.dividend_amount) AS dividend_income_accrual FROM dividend_events de WHERE de.ex_date <= de.period_end",
+        "view_definition": "CREATE VIEW dividend_income_accrual AS SELECT SUM(de.dividend_amount) AS value FROM dividend_events de WHERE de.ex_date <= de.period_end GROUP BY entity_id, as_of_date",
+        "directquery_compatibility": "High - Dividend accrual"
+      },
+      {
+        "metric_id": "fair_value_hierarchy_exposure",
+        "dax_formula": "SUMX(FILTER({positions}, {fv_level} = SELECTEDVALUE({level_filter})), {fair_value})",
+        "sql_equivalent": "SELECT SUM(p.fair_value) AS fair_value_hierarchy_exposure FROM positions p WHERE p.fv_hierarchy_level = (SELECT level_filter FROM level_filters LIMIT 1)",
+        "view_definition": "CREATE VIEW fair_value_hierarchy_exposure AS SELECT SUM(p.fair_value) AS value FROM positions p WHERE p.fv_hierarchy_level = (SELECT level_filter FROM level_filters LIMIT 1) GROUP BY entity_id, as_of_date",
+        "directquery_compatibility": "Medium - FV hierarchy exposure"
+      },
+      {
+        "metric_id": "oci_recycling_on_disposal",
+        "dax_formula": "MIN({accumulated_oci_balance}, {realised_gain_loss_disposal})",
+        "sql_equivalent": "SELECT LEAST(aocb.accumulated_oci_balance, rgld.value) AS oci_recycling_on_disposal FROM accumulated_oci_balance aocb, realised_gain_loss_disposal rgld",
+        "view_definition": "CREATE VIEW oci_recycling_on_disposal AS SELECT LEAST(aocb.accumulated_oci_balance, rgld.value) AS value FROM accumulated_oci_balance aocb JOIN realised_gain_loss_disposal rgld ON aocb.entity_id = rgld.entity_id AND aocb.as_of_date = rgld.as_of_date",
+        "directquery_compatibility": "High - OCI recycling"
+      },
+      {
+        "metric_id": "spot_conversion",
+        "dax_formula": "{amount_source} * {spot_rate}",
+        "sql_equivalent": "SELECT asc.amount_source_currency * sfr.spot_fx_rate AS spot_conversion FROM amount_source_currency asc, spot_fx_rate sfr",
+        "view_definition": "CREATE VIEW spot_conversion AS SELECT asc.amount_source_currency * sfr.spot_fx_rate AS value FROM amount_source_currency asc JOIN spot_fx_rate sfr ON asc.entity_id = sfr.entity_id AND asc.as_of_date = sfr.as_of_date",
+        "directquery_compatibility": "High - Spot conversion"
+      },
+      {
+        "metric_id": "average_period_rate",
+        "dax_formula": "AVERAGEX(FILTER({fx_rates}, {date} >= {period_start} && {date} <= {period_end}), {fx_rate})",
+        "sql_equivalent": "SELECT AVG(fr.fx_rate) AS average_period_rate FROM fx_rates fr WHERE fr.date >= fr.period_start AND fr.date <= fr.period_end",
+        "view_definition": "CREATE VIEW average_period_rate AS SELECT AVG(fr.fx_rate) AS value FROM fx_rates fr WHERE fr.date >= fr.period_start AND fr.date <= fr.period_end GROUP BY entity_id, as_of_date",
+        "directquery_compatibility": "High - Average period rate"
+      },
+      {
+        "metric_id": "closing_rate_translation",
+        "dax_formula": "{balance_foreign} * {closing_rate}",
+        "sql_equivalent": "SELECT bfc.balance_foreign_currency * frc.fx_rate_closing AS closing_rate_translation FROM balance_foreign_currency bfc, fx_rate_closing frc",
+        "view_definition": "CREATE VIEW closing_rate_translation AS SELECT bfc.balance_foreign_currency * frc.fx_rate_closing AS value FROM balance_foreign_currency bfc JOIN fx_rate_closing frc ON bfc.entity_id = frc.entity_id AND bfc.as_of_date = frc.as_of_date",
+        "directquery_compatibility": "High - Closing rate translation"
+      },
+      {
+        "metric_id": "net_fx_exposure",
+        "dax_formula": "{fx_assets} - {fx_liabilities}",
+        "sql_equivalent": "SELECT fa.fx_assets - fl.fx_liabilities AS net_fx_exposure FROM fx_assets fa, fx_liabilities fl",
+        "view_definition": "CREATE VIEW net_fx_exposure AS SELECT fa.fx_assets - fl.fx_liabilities AS value FROM fx_assets fa JOIN fx_liabilities fl ON fa.entity_id = fl.entity_id AND fa.as_of_date = fl.as_of_date",
+        "directquery_compatibility": "High - Net FX exposure"
+      },
+      {
+        "metric_id": "open_fx_position",
+        "dax_formula": "{net_fx_exposure} - {hedged_amount}",
+        "sql_equivalent": "SELECT nfe.value - ha.hedged_amount AS open_fx_position FROM net_fx_exposure nfe, hedged_amount ha",
+        "view_definition": "CREATE VIEW open_fx_position AS SELECT nfe.value - ha.hedged_amount AS value FROM net_fx_exposure nfe JOIN hedged_amount ha ON nfe.entity_id = ha.entity_id AND nfe.as_of_date = ha.as_of_date",
+        "directquery_compatibility": "High - Open FX position"
+      },
+      {
+        "metric_id": "fx_delta",
+        "dax_formula": "{portfolio_value} * 0.01",
+        "sql_equivalent": "SELECT pv.portfolio_value * 0.01 AS fx_delta FROM portfolio_value pv",
+        "view_definition": "CREATE VIEW fx_delta AS SELECT pv.portfolio_value * 0.01 AS value FROM portfolio_value pv",
+        "directquery_compatibility": "High - FX delta"
+      },
+      {
+        "metric_id": "currency_contribution_to_return",
+        "dax_formula": "{portfolio_return_base} - {portfolio_return_local}",
+        "sql_equivalent": "SELECT prb.portfolio_return_in_base_currency - prl.portfolio_return_in_local_currency AS currency_contribution_to_return FROM portfolio_return_in_base_currency prb, portfolio_return_in_local_currency prl",
+        "view_definition": "CREATE VIEW currency_contribution_to_return AS SELECT prb.portfolio_return_in_base_currency - prl.portfolio_return_in_local_currency AS value FROM portfolio_return_in_base_currency prb JOIN portfolio_return_in_local_currency prl ON prb.entity_id = prl.entity_id AND prb.as_of_date = prl.as_of_date",
+        "directquery_compatibility": "High - Currency contribution"
+      },
+      {
+        "metric_id": "hedging_effectiveness",
+        "dax_formula": "DIVIDE({hedge_pl}, {exposure_pl})",
+        "sql_equivalent": "SELECT hpl.hedge_profit_loss / epl.exposure_profit_loss AS hedging_effectiveness FROM hedge_profit_loss hpl, exposure_profit_loss epl",
+        "view_definition": "CREATE VIEW hedging_effectiveness AS SELECT hpl.hedge_profit_loss / epl.exposure_profit_loss AS value FROM hedge_profit_loss hpl JOIN exposure_profit_loss epl ON hpl.entity_id = epl.entity_id AND hpl.as_of_date = epl.as_of_date",
+        "directquery_compatibility": "High - Hedging effectiveness"
+      },
+      {
+        "metric_id": "cta_balance",
+        "dax_formula": "COALESCE({cta_prior}, 0) + {cta_movement}",
+        "sql_equivalent": "SELECT COALESCE(ctap.cta_prior, 0) + ctam.cta_movement AS cta_balance FROM cta_prior ctap, cta_movement ctam",
+        "view_definition": "CREATE VIEW cta_balance AS SELECT COALESCE(ctap.cta_prior, 0) + ctam.cta_movement AS value FROM cta_prior ctap JOIN cta_movement ctam ON ctap.entity_id = ctam.entity_id AND ctap.as_of_date = ctam.as_of_date",
+        "directquery_compatibility": "High - CTA balance"
+      },
+      {
+        "metric_id": "realised_fx_gain_loss",
+        "dax_formula": "{settlement_amount_base} - {contracted_amount_base}",
+        "sql_equivalent": "SELECT sab.settlement_amount_base - cab.contracted_amount_base AS realised_fx_gain_loss FROM settlement_amount_base sab, contracted_amount_base cab",
+        "view_definition": "CREATE VIEW realised_fx_gain_loss AS SELECT sab.settlement_amount_base - cab.contracted_amount_base AS value FROM settlement_amount_base sab JOIN contracted_amount_base cab ON sab.entity_id = cab.entity_id AND sab.as_of_date = cab.as_of_date",
+        "directquery_compatibility": "High - Realised FX G/L"
+      },
+      {
+        "metric_id": "unrealised_fx_gain_loss",
+        "dax_formula": "({current_fx_rate} - {prior_fx_rate}) * {open_position_foreign}",
+        "sql_equivalent": "SELECT (cfr.current_fx_rate - pfr.prior_fx_rate) * opf.open_position_foreign AS unrealised_fx_gain_loss FROM current_fx_rate cfr, prior_fx_rate pfr, open_position_foreign opf",
+        "view_definition": "CREATE VIEW unrealised_fx_gain_loss AS SELECT (cfr.current_fx_rate - pfr.prior_fx_rate) * opf.open_position_foreign AS value FROM current_fx_rate cfr JOIN prior_fx_rate pfr ON cfr.entity_id = pfr.entity_id AND cfr.as_of_date = pfr.as_of_date JOIN open_position_foreign opf ON cfr.entity_id = opf.entity_id AND cfr.as_of_date = opf.as_of_date",
+        "directquery_compatibility": "High - Unrealised FX G/L"
+      }
+    ],
+    "implementation_notes": {
+      "database_compatibility": "These examples use standard SQL. Adapt for your specific database (PostgreSQL, SQL Server, etc.)",
+      "performance_considerations": "Create indexes on entity_id, as_of_date, and frequently filtered columns",
+      "materialization_strategy": "Use materialized views for complex calculations that are queried frequently",
+      "directquery_optimization": "Ensure views are simple enough to fold into single SQL queries",
+      "testing_approach": "Compare DAX results with SQL results to validate accuracy"
+    }
+  }
+}

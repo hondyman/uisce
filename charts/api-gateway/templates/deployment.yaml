@@ -1,0 +1,172 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "api-gateway.fullname" . }}
+  labels:
+    {{- include "api-gateway.labels" . | nindent 4 }}
+  annotations:
+    reloader.stakater.com/auto: "true"
+spec:
+  {{- if not .Values.autoscaling.enabled }}
+  replicas: {{ .Values.replicaCount }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "api-gateway.selectorLabels" . | nindent 6 }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 25%
+      maxUnavailable: 0
+  template:
+    metadata:
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "{{ .Values.service.metricsPort | default 9090 }}"
+        prometheus.io/path: "/metrics"
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      labels:
+        {{- include "api-gateway.selectorLabels" . | nindent 8 }}
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      {{- with .Values.global.image.pullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "api-gateway.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: {{ .Chart.Name }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          image: {{ include "api-gateway.image" . }}
+          imagePullPolicy: {{ .Values.global.image.pullPolicy | default "IfNotPresent" }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.service.port }}
+              protocol: TCP
+            - name: grpc
+              containerPort: {{ .Values.service.grpcPort | default 9090 }}
+              protocol: TCP
+            - name: metrics
+              containerPort: {{ .Values.service.metricsPort | default 9091 }}
+              protocol: TCP
+          env:
+            # Service configuration
+            - name: SERVICE_NAME
+              value: "api-gateway"
+            - name: SERVICE_PORT
+              value: "{{ .Values.service.port }}"
+            - name: ENVIRONMENT
+              value: {{ .Values.global.environment | default "production" | quote }}
+            - name: REGION
+              value: {{ .Values.global.region | default "us-east-1" | quote }}
+              
+            # Auth configuration
+            - name: AUTH_PROVIDER
+              value: {{ .Values.auth.provider | default "okta" | quote }}
+            - name: AUTH_ISSUER_URL
+              value: {{ .Values.auth.issuerUrl | quote }}
+            - name: AUTH_AUDIENCE
+              value: {{ .Values.auth.audience | quote }}
+              
+            # Database
+            - name: DATABASE_HOST
+              value: {{ .Values.global.postgresql.host | quote }}
+            - name: DATABASE_PORT
+              value: {{ .Values.global.postgresql.port | quote }}
+            - name: DATABASE_NAME
+              value: {{ .Values.global.postgresql.database | quote }}
+            - name: DATABASE_SSLMODE
+              value: {{ .Values.global.postgresql.sslmode | default "require" | quote }}
+            - name: DATABASE_USER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "api-gateway.fullname" . }}-secrets
+                  key: database-user
+            - name: DATABASE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "api-gateway.fullname" . }}-secrets
+                  key: database-password
+                  
+            # Redis
+            - name: REDIS_HOST
+              value: {{ .Values.global.redis.host | quote }}
+            - name: REDIS_PORT
+              value: {{ .Values.global.redis.port | quote }}
+              
+            # Rate limiting
+            - name: RATE_LIMIT_GLOBAL
+              value: {{ .Values.rateLimit.global.requestsPerMinute | default 10000 | quote }}
+            - name: RATE_LIMIT_PER_TENANT
+              value: {{ .Values.rateLimit.perTenant.requestsPerMinute | default 1000 | quote }}
+            - name: RATE_LIMIT_PER_USER
+              value: {{ .Values.rateLimit.perUser.requestsPerMinute | default 100 | quote }}
+              
+            # Tracing
+            {{- if .Values.global.observability.jaeger.enabled }}
+            - name: JAEGER_ENDPOINT
+              value: {{ .Values.global.observability.jaeger.endpoint | quote }}
+            - name: OTEL_EXPORTER_JAEGER_ENDPOINT
+              value: {{ .Values.global.observability.jaeger.endpoint | quote }}
+            {{- end }}
+            
+            # Service discovery - downstream services
+            - name: SEMANTIC_ENGINE_URL
+              value: "http://semantic-engine:8081"
+            - name: GOVERNANCE_ENGINE_URL
+              value: "http://governance-engine:8082"
+            - name: CUBE_API_URL
+              value: "http://cube-api:4000"
+              
+          livenessProbe:
+            {{- toYaml .Values.livenessProbe | nindent 12 }}
+          readinessProbe:
+            {{- toYaml .Values.readinessProbe | nindent 12 }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          volumeMounts:
+            - name: config
+              mountPath: /app/config
+              readOnly: true
+            {{- if .Values.extraVolumeMounts }}
+            {{- toYaml .Values.extraVolumeMounts | nindent 12 }}
+            {{- end }}
+      volumes:
+        - name: config
+          configMap:
+            name: {{ include "api-gateway.fullname" . }}-config
+        {{- if .Values.extraVolumes }}
+        {{- toYaml .Values.extraVolumes | nindent 8 }}
+        {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              {{- include "api-gateway.selectorLabels" . | nindent 14 }}
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              {{- include "api-gateway.selectorLabels" . | nindent 14 }}

@@ -1,0 +1,60 @@
+table:
+  name: lookups
+  schema: public
+object_relationships:
+- name: tenant
+  using:
+    foreign_key_constraint_on: tenant_id
+select_permissions:
+- role: anonymous
+  permission:
+    columns:
+    - id
+    - tenant_id
+    - name
+    - description
+    - source_table
+    - created_at
+    - updated_at
+    filter:
+      tenant_id:
+        _eq: X-Hasura-Tenant-Id
+- role: user
+  permission:
+    columns:
+    - id
+    - tenant_id
+    - name
+    - description
+    - source_table
+    - created_at
+    - updated_at
+    filter:
+      tenant_id:
+        _eq: X-Hasura-Tenant-Id
+insert_permissions:
+- role: user
+  permission:
+    check:
+      tenant_id:
+        _eq: X-Hasura-Tenant-Id
+    columns:
+    - name
+    - description
+    - source_table
+update_permissions:
+- role: user
+  permission:
+    columns:
+    - name
+    - description
+    - source_table
+    filter:
+      tenant_id:
+        _eq: X-Hasura-Tenant-Id
+delete_permissions:
+- role: user
+  permission:
+    filter:
+      tenant_id:
+        _eq: X-Hasura-Tenant-Id

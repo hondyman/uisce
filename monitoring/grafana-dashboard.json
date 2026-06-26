@@ -1,0 +1,174 @@
+{
+  "dashboard": {
+    "id": null,
+    "title": "SemLayer Observability Dashboard",
+    "tags": ["semlayer", "governance", "performance"],
+    "timezone": "UTC",
+    "panels": [
+      {
+        "id": 1,
+        "title": "Request Rate (RED)",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "rate(semlayer_requests_total[5m])",
+            "legendFormat": "{{endpoint}} {{method}}"
+          }
+        ],
+        "yAxes": [
+          {
+            "unit": "reqps",
+            "label": "Requests per second"
+          }
+        ]
+      },
+      {
+        "id": 2,
+        "title": "Request Duration (RED)",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.95, rate(semlayer_request_duration_seconds_bucket[5m]))",
+            "legendFormat": "95th percentile"
+          },
+          {
+            "expr": "histogram_quantile(0.50, rate(semlayer_request_duration_seconds_bucket[5m]))",
+            "legendFormat": "50th percentile"
+          }
+        ],
+        "yAxes": [
+          {
+            "unit": "seconds",
+            "label": "Duration"
+          }
+        ]
+      },
+      {
+        "id": 3,
+        "title": "Error Rate (RED)",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "rate(semlayer_errors_total[5m])",
+            "legendFormat": "{{type}} {{endpoint}}"
+          }
+        ],
+        "yAxes": [
+          {
+            "unit": "errors/s",
+            "label": "Errors per second"
+          }
+        ]
+      },
+      {
+        "id": 4,
+        "title": "Cache Utilization (USE)",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "semlayer_cache_utilization_ratio",
+            "legendFormat": "{{cache_name}} shard {{shard}}"
+          }
+        ],
+        "yAxes": [
+          {
+            "unit": "percentunit",
+            "label": "Utilization"
+          }
+        ]
+      },
+      {
+        "id": 5,
+        "title": "Database Connections (USE)",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "semlayer_db_connections_active",
+            "legendFormat": "{{pool_type}}"
+          }
+        ],
+        "yAxes": [
+          {
+            "unit": "connections",
+            "label": "Active connections"
+          }
+        ]
+      },
+      {
+        "id": 6,
+        "title": "Memory Utilization (USE)",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "semlayer_memory_utilization_bytes",
+            "legendFormat": "Memory usage"
+          }
+        ],
+        "yAxes": [
+          {
+            "unit": "bytes",
+            "label": "Memory"
+          }
+        ]
+      },
+      {
+        "id": 7,
+        "title": "Goroutine Count",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "semlayer_goroutines_total",
+            "legendFormat": "Goroutines"
+          }
+        ],
+        "yAxes": [
+          {
+            "unit": "short",
+            "label": "Count"
+          }
+        ]
+      },
+      {
+        "id": 8,
+        "title": "Mutex Block Time",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "rate(semlayer_mutex_block_seconds[5m])",
+            "legendFormat": "{{mutex_name}}"
+          }
+        ],
+        "yAxes": [
+          {
+            "unit": "seconds",
+            "label": "Block time"
+          }
+        ]
+      },
+      {
+        "id": 9,
+        "title": "Governance KPIs",
+        "type": "table",
+        "targets": [
+          {
+            "expr": "semlayer_requests_total{status='200'} / semlayer_requests_total",
+            "legendFormat": "Success Rate"
+          },
+          {
+            "expr": "histogram_quantile(0.95, semlayer_request_duration_seconds)",
+            "legendFormat": "P95 Latency"
+          },
+          {
+            "expr": "rate(semlayer_errors_total[1h])",
+            "legendFormat": "Error Rate (1h)"
+          }
+        ]
+      }
+    ],
+    "time": {
+      "from": "now-1h",
+      "to": "now"
+    },
+    "refresh": "30s"
+  }
+}

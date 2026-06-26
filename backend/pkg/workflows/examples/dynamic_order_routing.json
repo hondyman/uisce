@@ -1,0 +1,113 @@
+{
+    "name": "Dynamic Order Routing",
+    "description": "Demonstrates Switch, Publish Event, and Alert nodes for routing orders by type",
+    "startNodeId": "node_start",
+    "globalState": {
+        "order_type": "EXPRESS",
+        "order_id": "ORD-99887",
+        "amount": 2500.00
+    },
+    "nodes": {
+        "node_start": {
+            "id": "node_start",
+            "type": "ACTIVITY",
+            "name": "Receive Order",
+            "config": {
+                "activityName": "ActivityLogEvent",
+                "message": "Order received for routing"
+            },
+            "nextNodeId": "node_switch_order_type"
+        },
+        "node_switch_order_type": {
+            "id": "node_switch_order_type",
+            "type": "switch",
+            "name": "Route by Order Type",
+            "config": {
+                "expression": "$.order_type",
+                "cases": [
+                    {
+                        "value": "EXPRESS",
+                        "target_node": "node_express_handler",
+                        "label": "Express"
+                    },
+                    {
+                        "value": "STANDARD",
+                        "target_node": "node_standard_handler",
+                        "label": "Standard"
+                    },
+                    {
+                        "value": "BULK",
+                        "target_node": "node_bulk_handler",
+                        "label": "Bulk"
+                    }
+                ],
+                "default_id": "node_standard_handler"
+            }
+        },
+        "node_express_handler": {
+            "id": "node_express_handler",
+            "type": "ACTIVITY",
+            "name": "Process Express Order",
+            "config": {
+                "activityName": "ActivityProcessExpressOrder"
+            },
+            "nextNodeId": "node_publish_event"
+        },
+        "node_standard_handler": {
+            "id": "node_standard_handler",
+            "type": "ACTIVITY",
+            "name": "Process Standard Order",
+            "config": {
+                "activityName": "ActivityProcessStandardOrder"
+            },
+            "nextNodeId": "node_publish_event"
+        },
+        "node_bulk_handler": {
+            "id": "node_bulk_handler",
+            "type": "ACTIVITY",
+            "name": "Process Bulk Order",
+            "config": {
+                "activityName": "ActivityProcessBulkOrder"
+            },
+            "nextNodeId": "node_publish_event"
+        },
+        "node_publish_event": {
+            "id": "node_publish_event",
+            "type": "publishEvent",
+            "name": "Publish Order Processed",
+            "config": {
+                "event_name": "order.processed",
+                "exchange": "titan.events",
+                "routing_key": "orders.processed",
+                "payload": {
+                    "order_id": "$.order_id",
+                    "order_type": "$.order_type",
+                    "amount": "$.amount"
+                }
+            },
+            "nextNodeId": "node_alert_team"
+        },
+        "node_alert_team": {
+            "id": "node_alert_team",
+            "type": "alert",
+            "name": "Notify Operations Team",
+            "config": {
+                "channel": "slack",
+                "severity": "info",
+                "subject": "Order Processed",
+                "message": "Order {{order_id}} ({{order_type}}) processed successfully. Amount: ${{amount}}",
+                "data": {
+                    "order_id": "$.order_id",
+                    "order_type": "$.order_type",
+                    "amount": "$.amount"
+                }
+            },
+            "nextNodeId": "node_end"
+        },
+        "node_end": {
+            "id": "node_end",
+            "type": "END",
+            "name": "Complete"
+        }
+    }
+}

@@ -1,0 +1,113 @@
+package main
+
+import (
+    "encoding/json"
+    "io"
+    "net/http"
+    "os"
+    "testing"
+    "time"
+
+    jwt "github.com/golang-jwt/jwt/v5"
+)
+
+// Test tokens follow the same pattern as other integration tests
+func TestGatewayCalculationsProxy(t *testing.T) {
+    if os.Getenv("RUN_INTEGRATION_TESTS") == "" {
+        t.Skip("Skipping integration gateway test: RUN_INTEGRATION_TESTS not set")
+    }
+    client := &http.Client{Timeout: 5 * time.Second}
+    url := "http://localhost:8001/api/calculations"
+
+    // build token
+    secret := os.Getenv("JWT_SECRET")
+    if secret == "" {
+        secret = "test-secret"
+    }
+    claims := jwt.MapClaims{
+        "user_id":   "integration-test-user",
+        "tenant_id": "integration-tenant",
+        "exp":       time.Now().Add(1 * time.Hour).Unix(),
+    }
+    tok := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+    token, err := tok.SignedString([]byte(secret))
+    if err != nil {
+        t.Fatalf("failed to sign token: %v", err)
+    }
+
+    var resp *http.Response
+    for i := 0; i < 10; i++ {
+        req, _ := http.NewRequest("GET", url, nil)
+        req.Header.Set("Authorization", "Bearer "+token)
+        resp, err = client.Do(req)
+        if err == nil && resp.StatusCode == http.StatusOK {
+            break
+        }
+        time.Sleep(300 * time.Millisecond)
+    }
+    if err != nil {
+        t.Fatalf("failed to GET %s: %v", url, err)
+    }
+    defer resp.Body.Close()
+
+    if resp.StatusCode != http.StatusOK {
+        body, _ := io.ReadAll(resp.Body)
+        t.Fatalf("unexpected status %d: %s", resp.StatusCode, string(body))
+    }
+
+    var arr []interface{}
+    dec := json.NewDecoder(resp.Body)
+    if err := dec.Decode(&arr); err != nil {
+        t.Fatalf("failed to decode json array: %v", err)
+    }
+}
+
+func TestGatewayDataDomainsProxy(t *testing.T) {
+    if os.Getenv("RUN_INTEGRATION_TESTS") == "" {
+        t.Skip("Skipping integration gateway test: RUN_INTEGRATION_TESTS not set")
+    }
+    client := &http.Client{Timeout: 5 * time.Second}
+    url := "http://localhost:8001/api/data-domains"
+
+    // build token
+    secret := os.Getenv("JWT_SECRET")
+    if secret == "" {
+        secret = "test-secret"
+    }
+    claims := jwt.MapClaims{
+        "user_id":   "integration-test-user",
+        "tenant_id": "integration-tenant",
+        "exp":       time.Now().Add(1 * time.Hour).Unix(),
+    }
+    tok := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+    token, err := tok.SignedString([]byte(secret))
+    if err != nil {
+        t.Fatalf("failed to sign token: %v", err)
+    }
+
+    var resp *http.Response
+    for i := 0; i < 10; i++ {
+        req, _ := http.NewRequest("GET", url, nil)
+        req.Header.Set("Authorization", "Bearer "+token)
+        resp, err = client.Do(req)
+        if err == nil && resp.StatusCode == http.StatusOK {
+            break
+        }
+        time.Sleep(300 * time.Millisecond)
+    }
+    if err != nil {
+        t.Fatalf("failed to GET %s: %v", url, err)
+    }
+    defer resp.Body.Close()
+
+    if resp.StatusCode != http.StatusOK {
+        body, _ := io.ReadAll(resp.Body)
+        t.Fatalf("unexpected status %d: %s", resp.StatusCode, string(body))
+    }
+
+    var arr []interface{}
+    dec := json.NewDecoder(resp.Body)
+    if err := dec.Decode(&arr); err != nil {
+        t.Fatalf("failed to decode json array: %v", err)
+    }
+}

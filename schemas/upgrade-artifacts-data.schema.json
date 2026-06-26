@@ -1,0 +1,164 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://yourdomain.com/schemas/upgrade-artifacts-data.schema.json",
+  "title": "UpgradeArtifactsData",
+  "schema_version": "1.0.0",
+  "type": "object",
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "description": "Semantic version of this schema definition, e.g., '1.0.0'."
+    },
+    "changelog": {
+      "type": "array",
+      "description": "Optional history of schema changes for this artifact.",
+      "items": {
+        "type": "object",
+        "properties": {
+          "version": { "type": "string" },
+          "date": { "type": "string", "format": "date-time" },
+          "description": { "type": "string" }
+        },
+        "required": ["version", "date", "description"]
+      }
+    },
+    "report": { "$ref": "#/definitions/DiffReport" },
+    "aliases": { "$ref": "#/definitions/AliasMap" }
+  },
+  "required": ["schema_version", "report", "aliases"],
+  "definitions": {
+    "DiffReport": {
+      "type": "object",
+      "properties": {
+        "core_version": { "type": "string" },
+        "previous_version": { "type": "string" },
+        "generated_at": { "type": "string", "format": "date-time" },
+        "schema_hash": { "type": "string" },
+        "summary": { "$ref": "#/definitions/DiffSummary" },
+        "cubes": { "type": "array", "items": { "$ref": "#/definitions/CubeDiff" } },
+        "views": { "type": "array", "items": { "$ref": "#/definitions/ViewDiff" } },
+        "governance": { "type": "array", "items": { "$ref": "#/definitions/GovernanceDiff" } },
+        "pre_aggregations": { "type": "array", "items": { "$ref": "#/definitions/PreAggregationDiff" } },
+        "warnings": { "type": "array", "items": { "type": "string" } }
+      },
+      "required": [
+        "core_version",
+        "previous_version",
+        "generated_at",
+        "schema_hash",
+        "summary",
+        "cubes",
+        "views",
+        "governance",
+        "pre_aggregations",
+        "warnings"
+      ]
+    },
+    "DiffSummary": {
+      "type": "object",
+      "properties": {
+        "cubes_added": { "type": "integer" },
+        "cubes_removed": { "type": "integer" },
+        "cubes_changed": { "type": "integer" },
+        "views_added": { "type": "integer" },
+        "views_removed": { "type": "integer" },
+        "views_changed": { "type": "integer" },
+        "breaking_changes": { "type": "integer" },
+        "warnings": { "type": "integer" }
+      },
+      "required": [
+        "cubes_added",
+        "cubes_removed",
+        "cubes_changed",
+        "views_added",
+        "views_removed",
+        "views_changed",
+        "breaking_changes",
+        "warnings"
+      ]
+    },
+    "CubeDiff": {
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "status": { "type": "string", "enum": ["added", "removed", "changed"] },
+        "changes": { "type": "array", "items": { "$ref": "#/definitions/Change" } }
+      },
+      "required": ["name", "status", "changes"]
+    },
+    "ViewDiff": {
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "status": { "type": "string", "enum": ["added", "removed", "changed"] },
+        "changes": { "type": "array", "items": { "$ref": "#/definitions/Change" } }
+      },
+      "required": ["name", "status", "changes"]
+    },
+    "GovernanceDiff": {
+      "type": "object",
+      "properties": {
+        "scope": { "type": "string", "enum": ["cube", "view"] },
+        "name": { "type": "string" },
+        "changes": { "type": "array", "items": { "$ref": "#/definitions/Change" } }
+      },
+      "required": ["scope", "name", "changes"]
+    },
+    "PreAggregationDiff": {
+      "type": "object",
+      "properties": {
+        "cube": { "type": "string" },
+        "name": { "type": "string" },
+        "status": { "type": "string", "enum": ["rebuild_required", "unchanged", "removed", "added"] },
+        "reason": { "type": "string" }
+      },
+      "required": ["cube", "name", "status"]
+    },
+    "Change": {
+      "type": "object",
+      "properties": {
+        "type": { "type": "string" },
+        "name": { "type": "string" },
+        "join_path": { "type": "string" },
+        "member": { "type": "string" },
+        "old": {},
+        "new": {},
+        "details": { "type": "object" }
+      },
+      "required": ["type"]
+    },
+    "AliasMap": {
+      "type": "object",
+      "properties": {
+        "core_version": { "type": "string" },
+        "previous_version": { "type": "string" },
+        "generated_at": { "type": "string", "format": "date-time" },
+        "aliases": { "type": "array", "items": { "$ref": "#/definitions/AliasEntry" } }
+      },
+      "required": ["core_version", "previous_version", "generated_at", "aliases"]
+    },
+    "AliasEntry": {
+      "type": "object",
+      "properties": {
+        "scope": { "type": "string", "enum": ["cube", "view"] },
+        "name": { "type": "string" },
+        "member_type": { "type": "string", "enum": ["dimension", "measure", "segment"] },
+        "old_name": { "type": "string" },
+        "new_name": { "type": "string" },
+        "status": { "type": "string", "enum": ["renamed", "deprecated", "removed"] },
+        "meta": { "$ref": "#/definitions/AliasMeta" }
+      },
+      "required": ["scope", "name", "member_type", "old_name", "status"]
+    },
+    "AliasMeta": {
+      "type": "object",
+      "properties": {
+        "reason": { "type": "string" },
+        "auto_rewrite": { "type": "boolean" },
+        "suggested_replacement": { "type": "string" },
+        "breaking_change": { "type": "boolean" }
+      },
+      "required": ["reason", "auto_rewrite"]
+    }
+  }
+}

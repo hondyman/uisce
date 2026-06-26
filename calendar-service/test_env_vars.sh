@@ -1,0 +1,14 @@
+#!/bin/bash
+set -a
+source .env.local
+set +a
+
+echo "Google OAuth Configuration:"
+echo "GOOGLE_CLIENT_ID=$GOOGLE_CLIENT_ID"
+echo "GOOGLE_CLIENT_SECRET=$GOOGLE_CLIENT_SECRET"
+echo "GOOGLE_REDIRECT_URL=$GOOGLE_REDIRECT_URL"
+echo ""
+echo "Microsoft OAuth Configuration:"
+echo "MICROSOFT_CLIENT_ID=$MICROSOFT_CLIENT_ID" 
+echo "MICROSOFT_CLIENT_SECRET=$MICROSOFT_CLIENT_SECRET"
+echo "MICROSOFT_REDIRECT_URL=$MICROSOFT_REDIRECT_URL"

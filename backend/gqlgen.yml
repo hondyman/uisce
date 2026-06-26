@@ -1,0 +1,104 @@
+# This file configures the gqlgen code generation tool.
+# For a full list of options, see: https://gqlgen.com/config/
+
+# Where are all the schema files located?
+# I've set a conventional path. You should create this directory and add your .graphqls files here.
+schema:
+- "internal/graphql/schema/*.graphqls"
+# Fallback to repo-level generated schema
+- "../graph/*.graphqls"
+
+# Where should the generated server code go?
+exec:
+  # We will put the generated code in the same package as our resolvers
+  # to simplify the project structure and avoid package name conflicts.
+  layout: follow-schema
+  dir: internal/graphql
+  package: graphql
+
+# Uncomment to enable federation
+# federation:
+#   filename: internal/graphql/generated/federation.go
+#   package: generated
+
+# Where should the resolver implementations go?
+resolver:
+  layout: follow-schema
+  dir: internal/graphql
+  package: graphql
+  filename_template: "{name}.resolvers.go"
+
+# Optional: turn on use `gqlgen:"fieldName"` tags in your models
+# struct_tag: json
+
+# Optional: turn on to use []Thing instead of []*Thing
+# omit_slice_element_pointers: false
+
+# Optional: turn on to omit Is<Name>() methods to interface and unions
+# omit_interface_checks: true
+
+# Optional: turn on to skip generation of ComplexityRoot struct content and Complexity function
+# omit_complexity: false
+
+# Optional: turn on to not generate any file notice comments in generated files
+# omit_gqlgen_file_notice: false
+
+# Optional: turn on to exclude the gqlgen version in the generated file notice. No effect if `omit_gqlgen_file_notice` is true.
+# omit_gqlgen_version_in_file_notice: false
+
+# Optional: turn on to exclude root models such as Query and Mutation from the generated models file.
+# omit_root_models: false
+
+# Optional: turn on to exclude resolver fields from the generated models file.
+# omit_resolver_fields: false
+
+# Optional: turn off to make struct-type struct fields not use pointers
+# e.g. type Thing struct { FieldA OtherThing } instead of { FieldA *OtherThing }
+# struct_fields_always_pointers: true
+
+# Optional: turn off to make resolvers return values instead of pointers for structs
+# resolvers_always_return_pointers: true
+
+# Optional: turn on to return pointers instead of values in unmarshalInput
+# return_pointers_in_unmarshalinput: false
+
+# Optional: wrap nullable input fields with Omittable
+# nullable_input_omittable: true
+
+# Optional: set to speed up generation time by not performing a final validation pass.
+# skip_validation: true
+
+# Optional: set to skip running `go mod tidy` when generating server code
+# skip_mod_tidy: true
+# This section declares type mapping between the GraphQL and go type systems
+models:
+  # The `ip_whitelist_resolvers.go` file uses `github.com/google/uuid` for IDs.
+  # This maps the GraphQL `UUID` scalar to that Go type.
+  UUID:
+    model:
+    - github.com/google/uuid.UUID
+
+  # The `ip_whitelist_resolvers.go` file uses `time.Time`.
+  # This maps the GraphQL `Timestamp` scalar to that Go type.
+  Timestamp:
+    model:
+    - time.Time
+
+  ID:
+    model:
+    - github.com/99designs/gqlgen/graphql.ID
+    - github.com/99designs/gqlgen/graphql.Int
+    - github.com/99designs/gqlgen/graphql.Int64
+    - github.com/99designs/gqlgen/graphql.Int32
+
+  Int:
+    model:
+    - github.com/99designs/gqlgen/graphql.Int32
+
+  IpWhitelistEntry:
+    model:
+    - github.com/eganpj/semlayer/backend/internal/graphql.IPWhitelistEntry
+
+  IpWhitelistEntryInput:
+    model:
+    - github.com/eganpj/semlayer/backend/internal/graphql.IPWhitelistEntryInput

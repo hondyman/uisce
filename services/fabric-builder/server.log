@@ -1,0 +1,4 @@
+2025/11/12 23:12:50 🚀 Starting Fabric Builder Service...
+2025/11/12 23:12:50 ✅ Fabric Builder Service started successfully
+2025/11/12 23:12:50 📊 Registered endpoints: /api/fabric/*, /api/business-process/*
+2025/11/12 23:13:05 "GET http://localhost:8081/api/validation-rules?tenant_id=00000000-0000-0000-0000-000000000000&datasource_id=11111111-1111-1111-1111-111111111111&entity_ids=test HTTP/1.1" from [::1]:61737 - 404 19B in 79.666µs

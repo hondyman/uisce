@@ -1,0 +1,147 @@
+table:
+  name: tenants
+  schema: public
+array_relationships:
+  - name: products
+    using:
+      foreign_key_constraint_on:
+        column: tenant_id
+        table:
+          name: products
+          schema: public
+  - name: tenant_instances
+    using:
+      foreign_key_constraint_on:
+        column: tenant_id
+        table:
+          name: tenant_instance
+          schema: public
+  - name: tenant_products
+    using:
+      foreign_key_constraint_on:
+        column: tenant_id
+        table:
+          name: tenant_product
+          schema: public
+select_permissions:
+  - role: anonymous
+    permission:
+      columns:
+        - id
+        - display_name
+        - description
+        - is_active
+        - gold_copy
+      filter:
+        id:
+          _eq: "00000000-0000-0000-0000-000000000000"
+      allow_aggregations: true
+  - role: steward
+    permission:
+      columns:
+        - id
+        - name
+        - created_at
+        - updated_at
+        - display_name
+        - description
+        - is_active
+        - gold_copy
+        - tenant_code
+        - status
+      filter: {}
+  - role: user
+    permission:
+      columns:
+        - id
+        - name
+        - created_at
+        - updated_at
+        - display_name
+        - description
+        - is_active
+        - gold_copy
+        - tenant_code
+        - status
+      filter: {}
+  - role: admin
+    permission:
+      columns:
+        - id
+        - name
+        - created_at
+        - updated_at
+        - display_name
+        - description
+        - is_active
+        - gold_copy
+        - tenant_code
+        - status
+      filter: {}
+      allow_aggregations: true
+update_permissions:
+  - role: user
+    permission:
+      columns:
+        - display_name
+        - description
+        - is_active
+        - status
+      filter: {}
+      check: {}
+  - role: admin
+    permission:
+      columns:
+        - display_name
+        - description
+        - is_active
+        - status
+        - gold_copy
+        - tenant_code
+        - name
+      filter: {}
+      check: {}
+delete_permissions:
+  - role: user
+    permission:
+      filter:
+        gold_copy:
+          _eq: false
+  - role: admin
+    permission:
+      filter: {}
+insert_permissions:
+  - role: user
+    permission:
+      check: {}
+      columns:
+        - name
+        - display_name
+        - description
+        - is_active
+        - tenant_code
+        - status
+  - role: admin
+    permission:
+      check: {}
+      columns:
+        - name
+        - display_name
+        - description
+        - is_active
+        - tenant_code
+        - status
+        - gold_copy
+event_triggers:
+  - name: tenant_update_audit
+    definition:
+      enable_manual: false
+      insert:
+        columns: "*"
+      update:
+        columns: "*"
+    retry_conf:
+      interval_sec: 10
+      num_retries: 0
+      timeout_sec: 60
+    webhook: http://backend:8080/api/audit/events/tenant-update

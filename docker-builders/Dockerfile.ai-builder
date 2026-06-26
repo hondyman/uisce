@@ -1,0 +1,22 @@
+FROM golang:1.25-alpine AS builder
+WORKDIR /app
+
+# Copy service sources and shared libs
+COPY ./services/ai-builder ./services/ai-builder
+COPY ./libs ./libs
+
+# Download modules within the service directory
+WORKDIR /app/services/ai-builder
+RUN go mod download
+
+# Build from the service directory
+WORKDIR /app/services/ai-builder
+RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o /app/ai-builder .
+
+# Final image
+FROM alpine:latest
+RUN apk update && apk --no-cache add --allow-untrusted ca-certificates
+WORKDIR /root/
+COPY --from=builder /app/ai-builder .
+EXPOSE 8082
+CMD ["./ai-builder"]

@@ -1,0 +1,11 @@
+// Inputs: drift_percent, trade_value_total, confidence, account_type
+// Outputs: boolean allow_autonomous
+
+allow_autonomous
+  ==
+(
+  account_type == "taxable" &&
+  drift_percent < 5.0 &&
+  trade_value_total < 10000 &&
+  confidence >= 0.75
+)

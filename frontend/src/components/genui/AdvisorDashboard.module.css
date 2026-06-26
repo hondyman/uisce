@@ -1,0 +1,358 @@
+.dashboard {
+  display: grid;
+  grid-template-columns: 350px 1fr;
+  gap: 24px;
+  height: 100%;
+  padding: 24px;
+  background: var(--bg-secondary, #f5f5f5);
+}
+
+/* Proposal List */
+.proposalList {
+  background: var(--bg-primary, #fff);
+  border-radius: 12px;
+  padding: 16px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  overflow-y: auto;
+}
+
+.proposalList h2 {
+  margin: 0 0 16px;
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text-primary, #1a1a1a);
+}
+
+.proposalList ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.proposalItem {
+  padding: 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  margin-bottom: 8px;
+  transition: background 0.2s, border-color 0.2s;
+  border: 2px solid transparent;
+}
+
+.proposalItem:hover {
+  background: var(--bg-hover, #f0f0f0);
+}
+
+.proposalItem.selected {
+  background: var(--bg-selected, #e8f4fc);
+  border-color: var(--accent, #2563eb);
+}
+
+.proposalItem strong {
+  display: block;
+  font-size: 14px;
+  color: var(--text-primary, #1a1a1a);
+  margin-bottom: 8px;
+  line-height: 1.4;
+}
+
+.proposalMeta {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--text-secondary, #666);
+}
+
+/* Proposal Detail */
+.proposalDetail {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  overflow-y: auto;
+}
+
+.visualizations {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+}
+
+/* Card */
+.card {
+  background: var(--bg-primary, #fff);
+  border-radius: 12px;
+  padding: 24px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+.cardHeader {
+  margin-bottom: 20px;
+}
+
+.cardHeader h3 {
+  margin: 0 0 8px;
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--text-primary, #1a1a1a);
+}
+
+.cardHeader p {
+  margin: 0;
+  font-size: 14px;
+  color: var(--text-secondary, #666);
+  line-height: 1.5;
+}
+
+/* Metrics */
+.metrics {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+  margin-bottom: 24px;
+  padding: 16px;
+  background: var(--bg-secondary, #f9fafb);
+  border-radius: 8px;
+}
+
+.metric {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.metricLabel {
+  font-size: 12px;
+  color: var(--text-secondary, #666);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.metricValue {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text-primary, #1a1a1a);
+}
+
+/* Disclosures */
+.disclosures {
+  margin-bottom: 24px;
+}
+
+.disclosures h4 {
+  margin: 0 0 8px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary, #1a1a1a);
+}
+
+.disclosures ul {
+  margin: 0;
+  padding-left: 20px;
+}
+
+.disclosures li {
+  font-size: 13px;
+  color: var(--text-secondary, #666);
+  margin-bottom: 4px;
+}
+
+/* Orders Table */
+.orders {
+  margin-bottom: 24px;
+}
+
+.orders h4 {
+  margin: 0 0 12px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary, #1a1a1a);
+}
+
+.ordersTable {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.ordersTable th {
+  text-align: left;
+  padding: 12px 8px;
+  background: var(--bg-secondary, #f9fafb);
+  font-weight: 600;
+  color: var(--text-secondary, #666);
+  border-bottom: 2px solid var(--border, #e5e5e5);
+}
+
+.ordersTable td {
+  padding: 12px 8px;
+  border-bottom: 1px solid var(--border, #e5e5e5);
+  color: var(--text-primary, #1a1a1a);
+}
+
+.sellRow td:first-child {
+  color: #dc2626;
+  font-weight: 600;
+}
+
+.buyRow td:first-child {
+  color: #16a34a;
+  font-weight: 600;
+}
+
+.sell {
+  color: #dc2626;
+}
+
+.buy {
+  color: #16a34a;
+}
+
+/* Citations */
+.citations {
+  margin-bottom: 24px;
+}
+
+.citations h4 {
+  margin: 0 0 8px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary, #1a1a1a);
+}
+
+.citations ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.citations li {
+  padding: 8px 12px;
+  background: var(--bg-secondary, #f9fafb);
+  border-radius: 6px;
+  margin-bottom: 8px;
+  font-size: 13px;
+  color: var(--text-secondary, #666);
+}
+
+.citations li strong {
+  color: var(--text-primary, #1a1a1a);
+}
+
+/* Card Footer */
+.cardFooter {
+  display: flex;
+  gap: 12px;
+  padding-top: 20px;
+  border-top: 1px solid var(--border, #e5e5e5);
+}
+
+.approveButton,
+.rejectButton,
+.clarifyButton {
+  padding: 12px 24px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s, transform 0.1s;
+}
+
+.approveButton {
+  background: #16a34a;
+  color: #fff;
+  border: none;
+}
+
+.approveButton:hover {
+  background: #15803d;
+  transform: translateY(-1px);
+}
+
+.rejectButton {
+  background: transparent;
+  color: #dc2626;
+  border: 2px solid #dc2626;
+}
+
+.rejectButton:hover {
+  background: #fef2f2;
+}
+
+.clarifyButton {
+  background: transparent;
+  color: var(--text-secondary, #666);
+  border: 2px solid var(--border, #e5e5e5);
+}
+
+.clarifyButton:hover {
+  background: var(--bg-hover, #f5f5f5);
+}
+
+/* Charts */
+.chartContainer {
+  background: var(--bg-primary, #fff);
+  border-radius: 12px;
+  padding: 20px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+.chartContainer h4 {
+  margin: 0 0 16px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary, #1a1a1a);
+}
+
+.confidenceBand {
+  margin: 12px 0 0;
+  font-size: 13px;
+  color: var(--text-secondary, #666);
+  text-align: center;
+}
+
+/* Placeholder */
+.placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-primary, #fff);
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+.placeholder p {
+  color: var(--text-secondary, #666);
+  font-size: 16px;
+}
+
+/* Loading Overlay */
+.loadingOverlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-size: 18px;
+  font-weight: 600;
+  z-index: 1000;
+}
+
+/* Responsive */
+@media (max-width: 1024px) {
+  .dashboard {
+    grid-template-columns: 1fr;
+  }
+
+  .metrics {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .visualizations {
+    grid-template-columns: 1fr;
+  }
+}

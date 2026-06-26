@@ -1,0 +1,36 @@
+.details-empty{
+  padding:16px;
+  background:white;
+  height:100%;
+  overflow:auto;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  color:#6b7280;
+}
+.details-empty-inner{ text-align:center }
+.details-empty-icon{ font-size:32px; margin-bottom:12px }
+.details-empty-title{ margin:0 0 8px 0; font-size:14px }
+.details-empty-sub{ font-size:12px; margin:0 }
+
+.details-root{ padding:16px; background:white; height:100%; overflow:auto }
+.details-header{ margin-bottom:16px; display:flex; align-items:center; justify-content:space-between }
+.details-header-left{ display:flex; align-items:center; gap:6px }
+.details-header-icon{ font-size:18px }
+.details-header-title{ margin:0; color:#1f2937; font-size:14px; font-weight:600 }
+.details-relationship-badge{ padding:6px 10px; border-radius:6px; font-size:11px; font-weight:600; color:white }
+.details-relationship-badge.tech{ background:linear-gradient(135deg,#10b981,#059669) }
+.details-relationship-badge.sem{ background:linear-gradient(135deg,#8b5cf6,#7c3aed) }
+
+.details-section{ margin-bottom:16px }
+.details-section-title{ margin:0 0 8px 0; color:#374151; font-size:12px; font-weight:600 }
+.details-box{ background:#f9fafb; padding:10px; border-radius:6px; border:1px solid #e5e7eb }
+.details-row{ margin-bottom:6px; font-size:11px }
+
+.node-type-badge{ display:inline-block; color:white; padding:2px 6px; border-radius:3px; font-size:9px; font-weight:500; margin-bottom:6px }
+.node-type-badge.tech{ background:#10b981 }
+.node-type-badge.sem{ background:#8b5cf6 }
+.node-type-badge.tech-target{ background:#059669 }
+.node-type-badge.sem-target{ background:#7c3aed }
+.details-node-title{ font-size:11px; font-weight:500; color:#1f2937; margin-bottom:3px }
+.details-node-desc{ font-size:10px; color:#6b7280; line-height:1.3 }

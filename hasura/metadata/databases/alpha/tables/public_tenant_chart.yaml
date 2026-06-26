@@ -1,0 +1,34 @@
+table:
+  name: tenant_chart
+  schema: public
+select_permissions:
+  - role: anonymous
+    permission:
+      columns:
+        - id
+        - tenant_datasource_id
+        - chart_name
+        - chart
+        - created_at
+        - updated_at
+      filter: {}
+  - role: steward
+    permission:
+      columns:
+        - id
+        - tenant_datasource_id
+        - chart_name
+        - chart
+        - created_at
+        - updated_at
+      filter: {}
+  - role: user
+    permission:
+      columns:
+        - id
+        - tenant_datasource_id
+        - chart_name
+        - chart
+        - created_at
+        - updated_at
+      filter: {}

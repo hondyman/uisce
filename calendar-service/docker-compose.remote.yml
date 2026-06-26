@@ -1,0 +1,168 @@
+version: '3.8'
+
+# REMOTE DEPLOYMENT - All services except PostgreSQL (which is native/remote)
+# PostgreSQL: REMOTE (native infrastructure)
+# Hasura: REMOTE (native infrastructure)
+# All other services: Deployed via docker-compose
+
+services:
+  # Redpanda - Event Streaming (Kafka-compatible) - REMOTE
+  redpanda:
+    image: docker.redpanda.com/redpandadata/redpanda:v23.2.18
+    container_name: semlayer-redpanda
+    command:
+      - redpanda
+      - start
+      - --smp 2
+      - --kafka-addr internal://0.0.0.0:9092,external://0.0.0.0:19092
+      - --advertise-kafka-addr internal://redpanda:9092,external://redpanda.example.com:19092
+      - --pandaproxy-addr internal://0.0.0.0:8082,external://0.0.0.0:18082
+      - --advertise-pandaproxy-addr internal://redpanda:8082,external://redpanda.example.com:18082
+      - --schema-registry-addr internal://0.0.0.0:8081,external://0.0.0.0:18081
+      - --rpc-addr redpanda:33145
+      - --advertise-rpc-addr redpanda:33145
+    ports:
+      - "9092:9092"   # Internal Kafka API
+      - "19092:19092" # External Kafka API
+      - "8081:8081"   # Schema Registry
+      - "18081:18081" # External Schema Registry
+      - "8082:8082"   # PandaProxy
+      - "18082:18082" # External PandaProxy
+    volumes:
+      - redpanda_data:/var/lib/redpanda/data
+    healthcheck:
+      test: ["CMD", "rpk", "cluster", "info"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - semlayer-remote
+    restart: unless-stopped
+
+  # Debezium Connect - CDC from PostgreSQL to Redpanda - REMOTE
+  debezium:
+    image: debezium/connect:2.4
+    container_name: semlayer-debezium
+    ports:
+      - "8083:8083"
+    environment:
+      BOOTSTRAP_SERVERS: redpanda:9092
+      GROUP_ID: 1
+      CONFIG_STORAGE_TOPIC: connect_configs
+      OFFSET_STORAGE_TOPIC: connect_offsets
+      STATUS_STORAGE_TOPIC: connect_statuses
+      KEY_CONVERTER: org.apache.kafka.connect.json.JsonConverter
+      VALUE_CONVERTER: org.apache.kafka.connect.json.JsonConverter
+      ENABLE_DEBEZIUM_KCORS: "true"
+    depends_on:
+      redpanda:
+        condition: service_healthy
+    networks:
+      - semlayer-remote
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8083/"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # Redis for Caching - REMOTE
+  redis:
+    image: redis:7-alpine
+    container_name: semlayer-redis
+    ports:
+      - "6379:6379"
+    command: redis-server --appendonly yes --maxmemory 2gb --maxmemory-policy allkeys-lru
+    volumes:
+      - redis_data:/data
+    networks:
+      - semlayer-remote
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+
+  # Temporal Server for Workflow Orchestration - REMOTE
+  temporal:
+    image: temporalio/auto-setup:latest
+    container_name: semlayer-temporal
+    ports:
+      - "7233:7233"     # gRPC
+      - "6831:6831/udp" # Jaeger
+    environment:
+      DB: postgresql
+      DB_PORT: "5432"
+      # Connect to REMOTE PostgreSQL (not in compose)
+      POSTGRES_USER: "${POSTGRES_USER}"
+      POSTGRES_PWD: "${POSTGRES_PASSWORD}"
+      POSTGRES_HOST: "${POSTGRES_HOST}"
+      POSTGRES_DB: "temporal"
+    depends_on:
+      - redpanda
+    networks:
+      - semlayer-remote
+    healthcheck:
+      test: ["CMD", "tctl", "workflow", "list"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # Calendar Service (Golang) - Built and deployed remotely
+  calendar-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: semlayer-calendar-service
+    ports:
+      - "8081:8080"
+    environment:
+      # Service Configuration
+      SERVER_PORT: "8080"
+      ENVIRONMENT: "production"
+      LOG_LEVEL: "info"
+      
+      # Database Configuration (REMOTE PostgreSQL - native infrastructure)
+      POSTGRES_HOST: "${POSTGRES_HOST}"
+      POSTGRES_PORT: "${POSTGRES_PORT:-5432}"
+      POSTGRES_USER: "${POSTGRES_USER}"
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD}"
+      POSTGRES_DB: "${POSTGRES_DB:-calendar_service}"
+      
+      # Local Services (in this compose)
+      REDPANDA_BROKERS: "${REDPANDA_BROKERS:-redpanda:9092}"
+      REDIS_URL: "${REDIS_URL:-redis://redis:6379/0}"
+      
+      # Remote Services (REMOTE - Hasura, native infrastructure)
+      HASURA_ENDPOINT: "${HASURA_ENDPOINT}"
+      HASURA_ADMIN_SECRET: "${HASURA_ADMIN_SECRET}"
+      
+      # Temporal (in this compose)
+      TEMPORAL_HOST: "temporal"
+      TEMPORAL_PORT: "7233"
+    depends_on:
+      redpanda:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      temporal:
+        condition: service_healthy
+    networks:
+      - semlayer-remote
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+volumes:
+  redpanda_data:
+  redis_data:
+
+networks:
+  semlayer-remote:
+    driver: bridge
+

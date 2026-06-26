@@ -1,0 +1,204 @@
+version: 3
+sources:
+- name: default
+  kind: postgres
+  tables:
+  - table:
+      name: tenants
+      schema: public
+    array_relationships:
+    - name: tenant_instances
+      using:
+        foreign_key_constraint_on:
+          column: tenant_id
+          table:
+            name: tenant_instance
+            schema: public
+    - name: api_definitions
+      using:
+        foreign_key_constraint_on:
+          column: tenant_id
+          table:
+            name: api_definitions
+            schema: public
+    insert_permissions:
+    - role: admin
+      permission:
+        check: {}
+        columns:
+        - display_name
+        - id
+        - name
+    select_permissions:
+    - role: admin
+      permission:
+        columns:
+        - display_name
+        - id
+        - name
+        filter: {}
+    update_permissions:
+    - role: admin
+      permission:
+        columns:
+        - display_name
+        - id
+        - name
+        filter: {}
+    delete_permissions:
+    - role: admin
+      permission:
+        filter: {}
+    computed_fields:
+    - name: tenant_products
+      definition:
+        function:
+          name: get_tenant_products
+          schema: public
+        table_argument: null
+      comment: null
+  - table:
+      name: tenant_instance
+      schema: public
+    object_relationships:
+    - name: tenant
+      using:
+        foreign_key_constraint_on: tenant_id
+    array_relationships:
+    - name: datasources
+      using:
+        foreign_key_constraint_on:
+          column: instance_id
+          table:
+            name: datasources
+            schema: public
+    - name: tenant_products
+      using:
+        foreign_key_constraint_on:
+          column: tenant_instance_id
+          table:
+            name: tenant_product
+            schema: public
+    insert_permissions:
+    - role: admin
+      permission:
+        check: {}
+        columns:
+        - tenant_id
+        - display_name
+        - id
+        - name
+    select_permissions:
+    - role: admin
+      permission:
+        columns:
+        - tenant_id
+        - display_name
+        - id
+        - name
+        filter: {}
+    update_permissions:
+    - role: admin
+      permission:
+        columns:
+        - tenant_id
+        - display_name
+        - id
+        - name
+        filter: {}
+    delete_permissions:
+    - role: admin
+      permission:
+        filter: {}
+  - table:
+      name: datasources
+      schema: public
+    object_relationships:
+    - name: tenant_instance
+      using:
+        foreign_key_constraint_on: instance_id
+    - name: tenant
+      using:
+        foreign_key_constraint_on: tenant_id
+  - table:
+      name: tenant_product
+      schema: public
+    object_relationships:
+    - name: tenant_instance
+      using:
+        foreign_key_constraint_on: tenant_instance_id
+    - name: alpha_product
+      using:
+        foreign_key_constraint_on: alpha_product_id
+    array_relationships:
+    - name: tenant_product_datasources
+      using:
+        foreign_key_constraint_on:
+          column: tenant_product_id
+          table:
+            name: tenant_product_datasource
+            schema: public
+  - table:
+      name: tenant_product_datasources
+      schema: public
+  - table:
+      name: api_definitions
+      schema: public
+    object_relationships:
+    - name: tenant
+      using:
+        foreign_key_constraint_on: tenant_id
+  - table:
+      name: connections
+      schema: public
+  - table:
+      name: product
+      schema: public
+  - table:
+      name: alpha_product
+      schema: public
+  - table:
+      name: alpha_datasource
+      schema: public
+    select_permissions:
+    - role: anonymous
+      permission:
+        columns:
+        - id
+        - datasource_code
+        - datasource_name
+        - datasource_type
+        - config
+        - is_active
+        filter: {}
+    - role: user
+      permission:
+        columns:
+        - id
+        - datasource_code
+        - datasource_name
+        - datasource_type
+        - config
+        - is_active
+        filter: {}
+    - role: steward
+      permission:
+        columns:
+        - id
+        - datasource_code
+        - datasource_name
+        - datasource_type
+        - config
+        - is_active
+        filter: {}
+  configuration:
+    connection_info:
+      database_url:
+        from_env: HASURA_GRAPHQL_METADATA_DATABASE_URL
+      isolation_level: read-committed
+      use_prepared_statements: false
+      ssl_mode: disable
+actions:
+- "!include actions.yaml"
+custom_types:
+- "!include custom_types.yaml"

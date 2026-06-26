@@ -1,0 +1,309 @@
+openapi: 3.0.3
+info:
+  title: Catalog Q&A Service API
+  version: 1.0.0
+  description: >
+    Natural language Q&A over semantic catalog with DAG lookup, vector retrieval, 
+    and LLM providers. Supports investment management workflows.
+
+servers:
+  - url: http://localhost:8080
+    description: Local development
+  - url: https://api.semlayer.com
+    description: Production
+
+paths:
+  /nlq/ask:
+    post:
+      summary: Ask a natural language question about the catalog
+      description: >
+        Resolves a question against the catalog, builds a calculation DAG,
+        retrieves semantic context, and returns a structured answer with sources,
+        calculation breakdown, and data quality caveats.
+      tags:
+        - Natural Language Q&A
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - question
+                - tenant_id
+              properties:
+                question:
+                  type: string
+                  description: Natural language question
+                  example: "How is monthly revenue calculated?"
+                tenant_id:
+                  type: string
+                  description: Tenant scope for catalog lookup
+                  example: "tenant-uuid-123"
+                tenant_datasource_id:
+                  type: string
+                  description: Optional datasource scope
+                  example: "datasource-uuid-456"
+                target_entity_path:
+                  type: string
+                  description: Optional pre-resolved entity path
+                  example: "finance.metrics.revenue.monthly"
+      responses:
+        '200':
+          description: Structured answer with breakdown and sources
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AskResponse'
+        '400':
+          description: Invalid request
+        '500':
+          description: Server error
+
+  /nlq/feedback:
+    post:
+      summary: Submit user feedback on an NLQ response
+      tags:
+        - Natural Language Q&A
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - query_id
+                - tenant_id
+                - user_id
+                - rating
+              properties:
+                query_id:
+                  type: string
+                  format: uuid
+                  description: ID of the query being rated
+                tenant_id:
+                  type: string
+                  description: Tenant ID
+                user_id:
+                  type: string
+                  description: User ID
+                rating:
+                  type: integer
+                  minimum: 1
+                  maximum: 5
+                  description: Rating from 1 (poor) to 5 (excellent)
+                comment:
+                  type: string
+                  description: Optional feedback comment
+      responses:
+        '200':
+          description: Feedback submitted successfully
+        '400':
+          description: Invalid request
+
+  /admin/llm/config:
+    get:
+      summary: Get current LLM provider configuration
+      tags:
+        - Admin - LLM
+      responses:
+        '200':
+          description: Current configuration
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LLMConfig'
+    
+    put:
+      summary: Update LLM provider configuration
+      description: Switch between providers (Gemini, OpenAI, Anthropic) and adjust parameters
+      tags:
+        - Admin - LLM
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LLMConfig'
+      responses:
+        '200':
+          description: Configuration updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LLMConfig'
+
+  /admin/llm/test:
+    post:
+      summary: Test LLM configuration
+      tags:
+        - Admin - LLM
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - prompt
+              properties:
+                prompt:
+                  type: string
+                  description: Test prompt
+      responses:
+        '200':
+          description: Test successful
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  response:
+                    type: string
+                  provider:
+                    type: string
+
+  /admin/eval/run:
+    post:
+      summary: Run evaluation suite against golden dataset
+      tags:
+        - Admin - Evaluation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - tenant_id
+              properties:
+                tenant_id:
+                  type: string
+      responses:
+        '200':
+          description: Evaluation completed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  run_id:
+                    type: string
+                    format: uuid
+                  status:
+                    type: string
+                    enum: [completed, failed]
+
+  /admin/cube/sync:
+    post:
+      summary: Generate Cube.dev schema files from catalog
+      tags:
+        - Admin - Cube Integration
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - tenant_id
+              properties:
+                tenant_id:
+                  type: string
+      responses:
+        '200':
+          description: Schema generation successful
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: success
+
+components:
+  schemas:
+    AskResponse:
+      type: object
+      properties:
+        answer:
+          type: string
+          description: Natural language answer
+          example: "Monthly revenue is calculated as the sum of order_amount from orders_clean, excluding refunds, grouped by month."
+        calculation_breakdown:
+          type: object
+          description: Structured breakdown of calculation steps
+          additionalProperties: true
+        sources:
+          type: array
+          description: Source references with data quality metrics
+          items:
+            $ref: '#/components/schemas/SourceReference'
+        confidence:
+          type: string
+          description: Confidence level
+          enum: [high, medium, low]
+        resolved_entity_path:
+          type: string
+          description: Resolved qualified path in catalog
+          example: "finance.metrics.revenue.monthly"
+        caveats:
+          type: array
+          description: Data quality and freshness caveats
+          items:
+            type: string
+          example: ["Freshness: 3h", "Null rate: 2.1%", "SLA: 99.9% availability"]
+
+    SourceReference:
+      type: object
+      properties:
+        qualified_path:
+          type: string
+          example: "sales.views.orders_clean"
+        data_quality:
+          type: object
+          properties:
+            freshness:
+              type: string
+              example: "3 hours"
+            null_rate:
+              type: number
+              format: float
+              example: 2.1
+            completeness:
+              type: number
+              format: float
+              example: 97.9
+
+    LLMConfig:
+      type: object
+      properties:
+        provider:
+          type: string
+          enum: [gemini, openai, anthropic]
+          description: LLM provider
+        model_name:
+          type: string
+          description: Model identifier
+          example: "gemini-1.5-pro"
+        api_key:
+          type: string
+          description: API key (write-only)
+        embedding_model:
+          type: string
+          description: Embedding model for vector search
+          example: "text-embedding-004"
+        temperature:
+          type: number
+          format: float
+          minimum: 0
+          maximum: 1
+          description: Sampling temperature
+          example: 0.2
+        max_tokens:
+          type: integer
+          minimum: 128
+          maximum: 8192
+          description: Maximum tokens in response
+          example: 2048

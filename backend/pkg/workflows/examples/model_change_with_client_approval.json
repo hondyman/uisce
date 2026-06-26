@@ -1,0 +1,130 @@
+{
+    "id": "bp.model_change_with_client_approval.v1",
+    "name": "Model Change with Client Approval",
+    "version": "1.0.0",
+    "steps": [
+        {
+            "id": "S1",
+            "name": "Capture Model Change Intent",
+            "type": "Interpretation",
+            "category": "LLM",
+            "config": {
+                "profile_id": "llm.intent_to_structured_model_change",
+                "input_context": {
+                    "proposal_text": "proposal_free_text",
+                    "client": "client_context",
+                    "accounts": "account_list"
+                },
+                "output_variable": "model_change_proposal"
+            },
+            "next_step_id": "S2"
+        },
+        {
+            "id": "S2",
+            "name": "Run Suitability & Risk Checks",
+            "type": "DataValidation",
+            "category": "System",
+            "config": {
+                "validation_rules": [
+                    "suitability",
+                    "risk_limits",
+                    "tax_impact"
+                ]
+            },
+            "next_step_id": "S3"
+        },
+        {
+            "id": "S3",
+            "name": "Advisor Review & Adjust",
+            "type": "Review",
+            "category": "Human",
+            "config": {
+                "routing_rule": {
+                    "type": "DynamicRole",
+                    "dynamic_role": "PrimaryAdvisor",
+                    "expression": "client.primary_advisor_user_id"
+                },
+                "title": "Review Suitability Results",
+                "description": "Risk checks complete. Please review proposal and warnings."
+            },
+            "next_step_id": "S4"
+        },
+        {
+            "id": "S4",
+            "name": "Draft Client Explanation",
+            "type": "Drafting",
+            "category": "LLM",
+            "config": {
+                "profile_id": "llm.client_friendly_explanation",
+                "input_context": {
+                    "proposal": "model_change_proposal",
+                    "suitability": "suitability_result"
+                },
+                "output_variable": "client_explanation_draft"
+            },
+            "next_step_id": "S5"
+        },
+        {
+            "id": "S5",
+            "name": "Client Approval",
+            "type": "Approval",
+            "category": "Human",
+            "config": {
+                "routing_rule": {
+                    "type": "DynamicRole",
+                    "dynamic_role": "ClientPrimaryContact",
+                    "expression": "client.primary_contact_user_id"
+                },
+                "condition_rule": {
+                    "type": "Boolean",
+                    "expression": "client.discretionary == false"
+                },
+                "title": "Approve Model Change",
+                "description": "Please review the proposed changes to your portfolio."
+            },
+            "next_step_id": "S6"
+        },
+        {
+            "id": "S6",
+            "name": "Execute Trades",
+            "type": "ServiceCall",
+            "category": "System",
+            "config": {
+                "service": "TradingSystem",
+                "method": "ExecuteProposal"
+            },
+            "next_step_id": "S7"
+        },
+        {
+            "id": "S7",
+            "name": "Refresh Rollups",
+            "type": "SemanticRollup",
+            "category": "System",
+            "config": {
+                "metrics": [
+                    "risk",
+                    "allocation",
+                    "performance"
+                ]
+            },
+            "next_step_id": "S8"
+        },
+        {
+            "id": "S8",
+            "name": "Notify Advisor",
+            "type": "Notification",
+            "category": "System",
+            "config": {
+                "template": "model_change_executed",
+                "recipient": "advisor"
+            },
+            "next_step_id": "S9"
+        },
+        {
+            "id": "S9",
+            "name": "Completion",
+            "type": "Completion",
+            "category": "Structural"
+        }
+    ]
+}

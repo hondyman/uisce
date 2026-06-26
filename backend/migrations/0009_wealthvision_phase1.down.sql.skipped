@@ -1,0 +1,19 @@
+-- WealthVision Phase 1 Rollback Migration
+-- Drops all WealthVision tables in reverse dependency order
+
+DROP TABLE IF EXISTS impact_investments CASCADE;
+DROP TABLE IF EXISTS esg_portfolio_scores CASCADE;
+DROP TABLE IF EXISTS carbon_footprint_calculations CASCADE;
+DROP TABLE IF EXISTS meeting_preparations CASCADE;
+DROP TABLE IF EXISTS churn_predictions CASCADE;
+DROP TABLE IF EXISTS real_estate_syndications CASCADE;
+DROP TABLE IF EXISTS art_collectibles CASCADE;
+DROP TABLE IF EXISTS venture_capital_investments CASCADE;
+DROP TABLE IF EXISTS private_equity_investments CASCADE;
+DROP TABLE IF EXISTS legacy_impact_calculations CASCADE;
+DROP TABLE IF EXISTS education_529_plans CASCADE;
+DROP TABLE IF EXISTS dynasty_trust_simulations CASCADE;
+DROP TABLE IF EXISTS charitable_bunching_analyses CASCADE;
+DROP TABLE IF EXISTS niit_calculations CASCADE;
+DROP TABLE IF EXISTS state_residency_comparisons CASCADE;
+DROP TABLE IF EXISTS tax_strategies CASCADE;

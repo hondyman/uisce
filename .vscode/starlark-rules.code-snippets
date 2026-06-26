@@ -1,0 +1,64 @@
+{
+  "Starlark: ok + message template": {
+    "scope": "starlark",
+    "prefix": "semlayer-ok",
+    "body": [
+      "# Expresso-ish validation rule",
+      "ok = ${1:true}",
+      "message = \"${2:optional message}\""
+    ],
+    "description": "Template for ok-style Starlark rules"
+  },
+  "Starlark: field()": {
+    "scope": "starlark",
+    "prefix": "semlayer-field",
+    "body": [
+      "field(\"${1:object}\", \"${2:key}\"${3:, default=None})"
+    ],
+    "description": "BO-aware field accessor"
+  },
+  "Starlark: num_field()": {
+    "scope": "starlark",
+    "prefix": "semlayer-num-field",
+    "body": [
+      "num_field(\"${1:object}\", \"${2:key}\"${3:, default=None})"
+    ],
+    "description": "BO-aware numeric accessor"
+  },
+  "Starlark: bool_field()": {
+    "scope": "starlark",
+    "prefix": "semlayer-bool-field",
+    "body": [
+      "bool_field(\"${1:object}\", \"${2:key}\"${3:, default=None})"
+    ],
+    "description": "BO-aware boolean accessor"
+  },
+  "Starlark: comparisons": {
+    "scope": "starlark",
+    "prefix": "semlayer-cmp",
+    "body": [
+      "# eq/ne/gt/ge/lt/le",
+      "ok = ${1:eq}(${2:left}, ${3:right})"
+    ],
+    "description": "Comparison helpers"
+  },
+  "Starlark: get()/exists()": {
+    "scope": "starlark",
+    "prefix": "semlayer-get",
+    "body": [
+      "# object can be a dict, or a ctx object name string",
+      "v = get(\"${1:object}\", \"${2:field}\", ${3:None})",
+      "has = exists(\"${1:object}\", \"${2:field}\")"
+    ],
+    "description": "ctx-aware get/exists"
+  },
+  "Starlark: get_path()/exists_path()": {
+    "scope": "starlark",
+    "prefix": "semlayer-path",
+    "body": [
+      "v = get_path(\"${1:object}\", \"${2:path.like.this}\", ${3:None})",
+      "has = exists_path(\"${1:object}\", \"${2:path.like.this}\")"
+    ],
+    "description": "Dot-path traversal helpers"
+  }
+}

@@ -1,0 +1,22 @@
+FROM golang:1.25-alpine AS builder
+WORKDIR /app
+
+# Copy service sources and shared libs so local replace paths are available
+COPY ./services/semantic-engine ./services/semantic-engine
+COPY ./libs ./libs
+
+# Download modules within the service directory
+WORKDIR /app/services/semantic-engine
+RUN go mod download
+
+# Build the service from its directory
+WORKDIR /app/services/semantic-engine
+RUN CGO_ENABLED=0 GOOS=linux go build -o /app/semantic-engine ./cmd/main.go
+
+# Final image
+FROM alpine:latest
+RUN apk update && apk --no-cache add --allow-untrusted ca-certificates
+WORKDIR /root/
+COPY --from=builder /app/semantic-engine .
+EXPOSE 8083
+CMD ["./semantic-engine"]

@@ -1,0 +1,603 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://semlayer.io/schemas/rule-definition-language/v1",
+  "title": "Rule Definition Language (RDL) Schema",
+  "description": "Metadata-driven rule definitions for multi-tenant wealth management platform",
+  
+  "definitions": {
+    "TaxLossHarvestingRule": {
+      "type": "object",
+      "description": "Tax-Loss Harvesting opportunity detection and execution rule",
+      "required": ["tenant_id", "rule_id", "type", "version", "parameters", "expression", "active"],
+      "properties": {
+        "tenant_id": {
+          "type": "string",
+          "format": "uuid",
+          "description": "Tenant isolation key for multi-tenancy"
+        },
+        "rule_id": {
+          "type": "string",
+          "pattern": "^TLH_[A-Z0-9_]+$",
+          "description": "Unique identifier following TLH_* pattern",
+          "examples": ["TLH_STANDARD_V1", "TLH_AGGRESSIVE_V1", "TLH_ESG_AWARE_V1"]
+        },
+        "type": {
+          "type": "string",
+          "const": "tax_loss_harvesting"
+        },
+        "version": {
+          "type": "string",
+          "pattern": "^\\d+\\.\\d+\\.\\d+$",
+          "description": "Semantic version for rule tracking"
+        },
+        "name": {
+          "type": "string",
+          "description": "Human-readable rule name"
+        },
+        "description": {
+          "type": "string",
+          "description": "Detailed description of rule purpose"
+        },
+        "jurisdiction": {
+          "type": "string",
+          "pattern": "^[A-Z]{2}$",
+          "description": "ISO 3166-1 alpha-2 country code",
+          "examples": ["US", "GB", "CA", "AU"]
+        },
+        "parameters": {
+          "$ref": "#/definitions/TLHParameters"
+        },
+        "wash_sale_config": {
+          "$ref": "#/definitions/WashSaleConfig"
+        },
+        "substitute_asset_rules": {
+          "$ref": "#/definitions/SubstituteAssetRules"
+        },
+        "expression": {
+          "type": "string",
+          "description": "CEL expression for opportunity detection",
+          "examples": [
+            "input.unrealized_loss_pct >= params.min_loss_pct && input.unrealized_loss_usd >= params.min_loss_usd && !isInWashSaleWindow(input.household_id, input.ticker, params.wash_sale_window_days)"
+          ]
+        },
+        "scoring_formula": {
+          "type": "string",
+          "description": "CEL expression for prioritizing opportunities",
+          "examples": [
+            "(input.unrealized_loss_usd * params.tax_rate) - (input.transaction_cost * 2)"
+          ]
+        },
+        "active": {
+          "type": "boolean",
+          "description": "Whether rule is currently active"
+        },
+        "effective_from": {
+          "type": "string",
+          "format": "date",
+          "description": "Date rule becomes effective"
+        },
+        "effective_to": {
+          "type": "string",
+          "format": "date",
+          "description": "Date rule expires (null = no expiry)"
+        },
+        "schedule": {
+          "$ref": "#/definitions/EvaluationSchedule"
+        },
+        "notifications": {
+          "$ref": "#/definitions/NotificationConfig"
+        },
+        "audit": {
+          "$ref": "#/definitions/AuditMetadata"
+        }
+      }
+    },
+    
+    "TLHParameters": {
+      "type": "object",
+      "description": "Core parameters for tax-loss harvesting detection",
+      "required": ["min_loss_percentage", "min_loss_amount_usd"],
+      "properties": {
+        "min_loss_percentage": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100,
+          "description": "Minimum unrealized loss as percentage (e.g., 10 = 10% down)",
+          "default": 10
+        },
+        "min_loss_amount_usd": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Minimum absolute loss in USD to trigger",
+          "default": 1000
+        },
+        "max_loss_amount_usd": {
+          "type": "number",
+          "description": "Maximum loss to harvest in single transaction (for position sizing)"
+        },
+        "holding_period_days": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Minimum days held before eligible (for short-term vs long-term)",
+          "default": 0
+        },
+        "long_term_threshold_days": {
+          "type": "integer",
+          "description": "Days to qualify as long-term capital loss (366 for US)",
+          "default": 366
+        },
+        "annual_loss_limit_usd": {
+          "type": "number",
+          "description": "Maximum harvestable loss per year (US: $3000 against ordinary income)",
+          "default": 3000
+        },
+        "carryforward_enabled": {
+          "type": "boolean",
+          "description": "Whether excess losses can be carried to future years",
+          "default": true
+        },
+        "estimated_tax_rate": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Estimated marginal tax rate for benefit calculation",
+          "default": 0.35
+        },
+        "state_tax_rate": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "State/local tax rate if applicable"
+        },
+        "transaction_cost_threshold_usd": {
+          "type": "number",
+          "description": "Minimum net benefit after transaction costs",
+          "default": 50
+        },
+        "min_remaining_position_usd": {
+          "type": "number",
+          "description": "Minimum position size to leave after partial harvest"
+        },
+        "exclude_qualified_dividends": {
+          "type": "boolean",
+          "description": "Exclude positions with significant qualified dividend yield",
+          "default": false
+        },
+        "qualified_dividend_threshold": {
+          "type": "number",
+          "description": "Yield threshold above which to preserve position"
+        }
+      }
+    },
+    
+    "WashSaleConfig": {
+      "type": "object",
+      "description": "Wash sale prevention configuration",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "Whether to check for wash sale violations",
+          "default": true
+        },
+        "window_days_before": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Days before sale to check for purchases",
+          "default": 30
+        },
+        "window_days_after": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Days after sale to restrict purchases",
+          "default": 30
+        },
+        "check_household": {
+          "type": "boolean",
+          "description": "Check wash sales across all household accounts",
+          "default": true
+        },
+        "check_ira": {
+          "type": "boolean",
+          "description": "Check wash sales in IRA accounts",
+          "default": true
+        },
+        "check_spouse": {
+          "type": "boolean",
+          "description": "Check wash sales in spouse accounts",
+          "default": true
+        },
+        "substantially_identical_config": {
+          "type": "object",
+          "description": "Configuration for 'substantially identical' security matching",
+          "properties": {
+            "same_ticker": {
+              "type": "boolean",
+              "default": true
+            },
+            "same_cusip": {
+              "type": "boolean",
+              "default": true
+            },
+            "options_on_same": {
+              "type": "boolean",
+              "description": "Treat options on same underlying as identical",
+              "default": true
+            },
+            "convertible_bonds": {
+              "type": "boolean",
+              "description": "Treat convertible bonds on same issuer as identical",
+              "default": true
+            },
+            "etf_overlap_threshold": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1,
+              "description": "ETF holdings overlap threshold to consider identical",
+              "default": 0.70
+            },
+            "mutual_fund_same_index": {
+              "type": "boolean",
+              "description": "Treat funds tracking same index as identical",
+              "default": false
+            }
+          }
+        }
+      }
+    },
+    
+    "SubstituteAssetRules": {
+      "type": "object",
+      "description": "Rules for selecting replacement assets after harvest",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "Whether to auto-suggest substitute assets",
+          "default": true
+        },
+        "min_correlation": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Minimum correlation with sold asset",
+          "default": 0.85
+        },
+        "max_tracking_error": {
+          "type": "number",
+          "description": "Maximum tracking error vs original position",
+          "default": 0.02
+        },
+        "sector_match_required": {
+          "type": "boolean",
+          "description": "Substitute must be in same sector",
+          "default": true
+        },
+        "market_cap_match": {
+          "type": "string",
+          "enum": ["EXACT", "SIMILAR", "ANY"],
+          "description": "Market cap matching requirement",
+          "default": "SIMILAR"
+        },
+        "factor_exposure_tolerance": {
+          "type": "number",
+          "description": "Maximum deviation in factor exposures",
+          "default": 0.10
+        },
+        "esg_score_minimum": {
+          "type": "number",
+          "description": "Minimum ESG score for substitute (if ESG client)"
+        },
+        "exclude_tickers": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Tickers to never use as substitutes"
+        },
+        "preferred_substitutes": {
+          "type": "array",
+          "description": "Pre-approved substitute mappings",
+          "items": {
+            "type": "object",
+            "properties": {
+              "original_ticker": { "type": "string" },
+              "substitute_tickers": {
+                "type": "array",
+                "items": { "type": "string" }
+              },
+              "priority": { "type": "integer" }
+            }
+          }
+        },
+        "wait_period_for_repurchase_days": {
+          "type": "integer",
+          "description": "Days to wait before repurchasing original",
+          "default": 31
+        }
+      }
+    },
+    
+    "EvaluationSchedule": {
+      "type": "object",
+      "description": "When and how often to evaluate this rule",
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": ["CONTINUOUS", "SCHEDULED", "ON_DEMAND", "EVENT_TRIGGERED"],
+          "description": "Evaluation trigger type"
+        },
+        "cron": {
+          "type": "string",
+          "description": "Cron expression for scheduled evaluation",
+          "examples": ["0 16 * * 1-5"]
+        },
+        "timezone": {
+          "type": "string",
+          "description": "Timezone for schedule",
+          "default": "America/New_York"
+        },
+        "event_triggers": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["PRICE_UPDATE", "POSITION_CHANGE", "CASH_FLOW", "END_OF_DAY", "END_OF_MONTH", "END_OF_QUARTER", "END_OF_YEAR"]
+          }
+        },
+        "blackout_periods": {
+          "type": "array",
+          "description": "Periods when evaluation is suspended",
+          "items": {
+            "type": "object",
+            "properties": {
+              "start": { "type": "string", "format": "date" },
+              "end": { "type": "string", "format": "date" },
+              "reason": { "type": "string" }
+            }
+          }
+        },
+        "year_end_acceleration": {
+          "type": "object",
+          "description": "Special handling for year-end harvesting",
+          "properties": {
+            "enabled": { "type": "boolean", "default": true },
+            "start_month": { "type": "integer", "default": 11 },
+            "increased_frequency": { "type": "string", "default": "DAILY" },
+            "lower_threshold_multiplier": { "type": "number", "default": 0.5 }
+          }
+        }
+      }
+    },
+    
+    "NotificationConfig": {
+      "type": "object",
+      "description": "Notification settings when opportunities are detected",
+      "properties": {
+        "notify_advisor": {
+          "type": "boolean",
+          "default": true
+        },
+        "notify_client": {
+          "type": "boolean",
+          "default": false
+        },
+        "channels": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["EMAIL", "SMS", "IN_APP", "WEBHOOK", "SLACK"]
+          }
+        },
+        "urgency_thresholds": {
+          "type": "object",
+          "properties": {
+            "high_benefit_usd": { "type": "number", "default": 10000 },
+            "time_sensitive_days": { "type": "integer", "default": 5 }
+          }
+        },
+        "digest_frequency": {
+          "type": "string",
+          "enum": ["IMMEDIATE", "HOURLY", "DAILY", "WEEKLY"],
+          "default": "DAILY"
+        }
+      }
+    },
+    
+    "AuditMetadata": {
+      "type": "object",
+      "description": "Audit trail for rule changes",
+      "properties": {
+        "created_by": { "type": "string" },
+        "created_at": { "type": "string", "format": "date-time" },
+        "updated_by": { "type": "string" },
+        "updated_at": { "type": "string", "format": "date-time" },
+        "approved_by": { "type": "string" },
+        "approved_at": { "type": "string", "format": "date-time" },
+        "change_reason": { "type": "string" },
+        "compliance_review": {
+          "type": "object",
+          "properties": {
+            "reviewed_by": { "type": "string" },
+            "reviewed_at": { "type": "string", "format": "date-time" },
+            "status": {
+              "type": "string",
+              "enum": ["PENDING", "APPROVED", "REJECTED", "REQUIRES_CHANGES"]
+            },
+            "notes": { "type": "string" }
+          }
+        }
+      }
+    }
+  },
+  
+  "type": "object",
+  "$ref": "#/definitions/TaxLossHarvestingRule",
+  
+  "examples": [
+    {
+      "tenant_id": "550e8400-e29b-41d4-a716-446655440000",
+      "rule_id": "TLH_STANDARD_US_V1",
+      "type": "tax_loss_harvesting",
+      "version": "1.0.0",
+      "name": "Standard US Tax-Loss Harvesting",
+      "description": "Identifies tax-loss harvesting opportunities for US taxable accounts with wash sale protection",
+      "jurisdiction": "US",
+      "parameters": {
+        "min_loss_percentage": 10,
+        "min_loss_amount_usd": 1000,
+        "holding_period_days": 0,
+        "long_term_threshold_days": 366,
+        "annual_loss_limit_usd": 3000,
+        "carryforward_enabled": true,
+        "estimated_tax_rate": 0.35,
+        "transaction_cost_threshold_usd": 50
+      },
+      "wash_sale_config": {
+        "enabled": true,
+        "window_days_before": 30,
+        "window_days_after": 30,
+        "check_household": true,
+        "check_ira": true,
+        "check_spouse": true,
+        "substantially_identical_config": {
+          "same_ticker": true,
+          "same_cusip": true,
+          "options_on_same": true,
+          "etf_overlap_threshold": 0.70
+        }
+      },
+      "substitute_asset_rules": {
+        "enabled": true,
+        "min_correlation": 0.90,
+        "max_tracking_error": 0.02,
+        "sector_match_required": true,
+        "market_cap_match": "SIMILAR",
+        "factor_exposure_tolerance": 0.10,
+        "wait_period_for_repurchase_days": 31,
+        "preferred_substitutes": [
+          {
+            "original_ticker": "SPY",
+            "substitute_tickers": ["IVV", "VOO", "SPLG"],
+            "priority": 1
+          },
+          {
+            "original_ticker": "QQQ",
+            "substitute_tickers": ["QQQM", "ONEQ"],
+            "priority": 1
+          }
+        ]
+      },
+      "expression": "input.unrealized_loss_pct >= params.min_loss_pct && input.unrealized_loss_usd >= params.min_loss_usd && input.account_type == 'TAXABLE' && !isInWashSaleWindow(input.household_id, input.ticker, params.wash_sale.window_days_before, params.wash_sale.window_days_after)",
+      "scoring_formula": "(input.unrealized_loss_usd * params.estimated_tax_rate) - (input.estimated_transaction_cost * 2) + (input.is_long_term ? 500 : 0)",
+      "active": true,
+      "effective_from": "2024-01-01",
+      "schedule": {
+        "type": "SCHEDULED",
+        "cron": "0 16 * * 1-5",
+        "timezone": "America/New_York",
+        "event_triggers": ["PRICE_UPDATE", "END_OF_DAY"],
+        "year_end_acceleration": {
+          "enabled": true,
+          "start_month": 11,
+          "increased_frequency": "HOURLY",
+          "lower_threshold_multiplier": 0.5
+        }
+      },
+      "notifications": {
+        "notify_advisor": true,
+        "notify_client": false,
+        "channels": ["IN_APP", "EMAIL"],
+        "urgency_thresholds": {
+          "high_benefit_usd": 5000,
+          "time_sensitive_days": 3
+        },
+        "digest_frequency": "DAILY"
+      },
+      "audit": {
+        "created_by": "system",
+        "created_at": "2024-01-01T00:00:00Z",
+        "compliance_review": {
+          "status": "APPROVED",
+          "reviewed_by": "compliance_officer_001",
+          "reviewed_at": "2024-01-02T14:30:00Z"
+        }
+      }
+    },
+    {
+      "tenant_id": "660e8400-e29b-41d4-a716-446655440001",
+      "rule_id": "TLH_UK_BED_BREAKFAST_V1",
+      "type": "tax_loss_harvesting",
+      "version": "1.0.0",
+      "name": "UK Bed & Breakfast Compliant TLH",
+      "description": "Tax-loss harvesting respecting UK 30-day Bed & Breakfast rule",
+      "jurisdiction": "GB",
+      "parameters": {
+        "min_loss_percentage": 10,
+        "min_loss_amount_usd": 1000,
+        "holding_period_days": 0,
+        "estimated_tax_rate": 0.20,
+        "transaction_cost_threshold_usd": 50
+      },
+      "wash_sale_config": {
+        "enabled": true,
+        "window_days_before": 0,
+        "window_days_after": 30,
+        "check_household": true,
+        "substantially_identical_config": {
+          "same_ticker": true,
+          "same_cusip": true
+        }
+      },
+      "substitute_asset_rules": {
+        "enabled": true,
+        "min_correlation": 0.85,
+        "sector_match_required": true,
+        "wait_period_for_repurchase_days": 31
+      },
+      "expression": "input.unrealized_loss_pct >= params.min_loss_pct && input.unrealized_loss_gbp >= params.min_loss_usd && !hasPurchaseInWindow(input.account_id, input.ticker, 30)",
+      "active": true,
+      "effective_from": "1998-04-06",
+      "schedule": {
+        "type": "SCHEDULED",
+        "cron": "0 16 * * 1-5",
+        "timezone": "Europe/London"
+      },
+      "audit": {
+        "created_by": "system",
+        "created_at": "2024-01-01T00:00:00Z"
+      }
+    },
+    {
+      "tenant_id": "770e8400-e29b-41d4-a716-446655440002",
+      "rule_id": "TLH_ESG_AWARE_V1",
+      "type": "tax_loss_harvesting",
+      "version": "1.0.0",
+      "name": "ESG-Aware Tax-Loss Harvesting",
+      "description": "TLH that ensures substitute assets meet ESG criteria",
+      "jurisdiction": "US",
+      "parameters": {
+        "min_loss_percentage": 10,
+        "min_loss_amount_usd": 2000,
+        "estimated_tax_rate": 0.35
+      },
+      "wash_sale_config": {
+        "enabled": true,
+        "window_days_before": 30,
+        "window_days_after": 30
+      },
+      "substitute_asset_rules": {
+        "enabled": true,
+        "min_correlation": 0.80,
+        "sector_match_required": true,
+        "esg_score_minimum": 70,
+        "exclude_tickers": ["XOM", "CVX", "COP", "MRO", "OXY", "VLO", "PSX", "HES", "MPC", "DVN"]
+      },
+      "expression": "input.unrealized_loss_pct >= params.min_loss_pct && input.client_esg_preference == true && hasESGCompliantSubstitute(input.ticker, params.substitute_asset_rules.esg_score_minimum)",
+      "active": true,
+      "schedule": {
+        "type": "EVENT_TRIGGERED",
+        "event_triggers": ["PRICE_UPDATE", "ESG_SCORE_CHANGE"]
+      },
+      "audit": {
+        "created_by": "esg_team",
+        "created_at": "2024-03-15T00:00:00Z"
+      }
+    }
+  ]
+}

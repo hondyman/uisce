@@ -1,0 +1,99 @@
+name: Integration - Gateway Roles
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  integration:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_DB: alpha
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+        - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U postgres" --health-interval=5s --health-timeout=5s --health-retries=5
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: '1.24'
+
+    - name: Install psql client
+      run: sudo apt-get update && sudo apt-get install -y postgresql-client
+
+    - name: Wait for Postgres
+      run: |
+        for i in {1..30}; do
+          pg_isready -h localhost -p 5432 -U postgres && break
+          sleep 1
+        done
+
+    - name: Apply DB schema and seed
+      env:
+        PGPASSWORD: postgres
+      run: |
+        # Apply base schema if present
+        if [ -f init-db.sql ]; then
+          psql -h localhost -U postgres -d alpha -v ON_ERROR_STOP=1 -f init-db.sql
+        fi
+        # Apply semantic roles seed if present
+        if [ -f tmp/seed_semantic_roles.sql ]; then
+          psql -h localhost -U postgres -d alpha -v ON_ERROR_STOP=1 -f tmp/seed_semantic_roles.sql || true
+        fi
+
+    - name: Build backend
+      run: go build -o bin/backend ./backend/cmd/server
+
+    - name: Start backend
+      env:
+        DSN: postgres://postgres:postgres@localhost:5432/alpha?sslmode=disable
+        PORT: 8080
+      run: |
+        mkdir -p logs
+        ./bin/backend > logs/backend.log 2>&1 & echo $! > backend.pid
+        # Wait for backend to serve /api/roles (or start responding)
+        for i in {1..30}; do
+          if curl -sSf http://localhost:8080/api/roles >/dev/null 2>&1; then break; fi
+          sleep 1
+        done
+        curl -s http://localhost:8080/api/roles | head -c 200 || true
+
+    - name: Build gateway
+      run: go build -o bin/api-gateway ./api-gateway
+
+    - name: Start gateway
+      env:
+        PORT: 8001
+        BACKEND_URL: http://localhost:8080
+        JWT_SECRET: test-secret
+        HASURA_URL: ''
+      run: |
+        ./bin/api-gateway > logs/gateway.log 2>&1 & echo $! > gateway.pid
+        for i in {1..30}; do
+          if curl -sSf http://localhost:8001/health >/dev/null 2>&1; then break; fi
+          sleep 1
+        done
+        curl -s http://localhost:8001/health || true
+
+    - name: Run integration test
+      run: go test ./api-gateway -v -run TestGatewayRolesProxy
+
+    - name: Upload logs on failure
+      if: failure()
+      run: |
+        echo "==== backend log ===="
+        tail -n 200 logs/backend.log || true
+        echo "==== gateway log ===="
+        tail -n 200 logs/gateway.log || true

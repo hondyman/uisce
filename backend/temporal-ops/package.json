@@ -1,0 +1,23 @@
+{
+  "name": "semlayer-temporal-ops",
+  "version": "0.1.0",
+  "description": "Temporal ops utilities for signal/update/cancel/terminate/reset, batch helpers, and audit exports.",
+  "main": "dist/cli.js",
+  "bin": {
+    "temporal-ops": "dist/cli.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/cli.js",
+    "dev": "ts-node src/cli.ts"
+  },
+  "dependencies": {
+    "@temporalio/client": "^1.0.0",
+    "@temporalio/proto": "^1.0.0",
+    "yargs": "^17.0.1"
+  },
+  "devDependencies": {
+    "ts-node": "^10.0.0",
+    "typescript": "^4.9.5"
+  }
+}

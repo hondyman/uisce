@@ -1,0 +1,216 @@
+# Staging Values for Semlayer Platform
+# Use with: helm install semlayer ./charts/semlayer-platform -f values-staging.yaml
+
+global:
+  environment: staging
+
+  # Lower replica counts for staging
+  replicas:
+    apiGateway: 2
+    semanticEngine: 2
+    cubeApi: 2
+    ruleEngine: 2
+    complianceEngine: 1
+    aiBuilder: 1
+    notificationService: 1
+
+  # Reduced resources for staging
+  resources:
+    apiGateway:
+      limits:
+        cpu: "2"
+        memory: 4Gi
+      requests:
+        cpu: "500m"
+        memory: 1Gi
+    semanticEngine:
+      limits:
+        cpu: "4"
+        memory: 8Gi
+      requests:
+        cpu: "1"
+        memory: 2Gi
+    cubeApi:
+      limits:
+        cpu: "4"
+        memory: 8Gi
+      requests:
+        cpu: "1"
+        memory: 2Gi
+    ruleEngine:
+      limits:
+        cpu: "2"
+        memory: 4Gi
+      requests:
+        cpu: "500m"
+        memory: 1Gi
+    complianceEngine:
+      limits:
+        cpu: "2"
+        memory: 4Gi
+      requests:
+        cpu: "500m"
+        memory: 1Gi
+    aiBuilder:
+      limits:
+        cpu: "4"
+        memory: 16Gi
+      requests:
+        cpu: "1"
+        memory: 4Gi
+    notificationService:
+      limits:
+        cpu: "1"
+        memory: 2Gi
+      requests:
+        cpu: "250m"
+        memory: 512Mi
+
+  # Autoscaling for staging
+  autoscaling:
+    enabled: true
+    apiGateway:
+      minReplicas: 2
+      maxReplicas: 5
+      targetCPUUtilizationPercentage: 70
+    semanticEngine:
+      minReplicas: 2
+      maxReplicas: 5
+      targetCPUUtilizationPercentage: 70
+    cubeApi:
+      minReplicas: 2
+      maxReplicas: 5
+      targetCPUUtilizationPercentage: 75
+    ruleEngine:
+      minReplicas: 2
+      maxReplicas: 5
+      targetCPUUtilizationPercentage: 70
+    complianceEngine:
+      minReplicas: 1
+      maxReplicas: 3
+      targetCPUUtilizationPercentage: 75
+    aiBuilder:
+      minReplicas: 1
+      maxReplicas: 3
+      targetCPUUtilizationPercentage: 75
+    notificationService:
+      minReplicas: 1
+      maxReplicas: 3
+      targetCPUUtilizationPercentage: 75
+
+  # Pod Disruption Budgets for staging
+  podDisruptionBudget:
+    enabled: true
+    apiGateway:
+      minAvailable: 1
+    semanticEngine:
+      minAvailable: 1
+    cubeApi:
+      minAvailable: 1
+    ruleEngine:
+      minAvailable: 1
+    complianceEngine:
+      minAvailable: 0
+    aiBuilder:
+      minAvailable: 0
+    notificationService:
+      minAvailable: 0
+
+  # Security settings
+  security:
+    podSecurityContext:
+      runAsNonRoot: true
+      runAsUser: 1000
+      runAsGroup: 1000
+      fsGroup: 1000
+    containerSecurityContext:
+      allowPrivilegeEscalation: false
+      readOnlyRootFilesystem: true
+      capabilities:
+        drop:
+        - ALL
+
+  # Network policies
+  networkPolicy:
+    enabled: true
+
+  # Service mesh
+  istio:
+    enabled: true
+    mtls:
+      mode: STRICT
+
+# Ingress configuration
+ingress:
+  enabled: true
+  className: nginx
+  annotations:
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/proxy-body-size: "50m"
+    cert-manager.io/cluster-issuer: letsencrypt-staging
+  hosts:
+  - host: api-staging.semlayer.io
+    paths:
+    - path: /
+      pathType: Prefix
+  tls:
+  - secretName: semlayer-staging-api-tls
+    hosts:
+    - api-staging.semlayer.io
+
+# Database configuration
+postgresql:
+  host: semlayer-staging-postgresql.postgres.database.azure.com
+  port: 5432
+  sslMode: require
+  maxConnections: 50
+  maxIdleConnections: 10
+  connMaxLifetime: 30m
+
+# Redis configuration
+redis:
+  host: semlayer-staging-redis.redis.cache.windows.net
+  port: 6380
+  tls: true
+  cluster:
+    enabled: false # Single node for staging
+  maxConnections: 100
+
+# Queue configuration
+servicebus:
+  namespace: semlayer-staging-servicebus
+  tier: Standard # Lower tier for staging
+
+# Monitoring configuration
+monitoring:
+  prometheus:
+    enabled: true
+    serviceMonitor:
+      enabled: true
+      interval: 30s
+  grafana:
+    enabled: true
+    dashboards:
+      enabled: true
+  alertmanager:
+    enabled: true
+    # Less aggressive alerting in staging
+    receivers:
+    - name: slack-staging
+
+# Logging configuration
+logging:
+  level: debug # More verbose in staging
+  format: json
+  structured: true
+
+# Tracing configuration
+tracing:
+  enabled: true
+  samplingRate: 0.5 # 50% in staging for better debugging
+  exporter: jaeger
+
+# Test data
+testData:
+  enabled: true
+  seedOnStartup: true

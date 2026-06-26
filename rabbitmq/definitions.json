@@ -1,0 +1,111 @@
+{
+    "rabbit_version": "3.12.0",
+    "users": [
+        {
+            "name": "guest",
+            "password": "guest",
+            "tags": "administrator"
+        }
+    ],
+    "vhosts": [
+        {
+            "name": "/"
+        }
+    ],
+    "permissions": [
+        {
+            "user": "guest",
+            "vhost": "/",
+            "configure": ".*",
+            "write": ".*",
+            "read": ".*"
+        }
+    ],
+    "exchanges": [
+        {
+            "name": "security_sync_exchange",
+            "vhost": "/",
+            "type": "topic",
+            "durable": true,
+            "auto_delete": false,
+            "internal": false,
+            "arguments": {}
+        }
+    ],
+    "queues": [
+        {
+            "name": "security_sync.postgresql",
+            "vhost": "/",
+            "durable": true,
+            "auto_delete": false,
+            "arguments": {
+                "x-message-ttl": 86400000,
+                "x-max-length": 100000
+            }
+        },
+        {
+            "name": "security_sync.hasura",
+            "vhost": "/",
+            "durable": true,
+            "auto_delete": false,
+            "arguments": {
+                "x-message-ttl": 86400000,
+                "x-max-length": 100000
+            }
+        },
+        {
+            "name": "security_sync.superset",
+            "vhost": "/",
+            "durable": true,
+            "auto_delete": false,
+            "arguments": {
+                "x-message-ttl": 86400000,
+                "x-max-length": 100000
+            }
+        },
+        {
+            "name": "security_sync.starrocks",
+            "vhost": "/",
+            "durable": true,
+            "auto_delete": false,
+            "arguments": {
+                "x-message-ttl": 86400000,
+                "x-max-length": 100000
+            }
+        }
+    ],
+    "bindings": [
+        {
+            "source": "security_sync_exchange",
+            "vhost": "/",
+            "destination": "security_sync.postgresql",
+            "destination_type": "queue",
+            "routing_key": "security_sync.iam.#",
+            "arguments": {}
+        },
+        {
+            "source": "security_sync_exchange",
+            "vhost": "/",
+            "destination": "security_sync.hasura",
+            "destination_type": "queue",
+            "routing_key": "security_sync.iam.#",
+            "arguments": {}
+        },
+        {
+            "source": "security_sync_exchange",
+            "vhost": "/",
+            "destination": "security_sync.superset",
+            "destination_type": "queue",
+            "routing_key": "security_sync.iam.#",
+            "arguments": {}
+        },
+        {
+            "source": "security_sync_exchange",
+            "vhost": "/",
+            "destination": "security_sync.starrocks",
+            "destination_type": "queue",
+            "routing_key": "security_sync.iam.#",
+            "arguments": {}
+        }
+    ]
+}

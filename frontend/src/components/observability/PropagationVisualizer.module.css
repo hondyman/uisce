@@ -1,0 +1,244 @@
+.propagation-visualizer-card {
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  margin-bottom: 16px;
+}
+
+.propagation-container {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+/* Region Overview */
+.regions-overview h4,
+.propagation-paths h4,
+.propagation-summary h4 {
+  margin: 0 0 12px 0;
+  color: #262626;
+  font-size: 14px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.regions-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 12px;
+}
+
+.region-node {
+  padding: 12px;
+  background: #fafafa;
+  border-radius: 6px;
+  border: 1px solid #f0f0f0;
+  transition: all 0.3s ease;
+}
+
+.region-node:hover {
+  border-color: #1890ff;
+  box-shadow: 0 2px 8px rgba(24, 144, 255, 0.12);
+}
+
+.region-header {
+  margin-bottom: 8px;
+  font-weight: 500;
+  font-size: 12px;
+}
+
+.region-metrics {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.issue-count {
+  font-size: 12px;
+  color: #666;
+}
+
+/* Propagation Paths */
+.paths-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.propagation-path {
+  display: grid;
+  grid-template-columns: 120px 1fr 120px 150px;
+  gap: 12px;
+  align-items: center;
+  padding: 12px;
+  background: #fafafa;
+  border-radius: 6px;
+  border-left: 3px solid #1890ff;
+  transition: all 0.3s ease;
+}
+
+.propagation-path:hover {
+  background: #f0f5ff;
+  border-left-color: #0050b3;
+  box-shadow: 0 2px 8px rgba(24, 144, 255, 0.12);
+}
+
+.path-source,
+.path-target {
+  font-weight: 500;
+  font-size: 14px;
+}
+
+.region-label {
+  color: #262626;
+  font-weight: 600;
+}
+
+.path-arrow {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: #1890ff;
+  font-size: 16px;
+}
+
+.path-details {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 11px;
+  color: #666;
+  text-align: center;
+}
+
+.hop-count {
+  font-weight: 500;
+}
+
+.latency {
+  color: #faad14;
+}
+
+.path-risk {
+  display: flex;
+  justify-content: flex-end;
+}
+
+/* Propagation Summary */
+.summary-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 12px;
+}
+
+.summary-item {
+  padding: 12px;
+  background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+  border-radius: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.summary-item .label {
+  font-size: 12px;
+  color: #666;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.summary-item .value {
+  font-size: 20px;
+  font-weight: 700;
+  color: #262626;
+}
+
+/* Responsive Design */
+@media (max-width: 1200px) {
+  .propagation-path {
+    grid-template-columns: 1fr;
+    gap: 8px;
+    border-left: none;
+    border-top: 3px solid #1890ff;
+  }
+
+  .path-arrow {
+    flex-direction: column;
+  }
+
+  .path-details {
+    flex-direction: row;
+    gap: 8px;
+  }
+
+  .path-source,
+  .path-target {
+    display: flex;
+    justify-content: space-between;
+  }
+}
+
+@media (max-width: 768px) {
+  .regions-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .summary-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+/* Dark mode support */
+@media (prefers-color-scheme: dark) {
+  .regions-overview h4,
+  .propagation-paths h4,
+  .propagation-summary h4 {
+    color: #e0e0e0;
+  }
+
+  .region-node {
+    background: #1f1f1f;
+    border-color: #434343;
+  }
+
+  .region-header {
+    color: #e0e0e0;
+  }
+
+  .issue-count,
+  .path-details {
+    color: #a0a0a0;
+  }
+
+  .region-label {
+    color: #e0e0e0;
+  }
+
+  .propagation-path {
+    background: #1f1f1f;
+    border-left-color: #177ddc;
+  }
+
+  .propagation-path:hover {
+    background: #262626;
+    border-left-color: #0050b3;
+  }
+
+  .path-arrow {
+    color: #177ddc;
+  }
+
+  .summary-item {
+    background: linear-gradient(135deg, #262626 0%, #1f1f1f 100%);
+  }
+
+  .summary-item .label {
+    color: #a0a0a0;
+  }
+
+  .summary-item .value {
+    color: #e0e0e0;
+  }
+}

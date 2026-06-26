@@ -1,0 +1,19 @@
+FROM golang:1.25-alpine AS builder
+WORKDIR /app
+
+# Copy go.mod and go.sum first to leverage Docker layer caching.
+# This step only re-runs if these files change.
+COPY . .
+RUN go mod download
+
+# Build from the service directory
+WORKDIR /app/services/compliance-engine
+RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o /app/compliance-engine .
+
+# Final image
+FROM alpine:latest
+# Add ca-certificates for making HTTPS requests
+RUN apk update && apk --no-cache add --allow-untrusted ca-certificates
+WORKDIR /root/
+COPY --from=builder /app/compliance-engine .
+CMD ["./compliance-engine"]

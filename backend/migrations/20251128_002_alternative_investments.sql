@@ -1,0 +1,2 @@
+-- Skipped: Redundant to 20251127_001_alternative_investments.up.sql
+-- This file attempted to create the same tables already created by the previous migration.

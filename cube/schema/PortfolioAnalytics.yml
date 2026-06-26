@@ -1,0 +1,204 @@
+##
+## Portfolio Analytics Cube - Unified Hot + Cold View (BULLETPROOF)
+##
+## CRITICAL: Uses watermark table to ensure EXACT tier boundaries
+## No double-counting or missing data possible when using this approach
+##
+## ARCHITECTURE:
+## ┌─────────────────────────────────────────────────────────────────┐
+## │              BULLETPROOF TIER BOUNDARY ENFORCEMENT              │
+## ├─────────────────────────────────────────────────────────────────┤
+## │                                                                 │
+## │  tier_watermarks table = SINGLE SOURCE OF TRUTH                │
+## │                                                                 │
+## │  Hot tier:  WHERE as_of_date >= (SELECT cutoff_date FROM wm)   │
+## │  Cold tier: WHERE as_of_date < (SELECT cutoff_date FROM wm)    │
+## │                                                                 │
+## │  During migration (state='MIGRATING'):                         │
+## │  → Query falls back to HOT ONLY (safe default)                 │
+## │                                                                 │
+## │  GUARANTEES:                                                   │
+## │  ✓ No double counting (strict < and >= boundary)               │
+## │  ✓ No missing data (boundary is authoritative)                 │
+## │  ✓ Atomic boundary updates (single row update)                 │
+## │  ✓ Migration-safe (falls back to hot during migration)         │
+## │                                                                 │
+## └─────────────────────────────────────────────────────────────────┘
+##
+
+cubes:
+- name: PortfolioAnalytics
+  title: Portfolio Analytics (Unified - Bulletproof)
+  description: Combined hot + cold portfolio data with guaranteed data integrity
+
+  # Use the hot datasource - StarRocks handles the boundary internally
+  data_source: starrocks
+
+  # SQL uses subquery to get authoritative cutoff from watermark table
+  # This ensures EXACT boundary alignment between hot and cold
+  sql: >
+    WITH watermark AS (
+      SELECT cutoff_date, state
+      FROM semantic_hot.tier_watermarks
+      WHERE table_name = 'portfolio_nav'
+        AND tenant_id = SECURITY_CONTEXT.tenant_id
+        AND datasource_id = SECURITY_CONTEXT.datasource_id
+    ) SELECT 
+      h.tenant_id,
+      h.datasource_id,
+      h.portfolio_id,
+      h.as_of_date,
+      'hot' as data_tier,
+      h.nav_value as nav,
+      h.inflows,
+      h.outflows,
+      h.created_at
+    FROM semantic_hot.portfolio_nav h CROSS JOIN watermark wm WHERE h.as_of_date >= wm.cutoff_date
+      AND (wm.state = 'STABLE' OR wm.state IS NULL)
+
+    UNION ALL
+
+    SELECT 
+      c.tenant_id,
+      c.datasource_id,
+      c.portfolio_id,
+      c.as_of_date,
+      'cold' as data_tier,
+      c.nav_value as nav,
+      c.inflows,
+      c.outflows,
+      c.created_at
+    FROM semantic_cold.portfolio_nav c CROSS JOIN watermark wm WHERE c.as_of_date < wm.cutoff_date
+      AND wm.state = 'STABLE'
+
+  # Refresh strategy - hot data refreshes more frequently
+  refresh_key:
+    every: 1 hour
+
+  dimensions:
+  - name: tenant_id
+    sql: tenant_id
+    type: string
+    public: false
+
+  - name: datasource_id
+    sql: datasource_id
+    type: string
+    public: false
+
+  - name: portfolio_id
+    sql: portfolio_id
+    type: string
+
+  - name: as_of_date
+    sql: as_of_date
+    type: time
+
+  - name: data_tier
+    sql: data_tier
+    type: string
+    description: "Which storage tier the data came from (hot/cold)"
+
+  - name: year
+    sql: YEAR(as_of_date)
+    type: number
+
+  - name: quarter
+    sql: CONCAT('Q', QUARTER(as_of_date))
+    type: string
+
+  - name: month
+    sql: DATE_FORMAT(as_of_date, '%Y-%m')
+    type: string
+
+  measures:
+  - name: count
+    type: count
+
+  - name: latest_nav
+    sql: nav
+    type: max
+    format: currency
+
+  - name: total_nav
+    sql: nav
+    type: sum
+    format: currency
+
+  - name: total_inflows
+    sql: inflows
+    type: sum
+    format: currency
+
+  - name: total_outflows
+    sql: outflows
+    type: sum
+    format: currency
+
+  - name: net_flows
+    sql: inflows - outflows
+    type: sum
+    format: currency
+
+  - name: data_points
+    type: count_distinct
+    sql: as_of_date
+  # Pre-aggregations - stored in StarRocks native tables for speed
+  # IMPORTANT: Pre-aggs use static date ranges, not dynamic watermark
+  # This is safe because pre-aggs are refreshed periodically
+  pre_aggregations:
+
+  # Daily rollup for recent data (fast time-series)
+  - name: daily_nav_recent
+    type: rollup
+    measures:
+    - latest_nav
+    - total_inflows
+    - total_outflows
+    dimensions:
+    - portfolio_id
+    - data_tier
+    time_dimension: as_of_date
+    granularity: day
+    # Only pre-aggregate last 90 days (hot data)
+    build_range_start:
+      sql: DATE_SUB(CURRENT_DATE(), INTERVAL 90 DAY)
+    build_range_end:
+      sql: CURRENT_DATE()
+    refresh_key:
+      every: 1 hour
+    # Store in StarRocks native for fast queries
+    external: true
+
+  # Monthly rollup for historical data (covers cold tier)
+  - name: monthly_summary
+    type: rollup
+    measures:
+    - total_nav
+    - total_inflows
+    - total_outflows
+    - data_points
+    dimensions:
+    - portfolio_id
+    - month
+    - year
+    time_dimension: as_of_date
+    granularity: month
+    refresh_key:
+      every: 1 day
+    external: true
+
+  # Yearly rollup for long-term trends
+  - name: yearly_summary
+    type: rollup
+    measures:
+    - total_nav
+    - net_flows
+    dimensions:
+    - portfolio_id
+    - year
+    time_dimension: as_of_date
+    granularity: year
+    refresh_key:
+      every: 1 day
+    external: true

@@ -1,0 +1,598 @@
+package analytics
+
+import (
+	"context"
+	"fmt"
+	"regexp"
+	"strings"
+
+	"github.com/hondyman/semlayer/backend/internal/logging"
+)
+
+// Enhanced semantic matching functionality to be integrated into SemanticMappingService
+
+// AbbreviationMap contains common abbreviation expansions
+var AbbreviationMap = map[string]string{
+	// Geographic
+	"CNTRY":  "COUNTRY",
+	"CTRY":   "COUNTRY",
+	"ST":     "STATE",
+	"ADDR":   "ADDRESS",
+	"ZIP":    "ZIPCODE",
+	"POSTAL": "POSTALCODE",
+	"CTY":    "CITY",
+	"REGN":   "REGION",
+
+	// Financial
+	"AMT":  "AMOUNT",
+	"VAL":  "VALUE",
+	"BAL":  "BALANCE",
+	"CURR": "CURRENCY",
+	"FX":   "FOREIGN_EXCHANGE",
+	"ACCT": "ACCOUNT",
+	"TXN":  "TRANSACTION",
+	"PMT":  "PAYMENT",
+
+	// Temporal
+	"DT":  "DATE",
+	"DTM": "DATETIME",
+	"TS":  "TIMESTAMP",
+	"YR":  "YEAR",
+	"MON": "MONTH",
+	"WK":  "WEEK",
+	"QTR": "QUARTER",
+
+	// Business
+	"CUST":  "CUSTOMER",
+	"CLNT":  "CLIENT",
+	"ORD":   "ORDER",
+	"PROD":  "PRODUCT",
+	"CATEG": "CATEGORY",
+	"DEPT":  "DEPARTMENT",
+	"DIV":   "DIVISION",
+	"ORG":   "ORGANIZATION",
+	"COMP":  "COMPANY",
+
+	// Identity
+	"ID":  "IDENTIFIER",
+	"NUM": "NUMBER",
+	"NBR": "NUMBER",
+	"NO":  "NUMBER",
+	"CD":  "CODE",
+	"KEY": "KEY",
+	"REF": "REFERENCE",
+
+	// Measurements
+	"QTY":   "QUANTITY",
+	"CNT":   "COUNT",
+	"PCT":   "PERCENT",
+	"RATE":  "RATE",
+	"RATIO": "RATIO",
+	"SCORE": "SCORE",
+	"RANK":  "RANK",
+
+	// Status/Flags
+	"FLG":  "FLAG",
+	"IND":  "INDICATOR",
+	"STAT": "STATUS",
+	"TYP":  "TYPE",
+
+	// Common prefixes/suffixes
+	"DESC": "DESCRIPTION",
+	"NM":   "NAME",
+	"TTL":  "TOTAL",
+	"AVG":  "AVERAGE",
+	"MIN":  "MINIMUM",
+	"MAX":  "MAXIMUM",
+	"SUM":  "SUMMARY",
+}
+
+// SemanticPatterns for enhanced pattern matching
+var SemanticPatterns = map[string]*regexp.Regexp{
+	"EMAIL":      regexp.MustCompile(`(?i)(email|e_mail|mail|email_addr)`),
+	"PHONE":      regexp.MustCompile(`(?i)(phone|tel|telephone|mobile|cell)`),
+	"ADDRESS":    regexp.MustCompile(`(?i)(addr|address|street|avenue|blvd|boulevard)`),
+	"DATE":       regexp.MustCompile(`(?i)(date|dt|day|created_at|updated_at|modified)`),
+	"AMOUNT":     regexp.MustCompile(`(?i)(amt|amount|price|cost|value|balance|total|sum)`),
+	"IDENTIFIER": regexp.MustCompile(`(?i)(_id|_key|_num|_no|_nbr|_code|_cd)$`),
+}
+
+// EnhancedProfileMatch contains profile-based matching information
+type EnhancedProfileMatch struct {
+	ValueOverlap     float64 `json:"value_overlap"`
+	PatternOverlap   float64 `json:"pattern_overlap"`
+	CardinalityMatch float64 `json:"cardinality_match"`
+	DataTypeMatch    bool    `json:"data_type_match"`
+	StatisticalMatch float64 `json:"statistical_match"`
+	BloomMatch       bool    `json:"bloom_match"`
+}
+
+// EnhancedCalculateSemanticConfidence replaces the original calculateSemanticConfidence
+// with abbreviation handling and improved profile integration
+func (s *SemanticMappingService) EnhancedCalculateSemanticConfidence(
+	ctx context.Context,
+	generatedTerm, existingTerm string,
+	column *DatabaseColumn,
+	term *SemanticTerm,
+) (float64, string, []ConfidenceBreakdown) {
+
+	// 1. Expand abbreviations in the generated term using database service
+	expandedTerms, err := s.ExpandAbbreviationsDB(ctx, generatedTerm)
+	if err != nil {
+		// Fallback to legacy expansion if database service fails
+		expandedTerms = expandAbbreviations(generatedTerm)
+	}
+
+	// 2. Calculate name-based confidence with abbreviation support
+	nameConfidence := calculateNameConfidenceWithAbbreviations(expandedTerms, existingTerm)
+
+	// 3. Get enhanced profile data if available
+	profileConfidence, profileMatch := s.calculateEnhancedProfileConfidence(column, term)
+
+	// 4. Calculate data type compatibility
+	typeConfidence := s.calculateDataTypeCompatibility(column.DataType, term.DataType)
+
+	// 5. Combine confidences with weighted average
+	// Name matching (50%), profile data (35%), data type compatibility (15%)
+	finalConfidence := (nameConfidence * 0.50) + (profileConfidence * 0.35) + (typeConfidence * 0.15)
+
+	// 6. Build detailed match reason
+	reason := buildEnhancedMatchReason(nameConfidence, profileConfidence, typeConfidence, profileMatch, expandedTerms)
+
+	// 7. Build confidence breakdown
+	nameDetails := "Name matching with abbreviation expansion"
+	if len(expandedTerms) > 1 {
+		nameDetails = fmt.Sprintf("Expanded %d variations", len(expandedTerms))
+	}
+
+	profileDetails := "No profile data"
+	if profileMatch != nil {
+		profileDetails = fmt.Sprintf("Value overlap %.0f%%, Pattern overlap %.0f%%",
+			profileMatch.ValueOverlap*100, profileMatch.PatternOverlap*100)
+	}
+
+	typeDetails := "Compatible"
+	if typeConfidence < 0.5 {
+		typeDetails = "Incompatible"
+	} else if typeConfidence < 0.8 {
+		typeDetails = "Partial match"
+	}
+
+	breakdown := []ConfidenceBreakdown{
+		{Label: "Name similarity", Score: nameConfidence, Weight: 0.5, Details: nameDetails},
+		{Label: "Profile alignment", Score: profileConfidence, Weight: 0.35, Details: profileDetails},
+		{Label: "Data type alignment", Score: typeConfidence, Weight: 0.15, Details: typeDetails},
+	}
+
+	return minFloat64(finalConfidence, 1.0), reason, breakdown
+}
+
+// expandAbbreviations creates variations of the column name with expanded abbreviations
+func expandAbbreviations(columnName string) []string {
+	normalized := strings.ToUpper(columnName)
+	variations := []string{normalized}
+
+	// Split on common separators
+	separators := []string{"_", "-", ".", " "}
+	var tokens []string
+
+	current := normalized
+	for _, sep := range separators {
+		if strings.Contains(current, sep) {
+			tokens = strings.Split(current, sep)
+			break
+		}
+	}
+
+	if len(tokens) == 0 {
+		tokens = []string{normalized}
+	}
+
+	// Expand each token if it's an abbreviation
+	var expandedTokens [][]string
+	hasExpansion := false
+
+	for _, token := range tokens {
+		tokenVariations := []string{token}
+		if expansion, exists := AbbreviationMap[token]; exists {
+			tokenVariations = append(tokenVariations, expansion)
+			hasExpansion = true
+		}
+		expandedTokens = append(expandedTokens, tokenVariations)
+	}
+
+	// Generate all combinations if we have expansions
+	if hasExpansion {
+		combinations := generateCombinations(expandedTokens)
+		for _, combo := range combinations {
+			variations = append(variations, strings.Join(combo, "_"))
+		}
+	}
+
+	return variations
+}
+
+// generateCombinations creates all possible combinations from token variations
+func generateCombinations(tokenVariations [][]string) [][]string {
+	if len(tokenVariations) == 0 {
+		return [][]string{}
+	}
+
+	if len(tokenVariations) == 1 {
+		var result [][]string
+		for _, variation := range tokenVariations[0] {
+			result = append(result, []string{variation})
+		}
+		return result
+	}
+
+	var result [][]string
+	restCombos := generateCombinations(tokenVariations[1:])
+
+	for _, variation := range tokenVariations[0] {
+		for _, restCombo := range restCombos {
+			combo := append([]string{variation}, restCombo...)
+			result = append(result, combo)
+		}
+	}
+
+	return result
+}
+
+// calculateNameConfidenceWithAbbreviations computes name similarity including abbreviation expansion
+func calculateNameConfidenceWithAbbreviations(columnNameVariations []string, termName string) float64 {
+	normalizedTermName := strings.ToUpper(strings.ReplaceAll(strings.ReplaceAll(termName, "_", ""), "-", ""))
+
+	bestScore := 0.0
+
+	for _, variation := range columnNameVariations {
+		normalizedVariation := strings.ToUpper(strings.ReplaceAll(strings.ReplaceAll(variation, "_", ""), "-", ""))
+
+		// Exact match
+		if normalizedVariation == normalizedTermName {
+			bestScore = 1.0
+			break
+		}
+
+		// Calculate similarity using multiple approaches
+
+		// 1. Levenshtein distance
+		levDistance := levenshteinDistance(normalizedVariation, normalizedTermName)
+		maxLen := maxInt(len(normalizedVariation), len(normalizedTermName))
+		levScore := 0.0
+		if maxLen > 0 {
+			levScore = 1.0 - (float64(levDistance) / float64(maxLen))
+		}
+
+		// 2. Jaccard similarity on tokens
+		variationTokens := tokenizeSemanticTerm(variation)
+		termTokens := tokenizeSemanticTerm(termName)
+		jaccardScore := calculateJaccardSimilarity(variationTokens, termTokens)
+
+		// 3. Substring matching bonus
+		substringBonus := 0.0
+		if strings.Contains(normalizedTermName, normalizedVariation) ||
+			strings.Contains(normalizedVariation, normalizedTermName) {
+			substringBonus = 0.2
+		}
+
+		// 4. Check semantic patterns
+		patternBonus := calculatePatternBonus(variation, termName)
+
+		// Combine scores
+		combinedScore := (levScore * 0.4) + (jaccardScore * 0.4) + substringBonus + patternBonus
+		if combinedScore > bestScore {
+			bestScore = combinedScore
+		}
+	}
+
+	return minFloat64(bestScore, 1.0)
+}
+
+// calculatePatternBonus gives bonus for matching semantic patterns
+func calculatePatternBonus(columnName, termName string) float64 {
+	bonus := 0.0
+
+	for _, pattern := range SemanticPatterns {
+		columnMatches := pattern.MatchString(columnName)
+		termMatches := pattern.MatchString(termName)
+
+		if columnMatches && termMatches {
+			bonus += 0.15
+		}
+	}
+
+	return minFloat64(bonus, 0.3) // Cap the bonus
+}
+
+// calculateEnhancedProfileConfidence uses column profiling data to assess semantic similarity
+func (s *SemanticMappingService) calculateEnhancedProfileConfidence(
+	column *DatabaseColumn,
+	term *SemanticTerm,
+) (float64, *EnhancedProfileMatch) {
+
+	matchInfo := &EnhancedProfileMatch{}
+	confidence := 0.0
+
+	// Get column profile data from database if available
+	profile, err := s.getColumnProfileData(column)
+	if err != nil || profile == nil {
+		logging.GetLogger().Sugar().Debugf("No profile data available for column %s.%s.%s",
+			column.Schema, column.Table, column.Column)
+		return 0.0, matchInfo
+	}
+
+	// 1. Frequent values overlap
+	if len(profile.FrequentValues) > 0 && len(term.ReferenceValues) > 0 {
+		overlap := calculateSetOverlap(profile.FrequentValues, term.ReferenceValues)
+		matchInfo.ValueOverlap = overlap
+		confidence += overlap * 0.4 // Strong indicator
+	}
+
+	// 2. Inferred patterns overlap
+	if len(profile.InferredPatterns) > 0 && len(term.ReferencePatterns) > 0 {
+		overlap := calculateSetOverlap(profile.InferredPatterns, term.ReferencePatterns)
+		matchInfo.PatternOverlap = overlap
+		confidence += overlap * 0.3
+	}
+
+	// 3. Cardinality similarity
+	if profile.Cardinality > 0 {
+		expectedCardinality := estimateExpectedCardinality(term.TermName)
+		if expectedCardinality > 0 {
+			cardinalityRatio := float64(minInt(int(profile.Cardinality), expectedCardinality)) /
+				float64(maxInt(int(profile.Cardinality), expectedCardinality))
+			matchInfo.CardinalityMatch = cardinalityRatio
+			confidence += cardinalityRatio * 0.2
+		}
+	}
+
+	// 4. Data type compatibility
+	dataTypeMatch := s.areDataTypesCompatible(profile.DataType, term.DataType)
+	matchInfo.DataTypeMatch = dataTypeMatch
+	if dataTypeMatch {
+		confidence += 0.1
+	}
+
+	return minFloat64(confidence, 1.0), matchInfo
+}
+
+// getColumnProfileData retrieves profiling data for a column
+func (s *SemanticMappingService) getColumnProfileData(column *DatabaseColumn) (*ColumnProfile, error) {
+	// This would query the column_profiles table
+	// For now, return the data we already have in the column
+	if len(column.FrequentValues) == 0 && len(column.InferredPatterns) == 0 {
+		return nil, fmt.Errorf("no profile data available")
+	}
+
+	return &ColumnProfile{
+		Schema:           column.Schema,
+		TableName:        column.Table,
+		ColumnName:       column.Column,
+		DataType:         column.DataType,
+		Cardinality:      int64(column.Cardinality),
+		FrequentValues:   column.FrequentValues,
+		InferredPatterns: column.InferredPatterns,
+		BloomFilter:      column.BloomFilter,
+	}, nil
+}
+
+// estimateExpectedCardinality provides heuristic cardinality estimates based on semantic term names
+func estimateExpectedCardinality(termName string) int {
+	termLower := strings.ToLower(termName)
+
+	// High cardinality terms
+	if strings.Contains(termLower, "id") || strings.Contains(termLower, "key") ||
+		strings.Contains(termLower, "email") || strings.Contains(termLower, "phone") {
+		return 100000
+	}
+
+	// Medium cardinality terms
+	if strings.Contains(termLower, "name") || strings.Contains(termLower, "code") ||
+		strings.Contains(termLower, "number") {
+		return 1000
+	}
+
+	// Low cardinality terms
+	if strings.Contains(termLower, "type") || strings.Contains(termLower, "status") ||
+		strings.Contains(termLower, "category") || strings.Contains(termLower, "flag") {
+		return 50
+	}
+
+	// Country/State level
+	if strings.Contains(termLower, "country") || strings.Contains(termLower, "state") {
+		return 250
+	}
+
+	return 0 // Unknown
+}
+
+// calculateDataTypeCompatibility assesses data type compatibility
+func (s *SemanticMappingService) calculateDataTypeCompatibility(columnType, termType string) float64 {
+	if columnType == "" || termType == "" {
+		return 0.5 // Neutral when types unknown
+	}
+
+	normalizedColumnType := s.normalizeDataType(columnType)
+	normalizedTermType := s.normalizeDataType(termType)
+
+	if normalizedColumnType == normalizedTermType {
+		return 1.0
+	}
+
+	// Check for compatible types
+	if s.areDataTypesCompatible(columnType, termType) {
+		return 0.8
+	}
+
+	return 0.2 // Incompatible types
+}
+
+// buildEnhancedMatchReason creates a human-readable explanation of the match
+func buildEnhancedMatchReason(
+	nameConf, profileConf, typeConf float64,
+	profileMatch *EnhancedProfileMatch,
+	expandedTerms []string,
+) string {
+	var reasons []string
+
+	// Name matching reasons
+	if nameConf > 0.8 {
+		reasons = append(reasons, "Strong name similarity")
+	} else if nameConf > 0.6 {
+		reasons = append(reasons, "Good name similarity")
+	} else if nameConf > 0.4 {
+		reasons = append(reasons, "Moderate name similarity")
+	}
+
+	// Add abbreviation expansion info if applicable
+	if len(expandedTerms) > 1 {
+		reasons = append(reasons, "Abbreviation expanded")
+	}
+
+	// Profile matching reasons
+	if profileMatch != nil {
+		if profileMatch.ValueOverlap > 0.5 {
+			reasons = append(reasons, fmt.Sprintf("%.0f%% value overlap", profileMatch.ValueOverlap*100))
+		}
+		if profileMatch.PatternOverlap > 0.5 {
+			reasons = append(reasons, fmt.Sprintf("%.0f%% pattern overlap", profileMatch.PatternOverlap*100))
+		}
+		if profileMatch.CardinalityMatch > 0.8 {
+			reasons = append(reasons, "Similar cardinality")
+		}
+		if profileMatch.DataTypeMatch {
+			reasons = append(reasons, "Compatible data types")
+		}
+	} else if typeConf > 0.8 {
+		reasons = append(reasons, "Compatible data types")
+	}
+
+	if len(reasons) == 0 {
+		return "Low confidence match"
+	}
+
+	return strings.Join(reasons, ", ")
+}
+
+// calculateSetOverlap calculates Jaccard similarity between two sets
+func calculateSetOverlap(set1, set2 []string) float64 {
+	if len(set1) == 0 || len(set2) == 0 {
+		return 0.0
+	}
+
+	// Convert to maps for faster lookup
+	map1 := make(map[string]struct{})
+	for _, item := range set1 {
+		map1[strings.ToUpper(item)] = struct{}{}
+	}
+
+	intersection := 0
+	for _, item := range set2 {
+		if _, exists := map1[strings.ToUpper(item)]; exists {
+			intersection++
+		}
+	}
+
+	union := len(set1) + len(set2) - intersection
+	if union == 0 {
+		return 0.0
+	}
+
+	return float64(intersection) / float64(union)
+}
+
+// levenshteinDistance computes the Levenshtein distance between two strings
+func levenshteinDistance(s1, s2 string) int {
+	if len(s1) == 0 {
+		return len(s2)
+	}
+	if len(s2) == 0 {
+		return len(s1)
+	}
+
+	matrix := make([][]int, len(s1)+1)
+	for i := range matrix {
+		matrix[i] = make([]int, len(s2)+1)
+	}
+
+	for i := 0; i <= len(s1); i++ {
+		matrix[i][0] = i
+	}
+	for j := 0; j <= len(s2); j++ {
+		matrix[0][j] = j
+	}
+
+	for i := 1; i <= len(s1); i++ {
+		for j := 1; j <= len(s2); j++ {
+			cost := 0
+			if s1[i-1] != s2[j-1] {
+				cost = 1
+			}
+
+			matrix[i][j] = minInt3(
+				matrix[i-1][j]+1,      // deletion
+				matrix[i][j-1]+1,      // insertion
+				matrix[i-1][j-1]+cost, // substitution
+			)
+		}
+	}
+
+	return matrix[len(s1)][len(s2)]
+}
+
+// tokenizeSemanticTerm splits a term into tokens for comparison
+func tokenizeSemanticTerm(term string) []string {
+	// Split on underscores, spaces, and camelCase boundaries
+	term = strings.ReplaceAll(term, "_", " ")
+	term = strings.ReplaceAll(term, "-", " ")
+
+	// Handle camelCase
+	camelRegex := regexp.MustCompile("([a-z])([A-Z])")
+	term = camelRegex.ReplaceAllString(term, "$1 $2")
+
+	tokens := strings.Fields(strings.ToUpper(term))
+
+	// Filter out very short tokens
+	var filtered []string
+	for _, token := range tokens {
+		if len(token) >= 2 {
+			filtered = append(filtered, token)
+		}
+	}
+
+	return filtered
+}
+
+// calculateJaccardSimilarity computes Jaccard similarity between two token sets
+func calculateJaccardSimilarity(tokens1, tokens2 []string) float64 {
+	if len(tokens1) == 0 && len(tokens2) == 0 {
+		return 1.0
+	}
+	if len(tokens1) == 0 || len(tokens2) == 0 {
+		return 0.0
+	}
+
+	set1 := make(map[string]struct{})
+	for _, token := range tokens1 {
+		set1[token] = struct{}{}
+	}
+
+	intersection := 0
+	set2 := make(map[string]struct{})
+	for _, token := range tokens2 {
+		set2[token] = struct{}{}
+		if _, exists := set1[token]; exists {
+			intersection++
+		}
+	}
+
+	union := len(set1) + len(set2) - intersection
+	if union == 0 {
+		return 0.0
+	}
+
+	return float64(intersection) / float64(union)
+}
+
+// Utility functions are defined in enhanced_semantic_matcher.go

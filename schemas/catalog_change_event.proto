@@ -1,0 +1,21 @@
+syntax = "proto3";
+
+package catalog;
+
+// Semantic catalog change event with before/after snapshots.
+message CatalogChangeEvent {
+  string eventId = 1;          // UUID
+  string entityType = 2;       // catalog_node | catalog_edge | catalog_node_type | catalog_edge_type
+  ChangeType changeType = 3;   // insert | update | delete
+  string tenantId = 4;         // UUID
+  string occurredAt = 5;       // ISO-8601 UTC timestamp
+  map<string, string> before = 6; // Previous version flattened to strings
+  map<string, string> after = 7;  // New version flattened to strings
+  string source = 8;           // Logical producer, e.g. catalog-manager
+
+  enum ChangeType {
+    INSERT = 0;
+    UPDATE = 1;
+    DELETE = 2;
+  }
+}

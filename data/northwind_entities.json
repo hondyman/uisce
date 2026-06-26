@@ -1,0 +1,166 @@
+{
+  "customer": {
+    "key": "customer",
+    "name": "Customer",
+    "businessName": "Customer",
+    "technicalName": "customer",
+    "description": "Customer Business Object derived from Northwind Customers and CustomerCustomerDemo",
+    "entity_fields": [
+      { "key": "id", "name": "id", "businessName": "Customer ID", "technicalName": "customer_id", "type": "text", "isCore": true, "semanticTermId": "cust.id", "semanticTermName": "customer.id" },
+      { "key": "company_name", "name": "company_name", "businessName": "Company Name", "technicalName": "company_name", "type": "text", "isCore": true, "semanticTermId": "cust.company_name", "semanticTermName": "customer.company_name" },
+      { "key": "contact_name", "name": "contact_name", "businessName": "Contact Name", "technicalName": "contact_name", "type": "text", "isCore": true, "semanticTermId": "cust.contact_name", "semanticTermName": "customer.contact_name" },
+      { "key": "contact_title", "name": "contact_title", "businessName": "Contact Title", "technicalName": "contact_title", "type": "text", "isCore": true, "semanticTermId": "cust.contact_title", "semanticTermName": "customer.contact_title" },
+      { "key": "address", "name": "address", "businessName": "Address", "technicalName": "address", "type": "text", "isCore": true, "semanticTermId": "cust.address", "semanticTermName": "customer.address" },
+      { "key": "city", "name": "city", "businessName": "City", "technicalName": "city", "type": "text", "isCore": true, "semanticTermId": "cust.city", "semanticTermName": "customer.city" },
+      { "key": "region", "name": "region", "businessName": "Region", "technicalName": "region", "type": "text", "isCore": true, "semanticTermId": "cust.region", "semanticTermName": "customer.region" },
+      { "key": "postal_code", "name": "postal_code", "businessName": "Postal Code", "technicalName": "postal_code", "type": "text", "isCore": true, "semanticTermId": "cust.postal_code", "semanticTermName": "customer.postal_code" },
+      { "key": "country", "name": "country", "businessName": "Country", "technicalName": "country", "type": "text", "isCore": true, "semanticTermId": "cust.country", "semanticTermName": "customer.country" },
+      { "key": "phone", "name": "phone", "businessName": "Phone", "technicalName": "phone", "type": "text", "isCore": true, "semanticTermId": "cust.phone", "semanticTermName": "customer.phone" },
+      { "key": "fax", "name": "fax", "businessName": "Fax", "technicalName": "fax", "type": "text", "isCore": true, "semanticTermId": "cust.fax", "semanticTermName": "customer.fax" },
+      { "key": "customer_demo_id", "name": "customer_demo_id", "businessName": "Customer Demo ID", "technicalName": "customer_demo_id", "type": "text", "isCore": false }
+    ],
+    "subtypes": {
+      "standard_customer": {
+        "key": "standard_customer",
+        "name": "Standard Customer",
+        "businessName": "Standard Customer",
+        "technicalName": "standard_customer",
+        "subtype_fields": [],
+        "isCore": true
+      },
+      "vip_customer": {
+        "key": "vip_customer",
+        "name": "VIP Customer",
+        "businessName": "VIP Customer",
+        "technicalName": "vip_customer",
+        "subtype_fields": [],
+        "isCore": false
+      }
+    },
+    "isCore": true
+  },
+
+  "employee": {
+    "key": "employee",
+    "name": "Employee",
+    "businessName": "Employee",
+    "technicalName": "employee",
+    "description": "Employee BO from Employees table",
+    "entity_fields": [
+      { "key": "id", "name": "id", "businessName": "Employee ID", "technicalName": "employee_id", "type": "number", "isCore": true, "semanticTermId": "emp.id", "semanticTermName": "employee.id" },
+      { "key": "last_name", "name": "last_name", "businessName": "Last Name", "technicalName": "last_name", "type": "text", "isCore": true, "semanticTermId": "emp.last_name", "semanticTermName": "employee.last_name" },
+      { "key": "first_name", "name": "first_name", "businessName": "First Name", "technicalName": "first_name", "type": "text", "isCore": true, "semanticTermId": "emp.first_name", "semanticTermName": "employee.first_name" },
+      { "key": "title", "name": "title", "businessName": "Title", "technicalName": "title", "type": "text", "isCore": true, "semanticTermId": "emp.title", "semanticTermName": "employee.title" },
+      { "key": "birth_date", "name": "birth_date", "businessName": "Birth Date", "technicalName": "birth_date", "type": "date", "isCore": true, "semanticTermId": "emp.birth_date", "semanticTermName": "employee.birth_date" },
+      { "key": "hire_date", "name": "hire_date", "businessName": "Hire Date", "technicalName": "hire_date", "type": "date", "isCore": true, "semanticTermId": "emp.hire_date", "semanticTermName": "employee.hire_date" },
+      { "key": "home_phone", "name": "home_phone", "businessName": "Home Phone", "technicalName": "home_phone", "type": "text", "isCore": true, "semanticTermId": "emp.home_phone", "semanticTermName": "employee.home_phone" }
+    ],
+    "subtypes": {
+      "sales_rep": { "key": "sales_rep", "name": "Sales Representative", "businessName": "Sales Representative", "technicalName": "sales_rep", "subtype_fields": [], "isCore": false },
+      "manager": { "key": "manager", "name": "Manager", "businessName": "Manager", "technicalName": "manager", "subtype_fields": [], "isCore": false }
+    },
+    "isCore": true
+  },
+
+  "supplier": {
+    "key": "supplier",
+    "name": "Supplier",
+    "businessName": "Supplier",
+    "technicalName": "supplier",
+    "description": "Supplier BO from Suppliers table",
+    "entity_fields": [
+      { "key": "id", "name": "id", "businessName": "Supplier ID", "technicalName": "supplier_id", "type": "number", "isCore": true, "semanticTermId": "sup.id", "semanticTermName": "supplier.id" },
+      { "key": "company_name", "name": "company_name", "businessName": "Company Name", "technicalName": "company_name", "type": "text", "isCore": true, "semanticTermId": "sup.company_name", "semanticTermName": "supplier.company_name" },
+      { "key": "contact_name", "name": "contact_name", "businessName": "Contact Name", "technicalName": "contact_name", "type": "text", "isCore": true, "semanticTermId": "sup.contact_name", "semanticTermName": "supplier.contact_name" }
+    ],
+    "subtypes": {
+      "domestic_supplier": { "key": "domestic_supplier", "name": "Domestic Supplier", "businessName": "Domestic Supplier", "technicalName": "domestic_supplier", "subtype_fields": [], "isCore": false },
+      "international_supplier": { "key": "international_supplier", "name": "International Supplier", "businessName": "International Supplier", "technicalName": "international_supplier", "subtype_fields": [], "isCore": false }
+    },
+    "isCore": true
+  },
+
+  "product": {
+    "key": "product",
+    "name": "Product",
+    "businessName": "Product",
+    "technicalName": "product",
+    "description": "Product BO from Products and Categories",
+    "entity_fields": [
+      { "key": "id", "name": "id", "businessName": "Product ID", "technicalName": "product_id", "type": "number", "isCore": true, "semanticTermId": "prod.id", "semanticTermName": "product.id" },
+      { "key": "product_name", "name": "product_name", "businessName": "Product Name", "technicalName": "product_name", "type": "text", "isCore": true, "semanticTermId": "prod.product_name", "semanticTermName": "product.product_name" },
+      { "key": "supplier_id", "name": "supplier_id", "businessName": "Supplier ID", "technicalName": "supplier_id", "type": "number", "isCore": true, "semanticTermId": "prod.supplier_id", "semanticTermName": "product.supplier_id" },
+      { "key": "category_id", "name": "category_id", "businessName": "Category ID", "technicalName": "category_id", "type": "number", "isCore": true, "semanticTermId": "prod.category_id", "semanticTermName": "product.category_id" },
+      { "key": "unit_price", "name": "unit_price", "businessName": "Unit Price", "technicalName": "unit_price", "type": "number", "isCore": true, "semanticTermId": "prod.unit_price", "semanticTermName": "product.unit_price" }
+    ],
+    "subtypes": {
+      "beverage": { "key": "beverage", "name": "Beverage", "businessName": "Beverage", "technicalName": "beverage", "subtype_fields": [], "isCore": false },
+      "condiment": { "key": "condiment", "name": "Condiment", "businessName": "Condiment", "technicalName": "condiment", "subtype_fields": [], "isCore": false }
+    },
+    "isCore": true
+  },
+
+  "order": {
+    "key": "order",
+    "name": "Order",
+    "businessName": "Order",
+    "technicalName": "order",
+    "description": "Order BO from Orders table",
+    "entity_fields": [
+      { "key": "id", "name": "id", "businessName": "Order ID", "technicalName": "order_id", "type": "number", "isCore": true, "semanticTermId": "ord.id", "semanticTermName": "order.id" },
+      { "key": "customer_id", "name": "customer_id", "businessName": "Customer ID", "technicalName": "customer_id", "type": "text", "isCore": true, "semanticTermId": "ord.customer_id", "semanticTermName": "order.customer_id" },
+      { "key": "employee_id", "name": "employee_id", "businessName": "Employee ID", "technicalName": "employee_id", "type": "number", "isCore": true, "semanticTermId": "ord.employee_id", "semanticTermName": "order.employee_id" },
+      { "key": "order_date", "name": "order_date", "businessName": "Order Date", "technicalName": "order_date", "type": "date", "isCore": true, "semanticTermId": "ord.order_date", "semanticTermName": "order.order_date" }
+    ],
+    "subtypes": {
+      "standard_order": { "key": "standard_order", "name": "Standard Order", "businessName": "Standard Order", "technicalName": "standard_order", "subtype_fields": [], "isCore": true },
+      "rush_order": { "key": "rush_order", "name": "Rush Order", "businessName": "Rush Order", "technicalName": "rush_order", "subtype_fields": [], "isCore": false }
+    },
+    "isCore": true
+  },
+
+  "order_detail": {
+    "key": "order_detail",
+    "name": "Order Detail",
+    "businessName": "Order Detail",
+    "technicalName": "order_detail",
+    "description": "OrderDetail BO from Order Details table",
+    "entity_fields": [
+      { "key": "order_id", "name": "order_id", "businessName": "Order ID", "technicalName": "order_id", "type": "number", "isCore": true, "semanticTermId": "od.order_id", "semanticTermName": "order_detail.order_id" },
+      { "key": "product_id", "name": "product_id", "businessName": "Product ID", "technicalName": "product_id", "type": "number", "isCore": true, "semanticTermId": "od.product_id", "semanticTermName": "order_detail.product_id" },
+      { "key": "unit_price", "name": "unit_price", "businessName": "Unit Price", "technicalName": "unit_price", "type": "number", "isCore": true, "semanticTermId": "od.unit_price", "semanticTermName": "order_detail.unit_price" },
+      { "key": "quantity", "name": "quantity", "businessName": "Quantity", "technicalName": "quantity", "type": "number", "isCore": true }
+    ],
+    "subtypes": {},
+    "isCore": true
+  },
+
+  "shipper": {
+    "key": "shipper",
+    "name": "Shipper",
+    "businessName": "Shipper",
+    "technicalName": "shipper",
+    "description": "Shipper BO from Shippers table",
+    "entity_fields": [
+      { "key": "id", "name": "id", "businessName": "Shipper ID", "technicalName": "shipper_id", "type": "number", "isCore": true, "semanticTermId": "ship.id", "semanticTermName": "shipper.id" },
+      { "key": "company_name", "name": "company_name", "businessName": "Company Name", "technicalName": "company_name", "type": "text", "isCore": true, "semanticTermId": "ship.company_name", "semanticTermName": "shipper.company_name" },
+      { "key": "phone", "name": "phone", "businessName": "Phone", "technicalName": "phone", "type": "text", "isCore": true }
+    ],
+    "subtypes": {},
+    "isCore": true
+  },
+
+  "region_territory": {
+    "key": "region_territory",
+    "name": "Region & Territory",
+    "businessName": "Region & Territory",
+    "technicalName": "region_territory",
+    "description": "Region and Territory BOs combined",
+    "entity_fields": [
+      { "key": "region_id", "name": "region_id", "businessName": "Region ID", "technicalName": "region_id", "type": "number", "isCore": true, "semanticTermId": "region.region_id", "semanticTermName": "region.region_id" },
+      { "key": "territory_id", "name": "territory_id", "businessName": "Territory ID", "technicalName": "territory_id", "type": "text", "isCore": true, "semanticTermId": "territory.territory_id", "semanticTermName": "territory.territory_id" }
+    ],
+    "subtypes": {},
+    "isCore": true
+  }
+}

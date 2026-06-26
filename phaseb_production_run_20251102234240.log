@@ -1,0 +1,7 @@
+Set CONFIG variables at top of file before running in production. Review mapping rules and maintenance plan.
+psql:phaseb_production.sql:45: ERROR:  null value in column "tenant_product_id" of relation "tenant_product_datasource" violates not-null constraint
+DETAIL:  Failing row contains (93fb09fb-2ca7-4d9d-8d30-f42ff3dfd17f, null, null, t, null, 2025-11-02 23:42:40.960115-05, 2025-11-02 23:42:40.960115-05, phaseb-default-20251102234240, null).
+CONTEXT:  SQL statement "INSERT INTO public.tenant_product_datasource (id, tenant_product_id, alpha_datasource_id, is_active, source_name, created_at, updated_at)
+    VALUES (gen_random_uuid(), NULL, NULL, TRUE, 'phaseb-default-' || to_char(now(),'YYYYMMDDHH24MISS'), now(), now())
+    RETURNING id"
+PL/pgSQL function inline_code_block line 2 at SQL statement

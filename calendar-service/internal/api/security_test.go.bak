@@ -1,0 +1,261 @@
+package api_test
+
+import (
+	"context"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"testing"
+	"time"
+
+	"github.com/golang-jwt/jwt/v5"
+	"github.com/sirupsen/logrus"
+
+	"calendar-service/internal/middleware"
+)
+
+// generateTestJWT creates a valid JWT token for testing
+func generateTestJWT(userID, tenantID, email, role, secret string) string {
+	claims := jwt.MapClaims{
+		"user_id":     userID,
+		"email":       email,
+		"tenant_id":   tenantID,
+		"role":        role,
+		"roles":       []string{role, "user"},
+		"permissions": []string{"read:calendar", "write:calendar"},
+		"iat":         time.Now().Unix(),
+		"exp":         time.Now().Add(time.Hour).Unix(),
+	}
+
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	tokenString, _ := token.SignedString([]byte(secret))
+	return tokenString
+}
+
+// TestJWTMiddlewareValid tests JWT validation with valid token
+func TestJWTMiddlewareValid(t *testing.T) {
+	jwtSecret := "test-secret-key-at-least-32-chars-long-for-testing-purposes"
+	logger := logrus.NewEntry(logrus.New())
+
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Extract from context
+		userID := middleware.ExtractUserIDFromContext(r.Context())
+		tenantID := middleware.ExtractTenantIDFromContext(r.Context())
+
+		if userID == "" || tenantID == "" {
+			http.Error(w, "Missing auth context", http.StatusUnauthorized)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]string{
+			"user_id":   userID,
+			"tenant_id": tenantID,
+		})
+	})
+
+	// Apply middleware
+	wrapped := middleware.JWTMiddleware(jwtSecret, logger)(handler)
+
+	// Create request with valid token
+	token := generateTestJWT("user-123", "tenant-456", "test@example.com", "admin", jwtSecret)
+	req := httptest.NewRequest("GET", "/test", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+
+	// Execute
+	recorder := httptest.NewRecorder()
+	wrapped.ServeHTTP(recorder, req)
+
+	// Verify
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("Expected 200, got %d: %s", recorder.Code, recorder.Body.String())
+	}
+
+	var result map[string]string
+	json.NewDecoder(recorder.Body).Decode(&result)
+	if result["user_id"] != "user-123" || result["tenant_id"] != "tenant-456" {
+		t.Fatalf("Expected user_id=user-123, tenant_id=tenant-456, got %+v", result)
+	}
+}
+
+// TestJWTMiddlewareMissingHeader tests JWT validation without Authorization header
+func TestJWTMiddlewareMissingHeader(t *testing.T) {
+	jwtSecret := "test-secret-key-at-least-32-chars-long-for-testing-purposes"
+	logger := logrus.NewEntry(logrus.New())
+
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
+
+	wrapped := middleware.JWTMiddleware(jwtSecret, logger)(handler)
+
+	// Create request without Authorization header
+	req := httptest.NewRequest("GET", "/test", nil)
+
+	// Execute
+	recorder := httptest.NewRecorder()
+	wrapped.ServeHTTP(recorder, req)
+
+	// Verify - should return 401
+	if recorder.Code != http.StatusUnauthorized {
+		t.Fatalf("Expected 401, got %d", recorder.Code)
+	}
+}
+
+// TestJWTMiddlewareInvalidSignature tests JWT validation with invalid signature
+func TestJWTMiddlewareInvalidSignature(t *testing.T) {
+	jwtSecret := "test-secret-key-at-least-32-chars-long-for-testing-purposes"
+	wrongSecret := "wrong-secret-key-at-least-32-chars-long-for-testing-purposes"
+	logger := logrus.NewEntry(logrus.New())
+
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
+
+	wrapped := middleware.JWTMiddleware(jwtSecret, logger)(handler)
+
+	// Create request with token signed by wrong secret
+	token := generateTestJWT("user-123", "tenant-456", "test@example.com", "admin", wrongSecret)
+	req := httptest.NewRequest("GET", "/test", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+
+	// Execute
+	recorder := httptest.NewRecorder()
+	wrapped.ServeHTTP(recorder, req)
+
+	// Verify - should return 401
+	if recorder.Code != http.StatusUnauthorized {
+		t.Fatalf("Expected 401, got %d", recorder.Code)
+	}
+}
+
+// TestTenantGuardMiddleware tests tenant isolation
+func TestTenantGuardMiddleware(t *testing.T) {
+	logger := logrus.NewEntry(logrus.New())
+
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		tenantID := middleware.ExtractTenantIDFromContext(r.Context())
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]string{"tenant_id": tenantID})
+	})
+
+	wrapped := middleware.TenantGuardMiddleware(logger)(handler)
+
+	tests := []struct {
+		name           string
+		tenantFromJWT  string
+		tenantInHeader string
+		expectedCode   int
+	}{
+		{"Matching tenant", "tenant-1", "tenant-1", http.StatusOK},
+		{"Mismatched tenant", "tenant-1", "tenant-2", http.StatusForbidden},
+		{"No header uses JWT tenant", "tenant-1", "", http.StatusOK},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := httptest.NewRequest("GET", "/test", nil)
+
+			// Add tenant to context (simulating JWT middleware)
+			ctx := req.Context()
+			ctx = context.WithValue(ctx, middleware.ContextKeyTenantID, tt.tenantFromJWT)
+			req = req.WithContext(ctx)
+
+			// Add header if provided
+			if tt.tenantInHeader != "" {
+				req.Header.Set("X-Tenant-ID", tt.tenantInHeader)
+			}
+
+			recorder := httptest.NewRecorder()
+			wrapped.ServeHTTP(recorder, req)
+
+			if recorder.Code != tt.expectedCode {
+				t.Fatalf("Expected %d, got %d: %s", tt.expectedCode, recorder.Code, recorder.Body.String())
+			}
+		})
+	}
+}
+
+// TestSecurityManagerTokenValidation tests SecurityManager
+func TestSecurityManagerTokenValidation(t *testing.T) {
+	jwtSecret := "test-secret-key-at-least-32-chars-long-for-testing-purposes"
+	manager := NewManager(jwtSecret)
+
+	// Create valid token
+	token := generateTestJWT("user-123", "tenant-456", "test@example.com", "admin", jwtSecret)
+
+	// Validate
+	claims, err := manager.ValidateToken(token)
+	if err != nil {
+		t.Fatalf("Expected no error, got %v", err)
+	}
+
+	if claims.UserID != "user-123" || claims.TenantID != "tenant-456" {
+		t.Fatalf("Claims mismatch: got %+v", claims)
+	}
+
+	if !claims.HasRole("admin") {
+		t.Fatalf("Expected admin role, got %+v", claims.Roles)
+	}
+
+	if !claims.HasTenantAccess("tenant-456") {
+		t.Fatalf("Expected tenant access")
+	}
+}
+
+// TestSecurityManagerInvalidToken tests SecurityManager with invalid token
+func TestSecurityManagerInvalidToken(t *testing.T) {
+	jwtSecret := "test-secret-key-at-least-32-chars-long-for-testing-purposes"
+	manager := NewManager(jwtSecret)
+
+	_, err := manager.ValidateToken("invalid-token")
+	if err == nil {
+		t.Fatalf("Expected error for invalid token")
+	}
+}
+
+// TestIntegrationJWTFlow tests complete JWT flow
+func TestIntegrationJWTFlow(t *testing.T) {
+	jwtSecret := "test-secret-key-at-least-32-chars-long-for-testing-purposes"
+	logger := logrus.NewEntry(logrus.New())
+
+	// Create handler chain
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		userID := middleware.ExtractUserIDFromContext(r.Context())
+		tenantID := middleware.ExtractTenantIDFromContext(r.Context())
+		roles := middleware.ExtractRolesFromContext(r.Context())
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"user_id":   userID,
+			"tenant_id": tenantID,
+			"roles":     roles,
+		})
+	})
+
+	// Apply middleware stack
+	wrapped := middleware.TenantGuardMiddleware(logger)(
+		middleware.JWTMiddleware(jwtSecret, logger)(handler),
+	)
+
+	// Create request
+	token := generateTestJWT("user-123", "tenant-456", "test@example.com", "admin", jwtSecret)
+	req := httptest.NewRequest("GET", "/test", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("X-Tenant-ID", "tenant-456")
+
+	// Execute
+	recorder := httptest.NewRecorder()
+	wrapped.ServeHTTP(recorder, req)
+
+	// Verify
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("Expected 200, got %d: %s", recorder.Code, recorder.Body.String())
+	}
+
+	var result map[string]interface{}
+	json.NewDecoder(recorder.Body).Decode(&result)
+	if result["user_id"] != "user-123" || result["tenant_id"] != "tenant-456" {
+		t.Fatalf("Auth context not propagated correctly: %+v", result)
+	}
+}

@@ -1,0 +1,12 @@
+{
+    "geminicodeassist.updateChannel": "Insiders",
+    "geminicodeassist.agentYoloMode": true,
+    "files.associations": {
+        "*.star": "starlark",
+        "*.bzl": "starlark",
+        "*.bazel": "starlark"
+    },
+    "chat.tools.terminal.autoApprove": {
+        "/Users/eganpj/GitHub/semlayer/backend/catalog-sync": true
+    }
+}

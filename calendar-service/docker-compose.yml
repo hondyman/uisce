@@ -1,0 +1,154 @@
+version: '3.8'
+
+services:
+  # Redpanda - Event Streaming (Kafka-compatible)
+  redpanda:
+    image: docker.redpanda.com/redpandadata/redpanda:v23.2.18
+    container_name: semlayer-redpanda
+    command:
+      - redpanda
+      - start
+      - --smp 1
+      - --overprovisioned
+      - --kafka-addr internal://0.0.0.0:9092,external://0.0.0.0:19092
+      - --advertise-kafka-addr internal://redpanda:9092,external://localhost:19092
+      - --pandaproxy-addr internal://0.0.0.0:8082,external://0.0.0.0:18082
+      - --advertise-pandaproxy-addr internal://redpanda:8082,external://localhost:18082
+      - --schema-registry-addr internal://0.0.0.0:8081,external://0.0.0.0:18081
+      - --rpc-addr redpanda:33145
+      - --advertise-rpc-addr redpanda:33145
+    ports:
+      - "19092:19092"  # External Kafka API
+      - "18081:18081"  # Schema Registry
+      - "18082:18082"  # PandaProxy
+    volumes:
+      - redpanda_data:/var/lib/redpanda/data
+    healthcheck:
+      test: ["CMD", "rpk", "cluster", "info"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - semlayer
+
+  # Debezium Connect - CDC from PostgreSQL to Redpanda
+  debezium:
+    image: debezium/connect:2.4
+    container_name: semlayer-debezium
+    ports:
+      - "8083:8083"
+    environment:
+      BOOTSTRAP_SERVERS: redpanda:9092
+      GROUP_ID: 1
+      CONFIG_STORAGE_TOPIC: connect_configs
+      OFFSET_STORAGE_TOPIC: connect_offsets
+      STATUS_STORAGE_TOPIC: connect_statuses
+      KEY_CONVERTER: org.apache.kafka.connect.json.JsonConverter
+      VALUE_CONVERTER: org.apache.kafka.connect.json.JsonConverter
+      ENABLE_DEBEZIUM_KCORS: "true"
+    depends_on:
+      redpanda:
+        condition: service_healthy
+    networks:
+      - semlayer
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8083/"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis for Caching
+  redis:
+    image: redis:7-alpine
+    container_name: semlayer-redis
+    ports:
+      - "6379:6379"
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    volumes:
+      - redis_data:/data
+    networks:
+      - semlayer
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # Calendar Service (Golang)
+  calendar-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: semlayer-calendar-service
+    ports:
+      - "8081:8080"  # Map to 8081 on host to avoid conflict with other services
+    environment:
+      # Service Configuration
+      SERVER_PORT: "8080"
+      ENVIRONMENT: "development"
+      LOG_LEVEL: "info"
+      
+      # Database Configuration (Local - use localhost in dev, or provide service hostname)
+      POSTGRES_HOST: "postgres"
+      POSTGRES_PORT: "5432"
+      POSTGRES_USER: "calendar_user"
+      POSTGRES_PASSWORD: "calendar_password"
+      POSTGRES_DB: "calendar_service"
+      
+      # Remote Services (Redpanda, Redis, Hasura - configure with actual remote endpoints)
+      REDPANDA_BROKERS: "redpanda:9092"
+      HASURA_ENDPOINT: "http://YOUR_REMOTE_HOST:8080/v1/graphql"
+      HASURA_ADMIN_SECRET: "your_hasura_admin_secret"
+      REDIS_URL: "redis://redis:6379/0"
+      
+      # Optional: Temporal Workflow Orchestration
+      TEMPORAL_HOST: "temporal"
+      TEMPORAL_PORT: "7233"
+    depends_on:
+      redpanda:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - semlayer
+    volumes:
+      - .:/app  # Hot reload during development
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Optional: Temporal Server for Workflow Orchestration
+  temporal:
+    image: temporalio/auto-setup:latest
+    container_name: semlayer-temporal
+    ports:
+      - "7233:7233"  # gRPC
+      - "6831:6831/udp"  # Jaeger
+    environment:
+      DB: postgresql
+      DB_PORT: "5432"
+      POSTGRES_USER: "postgres"
+      POSTGRES_PWD: "postgres"
+      POSTGRES_HOST: "YOUR_REMOTE_HOST"
+      POSTGRES_DB: "temporal"
+    depends_on:
+      - redpanda
+    networks:
+      - semlayer
+    profiles:
+      - temporal  # Optional: run with --profile temporal
+    healthcheck:
+      test: ["CMD", "tctl", "workflow", "list"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  redpanda_data:
+  redis_data:
+
+networks:
+  semlayer:
+    driver: bridge

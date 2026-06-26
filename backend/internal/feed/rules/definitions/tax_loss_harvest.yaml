@@ -1,0 +1,23 @@
+# Tax Loss Harvest Rule
+# Triggers when unrealized losses exist and client is in taxable account
+
+id: rule_tax_loss_harvest
+card_id: tax_loss_harvest
+description: Show tax loss harvesting opportunity when unrealized losses exist
+priority: 80
+
+conditions:
+  # Portfolio must have at least 1% unrealized loss
+  - field: Portfolio.UnrealizedLossPct
+    operator: lt
+    value: -0.01
+  
+  # Client must be in taxable account (not tax-deferred)
+  - field: Profile.TaxStatus
+    operator: eq
+    value: "taxable"
+  
+  # Client must not be restricted from trading
+  - field: Compliance.IsRestricted
+    operator: eq
+    value: false

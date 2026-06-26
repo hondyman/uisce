@@ -1,0 +1,83 @@
+name: Integration - Entity Manager
+
+on:
+  push:
+  pull_request:
+
+
+jobs:
+  entity-manager-integration:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Ensure Docker Compose
+      run: docker compose version
+
+    - name: Start integration stack
+      run: |
+        docker compose -f docker-compose.integration.yml up -d --build
+
+    - name: Wait for entity-manager /ready
+      run: |
+        bash ./scripts/wait-for-ready.sh http://localhost:8087/ready 60 5
+
+    - name: Run smoke tests
+      run: |
+        curl -fsS http://localhost:8087/health | jq .
+
+    - name: Wait for Redpanda to accept TCP connections
+      run: |
+        for i in $(seq 1 20); do
+          (echo > /dev/tcp/localhost/9092) >/dev/null 2>&1 && { echo "redpanda tcp ready"; exit 0; }
+          echo "waiting for redpanda tcp ($i/20)";
+          sleep 2
+        done
+        echo "redpanda tcp not available"; exit 1
+
+    - name: Check Redpanda cluster health via rpk
+      run: |
+        for i in $(seq 1 20); do
+          docker compose -f docker-compose.integration.yml exec -T redpanda rpk cluster health >/dev/null 2>&1 && { echo "redpanda cluster healthy"; exit 0; }
+          echo "waiting for redpanda cluster health ($i/20)";
+          sleep 2
+        done
+        echo "redpanda cluster not healthy"; docker compose -f docker-compose.integration.yml logs redpanda --no-log-prefix --tail 50; exit 1
+
+    - name: Ensure Kafka topics exist (scripted)
+      run: |
+        chmod +x ./scripts/ci-create-topics.sh
+        ./scripts/ci-create-topics.sh
+
+    - name: Wait for entity-manager consumer to be ready
+      run: |
+        for i in $(seq 1 30); do
+          if curl -fsS http://localhost:8087/api/internal/consumer-ready >/dev/null 2>&1; then
+            echo "entity-manager consumer ready"; exit 0
+          fi
+          echo "waiting for consumer to be ready ($i/30)";
+          sleep 2
+        done
+        echo "consumer not ready"; docker compose logs entity-manager --no-log-prefix --tail 100; exit 1
+
+    - name: Run strict publish→consume test
+      run: |
+        TEST_ID=$(uuidgen)
+        PAYLOAD='{"eventType":"workflow.test","data":{"message":"ci-e2e-$TEST_ID"}}'
+        HTTP_STATUS=$(curl -sS -o /dev/stderr -w "%{http_code}" -X POST http://localhost:8087/api/internal/publish-test-approval-sync \
+          -H 'Content-Type: application/json' -d "$PAYLOAD") || true
+        echo "publish endpoint status: $HTTP_STATUS"
+        if [ "$HTTP_STATUS" != "200" ]; then
+          echo "Publish/consume sync failed"; docker compose logs entity-manager --no-log-prefix --tail 200; exit 1
+        fi
+
+    - name: Teardown
+      if: always()
+      run: |
+        docker compose -f docker-compose.integration.yml down --volumes --remove-orphans
+
+    - name: Teardown
+      if: always()
+      run: |
+        docker compose -f docker-compose.integration.yml down --volumes --remove-orphans

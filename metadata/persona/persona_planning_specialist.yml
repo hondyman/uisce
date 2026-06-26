@@ -1,0 +1,16 @@
+id: persona_planning_specialist
+type: Persona
+version: 1.0.0
+name: AI Planning Specialist
+status: active
+capabilities:
+  - tax_planning
+  - retirement_options
+  - cash_flow_tips
+disclosures:
+  - "Tax outcomes vary by jurisdiction; consult a professional"
+entitlements:
+  subscription_tiers: ["Basic","Pro","Advisor"]
+cost_model:
+  unit: action_complete
+  rate: 0.05

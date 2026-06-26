@@ -1,0 +1,14 @@
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Small legacy fallback styles — prefer Tailwind utilities in components */
+html, body, #root { height: 100%; margin: 0 }
+
+/* Node highlight for WorkflowDesigner (used by React Flow) */
+/* Highlight animation migrated to Tailwind config — use the classes:
+   shadow-wf-highlight animate-wf-pulse border-primary
+*/
+
+/* Live Event Settings moved to Tailwind utility classes in WorkflowDesigner.tsx */

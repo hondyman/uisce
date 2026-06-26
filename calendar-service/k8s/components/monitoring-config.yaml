@@ -1,0 +1,179 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-calendar-alerts
+  namespace: calendar
+data:
+  calendar-alerts.yml: |
+    groups:
+    - name: calendar-service
+      interval: 30s
+      rules:
+      
+      # High error rate alerts
+      - alert: HighErrorRate
+        expr: rate(http_requests_total{job="calendar-service", status=~"5.."}[5m]) > 0.05
+        for: 5m
+        labels:
+          severity: critical
+          component: api
+        annotations:
+          summary: "Calendar service error rate > 5%"
+          description: "Error rate reached {{ $value | humanizePercentage }}"
+          runbook_url: "https://docs.example.com/runbooks/high-error-rate"
+      
+      # High latency alert
+      - alert: HighLatency
+        expr: histogram_quantile(0.95, http_request_duration_seconds_bucket{job="calendar-service"}) > 5
+        for: 5m
+        labels:
+          severity: warning
+          component: api
+        annotations:
+          summary: "Calendar service p95 latency > 5s"
+          description: "p95 latency: {{ $value | humanizeDuration }}"
+      
+      # Pod restart loop
+      - alert: PodRestartingTooOften
+        expr: rate(kube_pod_container_status_restarts_total{pod=~"calendar-service.*"}[15m]) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+          component: pod
+        annotations:
+          summary: "Pod {{ $labels.pod }} restarting too often"
+          description: "Restart rate: {{ $value }} per second"
+      
+      # Memory usage high
+      - alert: HighMemoryUsage
+        expr: container_memory_usage_bytes{pod=~"calendar-service.*"} / container_spec_memory_limit_bytes > 0.85
+        for: 5m
+        labels:
+          severity: warning
+          component: pods
+        annotations:
+          summary: "Pod {{ $labels.pod }} memory usage high"
+          description: "Memory usage: {{ $value | humanizePercentage }}"
+      
+      # CPU throttling
+      - alert: CPUThrottling
+        expr: rate(container_cpu_cfs_throttled_seconds_total{pod=~"calendar-service.*"}[5m]) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+          component: pods
+        annotations:
+          summary: "Pod {{ $labels.pod }} CPU throttled"
+          description: "Throttle rate: {{ $value }}"
+      
+      # Database connection pool exhaustion
+      - alert: DBConnectionPoolExhausted
+        expr: db_connections_active{job="calendar-service"} / db_connections_limit > 0.8
+        for: 5m
+        labels:
+          severity: critical
+          component: database
+        annotations:
+          summary: "Database connection pool {{ $value | humanizePercentage }} full"
+          description: "Active connections: {{ $value }} of limit"
+      
+      # Redis cache hit rate too low
+      - alert: LowCacheHitRate
+        expr: rate(calendar_cache_hits_total[5m]) / (rate(calendar_cache_hits_total[5m]) + rate(calendar_cache_misses_total[5m])) < 0.6
+        for: 10m
+        labels:
+          severity: warning
+          component: cache
+        annotations:
+          summary: "Cache hit rate below 60%"
+          description: "Hit rate: {{ $value | humanizePercentage }}"
+      
+      # Service unavailable
+      - alert: ServiceUnavailable
+        expr: up{job="calendar-service"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          component: api
+        annotations:
+          summary: "Calendar service is down"
+          description: "Service has been unreachable for 1 minute"
+      
+      # Certificate expiration warning
+      - alert: CertificateExpirationWarning
+        expr: (certmanager_certificate_expiration_timestamp_seconds - time()) / 86400 < 30
+        for: 1h
+        labels:
+          severity: warning
+          component: tls
+        annotations:
+          summary: "Certificate {{ $labels.name }} expires in less than 30 days"
+          description: "Days until expiration: {{ ($value / 86400) | humanize }}"
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-config
+  namespace: calendar
+data:
+  prometheus.yml: |
+    global:
+      scrape_interval: 30s
+      evaluation_interval: 30s
+      external_labels:
+        cluster: 'production'
+        environment: 'calendar'
+
+    # Alertmanager configuration
+    alerting:
+      alertmanagers:
+      - static_configs:
+        - targets:
+          - alertmanager:9093
+
+    # Alert rules
+    rule_files:
+      - /etc/prometheus/calendar-alerts.yml
+
+    scrape_configs:
+
+    # Calendar Service scrape config
+    - job_name: 'calendar-service'
+      kubernetes_sd_configs:
+      - role: pod
+        namespaces:
+          names:
+          - calendar
+      relabel_configs:
+      - source_labels: [__meta_kubernetes_pod_label_app]
+        action: keep
+        regex: calendar-service
+      - source_labels: [__meta_kubernetes_pod_container_port_number]
+        action: keep
+        regex: "9090"
+      - source_labels: [__meta_kubernetes_namespace]
+        target_label: namespace
+      - source_labels: [__meta_kubernetes_pod_name]
+        target_label: pod
+
+    # Kubernetes components
+    - job_name: 'kubernetes-apiservers'
+      kubernetes_sd_configs:
+      - role: endpoints
+      scheme: https
+      tls_config:
+        ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+      bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+      relabel_configs:
+      - source_labels: [__meta_kubernetes_namespace, __meta_kubernetes_service_name, __meta_kubernetes_endpoint_port_name]
+        action: keep
+        regex: default;kubernetes;https
+
+    # Node metrics
+    - job_name: 'kubernetes-nodes'
+      kubernetes_sd_configs:
+      - role: node
+      scheme: https
+      tls_config:
+        ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+      bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token

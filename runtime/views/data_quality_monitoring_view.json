@@ -1,0 +1,63 @@
+{
+  "name": "data_quality_monitoring_view",
+  "title": "Data Quality Monitoring View",
+  "description": "Auto-generated semantic model for table data_quality_monitoring.",
+  "public": true,
+  "meta": {
+    "admin_variant": true,
+    "generated_at": "2025-10-01T18:21:07Z",
+    "root_cube": "data_quality_monitoring"
+  },
+  "cubes": [
+    {
+      "join_path": "data_quality_monitoring",
+      "includes": [
+        {
+          "name": "checked_at"
+        },
+        {
+          "name": "count"
+        },
+        {
+          "name": "sum_check_value"
+        },
+        {
+          "name": "sum_threshold"
+        }
+      ]
+    },
+    {
+      "join_path": "data_quality_monitoring.preaggregated_metrics",
+      "prefix": true,
+      "includes": [
+        {
+          "name": "*"
+        }
+      ]
+    }
+  ],
+  "folders": [
+    {
+      "name": "Metrics",
+      "includes": [
+        {
+          "member": "count"
+        },
+        {
+          "member": "sum_threshold"
+        },
+        {
+          "member": "sum_check_value"
+        }
+      ]
+    },
+    {
+      "name": "Time",
+      "includes": [
+        {
+          "member": "checked_at"
+        }
+      ]
+    }
+  ]
+}

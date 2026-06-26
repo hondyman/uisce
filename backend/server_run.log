@@ -1,0 +1,24 @@
+{"level":"info","ts":1761193111.491062,"caller":"server/main.go:90","msg":"Database connection established successfully"}
+{"level":"info","ts":1761193111.491284,"caller":"server/main.go:91","msg":"Connection pool configured: MaxOpen=50, MaxIdle=10, MaxLifetime=10m0s, MaxIdleTime=5m0s"}
+{"level":"info","ts":1761193111.491337,"caller":"services/performance_monitor.go:145","msg":"Performance monitoring started"}
+{"level":"info","ts":1761193111.4913769,"caller":"observability/dynatrace_manager.go:30","msg":"Dynatrace environment variables not set, disabling Dynatrace integration."}
+{"level":"info","ts":1761193111.491429,"caller":"services/performance_monitor.go:436","msg":"pprof endpoints available at /debug/pprof/"}
+{"level":"warn","ts":1761193111.494446,"caller":"server/main.go:144","msg":"Warning: Failed to create views table: ERROR: cannot drop index ux_views_tenant_ds_name because constraint ux_views_tenant_ds_name on table views requires it (SQLSTATE 2BP01)"}
+{"level":"info","ts":1761193111.4948008,"caller":"server/main.go:172","msg":"Ensured fabric_defn table exists"}
+{"level":"warn","ts":1761193111.495369,"caller":"server/main.go:182","msg":"Warning: Failed to initialize private markets schema: failed to execute private markets schema: ERROR: syntax error at or near \"NOT\" (SQLSTATE 42601)"}
+{"level":"info","ts":1761193111.496585,"caller":"server/main.go:257","msg":"Ensured entity_registry table exists"}
+{"level":"info","ts":1761193111.49698,"caller":"server/main.go:306","msg":"Ensured validation rules tables exist"}
+{"level":"info","ts":1761193111.497056,"caller":"logging/logging.go:39","msg":"2025/10/23 00:18:31 [DEV] Seeded API key for user tester@example.com: sk_1761193111497038000\n"}
+2025/10/23 00:18:31 INFO  No logger configured for temporal client. Created default one.
+{"level":"info","ts":1761193111.507711,"caller":"server/main.go:320","msg":"Insurance calculation templates initialized successfully"}
+{"level":"warn","ts":1761193111.5159712,"caller":"api/api.go:368","msg":"Temporal client not available at startup: failed reaching server: connection error: desc = \"transport: Error while dialing: dial tcp [::1]:7233: connect: connection refused\""}
+{"level":"info","ts":1761193111.516028,"caller":"server/main.go:327","msg":"Private markets calculation templates initialized successfully"}
+{"level":"info","ts":1761193111.51613,"caller":"api/api.go:442","msg":"Temporal admin routes registered"}
+{"level":"info","ts":1761193111.519844,"caller":"server/main.go:334","msg":"Quant finance calculation templates initialized successfully"}
+{"level":"info","ts":1761193111.524517,"caller":"server/main.go:341","msg":"Risk management calculation templates initialized successfully"}
+{"level":"info","ts":1761193111.528119,"caller":"server/main.go:348","msg":"Compliance and regulatory calculation templates initialized successfully"}
+{"level":"warn","ts":1761193111.528147,"caller":"server/main.go:382","msg":"Dynatrace URL and API token not configured - capacity metrics collection disabled"}
+{"level":"info","ts":1761193111.528169,"caller":"server/main.go:417","msg":"Server starting on http://localhost:18080"}
+{"level":"info","ts":1761193111.52818,"caller":"server/main.go:418","msg":"Swagger UI available at: http://localhost:18080/swagger/index.html"}
+{"level":"fatal","ts":1761193111.52828,"caller":"server/main.go:421","msg":"Failed to start server: listen tcp 0.0.0.0:18080: bind: address already in use","stacktrace":"main.main\n\t/Users/eganpj/GitHub/semlayer/backend/cmd/server/main.go:421\nruntime.main\n\t/opt/homebrew/Cellar/go/1.25.3/libexec/src/runtime/proc.go:285"}
+exit status 1

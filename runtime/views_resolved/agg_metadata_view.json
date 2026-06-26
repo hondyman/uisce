@@ -1,0 +1,55 @@
+{
+  "name": "agg_metadata_view",
+  "title": "Agg Metadata View",
+  "description": "Auto-generated semantic model for table agg_metadata.",
+  "public": true,
+  "meta": {
+    "admin_variant": true,
+    "core_version": "runtime",
+    "generated_at": "2025-10-01T18:21:07Z",
+    "last_merged": "2025-10-01T18:21:07Z",
+    "root_cube": "agg_metadata"
+  },
+  "cubes": [
+    {
+      "join_path": "agg_metadata",
+      "includes": [
+        {
+          "name": "agg_name"
+        },
+        {
+          "name": "count"
+        },
+        {
+          "name": "last_update"
+        }
+      ]
+    }
+  ],
+  "folders": [
+    {
+      "name": "Basic Details",
+      "includes": [
+        {
+          "member": "agg_name"
+        }
+      ]
+    },
+    {
+      "name": "Metrics",
+      "includes": [
+        {
+          "member": "count"
+        }
+      ]
+    },
+    {
+      "name": "Time",
+      "includes": [
+        {
+          "member": "last_update"
+        }
+      ]
+    }
+  ]
+}
