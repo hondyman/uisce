@@ -1,0 +1,462 @@
+# Azure DevOps Pipeline for Semlayer
+# Build, test, security scan, and deploy to AKS
+
+trigger:
+  branches:
+    include:
+    - main
+    - develop
+    - release/*
+  tags:
+    include:
+    - v*
+
+pr:
+  branches:
+    include:
+    - main
+    - develop
+
+variables:
+- group: semlayer-common
+- name: dockerRegistryServiceConnection
+  value: 'semlayer-acr'
+- name: imageRepository
+  value: 'semlayer'
+- name: containerRegistry
+  value: 'semlayerprodacr.azurecr.io'
+- name: tag
+  value: '$(Build.BuildId)'
+- name: vmImageName
+  value: 'ubuntu-latest'
+
+stages:
+# =============================================================================
+# Build Stage
+# =============================================================================
+- stage: Build
+  displayName: 'Build and Test'
+  jobs:
+  - job: BuildBackend
+    displayName: 'Build Backend'
+    pool:
+      vmImage: $(vmImageName)
+    steps:
+    - task: GoTool@0
+      displayName: 'Install Go'
+      inputs:
+        version: '1.22'
+
+    - task: Cache@2
+      displayName: 'Cache Go modules'
+      inputs:
+        key: 'go | "$(Agent.OS)" | backend/go.sum'
+        restoreKeys: |
+          go | "$(Agent.OS)"
+        path: $(GOPATH)/pkg/mod
+
+    - script: |
+        cd backend
+        go test -v -race -coverprofile=coverage.out ./...
+        go tool cover -func=coverage.out
+      displayName: 'Run Tests'
+
+    - task: PublishCodeCoverageResults@1
+      displayName: 'Publish Coverage'
+      inputs:
+        codeCoverageTool: 'Cobertura'
+        summaryFileLocation: 'backend/coverage.out'
+
+    - script: |
+        cd backend
+        CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w -X main.Version=$(Build.BuildNumber)" -o bin/api-gateway ./cmd/api-gateway
+        CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w -X main.Version=$(Build.BuildNumber)" -o bin/semantic-engine ./cmd/semantic-engine
+        CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w -X main.Version=$(Build.BuildNumber)" -o bin/governance-engine ./cmd/governance-engine
+      displayName: 'Build Binaries'
+
+    - publish: $(System.DefaultWorkingDirectory)/backend/bin
+      artifact: backend-binaries
+      displayName: 'Publish Backend Artifacts'
+
+  - job: BuildFrontend
+    displayName: 'Build Frontend'
+    pool:
+      vmImage: $(vmImageName)
+    steps:
+    - task: NodeTool@0
+      displayName: 'Install Node.js'
+      inputs:
+        versionSpec: '20.x'
+
+    - task: Cache@2
+      displayName: 'Cache npm packages'
+      inputs:
+        key: 'npm | "$(Agent.OS)" | frontend/pnpm-lock.yaml'
+        restoreKeys: |
+          npm | "$(Agent.OS)"
+        path: $(Pipeline.Workspace)/.pnpm-store
+
+    - script: |
+        npm install -g pnpm
+        cd frontend
+        pnpm install --frozen-lockfile
+        pnpm test -- --coverage
+        pnpm build
+      displayName: 'Install, Test, Build'
+
+    - publish: $(System.DefaultWorkingDirectory)/frontend/dist
+      artifact: frontend-build
+      displayName: 'Publish Frontend Artifacts'
+
+# =============================================================================
+# Security Scan Stage
+# =============================================================================
+- stage: SecurityScan
+  displayName: 'Security Scanning'
+  dependsOn: Build
+  jobs:
+  - job: SecurityScan
+    displayName: 'Run Security Scans'
+    pool:
+      vmImage: $(vmImageName)
+    steps:
+    - task: UseDotNet@2
+      displayName: 'Install .NET'
+      inputs:
+        packageType: 'sdk'
+        version: '8.0.x'
+
+    # Microsoft Security DevOps
+    - task: MicrosoftSecurityDevOps@1
+      displayName: 'Microsoft Security DevOps'
+      inputs:
+        break: true
+        publish: true
+
+    # Container scanning with Trivy
+    - script: |
+        curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b /usr/local/bin
+        trivy fs --format sarif --output trivy-results.sarif .
+      displayName: 'Trivy Filesystem Scan'
+
+    - task: PublishBuildArtifacts@1
+      displayName: 'Publish Security Results'
+      inputs:
+        pathToPublish: 'trivy-results.sarif'
+        artifactName: 'security-results'
+
+    # Credential Scanner
+    - task: CredScan@3
+      displayName: 'Credential Scanner'
+      inputs:
+        outputFormat: 'sarif'
+
+    # Dependency Check
+    - task: dependency-check-build-task@6
+      displayName: 'OWASP Dependency Check'
+      inputs:
+        projectName: 'semlayer'
+        scanPath: '$(Build.SourcesDirectory)'
+        format: 'SARIF'
+
+# =============================================================================
+# Docker Build Stage
+# =============================================================================
+- stage: DockerBuild
+  displayName: 'Build Docker Images'
+  dependsOn: SecurityScan
+  condition: and(succeeded(), ne(variables['Build.Reason'], 'PullRequest'))
+  jobs:
+  - job: BuildImages
+    displayName: 'Build and Push Images'
+    pool:
+      vmImage: $(vmImageName)
+    strategy:
+      matrix:
+        api-gateway:
+          serviceName: 'api-gateway'
+        semantic-engine:
+          serviceName: 'semantic-engine'
+        governance-engine:
+          serviceName: 'governance-engine'
+        cube-api:
+          serviceName: 'cube-api'
+        ai-builder:
+          serviceName: 'ai-builder'
+        compliance-engine:
+          serviceName: 'compliance-engine'
+    steps:
+    - task: Docker@2
+      displayName: 'Login to ACR'
+      inputs:
+        command: login
+        containerRegistry: $(dockerRegistryServiceConnection)
+
+    - task: Docker@2
+      displayName: 'Build and Push $(serviceName)'
+      inputs:
+        command: buildAndPush
+        repository: $(imageRepository)/$(serviceName)
+        dockerfile: 'backend/Dockerfile.$(serviceName)'
+        containerRegistry: $(dockerRegistryServiceConnection)
+        tags: |
+          $(tag)
+          latest
+
+    # Scan built image
+    - script: |
+        trivy image --format sarif --output trivy-$(serviceName).sarif $(containerRegistry)/$(imageRepository)/$(serviceName):$(tag)
+      displayName: 'Scan Image with Trivy'
+
+    - task: PublishBuildArtifacts@1
+      displayName: 'Publish Image Scan Results'
+      inputs:
+        pathToPublish: 'trivy-$(serviceName).sarif'
+        artifactName: 'image-scan-$(serviceName)'
+
+# =============================================================================
+# Deploy to Staging
+# =============================================================================
+- stage: DeployStaging
+  displayName: 'Deploy to Staging'
+  dependsOn: DockerBuild
+  condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/develop'))
+  jobs:
+  - deployment: DeployStaging
+    displayName: 'Deploy to Staging AKS'
+    pool:
+      vmImage: $(vmImageName)
+    environment: 'staging'
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+          - task: HelmInstaller@1
+            displayName: 'Install Helm'
+            inputs:
+              helmVersionToInstall: 'latest'
+
+          - task: AzureCLI@2
+            displayName: 'Get AKS Credentials'
+            inputs:
+              azureSubscription: 'semlayer-azure'
+              scriptType: 'bash'
+              scriptLocation: 'inlineScript'
+              inlineScript: |
+                az aks get-credentials --resource-group semlayer-staging-rg --name semlayer-staging --overwrite-existing
+
+          - task: HelmDeploy@0
+            displayName: 'Deploy with Helm'
+            inputs:
+              connectionType: 'Azure Resource Manager'
+              azureSubscription: 'semlayer-azure'
+              azureResourceGroup: 'semlayer-staging-rg'
+              kubernetesCluster: 'semlayer-staging'
+              namespace: 'semlayer-control'
+              command: 'upgrade'
+              chartType: 'FilePath'
+              chartPath: '$(Pipeline.Workspace)/charts/semlayer-platform'
+              releaseName: 'semlayer-staging'
+              overrideValues: 'global.image.tag=$(tag)'
+              valueFile: '$(Pipeline.Workspace)/charts/semlayer-platform/values-azure.yaml,$(Pipeline.Workspace)/charts/semlayer-platform/values-staging.yaml'
+              arguments: '--wait --timeout 10m'
+
+          - task: AzureCLI@2
+            displayName: 'Run Smoke Tests'
+            inputs:
+              azureSubscription: 'semlayer-azure'
+              scriptType: 'bash'
+              scriptLocation: 'inlineScript'
+              inlineScript: |
+                kubectl -n semlayer-control wait --for=condition=ready pod -l app=api-gateway --timeout=300s
+                curl -f https://api-staging.semlayer.io/health || exit 1
+
+# =============================================================================
+# Deploy to Production (Canary)
+# =============================================================================
+- stage: DeployProductionCanary
+  displayName: 'Deploy to Production (Canary)'
+  dependsOn: DockerBuild
+  condition: and(succeeded(), or(eq(variables['Build.SourceBranch'], 'refs/heads/main'), startsWith(variables['Build.SourceBranch'], 'refs/tags/v')))
+  jobs:
+  - deployment: DeployCanary
+    displayName: 'Deploy Canary (10%)'
+    pool:
+      vmImage: $(vmImageName)
+    environment: 'production-canary'
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+          - task: AzureCLI@2
+            displayName: 'Get AKS Credentials'
+            inputs:
+              azureSubscription: 'semlayer-azure'
+              scriptType: 'bash'
+              scriptLocation: 'inlineScript'
+              inlineScript: |
+                az aks get-credentials --resource-group semlayer-prod-rg --name semlayer-prod --overwrite-existing
+
+          - task: HelmDeploy@0
+            displayName: 'Deploy Canary'
+            inputs:
+              connectionType: 'Azure Resource Manager'
+              azureSubscription: 'semlayer-azure'
+              azureResourceGroup: 'semlayer-prod-rg'
+              kubernetesCluster: 'semlayer-prod'
+              namespace: 'semlayer-canary'
+              command: 'upgrade'
+              chartType: 'FilePath'
+              chartPath: '$(Pipeline.Workspace)/charts/semlayer-platform'
+              releaseName: 'semlayer-canary'
+              overrideValues: 'global.image.tag=$(tag),global.canary.enabled=true,global.canary.weight=10'
+              valueFile: '$(Pipeline.Workspace)/charts/semlayer-platform/values-azure.yaml,$(Pipeline.Workspace)/charts/semlayer-platform/values-production.yaml'
+              arguments: '--wait --timeout 15m --create-namespace'
+
+  - job: MonitorCanary
+    displayName: 'Monitor Canary SLOs'
+    dependsOn: DeployCanary
+    pool:
+      vmImage: $(vmImageName)
+    steps:
+    - task: AzureCLI@2
+      displayName: 'Monitor for 15 minutes'
+      inputs:
+        azureSubscription: 'semlayer-azure'
+        scriptType: 'bash'
+        scriptLocation: 'inlineScript'
+        inlineScript: |
+          # Query Azure Monitor for SLO metrics
+          for i in {1..15}; do
+            echo "Minute $i: Checking SLOs..."
+            
+            # Get error rate from Application Insights
+            ERROR_RATE=$(az monitor app-insights query \
+              --app semlayer-prod-appinsights \
+              --analytics-query "requests | where timestamp > ago(5m) | where name contains 'canary' | summarize errorRate = todouble(countif(success == false)) / count() * 100" \
+              --query "tables[0].rows[0][0]" -o tsv)
+            
+            echo "Error Rate: ${ERROR_RATE}%"
+            
+            # Fail if error rate > 1%
+            if (( $(echo "$ERROR_RATE > 1" | bc -l) )); then
+              echo "SLO breach! Rolling back..."
+              helm rollback semlayer-canary -n semlayer-canary
+              exit 1
+            fi
+            
+            sleep 60
+          done
+          echo "Canary passed SLO checks!"
+
+# =============================================================================
+# Deploy to Production (Full)
+# =============================================================================
+- stage: DeployProduction
+  displayName: 'Deploy to Production'
+  dependsOn: DeployProductionCanary
+  condition: succeeded()
+  jobs:
+  - deployment: DeployProductionEastUS
+    displayName: 'Deploy to East US'
+    pool:
+      vmImage: $(vmImageName)
+    environment: 'production'
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+          - task: AzureCLI@2
+            displayName: 'Deploy to East US'
+            inputs:
+              azureSubscription: 'semlayer-azure'
+              scriptType: 'bash'
+              scriptLocation: 'inlineScript'
+              inlineScript: |
+                az aks get-credentials --resource-group semlayer-prod-eastus-rg --name semlayer-prod-eastus --overwrite-existing
+                helm upgrade --install semlayer ./charts/semlayer-platform \
+                  --namespace semlayer-control \
+                  -f ./charts/semlayer-platform/values-azure.yaml \
+                  -f ./charts/semlayer-platform/values-production.yaml \
+                  --set global.image.tag=$(tag) \
+                  --set global.region=eastus \
+                  --wait --timeout 20m
+
+  - deployment: DeployProductionWestEurope
+    displayName: 'Deploy to West Europe'
+    dependsOn: DeployProductionEastUS
+    pool:
+      vmImage: $(vmImageName)
+    environment: 'production-eu'
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+          - task: AzureCLI@2
+            displayName: 'Deploy to West Europe'
+            inputs:
+              azureSubscription: 'semlayer-azure'
+              scriptType: 'bash'
+              scriptLocation: 'inlineScript'
+              inlineScript: |
+                az aks get-credentials --resource-group semlayer-prod-westeurope-rg --name semlayer-prod-westeurope --overwrite-existing
+                helm upgrade --install semlayer ./charts/semlayer-platform \
+                  --namespace semlayer-control \
+                  -f ./charts/semlayer-platform/values-azure.yaml \
+                  -f ./charts/semlayer-platform/values-production.yaml \
+                  -f ./charts/semlayer-platform/values-eu.yaml \
+                  --set global.image.tag=$(tag) \
+                  --set global.region=westeurope \
+                  --set global.dataResidency.enabled=true \
+                  --set global.dataResidency.region=eu \
+                  --wait --timeout 20m
+
+  - deployment: DeployProductionSoutheastAsia
+    displayName: 'Deploy to Southeast Asia'
+    dependsOn: DeployProductionWestEurope
+    pool:
+      vmImage: $(vmImageName)
+    environment: 'production-apac'
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+          - task: AzureCLI@2
+            displayName: 'Deploy to Southeast Asia'
+            inputs:
+              azureSubscription: 'semlayer-azure'
+              scriptType: 'bash'
+              scriptLocation: 'inlineScript'
+              inlineScript: |
+                az aks get-credentials --resource-group semlayer-prod-southeastasia-rg --name semlayer-prod-southeastasia --overwrite-existing
+                helm upgrade --install semlayer ./charts/semlayer-platform \
+                  --namespace semlayer-control \
+                  -f ./charts/semlayer-platform/values-azure.yaml \
+                  -f ./charts/semlayer-platform/values-production.yaml \
+                  --set global.image.tag=$(tag) \
+                  --set global.region=southeastasia \
+                  --wait --timeout 20m
+
+# =============================================================================
+# Cleanup Canary
+# =============================================================================
+- stage: CleanupCanary
+  displayName: 'Cleanup Canary'
+  dependsOn: DeployProduction
+  condition: always()
+  jobs:
+  - job: Cleanup
+    displayName: 'Delete Canary Deployment'
+    pool:
+      vmImage: $(vmImageName)
+    steps:
+    - task: AzureCLI@2
+      displayName: 'Cleanup Canary'
+      inputs:
+        azureSubscription: 'semlayer-azure'
+        scriptType: 'bash'
+        scriptLocation: 'inlineScript'
+        inlineScript: |
+          az aks get-credentials --resource-group semlayer-prod-rg --name semlayer-prod --overwrite-existing
+          helm uninstall semlayer-canary -n semlayer-canary || true
+          kubectl delete namespace semlayer-canary || true

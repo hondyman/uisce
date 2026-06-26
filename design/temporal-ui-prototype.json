@@ -1,0 +1,22 @@
+{
+  "document": {
+    "id": "temporal-ui-prototype",
+    "name": "Temporal UI Enhancements",
+    "children": [
+      {
+        "type": "FRAME",
+        "id": "workflow-designer",
+        "name": "Workflow Designer",
+        "children": [
+          { "type": "RECTANGLE", "id": "canvas-bg", "name": "Canvas", "style": { "width": 1200, "height": 800 } },
+          { "type": "ELLIPSE", "id": "start-node", "name": "Start Node", "children": [{ "type": "TEXT", "characters": "Start" }] },
+          { "type": "RECTANGLE", "id": "activity-node", "name": "Activity Node", "children": [{ "type": "TEXT", "characters": "AML Check (ABAC Validated)" }] }
+        ]
+      },
+      { "type": "FRAME", "id": "execution-monitor", "name": "Execution Monitor" },
+      { "type": "FRAME", "id": "namespace-manager", "name": "Namespace Manager" },
+      { "type": "FRAME", "id": "audit-analytics", "name": "Audit & Analytics" }
+    ]
+  },
+  "styles": { "global": { "fontFamily": "Inter", "fontSize": 14 } }
+}

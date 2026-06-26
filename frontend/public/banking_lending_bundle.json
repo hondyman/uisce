@@ -1,0 +1,249 @@
+{
+  "bundle_id": "banking_lending_bundle",
+  "domain": "banking",
+  "audience": ["executive", "risk_officer", "compliance"],
+  "version": "v1.0.0",
+  "owner": "patrick",
+  "tags": ["banking", "lending", "interest", "credit_risk", "liquidity"],
+  "functions": [
+    {
+      "name": "DATESYTD",
+      "class": "DAX-Time",
+      "badge": "🟦",
+      "description": "Returns a table with dates from the beginning of the year to the last date in the current context."
+    },
+    {
+      "name": "TOTALYTD",
+      "class": "DAX-Time",
+      "badge": "🟦",
+      "description": "Calculates a year-to-date value for the specified measure."
+    },
+    {
+      "name": "SUMX",
+      "class": "DAX-Iterator",
+      "badge": "🟨",
+      "description": "Returns the sum of an expression evaluated over a table."
+    },
+    {
+      "name": "AVERAGEX",
+      "class": "DAX-Iterator",
+      "badge": "🟨",
+      "description": "Calculates the average of an expression evaluated over a table."
+    },
+    {
+      "name": "FILTER",
+      "class": "DAX-Iterator",
+      "badge": "🟨",
+      "description": "Returns a table that represents a subset of another table or expression."
+    },
+    {
+      "name": "DISTINCTCOUNT",
+      "class": "DAX-Iterator",
+      "badge": "🟨",
+      "description": "Counts the number of distinct values in a column."
+    },
+    {
+      "name": "DIVIDE",
+      "class": "DAX-Logical",
+      "badge": "🟧",
+      "description": "Performs division and returns alternate result or BLANK() on division by 0."
+    },
+    {
+      "name": "STDEVX.P",
+      "class": "DAX-Financial",
+      "badge": "🟩",
+      "description": "Returns the standard deviation of an expression evaluated over a table."
+    }
+  ],
+  "metrics": [
+    {
+      "node_id": "net_interest_margin",
+      "category": "profitability",
+      "description": "Net interest income as a percentage of average earning assets.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "DIVIDE(SUMX({interest_income_table}, {interest_income}) - SUMX({interest_expense_table}, {interest_expense}), AVERAGEX({assets_table}, {average_assets}))",
+        "arguments": {
+          "interest_income_table": "table:interest_income",
+          "interest_income": "field:amount",
+          "interest_expense_table": "table:interest_expense",
+          "interest_expense": "field:amount",
+          "assets_table": "table:assets",
+          "average_assets": "field:average_balance"
+        }
+      },
+      "badge": "🟨",
+      "function_class": "DAX-Iterator",
+      "functions_used": ["SUMX", "AVERAGEX", "DIVIDE"],
+      "governance": { "status": "golden" }
+    },
+    {
+      "node_id": "loan_loss_provision_ratio",
+      "category": "credit_risk",
+      "description": "Loan loss provisions as a percentage of total loans.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "DIVIDE(SUMX({provisions_table}, {loan_loss_provisions}), SUMX({loans_table}, {total_loans}))",
+        "arguments": {
+          "provisions_table": "table:loan_provisions",
+          "loan_loss_provisions": "field:provision_amount",
+          "loans_table": "table:loans",
+          "total_loans": "field:outstanding_balance"
+        }
+      },
+      "badge": "🟨",
+      "function_class": "DAX-Iterator",
+      "functions_used": ["SUMX", "DIVIDE"],
+      "governance": { "status": "golden" }
+    },
+    {
+      "node_id": "credit_risk_concentration",
+      "category": "credit_risk",
+      "description": "Percentage of loans to large borrowers relative to total loans.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "DIVIDE(SUMX(FILTER({loans_table}, {loan_amount} > {concentration_threshold}), {loan_amount}), SUMX({loans_table}, {loan_amount}))",
+        "arguments": {
+          "loans_table": "table:loans",
+          "loan_amount": "field:principal_amount",
+          "concentration_threshold": "field:large_borrower_threshold"
+        }
+      },
+      "badge": "🟨",
+      "function_class": "DAX-Iterator",
+      "functions_used": ["SUMX", "FILTER", "DIVIDE"],
+      "governance": { "status": "draft" }
+    },
+    {
+      "node_id": "deposit_stability_ratio",
+      "category": "liquidity",
+      "description": "Ratio of stable deposits to total deposits.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "DIVIDE(SUMX(FILTER({deposits_table}, {deposit_type} = 'stable'), {deposit_amount}), SUMX({deposits_table}, {deposit_amount}))",
+        "arguments": {
+          "deposits_table": "table:deposits",
+          "deposit_type": "field:stability_classification",
+          "deposit_amount": "field:balance"
+        }
+      },
+      "badge": "🟨",
+      "function_class": "DAX-Iterator",
+      "functions_used": ["SUMX", "FILTER", "DIVIDE"],
+      "governance": { "status": "golden" }
+    },
+    {
+      "node_id": "cost_to_income_ratio",
+      "category": "efficiency",
+      "description": "Operating expenses as a percentage of operating income.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "DIVIDE(SUMX({expenses_table}, {operating_expenses}), SUMX({income_table}, {operating_income}))",
+        "arguments": {
+          "expenses_table": "table:operating_expenses",
+          "operating_expenses": "field:amount",
+          "income_table": "table:operating_income",
+          "operating_income": "field:amount"
+        }
+      },
+      "badge": "🟨",
+      "function_class": "DAX-Iterator",
+      "functions_used": ["SUMX", "DIVIDE"],
+      "governance": { "status": "golden" }
+    },
+    {
+      "node_id": "return_on_assets",
+      "category": "profitability",
+      "description": "Net income as a percentage of average total assets.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "DIVIDE(SUMX({income_table}, {net_income}), AVERAGEX({assets_table}, {total_assets}))",
+        "arguments": {
+          "income_table": "table:net_income",
+          "net_income": "field:amount",
+          "assets_table": "table:assets",
+          "total_assets": "field:total_balance"
+        }
+      },
+      "badge": "🟨",
+      "function_class": "DAX-Iterator",
+      "functions_used": ["SUMX", "AVERAGEX", "DIVIDE"],
+      "governance": { "status": "golden" }
+    },
+    {
+      "node_id": "return_on_equity",
+      "category": "profitability",
+      "description": "Net income as a percentage of average equity.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "DIVIDE(SUMX({income_table}, {net_income}), AVERAGEX({equity_table}, {total_equity}))",
+        "arguments": {
+          "income_table": "table:net_income",
+          "net_income": "field:amount",
+          "equity_table": "table:equity",
+          "total_equity": "field:balance"
+        }
+      },
+      "badge": "🟨",
+      "function_class": "DAX-Iterator",
+      "functions_used": ["SUMX", "AVERAGEX", "DIVIDE"],
+      "governance": { "status": "golden" }
+    },
+    {
+      "node_id": "loan_to_deposit_ratio",
+      "category": "liquidity",
+      "description": "Total loans as a percentage of total deposits.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "DIVIDE(SUMX({loans_table}, {loan_balance}), SUMX({deposits_table}, {deposit_balance}))",
+        "arguments": {
+          "loans_table": "table:loans",
+          "loan_balance": "field:outstanding_balance",
+          "deposits_table": "table:deposits",
+          "deposit_balance": "field:balance"
+        }
+      },
+      "badge": "🟨",
+      "function_class": "DAX-Iterator",
+      "functions_used": ["SUMX", "DIVIDE"],
+      "governance": { "status": "golden" }
+    },
+    {
+      "node_id": "non_performing_loan_ratio",
+      "category": "credit_risk",
+      "description": "Non-performing loans as a percentage of total loans.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "DIVIDE(SUMX(FILTER({loans_table}, {performance_status} = 'non_performing'), {loan_balance}), SUMX({loans_table}, {loan_balance}))",
+        "arguments": {
+          "loans_table": "table:loans",
+          "performance_status": "field:performance_classification",
+          "loan_balance": "field:outstanding_balance"
+        }
+      },
+      "badge": "🟨",
+      "function_class": "DAX-Iterator",
+      "functions_used": ["SUMX", "FILTER", "DIVIDE"],
+      "governance": { "status": "golden" }
+    },
+    {
+      "node_id": "capital_adequacy_ratio",
+      "category": "capital",
+      "description": "Regulatory capital as a percentage of risk-weighted assets.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "DIVIDE(SUMX({capital_table}, {regulatory_capital}), SUMX({assets_table}, {risk_weighted_assets}))",
+        "arguments": {
+          "capital_table": "table:regulatory_capital",
+          "regulatory_capital": "field:amount",
+          "assets_table": "table:risk_weighted_assets",
+          "risk_weighted_assets": "field:weighted_balance"
+        }
+      },
+      "badge": "🟨",
+      "function_class": "DAX-Iterator",
+      "functions_used": ["SUMX", "DIVIDE"],
+      "governance": { "status": "golden" }
+    }
+  ]
+}

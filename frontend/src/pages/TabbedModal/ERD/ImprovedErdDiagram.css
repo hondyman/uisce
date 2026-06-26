@@ -1,0 +1,359 @@
+/* World-Class Professional ERD Diagram Styles */
+
+/* Container */
+.improved-erd-container {
+  width: 100%;
+  height: 100%;
+  position: relative;
+  background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+}
+
+/* Professional Table Node */
+.professional-table-node {
+  background: #ffffff;
+  border-radius: 12px;
+  overflow: hidden;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+  cursor: pointer;
+  box-shadow: 
+    0 4px 6px -1px rgba(0, 0, 0, 0.1),
+    0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  border: 2px solid #e2e8f0;
+  width: var(--node-width, auto);
+  height: var(--node-height, auto);
+}
+
+.professional-table-node:hover {
+  transform: translateY(-2px);
+  box-shadow: 
+    0 10px 15px -3px rgba(0, 0, 0, 0.1),
+    0 4px 6px -2px rgba(0, 0, 0, 0.05);
+  border-color: #cbd5e1;
+}
+
+.professional-table-node--selected {
+  border-color: #3b82f6;
+  box-shadow: 
+    0 20px 25px -5px rgba(59, 130, 246, 0.2),
+    0 10px 10px -5px rgba(59, 130, 246, 0.1),
+    0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+.professional-table-node--highlighted {
+  border-color: #f59e0b;
+  box-shadow: 
+    0 20px 25px -5px rgba(245, 158, 11, 0.2),
+    0 10px 10px -5px rgba(245, 158, 11, 0.1),
+    0 0 0 3px rgba(245, 158, 11, 0.1);
+  animation: pulse-highlight 2s ease-in-out infinite;
+}
+
+@keyframes pulse-highlight {
+  0%, 100% { box-shadow: 0 20px 25px -5px rgba(245, 158, 11, 0.2), 0 10px 10px -5px rgba(245, 158, 11, 0.1), 0 0 0 3px rgba(245, 158, 11, 0.1); }
+  50% { box-shadow: 0 20px 25px -5px rgba(245, 158, 11, 0.3), 0 10px 10px -5px rgba(245, 158, 11, 0.2), 0 0 0 3px rgba(245, 158, 11, 0.2); }
+}
+
+/* Connection Handles */
+.professional-table-node .connection-handle {
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.professional-table-node:hover .connection-handle {
+  opacity: 1;
+}
+
+.professional-handle {
+  width: 12px;
+  height: 12px;
+  background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+  border: 2px solid #ffffff;
+  border-radius: 50%;
+  box-shadow: 0 2px 8px rgba(59, 130, 246, 0.4);
+}
+
+.professional-handle--top { top: -7px; left: 50%; transform: translateX(-50%); }
+.professional-handle--bottom { bottom: -7px; left: 50%; transform: translateX(-50%); }
+.professional-handle--left { left: -7px; top: 50%; transform: translateY(-50%); }
+.professional-handle--right { right: -7px; top: 50%; transform: translateY(-50%); }
+
+/* Table Header */
+.professional-table-header {
+  background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%);
+  color: #ffffff;
+  padding: 14px 20px;
+  border-radius: 10px 10px 0 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  position: relative;
+  overflow: hidden;
+}
+
+.professional-header-pattern {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 120px;
+  height: 100%;
+  background: linear-gradient(90deg, transparent 0%, rgba(255, 255, 255, 0.08) 100%);
+  pointer-events: none;
+}
+
+.professional-header-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  z-index: 1;
+}
+
+.professional-header-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  background: rgba(255, 255, 255, 0.2);
+  backdrop-filter: blur(10px);
+}
+
+.professional-header-title {
+  font-weight: 700;
+  font-size: 15px;
+  letter-spacing: 0.01em;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+}
+
+.professional-header-sub {
+  font-size: 11px;
+  opacity: 0.9;
+  margin-top: 2px;
+  font-weight: 500;
+}
+
+.professional-type-indicator {
+  background: rgba(255, 255, 255, 0.2);
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  z-index: 1;
+  backdrop-filter: blur(10px);
+}
+
+/* Columns Section */
+.professional-columns {
+  background: #ffffff;
+}
+
+.professional-column-row {
+  display: flex;
+  align-items: center;
+  padding: 10px 20px;
+  border-bottom: 1px solid #f1f5f9;
+  transition: all 0.15s ease;
+  cursor: pointer;
+  min-height: 42px;
+}
+
+.professional-column-row:last-child {
+  border-bottom: none;
+}
+
+.professional-column-row:hover {
+  background-color: #f8fafc;
+}
+
+.professional-column-row--highlighted {
+  background-color: #fef3c7;
+  border-left: 3px solid #f59e0b;
+}
+
+.professional-column-row--pk {
+  background: linear-gradient(90deg, #fef2f2 0%, #ffffff 100%);
+  border-left: 3px solid #ffd700;
+}
+
+.professional-column-row--fk {
+  background: linear-gradient(90deg, #eff6ff 0%, #ffffff 100%);
+  border-left: 3px solid #3b82f6;
+}
+
+.professional-col-key {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  width: 24px;
+  height: 24px;
+  margin-right: 10px;
+  flex-shrink: 0;
+  border-radius: 6px;
+}
+
+.professional-col-key--pk {
+  background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+}
+
+.professional-col-key--fk {
+  background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%);
+}
+
+.professional-col-key span {
+  font-size: 14px;
+  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.1));
+}
+
+.professional-col-details {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+  gap: 12px;
+}
+
+.professional-col-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+}
+
+.professional-col-name {
+  font-weight: 600;
+  color: #111827;
+  font-size: 13px;
+  flex-shrink: 0;
+}
+
+.professional-col-type {
+  font-size: 11px;
+  color: #64748b;
+  font-family: "SF Mono", Monaco, Menlo, Consolas, "Courier New", monospace;
+  font-weight: 500;
+  background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+  padding: 2px 8px;
+  border-radius: 4px;
+  border: 1px solid #e2e8f0;
+}
+
+.professional-col-type-badge {
+  font-size: 11px;
+  color: #64748b;
+  font-family: "SF Mono", Monaco, Menlo, Consolas, "Courier New", monospace;
+  font-weight: 500;
+  text-align: right;
+  background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+  padding: 4px 10px;
+  border-radius: 6px;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+}
+
+/* Enhanced Edges */
+.professional-erd-edge {
+  stroke: #94a3b8;
+  stroke-width: 2.5;
+}
+
+.professional-erd-edge.selected {
+  stroke: #3b82f6;
+  stroke-width: 3;
+}
+
+.react-flow__edge-path {
+  stroke: #94a3b8;
+  stroke-width: 2.5;
+  transition: all 0.2s ease;
+}
+
+.react-flow__edge:hover .react-flow__edge-path {
+  stroke: #64748b;
+  stroke-width: 3;
+}
+
+.react-flow__edge.selected .react-flow__edge-path {
+  stroke: #3b82f6;
+  stroke-width: 3;
+}
+
+/* Edge Labels */
+.react-flow__edge-text {
+  font-size: 11px;
+  font-weight: 600;
+  fill: #475569;
+}
+
+.react-flow__edge-textbg {
+  fill: #ffffff;
+  fill-opacity: 0.95;
+}
+
+/* Background */
+.improved-erd-background {
+  background-color: #f8fafc;
+}
+
+/* Watermark */
+.erd-watermark {
+  position: absolute;
+  bottom: 16px;
+  right: 16px;
+  font-size: 11px;
+  color: #94a3b8;
+  font-weight: 500;
+  letter-spacing: 0.5px;
+  pointer-events: none;
+  user-select: none;
+  opacity: 0.6;
+}
+
+/* ReactFlow Controls */
+.react-flow__controls {
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.react-flow__controls-button {
+  background: #ffffff;
+  border-bottom: 1px solid #e2e8f0;
+  transition: all 0.2s ease;
+}
+
+.react-flow__controls-button:hover {
+  background: #f8fafc;
+}
+
+.react-flow__controls-button svg {
+  fill: #475569;
+}
+
+/* Minimap - positioned bottom-left */
+.react-flow__minimap {
+  bottom: 16px !important;
+  left: 16px !important;
+  right: auto !important;
+  top: auto !important;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid #e2e8f0;
+}
+
+.react-flow__minimap-mask {
+  fill: rgba(59, 130, 246, 0.1);
+  stroke: #3b82f6;
+  stroke-width: 2;
+}
+
+.react-flow__minimap-node {
+  fill: #cbd5e1;
+  stroke: #94a3b8;
+  stroke-width: 1;
+}

@@ -1,0 +1,172 @@
+{
+  "bundle_id": "fixed_income_preaggregation_plan",
+  "domain": "fixed_income",
+  "version": "v1.0.0",
+  "description": "Preaggregation plan for fixed income pricing, yield, duration, and attribution metrics",
+  "metrics": [
+    {
+      "node_id": "clean_price",
+      "preaggregation": {
+        "type": "batch",
+        "schedule": "daily",
+        "source_tables": ["bond_prices", "bond_master"],
+        "aggregation_rules": [
+          {
+            "group_by": ["date", "security_id", "issuer"],
+            "measures": [
+              {"field": "clean_price", "function": "AVG"},
+              {"field": "dirty_price", "function": "AVG"}
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "node_id": "accrued_interest",
+      "preaggregation": {
+        "type": "batch",
+        "schedule": "daily",
+        "source_tables": ["bond_master", "coupon_schedule"],
+        "aggregation_rules": [
+          {
+            "group_by": ["date", "security_id"],
+            "measures": [
+              {"field": "coupon_rate", "function": "MAX"},
+              {"field": "face_value", "function": "MAX"},
+              {"field": "days_since_coupon", "function": "MAX"},
+              {"field": "days_in_period", "function": "MAX"}
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "node_id": "yield_to_maturity",
+      "preaggregation": {
+        "type": "batch",
+        "schedule": "daily",
+        "source_tables": ["bond_prices", "bond_master", "cash_flows"],
+        "aggregation_rules": [
+          {
+            "group_by": ["date", "security_id"],
+            "measures": [
+              {"field": "settlement_date", "function": "MAX"},
+              {"field": "maturity_date", "function": "MAX"},
+              {"field": "coupon_rate", "function": "MAX"},
+              {"field": "clean_price", "function": "AVG"},
+              {"field": "redemption_value", "function": "MAX"},
+              {"field": "coupon_frequency", "function": "MAX"},
+              {"field": "day_count_basis", "function": "MAX"}
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "node_id": "yield_to_worst",
+      "preaggregation": {
+        "type": "batch",
+        "schedule": "daily",
+        "source_tables": ["yield_scenarios", "bond_master"],
+        "aggregation_rules": [
+          {
+            "group_by": ["date", "security_id"],
+            "measures": [
+              {"field": "yield_scenario", "function": "MIN"}
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "node_id": "macaulay_duration",
+      "preaggregation": {
+        "type": "batch",
+        "schedule": "daily",
+        "source_tables": ["bond_cash_flows", "bond_prices"],
+        "aggregation_rules": [
+          {
+            "group_by": ["date", "security_id"],
+            "measures": [
+              {"field": "pv_cash_flow", "function": "SUM"},
+              {"field": "time_period", "function": "AVG"},
+              {"field": "clean_price", "function": "AVG"}
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "node_id": "modified_duration",
+      "preaggregation": {
+        "type": "batch",
+        "schedule": "daily",
+        "source_tables": ["bond_master", "bond_prices"],
+        "aggregation_rules": [
+          {
+            "group_by": ["date", "security_id"],
+            "measures": [
+              {"field": "macaulay_duration", "function": "AVG"},
+              {"field": "ytm", "function": "AVG"},
+              {"field": "coupon_frequency", "function": "MAX"}
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "node_id": "convexity",
+      "preaggregation": {
+        "type": "batch",
+        "schedule": "daily",
+        "source_tables": ["bond_cash_flows", "bond_prices"],
+        "aggregation_rules": [
+          {
+            "group_by": ["date", "security_id"],
+            "measures": [
+              {"field": "pv_cash_flow", "function": "SUM"},
+              {"field": "time_period", "function": "SUM"},
+              {"field": "clean_price", "function": "AVG"},
+              {"field": "ytm", "function": "AVG"}
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "node_id": "oas",
+      "preaggregation": {
+        "type": "batch",
+        "schedule": "daily",
+        "source_tables": ["bond_prices", "benchmark_curves", "bond_cash_flows"],
+        "aggregation_rules": [
+          {
+            "group_by": ["date", "security_id"],
+            "measures": [
+              {"field": "clean_price", "function": "AVG"},
+              {"field": "benchmark_curve", "function": "AVG"}
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "node_id": "total_return",
+      "preaggregation": {
+        "type": "batch",
+        "schedule": "monthly",
+        "source_tables": ["bond_returns", "coupon_payments", "price_changes"],
+        "aggregation_rules": [
+          {
+            "group_by": ["date", "security_id", "portfolio"],
+            "measures": [
+              {"field": "coupon_return", "function": "SUM"},
+              {"field": "price_return", "function": "SUM"},
+              {"field": "reinvestment_income", "function": "SUM"}
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

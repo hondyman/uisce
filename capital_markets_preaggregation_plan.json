@@ -1,0 +1,54 @@
+{
+  "bundle_id": "capital_markets_preaggregation_plan",
+  "domain": "capital_markets",
+  "version": "v1.0.0",
+  "description": "Preaggregation plan for capital markets metrics",
+  "metrics": [
+    {
+      "node_id": "value_at_risk",
+      "preaggregation": {
+        "type": "batch",
+        "schedule": "daily",
+        "source_tables": ["portfolio_returns", "market_data"],
+        "aggregation_rules": [
+          {
+            "group_by": ["date", "portfolio_id"],
+            "measures": [
+              {"field": "daily_return", "function": "STDEV"},
+              {"field": "portfolio_value", "function": "SUM"}
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "node_id": "sharpe_ratio",
+      "preaggregation": {
+        "type": "batch",
+        "schedule": "weekly",
+        "source_tables": ["portfolio_returns", "risk_free_rate"],
+        "aggregation_rules": [
+          {
+            "group_by": ["date", "portfolio_id"],
+            "measures": [
+              {"field": "portfolio_return", "function": "AVG"},
+              {"field": "risk_free_return", "function": "AVG"},
+              {"field": "portfolio_volatility", "function": "STDEV"}
+            ]
+          }
+        ]
+      }
+    }
+  ],
+  "dependencies": {
+    "required_tables": [
+      "portfolio_returns",
+      "market_data",
+      "risk_free_rate"
+    ],
+    "data_quality_checks": [
+      {"table": "portfolio_returns", "check": "not_null", "fields": ["return_value", "date"]},
+      {"table": "market_data", "check": "valid_range", "fields": ["price"], "min": 0}
+    ]
+  }
+}

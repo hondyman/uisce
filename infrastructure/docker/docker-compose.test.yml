@@ -1,0 +1,15 @@
+version: '3.8'
+services:
+  postgres:
+    image: postgres:14
+    environment:
+      POSTGRES_USER: semlayer_user
+      POSTGRES_PASSWORD: semlayer_pass
+      POSTGRES_DB: semlayer_db
+    ports:
+      - '55432:5432'
+    volumes:
+      - db_test_data:/var/lib/postgresql/data
+
+volumes:
+  db_test_data:

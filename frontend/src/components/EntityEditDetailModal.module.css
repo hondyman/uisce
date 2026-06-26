@@ -1,0 +1,40 @@
+.side-pane {
+  padding: 16px;
+}
+
+.inherited-section {
+  margin-bottom: 24px;
+}
+
+.empty-state {
+  text-align: center;
+  padding: 40px;
+  color: #888;
+}
+
+.modal-content {
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.semantic-term-card {
+  padding: 12px;
+  border: 1px solid #f0f0f0;
+  border-radius: 4px;
+  margin-bottom: 8px;
+  cursor: pointer;
+  transition: background-color 0.3s;
+}
+
+.semantic-term-card:hover {
+  background-color: #f5f5f5;
+}
+
+.semantic-term-card-name {
+  font-size: 16px;
+}
+
+.semantic-term-card-details {
+  font-size: 12px;
+  color: #888;
+}

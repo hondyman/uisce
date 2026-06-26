@@ -1,0 +1,49 @@
+version: '3.8'
+services:
+  ci_postgres:
+    image: postgres:15
+    environment:
+      POSTGRES_USER: ops
+      POSTGRES_PASSWORD: ops_pass
+      POSTGRES_DB: ops
+    ports:
+      - '5432:5432'
+    healthcheck:
+      test: ['CMD-SHELL','pg_isready -U ops']
+      interval: 5s
+      retries: 20
+
+  minio:
+    image: minio/minio:latest
+    command: server /data
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    ports:
+      - '9000:9000'
+    healthcheck:
+      test: ['CMD','/bin/sh','-c','curl -f http://localhost:9000/minio/health/live || exit 1']
+      interval: 5s
+      retries: 20
+
+  hive-metastore:
+    image: quay.io/astral/hive-metastore:3.1.2
+    environment:
+      HIVE_METASTORE_DB_HOST: ci_postgres
+      HIVE_METASTORE_DB_PORT: 5432
+      HIVE_METASTORE_DB_NAME: ops
+      HIVE_METASTORE_DB_USER: ops
+      HIVE_METASTORE_DB_PASS: ops_pass
+    ports:
+      - '9083:9083'
+    depends_on:
+      - ci_postgres
+
+  trino:
+    image: trinodb/trino:latest
+    volumes:
+      - ./trino/catalog:/etc/trino/catalog
+    ports:
+      - '8080:8080'
+    depends_on:
+      - hive-metastore

@@ -1,0 +1,14 @@
+apiVersion: v2
+name: ai-builder
+description: AI Builder - ML model training and inference service
+type: application
+version: 1.0.0
+appVersion: "1.0.0"
+
+maintainers:
+- name: Semlayer Platform Team
+  email: platform@semlayer.io
+
+annotations:
+  category: ai
+  component: ml

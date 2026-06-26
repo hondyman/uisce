@@ -1,0 +1,36 @@
+id: card_dividend_income
+type: FeedCard
+version: 1.0.0
+name: Dividend Income Card
+status: draft
+persona: persona_market_strategist
+eligibility:
+- "exists(holdings, h, h.symbol == symbol) and exists(dividends, d, d.symbol == symbol and d.date >= now())"
+bindings:
+  data:
+  - cube.holdings_dividend_projection
+fields:
+- symbol
+- shares
+- dividend_per_share
+- expected_income
+tone:
+  variant: neutral_informational
+disclosures:
+- "Dividend taxation depends on account type and jurisdiction"
+ctas:
+- id: reinvest
+  label: Reinvest automatically
+  action: SetDividendInstruction
+  guard: "account_type != 'retirement' or allow_reinvest"
+  approval_required: false
+- id: keep_cash
+  label: Keep as cash
+  action: SetDividendInstruction
+  approval_required: false
+rank:
+  score: "portfolio_weight(symbol, holdings) * 10 + recency(dividend_date)"
+suppression:
+- "delivered_within_days(7)"
+lineage:
+- starrocks.dividend_mv

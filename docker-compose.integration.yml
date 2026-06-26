@@ -1,0 +1,99 @@
+version: '3.8'
+services:
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: alpha
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    ports:
+      - "5432:5432"
+
+  redis:
+    image: redis:7-alpine
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli ping | grep PONG"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    ports:
+      - "6379:6379"
+
+  redpanda:
+    image: docker.redpanda.com/redpandadata/redpanda:latest
+    command:
+      - redpanda
+      - start
+      - --overprovisioned
+      - --smp
+      - "1"
+      - --memory
+      - "1G"
+      - --reserve-memory
+      - "0M"
+      - --check=false
+      - --kafka-addr
+      - PLAINTEXT://0.0.0.0:9092
+      - --advertise-kafka-addr
+      - PLAINTEXT://redpanda:9092
+      - --pandaproxy-addr
+      - 0.0.0.0:8082
+      - --schema-registry-addr
+      - 0.0.0.0:8081
+    ports:
+      - "9092:9092"
+      - "8081:8081"
+
+  temporal:
+    image: temporalio/auto-setup:latest
+    environment:
+      - DB=postgres12
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - POSTGRES_USER=postgres
+      - POSTGRES_PWD=postgres
+      - POSTGRES_DB=temporal
+      - POSTGRES_HOST=postgres
+    ports:
+      - "7233:7233"
+    depends_on:
+      - postgres
+
+  entity-manager:
+    build:
+      context: .
+      dockerfile: entity-manager/Dockerfile
+    environment:
+      - DATABASE_URL=postgres://postgres:postgres@postgres:5432/alpha?sslmode=disable
+      - PORT=8080
+      - REDIS_ADDR=redis:6379
+      - KAFKA_BROKERS=redpanda:9092
+      - TEMPORAL_HOSTPORT=temporal:7233
+      - KAFKA_PRODUCE_RETRIES=8
+      - KAFKA_PRODUCE_DELAY_MS=1000
+      - KAFKA_CONNECT_RETRIES=8
+      - KAFKA_CONNECT_DELAY_MS=1000
+      - TEST_CONSUME_TIMEOUT_MS=60000
+    ports:
+      - "8087:8080"
+    depends_on:
+      - postgres
+      - redis
+      - redpanda
+      - temporal
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8080/ready || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+networks:
+  default:
+    name: semlayer-test-net
+    driver: bridge

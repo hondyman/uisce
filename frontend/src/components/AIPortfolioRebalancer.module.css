@@ -1,0 +1,25 @@
+.statusInfo {
+  background-color: rgba(0, 0, 0, 0.2);
+  color: var(--status-color);
+}
+
+.driftText {
+  color: var(--drift-color);
+}
+
+.driftBar {
+  width: var(--drift-width);
+  background-color: var(--drift-color);
+}
+
+.tradeAction {
+  color: var(--trade-action-color);
+}
+
+.sellAction {
+  --trade-action-color: #FF4D4D;
+}
+
+.buyAction {
+  --trade-action-color: #00D18F;
+}

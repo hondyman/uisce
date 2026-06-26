@@ -1,0 +1,227 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Dynamic Measure Contract",
+  "description": "Schema contract for dynamic measures in the semantic layer",
+  "type": "object",
+  "properties": {
+    "node_id": {
+      "type": "string",
+      "description": "Unique identifier for the dynamic measure",
+      "pattern": "^[a-zA-Z_][a-zA-Z0-9_]*$",
+      "minLength": 1,
+      "maxLength": 100
+    },
+    "node_type": {
+      "type": "string",
+      "enum": ["dynamic_measure"],
+      "description": "Type of semantic node"
+    },
+    "name": {
+      "type": "string",
+      "description": "Human-readable name of the measure",
+      "minLength": 1,
+      "maxLength": 200
+    },
+    "description": {
+      "type": "string",
+      "description": "Detailed description of what the measure represents",
+      "minLength": 1,
+      "maxLength": 500
+    },
+    "source_enum": {
+      "type": "string",
+      "description": "Source table.column that generated this measure",
+      "pattern": "^[a-zA-Z_][a-zA-Z0-9_]*\\.[a-zA-Z_][a-zA-Z0-9_]*$"
+    },
+    "sql": {
+      "type": "string",
+      "description": "SQL expression for the measure calculation",
+      "minLength": 1,
+      "maxLength": 1000
+    },
+    "type": {
+      "type": "string",
+      "enum": ["count", "sum", "avg", "min", "max"],
+      "description": "Aggregation type for the measure"
+    },
+    "tags": {
+      "type": "array",
+      "description": "Tags for categorization and filtering",
+      "items": {
+        "type": "string",
+        "pattern": "^[a-zA-Z0-9_-]+$",
+        "minLength": 1,
+        "maxLength": 50
+      },
+      "minItems": 1,
+      "maxItems": 10
+    },
+    "owner": {
+      "type": "string",
+      "description": "Owner/steward responsible for this measure",
+      "pattern": "^[a-zA-Z0-9_-]+$",
+      "minLength": 1,
+      "maxLength": 50
+    },
+    "version": {
+      "type": "string",
+      "description": "Version of the measure definition",
+      "pattern": "^v\\d+\\.\\d+(\\.\\d+)?$"
+    },
+    "golden_path": {
+      "type": "boolean",
+      "description": "Whether this measure is on the golden path (approved)",
+      "default": false
+    },
+    "schema_hash": {
+      "type": "string",
+      "description": "SHA256 hash of the schema definition for drift detection",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "data_quality_contract": {
+      "type": "object",
+      "description": "Data quality expectations and SLAs",
+      "properties": {
+        "freshness_sla": {
+          "type": "string",
+          "description": "Maximum acceptable data age",
+          "pattern": "^\\d+[dhms]$"
+        },
+        "completeness_threshold": {
+          "type": "number",
+          "description": "Minimum completeness percentage",
+          "minimum": 0,
+          "maximum": 100
+        },
+        "accuracy_threshold": {
+          "type": "number",
+          "description": "Minimum accuracy percentage",
+          "minimum": 0,
+          "maximum": 100
+        }
+      },
+      "additionalProperties": false
+    },
+    "lineage": {
+      "type": "object",
+      "description": "Data lineage information",
+      "properties": {
+        "source_tables": {
+          "type": "array",
+          "description": "Source tables used in this measure",
+          "items": {
+            "type": "string",
+            "pattern": "^[a-zA-Z_][a-zA-Z0-9_]*$"
+          },
+          "minItems": 1
+        },
+        "upstream_measures": {
+          "type": "array",
+          "description": "Measures this measure depends on",
+          "items": {
+            "type": "string",
+            "pattern": "^[a-zA-Z_][a-zA-Z0-9_]*$"
+          }
+        },
+        "transformation_logic": {
+          "type": "string",
+          "description": "Description of transformation logic",
+          "maxLength": 1000
+        }
+      },
+      "required": ["source_tables"],
+      "additionalProperties": false
+    },
+    "steward_group": {
+      "type": "string",
+      "description": "Steward group responsible for governance",
+      "pattern": "^[a-zA-Z0-9_-]+$",
+      "minLength": 1,
+      "maxLength": 50
+    },
+    "anomaly_detection": {
+      "type": "object",
+      "description": "Anomaly detection configuration",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": false
+        },
+        "method": {
+          "type": "string",
+          "enum": ["z_score", "iqr", "isolation_forest", "prophet"],
+          "default": "z_score"
+        },
+        "threshold": {
+          "type": "number",
+          "description": "Anomaly detection threshold",
+          "minimum": 0,
+          "default": 3.0
+        },
+        "lookback_period": {
+          "type": "string",
+          "description": "Historical period for anomaly detection",
+          "pattern": "^\\d+[dhms]$",
+          "default": "30d"
+        }
+      },
+      "additionalProperties": false
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Creation timestamp"
+    },
+    "updated_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Last update timestamp"
+    },
+    "review_status": {
+      "type": "string",
+      "enum": ["draft", "pending_review", "approved", "rejected", "deprecated"],
+      "description": "Current review status",
+      "default": "draft"
+    },
+    "review_comments": {
+      "type": "array",
+      "description": "Review comments and feedback",
+      "items": {
+        "type": "object",
+        "properties": {
+          "user": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9_-]+$"
+          },
+          "comment": {
+            "type": "string",
+            "maxLength": 1000
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "action": {
+            "type": "string",
+            "enum": ["comment", "approve", "reject", "flag"]
+          }
+        },
+        "required": ["user", "comment", "timestamp"],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": [
+    "node_id",
+    "node_type",
+    "name",
+    "description",
+    "source_enum",
+    "sql",
+    "type",
+    "tags",
+    "owner",
+    "version"
+  ],
+  "additionalProperties": false
+}

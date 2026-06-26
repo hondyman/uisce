@@ -1,0 +1,71 @@
+table:
+  name: users
+  schema: public
+object_relationships:
+  - name: tenant
+    using:
+      foreign_key_constraint_on: tenant_id
+
+insert_permissions:
+  - role: user
+    permission:
+      check:
+        tenant_id:
+          _eq: X-Hasura-Tenant-Id
+      columns:
+        - username
+        - email
+        - tenant_id
+select_permissions:
+  - role: anonymous
+    permission:
+      columns:
+        - id
+        - username
+        - first_name
+        - last_name
+      filter:
+        id:
+          _eq: "00000000-0000-0000-0000-000000000000"
+  - role: steward
+    permission:
+      columns:
+        - id
+        - username
+        - email
+        - tenant_id
+        - first_name
+        - last_name
+      filter:
+        tenant_id:
+          _eq: X-Hasura-Tenant-Id
+  - role: user
+    permission:
+      columns:
+        - id
+        - username
+        - email
+        - tenant_id
+        - first_name
+        - last_name
+      filter:
+        tenant_id:
+          _eq: X-Hasura-Tenant-Id
+update_permissions:
+  - role: user
+    permission:
+      columns:
+        - username
+        - email
+        - first_name
+        - last_name
+      filter:
+        tenant_id:
+          _eq: X-Hasura-Tenant-Id
+      check: null
+delete_permissions:
+  - role: steward
+    permission:
+      filter:
+        tenant_id:
+          _eq: X-Hasura-Tenant-Id

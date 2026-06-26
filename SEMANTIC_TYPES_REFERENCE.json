@@ -1,0 +1,244 @@
+{
+  "semantic_types_reference": [
+    {
+      "id": "dimension_string_default",
+      "label": "Dimension (string, default)",
+      "semantic_type": "Dimension",
+      "data_type": "string",
+      "format": "default",
+      "notes": ""
+    },
+    {
+      "id": "dimension_string_imageurl",
+      "label": "Dimension (string, imageUrl)",
+      "semantic_type": "Dimension",
+      "data_type": "string",
+      "format": "imageUrl",
+      "notes": "Dimension Format"
+    },
+    {
+      "id": "dimension_string_link",
+      "label": "Dimension (string, link)",
+      "semantic_type": "Dimension",
+      "data_type": "string",
+      "format": "link",
+      "notes": "Dimension Format"
+    },
+    {
+      "id": "dimension_string_currency",
+      "label": "Dimension (string, currency)",
+      "semantic_type": "Dimension",
+      "data_type": "string",
+      "format": "currency",
+      "notes": "Dimension Format (If underlying type is number and formatted as string in SQL)"
+    },
+    {
+      "id": "dimension_string_percent",
+      "label": "Dimension (string, percent)",
+      "semantic_type": "Dimension",
+      "data_type": "string",
+      "format": "percent",
+      "notes": "Dimension Format (If underlying type is number and formatted as string in SQL)"
+    },
+    {
+      "id": "dimension_number_default",
+      "label": "Dimension (number, default)",
+      "semantic_type": "Dimension",
+      "data_type": "number",
+      "format": "default",
+      "notes": ""
+    },
+    {
+      "id": "dimension_number_id",
+      "label": "Dimension (number, id)",
+      "semantic_type": "Dimension",
+      "data_type": "number",
+      "format": "id",
+      "notes": "Dimension Format"
+    },
+    {
+      "id": "dimension_number_currency",
+      "label": "Dimension (number, currency)",
+      "semantic_type": "Dimension",
+      "data_type": "number",
+      "format": "currency",
+      "notes": "Dimension Format"
+    },
+    {
+      "id": "dimension_number_percent",
+      "label": "Dimension (number, percent)",
+      "semantic_type": "Dimension",
+      "data_type": "number",
+      "format": "percent",
+      "notes": "Dimension Format"
+    },
+    {
+      "id": "dimension_boolean_default",
+      "label": "Dimension (boolean, default)",
+      "semantic_type": "Dimension",
+      "data_type": "boolean",
+      "format": "default",
+      "notes": ""
+    },
+    {
+      "id": "dimension_time_default",
+      "label": "Dimension (time, default)",
+      "semantic_type": "Dimension",
+      "data_type": "time",
+      "format": "default",
+      "notes": ""
+    },
+    {
+      "id": "dimension_geo_default",
+      "label": "Dimension (geo, default)",
+      "semantic_type": "Dimension",
+      "data_type": "geo",
+      "format": "default",
+      "notes": ""
+    },
+    {
+      "id": "measure_string_default",
+      "label": "Measure (string, default)",
+      "semantic_type": "Measure",
+      "data_type": "string",
+      "format": "default",
+      "notes": "Measure Type"
+    },
+    {
+      "id": "measure_time_default",
+      "label": "Measure (time, default)",
+      "semantic_type": "Measure",
+      "data_type": "time",
+      "format": "default",
+      "notes": "Measure Type"
+    },
+    {
+      "id": "measure_boolean_default",
+      "label": "Measure (boolean, default)",
+      "semantic_type": "Measure",
+      "data_type": "boolean",
+      "format": "default",
+      "notes": "Measure Type"
+    },
+    {
+      "id": "measure_number_default",
+      "label": "Measure (number, default)",
+      "semantic_type": "Measure",
+      "data_type": "number",
+      "format": "default",
+      "notes": "Measure Type"
+    },
+    {
+      "id": "measure_number_percent",
+      "label": "Measure (number, percent)",
+      "semantic_type": "Measure",
+      "data_type": "number",
+      "format": "percent",
+      "notes": "Measure Format"
+    },
+    {
+      "id": "measure_number_currency",
+      "label": "Measure (number, currency)",
+      "semantic_type": "Measure",
+      "data_type": "number",
+      "format": "currency",
+      "notes": "Measure Format"
+    },
+    {
+      "id": "measure_number_agg_default",
+      "label": "Measure (number_agg, default)",
+      "semantic_type": "Measure",
+      "data_type": "number_agg",
+      "format": "default",
+      "notes": "Measure Type"
+    },
+    {
+      "id": "measure_number_agg_percent",
+      "label": "Measure (number_agg, percent)",
+      "semantic_type": "Measure",
+      "data_type": "number_agg",
+      "format": "percent",
+      "notes": "Measure Format"
+    },
+    {
+      "id": "measure_number_agg_currency",
+      "label": "Measure (number_agg, currency)",
+      "semantic_type": "Measure",
+      "data_type": "number_agg",
+      "format": "currency",
+      "notes": "Measure Format"
+    },
+    {
+      "id": "measure_count_default",
+      "label": "Measure (count, default)",
+      "semantic_type": "Measure",
+      "data_type": "count",
+      "format": "default",
+      "notes": "Measure Type"
+    },
+    {
+      "id": "measure_count_distinct_default",
+      "label": "Measure (count_distinct, default)",
+      "semantic_type": "Measure",
+      "data_type": "count_distinct",
+      "format": "default",
+      "notes": "Measure Type"
+    },
+    {
+      "id": "measure_count_distinct_approx_default",
+      "label": "Measure (count_distinct_approx, default)",
+      "semantic_type": "Measure",
+      "data_type": "count_distinct_approx",
+      "format": "default",
+      "notes": "Measure Type"
+    },
+    {
+      "id": "measure_sum_default",
+      "label": "Measure (sum, default)",
+      "semantic_type": "Measure",
+      "data_type": "sum",
+      "format": "default",
+      "notes": "Measure Type"
+    },
+    {
+      "id": "measure_sum_currency",
+      "label": "Measure (sum, currency)",
+      "semantic_type": "Measure",
+      "data_type": "sum",
+      "format": "currency",
+      "notes": "Measure Format"
+    },
+    {
+      "id": "measure_avg_default",
+      "label": "Measure (avg, default)",
+      "semantic_type": "Measure",
+      "data_type": "avg",
+      "format": "default",
+      "notes": "Measure Type"
+    },
+    {
+      "id": "measure_min_default",
+      "label": "Measure (min, default)",
+      "semantic_type": "Measure",
+      "data_type": "min",
+      "format": "default",
+      "notes": "Measure Type"
+    },
+    {
+      "id": "measure_max_default",
+      "label": "Measure (max, default)",
+      "semantic_type": "Measure",
+      "data_type": "max",
+      "format": "default",
+      "notes": "Measure Type"
+    },
+    {
+      "id": "time_time_default",
+      "label": "Time (time, default)",
+      "semantic_type": "Time",
+      "data_type": "time",
+      "format": "default",
+      "notes": "Dedicated Semantic Time Object"
+    }
+  ]
+}

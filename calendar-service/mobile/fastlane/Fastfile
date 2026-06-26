@@ -1,0 +1,18 @@
+default_platform(:ios)
+
+platform :ios do
+  desc "Push a new beta build to TestFlight"
+  lane :beta do
+    increment_build_number(xcodeproj: "CalendarApp.xcodeproj")
+    build_app(workspace: "CalendarApp.xcworkspace", scheme: "CalendarApp")
+    upload_to_testflight
+  end
+end
+
+platform :android do
+  desc "Submit a new Beta Build to Google Play"
+  lane :beta do
+    gradle(task: "clean assembleRelease")
+    upload_to_play_store(track: 'internal')
+  end
+end

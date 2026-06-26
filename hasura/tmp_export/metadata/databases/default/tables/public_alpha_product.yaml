@@ -1,0 +1,11 @@
+table:
+  name: alpha_product
+  schema: public
+array_relationships:
+- name: tenant_products
+  using:
+    foreign_key_constraint_on:
+      column: product_id
+      table:
+        name: tenant_product
+        schema: public

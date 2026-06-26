@@ -1,0 +1,54 @@
+---
+enums: []
+input_objects: []
+objects:
+- name: BusinessTerm
+  fields:
+  - name: id
+    type: String!
+  - name: name
+    type: String!
+  - name: display_name
+    type: String
+  - name: description
+    type: String
+  - name: category
+    type: String
+- name: SearchBusinessTermsResponse
+  fields:
+  - name: business_terms
+    type: '[BusinessTerm!]!'
+  - name: total
+    type: Int!
+- name: ValidationResponse
+  fields:
+  - name: valid
+    type: Boolean!
+  - name: errors
+    type: '[String!]'
+  - name: warnings
+    type: '[String!]'
+- name: LineageNode
+  fields:
+  - name: id
+    type: String!
+  - name: name
+    type: String!
+  - name: type
+    type: String!
+- name: LineageEdge
+  fields:
+  - name: source
+    type: String!
+  - name: target
+    type: String!
+  - name: relationship
+    type: String!
+- name: LineageResponse
+  fields:
+  - name: nodes
+    type: '[LineageNode!]!'
+  - name: edges
+    type: '[LineageEdge!]!'
+scalars:
+- name: jsonb

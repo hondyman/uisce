@@ -1,0 +1,16 @@
+apiVersion: v2
+name: api-gateway
+description: Semlayer API Gateway - Entry point for all API requests
+type: application
+version: 1.0.0
+appVersion: "1.0.0"
+
+maintainers:
+- name: Semlayer Platform Team
+  email: platform@semlayer.io
+
+keywords:
+- api-gateway
+- ingress
+- authentication
+- rate-limiting

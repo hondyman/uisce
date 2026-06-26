@@ -1,0 +1,78 @@
+table:
+  name: tenant_product_datasource
+  schema: public
+object_relationships:
+- name: alpha_tenant_instance
+  using:
+    foreign_key_constraint_on: alpha_tenant_instance_id
+- name: tenant_product
+  using:
+    foreign_key_constraint_on: tenant_product_id
+- name: connection
+  using:
+    foreign_key_constraint_on: connection_id
+- name: tenant_instance
+  using:
+    foreign_key_constraint_on: tenant_instance_id
+select_permissions:
+- role: user
+  permission:
+    columns:
+    - id
+    - tenant_product_id
+    - alpha_tenant_instance_id
+    - source_name
+    - config
+    - is_active
+    - last_scan_at
+    - last_scan_status
+    - connection_id
+    - created_at
+    - updated_at
+    - tenant_instance_id
+    - core_id
+    filter:
+      tenant_product:
+        tenant_instance:
+          tenant_id:
+            _eq: X-Hasura-Tenant-Id
+insert_permissions:
+- role: user
+  permission:
+    check:
+      tenant_product:
+        tenant_instance:
+          tenant_id:
+            _eq: X-Hasura-Tenant-Id
+    columns:
+    - tenant_product_id
+    - alpha_tenant_instance_id
+    - source_name
+    - config
+    - is_active
+    - connection_id
+    - tenant_instance_id
+    - core_id
+update_permissions:
+- role: user
+  permission:
+    columns:
+    - source_name
+    - config
+    - is_active
+    - connection_id
+    - last_scan_at
+    - last_scan_status
+    filter:
+      tenant_product:
+        tenant_instance:
+          tenant_id:
+            _eq: X-Hasura-Tenant-Id
+delete_permissions:
+- role: user
+  permission:
+    filter:
+      tenant_product:
+        tenant_instance:
+          tenant_id:
+            _eq: X-Hasura-Tenant-Id

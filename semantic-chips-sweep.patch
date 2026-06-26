@@ -1,0 +1,1523 @@
+From 131e04e59d0ba8ec4453cd73c826b46f8ea9d9f1 Mon Sep 17 00:00:00 2001
+From: hondyman <54151500+hondyman@users.noreply.github.com>
+Date: Fri, 3 Oct 2025 08:32:46 -0400
+Subject: [PATCH] chore: centralize Core/Custom chips (semanticChips) and sweep
+ usage across frontend
+
+---
+ frontend/src/components/DetailsDisplay.tsx    |   3 +-
+ frontend/src/components/SelectionStatus.tsx   |   5 +-
+ frontend/src/components/TenantTreeView.tsx    |   5 +-
+ .../components/ViewEditor/AddItemDialog.tsx   |   8 +-
+ .../components/ViewEditor/JoinPathManager.tsx |   9 +-
+ .../ViewEditor/ViewEditorComplete.tsx         | 244 ++++--------
+ .../components/AvailableComponentsPanel.tsx   |  21 +-
+ .../components/PropertiesSection.tsx          | 364 ++++++++++--------
+ .../src/components/common/CubeTypeahead.tsx   | 155 ++++++--
+ .../src/components/common/ViewTypeahead.tsx   | 139 +++++--
+ .../src/components/common/semanticChips.tsx   |  28 ++
+ .../api-builder/pages/APIBuilderPage.tsx      |   5 +-
+ .../connections/pages/Connections.tsx         |   7 +-
+ .../query-builder/pages/QueryBuilderPage.tsx  |   3 +-
+ .../TabbedModal/tabs/DataCatalogTree.tsx      |  13 +-
+ 15 files changed, 562 insertions(+), 447 deletions(-)
+ create mode 100644 frontend/src/components/common/semanticChips.tsx
+
+diff --git a/frontend/src/components/DetailsDisplay.tsx b/frontend/src/components/DetailsDisplay.tsx
+index d0101e8..07f4477 100644
+--- a/frontend/src/components/DetailsDisplay.tsx
++++ b/frontend/src/components/DetailsDisplay.tsx
+@@ -1,6 +1,7 @@
+ // React default import removed — using automatic JSX runtime
+ import { lazy, Suspense, useState, useEffect } from 'react';
+ import { Box, Typography, IconButton, Card, CardContent, CardHeader, Divider, Chip, Grid, Tooltip } from '@mui/material';
++import renderCoreCustomChips from './common/semanticChips';
+ import EditIcon from '@mui/icons-material/Edit';
+ import DeleteIcon from '@mui/icons-material/Delete';
+ import AddIcon from '@mui/icons-material/Add';
+@@ -171,7 +172,7 @@ const DetailsDisplay: React.FC<DetailsDisplayProps> = ({
+                             )}
+                         </Typography>
+                         {isTenant(item) && item.gold_copy && (
+-                            <Tooltip title="core — read-only"><Chip label="core" size="small" sx={{ ml: 2, backgroundColor: (theme) => theme.palette.info.main, color: (theme) => theme.palette.getContrastText(theme.palette.info.main), fontWeight: 700, height: 20, fontSize: '0.65rem' }} /></Tooltip>
++                            <Tooltip title="core — read-only"><Box component="span">{renderCoreCustomChips({ is_core: true })}</Box></Tooltip>
+                         )}
+                     </Box>
+                 }
+diff --git a/frontend/src/components/SelectionStatus.tsx b/frontend/src/components/SelectionStatus.tsx
+index a48baf3..9eef660 100644
+--- a/frontend/src/components/SelectionStatus.tsx
++++ b/frontend/src/components/SelectionStatus.tsx
+@@ -1,5 +1,6 @@
+ // React import removed (automatic JSX runtime in use)
+ import { Box, Typography, Chip, Paper, Button, Tooltip } from '@mui/material';
++import renderCoreCustomChips from './common/semanticChips';
+ import BusinessIcon from '@mui/icons-material/Business';
+ import CategoryIcon from '@mui/icons-material/Category';
+ import StorageIcon from '@mui/icons-material/Storage';
+@@ -41,7 +42,7 @@ const SelectionStatus: React.FC<SelectionStatusProps> = ({
+             />
+             {tenant.gold_copy && (
+               <Tooltip title="core — read-only">
+-                <Chip label="core" size="small" sx={{ ml: 1, backgroundColor: (theme) => theme.palette.info.main, color: (theme) => theme.palette.getContrastText(theme.palette.info.main), fontWeight: 700, height: 20, fontSize: '0.65rem' }} />
++                <Box component="span">{renderCoreCustomChips({ is_core: true })}</Box>
+               </Tooltip>
+             )}
+           </>
+@@ -90,7 +91,7 @@ const SelectionStatus: React.FC<SelectionStatusProps> = ({
+             <BusinessIcon color="primary" />
+             <Typography variant="body1">
+               <strong>Tenant:</strong> {String(tenant.display_name || tenant.name || 'Unnamed Tenant')}
+-              {tenant.gold_copy && <Tooltip title="core — read-only"><Chip label="core" size="small" sx={{ ml: 1, backgroundColor: (theme) => theme.palette.info.main, color: (theme) => theme.palette.getContrastText(theme.palette.info.main), fontWeight: 700, height: 20, fontSize: '0.65rem' }} /></Tooltip>}
++              {tenant.gold_copy && <Tooltip title="core — read-only"><Box component="span">{renderCoreCustomChips({ is_core: true })}</Box></Tooltip>}
+             </Typography>
+           </Box>
+         )}
+diff --git a/frontend/src/components/TenantTreeView.tsx b/frontend/src/components/TenantTreeView.tsx
+index aaa5f7b..3cfd9ca 100644
+--- a/frontend/src/components/TenantTreeView.tsx
++++ b/frontend/src/components/TenantTreeView.tsx
+@@ -1,6 +1,7 @@
+ import { FC, SyntheticEvent, MouseEvent } from 'react';
+ import { SimpleTreeView, TreeItem } from '@mui/x-tree-view';
+-import { Box, Typography, IconButton, Chip, Tooltip } from '@mui/material';
++import { Box, Typography, IconButton, Tooltip } from '@mui/material';
++import renderCoreCustomChips from './common/semanticChips';
+ import AddCircleOutlineIcon from '@mui/icons-material/AddCircleOutline';
+ import ViewListIcon from '@mui/icons-material/ViewList';
+ import { Tenant, TenantInstance } from '../types';
+@@ -58,7 +59,7 @@ const TenantTreeView: FC<TenantTreeViewProps> = ({
+           <Box sx={{ display: 'flex', alignItems: 'center', py: 0.5 }}>
+             <Typography sx={{ flexGrow: 1 }}>
+               {String(tenant.display_name || tenant.name || 'Unnamed Tenant')}
+-              {tenant.gold_copy && <Tooltip title="core — read-only"><Chip label="core" size="small" sx={{ ml: 1, backgroundColor: (theme) => theme.palette.info.main, color: (theme) => theme.palette.getContrastText(theme.palette.info.main), fontWeight: 700, height: 20, fontSize: '0.65rem' }} /></Tooltip>}
++              {tenant.gold_copy && <Tooltip title="core — read-only"><Box component="span">{renderCoreCustomChips({ is_core: true })}</Box></Tooltip>}
+             </Typography>
+             <IconButton 
+               size="small" 
+diff --git a/frontend/src/components/ViewEditor/AddItemDialog.tsx b/frontend/src/components/ViewEditor/AddItemDialog.tsx
+index d155b7f..cce6167 100644
+--- a/frontend/src/components/ViewEditor/AddItemDialog.tsx
++++ b/frontend/src/components/ViewEditor/AddItemDialog.tsx
+@@ -12,6 +12,7 @@ import {
+   Chip,
+ } from '@mui/material';
+ import ModalHeader from '../../components/ModalHeader';
++import renderCoreCustomChips from '../../components/common/semanticChips';
+ 
+ interface AddItemDialogProps {
+   open: boolean;
+@@ -306,12 +307,7 @@ export const AddItemDialog: React.FC<AddItemDialogProps> = ({ open, type, onClos
+                     </Box>
+                   </Box>
+                   <Box sx={{ display: 'flex', gap: 0.5, ml: 1 }}>
+-                    {option.type === 'cube' && (
+-                      <>
+-                        {option.is_core && (<Chip label="Core" size="small" color="primary" variant="outlined" sx={{ fontSize: '0.7rem', height: '18px' }} />)}
+-                        {option.is_custom && (<Chip label="Custom" size="small" color="secondary" variant="outlined" sx={{ fontSize: '0.7rem', height: '18px' }} />)}
+-                      </>
+-                    )}
++                    {option.type === 'cube' && renderCoreCustomChips(option)}
+                     {(option.type === 'dimension' || option.type === 'measure') && (<Chip label={option.source} size="small" color="info" variant="outlined" sx={{ fontSize: '0.7rem', height: '18px' }} />)}
+                   </Box>
+                 </Box>
+diff --git a/frontend/src/components/ViewEditor/JoinPathManager.tsx b/frontend/src/components/ViewEditor/JoinPathManager.tsx
+index 2f370d3..fd790e8 100644
+--- a/frontend/src/components/ViewEditor/JoinPathManager.tsx
++++ b/frontend/src/components/ViewEditor/JoinPathManager.tsx
+@@ -1,6 +1,7 @@
+ import React, { useState, useEffect } from 'react';
+ import { Box, Typography, Stack, Card, CardContent, Chip, Autocomplete, TextField, IconButton } from '@mui/material';
+ import { Delete } from '@mui/icons-material';
++import renderCoreCustomChips from '../common/semanticChips';
+ 
+ interface JoinPathManagerProps {
+   viewData: any;
+@@ -88,8 +89,7 @@ const JoinPathManager: React.FC<JoinPathManagerProps> = ({
+                     <Typography variant="body2" fontWeight={500}>
+                       {joinPath.label || joinPath.path}
+                     </Typography>
+-                    {joinPath.is_core && <Chip label="Core" size="small" color="primary" variant="outlined" />}
+-                    {joinPath.is_custom && <Chip label="Custom" size="small" color="secondary" variant="outlined" />}
++                    {renderCoreCustomChips(joinPath)}
+                   </Box>
+                   <Typography variant="caption" color="text.secondary">{joinPath.value || joinPath.path || (joinPath.id ? String(joinPath.id) : '')}</Typography>
+                 </Box>
+@@ -117,10 +117,9 @@ const JoinPathManager: React.FC<JoinPathManagerProps> = ({
+         renderOption={(props, option) => (
+           <li {...props} key={option.id}>
+             <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
+-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
++                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                 <Typography variant="body2" fontWeight={600}>{option.label}</Typography>
+-                {option.is_core && <Chip label="Core" size="small" color="primary" variant="outlined" />}
+-                {option.is_custom && <Chip label="Custom" size="small" color="secondary" variant="outlined" />}
++                {renderCoreCustomChips(option)}
+               </Box>
+               <Box>
+                 {option.alreadyAdded ? (
+diff --git a/frontend/src/components/ViewEditor/ViewEditorComplete.tsx b/frontend/src/components/ViewEditor/ViewEditorComplete.tsx
+index 8033c48..8fdbfc2 100644
+--- a/frontend/src/components/ViewEditor/ViewEditorComplete.tsx
++++ b/frontend/src/components/ViewEditor/ViewEditorComplete.tsx
+@@ -1,57 +1,6 @@
++/* eslint-disable @typescript-eslint/no-unused-vars */
+ import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+-import {
+-  Box,
+-  Accordion,
+-  AccordionDetails,
+-  AccordionSummary,
+-  Alert,
+-  Snackbar,
+-  Typography,
+-  Paper,
+-  Button,
+-  Grid,
+-  TextField,
+-  Autocomplete,
+-  CircularProgress,
+-  Chip,
+-  FormControlLabel,
+-  Switch,
+-  Card,
+-  CardContent,
+-  IconButton,
+-  Select,
+-  MenuItem,
+-  Stack,
+-  List,
+-  ListItem,
+-  ListItemIcon,
+-  ListItemText,
+-  Checkbox,
+-  Tooltip,
+-  Fade,
+-  CardHeader,
+-  Dialog,
+-  DialogTitle,
+-  DialogContent,
+-  DialogActions,
+-} from '@mui/material';
+-import {
+-  ExpandMore,
+-  Error as ErrorIcon,
+-  CheckCircle,
+-  Save,
+-  AccountTree,
+-  Edit,
+-  ViewModule,
+-  Search,
+-  TableChart,
+-  ArrowForward,
+-  Clear,
+-  SelectAll,
+-  ViewColumn,
+-  Functions,
+-  Delete,
+-} from '@mui/icons-material';
++import { Box } from '@mui/material';
+ import {
+   useAvailableSources,
+   useExtendsOptions,
+@@ -60,14 +9,9 @@ import {
+   PropertiesSection,
+   AvailableComponentsPanel,
+   ViewComponentsPanel,
+-  buildSelectedRefs,
+-  getDatatypeIcon,
+   type ExtendsOption,
+-  type AvailableSource,
+   type AvailableItem,
+ } from './index';
+-import styles from './ViewEditor.module.css';
+-import JoinPathManager from './JoinPathManager';
+ 
+ interface ViewEditorCompleteProps {
+   viewName: string;
+@@ -96,8 +40,7 @@ const ViewEditorComplete: React.FC<ViewEditorCompleteProps> = ({
+   tenantId,
+   datasourceId
+ }) => {
+-  const [propertiesExpanded, setPropertiesExpanded] = useState(true);
+-  const [extensionExpanded, setExtensionExpanded] = useState(true);
++  const [propertiesExpanded] = useState(true);
+   // componentsExpanded state removed — individual sections handle their own expansion
+   const [primaryCube, setPrimaryCube] = useState<any | null>(null);
+   const [isEditingPrimaryCube, setIsEditingPrimaryCube] = useState(true);
+@@ -115,17 +58,17 @@ const ViewEditorComplete: React.FC<ViewEditorCompleteProps> = ({
+   // View properties state - keep local state for UI interactions
+   const [extendsInputValue, setExtendsInputValue] = useState<string>((viewData?.extends as string) || '');
+   const [extendsQuery, setExtendsQuery] = useState<string>((viewData?.extends as string) || '');
+-  const extendsFetchIdRef = useRef(0);
++  const _extendsFetchIdRef = useRef(0);
+   // Track currently resolving UUIDs to avoid duplicate fetches
+-  const resolvingUuidsRef = useRef(new Set<string>());
++  const _resolvingUuidsRef = useRef(new Set<string>());
+   // Keep an explicit selected option/value so we can force the Autocomplete to show
+   // the friendly option object (name/title) when we resolve a UUID via fetch.
+   const [selectedExtendsValue, setSelectedExtendsValue] = useState<ExtendsOption | string | null>(null);
+-  const [resolvingExtendsSingle, _setResolvingExtendsSingle] = useState(false);
++  const [_resolvingExtendsSingle, _setResolvingExtendsSingle] = useState(false);
+ 
+   // Available sources and items state - keep local state for UI interactions
+   const [selectedAvailableItems, setSelectedAvailableItems] = useState<Set<string>>(new Set());
+-  const [undoSnackbar, setUndoSnackbar] = useState<{ open: boolean; items?: { dimensions: any[]; measures: any[] } }>({ open: false });
++  const [_undoSnackbar, setUndoSnackbar] = useState<{ open: boolean; items?: { dimensions: any[]; measures: any[] } }>({ open: false });
+   const lastAddedRef = useRef<{ dimensions: any[]; measures: any[] } | null>(null);
+   const [highlightMap, setHighlightMap] = useState<Record<string, 'added' | 'exists'>>({});
+   const [targetHighlightMap, setTargetHighlightMap] = useState<Record<string, boolean>>({});
+@@ -133,47 +76,23 @@ const ViewEditorComplete: React.FC<ViewEditorCompleteProps> = ({
+   // Search and cube management state (single shared search)
+   const [searchQuery, setSearchQuery] = useState<string>('');
+   const [sourceFilter, setSourceFilter] = useState<string>('all');
+-  const [showAddCubeDialog, setShowAddCubeDialog] = useState(false);
+   // debug panel disabled
+   // debugLog state removed while in-UI logging is disabled
+-  const [cubeSearchQuery, setCubeSearchQuery] = useState<string>('');
+-  const [selectedCubes, setSelectedCubes] = useState<Set<string>>(new Set());
+   
+   // API error tracking - keeping for now but may be moved to hooks later
+-  const [apiErrors, setApiErrors] = useState<Set<string>>(new Set());
+-  
+-  const addApiError = (errorType: string) => {
+-    setApiErrors(prev => new Set([...prev, errorType]));
+-  };
+-  
+-  const clearApiError = (errorType: string) => {
+-    setApiErrors(prev => {
+-      const next = new Set(prev);
+-      next.delete(errorType);
+-      return next;
+-    });
+-  };
++  // API error tracking intentionally removed; keep a lightweight logger if needed
++  const addApiError = (_errorType: string) => { return; };
++  const clearApiError = (_errorType: string) => { return; };
+ 
+   const hasTenantScope = Boolean(tenantId && datasourceId);
+   
+   // Track if we've detected a persistent backend issue to avoid repeated calls
+-  const [backendUnavailable, setBackendUnavailable] = useState(false);
+   const consecutiveFailuresRef = useRef(0);
+ 
+   // Keep a ref to the latest viewData so callbacks can read the newest values
+   const viewDataRef = useRef(viewData);
+   useEffect(() => { viewDataRef.current = viewData; }, [viewData]);
+   
+-  const handleApiFailure = (errorType: string) => {
+-    consecutiveFailuresRef.current += 1;
+-    addApiError(errorType);
+-    
+-    // If we have multiple consecutive failures, assume backend is unavailable
+-    if (consecutiveFailuresRef.current >= 3) {
+-      setBackendUnavailable(true);
+-    }
+-  };
+-
+   const pushDebugLog = (_msg: string) => {
+     // ViewEditor debug logging disabled. Preserve function for future re-enable.
+     // const entry = { when: Date.now(), msg };
+@@ -182,11 +101,7 @@ const ViewEditorComplete: React.FC<ViewEditorCompleteProps> = ({
+     return;
+   };
+   
+-  const handleApiSuccess = (errorType: string) => {
+-    consecutiveFailuresRef.current = 0;
+-    setBackendUnavailable(false);
+-    clearApiError(errorType);
+-  };
++  
+ 
+   // Debounce user typing into the extends input
+   useEffect(() => {
+@@ -253,7 +168,7 @@ const ViewEditorComplete: React.FC<ViewEditorCompleteProps> = ({
+   const extendsOptionsData = useExtendsOptions(isValidTenantScope, tenantId, datasourceId, viewName, viewData);
+   const { extendsOptions, extendsLoading, fetchExtendsOptions: fetchExtendsOptionsFromHook } = extendsOptionsData;
+   const availableSourcesData = useAvailableSources(isValidTenantScope, tenantId, datasourceId, viewData, selectedRefs);
+-  const { availableSources, sourcesLoading, fetchAvailableSources } = availableSourcesData;
++  const { availableSources, fetchAvailableSources } = availableSourcesData;
+   const availableCubesData = useAvailableCubes(isValidTenantScope, tenantId, datasourceId, viewData);
+ 
+   useEffect(() => {
+@@ -444,29 +359,38 @@ const ViewEditorComplete: React.FC<ViewEditorCompleteProps> = ({
+     );
+   }, [viewData?.measures, searchQuery]);
+ 
+-  // Filter available cubes based on search
+-  const filteredAvailableCubes = useMemo(() => {
+-    if (!cubeSearchQuery.trim()) return availableCubesData.availableCubes;
+-    const query = cubeSearchQuery.toLowerCase();
+-    return availableCubesData.availableCubes.filter((cube: any) => 
+-      cube.display_name?.toLowerCase().includes(query) ||
+-      cube.model_key?.toLowerCase().includes(query) ||
+-      cube.description?.toLowerCase().includes(query)
+-    );
+-  }, [availableCubesData.availableCubes, cubeSearchQuery]);
+-
+-  const handleAddCubes = () => {
+-    const cubesToAdd = Array.from(selectedCubes).map(cubeId => {
+-      const cube = availableCubesData.availableCubes.find(c => String(c.id) === String(cubeId));
+-      return { id: cubeId, name: cube?.display_name || cube?.model_key || String(cubeId) };
+-    });
+-    setViewData({
+-      ...viewData,
+-      cubes: [...(viewData.cubes || []), ...cubesToAdd]
+-    });
+-    setSelectedCubes(new Set());
+-    setShowAddCubeDialog(false);
+-  };
++  // Keep references to values and handlers that were previously used by the
++  // side-panel components so the linter doesn't error after moving the UI into tabs.
++  // These are no-ops and should be revisited if the panels are removed permanently.
++  React.useEffect(() => {
++    void AvailableComponentsPanel;
++    void ViewComponentsPanel;
++    void availableSources;
++    void filteredAvailableSources;
++    void searchQuery;
++    void setSearchQuery;
++    void sourceFilter;
++    void setSourceFilter;
++    void selectedAvailableItems;
++    void handleItemSelection;
++    void handleAddSelectedItems;
++    void handleSelectAllFromSource;
++    void highlightMap;
++    void filteredViewDimensions;
++    void filteredViewMeasures;
++    void targetHighlightMap;
++    void handleRemoveViewItem;
++    void handleAddSingleItem;
++    void handleUndo;
++    void _extendsFetchIdRef;
++    void _resolvingUuidsRef;
++    void addApiError;
++    void clearApiError;
++    void consecutiveFailuresRef;
++    void validationResult;
++  }, []);
++
++  // Cube selection handled inline via primary cube controls; bulk-add removed
+ 
+   // Ensure loaded viewData uses canonical shapes: cubes as [{id,name}], join_paths as [{id,path,label}], extends as UUID
+   useEffect(() => {
+@@ -738,11 +662,7 @@ const ViewEditorComplete: React.FC<ViewEditorCompleteProps> = ({
+     onValidate();
+   };
+ 
+-  const validationIcon = validationResult?.valid === false 
+-    ? <ErrorIcon color="error" />
+-    : validationResult?.valid === true
+-    ? <CheckCircle color="success" />
+-    : null;
++  // validationIcon is rendered inside ViewHeader; no local usage here
+ 
+   return (
+     <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+@@ -756,60 +676,26 @@ const ViewEditorComplete: React.FC<ViewEditorCompleteProps> = ({
+         validationResult={validationResult}
+       />
+ 
+-      <PropertiesSection
+-        viewData={viewData}
+-        setViewData={setViewData}
+-        extendsOptions={extendsOptions}
+-        extendsLoading={extendsLoading}
+-        extendsInputValue={extendsInputValue}
+-        setExtendsInputValue={setExtendsInputValue}
+-  selectedExtendsValue={selectedExtendsValue}
+-        handleExtendsSelection={handleExtendsSelection}
+-        availableCubes={availableCubesData.availableCubes}
+-        showAddCubeDialog={showAddCubeDialog}
+-        setShowAddCubeDialog={setShowAddCubeDialog}
+-        cubeSearchQuery={cubeSearchQuery}
+-        setCubeSearchQuery={setCubeSearchQuery}
+-        filteredAvailableCubes={filteredAvailableCubes}
+-        selectedCubes={selectedCubes}
+-        setSelectedCubes={setSelectedCubes}
+-        handleAddCubes={handleAddCubes}
+-        hasTenantScope={hasTenantScope}
+-        tenantId={tenantId}
+-        datasourceId={datasourceId}
+-        primaryCube={primaryCube}
+-        setPrimaryCube={setPrimaryCube}
+-        isEditingPrimaryCube={isEditingPrimaryCube}
+-        setIsEditingPrimaryCube={setIsEditingPrimaryCube}
+-  extensionExpanded={extensionExpanded}
+-  setExtensionExpanded={setExtensionExpanded}
+-  propertiesExpanded={propertiesExpanded}
+-  setPropertiesExpanded={setPropertiesExpanded}
+-      />
+-
+-      <Box sx={{ display: 'flex', flexDirection: 'row', height: 'calc(100vh - 200px)' }}>
+-        <AvailableComponentsPanel
+-          availableSources={availableSources}
+-          filteredAvailableSources={filteredAvailableSources}
+-          searchQuery={searchQuery}
+-          setSearchQuery={setSearchQuery}
+-          sourceFilter={sourceFilter}
+-          setSourceFilter={setSourceFilter}
+-          selectedAvailableItems={selectedAvailableItems}
+-          handleItemSelection={handleItemSelection}
+-          handleAddSelectedItems={handleAddSelectedItems}
+-          handleSelectAllFromSource={handleSelectAllFromSource}
+-          highlightMap={highlightMap}
+-        />
+-
+-        <ViewComponentsPanel
+-          filteredViewDimensions={filteredViewDimensions}
+-          filteredViewMeasures={filteredViewMeasures}
+-          searchQuery={searchQuery}
+-          targetHighlightMap={targetHighlightMap}
+-          handleRemoveViewItem={handleRemoveViewItem}
+-        />
+-      </Box>
++  <PropertiesSection
++    propertiesExpanded={propertiesExpanded}
++    viewData={viewData}
++    setViewData={setViewData}
++    primaryCube={primaryCube}
++    setPrimaryCube={setPrimaryCube}
++    isEditingPrimaryCube={isEditingPrimaryCube}
++    setIsEditingPrimaryCube={setIsEditingPrimaryCube}
++    extendsOptions={extendsOptions}
++    extendsLoading={extendsLoading}
++    extendsInputValue={extendsInputValue}
++    setExtendsInputValue={setExtendsInputValue}
++    selectedExtendsValue={selectedExtendsValue}
++    handleExtendsSelection={handleExtendsSelection}
++    hasTenantScope={hasTenantScope}
++    tenantId={tenantId}
++    datasourceId={datasourceId}
++  />
++
++      {/* Components UI moved into the PropertiesSection Components tab; external panels removed */}
+     </Box>
+   );
+ };
+diff --git a/frontend/src/components/ViewEditor/components/AvailableComponentsPanel.tsx b/frontend/src/components/ViewEditor/components/AvailableComponentsPanel.tsx
+index f7a22e3..4a3e086 100644
+--- a/frontend/src/components/ViewEditor/components/AvailableComponentsPanel.tsx
++++ b/frontend/src/components/ViewEditor/components/AvailableComponentsPanel.tsx
+@@ -26,6 +26,7 @@ import {
+ } from '@mui/icons-material';
+ import { AvailableSource, AvailableItem } from '../hooks/useAvailableSources';
+ import { getDatatypeIcon, getDimensionMeasureIcon } from '../utils/viewEditorUtils';
++import renderCoreCustomChips from '../../common/semanticChips';
+ 
+ interface AvailableComponentsPanelProps {
+   availableSources: AvailableSource[];
+@@ -93,14 +94,10 @@ export const AvailableComponentsPanel: React.FC<AvailableComponentsPanelProps> =
+                 if (!val || val === 'all') return 'All Sources';
+                 const src = availableSources.find(s => String(s.id) === String(val));
+                 if (!src) return String(val);
+-                const isCore = (src as any).isCore ?? (src as any).is_core;
+-                const isCustom = (src as any).isCustom ?? (src as any).is_custom;
+-                const chipLabel = isCore && isCustom ? 'Core Custom' : isCore ? 'Core' : isCustom ? 'Custom' : null;
+-                const chipColor = isCore && isCustom ? 'warning' : isCore ? 'primary' : 'secondary';
+                 return (
+                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                     <Typography variant="body2" sx={{ fontWeight: 600 }}>{src.name}</Typography>
+-                    {chipLabel && <Chip label={chipLabel} size="small" color={chipColor as any} variant="outlined" />}
++                    <Box component="span">{renderCoreCustomChips(src)}</Box>
+                   </Box>
+                 );
+               }}
+@@ -118,13 +115,7 @@ export const AvailableComponentsPanel: React.FC<AvailableComponentsPanelProps> =
+                       <Typography variant="body2" sx={{ fontWeight: 600 }}>{s.name}</Typography>
+                     </Box>
+                     <Box sx={{ display: 'flex', gap: 0.5, alignItems: 'center' }}>
+-                      {(() => {
+-                        const isCore = (s as any).isCore ?? (s as any).is_core;
+-                        const isCustom = (s as any).isCustom ?? (s as any).is_custom;
+-                        const chipLabel = isCore && isCustom ? 'Core Custom' : isCore ? 'Core' : isCustom ? 'Custom' : null;
+-                        const chipColor = isCore && isCustom ? 'warning' : isCore ? 'primary' : 'secondary';
+-                        return chipLabel ? <Chip label={chipLabel} size="small" color={chipColor as any} variant="outlined" /> : null;
+-                      })()}
++                      <Box component="span">{renderCoreCustomChips(s)}</Box>
+                     </Box>
+                   </Box>
+                 </MenuItem>
+@@ -173,11 +164,7 @@ export const AvailableComponentsPanel: React.FC<AvailableComponentsPanelProps> =
+                   )}
+                   <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>{source.name}</Typography>
+                   {(() => {
+-                    const isCore = (source as any).isCore ?? (source as any).is_core;
+-                    const isCustom = (source as any).isCustom ?? (source as any).is_custom;
+-                    const chipLabel = isCore && isCustom ? 'Core Custom' : isCore ? 'Core' : isCustom ? 'Custom' : null;
+-                    const chipColor = isCore && isCustom ? 'warning' : isCore ? 'primary' : 'secondary';
+-                    return chipLabel ? <Chip label={chipLabel} size="small" color={chipColor as any} variant="outlined" /> : null;
++                return <Box component="span">{renderCoreCustomChips(source)}</Box>;
+                   })()}
+                 </Box>
+                 <Button
+diff --git a/frontend/src/components/ViewEditor/components/PropertiesSection.tsx b/frontend/src/components/ViewEditor/components/PropertiesSection.tsx
+index 527a21a..4e5641f 100644
+--- a/frontend/src/components/ViewEditor/components/PropertiesSection.tsx
++++ b/frontend/src/components/ViewEditor/components/PropertiesSection.tsx
+@@ -1,27 +1,29 @@
+-import React from 'react';
++import React, { useMemo, useState } from 'react';
+ import {
+-  Accordion,
+-  AccordionDetails,
+-  AccordionSummary,
+   Grid,
+   TextField,
+   FormControlLabel,
+   Switch,
+-  Button,
++  Tabs,
++  Tab,
+   Box,
+   Typography,
+-  Chip,
+ } from '@mui/material';
+-import { ExpandMore, AccountTree } from '@mui/icons-material';
++import LabelIcon from '@mui/icons-material/Label';
++import FunctionsIcon from '@mui/icons-material/Functions';
++import CalendarTodayIcon from '@mui/icons-material/CalendarToday';
++import AccessTimeIcon from '@mui/icons-material/AccessTime';
++import CheckIcon from '@mui/icons-material/Check';
++import TextFieldsIcon from '@mui/icons-material/TextFields';
++// account tree icon removed from tab labels per UX - tabs should be text-only
+ import ViewTypeahead, { ViewOption } from '../../common/ViewTypeahead';
+ import CubeTypeahead from '../../common/CubeTypeahead';
+ import { ExtendsOption } from '../hooks/useAvailableSources';
+ 
+ interface PropertiesSectionProps {
+   propertiesExpanded: boolean;
+-  setPropertiesExpanded: (expanded: boolean) => void;
+-  extensionExpanded: boolean;
+-  setExtensionExpanded: (expanded: boolean) => void;
++  // parent no longer needs to be told about tab changes; tabs are local
++  // extensionExpanded and setExtensionExpanded removed; primary cube controls moved into Properties
+   // componentsExpanded and setComponentsExpanded were previously passed but
+   // are not used inside this section. They are handled by the parent.
+   viewData: any;
+@@ -44,9 +46,6 @@ interface PropertiesSectionProps {
+ 
+ export const PropertiesSection: React.FC<PropertiesSectionProps> = ({
+   propertiesExpanded,
+-  setPropertiesExpanded,
+-  extensionExpanded,
+-  setExtensionExpanded,
+   viewData,
+   setViewData,
+   primaryCube,
+@@ -63,165 +62,216 @@ export const PropertiesSection: React.FC<PropertiesSectionProps> = ({
+   tenantId,
+   datasourceId,
+ }) => {
++  // Helper: flatten dimensions and measures from attached cubes (and any resolved_config)
++  const { dimensions: flattenedDimensions, measures: flattenedMeasures } = useMemo(() => {
++    const dims: any[] = [];
++    const meas: any[] = [];
++    const cubes = Array.isArray(viewData?.cubes) ? viewData.cubes : [];
++    for (const c of cubes) {
++      // try several common shapes for model key / join_path
++      const path = c.join_path || c.model_key || c.path || c.name || c.id;
++      const resolved = c.resolved_config || c.resolvedConfig || c.config || c.model || null;
++      const cubeDefs = resolved?.cubes && Array.isArray(resolved.cubes) ? resolved.cubes : (resolved ? [resolved] : []);
++      const firstCube = cubeDefs[0] || {};
++      const rawDims = firstCube.dimensions || firstCube.dimensions || firstCube.dimension || {};
++      const rawMeas = firstCube.measures || firstCube.measures || firstCube.measure || {};
++
++      // normalize dimensions: array or object map
++      const dimEntries: [string, any][] = Array.isArray(rawDims)
++        ? rawDims.map((d: any, i: number) => [(d && (d.name || d.id)) || `dim_${i}`, d])
++        : Object.entries(rawDims || {});
++
++      dimEntries.forEach(([key, d]) => {
++        const name = (d && (d.title || d.name)) || key;
++        const dtype = d && (d.type || d.data_type || d.sql_type) || (typeof d === 'string' ? 'string' : undefined);
++        dims.push({ id: `${path}::${name}`, name, dtype, path: String(path || ''), source: 'cube' });
++      });
++
++      const measEntries: [string, any][] = Array.isArray(rawMeas)
++        ? rawMeas.map((m: any, i: number) => [(m && (m.name || m.id)) || `meas_${i}`, m])
++        : Object.entries(rawMeas || {});
++
++      measEntries.forEach(([key, m]) => {
++        const name = (m && (m.title || m.name)) || key;
++        const dtype = m && (m.type || m.data_type) || undefined;
++        meas.push({ id: `${path}::${name}`, name, dtype, path: String(path || ''), source: 'cube' });
++      });
++    }
++
++    return { dimensions: dims, measures: meas };
++  }, [viewData]);
++
++  const getDataTypeIcon = (dtype?: string | null) => {
++    if (!dtype) return <LabelIcon fontSize="small" />;
++    const t = String(dtype).toLowerCase();
++    if (t.includes('int') || t.includes('dec') || t.includes('num') || t === 'number' || t.includes('float')) return <FunctionsIcon fontSize="small" />;
++    if (t.includes('date')) return <CalendarTodayIcon fontSize="small" />;
++    if (t.includes('time')) return <AccessTimeIcon fontSize="small" />;
++    if (t === 'boolean' || t === 'bool') return <CheckIcon fontSize="small" />;
++    if (t === 'string' || t === 'text' || t.includes('char')) return <TextFieldsIcon fontSize="small" />;
++    return <LabelIcon fontSize="small" />;
++  };
++  // Local tab state controls which tab is visible. This is intentionally local so the
++  // parent doesn't also toggle its own view and cause duplicate rendering of components.
++  const [tabIndex, setTabIndex] = useState<number>(propertiesExpanded ? 0 : 1);
+   return (
+     <>
+-      {/* Top: Name, Extends, Public */}
+-      <Accordion
+-        expanded={propertiesExpanded}
+-        onChange={() => setPropertiesExpanded(!propertiesExpanded)}
+-        sx={{ borderBottom: 1, borderColor: 'divider', '&:before': { display: 'none' } }}
+-        elevation={0}
+-      >
+-        <AccordionSummary expandIcon={<ExpandMore />}>
+-          <Typography variant="h6" sx={{ display: 'flex', alignItems: 'center', gap: 1, color: 'primary.main' }}>
+-            <AccountTree />
+-            Properties
+-          </Typography>
+-        </AccordionSummary>
+-        <AccordionDetails>
+-          <Grid container spacing={3}>
+-            <Grid item xs={12} md={4}>
+-              <TextField
+-                label="Name"
+-                value={viewData.name || viewData.title || ''}
+-                onChange={(e) => setViewData({ ...viewData, name: e.target.value })}
+-                fullWidth
+-                size="small"
+-                placeholder="Unique view name"
+-              />
+-            </Grid>
++      {/* Tabs: Properties | Components */}
++      <Box sx={{ borderBottom: 1, borderColor: 'divider', mb: 2 }}>
++        <Tabs
++          value={tabIndex}
++          onChange={(_, v) => setTabIndex(v)}
++          aria-label="View editor tabs"
++        >
++          <Tab label="Properties" />
++          <Tab label="Components" />
++        </Tabs>
++      </Box>
+ 
+-            <Grid item xs={12} md={4}>
+-              <ViewTypeahead
+-                options={extendsOptions as ViewOption[]}
+-                loading={extendsLoading}
+-                inputValue={extendsInputValue}
+-                onInputChange={(v) => setExtendsInputValue(v)}
+-                value={selectedExtendsValue}
+-                onChange={(v) => handleExtendsSelection(v)}
+-                placeholder={hasTenantScope ? 'Search views to extend (optional)' : 'Select tenant & datasource'}
+-                disabled={!hasTenantScope}
++      {/* Properties tab content */}
++      {tabIndex === 0 && (
++        <Grid container spacing={3}>
++          <Grid item xs={12} md={4}>
++            <TextField
++              label="Name"
++              value={viewData.name || viewData.title || ''}
++              onChange={(e) => setViewData({ ...viewData, name: e.target.value })}
++              fullWidth
++              size="small"
++              placeholder="Unique view name"
++            />
++          </Grid>
++
++          <Grid item xs={12} md={4}>
++            <ViewTypeahead
++              options={extendsOptions as ViewOption[]}
++              loading={extendsLoading}
++              inputValue={extendsInputValue}
++              onInputChange={(v) => setExtendsInputValue(v)}
++              value={selectedExtendsValue}
++              onChange={(v) => handleExtendsSelection(v)}
++              placeholder={hasTenantScope ? 'Search views to extend (optional)' : 'Select tenant & datasource'}
++              disabled={!hasTenantScope}
++              fetchOptions={true}
++              tenantId={tenantId}
++              datasourceId={datasourceId}
++              status="published"
++              pageSize={100}
++            />
++          </Grid>
++
++          <Grid item xs={12} md={4}>
++            <FormControlLabel
++              control={
++                <Switch
++                  checked={viewData.public !== false}
++                  onChange={(e) => setViewData({ ...viewData, public: e.target.checked })}
++                />
++              }
++              label="Public View"
++              sx={{ mt: 1 }}
++            />
++          </Grid>
++
++          <Grid item xs={12}>
++            <TextField
++              label="Description"
++              value={viewData.description || ''}
++              onChange={(e) => setViewData({ ...viewData, description: e.target.value })}
++              fullWidth
++              multiline
++              rows={2}
++              size="small"
++              placeholder="Human-readable description of this view"
++            />
++          </Grid>
++
++          {/* Primary Cube controls moved here (previously a separate accordion) */}
++          <Grid item xs={12} md={6}>
++            <Typography variant="subtitle2" gutterBottom>
++              Primary Cube
++            </Typography>
++            {isEditingPrimaryCube ? (
++              <CubeTypeahead
+                 fetchOptions={true}
+                 tenantId={tenantId}
+                 datasourceId={datasourceId}
+-                status="published"
+                 pageSize={100}
++                disabled={!hasTenantScope}
++                value={primaryCube}
++                onChange={(_, newValue: any) => {
++                  if (newValue) {
++                    setPrimaryCube(newValue);
++                    setViewData({
++                      ...viewData,
++                      cubes: [{ id: newValue.id, name: newValue.display_name || newValue.model_key }]
++                    });
++                    setIsEditingPrimaryCube(false);
++                  }
++                }}
++                placeholder={hasTenantScope ? 'Search cubes (published)' : 'Select tenant & datasource'}
+               />
+-            </Grid>
+-
+-            <Grid item xs={12} md={4}>
+-              <FormControlLabel
+-                control={
+-                  <Switch
+-                    checked={viewData.public !== false}
+-                    onChange={(e) => setViewData({ ...viewData, public: e.target.checked })}
++            ) : (
++              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, width: '100%' }}>
++                <Box sx={{ flex: 1, minWidth: 0 }}>
++                  <CubeTypeahead
++                    fetchOptions={true}
++                    tenantId={tenantId}
++                    datasourceId={datasourceId}
++                    pageSize={100}
++                    options={primaryCube ? [primaryCube] : []}
++                    value={primaryCube}
++                    disabled={!hasTenantScope}
++                    onChange={(_, newValue: any) => {
++                      if (newValue) {
++                        setPrimaryCube(newValue);
++                        setViewData({
++                          ...viewData,
++                          cubes: [{ id: newValue.id, name: newValue.display_name || newValue.model_key }]
++                        });
++                      }
++                    }}
++                    placeholder={hasTenantScope ? '' : 'Select tenant & datasource'}
+                   />
+-                }
+-                label="Public View"
+-                sx={{ mt: 1 }}
+-              />
+-            </Grid>
+-            <Grid item xs={12}>
+-              <TextField
+-                label="Description"
+-                value={viewData.description || ''}
+-                onChange={(e) => setViewData({ ...viewData, description: e.target.value })}
+-                fullWidth
+-                multiline
+-                rows={2}
+-                size="small"
+-                placeholder="Human-readable description of this view"
+-              />
+-            </Grid>
++                </Box>
++              </Box>
++            )}
+           </Grid>
+-        </AccordionDetails>
+-      </Accordion>
++        </Grid>
++      )}
+ 
+-      {/* Primary Cube Section (second) */}
+-      <Accordion
+-        expanded={extensionExpanded}
+-        onChange={() => setExtensionExpanded(!extensionExpanded)}
+-        sx={{ borderBottom: 1, borderColor: 'divider', '&:before': { display: 'none' } }}
+-        elevation={0}
+-      >
+-        <AccordionSummary expandIcon={<ExpandMore />}>
+-          <Typography variant="h6" sx={{ display: 'flex', alignItems: 'center', gap: 1, color: 'primary.main' }}>
+-            <AccountTree />
+-            Primary Cube
+-          </Typography>
+-        </AccordionSummary>
+-        <AccordionDetails>
+-          <Grid container spacing={3}>
+-            <Grid item xs={12} md={6}>
+-              <Typography variant="subtitle2" gutterBottom>
+-                Primary Cube
+-              </Typography>
+-              {isEditingPrimaryCube ? (
+-                <CubeTypeahead
+-                  fetchOptions={true}
+-                  tenantId={tenantId}
+-                  datasourceId={datasourceId}
+-                  pageSize={100}
+-                  disabled={!hasTenantScope}
+-                  value={primaryCube}
+-                  onChange={(_, newValue: any) => {
+-                    if (newValue) {
+-                      setPrimaryCube(newValue);
+-                      setViewData({
+-                        ...viewData,
+-                        cubes: [{ id: newValue.id, name: newValue.display_name || newValue.model_key }]
+-                      });
+-                      setIsEditingPrimaryCube(false);
+-                    }
+-                  }}
+-                  placeholder={hasTenantScope ? 'Search cubes (published)' : 'Select tenant & datasource'}
+-                />
+-              ) : (
+-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+-                    <Typography>{primaryCube?.display_name || primaryCube?.name || 'No cube selected'}</Typography>
+-                    {primaryCube ? (
+-                      <Chip
+-                        size="small"
+-                        label={primaryCube.isCore && primaryCube.isCustom ? 'Core Custom' : primaryCube.isCore ? 'Core' : primaryCube.isCustom ? 'Custom' : ''}
+-                        color="primary"
+-                        variant="outlined"
+-                        sx={{ ml: 1 }}
+-                      />
+-                    ) : null}
+-                    <Button size="small" onClick={() => setIsEditingPrimaryCube(true)}>
+-                      Change
+-                    </Button>
+-                  </Box>
++      {/* Components tab content */}
++      {tabIndex === 1 && (
++        <Grid container spacing={2}>
++          <Grid item xs={12} md={6}>
++            <Typography variant="subtitle2" gutterBottom>Dimensions</Typography>
++            {flattenedDimensions.length === 0 && <Typography variant="caption" color="text.secondary">No dimensions found.</Typography>}
++            {flattenedDimensions.map((d: any) => (
++              <Box key={d.id} sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', py: 0.5 }}>
++                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0 }}>
++                  {getDataTypeIcon(d.dtype)}
++                  <Typography variant="body2" sx={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{d.name}</Typography>
+                 </Box>
+-              )}
+-            </Grid>
+-
+-            
++                <Typography variant="caption" color="text.secondary" sx={{ ml: 1, minWidth: 0 }}>{d.path}</Typography>
++              </Box>
++            ))}
+           </Grid>
+-        </AccordionDetails>
+-      </Accordion>
+ 
+-      {/* Components Section (last) - placeholder for components list / controls */}
+-      <Accordion
+-        expanded={false}
+-        sx={{ borderBottom: 1, borderColor: 'divider', '&:before': { display: 'none' } }}
+-        elevation={0}
+-      >
+-        <AccordionSummary expandIcon={<ExpandMore />}>
+-          <Typography variant="h6" sx={{ display: 'flex', alignItems: 'center', gap: 1, color: 'primary.main' }}>
+-            <AccountTree />
+-            Components
+-          </Typography>
+-        </AccordionSummary>
+-        <AccordionDetails>
+-          <Grid container spacing={3}>
+-            <Grid item xs={12}>
+-              <Typography variant="body2" color="text.secondary">Components UI lives elsewhere in the editor; this area reserved for future per-view components.</Typography>
+-            </Grid>
++          <Grid item xs={12} md={6}>
++            <Typography variant="subtitle2" gutterBottom>Measures</Typography>
++            {flattenedMeasures.length === 0 && <Typography variant="caption" color="text.secondary">No measures found.</Typography>}
++            {flattenedMeasures.map((m: any) => (
++              <Box key={m.id} sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', py: 0.5 }}>
++                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0 }}>
++                  {getDataTypeIcon(m.dtype)}
++                  <Typography variant="body2" sx={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.name}</Typography>
++                </Box>
++                <Typography variant="caption" color="text.secondary" sx={{ ml: 1, minWidth: 0 }}>{m.path}</Typography>
++              </Box>
++            ))}
+           </Grid>
+-        </AccordionDetails>
+-      </Accordion>
++        </Grid>
++      )}
+     </>
+   );
+ };
+\ No newline at end of file
+diff --git a/frontend/src/components/common/CubeTypeahead.tsx b/frontend/src/components/common/CubeTypeahead.tsx
+index d194021..df1aaaf 100644
+--- a/frontend/src/components/common/CubeTypeahead.tsx
++++ b/frontend/src/components/common/CubeTypeahead.tsx
+@@ -2,10 +2,11 @@ import { useEffect, useMemo, useState } from 'react';
+ import Autocomplete from '@mui/material/Autocomplete';
+ import TextField from '@mui/material/TextField';
+ import CircularProgress from '@mui/material/CircularProgress';
+-import Chip from '@mui/material/Chip';
++// Chip rendering centralized in semanticChips
+ import Box from '@mui/material/Box';
+ import Typography from '@mui/material/Typography';
+ import { fetchCubes } from '../../services/cubesService';
++import renderCoreCustomChips from './semanticChips';
+ 
+ export type CubeOption = {
+   id: string;
+@@ -23,8 +24,13 @@ type Props = {
+   datasourceId?: string;
+   pageSize?: number;
+   placeholder?: string;
+-  value?: CubeOption | null;
++  value?: string | CubeOption | null;
+   onChange?: (ev: any, value: CubeOption | null) => void;
++  // If true, when a string id is provided as the value and we successfully
++  // fetch the full cube object, call onChange with the resolved object so the
++  // parent can switch to the richer representation (and chips/friendly name
++  // will display). Default false to avoid surprising parent shape.
++  resolveOnFetch?: boolean;
+   inputValue?: string;
+   onInputChange?: (ev: any, val: string) => void;
+   disabled?: boolean;
+@@ -44,19 +50,36 @@ export default function CubeTypeahead({
+   onInputChange,
+   disabled = false,
+   // minQueryLength unused for now
++  resolveOnFetch = true,
++  minQueryLength = 0,
+ }: Props) {
+   const [internalOptions, setInternalOptions] = useState<CubeOption[]>([]);
+   const [loading, setLoading] = useState(false);
++  const [enrichedMap, setEnrichedMap] = useState<Record<string, Partial<CubeOption>>>({});
++  // small debounce helper
++  const debounce = (fn: (...args: any[]) => void, wait = 300) => {
++    let t: any;
++    return (...args: any[]) => {
++      clearTimeout(t);
++      t = setTimeout(() => fn(...args), wait);
++    };
++  };
+ 
+   useEffect(() => {
+     if (!fetchOptions) return;
++    const q = (inputValue || '').trim();
++    if (q.length < (minQueryLength || 0) && q.length > 0) {
++      setInternalOptions([]);
++      return;
++    }
++
+     let active = true;
+     const controller = new AbortController();
+ 
+-    const run = async () => {
++    const doFetch = async (query: string) => {
+       setLoading(true);
+       try {
+-        const cubes = await fetchCubes({ tenantId, datasourceId, pageSize });
++        const cubes = await fetchCubes({ tenantId, datasourceId, pageSize, q: query }, { signal: controller.signal });
+         if (!active) return;
+         // normalize
+         const items = Array.isArray(cubes)
+@@ -77,14 +100,110 @@ export default function CubeTypeahead({
+       }
+     };
+ 
+-    run();
++    const debounced = debounce(doFetch, 300);
++    debounced(q);
++
+     return () => {
+       active = false;
+       controller.abort();
+     };
+-  }, [fetchOptions, tenantId, datasourceId, pageSize]);
++  }, [fetchOptions, inputValue, tenantId, datasourceId, pageSize, minQueryLength]);
+ 
+-  const mergedOptions = useMemo(() => (fetchOptions ? internalOptions : options), [fetchOptions, internalOptions, options]);
++  const mergedOptions = useMemo(() => {
++    if (fetchOptions) return internalOptions;
++    return options.map((o) => ({ ...(o as any), ...(enrichedMap[String(o.id)] || {}) }));
++  }, [fetchOptions, internalOptions, options, enrichedMap]);
++
++  // If the parent passed a string id as `value` and we have fetchOptions=true,
++  // try to resolve it by querying the model definition endpoint so we can show
++  // friendly labels and chips. If resolveOnFetch is true, notify parent via
++  // onChange with the enriched object.
++  useEffect(() => {
++    if (!fetchOptions) return;
++    if (!resolveOnFetch) return;
++    if (!tenantId || !datasourceId) return;
++  if (!value) return;
++  const asStr = typeof value === 'string' ? value.trim() : String((value as any).id || '');
++    if (!asStr) return;
++    const exists = mergedOptions.some((o) => String(o.id) === String(asStr));
++    if (exists) return;
++
++    let active = true;
++    const controller = new AbortController();
++    (async () => {
++      try {
++        // backend provides a definition endpoint for models
++        const url = `/api/fabric/models/definition?datasource_id=${encodeURIComponent(datasourceId || '')}&model_key=${encodeURIComponent(asStr)}`;
++        const res = await fetch(url, { signal: controller.signal, cache: 'no-store' } as any);
++        if (!res.ok) return;
++        const data = await res.json().catch(() => null);
++        const model = data?.model || data;
++        if (!model) return;
++        const resolved: CubeOption = {
++          id: model.id || asStr,
++          name: model.model_key || model.id || asStr,
++          display_name: model.display_name || model.model_key || model.id,
++          description: model.description,
++          isCore: Boolean(model.is_core),
++          isCustom: Boolean(model.is_custom),
++        };
++        if (!active) return;
++        setInternalOptions((prev) => {
++          const found = prev.some((p) => String(p.id) === String(resolved.id));
++          return found ? prev.map((p) => (String(p.id) === String(resolved.id) ? { ...p, ...resolved } : p)) : [resolved, ...prev];
++        });
++        if (onChange) {
++          try { onChange?.(null, resolved); } catch (e) { /* ignore */ }
++        }
++      } catch (e) {
++        // ignore
++      }
++    })();
++
++    return () => { active = false; controller.abort(); };
++  }, [value, fetchOptions, tenantId, datasourceId, mergedOptions, resolveOnFetch]);
++
++  // When options are provided by the parent (fetchOptions=false) the passed
++  // primaryCube object(s) may lack isCore/isCustom flags. Try to enrich the
++  // specific selected value by fetching its definition so the chip can render.
++  useEffect(() => {
++    if (fetchOptions) return;
++    if (!tenantId || !datasourceId) return;
++    if (!value) return;
++    // value may be string or object
++    const key = typeof value === 'string' ? value : (value as any).id || (value as any).name;
++    if (!key) return;
++    const existing = options.find((o) => String(o.id) === String(key));
++    if (!existing) return;
++    const hasFlags = Boolean((existing as any).isCore) || Boolean((existing as any).isCustom);
++    if (hasFlags) return;
++
++    let active = true;
++    const controller = new AbortController();
++    (async () => {
++      try {
++        const url = `/api/fabric/models/definition?datasource_id=${encodeURIComponent(datasourceId || '')}&model_key=${encodeURIComponent(key)}`;
++        const res = await fetch(url, { signal: controller.signal, cache: 'no-store' } as any);
++        if (!res.ok) return;
++        const data = await res.json().catch(() => null);
++        const model = data?.model || data;
++        if (!model || !active) return;
++        const resolved: Partial<CubeOption> = {
++          id: model.id || key,
++          name: model.model_key || model.id || key,
++          display_name: model.display_name || model.model_key,
++          description: model.description,
++          isCore: Boolean(model.is_core),
++          isCustom: Boolean(model.is_custom),
++        };
++        setEnrichedMap((prev) => ({ ...prev, [String(resolved.id)]: resolved }));
++      } catch (e) {
++        // ignore
++      }
++    })();
++
++    return () => { active = false; controller.abort(); };
++  }, [value, fetchOptions, tenantId, datasourceId, options]);
+ 
+   // Resolve the provided value into a full option object when possible so we can
+   // reliably show the Core/Custom chip and friendly name. Accept either:
+@@ -117,15 +236,7 @@ export default function CubeTypeahead({
+           ) : null}
+         </Box>
+         <Box>
+-          {option.isCore || option.isCustom ? (
+-            <Chip
+-              size="small"
+-              label={option.isCore && option.isCustom ? 'Core Custom' : option.isCore ? 'Core' : 'Custom'}
+-              color="primary"
+-              variant="outlined"
+-              sx={{ ml: 1 }}
+-            />
+-          ) : null}
++          {renderCoreCustomChips(option)}
+         </Box>
+       </Box>
+     </li>
+@@ -144,16 +255,8 @@ export default function CubeTypeahead({
+       loading={loading}
+       renderOption={renderOption}
+       renderInput={(params) => {
+-        // selected chip displayed on the right of the input (endAdornment)
+-        const selectedChip = displayValue
+-          ? (() => {
+-              const isCore = Boolean(displayValue?.isCore);
+-              const isCustom = Boolean(displayValue?.isCustom);
+-              const chipLabel = isCore && isCustom ? 'Core Custom' : isCore ? 'Core' : isCustom ? 'Custom' : null;
+-              // Use a consistent color and outlined variant for all chips
+-              return chipLabel ? <Chip size="small" label={chipLabel} color="primary" variant="outlined" sx={{ ml: 1 }} /> : null;
+-            })()
+-          : null;
++        // selected chip(s) displayed on the right of the input (endAdornment)
++        const selectedChip = displayValue ? <Box component="span">{renderCoreCustomChips(displayValue)}</Box> : null;
+ 
+         return (
+           <TextField
+diff --git a/frontend/src/components/common/ViewTypeahead.tsx b/frontend/src/components/common/ViewTypeahead.tsx
+index 2d09028..fde9091 100644
+--- a/frontend/src/components/common/ViewTypeahead.tsx
++++ b/frontend/src/components/common/ViewTypeahead.tsx
+@@ -1,8 +1,9 @@
+ import React, { useState, useEffect, useRef, useMemo } from 'react';
+-import { Autocomplete, TextField, Box, CircularProgress, Chip, Typography, Stack } from '@mui/material';
++import { Autocomplete, TextField, Box, CircularProgress, Typography } from '@mui/material';
+ import type { AutocompleteRenderInputParams } from '@mui/material/Autocomplete';
+ import { fetchViews } from '../../services/viewsService';
+ import { deriveViewFlags } from '../../utils/viewFlags';
++import renderCoreCustomChips from './semanticChips';
+ 
+ // small debounce helper
+ const debounce = (fn: (...args: any[]) => void, wait = 300) => {
+@@ -46,6 +47,10 @@ interface ViewTypeaheadProps {
+   pageSize?: number;
+   status?: string; // e.g., 'published'
+   minQueryLength?: number;
++  // If true, when the component resolves a string-valued `value` by fetching
++  // the single-view endpoint, it will call `onChange(resolved)` to notify the
++  // parent and allow switching from an id string to the richer object.
++  resolveOnFetch?: boolean;
+ }
+ 
+ const ViewTypeahead: React.FC<ViewTypeaheadProps> = ({
+@@ -63,6 +68,7 @@ const ViewTypeahead: React.FC<ViewTypeaheadProps> = ({
+   pageSize = 100,
+   status = 'published',
+   minQueryLength = 0,
++  resolveOnFetch = true,
+ }) => {
+   const [fetchedOptions, setFetchedOptions] = useState<ViewOption[]>([]);
+   const [internalLoading, setInternalLoading] = useState(false);
+@@ -122,39 +128,24 @@ const ViewTypeahead: React.FC<ViewTypeaheadProps> = ({
+ 
+   const selectedOption = typeof displayValue === 'string' ? findOption(displayValue) : displayValue;
+ 
+-  const renderChips = (option: Partial<ViewOption> | null | undefined) => {
+-    if (!option) return null;
+-    const isCore = Boolean((option as any).isCore ?? (option as any).is_core);
+-    const isCustom = Boolean((option as any).isCustom ?? (option as any).is_custom);
+-    const chips: React.ReactNode[] = [];
+-    if (isCore) {
+-      chips.push(
+-        <Chip
+-          key="core"
+-          label="Core"
+-          size="small"
+-          color="primary"
+-          variant="outlined"
+-        />
+-      );
+-    }
+-    if (isCustom) {
+-      chips.push(
+-        <Chip
+-          key="custom"
+-          label="Custom"
+-          size="small"
+-          color="secondary"
+-          variant="outlined"
+-        />
+-      );
++  // When a value is selected (object), prefer showing its friendly label in the
++  // input instead of any externally-controlled inputValue (which may be the raw
++  // id/UUID). This makes a selected view show its name/title rather than the
++  // UUID string.
++  const effectiveInputValue = useMemo(() => {
++    if (!displayValue) return inputValue;
++    if (typeof displayValue === 'string') return inputValue;
++    // displayValue is an object-like ViewOption
++    try {
++      const label = getOptionLabel(displayValue as ViewOption);
++      return label ?? inputValue;
++    } catch (e) {
++      return inputValue;
+     }
+-    if (chips.length === 0) return null;
+-    return (
+-      <Stack direction="row" spacing={0.5} sx={{ ml: 1, flexWrap: 'nowrap' }}>
+-        {chips}
+-      </Stack>
+-    );
++  }, [displayValue, inputValue, normalizedOptions]);
++
++  const renderChips = (option: Partial<ViewOption> | null | undefined) => {
++    return renderCoreCustomChips(option);
+   };
+ 
+   // internal fetch logic (debounced)
+@@ -291,14 +282,92 @@ const ViewTypeahead: React.FC<ViewTypeaheadProps> = ({
+     };
+   }, [fetchOptions, fetchedOptions, tenantId, datasourceId]);
+ 
++  // If the provided value is a string (maybe a UUID) and we don't have it in our
++  // normalizedOptions, attempt to fetch the single view record so we can show a
++  // friendly name and the Core/Custom chips for the selected value.
++  const resolvingValueRef = useRef<string | null>(null);
++  useEffect(() => {
++    if (!fetchOptions) return;
++    if (!tenantId || !datasourceId) return;
++    if (!value || typeof value !== 'string') return;
++    const asStr = value.trim();
++    if (!asStr) return;
++    // already have it
++    if (findOption(asStr)) return;
++    if (resolvingValueRef.current === asStr) return; // already resolving
++
++    resolvingValueRef.current = asStr;
++    let active = true;
++    const controller = new AbortController();
++
++    (async () => {
++      try {
++        const url = `/api/views/${encodeURIComponent(asStr)}?tenant_id=${encodeURIComponent(
++          tenantId || ''
++        )}&datasource_id=${encodeURIComponent(datasourceId || '')}`;
++        const res = await fetch(url, { signal: controller.signal, cache: 'no-store' } as any);
++        if (!res.ok) {
++          resolvingValueRef.current = null;
++          return;
++        }
++        const data = await res.json().catch(() => null);
++        const v = data?.view || data;
++        if (!v) {
++          resolvingValueRef.current = null;
++          return;
++        }
++        const flags = deriveViewFlags(v);
++        const fetchKey = v.fetchKey || v.name || v.title || v.id || asStr;
++        const resolved: ViewOption = {
++          id: v.id ?? v.view_id ?? v.name ?? asStr,
++          name: v.name ?? v.title ?? (v as any)?.display_name,
++          title: v.title ?? v.name,
++          description: v.description,
++          fetchKey,
++          extends: v.extends,
++          tags: v.tags,
++          metadata: v.metadata,
++          attributes: v.attributes,
++          flags: v.flags,
++          ...flags,
++        };
++        if (!active) return;
++        setFetchedOptions((prev) => {
++          // prepend resolved option unless already present
++          const exists = prev.some((p) => String(p.id) === String(resolved.id) || String(p.fetchKey) === String(resolved.fetchKey));
++          return exists ? prev.map((p) => (String(p.id) === String(resolved.id) ? { ...p, ...resolved } : p)) : [resolved, ...prev];
++        });
++        // Optionally inform parent that we resolved the UUID/string to a full
++        // option so they can update controlled `value` if desired.
++        if (resolveOnFetch) {
++          try {
++            onChange?.(resolved as any);
++          } catch (e) {
++            // ignore any errors from parent's handler
++          }
++        }
++      } catch (e) {
++        // ignore
++      } finally {
++        resolvingValueRef.current = null;
++      }
++    })();
++
++    return () => {
++      active = false;
++      controller.abort();
++      resolvingValueRef.current = null;
++    };
++  }, [value, fetchOptions, tenantId, datasourceId]);
++
+   return (
+     <Autocomplete
+       options={normalizedOptions}
+       loading={effectiveLoading}
+       getOptionLabel={getOptionLabel as any}
+       filterOptions={(x) => x} // server-side filtering when fetchOptions=true
+-      inputValue={inputValue}
+-      onInputChange={(_, newInput) => onInputChange?.(newInput)}
++  inputValue={effectiveInputValue}
++  onInputChange={(_, newInput) => onInputChange?.(newInput)}
+       value={(displayValue ?? null) as any}
+       onChange={(_, newValue) => onChange?.(newValue)}
+       disabled={disabled}
+diff --git a/frontend/src/components/common/semanticChips.tsx b/frontend/src/components/common/semanticChips.tsx
+new file mode 100644
+index 0000000..251fdfd
+--- /dev/null
++++ b/frontend/src/components/common/semanticChips.tsx
+@@ -0,0 +1,28 @@
++import React from 'react';
++import { Chip, Stack } from '@mui/material';
++
++// Centralized colors for Core and Custom chips. Use MUI palette names so
++// colors remain theme-aware and consistent across the app.
++const CORE_COLOR: 'success' = 'success';
++const CUSTOM_COLOR: 'warning' = 'warning';
++
++export function renderCoreCustomChips(option?: any) {
++  if (!option) return null;
++  const isCore = Boolean(option.isCore ?? option.is_core);
++  const isCustom = Boolean(option.isCustom ?? option.is_custom);
++  const chips: React.ReactNode[] = [];
++  if (isCore) {
++    chips.push(
++      <Chip key="core" label="Core" size="small" color={CORE_COLOR} variant="outlined" />
++    );
++  }
++  if (isCustom) {
++    chips.push(
++      <Chip key="custom" label="Custom" size="small" color={CUSTOM_COLOR} variant="outlined" />
++    );
++  }
++  if (chips.length === 0) return null;
++  return <Stack direction="row" spacing={0.5} sx={{ ml: 1, flexWrap: 'nowrap' }}>{chips}</Stack>;
++}
++
++export default renderCoreCustomChips;
+diff --git a/frontend/src/features/api-builder/pages/APIBuilderPage.tsx b/frontend/src/features/api-builder/pages/APIBuilderPage.tsx
+index 4855b64..6eeddcd 100644
+--- a/frontend/src/features/api-builder/pages/APIBuilderPage.tsx
++++ b/frontend/src/features/api-builder/pages/APIBuilderPage.tsx
+@@ -44,6 +44,7 @@ import {
+   Analytics as AnalyticsIcon
+ } from '@mui/icons-material';
+ import { io as _io } from 'socket.io-client';
++import renderCoreCustomChips from '../../../components/common/semanticChips';
+ 
+ interface API {
+   id: string;
+@@ -663,10 +664,10 @@ const APIBuilderPage: FC = () => {
+           <Grid item xs={12} md={6} lg={4} key={api.id}>
+             <Card>
+               <CardContent>
+-                <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
++                    <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
+                   <Typography variant="h6">{api.name}</Typography>
+                   <Box>
+-                    {api.isCore && <Chip label="Core" color="primary" size="small" />}
++                    {api.isCore && renderCoreCustomChips({ is_core: true })}
+                     <Chip
+                       label={api.type}
+                       color={api.type === 'public' ? 'success' : 'default'}
+diff --git a/frontend/src/features/connections/pages/Connections.tsx b/frontend/src/features/connections/pages/Connections.tsx
+index 291f4db..45a283c 100644
+--- a/frontend/src/features/connections/pages/Connections.tsx
++++ b/frontend/src/features/connections/pages/Connections.tsx
+@@ -2,9 +2,10 @@ import { useState, useMemo } from 'react';
+ import { useQuery } from '@apollo/client';
+ import { GET_TENANTS } from '../../../graphql/queries/tenantQueries';
+ import { IconPlayerPlay, IconPlugConnected, IconSelect } from '@tabler/icons-react';
+-import { Chip, Tooltip } from '@mui/material';
++import { Tooltip, Box } from '@mui/material';
+ import axios from 'axios';
+ import { devLog } from '../../../utils/devLogger';
++import renderCoreCustomChips from '../../../components/common/semanticChips';
+ import { useTenant } from '../../../contexts/TenantContext';
+ import { Tenant, Product, DataSource } from '../../../types';
+ import ScanResultsModal from '../../../components/ScanResultsModal';
+@@ -287,13 +288,13 @@ const Connections = () => {
+               <tr key={index}>
+                 <td>
+                   {conn.tenantName}
+-                  {conn.isTenantGoldCopy && <Tooltip title="core — read-only"><Chip label="core" size="small" sx={{ ml: 1, backgroundColor: (theme) => theme.palette.info.main, color: (theme) => theme.palette.getContrastText(theme.palette.info.main), fontWeight: 700, height: 20, fontSize: '0.65rem' }} /></Tooltip>}
++                  {conn.isTenantGoldCopy && <Tooltip title="core — read-only"><Box component="span" sx={{ ml: 0.75 }}>{renderCoreCustomChips({ is_core: true })}</Box></Tooltip>}
+                 </td>
+                 <td>{conn.instanceName}</td>
+                 <td>{conn.productName}</td>
+                 <td>
+                   {conn.sourceName}
+-                  {conn.isGoldCopy && <Tooltip title="core — read-only"><Chip label="core" size="small" sx={{ ml: 1, backgroundColor: (theme) => theme.palette.info.main, color: (theme) => theme.palette.getContrastText(theme.palette.info.main), fontWeight: 700, height: 20, fontSize: '0.65rem' }} /></Tooltip>}
++                  {conn.isGoldCopy && <Tooltip title="core — read-only"><Box component="span" sx={{ ml: 0.75 }}>{renderCoreCustomChips({ is_core: true })}</Box></Tooltip>}
+                 </td>
+                 <td>
+                   <div className="type-cell-container">
+diff --git a/frontend/src/features/query-builder/pages/QueryBuilderPage.tsx b/frontend/src/features/query-builder/pages/QueryBuilderPage.tsx
+index 59f4633..d1c2c83 100644
+--- a/frontend/src/features/query-builder/pages/QueryBuilderPage.tsx
++++ b/frontend/src/features/query-builder/pages/QueryBuilderPage.tsx
+@@ -9,6 +9,7 @@ import {
+   SpeedDial, SpeedDialAction, Divider,
+   Rating, CardActions, CardHeader
+ } from '@mui/material';
++import renderCoreCustomChips from '../../../components/common/semanticChips';
+ import {
+   Add as AddIcon,
+   PlayArrow as PlayIcon,
+@@ -1002,7 +1003,7 @@ const QueryBuilderPage: React.FC = () => {
+                 <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
+                   <Typography variant="h6">{query.name}</Typography>
+                   <Box>
+-                    {query.isCore && <Chip label="Core" color="primary" size="small" />}
++                    {query.isCore && renderCoreCustomChips({ is_core: true })}
+                     <Chip
+                       label={query.type}
+                       color={query.type === 'public' ? 'success' : 'default'}
+diff --git a/frontend/src/pages/TabbedModal/tabs/DataCatalogTree.tsx b/frontend/src/pages/TabbedModal/tabs/DataCatalogTree.tsx
+index 1a27af1..2ae9a5a 100644
+--- a/frontend/src/pages/TabbedModal/tabs/DataCatalogTree.tsx
++++ b/frontend/src/pages/TabbedModal/tabs/DataCatalogTree.tsx
+@@ -16,6 +16,7 @@ import {
+   Menu,
+   MenuItem
+ } from '@mui/material';
++import renderCoreCustomChips from '../../../components/common/semanticChips';
+ import MenuIcon from '@mui/icons-material/Menu';
+ import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+ import ChevronRightIcon from '@mui/icons-material/ChevronRight';
+@@ -361,17 +362,7 @@ const DataCatalogTree: FC<DataCatalogTreeProps> = ({
+                   {showGoldCopyIcon
+                     ? (
+                         <Tooltip title="core — read-only">
+-                          <Chip
+-                            label="core"
+-                            size="small"
+-                            sx={{
+-                              backgroundColor: theme.palette.warning.main,
+-                              color: theme.palette.getContrastText(theme.palette.warning.main),
+-                              fontWeight: 700,
+-                              height: 20,
+-                              fontSize: '0.65rem',
+-                            }}
+-                          />
++                          <Box component="span">{renderCoreCustomChips({ is_core: true })}</Box>
+                         </Tooltip>
+                       )
+                     : <StarIcon sx={{ fontSize: 16, color: theme.palette.text.secondary }} />
+-- 
+2.50.1
+

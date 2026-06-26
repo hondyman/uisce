@@ -1,0 +1,27 @@
+{
+  "keywords": [
+    "rule",
+    "condition",
+    "group",
+    "and",
+    "or",
+    "not",
+    "equals",
+    "gt",
+    "lt",
+    "gte",
+    "lte",
+    "contains"
+  ],
+  "operators": [
+    "=",
+    "\u003e",
+    "\u003c",
+    "\u003e=",
+    "\u003c=",
+    "!=",
+    "in",
+    "contains"
+  ],
+  "types": {}
+}

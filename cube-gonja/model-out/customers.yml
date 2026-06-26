@@ -1,0 +1,96 @@
+cubes:
+- name: customers
+  sql_table: public.customers
+  data_source: default
+  title: Customers
+  description: "Customer information and metrics"
+
+  business_terms:
+  - id: "BT-CUST-001"
+    name: "Customer"
+    description: "A customer entity representing a business client"
+    category: "Business Entity"
+    sub_category: "Core Entities"
+    owner: "Data Governance Team"
+    steward: "John Smith"
+    status: "approved"
+    version: "1.0.0"
+    tags: [ "customer", "entity", "core" ]
+  - id: "BT-REVENUE-002"
+    name: "Revenue"
+    description: "Financial revenue metrics"
+    category: "Financial"
+    sub_category: "Revenue Metrics"
+    owner: "Finance Team"
+    steward: "Jane Doe"
+    status: "approved"
+    version: "1.1.0"
+    tags: [ "revenue", "financial", "metrics" ]
+    parent_id: "BT-FIN-000"
+
+  joins:
+  - name: orders
+    sql: "LEFT JOIN orders ON customers.customer_id = orders.customer_id"
+    relationship: many_to_one
+
+  measures:
+  - name: count
+    type: count
+    description: "Total number of customers"
+    business_terms:
+    - id: "BT-CUST-001"
+      name: "Customer Count"
+      description: "Count of customer entities"
+      category: "Business Entity"
+      sub_category: "Metrics"
+      status: "approved"
+      version: "1.0.0"
+      tags: [ "count", "customers", "metrics" ]
+
+  - name: total_orders
+    type: sum
+    sql: orders.order_count
+    description: "Total number of orders per customer"
+    business_terms:
+    - id: "BT-REVENUE-002"
+      name: "Order Volume"
+      description: "Volume of orders"
+      category: "Operational"
+
+  dimensions:
+
+  - name: id
+    sql: id
+    type: number
+    primary_key: true
+    description: "Unique customer identifier"
+    business_terms:
+    - id: "BT-CUST-001"
+      name: "Customer ID"
+      description: "Unique identifier for customers"
+      category: "Business Entity"
+      sub_category: "Identifiers"
+      owner: "Data Engineering"
+      status: "approved"
+      version: "1.0.0"
+      tags: [ "id", "identifier", "primary_key" ]
+
+  - name: name
+    sql: name
+    type: string
+    description: "Customer name"
+    business_terms:
+    - id: "BT-CUST-001"
+      name: "Customer Name"
+      description: "Name of the customer"
+      category: "Business Entity"
+
+  - name: order_date
+    sql: orders.order_date
+    type: time
+    description: "Date of customer orders"
+    business_terms:
+    - id: "BT-REVENUE-002"
+      name: "Order Date"
+      description: "Date when orders were placed"
+      category: "Operational"

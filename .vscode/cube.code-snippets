@@ -1,0 +1,212 @@
+{
+  "Cube Schema": {
+    "prefix": "cube",
+    "body": [
+      "cubes:",
+      "  - name: ${1:CubeName}",
+      "    sql: >",
+      "      SELECT *",
+      "      FROM \\${COMPILE_CONTEXT.securityContext.datasource_id}.${2:table_name}",
+      "      WHERE tenant_id = '{COMPILE_CONTEXT.securityContext.tenant_id}'",
+      "",
+      "    dimensions:",
+      "      - name: id",
+      "        sql: id",
+      "        type: string",
+      "        primaryKey: true",
+      "",
+      "      - name: tenant_id",
+      "        sql: tenant_id",
+      "        type: string",
+      "",
+      "      - name: ${3:dimension_name}",
+      "        sql: ${3:dimension_name}",
+      "        type: ${4|string,number,time,boolean|}",
+      "",
+      "    measures:",
+      "      - name: count",
+      "        type: count",
+      "",
+      "      - name: ${5:measure_name}",
+      "        sql: ${6:column_name}",
+      "        type: ${7|sum,count,countDistinct,avg,min,max|}",
+      "",
+      "    preAggregations:",
+      "      - name: main",
+      "        measures: [${8:count}]",
+      "        dimensions: [tenant_id]",
+      "        timeDimension: ${9:created_at}",
+      "        granularity: ${10|day,hour,week,month|}",
+      "        refreshKey:",
+      "          every: \"1 hour\""
+    ],
+    "description": "Create a new Cube schema with tenant isolation"
+  },
+  "Cube Dimension": {
+    "prefix": "dim",
+    "body": [
+      "- name: ${1:dimension_name}",
+      "  sql: ${2:column_name}",
+      "  type: ${3|string,number,time,boolean|}",
+      "  ${4:title: \"${5:Display Title}\"}"
+    ],
+    "description": "Add a dimension to a cube"
+  },
+  "Cube Dimension (Time)": {
+    "prefix": "dimtime",
+    "body": [
+      "- name: ${1:created_at}",
+      "  sql: ${1:created_at}",
+      "  type: time"
+    ],
+    "description": "Add a time dimension"
+  },
+  "Cube Measure (Sum)": {
+    "prefix": "measuresum",
+    "body": [
+      "- name: ${1:total_amount}",
+      "  sql: ${2:amount}",
+      "  type: sum",
+      "  title: \"${3:Total Amount}\""
+    ],
+    "description": "Add a sum measure"
+  },
+  "Cube Measure (Count)": {
+    "prefix": "measurecount",
+    "body": [
+      "- name: ${1:count}",
+      "  type: count",
+      "  title: \"${2:Count}\""
+    ],
+    "description": "Add a count measure"
+  },
+  "Cube Measure (Count Distinct)": {
+    "prefix": "measurecountd",
+    "body": [
+      "- name: ${1:unique_count}",
+      "  sql: ${2:id}",
+      "  type: countDistinct",
+      "  title: \"${3:Unique Count}\""
+    ],
+    "description": "Add a count distinct measure"
+  },
+  "Cube Measure (Average)": {
+    "prefix": "measureavg",
+    "body": [
+      "- name: ${1:avg_amount}",
+      "  sql: ${2:amount}",
+      "  type: avg",
+      "  title: \"${3:Average Amount}\""
+    ],
+    "description": "Add an average measure"
+  },
+  "Cube Pre-Aggregation": {
+    "prefix": "preagg",
+    "body": [
+      "- name: ${1:daily_rollup}",
+      "  measures: [${2:count}]",
+      "  dimensions: [${3:tenant_id}]",
+      "  timeDimension: ${4:created_at}",
+      "  granularity: ${5|day,hour,week,month|}",
+      "  partitionGranularity: ${6|day,week,month|}",
+      "  refreshKey:",
+      "    every: \"${7:1 hour}\"",
+      "  buildRangeStart:",
+      "    sql: \"SELECT DATE_SUB(NOW(), INTERVAL 1 YEAR)\"",
+      "  buildRangeEnd:",
+      "    sql: \"SELECT NOW()\""
+    ],
+    "description": "Add a pre-aggregation with time partitioning"
+  },
+  "Cube Pre-Aggregation (Simple)": {
+    "prefix": "preaggsimple",
+    "body": [
+      "- name: ${1:main}",
+      "  measures: [${2:count}]",
+      "  dimensions: [${3:tenant_id}]",
+      "  refreshKey:",
+      "    every: \"${4:1 hour}\""
+    ],
+    "description": "Add a simple pre-aggregation"
+  },
+  "Cube Join": {
+    "prefix": "join",
+    "body": [
+      "joins:",
+      "  - name: ${1:JoinedCube}",
+      "    sql: \"\\${CUBE}.${2:foreign_key_id} = \\${${1:JoinedCube}}.id\"",
+      "    relationship: ${3|belongsTo,hasMany,hasOne|}"
+    ],
+    "description": "Add a join to another cube"
+  },
+  "Cube Segment": {
+    "prefix": "segment",
+    "body": [
+      "segments:",
+      "  - name: ${1:active_users}",
+      "    sql: \"\\${CUBE}.${2:status} = '${3:active}'\""
+    ],
+    "description": "Add a segment (reusable filter)"
+  },
+  "Tenant Override Cube": {
+    "prefix": "cubeoverride",
+    "body": [
+      "# Tenant-specific override for ${1:TenantId}",
+      "cubes:",
+      "  - name: ${2:CubeName}",
+      "    extends: ${2:CubeName}",
+      "",
+      "    dimensions:",
+      "      # Add tenant-specific dimensions here",
+      "      - name: ${3:custom_dimension}",
+      "        sql: \"${4:custom_sql_expression}\"",
+      "        type: ${5|string,number,boolean|}",
+      "",
+      "    measures:",
+      "      # Add tenant-specific measures here",
+      "      - name: ${6:custom_measure}",
+      "        sql: \"${7:SUM(custom_column)}\"",
+      "        type: ${8|number,sum,avg|}"
+    ],
+    "description": "Create a tenant-specific cube override"
+  },
+  "Security Context Filter": {
+    "prefix": "secfilter",
+    "body": [
+      "WHERE tenant_id = '{COMPILE_CONTEXT.securityContext.tenant_id}'",
+      "  AND datasource_id = '{COMPILE_CONTEXT.securityContext.datasource_id}'"
+    ],
+    "description": "Add security context filter for RLS"
+  },
+  "Refresh Key (Time-based)": {
+    "prefix": "refreshtime",
+    "body": [
+      "refreshKey:",
+      "  every: \"${1:1 hour}\"",
+      "  timezone: \"${2:America/New_York}\""
+    ],
+    "description": "Add time-based refresh key"
+  },
+  "Refresh Key (SQL-based)": {
+    "prefix": "refreshsql",
+    "body": [
+      "refreshKey:",
+      "  sql: \"SELECT MAX(updated_at) FROM ${1:table_name} WHERE tenant_id = '{COMPILE_CONTEXT.securityContext.tenant_id}'\""
+    ],
+    "description": "Add SQL-based refresh key"
+  },
+  "Data Source (StarRocks)": {
+    "prefix": "dsstarrocks",
+    "body": [
+      "dataSource: starrocks"
+    ],
+    "description": "Set StarRocks as data source (hot tier)"
+  },
+  "Data Source (Trino)": {
+    "prefix": "dstrino",
+    "body": [
+      "dataSource: trino"
+    ],
+    "description": "Set Trino as data source (cold tier)"
+  }
+}

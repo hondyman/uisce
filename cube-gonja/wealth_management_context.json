@@ -1,0 +1,357 @@
+{
+  "data_sources": {
+    "wealth_management_portfolio": "wealth_db",
+    "private_equity_portfolio": "pe_db",
+    "benchmark_data": "benchmark_db"
+  },
+  "dimensions": {
+    "wealth_management_portfolio": [
+      {
+        "name": "client_id",
+        "sql": "client_id",
+        "type": "string",
+        "primary_key": true
+      },
+      {
+        "name": "portfolio_id",
+        "sql": "portfolio_id",
+        "type": "string"
+      },
+      {
+        "name": "asset_class",
+        "sql": "asset_class",
+        "type": "string"
+      },
+      {
+        "name": "risk_profile",
+        "sql": "risk_profile",
+        "type": "string"
+      }
+    ],
+    "private_equity_portfolio": [
+      {
+        "name": "fund_id",
+        "sql": "fund_id",
+        "type": "string",
+        "primary_key": true
+      },
+      {
+        "name": "investment_id",
+        "sql": "investment_id",
+        "type": "string"
+      },
+      {
+        "name": "vintage_year",
+        "sql": "vintage_year",
+        "type": "number"
+      }
+    ]
+  },
+  "measures": {
+    "wealth_management_portfolio": [
+      {
+        "name": "total_portfolio_value",
+        "sql": "total_portfolio_value",
+        "type": "number",
+        "format": "currency"
+      },
+      {
+        "name": "sharpe_ratio",
+        "sql": "sharpe_ratio",
+        "type": "number",
+        "financial_calc": {
+          "type": "sharpe_ratio",
+          "parameters": {
+            "risk_free_rate": 0.025
+          }
+        }
+      }
+    ],
+    "private_equity_portfolio": [
+      {
+        "name": "moic",
+        "sql": "moic",
+        "type": "number",
+        "financial_calc": {
+          "type": "moic",
+          "parameters": {}
+        }
+      }
+    ]
+  },
+  "wealth_management_metrics": {
+    "wealth_management_portfolio": [
+      {
+        "name": "portfolio_sharpe",
+        "type": "sharpe_ratio",
+        "parameters": {
+          "risk_free_rate": 0.025
+        },
+        "benchmark": "S&P 500",
+        "time_period": "1Y"
+      },
+      {
+        "name": "portfolio_sortino",
+        "type": "sortino_ratio",
+        "parameters": {
+          "risk_free_rate": 0.025,
+          "target_return": 0.05
+        },
+        "time_period": "1Y"
+      },
+      {
+        "name": "information_ratio",
+        "type": "information_ratio",
+        "parameters": {},
+        "benchmark": "S&P 500",
+        "time_period": "1Y"
+      },
+      {
+        "name": "upside_capture",
+        "type": "upside_capture",
+        "parameters": {},
+        "benchmark": "S&P 500",
+        "time_period": "1Y"
+      },
+      {
+        "name": "downside_capture",
+        "type": "downside_capture",
+        "parameters": {},
+        "benchmark": "S&P 500",
+        "time_period": "1Y"
+      },
+      {
+        "name": "var_95",
+        "type": "var",
+        "parameters": {},
+        "confidence": 0.95,
+        "time_period": "1Y"
+      },
+      {
+        "name": "cvar_95",
+        "type": "cvar",
+        "parameters": {},
+        "confidence": 0.95,
+        "time_period": "1Y"
+      }
+    ]
+  },
+  "risk_metrics": {
+    "wealth_management_portfolio": [
+      {
+        "name": "portfolio_risk",
+        "portfolio_returns": [0.08, 0.06, 0.09, -0.03, 0.07],
+        "benchmark_returns": [0.07, 0.05, 0.08, -0.02, 0.06],
+        "risk_free_rate": 0.025,
+        "target_return": 0.05,
+        "parameters": {
+          "annualize": true
+        }
+      }
+    ]
+  },
+  "benchmarking_metrics": {
+    "wealth_management_portfolio": [
+      {
+        "name": "sp500_comparison",
+        "portfolio_returns": [0.08, 0.06, 0.09, -0.03, 0.07],
+        "benchmark_returns": [0.07, 0.05, 0.08, -0.02, 0.06],
+        "risk_free_rate": 0.025,
+        "parameters": {
+          "benchmark_name": "S&P 500"
+        }
+      }
+    ]
+  },
+  "portfolio_analytics": {
+    "wealth_management_portfolio": [
+      {
+        "name": "multi_asset_portfolio",
+        "portfolio_returns": [0.08, 0.06, 0.09, -0.03, 0.07],
+        "benchmark_returns": [0.07, 0.05, 0.08, -0.02, 0.06],
+        "weights": [0.4, 0.3, 0.2, 0.1],
+        "risk_free_rate": 0.025,
+        "time_period": "1Y",
+        "parameters": {
+          "rebalance_frequency": "quarterly"
+        }
+      }
+    ]
+  },
+  "private_equity_metrics": {
+    "private_equity_portfolio": [
+      {
+        "name": "tech_fund_2020",
+        "type": "moic",
+        "distributions": [50, 30, 20],
+        "contributions": [100, 0, 0],
+        "residual_value": 75,
+        "paid_in_capital": 100,
+        "benchmark_returns": [0.08, 0.06, 0.09, -0.03, 0.07],
+        "parameters": {
+          "vintage_year": 2020,
+          "industry": "Technology"
+        }
+      },
+      {
+        "name": "healthcare_fund_2019",
+        "type": "pme",
+        "distributions": [40, 35, 25],
+        "contributions": [100, 0, 0],
+        "residual_value": 85,
+        "paid_in_capital": 100,
+        "benchmark_returns": [0.07, 0.05, 0.08, -0.02, 0.06],
+        "parameters": {
+          "vintage_year": 2019,
+          "industry": "Healthcare"
+        }
+      }
+    ]
+  },
+  "tenant_params": {
+    "wealth_management_tenant": {
+      "tenant_id": "wealth_management_tenant",
+      "default_risk_free_rate": 0.025,
+      "default_benchmark": "S&P 500 Total Return",
+      "custom_metrics": {
+        "custom_risk_adjusted_return": {
+          "formula": "(total_return - risk_free_rate) / volatility",
+          "parameters": {
+            "risk_free_rate": 0.025
+          }
+        },
+        "portfolio_efficiency": {
+          "formula": "sharpe_ratio / (1 + max_drawdown)",
+          "parameters": {}
+        }
+      },
+      "data_quality_rules": [
+        {
+          "name": "positive_portfolio_value",
+          "type": "range",
+          "severity": "error",
+          "parameters": {
+            "column": "total_portfolio_value",
+            "min": 0
+          }
+        },
+        {
+          "name": "valid_returns",
+          "type": "range",
+          "severity": "warning",
+          "parameters": {
+            "column": "monthly_return",
+            "min": -0.5,
+            "max": 0.5
+          }
+        }
+      ],
+      "performance_hints": [
+        {
+          "type": "index",
+          "table": "portfolio_returns",
+          "columns": ["client_id", "date"],
+          "description": "Index for time-series portfolio queries"
+        },
+        {
+          "type": "partition",
+          "table": "portfolio_returns",
+          "columns": ["date"],
+          "parameters": {
+            "strategy": "monthly"
+          }
+        }
+      ]
+    }
+  },
+  "scaling_config": {
+    "materialized_views": [
+      {
+        "name": "daily_portfolio_metrics",
+        "refresh_type": "incremental",
+        "refresh_schedule": "0 6 * * *",
+        "partition_by": "date",
+        "cluster_by": "client_id"
+      },
+      {
+        "name": "monthly_risk_metrics",
+        "refresh_type": "full",
+        "refresh_schedule": "0 8 1 * *",
+        "partition_by": "month",
+        "cluster_by": "portfolio_id"
+      }
+    ],
+    "partitioning": [
+      {
+        "table": "portfolio_returns",
+        "column": "date",
+        "type": "range",
+        "granularity": "month"
+      },
+      {
+        "table": "benchmark_data",
+        "column": "date",
+        "type": "range",
+        "granularity": "day"
+      }
+    ],
+    "caching": [
+      {
+        "name": "portfolio_performance_cache",
+        "table": "portfolio_performance",
+        "ttl": 3600,
+        "refresh_type": "auto",
+        "refresh_schedule": "*/30 * * * *"
+      },
+      {
+        "name": "risk_metrics_cache",
+        "table": "risk_metrics",
+        "ttl": 7200,
+        "refresh_type": "scheduled",
+        "refresh_schedule": "0 */4 * * *"
+      }
+    ]
+  },
+  "data_quality_rules": {
+    "wealth_management_portfolio": [
+      {
+        "name": "portfolio_value_positive",
+        "type": "not_null",
+        "severity": "error",
+        "parameters": {
+          "column": "total_portfolio_value"
+        }
+      },
+      {
+        "name": "returns_reasonable",
+        "type": "range",
+        "severity": "warning",
+        "threshold": 0.5,
+        "parameters": {
+          "column": "monthly_return",
+          "min": -0.5,
+          "max": 0.5
+        }
+      }
+    ]
+  },
+  "performance_hints": {
+    "wealth_management_portfolio": [
+      {
+        "type": "index",
+        "table": "portfolio_returns",
+        "columns": ["client_id", "date", "asset_class"],
+        "description": "Composite index for portfolio analysis queries"
+      },
+      {
+        "type": "partition",
+        "table": "portfolio_returns",
+        "columns": ["date"],
+        "parameters": {
+          "strategy": "monthly",
+          "retention": "7 years"
+        }
+      }
+    ]
+  }
+}

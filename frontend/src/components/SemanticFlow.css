@@ -1,0 +1,143 @@
+/* SemanticFlow.css - Custom node styling for different node types */
+
+.semantic-flow-container {
+  width: 100%;
+  height: 100%;
+  min-height: 400px;
+  position: relative;
+}
+
+.semantic-flow-container .react-flow {
+  width: 100%;
+  height: 100%;
+}
+
+.semantic-flow-container .react-flow__edges {
+  z-index: 1;
+}
+
+.semantic-flow-container .react-flow__nodes {
+  z-index: 2;
+}
+
+.custom-node {
+  padding: 8px 12px;
+  border-radius: 6px;
+  border: 2px solid;
+  background: white;
+  min-width: 120px;
+  text-align: center;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  transition: all 0.2s ease;
+}
+
+.custom-node:hover {
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+  transform: translateY(-1px);
+}
+
+.node-label {
+  font-size: 12px;
+  font-weight: 500;
+  color: #333;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Business Term Nodes - Blue theme */
+.business-term-node {
+  border-color: #1976d2;
+  background: linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%);
+}
+
+.business-term-node .node-label {
+  color: #0d47a1;
+}
+
+/* Semantic Term Nodes - Green theme */
+.semantic-term-node {
+  border-color: #388e3c;
+  background: linear-gradient(135deg, #e8f5e8 0%, #c8e6c9 100%);
+}
+
+.semantic-term-node .node-label {
+  color: #1b5e20;
+}
+
+/* Semantic Column Nodes - Orange theme */
+.semantic-column-node {
+  border-color: #f57c00;
+  background: linear-gradient(135deg, #fff3e0 0%, #ffcc80 100%);
+}
+
+.semantic-column-node .node-label {
+  color: #bf360c;
+}
+
+/* Database Table Nodes - Purple theme */
+.database-table-node {
+  border-color: #7b1fa2;
+  background: linear-gradient(135deg, #f3e5f5 0%, #ce93d8 100%);
+}
+
+.database-table-node .node-label {
+  color: #4a148c;
+}
+
+/* Database Column Nodes - Red theme */
+.database-column-node {
+  border-color: #d32f2f;
+  background: linear-gradient(135deg, #ffebee 0%, #ffcdd2 100%);
+}
+
+.database-column-node .node-label {
+  color: #b71c1c;
+}
+
+/* ReactFlow default styles override */
+.react-flow__node {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+.react-flow__node.selected .custom-node {
+  border-width: 3px;
+  box-shadow: 0 0 0 2px rgba(25, 118, 210, 0.3);
+}
+
+.react-flow__edge.selected {
+  z-index: 10;
+}
+
+.react-flow__edge-path {
+  stroke: #666 !important;
+  stroke-width: 3 !important;
+  fill: none !important;
+}
+
+.react-flow__edge.animated .react-flow__edge-path {
+  stroke-dasharray: 5, 5;
+  animation: react-flow__edge-animation 1s linear infinite;
+}
+
+.react-flow__edge:hover .react-flow__edge-path {
+  stroke: #1976d2 !important;
+  stroke-width: 4 !important;
+}
+
+@keyframes react-flow__edge-animation {
+  to {
+    stroke-dashoffset: -10;
+  }
+}
+
+/* Edge labels */
+.react-flow__edge-label {
+  font-size: 10px;
+  font-weight: 500;
+  color: #666;
+  background: rgba(255, 255, 255, 0.9);
+  padding: 2px 6px;
+  border-radius: 3px;
+  border: 1px solid #ddd;
+}

@@ -1,0 +1,15 @@
+.gridColSpanFull {
+  grid-column: 1 / -1;
+}
+
+.lineage-container {
+  position: relative;
+  overflow: hidden;
+  height: 100%;
+}
+
+.headerActions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}

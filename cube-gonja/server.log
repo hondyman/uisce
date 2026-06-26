@@ -1,0 +1,76 @@
+2025/09/10 16:04:02 Database connection established
+2025/09/10 16:04:02 Warning: Failed to initialize catalog types: failed to create schema node type: failed to create node type schema: pq: relation "public.catalog_node_type" does not exist
+2025/09/10 16:04:02 Warning: Failed to insert node type semantic_model: pq: relation "public.catalog_node_type" does not exist
+2025/09/10 16:04:02 Warning: Failed to insert node type semantic_column: pq: relation "public.catalog_node_type" does not exist
+2025/09/10 16:04:02 Warning: Failed to insert node type schema: pq: relation "public.catalog_node_type" does not exist
+2025/09/10 16:04:02 Warning: Failed to insert node type table: pq: relation "public.catalog_node_type" does not exist
+2025/09/10 16:04:02 Warning: Failed to insert node type column: pq: relation "public.catalog_node_type" does not exist
+2025/09/10 16:04:02 Warning: Failed to insert node type business_term: pq: relation "public.catalog_node_type" does not exist
+2025/09/10 16:04:02 Warning: Failed to insert node type semantic_term: pq: relation "public.catalog_node_type" does not exist
+2025/09/10 16:04:02 Warning: Failed to insert node type semantic_view: pq: relation "public.catalog_node_type" does not exist
+2025/09/10 16:04:02 Warning: Failed to insert node type metrics: pq: relation "public.catalog_node_type" does not exist
+2025/09/10 16:04:02 Warning: Failed to insert edge type foreign_key: pq: relation "public.catalog_edge_type" does not exist
+2025/09/10 16:04:02 Warning: Failed to insert edge type has_semantic: pq: relation "public.catalog_edge_type" does not exist
+2025/09/10 16:04:02 Warning: Failed to insert edge type mapped to: pq: relation "public.catalog_edge_type" does not exist
+2025/09/10 16:04:02 Warning: Failed to insert edge type member of: pq: relation "public.catalog_edge_type" does not exist
+2025/09/10 16:04:02 Warning: Failed to insert edge type joins: pq: relation "public.catalog_edge_type" does not exist
+2025/09/10 16:04:02 Warning: Failed to insert edge type references: pq: relation "public.catalog_edge_type" does not exist
+2025/09/10 16:04:02 Warning: Failed to insert edge type extends: pq: relation "public.catalog_edge_type" does not exist
+2025/09/10 16:04:02 Warning: Failed to insert wealth metrics node: pq: relation "public.catalog_node" does not exist
+2025/09/10 16:04:02 Setting up Gin router
+[GIN-debug] [WARNING] Creating an Engine instance with the Logger and Recovery middleware already attached.
+
+[GIN-debug] [WARNING] Running in "debug" mode. Switch to "release" mode in production.
+ - using env:	export GIN_MODE=release
+ - using code:	gin.SetMode(gin.ReleaseMode)
+
+2025/09/10 16:04:02 Registering /health handler
+[GIN-debug] GET    /health                   --> main.simpleHealthGin (3 handlers)
+2025/09/10 16:04:02 Handler registered successfully
+[GIN-debug] GET    /context/history          --> main.getContextHistoryGin (5 handlers)
+[GIN-debug] POST   /context/rollback         --> main.rollbackContextGin (5 handlers)
+[GIN-debug] GET    /context/stats            --> main.getContextStatsGin (5 handlers)
+[GIN-debug] POST   /validate-config          --> main.validateConfigGin (5 handlers)
+[GIN-debug] GET    /metrics                  --> main.getMetricsGin (5 handlers)
+[GIN-debug] POST   /update-context           --> main.updateContextGin (5 handlers)
+[GIN-debug] POST   /render                   --> main.renderOneGin (5 handlers)
+[GIN-debug] POST   /render-all               --> main.renderAllGin (5 handlers)
+[GIN-debug] POST   /validate-dry-run         --> main.validateDryRunGin (5 handlers)
+[GIN-debug] POST   /preview                  --> main.previewGin (5 handlers)
+[GIN-debug] POST   /update-catalog           --> main.updateCatalogGin (5 handlers)
+[GIN-debug] GET    /business-terms           --> main.searchBusinessTermsGin (5 handlers)
+[GIN-debug] POST   /business-terms/validate  --> main.validateBusinessTermsGin (5 handlers)
+[GIN-debug] GET    /ui                       --> main.webUIGin (5 handlers)
+[GIN-debug] GET    /ui/                      --> main.webUIGin (5 handlers)
+[GIN-debug] GET    /templates                --> main.listTemplatesGin (5 handlers)
+[GIN-debug] GET    /tenants                  --> main.listTenantsGin (5 handlers)
+[GIN-debug] GET    /tenants/*action          --> main.manageTenantGin (5 handlers)
+[GIN-debug] POST   /tenants/*action          --> main.manageTenantGin (5 handlers)
+[GIN-debug] PUT    /tenants/*action          --> main.manageTenantGin (5 handlers)
+[GIN-debug] PATCH  /tenants/*action          --> main.manageTenantGin (5 handlers)
+[GIN-debug] HEAD   /tenants/*action          --> main.manageTenantGin (5 handlers)
+[GIN-debug] OPTIONS /tenants/*action          --> main.manageTenantGin (5 handlers)
+[GIN-debug] DELETE /tenants/*action          --> main.manageTenantGin (5 handlers)
+[GIN-debug] CONNECT /tenants/*action          --> main.manageTenantGin (5 handlers)
+[GIN-debug] TRACE  /tenants/*action          --> main.manageTenantGin (5 handlers)
+[GIN-debug] GET    /git/status               --> main.gitStatusGin (5 handlers)
+[GIN-debug] GET    /git/log                  --> main.gitLogGin (5 handlers)
+[GIN-debug] GET    /git/branches             --> main.gitBranchesGin (5 handlers)
+[GIN-debug] POST   /git/commit               --> main.gitCommitGin (5 handlers)
+[GIN-debug] POST   /git/push                 --> main.gitPushGin (5 handlers)
+[GIN-debug] POST   /git/pull                 --> main.gitPullGin (5 handlers)
+[GIN-debug] GET    /git/branches/            --> main.gitBranchOpsGin (5 handlers)
+[GIN-debug] POST   /git/branches/            --> main.gitBranchOpsGin (5 handlers)
+[GIN-debug] PUT    /git/branches/            --> main.gitBranchOpsGin (5 handlers)
+[GIN-debug] PATCH  /git/branches/            --> main.gitBranchOpsGin (5 handlers)
+[GIN-debug] HEAD   /git/branches/            --> main.gitBranchOpsGin (5 handlers)
+[GIN-debug] OPTIONS /git/branches/            --> main.gitBranchOpsGin (5 handlers)
+[GIN-debug] DELETE /git/branches/            --> main.gitBranchOpsGin (5 handlers)
+[GIN-debug] CONNECT /git/branches/            --> main.gitBranchOpsGin (5 handlers)
+[GIN-debug] TRACE  /git/branches/            --> main.gitBranchOpsGin (5 handlers)
+2025/09/10 16:04:02 Gonja Context Service listening on :3000
+2025/09/10 16:04:02 Starting server...
+[GIN-debug] [WARNING] You trusted all proxies, this is NOT safe. We recommend you to set a value.
+Please check https://pkg.go.dev/github.com/gin-gonic/gin#readme-don-t-trust-all-proxies for details.
+[GIN-debug] Listening and serving HTTP on :3000
+[GIN] 2025/09/10 - 16:04:03 | 200 |      40.125µs |             ::1 | GET      "/health"

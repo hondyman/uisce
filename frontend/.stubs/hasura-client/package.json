@@ -1,0 +1,5 @@
+{
+  "name": "@semlayer/hasura-client",
+  "version": "0.0.0",
+  "main": "index.js"
+}

@@ -1,0 +1,46 @@
+{
+  "mappings": [
+    {
+      "database_column": {
+        "node_id": "cust.company_name",
+        "tenant_id": "910638ba-a459-4a3f-bb2d-78391b0595f6",
+        "tenant_datasource_id": "982aef38-418f-46dc-acd0-35fe8f3b97b0",
+        "data_type": "varchar",
+        "connection": "northwind_default",
+        "schema": "dbo",
+        "table": "Customers",
+        "column": "CompanyName"
+      },
+      "semantic_term": "Customer.CompanyName",
+      "is_new_term": true
+    },
+    {
+      "database_column": {
+        "node_id": "cust.id",
+        "tenant_id": "910638ba-a459-4a3f-bb2d-78391b0595f6",
+        "tenant_datasource_id": "982aef38-418f-46dc-acd0-35fe8f3b97b0",
+        "data_type": "varchar",
+        "connection": "northwind_default",
+        "schema": "dbo",
+        "table": "Customers",
+        "column": "CustomerID"
+      },
+      "semantic_term": "Customer.ID",
+      "is_new_term": true
+    },
+    {
+      "database_column": {
+        "node_id": "emp.id",
+        "tenant_id": "910638ba-a459-4a3f-bb2d-78391b0595f6",
+        "tenant_datasource_id": "982aef38-418f-46dc-acd0-35fe8f3b97b0",
+        "data_type": "int",
+        "connection": "northwind_default",
+        "schema": "dbo",
+        "table": "Employees",
+        "column": "EmployeeID"
+      },
+      "semantic_term": "Employee.ID",
+      "is_new_term": true
+    }
+  ]
+}

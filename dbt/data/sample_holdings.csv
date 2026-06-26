@@ -1,0 +1,4 @@
+id,account_id,security_id,holding_type,market_value,valuation_date,currency
+h1,A-001,S-100,SOD,100000.00,2026-01-02,USD
+h2,A-001,S-100,EOD,101200.00,2026-01-02,USD
+h3,A-001,S-100,SETTLED,100500.00,2026-01-02,USD

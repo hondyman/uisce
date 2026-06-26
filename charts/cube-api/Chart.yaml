@@ -1,0 +1,20 @@
+apiVersion: v2
+name: cube-api
+description: Cube.js API - OLAP semantic layer and caching
+type: application
+version: 1.0.0
+appVersion: "0.35.0"
+
+maintainers:
+- name: Semlayer Platform Team
+  email: platform@semlayer.io
+
+dependencies:
+- name: common
+  version: "1.x.x"
+  repository: "https://charts.bitnami.com/bitnami"
+  condition: common.enabled
+
+annotations:
+  category: analytics
+  component: cube

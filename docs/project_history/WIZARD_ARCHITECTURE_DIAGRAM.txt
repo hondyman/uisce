@@ -1,0 +1,436 @@
+╔════════════════════════════════════════════════════════════════════════════╗
+║                  VALIDATION RULES WIZARD - ARCHITECTURE                    ║
+╚════════════════════════════════════════════════════════════════════════════╝
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                       APPLICATION LAYER                                     │
+│  ┌──────────────────────────────────────────────────────────────────────┐   │
+│  │          ValidationRulesWithFacets.tsx                              │   │
+│  │  (Main rules management page)                                       │   │
+│  │                                                                      │   │
+│  │  State:                                                             │   │
+│  │  - searchTerm, selectedFilters                                      │   │
+│  │  - totalFacetCounts, rules                                          │   │
+│  │  - creatorOpen ← NEW                                                │   │
+│  │                                                                      │   │
+│  │  Renders:                                                           │   │
+│  │  ✓ Search bar + "+ Add Rule" button ← NEW                          │   │
+│  │  ✓ Facet filters (Entity, Type, Severity)                          │   │
+│  │  ✓ Rules list with pagination                                      │   │
+│  │  ✓ ValidationRuleCreator component ← NEW                           │   │
+│  └──────────────────────────────────────────────────────────────────────┘   │
+└─────────────────────────────────────────────────────────────────────────────┘
+                                    │
+                    ┌───────────────┴───────────────┐
+                    │                               │
+        ┌───────────▼──────────────┐     ┌──────────▼──────────────┐
+        │   EXISTING COMPONENTS    │     │   NEW COMPONENTS       │
+        │                          │     │                        │
+        │ • RuleList               │     │ • ValidationRuleEditor │
+        │ • FacetFilters           │     │ • ValidationRuleCreator
+        │ • RuleEditor (existing)  │     │     (4-Step Wizard)   │
+        │ • SearchBar              │     │                        │
+        └──────────────────────────┘     └────────────────────────┘
+
+
+╔════════════════════════════════════════════════════════════════════════════╗
+║                  VALIDATION RULE CREATOR - COMPONENT STRUCTURE              ║
+╚════════════════════════════════════════════════════════════════════════════╝
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                 ValidationRuleCreator.tsx Component                         │
+│                          (530 lines)                                        │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  PROPS INPUT:                           STATE MANAGEMENT:                  │
+│  ├── isOpen: boolean                    ├── currentStep: 1-4               │
+│  ├── onClose: () => void                ├── formData: FormState            │
+│  ├── onSave: (rule) => void             ├── errors: {field: string}        │
+│  ├── tenantId: string                   └── loading: boolean               │
+│  ├── datasourceId: string                                                  │
+│  └── availableEntities: string[]        FUNCTIONS:                         │
+│                                         ├── validateStep()                 │
+│  CONSTANTS:                             ├── handleNext()                   │
+│  ├── RULE_TYPES (5 options)             ├── handleBack()                   │
+│  ├── SEVERITY_LEVELS (3 options)        ├── handleSubmit()                 │
+│  └── OPERATORS (9 options)              ├── addCondition()                 │
+│                                         ├── removeCondition()              │
+│                                         └── updateCondition()              │
+│                                                                             │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                         VISUAL STRUCTURE                                    │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  ┌─────────────────────────────────────────────────────────────────────┐  │
+│  │  Header (Blue Gradient)                                       [×]   │  │
+│  │  "Create Validation Rule"                                          │  │
+│  ├─────────────────────────────────────────────────────────────────────┤  │
+│  │  Progress Bar with 4 Steps                                         │  │
+│  │  📋 → ⚙️ → ⚠️ → 🔍                                                  │  │
+│  ├─────────────────────────────────────────────────────────────────────┤  │
+│  │  Content Area (Scrollable)                                         │  │
+│  │  ┌──────────────────────────────────────────────────────────────┐  │  │
+│  │  │ STEP 1: Basic Information                                   │  │  │
+│  │  │ • Rule Name (required)                                      │  │  │
+│  │  │ • Description (required)                                    │  │  │
+│  │  └──────────────────────────────────────────────────────────────┘  │  │
+│  │                                                                     │  │
+│  │  ┌──────────────────────────────────────────────────────────────┐  │  │
+│  │  │ STEP 2: Configuration                                       │  │  │
+│  │  │ • Rule Type (5 card options)                                │  │  │
+│  │  │ • Target Entity (dropdown)                                  │  │  │
+│  │  │ • Sub-Entity (optional text)                                │  │  │
+│  │  └──────────────────────────────────────────────────────────────┘  │  │
+│  │                                                                     │  │
+│  │  ┌──────────────────────────────────────────────────────────────┐  │  │
+│  │  │ STEP 3: Severity & Scope                                    │  │  │
+│  │  │ • Severity Level (3 card options)                           │  │  │
+│  │  │ • Apply Globally (checkbox)                                 │  │  │
+│  │  │ • Active Rule (checkbox)                                    │  │  │
+│  │  └──────────────────────────────────────────────────────────────┘  │  │
+│  │                                                                     │  │
+│  │  ┌──────────────────────────────────────────────────────────────┐  │  │
+│  │  │ STEP 4: Conditions (Optional)                               │  │  │
+│  │  │ • Add Condition button                                      │  │  │
+│  │  │ • Condition list (field, operator, value)                   │  │  │
+│  │  │ • Remove buttons for each condition                         │  │  │
+│  │  └──────────────────────────────────────────────────────────────┘  │  │
+│  ├─────────────────────────────────────────────────────────────────────┤  │
+│  │  Footer (Buttons)                                                  │  │
+│  │  [ Cancel ]     [ Back ]  [ Next / Create ]                        │  │
+│  └─────────────────────────────────────────────────────────────────────┘  │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+
+╔════════════════════════════════════════════════════════════════════════════╗
+║                    STYLING ARCHITECTURE - CSS                              ║
+╚════════════════════════════════════════════════════════════════════════════╝
+
+ValidationRuleCreator.css (600 lines)
+│
+├─ Overlay Styles
+│  ├── .validation-rule-creator-overlay (backdrop)
+│  └── .validation-rule-creator-modal (main container)
+│
+├─ Header Styles
+│  ├── .creator-header (blue gradient)
+│  ├── .creator-title
+│  ├── .creator-subtitle
+│  └── .creator-close
+│
+├─ Progress Styles
+│  ├── .creator-steps
+│  ├── .steps-container
+│  ├── .step-indicator
+│  ├── .step-circle
+│  ├── .step-label
+│  ├── .step-connector
+│  └── Step states: .step-completed, .step-active, .step-inactive
+│
+├─ Content Styles
+│  ├── .creator-content (scrollable area)
+│  ├── .step-content (individual step)
+│  └── .error-banner
+│
+├─ Form Styles
+│  ├── .form-group
+│  ├── .form-label
+│  ├── .form-input
+│  ├── .form-select
+│  └── .error-text
+│
+├─ Option Selection Styles
+│  ├── .option-grid
+│  ├── .option-card
+│  ├── .option-selected
+│  ├── .option-icon
+│  ├── .option-content
+│  ├── .option-title
+│  ├── .option-description
+│  └── .option-checkmark
+│
+├─ Severity Styles
+│  ├── .severity-dot
+│  ├── .severity-error (red)
+│  ├── .severity-warning (orange)
+│  └── .severity-info (blue)
+│
+├─ Checkbox Styles
+│  ├── .checkbox-group
+│  ├── .checkbox-card
+│  ├── .checkbox-title
+│  └── .checkbox-description
+│
+├─ Condition Styles
+│  ├── .conditions-section
+│  ├── .conditions-header
+│  ├── .add-condition-btn
+│  ├── .conditions-list
+│  ├── .condition-item
+│  ├── .condition-fields
+│  ├── .field-group
+│  ├── .condition-input
+│  └── .remove-condition-btn
+│
+├─ Footer Styles
+│  ├── .creator-footer
+│  ├── .footer-actions
+│  └── Button variants:
+│      ├── .btn-cancel
+│      ├── .btn-primary
+│      ├── .btn-secondary
+│      └── .btn-success
+│
+├─ Responsive Design
+│  └── @media (max-width: 640px)
+│      └── Mobile-optimized layouts
+│
+└─ Accessibility
+   └── @media (prefers-reduced-motion: reduce)
+       └── Disable animations
+
+
+╔════════════════════════════════════════════════════════════════════════════╗
+║                    DATA FLOW - FORM SUBMISSION                            ║
+╚════════════════════════════════════════════════════════════════════════════╝
+
+USER INTERACTION
+      │
+      ▼
+┌─────────────────────────┐
+│ Click "+ Add Rule"      │
+└────────────┬────────────┘
+             │
+             ▼
+┌─────────────────────────┐
+│ setCreatorOpen(true)    │
+│ Modal becomes visible   │
+└────────────┬────────────┘
+             │
+             ▼
+┌─────────────────────────────────────────┐
+│ STEP 1: Enter Rule Name & Description   │
+│ validateStep(1)                         │
+│ All required fields filled?             │
+└────────────┬────────────────────────────┘
+             │ YES
+             ▼
+┌─────────────────────────────────────────┐
+│ STEP 2: Select Type & Entity            │
+│ validateStep(2)                         │
+│ Type and Entity selected?               │
+└────────────┬────────────────────────────┘
+             │ YES
+             ▼
+┌─────────────────────────────────────────┐
+│ STEP 3: Set Severity & Scope            │
+│ validateStep(3)                         │
+│ Severity selected?                      │
+└────────────┬────────────────────────────┘
+             │ YES
+             ▼
+┌─────────────────────────────────────────┐
+│ STEP 4: Add Conditions (Optional)       │
+│ No validation required                  │
+│ User may skip or add conditions         │
+└────────────┬────────────────────────────┘
+             │
+             ▼
+┌──────────────────────────────────────────────┐
+│ Click "Create Rule"                          │
+│ handleSubmit() called                        │
+│ setLoading(true)                             │
+└────────────┬─────────────────────────────────┘
+             │
+             ▼
+┌──────────────────────────────────────────────┐
+│ POST /api/validation-rules                   │
+│ Query: ?tenant_id=X&datasource_id=Y          │
+│ Body: {                                      │
+│   rule_name, rule_type, target_entity,      │
+│   description, severity, is_active,         │
+│   condition_json                            │
+│ }                                            │
+└────────────┬─────────────────────────────────┘
+             │
+             ├─── SUCCESS ──┬──────────────────────┐
+             │              │                      ▼
+             │              │            ┌──────────────────┐
+             │              │            │ Return rule data │
+             │              │            │ with ID          │
+             │              │            └────────┬─────────┘
+             │              │                     │
+             │              │                     ▼
+             │              │            ┌──────────────────────────┐
+             │              │            │ onSave callback called   │
+             │              │            │ fetchRules() - refresh   │
+             │              │            └────────┬─────────────────┘
+             │              │                     │
+             │              │                     ▼
+             │              │            ┌──────────────────────────┐
+             │              │            │ Rule appears in list    │
+             │              │            │ Modal closes            │
+             │              │            └──────────────────────────┘
+             │              │
+             └─── ERROR ────┴──────────────────────┐
+                                                   │
+                                                   ▼
+                                    ┌──────────────────────────┐
+                                    │ Error message shown      │
+                                    │ Modal stays open         │
+                                    │ User can retry           │
+                                    └──────────────────────────┘
+
+
+╔════════════════════════════════════════════════════════════════════════════╗
+║                    COMPONENT INTEGRATION DIAGRAM                           ║
+╚════════════════════════════════════════════════════════════════════════════╝
+
+Your Application
+│
+├─ ValidationRulesWithFacets (existing)
+│  ├─ State & Hooks
+│  ├─ Search Bar
+│  │  └─ "+ Add Rule" Button (NEW)
+│  │     └─ onClick: setCreatorOpen(true)
+│  ├─ Facet Filters
+│  ├─ Rules List
+│  │  └─ Rule Item
+│  │     └─ ValidationRuleEditor (existing)
+│  └─ ValidationRuleCreator Component (NEW)
+│     │
+│     ├─ Props: isOpen, onClose, onSave, tenantId, datasourceId, availableEntities
+│     │
+│     ├─ Step 1: Basic Info
+│     │  └─ Input: name, description
+│     │
+│     ├─ Step 2: Configuration
+│     │  └─ Select: type, entity, sub-entity
+│     │
+│     ├─ Step 3: Severity & Scope
+│     │  └─ Select: severity, global, active
+│     │
+│     ├─ Step 4: Conditions
+│     │  └─ Add: field, operator, value (optional)
+│     │
+│     └─ Submit
+│        └─ POST /api/validation-rules
+│           └─ onSave callback
+│              └─ fetchRules() - refresh existing list
+
+
+╔════════════════════════════════════════════════════════════════════════════╗
+║                         FILE DEPENDENCIES                                  ║
+╚════════════════════════════════════════════════════════════════════════════╝
+
+ValidationRulesWithFacets.tsx
+│
+├─ imports
+│  ├─ React, useState, useEffect
+│  ├─ ValidationRuleCreator (NEW import)
+│  ├─ ValidationRulesWithFacets.css
+│  └─ [other existing imports]
+│
+├─ uses
+│  ├─ ValidationRuleEditor (existing)
+│  └─ ValidationRuleCreator (NEW)
+│
+└─ dependencies
+   ├─ tenantId (from context/props)
+   ├─ datasourceId (from context/props)
+   ├─ availableEntities (computed from facets)
+   └─ fetchRules() (existing function)
+
+
+ValidationRuleCreator.tsx
+│
+├─ imports
+│  ├─ React, useState
+│  └─ ValidationRuleCreator.css
+│
+├─ exports
+│  └─ ValidationRuleCreator component
+│
+└─ external APIs
+   └─ POST /api/validation-rules
+
+
+ValidationRuleCreator.css
+│
+├─ includes
+│  ├─ Layout styles
+│  ├─ Color definitions
+│  ├─ Animations
+│  ├─ Responsive breakpoints
+│  └─ Accessibility features
+│
+└─ no dependencies
+
+
+╔════════════════════════════════════════════════════════════════════════════╗
+║                    DEPLOYMENT ARCHITECTURE                                 ║
+╚════════════════════════════════════════════════════════════════════════════╝
+
+DEVELOPMENT
+    │
+    ├─ Component Files
+    │  ├─ ValidationRuleCreator.tsx (20 KB)
+    │  └─ ValidationRuleCreator.css (10 KB)
+    │
+    └─ Build Process
+       └─ npm run build
+          └─ Vite bundler
+             ├─ TypeScript → JavaScript
+             ├─ CSS minification
+             ├─ Tree shaking
+             └─ Output: dist/
+
+PRODUCTION
+    │
+    ├─ dist/assets/
+    │  └─ ValidationRuleCreator bundle
+    │     └─ ~30 KB (gzipped)
+    │
+    └─ API Backend
+       └─ POST /api/validation-rules
+          └─ Validates and creates rule
+             └─ Stores in PostgreSQL
+
+
+DELIVERY PACKAGE STRUCTURE
+│
+├─ Component Files (Ready to Use)
+│  ├─ ValidationRuleCreator.tsx
+│  └─ ValidationRuleCreator.css
+│
+├─ Documentation
+│  ├─ README_WIZARD_PACKAGE.md (overview)
+│  ├─ INTEGRATION_GUIDE_WIZARD.md (how-to)
+│  ├─ VALIDATION_RULES_WIZARD_COMPLETE.md (details)
+│  ├─ VALIDATION_RULES_WIZARD_VISUAL_GUIDE.md (UI reference)
+│  ├─ VALIDATION_RULES_WIZARD_SUMMARY.md (checklist)
+│  └─ WIZARD_ARCHITECTURE_DIAGRAM.txt (this file)
+│
+└─ Status: ✅ PRODUCTION READY
+
+
+═══════════════════════════════════════════════════════════════════════════════
+LEGEND:
+───────────────────────────────────────────────────────────────────────────────
+► = Flow direction
+┌─ = Corner/start
+─┬─ = Branch point
+├─ = Connection
+└─ = End
+│ = Vertical connection
+▼ = Downward flow
+═ = Section boundary
+───── = Section divider
+═════ = Major section divider
+
+═══════════════════════════════════════════════════════════════════════════════
+DOCUMENT VERSION: 1.0
+CREATED: October 20, 2025
+STATUS: ✅ Production Ready
+═══════════════════════════════════════════════════════════════════════════════

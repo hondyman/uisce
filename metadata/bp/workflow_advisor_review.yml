@@ -1,0 +1,35 @@
+id: workflow_advisor_review
+type: BusinessProcess
+version: 1.0.0
+name: Advisor Review Workflow
+status: draft
+description: Maker-checker workflow for advisor review of AI-suggested actions
+states:
+  - queued
+  - reviewing
+  - approved
+  - rejected
+  - escalated
+transitions:
+  - from: queued
+    to: reviewing
+    guard: "queue.has_capacity()"
+    action: "assign_advisor"
+    sla: "PT4H"
+  - from: reviewing
+    to: approved
+    guard: "advisor_confirms()"
+    action: "record_approval"
+  - from: reviewing
+    to: rejected
+    guard: "advisor_rejects()"
+    action: "record_rejection"
+  - from: reviewing
+    to: escalated
+    guard: "sla_breached()"
+    action: "escalate_to_ops"
+bindings:
+  queued: AdvisorInboxView
+  reviewing: AdvisorCaseView
+audit:
+  include: ["queue_item_id","card_id","client_id","advisor_id","disclosures","decision_rationale","evidence_snapshot"]

@@ -1,0 +1,157 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "String-Based Time Dimension Contract",
+  "description": "Schema for string-based time dimension definitions in the semantic layer",
+  "type": "object",
+  "properties": {
+    "node_id": {
+      "type": "string",
+      "description": "Unique identifier for the time dimension node"
+    },
+    "node_type": {
+      "type": "string",
+      "enum": ["string_time_dimension"],
+      "description": "Type of semantic node"
+    },
+    "name": {
+      "type": "string",
+      "description": "Human-readable name for the time dimension"
+    },
+    "description": {
+      "type": "string",
+      "description": "Description of the time dimension purpose"
+    },
+    "source_column": {
+      "type": "string",
+      "description": "Source column containing string date/time values"
+    },
+    "source_table": {
+      "type": "string",
+      "description": "Source table containing the string column"
+    },
+    "date_format": {
+      "type": "string",
+      "description": "Format pattern for parsing the string (e.g., 'YYYY-MM-DD', 'MM/DD/YYYY')"
+    },
+    "time_format": {
+      "type": "string",
+      "description": "Time format pattern if time component exists (e.g., 'HH:mm:ss')"
+    },
+    "timezone": {
+      "type": "string",
+      "default": "UTC",
+      "description": "Timezone for the parsed timestamps"
+    },
+    "parsing_function": {
+      "type": "string",
+      "enum": ["TO_TIMESTAMP", "PARSE_TIMESTAMP", "STR_TO_DATE", "CUSTOM"],
+      "default": "TO_TIMESTAMP",
+      "description": "SQL function to use for parsing"
+    },
+    "fallback_value": {
+      "type": "string",
+      "description": "Value to use when parsing fails"
+    },
+    "validation_rules": {
+      "type": "object",
+      "properties": {
+        "allow_null": {
+          "type": "boolean",
+          "default": true,
+          "description": "Whether null values are allowed"
+        },
+        "min_date": {
+          "type": "string",
+          "format": "date",
+          "description": "Minimum allowed date"
+        },
+        "max_date": {
+          "type": "string",
+          "format": "date",
+          "description": "Maximum allowed date"
+        },
+        "date_range_check": {
+          "type": "boolean",
+          "default": false,
+          "description": "Whether to validate date ranges"
+        }
+      },
+      "description": "Validation rules for parsed dates"
+    },
+    "performance_optimization": {
+      "type": "object",
+      "properties": {
+        "materialize_parsed_column": {
+          "type": "boolean",
+          "default": false,
+          "description": "Whether to create a materialized parsed column"
+        },
+        "index_parsed_column": {
+          "type": "boolean",
+          "default": true,
+          "description": "Whether to index the parsed column"
+        },
+        "partition_by_parsed_date": {
+          "type": "boolean",
+          "default": false,
+          "description": "Whether to partition by parsed date"
+        }
+      },
+      "description": "Performance optimization settings"
+    },
+    "tags": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Tags for categorization and filtering"
+    },
+    "owner": {
+      "type": "string",
+      "description": "Owner/steward responsible for this dimension"
+    },
+    "version": {
+      "type": "string",
+      "description": "Version of the dimension definition"
+    },
+    "golden_path": {
+      "type": "boolean",
+      "default": false,
+      "description": "Whether this dimension is part of the golden path"
+    },
+    "schema_hash": {
+      "type": "string",
+      "description": "Hash of the schema for drift detection"
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Creation timestamp"
+    },
+    "updated_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Last update timestamp"
+    },
+    "review_status": {
+      "type": "string",
+      "enum": ["draft", "pending_review", "approved", "rejected"],
+      "default": "draft",
+      "description": "Current review status"
+    },
+    "review_comments": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "user": { "type": "string" },
+          "comment": { "type": "string" },
+          "timestamp": { "type": "string", "format": "date-time" },
+          "action": { "type": "string" }
+        }
+      },
+      "description": "Review comments and audit trail"
+    }
+  },
+  "required": ["node_id", "node_type", "source_column", "source_table", "date_format", "owner", "version"]
+}

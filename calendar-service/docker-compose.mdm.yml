@@ -1,0 +1,251 @@
+version: '3.8'
+
+services:
+  # ============================================================================
+  # Core Services
+  # ============================================================================
+
+  # 1. Redpanda (Streaming Platform) - replaces Kafka/Kerberos
+  redpanda:
+    image: vectorized/redpanda:v23.3.11
+    container_name: redpanda-1
+    command:
+      - redpanda
+      - start
+      - --smp=1
+      - --memory=1G
+      - --reserve-memory=0M
+      - --node-id=0
+      - --check=false
+      - --kafka-addr=0.0.0.0:9092
+      - --advertise-kafka-addr=redpanda:9092
+      - --rpc-addr=0.0.0.0:33145
+      - --advertise-rpc-addr=redpanda:33145
+      - --admin-addr=0.0.0.0:9644
+      - --advertise-admin-addr=redpanda:9644
+      - --default-topic-partitions=3
+      - --consumer-offsets-topic-partitions=3
+      - --product=redpanda
+    ports:
+      - "9092:9092"    # Kafka API
+      - "9644:9644"    # Admin API
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9644/metrics"]
+      interval: 15s
+      timeout: 3s
+      retries: 5
+      start_period: 20s
+    networks:
+      - usice-network
+    volumes:
+      - redpanda_data:/var/lib/redpanda/data
+
+  # 2. Schema Registry (for event schema management)
+  schema-registry:
+    image: confluentinc/cp-schema-registry:7.3.2
+    container_name: schema-registry
+    depends_on:
+      - redpanda
+    environment:
+      SCHEMA_REGISTRY_HOST_NAME: schema-registry
+      SCHEMA_REGISTRY_KAFKASTORE_BOOTSTRAP_SERVERS: PLAINTEXT://redpanda:9092
+      SCHEMA_REGISTRY_LISTENERS: http://0.0.0.0:8081
+    ports:
+      - "8081:8081"
+    networks:
+      - usice-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8081/subjects"]
+      interval: 15s
+      timeout: 3s
+      retries: 5
+
+  # 3. Python Microservice: Workalendar Adapter
+  workalendar-service:
+    build:
+      context: ./services/workalendar-adapter
+      dockerfile: Dockerfile
+    container_name: workalendar-adapter
+    ports:
+      - "8000:8000"
+    environment:
+      - FLASK_ENV=production
+      - WORKERS=4
+    networks:
+      - usice-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 5s
+
+  # 4. Python Microservice: Holidays PyPI Adapter
+  holidays-service:
+    build:
+      context: ./services/holidays-adapter
+      dockerfile: Dockerfile
+    container_name: holidays-adapter
+    ports:
+      - "8001:8001"
+    environment:
+      - FLASK_ENV=production
+      - WORKERS=4
+    networks:
+      - usice-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 5s
+
+  # ============================================================================
+  # Microservices
+  # ============================================================================
+
+  # 5. Semantic Engine (MDM Orchestrator) - runs in background
+  semantic-engine:
+    build:
+      context: .
+      dockerfile: ./services/semantic-engine/Dockerfile
+    container_name: semantic-engine
+    depends_on:
+      workalendar-service:
+        condition: service_healthy
+      holidays-service:
+        condition: service_healthy
+      redpanda:
+        condition: service_healthy
+    environment:
+      - DB_HOST=100.84.126.19  # Your external desktop Postgres
+      - DB_PORT=5432
+      - DB_NAME=alpha
+      - DB_USER=usice_app
+      - DB_PASSWORD=${DB_PASSWORD}
+      - DB_SSL_MODE=require
+      - REDPANDA_BROKERS=redpanda:9092
+      - WASM_SANDBOX_ENABLED=true
+      - LOG_LEVEL=info
+      - INGESTION_SCHEDULE=*/30 * * * *  # Every 30 minutes
+    ports:
+      - "9000:9000"  # Health/metrics
+    networks:
+      - usice-network
+    restart: on-failure
+
+  # 6. API Gateway (HTTP REST)
+  api-gateway:
+    build:
+      context: .
+      dockerfile: ./services/api-gateway/Dockerfile
+    container_name: api-gateway
+    depends_on:
+      - semantic-engine
+      - redpanda
+    environment:
+      - DB_HOST=100.84.126.19
+      - DB_PORT=5432
+      - DB_NAME=alpha
+      - SEMANTIC_ENGINE_URL=http://semantic-engine:9000
+      - REDPANDA_BROKERS=redpanda:9092
+      - AUTH_SERVICE_URL=http://auth-service:3000
+      - PORT=8080
+      - LOG_LEVEL=info
+    ports:
+      - "8080:8080"
+    networks:
+      - usice-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: on-failure
+
+  # 7. Frontend (React + Vite) - Ops Console
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: mdm-frontend
+    ports:
+      - "3000:80"
+    environment:
+      - VITE_API_URL=http://localhost:8080
+      - VITE_GRAPHQL_ENDPOINT=http://localhost:8080/graphql
+    depends_on:
+      - api-gateway
+    networks:
+      - usice-network
+
+  # ============================================================================
+  # Development/Monitoring Tools (Optional)
+  # ============================================================================
+
+  # 8. Redpanda Console (Admin UI)
+  redpanda-console:
+    image: docker.redpanda.com/console:latest
+    container_name: redpanda-console
+    depends_on:
+      - redpanda
+      - schema-registry
+    environment:
+      KAFKA_BROKERS: redpanda:9092
+      SCHEMA_REGISTRY_URL: http://schema-registry:8081
+    ports:
+      - "8888:8080"
+    networks:
+      - usice-network
+    restart: on-failure
+
+  # 9. Postgres Adminer (SQL UI - optional)
+  adminer:
+    image: adminer:latest
+    container_name: mdm-adminer
+    ports:
+      - "8889:8080"
+    networks:
+      - usice-network
+    restart: on-failure
+
+# ============================================================================
+# Networks
+# ============================================================================
+
+networks:
+  usice-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.28.0.0/16
+
+# ============================================================================
+# Volumes
+# ============================================================================
+
+volumes:
+  redpanda_data:
+    driver: local
+
+# ============================================================================
+# Notes for Deployment
+# ============================================================================
+# 1. Set DB_PASSWORD environment variable before running:
+#    export DB_PASSWORD=your-secure-password
+#
+# 2. Ensure Postgres is accessible on 100.84.126.19:5432 with usice_app user
+#
+# 3. Run database initialization:
+#    psql -h 100.84.126.19 -U postgres -d alpha -f schema/001_mdm_init.sql
+#
+# 4. Build and start all services:
+#    docker-compose up --build
+#
+# 5. Access services:
+#    - API Gateway: http://localhost:8080
+#    - Frontend: http://localhost:3000
+#    - Redpanda Console: http://localhost:8888
+#    - Adminer: http://localhost:8889
+#    - Workalendar Health: http://localhost:8000/health
+#    - Holidays Health: http://localhost:8001/health

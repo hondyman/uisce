@@ -1,0 +1,86 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: ai-builder-monitor
+  labels:
+    team: backend
+spec:
+  selector:
+    matchLabels:
+      app: ai-builder
+  endpoints:
+  - port: http
+    path: /metrics
+    interval: 30s
+    scrapeTimeout: 10s
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: compliance-engine-monitor
+  labels:
+    team: backend
+spec:
+  selector:
+    matchLabels:
+      app: compliance-engine
+  endpoints:
+  - port: http
+    path: /metrics
+    interval: 15s
+    scrapeTimeout: 10s
+---
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: semlayer-alerts
+  labels:
+    team: backend
+spec:
+  groups:
+  - name: semlayer
+    rules:
+    - alert: HighComplianceEventRate
+      expr: rate(compliance_events_total[5m]) > 10
+      for: 5m
+      labels:
+        severity: warning
+      annotations:
+        summary: "High compliance event rate detected"
+        description: "Compliance event rate is {{ $value }} events per second"
+
+    - alert: WorkflowComplianceFailure
+      expr: increase(workflow_checks_total{status="failed"}[5m]) > 5
+      for: 2m
+      labels:
+        severity: critical
+      annotations:
+        summary: "Workflow compliance failures detected"
+        description: "{{ $value }} workflow compliance checks failed in the last 5 minutes"
+
+    - alert: ServiceDown
+      expr: up == 0
+      for: 5m
+      labels:
+        severity: critical
+      annotations:
+        summary: "Service {{ $labels.job }} is down"
+        description: "Service {{ $labels.job }} has been down for more than 5 minutes"
+
+    - alert: HighMemoryUsage
+      expr: (container_memory_usage_bytes / container_spec_memory_limit_bytes) > 0.9
+      for: 5m
+      labels:
+        severity: warning
+      annotations:
+        summary: "High memory usage on {{ $labels.pod }}"
+        description: "Memory usage is {{ $value | humanizePercentage }}"
+
+    - alert: HighCPUUsage
+      expr: rate(container_cpu_usage_seconds_total[5m]) > 0.8
+      for: 5m
+      labels:
+        severity: warning
+      annotations:
+        summary: "High CPU usage on {{ $labels.pod }}"
+        description: "CPU usage rate is {{ $value }} cores per second"

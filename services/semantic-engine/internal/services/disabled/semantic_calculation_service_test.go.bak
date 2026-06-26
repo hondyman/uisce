@@ -1,0 +1,90 @@
+package services
+
+import (
+	"testing"
+)
+
+func TestVectorizedExcelFormula(t *testing.T) {
+	service := &SemanticCalculationService{}
+
+	// Test vectorized XIRR calculation
+	calc := map[string]interface{}{
+		"type":    "excel_formula",
+		"formula": "=XIRR({cash_flows}, {dates})",
+		"arguments": map[string]interface{}{
+			"cash_flows": []interface{}{
+				[]interface{}{-1000.0, 200.0, 300.0, 400.0, 500.0},  // Portfolio 1
+				[]interface{}{-2000.0, 400.0, 600.0, 800.0, 1000.0}, // Portfolio 2
+			},
+			"dates": []interface{}{
+				[]interface{}{1.0, 2.0, 3.0, 4.0, 5.0}, // Dates for portfolio 1
+				[]interface{}{1.0, 2.0, 3.0, 4.0, 5.0}, // Dates for portfolio 2
+			},
+		},
+	}
+
+	adapter := NewFinancialCalcAdapter(calc)
+	result, err := service.executeExcelFormula(adapter)
+
+	if err != nil {
+		t.Fatalf("Expected no error, got: %v", err)
+	}
+
+	resultMap, ok := result.(map[string]interface{})
+	if !ok {
+		t.Fatalf("Expected result to be a map, got: %T", result)
+	}
+
+	if resultMap["calculation_type"] != "excel_formula_vectorized" {
+		t.Errorf("Expected calculation_type to be 'excel_formula_vectorized', got: %v", resultMap["calculation_type"])
+	}
+
+	results, ok := resultMap["results"].([]interface{})
+	if !ok {
+		t.Fatalf("Expected results to be an array, got: %T", resultMap["results"])
+	}
+
+	if len(results) != 2 {
+		t.Errorf("Expected 2 results, got: %d", len(results))
+	}
+
+	// Check that each result is a number (XIRR calculation result)
+	for i, res := range results {
+		if _, ok := res.(float64); !ok {
+			t.Errorf("Expected result %d to be a float64, got: %T", i, res)
+		}
+	}
+}
+
+func TestDetectVectorizedArguments(t *testing.T) {
+	service := &SemanticCalculationService{}
+
+	// Test detection of vectorized arguments
+	args := map[string]interface{}{
+		"cash_flows": []interface{}{
+			[]interface{}{-1000.0, 200.0},
+			[]interface{}{-2000.0, 400.0},
+		},
+		"rate": 0.1, // Scalar value
+	}
+
+	vectorizedArgs, isVectorized := service.detectVectorizedArguments(args)
+
+	if !isVectorized {
+		t.Error("Expected arguments to be detected as vectorized")
+	}
+
+	if len(vectorizedArgs) != 2 {
+		t.Errorf("Expected 2 vectorized argument sets, got: %d", len(vectorizedArgs))
+	}
+
+	// Check first argument set
+	if len(vectorizedArgs[0]["cash_flows"].([]interface{})) != 2 {
+		t.Error("First argument set cash_flows should have 2 elements")
+	}
+
+	// Check that scalar values are replicated
+	if vectorizedArgs[0]["rate"] != 0.1 || vectorizedArgs[1]["rate"] != 0.1 {
+		t.Error("Scalar rate should be replicated to all argument sets")
+	}
+}

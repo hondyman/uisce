@@ -1,0 +1,573 @@
+# Kubernetes CronJobs for Semlayer
+# Application-level scheduled tasks (use pg_cron for database-level tasks)
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: semlayer-jobs
+  labels:
+    app.kubernetes.io/part-of: semlayer
+---
+# =============================================================================
+# Pre-aggregation Builder (Cube.js)
+# =============================================================================
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: cube-preagg-builder
+  namespace: semlayer-jobs
+  labels:
+    app.kubernetes.io/name: cube-preagg-builder
+    app.kubernetes.io/component: analytics
+spec:
+  schedule: "0 */4 * * *" # Every 4 hours
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      ttlSecondsAfterFinished: 86400 # Clean up after 24 hours
+      backoffLimit: 3
+      template:
+        metadata:
+          labels:
+            app.kubernetes.io/name: cube-preagg-builder
+          annotations:
+            prometheus.io/scrape: "true"
+            prometheus.io/port: "9090"
+        spec:
+          serviceAccountName: semlayer-jobs
+          restartPolicy: OnFailure
+          containers:
+          - name: preagg-builder
+            image: semlayerprodacr.azurecr.io/semlayer/jobs:latest
+            command:
+            - /app/jobs
+            - preagg-build
+            - --all-tenants
+            env:
+            - name: CUBE_API_URL
+              value: "http://cube-api.semlayer-control.svc.cluster.local:4000"
+            - name: CUBE_API_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: cube-secrets
+                  key: api-secret
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: db-credentials
+                  key: url
+            resources:
+              limits:
+                cpu: "2"
+                memory: 4Gi
+              requests:
+                cpu: "500m"
+                memory: 1Gi
+          nodeSelector:
+            kubernetes.azure.com/agentpool: app
+---
+# =============================================================================
+# Cache Warming (Redis)
+# =============================================================================
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: cache-warmer
+  namespace: semlayer-jobs
+  labels:
+    app.kubernetes.io/name: cache-warmer
+    app.kubernetes.io/component: cache
+spec:
+  schedule: "*/30 * * * *" # Every 30 minutes
+  concurrencyPolicy: Replace
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      ttlSecondsAfterFinished: 3600
+      backoffLimit: 2
+      template:
+        metadata:
+          labels:
+            app.kubernetes.io/name: cache-warmer
+        spec:
+          serviceAccountName: semlayer-jobs
+          restartPolicy: OnFailure
+          containers:
+          - name: cache-warmer
+            image: semlayerprodacr.azurecr.io/semlayer/jobs:latest
+            command:
+            - /app/jobs
+            - cache-warm
+            - --popular-queries
+            - --metadata-cache
+            env:
+            - name: REDIS_URL
+              valueFrom:
+                secretKeyRef:
+                  name: redis-credentials
+                  key: url
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: db-credentials
+                  key: url
+            resources:
+              limits:
+                cpu: "1"
+                memory: 2Gi
+              requests:
+                cpu: "250m"
+                memory: 512Mi
+          nodeSelector:
+            kubernetes.azure.com/agentpool: app
+---
+# =============================================================================
+# Report Generator (Daily summaries, SLO reports)
+# =============================================================================
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: daily-reports
+  namespace: semlayer-jobs
+  labels:
+    app.kubernetes.io/name: daily-reports
+    app.kubernetes.io/component: reporting
+spec:
+  schedule: "0 6 * * *" # 6 AM UTC daily
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 7
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      ttlSecondsAfterFinished: 604800 # Keep for 7 days
+      backoffLimit: 3
+      template:
+        metadata:
+          labels:
+            app.kubernetes.io/name: daily-reports
+        spec:
+          serviceAccountName: semlayer-jobs
+          restartPolicy: OnFailure
+          containers:
+          - name: report-generator
+            image: semlayerprodacr.azurecr.io/semlayer/jobs:latest
+            command:
+            - /app/jobs
+            - generate-reports
+            - --type=daily-summary
+            - --type=slo-report
+            - --type=usage-stats
+            env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: db-credentials
+                  key: url
+            - name: STORAGE_ACCOUNT
+              value: "semlayerreports"
+            - name: STORAGE_CONTAINER
+              value: "reports"
+            - name: AZURE_STORAGE_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: storage-credentials
+                  key: key
+            - name: NOTIFICATION_WEBHOOK
+              valueFrom:
+                secretKeyRef:
+                  name: notification-secrets
+                  key: slack-webhook
+            resources:
+              limits:
+                cpu: "2"
+                memory: 4Gi
+              requests:
+                cpu: "500m"
+                memory: 1Gi
+          nodeSelector:
+            kubernetes.azure.com/agentpool: app
+---
+# =============================================================================
+# Search Index Optimization
+# =============================================================================
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: search-index-optimize
+  namespace: semlayer-jobs
+  labels:
+    app.kubernetes.io/name: search-index-optimize
+    app.kubernetes.io/component: search
+spec:
+  schedule: "0 3 * * *" # 3 AM UTC daily
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      ttlSecondsAfterFinished: 86400
+      backoffLimit: 2
+      template:
+        metadata:
+          labels:
+            app.kubernetes.io/name: search-index-optimize
+        spec:
+          serviceAccountName: semlayer-jobs
+          restartPolicy: OnFailure
+          containers:
+          - name: search-optimize
+            image: semlayerprodacr.azurecr.io/semlayer/jobs:latest
+            command:
+            - /app/jobs
+            - search-optimize
+            - --reindex-stale
+            - --analyze-tables
+            env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: db-credentials
+                  key: url
+            resources:
+              limits:
+                cpu: "2"
+                memory: 4Gi
+              requests:
+                cpu: "500m"
+                memory: 1Gi
+          nodeSelector:
+            kubernetes.azure.com/agentpool: app
+---
+# =============================================================================
+# Compliance Validation (Weekly)
+# =============================================================================
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: compliance-validation
+  namespace: semlayer-jobs
+  labels:
+    app.kubernetes.io/name: compliance-validation
+    app.kubernetes.io/component: compliance
+spec:
+  schedule: "0 2 * * 0" # Sunday 2 AM UTC
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 4
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      ttlSecondsAfterFinished: 604800
+      backoffLimit: 2
+      template:
+        metadata:
+          labels:
+            app.kubernetes.io/name: compliance-validation
+        spec:
+          serviceAccountName: semlayer-jobs
+          restartPolicy: OnFailure
+          containers:
+          - name: compliance-validator
+            image: semlayerprodacr.azurecr.io/semlayer/jobs:latest
+            command:
+            - /app/jobs
+            - compliance-validate
+            - --frameworks=SOC2,GDPR,HIPAA
+            - --generate-report
+            env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: db-credentials
+                  key: url
+            - name: COMPLIANCE_ENGINE_URL
+              value: "http://compliance-engine.semlayer-control.svc.cluster.local:8080"
+            resources:
+              limits:
+                cpu: "4"
+                memory: 8Gi
+              requests:
+                cpu: "1"
+                memory: 2Gi
+          nodeSelector:
+            kubernetes.azure.com/agentpool: app
+---
+# =============================================================================
+# Catalog Sync (Refresh metadata from data sources)
+# =============================================================================
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: catalog-sync
+  namespace: semlayer-jobs
+  labels:
+    app.kubernetes.io/name: catalog-sync
+    app.kubernetes.io/component: catalog
+spec:
+  schedule: "0 */6 * * *" # Every 6 hours
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      ttlSecondsAfterFinished: 86400
+      backoffLimit: 3
+      template:
+        metadata:
+          labels:
+            app.kubernetes.io/name: catalog-sync
+        spec:
+          serviceAccountName: semlayer-jobs
+          restartPolicy: OnFailure
+          containers:
+          - name: catalog-sync
+            image: semlayerprodacr.azurecr.io/semlayer/jobs:latest
+            command:
+            - /app/jobs
+            - catalog-sync
+            - --all-datasources
+            - --detect-changes
+            env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: db-credentials
+                  key: url
+            resources:
+              limits:
+                cpu: "2"
+                memory: 4Gi
+              requests:
+                cpu: "500m"
+                memory: 1Gi
+          nodeSelector:
+            kubernetes.azure.com/agentpool: app
+---
+# =============================================================================
+# Tenant Usage Metrics Aggregation
+# =============================================================================
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: usage-metrics-aggregator
+  namespace: semlayer-jobs
+  labels:
+    app.kubernetes.io/name: usage-metrics-aggregator
+    app.kubernetes.io/component: metrics
+spec:
+  schedule: "*/15 * * * *" # Every 15 minutes
+  concurrencyPolicy: Replace
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      ttlSecondsAfterFinished: 1800
+      backoffLimit: 2
+      template:
+        metadata:
+          labels:
+            app.kubernetes.io/name: usage-metrics-aggregator
+        spec:
+          serviceAccountName: semlayer-jobs
+          restartPolicy: OnFailure
+          containers:
+          - name: metrics-aggregator
+            image: semlayerprodacr.azurecr.io/semlayer/jobs:latest
+            command:
+            - /app/jobs
+            - aggregate-metrics
+            - --interval=15m
+            env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: db-credentials
+                  key: url
+            resources:
+              limits:
+                cpu: "1"
+                memory: 2Gi
+              requests:
+                cpu: "250m"
+                memory: 512Mi
+          nodeSelector:
+            kubernetes.azure.com/agentpool: app
+---
+# =============================================================================
+# Expired Session/Token Cleanup
+# =============================================================================
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: session-cleanup
+  namespace: semlayer-jobs
+  labels:
+    app.kubernetes.io/name: session-cleanup
+    app.kubernetes.io/component: auth
+spec:
+  schedule: "0 * * * *" # Every hour
+  concurrencyPolicy: Replace
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      ttlSecondsAfterFinished: 3600
+      backoffLimit: 2
+      template:
+        metadata:
+          labels:
+            app.kubernetes.io/name: session-cleanup
+        spec:
+          serviceAccountName: semlayer-jobs
+          restartPolicy: OnFailure
+          containers:
+          - name: session-cleanup
+            image: semlayerprodacr.azurecr.io/semlayer/jobs:latest
+            command:
+            - /app/jobs
+            - cleanup-sessions
+            - --expired-only
+            env:
+            - name: REDIS_URL
+              valueFrom:
+                secretKeyRef:
+                  name: redis-credentials
+                  key: url
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: db-credentials
+                  key: url
+            resources:
+              limits:
+                cpu: "500m"
+                memory: 512Mi
+              requests:
+                cpu: "100m"
+                memory: 128Mi
+          nodeSelector:
+            kubernetes.azure.com/agentpool: app
+---
+# =============================================================================
+# Health Check / Heartbeat (for monitoring)
+# =============================================================================
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: system-health-check
+  namespace: semlayer-jobs
+  labels:
+    app.kubernetes.io/name: system-health-check
+    app.kubernetes.io/component: monitoring
+spec:
+  schedule: "*/5 * * * *" # Every 5 minutes
+  concurrencyPolicy: Replace
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 5
+  jobTemplate:
+    spec:
+      ttlSecondsAfterFinished: 600
+      backoffLimit: 1
+      template:
+        metadata:
+          labels:
+            app.kubernetes.io/name: system-health-check
+        spec:
+          serviceAccountName: semlayer-jobs
+          restartPolicy: Never
+          containers:
+          - name: health-check
+            image: semlayerprodacr.azurecr.io/semlayer/jobs:latest
+            command:
+            - /app/jobs
+            - health-check
+            - --check-db
+            - --check-redis
+            - --check-services
+            - --alert-on-failure
+            env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: db-credentials
+                  key: url
+            - name: REDIS_URL
+              valueFrom:
+                secretKeyRef:
+                  name: redis-credentials
+                  key: url
+            - name: API_GATEWAY_URL
+              value: "http://api-gateway.semlayer-control.svc.cluster.local:8080"
+            - name: NOTIFICATION_WEBHOOK
+              valueFrom:
+                secretKeyRef:
+                  name: notification-secrets
+                  key: slack-webhook
+            resources:
+              limits:
+                cpu: "200m"
+                memory: 256Mi
+              requests:
+                cpu: "50m"
+                memory: 64Mi
+          nodeSelector:
+            kubernetes.azure.com/agentpool: app
+---
+# =============================================================================
+# ServiceAccount for Jobs
+# =============================================================================
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: semlayer-jobs
+  namespace: semlayer-jobs
+  labels:
+    app.kubernetes.io/name: semlayer-jobs
+  annotations:
+    azure.workload.identity/client-id: "${AZURE_CLIENT_ID}"
+---
+# =============================================================================
+# RBAC for Jobs
+# =============================================================================
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: semlayer-jobs-role
+  namespace: semlayer-jobs
+rules:
+- apiGroups: [ "" ]
+  resources: [ "configmaps", "secrets" ]
+  verbs: [ "get", "list" ]
+- apiGroups: [ "batch" ]
+  resources: [ "jobs" ]
+  verbs: [ "get", "list", "watch" ]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: semlayer-jobs-rolebinding
+  namespace: semlayer-jobs
+subjects:
+- kind: ServiceAccount
+  name: semlayer-jobs
+  namespace: semlayer-jobs
+roleRef:
+  kind: Role
+  name: semlayer-jobs-role
+  apiGroup: rbac.authorization.k8s.io
+---
+# =============================================================================
+# Pod Disruption Budget (for long-running jobs)
+# =============================================================================
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: semlayer-jobs-pdb
+  namespace: semlayer-jobs
+spec:
+  minAvailable: 0 # Jobs can be disrupted, they'll retry
+  selector:
+    matchLabels:
+      app.kubernetes.io/part-of: semlayer-jobs

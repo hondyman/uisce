@@ -1,0 +1,49 @@
+import React, { useState } from 'react';
+import { Box, Tabs, Tab } from '@mui/material';
+
+import { useTenant } from '../../../contexts/TenantContext';
+import SelectionStatus from '../../../components/SelectionStatus';
+import SemanticModelModal from '../../../pages/Fabric/SemanticModelModal';
+import ModelGenerator from './ModelGenerator';
+
+const FabricBuilderPage: React.FC = () => {
+  const { tenant, product, datasource } = useTenant();
+  const [activeMainTab, setActiveMainTab] = useState<'generator' | 'editor'>('generator');
+
+  // Show selection prompt if no datasource is selected
+  if (!tenant || !product || !datasource) {
+    return (
+      <Box sx={{ p: 3 }}>
+        <SelectionStatus variant="full" />
+      </Box>
+    );
+  }
+
+  return (
+    <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+       <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
+        <Tabs value={activeMainTab} onChange={(_e, newValue) => setActiveMainTab(newValue)}>
+          <Tab label="Generator" value="generator" />
+          <Tab label="Editor" value="editor" />
+        </Tabs>
+      </Box>
+    {activeMainTab === 'generator' && (
+      <ModelGenerator />
+    )}
+    {activeMainTab === 'editor' && (
+        <Box sx={{ flexGrow: 1, overflow: 'auto' }}>
+          {/* Render the correct semantic model editor, which was previously in a modal */}
+          <SemanticModelModal
+            datasourceId={datasource.id}
+            tenantId={tenant.id}
+            alphaDatasourceId={datasource.alpha_datasource?.id || ''}
+            // A nice UX touch: the 'onClose' action now switches back to the generator tab
+            onClose={() => setActiveMainTab('generator')}
+          />
+        </Box>
+    )}
+    </Box>
+  );
+};
+
+export default FabricBuilderPage;

@@ -1,0 +1,70 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: calendar-service
+  namespace: calendar
+  labels:
+    app: calendar-service
+  annotations:
+    service.beta.kubernetes.io/aws-load-balancer-type: "nlb"
+spec:
+  type: ClusterIP
+  selector:
+    app: calendar-service
+    component: api
+
+  ports:
+  - name: http
+    port: 80
+    targetPort: 8080
+    protocol: TCP
+
+  - name: metrics
+    port: 9090
+    targetPort: 9090
+    protocol: TCP
+
+  sessionAffinity: None
+  sessionAffinityConfig:
+    timeoutSeconds: 10800
+---
+# Headless service for stateful access (useful for direct pod communication)
+apiVersion: v1
+kind: Service
+metadata:
+  name: calendar-service-headless
+  namespace: calendar
+  labels:
+    app: calendar-service
+spec:
+  type: ClusterIP
+  clusterIP: None
+  selector:
+    app: calendar-service
+    component: api
+
+  ports:
+  - name: http
+    port: 8080
+    targetPort: 8080
+    protocol: TCP
+---
+# NodePort service for local development (optional)
+apiVersion: v1
+kind: Service
+metadata:
+  name: calendar-service-nodeport
+  namespace: calendar
+  labels:
+    app: calendar-service
+    environment: development
+spec:
+  type: NodePort
+  selector:
+    app: calendar-service
+  ports:
+  - name: http
+    port: 8080
+    targetPort: 8080
+    nodePort: 30080
+    protocol: TCP

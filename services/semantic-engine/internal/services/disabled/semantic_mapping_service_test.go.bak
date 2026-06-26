@@ -1,0 +1,55 @@
+package services
+
+import (
+	"testing"
+)
+
+func TestNormalizeBusinessTermName(t *testing.T) {
+	cases := []struct {
+		in   string
+		want string
+	}{
+		// The implementation preserves some original camel-casing and capitalizes tokens.
+		{"user_id", "User Id"},
+		{"OrderAmount", "Order Amount"},
+		{"  invoice-number  ", "Invoice Number"},
+		{"", ""},
+	}
+
+	for _, c := range cases {
+		got := normalizeBusinessTermName(c.in)
+		if got != c.want {
+			t.Fatalf("normalizeBusinessTermName(%q) = %q; want %q", c.in, got, c.want)
+		}
+	}
+}
+
+func TestMakeBusinessTermQualifiedPath(t *testing.T) {
+	cases := []struct{ in, want string }{
+		{"Invoice Amount", "/business_terms/invoice-amount"},
+		{"  Customer_ID  ", "/business_terms/customer_id"},
+	}
+
+	for _, c := range cases {
+		got := makeBusinessTermQualifiedPath(c.in)
+		if got != c.want {
+			t.Fatalf("makeBusinessTermQualifiedPath(%q) = %q; want %q", c.in, got, c.want)
+		}
+	}
+}
+
+func TestNormalizeSuggestionKey(t *testing.T) {
+	if normalizeSuggestionKey("Order Amount") != "order amount" {
+		t.Fatalf("normalizeSuggestionKey produced unexpected result")
+	}
+}
+
+func TestParseQualifiedPath(t *testing.T) {
+	svc := &SemanticMappingService{}
+	// The parser treats "/public.orders/amount" as ["", "public.orders", "amount"]
+	// and returns table as the middle segment in that case.
+	s, table, col := svc.parseQualifiedPath("/public.orders/amount")
+	if s != "" || table != "public.orders" || col != "amount" {
+		t.Fatalf("parseQualifiedPath returned %q,%q,%q", s, table, col)
+	}
+}

@@ -1,0 +1,263 @@
+{
+  "data_sources": {
+    "advanced_semantic_layer": "default"
+  },
+  "dimensions": {
+    "advanced_semantic_layer": [
+      {
+        "name": "order_date",
+        "sql": "order_date",
+        "type": "time",
+        "time_intelligence": {
+          "type": "period_over_period",
+          "period": "month",
+          "offset": 1
+        },
+        "description": "Order date with time intelligence",
+        "tags": ["time", "orders"]
+      },
+      {
+        "name": "sales_region",
+        "sql": "region",
+        "type": "string",
+        "description": "Sales region dimension",
+        "tags": ["geography", "sales"],
+        "hidden": false,
+        "required": true
+      },
+      {
+        "name": "dynamic_group_by",
+        "sql": "category",
+        "type": "string",
+        "field_parameters": [
+          {
+            "name": "group_by_field",
+            "display_name": "Group By",
+            "type": "string",
+            "values": ["category", "subcategory", "brand"],
+            "default_value": "category"
+          }
+        ]
+      },
+      {
+        "name": "user_segment",
+        "sql": "user_type",
+        "type": "string",
+        "user_attributes": {
+          "admin": "premium",
+          "standard": "basic"
+        },
+        "custom_filter": "user_type IN {{ user_segments }}"
+      }
+    ]
+  },
+  "measures": {
+    "advanced_semantic_layer": [
+      {
+        "name": "sales_amount",
+        "sql": "SUM(amount)",
+        "type": "sum",
+        "format": "currency",
+        "description": "Total sales amount",
+        "tags": ["revenue", "kpi"],
+        "hidden": false,
+        "required": true
+      },
+      {
+        "name": "sales_growth",
+        "sql": "PERIOD_OVER_PERIOD(SUM(amount), 'month', 1)",
+        "type": "number",
+        "format": "percent",
+        "description": "Month over month sales growth",
+        "aggregation_type": "time_intelligence"
+      },
+      {
+        "name": "rolling_avg_sales",
+        "sql": "ROLLING_AVERAGE(SUM(amount), 3)",
+        "type": "avg",
+        "format": "currency",
+        "description": "3-month rolling average sales"
+      },
+      {
+        "name": "sales_with_tax",
+        "sql": "CALCULATE(SUM(amount), tax_rate > 0)",
+        "type": "sum",
+        "format": "currency",
+        "calculation_group": {
+          "name": "tax_calculations",
+          "expression": "[Sales Amount] * (1 + [Tax Rate])",
+          "format": "currency",
+          "priority": 1
+        }
+      },
+      {
+        "name": "daily_active_users",
+        "sql": "COUNT(DISTINCT user_id)",
+        "type": "countDistinct",
+        "materialized_view": {
+          "name": "daily_metrics_mv",
+          "refresh_type": "incremental",
+          "refresh_schedule": "daily",
+          "partition_by": "date"
+        },
+        "pre_aggregated": true,
+        "refresh_schedule": "daily"
+      },
+      {
+        "name": "customer_lifetime_value",
+        "sql": "SUM(amount) / COUNT(DISTINCT customer_id)",
+        "type": "number",
+        "format": "currency",
+        "custom_expression": "total_revenue / unique_customers"
+      }
+    ]
+  },
+  "hierarchies": {
+    "advanced_semantic_layer": [
+      {
+        "name": "geography",
+        "title": "Geographic Hierarchy",
+        "levels": ["country", "region", "city"],
+        "public": true
+      }
+    ]
+  },
+  "segments": {
+    "advanced_semantic_layer": [
+      {
+        "name": "high_value_customers",
+        "description": "Customers with lifetime value > $1000",
+        "sql": "customer_id IN (SELECT customer_id FROM customer_summary WHERE lifetime_value > 1000)",
+        "public": true
+      }
+    ]
+  },
+  "perspectives": {
+    "advanced_semantic_layer": [
+      {
+        "name": "sales_manager",
+        "description": "Sales manager perspective with full access",
+        "dimensions": ["order_date", "sales_region", "user_segment"],
+        "measures": ["sales_amount", "sales_growth", "rolling_avg_sales"],
+        "users": ["sales_manager@example.com"],
+        "groups": ["sales_managers"]
+      },
+      {
+        "name": "analyst",
+        "description": "Analyst perspective with limited measures",
+        "dimensions": ["order_date", "sales_region"],
+        "measures": ["sales_amount", "customer_lifetime_value"],
+        "groups": ["analysts"]
+      }
+    ]
+  },
+  "calculation_groups": {
+    "advanced_semantic_layer": [
+      {
+        "name": "time_calculations",
+        "expression": "CALCULATE([Sales Amount], DATEADD('Date'[Date], -1, MONTH))",
+        "format": "currency",
+        "priority": 2,
+        "parameters": {
+          "time_period": "month"
+        }
+      }
+    ]
+  },
+  "materialized_views": {
+    "advanced_semantic_layer": [
+      {
+        "name": "customer_summary_mv",
+        "refresh_type": "full",
+        "refresh_schedule": "hourly",
+        "cluster_by": "customer_id",
+        "partition_by": "last_order_date"
+      }
+    ]
+  },
+  "user_attributes": {
+    "admin": {
+      "role": "administrator",
+      "permissions": "read,write,delete",
+      "region_access": "all"
+    },
+    "analyst": {
+      "role": "analyst",
+      "permissions": "read",
+      "region_access": "North,South"
+    },
+    "standard": {
+      "role": "user",
+      "permissions": "read",
+      "region_access": "local"
+    }
+  },
+  "custom_filters": {
+    "advanced_semantic_layer": [
+      {
+        "name": "date_range",
+        "type": "date_range",
+        "expression": "order_date BETWEEN {{ start_date }} AND {{ end_date }}",
+        "default_value": "last_30_days",
+        "required": true
+      },
+      {
+        "name": "region_filter",
+        "type": "multi_select",
+        "expression": "region IN {{ selected_regions }}",
+        "default_value": ["North", "South"]
+      }
+    ]
+  },
+  "data_quality_rules": {
+    "advanced_semantic_layer": [
+      {
+        "name": "sales_amount_not_null",
+        "type": "completeness",
+        "severity": "error",
+        "threshold": 0.99,
+        "parameters": {
+          "column": "amount"
+        },
+        "description": "Ensure sales amounts are not null"
+      },
+      {
+        "name": "region_consistency",
+        "type": "consistency",
+        "severity": "warning",
+        "parameters": {
+          "allowed_values": ["North", "South", "East", "West"]
+        },
+        "description": "Validate region values are consistent"
+      }
+    ]
+  },
+  "performance_hints": {
+    "advanced_semantic_layer": [
+      {
+        "type": "index",
+        "table": "orders",
+        "columns": ["order_date", "region", "customer_id"],
+        "description": "Composite index for common query patterns"
+      },
+      {
+        "type": "partition",
+        "table": "orders",
+        "columns": ["order_date"],
+        "parameters": {
+          "partition_type": "monthly"
+        },
+        "description": "Monthly partitioning on order date"
+      },
+      {
+        "type": "cache",
+        "table": "daily_metrics",
+        "parameters": {
+          "ttl": "1h",
+          "size": "100MB"
+        },
+        "description": "Cache daily metrics for 1 hour"
+      }
+    ]
+  }
+}

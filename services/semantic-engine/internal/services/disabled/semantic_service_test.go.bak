@@ -1,0 +1,44 @@
+package services
+
+import (
+	"context"
+	"fmt"
+	"os"
+	"testing"
+	"time"
+
+	"github.com/jmoiron/sqlx"
+	_ "github.com/lib/pq"
+)
+
+// TestPersistIgnoreLocal runs against local Postgres (alpha) and verifies PersistIgnore
+// Note: this test requires local Postgres reachable at postgres://postgres:postgres@localhost:5432/alpha
+func TestPersistIgnoreLocal(t *testing.T) {
+	dsn := os.Getenv("POSTGRES_URL")
+	if dsn == "" {
+		dsn = "postgres://postgres:postgres@localhost:5432/alpha?sslmode=disable"
+	}
+
+	db, err := sqlx.Connect("postgres", dsn)
+	if err != nil {
+		t.Fatalf("failed to connect to database: %v", err)
+	}
+	defer db.Close()
+
+	svc := NewSemanticService(db)
+	ctx := context.Background()
+
+	tenantID := "00000000-0000-0000-0000-000000000000"
+	tenantDS := "11111111-1111-1111-1111-111111111111"
+	columnNodeID := fmt.Sprintf("00000000-0000-0000-0000-%012d", time.Now().UnixNano()%999999999999)
+	term := fmt.Sprintf("test-ignore-%d", time.Now().Unix())
+
+	if err := svc.PersistIgnore(ctx, tenantID, tenantDS, columnNodeID, term); err != nil {
+		t.Fatalf("PersistIgnore returned error: %v", err)
+	}
+
+	// Cleanup the inserted row
+	if _, err := db.ExecContext(ctx, `DELETE FROM public.semantic_mapping_ignores WHERE tenant_datasource_id = $1 AND database_column_node_id = $2 AND ignored_term = $3`, tenantDS, columnNodeID, term); err != nil {
+		t.Logf("cleanup failed: %v", err)
+	}
+}

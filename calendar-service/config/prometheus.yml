@@ -1,0 +1,67 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    monitor: 'calendar-service-prod'
+    environment: 'production'
+    region: 'us-west-2'
+
+alerting:
+  alertmanagers:
+  - static_configs:
+    - targets:
+      - 'alertmanager:9093'
+
+rule_files:
+- '/etc/prometheus/rules/alert_rules.yml'
+- '/etc/prometheus/rules/recording_rules.yml'
+
+scrape_configs:
+# Calendar Service API metrics
+- job_name: 'calendar-service'
+  static_configs:
+  - targets: [ 'calendar-service:9090' ]
+  scrape_interval: 5s
+  scrape_timeout: 5s
+  metrics_path: '/metrics'
+  honor_timestamps: true
+  labels:
+    service: 'calendar-service'
+    environment: 'production'
+
+# PostgreSQL exporter metrics
+- job_name: 'postgres'
+  static_configs:
+  - targets: [ 'postgres-exporter:9187' ]
+  scrape_interval: 30s
+  labels:
+    service: 'postgres'
+
+# Node exporter for infrastructure metrics
+- job_name: 'node'
+  static_configs:
+  - targets: [ 'node-exporter:9100' ]
+  scrape_interval: 30s
+  labels:
+    service: 'node'
+
+# Kubernetes metrics (if using kube-state-metrics)
+- job_name: 'kubernetes-pods'
+  kubernetes_sd_configs:
+  - role: pod
+    namespaces:
+      names:
+      - calendar-service
+  relabel_configs:
+  - source_labels: [ __meta_kubernetes_pod_annotation_prometheus_io_scrape ]
+    action: keep
+    regex: true
+  - source_labels: [ __meta_kubernetes_pod_annotation_prometheus_io_path ]
+    action: replace
+    target_label: __metrics_path__
+    regex: (.+)
+  - source_labels: [ __address__, __meta_kubernetes_pod_annotation_prometheus_io_port ]
+    action: replace
+    regex: ([^:]+)(?::\d+)?;(\d+)
+    replacement: $1:$2
+    target_label: __address__

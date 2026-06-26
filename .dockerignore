@@ -1,0 +1,26 @@
+.git
+.gitignore
+.vscode
+.idea
+node_modules
+dist
+build
+tmp
+*.log
+.DS_Store
+backend/tmp
+frontend/node_modules
+frontend/dist
+frontend/build
+
+# Large binaries
+backend-final
+backend-new
+semlayer-backend
+worker
+migrate
+migration
+demo
+server
+semctl
+notifications-service

@@ -1,0 +1,57 @@
+{"level":"info","ts":1758768585.457279,"caller":"server/main.go:89","msg":"Database connection established successfully"}
+{"level":"info","ts":1758768585.4575412,"caller":"server/main.go:90","msg":"Connection pool configured: MaxOpen=50, MaxIdle=10, MaxLifetime=10m0s, MaxIdleTime=5m0s"}
+{"level":"info","ts":1758768585.4576159,"caller":"services/performance_monitor.go:145","msg":"Performance monitoring started"}
+{"level":"info","ts":1758768585.4577868,"caller":"observability/dynatrace_manager.go:30","msg":"Dynatrace environment variables not set, disabling Dynatrace integration."}
+{"level":"info","ts":1758768585.457958,"caller":"services/performance_monitor.go:410","msg":"pprof endpoints available at /debug/pprof/"}
+{"level":"warn","ts":1758768585.462301,"caller":"server/main.go:143","msg":"Warning: Failed to create views table: ERROR: cannot drop index ux_views_tenant_ds_name because constraint ux_views_tenant_ds_name on table views requires it (SQLSTATE 2BP01)"}
+{"level":"info","ts":1758768585.4626958,"caller":"server/main.go:171","msg":"Ensured fabric_defn table exists"}
+{"level":"warn","ts":1758768585.46301,"caller":"server/main.go:181","msg":"Warning: Failed to initialize private markets schema: failed to read private markets schema file: open internal/api/private_markets_schema.sql: no such file or directory"}
+{"level":"info","ts":1758768585.472907,"caller":"server/main.go:197","msg":"Insurance calculation templates initialized successfully"}
+{"level":"info","ts":1758768585.4817228,"caller":"server/main.go:204","msg":"Private markets calculation templates initialized successfully"}
+{"level":"info","ts":1758768585.48625,"caller":"server/main.go:211","msg":"Quant finance calculation templates initialized successfully"}
+{"level":"info","ts":1758768585.49119,"caller":"server/main.go:218","msg":"Risk management calculation templates initialized successfully"}
+{"level":"info","ts":1758768585.4957068,"caller":"server/main.go:225","msg":"Compliance and regulatory calculation templates initialized successfully"}
+{"level":"warn","ts":1758768585.495726,"caller":"server/main.go:259","msg":"Dynatrace URL and API token not configured - capacity metrics collection disabled"}
+{"level":"info","ts":1758768585.495764,"caller":"server/main.go:294","msg":"Server starting on http://localhost:9090"}
+{"level":"info","ts":1758768585.495775,"caller":"server/main.go:295","msg":"Swagger UI available at: http://localhost:9090/swagger/index.html"}
+{"level":"info","ts":1758768587.015939,"caller":"audit/service.go:116","msg":"Audit event logged","event_id":"b6413cd4-807c-437a-940e-82fe286e9969","event_type":"data_access","user_id":"anonymous","resource_type":"api_endpoint","resource_id":"/api/models/generated"}
+{"level":"info","ts":1758768587.016042,"caller":"handlers/model_catalog_handler.go:719","msg":"Creating generated model for table public.products"}
+{"level":"warn","ts":1758768587.017278,"caller":"handlers/model_catalog_handler.go:810","msg":"Generated model already exists: ERROR: duplicate key value violates unique constraint \"fabric_defn_tenant_id_model_key_version_key\" (SQLSTATE 23505)"}
+{"level":"info","ts":1758768587.0198662,"caller":"handlers/model_catalog_handler.go:839","msg":"Found existing semantic model catalog_node a60c3758-d2b1-48af-9a5a-0ecb555fc732 for duplicate path /semantic_model/products"}
+{"level":"info","ts":1758768587.022645,"caller":"handlers/model_catalog_handler.go:854","msg":"Linked table node 0ea4fc23-cad5-41d6-954a-ffa365804a8a to semantic model node a60c3758-d2b1-48af-9a5a-0ecb555fc732 via upsert"}
+Request completed in 9.636834ms
+2025/09/24 22:49:47 "POST http://localhost:9090/api/models/generated?tenant_id=910638ba-a459-4a3f-bb2d-78391b0595f6&datasource_id=982aef38-418f-46dc-acd0-35fe8f3b97b0 HTTP/1.1" from [::1]:63196 - 200 290B in 9.733916ms
+{"level":"info","ts":1758768587.153002,"caller":"audit/service.go:116","msg":"Audit event logged","event_id":"55b529bb-e6dc-47de-ba49-97b614d18757","event_type":"data_access","user_id":"anonymous","resource_type":"api_endpoint","resource_id":"/api/catalog/tables"}
+warning: failed to query columns for table agg_metadata: driver: bad connection (table will be included without columns)
+warning: failed to query columns for table data_quality_monitoring: driver: bad connection (table will be included without columns)
+warning: failed to query columns for table preaggregated_metrics: driver: bad connection (table will be included without columns)
+warning: failed to query columns for table preaggregation_audit: driver: bad connection (table will be included without columns)
+warning: failed to query columns for table hdb_action_log: driver: bad connection (table will be included without columns)
+warning: failed to query columns for table hdb_cron_event_invocation_logs: driver: bad connection (table will be included without columns)
+warning: failed to query columns for table hdb_cron_events: driver: bad connection (table will be included without columns)
+warning: failed to query columns for table hdb_metadata: driver: bad connection (table will be included without columns)
+warning: failed to query columns for table hdb_scheduled_event_invocation_logs: driver: bad connection (table will be included without columns)
+warning: failed to query columns for table hdb_scheduled_events: driver: bad connection (table will be included without columns)
+warning: failed to query columns for table hdb_schema_notifications: driver: bad connection (table will be included without columns)
+warning: failed to query columns for table hdb_version: driver: bad connection (table will be included without columns)
+warning: failed to query columns for table categories: driver: bad connection (table will be included without columns)
+warning: failed to query columns for table custom_categories: driver: bad connection (table will be included without columns)
+warning: failed to query columns for table customer_customer_demo: driver: bad connection (table will be included without columns)
+warning: failed to query columns for table customer_demographics: driver: bad connection (table will be included without columns)
+warning: failed to query columns for table customers: driver: bad connection (table will be included without columns)
+warning: failed to query columns for table dim_country_cd: driver: bad connection (table will be included without columns)
+warning: failed to query columns for table employee_territories: driver: bad connection (table will be included without columns)
+warning: failed to query columns for table employees: driver: bad connection (table will be included without columns)
+warning: failed to query columns for table order_details: driver: bad connection (table will be included without columns)
+warning: failed to query columns for table orders: driver: bad connection (table will be included without columns)
+warning: failed to query columns for table products: driver: bad connection (table will be included without columns)
+warning: failed to query columns for table ref_service_codes: driver: bad connection (table will be included without columns)
+warning: failed to query columns for table region: driver: bad connection (table will be included without columns)
+warning: failed to query columns for table shippers: driver: bad connection (table will be included without columns)
+warning: failed to query columns for table suppliers: driver: bad connection (table will be included without columns)
+warning: failed to query columns for table territories: driver: bad connection (table will be included without columns)
+warning: failed to query columns for table us_states: driver: bad connection (table will be included without columns)
+warning: failed to query columns for table products: driver: bad connection (table will be included without columns)
+Request completed in 5.301375ms
+2025/09/24 22:49:47 "GET http://localhost:9090/api/catalog/tables?datasource_id=982aef38-418f-46dc-acd0-35fe8f3b97b0 HTTP/1.1" from [::1]:63196 - 200 11898B in 5.329875ms
+{"level":"info","ts":1758768645.4589078,"caller":"services/performance_monitor.go:334","msg":"Performance Stats: requests=0, avg_duration=0s, cache_hit_rate=0.00%, active=0, errors=0"}

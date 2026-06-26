@@ -1,0 +1,210 @@
+{
+  "data_sources": {
+    "mutual_fund_portfolio": "mutual_fund_db",
+    "options_portfolio": "derivatives_db"
+  },
+  "dimensions": {
+    "mutual_fund_portfolio": [
+      {
+        "name": "fund_id",
+        "sql": "fund_id",
+        "type": "string",
+        "primary_key": true
+      },
+      {
+        "name": "fund_name",
+        "sql": "fund_name",
+        "type": "string"
+      },
+      {
+        "name": "asset_class",
+        "sql": "asset_class",
+        "type": "string"
+      }
+    ],
+    "options_portfolio": [
+      {
+        "name": "option_id",
+        "sql": "option_id",
+        "type": "string",
+        "primary_key": true
+      },
+      {
+        "name": "underlying_asset",
+        "sql": "underlying_asset",
+        "type": "string"
+      }
+    ]
+  },
+  "measures": {
+    "mutual_fund_portfolio": [
+      {
+        "name": "total_assets",
+        "sql": "total_assets",
+        "type": "number",
+        "format": "currency"
+      },
+      {
+        "name": "sharpe_ratio",
+        "sql": "sharpe_ratio",
+        "type": "number",
+        "financial_calc": {
+          "type": "sharpe_ratio",
+          "parameters": {
+            "risk_free_rate": 0.02
+          }
+        }
+      }
+    ],
+    "options_portfolio": [
+      {
+        "name": "delta",
+        "sql": "delta",
+        "type": "number",
+        "financial_calc": {
+          "type": "delta",
+          "parameters": {
+            "asset_price": 100.0,
+            "strike_price": 105.0,
+            "time_to_expiry": 0.25,
+            "volatility": 0.2,
+            "risk_free_rate": 0.03,
+            "dividend_yield": 0.02
+          }
+        }
+      }
+    ]
+  },
+  "weighted_averages": {
+    "mutual_fund_portfolio": [
+      {
+        "name": "portfolio_return",
+        "weights": [0.3, 0.4, 0.3],
+        "values": [0.05, 0.08, 0.03],
+        "weight_column": "allocation_percentage",
+        "value_column": "fund_return"
+      }
+    ]
+  },
+  "greeks_calculations": {
+    "options_portfolio": [
+      {
+        "type": "delta",
+        "asset_price": 100.0,
+        "strike_price": 105.0,
+        "time_to_expiry": 0.25,
+        "volatility": 0.2,
+        "risk_free_rate": 0.03,
+        "dividend_yield": 0.02
+      }
+    ]
+  },
+  "mutual_fund_metrics": {
+    "mutual_fund_portfolio": [
+      {
+        "name": "sharpe_ratio",
+        "type": "sharpe_ratio",
+        "parameters": {
+          "risk_free_rate": 0.02
+        },
+        "benchmark": "S&P 500",
+        "time_period": "1Y"
+      },
+      {
+        "name": "volatility",
+        "type": "volatility",
+        "parameters": {
+          "annualize": true
+        },
+        "time_period": "1Y"
+      }
+    ]
+  },
+  "tenant_params": {
+    "tenant_123": {
+      "tenant_id": "tenant_123",
+      "default_risk_free_rate": 0.025,
+      "default_benchmark": "S&P 500 Total Return",
+      "custom_metrics": {
+        "custom_sharpe": {
+          "formula": "(avg_return - risk_free) / std_dev",
+          "parameters": {
+            "risk_free": 0.025
+          }
+        }
+      },
+      "data_quality_rules": [
+        {
+          "name": "nav_not_null",
+          "type": "not_null",
+          "severity": "error",
+          "parameters": {
+            "column": "nav_per_share"
+          }
+        }
+      ],
+      "performance_hints": [
+        {
+          "type": "index",
+          "table": "fund_returns",
+          "columns": ["fund_id", "date"],
+          "description": "Index for time-series queries"
+        }
+      ]
+    }
+  },
+  "scaling_config": {
+    "materialized_views": [
+      {
+        "name": "daily_fund_performance",
+        "refresh_type": "incremental",
+        "refresh_schedule": "0 6 * * *",
+        "partition_by": "date",
+        "cluster_by": "fund_id"
+      }
+    ],
+    "partitioning": [
+      {
+        "table": "fund_returns",
+        "column": "date",
+        "type": "range",
+        "granularity": "month"
+      }
+    ],
+    "caching": [
+      {
+        "name": "portfolio_metrics_cache",
+        "table": "portfolio_metrics",
+        "ttl": 3600,
+        "refresh_type": "auto",
+        "refresh_schedule": "*/15 * * * *"
+      }
+    ]
+  },
+  "data_quality_rules": {
+    "mutual_fund_portfolio": [
+      {
+        "name": "assets_positive",
+        "type": "range",
+        "severity": "warning",
+        "threshold": 0,
+        "parameters": {
+          "column": "total_assets",
+          "min": 0
+        }
+      }
+    ]
+  },
+  "performance_hints": {
+    "mutual_fund_portfolio": [
+      {
+        "type": "partition",
+        "table": "fund_returns",
+        "columns": ["date"],
+        "parameters": {
+          "strategy": "monthly"
+        }
+      }
+    ]
+  }
+}

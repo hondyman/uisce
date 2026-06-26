@@ -1,0 +1,13 @@
+yaml_dir: ./models
+driver: postgres
+# Using local Postgres for development
+dsn: "postgres://postgres:postgres@localhost:5432/alpha?sslmode=disable"
+aggregates_dsn: "postgres://postgres:postgres@localhost:5432/northwinds?sslmode=disable"
+# Run backend locally on port 8080
+port: 8080
+pg_port: 5432
+graphql_url: "http://localhost:8888/v1/graphql"
+jwt_secret: "test-jwt-secret"
+# Temporal configuration for local development (optional)
+temporal_host: "localhost"
+temporal_port: "7233"

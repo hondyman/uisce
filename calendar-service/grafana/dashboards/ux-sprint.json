@@ -1,0 +1,96 @@
+{
+    "annotations": {
+        "list": [
+            {
+                "builtIn": 1,
+                "datasource": "-- Grafana --",
+                "enable": true,
+                "hide": true,
+                "iconColor": "rgba(0, 211, 255, 1)",
+                "name": "Annotations & Alerts",
+                "type": "dashboard"
+            }
+        ]
+    },
+    "editable": true,
+    "fiscalYearStartMonth": 0,
+    "graphTooltip": 0,
+    "id": 2,
+    "links": [],
+    "liveNow": false,
+    "panels": [
+        {
+            "title": "Email Delivery Success Rate",
+            "type": "stat",
+            "datasource": "Prometheus",
+            "gridPos": {
+                "h": 8,
+                "w": 6,
+                "x": 0,
+                "y": 0
+            },
+            "targets": [
+                {
+                    "expr": "sum(rate(email_delivery_success_total[1h])) / sum(rate(email_delivery_attempt_total[1h])) * 100",
+                    "legendFormat": "Success Rate %",
+                    "refId": "A"
+                }
+            ]
+        },
+        {
+            "title": "Mobile App Crashes (Beta)",
+            "type": "timeseries",
+            "datasource": "Prometheus",
+            "gridPos": {
+                "h": 8,
+                "w": 18,
+                "x": 6,
+                "y": 0
+            },
+            "targets": [
+                {
+                    "expr": "sum(rate(mobile_app_crash_total[15m])) by (platform)",
+                    "legendFormat": "{{platform}} Crashes",
+                    "refId": "A"
+                }
+            ]
+        },
+        {
+            "title": "PWA Installations",
+            "type": "stat",
+            "datasource": "Prometheus",
+            "gridPos": {
+                "h": 8,
+                "w": 6,
+                "x": 0,
+                "y": 8
+            },
+            "targets": [
+                {
+                    "expr": "sum(pwa_install_events_total)",
+                    "legendFormat": "Total Installs",
+                    "refId": "A"
+                }
+            ]
+        }
+    ],
+    "refresh": "10s",
+    "schemaVersion": 36,
+    "style": "dark",
+    "tags": [
+        "ux-sprint",
+        "beta"
+    ],
+    "templating": {
+        "list": []
+    },
+    "time": {
+        "from": "now-24h",
+        "to": "now"
+    },
+    "timepicker": {},
+    "timezone": "",
+    "title": "UX Sprint Beta Monitoring",
+    "uid": "ux-sprint-dash",
+    "version": 1
+}

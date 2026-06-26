@@ -1,0 +1,20 @@
+.gaugeContainer {
+  width: var(--gauge-size);
+  height: var(--gauge-size);
+}
+
+.gauge-small {
+  --gauge-size: 64px;
+}
+
+.gauge-medium {
+  --gauge-size: 96px;
+}
+
+.gauge-large {
+  --gauge-size: 128px;
+}
+.gaugeRotate {
+  transform: rotate(-90deg);
+  transform-origin: 50% 50%;
+}

@@ -1,0 +1,264 @@
+# Cube.js with StarRocks - NO REDIS
+# 
+# Architecture:
+#   - StarRocks (Hot): Pre-aggregations, real-time queries
+#   - StarRocks on Parquet (Cold): Historical analytics via external tables
+#   - PostgreSQL (Metadata): Tenant catalog, multi-tenant metadata
+#   - PostgreSQL per Tenant: Isolated financial data
+#
+# Key Changes from previous setup:
+#   - REMOVED: Redis (replaced by StarRocks caching + Cube Store)
+#   - ADDED: Cube Store for query orchestration (lightweight, no Redis needed)
+
+version: "3.8"
+
+services:
+  # ==========================================================================
+  # CUBE STORE (Replaces Redis for query orchestration)
+  # ==========================================================================
+  
+  cubestore_router:
+    image: cubejs/cubestore:latest
+    environment:
+      - CUBESTORE_SERVER_NAME=cubestore_router:9999
+      - CUBESTORE_META_PORT=9999
+      - CUBESTORE_WORKERS=cubestore_worker:10001
+      - CUBESTORE_REMOTE_DIR=/cube/data
+      - CUBESTORE_LOG_LEVEL=info
+    volumes:
+      - cubestore_data:/cube/data
+    ports:
+      - "9999:9999"
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:9999/livez"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - cube-dev
+
+  cubestore_worker:
+    image: cubejs/cubestore:latest
+    environment:
+      - CUBESTORE_SERVER_NAME=cubestore_worker:10001
+      - CUBESTORE_WORKER_PORT=10001
+      - CUBESTORE_META_ADDR=cubestore_router:9999
+      - CUBESTORE_REMOTE_DIR=/cube/data
+      - CUBESTORE_LOG_LEVEL=info
+    volumes:
+      - cubestore_data:/cube/data
+    depends_on:
+      - cubestore_router
+    networks:
+      - cube-dev
+
+  # ==========================================================================
+  # CUBE.JS API (No Redis!)
+  # ==========================================================================
+  
+  cube:
+    image: cubejs/cube:latest
+    environment:
+      # Dev mode enables playground
+      - CUBEJS_DEV_MODE=true
+      - CUBEJS_API_SECRET=${CUBEJS_API_SECRET:-dev-secret-change-me}
+      
+      # NO REDIS - Use Cube Store instead
+      # - CUBEJS_REDIS_URL=redis://redis:6379  # REMOVED!
+      - CUBEJS_CUBESTORE_HOST=cubestore_router
+      - CUBEJS_CUBESTORE_PORT=9999
+      
+      # Expose metrics for Prometheus
+      - CUBEJS_TELEMETRY=false
+      
+      # Schema paths
+      - CUBEJS_SCHEMA_PATH=/cube/conf/schema
+      - CUBE_TENANT_CONFIG_PATH=/cube/conf/generated/tenant-scopes.json
+      
+      # Governance: require pre-aggregations
+      - CUBEJS_ROLLUP_ONLY=${CUBEJS_ROLLUP_ONLY:-false}
+      
+      # Primary Data Source: StarRocks (Hot Store)
+      - CUBEJS_DATASOURCES=starrocks
+      - CUBEJS_DB_TYPE=mysql
+      - CUBEJS_DB_HOST=starrocks-fe
+      - CUBEJS_DB_PORT=9030
+      - CUBEJS_DB_USER=root
+      - CUBEJS_DB_PASS=
+      - CUBEJS_DB_NAME=cube_hot
+      
+      # External Pre-aggregation Storage: StarRocks
+      # This is where Cube.js stores computed pre-aggs
+      - CUBEJS_EXT_DB_TYPE=mysql
+      - CUBEJS_EXT_DB_HOST=starrocks-fe
+      - CUBEJS_EXT_DB_PORT=9030
+      - CUBEJS_EXT_DB_USER=root
+      - CUBEJS_EXT_DB_PASS=
+      - CUBEJS_EXT_DB_NAME=cube_preagg
+      
+      # SQL API (Postgres wire protocol)
+      - CUBEJS_SQL_PORT=15432
+      - CUBEJS_PG_SQL_PORT=15432
+      
+      # Cache settings (now handled by StarRocks + Cube Store)
+      - CUBEJS_CACHE_AND_QUEUE_DRIVER=cubestore
+      - CUBEJS_PRE_AGGREGATIONS_SCHEMA=cube_preagg
+      
+      # JWT settings
+      - CUBEJS_JWT_KEY=${CUBEJS_JWT_KEY:-}
+      - CUBEJS_JWT_ISSUER=${CUBEJS_JWT_ISSUER:-http://mock-jwt:8080}
+      - CUBEJS_JWT_AUDIENCE=${CUBEJS_JWT_AUDIENCE:-cube-api}
+      - CUBEJS_JWT_ALGORITHMS=RS256
+      
+      # SLO thresholds
+      - CUBE_SLO_LATENCY_THRESHOLD_SECONDS=1.0
+      - CUBE_SLO_ROLLUP_TARGET_PERCENT=85
+    volumes:
+      - ../../cube:/cube/conf:ro
+    ports:
+      - "4000:4000"   # REST/GraphQL API + Playground
+      - "15432:15432" # SQL API (Postgres wire)
+    depends_on:
+      cubestore_router:
+        condition: service_healthy
+      starrocks-fe:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:4000/readyz"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - cube-dev
+    labels:
+      - "prometheus.scrape=true"
+      - "prometheus.port=4000"
+      - "prometheus.path=/metrics"
+
+  cube-refresh:
+    image: cubejs/cube:latest
+    command: ["node", "index.js", "--refresh-worker"]
+    environment:
+      - CUBEJS_DEV_MODE=true
+      - CUBEJS_API_SECRET=${CUBEJS_API_SECRET:-dev-secret-change-me}
+      # NO REDIS
+      - CUBEJS_CUBESTORE_HOST=cubestore_router
+      - CUBEJS_CUBESTORE_PORT=9999
+      - CUBEJS_CACHE_AND_QUEUE_DRIVER=cubestore
+      - CUBEJS_SCHEMA_PATH=/cube/conf/schema
+      - CUBE_TENANT_CONFIG_PATH=/cube/conf/generated/tenant-scopes.json
+      - CUBEJS_DB_TYPE=mysql
+      - CUBEJS_DB_HOST=starrocks-fe
+      - CUBEJS_DB_PORT=9030
+      - CUBEJS_DB_USER=root
+      - CUBEJS_DB_PASS=
+      - CUBEJS_DB_NAME=cube_hot
+      - CUBEJS_EXT_DB_TYPE=mysql
+      - CUBEJS_EXT_DB_HOST=starrocks-fe
+      - CUBEJS_EXT_DB_PORT=9030
+      - CUBEJS_EXT_DB_USER=root
+      - CUBEJS_EXT_DB_PASS=
+      - CUBEJS_EXT_DB_NAME=cube_preagg
+    volumes:
+      - ../../cube:/cube/conf:ro
+    depends_on:
+      - cubestore_router
+      - starrocks-fe
+    networks:
+      - cube-dev
+
+  # ==========================================================================
+  # STARROCKS (Hot Store + Pre-aggregations)
+  # ==========================================================================
+  
+  starrocks-fe:
+    image: starrocks/fe-ubuntu:3.2-latest
+    hostname: starrocks-fe
+    environment:
+      - FE_CONF_priority_networks=10.0.0.0/8;172.16.0.0/12;192.168.0.0/16
+    ports:
+      - "8030:8030"   # HTTP
+      - "9030:9030"   # MySQL protocol
+    volumes:
+      - starrocks_fe_data:/opt/starrocks/fe/meta
+      - ./starrocks/fe.conf:/opt/starrocks/fe/conf/fe.conf:ro
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8030/api/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - cube-dev
+
+  starrocks-be:
+    image: starrocks/be-ubuntu:3.2-latest
+    hostname: starrocks-be
+    environment:
+      - BE_CONF_priority_networks=10.0.0.0/8;172.16.0.0/12;192.168.0.0/16
+    ports:
+      - "8040:8040"   # HTTP
+    volumes:
+      - starrocks_be_data:/opt/starrocks/be/storage
+      - ./starrocks/be.conf:/opt/starrocks/be/conf/be.conf:ro
+      # Mount Parquet storage for cold data access
+      - ${PARQUET_DATA_PATH:-./data/parquet}:/data/parquet:ro
+    depends_on:
+      starrocks-fe:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8040/api/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - cube-dev
+
+  # ==========================================================================
+  # TENANT POSTGRESQL INSTANCES (Isolated Financial Data)
+  # In production, these would be separate RDS/Cloud SQL instances
+  # ==========================================================================
+  
+  # ==========================================================================
+  # MONITORING
+  # ==========================================================================
+  
+  prometheus:
+    image: prom/prometheus:latest
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=7d'
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    networks:
+      - cube-dev
+
+  grafana:
+    image: grafana/grafana:latest
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:-admin}
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Viewer
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+    depends_on:
+      - prometheus
+    networks:
+      - cube-dev
+
+networks:
+  cube-dev:
+    driver: bridge
+
+volumes:
+  cubestore_data:
+  starrocks_fe_data:
+  starrocks_be_data:
+  prometheus_data:
+  grafana_data:

@@ -1,0 +1,52 @@
+table:
+  name: catalog_node_type
+  schema: public
+select_permissions:
+  - role: anonymous
+    permission:
+      columns:
+        - id
+
+        - catalog_type_name
+        - description
+        - is_active
+        - parent_type_id
+        - config
+        - created_at
+        - updated_at
+        - tenant_id
+        - core_id
+        - properties
+      filter: {}
+  - role: steward
+    permission:
+      columns:
+        - id
+
+        - catalog_type_name
+        - description
+        - is_active
+        - parent_type_id
+        - config
+        - created_at
+        - updated_at
+        - tenant_id
+        - core_id
+        - properties
+      filter: {}
+  - role: user
+    permission:
+      columns:
+        - id
+
+        - catalog_type_name
+        - description
+        - is_active
+        - parent_type_id
+        - config
+        - created_at
+        - updated_at
+        - tenant_id
+        - core_id
+        - properties
+      filter: {}

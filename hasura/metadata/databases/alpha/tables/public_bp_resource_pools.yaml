@@ -1,0 +1,105 @@
+table:
+  name: bp_resource_pools
+  schema: public
+object_relationships:
+  - name: step
+    using:
+      foreign_key_constraint_on: step_id
+  - name: tenant
+    using:
+      foreign_key_constraint_on: tenant_id
+insert_permissions:
+  - role: user
+    permission:
+      check:
+        tenant_id:
+          _eq: X-Hasura-Tenant-Id
+      columns:
+        - tenant_id
+        - step_id
+        - pool_name
+        - resource_type
+        - resource_id
+        - capacity_metric
+        - current_load_api
+        - max_capacity
+        - routing_strategy
+        - load_threshold_for_overflow
+        - overflow_pool_id
+        - overflow_branch_id
+        - auto_scaling_enabled
+        - scale_up_threshold
+        - scale_down_threshold
+        - scale_up_increment
+        - scale_down_decrement
+        - cooldown_minutes
+        - is_active
+select_permissions:
+  - role: user
+    permission:
+      columns:
+        - id
+        - tenant_id
+        - step_id
+        - pool_name
+        - resource_type
+        - resource_id
+        - capacity_metric
+        - current_load_api
+        - max_capacity
+        - routing_strategy
+        - load_threshold_for_overflow
+        - overflow_pool_id
+        - overflow_branch_id
+        - auto_scaling_enabled
+        - scale_up_threshold
+        - scale_down_threshold
+        - scale_up_increment
+        - scale_down_decrement
+        - cooldown_minutes
+        - current_load
+        - current_load_percent
+        - peak_load_recorded
+        - is_active
+        - created_at
+        - updated_at
+      filter:
+        tenant_id:
+          _eq: X-Hasura-Tenant-Id
+update_permissions:
+  - role: user
+    permission:
+      columns:
+        - pool_name
+        - resource_type
+        - resource_id
+        - capacity_metric
+        - current_load_api
+        - max_capacity
+        - routing_strategy
+        - load_threshold_for_overflow
+        - overflow_pool_id
+        - overflow_branch_id
+        - auto_scaling_enabled
+        - scale_up_threshold
+        - scale_down_threshold
+        - scale_up_increment
+        - scale_down_decrement
+        - cooldown_minutes
+        - current_load
+        - current_load_percent
+        - peak_load_recorded
+        - is_active
+        - updated_at
+      filter:
+        tenant_id:
+          _eq: X-Hasura-Tenant-Id
+      check:
+        tenant_id:
+          _eq: X-Hasura-Tenant-Id
+delete_permissions:
+  - role: user
+    permission:
+      filter:
+        tenant_id:
+          _eq: X-Hasura-Tenant-Id

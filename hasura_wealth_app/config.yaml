@@ -1,0 +1,4 @@
+version: 3
+endpoint: http://100.84.126.19:20005
+admin_secret: myadminsecret
+metadata_directory: metadata

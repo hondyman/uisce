@@ -1,0 +1,198 @@
+-- Create Test Users and Tenants for Multi-Tenant Security Testing
+-- Run this script to set up test data for verifying the security implementation
+
+-- ============================================================================
+-- STEP 1: Create Test Tenants
+-- ============================================================================
+
+-- Tenant A
+INSERT INTO tenants (id, name, created_at, updated_at)
+VALUES (
+    '00000000-0000-0000-0000-000000000001',
+    'tenant-a',
+    NOW(),
+    NOW()
+) ON CONFLICT (id) DO NOTHING;
+
+-- Tenant B
+INSERT INTO tenants (id, name, created_at, updated_at)
+VALUES (
+    '00000000-0000-0000-0000-000000000002',
+    'tenant-b',
+    NOW(),
+    NOW()
+) ON CONFLICT (id) DO NOTHING;
+
+-- ============================================================================
+-- STEP 2: Create Test Users
+-- ============================================================================
+
+-- User A (Tenant A)
+-- Password: password123
+-- Bcrypt hash generated with: bcrypt.GenerateFromPassword([]byte("password123"), bcrypt.DefaultCost)
+INSERT INTO users (
+    id, email, password_hash, name, role, organization, tenant_id, 
+    is_core_admin, is_active, created_at, updated_at
+)
+VALUES (
+    '10000000-0000-0000-0000-000000000001',
+    'user-a@tenant-a.com',
+    '$2a$10$rKZLvVZvKxF7Y9jXxZ8eJOqKqH5vYxYxYxYxYxYxYxYxYxYxYxYxY', -- Replace with actual hash
+    'User A',
+    'user',
+    'tenant-a',
+    '00000000-0000-0000-0000-000000000001',
+    false,
+    true,
+    NOW(),
+    NOW()
+) ON CONFLICT (id) DO UPDATE SET
+    email = EXCLUDED.email,
+    password_hash = EXCLUDED.password_hash,
+    tenant_id = EXCLUDED.tenant_id;
+
+-- User B (Tenant B)
+-- Password: password123
+INSERT INTO users (
+    id, email, password_hash, name, role, organization, tenant_id,
+    is_core_admin, is_active, created_at, updated_at
+)
+VALUES (
+    '20000000-0000-0000-0000-000000000001',
+    'user-b@tenant-b.com',
+    '$2a$10$rKZLvVZvKxF7Y9jXxZ8eJOqKqH5vYxYxYxYxYxYxYxYxYxYxYxYxY', -- Replace with actual hash
+    'User B',
+    'user',
+    'tenant-b',
+    '00000000-0000-0000-0000-000000000002',
+    false,
+    true,
+    NOW(),
+    NOW()
+) ON CONFLICT (id) DO UPDATE SET
+    email = EXCLUDED.email,
+    password_hash = EXCLUDED.password_hash,
+    tenant_id = EXCLUDED.tenant_id;
+
+-- Global Admin (Uisce Organization)
+-- Password: admin123
+INSERT INTO users (
+    id, email, password_hash, name, role, organization, tenant_id,
+    is_core_admin, is_active, created_at, updated_at
+)
+VALUES (
+    '99000000-0000-0000-0000-000000000001',
+    'admin@uisce.com',
+    '$2a$10$rKZLvVZvKxF7Y9jXxZ8eJOqKqH5vYxYxYxYxYxYxYxYxYxYxYxYxY', -- Replace with actual hash
+    'Global Admin',
+    'admin',
+    'uisce',
+    NULL,
+    true,
+    true,
+    NOW(),
+    NOW()
+) ON CONFLICT (id) DO UPDATE SET
+    email = EXCLUDED.email,
+    password_hash = EXCLUDED.password_hash,
+    organization = EXCLUDED.organization,
+    is_core_admin = EXCLUDED.is_core_admin;
+
+-- ============================================================================
+-- STEP 3: Create Test Data
+-- ============================================================================
+
+-- Business Objects for Tenant A
+INSERT INTO business_objects (id, name, display_name, fields, tenant_id, created_at, updated_at)
+VALUES (
+    '11111111-0000-0000-0000-000000000001',
+    'client_a',
+    'Client A',
+    '[]'::jsonb,
+    '00000000-0000-0000-0000-000000000001',
+    NOW(),
+    NOW()
+) ON CONFLICT (id) DO NOTHING;
+
+INSERT INTO business_objects (id, name, display_name, fields, tenant_id, created_at, updated_at)
+VALUES (
+    '11111111-0000-0000-0000-000000000002',
+    'account_a',
+    'Account A',
+    '[]'::jsonb,
+    '00000000-0000-0000-0000-000000000001',
+    NOW(),
+    NOW()
+) ON CONFLICT (id) DO NOTHING;
+
+-- Business Objects for Tenant B
+INSERT INTO business_objects (id, name, display_name, fields, tenant_id, created_at, updated_at)
+VALUES (
+    '22222222-0000-0000-0000-000000000001',
+    'client_b',
+    'Client B',
+    '[]'::jsonb,
+    '00000000-0000-0000-0000-000000000002',
+    NOW(),
+    NOW()
+) ON CONFLICT (id) DO NOTHING;
+
+INSERT INTO business_objects (id, name, display_name, fields, tenant_id, created_at, updated_at)
+VALUES (
+    '22222222-0000-0000-0000-000000000002',
+    'account_b',
+    'Account B',
+    '[]'::jsonb,
+    '00000000-0000-0000-0000-000000000002',
+    NOW(),
+    NOW()
+) ON CONFLICT (id) DO NOTHING;
+
+-- ============================================================================
+-- STEP 4: Verify Data
+-- ============================================================================
+
+-- Check tenants
+SELECT 'Tenants:' as info;
+SELECT id, name FROM tenants WHERE id IN (
+    '00000000-0000-0000-0000-000000000001',
+    '00000000-0000-0000-0000-000000000002'
+);
+
+-- Check users
+SELECT 'Users:' as info;
+SELECT id, email, name, organization, tenant_id, is_core_admin 
+FROM users 
+WHERE id IN (
+    '10000000-0000-0000-0000-000000000001',
+    '20000000-0000-0000-0000-000000000001',
+    '99000000-0000-0000-0000-000000000001'
+);
+
+-- Check business objects
+SELECT 'Business Objects:' as info;
+SELECT id, name, tenant_id FROM business_objects 
+WHERE tenant_id IN (
+    '00000000-0000-0000-0000-000000000001',
+    '00000000-0000-0000-0000-000000000002'
+)
+ORDER BY tenant_id, name;
+
+-- ============================================================================
+-- NOTES
+-- ============================================================================
+
+-- To generate actual bcrypt hashes, use this Go code:
+-- 
+-- package main
+-- import (
+--     "fmt"
+--     "golang.org/x/crypto/bcrypt"
+-- )
+-- func main() {
+--     hash, _ := bcrypt.GenerateFromPassword([]byte("password123"), bcrypt.DefaultCost)
+--     fmt.Println(string(hash))
+-- }
+
+-- Or use this command:
+-- htpasswd -bnBC 10 "" password123 | tr -d ':\n'

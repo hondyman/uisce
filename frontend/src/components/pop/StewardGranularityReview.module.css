@@ -1,0 +1,35 @@
+.granularityDetails {
+  max-height: 600px;
+  overflow-y: auto;
+}
+
+.granularityDetails h4 {
+  margin-top: 16px;
+  margin-bottom: 8px;
+  color: #262626;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.fiscalLabel,
+.granularitySQL {
+  margin-bottom: 16px;
+}
+
+.sqlCode {
+  background-color: #f6f8fa;
+  border: 1px solid #d1d9e0;
+  border-radius: 6px;
+  padding: 12px;
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+  font-size: 12px;
+  line-height: 1.4;
+  overflow-x: auto;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.fiscalLabel .ant-typography {
+  font-size: 14px;
+  color: #1890ff;
+}

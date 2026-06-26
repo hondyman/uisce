@@ -1,0 +1,55 @@
+===== FAIL	backend/local =====
+# github.com/hondyman/semlayer/backend/local
+./main.go:127:26: non-constant format string in call to fmt.Errorf
+FAIL	github.com/hondyman/semlayer/backend/local [build failed]
+?   	github.com/hondyman/semlayer/backend/local/cmd/proxy	[no test files]
+FAIL
+
+===== FAIL	bp-backend =====
+# ./...
+pattern ./...: directory prefix . does not contain modules listed in go.work or their selected dependencies
+FAIL	./... [setup failed]
+FAIL
+
+===== FAIL	cube-gonja/scripts =====
+# ./...
+pattern ./...: directory prefix . does not contain modules listed in go.work or their selected dependencies
+FAIL	./... [setup failed]
+FAIL
+
+===== FAIL	cube-gonja/test =====
+# ./...
+pattern ./...: directory prefix . does not contain modules listed in go.work or their selected dependencies
+FAIL	./... [setup failed]
+FAIL
+
+===== FAIL	integration =====
+# ./...
+pattern ./...: directory prefix . does not contain modules listed in go.work or their selected dependencies
+FAIL	./... [setup failed]
+FAIL
+
+===== FAIL	portfolio-management/backend =====
+# ./...
+pattern ./...: directory prefix . does not contain modules listed in go.work or their selected dependencies
+FAIL	./... [setup failed]
+FAIL
+
+===== FAIL	rebalancing/api =====
+# ./...
+pattern ./...: directory prefix . does not contain modules listed in go.work or their selected dependencies
+FAIL	./... [setup failed]
+FAIL
+
+===== FAIL	rebalancing/worker =====
+# ./...
+pattern ./...: directory prefix . does not contain modules listed in go.work or their selected dependencies
+FAIL	./... [setup failed]
+FAIL
+
+===== FAIL	services/ai-trade-reconciliation =====
+# ./...
+pattern ./...: directory prefix . does not contain modules listed in go.work or their selected dependencies
+FAIL	./... [setup failed]
+FAIL
+

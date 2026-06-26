@@ -1,0 +1,31 @@
+name: Auto Deploy on Main (deploy-related changes)
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'trino/**'
+      - 'docker-compose.remote.yml'
+      - 'scripts/deploy*'
+      - 'backend/migrations/**'
+
+permissions:
+  actions: write
+
+jobs:
+  dispatch-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Notify and dispatch Deploy Remote workflow
+        uses: actions/github-script@v6
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            await github.actions.createWorkflowDispatch({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              workflow_id: 'deploy-remote.yml',
+              ref: 'main'
+            });
+            core.info('Dispatched deploy-remote.yml due to deploy-related change on main');

@@ -1,0 +1,145 @@
+{
+  "name": "products_admin_view",
+  "title": "Products View (Admin)",
+  "description": "Auto-generated semantic model for table products.",
+  "public": "role in (steward,admin)",
+  "meta": {
+    "admin_variant": true,
+    "generated_at": "2025-10-01T18:21:07Z",
+    "root_cube": "products"
+  },
+  "cubes": [
+    {
+      "join_path": "products",
+      "includes": [
+        {
+          "name": "count"
+        },
+        {
+          "name": "product_name"
+        },
+        {
+          "name": "sum_discontinued"
+        },
+        {
+          "name": "sum_reorder_level"
+        },
+        {
+          "name": "sum_unit_price"
+        },
+        {
+          "name": "sum_units_in_stock"
+        },
+        {
+          "name": "sum_units_on_order"
+        }
+      ]
+    },
+    {
+      "join_path": "products.order_details",
+      "prefix": true,
+      "includes": [
+        {
+          "name": "*"
+        }
+      ]
+    },
+    {
+      "join_path": "products.suppliers",
+      "prefix": true,
+      "includes": [
+        {
+          "name": "*"
+        }
+      ]
+    },
+    {
+      "join_path": "products.categories",
+      "prefix": true,
+      "includes": [
+        {
+          "name": "*"
+        }
+      ]
+    },
+    {
+      "join_path": "products.order_details.orders",
+      "prefix": true,
+      "includes": [
+        {
+          "name": "*"
+        }
+      ]
+    }
+  ],
+  "folders": [
+    {
+      "name": "Basic Details",
+      "includes": [
+        {
+          "member": "product_name"
+        }
+      ]
+    },
+    {
+      "name": "Metrics",
+      "includes": [
+        {
+          "member": "sum_units_on_order"
+        },
+        {
+          "member": "count"
+        },
+        {
+          "member": "sum_unit_price"
+        },
+        {
+          "member": "sum_discontinued"
+        },
+        {
+          "member": "sum_reorder_level"
+        },
+        {
+          "member": "sum_units_in_stock"
+        }
+      ]
+    },
+    {
+      "name": "Related",
+      "includes": [
+        {
+          "nested": {
+            "name": "Order details",
+            "includes": [
+              {
+                "member": "order_details_discount"
+              },
+              {
+                "member": "order_details_quantity"
+              },
+              {
+                "member": "order_details_unit_price"
+              }
+            ]
+          }
+        },
+        {
+          "nested": {
+            "name": "Categories",
+            "includes": [
+              {
+                "member": "categories_category_name"
+              },
+              {
+                "member": "categories_picture"
+              },
+              {
+                "member": "categories_description"
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

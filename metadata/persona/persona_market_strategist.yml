@@ -1,0 +1,16 @@
+id: persona_market_strategist
+type: Persona
+version: 1.0.0
+name: AI Market Strategist
+status: active
+capabilities:
+  - macro_insights
+  - instrument_events
+  - portfolio_effects
+disclosures:
+  - "Educational only; not investment advice"
+entitlements:
+  subscription_tiers: ["Pro","Advisor"]
+cost_model:
+  unit: impression
+  rate: 0.001

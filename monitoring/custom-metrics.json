@@ -1,0 +1,79 @@
+[
+  {
+    "name": "semlayer.access_evaluation.duration",
+    "description": "Duration of access evaluation in milliseconds",
+    "unit": "MILLISECOND",
+    "dimensions": ["tenant_id", "cache_hit", "decision"],
+    "aggregation": "AVG"
+  },
+  {
+    "name": "semlayer.access_evaluation.active",
+    "description": "Number of active concurrent evaluations",
+    "unit": "COUNT",
+    "dimensions": ["tenant_id"],
+    "aggregation": "MAX"
+  },
+  {
+    "name": "semlayer.cache.hit_ratio",
+    "description": "Cache hit ratio percentage",
+    "unit": "PERCENT",
+    "dimensions": ["tenant_id"],
+    "aggregation": "AVG"
+  },
+  {
+    "name": "semlayer.cache.invalidations",
+    "description": "Cache invalidation rate per minute",
+    "unit": "COUNT",
+    "dimensions": ["tenant_id"],
+    "aggregation": "SUM"
+  },
+  {
+    "name": "semlayer.conversational.turn.duration",
+    "description": "Duration of conversational turn processing",
+    "unit": "MILLISECOND",
+    "dimensions": ["conversation_id", "tenant_id", "conversation.length"],
+    "aggregation": "AVG"
+  },
+  {
+    "name": "semlayer.guardrail.interventions",
+    "description": "Number of guardrail interventions",
+    "unit": "COUNT",
+    "dimensions": ["tenant_id", "trigger_reason"],
+    "aggregation": "SUM"
+  },
+  {
+    "name": "semlayer.conversations.active",
+    "description": "Number of active conversations",
+    "unit": "COUNT",
+    "dimensions": ["tenant_id"],
+    "aggregation": "MAX"
+  },
+  {
+    "name": "semlayer.governance.manual_grants",
+    "description": "Number of manual governance grants",
+    "unit": "COUNT",
+    "dimensions": ["tenant_id", "steward_id"],
+    "aggregation": "SUM"
+  },
+  {
+    "name": "semlayer.governance.drift_backlog",
+    "description": "Number of drifted claims awaiting action",
+    "unit": "COUNT",
+    "dimensions": ["tenant_id"],
+    "aggregation": "MAX"
+  },
+  {
+    "name": "semlayer.governance.conflict_resolution_time",
+    "description": "Time to resolve governance conflicts",
+    "unit": "MILLISECOND",
+    "dimensions": ["tenant_id"],
+    "aggregation": "AVG"
+  },
+  {
+    "name": "semlayer.conversational.success_rate",
+    "description": "Conversational query success rate",
+    "unit": "PERCENT",
+    "dimensions": ["tenant_id"],
+    "aggregation": "AVG"
+  }
+]

@@ -1,0 +1,148 @@
+{
+  "multi_dialect_dax_sql_mapping": {
+    "description": "Cross-engine DAX-to-SQL translation for unified financial services super-bundle",
+    "purpose": "Enable consistent metric calculations across SQL Server, Oracle, PostgreSQL, Snowflake, and Iceberg",
+    "supported_engines": ["sqlserver", "oracle", "postgres", "snowflake", "iceberg"],
+    "function_mappings": {
+      "logical_functions": {
+        "DIVIDE": {
+          "neutral": "DIVIDE(numerator, denominator)",
+          "sqlserver": "CASE WHEN denominator <> 0 THEN numerator / denominator ELSE NULL END",
+          "oracle": "CASE WHEN denominator <> 0 THEN numerator / denominator ELSE NULL END",
+          "postgres": "CASE WHEN denominator <> 0 THEN numerator::DECIMAL / denominator::DECIMAL ELSE NULL END",
+          "snowflake": "IFF(denominator <> 0, numerator / denominator, NULL)",
+          "iceberg": "IF(denominator != 0, numerator / denominator, NULL)"
+        },
+        "COALESCE": {
+          "neutral": "COALESCE(value1, value2)",
+          "sqlserver": "COALESCE(value1, value2)",
+          "oracle": "COALESCE(value1, value2)",
+          "postgres": "COALESCE(value1, value2)",
+          "snowflake": "COALESCE(value1, value2)",
+          "iceberg": "COALESCE(value1, value2)"
+        },
+        "MAX": {
+          "neutral": "MAX(column)",
+          "sqlserver": "MAX(column)",
+          "oracle": "MAX(column)",
+          "postgres": "MAX(column)",
+          "snowflake": "MAX(column)",
+          "iceberg": "MAX(column)"
+        }
+      },
+      "iterator_functions": {
+        "SUMX": {
+          "neutral": "SUMX(table, expression)",
+          "sqlserver": "SUM(expression)",
+          "oracle": "SUM(expression)",
+          "postgres": "SUM(expression)",
+          "snowflake": "SUM(expression)",
+          "iceberg": "SUM(expression)"
+        },
+        "AVERAGEX": {
+          "neutral": "AVERAGEX(table, expression)",
+          "sqlserver": "AVG(expression)",
+          "oracle": "AVG(expression)",
+          "postgres": "AVG(expression)",
+          "snowflake": "AVG(expression)",
+          "iceberg": "AVG(expression)"
+        },
+        "FILTER": {
+          "neutral": "FILTER(table, condition)",
+          "sqlserver": "WHERE condition",
+          "oracle": "WHERE condition",
+          "postgres": "WHERE condition",
+          "snowflake": "WHERE condition",
+          "iceberg": "WHERE condition"
+        },
+        "DISTINCTCOUNT": {
+          "neutral": "DISTINCTCOUNT(column)",
+          "sqlserver": "COUNT(DISTINCT column)",
+          "oracle": "COUNT(DISTINCT column)",
+          "postgres": "COUNT(DISTINCT column)",
+          "snowflake": "COUNT(DISTINCT column)",
+          "iceberg": "COUNT(DISTINCT column)"
+        }
+      },
+      "time_intelligence": {
+        "DATEADD": {
+          "neutral": "DATEADD(interval, number, date)",
+          "sqlserver": "DATEADD(interval, number, date)",
+          "oracle": "date + INTERVAL 'number' interval",
+          "postgres": "date + INTERVAL 'number' interval",
+          "snowflake": "DATEADD(interval, number, date)",
+          "iceberg": "DATE_ADD(date, INTERVAL number interval)"
+        },
+        "TOTALYTD": {
+          "neutral": "TOTALYTD(expression, date)",
+          "sqlserver": "SUM(expression) OVER (PARTITION BY YEAR(date) ORDER BY date ROWS UNBOUNDED PRECEDING)",
+          "oracle": "SUM(expression) OVER (PARTITION BY EXTRACT(YEAR FROM date) ORDER BY date ROWS UNBOUNDED PRECEDING)",
+          "postgres": "SUM(expression) OVER (PARTITION BY EXTRACT(YEAR FROM date) ORDER BY date ROWS UNBOUNDED PRECEDING)",
+          "snowflake": "SUM(expression) OVER (PARTITION BY YEAR(date) ORDER BY date ROWS UNBOUNDED PRECEDING)",
+          "iceberg": "SUM(expression) OVER (PARTITION BY YEAR(date) ORDER BY date ROWS UNBOUNDED PRECEDING)"
+        }
+      },
+      "financial_functions": {
+        "STDEVX.P": {
+          "neutral": "STDEVX.P(table, expression)",
+          "sqlserver": "STDEV(expression)",
+          "oracle": "STDDEV(expression)",
+          "postgres": "STDDEV(expression)",
+          "snowflake": "STDDEV(expression)",
+          "iceberg": "STDDEV(expression)"
+        },
+        "MULTIPLY": {
+          "neutral": "MULTIPLY(value1, value2)",
+          "sqlserver": "value1 * value2",
+          "oracle": "value1 * value2",
+          "postgres": "value1 * value2",
+          "snowflake": "value1 * value2",
+          "iceberg": "value1 * value2"
+        },
+        "SUBTRACT": {
+          "neutral": "SUBTRACT(value1, value2)",
+          "sqlserver": "value1 - value2",
+          "oracle": "value1 - value2",
+          "postgres": "value1 - value2",
+          "snowflake": "value1 - value2",
+          "iceberg": "value1 - value2"
+        },
+        "ADD": {
+          "neutral": "ADD(value1, value2)",
+          "sqlserver": "value1 + value2",
+          "oracle": "value1 + value2",
+          "postgres": "value1 + value2",
+          "snowflake": "value1 + value2",
+          "iceberg": "value1 + value2"
+        }
+      }
+    },
+    "preaggregation_strategies": {
+      "sqlserver": {
+        "materialized_view": "CREATE MATERIALIZED VIEW view_name WITH (DISTRIBUTION = HASH(entity_id), CLUSTERED INDEX (entity_id, as_of_date)) AS SELECT ...",
+        "indexing": "CREATE CLUSTERED COLUMNSTORE INDEX idx_name ON table_name; CREATE NONCLUSTERED INDEX idx_entity_date ON table_name(entity_id, as_of_date);",
+        "partitioning": "CREATE PARTITION FUNCTION pf_date(datetime) AS RANGE RIGHT FOR VALUES (...); CREATE PARTITION SCHEME ps_date AS PARTITION pf_date TO (...);"
+      },
+      "oracle": {
+        "materialized_view": "CREATE MATERIALIZED VIEW view_name BUILD IMMEDIATE REFRESH FAST ON COMMIT AS SELECT ...;",
+        "indexing": "CREATE INDEX idx_entity_date ON table_name(entity_id, as_of_date) LOCAL;",
+        "partitioning": "CREATE TABLE table_name (...) PARTITION BY RANGE (as_of_date) (PARTITION p2024 VALUES LESS THAN (TO_DATE('2025-01-01', 'YYYY-MM-DD')), ...);"
+      },
+      "postgres": {
+        "materialized_view": "CREATE MATERIALIZED VIEW view_name AS SELECT ... WITH DATA;",
+        "indexing": "CREATE INDEX CONCURRENTLY idx_entity_date ON table_name(entity_id, as_of_date);",
+        "partitioning": "CREATE TABLE table_name (...) PARTITION BY RANGE (as_of_date); CREATE TABLE table_name_y2024 PARTITION OF table_name FOR VALUES FROM ('2024-01-01') TO ('2025-01-01');"
+      },
+      "snowflake": {
+        "materialized_view": "CREATE MATERIALIZED VIEW view_name AS SELECT ...;",
+        "indexing": "ALTER TABLE table_name ADD CLUSTERING KEY (entity_id, as_of_date);",
+        "partitioning": "CREATE TABLE table_name (...) CLUSTER BY (entity_id, as_of_date);"
+      },
+      "iceberg": {
+        "materialized_view": "CREATE TABLE view_name USING iceberg PARTITIONED BY (year(as_of_date)) AS SELECT ...;",
+        "indexing": "ALTER TABLE table_name ADD PARTITION FIELD year(as_of_date);",
+        "partitioning": "CREATE TABLE table_name (...) USING iceberg PARTITIONED BY (entity_id, year(as_of_date));"
+      }
+    }
+  }
+}

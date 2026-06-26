@@ -1,0 +1,7 @@
+{
+  "$id": "https://semlayer.com/schemas/asl-rule.schema.json",
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "definitions": {},
+  "title": "ASL Rule Schema",
+  "type": "object"
+}

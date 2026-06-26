@@ -1,0 +1,217 @@
+[GIN-debug] [WARNING] Creating an Engine instance with the Logger and Recovery middleware already attached.
+
+[GIN-debug] [WARNING] Running in "debug" mode. Switch to "release" mode in production.
+ - using env:	export GIN_MODE=release
+ - using code:	gin.SetMode(gin.ReleaseMode)
+
+2025/09/24 22:40:31 Set trusted proxies: [127.0.0.1 ::1]
+2025/09/24 22:40:31 Using in-memory revocation store (dev only)
+2025/09/24 22:40:31 Resolved HASURA_URL=http://localhost:8081 HASURA_ADMIN_SECRET=****tkey BACKEND_URL=http://localhost:9090
+[GIN-debug] GET    /health                   --> main.main.func1 (5 handlers)
+[GIN-debug] GET    /jwks.json                --> main.main.func2 (5 handlers)
+[GIN-debug] GET    /api/analytics            --> main.main.func3 (5 handlers)
+[GIN-debug] GET    /api/health/detailed      --> main.main.func4 (5 handlers)
+[GIN-debug] POST   /api/keys                 --> main.main.func5 (10 handlers)
+[GIN-debug] GET    /api/keys                 --> main.main.func6 (10 handlers)
+[GIN-debug] GET    /api/catalog/apis         --> main.main.func7 (10 handlers)
+[GIN-debug] POST   /api/keys/rotate          --> main.main.func8 (10 handlers)
+[GIN-debug] POST   /api/tokens/revoke        --> main.main.func9 (10 handlers)
+[GIN-debug] GET    /api/catalog/business-terms --> main.main.func10 (10 handlers)
+[GIN-debug] POST   /api/catalog/apis         --> main.main.func11 (10 handlers)
+[GIN-debug] POST   /api/catalog/business-terms --> main.main.func12 (10 handlers)
+[GIN-debug] POST   /api/catalog/scan         --> main.main.func13 (10 handlers)
+[GIN-debug] POST   /api/search/business-terms --> main.main.func14 (10 handlers)
+[GIN-debug] POST   /api/validate/business-term --> main.main.func15 (10 handlers)
+[GIN-debug] GET    /api/lineage/semantic     --> main.main.func16 (10 handlers)
+[GIN-debug] POST   /api/graphql              --> main.main.func17 (10 handlers)
+[GIN-debug] POST   /graphql                  --> main.main.func18 (5 handlers)
+[GIN-debug] POST   /v1/graphql               --> main.main.func19 (5 handlers)
+[GIN-debug] GET    /playground               --> main.main.func20 (5 handlers)
+[GIN-debug] GET    /api/models               --> main.main.createProxyHandler.func49 (10 handlers)
+[GIN-debug] POST   /api/models               --> main.main.createProxyHandler.func49 (10 handlers)
+[GIN-debug] PUT    /api/models               --> main.main.createProxyHandler.func49 (10 handlers)
+[GIN-debug] PATCH  /api/models               --> main.main.createProxyHandler.func49 (10 handlers)
+[GIN-debug] HEAD   /api/models               --> main.main.createProxyHandler.func49 (10 handlers)
+[GIN-debug] OPTIONS /api/models               --> main.main.createProxyHandler.func49 (10 handlers)
+[GIN-debug] DELETE /api/models               --> main.main.createProxyHandler.func49 (10 handlers)
+[GIN-debug] CONNECT /api/models               --> main.main.createProxyHandler.func49 (10 handlers)
+[GIN-debug] TRACE  /api/models               --> main.main.createProxyHandler.func49 (10 handlers)
+[GIN-debug] POST   /api/models/generated     --> main.main.createProxyHandler.func49 (10 handlers)
+[GIN-debug] POST   /api/models/custom        --> main.main.createProxyHandler.func49 (10 handlers)
+[GIN-debug] POST   /api/models/clone         --> main.main.createProxyHandler.func49 (10 handlers)
+[GIN-debug] GET    /api/models/:model_id     --> main.main.createProxyHandler.func49 (10 handlers)
+[GIN-debug] POST   /api/models/:model_id     --> main.main.createProxyHandler.func49 (10 handlers)
+[GIN-debug] PUT    /api/models/:model_id     --> main.main.createProxyHandler.func49 (10 handlers)
+[GIN-debug] PATCH  /api/models/:model_id     --> main.main.createProxyHandler.func49 (10 handlers)
+[GIN-debug] HEAD   /api/models/:model_id     --> main.main.createProxyHandler.func49 (10 handlers)
+[GIN-debug] OPTIONS /api/models/:model_id     --> main.main.createProxyHandler.func49 (10 handlers)
+[GIN-debug] DELETE /api/models/:model_id     --> main.main.createProxyHandler.func49 (10 handlers)
+[GIN-debug] CONNECT /api/models/:model_id     --> main.main.createProxyHandler.func49 (10 handlers)
+[GIN-debug] TRACE  /api/models/:model_id     --> main.main.createProxyHandler.func49 (10 handlers)
+[GIN-debug] POST   /api/auth/login           --> main.main.func21 (5 handlers)
+[GIN-debug] POST   /api/auth/logout          --> main.main.createProxyHandler.func49 (10 handlers)
+[GIN-debug] GET    /api/fabric/*path         --> main.main.createProxyHandler.func49 (10 handlers)
+[GIN-debug] POST   /api/fabric/*path         --> main.main.createProxyHandler.func49 (10 handlers)
+[GIN-debug] PUT    /api/fabric/*path         --> main.main.createProxyHandler.func49 (10 handlers)
+[GIN-debug] PATCH  /api/fabric/*path         --> main.main.createProxyHandler.func49 (10 handlers)
+[GIN-debug] HEAD   /api/fabric/*path         --> main.main.createProxyHandler.func49 (10 handlers)
+[GIN-debug] OPTIONS /api/fabric/*path         --> main.main.createProxyHandler.func49 (10 handlers)
+[GIN-debug] DELETE /api/fabric/*path         --> main.main.createProxyHandler.func49 (10 handlers)
+[GIN-debug] CONNECT /api/fabric/*path         --> main.main.createProxyHandler.func49 (10 handlers)
+[GIN-debug] TRACE  /api/fabric/*path         --> main.main.createProxyHandler.func49 (10 handlers)
+[GIN-debug] GET    /api/tenants              --> main.main.createProxyHandler.func49 (10 handlers)
+[GIN-debug] POST   /api/tenants              --> main.main.createProxyHandler.func49 (10 handlers)
+[GIN-debug] PUT    /api/tenants              --> main.main.createProxyHandler.func49 (10 handlers)
+[GIN-debug] PATCH  /api/tenants              --> main.main.createProxyHandler.func49 (10 handlers)
+[GIN-debug] HEAD   /api/tenants              --> main.main.createProxyHandler.func49 (10 handlers)
+[GIN-debug] OPTIONS /api/tenants              --> main.main.createProxyHandler.func49 (10 handlers)
+[GIN-debug] DELETE /api/tenants              --> main.main.createProxyHandler.func49 (10 handlers)
+[GIN-debug] CONNECT /api/tenants              --> main.main.createProxyHandler.func49 (10 handlers)
+[GIN-debug] TRACE  /api/tenants              --> main.main.createProxyHandler.func49 (10 handlers)
+[GIN-debug] GET    /api/tenants/*path        --> main.main.createProxyHandler.func49 (10 handlers)
+[GIN-debug] POST   /api/tenants/*path        --> main.main.createProxyHandler.func49 (10 handlers)
+[GIN-debug] PUT    /api/tenants/*path        --> main.main.createProxyHandler.func49 (10 handlers)
+[GIN-debug] PATCH  /api/tenants/*path        --> main.main.createProxyHandler.func49 (10 handlers)
+[GIN-debug] HEAD   /api/tenants/*path        --> main.main.createProxyHandler.func49 (10 handlers)
+[GIN-debug] OPTIONS /api/tenants/*path        --> main.main.createProxyHandler.func49 (10 handlers)
+[GIN-debug] DELETE /api/tenants/*path        --> main.main.createProxyHandler.func49 (10 handlers)
+[GIN-debug] CONNECT /api/tenants/*path        --> main.main.createProxyHandler.func49 (10 handlers)
+[GIN-debug] TRACE  /api/tenants/*path        --> main.main.createProxyHandler.func49 (10 handlers)
+[GIN-debug] GET    /api/ip-whitelist         --> main.main.createProxyHandler.func49 (10 handlers)
+[GIN-debug] POST   /api/ip-whitelist         --> main.main.createProxyHandler.func49 (10 handlers)
+[GIN-debug] PUT    /api/ip-whitelist         --> main.main.createProxyHandler.func49 (10 handlers)
+[GIN-debug] PATCH  /api/ip-whitelist         --> main.main.createProxyHandler.func49 (10 handlers)
+[GIN-debug] HEAD   /api/ip-whitelist         --> main.main.createProxyHandler.func49 (10 handlers)
+[GIN-debug] OPTIONS /api/ip-whitelist         --> main.main.createProxyHandler.func49 (10 handlers)
+[GIN-debug] DELETE /api/ip-whitelist         --> main.main.createProxyHandler.func49 (10 handlers)
+[GIN-debug] CONNECT /api/ip-whitelist         --> main.main.createProxyHandler.func49 (10 handlers)
+[GIN-debug] TRACE  /api/ip-whitelist         --> main.main.createProxyHandler.func49 (10 handlers)
+[GIN-debug] GET    /api/ip-whitelist/*path   --> main.main.createProxyHandler.func49 (10 handlers)
+[GIN-debug] POST   /api/ip-whitelist/*path   --> main.main.createProxyHandler.func49 (10 handlers)
+[GIN-debug] PUT    /api/ip-whitelist/*path   --> main.main.createProxyHandler.func49 (10 handlers)
+[GIN-debug] PATCH  /api/ip-whitelist/*path   --> main.main.createProxyHandler.func49 (10 handlers)
+[GIN-debug] HEAD   /api/ip-whitelist/*path   --> main.main.createProxyHandler.func49 (10 handlers)
+[GIN-debug] OPTIONS /api/ip-whitelist/*path   --> main.main.createProxyHandler.func49 (10 handlers)
+[GIN-debug] DELETE /api/ip-whitelist/*path   --> main.main.createProxyHandler.func49 (10 handlers)
+[GIN-debug] CONNECT /api/ip-whitelist/*path   --> main.main.createProxyHandler.func49 (10 handlers)
+[GIN-debug] TRACE  /api/ip-whitelist/*path   --> main.main.createProxyHandler.func49 (10 handlers)
+[GIN-debug] GET    /api/query                --> main.main.createProxyHandler.func49 (10 handlers)
+[GIN-debug] POST   /api/query                --> main.main.createProxyHandler.func49 (10 handlers)
+[GIN-debug] PUT    /api/query                --> main.main.createProxyHandler.func49 (10 handlers)
+[GIN-debug] PATCH  /api/query                --> main.main.createProxyHandler.func49 (10 handlers)
+[GIN-debug] HEAD   /api/query                --> main.main.createProxyHandler.func49 (10 handlers)
+[GIN-debug] OPTIONS /api/query                --> main.main.createProxyHandler.func49 (10 handlers)
+[GIN-debug] DELETE /api/query                --> main.main.createProxyHandler.func49 (10 handlers)
+[GIN-debug] CONNECT /api/query                --> main.main.createProxyHandler.func49 (10 handlers)
+[GIN-debug] TRACE  /api/query                --> main.main.createProxyHandler.func49 (10 handlers)
+[GIN-debug] GET    /api/pre_aggregations     --> main.main.createProxyHandler.func49 (10 handlers)
+[GIN-debug] POST   /api/pre_aggregations     --> main.main.createProxyHandler.func49 (10 handlers)
+[GIN-debug] PUT    /api/pre_aggregations     --> main.main.createProxyHandler.func49 (10 handlers)
+[GIN-debug] PATCH  /api/pre_aggregations     --> main.main.createProxyHandler.func49 (10 handlers)
+[GIN-debug] HEAD   /api/pre_aggregations     --> main.main.createProxyHandler.func49 (10 handlers)
+[GIN-debug] OPTIONS /api/pre_aggregations     --> main.main.createProxyHandler.func49 (10 handlers)
+[GIN-debug] DELETE /api/pre_aggregations     --> main.main.createProxyHandler.func49 (10 handlers)
+[GIN-debug] CONNECT /api/pre_aggregations     --> main.main.createProxyHandler.func49 (10 handlers)
+[GIN-debug] TRACE  /api/pre_aggregations     --> main.main.createProxyHandler.func49 (10 handlers)
+[GIN-debug] GET    /api/pre_aggregations/*path --> main.main.createProxyHandler.func49 (10 handlers)
+[GIN-debug] POST   /api/pre_aggregations/*path --> main.main.createProxyHandler.func49 (10 handlers)
+[GIN-debug] PUT    /api/pre_aggregations/*path --> main.main.createProxyHandler.func49 (10 handlers)
+[GIN-debug] PATCH  /api/pre_aggregations/*path --> main.main.createProxyHandler.func49 (10 handlers)
+[GIN-debug] HEAD   /api/pre_aggregations/*path --> main.main.createProxyHandler.func49 (10 handlers)
+[GIN-debug] OPTIONS /api/pre_aggregations/*path --> main.main.createProxyHandler.func49 (10 handlers)
+[GIN-debug] DELETE /api/pre_aggregations/*path --> main.main.createProxyHandler.func49 (10 handlers)
+[GIN-debug] CONNECT /api/pre_aggregations/*path --> main.main.createProxyHandler.func49 (10 handlers)
+[GIN-debug] TRACE  /api/pre_aggregations/*path --> main.main.createProxyHandler.func49 (10 handlers)
+[GIN-debug] GET    /api/views                --> main.main.createProxyHandler.func49 (10 handlers)
+[GIN-debug] POST   /api/views                --> main.main.createProxyHandler.func49 (10 handlers)
+[GIN-debug] PUT    /api/views                --> main.main.createProxyHandler.func49 (10 handlers)
+[GIN-debug] PATCH  /api/views                --> main.main.createProxyHandler.func49 (10 handlers)
+[GIN-debug] HEAD   /api/views                --> main.main.createProxyHandler.func49 (10 handlers)
+[GIN-debug] OPTIONS /api/views                --> main.main.createProxyHandler.func49 (10 handlers)
+[GIN-debug] DELETE /api/views                --> main.main.createProxyHandler.func49 (10 handlers)
+[GIN-debug] CONNECT /api/views                --> main.main.createProxyHandler.func49 (10 handlers)
+[GIN-debug] TRACE  /api/views                --> main.main.createProxyHandler.func49 (10 handlers)
+[GIN-debug] GET    /api/views/*path          --> main.main.createProxyHandler.func49 (10 handlers)
+[GIN-debug] POST   /api/views/*path          --> main.main.createProxyHandler.func49 (10 handlers)
+[GIN-debug] PUT    /api/views/*path          --> main.main.createProxyHandler.func49 (10 handlers)
+[GIN-debug] PATCH  /api/views/*path          --> main.main.createProxyHandler.func49 (10 handlers)
+[GIN-debug] HEAD   /api/views/*path          --> main.main.createProxyHandler.func49 (10 handlers)
+[GIN-debug] OPTIONS /api/views/*path          --> main.main.createProxyHandler.func49 (10 handlers)
+[GIN-debug] DELETE /api/views/*path          --> main.main.createProxyHandler.func49 (10 handlers)
+[GIN-debug] CONNECT /api/views/*path          --> main.main.createProxyHandler.func49 (10 handlers)
+[GIN-debug] TRACE  /api/views/*path          --> main.main.createProxyHandler.func49 (10 handlers)
+[GIN-debug] GET    /api/catalog/tables       --> main.main.createProxyHandler.func49 (10 handlers)
+[GIN-debug] POST   /api/catalog/tables       --> main.main.createProxyHandler.func49 (10 handlers)
+[GIN-debug] PUT    /api/catalog/tables       --> main.main.createProxyHandler.func49 (10 handlers)
+[GIN-debug] PATCH  /api/catalog/tables       --> main.main.createProxyHandler.func49 (10 handlers)
+[GIN-debug] HEAD   /api/catalog/tables       --> main.main.createProxyHandler.func49 (10 handlers)
+[GIN-debug] OPTIONS /api/catalog/tables       --> main.main.createProxyHandler.func49 (10 handlers)
+[GIN-debug] DELETE /api/catalog/tables       --> main.main.createProxyHandler.func49 (10 handlers)
+[GIN-debug] CONNECT /api/catalog/tables       --> main.main.createProxyHandler.func49 (10 handlers)
+[GIN-debug] TRACE  /api/catalog/tables       --> main.main.createProxyHandler.func49 (10 handlers)
+[GIN-debug] GET    /api/catalog/tables/*path --> main.main.createProxyHandler.func49 (10 handlers)
+[GIN-debug] POST   /api/catalog/tables/*path --> main.main.createProxyHandler.func49 (10 handlers)
+[GIN-debug] PUT    /api/catalog/tables/*path --> main.main.createProxyHandler.func49 (10 handlers)
+[GIN-debug] PATCH  /api/catalog/tables/*path --> main.main.createProxyHandler.func49 (10 handlers)
+[GIN-debug] HEAD   /api/catalog/tables/*path --> main.main.createProxyHandler.func49 (10 handlers)
+[GIN-debug] OPTIONS /api/catalog/tables/*path --> main.main.createProxyHandler.func49 (10 handlers)
+[GIN-debug] DELETE /api/catalog/tables/*path --> main.main.createProxyHandler.func49 (10 handlers)
+[GIN-debug] CONNECT /api/catalog/tables/*path --> main.main.createProxyHandler.func49 (10 handlers)
+[GIN-debug] TRACE  /api/catalog/tables/*path --> main.main.createProxyHandler.func49 (10 handlers)
+[GIN-debug] POST   /api/queries              --> main.main.func22 (10 handlers)
+[GIN-debug] GET    /api/queries              --> main.main.func23 (10 handlers)
+[GIN-debug] GET    /api/queries/:id          --> main.main.func24 (10 handlers)
+[GIN-debug] PUT    /api/queries/:id          --> main.main.func25 (10 handlers)
+[GIN-debug] DELETE /api/queries/:id          --> main.main.func26 (10 handlers)
+[GIN-debug] POST   /api/queries/:id/clone    --> main.main.func27 (10 handlers)
+[GIN-debug] POST   /api/queries/:id/share    --> main.main.func28 (10 handlers)
+[GIN-debug] POST   /api/apis                 --> main.main.func29 (10 handlers)
+[GIN-debug] GET    /api/apis                 --> main.main.func30 (10 handlers)
+[GIN-debug] GET    /api/apis/:id             --> main.main.func31 (10 handlers)
+[GIN-debug] PUT    /api/apis/:id             --> main.main.func32 (10 handlers)
+[GIN-debug] DELETE /api/apis/:id             --> main.main.func33 (10 handlers)
+[GIN-debug] POST   /api/apis/:id/clone       --> main.main.func34 (10 handlers)
+[GIN-debug] POST   /api/apis/:id/share       --> main.main.func35 (10 handlers)
+[GIN-debug] POST   /api/execute/:apiId/*path --> main.main.func36 (10 handlers)
+[GIN-debug] GET    /docs/*filepath           --> github.com/gin-gonic/gin.(*RouterGroup).createStaticHandler.func1 (5 handlers)
+[GIN-debug] HEAD   /docs/*filepath           --> github.com/gin-gonic/gin.(*RouterGroup).createStaticHandler.func1 (5 handlers)
+[GIN-debug] GET    /api/openapi.yaml         --> main.main.func37 (5 handlers)
+2025/09/24 22:40:31 API Gateway starting on port 8001
+[GIN-debug] Listening and serving HTTP on :8001
+2025/09/24 22:40:41 [AUDIT] POST /api/models/generated 502 3.443375ms ::1
+[GIN] 2025/09/24 - 22:40:41 | 502 |       3.584ms |             ::1 | POST     "/api/models/generated"
+2025/09/24 22:40:41 [AUDIT] GET /api/catalog/tables 502 682.708µs ::1
+[GIN] 2025/09/24 - 22:40:41 | 502 |     759.458µs |             ::1 | GET      "/api/catalog/tables?tenant=public&datasource=default&name=products"
+2025/09/24 22:41:06 proxy: dev CORS fallback applied, no Origin header present, using http://localhost:5173 for path=/api/models/generated original=*
+2025/09/24 22:41:06 [AUDIT] POST /api/models/generated 400 5.358916ms ::1
+[GIN] 2025/09/24 - 22:41:06 | 400 |      5.3875ms |             ::1 | POST     "/api/models/generated"
+2025/09/24 22:41:06 proxy: dev CORS fallback applied, no Origin header present, using http://localhost:5173 for path=/api/catalog/tables original=*
+2025/09/24 22:41:06 [AUDIT] GET /api/catalog/tables 400 1.577875ms ::1
+[GIN] 2025/09/24 - 22:41:06 | 400 |       1.607ms |             ::1 | GET      "/api/catalog/tables?tenant=public&datasource=default&name=products"
+2025/09/24 22:41:12 proxy: dev CORS fallback applied, no Origin header present, using http://localhost:5173 for path=/api/models/generated original=*
+2025/09/24 22:41:12 [AUDIT] POST /api/models/generated 400 2.429ms ::1
+[GIN] 2025/09/24 - 22:41:12 | 400 |    2.458875ms |             ::1 | POST     "/api/models/generated"
+2025/09/24 22:41:12 proxy: dev CORS fallback applied, no Origin header present, using http://localhost:5173 for path=/api/catalog/tables original=*
+2025/09/24 22:41:12 [AUDIT] GET /api/catalog/tables 400 1.738917ms ::1
+[GIN] 2025/09/24 - 22:41:12 | 400 |    1.765708ms |             ::1 | GET      "/api/catalog/tables?tenant=public&datasource=default&name=products"
+2025/09/24 22:42:05 proxy: dev CORS fallback applied, no Origin header present, using http://localhost:5173 for path=/api/models/generated original=*
+2025/09/24 22:42:05 [AUDIT] POST /api/models/generated 200 13.887708ms ::1
+[GIN] 2025/09/24 - 22:42:05 | 200 |   13.918125ms |             ::1 | POST     "/api/models/generated?tenant_id=910638ba-a459-4a3f-bb2d-78391b0595f6&datasource_id=982aef38-418f-46dc-acd0-35fe8f3b97b0"
+2025/09/24 22:42:05 proxy: dev CORS fallback applied, no Origin header present, using http://localhost:5173 for path=/api/catalog/tables original=*
+2025/09/24 22:42:05 [AUDIT] GET /api/catalog/tables 400 3.620166ms ::1
+[GIN] 2025/09/24 - 22:42:05 | 400 |    3.650041ms |             ::1 | GET      "/api/catalog/tables?tenant=910638ba-a459-4a3f-bb2d-78391b0595f6&datasource=982aef38-418f-46dc-acd0-35fe8f3b97b0&name=products"
+2025/09/24 22:42:17 proxy: dev CORS fallback applied, no Origin header present, using http://localhost:5173 for path=/api/catalog/tables original=*
+2025/09/24 22:42:17 [AUDIT] GET /api/catalog/tables 200 5.97ms ::1
+[GIN] 2025/09/24 - 22:42:17 | 200 |    6.005584ms |             ::1 | GET      "/api/catalog/tables?datasource_id=982aef38-418f-46dc-acd0-35fe8f3b97b0"
+2025/09/24 22:47:30 proxy: dev CORS fallback applied, no Origin header present, using http://localhost:5173 for path=/api/models/generated original=*
+2025/09/24 22:47:30 [AUDIT] POST /api/models/generated 200 11.440666ms ::1
+[GIN] 2025/09/24 - 22:47:30 | 200 |   11.469084ms |             ::1 | POST     "/api/models/generated?tenant_id=910638ba-a459-4a3f-bb2d-78391b0595f6&datasource_id=982aef38-418f-46dc-acd0-35fe8f3b97b0"
+2025/09/24 22:47:30 proxy: dev CORS fallback applied, no Origin header present, using http://localhost:5173 for path=/api/catalog/tables original=*
+2025/09/24 22:47:30 [AUDIT] GET /api/catalog/tables 200 6.252584ms ::1
+[GIN] 2025/09/24 - 22:47:30 | 200 |    6.284666ms |             ::1 | GET      "/api/catalog/tables?datasource_id=982aef38-418f-46dc-acd0-35fe8f3b97b0"
+2025/09/24 22:49:47 proxy: dev CORS fallback applied, no Origin header present, using http://localhost:5173 for path=/api/models/generated original=*
+2025/09/24 22:49:47 [AUDIT] POST /api/models/generated 200 10.667625ms ::1
+[GIN] 2025/09/24 - 22:49:47 | 200 |   10.694958ms |             ::1 | POST     "/api/models/generated?tenant_id=910638ba-a459-4a3f-bb2d-78391b0595f6&datasource_id=982aef38-418f-46dc-acd0-35fe8f3b97b0"
+2025/09/24 22:49:47 proxy: dev CORS fallback applied, no Origin header present, using http://localhost:5173 for path=/api/catalog/tables original=*
+2025/09/24 22:49:47 [AUDIT] GET /api/catalog/tables 200 5.625ms ::1
+[GIN] 2025/09/24 - 22:49:47 | 200 |    5.655417ms |             ::1 | GET      "/api/catalog/tables?datasource_id=982aef38-418f-46dc-acd0-35fe8f3b97b0"

@@ -1,0 +1,3 @@
+persistence:
+  defaultStore: postgres
+  visibilityStore: postgres

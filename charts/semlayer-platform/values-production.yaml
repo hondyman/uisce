@@ -1,0 +1,249 @@
+# Production Values for Semlayer Platform
+# Use with: helm install semlayer ./charts/semlayer-platform -f values-production.yaml
+
+global:
+  environment: production
+
+  # Replica counts for production (high availability)
+  replicas:
+    apiGateway: 5
+    semanticEngine: 5
+    cubeApi: 5
+    ruleEngine: 5
+    complianceEngine: 3
+    aiBuilder: 3
+    notificationService: 3
+
+  # Production resource limits
+  resources:
+    apiGateway:
+      limits:
+        cpu: "4"
+        memory: 8Gi
+      requests:
+        cpu: "1"
+        memory: 2Gi
+    semanticEngine:
+      limits:
+        cpu: "8"
+        memory: 16Gi
+      requests:
+        cpu: "2"
+        memory: 4Gi
+    cubeApi:
+      limits:
+        cpu: "8"
+        memory: 16Gi
+      requests:
+        cpu: "2"
+        memory: 4Gi
+    ruleEngine:
+      limits:
+        cpu: "4"
+        memory: 8Gi
+      requests:
+        cpu: "1"
+        memory: 2Gi
+    complianceEngine:
+      limits:
+        cpu: "4"
+        memory: 8Gi
+      requests:
+        cpu: "1"
+        memory: 2Gi
+    aiBuilder:
+      limits:
+        cpu: "16"
+        memory: 64Gi
+      requests:
+        cpu: "4"
+        memory: 16Gi
+    notificationService:
+      limits:
+        cpu: "2"
+        memory: 4Gi
+      requests:
+        cpu: "500m"
+        memory: 1Gi
+
+  # Autoscaling configuration
+  autoscaling:
+    enabled: true
+    apiGateway:
+      minReplicas: 5
+      maxReplicas: 30
+      targetCPUUtilizationPercentage: 60
+    semanticEngine:
+      minReplicas: 5
+      maxReplicas: 30
+      targetCPUUtilizationPercentage: 60
+    cubeApi:
+      minReplicas: 5
+      maxReplicas: 25
+      targetCPUUtilizationPercentage: 70
+    ruleEngine:
+      minReplicas: 5
+      maxReplicas: 25
+      targetCPUUtilizationPercentage: 50
+    complianceEngine:
+      minReplicas: 3
+      maxReplicas: 15
+      targetCPUUtilizationPercentage: 70
+    aiBuilder:
+      minReplicas: 3
+      maxReplicas: 15
+      targetCPUUtilizationPercentage: 70
+    notificationService:
+      minReplicas: 3
+      maxReplicas: 15
+      targetCPUUtilizationPercentage: 70
+
+  # Pod Disruption Budgets
+  podDisruptionBudget:
+    enabled: true
+    apiGateway:
+      minAvailable: 3
+    semanticEngine:
+      minAvailable: 3
+    cubeApi:
+      minAvailable: 3
+    ruleEngine:
+      minAvailable: 3
+    complianceEngine:
+      minAvailable: 2
+    aiBuilder:
+      minAvailable: 2
+    notificationService:
+      minAvailable: 2
+
+  # Security settings
+  security:
+    podSecurityContext:
+      runAsNonRoot: true
+      runAsUser: 1000
+      runAsGroup: 1000
+      fsGroup: 1000
+    containerSecurityContext:
+      allowPrivilegeEscalation: false
+      readOnlyRootFilesystem: true
+      capabilities:
+        drop:
+        - ALL
+
+  # Network policies
+  networkPolicy:
+    enabled: true
+
+  # Service mesh
+  istio:
+    enabled: true
+    mtls:
+      mode: STRICT
+
+# Ingress configuration
+ingress:
+  enabled: true
+  className: nginx
+  annotations:
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/proxy-body-size: "100m"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "120"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "120"
+    nginx.ingress.kubernetes.io/rate-limit: "1000"
+    nginx.ingress.kubernetes.io/rate-limit-window: "1m"
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+  hosts:
+  - host: api.semlayer.io
+    paths:
+    - path: /
+      pathType: Prefix
+  tls:
+  - secretName: semlayer-api-tls
+    hosts:
+    - api.semlayer.io
+
+# Database configuration
+postgresql:
+  host: semlayer-prod-postgresql.postgres.database.azure.com
+  port: 5432
+  sslMode: require
+  maxConnections: 200
+  maxIdleConnections: 50
+  connMaxLifetime: 30m
+  databases:
+  - name: semantic
+    maxConnections: 50
+  - name: rules
+    maxConnections: 50
+  - name: compliance
+    maxConnections: 30
+  - name: ai_builder
+    maxConnections: 30
+  - name: notifications
+    maxConnections: 20
+  - name: governance
+    maxConnections: 20
+
+# Redis configuration
+redis:
+  host: semlayer-prod-redis.redis.cache.windows.net
+  port: 6380
+  tls: true
+  cluster:
+    enabled: true
+    nodes: 6
+  maxConnections: 500
+
+# Queue configuration
+servicebus:
+  namespace: semlayer-prod-servicebus
+  tier: Premium
+  queues:
+  - name: notifications
+    maxDeliveryCount: 10
+    lockDuration: PT5M
+  - name: compliance-validation
+    maxDeliveryCount: 5
+    lockDuration: PT10M
+  - name: rule-evaluation
+    maxDeliveryCount: 5
+    lockDuration: PT1M
+
+# Monitoring configuration
+monitoring:
+  prometheus:
+    enabled: true
+    serviceMonitor:
+      enabled: true
+      interval: 15s
+  grafana:
+    enabled: true
+    dashboards:
+      enabled: true
+  alertmanager:
+    enabled: true
+
+# Logging configuration
+logging:
+  level: info
+  format: json
+  structured: true
+
+# Tracing configuration
+tracing:
+  enabled: true
+  samplingRate: 0.05 # 5% in production
+  exporter: jaeger
+
+# SLO targets
+slo:
+  availability: 99.9
+  latencyP95Ms: 200
+  errorRatePercent: 0.1
+
+# Compliance settings
+compliance:
+  dataRetentionDays: 2555 # 7 years
+  auditLogging: true
+  encryptionAtRest: true
+  encryptionInTransit: true

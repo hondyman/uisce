@@ -1,0 +1,341 @@
+{"level":"info","ts":1762403484.857572,"caller":"server/main.go:90","msg":"Database connection established successfully"}
+{"level":"info","ts":1762403484.8576682,"caller":"server/main.go:91","msg":"Connection pool configured: MaxOpen=50, MaxIdle=10, MaxLifetime=10m0s, MaxIdleTime=5m0s"}
+{"level":"info","ts":1762403484.8576992,"caller":"services/performance_monitor.go:145","msg":"Performance monitoring started"}
+{"level":"info","ts":1762403484.8577092,"caller":"observability/dynatrace_manager.go:30","msg":"Dynatrace environment variables not set, disabling Dynatrace integration."}
+{"level":"info","ts":1762403484.857721,"caller":"services/performance_monitor.go:436","msg":"pprof endpoints available at /debug/pprof/"}
+{"level":"warn","ts":1762403484.865221,"caller":"server/main.go:144","msg":"Warning: Failed to create views table: ERROR: cannot drop index ux_views_tenant_ds_name because constraint ux_views_tenant_ds_name on table views requires it (SQLSTATE 2BP01)"}
+{"level":"info","ts":1762403484.865846,"caller":"server/main.go:172","msg":"Ensured fabric_defn table exists"}
+{"level":"warn","ts":1762403484.866271,"caller":"server/main.go:182","msg":"Warning: Failed to initialize private markets schema: failed to read private markets schema file: open internal/api/private_markets_schema.sql: no such file or directory"}
+{"level":"info","ts":1762403484.869628,"caller":"server/main.go:257","msg":"Ensured entity_registry table exists"}
+{"level":"info","ts":1762403484.87144,"caller":"server/main.go:307","msg":"Ensured validation rules tables exist"}
+{"level":"info","ts":1762403500.384935,"caller":"api/api.go:378","msg":"No AMQP configured or connect failed; using noop EventBus"}
+2025/11/05 23:31:40 INFO  No logger configured for temporal client. Created default one.
+[ROUTES-DUMP-START]
+[ROUTE] POST /_debug/validation-rules-proxy
+[ROUTE] GET /_routes
+[ROUTE] GET /api/_debug/amqp-metrics
+[ROUTE] POST /api/_debug/publish-event
+[ROUTE] POST /api/_debug/validation-rules-proxy
+[ROUTE] GET /api/_health/amqp
+[ROUTE] POST /api/abbreviations/expand
+[ROUTE] GET /api/abbreviations/expand
+[ROUTE] POST /api/abbreviations/validate
+[ROUTE] POST /api/abbreviations/
+[ROUTE] GET /api/abbreviations/
+[ROUTE] GET /api/abbreviations/{id}/
+[ROUTE] PUT /api/abbreviations/{id}/
+[ROUTE] DELETE /api/abbreviations/{id}/
+[ROUTE] POST /api/ai/field-recommendations
+[ROUTE] POST /api/ai/generate-layout
+[ROUTE] GET /api/ai/layouts
+[ROUTE] POST /api/ai/mark-adopted
+[ROUTE] POST /api/analytics/layout
+[ROUTE] POST /api/api/v1/timeouts
+[ROUTE] GET /api/api/v1/timeouts/pending
+[ROUTE] POST /api/api/v1/timeouts/{id}/escalate
+[ROUTE] POST /api/api/v1/triggers
+[ROUTE] GET /api/api/v1/triggers
+[ROUTE] GET /api/api/v1/triggers/events
+[ROUTE] GET /api/api/v1/triggers/executions
+[ROUTE] GET /api/api/v1/triggers/objects
+[ROUTE] GET /api/api/v1/triggers/operators
+[ROUTE] GET /api/api/v1/triggers/types
+[ROUTE] PUT /api/api/v1/triggers/{id}
+[ROUTE] DELETE /api/api/v1/triggers/{id}
+[ROUTE] POST /api/auth/login
+[ROUTE] POST /api/auth/logout
+[ROUTE] GET /api/auth/me
+[ROUTE] POST /api/auth/refresh
+[ROUTE] POST /api/auth/register
+[ROUTE] POST /api/bp/start-execution
+[ROUTE] POST /api/bundles/
+[ROUTE] GET /api/bundles/
+[ROUTE] PUT /api/bundles/{bundleID}/
+[ROUTE] GET /api/bundles/{bundleID}/
+[ROUTE] POST /api/bundles/{bundleID}/certify
+[ROUTE] POST /api/bundles/{bundleID}/deprecate
+[ROUTE] PUT /api/bundles/{bundleID}/policies
+[ROUTE] POST /api/bundles/{bundleID}/publish
+[ROUTE] GET /api/business-term
+[ROUTE] POST /api/business-term-edges
+[ROUTE] DELETE /api/business-term-edges
+[ROUTE] GET /api/business-term-edges
+[ROUTE] GET /api/business-term-edges-test
+[ROUTE] DELETE /api/business-term-edges/{id}
+[ROUTE] POST /api/business-term/suggestion-feedback
+[ROUTE] POST /api/business-term/suggestions
+[ROUTE] GET /api/business-terms
+[ROUTE] POST /api/business-terms
+[ROUTE] POST /api/business-terms/search
+[ROUTE] DELETE /api/business-terms/{id}
+[ROUTE] PUT /api/business-terms/{id}
+[ROUTE] POST /api/calc/run
+[ROUTE] POST /api/calc/vectorized
+[ROUTE] GET /api/catalog/nodes
+[ROUTE] POST /api/catalog/scan
+[ROUTE] GET /api/catalog/tables
+[ROUTE] POST /api/crud
+[ROUTE] PUT /api/crud
+[ROUTE] DELETE /api/crud
+[ROUTE] POST /api/custom-components
+[ROUTE] GET /api/custom-components
+[ROUTE] GET /api/custom-components/export
+[ROUTE] POST /api/custom-components/import
+[ROUTE] POST /api/custom-components/test-api
+[ROUTE] DELETE /api/custom-components/{id}
+[ROUTE] GET /api/custom-components/{id}
+[ROUTE] PUT /api/custom-components/{id}
+[ROUTE] POST /api/dashboards/
+[ROUTE] GET /api/dashboards/public
+[ROUTE] GET /api/dashboards/templates
+[ROUTE] GET /api/dashboards/user/{userId}
+[ROUTE] GET /api/dashboards/{id}
+[ROUTE] PUT /api/dashboards/{id}
+[ROUTE] DELETE /api/dashboards/{id}
+[ROUTE] POST /api/dashboards/{id}/duplicate
+[ROUTE] POST /api/data-domains/
+[ROUTE] GET /api/data-domains/
+[ROUTE] GET /api/data-domains/search
+[ROUTE] GET /api/data-domains/{id}/
+[ROUTE] PUT /api/data-domains/{id}/
+[ROUTE] DELETE /api/data-domains/{id}/
+[ROUTE] GET /api/dax/categories
+[ROUTE] POST /api/dax/execute
+[ROUTE] GET /api/dax/functions
+[ROUTE] GET /api/dax/functions/{functionName}
+[ROUTE] GET /api/edge-types
+[ROUTE] POST /api/edge-types
+[ROUTE] GET /api/edge-types/{id}
+[ROUTE] PATCH /api/edge-types/{id}
+[ROUTE] DELETE /api/edge-types/{id}
+[ROUTE] POST /api/edge-types/{id}/properties
+[ROUTE] GET /api/edge-types/{id}/properties
+[ROUTE] PATCH /api/edge-types/{id}/properties/{propName}
+[ROUTE] DELETE /api/edge-types/{id}/properties/{propName}
+[ROUTE] POST /api/employees
+[ROUTE] GET /api/employees
+[ROUTE] GET /api/entities
+[ROUTE] GET /api/entities/{name}
+[ROUTE] GET /api/entity-schema
+[ROUTE] POST /api/entity-schema
+[ROUTE] POST /api/entity_registry
+[ROUTE] GET /api/entity_registry
+[ROUTE] PUT /api/entity_registry/{entity_name}
+[ROUTE] POST /api/events
+[ROUTE] GET /api/events
+[ROUTE] POST /api/fabric/cubes/generate-from-table
+[ROUTE] GET /api/fabric/extensions
+[ROUTE] POST /api/fabric/extensions
+[ROUTE] GET /api/fabric/extensions/compatibility-report
+[ROUTE] GET /api/fabric/joins/{datasourceId}
+[ROUTE] GET /api/fabric/joins/{datasourceId}/table/{tableName}
+[ROUTE] GET /api/fabric/models
+[ROUTE] GET /api/fabric/models/definition
+[ROUTE] POST /api/fabric/models/generate
+[ROUTE] POST /api/fabric/models/generate-defaults
+[ROUTE] POST /api/fabric/models/metadata
+[ROUTE] POST /api/fabric/models/validate
+[ROUTE] GET /api/funds
+[ROUTE] GET /api/glossary/business-terms
+[ROUTE] POST /api/glossary/edges
+[ROUTE] GET /api/glossary/edges
+[ROUTE] GET /api/glossary/semantic-terms
+[ROUTE] POST /api/glossary/terms
+[ROUTE] DELETE /api/glossary/terms/{id}
+[ROUTE] PUT /api/glossary/terms/{id}
+[ROUTE] GET /api/ip-whitelist
+[ROUTE] GET /api/marketplace/items
+[ROUTE] POST /api/marketplace/items/add-to-tenant
+[ROUTE] GET /api/marketplace/items/{id}
+[ROUTE] POST /api/marketplace/items/{id}/feedback
+[ROUTE] GET /api/marketplace/items/{id}/feedback
+[ROUTE] GET /api/marketplace/items/{id}/parameters
+[ROUTE] GET /api/marketplace/tenant-items
+[ROUTE] GET /api/marketplace/tenant-items/{id}
+[ROUTE] PUT /api/marketplace/tenant-items/{id}
+[ROUTE] DELETE /api/marketplace/tenant-items/{id}
+[ROUTE] GET /api/marketplace/validation-rules
+[ROUTE] GET /api/metadata/{datasourceId}
+[ROUTE] GET /api/metrics
+[ROUTE] POST /api/metrics
+[ROUTE] TRACE /api/metrics
+[ROUTE] PATCH /api/metrics
+[ROUTE] DELETE /api/metrics
+[ROUTE] HEAD /api/metrics
+[ROUTE] OPTIONS /api/metrics
+[ROUTE] PUT /api/metrics
+[ROUTE] CONNECT /api/metrics
+[ROUTE] GET /api/metrics/{fundId}
+[ROUTE] GET /api/micro-bundles
+[ROUTE] POST /api/micro-bundles
+[ROUTE] GET /api/micro-bundles/{id}
+[ROUTE] GET /api/models
+[ROUTE] POST /api/models/clone
+[ROUTE] POST /api/models/custom
+[ROUTE] POST /api/models/generated
+[ROUTE] GET /api/models/{model_id}
+[ROUTE] PATCH /api/models/{model_id}
+[ROUTE] DELETE /api/models/{model_id}
+[ROUTE] GET /api/node-types
+[ROUTE] POST /api/node-types
+[ROUTE] PATCH /api/node-types/{id}
+[ROUTE] DELETE /api/node-types/{id}
+[ROUTE] GET /api/node-types/{id}
+[ROUTE] POST /api/node-types/{id}/properties
+[ROUTE] GET /api/node-types/{id}/properties
+[ROUTE] DELETE /api/node-types/{id}/properties/{propName}
+[ROUTE] PATCH /api/node-types/{id}/properties/{propName}
+[ROUTE] GET /api/policies
+[ROUTE] POST /api/policies
+[ROUTE] POST /api/policies/simulate
+[ROUTE] DELETE /api/policies/{id}
+[ROUTE] GET /api/policies/{id}
+[ROUTE] POST /api/profiler/profile
+[ROUTE] GET /api/profiler/results
+[ROUTE] GET /api/profiler/status/{jobId}
+[ROUTE] POST /api/publish/validate
+[ROUTE] POST /api/relationships/apply
+[ROUTE] GET /api/relationships/objects
+[ROUTE] GET /api/relationships/suggestions
+[ROUTE] POST /api/relationships/suggestions/dismiss
+[ROUTE] POST /api/roles/
+[ROUTE] GET /api/roles/
+[ROUTE] PUT /api/roles/{roleName}/
+[ROUTE] DELETE /api/roles/{roleName}/
+[ROUTE] GET /api/roles/{roleName}/
+[ROUTE] GET /api/roles/{roleName}/bundles
+[ROUTE] POST /api/roles/{roleName}/bundles
+[ROUTE] DELETE /api/roles/{roleName}/bundles/{bundleID}
+[ROUTE] GET /api/semantic-mappings
+[ROUTE] POST /api/semantic-mappings/apply-custom
+[ROUTE] POST /api/semantic-mappings/business-term-edges
+[ROUTE] POST /api/semantic-mappings/edges
+[ROUTE] POST /api/semantic-mappings/enhanced-match
+[ROUTE] POST /api/semantic-mappings/ignore
+[ROUTE] POST /api/semantic-mappings/replace
+[ROUTE] POST /api/semantic-mappings/upsert-business-term-edge
+[ROUTE] POST /api/semantic-terms
+[ROUTE] GET /api/semantic-terms
+[ROUTE] POST /api/semantic-terms/search
+[ROUTE] GET /api/semantic-terms/{id}/suggest-business-terms
+[ROUTE] GET /api/semantic/bundles/{domain}
+[ROUTE] GET /api/semantic/objects
+[ROUTE] GET /api/templates
+[ROUTE] POST /api/templates
+[ROUTE] GET /api/templates/{node_id}
+[ROUTE] POST /api/templates/{node_id}/promote
+[ROUTE] GET /api/templates/{node_id}/versions
+[ROUTE] POST /api/temporal
+[ROUTE] GET /api/tenants
+[ROUTE] PATCH /api/tenants/{tenant_id}/datasources/{datasource_id}/models/{model_id}
+[ROUTE] GET /api/tenants/{tenantId}/ip-whitelist
+[ROUTE] POST /api/tenants/{tenantId}/ip-whitelist
+[ROUTE] DELETE /api/tenants/{tenantId}/ip-whitelist
+[ROUTE] GET /api/user/{id}
+[ROUTE] GET /api/validation-rules
+[ROUTE] POST /api/validation-rules
+[ROUTE] POST /api/validation-rules/execute-batch
+[ROUTE] PATCH /api/validation-rules/{id}
+[ROUTE] DELETE /api/validation-rules/{id}
+[ROUTE] GET /api/validation-rules/{id}
+[ROUTE] GET /api/validation-rules/{id}/audit
+[ROUTE] POST /api/validation-rules/{id}/execute
+[ROUTE] GET /api/views
+[ROUTE] POST /api/views
+[ROUTE] POST /api/views/apply
+[ROUTE] GET /api/views/compare
+[ROUTE] POST /api/views/reject
+[ROUTE] POST /api/views/validate
+[ROUTE] PUT /api/views/{name}
+[ROUTE] DELETE /api/views/{name}
+[ROUTE] GET /api/views/{name}
+[ROUTE] GET /api/views/{name}/download
+[ROUTE] GET /api/views/{name}/suggestions
+[ROUTE] GET /api/views/{name}/validate
+[ROUTE] GET /api/workflow-timeout-triggers/
+[ROUTE] POST /api/workflow-timeout-triggers/
+[ROUTE] GET /api/workflow-timeout-triggers/{triggerId}/
+[ROUTE] PUT /api/workflow-timeout-triggers/{triggerId}/
+[ROUTE] DELETE /api/workflow-timeout-triggers/{triggerId}/
+[ROUTE] POST /api/workflow-timeout-triggers/{triggerId}/test
+[ROUTE] GET /api/ws
+[ROUTE] POST /api/ws/token
+[ROUTE] GET /layouts
+[ROUTE] POST /layouts
+[ROUTE] GET /layouts/{id}
+[ROUTE] DELETE /layouts/{id}
+[ROUTES-DUMP-END]
+{"level":"warn","ts":1762403500.394639,"caller":"api/api.go:466","msg":"Temporal client not available at startup: failed reaching server: connection error: desc = \"transport: Error while dialing: dial tcp 127.0.0.1:7233: connect: connection refused\""}
+{"level":"info","ts":1762403500.3947499,"caller":"api/api.go:540","msg":"Temporal admin routes registered"}
+{"level":"info","ts":1762403500.4080808,"caller":"server/main.go:321","msg":"Insurance calculation templates initialized successfully"}
+{"level":"info","ts":1762403500.420521,"caller":"server/main.go:328","msg":"Private markets calculation templates initialized successfully"}
+{"level":"info","ts":1762403500.425299,"caller":"server/main.go:335","msg":"Quant finance calculation templates initialized successfully"}
+{"level":"info","ts":1762403500.4301472,"caller":"server/main.go:342","msg":"Risk management calculation templates initialized successfully"}
+{"level":"info","ts":1762403500.434064,"caller":"server/main.go:349","msg":"Compliance and regulatory calculation templates initialized successfully"}
+{"level":"warn","ts":1762403500.4340951,"caller":"server/main.go:383","msg":"Dynatrace URL and API token not configured - capacity metrics collection disabled"}
+{"level":"info","ts":1762403500.434114,"caller":"server/main.go:418","msg":"Server starting on http://localhost:8080"}
+{"level":"info","ts":1762403500.434125,"caller":"server/main.go:419","msg":"Swagger UI available at: http://localhost:8080/swagger/index.html"}
+[REQ] GET /api/validation-rules Headers:Content-Type=,Authorization=,Origin=,X-Tenant-ID=,X-Tenant-Datasource-ID= Body:
+{"level":"info","ts":1762403524.157182,"caller":"audit/service.go:116","msg":"Audit event logged","event_id":"21628db5-ea07-4147-b855-1048f62c9622","event_type":"data_access","user_id":"anonymous","resource_type":"api_endpoint","resource_id":"/api/validation-rules"}
+[LIST-DEBUG] countQuery=SELECT COUNT(*) as count FROM catalog_validation_rules WHERE tenant_id = $1
+args=[910638ba-a459-4a3f-bb2d-78391b0595f6]
+Request completed in 22.408417ms
+[REQ] GET /api/validation-rules Headers:Content-Type=,Authorization=,Origin=,X-Tenant-ID=,X-Tenant-Datasource-ID= Body:
+{"level":"info","ts":1762403530.8143702,"caller":"audit/service.go:116","msg":"Audit event logged","event_id":"44e83fd7-e9d1-4683-bd34-325e4f0caedf","event_type":"data_access","user_id":"anonymous","resource_type":"api_endpoint","resource_id":"/api/validation-rules"}
+[LIST-DEBUG] countQuery=SELECT COUNT(*) as count FROM catalog_validation_rules WHERE tenant_id = $1
+args=[910638ba-a459-4a3f-bb2d-78391b0595f6]
+Request completed in 4.148834ms
+{"level":"info","ts":1762403544.857712,"caller":"services/performance_monitor.go:360","msg":"Performance Stats: requests=0, avg_duration=0s, cache_hit_rate=0.00%, active=0, errors=0"}
+[REQ] GET /api/validation-rules Headers:Content-Type=,Authorization=,Origin=,X-Tenant-ID=,X-Tenant-Datasource-ID= Body:
+{"level":"info","ts":1762403602.716181,"caller":"audit/service.go:116","msg":"Audit event logged","event_id":"f581fe46-956f-4d24-a712-d38c384b969b","event_type":"data_access","user_id":"anonymous","resource_type":"api_endpoint","resource_id":"/api/validation-rules"}
+[LIST-DEBUG] countQuery=SELECT COUNT(*) as count FROM catalog_validation_rules WHERE tenant_id = $1
+args=[910638ba-a459-4a3f-bb2d-78391b0595f6]
+Request completed in 8.163375ms
+{"level":"info","ts":1762403604.856652,"caller":"services/performance_monitor.go:360","msg":"Performance Stats: requests=0, avg_duration=0s, cache_hit_rate=0.00%, active=0, errors=0"}
+[REQ] GET /api/validation-rules Headers:Content-Type=,Authorization=,Origin=,X-Tenant-ID=,X-Tenant-Datasource-ID= Body:
+{"level":"info","ts":1762403608.121834,"caller":"audit/service.go:116","msg":"Audit event logged","event_id":"d5a00193-a1a8-4726-846e-5cce1e94e7d3","event_type":"data_access","user_id":"anonymous","resource_type":"api_endpoint","resource_id":"/api/validation-rules"}
+[LIST-DEBUG] countQuery=SELECT COUNT(*) as count FROM catalog_validation_rules WHERE tenant_id = $1
+args=[910638ba-a459-4a3f-bb2d-78391b0595f6]
+Request completed in 14.841166ms
+[REQ] GET /api/validation-rules Headers:Content-Type=,Authorization=,Origin=,X-Tenant-ID=,X-Tenant-Datasource-ID= Body:
+{"level":"info","ts":1762403620.648113,"caller":"audit/service.go:116","msg":"Audit event logged","event_id":"33103959-6882-4d67-ad14-79aad1496797","event_type":"data_access","user_id":"anonymous","resource_type":"api_endpoint","resource_id":"/api/validation-rules"}
+[LIST-DEBUG] countQuery=SELECT COUNT(*) as count FROM catalog_validation_rules WHERE tenant_id = $1
+args=[910638ba-a459-4a3f-bb2d-78391b0595f6]
+Request completed in 4.31675ms
+[REQ] GET /api/validation-rules Headers:Content-Type=,Authorization=,Origin=,X-Tenant-ID=,X-Tenant-Datasource-ID= Body:
+{"level":"info","ts":1762403625.106596,"caller":"audit/service.go:116","msg":"Audit event logged","event_id":"add6857c-68c0-4a52-be70-fdc53a49d22a","event_type":"data_access","user_id":"anonymous","resource_type":"api_endpoint","resource_id":"/api/validation-rules"}
+[LIST-DEBUG] countQuery=SELECT COUNT(*) as count FROM catalog_validation_rules WHERE tenant_id = $1
+args=[910638ba-a459-4a3f-bb2d-78391b0595f6]
+Request completed in 3.062834ms
+[REQ] GET /api/validation-rules Headers:Content-Type=,Authorization=,Origin=,X-Tenant-ID=,X-Tenant-Datasource-ID= Body:
+{"level":"info","ts":1762403628.832511,"caller":"audit/service.go:116","msg":"Audit event logged","event_id":"59521e06-8a07-4745-8fed-36e31d4bb41f","event_type":"data_access","user_id":"anonymous","resource_type":"api_endpoint","resource_id":"/api/validation-rules"}
+[LIST-DEBUG] countQuery=SELECT COUNT(*) as count FROM catalog_validation_rules WHERE tenant_id = $1
+args=[910638ba-a459-4a3f-bb2d-78391b0595f6]
+Request completed in 2.978083ms
+[REQ] GET /api/validation-rules Headers:Content-Type=,Authorization=,Origin=,X-Tenant-ID=,X-Tenant-Datasource-ID= Body:
+{"level":"info","ts":1762403638.346368,"caller":"audit/service.go:116","msg":"Audit event logged","event_id":"7a856b67-6b49-43e7-a943-63d713d75b7e","event_type":"data_access","user_id":"anonymous","resource_type":"api_endpoint","resource_id":"/api/validation-rules"}
+[LIST-DEBUG] countQuery=SELECT COUNT(*) as count FROM catalog_validation_rules WHERE tenant_id = $1
+args=[910638ba-a459-4a3f-bb2d-78391b0595f6]
+Request completed in 2.8155ms
+{"level":"info","ts":1762403664.8555,"caller":"services/performance_monitor.go:360","msg":"Performance Stats: requests=0, avg_duration=0s, cache_hit_rate=0.00%, active=0, errors=0"}
+[REQ] GET /api/validation-rules Headers:Content-Type=,Authorization=,Origin=,X-Tenant-ID=,X-Tenant-Datasource-ID= Body:
+{"level":"info","ts":1762403707.090583,"caller":"audit/service.go:116","msg":"Audit event logged","event_id":"3754f3a4-6088-4916-b15f-0ea757b01d4b","event_type":"data_access","user_id":"anonymous","resource_type":"api_endpoint","resource_id":"/api/validation-rules"}
+Request completed in 1.472292ms
+{"level":"info","ts":1762403724.854309,"caller":"services/performance_monitor.go:360","msg":"Performance Stats: requests=0, avg_duration=0s, cache_hit_rate=0.00%, active=0, errors=0"}
+[REQ] GET /api/marketplace/validation-rules Headers:Content-Type=,Authorization=,Origin=,X-Tenant-ID=,X-Tenant-Datasource-ID= Body:
+{"level":"info","ts":1762403744.942645,"caller":"audit/service.go:116","msg":"Audit event logged","event_id":"7b6da1f7-ebe1-4145-a9ed-94396efea64e","event_type":"data_access","user_id":"anonymous","resource_type":"api_endpoint","resource_id":"/api/marketplace/validation-rules"}
+Request completed in 8.979417ms
+[REQ] GET /api/marketplace/validation-rules Headers:Content-Type=,Authorization=,Origin=,X-Tenant-ID=,X-Tenant-Datasource-ID= Body:
+{"level":"info","ts":1762403752.219404,"caller":"audit/service.go:116","msg":"Audit event logged","event_id":"1a21706a-1b8d-49db-a91e-994552e14f1f","event_type":"data_access","user_id":"anonymous","resource_type":"api_endpoint","resource_id":"/api/marketplace/validation-rules"}
+Request completed in 4.030625ms
+{"level":"info","ts":1762403784.8528142,"caller":"services/performance_monitor.go:360","msg":"Performance Stats: requests=0, avg_duration=0s, cache_hit_rate=0.00%, active=0, errors=0"}
+[REQ] GET /api/marketplace/validation-rules Headers:Content-Type=,Authorization=,Origin=,X-Tenant-ID=,X-Tenant-Datasource-ID= Body:
+{"level":"info","ts":1762403797.5603058,"caller":"audit/service.go:116","msg":"Audit event logged","event_id":"364d8d71-4cba-466b-8d41-0ecb85026b48","event_type":"data_access","user_id":"anonymous","resource_type":"api_endpoint","resource_id":"/api/marketplace/validation-rules"}
+Request completed in 3.731667ms
+[REQ] GET /api/marketplace/validation-rules Headers:Content-Type=,Authorization=,Origin=,X-Tenant-ID=,X-Tenant-Datasource-ID= Body:
+{"level":"info","ts":1762403831.4018948,"caller":"audit/service.go:116","msg":"Audit event logged","event_id":"39770343-b85e-400a-ba2d-fa7209fa5aac","event_type":"data_access","user_id":"anonymous","resource_type":"api_endpoint","resource_id":"/api/marketplace/validation-rules"}
+Request completed in 3.981375ms
+{"level":"info","ts":1762403844.852009,"caller":"services/performance_monitor.go:360","msg":"Performance Stats: requests=0, avg_duration=0s, cache_hit_rate=0.00%, active=0, errors=0"}
+[REQ] GET /api/marketplace/validation-rules Headers:Content-Type=,Authorization=,Origin=,X-Tenant-ID=,X-Tenant-Datasource-ID= Body:
+{"level":"info","ts":1762403873.46034,"caller":"audit/service.go:116","msg":"Audit event logged","event_id":"b924cacc-39a9-4aa0-96f0-2cffe9f2a811","event_type":"data_access","user_id":"anonymous","resource_type":"api_endpoint","resource_id":"/api/marketplace/validation-rules"}
+Request completed in 4.41175ms

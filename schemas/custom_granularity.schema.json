@@ -1,0 +1,145 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Custom Time Granularity Contract",
+  "description": "Schema for custom time granularity definitions in the semantic layer",
+  "type": "object",
+  "properties": {
+    "node_id": {
+      "type": "string",
+      "description": "Unique identifier for the granularity node"
+    },
+    "node_type": {
+      "type": "string",
+      "enum": ["custom_granularity"],
+      "description": "Type of semantic node"
+    },
+    "name": {
+      "type": "string",
+      "description": "Human-readable name for the granularity"
+    },
+    "description": {
+      "type": "string",
+      "description": "Description of the granularity purpose"
+    },
+    "dimension": {
+      "type": "string",
+      "description": "Base time dimension to apply granularity to"
+    },
+    "interval": {
+      "type": "string",
+      "enum": ["minute", "hour", "day", "week", "month", "quarter", "year"],
+      "description": "Base interval for the granularity"
+    },
+    "offset_days": {
+      "type": "integer",
+      "default": 0,
+      "description": "Offset in days from standard calendar"
+    },
+    "offset_hours": {
+      "type": "integer",
+      "default": 0,
+      "description": "Offset in hours from standard calendar"
+    },
+    "fiscal_label": {
+      "type": "string",
+      "description": "Human-readable label for fiscal periods (e.g., 'FY2025-Q1')"
+    },
+    "calendar_type": {
+      "type": "string",
+      "enum": ["gregorian", "fiscal", "custom", "iso_week"],
+      "default": "gregorian",
+      "description": "Type of calendar system"
+    },
+    "week_start_day": {
+      "type": "string",
+      "enum": ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"],
+      "default": "monday",
+      "description": "Day that starts the week"
+    },
+    "fiscal_year_start": {
+      "type": "object",
+      "properties": {
+        "month": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 12,
+          "description": "Month when fiscal year starts"
+        },
+        "day": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 31,
+          "description": "Day when fiscal year starts"
+        }
+      },
+      "description": "Start date for fiscal year"
+    },
+    "custom_periods": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": { "type": "string" },
+          "start_date": { "type": "string", "format": "date" },
+          "end_date": { "type": "string", "format": "date" },
+          "label": { "type": "string" }
+        }
+      },
+      "description": "Custom-defined periods for irregular calendars"
+    },
+    "tags": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Tags for categorization and filtering"
+    },
+    "owner": {
+      "type": "string",
+      "description": "Owner/steward responsible for this granularity"
+    },
+    "version": {
+      "type": "string",
+      "description": "Version of the granularity definition"
+    },
+    "golden_path": {
+      "type": "boolean",
+      "default": false,
+      "description": "Whether this granularity is part of the golden path"
+    },
+    "schema_hash": {
+      "type": "string",
+      "description": "Hash of the schema for drift detection"
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Creation timestamp"
+    },
+    "updated_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Last update timestamp"
+    },
+    "review_status": {
+      "type": "string",
+      "enum": ["draft", "pending_review", "approved", "rejected"],
+      "default": "draft",
+      "description": "Current review status"
+    },
+    "review_comments": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "user": { "type": "string" },
+          "comment": { "type": "string" },
+          "timestamp": { "type": "string", "format": "date-time" },
+          "action": { "type": "string" }
+        }
+      },
+      "description": "Review comments and audit trail"
+    }
+  },
+  "required": ["node_id", "node_type", "dimension", "interval", "owner", "version"]
+}

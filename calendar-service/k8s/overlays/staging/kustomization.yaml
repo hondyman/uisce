@@ -1,0 +1,39 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: calendar-staging
+
+bases:
+- ../../base
+
+namePrefix: staging-
+
+commonLabels:
+  environment: staging
+  managed-by: kustomize
+
+commonAnnotations:
+  environment: staging
+  auto-deploy: "true"
+
+replicas:
+- name: calendar-service
+  count: 1
+
+# Override replicas and resources for staging
+patchesStrategicMerge:
+- deployment-patch.yaml
+
+# ConfigMap patches for staging-specific settings
+configMapGenerator:
+- name: calendar-config
+  behavior: merge
+  literals:
+  - LOG_LEVEL=debug
+  - METRICS_ENABLED=true
+  - PPROF_ENABLED=false
+  - ENABLE_RECURRING_EVENTS=true
+  - ENABLE_CONFLICT_DETECTION=true
+
+resources:
+- ingress.yaml

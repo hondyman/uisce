@@ -1,0 +1,333 @@
+# Local Application Services - Run on local machine
+# This compose file contains only Golang application services
+# Infrastructure services (Redis, Kafka, etc.) run on remote Tailscale server
+
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    networks:
+      - local-net
+    ports:
+      - "${BACKEND_PORT:-8082}:8080"
+    environment:
+      - DATABASE_URL=postgres://postgres:postgres@100.84.126.19:5432/alpha?sslmode=disable
+      - PORT=8080
+      - HASURA_URL=http://100.84.126.19:8080
+      - HASURA_ADMIN_SECRET=myadminsecret
+      - REDIS_ADDR=100.84.126.19:6379
+      - TEMPORAL_HOSTPORT=100.84.126.19:7233
+      - KAFKA_BROKERS=100.84.126.19:9092
+      - TRINO_DSN=http://admin@100.84.126.19:8084?catalog=iceberg&schema=audit
+    depends_on: []  # No local dependencies - all remote
+    restart: unless-stopped
+
+  api-gateway:
+    build:
+      context: .
+      dockerfile: api-gateway/Dockerfile
+    networks:
+      - local-net
+    ports:
+      - "${API_GATEWAY_PORT:-8001}:8001"
+    environment:
+      - DATABASE_URL=postgres://postgres:postgres@100.84.126.19:5432/alpha?sslmode=disable
+      - BACKEND_URL=http://backend:8080
+      - HASURA_URL=http://100.84.126.19:8080
+      - HASURA_ADMIN_SECRET=myadminsecret
+      - REDIS_ADDR=100.84.126.19:6379
+      - TEMPORAL_HOSTPORT=100.84.126.19:7233
+      - KAFKA_BROKERS=100.84.126.19:9092
+      - PORT=8001
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+  bp-backend:
+    build:
+      context: ./bp-backend
+      dockerfile: Dockerfile
+    networks:
+      - local-net
+    ports:
+      - "${BP_BACKEND_PORT:-8086}:8080"
+    environment:
+      - DATABASE_URL=postgres://postgres:postgres@100.84.126.19:5432/alpha?sslmode=disable
+      - PORT=8080
+      - REDIS_ADDR=100.84.126.19:6379
+      - TEMPORAL_HOSTPORT=100.84.126.19:7233
+      - KAFKA_BROKERS=100.84.126.19:9092
+    depends_on: []  # No local dependencies
+    restart: unless-stopped
+
+  entity-manager:
+    build:
+      context: .
+      dockerfile: entity-manager/Dockerfile
+    networks:
+      - local-net
+    ports:
+      - "${ENTITY_MANAGER_PORT:-8087}:8080"
+    environment:
+      - DATABASE_URL=postgres://postgres:postgres@100.84.126.19:5432/alpha?sslmode=disable
+      - PORT=8080
+      - REDIS_ADDR=100.84.126.19:6379
+      - TEMPORAL_HOSTPORT=100.84.126.19:7233
+      - KAFKA_BROKERS=100.84.126.19:9092
+    depends_on: []  # No local dependencies
+    restart: unless-stopped
+
+  sync-worker:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile.sync-worker
+    networks:
+      - local-net
+    environment:
+      - DATABASE_URL=postgres://postgres:postgres@100.84.126.19:5432/alpha?sslmode=disable
+      - KAFKA_BROKERS=100.84.126.19:9092
+      - REDIS_ADDR=100.84.126.19:6379
+      - TEMPORAL_HOSTPORT=100.84.126.19:7233
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+  notifications:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile.notifications
+    networks:
+      - local-net
+    ports:
+      - "${NOTIFICATIONS_PORT:-8089}:8080"
+    environment:
+      - DATABASE_URL=postgres://postgres:postgres@100.84.126.19:5432/alpha?sslmode=disable
+      - KAFKA_BROKERS=100.84.126.19:9092
+      - PORT=8080
+      - REDIS_ADDR=100.84.126.19:6379
+      - TEMPORAL_HOSTPORT=100.84.126.19:7233
+    depends_on: []  # No local dependencies
+    restart: unless-stopped
+
+  validation-engine:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile.validation
+    networks:
+      - local-net
+    ports:
+      - "${VALIDATION_ENGINE_PORT:-8090}:8080"
+    environment:
+      - DATABASE_URL=postgres://postgres:postgres@100.84.126.19:5432/alpha?sslmode=disable
+      - PORT=8080
+      - REDIS_ADDR=100.84.126.19:6379
+      - TEMPORAL_HOSTPORT=100.84.126.19:7233
+      - KAFKA_BROKERS=100.84.126.19:9092
+    depends_on: []  # No local dependencies
+    restart: unless-stopped
+
+  rule-engine:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile.rule-engine
+    networks:
+      - local-net
+    ports:
+      - "${RULE_ENGINE_PORT:-8091}:8080"
+    environment:
+      - DATABASE_URL=postgres://postgres:postgres@100.84.126.19:5432/alpha?sslmode=disable
+      - PORT=8080
+      - REDIS_ADDR=100.84.126.19:6379
+      - TEMPORAL_HOSTPORT=100.84.126.19:7233
+      - KAFKA_BROKERS=100.84.126.19:9092
+    depends_on: []  # No local dependencies
+    restart: unless-stopped
+
+  search-service:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile.search
+    networks:
+      - local-net
+    ports:
+      - "${SEARCH_SERVICE_PORT:-8092}:8080"
+    environment:
+      - DATABASE_URL=postgres://postgres:postgres@100.84.126.19:5432/alpha?sslmode=disable
+      - PORT=8080
+      - REDIS_ADDR=100.84.126.19:6379
+      - TEMPORAL_HOSTPORT=100.84.126.19:7233
+      - KAFKA_BROKERS=100.84.126.19:9092
+    depends_on: []  # No local dependencies
+    restart: unless-stopped
+
+  policy-engine:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile.policy
+    networks:
+      - local-net
+    ports:
+      - "${POLICY_ENGINE_PORT:-8102}:8080"
+    environment:
+      - DATABASE_URL=postgres://postgres:postgres@100.84.126.19:5432/alpha?sslmode=disable
+      - PORT=8080
+      - REDIS_ADDR=100.84.126.19:6379
+      - TEMPORAL_HOSTPORT=100.84.126.19:7233
+      - KAFKA_BROKERS=100.84.126.19:9092
+    depends_on: []  # No local dependencies
+    restart: unless-stopped
+
+  parity-checker:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile.parity
+    networks:
+      - local-net
+    environment:
+      - DATABASE_URL=postgres://postgres:postgres@100.84.126.19:5432/alpha?sslmode=disable
+      - REDIS_ADDR=100.84.126.19:6379
+      - TEMPORAL_HOSTPORT=100.84.126.19:7233
+      - KAFKA_BROKERS=100.84.126.19:9092
+    depends_on: []  # No local dependencies
+    restart: unless-stopped
+
+  event-router:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile.event-router
+    networks:
+      - local-net
+    environment:
+      - DATABASE_URL=postgres://postgres:postgres@100.84.126.19:5432/alpha?sslmode=disable
+      - KAFKA_BROKERS=100.84.126.19:9092
+      - REDIS_ADDR=100.84.126.19:6379
+      - TEMPORAL_HOSTPORT=100.84.126.19:7233
+    depends_on: []  # No local dependencies
+    restart: unless-stopped
+
+  cdc-processor:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile.cdc
+    networks:
+      - local-net
+    environment:
+      - DATABASE_URL=postgres://postgres:postgres@100.84.126.19:5432/alpha?sslmode=disable
+      - KAFKA_BROKERS=100.84.126.19:9092
+      - REDIS_ADDR=100.84.126.19:6379
+      - TEMPORAL_HOSTPORT=100.84.126.19:7233
+    depends_on: []  # No local dependencies
+    restart: unless-stopped
+
+  analytics-engine:
+    build:
+      context: ./analytics_engine
+      dockerfile: Dockerfile
+    networks:
+      - local-net
+    ports:
+      - "${ANALYTICS_ENGINE_PORT:-8101}:8080"
+    environment:
+      - DATABASE_URL=postgres://postgres:postgres@100.84.126.19:5432/alpha?sslmode=disable
+      - PORT=8080
+      - REDIS_ADDR=100.84.126.19:6379
+      - TEMPORAL_HOSTPORT=100.84.126.19:7233
+      - KAFKA_BROKERS=100.84.126.19:9092
+    depends_on: []  # No local dependencies
+    restart: unless-stopped
+
+  compliance-engine:
+    build:
+      context: .
+      dockerfile: Dockerfile.compliance-engine
+    networks:
+      - local-net
+    ports:
+      - "${COMPLIANCE_ENGINE_PORT:-8095}:8080"
+    environment:
+      - DATABASE_URL=postgres://postgres:postgres@100.84.126.19:5432/alpha?sslmode=disable
+      - PORT=8080
+      - REDIS_ADDR=100.84.126.19:6379
+      - TEMPORAL_HOSTPORT=100.84.126.19:7233
+      - KAFKA_BROKERS=100.84.126.19:9092
+    depends_on: []  # No local dependencies
+    restart: unless-stopped
+
+  catalog-sync:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile.catalog-sync
+    networks:
+      - local-net
+    ports:
+      - "${CATALOG_SYNC_PORT:-8097}:8090"
+    environment:
+      - DATABASE_URL=postgres://postgres:postgres@100.84.126.19:5432/alpha?sslmode=disable
+      - POSTGRES_DSN=postgres://postgres:postgres@100.84.126.19:5432/alpha?sslmode=disable
+      - KAFKA_BROKERS=100.84.126.19:9092
+      - SCHEMA_REGISTRY_URL=http://100.84.126.19:8081
+      - PORT=8090
+      - TENANT_ID=99e99e99-99e9-49e9-89e9-99e99e99e999
+    depends_on: []  # No local dependencies
+    restart: unless-stopped
+
+  outbox-processor:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.outbox-processor
+    container_name: semlayer-outbox-processor-1
+    environment:
+      - DATABASE_URL=postgres://postgres:postgres@100.84.126.19:5432/alpha?sslmode=disable
+      - KAFKA_BROKERS=100.84.126.19:9092
+    depends_on: []  # No local dependencies
+    restart: unless-stopped
+    networks:
+      - local-net
+
+  audit-worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.audit-worker
+    container_name: semlayer-audit-worker-1
+    environment:
+      - DATABASE_URL=postgres://postgres:postgres@100.84.126.19:5432/alpha?sslmode=disable
+      - KAFKA_BROKERS=100.84.126.19:9092
+    depends_on: []  # No local dependencies
+    restart: unless-stopped
+    networks:
+      - local-net
+
+  snapshot-worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.snapshot-worker
+    container_name: semlayer-snapshot-worker-1
+    environment:
+      - DATABASE_URL=postgres://postgres:postgres@100.84.126.19:5432/alpha?sslmode=disable
+      - KAFKA_BROKERS=100.84.126.19:9092
+    depends_on: []  # No local dependencies
+    restart: unless-stopped
+    networks:
+      - local-net
+
+  catalog-worker:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile.catalog-worker
+    container_name: semlayer-catalog-worker-1
+    environment:
+      - DATABASE_URL=postgres://postgres:postgres@100.84.126.19:5432/alpha?sslmode=disable
+      - KAFKA_BROKERS=100.84.126.19:9092
+    depends_on: []  # No local dependencies
+    restart: unless-stopped
+    networks:
+      - local-net
+
+  # PostgreSQL runs on localhost (100.84.126.19)
+  # Hasura GraphQL engine - runs on remote server at 100.84.126.19:8080
+
+networks:
+  local-net:
+    driver: bridge
+    name: local-net

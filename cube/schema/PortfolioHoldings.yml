@@ -1,0 +1,125 @@
+##
+## Portfolio Holdings Cube - Hot Tier (StarRocks Native Tables)
+##
+## Current portfolio positions and valuations
+## High-frequency updates for real-time dashboards
+## Native tables = fastest possible query performance
+##
+
+cubes:
+- name: PortfolioHoldings
+  sql: SELECT * FROM semantic_hot.holdings
+  title: Portfolio Holdings
+  description: Current portfolio positions (hot tier - StarRocks native tables)
+
+  # StarRocks native tables for real-time position data
+  data_source: starrocks
+
+  refresh_key:
+    every: 10 minutes
+
+  dimensions:
+  - name: tenant_id
+    sql: tenant_id
+    type: string
+    public: false
+
+  - name: datasource_id
+    sql: datasource_id
+    type: string
+    public: false
+
+  - name: holding_id
+    sql: holding_id
+    type: string
+    primary_key: true
+
+  - name: portfolio_id
+    sql: portfolio_id
+    type: string
+
+  - name: symbol
+    sql: symbol
+    type: string
+
+  - name: asset_class
+    sql: asset_class
+    type: string
+
+  - name: currency
+    sql: currency
+    type: string
+
+  - name: last_updated
+    sql: last_updated
+    type: time
+
+  measures:
+  - name: count
+    type: count
+
+  - name: total_quantity
+    sql: quantity
+    type: sum
+
+  - name: total_market_value
+    sql: market_value
+    type: sum
+    format: currency
+
+  - name: total_cost_basis
+    sql: cost_basis
+    type: sum
+    format: currency
+
+  - name: unrealized_pnl
+    sql: market_value - cost_basis
+    type: sum
+    format: currency
+
+  - name: avg_price
+    sql: price
+    type: avg
+    format: currency
+
+  - name: unique_portfolios
+    sql: portfolio_id
+    type: count_distinct
+
+  - name: unique_symbols
+    sql: symbol
+    type: count_distinct
+
+  # Calculated measure for P&L percentage
+  - name: pnl_percent
+    sql: CASE WHEN SUM(cost_basis) > 0 THEN ((SUM(market_value) - SUM(cost_basis)) / SUM(cost_basis)) * 100 ELSE 0 END
+    type: number
+    format: percent
+
+  pre_aggregations:
+  - name: holdings_by_portfolio
+    type: rollup
+    measures:
+    - total_market_value
+    - total_cost_basis
+    - unrealized_pnl
+    - count
+    dimensions:
+    - portfolio_id
+    - asset_class
+    refresh_key:
+      every: 15 minutes
+    external: true
+
+  - name: holdings_by_symbol
+    type: rollup
+    measures:
+    - total_quantity
+    - total_market_value
+    - avg_price
+    dimensions:
+    - symbol
+    - currency
+    refresh_key:
+      every: 15 minutes
+    external: true

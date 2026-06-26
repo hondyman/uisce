@@ -1,0 +1,3 @@
+table:
+  name: google_calendar_connections
+  schema: calendar

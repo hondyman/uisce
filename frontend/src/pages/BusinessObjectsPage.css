@@ -1,0 +1,7 @@
+.business-objects-page {
+  padding: 24px;
+}
+
+.business-objects-page > .ant-card {
+  margin-bottom: 24px;
+}

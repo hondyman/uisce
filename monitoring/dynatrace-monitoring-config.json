@@ -1,0 +1,170 @@
+{
+  "slos": [
+    {
+      "name": "Access Intelligence Latency SLO",
+      "description": "p95 latency for access evaluation should be under 8ms",
+      "metric": "semlayer.access_evaluation.duration",
+      "target": 8,
+      "warning": 15,
+      "critical": 30,
+      "timeframe": "-1h",
+      "unit": "MILLISECOND",
+      "evaluationType": "AGGREGATE"
+    },
+    {
+      "name": "Cache Hit Ratio SLO",
+      "description": "Cache hit ratio should be above 90%",
+      "metric": "semlayer.cache.hit_ratio",
+      "target": 90,
+      "warning": 80,
+      "critical": 70,
+      "timeframe": "-1h",
+      "unit": "PERCENT",
+      "evaluationType": "AGGREGATE"
+    },
+    {
+      "name": "Conversational Success Rate SLO",
+      "description": "NL query success rate should be above 95%",
+      "metric": "semlayer.conversational.success_rate",
+      "target": 95,
+      "warning": 90,
+      "critical": 85,
+      "timeframe": "-1h",
+      "unit": "PERCENT",
+      "evaluationType": "AGGREGATE"
+    },
+    {
+      "name": "Error Rate SLO",
+      "description": "Overall error rate should be below 1%",
+      "metric": "semlayer.errors.total",
+      "target": 1,
+      "warning": 2,
+      "critical": 5,
+      "timeframe": "-1h",
+      "unit": "PERCENT",
+      "evaluationType": "AGGREGATE"
+    }
+  ],
+  "alerts": [
+    {
+      "name": "High Latency Alert",
+      "description": "Access evaluation latency is too high",
+      "query": "semlayer.access_evaluation.duration:percentile(95) > 30",
+      "severity": "CRITICAL",
+      "tags": ["performance", "hot-path"]
+    },
+    {
+      "name": "Cache Performance Degradation",
+      "description": "Cache hit ratio has dropped significantly",
+      "query": "semlayer.cache.hit_ratio < 70",
+      "severity": "WARNING",
+      "tags": ["cache", "performance"]
+    },
+    {
+      "name": "Governance Drift Backlog",
+      "description": "Too many drifted claims awaiting action",
+      "query": "semlayer.governance.drift_backlog > 100",
+      "severity": "WARNING",
+      "tags": ["governance", "drift"]
+    },
+    {
+      "name": "Conversational Error Spike",
+      "description": "Conversational query success rate has dropped",
+      "query": "semlayer.conversational.success_rate < 85",
+      "severity": "CRITICAL",
+      "tags": ["conversational", "adoption"]
+    },
+    {
+      "name": "Guardrail Intervention Rate",
+      "description": "Too many guardrail interventions",
+      "query": "semlayer.guardrail.interventions:rate(5m) > 10",
+      "severity": "WARNING",
+      "tags": ["guardrail", "governance"]
+    }
+  ],
+  "businessEvents": [
+    {
+      "name": "Access Evaluation",
+      "description": "Track access evaluation decisions",
+      "eventType": "semlayer.access_evaluation",
+      "attributes": [
+        "tenant_id",
+        "user_id",
+        "asset_id",
+        "decision",
+        "cache_hit",
+        "duration_ms"
+      ]
+    },
+    {
+      "name": "Governance Action",
+      "description": "Track steward governance actions",
+      "eventType": "semlayer.governance.action",
+      "attributes": [
+        "action_type",
+        "steward_id",
+        "tenant_id",
+        "target_type",
+        "target_id",
+        "duration_ms"
+      ]
+    },
+    {
+      "name": "Conversational Query",
+      "description": "Track conversational NL queries",
+      "eventType": "semlayer.conversational.query",
+      "attributes": [
+        "conversation_id",
+        "tenant_id",
+        "user_id",
+        "query_length",
+        "turns_count",
+        "success"
+      ]
+    },
+    {
+      "name": "Guardrail Triggered",
+      "description": "Track guardrail interventions",
+      "eventType": "semlayer.guardrail.triggered",
+      "attributes": [
+        "conversation_id",
+        "tenant_id",
+        "trigger_reason",
+        "action_taken",
+        "severity"
+      ]
+    }
+  ],
+  "customMetrics": [
+    {
+      "name": "semlayer.access_evaluation.duration",
+      "description": "Duration of access evaluation in milliseconds",
+      "unit": "MILLISECOND",
+      "dimensions": ["tenant_id", "cache_hit", "decision"]
+    },
+    {
+      "name": "semlayer.cache.hit_ratio",
+      "description": "Cache hit ratio percentage",
+      "unit": "PERCENT",
+      "dimensions": ["tenant_id"]
+    },
+    {
+      "name": "semlayer.conversational.success_rate",
+      "description": "Conversational query success rate",
+      "unit": "PERCENT",
+      "dimensions": ["tenant_id"]
+    },
+    {
+      "name": "semlayer.governance.drift_backlog",
+      "description": "Number of drifted claims awaiting action",
+      "unit": "COUNT",
+      "dimensions": ["tenant_id"]
+    },
+    {
+      "name": "semlayer.guardrail.interventions",
+      "description": "Number of guardrail interventions",
+      "unit": "COUNT",
+      "dimensions": ["tenant_id", "trigger_reason"]
+    }
+  ]
+}

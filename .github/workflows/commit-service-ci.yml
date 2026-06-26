@@ -1,0 +1,75 @@
+name: Commit Service CI
+
+on:
+  push:
+    paths:
+    - 'tools/iceberg-commit-service/**'
+    - '.github/ci/**'
+  pull_request:
+    paths:
+    - 'tools/iceberg-commit-service/**'
+    - '.github/ci/**'
+  workflow_dispatch:
+
+
+jobs:
+  integration:
+    runs-on: ubuntu-latest
+    env:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+      POSTGRES_USER: ops
+      POSTGRES_PASSWORD: ops_pass
+      POSTGRES_DB: ops
+      TRINO_CATALOG_DIR: .github/ci/trino_catalog
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Set up JDK 17
+      uses: actions/setup-java@v4
+      with:
+        distribution: 'temurin'
+        java-version: '17'
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
+
+    - name: Install prerequisites
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y jq curl unzip
+        pip install pyarrow==12.0.0 pandas
+        # install minio mc client
+        curl -fsSL https://dl.min.io/client/mc/release/linux-amd64/mc -o /usr/local/bin/mc
+        chmod +x /usr/local/bin/mc
+
+    - name: Run Maven integration tests (Testcontainers)
+      run: mvn -f tools/iceberg-commit-service/pom.xml -B -P integration-tests -DskipITs=false verify
+
+    - name: Collect test reports
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: integration-test-reports
+        path: tools/iceberg-commit-service/target/failsafe-reports/**
+
+    - name: Archive logs on failure
+      if: failure()
+      uses: actions/upload-artifact@v4
+      with:
+        name: commit-service-logs
+        path: |
+          tools/iceberg-commit-service/target/failsafe-reports/**
+          tools/iceberg-commit-service/target/*.log
+          tools/iceberg-commit-service/logs/**
+          ./**/stdout.log
+
+    - name: Upload OTLP spans on failure
+      if: failure()
+      uses: actions/upload-artifact@v4
+      with:
+        name: otlp-spans
+        path: /tmp/spans.json

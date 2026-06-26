@@ -1,0 +1,38 @@
+id: bo_advisor_queue_item
+type: BusinessObject
+version: 1.0.0
+name: AdvisorQueueItem
+status: draft
+description: Queue item created when a card requires advisor review
+attributes:
+  - name: queue_item_id
+    type: string
+    required: true
+  - name: tenant_id
+    type: string
+    required: true
+  - name: client_id
+    type: string
+    required: true
+  - name: card_id
+    type: string
+    required: true
+  - name: suggested_action
+    type: string
+  - name: confidence
+    type: number
+  - name: priority
+    type: string
+    enum: ["low","medium","high"]
+  - name: disclosures
+    type: array
+    items: string
+  - name: lineage
+    type: array
+    items: string
+  - name: created_at
+    type: timestamp
+  - name: sla_due_at
+    type: timestamp
+policies:
+  - "audit_required"

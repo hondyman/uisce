@@ -1,0 +1,59 @@
+table:
+  name: tenant_instance
+  schema: public
+object_relationships:
+- name: tenant
+  using:
+    foreign_key_constraint_on: tenant_id
+array_relationships:
+- name: tenant_products
+  using:
+    foreign_key_constraint_on:
+      column: tenant_instance_id
+      table:
+        name: tenant_product
+        schema: public
+select_permissions:
+- role: user
+  permission:
+    columns:
+    - id
+    - tenant_id
+    - instance_name
+    - config
+    - is_active
+    - url
+    - display_name
+    - description
+    - status
+    - created_at
+    - updated_at
+    filter: {}
+- role: steward
+  permission:
+    columns:
+    - id
+    - tenant_id
+    - instance_name
+    - config
+    - is_active
+    - url
+    - display_name
+    - description
+    - status
+    - created_at
+    - updated_at
+    filter: {}
+- role: anonymous
+  permission:
+    columns:
+    - id
+    - tenant_id
+    - instance_name
+    - display_name
+    - description
+    - is_active
+    - url
+    - config
+    filter: {}
+

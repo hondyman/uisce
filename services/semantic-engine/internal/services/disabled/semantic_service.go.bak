@@ -1,0 +1,576 @@
+package services
+
+import (
+	"context"
+	"database/sql"
+	"encoding/json"
+	"fmt"
+	"log"
+	"strings"
+	"time"
+
+	"github.com/eganpj/semlayer/backend/internal/logging"
+	internalmodels "github.com/eganpj/semlayer/backend/internal/models"
+	"github.com/eganpj/semlayer/backend/models"
+	"github.com/google/uuid"
+	"github.com/jmoiron/sqlx"
+	"github.com/lib/pq"
+)
+
+// SemanticService provides methods for interacting with the semantic layer.
+type SemanticService struct {
+	db *sqlx.DB
+}
+
+// NewSemanticService creates a new SemanticService.
+func NewSemanticService(db *sqlx.DB) *SemanticService {
+	return &SemanticService{db: db}
+}
+
+// ListSemanticViews retrieves available semantic views.
+func (s *SemanticService) ListSemanticViews(ctx context.Context, datasourceIDStr string) ([]models.SemanticViewMeta, error) {
+	datasourceID, err := uuid.Parse(datasourceIDStr)
+	if err != nil {
+		return nil, fmt.Errorf("invalid datasource_id format: %w", err)
+	}
+
+	// 1. Fetch all current, published models for the datasource.
+	var defns []*models.FabricDefn
+	query := `
+		SELECT id, title, description, resolved_config, created_by, updated_at 
+		FROM public.fabric_defn 
+		WHERE tenant_datasource_id = $1 AND status = 'published' AND is_current = true
+		ORDER BY title
+	`
+	if err := s.db.SelectContext(ctx, &defns, query, datasourceID); err != nil {
+		return nil, fmt.Errorf("failed to list published models for datasource %s: %w", datasourceID, err)
+	}
+
+	var views []models.SemanticViewMeta
+	for _, defn := range defns {
+		var config models.ResolvedModelConfig
+		if err := json.Unmarshal(defn.ResolvedConfig, &config); err != nil {
+			logging.GetLogger().Sugar().Warnf("Warning: could not unmarshal resolved config for model %s: %v", defn.ModelKey, err)
+			continue
+		}
+
+		// Each fabric definition with one cube is treated as one semantic view.
+		if len(config.Cubes) > 0 {
+			cube := config.Cubes[0]
+			view := models.SemanticViewMeta{
+				ID:          defn.ID,
+				Name:        cube.Name, // Use the cube name as the view's programmatic name
+				Description: defn.Description,
+				Owner:       "auto-generated", // Placeholder for owner
+				Certified:   true,             // Published models are considered certified
+				UpdatedAt:   *defn.UpdatedAt,
+				Dimensions:  make([]models.SemanticMember, 0, len(cube.Dimensions)),
+				Metrics:     make([]models.SemanticMember, 0, len(cube.Measures)),
+			}
+
+			for name, props := range cube.Dimensions {
+				view.Dimensions = append(view.Dimensions, models.SemanticMember{
+					Name:        name,
+					Label:       props["title"].(string),
+					Description: props["title"].(string), // Use title as description for now
+					Type:        props["type"].(string),
+				})
+			}
+			for name, props := range cube.Measures {
+				view.Metrics = append(view.Metrics, models.SemanticMember{
+					Name:        name,
+					Label:       props["title"].(string),
+					Description: props["title"].(string),
+					Type:        props["type"].(string),
+				})
+			}
+			views = append(views, view)
+		}
+	}
+
+	return views, nil
+}
+
+// ListSemanticObjects returns flattened semantic measures and dimensions available in the catalog.
+func (s *SemanticService) ListSemanticObjects(ctx context.Context, tenantID, datasourceID string) ([]internalmodels.SemanticObjectReference, error) {
+	if s.db == nil {
+		return nil, fmt.Errorf("database not configured")
+	}
+
+	tenantID = strings.TrimSpace(tenantID)
+	datasourceID = strings.TrimSpace(datasourceID)
+
+	query := `
+		SELECT child.node_name AS object_name,
+		       COALESCE(parent.node_name, child.parent_id) AS model_name,
+		       LOWER(child.properties->>'type') AS kind
+		FROM public.catalog_node child
+		JOIN public.catalog_node_type cnt ON cnt.id = child.node_type_id
+		LEFT JOIN public.catalog_node parent ON parent.id = child.parent_id
+		WHERE cnt.catalog_type_name = 'semantic_column'
+		  AND ($1 = '' OR child.tenant_id = $1)
+		  AND ($2 = '' OR child.tenant_datasource_id = $2)
+		ORDER BY COALESCE(parent.node_name, child.parent_id), child.node_name
+	`
+
+	rows, err := s.db.QueryxContext(ctx, query, tenantID, datasourceID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list semantic objects: %w", err)
+	}
+	defer rows.Close()
+
+	objects := make([]internalmodels.SemanticObjectReference, 0)
+	seen := make(map[string]struct{})
+
+	for rows.Next() {
+		var (
+			name      sql.NullString
+			modelName sql.NullString
+			kind      sql.NullString
+		)
+		if err := rows.Scan(&name, &modelName, &kind); err != nil {
+			continue
+		}
+
+		id := strings.TrimSpace(name.String)
+		if id == "" {
+			continue
+		}
+
+		typeValue := normalizeSemanticKind(kind.String)
+		if typeValue == "" {
+			continue
+		}
+
+		modelID := strings.TrimSpace(modelName.String)
+		if modelID == "" {
+			modelID = "unknown"
+		}
+
+		key := modelID + "::" + id + "::" + typeValue
+		if _, exists := seen[key]; exists {
+			continue
+		}
+		seen[key] = struct{}{}
+
+		objects = append(objects, internalmodels.SemanticObjectReference{
+			ID:      id,
+			ModelID: modelID,
+			Type:    typeValue,
+		})
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate semantic objects: %w", err)
+	}
+
+	return objects, nil
+}
+
+func normalizeSemanticKind(kind string) string {
+	switch strings.ToLower(strings.TrimSpace(kind)) {
+	case "measure", "metric", "calculation":
+		return "measure"
+	case "dimension", "attribute", "hierarchy":
+		return "dimension"
+	default:
+		return ""
+	}
+}
+
+// CreateSemanticTerm creates a new semantic term node if it does not exist and returns its ID.
+func (s *SemanticService) CreateSemanticTerm(ctx context.Context, tenantIDStr, tenantDatasourceIDStr, termName, dataType string) (string, error) {
+	if s.db == nil {
+		return "", fmt.Errorf("db handle is nil")
+	}
+
+	tenantID := strings.TrimSpace(tenantIDStr)
+	tenantDatasourceID := strings.TrimSpace(tenantDatasourceIDStr)
+
+	// Ensure we have a deterministic qualified path
+	qualifiedPath := "/semantic/" + termName
+
+	// Prepare properties JSON
+	props := map[string]interface{}{"data_type": dataType}
+	propsJSON, _ := json.Marshal(props)
+
+	id := uuid.New().String()
+	now := time.Now()
+
+	// Insert node; if conflict on tenant_datasource_id + node_type_id + qualified_path, return existing id
+	_, err := s.db.ExecContext(ctx, `
+		INSERT INTO public.catalog_node (
+			id, tenant_datasource_id, node_type_id, node_name, qualified_path, tenant_id, created_at, updated_at, properties
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+		ON CONFLICT (tenant_datasource_id, node_type_id, qualified_path) DO NOTHING
+	`, id, tenantDatasourceID, mustParseOrDefault("SEMLAYER_NODETYPE_SEMANTIC_COLUMN", "1439f761-606a-44cb-b4f8-7aa6b27a9bf5"), termName, qualifiedPath, tenantID, now, now, string(propsJSON))
+	if err != nil {
+		return "", fmt.Errorf("insert semantic term: %w", err)
+	}
+
+	// Return the id — if the row already existed we should try to lookup the id
+	var existingID string
+	err = s.db.GetContext(ctx, &existingID, `SELECT id FROM public.catalog_node WHERE tenant_datasource_id = $1 AND node_type_id = $2 AND qualified_path = $3`, tenantDatasourceID, mustParseOrDefault("SEMLAYER_NODETYPE_SEMANTIC_COLUMN", "1439f761-606a-44cb-b4f8-7aa6b27a9bf5"), qualifiedPath)
+	if err != nil {
+		return "", fmt.Errorf("select semantic term id: %w", err)
+	}
+	return existingID, nil
+}
+
+// UpsertMappingEdge creates or updates a mapping edge between a semantic term and a database column.
+// If override=true, existing mapping edges for the target column and mapping edge type will be removed first.
+func (s *SemanticService) UpsertMappingEdge(ctx context.Context, tenantIDStr, tenantDatasourceIDStr, semanticTermID, columnNodeID string, override bool) error {
+	if s.db == nil {
+		return fmt.Errorf("db handle is nil")
+	}
+	tenantID := strings.TrimSpace(tenantIDStr)
+	tenantDatasourceID := strings.TrimSpace(tenantDatasourceIDStr)
+
+	// Use a conventional edge type for semantic mapping
+	mappingEdgeType := mustParseOrDefault("SEMLAYER_EDGETYPE_MAPPED_TO", "97d82101-2b84-47a6-9ec0-f930fe389c3c")
+	now := time.Now()
+
+	tx, err := s.db.BeginTxx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin tx for upsert edge: %w", err)
+	}
+	defer func() {
+		if err != nil {
+			_ = tx.Rollback()
+		}
+	}()
+
+	if override {
+		// Delete existing mapping edges for this target column and mapping edge type
+		if _, err = tx.ExecContext(ctx, `DELETE FROM public.catalog_edge WHERE tenant_datasource_id = $1 AND target_node_id = $2 AND edge_type_id = $3`, tenantDatasourceID, columnNodeID, mappingEdgeType); err != nil {
+			return fmt.Errorf("delete existing mapping edges: %w", err)
+		}
+	}
+
+	edgeID := uuid.New().String()
+	props := map[string]interface{}{"relationship": "mapped_to"}
+	propsJSON, _ := json.Marshal(props)
+
+	_, err = tx.ExecContext(ctx, `
+		INSERT INTO public.catalog_edge (
+			id, tenant_datasource_id, source_node_id, target_node_id, relationship_type, edge_type_id, tenant_id, created_at, updated_at, properties
+		) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+		ON CONFLICT (tenant_datasource_id, source_node_id, edge_type_id, target_node_id) DO UPDATE SET
+			relationship_type = EXCLUDED.relationship_type,
+			properties = EXCLUDED.properties,
+			updated_at = EXCLUDED.updated_at
+	`, edgeID, tenantDatasourceID, semanticTermID, columnNodeID, "mapped_to", mappingEdgeType, tenantID, now, now, string(propsJSON))
+	if err != nil {
+		return fmt.Errorf("upsert catalog_edge: %w", err)
+	}
+
+	if err = tx.Commit(); err != nil {
+		return fmt.Errorf("commit upsert edge tx: %w", err)
+	}
+	return nil
+}
+
+// PersistIgnore stores ignored mapping suggestions for later suppression.
+func (s *SemanticService) PersistIgnore(ctx context.Context, tenantIDStr, tenantDatasourceIDStr, columnNodeID, ignoredTerm string) error {
+	if s.db == nil {
+		return fmt.Errorf("db handle is nil")
+	}
+	tenantID := strings.TrimSpace(tenantIDStr)
+	tenantDatasourceID := strings.TrimSpace(tenantDatasourceIDStr)
+	// The table `public.semantic_mapping_ignores` is created via migrations.
+	_, err := s.db.ExecContext(ctx, `
+		INSERT INTO public.semantic_mapping_ignores (tenant_datasource_id, tenant_id, database_column_node_id, ignored_term, created_at)
+		VALUES ($1,$2,$3,$4,$5)
+		ON CONFLICT (tenant_datasource_id, database_column_node_id, ignored_term) DO NOTHING
+	`, tenantDatasourceID, tenantID, columnNodeID, ignoredTerm, time.Now())
+	if err != nil {
+		return fmt.Errorf("insert semantic mapping ignore: %w", err)
+	}
+	return nil
+}
+
+// ListSemanticViewVersions retrieves available versions for a semantic view.
+// This is a mock implementation.
+func (s *SemanticService) ListSemanticViewVersions(ctx context.Context, viewName string) ([]models.SemanticViewVersion, error) {
+	return []models.SemanticViewVersion{
+		{Version: 2, Timestamp: time.Now().Add(-24 * time.Hour), Author: "data_team_lead", Description: "Added avg_order_value metric."},
+		{Version: 1, Timestamp: time.Now().Add(-7 * 24 * time.Hour), Author: "patrick", Description: "Initial creation."},
+	}, nil
+}
+
+// CompareSemanticViewVersions generates a diff between two versions of a view.
+// This is a mock implementation.
+func (s *SemanticService) CompareSemanticViewVersions(ctx context.Context, viewName string, fromVersion, toVersion int) (*models.SemanticDiff, error) {
+	return &models.SemanticDiff{
+		FromVersion: fromVersion,
+		ToVersion:   toVersion,
+		Dimensions: []models.MemberDiffItem{
+			{
+				Name:       "customer_name",
+				ChangeType: "removed",
+				Before:     "type: string",
+			},
+			{
+				Name:       "customer_region",
+				ChangeType: "modified",
+				Before:     "region",
+				After:      "customer_region",
+			},
+		},
+		Metrics: []models.MemberDiffItem{
+			{Name: "avg_order_value", ChangeType: "added", After: "type: average, sql: ${TABLE}.order_total"},
+		},
+	}, nil
+}
+
+// ExecuteSemanticQuery translates a semantic query into SQL and runs it.
+func (s *SemanticService) ExecuteSemanticQuery(ctx context.Context, viewName string, query models.SemanticQuery) (*models.ExecuteResult, error) {
+	// In a real implementation, this would use the semantic model definitions to generate SQL.
+	// For now, we'll return a mocked result with routing simulation.
+
+	// Mocking routing logic based on query content
+	isOptimizable := false
+	for _, dim := range query.Dimensions {
+		if dim == "product_sku" { // Let's use this dimension to trigger the fallback scenario
+			isOptimizable = true
+			break
+		}
+	}
+
+	var explain *models.Explain
+	var rows []map[string]any
+	var columns []models.ExplorerColumn
+
+	if isOptimizable {
+		// Scenario: Fallback to base tables
+		explain = &models.Explain{
+			UsedPreAgg:    "",                                                                                                          // PreAggHit is false
+			RoutingReason: "Query could not be accelerated. Dimension 'product_sku' is not available in any matching pre-aggregation.", // Combining reasons
+			Freshness:     "N/A (querying base tables)",
+		}
+		columns = []models.ExplorerColumn{{Name: "product_sku", Type: "string"}, {Name: query.Metrics[0], Type: "number"}}
+		rows = []map[string]any{
+			{"product_sku": "SKU-123", query.Metrics[0]: 500},
+			{"product_sku": "SKU-456", query.Metrics[0]: 800},
+		}
+	} else {
+		// Scenario: Pre-agg hit
+		prunedCount := 1
+		explain = &models.Explain{
+			UsedPreAgg:       "sales_by_region_daily",
+			RoutingReason:    "Query grain (customer_region, total_revenue) and filters matched pre-aggregation.",
+			PartitionsPruned: &prunedCount,
+			Freshness:        "Last updated 5 minutes ago",
+		}
+		columns = []models.ExplorerColumn{{Name: query.Dimensions[0], Type: "string"}, {Name: query.Metrics[0], Type: "number"}}
+		rows = []map[string]any{
+			{query.Dimensions[0]: "APAC", query.Metrics[0]: 12000},
+			{query.Dimensions[0]: "EMEA", query.Metrics[0]: 9500},
+		}
+	}
+
+	mockSQL := fmt.Sprintf("-- Mock SQL for semantic view: %s\nSELECT %s, %s FROM source_table LIMIT %d;", viewName, columns[0].Name, columns[1].Name, query.Limit)
+
+	return &models.ExecuteResult{
+		SQL:     mockSQL,
+		Columns: columns,
+		Rows:    rows,
+		Page:    models.PageInfo{HasNext: false},
+		Explain: explain,
+	}, nil
+}
+
+// TranslateNaturalLanguageToQuery converts a natural language string to a semantic query.
+// This is a mock implementation.
+func (s *SemanticService) TranslateNaturalLanguageToQuery(ctx context.Context, text, datasourceID, userID, viewName string) (*models.NLQTranslateResponse, error) {
+	// In a real implementation, this would call an LLM with the text,
+	// available semantic models for the datasource, and user context.
+	// The LLM would be prompted to return a JSON object matching the SemanticQuery structure.
+
+	// Mock response for "Show me average order value by region last quarter"
+	if strings.Contains(strings.ToLower(text), "average order value") {
+		return &models.NLQTranslateResponse{
+			ViewName: "sales_overview",
+			Query: models.SemanticQuery{
+				Dimensions: []string{"customer_region"},
+				Metrics:    []string{"avg_order_value"}, // Assuming this metric exists
+				Filters: []models.Filter{
+					{
+						Field:  "order_date",
+						Op:     "last_quarter", // This op would need to be handled by the query engine
+						Values: []string{},
+					},
+				},
+				Limit: 100,
+			},
+			Explanation: "Mapped 'average order value' to metric `avg_order_value`, 'region' to dimension `customer_region`, and 'last quarter' to a time filter on `order_date`.",
+		}, nil
+	}
+
+	// Default mock response
+	return &models.NLQTranslateResponse{
+		ViewName:    "sales_overview",
+		Query:       models.SemanticQuery{Dimensions: []string{"order_date"}, Metrics: []string{"total_revenue"}, Limit: 100},
+		Explanation: "Could not fully understand the query, showing total revenue by date as a default.",
+	}, nil
+}
+
+// ListQueryTemplates retrieves available query templates for a datasource.
+// This is a mock implementation.
+func (s *SemanticService) ListQueryTemplates(ctx context.Context, datasourceID string) ([]models.QueryTemplateMeta, error) {
+	// In a real app, this would query the explorer_query_template table.
+	return []models.QueryTemplateMeta{
+		{
+			ID:           uuid.MustParse("e0a0d8e0-0b0a-4b0e-8b0a-0d8e0a0b0c0d"),
+			Name:         "Weekly Revenue Analysis",
+			Description:  "Tracks total revenue, segmented by customer region, for the last 7 days.",
+			SemanticView: "sales_overview",
+			Tags:         pq.StringArray{"revenue", "weekly"},
+			Certified:    true,
+		},
+		{
+			ID:           uuid.New(),
+			Name:         "New vs. Returning Customers",
+			Description:  "A high-level look at customer acquisition over the last month.",
+			SemanticView: "sales_overview",
+			Tags:         pq.StringArray{"customers", "retention"},
+			Certified:    false,
+		},
+	}, nil
+}
+
+// GetQueryTemplate retrieves the full details of a single query template.
+// This is a mock implementation.
+func (s *SemanticService) GetQueryTemplate(ctx context.Context, templateID uuid.UUID) (*models.QueryTemplate, error) {
+	// In a real app, this would query the explorer_query_template table by ID.
+	// We'll return a mock based on a hardcoded ID.
+	requiredFilters, _ := json.Marshal([]models.Filter{
+		{Field: "order_date", Op: "last_n_days", Values: []string{"7"}},
+	})
+
+	return &models.QueryTemplate{
+		QueryTemplateMeta: models.QueryTemplateMeta{
+			ID:           templateID,
+			Name:         "Weekly Revenue Analysis",
+			Description:  "Tracks total revenue, segmented by customer region, for the last 7 days.",
+			SemanticView: "sales_overview",
+			Tags:         pq.StringArray{"revenue", "weekly"},
+			Certified:    true,
+		},
+		DefaultDimensions: []string{"customer_region"},
+		DefaultMetrics:    []string{"total_revenue"},
+		RequiredFilters:   requiredFilters,
+		OwnerUserID:       "analytics_team",
+		UpdatedAt:         time.Now(),
+	}, nil
+}
+
+// ListCatalogNodesByType returns catalog nodes filtered by type and tenant/datasource.
+func (s *SemanticService) ListCatalogNodesByType(ctx context.Context, tenantID, datasourceID, nodeType, parentID, q string, limit int) ([]map[string]interface{}, error) {
+	if s.db == nil {
+		return nil, fmt.Errorf("database not configured")
+	}
+
+	tenantID = strings.TrimSpace(tenantID)
+	datasourceID = strings.TrimSpace(datasourceID)
+	nodeType = strings.TrimSpace(nodeType)
+
+	log.Printf("[DEBUG] ListCatalogNodesByType: tenantID=%s, datasourceID=%s, nodeType=%s, parentID=%s, q=%s, limit=%d", tenantID, datasourceID, nodeType, parentID, q, limit)
+
+	// Parse UUIDs like in ListSemanticViews
+	tenantUUID, err := uuid.Parse(tenantID)
+	if err != nil {
+		return nil, fmt.Errorf("invalid tenant_id format: %w", err)
+	}
+	datasourceUUID, err := uuid.Parse(datasourceID)
+	if err != nil {
+		return nil, fmt.Errorf("invalid datasource_id format: %w", err)
+	}
+
+	// Build query based on nodeType, parent, and search q
+	baseQuery := `
+		SELECT cn.id, cn.node_name, cn.qualified_path, cn.properties,
+			   cnt.catalog_type_name, cn.parent_id, cn.created_at
+		FROM public.catalog_node cn
+		JOIN public.catalog_node_type cnt ON cnt.id = cn.node_type_id
+		WHERE cn.tenant_id = $1 AND cn.tenant_datasource_id = $2`
+
+	args := []interface{}{tenantUUID, datasourceUUID}
+	argIdx := 2
+
+	if nodeType != "" {
+		argIdx++
+		baseQuery += fmt.Sprintf(" AND cnt.catalog_type_name = $%d", argIdx)
+		args = append(args, nodeType)
+	}
+	if parentID != "" {
+		argIdx++
+		baseQuery += fmt.Sprintf(" AND cn.parent_id = $%d", argIdx)
+		// parent_id should be a uuid -> parse
+		pid, err := uuid.Parse(parentID)
+		if err == nil {
+			args = append(args, pid)
+			log.Printf("[DEBUG] Added parent_id filter: %s", parentID)
+		} else {
+			log.Printf("[DEBUG] Invalid parent_id format: %s, error: %v", parentID, err)
+			// invalid parent id -> no results
+			return []map[string]interface{}{}, nil
+		}
+	} else {
+		log.Printf("[DEBUG] No parent_id filter applied (empty)")
+	}
+	if q != "" {
+		argIdx++
+		baseQuery += fmt.Sprintf(" AND cn.qualified_path ILIKE $%d", argIdx)
+		args = append(args, "%"+q+"%")
+	}
+
+	baseQuery += " ORDER BY cn.qualified_path"
+
+	if limit > 0 {
+		baseQuery += fmt.Sprintf(" LIMIT %d", limit)
+	}
+
+	rows, err := s.db.QueryxContext(ctx, baseQuery, args...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list catalog nodes: %w", err)
+	}
+	defer rows.Close()
+
+	nodes := make([]map[string]interface{}, 0)
+	for rows.Next() {
+		var (
+			id            string
+			nodeName      sql.NullString
+			qualifiedPath sql.NullString
+			properties    []byte
+			catalogType   string
+			parentID      sql.NullString
+			createdAt     time.Time
+		)
+		if err := rows.Scan(&id, &nodeName, &qualifiedPath, &properties, &catalogType, &parentID, &createdAt); err != nil {
+			continue
+		}
+
+		node := map[string]interface{}{
+			"id":             id,
+			"node_name":      nodeName.String,
+			"qualified_path": qualifiedPath.String,
+			"catalog_type":   catalogType,
+			"parent_id":      parentID.String,
+			"created_at":     createdAt,
+		}
+
+		// Parse properties JSON if present
+		if len(properties) > 0 {
+			var props map[string]interface{}
+			if json.Unmarshal(properties, &props) == nil {
+				node["properties"] = props
+			}
+		}
+
+		nodes = append(nodes, node)
+	}
+
+	return nodes, nil
+}

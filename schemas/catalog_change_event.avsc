@@ -1,0 +1,38 @@
+{
+  "type": "record",
+  "name": "CatalogChangeEvent",
+  "namespace": "com.wealthstream.catalog",
+  "doc": "Semantic catalog change event with before/after snapshots for Iceberg-compatible replay.",
+  "fields": [
+    { "name": "eventId", "type": "string", "doc": "UUID for this event" },
+    { "name": "entityType", "type": "string", "doc": "catalog_node | catalog_edge | catalog_node_type | catalog_edge_type" },
+    {
+      "name": "changeType",
+      "type": {
+        "type": "enum",
+        "name": "ChangeType",
+        "symbols": ["insert", "update", "delete"]
+      },
+      "doc": "Operation applied to Postgres hot store"
+    },
+    { "name": "tenantId", "type": "string", "doc": "Tenant UUID" },
+    {
+      "name": "occurredAt",
+      "type": { "type": "long", "logicalType": "timestamp-millis" },
+      "doc": "UTC timestamp of the change"
+    },
+    {
+      "name": "before",
+      "type": ["null", { "type": "map", "values": "string" }],
+      "default": null,
+      "doc": "Previous version of the entity, flattened to string values for schema evolution safety"
+    },
+    {
+      "name": "after",
+      "type": ["null", { "type": "map", "values": "string" }],
+      "default": null,
+      "doc": "New version of the entity, flattened to string values for schema evolution safety"
+    },
+    { "name": "source", "type": "string", "doc": "Logical producer, e.g. catalog-manager" }
+  ]
+}

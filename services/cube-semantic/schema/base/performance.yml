@@ -1,0 +1,64 @@
+cube:
+  - name: performance
+    sql_table: analytics.performance_attribution
+    data_source: star rocks  # Performance metrics in hot tier
+    
+    dimensions:
+      - name: tenant_id
+        sql: tenant_id
+        type: string
+        meta:
+          required_for_rls: true
+      
+      - name: portfolio_id
+        sql: portfolio_id
+        type: string
+      
+      - name: period
+        sql: period
+        type: string
+      
+      - name: calculation_date
+        sql: calculated_at
+        type: time
+    
+    measures:
+      - name: total_return
+        sql: total_return
+        type: avg
+      
+      - name: benchmark_return
+        sql: benchmark_return
+        type: avg
+      
+      - name: active_return
+        sql: active_return
+        type: avg
+      
+      - name: allocation_effect
+        sql: allocation_effect
+        type: avg
+      
+      - name: selection_effect
+        sql: selection_effect
+        type: avg
+    
+    pre_aggregations:
+      - name: performance_monthly
+        type: rollup
+        external: true
+        data_source: starrocks
+        partition_granularity: month
+        time_dimension: calculation_date
+        measure_references:
+          - total_return
+          - benchmark_return
+          - active_return
+          - allocation_effect
+          - selection_effect
+        dimension_references:
+          - tenant_id
+          - portfolio_id
+          - period
+        refresh_key:
+          every: 15 minute

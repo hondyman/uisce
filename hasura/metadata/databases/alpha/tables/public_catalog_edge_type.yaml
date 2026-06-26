@@ -1,0 +1,49 @@
+table:
+  name: catalog_edge_type
+  schema: public
+select_permissions:
+  - role: anonymous
+    permission:
+      columns:
+        - id
+        - edge_type_name
+        - description
+        - subject_node_type_id
+        - object_node_type_id
+        - properties
+        - is_active
+        - created_at
+        - updated_at
+        - tenant_id
+        - core_id
+      filter: {}
+  - role: steward
+    permission:
+      columns:
+        - id
+        - edge_type_name
+        - description
+        - subject_node_type_id
+        - object_node_type_id
+        - properties
+        - is_active
+        - created_at
+        - updated_at
+        - tenant_id
+        - core_id
+      filter: {}
+  - role: user
+    permission:
+      columns:
+        - id
+        - edge_type_name
+        - description
+        - subject_node_type_id
+        - object_node_type_id
+        - properties
+        - is_active
+        - created_at
+        - updated_at
+        - tenant_id
+        - core_id
+      filter: {}

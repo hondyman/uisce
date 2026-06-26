@@ -1,0 +1,209 @@
+================================================================================
+TEMPORAL + REDPANDA (KAFKA) ROUTING - QUICK START
+================================================================================
+
+✅ WHAT'S WIRED:
+  • Temporal workflows trigger on metric computation requests
+  • Redpanda/Kafka events publish when workflows complete
+  • Postgres tracks all job runs and status
+  • Graceful degradation if Temporal/Redpanda unavailable
+
+⏭️  DEFERRED (for later):
+  • Trino SQL execution (activities log SQL, don't execute)
+  • Iceberg table writes
+  • Spark transformations
+
+================================================================================
+SETUP (5 MINUTES)
+================================================================================
+
+1. Start Temporal:
+   temporal server start-dev
+   
+   OR with Docker:
+   docker run -d --name temporal \
+     -p 7233:7233 -p 8233:8233 \
+     temporalio/auto-setup:latest
+
+2. Start Redpanda (Kafka):
+   # Use the provided compose or run a simple Redpanda container
+   docker compose -f docker-compose.backend.yml up -d redpanda
+   # Alternatively, use: docker run -d --name redpanda -p 9092:9092 docker.redpanda.com/redpandadata/redpanda:latest (see Redpanda docs for full options)
+
+3. Set environment:
+   export TEMPORAL_HOSTPORT=localhost:7233
+   export KAFKA_BROKERS=localhost:9092
+
+4. Initialize database:
+   psql postgres://postgres:postgres@host.docker.internal:5432/alpha \
+     < backend/sql/calc-engine.sql
+
+5. Start backend:
+   cd backend && go run ./cmd/server/main.go
+
+6. Test it:
+   bash test-calc-engine.sh
+
+================================================================================
+FLOW
+================================================================================
+
+[User] → POST /api/metrics/{id}/compute/pop
+         ↓
+[Handler] → Create job_run in Postgres (status: pending)
+            Execute Temporal workflow (async)
+            Return 202 Accepted
+         ↓
+[Temporal Worker] → Execute MetricComputeWorkflow
+                    ├─ Update status: running
+                    ├─ Execute Activity (PoP or Anomaly)
+                    ├─ Update status: success
+            ├─ Publish event to Redpanda (Kafka topic)
+
+[Event Queue] → metrics.computations queue
+                ↓
+[Consumers] → React to completion events
+
+================================================================================
+URLS
+================================================================================
+
+API:              http://localhost:8080
+Temporal UI:      http://localhost:8233
+Redpanda / Pandaproxy UI: http://localhost:8082 (if Pandaproxy enabled) — broker at localhost:9092
+Postgres:         postgres://postgres:postgres@localhost:5432/alpha
+
+================================================================================
+KEY FILES CHANGED
+================================================================================
+
+✅ backend/internal/api/calc-engine_handlers.go
+   - Updated CalcEngineHandler to accept Temporal client
+   - triggerCompute() now executes workflow asynchronously
+
+✅ backend/internal/calc-engine/activities/activities.go
+   - Added RabbitMQ connection to ActivityConfig
+   - PublishCompletionEvent() publishes to queue
+
+✅ backend/internal/calc-engine/worker/init.go
+   - New file! Initializes Temporal worker and RabbitMQ
+   - Registers workflows and activities
+
+✅ backend/cmd/server/main.go
+   - Initializes Temporal worker on startup
+   - Passes temporal client to API routes
+
+✅ backend/internal/api/api.go
+   - Updated SetupRouter() to accept temporal client
+   - Passes it to RegisterCalcEngineRoutes()
+
+================================================================================
+TROUBLESHOOTING
+================================================================================
+
+❌ "cannot find temporal server"
+   → Start temporal: temporal server start-dev
+
+❌ "cannot connect to rabbitmq"
+   → Start rabbitmq: docker run -d --name rabbitmq -p 5672:5672 -p 15672:15672 rabbitmq:4.0-management
+   → Or disable by unsetting RABBIT_URL (API still works)
+
+❌ "metric creation returns 400"
+   → Check X-Tenant-ID header is set
+   → Verify required fields in request body
+
+❌ "job run status stuck on pending"
+   → Check Temporal worker is running
+   → Check Temporal server is accessible
+   → Check backend logs for Temporal errors
+
+❌ "no events in RabbitMQ queue"
+   → Verify RABBIT_URL is set correctly
+   → Check RabbitMQ is running and queue exists
+   → Check backend logs for publishing errors
+
+================================================================================
+MONITORING
+================================================================================
+
+Temporal:
+  → View workflows: http://localhost:8233
+  → Check activity logs
+  → See retry history and errors
+
+RabbitMQ:
+  → View queues: http://localhost:15672
+  → Check message depth: rabbitmqctl list_queues
+  → Monitor consumers
+
+Postgres:
+  SELECT status, COUNT(*) FROM metric_job_runs GROUP BY status;
+  SELECT * FROM metric_job_runs WHERE status = 'failed';
+
+Backend logs:
+  grep "Temporal" backend.log
+  grep "RabbitMQ" backend.log
+  grep "workflow" backend.log
+
+================================================================================
+EXAMPLES
+================================================================================
+
+Create metric:
+  curl -X POST -H "X-Tenant-ID: test1" http://localhost:8080/api/metrics \
+    -H "Content-Type: application/json" \
+    -d '{"name":"Revenue","domain":"finance","aggregation_function":"sum"}'
+
+Trigger computation:
+  curl -X POST -H "X-Tenant-ID: test1" \
+    http://localhost:8080/api/metrics/{metric_id}/compute/pop \
+    -d '{"period_label":"2024-11"}'
+
+Check status:
+  curl -H "X-Tenant-ID: test1" http://localhost:8080/api/metrics/{metric_id}/runs
+
+Full integration test:
+  bash test-calc-engine.sh
+
+================================================================================
+DEFERRED: ACTIVATING TRINO
+================================================================================
+
+When Trino is ready:
+
+1. In activities.go, replace:
+   fmt.Printf("Would execute: %s\n", mergeSQL)
+   
+   With:
+   err := globalConfig.TrinoClient.ExecuteMerge(ctx, mergeSQL)
+   if err != nil {
+     return fmt.Errorf("trino execution failed: %w", err)
+   }
+
+2. Configure Trino in ActivityConfig:
+   type ActivityConfig struct {
+     DB           *sql.DB
+     TrinoClient  *trino.Client
+     KafkaBrokers []string // e.g. strings.Split(os.Getenv("KAFKA_BROKERS"), ",")
+     // or use a kafka writer: *kafka.Writer
+   }
+
+3. Test against actual Iceberg tables
+
+================================================================================
+STATUS
+================================================================================
+
+✅ Temporal workflows routing: COMPLETE
+✅ RabbitMQ event publishing: COMPLETE
+✅ Postgres job tracking: COMPLETE
+✅ Graceful degradation: COMPLETE
+✅ Error handling: COMPLETE
+
+⏳ Trino execution: DEFERRED
+⏳ Iceberg tables: DEFERRED
+⏳ Spark transformations: DEFERRED
+
+================================================================================
+NEXT: SEE TEMPORAL_RABBITMQ_INTEGRATION.md FOR FULL DETAILS
+================================================================================

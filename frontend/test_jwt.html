@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>JWT Test</title>
+</head>
+<body>
+    <h1>JWT Authentication Test</h1>
+    <button id="loginBtn">Login</button>
+    <button id="testGraphQLBtn">Test GraphQL</button>
+    <div id="output"></div>
+
+    <script>
+        const output = document.getElementById('output');
+        let token = null;
+
+        document.getElementById('loginBtn').addEventListener('click', async () => {
+            try {
+                output.textContent = 'Logging in...';
+                const response = await fetch('http://localhost:8081/api/auth/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email: 'admin@example.com', password: 'admin' })
+                });
+                const data = await response.json();
+                token = data.access_token;
+                output.textContent = 'Login successful! Token: ' + token.substring(0, 50) + '...';
+            } catch (error) {
+                output.textContent = 'Login failed: ' + error.message;
+            }
+        });
+
+        document.getElementById('testGraphQLBtn').addEventListener('click', async () => {
+            if (!token) {
+                output.textContent = 'Please login first';
+                return;
+            }
+            try {
+                output.textContent = 'Testing GraphQL...';
+                const response = await fetch('http://localhost:8080/v1/graphql', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': 'Bearer ' + token
+                    },
+                    body: JSON.stringify({ query: 'query { tenants { id name } }' })
+                });
+                const data = await response.json();
+                output.textContent = 'GraphQL response: ' + JSON.stringify(data, null, 2);
+            } catch (error) {
+                output.textContent = 'GraphQL failed: ' + error.message;
+            }
+        });
+    </script>
+</body>
+</html>

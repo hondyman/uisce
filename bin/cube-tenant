@@ -1,0 +1,552 @@
+#!/usr/bin/env bash
+#
+# cube-tenant - CLI for Cube.js tenant management
+# Phase 9: Developer Experience
+#
+# Commands:
+#   init         Initialize a new tenant workspace
+#   scaffold     Generate cube schema files from templates
+#   validate     Validate cube schemas and tenant config
+#   dry-run      Test refresh without persisting
+#   diff         Compare local vs deployed tenant config
+#   deploy       Deploy tenant configuration changes
+#   status       Show tenant provisioning status
+#
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT_DIR="${SCRIPT_DIR}/.."
+CUBE_SCHEMA_ROOT="${ROOT_DIR}/cube/schema"
+CUBE_TENANTS_ROOT="${CUBE_SCHEMA_ROOT}/tenants"
+GENERATED_DIR="${ROOT_DIR}/cube/generated"
+TEMPLATES_DIR="${ROOT_DIR}/cube/templates"
+
+# Colors for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m' # No Color
+
+log_info() { echo -e "${BLUE}[INFO]${NC} $*"; }
+log_success() { echo -e "${GREEN}[OK]${NC} $*"; }
+log_warn() { echo -e "${YELLOW}[WARN]${NC} $*"; }
+log_error() { echo -e "${RED}[ERROR]${NC} $*" >&2; }
+
+usage() {
+  cat <<EOF
+Usage: cube-tenant <command> [options]
+
+Cube.js Multi-Tenant CLI - Phase 9 Developer Experience
+
+Commands:
+  init <tenant_id>              Initialize a new tenant workspace
+  scaffold <tenant_id> <cube>   Generate a cube schema from template
+  validate [tenant_id]          Validate cube schemas (all or specific tenant)
+  dry-run <tenant_id>           Test pre-aggregation refresh without persisting
+  diff <tenant_id>              Compare local vs deployed configuration
+  deploy <tenant_id>            Deploy tenant configuration to database
+  status [tenant_id]            Show provisioning status
+  list                          List all configured tenants
+  sync                          Sync tenant-scopes.json from database
+
+Options:
+  -h, --help                    Show this help message
+  -v, --verbose                 Enable verbose output
+  --dry-run                     Preview changes without applying
+
+Environment Variables:
+  DATABASE_URL                  PostgreSQL connection string
+  CUBE_API_URL                  Cube.js API endpoint (default: http://localhost:4000)
+  CUBEJS_API_SECRET             Cube.js API secret
+
+Examples:
+  cube-tenant init acme-corp
+  cube-tenant scaffold acme-corp PortfolioHoldings
+  cube-tenant validate acme-corp
+  cube-tenant dry-run acme-corp
+  cube-tenant diff acme-corp
+  cube-tenant deploy acme-corp
+  cube-tenant status
+  cube-tenant sync
+EOF
+  exit 0
+}
+
+# Initialize a new tenant workspace
+cmd_init() {
+  local tenant_id="${1:-}"
+  if [[ -z "$tenant_id" ]]; then
+    log_error "Usage: cube-tenant init <tenant_id>"
+    exit 1
+  fi
+
+  local tenant_dir="${CUBE_TENANTS_ROOT}/${tenant_id}"
+  
+  if [[ -d "$tenant_dir" ]]; then
+    log_warn "Tenant directory already exists: ${tenant_dir}"
+    read -p "Overwrite? [y/N] " -n 1 -r
+    echo
+    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+      exit 1
+    fi
+  fi
+
+  log_info "Initializing tenant workspace for: ${tenant_id}"
+  
+  mkdir -p "${tenant_dir}/auto"
+  
+  # Create tenant.json metadata
+  cat > "${tenant_dir}/tenant.json" <<EOF
+{
+  "tenantId": "${tenant_id}",
+  "tenantName": "${tenant_id}",
+  "tier": "standard",
+  "resourceGroup": "tenant_standard",
+  "refresh": {
+    "mode": "interval",
+    "everyMinutes": 60,
+    "timezone": "UTC"
+  },
+  "createdAt": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+  "schemaOverrides": []
+}
+EOF
+
+  # Create dimensions.yml template
+  cat > "${tenant_dir}/dimensions.yml" <<EOF
+# Tenant-specific dimension overrides for ${tenant_id}
+# Add custom dimensions or override base dimensions here
+#
+# Example:
+# cubes:
+#   - name: PortfolioHoldings
+#     dimensions:
+#       - name: custom_category
+#         sql: "CASE WHEN asset_type = 'EQUITY' THEN 'Stocks' ELSE 'Other' END"
+#         type: string
+EOF
+
+  # Create measures.yml template
+  cat > "${tenant_dir}/measures.yml" <<EOF
+# Tenant-specific measure overrides for ${tenant_id}
+# Add custom measures or override base measures here
+#
+# Example:
+# cubes:
+#   - name: PortfolioHoldings
+#     measures:
+#       - name: custom_nav
+#         sql: "SUM(market_value * custom_multiplier)"
+#         type: sum
+EOF
+
+  # Create preaggs.yml template
+  cat > "${tenant_dir}/preaggs.yml" <<EOF
+# Tenant-specific pre-aggregation definitions for ${tenant_id}
+# Define custom rollups based on tenant query patterns
+#
+# Example:
+# cubes:
+#   - name: PortfolioHoldings
+#     preAggregations:
+#       - name: daily_by_account
+#         measures: [total_market_value, position_count]
+#         dimensions: [account_id, as_of_date]
+#         timeDimension: as_of_date
+#         granularity: day
+#         refreshKey:
+#           every: "1 hour"
+EOF
+
+  # Create security.yml template
+  cat > "${tenant_dir}/security.yml" <<EOF
+# Tenant-specific security context for ${tenant_id}
+# Note: Base RLS via queryRewrite is always enforced
+#
+# Additional filters can be added here if needed
+# Example:
+# securityContext:
+#   additionalFilters:
+#     - member: user_role
+#       operator: equals
+#       values: ["viewer", "editor", "admin"]
+EOF
+
+  # Create README
+  cat > "${tenant_dir}/README.md" <<EOF
+# Tenant: ${tenant_id}
+
+## Directory Structure
+
+\`\`\`
+${tenant_id}/
+├── tenant.json        # Tenant metadata and configuration
+├── dimensions.yml     # Custom dimension definitions
+├── measures.yml       # Custom measure definitions  
+├── preaggs.yml        # Pre-aggregation definitions
+├── security.yml       # Additional security context
+├── auto/              # Auto-generated files (do not edit)
+│   └── metadata.json  # Generated by tenant automation
+└── README.md          # This file
+\`\`\`
+
+## Development Workflow
+
+1. Edit schema files as needed
+2. Validate: \`cube-tenant validate ${tenant_id}\`
+3. Test refresh: \`cube-tenant dry-run ${tenant_id}\`
+4. Review diff: \`cube-tenant diff ${tenant_id}\`
+5. Deploy: \`cube-tenant deploy ${tenant_id}\`
+
+## Configuration
+
+- **Tier**: standard
+- **Resource Group**: tenant_standard
+- **Refresh Interval**: 60 minutes
+EOF
+
+  log_success "Tenant workspace initialized: ${tenant_dir}"
+  log_info "Next steps:"
+  echo "  1. Edit tenant.json to configure tier and refresh settings"
+  echo "  2. Add custom dimensions/measures/preaggs as needed"
+  echo "  3. Run: cube-tenant validate ${tenant_id}"
+}
+
+# Scaffold a cube from template
+cmd_scaffold() {
+  local tenant_id="${1:-}"
+  local cube_name="${2:-}"
+  
+  if [[ -z "$tenant_id" ]] || [[ -z "$cube_name" ]]; then
+    log_error "Usage: cube-tenant scaffold <tenant_id> <cube_name>"
+    exit 1
+  fi
+
+  local tenant_dir="${CUBE_TENANTS_ROOT}/${tenant_id}"
+  local output_file="${tenant_dir}/${cube_name}.yml"
+  
+  if [[ ! -d "$tenant_dir" ]]; then
+    log_error "Tenant not initialized. Run: cube-tenant init ${tenant_id}"
+    exit 1
+  fi
+
+  log_info "Scaffolding cube: ${cube_name} for tenant: ${tenant_id}"
+
+  # Check for template
+  local template_file="${TEMPLATES_DIR}/${cube_name}.yml.tmpl"
+  if [[ -f "$template_file" ]]; then
+    log_info "Using template: ${template_file}"
+    sed "s/{{TENANT_ID}}/${tenant_id}/g" "$template_file" > "$output_file"
+  else
+    # Generate basic cube structure
+    cat > "$output_file" <<EOF
+# Cube: ${cube_name}
+# Tenant: ${tenant_id}
+# Generated: $(date -u +%Y-%m-%dT%H:%M:%SZ)
+
+cubes:
+  - name: ${cube_name}
+    # Inherit from base cube if it exists
+    # extends: ${cube_name}
+    
+    sql: >
+      SELECT *
+      FROM {{DATASOURCE}}.${cube_name,,}
+      WHERE tenant_id = '{COMPILE_CONTEXT.securityContext.tenant_id}'
+
+    dimensions:
+      - name: id
+        sql: id
+        type: string
+        primaryKey: true
+
+      - name: tenant_id
+        sql: tenant_id
+        type: string
+
+      - name: created_at
+        sql: created_at
+        type: time
+
+    measures:
+      - name: count
+        type: count
+
+    preAggregations:
+      - name: main
+        measures: [count]
+        dimensions: [tenant_id]
+        timeDimension: created_at
+        granularity: day
+        refreshKey:
+          every: "1 hour"
+EOF
+  fi
+
+  log_success "Cube scaffolded: ${output_file}"
+}
+
+# Validate cube schemas
+cmd_validate() {
+  local tenant_id="${1:-}"
+  local exit_code=0
+  
+  log_info "Validating cube schemas..."
+
+  # Check if cube CLI is available
+  if ! command -v cubejs &> /dev/null; then
+    log_warn "cubejs CLI not found, using basic validation"
+  fi
+
+  if [[ -n "$tenant_id" ]]; then
+    validate_tenant "$tenant_id" || exit_code=1
+  else
+    # Validate all tenants
+    for dir in "${CUBE_TENANTS_ROOT}"/*/; do
+      if [[ -d "$dir" ]]; then
+        local tid
+        tid=$(basename "$dir")
+        validate_tenant "$tid" || exit_code=1
+      fi
+    done
+  fi
+
+  if [[ $exit_code -eq 0 ]]; then
+    log_success "All validations passed"
+  else
+    log_error "Validation failed"
+  fi
+  
+  return $exit_code
+}
+
+validate_tenant() {
+  local tenant_id="$1"
+  local tenant_dir="${CUBE_TENANTS_ROOT}/${tenant_id}"
+  local errors=0
+
+  log_info "Validating tenant: ${tenant_id}"
+
+  # Check tenant.json exists and is valid JSON
+  if [[ ! -f "${tenant_dir}/tenant.json" ]]; then
+    log_error "Missing tenant.json for ${tenant_id}"
+    return 1
+  fi
+
+  if ! jq empty "${tenant_dir}/tenant.json" 2>/dev/null; then
+    log_error "Invalid JSON in tenant.json for ${tenant_id}"
+    return 1
+  fi
+
+  # Validate YAML files
+  for yml_file in "${tenant_dir}"/*.yml; do
+    if [[ -f "$yml_file" ]]; then
+      if ! python3 -c "import yaml; yaml.safe_load(open('$yml_file'))" 2>/dev/null; then
+        log_error "Invalid YAML: ${yml_file}"
+        ((errors++))
+      fi
+    fi
+  done
+
+  # Check for required tenant_id filter in custom cubes
+  for yml_file in "${tenant_dir}"/*.yml; do
+    if [[ -f "$yml_file" ]] && [[ "$(basename "$yml_file")" != "security.yml" ]]; then
+      if grep -q "sql:" "$yml_file" && ! grep -q "tenant_id" "$yml_file"; then
+        log_warn "Cube in ${yml_file} may be missing tenant_id filter"
+      fi
+    fi
+  done
+
+  if [[ $errors -gt 0 ]]; then
+    log_error "Tenant ${tenant_id} has ${errors} validation errors"
+    return 1
+  fi
+
+  log_success "Tenant ${tenant_id} validation passed"
+  return 0
+}
+
+# Dry-run pre-aggregation refresh
+cmd_dry_run() {
+  local tenant_id="${1:-}"
+  
+  if [[ -z "$tenant_id" ]]; then
+    log_error "Usage: cube-tenant dry-run <tenant_id>"
+    exit 1
+  fi
+
+  log_info "Running dry-run refresh for tenant: ${tenant_id}"
+  
+  local cube_api="${CUBE_API_URL:-http://localhost:4000}"
+  
+  # Call Cube API dry-run endpoint
+  local response
+  response=$(curl -sf -X POST "${cube_api}/cubejs-api/v1/dry-run" \
+    -H "Content-Type: application/json" \
+    -H "X-Tenant-ID: ${tenant_id}" \
+    -H "X-Tenant-Datasource-ID: default" \
+    -H "Authorization: Bearer ${CUBEJS_API_SECRET:-devsecret}" \
+    -d '{"query": {"measures": ["*"], "timeDimensions": []}}' 2>&1) || {
+    log_error "Dry-run failed: ${response}"
+    exit 1
+  }
+
+  echo "$response" | jq .
+  log_success "Dry-run completed"
+}
+
+# Compare local vs deployed config
+cmd_diff() {
+  local tenant_id="${1:-}"
+  
+  if [[ -z "$tenant_id" ]]; then
+    log_error "Usage: cube-tenant diff <tenant_id>"
+    exit 1
+  fi
+
+  log_info "Comparing local vs deployed config for tenant: ${tenant_id}"
+  
+  local tenant_dir="${CUBE_TENANTS_ROOT}/${tenant_id}"
+  local local_config="${tenant_dir}/tenant.json"
+  
+  if [[ ! -f "$local_config" ]]; then
+    log_error "Local config not found: ${local_config}"
+    exit 1
+  fi
+
+  # Fetch deployed config from database
+  local db_url="${DATABASE_URL:-postgres://postgres:postgres@localhost:5432/alpha?sslmode=disable}"
+  local deployed_config
+  deployed_config=$(psql "$db_url" -t -c "
+    SELECT metadata::text 
+    FROM tenant_datasources 
+    WHERE tenant_id = '${tenant_id}' 
+    LIMIT 1
+  " 2>/dev/null | tr -d '[:space:]')
+
+  if [[ -z "$deployed_config" ]] || [[ "$deployed_config" == "null" ]]; then
+    log_warn "No deployed config found for tenant: ${tenant_id}"
+    log_info "Local config:"
+    cat "$local_config"
+    exit 0
+  fi
+
+  # Create temp files for diff
+  local tmp_local=$(mktemp)
+  local tmp_deployed=$(mktemp)
+  
+  jq -S . "$local_config" > "$tmp_local"
+  echo "$deployed_config" | jq -S . > "$tmp_deployed"
+  
+  log_info "Diff (local vs deployed):"
+  diff --color=auto -u "$tmp_deployed" "$tmp_local" || true
+  
+  rm -f "$tmp_local" "$tmp_deployed"
+}
+
+# Deploy tenant configuration
+cmd_deploy() {
+  local tenant_id="${1:-}"
+  
+  if [[ -z "$tenant_id" ]]; then
+    log_error "Usage: cube-tenant deploy <tenant_id>"
+    exit 1
+  fi
+
+  log_info "Deploying configuration for tenant: ${tenant_id}"
+  
+  # Validate first
+  cmd_validate "$tenant_id" || exit 1
+  
+  # Run tenant automation for this specific tenant
+  if [[ -f "${ROOT_DIR}/backend/cmd/tenant_automation/main.go" ]]; then
+    log_info "Running tenant automation..."
+    (cd "${ROOT_DIR}/backend" && go run ./cmd/tenant_automation --tenants="${tenant_id}")
+    log_success "Deployment complete"
+  else
+    log_error "Tenant automation not found"
+    exit 1
+  fi
+}
+
+# Show provisioning status
+cmd_status() {
+  local tenant_id="${1:-}"
+  local db_url="${DATABASE_URL:-postgres://postgres:postgres@localhost:5432/alpha?sslmode=disable}"
+  
+  log_info "Tenant provisioning status:"
+  
+  local query
+  if [[ -n "$tenant_id" ]]; then
+    query="SELECT tenant_id, datasource_id, provisioning_status, last_provisioned_at, last_provision_error 
+           FROM tenant_datasources WHERE tenant_id = '${tenant_id}'"
+  else
+    query="SELECT tenant_id, datasource_id, provisioning_status, last_provisioned_at, last_provision_error 
+           FROM tenant_datasources ORDER BY last_provisioned_at DESC LIMIT 20"
+  fi
+  
+  psql "$db_url" -c "$query" 2>/dev/null || {
+    log_error "Failed to query database"
+    exit 1
+  }
+}
+
+# List configured tenants
+cmd_list() {
+  log_info "Configured tenants:"
+  
+  for dir in "${CUBE_TENANTS_ROOT}"/*/; do
+    if [[ -d "$dir" ]]; then
+      local tid
+      tid=$(basename "$dir")
+      local tier="unknown"
+      if [[ -f "${dir}/tenant.json" ]]; then
+        tier=$(jq -r '.tier // "standard"' "${dir}/tenant.json" 2>/dev/null)
+      fi
+      echo "  ${tid} (tier: ${tier})"
+    fi
+  done
+}
+
+# Sync tenant-scopes.json from database
+cmd_sync() {
+  log_info "Syncing tenant-scopes.json from database..."
+  
+  if [[ -f "${ROOT_DIR}/backend/cmd/tenant_automation/main.go" ]]; then
+    (cd "${ROOT_DIR}/backend" && go run ./cmd/tenant_automation)
+    log_success "Sync complete: ${GENERATED_DIR}/tenant-scopes.json"
+  else
+    log_error "Tenant automation not found"
+    exit 1
+  fi
+}
+
+# Main command dispatcher
+main() {
+  if [[ $# -eq 0 ]]; then
+    usage
+  fi
+
+  local cmd="$1"
+  shift
+
+  case "$cmd" in
+    init)      cmd_init "$@" ;;
+    scaffold)  cmd_scaffold "$@" ;;
+    validate)  cmd_validate "$@" ;;
+    dry-run)   cmd_dry_run "$@" ;;
+    diff)      cmd_diff "$@" ;;
+    deploy)    cmd_deploy "$@" ;;
+    status)    cmd_status "$@" ;;
+    list)      cmd_list "$@" ;;
+    sync)      cmd_sync "$@" ;;
+    -h|--help) usage ;;
+    *)
+      log_error "Unknown command: ${cmd}"
+      usage
+      ;;
+  esac
+}
+
+main "$@"

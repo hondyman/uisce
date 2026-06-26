@@ -1,0 +1,72 @@
+cubes:
+  - name: customers
+    sql_table: public.customers
+    data_source: default
+    title: Customers (Test Tenant)
+
+    measures:
+      - name: count
+        type: count
+
+    dimensions:
+      
+      - name: id
+        sql: id
+        type: number
+        primary_key: true
+      
+      - name: name
+        sql: name
+        type: string
+        
+      
+      - name: state
+        sql: state
+        type: string
+        
+      
+      - name: city
+        sql: city
+        type: string
+        
+      
+
+    
+    hierarchies:
+      
+      - name: location
+        title: Customer Location
+        levels:
+          
+          - state
+          
+          - city
+          
+        
+      
+      # Additional tenant-specific hierarchy
+      - name: tenant_location
+        title: Tenant-Specific Location
+        levels:
+          - city
+          - state
+    
+
+    
+    segments:
+      
+      - name: sf_customers
+        description: Customers from San Francisco
+        sql: {CUBE}.city = 'San Francisco'
+        
+      
+      - name: ca_customers
+        description: Customers from California
+        sql: {CUBE}.state = 'CA'
+        
+      
+      # Additional tenant-specific segment
+      - name: test_segment
+        description: Test tenant segment
+        sql: {CUBE}.name LIKE 'Test%'
+    

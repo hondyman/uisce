@@ -1,0 +1,408 @@
+{
+  "bundle_id": "investment_accounting_pack",
+  "domain": "investment_accounting",
+  "audience": ["controller", "finance", "risk", "executive", "regulator", "audit"],
+  "version": "v1.0.0",
+  "owner": "patrick",
+  "tags": ["accounting", "ifrs", "us_gaap", "measurement", "amortised_cost", "fair_value", "equity_method", "fx_translation", "impairment", "oci", "pnl"],
+  "defaults": {
+    "materialization": "table",
+    "preaggregate": {
+      "enabled": true,
+      "grain": "monthly",
+      "rollups": ["quarterly", "yearly"],
+      "partition_keys": ["entity_id", "instrument_id", "ledger_currency", "accounting_policy"],
+      "watermark_field": "as_of_date",
+      "snapshot": true
+    }
+  },
+  "metrics": [
+    {
+      "node_id": "effective_interest_income",
+      "category": "income_recognition",
+      "description": "Interest income using the effective interest rate (EIR) method for amortised cost instruments (HTM/Loans).",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "{opening_carrying_amount} * {effective_interest_rate}",
+        "arguments": {
+          "opening_carrying_amount": "field:opening_carrying_amount",
+          "effective_interest_rate": "field:effective_interest_rate"
+        }
+      },
+      "preaggregation": {
+        "enabled": true,
+        "grain": "monthly",
+        "aggregation": "sum",
+        "snapshot": false,
+        "rollups": ["quarterly", "yearly"]
+      },
+      "badge": "🟩",
+      "function_class": "DAX-Financial",
+      "functions_used": ["MULTIPLY"],
+      "governance": { "status": "golden" }
+    },
+    {
+      "node_id": "premium_discount_amortization",
+      "category": "amortization",
+      "description": "Effective interest amortization of premium (negative) or accretion of discount (positive).",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "({effective_interest_income} - {coupon_cash_received})",
+        "arguments": {
+          "effective_interest_income": "calc:effective_interest_income",
+          "coupon_cash_received": "field:coupon_cash_received"
+        }
+      },
+      "preaggregation": {
+        "enabled": true,
+        "grain": "monthly",
+        "aggregation": "sum",
+        "snapshot": false
+      },
+      "badge": "🟧",
+      "function_class": "DAX-Logical",
+      "functions_used": ["SUBTRACT"],
+      "governance": { "status": "golden" }
+    },
+    {
+      "node_id": "carrying_amount_rollforward",
+      "category": "measurement",
+      "description": "Amortised cost carrying amount rollforward: opening + EIR income − coupons ± amortization − credit_loss − fx.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "{opening_carrying_amount} + {effective_interest_income} - {coupon_cash_received} + {premium_discount_amortization} - {credit_loss_allowance_change} + {fx_remeasurement}",
+        "arguments": {
+          "opening_carrying_amount": "field:opening_carrying_amount",
+          "effective_interest_income": "calc:effective_interest_income",
+          "coupon_cash_received": "field:coupon_cash_received",
+          "premium_discount_amortization": "calc:premium_discount_amortization",
+          "credit_loss_allowance_change": "calc:credit_loss_allowance_change",
+          "fx_remeasurement": "calc:fx_remeasurement"
+        }
+      },
+      "preaggregation": {
+        "enabled": true,
+        "grain": "monthly",
+        "aggregation": "last_non_null",
+        "snapshot": true,
+        "rollups": ["quarterly", "yearly"]
+      },
+      "badge": "🟧",
+      "function_class": "DAX-Logical",
+      "functions_used": ["ADD", "SUBTRACT"],
+      "governance": { "status": "golden" }
+    },
+    {
+      "node_id": "fair_value_change_pnl_trading",
+      "category": "fair_value",
+      "description": "Unrealised fair value gain/loss for trading (FVTPL) recognised in P&L.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "{fair_value_current} - {fair_value_prior}",
+        "arguments": {
+          "fair_value_current": "field:fair_value_current",
+          "fair_value_prior": "field:fair_value_prior"
+        }
+      },
+      "preaggregation": {
+        "enabled": true,
+        "grain": "daily",
+        "aggregation": "sum",
+        "snapshot": false,
+        "rollups": ["monthly", "quarterly"]
+      },
+      "badge": "🟧",
+      "function_class": "DAX-Logical",
+      "functions_used": ["SUBTRACT"],
+      "governance": { "status": "golden" }
+    },
+    {
+      "node_id": "fair_value_change_oci_afs",
+      "category": "fair_value",
+      "description": "Unrealised fair value gain/loss for AFS (FVOCI) recognised in OCI until realised.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "{fair_value_current} - {amortised_cost_current}",
+        "arguments": {
+          "fair_value_current": "field:fair_value_current",
+          "amortised_cost_current": "calc:carrying_amount_rollforward"
+        }
+      },
+      "preaggregation": {
+        "enabled": true,
+        "grain": "monthly",
+        "aggregation": "sum",
+        "snapshot": false
+      },
+      "badge": "🟧",
+      "function_class": "DAX-Logical",
+      "functions_used": ["SUBTRACT"],
+      "governance": { "status": "golden" }
+    },
+    {
+      "node_id": "realised_gain_loss_disposal",
+      "category": "realisation",
+      "description": "Realised gain/loss on disposal = consideration − carrying amount at sale.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "{consideration_received} - {carrying_amount_at_sale}",
+        "arguments": {
+          "consideration_received": "field:consideration_received",
+          "carrying_amount_at_sale": "field:carrying_amount_at_sale"
+        }
+      },
+      "preaggregation": {
+        "enabled": true,
+        "grain": "monthly",
+        "aggregation": "sum",
+        "snapshot": false
+      },
+      "badge": "🟧",
+      "function_class": "DAX-Logical",
+      "functions_used": ["SUBTRACT"],
+      "governance": { "status": "golden" }
+    },
+    {
+      "node_id": "credit_loss_allowance_change",
+      "category": "impairment",
+      "description": "Period movement in expected credit loss (ECL) allowance recognised in P&L.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "{ecl_closing} - {ecl_opening}",
+        "arguments": {
+          "ecl_closing": "field:ecl_closing",
+          "ecl_opening": "field:ecl_opening"
+        }
+      },
+      "preaggregation": {
+        "enabled": true,
+        "grain": "monthly",
+        "aggregation": "sum",
+        "snapshot": false
+      },
+      "badge": "🟩",
+      "function_class": "DAX-Financial",
+      "functions_used": ["SUBTRACT"],
+      "governance": { "status": "golden" }
+    },
+    {
+      "node_id": "fx_remeasurement",
+      "category": "fx_translation",
+      "description": "Remeasurement of monetary items to functional currency at closing rate; P&L impact.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "({closing_rate} - {average_rate}) * {monetary_balance_foreign}",
+        "arguments": {
+          "closing_rate": "field:fx_rate_closing",
+          "average_rate": "field:fx_rate_avg_period",
+          "monetary_balance_foreign": "field:monetary_balance_foreign"
+        }
+      },
+      "preaggregation": {
+        "enabled": true,
+        "grain": "monthly",
+        "aggregation": "sum",
+        "snapshot": false
+      },
+      "badge": "🟩",
+      "function_class": "DAX-Financial",
+      "functions_used": ["SUBTRACT", "MULTIPLY"],
+      "governance": { "status": "golden" }
+    },
+    {
+      "node_id": "fx_translation_reserve_oci",
+      "category": "fx_translation",
+      "description": "Cumulative translation adjustment (CTA) for foreign operations recognised in OCI.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "COALESCE({cta_prior}, 0) + {cta_movement}",
+        "arguments": {
+          "cta_prior": "field:cta_prior",
+          "cta_movement": "field:cta_movement"
+        }
+      },
+      "preaggregation": {
+        "enabled": true,
+        "grain": "monthly",
+        "aggregation": "last_non_null",
+        "snapshot": true,
+        "rollups": ["quarterly", "yearly"]
+      },
+      "badge": "🟧",
+      "function_class": "DAX-Logical",
+      "functions_used": ["COALESCE", "ADD"],
+      "governance": { "status": "golden" }
+    },
+    {
+      "node_id": "equity_method_share_of_profit",
+      "category": "equity_method",
+      "description": "Investor share of investee profit/loss based on ownership percentage.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "{investee_net_income} * {ownership_pct}",
+        "arguments": {
+          "investee_net_income": "field:investee_net_income",
+          "ownership_pct": "field:ownership_pct"
+        }
+      },
+      "preaggregation": {
+        "enabled": true,
+        "grain": "quarterly",
+        "aggregation": "sum",
+        "snapshot": false
+      },
+      "badge": "🟩",
+      "function_class": "DAX-Financial",
+      "functions_used": ["MULTIPLY"],
+      "governance": { "status": "golden" }
+    },
+    {
+      "node_id": "equity_method_carrying_value",
+      "category": "equity_method",
+      "description": "Carrying value rollforward: opening + share_of_profit − dividends ± adjustments (OCI/FX/impairment).",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "{opening_carrying_value} + {equity_method_share_of_profit} - {dividends_received} + {oci_adjustment} + {fx_translation}",
+        "arguments": {
+          "opening_carrying_value": "field:opening_carrying_value",
+          "equity_method_share_of_profit": "calc:equity_method_share_of_profit",
+          "dividends_received": "field:dividends_received",
+          "oci_adjustment": "field:oci_adjustment",
+          "fx_translation": "calc:fx_translation_reserve_oci"
+        }
+      },
+      "preaggregation": {
+        "enabled": true,
+        "grain": "quarterly",
+        "aggregation": "last_non_null",
+        "snapshot": true
+      },
+      "badge": "🟧",
+      "function_class": "DAX-Logical",
+      "functions_used": ["ADD", "SUBTRACT"],
+      "governance": { "status": "golden" }
+    },
+    {
+      "node_id": "nci_share_of_profit",
+      "category": "consolidation",
+      "description": "Non-controlling interest (NCI) share of subsidiary profit.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "{subsidiary_profit} * {nci_pct}",
+        "arguments": {
+          "subsidiary_profit": "field:subsidiary_profit",
+          "nci_pct": "field:nci_pct"
+        }
+      },
+      "preaggregation": {
+        "enabled": true,
+        "grain": "quarterly",
+        "aggregation": "sum",
+        "snapshot": false
+      },
+      "badge": "🟩",
+      "function_class": "DAX-Financial",
+      "functions_used": ["MULTIPLY"],
+      "governance": { "status": "golden" }
+    },
+    {
+      "node_id": "impairment_loss_incurred",
+      "category": "impairment",
+      "description": "Impairment loss when carrying amount exceeds recoverable amount.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "MAX(0, {carrying_amount} - {recoverable_amount})",
+        "arguments": {
+          "carrying_amount": "field:carrying_amount",
+          "recoverable_amount": "field:recoverable_amount"
+        }
+      },
+      "preaggregation": {
+        "enabled": true,
+        "grain": "quarterly",
+        "aggregation": "sum",
+        "snapshot": false
+      },
+      "badge": "🟧",
+      "function_class": "DAX-Logical",
+      "functions_used": ["MAX", "SUBTRACT"],
+      "governance": { "status": "golden" }
+    },
+    {
+      "node_id": "dividend_income_accrual",
+      "category": "income_recognition",
+      "description": "Dividend income recognised when the right to receive is established.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "SUMX(FILTER({dividend_events}, {ex_date} <= {period_end}), {dividend_amount})",
+        "arguments": {
+          "dividend_events": "table:dividend_events",
+          "ex_date": "field:ex_date",
+          "period_end": "field:period_end",
+          "dividend_amount": "field:dividend_amount"
+        }
+      },
+      "preaggregation": {
+        "enabled": true,
+        "grain": "monthly",
+        "aggregation": "sum",
+        "snapshot": false,
+        "rollups": ["quarterly", "yearly"]
+      },
+      "badge": "🟨",
+      "function_class": "DAX-Iterator",
+      "functions_used": ["SUMX", "FILTER"],
+      "governance": { "status": "golden" }
+    },
+    {
+      "node_id": "fair_value_hierarchy_exposure",
+      "category": "disclosure",
+      "description": "Exposure by fair value hierarchy level (Level 1/2/3) for disclosure.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "SUMX(FILTER({positions}, {fv_level} = SELECTEDVALUE({level_filter})), {fair_value})",
+        "arguments": {
+          "positions": "table:positions",
+          "fv_level": "field:fv_hierarchy_level",
+          "level_filter": "field:level_filter",
+          "fair_value": "field:fair_value"
+        }
+      },
+      "preaggregation": {
+        "enabled": true,
+        "grain": "quarterly",
+        "aggregation": "sum",
+        "snapshot": true,
+        "rollups": ["yearly"],
+        "dimensions": ["fv_hierarchy_level"]
+      },
+      "badge": "🟪",
+      "function_class": "DAX-Meta",
+      "functions_used": ["SUMX", "FILTER", "SELECTEDVALUE"],
+      "governance": { "status": "golden" }
+    },
+    {
+      "node_id": "oci_recycling_on_disposal",
+      "category": "oci",
+      "description": "Recycling of accumulated OCI to P&L upon disposal of FVOCI assets.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "MIN({accumulated_oci_balance}, {realised_gain_loss_disposal})",
+        "arguments": {
+          "accumulated_oci_balance": "field:accumulated_oci_balance",
+          "realised_gain_loss_disposal": "calc:realised_gain_loss_disposal"
+        }
+      },
+      "preaggregation": {
+        "enabled": true,
+        "grain": "monthly",
+        "aggregation": "sum",
+        "snapshot": false
+      },
+      "badge": "🟧",
+      "function_class": "DAX-Logical",
+      "functions_used": ["MIN"],
+      "governance": { "status": "golden" }
+    }
+  ]
+}

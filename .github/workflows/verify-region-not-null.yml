@@ -1,0 +1,85 @@
+name: Verify Region NOT NULL Migration
+
+on:
+  pull_request:
+    paths:
+      - 'backend/migrations/20260207_set_region_not_null.up.sql'
+      - 'backend/migrations/20260207_add_region_to_snapshots_and_preaggs.up.sql'
+  workflow_dispatch: {}
+
+jobs:
+  verify-migration:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: alpha
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 10s --health-timeout 5s --health-retries 5
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: '1.25'
+
+      - name: Install psql client
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client
+
+      - name: Wait for Postgres
+        env:
+          PGPASSWORD: postgres
+        run: |
+          echo "Waiting for Postgres to be ready..."
+          for i in {1..30}; do
+            if pg_isready -h localhost -U postgres -d alpha -q; then
+              echo "Postgres is ready"
+              break
+            fi
+            sleep 2
+          done
+
+      - name: Run migrations
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/alpha?sslmode=disable
+        run: |
+          echo "Running migrations via migration runner"
+          go run ./backend/migrations/cmd/migrate.go || (echo "Migration runner failed" && exit 1)
+
+      - name: Verify pre-aggregations region backfill
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/alpha?sslmode=disable
+          PGPASSWORD: postgres
+        run: |
+          echo "Checking for NULL regions in semantic_pre_aggregations_v2"
+          COUNT=$(psql "$DATABASE_URL" -t -c "SELECT COUNT(*) FROM semantic_pre_aggregations_v2 WHERE region IS NULL;")
+          echo "Raw COUNT output: '$COUNT'"
+          COUNT=$(echo "$COUNT" | tr -d '[:space:]')
+          if [ -z "$COUNT" ]; then
+            echo "Verification query returned empty result; failing"
+            exit 1
+          fi
+          if [ "$COUNT" -ne 0 ]; then
+            echo "ERROR: Found $COUNT pre-agg rows with NULL region. Backfill required before setting NOT NULL."
+            exit 1
+          fi
+          echo "Pre-aggregation region backfill verified: 0 nulls."
+
+      - name: Run PlanRequest unit test
+        run: |
+          echo "Running PlanRequest validation test"
+          go test ./backend/internal/api -run TestPlanRequest_ValidateAcceptsRegion -v
+
+      - name: Success
+        run: |
+          echo "Migration verification passed: pre-agg regions present and PlanRequest test succeeded"

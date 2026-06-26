@@ -1,0 +1,46 @@
+.container {
+  padding: 24px;
+  background: #f5f5f5;
+  min-height: 100vh;
+}
+
+.sidePane {
+  padding: 16px;
+}
+
+.contentHeader {
+  margin: 0;
+}
+
+.hierarchyTitle {
+  font-size: 14px;
+  font-weight: 500;
+  margin-bottom: 16px;
+}
+
+.layoutContainer {
+  background: #fff;
+  border-radius: 4px;
+}
+
+.layoutSider {
+  background: #fafafa;
+  border-right: 1px solid #f0f0f0;
+}
+
+.layoutContent {
+  padding: 24px;
+}
+
+.afixButton {
+  bottom: 24px;
+  right: 24px;
+}
+
+.fieldActionSpace {
+  gap: 4px;
+}
+
+.headerSpace {
+  margin-bottom: 24px;
+}

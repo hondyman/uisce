@@ -1,0 +1,455 @@
+/* Professional Abbreviation Manager Styles */
+.abbreviation-manager {
+  background-color: white;
+  border-radius: 12px;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+  border: 1px solid rgb(243, 244, 246);
+  min-height: 600px;
+}
+
+.abbreviation-manager .tab-navigation {
+  border-bottom: 1px solid rgb(243, 244, 246);
+  background: linear-gradient(to right, rgb(249, 250, 251), white);
+  border-radius: 12px 12px 0 0;
+}
+
+.abbreviation-manager .tab-nav {
+  display: flex;
+  gap: 0;
+  padding: 4px;
+  margin: 16px;
+  margin-bottom: 0;
+}
+
+.abbreviation-manager .tab-button {
+  padding: 12px 24px;
+  font-size: 14px;
+  font-weight: 500;
+  border-radius: 8px;
+  transition: all 0.2s;
+  color: rgb(75, 85, 99);
+  cursor: pointer;
+  border: none;
+  background: none;
+}
+
+.abbreviation-manager .tab-button:hover {
+  color: rgb(17, 24, 39);
+  background-color: white;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.abbreviation-manager .tab-button.active {
+  background-color: white;
+  color: rgb(29, 78, 216);
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  border: 1px solid rgb(229, 231, 235);
+}
+
+.abbreviation-manager .tab-content {
+  padding: 24px;
+  min-height: 500px;
+}
+
+/* Abbreviations List Styles */
+.abbreviations-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.abbreviation-card {
+  background: linear-gradient(to bottom right, white, rgb(249, 250, 251));
+  border-radius: 12px;
+  padding: 20px;
+  border: 1px solid rgb(243, 244, 246);
+  transition: all 0.2s;
+}
+
+.abbreviation-card:hover {
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  border-color: rgb(229, 231, 235);
+}
+
+.abbreviation-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 12px;
+}
+
+.abbreviation-main {
+  flex: 1;
+}
+
+.abbreviation-term {
+  font-size: 18px;
+  font-weight: 700;
+  color: rgb(17, 24, 39);
+  margin-bottom: 4px;
+  font-family: 'SF Mono', 'Monaco', 'Consolas', monospace;
+}
+
+.abbreviation-expansion {
+  font-size: 16px;
+  color: rgb(29, 78, 216);
+  font-weight: 500;
+}
+
+.abbreviation-notes {
+  font-size: 14px;
+  color: rgb(75, 85, 99);
+  margin-top: 8px;
+  font-style: italic;
+}
+
+.abbreviation-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.abbreviation-action-btn {
+  padding: 8px;
+  border-radius: 8px;
+  color: rgb(107, 114, 128);
+  transition: color 0.15s;
+  cursor: pointer;
+  border: none;
+  background: none;
+}
+
+.abbreviation-action-btn:hover {
+  color: rgb(55, 65, 81);
+  background-color: white;
+}
+
+/* Form Styles */
+.abbreviation-form {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.form-label {
+  display: block;
+  font-size: 14px;
+  font-weight: 600;
+  color: rgb(55, 65, 81);
+  margin-bottom: 8px;
+}
+
+.form-input {
+  width: 100%;
+  padding: 12px 16px;
+  border-radius: 8px;
+  border: 1px solid rgb(229, 231, 235);
+  transition: all 0.2s;
+  background-color: white;
+}
+
+.form-input:focus {
+  outline: none;
+  border-color: transparent;
+  box-shadow: 0 0 0 2px rgb(59, 130, 246), 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+.form-textarea {
+  width: 100%;
+  padding: 12px 16px;
+  border-radius: 8px;
+  border: 1px solid rgb(229, 231, 235);
+  transition: all 0.2s;
+  background-color: white;
+  resize: none;
+  min-height: 80px;
+}
+
+.form-textarea:focus {
+  outline: none;
+  border-color: transparent;
+  box-shadow: 0 0 0 2px rgb(59, 130, 246), 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+.form-button {
+  padding: 12px 24px;
+  border-radius: 8px;
+  font-weight: 500;
+  transition: all 0.2s;
+  cursor: pointer;
+  border: none;
+}
+
+.form-button-primary {
+  background: linear-gradient(to right, rgb(37, 99, 235), rgb(29, 78, 216));
+  color: white;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+}
+
+.form-button-primary:hover {
+  background: linear-gradient(to right, rgb(29, 78, 216), rgb(30, 64, 175));
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+}
+
+.form-button-secondary {
+  background-color: rgb(243, 244, 246);
+  color: rgb(55, 65, 81);
+  border: 1px solid rgb(209, 213, 219);
+}
+
+.form-button-secondary:hover {
+  background-color: rgb(229, 231, 235);
+  border-color: rgb(156, 163, 175);
+}
+
+/* Test Results Styles */
+.test-section {
+  background: linear-gradient(to bottom right, rgb(239, 246, 255), rgb(238, 242, 255));
+  border-radius: 12px;
+  padding: 24px;
+  border: 1px solid rgb(191, 219, 254);
+}
+
+.test-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.test-title {
+  font-size: 18px;
+  font-weight: 700;
+  color: rgb(17, 24, 39);
+}
+
+.test-input-group {
+  display: flex;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.test-input {
+  flex: 1;
+  padding: 8px 16px;
+  border-radius: 8px;
+  border: 1px solid rgb(229, 231, 235);
+}
+
+.test-input:focus {
+  outline: none;
+  border-color: transparent;
+  box-shadow: 0 0 0 2px rgb(59, 130, 246);
+}
+
+.test-button {
+  padding: 8px 16px;
+  background-color: rgb(37, 99, 235);
+  color: white;
+  border-radius: 8px;
+  font-weight: 500;
+  white-space: nowrap;
+  transition: background-color 0.15s;
+  border: none;
+  cursor: pointer;
+}
+
+.test-button:hover {
+  background-color: rgb(29, 78, 216);
+}
+
+.test-results {
+  margin-top: 16px;
+  padding: 16px;
+  background-color: white;
+  border-radius: 8px;
+  border: 1px solid rgb(229, 231, 235);
+}
+
+.result-item {
+  margin-bottom: 8px;
+  padding: 12px;
+  background-color: rgb(249, 250, 251);
+  border-radius: 8px;
+}
+
+.result-label {
+  font-weight: 500;
+  color: rgb(55, 65, 81);
+  margin-bottom: 4px;
+}
+
+.result-value {
+  color: rgb(17, 24, 39);
+  font-family: monospace;
+  font-size: 14px;
+}
+
+/* Loading States */
+.loading-skeleton {
+  animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+.skeleton-card {
+  background-color: rgb(229, 231, 235);
+  border-radius: 12px;
+  height: 80px;
+  margin-bottom: 16px;
+}
+
+.skeleton-text {
+  background-color: rgb(229, 231, 235);
+  border-radius: 4px;
+  height: 16px;
+  margin-bottom: 8px;
+}
+
+.skeleton-text.short {
+  width: 60%;
+}
+
+.skeleton-text.medium {
+  width: 80%;
+}
+
+/* Empty States */
+.empty-state {
+  text-align: center;
+  padding: 48px 0;
+}
+
+.empty-icon {
+  width: 64px;
+  height: 64px;
+  margin: 0 auto 16px auto;
+  color: rgb(156, 163, 175);
+}
+
+.empty-title {
+  font-size: 18px;
+  font-weight: 500;
+  color: rgb(17, 24, 39);
+  margin-bottom: 8px;
+}
+
+.empty-description {
+  color: rgb(75, 85, 99);
+  margin-bottom: 24px;
+}
+
+/* Success/Error States */
+.success-message {
+  padding: 16px;
+  background-color: rgb(240, 253, 244);
+  border: 1px solid rgb(187, 247, 208);
+  border-radius: 8px;
+  margin-bottom: 16px;
+  color: rgb(22, 101, 52);
+}
+
+.error-message {
+  padding: 16px;
+  background-color: rgb(254, 242, 242);
+  border: 1px solid rgb(252, 165, 165);
+  border-radius: 8px;
+  margin-bottom: 16px;
+  color: rgb(153, 27, 27);
+}
+
+/* Modal Styles */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  backdrop-filter: blur(4px);
+}
+
+.modal-content {
+  background-color: white;
+  border-radius: 12px;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+  max-width: 32rem;
+  width: 100%;
+  max-height: 90vh;
+  overflow: hidden;
+}
+
+.modal-header {
+  padding: 16px 24px;
+  border-bottom: 1px solid rgb(243, 244, 246);
+  background: linear-gradient(to right, rgb(249, 250, 251), white);
+}
+
+.modal-title {
+  font-size: 18px;
+  font-weight: 700;
+  color: rgb(17, 24, 39);
+}
+
+.modal-body {
+  padding: 24px;
+  overflow-y: auto;
+}
+
+.modal-footer {
+  padding: 16px 24px;
+  border-top: 1px solid rgb(243, 244, 246);
+  background-color: rgb(249, 250, 251);
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+/* Search Input Integration */
+.abbreviation-search {
+  margin-bottom: 24px;
+}
+
+.search-results-info {
+  font-size: 14px;
+  color: rgb(75, 85, 99);
+  margin-bottom: 16px;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .abbreviation-manager .tab-nav {
+    flex-direction: column;
+    gap: 4px;
+  }
+  
+  .abbreviation-manager .tab-content {
+    padding: 16px;
+  }
+  
+  .abbreviation-card {
+    padding: 16px;
+  }
+  
+  .test-input-group {
+    flex-direction: column;
+    gap: 8px;
+  }
+}

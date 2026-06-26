@@ -1,0 +1,11 @@
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: calendar-service-strict
+  namespace: calendar
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels:
+      app: calendar-service
+  unhealthyPodEvictionPolicy: IfHealthyBudget

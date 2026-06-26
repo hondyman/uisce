@@ -1,0 +1,481 @@
+# Database Performance Monitoring Dashboard
+# Deploy: kubectl apply -f database-monitoring-config.yaml
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: database-monitoring-rules
+  namespace: calendar
+data:
+  # Prometheus alert rules for database performance
+  database-alerts.yml: |
+    groups:
+      - name: calendar_database_alerts
+        interval: 30s
+        rules:
+          # ===================================================================
+          # QUERY PERFORMANCE ALERTS
+          # ===================================================================
+
+          - alert: SlowQueryDetected
+            expr: |
+              rate(pg_stat_statements_mean_exec_time_ms{job="postgres"}[5m]) > 100
+            for: 5m
+            labels:
+              severity: warning
+              component: database
+            annotations:
+              summary: "Slow query detected on {{ $labels.datname }}"
+              description: "Query {{ $labels.query | truncateWords 20 }} is taking {{ $value | humanize }}ms average"
+              runbook_url: "https://wiki/runbooks/slow-queries"
+
+          - alert: CriticalSlowQuery
+            expr: |
+              rate(pg_stat_statements_mean_exec_time_ms{job="postgres"}[1m]) > 1000
+            for: 1m
+            labels:
+              severity: critical
+              component: database
+            annotations:
+              summary: "CRITICAL: Query taking > 1s on {{ $labels.datname }}"
+              description: "{{ $labels.query | truncateWords 30 }} - {{ $value | humanize }}ms"
+
+          - alert: FullTableScanRate
+            expr: |
+              rate(pg_stat_user_tables_seq_scan[5m]) > 100
+            for: 5m
+            labels:
+              severity: warning
+              component: database
+            annotations:
+              summary: "High full table scans on {{ $labels.relname }}"
+              description: "Table {{ $labels.relname }} has {{ $value | humanize }} sequential scans/sec"
+
+          # ===================================================================
+          # CONNECTION POOL ALERTS
+          # ===================================================================
+
+          - alert: DBConnectionPoolExhausted
+            expr: |
+              (
+                pg_stat_activity_count{state="active"} / 
+                on(job) group_left() pg_settings_max_connections
+              ) > 0.8
+            for: 2m
+            labels:
+              severity: critical
+              component: database
+            annotations:
+              summary: "PostgreSQL connection pool {{ $value | humanizePercentage }} in use"
+              description: "{{ $labels.datname }}: {{ $value | humanizePercentage }} of max_connections exhausted"
+
+          - alert: PgBouncerConnectionBacklog
+            expr: |
+              pgbouncer_client_connections > pgbouncer_server_connections * 1.5
+            for: 2m
+            labels:
+              severity: warning
+              component: database
+            annotations:
+              summary: "pgBouncer has connection backlog"
+              description: "Clients waiting: {{ $value | humanize }}, try pooling optimization"
+
+          # ===================================================================
+          # CACHE & INDEX PERFORMANCE
+          # ===================================================================
+
+          - alert: LowBufferCacheHitRate
+            expr: |
+              (1.0 - (
+                rate(pg_stat_database_blks_read{datname="calendar_service"}[5m]) /
+                (rate(pg_stat_database_blks_read{datname="calendar_service"}[5m]) + 
+                 rate(pg_stat_database_blks_hit{datname="calendar_service"}[5m]))
+              )) < 0.99
+            for: 10m
+            labels:
+              severity: warning
+              component: database
+            annotations:
+              summary: "Low buffer cache hit rate: {{ $value | humanizePercentage }}"
+              description: "Database cache efficiency is poor. Consider: disable sequential scans, add indexes, or increase shared_buffers"
+
+          - alert: IndexBloat
+            expr: |
+              pg_index_size_bytes / pg_relation_size_bytes > 0.3
+            for: 30m
+            labels:
+              severity: info
+              component: database
+            annotations:
+              summary: "Index {{ $labels.indexname }} is bloated"
+              description: "Index is {{ $value | humanizePercentage }} of table size. Consider REINDEX"
+
+          - alert: UnusedIndexes
+            expr: |
+              pg_stat_user_indexes_idx_scan == 0
+            for: 7d
+            labels:
+              severity: info
+              component: database
+            annotations:
+              summary: "Unused index detected: {{ $labels.indexname }}"
+              description: "Index has not been scanned in 7 days. Consider drop to save space"
+
+          # ===================================================================
+          # TRANSACTION & LOCK ALERTS
+          # ===================================================================
+
+          - alert: LongRunningTransaction
+            expr: |
+              pg_stat_activity_max_transaction_duration_seconds > 300
+            for: 5m
+            labels:
+              severity: warning
+              component: database
+            annotations:
+              summary: "Long running transaction ({{ $value | humanizeDuration }})"
+              description: "PID {{ $labels.pid }} query: {{ $labels.query | truncateWords 30 }}"
+
+          - alert: ExcessiveLocks
+            expr: |
+              pg_locks_count > 1000
+            for: 2m
+            labels:
+              severity: warning
+              component: database
+            annotations:
+              summary: "Excessive locks detected: {{ $value | humanize }}"
+              description: "May indicate contention or deadlock conditions"
+
+          - alert: DeadlockDetected
+            expr: |
+              rate(pg_stat_database_deadlocks[5m]) > 0
+            for: 1m
+            labels:
+              severity: critical
+              component: database
+            annotations:
+              summary: "Database deadlocks detected"
+              description: "{{ $value | humanize }} deadlocks/sec - investigate transaction isolation"
+
+          # ===================================================================
+          # REPLICATION & DATA INTEGRITY
+          # ===================================================================
+
+          - alert: ReplicationLag
+            expr: |
+              pg_replication_lag_bytes{job="postgres_replica"} > 1073741824  # 1GB
+            for: 5m
+            labels:
+              severity: critical
+              component: database
+            annotations:
+              summary: "Replication lag > 1GB on replica {{ $labels.instance }}"
+              description: "Lag: {{ $value | humanize1024 }}B - may lose data on primary failure"
+
+          - alert: LowDiskSpace
+            expr: |
+              (node_filesystem_avail_bytes{mountpoint="/var/lib/postgresql"} / 
+               node_filesystem_size_bytes{mountpoint="/var/lib/postgresql"}) < 0.1
+            for: 5m
+            labels:
+              severity: critical
+              component: database
+            annotations:
+              summary: "PostgreSQL disk < 10% available"
+              description: "{{ $value | humanizePercentage }} free - immediate action needed"
+
+          # ===================================================================
+          # MAINTENANCE ALERTS
+          # ===================================================================
+
+          - alert: AutovacuumTupleCount
+            expr: |
+              pg_stat_user_tables_live_tuples > 10000000
+            for: 30m
+            labels:
+              severity: info
+              component: database
+            annotations:
+              summary: "Table {{ $labels.relname }} has {{ $value | humanize }} rows"
+              description: "Consider VACUUM FULL if bloat is detected"
+
+          - alert: VacuumRuntime
+            expr: |
+              pg_stat_progress_vacuum_elapsed_seconds > 3600  # 1 hour
+            for: 5m
+            labels:
+              severity: warning
+              component: database
+            annotations:
+              summary: "VACUUM running > 1 hour on {{ $labels.relname }}"
+              description: "Consider tuning autovacuum settings"
+
+  # ========================================================================
+  # Prometheus Scrape Configuration for Database Metrics
+  # ========================================================================
+  prometheus-scrape-config.yml: |
+    global:
+      scrape_interval: 30s
+      evaluation_interval: 30s
+      external_labels:
+        cluster: production
+        component: database
+
+    scrape_configs:
+      # PostgreSQL Exporter (pg_exporter)
+      - job_name: postgres_main
+        static_configs:
+          - targets:
+              - postgresql.database.svc.cluster.local:5432
+        metric_relabel_configs:
+          # Keep only relevant metrics for Calendar service
+          - source_labels: [__name__]
+            regex: 'pg_stat_(statements|user_tables|activity|database).*'
+            action: keep
+          # Drop high-cardinality query text labels
+          - source_labels: [query]
+            regex: '.{1000,}'  # Drop queries > 1000 chars
+            action: drop
+
+      # pgBouncer Exporter
+      - job_name: pgbouncer
+        static_configs:
+          - targets:
+              - pgbouncer.calendar.svc.cluster.local:9127
+        metric_relabel_configs:
+          - source_labels: [__name__]
+            regex: 'pgbouncer_.*'
+            action: keep
+
+  # ========================================================================
+  # Grafana Dashboard Configuration
+  # ========================================================================
+  grafana-dashboard-database.json: |
+    {
+      "dashboard": {
+        "title": "Calendar Database Performance - Phase 8",
+        "uid": "calendar-db-performance",
+        "version": 1,
+        "timezone": "UTC",
+        "panels": [
+          {
+            "title": "Query Response Time (P95)",
+            "targets": [
+              {
+                "expr": "histogram_quantile(0.95, rate(pg_stat_statements_duration_seconds[5m]))",
+                "legendFormat": "{{ query }}"
+              }
+            ],
+            "gridPos": {"x": 0, "y": 0, "w": 12, "h": 8}
+          },
+          {
+            "title": "Cache Hit Ratio",
+            "targets": [
+              {
+                "expr": "(rate(pg_stat_database_blks_hit[5m]) / (rate(pg_stat_database_blks_read[5m]) + rate(pg_stat_database_blks_hit[5m]))) * 100",
+                "legendFormat": "Hit Ratio %"
+              }
+            ],
+            "gridPos": {"x": 12, "y": 0, "w": 12, "h": 8}
+          },
+          {
+            "title": "Active Connections by Type",
+            "targets": [
+              {
+                "expr": "pg_stat_activity_count",
+                "legendFormat": "{{ state }}"
+              }
+            ],
+            "gridPos": {"x": 0, "y": 8, "w": 12, "h": 8}
+          },
+          {
+            "title": "pgBouncer Pool Utilization",
+            "targets": [
+              {
+                "expr": "pgbouncer_client_connections / pgbouncer_server_connections",
+                "legendFormat": "Client/Server Ratio"
+              }
+            ],
+            "gridPos": {"x": 12, "y": 8, "w": 12, "h": 8}
+          },
+          {
+            "title": "Slow Queries (> 100ms)",
+            "targets": [
+              {
+                "expr": "count(pg_stat_statements_mean_exec_time_ms > 100)",
+                "legendFormat": "Slow Queries"
+              }
+            ],
+            "gridPos": {"x": 0, "y": 16, "w": 8, "h": 6}
+          },
+          {
+            "title": "Full Table Scans/sec",
+            "targets": [
+              {
+                "expr": "rate(pg_stat_user_tables_seq_scan[5m])",
+                "legendFormat": "{{ relname }}"
+              }
+            ],
+            "gridPos": {"x": 8, "y": 16, "w": 8, "h": 6}
+          },
+          {
+            "title": "Index Usage",
+            "targets": [
+              {
+                "expr": "pg_stat_user_indexes_idx_scan",
+                "legendFormat": "{{ indexname }}"
+              }
+            ],
+            "gridPos": {"x": 16, "y": 16, "w": 8, "h": 6}
+          },
+          {
+            "title": "Lock Wait Time",
+            "targets": [
+              {
+                "expr": "pg_lock_timeout_seconds",
+                "legendFormat": "Lock Duration"
+              }
+            ],
+            "gridPos": {"x": 0, "y": 22, "w": 12, "h": 8}
+          },
+          {
+            "title": "Replication Lag (bytes)",
+            "targets": [
+              {
+                "expr": "pg_replication_lag_bytes",
+                "legendFormat": "Lag"
+              }
+            ],
+            "gridPos": {"x": 12, "y": 22, "w": 12, "h": 8}
+          }
+        ]
+      }
+    }
+---
+
+# ServiceMonitor for automatic Prometheus scrape setup
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: database-monitoring
+  namespace: calendar
+spec:
+  selector:
+    matchLabels:
+      monitoring: enabled
+  endpoints:
+  - port: metrics
+    interval: 30s
+    path: /metrics
+---
+
+# PrometheusRule for database alerts
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: database-alerts
+  namespace: calendar
+spec:
+  groups:
+  - name: calendar_database
+    interval: 30s
+    rules:
+    - alert: SlowQueriesDetected
+      expr: |
+        (rate(pg_stat_statements_calls_total[5m]) * 
+         pg_stat_statements_mean_exec_time_ms / 1000) > 1.0
+      for: 5m
+      labels:
+        severity: warning
+        component: database
+      annotations:
+        summary: "Slow queries detected"
+        description: "Average query taking {{ $value | humanize }}s"
+
+    - alert: HighDiskUsage
+      expr: |
+        (100 - (node_filesystem_avail_bytes{mountpoint="/var/lib/postgresql"} / 
+                node_filesystem_size_bytes{mountpoint="/var/lib/postgresql"} * 100)) > 80
+      for: 10m
+      labels:
+        severity: warning
+        component: database
+      annotations:
+        summary: "PostgreSQL disk {{ $value | humanize }}% used"
+
+    - alert: ConnectionPoolNearMax
+      expr: |
+        pg_stat_activity_count > 25
+      for: 5m
+      labels:
+        severity: warning
+        component: database
+      annotations:
+        summary: "PostgreSQL has {{ $value | humanize }} active connections"
+---
+
+# ConfigMap with query examples for manual performance testing
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: database-optimization-queries
+  namespace: calendar
+data:
+  index-verification.sql: |
+    -- Verify critical indexes exist
+    SELECT indexname, tablename, idx_scan, idx_tup_read, idx_tup_fetch
+    FROM pg_stat_user_indexes
+    WHERE tablename IN ('calendars', 'calendar_holidays', 'calendar_blackouts')
+    ORDER BY idx_scan DESC;
+
+  slow-queries.sql: |
+    -- Find slowest queries (requires pg_stat_statements)
+    SELECT query, calls, mean_exec_time, max_exec_time, total_exec_time
+    FROM pg_stat_statements
+    WHERE mean_exec_time > 100
+    ORDER BY mean_exec_time DESC
+    LIMIT 20;
+
+  cache-hit-ratio.sql: |
+    -- Check buffer cache effectiveness
+    SELECT 
+        datname,
+        ROUND(100 - 100 * sum(heap_blks_read) / 
+              (sum(heap_blks_read) + sum(heap_blks_hit)), 2) AS ratio
+    FROM pg_statio_user_tables
+    GROUP BY datname
+    ORDER BY ratio DESC;
+
+  connection-status.sql: |
+    -- Monitor active connections
+    SELECT 
+        datname, 
+        count(*) as connections,
+        state,
+        wait_event
+    FROM pg_stat_activity
+    WHERE pid <> pg_backend_pid()
+    GROUP BY datname, state, wait_event
+    ORDER BY connections DESC;
+
+  table-bloat.sql: |
+    -- Identify bloated tables needing VACUUM
+    SELECT 
+        schemaname,
+        tablename,
+        pg_size_pretty(pg_total_relation_size(schemaname||'.'||tablename)) as size,
+        n_live_tup as rows
+    FROM pg_stat_user_tables
+    ORDER BY pg_total_relation_size(schemaname||'.'||tablename) DESC;
+
+  index-size.sql: |
+    -- Show all index sizes
+    SELECT 
+        tablename,
+        indexname,
+        pg_size_pretty(pg_relation_size(indexrelid)) as size,
+        idx_scan as scans
+    FROM pg_stat_user_indexes
+    WHERE tablename IN ('calendars', 'calendar_holidays', 'calendar_blackouts')
+    ORDER BY pg_relation_size(indexrelid) DESC;

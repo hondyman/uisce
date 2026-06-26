@@ -1,0 +1,12 @@
+id: policy_approval_thresholds
+type: ApprovalThresholds
+version: 1.0.0
+name: Approval Thresholds
+status: active
+rules:
+  - when: "suggested_action == 'InitiateTaxLossHarvest' and loss_amount > 5000"
+    approval_required: true
+  - when: "suggested_action == 'InitiateRebalance' and portfolio_size > 250000"
+    approval_required: true
+  - when: "confidence < 0.6"
+    approval_required: true

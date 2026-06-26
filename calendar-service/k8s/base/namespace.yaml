@@ -1,0 +1,10 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: calendar
+  labels:
+    name: calendar
+    pod-security.kubernetes.io/enforce: baseline
+  annotations:
+    description: "Calendar Service production namespace"
+    environment: "production"

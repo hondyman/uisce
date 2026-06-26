@@ -1,0 +1,33 @@
+type Mutation {
+  scan_datasource(
+    datasource_id: uuid
+  ): ScanDatasourceOutput
+}
+
+type Mutation {
+  test_datasource_connection(
+    connection_details: String!
+  ): TestConnectionOutput
+}
+
+type ScanDatasourceOutput {
+  results: [ScanResult!]!
+  status: String
+  message: String
+}
+
+type ScanResult {
+  datasource_id: uuid
+  name: String
+  success: Boolean
+  error: String
+  added: Int
+  updated: Int
+  removed: Int
+}
+
+type TestConnectionOutput {
+  success: Boolean!
+  message: String
+}
+

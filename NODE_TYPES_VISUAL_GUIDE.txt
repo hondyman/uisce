@@ -1,0 +1,89 @@
+════════════════════════════════════════════════════════════════════════════════
+           🎯 NODE TYPES FEATURE - NAVIGATION GUIDE
+════════════════════════════════════════════════════════════════════════════════
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                        TOP NAVIGATION BAR                                   │
+│                                                                             │
+│  [Micro-Bundle]  [Bundle]  [Fixed]  [JIT]  [Access]  [Core ▾]  [Fabric ▾] │
+│   [Catalog]      [Explorer] [Income] [Request] [Explanation]  ↑           │
+│                                                                │           │
+│                                                         CLICK HERE!        │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+                              ↓ When you click Core ↓
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                     CORE DROPDOWN MENU                                      │
+│ ┌─────────────────────────────────────────────────┐                        │
+│ │  Domains                                        │                        │
+│ │  Manage the three-level data domain hierarchy. │                        │
+│ ├─────────────────────────────────────────────────┤                        │
+│ │  Semantic Mapper                                │                        │
+│ │  Map database columns to semantic terms...     │                        │
+│ ├─────────────────────────────────────────────────┤                        │
+│ │  ★ Node Types ★  ← CLICK THIS!                 │                        │
+│ │  Configure node types and their properties...  │                        │
+│ ├─────────────────────────────────────────────────┤                        │
+│ │  Tenant Management                              │                        │
+│ │  Manage tenants, instances, products...        │                        │
+│ └─────────────────────────────────────────────────┘                        │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+                              ↓ Takes you to ↓
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                    NODE TYPE MANAGEMENT PAGE                                │
+│                                                                             │
+│  Node Type Management                         [+ Create Node Type]         │
+│  Configure node types and their properties for your business glossary      │
+│                                                                             │
+│ ┌───────────────────────────────────────────────────────────────────────┐  │
+│ │ Type Name      │ Description   │ Properties │ Status  │ Actions      │  │
+│ ├───────────────────────────────────────────────────────────────────────┤  │
+│ │ business_term  │ Business Term │ 5 props    │ Active  │ Edit Delete  │  │
+│ │ semantic_term  │ Semantic Term │ 3 props    │ Active  │ Edit Delete  │  │
+│ │ database_col   │ DB Column     │ 7 props    │ Active  │ Edit Delete  │  │
+│ └───────────────────────────────────────────────────────────────────────┘  │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+════════════════════════════════════════════════════════════════════════════════
+
+                            ALTERNATIVE ROUTE
+
+           Just type in browser address bar:
+           http://localhost:5173/core/node-types
+
+════════════════════════════════════════════════════════════════════════════════
+
+                         ⚠️  IMPORTANT NOTE  ⚠️
+
+    Before you can see this page, you MUST rebuild the backend:
+
+    $ cd /Users/eganpj/GitHub/semlayer
+    $ docker compose build backend && docker compose up -d backend
+
+    This adds the new Node Types API routes to the backend.
+    Takes about 2-3 minutes.
+
+════════════════════════════════════════════════════════════════════════════════
+
+                          STATUS INDICATORS
+
+    ✅ Frontend Code: COMPLETE
+    ✅ Backend Code: COMPLETE  
+    ✅ Routes: REGISTERED
+    ✅ Menu: INTEGRATED
+    ⏳ Backend Container: NEEDS REBUILD
+
+════════════════════════════════════════════════════════════════════════════════
+
+                           QUICK HELP
+
+    Can't find Core menu?        → Hard refresh browser (Cmd+Shift+R)
+    Menu empty/broken?           → Check browser console (F12)
+    Page shows "Tenant Required"?→ Select a tenant first
+    Backend returns 404?         → Rebuild backend container
+    Still stuck?                 → Read START_HERE_NODE_TYPES.md
+
+════════════════════════════════════════════════════════════════════════════════

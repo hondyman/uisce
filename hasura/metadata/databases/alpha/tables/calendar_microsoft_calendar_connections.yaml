@@ -1,0 +1,3 @@
+table:
+  name: microsoft_calendar_connections
+  schema: calendar

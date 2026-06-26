@@ -1,0 +1,39 @@
+cubes:
+  - name: Document
+    sql_table: document
+    title: Document
+
+    measures:
+      - name: count
+        type: count
+
+    dimensions:
+      - name: id
+        sql: id
+        type: string
+        primary_key: true
+        title: Document ID
+      - name: type
+        sql: type
+        type: string
+        title: Document Type
+      - name: status
+        sql: status
+        type: string
+        title: Upload Status
+      - name: file_name
+        sql: file_name
+        type: string
+        title: File Name
+      - name: uploaded_date
+        sql: uploaded_date
+        type: time
+        title: Upload Date
+      - name: verified
+        sql: verified
+        type: string
+        title: Verified
+      - name: expiry_date
+        sql: expiry_date
+        type: time
+        title: Expiry Date

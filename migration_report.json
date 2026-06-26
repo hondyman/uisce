@@ -1,0 +1,39 @@
+{
+  "generated_at": "2025-11-03T18:05:47.428308",
+  "database": "alpha (localhost:5432)",
+  "consolidation_target": "public schema",
+  "tables_to_consolidate": {
+    "metrics_registry": {
+      "source_schemas": [],
+      "total_records": 0,
+      "consolidated_to": "public.metrics_registry",
+      "new_columns": [
+        "schema_domain (VARCHAR 100)"
+      ]
+    },
+    "dax_functions": {
+      "source_schemas": [],
+      "total_records": 0,
+      "consolidated_to": "public.dax_functions",
+      "new_columns": [
+        "schema_domain (VARCHAR 100)"
+      ]
+    }
+  },
+  "migration_steps": [
+    "Create public.metrics_registry with schema_domain column",
+    "Create public.dax_functions with schema_domain column",
+    "Migrate all metrics_registry data with domain tracking",
+    "Migrate all dax_functions data with domain tracking",
+    "Create backwards-compatibility views (optional)",
+    "Update application code",
+    "Drop old tables after code migration"
+  ],
+  "benefits": [
+    "Single source of truth for metrics and functions",
+    "Reduced schema duplication (17\u21921 for these tables)",
+    "Simplified maintenance and governance",
+    "Better performance with consolidated indexes",
+    "Backwards compatible views during transition"
+  ]
+}

@@ -1,0 +1,516 @@
+frontend/src/components/semantic-mapper/__tests__/ReportingServerUI.tsx(33,26): error TS1109: Expression expected.
+frontend/src/components/semantic-mapper/__tests__/ReportingServerUI.tsx(33,27): error TS1003: Identifier expected.
+frontend/src/components/semantic-mapper/__tests__/ReportingServerUI.tsx(33,28): error TS1003: Identifier expected.
+frontend/src/components/semantic-mapper/__tests__/ReportingServerUI.tsx(33,29): error TS1109: Expression expected.
+frontend/src/components/semantic-mapper/__tests__/ReportingServerUI.tsx(33,30): error TS1003: Identifier expected.
+frontend/src/components/semantic-mapper/__tests__/ReportingServerUI.tsx(33,31): error TS1003: Identifier expected.
+frontend/src/components/semantic-mapper/__tests__/ReportingServerUI.tsx(33,32): error TS1109: Expression expected.
+frontend/src/components/semantic-mapper/__tests__/ReportingServerUI.tsx(33,33): error TS1003: Identifier expected.
+frontend/src/components/semantic-mapper/__tests__/ReportingServerUI.tsx(33,34): error TS1003: Identifier expected.
+frontend/src/components/semantic-mapper/__tests__/ReportingServerUI.tsx(33,50): error TS1005: ';' expected.
+frontend/src/components/semantic-mapper/__tests__/ReportingServerUI.tsx(33,52): error TS1002: Unterminated string literal.
+frontend/src/components/semantic-mapper/__tests__/ReportingServerUI.tsx(1379,1): error TS1128: Declaration or statement expected.
+frontend/src/components/semantic-reporting/ReportScheduler.tsx(48,1): error TS1109: Expression expected.
+frontend/src/components/semantic-reporting/ReportScheduler.tsx(48,3): error TS1434: Unexpected keyword or identifier.
+frontend/src/components/UnifiedSemanticBuilder/AccessibleActionsMenu.tsx(155,36): error TS1145: '{' or JSX element expected.
+frontend/src/components/UnifiedSemanticBuilder/AccessibleActionsMenu.tsx(155,50): error TS1003: Identifier expected.
+frontend/src/components/UnifiedSemanticBuilder/AccessibleActionsMenu.tsx(158,13): error TS1382: Unexpected token. Did you mean `{'>'}` or `&gt;`?
+frontend/src/components/UnifiedSemanticBuilder/AccessibleActionsMenu.tsx(162,15): error TS17002: Expected corresponding JSX closing tag for 'div'.
+frontend/src/components/UnifiedSemanticBuilder/AccessibleActionsMenu.tsx(191,11): error TS1005: ')' expected.
+frontend/src/components/UnifiedSemanticBuilder/AccessibleActionsMenu.tsx(204,9): error TS1128: Declaration or statement expected.
+frontend/src/components/UnifiedSemanticBuilder/AccessibleActionsMenu.tsx(205,3): error TS1109: Expression expected.
+frontend/src/components/UnifiedSemanticBuilder/AccessibleActionsMenu.tsx(208,1): error TS1128: Declaration or statement expected.
+frontend/src/components/ViewEditor/components/PropertiesSection.tsx(2,36): error TS1109: Expression expected.
+frontend/src/components/ViewEditor/components/PropertiesSection.tsx(2,37): error TS1003: Identifier expected.
+frontend/src/components/ViewEditor/components/PropertiesSection.tsx(2,38): error TS1003: Identifier expected.
+frontend/src/components/ViewEditor/components/PropertiesSection.tsx(2,39): error TS1109: Expression expected.
+frontend/src/components/ViewEditor/components/PropertiesSection.tsx(2,40): error TS1003: Identifier expected.
+frontend/src/components/ViewEditor/components/PropertiesSection.tsx(2,41): error TS1003: Identifier expected.
+frontend/src/components/ViewEditor/components/PropertiesSection.tsx(2,42): error TS1109: Expression expected.
+frontend/src/components/ViewEditor/components/PropertiesSection.tsx(2,43): error TS1003: Identifier expected.
+frontend/src/components/ViewEditor/components/PropertiesSection.tsx(2,44): error TS1003: Identifier expected.
+frontend/src/components/ViewEditor/components/PropertiesSection.tsx(2,60): error TS1005: ';' expected.
+frontend/src/components/ViewEditor/components/PropertiesSection.tsx(2,62): error TS1002: Unterminated string literal.
+frontend/src/features/account/AccountServicing.tsx(219,19): error TS1005: ',' expected.
+frontend/src/features/admin/pages/TemporalOpsPage.tsx(40,24): error TS1109: Expression expected.
+frontend/src/features/admin/pages/TemporalOpsPage.tsx(40,25): error TS1003: Identifier expected.
+frontend/src/features/admin/pages/TemporalOpsPage.tsx(40,26): error TS1003: Identifier expected.
+frontend/src/features/admin/pages/TemporalOpsPage.tsx(40,27): error TS1109: Expression expected.
+frontend/src/features/admin/pages/TemporalOpsPage.tsx(40,28): error TS1003: Identifier expected.
+frontend/src/features/admin/pages/TemporalOpsPage.tsx(40,29): error TS1003: Identifier expected.
+frontend/src/features/admin/pages/TemporalOpsPage.tsx(40,30): error TS1109: Expression expected.
+frontend/src/features/admin/pages/TemporalOpsPage.tsx(40,31): error TS1003: Identifier expected.
+frontend/src/features/admin/pages/TemporalOpsPage.tsx(40,32): error TS1003: Identifier expected.
+frontend/src/features/admin/pages/TemporalOpsPage.tsx(40,48): error TS1005: ';' expected.
+frontend/src/features/admin/pages/TemporalOpsPage.tsx(40,50): error TS1002: Unterminated string literal.
+frontend/src/features/altinvest/AlternativesAnalyticsDashboard.tsx(255,59): error TS1382: Unexpected token. Did you mean `{'>'}` or `&gt;`?
+frontend/src/features/analytics/pages/AggregateDesignerPage.tsx(2,26): error TS1109: Expression expected.
+frontend/src/features/analytics/pages/AggregateDesignerPage.tsx(2,27): error TS1003: Identifier expected.
+frontend/src/features/analytics/pages/AggregateDesignerPage.tsx(2,28): error TS1003: Identifier expected.
+frontend/src/features/analytics/pages/AggregateDesignerPage.tsx(2,29): error TS1109: Expression expected.
+frontend/src/features/analytics/pages/AggregateDesignerPage.tsx(2,30): error TS1003: Identifier expected.
+frontend/src/features/analytics/pages/AggregateDesignerPage.tsx(2,31): error TS1003: Identifier expected.
+frontend/src/features/analytics/pages/AggregateDesignerPage.tsx(2,32): error TS1109: Expression expected.
+frontend/src/features/analytics/pages/AggregateDesignerPage.tsx(2,33): error TS1003: Identifier expected.
+frontend/src/features/analytics/pages/AggregateDesignerPage.tsx(2,34): error TS1003: Identifier expected.
+frontend/src/features/analytics/pages/AggregateDesignerPage.tsx(2,50): error TS1005: ';' expected.
+frontend/src/features/analytics/pages/AggregateDesignerPage.tsx(2,52): error TS1002: Unterminated string literal.
+frontend/src/features/api-builder/pages/APIBuilderPage.tsx(2,26): error TS1109: Expression expected.
+frontend/src/features/api-builder/pages/APIBuilderPage.tsx(2,27): error TS1003: Identifier expected.
+frontend/src/features/api-builder/pages/APIBuilderPage.tsx(2,28): error TS1003: Identifier expected.
+frontend/src/features/api-builder/pages/APIBuilderPage.tsx(2,29): error TS1109: Expression expected.
+frontend/src/features/api-builder/pages/APIBuilderPage.tsx(2,30): error TS1003: Identifier expected.
+frontend/src/features/api-builder/pages/APIBuilderPage.tsx(2,31): error TS1003: Identifier expected.
+frontend/src/features/api-builder/pages/APIBuilderPage.tsx(2,32): error TS1109: Expression expected.
+frontend/src/features/api-builder/pages/APIBuilderPage.tsx(2,33): error TS1003: Identifier expected.
+frontend/src/features/api-builder/pages/APIBuilderPage.tsx(2,34): error TS1003: Identifier expected.
+frontend/src/features/api-builder/pages/APIBuilderPage.tsx(2,50): error TS1005: ';' expected.
+frontend/src/features/api-builder/pages/APIBuilderPage.tsx(2,52): error TS1002: Unterminated string literal.
+frontend/src/features/catalog/pages/APICatalogPage.tsx(2,35): error TS1109: Expression expected.
+frontend/src/features/catalog/pages/APICatalogPage.tsx(2,36): error TS1003: Identifier expected.
+frontend/src/features/catalog/pages/APICatalogPage.tsx(2,37): error TS1003: Identifier expected.
+frontend/src/features/catalog/pages/APICatalogPage.tsx(2,38): error TS1109: Expression expected.
+frontend/src/features/catalog/pages/APICatalogPage.tsx(2,39): error TS1003: Identifier expected.
+frontend/src/features/catalog/pages/APICatalogPage.tsx(2,40): error TS1003: Identifier expected.
+frontend/src/features/catalog/pages/APICatalogPage.tsx(2,41): error TS1109: Expression expected.
+frontend/src/features/catalog/pages/APICatalogPage.tsx(2,42): error TS1003: Identifier expected.
+frontend/src/features/catalog/pages/APICatalogPage.tsx(2,43): error TS1003: Identifier expected.
+frontend/src/features/catalog/pages/APICatalogPage.tsx(2,59): error TS1005: ';' expected.
+frontend/src/features/catalog/pages/APICatalogPage.tsx(2,61): error TS1002: Unterminated string literal.
+frontend/src/features/connections/pages/Connections.tsx(11,24): error TS1109: Expression expected.
+frontend/src/features/connections/pages/Connections.tsx(11,25): error TS1003: Identifier expected.
+frontend/src/features/connections/pages/Connections.tsx(11,26): error TS1003: Identifier expected.
+frontend/src/features/connections/pages/Connections.tsx(11,27): error TS1109: Expression expected.
+frontend/src/features/connections/pages/Connections.tsx(11,28): error TS1003: Identifier expected.
+frontend/src/features/connections/pages/Connections.tsx(11,29): error TS1003: Identifier expected.
+frontend/src/features/connections/pages/Connections.tsx(11,30): error TS1109: Expression expected.
+frontend/src/features/connections/pages/Connections.tsx(11,31): error TS1003: Identifier expected.
+frontend/src/features/connections/pages/Connections.tsx(11,32): error TS1003: Identifier expected.
+frontend/src/features/connections/pages/Connections.tsx(11,48): error TS1005: ';' expected.
+frontend/src/features/connections/pages/Connections.tsx(11,50): error TS1002: Unterminated string literal.
+frontend/src/features/fabric/components/UnifiedHeatmapDrillDown.tsx(2,26): error TS1109: Expression expected.
+frontend/src/features/fabric/components/UnifiedHeatmapDrillDown.tsx(2,27): error TS1003: Identifier expected.
+frontend/src/features/fabric/components/UnifiedHeatmapDrillDown.tsx(2,28): error TS1003: Identifier expected.
+frontend/src/features/fabric/components/UnifiedHeatmapDrillDown.tsx(2,29): error TS1109: Expression expected.
+frontend/src/features/fabric/components/UnifiedHeatmapDrillDown.tsx(2,30): error TS1003: Identifier expected.
+frontend/src/features/fabric/components/UnifiedHeatmapDrillDown.tsx(2,31): error TS1003: Identifier expected.
+frontend/src/features/fabric/components/UnifiedHeatmapDrillDown.tsx(2,32): error TS1109: Expression expected.
+frontend/src/features/fabric/components/UnifiedHeatmapDrillDown.tsx(2,33): error TS1003: Identifier expected.
+frontend/src/features/fabric/components/UnifiedHeatmapDrillDown.tsx(2,34): error TS1003: Identifier expected.
+frontend/src/features/fabric/components/UnifiedHeatmapDrillDown.tsx(2,50): error TS1005: ';' expected.
+frontend/src/features/fabric/components/UnifiedHeatmapDrillDown.tsx(2,52): error TS1002: Unterminated string literal.
+frontend/src/features/fabric/pages/BusinessGlossaryPage.tsx(13,36): error TS1109: Expression expected.
+frontend/src/features/fabric/pages/BusinessGlossaryPage.tsx(13,37): error TS1003: Identifier expected.
+frontend/src/features/fabric/pages/BusinessGlossaryPage.tsx(13,38): error TS1003: Identifier expected.
+frontend/src/features/fabric/pages/BusinessGlossaryPage.tsx(13,39): error TS1109: Expression expected.
+frontend/src/features/fabric/pages/BusinessGlossaryPage.tsx(13,40): error TS1003: Identifier expected.
+frontend/src/features/fabric/pages/BusinessGlossaryPage.tsx(13,41): error TS1003: Identifier expected.
+frontend/src/features/fabric/pages/BusinessGlossaryPage.tsx(13,42): error TS1109: Expression expected.
+frontend/src/features/fabric/pages/BusinessGlossaryPage.tsx(13,43): error TS1003: Identifier expected.
+frontend/src/features/fabric/pages/BusinessGlossaryPage.tsx(13,44): error TS1003: Identifier expected.
+frontend/src/features/fabric/pages/BusinessGlossaryPage.tsx(13,60): error TS1005: ';' expected.
+frontend/src/features/fabric/pages/BusinessGlossaryPage.tsx(13,62): error TS1002: Unterminated string literal.
+frontend/src/features/fabric/pages/CalculationsLibraryPage.tsx(2,24): error TS1109: Expression expected.
+frontend/src/features/fabric/pages/CalculationsLibraryPage.tsx(2,25): error TS1003: Identifier expected.
+frontend/src/features/fabric/pages/CalculationsLibraryPage.tsx(2,26): error TS1003: Identifier expected.
+frontend/src/features/fabric/pages/CalculationsLibraryPage.tsx(2,27): error TS1109: Expression expected.
+frontend/src/features/fabric/pages/CalculationsLibraryPage.tsx(2,28): error TS1003: Identifier expected.
+frontend/src/features/fabric/pages/CalculationsLibraryPage.tsx(2,29): error TS1003: Identifier expected.
+frontend/src/features/fabric/pages/CalculationsLibraryPage.tsx(2,30): error TS1109: Expression expected.
+frontend/src/features/fabric/pages/CalculationsLibraryPage.tsx(2,31): error TS1003: Identifier expected.
+frontend/src/features/fabric/pages/CalculationsLibraryPage.tsx(2,32): error TS1003: Identifier expected.
+frontend/src/features/fabric/pages/CalculationsLibraryPage.tsx(2,48): error TS1005: ';' expected.
+frontend/src/features/fabric/pages/CalculationsLibraryPage.tsx(2,50): error TS1002: Unterminated string literal.
+frontend/src/features/fabric/pages/ModelGenerator.tsx(3,44): error TS1109: Expression expected.
+frontend/src/features/fabric/pages/ModelGenerator.tsx(3,45): error TS1003: Identifier expected.
+frontend/src/features/fabric/pages/ModelGenerator.tsx(3,46): error TS1003: Identifier expected.
+frontend/src/features/fabric/pages/ModelGenerator.tsx(3,47): error TS1109: Expression expected.
+frontend/src/features/fabric/pages/ModelGenerator.tsx(3,48): error TS1003: Identifier expected.
+frontend/src/features/fabric/pages/ModelGenerator.tsx(3,49): error TS1003: Identifier expected.
+frontend/src/features/fabric/pages/ModelGenerator.tsx(3,50): error TS1109: Expression expected.
+frontend/src/features/fabric/pages/ModelGenerator.tsx(3,51): error TS1003: Identifier expected.
+frontend/src/features/fabric/pages/ModelGenerator.tsx(3,52): error TS1003: Identifier expected.
+frontend/src/features/fabric/pages/ModelGenerator.tsx(3,68): error TS1005: ';' expected.
+frontend/src/features/fabric/pages/ModelGenerator.tsx(3,70): error TS1002: Unterminated string literal.
+frontend/src/features/fabric/pages/preaggregations/ManagementPage.tsx(5,24): error TS1109: Expression expected.
+frontend/src/features/fabric/pages/preaggregations/ManagementPage.tsx(5,25): error TS1003: Identifier expected.
+frontend/src/features/fabric/pages/preaggregations/ManagementPage.tsx(5,26): error TS1003: Identifier expected.
+frontend/src/features/fabric/pages/preaggregations/ManagementPage.tsx(5,27): error TS1109: Expression expected.
+frontend/src/features/fabric/pages/preaggregations/ManagementPage.tsx(5,28): error TS1003: Identifier expected.
+frontend/src/features/fabric/pages/preaggregations/ManagementPage.tsx(5,29): error TS1003: Identifier expected.
+frontend/src/features/fabric/pages/preaggregations/ManagementPage.tsx(5,30): error TS1109: Expression expected.
+frontend/src/features/fabric/pages/preaggregations/ManagementPage.tsx(5,31): error TS1003: Identifier expected.
+frontend/src/features/fabric/pages/preaggregations/ManagementPage.tsx(5,32): error TS1003: Identifier expected.
+frontend/src/features/fabric/pages/preaggregations/ManagementPage.tsx(5,33): error TS1109: Expression expected.
+frontend/src/features/fabric/pages/preaggregations/ManagementPage.tsx(5,34): error TS1003: Identifier expected.
+frontend/src/features/fabric/pages/preaggregations/ManagementPage.tsx(5,35): error TS1003: Identifier expected.
+frontend/src/features/fabric/pages/preaggregations/ManagementPage.tsx(5,51): error TS1005: ';' expected.
+frontend/src/features/fabric/pages/preaggregations/ManagementPage.tsx(5,53): error TS1002: Unterminated string literal.
+frontend/src/features/fabric/pages/preaggregations/MonitorPage.tsx(4,24): error TS1109: Expression expected.
+frontend/src/features/fabric/pages/preaggregations/MonitorPage.tsx(4,25): error TS1003: Identifier expected.
+frontend/src/features/fabric/pages/preaggregations/MonitorPage.tsx(4,26): error TS1003: Identifier expected.
+frontend/src/features/fabric/pages/preaggregations/MonitorPage.tsx(4,27): error TS1109: Expression expected.
+frontend/src/features/fabric/pages/preaggregations/MonitorPage.tsx(4,28): error TS1003: Identifier expected.
+frontend/src/features/fabric/pages/preaggregations/MonitorPage.tsx(4,29): error TS1003: Identifier expected.
+frontend/src/features/fabric/pages/preaggregations/MonitorPage.tsx(4,30): error TS1109: Expression expected.
+frontend/src/features/fabric/pages/preaggregations/MonitorPage.tsx(4,31): error TS1003: Identifier expected.
+frontend/src/features/fabric/pages/preaggregations/MonitorPage.tsx(4,32): error TS1003: Identifier expected.
+frontend/src/features/fabric/pages/preaggregations/MonitorPage.tsx(4,33): error TS1109: Expression expected.
+frontend/src/features/fabric/pages/preaggregations/MonitorPage.tsx(4,34): error TS1003: Identifier expected.
+frontend/src/features/fabric/pages/preaggregations/MonitorPage.tsx(4,35): error TS1003: Identifier expected.
+frontend/src/features/fabric/pages/preaggregations/MonitorPage.tsx(4,51): error TS1005: ';' expected.
+frontend/src/features/fabric/pages/preaggregations/MonitorPage.tsx(4,53): error TS1002: Unterminated string literal.
+frontend/src/features/fabric/pages/preaggregations/SuggestionsPage.tsx(6,24): error TS1109: Expression expected.
+frontend/src/features/fabric/pages/preaggregations/SuggestionsPage.tsx(6,25): error TS1003: Identifier expected.
+frontend/src/features/fabric/pages/preaggregations/SuggestionsPage.tsx(6,26): error TS1003: Identifier expected.
+frontend/src/features/fabric/pages/preaggregations/SuggestionsPage.tsx(6,27): error TS1109: Expression expected.
+frontend/src/features/fabric/pages/preaggregations/SuggestionsPage.tsx(6,28): error TS1003: Identifier expected.
+frontend/src/features/fabric/pages/preaggregations/SuggestionsPage.tsx(6,29): error TS1003: Identifier expected.
+frontend/src/features/fabric/pages/preaggregations/SuggestionsPage.tsx(6,30): error TS1109: Expression expected.
+frontend/src/features/fabric/pages/preaggregations/SuggestionsPage.tsx(6,31): error TS1003: Identifier expected.
+frontend/src/features/fabric/pages/preaggregations/SuggestionsPage.tsx(6,32): error TS1003: Identifier expected.
+frontend/src/features/fabric/pages/preaggregations/SuggestionsPage.tsx(6,33): error TS1109: Expression expected.
+frontend/src/features/fabric/pages/preaggregations/SuggestionsPage.tsx(6,34): error TS1003: Identifier expected.
+frontend/src/features/fabric/pages/preaggregations/SuggestionsPage.tsx(6,35): error TS1003: Identifier expected.
+frontend/src/features/fabric/pages/preaggregations/SuggestionsPage.tsx(6,51): error TS1005: ';' expected.
+frontend/src/features/fabric/pages/preaggregations/SuggestionsPage.tsx(6,53): error TS1002: Unterminated string literal.
+frontend/src/features/fabric/pages/semantic.ts(3,26): error TS1109: Expression expected.
+frontend/src/features/fabric/pages/semantic.ts(3,27): error TS1003: Identifier expected.
+frontend/src/features/fabric/pages/semantic.ts(3,28): error TS1003: Identifier expected.
+frontend/src/features/fabric/pages/semantic.ts(3,29): error TS1109: Expression expected.
+frontend/src/features/fabric/pages/semantic.ts(3,30): error TS1003: Identifier expected.
+frontend/src/features/fabric/pages/semantic.ts(3,31): error TS1003: Identifier expected.
+frontend/src/features/fabric/pages/semantic.ts(3,32): error TS1109: Expression expected.
+frontend/src/features/fabric/pages/semantic.ts(3,33): error TS1003: Identifier expected.
+frontend/src/features/fabric/pages/semantic.ts(3,34): error TS1003: Identifier expected.
+frontend/src/features/fabric/pages/semantic.ts(3,50): error TS1005: ';' expected.
+frontend/src/features/fabric/pages/semantic.ts(3,52): error TS1002: Unterminated string literal.
+frontend/src/features/fabric/pages/UpgradeComparePage.tsx(2,24): error TS1109: Expression expected.
+frontend/src/features/fabric/pages/UpgradeComparePage.tsx(2,25): error TS1003: Identifier expected.
+frontend/src/features/fabric/pages/UpgradeComparePage.tsx(2,26): error TS1003: Identifier expected.
+frontend/src/features/fabric/pages/UpgradeComparePage.tsx(2,27): error TS1109: Expression expected.
+frontend/src/features/fabric/pages/UpgradeComparePage.tsx(2,28): error TS1003: Identifier expected.
+frontend/src/features/fabric/pages/UpgradeComparePage.tsx(2,29): error TS1003: Identifier expected.
+frontend/src/features/fabric/pages/UpgradeComparePage.tsx(2,30): error TS1109: Expression expected.
+frontend/src/features/fabric/pages/UpgradeComparePage.tsx(2,31): error TS1003: Identifier expected.
+frontend/src/features/fabric/pages/UpgradeComparePage.tsx(2,32): error TS1003: Identifier expected.
+frontend/src/features/fabric/pages/UpgradeComparePage.tsx(2,48): error TS1005: ';' expected.
+frontend/src/features/fabric/pages/UpgradeComparePage.tsx(2,50): error TS1002: Unterminated string literal.
+frontend/src/features/fabric/pages/utils.tsx(3,24): error TS1109: Expression expected.
+frontend/src/features/fabric/pages/utils.tsx(3,25): error TS1003: Identifier expected.
+frontend/src/features/fabric/pages/utils.tsx(3,26): error TS1003: Identifier expected.
+frontend/src/features/fabric/pages/utils.tsx(3,27): error TS1109: Expression expected.
+frontend/src/features/fabric/pages/utils.tsx(3,28): error TS1003: Identifier expected.
+frontend/src/features/fabric/pages/utils.tsx(3,29): error TS1003: Identifier expected.
+frontend/src/features/fabric/pages/utils.tsx(3,30): error TS1109: Expression expected.
+frontend/src/features/fabric/pages/utils.tsx(3,31): error TS1003: Identifier expected.
+frontend/src/features/fabric/pages/utils.tsx(3,32): error TS1003: Identifier expected.
+frontend/src/features/fabric/pages/utils.tsx(3,48): error TS1005: ';' expected.
+frontend/src/features/fabric/pages/utils.tsx(3,50): error TS1002: Unterminated string literal.
+frontend/src/features/fabric/pages/ValidationRulesPage.tsx(51,34): error TS1109: Expression expected.
+frontend/src/features/fabric/pages/ValidationRulesPage.tsx(51,35): error TS1003: Identifier expected.
+frontend/src/features/fabric/pages/ValidationRulesPage.tsx(51,36): error TS1003: Identifier expected.
+frontend/src/features/fabric/pages/ValidationRulesPage.tsx(51,37): error TS1109: Expression expected.
+frontend/src/features/fabric/pages/ValidationRulesPage.tsx(51,38): error TS1003: Identifier expected.
+frontend/src/features/fabric/pages/ValidationRulesPage.tsx(51,39): error TS1003: Identifier expected.
+frontend/src/features/fabric/pages/ValidationRulesPage.tsx(51,40): error TS1109: Expression expected.
+frontend/src/features/fabric/pages/ValidationRulesPage.tsx(51,41): error TS1003: Identifier expected.
+frontend/src/features/fabric/pages/ValidationRulesPage.tsx(51,42): error TS1003: Identifier expected.
+frontend/src/features/fabric/pages/ValidationRulesPage.tsx(51,58): error TS1005: ';' expected.
+frontend/src/features/fabric/pages/ValidationRulesPage.tsx(51,60): error TS1002: Unterminated string literal.
+frontend/src/features/household/HouseholdManagementUI.tsx(2,2): error TS17008: JSX element 'parameter' has no corresponding closing tag.
+frontend/src/features/household/HouseholdManagementUI.tsx(3,1): error TS1005: '</' expected.
+frontend/src/features/reporting/components/ReportLibrary.tsx(37,26): error TS1109: Expression expected.
+frontend/src/features/reporting/components/ReportLibrary.tsx(37,27): error TS1003: Identifier expected.
+frontend/src/features/reporting/components/ReportLibrary.tsx(37,28): error TS1003: Identifier expected.
+frontend/src/features/reporting/components/ReportLibrary.tsx(37,29): error TS1109: Expression expected.
+frontend/src/features/reporting/components/ReportLibrary.tsx(37,30): error TS1003: Identifier expected.
+frontend/src/features/reporting/components/ReportLibrary.tsx(37,31): error TS1003: Identifier expected.
+frontend/src/features/reporting/components/ReportLibrary.tsx(37,32): error TS1109: Expression expected.
+frontend/src/features/reporting/components/ReportLibrary.tsx(37,33): error TS1003: Identifier expected.
+frontend/src/features/reporting/components/ReportLibrary.tsx(37,34): error TS1003: Identifier expected.
+frontend/src/features/reporting/components/ReportLibrary.tsx(37,50): error TS1005: ';' expected.
+frontend/src/features/reporting/components/ReportLibrary.tsx(37,52): error TS1002: Unterminated string literal.
+frontend/src/features/reporting/components/ReportLibrary.tsx(59,1): error TS1109: Expression expected.
+frontend/src/features/reporting/components/ReportLibrary.tsx(59,3): error TS1434: Unexpected keyword or identifier.
+frontend/src/features/scheduler/pages/ComplianceDashboardPage.tsx(17,26): error TS1109: Expression expected.
+frontend/src/features/scheduler/pages/ComplianceDashboardPage.tsx(17,27): error TS1003: Identifier expected.
+frontend/src/features/scheduler/pages/ComplianceDashboardPage.tsx(17,28): error TS1003: Identifier expected.
+frontend/src/features/scheduler/pages/ComplianceDashboardPage.tsx(17,29): error TS1109: Expression expected.
+frontend/src/features/scheduler/pages/ComplianceDashboardPage.tsx(17,30): error TS1003: Identifier expected.
+frontend/src/features/scheduler/pages/ComplianceDashboardPage.tsx(17,31): error TS1003: Identifier expected.
+frontend/src/features/scheduler/pages/ComplianceDashboardPage.tsx(17,32): error TS1109: Expression expected.
+frontend/src/features/scheduler/pages/ComplianceDashboardPage.tsx(17,33): error TS1003: Identifier expected.
+frontend/src/features/scheduler/pages/ComplianceDashboardPage.tsx(17,34): error TS1003: Identifier expected.
+frontend/src/features/scheduler/pages/ComplianceDashboardPage.tsx(17,50): error TS1005: ';' expected.
+frontend/src/features/scheduler/pages/ComplianceDashboardPage.tsx(17,52): error TS1002: Unterminated string literal.
+frontend/src/features/tenants/pages/TenantDetailPage.tsx(43,26): error TS1109: Expression expected.
+frontend/src/features/tenants/pages/TenantDetailPage.tsx(43,27): error TS1003: Identifier expected.
+frontend/src/features/tenants/pages/TenantDetailPage.tsx(43,28): error TS1003: Identifier expected.
+frontend/src/features/tenants/pages/TenantDetailPage.tsx(43,29): error TS1109: Expression expected.
+frontend/src/features/tenants/pages/TenantDetailPage.tsx(43,30): error TS1003: Identifier expected.
+frontend/src/features/tenants/pages/TenantDetailPage.tsx(43,31): error TS1003: Identifier expected.
+frontend/src/features/tenants/pages/TenantDetailPage.tsx(43,32): error TS1109: Expression expected.
+frontend/src/features/tenants/pages/TenantDetailPage.tsx(43,33): error TS1003: Identifier expected.
+frontend/src/features/tenants/pages/TenantDetailPage.tsx(43,34): error TS1003: Identifier expected.
+frontend/src/features/tenants/pages/TenantDetailPage.tsx(43,50): error TS1005: ';' expected.
+frontend/src/features/tenants/pages/TenantDetailPage.tsx(43,52): error TS1002: Unterminated string literal.
+frontend/src/features/upgrade/components/DiffViewer.tsx(3,26): error TS1109: Expression expected.
+frontend/src/features/upgrade/components/DiffViewer.tsx(3,27): error TS1003: Identifier expected.
+frontend/src/features/upgrade/components/DiffViewer.tsx(3,28): error TS1003: Identifier expected.
+frontend/src/features/upgrade/components/DiffViewer.tsx(3,29): error TS1109: Expression expected.
+frontend/src/features/upgrade/components/DiffViewer.tsx(3,30): error TS1003: Identifier expected.
+frontend/src/features/upgrade/components/DiffViewer.tsx(3,31): error TS1003: Identifier expected.
+frontend/src/features/upgrade/components/DiffViewer.tsx(3,32): error TS1109: Expression expected.
+frontend/src/features/upgrade/components/DiffViewer.tsx(3,33): error TS1003: Identifier expected.
+frontend/src/features/upgrade/components/DiffViewer.tsx(3,34): error TS1003: Identifier expected.
+frontend/src/features/upgrade/components/DiffViewer.tsx(3,50): error TS1005: ';' expected.
+frontend/src/features/upgrade/components/DiffViewer.tsx(3,52): error TS1002: Unterminated string literal.
+frontend/src/features/upgrade/components/ExtensionFixer.tsx(2,26): error TS1109: Expression expected.
+frontend/src/features/upgrade/components/ExtensionFixer.tsx(2,27): error TS1003: Identifier expected.
+frontend/src/features/upgrade/components/ExtensionFixer.tsx(2,28): error TS1003: Identifier expected.
+frontend/src/features/upgrade/components/ExtensionFixer.tsx(2,29): error TS1109: Expression expected.
+frontend/src/features/upgrade/components/ExtensionFixer.tsx(2,30): error TS1003: Identifier expected.
+frontend/src/features/upgrade/components/ExtensionFixer.tsx(2,31): error TS1003: Identifier expected.
+frontend/src/features/upgrade/components/ExtensionFixer.tsx(2,32): error TS1109: Expression expected.
+frontend/src/features/upgrade/components/ExtensionFixer.tsx(2,33): error TS1003: Identifier expected.
+frontend/src/features/upgrade/components/ExtensionFixer.tsx(2,34): error TS1003: Identifier expected.
+frontend/src/features/upgrade/components/ExtensionFixer.tsx(2,50): error TS1005: ';' expected.
+frontend/src/features/upgrade/components/ExtensionFixer.tsx(2,52): error TS1002: Unterminated string literal.
+frontend/src/features/upgrade/components/GoldenQueryRunner.tsx(3,26): error TS1109: Expression expected.
+frontend/src/features/upgrade/components/GoldenQueryRunner.tsx(3,27): error TS1003: Identifier expected.
+frontend/src/features/upgrade/components/GoldenQueryRunner.tsx(3,28): error TS1003: Identifier expected.
+frontend/src/features/upgrade/components/GoldenQueryRunner.tsx(3,29): error TS1109: Expression expected.
+frontend/src/features/upgrade/components/GoldenQueryRunner.tsx(3,30): error TS1003: Identifier expected.
+frontend/src/features/upgrade/components/GoldenQueryRunner.tsx(3,31): error TS1003: Identifier expected.
+frontend/src/features/upgrade/components/GoldenQueryRunner.tsx(3,32): error TS1109: Expression expected.
+frontend/src/features/upgrade/components/GoldenQueryRunner.tsx(3,33): error TS1003: Identifier expected.
+frontend/src/features/upgrade/components/GoldenQueryRunner.tsx(3,34): error TS1003: Identifier expected.
+frontend/src/features/upgrade/components/GoldenQueryRunner.tsx(3,50): error TS1005: ';' expected.
+frontend/src/features/upgrade/components/GoldenQueryRunner.tsx(3,52): error TS1002: Unterminated string literal.
+frontend/src/features/upgrade/hooks/useWebSocket.ts(2,26): error TS1109: Expression expected.
+frontend/src/features/upgrade/hooks/useWebSocket.ts(2,27): error TS1003: Identifier expected.
+frontend/src/features/upgrade/hooks/useWebSocket.ts(2,28): error TS1003: Identifier expected.
+frontend/src/features/upgrade/hooks/useWebSocket.ts(2,29): error TS1109: Expression expected.
+frontend/src/features/upgrade/hooks/useWebSocket.ts(2,30): error TS1003: Identifier expected.
+frontend/src/features/upgrade/hooks/useWebSocket.ts(2,31): error TS1003: Identifier expected.
+frontend/src/features/upgrade/hooks/useWebSocket.ts(2,32): error TS1109: Expression expected.
+frontend/src/features/upgrade/hooks/useWebSocket.ts(2,33): error TS1003: Identifier expected.
+frontend/src/features/upgrade/hooks/useWebSocket.ts(2,34): error TS1003: Identifier expected.
+frontend/src/features/upgrade/hooks/useWebSocket.ts(2,50): error TS1005: ';' expected.
+frontend/src/features/upgrade/hooks/useWebSocket.ts(2,52): error TS1002: Unterminated string literal.
+frontend/src/features/upgrade/pages/VersionsPage.tsx(2,26): error TS1109: Expression expected.
+frontend/src/features/upgrade/pages/VersionsPage.tsx(2,27): error TS1003: Identifier expected.
+frontend/src/features/upgrade/pages/VersionsPage.tsx(2,28): error TS1003: Identifier expected.
+frontend/src/features/upgrade/pages/VersionsPage.tsx(2,29): error TS1109: Expression expected.
+frontend/src/features/upgrade/pages/VersionsPage.tsx(2,30): error TS1003: Identifier expected.
+frontend/src/features/upgrade/pages/VersionsPage.tsx(2,31): error TS1003: Identifier expected.
+frontend/src/features/upgrade/pages/VersionsPage.tsx(2,32): error TS1109: Expression expected.
+frontend/src/features/upgrade/pages/VersionsPage.tsx(2,33): error TS1003: Identifier expected.
+frontend/src/features/upgrade/pages/VersionsPage.tsx(2,34): error TS1003: Identifier expected.
+frontend/src/features/upgrade/pages/VersionsPage.tsx(2,50): error TS1005: ';' expected.
+frontend/src/features/upgrade/pages/VersionsPage.tsx(2,52): error TS1002: Unterminated string literal.
+frontend/src/features/views/pages/BundleEditor.tsx(20,26): error TS1109: Expression expected.
+frontend/src/features/views/pages/BundleEditor.tsx(20,27): error TS1003: Identifier expected.
+frontend/src/features/views/pages/BundleEditor.tsx(20,28): error TS1003: Identifier expected.
+frontend/src/features/views/pages/BundleEditor.tsx(20,29): error TS1109: Expression expected.
+frontend/src/features/views/pages/BundleEditor.tsx(20,30): error TS1003: Identifier expected.
+frontend/src/features/views/pages/BundleEditor.tsx(20,31): error TS1003: Identifier expected.
+frontend/src/features/views/pages/BundleEditor.tsx(20,32): error TS1109: Expression expected.
+frontend/src/features/views/pages/BundleEditor.tsx(20,33): error TS1003: Identifier expected.
+frontend/src/features/views/pages/BundleEditor.tsx(20,34): error TS1003: Identifier expected.
+frontend/src/features/views/pages/BundleEditor.tsx(20,50): error TS1005: ';' expected.
+frontend/src/features/views/pages/BundleEditor.tsx(20,52): error TS1002: Unterminated string literal.
+frontend/src/features/views/pages/ViewDetailsPage.tsx(2,24): error TS1109: Expression expected.
+frontend/src/features/views/pages/ViewDetailsPage.tsx(2,25): error TS1003: Identifier expected.
+frontend/src/features/views/pages/ViewDetailsPage.tsx(2,26): error TS1003: Identifier expected.
+frontend/src/features/views/pages/ViewDetailsPage.tsx(2,27): error TS1109: Expression expected.
+frontend/src/features/views/pages/ViewDetailsPage.tsx(2,28): error TS1003: Identifier expected.
+frontend/src/features/views/pages/ViewDetailsPage.tsx(2,29): error TS1003: Identifier expected.
+frontend/src/features/views/pages/ViewDetailsPage.tsx(2,30): error TS1109: Expression expected.
+frontend/src/features/views/pages/ViewDetailsPage.tsx(2,31): error TS1003: Identifier expected.
+frontend/src/features/views/pages/ViewDetailsPage.tsx(2,32): error TS1003: Identifier expected.
+frontend/src/features/views/pages/ViewDetailsPage.tsx(2,48): error TS1005: ';' expected.
+frontend/src/features/views/pages/ViewDetailsPage.tsx(2,50): error TS1002: Unterminated string literal.
+frontend/src/features/views/pages/ViewsCatalogPage.tsx(6,24): error TS1109: Expression expected.
+frontend/src/features/views/pages/ViewsCatalogPage.tsx(6,25): error TS1003: Identifier expected.
+frontend/src/features/views/pages/ViewsCatalogPage.tsx(6,26): error TS1003: Identifier expected.
+frontend/src/features/views/pages/ViewsCatalogPage.tsx(6,27): error TS1109: Expression expected.
+frontend/src/features/views/pages/ViewsCatalogPage.tsx(6,28): error TS1003: Identifier expected.
+frontend/src/features/views/pages/ViewsCatalogPage.tsx(6,29): error TS1003: Identifier expected.
+frontend/src/features/views/pages/ViewsCatalogPage.tsx(6,30): error TS1109: Expression expected.
+frontend/src/features/views/pages/ViewsCatalogPage.tsx(6,31): error TS1003: Identifier expected.
+frontend/src/features/views/pages/ViewsCatalogPage.tsx(6,32): error TS1003: Identifier expected.
+frontend/src/features/views/pages/ViewsCatalogPage.tsx(6,48): error TS1005: ';' expected.
+frontend/src/features/views/pages/ViewsCatalogPage.tsx(6,50): error TS1002: Unterminated string literal.
+frontend/src/features/wealth/pages/AdvisorConsolePage.tsx(22,26): error TS1109: Expression expected.
+frontend/src/features/wealth/pages/AdvisorConsolePage.tsx(22,27): error TS1003: Identifier expected.
+frontend/src/features/wealth/pages/AdvisorConsolePage.tsx(22,28): error TS1003: Identifier expected.
+frontend/src/features/wealth/pages/AdvisorConsolePage.tsx(22,29): error TS1109: Expression expected.
+frontend/src/features/wealth/pages/AdvisorConsolePage.tsx(22,30): error TS1003: Identifier expected.
+frontend/src/features/wealth/pages/AdvisorConsolePage.tsx(22,31): error TS1003: Identifier expected.
+frontend/src/features/wealth/pages/AdvisorConsolePage.tsx(22,32): error TS1109: Expression expected.
+frontend/src/features/wealth/pages/AdvisorConsolePage.tsx(22,33): error TS1003: Identifier expected.
+frontend/src/features/wealth/pages/AdvisorConsolePage.tsx(22,34): error TS1003: Identifier expected.
+frontend/src/features/wealth/pages/AdvisorConsolePage.tsx(22,50): error TS1005: ';' expected.
+frontend/src/features/wealth/pages/AdvisorConsolePage.tsx(22,52): error TS1002: Unterminated string literal.
+frontend/src/features/wealth/pages/ClientManagementPage.tsx(3,26): error TS1109: Expression expected.
+frontend/src/features/wealth/pages/ClientManagementPage.tsx(3,27): error TS1003: Identifier expected.
+frontend/src/features/wealth/pages/ClientManagementPage.tsx(3,28): error TS1003: Identifier expected.
+frontend/src/features/wealth/pages/ClientManagementPage.tsx(3,29): error TS1109: Expression expected.
+frontend/src/features/wealth/pages/ClientManagementPage.tsx(3,30): error TS1003: Identifier expected.
+frontend/src/features/wealth/pages/ClientManagementPage.tsx(3,31): error TS1003: Identifier expected.
+frontend/src/features/wealth/pages/ClientManagementPage.tsx(3,32): error TS1109: Expression expected.
+frontend/src/features/wealth/pages/ClientManagementPage.tsx(3,33): error TS1003: Identifier expected.
+frontend/src/features/wealth/pages/ClientManagementPage.tsx(3,34): error TS1003: Identifier expected.
+frontend/src/features/wealth/pages/ClientManagementPage.tsx(3,50): error TS1005: ';' expected.
+frontend/src/features/wealth/pages/ClientManagementPage.tsx(3,52): error TS1002: Unterminated string literal.
+frontend/src/features/wealth/pages/PortfolioManagementPage.tsx(3,26): error TS1109: Expression expected.
+frontend/src/features/wealth/pages/PortfolioManagementPage.tsx(3,27): error TS1003: Identifier expected.
+frontend/src/features/wealth/pages/PortfolioManagementPage.tsx(3,28): error TS1003: Identifier expected.
+frontend/src/features/wealth/pages/PortfolioManagementPage.tsx(3,29): error TS1109: Expression expected.
+frontend/src/features/wealth/pages/PortfolioManagementPage.tsx(3,30): error TS1003: Identifier expected.
+frontend/src/features/wealth/pages/PortfolioManagementPage.tsx(3,31): error TS1003: Identifier expected.
+frontend/src/features/wealth/pages/PortfolioManagementPage.tsx(3,32): error TS1109: Expression expected.
+frontend/src/features/wealth/pages/PortfolioManagementPage.tsx(3,33): error TS1003: Identifier expected.
+frontend/src/features/wealth/pages/PortfolioManagementPage.tsx(3,34): error TS1003: Identifier expected.
+frontend/src/features/wealth/pages/PortfolioManagementPage.tsx(3,50): error TS1005: ';' expected.
+frontend/src/features/wealth/pages/PortfolioManagementPage.tsx(3,52): error TS1002: Unterminated string literal.
+frontend/src/features/workflow/pages/WorkflowDesignerPage.tsx(6,26): error TS1109: Expression expected.
+frontend/src/features/workflow/pages/WorkflowDesignerPage.tsx(6,27): error TS1003: Identifier expected.
+frontend/src/features/workflow/pages/WorkflowDesignerPage.tsx(6,28): error TS1003: Identifier expected.
+frontend/src/features/workflow/pages/WorkflowDesignerPage.tsx(6,29): error TS1109: Expression expected.
+frontend/src/features/workflow/pages/WorkflowDesignerPage.tsx(6,30): error TS1003: Identifier expected.
+frontend/src/features/workflow/pages/WorkflowDesignerPage.tsx(6,31): error TS1003: Identifier expected.
+frontend/src/features/workflow/pages/WorkflowDesignerPage.tsx(6,32): error TS1109: Expression expected.
+frontend/src/features/workflow/pages/WorkflowDesignerPage.tsx(6,33): error TS1003: Identifier expected.
+frontend/src/features/workflow/pages/WorkflowDesignerPage.tsx(6,34): error TS1003: Identifier expected.
+frontend/src/features/workflow/pages/WorkflowDesignerPage.tsx(6,50): error TS1005: ';' expected.
+frontend/src/features/workflow/pages/WorkflowDesignerPage.tsx(6,52): error TS1002: Unterminated string literal.
+frontend/src/pages/HireEmployeeDemo.tsx(21,1): error TS1128: Declaration or statement expected.
+frontend/src/pages/HireEmployeeDemo.tsx(30,1): error TS1131: Property or signature expected.
+frontend/src/pages/HireEmployeeDemo.tsx(49,1): error TS1131: Property or signature expected.
+frontend/src/pages/HireEmployeeDemo.tsx(294,3): error TS1128: Declaration or statement expected.
+frontend/src/pages/HireEmployeeDemo.tsx(295,5): error TS1128: Declaration or statement expected.
+frontend/src/pages/HireEmployeeDemo.tsx(296,5): error TS1109: Expression expected.
+frontend/src/pages/HireEmployeeDemo.tsx(302,11): error TS2657: JSX expressions must have one parent element.
+frontend/src/pages/HireEmployeeDemo.tsx(306,9): error TS1128: Declaration or statement expected.
+frontend/src/pages/HireEmployeeDemo.tsx(307,21): error TS1005: ',' expected.
+frontend/src/pages/HireEmployeeDemo.tsx(311,10): error TS1128: Declaration or statement expected.
+frontend/src/pages/HireEmployeeDemo.tsx(312,7): error TS1128: Declaration or statement expected.
+frontend/src/pages/HireEmployeeDemo.tsx(313,21): error TS1005: ',' expected.
+frontend/src/pages/HireEmployeeDemo.tsx(352,9): error TS17002: Expected corresponding JSX closing tag for 'Badge'.
+frontend/src/pages/HireEmployeeDemo.tsx(354,7): error TS1005: ')' expected.
+frontend/src/pages/HireEmployeeDemo.tsx(565,5): error TS1128: Declaration or statement expected.
+frontend/src/pages/HireEmployeeDemo.tsx(566,3): error TS1109: Expression expected.
+frontend/src/pages/HireEmployeeDemo.tsx(567,1): error TS1128: Declaration or statement expected.
+frontend/src/pages/TabbedModal/Catalog/ChartDataDebugger.tsx(4,44): error TS1109: Expression expected.
+frontend/src/pages/TabbedModal/Catalog/ChartDataDebugger.tsx(4,45): error TS1003: Identifier expected.
+frontend/src/pages/TabbedModal/Catalog/ChartDataDebugger.tsx(4,46): error TS1003: Identifier expected.
+frontend/src/pages/TabbedModal/Catalog/ChartDataDebugger.tsx(4,47): error TS1109: Expression expected.
+frontend/src/pages/TabbedModal/Catalog/ChartDataDebugger.tsx(4,48): error TS1003: Identifier expected.
+frontend/src/pages/TabbedModal/Catalog/ChartDataDebugger.tsx(4,49): error TS1003: Identifier expected.
+frontend/src/pages/TabbedModal/Catalog/ChartDataDebugger.tsx(4,50): error TS1109: Expression expected.
+frontend/src/pages/TabbedModal/Catalog/ChartDataDebugger.tsx(4,51): error TS1003: Identifier expected.
+frontend/src/pages/TabbedModal/Catalog/ChartDataDebugger.tsx(4,52): error TS1003: Identifier expected.
+frontend/src/pages/TabbedModal/Catalog/ChartDataDebugger.tsx(4,68): error TS1005: ';' expected.
+frontend/src/pages/TabbedModal/Catalog/ChartDataDebugger.tsx(4,70): error TS1002: Unterminated string literal.
+frontend/src/pages/TabbedModal/Catalog/DualLineageViewer.tsx(3,34): error TS1109: Expression expected.
+frontend/src/pages/TabbedModal/Catalog/DualLineageViewer.tsx(3,35): error TS1003: Identifier expected.
+frontend/src/pages/TabbedModal/Catalog/DualLineageViewer.tsx(3,36): error TS1003: Identifier expected.
+frontend/src/pages/TabbedModal/Catalog/DualLineageViewer.tsx(3,37): error TS1109: Expression expected.
+frontend/src/pages/TabbedModal/Catalog/DualLineageViewer.tsx(3,38): error TS1003: Identifier expected.
+frontend/src/pages/TabbedModal/Catalog/DualLineageViewer.tsx(3,39): error TS1003: Identifier expected.
+frontend/src/pages/TabbedModal/Catalog/DualLineageViewer.tsx(3,40): error TS1109: Expression expected.
+frontend/src/pages/TabbedModal/Catalog/DualLineageViewer.tsx(3,41): error TS1003: Identifier expected.
+frontend/src/pages/TabbedModal/Catalog/DualLineageViewer.tsx(3,42): error TS1003: Identifier expected.
+frontend/src/pages/TabbedModal/Catalog/DualLineageViewer.tsx(3,58): error TS1005: ';' expected.
+frontend/src/pages/TabbedModal/Catalog/DualLineageViewer.tsx(3,60): error TS1002: Unterminated string literal.
+frontend/src/pages/TabbedModal/Catalog/LineageContainer.tsx(3,34): error TS1109: Expression expected.
+frontend/src/pages/TabbedModal/Catalog/LineageContainer.tsx(3,35): error TS1003: Identifier expected.
+frontend/src/pages/TabbedModal/Catalog/LineageContainer.tsx(3,36): error TS1003: Identifier expected.
+frontend/src/pages/TabbedModal/Catalog/LineageContainer.tsx(3,37): error TS1109: Expression expected.
+frontend/src/pages/TabbedModal/Catalog/LineageContainer.tsx(3,38): error TS1003: Identifier expected.
+frontend/src/pages/TabbedModal/Catalog/LineageContainer.tsx(3,39): error TS1003: Identifier expected.
+frontend/src/pages/TabbedModal/Catalog/LineageContainer.tsx(3,40): error TS1109: Expression expected.
+frontend/src/pages/TabbedModal/Catalog/LineageContainer.tsx(3,41): error TS1003: Identifier expected.
+frontend/src/pages/TabbedModal/Catalog/LineageContainer.tsx(3,42): error TS1003: Identifier expected.
+frontend/src/pages/TabbedModal/Catalog/LineageContainer.tsx(3,58): error TS1005: ';' expected.
+frontend/src/pages/TabbedModal/Catalog/LineageContainer.tsx(3,60): error TS1002: Unterminated string literal.
+frontend/src/pages/TabbedModal/Catalog/semanticLayoutBuilder.ts(3,34): error TS1109: Expression expected.
+frontend/src/pages/TabbedModal/Catalog/semanticLayoutBuilder.ts(3,35): error TS1003: Identifier expected.
+frontend/src/pages/TabbedModal/Catalog/semanticLayoutBuilder.ts(3,36): error TS1003: Identifier expected.
+frontend/src/pages/TabbedModal/Catalog/semanticLayoutBuilder.ts(3,37): error TS1109: Expression expected.
+frontend/src/pages/TabbedModal/Catalog/semanticLayoutBuilder.ts(3,38): error TS1003: Identifier expected.
+frontend/src/pages/TabbedModal/Catalog/semanticLayoutBuilder.ts(3,39): error TS1003: Identifier expected.
+frontend/src/pages/TabbedModal/Catalog/semanticLayoutBuilder.ts(3,40): error TS1109: Expression expected.
+frontend/src/pages/TabbedModal/Catalog/semanticLayoutBuilder.ts(3,41): error TS1003: Identifier expected.
+frontend/src/pages/TabbedModal/Catalog/semanticLayoutBuilder.ts(3,42): error TS1003: Identifier expected.
+frontend/src/pages/TabbedModal/Catalog/semanticLayoutBuilder.ts(3,58): error TS1005: ';' expected.
+frontend/src/pages/TabbedModal/Catalog/semanticLayoutBuilder.ts(3,60): error TS1002: Unterminated string literal.
+frontend/src/pages/TabbedModal/Catalog/technicalLineageLayout.ts(5,26): error TS1109: Expression expected.
+frontend/src/pages/TabbedModal/Catalog/technicalLineageLayout.ts(5,27): error TS1003: Identifier expected.
+frontend/src/pages/TabbedModal/Catalog/technicalLineageLayout.ts(5,28): error TS1003: Identifier expected.
+frontend/src/pages/TabbedModal/Catalog/technicalLineageLayout.ts(5,29): error TS1109: Expression expected.
+frontend/src/pages/TabbedModal/Catalog/technicalLineageLayout.ts(5,30): error TS1003: Identifier expected.
+frontend/src/pages/TabbedModal/Catalog/technicalLineageLayout.ts(5,31): error TS1003: Identifier expected.
+frontend/src/pages/TabbedModal/Catalog/technicalLineageLayout.ts(5,32): error TS1109: Expression expected.
+frontend/src/pages/TabbedModal/Catalog/technicalLineageLayout.ts(5,33): error TS1003: Identifier expected.
+frontend/src/pages/TabbedModal/Catalog/technicalLineageLayout.ts(5,34): error TS1003: Identifier expected.
+frontend/src/pages/TabbedModal/Catalog/technicalLineageLayout.ts(5,50): error TS1005: ';' expected.
+frontend/src/pages/TabbedModal/Catalog/technicalLineageLayout.ts(5,52): error TS1002: Unterminated string literal.
+frontend/src/pages/TabbedModal/ERD/ImprovedErdDiagram.tsx(25,26): error TS1109: Expression expected.
+frontend/src/pages/TabbedModal/ERD/ImprovedErdDiagram.tsx(25,27): error TS1003: Identifier expected.
+frontend/src/pages/TabbedModal/ERD/ImprovedErdDiagram.tsx(25,28): error TS1003: Identifier expected.
+frontend/src/pages/TabbedModal/ERD/ImprovedErdDiagram.tsx(25,29): error TS1109: Expression expected.
+frontend/src/pages/TabbedModal/ERD/ImprovedErdDiagram.tsx(25,30): error TS1003: Identifier expected.
+frontend/src/pages/TabbedModal/ERD/ImprovedErdDiagram.tsx(25,31): error TS1003: Identifier expected.
+frontend/src/pages/TabbedModal/ERD/ImprovedErdDiagram.tsx(25,32): error TS1109: Expression expected.
+frontend/src/pages/TabbedModal/ERD/ImprovedErdDiagram.tsx(25,33): error TS1003: Identifier expected.
+frontend/src/pages/TabbedModal/ERD/ImprovedErdDiagram.tsx(25,34): error TS1003: Identifier expected.
+frontend/src/pages/TabbedModal/ERD/ImprovedErdDiagram.tsx(25,50): error TS1005: ';' expected.
+frontend/src/pages/TabbedModal/ERD/ImprovedErdDiagram.tsx(25,52): error TS1002: Unterminated string literal.
+frontend/src/pages/TabbedModal/tabs/DataCatalogTree.tsx(3,34): error TS1109: Expression expected.
+frontend/src/pages/TabbedModal/tabs/DataCatalogTree.tsx(3,35): error TS1003: Identifier expected.
+frontend/src/pages/TabbedModal/tabs/DataCatalogTree.tsx(3,36): error TS1003: Identifier expected.
+frontend/src/pages/TabbedModal/tabs/DataCatalogTree.tsx(3,37): error TS1109: Expression expected.
+frontend/src/pages/TabbedModal/tabs/DataCatalogTree.tsx(3,38): error TS1003: Identifier expected.
+frontend/src/pages/TabbedModal/tabs/DataCatalogTree.tsx(3,39): error TS1003: Identifier expected.
+frontend/src/pages/TabbedModal/tabs/DataCatalogTree.tsx(3,40): error TS1109: Expression expected.
+frontend/src/pages/TabbedModal/tabs/DataCatalogTree.tsx(3,41): error TS1003: Identifier expected.
+frontend/src/pages/TabbedModal/tabs/DataCatalogTree.tsx(3,42): error TS1003: Identifier expected.
+frontend/src/pages/TabbedModal/tabs/DataCatalogTree.tsx(3,58): error TS1005: ';' expected.
+frontend/src/pages/TabbedModal/tabs/DataCatalogTree.tsx(3,60): error TS1002: Unterminated string literal.
+frontend/src/pages/TabbedModal/tabs/SemanticTermDetails.tsx(31,26): error TS1109: Expression expected.
+frontend/src/pages/TabbedModal/tabs/SemanticTermDetails.tsx(31,27): error TS1003: Identifier expected.
+frontend/src/pages/TabbedModal/tabs/SemanticTermDetails.tsx(31,28): error TS1003: Identifier expected.
+frontend/src/pages/TabbedModal/tabs/SemanticTermDetails.tsx(31,29): error TS1109: Expression expected.
+frontend/src/pages/TabbedModal/tabs/SemanticTermDetails.tsx(31,30): error TS1003: Identifier expected.
+frontend/src/pages/TabbedModal/tabs/SemanticTermDetails.tsx(31,31): error TS1003: Identifier expected.
+frontend/src/pages/TabbedModal/tabs/SemanticTermDetails.tsx(31,32): error TS1109: Expression expected.
+frontend/src/pages/TabbedModal/tabs/SemanticTermDetails.tsx(31,33): error TS1003: Identifier expected.
+frontend/src/pages/TabbedModal/tabs/SemanticTermDetails.tsx(31,34): error TS1003: Identifier expected.
+frontend/src/pages/TabbedModal/tabs/SemanticTermDetails.tsx(31,50): error TS1005: ';' expected.
+frontend/src/pages/TabbedModal/tabs/SemanticTermDetails.tsx(31,52): error TS1002: Unterminated string literal.
+frontend/src/pages/TabbedModal/tabs/useHierarchicalLayout.tsx(3,26): error TS1109: Expression expected.
+frontend/src/pages/TabbedModal/tabs/useHierarchicalLayout.tsx(3,27): error TS1003: Identifier expected.
+frontend/src/pages/TabbedModal/tabs/useHierarchicalLayout.tsx(3,28): error TS1003: Identifier expected.
+frontend/src/pages/TabbedModal/tabs/useHierarchicalLayout.tsx(3,29): error TS1109: Expression expected.
+frontend/src/pages/TabbedModal/tabs/useHierarchicalLayout.tsx(3,30): error TS1003: Identifier expected.
+frontend/src/pages/TabbedModal/tabs/useHierarchicalLayout.tsx(3,31): error TS1003: Identifier expected.
+frontend/src/pages/TabbedModal/tabs/useHierarchicalLayout.tsx(3,32): error TS1109: Expression expected.
+frontend/src/pages/TabbedModal/tabs/useHierarchicalLayout.tsx(3,33): error TS1003: Identifier expected.
+frontend/src/pages/TabbedModal/tabs/useHierarchicalLayout.tsx(3,34): error TS1003: Identifier expected.
+frontend/src/pages/TabbedModal/tabs/useHierarchicalLayout.tsx(3,50): error TS1005: ';' expected.
+frontend/src/pages/TabbedModal/tabs/useHierarchicalLayout.tsx(3,52): error TS1002: Unterminated string literal.
+frontend/src/pages/WealthTransfer/FamilyTreeVisualization.tsx(189,23): error TS1005: '}' expected.
+frontend/src/pages/WealthTransfer/FamilyTreeVisualization.tsx(189,46): error TS1381: Unexpected token. Did you mean `{'}'}` or `&rbrace;`?
+frontend/src/pages/WealthTransfer/TrustManagementPanel.tsx(143,16): error TS1005: ';' expected.
+frontend/src/pages/WorkflowTimeoutTriggersPageEnhanced.tsx(104,11): error TS1005: ';' expected.
+frontend/src/pages/WorkflowTimeoutTriggersPageEnhanced.tsx(104,51): error TS1005: ';' expected.
+frontend/src/pages/WorkflowTimeoutTriggersPageEnhanced.tsx(104,62): error TS1359: Identifier expected. 'false' is a reserved word that cannot be used here.
+frontend/src/pages/WorkflowTimeoutTriggersPageEnhanced.tsx(105,11): error TS1005: ';' expected.
+frontend/src/pages/WorkflowTimeoutTriggersPageEnhanced.tsx(105,51): error TS1005: ';' expected.
+frontend/src/pages/WorkflowTimeoutTriggersPageEnhanced.tsx(105,69): error TS1005: ',' expected.
+frontend/src/pages/WorkflowTimeoutTriggersPageEnhanced.tsx(110,19): error TS1011: An element access expression should take an argument.
+frontend/src/pages/WorkflowTimeoutTriggersPageEnhanced.tsx(116,1): error TS1128: Declaration or statement expected.

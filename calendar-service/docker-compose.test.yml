@@ -1,0 +1,42 @@
+version: '3.8'
+
+services:
+  k6-test:
+    image: grafana/k6:latest
+    container_name: k6-load-test
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ./k6:/scripts
+      - ./k6/results:/scripts/results
+    environment:
+      - BACKEND_URL=http://host.docker.internal:8081
+      - HASURA_URL=http://host.docker.internal:8080
+      - TENANT_COUNT=10
+    command: run /scripts/api-load-test.js --duration 5m --vus-max 100
+    networks:
+      - test-net
+
+  postgres-test:
+    image: postgres:15
+    container_name: postgres-load-test
+    environment:
+      POSTGRES_PASSWORD: testpassword
+      POSTGRES_DB: calendar_test
+    volumes:
+      - postgres-test_/var/lib/postgresql/data
+    networks:
+      - test-net
+
+  redis-test:
+    image: redis:7-alpine
+    container_name: redis-load-test
+    networks:
+      - test-net
+
+networks:
+  test-net:
+    driver: bridge
+
+volumes:
+  postgres-test_

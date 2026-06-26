@@ -1,0 +1,186 @@
+version: '3.8'
+
+services:
+  # =========================================================================
+  # Redpanda (Kafka) broker for event distribution
+  # =========================================================================
+  redpanda:
+    image: docker.redpanda.com/redpandadata/redpanda:latest
+    container_name: semlayer-redpanda
+    hostname: redpanda
+    command: ["redpanda", "start", "--overprovisioned", "--smp", "1", "--memory", "1G", "--reserve-memory", "0M", "--check=false"]
+    ports:
+      - "9092:9092"   # Kafka broker
+      - "8082:8082"   # Pandaproxy (HTTP Kafka API)
+    networks:
+      - semlayer
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "rpk", "cluster", "info"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # =========================================================================
+  # Temporal (for workflow orchestration)
+  # =========================================================================
+  temporal:
+    image: temporalio/server:latest
+    container_name: semlayer-temporal
+    environment:
+      DB: postgres12
+      DB_PORT: 5432
+      POSTGRES_USER: postgres
+      POSTGRES_PWD: postgres
+      POSTGRES_SEEDS: postgres
+      LOG_LEVEL: debug
+      DYNAMIC_CONFIG_FILE_PATH: /etc/temporal/config/dynamicconfig.yaml
+    ports:
+      - "7233:7233"  # gRPC port
+      - "6933:6933"  # Frontend gRPC
+      - "6934:6934"  # History gRPC
+      - "6935:6935"  # Matching gRPC
+      - "6939:6939"  # Worker gRPC
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - semlayer
+
+  # =========================================================================
+  # Temporal Admin Tools (optional, for debugging)
+  # =========================================================================
+  temporal-admin-tools:
+    image: temporalio/admin-tools:latest
+    container_name: semlayer-temporal-admin
+    ports:
+      - "6500:6500"
+    environment:
+      TEMPORAL_CLI_ADDRESS: temporal:7233
+    depends_on:
+      - temporal
+    networks:
+      - semlayer
+
+  # =========================================================================
+  # Hasura GraphQL (for real-time queries)
+  # =========================================================================
+  hasura:
+    image: hasura/graphql-engine:latest
+    container_name: semlayer-hasura
+    environment:
+      HASURA_GRAPHQL_DATABASE_URL: postgres://postgres:postgres@postgres:5432/alpha
+      HASURA_GRAPHQL_ENABLE_CONSOLE: "true"
+      HASURA_GRAPHQL_ADMIN_SECRET: admin-secret
+      HASURA_GRAPHQL_LOG_LEVEL: debug
+    ports:
+      - "8080:8080"  # Hasura GraphQL API
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - semlayer
+
+  # =========================================================================
+  # UMA Rebalance Microservice
+  # =========================================================================
+  uma-rebalance:
+    build:
+      context: ./backend
+      dockerfile: services/uma-rebalance/Dockerfile
+    container_name: semlayer-uma-rebalance
+    environment:
+      DATABASE_URL: postgres://postgres:postgres@postgres:5432/alpha?sslmode=disable
+      TEMPORAL_HOST_PORT: temporal:7233
+      KAFKA_BROKERS: redpanda:9092
+      LOG_LEVEL: debug
+    ports:
+      - "8087:8087"  # UMA Rebalance API
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redpanda:
+        condition: service_healthy
+      temporal:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8087/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - semlayer
+
+  # =========================================================================
+  # UMA Events Listener (RabbitMQ consumer)
+  # =========================================================================
+  uma-events-listener:
+    build:
+      context: ./backend
+      dockerfile: services/uma-events-listener/Dockerfile
+    container_name: semlayer-uma-events-listener
+    environment:
+      DATABASE_URL: postgres://postgres:postgres@postgres:5432/alpha?sslmode=disable
+      KAFKA_BROKERS: redpanda:9092
+      LOG_LEVEL: debug
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redpanda:
+        condition: service_healthy
+    networks:
+      - semlayer
+
+  # =========================================================================
+  # Temporal Worker (registers and processes workflows)
+  # =========================================================================
+  temporal-worker:
+    build:
+      context: ./backend
+      dockerfile: cmd/temporal-worker/Dockerfile
+    container_name: semlayer-temporal-worker
+    environment:
+      TEMPORAL_HOST_PORT: temporal:7233
+      DATABASE_URL: postgres://postgres:postgres@postgres:5432/alpha?sslmode=disable
+      KAFKA_BROKERS: redpanda:9092
+      TASK_QUEUE: uma-rebalance
+      LOG_LEVEL: debug
+    depends_on:
+      postgres:
+        condition: service_healthy
+      temporal:
+        condition: service_started
+      redpanda:
+        condition: service_healthy
+    networks:
+      - semlayer
+
+  # =========================================================================
+  # Frontend (React + Vite for UMA Builder)
+  # =========================================================================
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.dev
+    container_name: semlayer-frontend
+    environment:
+      VITE_API_URL: http://localhost:8080
+      VITE_HASURA_URL: http://localhost:8080/graphql
+      VITE_UMA_REBALANCE_API: http://localhost:8087
+    ports:
+      - "5173:5173"  # React dev server
+    volumes:
+      - ./frontend/src:/app/src
+      - ./frontend/public:/app/public
+    depends_on:
+      - uma-rebalance
+    networks:
+      - semlayer
+
+volumes:
+  rabbitmq_data:
+    driver: local
+
+networks:
+  semlayer:
+    driver: bridge

@@ -1,0 +1,32 @@
+# Optional: event trigger for external webhooks (e.g., invalidate caches after publish)
+# metadata/databases/default/event_triggers/fabric_defn_published.yaml
+name: fabric_defn_published
+definition:
+  enable_manual: false
+  insert:
+    columns: '*'
+  update:
+    columns: [status, is_current]
+  delete: {}
+  enable_ddl: false
+  table:
+    name: fabric_defn
+    schema: public
+retry_conf:
+  interval_sec: 60
+  num_retries: 5
+  timeout_sec: 30
+headers:
+  - name: x-hasura-event
+    value: fabric_defn_published
+webhook: https://your-webhook.example.com/semantic-model-events
+request_transform:
+  body:
+    action: transform
+    template: |
+      {
+        "event": {{ $body.event.op | toJson }},
+        "row": {{ $body.event.data.new | toJson }}
+      }
+  template_engine: Kriti
+  version: 2

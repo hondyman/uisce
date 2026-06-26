@@ -1,0 +1,82 @@
+table:
+  name: bp_adaptive_triggers
+  schema: public
+object_relationships:
+  - name: step
+    using:
+      foreign_key_constraint_on: step_id
+  - name: tenant
+    using:
+      foreign_key_constraint_on: tenant_id
+insert_permissions:
+  - role: user
+    permission:
+      check:
+        tenant_id:
+          _eq: X-Hasura-Tenant-Id
+      columns:
+        - tenant_id
+        - step_id
+        - trigger_name
+        - trigger_condition
+        - trigger_type
+        - action_type
+        - action_config
+        - context_variables
+        - learning_mode
+        - persist_across_branches
+        - reset_on_loop_back
+        - is_active
+select_permissions:
+  - role: user
+    permission:
+      columns:
+        - id
+        - tenant_id
+        - step_id
+        - trigger_name
+        - trigger_condition
+        - trigger_type
+        - action_type
+        - action_config
+        - context_variables
+        - learning_mode
+        - persist_across_branches
+        - reset_on_loop_back
+        - trigger_count
+        - success_rate
+        - is_active
+        - created_at
+        - updated_at
+      filter:
+        tenant_id:
+          _eq: X-Hasura-Tenant-Id
+update_permissions:
+  - role: user
+    permission:
+      columns:
+        - trigger_name
+        - trigger_condition
+        - trigger_type
+        - action_type
+        - action_config
+        - context_variables
+        - learning_mode
+        - persist_across_branches
+        - reset_on_loop_back
+        - trigger_count
+        - success_rate
+        - is_active
+        - updated_at
+      filter:
+        tenant_id:
+          _eq: X-Hasura-Tenant-Id
+      check:
+        tenant_id:
+          _eq: X-Hasura-Tenant-Id
+delete_permissions:
+  - role: user
+    permission:
+      filter:
+        tenant_id:
+          _eq: X-Hasura-Tenant-Id

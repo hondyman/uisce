@@ -1,0 +1,47 @@
+.loadingContainer {
+  display: flex;
+  justify-content: center;
+  padding: 50px;
+}
+
+.emptyContainer {
+  padding: 50px;
+}
+
+.backButton {
+  margin-right: 16px;
+}
+
+.title {
+  margin: 0;
+}
+
+.pageContainer {
+  padding: 24px;
+}
+
+.header {
+  margin-bottom: 16px;
+  display: flex;
+  align-items: center;
+}
+
+.validationRulesContainer {
+  padding: 24px 0;
+}
+
+.validationRulesHeader {
+  margin-bottom: 24px;
+}
+
+.validationRulesTitle {
+  margin-bottom: 8px;
+}
+
+.validationRulesDescription {
+  color: rgba(0, 0, 0, 0.45);
+}
+
+.validationRulesCard {
+  border: 1px solid #f0f0f0;
+}

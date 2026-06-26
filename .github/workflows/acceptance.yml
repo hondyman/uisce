@@ -1,0 +1,165 @@
+name: WealthStream Acceptance Tests
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  metadata-validation:
+    name: Validate Metadata Package
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Validate YAML syntax
+      run: |
+        find metadata -name "*.yml" -exec yamllint -d relaxed {} \;
+
+    - name: Install registry CLI (placeholder)
+      run: |
+        # TODO: Install your registry-cli tool
+        echo "registry-cli would be installed here"
+
+    - name: Dry-run publish
+      run: |
+        # registry-cli publish --dir metadata --dry-run
+        echo "Would validate metadata publishability"
+
+    - name: Validate expressions
+      run: |
+        # registry-cli publish --dir metadata --validate-only
+        echo "Would compile CEL/Rego expressions"
+
+  unit-tests:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: '1.21'
+
+    - name: Install dependencies
+      working-directory: backend
+      run: go mod download
+
+    - name: Run policy tests
+      working-directory: backend
+      run: |
+        go test ./pkg/policy -run TestCELEvalEligibility -v
+        go test ./pkg/canonical -v
+
+    - name: Run feed tests
+      working-directory: backend
+      run: go test ./internal/feed/... -v
+
+  integration-tests:
+    name: Integration Tests
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_PASSWORD: testpass
+          POSTGRES_DB: testdb
+        ports:
+        - 5432:5432
+        options: >-
+          --health-cmd pg_isready --health-interval 10s --health-timeout 5s --health-retries 5
+
+      # StarRocks FE for analytics (single-node mode for CI)
+      starrocks-fe:
+        image: starrocks/fe-ubuntu:3.3-latest
+        ports:
+        - 9030:9030
+        - 8030:8030
+        options: >-
+          --health-cmd "curl -sf http://localhost:8030/api/health || exit 1" --health-interval 30s --health-timeout 10s --health-retries 10
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: '1.21'
+
+    - name: Start backend services
+      working-directory: backend
+      env:
+        DATABASE_URL: postgres://postgres:testpass@localhost:5432/testdb?sslmode=disable
+        STARROCKS_HOST: localhost
+        STARROCKS_PORT: 9030
+        STARROCKS_USER: root
+        STARROCKS_PASSWORD: ""
+      run: |
+        go run cmd/server/main.go &
+        sleep 5
+
+    - name: Install jq
+      run: sudo apt-get install -y jq
+
+    - name: Run feed card delivery test
+      env:
+        ASSERT_FEED_CARD_DELIVERY_BASEURL: http://localhost:8080
+        TENANT: test_t1
+        CLIENT: test_c1
+        CARD_ID: card_dividend_income
+        API_KEY: test-api-key
+      run: |
+        chmod +x scripts/assert_feed_card_delivery.sh
+        ./scripts/assert_feed_card_delivery.sh
+
+  e2e-tests:
+    name: End-to-End Tests
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_PASSWORD: testpass
+          POSTGRES_DB: testdb
+        ports:
+        - 5432:5432
+      starrocks-fe:
+        image: starrocks/fe-ubuntu:3.3-latest
+        ports:
+        - 9030:9030
+        - 8030:8030
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: '1.21'
+
+    - name: Start all services
+      working-directory: backend
+      env:
+        DATABASE_URL: postgres://postgres:testpass@localhost:5432/testdb?sslmode=disable
+        STARROCKS_HOST: localhost
+        STARROCKS_PORT: 9030
+        STARROCKS_USER: root
+        STARROCKS_PASSWORD: ""
+      run: |
+        # Start backend
+        go run cmd/server/main.go &
+        # Wait for readiness
+        sleep 10
+
+    - name: Install jq
+      run: sudo apt-get install -y jq
+
+    - name: Run E2E basic-mvp scenario
+      env:
+        E2E_BASEURL: http://localhost:8080
+        API_KEY: test-api-key
+      run: |
+        chmod +x scripts/e2e_run.sh
+        ./scripts/e2e_run.sh --scenario basic-mvp

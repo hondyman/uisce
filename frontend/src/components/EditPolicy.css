@@ -1,0 +1,11 @@
+.edit-policy { max-width: 800px; padding: 12px; border: 1px solid #ddd; border-radius: 6px; background: #fff }
+.ep-row { display: flex; gap: 8px; align-items: center; margin-bottom: 8px }
+.ep-row-col { display: flex; flex-direction: column; align-items: stretch; gap: 8px }
+.ep-row label { width: 120px; font-weight: 600 }
+.ep-row input[type="text"], .ep-row input[type="number"], .ep-row input[type="date"], .ep-row select, .ep-row textarea { flex: 1; padding: 6px; border: 1px solid #ccc; border-radius: 4px }
+.ep-perms { display: flex; gap: 12px }
+.ep-perm { display: inline-flex; gap: 6px; align-items: center }
+.ep-actions { margin-top: 12px }
+.ep-actions button { margin-right: 8px }
+.ep-error { color: #b00020; margin-bottom: 8px }
+.ep-loading { color: #666; margin-bottom: 8px }

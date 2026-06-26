@@ -1,0 +1,217 @@
+openapi: 3.0.3
+info:
+  title: WealthStream Feed & Advisor API
+  version: 1.0.0
+  description: API for WealthStream feed curation, advisor queues, and audit trails
+servers:
+  - url: https://api.example.com
+    description: Replace with your API host
+  - url: http://localhost:8080
+    description: Local development
+
+paths:
+  /v1/feed:
+    get:
+      summary: Get ranked feed cards for a client
+      operationId: getFeed
+      tags: [Feed]
+      parameters:
+        - name: tenant_id
+          in: query
+          required: true
+          schema: { type: string }
+        - name: client_id
+          in: query
+          required: true
+          schema: { type: string }
+        - name: channel
+          in: query
+          required: false
+          schema: { type: string, enum: ["mobile","portal","email"] }
+        - name: limit
+          in: query
+          required: false
+          schema: { type: integer, default: 10 }
+      responses:
+        '200':
+          description: Ranked feed cards
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  cards:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/FeedCardInstance'
+
+  /v1/feed/{card_id}/cta:
+    post:
+      summary: Invoke a CTA for a feed card
+      operationId: invokeCTA
+      tags: [Feed]
+      parameters:
+        - name: card_id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                tenant_id: { type: string }
+                client_id: { type: string }
+                cta_id: { type: string }
+                payload: { type: object, additionalProperties: true }
+      responses:
+        '200':
+          description: CTA accepted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string, example: "accepted" }
+                  needs_approval: { type: boolean }
+                  queue_item_id: { type: string, nullable: true }
+                  uar_hash: { type: string }
+
+  /v1/queue:
+    get:
+      summary: Query advisor queue
+      operationId: getQueue
+      tags: [Advisor]
+      parameters:
+        - name: tenant_id
+          in: query
+          required: true
+          schema: { type: string }
+        - name: advisor_id
+          in: query
+          required: false
+          schema: { type: string }
+        - name: sla_risk
+          in: query
+          required: false
+          schema: { type: string, enum: ["low","medium","high"] }
+      responses:
+        '200':
+          description: Queue items
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/AdvisorQueueItem'
+
+  /v1/queue/{queue_item_id}/decision:
+    post:
+      summary: Advisor decision on queue item
+      operationId: recordDecision
+      tags: [Advisor]
+      parameters:
+        - name: queue_item_id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                advisor_id: { type: string }
+                action:
+                  type: string
+                  enum: ["approve","reject","defer","escalate"]
+                rationale: { type: string }
+                attachments: { type: array, items: { type: string } }
+      responses:
+        '200':
+          description: Decision recorded
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string, example: "recorded" }
+                  uar_hash: { type: string }
+
+  /v1/uar/verify:
+    post:
+      summary: Request UAR verification for tenant
+      operationId: verifyUAR
+      tags: [Audit]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                tenant_id: { type: string }
+      responses:
+        '200':
+          description: Verification result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  tenant_id: { type: string }
+                  verified: { type: boolean }
+                  error: { type: string, nullable: true }
+
+components:
+  schemas:
+    FeedCardInstance:
+      type: object
+      properties:
+        card_id: { type: string }
+        template_id: { type: string }
+        title: { type: string }
+        body: { type: string }
+        fields: { type: object, additionalProperties: true }
+        disclosures: { type: array, items: { type: string } }
+        ctas:
+          type: array
+          items:
+            type: object
+            properties:
+              id: { type: string }
+              label: { type: string }
+              approval_required: { type: boolean }
+        rank_score: { type: number }
+        lineage: { type: array, items: { type: string } }
+        experiment: { type: string, nullable: true }
+
+    AdvisorQueueItem:
+      type: object
+      properties:
+        queue_item_id: { type: string }
+        tenant_id: { type: string }
+        client_id: { type: string }
+        card_id: { type: string }
+        suggested_action: { type: string }
+        confidence: { type: number }
+        priority: { type: string }
+        disclosures: { type: array, items: { type: string } }
+        lineage: { type: array, items: { type: string } }
+        created_at: { type: string, format: date-time }
+        sla_due_at: { type: string, format: date-time }
+
+  securitySchemes:
+    apiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-Api-Key
+
+security:
+  - apiKeyAuth: []

@@ -1,0 +1,34 @@
+---
+# ConfigMap for Drift Detection Service
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: drift-config
+  namespace: semlayer
+data:
+  # Database
+  postgres_host: "postgres.default.svc.cluster.local"
+  postgres_port: "5432"
+  postgres_db: "semlayer"
+
+  # Iceberg/Trino
+  trino_host: "trino.default.svc.cluster.local"
+  trino_port: "8080"
+  trino_catalog: "iceberg"
+  trino_schema: "features"
+
+  # Alerting
+  alert_email_recipients: "mlops-team@example.com,data-team@example.com"
+---
+# Secret for Drift Detection Service
+apiVersion: v1
+kind: Secret
+metadata:
+  name: drift-secrets
+  namespace: semlayer
+type: Opaque
+stringData:
+  postgres_user: "drift_user"
+  postgres_password: "${POSTGRES_PASSWORD}" # Replace with actual password
+  webhook_url: "${WEBHOOK_URL}" # Replace if using webhook alerts
+  pagerduty_key: "${PAGERDUTY_KEY}" # Replace if using PagerDuty

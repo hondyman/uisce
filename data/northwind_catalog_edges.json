@@ -1,0 +1,56 @@
+[
+  {
+    "id": "edge_cust_company",
+    "from_node": "cust.company_name",
+    "to": {
+      "type": "db_column",
+      "connection": "northwind_default",
+      "schema": "dbo",
+      "table": "Customers",
+      "column": "CompanyName"
+    },
+    "properties": { "confidence": 0.95 }
+  },
+  {
+    "id": "edge_cust_id",
+    "from_node": "cust.id",
+    "to": { "type": "db_column", "connection": "northwind_default", "schema": "dbo", "table": "Customers", "column": "CustomerID" },
+    "properties": { "confidence": 1 }
+  },
+  {
+    "id": "edge_emp_id",
+    "from_node": "emp.id",
+    "to": { "type": "db_column", "connection": "northwind_default", "schema": "dbo", "table": "Employees", "column": "EmployeeID" },
+    "properties": { "confidence": 1 }
+  },
+  {
+    "id": "edge_prod_id",
+    "from_node": "prod.id",
+    "to": { "type": "db_column", "connection": "northwind_default", "schema": "dbo", "table": "Products", "column": "ProductID" },
+    "properties": { "confidence": 1 }
+  },
+  {
+    "id": "edge_ord_id",
+    "from_node": "ord.id",
+    "to": { "type": "db_column", "connection": "northwind_default", "schema": "dbo", "table": "Orders", "column": "OrderID" },
+    "properties": { "confidence": 1 }
+  },
+  {
+    "id": "edge_od_product",
+    "from_node": "od.product_id",
+    "to": { "type": "db_column", "connection": "northwind_default", "schema": "dbo", "table": "[Order Details]", "column": "ProductID" },
+    "properties": { "confidence": 1 }
+  },
+  {
+    "id": "edge_ship_company",
+    "from_node": "ship.company_name",
+    "to": { "type": "db_column", "connection": "northwind_default", "schema": "dbo", "table": "Shippers", "column": "CompanyName" },
+    "properties": { "confidence": 0.98 }
+  },
+  {
+    "id": "edge_region",
+    "from_node": "region.region_id",
+    "to": { "type": "db_column", "connection": "northwind_default", "schema": "dbo", "table": "Region", "column": "RegionID" },
+    "properties": { "confidence": 1 }
+  }
+]

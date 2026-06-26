@@ -1,0 +1,216 @@
+# Compliance Engine Helm Values
+# Regulatory compliance validation and reporting service
+
+replicaCount: 2
+
+image:
+  repository: semlayerprodacr.azurecr.io/semlayer/compliance-engine
+  pullPolicy: IfNotPresent
+  tag: ""
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  create: true
+  annotations: {}
+  name: ""
+
+podAnnotations:
+  prometheus.io/scrape: "true"
+  prometheus.io/port: "9090"
+  prometheus.io/path: "/metrics"
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  runAsGroup: 1000
+  fsGroup: 1000
+
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop:
+    - ALL
+
+service:
+  type: ClusterIP
+  port: 8080
+  metricsPort: 9090
+
+ingress:
+  enabled: false
+
+resources:
+  limits:
+    cpu: "2"
+    memory: 4Gi
+  requests:
+    cpu: "500m"
+    memory: 1Gi
+
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 8
+  targetCPUUtilizationPercentage: 70
+  targetMemoryUtilizationPercentage: 80
+
+nodeSelector:
+  kubernetes.azure.com/agentpool: app
+
+tolerations: []
+
+affinity:
+  podAntiAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+    - weight: 100
+      podAffinityTerm:
+        labelSelector:
+          matchExpressions:
+          - key: app.kubernetes.io/name
+            operator: In
+            values:
+            - compliance-engine
+        topologyKey: topology.kubernetes.io/zone
+
+topologySpreadConstraints:
+- maxSkew: 1
+  topologyKey: topology.kubernetes.io/zone
+  whenUnsatisfiable: ScheduleAnyway
+  labelSelector:
+    matchLabels:
+      app.kubernetes.io/name: compliance-engine
+
+livenessProbe:
+  httpGet:
+    path: /healthz
+    port: 8080
+  initialDelaySeconds: 30
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 3
+
+readinessProbe:
+  httpGet:
+    path: /readyz
+    port: 8080
+  initialDelaySeconds: 10
+  periodSeconds: 5
+  timeoutSeconds: 3
+  failureThreshold: 3
+
+startupProbe:
+  httpGet:
+    path: /healthz
+    port: 8080
+  initialDelaySeconds: 10
+  periodSeconds: 5
+  timeoutSeconds: 3
+  failureThreshold: 30
+
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 1
+
+# Compliance Engine Configuration
+config:
+  database:
+    host: semlayer-postgresql.postgres.database.azure.com
+    port: 5432
+    name: compliance
+    sslMode: require
+    maxConnections: 30
+
+  cache:
+    enabled: true
+    host: semlayer-redis.redis.cache.windows.net
+    port: 6380
+    tls: true
+
+  # Regulatory frameworks supported
+  frameworks:
+  - name: SOC2
+    enabled: true
+  - name: GDPR
+    enabled: true
+  - name: HIPAA
+    enabled: true
+  - name: FINRA
+    enabled: true
+  - name: PCI-DSS
+    enabled: true
+  - name: SOX
+    enabled: true
+
+  # Audit logging
+  audit:
+    enabled: true
+    retentionDays: 2555 # 7 years
+    destination: azure-storage
+
+  # Compliance validation settings
+  validation:
+    asyncMode: true
+    queueType: servicebus
+    maxConcurrentValidations: 20
+    timeout: 5m
+
+  # Reporting
+  reporting:
+    enabled: true
+    formats:
+    - pdf
+    - xlsx
+    - json
+    storage: azure-blob
+
+  # Multi-tenant
+  multiTenant:
+    enabled: true
+    isolation: schema
+
+env:
+- name: LOG_LEVEL
+  value: "info"
+- name: LOG_FORMAT
+  value: "json"
+- name: ENVIRONMENT
+  value: "production"
+
+secrets:
+  useAzureKeyVault: true
+  keyVaultName: semlayer-prod-kv
+  keys:
+  - name: database-password
+    secretName: db-password
+  - name: redis-password
+    secretName: redis-password
+
+extraVolumes:
+- name: config
+  configMap:
+    name: compliance-engine-config
+- name: tmp
+  emptyDir: {}
+
+extraVolumeMounts:
+- name: config
+  mountPath: /app/config
+  readOnly: true
+- name: tmp
+  mountPath: /tmp
+
+istio:
+  enabled: true
+  virtualService:
+    enabled: true
+    timeout: 60s
+    retries:
+      attempts: 3
+      perTryTimeout: 20s
+      retryOn: "5xx,reset,connect-failure"
+  destinationRule:
+    enabled: true

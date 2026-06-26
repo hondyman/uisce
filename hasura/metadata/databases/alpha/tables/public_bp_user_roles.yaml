@@ -1,0 +1,46 @@
+table:
+  name: bp_user_roles
+  schema: public
+object_relationships:
+  - name: role
+    using:
+      foreign_key_constraint_on: role_id
+insert_permissions:
+  - role: user
+    permission:
+      check:
+        tenant_id:
+          _eq: X-Hasura-Tenant-Id
+      columns:
+        - user_id
+        - role_id
+        - tenant_id
+        - datasource_id
+        - scope_type
+        - scope_id
+        - assigned_by
+        - expires_at
+select_permissions:
+  - role: user
+    permission:
+      columns:
+        - id
+        - user_id
+        - role_id
+        - tenant_id
+        - datasource_id
+        - scope_type
+        - scope_id
+        - assigned_by
+        - assigned_at
+        - expires_at
+        - is_active
+      filter:
+        tenant_id:
+          _eq: X-Hasura-Tenant-Id
+delete_permissions:
+  - role: user
+    permission:
+      filter:
+        tenant_id:
+          _eq: X-Hasura-Tenant-Id

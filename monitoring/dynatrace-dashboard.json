@@ -1,0 +1,610 @@
+{
+  "dashboardMetadata": {
+    "name": "Semlayer Governance Platform - Performance & Observability",
+    "shared": true,
+    "owner": "Platform SRE",
+    "description": "Real-time observability for Access Intelligence Service, conversational layer, and governance workflows",
+    "tags": ["semlayer", "governance", "performance", "observability"]
+  },
+  "tiles": [
+    {
+      "name": "Hot-Path Performance SLOs",
+      "type": "SLO",
+      "bounds": {
+        "top": 0,
+        "left": 0,
+        "width": 152,
+        "height": 76
+      },
+      "tileFilter": {
+        "timeframe": "-1h"
+      },
+      "configured": true,
+      "sloTile": {
+        "sloId": "semlayer.access_intelligence.latency_slo",
+        "showProblems": true,
+        "viewMode": "BOTH"
+      }
+    },
+    {
+      "name": "Service Method Latency",
+      "type": "DATA_EXPLORER",
+      "bounds": {
+        "top": 76,
+        "left": 0,
+        "width": 304,
+        "height": 228
+      },
+      "tileFilter": {
+        "timeframe": "-1h"
+      },
+      "configured": true,
+      "queries": [
+        {
+          "id": "A",
+          "metric": "semlayer.access_evaluation.duration",
+          "spaceAggregation": "AVG",
+          "timeAggregation": "PERCENTILE_95",
+          "splitBy": ["cache.hit"],
+          "filterBy": {
+            "dt.entity.service": ["SERVICE-ABC123"]
+          }
+        }
+      ],
+      "visualConfig": {
+        "type": "GRAPH_CHART",
+        "global": {
+          "theme": "DEFAULT"
+        },
+        "rules": [
+          {
+            "matcher": "A:",
+            "properties": {
+              "color": "DEFAULT"
+            },
+            "seriesOverrides": []
+          }
+        ],
+        "axes": {
+          "xAxis": {
+            "displayName": "",
+            "visible": true
+          },
+          "yAxes": [
+            {
+              "displayName": "Latency (ms)",
+              "visible": true
+            }
+          ]
+        },
+        "legend": {
+          "visible": true,
+          "position": "AUTO"
+        }
+      }
+    },
+    {
+      "name": "Concurrent Evaluations",
+      "type": "DATA_EXPLORER",
+      "bounds": {
+        "top": 304,
+        "left": 0,
+        "width": 152,
+        "height": 152
+      },
+      "tileFilter": {
+        "timeframe": "-1h"
+      },
+      "configured": true,
+      "queries": [
+        {
+          "id": "A",
+          "metric": "semlayer.access_evaluation.active",
+          "spaceAggregation": "MAX",
+          "timeAggregation": "VALUE"
+        },
+        {
+          "id": "B",
+          "metric": "semlayer.access_evaluation.concurrency_limit",
+          "spaceAggregation": "MAX",
+          "timeAggregation": "VALUE"
+        }
+      ],
+      "visualConfig": {
+        "type": "SINGLE_VALUE",
+        "global": {
+          "theme": "DEFAULT"
+        },
+        "thresholds": [
+          {
+            "axisTarget": "LEFT",
+            "rules": [
+              {
+                "color": "RED",
+                "comparator": "ABOVE",
+                "value": 80,
+                "unit": "PERCENT"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "Cache Health",
+      "type": "DATA_EXPLORER",
+      "bounds": {
+        "top": 304,
+        "left": 152,
+        "width": 152,
+        "height": 152
+      },
+      "tileFilter": {
+        "timeframe": "-1h"
+      },
+      "configured": true,
+      "queries": [
+        {
+          "id": "A",
+          "metric": "semlayer.cache.hit_ratio",
+          "spaceAggregation": "AVG",
+          "timeAggregation": "VALUE"
+        },
+        {
+          "id": "B",
+          "metric": "semlayer.cache.invalidations",
+          "spaceAggregation": "SUM",
+          "timeAggregation": "COUNT"
+        }
+      ],
+      "visualConfig": {
+        "type": "GRAPH_CHART",
+        "global": {
+          "theme": "DEFAULT"
+        }
+      }
+    },
+    {
+      "name": "Conversational Turn Latency",
+      "type": "DATA_EXPLORER",
+      "bounds": {
+        "top": 0,
+        "left": 304,
+        "width": 304,
+        "height": 228
+      },
+      "tileFilter": {
+        "timeframe": "-1h"
+      },
+      "configured": true,
+      "queries": [
+        {
+          "id": "A",
+          "metric": "semlayer.conversational.turn.duration",
+          "spaceAggregation": "AVG",
+          "timeAggregation": "PERCENTILE_95",
+          "splitBy": ["conversation.length"]
+        }
+      ],
+      "visualConfig": {
+        "type": "GRAPH_CHART",
+        "global": {
+          "theme": "DEFAULT"
+        }
+      }
+    },
+    {
+      "name": "Guardrail Intervention Rate",
+      "type": "DATA_EXPLORER",
+      "bounds": {
+        "top": 228,
+        "left": 304,
+        "width": 152,
+        "height": 152
+      },
+      "tileFilter": {
+        "timeframe": "-1h"
+      },
+      "configured": true,
+      "queries": [
+        {
+          "id": "A",
+          "metric": "semlayer.guardrail.interventions",
+          "spaceAggregation": "SUM",
+          "timeAggregation": "COUNT"
+        },
+        {
+          "id": "B",
+          "metric": "semlayer.conversational.turns",
+          "spaceAggregation": "SUM",
+          "timeAggregation": "COUNT"
+        }
+      ],
+      "visualConfig": {
+        "type": "SINGLE_VALUE",
+        "global": {
+          "theme": "DEFAULT"
+        },
+        "thresholds": [
+          {
+            "axisTarget": "LEFT",
+            "rules": [
+              {
+                "color": "YELLOW",
+                "comparator": "ABOVE",
+                "value": 10,
+                "unit": "PERCENT"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "Active Conversations",
+      "type": "DATA_EXPLORER",
+      "bounds": {
+        "top": 228,
+        "left": 456,
+        "width": 152,
+        "height": 152
+      },
+      "tileFilter": {
+        "timeframe": "-1h"
+      },
+      "configured": true,
+      "queries": [
+        {
+          "id": "A",
+          "metric": "semlayer.conversations.active",
+          "spaceAggregation": "MAX",
+          "timeAggregation": "VALUE"
+        }
+      ],
+      "visualConfig": {
+        "type": "SINGLE_VALUE",
+        "global": {
+          "theme": "DEFAULT"
+        }
+      }
+    },
+    {
+      "name": "Manual Grant Rate",
+      "type": "DATA_EXPLORER",
+      "bounds": {
+        "top": 456,
+        "left": 0,
+        "width": 152,
+        "height": 152
+      },
+      "tileFilter": {
+        "timeframe": "-30d"
+      },
+      "configured": true,
+      "queries": [
+        {
+          "id": "A",
+          "metric": "semlayer.governance.manual_grants",
+          "spaceAggregation": "SUM",
+          "timeAggregation": "COUNT"
+        }
+      ],
+      "visualConfig": {
+        "type": "GRAPH_CHART",
+        "global": {
+          "theme": "DEFAULT"
+        }
+      }
+    },
+    {
+      "name": "Drift Backlog",
+      "type": "DATA_EXPLORER",
+      "bounds": {
+        "top": 456,
+        "left": 152,
+        "width": 152,
+        "height": 152
+      },
+      "tileFilter": {
+        "timeframe": "-1h"
+      },
+      "configured": true,
+      "queries": [
+        {
+          "id": "A",
+          "metric": "semlayer.governance.drift_backlog",
+          "spaceAggregation": "MAX",
+          "timeAggregation": "VALUE"
+        }
+      ],
+      "visualConfig": {
+        "type": "SINGLE_VALUE",
+        "global": {
+          "theme": "DEFAULT"
+        },
+        "thresholds": [
+          {
+            "axisTarget": "LEFT",
+            "rules": [
+              {
+                "color": "RED",
+                "comparator": "ABOVE",
+                "value": 100
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "Conflict MTTR",
+      "type": "DATA_EXPLORER",
+      "bounds": {
+        "top": 456,
+        "left": 304,
+        "width": 152,
+        "height": 152
+      },
+      "tileFilter": {
+        "timeframe": "-7d"
+      },
+      "configured": true,
+      "queries": [
+        {
+          "id": "A",
+          "metric": "semlayer.governance.conflict_resolution_time",
+          "spaceAggregation": "AVG",
+          "timeAggregation": "VALUE"
+        }
+      ],
+      "visualConfig": {
+        "type": "SINGLE_VALUE",
+        "global": {
+          "theme": "DEFAULT"
+        }
+      }
+    },
+    {
+      "name": "NL Query Success Rate",
+      "type": "DATA_EXPLORER",
+      "bounds": {
+        "top": 456,
+        "left": 456,
+        "width": 152,
+        "height": 152
+      },
+      "tileFilter": {
+        "timeframe": "-1h"
+      },
+      "configured": true,
+      "queries": [
+        {
+          "id": "A",
+          "metric": "semlayer.conversational.success_rate",
+          "spaceAggregation": "AVG",
+          "timeAggregation": "VALUE"
+        }
+      ],
+      "visualConfig": {
+        "type": "SINGLE_VALUE",
+        "global": {
+          "theme": "DEFAULT"
+        },
+        "thresholds": [
+          {
+            "axisTarget": "LEFT",
+            "rules": [
+              {
+                "color": "GREEN",
+                "comparator": "ABOVE",
+                "value": 95,
+                "unit": "PERCENT"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "Global Capacity Index",
+      "type": "DATA_EXPLORER",
+      "bounds": {
+        "top": 0,
+        "left": 608,
+        "width": 152,
+        "height": 152
+      },
+      "tileFilter": {
+        "timeframe": "-1h"
+      },
+      "configured": true,
+      "queries": [
+        {
+          "id": "A",
+          "metric": "semlayer.capacity.index",
+          "spaceAggregation": "AVG",
+          "timeAggregation": "VALUE"
+        }
+      ],
+      "visualConfig": {
+        "type": "SINGLE_VALUE",
+        "global": {
+          "theme": "DEFAULT"
+        },
+        "thresholds": [
+          {
+            "axisTarget": "LEFT",
+            "rules": [
+              {
+                "color": "GREEN",
+                "comparator": "BELOW",
+                "value": 0.7
+              },
+              {
+                "color": "YELLOW",
+                "comparator": "BETWEEN",
+                "value": 0.7,
+                "upperBound": 0.9
+              },
+              {
+                "color": "RED",
+                "comparator": "ABOVE",
+                "value": 0.9
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "Per-Tenant Capacity Index",
+      "type": "DATA_EXPLORER",
+      "bounds": {
+        "top": 152,
+        "left": 608,
+        "width": 304,
+        "height": 152
+      },
+      "tileFilter": {
+        "timeframe": "-1h"
+      },
+      "configured": true,
+      "queries": [
+        {
+          "id": "A",
+          "metric": "semlayer.capacity.index",
+          "spaceAggregation": "AVG",
+          "timeAggregation": "VALUE",
+          "splitBy": ["tenant_id"]
+        }
+      ],
+      "visualConfig": {
+        "type": "TABLE",
+        "global": {
+          "theme": "DEFAULT"
+        },
+        "table": {
+          "columns": [
+            {
+              "id": "tenant_id",
+              "header": "Tenant",
+              "type": "DIMENSION"
+            },
+            {
+              "id": "A",
+              "header": "Capacity Index",
+              "type": "METRIC",
+              "aggregation": "AVG"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "Capacity Forecast (7 days)",
+      "type": "DATA_EXPLORER",
+      "bounds": {
+        "top": 304,
+        "left": 608,
+        "width": 304,
+        "height": 152
+      },
+      "tileFilter": {
+        "timeframe": "-7d"
+      },
+      "configured": true,
+      "queries": [
+        {
+          "id": "A",
+          "metric": "semlayer.capacity.index",
+          "spaceAggregation": "AVG",
+          "timeAggregation": "VALUE"
+        }
+      ],
+      "visualConfig": {
+        "type": "GRAPH_CHART",
+        "global": {
+          "theme": "DEFAULT"
+        },
+        "forecast": {
+          "enabled": true,
+          "type": "LINEAR",
+          "horizon": 168
+        }
+      }
+    },
+    {
+      "name": "Capacity-Related Alerts",
+      "type": "OPEN_PROBLEMS",
+      "bounds": {
+        "top": 456,
+        "left": 608,
+        "width": 304,
+        "height": 152
+      },
+      "tileFilter": {
+        "timeframe": "-1h"
+      },
+      "configured": true,
+      "problemTile": {
+        "showProblems": true,
+        "showAllProblems": false,
+        "problemFilters": [
+          {
+            "type": "TITLE",
+            "title": "Capacity"
+          },
+          {
+            "type": "TAG",
+            "tag": "service:semlayer"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Active Alerts",
+      "type": "OPEN_PROBLEMS",
+      "bounds": {
+        "top": 608,
+        "left": 0,
+        "width": 304,
+        "height": 228
+      },
+      "tileFilter": {
+        "timeframe": "-1h"
+      },
+      "configured": true,
+      "problemTile": {
+        "showProblems": true,
+        "showAllProblems": false,
+        "problemFilters": [
+          {
+            "type": "TAG",
+            "tag": "service:semlayer"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Recent Incidents",
+      "type": "LOGS",
+      "bounds": {
+        "top": 608,
+        "left": 304,
+        "width": 304,
+        "height": 228
+      },
+      "tileFilter": {
+        "timeframe": "-24h"
+      },
+      "configured": true,
+      "logTile": {
+        "query": "content:\"semlayer\" AND (content:\"error\" OR content:\"incident\" OR content:\"breach\")",
+        "displayScope": "ALL",
+        "timeFrame": "-24h"
+      }
+    }
+  ],
+  "managementZoneId": null,
+  "timeframe": "-1h"
+}

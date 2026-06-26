@@ -1,0 +1,145 @@
+# Default values for calendar-service Helm chart
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+replicaCount: 3
+
+image:
+  repository: calendar-service
+  pullPolicy: IfNotPresent
+  tag: "1.0.0"
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  create: true
+  annotations: {}
+  name: ""
+
+podAnnotations:
+  prometheus.io/scrape: "true"
+  prometheus.io/port: "9090"
+  prometheus.io/path: "/metrics"
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  fsGroup: 1000
+
+securityContext:
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop:
+    - ALL
+  readOnlyRootFilesystem: true
+
+service:
+  type: ClusterIP
+  port: 8080
+  targetPort: 8080
+
+ingress:
+  enabled: true
+  className: "nginx"
+  annotations:
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    nginx.ingress.kubernetes.io/rate-limit: "100"
+  hosts:
+  - host: calendar-service.example.com
+    paths:
+    - path: /
+      pathType: Prefix
+  tls:
+  - secretName: calendar-service-tls
+    hosts:
+    - calendar-service.example.com
+
+resources:
+  limits:
+    cpu: 500m
+    memory: 512Mi
+  requests:
+    cpu: 250m
+    memory: 256Mi
+
+# Autoscaling
+autoscaling:
+  enabled: true
+  minReplicas: 3
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 70
+  targetMemoryUtilizationPercentage: 80
+
+# Node affinity for pod distribution
+affinity:
+  podAntiAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+    - weight: 100
+      podAffinityTerm:
+        labelSelector:
+          matchExpressions:
+          - key: app
+            operator: In
+            values:
+            - calendar-service
+        topologyKey: kubernetes.io/hostname
+
+# Health probes
+livenessProbe:
+  httpGet:
+    path: /api/v1/health
+    port: 8080
+  initialDelaySeconds: 30
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 3
+
+readinessProbe:
+  httpGet:
+    path: /api/v1/ready
+    port: 8080
+  initialDelaySeconds: 10
+  periodSeconds: 5
+  timeoutSeconds: 3
+  failureThreshold: 2
+
+# Environment variables
+env:
+- name: LOG_LEVEL
+  value: "info"
+- name: RATE_LIMIT_RPS
+  value: "100"
+- name: RATE_LIMIT_BURST
+  value: "200"
+
+# Secrets management
+secrets:
+- name: JWT_SECRET
+  valueFrom: secretKeyRef
+- name: DATABASE_URL
+  valueFrom: secretKeyRef
+
+# Database configuration
+database:
+  host: postgresql.default.svc.cluster.local
+  port: 5432
+  name: calendar_service
+  pool: 10
+
+# Monitoring
+monitoring:
+  enabled: true
+  prometheus:
+    createRule: true
+  serviceMonitor:
+    enabled: true
+    interval: 30s
+
+# Network policies
+networkPolicy:
+  enabled: true
+  policyTypes:
+  - Ingress
+  - Egress

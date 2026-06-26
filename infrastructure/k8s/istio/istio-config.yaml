@@ -1,0 +1,476 @@
+# Istio Service Mesh Configuration for Semlayer
+# Zero-trust, mTLS, traffic management
+
+apiVersion: install.istio.io/v1alpha1
+kind: IstioOperator
+metadata:
+  name: semlayer-istio
+  namespace: istio-system
+spec:
+  profile: production
+
+  # Mesh configuration
+  meshConfig:
+    # Enable access logging
+    accessLogFile: /dev/stdout
+    accessLogFormat: |
+      [%START_TIME%] "%REQ(:METHOD)% %REQ(X-ENVOY-ORIGINAL-PATH?:PATH)% %PROTOCOL%"
+      %RESPONSE_CODE% %RESPONSE_FLAGS% %BYTES_RECEIVED% %BYTES_SENT%
+      %DURATION% %RESP(X-ENVOY-UPSTREAM-SERVICE-TIME)%
+      "%REQ(X-FORWARDED-FOR)%" "%REQ(USER-AGENT)%"
+      "%REQ(X-REQUEST-ID)%" "%REQ(:AUTHORITY)%" "%UPSTREAM_HOST%"
+      "%REQ(X-TENANT-ID)%" "%REQ(X-USER-ID)%"
+
+    # Default mTLS mode
+    defaultConfig:
+      tracing:
+        zipkin:
+          address: jaeger-collector.semlayer-system:9411
+        sampling: 100
+      holdApplicationUntilProxyStarts: true
+
+    # Enable automatic mTLS
+    enableAutoMtls: true
+
+    # Outbound traffic policy
+    outboundTrafficPolicy:
+      mode: REGISTRY_ONLY # Only allow traffic to known services
+
+    # Proxy configuration
+    defaultProviders:
+      accessLogging:
+      - envoy
+      metrics:
+      - prometheus
+
+  # Component configuration
+  components:
+    # Istiod (control plane)
+    pilot:
+      enabled: true
+      k8s:
+        replicaCount: 3
+        resources:
+          requests:
+            cpu: 500m
+            memory: 512Mi
+          limits:
+            cpu: 2000m
+            memory: 2Gi
+        hpaSpec:
+          minReplicas: 3
+          maxReplicas: 10
+          metrics:
+          - type: Resource
+            resource:
+              name: cpu
+              target:
+                type: Utilization
+                averageUtilization: 70
+        env:
+        - name: PILOT_ENABLE_CROSS_CLUSTER_WORKLOAD_ENTRY
+          value: "true"
+        podDisruptionBudget:
+          minAvailable: 2
+        affinity:
+          podAntiAffinity:
+            preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app: istiod
+                topologyKey: topology.kubernetes.io/zone
+
+    # Ingress gateway
+    ingressGateways:
+    - name: istio-ingressgateway
+      enabled: true
+      k8s:
+        replicaCount: 3
+        resources:
+          requests:
+            cpu: 500m
+            memory: 512Mi
+          limits:
+            cpu: 2000m
+            memory: 1Gi
+        hpaSpec:
+          minReplicas: 3
+          maxReplicas: 20
+          metrics:
+          - type: Resource
+            resource:
+              name: cpu
+              target:
+                type: Utilization
+                averageUtilization: 70
+        service:
+          type: LoadBalancer
+          ports:
+          - port: 80
+            targetPort: 8080
+            name: http2
+          - port: 443
+            targetPort: 8443
+            name: https
+          - port: 15021
+            targetPort: 15021
+            name: status-port
+        podDisruptionBudget:
+          minAvailable: 2
+
+    # Egress gateway (for controlled outbound traffic)
+    egressGateways:
+    - name: istio-egressgateway
+      enabled: true
+      k8s:
+        replicaCount: 2
+        resources:
+          requests:
+            cpu: 250m
+            memory: 256Mi
+          limits:
+            cpu: 1000m
+            memory: 512Mi
+
+  # Global values
+  values:
+    global:
+      # Multi-cluster mesh
+      meshID: semlayer-mesh
+      multiCluster:
+        clusterName: semlayer-us-east
+      network: semlayer-network
+
+      # Proxy settings
+      proxy:
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: 500m
+            memory: 512Mi
+
+        # Enable protocol sniffing
+        protocolDetectionTimeout: 100ms
+
+        # Tracing
+        tracer: zipkin
+
+    # Pilot settings
+    pilot:
+      autoscaleEnabled: true
+      autoscaleMin: 3
+      autoscaleMax: 10
+      traceSampling: 100
+---
+# PeerAuthentication - Strict mTLS for the entire mesh
+apiVersion: security.istio.io/v1beta1
+kind: PeerAuthentication
+metadata:
+  name: default
+  namespace: istio-system
+spec:
+  mtls:
+    mode: STRICT
+---
+# AuthorizationPolicy - Default deny all
+apiVersion: security.istio.io/v1beta1
+kind: AuthorizationPolicy
+metadata:
+  name: deny-all
+  namespace: semlayer-control
+spec: {} # Empty spec = deny all
+---
+# AuthorizationPolicy - Allow API Gateway to receive external traffic
+apiVersion: security.istio.io/v1beta1
+kind: AuthorizationPolicy
+metadata:
+  name: allow-api-gateway-ingress
+  namespace: semlayer-control
+spec:
+  selector:
+    matchLabels:
+      app: api-gateway
+  action: ALLOW
+  rules:
+  - from:
+    - source:
+        principals: [ "cluster.local/ns/istio-system/sa/istio-ingressgateway-service-account" ]
+  - from:
+    - source:
+        namespaces: [ "semlayer-control" ]
+---
+# AuthorizationPolicy - Allow semantic-engine from api-gateway
+apiVersion: security.istio.io/v1beta1
+kind: AuthorizationPolicy
+metadata:
+  name: allow-semantic-engine
+  namespace: semlayer-control
+spec:
+  selector:
+    matchLabels:
+      app: semantic-engine
+  action: ALLOW
+  rules:
+  - from:
+    - source:
+        principals:
+        - "cluster.local/ns/semlayer-control/sa/api-gateway"
+        - "cluster.local/ns/semlayer-control/sa/cube-api"
+---
+# AuthorizationPolicy - Allow governance-engine
+apiVersion: security.istio.io/v1beta1
+kind: AuthorizationPolicy
+metadata:
+  name: allow-governance-engine
+  namespace: semlayer-control
+spec:
+  selector:
+    matchLabels:
+      app: governance-engine
+  action: ALLOW
+  rules:
+  - from:
+    - source:
+        principals:
+        - "cluster.local/ns/semlayer-control/sa/api-gateway"
+        - "cluster.local/ns/semlayer-control/sa/semantic-engine"
+        - "cluster.local/ns/semlayer-control/sa/cube-api"
+---
+# AuthorizationPolicy - Allow cube-api
+apiVersion: security.istio.io/v1beta1
+kind: AuthorizationPolicy
+metadata:
+  name: allow-cube-api
+  namespace: semlayer-control
+spec:
+  selector:
+    matchLabels:
+      app: cube-api
+  action: ALLOW
+  rules:
+  - from:
+    - source:
+        principals:
+        - "cluster.local/ns/semlayer-control/sa/api-gateway"
+        - "cluster.local/ns/semlayer-control/sa/semantic-engine"
+---
+# DestinationRule - Circuit breaker for api-gateway
+apiVersion: networking.istio.io/v1beta1
+kind: DestinationRule
+metadata:
+  name: api-gateway
+  namespace: semlayer-control
+spec:
+  host: api-gateway
+  trafficPolicy:
+    connectionPool:
+      tcp:
+        maxConnections: 1000
+        connectTimeout: 30s
+      http:
+        h2UpgradePolicy: UPGRADE
+        http1MaxPendingRequests: 1000
+        http2MaxRequests: 1000
+        maxRequestsPerConnection: 100
+        maxRetries: 3
+    outlierDetection:
+      consecutive5xxErrors: 5
+      interval: 30s
+      baseEjectionTime: 30s
+      maxEjectionPercent: 50
+      minHealthPercent: 30
+    loadBalancer:
+      simple: LEAST_REQUEST
+---
+# DestinationRule - Circuit breaker for semantic-engine
+apiVersion: networking.istio.io/v1beta1
+kind: DestinationRule
+metadata:
+  name: semantic-engine
+  namespace: semlayer-control
+spec:
+  host: semantic-engine
+  trafficPolicy:
+    connectionPool:
+      tcp:
+        maxConnections: 500
+        connectTimeout: 30s
+      http:
+        h2UpgradePolicy: UPGRADE
+        http1MaxPendingRequests: 500
+        http2MaxRequests: 500
+        maxRequestsPerConnection: 50
+        maxRetries: 3
+    outlierDetection:
+      consecutive5xxErrors: 5
+      interval: 30s
+      baseEjectionTime: 60s
+      maxEjectionPercent: 30
+    loadBalancer:
+      simple: ROUND_ROBIN
+---
+# DestinationRule - Circuit breaker for cube-api (longer timeouts for analytics)
+apiVersion: networking.istio.io/v1beta1
+kind: DestinationRule
+metadata:
+  name: cube-api
+  namespace: semlayer-control
+spec:
+  host: cube-api
+  trafficPolicy:
+    connectionPool:
+      tcp:
+        maxConnections: 2000
+        connectTimeout: 60s
+      http:
+        h2UpgradePolicy: UPGRADE
+        http1MaxPendingRequests: 2000
+        http2MaxRequests: 2000
+        maxRequestsPerConnection: 10
+        maxRetries: 2
+        idleTimeout: 300s # 5 min for long queries
+    outlierDetection:
+      consecutive5xxErrors: 10
+      interval: 60s
+      baseEjectionTime: 120s
+      maxEjectionPercent: 20
+    loadBalancer:
+      simple: LEAST_REQUEST
+---
+# VirtualService - API Gateway routing
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: api-gateway
+  namespace: semlayer-control
+spec:
+  hosts:
+  - api.semlayer.io
+  - api-gateway
+  gateways:
+  - istio-system/semlayer-gateway
+  - mesh
+  http:
+  - match:
+    - uri:
+        prefix: /api/v1/cube
+    route:
+    - destination:
+        host: cube-api
+        port:
+          number: 4000
+    timeout: 300s # 5 min for analytics queries
+    retries:
+      attempts: 2
+      perTryTimeout: 120s
+      retryOn: "gateway-error,connect-failure,refused-stream"
+
+  - match:
+    - uri:
+        prefix: /api/v1/semantic
+    route:
+    - destination:
+        host: semantic-engine
+        port:
+          number: 8081
+    timeout: 60s
+    retries:
+      attempts: 3
+      perTryTimeout: 20s
+      retryOn: "gateway-error,connect-failure,refused-stream"
+
+  - match:
+    - uri:
+        prefix: /api/v1/governance
+    route:
+    - destination:
+        host: governance-engine
+        port:
+          number: 8082
+    timeout: 30s
+    retries:
+      attempts: 3
+      perTryTimeout: 10s
+      retryOn: "gateway-error,connect-failure,refused-stream"
+
+  - route:
+    - destination:
+        host: api-gateway
+        port:
+          number: 8080
+    timeout: 30s
+    retries:
+      attempts: 3
+      perTryTimeout: 10s
+---
+# Gateway - External ingress
+apiVersion: networking.istio.io/v1beta1
+kind: Gateway
+metadata:
+  name: semlayer-gateway
+  namespace: istio-system
+spec:
+  selector:
+    istio: ingressgateway
+  servers:
+  - port:
+      number: 443
+      name: https
+      protocol: HTTPS
+    tls:
+      mode: SIMPLE
+      credentialName: semlayer-tls-cert
+    hosts:
+    - api.semlayer.io
+    - "*.semlayer.io"
+  - port:
+      number: 80
+      name: http
+      protocol: HTTP
+    hosts:
+    - api.semlayer.io
+    - "*.semlayer.io"
+    tls:
+      httpsRedirect: true
+---
+# RequestAuthentication - JWT validation
+apiVersion: security.istio.io/v1beta1
+kind: RequestAuthentication
+metadata:
+  name: jwt-auth
+  namespace: semlayer-control
+spec:
+  selector:
+    matchLabels:
+      app: api-gateway
+  jwtRules:
+  - issuer: "https://semlayer.okta.com"
+    jwksUri: "https://semlayer.okta.com/.well-known/jwks.json"
+    audiences:
+    - "api://semlayer"
+    forwardOriginalToken: true
+    outputPayloadToHeader: "x-jwt-payload"
+---
+# AuthorizationPolicy - Require valid JWT for API
+apiVersion: security.istio.io/v1beta1
+kind: AuthorizationPolicy
+metadata:
+  name: require-jwt
+  namespace: semlayer-control
+spec:
+  selector:
+    matchLabels:
+      app: api-gateway
+  action: ALLOW
+  rules:
+  - from:
+    - source:
+        requestPrincipals: [ "*" ]
+  # Allow health checks without JWT
+  - to:
+    - operation:
+        paths: [ "/health/*", "/metrics", "/ready", "/live" ]

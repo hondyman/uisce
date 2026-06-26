@@ -1,0 +1,17 @@
+id: policy_throttling
+type: ThrottlingPolicy
+version: 1.0.0
+name: Global Throttling Policy
+status: active
+quiet_hours:
+  start: "21:00"
+  end: "07:00"
+limits:
+  per_day: 3
+  per_week: 10
+dedupe_window_days: 7
+channel_rules:
+  mobile:
+    per_day: 2
+  email:
+    per_day: 1

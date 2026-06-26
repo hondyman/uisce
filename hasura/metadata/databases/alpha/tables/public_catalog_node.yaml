@@ -1,0 +1,82 @@
+table:
+  name: catalog_node
+  schema: public
+select_permissions:
+  - role: anonymous
+    permission:
+      columns:
+        - id
+        - tenant_datasource_id
+        - node_type_id
+        - node_name
+        - description
+        - properties
+        - qualified_path
+        - parent_id
+        - created_at
+        - updated_at
+        - tenant_id
+        - core_id
+        - is_alpha
+        - schema_hash
+        - lineage
+        - data_quality_contract
+        - sla
+        - steward_group
+        - golden_path
+        - parent_type_id
+        - config
+
+      filter: {}
+  - role: steward
+    permission:
+      columns:
+        - id
+        - tenant_datasource_id
+        - node_type_id
+        - node_name
+        - description
+        - properties
+        - qualified_path
+        - parent_id
+        - created_at
+        - updated_at
+        - tenant_id
+        - core_id
+        - is_alpha
+        - schema_hash
+        - lineage
+        - data_quality_contract
+        - sla
+        - steward_group
+        - golden_path
+        - parent_type_id
+        - config
+
+      filter: {}
+  - role: user
+    permission:
+      columns:
+        - id
+        - tenant_datasource_id
+        - node_type_id
+        - node_name
+        - description
+        - properties
+        - qualified_path
+        - parent_id
+        - created_at
+        - updated_at
+        - tenant_id
+        - core_id
+        - is_alpha
+        - schema_hash
+        - lineage
+        - data_quality_contract
+        - sla
+        - steward_group
+        - golden_path
+        - parent_type_id
+        - config
+
+      filter: {}

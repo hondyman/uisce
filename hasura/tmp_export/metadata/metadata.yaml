@@ -1,0 +1,17 @@
+version: 3
+sources:
+  - name: default
+    kind: postgres
+    tables:
+      - "!include databases/default/tables/tables.yaml"
+    configuration:
+      connection_info:
+        database_url:
+          from_env: HASURA_GRAPHQL_METADATA_DATABASE_URL
+        isolation_level: read-committed
+        use_prepared_statements: false
+        ssl_mode: disable
+actions:
+  - "!include actions.yaml"
+custom_types:
+  - "!include custom_types.yaml"

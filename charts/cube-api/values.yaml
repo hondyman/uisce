@@ -1,0 +1,318 @@
+# Cube.js API Helm Values
+# OLAP semantic layer with pre-aggregation caching
+
+replicaCount: 3
+
+image:
+  repository: cubejs/cube
+  pullPolicy: IfNotPresent
+  tag: "v0.35.0"
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+# Cube.js has multiple services - API, Refresh Worker, Scheduler
+components:
+  api:
+    enabled: true
+    replicaCount: 3
+    resources:
+      limits:
+        cpu: "2"
+        memory: 4Gi
+      requests:
+        cpu: "500m"
+        memory: 1Gi
+    autoscaling:
+      enabled: true
+      minReplicas: 3
+      maxReplicas: 15
+      targetCPUUtilizationPercentage: 70
+
+  refreshWorker:
+    enabled: true
+    replicaCount: 2
+    resources:
+      limits:
+        cpu: "4"
+        memory: 8Gi
+      requests:
+        cpu: "1"
+        memory: 2Gi
+    autoscaling:
+      enabled: true
+      minReplicas: 2
+      maxReplicas: 10
+      targetCPUUtilizationPercentage: 80
+
+  scheduler:
+    enabled: true
+    replicaCount: 1
+    resources:
+      limits:
+        cpu: "1"
+        memory: 2Gi
+      requests:
+        cpu: "250m"
+        memory: 512Mi
+
+serviceAccount:
+  create: true
+  annotations: {}
+  name: ""
+
+podAnnotations:
+  prometheus.io/scrape: "true"
+  prometheus.io/port: "9090"
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  runAsGroup: 1000
+  fsGroup: 1000
+
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: false # Cube needs to write temp files
+  capabilities:
+    drop:
+    - ALL
+
+service:
+  type: ClusterIP
+  port: 4000
+  playgroundPort: 4000
+  sqlPort: 15432 # Cube SQL API
+
+ingress:
+  enabled: false
+  className: "nginx"
+  annotations: {}
+  hosts:
+  - host: cube.semlayer.local
+    paths:
+    - path: /
+      pathType: Prefix
+  tls: []
+
+resources:
+  limits:
+    cpu: "4"
+    memory: 8Gi
+  requests:
+    cpu: "1"
+    memory: 2Gi
+
+autoscaling:
+  enabled: true
+  minReplicas: 3
+  maxReplicas: 15
+  targetCPUUtilizationPercentage: 70
+  targetMemoryUtilizationPercentage: 80
+
+nodeSelector:
+  kubernetes.azure.com/agentpool: cube
+
+tolerations:
+- key: "workload"
+  operator: "Equal"
+  value: "cube"
+  effect: "NoSchedule"
+
+affinity:
+  podAntiAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+    - weight: 100
+      podAffinityTerm:
+        labelSelector:
+          matchExpressions:
+          - key: app.kubernetes.io/name
+            operator: In
+            values:
+            - cube-api
+        topologyKey: topology.kubernetes.io/zone
+
+topologySpreadConstraints:
+- maxSkew: 1
+  topologyKey: topology.kubernetes.io/zone
+  whenUnsatisfiable: ScheduleAnyway
+  labelSelector:
+    matchLabels:
+      app.kubernetes.io/name: cube-api
+
+# Health checks
+livenessProbe:
+  httpGet:
+    path: /livez
+    port: 4000
+  initialDelaySeconds: 60
+  periodSeconds: 15
+  timeoutSeconds: 10
+  failureThreshold: 3
+
+readinessProbe:
+  httpGet:
+    path: /readyz
+    port: 4000
+  initialDelaySeconds: 30
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 3
+
+startupProbe:
+  httpGet:
+    path: /livez
+    port: 4000
+  initialDelaySeconds: 30
+  periodSeconds: 10
+  timeoutSeconds: 10
+  failureThreshold: 30
+
+# Pod Disruption Budget
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 2
+
+# Cube.js Configuration
+config:
+  # Core settings
+  devMode: false
+  debugLog: false
+  apiSecret: "" # From Azure Key Vault
+
+  # Database connections (data sources)
+  database:
+    type: postgres
+    host: semlayer-postgresql.postgres.database.azure.com
+    port: 5432
+    name: warehouse
+    ssl: true
+    maxConnections: 100
+
+  # Redis for caching and queue
+  redis:
+    host: semlayer-redis.redis.cache.windows.net
+    port: 6380
+    tls: true
+    poolMin: 10
+    poolMax: 100
+
+  # Pre-aggregations store
+  preAggregations:
+    storage: redis
+    queueConcurrency: 4
+    maxPartitions: 256
+    refreshKey:
+      every: "1 hour"
+
+  # External pre-aggregations (cloud storage)
+  externalPreAggregations:
+    enabled: true
+    storage: azure
+    container: cube-preaggs
+
+  # Query caching
+  queryCache:
+    refreshKeyRenewalThreshold: 120
+    backgroundRefresh: true
+
+  # SQL API settings
+  sqlApi:
+    enabled: true
+    port: 15432
+
+  # Multi-tenant settings
+  multiTenant:
+    enabled: true
+    contextToAppId: tenant # Use tenant ID as app ID
+    scheduledRefreshContexts: true
+
+  # Security
+  security:
+    checkAuth: true
+    queryRewrite: true
+
+  # Telemetry
+  telemetry:
+    enabled: true
+
+# Environment variables for Cube.js
+env:
+- name: CUBEJS_LOG_LEVEL
+  value: "info"
+- name: CUBEJS_CACHE_AND_QUEUE_DRIVER
+  value: "redis"
+- name: CUBEJS_EXTERNAL_DEFAULT
+  value: "true"
+- name: CUBEJS_SCHEDULED_REFRESH_DEFAULT
+  value: "true"
+- name: CUBEJS_PRE_AGGREGATIONS_BUILDER
+  value: "true"
+- name: CUBEJS_ROLLUP_ONLY
+  value: "false"
+- name: CUBEJS_WEB_SOCKETS
+  value: "true"
+- name: CUBEJS_CONCURRENCY
+  value: "10"
+- name: CUBEJS_DB_QUERY_TIMEOUT
+  value: "600"
+- name: CUBEJS_DB_MAX_POOL
+  value: "100"
+# Multi-tenant configuration
+- name: CUBEJS_SCHEDULED_REFRESH_TIMEZONES
+  value: "America/New_York,Europe/London,Asia/Tokyo"
+
+# Secrets management
+secrets:
+  useAzureKeyVault: true
+  keyVaultName: semlayer-prod-kv
+  keys:
+  - name: CUBEJS_API_SECRET
+    secretName: cube-api-secret
+  - name: CUBEJS_DB_PASS
+    secretName: db-password
+  - name: CUBEJS_REDIS_PASSWORD
+    secretName: redis-password
+
+# Volume mounts for schema and configuration
+extraVolumes:
+- name: schema
+  configMap:
+    name: cube-schema
+- name: tmp
+  emptyDir:
+    sizeLimit: 5Gi
+
+extraVolumeMounts:
+- name: schema
+  mountPath: /cube/conf/schema
+  readOnly: true
+- name: tmp
+  mountPath: /tmp
+
+# Service mesh integration
+istio:
+  enabled: true
+  virtualService:
+    enabled: true
+    timeout: 120s
+    retries:
+      attempts: 3
+      perTryTimeout: 45s
+      retryOn: "5xx,reset,connect-failure"
+  destinationRule:
+    enabled: true
+    trafficPolicy:
+      connectionPool:
+        tcp:
+          maxConnections: 500
+        http:
+          h2UpgradePolicy: UPGRADE
+          http1MaxPendingRequests: 500
+          http2MaxRequests: 500
+      outlierDetection:
+        consecutive5xxErrors: 5
+        interval: 30s
+        baseEjectionTime: 30s
+        maxEjectionPercent: 50

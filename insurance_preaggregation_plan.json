@@ -1,0 +1,56 @@
+{
+  "bundle_id": "insurance_preaggregation_plan",
+  "domain": "insurance",
+  "version": "v1.0.0",
+  "description": "Preaggregation plan for insurance metrics",
+  "metrics": [
+    {
+      "node_id": "combined_ratio",
+      "preaggregation": {
+        "type": "batch",
+        "schedule": "monthly",
+        "source_tables": ["claims_paid", "premiums_earned", "operating_expenses"],
+        "aggregation_rules": [
+          {
+            "group_by": ["date", "line_of_business"],
+            "measures": [
+              {"field": "claims_amount", "function": "SUM"},
+              {"field": "premiums_amount", "function": "SUM"},
+              {"field": "expenses_amount", "function": "SUM"}
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "node_id": "loss_ratio",
+      "preaggregation": {
+        "type": "batch",
+        "schedule": "quarterly",
+        "source_tables": ["claims_incurred", "premiums_written"],
+        "aggregation_rules": [
+          {
+            "group_by": ["date", "policy_type"],
+            "measures": [
+              {"field": "claims_amount", "function": "SUM"},
+              {"field": "premiums_amount", "function": "SUM"}
+            ]
+          }
+        ]
+      }
+    }
+  ],
+  "dependencies": {
+    "required_tables": [
+      "claims_paid",
+      "premiums_earned",
+      "operating_expenses",
+      "claims_incurred",
+      "premiums_written"
+    ],
+    "data_quality_checks": [
+      {"table": "premiums_earned", "check": "positive", "fields": ["amount"]},
+      {"table": "claims_paid", "check": "not_null", "fields": ["amount", "date"]}
+    ]
+  }
+}

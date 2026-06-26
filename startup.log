@@ -1,0 +1,107 @@
+🧹 Cleaning up ports and stopping existing services...
+🔍 Checking port 5173...
+✅ Port 5173 is free
+🔍 Checking port 5175...
+✅ Port 5175 is free
+🔍 Checking port 8080...
+✅ Port 8080 is free
+🔍 Checking port 9090...
+✅ Port 9090 is free
+🔍 Checking port 8001...
+✅ Port 8001 is free
+🔍 Checking port 8081...
+✅ Port 8081 is free
+🔍 Checking port 8082...
+✅ Port 8082 is free
+🐳 Stopping existing Docker containers...
+⏱️  Waiting for ports to be released...
+🚀 Starting services...
+📦 Starting Docker services (Hasura, API Gateway, Backend, Swagger)...
+ Network semlayer_default  Creating
+ Network semlayer_default  Created
+ Container semlayer-graphql-engine-1  Creating
+ Container semlayer-swagger-ui-1  Creating
+ Container semlayer-backend-1  Creating
+ Container semlayer-graphql-engine-1  Created
+ Container semlayer-backend-1  Created
+ Container semlayer-api-gateway-1  Creating
+ Container semlayer-swagger-ui-1  Created
+ Container semlayer-api-gateway-1  Created
+ Container semlayer-backend-1  Starting
+ Container semlayer-graphql-engine-1  Starting
+ Container semlayer-swagger-ui-1  Starting
+ Container semlayer-backend-1  Started
+ Container semlayer-swagger-ui-1  Started
+ Container semlayer-graphql-engine-1  Started
+ Container semlayer-api-gateway-1  Starting
+ Container semlayer-api-gateway-1  Started
+⏱️  Waiting for Docker services to initialize...
+🔍 Verifying Docker services...
+NAME                        IMAGE                           COMMAND                   SERVICE          CREATED          STATUS                    PORTS
+semlayer-api-gateway-1      semlayer-api-gateway            "/api-gateway"            api-gateway      11 seconds ago   Up 10 seconds             0.0.0.0:8001->8000/tcp, [::]:8001->8000/tcp
+semlayer-backend-1          semlayer-backend                "./server"                backend          11 seconds ago   Up 10 seconds             0.0.0.0:8080->8080/tcp, [::]:8080->8080/tcp
+semlayer-graphql-engine-1   hasura/graphql-engine:v2.46.0   "/bin/sh -c '\"${HGE_…"   graphql-engine   11 seconds ago   Up 10 seconds (healthy)   0.0.0.0:8081->8080/tcp, [::]:8081->8080/tcp
+semlayer-swagger-ui-1       swaggerapi/swagger-ui:v5.10.3   "/docker-entrypoint.…"    swagger-ui       11 seconds ago   Up 10 seconds             0.0.0.0:8082->8080/tcp, [::]:8082->8080/tcp
+🔄 Starting development proxy on port 5175...
+Dev proxy listening on http://localhost:5175, forwarding /api -> http://localhost:8001
+./scripts/start-services.sh: line 63: 96440 Killed: 9               node dev-proxy.cjs  (wd: ~/GitHub/semlayer/frontend/dev-tools)
+🌐 Starting frontend development server on port 5173...
+
+> frontend@0.0.0 dev
+> sh ./scripts/start-dev.sh
+
+[start-dev] ensuring port 5173 is free...
+[start-dev] no process listening on 5173.
+[start-dev] starting Vite on port 5173...
+
+  VITE v5.4.20  ready in 133 ms
+
+  ➜  Local:   http://localhost:5173/
+  ➜  Network: http://192.168.86.72:5173/
+3:22:01 PM [vite] http proxy error: /api/catalog/tables?datasource_id=982aef38-418f-46dc-acd0-35fe8f3b97b0
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1134:18)
+    at afterConnectMultiple (node:net:1715:7)
+3:22:01 PM [vite] http proxy error: /api/catalog/tables?datasource_id=982aef38-418f-46dc-acd0-35fe8f3b97b0
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1134:18)
+    at afterConnectMultiple (node:net:1715:7)
+✅ All services started successfully!
+
+📋 Services Status:
+🌐 Frontend:      http://localhost:5173
+🔄 Dev Proxy:     http://localhost:5175
+🔧 API Gateway:   http://localhost:8001
+🏗️  Backend:       http://localhost:8080
+📊 Hasura:        http://localhost:8081
+📚 Swagger:       http://localhost:8082
+
+🎯 Main Application: http://localhost:5173
+
+💡 To stop all services, run: ./scripts/stop-services.sh
+💡 Or press Ctrl+C to stop this script and run: docker-compose down
+⏸️  Press Ctrl+C to stop all services...
+3:22:29 PM [vite] http proxy error: /v1/graphql
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1134:18)
+    at afterConnectMultiple (node:net:1715:7)
+3:22:29 PM [vite] http proxy error: /v1/graphql
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1134:18)
+    at afterConnectMultiple (node:net:1715:7)
+3:22:29 PM [vite] http proxy error: /v1/graphql
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1134:18)
+    at afterConnectMultiple (node:net:1715:7)
+3:22:50 PM [vite] http proxy error: /api/catalog/tables?datasource_id=982aef38-418f-46dc-acd0-35fe8f3b97b0
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1134:18)
+    at afterConnectMultiple (node:net:1715:7)
+3:22:50 PM [vite] http proxy error: /api/catalog/tables?datasource_id=982aef38-418f-46dc-acd0-35fe8f3b97b0
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1134:18)
+    at afterConnectMultiple (node:net:1715:7)
+./scripts/start-services.sh: line 104: 96596 Killed: 9               npm run dev  (wd: ~/GitHub/semlayer/frontend)
+
+🛑 Stopping services...
+Cannot connect to the Docker daemon at unix:///Users/eganpj/.docker/run/docker.sock. Is the docker daemon running?

@@ -1,0 +1,13 @@
+{
+    "name": "pointer-producer",
+    "version": "1.0.0",
+    "description": "Produces pointer events for large payloads",
+    "main": "producer.js",
+    "scripts": {
+        "start": "node producer.js"
+    },
+    "dependencies": {
+        "aws-sdk": "^2.1467.0",
+        "kafkajs": "^2.2.4"
+    }
+}

@@ -1,0 +1,9 @@
+module.exports = {
+  plugins: [
+    // Use the PostCSS adapter package for Tailwind (Tailwind v3+ moved the PostCSS plugin
+    // into a separate package). Require the adapter explicitly to avoid the old `tailwindcss`
+    // plugin key which newer tailwind versions no longer support.
+    require('@tailwindcss/postcss'),
+    require('autoprefixer'),
+  ],
+};

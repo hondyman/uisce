@@ -1,0 +1,27 @@
+Note: Unnecessary use of -X or --request, POST is already inferred.
+  % Total    % Received % Xferd  Average Speed   Time    Time     Time  Current
+                                 Dload  Upload   Total   Spent    Left  Speed
+  0     0    0     0    0     0      0      0 --:--:-- --:--:-- --:--:--     0*   Trying 127.0.0.1:8080...
+* Connected to 127.0.0.1 (127.0.0.1) port 8080
+> POST /api/roles HTTP/1.1
+> Host: 127.0.0.1:8080
+> User-Agent: curl/8.7.1
+> Accept: */*
+> Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJlbWFpbCI6ImFkbWluQHVpc2NlLmNvbSIsImV4cCI6MTc2NzI0Njk0MCwiaHR0cHM6Ly9oYXN1cmEuaW8vand0L2NsYWltcyI6eyJ4LWhhc3VyYS1hbGxvd2VkLXJvbGVzIjpbInVzZXIiLCJnbG9iYWxfYWRtaW4iLCJhZG1pbiJdLCJ4LWhhc3VyYS1kZWZhdWx0LXJvbGUiOiJnbG9iYWxfYWRtaW4iLCJ4LWhhc3VyYS11c2VyLWlkIjoiOTkwMDAwMDAtMDAwMC0wMDAwLTAwMDAtMDAwMDAwMDAwMDAxIn0sImlhdCI6MTc2NzI0MzM0MCwiaXNfY29yZV9hZG1pbiI6dHJ1ZSwibmFtZSI6Ikdsb2JhbCBBZG1pbiIsIm9yZ2FuaXphdGlvbiI6InVpc2NlIiwicGVybWlzc2lvbnMiOltdLCJyb2xlIjoiYWRtaW4iLCJ0ZW5hbnRfaWQiOiIiLCJ1c2VyX2lkIjoiOTkwMDAwMDAtMDAwMC0wMDAwLTAwMDAtMDAwMDAwMDAwMDAxIn0.c8Ta0X1cmtpdihiJl6y3edlXPzWVa71DYZTdLliCrRo
+> Content-Type: application/json
+> Content-Length: 109
+> 
+} [109 bytes data]
+* upload completely sent off: 109 bytes
+< HTTP/1.1 401 Unauthorized
+< Content-Type: text/plain; charset=utf-8
+< Set-Cookie: session_token=; Path=/; Max-Age=0; HttpOnly; Secure; SameSite=Lax
+< X-Content-Type-Options: nosniff
+< X-Request-Id: 0134d931-c252-4b57-a5fc-26d2ea9db844
+< Date: Thu, 01 Jan 2026 05:07:25 GMT
+< Content-Length: 13
+< 
+{ [13 bytes data]
+100   122  100    13  100   109   1148   9628 --:--:-- --:--:-- --:--:-- 11090
+* Connection #0 to host 127.0.0.1 left intact
+Unauthorized

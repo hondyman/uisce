@@ -1,0 +1,704 @@
+{
+  "id": "risk_alpha_v1",
+  "name": "AI Risk Management Alpha",
+  "displayName": "Real-Time Risk Detection & Auto-Mitigation",
+  "category": "risk",
+  "version": "1.0.0",
+  "description": "AI-powered portfolio risk detection and automated mitigation orchestrated via Temporal workflows. Integrates with xAI Grok for predictive risk analysis, ABAC for authorization, and automated trade execution.",
+  
+  "entity": "portfolio",
+  "triggers": {
+    "type": "event",
+    "events": [
+      "portfolio.market_data_update",
+      "portfolio.position_change",
+      "portfolio.risk_threshold_breach",
+      "portfolio.manual_risk_check"
+    ],
+    "schedule": "0 */4 * * *"
+  },
+  
+  "initiators": {
+    "roles": ["risk_manager", "portfolio_manager", "advisor", "system"],
+    "minAUM": 100000
+  },
+  
+  "steps": [
+    {
+      "id": "step_1_ai_risk_score",
+      "stepOrder": 1,
+      "stepType": "integrate",
+      "stepName": "AI Risk Scoring (xAI Grok)",
+      "description": "Analyze portfolio for 9 risk vectors: concentration, VaR, liquidity, ESG, geopolitical, correlation, counterparty, operational, market shock",
+      "durationHours": 0.5,
+      "config": {
+        "activityName": "AIRiskScore",
+        "service": "xai_grok",
+        "parameters": {
+          "analysisDepth": "comprehensive",
+          "riskVectors": [
+            "concentration",
+            "value_at_risk",
+            "conditional_var",
+            "liquidity_risk",
+            "esg_risk",
+            "geopolitical_risk",
+            "correlation_risk",
+            "counterparty_risk",
+            "operational_risk"
+          ],
+          "outputFormat": "json",
+          "timeout_seconds": 30
+        },
+        "errorHandling": {
+          "retryPolicy": {
+            "maxAttempts": 3,
+            "initialIntervalSeconds": 2,
+            "backoffCoefficient": 2.0
+          },
+          "nonRetryableErrors": ["InvalidPortfolioData"],
+          "alertOnError": true
+        }
+      },
+      "outputs": {
+        "risk_score": "number",
+        "confidence": "number",
+        "var_95": "number",
+        "cvar_95": "number",
+        "primary_risk_type": "string",
+        "reasoning": "string",
+        "recommendations": "object"
+      },
+      "nextSteps": {
+        "success": "step_2_threshold_check",
+        "failure": "step_escalate_ai_failure"
+      }
+    },
+    
+    {
+      "id": "step_2_threshold_check",
+      "stepOrder": 2,
+      "stepType": "condition",
+      "stepName": "Risk Threshold Validation",
+      "description": "Evaluate if risk thresholds exceeded for automatic mitigation trigger",
+      "durationHours": 0.1,
+      "config": {
+        "conditions": {
+          "type": "OR",
+          "branches": [
+            {
+              "name": "Critical Risk Detected",
+              "condition": {
+                "variable": "step_1_ai_risk_score.risk_score",
+                "operator": ">=",
+                "value": 9.0
+              },
+              "nextStep": "step_critical_alert"
+            },
+            {
+              "name": "High Risk Detected",
+              "condition": {
+                "variable": "step_1_ai_risk_score.risk_score",
+                "operator": ">=",
+                "value": 7.0
+              },
+              "nextStep": "step_3_abac_check"
+            },
+            {
+              "name": "VAR Threshold Breach",
+              "condition": {
+                "variable": "step_1_ai_risk_score.var_95",
+                "operator": ">",
+                "value": 5.0
+              },
+              "nextStep": "step_3_abac_check"
+            },
+            {
+              "name": "Concentration Threshold Breach",
+              "condition": {
+                "variable": "step_1_ai_risk_score.concentration_pct",
+                "operator": ">",
+                "value": 40.0
+              },
+              "nextStep": "step_3_abac_check"
+            }
+          ]
+        },
+        "defaultNextStep": "step_log_low_risk"
+      },
+      "nextSteps": {
+        "default": "step_log_low_risk"
+      }
+    },
+    
+    {
+      "id": "step_critical_alert",
+      "stepOrder": 2.5,
+      "stepType": "notify",
+      "stepName": "Critical Risk Alert",
+      "description": "Immediate notification to risk committee for critical-level risks",
+      "durationHours": 0.1,
+      "config": {
+        "notificationType": "email_and_slack",
+        "recipients": {
+          "roles": ["cio", "risk_committee_lead"],
+          "emails": []
+        },
+        "channels": ["email", "slack", "sms"],
+        "priority": "critical",
+        "template": {
+          "subject": "🚨 CRITICAL RISK ALERT: Portfolio {{portfolio_name}} - Risk Score {{risk_score}}/10",
+          "body": "Immediate action required.\n\nPortfolio: {{portfolio_name}}\nRisk Score: {{risk_score}}/10\nPrimary Risk: {{primary_risk_type}}\nVaR 95%: {{var_95}}%\nCVaR 95%: {{cvar_95}}%\n\nAI Reasoning: {{reasoning}}\n\nRecommendations: {{recommendations}}"
+        }
+      },
+      "nextSteps": {
+        "success": "step_3_abac_check"
+      }
+    },
+    
+    {
+      "id": "step_3_abac_check",
+      "stepOrder": 3,
+      "stepType": "integrate",
+      "stepName": "ABAC Authorization Check",
+      "description": "Verify user/system has authorization to execute risk mitigation for this portfolio/client",
+      "durationHours": 0.1,
+      "config": {
+        "activityName": "ABACCheck",
+        "parameters": {
+          "action": "mitigate_risk",
+          "resource_type": "portfolio",
+          "check_temporal_policy": true,
+          "check_business_hours": true,
+          "timezone": "America/New_York"
+        },
+        "errorHandling": {
+          "onABACDenied": "step_escalate_abac_denied",
+          "onOutsideBusinessHours": "step_schedule_next_business_day",
+          "alertOnError": true
+        }
+      },
+      "nextSteps": {
+        "success": "step_4_determine_mitigation",
+        "failure": "step_escalate_abac_denied"
+      }
+    },
+    
+    {
+      "id": "step_4_determine_mitigation",
+      "stepOrder": 4,
+      "stepType": "integrate",
+      "stepName": "AI Mitigation Strategy",
+      "description": "Generate optimal mitigation plan using xAI considering portfolio constraints (tax, liquidity, turnover)",
+      "durationHours": 0.5,
+      "config": {
+        "activityName": "AIMitigationStrategy",
+        "service": "xai_grok",
+        "parameters": {
+          "riskContext": "{{ step_1_ai_risk_score }}",
+          "portfolioConstraints": {
+            "maxTurnover": 0.15,
+            "taxAware": true,
+            "minLiquidityRatio": 0.25,
+            "respectHoldingPeriods": true
+          },
+          "optimizationGoals": [
+            "minimize_tax_impact",
+            "reduce_risk_score_by_50_percent",
+            "maintain_diversification",
+            "respect_strategic_allocation"
+          ]
+        },
+        "errorHandling": {
+          "retryPolicy": {
+            "maxAttempts": 2,
+            "initialIntervalSeconds": 2
+          }
+        }
+      },
+      "outputs": {
+        "strategy": "string",
+        "actions": "array",
+        "estimated_risk_reduction": "number",
+        "tax_impact": "number"
+      },
+      "nextSteps": {
+        "success": "step_5_approval_or_execute",
+        "failure": "step_manual_mitigation_required"
+      }
+    },
+    
+    {
+      "id": "step_5_approval_or_execute",
+      "stepOrder": 5,
+      "stepType": "condition",
+      "stepName": "Auto-Execute or Require Approval",
+      "description": "Decide whether to auto-execute mitigation (for low-risk portfolios) or route for approval",
+      "durationHours": 0.1,
+      "config": {
+        "conditions": {
+          "type": "OR",
+          "branches": [
+            {
+              "name": "Auto-Execute Path (Risk < 7.0, AUM < $10M)",
+              "condition": {
+                "type": "AND",
+                "conditions": [
+                  {
+                    "variable": "step_1_ai_risk_score.risk_score",
+                    "operator": "<",
+                    "value": 7.0
+                  },
+                  {
+                    "variable": "portfolio.aum",
+                    "operator": "<",
+                    "value": 10000000
+                  }
+                ]
+              },
+              "nextStep": "step_5_execute_mitigation"
+            },
+            {
+              "name": "Require Approval (Risk >= 7.0 or AUM >= $10M)",
+              "condition": {
+                "type": "OR",
+                "conditions": [
+                  {
+                    "variable": "step_1_ai_risk_score.risk_score",
+                    "operator": ">=",
+                    "value": 7.0
+                  },
+                  {
+                    "variable": "portfolio.aum",
+                    "operator": ">=",
+                    "value": 10000000
+                  }
+                ]
+              },
+              "nextStep": "step_5_approval"
+            }
+          ]
+        },
+        "defaultNextStep": "step_5_execute_mitigation"
+      },
+      "nextSteps": {
+        "default": "step_5_execute_mitigation"
+      }
+    },
+    
+    {
+      "id": "step_5_approval",
+      "stepOrder": 5.5,
+      "stepType": "approve",
+      "stepName": "Mitigation Approval",
+      "description": "Route mitigation strategy to senior risk manager for approval",
+      "durationHours": 1.0,
+      "assigneeRole": "senior_risk_manager",
+      "config": {
+        "approvalOptions": [
+          {
+            "label": "Approve & Execute",
+            "value": "approved",
+            "nextStep": "step_5_execute_mitigation"
+          },
+          {
+            "label": "Approve with Modifications",
+            "value": "approved_modified",
+            "nextStep": "step_modify_strategy"
+          },
+          {
+            "label": "Reject & Manual Review",
+            "value": "rejected",
+            "nextStep": "step_manual_mitigation_required"
+          }
+        ],
+        "escalationThresholdHours": 2.0,
+        "escalateToRole": "cio"
+      },
+      "nextSteps": {
+        "default": "step_5_execute_mitigation"
+      }
+    },
+    
+    {
+      "id": "step_5_execute_mitigation",
+      "stepOrder": 6,
+      "stepType": "integrate",
+      "stepName": "Execute Mitigation Actions",
+      "description": "Execute trades, hedges, liquidations per mitigation strategy with full audit trail",
+      "durationHours": 1.0,
+      "config": {
+        "activityName": "ExecuteRiskMitigation",
+        "parameters": {
+          "strategy": "{{ step_4_determine_mitigation }}",
+          "dryRun": false,
+          "requireConfirmation": false,
+          "maxRetries": 3,
+          "auditTrail": {
+            "logAllTrades": true,
+            "recordRationale": true,
+            "captureMarketConditions": true
+          }
+        },
+        "errorHandling": {
+          "onInsufficientLiquidity": "step_partial_mitigation",
+          "onMarketClosed": "step_queue_for_market_open",
+          "onBrokerError": "step_retry_with_backoff",
+          "compensation": {
+            "enabled": true,
+            "strategy": "reverse_trades",
+            "maxAttempts": 5
+          }
+        }
+      },
+      "outputs": {
+        "executedTrades": "array",
+        "actualRiskReduction": "number",
+        "executionCost": "number",
+        "taxImpact": "number"
+      },
+      "nextSteps": {
+        "success": "step_6_update_risk_event",
+        "failure": "step_compensate_failed_mitigation"
+      }
+    },
+    
+    {
+      "id": "step_6_update_risk_event",
+      "stepOrder": 7,
+      "stepType": "integrate",
+      "stepName": "Update Risk Event Status",
+      "description": "Record mitigation completion in Hasura risk_events table",
+      "durationHours": 0.1,
+      "config": {
+        "activityName": "HasuraUpdateRiskEvent",
+        "service": "hasura",
+        "parameters": {
+          "table": "risk_events",
+          "fields": {
+            "status": "MITIGATED",
+            "mitigated_at": "NOW()",
+            "auto_mitigated": true,
+            "mitigation_actions": "{{ step_5_execute_mitigation.executedTrades }}",
+            "actual_risk_reduction": "{{ step_5_execute_mitigation.actualRiskReduction }}"
+          }
+        }
+      },
+      "nextSteps": {
+        "success": "step_7_publish_event"
+      }
+    },
+    
+    {
+      "id": "step_7_publish_event",
+      "stepOrder": 8,
+      "stepType": "integrate",
+      "stepName": "Publish Risk Mitigated Event",
+      "description": "Emit portfolio.risk_mitigated event for downstream consumers (analytics, reporting)",
+      "durationHours": 0.1,
+      "config": {
+        "activityName": "PublishToKafka",
+        "service": "rabbitmq",
+        "parameters": {
+          "exchange": "portfolio.events",
+          "routingKey": "risk.mitigated",
+          "message": {
+            "portfolioId": "{{ portfolio.id }}",
+            "riskScore": "{{ step_1_ai_risk_score.risk_score }}",
+            "mitigatedAt": "NOW()",
+            "mitigationStrategy": "{{ step_4_determine_mitigation.strategy }}",
+            "mitigationCost": "{{ step_5_execute_mitigation.executionCost }}"
+          }
+        }
+      },
+      "nextSteps": {
+        "default": "step_complete"
+      }
+    },
+    
+    {
+      "id": "step_log_low_risk",
+      "stepOrder": 9,
+      "stepType": "integrate",
+      "stepName": "Log Low Risk Assessment",
+      "description": "Record low-risk portfolio check and close risk event",
+      "durationHours": 0.1,
+      "config": {
+        "activityName": "HasuraUpdateRiskEvent",
+        "parameters": {
+          "table": "risk_events",
+          "fields": {
+            "status": "CLOSED",
+            "reasoning": "Risk assessment below thresholds. No mitigation required."
+          }
+        }
+      },
+      "nextSteps": {
+        "default": "step_complete"
+      }
+    },
+    
+    {
+      "id": "step_escalate_ai_failure",
+      "stepOrder": 10,
+      "stepType": "approve",
+      "stepName": "Escalate: AI Analysis Failed",
+      "description": "AI analysis failed - manual review required",
+      "durationHours": 4.0,
+      "assigneeRole": "risk_manager",
+      "config": {
+        "priority": "high",
+        "escalationThresholdHours": 1.0,
+        "escalateToRole": "cio"
+      },
+      "nextSteps": {
+        "default": "step_complete"
+      }
+    },
+    
+    {
+      "id": "step_escalate_abac_denied",
+      "stepOrder": 11,
+      "stepType": "approve",
+      "stepName": "Escalate: ABAC Authorization Denied",
+      "description": "User lacks authorization for this portfolio risk mitigation",
+      "durationHours": 2.0,
+      "assigneeRole": "senior_risk_manager",
+      "config": {
+        "escalationThresholdHours": 1.0,
+        "escalateToRole": "cio",
+        "notification": {
+          "subject": "Risk Mitigation Request - Authorization Required",
+          "body": "Portfolio {{portfolio_name}} has high risk but requires escalation approval.\nRisk Score: {{risk_score}}/10\nPrimary Risk: {{primary_risk_type}}"
+        }
+      },
+      "nextSteps": {
+        "default": "step_complete"
+      }
+    },
+    
+    {
+      "id": "step_schedule_next_business_day",
+      "stepOrder": 12,
+      "stepType": "integrate",
+      "stepName": "Schedule for Next Business Day",
+      "description": "Market is closed - queue mitigation for market open",
+      "durationHours": 16.0,
+      "config": {
+        "activityName": "ScheduleTask",
+        "parameters": {
+          "executeAt": "NEXT_MARKET_OPEN",
+          "timezone": "America/New_York",
+          "retryPolicy": {
+            "maxAttempts": 2
+          }
+        }
+      },
+      "nextSteps": {
+        "default": "step_complete"
+      }
+    },
+    
+    {
+      "id": "step_manual_mitigation_required",
+      "stepOrder": 13,
+      "stepType": "notify",
+      "stepName": "Manual Mitigation Required",
+      "description": "AI strategy generation failed - manual review by risk team required",
+      "durationHours": 24.0,
+      "config": {
+        "notificationType": "email",
+        "recipients": {
+          "roles": ["risk_manager", "portfolio_manager"]
+        },
+        "template": {
+          "subject": "⚠️ MANUAL RISK MITIGATION REQUIRED - {{portfolio_name}}",
+          "body": "AI mitigation strategy generation failed for {{portfolio_name}}.\n\nRisk Score: {{risk_score}}/10\nPrimary Risk: {{primary_risk_type}}\n\nPlease review portfolio and devise manual mitigation strategy.\n\nLink: {{dashboard_url}}/portfolios/{{portfolio_id}}/risk"
+        }
+      },
+      "nextSteps": {
+        "default": "step_complete"
+      }
+    },
+    
+    {
+      "id": "step_modify_strategy",
+      "stepOrder": 14,
+      "stepType": "data_entry",
+      "stepName": "Modify Mitigation Strategy",
+      "description": "User can adjust AI-generated strategy before execution",
+      "durationHours": 1.0,
+      "config": {
+        "formFields": [
+          {
+            "name": "mitigation_actions",
+            "type": "textarea",
+            "label": "Mitigation Actions (JSON)",
+            "required": true
+          },
+          {
+            "name": "risk_reduction_target",
+            "type": "number",
+            "label": "Target Risk Reduction (%)",
+            "required": false
+          }
+        ]
+      },
+      "nextSteps": {
+        "default": "step_5_execute_mitigation"
+      }
+    },
+    
+    {
+      "id": "step_partial_mitigation",
+      "stepOrder": 15,
+      "stepType": "notify",
+      "stepName": "Partial Mitigation Executed",
+      "description": "Insufficient liquidity - partial mitigation completed, alert sent",
+      "durationHours": 1.0,
+      "config": {
+        "notificationType": "email",
+        "recipients": {
+          "roles": ["risk_manager"]
+        },
+        "template": {
+          "subject": "⚠️ Partial Risk Mitigation - {{portfolio_name}}",
+          "body": "Mitigation completed partially due to liquidity constraints.\n\nTargeted Risk Reduction: {{targeted_reduction}}%\nActual Risk Reduction: {{actual_risk_reduction}}%\n\nAction: Monitor for additional risk reduction opportunities."
+        }
+      },
+      "nextSteps": {
+        "default": "step_complete"
+      }
+    },
+    
+    {
+      "id": "step_queue_for_market_open",
+      "stepOrder": 16,
+      "stepType": "integrate",
+      "stepName": "Queue for Market Open",
+      "description": "Market closed - re-trigger mitigation at next market open",
+      "durationHours": 16.0,
+      "config": {
+        "activityName": "QueueWorkflowForTime",
+        "parameters": {
+          "delayUntil": "NEXT_MARKET_OPEN",
+          "workflowName": "RiskAlpha",
+          "workflowInput": "{{ workflow.input }}"
+        }
+      },
+      "nextSteps": {
+        "default": "step_complete"
+      }
+    },
+    
+    {
+      "id": "step_retry_with_backoff",
+      "stepOrder": 17,
+      "stepType": "integrate",
+      "stepName": "Retry Execution with Backoff",
+      "description": "Broker error - retry with exponential backoff",
+      "durationHours": 0.5,
+      "config": {
+        "activityName": "RetryActivity",
+        "parameters": {
+          "maxAttempts": 5,
+          "initialIntervalSeconds": 5,
+          "backoffCoefficient": 2.0,
+          "maxIntervalSeconds": 60
+        }
+      },
+      "nextSteps": {
+        "success": "step_5_execute_mitigation",
+        "failure": "step_compensate_failed_mitigation"
+      }
+    },
+    
+    {
+      "id": "step_compensate_failed_mitigation",
+      "stepOrder": 18,
+      "stepType": "integrate",
+      "stepName": "Rollback Failed Mitigation",
+      "description": "Mitigation execution failed - rollback trades and notify",
+      "durationHours": 1.0,
+      "config": {
+        "activityName": "RollbackMitigation",
+        "parameters": {
+          "rollbackStrategy": "reverse_trades",
+          "maxRetries": 5,
+          "notifyRoles": ["risk_manager", "cio"]
+        }
+      },
+      "nextSteps": {
+        "default": "step_complete"
+      }
+    },
+    
+    {
+      "id": "step_complete",
+      "stepOrder": 99,
+      "stepType": "notify",
+      "stepName": "Risk Alpha Complete",
+      "description": "Risk assessment and mitigation workflow completed",
+      "durationHours": 0.1,
+      "config": {
+        "notificationType": "log",
+        "recipients": {
+          "roles": []
+        }
+      },
+      "nextSteps": {}
+    }
+  ],
+  
+  "validationRules": [
+    {
+      "field": "portfolio.id",
+      "required": true,
+      "type": "uuid"
+    },
+    {
+      "field": "portfolio.aum",
+      "required": true,
+      "type": "number",
+      "min": 0
+    },
+    {
+      "field": "portfolio.tenant_id",
+      "required": true,
+      "type": "uuid"
+    }
+  ],
+  
+  "errorHandling": {
+    "defaultRetryPolicy": {
+      "enabled": true,
+      "maxAttempts": 3,
+      "initialIntervalSeconds": 2,
+      "backoffCoefficient": 2.0,
+      "maximumIntervalSeconds": 60
+    },
+    "timeout": {
+      "stepTimeoutSeconds": 300,
+      "processTimeoutSeconds": 3600
+    },
+    "onProcessFailure": {
+      "action": "escalate",
+      "notifyRoles": ["risk_manager", "operations_team"],
+      "createIncident": true
+    }
+  },
+  
+  "auditLevel": "full",
+  "retentionDays": 2555,
+  "isActive": true,
+  "tags": [
+    "AI",
+    "Risk",
+    "Mitigation",
+    "Portfolio",
+    "Real-Time",
+    "xAI-Grok",
+    "ABAC",
+    "Temporal"
+  ]
+}

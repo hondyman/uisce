@@ -1,0 +1,12 @@
+id: policy_disclosures
+type: DisclosurePolicy
+version: 1.0.0
+name: Disclosure Policy
+status: active
+rules:
+  - when: "card.persona == 'persona_market_strategist'"
+    include:
+      - "Educational only; not investment advice"
+  - when: "action == 'InitiateTaxLossHarvest'"
+    include:
+      - "Tax outcomes vary; consult a qualified professional"

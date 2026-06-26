@@ -1,0 +1,3 @@
+table:
+  name: sync_queue
+  schema: calendar

@@ -1,0 +1,107 @@
+table:
+  name: tenant_product_datasource
+  schema: public
+object_relationships:
+  - name: alpha_tenant_instance
+    using:
+      foreign_key_constraint_on: alpha_tenant_instance_id
+  - name: connection
+    using:
+      foreign_key_constraint_on: connection_id
+  - name: tenant_instance
+    using:
+      foreign_key_constraint_on: tenant_instance_id
+  - name: tenant_product
+    using:
+      foreign_key_constraint_on: tenant_product_id
+insert_permissions:
+  - role: anonymous
+    permission:
+      check: {}
+      columns:
+        - tenant_product_id
+        - alpha_tenant_instance_id
+        - config
+        - is_active
+        - source_name
+        - connection_id
+  - role: user
+    permission:
+      check: {}
+      columns:
+        - tenant_product_id
+        - alpha_tenant_instance_id
+        - config
+        - is_active
+        - source_name
+        - connection_id
+        - tenant_instance_id
+        - core_id
+select_permissions:
+  - role: anonymous
+    permission:
+      columns:
+        - id
+        - tenant_product_id
+        - alpha_tenant_instance_id
+        - connection_id
+        - tenant_instance_id
+        - is_active
+        - config
+        - created_at
+        - updated_at
+        - source_name
+        - last_scan_at
+        - last_scan_status
+        - core_id
+      filter:
+        tenant_product:
+          tenant_instance:
+            tenant_id:
+              _eq: X-Hasura-Tenant-Id
+  - role: user
+    permission:
+      columns:
+        - id
+        - tenant_product_id
+        - alpha_tenant_instance_id
+        - connection_id
+        - tenant_instance_id
+        - is_active
+        - config
+        - created_at
+        - updated_at
+        - source_name
+        - last_scan_at
+        - last_scan_status
+        - core_id
+      filter:
+        tenant_product:
+          tenant_instance:
+            tenant_id:
+              _eq: X-Hasura-Tenant-Id
+update_permissions:
+  - role: user
+    permission:
+      columns:
+        - tenant_product_id
+        - alpha_tenant_instance_id
+        - config
+        - is_active
+        - source_name
+        - connection_id
+        - tenant_instance_id
+      filter:
+        tenant_product:
+          tenant_instance:
+            tenant_id:
+              _eq: X-Hasura-Tenant-Id
+      check: null
+delete_permissions:
+  - role: user
+    permission:
+      filter:
+        tenant_product:
+          tenant_instance:
+            tenant_id:
+              _eq: X-Hasura-Tenant-Id

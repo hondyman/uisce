@@ -1,0 +1,45 @@
+table:
+  name: product
+  schema: public
+array_relationships:
+- name: tenant_products
+  using:
+    foreign_key_constraint_on:
+      column: product_id
+      table:
+        name: tenant_product
+        schema: public
+insert_permissions:
+  - role: admin
+    permission:
+      check: {}
+      columns:
+        - id
+        - product_name
+        - product_code
+        - status
+        - is_active
+select_permissions:
+  - role: admin
+    permission:
+      columns:
+        - id
+        - product_name
+        - product_code
+        - status
+        - is_active
+      filter: {}
+update_permissions:
+  - role: admin
+    permission:
+      columns:
+        - id
+        - product_name
+        - product_code
+        - status
+        - is_active
+      filter: {}
+delete_permissions:
+  - role: admin
+    permission:
+      filter: {}

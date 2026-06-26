@@ -1,0 +1,173 @@
+╔════════════════════════════════════════════════════════════════════════════╗
+║                                                                            ║
+║                    SEMLAYER SYSTEM STARTUP QUICK REFERENCE                ║
+║                                                                            ║
+╚════════════════════════════════════════════════════════════════════════════╝
+
+═════════════════════════════════════════════════════════════════════════════
+                          🚀 QUICKEST START
+═════════════════════════════════════════════════════════════════════════════
+
+    ONE COMMAND TO RUN EVERYTHING:
+
+    $ bash START_FULL_SYSTEM.sh
+
+    Then open browser: http://localhost:5173
+
+═════════════════════════════════════════════════════════════════════════════
+                       📦 INDIVIDUAL SCRIPTS
+═════════════════════════════════════════════════════════════════════════════
+
+    Full System:        bash START_FULL_SYSTEM.sh     (Backend + Frontend)
+    Backend Only:       bash START_BACKEND.sh          (Just API server)
+    Frontend Only:      bash START_FRONTEND.sh         (Just UI)
+
+═════════════════════════════════════════════════════════════════════════════
+                    🔧 MANUAL COMMANDS (3 TERMINALS)
+═════════════════════════════════════════════════════════════════════════════
+
+    Terminal 1 - Backend:
+    ├─ $ cd backend
+    ├─ $ go build -o server cmd/server/main.go
+    └─ $ ./server
+
+    Terminal 2 - Frontend:
+    ├─ $ cd frontend
+    ├─ $ npm install              (First time only)
+    └─ $ npm run dev
+
+    Terminal 3 - Database:
+    └─ $ psql -U postgres -d alpha -c "SELECT 1"
+
+═════════════════════════════════════════════════════════════════════════════
+                      🔗 SYSTEM URLs & PORTS
+═════════════════════════════════════════════════════════════════════════════
+
+    Service           Port     URL
+    ────────────────────────────────────────────
+    Backend API       8080     http://localhost:8080
+    Frontend UI       5173     http://localhost:5173
+    PostgreSQL        5432     localhost:5432
+    Dynamic UI Gen.   N/A      http://localhost:5173/dynamic-ui
+
+═════════════════════════════════════════════════════════════════════════════
+                      ⚡ COMMON COMMANDS
+═════════════════════════════════════════════════════════════════════════════
+
+    Build Backend:         cd backend && go build -o server cmd/server/main.go
+    Build Frontend:        cd frontend && npm run build
+    Run Backend:           cd backend && ./server
+    Run Frontend (dev):    cd frontend && npm run dev
+    Stop Backend:          lsof -ti:8080 | xargs kill -9
+    Stop Frontend:         lsof -ti:5173 | xargs kill -9
+    Database Connect:      psql -U postgres -d alpha
+    View Backend Logs:     tail -f logs/backend_*.log
+    View Frontend Logs:    tail -f logs/frontend_*.log
+
+═════════════════════════════════════════════════════════════════════════════
+                      ✅ TEST AFTER STARTUP
+═════════════════════════════════════════════════════════════════════════════
+
+    1. Backend Health:
+       $ curl http://localhost:8080/health
+
+    2. Frontend Load:
+       $ curl http://localhost:5173 | head -5
+
+    3. Create Employee:
+       $ curl -X POST http://localhost:8080/api/employees \
+         -H "Content-Type: application/json" \
+         -H "X-Tenant-ID: 00000000-0000-0000-0000-000000000000" \
+         -H "X-Tenant-Datasource-ID: 11111111-1111-1111-1111-111111111111" \
+         -d '{"firstName":"John","lastName":"Doe","email":"john@example.com"}'
+
+    4. Open UI:
+       $ open http://localhost:5173
+       Then: Config → Dynamic UI Generator
+
+═════════════════════════════════════════════════════════════════════════════
+                      📋 STARTUP DOCUMENTATION
+═════════════════════════════════════════════════════════════════════════════
+
+    SYSTEM_STARTUP_SUMMARY.md       ← Start here! Overview of all options
+    COMPLETE_STARTUP_GUIDE.md       ← Detailed guide with examples
+    COMMANDS_CHEAT_SHEET.md         ← Quick reference for all commands
+    STARTUP_QUICK_REFERENCE.txt     ← This file
+
+═════════════════════════════════════════════════════════════════════════════
+                      🐛 TROUBLESHOOTING
+═════════════════════════════════════════════════════════════════════════════
+
+    Port in use:           lsof -ti:PORT | xargs kill -9
+    Go not found:          Install from golang.org
+    npm not found:         Install Node.js from nodejs.org
+    PostgreSQL error:      Start with: brew services start postgresql
+    Build fails:           Try: go mod tidy
+    No node_modules:       Run: npm install (in frontend dir)
+
+═════════════════════════════════════════════════════════════════════════════
+                      🎯 TYPICAL WORKFLOW
+═════════════════════════════════════════════════════════════════════════════
+
+    1. Start System:
+       $ bash START_FULL_SYSTEM.sh
+
+    2. Open Browser:
+       http://localhost:5173
+
+    3. Navigate To:
+       Config → Dynamic UI Generator
+
+    4. Fill Form:
+       Employee ID: EMP001
+       First Name: John
+       Last Name: Doe
+       Email: john@example.com
+       Department: Engineering
+
+    5. Click Save:
+       Expect: 201 response
+       Verify: Data in database
+
+    6. Click Submit for Approval:
+       Expect: Workflow triggered (202)
+       Verify: workflowId returned
+
+═════════════════════════════════════════════════════════════════════════════
+                      📊 SYSTEM ARCHITECTURE
+═════════════════════════════════════════════════════════════════════════════
+
+    Frontend (React + TypeScript)  ──→  Backend (Go API)  ──→  PostgreSQL
+    Port 5173                           Port 8080              Port 5432
+    Vite Dev Server                     Chi Router             Database
+    Auto-reload (HMR)                   Multi-tenant           Multi-tenant
+
+═════════════════════════════════════════════════════════════════════════════
+                      💾 WHAT'S CREATED FOR YOU
+═════════════════════════════════════════════════════════════════════════════
+
+    Scripts:
+    ✅ START_FULL_SYSTEM.sh       - Start everything
+    ✅ START_BACKEND.sh           - Backend only
+    ✅ START_FRONTEND.sh          - Frontend only
+
+    Documentation:
+    ✅ SYSTEM_STARTUP_SUMMARY.md  - Overview
+    ✅ COMPLETE_STARTUP_GUIDE.md  - Full guide
+    ✅ COMMANDS_CHEAT_SHEET.md    - Quick ref
+
+═════════════════════════════════════════════════════════════════════════════
+                      🎉 READY TO GO!
+═════════════════════════════════════════════════════════════════════════════
+
+    Run this:
+    $ bash START_FULL_SYSTEM.sh
+
+    Then open:
+    http://localhost:5173
+
+    That's it! System will be ready in ~30 seconds.
+
+═════════════════════════════════════════════════════════════════════════════
+Generated: October 21, 2025 | Status: ✅ READY | Confidence: HIGH
+═════════════════════════════════════════════════════════════════════════════

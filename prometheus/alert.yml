@@ -1,0 +1,133 @@
+# Prometheus Alert Rules
+
+groups:
+- name: service_health
+  interval: 30s
+  rules:
+  # High error rate
+  - alert: HighErrorRate
+    expr: |
+      (
+        sum(rate(http_requests_total{status=~"5.."}[5m])) by (service)
+        /
+        sum(rate(http_requests_total[5m])) by (service)
+      ) > 0.05
+    for: 5m
+    labels:
+      severity: critical
+      component: api
+    annotations:
+      summary: "High error rate on {{ $labels.service }}"
+      description: "{{ $labels.service }} has error rate > 5% (current: {{ $value | humanizePercentage }})"
+
+  # Service unavailable
+  - alert: ServiceDown
+    expr: up{job!="prometheus"} == 0
+    for: 1m
+    labels:
+      severity: critical
+      component: infrastructure
+    annotations:
+      summary: "Service {{ $labels.job }} is down"
+      description: "{{ $labels.job }} ({{ $labels.instance }}) has been down for more than 1 minute"
+
+  # High latency
+  - alert: HighLatency
+    expr: |
+      histogram_quantile(0.99,
+        sum(rate(http_request_duration_seconds_bucket[5m])) by (le, service)
+      ) > 1.0
+    for: 5m
+    labels:
+      severity: warning
+      component: api
+    annotations:
+      summary: "High latency on {{ $labels.service }}"
+      description: "{{ $labels.service }} p99 latency > 1s (current: {{ $value | humanizeDuration }})"
+
+- name: validation_metrics
+  interval: 30s
+  rules:
+  # Validation queue too deep
+  - alert: ValidationQueueBacklog
+    expr: |
+      validation_queue_depth > 1000
+    for: 10m
+    labels:
+      severity: warning
+      component: validation
+    annotations:
+      summary: "Validation queue backlog building up"
+      description: "Validation queue depth is {{ $value }} (threshold: 1000)"
+
+  # Validation failure rate high
+  - alert: HighValidationFailureRate
+    expr: |
+      (
+        sum(rate(validation_failed_total[5m]))
+        /
+        (sum(rate(validation_passed_total[5m])) + sum(rate(validation_failed_total[5m])))
+      ) > 0.1
+    for: 5m
+    labels:
+      severity: warning
+      component: validation
+    annotations:
+      summary: "High validation failure rate"
+      description: "Validation failure rate > 10% (current: {{ $value | humanizePercentage }})"
+
+- name: resource_metrics
+  interval: 30s
+  rules:
+  # High memory usage
+  - alert: HighMemoryUsage
+    expr: |
+      (
+        container_memory_usage_bytes / container_spec_memory_limit_bytes
+      ) > 0.85
+    for: 5m
+    labels:
+      severity: warning
+      component: infrastructure
+    annotations:
+      summary: "High memory usage on {{ $labels.container_name }}"
+      description: "{{ $labels.container_name }} memory usage > 85% (current: {{ $value | humanizePercentage }})"
+
+  # High CPU usage
+  - alert: HighCPUUsage
+    expr: |
+      rate(container_cpu_usage_seconds_total[5m]) > 0.8
+    for: 5m
+    labels:
+      severity: warning
+      component: infrastructure
+    annotations:
+      summary: "High CPU usage on {{ $labels.container_name }}"
+      description: "{{ $labels.container_name }} CPU usage > 80% (current: {{ $value | humanizePercentage }})"
+
+- name: rabbitmq_metrics
+  interval: 30s
+  rules:
+  # RabbitMQ queue length high
+  - alert: RabbitMQQueueBacklog
+    expr: |
+      rabbitmq_queue_messages_ready > 5000
+    for: 5m
+    labels:
+      severity: warning
+      component: messaging
+    annotations:
+      summary: "RabbitMQ queue backlog high"
+      description: "Queue {{ $labels.queue }} has {{ $value }} messages ready"
+
+  # RabbitMQ connection issues
+  - alert: RabbitMQConnectionErrors
+    expr: |
+      increase(rabbitmq_connection_errors_total[5m]) > 10
+    for: 2m
+    labels:
+      severity: critical
+      component: messaging
+    annotations:
+      summary: "RabbitMQ connection errors detected"
+      description: "{{ $value }} connection errors in last 5 minutes"

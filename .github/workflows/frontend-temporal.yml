@@ -1,0 +1,35 @@
+name: Build frontend-temporal
+
+on:
+  push:
+    paths:
+    - 'frontend-temporal/**'
+  pull_request:
+    paths:
+    - 'frontend-temporal/**'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Setup Node
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+
+    - name: Install dependencies
+      working-directory: frontend-temporal
+      run: npm ci
+
+    - name: Build
+      working-directory: frontend-temporal
+      run: npm run build
+
+    - name: Upload artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: frontend-temporal-dist
+        path: frontend-temporal/dist

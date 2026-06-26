@@ -1,0 +1,50 @@
+cubes:
+  - name: customers
+    sql_table: public.customers
+    data_source: {{ get_data_source("customers") }}
+    title: Customers (Test Tenant)
+
+    measures:
+      - name: count
+        type: count
+
+    dimensions:
+      {% for dim in get_dimensions("customers") %}
+      - name: {{ dim.Name }}
+        sql: {{ dim.Sql }}
+        type: {{ dim.Type }}
+        {% if dim.PrimaryKey %}primary_key: true{% endif %}
+      {% endfor %}
+
+    {% if get_hierarchies("customers") %}
+    hierarchies:
+      {% for hierarchy in get_hierarchies("customers") %}
+      - name: {{ hierarchy.Name }}
+        {% if hierarchy.Title %}title: {{ hierarchy.Title }}{% endif %}
+        levels:
+          {% for level in hierarchy.Levels %}
+          - {{ level }}
+          {% endfor %}
+        {% if not hierarchy.Public %}public: false{% endif %}
+      {% endfor %}
+      # Additional tenant-specific hierarchy
+      - name: tenant_location
+        title: Tenant-Specific Location
+        levels:
+          - city
+          - state
+    {% endif %}
+
+    {% if get_segments("customers") %}
+    segments:
+      {% for segment in get_segments("customers") %}
+      - name: {{ segment.Name }}
+        {% if segment.Description %}description: {{ segment.Description }}{% endif %}
+        sql: {{ segment.Sql }}
+        {% if not segment.Public %}public: false{% endif %}
+      {% endfor %}
+      # Additional tenant-specific segment
+      - name: test_segment
+        description: Test tenant segment
+        sql: {CUBE}.name LIKE 'Test%'
+    {% endif %}

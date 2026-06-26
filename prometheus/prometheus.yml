@@ -1,0 +1,182 @@
+# Prometheus Configuration
+
+global:
+  scrape_interval: 15s # Scrape targets every 15 seconds
+  evaluation_interval: 15s # Evaluate alerts every 15 seconds
+  external_labels:
+    cluster: 'semlayer'
+    environment: 'development'
+    region: 'local'
+
+# Alert rule files
+rule_files:
+- '/etc/prometheus/alert.yml'
+
+# Alertmanager configuration
+alerting:
+  alertmanagers:
+  - static_configs:
+    - targets:
+      - alertmanager:9093
+
+# Scrape configurations
+scrape_configs:
+# Prometheus self-monitoring
+- job_name: 'prometheus'
+  static_configs:
+  - targets: [ 'localhost:9090' ]
+  scrape_interval: 10s
+  metrics_path: '/metrics'
+
+# Temporal Server metrics (NEWLY ADDED)
+- job_name: 'temporal-server'
+  static_configs:
+  - targets: [ 'temporal:8233' ]
+  scrape_interval: 15s
+  metrics_path: '/metrics'
+  relabel_configs:
+  - source_labels: [ __address__ ]
+    target_label: service
+    replacement: 'temporal'
+  - source_labels: [ __address__ ]
+    target_label: component
+    replacement: 'server'
+
+# Traefik metrics
+- job_name: 'traefik'
+  static_configs:
+  - targets: [ 'traefik:8080' ]
+  scrape_interval: 10s
+  metrics_path: '/metrics'
+  relabel_configs:
+  - source_labels: [ __address__ ]
+    target_label: instance
+    replacement: 'traefik-ingress'
+
+# Backend API metrics
+- job_name: 'backend'
+  static_configs:
+  - targets: [ 'backend:8080' ]
+  scrape_interval: 15s
+  metrics_path: '/metrics'
+  relabel_configs:
+  - source_labels: [ __address__ ]
+    target_label: service
+    replacement: 'backend'
+
+# GraphQL Engine metrics
+- job_name: 'graphql-engine'
+  static_configs:
+  - targets: [ 'graphql-engine:8080' ]
+  scrape_interval: 15s
+  metrics_path: '/metrics'
+  relabel_configs:
+  - source_labels: [ __address__ ]
+    target_label: service
+    replacement: 'graphql-engine'
+
+# Cube.js Semantic Layer metrics
+- job_name: 'cubejs'
+  static_configs:
+  - targets: [ 'cube:4000' ]
+  scrape_interval: 15s
+  metrics_path: '/metrics'
+  relabel_configs:
+  - source_labels: [ __address__ ]
+    target_label: service
+    replacement: 'cubejs'
+
+# Validation Service metrics
+- job_name: 'validation-service'
+  static_configs:
+  - targets: [ 'validation-service:8082' ]
+  scrape_interval: 15s
+  metrics_path: '/metrics'
+  relabel_configs:
+  - source_labels: [ __address__ ]
+    target_label: service
+    replacement: 'validation-service'
+  - source_labels: [ __address__ ]
+    target_label: port
+    replacement: '8082'
+
+# Rule Engine Service metrics
+- job_name: 'rule-engine-service'
+  static_configs:
+  - targets: [ 'rule-engine-service:8083' ]
+  scrape_interval: 15s
+  metrics_path: '/metrics'
+  relabel_configs:
+  - source_labels: [ __address__ ]
+    target_label: service
+    replacement: 'rule-engine-service'
+  - source_labels: [ __address__ ]
+    target_label: port
+    replacement: '8083'
+
+# Notifications Service metrics
+- job_name: 'notifications-service'
+  static_configs:
+  - targets: [ 'notifications-service:8084' ]
+  scrape_interval: 15s
+  metrics_path: '/metrics'
+  relabel_configs:
+  - source_labels: [ __address__ ]
+    target_label: service
+    replacement: 'notifications-service'
+  - source_labels: [ __address__ ]
+    target_label: port
+    replacement: '8084'
+
+# Policy Service metrics
+- job_name: 'policy-service'
+  static_configs:
+  - targets: [ 'policy-service:8085' ]
+  scrape_interval: 15s
+  metrics_path: '/metrics'
+  relabel_configs:
+  - source_labels: [ __address__ ]
+    target_label: service
+    replacement: 'policy-service'
+  - source_labels: [ __address__ ]
+    target_label: port
+    replacement: '8085'
+
+# Search Service metrics
+- job_name: 'search-service'
+  static_configs:
+  - targets: [ 'search-service:8086' ]
+  scrape_interval: 15s
+  metrics_path: '/metrics'
+  relabel_configs:
+  - source_labels: [ __address__ ]
+    target_label: service
+    replacement: 'search-service'
+  - source_labels: [ __address__ ]
+    target_label: port
+    replacement: '8086'
+
+# Event Router metrics
+- job_name: 'event-router'
+  static_configs:
+  - targets: [ 'event-router:8081' ]
+  scrape_interval: 15s
+  metrics_path: '/metrics'
+  relabel_configs:
+  - source_labels: [ __address__ ]
+    target_label: service
+    replacement: 'event-router'
+  - source_labels: [ __address__ ]
+    target_label: port
+    replacement: '8081'
+
+# Docker stats (optional, requires cadvisor)
+- job_name: 'docker'
+  static_configs:
+  - targets: [ 'cadvisor:8080' ]
+  scrape_interval: 15s
+  scrape_timeout: 10s
+  relabel_configs:
+  - source_labels: [ __address__ ]
+    target_label: instance
+    replacement: 'docker-cadvisor'

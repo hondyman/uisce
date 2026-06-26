@@ -1,0 +1,480 @@
+{
+  "bundle_id": "financial_services_expansion_pack",
+  "domain": "financial_services",
+  "audience": ["executive", "risk", "advisor", "regulator"],
+  "version": "v1.0.0",
+  "owner": "patrick",
+  "tags": ["banking", "insurance", "asset_management", "capital_markets", "cross_domain"],
+  "functions": [
+    {
+      "name": "SUM",
+      "class": "DAX-Aggregator",
+      "badge": "🟨",
+      "description": "Returns the sum of all the numbers in a column."
+    },
+    {
+      "name": "AVERAGE",
+      "class": "DAX-Aggregator",
+      "badge": "🟨",
+      "description": "Returns the average (arithmetic mean) of all the numbers in a column."
+    },
+    {
+      "name": "DIVIDE",
+      "class": "DAX-Logical",
+      "badge": "🟧",
+      "description": "Performs division and returns alternate result or BLANK() on division by 0."
+    },
+    {
+      "name": "PERCENTILEX.INC",
+      "class": "DAX-Statistical",
+      "badge": "🟩",
+      "description": "Returns the k-th percentile of values in a column."
+    },
+    {
+      "name": "SUBTRACT",
+      "class": "DAX-Logical",
+      "badge": "🟧",
+      "description": "Returns the result of subtracting the second argument from the first argument."
+    },
+    {
+      "name": "MULTIPLY",
+      "class": "DAX-Logical",
+      "badge": "🟧",
+      "description": "Returns the result of multiplying two numbers."
+    },
+    {
+      "name": "ADD",
+      "class": "DAX-Logical",
+      "badge": "🟧",
+      "description": "Returns the result of adding two numbers."
+    }
+  ],
+  "metrics": [
+    {
+      "node_id": "net_interest_margin",
+      "category": "banking",
+      "description": "Net interest income divided by average earning assets. Core profitability metric for banks.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "DIVIDE(SUM({interest_income}) - SUM({interest_expense}), AVERAGE({earning_assets}))",
+        "arguments": {
+          "interest_income": "field:interest_income",
+          "interest_expense": "field:interest_expense",
+          "earning_assets": "field:earning_assets"
+        }
+      },
+      "badge": "🟨",
+      "function_class": "DAX-Aggregator",
+      "functions_used": ["SUM", "AVERAGE", "DIVIDE"],
+      "governance": { "status": "golden" }
+    },
+    {
+      "node_id": "loan_to_deposit_ratio",
+      "category": "banking",
+      "description": "Total loans divided by total deposits. Liquidity and lending aggressiveness indicator.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "DIVIDE(SUM({total_loans}), SUM({total_deposits}))",
+        "arguments": {
+          "total_loans": "field:total_loans",
+          "total_deposits": "field:total_deposits"
+        }
+      },
+      "badge": "🟨",
+      "function_class": "DAX-Aggregator",
+      "functions_used": ["SUM", "DIVIDE"],
+      "governance": { "status": "golden" }
+    },
+    {
+      "node_id": "non_performing_loan_ratio",
+      "category": "banking",
+      "description": "Non-performing loans divided by total loans. Credit quality and risk measure.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "DIVIDE(SUM({non_performing_loans}), SUM({total_loans}))",
+        "arguments": {
+          "non_performing_loans": "field:non_performing_loans",
+          "total_loans": "field:total_loans"
+        }
+      },
+      "badge": "🟨",
+      "function_class": "DAX-Aggregator",
+      "functions_used": ["SUM", "DIVIDE"],
+      "governance": { "status": "golden" }
+    },
+    {
+      "node_id": "cost_to_income_ratio",
+      "category": "banking",
+      "description": "Operating expenses divided by operating income. Operational efficiency benchmark.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "DIVIDE(SUM({operating_expenses}), SUM({operating_income}))",
+        "arguments": {
+          "operating_expenses": "field:operating_expenses",
+          "operating_income": "field:operating_income"
+        }
+      },
+      "badge": "🟨",
+      "function_class": "DAX-Aggregator",
+      "functions_used": ["SUM", "DIVIDE"],
+      "governance": { "status": "golden" }
+    },
+    {
+      "node_id": "provision_coverage_ratio",
+      "category": "banking",
+      "description": "Loan loss provisions divided by gross non-performing loans. Risk buffer adequacy.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "DIVIDE(SUM({loan_loss_provisions}), SUM({gross_npl}))",
+        "arguments": {
+          "loan_loss_provisions": "field:loan_loss_provisions",
+          "gross_npl": "field:gross_npl"
+        }
+      },
+      "badge": "🟨",
+      "function_class": "DAX-Aggregator",
+      "functions_used": ["SUM", "DIVIDE"],
+      "governance": { "status": "golden" }
+    },
+    {
+      "node_id": "aum_growth_rate",
+      "category": "asset_management",
+      "description": "Growth rate of assets under management over a period. Business growth tracking.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "DIVIDE({aum_end} - {aum_start}, {aum_start})",
+        "arguments": {
+          "aum_end": "field:aum_end",
+          "aum_start": "field:aum_start"
+        }
+      },
+      "badge": "🟧",
+      "function_class": "DAX-Logical",
+      "functions_used": ["DIVIDE"],
+      "governance": { "status": "golden" }
+    },
+    {
+      "node_id": "net_new_money",
+      "category": "asset_management",
+      "description": "Inflows minus outflows over a period. Client acquisition/retention health.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "SUM({inflows}) - SUM({outflows})",
+        "arguments": {
+          "inflows": "field:inflows",
+          "outflows": "field:outflows"
+        }
+      },
+      "badge": "🟨",
+      "function_class": "DAX-Aggregator",
+      "functions_used": ["SUM"],
+      "governance": { "status": "golden" }
+    },
+    {
+      "node_id": "management_fee_yield",
+      "category": "asset_management",
+      "description": "Fee income divided by average assets under management. Revenue efficiency.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "DIVIDE(SUM({fee_income}), AVERAGE({average_aum}))",
+        "arguments": {
+          "fee_income": "field:fee_income",
+          "average_aum": "field:average_aum"
+        }
+      },
+      "badge": "🟨",
+      "function_class": "DAX-Aggregator",
+      "functions_used": ["SUM", "AVERAGE", "DIVIDE"],
+      "governance": { "status": "golden" }
+    },
+    {
+      "node_id": "performance_fee_capture",
+      "category": "asset_management",
+      "description": "Performance fees divided by eligible assets under management. Alpha monetization measure.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "DIVIDE(SUM({performance_fees}), SUM({eligible_aum}))",
+        "arguments": {
+          "performance_fees": "field:performance_fees",
+          "eligible_aum": "field:eligible_aum"
+        }
+      },
+      "badge": "🟨",
+      "function_class": "DAX-Aggregator",
+      "functions_used": ["SUM", "DIVIDE"],
+      "governance": { "status": "golden" }
+    },
+    {
+      "node_id": "active_share",
+      "category": "asset_management",
+      "description": "Percentage of portfolio holdings that differ from benchmark. Active management intensity.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "DIVIDE(SUM({active_weight}), SUM({total_weight}))",
+        "arguments": {
+          "active_weight": "field:active_weight",
+          "total_weight": "field:total_weight"
+        }
+      },
+      "badge": "🟨",
+      "function_class": "DAX-Aggregator",
+      "functions_used": ["SUM", "DIVIDE"],
+      "governance": { "status": "golden" }
+    },
+    {
+      "node_id": "loss_ratio",
+      "category": "insurance",
+      "description": "Incurred losses divided by earned premiums. Underwriting profitability.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "DIVIDE(SUM({incurred_losses}), SUM({earned_premiums}))",
+        "arguments": {
+          "incurred_losses": "field:incurred_losses",
+          "earned_premiums": "field:earned_premiums"
+        }
+      },
+      "badge": "🟨",
+      "function_class": "DAX-Aggregator",
+      "functions_used": ["SUM", "DIVIDE"],
+      "governance": { "status": "golden" }
+    },
+    {
+      "node_id": "expense_ratio",
+      "category": "insurance",
+      "description": "Underwriting expenses divided by earned premiums. Operational efficiency.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "DIVIDE(SUM({underwriting_expenses}), SUM({earned_premiums}))",
+        "arguments": {
+          "underwriting_expenses": "field:underwriting_expenses",
+          "earned_premiums": "field:earned_premiums"
+        }
+      },
+      "badge": "🟨",
+      "function_class": "DAX-Aggregator",
+      "functions_used": ["SUM", "DIVIDE"],
+      "governance": { "status": "golden" }
+    },
+    {
+      "node_id": "combined_ratio",
+      "category": "insurance",
+      "description": "Loss ratio plus expense ratio. Overall underwriting performance.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "{loss_ratio} + {expense_ratio}",
+        "arguments": {
+          "loss_ratio": "calc:loss_ratio",
+          "expense_ratio": "calc:expense_ratio"
+        }
+      },
+      "badge": "🟧",
+      "function_class": "DAX-Logical",
+      "functions_used": ["ADD"],
+      "governance": { "status": "golden" }
+    },
+    {
+      "node_id": "solvency_ratio",
+      "category": "insurance",
+      "description": "Available capital divided by required capital. Regulatory capital adequacy.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "DIVIDE(SUM({available_capital}), SUM({required_capital}))",
+        "arguments": {
+          "available_capital": "field:available_capital",
+          "required_capital": "field:required_capital"
+        }
+      },
+      "badge": "🟨",
+      "function_class": "DAX-Aggregator",
+      "functions_used": ["SUM", "DIVIDE"],
+      "governance": { "status": "golden" }
+    },
+    {
+      "node_id": "retention_ratio",
+      "category": "insurance",
+      "description": "Renewed policies divided by total policies eligible for renewal. Customer loyalty measure.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "DIVIDE(SUM({renewed_policies}), SUM({eligible_policies}))",
+        "arguments": {
+          "renewed_policies": "field:renewed_policies",
+          "eligible_policies": "field:eligible_policies"
+        }
+      },
+      "badge": "🟨",
+      "function_class": "DAX-Aggregator",
+      "functions_used": ["SUM", "DIVIDE"],
+      "governance": { "status": "golden" }
+    },
+    {
+      "node_id": "value_at_risk",
+      "category": "capital_markets",
+      "description": "Maximum expected loss over a period at a given confidence level. Risk limit setting.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "PERCENTILEX.INC({loss_distribution}, {confidence_level})",
+        "arguments": {
+          "loss_distribution": "ARRAY_AGG(loss_amount)",
+          "confidence_level": "field:confidence_level"
+        }
+      },
+      "badge": "🟩",
+      "function_class": "DAX-Statistical",
+      "functions_used": ["PERCENTILEX.INC"],
+      "governance": { "status": "draft" }
+    },
+    {
+      "node_id": "expected_shortfall",
+      "category": "capital_markets",
+      "description": "Average loss beyond VaR threshold. Tail risk measure.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "AVERAGE({losses_beyond_var})",
+        "arguments": {
+          "losses_beyond_var": "field:losses_beyond_var"
+        }
+      },
+      "badge": "🟨",
+      "function_class": "DAX-Aggregator",
+      "functions_used": ["AVERAGE"],
+      "governance": { "status": "draft" }
+    },
+    {
+      "node_id": "turnover_ratio",
+      "category": "capital_markets",
+      "description": "Trading volume divided by average portfolio value. Liquidity and activity indicator.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "DIVIDE(SUM({trading_volume}), AVERAGE({portfolio_value}))",
+        "arguments": {
+          "trading_volume": "field:trading_volume",
+          "portfolio_value": "field:portfolio_value"
+        }
+      },
+      "badge": "🟨",
+      "function_class": "DAX-Aggregator",
+      "functions_used": ["SUM", "AVERAGE", "DIVIDE"],
+      "governance": { "status": "golden" }
+    },
+    {
+      "node_id": "slippage",
+      "category": "capital_markets",
+      "description": "Execution price minus expected price. Trading efficiency.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "AVERAGE({execution_price}) - AVERAGE({expected_price})",
+        "arguments": {
+          "execution_price": "field:execution_price",
+          "expected_price": "field:expected_price"
+        }
+      },
+      "badge": "🟨",
+      "function_class": "DAX-Aggregator",
+      "functions_used": ["AVERAGE"],
+      "governance": { "status": "draft" }
+    },
+    {
+      "node_id": "order_fill_rate",
+      "category": "capital_markets",
+      "description": "Filled orders divided by total orders. Execution quality.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "DIVIDE(SUM({filled_orders}), SUM({total_orders}))",
+        "arguments": {
+          "filled_orders": "field:filled_orders",
+          "total_orders": "field:total_orders"
+        }
+      },
+      "badge": "🟨",
+      "function_class": "DAX-Aggregator",
+      "functions_used": ["SUM", "DIVIDE"],
+      "governance": { "status": "golden" }
+    },
+    {
+      "node_id": "economic_value_added",
+      "category": "cross_domain",
+      "description": "Net operating profit after tax minus capital charge. Value creation after cost of capital.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "{nopat} - ({capital} * {cost_of_capital})",
+        "arguments": {
+          "nopat": "field:nopat",
+          "capital": "field:capital",
+          "cost_of_capital": "field:cost_of_capital"
+        }
+      },
+      "badge": "🟧",
+      "function_class": "DAX-Logical",
+      "functions_used": ["MULTIPLY"],
+      "governance": { "status": "draft" }
+    },
+    {
+      "node_id": "raroc",
+      "category": "cross_domain",
+      "description": "Risk-adjusted return on capital. Capital efficiency.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "DIVIDE({risk_adjusted_profit}, {economic_capital})",
+        "arguments": {
+          "risk_adjusted_profit": "field:risk_adjusted_profit",
+          "economic_capital": "field:economic_capital"
+        }
+      },
+      "badge": "🟧",
+      "function_class": "DAX-Logical",
+      "functions_used": ["DIVIDE"],
+      "governance": { "status": "golden" }
+    },
+    {
+      "node_id": "liquidity_coverage_ratio",
+      "category": "cross_domain",
+      "description": "High-quality liquid assets divided by net cash outflows over 30 days. Basel III compliance.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "DIVIDE(SUM({high_quality_assets}), SUM({net_cash_outflows}))",
+        "arguments": {
+          "high_quality_assets": "field:high_quality_assets",
+          "net_cash_outflows": "field:net_cash_outflows"
+        }
+      },
+      "badge": "🟨",
+      "function_class": "DAX-Aggregator",
+      "functions_used": ["SUM", "DIVIDE"],
+      "governance": { "status": "golden" }
+    },
+    {
+      "node_id": "net_stable_funding_ratio",
+      "category": "cross_domain",
+      "description": "Available stable funding divided by required stable funding. Long-term liquidity health.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "DIVIDE(SUM({available_stable_funding}), SUM({required_stable_funding}))",
+        "arguments": {
+          "available_stable_funding": "field:available_stable_funding",
+          "required_stable_funding": "field:required_stable_funding"
+        }
+      },
+      "badge": "🟨",
+      "function_class": "DAX-Aggregator",
+      "functions_used": ["SUM", "DIVIDE"],
+      "governance": { "status": "golden" }
+    },
+    {
+      "node_id": "stress_test_impact",
+      "category": "cross_domain",
+      "description": "Modeled capital ratio under stress divided by baseline capital ratio. Resilience measure.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "DIVIDE({stressed_capital_ratio}, {baseline_capital_ratio})",
+        "arguments": {
+          "stressed_capital_ratio": "field:stressed_capital_ratio",
+          "baseline_capital_ratio": "field:baseline_capital_ratio"
+        }
+      },
+      "badge": "🟧",
+      "function_class": "DAX-Logical",
+      "functions_used": ["DIVIDE"],
+      "governance": { "status": "draft" }
+    }
+  ]
+}

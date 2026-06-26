@@ -1,0 +1,281 @@
+{
+  "data_sources": {
+    "financial_analytics": "default"
+  },
+  "dimensions": {
+    "financial_analytics": [
+      {
+        "name": "investment_id",
+        "sql": "investment_id",
+        "type": "string",
+        "primary_key": true,
+        "description": "Unique investment identifier",
+        "tags": ["finance", "investment"]
+      },
+      {
+        "name": "investment_date",
+        "sql": "investment_date",
+        "type": "time",
+        "description": "Date of investment",
+        "tags": ["finance", "date"]
+      },
+      {
+        "name": "investor_type",
+        "sql": "investor_type",
+        "type": "string",
+        "description": "Type of investor",
+        "tags": ["finance", "segmentation"]
+      }
+    ]
+  },
+  "measures": {
+    "financial_analytics": [
+      {
+        "name": "total_investment",
+        "sql": "SUM(initial_investment)",
+        "type": "sum",
+        "format": "currency",
+        "description": "Total amount invested",
+        "tags": ["finance", "kpi"]
+      },
+      {
+        "name": "total_returns",
+        "sql": "SUM(cash_flow_amount)",
+        "type": "sum",
+        "format": "currency",
+        "description": "Total cash flows received",
+        "tags": ["finance", "returns"]
+      },
+      {
+        "name": "investment_irr",
+        "sql": "IRR(ARRAY[-10000.00,2750.00,4250.00,3250.00,2750.00], 0.100000)",
+        "type": "number",
+        "format": "percent",
+        "description": "Internal Rate of Return for periodic cash flows",
+        "financial_calc": {
+          "type": "irr",
+          "cash_flows": [
+            {
+              "amount": -10000,
+              "period": 0,
+              "category": "investment",
+              "description": "Initial investment"
+            },
+            {
+              "amount": 2750,
+              "period": 1,
+              "category": "return",
+              "description": "Quarter 1 return"
+            },
+            {
+              "amount": 4250,
+              "period": 2,
+              "category": "return",
+              "description": "Quarter 2 return"
+            },
+            {
+              "amount": 3250,
+              "period": 3,
+              "category": "return",
+              "description": "Quarter 3 return"
+            },
+            {
+              "amount": 2750,
+              "period": 4,
+              "category": "return",
+              "description": "Quarter 4 return"
+            }
+          ],
+          "guess": 0.1
+        },
+        "tags": ["finance", "irr", "performance"]
+      },
+      {
+        "name": "investment_xirr",
+        "sql": "XIRR(ARRAY[-10000.00,2750.00,4250.00,3250.00,2750.00], ARRAY[2008-01-01,2008-03-01,2008-10-30,2009-02-15,2009-04-01], 0.100000)",
+        "type": "number",
+        "format": "percent",
+        "description": "Extended Internal Rate of Return for non-periodic cash flows",
+        "financial_calc": {
+          "type": "xirr",
+          "cash_flows": [
+            {
+              "amount": -10000,
+              "date": "2008-01-01",
+              "category": "investment",
+              "description": "Initial investment on Jan 1, 2008"
+            },
+            {
+              "amount": 2750,
+              "date": "2008-03-01",
+              "category": "return",
+              "description": "Return on Mar 1, 2008"
+            },
+            {
+              "amount": 4250,
+              "date": "2008-10-30",
+              "category": "return",
+              "description": "Return on Oct 30, 2008"
+            },
+            {
+              "amount": 3250,
+              "date": "2009-02-15",
+              "category": "return",
+              "description": "Return on Feb 15, 2009"
+            },
+            {
+              "amount": 2750,
+              "date": "2009-04-01",
+              "category": "return",
+              "description": "Return on Apr 1, 2009"
+            }
+          ],
+          "guess": 0.1
+        },
+        "tags": ["finance", "xirr", "performance"]
+      },
+      {
+        "name": "net_present_value",
+        "sql": "NPV(0.100000, ARRAY[-10000.00,2750.00,4250.00,3250.00,2750.00])",
+        "type": "number",
+        "format": "currency",
+        "description": "Net Present Value at 10% discount rate",
+        "financial_calc": {
+          "type": "npv",
+          "rate": 0.1,
+          "cash_flows": [
+            {
+              "amount": -10000,
+              "period": 0,
+              "category": "investment"
+            },
+            {
+              "amount": 2750,
+              "period": 1,
+              "category": "return"
+            },
+            {
+              "amount": 4250,
+              "period": 2,
+              "category": "return"
+            },
+            {
+              "amount": 3250,
+              "period": 3,
+              "category": "return"
+            },
+            {
+              "amount": 2750,
+              "period": 4,
+              "category": "return"
+            }
+          ]
+        },
+        "tags": ["finance", "npv", "valuation"]
+      },
+      {
+        "name": "loan_payment",
+        "sql": "PMT(0.004167, 60, 100000.00, 0.00)",
+        "type": "number",
+        "format": "currency",
+        "description": "Monthly loan payment for $100K at 5% APR over 5 years",
+        "financial_calc": {
+          "type": "pmt",
+          "rate": 0.05,
+          "periods": 60,
+          "present_value": 100000,
+          "future_value": 0
+        },
+        "tags": ["finance", "loan", "payment"]
+      },
+      {
+        "name": "future_value",
+        "sql": "FV(0.080000, 10, 0.00, -50000.00)",
+        "type": "number",
+        "format": "currency",
+        "description": "Future value of $50K investment at 8% over 10 years",
+        "financial_calc": {
+          "type": "fv",
+          "rate": 0.08,
+          "periods": 10,
+          "payment": 0,
+          "present_value": -50000
+        },
+        "tags": ["finance", "investment", "projection"]
+      },
+      {
+        "name": "present_value",
+        "sql": "PV(0.060000, 20, 0.00, 100000.00)",
+        "type": "number",
+        "format": "currency",
+        "description": "Present value of $100K received in 20 years at 6%",
+        "financial_calc": {
+          "type": "pv",
+          "rate": 0.06,
+          "periods": 20,
+          "payment": 0,
+          "future_value": 100000
+        },
+        "tags": ["finance", "valuation", "discounting"]
+      },
+      {
+        "name": "sharpe_ratio",
+        "sql": "(AVG(daily_return) - 0.02/252) / STDDEV(daily_return) * SQRT(252)",
+        "type": "number",
+        "format": "decimal",
+        "description": "Risk-adjusted return measure",
+        "tags": ["finance", "risk", "performance"]
+      },
+      {
+        "name": "sortino_ratio",
+        "sql": "(AVG(daily_return) - 0.02/252) / SQRT(AVG(POWER(LEAST(daily_return - 0.02/252, 0), 2))) * SQRT(252)",
+        "type": "number",
+        "format": "decimal",
+        "description": "Downside risk-adjusted return",
+        "tags": ["finance", "risk", "performance"]
+      },
+      {
+        "name": "maximum_drawdown",
+        "sql": "MIN(running_total / GREATEST(running_max, 0.0001) - 1)",
+        "type": "number",
+        "format": "percent",
+        "description": "Maximum peak-to-trough decline",
+        "tags": ["finance", "risk", "drawdown"]
+      }
+    ]
+  },
+  "hierarchies": {
+    "financial_analytics": []
+  },
+  "segments": {
+    "financial_analytics": []
+  },
+  "performance_hints": {
+    "financial_analytics": [
+      {
+        "type": "index",
+        "table": "investments",
+        "columns": ["investment_date", "investor_type", "investment_id"],
+        "description": "Index for time-series financial queries"
+      },
+      {
+        "type": "partition",
+        "table": "cash_flows",
+        "columns": ["cash_flow_date"],
+        "parameters": {
+          "partition_type": "monthly"
+        },
+        "description": "Monthly partitioning for cash flow data"
+      },
+      {
+        "type": "cache",
+        "table": "financial_metrics",
+        "parameters": {
+          "ttl": "1h",
+          "size": "500MB"
+        },
+        "description": "Cache financial calculations for 1 hour"
+      }
+    ]
+  }
+}

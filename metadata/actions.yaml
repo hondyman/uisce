@@ -1,0 +1,190 @@
+actions:
+- name: applyRelationship
+  definition:
+    kind: synchronous
+    handler: http://api-gateway:8000/api/relationships/apply
+    forward_client_headers: true
+    request_transform:
+      version: 2
+      template_engine: Kriti
+      url: 'http://api-gateway:8000/api/relationships/apply?tenant_id={{$body.variables.tenantId}}&datasource_id={{$body.variables.datasourceId}}'
+      body:
+        action: transform
+        template: |
+          {
+            "sourceEntity": {{$body.variables.sourceEntity | @json}},
+            "targetEntity": {{$body.variables.targetEntity | @json}},
+            "edgeType": {{$body.variables.edgeType | @json}},
+            "cardinality": {{$body.variables.cardinality | @json}},
+            "fkColumn": {{$body.variables.fkColumn | @json}},
+            "confidence": {{$body.variables.confidence}}
+          }
+    headers:
+    - name: Content-Type
+      value: application/json
+    - name: Authorization
+      value_from_env: API_GATEWAY_AUTH_TOKEN
+- name: dismissRelationshipSuggestion
+  definition:
+    kind: synchronous
+    handler: http://api-gateway:8000/api/relationships/suggestions/dismiss
+    forward_client_headers: true
+    request_transform:
+      version: 2
+      template_engine: Kriti
+      url: 'http://api-gateway:8000/api/relationships/suggestions/dismiss?tenant_id={{$body.variables.tenantId}}&datasource_id={{$body.variables.datasourceId}}'
+      body:
+        action: transform
+        template: |
+          {
+            "suggestionId": {{$body.variables.suggestionId | @json}},
+            "reason": {{$body.variables.reason | @json}}
+          }
+    headers:
+    - name: Content-Type
+      value: application/json
+    - name: Authorization
+      value_from_env: API_GATEWAY_AUTH_TOKEN
+- name: dynamic_delete
+  definition:
+    kind: synchronous
+    handler: http://backend-local:8080/actions/dynamic-delete
+    forward_client_headers: true
+    headers:
+    - name: Content-Type
+      value: application/json
+- name: dynamic_insert
+  definition:
+    kind: synchronous
+    handler: http://backend-local:8080/actions/dynamic-insert
+    forward_client_headers: true
+    headers:
+    - name: Content-Type
+      value: application/json
+- name: dynamic_update
+  definition:
+    kind: synchronous
+    handler: http://backend-local:8080/actions/dynamic-update
+    forward_client_headers: true
+    headers:
+    - name: Content-Type
+      value: application/json
+- name: getRelatedObjects
+  definition:
+    kind: ""
+    handler: http://api-gateway:8000/api/relationships/objects
+    forward_client_headers: true
+    request_transform:
+      version: 2
+      template_engine: Kriti
+      url: 'http://api-gateway:8000/api/relationships/objects?tenant_id={{$body.variables.tenantId}}&datasource_id={{$body.variables.datasourceId}}&entity={{$body.variables.entity}}'
+      body:
+        action: remove
+    headers:
+    - name: Content-Type
+      value: application/json
+    - name: Authorization
+      value_from_env: API_GATEWAY_AUTH_TOKEN
+- name: getRelationshipSuggestions
+  definition:
+    kind: ""
+    handler: http://api-gateway:8000/api/relationships/suggestions
+    forward_client_headers: true
+    request_transform:
+      version: 2
+      template_engine: Kriti
+      url: 'http://api-gateway:8000/api/relationships/suggestions?tenant_id={{$body.variables.tenantId}}&datasource_id={{$body.variables.datasourceId}}&entity={{$body.variables.entity}}&limit={{$body.variables.limit}}'
+      body:
+        action: remove
+    headers:
+    - name: Content-Type
+      value: application/json
+    - name: Authorization
+      value_from_env: API_GATEWAY_AUTH_TOKEN
+- name: get_semantic_lineage
+  definition:
+    kind: ""
+    handler: http://api-gateway:8000/api/lineage/semantic
+    forward_client_headers: true
+    request_transform:
+      version: 2
+      template_engine: Kriti
+      # Pass optional tenant/datasource if provided as variables
+      url: 'http://api-gateway:8000/api/lineage/semantic?entity={{$body.variables.entity}}&tenant_id={{$body.variables.tenant_id}}&datasource_id={{$body.variables.datasource_id}}'
+      body:
+        action: remove
+    headers:
+    - name: Content-Type
+      value: application/json
+    - name: Authorization
+      value_from_env: API_GATEWAY_AUTH_TOKEN
+- name: search_business_terms
+  definition:
+    kind: ""
+    handler: http://api-gateway:8000/api/search/business-terms
+    forward_client_headers: true
+    headers:
+    - name: Content-Type
+      value: application/json
+    - name: Authorization
+      value_from_env: API_GATEWAY_AUTH_TOKEN
+- name: validate_business_term
+  definition:
+    kind: synchronous
+    handler: http://api-gateway:8000/api/validate/business-term
+    forward_client_headers: true
+    request_transform:
+      version: 2
+      template_engine: Kriti
+      url: 'http://api-gateway:8000/api/validate/business-term?tenant_id={{$body.variables.tenantId}}'
+      body:
+        action: transform
+        template: |
+          {
+            "business_term": {{$body.variables.business_term | @json}}
+          }
+    headers:
+    - name: Content-Type
+      value: application/json
+    - name: Authorization
+      value_from_env: API_GATEWAY_AUTH_TOKEN
+custom_types:
+  enums:
+  - name: EdgeType
+    values:
+    - description: null
+      is_deprecated: null
+      value: REFERENCE
+    - description: null
+      is_deprecated: null
+      value: COMPOSITION
+    - description: null
+      is_deprecated: null
+      value: ASSOCIATION
+    - description: null
+      is_deprecated: null
+      value: FOREIGN_KEY
+  - name: Direction
+    values:
+    - description: null
+      is_deprecated: null
+      value: OUTBOUND
+    - description: null
+      is_deprecated: null
+      value: INBOUND
+  input_objects: []
+  objects:
+  - name: LineageNode
+  - name: LineageEdge
+  - name: LineageResponse
+  - name: BusinessTerm
+  - name: SearchBusinessTermsResponse
+  - name: ValidationResponse
+  - name: GenericActionResponse
+  - name: RelatedObject
+  - name: RelationshipSuggestion
+  - name: ApplyRelationshipResponse
+  - name: DismissSuggestionResponse
+  scalars:
+  - name: jsonb
+  - name: uuid

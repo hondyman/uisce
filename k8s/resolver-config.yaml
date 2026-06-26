@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: resolver-config
+  namespace: analytics
+data:
+  top_accounts_query: |
+    SELECT account_id 
+    FROM iceberg.default.holdings_preagg 
+    GROUP BY account_id 
+    ORDER BY SUM(market_value_resolved) DESC 
+    LIMIT 50
+  dryrun_threshold_pct: "0.005" # 0.5%
+  dryrun_threshold_abs: "1000"  # $1000

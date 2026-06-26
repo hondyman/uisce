@@ -1,0 +1,93 @@
+services:
+  # Redpanda - Kafka-compatible message broker (replaces RabbitMQ)
+  redpanda:
+    image: docker.redpanda.com/redpandadata/redpanda:latest
+    platform: linux/amd64
+    container_name: semlayer-redpanda
+    restart: unless-stopped
+    command:
+      - redpanda start
+      - --overprovisioned
+      - --smp 1
+      - --memory 1G
+      - --reserve-memory 0M
+      - --node-id 0
+      - --check=false
+      - --kafka-addr PLAINTEXT://0.0.0.0:9092,OUTSIDE://0.0.0.0:19092
+      - --advertise-kafka-addr PLAINTEXT://redpanda:9092,OUTSIDE://localhost:19092
+      - --pandaproxy-addr 0.0.0.0:8082
+      - --advertise-pandaproxy-addr localhost:8082
+      - --schema-registry-addr 0.0.0.0:8081
+    ports:
+      - "9092:9092"
+      - "19092:19092"
+      - "8081:8081"
+    healthcheck:
+      test: ["CMD", "rpk", "cluster", "health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  # Event Router Microservice
+  event-router:
+    build:
+      context: ./backend/cmd/event-router
+      dockerfile: Dockerfile
+    container_name: semlayer-event-router
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      - KAFKA_BROKERS=redpanda:9092
+      - HASURA_URL=http://graphql-engine:8080/v1/graphql
+      - EVENT_ROUTER_URL=http://event-router:8081
+      - PORT=8081
+    ports:
+      - "8081:8081"
+    depends_on:
+      - redpanda
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8081/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  # (Non-essential microservices omitted here to simplify local startup)
+  # Re-add validation-service, rule-engine-service, notifications-service, policy-service
+  # when you want to build/run them; they can be added back into this compose file.
+  # Note: Backend runs as native Go process (./scripts/start-backend.sh) for faster development iteration
+  # 
+  # Hasura GraphQL Engine
+  graphql-engine:
+    image: hasura/graphql-engine:latest
+    container_name: semlayer-graphql-engine
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      HASURA_GRAPHQL_DATABASE_URL: postgresql://postgres:postgres@host.docker.internal:5432/alpha
+      HASURA_GRAPHQL_ENABLE_CONSOLE: "true"
+      HASURA_GRAPHQL_ADMIN_SECRET: ${HASURA_ADMIN_SECRET}
+      HASURA_GRAPHQL_JWT_SECRET: '{"type":"HS256","key":"${JWT_SECRET}"}'
+      HASURA_GRAPHQL_UNAUTHORIZED_ROLE: anonymous
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./hasura/metadata:/hasura-metadata
+      - ./hasura/migrations:/hasura-migrations
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    depends_on:
+      - event-router
+
+volumes:
+
+networks:
+  default:
+    name: semlayer_backend_network
+    driver: bridge

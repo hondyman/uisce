@@ -1,0 +1,96 @@
+syntax = "proto3";
+
+package calendar.events.v1;
+
+option go_package = "calendar-service/pkg/proto/calendar/events/v1";
+option java_package = "com.usice.calendar.events.v1";
+option java_outer_classname = "CalendarEventsProto";
+
+// CalendarEvent represents a change to calendar data
+// Published to Redpanda topics for downstream consumption
+message CalendarEvent {
+  string event_id = 1;                    // UUID unique to this event
+  string event_type = 2;                  // CALENDAR_UPDATE, HOLIDAY_ADDED, CONFLICT_DETECTED, INGESTION_STARTED, INGESTION_COMPLETED
+  string tenant_id = 3;                   // Multi-tenant isolation - partition key
+  
+  string region = 4;                      // Region affected (US, GB, CA, etc)
+  string exchange = 5;                    // Exchange code (NYSE, LSE, etc) - optional
+  string calendar_date = 6;               // ISO 8601 date string: YYYY-MM-DD
+  
+  bool is_business_day = 7;               // True if market/office open
+  string holiday_name = 8;                // Human-readable holiday name (e.g., "Christmas")
+  
+  string source_system = 9;               // Where data came from (Workalendar, TradingHours, NagerDate, OpenHolidays, etc)
+  int32 confidence_score = 10;            // 0-100 confidence in this data point
+  
+  string operation = 11;                  // CREATE, UPDATE, DELETE
+  string rule_applied = 12;               // Which survivorship rule won (e.g., "highest_confidence", "most_recent")
+  
+  string semantic_term_version = 13;      // Schema version for semantic terms
+  string business_object_version = 14;    // Schema version for business objects
+  
+  int64 timestamp = 15;                   // Unix milliseconds when event was created
+  string wasm_execution_id = 16;          // Traceable to WASM rules engine execution - for debugging
+  
+  int32 attempt_number = 17;              // If retried, which attempt (1-based)
+  bool is_retry = 18;                     // Whether this is a retry of a previous failed publish
+}
+
+// CalendarConflict represents a discrepancy between sources
+// Published to calendar-conflicts topic for stewardship queue
+message CalendarConflict {
+  string conflict_id = 1;                 // UUID
+  string tenant_id = 2;                   // Multi-tenant isolation
+  string region = 3;                      // Region where conflict occurred
+  string calendar_date = 4;               // Date with conflicting data
+  
+  string field_name = 5;                  // Which field had conflict (is_business_day, holiday_name, etc)
+  repeated string conflicting_values = 6; // Values that disagreed ("true", "false", "Christmas", "Xmas", etc)
+  repeated string source_systems = 7;     // Systems that disagreed (Workalendar, TradingHours, etc)
+  
+  int32 severity = 8;                     // 1=LOW, 2=MEDIUM, 3=HIGH, 4=CRITICAL
+  string reason = 9;                      // Why conflict occurred (e.g., "source_disagreement", "stale_data", "partial_coverage")
+  bool resolved = 10;                     // Whether conflict was resolved by survivorship rules
+  
+  string resolution_rule = 11;            // Which rule resolved it
+  string resolved_value = 12;             // The winning value
+  
+  int64 created_at = 13;                  // Milliseconds since epoch
+  int64 resolved_at = 14;                 // Milliseconds since epoch
+  
+  string escalation_status = 15;          // NONE, PENDING, ESCALATED, MANUAL_REVIEW_REQUIRED
+}
+
+// IngestionEvent represents lifecycle events during data ingestion
+message IngestionEvent {
+  string ingestion_id = 1;                // UUID for this ingestion run
+  string tenant_id = 2;                   // Multi-tenant isolation
+  
+  string event_type = 3;                  // STARTED, IN_PROGRESS, COMPLETED, FAILED
+  string status = 4;                      // QUEUED, RUNNING, SUCCESS, PARTIAL_SUCCESS, FAILURE
+  
+  repeated string regions = 5;            // Regions being ingested
+  int32 target_year = 6;                  // Year being ingested
+  bool force_refresh = 7;                 // Force overwrite of existing data
+  
+  int32 records_ingested = 8;             // Total records processed
+  int32 records_created = 9;              // New records added
+  int32 records_updated = 10;             // Existing records updated
+  int32 records_deleted = 11;             // Records marked as deleted
+  int32 conflicts_detected = 12;          // Number of conflicts found
+  int32 conflicts_resolved = 13;          // Number of conflicts automatically resolved
+  int32 conflicts_escalated = 14;         // Conflicts requiring manual review
+  
+  int32 sources_queried = 15;             // Number of data sources queried
+  int32 sources_succeeded = 16;           // Number of sources that succeeded
+  int32 sources_failed = 17;              // Number of sources that failed
+  
+  repeated string error_messages = 18;    // If failed, error details
+  
+  int64 started_at = 19;                  // Milliseconds since epoch
+  int64 completed_at = 20;                // Milliseconds since epoch
+  int64 duration_ms = 21;                 // Total execution time
+  
+  string triggered_by = 22;               // User ID or system name that triggered
+  string wasm_rules_version = 23;         // Version of WASM rules engine used
+}

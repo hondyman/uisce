@@ -1,0 +1,6 @@
+# Minimal Temporal dynamic config for local dev
+# This file intentionally minimal — Temporal's auto-setup expects a path.
+# Keep it empty or include very small overrides if needed.
+# Example:
+# taskqueue:
+#   max_pending_workflows: 100

@@ -1,0 +1,189 @@
+# GraphQL Schema Extensions for Semantic Term Tags
+
+# ============================================================================
+# SEMANTIC TERM TAGS EXTENSION
+# ============================================================================
+
+# Tag represents a semantic term classification label
+type SemanticTag {
+  id: ID!
+  tagKey: String!
+  tagLabel: String!
+  tagCategory: String! # business_area, data_type, domain, usage_pattern, sensitivity, governance
+  description: String
+  colorCode: String
+  iconName: String
+  autoSuggest: Boolean!
+  sortOrder: Int
+  isActive: Boolean!
+  createdAt: DateTime!
+  updatedAt: DateTime!
+}
+
+# TagCategory represents a classification grouping of tags
+type TagCategory {
+  category: String!
+  displayName: String!
+  icon: String!
+  tags: [SemanticTag!]!
+}
+
+# TagSuggestion represents a wizard-generated tag recommendation
+type TagSuggestion {
+  tagKey: String!
+  tagLabel: String!
+  tagCategory: String!
+  suggestionReason: String! # inferred_from_datatype, inferred_from_name, etc.
+  confidenceScore: Float! # 0.0-1.0
+  colorCode: String
+  iconName: String
+}
+
+# TagSuggestionResponse wraps the suggestion results
+type TagSuggestionResponse {
+  suggestions: [TagSuggestion!]!
+  reasons: [String!]! # Explanations for suggestions
+}
+
+# Extended SemanticTerm type with tags support
+extend type SemanticTerm {
+  id: ID!
+  nodeId: String!
+  nodeName: String!
+  displayName: String!
+  description: String
+  type: SemanticTermType!
+  dataType: SemanticDataType!
+  expression: String
+  physicalMapping: PhysicalMapping
+  
+  # Tags support
+  tags: [SemanticTag!]!
+  suggestedTags: [TagSuggestion!]
+  
+  # Other fields
+  createdAt: DateTime!
+  updatedAt: DateTime!
+}
+
+# Input types for mutations
+input TagInput {
+  tagKey: String!
+  tagLabel: String!
+  tagCategory: String!
+  description: String
+}
+
+input SemanticTermTagInput {
+  semanticTermId: ID!
+  tagKey: String!
+  suggestionReason: String
+  confidenceScore: Float
+}
+
+input TagSuggestionInput {
+  nodeName: String!
+  displayName: String
+  description: String
+  dataType: SemanticDataType
+  domain: String
+  expression: String
+  physicalMapping: PhysicalMappingInput
+  relationships: [String!]
+  existingTags: [String!]
+}
+
+input PhysicalMappingInput {
+  table: String!
+  column: String!
+}
+
+# Extended Query type
+extend type Query {
+  # Get all available tags
+  semanticTags: [SemanticTag!]!
+  
+  # Get tags by category
+  tagsByCategory(category: String!): [SemanticTag!]!
+  
+  # Get tags for a specific semantic term
+  semanticTermTags(termId: ID!): [SemanticTag!]!
+  
+  # Get tag categories
+  tagCategories: [TagCategory!]!
+  
+  # Suggest tags for a new/existing semantic term
+  suggestSemanticTermTags(input: TagSuggestionInput!): TagSuggestionResponse!
+}
+
+# Extended Mutation type
+extend type Mutation {
+  # Add a tag to a semantic term
+  addTagToSemanticTerm(input: SemanticTermTagInput!): SemanticTerm!
+  
+  # Remove a tag from a semantic term
+  removeTagFromSemanticTerm(termId: ID!, tagKey: String!): SemanticTerm!
+  
+  # Update multiple tags for a semantic term
+  updateSemanticTermTags(termId: ID!, tagKeys: [String!]!): SemanticTerm!
+  
+  # Create a new custom tag
+  createSemanticTag(input: TagInput!): SemanticTag!
+  
+  # Update an existing tag
+  updateSemanticTag(tagKey: String!, input: TagInput!): SemanticTag!
+  
+  # Delete a tag
+  deleteSemanticTag(tagKey: String!): Boolean!
+  
+  # Accept or reject a suggested tag
+  acceptTagSuggestion(termId: ID!, tagKey: String!, isAccepted: Boolean!): SemanticTerm!
+  
+  # Batch operations for wizard-generated tags
+  applyTagSuggestions(termId: ID!, suggestedTags: [String!]!): SemanticTerm!
+}
+
+# ============================================================================
+# RESOLVED TYPES FOR GRAPHQL EXECUTION
+# ============================================================================
+
+# SemanticTerm resolver needs to populate:
+# - tags: Query catalog_node.tags field and join with semantic_term_tags lookup
+# - suggestedTags: Generated on-demand via TagSuggestionService
+
+# Resolver pseudocode for SemanticTerm.tags:
+# 
+# type SemanticTerm implements Node {
+#   ...existing fields...
+#   tags: [SemanticTag!]! @resolve(
+#     # 1. Get tags array from catalog_node.tags (JSONB array of tag_keys)
+#     # 2. For each tag_key, lookup full tag details from semantic_term_tags table
+#     # 3. Return array of SemanticTag objects
+#   )
+#   suggestedTags: [TagSuggestion!] @resolve(
+#     # 1. Call TagSuggestionService.SuggestTagsForSemanticTerm()
+#     # 2. Filter out tags already in term.tags
+#     # 3. Return array of TagSuggestion objects with confidence scores
+#   )
+# }
+
+# ============================================================================
+# SUBSCRIPTIONS (optional for real-time tag updates)
+# ============================================================================
+
+extend type Subscription {
+  # Real-time notification when tags are added/removed from a semantic term
+  semanticTermTagsChanged(termId: ID!): SemanticTerm!
+}
+
+# ============================================================================
+# DIRECTIVES FOR SCHEMA HINTS
+# ============================================================================
+
+# Directive to mark fields that should show tag suggestions in UI
+directive @suggestTags on FIELD_DEFINITION
+
+# Example usage:
+# type SemanticTermForm {
+#   suggestedTags: [TagSuggestion!]! @suggestTags
+# }

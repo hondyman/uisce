@@ -1,0 +1,228 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-config
+  namespace: semlayer
+data:
+  prometheus.yaml: |
+    global:
+      scrape_interval: 15s
+      evaluation_interval: 15s
+      external_labels:
+        cluster: 'semlayer-prod'
+        environment: 'production'
+
+    alerting:
+      alertmanagers:
+      - static_configs:
+        - targets:
+          - 'alertmanager:9093'
+
+    rule_files:
+    - '/etc/prometheus/rules/*.yaml'
+
+    scrape_configs:
+    - job_name: 'semlayer-backend'
+      static_configs:
+      - targets: ['localhost:8081']
+      relabel_configs:
+      - source_labels: [__meta_kubernetes_pod_name]
+        target_label: pod
+      - source_labels: [__meta_kubernetes_namespace]
+        target_label: namespace
+
+    - job_name: 'shap-service'
+      static_configs:
+      - targets: ['shap-service:8000']
+      metrics_path: '/metrics'
+
+    - job_name: 'postgres'
+      static_configs:
+      - targets: ['postgres-exporter:9187']
+
+    - job_name: 'temporal-server'
+      static_configs:
+      - targets: ['temporal:9090']
+
+    - job_name: 'kubernetes-nodes'
+      kubernetes_sd_configs:
+      - role: node
+      relabel_configs:
+      - source_labels: [__address__]
+        regex: '([^:]+)(?::\d+)?'
+        replacement: '${1}:9100'
+        target_label: __address__
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-rules
+  namespace: semlayer
+data:
+  alerts.yaml: |
+    groups:
+    - name: semlayer-alerts
+      interval: 30s
+      rules:
+      - alert: HighModelLatency
+        expr: histogram_quantile(0.95, semlayer_prediction_latency_seconds) > 0.1
+        for: 5m
+        annotations:
+          summary: "High model prediction latency (>100ms p95)"
+
+      - alert: LowCacheHitRate
+        expr: semlayer_cache_hit_rate < 0.60
+        for: 10m
+        annotations:
+          summary: "Cache hit rate below 60%"
+
+      - alert: HighFairnessDisparity
+        expr: semlayer_fairness_demographic_parity > 0.15
+        for: 5m
+        annotations:
+          summary: "Demographic parity > 15%, potential bias detected"
+
+      - alert: ModelDriftDetected
+        expr: semlayer_drift_ks_statistic > 0.3
+        for: 10m
+        annotations:
+          summary: "Model drift detected (KS-statistic > 0.3)"
+
+      - alert: BackendDowntime
+        expr: up{job="semlayer-backend"} == 0
+        for: 1m
+        annotations:
+          summary: "Backend service is down"
+
+      - alert: SHAPServiceErrors
+        expr: rate(semlayer_shap_errors_total[5m]) > 0.01
+        for: 5m
+        annotations:
+          summary: "SHAP service error rate > 1%"
+
+      - alert: FeatureComputationFailed
+        expr: rate(semlayer_feature_compute_fails_total[5m]) > 0.05
+        for: 5m
+        annotations:
+          summary: "Feature computation failure rate > 5%"
+
+      - alert: ExtrapolationBatchSize
+        expr: semlayer_batch_size_avg > 100
+        for: 5m
+        annotations:
+          summary: "Batch prediction queue building up"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: prometheus
+  namespace: semlayer
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: prometheus
+  template:
+    metadata:
+      labels:
+        app: prometheus
+    spec:
+      containers:
+      - name: prometheus
+        image: prom/prometheus:latest
+        ports:
+        - containerPort: 9090
+        args:
+        - '--config.file=/etc/prometheus/prometheus.yaml'
+        - '--storage.tsdb.path=/prometheus'
+        - '--storage.tsdb.retention.time=30d'
+        volumeMounts:
+        - name: config
+          mountPath: /etc/prometheus
+        - name: rules
+          mountPath: /etc/prometheus/rules
+        - name: storage
+          mountPath: /prometheus
+        resources:
+          requests:
+            memory: "2Gi"
+            cpu: "1000m"
+          limits:
+            memory: "4Gi"
+            cpu: "2000m"
+      volumes:
+      - name: config
+        configMap:
+          name: prometheus-config
+      - name: rules
+        configMap:
+          name: prometheus-rules
+      - name: storage
+        emptyDir:
+          sizeLimit: 50Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: prometheus
+  namespace: semlayer
+spec:
+  type: ClusterIP
+  ports:
+  - port: 9090
+    targetPort: 9090
+  selector:
+    app: prometheus
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: grafana
+  namespace: semlayer
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: grafana
+  template:
+    metadata:
+      labels:
+        app: grafana
+    spec:
+      containers:
+      - name: grafana
+        image: grafana/grafana:latest
+        ports:
+        - containerPort: 3000
+        env:
+        - name: GF_SECURITY_ADMIN_PASSWORD
+          value: "adminpass"
+        - name: GF_USERS_ALLOW_SIGN_UP
+          value: "false"
+        volumeMounts:
+        - name: storage
+          mountPath: /var/lib/grafana
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "500m"
+          limits:
+            memory: "2Gi"
+            cpu: "1000m"
+      volumes:
+      - name: storage
+        emptyDir:
+          sizeLimit: 10Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: grafana
+  namespace: semlayer
+spec:
+  type: LoadBalancer
+  ports:
+  - port: 3000
+    targetPort: 3000
+  selector:
+    app: grafana

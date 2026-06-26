@@ -1,0 +1,28 @@
+.modalOverlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.45);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem;
+}
+.dialog {
+  background: #fff;
+  color: #111827;
+  border-radius: 8px;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+  width: min(720px, 100%);
+  max-height: calc(100vh - 4rem);
+  overflow: auto;
+  outline: none;
+}
+.header {
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid #e5e7eb;
+}
+.title { margin: 0; font-size: 1.125rem; }
+.body { padding: 1rem 1.25rem; }
+.footer { padding: 0.75rem 1.25rem; border-top: 1px solid #e5e7eb; display:flex; justify-content:flex-end; gap:0.5rem }
+.btnClose { padding: 0.5rem 0.75rem }

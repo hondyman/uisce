@@ -1,0 +1,451 @@
+# =============================================================================
+# LOCAL MACBOOK SERVICES - Go backends + auth-service only
+# =============================================================================
+# All infrastructure (Hasura, Redpanda, Temporal, Debezium, Trino) runs on REMOTE
+# Postgres runs on REMOTE host directly (not in compose)
+# Frontend runs OUTSIDE compose via: cd frontend && npm run dev
+#
+# Usage: docker compose -f docker-compose.local.yml --env-file .env.split up -d
+# =============================================================================
+
+services:
+  # ==========================================
+  # AUTH SERVICE (Node.js - needed for login)
+  # ==========================================
+  auth-service:
+    build:
+      context: .
+      dockerfile: auth-service/Dockerfile
+    container_name: semlayer-auth
+    networks:
+      - local-net
+    ports:
+      - "3001:8001"
+    environment:
+      - NODE_ENV=development
+      - AUTH_SERVICE_PORT=8001
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres}
+      - POSTGRES_HOST=${REMOTE_HOST:-100.84.126.19}
+      - POSTGRES_PORT=5432
+      - POSTGRES_DB=alpha
+      - JWT_SECRET=${JWT_SECRET:-dev-jwt-secret-key-change-in-production}
+      - JWT_EXPIRY=1h
+      - REFRESH_TOKEN_EXPIRY=24h
+      - ALLOWED_ORIGINS=http://localhost:5173,http://localhost:5174,http://127.0.0.1:5173,http://127.0.0.1:5174
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:8001/health', (r) => {if (r.statusCode !== 200) throw new Error(r.statusCode)})"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  # ==========================================
+  # BACKEND API (Go)
+  # ==========================================
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: semlayer-backend
+    networks:
+      - local-net
+    ports:
+      - "${BACKEND_PORT:-8082}:8080"
+    environment:
+      - DATABASE_URL=postgres://postgres:${POSTGRES_PASSWORD:-postgres}@${REMOTE_HOST:-100.84.126.19}:5432/alpha?sslmode=disable
+      - PORT=8080
+      - HASURA_URL=http://${REMOTE_HOST:-100.84.126.19}:8085/v1/graphql
+      - HASURA_ADMIN_SECRET=${HASURA_ADMIN_SECRET:-myadminsecret}
+      - TEMPORAL_HOSTPORT=${REMOTE_HOST:-100.84.126.19}:7233
+      - KAFKA_BROKERS=${REMOTE_HOST:-100.84.126.19}:19092
+      - JWT_SECRET=${JWT_SECRET:-dev-jwt-secret-key-change-in-production}
+    depends_on:
+      - auth-service
+    restart: unless-stopped
+
+  # ==========================================
+  # API GATEWAY (Go)
+  # ==========================================
+  api-gateway:
+    build:
+      context: .
+      dockerfile: api-gateway/Dockerfile
+    container_name: semlayer-api-gateway
+    networks:
+      - local-net
+    ports:
+      - "${API_GATEWAY_PORT:-8001}:8001"
+    environment:
+      - DATABASE_URL=postgres://postgres:${POSTGRES_PASSWORD:-postgres}@${REMOTE_HOST:-100.84.126.19}:5432/alpha?sslmode=disable
+      - BACKEND_URL=http://backend:8080
+      - HASURA_URL=http://${REMOTE_HOST:-100.84.126.19}:8085/v1/graphql
+      - HASURA_ADMIN_SECRET=${HASURA_ADMIN_SECRET:-myadminsecret}
+      - JWT_SECRET=${JWT_SECRET:-dev-jwt-secret-key-change-in-production}
+      - TEMPORAL_HOSTPORT=${REMOTE_HOST:-100.84.126.19}:7233
+      - KAFKA_BROKERS=${REMOTE_HOST:-100.84.126.19}:19092
+      - PORT=8001
+      - ENABLE_SECURITY=true
+    restart: unless-stopped
+    depends_on:
+      - backend
+      - auth-service
+
+  # ==========================================
+  # BP-BACKEND (Go)
+  # ==========================================
+  bp-backend:
+    build:
+      context: ./bp-backend
+      dockerfile: Dockerfile
+    container_name: semlayer-bp-backend
+    networks:
+      - local-net
+    ports:
+      - "${BP_BACKEND_PORT:-8086}:8080"
+    environment:
+      - DATABASE_URL=postgres://postgres:${POSTGRES_PASSWORD:-postgres}@${REMOTE_HOST:-100.84.126.19}:5432/alpha?sslmode=disable
+      - PORT=8080
+      - TEMPORAL_HOSTPORT=${REMOTE_HOST:-100.84.126.19}:7233
+      - KAFKA_BROKERS=${REMOTE_HOST:-100.84.126.19}:19092
+    restart: unless-stopped
+
+  # ==========================================
+  # ENTITY MANAGER (Go)
+  # ==========================================
+  entity-manager:
+    build:
+      context: .
+      dockerfile: entity-manager/Dockerfile
+    container_name: semlayer-entity-manager
+    networks:
+      - local-net
+    ports:
+      - "${ENTITY_MANAGER_PORT:-8087}:8080"
+    environment:
+      - DATABASE_URL=postgres://postgres:${POSTGRES_PASSWORD:-postgres}@${REMOTE_HOST:-100.84.126.19}:5432/alpha?sslmode=disable
+      - PORT=8080
+      - TEMPORAL_HOSTPORT=${REMOTE_HOST:-100.84.126.19}:7233
+      - KAFKA_BROKERS=${REMOTE_HOST:-100.84.126.19}:19092
+    restart: unless-stopped
+
+  # ==========================================
+  # SYNC WORKER (Go)
+  # ==========================================
+  sync-worker:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile.sync-worker
+    container_name: semlayer-sync-worker
+    networks:
+      - local-net
+    environment:
+      - DATABASE_URL=postgres://postgres:${POSTGRES_PASSWORD:-postgres}@${REMOTE_HOST:-100.84.126.19}:5432/alpha?sslmode=disable
+      - KAFKA_BROKERS=${REMOTE_HOST:-100.84.126.19}:19092
+      - TEMPORAL_HOSTPORT=${REMOTE_HOST:-100.84.126.19}:7233
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+  # ==========================================
+  # NOTIFICATIONS (Go)
+  # ==========================================
+  notifications:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile.notifications
+    container_name: semlayer-notifications
+    networks:
+      - local-net
+    ports:
+      - "${NOTIFICATIONS_PORT:-8089}:8080"
+    environment:
+      - DATABASE_URL=postgres://postgres:${POSTGRES_PASSWORD:-postgres}@${REMOTE_HOST:-100.84.126.19}:5432/alpha?sslmode=disable
+      - KAFKA_BROKERS=${REMOTE_HOST:-100.84.126.19}:19092
+      - PORT=8080
+      - TEMPORAL_HOSTPORT=${REMOTE_HOST:-100.84.126.19}:7233
+    restart: unless-stopped
+
+  # ==========================================
+  # VALIDATION ENGINE (Go)
+  # ==========================================
+  validation-engine:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile.validation
+    container_name: semlayer-validation-engine
+    networks:
+      - local-net
+    ports:
+      - "${VALIDATION_ENGINE_PORT:-8090}:8080"
+    environment:
+      - DATABASE_URL=postgres://postgres:${POSTGRES_PASSWORD:-postgres}@${REMOTE_HOST:-100.84.126.19}:5432/alpha?sslmode=disable
+      - PORT=8080
+      - TEMPORAL_HOSTPORT=${REMOTE_HOST:-100.84.126.19}:7233
+      - KAFKA_BROKERS=${REMOTE_HOST:-100.84.126.19}:19092
+    restart: unless-stopped
+
+  # ==========================================
+  # RULE ENGINE (Go)
+  # ==========================================
+  rule-engine:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile.rule-engine
+    container_name: semlayer-rule-engine
+    networks:
+      - local-net
+    ports:
+      - "${RULE_ENGINE_PORT:-8091}:8080"
+    environment:
+      - DATABASE_URL=postgres://postgres:${POSTGRES_PASSWORD:-postgres}@${REMOTE_HOST:-100.84.126.19}:5432/alpha?sslmode=disable
+      - PORT=8080
+      - TEMPORAL_HOSTPORT=${REMOTE_HOST:-100.84.126.19}:7233
+      - KAFKA_BROKERS=${REMOTE_HOST:-100.84.126.19}:19092
+    restart: unless-stopped
+
+  # ==========================================
+  # SEARCH SERVICE (Go)
+  # ==========================================
+  search-service:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile.search
+    container_name: semlayer-search-service
+    networks:
+      - local-net
+    ports:
+      - "${SEARCH_SERVICE_PORT:-8092}:8080"
+    environment:
+      - DATABASE_URL=postgres://postgres:${POSTGRES_PASSWORD:-postgres}@${REMOTE_HOST:-100.84.126.19}:5432/alpha?sslmode=disable
+      - PORT=8080
+      - TEMPORAL_HOSTPORT=${REMOTE_HOST:-100.84.126.19}:7233
+      - KAFKA_BROKERS=${REMOTE_HOST:-100.84.126.19}:19092
+    restart: unless-stopped
+
+  # ==========================================
+  # POLICY ENGINE (Go)
+  # ==========================================
+  policy-engine:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile.policy
+    container_name: semlayer-policy-engine
+    networks:
+      - local-net
+    ports:
+      - "${POLICY_ENGINE_PORT:-8102}:8080"
+    environment:
+      - DATABASE_URL=postgres://postgres:${POSTGRES_PASSWORD:-postgres}@${REMOTE_HOST:-100.84.126.19}:5432/alpha?sslmode=disable
+      - PORT=8080
+      - TEMPORAL_HOSTPORT=${REMOTE_HOST:-100.84.126.19}:7233
+      - KAFKA_BROKERS=${REMOTE_HOST:-100.84.126.19}:19092
+    restart: unless-stopped
+
+  # ==========================================
+  # PARITY CHECKER (Go)
+  # ==========================================
+  parity-checker:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile.parity
+    container_name: semlayer-parity-checker
+    networks:
+      - local-net
+    environment:
+      - DATABASE_URL=postgres://postgres:${POSTGRES_PASSWORD:-postgres}@${REMOTE_HOST:-100.84.126.19}:5432/alpha?sslmode=disable
+      - TEMPORAL_HOSTPORT=${REMOTE_HOST:-100.84.126.19}:7233
+      - KAFKA_BROKERS=${REMOTE_HOST:-100.84.126.19}:19092
+    restart: unless-stopped
+
+  # ==========================================
+  # EVENT ROUTER (Go)
+  # ==========================================
+  event-router:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile.event-router
+    container_name: semlayer-event-router
+    networks:
+      - local-net
+    environment:
+      - DATABASE_URL=postgres://postgres:${POSTGRES_PASSWORD:-postgres}@${REMOTE_HOST:-100.84.126.19}:5432/alpha?sslmode=disable
+      - KAFKA_BROKERS=${REMOTE_HOST:-100.84.126.19}:19092
+      - TEMPORAL_HOSTPORT=${REMOTE_HOST:-100.84.126.19}:7233
+    restart: unless-stopped
+
+  # ==========================================
+  # CDC PROCESSOR (Go)
+  # ==========================================
+  cdc-processor:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile.cdc
+    container_name: semlayer-cdc-processor
+    networks:
+      - local-net
+    environment:
+      - DATABASE_URL=postgres://postgres:${POSTGRES_PASSWORD:-postgres}@${REMOTE_HOST:-100.84.126.19}:5432/alpha?sslmode=disable
+      - KAFKA_BROKERS=${REMOTE_HOST:-100.84.126.19}:19092
+      - TEMPORAL_HOSTPORT=${REMOTE_HOST:-100.84.126.19}:7233
+    restart: unless-stopped
+
+  # ==========================================
+  # ANALYTICS ENGINE (Go)
+  # ==========================================
+  analytics-engine:
+    build:
+      context: ./analytics_engine
+      dockerfile: Dockerfile
+    container_name: semlayer-analytics-engine
+    networks:
+      - local-net
+    ports:
+      - "${ANALYTICS_ENGINE_PORT:-8101}:8080"
+    environment:
+      - DATABASE_URL=postgres://postgres:${POSTGRES_PASSWORD:-postgres}@${REMOTE_HOST:-100.84.126.19}:5432/alpha?sslmode=disable
+      - PORT=8080
+      - TEMPORAL_HOSTPORT=${REMOTE_HOST:-100.84.126.19}:7233
+      - KAFKA_BROKERS=${REMOTE_HOST:-100.84.126.19}:19092
+    restart: unless-stopped
+
+  # ==========================================
+  # COMPLIANCE ENGINE (Go)
+  # ==========================================
+  compliance-engine:
+    build:
+      context: .
+      dockerfile: Dockerfile.compliance-engine
+    container_name: semlayer-compliance-engine
+    networks:
+      - local-net
+    ports:
+      - "${COMPLIANCE_ENGINE_PORT:-8095}:8080"
+    environment:
+      - DATABASE_URL=postgres://postgres:${POSTGRES_PASSWORD:-postgres}@${REMOTE_HOST:-100.84.126.19}:5432/alpha?sslmode=disable
+      - PORT=8080
+      - TEMPORAL_HOSTPORT=${REMOTE_HOST:-100.84.126.19}:7233
+      - KAFKA_BROKERS=${REMOTE_HOST:-100.84.126.19}:19092
+    restart: unless-stopped
+
+  # ==========================================
+  # CATALOG SYNC (Go)
+  # ==========================================
+  catalog-sync:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile.catalog-sync
+    container_name: semlayer-catalog-sync
+    networks:
+      - local-net
+    ports:
+      - "${CATALOG_SYNC_PORT:-8097}:8090"
+    environment:
+      - DATABASE_URL=postgres://postgres:${POSTGRES_PASSWORD:-postgres}@${REMOTE_HOST:-100.84.126.19}:5432/alpha?sslmode=disable
+      - POSTGRES_DSN=postgres://postgres:${POSTGRES_PASSWORD:-postgres}@${REMOTE_HOST:-100.84.126.19}:5432/alpha?sslmode=disable
+      - KAFKA_BROKERS=${REMOTE_HOST:-100.84.126.19}:19092
+      - SCHEMA_REGISTRY_URL=http://${REMOTE_HOST:-100.84.126.19}:8081
+      - PORT=8090
+      - TENANT_ID=99e99e99-99e9-49e9-89e9-99e99e99e999
+    restart: unless-stopped
+
+  # ==========================================
+  # OUTBOX PROCESSOR (Go)
+  # ==========================================
+  outbox-processor:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.outbox-processor
+    container_name: semlayer-outbox-processor
+    networks:
+      - local-net
+    environment:
+      - DATABASE_URL=postgres://postgres:${POSTGRES_PASSWORD:-postgres}@${REMOTE_HOST:-100.84.126.19}:5432/alpha?sslmode=disable
+      - KAFKA_BROKERS=${REMOTE_HOST:-100.84.126.19}:19092
+    restart: unless-stopped
+
+  # ==========================================
+  # AUDIT WORKER (Go)
+  # ==========================================
+  audit-worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.audit-worker
+    container_name: semlayer-audit-worker
+    networks:
+      - local-net
+    environment:
+      - DATABASE_URL=postgres://postgres:${POSTGRES_PASSWORD:-postgres}@${REMOTE_HOST:-100.84.126.19}:5432/alpha?sslmode=disable
+      - KAFKA_BROKERS=${REMOTE_HOST:-100.84.126.19}:19092
+    restart: unless-stopped
+
+  # ==========================================
+  # SNAPSHOT WORKER (Go)
+  # ==========================================
+  snapshot-worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.snapshot-worker
+    container_name: semlayer-snapshot-worker
+    networks:
+      - local-net
+    environment:
+      - DATABASE_URL=postgres://postgres:${POSTGRES_PASSWORD:-postgres}@${REMOTE_HOST:-100.84.126.19}:5432/alpha?sslmode=disable
+      - KAFKA_BROKERS=${REMOTE_HOST:-100.84.126.19}:19092
+    restart: unless-stopped
+
+  # ==========================================
+  # catalog-worker:
+  #   build:
+  #     context: .
+  #     dockerfile: backend/Dockerfile.catalog-worker
+  #   container_name: semlayer-catalog-worker
+  #   networks:
+  #     - local-net
+  #   environment:
+  #     - DATABASE_URL=postgres://postgres:${POSTGRES_PASSWORD:-postgres}@${REMOTE_HOST:-100.84.126.19}:5432/alpha?sslmode=disable
+  #     - KAFKA_BROKERS=${REMOTE_HOST:-100.84.126.19}:19092
+  #   restart: unless-stopped
+
+  # ==========================================
+  # CALENDAR SERVICE (Go) - Epic 31
+  # ==========================================
+  calendar-service:
+    build:
+      context: ./calendar-service
+      dockerfile: Dockerfile
+    container_name: semlayer-calendar-service
+    networks:
+      - local-net
+    ports:
+      - "${CALENDAR_SERVICE_PORT:-8081}:8080"
+    environment:
+      - SERVER_PORT=8080
+      - HASURA_ENDPOINT=${HASURA_ENDPOINT:-http://${REMOTE_HOST:-100.84.126.19}:8085/v1/graphql}
+      - HASURA_ADMIN_SECRET=${HASURA_ADMIN_SECRET:-myadminsecret}
+      - POSTGRES_HOST=${REMOTE_HOST:-100.84.126.19}
+      - POSTGRES_PORT=5432
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres}
+      - POSTGRES_DB=semlayer
+      - TEMPORAL_HOST=${REMOTE_HOST:-100.84.126.19}
+      - TEMPORAL_PORT=7233
+      - REDPANDA_BROKERS=${REMOTE_HOST:-100.84.126.19}:19092
+      - REDIS_URL=redis://${REMOTE_HOST:-100.84.126.19}:6379
+      - ENVIRONMENT=development
+      - LOG_LEVEL=debug
+      - CACHE_TTL_MINUTES=60
+      - ENABLE_TEMPORAL=false
+    restart: unless-stopped
+
+  # ==========================================================================
+  # NO POSTGRES, NO HASURA, NO REDPANDA, NO DEBEZIUM, NO TRINO, NO MINIO HERE
+  # All infrastructure runs on REMOTE server
+  # All databases on REMOTE Postgres
+  # ==========================================================================
+
+networks:
+  local-net:
+    driver: bridge
+    name: local-net

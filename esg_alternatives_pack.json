@@ -1,0 +1,322 @@
+{
+  "bundle_id": "esg_alternatives_pack",
+  "domain": ["esg", "alternatives"],
+  "audience": ["advisor", "executive", "portfolio_manager", "risk", "regulator", "impact_team"],
+  "version": "v1.0.0",
+  "owner": "patrick",
+  "tags": ["esg", "sustainability", "impact", "alternatives", "private_equity", "venture_capital", "real_assets"],
+  "metrics": [
+    {
+      "node_id": "esg_composite_score",
+      "category": "esg",
+      "description": "Weighted blend of Environmental, Social, and Governance sub-scores.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "({E_score} * {E_weight}) + ({S_score} * {S_weight}) + ({G_score} * {G_weight})",
+        "arguments": {
+          "E_score": "field:E_score",
+          "E_weight": "field:E_weight",
+          "S_score": "field:S_score",
+          "S_weight": "field:S_weight",
+          "G_score": "field:G_score",
+          "G_weight": "field:G_weight"
+        }
+      },
+      "badge": "🟧",
+      "function_class": "DAX-Logical",
+      "functions_used": ["ADD", "MULTIPLY"],
+      "governance": { "status": "golden" }
+    },
+    {
+      "node_id": "carbon_intensity",
+      "category": "esg",
+      "description": "CO₂e emissions per million USD revenue.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "DIVIDE({total_emissions}, DIVIDE({revenue}, 1000000))",
+        "arguments": {
+          "total_emissions": "field:total_emissions",
+          "revenue": "field:revenue"
+        }
+      },
+      "badge": "🟧",
+      "function_class": "DAX-Logical",
+      "functions_used": ["DIVIDE"],
+      "governance": { "status": "golden" }
+    },
+    {
+      "node_id": "renewable_energy_pct",
+      "category": "esg",
+      "description": "Percentage of energy consumption from renewable sources.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "DIVIDE({renewable_energy}, {total_energy})",
+        "arguments": {
+          "renewable_energy": "field:renewable_energy_consumption",
+          "total_energy": "field:total_energy_consumption"
+        }
+      },
+      "badge": "🟨",
+      "function_class": "DAX-Iterator",
+      "functions_used": ["DIVIDE"],
+      "governance": { "status": "golden" }
+    },
+    {
+      "node_id": "board_diversity_pct",
+      "category": "esg",
+      "description": "Percentage of board seats held by under-represented groups.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "DIVIDE({diverse_board_members}, {total_board_members})",
+        "arguments": {
+          "diverse_board_members": "field:diverse_board_members",
+          "total_board_members": "field:total_board_members"
+        }
+      },
+      "badge": "🟧",
+      "function_class": "DAX-Logical",
+      "functions_used": ["DIVIDE"],
+      "governance": { "status": "golden" }
+    },
+    {
+      "node_id": "sustainable_revenue_pct",
+      "category": "esg",
+      "description": "Revenue from products/services aligned to sustainability taxonomy.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "DIVIDE({sustainable_revenue}, {total_revenue})",
+        "arguments": {
+          "sustainable_revenue": "field:sustainable_revenue",
+          "total_revenue": "field:total_revenue"
+        }
+      },
+      "badge": "🟧",
+      "function_class": "DAX-Logical",
+      "functions_used": ["DIVIDE"],
+      "governance": { "status": "golden" }
+    },
+    {
+      "node_id": "esg_controversy_score",
+      "category": "esg",
+      "description": "Penalty score from controversies.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "MAX(0, {base_score} - {controversy_penalty})",
+        "arguments": {
+          "base_score": "field:base_score",
+          "controversy_penalty": "field:controversy_penalty"
+        }
+      },
+      "badge": "🟧",
+      "function_class": "DAX-Logical",
+      "functions_used": ["MAX", "SUBTRACT"],
+      "governance": { "status": "draft" }
+    },
+    {
+      "node_id": "esg_adjusted_return",
+      "category": "esg_performance",
+      "description": "Portfolio return adjusted for ESG risk score.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "{portfolio_return} - ({esg_risk_score} * {risk_penalty_factor})",
+        "arguments": {
+          "portfolio_return": "calc:annualized_return",
+          "esg_risk_score": "field:esg_risk_score",
+          "risk_penalty_factor": "field:risk_penalty_factor"
+        }
+      },
+      "badge": "🟧",
+      "function_class": "DAX-Logical",
+      "functions_used": ["SUBTRACT", "MULTIPLY"],
+      "governance": { "status": "draft" }
+    },
+    {
+      "node_id": "green_alpha",
+      "category": "esg_performance",
+      "description": "Excess return vs. ESG benchmark.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "{portfolio_return} - {esg_benchmark_return}",
+        "arguments": {
+          "portfolio_return": "calc:annualized_return",
+          "esg_benchmark_return": "calc:esg_benchmark_annualized_return"
+        }
+      },
+      "badge": "🟧",
+      "function_class": "DAX-Logical",
+      "functions_used": ["SUBTRACT"],
+      "governance": { "status": "draft" }
+    },
+    {
+      "node_id": "impact_weighted_revenue",
+      "category": "esg_impact",
+      "description": "Revenue weighted by positive/negative impact.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "SUMX({revenue_streams}, {revenue} * {impact_factor})",
+        "arguments": {
+          "revenue_streams": "table:revenue_streams",
+          "revenue": "field:revenue",
+          "impact_factor": "field:impact_factor"
+        }
+      },
+      "badge": "🟨",
+      "function_class": "DAX-Iterator",
+      "functions_used": ["SUMX", "MULTIPLY"],
+      "governance": { "status": "draft" }
+    },
+    {
+      "node_id": "sustainability_duration",
+      "category": "esg_impact",
+      "description": "Years until portfolio aligns with net-zero target.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "{target_year} - {current_year}",
+        "arguments": {
+          "target_year": "field:target_year",
+          "current_year": "field:current_year"
+        }
+      },
+      "badge": "🟧",
+      "function_class": "DAX-Logical",
+      "functions_used": ["SUBTRACT"],
+      "governance": { "status": "draft" }
+    },
+    {
+      "node_id": "irr_private_equity",
+      "category": "alternatives",
+      "description": "Internal rate of return for private equity or venture capital investments.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "XIRR({cash_flows}, {dates})",
+        "arguments": {
+          "cash_flows": "ARRAY_AGG(cash_flow)",
+          "dates": "ARRAY_AGG(transaction_date)"
+        }
+      },
+      "badge": "🟩",
+      "function_class": "DAX-Financial",
+      "functions_used": ["XIRR"],
+      "governance": { "status": "golden" }
+    },
+    {
+      "node_id": "moic",
+      "category": "alternatives",
+      "description": "Multiple on invested capital.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "DIVIDE({total_value}, {invested_capital})",
+        "arguments": {
+          "total_value": "field:total_value",
+          "invested_capital": "field:invested_capital"
+        }
+      },
+      "badge": "🟧",
+      "function_class": "DAX-Logical",
+      "functions_used": ["DIVIDE"],
+      "governance": { "status": "golden" }
+    },
+    {
+      "node_id": "capital_call_pct",
+      "category": "alternatives",
+      "description": "Percentage of committed capital called.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "DIVIDE({capital_called}, {committed_capital})",
+        "arguments": {
+          "capital_called": "field:capital_called",
+          "committed_capital": "field:committed_capital"
+        }
+      },
+      "badge": "🟧",
+      "function_class": "DAX-Logical",
+      "functions_used": ["DIVIDE"],
+      "governance": { "status": "golden" }
+    },
+    {
+      "node_id": "rvpi",
+      "category": "alternatives",
+      "description": "Residual value to paid-in capital.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "DIVIDE({unrealised_value}, {paid_in_capital})",
+        "arguments": {
+          "unrealised_value": "field:unrealised_value",
+          "paid_in_capital": "field:paid_in_capital"
+        }
+      },
+      "badge": "🟧",
+      "function_class": "DAX-Logical",
+      "functions_used": ["DIVIDE"],
+      "governance": { "status": "golden" }
+    },
+    {
+      "node_id": "dpi",
+      "category": "alternatives",
+      "description": "Distributions to paid-in capital.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "DIVIDE({distributions}, {paid_in_capital})",
+        "arguments": {
+          "distributions": "field:distributions",
+          "paid_in_capital": "field:paid_in_capital"
+        }
+      },
+      "badge": "🟧",
+      "function_class": "DAX-Logical",
+      "functions_used": ["DIVIDE"],
+      "governance": { "status": "golden" }
+    },
+    {
+      "node_id": "tvpi",
+      "category": "alternatives",
+      "description": "Total value to paid-in capital (DPI + RVPI).",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "DIVIDE({total_value}, {paid_in_capital})",
+        "arguments": {
+          "total_value": "field:total_value",
+          "paid_in_capital": "field:paid_in_capital"
+        }
+      },
+      "badge": "🟧",
+      "function_class": "DAX-Logical",
+      "functions_used": ["DIVIDE"],
+      "governance": { "status": "golden" }
+    },
+    {
+      "node_id": "pme",
+      "category": "alternatives",
+      "description": "Public Market Equivalent comparing private investment to public benchmark.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "DIVIDE({npv_private}, {npv_public})",
+        "arguments": {
+          "npv_private": "calc:npv_private",
+          "npv_public": "calc:npv_public"
+        }
+      },
+      "badge": "🟩",
+      "function_class": "DAX-Financial",
+      "functions_used": ["DIVIDE"],
+      "governance": { "status": "draft" }
+    },
+    {
+      "node_id": "j_curve_effect",
+      "category": "alternatives",
+      "description": "Early negative returns turning positive over time.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "CUMULATIVE_IRR({cash_flows}, {dates})",
+        "arguments": {
+          "cash_flows": "ARRAY_AGG(cash_flow)",
+          "dates": "ARRAY_AGG(transaction_date)"
+        }
+      },
+      "badge": "🟩",
+      "function_class": "DAX-Financial",
+      "functions_used": ["CUMULATIVE_IRR"],
+      "governance": { "status": "draft" }
+    }
+  ]
+}

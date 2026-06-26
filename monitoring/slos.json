@@ -1,0 +1,32 @@
+[
+  {
+    "name": "Access Intelligence Latency SLO",
+    "description": "p95 latency for access evaluation should be under 8ms",
+    "metricExpression": "semlayer.access_evaluation.duration:percentile(95)",
+    "target": 8,
+    "warning": 15,
+    "critical": 30,
+    "timeframe": "-1h",
+    "evaluationType": "AGGREGATE"
+  },
+  {
+    "name": "Cache Hit Ratio SLO",
+    "description": "Cache hit ratio should be above 90%",
+    "metricExpression": "semlayer.cache.hit_ratio",
+    "target": 90,
+    "warning": 80,
+    "critical": 70,
+    "timeframe": "-1h",
+    "evaluationType": "AGGREGATE"
+  },
+  {
+    "name": "Conversational Success Rate SLO",
+    "description": "NL query success rate should be above 95%",
+    "metricExpression": "semlayer.conversational.success_rate",
+    "target": 95,
+    "warning": 90,
+    "critical": 85,
+    "timeframe": "-1h",
+    "evaluationType": "AGGREGATE"
+  }
+]

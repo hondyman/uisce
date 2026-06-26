@@ -1,0 +1,68 @@
+# Docker Compose Extension for Phase 3: BO Command Microservice
+# This file extends the base docker-compose.yml to add the BO service microservice
+#
+# Usage:
+#   docker-compose -f docker-compose.yml -f docker-compose.bo-service.yml up
+#
+# Or add to your base docker-compose.yml for permanent inclusion
+#
+
+version: '3.8'
+
+services:
+  # BO Command Microservice (Phase 3)
+  # Responsible for consuming CRUD commands from RabbitMQ and executing them
+  bo-service:
+    build:
+      context: ./backend
+      dockerfile: cmd/bo-service/Dockerfile
+    container_name: semlayer-bo-service
+    ports:
+      - "8081:8081"  # Optional: for metrics/health if added
+    environment:
+      # Service Configuration
+      SERVICE_NAME: bo-service
+      LOG_LEVEL: info
+      
+      # Database Configuration
+      DATABASE_URL: "postgres://postgres:postgres@postgres:5432/alpha?sslmode=disable"
+      
+      # Kafka / Redpanda Configuration
+      KAFKA_BROKERS: "redpanda:9092"
+      
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redpanda:
+        condition: service_healthy
+    
+    networks:
+      - semlayer-network
+    
+    restart: unless-stopped
+    
+    # Logging configuration
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    
+    # Security options
+    security_opt:
+      - no-new-privileges:true
+    
+    # Resource limits
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 512M
+        reservations:
+          cpus: '0.5'
+          memory: 256M
+
+networks:
+  semlayer-network:
+    driver: bridge
+    external: false

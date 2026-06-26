@@ -1,0 +1,127 @@
+##
+## Trades Cube - Hot Tier (StarRocks)
+##
+## Real-time operational data for recent trades
+## Optimized for low-latency queries on current activity
+##
+
+cubes:
+- name: Trades
+  sql: SELECT * FROM iceberg_catalog.wealth.trades
+  title: Real-Time Trades
+  description: Live trade data from the last 90 days (hot tier)
+
+  # Route to StarRocks for real-time performance
+  data_source: starrocks
+
+  # Refresh every 5 minutes for near real-time data
+  refresh_key:
+    every: 5 minutes
+
+  # Tenant isolation dimension (mandatory)
+  dimensions:
+  - name: tenant_id
+    sql: tenant_id
+    type: string
+    public: false
+
+  - name: datasource_id
+    sql: datasource_id
+    type: string
+    public: false
+
+  - name: trade_id
+    sql: trade_id
+    type: string
+    primary_key: true
+    shown: true
+
+  - name: event_time
+    sql: event_time
+    type: time
+
+  - name: portfolio_id
+    sql: portfolio_id
+    type: string
+
+  - name: desk_id
+    sql: desk_id
+    type: string
+
+  - name: symbol
+    sql: symbol
+    type: string
+
+  - name: side
+    sql: side
+    type: string
+
+  - name: currency
+    sql: currency
+    type: string
+
+  - name: basis_id
+    sql: basis_id
+    type: string
+
+  measures:
+  - name: count
+    type: count
+
+  - name: total_quantity
+    sql: quantity
+    type: sum
+    format: number
+
+  - name: total_notional
+    sql: notional
+    type: sum
+    format: currency
+
+  - name: avg_price
+    sql: price
+    type: avg
+    format: currency
+
+  - name: unique_portfolios
+    sql: portfolio_id
+    type: count_distinct
+
+  - name: unique_symbols
+    sql: symbol
+    type: count_distinct
+
+  # Pre-aggregations materialized in StarRocks
+  pre_aggregations:
+  - name: trades_by_day
+    type: rollup
+    measures:
+    - count
+    - total_notional
+    - total_quantity
+    dimensions:
+    - symbol
+    - side
+    - currency
+    time_dimension: event_time
+    granularity: day
+    partition_granularity: month
+    refresh_key:
+      every: 1 hour
+    # Store in StarRocks for HA
+    external: true
+
+  - name: portfolio_summary
+    type: rollup
+    measures:
+    - count
+    - total_notional
+    - unique_symbols
+    dimensions:
+    - portfolio_id
+    - desk_id
+    time_dimension: event_time
+    granularity: day
+    refresh_key:
+      every: 30 minutes
+    external: true

@@ -1,0 +1,61 @@
+/* Card component styles */
+
+.card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+
+.card-header {
+  border-bottom: 1px solid var(--color-border);
+  padding: var(--spacing-md);
+}
+
+.card-title {
+  font-weight: 600;
+  font-size: 1.0625rem;
+  color: var(--color-text);
+  margin: 0;
+  line-height: 1.4;
+}
+
+.card-subtitle {
+  font-size: 0.875rem;
+  color: var(--color-muted);
+  margin: 0.5rem 0 0 0;
+}
+
+.card-body {
+  padding: var(--spacing-md);
+}
+
+.card-body:empty {
+  display: none;
+}
+
+/* Card grid layouts */
+.grid-1 {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--spacing-lg);
+}
+
+.grid-2 {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+  gap: var(--spacing-lg);
+}
+
+.grid-3 {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+  gap: var(--spacing-lg);
+}
+
+@media (max-width: 768px) {
+  .grid-2,
+  .grid-3 {
+    grid-template-columns: 1fr;
+  }
+}

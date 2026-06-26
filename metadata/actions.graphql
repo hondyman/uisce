@@ -1,0 +1,181 @@
+type Mutation {
+  applyRelationship(
+    tenantId: ID!
+    datasourceId: ID!
+    sourceEntity: String!
+    targetEntity: String!
+    edgeType: EdgeType!
+    cardinality: String
+    fkColumn: String
+    confidence: Float
+  ): ApplyRelationshipResponse
+}
+
+type Mutation {
+  dismissRelationshipSuggestion(
+    tenantId: ID!
+    datasourceId: ID!
+    suggestionId: ID!
+    reason: String
+  ): DismissSuggestionResponse
+}
+
+type Mutation {
+  dynamic_delete(
+    entity_type: String!
+    ids: [uuid!]!
+  ): GenericActionResponse
+}
+
+type Mutation {
+  dynamic_insert(
+    entity_type: String!
+    object: jsonb!
+  ): GenericActionResponse
+}
+
+type Mutation {
+  dynamic_update(
+    entity_type: String!
+    changes: jsonb!
+  ): GenericActionResponse
+}
+
+type Query {
+  getRelatedObjects(
+    tenantId: ID!
+    datasourceId: ID!
+    entity: String!
+  ): [RelatedObject!]!
+}
+
+type Query {
+  getRelationshipSuggestions(
+    tenantId: ID!
+    datasourceId: ID!
+    entity: String!
+    limit: Int
+  ): [RelationshipSuggestion!]!
+}
+
+type Query {
+  get_semantic_lineage(
+    entity: String!
+    tenant_id: String
+    datasource_id: String
+  ): LineageResponse
+}
+
+type Query {
+  search_business_terms(
+    query: String!
+    tenant_id: String
+    limit: Int
+    offset: Int
+  ): SearchBusinessTermsResponse
+}
+
+type Mutation {
+  validate_business_term(
+    business_term: jsonb!
+  ): ValidationResponse
+}
+
+enum EdgeType {
+  REFERENCE
+  COMPOSITION
+  ASSOCIATION
+  FOREIGN_KEY
+}
+
+enum Direction {
+  OUTBOUND
+  INBOUND
+}
+
+type LineageNode {
+  id: String!
+  name: String!
+  type: String!
+}
+
+type LineageEdge {
+  source: String!
+  target: String!
+  type: String!
+}
+
+type LineageResponse {
+  nodes: [LineageNode!]!
+  edges: [LineageEdge!]!
+}
+
+type BusinessTerm {
+  id: String!
+  name: String!
+  display_name: String
+  description: String
+  category: String
+  sub_category: String
+  owner: String
+  steward: String
+  status: String
+  properties: jsonb
+}
+
+type SearchBusinessTermsResponse {
+  results: [BusinessTerm!]!
+  total: Int!
+}
+
+type ValidationResponse {
+  valid: Boolean!
+  errors: [String!]!
+}
+
+type GenericActionResponse {
+  success: Boolean!
+  message: String
+  data: jsonb
+}
+
+type RelatedObject {
+  edgeId: ID!
+  direction: String!
+  edgeType: String!
+  cardinality: String
+  source: BusinessTerm
+  target: BusinessTerm
+}
+
+type RelationshipSuggestion {
+  id: ID!
+  title: String!
+  description: String!
+  sourceEntity: String!
+  targetEntity: String!
+  edgeType: String!
+  cardinality: String
+  fkColumn: String
+  confidence: Float!
+  reasoning: String!
+  dismissible: Boolean!
+}
+
+type ApplyRelationshipResponse {
+  edgeId: ID!
+  direction: Direction!
+  edgeType: EdgeType!
+  cardinality: String
+  source: BusinessTerm
+  target: BusinessTerm
+}
+
+type DismissSuggestionResponse {
+  status: String!
+}
+
+scalar jsonb
+
+scalar uuid
+

@@ -1,0 +1,34 @@
+id: card_tax_loss_harvest
+type: FeedCard
+version: 1.0.0
+name: Tax Loss Harvest Candidate
+status: draft
+persona: persona_planning_specialist
+eligibility:
+- "unrealized_loss(symbol) > threshold('loss_threshold')"
+- "wash_sale_risk(symbol) == false"
+- "account_tax_status == 'taxable'"
+bindings:
+  data:
+  - cube.unrealized_pnl_by_lot
+fields:
+- symbol
+- loss_amount
+- lot_id
+tone:
+  variant: advisory_gentle
+disclosures:
+- "Selling at a loss may affect future deductions; consider wash-sale rules"
+ctas:
+- id: harvest
+  label: Harvest this loss
+  action: InitiateTaxLossHarvest
+  guard: ""
+  approval_required: true
+rank:
+  score: "loss_amount * recency(trade_date)"
+suppression:
+- "max_per_month(2)"
+lineage:
+- starrocks.pnl_mv
+- iceberg.pnl_snapshots

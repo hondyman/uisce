@@ -1,0 +1,173 @@
+# Override file for local development
+# Use with: docker-compose -f docker-compose.yml -f docker-compose.override.yml up
+
+services:
+  # ==========================================
+  # DEVELOPMENT SERVICES
+  # ==========================================
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.dev
+    container_name: semlayer-frontend-dev-1
+    profiles: ["disabled"]
+    restart: unless-stopped
+    environment:
+      - NODE_ENV=development
+      - VITE_API_BASE_URL=http://localhost:8080
+      - VITE_HASURA_URL=http://localhost:8080
+      - VITE_TEMPORAL_URL=http://localhost:8088
+    ports:
+      - "${FRONTEND_PORT:-5173}:5173"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    command: npm run dev -- --host 0.0.0.0
+  
+
+
+  # Backend overrides for local DB development: point containers at host services
+  backend:
+    # ports:
+    #   - "8080:8080" # Defined in docker-compose.yml as 8082:8080
+    environment:
+      - DATABASE_URL=postgres://postgres:postgres@host.docker.internal:5432/alpha?sslmode=disable
+      - IGNITE_ADDR=postgres:10800
+
+  # Development database with additional tools (standalone service - avoid `extends` for compatibility)
+  
+  # Make Postgres and Ignite optional via profile `local-db` so you can run them on host
+  # or enable them in compose with: `docker compose --profile local-db up -d`
+  postgres:
+    profiles: ["local-db"]
+
+  ignite:
+    profiles: ["local-db"]
+
+
+  # Adminer for database management
+  adminer:
+    image: adminer:latest
+    container_name: semlayer-adminer-1
+    restart: unless-stopped
+    ports:
+      - "8099:8080" # Adminer stays as is or can be variable if requested, but 8099 is unique
+
+    networks:
+      - semlayer-net
+
+  # Redis for caching (optional)
+  redis:
+    image: redis:7-alpine
+    container_name: semlayer-redis-1
+    restart: unless-stopped
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - semlayer-net
+    command: redis-server --appendonly yes
+
+  # Monitoring services (optional)
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: semlayer-prometheus-1
+    restart: unless-stopped
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    networks:
+      - semlayer-net
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: semlayer-grafana-1
+    restart: unless-stopped
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+    depends_on:
+      - prometheus
+    networks:
+      - semlayer-net
+
+  # Development tools
+  swagger-ui:
+    image: swaggerapi/swagger-ui:latest
+    container_name: semlayer-swagger-ui-1
+    restart: unless-stopped
+    environment:
+      - SWAGGER_JSON=/app/swagger.json
+      - BASE_URL=/
+    ports:
+      - "8094:8080"
+    volumes:
+      - ./docs/api/swagger.json:/app/swagger.json:ro
+    networks:
+      - semlayer-net
+
+  # Override AI service in development to avoid pulling private image
+  ai-service:
+    image: alpine:3.18
+    container_name: semlayer-ai-service-dev-1
+    restart: unless-stopped
+    command: tail -f /dev/null
+    environment:
+      - XAI_API_KEY=${XAI_API_KEY}
+    networks:
+      - semlayer-net
+
+  temporal:
+    image: temporalio/auto-setup:latest
+    restart: on-failure
+    environment:
+      - DB=postgres12
+      - DB_PORT=5432
+      - POSTGRES_USER=postgres
+      - POSTGRES_PWD=postgres
+      - POSTGRES_DB=temporal
+      - POSTGRES_HOST=host.docker.internal # use host Postgres when running locally (macOS)
+      - POSTGRES_SEEDS=host.docker.internal
+    ports:
+      - "${TEMPORAL_PORT:-7233}:7233" # Expose for local access
+      - "6933:6933"
+
+  api-gateway:
+    environment:
+      - TEMPORAL_RETRY_ATTEMPTS=5
+      - TEMPORAL_RETRY_DELAY_SECONDS=2
+
+  temporal-ui:
+    image: temporalio/ui:latest
+    restart: unless-stopped
+    # ports:
+    #   - "${TEMPORAL_UI_PORT:-8093}:8080" # Defined in docker-compose.local.yml
+    environment:
+      TEMPORAL_ADDRESS: temporal:7233
+    depends_on:
+      - temporal
+
+  entity-manager:
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8080/ready || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+volumes:
+  redis_data:
+  prometheus_data:
+  grafana_data:
+
+networks:
+  semlayer-net:
+    driver: bridge

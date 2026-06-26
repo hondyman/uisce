@@ -1,0 +1,219 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/compose-spec/compose-spec/master/schema/compose-spec.json
+version: '3.8'
+
+services:
+  # ============================================================================
+  # EXISTING SERVICES (unchanged from your docker-compose.yml)
+  # ============================================================================
+
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_DB: alpha
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  hasura:
+    image: hasura/graphql-engine:v2.37.0.cli-migrations-v3
+    environment:
+      HASURA_GRAPHQL_DATABASE_URL: "postgresql://postgres:postgres@postgres:5432/alpha"
+      HASURA_GRAPHQL_ADMIN_SECRET: ${HASURA_ADMIN_SECRET}
+      HASURA_GRAPHQL_DEV_MODE: "true"
+      HASURA_GRAPHQL_CORS_DOMAIN: "*"
+    ports:
+      - "8080:8080"
+    depends_on:
+      - postgres
+
+  # ============================================================================
+  # NEW WORKFLOW & SCREEN BUILDER SERVICES
+  # ============================================================================
+
+  workflow-service:
+    build:
+      context: .
+      dockerfile: backend/cmd/workflow-service/Dockerfile
+    environment:
+      HASURA_URL: http://hasura:8080
+      HASURA_ADMIN_SECRET: ${HASURA_ADMIN_SECRET}
+      KAFKA_BROKERS: redpanda:9092
+      WORKFLOW_SERVICE_PORT: 8082
+    ports:
+      - "8082:8082"
+    depends_on:
+      - hasura
+      - redpanda
+    networks:
+      - backend
+
+  screen-builder-service:
+    build:
+      context: .
+      dockerfile: backend/cmd/screen-builder-service/Dockerfile
+    environment:
+      HASURA_URL: http://hasura:8080
+      HASURA_ADMIN_SECRET: ${HASURA_ADMIN_SECRET}
+      SCREEN_BUILDER_SERVICE_PORT: 8083
+    ports:
+      - "8083:8083"
+    depends_on:
+      - hasura
+    networks:
+      - backend
+
+  # ============================================================================
+  # MESSAGE QUEUE & EVENT PROCESSING
+  # ============================================================================
+
+  rabbitmq:
+    image: rabbitmq:3.12-management-alpine
+    environment:
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
+    ports:
+      - "5672:5672"     # AMQP port
+      - "15672:15672"   # Management UI
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    networks:
+      - backend
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ============================================================================
+  # TEMPORAL WORKFLOW ENGINE (Optional - for advanced orchestration)
+  # ============================================================================
+
+  temporal-db:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_PASSWORD: temporal
+      POSTGRES_USER: temporal
+      POSTGRES_DB: temporal
+    ports:
+      - "5433:5432"
+    volumes:
+      - temporal_db:/var/lib/postgresql/data
+    networks:
+      - backend
+
+  temporal:
+    image: temporalio/auto-setup:latest
+    environment:
+      DB: postgres12
+      DB_PORT: 5432
+      POSTGRES_USER: temporal
+      POSTGRES_PASSWORD: temporal
+      POSTGRES_DB: temporal
+      TEMPORAL_BROADCAST_ADDRESS: temporal
+    ports:
+      - "7233:7233"   # gRPC
+      - "6933:6933"   # Frontend gRPC
+    depends_on:
+      - temporal-db
+    networks:
+      - backend
+    healthcheck:
+      test: ["CMD", "temporal", "workflow", "list", "--address", "localhost:7233", "--limit", "1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  temporal-ui:
+    image: temporalio/ui:latest
+    ports:
+      - "8081:8080"
+    environment:
+      TEMPORAL_ADDRESS: temporal:7233
+    depends_on:
+      - temporal
+    networks:
+      - backend
+
+  # ============================================================================
+  # FRONTEND (React)
+  # ============================================================================
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    environment:
+      VITE_HASURA_URL: http://localhost:8080/v1/graphql
+      VITE_WORKFLOW_SERVICE: http://localhost:8082
+      VITE_SCREEN_BUILDER_SERVICE: http://localhost:8083
+    ports:
+      - "3000:3000"
+    depends_on:
+      - hasura
+      - workflow-service
+      - screen-builder-service
+    networks:
+      - backend
+
+  # ============================================================================
+  # MONITORING & OBSERVABILITY (Optional)
+  # ============================================================================
+
+  prometheus:
+    image: prom/prometheus:latest
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+    ports:
+      - "9090:9090"
+    networks:
+      - backend
+
+  grafana:
+    image: grafana/grafana:latest
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: admin
+    ports:
+      - "3001:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+    depends_on:
+      - prometheus
+    networks:
+      - backend
+
+# ============================================================================
+# VOLUMES
+# ============================================================================
+
+volumes:
+  postgres_data:
+  rabbitmq_data:
+  temporal_db:
+  prometheus_data:
+  grafana_data:
+
+# ============================================================================
+# NETWORKS
+# ============================================================================
+
+networks:
+  backend:
+    driver: bridge
+
+# ============================================================================
+# USAGE:
+# 1. docker-compose up -d
+# 2. Wait for services to start: docker-compose logs -f
+# 3. Apply migrations: psql -f db/migrations/005_workflows_screens.sql
+# 4. Access:
+#    - Frontend: http://localhost:3000
+#    - Hasura: http://localhost:8080/console
+#    - Workflow Service: http://localhost:8082/health
+#    - Screen Builder: http://localhost:8083/health
+#    - RabbitMQ: http://localhost:15672 (guest:guest)
+#    - Temporal UI: http://localhost:8081
+# ============================================================================

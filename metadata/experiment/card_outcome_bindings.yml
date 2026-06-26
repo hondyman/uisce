@@ -1,0 +1,11 @@
+id: card_outcome_bindings
+type: ExperimentBinding
+version: 1.0.0
+name: Card to Outcome Bindings
+mappings:
+  card_dividend_income:
+    outcomes: ["cta_reinvest_completed","advisor_contacted_within_7d"]
+  card_tax_loss_harvest:
+    outcomes: ["harvest_executed","tax_savings_estimated"]
+  card_rebalance_alert:
+    outcomes: ["rebalance_executed","tracking_error_reduced_30d"]

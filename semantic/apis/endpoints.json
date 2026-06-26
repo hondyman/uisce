@@ -1,0 +1,21 @@
+[
+    {
+        "name": "ListPositions",
+        "path": "/api/positions",
+        "method": "GET",
+        "bo_name": "Position",
+        "filters": {
+            "accountId": "string",
+            "ticker": "string"
+        }
+    },
+    {
+        "name": "GetAccount",
+        "path": "/api/accounts/{id}",
+        "method": "GET",
+        "bo_name": "Account",
+        "filters": {
+            "id": "string"
+        }
+    }
+]

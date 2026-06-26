@@ -1,0 +1,163 @@
+.region-selector-card {
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  margin-bottom: 16px;
+}
+
+.region-selector-container {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.region-selection {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.region-selection label {
+  font-weight: 500;
+  color: #262626;
+  font-size: 14px;
+}
+
+.region-details {
+  padding: 12px;
+  background: #fafafa;
+  border-radius: 6px;
+  border-left: 4px solid #1890ff;
+}
+
+.region-details h4 {
+  margin: 0 0 12px 0;
+  color: #1890ff;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.detail-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 12px;
+}
+
+.detail-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.detail-item .label {
+  font-size: 12px;
+  color: #8c8c8c;
+  font-weight: 500;
+  text-transform: uppercase;
+}
+
+.detail-item .value {
+  font-size: 14px;
+  color: #262626;
+  font-weight: 600;
+}
+
+.locality-preferences {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.locality-preferences label {
+  font-weight: 500;
+  color: #262626;
+  font-size: 14px;
+}
+
+.latency-threshold {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.latency-threshold label {
+  font-weight: 500;
+  color: #262626;
+  font-size: 14px;
+}
+
+.latency-threshold input {
+  font-size: 14px;
+  transition: border-color 0.3s;
+}
+
+.latency-threshold input:focus {
+  border-color: #1890ff !important;
+  box-shadow: 0 0 0 2px rgba(24, 144, 255, 0.1);
+}
+
+.fallback-regions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.fallback-regions label {
+  font-weight: 500;
+  color: #262626;
+  font-size: 14px;
+}
+
+.fallback-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 8px;
+  background: #fafafa;
+  border-radius: 4px;
+}
+
+/* Dark mode support */
+@media (prefers-color-scheme: dark) {
+  .region-selector-card {
+    background: #141414;
+  }
+
+  .region-selection label,
+  .locality-preferences label,
+  .latency-threshold label,
+  .fallback-regions label {
+    color: #e0e0e0;
+  }
+
+  .region-details {
+    background: #1f1f1f;
+    border-left-color: #177ddc;
+  }
+
+  .region-details h4 {
+    color: #177ddc;
+  }
+
+  .detail-item .label {
+    color: #8c8c8c;
+  }
+
+  .detail-item .value {
+    color: #e0e0e0;
+  }
+
+  .latency-threshold input {
+    background: #262626;
+    color: #e0e0e0;
+    border-color: #434343 !important;
+  }
+
+  .latency-threshold input:focus {
+    border-color: #177ddc !important;
+    box-shadow: 0 0 0 2px rgba(23, 125, 220, 0.1);
+  }
+
+  .fallback-list {
+    background: #1f1f1f;
+  }
+}

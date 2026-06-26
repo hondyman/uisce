@@ -1,0 +1,30 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: semantic-dryrun
+  namespace: analytics
+spec:
+  schedule: "0 2 * * *" # nightly at 02:00
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+            - name: dryrun
+              image: your-registry/semantic-dryrun:latest
+              envFrom:
+                - secretRef: { name: resolver-secrets }
+                - configMapRef: { name: resolver-config }
+              env:
+                - name: TRINO_HOST
+                  valueFrom:
+                    secretKeyRef:
+                      name: resolver-secrets
+                      key: trino_host
+                # Map other specific keys if envFrom isn't sufficient or keys differ
+                - name: DRYRUN_BASELINE_STORE
+                  valueFrom:
+                    secretKeyRef:
+                      name: resolver-secrets
+                      key: dryrun_baseline_s3
+          restartPolicy: OnFailure

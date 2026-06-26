@@ -1,0 +1,75 @@
+{
+  "name": "employee_territories_admin_view",
+  "title": "Employee Territories View (Admin)",
+  "description": "Auto-generated semantic model for table employee_territories.",
+  "public": "role in (steward,admin)",
+  "meta": {
+    "admin_variant": true,
+    "core_version": "runtime",
+    "generated_at": "2025-10-01T18:21:07Z",
+    "last_merged": "2025-10-01T18:21:07Z",
+    "root_cube": "employee_territories"
+  },
+  "cubes": [
+    {
+      "join_path": "employee_territories",
+      "includes": [
+        {
+          "name": "count"
+        }
+      ]
+    },
+    {
+      "join_path": "employee_territories.employees",
+      "prefix": true,
+      "includes": [
+        {
+          "name": "*"
+        }
+      ]
+    },
+    {
+      "join_path": "employee_territories.territories",
+      "prefix": true,
+      "includes": [
+        {
+          "name": "*"
+        }
+      ]
+    },
+    {
+      "join_path": "employee_territories.territories.region",
+      "prefix": true,
+      "includes": [
+        {
+          "name": "*"
+        }
+      ]
+    }
+  ],
+  "folders": [
+    {
+      "name": "Metrics",
+      "includes": [
+        {
+          "member": "count"
+        }
+      ]
+    },
+    {
+      "name": "Related",
+      "includes": [
+        {
+          "nested": {
+            "name": "Territories",
+            "includes": [
+              {
+                "member": "territories_territory_description"
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

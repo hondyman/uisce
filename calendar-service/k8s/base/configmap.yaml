@@ -1,0 +1,60 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: calendar-config
+  namespace: calendar
+  labels:
+    app: calendar-service
+data:
+  # Server Configuration
+  PORT: "8080"
+  LOG_LEVEL: "info"
+
+  # Database Configuration (connection string should be in Secrets)
+  DB_MAX_CONNECTIONS: "25"
+  DB_CONNECTION_TIMEOUT: "30s"
+  DB_IDLE_TIMEOUT: "5m"
+
+  # Cache Configuration
+  CACHE_ENABLED: "true"
+  CACHE_TTL: "3600"
+  CACHE_MAX_SIZE: "10000"
+
+  # Rate Limiting
+  RATE_LIMIT_RPS: "10.0"
+  RATE_LIMIT_BURST: "20"
+
+  # Security
+  JWT_ALGORITHM: "HS256"
+  TOKEN_EXPIRY: "24h"
+  REFRESH_TOKEN_EXPIRY: "7d"
+
+  # Temporal Workflow
+  TEMPORAL_NAMESPACE: "calendar-workflows"
+  TEMPORAL_TASK_QUEUE: "calendar-tasks"
+  TEMPORAL_WORKFLOW_TIMEOUT: "24h"
+
+  # Redis Configuration
+  REDIS_URL: "redis://redis:6379"
+  REDIS_PREFIX: "calendar"
+  REDIS_CACHE_TTL: "3600"
+
+  # Hasura Configuration
+  HASURA_GRAPHQL_ADMIN_SECRET: "set-via-secret"
+  HASURA_ENDPOINT: "http://hasura:8080/v1/graphql"
+
+  # Feature Flags
+  ENABLE_RECURRING_EVENTS: "true"
+  ENABLE_CONFLICT_DETECTION: "true"
+  ENABLE_TIMEZONE_CONVERSION: "true"
+  ENABLE_SECURITY_HEADERS: "true"
+  ENABLE_AUDIT_LOGGING: "true"
+
+  # Monitoring
+  METRICS_ENABLED: "true"
+  METRICS_PORT: "9090"
+  PPROF_ENABLED: "false"
+
+  # Data Residency
+  DEFAULT_REGION: "us-east-1"
+  ALLOWED_REGIONS: "us-east-1,eu-west-1,ap-southeast-1"

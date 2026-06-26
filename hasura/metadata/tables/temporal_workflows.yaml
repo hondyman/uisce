@@ -1,0 +1,32 @@
+- table:
+    name: temporal_workflows
+    schema: public
+  select_permissions:
+  - role: user
+    permission:
+      columns: [ id, workflow_id, status, input, result ]
+      filter: { tenant_id: "X-Hasura-Tenant-Id" }
+  event_triggers:
+  - name: workflow_event
+    definition:
+      enable_manual: false
+      insert: { columns: "*" }
+    webhook: "{{HASURA_WEBHOOK_URL}}/temporal"
+    retry_conf:
+      num_retries: 5
+      interval_sec: 10
+      timeout_sec: 30
+- table:
+    name: temporal_workflows
+    schema: public
+  select_permissions:
+  - role: user
+    permission:
+      columns: [ id, workflow_id, status, input, result ]
+      filter: { tenant_id: "X-Hasura-Tenant-Id" }
+  event_triggers:
+  - name: workflow_event
+    definition:
+      enable_manual: false
+      insert: { columns: "*" }
+    webhook: "{{HASURA_WEBHOOK_URL}}/api/temporal"

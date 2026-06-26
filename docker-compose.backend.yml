@@ -1,0 +1,200 @@
+# ============================================================================
+# BULLETPROOF BACKEND DOCKER COMPOSE
+# ============================================================================
+# This Compose file provides a minimal, reliable backend stack for development.
+# Supported: Backend API (8080), Hasura GraphQL (8888)
+# Optional: Temporal, Workflow Service, Screen Builder, Rule Engine
+# Note: RabbitMQ has been removed from this compose file; run it separately if needed
+#
+# Usage:
+#   docker compose -f docker-compose.backend.yml up
+#   
+# After startup:
+#   - Backend API:       http://localhost:8080
+#   - Hasura GraphQL:    http://localhost:8888
+#   - Redpanda broker: http://localhost:9092 (Pandaproxy 8082 or outside 19092; schema registry 8081 if enabled)
+#   
+# Frontend configuration (.env):
+#   VITE_API_BASE_URL=http://localhost:8080
+#   VITE_BACKEND_TARGET=http://localhost:8080
+# ============================================================================
+
+services:
+  hasura:
+    image: hasura/graphql-engine:v2.37.0.cli-migrations-v3
+    restart: unless-stopped
+    environment:
+      HASURA_GRAPHQL_DATABASE_URL: "postgresql://postgres:postgres@host.docker.internal:5432/alpha"
+      HASURA_GRAPHQL_ADMIN_SECRET: ${HASURA_ADMIN_SECRET:-newadminsecretkey}
+      HASURA_GRAPHQL_DEV_MODE: "true"
+      HASURA_GRAPHQL_ENABLE_CONSOLE: "true"
+      HASURA_GRAPHQL_CORS_DOMAIN: "*"
+    ports:
+      - "8888:8080"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  # Redpanda - Kafka-compatible messaging broker (replaces RabbitMQ)
+  redpanda:
+    image: docker.redpanda.com/redpandadata/redpanda:latest
+    command:
+      - redpanda start
+      - --overprovisioned
+      - --smp 1
+      - --memory 1G
+      - --reserve-memory 0M
+      - --node-id 0
+      - --check=false
+      - --kafka-addr PLAINTEXT://0.0.0.0:9092,OUTSIDE://0.0.0.0:19092
+      - --advertise-kafka-addr PLAINTEXT://redpanda:9092,OUTSIDE://localhost:19092
+      - --pandaproxy-addr 0.0.0.0:8082
+      - --advertise-pandaproxy-addr localhost:8082
+      - --schema-registry-addr 0.0.0.0:8081
+    ports:
+      - "9092:9092"
+      - "19092:19092"
+      - "8081:8081"
+    healthcheck:
+      test: ["CMD", "rpk", "cluster", "health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  temporal:
+    image: temporalio/auto-setup:latest
+    restart: on-failure
+    environment:
+      DB: postgres12
+      POSTGRES_USER: temporal
+      POSTGRES_PASSWORD: temporal
+      POSTGRES_DB: temporal_db
+      POSTGRES_HOST: host.docker.internal
+      POSTGRES_SEEDS: host.docker.internal
+      DB_PORT: 5432
+      TEMPORAL_BROADCAST_ADDRESS: temporal
+    ports:
+      - "7233:7233"
+      - "6933:6933"
+    healthcheck:
+      test: ["CMD", "temporal", "workflow", "list", "--address", "localhost:7233", "--limit", "1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    profiles:
+      - temporal
+
+  temporal-ui:
+    image: temporalio/ui:latest
+    restart: unless-stopped
+    ports:
+      - "8082:8080"
+    environment:
+      TEMPORAL_ADDRESS: temporal:7233
+    depends_on:
+      temporal:
+        condition: service_healthy
+    profiles:
+      - temporal
+
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    restart: unless-stopped
+    environment:
+      PORT: 8080
+      HASURA_URL: http://hasura:8080
+      DATABASE_URL: postgresql://postgres:postgres@host.docker.internal:5432/alpha
+      HASURA_ADMIN_SECRET: ${HASURA_ADMIN_SECRET:-newadminsecretkey}
+      JWT_SECRET: ${JWT_SECRET:-dev-jwt-secret-key-change-in-production}
+    ports:
+      - "8080:8080"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    depends_on:
+      hasura:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+
+  workflow-service:
+    build:
+      context: .
+      dockerfile: backend/cmd/workflow-service/Dockerfile
+    restart: on-failure
+    environment:
+      HASURA_URL: http://hasura:8080
+      HASURA_ADMIN_SECRET: ${HASURA_ADMIN_SECRET:-newadminsecretkey}
+      WORKFLOW_SERVICE_PORT: 8084
+      KAFKA_BROKERS: redpanda:9092
+      # Note: messaging now uses Redpanda (Kafka-compatible)
+    ports:
+      - "8084:8084"
+    depends_on:
+      hasura:
+        condition: service_healthy
+      redpanda:
+        condition: service_healthy
+    profiles:
+      - temporal
+
+  screen-builder-service:
+    build:
+      context: .
+      dockerfile: backend/cmd/screen-builder-service/Dockerfile
+    restart: on-failure
+    environment:
+      HASURA_URL: http://hasura:8080
+      HASURA_ADMIN_SECRET: ${HASURA_ADMIN_SECRET:-newadminsecretkey}
+      SCREEN_BUILDER_SERVICE_PORT: 8086
+    expose:
+      - "8086"
+    depends_on:
+      hasura:
+        condition: service_healthy
+    profiles:
+      - services
+
+  rule-engine:
+    build:
+      context: .
+      dockerfile: backend/cmd/rule-engine-service/Dockerfile
+    restart: on-failure
+    environment:
+      PORT: 8085
+      DATABASE_URL: "postgresql://postgres:postgres@host.docker.internal:5432/alpha?sslmode=disable"
+      KAFKA_BROKERS: redpanda:9092
+      # Note: messaging now uses Redpanda (Kafka-compatible)
+    expose:
+      - "8085"
+    depends_on:
+      hasura:
+        condition: service_healthy
+      redpanda:
+        condition: service_healthy
+    profiles:
+      - services
+
+  # ============================================================================
+  # OPTIONAL PROFILES
+  # ============================================================================
+  # Temporal services:     docker compose --profile temporal up
+  # All services:          docker compose --profile temporal --profile services up
+  # Minimal (default):     docker compose up
+  # ============================================================================
+
+volumes:
+
+networks:
+  default:
+    name: backend_default
+    driver: bridge

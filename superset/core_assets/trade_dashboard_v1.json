@@ -1,0 +1,29 @@
+{
+    "dashboard_title": "Core Trade Performance v1",
+    "description": "Standard trade analytics for all tenants. Do not edit directly.",
+    "slug": "core-trade-v1",
+    "position": {},
+    "charts": [
+        {
+            "slice_name": "Total Volume by Country",
+            "viz_type": "sunburst",
+            "datasource": "sales_performance_mv",
+            "params": {
+                "groupby": [
+                    "customer_country"
+                ],
+                "metric": "sum__total_sale_amount"
+            }
+        },
+        {
+            "slice_name": "Risk Heatmap",
+            "viz_type": "heatmap",
+            "datasource": "fact_orders",
+            "params": {
+                "all_columns_x": "order_date",
+                "all_columns_y": "risk_score",
+                "metric": "count"
+            }
+        }
+    ]
+}

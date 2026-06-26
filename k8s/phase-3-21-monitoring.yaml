@@ -1,0 +1,319 @@
+---
+# Phase 3.21: Grafana Dashboards + Prometheus Rules
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-rules-3-21
+  namespace: semlayer
+data:
+  phase-3-21-alerts.yaml: |
+    groups:
+    - name: feature_engineering_alerts
+      interval: 30s
+      rules:
+      
+      # ========== DRIFT DETECTION ALERTS ==========
+      - alert: HighFeatureDrift
+        expr: |
+          (drift_score > 0.15) or 
+          (drift_score{method="psi"} > 0.25) or
+          (drift_score{method="classifier"} > 0.7)
+        for: 5m
+        labels:
+          severity: warning
+          component: feature-engineering
+        annotations:
+          summary: "High feature drift detected: {{ $labels.feature_id }}"
+          description: |
+            Feature {{ $labels.feature_id }} has drifted beyond threshold.
+            Method: {{ $labels.method }}
+            Score: {{ $value | humanize }}
+            Baseline: 30d, Eval: 1d
+      
+      - alert: ExtremeFeatureDrift
+        expr: |
+          (drift_score > 0.3) or 
+          (drift_score{method="psi"} > 0.4) or
+          (drift_score{method="classifier"} > 0.85)
+        for: 2m
+        labels:
+          severity: critical
+          component: feature-engineering
+        annotations:
+          summary: "CRITICAL: Extreme feature drift: {{ $labels.feature_id }}"
+          description: |
+            Feature {{ $labels.feature_id }} shows extreme drift!
+            Immediate investigation required.
+            Score: {{ $value | humanize }}
+      
+      - alert: MultipleDriftsActive
+        expr: |
+          count(drift_score > 0.15) > 10
+        for: 10m
+        labels:
+          severity: critical
+          component: feature-engineering
+        annotations:
+          summary: "Multiple feature drifts detected"
+          description: |
+            {{ $value }} features showing active drift.
+            Possible upstream data quality issue.
+      
+      # ========== MATERIALIZATION ALERTS ==========
+      - alert: FeatureFreshnessSLABreach
+        expr: |
+          (time() - feature_last_materialized_seconds) / 3600 > 2
+        for: 15m
+        labels:
+          severity: warning
+          component: feature-engineering
+        annotations:
+          summary: "Feature freshness SLA breached: {{ $labels.feature_id }}"
+          description: |
+            Feature {{ $labels.feature_id }} last materialized {{ $value | humanize }}h ago.
+            SLA: 1h, threshold triggering: 2h
+      
+      - alert: FeatureMaterializationFailure
+        expr: |
+          increase(feature_computation_errors_total{job_type="materialization"}[1h]) > 3
+        for: 5m
+        labels:
+          severity: critical
+          component: feature-engineering
+        annotations:
+          summary: "Feature materialization failing: {{ $labels.feature_id }}"
+          description: |
+            Materialization job failed {{ $value }} times in last hour.
+            Check Spark cluster and data connectivity.
+      
+      - alert: HighMaterializationLatency
+        expr: |
+          histogram_quantile(0.95, drift_detection_duration_seconds) > 60
+        for: 10m
+        labels:
+          severity: warning
+          component: feature-engineering
+        annotations:
+          summary: "High feature materialization latency"
+          description: |
+            p95 materialization latency: {{ $value | humanizeDuration }}
+            SLO: < 30s. Investigate Spark cluster performance.
+      
+      # ========== QUALITY ALERTS ==========
+      - alert: FeatureQualityCheckFailure
+        expr: |
+          feature_quality_check_failures_total offset 0m > feature_quality_check_failures_total offset 1m
+        for: 5m
+        labels:
+          severity: warning
+          component: feature-engineering
+        annotations:
+          summary: "Feature quality check failed: {{ $labels.feature_id }}"
+          description: |
+            Quality check {{ $labels.check_name }} failed for {{ $labels.feature_id }}.
+            Observed value {{ $label.observed_value }} exceeds {{ $label.threshold }}.
+      
+      - alert: HighFeatureNullRate
+        expr: |
+          feature_null_rate{} > 0.05
+        for: 10m
+        labels:
+          severity: warning
+          component: feature-engineering
+        annotations:
+          summary: "High null rate in feature: {{ $labels.feature_id }}"
+          description: |
+            Feature {{ $labels.feature_id }} has {{ $value | humanizePercentage }} nulls.
+            Threshold: 5%
+      
+      - alert: FeatureCardinalitySpike
+        expr: |
+          increase(feature_cardinality[1h]) / on() feature_cardinality offset 1h > 2
+        for: 5m
+        labels:
+          severity: warning
+          component: feature-engineering
+        annotations:
+          summary: "Feature cardinality spike: {{ $labels.feature_id }}"
+          description: |
+            Feature {{ $labels.feature_id }} cardinality doubled in 1 hour.
+            Possible data quality or schema issue.
+      
+      # ========== IMPORTANCE ALERTS ==========
+      - alert: FeatureImportanceUnstable
+        expr: |
+          feature_importance_stability_score{} < 0.6
+        for: 30m
+        labels:
+          severity: info
+          component: feature-engineering
+        annotations:
+          summary: "Feature importance unstable: {{ $labels.feature_id }}"
+          description: |
+            Feature {{ $labels.feature_id }} importance varies significantly over time.
+            Stability score: {{ $value | humanizePercentage }}
+            Consider retraining or feature engineering review.
+      
+      - alert: FeatureImportanceDropoff
+        expr: |
+          (feature_importance_score - on() feature_importance_score offset 1d) / on() feature_importance_score offset 1d < -0.3
+        for: 30m
+        labels:
+          severity: warning
+          component: feature-engineering
+        annotations:
+          summary: "Feature importance dropped: {{ $labels.feature_id }}"
+          description: |
+            Feature {{ $labels.feature_id }} importance dropped > 30% in 1 day.
+            New score: {{ $value }}, previous: {{ $value offset 1d }}
+      
+      - alert: ImportanceComputationFailed
+        expr: |
+          increase(importance_computation_errors_total[1h]) > 0
+        for: 5m
+        labels:
+          severity: warning
+          component: feature-engineering
+        annotations:
+          summary: "Importance computation failed: {{ $labels.model_id }}"
+          description: |
+            SHAP importance computation failed for {{ $labels.model_id }}.
+            Check model availability and SHAP service.
+      
+      # ========== SLA TRACKING ==========
+      - alert: ComputationSLOBreach
+        expr: |
+          computation_slos_success_rate < 0.99
+        for: 15m
+        labels:
+          severity: critical
+          component: feature-engineering
+        annotations:
+          summary: "Computation SLO breach: {{ $labels.feature_id }}"
+          description: |
+            Success rate for {{ $labels.job_type }} job on {{ $labels.feature_id }}: {{ $value | humanizePercentage }}
+            SLO: > 99%
+      
+      - alert: ExcessiveComputationCost
+        expr: |
+          increase(computation_cost_usd_total[1h]) > 100
+        for: 10m
+        labels:
+          severity: warning
+          component: feature-engineering
+        annotations:
+          summary: "Computation cost spike"
+          description: |
+            Feature engineering cost: ${{ $value }} in last hour.
+            Investigate expensive materializations or importance jobs.
+---
+# Grafana Dashboard ConfigMap
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboards-3-21
+  namespace: semlayer
+data:
+  feature-engineering-dashboard.json: |
+    {
+      "dashboard": {
+        "title": "Phase 3.21: Feature Engineering",
+        "uid": "feature-engineering-3-21",
+        "timezone": "browser",
+        "panels": [
+          {
+            "title": "Active Drifts (Last 24h)",
+            "type": "stat",
+            "targets": [
+              {
+                "expr": "count(drift_score > 0.15)"
+              }
+            ]
+          },
+          {
+            "title": "Drift Score Distribution",
+            "type": "heatmap",
+            "targets": [
+              {
+                "expr": "drift_score"
+              }
+            ]
+          },
+          {
+            "title": "Feature Freshness (Hours)",
+            "type": "gauge",
+            "targets": [
+              {
+                "expr": "(time() - feature_last_materialized_seconds) / 3600"
+              }
+            ],
+            "fieldConfig": {
+              "defaults": {
+                "thresholds": {
+                  "steps": [
+                    {"value": null, "color": "green"},
+                    {"value": 1, "color": "yellow"},
+                    {"value": 2, "color": "red"}
+                  ]
+                }
+              }
+            }
+          },
+          {
+            "title": "Materialization Job Duration",
+            "type": "graph",
+            "targets": [
+              {
+                "expr": "histogram_quantile(0.95, drift_detection_duration_seconds)"
+              }
+            ]
+          },
+          {
+            "title": "Feature Importance Trend",
+            "type": "graph",
+            "targets": [
+              {
+                "expr": "feature_importance_score"
+              }
+            ]
+          },
+          {
+            "title": "Quality Check Pass Rate",
+            "type": "stat",
+            "targets": [
+              {
+                "expr": "sum(feature_quality_checks_passed) / count(feature_quality_checks_total) * 100"
+              }
+            ]
+          },
+          {
+            "title": "Computation SLO Achievement",
+            "type": "graph",
+            "targets": [
+              {
+                "expr": "computation_slos_success_rate * 100"
+              }
+            ]
+          },
+          {
+            "title": "Alert Count by Feature",
+            "type": "table",
+            "targets": [
+              {
+                "expr": "topk(10, sum by (feature_id) (drift_alerts_total))"
+              }
+            ]
+          }
+        ]
+      }
+    }
+---
+# Prometheus Rules Alert Deployment
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-rules-volume
+  namespace: monitoring
+data:
+  alert.rules: |
+    # Alert rules mounted from volume

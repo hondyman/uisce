@@ -1,0 +1,85 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://inmemory/schema/cube-semantic.json",
+  "title": "Cube Semantic Model",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "name": { "type": "string", "description": "Friendly name of the cube/model" },
+    "extends": { "type": "string", "description": "Optional base cube to extend" },
+    "datasource_id": { "type": "string", "description": "Datasource identifier used to resolve SQL" },
+  "sql": { "type": "string", "description": "Optional SQL for the cube" },
+  "sql_table": { "type": "string", "description": "Optional physical table reference (schema.table)" },
+  "title": { "type": "string", "description": "Display title for the cube/model" },
+    "description": { "type": "string" },
+    "joins": {
+      "type": "array",
+      "items": { "$ref": "#/definitions/join" }
+    },
+    "measures": {
+      "type": "object",
+      "additionalProperties": { "$ref": "#/definitions/measure" }
+    },
+    "dimensions": {
+      "type": "object",
+      "additionalProperties": { "$ref": "#/definitions/dimension" }
+    },
+    "pre_aggregations": {
+      "type": "array",
+      "items": { "$ref": "#/definitions/preAggregation" }
+    },
+    "refreshKey": { "$ref": "#/definitions/refreshKey" }
+  },
+  "required": ["name"],
+  "definitions": {
+    "measure": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "sql": { "type": "string" },
+  "type": { "type": "string", "description": "type e.g. sum, count", "enum": ["sum","count","avg","min","max","countDistinct","runningTotal"] },
+        "label": { "type": "string" },
+        "filters": { "type": "array", "items": { "type": "object", "additionalProperties": true } },
+        "description": { "type": "string" }
+      },
+      "required": ["sql"]
+    },
+    "dimension": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "sql": { "type": "string" },
+  "type": { "type": "string", "enum": ["string","number","time","boolean"] },
+        "format": { "type": "string" },
+        "shown": { "type": "boolean" },
+        "description": { "type": "string" }
+      },
+      "required": ["sql"]
+    },
+    "join": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "name": { "type": "string" },
+        "sql_on": { "type": "string" },
+  "relationship": { "type": "string", "description": "one_to_one|one_to_many etc.", "enum": ["one_to_one","one_to_many","many_to_one","many_to_many"] },
+  "type": { "type": "string", "enum": ["inner","left","right","full","cross"] }
+      },
+      "required": ["name", "sql_on"]
+    },
+    "preAggregation": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "name": { "type": "string" },
+  "type": { "type": "string", "enum": ["rollup","originalSql","rollupJoin"] },
+        "time_dimension": { "type": "string" },
+        "dimensions": { "type": "array", "items": { "type": "string" } },
+        "refreshKey": { "$ref": "#/definitions/refreshKey" }
+      },
+      "required": ["name", "type"]
+    },
+    "refreshKey": { "type": "object", "additionalProperties": true }
+  }
+}
+

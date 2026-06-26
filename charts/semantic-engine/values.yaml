@@ -1,0 +1,274 @@
+# Semantic Engine Helm Values
+# Core semantic layer processing service
+
+replicaCount: 3
+
+image:
+  repository: semlayerprodacr.azurecr.io/semlayer/semantic-engine
+  pullPolicy: IfNotPresent
+  tag: ""
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  create: true
+  annotations: {}
+  name: ""
+
+podAnnotations:
+  prometheus.io/scrape: "true"
+  prometheus.io/port: "9090"
+  prometheus.io/path: "/metrics"
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  runAsGroup: 1000
+  fsGroup: 1000
+
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop:
+    - ALL
+
+service:
+  type: ClusterIP
+  port: 8080
+  metricsPort: 9090
+  grpcPort: 9091
+
+ingress:
+  enabled: false
+  className: "nginx"
+  annotations: {}
+  hosts:
+  - host: semantic.semlayer.local
+    paths:
+    - path: /
+      pathType: Prefix
+  tls: []
+
+resources:
+  limits:
+    cpu: "4"
+    memory: 8Gi
+  requests:
+    cpu: "1"
+    memory: 2Gi
+
+autoscaling:
+  enabled: true
+  minReplicas: 3
+  maxReplicas: 20
+  targetCPUUtilizationPercentage: 70
+  targetMemoryUtilizationPercentage: 80
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      policies:
+      - type: Percent
+        value: 10
+        periodSeconds: 60
+    scaleUp:
+      stabilizationWindowSeconds: 60
+      policies:
+      - type: Percent
+        value: 100
+        periodSeconds: 15
+      - type: Pods
+        value: 4
+        periodSeconds: 15
+      selectPolicy: Max
+
+nodeSelector:
+  kubernetes.azure.com/agentpool: app
+
+tolerations: []
+
+affinity:
+  podAntiAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+    - weight: 100
+      podAffinityTerm:
+        labelSelector:
+          matchExpressions:
+          - key: app.kubernetes.io/name
+            operator: In
+            values:
+            - semantic-engine
+        topologyKey: topology.kubernetes.io/zone
+
+topologySpreadConstraints:
+- maxSkew: 1
+  topologyKey: topology.kubernetes.io/zone
+  whenUnsatisfiable: ScheduleAnyway
+  labelSelector:
+    matchLabels:
+      app.kubernetes.io/name: semantic-engine
+
+# Health checks
+livenessProbe:
+  httpGet:
+    path: /healthz
+    port: 8080
+  initialDelaySeconds: 30
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 3
+
+readinessProbe:
+  httpGet:
+    path: /readyz
+    port: 8080
+  initialDelaySeconds: 10
+  periodSeconds: 5
+  timeoutSeconds: 3
+  failureThreshold: 3
+
+startupProbe:
+  httpGet:
+    path: /healthz
+    port: 8080
+  initialDelaySeconds: 10
+  periodSeconds: 5
+  timeoutSeconds: 3
+  failureThreshold: 30
+
+# Pod Disruption Budget
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 2
+
+# Semantic Engine Configuration
+config:
+  # Database connection
+  database:
+    host: semlayer-postgresql.postgres.database.azure.com
+    port: 5432
+    name: semantic
+    sslMode: require
+    maxConnections: 50
+    maxIdleConnections: 10
+    connMaxLifetime: 30m
+
+  # Redis cache
+  cache:
+    enabled: true
+    host: semlayer-redis.redis.cache.windows.net
+    port: 6380
+    tls: true
+    ttl: 3600
+    queryCache:
+      enabled: true
+      maxSize: 10000
+      ttl: 1800
+    metadataCache:
+      enabled: true
+      maxSize: 5000
+      ttl: 3600
+
+  # Query engine settings
+  query:
+    maxConcurrentQueries: 100
+    queryTimeout: 60s
+    maxResultSize: 100MB
+    enableQueryRewrite: true
+    enableCostBasedOptimization: true
+
+  # Semantic model settings
+  model:
+    schemaValidation: strict
+    autoDiscovery: true
+    refreshInterval: 5m
+
+  # Multi-tenant settings
+  multiTenant:
+    enabled: true
+    isolation: schema # database | schema | row
+    tenantHeader: X-Tenant-ID
+
+  # Cube.js integration
+  cube:
+    enabled: true
+    endpoint: http://cube-api:4000
+    apiSecret: ""
+
+  # Observability
+  metrics:
+    enabled: true
+    port: 9090
+  tracing:
+    enabled: true
+    samplingRate: 0.1
+    endpoint: http://jaeger-collector:14268/api/traces
+
+# Secrets management
+secrets:
+  useAzureKeyVault: true
+  keyVaultName: semlayer-prod-kv
+  keys:
+  - name: database-password
+    secretName: db-password
+  - name: redis-password
+    secretName: redis-password
+  - name: cube-api-secret
+    secretName: cube-api-secret
+
+# Volume mounts for configuration
+extraVolumes:
+- name: config
+  configMap:
+    name: semantic-engine-config
+- name: tmp
+  emptyDir: {}
+- name: cache
+  emptyDir:
+    sizeLimit: 1Gi
+
+extraVolumeMounts:
+- name: config
+  mountPath: /app/config
+  readOnly: true
+- name: tmp
+  mountPath: /tmp
+- name: cache
+  mountPath: /app/cache
+
+# Environment variables
+env:
+- name: LOG_LEVEL
+  value: "info"
+- name: LOG_FORMAT
+  value: "json"
+- name: ENVIRONMENT
+  value: "production"
+
+# Service mesh integration
+istio:
+  enabled: true
+  virtualService:
+    enabled: true
+    timeout: 60s
+    retries:
+      attempts: 3
+      perTryTimeout: 20s
+      retryOn: "5xx,reset,connect-failure"
+  destinationRule:
+    enabled: true
+    trafficPolicy:
+      connectionPool:
+        tcp:
+          maxConnections: 1000
+        http:
+          h2UpgradePolicy: UPGRADE
+          http1MaxPendingRequests: 1000
+          http2MaxRequests: 1000
+      outlierDetection:
+        consecutive5xxErrors: 5
+        interval: 30s
+        baseEjectionTime: 30s
+        maxEjectionPercent: 50

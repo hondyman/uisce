@@ -1,0 +1,1841 @@
+{
+  "bundle_id": "unified_financial_services_super_bundle",
+  "domain": "unified_financial_services",
+  "audience": ["executive", "risk_officer", "compliance", "actuary", "underwriter", "trader", "portfolio_manager", "risk_manager", "compliance_officer", "auditor", "healthcare_admin", "clinician", "payer", "retail_manager", "analyst", "controller", "finance", "regulator", "audit", "portfolio_manager", "treasury"],
+  "version": "v1.0.0",
+  "owner": "patrick",
+  "tags": ["banking", "lending", "interest", "credit_risk", "liquidity", "insurance", "underwriting", "claims", "premiums", "reserves", "trading", "portfolio", "performance", "market_risk", "regulatory", "compliance", "capital", "healthcare", "patient_care", "operational", "retail", "sales", "inventory", "customer", "accounting", "ifrs", "us_gaap", "measurement", "amortised_cost", "fair_value", "equity_method", "fx_translation", "impairment", "oci", "pnl", "fx", "currency", "translation", "conversion", "exposure", "attribution", "hedging"],
+  "defaults": {
+    "materialization": "table",
+    "preaggregate": {
+      "enabled": true,
+      "grain": "monthly",
+      "rollups": ["quarterly", "yearly"],
+      "partition_keys": ["entity_id", "portfolio_id", "currency_pair"],
+      "watermark_field": "as_of_date",
+      "snapshot": true
+    }
+  },
+  "functions": [
+    {
+      "name": "DATESYTD",
+      "class": "DAX-Time",
+      "badge": "🟦",
+      "description": "Returns a table with dates from the beginning of the year to the last date in the current context."
+    },
+    {
+      "name": "TOTALYTD",
+      "class": "DAX-Time",
+      "badge": "🟦",
+      "description": "Calculates a year-to-date value for the specified measure."
+    },
+    {
+      "name": "SUMX",
+      "class": "DAX-Iterator",
+      "badge": "🟨",
+      "description": "Returns the sum of an expression evaluated over a table."
+    },
+    {
+      "name": "AVERAGEX",
+      "class": "DAX-Iterator",
+      "badge": "🟨",
+      "description": "Calculates the average of an expression evaluated over a table."
+    },
+    {
+      "name": "FILTER",
+      "class": "DAX-Iterator",
+      "badge": "🟨",
+      "description": "Returns a table that represents a subset of another table or expression."
+    },
+    {
+      "name": "DISTINCTCOUNT",
+      "class": "DAX-Iterator",
+      "badge": "🟨",
+      "description": "Counts the number of distinct values in a column."
+    },
+    {
+      "name": "DIVIDE",
+      "class": "DAX-Logical",
+      "badge": "🟧",
+      "description": "Performs division and returns alternate result or BLANK() on division by 0."
+    },
+    {
+      "name": "STDEVX.P",
+      "class": "DAX-Financial",
+      "badge": "🟩",
+      "description": "Returns the standard deviation of an expression evaluated over a table."
+    },
+    {
+      "name": "SQRT",
+      "class": "DAX-Logical",
+      "badge": "🟧",
+      "description": "Returns the square root of a number."
+    },
+    {
+      "name": "MINX",
+      "class": "DAX-Iterator",
+      "badge": "🟨",
+      "description": "Returns the minimum value of an expression evaluated over a table."
+    },
+    {
+      "name": "MAXX",
+      "class": "DAX-Iterator",
+      "badge": "🟨",
+      "description": "Returns the maximum value of an expression evaluated over a table."
+    },
+    {
+      "name": "MULTIPLY",
+      "class": "DAX-Financial",
+      "badge": "🟩",
+      "description": "Returns the result of multiplying two numbers."
+    },
+    {
+      "name": "SUBTRACT",
+      "class": "DAX-Logical",
+      "badge": "🟧",
+      "description": "Returns the result of subtracting the second argument from the first argument."
+    },
+    {
+      "name": "ADD",
+      "class": "DAX-Logical",
+      "badge": "🟧",
+      "description": "Returns the result of adding two numbers."
+    },
+    {
+      "name": "COALESCE",
+      "class": "DAX-Logical",
+      "badge": "🟧",
+      "description": "Returns the first expression that does not evaluate to BLANK."
+    },
+    {
+      "name": "MAX",
+      "class": "DAX-Logical",
+      "badge": "🟧",
+      "description": "Returns the maximum value in a column."
+    },
+    {
+      "name": "SUMX",
+      "class": "DAX-Iterator",
+      "badge": "🟨",
+      "description": "Returns the sum of an expression evaluated over a table."
+    },
+    {
+      "name": "AVERAGEX",
+      "class": "DAX-Iterator",
+      "badge": "🟨",
+      "description": "Calculates the average of an expression evaluated over a table."
+    },
+    {
+      "name": "FILTER",
+      "class": "DAX-Iterator",
+      "badge": "🟨",
+      "description": "Returns a table that represents a subset of another table or expression."
+    },
+    {
+      "name": "DISTINCTCOUNT",
+      "class": "DAX-Iterator",
+      "badge": "🟨",
+      "description": "Counts the number of distinct values in a column."
+    },
+    {
+      "name": "DIVIDE",
+      "class": "DAX-Logical",
+      "badge": "🟧",
+      "description": "Performs division and returns alternate result or BLANK() on division by 0."
+    },
+    {
+      "name": "STDEVX.P",
+      "class": "DAX-Financial",
+      "badge": "🟩",
+      "description": "Returns the standard deviation of an expression evaluated over a table."
+    },
+    {
+      "name": "SQRT",
+      "class": "DAX-Logical",
+      "badge": "🟧",
+      "description": "Returns the square root of a number."
+    },
+    {
+      "name": "MINX",
+      "class": "DAX-Iterator",
+      "badge": "🟨",
+      "description": "Returns the minimum value of an expression evaluated over a table."
+    },
+    {
+      "name": "MAXX",
+      "class": "DAX-Iterator",
+      "badge": "🟨",
+      "description": "Returns the maximum value of an expression evaluated over a table."
+    },
+    {
+      "name": "MULTIPLY",
+      "class": "DAX-Financial",
+      "badge": "🟩",
+      "description": "Returns the result of multiplying two numbers."
+    },
+    {
+      "name": "SUBTRACT",
+      "class": "DAX-Logical",
+      "badge": "🟧",
+      "description": "Returns the result of subtracting the second argument from the first argument."
+    },
+    {
+      "name": "ADD",
+      "class": "DAX-Logical",
+      "badge": "🟧",
+      "description": "Returns the result of adding two numbers."
+    },
+    {
+      "name": "COALESCE",
+      "class": "DAX-Logical",
+      "badge": "🟧",
+      "description": "Returns the first expression that does not evaluate to BLANK."
+    },
+    {
+      "name": "MAX",
+      "class": "DAX-Logical",
+      "badge": "🟧",
+      "description": "Returns the maximum value in a column."
+    },
+    {
+      "name": "SUM",
+      "class": "DAX-Aggregator",
+      "badge": "🟨",
+      "description": "Returns the sum of all the numbers in a column."
+    },
+    {
+      "name": "AVERAGE",
+      "class": "DAX-Aggregator",
+      "badge": "🟨",
+      "description": "Returns the average (arithmetic mean) of all the numbers in a column."
+    },
+    {
+      "name": "PERCENTILEX.INC",
+      "class": "DAX-Statistical",
+      "badge": "🟩",
+      "description": "Returns the k-th percentile of values in a column."
+    },
+    {
+      "name": "POWER",
+      "class": "DAX-Logical",
+      "badge": "🟧",
+      "description": "Returns the result of a number raised to a power."
+    },
+    {
+      "name": "SELECTEDVALUE",
+      "class": "DAX-Meta",
+      "badge": "🟪",
+      "description": "Returns the value when the context has been filtered down to one distinct value."
+    }
+  ],
+  "metrics": [
+    {
+      "node_id": "net_interest_margin",
+      "category": "profitability",
+      "description": "Net interest income as a percentage of average earning assets.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "DIVIDE(SUMX({interest_income_table}, {interest_income}) - SUMX({interest_expense_table}, {interest_expense}), AVERAGEX({assets_table}, {average_assets}))",
+        "arguments": {
+          "interest_income_table": "table:interest_income",
+          "interest_income": "field:amount",
+          "interest_expense_table": "table:interest_expense",
+          "interest_expense": "field:amount",
+          "assets_table": "table:assets",
+          "average_assets": "field:average_balance"
+        }
+      },
+      "badge": "🟨",
+      "function_class": "DAX-Iterator",
+      "functions_used": ["SUMX", "AVERAGEX", "DIVIDE"],
+      "governance": { "status": "golden" }
+    },
+    {
+      "node_id": "loan_loss_provision_ratio",
+      "category": "credit_risk",
+      "description": "Loan loss provisions as a percentage of total loans.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "DIVIDE(SUMX({provisions_table}, {loan_loss_provisions}), SUMX({loans_table}, {total_loans}))",
+        "arguments": {
+          "provisions_table": "table:loan_provisions",
+          "loan_loss_provisions": "field:provision_amount",
+          "loans_table": "table:loans",
+          "total_loans": "field:outstanding_balance"
+        }
+      },
+      "badge": "🟨",
+      "function_class": "DAX-Iterator",
+      "functions_used": ["SUMX", "DIVIDE"],
+      "governance": { "status": "golden" }
+    },
+    {
+      "node_id": "credit_risk_concentration",
+      "category": "credit_risk",
+      "description": "Percentage of loans to large borrowers relative to total loans.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "DIVIDE(SUMX(FILTER({loans_table}, {loan_amount} > {concentration_threshold}), {loan_amount}), SUMX({loans_table}, {loan_amount}))",
+        "arguments": {
+          "loans_table": "table:loans",
+          "loan_amount": "field:principal_amount",
+          "concentration_threshold": "field:large_borrower_threshold"
+        }
+      },
+      "badge": "🟨",
+      "function_class": "DAX-Iterator",
+      "functions_used": ["SUMX", "FILTER", "DIVIDE"],
+      "governance": { "status": "draft" }
+    },
+    {
+      "node_id": "deposit_stability_ratio",
+      "category": "liquidity",
+      "description": "Ratio of stable deposits to total deposits.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "DIVIDE(SUMX(FILTER({deposits_table}, {deposit_type} = 'stable'), {deposit_amount}), SUMX({deposits_table}, {deposit_amount}))",
+        "arguments": {
+          "deposits_table": "table:deposits",
+          "deposit_type": "field:stability_classification",
+          "deposit_amount": "field:balance"
+        }
+      },
+      "badge": "🟨",
+      "function_class": "DAX-Iterator",
+      "functions_used": ["SUMX", "FILTER", "DIVIDE"],
+      "governance": { "status": "golden" }
+    },
+    {
+      "node_id": "cost_to_income_ratio",
+      "category": "efficiency",
+      "description": "Operating expenses as a percentage of operating income.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "DIVIDE(SUMX({expenses_table}, {operating_expenses}), SUMX({income_table}, {operating_income}))",
+        "arguments": {
+          "expenses_table": "table:operating_expenses",
+          "operating_expenses": "field:amount",
+          "income_table": "table:operating_income",
+          "operating_income": "field:amount"
+        }
+      },
+      "badge": "🟨",
+      "function_class": "DAX-Iterator",
+      "functions_used": ["SUMX", "DIVIDE"],
+      "governance": { "status": "golden" }
+    },
+    {
+      "node_id": "return_on_assets",
+      "category": "profitability",
+      "description": "Net income as a percentage of average total assets.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "DIVIDE(SUMX({income_table}, {net_income}), AVERAGEX({assets_table}, {total_assets}))",
+        "arguments": {
+          "income_table": "table:net_income",
+          "net_income": "field:amount",
+          "assets_table": "table:assets",
+          "total_assets": "field:total_balance"
+        }
+      },
+      "badge": "🟨",
+      "function_class": "DAX-Iterator",
+      "functions_used": ["SUMX", "AVERAGEX", "DIVIDE"],
+      "governance": { "status": "golden" }
+    },
+    {
+      "node_id": "return_on_equity",
+      "category": "profitability",
+      "description": "Net income as a percentage of average equity.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "DIVIDE(SUMX({income_table}, {net_income}), AVERAGEX({equity_table}, {total_equity}))",
+        "arguments": {
+          "income_table": "table:net_income",
+          "net_income": "field:amount",
+          "equity_table": "table:equity",
+          "total_equity": "field:balance"
+        }
+      },
+      "badge": "🟨",
+      "function_class": "DAX-Iterator",
+      "functions_used": ["SUMX", "AVERAGEX", "DIVIDE"],
+      "governance": { "status": "golden" }
+    },
+    {
+      "node_id": "loan_to_deposit_ratio",
+      "category": "liquidity",
+      "description": "Total loans as a percentage of total deposits.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "DIVIDE(SUMX({loans_table}, {loan_balance}), SUMX({deposits_table}, {deposit_balance}))",
+        "arguments": {
+          "loans_table": "table:loans",
+          "loan_balance": "field:outstanding_balance",
+          "deposits_table": "table:deposits",
+          "deposit_balance": "field:balance"
+        }
+      },
+      "badge": "🟨",
+      "function_class": "DAX-Iterator",
+      "functions_used": ["SUMX", "DIVIDE"],
+      "governance": { "status": "golden" }
+    },
+    {
+      "node_id": "non_performing_loan_ratio",
+      "category": "credit_risk",
+      "description": "Non-performing loans as a percentage of total loans.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "DIVIDE(SUMX(FILTER({loans_table}, {performance_status} = 'non_performing'), {loan_balance}), SUMX({loans_table}, {loan_balance}))",
+        "arguments": {
+          "loans_table": "table:loans",
+          "performance_status": "field:performance_classification",
+          "loan_balance": "field:outstanding_balance"
+        }
+      },
+      "badge": "🟨",
+      "function_class": "DAX-Iterator",
+      "functions_used": ["SUMX", "FILTER", "DIVIDE"],
+      "governance": { "status": "golden" }
+    },
+    {
+      "node_id": "capital_adequacy_ratio",
+      "category": "capital",
+      "description": "Regulatory capital as a percentage of risk-weighted assets.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "DIVIDE(SUMX({capital_table}, {regulatory_capital}), SUMX({assets_table}, {risk_weighted_assets}))",
+        "arguments": {
+          "capital_table": "table:regulatory_capital",
+          "regulatory_capital": "field:amount",
+          "assets_table": "table:risk_weighted_assets",
+          "risk_weighted_assets": "field:weighted_balance"
+        }
+      },
+      "badge": "🟨",
+      "function_class": "DAX-Iterator",
+      "functions_used": ["SUMX", "DIVIDE"],
+      "governance": { "status": "golden" }
+    },
+    {
+      "node_id": "combined_ratio",
+      "category": "underwriting_performance",
+      "description": "Total of loss ratio and expense ratio - below 100% indicates profitable underwriting.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "DIVIDE(SUMX({claims_table}, {claims_paid}) + SUMX({expenses_table}, {underwriting_expenses}), SUMX({premiums_table}, {earned_premiums}))",
+        "arguments": {
+          "claims_table": "table:claims",
+          "claims_paid": "field:amount",
+          "expenses_table": "table:underwriting_expenses",
+          "underwriting_expenses": "field:amount",
+          "premiums_table": "table:earned_premiums",
+          "earned_premiums": "field:amount"
+        }
+      },
+      "badge": "🟨",
+      "function_class": "DAX-Iterator",
+      "functions_used": ["SUMX", "DIVIDE"],
+      "governance": { "status": "golden" }
+    },
+    {
+      "node_id": "loss_ratio",
+      "category": "claims_performance",
+      "description": "Claims paid as a percentage of earned premiums.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "DIVIDE(SUMX({claims_table}, {claims_paid}), SUMX({premiums_table}, {earned_premiums}))",
+        "arguments": {
+          "claims_table": "table:claims",
+          "claims_paid": "field:amount",
+          "premiums_table": "table:earned_premiums",
+          "earned_premiums": "field:amount"
+        }
+      },
+      "badge": "🟨",
+      "function_class": "DAX-Iterator",
+      "functions_used": ["SUMX", "DIVIDE"],
+      "governance": { "status": "golden" }
+    },
+    {
+      "node_id": "expense_ratio",
+      "category": "efficiency",
+      "description": "Underwriting expenses as a percentage of written premiums.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "DIVIDE(SUMX({expenses_table}, {underwriting_expenses}), SUMX({premiums_table}, {written_premiums}))",
+        "arguments": {
+          "expenses_table": "table:underwriting_expenses",
+          "underwriting_expenses": "field:amount",
+          "premiums_table": "table:written_premiums",
+          "written_premiums": "field:amount"
+        }
+      },
+      "badge": "🟨",
+      "function_class": "DAX-Iterator",
+      "functions_used": ["SUMX", "DIVIDE"],
+      "governance": { "status": "golden" }
+    },
+    {
+      "node_id": "underwriting_profit",
+      "category": "profitability",
+      "description": "Net underwriting profit or loss.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "SUMX({premiums_table}, {earned_premiums}) - SUMX({claims_table}, {claims_paid}) - SUMX({expenses_table}, {underwriting_expenses})",
+        "arguments": {
+          "premiums_table": "table:earned_premiums",
+          "earned_premiums": "field:amount",
+          "claims_table": "table:claims",
+          "claims_paid": "field:amount",
+          "expenses_table": "table:underwriting_expenses",
+          "underwriting_expenses": "field:amount"
+        }
+      },
+      "badge": "🟨",
+      "function_class": "DAX-Iterator",
+      "functions_used": ["SUMX"],
+      "governance": { "status": "golden" }
+    },
+    {
+      "node_id": "retention_ratio",
+      "category": "underwriting",
+      "description": "Percentage of business retained vs. ceded to reinsurers.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "DIVIDE(SUMX({premiums_table}, {net_premiums}), SUMX({premiums_table}, {gross_premiums}))",
+        "arguments": {
+          "premiums_table": "table:premiums",
+          "net_premiums": "field:net_amount",
+          "gross_premiums": "field:gross_amount"
+        }
+      },
+      "badge": "🟨",
+      "function_class": "DAX-Iterator",
+      "functions_used": ["SUMX", "DIVIDE"],
+      "governance": { "status": "golden" }
+    },
+    {
+      "node_id": "claims_frequency",
+      "category": "claims_performance",
+      "description": "Average number of claims per policy or per exposure unit.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "DIVIDE(DISTINCTCOUNT({claims_table}, {claim_id}), SUMX({policies_table}, {exposure_units}))",
+        "arguments": {
+          "claims_table": "table:claims",
+          "claim_id": "field:id",
+          "policies_table": "table:policies",
+          "exposure_units": "field:exposure_amount"
+        }
+      },
+      "badge": "🟨",
+      "function_class": "DAX-Iterator",
+      "functions_used": ["DISTINCTCOUNT", "SUMX", "DIVIDE"],
+      "governance": { "status": "draft" }
+    },
+    {
+      "node_id": "claims_severity",
+      "category": "claims_performance",
+      "description": "Average claim amount per claim.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "DIVIDE(SUMX({claims_table}, {claim_amount}), DISTINCTCOUNT({claims_table}, {claim_id}))",
+        "arguments": {
+          "claims_table": "table:claims",
+          "claim_amount": "field:amount",
+          "claim_id": "field:id"
+        }
+      },
+      "badge": "🟨",
+      "function_class": "DAX-Iterator",
+      "functions_used": ["SUMX", "DISTINCTCOUNT", "DIVIDE"],
+      "governance": { "status": "draft" }
+    },
+    {
+      "node_id": "reserve_adequacy_ratio",
+      "category": "reserving",
+      "description": "Outstanding reserves as a percentage of ultimate expected losses.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "DIVIDE(SUMX({reserves_table}, {outstanding_reserves}), SUMX({actuarial_table}, {ultimate_losses}))",
+        "arguments": {
+          "reserves_table": "table:loss_reserves",
+          "outstanding_reserves": "field:amount",
+          "actuarial_table": "table:actuarial_projections",
+          "ultimate_losses": "field:projected_amount"
+        }
+      },
+      "badge": "🟨",
+      "function_class": "DAX-Iterator",
+      "functions_used": ["SUMX", "DIVIDE"],
+      "governance": { "status": "golden" }
+    },
+    {
+      "node_id": "policyholder_surplus_ratio",
+      "category": "solvency",
+      "description": "Policyholder surplus as a percentage of total liabilities.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "DIVIDE(SUMX({surplus_table}, {policyholder_surplus}), SUMX({liabilities_table}, {total_liabilities}))",
+        "arguments": {
+          "surplus_table": "table:policyholder_surplus",
+          "policyholder_surplus": "field:amount",
+          "liabilities_table": "table:liabilities",
+          "total_liabilities": "field:amount"
+        }
+      },
+      "badge": "🟨",
+      "function_class": "DAX-Iterator",
+      "functions_used": ["SUMX", "DIVIDE"],
+      "governance": { "status": "golden" }
+    },
+    {
+      "node_id": "value_at_risk",
+      "category": "market_risk",
+      "description": "Maximum expected loss over a specific time period at a given confidence level.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "STDEVX.P({returns_table}, {portfolio_returns}) * SQRT({holding_period}) * {confidence_factor}",
+        "arguments": {
+          "returns_table": "table:portfolio_returns",
+          "portfolio_returns": "field:daily_return",
+          "holding_period": "field:holding_days",
+          "confidence_factor": "field:confidence_multiplier"
+        }
+      },
+      "badge": "🟩",
+      "function_class": "DAX-Financial",
+      "functions_used": ["STDEVX.P", "SQRT"],
+      "governance": { "status": "golden" }
+    },
+    {
+      "node_id": "sharpe_ratio",
+      "category": "risk_adjusted_performance",
+      "description": "Risk-adjusted return using Sharpe Ratio.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "DIVIDE(AVERAGEX({returns_table}, {portfolio_returns}) - {risk_free_rate}, STDEVX.P({returns_table}, {portfolio_returns}))",
+        "arguments": {
+          "returns_table": "table:portfolio_returns",
+          "portfolio_returns": "field:daily_return",
+          "risk_free_rate": "field:risk_free_rate"
+        }
+      },
+      "badge": "🟧",
+      "function_class": "DAX-Logical",
+      "functions_used": ["AVERAGEX", "STDEVX.P", "DIVIDE"],
+      "governance": { "status": "golden" }
+    },
+    {
+      "node_id": "portfolio_turnover",
+      "category": "trading_activity",
+      "description": "Portfolio turnover ratio measuring trading activity.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "DIVIDE(SUMX({trades_table}, ABS({trade_amount})), 2 * AVERAGEX({portfolio_table}, {portfolio_value}))",
+        "arguments": {
+          "trades_table": "table:trades",
+          "trade_amount": "field:transaction_amount",
+          "portfolio_table": "table:portfolio_values",
+          "portfolio_value": "field:total_value"
+        }
+      },
+      "badge": "🟨",
+      "function_class": "DAX-Iterator",
+      "functions_used": ["SUMX", "AVERAGEX", "DIVIDE"],
+      "governance": { "status": "golden" }
+    },
+    {
+      "node_id": "beta_coefficient",
+      "category": "market_risk",
+      "description": "Portfolio beta relative to market benchmark.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "DIVIDE(SUMX({correlation_table}, ({portfolio_return} - {portfolio_mean}) * ({market_return} - {market_mean})), SUMX({correlation_table}, POWER({market_return} - {market_mean}, 2)))",
+        "arguments": {
+          "correlation_table": "table:portfolio_market_returns",
+          "portfolio_return": "field:portfolio_return",
+          "portfolio_mean": "field:portfolio_average",
+          "market_return": "field:market_return",
+          "market_mean": "field:market_average"
+        }
+      },
+      "badge": "🟧",
+      "function_class": "DAX-Logical",
+      "functions_used": ["SUMX", "DIVIDE", "POWER"],
+      "governance": { "status": "golden" }
+    },
+    {
+      "node_id": "tracking_error",
+      "category": "active_risk",
+      "description": "Standard deviation of active returns vs. benchmark.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "STDEVX.P({active_returns_table}, {active_return})",
+        "arguments": {
+          "active_returns_table": "table:active_returns",
+          "active_return": "field:active_return"
+        }
+      },
+      "badge": "🟩",
+      "function_class": "DAX-Financial",
+      "functions_used": ["STDEVX.P"],
+      "governance": { "status": "golden" }
+    },
+    {
+      "node_id": "information_ratio",
+      "category": "active_performance",
+      "description": "Risk-adjusted active return.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "DIVIDE(AVERAGEX({active_returns_table}, {active_return}), STDEVX.P({active_returns_table}, {active_return}))",
+        "arguments": {
+          "active_returns_table": "table:active_returns",
+          "active_return": "field:active_return"
+        }
+      },
+      "badge": "🟧",
+      "function_class": "DAX-Logical",
+      "functions_used": ["AVERAGEX", "STDEVX.P", "DIVIDE"],
+      "governance": { "status": "golden" }
+    },
+    {
+      "node_id": "maximum_drawdown",
+      "category": "risk",
+      "description": "Largest peak-to-trough decline in portfolio value.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "MINX({drawdown_table}, {drawdown_amount})",
+        "arguments": {
+          "drawdown_table": "table:rolling_drawdowns",
+          "drawdown_amount": "field:drawdown"
+        }
+      },
+      "badge": "🟨",
+      "function_class": "DAX-Iterator",
+      "functions_used": ["MINX"],
+      "governance": { "status": "golden" }
+    },
+    {
+      "node_id": "sortino_ratio",
+      "category": "downside_risk",
+      "description": "Return relative to downside volatility.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "DIVIDE(AVERAGEX({returns_table}, {portfolio_return}) - {risk_free_rate}, STDEVX.P(FILTER({returns_table}, {portfolio_return} < {risk_free_rate}), {portfolio_return}))",
+        "arguments": {
+          "returns_table": "table:portfolio_returns",
+          "portfolio_return": "field:daily_return",
+          "risk_free_rate": "field:risk_free_rate"
+        }
+      },
+      "badge": "🟨",
+      "function_class": "DAX-Iterator",
+      "functions_used": ["AVERAGEX", "STDEVX.P", "FILTER", "DIVIDE"],
+      "governance": { "status": "golden" }
+    },
+    {
+      "node_id": "alpha_coefficient",
+      "category": "active_performance",
+      "description": "Excess return over expected return given beta.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "AVERAGEX({returns_table}, {portfolio_return}) - ({risk_free_rate} + {beta} * (AVERAGEX({market_table}, {market_return}) - {risk_free_rate}))",
+        "arguments": {
+          "returns_table": "table:portfolio_returns",
+          "portfolio_return": "field:daily_return",
+          "risk_free_rate": "field:risk_free_rate",
+          "beta": "calc:beta_coefficient",
+          "market_table": "table:market_returns",
+          "market_return": "field:daily_return"
+        }
+      },
+      "badge": "🟨",
+      "function_class": "DAX-Iterator",
+      "functions_used": ["AVERAGEX"],
+      "governance": { "status": "golden" }
+    },
+    {
+      "node_id": "win_rate",
+      "category": "trading_performance",
+      "description": "Percentage of profitable trades.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "DIVIDE(DISTINCTCOUNT(FILTER({trades_table}, {trade_pnl} > 0), {trade_id}), DISTINCTCOUNT({trades_table}, {trade_id}))",
+        "arguments": {
+          "trades_table": "table:trades",
+          "trade_pnl": "field:profit_loss",
+          "trade_id": "field:id"
+        }
+      },
+      "badge": "🟨",
+      "function_class": "DAX-Iterator",
+      "functions_used": ["DISTINCTCOUNT", "FILTER", "DIVIDE"],
+      "governance": { "status": "draft" }
+    },
+    {
+      "node_id": "liquidity_coverage_ratio",
+      "category": "liquidity_risk",
+      "description": "High-quality liquid assets relative to net cash outflows over 30 days.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "DIVIDE(SUMX({assets_table}, {high_quality_assets}), SUMX({outflows_table}, {net_cash_outflows}))",
+        "arguments": {
+          "assets_table": "table:high_quality_liquid_assets",
+          "high_quality_assets": "field:amount",
+          "outflows_table": "table:net_cash_outflows",
+          "net_cash_outflows": "field:amount"
+        }
+      },
+      "badge": "🟨",
+      "function_class": "DAX-Iterator",
+      "functions_used": ["SUMX", "DIVIDE"],
+      "governance": { "status": "golden" }
+    },
+    {
+      "node_id": "net_stable_funding_ratio",
+      "category": "funding_risk",
+      "description": "Available stable funding relative to required stable funding over one year.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "DIVIDE(SUMX({funding_table}, {available_stable_funding}), SUMX({requirements_table}, {required_stable_funding}))",
+        "arguments": {
+          "funding_table": "table:available_stable_funding",
+          "available_stable_funding": "field:amount",
+          "requirements_table": "table:required_stable_funding",
+          "required_stable_funding": "field:amount"
+        }
+      },
+      "badge": "🟨",
+      "function_class": "DAX-Iterator",
+      "functions_used": ["SUMX", "DIVIDE"],
+      "governance": { "status": "golden" }
+    },
+    {
+      "node_id": "tier1_capital_ratio",
+      "category": "capital_quality",
+      "description": "Tier 1 capital as a percentage of risk-weighted assets.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "DIVIDE(SUMX({capital_table}, {tier1_capital}), SUMX({assets_table}, {risk_weighted_assets}))",
+        "arguments": {
+          "capital_table": "table:tier1_capital",
+          "tier1_capital": "field:amount",
+          "assets_table": "table:risk_weighted_assets",
+          "risk_weighted_assets": "field:weighted_amount"
+        }
+      },
+      "badge": "🟨",
+      "function_class": "DAX-Iterator",
+      "functions_used": ["SUMX", "DIVIDE"],
+      "governance": { "status": "golden" }
+    },
+    {
+      "node_id": "leverage_ratio",
+      "category": "leverage",
+      "description": "Tier 1 capital as a percentage of total exposure.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "DIVIDE(SUMX({capital_table}, {tier1_capital}), SUMX({exposure_table}, {total_exposure}))",
+        "arguments": {
+          "capital_table": "table:tier1_capital",
+          "tier1_capital": "field:amount",
+          "exposure_table": "table:total_exposure",
+          "total_exposure": "field:amount"
+        }
+      },
+      "badge": "🟨",
+      "function_class": "DAX-Iterator",
+      "functions_used": ["SUMX", "DIVIDE"],
+      "governance": { "status": "golden" }
+    },
+    {
+      "node_id": "large_exposure_limit",
+      "category": "concentration_risk",
+      "description": "Largest exposure as a percentage of eligible capital.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "DIVIDE(MAXX({exposures_table}, {exposure_amount}), SUMX({capital_table}, {eligible_capital}))",
+        "arguments": {
+          "exposures_table": "table:counterparty_exposures",
+          "exposure_amount": "field:amount",
+          "capital_table": "table:eligible_capital",
+          "eligible_capital": "field:amount"
+        }
+      },
+      "badge": "🟨",
+      "function_class": "DAX-Iterator",
+      "functions_used": ["MAXX", "SUMX", "DIVIDE"],
+      "governance": { "status": "golden" }
+    },
+    {
+      "node_id": "market_risk_capital",
+      "category": "market_risk",
+      "description": "Capital requirement for market risk exposures.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "SUMX({positions_table}, {value_at_risk}) * {confidence_factor}",
+        "arguments": {
+          "positions_table": "table:trading_positions",
+          "value_at_risk": "field:var_amount",
+          "confidence_factor": "field:risk_multiplier"
+        }
+      },
+      "badge": "🟨",
+      "function_class": "DAX-Iterator",
+      "functions_used": ["SUMX"],
+      "governance": { "status": "golden" }
+    },
+    {
+      "node_id": "patient_satisfaction_score",
+      "category": "patient_experience",
+      "description": "Average patient satisfaction rating across all services.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "AVERAGEX({surveys_table}, {satisfaction_rating})",
+        "arguments": {
+          "surveys_table": "table:patient_surveys",
+          "satisfaction_rating": "field:rating"
+        }
+      },
+      "badge": "🟨",
+      "function_class": "DAX-Iterator",
+      "functions_used": ["AVERAGEX"],
+      "governance": { "status": "golden" }
+    },
+    {
+      "node_id": "average_length_of_stay",
+      "category": "operational_efficiency",
+      "description": "Average number of days patients stay in hospital.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "AVERAGEX({admissions_table}, {length_of_stay})",
+        "arguments": {
+          "admissions_table": "table:hospital_admissions",
+          "length_of_stay": "field:days"
+        }
+      },
+      "badge": "🟨",
+      "function_class": "DAX-Iterator",
+      "functions_used": ["AVERAGEX"],
+      "governance": { "status": "golden" }
+    },
+    {
+      "node_id": "readmission_rate",
+      "category": "quality_of_care",
+      "description": "Percentage of patients readmitted within 30 days.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "DIVIDE(SUMX({readmissions_table}, {readmission_count}), SUMX({discharges_table}, {total_discharges}))",
+        "arguments": {
+          "readmissions_table": "table:readmissions",
+          "readmission_count": "field:count",
+          "discharges_table": "table:patient_discharges",
+          "total_discharges": "field:count"
+        }
+      },
+      "badge": "🟨",
+      "function_class": "DAX-Iterator",
+      "functions_used": ["SUMX", "DIVIDE"],
+      "governance": { "status": "golden" }
+    },
+    {
+      "node_id": "bed_occupancy_rate",
+      "category": "resource_utilization",
+      "description": "Percentage of hospital beds occupied.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "DIVIDE(SUMX({occupancy_table}, {occupied_beds}), SUMX({capacity_table}, {total_beds}))",
+        "arguments": {
+          "occupancy_table": "table:bed_occupancy",
+          "occupied_beds": "field:count",
+          "capacity_table": "table:bed_capacity",
+          "total_beds": "field:count"
+        }
+      },
+      "badge": "🟨",
+      "function_class": "DAX-Iterator",
+      "functions_used": ["SUMX", "DIVIDE"],
+      "governance": { "status": "golden" }
+    },
+    {
+      "node_id": "average_cost_per_patient",
+      "category": "financial_performance",
+      "description": "Average cost incurred per patient treated.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "DIVIDE(SUMX({costs_table}, {treatment_cost}), SUMX({patients_table}, {patient_count}))",
+        "arguments": {
+          "costs_table": "table:treatment_costs",
+          "treatment_cost": "field:amount",
+          "patients_table": "table:patient_counts",
+          "patient_count": "field:count"
+        }
+      },
+      "badge": "🟨",
+      "function_class": "DAX-Iterator",
+      "functions_used": ["SUMX", "DIVIDE"],
+      "governance": { "status": "golden" }
+    },
+    {
+      "node_id": "infection_rate",
+      "category": "patient_safety",
+      "description": "Rate of hospital-acquired infections per 1000 patient days.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "DIVIDE(SUMX({infections_table}, {infection_count}), SUMX({patient_days_table}, {total_patient_days})) * 1000",
+        "arguments": {
+          "infections_table": "table:hospital_infections",
+          "infection_count": "field:count",
+          "patient_days_table": "table:patient_days",
+          "total_patient_days": "field:days"
+        }
+      },
+      "badge": "🟨",
+      "function_class": "DAX-Iterator",
+      "functions_used": ["SUMX", "DIVIDE"],
+      "governance": { "status": "golden" }
+    },
+    {
+      "node_id": "physician_productivity",
+      "category": "staff_efficiency",
+      "description": "Average number of patients seen per physician per day.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "DIVIDE(SUMX({visits_table}, {patient_visits}), SUMX({physicians_table}, {physician_count}))",
+        "arguments": {
+          "visits_table": "table:patient_visits",
+          "patient_visits": "field:count",
+          "physicians_table": "table:active_physicians",
+          "physician_count": "field:count"
+        }
+      },
+      "badge": "🟨",
+      "function_class": "DAX-Iterator",
+      "functions_used": ["SUMX", "DIVIDE"],
+      "governance": { "status": "golden" }
+    },
+    {
+      "node_id": "medication_error_rate",
+      "category": "medication_safety",
+      "description": "Rate of medication errors per 1000 doses administered.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "DIVIDE(SUMX({errors_table}, {error_count}), SUMX({doses_table}, {total_doses})) * 1000",
+        "arguments": {
+          "errors_table": "table:medication_errors",
+          "error_count": "field:count",
+          "doses_table": "table:doses_administered",
+          "total_doses": "field:count"
+        }
+      },
+      "badge": "🟨",
+      "function_class": "DAX-Iterator",
+      "functions_used": ["SUMX", "DIVIDE"],
+      "governance": { "status": "golden" }
+    },
+    {
+      "node_id": "emergency_wait_time",
+      "category": "emergency_services",
+      "description": "Average wait time for emergency department patients.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "AVERAGEX({wait_times_table}, {wait_minutes})",
+        "arguments": {
+          "wait_times_table": "table:emergency_wait_times",
+          "wait_minutes": "field:minutes"
+        }
+      },
+      "badge": "🟨",
+      "function_class": "DAX-Iterator",
+      "functions_used": ["AVERAGEX"],
+      "governance": { "status": "golden" }
+    },
+    {
+      "node_id": "revenue_per_bed",
+      "category": "financial_efficiency",
+      "description": "Average revenue generated per hospital bed.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "DIVIDE(SUMX({revenue_table}, {total_revenue}), SUMX({beds_table}, {bed_count}))",
+        "arguments": {
+          "revenue_table": "table:hospital_revenue",
+          "total_revenue": "field:amount",
+          "beds_table": "table:available_beds",
+          "bed_count": "field:count"
+        }
+      },
+      "badge": "🟨",
+      "function_class": "DAX-Iterator",
+      "functions_used": ["SUMX", "DIVIDE"],
+      "governance": { "status": "golden" }
+    },
+    {
+      "node_id": "sales_per_square_foot",
+      "category": "store_performance",
+      "description": "Annual sales revenue per square foot of retail space.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "DIVIDE(SUMX({sales_table}, {annual_sales}), SUMX({stores_table}, {square_footage}))",
+        "arguments": {
+          "sales_table": "table:store_sales",
+          "annual_sales": "field:revenue",
+          "stores_table": "table:store_dimensions",
+          "square_footage": "field:area_sqft"
+        }
+      },
+      "badge": "🟨",
+      "function_class": "DAX-Iterator",
+      "functions_used": ["SUMX", "DIVIDE"],
+      "governance": { "status": "golden" }
+    },
+    {
+      "node_id": "inventory_turnover_ratio",
+      "category": "inventory_management",
+      "description": "Number of times inventory is sold and replaced over a period.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "DIVIDE(SUMX({sales_table}, {cost_of_goods_sold}), AVERAGEX({inventory_table}, {average_inventory}))",
+        "arguments": {
+          "sales_table": "table:sales_data",
+          "cost_of_goods_sold": "field:cogs",
+          "inventory_table": "table:inventory_levels",
+          "average_inventory": "field:value"
+        }
+      },
+      "badge": "🟨",
+      "function_class": "DAX-Iterator",
+      "functions_used": ["SUMX", "AVERAGEX", "DIVIDE"],
+      "governance": { "status": "golden" }
+    },
+    {
+      "node_id": "customer_acquisition_cost",
+      "category": "marketing_efficiency",
+      "description": "Average cost to acquire a new customer.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "DIVIDE(SUMX({marketing_table}, {marketing_spend}), SUMX({customers_table}, {new_customers}))",
+        "arguments": {
+          "marketing_table": "table:marketing_expenses",
+          "marketing_spend": "field:amount",
+          "customers_table": "table:new_customer_acquisitions",
+          "new_customers": "field:count"
+        }
+      },
+      "badge": "🟨",
+      "function_class": "DAX-Iterator",
+      "functions_used": ["SUMX", "DIVIDE"],
+      "governance": { "status": "golden" }
+    },
+    {
+      "node_id": "gross_margin_percentage",
+      "category": "profitability",
+      "description": "Gross profit as a percentage of sales revenue.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "DIVIDE(SUMX({sales_table}, {gross_profit}), SUMX({sales_table}, {total_sales}))",
+        "arguments": {
+          "sales_table": "table:sales_revenue",
+          "gross_profit": "field:profit",
+          "total_sales": "field:revenue"
+        }
+      },
+      "badge": "🟨",
+      "function_class": "DAX-Iterator",
+      "functions_used": ["SUMX", "DIVIDE"],
+      "governance": { "status": "golden" }
+    },
+    {
+      "node_id": "average_transaction_value",
+      "category": "sales_performance",
+      "description": "Average dollar amount per customer transaction.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "DIVIDE(SUMX({transactions_table}, {transaction_amount}), SUMX({transactions_table}, {transaction_count}))",
+        "arguments": {
+          "transactions_table": "table:customer_transactions",
+          "transaction_amount": "field:amount",
+          "transaction_count": "field:count"
+        }
+      },
+      "badge": "🟨",
+      "function_class": "DAX-Iterator",
+      "functions_used": ["SUMX", "DIVIDE"],
+      "governance": { "status": "golden" }
+    },
+    {
+      "node_id": "customer_lifetime_value",
+      "category": "customer_value",
+      "description": "Total revenue expected from a customer over their relationship.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "SUMX({customers_table}, {average_purchase_value} * {purchase_frequency} * {customer_lifespan})",
+        "arguments": {
+          "customers_table": "table:customer_segments",
+          "average_purchase_value": "field:avg_value",
+          "purchase_frequency": "field:frequency",
+          "customer_lifespan": "field:years"
+        }
+      },
+      "badge": "🟨",
+      "function_class": "DAX-Iterator",
+      "functions_used": ["SUMX"],
+      "governance": { "status": "golden" }
+    },
+    {
+      "node_id": "shrinkage_rate",
+      "category": "loss_prevention",
+      "description": "Percentage of inventory lost to theft, damage, or error.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "DIVIDE(SUMX({shrinkage_table}, {shrinkage_amount}), SUMX({inventory_table}, {total_inventory_value}))",
+        "arguments": {
+          "shrinkage_table": "table:inventory_shrinkage",
+          "shrinkage_amount": "field:value",
+          "inventory_table": "table:inventory_value",
+          "total_inventory_value": "field:amount"
+        }
+      },
+      "badge": "🟨",
+      "function_class": "DAX-Iterator",
+      "functions_used": ["SUMX", "DIVIDE"],
+      "governance": { "status": "golden" }
+    },
+    {
+      "node_id": "conversion_rate",
+      "category": "store_traffic",
+      "description": "Percentage of store visitors who make a purchase.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "DIVIDE(SUMX({purchases_table}, {purchase_count}), SUMX({traffic_table}, {visitor_count}))",
+        "arguments": {
+          "purchases_table": "table:store_purchases",
+          "purchase_count": "field:count",
+          "traffic_table": "table:store_traffic",
+          "visitor_count": "field:count"
+        }
+      },
+      "badge": "🟨",
+      "function_class": "DAX-Iterator",
+      "functions_used": ["SUMX", "DIVIDE"],
+      "governance": { "status": "golden" }
+    },
+    {
+      "node_id": "employee_productivity",
+      "category": "staff_efficiency",
+      "description": "Sales revenue per employee hour worked.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "DIVIDE(SUMX({sales_table}, {total_sales}), SUMX({labor_table}, {total_hours}))",
+        "arguments": {
+          "sales_table": "table:store_sales",
+          "total_sales": "field:revenue",
+          "labor_table": "table:employee_hours",
+          "total_hours": "field:hours"
+        }
+      },
+      "badge": "🟨",
+      "function_class": "DAX-Iterator",
+      "functions_used": ["SUMX", "DIVIDE"],
+      "governance": { "status": "golden" }
+    },
+    {
+      "node_id": "seasonal_sales_index",
+      "category": "seasonal_analysis",
+      "description": "Sales performance relative to seasonal average.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "DIVIDE(SUMX({current_table}, {current_sales}), AVERAGEX({seasonal_table}, {seasonal_average}))",
+        "arguments": {
+          "current_table": "table:current_period_sales",
+          "current_sales": "field:revenue",
+          "seasonal_table": "table:seasonal_averages",
+          "seasonal_average": "field:avg_revenue"
+        }
+      },
+      "badge": "🟨",
+      "function_class": "DAX-Iterator",
+      "functions_used": ["SUMX", "AVERAGEX", "DIVIDE"],
+      "governance": { "status": "golden" }
+    },
+    {
+      "node_id": "effective_interest_income",
+      "category": "income_recognition",
+      "description": "Interest income using the effective interest rate (EIR) method for amortised cost instruments (HTM/Loans).",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "{opening_carrying_amount} * {effective_interest_rate}",
+        "arguments": {
+          "opening_carrying_amount": "field:opening_carrying_amount",
+          "effective_interest_rate": "field:effective_interest_rate"
+        }
+      },
+      "preaggregation": {
+        "enabled": true,
+        "grain": "monthly",
+        "aggregation": "sum",
+        "snapshot": false,
+        "rollups": ["quarterly", "yearly"]
+      },
+      "badge": "🟩",
+      "function_class": "DAX-Financial",
+      "functions_used": ["MULTIPLY"],
+      "governance": { "status": "golden" }
+    },
+    {
+      "node_id": "premium_discount_amortization",
+      "category": "amortization",
+      "description": "Effective interest amortization of premium (negative) or accretion of discount (positive).",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "({effective_interest_income} - {coupon_cash_received})",
+        "arguments": {
+          "effective_interest_income": "calc:effective_interest_income",
+          "coupon_cash_received": "field:coupon_cash_received"
+        }
+      },
+      "preaggregation": {
+        "enabled": true,
+        "grain": "monthly",
+        "aggregation": "sum",
+        "snapshot": false
+      },
+      "badge": "🟧",
+      "function_class": "DAX-Logical",
+      "functions_used": ["SUBTRACT"],
+      "governance": { "status": "golden" }
+    },
+    {
+      "node_id": "carrying_amount_rollforward",
+      "category": "measurement",
+      "description": "Amortised cost carrying amount rollforward: opening + EIR income − coupons ± amortization − credit_loss − fx.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "{opening_carrying_amount} + {effective_interest_income} - {coupon_cash_received} + {premium_discount_amortization} - {credit_loss_allowance_change} + {fx_remeasurement}",
+        "arguments": {
+          "opening_carrying_amount": "field:opening_carrying_amount",
+          "effective_interest_income": "calc:effective_interest_income",
+          "coupon_cash_received": "field:coupon_cash_received",
+          "premium_discount_amortization": "calc:premium_discount_amortization",
+          "credit_loss_allowance_change": "calc:credit_loss_allowance_change",
+          "fx_remeasurement": "calc:fx_remeasurement"
+        }
+      },
+      "preaggregation": {
+        "enabled": true,
+        "grain": "monthly",
+        "aggregation": "last_non_null",
+        "snapshot": true,
+        "rollups": ["quarterly", "yearly"]
+      },
+      "badge": "🟧",
+      "function_class": "DAX-Logical",
+      "functions_used": ["ADD", "SUBTRACT"],
+      "governance": { "status": "golden" }
+    },
+    {
+      "node_id": "fair_value_change_pnl_trading",
+      "category": "fair_value",
+      "description": "Unrealised fair value gain/loss for trading (FVTPL) recognised in P&L.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "{fair_value_current} - {fair_value_prior}",
+        "arguments": {
+          "fair_value_current": "field:fair_value_current",
+          "fair_value_prior": "field:fair_value_prior"
+        }
+      },
+      "preaggregation": {
+        "enabled": true,
+        "grain": "daily",
+        "aggregation": "sum",
+        "snapshot": false,
+        "rollups": ["monthly", "quarterly"]
+      },
+      "badge": "🟧",
+      "function_class": "DAX-Logical",
+      "functions_used": ["SUBTRACT"],
+      "governance": { "status": "golden" }
+    },
+    {
+      "node_id": "fair_value_change_oci_afs",
+      "category": "fair_value",
+      "description": "Unrealised fair value gain/loss for AFS (FVOCI) recognised in OCI until realised.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "{fair_value_current} - {amortised_cost_current}",
+        "arguments": {
+          "fair_value_current": "field:fair_value_current",
+          "amortised_cost_current": "calc:carrying_amount_rollforward"
+        }
+      },
+      "preaggregation": {
+        "enabled": true,
+        "grain": "monthly",
+        "aggregation": "sum",
+        "snapshot": false
+      },
+      "badge": "🟧",
+      "function_class": "DAX-Logical",
+      "functions_used": ["SUBTRACT"],
+      "governance": { "status": "golden" }
+    },
+    {
+      "node_id": "realised_gain_loss_disposal",
+      "category": "realisation",
+      "description": "Realised gain/loss on disposal = consideration − carrying amount at sale.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "{consideration_received} - {carrying_amount_at_sale}",
+        "arguments": {
+          "consideration_received": "field:consideration_received",
+          "carrying_amount_at_sale": "field:carrying_amount_at_sale"
+        }
+      },
+      "preaggregation": {
+        "enabled": true,
+        "grain": "monthly",
+        "aggregation": "sum",
+        "snapshot": false
+      },
+      "badge": "🟧",
+      "function_class": "DAX-Logical",
+      "functions_used": ["SUBTRACT"],
+      "governance": { "status": "golden" }
+    },
+    {
+      "node_id": "credit_loss_allowance_change",
+      "category": "impairment",
+      "description": "Period movement in expected credit loss (ECL) allowance recognised in P&L.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "{ecl_closing} - {ecl_opening}",
+        "arguments": {
+          "ecl_closing": "field:ecl_closing",
+          "ecl_opening": "field:ecl_opening"
+        }
+      },
+      "preaggregation": {
+        "enabled": true,
+        "grain": "monthly",
+        "aggregation": "sum",
+        "snapshot": false
+      },
+      "badge": "🟩",
+      "function_class": "DAX-Financial",
+      "functions_used": ["SUBTRACT"],
+      "governance": { "status": "golden" }
+    },
+    {
+      "node_id": "fx_remeasurement",
+      "category": "fx_translation",
+      "description": "Remeasurement of monetary items to functional currency at closing rate; P&L impact.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "({closing_rate} - {average_rate}) * {monetary_balance_foreign}",
+        "arguments": {
+          "closing_rate": "field:fx_rate_closing",
+          "average_rate": "field:fx_rate_avg_period",
+          "monetary_balance_foreign": "field:monetary_balance_foreign"
+        }
+      },
+      "preaggregation": {
+        "enabled": true,
+        "grain": "monthly",
+        "aggregation": "sum",
+        "snapshot": false
+      },
+      "badge": "🟩",
+      "function_class": "DAX-Financial",
+      "functions_used": ["SUBTRACT", "MULTIPLY"],
+      "governance": { "status": "golden" }
+    },
+    {
+      "node_id": "fx_translation_reserve_oci",
+      "category": "fx_translation",
+      "description": "Cumulative translation adjustment (CTA) for foreign operations recognised in OCI.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "COALESCE({cta_prior}, 0) + {cta_movement}",
+        "arguments": {
+          "cta_prior": "field:cta_prior",
+          "cta_movement": "field:cta_movement"
+        }
+      },
+      "preaggregation": {
+        "enabled": true,
+        "grain": "monthly",
+        "aggregation": "last_non_null",
+        "snapshot": true,
+        "rollups": ["quarterly", "yearly"]
+      },
+      "badge": "🟧",
+      "function_class": "DAX-Logical",
+      "functions_used": ["COALESCE", "ADD"],
+      "governance": { "status": "golden" }
+    },
+    {
+      "node_id": "equity_method_share_of_profit",
+      "category": "equity_method",
+      "description": "Investor share of investee profit/loss based on ownership percentage.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "{investee_net_income} * {ownership_pct}",
+        "arguments": {
+          "investee_net_income": "field:investee_net_income",
+          "ownership_pct": "field:ownership_pct"
+        }
+      },
+      "preaggregation": {
+        "enabled": true,
+        "grain": "quarterly",
+        "aggregation": "sum",
+        "snapshot": false
+      },
+      "badge": "🟩",
+      "function_class": "DAX-Financial",
+      "functions_used": ["MULTIPLY"],
+      "governance": { "status": "golden" }
+    },
+    {
+      "node_id": "equity_method_carrying_value",
+      "category": "equity_method",
+      "description": "Carrying value rollforward: opening + share_of_profit − dividends ± adjustments (OCI/FX/impairment).",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "{opening_carrying_value} + {equity_method_share_of_profit} - {dividends_received} + {oci_adjustment} + {fx_translation}",
+        "arguments": {
+          "opening_carrying_value": "field:opening_carrying_value",
+          "equity_method_share_of_profit": "calc:equity_method_share_of_profit",
+          "dividends_received": "field:dividends_received",
+          "oci_adjustment": "field:oci_adjustment",
+          "fx_translation": "calc:fx_translation_reserve_oci"
+        }
+      },
+      "preaggregation": {
+        "enabled": true,
+        "grain": "quarterly",
+        "aggregation": "last_non_null",
+        "snapshot": true
+      },
+      "badge": "🟧",
+      "function_class": "DAX-Logical",
+      "functions_used": ["ADD", "SUBTRACT"],
+      "governance": { "status": "golden" }
+    },
+    {
+      "node_id": "nci_share_of_profit",
+      "category": "consolidation",
+      "description": "Non-controlling interest (NCI) share of subsidiary profit.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "{subsidiary_profit} * {nci_pct}",
+        "arguments": {
+          "subsidiary_profit": "field:subsidiary_profit",
+          "nci_pct": "field:nci_pct"
+        }
+      },
+      "preaggregation": {
+        "enabled": true,
+        "grain": "quarterly",
+        "aggregation": "sum",
+        "snapshot": false
+      },
+      "badge": "🟩",
+      "function_class": "DAX-Financial",
+      "functions_used": ["MULTIPLY"],
+      "governance": { "status": "golden" }
+    },
+    {
+      "node_id": "impairment_loss_incurred",
+      "category": "impairment",
+      "description": "Impairment loss when carrying amount exceeds recoverable amount.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "MAX(0, {carrying_amount} - {recoverable_amount})",
+        "arguments": {
+          "carrying_amount": "field:carrying_amount",
+          "recoverable_amount": "field:recoverable_amount"
+        }
+      },
+      "preaggregation": {
+        "enabled": true,
+        "grain": "quarterly",
+        "aggregation": "sum",
+        "snapshot": false
+      },
+      "badge": "🟧",
+      "function_class": "DAX-Logical",
+      "functions_used": ["MAX", "SUBTRACT"],
+      "governance": { "status": "golden" }
+    },
+    {
+      "node_id": "dividend_income_accrual",
+      "category": "income_recognition",
+      "description": "Dividend income recognised when the right to receive is established.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "SUMX(FILTER({dividend_events}, {ex_date} <= {period_end}), {dividend_amount})",
+        "arguments": {
+          "dividend_events": "table:dividend_events",
+          "ex_date": "field:ex_date",
+          "period_end": "field:period_end",
+          "dividend_amount": "field:dividend_amount"
+        }
+      },
+      "preaggregation": {
+        "enabled": true,
+        "grain": "monthly",
+        "aggregation": "sum",
+        "snapshot": false,
+        "rollups": ["quarterly", "yearly"]
+      },
+      "badge": "🟨",
+      "function_class": "DAX-Iterator",
+      "functions_used": ["SUMX", "FILTER"],
+      "governance": { "status": "golden" }
+    },
+    {
+      "node_id": "fair_value_hierarchy_exposure",
+      "category": "disclosure",
+      "description": "Exposure by fair value hierarchy level (Level 1/2/3) for disclosure.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "SUMX(FILTER({positions}, {fv_level} = SELECTEDVALUE({level_filter})), {fair_value})",
+        "arguments": {
+          "positions": "table:positions",
+          "fv_level": "field:fv_hierarchy_level",
+          "level_filter": "field:level_filter",
+          "fair_value": "field:fair_value"
+        }
+      },
+      "preaggregation": {
+        "enabled": true,
+        "grain": "quarterly",
+        "aggregation": "sum",
+        "snapshot": true,
+        "rollups": ["yearly"],
+        "dimensions": ["fv_hierarchy_level"]
+      },
+      "badge": "🟪",
+      "function_class": "DAX-Meta",
+      "functions_used": ["SUMX", "FILTER", "SELECTEDVALUE"],
+      "governance": { "status": "golden" }
+    },
+    {
+      "node_id": "oci_recycling_on_disposal",
+      "category": "oci",
+      "description": "Recycling of accumulated OCI to P&L upon disposal of FVOCI assets.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "MIN({accumulated_oci_balance}, {realised_gain_loss_disposal})",
+        "arguments": {
+          "accumulated_oci_balance": "field:accumulated_oci_balance",
+          "realised_gain_loss_disposal": "calc:realised_gain_loss_disposal"
+        }
+      },
+      "preaggregation": {
+        "enabled": true,
+        "grain": "monthly",
+        "aggregation": "sum",
+        "snapshot": false
+      },
+      "badge": "🟧",
+      "function_class": "DAX-Logical",
+      "functions_used": ["MIN"],
+      "governance": { "status": "golden" }
+    },
+    {
+      "node_id": "spot_conversion",
+      "category": "conversion",
+      "description": "Convert transaction amount from source to reporting currency using spot FX rate on transaction date.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "{amount_source} * {spot_rate}",
+        "arguments": {
+          "amount_source": "field:amount_source_currency",
+          "spot_rate": "field:spot_fx_rate"
+        }
+      },
+      "badge": "🟩",
+      "function_class": "DAX-Financial",
+      "functions_used": ["MULTIPLY"],
+      "governance": { "status": "golden" }
+    },
+    {
+      "node_id": "average_period_rate",
+      "category": "conversion",
+      "description": "Average FX rate over reporting period for P&L translation.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "AVERAGEX(FILTER({fx_rates}, {date} >= {period_start} && {date} <= {period_end}), {fx_rate})",
+        "arguments": {
+          "fx_rates": "table:fx_rates",
+          "date": "field:date",
+          "period_start": "field:period_start",
+          "period_end": "field:period_end",
+          "fx_rate": "field:fx_rate"
+        }
+      },
+      "badge": "🟨",
+      "function_class": "DAX-Iterator",
+      "functions_used": ["AVERAGEX", "FILTER"],
+      "governance": { "status": "golden" }
+    },
+    {
+      "node_id": "closing_rate_translation",
+      "category": "translation",
+      "description": "Translate monetary assets/liabilities at period-end closing rate.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "{balance_foreign} * {closing_rate}",
+        "arguments": {
+          "balance_foreign": "field:balance_foreign_currency",
+          "closing_rate": "field:fx_rate_closing"
+        }
+      },
+      "badge": "🟩",
+      "function_class": "DAX-Financial",
+      "functions_used": ["MULTIPLY"],
+      "governance": { "status": "golden" }
+    },
+    {
+      "node_id": "net_fx_exposure",
+      "category": "exposure",
+      "description": "FX assets minus FX liabilities per currency.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "{fx_assets} - {fx_liabilities}",
+        "arguments": {
+          "fx_assets": "field:fx_assets",
+          "fx_liabilities": "field:fx_liabilities"
+        }
+      },
+      "badge": "🟧",
+      "function_class": "DAX-Logical",
+      "functions_used": ["SUBTRACT"],
+      "governance": { "status": "golden" }
+    },
+    {
+      "node_id": "open_fx_position",
+      "category": "exposure",
+      "description": "Unhedged FX exposure after derivatives.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "{net_fx_exposure} - {hedged_amount}",
+        "arguments": {
+          "net_fx_exposure": "calc:net_fx_exposure",
+          "hedged_amount": "field:hedged_amount"
+        }
+      },
+      "badge": "🟧",
+      "function_class": "DAX-Logical",
+      "functions_used": ["SUBTRACT"],
+      "governance": { "status": "golden" }
+    },
+    {
+      "node_id": "fx_delta",
+      "category": "risk",
+      "description": "Sensitivity of portfolio value to 1% FX move.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "{portfolio_value} * 0.01",
+        "arguments": {
+          "portfolio_value": "field:portfolio_value"
+        }
+      },
+      "badge": "🟩",
+      "function_class": "DAX-Financial",
+      "functions_used": ["MULTIPLY"],
+      "governance": { "status": "draft" }
+    },
+    {
+      "node_id": "currency_contribution_to_return",
+      "category": "performance_attribution",
+      "description": "Portion of total portfolio return attributable to currency movements.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "{portfolio_return_base} - {portfolio_return_local}",
+        "arguments": {
+          "portfolio_return_base": "calc:portfolio_return_in_base_currency",
+          "portfolio_return_local": "calc:portfolio_return_in_local_currency"
+        }
+      },
+      "badge": "🟧",
+      "function_class": "DAX-Logical",
+      "functions_used": ["SUBTRACT"],
+      "governance": { "status": "golden" }
+    },
+    {
+      "node_id": "hedging_effectiveness",
+      "category": "performance_attribution",
+      "description": "Hedge P/L divided by exposure P/L.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "DIVIDE({hedge_pl}, {exposure_pl})",
+        "arguments": {
+          "hedge_pl": "field:hedge_profit_loss",
+          "exposure_pl": "field:exposure_profit_loss"
+        }
+      },
+      "badge": "🟧",
+      "function_class": "DAX-Logical",
+      "functions_used": ["DIVIDE"],
+      "governance": { "status": "golden" }
+    },
+    {
+      "node_id": "cta_balance",
+      "category": "regulatory",
+      "description": "Cumulative translation adjustment (CTA) reserve for FX translation of foreign operations.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "COALESCE({cta_prior}, 0) + {cta_movement}",
+        "arguments": {
+          "cta_prior": "field:cta_prior",
+          "cta_movement": "field:cta_movement"
+        }
+      },
+      "badge": "🟧",
+      "function_class": "DAX-Logical",
+      "functions_used": ["COALESCE", "ADD"],
+      "governance": { "status": "golden" }
+    },
+    {
+      "node_id": "realised_fx_gain_loss",
+      "category": "pnl",
+      "description": "FX gain/loss from settlement of FX transactions.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "{settlement_amount_base} - {contracted_amount_base}",
+        "arguments": {
+          "settlement_amount_base": "field:settlement_amount_base",
+          "contracted_amount_base": "field:contracted_amount_base"
+        }
+      },
+      "badge": "🟧",
+      "function_class": "DAX-Logical",
+      "functions_used": ["SUBTRACT"],
+      "governance": { "status": "golden" }
+    },
+    {
+      "node_id": "unrealised_fx_gain_loss",
+      "category": "pnl",
+      "description": "FX gain/loss from remeasurement of open positions.",
+      "financial_calc": {
+        "type": "dax_formula",
+        "formula": "({current_fx_rate} - {prior_fx_rate}) * {open_position_foreign}",
+        "arguments": {
+          "current_fx_rate": "field:current_fx_rate",
+          "prior_fx_rate": "field:prior_fx_rate",
+          "open_position_foreign": "field:open_position_foreign"
+        }
+      },
+      "badge": "🟩",
+      "function_class": "DAX-Financial",
+      "functions_used": ["SUBTRACT", "MULTIPLY"],
+      "governance": { "status": "golden" }
+    }
+  ]
+}

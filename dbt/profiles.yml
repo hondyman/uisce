@@ -1,0 +1,12 @@
+semlayer:
+  target: dev
+  outputs:
+    dev:
+      type: trino
+      method: none  # No auth for localhost/docker
+      user: admin
+      database: iceberg
+      schema: analytics
+      host: localhost
+      port: 8081
+      threads: 1

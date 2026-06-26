@@ -1,0 +1,122 @@
+##
+## Historical Trades Cube - Cold Tier (StarRocks External Tables on Parquet)
+##
+## Long-term historical trade data stored in Parquet/Iceberg
+## Optimized for analytical queries over large time ranges
+## 
+## WHY StarRocks external tables instead of Trino?
+## 1. Single query engine (simpler ops)
+## 2. Can JOIN with hot tables in same query
+## 3. Pre-aggs stored in StarRocks native = always fast
+## 4. External tables read Parquet directly (no data copy)
+##
+
+cubes:
+- name: HistoricalTrades
+  sql: SELECT * FROM semantic_cold.transactions
+  title: Historical Trades Archive
+  description: Complete trade history (cold tier - StarRocks external tables on Parquet)
+
+  # Route to StarRocks cold database (external tables on Parquet)
+  data_source: starrocks_cold
+
+  # Refresh daily (cold data changes infrequently)
+  refresh_key:
+    every: 1 day
+
+  dimensions:
+  - name: tenant_id
+    sql: tenant_id
+    type: string
+    public: false
+
+  - name: datasource_id
+    sql: datasource_id
+    type: string
+    public: false
+
+  - name: trade_id
+    sql: trade_id
+    type: string
+    primary_key: true
+
+  - name: event_time
+    sql: event_time
+    type: time
+
+  - name: trade_date
+    sql: DATE(event_time)
+    type: time
+
+  - name: portfolio_id
+    sql: portfolio_id
+    type: string
+
+  - name: symbol
+    sql: symbol
+    type: string
+
+  - name: side
+    sql: side
+    type: string
+
+  - name: currency
+    sql: currency
+    type: string
+
+  - name: basis_id
+    sql: basis_id
+    type: string
+
+  measures:
+  - name: count
+    type: count
+
+  - name: total_notional
+    sql: notional
+    type: sum
+    format: currency
+
+  - name: avg_notional
+    sql: notional
+    type: avg
+    format: currency
+
+  - name: total_quantity
+    sql: quantity
+    type: sum
+
+  - name: unique_portfolios
+    sql: portfolio_id
+    type: count_distinct
+  # Pre-aggregations computed from Trino but stored in StarRocks
+  pre_aggregations:
+  - name: historical_yearly_summary
+    type: rollup
+    measures:
+    - count
+    - total_notional
+    - total_quantity
+    dimensions:
+    - symbol
+    - currency
+    time_dimension: trade_date
+    granularity: year
+    partition_granularity: year
+    refresh_key:
+      every: 1 week
+    # Materialize in StarRocks for fast access
+    external: true
+
+  - name: historical_by_portfolio_quarter
+    type: rollup
+    measures:
+    - count
+    - total_notional
+    dimensions:
+    - portfolio_id
+    time_dimension: trade_date
+    granularity: quarter
+    refresh_key:
+      every: 1 month
+    external: true

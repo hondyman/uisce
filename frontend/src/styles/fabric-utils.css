@@ -1,0 +1,16 @@
+/* Utility styles for fabric pages to replace inline styles */
+.fabric-pre {
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.no-vertical-padding-cell {
+  padding-top: 0 !important;
+  padding-bottom: 0 !important;
+}
+
+.lazy-syntax-wrapper {
+  margin: 0;
+  max-height: 200px;
+  overflow: auto;
+}
