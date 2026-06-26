@@ -11,6 +11,7 @@ import FixedIncomeDashboard from "./components/FixedIncomeDashboard";
 import BundleExplorer from "./components/BundleExplorer";
 import CalculationsLibraryPage from "./features/fabric/pages/CalculationsLibraryPage";
 import LoginPage from "./pages/AuthPage";
+import AuthCallbackPage from "./pages/AuthCallbackPage";
 import ProtectedRoute from "./components/ProtectedRoute";
 import CalculatedFieldBuilderPage from "./pages/CalculatedFieldBuilderPage";
 import IPWhitelistManagementPage from "./features/fabric/pages/IPWhitelistManagementPage";
@@ -78,6 +79,7 @@ import { Feed } from "./features/feed/components/Feed";
 import { ApprovalInboxPage } from "./features/wealth/pages/ApprovalInboxPage";
 import { GenUIApprovalInboxPage } from "./features/workflow/pages/GenUIApprovalInboxPage";
 import { GenUIProposalDemoPage } from "./features/workflow/pages/GenUIProposalDemoPage";
+import GenUIChatPage from "./pages/GenUIChatPage";
 import { FactorAnalysisPage } from "./features/analytics/pages/FactorAnalysisPage";
 import AdvisorDashboard from "./pages/AdvisorDashboard";
 import DirectIndexingPage from "./pages/investment/DirectIndexingPage";
@@ -175,6 +177,7 @@ export function AppRoutes() {
         <Route path="/app/:slug" element={<RuntimePage />} />
         <Route path="/change-review" element={<ChangeReviewPage />} />
         <Route path="/login" element={<LoginPage />} />
+        <Route path="/auth/callback" element={<AuthCallbackPage />} />
         <Route path="/*" element={<ProtectedApp />} />
       </Routes>
     </RouteBlockerProvider>
@@ -356,6 +359,11 @@ function ProtectedApp() {
         <Route path="/core/approval-inbox" element={<ProtectedRoute><ApprovalInboxPage /></ProtectedRoute>} />
         <Route path="/core/sla-dashboard" element={<ProtectedRoute><SLADashboardPage /></ProtectedRoute>} />
         <Route path="/core/business-objects" element={<ProtectedRoute><BusinessObjectExplorerPage /></ProtectedRoute>} />
+        
+        {/* GenUI Routes */}
+        <Route path="/core/genui-chat" element={<ProtectedRoute><GenUIChatPage /></ProtectedRoute>} />
+        <Route path="/core/genui-proposal" element={<ProtectedRoute><GenUIProposalDemoPage /></ProtectedRoute>} />
+        <Route path="/core/genui-inbox" element={<ProtectedRoute><GenUIApprovalInboxPage /></ProtectedRoute>} />
         {/* Compatibility Redirects */}
         <Route path="/audit" element={<Navigate to="/setup/audit" replace />} />
         <Route path="/rbac" element={<Navigate to="/admin/rbac/roles" replace />} />

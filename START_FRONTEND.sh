@@ -26,9 +26,9 @@ echo -e "${BLUE}╚════════════════════�
 echo ""
 
 # Check if port is in use
-if lsof -Pi :5173 -sTCP:LISTEN -t >/dev/null 2>&1; then
-    echo -e "${YELLOW}ℹ️  Port 5173 is in use. Killing existing process...${NC}"
-    lsof -ti:5173 | xargs kill -9 2>/dev/null || true
+if lsof -Pi :3000 -sTCP:LISTEN -t >/dev/null 2>&1; then
+    echo -e "${YELLOW}ℹ️  Port 3000 is in use. Killing existing process...${NC}"
+    lsof -ti:3000 | xargs kill -9 2>/dev/null || true
     sleep 2
 fi
 
@@ -49,7 +49,7 @@ sleep 3
 
 if kill -0 $FRONTEND_PID 2>/dev/null; then
     echo -e "${GREEN}✅ Frontend server started${NC}"
-    echo -e "${GREEN}   URL: http://localhost:5173${NC}"
+    echo -e "${GREEN}   URL: http://localhost:3000${NC}"
     echo -e "${GREEN}   PID: $FRONTEND_PID${NC}"
     echo -e "${GREEN}   Logs: $LOG_DIR/frontend_${TIMESTAMP}.log${NC}"
     echo ""

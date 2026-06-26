@@ -1,6 +1,7 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback, useRef } from 'react';
+import { User as OidcUser } from 'oidc-client-ts';
 import { devLog, devError } from '../utils/devLogger';
-import { apiPost } from '../utils/api';
+import { userManager } from '../config/oidc';
 import { useToast } from '../hooks/use-toast';
 
 interface User {
@@ -24,15 +25,6 @@ interface User {
   }>;
 }
 
-interface AuthResponse {
-  user: User;
-  access_token: string;
-  refresh_token: string;
-  token_type: string;
-  expires_in: number;
-  expires_at?: number; // Add expiration timestamp
-}
-
 interface AuthContextType {
   user: User | null;
   token: string | null;
@@ -40,12 +32,11 @@ interface AuthContextType {
   tokenExpiresAt: number | null;
   isAuthenticated: boolean;
   isLoading: boolean;
-  // convenience helper to determine admin status
   isAdmin: () => boolean;
   isCoreAdmin: () => boolean;
   canManageCoreAssets: () => boolean;
   canManageCustomAssets: () => boolean;
-  login: (email: string, password: string) => Promise<void>;
+  login: (email?: string, password?: string) => Promise<void>;
   register: (email: string, password: string, name: string, organization?: string) => Promise<void>;
   forgotPassword: (email: string) => Promise<void>;
   resetPassword: (token: string, newPassword: string) => Promise<void>;
@@ -55,12 +46,107 @@ interface AuthContextType {
   getValidToken: () => Promise<string | null>;
 }
 
-
-
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 interface AuthProviderProps {
   children: ReactNode;
+}
+
+const AUTH_TOKEN_KEY = 'auth_token';
+const AUTH_REFRESH_TOKEN_KEY = 'auth_refresh_token';
+const AUTH_USER_KEY = 'auth_user';
+const AUTH_EXPIRES_AT_KEY = 'auth_expires_at';
+
+function extractRoles(profile: Record<string, unknown>): string[] {
+  const roles: string[] = [];
+
+  if (Array.isArray(profile.roles)) {
+    for (const r of profile.roles) {
+      if (typeof r === 'string') roles.push(r);
+    }
+  }
+
+  const realmAccess = profile.realm_access as Record<string, unknown> | undefined;
+  if (realmAccess && Array.isArray(realmAccess.roles)) {
+    for (const r of realmAccess.roles) {
+      if (typeof r === 'string') roles.push(r);
+    }
+  }
+
+  const resourceAccess = profile.resource_access as Record<string, Record<string, unknown>> | undefined;
+  if (resourceAccess) {
+    for (const client of Object.keys(resourceAccess)) {
+      const clientAccess = resourceAccess[client];
+      if (clientAccess && Array.isArray(clientAccess.roles)) {
+        for (const r of clientAccess.roles) {
+          if (typeof r === 'string') roles.push(`${client}:${r}`);
+        }
+      }
+    }
+  }
+
+  return [...new Set(roles)];
+}
+
+function mapProfileToUser(profile: Record<string, unknown>, roles: string[]): User {
+  const email = (profile.email as string) || (profile.preferred_username as string) || '';
+  const name =
+    (profile.name as string) ||
+    (profile.preferred_username as string) ||
+    email;
+
+  const isCoreAdmin = roles.some(
+    (r) => r === 'admin' || r === 'realm-admin' || r === 'core_admin' || r === 'core-admin',
+  );
+
+  return {
+    id: (profile.sub as string) || (profile.preferred_username as string) || email,
+    email,
+    name,
+    role: roles[0] || 'user',
+    organization: (profile.organization as string) || '',
+    permissions: [],
+    is_active: true,
+    roles,
+    is_core_admin: isCoreAdmin,
+    isCoreAdmin: isCoreAdmin,
+    is_admin: isCoreAdmin || roles.includes('admin'),
+  };
+}
+
+function persistOidcUser(oidcUser: OidcUser): void {
+  try {
+    // Send the OIDC ID token to the backend verifier.
+    const token = oidcUser.id_token || oidcUser.access_token;
+    const refreshToken = oidcUser.refresh_token;
+    const roles = extractRoles(oidcUser.profile);
+    const user = mapProfileToUser(oidcUser.profile, roles);
+
+    let expiresAt: number | null = null;
+    if (typeof oidcUser.expires_at === 'number') {
+      expiresAt = oidcUser.expires_at * 1000;
+    } else if (oidcUser.expires_in && typeof oidcUser.expires_in === 'number') {
+      expiresAt = Date.now() + oidcUser.expires_in * 1000;
+    }
+
+    localStorage.setItem(AUTH_TOKEN_KEY, token);
+    if (refreshToken) {
+      localStorage.setItem(AUTH_REFRESH_TOKEN_KEY, refreshToken);
+    }
+    localStorage.setItem(AUTH_USER_KEY, JSON.stringify(user));
+    if (expiresAt) {
+      localStorage.setItem(AUTH_EXPIRES_AT_KEY, expiresAt.toString());
+    }
+  } catch (error) {
+    devError('Error persisting OIDC user:', error);
+  }
+}
+
+function clearPersistedAuth(): void {
+  localStorage.removeItem(AUTH_TOKEN_KEY);
+  localStorage.removeItem(AUTH_REFRESH_TOKEN_KEY);
+  localStorage.removeItem(AUTH_USER_KEY);
+  localStorage.removeItem(AUTH_EXPIRES_AT_KEY);
 }
 
 export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
@@ -69,219 +155,176 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [refreshTokenValue, setRefreshTokenValue] = useState<string | null>(null);
   const [tokenExpiresAt, setTokenExpiresAt] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const oidcUserRef = useRef<OidcUser | null>(null);
+  const toast = useToast();
 
-  // Load auth state from localStorage on mount
-  useEffect(() => {
-    const loadAuthState = () => {
-      try {
-        const storedToken = localStorage.getItem('auth_token');
-        const storedRefreshToken = localStorage.getItem('auth_refresh_token');
-        const storedUser = localStorage.getItem('auth_user');
-        const storedExpiresAt = localStorage.getItem('auth_expires_at');
-
-        if (storedToken && storedUser) {
-          setToken(storedToken);
-          setRefreshTokenValue(storedRefreshToken);
-          setUser(JSON.parse(storedUser));
-          setTokenExpiresAt(storedExpiresAt ? parseInt(storedExpiresAt) : null);
-        }
-      } catch (error) {
-        devError('Error loading auth state from localStorage:', error);
-        // Clear invalid data
-        localStorage.removeItem('auth_token');
-        localStorage.removeItem('auth_refresh_token');
-        localStorage.removeItem('auth_user');
-        localStorage.removeItem('auth_expires_at');
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    loadAuthState();
-  }, []);
-
-  const login = async (email: string, password: string): Promise<void> => {
-    try {
-      const authData: AuthResponse = await apiPost('auth/login', { email, password });
-
-      // Calculate expiration time
-      const expiresAt = authData.expires_at || (Date.now() + (authData.expires_in * 1000));
-
-      // Store auth data
-      setUser(authData.user);
-      setToken(authData.access_token);
-      setRefreshTokenValue(authData.refresh_token);
-      setTokenExpiresAt(expiresAt);
-
-      // Persist to localStorage
-      localStorage.setItem('auth_token', authData.access_token);
-      localStorage.setItem('auth_refresh_token', authData.refresh_token);
-      localStorage.setItem('auth_user', JSON.stringify(authData.user));
-      localStorage.setItem('auth_expires_at', expiresAt.toString());
-
-      devLog('User logged in successfully:', authData.user.email);
-    } catch (error) {
-      devLog('Login error:', error);
-      throw error;
-    }
-  };
-
-  const register = async (email: string, password: string, name: string, organization?: string): Promise<void> => {
-    try {
-      const authData: AuthResponse = await apiPost('auth/register', { 
-        email, 
-        password, 
-        name, 
-        organization: organization || 'Default Organization' 
-      });
-
-      // Calculate expiration time
-      const expiresAt = authData.expires_at || (Date.now() + (authData.expires_in * 1000));
-
-      // Store auth data
-      setUser(authData.user);
-      setToken(authData.access_token);
-      setRefreshTokenValue(authData.refresh_token);
-      setTokenExpiresAt(expiresAt);
-
-      // Persist to localStorage
-      localStorage.setItem('auth_token', authData.access_token);
-      localStorage.setItem('auth_refresh_token', authData.refresh_token);
-      localStorage.setItem('auth_user', JSON.stringify(authData.user));
-      localStorage.setItem('auth_expires_at', expiresAt.toString());
-
-      devLog('User registered successfully:', authData.user.email);
-    } catch (error) {
-      devLog('Registration error:', error);
-      throw error;
-    }
-  };
-
-  const forgotPassword = async (email: string): Promise<void> => {
-    try {
-      await apiPost('auth/forgot-password', { email });
-      devLog('Password reset email sent to:', email);
-    } catch (error) {
-      devLog('Forgot password error:', error);
-      throw error;
-    }
-  };
-
-  const resetPassword = async (token: string, newPassword: string): Promise<void> => {
-    try {
-      await apiPost('auth/reset-password', { token, password: newPassword });
-      devLog('Password reset successfully');
-    } catch (error) {
-      devLog('Reset password error:', error);
-      throw error;
-    }
-  };
-
-  const toast = useToast()
-
-  const logout = async () => {
-    // Clear local auth state first to ensure user can always log out
-    const wasLoggedIn = !!user;
-    setUser(null);
-    setToken(null);
-    setRefreshTokenValue(null);
-    setTokenExpiresAt(null);
-    localStorage.removeItem('auth_token');
-    localStorage.removeItem('auth_refresh_token');
-    localStorage.removeItem('auth_user');
-    localStorage.removeItem('auth_expires_at');
-
-    // Show toast immediately after clearing
-    if (wasLoggedIn) {
-      toast.toast({ title: 'Logged out', description: 'You have been signed out.', variant: 'default' });
-      // Attempt to notify backend to invalidate session (don't await to avoid blocking)
-      apiPost('auth/logout', {}).catch((err) => {
-        devLog('Logout request failed:', err);
-      });
-    }
-
-    devLog('User logged out');
-  };
-
-  const refreshToken = async (): Promise<void> => {
-    if (!refreshTokenValue) {
-      devLog('No refresh token available');
-      throw new Error('No refresh token available');
-    }
-
-    try {
-      const response = await apiPost('auth/refresh', { refresh_token: refreshTokenValue });
-      
-      // Calculate new expiration time
-      const expiresAt = response.expires_at || (Date.now() + (response.expires_in * 1000));
-
-      // Update auth data
-      setToken(response.access_token);
-      setRefreshTokenValue(response.refresh_token);
-      setTokenExpiresAt(expiresAt);
-
-      // Update localStorage
-      localStorage.setItem('auth_token', response.access_token);
-      localStorage.setItem('auth_refresh_token', response.refresh_token);
-      localStorage.setItem('auth_expires_at', expiresAt.toString());
-
-      devLog('Token refreshed successfully');
-    } catch (error) {
-      devError('Token refresh failed:', error);
-      // Clear tokens on refresh failure
+  const hydrateFromOidcUser = useCallback((oidcUser: OidcUser | null) => {
+    oidcUserRef.current = oidcUser;
+    if (oidcUser && !oidcUser.expired) {
+      persistOidcUser(oidcUser);
+      const storedUser = localStorage.getItem(AUTH_USER_KEY);
+      const storedToken = localStorage.getItem(AUTH_TOKEN_KEY);
+      const storedRefreshToken = localStorage.getItem(AUTH_REFRESH_TOKEN_KEY);
+      const storedExpiresAt = localStorage.getItem(AUTH_EXPIRES_AT_KEY);
+      setUser(storedUser ? JSON.parse(storedUser) : null);
+      setToken(storedToken);
+      setRefreshTokenValue(storedRefreshToken);
+      setTokenExpiresAt(storedExpiresAt ? parseInt(storedExpiresAt, 10) : null);
+    } else {
+      clearPersistedAuth();
+      setUser(null);
       setToken(null);
       setRefreshTokenValue(null);
       setTokenExpiresAt(null);
-      localStorage.removeItem('auth_token');
-      localStorage.removeItem('auth_refresh_token');
-      localStorage.removeItem('auth_expires_at');
+    }
+  }, []);
+
+  // Load user on mount and subscribe to OIDC events.
+  useEffect(() => {
+    let mounted = true;
+
+    const loadUser = async () => {
+      try {
+        const oidcUser = await userManager.getUser();
+        if (!mounted) return;
+        hydrateFromOidcUser(oidcUser);
+      } catch (error) {
+        devError('Error loading OIDC user:', error);
+      } finally {
+        if (mounted) setIsLoading(false);
+      }
+    };
+
+    void loadUser();
+
+    const onUserLoaded = (oidcUser: OidcUser) => {
+      devLog('OIDC user loaded event');
+      hydrateFromOidcUser(oidcUser);
+    };
+
+    const onUserUnloaded = () => {
+      devLog('OIDC user unloaded event');
+      hydrateFromOidcUser(null);
+    };
+
+    const onSilentRenewError = (error: Error) => {
+      devError('OIDC silent renew error:', error);
+      // Clear auth state on silent renew failure so the user is redirected to login.
+      hydrateFromOidcUser(null);
+    };
+
+    userManager.events.addUserLoaded(onUserLoaded);
+    userManager.events.addUserUnloaded(onUserUnloaded);
+    userManager.events.addSilentRenewError(onSilentRenewError);
+
+    return () => {
+      mounted = false;
+      userManager.events.removeUserLoaded(onUserLoaded);
+      userManager.events.removeUserUnloaded(onUserUnloaded);
+      userManager.events.removeSilentRenewError(onSilentRenewError);
+    };
+  }, [hydrateFromOidcUser]);
+
+  const login = async (): Promise<void> => {
+    try {
+      await userManager.signinRedirect();
+    } catch (error) {
+      devError('OIDC login redirect failed:', error);
+      throw error;
+    }
+  };
+
+  const register = async (): Promise<void> => {
+    throw new Error('User registration is managed in Keycloak.');
+  };
+
+  const forgotPassword = async (): Promise<void> => {
+    throw new Error('Password reset is managed in Keycloak.');
+  };
+
+  const resetPassword = async (): Promise<void> => {
+    throw new Error('Password reset is managed in Keycloak.');
+  };
+
+  const logout = async (): Promise<void> => {
+    const wasLoggedIn = !!user;
+    hydrateFromOidcUser(null);
+
+    try {
+      await userManager.signoutRedirect();
+    } catch (error) {
+      devError('OIDC signout redirect failed:', error);
+      // Fallback: remove user locally and clear storage.
+      await userManager.removeUser();
+      clearPersistedAuth();
+    }
+
+    if (wasLoggedIn) {
+      toast.toast({
+        title: 'Logged out',
+        description: 'You have been signed out.',
+        variant: 'default',
+      });
+    }
+  };
+
+  const refreshToken = async (): Promise<void> => {
+    try {
+      const oidcUser = await userManager.signinSilent();
+      if (!oidcUser) {
+        throw new Error('Silent authentication returned no user');
+      }
+      hydrateFromOidcUser(oidcUser);
+      devLog('OIDC token refreshed successfully');
+    } catch (error) {
+      devError('OIDC token refresh failed:', error);
+      hydrateFromOidcUser(null);
       throw error;
     }
   };
 
   const isTokenExpired = (): boolean => {
     if (!tokenExpiresAt) return false;
-    // Add 30 second buffer before expiration
-    return Date.now() >= (tokenExpiresAt - 30000);
+    return Date.now() >= tokenExpiresAt - 30000;
   };
 
   const getValidToken = async (): Promise<string | null> => {
-    if (!token) return null;
-    
-    if (isTokenExpired()) {
-      devLog('Token expired, attempting refresh');
+    const current = oidcUserRef.current;
+    if (!current || current.expired) {
+      if (!current) {
+        // Attempt to load a stored user in case the ref was cleared.
+        try {
+          const loaded = await userManager.getUser();
+          if (loaded && !loaded.expired) {
+            hydrateFromOidcUser(loaded);
+            return loaded.id_token || loaded.access_token || null;
+          }
+        } catch (error) {
+          devError('Error loading user for valid token:', error);
+        }
+        return null;
+      }
+      devLog('OIDC token expired, attempting silent refresh');
       try {
-  await refreshToken();
-  // Read the latest token from localStorage to avoid stale state
-  const newToken = localStorage.getItem('auth_token');
-  return newToken;
+        await refreshToken();
+        return oidcUserRef.current?.id_token || oidcUserRef.current?.access_token || null;
       } catch (error) {
-        devError('Failed to refresh token:', error);
-        // Don't throw - return null so caller can handle gracefully
+        devError('Failed to refresh OIDC token:', error);
         return null;
       }
     }
-    
-    return token;
+    return current.id_token || current.access_token || null;
   };
 
   const computeIsCoreAdmin = (): boolean => {
     const u: any = user;
     if (!u) return false;
-    if (u.is_core_admin !== undefined) {
-      if (u.is_core_admin) return true;
-    }
-    if (u.isCoreAdmin !== undefined) {
-      if (u.isCoreAdmin) return true;
-    }
-    if (Array.isArray(u.roles) && typeof u.roles.includes === 'function') {
-      if (u.roles.includes('core_admin') || u.roles.includes('core-admin')) {
-        return true;
-      }
-    }
-    if (u.email === 'admin@example.com') {
+    if (u.is_core_admin) return true;
+    if (u.isCoreAdmin) return true;
+    if (Array.isArray(u.roles) && u.roles.includes('core_admin')) {
       return true;
     }
+    if (u.email === 'admin@example.com') return true;
     return false;
   };
 
@@ -290,10 +333,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     if (!u) return false;
     if (computeIsCoreAdmin()) return true;
     if (u.is_admin) return true;
-    if (u.isAdmin) return true;
-    if (Array.isArray(u.roles) && typeof u.roles.includes === 'function') {
-      if (u.roles.includes('admin')) return true;
-    }
+    if (Array.isArray(u.roles) && u.roles.includes('admin')) return true;
     if (u.email === 'admin@example.com') return true;
     return false;
   };
@@ -303,8 +343,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     token,
     refreshTokenValue,
     tokenExpiresAt,
-  // Treat expired tokens as unauthenticated so ProtectedRoute can redirect
-  isAuthenticated: !!user && !!token && !isTokenExpired(),
+    isAuthenticated: !!user && !!token && !isTokenExpired(),
     isLoading,
     isAdmin: () => computeIsAdmin(),
     isCoreAdmin: () => computeIsCoreAdmin(),
@@ -320,11 +359,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     getValidToken,
   };
 
-  return (
-    <AuthContext.Provider value={value}>
-      {children}
-    </AuthContext.Provider>
-  );
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };
 
 export const useAuth = (): AuthContextType => {

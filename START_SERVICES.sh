@@ -27,9 +27,9 @@ echo -e "${GREEN}✅ Backend started (PID: $BACKEND_PID)${NC}"
 sleep 3
 
 # Start frontend
-echo -e "${YELLOW}Starting Frontend (port 5173)...${NC}"
+echo -e "${YELLOW}Starting Frontend (port 3000)...${NC}"
 cd "$SCRIPT_DIR/frontend"
-npx vite --host 0.0.0.0 > "$SCRIPT_DIR/logs/frontend.log" 2>&1 &
+npx vite --port 3000 --host 0.0.0.0 > "$SCRIPT_DIR/logs/frontend.log" 2>&1 &
 FRONTEND_PID=$!
 echo -e "${GREEN}✅ Frontend started (PID: $FRONTEND_PID)${NC}"
 sleep 4
@@ -39,7 +39,7 @@ echo -e "${GREEN}═════════════════════
 echo -e "${GREEN}✅ All services started successfully!${NC}"
 echo -e "${GREEN}═══════════════════════════════════════════════════════════════${NC}"
 echo ""
-echo "📱 Frontend:  http://localhost:5173"
+echo "📱 Frontend:  http://localhost:3000"
 echo "🔌 Backend:   http://localhost:8080"
 echo ""
 echo "📋 Logs:"

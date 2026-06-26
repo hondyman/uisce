@@ -1,0 +1,69 @@
+import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { userManager } from '../config/oidc';
+import { devLog, devError } from '../utils/devLogger';
+
+const AuthCallbackPage: React.FC = () => {
+  const navigate = useNavigate();
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const completeSignin = async () => {
+      try {
+        const user = await userManager.signinRedirectCallback();
+        if (cancelled) return;
+
+        devLog('[AuthCallback] OIDC callback succeeded', {
+          sub: user.profile?.sub,
+          expired: user.expired,
+        });
+
+        // AuthContext listens to userManager events and will persist the token/user.
+        navigate('/', { replace: true });
+      } catch (err) {
+        devError('[AuthCallback] OIDC callback failed', err);
+        if (!cancelled) {
+          setError(err instanceof Error ? err.message : 'Authentication callback failed');
+        }
+      }
+    };
+
+    void completeSignin();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [navigate]);
+
+  if (error) {
+    return (
+      <div className="flex min-h-screen items-center justify-center">
+        <div className="rounded-lg border border-red-200 bg-red-50 p-8 text-center dark:border-red-900 dark:bg-red-950">
+          <h1 className="mb-2 text-xl font-semibold text-red-800 dark:text-red-200">
+            Authentication failed
+          </h1>
+          <p className="text-red-700 dark:text-red-300">{error}</p>
+          <a
+            href="/login"
+            className="mt-4 inline-block rounded-md bg-red-600 px-4 py-2 text-white hover:bg-red-700"
+          >
+            Back to login
+          </a>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex min-h-screen items-center justify-center">
+      <div className="text-center">
+        <div className="mx-auto mb-4 h-10 w-10 animate-spin rounded-full border-4 border-indigo-200 border-t-indigo-600"></div>
+        <p className="text-gray-600 dark:text-gray-300">Completing sign in...</p>
+      </div>
+    </div>
+  );
+};
+
+export default AuthCallbackPage;
