@@ -109,29 +109,25 @@ services:
   # ---------------------------------------------------------
   # Keycloak (OIDC Identity Provider)
   # ---------------------------------------------------------
-  keycloak:
+  semlayer-keycloak:
     image: quay.io/keycloak/keycloak:latest
     container_name: semlayer-keycloak
-    command: start-dev
-    environment:
-      KEYCLOAK_ADMIN: admin
-      KEYCLOAK_ADMIN_PASSWORD: admin
-      KC_DB: postgres
-      # Scopes seamlessly out to your native database named "keycloak"
-      KC_DB_URL: jdbc:postgresql://host.docker.internal:5432/keycloak
-      KC_DB_USERNAME: postgres
-      KC_DB_PASSWORD: postgres
-      # Disable HTTPS requirement for dev use over the local network.
-      KC_HTTP_ENABLED: "true"
-      KC_HTTPS_REQUIRED: "none"
-      KC_HOSTNAME_STRICT_HTTPS: "false"
+    command: start-dev --http-enabled=true
     ports:
-      - "8089:8080"
+      # Change the target port from 8080 to 8443
+      - "8089:8443"
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin # (or your existing admin variable names)
+      KC_BOOTSTRAP_ADMIN_PASSWORD: password
+      # Enable HTTPS features
+      KC_HTTPS_CERTIFICATE_FILE: /opt/keycloak/providers/keycloak.crt
+      KC_HTTPS_CERTIFICATE_KEY_FILE: /opt/keycloak/providers/keycloak.key
+    volumes:
+      # Mount your certificate directory into the container
+      - ./keycloak-certs/keycloak.crt:/opt/keycloak/providers/keycloak.crt:ro
+      - ./keycloak-certs/keycloak.key:/opt/keycloak/providers/keycloak.key:ro
     networks:
       - remote-net
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-    restart: unless-stopped
 
   # ---------------------------------------------------------
   # Redis Cache (Central Graph Memory)
