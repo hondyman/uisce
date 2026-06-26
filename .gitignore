@@ -17,6 +17,30 @@ migrate
 preaggregation
 services/uma-rebalance/uma-rebalance
 
+# Compiled semantic-rules-api binaries
+semantic-rules-api
+backend/semantic-rules-api
+backend/cmd/semantic-rules-api/semantic-rules-api
+
+# All compiled Go binaries (catch-all for services, backend, etc.)
+api-gateway/api-gateway
+backend/e2e_amqp
+backend/rule-engine-service
+backend/temporal-worker
+backend/validation-service
+backend/websocket
+backend/websocket_server
+calendar-service/bin/calendar-service
+migration
+services/ai-builder/ai-builder
+services/compliance-engine/compliance-engine
+services/governance/governance
+services/governance/governance-service
+services/semantic-engine/cmd/cmd
+services/semantic-engine/semantic-engine
+services/rule-engine/rule-engine
+demo
+
 # Test binary, built with `go test -c`
 *.test
 
