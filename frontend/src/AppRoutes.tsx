@@ -138,6 +138,7 @@ import AuditHistoryPage from "./features/audit/pages/AuditHistoryPage";
 import RoleManagerPage from "./features/admin/pages/RoleManagerPage";
 import { UserManagementPage } from "./features/admin/pages/UserManagementPage";
 import UserRoleAssignmentPage from "./features/admin/pages/UserRoleAssignmentPage";
+import TenantUserAssignmentPage from "./features/admin/pages/TenantUserAssignmentPage";
 import DelegationManagerPage from "./features/admin/pages/DelegationManagerPage";
 import FieldPermissionEditorPage from "./features/admin/pages/FieldPermissionEditorPage";
 
@@ -218,6 +219,7 @@ function ProtectedApp() {
         <Route path="/admin/rbac/delegations" element={<ProtectedRoute><DelegationManagerPage /></ProtectedRoute>} />
         <Route path="/admin/rbac/field-permissions" element={<ProtectedRoute><FieldPermissionEditorPage /></ProtectedRoute>} />
         <Route path="/admin/rbac/user-roles" element={<ProtectedRoute><UserRoleAssignmentPage /></ProtectedRoute>} />
+        <Route path="/admin/rbac/user-tenants" element={<ProtectedRoute><TenantUserAssignmentPage /></ProtectedRoute>} />
         <Route path="/fabric/ip-whitelist" element={<ProtectedRoute><IPWhitelistManagementPage /></ProtectedRoute>} />
         <Route path="/secrets/config" element={<ProtectedRoute><SecretsConfigPage tenantId="default" /></ProtectedRoute>} />
         <Route path="/secrets/audit" element={<ProtectedRoute><SecretsAuditPage tenantId="default" /></ProtectedRoute>} />
@@ -253,7 +255,7 @@ function ProtectedApp() {
         {/* ═══════════════════════════════════════════════════════════════════
             BUILD - Semantic layer
             ═══════════════════════════════════════════════════════════════════ */}
-        <Route path="/business-objects" element={<ProtectedRoute><BusinessObjectsPage /></ProtectedRoute>} />
+        <Route path="/business-objects" element={<ProtectedRoute><BusinessObjectExplorerPage /></ProtectedRoute>} />
         <Route path="/business-objects/:id" element={<ProtectedRoute><BusinessObjectDetailsPage /></ProtectedRoute>} />
         <Route path="/views" element={<ProtectedRoute><ViewsCatalogPage /></ProtectedRoute>} />
         <Route path="/views/:id" element={<ProtectedRoute><ViewDetailsPage /></ProtectedRoute>} />
