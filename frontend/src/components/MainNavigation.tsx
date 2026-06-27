@@ -130,6 +130,7 @@ const categoryConfigs: CategoryConfig[] = [
           { label: 'Users', path: '/admin/rbac/users', icon: <PersonAddIcon />, description: 'User management' },
           { label: 'Teams', path: '/admin/rbac/teams', icon: <GroupsIcon />, description: 'Team structure' },
           { label: 'User Roles', path: '/admin/rbac/user-roles', icon: <AccountCircleIcon />, description: 'User role assignments' },
+          { label: 'User Tenants', path: '/admin/rbac/user-tenants', icon: <SupervisorAccountIcon />, description: 'User tenant assignments' },
         ]
       },
       {

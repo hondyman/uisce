@@ -1,5 +1,6 @@
 import React from 'react';
 import { motion } from 'framer-motion';
+import { Card, CardHeader, CardContent, Typography, Chip, Box, Grid, useTheme } from '@mui/material';
 import { TrendingDown, TrendingUp } from 'lucide-react';
 
 interface ImpactAnalysisCardProps {
@@ -9,6 +10,7 @@ interface ImpactAnalysisCardProps {
 }
 
 export function ImpactAnalysisCard({ headline, affectedSector, impactScore }: ImpactAnalysisCardProps) {
+  const theme = useTheme();
   const isHighImpact = impactScore > 70;
   const isPositive = impactScore > 50; // Simplified logic
 
@@ -16,39 +18,66 @@ export function ImpactAnalysisCard({ headline, affectedSector, impactScore }: Im
     <motion.div 
       initial={{ x: -20, opacity: 0 }}
       animate={{ x: 0, opacity: 1 }}
-      className="bg-white rounded-xl shadow-md border border-gray-200 overflow-hidden my-4"
     >
-      <div className="p-4 border-b border-gray-100 flex justify-between items-center bg-gray-50">
-        <span className="text-xs font-bold uppercase tracking-wider text-gray-500">Impact Analysis</span>
-        <span className={`text-xs font-bold px-2 py-1 rounded-full ${isHighImpact ? 'bg-red-100 text-red-700' : 'bg-gray-100 text-gray-700'}`}>
-          Score: {impactScore}/100
-        </span>
-      </div>
-      
-      <div className="p-5">
-        <h3 className="text-lg font-bold text-gray-900 mb-2">{headline}</h3>
+      <Card sx={{ my: 2, borderRadius: 3, border: '1px solid', borderColor: 'divider', overflow: 'hidden', boxShadow: theme.shadows[2] }}>
+        <Box sx={{ 
+          px: 2, 
+          py: 1, 
+          borderBottom: '1px solid', 
+          borderColor: 'divider', 
+          display: 'flex', 
+          justifyContent: 'space-between', 
+          alignItems: 'center', 
+          backgroundColor: theme.palette.action.hover 
+        }}>
+          <Typography variant="caption" sx={{ fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: 1.1, color: 'text.secondary' }}>
+            Impact Analysis
+          </Typography>
+          <Chip 
+            label={`Score: ${impactScore}/100`} 
+            size="small" 
+            color={isHighImpact ? 'error' : 'default'} 
+            sx={{ fontWeight: 'bold' }} 
+          />
+        </Box>
         
-        <div className="flex items-center gap-4 mt-4">
-          <div className="flex-1">
-            <div className="text-sm text-gray-500 mb-1">Affected Sector</div>
-            <div className="font-medium text-gray-900">{affectedSector}</div>
-          </div>
+        <CardContent sx={{ p: 3 }}>
+          <Typography variant="h6" component="h3" sx={{ fontWeight: 'bold', color: 'text.primary', mb: 2 }}>
+            {headline}
+          </Typography>
           
-          <div className="flex-1">
-            <div className="text-sm text-gray-500 mb-1">Projected Impact</div>
-            <div className="flex items-center gap-2">
-              {isPositive ? (
-                <TrendingUp className="w-5 h-5 text-green-500" />
-              ) : (
-                <TrendingDown className="w-5 h-5 text-red-500" />
-              )}
-              <span className={`font-medium ${isPositive ? 'text-green-600' : 'text-red-600'}`}>
-                {isPositive ? 'Positive' : 'Negative'} Volatility
-              </span>
-            </div>
-          </div>
-        </div>
-      </div>
+          <Grid container spacing={2} sx={{ mt: 1 }}>
+            <Grid item xs={12} sm={6}>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 0.5 }}>
+                Affected Sector
+              </Typography>
+              <Typography variant="body1" sx={{ fontWeight: 'medium', color: 'text.primary' }}>
+                {affectedSector}
+              </Typography>
+            </Grid>
+            
+            <Grid item xs={12} sm={6}>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 0.5 }}>
+                Projected Impact
+              </Typography>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                {isPositive ? (
+                  <TrendingUp size={20} color={theme.palette.success.main} />
+                ) : (
+                  <TrendingDown size={20} color={theme.palette.error.main} />
+                )}
+                <Typography variant="body1" sx={{ 
+                  fontWeight: 'medium', 
+                  color: isPositive ? 'success.main' : 'error.main' 
+                }}>
+                  {isPositive ? 'Positive' : 'Negative'} Volatility
+                </Typography>
+              </Box>
+            </Grid>
+          </Grid>
+        </CardContent>
+      </Card>
     </motion.div>
   );
 }
+

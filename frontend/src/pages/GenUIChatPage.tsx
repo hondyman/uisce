@@ -1,5 +1,17 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, Sparkles } from 'lucide-react';
+import { 
+  Box, 
+  Paper, 
+  TextField, 
+  IconButton, 
+  Typography, 
+  Avatar, 
+  Grid, 
+  Button, 
+  useTheme,
+  CircularProgress
+} from '@mui/material';
+import { Send as SendIcon, Sparkles as SparklesIcon } from '@mui/icons-material';
 import { ComparisonChart } from '../genui/components/ComparisonChart';
 import { ComplianceDisclaimer } from '../genui/components/ComplianceDisclaimer';
 import { ImpactAnalysisCard } from '../genui/components/ImpactAnalysisCard';
@@ -17,6 +29,7 @@ export default function GenUIChatPage() {
   const [inputValue, setInputValue] = useState('');
   const [loading, setLoading] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const theme = useTheme();
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -97,107 +110,217 @@ export default function GenUIChatPage() {
   };
 
   return (
-    <div className="flex flex-col h-[calc(100vh-80px)] bg-gray-50 dark:bg-gray-900">
+    <Box sx={{ 
+      display: 'flex', 
+      flexDirection: 'column', 
+      height: 'calc(100vh - 80px)', 
+      backgroundColor: theme.palette.mode === 'dark' ? 'background.default' : 'grey.50' 
+    }}>
       {/* Header */}
-      <header className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-6 py-4 flex justify-between items-center">
-        <div className="flex items-center gap-2">
-          <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center text-white font-bold">
-            W
-          </div>
-          <h1 className="text-xl font-bold text-gray-900 dark:text-gray-100">WealthStream GenUI Chat</h1>
-        </div>
-        <div className="flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400">
-          <Sparkles className="w-3.5 h-3.5 text-blue-500 animate-pulse" />
+      <Box sx={{ 
+        px: 3, 
+        py: 2, 
+        backgroundColor: 'background.paper', 
+        borderBottom: '1px solid', 
+        borderColor: 'divider', 
+        display: 'flex', 
+        justifyContent: 'space-between', 
+        alignItems: 'center',
+        position: 'sticky',
+        top: 0,
+        zIndex: 10
+      }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <Avatar sx={{ bgcolor: theme.palette.primary.main, width: 32, height: 32 }}>
+            <SparklesIcon sx={{ fontSize: 18 }} />
+          </Avatar>
+          <Typography variant="h6" sx={{ fontWeight: 'bold' }}>
+            WealthStream OS Console
+          </Typography>
+        </Box>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, color: 'text.secondary', fontSize: '0.875rem' }}>
+          <SparklesIcon sx={{ fontSize: 14, color: theme.palette.primary.main }} />
           Powered by Gemini Pro
-        </div>
-      </header>
+        </Box>
+      </Box>
 
       {/* Chat History */}
-      <div className="flex-1 overflow-y-auto p-6 space-y-6">
+      <Box sx={{ flex: 1, overflowY: 'auto', p: 3, display: 'flex', flexDirection: 'column', gap: 3 }}>
         {messages.length === 0 ? (
-          <div className="h-full flex flex-col items-center justify-center text-center text-gray-400 dark:text-gray-500 space-y-4">
-            <div className="w-16 h-16 bg-gray-100 dark:bg-gray-800 rounded-full flex items-center justify-center">
-              <span className="text-2xl">✨</span>
-            </div>
-            <div>
-              <h2 className="text-lg font-medium text-gray-900 dark:text-gray-100">Generative UI Ready</h2>
-              <p className="text-sm mt-1">Ask about your portfolio, compliance, or market events.</p>
-            </div>
+          <Box sx={{ 
+            height: '100%', 
+            display: 'flex', 
+            flexDirection: 'column', 
+            alignItems: 'center', 
+            justifyContent: 'center', 
+            textAlign: 'center', 
+            color: 'text.secondary',
+            gap: 2
+          }}>
+            <Avatar sx={{ bgcolor: 'action.hover', width: 64, height: 64, fontSize: 32 }}>
+              ✨
+            </Avatar>
+            <Box>
+              <Typography variant="h6" color="text.primary" sx={{ fontWeight: 'medium' }}>
+                Generative UI Ready
+              </Typography>
+              <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+                Ask about your portfolio, compliance, or market events.
+              </Typography>
+            </Box>
             
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 w-full max-w-2xl mt-8">
-              <button 
-                onClick={() => setInputValue("Compare my Tech exposure to S&P 500 YTD")}
-                className="p-3 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-sm text-gray-700 dark:text-gray-300 hover:border-blue-500 hover:text-blue-600 transition-all text-left"
-              >
-                "Compare Tech vs S&P 500"
-              </button>
-              <button 
-                onClick={() => setInputValue("What are the risks of Futures Trading?")}
-                className="p-3 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-sm text-gray-700 dark:text-gray-300 hover:border-blue-500 hover:text-blue-600 transition-all text-left"
-              >
-                "Risks of Futures Trading"
-              </button>
-              <button 
-                onClick={() => setInputValue("Analyze impact of rate hikes on Real Estate")}
-                className="p-3 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-sm text-gray-700 dark:text-gray-300 hover:border-blue-500 hover:text-blue-600 transition-all text-left"
-              >
-                "Impact of Rate Hikes"
-              </button>
-            </div>
-          </div>
+            <Grid container spacing={2} sx={{ maxWidth: 600, mt: 4 }}>
+              {[
+                { label: "Compare Tech vs S&P 500", query: "Compare my Tech exposure to S&P 500 YTD" },
+                { label: "Risks of Futures Trading", query: "What are the risks of Futures Trading?" },
+                { label: "Impact of Rate Hikes", query: "Analyze impact of rate hikes on Real Estate" }
+              ].map((btn, index) => (
+                <Grid item xs={12} md={4} key={index}>
+                  <Button 
+                    fullWidth 
+                    variant="outlined" 
+                    onClick={() => setInputValue(btn.query)}
+                    sx={{ 
+                      p: 2, 
+                      borderRadius: 3, 
+                      borderColor: 'divider', 
+                      color: 'text.primary',
+                      textTransform: 'none',
+                      textAlign: 'left',
+                      justifyContent: 'flex-start',
+                      '&:hover': {
+                        borderColor: 'primary.main',
+                        color: 'primary.main',
+                        bgcolor: 'action.hover'
+                      }
+                    }}
+                  >
+                    "{btn.label}"
+                  </Button>
+                </Grid>
+              ))}
+            </Grid>
+          </Box>
         ) : (
           messages.map((message) => (
-            <div key={message.id} className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-              <div className={`max-w-3xl ${message.role === 'user' ? 'ml-12' : 'mr-12 w-full'}`}>
+            <Box 
+              key={message.id} 
+              sx={{ 
+                display: 'flex', 
+                justifyContent: message.role === 'user' ? 'flex-end' : 'flex-start' 
+              }}
+            >
+              <Box sx={{ maxWidth: '75%', width: message.role === 'user' ? 'auto' : '100%' }}>
                 {message.role === 'user' ? (
-                  <div className="bg-blue-600 text-white p-3.5 rounded-2xl rounded-tr-none shadow-sm text-sm">
-                    {message.content}
-                  </div>
+                  <Paper sx={{ 
+                    p: 2, 
+                    borderRadius: '16px 16px 0px 16px', 
+                    bgcolor: 'primary.main', 
+                    color: 'primary.contrastText',
+                    boxShadow: 1
+                  }}>
+                    <Typography variant="body2">{message.content}</Typography>
+                  </Paper>
                 ) : (
-                  <div className="space-y-2">
-                    <div className="bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 p-4 rounded-2xl rounded-tl-none shadow-sm border border-gray-100 dark:border-gray-700 text-sm whitespace-pre-wrap">
-                      {message.content}
-                    </div>
+                  <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                    <Paper sx={{ 
+                      p: 2, 
+                      borderRadius: '16px 16px 16px 0px', 
+                      border: '1px solid',
+                      borderColor: 'divider',
+                      boxShadow: 1,
+                      whiteSpace: 'pre-wrap'
+                    }}>
+                      <Typography variant="body2">{message.content}</Typography>
+                    </Paper>
                     {message.display}
-                  </div>
+                  </Box>
                 )}
-              </div>
-            </div>
+              </Box>
+            </Box>
           ))
         )}
         
         {loading && (
-          <div className="flex justify-start">
-            <div className="bg-white dark:bg-gray-800 p-4 rounded-2xl rounded-tl-none shadow-sm border border-gray-100 dark:border-gray-700 flex items-center gap-1.5">
-              <span className="w-2 h-2 bg-blue-600 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-              <span className="w-2 h-2 bg-blue-600 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-              <span className="w-2 h-2 bg-blue-600 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
-            </div>
-          </div>
+          <Box sx={{ display: 'flex', justifyContent: 'flex-start' }}>
+            <Paper sx={{ 
+              p: 2, 
+              borderRadius: '16px 16px 16px 0px', 
+              border: '1px solid',
+              borderColor: 'divider',
+              boxShadow: 1,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 1
+            }}>
+              <CircularProgress size={16} thickness={5} />
+              <Typography variant="caption" color="text.secondary">Thinking...</Typography>
+            </Paper>
+          </Box>
         )}
         <div ref={messagesEndRef} />
-      </div>
+      </Box>
 
       {/* Input Form */}
-      <div className="p-4 bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700">
-        <form onSubmit={handleSubmit} className="max-w-4xl mx-auto relative flex items-center">
-          <input
-            type="text"
+      <Box sx={{ 
+        p: 2, 
+        backgroundColor: 'background.paper', 
+        borderTop: '1px solid', 
+        borderColor: 'divider' 
+      }}>
+        <Box 
+          component="form" 
+          onSubmit={handleSubmit} 
+          sx={{ 
+            maxWidth: 800, 
+            mx: 'auto', 
+            position: 'relative', 
+            display: 'flex', 
+            alignItems: 'center' 
+          }}
+        >
+          <TextField
+            fullWidth
             value={inputValue}
             onChange={(e) => setInputValue(e.target.value)}
             placeholder="Ask a question or request a portfolio comparison..."
-            className="w-full pl-4 pr-12 py-3.5 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white dark:focus:bg-gray-950 transition-all text-sm text-gray-900 dark:text-gray-100"
+            variant="outlined"
             disabled={loading}
+            size="small"
+            sx={{
+              '& .MuiOutlinedInput-root': {
+                borderRadius: 3,
+                pr: 6
+              }
+            }}
           />
-          <button
+          <IconButton
             type="submit"
             disabled={!inputValue.trim() || loading}
-            className="absolute right-3 p-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            color="primary"
+            sx={{
+              position: 'absolute',
+              right: 8,
+              backgroundColor: 'primary.main',
+              color: 'primary.contrastText',
+              borderRadius: 2,
+              p: 1,
+              '&:hover': {
+                backgroundColor: 'primary.dark'
+              },
+              '&.Mui-disabled': {
+                backgroundColor: 'action.disabledBackground',
+                color: 'action.disabled'
+              }
+            }}
           >
-            <Send className="w-4 h-4" />
-          </button>
-        </form>
-      </div>
-    </div>
+            <SendIcon sx={{ fontSize: 18 }} />
+          </IconButton>
+        </Box>
+      </Box>
+    </Box>
+  );
+}
+
   );
 }

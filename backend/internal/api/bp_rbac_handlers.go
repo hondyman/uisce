@@ -47,6 +47,7 @@ func (h *RBACHandlers) RegisterRoutes(r chi.Router) {
 		// Users (for role assignment UI)
 		r.Get("/users", h.listUsers)
 		r.Post("/users", h.createUser)
+		r.Put("/users/{userId}/tenant", h.updateUserTenant)
 
 		// Field-Level Permissions
 		r.Get("/field-permissions", h.listFieldPermissions)

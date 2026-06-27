@@ -128,7 +128,8 @@ services:
       # Allow localhost in CORS:
       KC_CORS_ALLOWED_ORIGINS: "http://localhost:5173,http://localhost:3000"
     volumes:
-      - ./keycloak-certs:/opt/keycloak/conf:ro
+      - ./keycloak-ssl/server.crt.pem:/opt/keycloak/conf/server.crt.pem:ro
+      - ./keycloak-ssl/server.key.pem:/opt/keycloak/conf/server.key.pem:ro
     networks:
       - remote-net
     restart: unless-stopped

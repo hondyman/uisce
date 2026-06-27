@@ -18,7 +18,7 @@ func (h *RBACHandlers) listUsers(w http.ResponseWriter, r *http.Request) {
 
 	if tenantID != "" {
 		query = `
-			SELECT id, username, email, name, first_name, last_name, status, is_active, created_at
+			SELECT id, username, email, name, first_name, last_name, status, is_active, created_at, tenant_id
 			FROM users
 			WHERE tenant_id = $1 OR tenant_id IS NULL
 			ORDER BY name, username
@@ -26,7 +26,7 @@ func (h *RBACHandlers) listUsers(w http.ResponseWriter, r *http.Request) {
 		args = []interface{}{tenantID}
 	} else {
 		query = `
-			SELECT id, username, email, name, first_name, last_name, status, is_active, created_at
+			SELECT id, username, email, name, first_name, last_name, status, is_active, created_at, tenant_id
 			FROM users
 			ORDER BY name, username
 		`
@@ -42,11 +42,11 @@ func (h *RBACHandlers) listUsers(w http.ResponseWriter, r *http.Request) {
 	for rows.Next() {
 		var user map[string]interface{} = make(map[string]interface{})
 		var id, username, email string
-		var name, firstName, lastName, status sql.NullString
+		var name, firstName, lastName, status, userTenantID sql.NullString
 		var isActive bool
 		var createdAt time.Time
 
-		if err := rows.Scan(&id, &username, &email, &name, &firstName, &lastName, &status, &isActive, &createdAt); err != nil {
+		if err := rows.Scan(&id, &username, &email, &name, &firstName, &lastName, &status, &isActive, &createdAt, &userTenantID); err != nil {
 			continue
 		}
 
@@ -69,6 +69,11 @@ func (h *RBACHandlers) listUsers(w http.ResponseWriter, r *http.Request) {
 		}
 		user["is_active"] = isActive
 		user["created_at"] = createdAt
+		if userTenantID.Valid {
+			user["tenant_id"] = userTenantID.String
+		} else {
+			user["tenant_id"] = nil
+		}
 
 		users = append(users, user)
 	}
@@ -114,12 +119,6 @@ func (h *RBACHandlers) createUser(w http.ResponseWriter, r *http.Request) {
 		req.Status = "active"
 	}
 
-	// In a real app we'd hash the password here.
-	// For this exercise we'll insert directly or use valid mock hash if needed.
-	// Since I don't see a shared password lib immediately usable without imports,
-	// I will insert the password as is or use a placeholder if the DB requires a hash format.
-	// The seed script usually inserts raw or simple hashes.
-
 	var userID string
 	err := h.db.QueryRow(`
 		INSERT INTO users (username, email, name, first_name, last_name, tenant_id, status, is_active, password_hash)
@@ -134,3 +133,38 @@ func (h *RBACHandlers) createUser(w http.ResponseWriter, r *http.Request) {
 
 	respondJSONRBAC(w, r, map[string]string{"id": userID, "status": "created"}, http.StatusCreated)
 }
+
+// updateUserTenant updates the tenant_id for a user
+func (h *RBACHandlers) updateUserTenant(w http.ResponseWriter, r *http.Request) {
+	userID := chi.URLParam(r, "userId")
+	
+	var req struct {
+		TenantID *string `json:"tenant_id"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	var tenantVal any
+	if req.TenantID == nil || *req.TenantID == "" {
+		tenantVal = nil
+	} else {
+		tenantVal = *req.TenantID
+	}
+
+	_, err := h.db.Exec(`
+		UPDATE users 
+		SET tenant_id = $1, updated_at = now()
+		WHERE id = $2
+	`, tenantVal, userID)
+
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Failed to update user tenant assignment: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	respondJSONRBAC(w, r, map[string]string{"status": "updated"}, http.StatusOK)
+}
+

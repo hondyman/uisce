@@ -159,7 +159,7 @@ export const AccessProvider: React.FC<AccessProviderProps> = ({ children }) => {
         //   : '/api/tenants/accessible';
         // Bypass proxy in development to avoid 404s - DISABLED: using proxy on 8082
         // const baseUrl = import.meta.env.DEV ? 'http://localhost:8080' : '';
-        const endpoint = `/api/tenants/all`;
+        const endpoint = `/api/tenants/accessible`;
         
         devLog(`Fetching tenants from ${endpoint}`);
         const response = await fetch(endpoint, {
@@ -168,9 +168,10 @@ export const AccessProvider: React.FC<AccessProviderProps> = ({ children }) => {
         });
 
         if (response.ok) {
-          const tenants = await response.json();
-          setAccessibleTenants(tenants || []);
-          devLog(`Loaded ${tenants?.length || 0} accessible tenants`, tenants);
+          const json = await response.json();
+          const tenantsList = json.success ? json.data : json;
+          setAccessibleTenants(tenantsList || []);
+          devLog(`Loaded ${tenantsList?.length || 0} accessible tenants`, tenantsList);
         } else {
           devWarn(`Failed to fetch tenants: ${response.status} ${response.statusText}`);
         }

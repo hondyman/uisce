@@ -1,3 +1,8 @@
+import React, { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { userManager } from '../config/oidc';
+import { devLog, devError } from '../utils/devLogger';
+
 // Module-level flag to prevent multiple OAuth code exchanges (works across HMR too)
 let signinCallbackInProgress = false;
 
