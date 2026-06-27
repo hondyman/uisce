@@ -117,11 +117,14 @@ services:
       # Change the target port from 8080 to 8443
       - "8089:8443"
     environment:
-      KC_BOOTSTRAP_ADMIN_USERNAME: admin # (or your existing admin variable names)
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
       KC_BOOTSTRAP_ADMIN_PASSWORD: password
-      # Enable HTTPS features
       KC_HTTPS_CERTIFICATE_FILE: /opt/keycloak/providers/keycloak.crt
       KC_HTTPS_CERTIFICATE_KEY_FILE: /opt/keycloak/providers/keycloak.key
+      # Add this line below to fix the redirect_uri error:
+      KC_HOSTNAME: "100.84.50.65"
+      KC_HOSTNAME_PORT: 8089
+      KC_HOSTNAME_STRICT: "false"
     volumes:
       # Mount your certificate directory into the container
       - ./keycloak-certs/keycloak.crt:/opt/keycloak/providers/keycloak.crt:ro
