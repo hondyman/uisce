@@ -1,19 +1,21 @@
-import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { userManager } from '../config/oidc';
-import { devLog, devError } from '../utils/devLogger';
+// Module-level flag to prevent multiple OAuth code exchanges (works across HMR too)
+let signinCallbackInProgress = false;
 
 const AuthCallbackPage: React.FC = () => {
   const navigate = useNavigate();
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    let cancelled = false;
+    // Prevent multiple concurrent signin callbacks - this is the definitive fix
+    if (signinCallbackInProgress) {
+      devLog('[AuthCallback] Callback already in progress, skipping');
+      return;
+    }
+    signinCallbackInProgress = true;
 
     const completeSignin = async () => {
       try {
         const user = await userManager.signinRedirectCallback();
-        if (cancelled) return;
 
         devLog('[AuthCallback] OIDC callback succeeded', {
           sub: user.profile?.sub,
@@ -24,17 +26,13 @@ const AuthCallbackPage: React.FC = () => {
         navigate('/', { replace: true });
       } catch (err) {
         devError('[AuthCallback] OIDC callback failed', err);
-        if (!cancelled) {
-          setError(err instanceof Error ? err.message : 'Authentication callback failed');
-        }
+        setError(err instanceof Error ? err.message : 'Authentication callback failed');
+      } finally {
+        signinCallbackInProgress = false;
       }
     };
 
     void completeSignin();
-
-    return () => {
-      cancelled = true;
-    };
   }, [navigate]);
 
   if (error) {
