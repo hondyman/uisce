@@ -112,23 +112,19 @@ services:
   semlayer-keycloak:
     image: quay.io/keycloak/keycloak:latest
     container_name: semlayer-keycloak
-    command: start-dev --http-enabled=true
+    command: start-dev
     ports:
-      # Change the target port from 8080 to 8443
-      - "8089:8443"
+      - "8089:8080"
     environment:
       KC_BOOTSTRAP_ADMIN_USERNAME: admin
       KC_BOOTSTRAP_ADMIN_PASSWORD: password
-      KC_HTTPS_CERTIFICATE_FILE: /opt/keycloak/providers/keycloak.crt
-      KC_HTTPS_CERTIFICATE_KEY_FILE: /opt/keycloak/providers/keycloak.key
-      # Add this line below to fix the redirect_uri error:
-      KC_HOSTNAME: "100.84.50.65"
-      KC_HOSTNAME_PORT: 8089
+      KC_HTTP_ENABLED: "true"
+      # For cross-origin access from localhost frontend:
       KC_HOSTNAME_STRICT: "false"
-    volumes:
-      # Mount your certificate directory into the container
-      - ./keycloak-certs/keycloak.crt:/opt/keycloak/providers/keycloak.crt:ro
-      - ./keycloak-certs/keycloak.key:/opt/keycloak/providers/keycloak.key:ro
+      KC_HOSTNAME_STRICT_HTTPS: "false"
+      KC_PROXY_HEADERS: "xforwarded"
+      # Allow localhost in CORS:
+      KC_CORS_ALLOWED_ORIGINS: "http://localhost:5173,http://localhost:3000"
     networks:
       - remote-net
 
