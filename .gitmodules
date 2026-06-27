@@ -1,0 +1,6 @@
+[submodule "uisce_backend"]
+	path = uisce_backend
+	url = git@github.com:hondyman/uisce_backend.git
+[submodule "uisce_frontend"]
+	path = uisce_frontend
+	url = git@github.com:hondyman/uisce_frontend.git
