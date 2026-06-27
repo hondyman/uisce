@@ -1,7 +1,7 @@
 import { UserManager, WebStorageStateStore, UserManagerSettings } from 'oidc-client-ts';
 import { devLog, devError } from '../utils/devLogger';
 
-const issuer = import.meta.env.VITE_OIDC_ISSUER || 'http://100.84.50.65:8089/realms/master';
+const issuer = import.meta.env.VITE_OIDC_ISSUER || 'https://100.84.50.65:8443/realms/master';
 const clientId = import.meta.env.VITE_OIDC_CLIENT_ID || 'semlayer-frontend';
 const redirectUri = import.meta.env.VITE_OIDC_REDIRECT_URI || 'http://localhost:5173/auth/callback';
 const postLogoutRedirectUri = import.meta.env.VITE_OIDC_POST_LOGOUT_URI || 'http://localhost:5173/login';
