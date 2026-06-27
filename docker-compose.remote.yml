@@ -107,26 +107,31 @@ services:
     restart: unless-stopped
 
   # ---------------------------------------------------------
-  # Keycloak (OIDC Identity Provider)
+  # Keycloak (OIDC Identity Provider) - HTTPS on 8443
   # ---------------------------------------------------------
   semlayer-keycloak:
     image: quay.io/keycloak/keycloak:latest
     container_name: semlayer-keycloak
-    command: start-dev
+    command: start-dev --https-port=8443
     ports:
-      - "8089:8080"
+      - "8443:8443"
     environment:
       KC_BOOTSTRAP_ADMIN_USERNAME: admin
       KC_BOOTSTRAP_ADMIN_PASSWORD: password
-      KC_HTTP_ENABLED: "true"
+      KC_HTTPS_ENABLED: "true"
+      KC_HTTPS_CERTIFICATE_FILE: /opt/keycloak/conf/server.crt.pem
+      KC_HTTPS_CERTIFICATE_KEY_FILE: /opt/keycloak/conf/server.key.pem
       # For cross-origin access from localhost frontend:
       KC_HOSTNAME_STRICT: "false"
       KC_HOSTNAME_STRICT_HTTPS: "false"
       KC_PROXY_HEADERS: "xforwarded"
       # Allow localhost in CORS:
       KC_CORS_ALLOWED_ORIGINS: "http://localhost:5173,http://localhost:3000"
+    volumes:
+      - ./keycloak-certs:/opt/keycloak/conf:ro
     networks:
       - remote-net
+    restart: unless-stopped
 
   # ---------------------------------------------------------
   # Redis Cache (Central Graph Memory)
