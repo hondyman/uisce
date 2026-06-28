@@ -127,6 +127,8 @@ services:
       KC_PROXY_HEADERS: "xforwarded"
       # Allow localhost in CORS:
       KC_CORS_ALLOWED_ORIGINS: "http://localhost:5173,http://localhost:3000"
+      # Enable token exchange feature (required for OAuth2 token exchange functionality):
+      KC_FEATURES: token-exchange
     volumes:
       - ./keycloak-ssl/server.crt.pem:/opt/keycloak/conf/server.crt.pem:ro
       - ./keycloak-ssl/server.key.pem:/opt/keycloak/conf/server.key.pem:ro

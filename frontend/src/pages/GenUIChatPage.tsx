@@ -11,7 +11,7 @@ import {
   useTheme,
   CircularProgress
 } from '@mui/material';
-import { Send as SendIcon, Sparkles as SparklesIcon } from '@mui/icons-material';
+import { Send as SendIcon, AutoAwesome as SparklesIcon } from '@mui/icons-material';
 import { ComparisonChart } from '../genui/components/ComparisonChart';
 import { ComplianceDisclaimer } from '../genui/components/ComplianceDisclaimer';
 import { ImpactAnalysisCard } from '../genui/components/ImpactAnalysisCard';
@@ -319,8 +319,5 @@ export default function GenUIChatPage() {
         </Box>
       </Box>
     </Box>
-  );
-}
-
   );
 }

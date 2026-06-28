@@ -16,6 +16,7 @@ interface User {
   is_core_admin?: boolean;
   isCoreAdmin?: boolean;
   is_admin?: boolean;
+  is_global_admin?: boolean;
   /** Tenant assignments for multi-tenant access control */
   tenant_assignments?: Array<{
     tenantId: string;
@@ -34,6 +35,8 @@ interface AuthContextType {
   isLoading: boolean;
   isAdmin: () => boolean;
   isCoreAdmin: () => boolean;
+  /** True when the user holds the global_admin or global_ops role from Keycloak */
+  isGlobalAdmin: () => boolean;
   canManageCoreAssets: () => boolean;
   canManageCustomAssets: () => boolean;
   login: (email?: string, password?: string) => Promise<void>;
@@ -99,6 +102,14 @@ function mapProfileToUser(profile: Record<string, unknown>, roles: string[]): Us
     (r) => r === 'admin' || r === 'realm-admin' || r === 'core_admin' || r === 'core-admin',
   );
 
+  // Global admin check: read from the custom uisce_metadata claim injected by Keycloak,
+  // OR fall back to checking the roles array for global_admin / global_ops.
+  const uisceMetadata = profile.uisce_metadata as Record<string, unknown> | undefined;
+  const isGlobalAdmin =
+    uisceMetadata?.is_global_admin === true ||
+    roles.includes('global_admin') ||
+    roles.includes('global_ops');
+
   return {
     id: (profile.sub as string) || (profile.preferred_username as string) || email,
     email,
@@ -111,6 +122,7 @@ function mapProfileToUser(profile: Record<string, unknown>, roles: string[]): Us
     is_core_admin: isCoreAdmin,
     isCoreAdmin: isCoreAdmin,
     is_admin: isCoreAdmin || roles.includes('admin'),
+    is_global_admin: isGlobalAdmin,
   };
 }
 
@@ -338,6 +350,14 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     return false;
   };
 
+  const computeIsGlobalAdmin = (): boolean => {
+    const u: any = user;
+    if (!u) return false;
+    if (u.is_global_admin) return true;
+    if (Array.isArray(u.roles) && (u.roles.includes('global_admin') || u.roles.includes('global_ops'))) return true;
+    return false;
+  };
+
   const value: AuthContextType = {
     user,
     token,
@@ -347,6 +367,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     isLoading,
     isAdmin: () => computeIsAdmin(),
     isCoreAdmin: () => computeIsCoreAdmin(),
+    isGlobalAdmin: () => computeIsGlobalAdmin(),
     canManageCoreAssets: () => computeIsCoreAdmin(),
     canManageCustomAssets: () => computeIsAdmin(),
     login,

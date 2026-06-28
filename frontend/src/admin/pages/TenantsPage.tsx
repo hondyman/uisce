@@ -3,6 +3,8 @@
 import React, { useState } from "react";
 import { useTenants } from "../hooks/useAdmin";
 import { Tenant, PLANS } from "../types";
+import { useAuth } from "../../contexts/AuthContext";
+import { ImpersonationModal } from "../../components/admin/ImpersonationModal";
 import "./TenantsPage.css";
 
 interface TenantFormData {
@@ -22,7 +24,9 @@ export const TenantsPage: React.FC = () => {
     region: "us-east-1",
     plan: "free",
   });
+  const [impersonateTenant, setImpersonateTenant] = useState<Tenant | null>(null);
 
+  const { isGlobalAdmin } = useAuth();
   const { tenants, total, loading, error, refetch } = useTenants(limit, offset);
 
   const handleCreateClick = () => {
@@ -228,6 +232,15 @@ export const TenantsPage: React.FC = () => {
                   <td className="actions-col">
                     <button className="link-btn">Details</button>
                     <button className="link-btn">Edit</button>
+                    {isGlobalAdmin() && (
+                      <button 
+                        className="link-btn"
+                        onClick={() => setImpersonateTenant(tenant)}
+                        style={{ color: '#d97706', fontWeight: 600 }}
+                      >
+                        Assume Context
+                      </button>
+                    )}
                   </td>
                 </tr>
               ))}
@@ -255,6 +268,15 @@ export const TenantsPage: React.FC = () => {
             Next
           </button>
         </div>
+      )}
+
+      {impersonateTenant && (
+        <ImpersonationModal
+          open={!!impersonateTenant}
+          onClose={() => setImpersonateTenant(null)}
+          targetTenantId={impersonateTenant.id}
+          targetTenantName={impersonateTenant.name}
+        />
       )}
     </div>
   );

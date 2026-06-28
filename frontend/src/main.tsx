@@ -24,6 +24,7 @@ import { TenantProvider } from './contexts/TenantContext';
 import { AccessProvider } from './contexts/AccessContext';
 import { MetadataProvider } from './contexts/MetadataContext';
 import { AuthProvider } from './contexts/AuthContext';
+import { ImpersonationProvider } from './contexts/ImpersonationContext';
 import { ThemeProvider as CustomThemeProvider, useTheme } from './contexts/ThemeContext';
 import { useNotification } from './hooks/useNotification';
 import NotificationService from './services/NotificationService';
@@ -152,22 +153,24 @@ function AppWithTheme() {
               <QueryClientProvider client={queryClient}>
                 <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
                   <AuthProvider>
-                    <AccessProvider>
-                      <SnackbarProvider maxSnack={3}>
-                        {/* Set the global notification service using notistack */}
-                        <NotificationSetter />
-                        <ConfirmProvider>
-                          <TenantProvider>
-                            <MetadataProvider>
-                              <GraphqlOutageBanner />                              {/* Dev proxy check: warns if Vite proxy is likely misconfigured for local host dev */}
-                              <DevProxyWarning />                              <I18nextProvider i18n={i18n}>
-                                <App />
-                              </I18nextProvider>
-                            </MetadataProvider>
-                          </TenantProvider>
-                        </ConfirmProvider>
-                      </SnackbarProvider>
-                    </AccessProvider>
+                    <ImpersonationProvider>
+                      <AccessProvider>
+                        <SnackbarProvider maxSnack={3}>
+                          {/* Set the global notification service using notistack */}
+                          <NotificationSetter />
+                          <ConfirmProvider>
+                            <TenantProvider>
+                              <MetadataProvider>
+                                <GraphqlOutageBanner />                              {/* Dev proxy check: warns if Vite proxy is likely misconfigured for local host dev */}
+                                <DevProxyWarning />                              <I18nextProvider i18n={i18n}>
+                                  <App />
+                                </I18nextProvider>
+                              </MetadataProvider>
+                            </TenantProvider>
+                          </ConfirmProvider>
+                        </SnackbarProvider>
+                      </AccessProvider>
+                    </ImpersonationProvider>
                   </AuthProvider>
                 </BrowserRouter>
               </QueryClientProvider>
