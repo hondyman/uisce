@@ -5,6 +5,8 @@ import (
 	"log"
 	"net/http"
 	"strings"
+
+	"github.com/gin-gonic/gin"
 )
 
 // ContextKey is used for storing JWT claims in context
@@ -232,4 +234,23 @@ func (m *OptionalJWTMiddleware) Handler(next http.Handler) http.Handler {
 // NewOptionalJWTMiddleware creates optional JWT middleware
 func NewOptionalJWTMiddleware() *OptionalJWTMiddleware {
 	return &OptionalJWTMiddleware{}
+}
+
+// GetGinClaimsFromContext retrieves JWT claims from a gin context
+func GetGinClaimsFromContext(c *gin.Context) *JWTClaims {
+	if val, exists := c.Get(string(ClaimsContextKey)); exists {
+		if claims, ok := val.(*JWTClaims); ok {
+			return claims
+		}
+	}
+	if val, exists := c.Get("jwt_claims"); exists {
+		if claims, ok := val.(*JWTClaims); ok {
+			return claims
+		}
+	}
+	// Fall back to request context
+	if c.Request != nil {
+		return GetClaimsFromContext(c.Request)
+	}
+	return nil
 }
