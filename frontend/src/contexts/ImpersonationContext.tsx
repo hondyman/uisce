@@ -224,10 +224,17 @@ export const ImpersonationProvider: React.FC<{ children: ReactNode }> = ({ child
 
   // On mount: refresh the recent-sessions list from the backend so a new browser
   // still sees recently impersonated tenants (the localStorage cache is empty).
+  // Then poll every 30s while the admin is authenticated so the picker
+  // stays current even when the admin has not opened it recently.
   useEffect(() => {
+    if (!adminToken) return;
     void refreshRecentSessionsFromServer();
+    const id = setInterval(() => {
+      void refreshRecentSessionsFromServer();
+    }, 30_000);
+    return () => clearInterval(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [adminToken]);
 
   // Live countdown ticker
   useEffect(() => {
