@@ -128,6 +128,7 @@ type Server struct {
 	TemporalClient          temporalclient.Client
 	EvidenceBundleService   *services.EvidenceBundleService
 	ApprovalService         *services.ApprovalService
+	ImpersonationSweeper    *security.Sweeper
 	SemanticLayerHandler    *SemanticLayerHandler
 	GeminiClient            LLMProvider
 	HouseholdService        *household.Service
@@ -1347,6 +1348,21 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 			impersonateHandler := handlers.NewAdminImpersonateHandler(db)
 			r.Post("/admin/impersonate", impersonateHandler.AssumeContext)
 			r.Delete("/admin/impersonate/{sessionId}", impersonateHandler.ExitContext)
+
+			// Background sweeper: writes IMPERSONATION_EXPIRED rows for sessions
+			// whose expires_at passed without the client calling DELETE.
+			// Uses the same DB-backed audit logger as the handler so a single
+			// source of truth is queried.
+			if srv.ImpersonationSweeper == nil {
+				srv.ImpersonationSweeper = security.NewSweeper(
+					security.NewPlatformAdminAuditLogger(db),
+					60*time.Second,
+					func(err error) {
+						fmt.Fprintf(os.Stderr, "[impersonation-sweeper] %v\n", err)
+					},
+				)
+				srv.ImpersonationSweeper.Start()
+			}
 
 			// Session-history queries (used by the picker)
 			r.Get("/admin/impersonate/sessions/active", impersonateHandler.ListActiveSessions)

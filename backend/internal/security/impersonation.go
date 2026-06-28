@@ -37,9 +37,10 @@ const (
 type ImpersonationEventType string
 
 const (
-	EventImpersonationStart  ImpersonationEventType = "IMPERSONATION_START"
-	EventImpersonationEnd    ImpersonationEventType = "IMPERSONATION_END"
-	EventBreakGlassAction    ImpersonationEventType = "BREAK_GLASS_ACTION"
+	EventImpersonationStart   ImpersonationEventType = "IMPERSONATION_START"
+	EventImpersonationEnd     ImpersonationEventType = "IMPERSONATION_END"
+	EventBreakGlassAction     ImpersonationEventType = "BREAK_GLASS_ACTION"
+	EventImpersonationExpired ImpersonationEventType = "IMPERSONATION_EXPIRED"
 )
 
 // MaxImpersonationDuration is the hard server-side cap on any impersonation window.
@@ -174,6 +175,15 @@ type ImpersonationAuditLogger interface {
 
 	// LogBreakGlassAction records a state-changing operation performed under break_glass mode.
 	LogBreakGlassAction(ctx context.Context, sessionID uuid.UUID, adminUserID string, targetTenantID uuid.UUID, detail map[string]any) error
+
+	// ListExpiredActiveSessions returns START rows that have no matching END row
+	// AND whose expires_at is in the past. Used by the background sweeper to write
+	// IMPERSONATION_EXPIRED audit rows for sessions that the client never exited.
+	ListExpiredActiveSessions(ctx context.Context) ([]ImpersonationSession, error)
+
+	// LogExpired writes an IMPERSONATION_EXPIRED row for a session whose expires_at
+	// has passed without the client calling DELETE. Written by the background sweeper.
+	LogExpired(ctx context.Context, session ImpersonationSession) error
 }
 
 // ============================================================================

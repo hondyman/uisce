@@ -211,3 +211,107 @@ func nullableStr(s string) interface{} {
 	}
 	return s
 }
+
+// ListExpiredActiveSessions returns the START rows of impersonation sessions
+// that have no matching END row AND whose expires_at is already in the past.
+// Used by the background sweeper to write IMPERSONATION_EXPIRED audit rows so
+// the audit log stays complete even when clients go offline without exiting.
+//
+// Bounded by a hard limit (100) to prevent memory blowups if the sweeper is
+// offline for a long time and a backlog accumulates.
+func (l *PlatformAdminAuditLogger) ListExpiredActiveSessions(ctx context.Context) ([]ImpersonationSession, error) {
+	const q = `
+		SELECT s.session_id, s.admin_user_id, s.admin_email,
+		       s.target_tenant_id, s.mode, s.expires_at, s.created_at
+		FROM platform_admin_audit s
+		LEFT JOIN platform_admin_audit e
+		  ON e.session_id = s.session_id AND e.event_type = $2
+		WHERE s.event_type = $1
+		  AND s.expires_at IS NOT NULL
+		  AND s.expires_at < NOW()
+		  AND e.id IS NULL
+		ORDER BY s.expires_at ASC
+		LIMIT 100
+	`
+
+	rows, err := l.db.QueryContext(ctx, q,
+		EventImpersonationStart,
+		EventImpersonationEnd,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("platform_admin_audit: failed to query expired sessions: %w", err)
+	}
+	defer rows.Close()
+
+	out := make([]ImpersonationSession, 0, 16)
+	for rows.Next() {
+		var (
+			sid, adminID, adminEmail, tenantID, mode string
+			expiresAt                               sql.NullTime
+			createdAt                               time.Time
+		)
+		if err := rows.Scan(&sid, &adminID, &adminEmail, &tenantID, &mode, &expiresAt, &createdAt); err != nil {
+			return nil, fmt.Errorf("platform_admin_audit: scan failed: %w", err)
+		}
+		sessionUUID, uuidErr := uuid.Parse(sid)
+		if uuidErr != nil {
+			continue
+		}
+		tenantUUID, _ := uuid.Parse(tenantID)
+		parsedMode := ImpersonationMode(mode)
+		var expiresTime time.Time
+		if expiresAt.Valid {
+			expiresTime = expiresAt.Time
+		}
+		out = append(out, ImpersonationSession{
+			SessionID:      sessionUUID,
+			AdminUserID:    adminID,
+			AdminEmail:     adminEmail,
+			TargetTenantID: tenantUUID,
+			Mode:           parsedMode,
+			ExpiresAt:      expiresTime,
+			// StartedAt is captured via created_at; LogEnd handles the rest.
+		})
+	}
+	return out, nil
+}
+
+// LogExpired writes an IMPERSONATION_EXPIRED row for a session that the client
+// never explicitly exited. The event_type is new ("IMPERSONATION_EXPIRED") but
+// we reuse the existing columns; the "reason" field carries "Session expired
+// without explicit exit" so audit consumers can distinguish from manual exits.
+func (l *PlatformAdminAuditLogger) LogExpired(ctx context.Context, session ImpersonationSession) error {
+	const q = `
+		INSERT INTO platform_admin_audit (
+			id,
+			event_type,
+			mode,
+			admin_user_id,
+			admin_email,
+			target_tenant_id,
+			session_id,
+			reason,
+			created_at
+		) VALUES (
+			$1, $2, $3, $4, $5, $6, $7, $8, $9
+		)`
+
+	_, err := l.db.ExecContext(
+		ctx,
+		q,
+		uuid.New(),                          // $1  id
+		EventImpersonationExpired,           // $2  event_type
+		string(session.Mode),                // $3  mode — preserve original
+		session.AdminUserID,                 // $4  admin_user_id
+		session.AdminEmail,                  // $5  admin_email
+		session.TargetTenantID,              // $6  target_tenant_id
+		session.SessionID,                   // $7  session_id
+		"Session expired without explicit exit", // $8  reason
+		time.Now().UTC(),                    // $9  created_at
+	)
+	if err != nil {
+		return fmt.Errorf("platform_admin_audit: failed to write IMPERSONATION_EXPIRED for session %s: %w",
+			session.SessionID, err)
+	}
+	return nil
+}
