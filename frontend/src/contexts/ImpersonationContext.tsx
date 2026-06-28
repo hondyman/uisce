@@ -31,6 +31,41 @@ import { useAuth } from './AuthContext';
 
 export type ImpersonationMode = 'read_only' | 'break_glass';
 
+// Centralized constants shared by both the client and server (server is authoritative).
+// If you change these, update backend/internal/security/impersonation.go to match.
+export const MIN_REASON_LENGTH = 10;
+export const TICKET_REQUIRED_FOR_BREAK_GLASS = true;
+export const DEFAULT_SESSION_DURATION_MINUTES = 30;
+export const MAX_SESSION_DURATION_MINUTES = 120;
+
+/**
+ * ImpersonationScopeKind matches the backend CHECK constraint in
+ * platform_admin_audit.scope_kind. Adding a new kind here requires a corresponding
+ * server-side update.
+ */
+export type ImpersonationScopeKind = 'tenant' | 'instance' | 'product' | 'datasource';
+
+// String constants matching the ImpersonationScopeKind union. Re-exported here so
+// components can compare against typed values without sprinkling string literals.
+export const ScopeTenant = 'tenant' as const;
+export const ScopeInstance = 'instance' as const;
+export const ScopeProduct = 'product' as const;
+export const ScopeDatasource = 'datasource' as const;
+
+/**
+ * ImpersonationScope describes the optional narrowing of impersonation to a specific
+ * resource within the target tenant. When scope_kind = 'tenant' (the default), the
+ * admin has full tenant access. For tighter scopes, scope_id identifies the resource.
+ */
+export interface ImpersonationScope {
+  kind: ImpersonationScopeKind;
+  id: string;
+}
+
+/**
+ * ImpersonationSession is the resolved session record kept in memory and localStorage.
+ * Includes the audit-mode banner fields and an optional scope narrowing.
+ */
 export interface ImpersonationSession {
   sessionId: string;
   targetTenantId: string;
@@ -42,6 +77,8 @@ export interface ImpersonationSession {
   expiresAt: Date;
   /** Countdown seconds remaining — updates every second */
   secondsRemaining: number;
+  /** Optional scope narrowing (defaults to { kind: 'tenant', id: targetTenantId }) */
+  scope: ImpersonationScope;
 }
 
 export interface AssumeContextParams {
@@ -51,6 +88,19 @@ export interface AssumeContextParams {
   ticketReference: string;
   mode: ImpersonationMode;
   durationMinutes: number;
+  /** Optional scope narrowing; defaults to tenant-wide. */
+  scope?: ImpersonationScope;
+}
+
+/**
+ * RecentSession is a lightweight record of a recent impersonation, used for the
+ * "recent sessions" strip in the picker.
+ */
+export interface RecentSession {
+  tenantId: string;
+  tenantName: string;
+  lastUsedAt: number; // unix epoch ms
+  mode: ImpersonationMode;
 }
 
 interface ImpersonationContextType {
@@ -66,11 +116,17 @@ interface ImpersonationContextType {
   /** True while the assume/exit API call is in flight */
   isLoading: boolean;
 
+  /** Last 5 tenants the admin impersonated, newest first. */
+  recentSessions: RecentSession[];
+
   /** Start an impersonation session */
   assumeTenantContext: (params: AssumeContextParams) => Promise<void>;
 
   /** End the active impersonation session */
   exitImpersonation: () => Promise<void>;
+
+  /** Clear the recent-sessions cache (UI hook for the "clear history" button) */
+  clearRecentSessions: () => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -81,6 +137,7 @@ const ImpersonationContext = createContext<ImpersonationContextType | undefined>
 
 const IMPERSONATION_SESSION_KEY = 'uisce_impersonation_session';
 const IMPERSONATION_TOKEN_KEY = 'uisce_impersonation_token';
+const IMPERSONATION_RECENT_KEY = 'uisce_impersonation_recent';
 
 const API_BASE = import.meta.env.VITE_API_URL ?? '/api';
 
@@ -93,7 +150,25 @@ export const ImpersonationProvider: React.FC<{ children: ReactNode }> = ({ child
   const [session, setSession] = useState<ImpersonationSession | null>(null);
   const [impersonationToken, setImpersonationToken] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [recentSessions, setRecentSessions] = useState<RecentSession[]>(() => {
+    // Rehydrate recent sessions on mount.
+    try {
+      const raw = localStorage.getItem(IMPERSONATION_RECENT_KEY);
+      return raw ? (JSON.parse(raw) as RecentSession[]) : [];
+    } catch {
+      return [];
+    }
+  });
   const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Persist recent sessions whenever they change.
+  useEffect(() => {
+    try {
+      localStorage.setItem(IMPERSONATION_RECENT_KEY, JSON.stringify(recentSessions));
+    } catch {
+      // Ignore storage errors (private mode, quota exceeded, etc.)
+    }
+  }, [recentSessions]);
 
   // Rehydrate session from localStorage on mount (survives page refresh)
   useEffect(() => {
@@ -152,6 +227,10 @@ export const ImpersonationProvider: React.FC<{ children: ReactNode }> = ({ child
     async (params: AssumeContextParams): Promise<void> => {
       if (!adminToken) throw new Error('Not authenticated');
 
+      // Resolve effective scope: default to tenant-wide if not provided.
+      const scope: ImpersonationScope =
+        params.scope ?? { kind: 'tenant', id: params.targetTenantId };
+
       setIsLoading(true);
       try {
         const resp = await fetch(`${API_BASE}/admin/impersonate`, {
@@ -166,6 +245,8 @@ export const ImpersonationProvider: React.FC<{ children: ReactNode }> = ({ child
             ticket_reference: params.ticketReference,
             mode: params.mode,
             duration_minutes: params.durationMinutes,
+            scope_kind: scope.kind,
+            scope_id: scope.id,
           }),
         });
 
@@ -181,9 +262,15 @@ export const ImpersonationProvider: React.FC<{ children: ReactNode }> = ({ child
           session_id: string;
           tenant_id: string;
           mode: ImpersonationMode;
+          scope_kind?: ImpersonationScopeKind;
+          scope_id?: string;
         };
 
         const expiresAt = new Date(data.expires_at);
+        const effectiveScope: ImpersonationScope = {
+          kind: data.scope_kind ?? scope.kind,
+          id: data.scope_id ?? scope.id,
+        };
         const newSession: ImpersonationSession = {
           sessionId: data.session_id,
           targetTenantId: data.tenant_id,
@@ -194,11 +281,19 @@ export const ImpersonationProvider: React.FC<{ children: ReactNode }> = ({ child
           ticketReference: params.ticketReference,
           expiresAt,
           secondsRemaining: Math.round((expiresAt.getTime() - Date.now()) / 1000),
+          scope: effectiveScope,
         };
 
         setSession(newSession);
         setImpersonationToken(data.access_token);
         persistSession(newSession, data.access_token);
+        // Update recent sessions (deduped, newest first, max 5)
+        addRecentSession({
+          tenantId: data.tenant_id,
+          tenantName: params.targetTenantName,
+          lastUsedAt: Date.now(),
+          mode: data.mode,
+        });
       } finally {
         setIsLoading(false);
       }
@@ -215,9 +310,10 @@ export const ImpersonationProvider: React.FC<{ children: ReactNode }> = ({ child
 
     setIsLoading(true);
     try {
-      // Best-effort server-side END audit record; don't block local cleanup on failure
+      // Best-effort server-side END audit record; don't block local cleanup on failure.
+      // Note: no longer sends tenant_id query param — the server recovers it from the audit row.
       await fetch(
-        `${API_BASE}/admin/impersonate/${session.sessionId}?tenant_id=${session.targetTenantId}`,
+        `${API_BASE}/admin/impersonate/${session.sessionId}`,
         {
           method: 'DELETE',
           headers: {
@@ -235,6 +331,28 @@ export const ImpersonationProvider: React.FC<{ children: ReactNode }> = ({ child
       setIsLoading(false);
     }
   }, [session, adminToken]);
+
+  // ---------------------------------------------------------------------------
+  // Recent sessions (top-5 most-recent impersonated tenants)
+  // ---------------------------------------------------------------------------
+
+  const addRecentSession = useCallback((entry: RecentSession) => {
+    setRecentSessions((prev) => {
+      // Dedup by tenantId: drop existing entry with the same id, then prepend.
+      const filtered = prev.filter((s) => s.tenantId !== entry.tenantId);
+      const next = [entry, ...filtered];
+      return next.slice(0, 5);
+    });
+  }, []);
+
+  const clearRecentSessions = useCallback(() => {
+    setRecentSessions([]);
+    try {
+      localStorage.removeItem(IMPERSONATION_RECENT_KEY);
+    } catch {
+      // Ignore storage errors.
+    }
+  }, []);
 
   // ---------------------------------------------------------------------------
   // Helpers
@@ -259,8 +377,10 @@ export const ImpersonationProvider: React.FC<{ children: ReactNode }> = ({ child
     session,
     impersonationToken,
     isLoading,
+    recentSessions,
     assumeTenantContext,
     exitImpersonation,
+    clearRecentSessions,
   };
 
   return (

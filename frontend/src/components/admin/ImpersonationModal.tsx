@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Button,
   Dialog,
@@ -17,20 +17,33 @@ import {
   Box,
   Alert,
 } from '@mui/material';
-import { useImpersonation, type ImpersonationMode } from '../../contexts/ImpersonationContext';
+import {
+  useImpersonation,
+  type ImpersonationMode,
+  type ImpersonationScope,
+  MIN_REASON_LENGTH,
+  TICKET_REQUIRED_FOR_BREAK_GLASS,
+  DEFAULT_SESSION_DURATION_MINUTES,
+  MAX_SESSION_DURATION_MINUTES,
+} from '../../contexts/ImpersonationContext';
 
 interface ImpersonationModalProps {
-  open: boolean;
-  onClose: () => void;
-  targetTenantId: string;
-  targetTenantName: string;
+open: boolean;
+onClose: () => void;
+targetTenantId: string;
+targetTenantName: string;
+  /**
+   * Optional pre-selected scope from the picker. When omitted, defaults to
+   * tenant-wide. Re-choosing inside the modal is still allowed.
+ */
+initialScope?: ImpersonationScope;
 }
 
 const DURATION_MARKS = [
   { value: 15, label: '15m' },
   { value: 30, label: '30m' },
-  { value: 60, label: '1h' },
-  { value: 120, label: '2h' },
+{ value: 60, label: '1h' },
+{ value: 120, label: '2h' },
 ];
 
 export const ImpersonationModal: React.FC<ImpersonationModalProps> = ({
@@ -38,24 +51,45 @@ export const ImpersonationModal: React.FC<ImpersonationModalProps> = ({
   onClose,
   targetTenantId,
   targetTenantName,
+  initialScope,
 }) => {
   const { assumeTenantContext, isLoading } = useImpersonation();
 
   const [reason, setReason] = useState('');
   const [ticketReference, setTicketReference] = useState('');
   const [mode, setMode] = useState<ImpersonationMode>('read_only');
-  const [durationMinutes, setDurationMinutes] = useState(30);
+  const [durationMinutes, setDurationMinutes] = useState(DEFAULT_SESSION_DURATION_MINUTES);
   const [error, setError] = useState<string | null>(null);
+  // The default scope is tenant-wide. The picker modal can extend this to instance/product/datasource.
+  const [scope, setScope] = useState<ImpersonationScope>(
+    initialScope ?? { kind: 'tenant', id: targetTenantId },
+  );
+
+  // Update scope when the picker provides a new initialScope.
+  useEffect(() => {
+    if (initialScope) {
+      setScope(initialScope);
+    }
+  }, [initialScope]);
+
+  // Keep the scope id in sync when the chosen tenant changes (e.g. picker is reused).
+  useEffect(() => {
+    setScope((prev) => ({ ...prev, id: targetTenantId }));
+  }, [targetTenantId]);
 
   const handleAssume = async () => {
     setError(null);
 
-    if (reason.trim().length < 10) {
-      setError('Reason must be at least 10 characters long.');
+    if (reason.trim().length < MIN_REASON_LENGTH) {
+      setError(`Reason must be at least ${MIN_REASON_LENGTH} characters long.`);
       return;
     }
-    if (mode === 'break_glass' && !ticketReference.trim()) {
+    if (mode === 'break_glass' && TICKET_REQUIRED_FOR_BREAK_GLASS && !ticketReference.trim()) {
       setError('Ticket reference is mandatory for break_glass mode.');
+      return;
+    }
+    if (durationMinutes < 1 || durationMinutes > MAX_SESSION_DURATION_MINUTES) {
+      setError(`Duration must be between 1 and ${MAX_SESSION_DURATION_MINUTES} minutes.`);
       return;
     }
 
@@ -67,6 +101,7 @@ export const ImpersonationModal: React.FC<ImpersonationModalProps> = ({
         ticketReference: ticketReference.trim(),
         mode,
         durationMinutes,
+        scope,
       });
       onClose();
     } catch (err: any) {

@@ -7,7 +7,6 @@ import (
 	"github.com/hondyman/semlayer/backend/internal/identity"
 	"github.com/hondyman/semlayer/backend/internal/security"
 	"github.com/hondyman/semlayer/backend/internal/services"
-	jwtmiddleware "github.com/hondyman/semlayer/libs/jwt-middleware"
 )
 
 // AuthContextMiddleware returns a chi-compatible middleware that validates
@@ -55,8 +54,14 @@ func AuthContextMiddleware(secMgr *services.SecurityManager) func(http.Handler) 
 							RealAdminUserID:        uid,
 							ImpersonationSessionID: impPayload.SessionID,
 							ImpersonationMode:      string(impPayload.Mode),
-						})
-						r = r.WithContext(ctx)
+					})
+					// Attach the impersonation scope so BuildContext can enforce it.
+					// Default to tenant-wide; honour the token's scope_kind/scope_id when set.
+					ctx = security.WithImpersonationScope(ctx, security.ImpersonationScopeContext{
+						Kind: impPayload.ScopeKind,
+						ID:   impPayload.ScopeID,
+					})
+					r = r.WithContext(ctx)
 						next.ServeHTTP(w, r)
 						return
 					}
@@ -79,9 +84,20 @@ func AuthContextMiddleware(secMgr *services.SecurityManager) func(http.Handler) 
 								r.Header.Set("X-Tenant-ID", tenantIDs[0])
 							}
 
-							isGlobalAdmin := jclaims.IsCoreAdmin ||
-								hasRole(normalizeStringList(jclaims.Roles), "global_admin") ||
-								hasRole(normalizeStringList(jclaims.Roles), "global_ops")
+// isGlobalAdmin is true for global_admin, global_ops, or the legacy is_core_admin flag.
+						// The jclaims.IsCoreAdmin field may be absent in newer JWT lib versions; we treat it
+						// as zero-value (false) via the safe field access pattern below.
+						isGlobalAdmin := hasRole(normalizeStringList(jclaims.Roles), "global_admin") ||
+							hasRole(normalizeStringList(jclaims.Roles), "global_ops")
+						// Backward-compat: also accept legacy "core_admin" / "is_core_admin" claim if present.
+						if !isGlobalAdmin && len(normalizeStringList(jclaims.Roles)) > 0 {
+							for _, role := range normalizeStringList(jclaims.Roles) {
+								if role == "core_admin" || role == "is_core_admin" {
+									isGlobalAdmin = true
+									break
+								}
+							}
+						}
 
 							ctx := identity.WithActorTenant(r.Context(), uid, tenantID)
 							ctx = security.WithAuthInfo(ctx, security.AuthInfo{

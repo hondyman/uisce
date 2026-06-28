@@ -103,6 +103,18 @@ func BuildContext(ctx context.Context, auth AuthInfo, req BuildContextRequest, r
 		return nil, fmt.Errorf("region '%s' is not configured for datasource", req.Region)
 	}
 
+	// Phase 3 enforcement: when impersonation is active and a scope was chosen,
+	// verify the resolved datasource is within the chosen scope. This is the
+	// defence-in-depth backstop for the audit-recorded scope narrowing.
+	if auth.ImpersonationActive && auth.ImpersonationSessionID != "" {
+		// Pull the scope from the request context (set by AuthContextMiddleware
+		// after validating the impersonation token). Default to tenant-wide.
+		scope := ImpersonationScopeFromContext(ctx)
+		if err := ValidateScope(scope.Kind, scope.ID, *resolved); err != nil {
+			return nil, err
+		}
+	}
+
 	operatingScope := fmt.Sprintf("%s:%s:%s:%s", resolved.TenantID, resolved.InstanceID, resolved.ProductID, resolved.DatasourceID)
 	secCtx := &Context{
 		UserID:         auth.UserID,

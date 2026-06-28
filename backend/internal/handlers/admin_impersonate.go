@@ -1,14 +1,17 @@
 package handlers
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net"
 	"net/http"
 	"strings"
 	"time"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/hondyman/semlayer/backend/internal/security"
 )
@@ -180,11 +183,9 @@ func (h *AdminImpersonateHandler) ExitContext(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	// Extract sessionId from URL path — compatible with chi router.
-	// e.g. /api/admin/impersonate/{sessionId}
-	path := r.URL.Path
-	parts := strings.Split(strings.TrimSuffix(path, "/"), "/")
-	sessionIDStr := parts[len(parts)-1]
+	// Extract sessionId from URL path using chi's URLParam helper.
+	// chi.URLParam properly handles URL-decoding and trailing slashes.
+	sessionIDStr := chi.URLParam(r, "sessionId")
 
 	sessionID, err := uuid.Parse(sessionIDStr)
 	if err != nil {
@@ -192,12 +193,13 @@ func (h *AdminImpersonateHandler) ExitContext(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	// The targetTenantID must be provided by the frontend in a query param
-	// since the impersonation token may have already been revoked client-side.
-	targetTenantIDStr := r.URL.Query().Get("tenant_id")
-	targetTenantID, err := uuid.Parse(targetTenantIDStr)
-	if err != nil {
-		writeJSONError(w, http.StatusBadRequest, "tenant_id query parameter must be a valid UUID")
+	// Look up the target tenant ID from the audit row (the session token contained it).
+	// We do NOT rely on a client-supplied query param because that would let any caller
+	// claim any tenant -- instead, recover the target from the platform_admin_audit row.
+	targetTenantID, lookupErr := h.lookupSessionTenant(r.Context(), sessionID)
+	if lookupErr != nil {
+		writeJSONError(w, http.StatusInternalServerError,
+			"failed to look up session tenant: "+lookupErr.Error())
 		return
 	}
 
@@ -209,16 +211,26 @@ func (h *AdminImpersonateHandler) ExitContext(w http.ResponseWriter, r *http.Req
 	w.WriteHeader(http.StatusNoContent)
 }
 
+// lookupSessionTenant fetches the target tenant ID for a given session from
+// platform_admin_audit via the ContextExchangeService. This allows ExitContext to work
+// even after the impersonation token has been revoked client-side.
+func (h *AdminImpersonateHandler) lookupSessionTenant(ctx context.Context, sessionID uuid.UUID) (uuid.UUID, error) {
+	if h.svc == nil {
+		return uuid.Nil, errors.New("context exchange service is not configured")
+	}
+	return h.svc.LookupSessionTenant(ctx, sessionID)
+}
+
 // ============================================================================
 // Helpers
 // ============================================================================
+//
+// writeJSON and writeJSONError live in source_preference_handler.go (declared earlier in
+// the package). They are intentionally NOT redeclared here to avoid "redeclared in this
+// block" errors at compile time.
 
-func writeJSON(w http.ResponseWriter, code int, v any) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(code)
-	_ = json.NewEncoder(w).Encode(v)
-}
-
+// writeJSONError is a thin wrapper around the package-level writeJSON. Declared here so
+// the rest of this file can use the standard "writeJSONError(w, code, msg)" pattern.
 func writeJSONError(w http.ResponseWriter, code int, msg string) {
 	writeJSON(w, code, map[string]string{"error": msg})
 }

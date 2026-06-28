@@ -1050,7 +1050,9 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 	// Initialize Phase 8: Advanced Cross-Domain Intelligence
 	// 1. Semantic Graph Service for MDM
 	mdmGraph := analytics.NewSemanticGraphService(sqlxDB)
-	_ = mdmGraph.Initialize()
+	if db != nil {
+		_ = mdmGraph.Initialize()
+	}
 
 	// 2. Execution Engine for recursive NAV/analytics
 	execEngine, _ := mdm.NewExecutionEngine(context.Background(), mdmGraph, nil)
@@ -1340,6 +1342,29 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 		RegisterValidationRulesRoutes(r, db, srv.CueEngine, srv.BusinessObjectService, srv.DatasourceResolver)
 
 		adminHandler.RegisterRoutes(r)
+// Admin Impersonation Routes
+		if db != nil {
+			impersonateHandler := handlers.NewAdminImpersonateHandler(db)
+			r.Post("/admin/impersonate", impersonateHandler.AssumeContext)
+			r.Delete("/admin/impersonate/{sessionId}", impersonateHandler.ExitContext)
+
+			// Tenant search + scope (impersonation picker)
+			tenantSearchHandler := handlers.NewAdminTenantSearchHandler(db)
+			r.Get("/admin/tenants/search", tenantSearchHandler.SearchTenants)
+			r.Get("/admin/tenants/{tenantID}/scope", tenantSearchHandler.GetTenantScope)
+		}
+
+		// WebSocket token issuance
+
+		// Admin Impersonation Routes
+		if db != nil {
+			impersonateHandler := handlers.NewAdminImpersonateHandler(db)
+			r.Post("/admin/impersonate", impersonateHandler.AssumeContext)
+			r.Delete("/admin/impersonate/{sessionId}", impersonateHandler.ExitContext)
+		}
+
+		// WebSocket token issuance
+		r.Post("/ws/token", srv.getWsToken)
 
 		// Legacy Compatibility & Misc
 	})
@@ -2403,13 +2428,8 @@ func (s *Server) handleDynamicCrud(w http.ResponseWriter, r *http.Request) {
 		req.Data = make(map[string]interface{})
 	}
 
-	if claims := jwtmiddleware.GetClaimsFromContext(r)
-	if claims == nil {
-		http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
-		return
-	}
-	tenantID := claims.TenantID; tenantID != "" {
-		req.Data["tenant_id"] = tenantID
+	if claims := jwtmiddleware.GetClaimsFromContext(r); claims != nil && claims.TenantID != "" {
+		req.Data["tenant_id"] = claims.TenantID
 	}
 	if datasourceID := r.Header.Get("X-Tenant-Datasource-ID"); datasourceID != "" {
 		req.Data["tenant_datasource_id"] = datasourceID

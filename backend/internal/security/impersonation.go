@@ -129,6 +129,14 @@ type impersonationTokenPayload struct {
 	// SessionID links back to platform_admin_audit.
 	SessionID string `json:"session_id"`
 
+	// Scope narrows impersonation to a subset of the target tenant.
+	ScopeKind string `json:"scope_kind"` // "tenant" | "instance" | "product" | "datasource"
+	ScopeID   string `json:"scope_id"`   // UUID of the scoped resource; empty = tenant-wide
+
+	// RealRoles preserves the admin's actual roles so downstream auth can distinguish
+	// global_admin vs global_ops even during impersonation.
+	RealRoles []string `json:"real_roles"`
+
 	// Mode is the operational mode for this session.
 	Mode ImpersonationMode `json:"mode"`
 
@@ -175,6 +183,33 @@ type ContextExchangeService struct {
 	audit ImpersonationAuditLogger
 }
 
+// LookupSessionTenant fetches the target tenant ID for a session from the audit log.
+// Used by ExitContext to recover the target tenant even after the impersonation
+// token has been revoked client-side (the audit row is the durable record).
+func (s *ContextExchangeService) LookupSessionTenant(ctx context.Context, sessionID uuid.UUID) (uuid.UUID, error) {
+	if s.audit == nil {
+		return uuid.Nil, errors.New("audit logger is not configured")
+	}
+	pa, ok := s.audit.(*PlatformAdminAuditLogger)
+	if !ok {
+		return uuid.Nil, errors.New("audit logger does not support session tenant lookup")
+	}
+	if pa.db == nil {
+		return uuid.Nil, errors.New("audit database is not configured")
+	}
+	var targetTenantID uuid.UUID
+	err := pa.db.QueryRowContext(ctx,
+		`SELECT target_tenant_id FROM platform_admin_audit
+		 WHERE session_id = $1 AND event_type = $2 LIMIT 1`,
+		sessionID, EventImpersonationStart,
+	).Scan(&targetTenantID)
+	if err != nil {
+		return uuid.Nil, err
+	}
+	return targetTenantID, nil
+}
+
+// NewContextExchangeService constructs a ContextExchangeService.
 // NewContextExchangeService constructs a ContextExchangeService.
 func NewContextExchangeService(audit ImpersonationAuditLogger) *ContextExchangeService {
 	if audit == nil {
