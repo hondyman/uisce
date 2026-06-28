@@ -8,6 +8,37 @@
 /dist
 /.out/
 
+# Go build outputs (compiled binaries from go build)
+api-gateway/api-gateway
+api-gateway/api-gateway-bin
+api-gateway/server
+backend/app./cmd/server
+backend/cmd/*/main
+backend/e2e_amqp
+backend/rule-engine-service
+backend/semantic-rules-api
+backend/semantic-rules-api/semantic-rules-api
+backend/temporal-worker
+backend/validation-service
+backend/websocket
+backend/websocket_server
+bp-backend/server
+calendar-service/bin/calendar-service
+migrate
+migration
+server
+services/ai-builder/ai-builder
+services/compliance-engine/compliance-engine
+services/governance/governance
+services/governance/governance-service
+services/semantic-engine/cmd/cmd
+services/semantic-engine/semantic-engine
+
+# Backend runtime artifacts
+backend.log
+*.pid
+config.yaml
+
 # Logs
 *.log
 npm-debug.log*
@@ -33,3 +64,7 @@ Thumbs.db
 
 # Go test binaries
 *.test
+
+# Local logs and tmp dirs
+/logs/
+/tmp/
