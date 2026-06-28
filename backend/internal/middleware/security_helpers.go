@@ -111,3 +111,14 @@ func SetGlobalAdminContext(ctx context.Context, db *sql.DB) error {
 
 	return nil
 }
+
+// hasRole returns true if the given role string is present in the slice.
+// Used by AuthContextMiddleware to detect global_admin / global_ops roles.
+func hasRole(roles []string, target string) bool {
+	for _, r := range roles {
+		if r == target {
+			return true
+		}
+	}
+	return false
+}

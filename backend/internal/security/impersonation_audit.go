@@ -1,0 +1,186 @@
+package security
+
+import (
+	"context"
+	"database/sql"
+	"encoding/json"
+	"fmt"
+	"time"
+
+	"github.com/google/uuid"
+)
+
+// PlatformAdminAuditLogger is the concrete synchronous OLTP implementation
+// of ImpersonationAuditLogger. It writes directly to platform_admin_audit
+// using the provided *sql.DB connection pool.
+//
+// CRITICAL: All methods write synchronously. There are no goroutines, channels,
+// or message queues involved. If the DB write fails, the caller receives the
+// error and must abort the triggering operation.
+type PlatformAdminAuditLogger struct {
+	db *sql.DB
+}
+
+// NewPlatformAdminAuditLogger constructs a PlatformAdminAuditLogger.
+// The db must already be open and connected.
+func NewPlatformAdminAuditLogger(db *sql.DB) *PlatformAdminAuditLogger {
+	if db == nil {
+		panic("security: PlatformAdminAuditLogger requires a non-nil *sql.DB")
+	}
+	return &PlatformAdminAuditLogger{db: db}
+}
+
+// LogStart writes an IMPERSONATION_START record to platform_admin_audit.
+// This is called BEFORE the context token is issued. If this fails, the
+// ContextExchangeService will abort and return an error — no token is issued.
+func (l *PlatformAdminAuditLogger) LogStart(ctx context.Context, session ImpersonationSession) error {
+	const q = `
+		INSERT INTO platform_admin_audit (
+			id,
+			event_type,
+			mode,
+			admin_user_id,
+			admin_email,
+			target_tenant_id,
+			session_id,
+			reason,
+			ticket_reference,
+			duration_minutes,
+			expires_at,
+			ip_address,
+			user_agent,
+			action_detail,
+			created_at
+		) VALUES (
+			$1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15
+		)`
+
+	durationMinutes := int(session.Duration.Minutes())
+
+	_, err := l.db.ExecContext(
+		ctx,
+		q,
+		uuid.New(),                    // $1  id
+		EventImpersonationStart,       // $2  event_type
+		string(session.Mode),          // $3  mode
+		session.AdminUserID,           // $4  admin_user_id
+		session.AdminEmail,            // $5  admin_email
+		session.TargetTenantID,        // $6  target_tenant_id
+		session.SessionID,             // $7  session_id
+		session.Reason,                // $8  reason
+		nullableStr(session.TicketReference), // $9  ticket_reference
+		durationMinutes,               // $10 duration_minutes
+		session.ExpiresAt,             // $11 expires_at
+		nullableStr(session.IPAddress), // $12 ip_address
+		nullableStr(session.UserAgent), // $13 user_agent
+		nil,                           // $14 action_detail (nil for START events)
+		time.Now().UTC(),              // $15 created_at
+	)
+	if err != nil {
+		return fmt.Errorf("platform_admin_audit: failed to write IMPERSONATION_START for session %s: %w",
+			session.SessionID, err)
+	}
+	return nil
+}
+
+// LogEnd writes an IMPERSONATION_END record to platform_admin_audit.
+func (l *PlatformAdminAuditLogger) LogEnd(
+	ctx context.Context,
+	sessionID uuid.UUID,
+	adminUserID string,
+	targetTenantID uuid.UUID,
+) error {
+	const q = `
+		INSERT INTO platform_admin_audit (
+			id,
+			event_type,
+			mode,
+			admin_user_id,
+			admin_email,
+			target_tenant_id,
+			session_id,
+			reason,
+			created_at
+		) VALUES (
+			$1, $2, $3, $4, $5, $6, $7, $8, $9
+		)`
+
+	_, err := l.db.ExecContext(
+		ctx,
+		q,
+		uuid.New(),              // $1  id
+		EventImpersonationEnd,   // $2  event_type
+		"n/a",                   // $3  mode — derive from session if needed
+		adminUserID,             // $4  admin_user_id
+		"",                      // $5  admin_email — not required for END events
+		targetTenantID,          // $6  target_tenant_id
+		sessionID,               // $7  session_id
+		"Session terminated",    // $8  reason
+		time.Now().UTC(),        // $9  created_at
+	)
+	if err != nil {
+		return fmt.Errorf("platform_admin_audit: failed to write IMPERSONATION_END for session %s: %w",
+			sessionID, err)
+	}
+	return nil
+}
+
+// LogBreakGlassAction writes a BREAK_GLASS_ACTION record to platform_admin_audit.
+// This must be called by every handler that performs a state-changing operation
+// while an impersonation session is active in break_glass mode.
+func (l *PlatformAdminAuditLogger) LogBreakGlassAction(
+	ctx context.Context,
+	sessionID uuid.UUID,
+	adminUserID string,
+	targetTenantID uuid.UUID,
+	detail map[string]any,
+) error {
+	detailJSON, err := json.Marshal(detail)
+	if err != nil {
+		return fmt.Errorf("platform_admin_audit: failed to marshal action_detail: %w", err)
+	}
+
+	const q = `
+		INSERT INTO platform_admin_audit (
+			id,
+			event_type,
+			mode,
+			admin_user_id,
+			admin_email,
+			target_tenant_id,
+			session_id,
+			reason,
+			action_detail,
+			created_at
+		) VALUES (
+			$1, $2, $3, $4, $5, $6, $7, $8, $9, $10
+		)`
+
+	_, err = l.db.ExecContext(
+		ctx,
+		q,
+		uuid.New(),           // $1  id
+		EventBreakGlassAction, // $2  event_type
+		string(ModeBreakGlass), // $3  mode
+		adminUserID,          // $4  admin_user_id
+		"",                   // $5  admin_email
+		targetTenantID,       // $6  target_tenant_id
+		sessionID,            // $7  session_id
+		"Break-glass action", // $8  reason
+		detailJSON,           // $9  action_detail
+		time.Now().UTC(),     // $10 created_at
+	)
+	if err != nil {
+		return fmt.Errorf("platform_admin_audit: failed to write BREAK_GLASS_ACTION for session %s: %w",
+			sessionID, err)
+	}
+	return nil
+}
+
+// nullableStr converts an empty string to nil for nullable TEXT columns.
+func nullableStr(s string) interface{} {
+	if s == "" {
+		return nil
+	}
+	return s
+}

@@ -20,12 +20,31 @@ type Context struct {
 	OperatingScope string
 	Region         string
 	Attributes     map[string]any
+
+	// Impersonation fields — only set when a global admin has assumed a tenant context.
+	// ImpersonationActive is true for the entire duration of the impersonation window.
+	// All write operations MUST check this flag and require break_glass mode.
+	IsGlobalAdmin          bool
+	ImpersonationActive    bool
+	RealAdminUserID        string // The admin's true identity (immutable)
+	ImpersonationSessionID string // Links to platform_admin_audit.session_id
+	ImpersonationMode      string // "read_only" | "break_glass"
 }
 
 type AuthInfo struct {
 	UserID    string
 	Roles     []string
 	TenantIDs []string
+
+	// IsGlobalAdmin is true when the user holds the global_admin or global_ops role.
+	IsGlobalAdmin bool
+
+	// Impersonation fields — populated by AuthContextMiddleware when it detects
+	// an impersonation context token in the Authorization header.
+	ImpersonationActive    bool
+	RealAdminUserID        string
+	ImpersonationSessionID string
+	ImpersonationMode      string
 }
 
 type BuildContextRequest struct {
@@ -95,6 +114,13 @@ func BuildContext(ctx context.Context, auth AuthInfo, req BuildContextRequest, r
 		Region:         strings.TrimSpace(req.Region),
 		OperatingScope: operatingScope,
 		Attributes:     map[string]any{},
+
+		// Propagate impersonation metadata from AuthInfo into the security context.
+		IsGlobalAdmin:          auth.IsGlobalAdmin,
+		ImpersonationActive:    auth.ImpersonationActive,
+		RealAdminUserID:        auth.RealAdminUserID,
+		ImpersonationSessionID: auth.ImpersonationSessionID,
+		ImpersonationMode:      auth.ImpersonationMode,
 	}
 	secCtx.Attributes["operating_scope"] = secCtx.OperatingScope
 	secCtx.Attributes["region"] = secCtx.Region
@@ -102,6 +128,8 @@ func BuildContext(ctx context.Context, auth AuthInfo, req BuildContextRequest, r
 	secCtx.Attributes["instance_id"] = secCtx.InstanceID
 	secCtx.Attributes["product_id"] = secCtx.ProductID
 	secCtx.Attributes["datasource_id"] = secCtx.DatasourceID
+	secCtx.Attributes["impersonation_active"] = secCtx.ImpersonationActive
+	secCtx.Attributes["impersonation_mode"] = secCtx.ImpersonationMode
 
 	return secCtx, nil
 }

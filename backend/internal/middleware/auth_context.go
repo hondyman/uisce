@@ -7,19 +7,61 @@ import (
 	"github.com/hondyman/semlayer/backend/internal/identity"
 	"github.com/hondyman/semlayer/backend/internal/security"
 	"github.com/hondyman/semlayer/backend/internal/services"
-	"github.com/hondyman/semlayer/libs/jwt-middleware"
+	jwtmiddleware "github.com/hondyman/semlayer/libs/jwt-middleware"
 )
 
 // AuthContextMiddleware returns a chi-compatible middleware that validates
 // an Authorization Bearer token using SecurityManager and injects actor/tenant
 // into the request context. If validation fails the request continues but no
 // actor is set (handlers should enforce auth as needed).
+//
+// Impersonation token detection: the middleware first attempts to parse the
+// Bearer token as a platform-internal impersonation context token (HMAC-SHA256).
+// If it matches, the request context is populated with the TARGET tenant_id as
+// the concrete tenant identifier — meaning all downstream RLS, ABAC, and
+// BuildContext logic runs identically to a normal tenant-scoped request.
 func AuthContextMiddleware(secMgr *services.SecurityManager) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if secMgr != nil {
 				authHeader := r.Header.Get("Authorization")
 				if authHeader != "" {
+					// ── Check for impersonation context token first ──────────
+					// Impersonation tokens are HMAC-signed platform-internal tokens
+					// that carry a concrete target tenant_id and impersonation_active=true.
+					// If this succeeds, the downstream security context behaves exactly
+					// like a normal tenant user — no special-casing required.
+					rawToken := strings.TrimPrefix(authHeader, "Bearer ")
+					if impPayload, err := security.ValidateImpersonationToken(rawToken); err == nil {
+						uid := impPayload.Sub
+						tenantID := impPayload.TenantID
+
+						// Authoritative identity: the REAL admin, not the target tenant user.
+						r.Header.Set("X-User-ID", uid)
+						r.Header.Set("X-Tenant-ID", tenantID)
+
+						// Signal to downstream handlers and the frontend that impersonation is active.
+						w.Header().Set("X-Impersonation-Active", "true")
+						w.Header().Set("X-Real-Admin-ID", uid)
+						w.Header().Set("X-Impersonation-Mode", string(impPayload.Mode))
+
+						ctx := identity.WithActorTenant(r.Context(), uid, tenantID)
+						ctx = security.WithAuthInfo(ctx, security.AuthInfo{
+							UserID:                 uid,
+							Roles:                  []string{"global_admin"},
+							TenantIDs:              []string{tenantID},
+							IsGlobalAdmin:          true,
+							ImpersonationActive:    true,
+							RealAdminUserID:        uid,
+							ImpersonationSessionID: impPayload.SessionID,
+							ImpersonationMode:      string(impPayload.Mode),
+						})
+						r = r.WithContext(ctx)
+						next.ServeHTTP(w, r)
+						return
+					}
+
+					// ── Standard JWT validation ──────────────────────────────
 					if jclaims, err := secMgr.ValidateToken(authHeader); err == nil {
 						uid := jclaims.UserID
 						if uid != "" {
@@ -37,11 +79,16 @@ func AuthContextMiddleware(secMgr *services.SecurityManager) func(http.Handler) 
 								r.Header.Set("X-Tenant-ID", tenantIDs[0])
 							}
 
+							isGlobalAdmin := jclaims.IsCoreAdmin ||
+								hasRole(normalizeStringList(jclaims.Roles), "global_admin") ||
+								hasRole(normalizeStringList(jclaims.Roles), "global_ops")
+
 							ctx := identity.WithActorTenant(r.Context(), uid, tenantID)
 							ctx = security.WithAuthInfo(ctx, security.AuthInfo{
-								UserID:    uid,
-								Roles:     normalizeStringList(jclaims.Roles),
-								TenantIDs: tenantIDs,
+								UserID:        uid,
+								Roles:         normalizeStringList(jclaims.Roles),
+								TenantIDs:     tenantIDs,
+								IsGlobalAdmin: isGlobalAdmin,
 							})
 							r = r.WithContext(ctx)
 						}
