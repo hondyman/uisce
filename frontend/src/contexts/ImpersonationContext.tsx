@@ -103,6 +103,23 @@ export interface RecentSession {
   mode: ImpersonationMode;
 }
 
+/**
+ * ActiveImpersonationSession mirrors the backend's GET /admin/impersonate/sessions/active
+ * response. Returned only by listActiveSessions().
+ */
+export interface ActiveImpersonationSession {
+  session_id: string;
+  admin_user_id: string;
+  admin_email: string;
+  target_tenant_id: string;
+  mode: string;
+  scope_kind?: string;
+  scope_id?: string;
+  reason: string;
+  started_at: string;
+  expires_at: string;
+}
+
 interface ImpersonationContextType {
   /** True while an impersonation session is active */
   isImpersonating: boolean;
@@ -127,6 +144,20 @@ interface ImpersonationContextType {
 
   /** Clear the recent-sessions cache (UI hook for the "clear history" button) */
   clearRecentSessions: () => void;
+
+  /**
+   * Fetch the recent-sessions list from the backend (which derives it from the
+   * audit log) and merge it with the localStorage cache. Use on first mount so a
+   * new browser still sees recently impersonated tenants.
+   */
+  refreshRecentSessionsFromServer: () => Promise<void>;
+
+  /**
+   * Fetch the list of currently-active impersonation sessions for this admin.
+   * Returns sessions where an audit START row exists but no END row, AND
+   * expires_at is still in the future.
+   */
+  listActiveSessions: () => Promise<ActiveImpersonationSession[]>;
 }
 
 // ---------------------------------------------------------------------------
@@ -189,6 +220,13 @@ export const ImpersonationProvider: React.FC<{ children: ReactNode }> = ({ child
     } catch {
       clearPersistedSession();
     }
+  }, []);
+
+  // On mount: refresh the recent-sessions list from the backend so a new browser
+  // still sees recently impersonated tenants (the localStorage cache is empty).
+  useEffect(() => {
+    void refreshRecentSessionsFromServer();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Live countdown ticker
@@ -354,6 +392,66 @@ export const ImpersonationProvider: React.FC<{ children: ReactNode }> = ({ child
     }
   }, []);
 
+  /**
+   * Fetch recent sessions from the backend and merge them with the localStorage
+   * cache. Backend wins on ties (most recent lastUsedAt wins). New tenants from
+   * the backend are added; entries that no longer exist server-side are kept
+   * (they may be tenants the admin lost access to, which is fine for the picker).
+   */
+  const refreshRecentSessionsFromServer = useCallback(async (): Promise<void> => {
+    if (!adminToken) return;
+    try {
+      const resp = await fetch(`${API_BASE}/admin/impersonate/sessions/recent`, {
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      if (!resp.ok) return; // Silent fail — local cache is still usable.
+      const data = await resp.json();
+      const serverRecent: RecentSession[] = (data.recent_sessions ?? []).map(
+        (s: { target_tenant_id: string; tenant_name?: string; mode: string; last_used_at: string }) => ({
+          tenantId: s.target_tenant_id,
+          tenantName: s.tenant_name || s.target_tenant_id.slice(0, 8),
+          lastUsedAt: new Date(s.last_used_at).getTime(),
+          mode: (s.mode as ImpersonationMode) || 'read_only',
+        }),
+      );
+      setRecentSessions((prev) => {
+        // Merge: server-first by lastUsedAt, dedup by tenantId, cap at 5.
+        const byTenant = new Map<string, RecentSession>();
+        for (const s of serverRecent) byTenant.set(s.tenantId, s);
+        for (const s of prev) {
+          const existing = byTenant.get(s.tenantId);
+          if (!existing || s.lastUsedAt > existing.lastUsedAt) {
+            byTenant.set(s.tenantId, s);
+          }
+        }
+        return Array.from(byTenant.values())
+          .sort((a, b) => b.lastUsedAt - a.lastUsedAt)
+          .slice(0, 5);
+      });
+    } catch {
+      // Network error — local cache still works.
+    }
+  }, [adminToken]);
+
+  /**
+   * Fetch the list of currently-active impersonation sessions for this admin.
+   * Useful for the picker to warn about re-entry and for the banner to show
+   * "1 session active" indicators.
+   */
+  const listActiveSessions = useCallback(async (): Promise<ActiveImpersonationSession[]> => {
+    if (!adminToken) return [];
+    try {
+      const resp = await fetch(`${API_BASE}/admin/impersonate/sessions/active`, {
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      if (!resp.ok) return [];
+      const data = await resp.json();
+      return data.active_sessions ?? [];
+    } catch {
+      return [];
+    }
+  }, [adminToken]);
+
   // ---------------------------------------------------------------------------
   // Helpers
   // ---------------------------------------------------------------------------
@@ -381,6 +479,8 @@ export const ImpersonationProvider: React.FC<{ children: ReactNode }> = ({ child
     assumeTenantContext,
     exitImpersonation,
     clearRecentSessions,
+    refreshRecentSessionsFromServer,
+    listActiveSessions,
   };
 
   return (
