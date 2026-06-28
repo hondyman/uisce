@@ -9,7 +9,6 @@ import (
 	"strings"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/hondyman/semlayer/libs/jwt-middleware"
 )
 
 func registerGraphQLProxyRoutesV2(r chi.Router) {

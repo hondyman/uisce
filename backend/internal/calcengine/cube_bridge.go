@@ -8,7 +8,6 @@ import (
 	"io"
 	"net/http"
 	"time"
-	"github.com/hondyman/semlayer/libs/jwt-middleware"
 )
 
 // CubeBridge provides a Go client for the Cube.js semantic layer API

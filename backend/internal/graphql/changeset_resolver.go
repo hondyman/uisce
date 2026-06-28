@@ -10,7 +10,6 @@ import (
 
 	"github.com/hondyman/semlayer/backend/internal/audit"
 	"github.com/hondyman/semlayer/backend/internal/catalog"
-	"github.com/hondyman/semlayer/libs/jwt-middleware"
 )
 
 // ChangeSetResolver handles ChangeSet-related mutations and queries

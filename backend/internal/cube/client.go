@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/hondyman/semlayer/libs/jwt-middleware"
 )
 
 // Client wraps Cube.js API interactions with tenant-aware headers

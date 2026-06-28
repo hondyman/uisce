@@ -11,7 +11,6 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/hondyman/semlayer/backend/internal/security"
-	"github.com/hondyman/semlayer/libs/jwt-middleware"
 )
 
 // init sets up trace proxy authentication configuration on package initialization

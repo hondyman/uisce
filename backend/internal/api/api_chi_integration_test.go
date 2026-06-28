@@ -25,13 +25,10 @@ func TestSetupRouter_WithSessionAuthAndWsToken(t *testing.T) {
 
 	mock.MatchExpectationsInOrder(false)
 
-	// Allow background initialization queries from services (BundleService, CollaborationService)
+	// Allow background initialization queries from services (BundleService)
 	// These happen during SetupRouter
 	mock.ExpectQuery("SELECT .* FROM private_markets_bundles").WillReturnRows(sqlmock.NewRows([]string{"bundle_id"}))
-	mock.ExpectQuery("SELECT .* FROM access_control_policies").WillReturnRows(sqlmock.NewRows([]string{"id"}))
-	mock.ExpectQuery("INSERT INTO access_control_policies").WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow("00000000-0000-0000-0000-000000000000"))
-	mock.ExpectQuery("INSERT INTO access_control_policies").WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow("00000000-0000-0000-0000-000000000000"))
-	mock.ExpectQuery("SELECT .* FROM access_control_policies").WillReturnRows(sqlmock.NewRows([]string{"id"}))
+
 
 	// Expect a sessions query in session middleware when auth cookie present
 	mock.ExpectQuery("SELECT user_id, expires_at, is_active FROM private_markets_sessions").

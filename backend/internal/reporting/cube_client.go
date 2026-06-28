@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/hondyman/semlayer/libs/jwt-middleware"
 )
 
 // CubeClient handles communication with the Cube.js API

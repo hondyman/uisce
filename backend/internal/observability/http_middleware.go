@@ -52,13 +52,8 @@ func HTTPSpanMiddleware(tp *TracerProvider) func(next http.Handler) http.Handler
 			}
 
 			// Add tenant information if available
-			if claims := jwtmiddleware.GetClaimsFromContext(r)
-	if claims == nil {
-		http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
-		return
-	}
-	tenantID := claims.TenantID; tenantID != "" {
-				attributes["tenant.id"] = tenantID
+			if claims := jwtmiddleware.GetClaimsFromContext(r); claims != nil && claims.TenantID != "" {
+				attributes["tenant.id"] = claims.TenantID
 			}
 			if datasourceID := r.Header.Get("X-Tenant-Datasource-ID"); datasourceID != "" {
 				attributes["tenant.datasource_id"] = datasourceID

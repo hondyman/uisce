@@ -3,7 +3,6 @@ package handlers
 import (
 	"fmt"
 	"net/http"
-	"github.com/hondyman/semlayer/libs/jwt-middleware"
 )
 
 // ErrorHandler handles error responses with consistent formatting

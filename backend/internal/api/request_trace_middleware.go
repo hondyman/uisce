@@ -35,7 +35,10 @@ func RequestTracingMiddleware(next http.Handler) http.Handler {
 			w.Header().Set("X-Request-ID", reqID)
 		}
 
-		tenant := jwtmiddleware.GetClaimsFromContext(r).TenantID
+		var tenant string
+		if claims := jwtmiddleware.GetClaimsFromContext(r); claims != nil {
+			tenant = claims.TenantID
+		}
 
 		// Log entry (structured and to stderr for immediate visibility)
 		logging.GetLogger().Sugar().Infof("RequestTrace Start: id=%s method=%s path=%s tenant=%s", reqID, r.Method, r.URL.Path, tenant)

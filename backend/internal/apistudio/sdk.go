@@ -3,7 +3,6 @@ package apistudio
 import (
 	"fmt"
 	"strings"
-	"github.com/hondyman/semlayer/libs/jwt-middleware"
 )
 
 // GenerateTypeScriptSDK produces a basic TypeScript client for a set of API endpoints

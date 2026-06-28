@@ -24,13 +24,10 @@ type TenantContext struct {
 
 // extractTenantContext extracts tenant context from request headers and query params
 func extractTenantContext(r *http.Request) (*TenantContext, error) {
-	// Try headers first
-	claims := jwtmiddleware.GetClaimsFromContext(r)
-	if claims == nil {
-		http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
-		return
+	var tenantID string
+	if claims := jwtmiddleware.GetClaimsFromContext(r); claims != nil {
+		tenantID = claims.TenantID
 	}
-	tenantID := claims.TenantID
 	datasourceID := r.Header.Get("X-Tenant-Datasource-ID")
 
 	// Fall back to query params

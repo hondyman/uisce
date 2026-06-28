@@ -118,10 +118,10 @@ func SessionAuthMiddleware(cfg SessionAuthConfig) func(http.Handler) http.Handle
 				}
 
 				// Allow client to specify tenant context (e.g. for super admins or switching contexts)
-				if reqTenantID := jwtmiddleware.GetClaimsFromContext(r).TenantID; reqTenantID != "" {
+				if claims := jwtmiddleware.GetClaimsFromContext(r); claims != nil && claims.TenantID != "" {
 					// TODO: Add strict permission check here (e.g. only allow if user is super admin or if users can belong to multiple tenants)
 					// For now, trusting the header for multi-tenant management flows
-					user.TenantID = reqTenantID
+					user.TenantID = claims.TenantID
 				}
 
 				// ========================================

@@ -113,13 +113,10 @@ func ValidateTraceAuth(r *http.Request, config *TraceAuthConfig) (*security.Auth
 		}, http.StatusForbidden
 	}
 
-	// Extract tenant ID from headers
-	claims := jwtmiddleware.GetClaimsFromContext(r)
-	if claims == nil {
-		http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
-		return
+	var tenantID string
+	if claims := jwtmiddleware.GetClaimsFromContext(r); claims != nil {
+		tenantID = claims.TenantID
 	}
-	tenantID := claims.TenantID
 	if tenantID == "" {
 		return nil, "", &TraceAuthErrorResponse{
 			Error:     "bad_request",

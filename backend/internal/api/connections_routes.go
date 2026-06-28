@@ -41,13 +41,8 @@ func RegisterConnectionsRoutes(r chi.Router, db *sqlx.DB) {
 func getTenantIDFromRequest(r *http.Request) string {
 	// Check headers first (added by tenant fetch shim)
 	claims := jwtmiddleware.GetClaimsFromContext(r)
-	if claims == nil {
-		http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
-		return
-	}
-	tenantID := claims.TenantID
-	if tenantID != "" {
-		return tenantID
+	if claims != nil && claims.TenantID != "" {
+		return claims.TenantID
 	}
 	// Check query parameters
 	return r.URL.Query().Get("tenant_id")

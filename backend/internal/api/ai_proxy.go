@@ -3,9 +3,7 @@
 // DEPRECATED: moved to ai_proxy_routes.go and graphql_proxy.go.
 package api
 
-import (
-	"github.com/hondyman/semlayer/libs/jwt-middleware"
-)
+
 
 // Deprecated: moved to ai_proxy_routes.go and graphql_proxy.go
 

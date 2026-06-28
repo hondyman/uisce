@@ -67,8 +67,7 @@ func (h *TimeoutTriggersHandler) RegisterRoutes(r chi.Router) {
 func (h *TimeoutTriggersHandler) getTenantID(r *http.Request) (string, error) {
 	claims := jwtmiddleware.GetClaimsFromContext(r)
 	if claims == nil {
-		http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
-		return
+		return "", errors.New("unauthorized: missing claims")
 	}
 	tenantID := claims.TenantID
 	if tenantID == "" {

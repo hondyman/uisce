@@ -9,7 +9,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/hondyman/semlayer/backend/internal/position"
 	"github.com/shopspring/decimal"
-	"github.com/hondyman/semlayer/libs/jwt-middleware"
 )
 
 // PositionHandlers provides REST endpoints for the Position Master domain.

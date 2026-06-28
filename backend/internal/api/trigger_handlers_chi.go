@@ -13,8 +13,8 @@ import (
 
 // Helper functions to read tenant/user from request (header preferred, then context)
 func tenantIDFromRequest(r *http.Request) string {
-	if v := jwtmiddleware.GetClaimsFromContext(r).TenantID; v != "" {
-		return v
+	if claims := jwtmiddleware.GetClaimsFromContext(r); claims != nil && claims.TenantID != "" {
+		return claims.TenantID
 	}
 	if ctxv := r.Context().Value("tenant_id"); ctxv != nil {
 		if s, ok := ctxv.(string); ok {

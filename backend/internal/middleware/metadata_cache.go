@@ -3,7 +3,6 @@ package middleware
 import (
 	"net/http"
 	"strings"
-	"github.com/hondyman/semlayer/libs/jwt-middleware"
 )
 
 // MetadataCacheConfig holds configuration for the metadata caching middleware

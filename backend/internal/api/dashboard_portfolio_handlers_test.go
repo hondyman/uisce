@@ -1,19 +1,33 @@
 package api
-package api
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
-	"time"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/jmoiron/sqlx"
+	"github.com/hondyman/semlayer/backend/internal/identity"
+	"github.com/hondyman/semlayer/backend/internal/security"
 )
+
+// withAuthContext injects a mock authenticated user context into a test request.
+// DashboardHandler.verifyAuthentication requires identity.ActorIDFromContext and security.AuthInfoFromContext.
+func withAuthContext(req *http.Request, tenantID string) *http.Request {
+	if tenantID == "" {
+		tenantID = "test-tenant"
+	}
+	authInfo := security.AuthInfo{
+		UserID:    "test-user-001",
+		TenantIDs: []string{tenantID, "t1"},
+		Roles:     []string{"admin"},
+	}
+	ctx := identity.WithActorTenant(req.Context(), "test-user-001", tenantID)
+	ctx = security.WithAuthInfo(ctx, authInfo)
+	return req.WithContext(ctx)
+}
 
 // ============================================================================
 // Multi-Tenant Isolation Tests
@@ -49,7 +63,7 @@ func TestDashboardComplianceMultiTenant(t *testing.T) {
 
 			router.Get("/api/dashboard/compliance", handler.GetComplianceMetrics)
 
-			req := httptest.NewRequest("GET", "/api/dashboard/compliance?tenant_id="+tt.tenantID, nil)
+			req := withAuthContext(httptest.NewRequest("GET", "/api/dashboard/compliance?tenant_id="+tt.tenantID, nil), tt.tenantID)
 			w := httptest.NewRecorder()
 
 			router.ServeHTTP(w, req)
@@ -116,7 +130,7 @@ func TestPortfolioOverviewMultiTenant(t *testing.T) {
 				url += "?tenant_id=" + tt.tenantID
 			}
 
-			req := httptest.NewRequest("GET", url, nil)
+			req := withAuthContext(httptest.NewRequest("GET", url, nil), tt.tenantID)
 			w := httptest.NewRecorder()
 
 			router.ServeHTTP(w, req)
@@ -145,7 +159,7 @@ func TestDashboardRiskMetricsContract(t *testing.T) {
 	handler := &DashboardHandler{}
 	router.Get("/api/dashboard/risk", handler.GetRiskMetrics)
 
-	req := httptest.NewRequest("GET", "/api/dashboard/risk?tenant_id=test-tenant", nil)
+	req := withAuthContext(httptest.NewRequest("GET", "/api/dashboard/risk?tenant_id=test-tenant", nil), "test-tenant")
 	w := httptest.NewRecorder()
 
 	router.ServeHTTP(w, req)
@@ -199,7 +213,7 @@ func TestPortfolioHoldingsContract(t *testing.T) {
 	handler := &PortfolioHandler{}
 	router.Get("/api/portfolios/{portfolioId}/holdings", handler.GetHoldings)
 
-	req := httptest.NewRequest("GET", "/api/portfolios/port-123/holdings?tenant_id=test-tenant", nil)
+	req := withAuthContext(httptest.NewRequest("GET", "/api/portfolios/port-123/holdings?tenant_id=test-tenant", nil), "test-tenant")
 	w := httptest.NewRecorder()
 
 	router.ServeHTTP(w, req)
@@ -256,7 +270,7 @@ func TestComplianceResponseSchema(t *testing.T) {
 	handler := &DashboardHandler{}
 	router.Get("/api/dashboard/compliance", handler.GetComplianceMetrics)
 
-	req := httptest.NewRequest("GET", "/api/dashboard/compliance?tenant_id=test-tenant", nil)
+	req := withAuthContext(httptest.NewRequest("GET", "/api/dashboard/compliance?tenant_id=test-tenant", nil), "test-tenant")
 	w := httptest.NewRecorder()
 
 	router.ServeHTTP(w, req)
@@ -290,7 +304,7 @@ func TestTriggerETLResponseStructure(t *testing.T) {
 	router.Post("/api/dashboard/etl/trigger", handler.TriggerETL)
 
 	body := []byte(`{"priority":"high"}`)
-	req := httptest.NewRequest("POST", "/api/dashboard/etl/trigger?tenant_id=test-tenant", bytes.NewReader(body))
+	req := withAuthContext(httptest.NewRequest("POST", "/api/dashboard/etl/trigger?tenant_id=test-tenant", bytes.NewReader(body)), "test-tenant")
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 
@@ -323,7 +337,7 @@ func TestPortfolioComplianceSchema(t *testing.T) {
 	handler := &PortfolioHandler{}
 	router.Get("/api/portfolios/{portfolioId}/compliance", handler.GetPortfolioCompliance)
 
-	req := httptest.NewRequest("GET", "/api/portfolios/port-123/compliance?tenant_id=test-tenant", nil)
+	req := withAuthContext(httptest.NewRequest("GET", "/api/portfolios/port-123/compliance?tenant_id=test-tenant", nil), "test-tenant")
 	w := httptest.NewRecorder()
 
 	router.ServeHTTP(w, req)
@@ -353,7 +367,7 @@ func TestScenariosResponseStructure(t *testing.T) {
 	handler := &PortfolioHandler{}
 	router.Get("/api/portfolios/{portfolioId}/scenarios", handler.GetScenarios)
 
-	req := httptest.NewRequest("GET", "/api/portfolios/port-123/scenarios?tenant_id=test-tenant", nil)
+	req := withAuthContext(httptest.NewRequest("GET", "/api/portfolios/port-123/scenarios?tenant_id=test-tenant", nil), "test-tenant")
 	w := httptest.NewRecorder()
 
 	router.ServeHTTP(w, req)
@@ -388,7 +402,7 @@ func BenchmarkDashboardComplianceEndpoint(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		req := httptest.NewRequest("GET", "/api/dashboard/compliance?tenant_id=test-tenant", nil)
+		req := withAuthContext(httptest.NewRequest("GET", "/api/dashboard/compliance?tenant_id=test-tenant", nil), "test-tenant")
 		w := httptest.NewRecorder()
 		router.ServeHTTP(w, req)
 
@@ -406,7 +420,7 @@ func BenchmarkPortfolioOverviewEndpoint(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		req := httptest.NewRequest("GET", "/api/portfolios/port-123/overview?tenant_id=test-tenant", nil)
+		req := withAuthContext(httptest.NewRequest("GET", "/api/portfolios/port-123/overview?tenant_id=test-tenant", nil), "test-tenant")
 		w := httptest.NewRecorder()
 		router.ServeHTTP(w, req)
 
@@ -452,10 +466,10 @@ func TestAllEndpointsRespond(t *testing.T) {
 
 			var req *http.Request
 			if body != nil {
-				req = httptest.NewRequest(tt.method, tt.path, bytes.NewReader(body))
+				req = withAuthContext(httptest.NewRequest(tt.method, tt.path, bytes.NewReader(body)), "t1")
 				req.Header.Set("Content-Type", "application/json")
 			} else {
-				req = httptest.NewRequest(tt.method, tt.path, nil)
+				req = withAuthContext(httptest.NewRequest(tt.method, tt.path, nil), "t1")
 			}
 
 			w := httptest.NewRecorder()
