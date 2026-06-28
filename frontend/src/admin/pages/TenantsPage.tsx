@@ -1,6 +1,6 @@
 // Tenants Page - Main tenant management interface
 
-import React, { useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { useTenants } from "../hooks/useAdmin";
 import { Tenant } from "../types";
 import { useAuth } from "../../contexts/AuthContext";
@@ -8,6 +8,7 @@ import { ImpersonationModal } from "../../components/admin/ImpersonationModal";
 import { ImpersonationTenantPicker } from "../../components/admin/ImpersonationTenantPicker";
 import { useImpersonation } from "../../contexts/ImpersonationContext";
 import type { ImpersonationScope } from "../../contexts/ImpersonationContext";
+import type { ActiveImpersonationSession } from "../../contexts/ImpersonationContext";
 import "./TenantsPage.css";
 
 interface TenantFormData {
@@ -30,14 +31,26 @@ export const TenantsPage: React.FC = () => {
   const [impersonateTenant, setImpersonateTenant] = useState<Tenant | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [pendingScope, setPendingScope] = useState<ImpersonationScope | null>(null);
+  const [activeSessions, setActiveSessions] = useState<ActiveImpersonationSession[]>([]);
 
   const { token: adminToken } = useAuth();
-  const { recentSessions, clearRecentSessions } = useImpersonation();
+  const { recentSessions, clearRecentSessions, listActiveSessions } = useImpersonation();
+
+  // Fetch active sessions when the picker opens so the duplicate-session warning is current.
+  const refreshActiveSessions = useCallback(async () => {
+    try {
+      const sessions = await listActiveSessions();
+      setActiveSessions(sessions);
+    } catch {
+      setActiveSessions([]);
+    }
+  }, [listActiveSessions]);
 
   const openPickerFor = (t: Tenant) => {
     setImpersonateTenant(t);
     setPendingScope(null);
     setPickerOpen(true);
+    void refreshActiveSessions();
   };
 
   const handlePickerSelect = (
@@ -116,6 +129,7 @@ export const TenantsPage: React.FC = () => {
                 setImpersonateTenant(null);
                 setPendingScope(null);
                 setPickerOpen(true);
+                void refreshActiveSessions();
               }}
             >
               Assume Context (Pick Tenant)
@@ -324,6 +338,7 @@ export const TenantsPage: React.FC = () => {
           onClearRecentSessions={clearRecentSessions}
           onSelect={handlePickerSelect}
           initialTenant={null}
+          activeSessions={activeSessions}
         />
       )}
 
