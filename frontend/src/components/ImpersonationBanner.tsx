@@ -14,7 +14,6 @@
 
 import React, { useMemo } from 'react';
 import {
-  Alert,
   Box,
   Button,
   Chip,
@@ -155,6 +154,19 @@ const ImpersonationBanner: React.FC = () => {
               border: `1px solid ${palette.borderColor}`,
             }}
           />
+
+          {/* Scope narrowing chip — only when narrower than tenant-wide */}
+          {session.scope && session.scope.kind !== 'tenant' && (
+            <Tooltip title={`Scope UUID: ${session.scope.id}`} placement="bottom">
+              <Chip
+                label={`Scope: ${session.scope.kind} (${session.scope.id.slice(-8)})`}
+                size="small"
+                color="warning"
+                variant="outlined"
+                sx={{ fontWeight: 600, fontSize: '0.72rem' }}
+              />
+            </Tooltip>
+          )}
 
           <Tooltip title={`Full Tenant UUID: ${session.targetTenantId}`} placement="bottom">
             <Chip

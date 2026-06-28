@@ -2,9 +2,12 @@
 
 import React, { useState } from "react";
 import { useTenants } from "../hooks/useAdmin";
-import { Tenant, PLANS } from "../types";
+import { Tenant } from "../types";
 import { useAuth } from "../../contexts/AuthContext";
 import { ImpersonationModal } from "../../components/admin/ImpersonationModal";
+import { ImpersonationTenantPicker } from "../../components/admin/ImpersonationTenantPicker";
+import { useImpersonation } from "../../contexts/ImpersonationContext";
+import type { ImpersonationScope } from "../../contexts/ImpersonationContext";
 import "./TenantsPage.css";
 
 interface TenantFormData {
@@ -15,7 +18,7 @@ interface TenantFormData {
 }
 
 export const TenantsPage: React.FC = () => {
-  const [limit, setLimit] = useState(50);
+  const [limit] = useState(50);
   const [offset, setOffset] = useState(0);
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [formData, setFormData] = useState<TenantFormData>({
@@ -25,6 +28,32 @@ export const TenantsPage: React.FC = () => {
     plan: "free",
   });
   const [impersonateTenant, setImpersonateTenant] = useState<Tenant | null>(null);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [pendingScope, setPendingScope] = useState<ImpersonationScope | null>(null);
+
+  const { token: adminToken } = useAuth();
+  const { recentSessions, clearRecentSessions } = useImpersonation();
+
+  const openPickerFor = (t: Tenant) => {
+    setImpersonateTenant(t);
+    setPendingScope(null);
+    setPickerOpen(true);
+  };
+
+  const handlePickerSelect = (
+    tenant: { id: string; name: string },
+    scope: ImpersonationScope,
+  ) => {
+    setImpersonateTenant({
+      id: tenant.id,
+      name: tenant.name,
+      gold_copy: false,
+      is_active: true,
+      description: null,
+    } as unknown as Tenant);
+    setPendingScope(scope);
+    setPickerOpen(false);
+  };
 
   const { isGlobalAdmin } = useAuth();
   const { tenants, total, loading, error, refetch } = useTenants(limit, offset);
@@ -78,9 +107,24 @@ export const TenantsPage: React.FC = () => {
     <div className="tenants-page">
       <div className="page-header">
         <h1>Tenants</h1>
-        <button className="btn btn-primary" onClick={handleCreateClick}>
-          + New Tenant
-        </button>
+        <div style={{ display: 'flex', gap: 8 }}>
+          {isGlobalAdmin() && (
+            <button
+              className="btn"
+              style={{ background: '#d97706', color: 'white', fontWeight: 600 }}
+              onClick={() => {
+                setImpersonateTenant(null);
+                setPendingScope(null);
+                setPickerOpen(true);
+              }}
+            >
+              Assume Context (Pick Tenant)
+            </button>
+          )}
+          <button className="btn btn-primary" onClick={handleCreateClick}>
+            + New Tenant
+          </button>
+        </div>
       </div>
 
       {error && <div className="alert alert-error">{error}</div>}
@@ -235,7 +279,7 @@ export const TenantsPage: React.FC = () => {
                     {isGlobalAdmin() && (
                       <button 
                         className="link-btn"
-                        onClick={() => setImpersonateTenant(tenant)}
+                        onClick={() => openPickerFor(tenant)}
                         style={{ color: '#d97706', fontWeight: 600 }}
                       >
                         Assume Context
@@ -270,12 +314,29 @@ export const TenantsPage: React.FC = () => {
         </div>
       )}
 
+      {/* Tenant picker — opens when admin clicks any "Assume Context" button or the page-level action. */}
+      {adminToken && (
+        <ImpersonationTenantPicker
+          open={pickerOpen}
+          onClose={() => setPickerOpen(false)}
+          adminToken={adminToken}
+          recentSessions={recentSessions}
+          onClearRecentSessions={clearRecentSessions}
+          onSelect={handlePickerSelect}
+          initialTenant={null}
+        />
+      )}
+
       {impersonateTenant && (
         <ImpersonationModal
           open={!!impersonateTenant}
-          onClose={() => setImpersonateTenant(null)}
+          onClose={() => {
+            setImpersonateTenant(null);
+            setPendingScope(null);
+          }}
           targetTenantId={impersonateTenant.id}
           targetTenantName={impersonateTenant.name}
+          initialScope={pendingScope ?? undefined}
         />
       )}
     </div>
