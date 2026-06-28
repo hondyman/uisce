@@ -84,12 +84,25 @@ func (l *PlatformAdminAuditLogger) LogStart(ctx context.Context, session Imperso
 }
 
 // LogEnd writes an IMPERSONATION_END record to platform_admin_audit.
+// The original session mode is recovered from the matching START row in the same
+// transaction so the audit trail preserves whether the session was read-only or
+// break-glass. Scope fields are propagated to the END row for completeness.
 func (l *PlatformAdminAuditLogger) LogEnd(
 	ctx context.Context,
-	sessionID uuid.UUID,
-	adminUserID string,
-	targetTenantID uuid.UUID,
+	session ImpersonationSession,
 ) error {
+	// Recover the original session mode from the START row.
+	var originalMode string
+	err := l.db.QueryRowContext(
+		ctx,
+		`SELECT mode FROM platform_admin_audit WHERE session_id = $1 AND event_type = $2 LIMIT 1`,
+		session.SessionID, EventImpersonationStart,
+	).Scan(&originalMode)
+	if err != nil {
+		// If we can't find the START row, fall back to the session mode.
+		originalMode = string(session.Mode)
+	}
+
 	const q = `
 		INSERT INTO platform_admin_audit (
 			id,
@@ -100,29 +113,43 @@ func (l *PlatformAdminAuditLogger) LogEnd(
 			target_tenant_id,
 			session_id,
 			reason,
+			scope_kind,
+			scope_id,
 			created_at
 		) VALUES (
-			$1, $2, $3, $4, $5, $6, $7, $8, $9
+			$1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11
 		)`
 
-	_, err := l.db.ExecContext(
+	_, err = l.db.ExecContext(
 		ctx,
 		q,
-		uuid.New(),              // $1  id
-		EventImpersonationEnd,   // $2  event_type
-		"n/a",                   // $3  mode — derive from session if needed
-		adminUserID,             // $4  admin_user_id
-		"",                      // $5  admin_email — not required for END events
-		targetTenantID,          // $6  target_tenant_id
-		sessionID,               // $7  session_id
-		"Session terminated",    // $8  reason
-		time.Now().UTC(),        // $9  created_at
+		uuid.New(),                    // $1  id
+		EventImpersonationEnd,         // $2  event_type
+		originalMode,                  // $3  mode — recovered from START row
+		session.AdminUserID,           // $4  admin_user_id
+		session.AdminEmail,            // $5  admin_email
+		session.TargetTenantID,        // $6  target_tenant_id
+		session.SessionID,             // $7  session_id
+		"Session terminated",          // $8  reason
+		nullableStr(session.ScopeKind), // $9  scope_kind
+		nullableUUID(session.ScopeID),  // $10 scope_id
+		time.Now().UTC(),               // $11 created_at
 	)
 	if err != nil {
 		return fmt.Errorf("platform_admin_audit: failed to write IMPERSONATION_END for session %s: %w",
-			sessionID, err)
+			session.SessionID, err)
 	}
 	return nil
+}
+
+// nullableUUID converts a uuid.UUID to a nilable value for nullable UUID columns.
+// We can't use sql.NullString directly because the postgres driver doesn't
+// handle uuid.Nil → NULL via plain interface{} conversion.
+func nullableUUID(id uuid.UUID) interface{} {
+	if id == uuid.Nil {
+		return nil
+	}
+	return id
 }
 
 // LogBreakGlassAction writes a BREAK_GLASS_ACTION record to platform_admin_audit.

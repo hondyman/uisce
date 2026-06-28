@@ -1348,6 +1348,11 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 			r.Post("/admin/impersonate", impersonateHandler.AssumeContext)
 			r.Delete("/admin/impersonate/{sessionId}", impersonateHandler.ExitContext)
 
+			// Session-history queries (used by the picker)
+			r.Get("/admin/impersonate/sessions/active", impersonateHandler.ListActiveSessions)
+			r.Get("/admin/impersonate/sessions/recent", impersonateHandler.ListRecentSessions)
+
+
 			// Tenant search + scope (impersonation picker)
 			tenantSearchHandler := handlers.NewAdminTenantSearchHandler(db)
 			r.Get("/admin/tenants/search", tenantSearchHandler.SearchTenants)
@@ -1355,16 +1360,6 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 		}
 
 		// WebSocket token issuance
-
-		// Admin Impersonation Routes
-		if db != nil {
-			impersonateHandler := handlers.NewAdminImpersonateHandler(db)
-			r.Post("/admin/impersonate", impersonateHandler.AssumeContext)
-			r.Delete("/admin/impersonate/{sessionId}", impersonateHandler.ExitContext)
-		}
-
-		// WebSocket token issuance
-		r.Post("/ws/token", srv.getWsToken)
 
 		// Legacy Compatibility & Misc
 	})

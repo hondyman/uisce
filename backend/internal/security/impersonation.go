@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/hmac"
 	"crypto/sha256"
+	"database/sql"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -81,6 +82,12 @@ type ImpersonationSession struct {
 	ExpiresAt       time.Time
 	IPAddress       string
 	UserAgent       string
+	// ScopeKind restricts the impersonation to a subset of the target tenant.
+	// Defaults to "tenant" (full access); narrower scopes are "instance",
+	// "product", or "datasource". The END audit row carries this for completeness
+	// even though the START row is the source of truth for the audit invariant.
+	ScopeKind string
+	ScopeID   uuid.UUID
 }
 
 // ImpersonationContextToken is the signed platform-internal token returned to
@@ -160,7 +167,10 @@ type ImpersonationAuditLogger interface {
 	LogStart(ctx context.Context, session ImpersonationSession) error
 
 	// LogEnd records the termination of an impersonation session.
-	LogEnd(ctx context.Context, sessionID uuid.UUID, adminUserID string, targetTenantID uuid.UUID) error
+	// The session parameter carries all fields including scope_kind/scope_id and the
+	// original mode (which is recovered from the matching START row to preserve
+	// the audit invariant "the END row reflects the original session mode").
+	LogEnd(ctx context.Context, session ImpersonationSession) error
 
 	// LogBreakGlassAction records a state-changing operation performed under break_glass mode.
 	LogBreakGlassAction(ctx context.Context, sessionID uuid.UUID, adminUserID string, targetTenantID uuid.UUID, detail map[string]any) error
@@ -181,6 +191,21 @@ type ImpersonationAuditLogger interface {
 //  5. Maximum session duration is capped at MaxImpersonationDuration (2h).
 type ContextExchangeService struct {
 	audit ImpersonationAuditLogger
+}
+
+// AuditDB returns the underlying *sql.DB of the audit logger, when the logger is
+// backed by PlatformAdminAuditLogger. Returns nil otherwise. This is the only
+// way handlers in other packages can run read-only audit queries (e.g. listing
+// active sessions) without going through the audit-logger interface.
+func (s *ContextExchangeService) AuditDB() *sql.DB {
+	if s == nil || s.audit == nil {
+		return nil
+	}
+	pa, ok := s.audit.(*PlatformAdminAuditLogger)
+	if !ok || pa == nil {
+		return nil
+	}
+	return pa.db
 }
 
 // LookupSessionTenant fetches the target tenant ID for a session from the audit log.
@@ -314,11 +339,9 @@ func (s *ContextExchangeService) AssumeTenantContext(
 // or when the session timer expires client-side.
 func (s *ContextExchangeService) ExitTenantContext(
 	ctx context.Context,
-	sessionID uuid.UUID,
-	adminUserID string,
-	targetTenantID uuid.UUID,
+	session ImpersonationSession,
 ) error {
-	return s.audit.LogEnd(ctx, sessionID, adminUserID, targetTenantID)
+	return s.audit.LogEnd(ctx, session)
 }
 
 // ============================================================================
