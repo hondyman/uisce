@@ -1,0 +1,13 @@
+go 1.26.3
+
+use (
+	.
+	./backend
+	./calc-engine
+	./libs/abac-client
+	./libs/hasura-client
+	./libs/jwt-middleware
+	./libs/logging
+	./libs/shared-types
+	./libs/temporal-client
+)
