@@ -60,6 +60,7 @@ import {
   type ImpersonationScope,
   type ImpersonationScopeKind,
   type RecentSession,
+  type ActiveImpersonationSession,
   ScopeTenant,
   ScopeInstance,
   ScopeProduct,
@@ -147,6 +148,12 @@ export interface ImpersonationTenantPickerProps {
   onSelect: (tenant: { id: string; name: string }, scope: ImpersonationScope) => void;
   /** Pre-selected tenant (e.g. when the user clicked "Assume Context" on a row). */
   initialTenant?: { id: string; name: string } | null;
+  /**
+   * Currently-active impersonation sessions for this admin (returned by
+   * GET /admin/impersonate/sessions/active). Used to render a warning when the
+   * admin tries to start a duplicate session for the same tenant.
+   */
+  activeSessions?: ActiveImpersonationSession[];
 }
 
 export const ImpersonationTenantPicker: React.FC<ImpersonationTenantPickerProps> = ({
@@ -157,6 +164,7 @@ export const ImpersonationTenantPicker: React.FC<ImpersonationTenantPickerProps>
   onClearRecentSessions,
   onSelect,
   initialTenant,
+  activeSessions = [],
 }) => {
   // ---------------------------------------------------------------------------
   // Search state (left pane)
@@ -301,6 +309,20 @@ export const ImpersonationTenantPicker: React.FC<ImpersonationTenantPickerProps>
     if (!selectedTenant || !scope) return;
     onSelect(selectedTenant, scope);
   };
+
+  /**
+   * Detect whether the currently-selected tenant already has an active session.
+   * Returns the matching active session (if any) so the UI can show a precise
+   * warning with mode + scope info. The admin can still proceed -- the warning is
+   * informational, not blocking -- but they should know that another session for
+   * the same tenant is consuming an audit-log slot.
+   */
+  const duplicateActiveSession = useMemo<ActiveImpersonationSession | null>(() => {
+    if (!selectedTenant) return null;
+    return (
+      activeSessions.find((s) => s.target_tenant_id === selectedTenant.id) ?? null
+    );
+  }, [activeSessions, selectedTenant]);
 
   // ---------------------------------------------------------------------------
   // Render
@@ -458,6 +480,31 @@ export const ImpersonationTenantPicker: React.FC<ImpersonationTenantPickerProps>
                   {scopeLoading && (
                     <Box sx={{ p: 4, textAlign: 'center' }}>
                       <CircularProgress />
+                    </Box>
+                  )}
+                  {duplicateActiveSession && (
+                    <Box sx={{ p: 2, pb: 0 }}>
+                      <Alert severity="warning" variant="outlined">
+                        <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                          You already have an active impersonation session for this tenant.
+                        </Typography>
+                        <Typography variant="caption" color="text.secondary">
+                          Mode: {duplicateActiveSession.mode}
+                          {duplicateActiveSession.scope_kind &&
+                            duplicateActiveSession.scope_kind !== 'tenant' && (
+                              <> \u00b7 Scope: {duplicateActiveSession.scope_kind}</>
+                            )}
+                          {duplicateActiveSession.started_at && (
+                            <>
+                              {' \u00b7 Started '}
+                              {new Date(duplicateActiveSession.started_at).toLocaleTimeString()}
+                            </>
+                          )}
+                        </Typography>
+                        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
+                          Proceeding will create a second concurrent session for the same tenant. Both will be audited.
+                        </Typography>
+                      </Alert>
                     </Box>
                   )}
                   {scopeError && (
