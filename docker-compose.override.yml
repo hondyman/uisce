@@ -32,7 +32,7 @@ services:
     # ports:
     #   - "8080:8080" # Defined in docker-compose.yml as 8082:8080
     environment:
-      - DATABASE_URL=postgres://postgres:postgres@host.docker.internal:5432/alpha?sslmode=disable
+      - DATABASE_URL=postgres://postgres:postgres@${DB_HOST:-100.84.50.65}:5432/alpha?sslmode=disable
       - IGNITE_ADDR=postgres:10800
 
   # Development database with additional tools (standalone service - avoid `extends` for compatibility)
@@ -134,8 +134,8 @@ services:
       - POSTGRES_USER=postgres
       - POSTGRES_PWD=postgres
       - POSTGRES_DB=temporal
-      - POSTGRES_HOST=host.docker.internal # use host Postgres when running locally (macOS)
-      - POSTGRES_SEEDS=host.docker.internal
+      - POSTGRES_HOST=${DB_HOST:-100.84.50.65} # native Postgres (Tailscale)
+      - POSTGRES_SEEDS=${DB_HOST:-100.84.50.65}
     ports:
       - "${TEMPORAL_PORT:-7233}:7233" # Expose for local access
       - "6933:6933"

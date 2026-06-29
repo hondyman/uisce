@@ -16,6 +16,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	hasuraclient "github.com/hondyman/semlayer/libs/hasura-client"
+	jwtmiddleware "github.com/hondyman/semlayer/libs/jwt-middleware"
 	"github.com/jmoiron/sqlx"
 	_ "github.com/lib/pq"
 	kafka "github.com/segmentio/kafka-go"
@@ -82,7 +83,7 @@ func main() {
 		jwtSecret = "dev-secret"
 	}
 	jwtMw := jwtmiddleware.NewJWTMiddleware("/health", "/metrics")
-	router.Use(jwtMw.MiddlewareFunc)
+	router.Use(jwtMw.Handler)
 
 	// Health check
 	router.Get("/health", healthHandler(logger))

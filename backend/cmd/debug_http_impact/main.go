@@ -6,7 +6,6 @@ import (
 	"io/ioutil"
 	"log"
 	"net/http"
-	"github.com/hondyman/semlayer/libs/jwt-middleware"
 )
 
 func main() {

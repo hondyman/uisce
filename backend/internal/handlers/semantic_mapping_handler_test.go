@@ -21,7 +21,7 @@ func TestHandleGenerateMappings_RequiresNewHeader(t *testing.T) {
 
 	r.ServeHTTP(w, req)
 
-	require.Equal(t, http.StatusBadRequest, w.Result().StatusCode)
+	require.Equal(t, http.StatusUnauthorized, w.Result().StatusCode)
 }
 
 func TestHandleApplyMappings_RequiresNewHeader(t *testing.T) {
@@ -35,5 +35,5 @@ func TestHandleApplyMappings_RequiresNewHeader(t *testing.T) {
 
 	r.ServeHTTP(w, req)
 
-	require.Equal(t, http.StatusBadRequest, w.Result().StatusCode)
+	require.Equal(t, http.StatusUnauthorized, w.Result().StatusCode)
 }

@@ -11,6 +11,7 @@ import (
 	metadata "github.com/hondyman/semlayer/backend/internal/metadata"
 
 	"github.com/hondyman/semlayer/backend/internal/logging"
+	"github.com/hondyman/semlayer/backend/internal/security"
 	"github.com/hondyman/semlayer/backend/internal/services"
 	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/jmoiron/sqlx"
@@ -113,7 +114,14 @@ func main() {
 	sugar.Infof("✅ Registered 4 BO handlers (Create, Update, Delete, Clone)")
 
 	// Instance handlers
-	instanceCmdHandler := services.NewInstanceCommandHandler(boService, eventPublisher)
+	auditLogger := security.NewPlatformAdminAuditLogger(db.DB)
+	impersonationPolicy := security.ImpersonationPolicy{
+		// Professional_services is unrestricted by default so it can administer the
+		// tenant for the duration of the session. Populate this list to restrict
+		// which BO keys professional_services may mutate via break_glass.
+		ProfessionalServicesBreakGlassBOKeys: []string{},
+	}
+	instanceCmdHandler := services.NewInstanceCommandHandler(boService, eventPublisher, auditLogger, impersonationPolicy)
 	consumer.RegisterHandler(services.CommandCreateInstance, instanceCmdHandler.HandleCreateInstance)
 	consumer.RegisterHandler(services.CommandUpdateInstance, instanceCmdHandler.HandleUpdateInstance)
 	consumer.RegisterHandler(services.CommandDeleteInstance, instanceCmdHandler.HandleDeleteInstance)

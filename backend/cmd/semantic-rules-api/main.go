@@ -66,7 +66,7 @@ func main() {
 		jwtSecret = "dev-secret"
 	}
 	jwtMw := jwtmiddleware.NewJWTMiddleware("/health", "/ready")
-	router.Use(jwtMw.MiddlewareFunc)
+	router.Use(jwtMw.Handler)
 
 	// Health check endpoint
 	router.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {

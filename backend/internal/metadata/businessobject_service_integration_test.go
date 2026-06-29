@@ -12,6 +12,9 @@ import (
 )
 
 func TestGetBusinessObjectIncludesChildIntegration(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test in short mode: requires Postgres")
+	}
 	dsn := os.Getenv("TEST_DATABASE_URL")
 	if dsn == "" {
 		// fallback to local dev DB used by integration
@@ -90,6 +93,9 @@ func TestGetBusinessObjectIncludesChildIntegration(t *testing.T) {
 }
 
 func TestGetBusinessObjectFallbackToGoldCopy(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test in short mode: requires Postgres")
+	}
 	dsn := os.Getenv("TEST_DATABASE_URL")
 	if dsn == "" {
 		dsn = "postgres://postgres:postgres@100.84.126.19:5432/alpha?sslmode=disable"

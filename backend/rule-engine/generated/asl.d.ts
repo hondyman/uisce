@@ -6,11 +6,19 @@ export type CommandStatus = failed | pending | success;
 
 export type DataSource = ignite | postgres | starrocks;
 
+export type ExportFormat = csv | json | parquet;
+
+export type ExpressionType = calculation | condition | validation;
+
 export type FieldRole = DIMENSION | EVENT_DATE | MEASURE | PARTITION_KEY | VALIDITY_END | VALIDITY_START;
 
 export type HistoryMode = EVENT_LOG | EXPLICIT_RANGE;
 
 export type ImportMode = apply | dry_run;
+
+export type ItemStatus = failed | pending | processing | skipped | succeeded;
+
+export type JobStatus = cancelled | completed | failed | queued | running;
 
 export type ModelType = core | custom | override;
 
@@ -23,6 +31,10 @@ export type RoleScope = Environment | Global | Tenant;
 export type RoleStatus = Active | Draft | Retired | Suspended;
 
 export type RoleType = Business | System | Technical;
+
+export type ScheduleStatus = active | completed | disabled | failed | paused;
+
+export type ScheduleType = daily | monthly | once | weekly;
 
 export type ScriptState = certified | deprecated | draft | published;
 
@@ -290,6 +302,42 @@ export interface AskResponse {
   FactorBreakdown: FactorExposure[];
   ResolvedEntityPath: string;
   Sources: SourceReference[];
+}
+
+/** AsyncJob represents an asynchronous bulk operation job */
+export interface AsyncJob {
+  CompletedAt: any;
+  CreatedAt: any;
+  CreatedBy: string;
+  ErrorDetails: any;
+  FailedItems: number;
+  ID: string;
+  MaxRetries: number;
+  OperationType: OperationType;
+  Payload: any;
+  Priority: number;
+  ProcessedItems: number;
+  ResultIDs: any;
+  RetryCount: number;
+  StartedAt: any;
+  Status: JobStatus;
+  SucceededItems: number;
+  TenantID: string;
+  TotalItems: number;
+  WebhookAttempts: number;
+  WebhookSent: boolean;
+  WebhookURL: string;
+}
+
+/** AsyncJobResponse is returned when job is created */
+export interface AsyncJobResponse {
+  EstimatedTime: string;
+  JobID: string;
+  Message: string;
+  OperationType: string;
+  Status: JobStatus;
+  StatusURL: string;
+  TotalItems: number;
 }
 
 /** AsyncValidatorImpl implements AsyncValidator */
@@ -579,6 +627,24 @@ export interface BrokenReference {
   Suggestions: string[];
 }
 
+/** BulkCreatePayload represents items for bulk create */
+export interface BulkCreatePayload {
+  Description: string;
+  Expression: string;
+  Name: string;
+  Variables: any;
+}
+
+/** BulkOperationHandler implements the OperationHandler interface for bulk operations */
+export interface BulkOperationHandler {
+  db: any;
+}
+
+/** BulkPublishPayload represents items for bulk publish */
+export interface BulkPublishPayload {
+  TemplateID: string;
+}
+
 /** Bundle represents a metric bundle configuration */
 export interface Bundle {
   Audience: string;
@@ -832,6 +898,27 @@ export interface BusinessObjectInstance {
   SubtypeID: any;
   SubtypeKey: string;
   TenantID: string;
+}
+
+/** BusinessObjectListField represents a field in the legacy listing format */
+export interface BusinessObjectListField {
+  ColumnName: string;
+  Description: string;
+  Label: string;
+  Name: string;
+  TechnicalName: string;
+  Type: string;
+}
+
+/** BusinessObjectListItem represents a BO in the legacy listing format */
+export interface BusinessObjectListItem {
+  Config: Record<string, any>;
+  Description: string;
+  DisplayName: string;
+  Fields: BusinessObjectListField[];
+  ID: string;
+  Icon: string;
+  Name: string;
 }
 
 /** BusinessObjectProjection represents the read model for fast BO queries
@@ -1125,11 +1212,33 @@ export interface ComplexCondition {
   Or: RuleCondition[];
 }
 
+/** ComplianceBreachRecord defines internal struct for breaching inserts */
+export interface ComplianceBreachRecord {
+  BreachID: any;
+  Deviation: number;
+  EvaluationID: any;
+  Message: string;
+  MetricValue: number;
+  PortfolioID: any;
+  RuleID: string;
+  Severity: string;
+  Status: string;
+  TenantID: any;
+  ThresholdValue: number;
+  ValuationDate: string;
+}
+
+/** ComplianceReport represents a compliance report */
 export interface ComplianceReport {
-  ClientID: string;
-  Events: any[];
   GeneratedAt: any;
-  Summary: string;
+  GeneratedBy: string;
+  ID: string;
+  Recommendations: string[];
+  ReportType: string;
+  Status: string;
+  Summary: AuditSummary;
+  TimeRange: AuditTimeRange;
+  Violations: AuditEvent[];
 }
 
 /** ComplianceRule represents a rule stored in the database.
@@ -1144,6 +1253,22 @@ export interface ComplianceRule {
   RuleType: string;
   Severity: string;
   UpdatedAt: any;
+}
+
+/** ComplianceService orchestrates compliance evaluation ETL */
+export interface ComplianceService {
+  audit: any;
+  db: any;
+  tenantID: any;
+  wasm: any;
+}
+
+/** ConcentrationMetrics represents portfolio concentration metrics. */
+export interface ConcentrationMetrics {
+  GiniCoefficient: number;
+  HerfindahlHirschmanIndex: number;
+  Top10Concentration: number;
+  Top5Concentration: number;
 }
 
 export interface ConditionEvalTrace {
@@ -1290,6 +1415,21 @@ export interface ConversationalTurn {
   UserMessage: string;
 }
 
+export interface CoreCompiler {
+  cache: CoreFnCache;
+  predeclared: any;
+}
+
+export interface CoreFnCache {
+  m: Record<CoreFnKey, any>;
+  mu: any;
+}
+
+export interface CoreFnKey {
+  CoreRuleID: string;
+  Version: number;
+}
+
 /** CoreValidationRule represents a compiled core rule */
 export interface CoreValidationRule {
   ConditionSrc: string;
@@ -1300,6 +1440,14 @@ export interface CoreValidationRule {
   ModuleName: string;
   RuleKey: string;
   Version: number;
+}
+
+/** CreateAsyncJobRequest is the request body for creating an async job */
+export interface CreateAsyncJobRequest {
+  Items: any;
+  OperationType: string;
+  Priority: number;
+  WebhookURL: string;
 }
 
 /** CreateBusinessObjectRequest represents a request to create a new BO */
@@ -1320,6 +1468,13 @@ export interface CreateBusinessObjectRequest {
   ParentID: string;
   Status: string;
   TechnicalName: string;
+}
+
+/** CreateExportRequest is the request to create an export */
+export interface CreateExportRequest {
+  ExportFormat: string;
+  FilterCriteria: Record<string, any>;
+  IncludeErrors: boolean;
 }
 
 /** CreateFieldRequest represents a request to create a new field */
@@ -1690,6 +1845,18 @@ export interface DomainService {
   db: any;
 }
 
+/** DownloadURLRequest is the request for a download URL */
+export interface DownloadURLRequest {
+  ExpiryHours: number;
+}
+
+/** DownloadURLResponse is the response with download URL */
+export interface DownloadURLResponse {
+  ExpiresAt: any;
+  Format: string;
+  URL: string;
+}
+
 /** ECStore implements sharded cache for EffectiveClaims */
 export interface ECStore {
   shards: shard[];
@@ -1975,6 +2142,48 @@ export interface ExportBundle {
   Version: string;
 }
 
+/** ExportStatusResponse is the response for export status */
+export interface ExportStatusResponse {
+  CompletedAt: any;
+  CreatedAt: any;
+  ErrorMessage: string;
+  ExpiresAt: any;
+  ExportFormat: string;
+  FileSize: number;
+  ID: any;
+  IsDownloadable: boolean;
+  JobID: any;
+  PresignedURL: string;
+  PresignedURLExpires: any;
+  RecordCount: number;
+  Status: string;
+}
+
+/** ExportSummary is a summary of an export */
+export interface ExportSummary {
+  CreatedAt: any;
+  ExpiresAt: any;
+  FileSize: number;
+  Format: string;
+  ID: any;
+  Records: number;
+  Status: string;
+}
+
+/** Expression represents a stored expression rule */
+export interface Expression {
+  BusinessObjectID: string;
+  Description: string;
+  FieldKey: string;
+  ID: string;
+  IsActive: boolean;
+  Name: string;
+  RuleType: ExpressionType;
+  Script: string;
+  TenantID: string;
+  Version: number;
+}
+
 export interface ExtensionFix {
   FilePath: string;
   Fixes: ExtensionFixEntry[];
@@ -1996,6 +2205,14 @@ export interface FactorExposure {
   PValue: number;
   Significance: number;
   Sources: string[];
+}
+
+/** FailedJobItem represents a failed item in job results */
+export interface FailedJobItem {
+  Details: string;
+  Error: string;
+  Index: number;
+  Name: string;
 }
 
 /** FeatureCandidate represents a discovered feature that could be added to the catalog */
@@ -2210,6 +2427,41 @@ export interface GoalService {
   db: any;
 }
 
+/** GoldCopyEvent represents a canonical data entity published to downstream systems */
+export interface GoldCopyEvent {
+  ChangeReason: string;
+  ChangeType: string;
+  /** Operational Context */
+  CorrelationID: string;
+  /** Canonical Data */
+  Data: any;
+  DataHash: string;
+  EntityID: string;
+  EntityKey: string;
+  EntityType: string;
+  /** Event Metadata */
+  EventID: string;
+  EventType: GoldCopyEventType;
+  Metadata: Record<string, any>;
+  /** Lineage & Audit */
+  ParentEntityID: string;
+  PublishedAt: any;
+  PublishedBy: string;
+  SchemaVersion: string;
+  SemanticLayer: string;
+  /** Entity Identification */
+  TenantID: string;
+  Version: number;
+}
+
+/** GoldCopyPublisher publishes gold copy entities to Redpanda for downstream consumption */
+export interface GoldCopyPublisher {
+  enabled: boolean;
+  eventPublisher: EventPublisher;
+  topic: string;
+  writer: any;
+}
+
 export interface GoldenQuery {
   Description: string;
   ExpectedResultCount: number;
@@ -2258,6 +2510,14 @@ export interface GuardrailService {
   db: any;
   /** Dependency on SemanticModelService to get asset metadata like certification status. */
   semanticService: any;
+}
+
+/** HTTPWebhookNotifier sends job completion notifications via HTTP */
+export interface HTTPWebhookNotifier {
+  client: any;
+  maxRetries: number;
+  retryInterval: any;
+  timeout: any;
 }
 
 /** HealthStatus represents the health check response */
@@ -2437,8 +2697,10 @@ This handler is registered with the CommandConsumer and routes:
 - command.instance.update -> HandleUpdateInstance
 - command.instance.delete -> HandleDeleteInstance */
 export interface InstanceCommandHandler {
+  audit: any;
   boService: any;
   eventPublisher: EventPublisher;
+  policy: any;
 }
 
 /** IntegrityCheckResult represents the result of an integrity check */
@@ -2463,6 +2725,30 @@ export interface IntegrityCheckResult {
 export interface IntegrityService {
   db: any;
   logger: any;
+}
+
+/** InternalEvent represents the system's native event format
+This corresponds to the 'internal_events' table */
+export interface InternalEvent {
+  CreatedAt: any;
+  Description: string;
+  EndTime: any;
+  ID: any;
+  IsAllDay: boolean;
+  IsRecurring: boolean;
+  Location: string;
+  RecurrenceRule: string;
+  StartTime: any;
+  TenantID: any;
+  Title: string;
+  UpdatedAt: any;
+  UserID: any;
+}
+
+/** InternalEventService manages internal events and publishes changes */
+export interface InternalEventService {
+  publisher: EventPublisher;
+  repo: any;
 }
 
 /** IpWhitelistEntry corresponds to a row in the tenant_ip_whitelist_entries table. */
@@ -2512,6 +2798,161 @@ export interface Job {
   Type: string;
 }
 
+/** JobCancelResponse is returned when cancelling a job */
+export interface JobCancelResponse {
+  JobID: string;
+  Message: string;
+  ProcessedItems: number;
+  Status: JobStatus;
+}
+
+/** JobExport represents an export job */
+export interface JobExport {
+  CompletedAt: any;
+  CreatedAt: any;
+  CreatedBy: any;
+  DownloadCount: number;
+  ErrorMessage: string;
+  ExpiresAt: any;
+  ExportFormat: string;
+  FileLocation: string;
+  FileSize: number;
+  FilterCriteria: Record<string, any>;
+  ID: any;
+  IncludeErrors: boolean;
+  JobID: any;
+  PresignedURL: string;
+  PresignedURLExpires: any;
+  RecordCount: number;
+  StartedAt: any;
+  Status: string;
+  TenantID: any;
+}
+
+/** JobExportJSON is for database JSON storage */
+export interface JobExportJSON {
+  CreatedAt: any;
+  FileSize: number;
+  ID: any;
+  RecordCount: number;
+  Status: string;
+}
+
+/** JobItem represents a single item in a bulk operation */
+export interface JobItem {
+  ErrorMessage: string;
+  ID: string;
+  ItemData: any;
+  ItemIndex: number;
+  ItemName: string;
+  JobID: string;
+  ProcessedAt: any;
+  ResultID: string;
+  Status: ItemStatus;
+}
+
+/** JobListItem is a summary of a job for list response */
+export interface JobListItem {
+  CompletedAt: any;
+  CreatedAt: any;
+  JobID: string;
+  OperationType: OperationType;
+  Progress: JobProgress;
+  StartedAt: any;
+  Status: JobStatus;
+}
+
+/** JobListResponse is returned when listing jobs */
+export interface JobListResponse {
+  CompletedCount: number;
+  FailedCount: number;
+  Jobs: JobListItem[];
+  RunningCount: number;
+  TotalCount: number;
+}
+
+/** JobProcessor handles background processing of async jobs */
+export interface JobProcessor {
+  batchSize: number;
+  db: any;
+  isRunning: boolean;
+  mu: any;
+  operationHandler: OperationHandler;
+  pollInterval: any;
+  queue: JobQueue;
+  stopChan: any;
+  webhookNotifier: WebhookNotifier;
+  wg: any;
+  workerCount: number;
+}
+
+/** JobProgress tracks progress of a job */
+export interface JobProgress {
+  Failed: number;
+  Percentage: number;
+  Processed: number;
+  Succeeded: number;
+  Total: number;
+}
+
+/** JobProgressSummary provides aggregated job progress information */
+export interface JobProgressSummary {
+  CompletedAt: any;
+  CreatedAt: any;
+  DurationSeconds: number;
+  FailedItems: number;
+  ID: string;
+  ItemErrors: number;
+  OperationType: OperationType;
+  PendingItems: number;
+  ProcessedItems: number;
+  ProcessingItems: number;
+  ProgressPercent: number;
+  StartedAt: any;
+  Status: JobStatus;
+  SucceededItems: number;
+  TenantID: string;
+  TotalItems: number;
+}
+
+/** JobResults contains the results of completed job */
+export interface JobResults {
+  ErrorSummary: Record<string, int>;
+  FailedItems: FailedJobItem[];
+  FailureCount: number;
+  SkippedCount: number;
+  SuccessCount: number;
+  SuccessIDs: string[];
+}
+
+/** JobStatusResponse is returned when querying job status */
+export interface JobStatusResponse {
+  CompletedAt: any;
+  EstimatedCompletion: any;
+  JobID: string;
+  OperationType: OperationType;
+  Progress: JobProgress;
+  Results: JobResults;
+  StartedAt: any;
+  Status: JobStatus;
+}
+
+/** JobWebhookPayload is sent to webhook URL on job completion */
+export interface JobWebhookPayload {
+  CompletionTime: any;
+  DurationSeconds: number;
+  ErrorDetails: string;
+  Event: string;
+  FailedItems: number;
+  JobID: string;
+  OperationType: OperationType;
+  Results: JobResults;
+  Status: JobStatus;
+  StatusURL: string;
+  SucceededItems: number;
+  TotalItems: number;
+}
+
 /** LLMProfile defines how an LLM should derive this field */
 export interface LLMProfile {
   ContextTerms: string[];
@@ -2548,6 +2989,12 @@ export interface LineageEdge {
 /** LineageService provides methods for fetching lineage and impact data. */
 export interface LineageService {
   db: any;
+}
+
+/** ListExportsResponse lists exports for a job */
+export interface ListExportsResponse {
+  Exports: ExportSummary[];
+  Total: number;
 }
 
 /** LoadTestConfig configures the load test parameters */
@@ -2703,11 +3150,29 @@ export interface MetricRegistryService {
   db: any;
 }
 
+/** MockEventPublisher mocks the EventPublisher interface */
+export interface MockEventPublisher {
+  : any;
+}
+
 export interface MockRepo {
 }
 
 /** MockRuleRepository implements RuleRepository for testing */
 export interface MockRuleRepository {
+}
+
+export interface MockSampleEntityRepository {
+  : any;
+}
+
+export interface MockScenarioRepository {
+  : any;
+}
+
+/** MockWebhookNotifier for testing */
+export interface MockWebhookNotifier {
+  notificationsSent: NotificationRecord[];
 }
 
 export interface ModelDefinition {
@@ -2725,6 +3190,12 @@ export interface ModelRuleMetrics {
   RejectionRate: number;
   RuleID: string;
   Total: number;
+}
+
+/** ModuleLoader implements starlark.Thread.Load for whitelisted modules. */
+export interface ModuleLoader {
+  /** Allowed maps module name -> source code */
+  Allowed: Record<string, string>;
 }
 
 /** MonteCarloSnapshot contains simulation parameters for reproducibility. */
@@ -2875,6 +3346,13 @@ export interface NotificationMessage {
   Title: string;
 }
 
+/** NotificationRecord tracks a sent notification */
+export interface NotificationRecord {
+  JobID: string;
+  Payload: any;
+  Timestamp: any;
+}
+
 /** NotificationService provides notification management */
 export interface NotificationService {
   hasuraClient: any;
@@ -2895,6 +3373,49 @@ export interface NotificationTemplate {
   Type: string;
   UpdatedAt: any;
   Variables: string[];
+}
+
+/** OAuthAuditEvent represents an OAuth-related audit event */
+export interface OAuthAuditEvent {
+  Action: string;
+  Error: string;
+  IPAddress: string;
+  Metadata: any;
+  Provider: string;
+  Success: boolean;
+  TenantID: string;
+  UserAgent: string;
+  UserID: string;
+}
+
+/** OAuthAuditService handles recording of audit events */
+export interface OAuthAuditService {
+  hasuraClient: HasuraClient;
+}
+
+/** OkRule represents an ok-style Starlark rule.
+
+Script must set a global `ok = <bool>` and may set `message = <string>`. */
+export interface OkRule {
+  ID: string;
+  Script: string;
+}
+
+/** OkRuleMeta is lightweight execution metadata used to optimize BO-scale runs. */
+export interface OkRuleMeta {
+  /** Cost is a relative cost score (lower runs earlier). */
+  Cost: number;
+  /** FailureLikelihood is a relative likelihood in [0,1] (higher runs earlier within same Cost). */
+  FailureLikelihood: number;
+  /** RequiredFieldPaths are dot-paths that must be present in the input record for this rule.
+Example: "account.account_type" or "page.aum". */
+  RequiredFieldPaths: string[];
+}
+
+/** OkRuleWithMeta bundles a rule with its execution metadata. */
+export interface OkRuleWithMeta {
+  : OkRule;
+  Meta: OkRuleMeta;
 }
 
 /** PathResolver resolves dot-notation paths (e.g. "Manager.Location.Country")
@@ -3181,6 +3702,35 @@ export interface PolicyVersions {
   Rego: string;
 }
 
+/** Portfolio basic struct */
+export interface Portfolio {
+  AUM: number;
+  ID: any;
+  Strategy: string;
+}
+
+/** PortfolioAnalytics represents the analytics for a portfolio. */
+export interface PortfolioAnalytics {
+  AsOfDate: any;
+  AssetClassBreakdown: Record<string, float64>;
+  BaseCurrency: string;
+  ConcentrationMetrics: ConcentrationMetrics;
+  ConfidenceScore: number;
+  CurrencyExposure: Record<string, float64>;
+  InceptionDate: any;
+  LiquidityProfile: Record<string, int>;
+  PerformanceMetrics: PerformanceMetrics;
+  PortfolioCode: string;
+  PortfolioID: any;
+  PortfolioName: string;
+  RegionExposure: Record<string, float64>;
+  RiskMetrics: RiskMetrics;
+  SectorExposure: Record<string, float64>;
+  TopHoldings: PositionConcentration[];
+  TotalPositions: number;
+  TotalValue: number;
+}
+
 /** PortfolioService handles portfolio aggregations and calculations */
 export interface PortfolioService {
   client: any;
@@ -3206,6 +3756,15 @@ export interface PortfolioSummary {
   YTDReturn: number;
 }
 
+/** PositionConcentration represents concentration of a single position. */
+export interface PositionConcentration {
+  ISIN: string;
+  MarketValue: number;
+  SecurityID: any;
+  SecurityName: string;
+  Weight: number;
+}
+
 /** PositionSummary represents a position for display */
 export interface PositionSummary {
   DayChange: number;
@@ -3218,6 +3777,24 @@ export interface PositionSummary {
   UnrealizedGL: number;
   UnrealizedGLPercent: number;
   Weight: number;
+}
+
+/** PostgresExportService implements ExportService using PostgreSQL */
+export interface PostgresExportService {
+  db: any;
+  exportStoragePath: string;
+  urlBasePath: string;
+}
+
+/** PostgresJobQueue is a PostgreSQL-backed implementation of JobQueue */
+export interface PostgresJobQueue {
+  db: any;
+}
+
+/** PostgresSchedulerService implements SchedulerService */
+export interface PostgresSchedulerService {
+  cron: any;
+  db: any;
 }
 
 /** PreAggregation node config (stored in catalog_node.config) */
@@ -3416,6 +3993,18 @@ export interface Principal {
   UserID: string;
 }
 
+/** ProcessorStats provides statistics about the processor */
+export interface ProcessorStats {
+  AverageDuration: any;
+  AverageWaitTime: any;
+  CompletedCount: number;
+  FailedCount: number;
+  IsRunning: boolean;
+  QueuedCount: number;
+  RunningCount: number;
+  WorkerCount: number;
+}
+
 /** ProjectionEventHandlerImpl implements ProjectionEventHandler */
 export interface ProjectionEventHandlerImpl {
   boQueue: any;
@@ -3539,6 +4128,16 @@ export interface QueryTelemetry {
   TenantID: string;
 }
 
+/** QueueStats provides statistics about the job queue */
+export interface QueueStats {
+  AverageDuration: any;
+  AverageWaitTime: any;
+  CompletedCount: number;
+  FailedCount: number;
+  QueuedCount: number;
+  RunningCount: number;
+}
+
 export interface QuotaDef {
   Limit: number;
   Window: number;
@@ -3655,6 +4254,23 @@ export interface ReviewStatus {
   ReviewStatus: string;
 }
 
+/** RiskMetrics represents portfolio risk metrics. */
+export interface RiskMetrics {
+  Beta: number;
+  ExpectedShortfall: number;
+  TrackingError: number;
+  ValueAtRisk: number;
+  Volatility: number;
+}
+
+/** RiskService orchestrates risk computation ETL */
+export interface RiskService {
+  audit: any;
+  db: any;
+  tenantID: any;
+  wasm: any;
+}
+
 /** Role encapsulates the governance, membership, and permission metadata for a security role. */
 export interface Role {
   AttributeConstraints: AttributeCondition[];
@@ -3749,6 +4365,21 @@ export interface RoleUpdateInput {
   Status: any;
   Tags: string[];
   Type: any;
+}
+
+/** Rule represents a semantic priority rule for gold copy publishing */
+export interface Rule {
+  BusinessObject: string;
+  CreatedBy: string;
+  Description: string;
+  ExpressionLanguage: string;
+  ID: string;
+  Name: string;
+  RuleEngine: string;
+  SemanticTerm: string;
+  Status: string;
+  TenantID: string;
+  Version: number;
 }
 
 /** RuleCondition represents a single validation condition */
@@ -3935,8 +4566,43 @@ export interface ScanResult {
   Success: boolean;
 }
 
+export interface ScenarioRunner {
+  engine: RuleEngine;
+  repo: ScenarioRepository;
+  sampleRepo: SampleEntityRepository;
+}
+
 export interface ScenarioService {
   repo: ScenarioRepository;
+}
+
+/** ScheduledJob represents a scheduled job */
+export interface ScheduledJob {
+  CreatedAt: any;
+  CreatedBy: any;
+  CronExpression: string;
+  Description: string;
+  EndTime: any;
+  FailureCount: number;
+  ID: any;
+  IsActive: boolean;
+  JobTemplate: Record<string, any>;
+  LastRunAt: any;
+  MaxRetries: number;
+  MaxRunDuration: number;
+  Name: string;
+  NextRunAt: any;
+  OperationType: string;
+  Priority: number;
+  RetryOnFailure: boolean;
+  RunCount: number;
+  ScheduleType: ScheduleType;
+  StartTime: any;
+  Status: ScheduleStatus;
+  SuccessCount: number;
+  TenantID: any;
+  Timezone: string;
+  UpdatedAt: any;
 }
 
 /** Schema represents a schema within a database. */
@@ -4055,6 +4721,22 @@ export interface SecurityManager {
   auditLogger: AuditLogger;
   encryptionMgr: EncryptionManager;
   jwtManager: JWTManager;
+}
+
+/** SecurityPosition represents a portfolio position with security details. */
+export interface SecurityPosition {
+  Confidence: number;
+  CostBasis: number;
+  FieldCoverage: number;
+  ID: any;
+  MarketValue: number;
+  PortfolioID: any;
+  Quantity: number;
+  Security: any;
+  SecurityID: any;
+  SourceSystems: string[];
+  Status: string;
+  Weight: number;
 }
 
 /** SelfServiceReport represents a user-created report */
@@ -4226,6 +4908,22 @@ export interface SourceReference {
   Type: string;
 }
 
+/** StarlarkEngine provides Workday-style expression evaluation */
+export interface StarlarkEngine {
+  cache: Record<string, any>;
+  cacheMu: any;
+  hasuraClient: any;
+  logger: any;
+  maxSteps: uint64;
+}
+
+/** StarlarkValidationResult represents the result of a validation expression */
+export interface StarlarkValidationResult {
+  IsValid: boolean;
+  Message: string;
+  Severity: string;
+}
+
 /** StewardReview represents steward review sessions */
 export interface StewardReview {
   ActionItems: Record<string, any>[];
@@ -4381,6 +5079,20 @@ export interface TelemetryIngestionRequest {
   TenantID: string;
 }
 
+/** Template represents a rule template for gold copy publishing */
+export interface Template {
+  Category: string;
+  CreatedBy: string;
+  Description: string;
+  ID: string;
+  Name: string;
+  RuleIDs: string[];
+  Status: string;
+  TemplateType: string;
+  TenantID: string;
+  Version: number;
+}
+
 /** Tenant represents a first-class tenant in the system */
 export interface Tenant {
   Code: string;
@@ -4393,6 +5105,13 @@ export interface Tenant {
   Region: string;
   UpdatedAt: any;
   WindowSeconds: number;
+}
+
+export interface TenantCompiler {
+  coreCompiler: CoreCompiler;
+  coreRepo: CoreRuleRepository;
+  predeclared: any;
+  tenantCache: TenantFnCache;
 }
 
 /** TenantConfigService manages per-tenant QoS configurations */
@@ -4411,6 +5130,17 @@ export interface TenantCreateRequest {
   Plan: string;
   Region: string;
   WindowSeconds: number;
+}
+
+export interface TenantFnCache {
+  m: Record<TenantFnKey, any>;
+  mu: any;
+}
+
+export interface TenantFnKey {
+  CoreVer: number;
+  RuleID: string;
+  TenantID: string;
 }
 
 /** TenantMetrics tracks performance metrics per tenant */
@@ -4957,6 +5687,12 @@ export interface ValidationReport {
   StructuralErrors: string[];
 }
 
+/** ValidationResponse is the struct returned by success() and fail() */
+export interface ValidationResponse {
+  Message: string;
+  Pass: boolean;
+}
+
 /** ValidationResult represents the result of a single validation */
 export interface ValidationResult {
   AllowedOverrideAuthority: string;
@@ -5215,10 +5951,6 @@ export interface columnMaskWire {
   Term: string;
 }
 
-export interface complianceServiceImpl {
-  auditSvc: AuditQueryer;
-}
-
 export interface dbGovernanceEnvelope {
   Extra: Record<string, any>;
   Metadata: Record<string, any>;
@@ -5335,6 +6067,26 @@ export interface sqlAccessPolicyRepository {
 
 export interface sqlRoleRepository {
   db: any;
+}
+
+export interface starlarkBundleSpan {
+  span: any;
+  start: any;
+}
+
+export interface starlarkRuleMetricChildren {
+  duration: any;
+  lastError: any;
+  lastRun: any;
+}
+
+export interface starlarkRuleSpan {
+  ctxUsed: any;
+  ended: boolean;
+  mode: string;
+  ruleID: string;
+  span: any;
+  start: any;
 }
 
 export interface valuesServiceImpl {

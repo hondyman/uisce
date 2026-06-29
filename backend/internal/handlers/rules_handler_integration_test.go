@@ -41,7 +41,7 @@ func TestRuleE2EWorkflow(t *testing.T) {
 		t.Fatalf("Database connection failed: %v", err)
 	}
 
-	handler := NewRuleHandlerWithDB(db, nil)
+	handler := NewRuleHandlerWithDB(db, nil, nil)
 	tenantID := "00000000-0000-0000-0000-000000000001" // Default test tenant
 	userID := "test-user-001"
 
@@ -436,7 +436,7 @@ func BenchmarkRuleSimulation(b *testing.B) {
 	}
 	defer db.Close()
 
-	handler := NewRuleHandlerWithDB(db)
+	handler := NewRuleHandlerWithDB(db, nil, nil)
 	tenantID := "00000000-0000-0000-0000-000000000001"
 	userID := "test-user-001"
 

@@ -115,6 +115,16 @@ func NewBusinessObjectService(db *sqlx.DB, tm *platform.TenantDBManager, ap *eve
 	}
 }
 
+// TenantDB returns the tenant-scoped *sql.DB for the given tenant. Callers may
+// use it to begin transactions that span service operations and side-effects
+// such as impersonation audit logging.
+func (s *BusinessObjectService) TenantDB(tenantID string) (*sql.DB, error) {
+	if s.tenantManager == nil {
+		return nil, fmt.Errorf("tenant manager not configured")
+	}
+	return s.tenantManager.GetConnection(tenantID)
+}
+
 // atLeast returns true if current level meets the required level.
 func (l AccessLevel) atLeast(required AccessLevel) bool {
 	rank := map[AccessLevel]int{
@@ -2017,6 +2027,28 @@ func (s *BusinessObjectService) CreateInstance(ctx context.Context, tenantID, us
 		return nil, err
 	}
 
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer tx.Rollback()
+
+	created, err := s.CreateInstanceTx(ctx, tx, tenantID, userID, instance)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := tx.Commit(); err != nil {
+		return nil, fmt.Errorf("failed to commit transaction: %w", err)
+	}
+
+	s.logInstanceAction(ctx, tenantID, created.BusinessObjectKey, created.ID, "CREATE", "Instance created")
+	return created, nil
+}
+
+// CreateInstanceTx creates a business object instance inside an existing
+// transaction. The caller is responsible for committing or rolling back tx.
+func (s *BusinessObjectService) CreateInstanceTx(ctx context.Context, tx *sql.Tx, tenantID, userID string, instance *models.BusinessObjectInstance) (*models.BusinessObjectInstance, error) {
 	if instance.ID == "" {
 		instance.ID = uuid.New().String()
 	}
@@ -2041,7 +2073,7 @@ func (s *BusinessObjectService) CreateInstance(ctx context.Context, tenantID, us
 	coreJSON, _ := json.Marshal(instance.CoreFieldValues)
 	customJSON, _ := json.Marshal(instance.CustomFieldValues)
 
-	_, err = db.ExecContext(ctx, query,
+	_, err := tx.ExecContext(ctx, query,
 		instance.ID,
 		tenantID,
 		instance.BusinessObjectID,
@@ -2062,7 +2094,6 @@ func (s *BusinessObjectService) CreateInstance(ctx context.Context, tenantID, us
 		return nil, fmt.Errorf("failed to create instance: %w", err)
 	}
 
-	s.logInstanceAction(ctx, tenantID, instance.BusinessObjectKey, instance.ID, "CREATE", "Instance created")
 	return instance, nil
 }
 
@@ -2207,7 +2238,29 @@ func (s *BusinessObjectService) UpdateInstance(ctx context.Context, tenantID, in
 		return nil, err
 	}
 
-	instance, err := s.GetInstance(ctx, tenantID, instanceID)
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer tx.Rollback()
+
+	updated, err := s.UpdateInstanceTx(ctx, tx, tenantID, instanceID, userID, coreUpdates, customUpdates)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := tx.Commit(); err != nil {
+		return nil, fmt.Errorf("failed to commit transaction: %w", err)
+	}
+
+	s.logInstanceAction(ctx, tenantID, updated.BusinessObjectKey, instanceID, "UPDATE", "Instance updated")
+	return updated, nil
+}
+
+// UpdateInstanceTx updates a business object instance inside an existing
+// transaction. The caller is responsible for committing or rolling back tx.
+func (s *BusinessObjectService) UpdateInstanceTx(ctx context.Context, tx *sql.Tx, tenantID, instanceID, userID string, coreUpdates, customUpdates map[string]interface{}) (*models.BusinessObjectInstance, error) {
+	instance, err := s.getInstanceTx(ctx, tx, tenantID, instanceID)
 	if err != nil {
 		return nil, err
 	}
@@ -2235,7 +2288,7 @@ func (s *BusinessObjectService) UpdateInstance(ctx context.Context, tenantID, in
 
 	query := `
 		UPDATE bo_instances
-		SET core_field_values = $1, custom_field_values = $2, 
+		SET core_field_values = $1, custom_field_values = $2,
 		    last_modified_at = $3, last_modified_by = $4
 		WHERE id = $5 AND tenant_id = $6
 	`
@@ -2243,7 +2296,7 @@ func (s *BusinessObjectService) UpdateInstance(ctx context.Context, tenantID, in
 	coreJSON, _ := json.Marshal(instance.CoreFieldValues)
 	customJSON, _ := json.Marshal(instance.CustomFieldValues)
 
-	_, err = db.ExecContext(ctx, query,
+	_, err = tx.ExecContext(ctx, query,
 		coreJSON,
 		customJSON,
 		instance.LastModifiedAt,
@@ -2256,7 +2309,54 @@ func (s *BusinessObjectService) UpdateInstance(ctx context.Context, tenantID, in
 		return nil, fmt.Errorf("failed to update instance: %w", err)
 	}
 
-	s.logInstanceAction(ctx, tenantID, instance.BusinessObjectKey, instanceID, "UPDATE", "Instance updated")
+	return instance, nil
+}
+
+// getInstanceTx retrieves a single business object instance using the supplied
+// transaction. This helper keeps reads inside the caller's transaction boundary.
+func (s *BusinessObjectService) getInstanceTx(ctx context.Context, tx *sql.Tx, tenantID, instanceID string) (*models.BusinessObjectInstance, error) {
+	instance := &models.BusinessObjectInstance{}
+
+	query := `
+		SELECT
+			id, tenant_id, business_object_id, business_object_key, datasource_id,
+			subtype_id, subtype_key, core_field_values, custom_field_values,
+			created_at, created_by, last_modified_at, last_modified_by, is_deleted, deleted_at
+		FROM bo_instances
+		WHERE id = $1 AND tenant_id = $2 AND is_deleted = false
+	`
+
+	var coreJSON, customJSON []byte
+	row := tx.QueryRowContext(ctx, query, instanceID, tenantID)
+	err := row.Scan(
+		&instance.ID,
+		&instance.TenantID,
+		&instance.BusinessObjectID,
+		&instance.BusinessObjectKey,
+		&instance.DatasourceID,
+		&instance.SubtypeID,
+		&instance.SubtypeKey,
+		&coreJSON,
+		&customJSON,
+		&instance.CreatedAt,
+		&instance.CreatedBy,
+		&instance.LastModifiedAt,
+		&instance.LastModifiedBy,
+		&instance.IsDeleted,
+		&instance.DeletedAt,
+	)
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to get instance: %w", err)
+	}
+
+	if len(coreJSON) > 0 {
+		json.Unmarshal(coreJSON, &instance.CoreFieldValues)
+	}
+	if len(customJSON) > 0 {
+		json.Unmarshal(customJSON, &instance.CustomFieldValues)
+	}
+
 	return instance, nil
 }
 
@@ -2268,6 +2368,27 @@ func (s *BusinessObjectService) DeleteInstance(ctx context.Context, tenantID, in
 		return err
 	}
 
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer tx.Rollback()
+
+	if err := s.DeleteInstanceTx(ctx, tx, tenantID, instanceID, userID); err != nil {
+		return err
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("failed to commit transaction: %w", err)
+	}
+
+	s.logInstanceAction(ctx, tenantID, "", instanceID, "DELETE", "Instance deleted")
+	return nil
+}
+
+// DeleteInstanceTx soft-deletes a business object instance inside an existing
+// transaction. The caller is responsible for committing or rolling back tx.
+func (s *BusinessObjectService) DeleteInstanceTx(ctx context.Context, tx *sql.Tx, tenantID, instanceID, userID string) error {
 	now := time.Now()
 
 	query := `
@@ -2276,7 +2397,7 @@ func (s *BusinessObjectService) DeleteInstance(ctx context.Context, tenantID, in
 		WHERE id = $4 AND tenant_id = $5
 	`
 
-	result, err := db.ExecContext(ctx, query, now, now, userID, instanceID, tenantID)
+	result, err := tx.ExecContext(ctx, query, now, now, userID, instanceID, tenantID)
 	if err != nil {
 		return fmt.Errorf("failed to delete instance: %w", err)
 	}
@@ -2290,7 +2411,6 @@ func (s *BusinessObjectService) DeleteInstance(ctx context.Context, tenantID, in
 		return fmt.Errorf("instance not found")
 	}
 
-	s.logInstanceAction(ctx, tenantID, "", instanceID, "DELETE", "Instance deleted")
 	return nil
 }
 

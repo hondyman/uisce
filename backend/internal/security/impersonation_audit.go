@@ -41,6 +41,7 @@ func (l *PlatformAdminAuditLogger) LogStart(ctx context.Context, session Imperso
 			mode,
 			admin_user_id,
 			admin_email,
+			admin_role,
 			target_tenant_id,
 			session_id,
 			reason,
@@ -49,10 +50,12 @@ func (l *PlatformAdminAuditLogger) LogStart(ctx context.Context, session Imperso
 			expires_at,
 			ip_address,
 			user_agent,
+			scope_kind,
+			scope_id,
 			action_detail,
 			created_at
 		) VALUES (
-			$1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15
+			$1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18
 		)`
 
 	durationMinutes := int(session.Duration.Minutes())
@@ -65,16 +68,19 @@ func (l *PlatformAdminAuditLogger) LogStart(ctx context.Context, session Imperso
 		string(session.Mode),          // $3  mode
 		session.AdminUserID,           // $4  admin_user_id
 		session.AdminEmail,            // $5  admin_email
-		session.TargetTenantID,        // $6  target_tenant_id
-		session.SessionID,             // $7  session_id
-		session.Reason,                // $8  reason
-		nullableStr(session.TicketReference), // $9  ticket_reference
-		durationMinutes,               // $10 duration_minutes
-		session.ExpiresAt,             // $11 expires_at
-		nullableStr(session.IPAddress), // $12 ip_address
-		nullableStr(session.UserAgent), // $13 user_agent
-		nil,                           // $14 action_detail (nil for START events)
-		time.Now().UTC(),              // $15 created_at
+		session.AdminRole,             // $6  admin_role
+		session.TargetTenantID,        // $7  target_tenant_id
+		session.SessionID,             // $8  session_id
+		session.Reason,                // $9  reason
+		nullableStr(session.TicketReference), // $10 ticket_reference
+		durationMinutes,               // $11 duration_minutes
+		session.ExpiresAt,             // $12 expires_at
+		nullableStr(session.IPAddress), // $13 ip_address
+		nullableStr(session.UserAgent), // $14 user_agent
+		nullableStr(session.ScopeKind), // $15 scope_kind
+		nullableUUID(session.ScopeID),  // $16 scope_id
+		nil,                           // $17 action_detail (nil for START events)
+		time.Now().UTC(),              // $18 created_at
 	)
 	if err != nil {
 		return fmt.Errorf("platform_admin_audit: failed to write IMPERSONATION_START for session %s: %w",
@@ -110,6 +116,7 @@ func (l *PlatformAdminAuditLogger) LogEnd(
 			mode,
 			admin_user_id,
 			admin_email,
+			admin_role,
 			target_tenant_id,
 			session_id,
 			reason,
@@ -117,7 +124,7 @@ func (l *PlatformAdminAuditLogger) LogEnd(
 			scope_id,
 			created_at
 		) VALUES (
-			$1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11
+			$1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12
 		)`
 
 	_, err = l.db.ExecContext(
@@ -128,12 +135,13 @@ func (l *PlatformAdminAuditLogger) LogEnd(
 		originalMode,                  // $3  mode — recovered from START row
 		session.AdminUserID,           // $4  admin_user_id
 		session.AdminEmail,            // $5  admin_email
-		session.TargetTenantID,        // $6  target_tenant_id
-		session.SessionID,             // $7  session_id
-		"Session terminated",          // $8  reason
-		nullableStr(session.ScopeKind), // $9  scope_kind
-		nullableUUID(session.ScopeID),  // $10 scope_id
-		time.Now().UTC(),               // $11 created_at
+		session.AdminRole,             // $6  admin_role
+		session.TargetTenantID,        // $7  target_tenant_id
+		session.SessionID,             // $8  session_id
+		"Session terminated",          // $9  reason
+		nullableStr(session.ScopeKind), // $10 scope_kind
+		nullableUUID(session.ScopeID),  // $11 scope_id
+		time.Now().UTC(),               // $12 created_at
 	)
 	if err != nil {
 		return fmt.Errorf("platform_admin_audit: failed to write IMPERSONATION_END for session %s: %w",
@@ -200,6 +208,55 @@ func (l *PlatformAdminAuditLogger) LogBreakGlassAction(
 	if err != nil {
 		return fmt.Errorf("platform_admin_audit: failed to write BREAK_GLASS_ACTION for session %s: %w",
 			sessionID, err)
+	}
+	return nil
+}
+
+// LogImpersonationAction writes a per-BO action record to impersonation_action_audit.
+// When tx is provided the insert runs inside that transaction; otherwise the
+// logger's own pool is used. Callers performing state mutations MUST pass tx
+// so the audit row commits atomically with the business change.
+func (l *PlatformAdminAuditLogger) LogImpersonationAction(
+	ctx context.Context,
+	tx *sql.Tx,
+	action ImpersonationAction,
+) error {
+	const q = `
+		INSERT INTO impersonation_action_audit (
+			impersonation_id,
+			target_tenant_id,
+			bo_key,
+			bo_instance_id,
+			state_transition,
+			payload_snapshot
+		) VALUES (
+			$1, $2, $3, $4, $5, $6
+		)`
+
+	var err error
+	if tx != nil {
+		_, err = tx.ExecContext(ctx, q,
+			action.ImpersonationID,
+			action.TargetTenantID,
+			action.BOKey,
+			action.BOInstanceID,
+			action.StateTransition,
+			action.PayloadSnapshot,
+		)
+	} else {
+		_, err = l.db.ExecContext(ctx, q,
+			action.ImpersonationID,
+			action.TargetTenantID,
+			action.BOKey,
+			action.BOInstanceID,
+			action.StateTransition,
+			action.PayloadSnapshot,
+		)
+	}
+
+	if err != nil {
+		return fmt.Errorf("impersonation_action_audit: failed to write action for session %s: %w",
+			action.ImpersonationID, err)
 	}
 	return nil
 }
@@ -288,12 +345,13 @@ func (l *PlatformAdminAuditLogger) LogExpired(ctx context.Context, session Imper
 			mode,
 			admin_user_id,
 			admin_email,
+			admin_role,
 			target_tenant_id,
 			session_id,
 			reason,
 			created_at
 		) VALUES (
-			$1, $2, $3, $4, $5, $6, $7, $8, $9
+			$1, $2, $3, $4, $5, $6, $7, $8, $9, $10
 		)`
 
 	_, err := l.db.ExecContext(
@@ -304,10 +362,11 @@ func (l *PlatformAdminAuditLogger) LogExpired(ctx context.Context, session Imper
 		string(session.Mode),                // $3  mode — preserve original
 		session.AdminUserID,                 // $4  admin_user_id
 		session.AdminEmail,                  // $5  admin_email
-		session.TargetTenantID,              // $6  target_tenant_id
-		session.SessionID,                   // $7  session_id
-		"Session expired without explicit exit", // $8  reason
-		time.Now().UTC(),                    // $9  created_at
+		session.AdminRole,                   // $6  admin_role
+		session.TargetTenantID,              // $7  target_tenant_id
+		session.SessionID,                   // $8  session_id
+		"Session expired without explicit exit", // $9  reason
+		time.Now().UTC(),                    // $10 created_at
 	)
 	if err != nil {
 		return fmt.Errorf("platform_admin_audit: failed to write IMPERSONATION_EXPIRED for session %s: %w",

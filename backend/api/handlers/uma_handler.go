@@ -75,7 +75,7 @@ func (h *UMAHandler) evaluateABAC(c *gin.Context, action, resourceType string) b
 	claims := jwtmiddleware.GetGinClaimsFromContext(c)
 	if claims == nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error":"unauthorized"})
-		return
+		return false
 	}
 	tenantID := claims.TenantID
 	userID := c.GetHeader("X-User-ID")

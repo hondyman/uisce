@@ -11,7 +11,6 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/cors"
 	"github.com/hondyman/semlayer/backend/internal/pagestudio"
-	"github.com/hondyman/semlayer/libs/jwt-middleware"
 )
 
 func main() {

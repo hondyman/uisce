@@ -785,6 +785,130 @@
         }
       }
     },
+    "AsyncJob": {
+      "documentation": "AsyncJob represents an asynchronous bulk operation job",
+      "kind": "interface",
+      "properties": {
+        "CompletedAt": {
+          "documentation": "",
+          "type": "any"
+        },
+        "CreatedAt": {
+          "documentation": "",
+          "type": "any"
+        },
+        "CreatedBy": {
+          "documentation": "",
+          "type": "string"
+        },
+        "ErrorDetails": {
+          "documentation": "",
+          "type": "any"
+        },
+        "FailedItems": {
+          "documentation": "",
+          "type": "number"
+        },
+        "ID": {
+          "documentation": "",
+          "type": "string"
+        },
+        "MaxRetries": {
+          "documentation": "",
+          "type": "number"
+        },
+        "OperationType": {
+          "documentation": "",
+          "type": "OperationType"
+        },
+        "Payload": {
+          "documentation": "",
+          "type": "any"
+        },
+        "Priority": {
+          "documentation": "",
+          "type": "number"
+        },
+        "ProcessedItems": {
+          "documentation": "",
+          "type": "number"
+        },
+        "ResultIDs": {
+          "documentation": "",
+          "type": "any"
+        },
+        "RetryCount": {
+          "documentation": "",
+          "type": "number"
+        },
+        "StartedAt": {
+          "documentation": "",
+          "type": "any"
+        },
+        "Status": {
+          "documentation": "",
+          "type": "JobStatus"
+        },
+        "SucceededItems": {
+          "documentation": "",
+          "type": "number"
+        },
+        "TenantID": {
+          "documentation": "",
+          "type": "string"
+        },
+        "TotalItems": {
+          "documentation": "",
+          "type": "number"
+        },
+        "WebhookAttempts": {
+          "documentation": "",
+          "type": "number"
+        },
+        "WebhookSent": {
+          "documentation": "",
+          "type": "boolean"
+        },
+        "WebhookURL": {
+          "documentation": "",
+          "type": "string"
+        }
+      }
+    },
+    "AsyncJobResponse": {
+      "documentation": "AsyncJobResponse is returned when job is created",
+      "kind": "interface",
+      "properties": {
+        "EstimatedTime": {
+          "documentation": "",
+          "type": "string"
+        },
+        "JobID": {
+          "documentation": "",
+          "type": "string"
+        },
+        "Message": {
+          "documentation": "",
+          "type": "string"
+        },
+        "OperationType": {
+          "documentation": "",
+          "type": "string"
+        },
+        "Status": {
+          "documentation": "",
+          "type": "JobStatus"
+        },
+        "StatusURL": {
+          "documentation": "",
+          "type": "string"
+        },
+        "TotalItems": {
+          "documentation": "",
+          "type": "number"
+        }
+      }
+    },
     "AsyncValidatorImpl": {
       "documentation": "AsyncValidatorImpl implements AsyncValidator",
       "kind": "interface",
@@ -1677,6 +1801,48 @@
         }
       }
     },
+    "BulkCreatePayload": {
+      "documentation": "BulkCreatePayload represents items for bulk create",
+      "kind": "interface",
+      "properties": {
+        "Description": {
+          "documentation": "",
+          "type": "string"
+        },
+        "Expression": {
+          "documentation": "",
+          "type": "string"
+        },
+        "Name": {
+          "documentation": "",
+          "type": "string"
+        },
+        "Variables": {
+          "documentation": "",
+          "type": "any"
+        }
+      }
+    },
+    "BulkOperationHandler": {
+      "documentation": "BulkOperationHandler implements the OperationHandler interface for bulk operations",
+      "kind": "interface",
+      "properties": {
+        "db": {
+          "documentation": "",
+          "type": "any"
+        }
+      }
+    },
+    "BulkPublishPayload": {
+      "documentation": "BulkPublishPayload represents items for bulk publish",
+      "kind": "interface",
+      "properties": {
+        "TemplateID": {
+          "documentation": "",
+          "type": "string"
+        }
+      }
+    },
     "Bundle": {
       "documentation": "Bundle represents a metric bundle configuration",
       "kind": "interface",
@@ -2478,6 +2644,70 @@
           "type": "string"
         },
         "TenantID": {
+          "documentation": "",
+          "type": "string"
+        }
+      }
+    },
+    "BusinessObjectListField": {
+      "documentation": "BusinessObjectListField represents a field in the legacy listing format",
+      "kind": "interface",
+      "properties": {
+        "ColumnName": {
+          "documentation": "",
+          "type": "string"
+        },
+        "Description": {
+          "documentation": "",
+          "type": "string"
+        },
+        "Label": {
+          "documentation": "",
+          "type": "string"
+        },
+        "Name": {
+          "documentation": "",
+          "type": "string"
+        },
+        "TechnicalName": {
+          "documentation": "",
+          "type": "string"
+        },
+        "Type": {
+          "documentation": "",
+          "type": "string"
+        }
+      }
+    },
+    "BusinessObjectListItem": {
+      "documentation": "BusinessObjectListItem represents a BO in the legacy listing format",
+      "kind": "interface",
+      "properties": {
+        "Config": {
+          "documentation": "",
+          "type": "Record\u003cstring, any\u003e"
+        },
+        "Description": {
+          "documentation": "",
+          "type": "string"
+        },
+        "DisplayName": {
+          "documentation": "",
+          "type": "string"
+        },
+        "Fields": {
+          "documentation": "",
+          "type": "BusinessObjectListField[]"
+        },
+        "ID": {
+          "documentation": "",
+          "type": "string"
+        },
+        "Icon": {
+          "documentation": "",
+          "type": "string"
+        },
+        "Name": {
           "documentation": "",
           "type": "string"
         }
@@ -3332,25 +3562,99 @@
         }
       }
     },
-    "ComplianceReport": {
-      "documentation": "",
+    "ComplianceBreachRecord": {
+      "documentation": "ComplianceBreachRecord defines internal struct for breaching inserts",
       "kind": "interface",
       "properties": {
-        "ClientID": {
+        "BreachID": {
+          "documentation": "",
+          "type": "any"
+        },
+        "Deviation": {
+          "documentation": "",
+          "type": "number"
+        },
+        "EvaluationID": {
+          "documentation": "",
+          "type": "any"
+        },
+        "Message": {
           "documentation": "",
           "type": "string"
         },
-        "Events": {
+        "MetricValue": {
           "documentation": "",
-          "type": "any[]"
+          "type": "number"
         },
+        "PortfolioID": {
+          "documentation": "",
+          "type": "any"
+        },
+        "RuleID": {
+          "documentation": "",
+          "type": "string"
+        },
+        "Severity": {
+          "documentation": "",
+          "type": "string"
+        },
+        "Status": {
+          "documentation": "",
+          "type": "string"
+        },
+        "TenantID": {
+          "documentation": "",
+          "type": "any"
+        },
+        "ThresholdValue": {
+          "documentation": "",
+          "type": "number"
+        },
+        "ValuationDate": {
+          "documentation": "",
+          "type": "string"
+        }
+      }
+    },
+    "ComplianceReport": {
+      "documentation": "ComplianceReport represents a compliance report",
+      "kind": "interface",
+      "properties": {
         "GeneratedAt": {
           "documentation": "",
           "type": "any"
         },
-        "Summary": {
+        "GeneratedBy": {
           "documentation": "",
           "type": "string"
+        },
+        "ID": {
+          "documentation": "",
+          "type": "string"
+        },
+        "Recommendations": {
+          "documentation": "",
+          "type": "string[]"
+        },
+        "ReportType": {
+          "documentation": "",
+          "type": "string"
+        },
+        "Status": {
+          "documentation": "",
+          "type": "string"
+        },
+        "Summary": {
+          "documentation": "",
+          "type": "AuditSummary"
+        },
+        "TimeRange": {
+          "documentation": "",
+          "type": "AuditTimeRange"
+        },
+        "Violations": {
+          "documentation": "",
+          "type": "AuditEvent[]"
         }
       }
     },
@@ -3393,6 +3697,50 @@
         "UpdatedAt": {
           "documentation": "",
           "type": "any"
+        }
+      }
+    },
+    "ComplianceService": {
+      "documentation": "ComplianceService orchestrates compliance evaluation ETL",
+      "kind": "interface",
+      "properties": {
+        "audit": {
+          "documentation": "",
+          "type": "any"
+        },
+        "db": {
+          "documentation": "",
+          "type": "any"
+        },
+        "tenantID": {
+          "documentation": "",
+          "type": "any"
+        },
+        "wasm": {
+          "documentation": "",
+          "type": "any"
+        }
+      }
+    },
+    "ConcentrationMetrics": {
+      "documentation": "ConcentrationMetrics represents portfolio concentration metrics.",
+      "kind": "interface",
+      "properties": {
+        "GiniCoefficient": {
+          "documentation": "",
+          "type": "number"
+        },
+        "HerfindahlHirschmanIndex": {
+          "documentation": "",
+          "type": "number"
+        },
+        "Top10Concentration": {
+          "documentation": "",
+          "type": "number"
+        },
+        "Top5Concentration": {
+          "documentation": "",
+          "type": "number"
         }
       }
     },
@@ -3846,6 +4194,48 @@
         }
       }
     },
+    "CoreCompiler": {
+      "documentation": "",
+      "kind": "interface",
+      "properties": {
+        "cache": {
+          "documentation": "",
+          "type": "CoreFnCache"
+        },
+        "predeclared": {
+          "documentation": "",
+          "type": "any"
+        }
+      }
+    },
+    "CoreFnCache": {
+      "documentation": "",
+      "kind": "interface",
+      "properties": {
+        "m": {
+          "documentation": "",
+          "type": "Record\u003cCoreFnKey, any\u003e"
+        },
+        "mu": {
+          "documentation": "",
+          "type": "any"
+        }
+      }
+    },
+    "CoreFnKey": {
+      "documentation": "",
+      "kind": "interface",
+      "properties": {
+        "CoreRuleID": {
+          "documentation": "",
+          "type": "string"
+        },
+        "Version": {
+          "documentation": "",
+          "type": "number"
+        }
+      }
+    },
     "CoreValidationRule": {
       "documentation": "CoreValidationRule represents a compiled core rule",
       "kind": "interface",
@@ -3881,6 +4271,28 @@
         "Version": {
           "documentation": "",
           "type": "number"
+        }
+      }
+    },
+    "CreateAsyncJobRequest": {
+      "documentation": "CreateAsyncJobRequest is the request body for creating an async job",
+      "kind": "interface",
+      "properties": {
+        "Items": {
+          "documentation": "",
+          "type": "any"
+        },
+        "OperationType": {
+          "documentation": "",
+          "type": "string"
+        },
+        "Priority": {
+          "documentation": "",
+          "type": "number"
+        },
+        "WebhookURL": {
+          "documentation": "",
+          "type": "string"
         }
       }
     },
@@ -3951,6 +4363,24 @@
         "TechnicalName": {
           "documentation": "",
           "type": "string"
+        }
+      }
+    },
+    "CreateExportRequest": {
+      "documentation": "CreateExportRequest is the request to create an export",
+      "kind": "interface",
+      "properties": {
+        "ExportFormat": {
+          "documentation": "",
+          "type": "string"
+        },
+        "FilterCriteria": {
+          "documentation": "",
+          "type": "Record\u003cstring, any\u003e"
+        },
+        "IncludeErrors": {
+          "documentation": "",
+          "type": "boolean"
         }
       }
     },
@@ -5026,6 +5456,34 @@
         }
       }
     },
+    "DownloadURLRequest": {
+      "documentation": "DownloadURLRequest is the request for a download URL",
+      "kind": "interface",
+      "properties": {
+        "ExpiryHours": {
+          "documentation": "",
+          "type": "number"
+        }
+      }
+    },
+    "DownloadURLResponse": {
+      "documentation": "DownloadURLResponse is the response with download URL",
+      "kind": "interface",
+      "properties": {
+        "ExpiresAt": {
+          "documentation": "",
+          "type": "any"
+        },
+        "Format": {
+          "documentation": "",
+          "type": "string"
+        },
+        "URL": {
+          "documentation": "",
+          "type": "string"
+        }
+      }
+    },
     "ECStore": {
       "documentation": "ECStore implements sharded cache for EffectiveClaims",
       "kind": "interface",
@@ -5874,6 +6332,160 @@
         }
       }
     },
+    "ExportFormat": {
+      "kind": "enum",
+      "values": [
+        "csv",
+        "json",
+        "parquet"
+      ]
+    },
+    "ExportStatusResponse": {
+      "documentation": "ExportStatusResponse is the response for export status",
+      "kind": "interface",
+      "properties": {
+        "CompletedAt": {
+          "documentation": "",
+          "type": "any"
+        },
+        "CreatedAt": {
+          "documentation": "",
+          "type": "any"
+        },
+        "ErrorMessage": {
+          "documentation": "",
+          "type": "string"
+        },
+        "ExpiresAt": {
+          "documentation": "",
+          "type": "any"
+        },
+        "ExportFormat": {
+          "documentation": "",
+          "type": "string"
+        },
+        "FileSize": {
+          "documentation": "",
+          "type": "number"
+        },
+        "ID": {
+          "documentation": "",
+          "type": "any"
+        },
+        "IsDownloadable": {
+          "documentation": "",
+          "type": "boolean"
+        },
+        "JobID": {
+          "documentation": "",
+          "type": "any"
+        },
+        "PresignedURL": {
+          "documentation": "",
+          "type": "string"
+        },
+        "PresignedURLExpires": {
+          "documentation": "",
+          "type": "any"
+        },
+        "RecordCount": {
+          "documentation": "",
+          "type": "number"
+        },
+        "Status": {
+          "documentation": "",
+          "type": "string"
+        }
+      }
+    },
+    "ExportSummary": {
+      "documentation": "ExportSummary is a summary of an export",
+      "kind": "interface",
+      "properties": {
+        "CreatedAt": {
+          "documentation": "",
+          "type": "any"
+        },
+        "ExpiresAt": {
+          "documentation": "",
+          "type": "any"
+        },
+        "FileSize": {
+          "documentation": "",
+          "type": "number"
+        },
+        "Format": {
+          "documentation": "",
+          "type": "string"
+        },
+        "ID": {
+          "documentation": "",
+          "type": "any"
+        },
+        "Records": {
+          "documentation": "",
+          "type": "number"
+        },
+        "Status": {
+          "documentation": "",
+          "type": "string"
+        }
+      }
+    },
+    "Expression": {
+      "documentation": "Expression represents a stored expression rule",
+      "kind": "interface",
+      "properties": {
+        "BusinessObjectID": {
+          "documentation": "",
+          "type": "string"
+        },
+        "Description": {
+          "documentation": "",
+          "type": "string"
+        },
+        "FieldKey": {
+          "documentation": "",
+          "type": "string"
+        },
+        "ID": {
+          "documentation": "",
+          "type": "string"
+        },
+        "IsActive": {
+          "documentation": "",
+          "type": "boolean"
+        },
+        "Name": {
+          "documentation": "",
+          "type": "string"
+        },
+        "RuleType": {
+          "documentation": "",
+          "type": "ExpressionType"
+        },
+        "Script": {
+          "documentation": "",
+          "type": "string"
+        },
+        "TenantID": {
+          "documentation": "",
+          "type": "string"
+        },
+        "Version": {
+          "documentation": "",
+          "type": "number"
+        }
+      }
+    },
+    "ExpressionType": {
+      "kind": "enum",
+      "values": [
+        "calculation",
+        "condition",
+        "validation"
+      ]
+    },
     "ExtensionFix": {
       "documentation": "",
       "kind": "interface",
@@ -5941,6 +6553,28 @@
         "Sources": {
           "documentation": "",
           "type": "string[]"
+        }
+      }
+    },
+    "FailedJobItem": {
+      "documentation": "FailedJobItem represents a failed item in job results",
+      "kind": "interface",
+      "properties": {
+        "Details": {
+          "documentation": "",
+          "type": "string"
+        },
+        "Error": {
+          "documentation": "",
+          "type": "string"
+        },
+        "Index": {
+          "documentation": "",
+          "type": "number"
+        },
+        "Name": {
+          "documentation": "",
+          "type": "string"
         }
       }
     },
@@ -6601,6 +7235,106 @@
         }
       }
     },
+    "GoldCopyEvent": {
+      "documentation": "GoldCopyEvent represents a canonical data entity published to downstream systems",
+      "kind": "interface",
+      "properties": {
+        "ChangeReason": {
+          "documentation": "",
+          "type": "string"
+        },
+        "ChangeType": {
+          "documentation": "",
+          "type": "string"
+        },
+        "CorrelationID": {
+          "documentation": "Operational Context",
+          "type": "string"
+        },
+        "Data": {
+          "documentation": "Canonical Data",
+          "type": "any"
+        },
+        "DataHash": {
+          "documentation": "",
+          "type": "string"
+        },
+        "EntityID": {
+          "documentation": "",
+          "type": "string"
+        },
+        "EntityKey": {
+          "documentation": "",
+          "type": "string"
+        },
+        "EntityType": {
+          "documentation": "",
+          "type": "string"
+        },
+        "EventID": {
+          "documentation": "Event Metadata",
+          "type": "string"
+        },
+        "EventType": {
+          "documentation": "",
+          "type": "GoldCopyEventType"
+        },
+        "Metadata": {
+          "documentation": "",
+          "type": "Record\u003cstring, any\u003e"
+        },
+        "ParentEntityID": {
+          "documentation": "Lineage \u0026 Audit",
+          "type": "string"
+        },
+        "PublishedAt": {
+          "documentation": "",
+          "type": "any"
+        },
+        "PublishedBy": {
+          "documentation": "",
+          "type": "string"
+        },
+        "SchemaVersion": {
+          "documentation": "",
+          "type": "string"
+        },
+        "SemanticLayer": {
+          "documentation": "",
+          "type": "string"
+        },
+        "TenantID": {
+          "documentation": "Entity Identification",
+          "type": "string"
+        },
+        "Version": {
+          "documentation": "",
+          "type": "number"
+        }
+      }
+    },
+    "GoldCopyPublisher": {
+      "documentation": "GoldCopyPublisher publishes gold copy entities to Redpanda for downstream consumption",
+      "kind": "interface",
+      "properties": {
+        "enabled": {
+          "documentation": "",
+          "type": "boolean"
+        },
+        "eventPublisher": {
+          "documentation": "",
+          "type": "EventPublisher"
+        },
+        "topic": {
+          "documentation": "",
+          "type": "string"
+        },
+        "writer": {
+          "documentation": "",
+          "type": "any"
+        }
+      }
+    },
     "GoldenQuery": {
       "documentation": "",
       "kind": "interface",
@@ -6743,6 +7477,28 @@
         },
         "semanticService": {
           "documentation": "Dependency on SemanticModelService to get asset metadata like certification status.",
+          "type": "any"
+        }
+      }
+    },
+    "HTTPWebhookNotifier": {
+      "documentation": "HTTPWebhookNotifier sends job completion notifications via HTTP",
+      "kind": "interface",
+      "properties": {
+        "client": {
+          "documentation": "",
+          "type": "any"
+        },
+        "maxRetries": {
+          "documentation": "",
+          "type": "number"
+        },
+        "retryInterval": {
+          "documentation": "",
+          "type": "any"
+        },
+        "timeout": {
+          "documentation": "",
           "type": "any"
         }
       }
@@ -7240,6 +7996,10 @@
       "documentation": "InstanceCommandHandler handles all CRUD commands for Business Object Instances\nThis follows the same pattern as BOCommandHandler for consistency and scalability\n\nArchitecture:\n- Receives CRUD commands from the command bus (RabbitMQ)\n- Extracts business logic from HTTP handlers\n- Executes service layer operations (CreateInstance, UpdateInstance, DeleteInstance)\n- Publishes events to the event store for audit trail and event sourcing\n- Returns CommandResponse with status and result data\n\nThis handler is registered with the CommandConsumer and routes:\n- command.instance.create -\u003e HandleCreateInstance\n- command.instance.update -\u003e HandleUpdateInstance\n- command.instance.delete -\u003e HandleDeleteInstance",
       "kind": "interface",
       "properties": {
+        "audit": {
+          "documentation": "",
+          "type": "any"
+        },
         "boService": {
           "documentation": "",
           "type": "any"
@@ -7247,6 +8007,10 @@
         "eventPublisher": {
           "documentation": "",
           "type": "EventPublisher"
+        },
+        "policy": {
+          "documentation": "",
+          "type": "any"
         }
       }
     },
@@ -7326,6 +8090,78 @@
         }
       }
     },
+    "InternalEvent": {
+      "documentation": "InternalEvent represents the system's native event format\nThis corresponds to the 'internal_events' table",
+      "kind": "interface",
+      "properties": {
+        "CreatedAt": {
+          "documentation": "",
+          "type": "any"
+        },
+        "Description": {
+          "documentation": "",
+          "type": "string"
+        },
+        "EndTime": {
+          "documentation": "",
+          "type": "any"
+        },
+        "ID": {
+          "documentation": "",
+          "type": "any"
+        },
+        "IsAllDay": {
+          "documentation": "",
+          "type": "boolean"
+        },
+        "IsRecurring": {
+          "documentation": "",
+          "type": "boolean"
+        },
+        "Location": {
+          "documentation": "",
+          "type": "string"
+        },
+        "RecurrenceRule": {
+          "documentation": "",
+          "type": "string"
+        },
+        "StartTime": {
+          "documentation": "",
+          "type": "any"
+        },
+        "TenantID": {
+          "documentation": "",
+          "type": "any"
+        },
+        "Title": {
+          "documentation": "",
+          "type": "string"
+        },
+        "UpdatedAt": {
+          "documentation": "",
+          "type": "any"
+        },
+        "UserID": {
+          "documentation": "",
+          "type": "any"
+        }
+      }
+    },
+    "InternalEventService": {
+      "documentation": "InternalEventService manages internal events and publishes changes",
+      "kind": "interface",
+      "properties": {
+        "publisher": {
+          "documentation": "",
+          "type": "EventPublisher"
+        },
+        "repo": {
+          "documentation": "",
+          "type": "any"
+        }
+      }
+    },
     "IpWhitelistEntry": {
       "documentation": "IpWhitelistEntry corresponds to a row in the tenant_ip_whitelist_entries table.",
       "kind": "interface",
@@ -7343,6 +8179,16 @@
           "type": "any"
         }
       }
+    },
+    "ItemStatus": {
+      "kind": "enum",
+      "values": [
+        "failed",
+        "pending",
+        "processing",
+        "skipped",
+        "succeeded"
+      ]
     },
     "JITGrantAuditEvent": {
       "documentation": "",
@@ -7462,6 +8308,516 @@
         }
       }
     },
+    "JobCancelResponse": {
+      "documentation": "JobCancelResponse is returned when cancelling a job",
+      "kind": "interface",
+      "properties": {
+        "JobID": {
+          "documentation": "",
+          "type": "string"
+        },
+        "Message": {
+          "documentation": "",
+          "type": "string"
+        },
+        "ProcessedItems": {
+          "documentation": "",
+          "type": "number"
+        },
+        "Status": {
+          "documentation": "",
+          "type": "JobStatus"
+        }
+      }
+    },
+    "JobExport": {
+      "documentation": "JobExport represents an export job",
+      "kind": "interface",
+      "properties": {
+        "CompletedAt": {
+          "documentation": "",
+          "type": "any"
+        },
+        "CreatedAt": {
+          "documentation": "",
+          "type": "any"
+        },
+        "CreatedBy": {
+          "documentation": "",
+          "type": "any"
+        },
+        "DownloadCount": {
+          "documentation": "",
+          "type": "number"
+        },
+        "ErrorMessage": {
+          "documentation": "",
+          "type": "string"
+        },
+        "ExpiresAt": {
+          "documentation": "",
+          "type": "any"
+        },
+        "ExportFormat": {
+          "documentation": "",
+          "type": "string"
+        },
+        "FileLocation": {
+          "documentation": "",
+          "type": "string"
+        },
+        "FileSize": {
+          "documentation": "",
+          "type": "number"
+        },
+        "FilterCriteria": {
+          "documentation": "",
+          "type": "Record\u003cstring, any\u003e"
+        },
+        "ID": {
+          "documentation": "",
+          "type": "any"
+        },
+        "IncludeErrors": {
+          "documentation": "",
+          "type": "boolean"
+        },
+        "JobID": {
+          "documentation": "",
+          "type": "any"
+        },
+        "PresignedURL": {
+          "documentation": "",
+          "type": "string"
+        },
+        "PresignedURLExpires": {
+          "documentation": "",
+          "type": "any"
+        },
+        "RecordCount": {
+          "documentation": "",
+          "type": "number"
+        },
+        "StartedAt": {
+          "documentation": "",
+          "type": "any"
+        },
+        "Status": {
+          "documentation": "",
+          "type": "string"
+        },
+        "TenantID": {
+          "documentation": "",
+          "type": "any"
+        }
+      }
+    },
+    "JobExportJSON": {
+      "documentation": "JobExportJSON is for database JSON storage",
+      "kind": "interface",
+      "properties": {
+        "CreatedAt": {
+          "documentation": "",
+          "type": "any"
+        },
+        "FileSize": {
+          "documentation": "",
+          "type": "number"
+        },
+        "ID": {
+          "documentation": "",
+          "type": "any"
+        },
+        "RecordCount": {
+          "documentation": "",
+          "type": "number"
+        },
+        "Status": {
+          "documentation": "",
+          "type": "string"
+        }
+      }
+    },
+    "JobItem": {
+      "documentation": "JobItem represents a single item in a bulk operation",
+      "kind": "interface",
+      "properties": {
+        "ErrorMessage": {
+          "documentation": "",
+          "type": "string"
+        },
+        "ID": {
+          "documentation": "",
+          "type": "string"
+        },
+        "ItemData": {
+          "documentation": "",
+          "type": "any"
+        },
+        "ItemIndex": {
+          "documentation": "",
+          "type": "number"
+        },
+        "ItemName": {
+          "documentation": "",
+          "type": "string"
+        },
+        "JobID": {
+          "documentation": "",
+          "type": "string"
+        },
+        "ProcessedAt": {
+          "documentation": "",
+          "type": "any"
+        },
+        "ResultID": {
+          "documentation": "",
+          "type": "string"
+        },
+        "Status": {
+          "documentation": "",
+          "type": "ItemStatus"
+        }
+      }
+    },
+    "JobListItem": {
+      "documentation": "JobListItem is a summary of a job for list response",
+      "kind": "interface",
+      "properties": {
+        "CompletedAt": {
+          "documentation": "",
+          "type": "any"
+        },
+        "CreatedAt": {
+          "documentation": "",
+          "type": "any"
+        },
+        "JobID": {
+          "documentation": "",
+          "type": "string"
+        },
+        "OperationType": {
+          "documentation": "",
+          "type": "OperationType"
+        },
+        "Progress": {
+          "documentation": "",
+          "type": "JobProgress"
+        },
+        "StartedAt": {
+          "documentation": "",
+          "type": "any"
+        },
+        "Status": {
+          "documentation": "",
+          "type": "JobStatus"
+        }
+      }
+    },
+    "JobListResponse": {
+      "documentation": "JobListResponse is returned when listing jobs",
+      "kind": "interface",
+      "properties": {
+        "CompletedCount": {
+          "documentation": "",
+          "type": "number"
+        },
+        "FailedCount": {
+          "documentation": "",
+          "type": "number"
+        },
+        "Jobs": {
+          "documentation": "",
+          "type": "JobListItem[]"
+        },
+        "RunningCount": {
+          "documentation": "",
+          "type": "number"
+        },
+        "TotalCount": {
+          "documentation": "",
+          "type": "number"
+        }
+      }
+    },
+    "JobProcessor": {
+      "documentation": "JobProcessor handles background processing of async jobs",
+      "kind": "interface",
+      "properties": {
+        "batchSize": {
+          "documentation": "",
+          "type": "number"
+        },
+        "db": {
+          "documentation": "",
+          "type": "any"
+        },
+        "isRunning": {
+          "documentation": "",
+          "type": "boolean"
+        },
+        "mu": {
+          "documentation": "",
+          "type": "any"
+        },
+        "operationHandler": {
+          "documentation": "",
+          "type": "OperationHandler"
+        },
+        "pollInterval": {
+          "documentation": "",
+          "type": "any"
+        },
+        "queue": {
+          "documentation": "",
+          "type": "JobQueue"
+        },
+        "stopChan": {
+          "documentation": "",
+          "type": "any"
+        },
+        "webhookNotifier": {
+          "documentation": "",
+          "type": "WebhookNotifier"
+        },
+        "wg": {
+          "documentation": "",
+          "type": "any"
+        },
+        "workerCount": {
+          "documentation": "",
+          "type": "number"
+        }
+      }
+    },
+    "JobProgress": {
+      "documentation": "JobProgress tracks progress of a job",
+      "kind": "interface",
+      "properties": {
+        "Failed": {
+          "documentation": "",
+          "type": "number"
+        },
+        "Percentage": {
+          "documentation": "",
+          "type": "number"
+        },
+        "Processed": {
+          "documentation": "",
+          "type": "number"
+        },
+        "Succeeded": {
+          "documentation": "",
+          "type": "number"
+        },
+        "Total": {
+          "documentation": "",
+          "type": "number"
+        }
+      }
+    },
+    "JobProgressSummary": {
+      "documentation": "JobProgressSummary provides aggregated job progress information",
+      "kind": "interface",
+      "properties": {
+        "CompletedAt": {
+          "documentation": "",
+          "type": "any"
+        },
+        "CreatedAt": {
+          "documentation": "",
+          "type": "any"
+        },
+        "DurationSeconds": {
+          "documentation": "",
+          "type": "number"
+        },
+        "FailedItems": {
+          "documentation": "",
+          "type": "number"
+        },
+        "ID": {
+          "documentation": "",
+          "type": "string"
+        },
+        "ItemErrors": {
+          "documentation": "",
+          "type": "number"
+        },
+        "OperationType": {
+          "documentation": "",
+          "type": "OperationType"
+        },
+        "PendingItems": {
+          "documentation": "",
+          "type": "number"
+        },
+        "ProcessedItems": {
+          "documentation": "",
+          "type": "number"
+        },
+        "ProcessingItems": {
+          "documentation": "",
+          "type": "number"
+        },
+        "ProgressPercent": {
+          "documentation": "",
+          "type": "number"
+        },
+        "StartedAt": {
+          "documentation": "",
+          "type": "any"
+        },
+        "Status": {
+          "documentation": "",
+          "type": "JobStatus"
+        },
+        "SucceededItems": {
+          "documentation": "",
+          "type": "number"
+        },
+        "TenantID": {
+          "documentation": "",
+          "type": "string"
+        },
+        "TotalItems": {
+          "documentation": "",
+          "type": "number"
+        }
+      }
+    },
+    "JobResults": {
+      "documentation": "JobResults contains the results of completed job",
+      "kind": "interface",
+      "properties": {
+        "ErrorSummary": {
+          "documentation": "",
+          "type": "Record\u003cstring, int\u003e"
+        },
+        "FailedItems": {
+          "documentation": "",
+          "type": "FailedJobItem[]"
+        },
+        "FailureCount": {
+          "documentation": "",
+          "type": "number"
+        },
+        "SkippedCount": {
+          "documentation": "",
+          "type": "number"
+        },
+        "SuccessCount": {
+          "documentation": "",
+          "type": "number"
+        },
+        "SuccessIDs": {
+          "documentation": "",
+          "type": "string[]"
+        }
+      }
+    },
+    "JobStatus": {
+      "kind": "enum",
+      "values": [
+        "cancelled",
+        "completed",
+        "failed",
+        "queued",
+        "running"
+      ]
+    },
+    "JobStatusResponse": {
+      "documentation": "JobStatusResponse is returned when querying job status",
+      "kind": "interface",
+      "properties": {
+        "CompletedAt": {
+          "documentation": "",
+          "type": "any"
+        },
+        "EstimatedCompletion": {
+          "documentation": "",
+          "type": "any"
+        },
+        "JobID": {
+          "documentation": "",
+          "type": "string"
+        },
+        "OperationType": {
+          "documentation": "",
+          "type": "OperationType"
+        },
+        "Progress": {
+          "documentation": "",
+          "type": "JobProgress"
+        },
+        "Results": {
+          "documentation": "",
+          "type": "JobResults"
+        },
+        "StartedAt": {
+          "documentation": "",
+          "type": "any"
+        },
+        "Status": {
+          "documentation": "",
+          "type": "JobStatus"
+        }
+      }
+    },
+    "JobWebhookPayload": {
+      "documentation": "JobWebhookPayload is sent to webhook URL on job completion",
+      "kind": "interface",
+      "properties": {
+        "CompletionTime": {
+          "documentation": "",
+          "type": "any"
+        },
+        "DurationSeconds": {
+          "documentation": "",
+          "type": "number"
+        },
+        "ErrorDetails": {
+          "documentation": "",
+          "type": "string"
+        },
+        "Event": {
+          "documentation": "",
+          "type": "string"
+        },
+        "FailedItems": {
+          "documentation": "",
+          "type": "number"
+        },
+        "JobID": {
+          "documentation": "",
+          "type": "string"
+        },
+        "OperationType": {
+          "documentation": "",
+          "type": "OperationType"
+        },
+        "Results": {
+          "documentation": "",
+          "type": "JobResults"
+        },
+        "Status": {
+          "documentation": "",
+          "type": "JobStatus"
+        },
+        "StatusURL": {
+          "documentation": "",
+          "type": "string"
+        },
+        "SucceededItems": {
+          "documentation": "",
+          "type": "number"
+        },
+        "TotalItems": {
+          "documentation": "",
+          "type": "number"
+        }
+      }
+    },
     "LLMProfile": {
       "documentation": "LLMProfile defines how an LLM should derive this field",
       "kind": "interface",
@@ -7551,6 +8907,20 @@
         "db": {
           "documentation": "",
           "type": "any"
+        }
+      }
+    },
+    "ListExportsResponse": {
+      "documentation": "ListExportsResponse lists exports for a job",
+      "kind": "interface",
+      "properties": {
+        "Exports": {
+          "documentation": "",
+          "type": "ExportSummary[]"
+        },
+        "Total": {
+          "documentation": "",
+          "type": "number"
         }
       }
     },
@@ -8038,6 +9408,16 @@
         }
       }
     },
+    "MockEventPublisher": {
+      "documentation": "MockEventPublisher mocks the EventPublisher interface",
+      "kind": "interface",
+      "properties": {
+        "": {
+          "documentation": "",
+          "type": "any"
+        }
+      }
+    },
     "MockRepo": {
       "documentation": "",
       "kind": "interface",
@@ -8047,6 +9427,36 @@
       "documentation": "MockRuleRepository implements RuleRepository for testing",
       "kind": "interface",
       "properties": {}
+    },
+    "MockSampleEntityRepository": {
+      "documentation": "",
+      "kind": "interface",
+      "properties": {
+        "": {
+          "documentation": "",
+          "type": "any"
+        }
+      }
+    },
+    "MockScenarioRepository": {
+      "documentation": "",
+      "kind": "interface",
+      "properties": {
+        "": {
+          "documentation": "",
+          "type": "any"
+        }
+      }
+    },
+    "MockWebhookNotifier": {
+      "documentation": "MockWebhookNotifier for testing",
+      "kind": "interface",
+      "properties": {
+        "notificationsSent": {
+          "documentation": "",
+          "type": "NotificationRecord[]"
+        }
+      }
     },
     "ModelDefinition": {
       "documentation": "",
@@ -8096,6 +9506,16 @@
         "custom",
         "override"
       ]
+    },
+    "ModuleLoader": {
+      "documentation": "ModuleLoader implements starlark.Thread.Load for whitelisted modules.",
+      "kind": "interface",
+      "properties": {
+        "Allowed": {
+          "documentation": "Allowed maps module name -\u003e source code",
+          "type": "Record\u003cstring, string\u003e"
+        }
+      }
     },
     "MonteCarloSnapshot": {
       "documentation": "MonteCarloSnapshot contains simulation parameters for reproducibility.",
@@ -8541,6 +9961,24 @@
         }
       }
     },
+    "NotificationRecord": {
+      "documentation": "NotificationRecord tracks a sent notification",
+      "kind": "interface",
+      "properties": {
+        "JobID": {
+          "documentation": "",
+          "type": "string"
+        },
+        "Payload": {
+          "documentation": "",
+          "type": "any"
+        },
+        "Timestamp": {
+          "documentation": "",
+          "type": "any"
+        }
+      }
+    },
     "NotificationService": {
       "documentation": "NotificationService provides notification management",
       "kind": "interface",
@@ -8606,6 +10044,104 @@
         "Variables": {
           "documentation": "",
           "type": "string[]"
+        }
+      }
+    },
+    "OAuthAuditEvent": {
+      "documentation": "OAuthAuditEvent represents an OAuth-related audit event",
+      "kind": "interface",
+      "properties": {
+        "Action": {
+          "documentation": "",
+          "type": "string"
+        },
+        "Error": {
+          "documentation": "",
+          "type": "string"
+        },
+        "IPAddress": {
+          "documentation": "",
+          "type": "string"
+        },
+        "Metadata": {
+          "documentation": "",
+          "type": "any"
+        },
+        "Provider": {
+          "documentation": "",
+          "type": "string"
+        },
+        "Success": {
+          "documentation": "",
+          "type": "boolean"
+        },
+        "TenantID": {
+          "documentation": "",
+          "type": "string"
+        },
+        "UserAgent": {
+          "documentation": "",
+          "type": "string"
+        },
+        "UserID": {
+          "documentation": "",
+          "type": "string"
+        }
+      }
+    },
+    "OAuthAuditService": {
+      "documentation": "OAuthAuditService handles recording of audit events",
+      "kind": "interface",
+      "properties": {
+        "hasuraClient": {
+          "documentation": "",
+          "type": "HasuraClient"
+        }
+      }
+    },
+    "OkRule": {
+      "documentation": "OkRule represents an ok-style Starlark rule.\n\nScript must set a global `ok = \u003cbool\u003e` and may set `message = \u003cstring\u003e`.",
+      "kind": "interface",
+      "properties": {
+        "ID": {
+          "documentation": "",
+          "type": "string"
+        },
+        "Script": {
+          "documentation": "",
+          "type": "string"
+        }
+      }
+    },
+    "OkRuleMeta": {
+      "documentation": "OkRuleMeta is lightweight execution metadata used to optimize BO-scale runs.",
+      "kind": "interface",
+      "properties": {
+        "Cost": {
+          "documentation": "Cost is a relative cost score (lower runs earlier).",
+          "type": "number"
+        },
+        "FailureLikelihood": {
+          "documentation": "FailureLikelihood is a relative likelihood in [0,1] (higher runs earlier within same Cost).",
+          "type": "number"
+        },
+        "RequiredFieldPaths": {
+          "documentation": "RequiredFieldPaths are dot-paths that must be present in the input record for this rule.\nExample: \"account.account_type\" or \"page.aum\".",
+          "type": "string[]"
+        }
+      }
+    },
+    "OkRuleWithMeta": {
+      "documentation": "OkRuleWithMeta bundles a rule with its execution metadata.",
+      "kind": "interface",
+      "properties": {
+        "": {
+          "documentation": "",
+          "type": "OkRule"
+        },
+        "Meta": {
+          "documentation": "",
+          "type": "OkRuleMeta"
         }
       }
     },
@@ -9506,6 +11042,102 @@
         }
       }
     },
+    "Portfolio": {
+      "documentation": "Portfolio basic struct",
+      "kind": "interface",
+      "properties": {
+        "AUM": {
+          "documentation": "",
+          "type": "number"
+        },
+        "ID": {
+          "documentation": "",
+          "type": "any"
+        },
+        "Strategy": {
+          "documentation": "",
+          "type": "string"
+        }
+      }
+    },
+    "PortfolioAnalytics": {
+      "documentation": "PortfolioAnalytics represents the analytics for a portfolio.",
+      "kind": "interface",
+      "properties": {
+        "AsOfDate": {
+          "documentation": "",
+          "type": "any"
+        },
+        "AssetClassBreakdown": {
+          "documentation": "",
+          "type": "Record\u003cstring, float64\u003e"
+        },
+        "BaseCurrency": {
+          "documentation": "",
+          "type": "string"
+        },
+        "ConcentrationMetrics": {
+          "documentation": "",
+          "type": "ConcentrationMetrics"
+        },
+        "ConfidenceScore": {
+          "documentation": "",
+          "type": "number"
+        },
+        "CurrencyExposure": {
+          "documentation": "",
+          "type": "Record\u003cstring, float64\u003e"
+        },
+        "InceptionDate": {
+          "documentation": "",
+          "type": "any"
+        },
+        "LiquidityProfile": {
+          "documentation": "",
+          "type": "Record\u003cstring, int\u003e"
+        },
+        "PerformanceMetrics": {
+          "documentation": "",
+          "type": "PerformanceMetrics"
+        },
+        "PortfolioCode": {
+          "documentation": "",
+          "type": "string"
+        },
+        "PortfolioID": {
+          "documentation": "",
+          "type": "any"
+        },
+        "PortfolioName": {
+          "documentation": "",
+          "type": "string"
+        },
+        "RegionExposure": {
+          "documentation": "",
+          "type": "Record\u003cstring, float64\u003e"
+        },
+        "RiskMetrics": {
+          "documentation": "",
+          "type": "RiskMetrics"
+        },
+        "SectorExposure": {
+          "documentation": "",
+          "type": "Record\u003cstring, float64\u003e"
+        },
+        "TopHoldings": {
+          "documentation": "",
+          "type": "PositionConcentration[]"
+        },
+        "TotalPositions": {
+          "documentation": "",
+          "type": "number"
+        },
+        "TotalValue": {
+          "documentation": "",
+          "type": "number"
+        }
+      }
+    },
     "PortfolioService": {
       "documentation": "PortfolioService handles portfolio aggregations and calculations",
       "kind": "interface",
@@ -9586,6 +11218,32 @@
         }
       }
     },
+    "PositionConcentration": {
+      "documentation": "PositionConcentration represents concentration of a single position.",
+      "kind": "interface",
+      "properties": {
+        "ISIN": {
+          "documentation": "",
+          "type": "string"
+        },
+        "MarketValue": {
+          "documentation": "",
+          "type": "number"
+        },
+        "SecurityID": {
+          "documentation": "",
+          "type": "any"
+        },
+        "SecurityName": {
+          "documentation": "",
+          "type": "string"
+        },
+        "Weight": {
+          "documentation": "",
+          "type": "number"
+        }
+      }
+    },
     "PositionSummary": {
       "documentation": "PositionSummary represents a position for display",
       "kind": "interface",
@@ -9629,6 +11287,48 @@
         "Weight": {
           "documentation": "",
           "type": "number"
+        }
+      }
+    },
+    "PostgresExportService": {
+      "documentation": "PostgresExportService implements ExportService using PostgreSQL",
+      "kind": "interface",
+      "properties": {
+        "db": {
+          "documentation": "",
+          "type": "any"
+        },
+        "exportStoragePath": {
+          "documentation": "",
+          "type": "string"
+        },
+        "urlBasePath": {
+          "documentation": "",
+          "type": "string"
+        }
+      }
+    },
+    "PostgresJobQueue": {
+      "documentation": "PostgresJobQueue is a PostgreSQL-backed implementation of JobQueue",
+      "kind": "interface",
+      "properties": {
+        "db": {
+          "documentation": "",
+          "type": "any"
+        }
+      }
+    },
+    "PostgresSchedulerService": {
+      "documentation": "PostgresSchedulerService implements SchedulerService",
+      "kind": "interface",
+      "properties": {
+        "cron": {
+          "documentation": "",
+          "type": "any"
+        },
+        "db": {
+          "documentation": "",
+          "type": "any"
         }
       }
     },
@@ -10251,6 +11951,44 @@
         }
       }
     },
+    "ProcessorStats": {
+      "documentation": "ProcessorStats provides statistics about the processor",
+      "kind": "interface",
+      "properties": {
+        "AverageDuration": {
+          "documentation": "",
+          "type": "any"
+        },
+        "AverageWaitTime": {
+          "documentation": "",
+          "type": "any"
+        },
+        "CompletedCount": {
+          "documentation": "",
+          "type": "number"
+        },
+        "FailedCount": {
+          "documentation": "",
+          "type": "number"
+        },
+        "IsRunning": {
+          "documentation": "",
+          "type": "boolean"
+        },
+        "QueuedCount": {
+          "documentation": "",
+          "type": "number"
+        },
+        "RunningCount": {
+          "documentation": "",
+          "type": "number"
+        },
+        "WorkerCount": {
+          "documentation": "",
+          "type": "number"
+        }
+      }
+    },
     "ProjectionEventHandlerImpl": {
       "documentation": "ProjectionEventHandlerImpl implements ProjectionEventHandler",
       "kind": "interface",
@@ -10618,6 +12356,36 @@
         "realtime"
       ]
     },
+    "QueueStats": {
+      "documentation": "QueueStats provides statistics about the job queue",
+      "kind": "interface",
+      "properties": {
+        "AverageDuration": {
+          "documentation": "",
+          "type": "any"
+        },
+        "AverageWaitTime": {
+          "documentation": "",
+          "type": "any"
+        },
+        "CompletedCount": {
+          "documentation": "",
+          "type": "number"
+        },
+        "FailedCount": {
+          "documentation": "",
+          "type": "number"
+        },
+        "QueuedCount": {
+          "documentation": "",
+          "type": "number"
+        },
+        "RunningCount": {
+          "documentation": "",
+          "type": "number"
+        }
+      }
+    },
     "QuotaDef": {
       "documentation": "",
       "kind": "interface",
@@ -10950,6 +12718,54 @@
         }
       }
     },
+    "RiskMetrics": {
+      "documentation": "RiskMetrics represents portfolio risk metrics.",
+      "kind": "interface",
+      "properties": {
+        "Beta": {
+          "documentation": "",
+          "type": "number"
+        },
+        "ExpectedShortfall": {
+          "documentation": "",
+          "type": "number"
+        },
+        "TrackingError": {
+          "documentation": "",
+          "type": "number"
+        },
+        "ValueAtRisk": {
+          "documentation": "",
+          "type": "number"
+        },
+        "Volatility": {
+          "documentation": "",
+          "type": "number"
+        }
+      }
+    },
+    "RiskService": {
+      "documentation": "RiskService orchestrates risk computation ETL",
+      "kind": "interface",
+      "properties": {
+        "audit": {
+          "documentation": "",
+          "type": "any"
+        },
+        "db": {
+          "documentation": "",
+          "type": "any"
+        },
+        "tenantID": {
+          "documentation": "",
+          "type": "any"
+        },
+        "wasm": {
+          "documentation": "",
+          "type": "any"
+        }
+      }
+    },
     "Role": {
       "documentation": "Role encapsulates the governance, membership, and permission metadata for a security role.",
       "kind": "interface",
@@ -11276,6 +13092,56 @@
         "Type": {
           "documentation": "",
           "type": "any"
+        }
+      }
+    },
+    "Rule": {
+      "documentation": "Rule represents a semantic priority rule for gold copy publishing",
+      "kind": "interface",
+      "properties": {
+        "BusinessObject": {
+          "documentation": "",
+          "type": "string"
+        },
+        "CreatedBy": {
+          "documentation": "",
+          "type": "string"
+        },
+        "Description": {
+          "documentation": "",
+          "type": "string"
+        },
+        "ExpressionLanguage": {
+          "documentation": "",
+          "type": "string"
+        },
+        "ID": {
+          "documentation": "",
+          "type": "string"
+        },
+        "Name": {
+          "documentation": "",
+          "type": "string"
+        },
+        "RuleEngine": {
+          "documentation": "",
+          "type": "string"
+        },
+        "SemanticTerm": {
+          "documentation": "",
+          "type": "string"
+        },
+        "Status": {
+          "documentation": "",
+          "type": "string"
+        },
+        "TenantID": {
+          "documentation": "",
+          "type": "string"
+        },
+        "Version": {
+          "documentation": "",
+          "type": "number"
         }
       }
     },
@@ -11813,6 +13679,24 @@
         }
       }
     },
+    "ScenarioRunner": {
+      "documentation": "",
+      "kind": "interface",
+      "properties": {
+        "engine": {
+          "documentation": "",
+          "type": "RuleEngine"
+        },
+        "repo": {
+          "documentation": "",
+          "type": "ScenarioRepository"
+        },
+        "sampleRepo": {
+          "documentation": "",
+          "type": "SampleEntityRepository"
+        }
+      }
+    },
     "ScenarioService": {
       "documentation": "",
       "kind": "interface",
@@ -11820,6 +13704,131 @@
         "repo": {
           "documentation": "",
           "type": "ScenarioRepository"
+        }
+      }
+    },
+    "ScheduleStatus": {
+      "kind": "enum",
+      "values": [
+        "active",
+        "completed",
+        "disabled",
+        "failed",
+        "paused"
+      ]
+    },
+    "ScheduleType": {
+      "kind": "enum",
+      "values": [
+        "daily",
+        "monthly",
+        "once",
+        "weekly"
+      ]
+    },
+    "ScheduledJob": {
+      "documentation": "ScheduledJob represents a scheduled job",
+      "kind": "interface",
+      "properties": {
+        "CreatedAt": {
+          "documentation": "",
+          "type": "any"
+        },
+        "CreatedBy": {
+          "documentation": "",
+          "type": "any"
+        },
+        "CronExpression": {
+          "documentation": "",
+          "type": "string"
+        },
+        "Description": {
+          "documentation": "",
+          "type": "string"
+        },
+        "EndTime": {
+          "documentation": "",
+          "type": "any"
+        },
+        "FailureCount": {
+          "documentation": "",
+          "type": "number"
+        },
+        "ID": {
+          "documentation": "",
+          "type": "any"
+        },
+        "IsActive": {
+          "documentation": "",
+          "type": "boolean"
+        },
+        "JobTemplate": {
+          "documentation": "",
+          "type": "Record\u003cstring, any\u003e"
+        },
+        "LastRunAt": {
+          "documentation": "",
+          "type": "any"
+        },
+        "MaxRetries": {
+          "documentation": "",
+          "type": "number"
+        },
+        "MaxRunDuration": {
+          "documentation": "",
+          "type": "number"
+        },
+        "Name": {
+          "documentation": "",
+          "type": "string"
+        },
+        "NextRunAt": {
+          "documentation": "",
+          "type": "any"
+        },
+        "OperationType": {
+          "documentation": "",
+          "type": "string"
+        },
+        "Priority": {
+          "documentation": "",
+          "type": "number"
+        },
+        "RetryOnFailure": {
+          "documentation": "",
+          "type": "boolean"
+        },
+        "RunCount": {
+          "documentation": "",
+          "type": "number"
+        },
+        "ScheduleType": {
+          "documentation": "",
+          "type": "ScheduleType"
+        },
+        "StartTime": {
+          "documentation": "",
+          "type": "any"
+        },
+        "Status": {
+          "documentation": "",
+          "type": "ScheduleStatus"
+        },
+        "SuccessCount": {
+          "documentation": "",
+          "type": "number"
+        },
+        "TenantID": {
+          "documentation": "",
+          "type": "any"
+        },
+        "Timezone": {
+          "documentation": "",
+          "type": "string"
+        },
+        "UpdatedAt": {
+          "documentation": "",
+          "type": "any"
         }
       }
     },
@@ -12161,6 +14170,60 @@
         "jwtManager": {
           "documentation": "",
           "type": "JWTManager"
+        }
+      }
+    },
+    "SecurityPosition": {
+      "documentation": "SecurityPosition represents a portfolio position with security details.",
+      "kind": "interface",
+      "properties": {
+        "Confidence": {
+          "documentation": "",
+          "type": "number"
+        },
+        "CostBasis": {
+          "documentation": "",
+          "type": "number"
+        },
+        "FieldCoverage": {
+          "documentation": "",
+          "type": "number"
+        },
+        "ID": {
+          "documentation": "",
+          "type": "any"
+        },
+        "MarketValue": {
+          "documentation": "",
+          "type": "number"
+        },
+        "PortfolioID": {
+          "documentation": "",
+          "type": "any"
+        },
+        "Quantity": {
+          "documentation": "",
+          "type": "number"
+        },
+        "Security": {
+          "documentation": "",
+          "type": "any"
+        },
+        "SecurityID": {
+          "documentation": "",
+          "type": "any"
+        },
+        "SourceSystems": {
+          "documentation": "",
+          "type": "string[]"
+        },
+        "Status": {
+          "documentation": "",
+          "type": "string"
+        },
+        "Weight": {
+          "documentation": "",
+          "type": "number"
         }
       }
     },
@@ -12659,6 +14722,50 @@
         }
       }
     },
+    "StarlarkEngine": {
+      "documentation": "StarlarkEngine provides Workday-style expression evaluation",
+      "kind": "interface",
+      "properties": {
+        "cache": {
+          "documentation": "",
+          "type": "Record\u003cstring, any\u003e"
+        },
+        "cacheMu": {
+          "documentation": "",
+          "type": "any"
+        },
+        "hasuraClient": {
+          "documentation": "",
+          "type": "any"
+        },
+        "logger": {
+          "documentation": "",
+          "type": "any"
+        },
+        "maxSteps": {
+          "documentation": "",
+          "type": "uint64"
+        }
+      }
+    },
+    "StarlarkValidationResult": {
+      "documentation": "StarlarkValidationResult represents the result of a validation expression",
+      "kind": "interface",
+      "properties": {
+        "IsValid": {
+          "documentation": "",
+          "type": "boolean"
+        },
+        "Message": {
+          "documentation": "",
+          "type": "string"
+        },
+        "Severity": {
+          "documentation": "",
+          "type": "string"
+        }
+      }
+    },
     "StewardReview": {
       "documentation": "StewardReview represents steward review sessions",
       "kind": "interface",
@@ -13145,6 +15252,52 @@
         }
       }
     },
+    "Template": {
+      "documentation": "Template represents a rule template for gold copy publishing",
+      "kind": "interface",
+      "properties": {
+        "Category": {
+          "documentation": "",
+          "type": "string"
+        },
+        "CreatedBy": {
+          "documentation": "",
+          "type": "string"
+        },
+        "Description": {
+          "documentation": "",
+          "type": "string"
+        },
+        "ID": {
+          "documentation": "",
+          "type": "string"
+        },
+        "Name": {
+          "documentation": "",
+          "type": "string"
+        },
+        "RuleIDs": {
+          "documentation": "",
+          "type": "string[]"
+        },
+        "Status": {
+          "documentation": "",
+          "type": "string"
+        },
+        "TemplateType": {
+          "documentation": "",
+          "type": "string"
+        },
+        "TenantID": {
+          "documentation": "",
+          "type": "string"
+        },
+        "Version": {
+          "documentation": "",
+          "type": "number"
+        }
+      }
+    },
     "Tenant": {
       "documentation": "Tenant represents a first-class tenant in the system",
       "kind": "interface",
@@ -13188,6 +15341,28 @@
         "WindowSeconds": {
           "documentation": "",
           "type": "number"
+        }
+      }
+    },
+    "TenantCompiler": {
+      "documentation": "",
+      "kind": "interface",
+      "properties": {
+        "coreCompiler": {
+          "documentation": "",
+          "type": "CoreCompiler"
+        },
+        "coreRepo": {
+          "documentation": "",
+          "type": "CoreRuleRepository"
+        },
+        "predeclared": {
+          "documentation": "",
+          "type": "any"
+        },
+        "tenantCache": {
+          "documentation": "",
+          "type": "TenantFnCache"
         }
       }
     },
@@ -13240,6 +15415,38 @@
         "WindowSeconds": {
           "documentation": "",
           "type": "number"
+        }
+      }
+    },
+    "TenantFnCache": {
+      "documentation": "",
+      "kind": "interface",
+      "properties": {
+        "m": {
+          "documentation": "",
+          "type": "Record\u003cTenantFnKey, any\u003e"
+        },
+        "mu": {
+          "documentation": "",
+          "type": "any"
+        }
+      }
+    },
+    "TenantFnKey": {
+      "documentation": "",
+      "kind": "interface",
+      "properties": {
+        "CoreVer": {
+          "documentation": "",
+          "type": "number"
+        },
+        "RuleID": {
+          "documentation": "",
+          "type": "string"
+        },
+        "TenantID": {
+          "documentation": "",
+          "type": "string"
         }
       }
     },
@@ -14955,6 +17162,20 @@
         }
       }
     },
+    "ValidationResponse": {
+      "documentation": "ValidationResponse is the struct returned by success() and fail()",
+      "kind": "interface",
+      "properties": {
+        "Message": {
+          "documentation": "",
+          "type": "string"
+        },
+        "Pass": {
+          "documentation": "",
+          "type": "boolean"
+        }
+      }
+    },
     "ValidationResult": {
       "documentation": "ValidationResult represents the result of a single validation",
       "kind": "interface",
@@ -15727,16 +17948,6 @@
         }
       }
     },
-    "complianceServiceImpl": {
-      "documentation": "",
-      "kind": "interface",
-      "properties": {
-        "auditSvc": {
-          "documentation": "",
-          "type": "AuditQueryer"
-        }
-      }
-    },
     "dbGovernanceEnvelope": {
       "documentation": "",
       "kind": "interface",
@@ -16084,6 +18295,68 @@
       "kind": "interface",
       "properties": {
         "db": {
+          "documentation": "",
+          "type": "any"
+        }
+      }
+    },
+    "starlarkBundleSpan": {
+      "documentation": "",
+      "kind": "interface",
+      "properties": {
+        "span": {
+          "documentation": "",
+          "type": "any"
+        },
+        "start": {
+          "documentation": "",
+          "type": "any"
+        }
+      }
+    },
+    "starlarkRuleMetricChildren": {
+      "documentation": "",
+      "kind": "interface",
+      "properties": {
+        "duration": {
+          "documentation": "",
+          "type": "any"
+        },
+        "lastError": {
+          "documentation": "",
+          "type": "any"
+        },
+        "lastRun": {
+          "documentation": "",
+          "type": "any"
+        }
+      }
+    },
+    "starlarkRuleSpan": {
+      "documentation": "",
+      "kind": "interface",
+      "properties": {
+        "ctxUsed": {
+          "documentation": "",
+          "type": "any"
+        },
+        "ended": {
+          "documentation": "",
+          "type": "boolean"
+        },
+        "mode": {
+          "documentation": "",
+          "type": "string"
+        },
+        "ruleID": {
+          "documentation": "",
+          "type": "string"
+        },
+        "span": {
+          "documentation": "",
+          "type": "any"
+        },
+        "start": {
           "documentation": "",
           "type": "any"
         }

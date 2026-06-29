@@ -257,7 +257,6 @@ func createRuleHandler(db *sqlx.DB, logger *zap.Logger) http.HandlerFunc {
 		}
 
 		tenantID := claims.TenantID
-		userID := claims.UserID
 
 		var req struct {
 			BPName        string                 `json:"bp_name"`

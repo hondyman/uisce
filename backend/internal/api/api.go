@@ -1342,6 +1342,11 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 		businessTermsHandler.RegisterRoutes(r)
 		RegisterValidationRulesRoutes(r, db, srv.CueEngine, srv.BusinessObjectService, srv.DatasourceResolver)
 
+		// Initialize Security Profile Service and Handler
+		secProfileSvc := security.NewProfileService(db)
+		secProfileHandler := handlers.NewSecurityProfileHandler(secProfileSvc)
+		secProfileHandler.RegisterRoutes(r)
+
 		adminHandler.RegisterRoutes(r)
 // Admin Impersonation Routes
 		if db != nil {

@@ -8,7 +8,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/hondyman/semlayer/backend/internal/audit"
-	"github.com/hondyman/semlayer/libs/jwt-middleware"
 )
 
 func main() {

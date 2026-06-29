@@ -2,6 +2,7 @@ package security
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"sync"
 	"sync/atomic"
@@ -33,6 +34,10 @@ func (f *fakeAudit) LogEnd(_ context.Context, _ ImpersonationSession) error {
 }
 
 func (f *fakeAudit) LogBreakGlassAction(_ context.Context, _ uuid.UUID, _ string, _ uuid.UUID, _ map[string]any) error {
+	return nil
+}
+
+func (f *fakeAudit) LogImpersonationAction(_ context.Context, _ *sql.Tx, _ ImpersonationAction) error {
 	return nil
 }
 

@@ -28,16 +28,24 @@ import (
 type AdminImpersonateHandler struct {
 	svc    *security.ContextExchangeService
 	logger *security.PlatformAdminAuditLogger
+	policy security.ImpersonationPolicy
 }
 
 // NewAdminImpersonateHandler constructs the handler, wiring the DB-backed
 // synchronous audit logger to the ContextExchangeService.
 func NewAdminImpersonateHandler(db *sql.DB) *AdminImpersonateHandler {
 	auditLogger := security.NewPlatformAdminAuditLogger(db)
-	svc := security.NewContextExchangeService(auditLogger)
+	policy := security.ImpersonationPolicy{
+		// Professional_services is unrestricted by default so it can administer the
+		// tenant for the duration of the session. Populate this list to restrict
+		// which BO keys professional_services may mutate via break_glass.
+		ProfessionalServicesBreakGlassBOKeys: []string{},
+	}
+	svc := security.NewContextExchangeService(auditLogger, policy)
 	return &AdminImpersonateHandler{
 		svc:    svc,
 		logger: auditLogger,
+		policy: policy,
 	}
 }
 
@@ -51,6 +59,8 @@ type assumeContextRequest struct {
 	TicketReference string `json:"ticket_reference"`
 	Mode            string `json:"mode"`             // "read_only" | "break_glass"
 	DurationMinutes int    `json:"duration_minutes"` // 1–120, default 30
+	ScopeKind       string `json:"scope_kind"`       // "tenant" | "instance" | "product" | "datasource"
+	ScopeID         string `json:"scope_id"`         // UUID of the scoped resource
 }
 
 type assumeContextResponse struct {
@@ -71,12 +81,13 @@ func (h *AdminImpersonateHandler) AssumeContext(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	// ── 2. Guard: must be a global admin ────────────────────────────────────
+	// ── 2. Guard: must hold an authorized impersonation role ─────────────────
 	// Defence-in-depth: AuthContextMiddleware also checks this, but we
 	// enforce it here too to prevent routing misconfiguration bypass.
-	if !authInfo.IsGlobalAdmin {
+	adminRole := h.policy.ResolveAdminRole(authInfo.Roles)
+	if adminRole == "" || !h.policy.CanImpersonate(adminRole) {
 		writeJSONError(w, http.StatusForbidden,
-			fmt.Sprintf("access denied: user %s does not hold global_admin or global_ops role", authInfo.UserID))
+			fmt.Sprintf("access denied: user %s does not hold an authorized impersonation role", authInfo.UserID))
 		return
 	}
 
@@ -121,6 +132,8 @@ func (h *AdminImpersonateHandler) AssumeContext(w http.ResponseWriter, r *http.R
 		}
 	}
 
+	scopeID, _ := uuid.Parse(req.ScopeID)
+
 	// ── 4. Call ContextExchangeService (audit write + token issuance) ────────
 	impReq := security.ImpersonationRequest{
 		TargetTenantID:  targetID,
@@ -128,6 +141,8 @@ func (h *AdminImpersonateHandler) AssumeContext(w http.ResponseWriter, r *http.R
 		TicketReference: req.TicketReference,
 		Mode:            mode,
 		Duration:        time.Duration(durationMinutes) * time.Minute,
+		ScopeKind:       req.ScopeKind,
+		ScopeID:         scopeID,
 		IPAddress:       ipAddr,
 		UserAgent:       r.Header.Get("User-Agent"),
 	}
@@ -253,6 +268,7 @@ type ActiveImpersonationSession struct {
 	SessionID      string    `json:"session_id"`
 	AdminUserID    string    `json:"admin_user_id"`
 	AdminEmail     string    `json:"admin_email"`
+	AdminRole      string    `json:"admin_role"`
 	TargetTenantID string    `json:"target_tenant_id"`
 	Mode           string    `json:"mode"`
 	ScopeKind      string    `json:"scope_kind,omitempty"`
@@ -281,7 +297,7 @@ func (h *AdminImpersonateHandler) ListActiveSessions(w http.ResponseWriter, r *h
 	// whose expires_at is still in the future. We use a LEFT JOIN + GROUP BY
 	// approach to find sessions that haven't ended.
 	const q = `
-		SELECT s.session_id, s.admin_user_id, s.admin_email,
+		SELECT s.session_id, s.admin_user_id, s.admin_email, s.admin_role,
 		       s.target_tenant_id, s.mode, s.scope_kind, s.scope_id,
 		       s.reason, s.expires_at, MIN(s.created_at) AS started_at
 		FROM platform_admin_audit s
@@ -292,7 +308,7 @@ func (h *AdminImpersonateHandler) ListActiveSessions(w http.ResponseWriter, r *h
 		  AND s.expires_at IS NOT NULL
 		  AND s.expires_at > NOW()
 		  AND e.id IS NULL
-		GROUP BY s.session_id, s.admin_user_id, s.admin_email,
+		GROUP BY s.session_id, s.admin_user_id, s.admin_email, s.admin_role,
 		         s.target_tenant_id, s.mode, s.scope_kind, s.scope_id,
 		         s.reason, s.expires_at
 		ORDER BY started_at DESC
@@ -316,7 +332,7 @@ func (h *AdminImpersonateHandler) ListActiveSessions(w http.ResponseWriter, r *h
 		var mode, scopeKind sql.NullString
 		var scopeID sql.NullString
 		var expiresAt sql.NullTime
-		if err := rows.Scan(&s.SessionID, &s.AdminUserID, &s.AdminEmail,
+		if err := rows.Scan(&s.SessionID, &s.AdminUserID, &s.AdminEmail, &s.AdminRole,
 			&s.TargetTenantID, &mode, &scopeKind, &scopeID,
 			&s.Reason, &expiresAt, &s.StartedAt); err != nil {
 			writeJSONError(w, http.StatusInternalServerError, "scan failed: "+err.Error())
@@ -346,6 +362,7 @@ type RecentImpersonationSession struct {
 	TenantID    string    `json:"tenant_id"`
 	TenantName  string    `json:"tenant_name,omitempty"`
 	AdminUserID string    `json:"admin_user_id"`
+	AdminRole   string    `json:"admin_role"`
 	Mode        string    `json:"mode"`
 	LastUsedAt  time.Time `json:"last_used_at"`
 }
@@ -369,13 +386,14 @@ func (h *AdminImpersonateHandler) ListRecentSessions(w http.ResponseWriter, r *h
 		SELECT s.target_tenant_id,
 		       COALESCE(t.name, '') AS tenant_name,
 		       s.admin_user_id,
+		       s.admin_role,
 		       s.mode,
 		       MAX(s.created_at) AS last_used_at
 		FROM platform_admin_audit s
 		LEFT JOIN tenants t ON t.id = s.target_tenant_id
 		WHERE s.event_type = $1
 		  AND s.admin_user_id = $2
-		GROUP BY s.target_tenant_id, t.name, s.admin_user_id, s.mode
+		GROUP BY s.target_tenant_id, t.name, s.admin_user_id, s.admin_role, s.mode
 		ORDER BY last_used_at DESC
 		LIMIT 5
 	`
@@ -395,7 +413,7 @@ func (h *AdminImpersonateHandler) ListRecentSessions(w http.ResponseWriter, r *h
 		var s RecentImpersonationSession
 		var mode sql.NullString
 		var tenantName sql.NullString
-		if err := rows.Scan(&s.TenantID, &tenantName, &s.AdminUserID, &mode, &s.LastUsedAt); err != nil {
+		if err := rows.Scan(&s.TenantID, &tenantName, &s.AdminUserID, &s.AdminRole, &mode, &s.LastUsedAt); err != nil {
 			writeJSONError(w, http.StatusInternalServerError, "scan failed: "+err.Error())
 			return
 		}

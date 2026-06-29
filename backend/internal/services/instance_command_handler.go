@@ -3,10 +3,12 @@ package services
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 
 	"github.com/hondyman/semlayer/backend/internal/metadata"
 	"github.com/hondyman/semlayer/backend/internal/models"
+	"github.com/hondyman/semlayer/backend/internal/security"
 )
 
 // InstanceCommandHandler handles all CRUD commands for Business Object Instances
@@ -26,13 +28,22 @@ import (
 type InstanceCommandHandler struct {
 	boService      *metadata.BusinessObjectService
 	eventPublisher *EventPublisher
+	audit          security.ImpersonationAuditLogger
+	policy         security.ImpersonationPolicy
 }
 
 // NewInstanceCommandHandler creates a new instance command handler
-func NewInstanceCommandHandler(boService *metadata.BusinessObjectService, eventPublisher *EventPublisher) *InstanceCommandHandler {
+func NewInstanceCommandHandler(
+	boService *metadata.BusinessObjectService,
+	eventPublisher *EventPublisher,
+	audit security.ImpersonationAuditLogger,
+	policy security.ImpersonationPolicy,
+) *InstanceCommandHandler {
 	return &InstanceCommandHandler{
 		boService:      boService,
 		eventPublisher: eventPublisher,
+		audit:          audit,
+		policy:         policy,
 	}
 }
 
@@ -116,14 +127,63 @@ func (ich *InstanceCommandHandler) HandleCreateInstance(ctx context.Context, com
 		instance.CustomFieldValues = customFields
 	}
 
-	// Execute service layer operation
-	created, err := ich.boService.CreateInstance(ctx, tenantID, userID, instance)
+	// Execute service layer operation inside a transaction so impersonation audit
+	// is committed atomically with the BO mutation.
+	db, err := ich.boService.TenantDB(tenantID)
+	if err != nil {
+		return &CommandResponse{
+			ID:            command.ID,
+			CorrelationID: command.CorrelationID,
+			Status:        CommandStatusFailed,
+			Message:       fmt.Sprintf("Failed to resolve tenant database: %v", err),
+			Error:         err.Error(),
+			Timestamp:     command.Timestamp,
+		}, nil
+	}
+
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		return &CommandResponse{
+			ID:            command.ID,
+			CorrelationID: command.CorrelationID,
+			Status:        CommandStatusFailed,
+			Message:       fmt.Sprintf("Failed to begin transaction: %v", err),
+			Error:         err.Error(),
+			Timestamp:     command.Timestamp,
+		}, nil
+	}
+	defer tx.Rollback()
+
+	created, err := ich.boService.CreateInstanceTx(ctx, tx, tenantID, userID, instance)
 	if err != nil {
 		return &CommandResponse{
 			ID:            command.ID,
 			CorrelationID: command.CorrelationID,
 			Status:        CommandStatusFailed,
 			Message:       fmt.Sprintf("Failed to create instance: %v", err),
+			Error:         err.Error(),
+			Timestamp:     command.Timestamp,
+		}, nil
+	}
+
+	// Synchronous impersonation action audit (abort on audit failure rolls back tx).
+	if auditErr := ich.auditImpersonationActionTx(ctx, tx, boKey, created.ID, "CREATE", command.Data); auditErr != nil {
+		return &CommandResponse{
+			ID:            command.ID,
+			CorrelationID: command.CorrelationID,
+			Status:        CommandStatusFailed,
+			Message:       fmt.Sprintf("Failed to audit impersonation action: %v", auditErr),
+			Error:         auditErr.Error(),
+			Timestamp:     command.Timestamp,
+		}, nil
+	}
+
+	if err := tx.Commit(); err != nil {
+		return &CommandResponse{
+			ID:            command.ID,
+			CorrelationID: command.CorrelationID,
+			Status:        CommandStatusFailed,
+			Message:       fmt.Sprintf("Failed to commit transaction: %v", err),
 			Error:         err.Error(),
 			Timestamp:     command.Timestamp,
 		}, nil
@@ -190,14 +250,63 @@ func (ich *InstanceCommandHandler) HandleUpdateInstance(ctx context.Context, com
 	coreUpdates := getMapField(reqMap, "coreFieldUpdates")
 	customUpdates := getMapField(reqMap, "customFieldUpdates")
 
-	// Execute service layer operation
-	updated, err := ich.boService.UpdateInstance(ctx, tenantID, instanceID, userID, coreUpdates, customUpdates)
+	// Execute service layer operation inside a transaction so impersonation audit
+	// is committed atomically with the BO mutation.
+	db, err := ich.boService.TenantDB(tenantID)
+	if err != nil {
+		return &CommandResponse{
+			ID:            command.ID,
+			CorrelationID: command.CorrelationID,
+			Status:        CommandStatusFailed,
+			Message:       fmt.Sprintf("Failed to resolve tenant database: %v", err),
+			Error:         err.Error(),
+			Timestamp:     command.Timestamp,
+		}, nil
+	}
+
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		return &CommandResponse{
+			ID:            command.ID,
+			CorrelationID: command.CorrelationID,
+			Status:        CommandStatusFailed,
+			Message:       fmt.Sprintf("Failed to begin transaction: %v", err),
+			Error:         err.Error(),
+			Timestamp:     command.Timestamp,
+		}, nil
+	}
+	defer tx.Rollback()
+
+	updated, err := ich.boService.UpdateInstanceTx(ctx, tx, tenantID, instanceID, userID, coreUpdates, customUpdates)
 	if err != nil {
 		return &CommandResponse{
 			ID:            command.ID,
 			CorrelationID: command.CorrelationID,
 			Status:        CommandStatusFailed,
 			Message:       fmt.Sprintf("Failed to update instance: %v", err),
+			Error:         err.Error(),
+			Timestamp:     command.Timestamp,
+		}, nil
+	}
+
+	// Synchronous impersonation action audit (abort on audit failure rolls back tx).
+	if auditErr := ich.auditImpersonationActionTx(ctx, tx, updated.BusinessObjectKey, updated.ID, "UPDATE", command.Data); auditErr != nil {
+		return &CommandResponse{
+			ID:            command.ID,
+			CorrelationID: command.CorrelationID,
+			Status:        CommandStatusFailed,
+			Message:       fmt.Sprintf("Failed to audit impersonation action: %v", auditErr),
+			Error:         auditErr.Error(),
+			Timestamp:     command.Timestamp,
+		}, nil
+	}
+
+	if err := tx.Commit(); err != nil {
+		return &CommandResponse{
+			ID:            command.ID,
+			CorrelationID: command.CorrelationID,
+			Status:        CommandStatusFailed,
+			Message:       fmt.Sprintf("Failed to commit transaction: %v", err),
 			Error:         err.Error(),
 			Timestamp:     command.Timestamp,
 		}, nil
@@ -259,14 +368,62 @@ func (ich *InstanceCommandHandler) HandleDeleteInstance(ctx context.Context, com
 		}, nil
 	}
 
-	// Execute service layer operation
-	err := ich.boService.DeleteInstance(ctx, tenantID, instanceID, userID)
+	// Execute service layer operation inside a transaction so impersonation audit
+	// is committed atomically with the BO mutation.
+	db, err := ich.boService.TenantDB(tenantID)
 	if err != nil {
 		return &CommandResponse{
 			ID:            command.ID,
 			CorrelationID: command.CorrelationID,
 			Status:        CommandStatusFailed,
+			Message:       fmt.Sprintf("Failed to resolve tenant database: %v", err),
+			Error:         err.Error(),
+			Timestamp:     command.Timestamp,
+		}, nil
+	}
+
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		return &CommandResponse{
+			ID:            command.ID,
+			CorrelationID: command.CorrelationID,
+			Status:        CommandStatusFailed,
+			Message:       fmt.Sprintf("Failed to begin transaction: %v", err),
+			Error:         err.Error(),
+			Timestamp:     command.Timestamp,
+		}, nil
+	}
+	defer tx.Rollback()
+
+	if err := ich.boService.DeleteInstanceTx(ctx, tx, tenantID, instanceID, userID); err != nil {
+		return &CommandResponse{
+			ID:            command.ID,
+			CorrelationID: command.CorrelationID,
+			Status:        CommandStatusFailed,
 			Message:       fmt.Sprintf("Failed to delete instance: %v", err),
+			Error:         err.Error(),
+			Timestamp:     command.Timestamp,
+		}, nil
+	}
+
+	// Synchronous impersonation action audit (abort on audit failure rolls back tx).
+	if auditErr := ich.auditImpersonationActionTx(ctx, tx, boKey, instanceID, "DELETE", command.Data); auditErr != nil {
+		return &CommandResponse{
+			ID:            command.ID,
+			CorrelationID: command.CorrelationID,
+			Status:        CommandStatusFailed,
+			Message:       fmt.Sprintf("Failed to audit impersonation action: %v", auditErr),
+			Error:         auditErr.Error(),
+			Timestamp:     command.Timestamp,
+		}, nil
+	}
+
+	if err := tx.Commit(); err != nil {
+		return &CommandResponse{
+			ID:            command.ID,
+			CorrelationID: command.CorrelationID,
+			Status:        CommandStatusFailed,
+			Message:       fmt.Sprintf("Failed to commit transaction: %v", err),
 			Error:         err.Error(),
 			Timestamp:     command.Timestamp,
 		}, nil
@@ -287,4 +444,36 @@ func (ich *InstanceCommandHandler) HandleDeleteInstance(ctx context.Context, com
 		},
 		Timestamp: command.Timestamp,
 	}, nil
+}
+
+// auditImpersonationActionTx writes a synchronous micro-audit record inside
+// the active transaction when the request is executing inside an impersonation
+// session. No-op for normal users.
+func (ich *InstanceCommandHandler) auditImpersonationActionTx(
+	ctx context.Context,
+	tx *sql.Tx,
+	boKey string,
+	instanceID string,
+	transition string,
+	payload any,
+) error {
+	if ich.audit == nil {
+		return nil
+	}
+
+	payloadBytes, err := json.Marshal(payload)
+	if err != nil {
+		return fmt.Errorf("failed to marshal audit payload: %w", err)
+	}
+
+	return security.LogBOActionIfImpersonating(
+		ctx,
+		ich.policy,
+		ich.audit,
+		tx,
+		boKey,
+		instanceID,
+		transition,
+		payloadBytes,
+	)
 }

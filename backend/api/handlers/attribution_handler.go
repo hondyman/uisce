@@ -68,7 +68,7 @@ func (h *AttributionHandler) evaluateABAC(c *gin.Context, action, resourceType s
 	claims := jwtmiddleware.GetGinClaimsFromContext(c)
 	if claims == nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error":"unauthorized"})
-		return
+		return false
 	}
 	tenantID := claims.TenantID
 	userID := c.GetHeader("X-User-ID")

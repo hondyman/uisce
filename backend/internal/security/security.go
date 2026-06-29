@@ -29,6 +29,7 @@ type Context struct {
 	RealAdminUserID        string // The admin's true identity (immutable)
 	ImpersonationSessionID string // Links to platform_admin_audit.session_id
 	ImpersonationMode      string // "read_only" | "break_glass"
+	ImpersonationAdminRole string // "global_admin" | "helpdesk" | "professional_services"
 }
 
 type AuthInfo struct {
@@ -45,6 +46,7 @@ type AuthInfo struct {
 	RealAdminUserID        string
 	ImpersonationSessionID string
 	ImpersonationMode      string
+	ImpersonationAdminRole string // "global_admin" | "helpdesk" | "professional_services"
 }
 
 type BuildContextRequest struct {
@@ -133,6 +135,7 @@ func BuildContext(ctx context.Context, auth AuthInfo, req BuildContextRequest, r
 		RealAdminUserID:        auth.RealAdminUserID,
 		ImpersonationSessionID: auth.ImpersonationSessionID,
 		ImpersonationMode:      auth.ImpersonationMode,
+		ImpersonationAdminRole: auth.ImpersonationAdminRole,
 	}
 	secCtx.Attributes["operating_scope"] = secCtx.OperatingScope
 	secCtx.Attributes["region"] = secCtx.Region
@@ -142,6 +145,7 @@ func BuildContext(ctx context.Context, auth AuthInfo, req BuildContextRequest, r
 	secCtx.Attributes["datasource_id"] = secCtx.DatasourceID
 	secCtx.Attributes["impersonation_active"] = secCtx.ImpersonationActive
 	secCtx.Attributes["impersonation_mode"] = secCtx.ImpersonationMode
+	secCtx.Attributes["impersonation_admin_role"] = secCtx.ImpersonationAdminRole
 
 	return secCtx, nil
 }

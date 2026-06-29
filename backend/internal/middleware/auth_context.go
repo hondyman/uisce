@@ -44,24 +44,46 @@ func AuthContextMiddleware(secMgr *services.SecurityManager) func(http.Handler) 
 						w.Header().Set("X-Real-Admin-ID", uid)
 						w.Header().Set("X-Impersonation-Mode", string(impPayload.Mode))
 
+						// Preserve the real admin roles so downstream authorization and audit
+						// know which role initiated the session. Fall back to the token's
+						// admin_role for tokens that do not carry RealRoles. Legacy tokens
+						// issued before multi-role support have neither field; treat them as
+						// global_admin because the platform previously allowed only global
+						// admins to impersonate.
+						realRoles := impPayload.RealRoles
+						adminRole := impPayload.AdminRole
+						if len(realRoles) == 0 {
+							if adminRole != "" {
+								realRoles = []string{adminRole}
+							} else {
+								realRoles = []string{security.RoleGlobalAdmin}
+								adminRole = security.RoleGlobalAdmin
+							}
+						}
+						isGlobalAdmin := hasRole(realRoles, security.RoleGlobalAdmin) ||
+							hasRole(realRoles, security.RoleGlobalOps) ||
+							hasRole(realRoles, "core_admin") ||
+							hasRole(realRoles, "is_core_admin")
+
 						ctx := identity.WithActorTenant(r.Context(), uid, tenantID)
 						ctx = security.WithAuthInfo(ctx, security.AuthInfo{
 							UserID:                 uid,
-							Roles:                  []string{"global_admin"},
+							Roles:                  realRoles,
 							TenantIDs:              []string{tenantID},
-							IsGlobalAdmin:          true,
+							IsGlobalAdmin:          isGlobalAdmin,
 							ImpersonationActive:    true,
 							RealAdminUserID:        uid,
 							ImpersonationSessionID: impPayload.SessionID,
 							ImpersonationMode:      string(impPayload.Mode),
-					})
-					// Attach the impersonation scope so BuildContext can enforce it.
-					// Default to tenant-wide; honour the token's scope_kind/scope_id when set.
-					ctx = security.WithImpersonationScope(ctx, security.ImpersonationScopeContext{
-						Kind: impPayload.ScopeKind,
-						ID:   impPayload.ScopeID,
-					})
-					r = r.WithContext(ctx)
+							ImpersonationAdminRole: adminRole,
+						})
+						// Attach the impersonation scope so BuildContext can enforce it.
+						// Default to tenant-wide; honour the token's scope_kind/scope_id when set.
+						ctx = security.WithImpersonationScope(ctx, security.ImpersonationScopeContext{
+							Kind: impPayload.ScopeKind,
+							ID:   impPayload.ScopeID,
+						})
+						r = r.WithContext(ctx)
 						next.ServeHTTP(w, r)
 						return
 					}

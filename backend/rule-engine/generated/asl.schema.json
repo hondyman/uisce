@@ -515,6 +515,88 @@
       },
       "type": "object"
     },
+    "AsyncJob": {
+      "properties": {
+        "CompletedAt": {},
+        "CreatedAt": {},
+        "CreatedBy": {
+          "type": "string"
+        },
+        "ErrorDetails": {},
+        "FailedItems": {
+          "type": "number"
+        },
+        "ID": {
+          "type": "string"
+        },
+        "MaxRetries": {
+          "type": "number"
+        },
+        "OperationType": {
+          "$ref": "#/definitions/OperationType"
+        },
+        "Payload": {},
+        "Priority": {
+          "type": "number"
+        },
+        "ProcessedItems": {
+          "type": "number"
+        },
+        "ResultIDs": {},
+        "RetryCount": {
+          "type": "number"
+        },
+        "StartedAt": {},
+        "Status": {
+          "$ref": "#/definitions/JobStatus"
+        },
+        "SucceededItems": {
+          "type": "number"
+        },
+        "TenantID": {
+          "type": "string"
+        },
+        "TotalItems": {
+          "type": "number"
+        },
+        "WebhookAttempts": {
+          "type": "number"
+        },
+        "WebhookSent": {
+          "type": "boolean"
+        },
+        "WebhookURL": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "AsyncJobResponse": {
+      "properties": {
+        "EstimatedTime": {
+          "type": "string"
+        },
+        "JobID": {
+          "type": "string"
+        },
+        "Message": {
+          "type": "string"
+        },
+        "OperationType": {
+          "type": "string"
+        },
+        "Status": {
+          "$ref": "#/definitions/JobStatus"
+        },
+        "StatusURL": {
+          "type": "string"
+        },
+        "TotalItems": {
+          "type": "number"
+        }
+      },
+      "type": "object"
+    },
     "AsyncValidatorImpl": {
       "properties": {
         "db": {},
@@ -1132,6 +1214,35 @@
       },
       "type": "object"
     },
+    "BulkCreatePayload": {
+      "properties": {
+        "Description": {
+          "type": "string"
+        },
+        "Expression": {
+          "type": "string"
+        },
+        "Name": {
+          "type": "string"
+        },
+        "Variables": {}
+      },
+      "type": "object"
+    },
+    "BulkOperationHandler": {
+      "properties": {
+        "db": {}
+      },
+      "type": "object"
+    },
+    "BulkPublishPayload": {
+      "properties": {
+        "TemplateID": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
     "Bundle": {
       "properties": {
         "Audience": {
@@ -1687,6 +1798,55 @@
           "type": "string"
         },
         "TenantID": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "BusinessObjectListField": {
+      "properties": {
+        "ColumnName": {
+          "type": "string"
+        },
+        "Description": {
+          "type": "string"
+        },
+        "Label": {
+          "type": "string"
+        },
+        "Name": {
+          "type": "string"
+        },
+        "TechnicalName": {
+          "type": "string"
+        },
+        "Type": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "BusinessObjectListItem": {
+      "properties": {
+        "Config": {
+          "$ref": "#/definitions/Record\u003cstring, any\u003e"
+        },
+        "Description": {
+          "type": "string"
+        },
+        "DisplayName": {
+          "type": "string"
+        },
+        "Fields": {
+          "$ref": "#/definitions/BusinessObjectListField[]"
+        },
+        "ID": {
+          "type": "string"
+        },
+        "Icon": {
+          "type": "string"
+        },
+        "Name": {
           "type": "string"
         }
       },
@@ -2271,17 +2431,65 @@
       },
       "type": "object"
     },
+    "ComplianceBreachRecord": {
+      "properties": {
+        "BreachID": {},
+        "Deviation": {
+          "type": "number"
+        },
+        "EvaluationID": {},
+        "Message": {
+          "type": "string"
+        },
+        "MetricValue": {
+          "type": "number"
+        },
+        "PortfolioID": {},
+        "RuleID": {
+          "type": "string"
+        },
+        "Severity": {
+          "type": "string"
+        },
+        "Status": {
+          "type": "string"
+        },
+        "TenantID": {},
+        "ThresholdValue": {
+          "type": "number"
+        },
+        "ValuationDate": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
     "ComplianceReport": {
       "properties": {
-        "ClientID": {
-          "type": "string"
-        },
-        "Events": {
-          "$ref": "#/definitions/any[]"
-        },
         "GeneratedAt": {},
-        "Summary": {
+        "GeneratedBy": {
           "type": "string"
+        },
+        "ID": {
+          "type": "string"
+        },
+        "Recommendations": {
+          "$ref": "#/definitions/string[]"
+        },
+        "ReportType": {
+          "type": "string"
+        },
+        "Status": {
+          "type": "string"
+        },
+        "Summary": {
+          "$ref": "#/definitions/AuditSummary"
+        },
+        "TimeRange": {
+          "$ref": "#/definitions/AuditTimeRange"
+        },
+        "Violations": {
+          "$ref": "#/definitions/AuditEvent[]"
         }
       },
       "type": "object"
@@ -2309,6 +2517,32 @@
           "type": "string"
         },
         "UpdatedAt": {}
+      },
+      "type": "object"
+    },
+    "ComplianceService": {
+      "properties": {
+        "audit": {},
+        "db": {},
+        "tenantID": {},
+        "wasm": {}
+      },
+      "type": "object"
+    },
+    "ConcentrationMetrics": {
+      "properties": {
+        "GiniCoefficient": {
+          "type": "number"
+        },
+        "HerfindahlHirschmanIndex": {
+          "type": "number"
+        },
+        "Top10Concentration": {
+          "type": "number"
+        },
+        "Top5Concentration": {
+          "type": "number"
+        }
       },
       "type": "object"
     },
@@ -2607,6 +2841,35 @@
       },
       "type": "object"
     },
+    "CoreCompiler": {
+      "properties": {
+        "cache": {
+          "$ref": "#/definitions/CoreFnCache"
+        },
+        "predeclared": {}
+      },
+      "type": "object"
+    },
+    "CoreFnCache": {
+      "properties": {
+        "m": {
+          "$ref": "#/definitions/Record\u003cCoreFnKey, any\u003e"
+        },
+        "mu": {}
+      },
+      "type": "object"
+    },
+    "CoreFnKey": {
+      "properties": {
+        "CoreRuleID": {
+          "type": "string"
+        },
+        "Version": {
+          "type": "number"
+        }
+      },
+      "type": "object"
+    },
     "CoreValidationRule": {
       "properties": {
         "ConditionSrc": {
@@ -2630,6 +2893,21 @@
         },
         "Version": {
           "type": "number"
+        }
+      },
+      "type": "object"
+    },
+    "CreateAsyncJobRequest": {
+      "properties": {
+        "Items": {},
+        "OperationType": {
+          "type": "string"
+        },
+        "Priority": {
+          "type": "number"
+        },
+        "WebhookURL": {
+          "type": "string"
         }
       },
       "type": "object"
@@ -2683,6 +2961,20 @@
         },
         "TechnicalName": {
           "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "CreateExportRequest": {
+      "properties": {
+        "ExportFormat": {
+          "type": "string"
+        },
+        "FilterCriteria": {
+          "$ref": "#/definitions/Record\u003cstring, any\u003e"
+        },
+        "IncludeErrors": {
+          "type": "boolean"
         }
       },
       "type": "object"
@@ -3450,6 +3742,26 @@
       },
       "type": "object"
     },
+    "DownloadURLRequest": {
+      "properties": {
+        "ExpiryHours": {
+          "type": "number"
+        }
+      },
+      "type": "object"
+    },
+    "DownloadURLResponse": {
+      "properties": {
+        "ExpiresAt": {},
+        "Format": {
+          "type": "string"
+        },
+        "URL": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
     "ECStore": {
       "properties": {
         "shards": {
@@ -4035,6 +4347,109 @@
       },
       "type": "object"
     },
+    "ExportFormat": {
+      "enum": [
+        "csv",
+        "json",
+        "parquet"
+      ],
+      "type": "string"
+    },
+    "ExportStatusResponse": {
+      "properties": {
+        "CompletedAt": {},
+        "CreatedAt": {},
+        "ErrorMessage": {
+          "type": "string"
+        },
+        "ExpiresAt": {},
+        "ExportFormat": {
+          "type": "string"
+        },
+        "FileSize": {
+          "type": "number"
+        },
+        "ID": {},
+        "IsDownloadable": {
+          "type": "boolean"
+        },
+        "JobID": {},
+        "PresignedURL": {
+          "type": "string"
+        },
+        "PresignedURLExpires": {},
+        "RecordCount": {
+          "type": "number"
+        },
+        "Status": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "ExportSummary": {
+      "properties": {
+        "CreatedAt": {},
+        "ExpiresAt": {},
+        "FileSize": {
+          "type": "number"
+        },
+        "Format": {
+          "type": "string"
+        },
+        "ID": {},
+        "Records": {
+          "type": "number"
+        },
+        "Status": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "Expression": {
+      "properties": {
+        "BusinessObjectID": {
+          "type": "string"
+        },
+        "Description": {
+          "type": "string"
+        },
+        "FieldKey": {
+          "type": "string"
+        },
+        "ID": {
+          "type": "string"
+        },
+        "IsActive": {
+          "type": "boolean"
+        },
+        "Name": {
+          "type": "string"
+        },
+        "RuleType": {
+          "$ref": "#/definitions/ExpressionType"
+        },
+        "Script": {
+          "type": "string"
+        },
+        "TenantID": {
+          "type": "string"
+        },
+        "Version": {
+          "type": "number"
+        }
+      },
+      "type": "object"
+    },
+    "ExpressionType": {
+      "enum": [
+        "calculation",
+        "condition",
+        "validation"
+      ],
+      "type": "string"
+    },
     "ExtensionFix": {
       "properties": {
         "FilePath": {
@@ -4085,6 +4500,23 @@
         },
         "Sources": {
           "$ref": "#/definitions/string[]"
+        }
+      },
+      "type": "object"
+    },
+    "FailedJobItem": {
+      "properties": {
+        "Details": {
+          "type": "string"
+        },
+        "Error": {
+          "type": "string"
+        },
+        "Index": {
+          "type": "number"
+        },
+        "Name": {
+          "type": "string"
         }
       },
       "type": "object"
@@ -4545,6 +4977,82 @@
       },
       "type": "object"
     },
+    "GoldCopyEvent": {
+      "properties": {
+        "ChangeReason": {
+          "type": "string"
+        },
+        "ChangeType": {
+          "type": "string"
+        },
+        "CorrelationID": {
+          "description": "Operational Context",
+          "type": "string"
+        },
+        "Data": {
+          "description": "Canonical Data"
+        },
+        "DataHash": {
+          "type": "string"
+        },
+        "EntityID": {
+          "type": "string"
+        },
+        "EntityKey": {
+          "type": "string"
+        },
+        "EntityType": {
+          "type": "string"
+        },
+        "EventID": {
+          "description": "Event Metadata",
+          "type": "string"
+        },
+        "EventType": {
+          "$ref": "#/definitions/GoldCopyEventType"
+        },
+        "Metadata": {
+          "$ref": "#/definitions/Record\u003cstring, any\u003e"
+        },
+        "ParentEntityID": {
+          "description": "Lineage \u0026 Audit",
+          "type": "string"
+        },
+        "PublishedAt": {},
+        "PublishedBy": {
+          "type": "string"
+        },
+        "SchemaVersion": {
+          "type": "string"
+        },
+        "SemanticLayer": {
+          "type": "string"
+        },
+        "TenantID": {
+          "description": "Entity Identification",
+          "type": "string"
+        },
+        "Version": {
+          "type": "number"
+        }
+      },
+      "type": "object"
+    },
+    "GoldCopyPublisher": {
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "eventPublisher": {
+          "$ref": "#/definitions/EventPublisher"
+        },
+        "topic": {
+          "type": "string"
+        },
+        "writer": {}
+      },
+      "type": "object"
+    },
     "GoldenQuery": {
       "properties": {
         "Description": {
@@ -4653,6 +5161,17 @@
         "semanticService": {
           "description": "Dependency on SemanticModelService to get asset metadata like certification status."
         }
+      },
+      "type": "object"
+    },
+    "HTTPWebhookNotifier": {
+      "properties": {
+        "client": {},
+        "maxRetries": {
+          "type": "number"
+        },
+        "retryInterval": {},
+        "timeout": {}
       },
       "type": "object"
     },
@@ -5014,10 +5533,12 @@
     },
     "InstanceCommandHandler": {
       "properties": {
+        "audit": {},
         "boService": {},
         "eventPublisher": {
           "$ref": "#/definitions/EventPublisher"
-        }
+        },
+        "policy": {}
       },
       "type": "object"
     },
@@ -5071,6 +5592,45 @@
       },
       "type": "object"
     },
+    "InternalEvent": {
+      "properties": {
+        "CreatedAt": {},
+        "Description": {
+          "type": "string"
+        },
+        "EndTime": {},
+        "ID": {},
+        "IsAllDay": {
+          "type": "boolean"
+        },
+        "IsRecurring": {
+          "type": "boolean"
+        },
+        "Location": {
+          "type": "string"
+        },
+        "RecurrenceRule": {
+          "type": "string"
+        },
+        "StartTime": {},
+        "TenantID": {},
+        "Title": {
+          "type": "string"
+        },
+        "UpdatedAt": {},
+        "UserID": {}
+      },
+      "type": "object"
+    },
+    "InternalEventService": {
+      "properties": {
+        "publisher": {
+          "$ref": "#/definitions/EventPublisher"
+        },
+        "repo": {}
+      },
+      "type": "object"
+    },
     "IpWhitelistEntry": {
       "properties": {
         "ID": {
@@ -5082,6 +5642,16 @@
         "TenantID": {}
       },
       "type": "object"
+    },
+    "ItemStatus": {
+      "enum": [
+        "failed",
+        "pending",
+        "processing",
+        "skipped",
+        "succeeded"
+      ],
+      "type": "string"
     },
     "JITGrantAuditEvent": {
       "properties": {
@@ -5164,6 +5734,341 @@
       },
       "type": "object"
     },
+    "JobCancelResponse": {
+      "properties": {
+        "JobID": {
+          "type": "string"
+        },
+        "Message": {
+          "type": "string"
+        },
+        "ProcessedItems": {
+          "type": "number"
+        },
+        "Status": {
+          "$ref": "#/definitions/JobStatus"
+        }
+      },
+      "type": "object"
+    },
+    "JobExport": {
+      "properties": {
+        "CompletedAt": {},
+        "CreatedAt": {},
+        "CreatedBy": {},
+        "DownloadCount": {
+          "type": "number"
+        },
+        "ErrorMessage": {
+          "type": "string"
+        },
+        "ExpiresAt": {},
+        "ExportFormat": {
+          "type": "string"
+        },
+        "FileLocation": {
+          "type": "string"
+        },
+        "FileSize": {
+          "type": "number"
+        },
+        "FilterCriteria": {
+          "$ref": "#/definitions/Record\u003cstring, any\u003e"
+        },
+        "ID": {},
+        "IncludeErrors": {
+          "type": "boolean"
+        },
+        "JobID": {},
+        "PresignedURL": {
+          "type": "string"
+        },
+        "PresignedURLExpires": {},
+        "RecordCount": {
+          "type": "number"
+        },
+        "StartedAt": {},
+        "Status": {
+          "type": "string"
+        },
+        "TenantID": {}
+      },
+      "type": "object"
+    },
+    "JobExportJSON": {
+      "properties": {
+        "CreatedAt": {},
+        "FileSize": {
+          "type": "number"
+        },
+        "ID": {},
+        "RecordCount": {
+          "type": "number"
+        },
+        "Status": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "JobItem": {
+      "properties": {
+        "ErrorMessage": {
+          "type": "string"
+        },
+        "ID": {
+          "type": "string"
+        },
+        "ItemData": {},
+        "ItemIndex": {
+          "type": "number"
+        },
+        "ItemName": {
+          "type": "string"
+        },
+        "JobID": {
+          "type": "string"
+        },
+        "ProcessedAt": {},
+        "ResultID": {
+          "type": "string"
+        },
+        "Status": {
+          "$ref": "#/definitions/ItemStatus"
+        }
+      },
+      "type": "object"
+    },
+    "JobListItem": {
+      "properties": {
+        "CompletedAt": {},
+        "CreatedAt": {},
+        "JobID": {
+          "type": "string"
+        },
+        "OperationType": {
+          "$ref": "#/definitions/OperationType"
+        },
+        "Progress": {
+          "$ref": "#/definitions/JobProgress"
+        },
+        "StartedAt": {},
+        "Status": {
+          "$ref": "#/definitions/JobStatus"
+        }
+      },
+      "type": "object"
+    },
+    "JobListResponse": {
+      "properties": {
+        "CompletedCount": {
+          "type": "number"
+        },
+        "FailedCount": {
+          "type": "number"
+        },
+        "Jobs": {
+          "$ref": "#/definitions/JobListItem[]"
+        },
+        "RunningCount": {
+          "type": "number"
+        },
+        "TotalCount": {
+          "type": "number"
+        }
+      },
+      "type": "object"
+    },
+    "JobProcessor": {
+      "properties": {
+        "batchSize": {
+          "type": "number"
+        },
+        "db": {},
+        "isRunning": {
+          "type": "boolean"
+        },
+        "mu": {},
+        "operationHandler": {
+          "$ref": "#/definitions/OperationHandler"
+        },
+        "pollInterval": {},
+        "queue": {
+          "$ref": "#/definitions/JobQueue"
+        },
+        "stopChan": {},
+        "webhookNotifier": {
+          "$ref": "#/definitions/WebhookNotifier"
+        },
+        "wg": {},
+        "workerCount": {
+          "type": "number"
+        }
+      },
+      "type": "object"
+    },
+    "JobProgress": {
+      "properties": {
+        "Failed": {
+          "type": "number"
+        },
+        "Percentage": {
+          "type": "number"
+        },
+        "Processed": {
+          "type": "number"
+        },
+        "Succeeded": {
+          "type": "number"
+        },
+        "Total": {
+          "type": "number"
+        }
+      },
+      "type": "object"
+    },
+    "JobProgressSummary": {
+      "properties": {
+        "CompletedAt": {},
+        "CreatedAt": {},
+        "DurationSeconds": {
+          "type": "number"
+        },
+        "FailedItems": {
+          "type": "number"
+        },
+        "ID": {
+          "type": "string"
+        },
+        "ItemErrors": {
+          "type": "number"
+        },
+        "OperationType": {
+          "$ref": "#/definitions/OperationType"
+        },
+        "PendingItems": {
+          "type": "number"
+        },
+        "ProcessedItems": {
+          "type": "number"
+        },
+        "ProcessingItems": {
+          "type": "number"
+        },
+        "ProgressPercent": {
+          "type": "number"
+        },
+        "StartedAt": {},
+        "Status": {
+          "$ref": "#/definitions/JobStatus"
+        },
+        "SucceededItems": {
+          "type": "number"
+        },
+        "TenantID": {
+          "type": "string"
+        },
+        "TotalItems": {
+          "type": "number"
+        }
+      },
+      "type": "object"
+    },
+    "JobResults": {
+      "properties": {
+        "ErrorSummary": {
+          "$ref": "#/definitions/Record\u003cstring, int\u003e"
+        },
+        "FailedItems": {
+          "$ref": "#/definitions/FailedJobItem[]"
+        },
+        "FailureCount": {
+          "type": "number"
+        },
+        "SkippedCount": {
+          "type": "number"
+        },
+        "SuccessCount": {
+          "type": "number"
+        },
+        "SuccessIDs": {
+          "$ref": "#/definitions/string[]"
+        }
+      },
+      "type": "object"
+    },
+    "JobStatus": {
+      "enum": [
+        "cancelled",
+        "completed",
+        "failed",
+        "queued",
+        "running"
+      ],
+      "type": "string"
+    },
+    "JobStatusResponse": {
+      "properties": {
+        "CompletedAt": {},
+        "EstimatedCompletion": {},
+        "JobID": {
+          "type": "string"
+        },
+        "OperationType": {
+          "$ref": "#/definitions/OperationType"
+        },
+        "Progress": {
+          "$ref": "#/definitions/JobProgress"
+        },
+        "Results": {
+          "$ref": "#/definitions/JobResults"
+        },
+        "StartedAt": {},
+        "Status": {
+          "$ref": "#/definitions/JobStatus"
+        }
+      },
+      "type": "object"
+    },
+    "JobWebhookPayload": {
+      "properties": {
+        "CompletionTime": {},
+        "DurationSeconds": {
+          "type": "number"
+        },
+        "ErrorDetails": {
+          "type": "string"
+        },
+        "Event": {
+          "type": "string"
+        },
+        "FailedItems": {
+          "type": "number"
+        },
+        "JobID": {
+          "type": "string"
+        },
+        "OperationType": {
+          "$ref": "#/definitions/OperationType"
+        },
+        "Results": {
+          "$ref": "#/definitions/JobResults"
+        },
+        "Status": {
+          "$ref": "#/definitions/JobStatus"
+        },
+        "StatusURL": {
+          "type": "string"
+        },
+        "SucceededItems": {
+          "type": "number"
+        },
+        "TotalItems": {
+          "type": "number"
+        }
+      },
+      "type": "object"
+    },
     "LLMProfile": {
       "properties": {
         "ContextTerms": {
@@ -5229,6 +6134,17 @@
     "LineageService": {
       "properties": {
         "db": {}
+      },
+      "type": "object"
+    },
+    "ListExportsResponse": {
+      "properties": {
+        "Exports": {
+          "$ref": "#/definitions/ExportSummary[]"
+        },
+        "Total": {
+          "type": "number"
+        }
       },
       "type": "object"
     },
@@ -5549,12 +6465,38 @@
       },
       "type": "object"
     },
+    "MockEventPublisher": {
+      "properties": {
+        "": {}
+      },
+      "type": "object"
+    },
     "MockRepo": {
       "properties": {},
       "type": "object"
     },
     "MockRuleRepository": {
       "properties": {},
+      "type": "object"
+    },
+    "MockSampleEntityRepository": {
+      "properties": {
+        "": {}
+      },
+      "type": "object"
+    },
+    "MockScenarioRepository": {
+      "properties": {
+        "": {}
+      },
+      "type": "object"
+    },
+    "MockWebhookNotifier": {
+      "properties": {
+        "notificationsSent": {
+          "$ref": "#/definitions/NotificationRecord[]"
+        }
+      },
       "type": "object"
     },
     "ModelDefinition": {
@@ -5594,6 +6536,15 @@
         "override"
       ],
       "type": "string"
+    },
+    "ModuleLoader": {
+      "properties": {
+        "Allowed": {
+          "$ref": "#/definitions/Record\u003cstring, string\u003e",
+          "description": "Allowed maps module name -\u003e source code"
+        }
+      },
+      "type": "object"
     },
     "MonteCarloSnapshot": {
       "properties": {
@@ -5919,6 +6870,16 @@
       },
       "type": "object"
     },
+    "NotificationRecord": {
+      "properties": {
+        "JobID": {
+          "type": "string"
+        },
+        "Payload": {},
+        "Timestamp": {}
+      },
+      "type": "object"
+    },
     "NotificationService": {
       "properties": {
         "hasuraClient": {},
@@ -5959,6 +6920,83 @@
         "UpdatedAt": {},
         "Variables": {
           "$ref": "#/definitions/string[]"
+        }
+      },
+      "type": "object"
+    },
+    "OAuthAuditEvent": {
+      "properties": {
+        "Action": {
+          "type": "string"
+        },
+        "Error": {
+          "type": "string"
+        },
+        "IPAddress": {
+          "type": "string"
+        },
+        "Metadata": {},
+        "Provider": {
+          "type": "string"
+        },
+        "Success": {
+          "type": "boolean"
+        },
+        "TenantID": {
+          "type": "string"
+        },
+        "UserAgent": {
+          "type": "string"
+        },
+        "UserID": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "OAuthAuditService": {
+      "properties": {
+        "hasuraClient": {
+          "$ref": "#/definitions/HasuraClient"
+        }
+      },
+      "type": "object"
+    },
+    "OkRule": {
+      "properties": {
+        "ID": {
+          "type": "string"
+        },
+        "Script": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "OkRuleMeta": {
+      "properties": {
+        "Cost": {
+          "description": "Cost is a relative cost score (lower runs earlier).",
+          "type": "number"
+        },
+        "FailureLikelihood": {
+          "description": "FailureLikelihood is a relative likelihood in [0,1] (higher runs earlier within same Cost).",
+          "type": "number"
+        },
+        "RequiredFieldPaths": {
+          "$ref": "#/definitions/string[]",
+          "description": "RequiredFieldPaths are dot-paths that must be present in the input record for this rule.\nExample: \"account.account_type\" or \"page.aum\"."
+        }
+      },
+      "type": "object"
+    },
+    "OkRuleWithMeta": {
+      "properties": {
+        "": {
+          "$ref": "#/definitions/OkRule"
+        },
+        "Meta": {
+          "$ref": "#/definitions/OkRuleMeta"
         }
       },
       "type": "object"
@@ -6587,6 +7625,71 @@
       },
       "type": "object"
     },
+    "Portfolio": {
+      "properties": {
+        "AUM": {
+          "type": "number"
+        },
+        "ID": {},
+        "Strategy": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "PortfolioAnalytics": {
+      "properties": {
+        "AsOfDate": {},
+        "AssetClassBreakdown": {
+          "$ref": "#/definitions/Record\u003cstring, float64\u003e"
+        },
+        "BaseCurrency": {
+          "type": "string"
+        },
+        "ConcentrationMetrics": {
+          "$ref": "#/definitions/ConcentrationMetrics"
+        },
+        "ConfidenceScore": {
+          "type": "number"
+        },
+        "CurrencyExposure": {
+          "$ref": "#/definitions/Record\u003cstring, float64\u003e"
+        },
+        "InceptionDate": {},
+        "LiquidityProfile": {
+          "$ref": "#/definitions/Record\u003cstring, int\u003e"
+        },
+        "PerformanceMetrics": {
+          "$ref": "#/definitions/PerformanceMetrics"
+        },
+        "PortfolioCode": {
+          "type": "string"
+        },
+        "PortfolioID": {},
+        "PortfolioName": {
+          "type": "string"
+        },
+        "RegionExposure": {
+          "$ref": "#/definitions/Record\u003cstring, float64\u003e"
+        },
+        "RiskMetrics": {
+          "$ref": "#/definitions/RiskMetrics"
+        },
+        "SectorExposure": {
+          "$ref": "#/definitions/Record\u003cstring, float64\u003e"
+        },
+        "TopHoldings": {
+          "$ref": "#/definitions/PositionConcentration[]"
+        },
+        "TotalPositions": {
+          "type": "number"
+        },
+        "TotalValue": {
+          "type": "number"
+        }
+      },
+      "type": "object"
+    },
     "PortfolioService": {
       "properties": {
         "client": {},
@@ -6642,6 +7745,24 @@
       },
       "type": "object"
     },
+    "PositionConcentration": {
+      "properties": {
+        "ISIN": {
+          "type": "string"
+        },
+        "MarketValue": {
+          "type": "number"
+        },
+        "SecurityID": {},
+        "SecurityName": {
+          "type": "string"
+        },
+        "Weight": {
+          "type": "number"
+        }
+      },
+      "type": "object"
+    },
     "PositionSummary": {
       "properties": {
         "DayChange": {
@@ -6674,6 +7795,31 @@
         "Weight": {
           "type": "number"
         }
+      },
+      "type": "object"
+    },
+    "PostgresExportService": {
+      "properties": {
+        "db": {},
+        "exportStoragePath": {
+          "type": "string"
+        },
+        "urlBasePath": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "PostgresJobQueue": {
+      "properties": {
+        "db": {}
+      },
+      "type": "object"
+    },
+    "PostgresSchedulerService": {
+      "properties": {
+        "cron": {},
+        "db": {}
       },
       "type": "object"
     },
@@ -7124,6 +8270,31 @@
       },
       "type": "object"
     },
+    "ProcessorStats": {
+      "properties": {
+        "AverageDuration": {},
+        "AverageWaitTime": {},
+        "CompletedCount": {
+          "type": "number"
+        },
+        "FailedCount": {
+          "type": "number"
+        },
+        "IsRunning": {
+          "type": "boolean"
+        },
+        "QueuedCount": {
+          "type": "number"
+        },
+        "RunningCount": {
+          "type": "number"
+        },
+        "WorkerCount": {
+          "type": "number"
+        }
+      },
+      "type": "object"
+    },
     "ProjectionEventHandlerImpl": {
       "properties": {
         "boQueue": {},
@@ -7376,6 +8547,25 @@
       ],
       "type": "string"
     },
+    "QueueStats": {
+      "properties": {
+        "AverageDuration": {},
+        "AverageWaitTime": {},
+        "CompletedCount": {
+          "type": "number"
+        },
+        "FailedCount": {
+          "type": "number"
+        },
+        "QueuedCount": {
+          "type": "number"
+        },
+        "RunningCount": {
+          "type": "number"
+        }
+      },
+      "type": "object"
+    },
     "QuotaDef": {
       "properties": {
         "Limit": {
@@ -7606,6 +8796,35 @@
       },
       "type": "object"
     },
+    "RiskMetrics": {
+      "properties": {
+        "Beta": {
+          "type": "number"
+        },
+        "ExpectedShortfall": {
+          "type": "number"
+        },
+        "TrackingError": {
+          "type": "number"
+        },
+        "ValueAtRisk": {
+          "type": "number"
+        },
+        "Volatility": {
+          "type": "number"
+        }
+      },
+      "type": "object"
+    },
+    "RiskService": {
+      "properties": {
+        "audit": {},
+        "db": {},
+        "tenantID": {},
+        "wasm": {}
+      },
+      "type": "object"
+    },
     "Role": {
       "properties": {
         "AttributeConstraints": {
@@ -7828,6 +9047,44 @@
           "$ref": "#/definitions/string[]"
         },
         "Type": {}
+      },
+      "type": "object"
+    },
+    "Rule": {
+      "properties": {
+        "BusinessObject": {
+          "type": "string"
+        },
+        "CreatedBy": {
+          "type": "string"
+        },
+        "Description": {
+          "type": "string"
+        },
+        "ExpressionLanguage": {
+          "type": "string"
+        },
+        "ID": {
+          "type": "string"
+        },
+        "Name": {
+          "type": "string"
+        },
+        "RuleEngine": {
+          "type": "string"
+        },
+        "SemanticTerm": {
+          "type": "string"
+        },
+        "Status": {
+          "type": "string"
+        },
+        "TenantID": {
+          "type": "string"
+        },
+        "Version": {
+          "type": "number"
+        }
       },
       "type": "object"
     },
@@ -8192,11 +9449,106 @@
       },
       "type": "object"
     },
+    "ScenarioRunner": {
+      "properties": {
+        "engine": {
+          "$ref": "#/definitions/RuleEngine"
+        },
+        "repo": {
+          "$ref": "#/definitions/ScenarioRepository"
+        },
+        "sampleRepo": {
+          "$ref": "#/definitions/SampleEntityRepository"
+        }
+      },
+      "type": "object"
+    },
     "ScenarioService": {
       "properties": {
         "repo": {
           "$ref": "#/definitions/ScenarioRepository"
         }
+      },
+      "type": "object"
+    },
+    "ScheduleStatus": {
+      "enum": [
+        "active",
+        "completed",
+        "disabled",
+        "failed",
+        "paused"
+      ],
+      "type": "string"
+    },
+    "ScheduleType": {
+      "enum": [
+        "daily",
+        "monthly",
+        "once",
+        "weekly"
+      ],
+      "type": "string"
+    },
+    "ScheduledJob": {
+      "properties": {
+        "CreatedAt": {},
+        "CreatedBy": {},
+        "CronExpression": {
+          "type": "string"
+        },
+        "Description": {
+          "type": "string"
+        },
+        "EndTime": {},
+        "FailureCount": {
+          "type": "number"
+        },
+        "ID": {},
+        "IsActive": {
+          "type": "boolean"
+        },
+        "JobTemplate": {
+          "$ref": "#/definitions/Record\u003cstring, any\u003e"
+        },
+        "LastRunAt": {},
+        "MaxRetries": {
+          "type": "number"
+        },
+        "MaxRunDuration": {
+          "type": "number"
+        },
+        "Name": {
+          "type": "string"
+        },
+        "NextRunAt": {},
+        "OperationType": {
+          "type": "string"
+        },
+        "Priority": {
+          "type": "number"
+        },
+        "RetryOnFailure": {
+          "type": "boolean"
+        },
+        "RunCount": {
+          "type": "number"
+        },
+        "ScheduleType": {
+          "$ref": "#/definitions/ScheduleType"
+        },
+        "StartTime": {},
+        "Status": {
+          "$ref": "#/definitions/ScheduleStatus"
+        },
+        "SuccessCount": {
+          "type": "number"
+        },
+        "TenantID": {},
+        "Timezone": {
+          "type": "string"
+        },
+        "UpdatedAt": {}
       },
       "type": "object"
     },
@@ -8445,6 +9797,39 @@
         },
         "jwtManager": {
           "$ref": "#/definitions/JWTManager"
+        }
+      },
+      "type": "object"
+    },
+    "SecurityPosition": {
+      "properties": {
+        "Confidence": {
+          "type": "number"
+        },
+        "CostBasis": {
+          "type": "number"
+        },
+        "FieldCoverage": {
+          "type": "number"
+        },
+        "ID": {},
+        "MarketValue": {
+          "type": "number"
+        },
+        "PortfolioID": {},
+        "Quantity": {
+          "type": "number"
+        },
+        "Security": {},
+        "SecurityID": {},
+        "SourceSystems": {
+          "$ref": "#/definitions/string[]"
+        },
+        "Status": {
+          "type": "string"
+        },
+        "Weight": {
+          "type": "number"
         }
       },
       "type": "object"
@@ -8808,6 +10193,34 @@
       },
       "type": "object"
     },
+    "StarlarkEngine": {
+      "properties": {
+        "cache": {
+          "$ref": "#/definitions/Record\u003cstring, any\u003e"
+        },
+        "cacheMu": {},
+        "hasuraClient": {},
+        "logger": {},
+        "maxSteps": {
+          "$ref": "#/definitions/uint64"
+        }
+      },
+      "type": "object"
+    },
+    "StarlarkValidationResult": {
+      "properties": {
+        "IsValid": {
+          "type": "boolean"
+        },
+        "Message": {
+          "type": "string"
+        },
+        "Severity": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
     "StewardReview": {
       "properties": {
         "ActionItems": {
@@ -9158,6 +10571,41 @@
       },
       "type": "object"
     },
+    "Template": {
+      "properties": {
+        "Category": {
+          "type": "string"
+        },
+        "CreatedBy": {
+          "type": "string"
+        },
+        "Description": {
+          "type": "string"
+        },
+        "ID": {
+          "type": "string"
+        },
+        "Name": {
+          "type": "string"
+        },
+        "RuleIDs": {
+          "$ref": "#/definitions/string[]"
+        },
+        "Status": {
+          "type": "string"
+        },
+        "TemplateType": {
+          "type": "string"
+        },
+        "TenantID": {
+          "type": "string"
+        },
+        "Version": {
+          "type": "number"
+        }
+      },
+      "type": "object"
+    },
     "Tenant": {
       "properties": {
         "Code": {
@@ -9183,6 +10631,21 @@
         "UpdatedAt": {},
         "WindowSeconds": {
           "type": "number"
+        }
+      },
+      "type": "object"
+    },
+    "TenantCompiler": {
+      "properties": {
+        "coreCompiler": {
+          "$ref": "#/definitions/CoreCompiler"
+        },
+        "coreRepo": {
+          "$ref": "#/definitions/CoreRuleRepository"
+        },
+        "predeclared": {},
+        "tenantCache": {
+          "$ref": "#/definitions/TenantFnCache"
         }
       },
       "type": "object"
@@ -9217,6 +10680,29 @@
         },
         "WindowSeconds": {
           "type": "number"
+        }
+      },
+      "type": "object"
+    },
+    "TenantFnCache": {
+      "properties": {
+        "m": {
+          "$ref": "#/definitions/Record\u003cTenantFnKey, any\u003e"
+        },
+        "mu": {}
+      },
+      "type": "object"
+    },
+    "TenantFnKey": {
+      "properties": {
+        "CoreVer": {
+          "type": "number"
+        },
+        "RuleID": {
+          "type": "string"
+        },
+        "TenantID": {
+          "type": "string"
         }
       },
       "type": "object"
@@ -10429,6 +11915,17 @@
       },
       "type": "object"
     },
+    "ValidationResponse": {
+      "properties": {
+        "Message": {
+          "type": "string"
+        },
+        "Pass": {
+          "type": "boolean"
+        }
+      },
+      "type": "object"
+    },
     "ValidationResult": {
       "properties": {
         "AllowedOverrideAuthority": {
@@ -10913,14 +12410,6 @@
       },
       "type": "object"
     },
-    "complianceServiceImpl": {
-      "properties": {
-        "auditSvc": {
-          "$ref": "#/definitions/AuditQueryer"
-        }
-      },
-      "type": "object"
-    },
     "dbGovernanceEnvelope": {
       "properties": {
         "Extra": {
@@ -11134,6 +12623,38 @@
     "sqlRoleRepository": {
       "properties": {
         "db": {}
+      },
+      "type": "object"
+    },
+    "starlarkBundleSpan": {
+      "properties": {
+        "span": {},
+        "start": {}
+      },
+      "type": "object"
+    },
+    "starlarkRuleMetricChildren": {
+      "properties": {
+        "duration": {},
+        "lastError": {},
+        "lastRun": {}
+      },
+      "type": "object"
+    },
+    "starlarkRuleSpan": {
+      "properties": {
+        "ctxUsed": {},
+        "ended": {
+          "type": "boolean"
+        },
+        "mode": {
+          "type": "string"
+        },
+        "ruleID": {
+          "type": "string"
+        },
+        "span": {},
+        "start": {}
       },
       "type": "object"
     },

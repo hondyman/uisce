@@ -112,9 +112,12 @@ services:
   semlayer-keycloak:
     image: quay.io/keycloak/keycloak:latest
     container_name: semlayer-keycloak
-    command: start-dev --https-port=8443
+    # Use production mode ('start') so the JDBC datasource below is honored.
+    # 'start-dev' uses an in-memory H2 database and loses data on every restart.
+    command: start --https-port=8443 --http-port=8080
     ports:
       - "8443:8443"
+      - "8080:8080"
     environment:
       KC_BOOTSTRAP_ADMIN_USERNAME: admin
       KC_BOOTSTRAP_ADMIN_PASSWORD: password
@@ -129,6 +132,18 @@ services:
       KC_CORS_ALLOWED_ORIGINS: "http://localhost:5173,http://localhost:3000"
       # Enable token exchange feature (required for OAuth2 token exchange functionality):
       KC_FEATURES: token-exchange
+
+      # ------------------------------------------------------------------
+      # Persistent Postgres backend (native, on 100.84.50.65 / Tailscale)
+      # DB_HOST, DB_USER, DB_PASSWORD come from .env.
+      # Keycloak stores its realm/user/client data in a dedicated
+      # `keycloak` database on the same server so it survives container
+      # restarts and `docker compose down`.
+      # ------------------------------------------------------------------
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://${DB_HOST:-100.84.50.65}:${DB_PORT:-5432}/${KEYCLOAK_DB:-keycloak}
+      KC_DB_USERNAME: ${DB_USER:-postgres}
+      KC_DB_PASSWORD: ${DB_PASSWORD:-postgres}
     volumes:
       - ./keycloak-ssl/server.crt.pem:/opt/keycloak/conf/server.crt.pem:ro
       - ./keycloak-ssl/server.key.pem:/opt/keycloak/conf/server.key.pem:ro
@@ -166,7 +181,7 @@ services:
     environment:
       - NODE_ENV=production
       # Scopes seamlessly out to your native database named "infisical"
-      - DB_CONNECTION_URI=postgresql://postgres:postgres@host.docker.internal:5432/infisical?sslmode=disable
+      - DB_CONNECTION_URI=postgresql://${DB_USER:-postgres}:${DB_PASSWORD:-postgres}@${DB_HOST:-100.84.50.65}:${DB_PORT:-5432}/${INFISICAL_DB:-infisical}?sslmode=disable
       - REDIS_URL=redis://uisce-redis-cache:6379
       - SITE_URL=http://localhost:8082
       - ENCRYPTION_KEY=1030410d3281d742b960cf2ff13705f6

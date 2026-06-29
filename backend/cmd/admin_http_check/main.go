@@ -18,7 +18,6 @@ import (
 	"github.com/hondyman/semlayer/backend/internal/identity"
 	"github.com/hondyman/semlayer/backend/internal/services"
 	_ "github.com/lib/pq"
-	"github.com/hondyman/semlayer/libs/jwt-middleware"
 )
 
 func main() {

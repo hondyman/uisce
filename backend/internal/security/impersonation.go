@@ -43,8 +43,19 @@ const (
 	EventImpersonationExpired ImpersonationEventType = "IMPERSONATION_EXPIRED"
 )
 
+// Admin impersonation roles.
+const (
+	RoleGlobalAdmin          = "global_admin"
+	RoleGlobalOps            = "global_ops"
+	RoleHelpdesk             = "helpdesk"
+	RoleProfessionalServices = "professional_services"
+)
+
 // MaxImpersonationDuration is the hard server-side cap on any impersonation window.
 const MaxImpersonationDuration = 2 * time.Hour
+
+// HelpdeskMaxDuration is the hard cap for helpdesk impersonation sessions.
+const HelpdeskMaxDuration = 30 * time.Minute
 
 // ImpersonationRequest is the validated input from the HTTP handler.
 type ImpersonationRequest struct {
@@ -64,6 +75,14 @@ type ImpersonationRequest struct {
 	// Duration is the requested window length. Capped server-side to MaxImpersonationDuration.
 	Duration time.Duration
 
+	// ScopeKind narrows the impersonation to a subset of the target tenant.
+	// Allowed values depend on the admin role (see ImpersonationPolicy).
+	ScopeKind string
+
+	// ScopeID is the concrete UUID of the scoped resource when ScopeKind is
+	// instance, product, or datasource. Empty for tenant-wide access.
+	ScopeID uuid.UUID
+
 	// IPAddress and UserAgent are populated by the HTTP handler from the request.
 	IPAddress string
 	UserAgent string
@@ -75,6 +94,7 @@ type ImpersonationSession struct {
 	SessionID       uuid.UUID
 	AdminUserID     string
 	AdminEmail      string
+	AdminRole       string
 	TargetTenantID  uuid.UUID
 	Reason          string
 	TicketReference string
@@ -89,6 +109,17 @@ type ImpersonationSession struct {
 	// even though the START row is the source of truth for the audit invariant.
 	ScopeKind string
 	ScopeID   uuid.UUID
+}
+
+// ImpersonationAction is the synchronous micro-audit record written for each
+// Business Object state change performed during an impersonation window.
+type ImpersonationAction struct {
+	ImpersonationID uuid.UUID
+	TargetTenantID  uuid.UUID
+	BOKey           string
+	BOInstanceID    string
+	StateTransition string
+	PayloadSnapshot []byte
 }
 
 // ImpersonationContextToken is the signed platform-internal token returned to
@@ -126,6 +157,9 @@ type impersonationTokenPayload struct {
 
 	// AdminEmail is the real admin's email address.
 	AdminEmail string `json:"admin_email"`
+
+	// AdminRole is the role used to initiate the impersonation session.
+	AdminRole string `json:"admin_role"`
 
 	// TenantID is the target tenant's UUID.
 	// This is what downstream middleware reads — identical to a normal user's token.
@@ -174,7 +208,14 @@ type ImpersonationAuditLogger interface {
 	LogEnd(ctx context.Context, session ImpersonationSession) error
 
 	// LogBreakGlassAction records a state-changing operation performed under break_glass mode.
+	// Deprecated: use LogImpersonationAction for per-BO micro-audit.
 	LogBreakGlassAction(ctx context.Context, sessionID uuid.UUID, adminUserID string, targetTenantID uuid.UUID, detail map[string]any) error
+
+	// LogImpersonationAction writes a per-BO action record inside the caller's
+	// transaction. If tx is nil the implementation falls back to its own pool,
+	// but callers performing state mutations should always pass the active tx
+	// so the audit row commits atomically with the business change.
+	LogImpersonationAction(ctx context.Context, tx *sql.Tx, action ImpersonationAction) error
 
 	// ListExpiredActiveSessions returns START rows that have no matching END row
 	// AND whose expires_at is in the past. Used by the background sweeper to write
@@ -187,20 +228,153 @@ type ImpersonationAuditLogger interface {
 }
 
 // ============================================================================
+// Role-based impersonation policy
+// ============================================================================
+
+// ImpersonationPolicy encodes the governance matrix for the three supported
+// impersonation roles: global_admin, helpdesk, and professional_services.
+// The zero value is safe and uses the default matrix.
+type ImpersonationPolicy struct {
+	// ProfessionalServicesBreakGlassBOKeys lists the business object keys for
+	// which professional_services may use break_glass mode. Global admins have
+	// no such restriction; helpdesk is never allowed break_glass.
+	ProfessionalServicesBreakGlassBOKeys []string
+}
+
+// ResolveAdminRole picks the most privileged impersonation role from the
+// caller's JWT roles. Priority: global_admin > global_ops > professional_services > helpdesk.
+func (p ImpersonationPolicy) ResolveAdminRole(roles []string) string {
+	for _, r := range roles {
+		if r == RoleGlobalAdmin {
+			return RoleGlobalAdmin
+		}
+	}
+	for _, r := range roles {
+		if r == RoleGlobalOps {
+			return RoleGlobalOps
+		}
+	}
+	for _, r := range roles {
+		if r == RoleProfessionalServices {
+			return RoleProfessionalServices
+		}
+	}
+	for _, r := range roles {
+		if r == RoleHelpdesk {
+			return RoleHelpdesk
+		}
+	}
+	return ""
+}
+
+// CanImpersonate reports whether the supplied role is allowed to assume a tenant context.
+func (p ImpersonationPolicy) CanImpersonate(role string) bool {
+	switch role {
+	case RoleGlobalAdmin, RoleGlobalOps, RoleHelpdesk, RoleProfessionalServices:
+		return true
+	default:
+		return false
+	}
+}
+
+// AllowedScopes returns the scope kinds permitted for a role.
+func (p ImpersonationPolicy) AllowedScopes(role string) []string {
+	switch role {
+	case RoleGlobalAdmin, RoleGlobalOps, RoleProfessionalServices:
+		// Professional services administers the tenant, so it receives the same
+		// scope latitude as global admins. Helpdesk remains more narrowly scoped.
+		return []string{ScopeTenant, ScopeInstance, ScopeProduct, ScopeDatasource}
+	case RoleHelpdesk:
+		return []string{ScopeTenant, ScopeInstance}
+	default:
+		return nil
+	}
+}
+
+// AllowedModes returns the impersonation modes permitted for a role.
+func (p ImpersonationPolicy) AllowedModes(role string) []ImpersonationMode {
+	switch role {
+	case RoleGlobalAdmin, RoleGlobalOps, RoleProfessionalServices:
+		return []ImpersonationMode{ModeReadOnly, ModeBreakGlass}
+	case RoleHelpdesk:
+		return []ImpersonationMode{ModeReadOnly}
+	default:
+		return nil
+	}
+}
+
+// MaxDuration returns the hard cap for an impersonation session for a role.
+func (p ImpersonationPolicy) MaxDuration(role string) time.Duration {
+	switch role {
+	case RoleHelpdesk:
+		return HelpdeskMaxDuration
+	default:
+		return MaxImpersonationDuration
+	}
+}
+
+// RequiresTicket reports whether a ticket reference is mandatory for the role/mode.
+func (p ImpersonationPolicy) RequiresTicket(role string, mode ImpersonationMode) bool {
+	if mode == ModeBreakGlass {
+		return true
+	}
+	// Helpdesk and professional_services must always provide a ticket, even in read_only.
+	return role == RoleHelpdesk || role == RoleProfessionalServices
+}
+
+// CanBreakGlassForBO reports whether the role may perform break_glass on the
+// given business object key. Global admins and professional_services are
+// unrestricted (the latter because it administers the tenant for the duration
+// of the session). Helpdesk is never allowed break_glass. If a deployment wants
+// to restrict professional_services further, populate ProfessionalServicesBreakGlassBOKeys.
+func (p ImpersonationPolicy) CanBreakGlassForBO(role string, boKey string) bool {
+	switch role {
+	case RoleGlobalAdmin, RoleGlobalOps:
+		return true
+	case RoleHelpdesk:
+		return false
+	case RoleProfessionalServices:
+		// Unrestricted by default so professional_services can administer any BO.
+		// An explicit allow-list narrows the set when desired.
+		if len(p.ProfessionalServicesBreakGlassBOKeys) == 0 {
+			return true
+		}
+		for _, allowed := range p.ProfessionalServicesBreakGlassBOKeys {
+			if allowed == boKey {
+				return true
+			}
+		}
+		return false
+	default:
+		return false
+	}
+}
+
+func containsString(slice []string, item string) bool {
+	for _, s := range slice {
+		if s == item {
+			return true
+		}
+	}
+	return false
+}
+
+// ============================================================================
 // ContextExchangeService
 // ============================================================================
 
-// ContextExchangeService orchestrates the safe, auditable transition of a
-// global admin into an explicit, isolated tenant context.
+// ContextExchangeService orchestrates the safe, auditable transition of an
+// authorized platform operator into an explicit, isolated tenant context.
 //
 // Design contract (Zero-Tolerance Security Mandate):
-//  1. Admin must have the global_admin role in their primary JWT.
+//  1. Admin must hold one of the supported impersonation roles in their primary JWT.
 //  2. TargetTenantID must be a valid, non-nil UUID.
 //  3. Audit log write MUST succeed before any token is issued. Fail = abort.
 //  4. Issued token carries a CONCRETE tenant UUID — never a wildcard.
-//  5. Maximum session duration is capped at MaxImpersonationDuration (2h).
+//  5. Maximum session duration is capped per role by ImpersonationPolicy.
 type ContextExchangeService struct {
-	audit ImpersonationAuditLogger
+	audit  ImpersonationAuditLogger
+	policy ImpersonationPolicy
 }
 
 // AuditDB returns the underlying *sql.DB of the audit logger, when the logger is
@@ -245,12 +419,12 @@ func (s *ContextExchangeService) LookupSessionTenant(ctx context.Context, sessio
 }
 
 // NewContextExchangeService constructs a ContextExchangeService.
-// NewContextExchangeService constructs a ContextExchangeService.
-func NewContextExchangeService(audit ImpersonationAuditLogger) *ContextExchangeService {
+// If policy is the zero value, the default role matrix is used.
+func NewContextExchangeService(audit ImpersonationAuditLogger, policy ImpersonationPolicy) *ContextExchangeService {
 	if audit == nil {
 		panic("security: ContextExchangeService requires a non-nil ImpersonationAuditLogger")
 	}
-	return &ContextExchangeService{audit: audit}
+	return &ContextExchangeService{audit: audit, policy: policy}
 }
 
 // AssumeTenantContext validates the admin's identity, enforces governance rules,
@@ -266,10 +440,11 @@ func (s *ContextExchangeService) AssumeTenantContext(
 	adminRoles []string,
 	req ImpersonationRequest,
 ) (*ImpersonationContextToken, error) {
-	// ── 1. Enforce Zero-Tolerance Security Mandate ──────────────────────────
-	if !isGlobalAdmin(adminRoles) {
+	// ── 1. Resolve role and enforce role-based governance ───────────────────
+	adminRole := s.policy.ResolveAdminRole(adminRoles)
+	if adminRole == "" || !s.policy.CanImpersonate(adminRole) {
 		return nil, fmt.Errorf(
-			"security violation: user %s lacks global_admin or global_ops role — impersonation denied",
+			"security violation: user %s lacks an authorized impersonation role — impersonation denied",
 			adminUserID,
 		)
 	}
@@ -282,22 +457,45 @@ func (s *ContextExchangeService) AssumeTenantContext(
 		return nil, errors.New("governance violation: reason must be at least 10 characters")
 	}
 
-	if req.Mode == ModeBreakGlass && req.TicketReference == "" {
-		return nil, errors.New("governance violation: ticket_reference is mandatory for break_glass mode")
+	// ── 2. Enforce mode restrictions per role ───────────────────────────────
+	mode := req.Mode
+	if mode == "" {
+		mode = ModeReadOnly // always default to least privilege
+	}
+	if !containsImpersonationMode(s.policy.AllowedModes(adminRole), mode) {
+		return nil, fmt.Errorf(
+			"governance violation: role %s is not permitted to use impersonation mode %s",
+			adminRole, mode,
+		)
 	}
 
-	// ── 2. Resolve + cap the session window ─────────────────────────────────
+	if s.policy.RequiresTicket(adminRole, mode) && req.TicketReference == "" {
+		return nil, fmt.Errorf(
+			"governance violation: ticket_reference is mandatory for role %s in mode %s",
+			adminRole, mode,
+		)
+	}
+
+	// ── 3. Enforce scope restrictions per role ──────────────────────────────
+	scopeKind := req.ScopeKind
+	if scopeKind == "" {
+		scopeKind = ScopeTenant
+	}
+	if !containsString(s.policy.AllowedScopes(adminRole), scopeKind) {
+		return nil, fmt.Errorf(
+			"governance violation: role %s is not permitted to use scope_kind %s",
+			adminRole, scopeKind,
+		)
+	}
+
+	// ── 4. Resolve + cap the session window per role ────────────────────────
 	duration := req.Duration
 	if duration <= 0 {
 		duration = 30 * time.Minute // safe default
 	}
-	if duration > MaxImpersonationDuration {
-		duration = MaxImpersonationDuration // hard cap — never negotiable
-	}
-
-	mode := req.Mode
-	if mode == "" {
-		mode = ModeReadOnly // always default to least privilege
+	maxDuration := s.policy.MaxDuration(adminRole)
+	if duration > maxDuration {
+		duration = maxDuration // hard cap — never negotiable
 	}
 
 	sessionID := uuid.New()
@@ -307,6 +505,7 @@ func (s *ContextExchangeService) AssumeTenantContext(
 		SessionID:       sessionID,
 		AdminUserID:     adminUserID,
 		AdminEmail:      adminEmail,
+		AdminRole:       adminRole,
 		TargetTenantID:  req.TargetTenantID,
 		Reason:          req.Reason,
 		TicketReference: req.TicketReference,
@@ -315,9 +514,11 @@ func (s *ContextExchangeService) AssumeTenantContext(
 		ExpiresAt:       expiresAt,
 		IPAddress:       req.IPAddress,
 		UserAgent:       req.UserAgent,
+		ScopeKind:       scopeKind,
+		ScopeID:         req.ScopeID,
 	}
 
-	// ── 3. Synchronous audit write BEFORE token issuance ────────────────────
+	// ── 5. Synchronous audit write BEFORE token issuance ────────────────────
 	// Critical invariant: if this write fails, no token is issued.
 	if err := s.audit.LogStart(ctx, session); err != nil {
 		// Fail loudly and securely — do NOT issue a token if audit fails.
@@ -327,8 +528,8 @@ func (s *ContextExchangeService) AssumeTenantContext(
 		)
 	}
 
-	// ── 4. Sign and issue the context token ─────────────────────────────────
-	tokenStr, err := signImpersonationToken(session)
+	// ── 6. Sign and issue the context token ─────────────────────────────────
+	tokenStr, err := signImpersonationToken(session, adminRoles)
 	if err != nil {
 		// Audit is already written — log this internal error but do not leak details.
 		return nil, fmt.Errorf("token signing failed after successful audit write: %w", err)
@@ -354,6 +555,89 @@ func (s *ContextExchangeService) ExitTenantContext(
 	return s.audit.LogEnd(ctx, session)
 }
 
+// SubjectAttributes identifies an operator requesting impersonation authority.
+type SubjectAttributes struct {
+	UserID       string
+	OperatorRole string
+}
+
+// queryRowContext matches the subset of *sql.DB and *sql.Tx used for lease
+// lookups. Both concrete types implement it, so VerifyImpersonationAuthority can
+// run inside an existing transaction or fall back to the audit database pool.
+type queryRowContext interface {
+	QueryRowContext(context.Context, string, ...interface{}) *sql.Row
+}
+
+// Boundary errors returned by VerifyImpersonationAuthority and the transition
+// guard helpers used by BO state-machine handlers.
+var (
+	// ErrImpersonationLeaseViolation is returned when helpdesk or
+	// professional_services operators try to access a tenant for which they have
+	// no active staff_tenant_assignments lease.
+	ErrImpersonationLeaseViolation = errors.New("impersonation lease violation: no active assignment for target tenant")
+
+	// ErrImpersonationWriteForbidden is returned when an impersonation session
+	// that is not in break_glass mode (or whose role cannot break glass on the
+	// target BO) attempts a state-changing operation.
+	ErrImpersonationWriteForbidden = errors.New("impersonation write forbidden: operator role or session mode does not permit state mutation")
+)
+
+// VerifyImpersonationAuthority validates that subject is allowed to assume a
+// tenant context for the given target tenant.
+//
+// Global admins and global ops are permitted directly. Helpdesk and
+// professional_services operators must hold an active row in
+// staff_tenant_assignments that matches both their user ID and the exact target
+// tenant, with expires_at in the future.
+//
+// The optional tx lets callers run the authority check inside an existing
+// business transaction so the lease state is evaluated at the same snapshot as
+// the operation it protects.
+func (s *ContextExchangeService) VerifyImpersonationAuthority(ctx context.Context, tx *sql.Tx, subject SubjectAttributes, targetTenantID uuid.UUID) error {
+	if targetTenantID == uuid.Nil {
+		return errors.New("invalid operation: target_tenant_id cannot be nil")
+	}
+	if subject.UserID == "" {
+		return errors.New("invalid operation: subject user_id cannot be empty")
+	}
+	if !s.policy.CanImpersonate(subject.OperatorRole) {
+		return fmt.Errorf("security violation: role %s is not permitted to impersonate", subject.OperatorRole)
+	}
+
+	switch subject.OperatorRole {
+	case RoleGlobalAdmin, RoleGlobalOps:
+		return nil
+	case RoleHelpdesk, RoleProfessionalServices:
+		// These roles require an active lease; continue below.
+	default:
+		return fmt.Errorf("security violation: role %s is not permitted to impersonate", subject.OperatorRole)
+	}
+
+	var executor queryRowContext = s.AuditDB()
+	if tx != nil {
+		executor = tx
+	}
+	if executor == nil {
+		return errors.New("impersonation authority check requires a database connection")
+	}
+
+	const q = `
+		SELECT COUNT(*)
+		FROM staff_tenant_assignments
+		WHERE operator_user_id = $1
+		  AND target_tenant_id = $2
+		  AND expires_at > CURRENT_TIMESTAMP
+	`
+	var count int
+	if err := executor.QueryRowContext(ctx, q, subject.UserID, targetTenantID.String()).Scan(&count); err != nil {
+		return fmt.Errorf("impersonation authority check failed: %w", err)
+	}
+	if count == 0 {
+		return ErrImpersonationLeaseViolation
+	}
+	return nil
+}
+
 // ============================================================================
 // Token Signing (HMAC-SHA256 — internal platform token, not a Keycloak token)
 // ============================================================================
@@ -361,7 +645,7 @@ func (s *ContextExchangeService) ExitTenantContext(
 // signImpersonationToken creates a base64-encoded HMAC-SHA256 signed payload.
 // The secret is taken from IMPERSONATION_TOKEN_SECRET env var, falling back
 // to JWT_SECRET as a secondary option. Both must be set in production.
-func signImpersonationToken(session ImpersonationSession) (string, error) {
+func signImpersonationToken(session ImpersonationSession, realRoles []string) (string, error) {
 	secret := os.Getenv("IMPERSONATION_TOKEN_SECRET")
 	if secret == "" {
 		secret = os.Getenv("JWT_SECRET")
@@ -373,9 +657,13 @@ func signImpersonationToken(session ImpersonationSession) (string, error) {
 	payload := impersonationTokenPayload{
 		Sub:                 session.AdminUserID,
 		AdminEmail:          session.AdminEmail,
+		AdminRole:           session.AdminRole,
 		TenantID:            session.TargetTenantID.String(),
 		ImpersonationActive: true,
 		SessionID:           session.SessionID.String(),
+		ScopeKind:           session.ScopeKind,
+		ScopeID:             session.ScopeID.String(),
+		RealRoles:           realRoles,
 		Mode:                session.Mode,
 		ExpiresAt:           session.ExpiresAt.Unix(),
 		IssuedAt:            time.Now().UTC().Unix(),
@@ -461,10 +749,10 @@ func ValidateImpersonationToken(tokenStr string) (*impersonationTokenPayload, er
 // Helpers
 // ============================================================================
 
-// isGlobalAdmin returns true if any of the provided roles grants global admin access.
-func isGlobalAdmin(roles []string) bool {
-	for _, r := range roles {
-		if r == "global_admin" || r == "global_ops" {
+// containsImpersonationMode reports whether modes contains the requested mode.
+func containsImpersonationMode(modes []ImpersonationMode, mode ImpersonationMode) bool {
+	for _, m := range modes {
+		if m == mode {
 			return true
 		}
 	}
