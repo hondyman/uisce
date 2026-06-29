@@ -5,9 +5,9 @@ services:
   # ---------------------------------------------------------
   redpanda:
     image: docker.redpanda.com/redpandadata/redpanda:latest
-    container_name: semlayer-redpanda
+    container_name: uisce-redpanda
     user: root
-    command: redpanda start --overprovisioned --smp 1 --memory 1G --reserve-memory 0M --node-id 0 --check=false --kafka-addr PLAINTEXT://0.0.0.0:9092,OUTSIDE://0.0.0.0:19092 --advertise-kafka-addr PLAINTEXT://redpanda:9092,OUTSIDE://100.84.50.65:19092 --pandaproxy-addr 0.0.0.0:8082 --advertise-pandaproxy-addr 100.84.50.65:8082 --schema-registry-addr 0.0.0.0:8081
+    command: redpanda start --overprovisioned --smp 1 --memory 1G --reserve-memory 0M --node-id 0 --check=false --kafka-addr PLAINTEXT://0.0.0.0:9092,OUTSIDE://0.0.0.0:19092 --advertise-kafka-addr PLAINTETEXT://redpanda:9092,OUTSIDE://100.84.50.65:19092 --pandaproxy-addr 0.0.0.0:8082 --advertise-pandaproxy-addr 100.84.50.65:8082 --schema-registry-addr 0.0.0.0:8081
     networks:
       - remote-net
     ports:
@@ -15,6 +15,11 @@ services:
       - "19092:19092"
       - "9644:9644"
       - "8081:8081"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9644/v1/status"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     restart: unless-stopped
 
   # ---------------------------------------------------------
@@ -22,7 +27,7 @@ services:
   # ---------------------------------------------------------
   redpanda-console:
     image: docker.redpanda.com/redpandadata/console:latest
-    container_name: semlayer-redpanda-console
+    container_name: uisce-redpanda-console
     user: root
     networks:
       - remote-net
@@ -33,15 +38,21 @@ services:
       KAFKA_SCHEMAREGISTRY_ENABLED: "true"
       KAFKA_SCHEMAREGISTRY_URLS: http://redpanda:8081
     depends_on:
-      - redpanda
+      redpanda:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     restart: unless-stopped
 
   # ---------------------------------------------------------
-  # Debezium (Change Data Capture Stream Consumer)
+  # Debezium (CDC Stream Consumer)
   # ---------------------------------------------------------
   debezium:
     image: debezium/connect:2.3
-    container_name: semlayer-debezium
+    container_name: uisce-debezium
     environment:
       BOOTSTRAP_SERVERS: redpanda:9092
       GROUP_ID: 1
@@ -56,22 +67,28 @@ services:
     ports:
       - "8083:8083"
     depends_on:
-      - redpanda
+      redpanda:
+        condition: service_healthy
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8083"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     restart: unless-stopped
 
   # ---------------------------------------------------------
-  # Temporal (Distributed Workflow Engine)
+  # Temporal (Workflow Engine)
   # ---------------------------------------------------------
   temporal:
     image: temporalio/auto-setup:latest
-    container_name: semlayer-temporal
+    container_name: uisce-temporal
     environment:
       DB: postgres12
       POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: password123 # Matches your native host credentials
-      POSTGRES_DB: temporal          # Ensure this DB is created natively
+      POSTGRES_PASSWORD: password123
+      POSTGRES_DB: temporal
       POSTGRES_HOST: host.docker.internal
       POSTGRES_SEEDS: host.docker.internal
       DB_PORT: 5432
@@ -94,100 +111,103 @@ services:
   # ---------------------------------------------------------
   temporal-ui:
     image: temporalio/ui:latest
-    container_name: semlayer-temporal-ui
+    container_name: uisce-temporal-ui
     environment:
       TEMPORAL_ADDRESS: temporal:7233
       TEMPORAL_CORS_ORIGINS: http://localhost:3000
     ports:
       - "8088:8080"
     depends_on:
-      - temporal
+      temporal:
+        condition: service_healthy
     networks:
       - remote-net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     restart: unless-stopped
 
   # ---------------------------------------------------------
-  # Keycloak (OIDC Identity Provider) - HTTPS on 8443
+  # Keycloak (OIDC Identity Provider)
   # ---------------------------------------------------------
-  semlayer-keycloak:
+  keycloak:
     image: quay.io/keycloak/keycloak:latest
-    container_name: semlayer-keycloak
-    # Use production mode ('start') so the JDBC datasource below is honored.
-    # 'start-dev' uses an in-memory H2 database and loses data on every restart.
-    command: start --https-port=8443 --http-port=8080
+    container_name: uisce-keycloak
+    command: start-dev --https-port=8443
     ports:
       - "8443:8443"
-      - "8080:8080"
     environment:
       KC_BOOTSTRAP_ADMIN_USERNAME: admin
       KC_BOOTSTRAP_ADMIN_PASSWORD: password
       KC_HTTPS_ENABLED: "true"
       KC_HTTPS_CERTIFICATE_FILE: /opt/keycloak/conf/server.crt.pem
       KC_HTTPS_CERTIFICATE_KEY_FILE: /opt/keycloak/conf/server.key.pem
-      # For cross-origin access from localhost frontend:
       KC_HOSTNAME_STRICT: "false"
       KC_HOSTNAME_STRICT_HTTPS: "false"
       KC_PROXY_HEADERS: "xforwarded"
-      # Allow localhost in CORS:
       KC_CORS_ALLOWED_ORIGINS: "http://localhost:5173,http://localhost:3000"
-      # Enable token exchange feature (required for OAuth2 token exchange functionality):
       KC_FEATURES: token-exchange
-
-      # ------------------------------------------------------------------
-      # Persistent Postgres backend (native, on 100.84.50.65 / Tailscale)
-      # DB_HOST, DB_USER, DB_PASSWORD come from .env.
-      # Keycloak stores its realm/user/client data in a dedicated
-      # `keycloak` database on the same server so it survives container
-      # restarts and `docker compose down`.
-      # ------------------------------------------------------------------
-      KC_DB: postgres
-      KC_DB_URL: jdbc:postgresql://${DB_HOST:-100.84.50.65}:${DB_PORT:-5432}/${KEYCLOAK_DB:-keycloak}
-      KC_DB_USERNAME: ${DB_USER:-postgres}
-      KC_DB_PASSWORD: ${DB_PASSWORD:-postgres}
     volumes:
       - ./keycloak-ssl/server.crt.pem:/opt/keycloak/conf/server.crt.pem:ro
       - ./keycloak-ssl/server.key.pem:/opt/keycloak/conf/server.key.pem:ro
     networks:
       - remote-net
+    healthcheck:
+      test: ["CMD", "curl", "-k", "-f", "https://localhost:8443"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     restart: unless-stopped
 
   # ---------------------------------------------------------
-  # Redis Cache (Central Graph Memory)
+  # Redis Cache
   # ---------------------------------------------------------
   redis:
     image: redis:7-alpine
-    container_name: uisce-redis-cache
+    container_name: uisce-redis
     command: redis-server --appendonly yes
     ports:
-      - "6379:6379" # Bound directly to host terminal loops
+      - "6379:6379"
     volumes:
       - uisce_redis_data:/data
     networks:
       - remote-net
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     restart: unless-stopped
 
   # ---------------------------------------------------------
-  # Infisical (Zero-Trust Secrets Vault Client)
+  # Infisical (Secrets Vault)
   # ---------------------------------------------------------
   infisical:
     image: infisical/infisical:latest
-    container_name: infisical-api
+    container_name: uisce-infisical
     depends_on:
-      - redis
+      redis:
+        condition: service_healthy
     ports:
       - "8085:8080"
     extra_hosts:
       - "host.docker.internal:host-gateway"
     environment:
       - NODE_ENV=production
-      # Scopes seamlessly out to your native database named "infisical"
-      - DB_CONNECTION_URI=postgresql://${DB_USER:-postgres}:${DB_PASSWORD:-postgres}@${DB_HOST:-100.84.50.65}:${DB_PORT:-5432}/${INFISICAL_DB:-infisical}?sslmode=disable
-      - REDIS_URL=redis://uisce-redis-cache:6379
+      - DB_CONNECTION_URI=postgresql://postgres:postgres@host.docker.internal:5432/infisical?sslmode=disable
+      - REDIS_URL=redis://uisce-redis:6379
       - SITE_URL=http://localhost:8082
       - ENCRYPTION_KEY=1030410d3281d742b960cf2ff13705f6
       - AUTH_SECRET=389218b2d15e55b255031ed509dfa79f
     networks:
       - remote-net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/api/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     restart: unless-stopped
 
 # ---------------------------------------------------------
@@ -204,4 +224,3 @@ networks:
 volumes:
   uisce_redis_data:
   open-webui-data:
-
