@@ -397,3 +397,14 @@ curl -H "Authorization: Bearer $TOKEN" \
 3. ✅ **Explicit context** for global ops
 4. ✅ **Complete audit trail** for all access
 5. ✅ **Enforced at every layer** (gateway, Hasura, backend)
+
+---
+
+## 🔗 Related
+
+- [`docs/security/northwind-profiles.md`](security/northwind-profiles.md) —
+  Northwind ABAC Gold Copy profiles and the core/custom override pattern
+  for `security.identity_profile_mappings`, `security.security_profiles`,
+  and `public.abac_policies`.
+- [`backend/migrations/000062_abac_security_profiles.sql`](../backend/migrations/000062_abac_security_profiles.sql) —
+  Authoritative schema for the ABAC layer described above.
