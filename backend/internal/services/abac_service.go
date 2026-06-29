@@ -88,7 +88,7 @@ func (s *AbacService) EvaluateAccess(ctx context.Context, subjectAttrs map[strin
 }
 
 // matchesAttrs compares attribute maps. It returns true if all attributes in `required`
-// are present and equal in `given`.
+// are present and satisfied in `given`.
 func matchesAttrs(given, required any) (bool, error) {
 	requiredMap, ok := required.(map[string]any)
 	if !ok || len(requiredMap) == 0 {
@@ -108,10 +108,52 @@ func matchesAttrs(given, required any) (bool, error) {
 			return false, nil // Required attribute is missing.
 		}
 
-		// Simple equality check. A full implementation would handle operators like gt, lt, etc.
-		// This handles basic cases but might fail on type differences (e.g., int vs float64).
-		// For a robust system, a more sophisticated comparison is needed.
-		if fmt.Sprintf("%v", givenVal) != fmt.Sprintf("%v", requiredVal) {
+		// Helper to check slice/array contains element
+		contains := func(slice []any, item any) bool {
+			for _, val := range slice {
+				if fmt.Sprintf("%v", val) == fmt.Sprintf("%v", item) {
+					return true
+				}
+			}
+			return false
+		}
+
+		// Convert given value to a slice of interfaces
+		var givenSlice []any
+		switch g := givenVal.(type) {
+		case []any:
+			givenSlice = g
+		case []string:
+			for _, val := range g {
+				givenSlice = append(givenSlice, val)
+			}
+		default:
+			givenSlice = []any{g}
+		}
+
+		// Convert required value to a slice of interfaces
+		var requiredSlice []any
+		switch r := requiredVal.(type) {
+		case []any:
+			requiredSlice = r
+		case []string:
+			for _, val := range r {
+				requiredSlice = append(requiredSlice, val)
+			}
+		default:
+			requiredSlice = []any{r}
+		}
+
+		// Check if there is any intersection/match between given and required values
+		matchFound := false
+		for _, reqItem := range requiredSlice {
+			if contains(givenSlice, reqItem) {
+				matchFound = true
+				break
+			}
+		}
+
+		if !matchFound {
 			return false, nil
 		}
 	}

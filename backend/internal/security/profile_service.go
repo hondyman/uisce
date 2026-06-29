@@ -269,3 +269,31 @@ func (s *ProfileService) DeleteMapping(ctx context.Context, id uuid.UUID, tenant
 	}
 	return nil
 }
+
+// FetchInheritedRoles recursively traverses the security.security_profiles parent relationships
+// to compile a list of all functional roles/profile keys that the user's role inherits from.
+func (s *ProfileService) FetchInheritedRoles(ctx context.Context, tenantID uuid.UUID, profileKey string) ([]string, error) {
+	query := `
+		WITH RECURSIVE profile_hierarchy AS (
+			SELECT profile_id, profile_key, parent_profile_id, tenant_id
+			FROM security.security_profiles
+			WHERE profile_key = $1 AND (tenant_id IS NULL OR tenant_id = $2)
+			
+			UNION ALL
+			
+			SELECT p.profile_id, p.profile_key, p.parent_profile_id, p.tenant_id
+			FROM security.security_profiles p
+			INNER JOIN profile_hierarchy h ON p.profile_id = h.parent_profile_id
+		)
+		SELECT DISTINCT profile_key FROM profile_hierarchy;
+	`
+
+	var roles []string
+	err := s.db.SelectContext(ctx, &roles, query, profileKey, tenantID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query profile inheritance hierarchy: %w", err)
+	}
+
+	return roles, nil
+}
+

@@ -116,4 +116,54 @@ func TestProfileService_Integration(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "northwind_sales_rep", role)
 	assert.Equal(t, "L2", clearance)
+
+	// Test 4: Verify recursive role hierarchy resolution (parent_profile_id semantics)
+	// First, fetch the global northwind_sales_rep profile to get its ID
+	var parentProfileID uuid.UUID
+	err = tx.QueryRowContext(ctx, `
+		SELECT profile_id FROM security.security_profiles
+		WHERE profile_key = 'northwind_sales_rep' AND tenant_id IS NULL
+		LIMIT 1
+	`).Scan(&parentProfileID)
+	require.NoError(t, err)
+
+	// Create child profile custom_sales_rep inheriting from global northwind_sales_rep
+	childProfileID := uuid.New()
+	_, err = tx.ExecContext(ctx, `
+		INSERT INTO security.security_profiles (profile_id, tenant_id, profile_key, profile_name, parent_profile_id)
+		VALUES ($1, $2, $3, $4, $5)
+	`, childProfileID, tenantID, "custom_sales_rep", "Acme Custom Sales Representative", parentProfileID)
+	require.NoError(t, err)
+
+	// Query inherited roles for custom_sales_rep
+	// (Traverses recursively: child custom_sales_rep -> parent northwind_sales_rep)
+	queryInherit := `
+		WITH RECURSIVE profile_hierarchy AS (
+			SELECT profile_id, profile_key, parent_profile_id, tenant_id
+			FROM security.security_profiles
+			WHERE profile_key = $1 AND (tenant_id IS NULL OR tenant_id = $2)
+			
+			UNION ALL
+			
+			SELECT p.profile_id, p.profile_key, p.parent_profile_id, p.tenant_id
+			FROM security.security_profiles p
+			INNER JOIN profile_hierarchy h ON p.profile_id = h.parent_profile_id
+		)
+		SELECT DISTINCT profile_key FROM profile_hierarchy;
+	`
+	rowsInherit, err := tx.QueryContext(ctx, queryInherit, "custom_sales_rep", tenantID)
+	require.NoError(t, err)
+	defer rowsInherit.Close()
+
+	var inheritedRoles []string
+	for rowsInherit.Next() {
+		var roleKey string
+		require.NoError(t, rowsInherit.Scan(&roleKey))
+		inheritedRoles = append(inheritedRoles, roleKey)
+	}
+
+	assert.Len(t, inheritedRoles, 2)
+	assert.Contains(t, inheritedRoles, "custom_sales_rep")
+	assert.Contains(t, inheritedRoles, "northwind_sales_rep")
 }
+
