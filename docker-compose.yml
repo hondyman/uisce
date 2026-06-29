@@ -186,14 +186,14 @@ services:
     ports:
       - "${HASURA_PORT:-8085}:8080"
     environment:
-      HASURA_GRAPHQL_DATABASE_URL: postgres://postgres:postgres@host.docker.internal:5432/alpha
+      HASURA_GRAPHQL_DATABASE_URL: postgres://postgres:postgres@${DB_HOST:-100.84.50.65}:5432/alpha
       HASURA_GRAPHQL_ENABLE_CONSOLE: "true"
       HASURA_GRAPHQL_DEV_MODE: "true"
       HASURA_GRAPHQL_ADMIN_SECRET: myadminsecret
       HASURA_GRAPHQL_JWT_SECRET: '{"type":"HS256", "key":"${JWT_SECRET:-dev-jwt-secret-key-change-in-production}"}'
       BACKEND_URL: http://backend:8080
     extra_hosts:
-      - "host.docker.internal:host-gateway"
+      - "host.docker.internal:host-gateway"  # fallback; primary DB now uses ${DB_HOST}
     # depends_on:
     #   - postgres
 
@@ -206,7 +206,7 @@ services:
     ports:
       - "${BACKEND_PORT:-8082}:8080"
     environment:
-      - DATABASE_URL=postgres://postgres:postgres@host.docker.internal:5432/alpha?sslmode=disable
+      - DATABASE_URL=postgres://postgres:postgres@${DB_HOST:-100.84.50.65}:5432/alpha?sslmode=disable
       - PORT=8080
       - HASURA_URL=http://hasura:8080/v1/graphql
       - HASURA_ADMIN_SECRET=myadminsecret
@@ -229,7 +229,7 @@ services:
     ports:
       - "${API_GATEWAY_PORT:-8001}:8001"
     environment:
-      - DATABASE_URL=postgres://postgres:postgres@host.docker.internal:5432/alpha?sslmode=disable
+      - DATABASE_URL=postgres://postgres:postgres@${DB_HOST:-100.84.50.65}:5432/alpha?sslmode=disable
       - BACKEND_URL=http://backend:8080
       - AUTH_SERVICE_URL=http://auth-service:8001
       - HASURA_URL=http://hasura:8080/v1/graphql
@@ -261,7 +261,7 @@ services:
     environment:
       - POSTGRES_USER=postgres
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres}
-      - POSTGRES_HOST=host.docker.internal
+      - POSTGRES_HOST=${DB_HOST:-100.84.50.65}
       - POSTGRES_PORT=5432
       - POSTGRES_DB=alpha
       - JWT_SECRET=${JWT_SECRET:-dev-jwt-secret-key-change-in-production}
@@ -286,7 +286,7 @@ services:
     ports:
       - "${BP_BACKEND_PORT:-8086}:8080"
     environment:
-      - DATABASE_URL=postgres://postgres:postgres@host.docker.internal:5432/alpha?sslmode=disable
+      - DATABASE_URL=postgres://postgres:postgres@${DB_HOST:-100.84.50.65}:5432/alpha?sslmode=disable
       - PORT=8080
       - REDIS_ADDR=redis:6379
       - TEMPORAL_HOSTPORT=temporal:7233
@@ -305,7 +305,7 @@ services:
   #   ports:
   #     - "8087:8080"
   #   environment:
-  #     - DATABASE_URL=postgres://postgres:postgres@host.docker.internal:5432/alpha?sslmode=disable
+  #     - DATABASE_URL=postgres://postgres:postgres@${DB_HOST:-100.84.50.65}:5432/alpha?sslmode=disable
   #     - PORT=8080
   #   restart: unless-stopped
 
@@ -318,7 +318,7 @@ services:
   #   ports:
   #     - "${NBA_ML_SERVICE_PORT:-8088}:8080"
   #   environment:
-  #     - DATABASE_URL=postgres://postgres:postgres@host.docker.internal:5432/alpha?sslmode=disable
+  #     - DATABASE_URL=postgres://postgres:postgres@${DB_HOST:-100.84.50.65}:5432/alpha?sslmode=disable
   #     - PORT=8080
   #     - REDIS_ADDR=redis:6379
   #     - TEMPORAL_HOSTPORT=temporal:7233
@@ -336,7 +336,7 @@ services:
     ports:
       - "${ENTITY_MANAGER_PORT:-8087}:8080"
     environment:
-      - DATABASE_URL=postgres://postgres:postgres@host.docker.internal:5432/alpha?sslmode=disable
+      - DATABASE_URL=postgres://postgres:postgres@${DB_HOST:-100.84.50.65}:5432/alpha?sslmode=disable
       - PORT=8080
       - REDIS_ADDR=redis:6379
       - TEMPORAL_HOSTPORT=temporal:7233
@@ -355,7 +355,7 @@ services:
     networks:
       - semlayer-net
     environment:
-      - DATABASE_URL=postgres://postgres:postgres@host.docker.internal:5432/alpha?sslmode=disable
+      - DATABASE_URL=postgres://postgres:postgres@${DB_HOST:-100.84.50.65}:5432/alpha?sslmode=disable
       - KAFKA_BROKERS=redpanda:9092
       - REDIS_ADDR=redis:6379
       - TEMPORAL_HOSTPORT=temporal:7233
@@ -376,7 +376,7 @@ services:
     ports:
       - "${NOTIFICATIONS_PORT:-8089}:8080"
     environment:
-      - DATABASE_URL=postgres://postgres:postgres@host.docker.internal:5432/alpha?sslmode=disable
+      - DATABASE_URL=postgres://postgres:postgres@${DB_HOST:-100.84.50.65}:5432/alpha?sslmode=disable
       - KAFKA_BROKERS=redpanda:9092
       - PORT=8080
       - REDIS_ADDR=redis:6379
@@ -398,7 +398,7 @@ services:
     ports:
       - "${VALIDATION_ENGINE_PORT:-8090}:8080"
     environment:
-      - DATABASE_URL=postgres://postgres:postgres@host.docker.internal:5432/alpha?sslmode=disable
+      - DATABASE_URL=postgres://postgres:postgres@${DB_HOST:-100.84.50.65}:5432/alpha?sslmode=disable
       - PORT=8080
       - REDIS_ADDR=redis:6379
       - TEMPORAL_HOSTPORT=temporal:7233
@@ -419,7 +419,7 @@ services:
     ports:
       - "${RULE_ENGINE_PORT:-8091}:8080"
     environment:
-      - DATABASE_URL=postgres://postgres:postgres@host.docker.internal:5432/alpha?sslmode=disable
+      - DATABASE_URL=postgres://postgres:postgres@${DB_HOST:-100.84.50.65}:5432/alpha?sslmode=disable
       - PORT=8080
       - REDIS_ADDR=redis:6379
       - TEMPORAL_HOSTPORT=temporal:7233
@@ -440,7 +440,7 @@ services:
     ports:
       - "${SEARCH_SERVICE_PORT:-8092}:8080"
     environment:
-      - DATABASE_URL=postgres://postgres:postgres@host.docker.internal:5432/alpha?sslmode=disable
+      - DATABASE_URL=postgres://postgres:postgres@${DB_HOST:-100.84.50.65}:5432/alpha?sslmode=disable
       - PORT=8080
       - REDIS_ADDR=redis:6379
       - TEMPORAL_HOSTPORT=temporal:7233
@@ -461,7 +461,7 @@ services:
     ports:
       - "${POLICY_ENGINE_PORT:-8102}:8080"
     environment:
-      - DATABASE_URL=postgres://postgres:postgres@host.docker.internal:5432/alpha?sslmode=disable
+      - DATABASE_URL=postgres://postgres:postgres@${DB_HOST:-100.84.50.65}:5432/alpha?sslmode=disable
       - PORT=8080
       - REDIS_ADDR=redis:6379
       - TEMPORAL_HOSTPORT=temporal:7233
@@ -480,7 +480,7 @@ services:
     networks:
       - semlayer-net
     environment:
-      - DATABASE_URL=postgres://postgres:postgres@host.docker.internal:5432/alpha?sslmode=disable
+      - DATABASE_URL=postgres://postgres:postgres@${DB_HOST:-100.84.50.65}:5432/alpha?sslmode=disable
       - REDIS_ADDR=redis:6379
       - TEMPORAL_HOSTPORT=temporal:7233
       - KAFKA_BROKERS=redpanda:9092
@@ -497,7 +497,7 @@ services:
     networks:
       - semlayer-net
     environment:
-      - DATABASE_URL=postgres://postgres:postgres@host.docker.internal:5432/alpha?sslmode=disable
+      - DATABASE_URL=postgres://postgres:postgres@${DB_HOST:-100.84.50.65}:5432/alpha?sslmode=disable
       - KAFKA_BROKERS=redpanda:9092
       - REDIS_ADDR=redis:6379
       - TEMPORAL_HOSTPORT=temporal:7233
@@ -515,7 +515,7 @@ services:
     networks:
       - semlayer-net
     environment:
-      - DATABASE_URL=postgres://postgres:postgres@host.docker.internal:5432/alpha?sslmode=disable
+      - DATABASE_URL=postgres://postgres:postgres@${DB_HOST:-100.84.50.65}:5432/alpha?sslmode=disable
       - KAFKA_BROKERS=redpanda:9092
       - REDIS_ADDR=redis:6379
       - TEMPORAL_HOSTPORT=temporal:7233
@@ -536,7 +536,7 @@ services:
     ports:
       - "${ANALYTICS_ENGINE_PORT:-8101}:8080"
     environment:
-      - DATABASE_URL=postgres://postgres:postgres@host.docker.internal:5432/alpha?sslmode=disable
+      - DATABASE_URL=postgres://postgres:postgres@${DB_HOST:-100.84.50.65}:5432/alpha?sslmode=disable
       - PORT=8080
       - REDIS_ADDR=redis:6379
       - TEMPORAL_HOSTPORT=temporal:7233
@@ -557,7 +557,7 @@ services:
     ports:
       - "${COMPLIANCE_ENGINE_PORT:-8095}:8080"
     environment:
-      - DATABASE_URL=postgres://postgres:postgres@host.docker.internal:5432/alpha?sslmode=disable
+      - DATABASE_URL=postgres://postgres:postgres@${DB_HOST:-100.84.50.65}:5432/alpha?sslmode=disable
       - PORT=8080
       - REDIS_ADDR=redis:6379
       - TEMPORAL_HOSTPORT=temporal:7233
@@ -578,8 +578,8 @@ services:
     ports:
       - "${CATALOG_SYNC_PORT:-8097}:8090"
     environment:
-      - DATABASE_URL=postgres://postgres:postgres@host.docker.internal:5432/alpha?sslmode=disable
-      - POSTGRES_DSN=postgres://postgres:postgres@host.docker.internal:5432/alpha?sslmode=disable
+      - DATABASE_URL=postgres://postgres:postgres@${DB_HOST:-100.84.50.65}:5432/alpha?sslmode=disable
+      - POSTGRES_DSN=postgres://postgres:postgres@${DB_HOST:-100.84.50.65}:5432/alpha?sslmode=disable
       - KAFKA_BROKERS=redpanda:9092
       - SCHEMA_REGISTRY_URL=http://redpanda:8081
       - PORT=8090
@@ -597,7 +597,7 @@ services:
       dockerfile: Dockerfile.outbox-processor
     container_name: semlayer-outbox-processor-1
     environment:
-      - DATABASE_URL=postgres://postgres:postgres@host.docker.internal:5432/alpha?sslmode=disable
+      - DATABASE_URL=postgres://postgres:postgres@${DB_HOST:-100.84.50.65}:5432/alpha?sslmode=disable
       - KAFKA_BROKERS=redpanda:9092
       - JWT_SECRET=${JWT_SECRET:-dev-jwt-secret-key-change-in-production}
       - ENABLE_SECURITY=true
@@ -613,7 +613,7 @@ services:
       dockerfile: Dockerfile.audit-worker
     container_name: semlayer-audit-worker-1
     environment:
-      - DATABASE_URL=postgres://postgres:postgres@host.docker.internal:5432/alpha?sslmode=disable
+      - DATABASE_URL=postgres://postgres:postgres@${DB_HOST:-100.84.50.65}:5432/alpha?sslmode=disable
       - KAFKA_BROKERS=redpanda:9092
     depends_on:
       - redpanda
@@ -627,7 +627,7 @@ services:
       dockerfile: Dockerfile.snapshot-worker
     container_name: semlayer-snapshot-worker-1
     environment:
-      - DATABASE_URL=postgres://postgres:postgres@host.docker.internal:5432/alpha?sslmode=disable
+      - DATABASE_URL=postgres://postgres:postgres@${DB_HOST:-100.84.50.65}:5432/alpha?sslmode=disable
       - KAFKA_BROKERS=redpanda:9092
     depends_on:
       - redpanda
@@ -641,7 +641,7 @@ services:
       dockerfile: backend/Dockerfile.catalog-worker
     container_name: semlayer-catalog-worker-1
     environment:
-      - DATABASE_URL=postgres://postgres:postgres@host.docker.internal:5432/alpha?sslmode=disable
+      - DATABASE_URL=postgres://postgres:postgres@${DB_HOST:-100.84.50.65}:5432/alpha?sslmode=disable
       - KAFKA_BROKERS=redpanda:9092
     depends_on:
       - redpanda
