@@ -1,0 +1,518 @@
+"""
+GraphQL Schema Extension for Audit Semantic Graph
+Adds queries and types for accessing audit events through the catalog graph
+All queries are tenant-scoped and multi-tenant safe
+"""
+
+# ============================================================================
+# Input Types for Audit Queries
+# ============================================================================
+
+input AuditEventsFilter {
+  """Tenant IDs to include (required - enforces multi-tenant isolation)"""
+  tenantIds: [String!]!
+
+  """Event type(s) to filter by"""
+  types: [String!]
+
+  """Event status(es) to filter by (e.g., FAILED, SUCCESS, OPEN)"""
+  statuses: [String!]
+
+  """Severity level(s) (e.g., CRITICAL, HIGH, MEDIUM, LOW)"""
+  severities: [String!]
+
+  """Start of time range (inclusive)"""
+  from: DateTime!
+
+  """End of time range (inclusive)"""
+  to: DateTime!
+
+  """Free-text search in narrative/description fields"""
+  search: String
+
+  """Pagination limit"""
+  limit: Int
+
+  """Pagination offset"""
+  offset: Int
+}
+
+input EntityAuditFilter {
+  """Entity type (e.g., semantic_term, job, dag)"""
+  entityType: String!
+
+  """Entity ID"""
+  entityId: String!
+
+  """Tenant IDs to include"""
+  tenantIds: [String!]!
+
+  """Time range start"""
+  from: DateTime!
+
+  """Time range end"""
+  to: DateTime!
+
+  """Event types to include (optional)"""
+  eventTypes: [String!]
+
+  """Pagination limit"""
+  limit: Int
+
+  """Pagination offset"""
+  offset: Int
+}
+
+input IncidentFilter {
+  """Tenant IDs (required)"""
+  tenantIds: [String!]!
+
+  """Incident status (e.g., OPEN, RESOLVED, CLOSED)"""
+  statuses: [String!]
+
+  """Severity levels"""
+  severities: [String!]
+
+  """Time range start"""
+  from: DateTime!
+
+  """Time range end"""
+  to: DateTime!
+
+  """Free-text search"""
+  search: String
+
+  """Pagination"""
+  limit: Int
+  offset: Int
+}
+
+input ExplainAuditInput {
+  """Records to explain"""
+  records: [AuditRecordInput!]!
+
+  """Tenant scope (required)"""
+  tenantIds: [String!]!
+}
+
+input AuditRecordInput {
+  """Event ID to explain"""
+  eventId: String!
+
+  """Event type"""
+  eventType: String!
+
+  """Include related events in explanation"""
+  includeRelated: Boolean
+}
+
+input AIExplanationRequest {
+  """Event ID or incident ID to explain"""
+  entityId: String!
+
+  """Entity type (job_run, incident, changeset_event, etc.)"""
+  entityType: String!
+
+  """Tenant scope"""
+  tenantIds: [String!]!
+
+  """Prompt template to use (optional)"""
+  promptTemplate: String
+}
+
+# ============================================================================
+# Output Types for Audit Events
+# ============================================================================
+
+type AuditEvent {
+  """Unique event ID in the catalog graph"""
+  id: String!
+
+  """Event type (job_run, dag_run, incident, etc.)"""
+  type: String!
+
+  """When the event occurred"""
+  timestamp: DateTime!
+
+  """Event status (SUCCESS, FAILED, OPEN, RESOLVED, etc.)"""
+  status: String
+
+  """Severity level for incidents/compliance events"""
+  severity: String
+
+  """Error message if applicable"""
+  errorMessage: String
+
+  """Full event properties as JSON"""
+  properties: JSON!
+
+  """Tenant that owns this event"""
+  tenantId: String!
+
+  """Entity this event refers to (if any)"""
+  relatedEntity: AuditEntity
+
+  """AI-generated narratives attached to this event"""
+  aiNarratives: [AISuggestion!]
+
+  """Catalog node ID"""
+  catalogNodeId: String!
+
+  """Links to related audit events"""
+  relatedEvents: [AuditEventRelationship!]
+}
+
+type AuditEntity {
+  """Entity type (semantic_term, job, dag, etc.)"""
+  type: String!
+
+  """Entity ID"""
+  id: String!
+
+  """Entity name/display"""
+  name: String!
+}
+
+type AuditEventRelationship {
+  """Relationship type (causes, has_impact_on, has_semantic_context, etc.)"""
+  type: String!
+
+  """Related event ID"""
+  relatedEventId: String!
+
+  """Related event type"""
+  relatedEventType: String!
+
+  """Relationship properties"""
+  properties: JSON
+}
+
+type EntityAudit {
+  """Entity information"""
+  entity: AuditEntity!
+
+  """Timeline of events affecting this entity"""
+  events: [AuditEvent!]!
+
+  """Summary statistics"""
+  summary: EntityAuditSummary!
+
+  """Impact analysis"""
+  impactAnalysis: ImpactAnalysis
+}
+
+type EntityAuditSummary {
+  """Total events in time range"""
+  totalEvents: Int!
+
+  """Events by type"""
+  eventsByType: [EventTypeCount!]!
+
+  """Events by status"""
+  eventsByStatus: [EventStatusCount!]!
+
+  """Most recent event"""
+  lastEvent: DateTime!
+
+  """First event in range"""
+  firstEvent: DateTime!
+}
+
+type EventTypeCount {
+  """Event type"""
+  type: String!
+
+  """Count"""
+  count: Int!
+}
+
+type EventStatusCount {
+  """Status value"""
+  status: String!
+
+  """Count"""
+  count: Int!
+}
+
+type ImpactAnalysis {
+  """All affected terms (transitive closure)"""
+  affectedTerms: [String!]!
+
+  """All incidents caused by this entity"""
+  relatedIncidents: [Incident!]!
+
+  """Risk score (0-100)"""
+  riskScore: Float!
+
+  """Affected entities downstream"""
+  downstreamEntities: [AuditEntity!]!
+}
+
+type Incident {
+  """Unique incident ID"""
+  id: String!
+
+  """Incident title"""
+  title: String!
+
+  """Incident description"""
+  description: String!
+
+  """Incident status"""
+  status: String!
+
+  """Severity (CRITICAL, HIGH, MEDIUM, LOW)"""
+  severity: String!
+
+  """When incident was detected"""
+  detectedAt: DateTime!
+
+  """When incident was resolved (if resolved)"""
+  resolvedAt: DateTime
+
+  """Events that caused this incident"""
+  rootCauseEvents: [AuditEvent!]!
+
+  """Semantic terms affected"""
+  affectedTerms: [String!]!
+
+  """AI-generated root cause analysis"""
+  rootCauseAnalysis: AISuggestion
+
+  """Recommended remediation"""
+  recommendedActions: [String!]!
+
+  """Blast radius (which entities were affected)"""
+  blastRadius: String!
+}
+
+type AISuggestion {
+  """Suggestion ID"""
+  id: String!
+
+  """Suggestion type (NARRATIVE, ROOT_CAUSE, RECOMMENDATION, RISK_ASSESSMENT)"""
+  type: String!
+
+  """AI-generated text"""
+  narrative: String!
+
+  """Confidence (0.0-1.0)"""
+  confidence: Float!
+
+  """AI model that generated this"""
+  generatedBy: String!
+
+  """When it was generated"""
+  generatedAt: DateTime!
+
+  """Recommended actions if any"""
+  recommendedActions: [String!]
+
+  """Event this refers to"""
+  relatedEventId: String!
+  relatedEventType: String!
+}
+
+type AIExplanation {
+  """What happened (narrative)"""
+  whatHappened: String!
+
+  """Root cause identification"""
+  rootCause: String!
+
+  """Severity assessment"""
+  severity: String!
+
+  """Blast radius"""
+  blastRadius: String!
+
+  """Affected entities"""
+  affectedEntities: [AuditEntity!]!
+
+  """Recommended remediation"""
+  recommendedActions: [String!]!
+
+  """Proposed ChangeSet summary"""
+  proposedChangeSet: String
+
+  """Confidence in analysis"""
+  confidence: Float!
+
+  """Related events for context"""
+  relatedEvents: [AuditEvent!]!
+}
+
+type ChangeSetImpact {
+  """ChangeSet ID"""
+  changeSetId: String!
+
+  """Impact summary"""
+  summary: String!
+
+  """Risk score"""
+  riskScore: Float!
+
+  """Affected semantic terms"""
+  affectedTerms: [String!]!
+
+  """Downstream impacts"""
+  downstreamImpacts: [AuditEntity!]!
+
+  """Incidents potentially caused by this"""
+  potentialIncidents: [Incident!]!
+}
+
+type ComplianceStatus {
+  """Total compliance checks"""
+  totalChecks: Int!
+
+  """Violations found"""
+  violations: Int!
+
+  """Passing checks"""
+  passing: Int!
+
+  """Critical violations"""
+  critical: Int!
+
+  """High severity violations"""
+  high: Int!
+
+  """Most recent violation"""
+  lastViolation: DateTime
+
+  """Affected terms"""
+  affectedTerms: [String!]!
+}
+
+# ============================================================================
+# Query Extensions for Audit Graph
+# ============================================================================
+
+extend type Query {
+  """
+  Query audit events with filters
+  Returns events in the catalog graph matching the criteria
+  """
+  auditEvents(filter: AuditEventsFilter!): [AuditEvent!]!
+
+  """
+  Get complete audit timeline for an entity
+  Shows all events that directly or indirectly affected the entity
+  """
+  entityAudit(filter: EntityAuditFilter!): EntityAudit!
+
+  """
+  Query incidents with context
+  Returns incidents with root cause events and impact analysis
+  """
+  incidents(filter: IncidentFilter!): [Incident!]!
+
+  """
+  Get AI explanation for audit events or incidents
+  Analyzes events using LLM to provide narrative, root cause, and recommendations
+  """
+  explainAudit(request: AIExplanationRequest!): AIExplanation!
+
+  """
+  Analyze ChangeSet impact on semantic objects and downstream entities
+  """
+  analyzeChangeSetImpact(changeSetId: String!, tenantIds: [String!]!): ChangeSetImpact!
+
+  """
+  Get compliance status and violations
+  """
+  complianceStatus(tenantIds: [String!]!, from: DateTime!, to: DateTime!): ComplianceStatus!
+
+  """
+  Get critical events in last N hours (for real-time dashboard)
+  """
+  criticalEventsRealtime(tenantIds: [String!]!, hoursBack: Int): [AuditEvent!]!
+
+  """
+  Get event statistics for dashboard
+  """
+  auditEventStats(
+    tenantIds: [String!]!
+    from: DateTime!
+    to: DateTime!
+  ): AuditEventStats!
+}
+
+type AuditEventStats {
+  """Total events in range"""
+  totalEvents: Int!
+
+  """Events by type"""
+  eventsByType: [EventTypeCount!]!
+
+  """Events by status"""
+  eventsByStatus: [EventStatusCount!]!
+
+  """Events by severity"""
+  eventsBySeverity: [EventSeverityCount!]!
+
+  """Top 10 most impacted entities"""
+  topImpactedEntities: [ImpactedEntityStats!]!
+
+  """Incidents in period"""
+  incidentCount: Int!
+
+  """Compliance violations"""
+  violationCount: Int!
+
+  """Average event duration (if applicable)"""
+  avgDurationMs: Int
+
+  """Critical events count"""
+  criticalCount: Int!
+}
+
+type EventSeverityCount {
+  """Severity level"""
+  severity: String!
+
+  """Count"""
+  count: Int!
+}
+
+type ImpactedEntityStats {
+  """Entity type"""
+  type: String!
+
+  """Entity ID"""
+  id: String!
+
+  """Number of events"""
+  eventCount: Int!
+
+  """Most recent event"""
+  lastEvent: DateTime!
+}
+
+# ============================================================================
+# Mutation Extensions (optional - for creating audit records manually)
+# ============================================================================
+
+extend type Mutation {
+  """
+  Create a manual audit event (admin only)
+  """
+  createAuditEvent(
+    type: String!
+    tenantIds: [String!]!
+    properties: JSON!
+  ): AuditEvent!
+
+  """
+  Create manual incident (admin only)
+  """
+  createIncident(
+    title: String!
+    description: String!
+    severity: String!
+    tenantIds: [String!]!
+    rootCauseEventIds: [String!]
+    affectedTerms: [String!]
+  ): Incident!
+}
