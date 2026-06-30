@@ -244,16 +244,19 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+DROP TRIGGER IF EXISTS alternative_investments_updated_at ON alternative_investments;
 CREATE TRIGGER alternative_investments_updated_at
     BEFORE UPDATE ON alternative_investments
     FOR EACH ROW
     EXECUTE FUNCTION update_alternative_investment_timestamp();
 
+DROP TRIGGER IF EXISTS capital_calls_updated_at ON capital_calls;
 CREATE TRIGGER capital_calls_updated_at
     BEFORE UPDATE ON capital_calls
     FOR EACH ROW
     EXECUTE FUNCTION update_alternative_investment_timestamp();
 
+DROP TRIGGER IF EXISTS distributions_updated_at ON distributions;
 CREATE TRIGGER distributions_updated_at
     BEFORE UPDATE ON distributions
     FOR EACH ROW

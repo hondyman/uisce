@@ -34,11 +34,17 @@ type Context struct {
 
 type AuthInfo struct {
 	UserID    string
+	Email     string
 	Roles     []string
 	TenantIDs []string
 
 	// IsGlobalAdmin is true when the user holds the global_admin or global_ops role.
 	IsGlobalAdmin bool
+
+	// Enriched abstract profile attributes resolved from IdP groups / operator claims.
+	FunctionalRole string
+	ClearanceLevel string
+	IDPGroups      []string
 
 	// Impersonation fields — populated by AuthContextMiddleware when it detects
 	// an impersonation context token in the Authorization header.

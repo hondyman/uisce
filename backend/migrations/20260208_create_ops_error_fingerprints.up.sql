@@ -14,9 +14,9 @@ CREATE TABLE IF NOT EXISTS ops_error_fingerprints (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE INDEX idx_ops_error_fingerprints_fingerprint ON ops_error_fingerprints(fingerprint);
-CREATE INDEX idx_ops_error_fingerprints_last_seen ON ops_error_fingerprints(last_seen DESC);
-CREATE INDEX idx_ops_error_fingerprints_status_code ON ops_error_fingerprints(status_code);
+CREATE INDEX IF NOT EXISTS idx_ops_error_fingerprints_fingerprint ON ops_error_fingerprints(fingerprint);
+CREATE INDEX IF NOT EXISTS idx_ops_error_fingerprints_last_seen ON ops_error_fingerprints(last_seen DESC);
+CREATE INDEX IF NOT EXISTS idx_ops_error_fingerprints_status_code ON ops_error_fingerprints(status_code);
 
 CREATE TABLE IF NOT EXISTS ops_error_events (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -29,6 +29,6 @@ CREATE TABLE IF NOT EXISTS ops_error_events (
     occurred_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE INDEX idx_ops_error_events_fingerprint_id ON ops_error_events(fingerprint_id);
-CREATE INDEX idx_ops_error_events_tenant_id ON ops_error_events(tenant_id);
-CREATE INDEX idx_ops_error_events_occurred_at ON ops_error_events(occurred_at DESC);
+CREATE INDEX IF NOT EXISTS idx_ops_error_events_fingerprint_id ON ops_error_events(fingerprint_id);
+CREATE INDEX IF NOT EXISTS idx_ops_error_events_tenant_id ON ops_error_events(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_ops_error_events_occurred_at ON ops_error_events(occurred_at DESC);

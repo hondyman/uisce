@@ -12,20 +12,24 @@ CREATE INDEX IF NOT EXISTS idx_ops_events_region ON ops_events(region);
 CREATE INDEX IF NOT EXISTS idx_ops_events_region_occurred_at ON ops_events(region, occurred_at DESC);
 
 -- 3. Add region to action_history for region-scoped audit trails
-ALTER TABLE IF EXISTS ops_action_history ADD COLUMN IF NOT EXISTS region VARCHAR(50);
-CREATE INDEX IF NOT EXISTS idx_ops_action_history_region ON ops_action_history(region);
-CREATE INDEX IF NOT EXISTS idx_ops_action_history_region_created_at ON ops_action_history(region, created_at DESC);
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'ops_action_history') THEN
+        ALTER TABLE public.ops_action_history ADD COLUMN IF NOT EXISTS region VARCHAR(50);
+        CREATE INDEX IF NOT EXISTS idx_ops_action_history_region ON ops_action_history(region);
+        CREATE INDEX IF NOT EXISTS idx_ops_action_history_region_created_at ON ops_action_history(region, created_at DESC);
+        COMMENT ON COLUMN ops_action_history.region IS 'Region where action was executed';
+        UPDATE ops_action_history SET region = 'us-east-1' WHERE region IS NULL;
+    END IF;
+END $$;
 
 -- 4. Add comments for clarity
 COMMENT ON COLUMN ops_incidents.region IS 'Geographic region (e.g., us-east-1, eu-west-1, ap-southeast-1) - incident scope';
 COMMENT ON COLUMN ops_events.region IS 'Geographic region for this event';
-COMMENT ON COLUMN ops_action_history.region IS 'Region where action was executed';
 
--- 5. Add constraints if needed (NOT NULL with defaults for new columns is handled at app layer)
--- Backfill existing records with default region (us-east-1)
+-- Backfill existing records with default region
 UPDATE ops_incidents SET region = 'us-east-1' WHERE region IS NULL;
 UPDATE ops_events SET region = 'us-east-1' WHERE region IS NULL;
-UPDATE ops_action_history SET region = 'us-east-1' WHERE region IS NULL;
 
 -- Create a view for recent incidents by region for operational dashboards
 CREATE OR REPLACE VIEW ops_incidents_by_region AS

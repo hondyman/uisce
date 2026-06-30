@@ -18,20 +18,17 @@ func (h *RBACHandlers) listUsers(w http.ResponseWriter, r *http.Request) {
 	var query string
 	var args []interface{}
 
+	// Query only columns that exist in the actual public.users schema.
+	baseQuery := `
+		SELECT id, username, email, name, role, organization,
+		       is_core_admin, is_active, tenant_id, created_at, last_login
+		FROM users
+	`
 	if tenantID != "" {
-		query = `
-			SELECT id, username, email, name, first_name, last_name, status, is_active, created_at, tenant_id
-			FROM users
-			WHERE tenant_id = $1 OR tenant_id IS NULL
-			ORDER BY name, username
-		`
+		query = baseQuery + ` WHERE tenant_id = $1 OR tenant_id IS NULL ORDER BY username`
 		args = []interface{}{tenantID}
 	} else {
-		query = `
-			SELECT id, username, email, name, first_name, last_name, status, is_active, created_at, tenant_id
-			FROM users
-			ORDER BY name, username
-		`
+		query = baseQuery + ` ORDER BY username`
 	}
 
 	rows, err := h.db.Query(query, args...)
@@ -44,33 +41,38 @@ func (h *RBACHandlers) listUsers(w http.ResponseWriter, r *http.Request) {
 	for rows.Next() {
 		var user map[string]interface{} = make(map[string]interface{})
 		var id, username, email string
-		var name, firstName, lastName, status, userTenantID sql.NullString
-		var isActive bool
+		var name, role, organization, userTenantID sql.NullString
+		var isCoreAdmin, isActive bool
 		var createdAt time.Time
+		var lastLogin sql.NullTime
 
-		if err := rows.Scan(&id, &username, &email, &name, &firstName, &lastName, &status, &isActive, &createdAt, &userTenantID); err != nil {
+		if err := rows.Scan(&id, &username, &email, &name, &role, &organization, &isCoreAdmin, &isActive, &userTenantID, &createdAt, &lastLogin); err != nil {
+			fmt.Printf("[WARN] listUsers scan error: %v\n", err)
 			continue
 		}
 
 		user["id"] = id
 		user["username"] = username
 		user["email"] = email
-		if name.Valid {
+		if name.Valid && name.String != "" {
 			user["name"] = name.String
-		}
-		if firstName.Valid {
-			user["first_name"] = firstName.String
-		}
-		if lastName.Valid {
-			user["last_name"] = lastName.String
-		}
-		if status.Valid {
-			user["status"] = status.String
+		} else if email != "" {
+			user["name"] = email
 		} else {
-			user["status"] = "active"
+			user["name"] = username
 		}
+		if role.Valid && role.String != "" {
+			user["role"] = role.String
+		}
+		if organization.Valid && organization.String != "" {
+			user["organization"] = organization.String
+		}
+		user["is_core_admin"] = isCoreAdmin
 		user["is_active"] = isActive
 		user["created_at"] = createdAt
+		if lastLogin.Valid {
+			user["last_login"] = lastLogin.Time
+		}
 		if userTenantID.Valid {
 			user["tenant_id"] = userTenantID.String
 		} else {
@@ -121,12 +123,13 @@ func (h *RBACHandlers) createUser(w http.ResponseWriter, r *http.Request) {
 		req.Status = "active"
 	}
 
+	// public.users is a view over app_user; writes must go to the underlying table.
 	var userID string
 	err := h.db.QueryRow(`
-		INSERT INTO users (username, email, name, first_name, last_name, tenant_id, status, is_active, password_hash)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, true, $8)
+		INSERT INTO app_user (id, username, email, name, display_name, tenant_id, is_active, password_hash, created_at)
+		VALUES (gen_random_uuid()::text, $1, $2, $3, $4, $5, true, $6, CURRENT_TIMESTAMP)
 		RETURNING id
-	`, req.Username, req.Email, req.Name, req.FirstName, req.LastName, req.TenantID, req.Status, req.Password).Scan(&userID)
+	`, req.Username, req.Email, req.Name, req.Name, req.TenantID, req.Password).Scan(&userID)
 
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Failed to create user: %v", err), http.StatusInternalServerError)
@@ -157,8 +160,8 @@ func (h *RBACHandlers) updateUserTenant(w http.ResponseWriter, r *http.Request) 
 	}
 
 	_, err := h.db.Exec(`
-		UPDATE users 
-		SET tenant_id = $1, updated_at = now()
+		UPDATE app_user
+		SET tenant_id = $1, updated_at_time = now()
 		WHERE id = $2
 	`, tenantVal, userID)
 

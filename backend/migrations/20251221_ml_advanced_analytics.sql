@@ -6,7 +6,7 @@
 -- MACHINE LEARNING ANOMALY DETECTION
 -- =========================================--
 
--- Create table for ML models
+-- CREATE TABLE IF NOT EXISTS for ML models
 CREATE TABLE IF NOT EXISTS public.pop_ml_models (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     metric_id UUID REFERENCES public.pop_metrics(id) ON DELETE CASCADE,
@@ -27,7 +27,7 @@ CREATE TABLE IF NOT EXISTS public.pop_ml_models (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- Create table for ML predictions and anomalies
+-- CREATE TABLE IF NOT EXISTS for ML predictions and anomalies
 CREATE TABLE IF NOT EXISTS public.pop_ml_anomalies (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     metric_id UUID REFERENCES public.pop_metrics(id) ON DELETE CASCADE,
@@ -178,7 +178,7 @@ INSERT INTO public.pop_ml_anomalies (
 -- EXTERNAL DATA INTEGRATION
 -- =========================================--
 
--- Create table for external data sources
+-- CREATE TABLE IF NOT EXISTS for external data sources
 CREATE TABLE IF NOT EXISTS public.pop_external_data_sources (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     source_name TEXT NOT NULL,
@@ -193,7 +193,7 @@ CREATE TABLE IF NOT EXISTS public.pop_external_data_sources (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- Create table for external data mappings
+-- CREATE TABLE IF NOT EXISTS for external data mappings
 CREATE TABLE IF NOT EXISTS public.pop_external_data_mappings (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     source_id UUID REFERENCES public.pop_external_data_sources(id) ON DELETE CASCADE,
@@ -308,7 +308,7 @@ INSERT INTO public.pop_external_data_mappings (
 -- COMPLIANCE REPORTING AUTOMATION
 -- =========================================--
 
--- Create table for compliance reports
+-- CREATE TABLE IF NOT EXISTS for compliance reports
 CREATE TABLE IF NOT EXISTS public.pop_compliance_reports (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     report_name TEXT NOT NULL,
@@ -329,7 +329,7 @@ CREATE TABLE IF NOT EXISTS public.pop_compliance_reports (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- Create table for compliance report sections
+-- CREATE TABLE IF NOT EXISTS for compliance report sections
 CREATE TABLE IF NOT EXISTS public.pop_compliance_report_sections (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     report_id UUID REFERENCES public.pop_compliance_reports(id) ON DELETE CASCADE,
@@ -343,7 +343,7 @@ CREATE TABLE IF NOT EXISTS public.pop_compliance_report_sections (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- Create table for compliance requirements
+-- CREATE TABLE IF NOT EXISTS for compliance requirements
 CREATE TABLE IF NOT EXISTS public.pop_compliance_requirements (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     requirement_name TEXT NOT NULL,
@@ -448,7 +448,7 @@ INSERT INTO public.pop_compliance_requirements (
 -- PREDICTIVE COMPLIANCE MONITORING
 -- =========================================--
 
--- Create table for compliance predictions
+-- CREATE TABLE IF NOT EXISTS for compliance predictions
 CREATE TABLE IF NOT EXISTS public.pop_compliance_predictions (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     requirement_id UUID REFERENCES public.pop_compliance_requirements(id) ON DELETE CASCADE,

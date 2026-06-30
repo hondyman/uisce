@@ -1,4 +1,10 @@
-ALTER TABLE IF EXISTS compliance_rules RENAME TO workflow_compliance_rules;
+DO $$
+BEGIN
+    IF EXISTS (SELECT FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'compliance_rules') 
+       AND NOT EXISTS (SELECT FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'workflow_compliance_rules') THEN
+        ALTER TABLE public.compliance_rules RENAME TO workflow_compliance_rules;
+    END IF;
+END $$;
 
 CREATE TABLE IF NOT EXISTS compliance_rules (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -12,4 +18,4 @@ CREATE TABLE IF NOT EXISTS compliance_rules (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
-CREATE INDEX idx_compliance_rules_type ON compliance_rules(rule_type);
+CREATE INDEX IF NOT EXISTS idx_compliance_rules_type ON compliance_rules(rule_type);

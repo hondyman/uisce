@@ -27,10 +27,10 @@ BEGIN
         WHERE c.relkind = 'i' AND c.relname = 'idx_reference_term_tenant_ds_semantic'
     ) THEN
         BEGIN
-            CREATE UNIQUE INDEX idx_reference_term_tenant_ds_semantic ON public.reference_data (tenant_datasource_id, semantic_term_id);
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_reference_term_tenant_ds_semantic ON public.reference_data (tenant_datasource_id, semantic_term_id);
         EXCEPTION WHEN others THEN
             -- If index creation fails for any reason (existing incompatible index), ignore to keep migration idempotent
-            RAISE NOTICE 'Could not create index idx_reference_term_tenant_ds_semantic: %', SQLERRM;
+            RAISE NOTICE 'Could not CREATE index IF NOT EXISTS idx_reference_term_tenant_ds_semantic: %', SQLERRM;
         END;
     END IF;
 END$$;

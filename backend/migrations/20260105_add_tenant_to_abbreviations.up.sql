@@ -15,15 +15,15 @@ DO $do$
 BEGIN
   IF EXISTS (SELECT 1 FROM pg_class WHERE relkind='r' AND relname='abbreviation_lookup') THEN
     IF NOT EXISTS (SELECT 1 FROM pg_class WHERE relkind='i' AND relname='idx_abbreviations_tenant_abbr') THEN
-      EXECUTE 'CREATE UNIQUE INDEX idx_abbreviations_tenant_abbr ON sml.abbreviation_lookup(tenant_id, UPPER(abbreviation))';
+      EXECUTE 'CREATE UNIQUE INDEX IF NOT EXISTS idx_abbreviations_tenant_abbr ON sml.abbreviation_lookup(tenant_id, UPPER(abbreviation))';
     END IF;
 
     IF NOT EXISTS (SELECT 1 FROM pg_class WHERE relkind='i' AND relname='idx_abbreviations_tenant') THEN
-      EXECUTE 'CREATE INDEX idx_abbreviations_tenant ON sml.abbreviation_lookup(tenant_id)';
+      EXECUTE 'CREATE INDEX IF NOT EXISTS idx_abbreviations_tenant ON sml.abbreviation_lookup(tenant_id)';
     END IF;
 
     IF NOT EXISTS (SELECT 1 FROM pg_class WHERE relkind='i' AND relname='idx_abbreviations_tenant_abbr_lookup') THEN
-      EXECUTE 'CREATE INDEX idx_abbreviations_tenant_abbr_lookup ON sml.abbreviation_lookup(tenant_id, abbreviation)';
+      EXECUTE 'CREATE INDEX IF NOT EXISTS idx_abbreviations_tenant_abbr_lookup ON sml.abbreviation_lookup(tenant_id, abbreviation)';
     END IF;
   END IF;
 END

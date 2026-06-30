@@ -32,8 +32,8 @@ CREATE TABLE IF NOT EXISTS bp_industry_benchmarks (
     UNIQUE(industry, process_type)
 );
 
-CREATE INDEX idx_bp_industry_benchmarks_industry ON bp_industry_benchmarks(industry);
-CREATE INDEX idx_bp_industry_benchmarks_process ON bp_industry_benchmarks(process_type);
+CREATE INDEX IF NOT EXISTS idx_bp_industry_benchmarks_industry ON bp_industry_benchmarks(industry);
+CREATE INDEX IF NOT EXISTS idx_bp_industry_benchmarks_process ON bp_industry_benchmarks(process_type);
 
 -- ============================================================================
 -- Performance Scores Table
@@ -70,10 +70,10 @@ CREATE TABLE IF NOT EXISTS bp_performance_scores (
     UNIQUE(tenant_id, workflow_type)
 );
 
-CREATE INDEX idx_bp_performance_scores_tenant ON bp_performance_scores(tenant_id);
-CREATE INDEX idx_bp_performance_scores_workflow ON bp_performance_scores(workflow_type);
-CREATE INDEX idx_bp_performance_scores_industry ON bp_performance_scores(industry);
-CREATE INDEX idx_bp_performance_scores_overall ON bp_performance_scores(overall_score DESC);
+CREATE INDEX IF NOT EXISTS idx_bp_performance_scores_tenant ON bp_performance_scores(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_bp_performance_scores_workflow ON bp_performance_scores(workflow_type);
+CREATE INDEX IF NOT EXISTS idx_bp_performance_scores_industry ON bp_performance_scores(industry);
+CREATE INDEX IF NOT EXISTS idx_bp_performance_scores_overall ON bp_performance_scores(overall_score DESC);
 
 -- ============================================================================
 -- Best Practices Table
@@ -118,10 +118,10 @@ CREATE TABLE IF NOT EXISTS bp_best_practices (
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE INDEX idx_bp_best_practices_industry ON bp_best_practices(industry);
-CREATE INDEX idx_bp_best_practices_process ON bp_best_practices(process_type);
-CREATE INDEX idx_bp_best_practices_category ON bp_best_practices(category);
-CREATE INDEX idx_bp_best_practices_priority ON bp_best_practices(priority);
+CREATE INDEX IF NOT EXISTS idx_bp_best_practices_industry ON bp_best_practices(industry);
+CREATE INDEX IF NOT EXISTS idx_bp_best_practices_process ON bp_best_practices(process_type);
+CREATE INDEX IF NOT EXISTS idx_bp_best_practices_category ON bp_best_practices(category);
+CREATE INDEX IF NOT EXISTS idx_bp_best_practices_priority ON bp_best_practices(priority);
 
 -- ============================================================================
 -- Peer Groups Table
@@ -150,8 +150,8 @@ CREATE TABLE IF NOT EXISTS bp_peer_groups (
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE INDEX idx_bp_peer_groups_industry ON bp_peer_groups(industry);
-CREATE INDEX idx_bp_peer_groups_active ON bp_peer_groups(is_active);
+CREATE INDEX IF NOT EXISTS idx_bp_peer_groups_industry ON bp_peer_groups(industry);
+CREATE INDEX IF NOT EXISTS idx_bp_peer_groups_active ON bp_peer_groups(is_active);
 
 -- ============================================================================
 -- Peer Group Members Table
@@ -177,8 +177,8 @@ CREATE TABLE IF NOT EXISTS bp_peer_group_members (
     UNIQUE(peer_group_id, tenant_id)
 );
 
-CREATE INDEX idx_bp_peer_group_members_peer_group ON bp_peer_group_members(peer_group_id);
-CREATE INDEX idx_bp_peer_group_members_tenant ON bp_peer_group_members(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_bp_peer_group_members_peer_group ON bp_peer_group_members(peer_group_id);
+CREATE INDEX IF NOT EXISTS idx_bp_peer_group_members_tenant ON bp_peer_group_members(tenant_id);
 
 -- ============================================================================
 -- Gap Analysis Table
@@ -218,11 +218,11 @@ CREATE TABLE IF NOT EXISTS bp_gap_analysis (
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE INDEX idx_bp_gap_analysis_tenant ON bp_gap_analysis(tenant_id);
-CREATE INDEX idx_bp_gap_analysis_workflow ON bp_gap_analysis(workflow_type);
-CREATE INDEX idx_bp_gap_analysis_dimension ON bp_gap_analysis(dimension);
-CREATE INDEX idx_bp_gap_analysis_priority ON bp_gap_analysis(priority);
-CREATE INDEX idx_bp_gap_analysis_status ON bp_gap_analysis(status);
+CREATE INDEX IF NOT EXISTS idx_bp_gap_analysis_tenant ON bp_gap_analysis(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_bp_gap_analysis_workflow ON bp_gap_analysis(workflow_type);
+CREATE INDEX IF NOT EXISTS idx_bp_gap_analysis_dimension ON bp_gap_analysis(dimension);
+CREATE INDEX IF NOT EXISTS idx_bp_gap_analysis_priority ON bp_gap_analysis(priority);
+CREATE INDEX IF NOT EXISTS idx_bp_gap_analysis_status ON bp_gap_analysis(status);
 
 -- ============================================================================
 -- Trigger to update updated_at timestamps
@@ -236,21 +236,25 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+DROP TRIGGER IF EXISTS update_bp_performance_scores_updated_at ON bp_performance_scores;
 CREATE TRIGGER update_bp_performance_scores_updated_at
     BEFORE UPDATE ON bp_performance_scores
     FOR EACH ROW
     EXECUTE FUNCTION update_bp_updated_at();
 
+DROP TRIGGER IF EXISTS update_bp_best_practices_updated_at ON bp_best_practices;
 CREATE TRIGGER update_bp_best_practices_updated_at
     BEFORE UPDATE ON bp_best_practices
     FOR EACH ROW
     EXECUTE FUNCTION update_bp_updated_at();
 
+DROP TRIGGER IF EXISTS update_bp_peer_groups_updated_at ON bp_peer_groups;
 CREATE TRIGGER update_bp_peer_groups_updated_at
     BEFORE UPDATE ON bp_peer_groups
     FOR EACH ROW
     EXECUTE FUNCTION update_bp_updated_at();
 
+DROP TRIGGER IF EXISTS update_bp_gap_analysis_updated_at ON bp_gap_analysis;
 CREATE TRIGGER update_bp_gap_analysis_updated_at
     BEFORE UPDATE ON bp_gap_analysis
     FOR EACH ROW

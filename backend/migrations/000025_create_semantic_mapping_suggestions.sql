@@ -1,6 +1,6 @@
 -- Migration: 000025_create_semantic_mapping_suggestions.sql
 -- Created: 2025-10-06
--- Purpose: Create table to store generated semantic mapping suggestions
+-- Purpose: CREATE TABLE IF NOT EXISTS to store generated semantic mapping suggestions
 
 -- Ensure pgcrypto (for gen_random_uuid) is available. This is idempotent.
 CREATE EXTENSION IF NOT EXISTS pgcrypto;

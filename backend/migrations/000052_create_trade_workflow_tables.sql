@@ -22,7 +22,7 @@ CREATE TABLE IF NOT EXISTS public.workflow_definitions (
     CONSTRAINT workflow_definitions_tenant_fk FOREIGN KEY (tenant_id) REFERENCES public.tenants(id) ON DELETE CASCADE
 );
 
-CREATE INDEX workflow_definitions_tenant_idx ON public.workflow_definitions (tenant_id);
+CREATE INDEX IF NOT EXISTS workflow_definitions_tenant_idx ON public.workflow_definitions (tenant_id);
 
 CREATE TABLE IF NOT EXISTS public.workflow_stages (
     id uuid DEFAULT gen_random_uuid() NOT NULL,
@@ -37,7 +37,7 @@ CREATE TABLE IF NOT EXISTS public.workflow_stages (
     CONSTRAINT workflow_stages_workflow_fk FOREIGN KEY (workflow_id) REFERENCES public.workflow_definitions(id) ON DELETE CASCADE
 );
 
-CREATE INDEX workflow_stages_workflow_idx ON public.workflow_stages (workflow_id);
+CREATE INDEX IF NOT EXISTS workflow_stages_workflow_idx ON public.workflow_stages (workflow_id);
 
 CREATE TABLE IF NOT EXISTS public.compliance_rules (
     id uuid DEFAULT gen_random_uuid() NOT NULL,
@@ -52,4 +52,4 @@ CREATE TABLE IF NOT EXISTS public.compliance_rules (
     CONSTRAINT compliance_rules_workflow_fk FOREIGN KEY (workflow_id) REFERENCES public.workflow_definitions(id) ON DELETE CASCADE
 );
 
-CREATE INDEX compliance_rules_workflow_idx ON public.compliance_rules (workflow_id);
+CREATE INDEX IF NOT EXISTS compliance_rules_workflow_idx ON public.compliance_rules (workflow_id);

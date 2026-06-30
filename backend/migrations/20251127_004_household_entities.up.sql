@@ -58,9 +58,9 @@ CREATE TABLE IF NOT EXISTS entities (
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
-CREATE INDEX idx_entities_household ON entities(household_id);
-CREATE INDEX idx_entities_type ON entities(entity_type);
-CREATE INDEX idx_entities_parent ON entities(parent_entity_id);
+CREATE INDEX IF NOT EXISTS idx_entities_household ON entities(household_id);
+CREATE INDEX IF NOT EXISTS idx_entities_type ON entities(entity_type);
+CREATE INDEX IF NOT EXISTS idx_entities_parent ON entities(parent_entity_id);
 
 -- ===========================
 -- INTER-ENTITY TRANSFERS TABLE
@@ -90,16 +90,16 @@ CREATE TABLE IF NOT EXISTS inter_entity_transfers (
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
-CREATE INDEX idx_inter_entity_from ON inter_entity_transfers(from_entity_id);
-CREATE INDEX idx_inter_entity_to ON inter_entity_transfers(to_entity_id);
-CREATE INDEX idx_inter_entity_date ON inter_entity_transfers(transfer_date);
+CREATE INDEX IF NOT EXISTS idx_inter_entity_from ON inter_entity_transfers(from_entity_id);
+CREATE INDEX IF NOT EXISTS idx_inter_entity_to ON inter_entity_transfers(to_entity_id);
+CREATE INDEX IF NOT EXISTS idx_inter_entity_date ON inter_entity_transfers(transfer_date);
 
 -- ===========================
 -- HOUSEHOLD CONSOLIDATED VIEW
 -- ===========================
 DO $$
 BEGIN
-  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'accounts') THEN
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'accounts' AND column_name = 'owner_entity_id') THEN
     EXECUTE $exec$
       CREATE OR REPLACE VIEW household_consolidated AS
       SELECT 

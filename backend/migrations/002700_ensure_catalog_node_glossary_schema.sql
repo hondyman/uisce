@@ -7,7 +7,7 @@ DECLARE
 BEGIN
     -- Check if catalog_node table exists, if not create it
     IF NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'catalog_node') THEN
-        CREATE TABLE public.catalog_node (
+        CREATE TABLE IF NOT EXISTS public.catalog_node (
             id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
             node_name TEXT NOT NULL,
             description TEXT,
@@ -22,8 +22,8 @@ BEGIN
             created_at TIMESTAMPTZ DEFAULT NOW(),
             updated_at TIMESTAMPTZ DEFAULT NOW()
         );
-        CREATE INDEX idx_catalog_node_tenant ON public.catalog_node(tenant_id);
-        CREATE INDEX idx_catalog_node_qualified_path ON public.catalog_node(qualified_path);
+        CREATE INDEX IF NOT EXISTS idx_catalog_node_tenant ON public.catalog_node(tenant_id);
+        CREATE INDEX IF NOT EXISTS idx_catalog_node_qualified_path ON public.catalog_node(qualified_path);
     ELSE
         -- Table exists, drop the problematic unique constraint if it exists
         BEGIN

@@ -10,8 +10,8 @@ CREATE TABLE IF NOT EXISTS ops_tenant_health_cache (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE INDEX idx_ops_tenant_health_cache_tenant_id ON ops_tenant_health_cache(tenant_id);
-CREATE INDEX idx_ops_tenant_health_cache_health_score ON ops_tenant_health_cache(health_score);
+CREATE INDEX IF NOT EXISTS idx_ops_tenant_health_cache_tenant_id ON ops_tenant_health_cache(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_ops_tenant_health_cache_health_score ON ops_tenant_health_cache(health_score);
 
 CREATE TABLE IF NOT EXISTS ops_endpoint_health_cache (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -25,8 +25,8 @@ CREATE TABLE IF NOT EXISTS ops_endpoint_health_cache (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE INDEX idx_ops_endpoint_health_cache_endpoint ON ops_endpoint_health_cache(endpoint);
-CREATE INDEX idx_ops_endpoint_health_cache_health_score ON ops_endpoint_health_cache(health_score);
+CREATE INDEX IF NOT EXISTS idx_ops_endpoint_health_cache_endpoint ON ops_endpoint_health_cache(endpoint);
+CREATE INDEX IF NOT EXISTS idx_ops_endpoint_health_cache_health_score ON ops_endpoint_health_cache(health_score);
 
 -- Heatmap data: time-series latency buckets per dimension (region, tenant, endpoint)
 CREATE TABLE IF NOT EXISTS ops_latency_heatmap (
@@ -41,6 +41,6 @@ CREATE TABLE IF NOT EXISTS ops_latency_heatmap (
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE INDEX idx_ops_latency_heatmap_bucket_time ON ops_latency_heatmap(bucket_time DESC);
-CREATE INDEX idx_ops_latency_heatmap_dimension ON ops_latency_heatmap(dimension_type, dimension_value);
-CREATE INDEX idx_ops_latency_heatmap_dimension_time ON ops_latency_heatmap(dimension_type, dimension_value, bucket_time DESC);
+CREATE INDEX IF NOT EXISTS idx_ops_latency_heatmap_bucket_time ON ops_latency_heatmap(bucket_time DESC);
+CREATE INDEX IF NOT EXISTS idx_ops_latency_heatmap_dimension ON ops_latency_heatmap(dimension_type, dimension_value);
+CREATE INDEX IF NOT EXISTS idx_ops_latency_heatmap_dimension_time ON ops_latency_heatmap(dimension_type, dimension_value, bucket_time DESC);

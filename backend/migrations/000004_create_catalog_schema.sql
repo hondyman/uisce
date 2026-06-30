@@ -18,7 +18,7 @@ CREATE TABLE IF NOT EXISTS catalog_node (
     updated_at TIMESTAMPTZ DEFAULT now()
 );
 
--- Create index for node lookups by tenant, datasource, and name
+-- CREATE index IF NOT EXISTS for node lookups by tenant, datasource, and name
 CREATE INDEX IF NOT EXISTS idx_node_scope_name ON catalog_node(tenant_id, datasource_id, name);
 
 -- NOTE: This migration defines a small controlled vocabulary used by older
@@ -84,7 +84,7 @@ CREATE TABLE IF NOT EXISTS relationship_suggestion_audit (
     acted_at TIMESTAMPTZ DEFAULT now()
 );
 
--- Create index for audit queries
+-- CREATE index IF NOT EXISTS for audit queries
 CREATE INDEX IF NOT EXISTS idx_audit_scope_action ON relationship_suggestion_audit(tenant_id, datasource_id, action);
 
 -- Trigger for auto-auditing suggested edges

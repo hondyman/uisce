@@ -90,8 +90,8 @@ CREATE TABLE IF NOT EXISTS fee_calculations (
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
-CREATE INDEX idx_fee_calcs_client ON fee_calculations(client_id);
-CREATE INDEX idx_fee_calcs_period ON fee_calculations(billing_period_end);
+CREATE INDEX IF NOT EXISTS idx_fee_calcs_client ON fee_calculations(client_id);
+CREATE INDEX IF NOT EXISTS idx_fee_calcs_period ON fee_calculations(billing_period_end);
 
 -- Revenue recognition (for accrual accounting)
 CREATE TABLE IF NOT EXISTS revenue_recognition_schedule (
@@ -104,4 +104,4 @@ CREATE TABLE IF NOT EXISTS revenue_recognition_schedule (
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
-CREATE INDEX idx_rev_rec_date ON revenue_recognition_schedule(recognition_date);
+CREATE INDEX IF NOT EXISTS idx_rev_rec_date ON revenue_recognition_schedule(recognition_date);

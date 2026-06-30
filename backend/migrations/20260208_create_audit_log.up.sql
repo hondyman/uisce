@@ -17,20 +17,20 @@ CREATE TABLE IF NOT EXISTS ops_audit_log (
     created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
     
     -- For future multi-region support
-    region VARCHAR(50),
-    
-    -- Indexes for common queries
-    INDEX idx_audit_log_incident_id (incident_id),
-    INDEX idx_audit_log_user_id (user_id),
-    INDEX idx_audit_log_action_type (action_type),
-    INDEX idx_audit_log_created_at (created_at),
-    INDEX idx_audit_log_status (status),
-    
-    -- Composite indexes for common filter patterns
-    INDEX idx_audit_log_user_created (user_id, created_at DESC),
-    INDEX idx_audit_log_action_created (action_type, created_at DESC),
-    INDEX idx_audit_log_incident_created (incident_id, created_at DESC)
+    region VARCHAR(50)
 );
+
+-- Indexes for common queries
+CREATE INDEX IF NOT EXISTS idx_audit_log_incident_id ON ops_audit_log (incident_id);
+CREATE INDEX IF NOT EXISTS idx_audit_log_user_id ON ops_audit_log (user_id);
+CREATE INDEX IF NOT EXISTS idx_audit_log_action_type ON ops_audit_log (action_type);
+CREATE INDEX IF NOT EXISTS idx_audit_log_created_at ON ops_audit_log (created_at);
+CREATE INDEX IF NOT EXISTS idx_audit_log_status ON ops_audit_log (status);
+
+-- Composite indexes for common filter patterns
+CREATE INDEX IF NOT EXISTS idx_audit_log_user_created ON ops_audit_log (user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_audit_log_action_created ON ops_audit_log (action_type, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_audit_log_incident_created ON ops_audit_log (incident_id, created_at DESC);
 
 -- Add comment for documentation
 COMMENT ON TABLE ops_audit_log IS 'Audit log entries for all action executions. Used for compliance, forensics, and operator analytics.';

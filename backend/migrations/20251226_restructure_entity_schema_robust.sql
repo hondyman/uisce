@@ -15,7 +15,7 @@ END $$;
 DROP TABLE IF EXISTS public.entity_schema CASCADE;
 
 -- Create new robust entity_attribute table
-CREATE TABLE public.entity_attribute (
+CREATE TABLE IF NOT EXISTS public.entity_attribute (
     id uuid DEFAULT gen_random_uuid() NOT NULL,
     tenant_id uuid NOT NULL,
     tenant_datasource_id uuid NOT NULL,
@@ -57,16 +57,16 @@ CREATE TABLE public.entity_attribute (
 );
 
 -- Create indexes for common queries
-CREATE INDEX entity_attribute_tenant_datasource_idx 
+CREATE INDEX IF NOT EXISTS entity_attribute_tenant_datasource_idx 
     ON public.entity_attribute USING btree (tenant_id, tenant_datasource_id);
 
-CREATE INDEX entity_attribute_parent_id_idx 
+CREATE INDEX IF NOT EXISTS entity_attribute_parent_id_idx 
     ON public.entity_attribute USING btree (parent_id);
 
-CREATE INDEX entity_attribute_catalog_node_id_idx 
+CREATE INDEX IF NOT EXISTS entity_attribute_catalog_node_id_idx 
     ON public.entity_attribute USING btree (catalog_node_id);
 
-CREATE INDEX entity_attribute_entity_key_idx 
+CREATE INDEX IF NOT EXISTS entity_attribute_entity_key_idx 
     ON public.entity_attribute USING btree (tenant_datasource_id, entity_key);
 
 -- Create a view for backward compatibility (if needed)

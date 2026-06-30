@@ -111,10 +111,13 @@ func (h *TenantAccessHandlers) listAccessibleTenants(w http.ResponseWriter, r *h
 
 	fmt.Printf("[DEBUG] listAccessibleTenants: UserID=%s Role=%s CoreAdmin=%v\n", userID, userRole, isCoreAdmin)
 
-	// Platform operators (core admins) see all tenants
+	// Platform operators (core admins and Uisce internal support tiers) see all tenants.
 	isPlatformOperator := isCoreAdmin ||
 		userRole == "platform_operator" ||
 		userRole == "admin" ||
+		userRole == "global_admin" ||
+		userRole == "helpdesk" ||
+		userRole == "professional_services" ||
 		strings.Contains(r.Header.Get("X-User-Permissions"), "platform:operator")
 
 	if isPlatformOperator {
@@ -152,8 +155,8 @@ func (h *TenantAccessHandlers) getAllTenantsInternal(ctx context.Context, target
 	// 1. Query tenants (optionally filtered)
 	var args []interface{}
 	query := `
-		SELECT id, COALESCE(display_name, name, '') as display_name, 
-		       COALESCE(name, '') as name, description, 
+		SELECT id, COALESCE(display_name, name, '') as display_name,
+		       COALESCE(name, '') as name, description,
 		       COALESCE(is_active, true) as is_active,
 		       COALESCE(gold_copy, false) as gold_copy,
 		       COALESCE(region, 'us-west') as region,
@@ -173,7 +176,6 @@ func (h *TenantAccessHandlers) getAllTenantsInternal(ctx context.Context, target
 	defer tenantRows.Close()
 
 	var tenants []TenantResponse
-	var tenantIDs []string
 	for tenantRows.Next() {
 		var t TenantResponse
 		var allowedRegionsJSON []byte
@@ -182,31 +184,21 @@ func (h *TenantAccessHandlers) getAllTenantsInternal(ctx context.Context, target
 		}
 		if len(allowedRegionsJSON) > 0 {
 			if err := json.Unmarshal(allowedRegionsJSON, &t.AllowedRegions); err != nil {
-				// Log error but continue with empty regions to avoid breaking the API
 				fmt.Printf("Error unmarshaling allowed_regions for tenant %s: %v\n", t.ID, err)
 				t.AllowedRegions = []string{}
 			}
 		} else {
 			t.AllowedRegions = []string{}
 		}
-
 		t.Instances = []InstanceResponse{}
 		tenants = append(tenants, t)
-		tenantIDs = append(tenantIDs, t.ID)
 	}
 
 	if len(tenants) == 0 {
 		return []TenantResponse{}, nil
 	}
 
-	// Helper to check if a tenant is in our target list (efficient for large sets)
-	// For SQL filtering, we can just use the targetTenantID if present, or IN clause if multiple.
-	// However, since we already have the memory protection in the upper layer, and we passed targetTenantID for root,
-	// checking instances by tenant_id is sufficient.
-
 	// 2. Query instances
-	// We optimize by filtering instances to the found tenants
-	// using ANY($1) is better but requires pq.Array. Let's just use string building for simplicity or single ID if set.
 	instanceQuery := `
 		SELECT id, COALESCE(display_name, instance_name, '') as display_name,
 		       COALESCE(instance_name, '') as instance_name, NULL::text as description,
@@ -217,9 +209,6 @@ func (h *TenantAccessHandlers) getAllTenantsInternal(ctx context.Context, target
 	if targetTenantID != nil {
 		instanceQuery += " AND tenant_id = $1"
 		iArgs = append(iArgs, *targetTenantID)
-	} else {
-		// If fetching all, no filter needed.
-		// (Optional: AND tenant_id = ANY(...) if we suspected orphan instances, but fetching all is fine here)
 	}
 	instanceQuery += " ORDER BY display_name"
 
@@ -230,7 +219,7 @@ func (h *TenantAccessHandlers) getAllTenantsInternal(ctx context.Context, target
 	defer instanceRows.Close()
 
 	instanceMap := make(map[string][]InstanceResponse)
-	var instanceIDs []string // Track IDs for product filtering
+	instanceIDs := []string{}
 	for instanceRows.Next() {
 		var i InstanceResponse
 		if err := instanceRows.Scan(&i.ID, &i.DisplayName, &i.Name, &i.Description, &i.IsActive, &i.URL, &i.TenantID); err != nil {
@@ -241,11 +230,10 @@ func (h *TenantAccessHandlers) getAllTenantsInternal(ctx context.Context, target
 		instanceIDs = append(instanceIDs, i.ID)
 	}
 
-	// 3. Query products
-	// Filter by instance IDs found
+	// 3. Query products by tenant (schema: tenant_product.tenant_id)
 	productQuery := `
-		SELECT tp.id, tp.version, tp.tenant_instance_id, tp.alpha_product_id,
-		       ap.id as ap_id, COALESCE(ap.product_name, '') as product_name, 
+		SELECT tp.id, tp.version, tp.alpha_product_id,
+		       ap.id as ap_id, COALESCE(ap.product_name, '') as product_name,
 		       NULL::text as product_code, COALESCE(ap.is_active, true) as ap_is_active
 		FROM tenant_product tp
 		LEFT JOIN alpha_product ap ON ap.id = tp.alpha_product_id
@@ -253,26 +241,8 @@ func (h *TenantAccessHandlers) getAllTenantsInternal(ctx context.Context, target
 	`
 	var pArgs []interface{}
 	if targetTenantID != nil {
-		// If specific tenant, we can join back to tenant_instance to filter safely at DB level
-		productQuery = `
-			SELECT tp.id, tp.version, tp.tenant_instance_id, tp.alpha_product_id,
-			       ap.id as ap_id, COALESCE(ap.product_name, '') as product_name, 
-			       NULL::text as product_code, COALESCE(ap.is_active, true) as ap_is_active
-			FROM tenant_product tp
-			JOIN tenant_instance ti ON tp.tenant_instance_id = ti.id
-			LEFT JOIN alpha_product ap ON ap.id = tp.alpha_product_id
-			WHERE ti.tenant_id = $1
-		`
+		productQuery += " AND tp.tenant_id = $1"
 		pArgs = append(pArgs, *targetTenantID)
-	} else {
-		// When fetching all, filter by the instances we found
-		if len(instanceIDs) > 0 {
-			productQuery += ` AND tp.tenant_instance_id = ANY($1)`
-			pArgs = append(pArgs, instanceIDs)
-		} else {
-			// No instances, so no products
-			productQuery += ` AND 1=0`
-		}
 	}
 	productQuery += " ORDER BY ap.product_name"
 
@@ -282,51 +252,31 @@ func (h *TenantAccessHandlers) getAllTenantsInternal(ctx context.Context, target
 	}
 	defer productRows.Close()
 
-	productMap := make(map[string][]ProductResponse)
+	productMap := make(map[string]ProductResponse)
 	for productRows.Next() {
 		var p ProductResponse
 		var ap AlphaProductInfo
-		if err := productRows.Scan(&p.ID, &p.Version, &p.TenantInstanceID, &p.AlphaProductID,
+		if err := productRows.Scan(&p.ID, &p.Version, &p.AlphaProductID,
 			&ap.ID, &ap.ProductName, &ap.ProductCode, &ap.IsActive); err != nil {
 			return nil, err
 		}
 		p.AlphaProduct = &ap
 		p.Datasources = []DatasourceResponse{}
-		productMap[p.TenantInstanceID] = append(productMap[p.TenantInstanceID], p)
+		productMap[p.ID] = p
 	}
 
-	// 4. Query datasources
+	// 4. Query datasources linking products to instances
 	dsQuery := `
 		SELECT tpd.id, COALESCE(tpd.is_active, true) as is_active,
 		       COALESCE(tpd.source_name, '') as source_name, tpd.tenant_product_id,
-		       ''::text as ads_id, '' as ds_name,
-		       ''::text as ds_type, ''::text as ds_code
+		       tpd.tenant_instance_id
 		FROM tenant_product_datasource tpd
 		WHERE 1=1
 	`
 	var dArgs []interface{}
 	if targetTenantID != nil {
-		// JOIN back to tenant for filtering
-		dsQuery = `
-			SELECT tpd.id, COALESCE(tpd.is_active, true) as is_active,
-			       COALESCE(tpd.source_name, '') as source_name, tpd.tenant_product_id,
-			       ''::text as ads_id, '' as ds_name,
-			       ''::text as ds_type, ''::text as ds_code
-			FROM tenant_product_datasource tpd
-			JOIN tenant_product tp ON tpd.tenant_product_id = tp.id
-			JOIN tenant_instance ti ON tp.tenant_instance_id = ti.id
-			WHERE ti.tenant_id = $1
-		`
+		dsQuery += " AND tpd.tenant_instance_id IN (SELECT id FROM tenant_instance WHERE tenant_id = $1)"
 		dArgs = append(dArgs, *targetTenantID)
-	} else {
-		// When fetching all, filter by products we found
-		if len(instanceIDs) > 0 {
-			dsQuery += ` AND tpd.tenant_product_id IN (SELECT id FROM tenant_product WHERE tenant_instance_id = ANY($1))`
-			dArgs = append(dArgs, instanceIDs)
-		} else {
-			// No products, so no datasources
-			dsQuery += ` AND 1=0`
-		}
 	}
 	dsQuery += " ORDER BY tpd.source_name"
 
@@ -336,29 +286,39 @@ func (h *TenantAccessHandlers) getAllTenantsInternal(ctx context.Context, target
 	}
 	defer dsRows.Close()
 
-	dsMap := make(map[string][]DatasourceResponse)
+	// instanceID -> []ProductResponse
+	instanceProducts := make(map[string][]ProductResponse)
 	for dsRows.Next() {
 		var ds DatasourceResponse
-		var ads AlphaDatasourceInfo
 		var productID string
-		if err := dsRows.Scan(&ds.ID, &ds.IsActive, &ds.SourceName, &productID,
-			&ads.ID, &ads.DatasourceName, &ads.DatasourceType, &ads.DatasourceCode); err != nil {
+		var instanceID sql.NullString
+		if err := dsRows.Scan(&ds.ID, &ds.IsActive, &ds.SourceName, &productID, &instanceID); err != nil {
 			return nil, err
 		}
-		ds.AlphaDatasource = &ads
-		dsMap[productID] = append(dsMap[productID], ds)
+		if !instanceID.Valid || instanceID.String == "" {
+			continue
+		}
+		if product, ok := productMap[productID]; ok {
+			product.Datasources = append(product.Datasources, ds)
+			// Ensure each product appears once per instance.
+			existing := false
+			for _, ep := range instanceProducts[instanceID.String] {
+				if ep.ID == product.ID {
+					existing = true
+					break
+				}
+			}
+			if !existing {
+				instanceProducts[instanceID.String] = append(instanceProducts[instanceID.String], product)
+			}
+		}
 	}
 
 	// Assemble the hierarchy
 	for i := range tenants {
 		if instances, ok := instanceMap[tenants[i].ID]; ok {
 			for j := range instances {
-				if products, ok := productMap[instances[j].ID]; ok {
-					for k := range products {
-						if datasources, ok := dsMap[products[k].ID]; ok {
-							products[k].Datasources = datasources
-						}
-					}
+				if products, ok := instanceProducts[instances[j].ID]; ok {
 					instances[j].Products = products
 				}
 			}
@@ -373,10 +333,21 @@ func (h *TenantAccessHandlers) getAllTenantsInternal(ctx context.Context, target
 func (h *TenantAccessHandlers) getTenantsByUser(r *http.Request, userID string) ([]TenantResponse, error) {
 	ctx := r.Context()
 
+	// Defensive: requests without a resolved user should not crash the DB query.
+	if strings.TrimSpace(userID) == "" {
+		fmt.Printf("[DEBUG] getTenantsByUser called with empty userID. Returning empty tenant list.\n")
+		return []TenantResponse{}, nil
+	}
+
 	// 1. Check for explicit tenant binding in users table
 	var tenantID sql.NullString
 	err := h.DB.QueryRowContext(ctx, "SELECT tenant_id FROM users WHERE id = $1", userID).Scan(&tenantID)
 	if err != nil {
+		if err == sql.ErrNoRows {
+			// User has not been provisioned in the platform yet; treat as no accessible tenants.
+			fmt.Printf("[DEBUG] User %s not found in users table. Returning empty tenant list.\n", userID)
+			return []TenantResponse{}, nil
+		}
 		return nil, fmt.Errorf("failed to fetch user tenant info: %w", err)
 	}
 

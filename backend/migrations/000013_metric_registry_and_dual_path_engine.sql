@@ -57,10 +57,10 @@ CREATE TABLE IF NOT EXISTS semantic_layer.metric_registry (
   updated_by TEXT
 );
 
-CREATE INDEX idx_registry_domain ON semantic_layer.metric_registry(domain, category);
-CREATE INDEX idx_registry_golden ON semantic_layer.metric_registry(golden_path) WHERE golden_path;
-CREATE INDEX idx_registry_source ON semantic_layer.metric_registry(source_system);
-CREATE INDEX idx_registry_status ON semantic_layer.metric_registry(status);
+CREATE INDEX IF NOT EXISTS idx_registry_domain ON semantic_layer.metric_registry(domain, category);
+CREATE INDEX IF NOT EXISTS idx_registry_golden ON semantic_layer.metric_registry(golden_path) WHERE golden_path;
+CREATE INDEX IF NOT EXISTS idx_registry_source ON semantic_layer.metric_registry(source_system);
+CREATE INDEX IF NOT EXISTS idx_registry_status ON semantic_layer.metric_registry(status);
 
 -- =====================================================
 -- 2. EXECUTION METADATA & LINEAGE
@@ -97,9 +97,9 @@ CREATE TABLE IF NOT EXISTS semantic_layer.metric_execution_log (
   duration_ms INT
 );
 
-CREATE INDEX idx_exec_log_metric ON semantic_layer.metric_execution_log(metric_id, completed_at DESC);
-CREATE INDEX idx_exec_log_lane ON semantic_layer.metric_execution_log(lane, status);
-CREATE INDEX idx_exec_log_period ON semantic_layer.metric_execution_log(period_start, period_end);
+CREATE INDEX IF NOT EXISTS idx_exec_log_metric ON semantic_layer.metric_execution_log(metric_id, completed_at DESC);
+CREATE INDEX IF NOT EXISTS idx_exec_log_lane ON semantic_layer.metric_execution_log(lane, status);
+CREATE INDEX IF NOT EXISTS idx_exec_log_period ON semantic_layer.metric_execution_log(period_start, period_end);
 
 -- =====================================================
 -- 3. REAL-TIME LANE: FINALIZED ATOMIC METRICS
@@ -130,11 +130,11 @@ CREATE TABLE IF NOT EXISTS public.metrics_finalized (
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
-CREATE UNIQUE INDEX idx_metrics_finalized_metric_date 
+CREATE UNIQUE INDEX IF NOT EXISTS idx_metrics_finalized_metric_date 
   ON public.metrics_finalized(metric_id, as_of_date);
-CREATE INDEX idx_metrics_finalized_freshness 
+CREATE INDEX IF NOT EXISTS idx_metrics_finalized_freshness 
   ON public.metrics_finalized(freshness_status, meets_sla);
-CREATE INDEX idx_metrics_finalized_date 
+CREATE INDEX IF NOT EXISTS idx_metrics_finalized_date 
   ON public.metrics_finalized(as_of_date DESC);
 
 -- =====================================================
@@ -169,9 +169,9 @@ CREATE TABLE IF NOT EXISTS public.metrics_comparison_periods (
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
-CREATE UNIQUE INDEX idx_comparison_periods_metric_label 
+CREATE UNIQUE INDEX IF NOT EXISTS idx_comparison_periods_metric_label 
   ON public.metrics_comparison_periods(metric_id, period_label);
-CREATE INDEX idx_comparison_periods_metric 
+CREATE INDEX IF NOT EXISTS idx_comparison_periods_metric 
   ON public.metrics_comparison_periods(metric_id, period_label DESC);
 
 -- =====================================================
@@ -199,8 +199,8 @@ CREATE TABLE IF NOT EXISTS public.sla_violations (
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
-CREATE INDEX idx_sla_violations_metric ON public.sla_violations(metric_id, detected_at DESC);
-CREATE INDEX idx_sla_violations_status ON public.sla_violations(status) WHERE status = 'open';
+CREATE INDEX IF NOT EXISTS idx_sla_violations_metric ON public.sla_violations(metric_id, detected_at DESC);
+CREATE INDEX IF NOT EXISTS idx_sla_violations_status ON public.sla_violations(status) WHERE status = 'open';
 
 -- =====================================================
 -- 6. HELPER VIEWS
@@ -271,6 +271,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+DROP TRIGGER IF EXISTS trg_metric_registry_update ON semantic_layer;
 CREATE TRIGGER trg_metric_registry_update
 BEFORE UPDATE ON semantic_layer.metric_registry
 FOR EACH ROW

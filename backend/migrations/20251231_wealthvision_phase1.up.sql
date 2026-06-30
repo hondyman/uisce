@@ -37,9 +37,9 @@ CREATE TABLE IF NOT EXISTS tax_strategies (
         REFERENCES family_offices(family_id) ON DELETE CASCADE
 );
 
-CREATE INDEX idx_tax_strategies_family ON tax_strategies(family_id);
-CREATE INDEX idx_tax_strategies_type ON tax_strategies(strategy_type);
-CREATE INDEX idx_tax_strategies_created ON tax_strategies(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_tax_strategies_family ON tax_strategies(family_id);
+CREATE INDEX IF NOT EXISTS idx_tax_strategies_type ON tax_strategies(strategy_type);
+CREATE INDEX IF NOT EXISTS idx_tax_strategies_created ON tax_strategies(created_at DESC);
 
 -- State Residency Comparisons
 CREATE TABLE IF NOT EXISTS state_residency_comparisons (
@@ -58,7 +58,7 @@ CREATE TABLE IF NOT EXISTS state_residency_comparisons (
         REFERENCES family_offices(family_id) ON DELETE CASCADE
 );
 
-CREATE INDEX idx_residency_family ON state_residency_comparisons(family_id);
+CREATE INDEX IF NOT EXISTS idx_residency_family ON state_residency_comparisons(family_id);
 
 -- NIIT Calculations
 CREATE TABLE IF NOT EXISTS niit_calculations (
@@ -78,8 +78,8 @@ CREATE TABLE IF NOT EXISTS niit_calculations (
         REFERENCES family_offices(family_id) ON DELETE CASCADE
 );
 
-CREATE INDEX idx_niit_family ON niit_calculations(family_id);
-CREATE INDEX idx_niit_year ON niit_calculations(tax_year DESC);
+CREATE INDEX IF NOT EXISTS idx_niit_family ON niit_calculations(family_id);
+CREATE INDEX IF NOT EXISTS idx_niit_year ON niit_calculations(tax_year DESC);
 
 -- Charitable Bunching Analysis
 CREATE TABLE IF NOT EXISTS charitable_bunching_analyses (
@@ -98,7 +98,7 @@ CREATE TABLE IF NOT EXISTS charitable_bunching_analyses (
         REFERENCES family_offices(family_id) ON DELETE CASCADE
 );
 
-CREATE INDEX idx_bunching_family ON charitable_bunching_analyses(family_id);
+CREATE INDEX IF NOT EXISTS idx_bunching_family ON charitable_bunching_analyses(family_id);
 
 -- ==============================================================================
 -- MULTI-GENERATIONAL PLANNING
@@ -122,8 +122,8 @@ CREATE TABLE IF NOT EXISTS dynasty_trust_simulations (
         REFERENCES family_offices(family_id) ON DELETE CASCADE
 );
 
-CREATE INDEX idx_dynasty_family ON dynasty_trust_simulations(family_id);
-CREATE INDEX idx_dynasty_created ON dynasty_trust_simulations(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_dynasty_family ON dynasty_trust_simulations(family_id);
+CREATE INDEX IF NOT EXISTS idx_dynasty_created ON dynasty_trust_simulations(created_at DESC);
 
 -- 529 Education Plans
 CREATE TABLE IF NOT EXISTS education_529_plans (
@@ -148,8 +148,8 @@ CREATE TABLE IF NOT EXISTS education_529_plans (
         REFERENCES family_offices(family_id) ON DELETE CASCADE
 );
 
-CREATE INDEX idx_529_family ON education_529_plans(family_id);
-CREATE INDEX idx_529_student ON education_529_plans(student_member_id);
+CREATE INDEX IF NOT EXISTS idx_529_family ON education_529_plans(family_id);
+CREATE INDEX IF NOT EXISTS idx_529_student ON education_529_plans(student_member_id);
 
 -- Legacy Impact Calculations
 CREATE TABLE IF NOT EXISTS legacy_impact_calculations (
@@ -170,7 +170,7 @@ CREATE TABLE IF NOT EXISTS legacy_impact_calculations (
         REFERENCES family_offices(family_id) ON DELETE CASCADE
 );
 
-CREATE INDEX idx_legacy_family ON legacy_impact_calculations(family_id);
+CREATE INDEX IF NOT EXISTS idx_legacy_family ON legacy_impact_calculations(family_id);
 
 -- ==============================================================================
 -- ALTERNATIVE INVESTMENTS
@@ -200,8 +200,8 @@ CREATE TABLE IF NOT EXISTS private_equity_investments (
         REFERENCES family_offices(family_id) ON DELETE CASCADE
 );
 
-CREATE INDEX idx_pe_family ON private_equity_investments(family_id);
-CREATE INDEX idx_pe_vintage ON private_equity_investments(vintage_year DESC);
+CREATE INDEX IF NOT EXISTS idx_pe_family ON private_equity_investments(family_id);
+CREATE INDEX IF NOT EXISTS idx_pe_vintage ON private_equity_investments(vintage_year DESC);
 
 -- Venture Capital Investments
 CREATE TABLE IF NOT EXISTS venture_capital_investments (
@@ -221,8 +221,8 @@ CREATE TABLE IF NOT EXISTS venture_capital_investments (
         REFERENCES family_offices(family_id) ON DELETE CASCADE
 );
 
-CREATE INDEX idx_vc_family ON venture_capital_investments(family_id);
-CREATE INDEX idx_vc_company ON venture_capital_investments(company_name);
+CREATE INDEX IF NOT EXISTS idx_vc_family ON venture_capital_investments(family_id);
+CREATE INDEX IF NOT EXISTS idx_vc_company ON venture_capital_investments(company_name);
 
 -- Art & Collectibles
 CREATE TABLE IF NOT EXISTS art_collectibles (
@@ -250,8 +250,8 @@ CREATE TABLE IF NOT EXISTS art_collectibles (
         REFERENCES family_offices(family_id) ON DELETE CASCADE
 );
 
-CREATE INDEX idx_art_family ON art_collectibles(family_id);
-CREATE INDEX idx_art_artist ON art_collectibles(artist_name);
+CREATE INDEX IF NOT EXISTS idx_art_family ON art_collectibles(family_id);
+CREATE INDEX IF NOT EXISTS idx_art_artist ON art_collectibles(artist_name);
 
 -- Real Estate Syndications
 CREATE TABLE IF NOT EXISTS real_estate_syndications (
@@ -277,8 +277,8 @@ CREATE TABLE IF NOT EXISTS real_estate_syndications (
         REFERENCES family_offices(family_id) ON DELETE CASCADE
 );
 
-CREATE INDEX idx_re_family ON real_estate_syndications(family_id);
-CREATE INDEX idx_re_property ON real_estate_syndications(property_name);
+CREATE INDEX IF NOT EXISTS idx_re_family ON real_estate_syndications(family_id);
+CREATE INDEX IF NOT EXISTS idx_re_property ON real_estate_syndications(property_name);
 
 -- ==============================================================================
 -- AI INTELLIGENCE
@@ -302,9 +302,9 @@ CREATE TABLE IF NOT EXISTS churn_predictions (
         REFERENCES family_offices(family_id) ON DELETE CASCADE
 );
 
-CREATE INDEX idx_churn_family ON churn_predictions(family_id);
-CREATE INDEX idx_churn_risk ON churn_predictions(churn_risk, risk_score DESC);
-CREATE INDEX idx_churn_date ON churn_predictions(prediction_date DESC);
+CREATE INDEX IF NOT EXISTS idx_churn_family ON churn_predictions(family_id);
+CREATE INDEX IF NOT EXISTS idx_churn_risk ON churn_predictions(churn_risk, risk_score DESC);
+CREATE INDEX IF NOT EXISTS idx_churn_date ON churn_predictions(prediction_date DESC);
 
 -- Meeting Preparations
 CREATE TABLE IF NOT EXISTS meeting_preparations (
@@ -322,8 +322,8 @@ CREATE TABLE IF NOT EXISTS meeting_preparations (
         REFERENCES family_offices(family_id) ON DELETE CASCADE
 );
 
-CREATE INDEX idx_prep_family ON meeting_preparations(family_id);
-CREATE INDEX idx_prep_date ON meeting_preparations(meeting_date DESC);
+CREATE INDEX IF NOT EXISTS idx_prep_family ON meeting_preparations(family_id);
+CREATE INDEX IF NOT EXISTS idx_prep_date ON meeting_preparations(meeting_date DESC);
 
 -- ==============================================================================
 -- ESG INTELLIGENCE
@@ -348,8 +348,8 @@ CREATE TABLE IF NOT EXISTS carbon_footprint_calculations (
         REFERENCES family_offices(family_id) ON DELETE CASCADE
 );
 
-CREATE INDEX idx_carbon_family ON carbon_footprint_calculations(family_id);
-CREATE INDEX idx_carbon_date ON carbon_footprint_calculations(calculation_date DESC);
+CREATE INDEX IF NOT EXISTS idx_carbon_family ON carbon_footprint_calculations(family_id);
+CREATE INDEX IF NOT EXISTS idx_carbon_date ON carbon_footprint_calculations(calculation_date DESC);
 
 -- ESG Portfolio Scores
 CREATE TABLE IF NOT EXISTS esg_portfolio_scores (
@@ -372,9 +372,9 @@ CREATE TABLE IF NOT EXISTS esg_portfolio_scores (
         REFERENCES family_offices(family_id) ON DELETE CASCADE
 );
 
-CREATE INDEX idx_esg_family ON esg_portfolio_scores(family_id);
-CREATE INDEX idx_esg_rating ON esg_portfolio_scores(msci_esg_rating);
-CREATE INDEX idx_esg_date ON esg_portfolio_scores(score_date DESC);
+CREATE INDEX IF NOT EXISTS idx_esg_family ON esg_portfolio_scores(family_id);
+CREATE INDEX IF NOT EXISTS idx_esg_rating ON esg_portfolio_scores(msci_esg_rating);
+CREATE INDEX IF NOT EXISTS idx_esg_date ON esg_portfolio_scores(score_date DESC);
 
 -- Impact Investments
 CREATE TABLE IF NOT EXISTS impact_investments (
@@ -394,8 +394,8 @@ CREATE TABLE IF NOT EXISTS impact_investments (
         REFERENCES family_offices(family_id) ON DELETE CASCADE
 );
 
-CREATE INDEX idx_impact_family ON impact_investments(family_id);
-CREATE INDEX idx_impact_theme ON impact_investments(impact_theme);
+CREATE INDEX IF NOT EXISTS idx_impact_family ON impact_investments(family_id);
+CREATE INDEX IF NOT EXISTS idx_impact_theme ON impact_investments(impact_theme);
 
 -- ==============================================================================
 -- AUDIT & TRACKING

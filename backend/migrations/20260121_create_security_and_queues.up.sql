@@ -95,8 +95,8 @@ BEGIN
           AND i.sla_expires_at > NOW() - INTERVAL '7 days'
       ORDER BY i.sla_expires_at ASC;
 
-      CREATE INDEX idx_my_approvals_role ON my_approvals_queue(current_approver_role);
-      CREATE INDEX idx_my_approvals_sla ON my_approvals_queue(sla_status);
+      CREATE INDEX IF NOT EXISTS idx_my_approvals_role ON my_approvals_queue(current_approver_role);
+      CREATE INDEX IF NOT EXISTS idx_my_approvals_sla ON my_approvals_queue(sla_status);
     $$;
   ELSE
     -- fallback: empty materialized view

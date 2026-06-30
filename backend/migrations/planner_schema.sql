@@ -33,11 +33,11 @@ CREATE TABLE IF NOT EXISTS planner.planner_decisions (
     CONSTRAINT fk_plan_type CHECK (plan_type IN ('single_region', 'multi_region_fanout', 'global_federated'))
 );
 
-CREATE INDEX idx_planner_decisions_tenant_created ON planner.planner_decisions(tenant_id, created_at DESC);
-CREATE INDEX idx_planner_decisions_plan_id ON planner.planner_decisions(plan_id);
-CREATE INDEX idx_planner_decisions_query_type ON planner.planner_decisions(query_type);
-CREATE INDEX idx_planner_decisions_status ON planner.planner_decisions(execution_status);
-CREATE INDEX idx_planner_decisions_region ON planner.planner_decisions USING GIN (selected_regions);
+CREATE INDEX IF NOT EXISTS idx_planner_decisions_tenant_created ON planner.planner_decisions(tenant_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_planner_decisions_plan_id ON planner.planner_decisions(plan_id);
+CREATE INDEX IF NOT EXISTS idx_planner_decisions_query_type ON planner.planner_decisions(query_type);
+CREATE INDEX IF NOT EXISTS idx_planner_decisions_status ON planner.planner_decisions(execution_status);
+CREATE INDEX IF NOT EXISTS idx_planner_decisions_region ON planner.planner_decisions USING GIN (selected_regions);
 
 -- planner_metrics: Tracks decision accuracy and performance
 CREATE TABLE IF NOT EXISTS planner.planner_metrics (
@@ -57,9 +57,9 @@ CREATE TABLE IF NOT EXISTS planner.planner_metrics (
     CONSTRAINT fk_metric_query_type CHECK (query_type IN ('feature', 'metric', 'ts', 'drift', 'importance', 'discovery'))
 );
 
-CREATE INDEX idx_planner_metrics_ts ON planner.planner_metrics(ts DESC);
-CREATE INDEX idx_planner_metrics_query_type_ts ON planner.planner_metrics(query_type, ts DESC);
-CREATE INDEX idx_planner_metrics_status ON planner.planner_metrics(execution_status);
+CREATE INDEX IF NOT EXISTS idx_planner_metrics_ts ON planner.planner_metrics(ts DESC);
+CREATE INDEX IF NOT EXISTS idx_planner_metrics_query_type_ts ON planner.planner_metrics(query_type, ts DESC);
+CREATE INDEX IF NOT EXISTS idx_planner_metrics_status ON planner.planner_metrics(execution_status);
 
 -- region_performance: Real-time health metrics for each region
 CREATE TABLE IF NOT EXISTS planner.region_performance (
@@ -86,8 +86,8 @@ CREATE TABLE IF NOT EXISTS planner.region_performance (
     )
 );
 
-CREATE INDEX idx_region_performance_region ON planner.region_performance(region);
-CREATE INDEX idx_region_performance_health ON planner.region_performance(is_healthy, last_updated DESC);
+CREATE INDEX IF NOT EXISTS idx_region_performance_region ON planner.region_performance(region);
+CREATE INDEX IF NOT EXISTS idx_region_performance_health ON planner.region_performance(is_healthy, last_updated DESC);
 
 -- feature_planner_config: Configuration preferences per feature
 CREATE TABLE IF NOT EXISTS planner.feature_planner_config (
@@ -111,8 +111,8 @@ CREATE TABLE IF NOT EXISTS planner.feature_planner_config (
     )
 );
 
-CREATE INDEX idx_feature_planner_config_feature_id ON planner.feature_planner_config(feature_id);
-CREATE INDEX idx_feature_planner_config_updated ON planner.feature_planner_config(updated_at DESC);
+CREATE INDEX IF NOT EXISTS idx_feature_planner_config_feature_id ON planner.feature_planner_config(feature_id);
+CREATE INDEX IF NOT EXISTS idx_feature_planner_config_updated ON planner.feature_planner_config(updated_at DESC);
 
 -- Seed region_performance with common regions
 INSERT INTO planner.region_performance (region, is_healthy, latency_ms_p50, latency_ms_p95, latency_ms_p99, error_rate, cache_hit_rate)

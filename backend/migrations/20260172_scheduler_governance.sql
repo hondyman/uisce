@@ -43,10 +43,10 @@ CREATE TABLE IF NOT EXISTS scheduler_changeset_approvals (
 );
 
 -- Indices
-CREATE INDEX idx_scheduler_changesets_tenant ON scheduler_changesets(tenant_id) WHERE tenant_id IS NOT NULL;
-CREATE INDEX idx_scheduler_changesets_status ON scheduler_changesets(status);
-CREATE INDEX idx_scheduler_changesets_scope ON scheduler_changesets(scope);
-CREATE INDEX idx_scheduler_changeset_approvals_cs ON scheduler_changeset_approvals(changeset_id);
+CREATE INDEX IF NOT EXISTS idx_scheduler_changesets_tenant ON scheduler_changesets(tenant_id) WHERE tenant_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_scheduler_changesets_status ON scheduler_changesets(status);
+CREATE INDEX IF NOT EXISTS idx_scheduler_changesets_scope ON scheduler_changesets(scope);
+CREATE INDEX IF NOT EXISTS idx_scheduler_changeset_approvals_cs ON scheduler_changeset_approvals(changeset_id);
 
 -- Update calendar table to support scopes if not already existing
 DO $$ 

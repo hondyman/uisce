@@ -55,7 +55,7 @@ CREATE TABLE IF NOT EXISTS outbox (
     published_at TIMESTAMP
 );
 
--- Create index for outbox processing
+-- CREATE index IF NOT EXISTS for outbox processing
 CREATE INDEX IF NOT EXISTS idx_outbox_unpublished 
     ON outbox(published, created_at) 
     WHERE published = false;

@@ -299,14 +299,17 @@ END;
 $$ LANGUAGE plpgsql;
 
 -- Triggers for updated_at
+DROP TRIGGER IF EXISTS pop_metrics_updated_at ON public;
 CREATE TRIGGER pop_metrics_updated_at
     BEFORE UPDATE ON public.pop_metrics
     FOR EACH ROW EXECUTE FUNCTION public.update_pop_updated_at();
 
+DROP TRIGGER IF EXISTS pop_steward_reviews_updated_at ON public;
 CREATE TRIGGER pop_steward_reviews_updated_at
     BEFORE UPDATE ON public.pop_steward_reviews
     FOR EACH ROW EXECUTE FUNCTION public.update_pop_updated_at();
 
+DROP TRIGGER IF EXISTS pop_dashboards_updated_at ON public;
 CREATE TRIGGER pop_dashboards_updated_at
     BEFORE UPDATE ON public.pop_dashboards
     FOR EACH ROW EXECUTE FUNCTION public.update_pop_updated_at();

@@ -1,12 +1,14 @@
 package middleware
 
 import (
+	dbsql "database/sql"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 	"github.com/hondyman/semlayer/backend/internal/security"
@@ -45,7 +47,7 @@ func TestAPIKeyAuth_ValidKey_Authenticated(t *testing.T) {
 	// Register a valid key
 	sm.RegisterAPIKey("valid-key-12345", userID, []string{tenantID}, []string{"GLOBAL_OPS"})
 
-	mw := AuthContextMiddleware(sm)
+	mw := AuthContextMiddleware(sm, nil)
 	handler := mw(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		authInfo, ok := security.AuthInfoFromContext(r.Context())
 		require.True(t, ok, "AuthInfo should be in context")
@@ -65,7 +67,7 @@ func TestAPIKeyAuth_ValidKey_Authenticated(t *testing.T) {
 func TestAPIKeyAuth_InvalidKey_Unauthenticated(t *testing.T) {
 	sm := newTestSecurityManager()
 
-	mw := AuthContextMiddleware(sm)
+	mw := AuthContextMiddleware(sm, nil)
 	handler := mw(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, ok := security.AuthInfoFromContext(r.Context())
 		// When invalid key, context should not have AuthInfo
@@ -92,7 +94,7 @@ func TestAPIKeyAuth_RevokedKey_Rejected(t *testing.T) {
 	sm.RegisterAPIKey(key, userID, []string{tenantID}, []string{"GLOBAL_OPS"})
 	sm.RevokeAPIKey(key)
 
-	mw := AuthContextMiddleware(sm)
+	mw := AuthContextMiddleware(sm, nil)
 	handler := mw(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, ok := security.AuthInfoFromContext(r.Context())
 		require.False(t, ok, "Revoked key should not authenticate")
@@ -116,7 +118,7 @@ func TestAPIKeyAuth_WrongTenant_ProperlyScoped(t *testing.T) {
 	// Key only allows access to allowedTenantID
 	sm.RegisterAPIKey("scoped-key-123", userID, []string{allowedTenantID}, []string{"TENANT_ADMIN"})
 
-	mw := AuthContextMiddleware(sm)
+	mw := AuthContextMiddleware(sm, nil)
 	handler := mw(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		authInfo, ok := security.AuthInfoFromContext(r.Context())
 		require.True(t, ok)
@@ -143,7 +145,7 @@ func TestAPIKeyAuth_WrongRole_PassesThrough(t *testing.T) {
 	// Key has restricted role (not admin)
 	sm.RegisterAPIKey("user-key-123", userID, []string{tenantID}, []string{"USER"})
 
-	mw := AuthContextMiddleware(sm)
+	mw := AuthContextMiddleware(sm, nil)
 	handler := mw(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		authInfo, ok := security.AuthInfoFromContext(r.Context())
 		require.True(t, ok)
@@ -179,7 +181,7 @@ func TestJWTAuth_ValidToken_Authenticated(t *testing.T) {
 	}
 	token := signTestToken(sm, claims)
 
-	mw := AuthContextMiddleware(sm)
+	mw := AuthContextMiddleware(sm, nil)
 	handler := mw(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		authInfo, ok := security.AuthInfoFromContext(r.Context())
 		require.True(t, ok)
@@ -199,7 +201,7 @@ func TestJWTAuth_ValidToken_Authenticated(t *testing.T) {
 func TestJWTAuth_InvalidToken_Rejected(t *testing.T) {
 	sm := newTestSecurityManager()
 
-	mw := AuthContextMiddleware(sm)
+	mw := AuthContextMiddleware(sm, nil)
 	handler := mw(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, ok := security.AuthInfoFromContext(r.Context())
 		require.False(t, ok, "Invalid token should not authenticate")
@@ -229,7 +231,7 @@ func TestJWTAuth_MissingRoles_StillAuthenticated(t *testing.T) {
 	}
 	token := signTestToken(sm, claims)
 
-	mw := AuthContextMiddleware(sm)
+	mw := AuthContextMiddleware(sm, nil)
 	handler := mw(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		authInfo, ok := security.AuthInfoFromContext(r.Context())
 		require.True(t, ok)
@@ -261,7 +263,7 @@ func TestJWTAuth_MissingTenantIDs_StillAuthenticated(t *testing.T) {
 	}
 	token := signTestToken(sm, claims)
 
-	mw := AuthContextMiddleware(sm)
+	mw := AuthContextMiddleware(sm, nil)
 	handler := mw(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		authInfo, ok := security.AuthInfoFromContext(r.Context())
 		require.True(t, ok)
@@ -333,3 +335,63 @@ func containsRole(roles []string, role string) bool {
 	}
 	return false
 }
+
+func TestAuthContextMiddleware_ProfessionalServicesLease(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	defer db.Close()
+
+	sm := newTestSecurityManager()
+	profileSvc := security.NewProfileService(db)
+
+	token, err := sm.SignToken(jwt.MapClaims{
+		"user_id":       "ali-g-user-id",
+		"email":         "ali.g@example.com",
+		"operator_role": "professional_services",
+	})
+	require.NoError(t, err)
+
+	targetTenantUUID := uuid.New()
+
+	mw := AuthContextMiddleware(sm, profileSvc)
+	handler := mw(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		authInfo, ok := security.AuthInfoFromContext(r.Context())
+		require.True(t, ok, "AuthInfo should be in context")
+		require.Equal(t, targetTenantUUID.String(), authInfo.TenantIDs[0])
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	// Scenario 1: Missing X-Tenant-ID
+	req := httptest.NewRequest("GET", "/test", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	rr := httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+	require.Equal(t, http.StatusForbidden, rr.Code)
+	require.Contains(t, rr.Body.String(), "Ambient Power Prohibited")
+
+	// Scenario 2: Active Lease exists in assignments table
+	mock.ExpectQuery(`SELECT ticket_reference FROM security.staff_tenant_assignments`).
+		WithArgs("ali.g@example.com", targetTenantUUID).
+		WillReturnRows(sqlmock.NewRows([]string{"ticket_reference"}).AddRow("INC-88931-PS"))
+
+	req = httptest.NewRequest("GET", "/test", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("X-Tenant-ID", targetTenantUUID.String())
+	rr = httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+	require.Equal(t, http.StatusOK, rr.Code)
+
+	// Scenario 3: Lease does not exist
+	mock.ExpectQuery(`SELECT ticket_reference FROM security.staff_tenant_assignments`).
+		WithArgs("ali.g@example.com", targetTenantUUID).
+		WillReturnError(dbsql.ErrNoRows)
+
+	req = httptest.NewRequest("GET", "/test", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("X-Tenant-ID", targetTenantUUID.String())
+	rr = httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+	require.Equal(t, http.StatusForbidden, rr.Code)
+	require.Contains(t, rr.Body.String(), "No active data lease assignment exists")
+}
+

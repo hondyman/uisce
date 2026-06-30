@@ -64,8 +64,8 @@ CREATE TABLE IF NOT EXISTS migration_jobs (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX idx_migration_jobs_status ON migration_jobs(status);
-CREATE INDEX idx_migration_jobs_tenant ON migration_jobs(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_migration_jobs_status ON migration_jobs(status);
+CREATE INDEX IF NOT EXISTS idx_migration_jobs_tenant ON migration_jobs(tenant_id);
 
 -- Seed initial Knowledge Base with Titan component schemas (handled above when pgvector present)
 

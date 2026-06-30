@@ -31,8 +31,8 @@ CREATE TABLE IF NOT EXISTS business_object_def (
   UNIQUE (tenant_id, bo_key)
 );
 
-CREATE INDEX idx_bo_def_tenant ON business_object_def(tenant_id);
-CREATE INDEX idx_bo_def_status ON business_object_def(status);
+CREATE INDEX IF NOT EXISTS idx_bo_def_tenant ON business_object_def(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_bo_def_status ON business_object_def(status);
 
 -- ============================================================
 -- Subtypes (sub business object types) - DEFINED FIRST
@@ -56,7 +56,7 @@ CREATE TABLE IF NOT EXISTS bo_subtype_def (
   UNIQUE (tenant_id, bo_def_id, subtype_key)
 );
 
-CREATE INDEX idx_bo_subtype_bo ON bo_subtype_def(tenant_id, bo_def_id);
+CREATE INDEX IF NOT EXISTS idx_bo_subtype_bo ON bo_subtype_def(tenant_id, bo_def_id);
 
 -- ============================================================
 -- Field Definitions - SCOPED TO SUBTYPE
@@ -83,8 +83,8 @@ CREATE TABLE IF NOT EXISTS bo_field_def (
   UNIQUE (tenant_id, subtype_def_id, field_key)
 );
 
-CREATE INDEX idx_bo_field_def_subtype ON bo_field_def(tenant_id, subtype_def_id);
-CREATE INDEX idx_bo_field_def_bo ON bo_field_def(tenant_id, bo_def_id);
+CREATE INDEX IF NOT EXISTS idx_bo_field_def_subtype ON bo_field_def(tenant_id, subtype_def_id);
+CREATE INDEX IF NOT EXISTS idx_bo_field_def_bo ON bo_field_def(tenant_id, bo_def_id);
 
 -- ============================================================
 -- Instances (the actual records)
@@ -116,9 +116,9 @@ CREATE TABLE IF NOT EXISTS bo_instance (
   UNIQUE (tenant_id, bo_def_id, external_ref)
 );
 
-CREATE INDEX idx_bo_instance_lookup ON bo_instance(tenant_id, bo_def_id, subtype_def_id);
-CREATE INDEX idx_bo_instance_core_gin ON bo_instance USING GIN (core_field_values);
-CREATE INDEX idx_bo_instance_active ON bo_instance(tenant_id, bo_def_id, is_deleted);
+CREATE INDEX IF NOT EXISTS idx_bo_instance_lookup ON bo_instance(tenant_id, bo_def_id, subtype_def_id);
+CREATE INDEX IF NOT EXISTS idx_bo_instance_core_gin ON bo_instance USING GIN (core_field_values);
+CREATE INDEX IF NOT EXISTS idx_bo_instance_active ON bo_instance(tenant_id, bo_def_id, is_deleted);
 
 -- ============================================================
 -- Related Objects (links between instances / hard tables)
@@ -144,9 +144,9 @@ CREATE TABLE IF NOT EXISTS bo_relationship (
   UNIQUE (tenant_id, from_instance_id, to_instance_id, relationship_type)
 );
 
-CREATE INDEX idx_bo_relationship_from ON bo_relationship(tenant_id, from_instance_id);
-CREATE INDEX idx_bo_relationship_to ON bo_relationship(tenant_id, to_instance_id);
-CREATE INDEX idx_bo_relationship_type ON bo_relationship(tenant_id, relationship_type);
+CREATE INDEX IF NOT EXISTS idx_bo_relationship_from ON bo_relationship(tenant_id, from_instance_id);
+CREATE INDEX IF NOT EXISTS idx_bo_relationship_to ON bo_relationship(tenant_id, to_instance_id);
+CREATE INDEX IF NOT EXISTS idx_bo_relationship_type ON bo_relationship(tenant_id, relationship_type);
 
 -- ============================================================
 -- Audit Log (for compliance)
@@ -165,8 +165,8 @@ CREATE TABLE IF NOT EXISTS bo_audit_log (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX idx_bo_audit_entity ON bo_audit_log(tenant_id, entity_type, entity_id);
-CREATE INDEX idx_bo_audit_time ON bo_audit_log(tenant_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_bo_audit_entity ON bo_audit_log(tenant_id, entity_type, entity_id);
+CREATE INDEX IF NOT EXISTS idx_bo_audit_time ON bo_audit_log(tenant_id, created_at DESC);
 
 -- ============================================================
 -- Comments

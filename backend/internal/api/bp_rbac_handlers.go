@@ -95,7 +95,11 @@ type Role struct {
 
 func (h *RBACHandlers) listRoles(w http.ResponseWriter, r *http.Request) {
 	tenantID := r.URL.Query().Get("tenant_id")
+	// The UI uses tenant_instance_id for the same concept as datasource_id.
 	datasourceID := r.URL.Query().Get("datasource_id")
+	if datasourceID == "" {
+		datasourceID = r.URL.Query().Get("tenant_instance_id")
+	}
 
 	if tenantID == "" || datasourceID == "" {
 		http.Error(w, "tenant_id and datasource_id required", http.StatusBadRequest)

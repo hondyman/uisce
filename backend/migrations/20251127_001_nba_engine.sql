@@ -1,5 +1,5 @@
 -- Unified client intelligence schema
-CREATE TABLE client_signals (
+CREATE TABLE IF NOT EXISTS client_signals (
     signal_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     client_id UUID NOT NULL, -- Assuming clients table exists, but foreign key might fail if not. User said "REFERENCES clients(id)", I will keep it if I can verify clients table exists.
     signal_type VARCHAR(100) NOT NULL,
@@ -11,13 +11,13 @@ CREATE TABLE client_signals (
     expiry_at TIMESTAMPTZ -- Signals decay over time
 );
 
-CREATE INDEX idx_client_signals ON client_signals (client_id, detected_at DESC);
-CREATE INDEX idx_signal_category ON client_signals (signal_category, signal_strength DESC);
+CREATE INDEX IF NOT EXISTS idx_client_signals ON client_signals (client_id, detected_at DESC);
+CREATE INDEX IF NOT EXISTS idx_signal_category ON client_signals (signal_category, signal_strength DESC);
 
 -- Signal categories and their sources
 -- CREATE TYPE signal_source AS ENUM ... (Skipping ENUM creation to avoid issues if it exists or if we want flexibility, using VARCHAR check constraints or just validation in code is safer for migrations usually, but I will follow user intent if possible. Postgres ENUMs can be tricky in migrations if not careful. I'll stick to VARCHAR for simplicity unless strictly required).
 
-CREATE TABLE signal_definitions (
+CREATE TABLE IF NOT EXISTS signal_definitions (
     definition_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     signal_type VARCHAR(100) UNIQUE NOT NULL,
     signal_category VARCHAR(50) NOT NULL,
@@ -43,7 +43,7 @@ INSERT INTO signal_definitions (signal_type, signal_category, detection_query, r
  '["DIVERSIFICATION_DISCUSSION", "RISK_REVIEW", "TAX_EFFICIENT_REBALANCING"]'
 );
 
-CREATE TABLE nba_action_catalog (
+CREATE TABLE IF NOT EXISTS nba_action_catalog (
     action_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     action_code VARCHAR(100) UNIQUE NOT NULL,
     action_name TEXT NOT NULL,
@@ -125,7 +125,7 @@ INSERT INTO nba_action_catalog (action_code, action_name, action_category, descr
 );
 
 -- Action effectiveness tracking (for model training)
-CREATE TABLE nba_action_outcomes (
+CREATE TABLE IF NOT EXISTS nba_action_outcomes (
     outcome_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     action_id UUID REFERENCES nba_action_catalog(action_id),
     client_id UUID,
@@ -151,5 +151,5 @@ CREATE TABLE nba_action_outcomes (
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
-CREATE INDEX idx_outcomes_action ON nba_action_outcomes(action_id, action_successful);
-CREATE INDEX idx_outcomes_advisor ON nba_action_outcomes(advisor_id, recommended_at DESC);
+CREATE INDEX IF NOT EXISTS idx_outcomes_action ON nba_action_outcomes(action_id, action_successful);
+CREATE INDEX IF NOT EXISTS idx_outcomes_advisor ON nba_action_outcomes(advisor_id, recommended_at DESC);

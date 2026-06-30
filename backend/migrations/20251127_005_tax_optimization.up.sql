@@ -57,10 +57,10 @@ CREATE TABLE IF NOT EXISTS tax_optimization_opportunities (
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
-CREATE INDEX idx_tax_opp_client ON tax_optimization_opportunities(client_id);
-CREATE INDEX idx_tax_opp_type ON tax_optimization_opportunities(opportunity_type);
-CREATE INDEX idx_tax_opp_status ON tax_optimization_opportunities(status);
-CREATE INDEX idx_tax_opp_time_sensitive ON tax_optimization_opportunities(time_sensitivity, detected_date) 
+CREATE INDEX IF NOT EXISTS idx_tax_opp_client ON tax_optimization_opportunities(client_id);
+CREATE INDEX IF NOT EXISTS idx_tax_opp_type ON tax_optimization_opportunities(opportunity_type);
+CREATE INDEX IF NOT EXISTS idx_tax_opp_status ON tax_optimization_opportunities(status);
+CREATE INDEX IF NOT EXISTS idx_tax_opp_time_sensitive ON tax_optimization_opportunities(time_sensitivity, detected_date) 
     WHERE status IN ('IDENTIFIED', 'PRESENTED_TO_CLIENT', 'APPROVED');
 
 -- ===========================

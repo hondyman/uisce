@@ -24,16 +24,16 @@ CREATE TABLE IF NOT EXISTS client_messages (
 );
 
 DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_class WHERE relkind='i' AND relname='idx_messages_thread') THEN
-    CREATE INDEX idx_messages_thread ON client_messages(thread_id);
+    CREATE INDEX IF NOT EXISTS idx_messages_thread ON client_messages(thread_id);
 END IF; END $$;
 DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_class WHERE relkind='i' AND relname='idx_messages_family') THEN
-    CREATE INDEX idx_messages_family ON client_messages(family_id);
+    CREATE INDEX IF NOT EXISTS idx_messages_family ON client_messages(family_id);
 END IF; END $$;
 DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_class WHERE relkind='i' AND relname='idx_messages_recipient') THEN
-    CREATE INDEX idx_messages_recipient ON client_messages(recipient_id, read);
+    CREATE INDEX IF NOT EXISTS idx_messages_recipient ON client_messages(recipient_id, read);
 END IF; END $$;
 DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_class WHERE relkind='i' AND relname='idx_messages_created') THEN
-    CREATE INDEX idx_messages_created ON client_messages(created_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_messages_created ON client_messages(created_at DESC);
 END IF; END $$;
 
 CREATE TABLE IF NOT EXISTS message_attachments (
@@ -50,7 +50,7 @@ CREATE TABLE IF NOT EXISTS message_attachments (
 );
 
 DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_class WHERE relkind='i' AND relname='idx_attachments_message') THEN
-    CREATE INDEX idx_attachments_message ON message_attachments(message_id);
+    CREATE INDEX IF NOT EXISTS idx_attachments_message ON message_attachments(message_id);
 END IF; END $$;
 
 -- ==============================================================================
@@ -72,13 +72,13 @@ CREATE TABLE IF NOT EXISTS signature_requests (
 );
 
 DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_class WHERE relkind='i' AND relname='idx_signature_family') THEN
-    CREATE INDEX idx_signature_family ON signature_requests(family_id);
+    CREATE INDEX IF NOT EXISTS idx_signature_family ON signature_requests(family_id);
 END IF; END $$;
 DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_class WHERE relkind='i' AND relname='idx_signature_status') THEN
-    CREATE INDEX idx_signature_status ON signature_requests(status);
+    CREATE INDEX IF NOT EXISTS idx_signature_status ON signature_requests(status);
 END IF; END $$;
 DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_class WHERE relkind='i' AND relname='idx_signature_expires') THEN
-    CREATE INDEX idx_signature_expires ON signature_requests(expires_at);
+    CREATE INDEX IF NOT EXISTS idx_signature_expires ON signature_requests(expires_at);
 END IF; END $$;
 
 CREATE TABLE IF NOT EXISTS signature_signers (
@@ -97,10 +97,10 @@ CREATE TABLE IF NOT EXISTS signature_signers (
 );
 
 DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_class WHERE relkind='i' AND relname='idx_signer_request') THEN
-    CREATE INDEX idx_signer_request ON signature_signers(request_id);
+    CREATE INDEX IF NOT EXISTS idx_signer_request ON signature_signers(request_id);
 END IF; END $$;
 DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_class WHERE relkind='i' AND relname='idx_signer_status') THEN
-    CREATE INDEX idx_signer_status ON signature_signers(status);
+    CREATE INDEX IF NOT EXISTS idx_signer_status ON signature_signers(status);
 END IF; END $$;
 
 -- ==============================================================================
@@ -126,13 +126,13 @@ CREATE TABLE IF NOT EXISTS video_meetings (
 );
 
 DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_class WHERE relkind='i' AND relname='idx_meeting_family') THEN
-    CREATE INDEX idx_meeting_family ON video_meetings(family_id);
+    CREATE INDEX IF NOT EXISTS idx_meeting_family ON video_meetings(family_id);
 END IF; END $$;
 DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_class WHERE relkind='i' AND relname='idx_meeting_scheduled') THEN
-    CREATE INDEX idx_meeting_scheduled ON video_meetings(scheduled_start);
+    CREATE INDEX IF NOT EXISTS idx_meeting_scheduled ON video_meetings(scheduled_start);
 END IF; END $$;
 DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_class WHERE relkind='i' AND relname='idx_meeting_status') THEN
-    CREATE INDEX idx_meeting_status ON video_meetings(status);
+    CREATE INDEX IF NOT EXISTS idx_meeting_status ON video_meetings(status);
 END IF; END $$;
 
 CREATE TABLE IF NOT EXISTS meeting_participants (
@@ -148,7 +148,7 @@ CREATE TABLE IF NOT EXISTS meeting_participants (
 );
 
 DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_class WHERE relkind='i' AND relname='idx_participant_meeting') THEN
-    CREATE INDEX idx_participant_meeting ON meeting_participants(meeting_id);
+    CREATE INDEX IF NOT EXISTS idx_participant_meeting ON meeting_participants(meeting_id);
 END IF; END $$;
 
 -- ==============================================================================
@@ -170,10 +170,10 @@ CREATE TABLE IF NOT EXISTS activity_events (
 );
 
 DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_class WHERE relkind='i' AND relname='idx_activity_family') THEN
-    CREATE INDEX idx_activity_family ON activity_events(family_id, created_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_activity_family ON activity_events(family_id, created_at DESC);
 END IF; END $$;
 DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_class WHERE relkind='i' AND relname='idx_activity_type') THEN
-    CREATE INDEX idx_activity_type ON activity_events(event_type);
+    CREATE INDEX IF NOT EXISTS idx_activity_type ON activity_events(event_type);
 END IF; END $$;
 
 -- ==============================================================================
@@ -196,13 +196,13 @@ CREATE TABLE IF NOT EXISTS form_adv_filings (
 );
 
 DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_class WHERE relkind='i' AND relname='idx_form_adv_firm') THEN
-    CREATE INDEX idx_form_adv_firm ON form_adv_filings(firm_id);
+    CREATE INDEX IF NOT EXISTS idx_form_adv_firm ON form_adv_filings(firm_id);
 END IF; END $$;
 DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_class WHERE relkind='i' AND relname='idx_form_adv_status') THEN
-    CREATE INDEX idx_form_adv_status ON form_adv_filings(status);
+    CREATE INDEX IF NOT EXISTS idx_form_adv_status ON form_adv_filings(status);
 END IF; END $$;
 DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_class WHERE relkind='i' AND relname='idx_form_adv_filing_date') THEN
-    CREATE INDEX idx_form_adv_filing_date ON form_adv_filings(filing_date DESC);
+    CREATE INDEX IF NOT EXISTS idx_form_adv_filing_date ON form_adv_filings(filing_date DESC);
 END IF; END $$;
 
 -- ==============================================================================
@@ -221,13 +221,13 @@ CREATE TABLE IF NOT EXISTS gips_compliance_reports (
 );
 
 DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_class WHERE relkind='i' AND relname='idx_gips_firm') THEN
-    CREATE INDEX idx_gips_firm ON gips_compliance_reports(firm_id);
+    CREATE INDEX IF NOT EXISTS idx_gips_firm ON gips_compliance_reports(firm_id);
 END IF; END $$;
 DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_class WHERE relkind='i' AND relname='idx_gips_status') THEN
-    CREATE INDEX idx_gips_status ON gips_compliance_reports(compliance_status);
+    CREATE INDEX IF NOT EXISTS idx_gips_status ON gips_compliance_reports(compliance_status);
 END IF; END $$;
 DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_class WHERE relkind='i' AND relname='idx_gips_date') THEN
-    CREATE INDEX idx_gips_date ON gips_compliance_reports(verification_date DESC);
+    CREATE INDEX IF NOT EXISTS idx_gips_date ON gips_compliance_reports(verification_date DESC);
 END IF; END $$;
 
 -- ==============================================================================
@@ -249,19 +249,19 @@ CREATE TABLE IF NOT EXISTS trade_surveillance_alerts (
 );
 
 DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_class WHERE relkind='i' AND relname='idx_surveillance_firm') THEN
-    CREATE INDEX idx_surveillance_firm ON trade_surveillance_alerts(firm_id);
+    CREATE INDEX IF NOT EXISTS idx_surveillance_firm ON trade_surveillance_alerts(firm_id);
 END IF; END $$;
 DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_class WHERE relkind='i' AND relname='idx_surveillance_type') THEN
-    CREATE INDEX idx_surveillance_type ON trade_surveillance_alerts(alert_type);
+    CREATE INDEX IF NOT EXISTS idx_surveillance_type ON trade_surveillance_alerts(alert_type);
 END IF; END $$;
 DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_class WHERE relkind='i' AND relname='idx_surveillance_severity') THEN
-    CREATE INDEX idx_surveillance_severity ON trade_surveillance_alerts(severity);
+    CREATE INDEX IF NOT EXISTS idx_surveillance_severity ON trade_surveillance_alerts(severity);
 END IF; END $$;
 DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_class WHERE relkind='i' AND relname='idx_surveillance_status') THEN
-    CREATE INDEX idx_surveillance_status ON trade_surveillance_alerts(status);
+    CREATE INDEX IF NOT EXISTS idx_surveillance_status ON trade_surveillance_alerts(status);
 END IF; END $$;
 DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_class WHERE relkind='i' AND relname='idx_surveillance_detected') THEN
-    CREATE INDEX idx_surveillance_detected ON trade_surveillance_alerts(detected_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_surveillance_detected ON trade_surveillance_alerts(detected_at DESC);
 END IF; END $$;
 
 -- ==============================================================================
@@ -286,16 +286,16 @@ CREATE TABLE IF NOT EXISTS suitability_analyses (
 );
 
 DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_class WHERE relkind='i' AND relname='idx_suitability_account') THEN
-    CREATE INDEX idx_suitability_account ON suitability_analyses(account_id);
+    CREATE INDEX IF NOT EXISTS idx_suitability_account ON suitability_analyses(account_id);
 END IF; END $$;
 DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_class WHERE relkind='i' AND relname='idx_suitability_family') THEN
-    CREATE INDEX idx_suitability_family ON suitability_analyses(family_id);
+    CREATE INDEX IF NOT EXISTS idx_suitability_family ON suitability_analyses(family_id);
 END IF; END $$;
 DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_class WHERE relkind='i' AND relname='idx_suitability_status') THEN
-    CREATE INDEX idx_suitability_status ON suitability_analyses(suitability_status);
+    CREATE INDEX IF NOT EXISTS idx_suitability_status ON suitability_analyses(suitability_status);
 END IF; END $$;
 DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_class WHERE relkind='i' AND relname='idx_suitability_date') THEN
-    CREATE INDEX idx_suitability_date ON suitability_analyses(analysis_date DESC);
+    CREATE INDEX IF NOT EXISTS idx_suitability_date ON suitability_analyses(analysis_date DESC);
 END IF; END $$;
 
 -- ==============================================================================
@@ -318,19 +318,19 @@ CREATE TABLE IF NOT EXISTS audit_trail (
 );
 
 DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_class WHERE relkind='i' AND relname='idx_audit_user') THEN
-    CREATE INDEX idx_audit_user ON audit_trail(user_id);
+    CREATE INDEX IF NOT EXISTS idx_audit_user ON audit_trail(user_id);
 END IF; END $$;
 DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_class WHERE relkind='i' AND relname='idx_audit_resource') THEN
-    CREATE INDEX idx_audit_resource ON audit_trail(resource_type, resource_id);
+    CREATE INDEX IF NOT EXISTS idx_audit_resource ON audit_trail(resource_type, resource_id);
 END IF; END $$;
 DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_class WHERE relkind='i' AND relname='idx_audit_action') THEN
-    CREATE INDEX idx_audit_action ON audit_trail(action);
+    CREATE INDEX IF NOT EXISTS idx_audit_action ON audit_trail(action);
 END IF; END $$;
 DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_class WHERE relkind='i' AND relname='idx_audit_timestamp') THEN
-    CREATE INDEX idx_audit_timestamp ON audit_trail(timestamp DESC);
+    CREATE INDEX IF NOT EXISTS idx_audit_timestamp ON audit_trail(timestamp DESC);
 END IF; END $$;
 DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_class WHERE relkind='i' AND relname='idx_audit_success') THEN
-    CREATE INDEX idx_audit_success ON audit_trail(success, timestamp DESC);
+    CREATE INDEX IF NOT EXISTS idx_audit_success ON audit_trail(success, timestamp DESC);
 END IF; END $$;
 
 -- ==============================================================================

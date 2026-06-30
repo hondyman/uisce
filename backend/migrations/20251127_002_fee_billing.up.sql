@@ -67,9 +67,9 @@ CREATE TABLE IF NOT EXISTS fee_schedules (
     updated_by UUID
 );
 
-CREATE INDEX idx_fee_schedules_type ON fee_schedules(fee_type);
-CREATE INDEX idx_fee_schedules_active ON fee_schedules(is_active);
-CREATE INDEX idx_fee_schedules_template ON fee_schedules(is_template) WHERE is_template = TRUE;
+CREATE INDEX IF NOT EXISTS idx_fee_schedules_type ON fee_schedules(fee_type);
+CREATE INDEX IF NOT EXISTS idx_fee_schedules_active ON fee_schedules(is_active);
+CREATE INDEX IF NOT EXISTS idx_fee_schedules_template ON fee_schedules(is_template) WHERE is_template = TRUE;
 
 -- ===========================
 -- CLIENT FEE ASSIGNMENTS TABLE
@@ -116,11 +116,11 @@ CREATE TABLE IF NOT EXISTS client_fee_assignments (
     CONSTRAINT valid_discount CHECK (custom_discount_pct IS NULL OR (custom_discount_pct >= 0 AND custom_discount_pct <= 100))
 );
 
-CREATE INDEX idx_client_fee_assignments_client ON client_fee_assignments(client_id);
-CREATE INDEX idx_client_fee_assignments_account ON client_fee_assignments(account_id);
-CREATE INDEX idx_client_fee_assignments_schedule ON client_fee_assignments(schedule_id);
-CREATE INDEX idx_client_fee_assignments_active ON client_fee_assignments(is_active) WHERE is_active = TRUE;
-CREATE INDEX idx_client_fee_assignments_effective ON client_fee_assignments(effective_date, end_date);
+CREATE INDEX IF NOT EXISTS idx_client_fee_assignments_client ON client_fee_assignments(client_id);
+CREATE INDEX IF NOT EXISTS idx_client_fee_assignments_account ON client_fee_assignments(account_id);
+CREATE INDEX IF NOT EXISTS idx_client_fee_assignments_schedule ON client_fee_assignments(schedule_id);
+CREATE INDEX IF NOT EXISTS idx_client_fee_assignments_active ON client_fee_assignments(is_active) WHERE is_active = TRUE;
+CREATE INDEX IF NOT EXISTS idx_client_fee_assignments_effective ON client_fee_assignments(effective_date, end_date);
 
 -- ===========================
 -- FEE CALCULATIONS TABLE
@@ -209,12 +209,12 @@ CREATE TABLE IF NOT EXISTS fee_calculations (
     CONSTRAINT valid_fees CHECK (net_fee >= 0)
 );
 
-CREATE INDEX idx_fee_calc_client ON fee_calculations(client_id);
-CREATE INDEX idx_fee_calc_period ON fee_calculations(billing_period_start, billing_period_end);
-CREATE INDEX idx_fee_calc_status ON fee_calculations(calculation_status);
-CREATE INDEX idx_fee_calc_pending_review ON fee_calculations(calculation_status) 
+CREATE INDEX IF NOT EXISTS idx_fee_calc_client ON fee_calculations(client_id);
+CREATE INDEX IF NOT EXISTS idx_fee_calc_period ON fee_calculations(billing_period_start, billing_period_end);
+CREATE INDEX IF NOT EXISTS idx_fee_calc_status ON fee_calculations(calculation_status);
+CREATE INDEX IF NOT EXISTS idx_fee_calc_pending_review ON fee_calculations(calculation_status) 
     WHERE calculation_status = 'PENDING_REVIEW' OR requires_manual_review = TRUE;
-CREATE INDEX idx_fee_calc_invoice ON fee_calculations(invoice_id) WHERE invoice_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_fee_calc_invoice ON fee_calculations(invoice_id) WHERE invoice_id IS NOT NULL;
 
 -- ===========================
 -- REVENUE RECOGNITION SCHEDULE TABLE
@@ -241,9 +241,9 @@ CREATE TABLE IF NOT EXISTS revenue_recognition_schedule (
     CONSTRAINT valid_recognition_amount CHECK (amount > 0)
 );
 
-CREATE INDEX idx_revenue_recognition_calc ON revenue_recognition_schedule(calculation_id);
-CREATE INDEX idx_revenue_recognition_date ON revenue_recognition_schedule(recognition_date);
-CREATE INDEX idx_revenue_recognition_pending ON revenue_recognition_schedule(recognized) WHERE recognized = FALSE;
+CREATE INDEX IF NOT EXISTS idx_revenue_recognition_calc ON revenue_recognition_schedule(calculation_id);
+CREATE INDEX IF NOT EXISTS idx_revenue_recognition_date ON revenue_recognition_schedule(recognition_date);
+CREATE INDEX IF NOT EXISTS idx_revenue_recognition_pending ON revenue_recognition_schedule(recognized) WHERE recognized = FALSE;
 
 -- ===========================
 -- HIGH WATER MARKS TABLE
@@ -267,8 +267,8 @@ CREATE TABLE IF NOT EXISTS high_water_marks (
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
-CREATE UNIQUE INDEX idx_hwm_client_account ON high_water_marks(client_id, COALESCE(account_id, '00000000-0000-0000-0000-000000000000'::UUID));
-CREATE INDEX idx_hwm_client ON high_water_marks(client_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_hwm_client_account ON high_water_marks(client_id, COALESCE(account_id, '00000000-0000-0000-0000-000000000000'::UUID));
+CREATE INDEX IF NOT EXISTS idx_hwm_client ON high_water_marks(client_id);
 
 -- ===========================
 -- UPDATE TRIGGERS
@@ -281,21 +281,25 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+DROP TRIGGER IF EXISTS fee_schedules_updated_at ON fee_schedules;
 CREATE TRIGGER fee_schedules_updated_at
     BEFORE UPDATE ON fee_schedules
     FOR EACH ROW
     EXECUTE FUNCTION update_fee_billing_timestamp();
 
+DROP TRIGGER IF EXISTS client_fee_assignments_updated_at ON client_fee_assignments;
 CREATE TRIGGER client_fee_assignments_updated_at
     BEFORE UPDATE ON client_fee_assignments
     FOR EACH ROW
     EXECUTE FUNCTION update_fee_billing_timestamp();
 
+DROP TRIGGER IF EXISTS fee_calculations_updated_at ON fee_calculations;
 CREATE TRIGGER fee_calculations_updated_at
     BEFORE UPDATE ON fee_calculations
     FOR EACH ROW
     EXECUTE FUNCTION update_fee_billing_timestamp();
 
+DROP TRIGGER IF EXISTS high_water_marks_updated_at ON high_water_marks;
 CREATE TRIGGER high_water_marks_updated_at
     BEFORE UPDATE ON high_water_marks
     FOR EACH ROW

@@ -14,8 +14,8 @@ CREATE TABLE IF NOT EXISTS ops_alerts (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE INDEX idx_ops_alerts_scope_metric ON ops_alerts(scope, metric);
-CREATE INDEX idx_ops_alerts_enabled ON ops_alerts(enabled);
+CREATE INDEX IF NOT EXISTS idx_ops_alerts_scope_metric ON ops_alerts(scope, metric);
+CREATE INDEX IF NOT EXISTS idx_ops_alerts_enabled ON ops_alerts(enabled);
 
 CREATE TABLE IF NOT EXISTS ops_alert_events (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -26,9 +26,9 @@ CREATE TABLE IF NOT EXISTS ops_alert_events (
     triggered_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE INDEX idx_ops_alert_events_alert_id ON ops_alert_events(alert_id);
-CREATE INDEX idx_ops_alert_events_scope_id ON ops_alert_events(scope_id);
-CREATE INDEX idx_ops_alert_events_triggered_at ON ops_alert_events(triggered_at DESC);
+CREATE INDEX IF NOT EXISTS idx_ops_alert_events_alert_id ON ops_alert_events(alert_id);
+CREATE INDEX IF NOT EXISTS idx_ops_alert_events_scope_id ON ops_alert_events(scope_id);
+CREATE INDEX IF NOT EXISTS idx_ops_alert_events_triggered_at ON ops_alert_events(triggered_at DESC);
 
 -- Seed default global alerts
 INSERT INTO ops_alerts (name, scope, metric, threshold, comparison, window_secs, enabled)

@@ -72,8 +72,8 @@ CREATE TABLE IF NOT EXISTS succession_plans (
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
-CREATE INDEX idx_succession_plans_departing ON succession_plans(departing_advisor_id);
-CREATE INDEX idx_succession_plans_successor ON succession_plans(successor_advisor_id);
+CREATE INDEX IF NOT EXISTS idx_succession_plans_departing ON succession_plans(departing_advisor_id);
+CREATE INDEX IF NOT EXISTS idx_succession_plans_successor ON succession_plans(successor_advisor_id);
 
 -- ===========================
 -- CLIENT TRANSITIONS TABLE
@@ -109,10 +109,10 @@ CREATE TABLE IF NOT EXISTS client_transitions (
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
-CREATE INDEX idx_client_transitions_client ON client_transitions(client_id);
-CREATE INDEX idx_client_transitions_from_advisor ON client_transitions(from_advisor_id);
-CREATE INDEX idx_client_transitions_to_advisor ON client_transitions(to_advisor_id);
-CREATE INDEX idx_client_transitions_status ON client_transitions(transition_status);
+CREATE INDEX IF NOT EXISTS idx_client_transitions_client ON client_transitions(client_id);
+CREATE INDEX IF NOT EXISTS idx_client_transitions_from_advisor ON client_transitions(from_advisor_id);
+CREATE INDEX IF NOT EXISTS idx_client_transitions_to_advisor ON client_transitions(to_advisor_id);
+CREATE INDEX IF NOT EXISTS idx_client_transitions_status ON client_transitions(transition_status);
 
 COMMENT ON TABLE advisor_practice_metrics IS 'Advisor practice valuations and succession readiness metrics';
 COMMENT ON TABLE succession_plans IS 'Succession and continuity plans with financial terms';

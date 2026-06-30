@@ -1,6 +1,6 @@
 -- Creates the business_entity table for a structured representation of entities and their subtypes.
 -- This replaces the single JSON blob storage in the old entity_schema table.
-CREATE TABLE public.business_entity (
+CREATE TABLE IF NOT EXISTS public.business_entity (
     id uuid DEFAULT gen_random_uuid() NOT NULL,
     tenant_id uuid NOT NULL,
     tenant_datasource_id uuid NOT NULL,
@@ -20,7 +20,7 @@ CREATE TABLE public.business_entity (
     CONSTRAINT business_entity_tenant_datasource_fk FOREIGN KEY (tenant_datasource_id) REFERENCES public.tenant_product_datasource(id) ON DELETE CASCADE
 );
 
-CREATE INDEX business_entity_tenant_datasource_idx ON public.business_entity USING btree (tenant_id, tenant_datasource_id);
-CREATE INDEX business_entity_parent_id_idx ON public.business_entity USING btree (parent_id);
+CREATE INDEX IF NOT EXISTS business_entity_tenant_datasource_idx ON public.business_entity USING btree (tenant_id, tenant_datasource_id);
+CREATE INDEX IF NOT EXISTS business_entity_parent_id_idx ON public.business_entity USING btree (parent_id);
 
 -- It is recommended to run a script to migrate existing data from entity_schema to business_entity after this migration.

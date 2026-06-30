@@ -19,6 +19,6 @@ BEGIN
     SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
     WHERE c.relkind = 'i' AND c.relname = 'idx_catalog_edge_id_uuid'
   ) THEN
-    CREATE UNIQUE INDEX idx_catalog_edge_id_uuid ON public.catalog_edge(id_uuid);
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_catalog_edge_id_uuid ON public.catalog_edge(id_uuid);
   END IF;
 END $$;

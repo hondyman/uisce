@@ -117,5 +117,5 @@ CREATE TABLE IF NOT EXISTS successor_compatibility_scores (
     calculated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
-CREATE INDEX idx_successor_scores_departing ON successor_compatibility_scores(departing_advisor_id);
-CREATE INDEX idx_successor_scores_overall ON successor_compatibility_scores(overall_compatibility_score DESC);
+CREATE INDEX IF NOT EXISTS idx_successor_scores_departing ON successor_compatibility_scores(departing_advisor_id);
+CREATE INDEX IF NOT EXISTS idx_successor_scores_overall ON successor_compatibility_scores(overall_compatibility_score DESC);

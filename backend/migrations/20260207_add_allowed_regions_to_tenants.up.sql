@@ -3,9 +3,12 @@ ALTER TABLE public.tenants
 ADD COLUMN IF NOT EXISTS allowed_regions JSONB;
 
 -- Optionally backfill by copying metadata->'allowed_regions' if present
-UPDATE public.tenants
-SET allowed_regions = (CASE WHEN metadata ? 'allowed_regions' THEN metadata->'allowed_regions' ELSE NULL END)
-WHERE allowed_regions IS NULL AND (metadata ? 'allowed_regions');
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'tenants' AND column_name = 'metadata') THEN
+        EXECUTE 'UPDATE public.tenants SET allowed_regions = (CASE WHEN metadata ? ''allowed_regions'' THEN metadata->''allowed_regions'' ELSE NULL END) WHERE allowed_regions IS NULL AND (metadata ? ''allowed_regions'')';
+    END IF;
+END $$;
 
 -- Add index to speed lookups by tenant and to allow querying membership
 CREATE INDEX IF NOT EXISTS idx_tenants_allowed_regions ON public.tenants USING GIN (allowed_regions jsonb_path_ops);

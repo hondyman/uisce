@@ -15,6 +15,7 @@ CREATE INDEX IF NOT EXISTS idx_audit_ledger_tenant_created ON audit_ledger (tena
 -- Index for lookup by ID
 CREATE INDEX IF NOT EXISTS idx_audit_ledger_id ON audit_ledger (id);
 
--- Ensure data integrity (though physical protection is best, this helps)
+ALTER TABLE audit_ledger DROP CONSTRAINT IF EXISTS chk_hash_length;
 ALTER TABLE audit_ledger ADD CONSTRAINT chk_hash_length CHECK (length(hash) = 64);
+ALTER TABLE audit_ledger DROP CONSTRAINT IF EXISTS chk_prev_hash_length;
 ALTER TABLE audit_ledger ADD CONSTRAINT chk_prev_hash_length CHECK (length(previous_hash) = 64);

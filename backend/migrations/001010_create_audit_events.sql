@@ -3,7 +3,7 @@
 DO $$
 BEGIN
   IF NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'audit_events') THEN
-    CREATE TABLE public.audit_events (
+    CREATE TABLE IF NOT EXISTS public.audit_events (
       id VARCHAR(255) PRIMARY KEY,
       timestamp TIMESTAMPTZ NOT NULL,
       event_type VARCHAR(255),

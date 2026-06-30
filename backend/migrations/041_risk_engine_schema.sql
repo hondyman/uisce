@@ -7,7 +7,7 @@ CREATE SCHEMA IF NOT EXISTS edm;
 -- ============================================
 -- RISK FACTOR CATALOG
 -- ============================================
-CREATE TABLE edm.risk_factor (
+CREATE TABLE IF NOT EXISTS edm.risk_factor (
     factor_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     
     -- Identity
@@ -32,13 +32,13 @@ CREATE TABLE edm.risk_factor (
     UNIQUE (factor_code, valid_from)
 );
 
-CREATE INDEX idx_risk_factor_category ON edm.risk_factor (category);
-CREATE INDEX idx_risk_factor_tenant ON edm.risk_factor (tenant_id);
+CREATE INDEX IF NOT EXISTS idx_risk_factor_category ON edm.risk_factor (category);
+CREATE INDEX IF NOT EXISTS idx_risk_factor_tenant ON edm.risk_factor (tenant_id);
 
 -- ============================================
 -- SECURITY FACTOR EXPOSURE (SCD2)
 -- ============================================
-CREATE TABLE edm.security_factor_exposure (
+CREATE TABLE IF NOT EXISTS edm.security_factor_exposure (
     exposure_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     
     -- Keys
@@ -63,13 +63,13 @@ CREATE TABLE edm.security_factor_exposure (
     UNIQUE (security_id, factor_id, as_of_date, valid_from)
 );
 
-CREATE INDEX idx_security_factor_security ON edm.security_factor_exposure (security_id, as_of_date);
-CREATE INDEX idx_security_factor_factor ON edm.security_factor_exposure (factor_id);
+CREATE INDEX IF NOT EXISTS idx_security_factor_security ON edm.security_factor_exposure (security_id, as_of_date);
+CREATE INDEX IF NOT EXISTS idx_security_factor_factor ON edm.security_factor_exposure (factor_id);
 
 -- ============================================
 -- PORTFOLIO RISK MEASURES
 -- ============================================
-CREATE TABLE edm.portfolio_risk (
+CREATE TABLE IF NOT EXISTS edm.portfolio_risk (
     portfolio_risk_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     
     -- Keys
@@ -99,13 +99,13 @@ CREATE TABLE edm.portfolio_risk (
     UNIQUE (portfolio_id, valuation_date)
 );
 
-CREATE INDEX idx_portfolio_risk_portfolio ON edm.portfolio_risk (portfolio_id, valuation_date);
-CREATE INDEX idx_portfolio_risk_tenant ON edm.portfolio_risk (tenant_id);
+CREATE INDEX IF NOT EXISTS idx_portfolio_risk_portfolio ON edm.portfolio_risk (portfolio_id, valuation_date);
+CREATE INDEX IF NOT EXISTS idx_portfolio_risk_tenant ON edm.portfolio_risk (tenant_id);
 
 -- ============================================
 -- RISK SCENARIO (Stress Testing)
 -- ============================================
-CREATE TABLE edm.risk_scenario (
+CREATE TABLE IF NOT EXISTS edm.risk_scenario (
     scenario_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     
     -- Identity
@@ -134,7 +134,7 @@ CREATE TABLE edm.risk_scenario (
 -- ============================================
 -- SCENARIO RESULT
 -- ============================================
-CREATE TABLE edm.risk_scenario_result (
+CREATE TABLE IF NOT EXISTS edm.risk_scenario_result (
     scenario_result_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     
     -- Keys
@@ -157,7 +157,7 @@ CREATE TABLE edm.risk_scenario_result (
     UNIQUE (scenario_id, portfolio_id, valuation_date)
 );
 
-CREATE INDEX idx_scenario_result_portfolio ON edm.risk_scenario_result (portfolio_id, valuation_date);
+CREATE INDEX IF NOT EXISTS idx_scenario_result_portfolio ON edm.risk_scenario_result (portfolio_id, valuation_date);
 
 -- RLS for all risk tables
 ALTER TABLE edm.portfolio_risk ENABLE ROW LEVEL SECURITY;

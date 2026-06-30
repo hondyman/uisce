@@ -1,6 +1,6 @@
 -- Up Migration
 
-CREATE TABLE aso.experiments (
+CREATE TABLE IF NOT EXISTS aso.experiments (
     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     env text NOT NULL,
     tenant_id uuid, -- nullable for global experiments
@@ -17,7 +17,7 @@ CREATE TABLE aso.experiments (
     created_by text
 );
 
-CREATE TABLE aso.experiment_metrics (
+CREATE TABLE IF NOT EXISTS aso.experiment_metrics (
     experiment_id uuid NOT NULL REFERENCES aso.experiments(id),
     variant text NOT NULL CHECK (variant IN ('control', 'treatment')),
     window_start timestamptz NOT NULL,
@@ -30,8 +30,8 @@ CREATE TABLE aso.experiment_metrics (
     PRIMARY KEY (experiment_id, variant, window_start)
 );
 
-CREATE INDEX idx_experiments_status ON aso.experiments(status);
-CREATE INDEX idx_experiments_opt_id ON aso.experiments(optimization_id);
+CREATE INDEX IF NOT EXISTS idx_experiments_status ON aso.experiments(status);
+CREATE INDEX IF NOT EXISTS idx_experiments_opt_id ON aso.experiments(optimization_id);
 
 -- Down Migration
 -- DROP TABLE aso.experiment_metrics;

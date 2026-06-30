@@ -12,7 +12,7 @@ ADD COLUMN IF NOT EXISTS enable_history BOOLEAN DEFAULT FALSE;
 -- Example for a target table:
 -- ALTER TABLE trn_emp_data ADD COLUMN valid_from TIMESTAMP NOT NULL DEFAULT NOW();
 -- ALTER TABLE trn_emp_data ADD COLUMN valid_to TIMESTAMP NOT NULL DEFAULT '9999-12-31 23:59:59';
--- CREATE INDEX idx_emp_temporal ON trn_emp_data (valid_from, valid_to);
+-- CREATE INDEX IF NOT EXISTS idx_emp_temporal ON trn_emp_data (valid_from, valid_to);
 
 -- 3. Update existing records (Optional - defaulting to FALSE is safe)
 -- UPDATE business_objects SET enable_history = FALSE WHERE enable_history IS NULL;

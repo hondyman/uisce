@@ -6,8 +6,7 @@
 -- Ensure schema exists
 CREATE SCHEMA IF NOT EXISTS sml;
 
--- Create table
-CREATE TABLE IF NOT EXISTS sml.column_profiles (
+-- CREATE TABLE IF NOT EXISTS CREATE TABLE IF NOT EXISTS sml.column_profiles (
     id uuid NOT NULL,
     tenant_datasource_id uuid NOT NULL,
     data_type text NULL,

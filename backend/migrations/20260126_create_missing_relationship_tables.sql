@@ -1,5 +1,5 @@
 -- Migration: 20260126_create_missing_relationship_tables.sql
--- Create table for Business Object Relationships (Definitions)
+-- CREATE TABLE IF NOT EXISTS for Business Object Relationships (Definitions)
 CREATE TABLE IF NOT EXISTS public.business_object_relationships (
     id uuid DEFAULT gen_random_uuid() NOT NULL,
     tenant_id uuid NOT NULL,
@@ -26,7 +26,7 @@ CREATE INDEX IF NOT EXISTS idx_bo_relationships_tenant ON public.business_object
 CREATE INDEX IF NOT EXISTS idx_bo_relationships_source ON public.business_object_relationships(source_object_id);
 CREATE INDEX IF NOT EXISTS idx_bo_relationships_target ON public.business_object_relationships(target_object_id);
 
--- Create table for Relationship Suggestions (AI generated)
+-- CREATE TABLE IF NOT EXISTS for Relationship Suggestions (AI generated)
 CREATE TABLE IF NOT EXISTS public.relationship_suggestions (
     id uuid DEFAULT gen_random_uuid() NOT NULL,
     tenant_id uuid NOT NULL,

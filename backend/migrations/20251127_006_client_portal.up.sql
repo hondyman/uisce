@@ -28,15 +28,15 @@ CREATE TABLE IF NOT EXISTS onboarding_sessions (
 DO $$
 BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_class WHERE relname = 'idx_onboarding_client' AND relkind = 'i') THEN
-    CREATE INDEX idx_onboarding_client ON onboarding_sessions(client_id);
+    CREATE INDEX IF NOT EXISTS idx_onboarding_client ON onboarding_sessions(client_id);
   END IF;
 
   IF NOT EXISTS (SELECT 1 FROM pg_class WHERE relname = 'idx_onboarding_email' AND relkind = 'i') THEN
-    CREATE INDEX idx_onboarding_email ON onboarding_sessions(email);
+    CREATE INDEX IF NOT EXISTS idx_onboarding_email ON onboarding_sessions(email);
   END IF;
 
   IF NOT EXISTS (SELECT 1 FROM pg_class WHERE relname = 'idx_onboarding_status' AND relkind = 'i') THEN
-    CREATE INDEX idx_onboarding_status ON onboarding_sessions(status) WHERE status = 'IN_PROGRESS';
+    CREATE INDEX IF NOT EXISTS idx_onboarding_status ON onboarding_sessions(status) WHERE status = 'IN_PROGRESS';
   END IF;
 END$$; 
 
@@ -84,15 +84,15 @@ CREATE TABLE IF NOT EXISTS uploaded_documents (
 DO $$
 BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_class WHERE relname = 'idx_documents_client' AND relkind = 'i') THEN
-    CREATE INDEX idx_documents_client ON uploaded_documents(client_id);
+    CREATE INDEX IF NOT EXISTS idx_documents_client ON uploaded_documents(client_id);
   END IF;
 
   IF NOT EXISTS (SELECT 1 FROM pg_class WHERE relname = 'idx_documents_session' AND relkind = 'i') THEN
-    CREATE INDEX idx_documents_session ON uploaded_documents(onboarding_session_id);
+    CREATE INDEX IF NOT EXISTS idx_documents_session ON uploaded_documents(onboarding_session_id);
   END IF;
 
   IF NOT EXISTS (SELECT 1 FROM pg_class WHERE relname = 'idx_documents_verification' AND relkind = 'i') THEN
-    CREATE INDEX idx_documents_verification ON uploaded_documents(verification_status) WHERE verification_status = 'PENDING';
+    CREATE INDEX IF NOT EXISTS idx_documents_verification ON uploaded_documents(verification_status) WHERE verification_status = 'PENDING';
   END IF;
 END$$; 
 
@@ -142,15 +142,15 @@ CREATE TABLE IF NOT EXISTS e_signatures (
 DO $$
 BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_class WHERE relname = 'idx_esignatures_client' AND relkind = 'i') THEN
-    CREATE INDEX idx_esignatures_client ON e_signatures(client_id);
+    CREATE INDEX IF NOT EXISTS idx_esignatures_client ON e_signatures(client_id);
   END IF;
 
   IF NOT EXISTS (SELECT 1 FROM pg_class WHERE relname = 'idx_esignatures_status' AND relkind = 'i') THEN
-    CREATE INDEX idx_esignatures_status ON e_signatures(status);
+    CREATE INDEX IF NOT EXISTS idx_esignatures_status ON e_signatures(status);
   END IF;
 
   IF NOT EXISTS (SELECT 1 FROM pg_class WHERE relname = 'idx_esignatures_pending' AND relkind = 'i') THEN
-    CREATE INDEX idx_esignatures_pending ON e_signatures(status) WHERE status IN ('SENT', 'VIEWED');
+    CREATE INDEX IF NOT EXISTS idx_esignatures_pending ON e_signatures(status) WHERE status IN ('SENT', 'VIEWED');
   END IF;
 END$$; 
 
@@ -188,7 +188,7 @@ CREATE TABLE IF NOT EXISTS dashboard_widgets (
 DO $$
 BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_class WHERE relname = 'idx_widgets_client' AND relkind = 'i') THEN
-    CREATE INDEX idx_widgets_client ON dashboard_widgets(client_id, position);
+    CREATE INDEX IF NOT EXISTS idx_widgets_client ON dashboard_widgets(client_id, position);
   END IF;
 END$$; 
 
@@ -236,7 +236,7 @@ CREATE TABLE IF NOT EXISTS client_goals (
 DO $$
 BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_class WHERE relname = 'idx_goals_client' AND relkind = 'i') THEN
-    CREATE INDEX idx_goals_client ON client_goals(client_id, status);
+    CREATE INDEX IF NOT EXISTS idx_goals_client ON client_goals(client_id, status);
   END IF;
 END$$; 
 
@@ -269,11 +269,11 @@ CREATE TABLE IF NOT EXISTS secure_messages (
 DO $$
 BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_class WHERE relname = 'idx_messages_conversation' AND relkind = 'i') THEN
-    CREATE INDEX idx_messages_conversation ON secure_messages(conversation_id, created_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_messages_conversation ON secure_messages(conversation_id, created_at DESC);
   END IF;
 
   IF NOT EXISTS (SELECT 1 FROM pg_class WHERE relname = 'idx_messages_recipient_unread' AND relkind = 'i') THEN
-    CREATE INDEX idx_messages_recipient_unread ON secure_messages(recipient_id, created_at DESC) WHERE read_at IS NULL;
+    CREATE INDEX IF NOT EXISTS idx_messages_recipient_unread ON secure_messages(recipient_id, created_at DESC) WHERE read_at IS NULL;
   END IF;
 END$$; 
 
@@ -322,7 +322,7 @@ DO $$
 BEGIN
   IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'notifications' AND column_name = 'client_id') THEN
     IF NOT EXISTS (SELECT 1 FROM pg_class WHERE relname = 'idx_notifications_client' AND relkind = 'i') THEN
-      CREATE INDEX idx_notifications_client ON notifications(client_id, created_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_notifications_client ON notifications(client_id, created_at DESC);
     END IF;
   END IF;
 
@@ -330,7 +330,7 @@ BEGIN
      AND EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'notifications' AND column_name = 'read_at') THEN
     -- Create a conservative partial index only on read_at NULL (skip dismissed_at if not present)
     IF NOT EXISTS (SELECT 1 FROM pg_class WHERE relname = 'idx_notifications_unread' AND relkind = 'i') THEN
-      CREATE INDEX idx_notifications_unread ON notifications(client_id, created_at DESC) WHERE read_at IS NULL;
+      CREATE INDEX IF NOT EXISTS idx_notifications_unread ON notifications(client_id, created_at DESC) WHERE read_at IS NULL;
     END IF;
   END IF;
 END$$; 
@@ -370,7 +370,7 @@ CREATE TABLE IF NOT EXISTS scenario_simulations (
 DO $$
 BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_class WHERE relname = 'idx_simulations_client' AND relkind = 'i') THEN
-    CREATE INDEX idx_simulations_client ON scenario_simulations(client_id, created_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_simulations_client ON scenario_simulations(client_id, created_at DESC);
   END IF;
 END$$; 
 
@@ -411,11 +411,11 @@ CREATE TABLE IF NOT EXISTS client_sessions (
 DO $$
 BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_class WHERE relname = 'idx_sessions_client' AND relkind = 'i') THEN
-    CREATE INDEX idx_sessions_client ON client_sessions(client_id, is_active) WHERE is_active = TRUE;
+    CREATE INDEX IF NOT EXISTS idx_sessions_client ON client_sessions(client_id, is_active) WHERE is_active = TRUE;
   END IF;
 
   IF NOT EXISTS (SELECT 1 FROM pg_class WHERE relname = 'idx_sessions_active' AND relkind = 'i') THEN
-    CREATE INDEX idx_sessions_active ON client_sessions(expires_at) WHERE is_active = TRUE;
+    CREATE INDEX IF NOT EXISTS idx_sessions_active ON client_sessions(expires_at) WHERE is_active = TRUE;
   END IF;
 END$$; 
 
@@ -525,12 +525,12 @@ CREATE TABLE IF NOT EXISTS recommended_actions (
 DO $$
 BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_class WHERE relname = 'idx_actions_client_pending' AND relkind = 'i') THEN
-    CREATE INDEX idx_actions_client_pending ON recommended_actions(client_id, priority DESC) 
+    CREATE INDEX IF NOT EXISTS idx_actions_client_pending ON recommended_actions(client_id, priority DESC) 
       WHERE status IN ('PENDING', 'PRESENTED');
   END IF;
 
   IF NOT EXISTS (SELECT 1 FROM pg_class WHERE relname = 'idx_actions_type' AND relkind = 'i') THEN
-    CREATE INDEX idx_actions_type ON recommended_actions(action_type, status);
+    CREATE INDEX IF NOT EXISTS idx_actions_type ON recommended_actions(action_type, status);
   END IF;
 END$$; 
 
@@ -548,21 +548,24 @@ $$ LANGUAGE plpgsql;
 DO $$
 BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'onboarding_sessions_updated_at') THEN
-    CREATE TRIGGER onboarding_sessions_updated_at
+    DROP TRIGGER IF EXISTS onboarding_sessions_updated_at ON onboarding_sessions;
+CREATE TRIGGER onboarding_sessions_updated_at
       BEFORE UPDATE ON onboarding_sessions
       FOR EACH ROW
       EXECUTE FUNCTION update_portal_timestamp();
   END IF;
 
   IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'dashboard_widgets_updated_at') THEN
-    CREATE TRIGGER dashboard_widgets_updated_at
+    DROP TRIGGER IF EXISTS dashboard_widgets_updated_at ON dashboard_widgets;
+CREATE TRIGGER dashboard_widgets_updated_at
       BEFORE UPDATE ON dashboard_widgets
       FOR EACH ROW
       EXECUTE FUNCTION update_portal_timestamp();
   END IF;
 
   IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'client_goals_updated_at') THEN
-    CREATE TRIGGER client_goals_updated_at
+    DROP TRIGGER IF EXISTS client_goals_updated_at ON client_goals;
+CREATE TRIGGER client_goals_updated_at
       BEFORE UPDATE ON client_goals
       FOR EACH ROW
       EXECUTE FUNCTION update_portal_timestamp();
@@ -595,15 +598,16 @@ GROUP BY s.session_id;
 -- Client dashboard summary
 DO $$
 BEGIN
-  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'clients') THEN
+  DROP VIEW IF EXISTS client_dashboard_summary;
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'clients' AND column_name = 'id') THEN
     EXECUTE $exec$
       CREATE OR REPLACE VIEW client_dashboard_summary AS
       SELECT 
-          c.client_id,
-          (SELECT COUNT(*) FROM secure_messages WHERE recipient_id = c.client_id AND read_at IS NULL) as unread_messages,
-          (SELECT COUNT(*) FROM notifications WHERE client_id = c.client_id AND read_at IS NULL AND dismissed_at IS NULL) as unread_notifications,
-          (SELECT COUNT(*) FROM recommended_actions WHERE client_id = c.client_id AND status IN ('PENDING', 'PRESENTED')) as pending_actions,
-          (SELECT COUNT(*) FROM client_goals WHERE client_id = c.client_id AND status = 'ACTIVE') as active_goals
+          c.id AS client_id,
+          (SELECT COUNT(*) FROM secure_messages WHERE recipient_id = c.id AND read_at IS NULL) as unread_messages,
+          (SELECT COUNT(*) FROM notifications WHERE recipient_id = c.id AND read_at IS NULL AND dismissed_at IS NULL) as unread_notifications,
+          (SELECT COUNT(*) FROM recommended_actions WHERE client_id = c.id AND status IN ('PENDING', 'PRESENTED')) as pending_actions,
+          (SELECT COUNT(*) FROM client_goals WHERE client_id = c.id AND status = 'ACTIVE') as active_goals
       FROM clients c;
     $exec$;
   ELSE

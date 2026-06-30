@@ -8,7 +8,7 @@ CREATE SCHEMA IF NOT EXISTS edm;
 -- ============================================
 -- ROOT: Compliance Rule (SCD2 for versioning)
 -- ============================================
-CREATE TABLE edm.compliance_rule (
+CREATE TABLE IF NOT EXISTS edm.compliance_rule (
     rule_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     
     -- Core Identity
@@ -57,10 +57,10 @@ CREATE TABLE edm.compliance_rule (
 );
 
 -- Indexes
-CREATE INDEX idx_compliance_rule_scope ON edm.compliance_rule (scope_type, scope_value);
-CREATE INDEX idx_compliance_rule_status ON edm.compliance_rule (status, effective_from);
-CREATE INDEX idx_compliance_rule_tenant ON edm.compliance_rule (tenant_id);
-CREATE INDEX idx_compliance_rule_valid ON edm.compliance_rule (valid_from, valid_to) WHERE valid_to = 'infinity';
+CREATE INDEX IF NOT EXISTS idx_compliance_rule_scope ON edm.compliance_rule (scope_type, scope_value);
+CREATE INDEX IF NOT EXISTS idx_compliance_rule_status ON edm.compliance_rule (status, effective_from);
+CREATE INDEX IF NOT EXISTS idx_compliance_rule_tenant ON edm.compliance_rule (tenant_id);
+CREATE INDEX IF NOT EXISTS idx_compliance_rule_valid ON edm.compliance_rule (valid_from, valid_to) WHERE valid_to = 'infinity';
 
 -- RLS Policies
 ALTER TABLE edm.compliance_rule ENABLE ROW LEVEL SECURITY;
@@ -71,7 +71,7 @@ CREATE POLICY compliance_rule_tenant_isolation ON edm.compliance_rule
 -- ============================================
 -- EVALUATION: Compliance Evaluation Results
 -- ============================================
-CREATE TABLE edm.compliance_evaluation (
+CREATE TABLE IF NOT EXISTS edm.compliance_evaluation (
     evaluation_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     
     -- Keys
@@ -95,13 +95,13 @@ CREATE TABLE edm.compliance_evaluation (
     UNIQUE (rule_id, portfolio_id, valuation_date)
 );
 
-CREATE INDEX idx_compliance_eval_portfolio ON edm.compliance_evaluation (portfolio_id, valuation_date);
-CREATE INDEX idx_compliance_eval_result ON edm.compliance_evaluation (result, valuation_date);
+CREATE INDEX IF NOT EXISTS idx_compliance_eval_portfolio ON edm.compliance_evaluation (portfolio_id, valuation_date);
+CREATE INDEX IF NOT EXISTS idx_compliance_eval_result ON edm.compliance_evaluation (result, valuation_date);
 
 -- ============================================
 -- BREACH: Compliance Breach Records
 -- ============================================
-CREATE TABLE edm.compliance_breach (
+CREATE TABLE IF NOT EXISTS edm.compliance_breach (
     breach_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     
     -- Keys
@@ -136,9 +136,9 @@ CREATE TABLE edm.compliance_breach (
     UNIQUE (rule_id, portfolio_id, valuation_date)
 );
 
-CREATE INDEX idx_compliance_breach_portfolio ON edm.compliance_breach (portfolio_id, valuation_date);
-CREATE INDEX idx_compliance_breach_status ON edm.compliance_breach (status, priority);
-CREATE INDEX idx_compliance_breach_tenant ON edm.compliance_breach (tenant_id);
+CREATE INDEX IF NOT EXISTS idx_compliance_breach_portfolio ON edm.compliance_breach (portfolio_id, valuation_date);
+CREATE INDEX IF NOT EXISTS idx_compliance_breach_status ON edm.compliance_breach (status, priority);
+CREATE INDEX IF NOT EXISTS idx_compliance_breach_tenant ON edm.compliance_breach (tenant_id);
 
 -- RLS
 ALTER TABLE edm.compliance_breach ENABLE ROW LEVEL SECURITY;
@@ -148,7 +148,7 @@ CREATE POLICY compliance_breach_tenant_isolation ON edm.compliance_breach
 -- ============================================
 -- TRACE: Compliance Evaluation Lineage (Whitepaper §9)
 -- ============================================
-CREATE TABLE edm.compliance_lineage (
+CREATE TABLE IF NOT EXISTS edm.compliance_lineage (
     lineage_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     evaluation_id UUID NOT NULL REFERENCES edm.compliance_evaluation(evaluation_id),
     source_domain TEXT NOT NULL, -- POSITION, CASH, SECURITY, PORTFOLIO
@@ -160,4 +160,4 @@ CREATE TABLE edm.compliance_lineage (
     tenant_id UUID NOT NULL
 );
 
-CREATE INDEX idx_compliance_lineage_eval ON edm.compliance_lineage (evaluation_id);
+CREATE INDEX IF NOT EXISTS idx_compliance_lineage_eval ON edm.compliance_lineage (evaluation_id);

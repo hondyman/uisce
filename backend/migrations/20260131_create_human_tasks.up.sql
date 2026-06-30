@@ -13,5 +13,5 @@ CREATE TABLE IF NOT EXISTS human_tasks (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX idx_human_tasks_status ON human_tasks(status);
-CREATE INDEX idx_human_tasks_workflow ON human_tasks(workflow_id, run_id);
+CREATE INDEX IF NOT EXISTS idx_human_tasks_status ON human_tasks(status);
+CREATE INDEX IF NOT EXISTS idx_human_tasks_workflow ON human_tasks(workflow_id, run_id);

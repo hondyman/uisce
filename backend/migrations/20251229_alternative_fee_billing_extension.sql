@@ -175,13 +175,14 @@ CREATE TABLE IF NOT EXISTS alternative_management_fee_calculations (
 );
 
 -- Indexes
-CREATE INDEX idx_mgmt_fee_calc_investment ON alternative_management_fee_calculations(investment_id, calculation_date DESC);
-CREATE INDEX idx_mgmt_fee_calc_status ON alternative_management_fee_calculations(status);
+CREATE INDEX IF NOT EXISTS idx_mgmt_fee_calc_investment ON alternative_management_fee_calculations(investment_id, calculation_date DESC);
+CREATE INDEX IF NOT EXISTS idx_mgmt_fee_calc_status ON alternative_management_fee_calculations(status);
 
 -- ============================================================================
 -- TRIGGER: Update updated_at timestamp
 -- ============================================================================
 
+DROP TRIGGER IF EXISTS update_alternative_fee_structures_updated_at ON alternative_fee_structures;
 CREATE TRIGGER update_alternative_fee_structures_updated_at
     BEFORE UPDATE ON alternative_fee_structures
     FOR EACH ROW

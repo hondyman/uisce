@@ -64,9 +64,9 @@ CREATE TABLE IF NOT EXISTS crypto_wallets (
 );
 
 -- Indexes
-CREATE INDEX idx_crypto_wallets_client ON crypto_wallets(client_id, tenant_id) WHERE deleted_at IS NULL;
-CREATE INDEX idx_crypto_wallets_custodian ON crypto_wallets(custodian) WHERE is_active = TRUE;
-CREATE INDEX idx_crypto_wallets_blockchain ON crypto_wallets(blockchain) WHERE is_active = TRUE;
+CREATE INDEX IF NOT EXISTS idx_crypto_wallets_client ON crypto_wallets(client_id, tenant_id) WHERE deleted_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_crypto_wallets_custodian ON crypto_wallets(custodian) WHERE is_active = TRUE;
+CREATE INDEX IF NOT EXISTS idx_crypto_wallets_blockchain ON crypto_wallets(blockchain) WHERE is_active = TRUE;
 
 -- ============================================================================
 -- CRYPTO HOLDINGS (Current Balances)
@@ -107,8 +107,8 @@ CREATE TABLE IF NOT EXISTS crypto_holdings (
 );
 
 -- Indexes
-CREATE INDEX idx_crypto_holdings_wallet ON crypto_holdings(wallet_id);
-CREATE INDEX idx_crypto_holdings_asset ON crypto_holdings(asset_symbol);
+CREATE INDEX IF NOT EXISTS idx_crypto_holdings_wallet ON crypto_holdings(wallet_id);
+CREATE INDEX IF NOT EXISTS idx_crypto_holdings_asset ON crypto_holdings(asset_symbol);
 
 -- ============================================================================
 -- CRYPTO TRANSACTIONS (All Blockchain Activity)
@@ -180,11 +180,11 @@ CREATE TABLE IF NOT EXISTS crypto_transactions (
 );
 
 -- Indexes
-CREATE INDEX idx_crypto_txns_wallet ON crypto_transactions(wallet_id, block_timestamp DESC);
-CREATE INDEX idx_crypto_txns_hash ON crypto_transactions(txn_hash);
-CREATE INDEX idx_crypto_txns_type ON crypto_transactions(txn_type, block_timestamp DESC);
-CREATE INDEX idx_crypto_txns_status ON crypto_transactions(status) WHERE status = 'PENDING';
-CREATE INDEX idx_crypto_txns_taxable ON crypto_transactions(wallet_id, is_taxable) WHERE is_taxable = TRUE;
+CREATE INDEX IF NOT EXISTS idx_crypto_txns_wallet ON crypto_transactions(wallet_id, block_timestamp DESC);
+CREATE INDEX IF NOT EXISTS idx_crypto_txns_hash ON crypto_transactions(txn_hash);
+CREATE INDEX IF NOT EXISTS idx_crypto_txns_type ON crypto_transactions(txn_type, block_timestamp DESC);
+CREATE INDEX IF NOT EXISTS idx_crypto_txns_status ON crypto_transactions(status) WHERE status = 'PENDING';
+CREATE INDEX IF NOT EXISTS idx_crypto_txns_taxable ON crypto_transactions(wallet_id, is_taxable) WHERE is_taxable = TRUE;
 
 -- ============================================================================
 -- CRYPTO TAX LOTS (Cost Basis Tracking)
@@ -232,12 +232,12 @@ CREATE TABLE IF NOT EXISTS crypto_tax_lots (
 );
 
 -- Indexes
-CREATE INDEX idx_tax_lots_wallet_asset ON crypto_tax_lots(wallet_id, asset_symbol);
-CREATE INDEX idx_tax_lots_acquisition ON crypto_tax_lots(acquisition_date);
-CREATE INDEX idx_tax_lots_disposal ON crypto_tax_lots(disposal_date) WHERE disposal_date IS NOT NULL;
-CREATE INDEX idx_tax_lots_remaining ON crypto_tax_lots(wallet_id, asset_symbol) 
+CREATE INDEX IF NOT EXISTS idx_tax_lots_wallet_asset ON crypto_tax_lots(wallet_id, asset_symbol);
+CREATE INDEX IF NOT EXISTS idx_tax_lots_acquisition ON crypto_tax_lots(acquisition_date);
+CREATE INDEX IF NOT EXISTS idx_tax_lots_disposal ON crypto_tax_lots(disposal_date) WHERE disposal_date IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_tax_lots_remaining ON crypto_tax_lots(wallet_id, asset_symbol) 
     WHERE quantity_remaining > 0;
-CREATE INDEX idx_tax_lots_wash_sale ON crypto_tax_lots(is_wash_sale) WHERE is_wash_sale = TRUE;
+CREATE INDEX IF NOT EXISTS idx_tax_lots_wash_sale ON crypto_tax_lots(is_wash_sale) WHERE is_wash_sale = TRUE;
 
 -- ============================================================================
 -- CRYPTO PRICES (Real-Time Cache)
@@ -269,8 +269,8 @@ CREATE TABLE IF NOT EXISTS crypto_prices (
 );
 
 -- Indexes
-CREATE INDEX idx_crypto_prices_symbol ON crypto_prices(asset_symbol, timestamp DESC);
-CREATE INDEX idx_crypto_prices_timestamp ON crypto_prices(timestamp DESC);
+CREATE INDEX IF NOT EXISTS idx_crypto_prices_symbol ON crypto_prices(asset_symbol, timestamp DESC);
+CREATE INDEX IF NOT EXISTS idx_crypto_prices_timestamp ON crypto_prices(timestamp DESC);
 
 -- Materialized view for latest prices (for performance)
 CREATE MATERIALIZED VIEW crypto_latest_prices AS
@@ -284,7 +284,7 @@ SELECT DISTINCT ON (asset_symbol)
 FROM crypto_prices
 ORDER BY asset_symbol, timestamp DESC;
 
-CREATE UNIQUE INDEX idx_latest_prices_symbol ON crypto_latest_prices(asset_symbol);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_latest_prices_symbol ON crypto_latest_prices(asset_symbol);
 
 -- ============================================================================
 -- DEFI POSITIONS (Staking, Lending, LP)
@@ -341,9 +341,9 @@ CREATE TABLE IF NOT EXISTS defi_positions (
 );
 
 -- Indexes
-CREATE INDEX idx_defi_positions_wallet ON defi_positions(wallet_id) WHERE is_active = TRUE;
-CREATE INDEX idx_defi_positions_protocol ON defi_positions(protocol, position_type);
-CREATE INDEX idx_defi_positions_asset ON defi_positions(asset_deposited);
+CREATE INDEX IF NOT EXISTS idx_defi_positions_wallet ON defi_positions(wallet_id) WHERE is_active = TRUE;
+CREATE INDEX IF NOT EXISTS idx_defi_positions_protocol ON defi_positions(protocol, position_type);
+CREATE INDEX IF NOT EXISTS idx_defi_positions_asset ON defi_positions(asset_deposited);
 
 -- ============================================================================
 -- CRYPTO ADDRESS WHITELIST (Security)
@@ -373,18 +373,20 @@ CREATE TABLE IF NOT EXISTS crypto_address_whitelist (
 );
 
 -- Indexes
-CREATE INDEX idx_whitelist_wallet ON crypto_address_whitelist(wallet_id) WHERE is_active = TRUE;
+CREATE INDEX IF NOT EXISTS idx_whitelist_wallet ON crypto_address_whitelist(wallet_id) WHERE is_active = TRUE;
 
 -- ============================================================================
 -- TRIGGERS
 -- ============================================================================
 
 -- Update updated_at timestamp
+DROP TRIGGER IF EXISTS update_crypto_wallets_updated_at ON crypto_wallets;
 CREATE TRIGGER update_crypto_wallets_updated_at
     BEFORE UPDATE ON crypto_wallets
     FOR EACH ROW
     EXECUTE FUNCTION update_updated_at_column();
 
+DROP TRIGGER IF EXISTS update_crypto_transactions_updated_at ON crypto_transactions;
 CREATE TRIGGER update_crypto_transactions_updated_at
     BEFORE UPDATE ON crypto_transactions
     FOR EACH ROW

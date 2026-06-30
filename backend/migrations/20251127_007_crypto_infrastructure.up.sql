@@ -2,7 +2,7 @@
 -- Institutional-grade digital asset management
 
 -- Qualified custodian integrations
-CREATE TABLE crypto_custody_integrations (
+CREATE TABLE IF NOT EXISTS crypto_custody_integrations (
     integration_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     custodian_name VARCHAR(100) NOT NULL, -- 'Anchorage Digital', 'Coinbase Custody', 'Fidelity Digital Assets'
     custodian_type VARCHAR(50) NOT NULL, -- 'QUALIFIED_CUSTODIAN', 'EXCHANGE', 'SELF_CUSTODY'
@@ -32,7 +32,7 @@ CREATE TABLE crypto_custody_integrations (
 );
 
 -- Client crypto allocation policies
-CREATE TABLE crypto_allocations (
+CREATE TABLE IF NOT EXISTS crypto_allocations (
     allocation_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     client_id UUID NOT NULL REFERENCES clients(id),
     
@@ -61,7 +61,7 @@ CREATE TABLE crypto_allocations (
 );
 
 -- Crypto holdings (real-time positions)
-CREATE TABLE crypto_holdings (
+CREATE TABLE IF NOT EXISTS crypto_holdings (
     holding_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     client_id UUID NOT NULL REFERENCES clients(id),
     account_id UUID REFERENCES accounts(id),
@@ -101,7 +101,7 @@ CREATE TABLE crypto_holdings (
 );
 
 -- Crypto transactions (full history for tax reporting)
-CREATE TABLE crypto_transactions (
+CREATE TABLE IF NOT EXISTS crypto_transactions (
     transaction_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     client_id UUID NOT NULL REFERENCES clients(id),
     holding_id UUID REFERENCES crypto_holdings(holding_id),
@@ -145,7 +145,7 @@ CREATE TABLE crypto_transactions (
 );
 
 -- Real-time market data (streaming ticks)
-CREATE TABLE crypto_market_data (
+CREATE TABLE IF NOT EXISTS crypto_market_data (
     tick_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     asset_symbol VARCHAR(20) NOT NULL,
     
@@ -175,11 +175,11 @@ CREATE TABLE crypto_market_data (
 );
 
 -- Index for fast price lookups
-CREATE INDEX idx_crypto_market_data_symbol_time ON crypto_market_data(asset_symbol, timestamp_utc DESC);
-CREATE INDEX idx_crypto_market_data_source ON crypto_market_data(data_source, asset_symbol);
+CREATE INDEX IF NOT EXISTS idx_crypto_market_data_symbol_time ON crypto_market_data(asset_symbol, timestamp_utc DESC);
+CREATE INDEX IF NOT EXISTS idx_crypto_market_data_source ON crypto_market_data(data_source, asset_symbol);
 
 -- Tokenized assets registry (future-proofing)
-CREATE TABLE tokenized_assets (
+CREATE TABLE IF NOT EXISTS tokenized_assets (
     asset_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     
     -- Asset identification
@@ -223,7 +223,7 @@ CREATE TABLE tokenized_assets (
 );
 
 -- Crypto tax lot tracking (for wash sale and specific lot identification)
-CREATE TABLE crypto_tax_lots (
+CREATE TABLE IF NOT EXISTS crypto_tax_lots (
     lot_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     client_id UUID NOT NULL REFERENCES clients(id),
     holding_id UUID REFERENCES crypto_holdings(holding_id),
@@ -288,29 +288,57 @@ BEGIN
       name_col := 'name';
     END IF;
 
-    EXECUTE format(
-      'CREATE OR REPLACE VIEW client_crypto_portfolios AS
-       SELECT c.%I AS client_id, c.%I AS client_name,
-              COUNT(DISTINCT h.asset_symbol) as unique_assets,
-              SUM(h.current_value_usd) as total_crypto_value,
-              SUM(h.unrealized_gain_loss) as total_unrealized_gain_loss,
-              SUM(h.total_cost_basis) as total_cost_basis,
-              MAX(h.last_price_update) as last_updated
-       FROM clients c
-       JOIN crypto_holdings h ON c.%I = h.client_id
-       GROUP BY c.%I, c.%I', id_col, name_col, id_col, id_col, name_col
-    );
+    IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'crypto_holdings' AND column_name = 'client_id') THEN
+      EXECUTE format(
+        'CREATE OR REPLACE VIEW client_crypto_portfolios AS
+         SELECT c.%I AS client_id, c.%I AS client_name,
+                COUNT(DISTINCT h.asset_symbol) as unique_assets,
+                SUM(h.current_value_usd) as total_crypto_value,
+                SUM(h.unrealized_gain_loss) as total_unrealized_gain_loss,
+                SUM(h.total_cost_basis) as total_cost_basis,
+                MAX(h.last_price_update) as last_updated
+         FROM clients c
+         JOIN crypto_holdings h ON c.%I = h.client_id
+         GROUP BY c.%I, c.%I', id_col, name_col, id_col, id_col, name_col
+      );
+    ELSE
+      EXECUTE format(
+        'CREATE OR REPLACE VIEW client_crypto_portfolios AS
+         SELECT c.%I AS client_id, c.%I AS client_name,
+                COUNT(DISTINCT h.asset_symbol) as unique_assets,
+                COALESCE(SUM(h.quantity * COALESCE(p.price_usd, 0)), 0) as total_crypto_value,
+                COALESCE(SUM(h.quantity * COALESCE(p.price_usd, 0)) - SUM(h.cost_basis_total), 0) as total_unrealized_gain_loss,
+                SUM(h.cost_basis_total) as total_cost_basis,
+                MAX(h.last_updated) as last_updated
+         FROM clients c
+         JOIN crypto_wallets w ON c.%I = w.client_id
+         JOIN crypto_holdings h ON w.id = h.wallet_id
+         LEFT JOIN crypto_latest_prices p ON h.asset_symbol = p.asset_symbol
+         GROUP BY c.%I, c.%I', id_col, name_col, id_col, id_col, name_col
+      );
+    END IF;
   ELSE
     EXECUTE 'CREATE OR REPLACE VIEW client_crypto_portfolios AS SELECT NULL::uuid AS client_id, ''''::text AS client_name, 0::int AS unique_assets, 0::numeric AS total_crypto_value, 0::numeric AS total_unrealized_gain_loss, 0::numeric AS total_cost_basis, NULL::timestamptz AS last_updated WHERE FALSE';
   END IF;
 END$$;
 
 -- Indexes for performance
-CREATE INDEX idx_crypto_holdings_client ON crypto_holdings(client_id);
-CREATE INDEX idx_crypto_holdings_asset ON crypto_holdings(asset_symbol);
-CREATE INDEX idx_crypto_transactions_client_date ON crypto_transactions(client_id, transaction_date DESC);
-CREATE INDEX idx_crypto_transactions_asset ON crypto_transactions(asset_symbol);
-CREATE INDEX idx_crypto_tax_lots_client_asset ON crypto_tax_lots(client_id, asset_symbol);
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'crypto_holdings' AND column_name = 'client_id') THEN
+    EXECUTE 'CREATE INDEX IF NOT EXISTS idx_crypto_holdings_client ON crypto_holdings(client_id)';
+  END IF;
+
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'crypto_transactions' AND column_name = 'client_id') THEN
+    EXECUTE 'CREATE INDEX IF NOT EXISTS idx_crypto_transactions_client_date ON crypto_transactions(client_id, transaction_date DESC)';
+  END IF;
+
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'crypto_tax_lots' AND column_name = 'client_id') THEN
+    EXECUTE 'CREATE INDEX IF NOT EXISTS idx_crypto_tax_lots_client_asset ON crypto_tax_lots(client_id, asset_symbol)';
+  END IF;
+END$$;
+CREATE INDEX IF NOT EXISTS idx_crypto_holdings_asset ON crypto_holdings(asset_symbol);
+CREATE INDEX IF NOT EXISTS idx_crypto_transactions_asset ON crypto_transactions(asset_symbol);
 
 -- Trigger for updating crypto holdings valuation
 CREATE OR REPLACE FUNCTION update_crypto_holding_valuation()
@@ -328,6 +356,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+DROP TRIGGER IF EXISTS trigger_update_crypto_valuations ON crypto_market_data;
 CREATE TRIGGER trigger_update_crypto_valuations
     AFTER INSERT ON crypto_market_data
     FOR EACH ROW

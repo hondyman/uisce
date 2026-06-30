@@ -11,9 +11,9 @@ CREATE TABLE IF NOT EXISTS compliance_policies (
     CONSTRAINT unique_version_type UNIQUE (version_tag, rule_type)
 );
 
-CREATE INDEX idx_compliance_policies_effective_dates 
+CREATE INDEX IF NOT EXISTS idx_compliance_policies_effective_dates 
     ON compliance_policies(effective_start_date, effective_end_date);
-CREATE INDEX idx_compliance_policies_version 
+CREATE INDEX IF NOT EXISTS idx_compliance_policies_version 
     ON compliance_policies(version_tag);
 
 -- Create compliance events table for real-time validation results
@@ -28,10 +28,10 @@ CREATE TABLE IF NOT EXISTS compliance_events (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE INDEX idx_compliance_events_trace_id ON compliance_events(trace_id);
-CREATE INDEX idx_compliance_events_created_at ON compliance_events(created_at);
-CREATE INDEX idx_compliance_events_status ON compliance_events(status);
-CREATE INDEX idx_compliance_events_rule_version ON compliance_events(rule_version);
+CREATE INDEX IF NOT EXISTS idx_compliance_events_trace_id ON compliance_events(trace_id);
+CREATE INDEX IF NOT EXISTS idx_compliance_events_created_at ON compliance_events(created_at);
+CREATE INDEX IF NOT EXISTS idx_compliance_events_status ON compliance_events(status);
+CREATE INDEX IF NOT EXISTS idx_compliance_events_rule_version ON compliance_events(rule_version);
 
 -- Create audit log table for comprehensive compliance trail
 CREATE TABLE IF NOT EXISTS compliance_audit_log (
@@ -46,9 +46,9 @@ CREATE TABLE IF NOT EXISTS compliance_audit_log (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE INDEX idx_compliance_audit_log_event_id ON compliance_audit_log(event_id);
-CREATE INDEX idx_compliance_audit_log_tenant_id ON compliance_audit_log(tenant_id);
-CREATE INDEX idx_compliance_audit_log_created_at ON compliance_audit_log(created_at);
+CREATE INDEX IF NOT EXISTS idx_compliance_audit_log_event_id ON compliance_audit_log(event_id);
+CREATE INDEX IF NOT EXISTS idx_compliance_audit_log_tenant_id ON compliance_audit_log(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_compliance_audit_log_created_at ON compliance_audit_log(created_at);
 
 -- Insert initial 2025 and 2021 policy versions
 -- These will be loaded from filesystem CUE files initially

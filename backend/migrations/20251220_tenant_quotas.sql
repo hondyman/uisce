@@ -1,4 +1,4 @@
--- Create table for storing tenant-specific resource quotas
+-- CREATE TABLE IF NOT EXISTS for storing tenant-specific resource quotas
 CREATE TABLE IF NOT EXISTS tenant_quotas (
     tenant_id VARCHAR(255) NOT NULL,
     resource_name VARCHAR(255) NOT NULL, -- e.g., 'analytics_requests', 'storage_gb'

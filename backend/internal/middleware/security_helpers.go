@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
+	"strings"
 )
 
 // SecurityAuditLog represents a security event for audit logging
@@ -116,7 +117,7 @@ func SetGlobalAdminContext(ctx context.Context, db *sql.DB) error {
 // Used by AuthContextMiddleware to detect global_admin / global_ops roles.
 func hasRole(roles []string, target string) bool {
 	for _, r := range roles {
-		if r == target {
+		if strings.EqualFold(strings.TrimSpace(r), target) {
 			return true
 		}
 	}

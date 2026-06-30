@@ -12,7 +12,7 @@ CREATE TABLE IF NOT EXISTS edm.wasm_module_version (
     created_at        TIMESTAMP NOT NULL DEFAULT now()
 );
 
-CREATE UNIQUE INDEX ux_wasm_module_version_name_version
+CREATE UNIQUE INDEX IF NOT EXISTS ux_wasm_module_version_name_version
     ON edm.wasm_module_version (module_name, version);
 
 
@@ -27,10 +27,10 @@ CREATE TABLE IF NOT EXISTS edm.rule_lineage (
     threshold_value NUMERIC
 );
 
-CREATE INDEX idx_rule_lineage_rule
+CREATE INDEX IF NOT EXISTS idx_rule_lineage_rule
     ON edm.rule_lineage (rule_id, valuation_date DESC);
 
-CREATE INDEX idx_rule_lineage_portfolio
+CREATE INDEX IF NOT EXISTS idx_rule_lineage_portfolio
     ON edm.rule_lineage (portfolio_id, valuation_date DESC);
 
 
@@ -43,5 +43,5 @@ CREATE TABLE IF NOT EXISTS edm.scenario_lineage (
     pnl                 NUMERIC
 );
 
-CREATE INDEX idx_scenario_lineage_scenario
+CREATE INDEX IF NOT EXISTS idx_scenario_lineage_scenario
     ON edm.scenario_lineage (scenario_id, valuation_date DESC);

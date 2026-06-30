@@ -13,9 +13,15 @@ CREATE INDEX IF NOT EXISTS idx_ops_events_region ON ops_events(region);
 CREATE INDEX IF NOT EXISTS idx_ops_events_region_occurred_at ON ops_events(region, occurred_at DESC);
 
 -- Add region to action history for region-scoped auditing
-ALTER TABLE IF EXISTS ops_action_history ADD COLUMN IF NOT EXISTS region VARCHAR(50);
-CREATE INDEX IF NOT EXISTS idx_ops_action_history_region ON ops_action_history(region);
-CREATE INDEX IF NOT EXISTS idx_ops_action_history_region_created_at ON ops_action_history(region, created_at DESC);
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'ops_action_history') THEN
+        ALTER TABLE public.ops_action_history ADD COLUMN IF NOT EXISTS region VARCHAR(50);
+        CREATE INDEX IF NOT EXISTS idx_ops_action_history_region ON ops_action_history(region);
+        CREATE INDEX IF NOT EXISTS idx_ops_action_history_region_created_at ON ops_action_history(region, created_at DESC);
+        COMMENT ON COLUMN ops_action_history.region IS 'Geographic region where action was executed';
+    END IF;
+END $$;
 
 -- Add region to audit logs (already done in Phase 2.4c, but ensure it's there)
 CREATE INDEX IF NOT EXISTS idx_ops_audit_log_region ON ops_audit_log(region);
@@ -30,7 +36,6 @@ CREATE INDEX IF NOT EXISTS idx_ops_audit_log_region ON ops_audit_log(region);
 -- - temporal_namespaces: regional namespace isolation
 
 COMMENT ON COLUMN ops_incidents.region IS 'Geographic region for this incident (e.g., us-east-1, eu-west-1, ap-southeast-1)';
-COMMENT ON COLUMN ops_action_history.region IS 'Geographic region where action was executed';
 
 -- Add metadata table to track region configuration
 CREATE TABLE IF NOT EXISTS region_config (

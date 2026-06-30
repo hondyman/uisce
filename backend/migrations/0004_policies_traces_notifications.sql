@@ -1,5 +1,5 @@
 -- +goose Up
-CREATE TABLE claim_conflict (
+CREATE TABLE IF NOT EXISTS claim_conflict (
   id UUID PRIMARY KEY,
   user_id TEXT NOT NULL,
   tenant_id TEXT NOT NULL,
@@ -11,7 +11,7 @@ CREATE TABLE claim_conflict (
   resolution_action TEXT
 );
 
-CREATE TABLE claim_usage_log (
+CREATE TABLE IF NOT EXISTS claim_usage_log (
   id UUID PRIMARY KEY,
   claim_id UUID REFERENCES role_claim(id) ON DELETE CASCADE,
   user_id TEXT NOT NULL,
@@ -19,9 +19,9 @@ CREATE TABLE claim_usage_log (
   asset_id UUID NOT NULL,
   used_at TIMESTAMP NOT NULL DEFAULT now()
 );
-CREATE INDEX idx_usage_claim_time ON claim_usage_log(claim_id, used_at DESC);
+CREATE INDEX IF NOT EXISTS idx_usage_claim_time ON claim_usage_log(claim_id, used_at DESC);
 
-CREATE TABLE claim_drift (
+CREATE TABLE IF NOT EXISTS claim_drift (
   id UUID PRIMARY KEY,
   claim_id UUID REFERENCES role_claim(id) ON DELETE CASCADE,
   drift_type TEXT NOT NULL,
@@ -30,7 +30,7 @@ CREATE TABLE claim_drift (
   suggested_action TEXT
 );
 
-CREATE TABLE policy (
+CREATE TABLE IF NOT EXISTS policy (
   id UUID PRIMARY KEY,
   tenant_id uuid REFERENCES tenants(id) ON DELETE CASCADE,
   name TEXT NOT NULL,
@@ -41,7 +41,7 @@ CREATE TABLE policy (
   created_at TIMESTAMP NOT NULL DEFAULT now()
 );
 
-CREATE TABLE policy_simulation_result (
+CREATE TABLE IF NOT EXISTS policy_simulation_result (
   id UUID PRIMARY KEY,
   policy_id UUID REFERENCES policy(id) ON DELETE CASCADE,
   simulated_by TEXT NOT NULL,
@@ -53,7 +53,7 @@ CREATE TABLE policy_simulation_result (
   notes TEXT
 );
 
-CREATE TABLE access_decision_log (
+CREATE TABLE IF NOT EXISTS access_decision_log (
   id UUID PRIMARY KEY,
   user_id TEXT NOT NULL,
   tenant_id TEXT NOT NULL,
@@ -63,9 +63,9 @@ CREATE TABLE access_decision_log (
   reason TEXT,
   evaluated_at TIMESTAMP NOT NULL DEFAULT now()
 );
-CREATE INDEX idx_decision_recent ON access_decision_log(tenant_id, evaluated_at DESC);
+CREATE INDEX IF NOT EXISTS idx_decision_recent ON access_decision_log(tenant_id, evaluated_at DESC);
 
-CREATE TABLE access_decision_trace (
+CREATE TABLE IF NOT EXISTS access_decision_trace (
   id UUID PRIMARY KEY,
   decision_log_id UUID REFERENCES access_decision_log(id) ON DELETE CASCADE,
   user_id TEXT NOT NULL,
@@ -79,7 +79,7 @@ CREATE TABLE access_decision_trace (
   evaluated_at TIMESTAMP NOT NULL DEFAULT now()
 );
 
-CREATE TABLE notification_subscription (
+CREATE TABLE IF NOT EXISTS notification_subscription (
   id UUID PRIMARY KEY,
   user_id TEXT NOT NULL,
   tenant_id TEXT NOT NULL,
@@ -89,7 +89,7 @@ CREATE TABLE notification_subscription (
   delivery_method TEXT NOT NULL
 );
 
-CREATE TABLE semantic_notification (
+CREATE TABLE IF NOT EXISTS semantic_notification (
   id UUID PRIMARY KEY,
   event_type TEXT NOT NULL,
   tenant_id TEXT NOT NULL,

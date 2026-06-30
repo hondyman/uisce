@@ -26,10 +26,10 @@ CREATE TABLE IF NOT EXISTS edm.rules (
 );
 
 -- Index for common queries
-CREATE INDEX idx_rules_tenant_business ON edm.rules(tenant_id, business_object);
-CREATE INDEX idx_rules_status ON edm.rules(status);
-CREATE INDEX idx_rules_created_by ON edm.rules(created_by);
-CREATE INDEX idx_rules_updated_at ON edm.rules(updated_at DESC);
+CREATE INDEX IF NOT EXISTS idx_rules_tenant_business ON edm.rules(tenant_id, business_object);
+CREATE INDEX IF NOT EXISTS idx_rules_status ON edm.rules(status);
+CREATE INDEX IF NOT EXISTS idx_rules_created_by ON edm.rules(created_by);
+CREATE INDEX IF NOT EXISTS idx_rules_updated_at ON edm.rules(updated_at DESC);
 
 -- Row-level security
 ALTER TABLE edm.rules ENABLE ROW LEVEL SECURITY;
@@ -62,8 +62,8 @@ CREATE TABLE IF NOT EXISTS edm.rule_steps (
 );
 
 -- Index for rule steps
-CREATE INDEX idx_rule_steps_rule_version ON edm.rule_steps(rule_id, version);
-CREATE INDEX idx_rule_steps_priority ON edm.rule_steps(priority);
+CREATE INDEX IF NOT EXISTS idx_rule_steps_rule_version ON edm.rule_steps(rule_id, version);
+CREATE INDEX IF NOT EXISTS idx_rule_steps_priority ON edm.rule_steps(priority);
 
 -- Rule versions table - version history
 CREATE TABLE IF NOT EXISTS edm.rule_versions (
@@ -84,8 +84,8 @@ CREATE TABLE IF NOT EXISTS edm.rule_versions (
 );
 
 -- Index for versions
-CREATE INDEX idx_rule_versions_rule_status ON edm.rule_versions(rule_id, status);
-CREATE INDEX idx_rule_versions_promoted_at ON edm.rule_versions(promoted_at DESC);
+CREATE INDEX IF NOT EXISTS idx_rule_versions_rule_status ON edm.rule_versions(rule_id, status);
+CREATE INDEX IF NOT EXISTS idx_rule_versions_promoted_at ON edm.rule_versions(promoted_at DESC);
 
 -- Approval records table - governance workflow
 CREATE TABLE IF NOT EXISTS edm.rule_approvals (
@@ -112,10 +112,10 @@ CREATE TABLE IF NOT EXISTS edm.rule_approvals (
 );
 
 -- Index for approvals
-CREATE INDEX idx_rule_approvals_rule_version ON edm.rule_approvals(rule_id, version);
-CREATE INDEX idx_rule_approvals_status ON edm.rule_approvals(status);
-CREATE INDEX idx_rule_approvals_approver ON edm.rule_approvals(approver_id);
-CREATE INDEX idx_rule_approvals_created ON edm.rule_approvals(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_rule_approvals_rule_version ON edm.rule_approvals(rule_id, version);
+CREATE INDEX IF NOT EXISTS idx_rule_approvals_status ON edm.rule_approvals(status);
+CREATE INDEX IF NOT EXISTS idx_rule_approvals_approver ON edm.rule_approvals(approver_id);
+CREATE INDEX IF NOT EXISTS idx_rule_approvals_created ON edm.rule_approvals(created_at DESC);
 
 -- Row-level security for approvals
 ALTER TABLE edm.rule_approvals ENABLE ROW LEVEL SECURITY;
@@ -141,7 +141,7 @@ DO $$
 BEGIN
     IF NOT EXISTS (SELECT 1 FROM information_schema.tables
                    WHERE table_schema = 'edm' AND table_name = 'semantic_terms') THEN
-        CREATE TABLE edm.semantic_terms (
+        CREATE TABLE IF NOT EXISTS edm.semantic_terms (
             id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
             business_object VARCHAR(255) NOT NULL,
             name VARCHAR(255) NOT NULL,
@@ -170,9 +170,9 @@ BEGIN
 END$$;
 
 -- Index for semantic terms
-CREATE INDEX idx_semantic_terms_business_object ON edm.semantic_terms(business_object);
-CREATE INDEX idx_semantic_terms_category ON edm.semantic_terms(category);
-CREATE INDEX idx_semantic_terms_governance_status ON edm.semantic_terms(governance_status);
+CREATE INDEX IF NOT EXISTS idx_semantic_terms_business_object ON edm.semantic_terms(business_object);
+CREATE INDEX IF NOT EXISTS idx_semantic_terms_category ON edm.semantic_terms(category);
+CREATE INDEX IF NOT EXISTS idx_semantic_terms_governance_status ON edm.semantic_terms(governance_status);
 
 -- Rule execution audit trail - simulation/execution history
 -- drop old table if present to avoid mismatched column types
@@ -198,9 +198,9 @@ CREATE TABLE IF NOT EXISTS edm.rule_execution_history (
 );
 
 -- Index for execution history
-CREATE INDEX idx_rule_execution_rule_version ON edm.rule_execution_history(rule_id, version);
-CREATE INDEX idx_rule_execution_executed_at ON edm.rule_execution_history(executed_at DESC);
-CREATE INDEX idx_rule_execution_type ON edm.rule_execution_history(execution_type);
+CREATE INDEX IF NOT EXISTS idx_rule_execution_rule_version ON edm.rule_execution_history(rule_id, version);
+CREATE INDEX IF NOT EXISTS idx_rule_execution_executed_at ON edm.rule_execution_history(executed_at DESC);
+CREATE INDEX IF NOT EXISTS idx_rule_execution_type ON edm.rule_execution_history(execution_type);
 
 -- Upsert semantic terms for calendar business object
 INSERT INTO edm.semantic_terms (business_object, name, data_type, business_definition, source_field, sample_values, governance_status, category, created_by, created_at)
@@ -317,7 +317,8 @@ END;
 $$ LANGUAGE plpgsql;
 
 -- Don't create trigger yet - uncomment when needed
--- CREATE TRIGGER rule_change_audit AFTER UPDATE ON edm.rules
+-- DROP TRIGGER IF EXISTS rule_change_audit ON edm;
+CREATE TRIGGER rule_change_audit AFTER UPDATE ON edm.rules
 -- FOR EACH ROW EXECUTE FUNCTION edm.log_rule_change();
 
 -- Grant permissions

@@ -23,7 +23,7 @@ CREATE INDEX IF NOT EXISTS idx_semantic_pre_aggs_region ON semantic_pre_aggregat
 --   c) Validate row counts and sanity checks
 --   d) Swap the tables or use your platform's atomic rename/swap method
 -- Example Trino/Starburst step (template only):
--- CREATE TABLE audit.semantic_snapshots_new AS
+-- CREATE TABLE IF NOT EXISTS audit.semantic_snapshots_new AS
 -- SELECT ss.snapshot_id, ss.semantic_term_id, ss.version, ss.timestamp, ss.definition,
 --        ss.business_term_id, ss.tenant_id, COALESCE(n.region, 'unknown') AS region,
 --        ss.compliance, ss.lineage, ss.metadata, ss._ingest_ts, ss._source_service, ss._schema_version

@@ -41,8 +41,8 @@ CREATE TABLE IF NOT EXISTS screening_rule_sets (
     created_by UUID
 );
 
-CREATE INDEX idx_screening_rules_type ON screening_rule_sets(opportunity_type);
-CREATE INDEX idx_screening_rules_active ON screening_rule_sets(is_active);
+CREATE INDEX IF NOT EXISTS idx_screening_rules_type ON screening_rule_sets(opportunity_type);
+CREATE INDEX IF NOT EXISTS idx_screening_rules_active ON screening_rule_sets(is_active);
 
 -- AI screening executions with detailed breakdowns
 CREATE TABLE IF NOT EXISTS screening_executions (
@@ -90,9 +90,9 @@ CREATE TABLE IF NOT EXISTS screening_executions (
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
-CREATE INDEX idx_screening_exec_opportunity ON screening_executions(opportunity_id);
-CREATE INDEX idx_screening_exec_outcome ON screening_executions(outcome);
-CREATE INDEX idx_screening_exec_date ON screening_executions(executed_at);
+CREATE INDEX IF NOT EXISTS idx_screening_exec_opportunity ON screening_executions(opportunity_id);
+CREATE INDEX IF NOT EXISTS idx_screening_exec_outcome ON screening_executions(outcome);
+CREATE INDEX IF NOT EXISTS idx_screening_exec_date ON screening_executions(executed_at);
 
 -- ============================================================================
 -- SECTION 2: DOCUMENT AI PROCESSING
@@ -167,9 +167,9 @@ CREATE TABLE IF NOT EXISTS document_processing_queue (
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
-CREATE INDEX idx_doc_queue_opportunity ON document_processing_queue(opportunity_id);
-CREATE INDEX idx_doc_queue_status ON document_processing_queue(status);
-CREATE INDEX idx_doc_queue_type ON document_processing_queue(document_type);
+CREATE INDEX IF NOT EXISTS idx_doc_queue_opportunity ON document_processing_queue(opportunity_id);
+CREATE INDEX IF NOT EXISTS idx_doc_queue_status ON document_processing_queue(status);
+CREATE INDEX IF NOT EXISTS idx_doc_queue_type ON document_processing_queue(document_type);
 
 -- ============================================================================
 -- SECTION 3: COMPREHENSIVE AUDIT TRAIL
@@ -224,9 +224,9 @@ CREATE TABLE IF NOT EXISTS workflow_audit_log (
 
 CREATE INDEX IF NOT EXISTS idx_audit_entity ON workflow_audit_log(entity_type, entity_id);
 CREATE INDEX IF NOT EXISTS idx_audit_action ON workflow_audit_log(action);
-CREATE INDEX idx_audit_performed_by ON workflow_audit_log(performed_by);
-CREATE INDEX idx_audit_timestamp ON workflow_audit_log(performed_at);
-CREATE INDEX idx_audit_material ON workflow_audit_log(is_material_change) WHERE is_material_change = TRUE;
+CREATE INDEX IF NOT EXISTS idx_audit_performed_by ON workflow_audit_log(performed_by);
+CREATE INDEX IF NOT EXISTS idx_audit_timestamp ON workflow_audit_log(performed_at);
+CREATE INDEX IF NOT EXISTS idx_audit_material ON workflow_audit_log(is_material_change) WHERE is_material_change = TRUE;
 
 -- Create audit trigger function
 CREATE OR REPLACE FUNCTION log_workflow_audit()
@@ -321,9 +321,9 @@ CREATE TABLE IF NOT EXISTS document_versions (
     UNIQUE(document_id, version_number)
 );
 
-CREATE INDEX idx_doc_versions_document ON document_versions(document_id);
-CREATE INDEX idx_doc_versions_opportunity ON document_versions(opportunity_id);
-CREATE INDEX idx_doc_versions_current ON document_versions(is_current) WHERE is_current = TRUE;
+CREATE INDEX IF NOT EXISTS idx_doc_versions_document ON document_versions(document_id);
+CREATE INDEX IF NOT EXISTS idx_doc_versions_opportunity ON document_versions(opportunity_id);
+CREATE INDEX IF NOT EXISTS idx_doc_versions_current ON document_versions(is_current) WHERE is_current = TRUE;
 
 -- ============================================================================
 -- SECTION 5: REAL-TIME COLLABORATION
@@ -355,7 +355,7 @@ CREATE TABLE IF NOT EXISTS collaboration_workspaces (
     created_by UUID
 );
 
-CREATE INDEX idx_collab_workspace_opportunity ON collaboration_workspaces(opportunity_id);
+CREATE INDEX IF NOT EXISTS idx_collab_workspace_opportunity ON collaboration_workspaces(opportunity_id);
 
 -- Real-time comments and discussions
 CREATE TABLE IF NOT EXISTS collaboration_comments (
@@ -412,10 +412,10 @@ CREATE TABLE IF NOT EXISTS collaboration_comments (
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
-CREATE INDEX idx_collab_comments_workspace ON collaboration_comments(workspace_id);
-CREATE INDEX idx_collab_comments_thread ON collaboration_comments(thread_id);
-CREATE INDEX idx_collab_comments_context ON collaboration_comments(context_type, context_id);
-CREATE INDEX idx_collab_comments_mentions ON collaboration_comments USING GIN(mentioned_users);
+CREATE INDEX IF NOT EXISTS idx_collab_comments_workspace ON collaboration_comments(workspace_id);
+CREATE INDEX IF NOT EXISTS idx_collab_comments_thread ON collaboration_comments(thread_id);
+CREATE INDEX IF NOT EXISTS idx_collab_comments_context ON collaboration_comments(context_type, context_id);
+CREATE INDEX IF NOT EXISTS idx_collab_comments_mentions ON collaboration_comments USING GIN(mentioned_users);
 
 -- ============================================================================
 -- SECTION 6: SCENARIO ANALYSIS & STRESS TESTING
@@ -485,9 +485,9 @@ CREATE TABLE IF NOT EXISTS scenario_analyses (
     created_by UUID
 );
 
-CREATE INDEX idx_scenario_client ON scenario_analyses(client_id);
-CREATE INDEX idx_scenario_opportunity ON scenario_analyses(opportunity_id);
-CREATE INDEX idx_scenario_type ON scenario_analyses(scenario_type);
+CREATE INDEX IF NOT EXISTS idx_scenario_client ON scenario_analyses(client_id);
+CREATE INDEX IF NOT EXISTS idx_scenario_opportunity ON scenario_analyses(opportunity_id);
+CREATE INDEX IF NOT EXISTS idx_scenario_type ON scenario_analyses(scenario_type);
 
 -- ============================================================================
 -- SECTION 7: NOTIFICATION & ALERT SYSTEM
@@ -593,11 +593,11 @@ CREATE TABLE IF NOT EXISTS notification_queue (
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
-CREATE INDEX idx_notification_queue_recipient ON notification_queue(recipient_id);
-CREATE INDEX idx_notification_queue_scheduled ON notification_queue(scheduled_for);
-CREATE INDEX idx_notification_queue_unread ON notification_queue(recipient_id) 
+CREATE INDEX IF NOT EXISTS idx_notification_queue_recipient ON notification_queue(recipient_id);
+CREATE INDEX IF NOT EXISTS idx_notification_queue_scheduled ON notification_queue(scheduled_for);
+CREATE INDEX IF NOT EXISTS idx_notification_queue_unread ON notification_queue(recipient_id) 
     WHERE read_at IS NULL AND dismissed_at IS NULL;
-CREATE INDEX idx_notification_queue_type ON notification_queue(notification_type);
+CREATE INDEX IF NOT EXISTS idx_notification_queue_type ON notification_queue(notification_type);
 
 -- Add FK to templates only if the referenced column exists (some environments use a different notification_templates schema)
 DO $$
@@ -720,11 +720,11 @@ CREATE TABLE IF NOT EXISTS calendar_events (
     created_by UUID
 );
 
-CREATE INDEX idx_calendar_events_opportunity ON calendar_events(opportunity_id);
-CREATE INDEX idx_calendar_events_client ON calendar_events(client_id);
-CREATE INDEX idx_calendar_events_time ON calendar_events(start_time, end_time);
-CREATE INDEX idx_calendar_events_organizer ON calendar_events(organizer_id);
-CREATE INDEX idx_calendar_events_type ON calendar_events(event_type);
+CREATE INDEX IF NOT EXISTS idx_calendar_events_opportunity ON calendar_events(opportunity_id);
+CREATE INDEX IF NOT EXISTS idx_calendar_events_client ON calendar_events(client_id);
+CREATE INDEX IF NOT EXISTS idx_calendar_events_time ON calendar_events(start_time, end_time);
+CREATE INDEX IF NOT EXISTS idx_calendar_events_organizer ON calendar_events(organizer_id);
+CREATE INDEX IF NOT EXISTS idx_calendar_events_type ON calendar_events(event_type);
 
 -- ============================================================================
 -- SECTION 9: ANALYTICS & METRICS
@@ -773,8 +773,8 @@ CREATE TABLE IF NOT EXISTS advisor_kpi_snapshots (
     UNIQUE(advisor_id, snapshot_date)
 );
 
-CREATE INDEX idx_kpi_snapshots_advisor ON advisor_kpi_snapshots(advisor_id);
-CREATE INDEX idx_kpi_snapshots_date ON advisor_kpi_snapshots(snapshot_date);
+CREATE INDEX IF NOT EXISTS idx_kpi_snapshots_advisor ON advisor_kpi_snapshots(advisor_id);
+CREATE INDEX IF NOT EXISTS idx_kpi_snapshots_date ON advisor_kpi_snapshots(snapshot_date);
 
 -- Opportunity funnel analytics
 CREATE TABLE IF NOT EXISTS opportunity_funnel_metrics (
@@ -817,7 +817,7 @@ CREATE TABLE IF NOT EXISTS opportunity_funnel_metrics (
     UNIQUE(period_type, period_start, opportunity_type, advisor_id)
 );
 
-CREATE INDEX idx_funnel_metrics_period ON opportunity_funnel_metrics(period_type, period_start);
+CREATE INDEX IF NOT EXISTS idx_funnel_metrics_period ON opportunity_funnel_metrics(period_type, period_start);
 
 -- ============================================================================
 -- SECTION 10: EXTERNAL INTEGRATIONS
@@ -894,8 +894,8 @@ CREATE TABLE IF NOT EXISTS webhook_subscriptions (
     created_by UUID
 );
 
-CREATE INDEX idx_webhook_subs_active ON webhook_subscriptions(is_active);
-CREATE INDEX idx_webhook_subs_events ON webhook_subscriptions USING GIN(event_types);
+CREATE INDEX IF NOT EXISTS idx_webhook_subs_active ON webhook_subscriptions(is_active);
+CREATE INDEX IF NOT EXISTS idx_webhook_subs_events ON webhook_subscriptions USING GIN(event_types);
 
 -- Webhook delivery log
 CREATE TABLE IF NOT EXISTS webhook_deliveries (
@@ -929,9 +929,9 @@ CREATE TABLE IF NOT EXISTS webhook_deliveries (
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
-CREATE INDEX idx_webhook_deliveries_subscription ON webhook_deliveries(subscription_id);
-CREATE INDEX idx_webhook_deliveries_status ON webhook_deliveries(status);
-CREATE INDEX idx_webhook_deliveries_retry ON webhook_deliveries(next_retry_at) WHERE status = 'RETRYING';
+CREATE INDEX IF NOT EXISTS idx_webhook_deliveries_subscription ON webhook_deliveries(subscription_id);
+CREATE INDEX IF NOT EXISTS idx_webhook_deliveries_status ON webhook_deliveries(status);
+CREATE INDEX IF NOT EXISTS idx_webhook_deliveries_retry ON webhook_deliveries(next_retry_at) WHERE status = 'RETRYING';
 
 -- ============================================================================
 -- SECTION 11: DATA QUALITY & VALIDATION
@@ -1015,9 +1015,9 @@ CREATE TABLE IF NOT EXISTS data_quality_issues (
     detected_at TIMESTAMPTZ DEFAULT NOW()
 );
 
-CREATE INDEX idx_dq_issues_table_record ON data_quality_issues(table_name, record_id);
-CREATE INDEX idx_dq_issues_status ON data_quality_issues(status);
-CREATE INDEX idx_dq_issues_severity ON data_quality_issues(severity);
+CREATE INDEX IF NOT EXISTS idx_dq_issues_table_record ON data_quality_issues(table_name, record_id);
+CREATE INDEX IF NOT EXISTS idx_dq_issues_status ON data_quality_issues(status);
+CREATE INDEX IF NOT EXISTS idx_dq_issues_severity ON data_quality_issues(severity);
 
 -- ============================================================================
 -- SECTION 12: UPGRADE EXISTING TABLES
@@ -1092,7 +1092,7 @@ FROM investment_opportunities
 WHERE current_stage NOT IN ('CLOSED_WON', 'CLOSED_LOST')
 GROUP BY advisor_id, opportunity_type, current_stage;
 
-CREATE UNIQUE INDEX ON mv_pipeline_summary (advisor_id, opportunity_type, current_stage);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_mv_pipeline_summary ON mv_pipeline_summary (advisor_id, opportunity_type, current_stage);
 
 -- Client alternative exposure summary
 CREATE MATERIALIZED VIEW IF NOT EXISTS mv_client_alt_exposure AS
@@ -1110,7 +1110,7 @@ LEFT JOIN investment_opportunities io ON cat.client_id = io.client_id
 WHERE cat.effective_date <= CURRENT_DATE AND (cat.end_date IS NULL OR cat.end_date > CURRENT_DATE)
 GROUP BY cat.client_id, cat.max_alternatives_pct, cat.min_liquid_assets_pct;
 
-CREATE UNIQUE INDEX ON mv_client_alt_exposure (client_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_mv_client_alt_exposure ON mv_client_alt_exposure (client_id);
 
 -- Function to refresh materialized views
 CREATE OR REPLACE FUNCTION refresh_advisor_mvs()

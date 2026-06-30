@@ -26,20 +26,20 @@ CHECK (
   OR COALESCE(array_length(target_entity_ids, 1), 0) > 0
 );
 
--- Create index on target_entity_id for faster lookups
+-- CREATE index IF NOT EXISTS on target_entity_id for faster lookups
 DO $do$
 BEGIN
   IF EXISTS (SELECT 1 FROM pg_class WHERE relkind='r' AND relname='catalog_validation_rules') THEN
     IF NOT EXISTS (SELECT 1 FROM pg_class WHERE relkind='i' AND relname='idx_validation_rules_entity_id') THEN
-      CREATE INDEX idx_validation_rules_entity_id ON catalog_validation_rules(target_entity_id);
+      CREATE INDEX IF NOT EXISTS idx_validation_rules_entity_id ON catalog_validation_rules(target_entity_id);
     END IF;
 
     IF NOT EXISTS (SELECT 1 FROM pg_class WHERE relkind='i' AND relname='idx_validation_rules_entity_ids') THEN
-      CREATE INDEX idx_validation_rules_entity_ids ON catalog_validation_rules USING GIN(target_entity_ids);
+      CREATE INDEX IF NOT EXISTS idx_validation_rules_entity_ids ON catalog_validation_rules USING GIN(target_entity_ids);
     END IF;
 
     IF NOT EXISTS (SELECT 1 FROM pg_class WHERE relkind='i' AND relname='idx_validation_rules_datasource') THEN
-      CREATE INDEX idx_validation_rules_datasource ON catalog_validation_rules(datasource_id);
+      CREATE INDEX IF NOT EXISTS idx_validation_rules_datasource ON catalog_validation_rules(datasource_id);
     END IF;
   END IF;
 END

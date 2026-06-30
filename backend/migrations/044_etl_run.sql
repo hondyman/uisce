@@ -18,5 +18,5 @@ CREATE TABLE IF NOT EXISTS edm.etl_run (
 );
 
 -- Index for querying recent tenant runs
-CREATE INDEX idx_etl_run_tenant_date ON edm.etl_run (tenant_id, valuation_date DESC);
-CREATE INDEX idx_etl_run_status ON edm.etl_run (status);
+CREATE INDEX IF NOT EXISTS idx_etl_run_tenant_date ON edm.etl_run (tenant_id, valuation_date DESC);
+CREATE INDEX IF NOT EXISTS idx_etl_run_status ON edm.etl_run (status);

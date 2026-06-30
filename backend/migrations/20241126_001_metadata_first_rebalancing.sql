@@ -59,11 +59,11 @@ CREATE TABLE IF NOT EXISTS rule_definitions (
 );
 
 -- Partitioning by tenant_id for performance isolation
-CREATE INDEX idx_rule_definitions_tenant ON rule_definitions(tenant_id);
-CREATE INDEX idx_rule_definitions_type ON rule_definitions(tenant_id, type);
-CREATE INDEX idx_rule_definitions_active ON rule_definitions(tenant_id, active) 
+CREATE INDEX IF NOT EXISTS idx_rule_definitions_tenant ON rule_definitions(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_rule_definitions_type ON rule_definitions(tenant_id, type);
+CREATE INDEX IF NOT EXISTS idx_rule_definitions_active ON rule_definitions(tenant_id, active) 
     WHERE active = true;
-CREATE INDEX idx_rule_definitions_jurisdiction ON rule_definitions(tenant_id, jurisdiction);
+CREATE INDEX IF NOT EXISTS idx_rule_definitions_jurisdiction ON rule_definitions(tenant_id, jurisdiction);
 
 -- ============================================================================
 -- GLOBAL CALENDARS TABLE
@@ -106,7 +106,7 @@ CREATE TABLE IF NOT EXISTS global_calendars (
         UNIQUE (tenant_id, calendar_code, year)
 );
 
-CREATE INDEX idx_global_calendars_lookup ON global_calendars(tenant_id, calendar_code, year);
+CREATE INDEX IF NOT EXISTS idx_global_calendars_lookup ON global_calendars(tenant_id, calendar_code, year);
 
 -- ============================================================================
 -- TRIGGER DEFINITIONS TABLE
@@ -152,10 +152,10 @@ CREATE TABLE IF NOT EXISTS trigger_definitions (
                        'PRICE_MOVEMENT', 'REBALANCE_DUE', 'CUSTOM'))
 );
 
-CREATE INDEX idx_trigger_definitions_tenant ON trigger_definitions(tenant_id);
-CREATE INDEX idx_trigger_definitions_active ON trigger_definitions(tenant_id, active) 
+CREATE INDEX IF NOT EXISTS idx_trigger_definitions_tenant ON trigger_definitions(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_trigger_definitions_active ON trigger_definitions(tenant_id, active) 
     WHERE active = true;
-CREATE INDEX idx_trigger_definitions_type ON trigger_definitions(tenant_id, type);
+CREATE INDEX IF NOT EXISTS idx_trigger_definitions_type ON trigger_definitions(tenant_id, type);
 
 -- ============================================================================
 -- CPPI FLOOR CONFIGURATIONS TABLE
@@ -207,8 +207,8 @@ CREATE TABLE IF NOT EXISTS cppi_floors (
         CHECK (floor_type IN ('ABSOLUTE', 'PERCENTAGE', 'INFLATION_ADJUSTED'))
 );
 
-CREATE INDEX idx_cppi_floors_tenant ON cppi_floors(tenant_id);
-CREATE INDEX idx_cppi_floors_portfolio ON cppi_floors(tenant_id, portfolio_id);
+CREATE INDEX IF NOT EXISTS idx_cppi_floors_tenant ON cppi_floors(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_cppi_floors_portfolio ON cppi_floors(tenant_id, portfolio_id);
 
 -- ============================================================================
 -- RULE EVALUATION HISTORY TABLE
@@ -246,8 +246,8 @@ CREATE TABLE IF NOT EXISTS rule_evaluation_history (
 );
 
 -- Partitioned by time for efficient querying
-CREATE INDEX idx_rule_evaluation_tenant_time ON rule_evaluation_history(tenant_id, evaluated_at DESC);
-CREATE INDEX idx_rule_evaluation_rule ON rule_evaluation_history(rule_definition_id, evaluated_at DESC);
+CREATE INDEX IF NOT EXISTS idx_rule_evaluation_tenant_time ON rule_evaluation_history(tenant_id, evaluated_at DESC);
+CREATE INDEX IF NOT EXISTS idx_rule_evaluation_rule ON rule_evaluation_history(rule_definition_id, evaluated_at DESC);
 
 -- ============================================================================
 -- SUBSTITUTE ASSET MAPPINGS TABLE
@@ -296,7 +296,7 @@ CREATE TABLE IF NOT EXISTS substitute_asset_mappings (
         UNIQUE (tenant_id, original_ticker, substitute_ticker)
 );
 
-CREATE INDEX idx_substitute_assets_lookup ON substitute_asset_mappings(tenant_id, original_ticker);
+CREATE INDEX IF NOT EXISTS idx_substitute_assets_lookup ON substitute_asset_mappings(tenant_id, original_ticker);
 
 -- ============================================================================
 -- DRIFT SNAPSHOTS TABLE
@@ -337,7 +337,7 @@ CREATE TABLE IF NOT EXISTS drift_snapshots (
 );
 
 -- Time-series index for efficient queries
-CREATE INDEX idx_drift_snapshots_time ON drift_snapshots(tenant_id, portfolio_id, snapshot_at DESC);
+CREATE INDEX IF NOT EXISTS idx_drift_snapshots_time ON drift_snapshots(tenant_id, portfolio_id, snapshot_at DESC);
 
 -- ============================================================================
 -- FUNCTIONS & TRIGGERS
@@ -353,18 +353,22 @@ END;
 $$ language 'plpgsql';
 
 -- Apply to all tables
+DROP TRIGGER IF EXISTS update_rule_definitions_updated_at ON rule_definitions;
 CREATE TRIGGER update_rule_definitions_updated_at
     BEFORE UPDATE ON rule_definitions
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
+DROP TRIGGER IF EXISTS update_global_calendars_updated_at ON global_calendars;
 CREATE TRIGGER update_global_calendars_updated_at
     BEFORE UPDATE ON global_calendars
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
+DROP TRIGGER IF EXISTS update_trigger_definitions_updated_at ON trigger_definitions;
 CREATE TRIGGER update_trigger_definitions_updated_at
     BEFORE UPDATE ON trigger_definitions
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
+DROP TRIGGER IF EXISTS update_cppi_floors_updated_at ON cppi_floors;
 CREATE TRIGGER update_cppi_floors_updated_at
     BEFORE UPDATE ON cppi_floors
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();

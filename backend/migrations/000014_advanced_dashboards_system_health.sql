@@ -6,7 +6,7 @@
 -- ADVANCED DASHBOARD FEATURES
 -- =========================================--
 
--- Create table for dashboard templates
+-- CREATE TABLE IF NOT EXISTS for dashboard templates
 CREATE TABLE IF NOT EXISTS public.pop_dashboard_templates (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     template_name TEXT NOT NULL,
@@ -19,7 +19,7 @@ CREATE TABLE IF NOT EXISTS public.pop_dashboard_templates (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- Create table for custom dashboard widgets
+-- CREATE TABLE IF NOT EXISTS for custom dashboard widgets
 CREATE TABLE IF NOT EXISTS public.pop_custom_widgets (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     widget_name TEXT NOT NULL,
@@ -33,7 +33,7 @@ CREATE TABLE IF NOT EXISTS public.pop_custom_widgets (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- Create table for dashboard sharing and permissions
+-- CREATE TABLE IF NOT EXISTS for dashboard sharing and permissions
 CREATE TABLE IF NOT EXISTS public.pop_dashboard_permissions (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     dashboard_id UUID REFERENCES public.pop_dashboards(id) ON DELETE CASCADE,
@@ -127,7 +127,7 @@ INSERT INTO public.pop_custom_widgets (
 -- AUTOMATED REPORTING SYSTEM
 -- =========================================--
 
--- Create table for report templates
+-- CREATE TABLE IF NOT EXISTS for report templates
 CREATE TABLE IF NOT EXISTS public.pop_report_templates (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     template_name TEXT NOT NULL,
@@ -143,7 +143,7 @@ CREATE TABLE IF NOT EXISTS public.pop_report_templates (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- Create table for generated reports
+-- CREATE TABLE IF NOT EXISTS for generated reports
 CREATE TABLE IF NOT EXISTS public.pop_generated_reports (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     template_id UUID REFERENCES public.pop_report_templates(id) ON DELETE CASCADE,
@@ -227,7 +227,7 @@ INSERT INTO public.pop_report_templates (
 -- SYSTEM HEALTH MONITORING
 -- =========================================--
 
--- Create table for system health metrics
+-- CREATE TABLE IF NOT EXISTS for system health metrics
 CREATE TABLE IF NOT EXISTS public.pop_system_health (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     component_name TEXT NOT NULL,
@@ -244,7 +244,7 @@ CREATE TABLE IF NOT EXISTS public.pop_system_health (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- Create table for system health alerts
+-- CREATE TABLE IF NOT EXISTS for system health alerts
 CREATE TABLE IF NOT EXISTS public.pop_system_health_alerts (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     component_id UUID REFERENCES public.pop_system_health(id) ON DELETE CASCADE,
@@ -328,7 +328,7 @@ INSERT INTO public.pop_system_health (
 -- PERFORMANCE ANALYTICS
 -- =========================================--
 
--- Create table for performance benchmarks
+-- CREATE TABLE IF NOT EXISTS for performance benchmarks
 CREATE TABLE IF NOT EXISTS public.pop_performance_benchmarks (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     benchmark_name TEXT NOT NULL,
@@ -344,7 +344,7 @@ CREATE TABLE IF NOT EXISTS public.pop_performance_benchmarks (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- Create table for performance measurements
+-- CREATE TABLE IF NOT EXISTS for performance measurements
 CREATE TABLE IF NOT EXISTS public.pop_performance_measurements (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     benchmark_id UUID REFERENCES public.pop_performance_benchmarks(id) ON DELETE CASCADE,
@@ -410,7 +410,7 @@ INSERT INTO public.pop_performance_benchmarks (
 -- AUDIT AND GOVERNANCE ENHANCEMENTS
 -- =========================================--
 
--- Create table for audit trails
+-- CREATE TABLE IF NOT EXISTS for audit trails
 CREATE TABLE IF NOT EXISTS public.pop_audit_trail (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id TEXT NOT NULL,
@@ -424,7 +424,7 @@ CREATE TABLE IF NOT EXISTS public.pop_audit_trail (
     session_id TEXT
 );
 
--- Create table for data lineage tracking
+-- CREATE TABLE IF NOT EXISTS for data lineage tracking
 CREATE TABLE IF NOT EXISTS public.pop_data_lineage (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     source_table TEXT NOT NULL,

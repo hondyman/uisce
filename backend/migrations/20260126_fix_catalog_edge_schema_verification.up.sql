@@ -6,9 +6,20 @@ ALTER TABLE catalog_edge ADD COLUMN IF NOT EXISTS edge_type_id UUID;
 ALTER TABLE catalog_edge ADD COLUMN IF NOT EXISTS tenant_datasource_id TEXT;
 
 -- Backfill data for legacy rows (best effort)
-UPDATE catalog_edge SET source_node_id = source_id WHERE source_node_id IS NULL AND source_id IS NOT NULL;
-UPDATE catalog_edge SET target_node_id = target_id WHERE target_node_id IS NULL AND target_id IS NOT NULL;
-UPDATE catalog_edge SET tenant_datasource_id = datasource_id WHERE tenant_datasource_id IS NULL AND datasource_id IS NOT NULL;
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'catalog_edge' AND column_name = 'source_id') THEN
+    UPDATE catalog_edge SET source_node_id = source_id WHERE source_node_id IS NULL AND source_id IS NOT NULL;
+  END IF;
+  
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'catalog_edge' AND column_name = 'target_id') THEN
+    UPDATE catalog_edge SET target_node_id = target_id WHERE target_node_id IS NULL AND target_id IS NOT NULL;
+  END IF;
+  
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'catalog_edge' AND column_name = 'datasource_id') THEN
+    UPDATE catalog_edge SET tenant_datasource_id = datasource_id WHERE tenant_datasource_id IS NULL AND datasource_id IS NOT NULL;
+  END IF;
+END$$;
 
 -- We cannot easily backfill edge_type_id from edge_type code without complex join, and this is verification only.
 -- New edges will have correct IDs.

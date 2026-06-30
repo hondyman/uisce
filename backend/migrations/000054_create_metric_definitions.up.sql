@@ -17,4 +17,4 @@ CREATE TABLE IF NOT EXISTS public.metric_definitions (
     CONSTRAINT metric_definitions_name_unique UNIQUE (name)
 );
 
-CREATE INDEX metric_definitions_domain_idx ON public.metric_definitions (domain);
+CREATE INDEX IF NOT EXISTS metric_definitions_domain_idx ON public.metric_definitions (domain);

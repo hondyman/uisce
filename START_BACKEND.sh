@@ -17,6 +17,14 @@ BACKEND_DIR="$SCRIPT_DIR/backend"
 LOG_DIR="$SCRIPT_DIR/logs"
 TIMESTAMP=$(date '+%Y%m%d_%H%M%S')
 
+# Load environment variables if .env exists
+if [ -f "$SCRIPT_DIR/.env" ]; then
+    echo -e "Loading .env file..."
+    set -a
+    source "$SCRIPT_DIR/.env"
+    set +a
+fi
+
 mkdir -p "$LOG_DIR"
 
 echo ""
@@ -36,7 +44,7 @@ cd "$BACKEND_DIR"
 
 # Always rebuild so local changes are picked up
 echo -e "${YELLOW}Building backend...${NC}"
-go build -o server cmd/server/main.go
+go build -o server ./cmd/semantic-rules-api/main.go
 
 # Start server
 echo -e "${YELLOW}Starting server...${NC}"

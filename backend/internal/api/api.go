@@ -681,8 +681,11 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 		log.Printf("[DEV] Seeded API key for user %s: %s", seedUser, key)
 	}
 
+	// Initialize security profile service for IdP group → abstract role enrichment.
+	secProfileSvc := security.NewProfileService(db)
+
 	// Apply Auth Context Middleware globally (does not block, but populates context)
-	r.Use(appmid.AuthContextMiddleware(secMgr))
+	r.Use(appmid.AuthContextMiddleware(secMgr, secProfileSvc))
 	// Enforce region header and validate tenant scoping on all semantic requests
 	// Use new TenantRegionResolver for cleaner region + Gold Copy handling
 	regionResolver := region.NewTenantRegionResolver(db)
@@ -1342,8 +1345,7 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 		businessTermsHandler.RegisterRoutes(r)
 		RegisterValidationRulesRoutes(r, db, srv.CueEngine, srv.BusinessObjectService, srv.DatasourceResolver)
 
-		// Initialize Security Profile Service and Handler
-		secProfileSvc := security.NewProfileService(db)
+		// Security Profile Service and Handler already initialized before auth middleware.
 		secProfileHandler := handlers.NewSecurityProfileHandler(secProfileSvc)
 		secProfileHandler.RegisterRoutes(r)
 

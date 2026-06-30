@@ -166,7 +166,7 @@ BEGIN
 END $$;
 
 -- ============================================
--- STEP 11: Create index for common queries
+-- STEP 11: CREATE index IF NOT EXISTS for common queries
 -- ============================================
 CREATE INDEX IF NOT EXISTS idx_tenant_product_tenant_id ON tenant_product(tenant_id);
 CREATE INDEX IF NOT EXISTS idx_tenant_product_datasource_instance_id ON tenant_product_datasource(datasource_id);

@@ -3,9 +3,16 @@ package services
 import (
 	"context"
 	"crypto/rand"
+	"crypto/rsa"
+	"crypto/tls"
+	"crypto/x509"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"encoding/pem"
 	"fmt"
+	"io"
+	"math/big"
 	"net"
 	"net/http"
 	"os"
@@ -209,6 +216,35 @@ type JWTManager struct {
 	secretKey       []byte
 	tokenDuration   time.Duration
 	refreshDuration time.Duration
+
+	// Optional OpenID Connect / Keycloak JWKS configuration for validating
+	// RS256 tokens issued by an external identity provider.
+	jwksURL    string
+	jwksCache  *jwksCache
+	httpClient *http.Client
+}
+
+// jwksCache holds cached JWKS keys and their expiration.
+type jwksCache struct {
+	mu         sync.RWMutex
+	keys       map[string]*rsa.PublicKey
+	expiresAt  time.Time
+	fetchError error
+}
+
+// JWKS represents the JSON Web Key Set structure returned by an OIDC provider.
+type JWKS struct {
+	Keys []JWK `json:"keys"`
+}
+
+// JWK represents a single JSON Web Key.
+type JWK struct {
+	Kty string `json:"kty"`
+	Kid string `json:"kid"`
+	Use string `json:"use"`
+	N   string `json:"n"`
+	E   string `json:"e"`
+	Alg string `json:"alg"`
 }
 
 // APIKeyManager manages API key authentication
@@ -256,10 +292,13 @@ type SecurityEvent struct {
 	Details   map[string]interface{}
 }
 
-// NewSecurityManager creates a new security manager
+// NewSecurityManager creates a new security manager.
+// If the KEYCLOAK_JWKS_URL environment variable is set, the JWT manager will
+// also validate RS256 tokens from that Keycloak realm.
 func NewSecurityManager(cache *analytics.CacheManager, metrics *analytics.MetricsCollector, jwtSecret []byte) *SecurityManager {
+	jwksURL := os.Getenv("KEYCLOAK_JWKS_URL")
 	return &SecurityManager{
-		jwtManager:    NewJWTManager(jwtSecret),
+		jwtManager:    NewJWTManagerWithJWKS(jwtSecret, jwksURL),
 		apiKeyManager: NewAPIKeyManager(),
 		encryptionMgr: NewEncryptionManager(),
 		auditLogger:   NewAuditLogger(),
@@ -373,11 +412,26 @@ func (sm *SecurityManager) SetAPIKeyStore(store APIKeyStore) {
 
 // NewJWTManager creates a new JWT manager
 func NewJWTManager(secret []byte) *JWTManager {
-	return &JWTManager{
+	return NewJWTManagerWithJWKS(secret, "")
+}
+
+// NewJWTManagerWithJWKS creates a JWT manager that can validate both HS256
+// platform tokens and RS256 tokens from an external OIDC provider.
+func NewJWTManagerWithJWKS(secret []byte, jwksURL string) *JWTManager {
+	jm := &JWTManager{
 		secretKey:       secret,
 		tokenDuration:   15 * time.Minute,
 		refreshDuration: 7 * 24 * time.Hour,
+		jwksURL:         jwksURL,
+		jwksCache:       &jwksCache{},
+		httpClient: &http.Client{
+			Timeout: 10 * time.Second,
+			Transport: &http.Transport{
+				TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+			},
+		},
 	}
+	return jm
 }
 
 // SignMapClaims signs the provided claims with HS256 and returns the token string.
@@ -406,7 +460,148 @@ func (jm *JWTManager) ParseMapClaims(tokenString string) (jwt.MapClaims, error) 
 	return nil, fmt.Errorf("invalid token claims")
 }
 
-// ValidateToken validates a JWT token and returns claims
+// parseAndValidateRS256 validates an RS256 token using the configured JWKS.
+func (jm *JWTManager) parseAndValidateRS256(tokenString, kid string) (*jwt.Token, error) {
+	pubKey, err := jm.getJWKSKey(kid)
+	if err != nil {
+		return nil, err
+	}
+	return jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
+		if _, ok := token.Method.(*jwt.SigningMethodRSA); !ok {
+			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
+		}
+		return pubKey, nil
+	})
+}
+
+// getJWKSKey returns the RSA public key for the given key ID, fetching the
+// JWKS from the configured URL and caching it for subsequent lookups.
+func (jm *JWTManager) getJWKSKey(kid string) (*rsa.PublicKey, error) {
+	jm.jwksCache.mu.RLock()
+	key, ok := jm.jwksCache.keys[kid]
+	expiresAt := jm.jwksCache.expiresAt
+	fetchErr := jm.jwksCache.fetchError
+	jm.jwksCache.mu.RUnlock()
+
+	if ok && time.Now().Before(expiresAt) {
+		return key, nil
+	}
+	if fetchErr != nil && time.Now().Before(expiresAt) {
+		return nil, fetchErr
+	}
+
+	jm.jwksCache.mu.Lock()
+	defer jm.jwksCache.mu.Unlock()
+
+	// Double-check after acquiring write lock.
+	if key, ok := jm.jwksCache.keys[kid]; ok && time.Now().Before(jm.jwksCache.expiresAt) {
+		return key, nil
+	}
+
+	req, err := http.NewRequest("GET", jm.jwksURL, nil)
+	if err != nil {
+		jm.jwksCache.fetchError = err
+		jm.jwksCache.expiresAt = time.Now().Add(30 * time.Second)
+		return nil, err
+	}
+	resp, err := jm.httpClient.Do(req)
+	if err != nil {
+		jm.jwksCache.fetchError = err
+		jm.jwksCache.expiresAt = time.Now().Add(30 * time.Second)
+		return nil, fmt.Errorf("failed to fetch JWKS: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		jm.jwksCache.fetchError = fmt.Errorf("JWKS endpoint returned %d: %s", resp.StatusCode, string(body))
+		jm.jwksCache.expiresAt = time.Now().Add(30 * time.Second)
+		return nil, jm.jwksCache.fetchError
+	}
+
+	var jwks JWKS
+	if err := json.NewDecoder(resp.Body).Decode(&jwks); err != nil {
+		jm.jwksCache.fetchError = err
+		jm.jwksCache.expiresAt = time.Now().Add(30 * time.Second)
+		return nil, fmt.Errorf("failed to decode JWKS: %w", err)
+	}
+
+	keys := make(map[string]*rsa.PublicKey, len(jwks.Keys))
+	var firstErr error
+	for _, jwk := range jwks.Keys {
+		if jwk.Kty != "RSA" {
+			continue
+		}
+		if jwk.Use != "" && jwk.Use != "sig" {
+			continue
+		}
+		pub, err := jwkToRSAPublicKey(jwk)
+		if err != nil {
+			if firstErr == nil {
+				firstErr = err
+			}
+			continue
+		}
+		keys[jwk.Kid] = pub
+	}
+	if len(keys) == 0 && firstErr != nil {
+		jm.jwksCache.fetchError = firstErr
+		jm.jwksCache.expiresAt = time.Now().Add(30 * time.Second)
+		return nil, firstErr
+	}
+
+	jm.jwksCache.keys = keys
+	jm.jwksCache.fetchError = nil
+	jm.jwksCache.expiresAt = time.Now().Add(15 * time.Minute)
+
+	key, ok = keys[kid]
+	if !ok {
+		return nil, fmt.Errorf("JWKS does not contain key ID %q", kid)
+	}
+	return key, nil
+}
+
+// jwkToRSAPublicKey converts a JWK with base64url-encoded n/e to an RSA public key.
+func jwkToRSAPublicKey(jwk JWK) (*rsa.PublicKey, error) {
+	nBytes, err := base64.RawURLEncoding.DecodeString(jwk.N)
+	if err != nil {
+		return nil, fmt.Errorf("invalid JWK modulus: %w", err)
+	}
+	eBytes, err := base64.RawURLEncoding.DecodeString(jwk.E)
+	if err != nil {
+		return nil, fmt.Errorf("invalid JWK exponent: %w", err)
+	}
+	if len(eBytes) == 0 {
+		return nil, fmt.Errorf("empty JWK exponent")
+	}
+	n := new(big.Int).SetBytes(nBytes)
+	e := int(new(big.Int).SetBytes(eBytes).Int64())
+	if e == 0 {
+		return nil, fmt.Errorf("invalid JWK exponent value")
+	}
+	return &rsa.PublicKey{N: n, E: e}, nil
+}
+
+// pemToRSAPublicKey parses a PEM-encoded RSA public key (used for static OIDC keys).
+func pemToRSAPublicKey(pemBytes []byte) (*rsa.PublicKey, error) {
+	block, _ := pem.Decode(pemBytes)
+	if block == nil {
+		return nil, fmt.Errorf("failed to decode PEM block")
+	}
+	pub, err := x509.ParsePKIXPublicKey(block.Bytes)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse public key: %w", err)
+	}
+	rsaPub, ok := pub.(*rsa.PublicKey)
+	if !ok {
+		return nil, fmt.Errorf("PEM block is not an RSA public key")
+	}
+	return rsaPub, nil
+}
+
+// ValidateToken validates a JWT token and returns claims.
+// It supports platform-issued HS256 tokens and, when a JWKS URL is configured,
+// RS256 tokens from an external OIDC provider such as Keycloak.
 func (jm *JWTManager) ValidateToken(tokenString string) (*JWTClaims, error) {
 	// Accept optional "Bearer " prefix
 	if strings.HasPrefix(strings.ToLower(tokenString), "bearer ") {
@@ -416,10 +611,38 @@ func (jm *JWTManager) ValidateToken(tokenString string) (*JWTClaims, error) {
 		return nil, fmt.Errorf("empty token")
 	}
 
-	// Parse token and extract claims
-	claims, err := jm.ParseMapClaims(tokenString)
+	// Peek at the header to decide which validation path to use without fully
+	// trusting the unverified token.
+	token, _, err := jwt.NewParser().ParseUnverified(tokenString, jwt.MapClaims{})
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to parse token: %w", err)
+	}
+
+	alg, _ := token.Header["alg"].(string)
+	kid, _ := token.Header["kid"].(string)
+
+	var claims jwt.MapClaims
+	switch alg {
+	case "HS256":
+		claims, err = jm.ParseMapClaims(tokenString)
+		if err != nil {
+			return nil, err
+		}
+	case "RS256":
+		if jm.jwksURL == "" {
+			return nil, fmt.Errorf("RS256 token received but no JWKS URL configured")
+		}
+		parsed, err := jm.parseAndValidateRS256(tokenString, kid)
+		if err != nil {
+			return nil, err
+		}
+		if mc, ok := parsed.Claims.(jwt.MapClaims); ok {
+			claims = mc
+		} else {
+			return nil, fmt.Errorf("invalid RS256 token claims")
+		}
+	default:
+		return nil, fmt.Errorf("unsupported signing algorithm: %s", alg)
 	}
 
 	// Try common claim names for user id
@@ -448,21 +671,72 @@ func (jm *JWTManager) ValidateToken(tokenString string) (*JWTClaims, error) {
 	}
 
 	roles := parseStringListClaim(claims["roles"])
+	// Extract Keycloak realm_access.roles if present
+	if realmAccess, ok := claims["realm_access"].(map[string]interface{}); ok {
+		roles = append(roles, parseStringListClaim(realmAccess["roles"])...)
+	}
+	// Extract resource_access roles as "client:role" pairs
+	if resourceAccess, ok := claims["resource_access"].(map[string]interface{}); ok {
+		for client, access := range resourceAccess {
+			if accessMap, ok := access.(map[string]interface{}); ok {
+				for _, r := range parseStringListClaim(accessMap["roles"]) {
+					roles = addClaimItem(roles, map[string]struct{}{}, client+":"+r)
+				}
+			}
+		}
+	}
+
+	// Extract Keycloak groups claim (raw enterprise/IdP groups).
+	idpGroups := parseStringListClaim(claims["groups"])
+
+	// Extract Uisce internal operator role from nested uisce_metadata claim.
+	var operatorRole string
+	if metadata, ok := claims["uisce_metadata"].(map[string]interface{}); ok {
+		if or, ok := metadata["operator_role"].(string); ok {
+			operatorRole = strings.TrimSpace(or)
+		}
+	}
+	// Fallback: allow top-level claim name as well.
+	if operatorRole == "" {
+		if or, ok := claims["operator_role"].(string); ok {
+			operatorRole = strings.TrimSpace(or)
+		}
+	}
+
 	tenantIDs := parseStringListClaim(claims["tenant_ids"])
 	if len(tenantIDs) == 0 && tenantID != "" {
 		tenantIDs = []string{tenantID}
 	}
 
-	return &JWTClaims{UserID: userID, TenantID: tenantID, TenantIDs: tenantIDs, Roles: roles, IssuedAt: issuedAt}, nil
+	var email string
+	if em, ok := claims["email"].(string); ok {
+		email = strings.TrimSpace(em)
+	}
+
+	return &JWTClaims{
+		UserID:       userID,
+		Email:        email,
+		TenantID:     tenantID,
+		TenantIDs:    tenantIDs,
+		Roles:        roles,
+		IDPGroups:    idpGroups,
+		OperatorRole: operatorRole,
+		IssuedAt:     issuedAt,
+	}, nil
 }
 
 // JWTClaims represents JWT token claims
 type JWTClaims struct {
-	UserID    string
-	TenantID  string
-	TenantIDs []string
-	Roles     []string
-	IssuedAt  time.Time
+	UserID         string
+	Email          string
+	TenantID       string
+	TenantIDs      []string
+	Roles          []string
+	IDPGroups      []string
+	OperatorRole   string // Uisce internal staff role from uisce_metadata.operator_role
+	FunctionalRole string // Resolved abstract platform profile role
+	ClearanceLevel string // Resolved clearance level
+	IssuedAt       time.Time
 }
 
 func parseStringListClaim(value interface{}) []string {

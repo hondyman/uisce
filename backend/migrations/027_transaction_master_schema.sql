@@ -6,7 +6,7 @@ CREATE SCHEMA IF NOT EXISTS edm;
 -- ============================================
 -- ROOT: Transaction Master
 -- ============================================
-CREATE TABLE edm.transaction_master (
+CREATE TABLE IF NOT EXISTS edm.transaction_master (
     transaction_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     
     -- Core Identity
@@ -68,11 +68,11 @@ CREATE TABLE edm.transaction_master (
 );
 
 -- Indexes
-CREATE INDEX idx_tx_portfolio_date ON edm.transaction_master (portfolio_id, trade_date);
-CREATE INDEX idx_tx_security ON edm.transaction_master (security_id, trade_date);
-CREATE INDEX idx_tx_status ON edm.transaction_master (status, settlement_date);
-CREATE INDEX idx_tx_tenant ON edm.transaction_master (tenant_id, portfolio_id);
-CREATE INDEX idx_tx_valid ON edm.transaction_master (valid_from, valid_to) WHERE valid_to = 'infinity';
+CREATE INDEX IF NOT EXISTS idx_tx_portfolio_date ON edm.transaction_master (portfolio_id, trade_date);
+CREATE INDEX IF NOT EXISTS idx_tx_security ON edm.transaction_master (security_id, trade_date);
+CREATE INDEX IF NOT EXISTS idx_tx_status ON edm.transaction_master (status, settlement_date);
+CREATE INDEX IF NOT EXISTS idx_tx_tenant ON edm.transaction_master (tenant_id, portfolio_id);
+CREATE INDEX IF NOT EXISTS idx_tx_valid ON edm.transaction_master (valid_from, valid_to) WHERE valid_to = 'infinity';
 
 -- RLS Policies (Usice Architecture §6.2)
 ALTER TABLE edm.transaction_master ENABLE ROW LEVEL SECURITY;
@@ -89,7 +89,7 @@ CREATE POLICY tx_core_read ON edm.transaction_master
 -- ============================================
 -- TRACE: Transaction → Position Impact
 -- ============================================
-CREATE TABLE edm.transaction_flow_trace (
+CREATE TABLE IF NOT EXISTS edm.transaction_flow_trace (
     trace_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     transaction_id UUID NOT NULL REFERENCES edm.transaction_master(transaction_id),
     position_id UUID, -- Resulting position impact
@@ -101,12 +101,12 @@ CREATE TABLE edm.transaction_flow_trace (
     tenant_id UUID NOT NULL
 );
 
-CREATE INDEX idx_trace_tx ON edm.transaction_flow_trace (transaction_id);
+CREATE INDEX IF NOT EXISTS idx_trace_tx ON edm.transaction_flow_trace (transaction_id);
 
 -- ============================================
 -- GOLD TRACE: Survivorship Lineage
 -- ============================================
-CREATE TABLE edm.transaction_gold_trace (
+CREATE TABLE IF NOT EXISTS edm.transaction_gold_trace (
     trace_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     transaction_id UUID NOT NULL,
     field_name TEXT NOT NULL,
@@ -119,4 +119,4 @@ CREATE TABLE edm.transaction_gold_trace (
     tenant_id UUID NOT NULL
 );
 
-CREATE INDEX idx_gold_trace_tx ON edm.transaction_gold_trace (transaction_id, field_name);
+CREATE INDEX IF NOT EXISTS idx_gold_trace_tx ON edm.transaction_gold_trace (transaction_id, field_name);

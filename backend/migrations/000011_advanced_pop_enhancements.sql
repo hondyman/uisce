@@ -613,7 +613,7 @@ INSERT INTO public.pop_steward_comments (
 -- PREDICTIVE ANALYTICS TABLES
 -- =========================================--
 
--- Create table for predictive models
+-- CREATE TABLE IF NOT EXISTS for predictive models
 CREATE TABLE IF NOT EXISTS public.pop_predictive_models (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     metric_id UUID REFERENCES public.pop_metrics(id) ON DELETE CASCADE,
@@ -628,7 +628,7 @@ CREATE TABLE IF NOT EXISTS public.pop_predictive_models (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- Create table for predictions
+-- CREATE TABLE IF NOT EXISTS for predictions
 CREATE TABLE IF NOT EXISTS public.pop_predictions (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     metric_id UUID REFERENCES public.pop_metrics(id) ON DELETE CASCADE,
@@ -705,7 +705,7 @@ INSERT INTO public.pop_predictions (
 -- STRESS TESTING FRAMEWORK
 -- =========================================--
 
--- Create table for stress test scenarios
+-- CREATE TABLE IF NOT EXISTS for stress test scenarios
 CREATE TABLE IF NOT EXISTS public.pop_stress_scenarios (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     scenario_name TEXT NOT NULL,
@@ -717,7 +717,7 @@ CREATE TABLE IF NOT EXISTS public.pop_stress_scenarios (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- Create table for stress test results
+-- CREATE TABLE IF NOT EXISTS for stress test results
 CREATE TABLE IF NOT EXISTS public.pop_stress_test_results (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     scenario_id UUID REFERENCES public.pop_stress_scenarios(id) ON DELETE CASCADE,
@@ -762,7 +762,7 @@ INSERT INTO public.pop_stress_scenarios (
 -- PEER BENCHMARKING TABLES
 -- =========================================--
 
--- Create table for peer groups
+-- CREATE TABLE IF NOT EXISTS for peer groups
 CREATE TABLE IF NOT EXISTS public.pop_peer_groups (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     group_name TEXT NOT NULL,
@@ -772,7 +772,7 @@ CREATE TABLE IF NOT EXISTS public.pop_peer_groups (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- Create table for peer comparisons
+-- CREATE TABLE IF NOT EXISTS for peer comparisons
 CREATE TABLE IF NOT EXISTS public.pop_peer_comparisons (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     metric_id UUID REFERENCES public.pop_metrics(id) ON DELETE CASCADE,

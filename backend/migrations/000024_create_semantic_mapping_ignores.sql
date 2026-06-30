@@ -1,6 +1,6 @@
 -- Migration: 000024_create_semantic_mapping_ignores.sql
 -- Created: 2025-10-05
--- Purpose: Create table to persist ignored semantic mapping suggestions
+-- Purpose: CREATE TABLE IF NOT EXISTS to persist ignored semantic mapping suggestions
 
 -- Ensure pgcrypto (for gen_random_uuid) is available. This is idempotent.
 CREATE EXTENSION IF NOT EXISTS pgcrypto;

@@ -1,7 +1,7 @@
 -- Migration to add tables for Hyper-Personalized Direct Indexing (Values Schema)
 
 -- 1. Value Themes
-CREATE TABLE value_themes (
+CREATE TABLE IF NOT EXISTS value_themes (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     name TEXT NOT NULL UNIQUE,
     description TEXT,
@@ -10,7 +10,7 @@ CREATE TABLE value_themes (
 );
 
 -- 2. Value Signal Sources
-CREATE TABLE value_signal_sources (
+CREATE TABLE IF NOT EXISTS value_signal_sources (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     name TEXT NOT NULL UNIQUE,
     type TEXT NOT NULL, -- e.g., 'VENDOR', 'NEWS', 'INTERNAL'
@@ -20,7 +20,7 @@ CREATE TABLE value_signal_sources (
 );
 
 -- 3. Value Signals
-CREATE TABLE value_signals (
+CREATE TABLE IF NOT EXISTS value_signals (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     issuer_id TEXT NOT NULL, -- References an external issuer ID (e.g., ticker or internal ID)
     instrument_id TEXT, -- Optional, if specific to an instrument
@@ -37,11 +37,11 @@ CREATE TABLE value_signals (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX idx_value_signals_issuer ON value_signals(issuer_id);
-CREATE INDEX idx_value_signals_theme ON value_signals(theme_id);
+CREATE INDEX IF NOT EXISTS idx_value_signals_issuer ON value_signals(issuer_id);
+CREATE INDEX IF NOT EXISTS idx_value_signals_theme ON value_signals(theme_id);
 
 -- 4. Strategy Templates
-CREATE TABLE strategy_templates (
+CREATE TABLE IF NOT EXISTS strategy_templates (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     name TEXT NOT NULL UNIQUE,
     description TEXT,
@@ -51,7 +51,7 @@ CREATE TABLE strategy_templates (
 );
 
 -- 5. Client Values Profiles
-CREATE TABLE client_values_profiles (
+CREATE TABLE IF NOT EXISTS client_values_profiles (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     client_id TEXT NOT NULL UNIQUE, -- References the client in the main system
     strategy_template_id UUID REFERENCES strategy_templates(id),
@@ -61,7 +61,7 @@ CREATE TABLE client_values_profiles (
 );
 
 -- 6. Constraints
-CREATE TABLE constraints (
+CREATE TABLE IF NOT EXISTS constraints (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     client_values_profile_id UUID REFERENCES client_values_profiles(id),
     strategy_template_id UUID REFERENCES strategy_templates(id), -- Can belong to a template or a specific profile
@@ -76,5 +76,5 @@ CREATE TABLE constraints (
     CHECK (client_values_profile_id IS NOT NULL OR strategy_template_id IS NOT NULL)
 );
 
-CREATE INDEX idx_constraints_profile ON constraints(client_values_profile_id);
-CREATE INDEX idx_constraints_template ON constraints(strategy_template_id);
+CREATE INDEX IF NOT EXISTS idx_constraints_profile ON constraints(client_values_profile_id);
+CREATE INDEX IF NOT EXISTS idx_constraints_template ON constraints(strategy_template_id);

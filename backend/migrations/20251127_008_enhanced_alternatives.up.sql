@@ -84,7 +84,7 @@ BEGIN
       );
     $f$, ref_col);
   ELSE
-    -- Create table without a foreign key if the referenced column is missing
+    -- CREATE TABLE IF NOT EXISTS without a foreign key if the referenced column is missing
     CREATE TABLE IF NOT EXISTS capital_call_forecasts (
         forecast_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         investment_id UUID NOT NULL,

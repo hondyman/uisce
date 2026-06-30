@@ -90,6 +90,20 @@ func (s *ProfileService) EnrichSubjectAttributes(ctx context.Context, tenantID u
 	return role, clearance, nil
 }
 
+// VerifyStaffAssignment queries security.staff_tenant_assignments to check for active operator leases.
+func (s *ProfileService) VerifyStaffAssignment(ctx context.Context, email string, tenantID uuid.UUID) (string, error) {
+	var ticketRef string
+	query := `
+		SELECT ticket_reference 
+		FROM security.staff_tenant_assignments 
+		WHERE operator_email = $1 
+		  AND target_tenant_id = $2 
+		  AND expires_at > NOW();
+	`
+	err := s.db.GetContext(ctx, &ticketRef, query, email, tenantID)
+	return ticketRef, err
+}
+
 // --- Profiles CRUD ---
 
 func (s *ProfileService) CreateProfile(ctx context.Context, p *SecurityProfile) (*SecurityProfile, error) {

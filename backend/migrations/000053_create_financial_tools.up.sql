@@ -12,4 +12,4 @@ CREATE TABLE IF NOT EXISTS public.financial_tools (
     CONSTRAINT financial_tools_name_unique UNIQUE (name)
 );
 
-CREATE INDEX financial_tools_handler_type_idx ON public.financial_tools (handler_type);
+CREATE INDEX IF NOT EXISTS financial_tools_handler_type_idx ON public.financial_tools (handler_type);

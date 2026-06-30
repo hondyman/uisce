@@ -41,6 +41,12 @@ func (s *Server) GenerateSQLHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Prefer the authenticated tenant context over any tenant ID supplied in the
+	// request body so that ABAC isolation cannot be bypassed by the caller.
+	if claims := jwtmiddleware.GetClaimsFromContext(r); claims != nil && claims.TenantID != "" {
+		req.TenantID = claims.TenantID
+	}
+
 	// Initialize Generator
 	// In a real app, we should reuse a singleton or factory from the Server struct
 	// For now, we instantiate on demand.
@@ -70,7 +76,7 @@ func (s *Server) GenerateSQLHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	sql, err := generator.GenerateSQL(req)
+	sql, args, err := generator.GenerateSQL(req)
 	if err != nil {
 		logging.GetLogger().Sugar().Errorf("SQL Generation failed: %v", err)
 		http.Error(w, "Failed to generate SQL: "+err.Error(), http.StatusBadRequest) // 400 because it might be invalid BO/Field
@@ -78,7 +84,8 @@ func (s *Server) GenerateSQLHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	resp := boresolver.SQLGenerationResponse{
-		SQL: sql,
+		SQL:  sql,
+		Args: args,
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -137,7 +144,7 @@ func (s *Server) GenerateSQLFromSemanticHandler(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	sql, err := generator.GenerateSQLFromSemantic(&req, tenantID, datasourceID)
+	sql, args, err := generator.GenerateSQLFromSemantic(&req, tenantID, datasourceID)
 	if err != nil {
 		logging.GetLogger().Sugar().Errorf("Semantic SQL Generation failed: %v", err)
 		http.Error(w, "Failed to generate SQL: "+err.Error(), http.StatusBadRequest)
@@ -145,7 +152,8 @@ func (s *Server) GenerateSQLFromSemanticHandler(w http.ResponseWriter, r *http.R
 	}
 
 	resp := boresolver.SQLGenerationResponse{
-		SQL: sql,
+		SQL:  sql,
+		Args: args,
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -156,10 +164,11 @@ func (s *Server) GenerateSQLFromSemanticHandler(w http.ResponseWriter, r *http.R
 
 // ExecuteSQLRequest wraps SQL execution request
 type ExecuteSQLRequest struct {
-	SQL              string `json:"sql"`
-	Limit            int    `json:"limit"`
-	BusinessObjectID string `json:"business_object_id,omitempty"` // Optional: if provided, will auto-route based on BO's datasource
-	DatasourceID     string `json:"datasource_id,omitempty"`      // Optional: manual override; if provided, takes precedence over BO lookup
+	SQL              string        `json:"sql"`
+	Args             []interface{} `json:"args,omitempty"`               // Optional parameters for parameterized SQL
+	Limit            int           `json:"limit"`
+	BusinessObjectID string        `json:"business_object_id,omitempty"` // Optional: if provided, will auto-route based on BO's datasource
+	DatasourceID     string        `json:"datasource_id,omitempty"`      // Optional: manual override; if provided, takes precedence over BO lookup
 }
 
 // ExecuteResult represents the result of executing generated SQL
@@ -279,8 +288,8 @@ func (s *Server) ExecuteSQLHandler(w http.ResponseWriter, r *http.Request) {
 
 	logging.GetLogger().Sugar().Infof("ExecuteSQLHandler: Routing query to %s for tenant %s", datasourceTarget, tenantID)
 
-	// Execute the SQL query
-	rows, err := db.QueryContext(r.Context(), req.SQL)
+	// Execute the SQL query, binding any parameterized args supplied by the generator.
+	rows, err := db.QueryContext(r.Context(), req.SQL, req.Args...)
 	if err != nil {
 		logging.GetLogger().Sugar().Errorf("SQL execution failed for tenant %s: %v", tenantID, err)
 		errResp := ExecuteResult{Error: fmt.Sprintf("Query execution failed: %v", err)}

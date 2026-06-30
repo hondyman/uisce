@@ -18,7 +18,7 @@ BEGIN
   ) THEN
 
     -- Create the plural table with the schema expected by repo migrations
-    CREATE TABLE public.catalog_edge_types (
+    CREATE TABLE IF NOT EXISTS public.catalog_edge_types (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   tenant_id CHARACTER VARYING NOT NULL,
       edge_type_name VARCHAR(255) NOT NULL,

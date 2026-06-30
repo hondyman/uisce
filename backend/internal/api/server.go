@@ -6,7 +6,8 @@ import (
 	"os"
 
 	"github.com/hondyman/semlayer/backend/internal/services"
-	temporalclient "github.com/hondyman/semlayer/libs/temporal-client"
+	temporalclientlib "github.com/hondyman/semlayer/libs/temporal-client"
+	temporalclient "go.temporal.io/sdk/client"
 	"github.com/jmoiron/sqlx"
 	_ "github.com/lib/pq"
 )
@@ -18,9 +19,12 @@ func StartServer() {
 	//     log.Fatalf("FATAL: Failed to initialize schema validator: %v", err)
 	// }
 
-	dsn := os.Getenv("POSTGRES_DSN")
+	dsn := os.Getenv("DATABASE_URL")
 	if dsn == "" {
-		log.Println("WARN: POSTGRES_DSN not set, using default.")
+		dsn = os.Getenv("POSTGRES_DSN")
+	}
+	if dsn == "" {
+		log.Println("WARN: DATABASE_URL/POSTGRES_DSN not set, using default.")
 		dsn = "postgres://postgres:postgres@localhost:5432/semlayer?sslmode=disable"
 	}
 
@@ -29,17 +33,29 @@ func StartServer() {
 		log.Fatalf("FATAL: Failed to connect to database: %v", err)
 	}
 
-	// Initialize temporal client with retry logic
-	temporalC, err := temporalclient.NewClientWithRetry()
+	// Initialize temporal client with retry logic; allow startup to continue
+	// when Temporal is unreachable in local dev.
+	var temporalC temporalclient.Client
+	temporalC, err = temporalclientlib.NewClientWithRetry()
 	if err != nil {
-		log.Fatalf("FATAL: Failed to create temporal client: %v", err)
+		log.Printf("WARN: Failed to create temporal client: %v. Continuing without Temporal.", err)
+		temporalC = nil
+	} else {
+		defer temporalC.Close()
 	}
-	defer temporalC.Close()
 
 	// Initialize QoSManager
 	qosManager := services.NewQoSManager(db)
 
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8080"
+	}
+	addr := ":" + port
+
 	router := SetupRouter(db.DB, nil, nil, temporalC, qosManager, nil, nil, nil, nil)
-	log.Println("Server listening on :8080")
-	http.ListenAndServe(":8080", router)
+	log.Printf("Server listening on %s", addr)
+	if err := http.ListenAndServe(addr, router); err != nil {
+		log.Fatalf("FATAL: Server failed: %v", err)
+	}
 }

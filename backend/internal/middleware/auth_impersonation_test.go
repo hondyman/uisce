@@ -57,7 +57,7 @@ func TestAuthContextMiddleware_ImpersonationToken_PreservesRealRoles(t *testing.
 	)
 	require.NoError(t, err)
 
-	mw := AuthContextMiddleware(sm)
+	mw := AuthContextMiddleware(sm, nil)
 	handler := mw(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		authInfo, ok := security.AuthInfoFromContext(r.Context())
 		require.True(t, ok)
@@ -89,7 +89,7 @@ func TestAuthContextMiddleware_ImpersonationToken_LegacyFallback(t *testing.T) {
 	legacyToken, err := signLegacyImpersonationToken(tenantID)
 	require.NoError(t, err)
 
-	mw := AuthContextMiddleware(sm)
+	mw := AuthContextMiddleware(sm, nil)
 	handler := mw(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		authInfo, ok := security.AuthInfoFromContext(r.Context())
 		require.True(t, ok)

@@ -26,11 +26,11 @@ CREATE TABLE IF NOT EXISTS options_overlay_strategies (
         REFERENCES family_offices(family_id) ON DELETE CASCADE
 );
 
-CREATE INDEX idx_options_portfolio ON options_overlay_strategies(portfolio_id);
-CREATE INDEX idx_options_family ON options_overlay_strategies(family_id);
-CREATE INDEX idx_options_type ON options_overlay_strategies(strategy_type);
-CREATE INDEX idx_options_status ON options_overlay_strategies(status);
-CREATE INDEX idx_options_expiration ON options_overlay_strategies(expiration);
+CREATE INDEX IF NOT EXISTS idx_options_portfolio ON options_overlay_strategies(portfolio_id);
+CREATE INDEX IF NOT EXISTS idx_options_family ON options_overlay_strategies(family_id);
+CREATE INDEX IF NOT EXISTS idx_options_type ON options_overlay_strategies(strategy_type);
+CREATE INDEX IF NOT EXISTS idx_options_status ON options_overlay_strategies(status);
+CREATE INDEX IF NOT EXISTS idx_options_expiration ON options_overlay_strategies(expiration);
 
 -- Option Legs (individual options in a strategy)
 CREATE TABLE IF NOT EXISTS option_legs (
@@ -52,8 +52,8 @@ CREATE TABLE IF NOT EXISTS option_legs (
         REFERENCES options_overlay_strategies(strategy_id) ON DELETE CASCADE
 );
 
-CREATE INDEX idx_leg_strategy ON option_legs(strategy_id);
-CREATE INDEX idx_leg_type ON option_legs(leg_type);
+CREATE INDEX IF NOT EXISTS idx_leg_strategy ON option_legs(strategy_id);
+CREATE INDEX IF NOT EXISTS idx_leg_type ON option_legs(leg_type);
 
 -- ==============================================================================
 -- TAIL RISK ANALYSIS
@@ -86,9 +86,9 @@ CREATE TABLE IF NOT EXISTS tail_risk_analyses (
         REFERENCES family_offices(family_id) ON DELETE CASCADE
 );
 
-CREATE INDEX idx_tail_risk_portfolio ON tail_risk_analyses(portfolio_id);
-CREATE INDEX idx_tail_risk_family ON tail_risk_analyses(family_id);
-CREATE INDEX idx_tail_risk_date ON tail_risk_analyses(analysis_date DESC);
+CREATE INDEX IF NOT EXISTS idx_tail_risk_portfolio ON tail_risk_analyses(portfolio_id);
+CREATE INDEX IF NOT EXISTS idx_tail_risk_family ON tail_risk_analyses(family_id);
+CREATE INDEX IF NOT EXISTS idx_tail_risk_date ON tail_risk_analyses(analysis_date DESC);
 
 -- ==============================================================================
 -- DRAWDOWN ANALYSIS
@@ -122,9 +122,9 @@ CREATE TABLE IF NOT EXISTS drawdown_analyses (
         REFERENCES family_offices(family_id) ON DELETE CASCADE
 );
 
-CREATE INDEX idx_drawdown_portfolio ON drawdown_analyses(portfolio_id);
-CREATE INDEX idx_drawdown_family ON drawdown_analyses(family_id);
-CREATE INDEX idx_drawdown_date ON drawdown_analyses(analysis_date DESC);
+CREATE INDEX IF NOT EXISTS idx_drawdown_portfolio ON drawdown_analyses(portfolio_id);
+CREATE INDEX IF NOT EXISTS idx_drawdown_family ON drawdown_analyses(family_id);
+CREATE INDEX IF NOT EXISTS idx_drawdown_date ON drawdown_analyses(analysis_date DESC);
 
 -- ==============================================================================
 -- RISK ALERTS
@@ -148,11 +148,11 @@ CREATE TABLE IF NOT EXISTS risk_alerts (
         REFERENCES family_offices(family_id) ON DELETE CASCADE
 );
 
-CREATE INDEX idx_alert_portfolio ON risk_alerts(portfolio_id);
-CREATE INDEX idx_alert_family ON risk_alerts(family_id);
-CREATE INDEX idx_alert_type ON risk_alerts(alert_type);
-CREATE INDEX idx_alert_severity ON risk_alerts(severity);
-CREATE INDEX idx_alert_acknowledged ON risk_alerts(acknowledged, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_alert_portfolio ON risk_alerts(portfolio_id);
+CREATE INDEX IF NOT EXISTS idx_alert_family ON risk_alerts(family_id);
+CREATE INDEX IF NOT EXISTS idx_alert_type ON risk_alerts(alert_type);
+CREATE INDEX IF NOT EXISTS idx_alert_severity ON risk_alerts(severity);
+CREATE INDEX IF NOT EXISTS idx_alert_acknowledged ON risk_alerts(acknowledged, created_at DESC);
 
 -- ==============================================================================
 -- COMMENTS

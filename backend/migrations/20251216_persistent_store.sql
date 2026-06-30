@@ -28,6 +28,7 @@ BEGIN
 END;
 $$ language 'plpgsql';
 
+DROP TRIGGER IF EXISTS update_persistent_store_modtime ON persistent_store;
 CREATE TRIGGER update_persistent_store_modtime
     BEFORE UPDATE ON persistent_store
     FOR EACH ROW

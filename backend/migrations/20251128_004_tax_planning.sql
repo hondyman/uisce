@@ -55,9 +55,9 @@ CREATE TABLE IF NOT EXISTS tax_lots (
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
-CREATE INDEX idx_tax_lots_client ON tax_lots(client_id);
-CREATE INDEX idx_tax_lots_ticker ON tax_lots(ticker);
-CREATE INDEX idx_tax_lots_unrealized ON tax_lots(unrealized_gain_loss);
+CREATE INDEX IF NOT EXISTS idx_tax_lots_client ON tax_lots(client_id);
+CREATE INDEX IF NOT EXISTS idx_tax_lots_ticker ON tax_lots(ticker);
+CREATE INDEX IF NOT EXISTS idx_tax_lots_unrealized ON tax_lots(unrealized_gain_loss);
 
 -- Client tax profile
 CREATE TABLE IF NOT EXISTS client_tax_profiles (
@@ -87,4 +87,4 @@ CREATE TABLE IF NOT EXISTS client_tax_profiles (
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
-CREATE INDEX idx_tax_profiles_client ON client_tax_profiles(client_id);
+CREATE INDEX IF NOT EXISTS idx_tax_profiles_client ON client_tax_profiles(client_id);

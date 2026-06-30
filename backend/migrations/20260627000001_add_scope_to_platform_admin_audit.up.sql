@@ -35,7 +35,7 @@ BEGIN
     IF NOT EXISTS (
         SELECT 1 FROM pg_indexes WHERE indexname = 'idx_paa_session'
     ) THEN
-        CREATE INDEX idx_paa_session ON platform_admin_audit (session_id);
+        CREATE INDEX IF NOT EXISTS idx_paa_session ON platform_admin_audit (session_id);
     END IF;
 END $$;
 

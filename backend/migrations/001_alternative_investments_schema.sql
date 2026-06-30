@@ -79,9 +79,9 @@ CREATE TABLE IF NOT EXISTS alternative_investments (
 );
 
 -- Indexes for performance
-CREATE INDEX idx_alt_investments_tenant_client ON alternative_investments(tenant_id, client_id) WHERE deleted_at IS NULL;
-CREATE INDEX idx_alt_investments_asset_class ON alternative_investments(asset_class) WHERE deleted_at IS NULL;
-CREATE INDEX idx_alt_investments_vintage_year ON alternative_investments(vintage_year) WHERE deleted_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_alt_investments_tenant_client ON alternative_investments(tenant_id, client_id) WHERE deleted_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_alt_investments_asset_class ON alternative_investments(asset_class) WHERE deleted_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_alt_investments_vintage_year ON alternative_investments(vintage_year) WHERE deleted_at IS NULL;
 
 -- ============================================================================
 -- CAPITAL CALLS (Money requested by GP)
@@ -132,9 +132,9 @@ CREATE TABLE IF NOT EXISTS capital_calls (
 );
 
 -- Indexes
-CREATE INDEX idx_capital_calls_status ON capital_calls(status, due_date);
-CREATE INDEX idx_capital_calls_investment ON capital_calls(investment_id);
-CREATE INDEX idx_capital_calls_due_date ON capital_calls(due_date) WHERE status IN ('PENDING', 'PARTIALLY_FUNDED');
+CREATE INDEX IF NOT EXISTS idx_capital_calls_status ON capital_calls(status, due_date);
+CREATE INDEX IF NOT EXISTS idx_capital_calls_investment ON capital_calls(investment_id);
+CREATE INDEX IF NOT EXISTS idx_capital_calls_due_date ON capital_calls(due_date) WHERE status IN ('PENDING', 'PARTIALLY_FUNDED');
 
 -- ============================================================================
 -- CAPITAL DISTRIBUTIONS (Money returned to LP)
@@ -173,8 +173,8 @@ CREATE TABLE IF NOT EXISTS capital_distributions (
 );
 
 -- Indexes
-CREATE INDEX idx_distributions_investment ON capital_distributions(investment_id, distribution_date DESC);
-CREATE INDEX idx_distributions_date ON capital_distributions(distribution_date DESC);
+CREATE INDEX IF NOT EXISTS idx_distributions_investment ON capital_distributions(investment_id, distribution_date DESC);
+CREATE INDEX IF NOT EXISTS idx_distributions_date ON capital_distributions(distribution_date DESC);
 
 -- ============================================================================
 -- PERFORMANCE METRICS (Calculated periodically)
@@ -222,8 +222,8 @@ CREATE TABLE IF NOT EXISTS alternative_investment_performance (
 );
 
 -- Indexes
-CREATE INDEX idx_performance_investment_date ON alternative_investment_performance(investment_id, as_of_date DESC);
-CREATE INDEX idx_performance_as_of_date ON alternative_investment_performance(as_of_date DESC);
+CREATE INDEX IF NOT EXISTS idx_performance_investment_date ON alternative_investment_performance(investment_id, as_of_date DESC);
+CREATE INDEX IF NOT EXISTS idx_performance_as_of_date ON alternative_investment_performance(as_of_date DESC);
 
 -- ============================================================================
 -- CAPITAL CALL FORECASTS (ML-powered predictions)
@@ -254,8 +254,8 @@ CREATE TABLE IF NOT EXISTS capital_call_forecasts (
 );
 
 -- Indexes
-CREATE INDEX idx_forecasts_investment ON capital_call_forecasts(investment_id, forecasted_call_date);
-CREATE INDEX idx_forecasts_date ON capital_call_forecasts(forecasted_call_date) WHERE alert_triggered = FALSE;
+CREATE INDEX IF NOT EXISTS idx_forecasts_investment ON capital_call_forecasts(investment_id, forecasted_call_date);
+CREATE INDEX IF NOT EXISTS idx_forecasts_date ON capital_call_forecasts(forecasted_call_date) WHERE alert_triggered = FALSE;
 
 -- ============================================================================
 -- DOCUMENT STORAGE AND PROCESSING
@@ -314,10 +314,10 @@ CREATE TABLE IF NOT EXISTS alternative_investment_documents (
 );
 
 -- Indexes
-CREATE INDEX idx_documents_investment_type ON alternative_investment_documents(investment_id, document_type);
-CREATE INDEX idx_documents_status ON alternative_investment_documents(processing_status) 
+CREATE INDEX IF NOT EXISTS idx_documents_investment_type ON alternative_investment_documents(investment_id, document_type);
+CREATE INDEX IF NOT EXISTS idx_documents_status ON alternative_investment_documents(processing_status) 
     WHERE processing_status IN ('PENDING', 'NEEDS_REVIEW');
-CREATE INDEX idx_documents_uploaded_at ON alternative_investment_documents(uploaded_at DESC);
+CREATE INDEX IF NOT EXISTS idx_documents_uploaded_at ON alternative_investment_documents(uploaded_at DESC);
 
 -- ============================================================================
 -- ASSET-SPECIFIC KPIs (Polymorphic by asset class)
@@ -339,9 +339,9 @@ CREATE TABLE IF NOT EXISTS alternative_investment_kpis (
 );
 
 -- Indexes
-CREATE INDEX idx_kpis_investment ON alternative_investment_kpis(investment_id, period_end_date DESC);
-CREATE INDEX idx_kpis_period ON alternative_investment_kpis(period_end_date DESC);
-CREATE INDEX idx_kpis_jsonb ON alternative_investment_kpis USING GIN (kpis);
+CREATE INDEX IF NOT EXISTS idx_kpis_investment ON alternative_investment_kpis(investment_id, period_end_date DESC);
+CREATE INDEX IF NOT EXISTS idx_kpis_period ON alternative_investment_kpis(period_end_date DESC);
+CREATE INDEX IF NOT EXISTS idx_kpis_jsonb ON alternative_investment_kpis USING GIN (kpis);
 
 -- ============================================================================
 -- COMMENTS TABLE FOR KPIs (Example JSONB structures)
@@ -389,11 +389,13 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+DROP TRIGGER IF EXISTS update_alternative_investments_updated_at ON alternative_investments;
 CREATE TRIGGER update_alternative_investments_updated_at
     BEFORE UPDATE ON alternative_investments
     FOR EACH ROW
     EXECUTE FUNCTION update_updated_at_column();
 
+DROP TRIGGER IF EXISTS update_capital_calls_updated_at ON capital_calls;
 CREATE TRIGGER update_capital_calls_updated_at
     BEFORE UPDATE ON capital_calls
     FOR EACH ROW
@@ -419,6 +421,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+DROP TRIGGER IF EXISTS trigger_update_capital_called ON capital_calls;
 CREATE TRIGGER trigger_update_capital_called
     AFTER UPDATE ON capital_calls
     FOR EACH ROW

@@ -1,12 +1,20 @@
 package middleware
 
 import (
+	"context"
 	"net/http"
 	"strings"
 
+	"github.com/google/uuid"
 	"github.com/hondyman/semlayer/backend/internal/identity"
 	"github.com/hondyman/semlayer/backend/internal/security"
 	"github.com/hondyman/semlayer/backend/internal/services"
+)
+
+type contextKey string
+
+const (
+	UserEmailKey contextKey = "user_email"
 )
 
 // AuthContextMiddleware returns a chi-compatible middleware that validates
@@ -14,149 +22,218 @@ import (
 // into the request context. If validation fails the request continues but no
 // actor is set (handlers should enforce auth as needed).
 //
+// When profileSvc is provided, the middleware also enriches the request context
+// with the user's abstract security profile: internal Uisce operator roles are
+// taken from the uisce_metadata.operator_role claim, while tenant-scoped
+// enterprise IdP groups are mapped via security.identity_profile_mappings to a
+// functional role and clearance level.
+//
 // Impersonation token detection: the middleware first attempts to parse the
 // Bearer token as a platform-internal impersonation context token (HMAC-SHA256).
 // If it matches, the request context is populated with the TARGET tenant_id as
 // the concrete tenant identifier — meaning all downstream RLS, ABAC, and
 // BuildContext logic runs identically to a normal tenant-scoped request.
-func AuthContextMiddleware(secMgr *services.SecurityManager) func(http.Handler) http.Handler {
+func AuthContextMiddleware(secMgr *services.SecurityManager, profileSvc *security.ProfileService) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if secMgr != nil {
-				authHeader := r.Header.Get("Authorization")
-				if authHeader != "" {
-					// ── Check for impersonation context token first ──────────
-					// Impersonation tokens are HMAC-signed platform-internal tokens
-					// that carry a concrete target tenant_id and impersonation_active=true.
-					// If this succeeds, the downstream security context behaves exactly
-					// like a normal tenant user — no special-casing required.
-					rawToken := strings.TrimPrefix(authHeader, "Bearer ")
-					if impPayload, err := security.ValidateImpersonationToken(rawToken); err == nil {
-						uid := impPayload.Sub
-						tenantID := impPayload.TenantID
+			if secMgr == nil {
+				next.ServeHTTP(w, r)
+				return
+			}
 
-						// Authoritative identity: the REAL admin, not the target tenant user.
-						r.Header.Set("X-User-ID", uid)
-						r.Header.Set("X-Tenant-ID", tenantID)
+			authHeader := r.Header.Get("Authorization")
+			if authHeader != "" {
+				// ── Check for impersonation context token first ──────────
+				rawToken := strings.TrimPrefix(authHeader, "Bearer ")
+				if impPayload, err := security.ValidateImpersonationToken(rawToken); err == nil {
+					uid := impPayload.Sub
+					tenantID := impPayload.TenantID
 
-						// Signal to downstream handlers and the frontend that impersonation is active.
-						w.Header().Set("X-Impersonation-Active", "true")
-						w.Header().Set("X-Real-Admin-ID", uid)
-						w.Header().Set("X-Impersonation-Mode", string(impPayload.Mode))
+					r.Header.Set("X-User-ID", uid)
+					r.Header.Set("X-Tenant-ID", tenantID)
 
-						// Preserve the real admin roles so downstream authorization and audit
-						// know which role initiated the session. Fall back to the token's
-						// admin_role for tokens that do not carry RealRoles. Legacy tokens
-						// issued before multi-role support have neither field; treat them as
-						// global_admin because the platform previously allowed only global
-						// admins to impersonate.
-						realRoles := impPayload.RealRoles
-						adminRole := impPayload.AdminRole
-						if len(realRoles) == 0 {
-							if adminRole != "" {
-								realRoles = []string{adminRole}
-							} else {
-								realRoles = []string{security.RoleGlobalAdmin}
-								adminRole = security.RoleGlobalAdmin
-							}
+					w.Header().Set("X-Impersonation-Active", "true")
+					w.Header().Set("X-Real-Admin-ID", uid)
+					w.Header().Set("X-Impersonation-Mode", string(impPayload.Mode))
+
+					realRoles := impPayload.RealRoles
+					adminRole := impPayload.AdminRole
+					if len(realRoles) == 0 {
+						if adminRole != "" {
+							realRoles = []string{adminRole}
+						} else {
+							realRoles = []string{security.RoleGlobalAdmin}
+							adminRole = security.RoleGlobalAdmin
 						}
-						isGlobalAdmin := hasRole(realRoles, security.RoleGlobalAdmin) ||
-							hasRole(realRoles, security.RoleGlobalOps) ||
-							hasRole(realRoles, "core_admin") ||
-							hasRole(realRoles, "is_core_admin")
+					}
+					isGlobalAdmin := hasRole(realRoles, security.RoleGlobalAdmin) ||
+						hasRole(realRoles, security.RoleGlobalOps) ||
+						hasRole(realRoles, "core_admin") ||
+						hasRole(realRoles, "is_core_admin")
 
-						ctx := identity.WithActorTenant(r.Context(), uid, tenantID)
-						ctx = security.WithAuthInfo(ctx, security.AuthInfo{
-							UserID:                 uid,
-							Roles:                  realRoles,
-							TenantIDs:              []string{tenantID},
-							IsGlobalAdmin:          isGlobalAdmin,
-							ImpersonationActive:    true,
-							RealAdminUserID:        uid,
-							ImpersonationSessionID: impPayload.SessionID,
-							ImpersonationMode:      string(impPayload.Mode),
-							ImpersonationAdminRole: adminRole,
-						})
-						// Attach the impersonation scope so BuildContext can enforce it.
-						// Default to tenant-wide; honour the token's scope_kind/scope_id when set.
-						ctx = security.WithImpersonationScope(ctx, security.ImpersonationScopeContext{
-							Kind: impPayload.ScopeKind,
-							ID:   impPayload.ScopeID,
-						})
-						r = r.WithContext(ctx)
+					ctx := identity.WithActorTenant(r.Context(), uid, tenantID)
+					ctx = security.WithAuthInfo(ctx, security.AuthInfo{
+						UserID:                 uid,
+						Roles:                  realRoles,
+						TenantIDs:              []string{tenantID},
+						IsGlobalAdmin:          isGlobalAdmin,
+						ImpersonationActive:    true,
+						RealAdminUserID:        uid,
+						ImpersonationSessionID: impPayload.SessionID,
+						ImpersonationMode:      string(impPayload.Mode),
+						ImpersonationAdminRole: adminRole,
+					})
+					ctx = security.WithImpersonationScope(ctx, security.ImpersonationScopeContext{
+						Kind: impPayload.ScopeKind,
+						ID:   impPayload.ScopeID,
+					})
+					r = r.WithContext(ctx)
+					next.ServeHTTP(w, r)
+					return
+				}
+
+				// ── Standard JWT validation ──────────────────────────────
+				if jclaims, err := secMgr.ValidateToken(authHeader); err == nil {
+					uid := jclaims.UserID
+					if uid == "" {
 						next.ServeHTTP(w, r)
 						return
 					}
 
-					// ── Standard JWT validation ──────────────────────────────
-					if jclaims, err := secMgr.ValidateToken(authHeader); err == nil {
-						uid := jclaims.UserID
-						if uid != "" {
-							// Inject UserID into headers for legacy handlers that rely on it
-							r.Header.Set("X-User-ID", uid)
+					// Inject UserID into headers for legacy handlers that rely on it
+					r.Header.Set("X-User-ID", uid)
 
-							// Authoritative Tenant ID from token
-							tenantID := strings.TrimSpace(jclaims.TenantID)
-							tenantIDs := normalizeTenantIDs(jclaims.TenantIDs, tenantID)
-							if tenantID != "" {
-								// Override header with authoritative value from token if present.
-								// If missing from token, we do NOT fallback to header to prevent injection.
-								r.Header.Set("X-Tenant-ID", tenantID)
-							} else if len(tenantIDs) == 1 {
-								r.Header.Set("X-Tenant-ID", tenantIDs[0])
-							}
+					// Authoritative Tenant ID from token
+					tenantID := strings.TrimSpace(jclaims.TenantID)
+					tenantIDs := normalizeTenantIDs(jclaims.TenantIDs, tenantID)
+					if tenantID != "" {
+						r.Header.Set("X-Tenant-ID", tenantID)
+					} else if len(tenantIDs) == 1 {
+						tenantID = tenantIDs[0]
+						r.Header.Set("X-Tenant-ID", tenantID)
+					}
 
-// isGlobalAdmin is true for global_admin, global_ops, or the legacy is_core_admin flag.
-						// The jclaims.IsCoreAdmin field may be absent in newer JWT lib versions; we treat it
-						// as zero-value (false) via the safe field access pattern below.
-						isGlobalAdmin := hasRole(normalizeStringList(jclaims.Roles), "global_admin") ||
-							hasRole(normalizeStringList(jclaims.Roles), "global_ops")
-						// Backward-compat: also accept legacy "core_admin" / "is_core_admin" claim if present.
-						if !isGlobalAdmin && len(normalizeStringList(jclaims.Roles)) > 0 {
-							for _, role := range normalizeStringList(jclaims.Roles) {
-								if role == "core_admin" || role == "is_core_admin" {
-									isGlobalAdmin = true
-									break
-								}
-							}
+					roles := normalizeStringList(jclaims.Roles)
+					functionalRole := strings.TrimSpace(jclaims.OperatorRole)
+					clearanceLevel := "L1"
+					isGlobalAdmin := false
+
+					// Internal Uisce staff carry an explicit operator_role in the token.
+					if functionalRole != "" {
+						roles = appendIfMissing(roles, functionalRole)
+						isGlobalAdmin = functionalRole == "global_admin" ||
+							functionalRole == "global_ops" ||
+							functionalRole == "core_admin" ||
+							functionalRole == "is_core_admin"
+						if !isGlobalAdmin {
+							// Helpdesk / professional services are platform operators too.
+							isGlobalAdmin = functionalRole == "helpdesk" || functionalRole == "professional_services"
 						}
 
-							ctx := identity.WithActorTenant(r.Context(), uid, tenantID)
-							ctx = security.WithAuthInfo(ctx, security.AuthInfo{
-								UserID:        uid,
-								Roles:         normalizeStringList(jclaims.Roles),
-								TenantIDs:     tenantIDs,
-								IsGlobalAdmin: isGlobalAdmin,
-							})
-							r = r.WithContext(ctx)
+						// Enforce support lease validation for professional services and helpdesk operators
+						if (functionalRole == "professional_services" || functionalRole == "helpdesk") && profileSvc != nil {
+							requestedTenant := strings.TrimSpace(r.Header.Get("X-Tenant-ID"))
+							if requestedTenant == "" {
+								http.Error(w, "Forbidden: Ambient Power Prohibited. Explicitly select a target Tenant ID.", http.StatusForbidden)
+								return
+							}
+
+							tid, err := uuid.Parse(requestedTenant)
+							if err != nil {
+								http.Error(w, "Forbidden: Invalid target Tenant ID format.", http.StatusForbidden)
+								return
+							}
+
+							_, err = profileSvc.VerifyStaffAssignment(r.Context(), jclaims.Email, tid)
+							if err != nil {
+								http.Error(w, "Forbidden: No active data lease assignment exists for this target tenant.", http.StatusForbidden)
+								return
+							}
+
+							// Lease verified! Set tenant context.
+							tenantID = requestedTenant
+							r.Header.Set("X-Tenant-ID", tenantID)
+							tenantIDs = []string{tenantID}
+						}
+					} else if profileSvc != nil && tenantID != "" && len(jclaims.IDPGroups) > 0 {
+						// Tenant-scoped user: map raw IdP groups to abstract profile.
+						tid, err := uuid.Parse(tenantID)
+						if err == nil {
+							if fr, cl, err := profileSvc.EnrichSubjectAttributes(r.Context(), tid, uid, jclaims.IDPGroups); err == nil {
+								functionalRole = fr
+								clearanceLevel = cl
+								roles = appendIfMissing(roles, functionalRole)
+							}
 						}
 					}
-				} else if apiKey := r.Header.Get("X-API-Key"); apiKey != "" {
-					if ak, ok := secMgr.GetAPIKey(apiKey); ok && ak != nil {
-						uid := ak.UserID
-						if uid != "" {
-							r.Header.Set("X-User-ID", uid)
 
-							tenantID := ak.TenantID
-							if tenantID != "" {
-								r.Header.Set("X-Tenant-ID", tenantID)
-							}
+					// Fallback global-admin detection from legacy role claims.
+					if !isGlobalAdmin {
+						isGlobalAdmin = hasRole(roles, "global_admin") || hasRole(roles, "global_ops") ||
+							hasRole(roles, "core_admin") || hasRole(roles, "is_core_admin")
+					}
 
-							ctx := identity.WithActorTenant(r.Context(), uid, tenantID)
-							ctx = security.WithAuthInfo(ctx, security.AuthInfo{
-								UserID:    uid,
-								Roles:     normalizeStringList(ak.Roles),
-								TenantIDs: normalizeTenantIDs(ak.TenantIDs, tenantID),
-							})
-							r = r.WithContext(ctx)
+					// Expose enriched attributes as headers for legacy handlers.
+					if functionalRole != "" {
+						r.Header.Set("X-User-Role", functionalRole)
+						r.Header.Set("X-User-Permissions", functionalRole)
+					}
+					if clearanceLevel != "" {
+						r.Header.Set("X-Clearance-Level", clearanceLevel)
+					}
+
+					ctx := identity.WithActorTenant(r.Context(), uid, tenantID)
+					ctx = context.WithValue(ctx, UserEmailKey, jclaims.Email)
+					ctx = security.WithAuthInfo(ctx, security.AuthInfo{
+						UserID:         uid,
+						Email:          jclaims.Email,
+						Roles:          roles,
+						TenantIDs:      tenantIDs,
+						IsGlobalAdmin:  isGlobalAdmin,
+						FunctionalRole: functionalRole,
+						ClearanceLevel: clearanceLevel,
+						IDPGroups:      jclaims.IDPGroups,
+					})
+					r = r.WithContext(ctx)
+				}
+			} else if apiKey := r.Header.Get("X-API-Key"); apiKey != "" {
+				if ak, ok := secMgr.GetAPIKey(apiKey); ok && ak != nil {
+					uid := ak.UserID
+					if uid != "" {
+						r.Header.Set("X-User-ID", uid)
+
+						tenantID := ak.TenantID
+						if tenantID != "" {
+							r.Header.Set("X-Tenant-ID", tenantID)
 						}
+
+						ctx := identity.WithActorTenant(r.Context(), uid, tenantID)
+						ctx = security.WithAuthInfo(ctx, security.AuthInfo{
+							UserID:    uid,
+							Roles:     normalizeStringList(ak.Roles),
+							TenantIDs: normalizeTenantIDs(ak.TenantIDs, tenantID),
+						})
+						r = r.WithContext(ctx)
 					}
 				}
-
 			}
+
 			next.ServeHTTP(w, r)
 		})
 	}
+}
+
+func appendIfMissing(list []string, value string) []string {
+	trimmed := strings.TrimSpace(value)
+	if trimmed == "" {
+		return list
+	}
+	for _, item := range list {
+		if strings.EqualFold(strings.TrimSpace(item), trimmed) {
+			return list
+		}
+	}
+	return append(list, trimmed)
 }
 
 func normalizeTenantIDs(values []string, fallback string) []string {

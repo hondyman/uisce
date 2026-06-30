@@ -53,7 +53,7 @@ BEGIN
         ALTER TABLE abac_policies ALTER COLUMN tenant_id DROP NOT NULL;
         ALTER TABLE abac_policies ALTER COLUMN datasource_id DROP NOT NULL;
     ELSE
-        CREATE TABLE abac_policies (
+        CREATE TABLE IF NOT EXISTS abac_policies (
             id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
             tenant_id         UUID,
             datasource_id     UUID,
@@ -69,7 +69,7 @@ BEGIN
             created_at        TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
             updated_at        TIMESTAMP WITH TIME ZONE DEFAULT NOW()
         );
-        CREATE INDEX idx_abac_policies_tenant ON abac_policies (tenant_id);
+        CREATE INDEX IF NOT EXISTS idx_abac_policies_tenant ON abac_policies (tenant_id);
     END IF;
 END $$;
 

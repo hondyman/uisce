@@ -6,7 +6,7 @@
 -- ALERT CONFIGURATION TABLES
 -- =========================================--
 
--- Create table for alert rules
+-- CREATE TABLE IF NOT EXISTS for alert rules
 CREATE TABLE IF NOT EXISTS public.pop_alert_rules (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     metric_id UUID REFERENCES public.pop_metrics(id) ON DELETE CASCADE,
@@ -23,7 +23,7 @@ CREATE TABLE IF NOT EXISTS public.pop_alert_rules (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- Create table for alert instances
+-- CREATE TABLE IF NOT EXISTS for alert instances
 CREATE TABLE IF NOT EXISTS public.pop_alert_instances (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     rule_id UUID REFERENCES public.pop_alert_rules(id) ON DELETE CASCADE,
@@ -41,7 +41,7 @@ CREATE TABLE IF NOT EXISTS public.pop_alert_instances (
     escalation_level INTEGER DEFAULT 0
 );
 
--- Create table for alert notifications
+-- CREATE TABLE IF NOT EXISTS for alert notifications
 CREATE TABLE IF NOT EXISTS public.pop_alert_notifications (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     alert_instance_id UUID REFERENCES public.pop_alert_instances(id) ON DELETE CASCADE,
@@ -225,7 +225,7 @@ INSERT INTO public.pop_alert_instances (
 -- ALERT ESCALATION RULES
 -- =========================================--
 
--- Create table for alert escalation policies
+-- CREATE TABLE IF NOT EXISTS for alert escalation policies
 CREATE TABLE IF NOT EXISTS public.pop_alert_escalations (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     rule_id UUID REFERENCES public.pop_alert_rules(id) ON DELETE CASCADE,
@@ -276,7 +276,7 @@ INSERT INTO public.pop_alert_escalations (
 -- ALERT DASHBOARD INTEGRATION
 -- =========================================--
 
--- Create table for alert dashboard widgets
+-- CREATE TABLE IF NOT EXISTS for alert dashboard widgets
 CREATE TABLE IF NOT EXISTS public.pop_alert_dashboard_widgets (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     dashboard_id UUID REFERENCES public.pop_dashboards(id) ON DELETE CASCADE,
@@ -347,7 +347,7 @@ INSERT INTO public.pop_alert_dashboard_widgets (
 -- ALERT ANALYTICS AND REPORTING
 -- =========================================--
 
--- Create table for alert analytics
+-- CREATE TABLE IF NOT EXISTS for alert analytics
 CREATE TABLE IF NOT EXISTS public.pop_alert_analytics (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     date DATE NOT NULL,

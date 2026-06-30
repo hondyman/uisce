@@ -1,5 +1,5 @@
 -- +goose Up
-CREATE TABLE claim (
+CREATE TABLE IF NOT EXISTS claim (
   id UUID PRIMARY KEY,
   tenant_id uuid REFERENCES tenants(id) ON DELETE CASCADE,
   user_id TEXT REFERENCES app_user(id) ON DELETE CASCADE,
@@ -12,10 +12,10 @@ CREATE TABLE claim (
   expires_at TIMESTAMP,
   status TEXT NOT NULL DEFAULT 'active' -- active, expired, revoked
 );
-CREATE INDEX idx_claim_effective ON claim(tenant_id, user_id, asset_id) WHERE status='active';
-CREATE INDEX idx_claim_expiry ON claim(expires_at) WHERE status='active';
+CREATE INDEX IF NOT EXISTS idx_claim_effective ON claim(tenant_id, user_id, asset_id) WHERE status='active';
+CREATE INDEX IF NOT EXISTS idx_claim_expiry ON claim(expires_at) WHERE status='active';
 
-CREATE TABLE claim_bundle (
+CREATE TABLE IF NOT EXISTS claim_bundle (
   id UUID PRIMARY KEY,
   tenant_id uuid REFERENCES tenants(id) ON DELETE CASCADE,
   name TEXT NOT NULL,
@@ -29,16 +29,16 @@ CREATE TABLE claim_bundle (
   UNIQUE (tenant_id, name, version)
 );
 
-CREATE TABLE claim_bundle_item (
+CREATE TABLE IF NOT EXISTS claim_bundle_item (
   id UUID PRIMARY KEY,
   bundle_id UUID REFERENCES claim_bundle(id) ON DELETE CASCADE,
   asset_id UUID REFERENCES asset(id) ON DELETE CASCADE,
   permission TEXT NOT NULL,
   scope TEXT[] NOT NULL DEFAULT '{}'
 );
-CREATE INDEX idx_bundle_item_bundle ON claim_bundle_item(bundle_id);
+CREATE INDEX IF NOT EXISTS idx_bundle_item_bundle ON claim_bundle_item(bundle_id);
 
-CREATE TABLE user_bundle_assignment (
+CREATE TABLE IF NOT EXISTS user_bundle_assignment (
   id UUID PRIMARY KEY,
   user_id TEXT REFERENCES app_user(id) ON DELETE CASCADE,
   tenant_id uuid REFERENCES tenants(id) ON DELETE CASCADE,
@@ -48,7 +48,7 @@ CREATE TABLE user_bundle_assignment (
   UNIQUE (user_id, tenant_id, bundle_id)
 );
 
-CREATE TABLE micro_bundle (
+CREATE TABLE IF NOT EXISTS micro_bundle (
   id UUID PRIMARY KEY,
   tenant_id uuid REFERENCES tenants(id) ON DELETE CASCADE,
   name TEXT NOT NULL,
@@ -60,7 +60,7 @@ CREATE TABLE micro_bundle (
   UNIQUE (tenant_id, name, version)
 );
 
-CREATE TABLE jit_addon_grant (
+CREATE TABLE IF NOT EXISTS jit_addon_grant (
   id UUID PRIMARY KEY,
   user_id TEXT REFERENCES app_user(id) ON DELETE CASCADE,
   tenant_id uuid REFERENCES tenants(id) ON DELETE CASCADE,
@@ -71,7 +71,7 @@ CREATE TABLE jit_addon_grant (
   reason TEXT,
   status TEXT NOT NULL DEFAULT 'active'
 );
-CREATE INDEX idx_jit_active ON jit_addon_grant(user_id, tenant_id, expires_at) WHERE status='active';
+CREATE INDEX IF NOT EXISTS idx_jit_active ON jit_addon_grant(user_id, tenant_id, expires_at) WHERE status='active';
 
 -- +goose Down
 DROP TABLE IF EXISTS jit_addon_grant;

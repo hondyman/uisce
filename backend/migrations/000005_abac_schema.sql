@@ -22,7 +22,7 @@ CREATE TRIGGER trigger_app_user_updated_at
     EXECUTE FUNCTION set_updated_at();
 
 -- Core ABAC Tables
-CREATE TABLE resources (
+CREATE TABLE IF NOT EXISTS resources (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     name VARCHAR(255) UNIQUE NOT NULL,
     attributes JSONB DEFAULT '{}',  -- e.g., {"type": "semantic_model", "owner": "user1"}
@@ -30,12 +30,13 @@ CREATE TABLE resources (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
+DROP TRIGGER IF EXISTS trigger_resources_updated_at ON resources;
 CREATE TRIGGER trigger_resources_updated_at
     BEFORE UPDATE ON resources
     FOR EACH ROW
     EXECUTE FUNCTION set_updated_at();
 
-CREATE TABLE policies (
+CREATE TABLE IF NOT EXISTS policies (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     name VARCHAR(255) NOT NULL,
     rules JSONB NOT NULL,  -- e.g., {"subject": {"role": "admin"}, "action": "read", "resource": {"type": "model"}, "effect": "allow"}
@@ -49,12 +50,13 @@ CREATE TABLE policies (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
+DROP TRIGGER IF EXISTS trigger_policies_updated_at ON policies;
 CREATE TRIGGER trigger_policies_updated_at
     BEFORE UPDATE ON policies
     FOR EACH ROW
     EXECUTE FUNCTION set_updated_at();
 
-CREATE TABLE audit_events (
+CREATE TABLE IF NOT EXISTS audit_events (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     event_type VARCHAR(50) NOT NULL,  -- e.g., "policy_eval", "admin_action"
     user_id TEXT REFERENCES app_user(id) ON DELETE SET NULL,
@@ -62,7 +64,7 @@ CREATE TABLE audit_events (
     timestamp TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE TABLE delegations (
+CREATE TABLE IF NOT EXISTS delegations (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     delegator_id TEXT REFERENCES app_user(id) ON DELETE CASCADE,
     delegatee_id TEXT REFERENCES app_user(id) ON DELETE CASCADE,
@@ -72,7 +74,7 @@ CREATE TABLE delegations (
 );
 
 -- Advanced Tables for Policy Management
-CREATE TABLE policy_versions (
+CREATE TABLE IF NOT EXISTS policy_versions (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     policy_id UUID REFERENCES policies(id) ON DELETE CASCADE,
     version INTEGER NOT NULL,
@@ -80,7 +82,7 @@ CREATE TABLE policy_versions (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE TABLE policy_conflicts (
+CREATE TABLE IF NOT EXISTS policy_conflicts (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     policy_id1 UUID REFERENCES policies(id) ON DELETE CASCADE,
     policy_id2 UUID REFERENCES policies(id) ON DELETE CASCADE,
@@ -89,7 +91,7 @@ CREATE TABLE policy_conflicts (
     detected_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE TABLE conflict_resolution_actions (
+CREATE TABLE IF NOT EXISTS conflict_resolution_actions (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     conflict_id UUID REFERENCES policy_conflicts(id) ON DELETE CASCADE,
     action_taken VARCHAR(255) NOT NULL,  -- e.g., "merged policies"

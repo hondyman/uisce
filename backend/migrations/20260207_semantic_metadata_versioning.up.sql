@@ -58,11 +58,13 @@ ALTER TABLE metadata_versions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE field_aliases ENABLE ROW LEVEL SECURITY;
 
 -- RLS Policy for metadata_versions: users can only see their tenant's versions
+DROP POLICY IF EXISTS metadata_versions_tenant_isolation ON metadata_versions;
 CREATE POLICY metadata_versions_tenant_isolation ON metadata_versions
     USING (tenant_id = current_setting('app.current_tenant_id')::uuid)
     WITH CHECK (tenant_id = current_setting('app.current_tenant_id')::uuid);
 
 -- RLS Policy for field_aliases: users can only see their tenant's aliases
+DROP POLICY IF EXISTS field_aliases_tenant_isolation ON field_aliases;
 CREATE POLICY field_aliases_tenant_isolation ON field_aliases
     USING (tenant_id = current_setting('app.current_tenant_id')::uuid)
     WITH CHECK (tenant_id = current_setting('app.current_tenant_id')::uuid);

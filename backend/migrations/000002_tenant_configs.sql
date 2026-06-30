@@ -22,10 +22,10 @@ CREATE TABLE IF NOT EXISTS tenant_configs (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- Create index for efficient tenant lookups
+-- CREATE index IF NOT EXISTS for efficient tenant lookups
 CREATE INDEX IF NOT EXISTS idx_tenant_configs_tenant_id ON tenant_configs(tenant_id);
 
--- Create index for tier-based queries
+-- CREATE index IF NOT EXISTS for tier-based queries
 CREATE INDEX IF NOT EXISTS idx_tenant_configs_tier ON tenant_configs(tier);
 
 -- Add trigger to update updated_at timestamp
@@ -37,6 +37,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+DROP TRIGGER IF EXISTS trigger_tenant_config_updated_at ON tenant_configs;
 CREATE TRIGGER trigger_tenant_config_updated_at
     BEFORE UPDATE ON tenant_configs
     FOR EACH ROW

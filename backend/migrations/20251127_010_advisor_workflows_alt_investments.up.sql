@@ -5,7 +5,20 @@
 -- This migration extends the existing alternative_investments schema with
 -- comprehensive pipeline management, due diligence workflows, portfolio
 -- construction, monitoring, and compliance automation.
--- ============================================================================
+DO $$
+BEGIN
+    IF EXISTS (
+        SELECT 1 
+        FROM information_schema.tables 
+        WHERE table_name = 'capital_events'
+    ) AND NOT EXISTS (
+        SELECT 1 
+        FROM information_schema.columns 
+        WHERE table_name = 'capital_events' AND column_name = 'investment_id'
+    ) THEN
+        DROP TABLE capital_events CASCADE;
+    END IF;
+END $$;
 
 -- ============================================================================
 -- SECTION 1: INVESTMENT OPPORTUNITY PIPELINE
@@ -112,12 +125,12 @@ CREATE TABLE IF NOT EXISTS investment_opportunities (
     updated_by UUID
 );
 
-CREATE INDEX idx_opportunities_client ON investment_opportunities(client_id);
-CREATE INDEX idx_opportunities_advisor ON investment_opportunities(advisor_id);
-CREATE INDEX idx_opportunities_stage ON investment_opportunities(current_stage);
-CREATE INDEX idx_opportunities_type ON investment_opportunities(opportunity_type);
-CREATE INDEX idx_opportunities_vintage ON investment_opportunities(vintage_year);
-CREATE INDEX idx_opportunities_workflow ON investment_opportunities(workflow_instance_id);
+CREATE INDEX IF NOT EXISTS idx_opportunities_client ON investment_opportunities(client_id);
+CREATE INDEX IF NOT EXISTS idx_opportunities_advisor ON investment_opportunities(advisor_id);
+CREATE INDEX IF NOT EXISTS idx_opportunities_stage ON investment_opportunities(current_stage);
+CREATE INDEX IF NOT EXISTS idx_opportunities_type ON investment_opportunities(opportunity_type);
+CREATE INDEX IF NOT EXISTS idx_opportunities_vintage ON investment_opportunities(vintage_year);
+CREATE INDEX IF NOT EXISTS idx_opportunities_workflow ON investment_opportunities(workflow_instance_id);
 
 -- ============================================================================
 -- SECTION 2: DUE DILIGENCE TRACKING
@@ -175,9 +188,9 @@ CREATE TABLE IF NOT EXISTS due_diligence_items (
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
-CREATE INDEX idx_dd_items_opportunity ON due_diligence_items(opportunity_id);
-CREATE INDEX idx_dd_items_status ON due_diligence_items(status);
-CREATE INDEX idx_dd_items_assigned ON due_diligence_items(assigned_to);
+CREATE INDEX IF NOT EXISTS idx_dd_items_opportunity ON due_diligence_items(opportunity_id);
+CREATE INDEX IF NOT EXISTS idx_dd_items_status ON due_diligence_items(status);
+CREATE INDEX IF NOT EXISTS idx_dd_items_assigned ON due_diligence_items(assigned_to);
 
 -- Due diligence templates (reusable checklists)
 CREATE TABLE IF NOT EXISTS due_diligence_templates (
@@ -196,7 +209,7 @@ CREATE TABLE IF NOT EXISTS due_diligence_templates (
     created_by UUID
 );
 
-CREATE INDEX idx_dd_templates_type ON due_diligence_templates(opportunity_type);
+CREATE INDEX IF NOT EXISTS idx_dd_templates_type ON due_diligence_templates(opportunity_type);
 
 -- ============================================================================
 -- SECTION 3: INVESTMENT COMMITTEE
@@ -239,8 +252,8 @@ CREATE TABLE IF NOT EXISTS investment_committee_meetings (
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
-CREATE INDEX idx_ic_meetings_date ON investment_committee_meetings(meeting_date);
-CREATE INDEX idx_ic_meetings_status ON investment_committee_meetings(status);
+CREATE INDEX IF NOT EXISTS idx_ic_meetings_date ON investment_committee_meetings(meeting_date);
+CREATE INDEX IF NOT EXISTS idx_ic_meetings_status ON investment_committee_meetings(status);
 
 -- Investment committee reviews (per opportunity)
 CREATE TABLE IF NOT EXISTS investment_committee_reviews (
@@ -290,9 +303,9 @@ CREATE TABLE IF NOT EXISTS investment_committee_reviews (
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
-CREATE INDEX idx_ic_reviews_opportunity ON investment_committee_reviews(opportunity_id);
-CREATE INDEX idx_ic_reviews_meeting ON investment_committee_reviews(meeting_id);
-CREATE INDEX idx_ic_reviews_decision ON investment_committee_reviews(decision);
+CREATE INDEX IF NOT EXISTS idx_ic_reviews_opportunity ON investment_committee_reviews(opportunity_id);
+CREATE INDEX IF NOT EXISTS idx_ic_reviews_meeting ON investment_committee_reviews(meeting_id);
+CREATE INDEX IF NOT EXISTS idx_ic_reviews_decision ON investment_committee_reviews(decision);
 
 -- ============================================================================
 -- SECTION 4: PORTFOLIO CONSTRUCTION & ALLOCATION
@@ -333,8 +346,8 @@ CREATE TABLE IF NOT EXISTS client_allocation_targets (
     created_by UUID
 );
 
-CREATE INDEX idx_allocation_targets_client ON client_allocation_targets(client_id);
-CREATE INDEX idx_allocation_targets_effective ON client_allocation_targets(effective_date);
+CREATE INDEX IF NOT EXISTS idx_allocation_targets_client ON client_allocation_targets(client_id);
+CREATE INDEX IF NOT EXISTS idx_allocation_targets_effective ON client_allocation_targets(effective_date);
 
 -- Allocation rebalancing triggers and alerts
 CREATE TABLE IF NOT EXISTS allocation_rebalance_triggers (
@@ -392,9 +405,9 @@ CREATE TABLE IF NOT EXISTS allocation_rebalance_triggers (
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
-CREATE INDEX idx_rebalance_triggers_client ON allocation_rebalance_triggers(client_id);
-CREATE INDEX idx_rebalance_triggers_status ON allocation_rebalance_triggers(status);
-CREATE INDEX idx_rebalance_triggers_fired ON allocation_rebalance_triggers(trigger_fired_at);
+CREATE INDEX IF NOT EXISTS idx_rebalance_triggers_client ON allocation_rebalance_triggers(client_id);
+CREATE INDEX IF NOT EXISTS idx_rebalance_triggers_status ON allocation_rebalance_triggers(status);
+CREATE INDEX IF NOT EXISTS idx_rebalance_triggers_fired ON allocation_rebalance_triggers(trigger_fired_at);
 
 -- Allocation recommendations (AI-generated)
 CREATE TABLE IF NOT EXISTS allocation_recommendations (
@@ -447,9 +460,9 @@ CREATE TABLE IF NOT EXISTS allocation_recommendations (
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
-CREATE INDEX idx_alloc_recs_client ON allocation_recommendations(client_id);
-CREATE INDEX idx_alloc_recs_opportunity ON allocation_recommendations(opportunity_id);
-CREATE INDEX idx_alloc_recs_status ON allocation_recommendations(status);
+CREATE INDEX IF NOT EXISTS idx_alloc_recs_client ON allocation_recommendations(client_id);
+CREATE INDEX IF NOT EXISTS idx_alloc_recs_opportunity ON allocation_recommendations(opportunity_id);
+CREATE INDEX IF NOT EXISTS idx_alloc_recs_status ON allocation_recommendations(status);
 
 -- ============================================================================
 -- SECTION 5: CAPITAL EVENTS (Enhanced from existing capital_calls table)
@@ -530,12 +543,12 @@ CREATE TABLE IF NOT EXISTS capital_events (
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
-CREATE INDEX idx_capital_events_investment ON capital_events(investment_id);
-CREATE INDEX idx_capital_events_client ON capital_events(client_id);
-CREATE INDEX idx_capital_events_type ON capital_events(event_type);
-CREATE INDEX idx_capital_events_status ON capital_events(status);
-CREATE INDEX idx_capital_events_due_date ON capital_events(due_date);
-CREATE INDEX idx_capital_events_workflow ON capital_events(workflow_instance_id);
+CREATE INDEX IF NOT EXISTS idx_capital_events_investment ON capital_events(investment_id);
+CREATE INDEX IF NOT EXISTS idx_capital_events_client ON capital_events(client_id);
+CREATE INDEX IF NOT EXISTS idx_capital_events_type ON capital_events(event_type);
+CREATE INDEX IF NOT EXISTS idx_capital_events_status ON capital_events(status);
+CREATE INDEX IF NOT EXISTS idx_capital_events_due_date ON capital_events(due_date);
+CREATE INDEX IF NOT EXISTS idx_capital_events_workflow ON capital_events(workflow_instance_id);
 
 -- ============================================================================
 -- SECTION 6: POST-INVESTMENT MONITORING
@@ -597,9 +610,9 @@ CREATE TABLE IF NOT EXISTS quarterly_reviews (
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
-CREATE INDEX idx_quarterly_reviews_client ON quarterly_reviews(client_id);
-CREATE INDEX idx_quarterly_reviews_period ON quarterly_reviews(review_period);
-CREATE INDEX idx_quarterly_reviews_status ON quarterly_reviews(status);
+CREATE INDEX IF NOT EXISTS idx_quarterly_reviews_client ON quarterly_reviews(client_id);
+CREATE INDEX IF NOT EXISTS idx_quarterly_reviews_period ON quarterly_reviews(review_period);
+CREATE INDEX IF NOT EXISTS idx_quarterly_reviews_status ON quarterly_reviews(status);
 
 -- Manager updates and communications
 CREATE TABLE IF NOT EXISTS manager_updates (
@@ -642,9 +655,9 @@ CREATE TABLE IF NOT EXISTS manager_updates (
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
-CREATE INDEX idx_manager_updates_investment ON manager_updates(investment_id);
-CREATE INDEX idx_manager_updates_type ON manager_updates(update_type);
-CREATE INDEX idx_manager_updates_date ON manager_updates(document_date);
+CREATE INDEX IF NOT EXISTS idx_manager_updates_investment ON manager_updates(investment_id);
+CREATE INDEX IF NOT EXISTS idx_manager_updates_type ON manager_updates(update_type);
+CREATE INDEX IF NOT EXISTS idx_manager_updates_date ON manager_updates(document_date);
 
 -- ============================================================================
 -- SECTION 7: COMPLIANCE & REGULATORY
@@ -718,10 +731,10 @@ CREATE TABLE IF NOT EXISTS regulatory_filings (
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
-CREATE INDEX idx_reg_filings_type ON regulatory_filings(filing_type);
-CREATE INDEX idx_reg_filings_period ON regulatory_filings(reporting_period);
-CREATE INDEX idx_reg_filings_status ON regulatory_filings(status);
-CREATE INDEX idx_reg_filings_due ON regulatory_filings(due_date);
+CREATE INDEX IF NOT EXISTS idx_reg_filings_type ON regulatory_filings(filing_type);
+CREATE INDEX IF NOT EXISTS idx_reg_filings_period ON regulatory_filings(reporting_period);
+CREATE INDEX IF NOT EXISTS idx_reg_filings_status ON regulatory_filings(status);
+CREATE INDEX IF NOT EXISTS idx_reg_filings_due ON regulatory_filings(due_date);
 
 -- Compliance checkpoints for opportunities
 CREATE TABLE IF NOT EXISTS compliance_checkpoints (
@@ -768,9 +781,9 @@ CREATE TABLE IF NOT EXISTS compliance_checkpoints (
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
-CREATE INDEX idx_compliance_checkpoints_opportunity ON compliance_checkpoints(opportunity_id);
-CREATE INDEX idx_compliance_checkpoints_type ON compliance_checkpoints(checkpoint_type);
-CREATE INDEX idx_compliance_checkpoints_status ON compliance_checkpoints(status);
+CREATE INDEX IF NOT EXISTS idx_compliance_checkpoints_opportunity ON compliance_checkpoints(opportunity_id);
+CREATE INDEX IF NOT EXISTS idx_compliance_checkpoints_type ON compliance_checkpoints(checkpoint_type);
+CREATE INDEX IF NOT EXISTS idx_compliance_checkpoints_status ON compliance_checkpoints(status);
 
 -- ============================================================================
 -- SECTION 8: E-SIGNATURE & DOCUMENTS
@@ -831,9 +844,9 @@ CREATE TABLE IF NOT EXISTS esignature_requests (
     created_by UUID
 );
 
-CREATE INDEX idx_esig_requests_opportunity ON esignature_requests(opportunity_id);
-CREATE INDEX idx_esig_requests_status ON esignature_requests(status);
-CREATE INDEX idx_esig_requests_envelope ON esignature_requests(external_envelope_id);
+CREATE INDEX IF NOT EXISTS idx_esig_requests_opportunity ON esignature_requests(opportunity_id);
+CREATE INDEX IF NOT EXISTS idx_esig_requests_status ON esignature_requests(status);
+CREATE INDEX IF NOT EXISTS idx_esig_requests_envelope ON esignature_requests(external_envelope_id);
 
 -- ============================================================================
 -- SECTION 9: ADVISOR NOTIFICATIONS & TASKS
@@ -904,12 +917,12 @@ CREATE TABLE IF NOT EXISTS advisor_tasks (
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
-CREATE INDEX idx_advisor_tasks_advisor ON advisor_tasks(advisor_id);
-CREATE INDEX idx_advisor_tasks_client ON advisor_tasks(client_id);
-CREATE INDEX idx_advisor_tasks_status ON advisor_tasks(status);
-CREATE INDEX idx_advisor_tasks_priority ON advisor_tasks(priority);
-CREATE INDEX idx_advisor_tasks_due ON advisor_tasks(due_date);
-CREATE INDEX idx_advisor_tasks_type ON advisor_tasks(task_type);
+CREATE INDEX IF NOT EXISTS idx_advisor_tasks_advisor ON advisor_tasks(advisor_id);
+CREATE INDEX IF NOT EXISTS idx_advisor_tasks_client ON advisor_tasks(client_id);
+CREATE INDEX IF NOT EXISTS idx_advisor_tasks_status ON advisor_tasks(status);
+CREATE INDEX IF NOT EXISTS idx_advisor_tasks_priority ON advisor_tasks(priority);
+CREATE INDEX IF NOT EXISTS idx_advisor_tasks_due ON advisor_tasks(due_date);
+CREATE INDEX IF NOT EXISTS idx_advisor_tasks_type ON advisor_tasks(task_type);
 
 -- ============================================================================
 -- SECTION 10: ANALYTICS & METRICS
@@ -947,8 +960,8 @@ CREATE TABLE IF NOT EXISTS pipeline_metrics_snapshots (
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
-CREATE INDEX idx_pipeline_metrics_date ON pipeline_metrics_snapshots(snapshot_date);
-CREATE INDEX idx_pipeline_metrics_advisor ON pipeline_metrics_snapshots(advisor_id);
+CREATE INDEX IF NOT EXISTS idx_pipeline_metrics_date ON pipeline_metrics_snapshots(snapshot_date);
+CREATE INDEX IF NOT EXISTS idx_pipeline_metrics_advisor ON pipeline_metrics_snapshots(advisor_id);
 
 -- Portfolio alternative metrics snapshot
 CREATE TABLE IF NOT EXISTS portfolio_alt_metrics_snapshots (
@@ -990,8 +1003,8 @@ CREATE TABLE IF NOT EXISTS portfolio_alt_metrics_snapshots (
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
-CREATE INDEX idx_portfolio_alt_metrics_date ON portfolio_alt_metrics_snapshots(snapshot_date);
-CREATE INDEX idx_portfolio_alt_metrics_client ON portfolio_alt_metrics_snapshots(client_id);
+CREATE INDEX IF NOT EXISTS idx_portfolio_alt_metrics_date ON portfolio_alt_metrics_snapshots(snapshot_date);
+CREATE INDEX IF NOT EXISTS idx_portfolio_alt_metrics_client ON portfolio_alt_metrics_snapshots(client_id);
 
 -- ============================================================================
 -- SECTION 11: AUDIT TRAIL
@@ -1028,10 +1041,10 @@ CREATE TABLE IF NOT EXISTS alt_investment_audit_log (
     metadata JSONB
 );
 
-CREATE INDEX idx_audit_log_entity ON alt_investment_audit_log(entity_type, entity_id);
-CREATE INDEX idx_audit_log_performed ON alt_investment_audit_log(performed_at);
-CREATE INDEX idx_audit_log_user ON alt_investment_audit_log(performed_by);
-CREATE INDEX idx_audit_log_client ON alt_investment_audit_log(client_id);
+CREATE INDEX IF NOT EXISTS idx_audit_log_entity ON alt_investment_audit_log(entity_type, entity_id);
+CREATE INDEX IF NOT EXISTS idx_audit_log_performed ON alt_investment_audit_log(performed_at);
+CREATE INDEX IF NOT EXISTS idx_audit_log_user ON alt_investment_audit_log(performed_by);
+CREATE INDEX IF NOT EXISTS idx_audit_log_client ON alt_investment_audit_log(client_id);
 
 -- ============================================================================
 -- SECTION 12: HELPER FUNCTIONS

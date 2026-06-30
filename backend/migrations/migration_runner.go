@@ -59,6 +59,10 @@ func (mr *MigrationRunner) LoadMigrations() ([]Migration, error) {
 
 	var migrations []Migration
 	for _, file := range files {
+		// Skip down migration files, they are handled by their up counterpart
+		if strings.HasSuffix(file, ".down.sql") {
+			continue
+		}
 		migration, err := mr.parseMigrationFile(file)
 		if err != nil {
 			log.Printf("Warning: failed to parse migration file %s: %v", file, err)
@@ -116,34 +120,57 @@ func (mr *MigrationRunner) LoadMigrations() ([]Migration, error) {
 
 // parseMigrationFile parses a single migration file
 func (mr *MigrationRunner) parseMigrationFile(filePath string) (Migration, error) {
-	content, err := os.ReadFile(filePath)
-	if err != nil {
-		return Migration{}, fmt.Errorf("failed to read migration file: %w", err)
-	}
-
 	filename := filepath.Base(filePath)
-	// Use the full filename (without .sql) as the unique ID to avoid collisions
-	id := strings.TrimSuffix(filename, ".sql")
-	name := id
-
-	// Split content into up and down migrations
-	// Support both "-- +migrate Down" and "-- +goose Down" formats
-	contentStr := string(content)
-
-	var upSQL, downSQL string
-
-	// Try "-- +migrate Down" first
-	if parts := strings.Split(contentStr, "-- +migrate Down"); len(parts) == 2 {
-		upSQL = strings.TrimSpace(parts[0])
-		downSQL = strings.TrimSpace(parts[1])
-	} else if parts := strings.Split(contentStr, "-- +goose Down"); len(parts) == 2 {
-		// Try "-- +goose Down" format
-		upSQL = strings.TrimSpace(parts[0])
-		downSQL = strings.TrimSpace(parts[1])
+	
+	var id, name, upSQL, downSQL string
+	
+	if strings.HasSuffix(filename, ".up.sql") {
+		id = strings.TrimSuffix(filename, ".up.sql")
+		name = id
+		
+		content, err := os.ReadFile(filePath)
+		if err != nil {
+			return Migration{}, fmt.Errorf("failed to read up migration file: %w", err)
+		}
+		contentStr := string(content)
+		if parts := strings.Split(contentStr, "-- +migrate Down"); len(parts) == 2 {
+			upSQL = strings.TrimSpace(parts[0])
+			downSQL = strings.TrimSpace(parts[1])
+		} else if parts := strings.Split(contentStr, "-- +goose Down"); len(parts) == 2 {
+			upSQL = strings.TrimSpace(parts[0])
+			downSQL = strings.TrimSpace(parts[1])
+		} else {
+			upSQL = contentStr
+			// Look for corresponding .down.sql file
+			downPath := strings.TrimSuffix(filePath, ".up.sql") + ".down.sql"
+			if _, err := os.Stat(downPath); err == nil {
+				downContent, err := os.ReadFile(downPath)
+				if err == nil {
+					downSQL = string(downContent)
+				}
+			}
+		}
 	} else {
-		// No down migration marker found, treat entire file as up migration
-		upSQL = contentStr
-		downSQL = ""
+		id = strings.TrimSuffix(filename, ".sql")
+		name = id
+		
+		content, err := os.ReadFile(filePath)
+		if err != nil {
+			return Migration{}, fmt.Errorf("failed to read migration file: %w", err)
+		}
+		contentStr := string(content)
+		
+		// Try "-- +migrate Down" first
+		if parts := strings.Split(contentStr, "-- +migrate Down"); len(parts) == 2 {
+			upSQL = strings.TrimSpace(parts[0])
+			downSQL = strings.TrimSpace(parts[1])
+		} else if parts := strings.Split(contentStr, "-- +goose Down"); len(parts) == 2 {
+			upSQL = strings.TrimSpace(parts[0])
+			downSQL = strings.TrimSpace(parts[1])
+		} else {
+			upSQL = contentStr
+			downSQL = ""
+		}
 	}
 
 	return Migration{

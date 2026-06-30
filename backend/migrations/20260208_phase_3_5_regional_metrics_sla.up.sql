@@ -2,7 +2,7 @@
 -- Track per-region performance metrics, health scores, and SLA compliance
 -- Provides observability for multi-region operations on PostgreSQL
 
--- Create table for regional metrics
+-- CREATE TABLE IF NOT EXISTS for regional metrics
 CREATE TABLE IF NOT EXISTS regional_metrics (
     id UUID PRIMARY KEY,
     region VARCHAR(50) NOT NULL,
@@ -25,7 +25,7 @@ CREATE INDEX IF NOT EXISTS idx_regional_metrics_region ON regional_metrics(regio
 CREATE INDEX IF NOT EXISTS idx_regional_metrics_region_computed_at ON regional_metrics(region, computed_at DESC);
 CREATE INDEX IF NOT EXISTS idx_regional_metrics_created_at ON regional_metrics(created_at DESC);
 
--- Create table for regional health scores
+-- CREATE TABLE IF NOT EXISTS for regional health scores
 CREATE TABLE IF NOT EXISTS regional_health (
     id UUID PRIMARY KEY,
     region VARCHAR(50) NOT NULL UNIQUE,
@@ -40,7 +40,7 @@ CREATE INDEX IF NOT EXISTS idx_regional_health_region ON regional_health(region)
 CREATE INDEX IF NOT EXISTS idx_regional_health_status ON regional_health(status);
 CREATE INDEX IF NOT EXISTS idx_regional_health_updated_at ON regional_health(updated_at DESC);
 
--- Create table for Regional SLA definitions
+-- CREATE TABLE IF NOT EXISTS for Regional SLA definitions
 CREATE TABLE IF NOT EXISTS regional_sla (
     id UUID PRIMARY KEY,
     region VARCHAR(50) NOT NULL UNIQUE,
@@ -54,7 +54,7 @@ CREATE TABLE IF NOT EXISTS regional_sla (
 -- Create indexes for regional SLA
 CREATE INDEX IF NOT EXISTS idx_regional_sla_region ON regional_sla(region);
 
--- Create table for tracking SLA compliance
+-- CREATE TABLE IF NOT EXISTS for tracking SLA compliance
 CREATE TABLE IF NOT EXISTS regional_sla_status (
     id UUID PRIMARY KEY,
     region VARCHAR(50) NOT NULL,

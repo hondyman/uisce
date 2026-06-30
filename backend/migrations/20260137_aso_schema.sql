@@ -202,16 +202,19 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+DROP TRIGGER IF EXISTS trg_aso_policy_updated ON semantic;
 CREATE TRIGGER trg_aso_policy_updated
     BEFORE UPDATE ON semantic.aso_policy
     FOR EACH ROW
     EXECUTE FUNCTION semantic.update_aso_updated_at();
 
+DROP TRIGGER IF EXISTS trg_aso_optimization_updated ON semantic;
 CREATE TRIGGER trg_aso_optimization_updated
     BEFORE UPDATE ON semantic.aso_optimization
     FOR EACH ROW
     EXECUTE FUNCTION semantic.update_aso_updated_at();
 
+DROP TRIGGER IF EXISTS trg_aso_stats_updated ON semantic;
 CREATE TRIGGER trg_aso_stats_updated
     BEFORE UPDATE ON semantic.aso_daily_stats
     FOR EACH ROW

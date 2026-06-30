@@ -13,10 +13,10 @@ CREATE TABLE IF NOT EXISTS edm.audit_log (
 );
 
 -- Indexes for audit queries
-CREATE INDEX idx_audit_log_tenant ON edm.audit_log(tenant_id, created_at DESC);
-CREATE INDEX idx_audit_log_actor ON edm.audit_log(actor_id, created_at DESC);
-CREATE INDEX idx_audit_log_resource ON edm.audit_log(resource_id);
-CREATE INDEX idx_audit_log_action ON edm.audit_log(action);
+CREATE INDEX IF NOT EXISTS idx_audit_log_tenant ON edm.audit_log(tenant_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_audit_log_actor ON edm.audit_log(actor_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_audit_log_resource ON edm.audit_log(resource_id);
+CREATE INDEX IF NOT EXISTS idx_audit_log_action ON edm.audit_log(action);
 
 -- Add comment explaining table
 COMMENT ON TABLE edm.audit_log IS 'Immutable audit log tracking all rule mutations, approvals, and promotions for compliance and debugging';

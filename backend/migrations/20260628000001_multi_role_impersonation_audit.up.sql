@@ -22,7 +22,7 @@ CREATE INDEX IF NOT EXISTS idx_paa_admin_role
 -- 2. Per-BO action audit table (micro context).
 CREATE TABLE IF NOT EXISTS impersonation_action_audit (
     action_id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    impersonation_id   UUID NOT NULL REFERENCES platform_admin_audit(session_id),
+    impersonation_id   UUID NOT NULL,
     target_tenant_id   UUID NOT NULL,
     bo_key             TEXT NOT NULL,
     bo_instance_id     TEXT NOT NULL,

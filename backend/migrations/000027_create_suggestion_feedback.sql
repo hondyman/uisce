@@ -1,6 +1,6 @@
 -- Migration: 000027_create_suggestion_feedback.sql
 -- Created: 2025-10-14
--- Purpose: Create table to store user feedback on business term suggestions for ML training
+-- Purpose: CREATE TABLE IF NOT EXISTS to store user feedback on business term suggestions for ML training
 
 -- Ensure pgcrypto (for gen_random_uuid) is available. This is idempotent.
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
