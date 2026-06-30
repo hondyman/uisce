@@ -32,8 +32,27 @@ select_permissions:
     - status
     - created_at
     - updated_at
-    filter: {}
+    filter:
+      tenant_id:
+        _eq: X-Hasura-Tenant-Id
 - role: steward
+  permission:
+    columns:
+    - id
+    - tenant_id
+    - instance_name
+    - config
+    - is_active
+    - url
+    - display_name
+    - description
+    - status
+    - created_at
+    - updated_at
+    filter:
+      tenant_id:
+        _eq: X-Hasura-Tenant-Id
+- role: global_admin
   permission:
     columns:
     - id

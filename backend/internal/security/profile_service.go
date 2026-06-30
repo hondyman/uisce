@@ -90,6 +90,42 @@ func (s *ProfileService) EnrichSubjectAttributes(ctx context.Context, tenantID u
 	return role, clearance, nil
 }
 
+// ResolveTenantAndRole resolves the concrete tenant UUID and functional role for an external federated user
+// using their Keycloak Client ID (azp) and IdP Group claims.
+func (s *ProfileService) ResolveTenantAndRole(ctx context.Context, clientID string, idpGroups []string) (string, string, error) {
+	if clientID == "" {
+		return "", "", fmt.Errorf("client origin (azp) is required")
+	}
+	if len(idpGroups) == 0 {
+		return "", "", fmt.Errorf("missing group claims")
+	}
+
+	query := `
+		SELECT tenant_id::text, functional_role 
+		FROM security.identity_profile_mappings 
+		WHERE keycloak_client_id = $1 
+		AND idp_group_claim = ANY($2) 
+		LIMIT 1;
+	`
+
+	var tenantID, role string
+	err := s.db.QueryRowContext(ctx, query, clientID, idpGroups).Scan(&tenantID, &role)
+	return tenantID, role, err
+}
+
+// GetTenantIDByUser looks up the user's bound tenant ID in the database.
+func (s *ProfileService) GetTenantIDByUser(ctx context.Context, userID string, email string) (string, error) {
+	var tenantID sql.NullString
+	err := s.db.QueryRowContext(ctx, "SELECT tenant_id FROM users WHERE id = $1 OR email = $2", userID, email).Scan(&tenantID)
+	if err != nil {
+		return "", err
+	}
+	if !tenantID.Valid {
+		return "", fmt.Errorf("tenant ID is null")
+	}
+	return tenantID.String, nil
+}
+
 // VerifyStaffAssignment queries security.staff_tenant_assignments to check for active operator leases.
 func (s *ProfileService) VerifyStaffAssignment(ctx context.Context, email string, tenantID uuid.UUID) (string, error) {
 	var ticketRef string

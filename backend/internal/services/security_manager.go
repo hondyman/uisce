@@ -702,6 +702,22 @@ func (jm *JWTManager) ValidateToken(tokenString string) (*JWTClaims, error) {
 			operatorRole = strings.TrimSpace(or)
 		}
 	}
+	// Fallback: map from Keycloak groups if operatorRole is empty
+	if operatorRole == "" {
+		for _, group := range idpGroups {
+			switch group {
+			case "Uisce-Global-Admins":
+				operatorRole = "global_admin"
+			case "Uisce-Professional-Services":
+				operatorRole = "professional_services"
+			case "Uisce-Helpdesk":
+				operatorRole = "helpdesk"
+			}
+			if operatorRole != "" {
+				break
+			}
+		}
+	}
 
 	tenantIDs := parseStringListClaim(claims["tenant_ids"])
 	if len(tenantIDs) == 0 && tenantID != "" {
@@ -713,6 +729,11 @@ func (jm *JWTManager) ValidateToken(tokenString string) (*JWTClaims, error) {
 		email = strings.TrimSpace(em)
 	}
 
+	var clientID string
+	if azp, ok := claims["azp"].(string); ok {
+		clientID = azp
+	}
+
 	return &JWTClaims{
 		UserID:       userID,
 		Email:        email,
@@ -722,6 +743,7 @@ func (jm *JWTManager) ValidateToken(tokenString string) (*JWTClaims, error) {
 		IDPGroups:    idpGroups,
 		OperatorRole: operatorRole,
 		IssuedAt:     issuedAt,
+		ClientID:     clientID,
 	}, nil
 }
 
@@ -737,6 +759,7 @@ type JWTClaims struct {
 	FunctionalRole string // Resolved abstract platform profile role
 	ClearanceLevel string // Resolved clearance level
 	IssuedAt       time.Time
+	ClientID       string // Keycloak Authorized Party / Client ID
 }
 
 func parseStringListClaim(value interface{}) []string {

@@ -2773,9 +2773,29 @@ export interface JSONFieldDiff {
   Removed: Record<string, any>;
 }
 
+/** JWK represents a single JSON Web Key. */
+export interface JWK {
+  Alg: string;
+  E: string;
+  Kid: string;
+  Kty: string;
+  N: string;
+  Use: string;
+}
+
+/** JWKS represents the JSON Web Key Set structure returned by an OIDC provider. */
+export interface JWKS {
+  Keys: JWK[];
+}
+
 /** JWTClaims represents JWT token claims */
 export interface JWTClaims {
+  ClearanceLevel: string;
+  Email: string;
+  FunctionalRole: string;
+  IDPGroups: string[];
   IssuedAt: any;
+  OperatorRole: string;
   Roles: string[];
   TenantID: string;
   TenantIDs: string[];
@@ -2784,6 +2804,11 @@ export interface JWTClaims {
 
 /** JWTManager handles JWT token operations */
 export interface JWTManager {
+  httpClient: any;
+  jwksCache: jwksCache;
+  /** Optional OpenID Connect / Keycloak JWKS configuration for validating
+RS256 tokens issued by an external identity provider. */
+  jwksURL: string;
   refreshDuration: any;
   secretKey: byte[];
   tokenDuration: any;
@@ -5983,6 +6008,14 @@ export interface inMemoryBundleStore {
 export interface inMemoryScriptStore {
   mu: any;
   scripts: Record<string, any>;
+}
+
+/** jwksCache holds cached JWKS keys and their expiration. */
+export interface jwksCache {
+  expiresAt: any;
+  fetchError: error;
+  keys: Record<string, any>;
+  mu: any;
 }
 
 export interface nodeQualityMetrics {

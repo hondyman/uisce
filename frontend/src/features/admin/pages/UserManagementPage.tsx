@@ -4,6 +4,7 @@
  */
 
 import React, { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
   Box,
   Button,
@@ -12,7 +13,6 @@ import {
   DialogActions,
   DialogContent,
   DialogTitle,
-  IconButton,
   Paper,
   Table,
   TableBody,
@@ -33,6 +33,8 @@ import {
   Avatar,
   ToggleButton,
   ToggleButtonGroup,
+  Tab,
+  Tabs,
 } from '@mui/material';
 import {
   Search as SearchIcon,
@@ -46,6 +48,7 @@ import {
   ViewModule as ViewModuleIcon,
 } from '@mui/icons-material';
 import { useTenant } from '../../../contexts/TenantContext';
+import { UserRoleAssignmentStyled } from '../../../components/RBAC/UserRoleAssignment_Styled';
 
 interface User {
   id: string;
@@ -78,6 +81,22 @@ interface UserRole {
 
 export const UserManagementPage: React.FC = () => {
   const { tenant, datasource } = useTenant();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const tabParam = searchParams.get('tab');
+  const [activeTab, setActiveTab] = useState(tabParam === 'roles' ? 1 : 0);
+  
+  const handleTabChange = (_event: React.SyntheticEvent, newValue: number) => {
+    setActiveTab(newValue);
+    setSearchParams({ tab: newValue === 1 ? 'roles' : 'users' });
+  };
+
+  useEffect(() => {
+    const currentTab = searchParams.get('tab') === 'roles' ? 1 : 0;
+    if (currentTab !== activeTab) {
+      setActiveTab(currentTab);
+    }
+  }, [searchParams]);
+
   const [users, setUsers] = useState<User[]>([]);
   const [roles, setRoles] = useState<Role[]>([]);
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
@@ -133,7 +152,7 @@ export const UserManagementPage: React.FC = () => {
     
     try {
       const response = await fetch(
-        `/api/rbac/roles?tenant_id=${tenant.id}&tenant_instance_id=${datasource.id}`
+        `/api/rbac/roles?tenant_id=${tenant.id}&tenant_instance_id=${datasource.id}&datasource_id=${datasource.id}`
       );
       const data = await response.json();
       setRoles(Array.isArray(data) ? data.filter((r: Role) => r.is_active) : []);
@@ -149,7 +168,7 @@ export const UserManagementPage: React.FC = () => {
 
     try {
       const response = await fetch(
-        `/api/rbac/users/${userId}/roles?tenant_id=${tenant.id}&tenant_instance_id=${datasource.id}`
+        `/api/rbac/users/${userId}/roles?tenant_id=${tenant.id}&tenant_instance_id=${datasource.id}&datasource_id=${datasource.id}`
       );
       const data = await response.json();
       setUserRoles(Array.isArray(data) ? data : []);
@@ -170,13 +189,14 @@ export const UserManagementPage: React.FC = () => {
 
     try {
       const response = await fetch(
-        `/api/rbac/roles/${selectedRoleId}/assign?tenant_id=${tenant.id}&tenant_instance_id=${datasource.id}`,
+        `/api/rbac/roles/${selectedRoleId}/assign?tenant_id=${tenant.id}&tenant_instance_id=${datasource.id}&datasource_id=${datasource.id}`,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             user_id: selectedUser.id,
             scope_type: 'global',
+            datasource_id: datasource.id,
           }),
         }
       );
@@ -201,7 +221,7 @@ export const UserManagementPage: React.FC = () => {
 
     try {
       await fetch(
-        `/api/rbac/roles/${roleId}/unassign/${selectedUser.id}?tenant_id=${tenant.id}&tenant_instance_id=${datasource.id}`,
+        `/api/rbac/roles/${roleId}/unassign/${selectedUser.id}?tenant_id=${tenant.id}&tenant_instance_id=${datasource.id}&datasource_id=${datasource.id}`,
         { method: 'DELETE' }
       );
       await fetchUserRoles(selectedUser.id);
@@ -288,42 +308,49 @@ export const UserManagementPage: React.FC = () => {
     <Box sx={{ width: '100%', minHeight: '100vh', bgcolor: 'background.default' }}>
       {/* Header */}
       <AppBar position="sticky" color="default" elevation={1} sx={{ bgcolor: 'background.paper' }}>
-        <Toolbar sx={{ px: 3, py: 1 }}>
-          <Box display="flex" alignItems="center" gap={1.5} flexGrow={1}>
+        <Toolbar sx={{ px: 3, py: 1, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <Box display="flex" alignItems="center" gap={1.5}>
             <SecurityIcon sx={{ fontSize: 28, color: 'primary.main' }} />
-            <Typography variant="h6" component="div" fontWeight={600}>
+            <Typography variant="h6" component="div" fontWeight={600} sx={{ mr: 4 }}>
               User Management
             </Typography>
+            <Tabs value={activeTab} onChange={handleTabChange} sx={{ minHeight: 48 }}>
+              <Tab label="Users" sx={{ textTransform: 'none', fontWeight: 600 }} />
+              <Tab label="Role Assignments" sx={{ textTransform: 'none', fontWeight: 600 }} />
+            </Tabs>
           </Box>
           <Box display="flex" alignItems="center" gap={2}>
-            <Autocomplete
-              freeSolo
-              options={users.map(u => u.name || u.username)}
-              value={searchTerm}
-              onInputChange={(_, newValue) => setSearchTerm(newValue || '')}
-              renderInput={(params) => (
-                <TextField
-                  {...params}
-                  size="small"
-                  placeholder="Search users..."
-                  InputProps={{
-                    ...params.InputProps,
-                    startAdornment: (
-                      <InputAdornment position="start">
-                        <SearchIcon sx={{ fontSize: 18 }} />
-                      </InputAdornment>
-                    ),
-                  }}
-                />
-              )}
-              sx={{ width: 300 }}
-            />
+            {activeTab === 0 && (
+              <Autocomplete
+                freeSolo
+                options={users.map(u => u.name || u.username)}
+                value={searchTerm}
+                onInputChange={(_, newValue) => setSearchTerm(newValue || '')}
+                renderInput={(params) => (
+                  <TextField
+                    {...params}
+                    size="small"
+                    placeholder="Search users..."
+                    InputProps={{
+                      ...params.InputProps,
+                      startAdornment: (
+                        <InputAdornment position="start">
+                          <SearchIcon sx={{ fontSize: 18 }} />
+                        </InputAdornment>
+                      ),
+                    }}
+                  />
+                )}
+                sx={{ width: 300 }}
+              />
+            )}
           </Box>
         </Toolbar>
       </AppBar>
 
       {/* Main Content */}
-      <Box component="main" sx={{ px: 4, py: 4 }}>
+      {activeTab === 0 ? (
+        <Box component="main" sx={{ px: 4, py: 4 }}>
         <Box display="flex" justifyContent="space-between" alignItems="center" mb={4}>
           <Typography variant="h4" fontWeight={600} color="text.primary">
             Users ({filteredUsers.length})
@@ -491,6 +518,11 @@ export const UserManagementPage: React.FC = () => {
             </Grid>
         )}
       </Box>
+      ) : (
+        <Box sx={{ width: '100%' }}>
+          <UserRoleAssignmentStyled tenant={tenant} datasource={datasource} />
+        </Box>
+      )}
 
       {/* User Roles Dialog */}
       <Dialog

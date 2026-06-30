@@ -19,7 +19,8 @@ select_permissions:
         - core_id
 
 
-      filter: {}
+      filter:
+        _not: {}
   - role: steward
     permission:
       columns:
@@ -37,7 +38,9 @@ select_permissions:
         - core_id
 
 
-      filter: {}
+      filter:
+        tenant_id:
+          _eq: X-Hasura-Tenant-Id
   - role: user
     permission:
       columns:
@@ -55,4 +58,6 @@ select_permissions:
         - core_id
 
 
-      filter: {}
+      filter:
+        tenant_id:
+          _eq: X-Hasura-Tenant-Id

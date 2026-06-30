@@ -107,13 +107,11 @@ interface CategoryConfig {
 
 const categoryConfigs: CategoryConfig[] = [
   // ═══════════════════════════════════════════════════════════════════════════
-  // PLATFORM - Organization, security, and system administration
-  // ═══════════════════════════════════════════════════════════════════════════
   {
     label: 'Platform',
     key: 'tenants',
     icon: <SettingsIcon />,
-    defaultPath: '/tenants',
+    defaultPath: '/fabric/tenants',
     color: {
       primary: '#607D8B',
       light: '#ECEFF1',
@@ -125,11 +123,9 @@ const categoryConfigs: CategoryConfig[] = [
         label: 'Organization',
         icon: <BusinessIcon />,
         items: [
-          { label: 'Tenants', path: '/tenants', icon: <BusinessIcon />, description: 'Manage tenant hierarchy' },
-          { label: 'Tenant Management', path: '/fabric/tenants', icon: <BusinessIcon />, description: 'Manage platform tenants' },
-          { label: 'Users', path: '/admin/rbac/users', icon: <PersonAddIcon />, description: 'User management' },
+          { label: 'Tenants', path: '/fabric/tenants', icon: <BusinessIcon />, description: 'Manage platform tenants' },
+          { label: 'Users & Roles', path: '/admin/rbac/users', icon: <PersonAddIcon />, description: 'Manage users and role assignments' },
           { label: 'Teams', path: '/admin/rbac/teams', icon: <GroupsIcon />, description: 'Team structure' },
-          { label: 'User Roles', path: '/admin/rbac/user-roles', icon: <AccountCircleIcon />, description: 'User role assignments' },
           { label: 'User Tenants', path: '/admin/rbac/user-tenants', icon: <SupervisorAccountIcon />, description: 'User tenant assignments' },
         ]
       },

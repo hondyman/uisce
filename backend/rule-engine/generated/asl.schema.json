@@ -5690,9 +5690,55 @@
       },
       "type": "object"
     },
+    "JWK": {
+      "properties": {
+        "Alg": {
+          "type": "string"
+        },
+        "E": {
+          "type": "string"
+        },
+        "Kid": {
+          "type": "string"
+        },
+        "Kty": {
+          "type": "string"
+        },
+        "N": {
+          "type": "string"
+        },
+        "Use": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "JWKS": {
+      "properties": {
+        "Keys": {
+          "$ref": "#/definitions/JWK[]"
+        }
+      },
+      "type": "object"
+    },
     "JWTClaims": {
       "properties": {
+        "ClearanceLevel": {
+          "type": "string"
+        },
+        "Email": {
+          "type": "string"
+        },
+        "FunctionalRole": {
+          "type": "string"
+        },
+        "IDPGroups": {
+          "$ref": "#/definitions/string[]"
+        },
         "IssuedAt": {},
+        "OperatorRole": {
+          "type": "string"
+        },
         "Roles": {
           "$ref": "#/definitions/string[]"
         },
@@ -5710,6 +5756,14 @@
     },
     "JWTManager": {
       "properties": {
+        "httpClient": {},
+        "jwksCache": {
+          "$ref": "#/definitions/jwksCache"
+        },
+        "jwksURL": {
+          "description": "Optional OpenID Connect / Keycloak JWKS configuration for validating\nRS256 tokens issued by an external identity provider.",
+          "type": "string"
+        },
         "refreshDuration": {},
         "secretKey": {
           "$ref": "#/definitions/byte[]"
@@ -12479,6 +12533,19 @@
         "scripts": {
           "$ref": "#/definitions/Record\u003cstring, any\u003e"
         }
+      },
+      "type": "object"
+    },
+    "jwksCache": {
+      "properties": {
+        "expiresAt": {},
+        "fetchError": {
+          "$ref": "#/definitions/error"
+        },
+        "keys": {
+          "$ref": "#/definitions/Record\u003cstring, any\u003e"
+        },
+        "mu": {}
       },
       "type": "object"
     },

@@ -8238,13 +8238,73 @@
         }
       }
     },
+    "JWK": {
+      "documentation": "JWK represents a single JSON Web Key.",
+      "kind": "interface",
+      "properties": {
+        "Alg": {
+          "documentation": "",
+          "type": "string"
+        },
+        "E": {
+          "documentation": "",
+          "type": "string"
+        },
+        "Kid": {
+          "documentation": "",
+          "type": "string"
+        },
+        "Kty": {
+          "documentation": "",
+          "type": "string"
+        },
+        "N": {
+          "documentation": "",
+          "type": "string"
+        },
+        "Use": {
+          "documentation": "",
+          "type": "string"
+        }
+      }
+    },
+    "JWKS": {
+      "documentation": "JWKS represents the JSON Web Key Set structure returned by an OIDC provider.",
+      "kind": "interface",
+      "properties": {
+        "Keys": {
+          "documentation": "",
+          "type": "JWK[]"
+        }
+      }
+    },
     "JWTClaims": {
       "documentation": "JWTClaims represents JWT token claims",
       "kind": "interface",
       "properties": {
+        "ClearanceLevel": {
+          "documentation": "",
+          "type": "string"
+        },
+        "Email": {
+          "documentation": "",
+          "type": "string"
+        },
+        "FunctionalRole": {
+          "documentation": "",
+          "type": "string"
+        },
+        "IDPGroups": {
+          "documentation": "",
+          "type": "string[]"
+        },
         "IssuedAt": {
           "documentation": "",
           "type": "any"
+        },
+        "OperatorRole": {
+          "documentation": "",
+          "type": "string"
         },
         "Roles": {
           "documentation": "",
@@ -8268,6 +8328,18 @@
       "documentation": "JWTManager handles JWT token operations",
       "kind": "interface",
       "properties": {
+        "httpClient": {
+          "documentation": "",
+          "type": "any"
+        },
+        "jwksCache": {
+          "documentation": "",
+          "type": "jwksCache"
+        },
+        "jwksURL": {
+          "documentation": "Optional OpenID Connect / Keycloak JWKS configuration for validating\nRS256 tokens issued by an external identity provider.",
+          "type": "string"
+        },
         "refreshDuration": {
           "documentation": "",
           "type": "any"
@@ -18043,6 +18115,28 @@
         "scripts": {
           "documentation": "",
           "type": "Record\u003cstring, any\u003e"
+        }
+      }
+    },
+    "jwksCache": {
+      "documentation": "jwksCache holds cached JWKS keys and their expiration.",
+      "kind": "interface",
+      "properties": {
+        "expiresAt": {
+          "documentation": "",
+          "type": "any"
+        },
+        "fetchError": {
+          "documentation": "",
+          "type": "error"
+        },
+        "keys": {
+          "documentation": "",
+          "type": "Record\u003cstring, any\u003e"
+        },
+        "mu": {
+          "documentation": "",
+          "type": "any"
         }
       }
     },

@@ -2,6 +2,8 @@ package middleware
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 	"net/http"
 	"strings"
 
@@ -71,6 +73,13 @@ func AuthContextMiddleware(secMgr *services.SecurityManager, profileSvc *securit
 						hasRole(realRoles, "core_admin") ||
 						hasRole(realRoles, "is_core_admin")
 
+					if isGlobalAdmin {
+						r.Header.Set("X-Is-Core-Admin", "true")
+					}
+					if adminRole != "" {
+						r.Header.Set("X-User-Role", adminRole)
+					}
+
 					ctx := identity.WithActorTenant(r.Context(), uid, tenantID)
 					ctx = security.WithAuthInfo(ctx, security.AuthInfo{
 						UserID:                 uid,
@@ -125,38 +134,64 @@ func AuthContextMiddleware(secMgr *services.SecurityManager, profileSvc *securit
 							functionalRole == "global_ops" ||
 							functionalRole == "core_admin" ||
 							functionalRole == "is_core_admin"
-						if !isGlobalAdmin {
-							// Helpdesk / professional services are platform operators too.
-							isGlobalAdmin = functionalRole == "helpdesk" || functionalRole == "professional_services"
-						}
+						// Helpdesk / professional services are lease-scoped support roles,
+						// not global platform operators. They must not receive the
+						// X-Is-Core-Admin header that would bypass tenant filtering.
 
 						// Enforce support lease validation for professional services and helpdesk operators
 						if (functionalRole == "professional_services" || functionalRole == "helpdesk") && profileSvc != nil {
-							requestedTenant := strings.TrimSpace(r.Header.Get("X-Tenant-ID"))
-							if requestedTenant == "" {
-								http.Error(w, "Forbidden: Ambient Power Prohibited. Explicitly select a target Tenant ID.", http.StatusForbidden)
-								return
-							}
+							path := r.URL.Path
+							isPlatformAPI := strings.HasPrefix(path, "/api/tenants/") ||
+								strings.HasPrefix(path, "/api/admin/") ||
+								strings.HasPrefix(path, "/api/rbac/")
 
-							tid, err := uuid.Parse(requestedTenant)
-							if err != nil {
-								http.Error(w, "Forbidden: Invalid target Tenant ID format.", http.StatusForbidden)
-								return
-							}
+							if !isPlatformAPI {
+								requestedTenant := strings.TrimSpace(r.Header.Get("X-Tenant-ID"))
+								if requestedTenant == "" {
+									http.Error(w, "Forbidden: Ambient Power Prohibited. Explicitly select a target Tenant ID.", http.StatusForbidden)
+									return
+								}
 
-							_, err = profileSvc.VerifyStaffAssignment(r.Context(), jclaims.Email, tid)
-							if err != nil {
-								http.Error(w, "Forbidden: No active data lease assignment exists for this target tenant.", http.StatusForbidden)
-								return
-							}
+								tid, err := uuid.Parse(requestedTenant)
+								if err != nil {
+									http.Error(w, "Forbidden: Invalid target Tenant ID format.", http.StatusForbidden)
+									return
+								}
 
-							// Lease verified! Set tenant context.
-							tenantID = requestedTenant
-							r.Header.Set("X-Tenant-ID", tenantID)
-							tenantIDs = []string{tenantID}
+								_, err = profileSvc.VerifyStaffAssignment(r.Context(), jclaims.Email, tid)
+								if err != nil {
+									http.Error(w, "Forbidden: No active data lease assignment exists for this target tenant.", http.StatusForbidden)
+									return
+								}
+
+								// Lease verified! Set tenant context.
+								tenantID = requestedTenant
+								r.Header.Set("X-Tenant-ID", tenantID)
+								tenantIDs = []string{tenantID}
+							}
 						}
+					} else if profileSvc != nil && jclaims.ClientID != "" && len(jclaims.IDPGroups) > 0 {
+						// Branch B1: Bulletproof Client-to-Tenant group federation mapping
+						resolvedTenant, resolvedRole, err := profileSvc.ResolveTenantAndRole(r.Context(), jclaims.ClientID, jclaims.IDPGroups)
+						if err != nil {
+							if errors.Is(err, sql.ErrNoRows) {
+								http.Error(w, "Forbidden: Identity claims and client origin do not map to a recognized production tenant profile.", http.StatusForbidden)
+								return
+							}
+							http.Error(w, "Internal Database System Error", http.StatusInternalServerError)
+							return
+						}
+
+						// Strip any incoming client-provided X-Tenant-ID header overrides to mitigate manipulation vectors
+						r.Header.Del("X-Tenant-ID")
+
+						tenantID = resolvedTenant
+						r.Header.Set("X-Tenant-ID", tenantID)
+						tenantIDs = []string{tenantID}
+						functionalRole = resolvedRole
+						roles = appendIfMissing(roles, functionalRole)
 					} else if profileSvc != nil && tenantID != "" && len(jclaims.IDPGroups) > 0 {
-						// Tenant-scoped user: map raw IdP groups to abstract profile.
+						// Branch B2: Legacy tenant-scoped group mapping (using token tenant_id)
 						tid, err := uuid.Parse(tenantID)
 						if err == nil {
 							if fr, cl, err := profileSvc.EnrichSubjectAttributes(r.Context(), tid, uid, jclaims.IDPGroups); err == nil {
@@ -164,6 +199,15 @@ func AuthContextMiddleware(secMgr *services.SecurityManager, profileSvc *securit
 								clearanceLevel = cl
 								roles = appendIfMissing(roles, functionalRole)
 							}
+						}
+					}
+
+					// Fallback: If tenantID is still empty, resolve tenant from local database mapping (e.g. for Alice)
+					if tenantID == "" && profileSvc != nil {
+						if dbTenant, err := profileSvc.GetTenantIDByUser(r.Context(), uid, jclaims.Email); err == nil && dbTenant != "" {
+							tenantID = dbTenant
+							r.Header.Set("X-Tenant-ID", tenantID)
+							tenantIDs = []string{tenantID}
 						}
 					}
 
@@ -180,6 +224,12 @@ func AuthContextMiddleware(secMgr *services.SecurityManager, profileSvc *securit
 					}
 					if clearanceLevel != "" {
 						r.Header.Set("X-Clearance-Level", clearanceLevel)
+					}
+					if isGlobalAdmin {
+						r.Header.Set("X-Is-Core-Admin", "true")
+					}
+					if jclaims.Email != "" {
+						r.Header.Set("X-User-Email", jclaims.Email)
 					}
 
 					ctx := identity.WithActorTenant(r.Context(), uid, tenantID)

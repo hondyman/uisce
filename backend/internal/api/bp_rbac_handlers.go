@@ -361,17 +361,22 @@ func (h *RBACHandlers) assignRoleToUser(w http.ResponseWriter, r *http.Request) 
 	roleID := chi.URLParam(r, "roleId")
 
 	var req struct {
-		UserID       string  `json:"user_id"`
-		TenantID     string  `json:"tenant_id"`
-		DatasourceID string  `json:"datasource_id"`
-		ScopeType    *string `json:"scope_type"`
-		ScopeID      *string `json:"scope_id"`
-		ExpiresAt    *string `json:"expires_at"`
+		UserID             string  `json:"user_id"`
+		TenantID           string  `json:"tenant_id"`
+		DatasourceID       string  `json:"datasource_id"`
+		TenantInstanceID   string  `json:"tenant_instance_id"`
+		ScopeType          *string `json:"scope_type"`
+		ScopeID            *string `json:"scope_id"`
+		ExpiresAt          *string `json:"expires_at"`
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "Invalid request body", http.StatusBadRequest)
 		return
+	}
+
+	if req.DatasourceID == "" {
+		req.DatasourceID = req.TenantInstanceID
 	}
 
 	// Allow tenant_id and datasource_id from query params if not in body
@@ -380,6 +385,9 @@ func (h *RBACHandlers) assignRoleToUser(w http.ResponseWriter, r *http.Request) 
 	}
 	if req.DatasourceID == "" {
 		req.DatasourceID = r.URL.Query().Get("datasource_id")
+		if req.DatasourceID == "" {
+			req.DatasourceID = r.URL.Query().Get("tenant_instance_id")
+		}
 	}
 
 	if req.TenantID == "" || req.DatasourceID == "" {

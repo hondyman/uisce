@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 )
@@ -27,8 +28,16 @@ func (h *TenantAccessHandlers) RegisterRoutes(r chi.Router) {
 	r.Get("/tenants/debug", h.listAccessibleTenants)
 	r.Get("/tenants/all", h.listAllTenants)
 
-	// Connection sync handler moved to handlers.ConnectionSyncHandler
-	// r.Post("/tenants/{tenantId}/sync-connections", syncHandler.SyncConnectionsFromGoldCopy)
+	// Admin tenant access mapping endpoints
+	r.Route("/admin/tenant-access", func(r chi.Router) {
+		r.Get("/", h.listTenantAccessMappings)
+		r.Post("/", h.createTenantAccessMapping)
+		r.Get("/tenants", h.listAllTenants)
+		r.Route("/{id}", func(r chi.Router) {
+			r.Put("/", h.updateTenantAccessMapping)
+			r.Delete("/", h.deleteTenantAccessMapping)
+		})
+	})
 }
 
 // TenantResponse represents a tenant in the API response
@@ -111,13 +120,14 @@ func (h *TenantAccessHandlers) listAccessibleTenants(w http.ResponseWriter, r *h
 
 	fmt.Printf("[DEBUG] listAccessibleTenants: UserID=%s Role=%s CoreAdmin=%v\n", userID, userRole, isCoreAdmin)
 
-	// Platform operators (core admins and Uisce internal support tiers) see all tenants.
+	// Platform operators (core admins and global Uisce operators) see all tenants.
+	// Helpdesk and Professional Services are NOT included here: they are lease-scoped
+	// and must only see the tenant explicitly selected and verified by the auth
+	// middleware (X-Tenant-ID).
 	isPlatformOperator := isCoreAdmin ||
 		userRole == "platform_operator" ||
 		userRole == "admin" ||
 		userRole == "global_admin" ||
-		userRole == "helpdesk" ||
-		userRole == "professional_services" ||
 		strings.Contains(r.Header.Get("X-User-Permissions"), "platform:operator")
 
 	if isPlatformOperator {
@@ -329,7 +339,11 @@ func (h *TenantAccessHandlers) getAllTenantsInternal(ctx context.Context, target
 	return tenants, nil
 }
 
-// getTenantsByUser returns tenants accessible to a specific user
+// getTenantsByUser returns tenants accessible to a specific user.
+// Lease-based operators (helpdesk / professional services) have their tenant
+// context set by the auth middleware in X-Tenant-ID after lease verification.
+// That explicit context takes precedence over any persistent users.tenant_id
+// binding so that a support operator can never accidentally see multiple tenants.
 func (h *TenantAccessHandlers) getTenantsByUser(r *http.Request, userID string) ([]TenantResponse, error) {
 	ctx := r.Context()
 
@@ -339,7 +353,52 @@ func (h *TenantAccessHandlers) getTenantsByUser(r *http.Request, userID string) 
 		return []TenantResponse{}, nil
 	}
 
-	// 1. Check for explicit tenant binding in users table
+	// 1. Prefer the explicit tenant context from the auth middleware. This is the
+	// authoritative tenant for lease-scoped operators and for any request where a
+	// tenant has been explicitly selected.
+	if explicitTenantID := strings.TrimSpace(r.Header.Get("X-Tenant-ID")); explicitTenantID != "" {
+		return h.getAllTenantsInternal(ctx, &explicitTenantID)
+	}
+
+	// 2. Check for lease-scoped support operator mappings.
+	userRole := r.Header.Get("X-User-Role")
+	userEmail := r.Header.Get("X-User-Email")
+	if (userRole == "professional_services" || userRole == "helpdesk") && userEmail != "" {
+		rows, err := h.DB.QueryContext(ctx, `
+			SELECT target_tenant_id 
+			FROM security.staff_tenant_assignments 
+			WHERE operator_email = $1 AND expires_at > NOW()
+		`, userEmail)
+		if err != nil {
+			return nil, fmt.Errorf("failed to fetch staff tenant assignments: %w", err)
+		}
+		defer rows.Close()
+
+		var tenantIDs []string
+		for rows.Next() {
+			var tid string
+			if err := rows.Scan(&tid); err != nil {
+				return nil, err
+			}
+			tenantIDs = append(tenantIDs, tid)
+		}
+
+		if len(tenantIDs) == 0 {
+			return []TenantResponse{}, nil
+		}
+
+		var accessibleTenants []TenantResponse
+		for _, tid := range tenantIDs {
+			t, err := h.getAllTenantsInternal(ctx, &tid)
+			if err != nil {
+				return nil, err
+			}
+			accessibleTenants = append(accessibleTenants, t...)
+		}
+		return accessibleTenants, nil
+	}
+
+	// 2. Fall back to the persistent tenant binding in the users table.
 	var tenantID sql.NullString
 	err := h.DB.QueryRowContext(ctx, "SELECT tenant_id FROM users WHERE id = $1", userID).Scan(&tenantID)
 	if err != nil {
@@ -351,36 +410,148 @@ func (h *TenantAccessHandlers) getTenantsByUser(r *http.Request, userID string) 
 		return nil, fmt.Errorf("failed to fetch user tenant info: %w", err)
 	}
 
-	// 2. Fetch all tenants (with full hierarchy)
-	// We pass the explicit tenantID to filter efficiently at the DB level
+	// 3. Fetch tenants (with full hierarchy) filtered to the bound tenant.
 	var targetTenantID *string
 	if tenantID.Valid && tenantID.String != "" {
 		s := tenantID.String
 		targetTenantID = &s
 	}
 
-	allTenants, err := h.getAllTenantsInternal(ctx, targetTenantID)
+	if targetTenantID == nil {
+		// No explicit context and no persistent binding means no access.
+		fmt.Printf("[DEBUG] User %s has no tenant_id assigned. Returning empty list.\n", userID)
+		return []TenantResponse{}, nil
+	}
+
+	return h.getAllTenantsInternal(ctx, targetTenantID)
+}
+
+func (h *TenantAccessHandlers) listTenantAccessMappings(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	query := `
+		SELECT ut.user_id, ut.tenant_id, COALESCE(ut.access_role, 'viewer') as access_role,
+		       COALESCE(u.email, '') as email, ut.created_at, ut.updated_at
+		FROM public.user_tenant ut
+		LEFT JOIN public.app_user u ON ut.user_id = u.id
+		ORDER BY ut.created_at DESC
+	`
+	rows, err := h.DB.QueryContext(ctx, query)
 	if err != nil {
-		return nil, err
+		http.Error(w, "Failed to query tenant access mappings: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	defer rows.Close()
+
+	type Mapping struct {
+		ID         string    `json:"id"`
+		UserID     string    `json:"user_id"`
+		TenantID   string    `json:"tenant_id"`
+		AccessRole string    `json:"access_role"`
+		Email      string    `json:"email"`
+		CreatedAt  time.Time `json:"created_at"`
+		UpdatedAt  time.Time `json:"updated_at"`
 	}
 
-	// 3. Filter results (Double check: if we passed filter, DB should have filtered, but safety first)
-	var accessible []TenantResponse
-
-	if targetTenantID != nil {
-		// User is bound to a single tenant; only return that one
-		targetID := *targetTenantID
-		for _, t := range allTenants {
-			if t.ID == targetID {
-				accessible = append(accessible, t)
-			}
+	mappings := []Mapping{}
+	for rows.Next() {
+		var m Mapping
+		if err := rows.Scan(&m.UserID, &m.TenantID, &m.AccessRole, &m.Email, &m.CreatedAt, &m.UpdatedAt); err != nil {
+			http.Error(w, "Failed to scan tenant access mapping: "+err.Error(), http.StatusInternalServerError)
+			return
 		}
-		// If user is bound to a tenant but it's not in the list (e.g. inactive), return empty
-		return accessible, nil
+		m.ID = m.UserID + ":" + m.TenantID
+		mappings = append(mappings, m)
 	}
 
-	// 4. Default: No access if no tenant_id found
-	// We explicitly DO NOT fall back to returning all tenants.
-	fmt.Printf("[DEBUG] User %s has no tenant_id assigned. Returning empty list.\n", userID)
-	return []TenantResponse{}, nil
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(mappings)
+}
+
+func (h *TenantAccessHandlers) createTenantAccessMapping(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		UserID     string `json:"user_id"`
+		TenantID   string `json:"tenant_id"`
+		AccessRole string `json:"access_role"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	if req.UserID == "" || req.TenantID == "" {
+		http.Error(w, "Missing user_id or tenant_id", http.StatusBadRequest)
+		return
+	}
+
+	if req.AccessRole == "" {
+		req.AccessRole = "viewer"
+	}
+
+	ctx := r.Context()
+	query := `
+		INSERT INTO public.user_tenant (user_id, tenant_id, access_role, created_at, updated_at)
+		VALUES ($1, $2, $3, NOW(), NOW())
+		ON CONFLICT (user_id, tenant_id) DO UPDATE 
+		SET access_role = EXCLUDED.access_role, updated_at = NOW()
+	`
+	_, err := h.DB.ExecContext(ctx, query, req.UserID, req.TenantID, req.AccessRole)
+	if err != nil {
+		http.Error(w, "Failed to create tenant access mapping: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusCreated)
+}
+
+func (h *TenantAccessHandlers) deleteTenantAccessMapping(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	parts := strings.Split(id, ":")
+	if len(parts) != 2 {
+		http.Error(w, "Invalid mapping ID format. Expected user_id:tenant_id", http.StatusBadRequest)
+		return
+	}
+	userID, tenantID := parts[0], parts[1]
+
+	ctx := r.Context()
+	query := `DELETE FROM public.user_tenant WHERE user_id = $1 AND tenant_id = $2`
+	_, err := h.DB.ExecContext(ctx, query, userID, tenantID)
+	if err != nil {
+		http.Error(w, "Failed to delete tenant access mapping: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+}
+
+func (h *TenantAccessHandlers) updateTenantAccessMapping(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	parts := strings.Split(id, ":")
+	if len(parts) != 2 {
+		http.Error(w, "Invalid mapping ID format. Expected user_id:tenant_id", http.StatusBadRequest)
+		return
+	}
+	userID, tenantID := parts[0], parts[1]
+
+	var req struct {
+		AccessRole string `json:"access_role"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	if req.AccessRole == "" {
+		http.Error(w, "Missing access_role", http.StatusBadRequest)
+		return
+	}
+
+	ctx := r.Context()
+	query := `UPDATE public.user_tenant SET access_role = $1, updated_at = NOW() WHERE user_id = $2 AND tenant_id = $3`
+	_, err := h.DB.ExecContext(ctx, query, req.AccessRole, userID, tenantID)
+	if err != nil {
+		http.Error(w, "Failed to update tenant access mapping: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
 }

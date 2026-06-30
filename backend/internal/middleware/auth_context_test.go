@@ -66,3 +66,72 @@ func TestAuthContextMiddleware_WithJWT(t *testing.T) {
 		t.Fatalf("unexpected body: %s", rr.Body.String())
 	}
 }
+
+func TestAuthContextMiddleware_ProfessionalServices_NotCoreAdmin(t *testing.T) {
+	sm := services.NewSecurityManager(nil, nil, []byte("jwt-secret"))
+	token, err := sm.SignToken(map[string]interface{}{
+		"user_id":      "ali.g",
+		"tenant_id":    "tenant-investco",
+		"operator_role": "professional_services",
+	})
+	if err != nil {
+		t.Fatalf("failed to sign token: %v", err)
+	}
+
+	var coreAdmin string
+	var userRole string
+	var tenantID string
+	handler := AuthContextMiddleware(sm, nil)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		coreAdmin = r.Header.Get("X-Is-Core-Admin")
+		userRole = r.Header.Get("X-User-Role")
+		tenantID = r.Header.Get("X-Tenant-ID")
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	req := httptest.NewRequest("GET", "/api/tenants/accessible", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	rr := httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rr.Code)
+	}
+	if coreAdmin != "" {
+		t.Fatalf("professional_services should not be marked as core admin, got %q", coreAdmin)
+	}
+	if userRole != "professional_services" {
+		t.Fatalf("expected X-User-Role professional_services, got %q", userRole)
+	}
+	if tenantID != "tenant-investco" {
+		t.Fatalf("expected X-Tenant-ID tenant-investco, got %q", tenantID)
+	}
+}
+
+func TestAuthContextMiddleware_GlobalAdmin_IsCoreAdmin(t *testing.T) {
+	sm := services.NewSecurityManager(nil, nil, []byte("jwt-secret"))
+	token, err := sm.SignToken(map[string]interface{}{
+		"user_id":       "jim.g",
+		"operator_role": "global_admin",
+	})
+	if err != nil {
+		t.Fatalf("failed to sign token: %v", err)
+	}
+
+	var coreAdmin string
+	handler := AuthContextMiddleware(sm, nil)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		coreAdmin = r.Header.Get("X-Is-Core-Admin")
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	req := httptest.NewRequest("GET", "/api/tenants/accessible", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	rr := httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rr.Code)
+	}
+	if coreAdmin != "true" {
+		t.Fatalf("global_admin should be marked as core admin, got %q", coreAdmin)
+	}
+}

@@ -19,6 +19,7 @@ type AuditPublisher interface {
 	PublishSemanticSnapshot(ctx context.Context, event SemanticSnapshotEvent) error
 	PublishOrchestrationEvent(ctx context.Context, event OrchestrationWorkflowEvent) error
 	PublishComplianceViolation(ctx context.Context, event ComplianceViolationEvent) error
+	PublishAIQueryAudit(ctx context.Context, event AIQueryExecutionEvent) error
 	Close() error
 }
 
@@ -205,6 +206,30 @@ func (p *RedpandaAuditPublisher) PublishComplianceViolation(ctx context.Context,
 	}
 
 	return p.publishToRedpanda(ctx, TopicComplianceViolations, &envelope, event.TenantID)
+}
+
+// PublishAIQueryAudit publishes an AI query run audit event
+func (p *RedpandaAuditPublisher) PublishAIQueryAudit(ctx context.Context, event AIQueryExecutionEvent) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+
+	payload, err := json.Marshal(event)
+	if err != nil {
+		return fmt.Errorf("failed to marshal AI query audit event: %w", err)
+	}
+
+	envelope := KafkaEventEnvelope{
+		EventID:   uuid.New().String(),
+		EventType: EventTypeAIQueryExecuted,
+		Version:   "1.0",
+		Timestamp: time.Now().UTC(),
+		TenantID:  event.TenantID,
+		Source:    "ai-query-engine",
+		Payload:   payload,
+	}
+
+	return p.publishToRedpanda(ctx, TopicAIQueryAudits, &envelope, event.TenantID)
 }
 
 // publishToRedpanda sends an event to Redpanda with tenant-based partitioning

@@ -41,7 +41,9 @@ select_permissions:
         - version
         - is_active
         - core_id
-      filter: {}
+      filter:
+        tenant_id:
+          _eq: X-Hasura-Tenant-Id
   - role: user
     permission:
       columns:
@@ -54,7 +56,9 @@ select_permissions:
         - is_active
         - core_id
         - tenant_id
-      filter: {}
+      filter:
+        tenant_id:
+          _eq: X-Hasura-Tenant-Id
 update_permissions:
   - role: anonymous
     permission:

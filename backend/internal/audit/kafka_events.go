@@ -164,6 +164,20 @@ type AISuggestionEvent struct {
 	Metadata         json.RawMessage `json:"metadata,omitempty"`
 }
 
+// AIQueryExecutionEvent is emitted when an AI semantic query is compiled and run
+type AIQueryExecutionEvent struct {
+	QueryID        string          `json:"queryId"`
+	TenantID       string          `json:"tenantId"`
+	UserEmail      string          `json:"userEmail"`
+	InputPrompt    string          `json:"inputPrompt"`
+	GeneratedSQL   string          `json:"generatedSql"`
+	IsMasked       bool            `json:"isMasked"`
+	MaskedColumns  []string        `json:"maskedColumns,omitempty"`
+	FunctionalRole string          `json:"functionalRole"`
+	ExecutedAt     time.Time       `json:"executedAt"`
+	Metadata       json.RawMessage `json:"metadata,omitempty"`
+}
+
 // Kafka Topics for audit events
 const (
 	TopicSchedulerJobRuns     = "audit.scheduler.job_runs"
@@ -173,6 +187,7 @@ const (
 	TopicOrchestrationEvents  = "audit.orchestration.events"
 	TopicComplianceViolations = "audit.compliance.violations"
 	TopicAISuggestions        = "audit.ai.suggestions"
+	TopicAIQueryAudits        = "audit.ai.queries"
 )
 
 // Event types for routing
@@ -188,4 +203,5 @@ const (
 	EventTypeWorkflowFailed       = "WORKFLOW_FAILED"
 	EventTypeComplianceViolation  = "COMPLIANCE_VIOLATION"
 	EventTypeAINarrativeGenerated = "AI_NARRATIVE_GENERATED"
+	EventTypeAIQueryExecuted      = "AI_QUERY_EXECUTED"
 )

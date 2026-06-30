@@ -65,6 +65,10 @@ func PublishFromContext(ctx context.Context, publisher AuditPublisher, eventType
 		if e, ok := event.(ComplianceViolationEvent); ok {
 			return publisher.PublishComplianceViolation(ctx, e)
 		}
+	case EventTypeAIQueryExecuted:
+		if e, ok := event.(AIQueryExecutionEvent); ok {
+			return publisher.PublishAIQueryAudit(ctx, e)
+		}
 	default:
 		return fmt.Errorf("unknown event type: %s", eventType)
 	}
@@ -88,6 +92,7 @@ func EnsureTopicsExist(bootstrapServers string) error {
 		TopicOrchestrationEvents,
 		TopicComplianceViolations,
 		TopicAISuggestions,
+		TopicAIQueryAudits,
 	}
 
 	// In production, use Redpanda AdminClient to create topics:
