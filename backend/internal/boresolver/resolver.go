@@ -16,6 +16,7 @@ type JoinStep struct {
 	ToTable   string
 	Condition string // e.g. "t1.id = t2.ref_id"
 	Type      string // "LEFT", "INNER"
+	Alias     string // Target alias (e.g. "t1") used for tenant scoping
 }
 
 // Resolver maintains the context for resolving a calculation against a BO

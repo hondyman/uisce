@@ -4,6 +4,10 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"regexp"
+	"sort"
+	"strconv"
+	"strings"
 	"sync"
 	"time"
 )
@@ -26,9 +30,10 @@ import (
 
 // DataIntegrityManager ensures no double-counting or missing data between tiers
 type DataIntegrityManager struct {
-	db     *sql.DB
-	mu     sync.RWMutex
-	config *IntegrityConfig
+	db      *sql.DB
+	mu      sync.RWMutex
+	config  *IntegrityConfig
+	dialect QueryDialect
 }
 
 // IntegrityConfig configures data integrity checks
@@ -70,17 +75,22 @@ type WaterMark struct {
 	UpdatedAt time.Time `json:"updated_at"`
 }
 
-// NewDataIntegrityManager creates a new integrity manager
-func NewDataIntegrityManager(db *sql.DB, config *IntegrityConfig) *DataIntegrityManager {
+// NewDataIntegrityManager creates a new integrity manager.
+// If dialect is nil, PostgreSQL-style placeholders are used by default.
+func NewDataIntegrityManager(db *sql.DB, config *IntegrityConfig, dialect QueryDialect) *DataIntegrityManager {
 	if config.GracePeriodDays == 0 {
 		config.GracePeriodDays = 7
 	}
 	if config.RowCountMismatchThreshold == 0 {
 		config.RowCountMismatchThreshold = 0.001 // 0.1% tolerance
 	}
+	if dialect == nil {
+		dialect = PostgresQueryDialect{}
+	}
 	return &DataIntegrityManager{
-		db:     db,
-		config: config,
+		db:      db,
+		config:  config,
+		dialect: dialect,
 	}
 }
 
@@ -156,167 +166,398 @@ type TierQuery struct {
 	EndDate       *time.Time // Optional: query end date
 	Mode          TierQueryMode
 	SelectColumns string // Columns to select
-	WhereClause   string // Additional WHERE conditions
-	GroupByClause string // Optional GROUP BY
-	OrderByClause string // Optional ORDER BY
+	WhereClause   string        // Additional WHERE conditions (parenthesized and ANDed)
+	WhereArgs     []interface{} // Optional args for placeholders inside WhereClause
+	GroupByClause string        // Optional GROUP BY
+	OrderByClause string        // Optional ORDER BY
+	HotSchema     string        // Hot tier schema/catalog (default: semantic_hot)
+	ColdSchema    string        // Cold tier schema/catalog (default: semantic_cold)
+	Limit         int           // Optional row limit (pushed down to each branch)
+	Offset        int           // Optional row offset (pushed down to each branch)
 }
 
-// BuildSafeQuery builds a bulletproof UNION query that guarantees no overlap
-func (m *DataIntegrityManager) BuildSafeQuery(ctx context.Context, q *TierQuery) (string, error) {
+// BuildSafeQuery builds a bulletproof UNION query that guarantees no overlap.
+// It returns the SQL string, the parameter values for all placeholders, and an error.
+func (m *DataIntegrityManager) BuildSafeQuery(ctx context.Context, q *TierQuery) (string, []interface{}, error) {
+	if q.TenantID == "" {
+		return "", nil, fmt.Errorf("zero-tolerance violation: tenant_id is required for tier routing")
+	}
+
 	// Get the authoritative watermark
 	wm, err := m.GetWaterMark(ctx, q.TableName, q.TenantID, q.DatasourceID)
 	if err != nil {
-		return "", fmt.Errorf("failed to get watermark: %w", err)
+		return "", nil, fmt.Errorf("failed to get watermark: %w", err)
 	}
 
 	// If migration is in progress, use HOT ONLY to be safe
 	if wm.State == "MIGRATING" || wm.State == "VALIDATING" {
-		return m.buildHotOnlyQuery(q), nil
+		return m.buildHotOnlyQuery(q)
 	}
 
 	cutoffDate := wm.CutoffDate.Format("2006-01-02")
 
 	switch q.Mode {
 	case HotOnly:
-		return m.buildHotOnlyQuery(q), nil
+		return m.buildHotOnlyQuery(q)
 
 	case ColdOnly:
-		return m.buildColdOnlyQuery(q, cutoffDate), nil
+		return m.buildColdOnlyQuery(q, cutoffDate)
 
 	case UnionSafe:
-		return m.buildUnionSafeQuery(q, cutoffDate), nil
+		return m.buildUnionSafeQuery(q, cutoffDate)
 
 	default:
-		return "", fmt.Errorf("unsupported query mode: %s", q.Mode)
+		return "", nil, fmt.Errorf("unsupported query mode: %s", q.Mode)
 	}
 }
 
-func (m *DataIntegrityManager) buildHotOnlyQuery(q *TierQuery) string {
-	return fmt.Sprintf(`
-		SELECT %s
-		FROM semantic_hot.%s
-		WHERE tenant_id = '%s'
-		  AND datasource_id = '%s'
-		  %s
-		%s
-		%s
-	`, q.SelectColumns, q.TableName, q.TenantID, q.DatasourceID,
-		m.buildDateFilter(q, ""),
-		m.buildGroupBy(q),
-		m.buildOrderBy(q))
-}
+func (m *DataIntegrityManager) buildHotOnlyQuery(q *TierQuery) (string, []interface{}, error) {
+	var args []interface{}
+	param := 1
 
-func (m *DataIntegrityManager) buildColdOnlyQuery(q *TierQuery, cutoffDate string) string {
-	return fmt.Sprintf(`
-		SELECT %s
-		FROM semantic_cold.%s
-		WHERE tenant_id = '%s'
-		  AND datasource_id = '%s'
-		  AND %s < '%s'
-		  %s
-		%s
-		%s
-	`, q.SelectColumns, q.TableName, q.TenantID, q.DatasourceID,
-		q.DateColumn, cutoffDate,
-		m.buildDateFilter(q, cutoffDate),
-		m.buildGroupBy(q),
-		m.buildOrderBy(q))
-}
+	whereClause := m.buildTenantFilter(q, &param, &args)
+	dateFilter, dateArgs := m.buildDateFilter(q, &param)
+	args = append(args, dateArgs...)
+	whereClause += dateFilter
 
-// buildUnionSafeQuery builds a UNION query with EXACT boundary enforcement
-// KEY INSIGHT: We use EXPLICIT date filters on BOTH sides to prevent ANY overlap
-func (m *DataIntegrityManager) buildUnionSafeQuery(q *TierQuery, cutoffDate string) string {
-	hotDateFilter := m.buildHotDateFilter(q, cutoffDate)
-	coldDateFilter := m.buildColdDateFilter(q, cutoffDate)
-
-	return fmt.Sprintf(`
-		-- HOT TIER: Data >= cutoff date (authoritative from watermark)
-		SELECT %s, 'hot' as _data_tier
-		FROM semantic_hot.%s
-		WHERE tenant_id = '%s'
-		  AND datasource_id = '%s'
-		  AND %s >= '%s'  -- CRITICAL: Explicit boundary
-		  %s
-		
-		UNION ALL
-		
-		-- COLD TIER: Data < cutoff date (authoritative from watermark)
-		SELECT %s, 'cold' as _data_tier
-		FROM semantic_cold.%s
-		WHERE tenant_id = '%s'
-		  AND datasource_id = '%s'
-		  AND %s < '%s'   -- CRITICAL: Explicit boundary (< not <=)
-		  %s
-		%s
-		%s
-	`,
-		// Hot tier
-		q.SelectColumns, q.TableName, q.TenantID, q.DatasourceID,
-		q.DateColumn, cutoffDate, hotDateFilter,
-		// Cold tier
-		q.SelectColumns, q.TableName, q.TenantID, q.DatasourceID,
-		q.DateColumn, cutoffDate, coldDateFilter,
-		// Outer clauses
-		m.buildGroupBy(q),
-		m.buildOrderBy(q))
-}
-
-func (m *DataIntegrityManager) buildHotDateFilter(q *TierQuery, cutoffDate string) string {
-	if q.StartDate == nil && q.EndDate == nil {
-		return ""
+	if q.WhereClause != "" {
+		whereClause += " AND (" + offsetPlaceholders(q.WhereClause, m.dialect, param-1) + ")"
+		args = append(args, q.WhereArgs...)
+		param += len(q.WhereArgs)
 	}
 
+	sql := fmt.Sprintf(`
+		SELECT %s
+		FROM %s.%s
+		WHERE %s
+		%s
+		%s
+		%s
+	`, normalizeSelectColumns(q.SelectColumns), m.hotSchema(q), m.dialect.QuoteIdentifier(q.TableName),
+		whereClause,
+		m.buildGroupBy(q),
+		m.buildOrderBy(q),
+		m.buildLimitOffsetClause(q))
+
+	return sql, args, nil
+}
+
+func (m *DataIntegrityManager) buildColdOnlyQuery(q *TierQuery, cutoffDate string) (string, []interface{}, error) {
+	var args []interface{}
+	param := 1
+
+	whereClause := m.buildTenantFilter(q, &param, &args)
+	whereClause += fmt.Sprintf(" AND %s <= %s", m.dialect.QuoteIdentifier(q.DateColumn), m.dialect.BindPlaceholder(param))
+	args = append(args, cutoffDate)
+	param++
+
+	dateFilter, dateArgs := m.buildColdDateFilter(q, cutoffDate, &param)
+	args = append(args, dateArgs...)
+	whereClause += dateFilter
+
+	if q.WhereClause != "" {
+		whereClause += " AND (" + offsetPlaceholders(q.WhereClause, m.dialect, param-1) + ")"
+		args = append(args, q.WhereArgs...)
+		param += len(q.WhereArgs)
+	}
+
+	sql := fmt.Sprintf(`
+		SELECT %s
+		FROM %s.%s
+		WHERE %s
+		%s
+		%s
+		%s
+	`, normalizeSelectColumns(q.SelectColumns), m.coldSchema(q), m.dialect.QuoteIdentifier(q.TableName),
+		whereClause,
+		m.buildGroupBy(q),
+		m.buildOrderBy(q),
+		m.buildLimitOffsetClause(q))
+
+	return sql, args, nil
+}
+
+// buildUnionSafeQuery builds a UNION query with EXACT boundary enforcement.
+// Both halves are parameterized and tenant-scoped so that isolation holds across
+// the hot (OLTP) and cold (lake) backends.
+func (m *DataIntegrityManager) buildUnionSafeQuery(q *TierQuery, cutoffDate string) (string, []interface{}, error) {
+	hotSQL, hotArgs, err := m.buildHotBranch(q, cutoffDate)
+	if err != nil {
+		return "", nil, err
+	}
+
+	// Renumber cold placeholders to continue the hot sequence for a single
+	// federated execution plan.
+	coldSQL, coldArgs, err := m.buildColdBranch(q, cutoffDate)
+	if err != nil {
+		return "", nil, err
+	}
+	coldSQL = offsetPlaceholders(coldSQL, m.dialect, len(hotArgs))
+
+	var sql strings.Builder
+	sql.WriteString("/* --- Uisce Hot/Cold Seam Execution Graph --- */\n")
+	sql.WriteString("SELECT * FROM (\n")
+	sql.WriteString("  ")
+	sql.WriteString(hotSQL)
+	sql.WriteString("\n\n  UNION ALL\n\n  ")
+	sql.WriteString(coldSQL)
+	sql.WriteString("\n) AS unified_ledger_view")
+
+	if groupBy := m.buildGroupBy(q); groupBy != "" {
+		sql.WriteString("\n")
+		sql.WriteString(groupBy)
+	}
+	if orderBy := m.buildOrderBy(q); orderBy != "" {
+		sql.WriteString("\n")
+		sql.WriteString(orderBy)
+	}
+
+	// Apply the final LIMIT/OFFSET at the outer unified level to guarantee
+	// correct pagination semantics regardless of how many rows each branch
+	 // contributes.
+	if q.Limit > 0 {
+		sql.WriteString(fmt.Sprintf("\nLIMIT %d", q.Limit))
+		if q.Offset > 0 {
+			sql.WriteString(fmt.Sprintf(" OFFSET %d", q.Offset))
+		}
+	}
+
+	args := make([]interface{}, 0, len(hotArgs)+len(coldArgs))
+	args = append(args, hotArgs...)
+	args = append(args, coldArgs...)
+
+	return sql.String(), args, nil
+}
+
+// buildHotBranch produces the parameterized hot-tier sub-query.
+// Rule 4: timestamps STRICTLY GREATER than the watermark come from the hot tier.
+func (m *DataIntegrityManager) buildHotBranch(q *TierQuery, cutoffDate string) (string, []interface{}, error) {
+	var args []interface{}
+	param := 1
+
+	whereClause := m.buildTenantFilter(q, &param, &args)
+	whereClause += fmt.Sprintf(" AND %s > %s", m.dialect.QuoteIdentifier(q.DateColumn), m.dialect.BindPlaceholder(param))
+	args = append(args, cutoffDate)
+	param++
+
+	dateFilter, dateArgs := m.buildHotDateFilter(q, cutoffDate, &param)
+	args = append(args, dateArgs...)
+	whereClause += dateFilter
+
+	if q.WhereClause != "" {
+		whereClause += " AND (" + offsetPlaceholders(q.WhereClause, m.dialect, param-1) + ")"
+		args = append(args, q.WhereArgs...)
+		param += len(q.WhereArgs)
+	}
+
+	sql := fmt.Sprintf("SELECT %s, 'hot' AS _data_tier\nFROM %s.%s\nWHERE %s%s",
+		normalizeSelectColumns(q.SelectColumns), m.hotSchema(q), m.dialect.QuoteIdentifier(q.TableName),
+		whereClause, m.buildLimitOffsetClause(q))
+
+	return sql, args, nil
+}
+
+// buildColdBranch produces the parameterized cold-tier sub-query.
+// Rule 4: timestamps LESS THAN OR EQUAL to the watermark come from the cold tier.
+func (m *DataIntegrityManager) buildColdBranch(q *TierQuery, cutoffDate string) (string, []interface{}, error) {
+	var args []interface{}
+	param := 1
+
+	whereClause := m.buildTenantFilter(q, &param, &args)
+	whereClause += fmt.Sprintf(" AND %s <= %s", m.dialect.QuoteIdentifier(q.DateColumn), m.dialect.BindPlaceholder(param))
+	args = append(args, cutoffDate)
+	param++
+
+	dateFilter, dateArgs := m.buildColdDateFilter(q, cutoffDate, &param)
+	args = append(args, dateArgs...)
+	whereClause += dateFilter
+
+	if q.WhereClause != "" {
+		whereClause += " AND (" + offsetPlaceholders(q.WhereClause, m.dialect, param-1) + ")"
+		args = append(args, q.WhereArgs...)
+		param += len(q.WhereArgs)
+	}
+
+	sql := fmt.Sprintf("SELECT %s, 'cold' AS _data_tier\nFROM %s.%s\nWHERE %s%s",
+		normalizeSelectColumns(q.SelectColumns), m.coldSchema(q), m.dialect.QuoteIdentifier(q.TableName),
+		whereClause, m.buildLimitOffsetClause(q))
+
+	return sql, args, nil
+}
+
+// OrderFieldsDeterministically returns a lexicographically sorted, comma-separated
+// column list. This guarantees that the Hot and Cold branches of a UNION ALL
+// emit projection columns in the identical physical sequence, preventing
+// structural misalignment when dynamic field slices are used.
+func OrderFieldsDeterministically(fields []string) string {
+	sorted := make([]string, len(fields))
+	copy(sorted, fields)
+	sort.Strings(sorted)
+	return strings.Join(sorted, ", ")
+}
+
+// normalizeSelectColumns splits a comma-separated select list, sorts the columns
+// deterministically, and joins them back. If the input is already a single
+// expression (e.g., "*"), it is returned unchanged.
+func normalizeSelectColumns(selectColumns string) string {
+	trimmed := strings.TrimSpace(selectColumns)
+	if trimmed == "" || trimmed == "*" || !strings.Contains(trimmed, ",") {
+		return trimmed
+	}
+	parts := strings.Split(selectColumns, ",")
+	fields := make([]string, 0, len(parts))
+	for _, p := range parts {
+		p = strings.TrimSpace(p)
+		if p != "" {
+			fields = append(fields, p)
+		}
+	}
+	if len(fields) == 0 {
+		return "*"
+	}
+	return OrderFieldsDeterministically(fields)
+}
+
+func (m *DataIntegrityManager) buildTenantFilter(q *TierQuery, param *int, args *[]interface{}) string {
+	filter := fmt.Sprintf("tenant_id = %s", m.dialect.BindPlaceholder(*param))
+	*args = append(*args, q.TenantID)
+	*param++
+
+	filter += fmt.Sprintf(" AND datasource_id = %s", m.dialect.BindPlaceholder(*param))
+	*args = append(*args, q.DatasourceID)
+	*param++
+
+	return filter
+}
+
+func (m *DataIntegrityManager) hotSchema(q *TierQuery) string {
+	if q.HotSchema != "" {
+		return q.HotSchema
+	}
+	return "semantic_hot"
+}
+
+func (m *DataIntegrityManager) coldSchema(q *TierQuery) string {
+	if q.ColdSchema != "" {
+		return q.ColdSchema
+	}
+	return "semantic_cold"
+}
+
+func (m *DataIntegrityManager) buildHotDateFilter(q *TierQuery, cutoffDate string, param *int) (string, []interface{}) {
 	var filter string
+	var args []interface{}
+
 	if q.StartDate != nil {
 		startDate := q.StartDate.Format("2006-01-02")
 		// Use MAX of start date and cutoff for hot tier
 		if q.StartDate.Before(parseDate(cutoffDate)) {
-			filter += fmt.Sprintf(" AND %s >= '%s'", q.DateColumn, cutoffDate)
+			filter += fmt.Sprintf(" AND %s >= %s", m.dialect.QuoteIdentifier(q.DateColumn), m.dialect.BindPlaceholder(*param))
+			args = append(args, cutoffDate)
 		} else {
-			filter += fmt.Sprintf(" AND %s >= '%s'", q.DateColumn, startDate)
+			filter += fmt.Sprintf(" AND %s >= %s", m.dialect.QuoteIdentifier(q.DateColumn), m.dialect.BindPlaceholder(*param))
+			args = append(args, startDate)
 		}
+		*param++
 	}
 	if q.EndDate != nil {
-		filter += fmt.Sprintf(" AND %s <= '%s'", q.DateColumn, q.EndDate.Format("2006-01-02"))
+		filter += fmt.Sprintf(" AND %s <= %s", m.dialect.QuoteIdentifier(q.DateColumn), m.dialect.BindPlaceholder(*param))
+		args = append(args, q.EndDate.Format("2006-01-02"))
+		*param++
 	}
-	return filter
+	return filter, args
 }
 
-func (m *DataIntegrityManager) buildColdDateFilter(q *TierQuery, cutoffDate string) string {
-	if q.StartDate == nil && q.EndDate == nil {
-		return ""
-	}
-
+func (m *DataIntegrityManager) buildColdDateFilter(q *TierQuery, cutoffDate string, param *int) (string, []interface{}) {
 	var filter string
+	var args []interface{}
+
 	if q.StartDate != nil {
-		filter += fmt.Sprintf(" AND %s >= '%s'", q.DateColumn, q.StartDate.Format("2006-01-02"))
+		filter += fmt.Sprintf(" AND %s >= %s", m.dialect.QuoteIdentifier(q.DateColumn), m.dialect.BindPlaceholder(*param))
+		args = append(args, q.StartDate.Format("2006-01-02"))
+		*param++
 	}
 	if q.EndDate != nil {
 		endDate := q.EndDate.Format("2006-01-02")
-		// Use MIN of end date and cutoff-1 for cold tier
+		// Use MIN of end date and cutoff for cold tier
 		if q.EndDate.After(parseDate(cutoffDate)) {
-			// End date is after cutoff, so cold should go up to cutoff-1day
-			coldEnd := parseDate(cutoffDate).AddDate(0, 0, -1).Format("2006-01-02")
-			filter += fmt.Sprintf(" AND %s <= '%s'", q.DateColumn, coldEnd)
+			filter += fmt.Sprintf(" AND %s <= %s", m.dialect.QuoteIdentifier(q.DateColumn), m.dialect.BindPlaceholder(*param))
+			args = append(args, cutoffDate)
 		} else {
-			filter += fmt.Sprintf(" AND %s <= '%s'", q.DateColumn, endDate)
+			filter += fmt.Sprintf(" AND %s <= %s", m.dialect.QuoteIdentifier(q.DateColumn), m.dialect.BindPlaceholder(*param))
+			args = append(args, endDate)
 		}
+		*param++
 	}
-	return filter
+	return filter, args
 }
 
-func (m *DataIntegrityManager) buildDateFilter(q *TierQuery, _ string) string {
-	if q.StartDate == nil && q.EndDate == nil {
-		return ""
-	}
+func (m *DataIntegrityManager) buildDateFilter(q *TierQuery, param *int) (string, []interface{}) {
 	var filter string
+	var args []interface{}
+
 	if q.StartDate != nil {
-		filter += fmt.Sprintf(" AND %s >= '%s'", q.DateColumn, q.StartDate.Format("2006-01-02"))
+		filter += fmt.Sprintf(" AND %s >= %s", m.dialect.QuoteIdentifier(q.DateColumn), m.dialect.BindPlaceholder(*param))
+		args = append(args, q.StartDate.Format("2006-01-02"))
+		*param++
 	}
 	if q.EndDate != nil {
-		filter += fmt.Sprintf(" AND %s <= '%s'", q.DateColumn, q.EndDate.Format("2006-01-02"))
+		filter += fmt.Sprintf(" AND %s <= %s", m.dialect.QuoteIdentifier(q.DateColumn), m.dialect.BindPlaceholder(*param))
+		args = append(args, q.EndDate.Format("2006-01-02"))
+		*param++
 	}
-	return filter
+	return filter, args
+}
+
+// buildLimitOffsetClause returns a LIMIT/OFFSET clause to push down into a
+// single branch. If the dialect requires ORDER BY for LIMIT, the date column is
+// used as a deterministic ordering key.
+func (m *DataIntegrityManager) buildLimitOffsetClause(q *TierQuery) string {
+	if q.Limit <= 0 {
+		return ""
+	}
+
+	var clause strings.Builder
+	if m.dialect.RequiresOrderByForLimit() && q.DateColumn != "" {
+		clause.WriteString(fmt.Sprintf(" ORDER BY %s", m.dialect.QuoteIdentifier(q.DateColumn)))
+	}
+	clause.WriteString(fmt.Sprintf(" LIMIT %d", q.Limit))
+	if q.Offset > 0 {
+		clause.WriteString(fmt.Sprintf(" OFFSET %d", q.Offset))
+	}
+	return clause.String()
+}
+
+// offsetPlaceholders rewrites a SQL fragment so that its placeholder indices
+// continue a previous argument sequence. This is required when two
+// independently-parameterized branches are combined into one execution plan.
+func offsetPlaceholders(sql string, dialect QueryDialect, offset int) string {
+	switch dialect.(type) {
+	case PostgresQueryDialect:
+		return offsetPostgresPlaceholders(sql, offset)
+	case SQLServerQueryDialect:
+		return offsetSQLServerPlaceholders(sql, offset)
+	default:
+		// Positional '?' placeholders need no renumbering.
+		return sql
+	}
+}
+
+var postgresPlaceholderRE = regexp.MustCompile(`\$(\d+)`)
+var sqlServerPlaceholderRE = regexp.MustCompile(`@p(\d+)`)
+
+func offsetPostgresPlaceholders(sql string, offset int) string {
+	return postgresPlaceholderRE.ReplaceAllStringFunc(sql, func(match string) string {
+		n, _ := strconv.Atoi(strings.TrimPrefix(match, "$"))
+		return fmt.Sprintf("$%d", n+offset)
+	})
+}
+
+func offsetSQLServerPlaceholders(sql string, offset int) string {
+	return sqlServerPlaceholderRE.ReplaceAllStringFunc(sql, func(match string) string {
+		n, _ := strconv.Atoi(strings.TrimPrefix(match, "@p"))
+		return fmt.Sprintf("@p%d", n+offset)
+	})
 }
 
 func (m *DataIntegrityManager) buildGroupBy(q *TierQuery) string {

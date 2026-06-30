@@ -18,7 +18,7 @@ func (m *MockBORepository) GetBODefinition(boID string) (*BODefinition, error) {
 	return nil, nil // error handling simulated
 }
 
-func (m *MockBORepository) GetBOByTechnicalName(tenantID, datasourceID, technicalName string) (*BODefinition, error) {
+func (m *MockBORepository) GetBOByTechnicalName(technicalName, tenantID, datasourceID string) (*BODefinition, error) {
 	// Simple mock implementation: iterate mock definitions (inefficient but fine for tests)
 	for _, def := range m.BODefinitions {
 		if def.DrivingTable == technicalName { // Assuming technical name maps to table name for this mock
@@ -56,12 +56,13 @@ func TestSimpleSQLGeneration(t *testing.T) {
 		Limit: 10,
 	}
 
-	sql, err := generator.GenerateSQL(req)
+	sql, args, err := generator.GenerateSQL(req)
 	assert.NoError(t, err)
 	// Basic assertions on generated SQL
 	assert.Contains(t, sql, "SELECT")
 	assert.Contains(t, sql, "FROM orders")
 	assert.Contains(t, sql, "LIMIT 10")
+	assert.Nil(t, args)
 }
 
 func TestJoinInference(t *testing.T) {
@@ -97,11 +98,12 @@ func TestJoinInference(t *testing.T) {
 		Limit:            10,
 	}
 
-	sql, err := generator.GenerateSQL(req)
+	sql, args, err := generator.GenerateSQL(req)
 	if err != nil {
 		t.Skip("Skipping join test until deep resolver logic is perfect: " + err.Error())
 	}
 
 	_ = sql
+	_ = args
 	// assert.Contains(t, sql, "JOIN customers")
 }

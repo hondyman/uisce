@@ -86,7 +86,8 @@ type FilterClause struct {
 
 // SQLGenerationResponse defines the output of the SQL generation
 type SQLGenerationResponse struct {
-	SQL string `json:"sql"`
+	SQL  string        `json:"sql"`
+	Args []interface{} `json:"args,omitempty"`
 }
 
 // BOSQLGenerator handles the Logic for generating SQL
@@ -156,14 +157,22 @@ type GenerationContext struct {
 	Aliases      map[string]string        // Path -> Alias (e.g. "" -> "t0", "orders" -> "t1")
 	Joins        []JoinStep
 	NextAliasIdx int
+
+	// Parameter tracking for dialect-neutral prepared-statement generation.
+	Args         []interface{} // Parameter values passed to the database driver
+	ParamCounter int           // Monotonic placeholder counter ($1, $2, ...)
+
+	// RootTenantPredicate is the pre-built root table tenant boundary condition.
+	RootTenantPredicate string
 }
 
-// GenerateSQL is the main entry point
-func (g *BOSQLGenerator) GenerateSQL(req SQLGenerationRequest) (string, error) {
+// GenerateSQL is the main entry point. It returns the generated SQL, the
+// parameter values for any placeholders, and an error if generation fails.
+func (g *BOSQLGenerator) GenerateSQL(req SQLGenerationRequest) (string, []interface{}, error) {
 	// 1. Load Root BO Definition
 	rootBO, err := g.BORepository.GetBODefinition(req.BusinessObjectID)
 	if err != nil {
-		return "", fmt.Errorf("failed to load BO definition: %w", err)
+		return "", nil, fmt.Errorf("failed to load BO definition: %w", err)
 	}
 
 	// 2. Initialize Context
@@ -178,25 +187,22 @@ func (g *BOSQLGenerator) GenerateSQL(req SQLGenerationRequest) (string, error) {
 	ctx.LoadedBOs[rootBO.ID] = rootBO
 	ctx.Aliases[""] = "t0" // Root alias (empty path)
 
-	// 3. Resolve Selected Fields
+	// 3. Resolve Selected Fields (infers joins required for selected columns)
 	selectColumns, err := g.ResolveSelectedFields(ctx)
 	if err != nil {
-		return "", fmt.Errorf("failed to resolve fields: %w", err)
+		return "", nil, fmt.Errorf("failed to resolve fields: %w", err)
 	}
 
 	// 4. Build FROM Clause
 	fromClause := g.BuildFROMClause(ctx)
 
-	// 5. Build Join Clause (Joins were inferred during resolution)
-	joinClause := g.BuildJoinClause(ctx)
-
-	// 6. Convert Filters
+	// 5. Convert Filters (may infer additional joins for filter fields)
 	whereClause, err := g.ConvertFilters(ctx)
 	if err != nil {
-		return "", fmt.Errorf("failed to convert filters: %w", err)
+		return "", nil, fmt.Errorf("failed to convert filters: %w", err)
 	}
 
-	// 6b. Include user-provided WHERE clause if present
+	// 5b. Include user-provided WHERE clause if present
 	if req.WhereClause != "" {
 		// Convert field names in the WHERE clause to database columns with table aliases
 		convertedWhereClause, err := g.ConvertWhereClauseFieldNames(ctx, req.WhereClause)
@@ -212,7 +218,28 @@ func (g *BOSQLGenerator) GenerateSQL(req SQLGenerationRequest) (string, error) {
 		}
 	}
 
-	// 7. Assemble Query
+	// 6. Enforce ABAC tenant isolation at the AST level once the full join graph
+	// has been inferred. This injects parameterized predicates on every table node
+	// before the final SQL layout is produced.
+	if req.TenantID != "" {
+		g.InjectTenantScopingToGraph(ctx, req.TenantID)
+	}
+
+	// 7. Build Join Clause (conditions may have been mutated by tenant scoping)
+	joinClause := g.BuildJoinClause(ctx)
+
+	// 8. Stitch the root tenant boundary into the primary WHERE cluster.
+	// This prevents logical bypasses from subqueries or outer joins that a trailing
+	// global WHERE tenant_id = 'X' would be vulnerable to.
+	if ctx.RootTenantPredicate != "" {
+		if whereClause != "" {
+			whereClause = ctx.RootTenantPredicate + " AND " + whereClause
+		} else {
+			whereClause = ctx.RootTenantPredicate
+		}
+	}
+
+	// 9. Assemble Query
 	query := fmt.Sprintf("SELECT\n  %s\nFROM %s\n%s", strings.Join(selectColumns, ",\n  "), fromClause, joinClause)
 
 	if whereClause != "" {
@@ -223,7 +250,64 @@ func (g *BOSQLGenerator) GenerateSQL(req SQLGenerationRequest) (string, error) {
 		query += fmt.Sprintf("\nLIMIT %d", req.Limit)
 	}
 
-	return query, nil
+	return query, ctx.Args, nil
+}
+
+// paramToken returns the dialect-specific placeholder token for the nth parameter.
+// It avoids mutating the Dialect interface (which has a very wide blast radius) while
+// still keeping placeholder generation native to each backend.
+func paramToken(dialect Dialect, n int) string {
+	switch dialect.(type) {
+	case PostgresDialect:
+		return fmt.Sprintf("$%d", n)
+	case SnowflakeDialect:
+		return "?"
+	case SQLServerDialect:
+		return fmt.Sprintf("@p%d", n)
+	default:
+		return fmt.Sprintf("$%d", n)
+	}
+}
+
+// InjectTenantScopingToGraph mutates the generation context to enforce row-level
+// tenant isolation at the abstract compilation phase. It injects a parameterized
+// tenant predicate on the root driving table (t0) and on every relationship
+// traversal path (join). Existing join conditions are parenthesized before the
+// tenant check is appended to neutralize possible OR-short-circuit injection.
+func (g *BOSQLGenerator) InjectTenantScopingToGraph(ctx *GenerationContext, tenantID string) {
+	rootAlias := "t0" // Standard baseline root driving table alias
+
+	if ctx.Args == nil {
+		ctx.Args = make([]interface{}, 0)
+	}
+
+	// 1. Root table boundary.
+	ctx.ParamCounter++
+	rootParamToken := paramToken(g.Dialect, ctx.ParamCounter)
+	ctx.Args = append(ctx.Args, tenantID)
+	ctx.RootTenantPredicate = fmt.Sprintf("%s.tenant_id = %s", rootAlias, rootParamToken)
+
+	// 2. Relationship traversal boundaries.
+	for i := range ctx.Joins {
+		step := &ctx.Joins[i]
+
+		stepAlias := step.Alias
+		if stepAlias == "" {
+			// Fallback for join steps created without an explicit alias.
+			stepAlias = fmt.Sprintf("t%d", i+1)
+		}
+
+		ctx.ParamCounter++
+		joinParamToken := paramToken(g.Dialect, ctx.ParamCounter)
+		ctx.Args = append(ctx.Args, tenantID)
+
+		tenantCondition := fmt.Sprintf("%s.tenant_id = %s", stepAlias, joinParamToken)
+		if step.Condition == "" {
+			step.Condition = tenantCondition
+		} else {
+			step.Condition = fmt.Sprintf("(%s) AND %s", step.Condition, tenantCondition)
+		}
+	}
 }
 
 // ResolveSelectedFields resolves paths to physical columns and infers joins
@@ -364,6 +448,7 @@ func (g *BOSQLGenerator) ResolvePathWithLabel(ctx *GenerationContext, path strin
 			Type:      "LEFT", // Default to LEFT JOIN for safety
 			ToTable:   fmt.Sprintf("%s AS %s", targetBO.DrivingTable, newAlias),
 			Condition: condition,
+			Alias:     newAlias,
 		}
 		ctx.Joins = append(ctx.Joins, joinStep)
 
@@ -628,12 +713,13 @@ func (g *BOSQLGenerator) findFieldBySemanticTerm(boDef *BODefinition, term strin
 	return nil, fmt.Errorf("field with term '%s' not found in business object '%s'", term, boDef.ID)
 }
 
-// GenerateSQLFromSemantic generates SQL from a semantic query request
-func (g *BOSQLGenerator) GenerateSQLFromSemantic(semanticReq *SemanticSQLGenerationRequest, tenantID, datasourceID string) (string, error) {
+// GenerateSQLFromSemantic generates SQL from a semantic query request. It returns
+// the generated SQL, the parameter values for any placeholders, and an error.
+func (g *BOSQLGenerator) GenerateSQLFromSemantic(semanticReq *SemanticSQLGenerationRequest, tenantID, datasourceID string) (string, []interface{}, error) {
 	// Resolve semantic request to UUID-based request
 	req, err := g.ResolveSemanticRequest(semanticReq, tenantID, datasourceID)
 	if err != nil {
-		return "", fmt.Errorf("failed to resolve semantic request: %w", err)
+		return "", nil, fmt.Errorf("failed to resolve semantic request: %w", err)
 	}
 
 	// Generate SQL using existing logic
