@@ -27,7 +27,10 @@ select_permissions:
     - updated_at
     - version
     - is_active
-    filter: {}
+    filter:
+      tenant_instance:
+        tenant_id:
+          _eq: X-Hasura-Tenant-Id
 - role: steward
   permission:
     columns:
@@ -38,8 +41,25 @@ select_permissions:
     - updated_at
     - version
     - is_active
-    filter: {}
+    filter:
+      tenant_instance:
+        tenant_id:
+          _eq: X-Hasura-Tenant-Id
 - role: anonymous
+  permission:
+    columns:
+    - id
+    - tenant_instance_id
+    - alpha_product_id
+    - created_at
+    - updated_at
+    - version
+    - is_active
+    filter:
+      tenant_instance:
+        tenant_id:
+          _eq: "00000000-0000-0000-0000-000000000000"
+- role: global_admin
   permission:
     columns:
     - id

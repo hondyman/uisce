@@ -137,7 +137,6 @@ import AuditHistoryPage from "./features/audit/pages/AuditHistoryPage";
 // RBAC Management Pages
 import RoleManagerPage from "./features/admin/pages/RoleManagerPage";
 import { UserManagementPage } from "./features/admin/pages/UserManagementPage";
-import UserRoleAssignmentPage from "./features/admin/pages/UserRoleAssignmentPage";
 import TenantUserAssignmentPage from "./features/admin/pages/TenantUserAssignmentPage";
 import DelegationManagerPage from "./features/admin/pages/DelegationManagerPage";
 import FieldPermissionEditorPage from "./features/admin/pages/FieldPermissionEditorPage";
@@ -211,14 +210,14 @@ function ProtectedApp() {
         {/* ═══════════════════════════════════════════════════════════════════
             PLATFORM - Organization, security, and setup
             ═══════════════════════════════════════════════════════════════════ */}
-        <Route path="/tenants" element={<ProtectedRoute><TenantListPage /></ProtectedRoute>} />
+        <Route path="/tenants" element={<Navigate to="/fabric/tenants" replace />} />
         <Route path="/tenants/:tenantId" element={<ProtectedRoute><TenantDetailPageV2 /></ProtectedRoute>} />
         <Route path="/admin/rbac/roles" element={<ProtectedRoute><RoleManagerPage /></ProtectedRoute>} />
         <Route path="/admin/rbac/users" element={<ProtectedRoute><UserManagementPage /></ProtectedRoute>} />
         <Route path="/admin/rbac/teams" element={<ProtectedRoute><TeamManagerPage /></ProtectedRoute>} />
         <Route path="/admin/rbac/delegations" element={<ProtectedRoute><DelegationManagerPage /></ProtectedRoute>} />
         <Route path="/admin/rbac/field-permissions" element={<ProtectedRoute><FieldPermissionEditorPage /></ProtectedRoute>} />
-        <Route path="/admin/rbac/user-roles" element={<ProtectedRoute><UserRoleAssignmentPage /></ProtectedRoute>} />
+        <Route path="/admin/rbac/user-roles" element={<ProtectedRoute><UserManagementPage /></ProtectedRoute>} />
         <Route path="/admin/rbac/user-tenants" element={<ProtectedRoute><TenantUserAssignmentPage /></ProtectedRoute>} />
         <Route path="/fabric/ip-whitelist" element={<ProtectedRoute><IPWhitelistManagementPage /></ProtectedRoute>} />
         <Route path="/secrets/config" element={<ProtectedRoute><SecretsConfigPage tenantId="default" /></ProtectedRoute>} />

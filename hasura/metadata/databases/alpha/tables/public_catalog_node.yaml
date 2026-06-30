@@ -27,7 +27,8 @@ select_permissions:
         - parent_type_id
         - config
 
-      filter: {}
+      filter:
+        _not: {}
   - role: steward
     permission:
       columns:
@@ -53,7 +54,9 @@ select_permissions:
         - parent_type_id
         - config
 
-      filter: {}
+      filter:
+        tenant_id:
+          _eq: X-Hasura-Tenant-Id
   - role: user
     permission:
       columns:
@@ -79,4 +82,6 @@ select_permissions:
         - parent_type_id
         - config
 
-      filter: {}
+      filter:
+        tenant_id:
+          _eq: X-Hasura-Tenant-Id

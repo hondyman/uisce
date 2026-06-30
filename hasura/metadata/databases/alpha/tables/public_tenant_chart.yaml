@@ -1,6 +1,10 @@
 table:
   name: tenant_chart
   schema: public
+object_relationships:
+  - name: tenant_datasource
+    using:
+      foreign_key_constraint_on: tenant_datasource_id
 select_permissions:
   - role: anonymous
     permission:
@@ -11,7 +15,8 @@ select_permissions:
         - chart
         - created_at
         - updated_at
-      filter: {}
+      filter:
+        _not: {}
   - role: steward
     permission:
       columns:
@@ -21,7 +26,12 @@ select_permissions:
         - chart
         - created_at
         - updated_at
-      filter: {}
+      filter:
+        tenant_datasource:
+          tenant_product:
+            tenant_instance:
+              tenant_id:
+                _eq: X-Hasura-Tenant-Id
   - role: user
     permission:
       columns:
@@ -31,4 +41,9 @@ select_permissions:
         - chart
         - created_at
         - updated_at
-      filter: {}
+      filter:
+        tenant_datasource:
+          tenant_product:
+            tenant_instance:
+              tenant_id:
+                _eq: X-Hasura-Tenant-Id

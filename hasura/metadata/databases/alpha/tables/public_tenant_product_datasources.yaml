@@ -30,7 +30,11 @@ select_permissions:
     - source_name
     - last_scan_at
     - last_scan_status
-    filter: {}
+    filter:
+      tenant_product:
+        tenant_instance:
+          tenant_id:
+            _eq: "00000000-0000-0000-0000-000000000000"
 - role: user
   permission:
     columns:
@@ -45,8 +49,31 @@ select_permissions:
     - source_name
     - last_scan_at
     - last_scan_status
-    filter: {}
+    filter:
+      tenant_product:
+        tenant_instance:
+          tenant_id:
+            _eq: X-Hasura-Tenant-Id
 - role: steward
+  permission:
+    columns:
+    - id
+    - tenant_product_id
+    - alpha_tenant_instance_id
+    - connection_id
+    - is_active
+    - config
+    - created_at
+    - updated_at
+    - source_name
+    - last_scan_at
+    - last_scan_status
+    filter:
+      tenant_product:
+        tenant_instance:
+          tenant_id:
+            _eq: X-Hasura-Tenant-Id
+- role: global_admin
   permission:
     columns:
     - id

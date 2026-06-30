@@ -40,9 +40,11 @@ import {
 } from '@mui/icons-material';
 import { useIPWhitelistAPI } from '../hooks/useIPWhitelist';
 import { useNotification } from '../../../hooks/useNotification';
-import { Tenant } from '../types/ipWhitelist';
+import { Tenant as IPTenant } from '../types/ipWhitelist';
+import { useAccess } from '../../../contexts/AccessContext';
+import { Tenant } from '../../../types';
 
-interface TenantWithUsage extends Tenant {
+interface TenantWithUsage extends IPTenant {
   status: 'active' | 'suspended' | 'inactive';
   ipUsageActive: number;
   ipUsageTotal: number;
@@ -69,6 +71,7 @@ const TenantsManagementPage: React.FC = () => {
 
   const api = useIPWhitelistAPI();
   const notification = useNotification();
+  const { accessibleTenants, isPlatformOperator } = useAccess();
   const [tenants, setTenants] = useState<TenantWithUsage[]>([]);
   const [loading, setLoading] = useState(false);
 
@@ -76,11 +79,12 @@ const TenantsManagementPage: React.FC = () => {
     const loadTenants = async () => {
       setLoading(true);
       try {
-        const tenantsList = await api.fetchTenants();
-        
+        // Only show tenants the current user is authorized to access.
+        const tenantsList = accessibleTenants;
+
         // Fetch IP whitelist for each tenant to get real usage data
         const enriched: TenantWithUsage[] = await Promise.all(
-          tenantsList.map(async (t) => {
+          tenantsList.map(async (t: Tenant) => {
             try {
               const ips = await api.fetchTenantIPWhitelist(t.id);
               const totalIPs = ips.length;
@@ -88,9 +92,12 @@ const TenantsManagementPage: React.FC = () => {
               const lastUpdated = ips.length > 0
                 ? new Date(Math.max(...ips.map(ip => new Date(ip.createdAt || 0).getTime()))).toLocaleDateString()
                 : 'Never';
-              
+
               return {
-                ...t,
+                id: t.id,
+                displayName: t.display_name || t.name || t.id,
+                name: t.name,
+                tenant_code: (t as any).tenant_code,
                 status: totalIPs === 0 ? 'inactive' : 'active' as any,
                 ipUsageActive: activeIPs,
                 ipUsageTotal: totalIPs,
@@ -100,8 +107,11 @@ const TenantsManagementPage: React.FC = () => {
             } catch (err) {
               // If fetch fails for this tenant, return defaults
               return {
-                ...t,
-                status: 'active' as any,
+                id: t.id,
+                displayName: t.display_name || t.name || t.id,
+                name: t.name,
+                tenant_code: (t as any).tenant_code,
+                status: t.is_active ? 'active' : 'inactive' as any,
                 ipUsageActive: 0,
                 ipUsageTotal: 0,
                 lastUpdated: 'N/A',
@@ -118,7 +128,7 @@ const TenantsManagementPage: React.FC = () => {
       }
     };
     loadTenants();
-  }, []);
+  }, [accessibleTenants]);
 
   const filteredTenants = useMemo(() => {
     let filtered = tenants;
@@ -195,14 +205,18 @@ const TenantsManagementPage: React.FC = () => {
   const handleDeleteTenant = useCallback(async () => {
     if (!deleteConfirm) return;
     try {
-      // TODO: Call API to delete tenant
+      const success = await api.deleteTenant(deleteConfirm.id);
+      if (!success) {
+        notification.error('Failed to delete tenant');
+        return;
+      }
       setTenants(prev => prev.filter(t => t.id !== deleteConfirm.id));
       notification.success('Tenant deleted successfully');
       setDeleteConfirm(null);
     } catch (err) {
       notification.error('Failed to delete tenant');
     }
-  }, [deleteConfirm, notification]);
+  }, [deleteConfirm, notification, api]);
 
   const handleViewDetails = useCallback(() => {
     if (!selectedTenantMenu) return;
@@ -582,18 +596,20 @@ const TenantsManagementPage: React.FC = () => {
         <MenuItem onClick={handleViewDetails}>
           View Details
         </MenuItem>
-        <MenuItem
-          onClick={() => {
-            handleTenantMenuClose();
-            if (selectedTenantMenu) {
-              setDeleteConfirm(selectedTenantMenu);
-            }
-          }}
-          sx={{ color: 'error.main' }}
-        >
-          <DeleteIcon sx={{ mr: 1 }} fontSize="small" />
-          Delete
-        </MenuItem>
+        {isPlatformOperator && (
+          <MenuItem
+            onClick={() => {
+              handleTenantMenuClose();
+              if (selectedTenantMenu) {
+                setDeleteConfirm(selectedTenantMenu);
+              }
+            }}
+            sx={{ color: 'error.main' }}
+          >
+            <DeleteIcon sx={{ mr: 1 }} fontSize="small" />
+            Delete
+          </MenuItem>
+        )}
       </Menu>
 
       {/* View Details Dialog */}

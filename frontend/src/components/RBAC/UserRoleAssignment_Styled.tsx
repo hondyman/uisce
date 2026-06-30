@@ -30,6 +30,14 @@ import {
   AppBar,
   Toolbar,
   Divider,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem,
 } from '@mui/material';
 import {
   Search as SearchIcon,
@@ -128,12 +136,13 @@ export const UserRoleAssignmentStyled: React.FC<UserRoleAssignmentProps> = ({
       is_active: true,
     },
   ]);
-  const [_roles, setRoles] = useState<Role[]>([]);
+  const [roles, setRoles] = useState<Role[]>([]);
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [userRoles, setUserRoles] = useState<UserRole[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [_loading, _setLoading] = useState(false);
   const [_saving, setSaving] = useState(false);
+  const [isAssigning, setIsAssigning] = useState(false);
 
   // Assignment form state
   const [assignmentForm, setAssignmentForm] = useState({
@@ -147,7 +156,7 @@ export const UserRoleAssignmentStyled: React.FC<UserRoleAssignmentProps> = ({
   const fetchRoles = async () => {
     try {
       const response = await fetch(
-        `/api/rbac/roles?tenant_id=${tenant.id}&tenant_instance_id=${datasource.id}`
+        `/api/rbac/roles?tenant_id=${tenant.id}&tenant_instance_id=${datasource.id}&datasource_id=${datasource.id}`
       );
       const data = await response.json();
       setRoles(data || []);
@@ -160,7 +169,7 @@ export const UserRoleAssignmentStyled: React.FC<UserRoleAssignmentProps> = ({
   const fetchUserRoles = async (userId: string) => {
     try {
       const response = await fetch(
-        `/api/rbac/users/${userId}/roles?tenant_id=${tenant.id}&tenant_instance_id=${datasource.id}`
+        `/api/rbac/users/${userId}/roles?tenant_id=${tenant.id}&tenant_instance_id=${datasource.id}&datasource_id=${datasource.id}`
       );
       const data = await response.json();
       setUserRoles(data || []);
@@ -170,7 +179,7 @@ export const UserRoleAssignmentStyled: React.FC<UserRoleAssignmentProps> = ({
   };
 
   // Assign role to user
-  const _assignRole = async () => {
+  const assignRole = async () => {
     if (!selectedUser || !assignmentForm.role_id) return;
 
     try {
@@ -182,6 +191,7 @@ export const UserRoleAssignmentStyled: React.FC<UserRoleAssignmentProps> = ({
           user_id: selectedUser.id,
           tenant_id: tenant.id,
           tenant_instance_id: datasource.id,
+          datasource_id: datasource.id,
           scope_type: assignmentForm.scope_type,
           scope_id: assignmentForm.scope_id || null,
           expires_at: assignmentForm.expires_at || null,
@@ -190,6 +200,7 @@ export const UserRoleAssignmentStyled: React.FC<UserRoleAssignmentProps> = ({
 
       await fetchUserRoles(selectedUser.id);
       resetAssignmentForm();
+      setIsAssigning(false);
     } catch (error) {
       console.error('Failed to assign role:', error);
     } finally {
@@ -363,6 +374,7 @@ export const UserRoleAssignmentStyled: React.FC<UserRoleAssignmentProps> = ({
                 <Button
                   variant="contained"
                   startIcon={<AddIcon />}
+                  onClick={() => setIsAssigning(true)}
                   sx={{ textTransform: 'none', fontWeight: 500 }}
                 >
                   Assign Role
@@ -439,6 +451,86 @@ export const UserRoleAssignmentStyled: React.FC<UserRoleAssignmentProps> = ({
           )}
         </Box>
       </Box>
+
+      {/* Assign Role Dialog */}
+      <Dialog
+        open={isAssigning}
+        onClose={() => setIsAssigning(false)}
+        maxWidth="xs"
+        fullWidth
+        PaperProps={{ elevation: 8, sx: { borderRadius: 2 } }}
+      >
+        <DialogTitle>
+          <Typography variant="h6" fontWeight={600}>
+            Assign Role to {selectedUser?.full_name}
+          </Typography>
+        </DialogTitle>
+        <DialogContent>
+          <Box mt={2} display="flex" flexDirection="column" gap={2}>
+            <FormControl fullWidth>
+              <InputLabel id="role-select-label">Select Role</InputLabel>
+              <Select
+                labelId="role-select-label"
+                value={assignmentForm.role_id}
+                label="Select Role"
+                onChange={(e) => setAssignmentForm({ ...assignmentForm, role_id: e.target.value as string })}
+              >
+                {roles.map((r) => (
+                  <MenuItem key={r.id} value={r.id}>
+                    {r.role_name}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+
+            <FormControl fullWidth>
+              <InputLabel id="scope-select-label">Scope Type</InputLabel>
+              <Select
+                labelId="scope-select-label"
+                value={assignmentForm.scope_type}
+                label="Scope Type"
+                onChange={(e) => setAssignmentForm({ ...assignmentForm, scope_type: e.target.value as any })}
+              >
+                <MenuItem value="global">Global</MenuItem>
+                <MenuItem value="process">Process</MenuItem>
+                <MenuItem value="step">Step</MenuItem>
+                <MenuItem value="team">Team</MenuItem>
+              </Select>
+            </FormControl>
+
+            {assignmentForm.scope_type !== 'global' && (
+              <TextField
+                fullWidth
+                label="Scope ID"
+                value={assignmentForm.scope_id}
+                onChange={(e) => setAssignmentForm({ ...assignmentForm, scope_id: e.target.value })}
+              />
+            )}
+
+            <TextField
+              fullWidth
+              label="Expires At"
+              type="date"
+              InputLabelProps={{ shrink: true }}
+              value={assignmentForm.expires_at}
+              onChange={(e) => setAssignmentForm({ ...assignmentForm, expires_at: e.target.value })}
+            />
+          </Box>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2 }}>
+          <Button onClick={() => setIsAssigning(false)} sx={{ textTransform: 'none' }}>
+            Cancel
+          </Button>
+          <Button
+            variant="contained"
+            onClick={assignRole}
+            disabled={!assignmentForm.role_id}
+            sx={{ textTransform: 'none', fontWeight: 500 }}
+          >
+            Assign
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 };
