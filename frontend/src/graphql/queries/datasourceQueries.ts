@@ -10,76 +10,6 @@ export const GET_AVAILABLE_DATASOURCES = gql`
   }
 `;
 
-
-// This is the new, correct query to get all datasources for a tenant product
-export const GET_TENANT_PRODUCT_DATASOURCES = gql`
-  query GetTenantProductDatasource {
-    tenant_product_datasource {
-      is_active
-      chart
-      source_name
-      config
-      created_at
-      updated_at
-      tenant_tenant_instance_id
-      id
-      tenant_product_id
-      connection_id
-      connection {
-        id
-        name
-        type
-        host
-        port
-        database
-        schema
-        username
-        password
-        base_url
-        api_key
-        metadata
-      }
-    }
-  }
-`;
-
-
-// Existing query that the TabbedModal expects
-export const GET_ERD_CHART = gql`
-  query GetErdChart($datasourceId: uuid!) {
-    tenant_chart(where: { tenant_tenant_instance_id: { _eq: $datasourceId } }) {
-      id
-      tenant_tenant_instance_id
-      chart
-      created_at
-      updated_at
-    }
-  }
-`;
-
-
-// Query to get business terms for a datasource
-export const GET_BUSINESS_TERMS = gql`
-  query GetBusinessTerms($datasourceId: uuid!) {
-    catalog_node(
-      where: {
-        tenant_datasource_id: { _eq: $datasourceId }
-        node_type_id: { _eq: "21645d21-de5f-4feb-af99-99273ea75626" }
-      }
-      order_by: { node_name: asc }
-    ) {
-      id
-      node_name
-      description
-      properties
-      qualified_path
-      parent_id
-      created_at
-      updated_at
-    }
-  }
-`;
-
 // Query to get semantic terms for a datasource
 export const GET_SEMANTIC_TERMS = gql`
   query GetSemanticTerms($datasourceId: uuid!) {
@@ -98,47 +28,6 @@ export const GET_SEMANTIC_TERMS = gql`
       parent_id
       created_at
       updated_at
-    }
-  }
-`;
-
-// Query to get semantic views for a datasource
-export const GET_SEMANTIC_VIEWS = gql`
-  query GetSemanticViews($datasourceId: uuid!) {
-    catalog_node(
-      where: {
-        tenant_datasource_id: { _eq: $datasourceId }
-        node_type_id: { _eq: "c53f9e99-8d02-4dfb-bc1b-914747d35edb" }
-      }
-      order_by: { node_name: asc }
-    ) {
-      id
-      node_name
-      description
-      properties
-      qualified_path
-      parent_id
-      created_at
-      updated_at
-    }
-  }
-`;
-
-// Query to get business relationship edges for a datasource
-export const GET_BUSINESS_EDGES = gql`
-  query GetBusinessEdges($datasourceId: uuid!) {
-    catalog_edge(
-      where: {
-        tenant_datasource_id: { _eq: $datasourceId }
-        relationship_type: { _in: ["SemanticToView", "SemanticViewToColumn"] }
-      }
-    ) {
-      id
-      source_node_id
-      target_node_id
-      relationship_type
-      properties
-      created_at
     }
   }
 `;
@@ -162,7 +51,7 @@ export const GET_ALL_BUSINESS_DATA = gql`
       created_at
       updated_at
     }
-    
+
     semantic_terms: catalog_node(
       where: {
         tenant_datasource_id: { _eq: $datasourceId }
@@ -179,7 +68,7 @@ export const GET_ALL_BUSINESS_DATA = gql`
       created_at
       updated_at
     }
-    
+
     semantic_views: catalog_node(
       where: {
         tenant_datasource_id: { _eq: $datasourceId }
@@ -196,7 +85,7 @@ export const GET_ALL_BUSINESS_DATA = gql`
       created_at
       updated_at
     }
-    
+
     business_edges: catalog_edge(
       where: {
         tenant_datasource_id: { _eq: $datasourceId }
@@ -338,27 +227,6 @@ export const GET_COLUMNS_FOR_TABLE = gql`
       qualified_path
       properties
       parent_id
-    }
-  }
-`;
-
-// Query to get all semantic terms available for field assignment
-export const GET_AVAILABLE_SEMANTIC_TERMS = gql`
-  query GetAvailableSemanticTerms($datasourceId: uuid!) {
-    catalog_node(
-      where: {
-        tenant_tenant_instance_id: { _eq: $datasourceId }
-        node_type_id: { _eq: "820b942a-9c9e-4abc-acdc-84616db33098" }
-      }
-      order_by: { node_name: asc }
-    ) {
-      id
-      node_name
-      description
-      properties
-      qualified_path
-      created_at
-      updated_at
     }
   }
 `;
