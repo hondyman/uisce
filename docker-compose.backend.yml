@@ -21,7 +21,7 @@
 
 services:
   hasura:
-    image: hasura/graphql-engine:v2.37.0.cli-migrations-v3
+    image: hasura/graphql-engine:v2.46.0.cli-migrations-v3
     restart: unless-stopped
     environment:
       HASURA_GRAPHQL_DATABASE_URL: "postgresql://postgres:postgres@host.docker.internal:5432/alpha"

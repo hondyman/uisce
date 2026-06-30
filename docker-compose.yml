@@ -180,7 +180,7 @@ services:
     depends_on: [trino]
 
   hasura:
-    image: hasura/graphql-engine:v2.33.0
+    image: hasura/graphql-engine:v2.46.0.cli-migrations-v3
     networks:
       - semlayer-net
     ports:
