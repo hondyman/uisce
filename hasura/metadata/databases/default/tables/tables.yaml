@@ -1,8 +1,0 @@
-- !include public_tenants.yaml
-- !include public_tenant_datasources.yaml
-- !include public_tenant_instances.yaml
-- !include public_tenant_products.yaml
-- !include public_tenant_product_datasources.yaml
-- !include public_alpha_products.yaml
-- !include public_alpha_datasources.yaml
-- !include public_connections.yaml

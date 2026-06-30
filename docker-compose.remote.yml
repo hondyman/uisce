@@ -302,14 +302,11 @@ services:
     restart: unless-stopped
 
   # ---------------------------------------------------------
-  # Hasura GraphQL Engine (internal only; HTTPS via nginx)
+  # Hasura GraphQL Engine
   # ---------------------------------------------------------
   uisce-hasura:
     image: hasura/graphql-engine:v2.46.0.cli-migrations-v3
     container_name: uisce-hasura
-    restart: unless-stopped
-    # No exposed port; traffic goes through the HTTPS reverse proxy below.
-    networks:
       - remote-net
     extra_hosts:
       - "host.docker.internal:host-gateway"
@@ -332,36 +329,6 @@ services:
       test: ["CMD-SHELL", "curl -f http://localhost:8080/healthz || exit 1"]
       interval: 10s
       timeout: 5s
-      retries: 5
-
-  # ---------------------------------------------------------
-  # Hasura HTTPS reverse proxy
-  # ---------------------------------------------------------
-  uisce-hasura-nginx:
-    image: nginx:alpine
-    container_name: uisce-hasura-nginx
-    restart: unless-stopped
-    ports:
-      - "20005:443"
-    networks:
-      - remote-net
-    depends_on:
-      uisce-hasura:
-        condition: service_healthy
-    volumes:
-      - ./hasura-ssl/nginx.conf:/etc/nginx/conf.d/default.conf:ro
-      - ./hasura-ssl/server.crt.pem:/etc/nginx/ssl/server.crt.pem:ro
-      - ./hasura-ssl/server.key.pem:/etc/nginx/ssl/server.key.pem:ro
-    healthcheck:
-      test: ["CMD-SHELL", "wget --no-check-certificate -qO- https://localhost/healthz || exit 1"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
-# ---------------------------------------------------------
-# Networking
-# ---------------------------------------------------------
-networks:
   remote-net:
     driver: bridge
 
