@@ -1287,6 +1287,7 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 		srv.registerLineageRoutes(r)
 		srv.registerDebugRoutes(r)
 		srv.registerSemanticRoutes(r)
+		srv.registerRestQueryRoutes(r)
 		srv.registerLLMGatewayRoutes(r)
 		srv.registerMetadataRoutes(r, boHandler, catalogHandler, boService)
 		srv.registerCatalogRoutes(r, db, routes, temporalClient)

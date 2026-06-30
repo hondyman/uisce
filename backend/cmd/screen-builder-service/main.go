@@ -1,9 +1,11 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"os"
@@ -441,25 +443,34 @@ func publishScreen(c *gin.Context) {
 // HELPERS
 // ============================================================================
 
-// hasuraGraphQLQuery makes a GraphQL query to Hasura and returns the result
-func hasuraGraphQLQuery(ctx context.Context, query string, variables map[string]interface{}) (json.RawMessage, error) {
-	payload := map[string]interface{}{
-		"query":     query,
-		"variables": variables,
+func restQuery(ctx context.Context, endpoint string, method string, params map[string]string, body interface{}) (json.RawMessage, error) {
+	gatewayURL := os.Getenv("BACKEND_URL")
+	if gatewayURL == "" {
+		gatewayURL = "http://localhost:8080"
+	}
+	url := gatewayURL + "/api/rest/" + endpoint
+	if len(params) > 0 {
+		var parts []string
+		for k, v := range params {
+			parts = append(parts, k+"="+v)
+		}
+		url += "?" + strings.Join(parts, "&")
 	}
 
-	body, err := json.Marshal(payload)
+	var reqBody io.Reader
+	if body != nil {
+		b, err := json.Marshal(body)
+		if err != nil {
+			return nil, err
+		}
+		reqBody = bytes.NewReader(b)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, method, url, reqBody)
 	if err != nil {
 		return nil, err
 	}
-
-	req, err := http.NewRequestWithContext(ctx, "POST", hasuraURL+"/v1/graphql", strings.NewReader(string(body)))
-	if err != nil {
-		return nil, err
-	}
-
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("x-hasura-admin-secret", hasuraToken)
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -467,18 +478,84 @@ func hasuraGraphQLQuery(ctx context.Context, query string, variables map[string]
 	}
 	defer resp.Body.Close()
 
-	var result struct {
-		Data   json.RawMessage `json:"data"`
-		Errors []interface{}   `json:"errors"`
+	if resp.StatusCode >= 400 {
+		b, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("REST request failed with status %d: %s", resp.StatusCode, string(b))
 	}
 
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+	raw, err := io.ReadAll(resp.Body)
+	if err != nil {
 		return nil, err
 	}
+	return json.RawMessage(raw), nil
+}
 
-	if len(result.Errors) > 0 {
-		return nil, fmt.Errorf("GraphQL error: %v", result.Errors[0])
+// hasuraGraphQLQuery maps the original Hasura GraphQL queries to standard REST queries
+func hasuraGraphQLQuery(ctx context.Context, query string, variables map[string]interface{}) (json.RawMessage, error) {
+	if strings.Contains(query, "insert_screen_configs_one") {
+		obj := variables["object"]
+		res, err := restQuery(ctx, "screen-configs", "POST", nil, obj)
+		if err != nil {
+			return nil, err
+		}
+		return json.RawMessage(fmt.Sprintf(`{"insert_screen_configs_one": %s}`, string(res))), nil
 	}
 
-	return result.Data, nil
+	if strings.Contains(query, "update_screen_configs") {
+		updates := variables["updates"]
+		tenantID := variables["tenantID"]
+		screenID := variables["screenID"]
+		body := map[string]interface{}{
+			"tenant_id": tenantID,
+			"screen_id": screenID,
+			"updates":   updates,
+		}
+		res, err := restQuery(ctx, "screen-configs", "PUT", nil, body)
+		if err != nil {
+			return nil, err
+		}
+		var rowsResp struct {
+			AffectedRows int `json:"affected_rows"`
+		}
+		json.Unmarshal(res, &rowsResp)
+		return json.RawMessage(fmt.Sprintf(`{"update_screen_configs": {"affected_rows": %d}}`, rowsResp.AffectedRows)), nil
+	}
+
+	if strings.Contains(query, "delete_screen_configs") {
+		tenantID := fmt.Sprintf("%v", variables["tenantID"])
+		screenID := fmt.Sprintf("%v", variables["screenID"])
+		params := map[string]string{
+			"tenant_id": tenantID,
+			"screen_id": screenID,
+		}
+		res, err := restQuery(ctx, "screen-configs", "DELETE", params, nil)
+		if err != nil {
+			return nil, err
+		}
+		var rowsResp struct {
+			AffectedRows int `json:"affected_rows"`
+		}
+		json.Unmarshal(res, &rowsResp)
+		return json.RawMessage(fmt.Sprintf(`{"delete_screen_configs": {"affected_rows": %d}}`, rowsResp.AffectedRows)), nil
+	}
+
+	if strings.Contains(query, "screen_configs") {
+		tenantID := fmt.Sprintf("%v", variables["tenantID"])
+		params := map[string]string{
+			"tenant_id": tenantID,
+		}
+		if boType, ok := variables["boType"]; ok {
+			params["bo_type"] = fmt.Sprintf("%v", boType)
+		}
+		if screenID, ok := variables["screenID"]; ok {
+			params["id"] = fmt.Sprintf("%v", screenID)
+		}
+		res, err := restQuery(ctx, "screen-configs", "GET", params, nil)
+		if err != nil {
+			return nil, err
+		}
+		return json.RawMessage(fmt.Sprintf(`{"screen_configs": %s}`, string(res))), nil
+	}
+
+	return nil, fmt.Errorf("unhandled query in REST bridge: %s", query)
 }

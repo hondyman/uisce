@@ -13,7 +13,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/99designs/gqlgen/graphql/playground"
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
@@ -25,13 +24,14 @@ import (
 )
 
 type Config struct {
-	Port         string
-	HasuraURL    string
-	HasuraSecret string
-	JWTSecret    string
-	RateLimitRPM int
-	EnableAudit  bool
-	BackendURL   string
+	Port           string
+	HasuraURL      string
+	HasuraSecret   string
+	JWTSecret      string
+	RateLimitRPM   int
+	EnableAudit    bool
+	BackendURL     string
+	GraphQLBackend string
 }
 
 type GraphQLRequest struct {
@@ -643,14 +643,17 @@ func main() {
 	}
 
 	config := Config{
-		Port:         getEnv("PORT", "8001"),
-		HasuraURL:    getEnv("HASURA_URL", "http://localhost:8081"),
-		HasuraSecret: getEnv("HASURA_ADMIN_SECRET", "newadminsecretkey"),
-		BackendURL:   getEnv("BACKEND_URL", "http://localhost:8080"),
+		Port:           getEnv("PORT", "8001"),
+		HasuraURL:      getEnv("HASURA_URL", "http://localhost:8081"),
+		HasuraSecret:   getEnv("HASURA_ADMIN_SECRET", "newadminsecretkey"),
+		BackendURL:     getEnv("BACKEND_URL", "http://localhost:8080"),
+		GraphQLBackend: strings.ToLower(getEnv("UI_GRAPHQL_BACKEND", "hasura")),
 	}
 
+
+
 	// DEBUG: Verify config is populated
-	log.Printf("DEBUG: Config initialized: Port=%s, BackendURL=%s", config.Port, config.BackendURL)
+	log.Printf("DEBUG: Config initialized: Port=%s, BackendURL=%s, GraphQLBackend=%s", config.Port, config.BackendURL, config.GraphQLBackend)
 
 	// Normalize Hasura URL so callers can reliably append "/v1/graphql".
 	// Accept either a base URL (e.g. http://hasura:8080) or a full path
@@ -944,6 +947,8 @@ func main() {
 	// GraphQL endpoint (canonical under /api/graphql)
 	api.POST("/graphql", func(c *gin.Context) { handleGraphQLProxy(c, config) })
 
+
+
 	// Aliases: accept requests at top-level /graphql and /v1/graphql so clients
 	// that post directly to the gateway's GraphQL path (or expect v1 path)
 	// will be proxied the same as /api/graphql. This avoids 404s when the
@@ -951,9 +956,7 @@ func main() {
 	r.POST("/graphql", func(c *gin.Context) { handleGraphQLProxy(c, config) })
 	r.POST("/v1/graphql", func(c *gin.Context) { handleGraphQLProxy(c, config) })
 
-	r.GET("/playground", func(c *gin.Context) {
-		playground.Handler("GraphQL playground", "/api/graphql").ServeHTTP(c.Writer, c.Request)
-	})
+
 
 	// Create a reusable proxy handler for the backend service
 	proxy := createProxyHandler(backendBase)
@@ -1134,6 +1137,7 @@ func main() {
 	// Proxy routes to the backend service
 	api.POST("/auth/logout", proxy)
 	api.Any("/fabric/*path", proxy)
+	api.Any("/rest/*path", proxy)
 	// Tenants & IP whitelist routes (backend chi server under /api)
 	api.Any("/tenants", proxy)
 	api.Any("/tenants/*path", proxy)
@@ -1687,6 +1691,7 @@ func handleBusinessTermValidation(c *gin.Context, config Config) {
 }
 
 func handleGraphQLProxy(c *gin.Context, config Config) {
+
 	// Use GetRawData to safely read the body, even if a middleware has already read it.
 	body, err := c.GetRawData()
 	if err != nil {

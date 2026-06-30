@@ -210,17 +210,159 @@ const errorLink = onError(({ graphQLErrors, networkError, operation }) => {
 
 // The client is created by chaining the authLink and the httpLink.
 // The authLink runs first, adding the header, then the httpLink sends the request.
+const restTranslationLink = new ApolloLink((operation) => {
+  return new Observable((observer) => {
+    const { query, variables } = operation;
+    const queryStr = query.loc?.source.body || '';
+    const headers = operation.getContext().headers || {};
+
+    const performRestRequest = async () => {
+      try {
+        let url = '';
+        let method = 'GET';
+        let body: any = null;
+        let transform = (data: any) => data;
+
+        if (queryStr.includes('GetAllProducts') || queryStr.includes('alpha_product')) {
+          url = '/api/rest/products';
+          transform = (data) => ({ alpha_product: data });
+        } else if (queryStr.includes('GetSemanticModels') || queryStr.includes('semantic_models')) {
+          url = '/api/rest/semantic-models';
+          transform = (data) => ({ semantic_models: data });
+        } else if (queryStr.includes('GetTechnicalLineageChart') || queryStr.includes('GetSemanticLineageChart') || queryStr.includes('GetCombinedChart') || queryStr.includes('tenant_chart')) {
+          const dsId = variables.datasourceId;
+          url = `/api/rest/charts?tenant_datasource_id=${dsId}`;
+          if (variables.chartName) {
+            url += `&chart_name=${variables.chartName}`;
+          }
+          transform = (data) => ({ tenant_chart: data });
+        } else if (queryStr.includes('GetSemanticAssets') || queryStr.includes('semantic_assets')) {
+          const beId = variables.businessEntityId;
+          const dsId = variables.datasourceId;
+          url = `/api/rest/semantic-assets?business_entity_id=${beId}&tenant_instance_id=${dsId}`;
+          transform = (data) => ({ semantic_assets: data });
+        } else if (queryStr.includes('GetRelationshipSuggestions') || queryStr.includes('relationship_suggestions')) {
+          const beId = variables.businessEntityId;
+          const dsId = variables.datasourceId;
+          const limit = variables.limit || 100;
+          url = `/api/rest/relationship-suggestions?source_entity_id=${beId}&tenant_instance_id=${dsId}&limit=${limit}`;
+          transform = (data) => ({ relationship_suggestions: data });
+        } else if (queryStr.includes('GetLinkedModels') || queryStr.includes('catalog_edge')) {
+          const modelId = variables.modelId;
+          const dsId = variables.datasourceId;
+          url = `/api/rest/catalog-edges?source_node_id=${modelId}&tenant_datasource_id=${dsId}&relationship_types=joins,references,extends`;
+          transform = (data) => ({ catalog_edge: data });
+        } else if (queryStr.includes('GetAvailableDatasources') || queryStr.includes('alpha_datasource')) {
+          url = '/api/rest/datasources';
+          transform = (data) => ({ alpha_datasource: data });
+        } else if (queryStr.includes('GetSemanticTerms') || queryStr.includes('catalog_node')) {
+          if (queryStr.includes('business_terms') && queryStr.includes('semantic_terms')) {
+            const dsId = variables.datasourceId;
+            const [nodes, edges] = await Promise.all([
+              fetch(`/api/rest/catalog-nodes?tenant_datasource_id=${dsId}`, { headers }).then(r => r.json()),
+              fetch(`/api/rest/catalog-edges?tenant_datasource_id=${dsId}&relationship_types=SemanticToView,SemanticViewToColumn`, { headers }).then(r => r.json())
+            ]);
+            const businessTerms = Array.isArray(nodes) ? nodes.filter((n: any) => n.node_type_id === '21645d21-de5f-4feb-af99-99273ea75626') : [];
+            const semanticTerms = Array.isArray(nodes) ? nodes.filter((n: any) => n.node_type_id === '820b942a-9c9e-4abc-acdc-84616db33098') : [];
+            const semanticViews = Array.isArray(nodes) ? nodes.filter((n: any) => n.node_type_id === 'c53f9e99-8d02-4dfb-bc1b-914747d35edb') : [];
+            observer.next({
+              data: {
+                business_terms: businessTerms,
+                semantic_terms: semanticTerms,
+                semantic_views: semanticViews,
+                business_edges: edges
+              }
+            });
+            observer.complete();
+            return;
+          } else {
+            const dsId = variables.datasourceId;
+            const nodeTypeId = variables.nodeTypeId || '820b942a-9c9e-4abc-acdc-84616db33098';
+            url = `/api/rest/catalog-nodes?tenant_datasource_id=${dsId}&node_type_id=${nodeTypeId}`;
+            transform = (data) => ({ catalog_node: data });
+          }
+        } else if (queryStr.includes('GetTablesForDatasource') || queryStr.includes('catalog_node_vw')) {
+          const dsId = variables.datasourceId;
+          const q = variables.q || '';
+          const limit = variables.limit || 100;
+          url = `/api/rest/catalog-nodes?tenant_datasource_id=${dsId}&q=${encodeURIComponent(q)}&limit=${limit}&use_view=true`;
+          if (queryStr.includes('GetColumnsForTable')) {
+            const parentId = variables.parentId;
+            url = `/api/rest/catalog-nodes?tenant_datasource_id=${dsId}&parent_id=${parentId}&q=${encodeURIComponent(q)}&limit=${limit}&use_view=true`;
+          }
+          transform = (data) => ({ catalog_node_vw: data });
+        } else if (queryStr.includes('GetSchemaTables')) {
+          const dsId = variables.datasourceId;
+          const nodes = await fetch(`/api/rest/catalog-nodes?tenant_datasource_id=${dsId}`, { headers }).then(r => r.json());
+          const tables = Array.isArray(nodes) ? nodes.filter((n: any) => n.node_type_id === '49a50271-ae58-4d3e-ae1c-2f5b89d89192') : [];
+          const columns = Array.isArray(nodes) ? nodes.filter((n: any) => n.node_type_id === 'a64c1011-16e8-4ddf-b447-363bf8e15c9a') : [];
+          observer.next({
+            data: {
+              tables,
+              columns
+            }
+          });
+          observer.complete();
+          return;
+        } else if (queryStr.includes('GetCatalogNodeById')) {
+          const dsId = variables.datasourceId;
+          const nodeId = variables.nodeId;
+          url = `/api/rest/catalog-nodes?tenant_datasource_id=${dsId}&id=${nodeId}&use_view=true`;
+          transform = (data) => ({ catalog_node_vw: data });
+        } else if (queryStr.includes('CreateDraft') || queryStr.includes('insert_fabric_defn_one')) {
+          url = '/api/rest/fabric-defn';
+          method = 'POST';
+          body = JSON.stringify({ input: variables.input });
+          transform = (data) => data;
+        } else {
+          console.warn('[restTranslationLink] Unhandled query, falling back to GraphQL endpoint:', queryStr);
+          const response = await fetch(graphqlEndpoint, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              ...headers
+            },
+            body: JSON.stringify({ query: queryStr, variables })
+          });
+          const gqlRes = await response.json();
+          observer.next(gqlRes);
+          observer.complete();
+          return;
+        }
+
+        const fetchOptions: RequestInit = {
+          method,
+          headers: {
+            'Content-Type': 'application/json',
+            ...headers
+          }
+        };
+        if (body) {
+          fetchOptions.body = body;
+        }
+
+        const resp = await fetch(url, fetchOptions);
+        if (!resp.ok) {
+          throw new Error(`HTTP error ${resp.status}: ${await resp.text()}`);
+        }
+        const data = await resp.json();
+        observer.next({ data: transform(data) });
+        observer.complete();
+      } catch (err: any) {
+        observer.error(err);
+      }
+    };
+
+    performRestRequest();
+  });
+});
+
 const client = new ApolloClient({
-  // Order: authLink -> errorLink -> fallbackLink -> httpLink
-  // fallbackLink intercepts network failures from httpLink and returns
-  // a safe empty data payload so UI components can render without fatal
-  // uncaught exceptions. Keep authLink first so admin headers are applied.
-  link: from([authLink, errorLink, fallbackLink, httpLink]),
+  // Order: authLink -> errorLink -> fallbackLink -> restTranslationLink
+  link: from([authLink, errorLink, fallbackLink, restTranslationLink]),
   cache: new InMemoryCache({
-    // Disable all caching to force fresh schema fetches
     resultCaching: false,
   }),
-  // Force all queries to go to network
   defaultOptions: {
     watchQuery: {
       fetchPolicy: 'network-only',
@@ -234,7 +376,6 @@ const client = new ApolloClient({
       errorPolicy: 'all',
     },
   },
-  // Enable Apollo Client DevTools in development
   devtools: { enabled: import.meta.env.DEV },
 });
 
