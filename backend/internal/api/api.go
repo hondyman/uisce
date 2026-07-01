@@ -76,7 +76,6 @@ import (
 	"github.com/jmoiron/sqlx"
 
 	catalogmeta "github.com/hondyman/semlayer/backend/internal/metadata"
-	hasuraclient "github.com/hondyman/semlayer/libs/hasura-client"
 	temporalclientlib "github.com/hondyman/semlayer/libs/temporal-client"
 	temporalclient "go.temporal.io/sdk/client"
 	"google.golang.org/grpc"
@@ -1157,13 +1156,8 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 	// Initialize Policy Generation Handler (Phase 9)
 	srv.PolicyGenerationHandler = handlers.NewPolicyGenerationHandler(sqlxDB)
 
-	// Initialize Hasura Client and Calc Handler (Phase 9)
-	hasuraCfg := &hasuraclient.HasuraConfig{
-		Endpoint:    getEnv("HASURA_GRAPHQL_ENDPOINT", "http://hasura:8080/v1/graphql"),
-		AdminSecret: getEnv("HASURA_GRAPHQL_ADMIN_SECRET", "myadminsecret"),
-	}
-	hasura := hasuraclient.NewHasuraClient(hasuraCfg)
-	srv.CalcHandler = handlers.NewCalcHandler(hasura)
+	// Initialize Calc Handler (Phase 9) - uses direct database connection
+	srv.CalcHandler = handlers.NewCalcHandler(sqlxDB)
 
 	// Initialize Cube Client and Generator (Phase 9)
 	cubeURL = getEnv("CUBE_API_URL", "http://cube:4000")
@@ -1448,25 +1442,8 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 				tokenEncryptor,
 			)
 
-			// Sync Repo
-			hasuraURL := os.Getenv("HASURA_URL")
-			if hasuraURL == "" {
-				hasuraURL = "http://localhost:8085/v1/graphql"
-			}
-			hasuraAdminSecret := os.Getenv("HASURA_GRAPHQL_ADMIN_SECRET")
-			if hasuraAdminSecret == "" {
-				hasuraAdminSecret = os.Getenv("HASURA_ADMIN_SECRET")
-				if hasuraAdminSecret == "" {
-					hasuraAdminSecret = "myadminsecret"
-				}
-			}
-
-			syncHasuraClient := hasuraclient.NewHasuraClient(&hasuraclient.HasuraConfig{
-				Endpoint:    hasuraURL,
-				AdminSecret: hasuraAdminSecret,
-			})
-
-			googleSyncRepo := repository.NewGoogleSyncRepo(syncHasuraClient)
+			// Sync Repo — direct database connection
+			googleSyncRepo := repository.NewGoogleSyncRepo(sqlxDB)
 
 			// Sync Processor
 			// Note: SyncProcessor uses logrus, while the rest of the app uses zap.

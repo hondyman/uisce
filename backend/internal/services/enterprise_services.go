@@ -4,8 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 
-	hasuraclient "github.com/hondyman/semlayer/libs/hasura-client"
+	"github.com/google/uuid"
+	"github.com/jmoiron/sqlx"
 	"go.uber.org/zap"
 )
 
@@ -15,18 +17,18 @@ import (
 
 // TranslationService provides multilingual support
 type TranslationService struct {
-	hasuraClient *hasuraclient.HasuraClient
-	logger       *zap.Logger
-	cache        map[string]map[string]string // locale -> namespace.key -> value
+	db     *sqlx.DB
+	logger *zap.Logger
+	cache  map[string]map[string]string // locale -> namespace.key -> value
 }
 
 // NewTranslationService creates a new translation service
-func NewTranslationService(hasuraClient *hasuraclient.HasuraClient) *TranslationService {
+func NewTranslationService(db *sqlx.DB) *TranslationService {
 	logger, _ := zap.NewProduction()
 	return &TranslationService{
-		hasuraClient: hasuraClient,
-		logger:       logger,
-		cache:        make(map[string]map[string]string),
+		db:     db,
+		logger: logger,
+		cache:  make(map[string]map[string]string),
 	}
 }
 
@@ -40,89 +42,46 @@ func (s *TranslationService) GetTranslation(ctx context.Context, locale, namespa
 		}
 	}
 
-	// Query from database
-	query := `
-		query GetTranslation($locale: String!, $namespace: String!, $key: String!) {
-			translations(
-				where: {
-					locale_code: { _eq: $locale },
-					namespace: { _eq: $namespace },
-					key: { _eq: $key }
-				},
-				limit: 1
-			) {
-				value
-			}
-		}
-	`
+	var value string
+	err := s.db.GetContext(ctx, &value, `
+		SELECT value FROM translations
+		WHERE locale_code = $1 AND namespace = $2 AND key = $3
+		LIMIT 1
+	`, locale, namespace, key)
 
-	result, err := s.hasuraClient.Query(query, map[string]interface{}{
-		"locale":    locale,
-		"namespace": namespace,
-		"key":       key,
-	})
-
-	if err != nil || result == nil {
+	if err != nil {
 		return defaultValue
 	}
 
-	translations, ok := result["translations"].([]interface{})
-	if !ok || len(translations) == 0 {
-		return defaultValue
+	// Update cache
+	if s.cache[locale] == nil {
+		s.cache[locale] = make(map[string]string)
 	}
-
-	data := translations[0].(map[string]interface{})
-	if value, ok := data["value"].(string); ok {
-		// Update cache
-		if s.cache[locale] == nil {
-			s.cache[locale] = make(map[string]string)
-		}
-		s.cache[locale][cacheKey] = value
-		return value
-	}
-
-	return defaultValue
+	s.cache[locale][cacheKey] = value
+	return value
 }
 
 // GetTranslations fetches multiple translations for a namespace
 func (s *TranslationService) GetTranslations(ctx context.Context, locale, namespace string) (map[string]string, error) {
-	query := `
-		query GetTranslations($locale: String!, $namespace: String!) {
-			translations(
-				where: {
-					locale_code: { _eq: $locale },
-					namespace: { _eq: $namespace }
-				}
-			) {
-				key
-				value
-			}
-		}
-	`
-
-	result, err := s.hasuraClient.Query(query, map[string]interface{}{
-		"locale":    locale,
-		"namespace": namespace,
-	})
+	type row struct {
+		Key   string `db:"key"`
+		Value string `db:"value"`
+	}
+	var rows []row
+	err := s.db.SelectContext(ctx, &rows, `
+		SELECT key, value FROM translations
+		WHERE locale_code = $1 AND namespace = $2
+	`, locale, namespace)
 
 	if err != nil {
 		return nil, err
 	}
 
-	translations := make(map[string]string)
-	items, ok := result["translations"].([]interface{})
-	if !ok {
-		return translations, nil
+	result := make(map[string]string, len(rows))
+	for _, r := range rows {
+		result[r.Key] = r.Value
 	}
-
-	for _, item := range items {
-		data := item.(map[string]interface{})
-		key := getString(data, "key")
-		value := getString(data, "value")
-		translations[key] = value
-	}
-
-	return translations, nil
+	return result, nil
 }
 
 // ============================================================================
@@ -131,17 +90,14 @@ func (s *TranslationService) GetTranslations(ctx context.Context, locale, namesp
 
 // AuditService provides comprehensive audit logging
 type AuditService struct {
-	hasuraClient *hasuraclient.HasuraClient
-	logger       *zap.Logger
+	db     *sqlx.DB
+	logger *zap.Logger
 }
 
 // NewAuditService creates a new audit service
-func NewAuditService(hasuraClient *hasuraclient.HasuraClient) *AuditService {
+func NewAuditService(db *sqlx.DB) *AuditService {
 	logger, _ := zap.NewProduction()
-	return &AuditService{
-		hasuraClient: hasuraClient,
-		logger:       logger,
-	}
+	return &AuditService{db: db, logger: logger}
 }
 
 // AuditEntry represents an audit log entry
@@ -164,95 +120,65 @@ func (s *AuditService) LogAudit(ctx context.Context, entry AuditEntry) error {
 	changesJSON, _ := json.Marshal(entry.Changes)
 	metadataJSON, _ := json.Marshal(entry.Metadata)
 
-	mutation := `
-		mutation InsertAuditLog($object: audit_log_insert_input!) {
-			insert_audit_log_one(object: $object) {
-				id
-			}
-		}
-	`
-
-	object := map[string]interface{}{
-		"entity_type": entry.EntityType,
-		"entity_id":   entry.EntityID,
-		"action":      entry.Action,
-		"actor":       entry.Actor,
-	}
-
-	if entry.EntityName != "" {
-		object["entity_name"] = entry.EntityName
-	}
-	if entry.ActorType != "" {
-		object["actor_type"] = entry.ActorType
-	}
-	if entry.IPAddress != "" {
-		object["ip_address"] = entry.IPAddress
-	}
-	if entry.UserAgent != "" {
-		object["user_agent"] = entry.UserAgent
-	}
-	if len(entry.Changes) > 0 {
-		object["changes"] = string(changesJSON)
-	}
-	if len(entry.Metadata) > 0 {
-		object["metadata"] = string(metadataJSON)
-	}
-	if entry.Severity != "" {
-		object["severity"] = entry.Severity
-	}
-
-	_, err := s.hasuraClient.Mutate(mutation, map[string]interface{}{
-		"object": object,
-	})
+	id := uuid.New().String()
+	_, err := s.db.ExecContext(ctx, `
+		INSERT INTO audit_log (
+			id, entity_type, entity_id, entity_name, action, actor,
+			actor_type, ip_address, user_agent, changes, metadata, severity, created_at
+		) VALUES (
+			$1, $2, $3, $4, $5, $6,
+			$7, $8, $9, $10, $11, $12, NOW()
+		)
+	`, id, entry.EntityType, entry.EntityID, entry.EntityName, entry.Action, entry.Actor,
+		entry.ActorType, entry.IPAddress, entry.UserAgent,
+		string(changesJSON), string(metadataJSON), entry.Severity)
 
 	if err != nil {
 		s.logger.Error("Failed to create audit log", zap.Error(err))
 		return err
 	}
-
 	return nil
 }
 
 // GetAuditHistory fetches audit history for an entity
 func (s *AuditService) GetAuditHistory(ctx context.Context, entityType, entityID string, limit int) ([]map[string]interface{}, error) {
-	query := `
-		query GetAuditHistory($entityType: String!, $entityID: String!, $limit: Int!) {
-			audit_log(
-				where: { entity_type: { _eq: $entityType }, entity_id: { _eq: $entityID } }
-				order_by: { created_at: desc }
-				limit: $limit
-			) {
-				id
-				action
-				actor
-				actor_type
-				changes
-				metadata
-				created_at
-			}
-		}
-	`
+	type row struct {
+		ID        string `db:"id"`
+		Action    string `db:"action"`
+		Actor     string `db:"actor"`
+		ActorType string `db:"actor_type"`
+		Changes   string `db:"changes"`
+		Metadata  string `db:"metadata"`
+		CreatedAt string `db:"created_at"`
+	}
 
-	result, err := s.hasuraClient.Query(query, map[string]interface{}{
-		"entityType": entityType,
-		"entityID":   entityID,
-		"limit":      limit,
-	})
+	var rows []row
+	err := s.db.SelectContext(ctx, &rows, `
+		SELECT id, action, actor, COALESCE(actor_type,'') as actor_type,
+		       COALESCE(changes,'{}') as changes, COALESCE(metadata,'{}') as metadata,
+		       created_at::text as created_at
+		FROM audit_log
+		WHERE entity_type = $1 AND entity_id = $2
+		ORDER BY created_at DESC
+		LIMIT $3
+	`, entityType, entityID, limit)
 
 	if err != nil {
 		return nil, err
 	}
 
-	logs, ok := result["audit_log"].([]interface{})
-	if !ok {
-		return []map[string]interface{}{}, nil
+	history := make([]map[string]interface{}, 0, len(rows))
+	for _, r := range rows {
+		history = append(history, map[string]interface{}{
+			"id":         r.ID,
+			"action":     r.Action,
+			"actor":      r.Actor,
+			"actor_type": r.ActorType,
+			"changes":    r.Changes,
+			"metadata":   r.Metadata,
+			"created_at": r.CreatedAt,
+		})
 	}
-
-	history := make([]map[string]interface{}, 0, len(logs))
-	for _, log := range logs {
-		history = append(history, log.(map[string]interface{}))
-	}
-
 	return history, nil
 }
 
@@ -262,17 +188,14 @@ func (s *AuditService) GetAuditHistory(ctx context.Context, entityType, entityID
 
 // NotificationService provides notification management
 type NotificationService struct {
-	hasuraClient *hasuraclient.HasuraClient
-	logger       *zap.Logger
+	db     *sqlx.DB
+	logger *zap.Logger
 }
 
 // NewNotificationService creates a new notification service
-func NewNotificationService(hasuraClient *hasuraclient.HasuraClient) *NotificationService {
+func NewNotificationService(db *sqlx.DB) *NotificationService {
 	logger, _ := zap.NewProduction()
-	return &NotificationService{
-		hasuraClient: hasuraClient,
-		logger:       logger,
-	}
+	return &NotificationService{db: db, logger: logger}
 }
 
 // NotificationMessage represents a notification message
@@ -292,95 +215,65 @@ type NotificationMessage struct {
 // SendNotification creates a notification
 func (s *NotificationService) SendNotification(ctx context.Context, notif NotificationMessage) (string, error) {
 	dataJSON, _ := json.Marshal(notif.Data)
+	id := uuid.New().String()
 
-	mutation := `
-		mutation InsertNotification($object: notifications_insert_input!) {
-			insert_notifications_one(object: $object) {
-				id
-			}
-		}
-	`
-
-	object := map[string]interface{}{
-		"recipient_id": notif.RecipientID,
-		"channel":      notif.Channel,
-		"category":     notif.Category,
-		"title":        notif.Title,
-		"message":      notif.Message,
-	}
-
-	if notif.RecipientType != "" {
-		object["recipient_type"] = notif.RecipientType
-	}
-	if notif.Priority != "" {
-		object["priority"] = notif.Priority
-	}
-	if len(notif.Data) > 0 {
-		object["data"] = string(dataJSON)
-	}
-	if notif.LinkURL != "" {
-		object["link_url"] = notif.LinkURL
-	}
-	if notif.LinkText != "" {
-		object["link_text"] = notif.LinkText
-	}
-
-	result, err := s.hasuraClient.Mutate(mutation, map[string]interface{}{
-		"object": object,
-	})
+	_, err := s.db.ExecContext(ctx, `
+		INSERT INTO notifications (
+			id, recipient_id, recipient_type, channel, priority,
+			category, title, message, data, link_url, link_text,
+			created_at, updated_at
+		) VALUES (
+			$1, $2, $3, $4, $5,
+			$6, $7, $8, $9, $10, $11,
+			NOW(), NOW()
+		)
+	`, id, notif.RecipientID, notif.RecipientType, notif.Channel, notif.Priority,
+		notif.Category, notif.Title, notif.Message, string(dataJSON),
+		notif.LinkURL, notif.LinkText)
 
 	if err != nil {
 		return "", err
 	}
-
-	data := result["insert_notifications_one"].(map[string]interface{})
-	return data["id"].(string), nil
+	return id, nil
 }
 
 // SendFromTemplate sends a notification using a template
 func (s *NotificationService) SendFromTemplate(ctx context.Context, templateKey, recipientID string, variables map[string]string) error {
-	// Get template
-	query := `
-		query GetTemplate($key: String!) {
-			notification_templates(where: { key: { _eq: $key } }, limit: 1) {
-				subject_template
-				body_template
-				category
-				channels
-			}
-		}
-	`
-
-	result, err := s.hasuraClient.Query(query, map[string]interface{}{"key": templateKey})
-	if err != nil {
-		return err
+	var tmpl struct {
+		SubjectTemplate string `db:"subject_template"`
+		BodyTemplate    string `db:"body_template"`
+		Category        string `db:"category"`
+		Channels        string `db:"channels"`
 	}
 
-	templates, ok := result["notification_templates"].([]interface{})
-	if !ok || len(templates) == 0 {
+	err := s.db.GetContext(ctx, &tmpl, `
+		SELECT subject_template, body_template, category, channels::text
+		FROM notification_templates
+		WHERE key = $1
+		LIMIT 1
+	`, templateKey)
+
+	if err != nil {
 		return fmt.Errorf("template not found: %s", templateKey)
 	}
 
-	template := templates[0].(map[string]interface{})
-	subject := getString(template, "subject_template")
-	body := getString(template, "body_template")
-	category := getString(template, "category")
-
-	// Replace variables
+	subject := tmpl.SubjectTemplate
+	body := tmpl.BodyTemplate
 	for key, value := range variables {
 		placeholder := fmt.Sprintf("{{%s}}", key)
-		subject = replaceAll(subject, placeholder, value)
-		body = replaceAll(body, placeholder, value)
+		subject = strings.ReplaceAll(subject, placeholder, value)
+		body = strings.ReplaceAll(body, placeholder, value)
 	}
 
-	// Send notification
-	channels, _ := template["channels"].([]interface{})
-	for _, ch := range channels {
-		channel := ch.(string)
+	// channels stored as JSON array string e.g. ["email","sms"]
+	var channels []string
+	_ = json.Unmarshal([]byte(tmpl.Channels), &channels)
+
+	for _, channel := range channels {
 		_, err := s.SendNotification(ctx, NotificationMessage{
 			RecipientID: recipientID,
 			Channel:     channel,
-			Category:    category,
+			Category:    tmpl.Category,
 			Title:       subject,
 			Message:     body,
 		})
@@ -388,90 +281,64 @@ func (s *NotificationService) SendFromTemplate(ctx context.Context, templateKey,
 			s.logger.Error("Failed to send notification", zap.Error(err))
 		}
 	}
-
 	return nil
 }
 
 // GetUnreadNotifications fetches unread notifications for a user
 func (s *NotificationService) GetUnreadNotifications(ctx context.Context, recipientID string) ([]map[string]interface{}, error) {
-	query := `
-		query GetUnreadNotifications($recipientID: String!) {
-			notifications(
-				where: {
-					recipient_id: { _eq: $recipientID },
-					status: { _nin: ["read"] }
-				}
-				order_by: { created_at: desc }
-				limit: 50
-			) {
-				id
-				category
-				title
-				message
-				link_url
-				link_text
-				priority
-				created_at
-			}
-		}
-	`
+	type row struct {
+		ID        string `db:"id"`
+		Category  string `db:"category"`
+		Title     string `db:"title"`
+		Message   string `db:"message"`
+		LinkURL   string `db:"link_url"`
+		LinkText  string `db:"link_text"`
+		Priority  string `db:"priority"`
+		CreatedAt string `db:"created_at"`
+	}
 
-	result, err := s.hasuraClient.Query(query, map[string]interface{}{
-		"recipientID": recipientID,
-	})
+	var rows []row
+	err := s.db.SelectContext(ctx, &rows, `
+		SELECT id, COALESCE(category,'') as category, COALESCE(title,'') as title,
+		       COALESCE(message,'') as message, COALESCE(link_url,'') as link_url,
+		       COALESCE(link_text,'') as link_text, COALESCE(priority,'') as priority,
+		       created_at::text as created_at
+		FROM notifications
+		WHERE recipient_id = $1 AND (status IS NULL OR status != 'read')
+		ORDER BY created_at DESC
+		LIMIT 50
+	`, recipientID)
 
 	if err != nil {
 		return nil, err
 	}
 
-	notifs, ok := result["notifications"].([]interface{})
-	if !ok {
-		return []map[string]interface{}{}, nil
+	result := make([]map[string]interface{}, 0, len(rows))
+	for _, r := range rows {
+		result = append(result, map[string]interface{}{
+			"id":         r.ID,
+			"category":   r.Category,
+			"title":      r.Title,
+			"message":    r.Message,
+			"link_url":   r.LinkURL,
+			"link_text":  r.LinkText,
+			"priority":   r.Priority,
+			"created_at": r.CreatedAt,
+		})
 	}
-
-	notifications := make([]map[string]interface{}, 0, len(notifs))
-	for _, n := range notifs {
-		notifications = append(notifications, n.(map[string]interface{}))
-	}
-
-	return notifications, nil
+	return result, nil
 }
 
 // MarkAsRead marks a notification as read
 func (s *NotificationService) MarkAsRead(ctx context.Context, notificationID string) error {
-	mutation := `
-		mutation MarkAsRead($id: String!) {
-			update_notifications_by_pk(
-				pk_columns: { id: $id }
-				_set: { status: "read", read_at: "now()" }
-			) {
-				id
-			}
-		}
-	`
-
-	_, err := s.hasuraClient.Mutate(mutation, map[string]interface{}{
-		"id": notificationID,
-	})
-
+	_, err := s.db.ExecContext(ctx, `
+		UPDATE notifications SET status = 'read', read_at = NOW(), updated_at = NOW()
+		WHERE id = $1
+	`, notificationID)
 	return err
 }
 
-// Helper function for string replacement (already defined in other services)
+// Helper function for string replacement — kept for compatibility
 func replaceAll(s, old, new string) string {
-	result := s
-	for {
-		i := -1
-		for j := 0; j <= len(result)-len(old); j++ {
-			if result[j:j+len(old)] == old {
-				i = j
-				break
-			}
-		}
-		if i < 0 {
-			break
-		}
-		result = result[:i] + new + result[i+len(old):]
-	}
-	return result
+	return strings.ReplaceAll(s, old, new)
 }

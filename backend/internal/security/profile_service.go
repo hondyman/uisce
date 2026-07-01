@@ -101,10 +101,10 @@ func (s *ProfileService) ResolveTenantAndRole(ctx context.Context, clientID stri
 	}
 
 	query := `
-		SELECT tenant_id::text, functional_role 
-		FROM security.identity_profile_mappings 
-		WHERE keycloak_client_id = $1 
-		AND idp_group_claim = ANY($2) 
+		SELECT tenant_id::text, functional_role
+		FROM security.identity_profile_mappings
+		WHERE idp_client_id = $1
+		AND idp_group_claim = ANY($2)
 		LIMIT 1;
 	`
 

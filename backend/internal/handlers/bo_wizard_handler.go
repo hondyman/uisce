@@ -10,23 +10,18 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/hondyman/semlayer/backend/internal/events"
-	hasuraclient "github.com/hondyman/semlayer/libs/hasura-client"
 	"github.com/jmoiron/sqlx"
-	"github.com/hondyman/semlayer/libs/jwt-middleware"
+	jwtmiddleware "github.com/hondyman/semlayer/libs/jwt-middleware"
 )
 
 // BOWizardHandler handles Business Object creation wizard endpoints
 type BOWizardHandler struct {
-	db           *sqlx.DB
-	hasuraClient *hasuraclient.HasuraClient
+	db *sqlx.DB
 }
 
 // NewBOWizardHandler creates a new wizard handler
-func NewBOWizardHandler(db *sqlx.DB, hasuraClient *hasuraclient.HasuraClient) *BOWizardHandler {
-	return &BOWizardHandler{
-		db:           db,
-		hasuraClient: hasuraClient,
-	}
+func NewBOWizardHandler(db *sqlx.DB) *BOWizardHandler {
+	return &BOWizardHandler{db: db}
 }
 
 // RegisterRoutes registers wizard API routes
@@ -283,68 +278,40 @@ func (h *BOWizardHandler) SaveBusinessObject(w http.ResponseWriter, r *http.Requ
 	// 1. Reserve BO identifier (used across write model and catalog worker)
 	boID := uuid.New().String()
 
-	// Persist the canonical Business Object definition into business_objects via Hasura Mutation
-	configPayload := map[string]interface{}{
+	// Persist the canonical Business Object definition into business_objects via direct SQL
+	configPayload, _ := json.Marshal(map[string]interface{}{
 		"driver_table_id":            req.DriverTableID,
 		"selected_terms":             req.SelectedTerms,
 		"linked_bos":                 req.LinkedBOs,
 		"included_terms_from_tables": req.IncludedTermsFromTables,
-	}
+	})
 
-	var desc interface{} = nil
-	if req.Description != nil {
-		desc = *req.Description
-	}
-
-	// Prepare mutation for Business Object
-	boMutation := `
-		mutation InsertBusinessObject($object: business_objects_insert_input!) {
-			insert_business_objects_one(object: $object) {
-				id
-			}
-		}
-	`
-
-	boVariables := map[string]interface{}{
-		"object": map[string]interface{}{
-			"id":                   boID,
-			"tenant_id":            tenantID,
-			"tenant_datasource_id": datasourceID,
-			"key":                  req.BOKey,
-			"name":                 req.Name,
-			"display_name":         req.DisplayName,
-			"technical_name":       req.BOKey,
-			"description":          desc,
-			// "fields": []interface{}{} removed as it causes validation error (handled separately)
-			"config":          configPayload,
-			"driver_table_id": req.DriverTableID,
-		},
-	}
-
+	var datasourceIDArg interface{} = datasourceID
 	if datasourceID == "" {
-		boVariables["object"].(map[string]interface{})["tenant_datasource_id"] = nil
+		datasourceIDArg = nil
 	}
 
-	// Execute mutation
-	fmt.Printf("[BO_WIZARD] Executing Hasura mutation for BO: %s\n", boID)
-	// Marshal and log variables for debugging
-	debugBytes, _ := json.Marshal(boVariables)
-	fmt.Printf("[BO_WIZARD] Mutation variables: %s\n", string(debugBytes))
+	fmt.Printf("[BO_WIZARD] Inserting BO via SQL: %s\n", boID)
 
-	resp, err := h.hasuraClient.Mutate(boMutation, boVariables)
+	_, err := h.db.ExecContext(ctx, `
+		INSERT INTO business_objects (
+			id, tenant_id, tenant_datasource_id, key, name, display_name,
+			technical_name, description, config, driver_table_id,
+			created_at, updated_at
+		) VALUES (
+			$1, $2, $3, $4, $5, $6,
+			$7, $8, $9, $10,
+			NOW(), NOW()
+		)
+	`, boID, tenantID, datasourceIDArg, req.BOKey, req.Name, req.DisplayName,
+		req.BOKey, req.Description, string(configPayload), req.DriverTableID)
+
 	if err != nil {
-		fmt.Printf("[BO_WIZARD] Failed to create business object via Hasura: %v\n", err)
+		fmt.Printf("[BO_WIZARD] Failed to create business object: %v\n", err)
 		http.Error(w, "Failed to create business object: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
-
-	// Verify response data
-	if resp == nil || resp["insert_business_objects_one"] == nil {
-		fmt.Printf("[BO_WIZARD] Critical: Hasura returned success but no data for BO %s. Response: %+v\n", boID, resp)
-		http.Error(w, "Failed to persist business object (no data returned)", http.StatusInternalServerError)
-		return
-	}
-	fmt.Printf("[BO_WIZARD] Successfully created BO %s. Response: %+v\n", boID, resp)
+	fmt.Printf("[BO_WIZARD] Successfully created BO %s\n", boID)
 
 	// 2. Populate bo_fields with selected semantic terms via Hasura Mutation
 	if len(req.SelectedTerms) > 0 {
@@ -380,21 +347,27 @@ func (h *BOWizardHandler) SaveBusinessObject(w http.ResponseWriter, r *http.Requ
 		}
 
 		if len(fieldsToInsert) > 0 {
-			fieldsMutation := `
-				mutation InsertBOFields($objects: [bo_fields_insert_input!]!) {
-					insert_bo_fields(objects: $objects) {
-						affected_rows
-					}
+			fmt.Printf("[BO_WIZARD] Inserting %d bo_fields via SQL\n", len(fieldsToInsert))
+			for _, field := range fieldsToInsert {
+				_, err = h.db.ExecContext(ctx, `
+					INSERT INTO bo_fields (
+						id, tenant_id, business_object_id, key, name, field_name,
+						display_label, technical_name, field_type, is_core,
+						display_order, semantic_term_id, created_at, updated_at
+					) VALUES (
+						$1, $2, $3, $4, $5, $6,
+						$7, $8, $9, $10,
+						$11, $12, NOW(), NOW()
+					) ON CONFLICT DO NOTHING
+				`,
+					field["id"], field["tenant_id"], field["business_object_id"],
+					field["key"], field["name"], field["field_name"],
+					field["display_label"], field["technical_name"], field["field_type"],
+					field["is_core"], field["display_order"], field["semantic_term_id"],
+				)
+				if err != nil {
+					fmt.Printf("[BO_WIZARD] Warning: Failed to insert bo_field %v: %v\n", field["id"], err)
 				}
-			`
-			fieldsVariables := map[string]interface{}{
-				"objects": fieldsToInsert,
-			}
-
-			fmt.Printf("[BO_WIZARD] Executing Hasura mutation for %d fields\n", len(fieldsToInsert))
-			_, err = h.hasuraClient.Mutate(fieldsMutation, fieldsVariables)
-			if err != nil {
-				fmt.Printf("[BO_WIZARD] Warning: Failed to insert bo_fields via Hasura: %v\n", err)
 			}
 		}
 	}

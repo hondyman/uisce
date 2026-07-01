@@ -15,19 +15,13 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
-	hasuraclient "github.com/hondyman/semlayer/libs/hasura-client"
 	jwtmiddleware "github.com/hondyman/semlayer/libs/jwt-middleware"
+	"github.com/google/uuid"
 	"github.com/jmoiron/sqlx"
 	_ "github.com/lib/pq"
 	kafka "github.com/segmentio/kafka-go"
 	"go.uber.org/zap"
 )
-
-// HasuraClient interface for GraphQL operations
-type HasuraClient interface {
-	Query(query string, variables map[string]interface{}) (map[string]interface{}, error)
-	Mutate(mutation string, variables map[string]interface{}) (map[string]interface{}, error)
-}
 
 func main() {
 	logger, err := zap.NewProduction()
@@ -37,7 +31,7 @@ func main() {
 	defer logger.Sync()
 
 	port := getEnv("PORT", "8084")
-	databaseURL := getEnv("DATABASE_URL", "postgres://postgres:postgres@localhost:5432/alpha?sslmode=disable")
+	databaseURL := getEnv("DATABASE_URL", "postgres://postgres:postgres@100.84.50.65:5432/alpha?sslmode=disable")
 	kafkaBrokers := getEnv("KAFKA_BROKERS", "localhost:9092")
 
 	logger.Info("Starting Notifications Service",
@@ -58,16 +52,8 @@ func main() {
 	}
 	logger.Info("Database connection established")
 
-	// Initialize Hasura client
-	hasuraEndpoint := getEnv("HASURA_ENDPOINT", "http://localhost:8080/v1/graphql")
-	hasuraAdmin := getEnv("HASURA_ADMIN_SECRET", "newadminsecretkey")
-	hasuraClient := hasuraclient.NewHasuraClient(&hasuraclient.HasuraConfig{
-		Endpoint:    hasuraEndpoint,
-		AdminSecret: hasuraAdmin,
-	})
-
 	// Start event consumer in background
-	go consumeValidationEvents(kafkaBrokers, hasuraClient, logger)
+	go consumeValidationEvents(kafkaBrokers, db, logger)
 
 	// HTTP router
 	router := chi.NewRouter()
@@ -94,19 +80,19 @@ func main() {
 	// Notification API
 	router.Route("/api/notifications", func(r chi.Router) {
 		// Send notification
-		r.Post("/send", sendNotificationHandler(hasuraClient, logger))
+		r.Post("/send", sendNotificationHandler(db, logger))
 
 		// Get notification status
-		r.Get("/{notificationID}", getNotificationStatusHandler(hasuraClient, logger))
+		r.Get("/{notificationID}", getNotificationStatusHandler(db, logger))
 
 		// List recent notifications
-		r.Get("/", listNotificationsHandler(hasuraClient, logger))
+		r.Get("/", listNotificationsHandler(db, logger))
 
 		// Mark as read
-		r.Put("/{notificationID}/read", markAsReadHandler(hasuraClient, logger))
+		r.Put("/{notificationID}/read", markAsReadHandler(db, logger))
 
 		// Get delivery stats
-		r.Get("/stats/delivery", getDeliveryStatsHandler(hasuraClient, logger))
+		r.Get("/stats/delivery", getDeliveryStatsHandler(db, logger))
 	})
 
 	// Start server
@@ -144,7 +130,7 @@ func main() {
 // EVENT CONSUMER
 // ============================================================================
 
-func consumeValidationEvents(brokers string, hc HasuraClient, logger *zap.Logger) {
+func consumeValidationEvents(brokers string, db *sqlx.DB, logger *zap.Logger) {
 	topic := "semlayer.validations"
 	groupID := "notifications-service-group"
 
@@ -172,15 +158,14 @@ func consumeValidationEvents(brokers string, hc HasuraClient, logger *zap.Logger
 			continue
 		}
 
-		handleValidationEvent(ctx, r, m, hc, logger)
+		handleValidationEvent(ctx, r, m, db, logger)
 	}
 }
 
-func handleValidationEvent(ctx context.Context, r *kafka.Reader, msg kafka.Message, hc HasuraClient, logger *zap.Logger) {
+func handleValidationEvent(ctx context.Context, r *kafka.Reader, msg kafka.Message, db *sqlx.DB, logger *zap.Logger) {
 	var event map[string]interface{}
 	if err := json.Unmarshal(msg.Value, &event); err != nil {
 		logger.Error("Failed to unmarshal event", zap.Error(err))
-		// Continue to commit so we don't get stuck on bad message
 		if err := r.CommitMessages(ctx, msg); err != nil {
 			logger.Error("Failed to commit message after unmarshal error", zap.Error(err))
 		}
@@ -189,36 +174,22 @@ func handleValidationEvent(ctx context.Context, r *kafka.Reader, msg kafka.Messa
 
 	logger.Info("Processing validation event", zap.Any("event", event))
 
-	// Build data for the notification
 	notificationType := "validation_complete"
 	status := "sent"
 	subject := fmt.Sprintf("Validation: %v", event["validation_id"])
 	messageBytes, _ := json.Marshal(event)
 	messageStr := string(messageBytes)
 
-	// GraphQL mutation to insert a notification
-	mutation := `
-		mutation InsertNotification($tenant_id: uuid!, $user_id: uuid, $type: String!, $subject: String!, $message: String!, $delivery_status: String!) {
-			insert_notifications_one(object: { tenant_id: $tenant_id, user_id: $user_id, type: $type, subject: $subject, message: $message, delivery_status: $delivery_status }) {
-				id
-			}
-		}
-	`
+	notifID := uuid.New().String()
+	_, err := db.ExecContext(ctx, `
+		INSERT INTO notifications (id, tenant_id, user_id, type, subject, message, delivery_status, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), NOW())
+		ON CONFLICT DO NOTHING
+	`, notifID, event["tenant_id"], event["user_id"], notificationType, subject, messageStr, status)
 
-	vars := map[string]interface{}{
-		"tenant_id":       event["tenant_id"],
-		"user_id":         event["user_id"],
-		"type":            notificationType,
-		"subject":         subject,
-		"message":         messageStr,
-		"delivery_status": status,
-	}
-
-	if _, err := hc.Mutate(mutation, vars); err != nil {
-		logger.Error("Failed to store notification in Hasura", zap.Error(err))
-		// For retry-able errors, we might NOT want to commit here, causing a re-read.
-		// However, for simplicity/safety against infinite loops in this migration,
-		// we will log error and commit. Ideally, use a dead-letter queue.
+	if err != nil {
+		logger.Error("Failed to store notification in database", zap.Error(err))
+		// Log and commit to avoid infinite loop
 	}
 
 	if err := r.CommitMessages(ctx, msg); err != nil {
@@ -252,7 +223,7 @@ func metricsHandler(logger *zap.Logger) http.HandlerFunc {
 	}
 }
 
-func sendNotificationHandler(hc HasuraClient, logger *zap.Logger) http.HandlerFunc {
+func sendNotificationHandler(db *sqlx.DB, logger *zap.Logger) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var req struct {
 			TenantID string `json:"tenant_id"`
@@ -268,23 +239,12 @@ func sendNotificationHandler(hc HasuraClient, logger *zap.Logger) http.HandlerFu
 			return
 		}
 
-		mutation := `
-			mutation SendNotification($tenant_id: uuid!, $user_id: uuid, $type: String!, $subject: String!, $message: String!) {
-				insert_notifications_one(object: { tenant_id: $tenant_id, user_id: $user_id, type: $type, subject: $subject, message: $message, delivery_status: "pending" }) {
-					id
-				}
-			}
-		`
+		notifID := uuid.New().String()
+		_, err := db.ExecContext(r.Context(), `
+			INSERT INTO notifications (id, tenant_id, user_id, type, subject, message, delivery_status, created_at, updated_at)
+			VALUES ($1, $2, $3, $4, $5, $6, 'pending', NOW(), NOW())
+		`, notifID, req.TenantID, req.UserID, req.Type, req.Subject, req.Message)
 
-		vars := map[string]interface{}{
-			"tenant_id": req.TenantID,
-			"user_id":   req.UserID,
-			"type":      req.Type,
-			"subject":   req.Subject,
-			"message":   req.Message,
-		}
-
-		result, err := hc.Mutate(mutation, vars)
 		if err != nil {
 			logger.Error("Failed to send notification", zap.Error(err))
 			w.WriteHeader(http.StatusInternalServerError)
@@ -292,53 +252,36 @@ func sendNotificationHandler(hc HasuraClient, logger *zap.Logger) http.HandlerFu
 			return
 		}
 
-		// extract id
-		var notificationID string
-		if ins, ok := result["insert_notifications_one"].(map[string]interface{}); ok {
-			if idv, ok := ins["id"].(string); ok {
-				notificationID = idv
-			}
-		}
-
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusAccepted)
 		json.NewEncoder(w).Encode(map[string]string{
-			"notification_id": notificationID,
+			"notification_id": notifID,
 			"status":          "queued",
 		})
 	}
 }
 
-func getNotificationStatusHandler(hc HasuraClient, logger *zap.Logger) http.HandlerFunc {
+func getNotificationStatusHandler(db *sqlx.DB, logger *zap.Logger) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		notificationID := chi.URLParam(r, "notificationID")
 
-		var notification map[string]interface{}
-		query := `
-			query GetNotification($id: uuid!) {
-				notifications_by_pk(id: $id) {
-					id
-					tenant_id
-					type
-					subject
-					message
-					delivery_status
-					read_at
-					created_at
-					updated_at
-				}
-			}
-		`
-		result, err := hc.Query(query, map[string]interface{}{"id": notificationID})
-		// result already handled above; notification is available
-
-		if nbpk, ok := result["notifications_by_pk"].(map[string]interface{}); ok {
-			notification = nbpk
-		} else {
-			w.WriteHeader(http.StatusNotFound)
-			json.NewEncoder(w).Encode(map[string]string{"error": "notification not found"})
-			return
+		var notification struct {
+			ID             string     `db:"id" json:"id"`
+			TenantID       string     `db:"tenant_id" json:"tenant_id"`
+			Type           string     `db:"type" json:"type"`
+			Subject        string     `db:"subject" json:"subject"`
+			Message        string     `db:"message" json:"message"`
+			DeliveryStatus string     `db:"delivery_status" json:"delivery_status"`
+			ReadAt         *time.Time `db:"read_at" json:"read_at"`
+			CreatedAt      time.Time  `db:"created_at" json:"created_at"`
+			UpdatedAt      time.Time  `db:"updated_at" json:"updated_at"`
 		}
+
+		err := db.GetContext(r.Context(), &notification, `
+			SELECT id, tenant_id, type, subject, message, delivery_status, read_at, created_at, updated_at
+			FROM notifications
+			WHERE id = $1
+		`, notificationID)
 
 		if err != nil {
 			w.WriteHeader(http.StatusNotFound)
@@ -352,7 +295,7 @@ func getNotificationStatusHandler(hc HasuraClient, logger *zap.Logger) http.Hand
 	}
 }
 
-func listNotificationsHandler(hc HasuraClient, logger *zap.Logger) http.HandlerFunc {
+func listNotificationsHandler(db *sqlx.DB, logger *zap.Logger) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		claims := jwtmiddleware.GetClaimsFromContext(r)
 		if claims == nil {
@@ -362,62 +305,45 @@ func listNotificationsHandler(hc HasuraClient, logger *zap.Logger) http.HandlerF
 		tenantID := claims.TenantID
 		userID := r.URL.Query().Get("user_id")
 
-		var notifications []map[string]interface{}
+		type NotifRow struct {
+			ID             string    `db:"id" json:"id"`
+			Type           string    `db:"type" json:"type"`
+			Subject        string    `db:"subject" json:"subject"`
+			DeliveryStatus string    `db:"delivery_status" json:"delivery_status"`
+			CreatedAt      time.Time `db:"created_at" json:"created_at"`
+		}
+
+		var notifications []NotifRow
+		var err error
 
 		if userID != "" {
-			query := `
-				query ListNotifications($tenantId: uuid!, $userId: uuid!) {
-					notifications(where: { tenant_id: { _eq: $tenantId }, user_id: { _eq: $userId } }, order_by: { created_at: desc }, limit: 50) {
-						id
-						type
-						subject
-						delivery_status
-						created_at
-					}
-				}
-			`
-			res, err := hc.Query(query, map[string]interface{}{"tenantId": tenantID, "userId": userID})
-			if err != nil {
-				logger.Error("Failed to list notifications", zap.Error(err))
-				w.WriteHeader(http.StatusInternalServerError)
-				json.NewEncoder(w).Encode(map[string]string{"error": "failed to list"})
-				return
-			}
-			if arr, ok := res["notifications"].([]interface{}); ok {
-				for _, item := range arr {
-					if m, ok := item.(map[string]interface{}); ok {
-						notifications = append(notifications, m)
-					}
-				}
-			}
+			err = db.SelectContext(r.Context(), &notifications, `
+				SELECT id, type, subject, delivery_status, created_at
+				FROM notifications
+				WHERE tenant_id = $1 AND user_id = $2
+				ORDER BY created_at DESC
+				LIMIT 50
+			`, tenantID, userID)
 		} else {
-			query := `
-				query ListNotifications($tenantId: uuid!) {
-					notifications(where: { tenant_id: { _eq: $tenantId } }, order_by: { created_at: desc }, limit: 50) {
-						id
-						type
-						subject
-						delivery_status
-						created_at
-					}
-				}
-			`
-			res, err := hc.Query(query, map[string]interface{}{"tenantId": tenantID})
-			if err != nil {
-				logger.Error("Failed to list notifications", zap.Error(err))
-				w.WriteHeader(http.StatusInternalServerError)
-				json.NewEncoder(w).Encode(map[string]string{"error": "failed to list"})
-				return
-			}
-			if arr, ok := res["notifications"].([]interface{}); ok {
-				for _, item := range arr {
-					if m, ok := item.(map[string]interface{}); ok {
-						notifications = append(notifications, m)
-					}
-				}
-			}
+			err = db.SelectContext(r.Context(), &notifications, `
+				SELECT id, type, subject, delivery_status, created_at
+				FROM notifications
+				WHERE tenant_id = $1
+				ORDER BY created_at DESC
+				LIMIT 50
+			`, tenantID)
 		}
-		// response constructed above
+
+		if err != nil {
+			logger.Error("Failed to list notifications", zap.Error(err))
+			w.WriteHeader(http.StatusInternalServerError)
+			json.NewEncoder(w).Encode(map[string]string{"error": "failed to list"})
+			return
+		}
+
+		if notifications == nil {
+			notifications = []NotifRow{}
+		}
 
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
@@ -428,21 +354,14 @@ func listNotificationsHandler(hc HasuraClient, logger *zap.Logger) http.HandlerF
 	}
 }
 
-func markAsReadHandler(hc HasuraClient, logger *zap.Logger) http.HandlerFunc {
+func markAsReadHandler(db *sqlx.DB, logger *zap.Logger) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		notificationID := chi.URLParam(r, "notificationID")
 
-		// Set read_at to current timestamp
-		ts := time.Now().UTC().Format(time.RFC3339)
-		mutation := `
-			mutation MarkRead($id: uuid!, $read_at: timestamptz!) {
-				update_notifications_by_pk(pk_columns: { id: $id }, _set: { read_at: $read_at }) {
-					id
-				}
-			}
-		`
-		vars := map[string]interface{}{"id": notificationID, "read_at": ts}
-		res, err := hc.Mutate(mutation, vars)
+		result, err := db.ExecContext(r.Context(), `
+			UPDATE notifications SET read_at = NOW(), updated_at = NOW()
+			WHERE id = $1
+		`, notificationID)
 
 		if err != nil {
 			logger.Error("Failed to mark as read", zap.Error(err))
@@ -451,8 +370,8 @@ func markAsReadHandler(hc HasuraClient, logger *zap.Logger) http.HandlerFunc {
 			return
 		}
 
-		// Hasura returns the updated row in update_notifications_by_pk; if nil, it wasn't found
-		if updated, ok := res["update_notifications_by_pk"].(map[string]interface{}); !ok || updated == nil {
+		rows, _ := result.RowsAffected()
+		if rows == 0 {
 			w.WriteHeader(http.StatusNotFound)
 			json.NewEncoder(w).Encode(map[string]string{"error": "notification not found"})
 			return
@@ -462,7 +381,7 @@ func markAsReadHandler(hc HasuraClient, logger *zap.Logger) http.HandlerFunc {
 	}
 }
 
-func getDeliveryStatsHandler(hc HasuraClient, logger *zap.Logger) http.HandlerFunc {
+func getDeliveryStatsHandler(db *sqlx.DB, logger *zap.Logger) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		claims := jwtmiddleware.GetClaimsFromContext(r)
 		if claims == nil {
@@ -472,80 +391,33 @@ func getDeliveryStatsHandler(hc HasuraClient, logger *zap.Logger) http.HandlerFu
 		tenantID := claims.TenantID
 
 		var stats struct {
-			Total       int64   `db:"total"`
-			Sent        int64   `db:"sent"`
-			Failed      int64   `db:"failed"`
-			Pending     int64   `db:"pending"`
-			SuccessRate float64 `db:"success_rate"`
+			Total   int64 `db:"total"`
+			Sent    int64 `db:"sent"`
+			Failed  int64 `db:"failed"`
+			Pending int64 `db:"pending"`
 		}
 
-		// Use Hasura aggregates to fetch counts
-		totalQuery := `
-			query TotalCount($tenantId: uuid!) {
-				notifications_aggregate(where: { tenant_id: { _eq: $tenantId } }) {
-					aggregate { count }
-				}
-			}
-		`
-		sentQuery := `
-			query SentCount($tenantId: uuid!) {
-				notifications_aggregate(where: { tenant_id: { _eq: $tenantId }, delivery_status: { _eq: "sent" } }) {
-					aggregate { count }
-				}
-			}
-		`
-		failedQuery := `
-			query FailedCount($tenantId: uuid!) {
-				notifications_aggregate(where: { tenant_id: { _eq: $tenantId }, delivery_status: { _eq: "failed" } }) {
-					aggregate { count }
-				}
-			}
-		`
-		pendingQuery := `
-			query PendingCount($tenantId: uuid!) {
-				notifications_aggregate(where: { tenant_id: { _eq: $tenantId }, delivery_status: { _eq: "pending" } }) {
-					aggregate { count }
-				}
-			}
-		`
+		err := db.GetContext(r.Context(), &stats, `
+			SELECT
+				COUNT(*) as total,
+				COUNT(*) FILTER (WHERE delivery_status = 'sent') as sent,
+				COUNT(*) FILTER (WHERE delivery_status = 'failed') as failed,
+				COUNT(*) FILTER (WHERE delivery_status = 'pending') as pending
+			FROM notifications
+			WHERE tenant_id = $1
+		`, tenantID)
 
-		// total
-		resTotal, err := hc.Query(totalQuery, map[string]interface{}{"tenantId": tenantID})
 		if err != nil {
 			logger.Error("Failed to get stats", zap.Error(err))
 			w.WriteHeader(http.StatusInternalServerError)
 			json.NewEncoder(w).Encode(map[string]string{"error": "failed to get stats"})
 			return
 		}
-		getCount := func(val map[string]interface{}) int64 {
-			if agg, ok := val["notifications_aggregate"].(map[string]interface{}); ok {
-				if inner, ok := agg["aggregate"].(map[string]interface{}); ok {
-					if cnt, ok := inner["count"].(float64); ok {
-						return int64(cnt)
-					}
-				}
-			}
-			return 0
-		}
-		total := getCount(resTotal)
 
-		resSent, _ := hc.Query(sentQuery, map[string]interface{}{"tenantId": tenantID})
-		resFailed, _ := hc.Query(failedQuery, map[string]interface{}{"tenantId": tenantID})
-		resPending, _ := hc.Query(pendingQuery, map[string]interface{}{"tenantId": tenantID})
-		sent := getCount(resSent)
-		failed := getCount(resFailed)
-		pending := getCount(resPending)
-
-		var successRate float64 = 0.0
-		if total > 0 {
-			successRate = (float64(sent) * 100.0) / float64(total)
+		var successRate float64
+		if stats.Total > 0 {
+			successRate = (float64(stats.Sent) * 100.0) / float64(stats.Total)
 		}
-		// Populate and return
-		stats.Total = total
-		stats.Sent = sent
-		stats.Failed = failed
-		stats.Pending = pending
-		stats.SuccessRate = successRate
 
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
@@ -554,7 +426,7 @@ func getDeliveryStatsHandler(hc HasuraClient, logger *zap.Logger) http.HandlerFu
 			"sent":         stats.Sent,
 			"failed":       stats.Failed,
 			"pending":      stats.Pending,
-			"success_rate": stats.SuccessRate,
+			"success_rate": successRate,
 			"timestamp":    time.Now().UTC(),
 		})
 	}

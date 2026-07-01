@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -14,7 +15,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
-	"github.com/machinebox/graphql"
+	_ "github.com/lib/pq"
 	kafka "github.com/segmentio/kafka-go"
 )
 
@@ -27,23 +28,21 @@ type EventConfig struct {
 	FieldName  string          `json:"field_name"`
 	FilterJSON json.RawMessage `json:"filter_json"`
 	RouteQueue string          `json:"route_queue"`
-	CreatedAt  string          `json:"created_at"`
+	CreatedAt  time.Time       `json:"created_at"`
 }
 
-// RawEvent represents an incoming event from the core application
+// RawEvent is the inbound event payload
 type RawEvent struct {
-	TenantID   uuid.UUID       `json:"tenant_id"`
-	BOType     string          `json:"bo_type"`
-	BOID       string          `json:"bo_id"`
-	EventType  string          `json:"event_type"`
-	FieldName  string          `json:"field_name"`
-	OldValue   interface{}     `json:"old_value"`
-	NewValue   interface{}     `json:"new_value"`
-	ChangedBy  string          `json:"changed_by"`
-	CustomData json.RawMessage `json:"custom_data"`
+	TenantID  uuid.UUID   `json:"tenant_id"`
+	BOType    string      `json:"bo_type"`
+	EventType string      `json:"event_type"`
+	FieldName string      `json:"field_name"`
+	OldValue  interface{} `json:"old_value"`
+	NewValue  interface{} `json:"new_value"`
+	Metadata  interface{} `json:"metadata"`
 }
 
-// RoutedEvent is the enriched event sent to Redpanda/Kafka (topic)
+// RoutedEvent is the outbound event payload published to Kafka
 type RoutedEvent struct {
 	*RawEvent
 	ConfigID   uuid.UUID `json:"config_id"`
@@ -52,24 +51,30 @@ type RoutedEvent struct {
 }
 
 var (
-	hasuraClient *graphql.Client
-	kafkaWriter  *kafka.Writer
-	configCache  = make(map[string][]EventConfig)
-	cacheMu      sync.RWMutex
+	db          *sql.DB
+	kafkaWriter *kafka.Writer
+	configCache = make(map[string][]EventConfig)
+	cacheMu     sync.RWMutex
 )
 
 func main() {
-	// Initialize Hasura client
-	hasuraURL := os.Getenv("HASURA_URL")
-	if hasuraURL == "" {
-		hasuraURL = "http://localhost:8080/v1/graphql"
-	}
-	hasuraSecret := os.Getenv("HASURA_ADMIN_SECRET")
-	if hasuraSecret == "" {
-		hasuraSecret = "your-secret-key"
+	// Initialize PostgreSQL connection
+	dbURL := os.Getenv("DATABASE_URL")
+	if dbURL == "" {
+		dbURL = "postgres://postgres:postgres@100.84.50.65:5432/alpha?sslmode=disable"
 	}
 
-	hasuraClient = graphql.NewClient(hasuraURL)
+	var err error
+	db, err = sql.Open("postgres", dbURL)
+	if err != nil {
+		log.Fatalf("Failed to open database: %v", err)
+	}
+	defer db.Close()
+
+	if err := db.Ping(); err != nil {
+		log.Fatalf("Failed to connect to database: %v", err)
+	}
+	log.Println("Database connection established")
 
 	// Initialize Kafka writer (Redpanda)
 	kafkaBrokers := os.Getenv("KAFKA_BROKERS")
@@ -85,7 +90,7 @@ func main() {
 	defer kafkaWriter.Close()
 
 	// Start config cache refresher (every 5 minutes)
-	go refreshConfigCache(hasuraSecret)
+	go refreshConfigCache()
 
 	// Gin router
 	r := gin.Default()
@@ -98,63 +103,74 @@ func main() {
 	// Event processing endpoint
 	r.POST("/events", processEventHandler)
 
-	log.Println("Event-router service starting on :8081")
-	if err := r.Run(":8081"); err != nil {
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8083"
+	}
+	log.Printf("Event Router starting on :%s", port)
+	if err := r.Run(":" + port); err != nil {
 		log.Fatalf("Server failed: %v", err)
 	}
 }
 
-// refreshConfigCache periodically fetches configurations from Hasura and updates the in-memory cache
-func refreshConfigCache(hasuraSecret string) {
+// refreshConfigCache periodically fetches configurations from the database and updates the in-memory cache
+func refreshConfigCache() {
 	tick := time.NewTicker(5 * time.Minute)
 	defer tick.Stop()
 
 	// Initial load
-	fetchAndCacheConfigs(hasuraSecret)
+	fetchAndCacheConfigs()
 
 	for range tick.C {
-		fetchAndCacheConfigs(hasuraSecret)
+		fetchAndCacheConfigs()
 	}
 }
 
-// fetchAndCacheConfigs executes a GraphQL query against Hasura to fetch all event configs
-func fetchAndCacheConfigs(hasuraSecret string) {
-	req := graphql.NewRequest(`
-		query FetchConfigs {
-			event_configs {
-				id
-				tenant_id
-				event_type
-				bo_type
-				field_name
-				filter_json
-				route_queue
-				created_at
-			}
-		}
-	`)
-
+// fetchAndCacheConfigs executes a SQL query to fetch all event configs directly from PostgreSQL
+func fetchAndCacheConfigs() {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	var resp struct {
-		EventConfigs []EventConfig `json:"event_configs"`
-	}
-
-	if err := hasuraClient.Run(ctx, req, &resp); err != nil {
+	rows, err := db.QueryContext(ctx, `
+		SELECT id, tenant_id, event_type, bo_type, field_name,
+		       COALESCE(filter_json, '{}')::text, route_queue, created_at
+		FROM event_configs
+		ORDER BY created_at
+	`)
+	if err != nil {
 		log.Printf("Config fetch failed: %v, will retry", err)
+		return
+	}
+	defer rows.Close()
+
+	newCache := make(map[string][]EventConfig)
+	totalCount := 0
+	for rows.Next() {
+		var cfg EventConfig
+		var idStr, tenantIDStr, filterStr string
+		if err := rows.Scan(&idStr, &tenantIDStr, &cfg.EventType, &cfg.BOType,
+			&cfg.FieldName, &filterStr, &cfg.RouteQueue, &cfg.CreatedAt); err != nil {
+			log.Printf("Row scan failed: %v", err)
+			continue
+		}
+		cfg.ID = uuid.MustParse(idStr)
+		cfg.TenantID = uuid.MustParse(tenantIDStr)
+		cfg.FilterJSON = json.RawMessage(filterStr)
+
+		key := fmt.Sprintf("%s_%s", cfg.BOType, cfg.EventType)
+		newCache[key] = append(newCache[key], cfg)
+		totalCount++
+	}
+	if err := rows.Err(); err != nil {
+		log.Printf("Row iteration error: %v", err)
 		return
 	}
 
 	cacheMu.Lock()
-	configCache = make(map[string][]EventConfig)
-	for _, config := range resp.EventConfigs {
-		key := fmt.Sprintf("%s_%s", config.BOType, config.EventType)
-		configCache[key] = append(configCache[key], config)
-	}
+	configCache = newCache
 	cacheMu.Unlock()
 
-	log.Printf("Config cache updated: %d total configs", len(resp.EventConfigs))
+	log.Printf("Config cache updated: %d total configs", totalCount)
 }
 
 // processEventHandler handles incoming events and routes them to Redpanda/Kafka (publishes to configured topic)

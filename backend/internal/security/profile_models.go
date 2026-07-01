@@ -21,6 +21,7 @@ type SecurityProfile struct {
 type IdentityProfileMapping struct {
 	MappingID      uuid.UUID `db:"mapping_id" json:"mapping_id"`
 	TenantID       uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	IDPClientID    string    `db:"idp_client_id" json:"idp_client_id"`
 	IDPGroupClaim  string    `db:"idp_group_claim" json:"idp_group_claim"`
 	FunctionalRole string    `db:"functional_role" json:"functional_role"`
 	ClearanceLevel string    `db:"clearance_level" json:"clearance_level"`

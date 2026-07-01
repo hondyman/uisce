@@ -5,12 +5,13 @@ import (
 	"fmt"
 	"net/http"
 
-	hasuraclient "github.com/hondyman/semlayer/libs/hasura-client"
-	"github.com/hondyman/semlayer/libs/jwt-middleware"
+	"github.com/google/uuid"
+	"github.com/jmoiron/sqlx"
+	jwtmiddleware "github.com/hondyman/semlayer/libs/jwt-middleware"
 )
 
 type CalcHandler struct {
-	hasura *hasuraclient.HasuraClient
+	db *sqlx.DB
 }
 
 type CalcCreateInput struct {
@@ -23,8 +24,8 @@ type CalcCreateInput struct {
 	Realtime     bool   `json:"realtime"`
 }
 
-func NewCalcHandler(hasura *hasuraclient.HasuraClient) *CalcHandler {
-	return &CalcHandler{hasura: hasura}
+func NewCalcHandler(db *sqlx.DB) *CalcHandler {
+	return &CalcHandler{db: db}
 }
 
 func (h *CalcHandler) Create(w http.ResponseWriter, r *http.Request) {
@@ -46,49 +47,28 @@ func (h *CalcHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	mutation := `
-	mutation InsertCalc(
-	  $tenant_id: uuid!, $datasource_id: uuid!, $object_id: uuid!,
-	  $name: String!, $sql_expr: String!, $data_type: String!,
-	  $is_measure: Boolean!, $realtime: Boolean!
-	) {
-	  insert_calc_fields_one(object: {
-	    tenant_id: $tenant_id, datasource_id: $datasource_id,
-	    object_id: $object_id, name: $name, sql_expr: $sql_expr,
-	    data_type: $data_type, is_measure: $is_measure, realtime: $realtime
-	  }) { id version }
-	}`
+	calcID := uuid.New().String()
+	_, err := h.db.ExecContext(r.Context(), `
+		INSERT INTO calc_fields (
+			id, tenant_id, datasource_id, object_id, name, sql_expr,
+			data_type, is_measure, realtime, version, created_at, updated_at
+		) VALUES (
+			$1, $2, $3, $4, $5, $6,
+			$7, $8, $9, 1, NOW(), NOW()
+		)
+	`, calcID, tenantID, in.DatasourceID, in.ObjectID, in.Name, in.SQL,
+		in.DataType, in.IsMeasure, in.Realtime)
 
-	vars := map[string]interface{}{
-		"tenant_id":     tenantID,
-		"datasource_id": in.DatasourceID,
-		"object_id":     in.ObjectID,
-		"name":          in.Name,
-		"sql_expr":      in.SQL,
-		"data_type":     in.DataType,
-		"is_measure":    in.IsMeasure,
-		"realtime":      in.Realtime,
-	}
-
-	result, err := h.hasura.Mutate(mutation, vars)
 	if err != nil {
-		http.Error(w, fmt.Sprintf("Hasura mutation failed: %v", err), http.StatusInternalServerError)
+		http.Error(w, fmt.Sprintf("Failed to create calc field: %v", err), http.StatusInternalServerError)
 		return
 	}
 
-	// 1. Refresh per-object view
-	refreshMutation := `
-	mutation Refresh($object_id: uuid!) {
-	  refresh_calc_view(args: {p_object_id: $object_id}) { void }
-	}`
-	_, _ = h.hasura.Mutate(refreshMutation, map[string]interface{}{"object_id": in.ObjectID})
-
-	// 2. Invalidate Cube cache (Regenerate)
-	// In a real system, we'd trigger the CubeGenerator or call the existing /api/cube/generate/{boID} endpoint.
-	// We'll simulate this by returning the result first.
-
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(result)
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"id":      calcID,
+		"version": 1,
+	})
 }
 
 func (h *CalcHandler) Preview(w http.ResponseWriter, r *http.Request) {

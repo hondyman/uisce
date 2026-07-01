@@ -8,7 +8,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/hondyman/semlayer/backend/internal/services"
-	hasuraclient "github.com/hondyman/semlayer/libs/hasura-client"
 	"go.uber.org/zap"
 )
 
@@ -21,7 +20,6 @@ type WorkdayReportService struct {
 	reportService    *Service
 	processService   *services.BusinessProcessService
 	portfolioService *services.PortfolioService
-	hasuraClient     *hasuraclient.HasuraClient
 	logger           *zap.Logger
 }
 
@@ -30,14 +28,12 @@ func NewWorkdayReportService(
 	reportService *Service,
 	processService *services.BusinessProcessService,
 	portfolioService *services.PortfolioService,
-	hasuraClient *hasuraclient.HasuraClient,
 ) *WorkdayReportService {
 	logger, _ := zap.NewProduction()
 	return &WorkdayReportService{
 		reportService:    reportService,
 		processService:   processService,
 		portfolioService: portfolioService,
-		hasuraClient:     hasuraClient,
 		logger:           logger,
 	}
 }

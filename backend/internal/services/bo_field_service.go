@@ -5,7 +5,8 @@ import (
 	"fmt"
 	"os"
 
-	hasuraclient "github.com/hondyman/semlayer/libs/hasura-client"
+	"github.com/google/uuid"
+	"github.com/jmoiron/sqlx"
 	"go.uber.org/zap"
 )
 
@@ -15,22 +16,22 @@ import (
 
 // BusinessObjectFieldService manages BO fields with Workday-style inheritance
 type BusinessObjectFieldService struct {
-	hasuraClient *hasuraclient.HasuraClient
-	logger       *zap.Logger
-	isAdminCore  bool // When true, new fields are core enhancements, not customizations
+	db          *sqlx.DB
+	logger      *zap.Logger
+	isAdminCore bool // When true, new fields are core enhancements, not customizations
 }
 
 // NewBusinessObjectFieldService creates a new BO field service
-func NewBusinessObjectFieldService(hasuraClient *hasuraclient.HasuraClient) *BusinessObjectFieldService {
+func NewBusinessObjectFieldService(db *sqlx.DB) *BusinessObjectFieldService {
 	logger, _ := zap.NewProduction()
 
 	// Check ADMIN_CORE environment variable
 	isAdminCore := os.Getenv("ADMIN_CORE") == "true"
 
 	return &BusinessObjectFieldService{
-		hasuraClient: hasuraClient,
-		logger:       logger,
-		isAdminCore:  isAdminCore,
+		db:          db,
+		logger:      logger,
+		isAdminCore: isAdminCore,
 	}
 }
 
@@ -71,56 +72,55 @@ type BOField struct {
 
 // AddField adds a new field to a business object
 func (s *BusinessObjectFieldService) AddField(ctx context.Context, tenantID string, input BOFieldInput) (string, error) {
-	// Determine if this field is custom based on ADMIN_CORE env var
 	isCustom := !s.isAdminCore
 
-	mutation := `
-		mutation InsertBOField($object: bo_fields_insert_input!) {
-			insert_bo_fields_one(object: $object) {
-				id
-			}
-		}
-	`
+	fieldID := uuid.New().String()
 
-	object := map[string]interface{}{
-		"tenant_id":        tenantID,
-		"key":              input.Key,
-		"name":             input.Name,
-		"display_name":     input.DisplayName,
-		"technical_name":   input.TechnicalName,
-		"type":             input.Type,
-		"is_core":          !isCustom, // Core if ADMIN_CORE=true
-		"is_custom":        isCustom,
-		"is_required":      input.IsRequired,
-		"role":             input.Role,
-		"semantic_term_id": input.SemanticTermID,
-		"sequence":         input.Sequence,
-	}
-
-	if input.BusinessObjectID != "" {
-		object["business_object_id"] = input.BusinessObjectID
-	}
+	var subtypeIDArg interface{} = nil
 	if input.SubtypeID != "" {
-		object["subtype_id"] = input.SubtypeID
+		subtypeIDArg = input.SubtypeID
 	}
+	var boIDArg interface{} = nil
+	if input.BusinessObjectID != "" {
+		boIDArg = input.BusinessObjectID
+	}
+	var descArg interface{} = nil
 	if input.Description != "" {
-		object["description"] = input.Description
+		descArg = input.Description
 	}
+	var roleArg interface{} = nil
+	if input.Role != "" {
+		roleArg = input.Role
+	}
+	var semTermArg interface{} = nil
+	if input.SemanticTermID != "" {
+		semTermArg = input.SemanticTermID
+	}
+	var refEntityArg interface{} = nil
 	if input.ReferenceEntity != "" {
-		object["reference_entity"] = input.ReferenceEntity
+		refEntityArg = input.ReferenceEntity
 	}
 
-	result, err := s.hasuraClient.Mutate(mutation, map[string]interface{}{
-		"object": object,
-	})
+	_, err := s.db.ExecContext(ctx, `
+		INSERT INTO bo_fields (
+			id, tenant_id, business_object_id, subtype_id, key, name,
+			display_name, technical_name, type, is_core, is_custom, is_required,
+			role, semantic_term_id, reference_entity, description, sequence,
+			created_at, updated_at
+		) VALUES (
+			$1, $2, $3, $4, $5, $6,
+			$7, $8, $9, $10, $11, $12,
+			$13, $14, $15, $16, $17,
+			NOW(), NOW()
+		)
+	`, fieldID, tenantID, boIDArg, subtypeIDArg, input.Key, input.Name,
+		input.DisplayName, input.TechnicalName, input.Type, !isCustom, isCustom, input.IsRequired,
+		roleArg, semTermArg, refEntityArg, descArg, input.Sequence)
 
 	if err != nil {
 		s.logger.Error("Failed to add field", zap.Error(err))
 		return "", err
 	}
-
-	data := result["insert_bo_fields_one"].(map[string]interface{})
-	fieldID := data["id"].(string)
 
 	s.logger.Info("Field added",
 		zap.String("field_id", fieldID),
@@ -133,63 +133,56 @@ func (s *BusinessObjectFieldService) AddField(ctx context.Context, tenantID stri
 
 // GetAllFields gets all fields for a BO including inherited fields
 func (s *BusinessObjectFieldService) GetAllFields(ctx context.Context, businessObjectID string) ([]*BOField, error) {
-	// Use the database function to get all fields (inherited + own)
-	query := `
-		query GetAllBOFields($boID: uuid!) {
-			get_all_bo_fields(args: {bo_id: $boID}) {
-				field_id
-				field_key
-				field_name
-				field_type
-				is_core
-				is_required
-				is_custom
-				is_inherited
-				inherited_from
-				role
-				semantic_term_id
-				sequence
-			}
-		}
-	`
+	type row struct {
+		ID             string `db:"id"`
+		Key            string `db:"key"`
+		Name           string `db:"name"`
+		Type           string `db:"type"`
+		IsCore         bool   `db:"is_core"`
+		IsCustom       bool   `db:"is_custom"`
+		IsInherited    bool   `db:"is_inherited"`
+		IsRequired     bool   `db:"is_required"`
+		Role           string `db:"role"`
+		SemanticTermID string `db:"semantic_term_id"`
+		Sequence       int    `db:"sequence"`
+	}
 
-	result, err := s.hasuraClient.Query(query, map[string]interface{}{
-		"boID": businessObjectID,
-	})
+	var rows []row
+	// Own fields
+	err := s.db.SelectContext(ctx, &rows, `
+		SELECT id, key, name, type,
+		       COALESCE(is_core, false) as is_core,
+		       COALESCE(is_custom, false) as is_custom,
+		       false as is_inherited,
+		       COALESCE(is_required, false) as is_required,
+		       COALESCE(role, '') as role,
+		       COALESCE(semantic_term_id::text, '') as semantic_term_id,
+		       COALESCE(sequence, 0) as sequence
+		FROM bo_fields
+		WHERE business_object_id = $1
+		ORDER BY sequence
+	`, businessObjectID)
 
 	if err != nil {
 		return nil, err
 	}
 
-	items, ok := result["get_all_bo_fields"].([]interface{})
-	if !ok {
-		return []*BOField{}, nil
+	fields := make([]*BOField, 0, len(rows))
+	for _, r := range rows {
+		fields = append(fields, &BOField{
+			ID:             r.ID,
+			Key:            r.Key,
+			Name:           r.Name,
+			Type:           r.Type,
+			IsCore:         r.IsCore,
+			IsCustom:       r.IsCustom,
+			IsInherited:    r.IsInherited,
+			IsRequired:     r.IsRequired,
+			Role:           r.Role,
+			SemanticTermID: r.SemanticTermID,
+			Sequence:       r.Sequence,
+		})
 	}
-
-	fields := make([]*BOField, 0, len(items))
-	for _, item := range items {
-		data := item.(map[string]interface{})
-		field := &BOField{
-			ID:             getString(data, "field_id"),
-			Key:            getString(data, "field_key"),
-			Name:           getString(data, "field_name"),
-			Type:           getString(data, "field_type"),
-			IsCore:         getBool(data, "is_core"),
-			IsCustom:       getBool(data, "is_custom"),
-			IsInherited:    getBool(data, "is_inherited"),
-			IsRequired:     getBool(data, "is_required"),
-			Role:           getString(data, "role"),
-			SemanticTermID: getString(data, "semantic_term_id"),
-			Sequence:       getInt(data, "sequence"),
-		}
-
-		if inheritedFrom, ok := data["inherited_from"].(string); ok && inheritedFrom != "" {
-			field.InheritedFromKey = inheritedFrom
-		}
-
-		fields = append(fields, field)
-	}
-
 	return fields, nil
 }
 
@@ -221,37 +214,35 @@ func (s *BusinessObjectFieldService) GetFieldsByCategory(ctx context.Context, bu
 
 // GetParentBO gets the parent business object
 func (s *BusinessObjectFieldService) GetParentBO(ctx context.Context, businessObjectID string) (map[string]interface{}, error) {
-	query := `
-		query GetParentBO($boID: uuid!) {
-			business_objects_by_pk(id: $boID) {
-				parent_bo_id
-				parent_bo {
-					id
-					key
-					display_name
-				}
-			}
-		}
-	`
+	var parentID string
+	err := s.db.GetContext(ctx, &parentID, `
+		SELECT COALESCE(parent_bo_id::text, '') FROM business_objects WHERE id = $1
+	`, businessObjectID)
 
-	result, err := s.hasuraClient.Query(query, map[string]interface{}{
-		"boID": businessObjectID,
-	})
+	if err != nil || parentID == "" {
+		return nil, fmt.Errorf("business object not found or no parent")
+	}
+
+	type parentRow struct {
+		ID          string `db:"id"`
+		Key         string `db:"key"`
+		DisplayName string `db:"display_name"`
+	}
+	var p parentRow
+	err = s.db.GetContext(ctx, &p, `
+		SELECT id, key, COALESCE(display_name, '') as display_name
+		FROM business_objects WHERE id = $1
+	`, parentID)
 
 	if err != nil {
 		return nil, err
 	}
 
-	bo, ok := result["business_objects_by_pk"].(map[string]interface{})
-	if !ok {
-		return nil, fmt.Errorf("business object not found")
-	}
-
-	if parentBO, ok := bo["parent_bo"].(map[string]interface{}); ok {
-		return parentBO, nil
-	}
-
-	return nil, nil
+	return map[string]interface{}{
+		"id":           p.ID,
+		"key":          p.Key,
+		"display_name": p.DisplayName,
+	}, nil
 }
 
 // Helper functions

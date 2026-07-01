@@ -5,14 +5,15 @@
 CREATE SCHEMA IF NOT EXISTS security;
 
 CREATE TABLE IF NOT EXISTS security.identity_profile_mappings (
-    mapping_id        UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    tenant_id         UUID NOT NULL, -- Core isolation fence
-    idp_group_claim   VARCHAR(255) NOT NULL, -- e.g., 'GG-Uisce-Compliance'
-    functional_role   VARCHAR(100) NOT NULL, -- e.g., 'compliance_officer'
-    clearance_level   VARCHAR(50) NOT NULL,  -- e.g., 'L3'
-    created_at        TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+    mapping_id      UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id       UUID NOT NULL, -- Core isolation fence
+    idp_client_id   VARCHAR(100) NOT NULL, -- IdP client / authorized party (azp)
+    idp_group_claim VARCHAR(255) NOT NULL, -- e.g., 'GG-Uisce-Compliance'
+    functional_role VARCHAR(100) NOT NULL, -- e.g., 'compliance_officer'
+    clearance_level VARCHAR(50) NOT NULL,  -- e.g., 'L3'
+    created_at      TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
 
-    CONSTRAINT uq_tenant_group UNIQUE (tenant_id, idp_group_claim)
+    CONSTRAINT uq_client_group UNIQUE (idp_client_id, idp_group_claim)
 );
 
 CREATE INDEX IF NOT EXISTS idx_idp_mappings ON security.identity_profile_mappings(idp_group_claim, tenant_id);

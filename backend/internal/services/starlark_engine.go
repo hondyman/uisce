@@ -12,8 +12,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/hondyman/semlayer/backend/internal/starlib"
-	hasuraclient "github.com/hondyman/semlayer/libs/hasura-client"
+	"github.com/jmoiron/sqlx"
 	"go.starlark.net/starlark"
 	"go.starlark.net/starlarkstruct"
 	"go.starlark.net/syntax"
@@ -47,21 +48,21 @@ type ValidationResponse struct {
 
 // StarlarkEngine provides Workday-style expression evaluation
 type StarlarkEngine struct {
-	hasuraClient *hasuraclient.HasuraClient
-	logger       *zap.Logger
-	cache        map[string]*starlark.Program // Compiled expression cache
-	cacheMu      sync.RWMutex
-	maxSteps     uint64
+	db       *sqlx.DB
+	logger   *zap.Logger
+	cache    map[string]*starlark.Program // Compiled expression cache
+	cacheMu  sync.RWMutex
+	maxSteps uint64
 }
 
 // NewStarlarkEngine creates a new expression engine
-func NewStarlarkEngine(hasuraClient *hasuraclient.HasuraClient) *StarlarkEngine {
+func NewStarlarkEngine(db *sqlx.DB) *StarlarkEngine {
 	logger, _ := zap.NewProduction()
 	return &StarlarkEngine{
-		hasuraClient: hasuraClient,
-		logger:       logger,
-		cache:        make(map[string]*starlark.Program),
-		maxSteps:     1_000_000,
+		db:       db,
+		logger:   logger,
+		cache:    make(map[string]*starlark.Program),
+		maxSteps: 1_000_000,
 	}
 }
 
@@ -1087,126 +1088,115 @@ func (e *StarlarkEngine) builtinFail(_ *starlark.Thread, _ *starlark.Builtin, ar
 
 // GetExpression fetches an expression by ID
 func (e *StarlarkEngine) GetExpression(ctx context.Context, id string) (*Expression, error) {
-	query := `
-		query GetExpression($id: uuid!) {
-			expression_rules_by_pk(id: $id) {
-				id
-				tenant_id
-				business_object_id
-				field_key
-				rule_type
-				name
-				description
-				script
-				is_active
-				version
-			}
-		}
-	`
-
-	result, err := e.hasuraClient.Query(query, map[string]interface{}{"id": id})
-	if err != nil {
-		return nil, err
+	var r struct {
+		ID               string `db:"id"`
+		TenantID         string `db:"tenant_id"`
+		BusinessObjectID string `db:"business_object_id"`
+		FieldKey         string `db:"field_key"`
+		RuleType         string `db:"rule_type"`
+		Name             string `db:"name"`
+		Description      string `db:"description"`
+		Script           string `db:"script"`
+		IsActive         bool   `db:"is_active"`
+		Version          int    `db:"version"`
 	}
 
-	data, ok := result["expression_rules_by_pk"].(map[string]interface{})
-	if !ok {
+	err := e.db.GetContext(ctx, &r, `
+		SELECT id, COALESCE(tenant_id::text,'') as tenant_id,
+		       COALESCE(business_object_id::text,'') as business_object_id,
+		       COALESCE(field_key,'') as field_key, rule_type, name,
+		       COALESCE(description,'') as description, script,
+		       COALESCE(is_active, false) as is_active,
+		       COALESCE(version, 1) as version
+		FROM expression_rules WHERE id = $1
+	`, id)
+
+	if err != nil {
 		return nil, fmt.Errorf("expression not found")
 	}
 
 	return &Expression{
-		ID:               getString(data, "id"),
-		TenantID:         getString(data, "tenant_id"),
-		BusinessObjectID: getString(data, "business_object_id"),
-		FieldKey:         getString(data, "field_key"),
-		RuleType:         ExpressionType(getString(data, "rule_type")),
-		Name:             getString(data, "name"),
-		Description:      getString(data, "description"),
-		Script:           getString(data, "script"),
-		IsActive:         getBool(data, "is_active"),
-		Version:          getInt(data, "version"),
+		ID:               r.ID,
+		TenantID:         r.TenantID,
+		BusinessObjectID: r.BusinessObjectID,
+		FieldKey:         r.FieldKey,
+		RuleType:         ExpressionType(r.RuleType),
+		Name:             r.Name,
+		Description:      r.Description,
+		Script:           r.Script,
+		IsActive:         r.IsActive,
+		Version:          r.Version,
 	}, nil
 }
 
 // SaveExpression creates or updates an expression
 func (e *StarlarkEngine) SaveExpression(ctx context.Context, expr *Expression) (string, error) {
-	mutation := `
-		mutation UpsertExpression($object: expression_rules_insert_input!) {
-			insert_expression_rules_one(
-				object: $object,
-				on_conflict: { constraint: expression_rules_pkey, update_columns: [script, name, description, is_active, version] }
-			) {
-				id
-			}
-		}
-	`
-
-	object := map[string]interface{}{
-		"tenant_id": expr.TenantID,
-		"rule_type": string(expr.RuleType),
-		"name":      expr.Name,
-		"script":    expr.Script,
-		"is_active": expr.IsActive,
-		"version":   expr.Version + 1,
+	if expr.ID == "" {
+		expr.ID = uuid.New().String()
 	}
 
-	if expr.ID != "" {
-		object["id"] = expr.ID
-	}
-	if expr.BusinessObjectID != "" {
-		object["business_object_id"] = expr.BusinessObjectID
-	}
-	if expr.FieldKey != "" {
-		object["field_key"] = expr.FieldKey
-	}
-	if expr.Description != "" {
-		object["description"] = expr.Description
-	}
+	_, err := e.db.ExecContext(ctx, `
+		INSERT INTO expression_rules (
+			id, tenant_id, business_object_id, field_key, rule_type, name,
+			description, script, is_active, version, created_at, updated_at
+		) VALUES (
+			$1, $2, $3, $4, $5, $6,
+			$7, $8, $9, $10, NOW(), NOW()
+		)
+		ON CONFLICT (id) DO UPDATE SET
+			script = EXCLUDED.script,
+			name = EXCLUDED.name,
+			description = EXCLUDED.description,
+			is_active = EXCLUDED.is_active,
+			version = expression_rules.version + 1,
+			updated_at = NOW()
+	`, expr.ID, expr.TenantID, nilIfEmpty(expr.BusinessObjectID), nilIfEmpty(expr.FieldKey),
+		string(expr.RuleType), expr.Name, nilIfEmpty(expr.Description),
+		expr.Script, expr.IsActive, expr.Version+1)
 
-	result, err := e.hasuraClient.Mutate(mutation, map[string]interface{}{"object": object})
 	if err != nil {
 		return "", err
 	}
+	return expr.ID, nil
+}
 
-	data := result["insert_expression_rules_one"].(map[string]interface{})
-	return data["id"].(string), nil
+func nilIfEmpty(s string) interface{} {
+	if s == "" {
+		return nil
+	}
+	return s
 }
 
 // GetExpressionsByBO fetches all expressions for a business object
 func (e *StarlarkEngine) GetExpressionsByBO(ctx context.Context, boID string) ([]*Expression, error) {
-	query := `
-		query GetExpressions($boID: uuid!) {
-			expression_rules(where: { business_object_id: { _eq: $boID }, is_active: { _eq: true } }) {
-				id
-				rule_type
-				name
-				script
-				field_key
-			}
-		}
-	`
-
-	result, err := e.hasuraClient.Query(query, map[string]interface{}{"boID": boID})
-	if err != nil {
-		return nil, err
+	type row struct {
+		ID       string `db:"id"`
+		RuleType string `db:"rule_type"`
+		Name     string `db:"name"`
+		Script   string `db:"script"`
+		FieldKey string `db:"field_key"`
 	}
 
-	items, ok := result["expression_rules"].([]interface{})
-	if !ok {
+	var rows []row
+	err := e.db.SelectContext(ctx, &rows, `
+		SELECT id, rule_type, name, script, COALESCE(field_key,'') as field_key
+		FROM expression_rules
+		WHERE business_object_id = $1 AND is_active = true
+	`, boID)
+
+	if err != nil {
 		return []*Expression{}, nil
 	}
 
-	expressions := make([]*Expression, 0, len(items))
-	for _, item := range items {
-		data := item.(map[string]interface{})
+	expressions := make([]*Expression, 0, len(rows))
+	for _, r := range rows {
 		expressions = append(expressions, &Expression{
-			ID:       getString(data, "id"),
-			RuleType: ExpressionType(getString(data, "rule_type")),
-			Name:     getString(data, "name"),
-			Script:   getString(data, "script"),
-			FieldKey: getString(data, "field_key"),
+			ID:       r.ID,
+			RuleType: ExpressionType(r.RuleType),
+			Name:     r.Name,
+			Script:   r.Script,
+			FieldKey: r.FieldKey,
 		})
 	}
-
 	return expressions, nil
 }

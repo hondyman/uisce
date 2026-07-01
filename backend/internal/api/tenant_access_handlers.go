@@ -398,9 +398,41 @@ func (h *TenantAccessHandlers) getTenantsByUser(r *http.Request, userID string) 
 		return accessibleTenants, nil
 	}
 
-	// 2. Fall back to the persistent tenant binding in the users table.
+	// 2b. Check public.user_tenant assignments (preferred many-to-many mapping).
+	rows, err := h.DB.QueryContext(ctx, `
+		SELECT tenant_id
+		FROM public.user_tenant
+		WHERE user_id = $1
+	`, userID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch user tenant assignments: %w", err)
+	}
+	defer rows.Close()
+
+	var tenantIDs []string
+	for rows.Next() {
+		var tid string
+		if err := rows.Scan(&tid); err != nil {
+			return nil, err
+		}
+		tenantIDs = append(tenantIDs, tid)
+	}
+
+	if len(tenantIDs) > 0 {
+		var accessibleTenants []TenantResponse
+		for _, tid := range tenantIDs {
+			t, err := h.getAllTenantsInternal(ctx, &tid)
+			if err != nil {
+				return nil, err
+			}
+			accessibleTenants = append(accessibleTenants, t...)
+		}
+		return accessibleTenants, nil
+	}
+
+	// 3. Fall back to the persistent tenant binding in the users table.
 	var tenantID sql.NullString
-	err := h.DB.QueryRowContext(ctx, "SELECT tenant_id FROM users WHERE id = $1", userID).Scan(&tenantID)
+	err = h.DB.QueryRowContext(ctx, "SELECT tenant_id FROM users WHERE id = $1", userID).Scan(&tenantID)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			// User has not been provisioned in the platform yet; treat as no accessible tenants.
@@ -410,7 +442,7 @@ func (h *TenantAccessHandlers) getTenantsByUser(r *http.Request, userID string) 
 		return nil, fmt.Errorf("failed to fetch user tenant info: %w", err)
 	}
 
-	// 3. Fetch tenants (with full hierarchy) filtered to the bound tenant.
+	// 4. Fetch tenants (with full hierarchy) filtered to the bound tenant.
 	var targetTenantID *string
 	if tenantID.Valid && tenantID.String != "" {
 		s := tenantID.String

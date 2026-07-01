@@ -8,23 +8,20 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/hondyman/semlayer/backend/internal/bo"
-	hasuraclient "github.com/hondyman/semlayer/libs/hasura-client"
+	"github.com/jmoiron/sqlx"
 	"go.uber.org/zap"
 )
 
 // BusinessProcessService manages business process execution
 type BusinessProcessService struct {
-	client *hasuraclient.HasuraClient
+	db     *sqlx.DB
 	logger *zap.Logger
 }
 
 // NewBusinessProcessService creates a new BusinessProcessService
-func NewBusinessProcessService(client *hasuraclient.HasuraClient) *BusinessProcessService {
+func NewBusinessProcessService(db *sqlx.DB) *BusinessProcessService {
 	logger, _ := zap.NewProduction()
-	return &BusinessProcessService{
-		client: client,
-		logger: logger,
-	}
+	return &BusinessProcessService{db: db, logger: logger}
 }
 
 // StartProcess initiates a new business process instance
@@ -68,31 +65,16 @@ func (s *BusinessProcessService) StartProcess(ctx context.Context, processKey, e
 		instance.Data = dataJSON
 	}
 
-	// Insert instance
-	mutation := `
-		mutation InsertProcessInstance($object: process_instances_insert_input!) {
-			insert_process_instances_one(object: $object) {
-				id
-				status
-				started_at
-			}
-		}
-	`
+	// Insert instance via direct SQL
+	_, err = s.db.ExecContext(ctx, `
+		INSERT INTO process_instances (
+			id, tenant_id, process_id, entity_type, entity_id,
+			current_step_id, status, started_at, data, created_by
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+	`, instance.ID, instance.TenantID, instance.ProcessID, instance.EntityType, instance.EntityID,
+		instance.CurrentStepID, instance.Status, instance.StartedAt,
+		string(instance.Data), instance.CreatedBy)
 
-	object := map[string]interface{}{
-		"id":              instance.ID,
-		"tenant_id":       instance.TenantID,
-		"process_id":      instance.ProcessID,
-		"entity_type":     instance.EntityType,
-		"entity_id":       instance.EntityID,
-		"current_step_id": instance.CurrentStepID,
-		"status":          instance.Status,
-		"started_at":      instance.StartedAt,
-		"data":            string(instance.Data),
-		"created_by":      instance.CreatedBy,
-	}
-
-	_, err = s.client.Mutate(mutation, map[string]interface{}{"object": object})
 	if err != nil {
 		return nil, fmt.Errorf("failed to create instance: %w", err)
 	}
@@ -112,7 +94,6 @@ func (s *BusinessProcessService) StartProcess(ctx context.Context, processKey, e
 
 // AdvanceProcess moves the process to the next step
 func (s *BusinessProcessService) AdvanceProcess(ctx context.Context, instanceID, action, actor, comments string, data map[string]interface{}) error {
-	// Get current instance
 	instance, err := s.GetInstance(ctx, instanceID)
 	if err != nil {
 		return fmt.Errorf("failed to get instance: %w", err)
@@ -122,13 +103,11 @@ func (s *BusinessProcessService) AdvanceProcess(ctx context.Context, instanceID,
 		return fmt.Errorf("process already %s", instance.Status)
 	}
 
-	// Get all steps
 	steps, err := s.GetProcessSteps(ctx, instance.ProcessID)
 	if err != nil {
 		return fmt.Errorf("failed to get steps: %w", err)
 	}
 
-	// Find current step index
 	currentIdx := -1
 	for i, step := range steps {
 		if instance.CurrentStepID != nil && step.ID == *instance.CurrentStepID {
@@ -137,21 +116,17 @@ func (s *BusinessProcessService) AdvanceProcess(ctx context.Context, instanceID,
 		}
 	}
 
-	// Record action on current step
 	if instance.CurrentStepID != nil {
 		s.recordStepHistory(ctx, instanceID, *instance.CurrentStepID, action, actor, comments, data)
 	}
 
-	// Handle action
 	switch action {
 	case "approved", "completed", "skipped":
-		// Move to next step
 		if currentIdx < len(steps)-1 {
 			nextStep := steps[currentIdx+1]
 			s.updateInstanceStep(ctx, instanceID, nextStep.ID, "in_progress")
 			s.recordStepHistory(ctx, instanceID, nextStep.ID, "started", actor, "", nil)
 		} else {
-			// Last step - complete process
 			s.completeProcess(ctx, instanceID)
 		}
 
@@ -162,7 +137,6 @@ func (s *BusinessProcessService) AdvanceProcess(ctx context.Context, instanceID,
 		s.updateInstanceStatus(ctx, instanceID, "cancelled")
 
 	default:
-		// Just update data, stay on current step
 		if data != nil {
 			s.updateInstanceData(ctx, instanceID, data)
 		}
@@ -178,374 +152,283 @@ func (s *BusinessProcessService) CompleteProcess(ctx context.Context, instanceID
 
 // GetProcessByKey fetches a process definition by key
 func (s *BusinessProcessService) GetProcessByKey(ctx context.Context, key string) (*bo.BusinessProcess, error) {
-	query := `
-		query GetProcessByKey($key: String!) {
-			business_processes(where: { key: { _eq: $key } }, limit: 1) {
-				id
-				tenant_id
-				key
-				name
-				display_name
-				description
-				category
-				status
-				version
-				is_system
-			}
-		}
-	`
+	var p struct {
+		ID          string `db:"id"`
+		TenantID    string `db:"tenant_id"`
+		Key         string `db:"key"`
+		Name        string `db:"name"`
+		DisplayName string `db:"display_name"`
+		Description string `db:"description"`
+		Category    string `db:"category"`
+		Status      string `db:"status"`
+		IsSystem    bool   `db:"is_system"`
+	}
 
-	result, err := s.client.Query(query, map[string]interface{}{"key": key})
+	err := s.db.GetContext(ctx, &p, `
+		SELECT id, COALESCE(tenant_id::text,'') as tenant_id, key, name,
+		       COALESCE(display_name,'') as display_name, COALESCE(description,'') as description,
+		       COALESCE(category,'') as category, COALESCE(status,'') as status,
+		       COALESCE(is_system, false) as is_system
+		FROM business_processes WHERE key = $1 LIMIT 1
+	`, key)
+
 	if err != nil {
-		return nil, err
+		return nil, nil // not found
 	}
 
-	processes, ok := result["business_processes"].([]interface{})
-	if !ok || len(processes) == 0 {
-		return nil, nil
-	}
-
-	data := processes[0].(map[string]interface{})
 	return &bo.BusinessProcess{
-		ID:          data["id"].(string),
-		TenantID:    getString(data, "tenant_id"),
-		Key:         getString(data, "key"),
-		Name:        getString(data, "name"),
-		DisplayName: getString(data, "display_name"),
-		Description: getString(data, "description"),
-		Category:    getString(data, "category"),
-		Status:      getString(data, "status"),
-		IsSystem:    getBool(data, "is_system"),
+		ID:          p.ID,
+		TenantID:    p.TenantID,
+		Key:         p.Key,
+		Name:        p.Name,
+		DisplayName: p.DisplayName,
+		Description: p.Description,
+		Category:    p.Category,
+		Status:      p.Status,
+		IsSystem:    p.IsSystem,
 	}, nil
 }
 
 // GetProcessSteps fetches all steps for a process
 func (s *BusinessProcessService) GetProcessSteps(ctx context.Context, processID string) ([]*bo.ProcessStep, error) {
-	query := `
-		query GetProcessSteps($process_id: String!) {
-			process_steps(
-				where: { process_id: { _eq: $process_id } }
-				order_by: { sequence: asc }
-			) {
-				id
-				tenant_id
-				process_id
-				key
-				name
-				display_name
-				step_type
-				sequence
-				config
-				is_required
-			}
-		}
-	`
-
-	result, err := s.client.Query(query, map[string]interface{}{"process_id": processID})
-	if err != nil {
-		return nil, err
+	type row struct {
+		ID          string `db:"id"`
+		TenantID    string `db:"tenant_id"`
+		ProcessID   string `db:"process_id"`
+		Key         string `db:"key"`
+		Name        string `db:"name"`
+		DisplayName string `db:"display_name"`
+		StepType    string `db:"step_type"`
+		Sequence    int    `db:"sequence"`
+		Config      string `db:"config"`
+		IsRequired  bool   `db:"is_required"`
 	}
 
-	items, ok := result["process_steps"].([]interface{})
-	if !ok {
+	var rows []row
+	err := s.db.SelectContext(ctx, &rows, `
+		SELECT id, COALESCE(tenant_id::text,'') as tenant_id, process_id,
+		       key, name, COALESCE(display_name,'') as display_name,
+		       COALESCE(step_type,'') as step_type, sequence,
+		       COALESCE(config::text,'{}') as config,
+		       COALESCE(is_required, false) as is_required
+		FROM process_steps
+		WHERE process_id = $1
+		ORDER BY sequence
+	`, processID)
+
+	if err != nil {
 		return []*bo.ProcessStep{}, nil
 	}
 
-	steps := make([]*bo.ProcessStep, 0, len(items))
-	for _, item := range items {
-		data := item.(map[string]interface{})
+	steps := make([]*bo.ProcessStep, 0, len(rows))
+	for _, r := range rows {
 		step := &bo.ProcessStep{
-			ID:          data["id"].(string),
-			TenantID:    getString(data, "tenant_id"),
-			ProcessID:   getString(data, "process_id"),
-			Key:         getString(data, "key"),
-			Name:        getString(data, "name"),
-			DisplayName: getString(data, "display_name"),
-			StepType:    getString(data, "step_type"),
-			Sequence:    int(data["sequence"].(float64)),
-			IsRequired:  getBool(data, "is_required"),
+			ID:          r.ID,
+			TenantID:    r.TenantID,
+			ProcessID:   r.ProcessID,
+			Key:         r.Key,
+			Name:        r.Name,
+			DisplayName: r.DisplayName,
+			StepType:    r.StepType,
+			Sequence:    r.Sequence,
+			IsRequired:  r.IsRequired,
 		}
-		if cfg, ok := data["config"].(map[string]interface{}); ok {
-			step.Config, _ = json.Marshal(cfg)
-		}
+		step.Config = json.RawMessage(r.Config)
 		steps = append(steps, step)
 	}
-
 	return steps, nil
 }
 
 // GetInstance fetches a process instance by ID
 func (s *BusinessProcessService) GetInstance(ctx context.Context, instanceID string) (*bo.ProcessInstance, error) {
-	query := `
-		query GetInstance($id: String!) {
-			process_instances_by_pk(id: $id) {
-				id
-				tenant_id
-				process_id
-				entity_type
-				entity_id
-				current_step_id
-				status
-				started_at
-				completed_at
-				data
-				created_by
-			}
-		}
-	`
-
-	result, err := s.client.Query(query, map[string]interface{}{"id": instanceID})
-	if err != nil {
-		return nil, err
+	var r struct {
+		ID            string  `db:"id"`
+		TenantID      string  `db:"tenant_id"`
+		ProcessID     string  `db:"process_id"`
+		EntityType    string  `db:"entity_type"`
+		EntityID      string  `db:"entity_id"`
+		CurrentStepID *string `db:"current_step_id"`
+		Status        string  `db:"status"`
+		CreatedBy     string  `db:"created_by"`
 	}
 
-	data, ok := result["process_instances_by_pk"].(map[string]interface{})
-	if !ok || data == nil {
+	err := s.db.GetContext(ctx, &r, `
+		SELECT id, COALESCE(tenant_id::text,'') as tenant_id, process_id,
+		       entity_type, entity_id, current_step_id::text, status, COALESCE(created_by,'') as created_by
+		FROM process_instances WHERE id = $1
+	`, instanceID)
+
+	if err != nil {
 		return nil, fmt.Errorf("instance not found: %s", instanceID)
 	}
 
-	instance := &bo.ProcessInstance{
-		ID:         data["id"].(string),
-		TenantID:   getString(data, "tenant_id"),
-		ProcessID:  getString(data, "process_id"),
-		EntityType: getString(data, "entity_type"),
-		EntityID:   getString(data, "entity_id"),
-		Status:     getString(data, "status"),
-		CreatedBy:  getString(data, "created_by"),
-	}
-
-	if stepID, ok := data["current_step_id"].(string); ok {
-		instance.CurrentStepID = &stepID
-	}
-
-	return instance, nil
+	return &bo.ProcessInstance{
+		ID:            r.ID,
+		TenantID:      r.TenantID,
+		ProcessID:     r.ProcessID,
+		EntityType:    r.EntityType,
+		EntityID:      r.EntityID,
+		CurrentStepID: r.CurrentStepID,
+		Status:        r.Status,
+		CreatedBy:     r.CreatedBy,
+	}, nil
 }
 
 // GetInstanceHistory fetches the step history for an instance
 func (s *BusinessProcessService) GetInstanceHistory(ctx context.Context, instanceID string) ([]*bo.StepHistory, error) {
-	query := `
-		query GetInstanceHistory($instance_id: String!) {
-			step_history(
-				where: { instance_id: { _eq: $instance_id } }
-				order_by: { created_at: asc }
-			) {
-				id
-				instance_id
-				step_id
-				action
-				actor
-				comments
-				data
-				created_at
-			}
-		}
-	`
-
-	result, err := s.client.Query(query, map[string]interface{}{"instance_id": instanceID})
-	if err != nil {
-		return nil, err
+	type row struct {
+		ID         string `db:"id"`
+		InstanceID string `db:"instance_id"`
+		StepID     string `db:"step_id"`
+		Action     string `db:"action"`
+		Actor      string `db:"actor"`
+		Comments   string `db:"comments"`
 	}
 
-	items, ok := result["step_history"].([]interface{})
-	if !ok {
+	var rows []row
+	err := s.db.SelectContext(ctx, &rows, `
+		SELECT id, instance_id, step_id, action, actor, COALESCE(comments,'') as comments
+		FROM step_history
+		WHERE instance_id = $1
+		ORDER BY created_at ASC
+	`, instanceID)
+
+	if err != nil {
 		return []*bo.StepHistory{}, nil
 	}
 
-	history := make([]*bo.StepHistory, 0, len(items))
-	for _, item := range items {
-		data := item.(map[string]interface{})
-		h := &bo.StepHistory{
-			ID:         data["id"].(string),
-			InstanceID: getString(data, "instance_id"),
-			StepID:     getString(data, "step_id"),
-			Action:     getString(data, "action"),
-			Actor:      getString(data, "actor"),
-			Comments:   getString(data, "comments"),
-		}
-		history = append(history, h)
+	history := make([]*bo.StepHistory, 0, len(rows))
+	for _, r := range rows {
+		history = append(history, &bo.StepHistory{
+			ID:         r.ID,
+			InstanceID: r.InstanceID,
+			StepID:     r.StepID,
+			Action:     r.Action,
+			Actor:      r.Actor,
+			Comments:   r.Comments,
+		})
 	}
-
 	return history, nil
 }
 
 // ListProcesses fetches all available business processes
 func (s *BusinessProcessService) ListProcesses(ctx context.Context, category string) ([]*bo.BusinessProcess, error) {
-	query := `
-		query ListProcesses($category: String) {
-			business_processes(
-				where: { category: { _eq: $category }, status: { _eq: "active" } }
-				order_by: { name: asc }
-			) {
-				id
-				key
-				name
-				display_name
-				description
-				category
-				is_system
-			}
-		}
-	`
+	type row struct {
+		ID          string `db:"id"`
+		Key         string `db:"key"`
+		Name        string `db:"name"`
+		DisplayName string `db:"display_name"`
+		Description string `db:"description"`
+		Category    string `db:"category"`
+		IsSystem    bool   `db:"is_system"`
+	}
 
-	vars := map[string]interface{}{}
+	var rows []row
+	var err error
 	if category != "" {
-		vars["category"] = category
+		err = s.db.SelectContext(ctx, &rows, `
+			SELECT id, key, name, COALESCE(display_name,'') as display_name,
+			       COALESCE(description,'') as description,
+			       COALESCE(category,'') as category, COALESCE(is_system, false) as is_system
+			FROM business_processes
+			WHERE category = $1 AND status = 'active'
+			ORDER BY name
+		`, category)
+	} else {
+		err = s.db.SelectContext(ctx, &rows, `
+			SELECT id, key, name, COALESCE(display_name,'') as display_name,
+			       COALESCE(description,'') as description,
+			       COALESCE(category,'') as category, COALESCE(is_system, false) as is_system
+			FROM business_processes
+			WHERE status = 'active'
+			ORDER BY name
+		`)
 	}
 
-	result, err := s.client.Query(query, vars)
 	if err != nil {
-		return nil, err
-	}
-
-	items, ok := result["business_processes"].([]interface{})
-	if !ok {
 		return []*bo.BusinessProcess{}, nil
 	}
 
-	processes := make([]*bo.BusinessProcess, 0, len(items))
-	for _, item := range items {
-		data := item.(map[string]interface{})
-		p := &bo.BusinessProcess{
-			ID:          data["id"].(string),
-			Key:         getString(data, "key"),
-			Name:        getString(data, "name"),
-			DisplayName: getString(data, "display_name"),
-			Description: getString(data, "description"),
-			Category:    getString(data, "category"),
-			IsSystem:    getBool(data, "is_system"),
-		}
-		processes = append(processes, p)
+	processes := make([]*bo.BusinessProcess, 0, len(rows))
+	for _, r := range rows {
+		processes = append(processes, &bo.BusinessProcess{
+			ID:          r.ID,
+			Key:         r.Key,
+			Name:        r.Name,
+			DisplayName: r.DisplayName,
+			Description: r.Description,
+			Category:    r.Category,
+			IsSystem:    r.IsSystem,
+		})
 	}
-
 	return processes, nil
 }
 
 // ListInstancesForEntity fetches all process instances for an entity
 func (s *BusinessProcessService) ListInstancesForEntity(ctx context.Context, entityType, entityID string) ([]*bo.ProcessInstance, error) {
-	query := `
-		query ListInstancesForEntity($entity_type: String!, $entity_id: String!) {
-			process_instances(
-				where: { entity_type: { _eq: $entity_type }, entity_id: { _eq: $entity_id } }
-				order_by: { started_at: desc }
-			) {
-				id
-				process_id
-				status
-				started_at
-				completed_at
-				created_by
-			}
-		}
-	`
-
-	result, err := s.client.Query(query, map[string]interface{}{
-		"entity_type": entityType,
-		"entity_id":   entityID,
-	})
-	if err != nil {
-		return nil, err
+	type row struct {
+		ID        string `db:"id"`
+		ProcessID string `db:"process_id"`
+		Status    string `db:"status"`
+		CreatedBy string `db:"created_by"`
 	}
 
-	items, ok := result["process_instances"].([]interface{})
-	if !ok {
+	var rows []row
+	err := s.db.SelectContext(ctx, &rows, `
+		SELECT id, process_id, status, COALESCE(created_by,'') as created_by
+		FROM process_instances
+		WHERE entity_type = $1 AND entity_id = $2
+		ORDER BY started_at DESC
+	`, entityType, entityID)
+
+	if err != nil {
 		return []*bo.ProcessInstance{}, nil
 	}
 
-	instances := make([]*bo.ProcessInstance, 0, len(items))
-	for _, item := range items {
-		data := item.(map[string]interface{})
-		inst := &bo.ProcessInstance{
-			ID:         data["id"].(string),
-			ProcessID:  getString(data, "process_id"),
+	instances := make([]*bo.ProcessInstance, 0, len(rows))
+	for _, r := range rows {
+		instances = append(instances, &bo.ProcessInstance{
+			ID:         r.ID,
+			ProcessID:  r.ProcessID,
 			EntityType: entityType,
 			EntityID:   entityID,
-			Status:     getString(data, "status"),
-			CreatedBy:  getString(data, "created_by"),
-		}
-		instances = append(instances, inst)
+			Status:     r.Status,
+			CreatedBy:  r.CreatedBy,
+		})
 	}
-
 	return instances, nil
 }
 
 // Helper methods
 
 func (s *BusinessProcessService) completeProcess(ctx context.Context, instanceID string) error {
-	mutation := `
-		mutation CompleteProcess($id: String!, $completed_at: timestamptz!) {
-			update_process_instances_by_pk(
-				pk_columns: { id: $id }
-				_set: { status: "completed", completed_at: $completed_at }
-			) {
-				id
-				status
-			}
-		}
-	`
-	_, err := s.client.Mutate(mutation, map[string]interface{}{
-		"id":           instanceID,
-		"completed_at": time.Now(),
-	})
+	_, err := s.db.ExecContext(ctx, `
+		UPDATE process_instances SET status = 'completed', completed_at = NOW()
+		WHERE id = $1
+	`, instanceID)
 	return err
 }
 
 func (s *BusinessProcessService) updateInstanceStep(ctx context.Context, instanceID, stepID, status string) error {
-	mutation := `
-		mutation UpdateInstanceStep($id: String!, $step_id: String!, $status: String!) {
-			update_process_instances_by_pk(
-				pk_columns: { id: $id }
-				_set: { current_step_id: $step_id, status: $status }
-			) {
-				id
-			}
-		}
-	`
-
-	_, err := s.client.Mutate(mutation, map[string]interface{}{
-		"id":      instanceID,
-		"step_id": stepID,
-		"status":  status,
-	})
+	_, err := s.db.ExecContext(ctx, `
+		UPDATE process_instances SET current_step_id = $2, status = $3
+		WHERE id = $1
+	`, instanceID, stepID, status)
 	return err
 }
 
 func (s *BusinessProcessService) updateInstanceStatus(ctx context.Context, instanceID, status string) error {
-	mutation := `
-		mutation UpdateInstanceStatus($id: String!, $status: String!) {
-			update_process_instances_by_pk(
-				pk_columns: { id: $id }
-				_set: { status: $status }
-			) {
-				id
-			}
-		}
-	`
-
-	_, err := s.client.Mutate(mutation, map[string]interface{}{
-		"id":     instanceID,
-		"status": status,
-	})
+	_, err := s.db.ExecContext(ctx, `
+		UPDATE process_instances SET status = $2 WHERE id = $1
+	`, instanceID, status)
 	return err
 }
 
 func (s *BusinessProcessService) updateInstanceData(ctx context.Context, instanceID string, data map[string]interface{}) error {
 	dataJSON, _ := json.Marshal(data)
-
-	mutation := `
-		mutation UpdateInstanceData($id: String!, $data: jsonb!) {
-			update_process_instances_by_pk(
-				pk_columns: { id: $id }
-				_set: { data: $data }
-			) {
-				id
-			}
-		}
-	`
-
-	_, err := s.client.Mutate(mutation, map[string]interface{}{
-		"id":   instanceID,
-		"data": string(dataJSON),
-	})
+	_, err := s.db.ExecContext(ctx, `
+		UPDATE process_instances SET data = $2 WHERE id = $1
+	`, instanceID, string(dataJSON))
 	return err
 }
 
@@ -553,28 +436,14 @@ func (s *BusinessProcessService) recordStepHistory(ctx context.Context, instance
 	var dataJSON json.RawMessage
 	if data != nil {
 		dataJSON, _ = json.Marshal(data)
+	} else {
+		dataJSON = json.RawMessage("{}")
 	}
 
-	mutation := `
-		mutation InsertStepHistory($object: step_history_insert_input!) {
-			insert_step_history_one(object: $object) {
-				id
-			}
-		}
-	`
-
-	object := map[string]interface{}{
-		"id":          uuid.New().String(),
-		"instance_id": instanceID,
-		"step_id":     stepID,
-		"action":      action,
-		"actor":       actor,
-		"comments":    comments,
-		"data":        string(dataJSON),
-		"created_at":  time.Now(),
-	}
-
-	_, err := s.client.Mutate(mutation, map[string]interface{}{"object": object})
+	_, err := s.db.ExecContext(ctx, `
+		INSERT INTO step_history (id, instance_id, step_id, action, actor, comments, data, created_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
+	`, uuid.New().String(), instanceID, stepID, action, actor, comments, string(dataJSON))
 	return err
 }
 
