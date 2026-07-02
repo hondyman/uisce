@@ -39,6 +39,7 @@ import {
   Edit as EditIcon
 } from '@mui/icons-material';
 import { useAuthFetch } from '../../../utils/authFetch';
+import { useAccess } from '../../../contexts/AccessContext';
 
 interface Tenant {
   id: string;
@@ -68,7 +69,9 @@ interface TenantAccessMapping {
 const TenantUserAssignmentPage: React.FC = () => {
   const theme = useTheme();
   const { authFetch } = useAuthFetch();
-  
+  const { isPlatformOperator, accessLevel, accessibleTenants } = useAccess();
+  const isTenantManager = isPlatformOperator || accessLevel === 'tenant_admin';
+
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedTenantFilter, setSelectedTenantFilter] = useState<string>('all');
   
@@ -124,6 +127,25 @@ const TenantUserAssignmentPage: React.FC = () => {
   useEffect(() => {
     fetchData();
   }, []);
+
+  if (!isTenantManager) {
+    return (
+      <Box sx={{ p: 3 }}>
+        <Alert severity="error">
+          You do not have permission to manage tenant access. Please contact a platform administrator.
+        </Alert>
+      </Box>
+    );
+  }
+
+  // For tenant managers that are not platform operators, scope the view to their
+  // single assigned tenant.
+  useEffect(() => {
+    if (!isPlatformOperator && accessibleTenants.length === 1) {
+      setSelectedTenantFilter(accessibleTenants[0].id);
+      setSelectedTenantId(accessibleTenants[0].id);
+    }
+  }, [isPlatformOperator, accessibleTenants]);
 
   // Map tenant details by ID
   const tenantMap = useMemo(() => {
@@ -442,7 +464,7 @@ const TenantUserAssignmentPage: React.FC = () => {
             />
 
             {/* Tenant Selection */}
-            <FormControl fullWidth size="small">
+            <FormControl fullWidth size="small" disabled={!isPlatformOperator && tenants.length <= 1}>
               <InputLabel>Select Tenant</InputLabel>
               <Select
                 value={selectedTenantId}
