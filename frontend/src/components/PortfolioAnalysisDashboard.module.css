@@ -1,4 +1,0 @@
-.progressInner {
-  width: var(--progress-width);
-  transition: width 0.25s ease-in-out;
-}

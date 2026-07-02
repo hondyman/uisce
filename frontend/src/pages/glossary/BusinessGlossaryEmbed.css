@@ -1,9 +1,0 @@
-.glossary-embed .business-glossary-header {
-  display: none !important;
-}
-
-.glossary-embed .business-glossary-page {
-  /* ensure embedded layout fits inside tab */
-  margin: 0;
-  padding: 0;
-}

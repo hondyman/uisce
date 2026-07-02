@@ -11,7 +11,7 @@ make keycloak-setup
 # or, with non-default values:
 KEYCLOAK_URL=https://100.84.50.65:8443 \
 KEYCLOAK_ADMIN=admin \
-KEYCLOAK_ADMIN_PASS=password \
+KEYCLOAK_ADMIN_PASS=Gu1nness! \
 ./scripts/setup-keycloak-realm.sh
 ```
 
