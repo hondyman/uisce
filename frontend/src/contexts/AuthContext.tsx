@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback, useRef } from 'react';
 import { User as OidcUser } from 'oidc-client-ts';
-import { devLog, devWarn, devError } from '../utils/devLogger';
+import { devLog, devError } from '../utils/devLogger';
 import { userManager } from '../config/oidc';
 import { useToast } from '../hooks/use-toast';
 
@@ -17,6 +17,12 @@ interface User {
   isCoreAdmin?: boolean;
   is_admin?: boolean;
   is_global_admin?: boolean;
+  /** Raw Keycloak groups claim (group paths / names) */
+  groups?: string[];
+  /** Top-level `operator_role` claim injected by the Keycloak profile scope */
+  operator_role?: string;
+  /** Nested `uisce_metadata` claim from Keycloak, if present */
+  uisce_metadata?: Record<string, unknown>;
   /** Tenant assignments for multi-tenant access control */
   tenant_assignments?: Array<{
     tenantId: string;
@@ -24,12 +30,6 @@ interface User {
     accessLevel: 'platform_operator' | 'tenant_admin' | 'tenant_user';
     isReadOnly?: boolean;
   }>;
-}
-
-export interface UserEntitlements {
-  user_id: string;
-  functional_role?: string;
-  capabilities: Record<string, boolean>;
 }
 
 interface AuthContextType {
@@ -53,10 +53,6 @@ interface AuthContextType {
   refreshToken: () => Promise<void>;
   isTokenExpired: () => boolean;
   getValidToken: () => Promise<string | null>;
-  /** Capability map resolved by the backend ABAC engine */
-  entitlements: UserEntitlements | null;
-  /** True while the entitlement fetch is in flight */
-  entitlementsLoading: boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -101,6 +97,23 @@ function extractRoles(profile: Record<string, unknown>): string[] {
   return [...new Set(roles)];
 }
 
+// Recognise the platform-operator status from a Keycloak `groups` claim.
+// Keycloak emits the *path* of the group (e.g. "/Uisce-Global-Admins") when full.path=true,
+// or just the leaf name (e.g. "Uisce-Global-Admins") otherwise. Be permissive.
+const GLOBAL_ADMIN_GROUP_RE = /(^|\/)uisce[-_ ]?global[-_ ]?admins?$/i;
+const GLOBAL_OPS_GROUP_RE = /(^|\/)uisce[-_ ]?(global[-_ ]?ops|ops)$/i;
+
+function extractGroups(profile: Record<string, unknown>): string[] {
+  const result: string[] = [];
+  const raw = profile.groups;
+  if (Array.isArray(raw)) {
+    for (const g of raw) {
+      if (typeof g === 'string') result.push(g);
+    }
+  }
+  return result;
+}
+
 function mapProfileToUser(profile: Record<string, unknown>, roles: string[]): User {
   const email = (profile.email as string) || (profile.preferred_username as string) || '';
   const name =
@@ -113,12 +126,24 @@ function mapProfileToUser(profile: Record<string, unknown>, roles: string[]): Us
   );
 
   // Global admin check: read from the custom uisce_metadata claim injected by Keycloak,
-  // OR fall back to checking the roles array for global_admin / global_ops.
+  // OR fall back to checking the roles array for global_admin / global_ops,
+  // OR recognise the federated IdP group (Uisce-Global-Admins) when present.
   const uisceMetadata = profile.uisce_metadata as Record<string, unknown> | undefined;
+  const operatorRole = (profile.operator_role as string | undefined) || '';
+  const groups = extractGroups(profile);
+
+  const hasGlobalAdminGroup = groups.some((g) => GLOBAL_ADMIN_GROUP_RE.test(g));
+  const hasGlobalOpsGroup = groups.some((g) => GLOBAL_OPS_GROUP_RE.test(g));
+
   const isGlobalAdmin =
     uisceMetadata?.is_global_admin === true ||
+    uisceMetadata?.operator_role === 'global_admin' ||
+    operatorRole === 'global_admin' ||
+    operatorRole === 'global_ops' ||
     roles.includes('global_admin') ||
-    roles.includes('global_ops');
+    roles.includes('global_ops') ||
+    hasGlobalAdminGroup ||
+    hasGlobalOpsGroup;
 
   return {
     id: (profile.sub as string) || (profile.preferred_username as string) || email,
@@ -129,6 +154,9 @@ function mapProfileToUser(profile: Record<string, unknown>, roles: string[]): Us
     permissions: [],
     is_active: true,
     roles,
+    groups,
+    operator_role: operatorRole || undefined,
+    uisce_metadata: uisceMetadata,
     is_core_admin: isCoreAdmin,
     isCoreAdmin: isCoreAdmin,
     is_admin: isCoreAdmin || roles.includes('admin'),
@@ -177,8 +205,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [refreshTokenValue, setRefreshTokenValue] = useState<string | null>(null);
   const [tokenExpiresAt, setTokenExpiresAt] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [entitlements, setEntitlements] = useState<UserEntitlements | null>(null);
-  const [entitlementsLoading, setEntitlementsLoading] = useState(false);
   const oidcUserRef = useRef<OidcUser | null>(null);
   const toast = useToast();
 
@@ -340,48 +366,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     return current.id_token || current.access_token || null;
   }, [hydrateFromOidcUser, refreshToken]);
 
-  const fetchEntitlements = useCallback(async (): Promise<void> => {
-    const validToken = await getValidToken();
-    if (!validToken) {
-      setEntitlements(null);
-      return;
-    }
-
-    setEntitlementsLoading(true);
-    try {
-      const response = await fetch('/api/auth/me/entitlements', {
-        headers: {
-          Authorization: `Bearer ${validToken}`,
-        },
-        credentials: import.meta.env.DEV ? 'include' : 'same-origin',
-      });
-
-      if (!response.ok) {
-        devWarn(`Failed to fetch entitlements: ${response.status} ${response.statusText}`);
-        setEntitlements(null);
-        return;
-      }
-
-      const data = (await response.json()) as UserEntitlements;
-      setEntitlements(data);
-      devLog('Loaded user entitlements', data);
-    } catch (error) {
-      devError('Failed to fetch entitlements:', error);
-      setEntitlements(null);
-    } finally {
-      setEntitlementsLoading(false);
-    }
-  }, [getValidToken]);
-
-  // Fetch entitlements whenever the authenticated user changes.
-  useEffect(() => {
-    if (user && token && !isTokenExpired()) {
-      void fetchEntitlements();
-    } else {
-      setEntitlements(null);
-    }
-  }, [user, token, tokenExpiresAt, fetchEntitlements]);
-
   const computeIsCoreAdmin = (): boolean => {
     const u: any = user;
     if (!u) return false;
@@ -432,8 +416,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     refreshToken,
     isTokenExpired,
     getValidToken,
-    entitlements,
-    entitlementsLoading,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
