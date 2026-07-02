@@ -4,7 +4,10 @@ import path from 'path'
 
 // Get backend host from environment or use defaults
 // Backend + Auth run in LOCAL compose on MacBook
-// Hasura (GraphQL) runs on REMOTE server - NEVER on localhost
+// GraphQL (/v1/graphql) is served by the local platform backend on PLATFORM_BACKEND_HOST
+// (semlayer-backend, default :8083) — the platform mounts /v1/graphql itself. The
+// previous default of 100.84.126.19:8085 was a remote Hasura on a Tailscale IP that is
+// no longer reachable; use the local platform backend instead.
 //
 // IMPORTANT: All /api/* routes (auth, tenants, admin, catalog, glossary,
 // node-types, edge-types, semantic-bundles, etc.) are served by the "full"
@@ -15,7 +18,7 @@ import path from 'path'
 // the BusinessTermsTab / Glossary / Catalog pages all 404.
 const BACKEND_HOST = process.env.VITE_BACKEND_HOST || process.env.BACKEND_HOST || 'http://localhost:8082';
 const PLATFORM_BACKEND_HOST = process.env.VITE_PLATFORM_BACKEND_HOST || process.env.PLATFORM_BACKEND_HOST || 'http://localhost:8083';
-const GRAPHQL_HOST = process.env.VITE_GRAPHQL_HOST || process.env.GRAPHQL_HOST || 'http://100.84.126.19:8085';
+const GRAPHQL_HOST = process.env.VITE_GRAPHQL_HOST || process.env.GRAPHQL_HOST || 'http://localhost:8083';
 
 console.log('[Vite Config] Backend Host:', BACKEND_HOST);
 console.log('[Vite Config] Platform Backend Host:', PLATFORM_BACKEND_HOST);
