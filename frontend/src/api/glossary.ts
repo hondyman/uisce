@@ -4,6 +4,7 @@ import { useTenant } from '../contexts/TenantContext';
 import { useApolloClient, useQuery as useApolloQuery, gql } from '@apollo/client';
 import { devDebug } from '../utils/devLogger';
 import { getSelectedRegion } from '../lib/region';
+import { apiFetch } from '../lib/apiClient';
 
 // Types for Glossary
 export interface CatalogNode {
@@ -90,14 +91,8 @@ export function useSemanticTerms() {
         params.append('tenant_instance_id', datasource.id);
       }
 
-      const res = await fetch(`/api/glossary/semantic-terms?${params.toString()}`, {
-        credentials: 'include',
-        headers: {
-          ...(tenant?.id && { 'X-Tenant-ID': tenant.id }),
-          ...(datasource?.id && { 'X-Tenant-Datasource-ID': datasource.id }),
-          'X-Tenant-Region': getSelectedRegion(),
-        },
-      });
+      // apiFetch auto-injects Authorization: Bearer <jwt> + tenant headers.
+      const res = await apiFetch(`/api/glossary/semantic-terms?${params.toString()}`);
 
       if (!res.ok) {
         const error = await res.text();
@@ -128,21 +123,14 @@ export function useBusinessTerms() {
       }
 
       // Fallback to /api/catalog/nodes which works; filter client-side for business_term type
-      const res = await fetch(`/api/catalog/nodes?${params.toString()}`, {
-        credentials: 'include',
-        headers: {
-          ...(tenant?.id && { 'X-Tenant-ID': tenant.id }),
-          ...(datasource?.id && { 'X-Tenant-Datasource-ID': datasource.id }),
-          'X-Tenant-Region': getSelectedRegion(),
-        },
-      });
+      const res = await apiFetch(`/api/catalog/nodes?${params.toString()}`);
 
       if (!res.ok) {
         const error = await res.text();
         throw new Error(error || 'Failed to fetch business terms');
       }
 
-      const allNodes = (await res.json() as CatalogNode[]) || [];
+      const allNodes = ((await res.json()) as CatalogNode[]) || [];
       // Filter for business_term nodes
       const businessTerms = allNodes.filter(
         (node) => node.catalog_type === 'business_term'
@@ -171,9 +159,9 @@ export function useGlossaryEdges() {
 // GraphQL query for all semantic data (includes qualified_path for relationships display)
 const GET_ALL_SEMANTIC_DATA = gql`
   query GetAllSemanticData(
-    $datasourceId: uuid!, 
-    $businessTermTypeId: uuid!, 
-    $semanticTermTypeId: uuid!, 
+    $datasourceId: uuid!,
+    $businessTermTypeId: uuid!,
+    $semanticTermTypeId: uuid!,
     $semanticColumnTypeId: uuid!,
     $calculationTypeId: uuid!,
     $calculationTermTypeId: uuid!,
@@ -197,7 +185,7 @@ const GET_ALL_SEMANTIC_DATA = gql`
       created_at
       updated_at
     }
-    
+
     # Semantic Terms
     semantic_terms: catalog_node(
       where: {
@@ -216,7 +204,7 @@ const GET_ALL_SEMANTIC_DATA = gql`
       created_at
       updated_at
     }
-    
+
     # Semantic Columns
     semantic_columns: catalog_node(
       where: {
@@ -254,7 +242,7 @@ const GET_ALL_SEMANTIC_DATA = gql`
       created_at
       updated_at
     }
-    
+
     # All catalog nodes for qualified path lookup
     all_nodes: catalog_node(
       where: {
@@ -267,7 +255,7 @@ const GET_ALL_SEMANTIC_DATA = gql`
       node_type_id
       # Removed node_type relationship selection as it was causing schema errors
     }
-    
+
     # Semantic Edges/Relationships
     # Semantic Edges/Relationships
     semantic_edges: catalog_edge(
@@ -286,10 +274,10 @@ const GET_ALL_SEMANTIC_DATA = gql`
       updated_at
       # Relationship 'edge_type' not exposed in Hasura yet, fetching separately
     }
-    
+
     # Edge Types for lookups - REMOVED: catalog_edge_type not available in Hasura schema
     # Will fetch edge type names from edge objects directly if needed
-    
+
     # Node Types for type name lookups
     node_types: catalog_node_type {
       id
@@ -315,28 +303,29 @@ export function useAllSemanticData() {
 
   // Check for invalid IDs as requested
   if (nodeTypesList) {
-    const invalidTypes = nodeTypesList.filter(t => !t.id || t.id.trim() === '');
+    const invalidTypes = nodeTypesList.filter((t) => !t.id || t.id.trim() === '');
     if (invalidTypes.length > 0) {
       console.error('[SemanticTerms] Found invalid node types with null/empty IDs (Action required: Delete these):', invalidTypes);
     }
   }
 
   const typeMap = useMemo(() => {
-    if (!nodeTypesList) return {
-      business_term: NIL_UUID,
-      semantic_term: NIL_UUID,
-      semantic_column: NIL_UUID,
-      calculation: NIL_UUID,
-      calculation_term: NIL_UUID,
-      metric: NIL_UUID,
-    };
+    if (!nodeTypesList)
+      return {
+        business_term: NIL_UUID,
+        semantic_term: NIL_UUID,
+        semantic_column: NIL_UUID,
+        calculation: NIL_UUID,
+        calculation_term: NIL_UUID,
+        metric: NIL_UUID,
+      };
     return {
-      business_term: nodeTypesList.find(t => t.catalog_type_name === 'business_term')?.id || NIL_UUID,
-      semantic_term: nodeTypesList.find(t => t.catalog_type_name === 'semantic_term')?.id || NIL_UUID,
-      semantic_column: nodeTypesList.find(t => t.catalog_type_name === 'semantic_column')?.id || NIL_UUID,
-      calculation: nodeTypesList.find(t => t.catalog_type_name === 'calculation')?.id || NIL_UUID,
-      calculation_term: nodeTypesList.find(t => t.catalog_type_name === 'calculation_term')?.id || NIL_UUID,
-      metric: nodeTypesList.find(t => t.catalog_type_name === 'metric')?.id || NIL_UUID,
+      business_term: nodeTypesList.find((t) => t.catalog_type_name === 'business_term')?.id || NIL_UUID,
+      semantic_term: nodeTypesList.find((t) => t.catalog_type_name === 'semantic_term')?.id || NIL_UUID,
+      semantic_column: nodeTypesList.find((t) => t.catalog_type_name === 'semantic_column')?.id || NIL_UUID,
+      calculation: nodeTypesList.find((t) => t.catalog_type_name === 'calculation')?.id || NIL_UUID,
+      calculation_term: nodeTypesList.find((t) => t.catalog_type_name === 'calculation_term')?.id || NIL_UUID,
+      metric: nodeTypesList.find((t) => t.catalog_type_name === 'metric')?.id || NIL_UUID,
     };
   }, [nodeTypesList]);
 
@@ -356,37 +345,38 @@ export function useAllSemanticData() {
   });
 
   const transformedData = useMemo(() => {
-    if (!data) return {
-      business_terms: [],
-      semantic_terms: [],
-      semantic_edges: [],
-      all_nodes: [],
-      node_types: [],
-      calculation_terms: [],
-    };
+    if (!data)
+      return {
+        business_terms: [],
+        semantic_terms: [],
+        semantic_edges: [],
+        all_nodes: [],
+        node_types: [],
+        calculation_terms: [],
+      };
 
     // Helper to attach node_type object manually
     const attachNodeType = (nodes: any[]) => {
-      return nodes.map(node => {
+      return nodes.map((node) => {
         // Find the type name using the ID from our loaded types list
-        const typeDef = nodeTypesList?.find(t => t.id === node.node_type_id);
+        const typeDef = nodeTypesList?.find((t) => t.id === node.node_type_id);
         return {
           ...node,
           node_type: {
-            catalog_type_name: typeDef?.catalog_type_name || 'unknown'
-          }
+            catalog_type_name: typeDef?.catalog_type_name || 'unknown',
+          },
         };
       });
     };
 
     // Helper to attach edge_type info manually
     const attachEdgeType = (edges: any[]) => {
-      return edges.map(edge => {
+      return edges.map((edge) => {
         const typeDef = data.edge_types?.find((t: any) => t.id === edge.edge_type_id);
         return {
           ...edge,
           edge_type_name: typeDef?.edge_type_name, // Flatten for easy access
-          edge_type: typeDef // Keep structured object for compatibility
+          edge_type: typeDef, // Keep structured object for compatibility
         };
       });
     };
@@ -407,7 +397,7 @@ export function useAllSemanticData() {
     isLoading: isNodeTypesLoading || isGraphLoading,
     error: error?.message || null,
     enabled: !!datasource?.id,
-    refetch
+    refetch,
   };
 }
 
@@ -458,15 +448,8 @@ export function useUpdateTerm() {
       devDebug('[useUpdateTerm] Request body:', requestBody);
       devDebug('[useUpdateTerm] parent_id in payload:', updatePayload.parent_id);
 
-      const res = await fetch(url, {
+      const res = await apiFetch(url, {
         method: 'PUT',
-        credentials: 'include',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(tenant?.id && { 'X-Tenant-ID': tenant.id }),
-          ...(datasource?.id && { 'X-Tenant-Datasource-ID': datasource.id }),
-          'X-Tenant-Region': getSelectedRegion(),
-        },
         body: requestBody,
       });
 
@@ -491,15 +474,14 @@ export function useUpdateTerm() {
       devDebug('[useUpdateTerm.onSuccess] Response had parent_id:', responseData.parent_id);
 
       // Optimistically update the term in the cache for immediate UI feedback
-      const queryKey = responseData.catalog_type === 'semantic_term'
-        ? glossaryKeys.semanticTerms()
-        : glossaryKeys.businessTerms();
+      const queryKey =
+        responseData.catalog_type === 'semantic_term'
+          ? glossaryKeys.semanticTerms()
+          : glossaryKeys.businessTerms();
 
       queryClient.setQueryData<CatalogNode[]>(queryKey, (oldData) => {
         if (!oldData) return [];
-        return oldData.map((term) =>
-          term.id === variables.id ? { ...term, ...responseData } : term
-        );
+        return oldData.map((term) => (term.id === variables.id ? { ...term, ...responseData } : term));
       });
       devDebug(`[useUpdateTerm.onSuccess] Optimistically updated cache for ${responseData.catalog_type}`);
 
@@ -553,15 +535,8 @@ export function useCreateTerm() {
         createPayload.properties = {};
       }
 
-      const res = await fetch(`/api/glossary/terms?${params.toString()}`, {
+      const res = await apiFetch(`/api/glossary/terms?${params.toString()}`, {
         method: 'POST',
-        credentials: 'include',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(tenant?.id && { 'X-Tenant-ID': tenant.id }),
-          ...(datasource?.id && { 'X-Tenant-Datasource-ID': datasource.id }),
-          'X-Tenant-Region': getSelectedRegion(),
-        },
         body: JSON.stringify(createPayload),
       });
 
@@ -618,14 +593,8 @@ export function useDeleteTerm() {
         params.append('tenant_instance_id', datasource.id);
       }
 
-      const res = await fetch(`/api/glossary/terms/${id}?${params.toString()}`, {
+      const res = await apiFetch(`/api/glossary/terms/${id}?${params.toString()}`, {
         method: 'DELETE',
-        credentials: 'include',
-        headers: {
-          ...(tenant?.id && { 'X-Tenant-ID': tenant.id }),
-          ...(datasource?.id && { 'X-Tenant-Datasource-ID': datasource.id }),
-          'X-Tenant-Region': getSelectedRegion(),
-        },
       });
 
       if (!res.ok) {
@@ -666,14 +635,8 @@ export function useCreateTermEdge() {
         params.append('tenant_instance_id', datasource.id);
       }
 
-      const res = await fetch(`/api/glossary/edges?${params.toString()}`, {
+      const res = await apiFetch(`/api/glossary/edges?${params.toString()}`, {
         method: 'POST',
-        credentials: 'include',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(tenant?.id && { 'X-Tenant-ID': tenant.id }),
-          ...(datasource?.id && { 'X-Tenant-Datasource-ID': datasource.id }),
-        },
         body: JSON.stringify(data),
       });
 
@@ -704,15 +667,8 @@ export function useUpdateTermEdge() {
         params.append('tenant_instance_id', datasource.id);
       }
 
-      const res = await fetch(`/api/glossary/edges/${data.id}?${params.toString()}`, {
+      const res = await apiFetch(`/api/glossary/edges/${data.id}?${params.toString()}`, {
         method: 'PUT',
-        credentials: 'include',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(tenant?.id && { 'X-Tenant-ID': tenant.id }),
-          ...(datasource?.id && { 'X-Tenant-Datasource-ID': datasource.id }),
-          'X-Tenant-Region': getSelectedRegion(),
-        },
         body: JSON.stringify(data.updates),
       });
 
@@ -743,14 +699,8 @@ export function useDeleteTermEdge() {
         params.append('tenant_instance_id', datasource.id);
       }
 
-      const res = await fetch(`/api/glossary/edges/${id}?${params.toString()}`, {
+      const res = await apiFetch(`/api/glossary/edges/${id}?${params.toString()}`, {
         method: 'DELETE',
-        credentials: 'include',
-        headers: {
-          ...(tenant?.id && { 'X-Tenant-ID': tenant.id }),
-          ...(datasource?.id && { 'X-Tenant-Datasource-ID': datasource.id }),
-          'X-Tenant-Region': getSelectedRegion(),
-        },
       });
 
       if (!res.ok) {

@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTenant } from '../contexts/TenantContext';
+import { apiFetch } from '../lib/apiClient';
 
 export interface NodeType {
   id: string;
@@ -69,17 +70,15 @@ export function useNodeTypes(search?: string) {
 
       const params = new URLSearchParams();
       params.append('tenant_id', tenant.id);
-      // Fix: Some legacy callers pass tenant.id as the first argument, which is treated as 'search'. 
+      // Fix: Some legacy callers pass tenant.id as the first argument, which is treated as 'search'.
       // We ignore it if it matches the tenant ID.
       if (search && search !== tenant.id) {
         params.append('q', search);
       }
 
-      const res = await fetch(`/api/node-types?${params.toString()}`, {
-        headers: {
-          'X-Tenant-ID': tenant.id,
-        },
-      });
+      // apiFetch auto-injects Authorization: Bearer <jwt>, X-Tenant-ID,
+      // X-Tenant-Datasource-ID, X-Tenant-Region, and Content-Type.
+      const res = await apiFetch(`/api/node-types?${params.toString()}`);
 
       if (!res.ok) {
         throw new Error('Failed to fetch node types');
@@ -106,11 +105,7 @@ export function useNodeType(id: string) {
       const params = new URLSearchParams();
       params.append('tenant_id', tenant.id);
 
-      const res = await fetch(`/api/node-types/${id}?${params.toString()}`, {
-        headers: {
-          'X-Tenant-ID': tenant.id,
-        },
-      });
+      const res = await apiFetch(`/api/node-types/${id}?${params.toString()}`);
 
       if (!res.ok) {
         throw new Error('Failed to fetch node type');
@@ -146,17 +141,11 @@ export function useNodesByType(typeId: string, search?: string) {
       // We'll use the generic search endpoint or a specific nodes endpoint if available
       // For now, assuming we filter client-side or use a specific endpoint
       // Using /api/catalog/nodes which was implied in previous context or we can use list
-      const res = await fetch(`/api/node-types/${typeId}/nodes?${params.toString()}`, {
-        headers: {
-          'X-Tenant-ID': tenant.id,
-        },
-      });
+      const res = await apiFetch(`/api/node-types/${typeId}/nodes?${params.toString()}`);
 
       if (res.status === 404) {
         // If the specific endpoint doesn't exist, try fetching all nodes and filtering (fallback)
-        const fallbackRes = await fetch(`/api/glossary/semantic-terms?tenant_id=${tenant.id}`, {
-          headers: { 'X-Tenant-ID': tenant.id }
-        });
+        const fallbackRes = await apiFetch(`/api/glossary/semantic-terms?tenant_id=${tenant.id}`);
         if (!fallbackRes.ok) return [];
         const allNodes: CatalogNode[] = await fallbackRes.json();
         return allNodes.filter(n => n.node_type_id === typeId);
@@ -181,12 +170,8 @@ export function useCreateNodeType() {
     mutationFn: async (newNodeType: Partial<NodeType>) => {
       if (!tenant?.id) throw new Error('Tenant ID is required');
 
-      const res = await fetch('/api/node-types', {
+      const res = await apiFetch('/api/node-types', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Tenant-ID': tenant.id,
-        },
         body: JSON.stringify(newNodeType),
       });
 
@@ -211,12 +196,8 @@ export function useUpdateNodeType() {
     mutationFn: async ({ id, ...updates }: Partial<NodeType> & { id: string }) => {
       if (!tenant?.id) throw new Error('Tenant ID is required');
 
-      const res = await fetch(`/api/node-types/${id}`, {
+      const res = await apiFetch(`/api/node-types/${id}`, {
         method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Tenant-ID': tenant.id,
-        },
         body: JSON.stringify(updates),
       });
 
@@ -242,11 +223,8 @@ export function useDeleteNodeType() {
     mutationFn: async (id: string) => {
       if (!tenant?.id) throw new Error('Tenant ID is required');
 
-      const res = await fetch(`/api/node-types/${id}`, {
+      const res = await apiFetch(`/api/node-types/${id}`, {
         method: 'DELETE',
-        headers: {
-          'X-Tenant-ID': tenant.id,
-        },
       });
 
       if (!res.ok) {
