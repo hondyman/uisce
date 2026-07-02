@@ -8,6 +8,7 @@ import (
 
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/go-chi/chi/v5"
+	"github.com/hondyman/semlayer/backend/internal/security"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -125,6 +126,13 @@ func TestListAccessibleTenants_GlobalAdmin_SeesAll(t *testing.T) {
 	req.Header.Set("X-User-ID", "jim.g")
 	req.Header.Set("X-User-Role", "global_admin")
 
+	ctx := security.WithAuthInfo(req.Context(), security.AuthInfo{
+		UserID:        "jim.g",
+		IsGlobalAdmin: true,
+		Roles:         []string{"global_admin"},
+	})
+	req = req.WithContext(ctx)
+
 	rr := httptest.NewRecorder()
 	r.ServeHTTP(rr, req)
 
@@ -144,6 +152,13 @@ func TestListAccessibleTenants_CoreAdmin_SeesAll(t *testing.T) {
 	req.Header.Set("X-User-Role", "core_admin")
 	req.Header.Set("X-Is-Core-Admin", "true")
 
+	ctx := security.WithAuthInfo(req.Context(), security.AuthInfo{
+		UserID:        "root.ops",
+		IsGlobalAdmin: true,
+		Roles:         []string{"core_admin"},
+	})
+	req = req.WithContext(ctx)
+
 	rr := httptest.NewRecorder()
 	r.ServeHTTP(rr, req)
 
@@ -157,8 +172,8 @@ func TestListAccessibleTenants_CoreAdmin_SeesAll(t *testing.T) {
 func TestListAccessibleTenants_TenantUser_SeesAssigned(t *testing.T) {
 	_, mock, r := setupTenantHandler(t)
 
-	// users.tenant_id lookup
-	mock.ExpectQuery("SELECT tenant_id FROM users WHERE id =") .
+	// public.user_tenant lookup
+	mock.ExpectQuery("SELECT tenant_id FROM public\\.user_tenant WHERE user_id =").
 		WithArgs("tenant.user").
 		WillReturnRows(sqlmock.NewRows([]string{"tenant_id"}).AddRow("investco"))
 
@@ -180,6 +195,10 @@ func TestListAccessibleTenants_TenantUser_SeesAssigned(t *testing.T) {
 
 func TestListAccessibleTenants_NoAssignment_Empty(t *testing.T) {
 	_, mock, r := setupTenantHandler(t)
+
+	mock.ExpectQuery("SELECT tenant_id FROM public\\.user_tenant WHERE user_id =").
+		WithArgs("unassigned.user").
+		WillReturnRows(sqlmock.NewRows([]string{"tenant_id"}))
 
 	mock.ExpectQuery("SELECT tenant_id FROM users WHERE id =").
 		WithArgs("unassigned.user").

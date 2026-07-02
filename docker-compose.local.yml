@@ -61,6 +61,11 @@ services:
       - TEMPORAL_HOSTPORT=${REMOTE_HOST:-100.84.126.19}:7233
       - KAFKA_BROKERS=${REMOTE_HOST:-100.84.126.19}:19092
       - JWT_SECRET=${JWT_SECRET:-dev-jwt-secret-key-change-in-production}
+      # Keycloak OIDC JWKS endpoint. Backend's SecurityManager fetches this
+      # on first RS256 token validation to verify Keycloak-issued JWTs.
+      - KEYCLOAK_JWKS_URL=${KEYCLOAK_JWKS_URL:-https://${KEYCLOAK_HOST:-100.84.50.65}:${KEYCLOAK_PORT:-8443}/realms/${KEYCLOAK_REALM:-uisce}/protocol/openid-connect/certs}
+      - KEYCLOAK_ISSUER=${KEYCLOAK_ISSUER:-https://${KEYCLOAK_HOST:-100.84.50.65}:${KEYCLOAK_PORT:-8443}/realms/${KEYCLOAK_REALM:-uisce}}
+      - KEYCLOAK_INSECURE_SKIP_VERIFY=${KEYCLOAK_INSECURE_SKIP_VERIFY:-true}
     depends_on:
       - auth-service
     restart: unless-stopped

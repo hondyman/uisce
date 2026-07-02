@@ -109,43 +109,26 @@ func (h *TenantAccessHandlers) listAccessibleTenants(w http.ResponseWriter, r *h
 	defer func() {
 		if r := recover(); r != nil {
 			fmt.Printf("PANIC in listAccessibleTenants: %v\n", r)
-			// Print stack trace
-			// debug.PrintStack() // debug package check
 			http.Error(w, "Panic", http.StatusInternalServerError)
 		}
 	}()
 
-	// Get user info from headers (set by auth middleware)
-	userRole := r.Header.Get("X-User-Role")
-	userID := r.Header.Get("X-User-ID")
-	isCoreAdmin := r.Header.Get("X-Is-Core-Admin") == "true"
+	actor, ok := h.isPlatformOperator(r)
+	fmt.Printf("[DEBUG] listAccessibleTenants: UserID=%s IsPlatform=%v\n", actor.UserID, ok)
 
-	fmt.Printf("[DEBUG] listAccessibleTenants: UserID=%s Role=%s CoreAdmin=%v\n", userID, userRole, isCoreAdmin)
-
-	// Platform operators (core admins and global Uisce operators) see all tenants.
-	// Helpdesk and Professional Services are NOT included here: they are lease-scoped
-	// and must only see the tenant explicitly selected and verified by the auth
-	// middleware (X-Tenant-ID).
-	isPlatformOperator := isCoreAdmin ||
-		userRole == "platform_operator" ||
-		userRole == "admin" ||
-		userRole == "global_admin" ||
-		strings.Contains(r.Header.Get("X-User-Permissions"), "platform:operator")
-
-	if isPlatformOperator {
+	if ok {
 		h.listAllTenants(w, r)
 		return
 	}
 
 	// For non-operators, filter by tenant assignments
-	// This requires a user_tenant_assignments table
-	tenants, err := h.getTenantsByUser(r, userID)
+	tenants, err := h.getTenantsByUser(r, actor.UserID)
 	if err != nil {
 		fmt.Printf("[DEBUG] getTenantsByUser error: %v\n", err)
 		http.Error(w, "Failed to fetch accessible tenants: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
-	fmt.Printf("[DEBUG] listAccessibleTenants found %d tenants for user %s\n", len(tenants), userID)
+	fmt.Printf("[DEBUG] listAccessibleTenants found %d tenants for user %s\n", len(tenants), actor.UserID)
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(tenants)
@@ -154,23 +137,40 @@ func (h *TenantAccessHandlers) listAccessibleTenants(w http.ResponseWriter, r *h
 // listAllTenants returns tenants the caller is authorized to see.
 // Global admins see all tenants; tenant managers see only their assigned tenant(s).
 func (h *TenantAccessHandlers) listAllTenants(w http.ResponseWriter, r *http.Request) {
-	actor, ok, err := h.requireTenantManager(r)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusUnauthorized)
-		return
-	}
-	if !ok {
-		http.Error(w, "forbidden", http.StatusForbidden)
-		return
-	}
+	actor, isPlatform := h.isPlatformOperator(r)
 
 	var tenants []TenantResponse
 	var err2 error
-	if isGlobalAdmin(actor) {
+
+	if isPlatform {
 		tenants, err2 = h.getAllTenantsInternal(r.Context(), nil)
 	} else {
+		// Verify if they are tenant managers (tenant_admin or professional_services)
+		isManager := false
+		var tenantIDs []string
+
+		if actor.UserID != "" && hasAnyRole(actor.Roles, []string{"tenant_admin", "professional_services"}) {
+			isManager = true
+			tenantIDs = actor.TenantIDs
+		} else {
+			// Fallback to headers for legacy tests
+			userRole := r.Header.Get("X-User-Role")
+			if userRole == "tenant_admin" || userRole == "professional_services" {
+				isManager = true
+				tenantID := r.Header.Get("X-Tenant-ID")
+				if tenantID != "" {
+					tenantIDs = []string{tenantID}
+				}
+			}
+		}
+
+		if !isManager {
+			http.Error(w, "forbidden", http.StatusForbidden)
+			return
+		}
+
 		tenants = []TenantResponse{}
-		for _, tid := range actor.TenantIDs {
+		for _, tid := range tenantIDs {
 			t, err := h.getAllTenantsInternal(r.Context(), &tid)
 			if err != nil {
 				http.Error(w, "Failed to query tenants: "+err.Error(), http.StatusInternalServerError)
@@ -179,6 +179,7 @@ func (h *TenantAccessHandlers) listAllTenants(w http.ResponseWriter, r *http.Req
 			tenants = append(tenants, t...)
 		}
 	}
+
 	if err2 != nil {
 		http.Error(w, "Failed to query tenants: "+err2.Error(), http.StatusInternalServerError)
 		return
@@ -438,11 +439,13 @@ func (h *TenantAccessHandlers) getTenantsByUser(r *http.Request, userID string) 
 
 	var tenantIDs []string
 	for rows.Next() {
-		var tid string
+		var tid *string
 		if err := rows.Scan(&tid); err != nil {
 			return nil, err
 		}
-		tenantIDs = append(tenantIDs, tid)
+		if tid != nil && *tid != "" {
+			tenantIDs = append(tenantIDs, *tid)
+		}
 	}
 
 	if len(tenantIDs) > 0 {
@@ -746,4 +749,71 @@ func tenantAllowed(allowed []string, tenantID string) bool {
 		}
 	}
 	return false
+}
+
+// Recognise the federated IdP group by name (defence-in-depth so the platform
+// operator status is computed correctly even if the operator_role claim
+// derivation in ValidateToken ever drops a group). Path form ("/Uisce-Global-Admins")
+// and leaf form ("Uisce-Global-Admins") are both accepted.
+func idpGroupGrantsPlatformOperator(groups []string) bool {
+	for _, g := range groups {
+		leaf := g
+		if idx := strings.LastIndex(g, "/"); idx >= 0 {
+			leaf = g[idx+1:]
+		}
+		lower := strings.ToLower(strings.TrimSpace(leaf))
+		if lower == "uisce-global-admins" || lower == "uisce-global-admin" ||
+			lower == "global-admin" || lower == "global_admin" {
+			return true
+		}
+	}
+	return false
+}
+
+func (h *TenantAccessHandlers) isPlatformOperator(r *http.Request) (security.AuthInfo, bool) {
+	// 1. Try security.AuthInfoFromContext first (preferred path)
+	if actor, ok := security.AuthInfoFromContext(r.Context()); ok && strings.TrimSpace(actor.UserID) != "" {
+		if actor.IsGlobalAdmin || hasAnyRole(actor.Roles, []string{"global_admin", "global_ops", "core_admin"}) {
+			return actor, true
+		}
+		// Defence-in-depth: even if the operator_role claim was not populated, a
+		// federated IdP group membership still grants platform-operator status.
+		if idpGroupGrantsPlatformOperator(actor.IDPGroups) {
+			actor.IsGlobalAdmin = true
+			return actor, true
+		}
+		// Also check userRole or permissions if any
+		userRole := r.Header.Get("X-User-Role")
+		isCoreAdmin := r.Header.Get("X-Is-Core-Admin") == "true"
+		if isCoreAdmin ||
+			userRole == "platform_operator" ||
+			userRole == "admin" ||
+			userRole == "global_admin" ||
+			strings.Contains(r.Header.Get("X-User-Permissions"), "platform:operator") {
+			return actor, true
+		}
+		return actor, false
+	}
+
+	// 2. Fall back to header sniffing for legacy callers / tests
+	userRole := r.Header.Get("X-User-Role")
+	userID := r.Header.Get("X-User-ID")
+	isCoreAdmin := r.Header.Get("X-Is-Core-Admin") == "true"
+
+	isPlatform := isCoreAdmin ||
+		userRole == "platform_operator" ||
+		userRole == "admin" ||
+		userRole == "global_admin" ||
+		strings.Contains(r.Header.Get("X-User-Permissions"), "platform:operator")
+
+	if isPlatform && userID != "" {
+		actor := security.AuthInfo{
+			UserID:        userID,
+			IsGlobalAdmin: true,
+			Roles:         []string{userRole},
+		}
+		return actor, true
+	}
+
+	return security.AuthInfo{UserID: userID, Roles: []string{userRole}}, false
 }

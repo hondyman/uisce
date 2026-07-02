@@ -34,6 +34,11 @@ services:
     environment:
       - DATABASE_URL=postgres://postgres:postgres@${DB_HOST:-100.84.50.65}:5432/alpha?sslmode=disable
       - IGNITE_ADDR=postgres:10800
+      # Keycloak OIDC JWKS endpoint. Backend's SecurityManager fetches this
+      # on first RS256 token validation to verify Keycloak-issued JWTs.
+      - KEYCLOAK_JWKS_URL=${KEYCLOAK_JWKS_URL:-https://${KEYCLOAK_HOST:-100.84.50.65}:${KEYCLOAK_PORT:-8443}/realms/${KEYCLOAK_REALM:-uisce}/protocol/openid-connect/certs}
+      - KEYCLOAK_ISSUER=${KEYCLOAK_ISSUER:-https://${KEYCLOAK_HOST:-100.84.50.65}:${KEYCLOAK_PORT:-8443}/realms/${KEYCLOAK_REALM:-uisce}}
+      - KEYCLOAK_INSECURE_SKIP_VERIFY=${KEYCLOAK_INSECURE_SKIP_VERIFY:-true}
 
   # Development database with additional tools (standalone service - avoid `extends` for compatibility)
   

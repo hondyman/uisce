@@ -1,0 +1,41 @@
+declare const i18n: {
+    zh_CN: {
+        stmtInComplete: string;
+        noValidPosition: string;
+        expecting: string;
+        unfinishedMultilineComment: string;
+        unfinishedDoubleQuoted: string;
+        unfinishedSingleQuoted: string;
+        unfinishedTickQuoted: string;
+        noValidInput: string;
+        newObj: string;
+        existingObj: string;
+        new: string;
+        existing: string;
+        orKeyword: string;
+        keyword: string;
+        missing: string;
+        at: string;
+        or: string;
+    };
+    en_US: {
+        stmtInComplete: string;
+        noValidPosition: string;
+        expecting: string;
+        unfinishedMultilineComment: string;
+        unfinishedDoubleQuoted: string;
+        unfinishedSingleQuoted: string;
+        unfinishedTickQuoted: string;
+        noValidInput: string;
+        newObj: string;
+        existingObj: string;
+        new: string;
+        existing: string;
+        orKeyword: string;
+        keyword: string;
+        missing: string;
+        at: string;
+        or: string;
+    };
+};
+export { i18n };

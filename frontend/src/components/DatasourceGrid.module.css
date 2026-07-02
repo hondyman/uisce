@@ -1,9 +1,0 @@
-.rowFocusOutline {
-  outline: 2px solid rgba(25, 118, 210, 0.6);
-  outline-offset: 2px;
-}
-
-/* keep an accessible focus ring for keyboard users when a row is focused */
-.MuiDataGrid-row:focus {
-  outline: 2px solid rgba(25, 118, 210, 0.6);
-}
