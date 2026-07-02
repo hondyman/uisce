@@ -39,11 +39,18 @@ func (h *AdminTenantHandler) RegisterRoutes(r chi.Router) {
 	})
 }
 
-// ListTenants retrieves all tenants with pagination
+// ListTenants retrieves tenants the caller is authorized to manage.
+// Global admins see all tenants; tenant admins / professional services see only
+// their assigned tenant(s).
 // GET /api/admin/tenants?limit=50&offset=0
 func (h *AdminTenantHandler) ListTenants(w http.ResponseWriter, r *http.Request) {
-	if err := h.requireAdminAuth(r); err != nil {
+	actor, ok, err := h.requireTenantManager(r)
+	if err != nil {
 		http.Error(w, err.Error(), http.StatusUnauthorized)
+		return
+	}
+	if !ok {
+		http.Error(w, "forbidden", http.StatusForbidden)
 		return
 	}
 
@@ -67,6 +74,18 @@ func (h *AdminTenantHandler) ListTenants(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
+	// Filter to accessible tenants for non-global admins.
+	if !isGlobalAdmin(actor) {
+		filtered := make([]*models.Tenant, 0, len(tenants))
+		for _, t := range tenants {
+			if tenantAllowed(actor.TenantIDs, t.ID.String()) {
+				filtered = append(filtered, t)
+			}
+		}
+		tenants = filtered
+		total = len(filtered)
+	}
+
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{
 		"tenants": tenants,
@@ -76,11 +95,11 @@ func (h *AdminTenantHandler) ListTenants(w http.ResponseWriter, r *http.Request)
 	})
 }
 
-// CreateTenant creates a new tenant
+// CreateTenant creates a new tenant (global admins only).
 // POST /api/admin/tenants
 func (h *AdminTenantHandler) CreateTenant(w http.ResponseWriter, r *http.Request) {
-	if err := h.requireAdminAuth(r); err != nil {
-		http.Error(w, err.Error(), http.StatusUnauthorized)
+	if _, ok := h.requireGlobalAdmin(r); !ok {
+		http.Error(w, "forbidden", http.StatusForbidden)
 		return
 	}
 
@@ -140,17 +159,28 @@ func (h *AdminTenantHandler) CreateTenant(w http.ResponseWriter, r *http.Request
 	})
 }
 
-// GetTenant retrieves a single tenant by ID
+// GetTenant retrieves a single tenant by ID. Global admins may read any tenant;
+// tenant admins / professional services may read only their assigned tenant(s).
 // GET /api/admin/tenants/{tenantID}
 func (h *AdminTenantHandler) GetTenant(w http.ResponseWriter, r *http.Request) {
-	if err := h.requireAdminAuth(r); err != nil {
+	actor, ok, err := h.requireTenantManager(r)
+	if err != nil {
 		http.Error(w, err.Error(), http.StatusUnauthorized)
+		return
+	}
+	if !ok {
+		http.Error(w, "forbidden", http.StatusForbidden)
 		return
 	}
 
 	tenantID, err := h.parseUUID(chi.URLParam(r, "tenantID"))
 	if err != nil {
 		http.Error(w, "invalid tenant_id", http.StatusBadRequest)
+		return
+	}
+
+	if !canManageTenant(actor, tenantID.String()) {
+		http.Error(w, "forbidden", http.StatusForbidden)
 		return
 	}
 
@@ -171,17 +201,28 @@ func (h *AdminTenantHandler) GetTenant(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// UpdateTenant updates a tenant's metadata
+// UpdateTenant updates a tenant's metadata. Global admins may update any tenant;
+// tenant admins / professional services may update only their assigned tenant(s).
 // PATCH /api/admin/tenants/{tenantID}
 func (h *AdminTenantHandler) UpdateTenant(w http.ResponseWriter, r *http.Request) {
-	if err := h.requireAdminAuth(r); err != nil {
+	actor, ok, err := h.requireTenantManager(r)
+	if err != nil {
 		http.Error(w, err.Error(), http.StatusUnauthorized)
+		return
+	}
+	if !ok {
+		http.Error(w, "forbidden", http.StatusForbidden)
 		return
 	}
 
 	tenantID, err := h.parseUUID(chi.URLParam(r, "tenantID"))
 	if err != nil {
 		http.Error(w, "invalid tenant_id", http.StatusBadRequest)
+		return
+	}
+
+	if !canManageTenant(actor, tenantID.String()) {
+		http.Error(w, "forbidden", http.StatusForbidden)
 		return
 	}
 
@@ -230,11 +271,11 @@ func (h *AdminTenantHandler) UpdateTenant(w http.ResponseWriter, r *http.Request
 	})
 }
 
-// DeleteTenant deletes a tenant
+// DeleteTenant deletes a tenant (global admins only).
 // DELETE /api/admin/tenants/{tenantID}
 func (h *AdminTenantHandler) DeleteTenant(w http.ResponseWriter, r *http.Request) {
-	if err := h.requireAdminAuth(r); err != nil {
-		http.Error(w, err.Error(), http.StatusUnauthorized)
+	if _, ok := h.requireGlobalAdmin(r); !ok {
+		http.Error(w, "forbidden", http.StatusForbidden)
 		return
 	}
 
@@ -256,11 +297,11 @@ func (h *AdminTenantHandler) DeleteTenant(w http.ResponseWriter, r *http.Request
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// SuspendTenant suspends a tenant (hard kill switch)
+// SuspendTenant suspends a tenant (hard kill switch; global admins only).
 // POST /api/admin/tenants/{tenantID}/suspend
 func (h *AdminTenantHandler) SuspendTenant(w http.ResponseWriter, r *http.Request) {
-	if err := h.requireAdminAuth(r); err != nil {
-		http.Error(w, err.Error(), http.StatusUnauthorized)
+	if _, ok := h.requireGlobalAdmin(r); !ok {
+		http.Error(w, "forbidden", http.StatusForbidden)
 		return
 	}
 
@@ -282,11 +323,11 @@ func (h *AdminTenantHandler) SuspendTenant(w http.ResponseWriter, r *http.Reques
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// UnsuspendTenant unsuspends a tenant
+// UnsuspendTenant unsuspends a tenant (global admins only).
 // POST /api/admin/tenants/{tenantID}/unsuspend
 func (h *AdminTenantHandler) UnsuspendTenant(w http.ResponseWriter, r *http.Request) {
-	if err := h.requireAdminAuth(r); err != nil {
-		http.Error(w, err.Error(), http.StatusUnauthorized)
+	if _, ok := h.requireGlobalAdmin(r); !ok {
+		http.Error(w, "forbidden", http.StatusForbidden)
 		return
 	}
 
@@ -309,20 +350,72 @@ func (h *AdminTenantHandler) UnsuspendTenant(w http.ResponseWriter, r *http.Requ
 }
 
 // ============================================================================
-// Helper Methods
+// Authorization Helpers
 // ============================================================================
 
-func (h *AdminTenantHandler) requireAdminAuth(r *http.Request) error {
+// requireGlobalAdmin returns the actor only if they are a global platform admin.
+func (h *AdminTenantHandler) requireGlobalAdmin(r *http.Request) (security.AuthInfo, bool) {
 	actor, ok := security.AuthInfoFromContext(r.Context())
 	if !ok || strings.TrimSpace(actor.UserID) == "" {
-		return errors.New("unauthorized")
+		return security.AuthInfo{}, false
 	}
+	return actor, isGlobalAdmin(actor)
+}
 
-	if !hasAdminRole(actor.Roles) {
-		return errors.New("forbidden")
+// requireTenantManager returns the actor if they are a global admin, tenant admin,
+// or professional services operator. It returns (actor, true) when authorized,
+// or (zero value, false) when forbidden. A non-nil error indicates auth context
+// is missing entirely.
+func (h *AdminTenantHandler) requireTenantManager(r *http.Request) (security.AuthInfo, bool, error) {
+	actor, ok := security.AuthInfoFromContext(r.Context())
+	if !ok || strings.TrimSpace(actor.UserID) == "" {
+		return security.AuthInfo{}, false, errors.New("unauthorized")
 	}
+	if isGlobalAdmin(actor) {
+		return actor, true, nil
+	}
+	if hasAnyRole(actor.Roles, []string{"tenant_admin", "professional_services"}) {
+		return actor, true, nil
+	}
+	return security.AuthInfo{}, false, nil
+}
 
-	return nil
+// canManageTenant reports whether the actor may manage a specific tenant.
+// Global admins may manage any tenant; tenant managers may only manage tenants
+// explicitly assigned to them.
+func canManageTenant(actor security.AuthInfo, tenantID string) bool {
+	if isGlobalAdmin(actor) {
+		return true
+	}
+	return tenantAllowed(actor.TenantIDs, tenantID)
+}
+
+func isGlobalAdmin(actor security.AuthInfo) bool {
+	if actor.IsGlobalAdmin {
+		return true
+	}
+	return hasAnyRole(actor.Roles, []string{"global_admin", "global_ops", "core_admin"})
+}
+
+func hasAnyRole(roles []string, targets []string) bool {
+	for _, r := range roles {
+		for _, t := range targets {
+			if strings.EqualFold(strings.TrimSpace(r), t) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func tenantAllowed(allowed []string, tenantID string) bool {
+	tid := strings.TrimSpace(tenantID)
+	for _, candidate := range allowed {
+		if strings.TrimSpace(candidate) == tid {
+			return true
+		}
+	}
+	return false
 }
 
 func (h *AdminTenantHandler) parseUUID(s string) (uuid.UUID, error) {

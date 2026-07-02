@@ -43,7 +43,7 @@ func (e *TokenEnricher) EnrichSubjectAttributes(ctx context.Context, tenantID uu
 	query := `
 		SELECT functional_role, clearance_level 
 		FROM security.identity_profile_mappings
-		WHERE tenant_id = $1 AND idp_group_claim = ANY($2)
+		WHERE tenant_id = $1 AND idp_group_id = ANY($2)
 		LIMIT 1;
 	`
 

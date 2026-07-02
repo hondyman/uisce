@@ -795,6 +795,9 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 	// Initialize Tenant Access handler for multi-tenant access control
 	tenantAccessHandler := NewTenantAccessHandlers(db)
 
+	// Initialize IDP Mappings Handler
+	idpMappingHandler := NewIDPMappingHandlers(db, secProfileSvc)
+
 	// Initialize BP Notification handlers
 	// Note: sqlxDB is initialized below, so we need to move this or use db if compatible,
 	// but NewBPNotificationHandlers takes *sqlx.DB.
@@ -1323,6 +1326,7 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 		// Register handlers that were previously orphaned
 		ipWhitelistHandler.RegisterRoutes(r)
 		tenantAccessHandler.RegisterRoutes(r)
+		idpMappingHandler.RegisterRoutes(r)
 		abbreviationHandler.RegisterRoutes(r)
 		bundleHandler.RegisterRoutes(r)
 		domainHandler.RegisterRoutes(r)
@@ -3789,7 +3793,7 @@ func (s *Server) handleListCatalogNodes(w http.ResponseWriter, r *http.Request) 
 				SELECT cn.id, cn.node_name, COALESCE(cn.description, ''), cn.tenant_id, cn.tenant_datasource_id, cn.created_at, cn.updated_at, COALESCE(cn.properties, '{}'::jsonb) as properties
 				FROM catalog_node cn
 				LEFT JOIN catalog_node_type cnt ON cn.node_type_id = cnt.id
-				WHERE (cn.tenant_id = $1::uuid OR cn.tenant_id = '99e99e99-99e9-49e9-89e9-99e99e99e999') AND cn.tenant_datasource_id = $2::uuid
+				WHERE (cn.tenant_id = $1::uuid OR EXISTS (SELECT 1 FROM tenants WHERE id = cn.tenant_id AND gold_copy = true)) AND cn.tenant_datasource_id = $2::uuid
 			`
 	args := []interface{}{tenantID, tenantDatasourceID}
 	argIndex := 3

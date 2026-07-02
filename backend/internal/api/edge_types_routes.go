@@ -74,8 +74,8 @@ func handleListEdgeTypes(db *sql.DB) http.HandlerFunc {
 				LEFT JOIN catalog_node_type cnt_subj ON cnt_subj.id = cet.source_node_type_id
 				LEFT JOIN catalog_node_type cnt_obj ON cnt_obj.id = cet.target_node_type_id
 				JOIN tenants t ON cet.tenant_id::uuid = t.id
-				WHERE cet.tenant_id::text = $1
-				ORDER BY cet.edge_type_name
+				WHERE cet.tenant_id::text = $1 OR t.gold_copy = true
+				ORDER BY CASE WHEN cet.tenant_id::text = $1 THEN 0 ELSE 1 END, cet.edge_type_name
 			`
 			rows, err = db.Query(query, tenantID)
 		} else {
@@ -91,9 +91,9 @@ func handleListEdgeTypes(db *sql.DB) http.HandlerFunc {
 				LEFT JOIN catalog_node_type cnt_subj ON cnt_subj.id = cet.source_node_type_id
 				LEFT JOIN catalog_node_type cnt_obj ON cnt_obj.id = cet.target_node_type_id
 				JOIN tenants t ON cet.tenant_id::uuid = t.id
-				WHERE cet.tenant_id::text = $1
+				WHERE (cet.tenant_id::text = $1 OR t.gold_copy = true)
 				  AND (cet.edge_type_name ILIKE $2 OR cet.description ILIKE $2)
-				ORDER BY cet.edge_type_name
+				ORDER BY CASE WHEN cet.tenant_id::text = $1 THEN 0 ELSE 1 END, cet.edge_type_name
 			`
 			rows, err = db.Query(query, tenantID, search)
 		}
@@ -257,7 +257,7 @@ func handleGetEdgeType(db *sql.DB) http.HandlerFunc {
 			LEFT JOIN catalog_node_type cnt_subj ON cnt_subj.id = cet.source_node_type_id
 			LEFT JOIN catalog_node_type cnt_obj ON cnt_obj.id = cet.target_node_type_id
 			JOIN tenants t ON cet.tenant_id::uuid = t.id
-			WHERE cet.id = $1 AND cet.tenant_id::text = $2
+			WHERE cet.id = $1 AND (cet.tenant_id::text = $2 OR t.gold_copy = true)
 		`
 
 		var et EdgeType
@@ -490,7 +490,12 @@ func handleGetEdgeTypeProperties(db *sql.DB) http.HandlerFunc {
 		}
 
 		// Get properties from config
-		query := `SELECT config FROM catalog_edge_type WHERE id = $1 AND tenant_id = $2`
+		query := `
+			SELECT cet.config 
+			FROM catalog_edge_type cet
+			LEFT JOIN tenants t ON cet.tenant_id::uuid = t.id
+			WHERE cet.id = $1 AND (cet.tenant_id::text = $2 OR t.gold_copy = true)
+		`
 		var configJSON []byte
 		err := db.QueryRow(query, id, tenantID).Scan(&configJSON)
 		if err == sql.ErrNoRows {

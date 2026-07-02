@@ -103,9 +103,15 @@ func handleListNodeTypes(db *sql.DB) http.HandlerFunc {
 
 		var rows *sql.Rows
 		var err error
+		var goldCopyTenantID string
+		err = db.QueryRow(`SELECT id::text FROM tenants WHERE gold_copy = true LIMIT 1`).Scan(&goldCopyTenantID)
+		if err != nil && err != sql.ErrNoRows {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
 		if qParam == "" {
 			// Include both core tenant (uiscé) and current tenant's types
-			coreTenantID := "99e99e99-99e9-49e9-89e9-99e99e99e999"
 			query := `
 		     SELECT cnt.id, cnt.tenant_id, cnt.catalog_type_name, cnt.description, cnt.is_active, 
 				  cnt.parent_type_id, cnt.config, cnt.created_at, cnt.updated_at,
@@ -115,11 +121,10 @@ func handleListNodeTypes(db *sql.DB) http.HandlerFunc {
 				WHERE cnt.tenant_id = $1 OR cnt.tenant_id = $2
 				ORDER BY CASE WHEN cnt.tenant_id = $1 THEN 0 ELSE 1 END, cnt.catalog_type_name
 			`
-			rows, err = db.Query(query, tenantID, coreTenantID)
+			rows, err = db.Query(query, tenantID, goldCopyTenantID)
 		} else {
 			// Use ILIKE for case-insensitive partial matches on name or description
 			// Include both core tenant (uiscé) and current tenant's types
-			coreTenantID := "99e99e99-99e9-49e9-89e9-99e99e99e999"
 			search := "%" + qParam + "%"
 			query := `
 				SELECT cnt.id, cnt.tenant_id, cnt.catalog_type_name, cnt.description, cnt.is_active, 
@@ -131,7 +136,7 @@ func handleListNodeTypes(db *sql.DB) http.HandlerFunc {
 				  AND (cnt.catalog_type_name ILIKE $2 OR COALESCE(cnt.description, '') ILIKE $2)
 				ORDER BY CASE WHEN cnt.tenant_id = $1 THEN 0 ELSE 1 END, cnt.catalog_type_name
 			`
-			rows, err = db.Query(query, tenantID, search, coreTenantID)
+			rows, err = db.Query(query, tenantID, search, goldCopyTenantID)
 		}
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -282,7 +287,7 @@ func handleGetNodeType(db *sql.DB) http.HandlerFunc {
 				   COALESCE(t.gold_copy, false) as is_core
 			FROM catalog_node_type cond
 			LEFT JOIN tenants t ON cond.tenant_id = t.id
-			WHERE cond.id = $1 AND cond.tenant_id = $2
+			WHERE cond.id = $1 AND (cond.tenant_id = $2 OR t.gold_copy = true)
 		`
 
 		var nt NodeType
@@ -444,7 +449,12 @@ func handleGetNodeTypeProperties(db *sql.DB) http.HandlerFunc {
 		}
 
 		// Get properties from config
-		query := `SELECT config FROM catalog_node_type WHERE id = $1 AND tenant_id = $2`
+		query := `
+			SELECT cnt.config 
+			FROM catalog_node_type cnt
+			LEFT JOIN tenants t ON cnt.tenant_id = t.id
+			WHERE cnt.id = $1 AND (cnt.tenant_id = $2 OR t.gold_copy = true)
+		`
 		var configJSON []byte
 		err := db.QueryRow(query, id, tenantID).Scan(&configJSON)
 		if err == sql.ErrNoRows {
@@ -742,16 +752,16 @@ func handleGetNodesForType(db *sql.DB) http.HandlerFunc {
 			return
 		}
 
-		coreTenantID := "99e99e99-99e9-49e9-89e9-99e99e99e999"
 		query := `
-			SELECT id, node_name, description, node_type_id, tenant_id, tenant_datasource_id, properties, config, created_at, updated_at
-			FROM catalog_node
-			WHERE node_type_id = $1 AND (tenant_id = $2 OR tenant_id = $3)
+			SELECT cn.id, cn.node_name, cn.description, cn.node_type_id, cn.tenant_id, cn.tenant_datasource_id, cn.properties, cn.config, cn.created_at, cn.updated_at
+			FROM catalog_node cn
+			LEFT JOIN tenants t ON cn.tenant_id = t.id
+			WHERE cn.node_type_id = $1 AND (cn.tenant_id = $2 OR t.gold_copy = true)
 		`
-		args := []interface{}{id, tenantID, coreTenantID}
+		args := []interface{}{id, tenantID}
 
 		if tenantDatasourceID != "" {
-			query += " AND (tenant_datasource_id = $4 OR tenant_datasource_id IS NULL)"
+			query += " AND (cn.tenant_datasource_id = $3 OR cn.tenant_datasource_id IS NULL)"
 			args = append(args, tenantDatasourceID)
 		}
 

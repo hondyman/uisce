@@ -13,7 +13,7 @@ BEGIN
 
         UPDATE public.app_user
         SET tenant_id = NULL,
-            updated_at = NOW()
+            updated_at_time = NOW()
         WHERE id = alice_id;
     END IF;
 END $$;

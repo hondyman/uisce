@@ -15,11 +15,17 @@ import (
 // WORKDAY-STYLE REPORT BUSINESS OBJECT INTEGRATION
 // ============================================================================
 
+// hasuraQueryClient is the subset of the Hasura client used by this service.
+type hasuraQueryClient interface {
+	Query(query string, variables map[string]interface{}) (map[string]interface{}, error)
+}
+
 // WorkdayReportService integrates reporting with business objects and processes
 type WorkdayReportService struct {
 	reportService    *Service
 	processService   *services.BusinessProcessService
 	portfolioService *services.PortfolioService
+	hasuraClient     hasuraQueryClient
 	logger           *zap.Logger
 }
 
@@ -28,12 +34,14 @@ func NewWorkdayReportService(
 	reportService *Service,
 	processService *services.BusinessProcessService,
 	portfolioService *services.PortfolioService,
+	hasuraClient hasuraQueryClient,
 ) *WorkdayReportService {
 	logger, _ := zap.NewProduction()
 	return &WorkdayReportService{
 		reportService:    reportService,
 		processService:   processService,
 		portfolioService: portfolioService,
+		hasuraClient:     hasuraClient,
 		logger:           logger,
 	}
 }

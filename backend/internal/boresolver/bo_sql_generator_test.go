@@ -1,6 +1,7 @@
 package boresolver
 
 import (
+	"context"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -56,7 +57,7 @@ func TestSimpleSQLGeneration(t *testing.T) {
 		Limit: 10,
 	}
 
-	sql, args, err := generator.GenerateSQL(req)
+	sql, args, err := generator.GenerateSQL(context.Background(), req)
 	assert.NoError(t, err)
 	// Basic assertions on generated SQL
 	assert.Contains(t, sql, "SELECT")
@@ -98,7 +99,7 @@ func TestJoinInference(t *testing.T) {
 		Limit:            10,
 	}
 
-	sql, args, err := generator.GenerateSQL(req)
+	sql, args, err := generator.GenerateSQL(context.Background(), req)
 	if err != nil {
 		t.Skip("Skipping join test until deep resolver logic is perfect: " + err.Error())
 	}

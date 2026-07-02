@@ -75,7 +75,7 @@ func (s *ProfileService) EnrichSubjectAttributes(ctx context.Context, tenantID u
 	query := `
 		SELECT functional_role, clearance_level 
 		FROM security.identity_profile_mappings
-		WHERE tenant_id = $1 AND idp_group_claim = ANY($2)
+		WHERE tenant_id = $1 AND idp_group_id = ANY($2)
 		LIMIT 1;
 	`
 
@@ -104,7 +104,7 @@ func (s *ProfileService) ResolveTenantAndRole(ctx context.Context, clientID stri
 		SELECT tenant_id::text, functional_role
 		FROM security.identity_profile_mappings
 		WHERE idp_client_id = $1
-		AND idp_group_claim = ANY($2)
+		AND idp_group_id = ANY($2)
 		LIMIT 1;
 	`
 
@@ -240,12 +240,12 @@ func (s *ProfileService) CreateMapping(ctx context.Context, m *IdentityProfileMa
 	m.CreatedAt = time.Now()
 
 	query := `
-		INSERT INTO security.identity_profile_mappings (mapping_id, tenant_id, idp_group_claim, functional_role, clearance_level, created_at)
-		VALUES ($1, $2, $3, $4, $5, $6)
-		RETURNING mapping_id, tenant_id, idp_group_claim, functional_role, clearance_level, created_at
+		INSERT INTO security.identity_profile_mappings (mapping_id, tenant_id, idp_client_id, idp_group_id, functional_role, clearance_level, created_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7)
+		RETURNING mapping_id, tenant_id, idp_client_id, idp_group_id, functional_role, clearance_level, created_at
 	`
 	var newMapping IdentityProfileMapping
-	err := s.db.QueryRowxContext(ctx, query, m.MappingID, m.TenantID, m.IDPGroupClaim, m.FunctionalRole, m.ClearanceLevel, m.CreatedAt).StructScan(&newMapping)
+	err := s.db.QueryRowxContext(ctx, query, m.MappingID, m.TenantID, m.IDPClientID, m.IDPGroupID, m.FunctionalRole, m.ClearanceLevel, m.CreatedAt).StructScan(&newMapping)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create mapping: %w", err)
 	}
@@ -254,7 +254,7 @@ func (s *ProfileService) CreateMapping(ctx context.Context, m *IdentityProfileMa
 
 func (s *ProfileService) ListMappings(ctx context.Context, tenantID uuid.UUID) ([]IdentityProfileMapping, error) {
 	query := `
-		SELECT mapping_id, tenant_id, idp_group_claim, functional_role, clearance_level, created_at
+		SELECT mapping_id, tenant_id, idp_client_id, idp_group_id, functional_role, clearance_level, created_at
 		FROM security.identity_profile_mappings
 		WHERE tenant_id = $1
 		ORDER BY created_at DESC
@@ -269,7 +269,7 @@ func (s *ProfileService) ListMappings(ctx context.Context, tenantID uuid.UUID) (
 
 func (s *ProfileService) GetMapping(ctx context.Context, id uuid.UUID) (*IdentityProfileMapping, error) {
 	query := `
-		SELECT mapping_id, tenant_id, idp_group_claim, functional_role, clearance_level, created_at
+		SELECT mapping_id, tenant_id, idp_client_id, idp_group_id, functional_role, clearance_level, created_at
 		FROM security.identity_profile_mappings
 		WHERE mapping_id = $1
 	`
@@ -284,10 +284,10 @@ func (s *ProfileService) GetMapping(ctx context.Context, id uuid.UUID) (*Identit
 func (s *ProfileService) UpdateMapping(ctx context.Context, m *IdentityProfileMapping) error {
 	query := `
 		UPDATE security.identity_profile_mappings
-		SET idp_group_claim = $1, functional_role = $2, clearance_level = $3
-		WHERE mapping_id = $4 AND tenant_id = $5
+		SET idp_client_id = $1, idp_group_id = $2, functional_role = $3, clearance_level = $4
+		WHERE mapping_id = $5 AND tenant_id = $6
 	`
-	res, err := s.db.ExecContext(ctx, query, m.IDPGroupClaim, m.FunctionalRole, m.ClearanceLevel, m.MappingID, m.TenantID)
+	res, err := s.db.ExecContext(ctx, query, m.IDPClientID, m.IDPGroupID, m.FunctionalRole, m.ClearanceLevel, m.MappingID, m.TenantID)
 	if err != nil {
 		return fmt.Errorf("failed to update mapping: %w", err)
 	}

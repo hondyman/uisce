@@ -134,6 +134,7 @@ const categoryConfigs: CategoryConfig[] = [
         icon: <SecurityIcon />,
         items: [
           { label: 'Access Rules', path: '/security/access-rules', icon: <LockIcon />, description: 'Row & column security' },
+          { label: 'IDP Mappings', path: '/security/idp-mappings', icon: <SecurityIcon />, description: 'Identity Provider mappings' },
           { label: 'Roles & Permissions', path: '/admin/rbac/roles', icon: <ShieldIcon />, description: 'RBAC management' },
           { label: 'Delegations', path: '/admin/rbac/delegations', icon: <SupervisorAccountIcon />, description: 'Approval delegations' },
           { label: 'Field Permissions', path: '/admin/rbac/field-permissions', icon: <LockOpenIcon />, description: 'Field-level security' },

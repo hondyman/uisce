@@ -22,7 +22,7 @@ BEGIN
         -- Also keep the legacy users.tenant_id fallback in sync.
         UPDATE public.app_user
         SET tenant_id = invesco_tenant_id::text,
-            updated_at = NOW()
+            updated_at_time = NOW()
         WHERE id = alice_id;
     END IF;
 END $$;

@@ -212,7 +212,7 @@ func (h *BOWizardHandler) GetRelatedBusinessObjects(w http.ResponseWriter, r *ht
 		INNER JOIN catalog_node bo ON bo.properties->>'driver_table_id' = rt.id::text
 		WHERE fk.source_node_id = $1
 		  AND fk.edge_type_name = 'FOREIGN_KEY'
-		  AND (bo.tenant_id = $2 OR bo.tenant_id = '99e99e99-99e9-49e9-89e9-99e99e99e999')
+		  AND (bo.tenant_id = $2 OR EXISTS (SELECT 1 FROM tenants WHERE id = bo.tenant_id AND gold_copy = true))
 		  AND bo.tenant_datasource_id = $3
 		ORDER BY bo.node_name
 	`
@@ -509,7 +509,7 @@ func (h *BOWizardHandler) getDrivingTableInfo(ctx context.Context, tableID, tena
 		  AND (
 		    (cn.tenant_id = $2::uuid AND cn.tenant_datasource_id = $3::uuid)
 		    OR 
-		    (cn.tenant_id = '99e99e99-99e9-49e9-89e9-99e99e99e999'::uuid)
+		    (EXISTS (SELECT 1 FROM tenants WHERE id = cn.tenant_id AND gold_copy = true))
 		  )
 	`
 
@@ -542,7 +542,7 @@ func (h *BOWizardHandler) getSemanticTermsForTable(ctx context.Context, tableID,
 		  AND (
 		    (col.tenant_id = $2::uuid AND col.tenant_datasource_id = $3::uuid)
 		    OR 
-		    (col.tenant_id = '99e99e99-99e9-49e9-89e9-99e99e99e999'::uuid)
+		    (EXISTS (SELECT 1 FROM tenants WHERE id = col.tenant_id AND gold_copy = true))
 		  )
 	`
 
@@ -585,7 +585,7 @@ func (h *BOWizardHandler) getRelatedTables(ctx context.Context, tableID, tenantI
 			AND (
 				(bo.tenant_id = $2::uuid AND bo.tenant_datasource_id = $3::uuid)
 				OR 
-				(bo.tenant_id = '99e99e99-99e9-49e9-89e9-99e99e99e999'::uuid)
+				(EXISTS (SELECT 1 FROM tenants WHERE id = bo.tenant_id AND gold_copy = true))
 			)
 		WHERE fk.source_node_id = $1::uuid
 		  AND fk.edge_type_name = 'FOREIGN_KEY'

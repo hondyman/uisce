@@ -89,7 +89,7 @@ func ValidateBusinessObject(ctx context.Context, db *sqlx.DB, req SaveWizardRequ
 			SELECT EXISTS(
 				SELECT 1 FROM catalog_node 
 				WHERE id = $1 
-				  AND (tenant_id = $2 OR tenant_id = '99e99e99-99e9-49e9-89e9-99e99e99e999')
+				  AND (tenant_id = $2 OR EXISTS (SELECT 1 FROM tenants WHERE id = tenant_id AND gold_copy = true))
 				  AND tenant_datasource_id = $3
 			)
 		`, req.DriverTableID, tenantID, datasourceID)

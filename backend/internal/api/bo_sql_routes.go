@@ -9,8 +9,8 @@ import (
 
 	"github.com/hondyman/semlayer/backend/internal/boresolver"
 	"github.com/hondyman/semlayer/backend/internal/logging"
+	jwtmiddleware "github.com/hondyman/semlayer/libs/jwt-middleware"
 	"github.com/jmoiron/sqlx"
-	"github.com/hondyman/semlayer/libs/jwt-middleware"
 )
 
 // SQLGenerationRequest wrapper to match what's expected from frontend if needed
@@ -76,10 +76,12 @@ func (s *Server) GenerateSQLHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	sql, args, err := generator.GenerateSQL(req)
+	// Cardinal Rule 6: thread the request context so the audit Recorder (if any)
+	// can attribute the AIQueryGenerated event to the authenticated actor.
+	sql, args, err := generator.GenerateSQL(r.Context(), req)
 	if err != nil {
 		logging.GetLogger().Sugar().Errorf("SQL Generation failed: %v", err)
-		http.Error(w, "Failed to generate SQL: "+err.Error(), http.StatusBadRequest) // 400 because it might be invalid BO/Field
+		http.Error(w, "Failed to generate SQL: "+err.Error(), http.StatusBadRequest)
 		return
 	}
 
@@ -144,7 +146,8 @@ func (s *Server) GenerateSQLFromSemanticHandler(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	sql, args, err := generator.GenerateSQLFromSemantic(&req, tenantID, datasourceID)
+	// Cardinal Rule 6: thread the request context for actor attribution.
+	sql, args, err := generator.GenerateSQLFromSemantic(r.Context(), &req, tenantID, datasourceID)
 	if err != nil {
 		logging.GetLogger().Sugar().Errorf("Semantic SQL Generation failed: %v", err)
 		http.Error(w, "Failed to generate SQL: "+err.Error(), http.StatusBadRequest)
@@ -165,7 +168,7 @@ func (s *Server) GenerateSQLFromSemanticHandler(w http.ResponseWriter, r *http.R
 // ExecuteSQLRequest wraps SQL execution request
 type ExecuteSQLRequest struct {
 	SQL              string        `json:"sql"`
-	Args             []interface{} `json:"args,omitempty"`               // Optional parameters for parameterized SQL
+	Args             []interface{} `json:"args,omitempty"` // Optional parameters for parameterized SQL
 	Limit            int           `json:"limit"`
 	BusinessObjectID string        `json:"business_object_id,omitempty"` // Optional: if provided, will auto-route based on BO's datasource
 	DatasourceID     string        `json:"datasource_id,omitempty"`      // Optional: manual override; if provided, takes precedence over BO lookup

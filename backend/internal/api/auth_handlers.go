@@ -76,6 +76,7 @@ func (s *Server) RegisterAuthRoutes(r chi.Router) {
 	r.Post("/refresh", s.refreshToken)
 	r.Post("/register", s.register)
 	r.Get("/me", s.getCurrentUser)
+	r.Get("/me/entitlements", s.GetUserEntitlements)
 
 	// User preferences
 	r.Route("/users/{userId}/preferences", func(r chi.Router) {

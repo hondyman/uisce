@@ -4,12 +4,14 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/hondyman/semlayer/backend/internal/security"
 )
 
 // TenantAccessHandlers provides endpoints for tenant access control
@@ -149,11 +151,36 @@ func (h *TenantAccessHandlers) listAccessibleTenants(w http.ResponseWriter, r *h
 	json.NewEncoder(w).Encode(tenants)
 }
 
-// listAllTenants returns all tenants with full hierarchy
+// listAllTenants returns tenants the caller is authorized to see.
+// Global admins see all tenants; tenant managers see only their assigned tenant(s).
 func (h *TenantAccessHandlers) listAllTenants(w http.ResponseWriter, r *http.Request) {
-	tenants, err := h.getAllTenantsInternal(r.Context(), nil) // nil means fetch all
+	actor, ok, err := h.requireTenantManager(r)
 	if err != nil {
-		http.Error(w, "Failed to query tenants: "+err.Error(), http.StatusInternalServerError)
+		http.Error(w, err.Error(), http.StatusUnauthorized)
+		return
+	}
+	if !ok {
+		http.Error(w, "forbidden", http.StatusForbidden)
+		return
+	}
+
+	var tenants []TenantResponse
+	var err2 error
+	if isGlobalAdmin(actor) {
+		tenants, err2 = h.getAllTenantsInternal(r.Context(), nil)
+	} else {
+		tenants = []TenantResponse{}
+		for _, tid := range actor.TenantIDs {
+			t, err := h.getAllTenantsInternal(r.Context(), &tid)
+			if err != nil {
+				http.Error(w, "Failed to query tenants: "+err.Error(), http.StatusInternalServerError)
+				return
+			}
+			tenants = append(tenants, t...)
+		}
+	}
+	if err2 != nil {
+		http.Error(w, "Failed to query tenants: "+err2.Error(), http.StatusInternalServerError)
 		return
 	}
 
@@ -459,15 +486,42 @@ func (h *TenantAccessHandlers) getTenantsByUser(r *http.Request, userID string) 
 }
 
 func (h *TenantAccessHandlers) listTenantAccessMappings(w http.ResponseWriter, r *http.Request) {
+	actor, ok, err := h.requireTenantManager(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusUnauthorized)
+		return
+	}
+	if !ok {
+		http.Error(w, "forbidden", http.StatusForbidden)
+		return
+	}
+
 	ctx := r.Context()
 	query := `
 		SELECT ut.user_id, ut.tenant_id, COALESCE(ut.access_role, 'viewer') as access_role,
 		       COALESCE(u.email, '') as email, ut.created_at, ut.updated_at
 		FROM public.user_tenant ut
 		LEFT JOIN public.app_user u ON ut.user_id = u.id
-		ORDER BY ut.created_at DESC
 	`
-	rows, err := h.DB.QueryContext(ctx, query)
+	args := []interface{}{}
+
+	if !isGlobalAdmin(actor) {
+		if len(actor.TenantIDs) == 0 {
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode([]interface{}{})
+			return
+		}
+		placeholders := make([]string, len(actor.TenantIDs))
+		for i, tid := range actor.TenantIDs {
+			placeholders[i] = fmt.Sprintf("$%d", i+1)
+			args = append(args, tid)
+		}
+		query += ` WHERE ut.tenant_id IN (` + strings.Join(placeholders, ",") + `)`
+	}
+
+	query += ` ORDER BY ut.created_at DESC`
+
+	rows, err := h.DB.QueryContext(ctx, query, args...)
 	if err != nil {
 		http.Error(w, "Failed to query tenant access mappings: "+err.Error(), http.StatusInternalServerError)
 		return
@@ -500,6 +554,16 @@ func (h *TenantAccessHandlers) listTenantAccessMappings(w http.ResponseWriter, r
 }
 
 func (h *TenantAccessHandlers) createTenantAccessMapping(w http.ResponseWriter, r *http.Request) {
+	actor, ok, err := h.requireTenantManager(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusUnauthorized)
+		return
+	}
+	if !ok {
+		http.Error(w, "forbidden", http.StatusForbidden)
+		return
+	}
+
 	var req struct {
 		UserID     string `json:"user_id"`
 		TenantID   string `json:"tenant_id"`
@@ -515,6 +579,11 @@ func (h *TenantAccessHandlers) createTenantAccessMapping(w http.ResponseWriter, 
 		return
 	}
 
+	if !canManageTenantAccess(actor, req.TenantID) {
+		http.Error(w, "forbidden", http.StatusForbidden)
+		return
+	}
+
 	if req.AccessRole == "" {
 		req.AccessRole = "viewer"
 	}
@@ -523,10 +592,10 @@ func (h *TenantAccessHandlers) createTenantAccessMapping(w http.ResponseWriter, 
 	query := `
 		INSERT INTO public.user_tenant (user_id, tenant_id, access_role, created_at, updated_at)
 		VALUES ($1, $2, $3, NOW(), NOW())
-		ON CONFLICT (user_id, tenant_id) DO UPDATE 
+		ON CONFLICT (user_id, tenant_id) DO UPDATE
 		SET access_role = EXCLUDED.access_role, updated_at = NOW()
 	`
-	_, err := h.DB.ExecContext(ctx, query, req.UserID, req.TenantID, req.AccessRole)
+	_, err = h.DB.ExecContext(ctx, query, req.UserID, req.TenantID, req.AccessRole)
 	if err != nil {
 		http.Error(w, "Failed to create tenant access mapping: "+err.Error(), http.StatusInternalServerError)
 		return
@@ -536,6 +605,16 @@ func (h *TenantAccessHandlers) createTenantAccessMapping(w http.ResponseWriter, 
 }
 
 func (h *TenantAccessHandlers) deleteTenantAccessMapping(w http.ResponseWriter, r *http.Request) {
+	actor, ok, err := h.requireTenantManager(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusUnauthorized)
+		return
+	}
+	if !ok {
+		http.Error(w, "forbidden", http.StatusForbidden)
+		return
+	}
+
 	id := chi.URLParam(r, "id")
 	parts := strings.Split(id, ":")
 	if len(parts) != 2 {
@@ -544,9 +623,14 @@ func (h *TenantAccessHandlers) deleteTenantAccessMapping(w http.ResponseWriter, 
 	}
 	userID, tenantID := parts[0], parts[1]
 
+	if !canManageTenantAccess(actor, tenantID) {
+		http.Error(w, "forbidden", http.StatusForbidden)
+		return
+	}
+
 	ctx := r.Context()
 	query := `DELETE FROM public.user_tenant WHERE user_id = $1 AND tenant_id = $2`
-	_, err := h.DB.ExecContext(ctx, query, userID, tenantID)
+	_, err = h.DB.ExecContext(ctx, query, userID, tenantID)
 	if err != nil {
 		http.Error(w, "Failed to delete tenant access mapping: "+err.Error(), http.StatusInternalServerError)
 		return
@@ -556,6 +640,16 @@ func (h *TenantAccessHandlers) deleteTenantAccessMapping(w http.ResponseWriter, 
 }
 
 func (h *TenantAccessHandlers) updateTenantAccessMapping(w http.ResponseWriter, r *http.Request) {
+	actor, ok, err := h.requireTenantManager(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusUnauthorized)
+		return
+	}
+	if !ok {
+		http.Error(w, "forbidden", http.StatusForbidden)
+		return
+	}
+
 	id := chi.URLParam(r, "id")
 	parts := strings.Split(id, ":")
 	if len(parts) != 2 {
@@ -563,6 +657,11 @@ func (h *TenantAccessHandlers) updateTenantAccessMapping(w http.ResponseWriter, 
 		return
 	}
 	userID, tenantID := parts[0], parts[1]
+
+	if !canManageTenantAccess(actor, tenantID) {
+		http.Error(w, "forbidden", http.StatusForbidden)
+		return
+	}
 
 	var req struct {
 		AccessRole string `json:"access_role"`
@@ -579,11 +678,72 @@ func (h *TenantAccessHandlers) updateTenantAccessMapping(w http.ResponseWriter, 
 
 	ctx := r.Context()
 	query := `UPDATE public.user_tenant SET access_role = $1, updated_at = NOW() WHERE user_id = $2 AND tenant_id = $3`
-	_, err := h.DB.ExecContext(ctx, query, req.AccessRole, userID, tenantID)
+	_, err = h.DB.ExecContext(ctx, query, req.AccessRole, userID, tenantID)
 	if err != nil {
 		http.Error(w, "Failed to update tenant access mapping: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
 
 	w.WriteHeader(http.StatusOK)
+}
+
+// ============================================================================
+// Authorization helpers for tenant access management
+// ============================================================================
+
+func (h *TenantAccessHandlers) requireGlobalAdmin(r *http.Request) (security.AuthInfo, bool) {
+	actor, ok := security.AuthInfoFromContext(r.Context())
+	if !ok || strings.TrimSpace(actor.UserID) == "" {
+		return security.AuthInfo{}, false
+	}
+	return actor, isGlobalAdmin(actor)
+}
+
+func (h *TenantAccessHandlers) requireTenantManager(r *http.Request) (security.AuthInfo, bool, error) {
+	actor, ok := security.AuthInfoFromContext(r.Context())
+	if !ok || strings.TrimSpace(actor.UserID) == "" {
+		return security.AuthInfo{}, false, errors.New("unauthorized")
+	}
+	if isGlobalAdmin(actor) {
+		return actor, true, nil
+	}
+	if hasAnyRole(actor.Roles, []string{"tenant_admin", "professional_services"}) {
+		return actor, true, nil
+	}
+	return security.AuthInfo{}, false, nil
+}
+
+func canManageTenantAccess(actor security.AuthInfo, tenantID string) bool {
+	if isGlobalAdmin(actor) {
+		return true
+	}
+	return tenantAllowed(actor.TenantIDs, tenantID)
+}
+
+func isGlobalAdmin(actor security.AuthInfo) bool {
+	if actor.IsGlobalAdmin {
+		return true
+	}
+	return hasAnyRole(actor.Roles, []string{"global_admin", "global_ops", "core_admin"})
+}
+
+func hasAnyRole(roles []string, targets []string) bool {
+	for _, r := range roles {
+		for _, t := range targets {
+			if strings.EqualFold(strings.TrimSpace(r), t) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func tenantAllowed(allowed []string, tenantID string) bool {
+	tid := strings.TrimSpace(tenantID)
+	for _, candidate := range allowed {
+		if strings.TrimSpace(candidate) == tid {
+			return true
+		}
+	}
+	return false
 }

@@ -34,7 +34,9 @@ func NewPublisherMiddleware(publisher AuditPublisher) *PublisherMiddleware {
 	}
 }
 
-// PublishFromContext publishes an audit event using publisher from context
+// PublishFromContext publishes an audit event using publisher from context.
+// Cardinal Rule 7: every branch below is contractually synchronous — the
+// returned error MUST be inspected before any denial is surfaced to a user.
 func PublishFromContext(ctx context.Context, publisher AuditPublisher, eventType string, event interface{}) error {
 	if publisher == nil {
 		return fmt.Errorf("audit publisher not available")
@@ -69,6 +71,37 @@ func PublishFromContext(ctx context.Context, publisher AuditPublisher, eventType
 		if e, ok := event.(AIQueryExecutionEvent); ok {
 			return publisher.PublishAIQueryAudit(ctx, e)
 		}
+
+	// AI Gate dispatchers (Phase B — Cardinal Rule 7)
+	case EventTypeAIQueryGenerated:
+		if e, ok := event.(AIQueryGeneratedEvent); ok {
+			return publisher.PublishAIQueryGenerated(ctx, e)
+		}
+	case EventTypeAISemanticResolved:
+		if e, ok := event.(AISemanticResolvedEvent); ok {
+			return publisher.PublishAISemanticResolved(ctx, e)
+		}
+	case EventTypeAIColumnMasked:
+		if e, ok := event.(AIColumnMaskedEvent); ok {
+			return publisher.PublishAIColumnMasked(ctx, e)
+		}
+	case EventTypeAIABACEvaluated:
+		if e, ok := event.(AIABACEvaluatedEvent); ok {
+			return publisher.PublishAIABACEvaluated(ctx, e)
+		}
+	case EventTypeAIABACDenied:
+		if e, ok := event.(AIABACDeniedEvent); ok {
+			return publisher.PublishAIABACDenied(ctx, e)
+		}
+	case EventTypeAILineageResolved:
+		if e, ok := event.(AILineageResolvedEvent); ok {
+			return publisher.PublishAILineageResolved(ctx, e)
+		}
+	case EventTypeCatalogBOMutated:
+		if e, ok := event.(CatalogBOMutatedEvent); ok {
+			return publisher.PublishCatalogBOMutated(ctx, e)
+		}
+
 	default:
 		return fmt.Errorf("unknown event type: %s", eventType)
 	}
@@ -93,6 +126,11 @@ func EnsureTopicsExist(bootstrapServers string) error {
 		TopicComplianceViolations,
 		TopicAISuggestions,
 		TopicAIQueryAudits,
+		// AI Gate topics (Phase B)
+		TopicAIGate,
+		TopicAIDenials,
+		TopicCatalogMutations,
+		TopicCacheInvalidations,
 	}
 
 	// In production, use Redpanda AdminClient to create topics:

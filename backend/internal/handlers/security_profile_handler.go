@@ -208,7 +208,8 @@ func (h *SecurityProfileHandler) CreateMapping(w http.ResponseWriter, r *http.Re
 	}
 
 	var req struct {
-		IDPGroupClaim  string `json:"idp_group_claim"`
+		IDPClientID    string `json:"idp_client_id"`
+		IDPGroupID     string `json:"idp_group_id"`
 		FunctionalRole string `json:"functional_role"`
 		ClearanceLevel string `json:"clearance_level"`
 	}
@@ -219,7 +220,8 @@ func (h *SecurityProfileHandler) CreateMapping(w http.ResponseWriter, r *http.Re
 
 	m := &security.IdentityProfileMapping{
 		TenantID:       tenantID,
-		IDPGroupClaim:  req.IDPGroupClaim,
+		IDPClientID:    req.IDPClientID,
+		IDPGroupID:     req.IDPGroupID,
 		FunctionalRole: req.FunctionalRole,
 		ClearanceLevel: req.ClearanceLevel,
 	}
@@ -293,7 +295,8 @@ func (h *SecurityProfileHandler) UpdateMapping(w http.ResponseWriter, r *http.Re
 	}
 
 	var req struct {
-		IDPGroupClaim  string `json:"idp_group_claim"`
+		IDPClientID    string `json:"idp_client_id"`
+		IDPGroupID     string `json:"idp_group_id"`
 		FunctionalRole string `json:"functional_role"`
 		ClearanceLevel string `json:"clearance_level"`
 	}
@@ -305,7 +308,8 @@ func (h *SecurityProfileHandler) UpdateMapping(w http.ResponseWriter, r *http.Re
 	m := &security.IdentityProfileMapping{
 		MappingID:      id,
 		TenantID:       tenantID,
-		IDPGroupClaim:  req.IDPGroupClaim,
+		IDPClientID:    req.IDPClientID,
+		IDPGroupID:     req.IDPGroupID,
 		FunctionalRole: req.FunctionalRole,
 		ClearanceLevel: req.ClearanceLevel,
 	}

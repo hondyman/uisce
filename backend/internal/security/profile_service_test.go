@@ -94,15 +94,16 @@ func TestProfileService_Integration(t *testing.T) {
 	mapping := &IdentityProfileMapping{
 		MappingID:      uuid.New(),
 		TenantID:       tenantID,
-		IDPGroupClaim:  "GG-Sales-US",
+		IDPClientID:    "semlayer-frontend",
+		IDPGroupID:     "GG-Sales-US",
 		FunctionalRole: "northwind_sales_rep",
 		ClearanceLevel: "L2",
 	}
 
 	_, err = tx.ExecContext(ctx, `
-		INSERT INTO security.identity_profile_mappings (mapping_id, tenant_id, idp_group_claim, functional_role, clearance_level)
-		VALUES ($1, $2, $3, $4, $5)
-	`, mapping.MappingID, mapping.TenantID, mapping.IDPGroupClaim, mapping.FunctionalRole, mapping.ClearanceLevel)
+		INSERT INTO security.identity_profile_mappings (mapping_id, tenant_id, idp_client_id, idp_group_id, functional_role, clearance_level)
+		VALUES ($1, $2, $3, $4, $5, $6)
+	`, mapping.MappingID, mapping.TenantID, mapping.IDPClientID, mapping.IDPGroupID, mapping.FunctionalRole, mapping.ClearanceLevel)
 	require.NoError(t, err)
 
 	// Test EnrichSubjectAttributes using a query in the transaction
@@ -110,7 +111,7 @@ func TestProfileService_Integration(t *testing.T) {
 	err = tx.QueryRowContext(ctx, `
 		SELECT functional_role, clearance_level 
 		FROM security.identity_profile_mappings
-		WHERE tenant_id = $1 AND idp_group_claim = ANY($2)
+		WHERE tenant_id = $1 AND idp_group_id = ANY($2)
 		LIMIT 1;
 	`, tenantID, []string{"GG-Sales-US"}).Scan(&role, &clearance)
 	require.NoError(t, err)

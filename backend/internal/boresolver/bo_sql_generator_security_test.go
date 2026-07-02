@@ -1,6 +1,7 @@
 package boresolver
 
 import (
+	"context"
 	dbsql "database/sql"
 	"strings"
 	"testing"
@@ -59,7 +60,7 @@ func TestTenantScoping_SingleObject(t *testing.T) {
 		Limit:            10,
 	}
 
-	sql, args, err := generator.GenerateSQL(req)
+	sql, args, err := generator.GenerateSQL(context.Background(), req)
 	require.NoError(t, err)
 
 	// Root driving table is isolated.
@@ -81,7 +82,7 @@ func TestTenantScoping_MultiJoin(t *testing.T) {
 		Limit:            10,
 	}
 
-	sql, args, err := generator.GenerateSQL(req)
+	sql, args, err := generator.GenerateSQL(context.Background(), req)
 	require.NoError(t, err)
 
 	// Every alias in the join graph must be isolated.
@@ -117,7 +118,7 @@ func TestTenantScoping_CombinesWithExistingFilters(t *testing.T) {
 		Limit: 10,
 	}
 
-	sql, args, err := generator.GenerateSQL(req)
+	sql, args, err := generator.GenerateSQL(context.Background(), req)
 	require.NoError(t, err)
 
 	where := extractWhere(sql)
@@ -139,7 +140,7 @@ func TestTenantScoping_NoTenantID_NoScoping(t *testing.T) {
 		Limit:            10,
 	}
 
-	sql, args, err := generator.GenerateSQL(req)
+	sql, args, err := generator.GenerateSQL(context.Background(), req)
 	require.NoError(t, err)
 
 	assert.NotContains(t, sql, "tenant_id")
@@ -157,7 +158,7 @@ func TestTenantScoping_SemanticRequest(t *testing.T) {
 		Limit:      10,
 	}
 
-	sql, args, err := generator.GenerateSQLFromSemantic(semanticReq, "tenant-alpha", "ds-postgres")
+	sql, args, err := generator.GenerateSQLFromSemantic(context.Background(), semanticReq, "tenant-alpha", "ds-postgres")
 	require.NoError(t, err)
 
 	assert.Contains(t, sql, "t0.tenant_id = $1")
@@ -187,7 +188,7 @@ func TestTenantScoping_DialectTokens(t *testing.T) {
 				TenantID:         "tenant-alpha",
 			}
 
-			sql, _, err := generator.GenerateSQL(req)
+			sql, _, err := generator.GenerateSQL(context.Background(), req)
 			require.NoError(t, err)
 			assert.Contains(t, sql, tc.want)
 		})
@@ -254,7 +255,7 @@ func TestAIGraphSecurityInterceptor_Masking(t *testing.T) {
 		TargetProfile:    "platform_analyst",
 	}
 
-	sql, _, err := generator.GenerateSQL(req)
+	sql, _, err := generator.GenerateSQL(context.Background(), req)
 	require.NoError(t, err)
 
 	// Invariant 3 check: dialect-safe encapsulation within parentheses
@@ -273,7 +274,7 @@ func TestAIGraphSecurityInterceptor_Masking(t *testing.T) {
 		WithArgs("platform_analyst", "de305d54-75b4-431b-adb2-eb6b9e546013").
 		WillReturnRows(sqlmock.NewRows([]string{"masking_rules"}).AddRow([]byte(`{"classifications": [{"tag": "contains:pii", "mask_type": "HASH_SHA256"}]}`)))
 
-	sql, _, err = generator.GenerateSQL(req)
+	sql, _, err = generator.GenerateSQL(context.Background(), req)
 	require.NoError(t, err)
 	assert.Contains(t, sql, "(SHA256(CAST(t0.ssn AS VARCHAR))) AS \"social_security_number\"")
 }

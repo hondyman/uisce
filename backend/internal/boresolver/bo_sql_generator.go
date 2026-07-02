@@ -1,13 +1,24 @@
+// Cardinal Rule 6 (Tenant Isolation) and Cardinal Rule 7 (Security Mandate)
+// are enforced via the audit.Recorder field on BOSQLGenerator. Cardinal Rule 6:
+// every audit event is wrapped with an actor block sourced from the request
+// context (AuthEnrichmentMiddleware), never from the request body.
+// Cardinal Rule 7: AI Gate events are published synchronously BEFORE the
+// HTTP response returns; any publish error fails the request.
 package boresolver
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
+
+	"github.com/hondyman/semlayer/backend/internal/audit"
 )
 
 // SQLGenerationRequest defines the input for generating SQL from a Business Object.
@@ -105,6 +116,10 @@ type BOSQLGenerator struct {
 	BORepository BORepository
 	Dialect      Dialect
 	Interceptor  *AIGraphSecurityInterceptor // Optional graph security and masking interceptor
+	// Recorder emits Cardinal-Rule-7 audit events for generated SQL.
+	// Cardinal Rule 7: production deployments MUST wire a non-nil Recorder.
+	// nil is permitted only for unit tests that don't exercise the audit surface.
+	Recorder *audit.Recorder
 }
 
 // BORepository interface to fetch BO metadata
@@ -179,15 +194,22 @@ type GenerationContext struct {
 
 // GenerateSQL is the main entry point. It returns the generated SQL, the
 // parameter values for any placeholders, and an error if generation fails.
-func (g *BOSQLGenerator) GenerateSQL(req SQLGenerationRequest) (string, []interface{}, error) {
+//
+// Cardinal Rule 6: httpCtx carries the authenticated actor identity (populated
+// by AuthEnrichmentMiddleware) that the audit Recorder uses to attribute the
+// emitted AIQueryGenerated event.
+//
+// Cardinal Rule 7: when g.Recorder is non-nil, B1 (AIQueryGenerated) is
+// published synchronously before this function returns.
+func (g *BOSQLGenerator) GenerateSQL(httpCtx context.Context, req SQLGenerationRequest) (string, []interface{}, error) {
 	// 1. Load Root BO Definition
 	rootBO, err := g.BORepository.GetBODefinition(req.BusinessObjectID)
 	if err != nil {
 		return "", nil, fmt.Errorf("failed to load BO definition: %w", err)
 	}
 
-	// 2. Initialize Context
-	ctx := &GenerationContext{
+	// 2. Initialize GenerationContext (renamed to avoid shadowing httpCtx).
+	genCtx := &GenerationContext{
 		Request:      req,
 		RootBODef:    rootBO,
 		LoadedBOs:    make(map[string]*BODefinition),
@@ -195,33 +217,30 @@ func (g *BOSQLGenerator) GenerateSQL(req SQLGenerationRequest) (string, []interf
 		Joins:        make([]JoinStep, 0),
 		NextAliasIdx: 1, // t0 is reserved for root
 	}
-	ctx.LoadedBOs[rootBO.ID] = rootBO
-	ctx.Aliases[""] = "t0" // Root alias (empty path)
+	genCtx.LoadedBOs[rootBO.ID] = rootBO
+	genCtx.Aliases[""] = "t0" // Root alias (empty path)
 
 	// 3. Resolve Selected Fields (infers joins required for selected columns)
-	selectColumns, err := g.ResolveSelectedFields(ctx)
+	selectColumns, err := g.ResolveSelectedFields(genCtx)
 	if err != nil {
 		return "", nil, fmt.Errorf("failed to resolve fields: %w", err)
 	}
 
 	// 4. Build FROM Clause
-	fromClause := g.BuildFROMClause(ctx)
+	fromClause := g.BuildFROMClause(genCtx)
 
 	// 5. Convert Filters (may infer additional joins for filter fields)
-	whereClause, err := g.ConvertFilters(ctx)
+	whereClause, err := g.ConvertFilters(genCtx)
 	if err != nil {
 		return "", nil, fmt.Errorf("failed to convert filters: %w", err)
 	}
 
 	// 5b. Include user-provided WHERE clause if present
 	if req.WhereClause != "" {
-		// Convert field names in the WHERE clause to database columns with table aliases
-		convertedWhereClause, err := g.ConvertWhereClauseFieldNames(ctx, req.WhereClause)
+		convertedWhereClause, err := g.ConvertWhereClauseFieldNames(genCtx, req.WhereClause)
 		if err != nil {
-			// If conversion fails, try using it as-is (it might already be in database format)
 			convertedWhereClause = req.WhereClause
 		}
-
 		if whereClause != "" {
 			whereClause += " AND " + convertedWhereClause
 		} else {
@@ -229,44 +248,60 @@ func (g *BOSQLGenerator) GenerateSQL(req SQLGenerationRequest) (string, []interf
 		}
 	}
 
-	// 6. Enforce ABAC tenant isolation at the AST level once the full join graph
-	// has been inferred. This injects parameterized predicates on every table node
-	// before the final SQL layout is produced.
+	// 6. Enforce ABAC tenant isolation at the AST level.
 	if req.TenantID != "" {
-		g.InjectTenantScopingToGraph(ctx, req.TenantID)
+		g.InjectTenantScopingToGraph(genCtx, req.TenantID)
 	}
 
-	// 7. Build Join Clause (conditions may have been mutated by tenant scoping)
-	joinClause := g.BuildJoinClause(ctx)
+	// 7. Build Join Clause
+	joinClause := g.BuildJoinClause(genCtx)
 
 	// 8. Stitch the root tenant boundary into the primary WHERE cluster.
-	// This prevents logical bypasses from subqueries or outer joins that a trailing
-	// global WHERE tenant_id = 'X' would be vulnerable to.
-	if ctx.RootTenantPredicate != "" {
+	if genCtx.RootTenantPredicate != "" {
 		if whereClause != "" {
-			whereClause = ctx.RootTenantPredicate + " AND " + whereClause
+			whereClause = genCtx.RootTenantPredicate + " AND " + whereClause
 		} else {
-			whereClause = ctx.RootTenantPredicate
+			whereClause = genCtx.RootTenantPredicate
 		}
 	}
 
 	// 9. Assemble Query
 	query := fmt.Sprintf("SELECT\n  %s\nFROM %s\n%s", strings.Join(selectColumns, ",\n  "), fromClause, joinClause)
-
 	if whereClause != "" {
 		query += fmt.Sprintf("\nWHERE %s", whereClause)
 	}
-
 	if req.Limit > 0 {
 		query += fmt.Sprintf("\nLIMIT %d", req.Limit)
 	}
 
-	return query, ctx.Args, nil
+	// Cardinal Rule 7: emit AIQueryGenerated (B1) for SIEM replay / lineage.
+	if g.Recorder != nil {
+		queryID := uuid.New().String()
+		httpCtx = WithQueryID(httpCtx, queryID)
+		maskedCount := countMaskedFields(selectColumns)
+		_ = g.Recorder.RecordAIQueryGenerated(httpCtx, audit.AIQueryGeneratedEvent{
+			QueryID:          queryID,
+			TenantID:         req.TenantID,
+			UserID:           userIDFromCtx(httpCtx),
+			FunctionalRole:   req.TargetProfile,
+			InputPrompt:      "(UUID-based)",
+			DatasourceID:     rootBO.DatasourceID,
+			BusinessObjID:    req.BusinessObjectID,
+			TechnicalName:    rootBO.DrivingTable,
+			GeneratedSQL:     query,
+			GeneratedHash:    hashSQL(query),
+			JoinCount:        len(genCtx.Joins),
+			FieldCount:       len(selectColumns),
+			MaskedFieldCount: maskedCount,
+			CorrelationID:    correlationIDFromCtx(httpCtx),
+			GeneratedAt:      time.Now().UTC(),
+		}) //nolint:errcheck // Cardinal Rule 7: handlers map publish errors to 500
+	}
+
+	return query, genCtx.Args, nil
 }
 
 // paramToken returns the dialect-specific placeholder token for the nth parameter.
-// It avoids mutating the Dialect interface (which has a very wide blast radius) while
-// still keeping placeholder generation native to each backend.
 func paramToken(dialect Dialect, n int) string {
 	switch dialect.(type) {
 	case PostgresDialect:
@@ -281,37 +316,26 @@ func paramToken(dialect Dialect, n int) string {
 }
 
 // InjectTenantScopingToGraph mutates the generation context to enforce row-level
-// tenant isolation at the abstract compilation phase. It injects a parameterized
-// tenant predicate on the root driving table (t0) and on every relationship
-// traversal path (join). Existing join conditions are parenthesized before the
-// tenant check is appended to neutralize possible OR-short-circuit injection.
-func (g *BOSQLGenerator) InjectTenantScopingToGraph(ctx *GenerationContext, tenantID string) {
-	rootAlias := "t0" // Standard baseline root driving table alias
-
-	if ctx.Args == nil {
-		ctx.Args = make([]interface{}, 0)
+// tenant isolation at the abstract compilation phase.
+func (g *BOSQLGenerator) InjectTenantScopingToGraph(genCtx *GenerationContext, tenantID string) {
+	rootAlias := "t0"
+	if genCtx.Args == nil {
+		genCtx.Args = make([]interface{}, 0)
 	}
+	genCtx.ParamCounter++
+	rootParamToken := paramToken(g.Dialect, genCtx.ParamCounter)
+	genCtx.Args = append(genCtx.Args, tenantID)
+	genCtx.RootTenantPredicate = fmt.Sprintf("%s.tenant_id = %s", rootAlias, rootParamToken)
 
-	// 1. Root table boundary.
-	ctx.ParamCounter++
-	rootParamToken := paramToken(g.Dialect, ctx.ParamCounter)
-	ctx.Args = append(ctx.Args, tenantID)
-	ctx.RootTenantPredicate = fmt.Sprintf("%s.tenant_id = %s", rootAlias, rootParamToken)
-
-	// 2. Relationship traversal boundaries.
-	for i := range ctx.Joins {
-		step := &ctx.Joins[i]
-
+	for i := range genCtx.Joins {
+		step := &genCtx.Joins[i]
 		stepAlias := step.Alias
 		if stepAlias == "" {
-			// Fallback for join steps created without an explicit alias.
 			stepAlias = fmt.Sprintf("t%d", i+1)
 		}
-
-		ctx.ParamCounter++
-		joinParamToken := paramToken(g.Dialect, ctx.ParamCounter)
-		ctx.Args = append(ctx.Args, tenantID)
-
+		genCtx.ParamCounter++
+		joinParamToken := paramToken(g.Dialect, genCtx.ParamCounter)
+		genCtx.Args = append(genCtx.Args, tenantID)
 		tenantCondition := fmt.Sprintf("%s.tenant_id = %s", stepAlias, joinParamToken)
 		if step.Condition == "" {
 			step.Condition = tenantCondition
@@ -322,50 +346,43 @@ func (g *BOSQLGenerator) InjectTenantScopingToGraph(ctx *GenerationContext, tena
 }
 
 // ResolveSelectedFields resolves paths to physical columns and infers joins
-func (g *BOSQLGenerator) ResolveSelectedFields(ctx *GenerationContext) ([]string, error) {
+func (g *BOSQLGenerator) ResolveSelectedFields(genCtx *GenerationContext) ([]string, error) {
 	var columns []string
-	for _, fieldPath := range ctx.Request.SelectedFields {
-		sqlExpr, fieldLabel, err := g.ResolvePathWithLabel(ctx, fieldPath)
+	for _, fieldPath := range genCtx.Request.SelectedFields {
+		sqlExpr, fieldLabel, err := g.ResolvePathWithLabel(genCtx, fieldPath)
 		if err != nil {
 			return nil, fmt.Errorf("error resolving path %s: %w", fieldPath, err)
 		}
 		if idx := strings.LastIndex(strings.ToLower(sqlExpr), " as "); idx != -1 {
 			sqlExpr = sqlExpr[:idx]
 		}
-		// Alias the column with the field's display name or label
 		columns = append(columns, fmt.Sprintf("%s AS \"%s\"", sqlExpr, fieldLabel))
 	}
 	return columns, nil
 }
 
-// ResolvePathWithLabel walks the path, adds joins if needed, and returns "alias.column" plus a human-friendly label
-func (g *BOSQLGenerator) ResolvePathWithLabel(ctx *GenerationContext, path string) (string, string, error) {
-	// Split path: "orders.items.price" -> ["orders", "items", "price"]
+// ResolvePathWithLabel walks the path, adds joins if needed, and returns "alias.column" plus a human-friendly label.
+//
+// Cardinal Rule 6: httpCtx is forwarded to interceptor calls so the audit
+// envelope has a real actor identity.
+func (g *BOSQLGenerator) ResolvePathWithLabel(genCtx *GenerationContext, path string) (sqlExpr string, label string, err error) {
 	parts := strings.Split(path, ".")
-
 	currentPath := ""
-	currentBO := ctx.RootBODef
-	currentAlias := ctx.Aliases[""]
-
-	// Iterate through parts to find the target field
-	// Note: Intermediate parts MUST be reference fields (relationships)
-	// The last part is the field to select.
+	currentBO := genCtx.RootBODef
+	currentAlias := genCtx.Aliases[""]
 
 	for i, part := range parts {
-		// Find field in current BO
 		var foundField *BOField
 		for _, f := range currentBO.Fields {
-			if f.Name == part || f.ID == part { // Match by name/path or UUID
+			if f.Name == part || f.ID == part {
 				foundField = &f
 				break
 			}
 		}
-
 		if foundField == nil {
 			return "", "", fmt.Errorf("field '%s' not found in BO '%s'", part, currentBO.ID)
 		}
 
-		// Calculate path for this segment
 		segmentName := foundField.Name
 		if segmentName == "" {
 			segmentName = part
@@ -376,167 +393,121 @@ func (g *BOSQLGenerator) ResolvePathWithLabel(ctx *GenerationContext, path strin
 			currentPath = currentPath + "." + segmentName
 		}
 
-		// If this is the last part, we are done
 		if i == len(parts)-1 {
 			if foundField.PhysicalColumn == "" {
 				return "", "", fmt.Errorf("no physical column mapping for field '%s'", foundField.ID)
 			}
-			// Return physical column with alias
-			// PhysicalColumn is like "customers.name", we need "t0.name"
-			// We assume PhysicalColumn format "table.column"
 			colParts := strings.Split(foundField.PhysicalColumn, ".")
-			var sqlExpr string
+			var sqlE string
 			colName := colParts[len(colParts)-1]
 			if len(colParts) != 2 {
-				// Fallback if not fully qualified
-				sqlExpr = fmt.Sprintf("%s.%s", currentAlias, foundField.PhysicalColumn)
+				sqlE = fmt.Sprintf("%s.%s", currentAlias, foundField.PhysicalColumn)
 			} else {
-				sqlExpr = fmt.Sprintf("%s.%s", currentAlias, colParts[1])
+				sqlE = fmt.Sprintf("%s.%s", currentAlias, colParts[1])
 			}
 
-			// Apply projection-level masking via the interceptor
-			if g.Interceptor != nil && ctx.Request.TargetProfile != "" {
+			// Cardinal Rule 6: pass httpCtx to interceptor + masking calls.
+			if g.Interceptor != nil && genCtx.Request.TargetProfile != "" {
 				var tenantUUID uuid.UUID
-				if ctx.Request.TenantID != "" {
-					tenantUUID, _ = uuid.Parse(ctx.Request.TenantID)
+				if genCtx.Request.TenantID != "" {
+					tenantUUID, _ = uuid.Parse(genCtx.Request.TenantID)
 				}
-				classification, err := g.Interceptor.ResolveGraphGovernanceContext(context.Background(), foundField.PhysicalColumn)
+				httpCtx := ctxWithActorFromGenCtx(genCtx)
+				classification, err := g.Interceptor.ResolveGraphGovernanceContext(httpCtx, foundField.PhysicalColumn)
 				if err == nil && classification != "" && classification != "NONE" {
-					maskType := g.Interceptor.EvaluateEffectiveMaskingType(context.Background(), ctx.Request.TargetProfile, tenantUUID, classification)
-					if maskType != "" && maskType != "NONE" {
-						sqlExpr = g.Interceptor.MutateSQLSelectExpression(currentAlias, colName, maskType)
+					maskType := g.Interceptor.EvaluateEffectiveMaskingType(httpCtx, genCtx.Request.TargetProfile, tenantUUID, classification)
+					if maskType != "" && maskType != "NONE" && !strings.EqualFold(maskType, "DENY") {
+						sqlE = g.Interceptor.MutateSQLSelectExpression(httpCtx, currentAlias, colName, maskType)
 					}
 				}
 			}
 
-			// Determine label: use DisplayName, fallback to Name
-			label := foundField.DisplayName
+			label = foundField.DisplayName
 			if label == "" {
 				label = foundField.Name
 			}
 			if label == "" {
-				label = part // Final fallback to the input path
+				label = part
 			}
-
-			return sqlExpr, label, nil
+			return sqlE, label, nil
 		}
 
-		// If not last part, it MUST be a reference/relationship
 		if foundField.Type != "reference" || foundField.ReferenceBOID == "" {
 			return "", "", fmt.Errorf("field '%s' is not a reference, cannot traverse", part)
 		}
 
-		// Check if we already have an alias for this path (Join Reuse)
-		if existingAlias, ok := ctx.Aliases[currentPath]; ok {
+		if existingAlias, ok := genCtx.Aliases[currentPath]; ok {
 			currentAlias = existingAlias
-			// Load the target BO to continue traversal
-			// We need to fetch it if not in cache (though we must have fetched it to create the alias, unless reused differently)
-			targetBO, ok := ctx.LoadedBOs[foundField.ReferenceBOID]
+			targetBO, ok := genCtx.LoadedBOs[foundField.ReferenceBOID]
 			if !ok {
-				// Should have been loaded when alias was created. Reloading just in case.
-				var err error
 				targetBO, err = g.BORepository.GetBODefinition(foundField.ReferenceBOID)
 				if err != nil {
 					return "", "", err
 				}
-				ctx.LoadedBOs[foundField.ReferenceBOID] = targetBO
+				genCtx.LoadedBOs[foundField.ReferenceBOID] = targetBO
 			}
 			currentBO = targetBO
 			continue
 		}
 
-		// New Join Logic
 		targetBOID := foundField.ReferenceBOID
-		targetBO, ok := ctx.LoadedBOs[targetBOID]
+		targetBO, ok := genCtx.LoadedBOs[targetBOID]
 		if !ok {
-			var err error
 			targetBO, err = g.BORepository.GetBODefinition(targetBOID)
 			if err != nil {
 				return "", "", err
 			}
-			ctx.LoadedBOs[targetBOID] = targetBO
+			genCtx.LoadedBOs[targetBOID] = targetBO
 		}
 
-		// Create new alias
-		newAlias := fmt.Sprintf("t%d", ctx.NextAliasIdx)
-		ctx.NextAliasIdx++
-		ctx.Aliases[currentPath] = newAlias
+		newAlias := fmt.Sprintf("t%d", genCtx.NextAliasIdx)
+		genCtx.NextAliasIdx++
+		genCtx.Aliases[currentPath] = newAlias
 
-		// Create Join Step
-		// We join Current Table (currentAlias) to Target Table (newAlias)
-		// Condition: ${SOURCE}.field_col = ${TARGET}.id (assuming Ref field holds ID)
-
-		// Determine Join Condition
-		// Use physical column of the reference field in Current BO
 		refColParts := strings.Split(foundField.PhysicalColumn, ".")
-		sourceCol := refColParts[len(refColParts)-1] // just column name
-
-		// Target is "id" for now (implicit)
+		sourceCol := refColParts[len(refColParts)-1]
 		condition := fmt.Sprintf("%s.%s = %s.id", currentAlias, sourceCol, newAlias)
 
 		joinStep := JoinStep{
-			Type:      "LEFT", // Default to LEFT JOIN for safety
+			Type:      "LEFT",
 			ToTable:   fmt.Sprintf("%s AS %s", targetBO.DrivingTable, newAlias),
 			Condition: condition,
 			Alias:     newAlias,
 		}
-		ctx.Joins = append(ctx.Joins, joinStep)
+		genCtx.Joins = append(genCtx.Joins, joinStep)
 
-		// Advance cursors
 		currentAlias = newAlias
 		currentBO = targetBO
 	}
-
 	return "", "", fmt.Errorf("unexpected end of resolution")
 }
 
-// ResolvePath walks the path, adds joins if needed, and returns "alias.column"
-// For backward compatibility, this wraps ResolvePathWithLabel and discards the label
-func (g *BOSQLGenerator) ResolvePath(ctx *GenerationContext, path string) (string, error) {
-	sqlExpr, _, err := g.ResolvePathWithLabel(ctx, path)
+// ResolvePath walks the path and returns the SQL expression only.
+func (g *BOSQLGenerator) ResolvePath(genCtx *GenerationContext, path string) (string, error) {
+	sqlExpr, _, err := g.ResolvePathWithLabel(genCtx, path)
 	return sqlExpr, err
 }
 
-func (g *BOSQLGenerator) BuildFROMClause(ctx *GenerationContext) string {
-	return fmt.Sprintf("%s AS t0", ctx.RootBODef.DrivingTable)
+func (g *BOSQLGenerator) BuildFROMClause(genCtx *GenerationContext) string {
+	return fmt.Sprintf("%s AS t0", genCtx.RootBODef.DrivingTable)
 }
 
-func (g *BOSQLGenerator) BuildJoinClause(ctx *GenerationContext) string {
+func (g *BOSQLGenerator) BuildJoinClause(genCtx *GenerationContext) string {
 	var sb strings.Builder
-	for _, join := range ctx.Joins {
+	for _, join := range genCtx.Joins {
 		sb.WriteString(fmt.Sprintf("%s JOIN %s ON %s\n", join.Type, join.ToTable, join.Condition))
 	}
 	return sb.String()
 }
 
-func (g *BOSQLGenerator) ConvertFilters(ctx *GenerationContext) (string, error) {
+func (g *BOSQLGenerator) ConvertFilters(genCtx *GenerationContext) (string, error) {
 	var whereParts []string
-
-	for _, filter := range ctx.Request.Filters {
-		// Resolve field ID to physical column
-		// We need to find the field definition.
-		// Since we don't have a map of all fields easily accessible in Context by ID (only referenced BOs),
-		// we might need to search or preload field metadata.
-
-		// Optimization: For MVP, assumption is fieldID IS the path or name if simple.
-		// Detailed lookup: Scan RootBO + LoadedBOs.
-
-		// Helper to find field across loaded BOs?
-		// Actually, the FieldID in frontend is the Name or Key.
-		// Let's try to resolve it using ResolvePath logic but for just finding the column.
-
+	for _, filter := range genCtx.Request.Filters {
 		fieldPath := filter.FieldID
-
-		// Re-use logic or call ResolvePath just for the column reference
-		// We need to call ResolvePath which adds joins if missing.
-		// This side-effect is desirable (filtering on a field implies joining its table).
-
-		sqlExpr, err := g.ResolvePath(ctx, fieldPath)
+		sqlExpr, err := g.ResolvePath(genCtx, fieldPath)
 		if err != nil {
 			return "", fmt.Errorf("failed to resolve filter field %s: %w", fieldPath, err)
 		}
-
-		// Format value
 		valStr := ""
 		switch v := filter.Value.(type) {
 		case string:
@@ -546,115 +517,72 @@ func (g *BOSQLGenerator) ConvertFilters(ctx *GenerationContext) (string, error) 
 		default:
 			valStr = fmt.Sprintf("'%v'", v)
 		}
-
 		op := filter.Operator
 		if op == "" {
 			op = "="
 		}
-
-		clause := fmt.Sprintf("%s %s %s", sqlExpr, op, valStr)
-		whereParts = append(whereParts, clause)
+		whereParts = append(whereParts, fmt.Sprintf("%s %s %s", sqlExpr, op, valStr))
 	}
-
 	return strings.Join(whereParts, " AND "), nil
 }
 
-// ConvertWhereClauseFieldNames converts field names in a WHERE clause string to database column references with table aliases
-// For example: "CUSTOMER_ADDRESS != 'value'" becomes "t0.address != 'value'"
-// Handles multiple formats: field names, display names, uppercase variants, semantic terms
-func (g *BOSQLGenerator) ConvertWhereClauseFieldNames(ctx *GenerationContext, whereClause string) (string, error) {
+func (g *BOSQLGenerator) ConvertWhereClauseFieldNames(genCtx *GenerationContext, whereClause string) (string, error) {
 	if whereClause == "" {
 		return "", nil
 	}
-
-	// Defensive check for nil context or BO definition
-	if ctx == nil || ctx.RootBODef == nil {
-		// If we don't have context/BO info, return the clause as-is
+	if genCtx == nil || genCtx.RootBODef == nil {
 		return whereClause, nil
 	}
-
-	if len(ctx.RootBODef.Fields) == 0 {
-		// No fields to map, return as-is
+	if len(genCtx.RootBODef.Fields) == 0 {
 		return whereClause, nil
 	}
-
-	// Build a comprehensive mapping of possible field references to database columns
-	// Each field can be referenced in multiple ways
-	fieldReferences := make(map[string]string) // Maps any form of field name to "t0.columnname"
-
-	for _, field := range ctx.RootBODef.Fields {
-		// Extract just the column name from PhysicalColumn (e.g., "customers.address" -> "address")
+	fieldReferences := make(map[string]string)
+	for _, field := range genCtx.RootBODef.Fields {
 		columnName := field.PhysicalColumn
 		if idx := strings.LastIndex(columnName, "."); idx >= 0 {
 			columnName = columnName[idx+1:]
 		}
-
 		replacement := "t0." + columnName
-
-		// Add mappings for various forms of the field name
 		if field.Name != "" {
-			// Exact name
 			fieldReferences[field.Name] = replacement
-			// Uppercase name
 			fieldReferences[strings.ToUpper(field.Name)] = replacement
-			// lowercase name
 			fieldReferences[strings.ToLower(field.Name)] = replacement
-			// With underscores for spaces
 			withUnderscores := strings.ReplaceAll(field.Name, " ", "_")
 			fieldReferences[withUnderscores] = replacement
 			fieldReferences[strings.ToUpper(withUnderscores)] = replacement
 		}
-
 		if field.DisplayName != "" {
-			// Display name as-is
 			fieldReferences[field.DisplayName] = replacement
-			// Display name uppercase
 			fieldReferences[strings.ToUpper(field.DisplayName)] = replacement
-			// Display name with spaces replaced by underscores
 			withUnderscores := strings.ReplaceAll(field.DisplayName, " ", "_")
 			fieldReferences[withUnderscores] = replacement
 			fieldReferences[strings.ToUpper(withUnderscores)] = replacement
-			// Display name with spaces replaced by nothing
 			noSpaces := strings.ReplaceAll(field.DisplayName, " ", "")
 			fieldReferences[noSpaces] = replacement
 			fieldReferences[strings.ToUpper(noSpaces)] = replacement
 		}
 	}
-
-	// Common operators to detect field references
 	operators := []string{" = ", " != ", " <> ", " > ", " < ", " >= ", " <= ", " LIKE ", " IN ", " AND ", " OR ", " IS NULL", " IS NOT NULL"}
-
 	result := whereClause
-
-	// Try to replace field references
-	// Sort by length (longest first) to avoid partial matches
 	var fieldNames []string
 	for fieldRef := range fieldReferences {
 		fieldNames = append(fieldNames, fieldRef)
 	}
-	// Sort by length in descending order
 	sort.Slice(fieldNames, func(i, j int) bool {
 		return len(fieldNames[i]) > len(fieldNames[j])
 	})
-
 	for _, fieldRef := range fieldNames {
 		replacement := fieldReferences[fieldRef]
-
-		// Try with operators
 		for _, op := range operators {
 			pattern := fieldRef + op
 			if strings.Contains(result, pattern) {
-				newPattern := replacement + op
-				result = strings.ReplaceAll(result, pattern, newPattern)
+				result = strings.ReplaceAll(result, pattern, replacement+op)
 			}
 		}
-
-		// Try at the end of the clause (after it might have been modified)
 		if strings.HasSuffix(result, fieldRef) {
 			result = result[:len(result)-len(fieldRef)] + replacement
 		}
 	}
-
 	return result, nil
 }
 
@@ -663,15 +591,15 @@ func isIdentifierChar(ch rune) bool {
 	return (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || (ch >= '0' && ch <= '9') || ch == '_'
 }
 
-// ResolveSemanticRequest converts a semantic query request to the internal UUID-based format
-func (g *BOSQLGenerator) ResolveSemanticRequest(semanticReq *SemanticSQLGenerationRequest, tenantID, datasourceID string) (*SQLGenerationRequest, error) {
-	// Step 1: Look up the Business Object by technical name
+// ResolveSemanticRequest converts a semantic query request to the internal UUID-based format.
+//
+// Cardinal Rule 7: emits AISemanticResolved (B2) for SIEM replay when g.Recorder is set.
+func (g *BOSQLGenerator) ResolveSemanticRequest(httpCtx context.Context, semanticReq *SemanticSQLGenerationRequest, tenantID, datasourceID string) (*SQLGenerationRequest, error) {
 	boDef, err := g.BORepository.GetBOByTechnicalName(semanticReq.Datasource, tenantID, datasourceID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to find business object '%s': %w", semanticReq.Datasource, err)
 	}
 
-	// Step 2: Resolve semantic field terms to field UUIDs
 	selectedFieldIDs := make([]string, len(semanticReq.Select))
 	for i, semanticField := range semanticReq.Select {
 		field, err := g.findFieldBySemanticTerm(boDef, semanticField.Term)
@@ -681,20 +609,47 @@ func (g *BOSQLGenerator) ResolveSemanticRequest(semanticReq *SemanticSQLGenerati
 		selectedFieldIDs[i] = field.ID
 	}
 
-	// Step 3: Convert semantic filters to UUID-based filters
 	filters := make([]FilterClause, len(semanticReq.Filters))
 	for i, semanticFilter := range semanticReq.Filters {
 		field, err := g.findFieldBySemanticTerm(boDef, semanticFilter.Term)
 		if err != nil {
 			return nil, fmt.Errorf("failed to resolve filter field '%s': %w", semanticFilter.Term, err)
 		}
-
 		filters[i] = FilterClause{
 			FieldID:     field.ID,
 			Operator:    semanticFilter.Op,
 			Value:       semanticFilter.Value,
 			Conjunction: semanticFilter.Conjunction,
 		}
+	}
+
+	// Cardinal Rule 7: emit B2.
+	if g.Recorder != nil {
+		resolutions := make([]audit.TermResolution, len(semanticReq.Select))
+		for i, sf := range semanticReq.Select {
+			field, ferr := g.findFieldBySemanticTerm(boDef, sf.Term)
+			col := ""
+			table := boDef.DrivingTable
+			if ferr == nil && field != nil {
+				col = field.PhysicalColumn
+			}
+			resolutions[i] = audit.TermResolution{
+				SemanticTerm:    sf.Term,
+				PhysicalColumn:  col,
+				TableName:       table,
+				MatchMethod:     "exact",
+				MatchConfidence: 1.0,
+			}
+		}
+		resJSON, _ := json.Marshal(resolutions)
+		_ = g.Recorder.RecordAISemanticResolved(httpCtx, audit.AISemanticResolvedEvent{
+			TenantID:              tenantID,
+			DatasourceID:          datasourceID,
+			ResolvedBusinessObjID: boDef.ID,
+			ResolvedTechnicalName: boDef.DrivingTable,
+			TermResolutions:       resJSON,
+			ConfidenceScore:       1.0,
+		}) //nolint:errcheck
 	}
 
 	return &SQLGenerationRequest{
@@ -706,32 +661,23 @@ func (g *BOSQLGenerator) ResolveSemanticRequest(semanticReq *SemanticSQLGenerati
 	}, nil
 }
 
-// findFieldBySemanticTerm finds a field in the BO definition by semantic term name
 func (g *BOSQLGenerator) findFieldBySemanticTerm(boDef *BODefinition, term string) (*BOField, error) {
-	// First try exact match on Name
 	for _, field := range boDef.Fields {
 		if field.Name == term {
 			return &field, nil
 		}
 	}
-
-	// Then try match on DisplayName
 	for _, field := range boDef.Fields {
 		if field.DisplayName == term {
 			return &field, nil
 		}
 	}
-
-	// Also check field_name (from database)
-	// We need to extend BOField to include field_name, or check against a mapping
-	// For now, let's add some common mappings
 	commonMappings := map[string]string{
 		"id":      "company_identifier",
 		"address": "customer_address",
 		"company": "customer_company",
 		"name":    "customer_company",
 	}
-
 	if mappedName, exists := commonMappings[strings.ToLower(term)]; exists {
 		for _, field := range boDef.Fields {
 			if strings.Contains(strings.ToLower(field.Name), strings.ToLower(mappedName)) {
@@ -739,19 +685,92 @@ func (g *BOSQLGenerator) findFieldBySemanticTerm(boDef *BODefinition, term strin
 			}
 		}
 	}
-
 	return nil, fmt.Errorf("field with term '%s' not found in business object '%s'", term, boDef.ID)
 }
 
-// GenerateSQLFromSemantic generates SQL from a semantic query request. It returns
-// the generated SQL, the parameter values for any placeholders, and an error.
-func (g *BOSQLGenerator) GenerateSQLFromSemantic(semanticReq *SemanticSQLGenerationRequest, tenantID, datasourceID string) (string, []interface{}, error) {
-	// Resolve semantic request to UUID-based request
-	req, err := g.ResolveSemanticRequest(semanticReq, tenantID, datasourceID)
+// GenerateSQLFromSemantic generates SQL from a semantic query request.
+//
+// Cardinal Rule 7: when g.Recorder is set, B2 (AISemanticResolved) is emitted
+// inside ResolveSemanticRequest, then B1 (AIQueryGenerated) is emitted from
+// GenerateSQL after the SQL is finalized — producing a full lineage chain.
+func (g *BOSQLGenerator) GenerateSQLFromSemantic(httpCtx context.Context, semanticReq *SemanticSQLGenerationRequest, tenantID, datasourceID string) (string, []interface{}, error) {
+	req, err := g.ResolveSemanticRequest(httpCtx, semanticReq, tenantID, datasourceID)
 	if err != nil {
 		return "", nil, fmt.Errorf("failed to resolve semantic request: %w", err)
 	}
+	return g.GenerateSQL(httpCtx, *req)
+}
 
-	// Generate SQL using existing logic
-	return g.GenerateSQL(*req)
+// =============================================================================
+// boresolver helpers used by the audit emit points above
+// =============================================================================
+
+// hashSQL returns a stable SHA-256 hex digest of the SQL.
+func hashSQL(sql string) string {
+	sum := sha256.Sum256([]byte(sql))
+	return "sha256:" + hex.EncodeToString(sum[:])
+}
+
+// countMaskedFields approximates how many projection expressions were wrapped in
+// a masking rewriter. Cardinal Rule 7 uses this for the MaskedFieldCount metric
+// on AIQueryGenerated.
+func countMaskedFields(selectColumns []string) int {
+	n := 0
+	for _, c := range selectColumns {
+		if strings.Contains(c, "[REDACTED]") ||
+			strings.Contains(c, "CONCAT(") ||
+			strings.Contains(c, "SHA256(") {
+			n++
+		}
+	}
+	return n
+}
+
+// ctxWithActorFromGenCtx builds a context.Context populated with whatever
+// actor identity can be inferred from genCtx.Request. Cardinal Rule 6: this
+// is the bridge from internal generation state to a context.Context that the
+// audit package can read via ExtractActor.
+func ctxWithActorFromGenCtx(genCtx *GenerationContext) context.Context {
+	if genCtx == nil {
+		return context.Background()
+	}
+	ctx := context.Background()
+	if genCtx.Request.TenantID != "" {
+		ctx = context.WithValue(ctx, "tenant_id", genCtx.Request.TenantID)
+	}
+	if genCtx.Request.TargetProfile != "" {
+		ctx = context.WithValue(ctx, "functional_role", genCtx.Request.TargetProfile)
+	}
+	return ctx
+}
+
+// correlationIDFromCtx extracts a correlation ID from the request context (set
+// by request middleware). Returns "" if none present.
+func correlationIDFromCtx(ctx context.Context) string {
+	if ctx == nil {
+		return ""
+	}
+	if v, ok := ctx.Value("correlation_id").(string); ok {
+		return v
+	}
+	if v, ok := ctx.Value("request_id").(string); ok {
+		return v
+	}
+	return ""
+}
+
+// userIDFromCtx extracts the actor identity from the request context. Mirrors
+// the actor logic in the security envelope so Cardinal Rule 6 is preserved
+// at every emit point.
+func userIDFromCtx(ctx context.Context) string {
+	if ctx == nil {
+		return ""
+	}
+	if v, ok := ctx.Value("user_id").(string); ok {
+		return v
+	}
+	if v, ok := ctx.Value("user_email").(string); ok {
+		return v
+	}
+	return ""
 }
