@@ -19,7 +19,11 @@ export const oidcSettings: UserManagerSettings = {
   redirect_uri: redirectUri,
   post_logout_redirect_uri: postLogoutRedirectUri,
   response_type: 'code',
-  scope: 'openid profile email',
+  // Explicitly request the `tenant-groups` scope so the federated IdP group
+  // memberships (e.g. "Uisce-Global-Admins") are emitted as a `groups`
+  // claim in the ID token. The Keycloak `tenant-groups` scope is also in
+  // defaultDefaultClientScopes, so this is defence-in-depth.
+  scope: 'openid profile email tenant-groups',
   userStore: new WebStorageStateStore({ store: window.localStorage }),
   stateStore: new WebStorageStateStore({ store: window.localStorage }),
   automaticSilentRenew: false, // managed manually via getValidToken/signinSilent
@@ -31,7 +35,15 @@ export const userManager = new UserManager(oidcSettings);
 
 // Log OIDC events in dev to aid debugging.
 userManager.events.addUserLoaded((user) => {
-  devLog('[OIDC] user loaded', { sub: user.profile?.sub, expired: user.expired });
+  const profile: any = user.profile || {};
+  devLog('[OIDC] user loaded', {
+    sub: profile.sub,
+    expired: user.expired,
+    groups: profile.groups,
+    operator_role: profile.operator_role,
+    realm_access_roles: profile.realm_access?.roles,
+    uisce_metadata: profile.uisce_metadata,
+  });
 });
 
 userManager.events.addUserUnloaded(() => {

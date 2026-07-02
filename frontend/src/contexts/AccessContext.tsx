@@ -14,6 +14,7 @@ import { Tenant, TenantInstance, Product, DataSource } from '../types';
 import { useAuth } from './AuthContext';
 import { devLog, devWarn, devError } from '../utils/devLogger';
 import { setSelectedRegion } from '../lib/region';
+import { apiFetch } from '../lib/apiClient';
 
 // Storage keys
 export const ACCESS_STORAGE_KEYS = {
@@ -102,6 +103,13 @@ export const AccessProvider: React.FC<AccessProviderProps> = ({ children }) => {
       user.role === 'platform_operator' ||
       user.role === 'global_ops' ||
       user.role === 'admin' ||
+      user.role === 'global_admin' ||
+      user.is_global_admin === true ||
+      user.uisce_metadata?.is_global_admin === true ||
+      user.operator_role === 'global_admin' ||
+      user.operator_role === 'platform_operator' ||
+      user.operator_role === 'global_ops' ||
+      user.uisce_metadata?.operator_role === 'global_admin' ||
       user.permissions?.includes('platform:operator') ||
       user.permissions?.includes('*');
 
@@ -149,29 +157,25 @@ export const AccessProvider: React.FC<AccessProviderProps> = ({ children }) => {
 
     const fetchTenants = async () => {
       try {
-        // Platform operators see all tenants with full hierarchy
-        // Tenant admins/users see only their assigned tenants
-        // Use /api/tenants/all for full hierarchy (includes instances, products, datasources)
-        // Use /api/tenants/accessible for user-scoped access
-        // Use /api/tenants/all for everyone temporarily to bypass /api/tenants/accessible crash
-        // const endpoint = accessLevel === 'platform_operator' 
-        //   ? '/api/tenants/all' 
-        //   : '/api/tenants/accessible';
-        // Bypass proxy in development to avoid 404s - DISABLED: using proxy on 8082
-        // const baseUrl = import.meta.env.DEV ? 'http://localhost:8080' : '';
-        const endpoint = `/api/tenants/accessible`;
-        
+        // Platform operators see all tenants with full hierarchy (instances, products,
+        // datasources) via /api/tenants/all. Non-operators get a user-scoped projection
+        // via /api/tenants/accessible.
+        const endpoint = accessLevel === 'platform_operator'
+          ? '/api/tenants/all'
+          : '/api/tenants/accessible';
+
         devLog(`Fetching tenants from ${endpoint}`);
-        const response = await fetch(endpoint, {
-          // Include credentials for CORS requests in dev
+        // apiFetch injects Authorization: Bearer <jwt> + X-Tenant-ID + region automatically
+        const response = await apiFetch(endpoint, {
           credentials: import.meta.env.DEV ? 'include' : 'same-origin'
         });
 
         if (response.ok) {
           const json = await response.json();
           const tenantsList = json.success ? json.data : json;
-          setAccessibleTenants(tenantsList || []);
-          devLog(`Loaded ${tenantsList?.length || 0} accessible tenants`, tenantsList);
+          const list = Array.isArray(tenantsList) ? tenantsList : [];
+          setAccessibleTenants(list);
+          devLog(`Loaded ${list.length} accessible tenants`, list);
         } else {
           devWarn(`Failed to fetch tenants: ${response.status} ${response.statusText}`);
         }
