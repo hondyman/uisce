@@ -366,6 +366,7 @@ function ProtectedApp() {
         <Route path="/core/genui-proposal" element={<ProtectedRoute><GenUIProposalDemoPage /></ProtectedRoute>} />
         <Route path="/core/genui-inbox" element={<ProtectedRoute><GenUIApprovalInboxPage /></ProtectedRoute>} />
         {/* Compatibility Redirects */}
+        <Route path="/fabric/security/idp-mappings" element={<Navigate to="/security/idp-mappings" replace />} />
         <Route path="/audit" element={<Navigate to="/setup/audit" replace />} />
         <Route path="/rbac" element={<Navigate to="/admin/rbac/roles" replace />} />
         <Route path="/glossary" element={<Navigate to="/core/glossary" replace />} />

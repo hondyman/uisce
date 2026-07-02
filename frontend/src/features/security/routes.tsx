@@ -8,6 +8,7 @@ import { ComplianceReportsPage } from './pages/ComplianceReportsPage';
 import { AccessRulesDashboard } from './pages/AccessRulesDashboard';
 import { AccessRuleWizardPage } from './pages/AccessRuleWizardPage';
 import { AccessRuleDetailPage } from './pages/AccessRuleDetailPage';
+import { IDPMappingsPage } from './pages/IDPMappingsPage';
 
 export const SecurityRoutes: React.FC = () => {
   return (
@@ -20,6 +21,7 @@ export const SecurityRoutes: React.FC = () => {
       <Route path="/access-rules" element={<AccessRulesDashboard />} />
       <Route path="/access-rules/wizard" element={<AccessRuleWizardPage />} />
       <Route path="/access-rules/:ruleId" element={<AccessRuleDetailPage />} />
+      <Route path="/idp-mappings" element={<IDPMappingsPage />} />
     </Routes>
   );
 };

@@ -280,7 +280,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }
   };
 
-  const refreshToken = async (): Promise<void> => {
+  const refreshToken = useCallback(async (): Promise<void> => {
     try {
       const oidcUser = await userManager.signinSilent();
       if (!oidcUser) {
@@ -293,14 +293,14 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       hydrateFromOidcUser(null);
       throw error;
     }
-  };
+  }, [hydrateFromOidcUser]);
 
   const isTokenExpired = (): boolean => {
     if (!tokenExpiresAt) return false;
     return Date.now() >= tokenExpiresAt - 30000;
   };
 
-  const getValidToken = async (): Promise<string | null> => {
+  const getValidToken = useCallback(async (): Promise<string | null> => {
     const current = oidcUserRef.current;
     if (!current || current.expired) {
       if (!current) {
@@ -326,7 +326,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       }
     }
     return current.id_token || current.access_token || null;
-  };
+  }, [hydrateFromOidcUser, refreshToken]);
 
   const computeIsCoreAdmin = (): boolean => {
     const u: any = user;

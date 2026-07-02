@@ -8,5 +8,6 @@
     },
     "chat.tools.terminal.autoApprove": {
         "/Users/eganpj/GitHub/semlayer/backend/catalog-sync": true
-    }
+    },
+    "makefile.configureOnOpen": false
 }

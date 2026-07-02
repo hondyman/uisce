@@ -1,7 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useMemo } from 'react';
+import { useCallback, useMemo } from 'react';
 import { useTenant } from '../contexts/TenantContext';
-import { useApolloClient, useQuery as useApolloQuery, gql } from '@apollo/client';
 import { devDebug } from '../utils/devLogger';
 import { getSelectedRegion } from '../lib/region';
 
@@ -154,260 +153,210 @@ export function useBusinessTerms() {
 }
 
 // Fetch edges between business terms and semantic terms
-// NOTE: Edges are now provided by GraphQL query (catalog_edge), so this REST call is disabled
+// Backed by the REST /api/glossary/edges endpoint (the previous GraphQL
+// implementation was disabled along with Hasura).
 export function useGlossaryEdges() {
   const { tenant, datasource } = useTenant();
 
   return useQuery({
     queryKey: glossaryKeys.edges(),
     queryFn: async () => {
-      // Return empty array - edges are fetched via GraphQL instead
-      return [] as CatalogEdge[];
+      if (!tenant?.id) return [] as CatalogEdge[];
+      const params = new URLSearchParams();
+      params.append('tenant_id', tenant.id);
+      if (datasource?.id) params.append('tenant_instance_id', datasource.id);
+
+      const res = await fetch(`/api/glossary/edges?${params.toString()}`, {
+        credentials: 'include',
+        headers: {
+          ...(tenant?.id && { 'X-Tenant-ID': tenant.id }),
+          ...(datasource?.id && { 'X-Tenant-Datasource-ID': datasource.id }),
+          'X-Tenant-Region': getSelectedRegion(),
+        },
+      });
+      if (!res.ok) {
+        devDebug(`[useGlossaryEdges] /api/glossary/edges returned ${res.status}`);
+        return [] as CatalogEdge[];
+      }
+      return (await res.json()) as CatalogEdge[];
     },
     enabled: !!(tenant?.id && datasource?.id),
   });
 }
 
-// GraphQL query for all semantic data (includes qualified_path for relationships display)
-const GET_ALL_SEMANTIC_DATA = gql`
-  query GetAllSemanticData(
-    $datasourceId: uuid!, 
-    $businessTermTypeId: uuid!, 
-    $semanticTermTypeId: uuid!, 
-    $semanticColumnTypeId: uuid!,
-    $calculationTypeId: uuid!,
-    $calculationTermTypeId: uuid!,
-    $metricTypeId: uuid!
-  ) {
-    # Business Terms
-    business_terms: catalog_node(
-      where: {
-        tenant_datasource_id: { _eq: $datasourceId },
-        node_type_id: { _eq: $businessTermTypeId }
-      }
-      order_by: { node_name: asc }
-    ) {
-      id
-      node_type_id
-      node_name
-      description
-      qualified_path
-      parent_id
-      properties
-      created_at
-      updated_at
-    }
-    
-    # Semantic Terms
-    semantic_terms: catalog_node(
-      where: {
-        tenant_datasource_id: { _eq: $datasourceId },
-        node_type_id: { _eq: $semanticTermTypeId }
-      }
-      order_by: { node_name: asc }
-    ) {
-      id
-      node_type_id
-      node_name
-      description
-      qualified_path
-      parent_id
-      properties
-      created_at
-      updated_at
-    }
-    
-    # Semantic Columns
-    semantic_columns: catalog_node(
-      where: {
-        tenant_datasource_id: { _eq: $datasourceId },
-        node_type_id: { _eq: $semanticColumnTypeId }
-      }
-      order_by: { node_name: asc }
-    ) {
-      id
-      node_type_id
-      node_name
-      description
-      qualified_path
-      parent_id
-      properties
-      created_at
-      updated_at
-    }
-
-    # Calculation Terms - using _in for multiple IDs if they are provided, essentially OR logic
-    calculation_terms: catalog_node(
-      where: {
-        tenant_datasource_id: { _eq: $datasourceId },
-        node_type_id: { _in: [$calculationTypeId, $calculationTermTypeId, $metricTypeId] }
-      }
-      order_by: { node_name: asc }
-    ) {
-      id
-      node_type_id
-      node_name
-      description
-      qualified_path
-      parent_id
-      properties
-      created_at
-      updated_at
-    }
-    
-    # All catalog nodes for qualified path lookup
-    all_nodes: catalog_node(
-      where: {
-        tenant_datasource_id: { _eq: $datasourceId }
-      }
-    ) {
-      id
-      node_name
-      qualified_path
-      node_type_id
-      # Removed node_type relationship selection as it was causing schema errors
-    }
-    
-    # Semantic Edges/Relationships
-    # Semantic Edges/Relationships
-    semantic_edges: catalog_edge(
-      where: {
-        tenant_datasource_id: { _eq: $datasourceId }
-      }
-      order_by: { created_at: desc }
-    ) {
-      id
-      source_node_id
-      target_node_id
-      edge_type_id
-      relationship_type
-      properties
-      created_at
-      updated_at
-      # Relationship 'edge_type' not exposed in Hasura yet, fetching separately
-    }
-    
-    # Edge Types for lookups - REMOVED: catalog_edge_type not available in Hasura schema
-    # Will fetch edge type names from edge objects directly if needed
-    
-    # Node Types for type name lookups
-    node_types: catalog_node_type {
-      id
-      catalog_type_name
-    }
-  }
-`;
-
+// Fetch all semantic data (business terms, semantic terms, semantic columns,
+// calculation terms, edges) using the existing REST endpoints.
+//
+// The previous implementation was built on Hasura GraphQL which has been
+// removed. We fan out to the same REST routes the rest of the app already
+// uses, then re-assemble the shape the page expects:
+//
+//   {
+//     business_terms:     CatalogNode[]  (filtered to type=business_term)
+//     semantic_terms:     CatalogNode[]  (filtered to type=semantic_term)
+//     semantic_columns:   CatalogNode[]  (filtered to type=semantic_column)
+//     calculation_terms:  CatalogNode[]  (union of calculation, calculation_term, metric)
+//     semantic_edges:     CatalogEdge[]
+//     all_nodes:          CatalogNode[]  (every node in the datasource, for qualified_path lookup)
+//     node_types:         NodeType[]     (passthrough from useNodeTypes)
+//   }
+//
+// Every node is decorated with a synthetic `node_type: { catalog_type_name }`
+// object so existing consumers (BusinessTermsTab, SemanticTermsTab, etc.) that
+// read `node.node_type.catalog_type_name` keep working.
 import { useNodeTypes } from './nodeTypes';
 
-// Fetch all semantic data (business terms, semantic terms, and edges)
 export function useAllSemanticData() {
-  const { datasource } = useTenant();
-  const apolloClient = useApolloClient();
+  const { tenant, datasource } = useTenant();
 
-  // 1. Fetch node types first to get IDs
+  // 1. Pull node types so we can resolve node_type_id -> catalog_type_name
   const { data: nodeTypesList, isLoading: isNodeTypesLoading } = useNodeTypes();
 
-  // 2. Resolve IDs
-  // Use Nil UUID for missing types to prevent "unexpected null value" errors in GraphQL
-  // and ensuring we just match nothing instead of crashing.
-  const NIL_UUID = '00000000-0000-0000-0000-000000000000';
+  const buildHeaders = useCallback(() => ({
+    ...(tenant?.id && { 'X-Tenant-ID': tenant.id }),
+    ...(datasource?.id && { 'X-Tenant-Datasource-ID': datasource.id }),
+    'X-Tenant-Region': getSelectedRegion(),
+  }), [tenant?.id, datasource?.id]);
 
-  // Check for invalid IDs as requested
-  if (nodeTypesList) {
-    const invalidTypes = nodeTypesList.filter(t => !t.id || t.id.trim() === '');
-    if (invalidTypes.length > 0) {
-      console.error('[SemanticTerms] Found invalid node types with null/empty IDs (Action required: Delete these):', invalidTypes);
-    }
-  }
-
-  const typeMap = useMemo(() => {
-    if (!nodeTypesList) return {
-      business_term: NIL_UUID,
-      semantic_term: NIL_UUID,
-      semantic_column: NIL_UUID,
-      calculation: NIL_UUID,
-      calculation_term: NIL_UUID,
-      metric: NIL_UUID,
-    };
-    return {
-      business_term: nodeTypesList.find(t => t.catalog_type_name === 'business_term')?.id || NIL_UUID,
-      semantic_term: nodeTypesList.find(t => t.catalog_type_name === 'semantic_term')?.id || NIL_UUID,
-      semantic_column: nodeTypesList.find(t => t.catalog_type_name === 'semantic_column')?.id || NIL_UUID,
-      calculation: nodeTypesList.find(t => t.catalog_type_name === 'calculation')?.id || NIL_UUID,
-      calculation_term: nodeTypesList.find(t => t.catalog_type_name === 'calculation_term')?.id || NIL_UUID,
-      metric: nodeTypesList.find(t => t.catalog_type_name === 'metric')?.id || NIL_UUID,
-    };
-  }, [nodeTypesList]);
-
-  // 3. Query with resolved IDs
-  const { data, loading: isGraphLoading, error, refetch } = useApolloQuery(GET_ALL_SEMANTIC_DATA, {
-    variables: {
-      datasourceId: datasource?.id || '',
-      businessTermTypeId: typeMap.business_term,
-      semanticTermTypeId: typeMap.semantic_term,
-      semanticColumnTypeId: typeMap.semantic_column,
-      calculationTypeId: typeMap.calculation,
-      calculationTermTypeId: typeMap.calculation_term,
-      metricTypeId: typeMap.metric,
+  // Fetch catalog nodes for a given catalog_type_name using /api/catalog/nodes?type=
+  const fetchByType = useCallback(
+    async (typeName: string): Promise<any[]> => {
+      if (!tenant?.id) return [];
+      const params = new URLSearchParams();
+      params.append('tenant_id', tenant.id);
+      if (datasource?.id) params.append('tenant_instance_id', datasource.id);
+      params.append('type', typeName);
+      const res = await fetch(`/api/catalog/nodes?${params.toString()}`, {
+        credentials: 'include',
+        headers: buildHeaders(),
+      });
+      if (!res.ok) {
+        devDebug(`[useAllSemanticData] fetchByType(${typeName}) returned ${res.status}`);
+        return [];
+      }
+      return (await res.json()) || [];
     },
-    skip: !datasource?.id || isNodeTypesLoading, // Wait for types
-    client: apolloClient,
+    [tenant?.id, datasource?.id, buildHeaders],
+  );
+
+  // Fetch all glossary edges
+  const fetchEdges = useCallback(async (): Promise<any[]> => {
+    if (!tenant?.id) return [];
+    const params = new URLSearchParams();
+    params.append('tenant_id', tenant.id);
+    if (datasource?.id) params.append('tenant_instance_id', datasource.id);
+    const res = await fetch(`/api/glossary/edges?${params.toString()}`, {
+      credentials: 'include',
+      headers: buildHeaders(),
+    });
+    if (!res.ok) {
+      devDebug(`[useAllSemanticData] fetchEdges returned ${res.status}`);
+      return [];
+    }
+    return (await res.json()) || [];
+  }, [tenant?.id, datasource?.id, buildHeaders]);
+
+  const enabled = !!(tenant?.id && datasource?.id);
+
+  const query = useQuery({
+    queryKey: [
+      ...glossaryKeys.all,
+      'all-semantic-data',
+      tenant?.id || null,
+      datasource?.id || null,
+    ],
+    enabled,
+    queryFn: async () => {
+      // Fan out: 6 type-filtered node lookups + 1 edges lookup + 1 unfiltered node lookup.
+      const [
+        business,
+        semantic,
+        columns,
+        calc,
+        calcTerm,
+        metric,
+        allNodes,
+        edges,
+      ] = await Promise.all([
+        fetchByType('business_term'),
+        fetchByType('semantic_term'),
+        fetchByType('semantic_column'),
+        fetchByType('calculation'),
+        fetchByType('calculation_term'),
+        fetchByType('metric'),
+        // all nodes - same /api/catalog/nodes but with no type filter
+        (async () => {
+          if (!tenant?.id) return [];
+          const params = new URLSearchParams();
+          params.append('tenant_id', tenant.id);
+          if (datasource?.id) params.append('tenant_instance_id', datasource.id);
+          const res = await fetch(`/api/catalog/nodes?${params.toString()}`, {
+            credentials: 'include',
+            headers: buildHeaders(),
+          });
+          if (!res.ok) return [];
+          return (await res.json()) || [];
+        })(),
+        fetchEdges(),
+      ]);
+
+      // Decorate every node with a synthetic node_type so the
+      // BusinessTermsTab/SemanticTermsTab/CalculationTermsTab can read
+      // node.node_type.catalog_type_name just like before.
+      const attachNodeType = (nodes: any[]) =>
+        nodes.map((node) => {
+          const typeDef = nodeTypesList?.find(
+            (t: any) => t.id === node.node_type_id,
+          );
+          return {
+            ...node,
+            node_type: {
+              catalog_type_name: typeDef?.catalog_type_name || node.catalog_type || 'unknown',
+            },
+          };
+        });
+
+      // Decorate edges with a friendly edge_type_name fallback.
+      const attachEdgeType = (es: any[]) =>
+        es.map((e) => ({
+          ...e,
+          edge_type_name: e.edge_type || e.relationship_type,
+        }));
+
+      return {
+        business_terms: attachNodeType(business),
+        semantic_terms: attachNodeType(semantic),
+        semantic_columns: attachNodeType(columns),
+        // calculation_terms unions the three calculation-style types
+        // the GraphQL query used to group together.
+        calculation_terms: attachNodeType([...calc, ...calcTerm, ...metric]),
+        semantic_edges: attachEdgeType(edges),
+        all_nodes: attachNodeType(allNodes),
+        node_types: nodeTypesList || [],
+      };
+    },
+    staleTime: 30_000,
   });
 
-  const transformedData = useMemo(() => {
-    if (!data) return {
+  const fallback = useMemo(
+    () => ({
       business_terms: [],
       semantic_terms: [],
+      semantic_columns: [],
+      calculation_terms: [],
       semantic_edges: [],
       all_nodes: [],
       node_types: [],
-      calculation_terms: [],
-    };
-
-    // Helper to attach node_type object manually
-    const attachNodeType = (nodes: any[]) => {
-      return nodes.map(node => {
-        // Find the type name using the ID from our loaded types list
-        const typeDef = nodeTypesList?.find(t => t.id === node.node_type_id);
-        return {
-          ...node,
-          node_type: {
-            catalog_type_name: typeDef?.catalog_type_name || 'unknown'
-          }
-        };
-      });
-    };
-
-    // Helper to attach edge_type info manually
-    const attachEdgeType = (edges: any[]) => {
-      return edges.map(edge => {
-        const typeDef = data.edge_types?.find((t: any) => t.id === edge.edge_type_id);
-        return {
-          ...edge,
-          edge_type_name: typeDef?.edge_type_name, // Flatten for easy access
-          edge_type: typeDef // Keep structured object for compatibility
-        };
-      });
-    };
-
-    return {
-      business_terms: attachNodeType(data.business_terms || []),
-      semantic_terms: attachNodeType(data.semantic_terms || []),
-      semantic_edges: attachEdgeType(data.semantic_edges || []),
-      // Also attach to all_nodes so lookups work
-      all_nodes: attachNodeType(data.all_nodes || []),
-      node_types: data.node_types || [],
-      calculation_terms: attachNodeType(data.calculation_terms || []),
-    };
-  }, [data, nodeTypesList]);
+    }),
+    [],
+  );
 
   return {
-    data: transformedData,
-    isLoading: isNodeTypesLoading || isGraphLoading,
-    error: error?.message || null,
-    enabled: !!datasource?.id,
-    refetch
+    data: query.data ?? fallback,
+    isLoading: isNodeTypesLoading || query.isLoading,
+    error: (query.error as Error | null)?.message ?? null,
+    enabled,
+    refetch: query.refetch,
   };
 }
 
@@ -416,7 +365,6 @@ export const useAllSemanticDataQuery = useAllSemanticData;
 // Update a semantic term or business term
 export function useUpdateTerm() {
   const queryClient = useQueryClient();
-  const apolloClient = useApolloClient();
   const { tenant, datasource } = useTenant();
 
   return useMutation({
@@ -509,17 +457,14 @@ export function useUpdateTerm() {
       void queryClient.invalidateQueries({ queryKey: glossaryKeys.edges() });
       void queryClient.invalidateQueries({ queryKey: glossaryKeys.term(variables.id) });
 
-      devDebug('[useUpdateTerm.onSuccess] All React Query caches invalidated');
-
-      // Invalidate Apollo GraphQL cache
-      void apolloClient.cache.evict({ fieldName: 'catalog_node' });
-      void apolloClient.cache.gc();
-      // Also refetch active GraphQL queries to ensure UI updates
-      try {
-        void apolloClient.refetchQueries({ include: 'active' });
-      } catch (e) {
-        // Best-effort; ignore errors here
-      }
+      // Refresh the aggregated glossary data so the page re-fetches terms/edges
+      // with the new node attached.
+      void queryClient.invalidateQueries({
+        queryKey: [
+          ...glossaryKeys.all,
+          'all-semantic-data',
+        ],
+      });
 
       devDebug('[useUpdateTerm.onSuccess] Cache invalidation complete');
     },
@@ -533,7 +478,6 @@ export function useUpdateTerm() {
 // Create a new semantic term or business term
 export function useCreateTerm() {
   const queryClient = useQueryClient();
-  const apolloClient = useApolloClient();
   const { tenant, datasource } = useTenant();
 
   return useMutation({
@@ -589,15 +533,13 @@ export function useCreateTerm() {
       void queryClient.invalidateQueries({ queryKey: glossaryKeys.businessTerms() });
       void queryClient.invalidateQueries({ queryKey: glossaryKeys.edges() });
 
-      // Invalidate Apollo GraphQL cache
-      void apolloClient.cache.evict({ fieldName: 'catalog_node' });
-      void apolloClient.cache.gc();
-      // Also refetch active GraphQL queries to ensure UI updates
-      try {
-        void apolloClient.refetchQueries({ include: 'active' });
-      } catch (e) {
-        // Best-effort; ignore errors here
-      }
+      // Refresh the aggregated glossary data so the page re-fetches terms/edges.
+      void queryClient.invalidateQueries({
+        queryKey: [
+          ...glossaryKeys.all,
+          'all-semantic-data',
+        ],
+      });
     },
   });
 }
@@ -605,7 +547,6 @@ export function useCreateTerm() {
 // Delete a semantic term or business term
 export function useDeleteTerm() {
   const queryClient = useQueryClient();
-  const apolloClient = useApolloClient();
   const { tenant, datasource } = useTenant();
 
   return useMutation({
@@ -639,9 +580,13 @@ export function useDeleteTerm() {
       void queryClient.invalidateQueries({ queryKey: glossaryKeys.businessTerms() });
       void queryClient.invalidateQueries({ queryKey: glossaryKeys.edges() });
 
-      // Invalidate Apollo GraphQL cache
-      void apolloClient.cache.evict({ fieldName: 'catalog_node' });
-      void apolloClient.cache.gc();
+      // Refresh the aggregated glossary data so the page re-fetches terms/edges.
+      void queryClient.invalidateQueries({
+        queryKey: [
+          ...glossaryKeys.all,
+          'all-semantic-data',
+        ],
+      });
     },
   });
 }

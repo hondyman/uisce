@@ -75,5 +75,7 @@ logs:
 migrate-runner:
 	@./scripts/migrate.sh
 
-shell:
-	@docker compose -f $(COMPOSE_FILE) run --rm runner "sh"
+.PHONY: keycloak-setup
+keycloak-setup:
+	@echo "Provisioning the 'uisce' realm + 'semlayer-frontend' client in Keycloak"
+	@./scripts/setup-keycloak-realm.sh
