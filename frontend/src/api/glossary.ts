@@ -2,7 +2,6 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useMemo } from 'react';
 import { useTenant } from '../contexts/TenantContext';
 import { devDebug } from '../utils/devLogger';
-import { getSelectedRegion } from '../lib/region';
 import { apiFetch } from '../lib/apiClient';
 import { useNodeTypes } from './nodeTypes';
 

@@ -24,8 +24,11 @@ import { useQueryClient } from '@tanstack/react-query';
   import CategoryIcon from '@mui/icons-material/Category';
   import ProfessionalSearchInput from '../../components/ProfessionalSearchInput';
   import './BusinessGlossaryPage.css';
-  import { useQuery } from '@apollo/client';
-  import { GET_SEMANTIC_LINEAGE_CHART, transformChartData } from '../../graphql/queries/semantic';
+  // NOTE: Hasura/GraphQL was previously used here to fetch a precomputed
+  // semantic lineage chart (GET_SEMANTIC_LINEAGE_CHART) and pass it down to
+  // <SemanticTermsTab /> as `semanticData`. With Hasura removed permanently,
+  // we no longer fetch that chart; SemanticTermsTab falls back to its own
+  // REST-only data path (useAllSemanticData from src/api/glossary.ts).
 
   interface TabPanelProps {
     children?: React.ReactNode;
@@ -83,25 +86,12 @@ import { useQueryClient } from '@tanstack/react-query';
     const { data } = useAllSemanticData();
     const queryClient = useQueryClient();
 
-    // Fetch full lineage for mapped/unmapped calculation
-    const { data: metricData } = useQuery(GET_SEMANTIC_LINEAGE_CHART, {
-        variables: { datasourceId: datasource?.id || '' },
-        skip: !datasource?.id,
-        fetchPolicy: 'cache-and-network',
-    });
-
-    const [transformedLineage, setTransformedLineage] = useState<any>(null);
-
-    React.useEffect(() => {
-        if (metricData?.tenant_chart?.[0]?.chart) {
-            try {
-                const result = transformChartData(metricData.tenant_chart[0].chart);
-                setTransformedLineage(result);
-            } catch (e) {
-                console.error('Failed to transform chart data in Glossary', e);
-            }
-        }
-    }, [metricData]);
+    // transformedLineage previously held the precomputed semantic_lineage_chart
+    // fetched via GraphQL. With Hasura removed, we no longer fetch that chart;
+    // <SemanticTermsTab /> falls back to its own REST data via useAllSemanticData().
+    // The variable is kept as `null` to preserve the prop shape; the child uses
+    // `semanticData?.semantic_terms || data?.semantic_terms` so undefined/null is safe.
+    const transformedLineage = null as any;
 
     // Create search data combining business terms and semantic terms
     const searchData = useMemo((): any[] => {
@@ -377,7 +367,8 @@ import { useQueryClient } from '@tanstack/react-query';
                 onEditTerm={handleEditTerm}
                 onDeleteTerm={handleDeleteTerm}
                 onNavigateToBusinessTerm={handleNavigateToBusinessTerm}
-                semanticData={transformedLineage} // Pass the full lineage data
+                // semanticData intentionally omitted — <SemanticTermsTab /> falls
+                // back to its own REST-only data via useAllSemanticData().
               />
             </div>
           </TabPanel>
