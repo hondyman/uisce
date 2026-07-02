@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback, useRef } from 'react';
 import { User as OidcUser } from 'oidc-client-ts';
-import { devLog, devError } from '../utils/devLogger';
+import { devLog, devWarn, devError } from '../utils/devLogger';
 import { userManager } from '../config/oidc';
 import { useToast } from '../hooks/use-toast';
 
@@ -26,6 +26,12 @@ interface User {
   }>;
 }
 
+export interface UserEntitlements {
+  user_id: string;
+  functional_role?: string;
+  capabilities: Record<string, boolean>;
+}
+
 interface AuthContextType {
   user: User | null;
   token: string | null;
@@ -47,6 +53,10 @@ interface AuthContextType {
   refreshToken: () => Promise<void>;
   isTokenExpired: () => boolean;
   getValidToken: () => Promise<string | null>;
+  /** Capability map resolved by the backend ABAC engine */
+  entitlements: UserEntitlements | null;
+  /** True while the entitlement fetch is in flight */
+  entitlementsLoading: boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -167,6 +177,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [refreshTokenValue, setRefreshTokenValue] = useState<string | null>(null);
   const [tokenExpiresAt, setTokenExpiresAt] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [entitlements, setEntitlements] = useState<UserEntitlements | null>(null);
+  const [entitlementsLoading, setEntitlementsLoading] = useState(false);
   const oidcUserRef = useRef<OidcUser | null>(null);
   const toast = useToast();
 
@@ -280,7 +292,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }
   };
 
-  const refreshToken = async (): Promise<void> => {
+  const refreshToken = useCallback(async (): Promise<void> => {
     try {
       const oidcUser = await userManager.signinSilent();
       if (!oidcUser) {
@@ -293,14 +305,14 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       hydrateFromOidcUser(null);
       throw error;
     }
-  };
+  }, [hydrateFromOidcUser]);
 
   const isTokenExpired = (): boolean => {
     if (!tokenExpiresAt) return false;
     return Date.now() >= tokenExpiresAt - 30000;
   };
 
-  const getValidToken = async (): Promise<string | null> => {
+  const getValidToken = useCallback(async (): Promise<string | null> => {
     const current = oidcUserRef.current;
     if (!current || current.expired) {
       if (!current) {
@@ -326,7 +338,49 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       }
     }
     return current.id_token || current.access_token || null;
-  };
+  }, [hydrateFromOidcUser, refreshToken]);
+
+  const fetchEntitlements = useCallback(async (): Promise<void> => {
+    const validToken = await getValidToken();
+    if (!validToken) {
+      setEntitlements(null);
+      return;
+    }
+
+    setEntitlementsLoading(true);
+    try {
+      const response = await fetch('/api/auth/me/entitlements', {
+        headers: {
+          Authorization: `Bearer ${validToken}`,
+        },
+        credentials: import.meta.env.DEV ? 'include' : 'same-origin',
+      });
+
+      if (!response.ok) {
+        devWarn(`Failed to fetch entitlements: ${response.status} ${response.statusText}`);
+        setEntitlements(null);
+        return;
+      }
+
+      const data = (await response.json()) as UserEntitlements;
+      setEntitlements(data);
+      devLog('Loaded user entitlements', data);
+    } catch (error) {
+      devError('Failed to fetch entitlements:', error);
+      setEntitlements(null);
+    } finally {
+      setEntitlementsLoading(false);
+    }
+  }, [getValidToken]);
+
+  // Fetch entitlements whenever the authenticated user changes.
+  useEffect(() => {
+    if (user && token && !isTokenExpired()) {
+      void fetchEntitlements();
+    } else {
+      setEntitlements(null);
+    }
+  }, [user, token, tokenExpiresAt, fetchEntitlements]);
 
   const computeIsCoreAdmin = (): boolean => {
     const u: any = user;
@@ -378,6 +432,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     refreshToken,
     isTokenExpired,
     getValidToken,
+    entitlements,
+    entitlementsLoading,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

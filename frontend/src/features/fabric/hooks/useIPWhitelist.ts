@@ -58,7 +58,7 @@ export const useIPWhitelistAPI = () => {
   const fetchTenants = useCallback(async (): Promise<Tenant[]> => {
   const backendBase = (import.meta.env.VITE_API_BASE_URL as string) || 'http://localhost:29080';
   const candidates = ['/api/tenants', `${backendBase}/api/tenants`, 'http://localhost:3000/api/tenants'];
-    
+
     for (const url of candidates) {
       try {
         const response = await fetch(url);
@@ -76,9 +76,35 @@ export const useIPWhitelistAPI = () => {
         continue;
       }
     }
-    
+
     setError('Failed to fetch tenants from any endpoint');
     return [];
+  }, []);
+
+  const deleteTenant = useCallback(async (tenantId: string): Promise<boolean> => {
+    try {
+      const response = await fetch(`/api/admin/tenants/${tenantId}`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        let errorMessage = errorText || response.statusText;
+        try {
+          const errorData = JSON.parse(errorText);
+          errorMessage = errorData.message || errorMessage;
+        } catch {
+          // keep raw error text
+        }
+        throw new Error(`${response.status}: ${errorMessage}`);
+      }
+
+      return true;
+    } catch (err: any) {
+      setError(err.message || 'Failed to delete tenant');
+      return false;
+    }
   }, []);
 
   const fetchAllIPWhitelist = useCallback(async (): Promise<IPWhitelistEntry[]> => {
@@ -217,7 +243,8 @@ export const useIPWhitelistAPI = () => {
     fetchTenantIPWhitelist,
     addIPWhitelist,
     removeIPWhitelist,
-    updateIPAssignments
+    updateIPAssignments,
+    deleteTenant
   };
 };
 

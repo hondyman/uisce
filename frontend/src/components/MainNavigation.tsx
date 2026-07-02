@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useLocation } from 'react-router-dom';
 import BlockableLink from './RouteBlocker/BlockableLink';
 import { NotificationBell } from './Notifications/NotificationBell';
@@ -83,12 +83,16 @@ interface NavigationItem {
     label: string;
     color?: 'default' | 'primary' | 'secondary' | 'error' | 'info' | 'success' | 'warning';
   };
+  /** Backend ABAC capability required to render this item (e.g. "menu:platform"). */
+  requiredCapability?: string;
 }
 
 interface NavigationMenu {
   label: string;
   icon: React.ReactNode;
   items: NavigationItem[];
+  /** Backend ABAC capability required to render this menu group. */
+  requiredCapability?: string;
 }
 
 interface CategoryConfig {
@@ -103,6 +107,8 @@ interface CategoryConfig {
     background: string;
   };
   menus: NavigationMenu[];
+  /** Backend ABAC capability required to render this top-level category. */
+  requiredCapability?: string;
 }
 
 const categoryConfigs: CategoryConfig[] = [
@@ -114,6 +120,7 @@ const categoryConfigs: CategoryConfig[] = [
     key: 'tenants',
     icon: <SettingsIcon />,
     defaultPath: '/tenants',
+    requiredCapability: 'menu:platform',
     color: {
       primary: '#607D8B',
       light: '#ECEFF1',
@@ -124,6 +131,7 @@ const categoryConfigs: CategoryConfig[] = [
       {
         label: 'Organization',
         icon: <BusinessIcon />,
+        requiredCapability: 'menu:organization',
         items: [
           { label: 'Tenants', path: '/tenants', icon: <BusinessIcon />, description: 'Manage tenant hierarchy' },
           { label: 'Tenant Management', path: '/fabric/tenants', icon: <BusinessIcon />, description: 'Manage platform tenants' },
@@ -136,6 +144,7 @@ const categoryConfigs: CategoryConfig[] = [
       {
         label: 'Security',
         icon: <SecurityIcon />,
+        requiredCapability: 'menu:security',
         items: [
           { label: 'Access Rules', path: '/security/access-rules', icon: <LockIcon />, description: 'Row & column security' },
           { label: 'Roles & Permissions', path: '/admin/rbac/roles', icon: <ShieldIcon />, description: 'RBAC management' },
@@ -152,6 +161,7 @@ const categoryConfigs: CategoryConfig[] = [
       {
         label: 'System',
         icon: <SystemUpdateAltIcon />,
+        requiredCapability: 'menu:system',
         items: [
           { label: 'Audit History', path: '/setup/audit', icon: <TimelineIcon />, description: 'Bitemporal audit trail', badge: { label: 'New', color: 'success' } },
           { label: 'Audit Plane', path: '/audit', icon: <TimelineIcon />, description: 'Immutable audit & snapshots', badge: { label: 'New', color: 'success' } },
@@ -488,6 +498,50 @@ const categoryConfigs: CategoryConfig[] = [
   }
 ];
 
+/**
+ * Filter navigation config against the backend capability map.  The frontend
+ * never inspects roles directly; it only asks "does the backend allow this
+ * capability?".
+ */
+function filterNavigationByCapabilities(
+  categories: CategoryConfig[],
+  capabilities: Record<string, boolean> | undefined
+): CategoryConfig[] {
+  if (!capabilities) {
+    // If entitlements have not loaded yet, show only menus that require no
+    // capability.  This prevents a flash of unauthorized UI.
+    return categories
+      .filter((cat) => !cat.requiredCapability)
+      .map((cat) => ({
+        ...cat,
+        menus: cat.menus
+          .filter((menu) => !menu.requiredCapability)
+          .map((menu) => ({
+            ...menu,
+            items: menu.items.filter((item) => !item.requiredCapability),
+          }))
+          .filter((menu) => menu.items.length > 0),
+      }))
+      .filter((cat) => cat.menus.length > 0);
+  }
+
+  const hasCap = (cap?: string) => (cap ? !!capabilities[cap] : true);
+
+  return categories
+    .filter((cat) => hasCap(cat.requiredCapability))
+    .map((cat) => ({
+      ...cat,
+      menus: cat.menus
+        .filter((menu) => hasCap(menu.requiredCapability))
+        .map((menu) => ({
+          ...menu,
+          items: menu.items.filter((item) => hasCap(item.requiredCapability)),
+        }))
+        .filter((menu) => menu.items.length > 0),
+    }))
+    .filter((cat) => cat.menus.length > 0);
+}
+
 interface MainNavigationProps {
   // No longer needed - ThemeToggleButton handles theme internally
 }
@@ -500,7 +554,14 @@ export const MainNavigation: React.FC<MainNavigationProps> = () => {
   const { isPlatformOperator, accessLevel, canAccess, scope, scopeDescription } = useAccess();
   // compact scope summary for very small screens
   const scopeSummary = `${tenant?.display_name || tenant?.name || ''}${product ? ` · ${product.alpha_product?.product_name || 'Product'}` : ''}${datasource ? ` · ${datasource.source_name || 'Source'}` : ''}`;
-  const { user, logout } = useAuth();
+  const { user, logout, entitlements } = useAuth();
+
+  // Capability-filtered navigation config.  The backend decides which menus
+  // the user is allowed to see; the frontend only renders the allowed subset.
+  const filteredCategoryConfigs = useMemo(
+    () => filterNavigationByCapabilities(categoryConfigs, entitlements?.capabilities),
+    [entitlements?.capabilities]
+  );
 
   const [categoryMenuAnchorEl, setCategoryMenuAnchorEl] = useState<null | HTMLElement>(null);
   // Default to Tenants category on initial load
@@ -514,19 +575,35 @@ export const MainNavigation: React.FC<MainNavigationProps> = () => {
   const buttonRefs = React.useRef<Record<string, HTMLButtonElement | null>>({});
 
   // Get current category config
-  const currentCategory = selectedCategory ? categoryConfigs.find(c => c.key === selectedCategory) : null;
+  const currentCategory = selectedCategory ? filteredCategoryConfigs.find(c => c.key === selectedCategory) : null;
 
   // Handle category selection from dropdown - navigate to default page
   const handleCategorySelect = (categoryKey: 'tenants' | 'catalog' | 'weave' | 'studio' | 'workflow' | 'intelligence' | 'entity' | 'calendar') => {
     setSelectedCategory(categoryKey);
     setCategoryMenuAnchorEl(null);
-    
+
     // Navigate to the category's default page
-    const category = categoryConfigs.find(c => c.key === categoryKey);
+    const category = filteredCategoryConfigs.find(c => c.key === categoryKey);
     if (category?.defaultPath) {
       navigate(category.defaultPath);
     }
   };
+
+  // If the currently selected category is filtered out by capabilities,
+  // fall back to the first available category so the top nav never blanks.
+  useEffect(() => {
+    if (
+      selectedCategory &&
+      filteredCategoryConfigs.length > 0 &&
+      !filteredCategoryConfigs.some((c) => c.key === selectedCategory)
+    ) {
+      const fallback = filteredCategoryConfigs[0];
+      setSelectedCategory(fallback.key);
+      if (fallback.defaultPath) {
+        navigate(fallback.defaultPath);
+      }
+    }
+  }, [filteredCategoryConfigs, selectedCategory, navigate]);
 
   // Handle opening menu from top nav
   const handleMenuOpen = (menuLabel: string) => {
@@ -640,7 +717,7 @@ export const MainNavigation: React.FC<MainNavigationProps> = () => {
             open={Boolean(categoryMenuAnchorEl)}
             onClose={handleCategoryMenuClose}
           >
-            {categoryConfigs.map((cat) => (
+            {filteredCategoryConfigs.map((cat) => (
               <MenuItem
                 key={cat.key}
                 onClick={() => handleCategorySelect(cat.key)}
