@@ -1,7 +1,7 @@
 #!/bin/bash
 
 ###############################################################################
-#                   START BACKEND SERVER ONLY                                #
+#                   START FULL BACKEND ENVIRONMENT                            #
 ###############################################################################
 
 set -e
@@ -29,40 +29,64 @@ mkdir -p "$LOG_DIR"
 
 echo ""
 echo -e "${BLUE}╔════════════════════════════════════════════════════════════════╗${NC}"
-echo -e "${BLUE}║  Starting Backend Server${NC}"
+echo -e "${BLUE}║  Starting Full Backend Environment                             ║${NC}"
 echo -e "${BLUE}╚════════════════════════════════════════════════════════════════╝${NC}"
 echo ""
 
-# Check if port is in use
+# Check if ports are in use
 if lsof -Pi :8080 -sTCP:LISTEN -t >/dev/null 2>&1; then
-    echo -e "${YELLOW}ℹ️  Port 8080 is in use. Killing existing process...${NC}"
+    echo -e "${YELLOW}ℹ️  Port 8080 (Semantic Rules API) is in use. Killing existing process...${NC}"
     lsof -ti:8080 | xargs kill -9 2>/dev/null || true
-    sleep 2
+    sleep 1
+fi
+
+if lsof -Pi :8083 -sTCP:LISTEN -t >/dev/null 2>&1; then
+    echo -e "${YELLOW}ℹ️  Port 8083 (Platform Backend) is in use. Killing existing process...${NC}"
+    lsof -ti:8083 | xargs kill -9 2>/dev/null || true
+    sleep 1
 fi
 
 cd "$BACKEND_DIR"
 
-# Always rebuild so local changes are picked up
-echo -e "${YELLOW}Building backend...${NC}"
-go build -o server ./cmd/semantic-rules-api/main.go
+echo -e "${YELLOW}Building backends...${NC}"
+echo "Building Semantic Rules API..."
+go build -o rules_server ./cmd/semantic-rules-api/main.go
+echo "Building Platform Backend..."
+go build -o platform_server ./cmd/server
 
-# Start server
-echo -e "${YELLOW}Starting server...${NC}"
-./server 2>&1 | tee "$LOG_DIR/backend_${TIMESTAMP}.log" &
-BACKEND_PID=$!
+echo -e "${YELLOW}Starting servers...${NC}"
 
-sleep 2
+# Start Semantic Rules API (8080)
+./rules_server 2>&1 | tee "$LOG_DIR/rules_backend_${TIMESTAMP}.log" &
+RULES_PID=$!
 
-if kill -0 $BACKEND_PID 2>/dev/null; then
-    echo -e "${GREEN}✅ Backend server started${NC}"
+# Start Platform Backend (8083)
+# Using default PORT 8083, which is standard for platform_server
+PORT=8083 ./platform_server 2>&1 | tee "$LOG_DIR/platform_backend_${TIMESTAMP}.log" &
+PLATFORM_PID=$!
+
+sleep 3
+
+if kill -0 $RULES_PID 2>/dev/null; then
+    echo -e "${GREEN}✅ Semantic Rules API started${NC}"
     echo -e "${GREEN}   URL: http://localhost:8080${NC}"
-    echo -e "${GREEN}   PID: $BACKEND_PID${NC}"
-    echo -e "${GREEN}   Logs: $LOG_DIR/backend_${TIMESTAMP}.log${NC}"
-    echo ""
-    echo "Press Ctrl+C to stop"
-    wait
+    echo -e "${GREEN}   PID: $RULES_PID${NC}"
 else
-    echo -e "${YELLOW}❌ Backend server failed to start${NC}"
-    cat "$LOG_DIR/backend_${TIMESTAMP}.log" | tail -20
-    exit 1
+    echo -e "${YELLOW}❌ Semantic Rules API failed to start${NC}"
 fi
+
+if kill -0 $PLATFORM_PID 2>/dev/null; then
+    echo -e "${GREEN}✅ Platform Backend started${NC}"
+    echo -e "${GREEN}   URL: http://localhost:8083${NC}"
+    echo -e "${GREEN}   PID: $PLATFORM_PID${NC}"
+else
+    echo -e "${YELLOW}❌ Platform Backend failed to start${NC}"
+fi
+
+echo ""
+echo "Press Ctrl+C to stop both servers"
+
+# Trap Ctrl+C to kill both
+trap "kill -9 $RULES_PID $PLATFORM_PID 2>/dev/null; echo -e '\n${GREEN}Servers stopped${NC}'; exit 0" INT TERM
+
+wait
