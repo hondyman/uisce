@@ -83,3 +83,14 @@ Thumbs.db
 /probe_*.go
 /demo_*.go
 
+
+# Compiled Binaries
+platform_server
+rules_server
+apps/analytics-api/analytics-api
+apps/genui-api/genui-api
+apps/orchestration-api/orchestration-api
+backend/notifications-service
+backend/platform_server
+semlayer
+trading-consumer
