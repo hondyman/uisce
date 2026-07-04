@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/hondyman/semlayer/services/wealth-management/activities"
+	"github.com/hondyman/uisce/services/wealth-management/activities"
 	"go.temporal.io/sdk/workflow"
 )
 

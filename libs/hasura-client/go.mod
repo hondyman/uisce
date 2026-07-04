@@ -1,4 +1,4 @@
-module github.com/hondyman/semlayer/libs/hasura-client
+module github.com/hondyman/uisce/libs/hasura-client
 
 go 1.23.0
 

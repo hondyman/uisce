@@ -9,9 +9,11 @@
     Snackbar,
     IconButton,
     Tooltip,
+    Chip,
   } from '@mui/material';
   // AddIcon intentionally removed (unused)
   import { useTenant } from '../../contexts/TenantContext';
+  import { useAccess } from '../../contexts/AccessContext';
   import { SemanticTermsTab } from './SemanticTermsTab';
   import { BusinessTermsTab } from './BusinessTermsTab';
   import { CalculationTermsTab } from './CalculationTermsTab';
@@ -45,7 +47,7 @@ import { useQueryClient } from '@tanstack/react-query';
         hidden={value !== index}
         id={`glossary-tabpanel-${index}`}
         aria-labelledby={`glossary-tab-${index}`}
-        sx={{ height: '100%', display: value === index ? 'flex' : 'none', flexDirection: 'column' }}
+        sx={{ height: '100%', display: value !== index ? 'none' : 'flex', flexDirection: 'column' }}
         {...other}
       >
         {value === index && <Box sx={{ height: '100%', flex: 1 }}>{children}</Box>}
@@ -57,7 +59,13 @@ import { useQueryClient } from '@tanstack/react-query';
     const [currentTab, setCurrentTab] = useState(0);
     const [searchTerm, setSearchTerm] = useState('');
     const [externalSelectedBusinessTerm, setExternalSelectedBusinessTerm] = useState<CatalogNode | null>(null);
-    const { tenant, datasource } = useTenant();
+    const { tenant } = useTenant();
+    const { accessibleTenants, currentTenant } = useAccess();
+
+    // The active tenant is the operational-scope tenant (global admin / operator
+    // selection via the tenant switcher). Fall back to the legacy TenantContext
+    // selection for non-operator flows.
+    const scopeTenantId = currentTenant?.id ?? tenant?.id ?? '';
 
     // CRUD state
     const [formOpen, setFormOpen] = useState(false);
@@ -77,21 +85,16 @@ import { useQueryClient } from '@tanstack/react-query';
       setCurrentTab(0); // Switch to Business Terms tab
     };
 
-    // CRUD hooks
-    const createTermMutation = useCreateTerm();
-    const updateTermMutation = useUpdateTerm();
-    const deleteTermMutation = useDeleteTerm();
+    // CRUD hooks - all scoped to the operational-scope tenant
+    const createTermMutation = useCreateTerm({ tenantOverride: scopeTenantId });
+    const updateTermMutation = useUpdateTerm({ tenantOverride: scopeTenantId });
+    const deleteTermMutation = useDeleteTerm({ tenantOverride: scopeTenantId });
 
-    // Get data for search suggestions and refetch function
-    const { data } = useAllSemanticData();
+    // Get data for search suggestions and refetch function.
+    // The scope tenant override is passed in so suggestions respect the
+    // selected scope, not the active tenant.
+    const { data } = useAllSemanticData({ tenantOverride: scopeTenantId });
     const queryClient = useQueryClient();
-
-    // transformedLineage previously held the precomputed semantic_lineage_chart
-    // fetched via GraphQL. With Hasura removed, we no longer fetch that chart;
-    // <SemanticTermsTab /> falls back to its own REST data via useAllSemanticData().
-    // The variable is kept as `null` to preserve the prop shape; the child uses
-    // `semanticData?.semantic_terms || data?.semantic_terms` so undefined/null is safe.
-    const transformedLineage = null as any;
 
     // Create search data combining business terms and semantic terms
     const searchData = useMemo((): any[] => {
@@ -139,8 +142,10 @@ import { useQueryClient } from '@tanstack/react-query';
       }
     };
 
-    // Check if tenant scope is selected
-    const hasTenantScope = !!(tenant?.id && datasource?.id);
+    // Check if a scope tenant is selected. We NO LONGER require a datasource
+    // (per user direction: "datasource is not used for semantic terms or
+    // business terms; they are tied to the tenant").
+    const hasScopeTenant = !!scopeTenantId;
 
     // CRUD handlers
     const handleCreateTerm = (termType: 'business_term' | 'semantic_term') => {
@@ -186,9 +191,10 @@ import { useQueryClient } from '@tanstack/react-query';
         devDebug('[BusinessGlossaryPage.handleSaveTerm] Query cache invalidated');
         } else {
           devDebug('[BusinessGlossaryPage.handleSaveTerm] About to call createTermMutation.mutateAsync');
+          // semantic/business terms have NO datasource — explicitly omit it
+          const { tenant_datasource_id, ...createWithoutDS } = termData as any;
           const createdNode = await createTermMutation.mutateAsync({
-            ...termData,
-            tenant_datasource_id: datasource?.id,
+            ...createWithoutDS,
           } as Omit<CatalogNode, 'id' | 'created_at' | 'updated_at'>);
         devDebug('[BusinessGlossaryPage.handleSaveTerm] createTermMutation completed successfully');
         setSnackbar({ open: true, message: 'Term created successfully', severity: 'success' });
@@ -247,15 +253,23 @@ import { useQueryClient } from '@tanstack/react-query';
       setSnackbar({ ...snackbar, open: false });
     };
 
-    if (!hasTenantScope) {
+    if (!hasScopeTenant) {
       return (
         <Box sx={{ p: 4 }}>
           <Alert severity="warning">
-            Please select a tenant and datasource from the tenant picker to access the Business Glossary.
+            No active tenant is selected. Pick a tenant from the global tenant picker in the header to access the Business Glossary.
+            <br />
+            (Datasource is not required — semantic terms and business terms are scoped to the tenant.)
           </Alert>
         </Box>
       );
     }
+
+    // Find the display name of the currently scoped tenant
+    const scopeTenantDisplay = useMemo(() => {
+      const t = accessibleTenants.find((t: any) => t.id === scopeTenantId);
+      return t ? (t.display_name || t.name || scopeTenantId) : (tenant?.display_name || tenant?.name || scopeTenantId);
+    }, [accessibleTenants, scopeTenantId, tenant]);
 
     return (
       <Box
@@ -288,6 +302,19 @@ import { useQueryClient } from '@tanstack/react-query';
                     Manage semantic and business terms
                   </Typography>
                 </Box>
+
+                {/* Scope tenant info (read-only chip — picked elsewhere in the app) */}
+                {scopeTenantId && (
+                  <Tooltip title="Currently viewing this tenant's merged business glossary (core + scoped customizations)">
+                    <Chip
+                      label={`scope: ${scopeTenantDisplay}`}
+                      size="small"
+                      sx={{ ml: 1 }}
+                      color="primary"
+                      variant="outlined"
+                    />
+                  </Tooltip>
+                )}
               </Box>
 
               {/* Global Search - moved to right side */}
@@ -351,6 +378,7 @@ import { useQueryClient } from '@tanstack/react-query';
           <TabPanel value={currentTab} index={0}>
             <div className="glossary-embed">
               <BusinessTermsTab
+                scopeTenantId={scopeTenantId}
                 searchTerm={searchTerm}
                 onCreateTerm={() => handleCreateTerm('business_term')}
                 onEditTerm={handleEditTerm}
@@ -362,6 +390,7 @@ import { useQueryClient } from '@tanstack/react-query';
           <TabPanel value={currentTab} index={1}>
             <div className="glossary-embed">
               <SemanticTermsTab
+                scopeTenantId={scopeTenantId}
                 searchTerm={searchTerm}
                 onCreateTerm={() => handleCreateTerm('semantic_term')}
                 onEditTerm={handleEditTerm}
@@ -391,6 +420,7 @@ import { useQueryClient } from '@tanstack/react-query';
           onSave={handleSaveTerm}
           term={editingTerm}
           termType={formTermType}
+          tenantId={scopeTenantId}
           // When creating or editing terms from the glossary tabs we don't want
           // the user to change the type - it's fixed by which tab they opened the
           // form from. Pass disableTypeSelection so the `Type` select is not

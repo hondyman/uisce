@@ -4,7 +4,7 @@ import (
 	"context"
 
 	"github.com/gin-gonic/gin"
-	"github.com/hondyman/semlayer/api-gateway/abac"
+	"github.com/hondyman/uisce/api-gateway/abac"
 	"go.temporal.io/sdk/client"
 )
 

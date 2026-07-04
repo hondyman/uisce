@@ -1,11 +1,11 @@
-module github.com/hondyman/semlayer/services/ai-trade-reconciliation
+module github.com/hondyman/uisce/services/ai-trade-reconciliation
 
 go 1.24.0
 
 require (
 	github.com/gin-gonic/gin v1.10.0
 	github.com/google/uuid v1.6.0
-	github.com/hondyman/semlayer/libs/temporal-client v0.0.0-00010101000000-000000000000
+	github.com/hondyman/uisce/libs/temporal-client v0.0.0-00010101000000-000000000000
 	github.com/lib/pq v1.10.9
 	go.temporal.io/sdk v1.37.0
 )
@@ -60,6 +60,6 @@ require (
 // Map it to the official sqlc module path so the go tool can download the release.
 replace github.com/jmoiron/sqlc => github.com/sqlc-dev/sqlc v1.26.0
 
-replace github.com/hondyman/semlayer => ../../
+replace github.com/hondyman/uisce => ../../
 
-replace github.com/hondyman/semlayer/libs/temporal-client => ../../libs/temporal-client
+replace github.com/hondyman/uisce/libs/temporal-client => ../../libs/temporal-client

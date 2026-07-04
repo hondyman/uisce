@@ -1,6 +1,6 @@
 package httpapi
 
-import sharedtypes "github.com/hondyman/semlayer/libs/shared-types"
+import sharedtypes "github.com/hondyman/uisce/libs/shared-types"
 
 // AccessEvaluationRequest represents an access evaluation request
 type AccessEvaluationRequest struct {

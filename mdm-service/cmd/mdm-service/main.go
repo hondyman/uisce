@@ -12,10 +12,10 @@ import (
 	"github.com/joho/godotenv"
 	"go.uber.org/zap"
 
-	"github.com/hondyman/semlayer/mdm-service/internal/api"
-	"github.com/hondyman/semlayer/mdm-service/internal/repository"
-	"github.com/hondyman/semlayer/mdm-service/internal/rules"
-	"github.com/hondyman/semlayer/mdm-service/internal/service"
+	"github.com/hondyman/uisce/mdm-service/internal/api"
+	"github.com/hondyman/uisce/mdm-service/internal/repository"
+	"github.com/hondyman/uisce/mdm-service/internal/rules"
+	"github.com/hondyman/uisce/mdm-service/internal/service"
 )
 
 func main() {

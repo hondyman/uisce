@@ -7,12 +7,12 @@ import (
 	"strconv"
 
 	"github.com/gin-gonic/gin"
-	abacclient "github.com/hondyman/semlayer/libs/abac-client"
-	hasuraclient "github.com/hondyman/semlayer/libs/hasura-client"
-	sharedtypes "github.com/hondyman/semlayer/libs/shared-types"
-	temporalclient "github.com/hondyman/semlayer/libs/temporal-client"
-	"github.com/hondyman/semlayer/services/governance/internal/config"
-	"github.com/hondyman/semlayer/services/governance/internal/services"
+	abacclient "github.com/hondyman/uisce/libs/abac-client"
+	hasuraclient "github.com/hondyman/uisce/libs/hasura-client"
+	sharedtypes "github.com/hondyman/uisce/libs/shared-types"
+	temporalclient "github.com/hondyman/uisce/libs/temporal-client"
+	"github.com/hondyman/uisce/services/governance/internal/config"
+	"github.com/hondyman/uisce/services/governance/internal/services"
 )
 
 func main() {

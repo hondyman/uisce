@@ -5,11 +5,11 @@ import { IconButton, Tooltip } from '@mui/material';
 import { useTenant } from '../contexts/TenantContext';
 import { usePropertyLookupMaps } from '../hooks/usePropertyLookupMaps';
 import { useNodeTypes } from '../api/nodeTypes';
-import { 
-  EditOutlined as EditIcon, 
-  DeleteOutline as DeleteIcon, 
-  UnfoldMoreOutlined as UnfoldMoreIcon, 
-  UnfoldLessOutlined as UnfoldLessIcon 
+import {
+  EditOutlined as EditIcon,
+  DeleteOutline as DeleteIcon,
+  UnfoldMoreOutlined as UnfoldMoreIcon,
+  UnfoldLessOutlined as UnfoldLessIcon,
 } from '@mui/icons-material';
 import './BusinessTermsTree.css';
 import { useTranslation } from 'react-i18next';
@@ -17,8 +17,8 @@ import { devDebug } from '../utils/devLogger';
 
 interface BusinessTermsTreeProps {
   businessTerms: any[];
-  semanticTerms: any[];
-  semanticViews: any[];
+  semanticTerms?: any[];          // accepted but no longer rendered here (semantics live in SemanticTermsTab)
+  semanticViews?: any[];
   semanticEdges?: any[];
   selectedAsset: EnhancedSelectedAsset | null;
   onAssetSelect: (asset: EnhancedSelectedAsset) => void;
@@ -26,7 +26,10 @@ interface BusinessTermsTreeProps {
   highlightedItem: string | null;
   onEditTerm?: (term: CatalogNode) => void;
   onDeleteTerm?: (term: CatalogNode) => void;
+  onEditSemanticTerm?: (term: CatalogNode) => void;
+  onDeleteSemanticTerm?: (term: CatalogNode) => void;
   filterType?: 'all' | 'with_relationships' | 'without_relationships';
+  tenantId?: string;
 }
 
 interface SemanticAsset {
@@ -47,19 +50,23 @@ interface CategoryNode {
 
 const BusinessTermsTree: React.FC<BusinessTermsTreeProps> = ({
   businessTerms = [],
+  semanticTerms: _semanticTerms = [],            // accepted for prop compatibility but not rendered
   semanticEdges = [],
   onAssetSelect,
   highlightedItem,
   searchTerm = '',
   onEditTerm,
   onDeleteTerm,
+  onEditSemanticTerm: _onEditSemanticTerm,       // accepted for prop compatibility but not rendered
+  onDeleteSemanticTerm: _onDeleteSemanticTerm,   // accepted for prop compatibility but not rendered
   filterType = 'all',
+  tenantId: tenantIdProp,
 }) => {
   const [isFlatView, setIsFlatView] = useState(false);
-  const [expandedNodes, setExpandedNodes] = useState<Set<string>>(new Set());
-  const [isDefaultExpansion, setIsDefaultExpansion] = useState(true);
+  const [expandedNodes, setExpandedNodes] = useState<Set<string>>(() => new Set());
 
-  // Create a map of all available nodes for lookup name resolution
+  // Create a map of all available business term nodes for lookup name resolution.
+  // We only resolve against business terms here; semantic terms belong to the SemanticTermsTab.
   const nodeNameMap = useMemo(() => {
     const map = new Map<string, string>();
     businessTerms.forEach((term: any) => {
@@ -72,7 +79,8 @@ const BusinessTermsTree: React.FC<BusinessTermsTreeProps> = ({
   }, [businessTerms]);
 
   const { tenant } = useTenant();
-  const { data: nodeTypes } = useNodeTypes(tenant?.id || '');
+  const effectiveTenantId = tenantIdProp || tenant?.id || '';
+  const { data: nodeTypes } = useNodeTypes({ tenantId: effectiveTenantId });
   const businessTermNodeType = useMemo(() => {
     if (!nodeTypes) return null;
     return (nodeTypes as any[]).find((nt) => {
@@ -90,50 +98,31 @@ const BusinessTermsTree: React.FC<BusinessTermsTreeProps> = ({
       devDebug('[BusinessTermsTree] Top-level lookup maps keys:', Object.keys(topLevelLookupMaps));
       Object.entries(topLevelLookupMaps).forEach(([key, map]) => {
         devDebug(`[BusinessTermsTree] Lookup map '${key}' has ${map?.size || 0} entries`);
-        if (map && map.size > 0) {
-          const entries = Array.from(map.entries()).slice(0, 5);
-          devDebug(`[BusinessTermsTree]   Sample entries for '${key}':`, entries);
-        }
       });
     }
   }, [businessTermNodeType, topLevelLookupMaps]);
 
-  // Get category levels from business term properties with proper UUID resolution
   const getCategoryLevels = useCallback((term: SemanticAsset): [string, string, string] => {
     const props = term.properties || {};
     const uuidRegex = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
-    
-    const resolveValue = (propKeyCandidates: string[], val: any, level: string): string => {
+
+    const resolveValue = (propKeyCandidates: string[], val: any, _level: string): string => {
       if (!val) return '';
       const strVal = String(val);
-      
-      // If it's not a UUID, return as-is
       if (!uuidRegex.test(strVal)) {
-        devDebug(`[BusinessTermsTree] ${level} value '${strVal}' is not a UUID, using as-is`);
         return strVal;
       }
 
-      devDebug(`[BusinessTermsTree] Resolving ${level} UUID: ${strVal}`);
-      
-      // Try lookup maps first with all candidate keys
       for (const key of propKeyCandidates) {
         if (topLevelLookupMaps?.[key]?.has(strVal)) {
           const mapped = topLevelLookupMaps[key].get(strVal);
-          if (mapped) {
-            devDebug(`[BusinessTermsTree] ✓ Resolved ${level} via lookup '${key}': ${strVal} -> ${mapped}`);
-            return mapped;
-          }
+          if (mapped) return mapped;
         }
       }
 
-      // Try nodeNameMap
       const fromNodeMap = nodeNameMap.get(strVal);
-      if (fromNodeMap) {
-        devDebug(`[BusinessTermsTree] ✓ Resolved ${level} via nodeNameMap: ${strVal} -> ${fromNodeMap}`);
-        return fromNodeMap;
-      }
+      if (fromNodeMap) return fromNodeMap;
 
-      // Try cascading lookups
       const propDef = (businessTermNodeType?.properties as any[])?.find((p: any) => propKeyCandidates.includes(p.name));
       if (propDef?.cascade_from && propDef?.lookup_id) {
         const parentProperty = propDef.cascade_from;
@@ -143,33 +132,26 @@ const BusinessTermsTree: React.FC<BusinessTermsTreeProps> = ({
           if (cascadingLookupCache.has(cacheKey)) {
             const cachedMap = cascadingLookupCache.get(cacheKey);
             const mapped = cachedMap?.get(strVal);
-            if (mapped) {
-              devDebug(`[BusinessTermsTree] ✓ Resolved ${level} via cascade: ${strVal} -> ${mapped}`);
-              return mapped;
-            }
+            if (mapped) return mapped;
           }
         }
       }
-      
-      devDebug(`[BusinessTermsTree] ✗ Could not resolve ${level} UUID: ${strVal}`);
-      // Return "Unknown Category" instead of the UUID for better UX
+
       return `Unknown (${strVal.substring(0, 8)}...)`;
     };
-    
-    // Try all possible property name variations for each level
+
     const level1Candidates = ['category_1', 'category1', 'category_level_1', 'category'];
     const level2Candidates = ['category_2', 'category2', 'category_level_2', 'sub_category'];
     const level3Candidates = ['category_3', 'category3', 'category_level_3'];
-    
-    // Get raw values
+
     const level1Val = props.category_level_1 || props.category1 || props.category_1 || props.category;
     const level2Val = props.category_level_2 || props.category2 || props.category_2 || props.sub_category;
     const level3Val = props.category_level_3 || props.category3 || props.category_3;
-    
+
     const level1 = resolveValue(level1Candidates, level1Val || 'Uncategorized', 'Level 1');
     const level2 = resolveValue(level2Candidates, level2Val || '', 'Level 2');
     const level3 = resolveValue(level3Candidates, level3Val || '', 'Level 3');
-    
+
     return [level1, level2, level3];
   }, [topLevelLookupMaps, nodeNameMap, cascadingLookupCache, businessTermNodeType]);
 
@@ -198,9 +180,8 @@ const BusinessTermsTree: React.FC<BusinessTermsTreeProps> = ({
     return businessTerms || [];
   }, [businessTerms, semanticEdges, filterType]);
 
-  // Prefetch cascading values
   useEffect(() => {
-    if (!businessTermNodeType?.properties || !filteredBusinessTerms?.length || !tenant?.id) return;
+    if (!businessTermNodeType?.properties || !filteredBusinessTerms?.length || !effectiveTenantId) return;
 
     const cascadeProps = (businessTermNodeType.properties as any[]).filter((p: any) => p.cascade_from && p.lookup_id);
     if (!cascadeProps?.length) return;
@@ -212,7 +193,7 @@ const BusinessTermsTree: React.FC<BusinessTermsTreeProps> = ({
         if (val && parentVal) {
           const cacheKey = `${p.lookup_id}_${parentVal}`;
           if (cascadingLookupCache.has(cacheKey)) return;
-          
+
           setCascadingLookupCache(prev => {
             if (prev.has(cacheKey)) return prev;
             const newCache = new Map(prev);
@@ -221,7 +202,7 @@ const BusinessTermsTree: React.FC<BusinessTermsTreeProps> = ({
           });
 
           try {
-            const url = `/api/lookups/${p.lookup_id}/values?tenant_id=${tenant.id}&parent_id=${encodeURIComponent(String(parentVal))}`;
+            const url = `/api/lookups/${p.lookup_id}/values?tenant_id=${effectiveTenantId}&parent_id=${encodeURIComponent(String(parentVal))}`;
             const res = await fetch(url, { credentials: 'include' });
             if (res.ok) {
               const data = await res.json();
@@ -231,7 +212,7 @@ const BusinessTermsTree: React.FC<BusinessTermsTreeProps> = ({
                   lookupMap.set(item.id, item.label);
                 }
               });
-              
+
               setCascadingLookupCache(prev => {
                 const newCache = new Map(prev);
                 newCache.set(cacheKey, lookupMap);
@@ -244,9 +225,8 @@ const BusinessTermsTree: React.FC<BusinessTermsTreeProps> = ({
         }
       });
     });
-  }, [businessTermNodeType, filteredBusinessTerms, tenant?.id, cascadingLookupCache]);
+  }, [businessTermNodeType, filteredBusinessTerms, effectiveTenantId, cascadingLookupCache]);
 
-  // Build hierarchical tree structure with accurate counts
   const categoryTree = useMemo(() => {
     const root: CategoryNode = {
       name: 'Root',
@@ -273,10 +253,8 @@ const BusinessTermsTree: React.FC<BusinessTermsTreeProps> = ({
       }
 
       if (!level2 && !level3) {
-        // Term belongs directly to level 1
         level1Node.terms.push(term);
       } else if (level2 && !level3) {
-        // Level 2 category
         let level2Node = level1Node.children!.find(child => child.name === level2);
         if (!level2Node) {
           level2Node = {
@@ -290,7 +268,6 @@ const BusinessTermsTree: React.FC<BusinessTermsTreeProps> = ({
         }
         level2Node.terms.push(term);
       } else if (level2 && level3) {
-        // Level 3 category
         let level2Node = level1Node.children!.find(child => child.name === level2);
         if (!level2Node) {
           level2Node = {
@@ -321,7 +298,6 @@ const BusinessTermsTree: React.FC<BusinessTermsTreeProps> = ({
     return root;
   }, [filteredBusinessTerms, getCategoryLevels]);
 
-  // Helper function to count all terms in a node and its children recursively
   const countAllTerms = useCallback((node: CategoryNode): number => {
     let count = node.terms.length;
     if (node.children) {
@@ -332,7 +308,6 @@ const BusinessTermsTree: React.FC<BusinessTermsTreeProps> = ({
     return count;
   }, []);
 
-  // Filter tree based on search
   const filteredTree = useMemo(() => {
     if (!searchTerm.trim()) {
       return categoryTree;
@@ -343,7 +318,6 @@ const BusinessTermsTree: React.FC<BusinessTermsTreeProps> = ({
     const filterNode = (node: CategoryNode): CategoryNode | null => {
       const matchingTerms = node.terms.filter(term =>
         term.node_name.toLowerCase().includes(searchLower) ||
-        term.description?.toLowerCase().includes(searchLower) ||
         getCategoryLevels(term).some(level => level.toLowerCase().includes(searchLower))
       );
 
@@ -364,8 +338,8 @@ const BusinessTermsTree: React.FC<BusinessTermsTreeProps> = ({
     return filtered || { name: 'Root', level: 1, terms: [], children: [] };
   }, [categoryTree, searchTerm, getCategoryLevels]);
 
-  // Flatten tree for flat view
-  const flattenedTerms = useMemo(() => {
+  // Flat view: only business terms (semantic terms belong to SemanticTermsTab).
+  const flattenedBusinessTerms = useMemo(() => {
     if (!searchTerm.trim()) {
       return filteredBusinessTerms || [];
     }
@@ -373,7 +347,6 @@ const BusinessTermsTree: React.FC<BusinessTermsTreeProps> = ({
     const searchLower = searchTerm.toLowerCase();
     return (filteredBusinessTerms || []).filter(term =>
       term.node_name.toLowerCase().includes(searchLower) ||
-      term.description?.toLowerCase().includes(searchLower) ||
       getCategoryLevels(term).some(level => level.toLowerCase().includes(searchLower))
     );
   }, [filteredBusinessTerms, searchTerm, getCategoryLevels]);
@@ -403,7 +376,6 @@ const BusinessTermsTree: React.FC<BusinessTermsTreeProps> = ({
   };
 
   const handleExpandAll = useCallback(() => {
-    setIsDefaultExpansion(false);
     const allPaths = new Set<string>();
     const collectPaths = (node: CategoryNode, path = ''): boolean => {
       const nodePath = path ? `${path}-${node.name}` : node.name;
@@ -416,13 +388,12 @@ const BusinessTermsTree: React.FC<BusinessTermsTreeProps> = ({
       }
       return isExpandable;
     };
-  
+
     filteredTree.children?.forEach(child => collectPaths(child));
     setExpandedNodes(allPaths);
   }, [filteredTree]);
 
   const handleCollapseAll = () => {
-    setIsDefaultExpansion(false);
     setExpandedNodes(new Set());
   };
 
@@ -432,8 +403,7 @@ const BusinessTermsTree: React.FC<BusinessTermsTreeProps> = ({
     const hasChildren = node.children && node.children.length > 0;
     const hasTerms = node.terms.length > 0;
     const isExpandable = hasChildren || hasTerms;
-    
-    // Calculate total count including all descendants
+
     const totalCount = countAllTerms(node);
 
     return (
@@ -463,14 +433,11 @@ const BusinessTermsTree: React.FC<BusinessTermsTreeProps> = ({
                   key={assetId}
                   className={`business-term-item depth-${depth + 1} ${isSelected ? 'selected' : ''}`}
                 >
-                  <div 
+                  <div
                     className="term-content"
                     onClick={() => handleBusinessTermSelect(term)}
                   >
                     <span className="term-name">{term.node_name}</span>
-                    {term.description && (
-                      <span className="term-description">{term.description}</span>
-                    )}
                   </div>
                   <div className="term-actions">
                     {onEditTerm && (
@@ -512,7 +479,7 @@ const BusinessTermsTree: React.FC<BusinessTermsTreeProps> = ({
   const renderFlatView = () => {
     return (
       <div className="business-flat-view">
-        {flattenedTerms.map(term => {
+        {flattenedBusinessTerms.map(term => {
           const assetId = `business_term-${term.id}`;
           const isSelected = highlightedItem === assetId;
           const [level1, level2, level3] = getCategoryLevels(term);
@@ -523,7 +490,7 @@ const BusinessTermsTree: React.FC<BusinessTermsTreeProps> = ({
               key={assetId}
               className={`business-term-item-flat ${isSelected ? 'selected' : ''}`}
             >
-              <div 
+              <div
                 className="term-content"
                 onClick={() => handleBusinessTermSelect(term)}
               >
@@ -533,9 +500,6 @@ const BusinessTermsTree: React.FC<BusinessTermsTreeProps> = ({
                     <span className="term-categories">{categories.join(' > ')}</span>
                   )}
                 </div>
-                {term.description && (
-                  <div className="term-description">{term.description}</div>
-                )}
               </div>
               <div className="term-actions">
                 {onEditTerm && (
@@ -572,29 +536,31 @@ const BusinessTermsTree: React.FC<BusinessTermsTreeProps> = ({
     );
   };
 
-  // Initialize expanded nodes
-  useEffect(() => {
-    if (isDefaultExpansion && filteredTree.children && filteredTree.children.length > 0) {
-      const initialExpanded = new Set<string>();
-      filteredTree.children.forEach(child => {
-        initialExpanded.add(child.name);
-      });
-
-      setExpandedNodes(prevExpanded => {
-        if (prevExpanded.size === initialExpanded.size) {
-          const allPresent = [...initialExpanded].every(item => prevExpanded.has(item));
-          if (allPresent) {
-            return prevExpanded;
-          }
-        }
-        return initialExpanded;
-      });
+  // Auto-expand BUSINESS term categories on first render of each new tree.
+  // To avoid the "Maximum update depth" infinite loop, we compute the desired
+  // Set via useMemo (stable reference until filteredTree.children changes)
+  // and the updater function bails out when prev already equals desired.
+  const desiredExpansion = useMemo(() => {
+    const desired = new Set<string>();
+    const children = filteredTree.children;
+    if (children) {
+      for (const child of children) {
+        desired.add(child.name);
+      }
     }
-  }, [filteredTree, isDefaultExpansion]);
+    return desired;
+  }, [filteredTree.children]);
 
   useEffect(() => {
-    setIsDefaultExpansion(true);
-  }, [searchTerm, filterType]);
+    setExpandedNodes(prev => {
+      if (prev.size === desiredExpansion.size) {
+        let allPresent = true;
+        desiredExpansion.forEach(k => { if (!prev.has(k)) allPresent = false; });
+        if (allPresent) return prev;
+      }
+      return new Set(desiredExpansion);
+    });
+  }, [desiredExpansion]);
 
   useEffect(() => {
     if (highlightedItem) {
@@ -606,6 +572,9 @@ const BusinessTermsTree: React.FC<BusinessTermsTreeProps> = ({
   }, [highlightedItem]);
 
   const { t } = useTranslation();
+
+  const noBusinessCategories = !filteredTree.children || filteredTree.children.length === 0;
+  devDebug('[BusinessTermsTree] render — businessTerms:', filteredBusinessTerms?.length, 'isFlatView:', isFlatView, 'categories:', filteredTree.children?.length ?? 0);
 
   return (
     <div className="business-terms-tree-container">
@@ -636,33 +605,37 @@ const BusinessTermsTree: React.FC<BusinessTermsTreeProps> = ({
 
       <div className="business-tree-content">
         {isFlatView ? (
-          flattenedTerms.length === 0 && searchTerm ? (
+          flattenedBusinessTerms.length === 0 && searchTerm ? (
             <div className="no-results">
               <div className="no-results-icon">🔍</div>
               <h4>{t('no_results.title', 'No terms found')}</h4>
               <p>{t('no_results.description', 'No business terms match your search')}</p>
             </div>
+          ) : flattenedBusinessTerms.length === 0 ? (
+            <div className="no-results">
+              <div className="no-results-icon">📁</div>
+              <h4>{t('no_terms.title', 'No Business Terms')}</h4>
+              <p>{t('no_terms.description', 'No business terms are available')}</p>
+            </div>
           ) : (
             renderFlatView()
           )
+        ) : noBusinessCategories && !searchTerm ? (
+          <div className="no-results">
+            <div className="no-results-icon">📁</div>
+            <h4>{t('no_terms.title', 'No Business Terms')}</h4>
+            <p>{t('no_terms.description', 'No business terms are available')}</p>
+          </div>
+        ) : noBusinessCategories && searchTerm ? (
+          <div className="no-results">
+            <div className="no-results-icon">🔍</div>
+            <h4>{t('no_results.title', 'No terms found')}</h4>
+            <p>{t('no_results.description', 'No business terms match your search')}</p>
+          </div>
         ) : (
-          filteredTree.children && filteredTree.children.length > 0 ? (
-            <div className="business-tree-nodes">
-              {filteredTree.children.map(child => renderCategoryNode(child))}
-            </div>
-          ) : searchTerm ? (
-            <div className="no-results">
-              <div className="no-results-icon">🔍</div>
-              <h4>No categories found</h4>
-              <p>No business term categories match your search</p>
-            </div>
-          ) : (
-            <div className="no-results">
-              <div className="no-results-icon">📁</div>
-              <h4>No Business Terms</h4>
-              <p>No business terms are available</p>
-            </div>
-          )
+          <div className="business-tree-nodes">
+            {filteredTree.children?.map(child => renderCategoryNode(child))}
+          </div>
         )}
       </div>
     </div>

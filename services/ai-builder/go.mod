@@ -1,14 +1,14 @@
-module github.com/hondyman/semlayer/services/ai-builder
+module github.com/hondyman/uisce/services/ai-builder
 
 go 1.24.0
 
 require (
 	github.com/gin-gonic/gin v1.11.0
-	github.com/hondyman/semlayer/libs/temporal-client v0.0.0
+	github.com/hondyman/uisce/libs/temporal-client v0.0.0
 	go.temporal.io/sdk v1.37.0
 )
 
-replace github.com/hondyman/semlayer/libs/temporal-client => ../../libs/temporal-client
+replace github.com/hondyman/uisce/libs/temporal-client => ../../libs/temporal-client
 
 require (
 	github.com/bytedance/sonic v1.14.0 // indirect

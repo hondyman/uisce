@@ -2,13 +2,62 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useMemo } from 'react';
 import { useTenant } from '../contexts/TenantContext';
 import { devDebug } from '../utils/devLogger';
-import { apiFetch } from '../lib/apiClient';
+import { getSelectedRegion } from '../lib/region';
 import { useNodeTypes } from './nodeTypes';
+
+// ============================================================================
+// Catalog node type UUIDs (sourced from the gold copy tenant's catalog_node_type).
+// These are pinned in the frontend so we can filter by `node_type_id=<UUID>`
+// directly on /api/catalog/nodes, instead of the (slower, string-based) name
+// filter. They were sourced from the SQL dump on 2026-07-02 — the underlying
+// values live in the central platform DB and are stable.
+// ============================================================================
+export const BUSINESS_TERM_TYPE_ID = '21645d21-de5f-4feb-af99-99273ea75626';
+export const SEMANTIC_TERM_TYPE_ID  = '820b942a-9c9e-4abc-acdc-84616db33098';
+
+// Effective auth token: impersonation scoped token wins if present, otherwise
+// the primary OIDC token persisted by AuthContext.
+function getEffectiveAuthToken(): string | null {
+  try {
+    return localStorage.getItem('uisce_impersonation_token') || localStorage.getItem('auth_token');
+  } catch {
+    return null;
+  }
+}
+
+// Build headers for glossary catalog-node calls. Business and semantic terms are
+// scoped by TENANT only; they never carry a datasource/instance header because
+// those node types have no tenant_datasource_id / tenant_instance_id.
+function getGlossaryHeaders(tenantId?: string | null): Record<string, string> {
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  const token = getEffectiveAuthToken();
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+  if (tenantId) headers['X-Tenant-ID'] = tenantId;
+  const region = getSelectedRegion();
+  if (region) headers['X-Tenant-Region'] = region;
+  return headers;
+}
+
+// Fetch wrapper for glossary endpoints that intentionally omits the auto-injected
+// datasource header. Caller-supplied headers win, otherwise we inject auth,
+// tenant and region only.
+async function glossaryFetch(
+  input: RequestInfo | URL,
+  tenantId?: string | null,
+  init: RequestInit = {},
+): Promise<Response> {
+  const headers = new Headers(init.headers || {});
+  const glossaryHeaders = getGlossaryHeaders(tenantId);
+  Object.entries(glossaryHeaders).forEach(([key, value]) => {
+    if (!headers.has(key)) headers.set(key, value);
+  });
+  return fetch(input, { ...init, headers });
+}
 
 // Types for Glossary
 export interface CatalogNode {
   id: string;
-  tenant_datasource_id?: string;
+  tenant_datasource_id?: string | null;
   catalog_type?: string; // From /api/catalog/nodes
   catalog_type_name?: string; // From /api/glossary/* endpoints
   description?: string;
@@ -38,8 +87,12 @@ export interface NodeProperty {
 
 export interface CatalogEdge {
   id: string;
+  edge_type_id?: string;
   edge_type_name: string;
   description: string;
+  subject_node_id: string;
+  subject_node_type_id?: string;
+  object_node_id: string;
   object_node_type_id: string;
   properties: EdgeProperty[] | Record<string, any>;
   is_active: boolean;
@@ -47,6 +100,10 @@ export interface CatalogEdge {
   updated_at: string;
   tenant_id: string;
   core_id: string | null;
+  // Backwards-compatible aliases used by legacy GraphQL consumers
+  source_node_id?: string;
+  target_node_id?: string;
+  relationship_type?: string;
 }
 
 export interface EdgeProperty {
@@ -59,11 +116,11 @@ export interface EdgeProperty {
 }
 
 export interface SemanticTerm extends CatalogNode {
-  // Semantic terms are catalog nodes with catalog_type_name = 'semantic_term'
+  // Semantic terms are catalog nodes with node_type_id = SEMANTIC_TERM_TYPE_ID
 }
 
 export interface BusinessTerm extends CatalogNode {
-  // Business terms are catalog nodes with catalog_type_name = 'business_term'
+  // Business terms are catalog nodes with node_type_id = BUSINESS_TERM_TYPE_ID
 }
 
 // Query keys
@@ -77,111 +134,177 @@ export const glossaryKeys = {
   semanticData: () => [...glossaryKeys.all, 'semantic-data'] as const,
 };
 
+// =============================================================================
+// Glossary READ hooks
+// =============================================================================
+//
+// IMPORTANT: semantic terms and business terms are tied to the TENANT (not the
+// datasource). They are a merge of the gold copy tenant's core catalog and the
+// caller's scoped tenant. The frontend therefore queries with:
+//   ?tenant_id=<scope_or_current>  &  node_type_id=<UUID>  &  limit=...
+// (NO `tenant_instance_id` / datasource param.)
+// =============================================================================
+
 // Fetch all semantic terms
-// NOTE: Like useBusinessTerms(), this falls back to /api/catalog/nodes and filters
-// client-side because /api/glossary/semantic-terms returns 404 on the platform backend.
-// (Hasura has been removed permanently, so the GraphQL endpoint is unavailable.)
-export function useSemanticTerms() {
-  const { tenant, datasource } = useTenant();
+export function useSemanticTerms(opts?: { tenantOverride?: string }) {
+  const { tenant } = useTenant();
+  const scopeTenant = opts?.tenantOverride || tenant?.id;
 
   return useQuery({
-    queryKey: glossaryKeys.semanticTerms(),
+    queryKey: [...glossaryKeys.semanticTerms(), scopeTenant ?? null],
     queryFn: async () => {
       const params = new URLSearchParams();
-      if (tenant?.id) {
-        params.append('tenant_id', tenant.id);
-      }
-      if (datasource?.id) {
-        params.append('tenant_instance_id', datasource.id);
-      }
+      if (scopeTenant) params.append('tenant_id', scopeTenant);
+      params.append('node_type_id', SEMANTIC_TERM_TYPE_ID);
+      params.append('limit', '100000');
 
-      const res = await apiFetch(`/api/catalog/nodes?${params.toString()}`);
+      const url = `/api/catalog/nodes?${params.toString()}`;
+      devDebug('[useSemanticTerms] GET', url);
+      const res = await glossaryFetch(url, scopeTenant);
 
       if (!res.ok) {
         const error = await res.text();
+        devDebug('[useSemanticTerms] ERROR', res.status, error.slice(0, 200));
         throw new Error(error || 'Failed to fetch semantic terms');
       }
 
       const allNodes = ((await res.json()) as CatalogNode[]) || [];
-      return allNodes.filter((node) => node.catalog_type === 'semantic_term');
+      devDebug('[useSemanticTerms] returned', allNodes.length, 'nodes; first sample:', allNodes[0] ? {
+        id: allNodes[0].id,
+        node_name: allNodes[0].node_name,
+        node_type_id: allNodes[0].node_type_id,
+        catalog_type: allNodes[0].catalog_type,
+        catalog_type_name: allNodes[0].catalog_type_name,
+      } : 'none');
+      return allNodes.filter((node) => node.node_type_id === SEMANTIC_TERM_TYPE_ID);
     },
-    enabled: !!(tenant?.id && datasource?.id),
+    enabled: !!scopeTenant,
   });
 }
 
 // Fetch all business terms
-// NOTE: Uses /api/catalog/nodes as the canonical source. Backend does not implement
-// /api/glossary/business-terms (returns 404), and Hasura/GraphQL has been removed
-// permanently, so we filter client-side.
-export function useBusinessTerms() {
-  const { tenant, datasource } = useTenant();
+export function useBusinessTerms(opts?: { tenantOverride?: string }) {
+  const { tenant } = useTenant();
+  const scopeTenant = opts?.tenantOverride || tenant?.id;
 
   return useQuery({
-    queryKey: glossaryKeys.businessTerms(),
+    queryKey: [...glossaryKeys.businessTerms(), scopeTenant ?? null],
     queryFn: async () => {
       const params = new URLSearchParams();
-      if (tenant?.id) {
-        params.append('tenant_id', tenant.id);
-      }
-      if (datasource?.id) {
-        params.append('tenant_instance_id', datasource.id);
-      }
+      if (scopeTenant) params.append('tenant_id', scopeTenant);
+      params.append('node_type_id', BUSINESS_TERM_TYPE_ID);
+      params.append('limit', '100000');
 
-      const res = await apiFetch(`/api/catalog/nodes?${params.toString()}`);
+      const url = `/api/catalog/nodes?${params.toString()}`;
+      devDebug('[useBusinessTerms] GET', url);
+      const res = await glossaryFetch(url, scopeTenant);
 
       if (!res.ok) {
         const error = await res.text();
+        devDebug('[useBusinessTerms] ERROR', res.status, error.slice(0, 200));
         throw new Error(error || 'Failed to fetch business terms');
       }
 
       const allNodes = ((await res.json()) as CatalogNode[]) || [];
-      return allNodes.filter((node) => node.catalog_type === 'business_term');
+      devDebug('[useBusinessTerms] returned', allNodes.length, 'nodes; first sample:', allNodes[0] ? {
+        id: allNodes[0].id,
+        node_name: allNodes[0].node_name,
+        node_type_id: allNodes[0].node_type_id,
+        catalog_type: allNodes[0].catalog_type,
+        catalog_type_name: allNodes[0].catalog_type_name,
+      } : 'none');
+      return allNodes.filter((node) => node.node_type_id === BUSINESS_TERM_TYPE_ID);
     },
-    enabled: !!(tenant?.id && datasource?.id),
+    enabled: !!scopeTenant,
   });
 }
 
-// Fetch edges between business terms and semantic terms
-// NOTE: Returns empty array because /api/glossary/edges and /api/catalog/edges are
-// not yet implemented on the platform backend, and GraphQL (which previously served
-// edges) has been removed permanently. TODO: wire a REST endpoint when available.
-export function useGlossaryEdges() {
-  const { tenant, datasource } = useTenant();
+// Fetch edges between business terms and semantic terms from the REST endpoint.
+// Falls back to an empty array if the backend returns no data.
+export function useGlossaryEdges(opts?: { tenantOverride?: string }) {
+  const { tenant } = useTenant();
+  const scopeTenant = opts?.tenantOverride || tenant?.id;
 
   return useQuery({
-    queryKey: glossaryKeys.edges(),
-    queryFn: async () => {
-      return [] as CatalogEdge[];
-    },
-    enabled: !!(tenant?.id && datasource?.id),
-  });
-}
-
-// Fetch all catalog nodes for the active tenant/datasource (REST-only).
-// Returns the full list — callers can filter by `catalog_type` or `node_type_id`.
-function useAllCatalogNodes() {
-  const { tenant, datasource } = useTenant();
-
-  return useQuery({
-    queryKey: [...glossaryKeys.catalogNodes(), tenant?.id, datasource?.id],
+    queryKey: [...glossaryKeys.edges(), scopeTenant ?? null],
     queryFn: async () => {
       const params = new URLSearchParams();
-      if (tenant?.id) params.append('tenant_id', tenant.id);
-      if (datasource?.id) params.append('tenant_instance_id', datasource.id);
+      if (scopeTenant) params.append('tenant_id', scopeTenant);
 
-      const res = await apiFetch(`/api/catalog/nodes?${params.toString()}`);
+      const url = `/api/glossary/edges?${params.toString()}`;
+      devDebug('[useGlossaryEdges] GET', url);
+      const res = await glossaryFetch(url, scopeTenant);
+
       if (!res.ok) {
-        throw new Error(await res.text() || 'Failed to fetch catalog nodes');
+        const error = await res.text();
+        devDebug('[useGlossaryEdges] ERROR', res.status, error.slice(0, 200));
+        // Gracefully degrade if the GET endpoint is not deployed yet; this keeps
+        // the glossary UI usable while the backend endpoint is rolled out.
+        if (res.status === 404 || res.status === 501) {
+          return [] as CatalogEdge[];
+        }
+        throw new Error(error || 'Failed to fetch glossary edges');
       }
-      return ((await res.json()) as CatalogNode[]) || [];
+
+      const payload = (await res.json()) as CatalogEdge[] | { edges?: CatalogEdge[] };
+      const edges: CatalogEdge[] = Array.isArray(payload)
+        ? payload
+        : Array.isArray((payload as any).edges)
+          ? (payload as any).edges
+          : [];
+
+      // Normalize the newer subject/object naming to the legacy source/target
+      // aliases so existing consumers keep working.
+      return edges.map((edge: CatalogEdge) => ({
+        ...edge,
+        source_node_id: edge.subject_node_id,
+        target_node_id: edge.object_node_id,
+        relationship_type: edge.edge_type_name || edge.relationship_type,
+      })) as CatalogEdge[];
     },
-    enabled: !!(tenant?.id && datasource?.id),
+    enabled: !!scopeTenant,
+  });
+}
+
+// Fetch all catalog nodes for specific node_type_id UUIDs (REST-only).
+// Drops `tenant_instance_id`; semantic/business terms are scoped by tenant only.
+function useCatalogNodesByTypeIds(
+  typeIds: string[],
+  opts?: { tenantOverride?: string }
+) {
+  const { tenant } = useTenant();
+  const scopeTenant = opts?.tenantOverride || tenant?.id;
+
+  return useQuery({
+    queryKey: [...glossaryKeys.catalogNodes(), scopeTenant ?? null, typeIds.join(',')],
+    queryFn: async () => {
+      const results = await Promise.all(
+        typeIds.map(async (tid) => {
+          const params = new URLSearchParams();
+          if (scopeTenant) params.append('tenant_id', scopeTenant);
+          params.append('node_type_id', tid);
+          params.append('limit', '100000');
+
+          const res = await glossaryFetch(`/api/catalog/nodes?${params.toString()}`, scopeTenant);
+          if (!res.ok) {
+            devDebug(`[useCatalogNodesByTypeIds] failed to fetch type_id ${tid}`);
+            return [];
+          }
+          return ((await res.json()) as CatalogNode[]) || [];
+        })
+      );
+      return results.flat();
+    },
+    enabled: !!scopeTenant && typeIds.length > 0,
   });
 }
 
 // Attach a denormalized `node_type` object to each catalog node based on the
 // shared nodeTypes list. Matches the shape the GraphQL version produced.
-function attachNodeType(nodes: CatalogNode[], nodeTypesList?: { id: string; catalog_type_name?: string }[] | null) {
+function attachNodeType(
+  nodes: CatalogNode[],
+  nodeTypesList?: { id: string; catalog_type_name?: string }[] | null
+) {
   return nodes.map((node) => {
     const typeDef = nodeTypesList?.find((t) => t.id === node.node_type_id);
     return {
@@ -194,57 +317,40 @@ function attachNodeType(nodes: CatalogNode[], nodeTypesList?: { id: string; cata
 }
 
 // Fetch all semantic data (business terms, semantic terms, semantic columns,
-// calculation terms, and edges) using REST only.
-//
-// Previously this used Apollo/GraphQL to query catalog_node / catalog_edge in a
-// single round-trip. With Hasura removed permanently, this now:
-//   1. Fetches the full list of node types via /api/node-types (REST).
-//   2. Fetches the full list of catalog nodes via /api/catalog/nodes (REST).
-//   3. Filters client-side by `node_type_id` for each type bucket.
-//   4. Returns an empty array for `semantic_edges` (no REST edge endpoint yet).
-export function useAllSemanticData() {
-  const { tenant, datasource } = useTenant();
-  const NIL_UUID = '00000000-0000-0000-0000-000000000000';
+// calculation terms) using REST only. Backed by node_type_id UUIDs only — no
+// string name filters.
+export function useAllSemanticData(opts?: { tenantOverride?: string }) {
+  const { tenant } = useTenant();
+  const scopeTenant = opts?.tenantOverride || tenant?.id;
 
-  // 1. Node types (REST)
-  const { data: nodeTypesList, isLoading: isNodeTypesLoading } = useNodeTypes();
+  // 1. Node types (REST) — only used to attach denormalized `node_type` info
+  const { data: nodeTypesList, isLoading: isNodeTypesLoading } = useNodeTypes({ tenantId: scopeTenant });
 
-  // 2. Resolve type IDs by name → id
-  const typeMap = useMemo(() => {
-    const empty = {
-      business_term: NIL_UUID,
-      semantic_term: NIL_UUID,
-      semantic_column: NIL_UUID,
-      calculation: NIL_UUID,
-      calculation_term: NIL_UUID,
-      metric: NIL_UUID,
-    };
-    if (!nodeTypesList) return empty;
-    return {
-      business_term: nodeTypesList.find((t) => t.catalog_type_name === 'business_term')?.id || NIL_UUID,
-      semantic_term: nodeTypesList.find((t) => t.catalog_type_name === 'semantic_term')?.id || NIL_UUID,
-      semantic_column: nodeTypesList.find((t) => t.catalog_type_name === 'semantic_column')?.id || NIL_UUID,
-      calculation: nodeTypesList.find((t) => t.catalog_type_name === 'calculation')?.id || NIL_UUID,
-      calculation_term: nodeTypesList.find((t) => t.catalog_type_name === 'calculation_term')?.id || NIL_UUID,
-      metric: nodeTypesList.find((t) => t.catalog_type_name === 'metric')?.id || NIL_UUID,
-    };
-  }, [nodeTypesList]);
+  // 2. Catalog nodes fetched by node_type_id UUID
+  const requiredTypeIds = useMemo(
+    () => [
+      BUSINESS_TERM_TYPE_ID,
+      SEMANTIC_TERM_TYPE_ID,
+      // Other technical types — kept in case downstream code reads them,
+      // but the user only asked for business + semantic here.
+      // '1439f761-606a-44cb-b4f8-7aa6b27a9bf5', // semantic_column
+      // '2e6aa1bb-2582-4a0b-8a19-e4753f1ff5a8', // calculation_term
+      // 'a3b8d1b6-0b3b-4b1a-9c1a-1a2b3c4d5e6f', // delta_kpi
+    ],
+    []
+  );
+  const nodesQuery = useCatalogNodesByTypeIds(requiredTypeIds, { tenantOverride: scopeTenant });
 
-  // 3. All catalog nodes (REST)
-  const nodesQuery = useAllCatalogNodes();
-
-  // 4. Filter and shape data the way the GraphQL version did
+  // 3. Filter and shape data the way the GraphQL version did
   const transformedData = useMemo(() => {
     const allNodes = nodesQuery.data || [];
     const allWithType = attachNodeType(allNodes, nodeTypesList);
 
-    const business_terms = allWithType.filter((n) => n.node_type_id === typeMap.business_term);
-    const semantic_terms = allWithType.filter((n) => n.node_type_id === typeMap.semantic_term);
-    const semantic_columns = allWithType.filter((n) => n.node_type_id === typeMap.semantic_column);
-    const calculation_terms = allWithType.filter((n) =>
-      n.node_type_id === typeMap.calculation ||
-      n.node_type_id === typeMap.calculation_term ||
-      n.node_type_id === typeMap.metric
+    const business_terms = allWithType.filter(
+      (n) => n.node_type_id === BUSINESS_TERM_TYPE_ID
+    );
+    const semantic_terms = allWithType.filter(
+      (n) => n.node_type_id === SEMANTIC_TERM_TYPE_ID
     );
 
     return {
@@ -253,16 +359,17 @@ export function useAllSemanticData() {
       semantic_edges: [] as CatalogEdge[], // REST edge endpoint not yet implemented
       all_nodes: allWithType,
       node_types: nodeTypesList || [],
-      calculation_terms,
-      semantic_columns,
+      // Keep these keys in the response shape so downstream callers don't break:
+      calculation_terms: [] as CatalogNode[],
+      semantic_columns: [] as CatalogNode[],
     };
-  }, [nodesQuery.data, nodeTypesList, typeMap]);
+  }, [nodesQuery.data, nodeTypesList]);
 
   return {
     data: transformedData,
     isLoading: isNodeTypesLoading || nodesQuery.isLoading,
     error: (nodesQuery.error as Error | null)?.message || null,
-    enabled: !!(tenant?.id && datasource?.id),
+    enabled: !!scopeTenant,
     refetch: () => {
       void nodesQuery.refetch();
     },
@@ -271,19 +378,27 @@ export function useAllSemanticData() {
 
 export const useAllSemanticDataQuery = useAllSemanticData;
 
+// =============================================================================
+// Glossary CRUD hooks
+// =============================================================================
+//
+// For semantic/business terms: tenant_datasource_id is NEVER set (these types
+// have no datasource). The CRUD payloads below explicitly omit it.
+// =============================================================================
+
+interface GlossaryMutationOpts { tenantOverride?: string; }
+
 // Update a semantic term or business term
-export function useUpdateTerm() {
+export function useUpdateTerm(opts?: GlossaryMutationOpts) {
   const queryClient = useQueryClient();
-  const { tenant, datasource } = useTenant();
+  const { tenant } = useTenant();
+  const scopeTenant = opts?.tenantOverride || tenant?.id;
 
   return useMutation({
     mutationFn: async (data: { id: string; updates: Partial<CatalogNode> }) => {
       const params = new URLSearchParams();
-      if (tenant?.id) {
-        params.append('tenant_id', tenant.id);
-      }
-      if (datasource?.id) {
-        params.append('tenant_instance_id', datasource.id);
+      if (scopeTenant) {
+        params.append('tenant_id', scopeTenant);
       }
 
       devDebug('[useUpdateTerm] Starting update for term:', data.id);
@@ -291,12 +406,19 @@ export function useUpdateTerm() {
       devDebug('[useUpdateTerm] parent_id value:', data.updates.parent_id);
       devDebug('[useUpdateTerm] catalog_type:', data.updates.catalog_type);
 
+      // For semantic/business terms, NEVER set tenant_datasource_id
+      const updatesWithoutDatasource: any = { ...data.updates };
+      if (updatesWithoutDatasource.tenant_datasource_id !== undefined) {
+        delete updatesWithoutDatasource.tenant_datasource_id;
+      }
+
       // Ensure parent_id is explicitly included for semantic terms
       // ALSO ensure properties is always an object, never an array
       let updatePayload: any = {
-        ...data.updates,
-        // Preserve parent_id for semantic terms - use the value from updates (could be null or a valid ID)
-        ...(data.updates.catalog_type === 'semantic_term' && { parent_id: data.updates.parent_id ?? null }),
+        ...updatesWithoutDatasource,
+        ...(data.updates.catalog_type === 'semantic_term' && {
+          parent_id: data.updates.parent_id ?? null,
+        }),
       };
 
       // Normalize properties to always be an object (not array)
@@ -315,7 +437,7 @@ export function useUpdateTerm() {
       devDebug('[useUpdateTerm] Request body:', requestBody);
       devDebug('[useUpdateTerm] parent_id in payload:', updatePayload.parent_id);
 
-      const res = await apiFetch(url, {
+      const res = await glossaryFetch(url, scopeTenant, {
         method: 'PUT',
         body: requestBody,
       });
@@ -370,28 +492,31 @@ export function useUpdateTerm() {
 }
 
 // Create a new semantic term or business term
-export function useCreateTerm() {
+export function useCreateTerm(opts?: GlossaryMutationOpts) {
   const queryClient = useQueryClient();
-  const { tenant, datasource } = useTenant();
+  const { tenant } = useTenant();
+  const scopeTenant = opts?.tenantOverride || tenant?.id;
 
   return useMutation({
     mutationFn: async (data: Omit<CatalogNode, 'id' | 'created_at' | 'updated_at'>) => {
       const params = new URLSearchParams();
-      if (tenant?.id) {
-        params.append('tenant_id', tenant.id);
+      if (scopeTenant) {
+        params.append('tenant_id', scopeTenant);
       }
-      if (datasource?.id) {
-        params.append('tenant_instance_id', datasource.id);
+
+      // For semantic/business terms, NEVER set tenant_datasource_id
+      const createPayload: any = { ...data };
+      if (createPayload.tenant_datasource_id !== undefined) {
+        delete createPayload.tenant_datasource_id;
       }
 
       // Normalize properties to always be an object (not array)
-      let createPayload = { ...data };
       if (createPayload.properties && Array.isArray(createPayload.properties)) {
         devDebug('[useCreateTerm] Properties came as array, converting to empty object for proper storage');
         createPayload.properties = {};
       }
 
-      const res = await apiFetch(`/api/glossary/terms?${params.toString()}`, {
+      const res = await glossaryFetch(`/api/glossary/terms?${params.toString()}`, scopeTenant, {
         method: 'POST',
         body: JSON.stringify(createPayload),
       });
@@ -426,21 +551,19 @@ export function useCreateTerm() {
 }
 
 // Delete a semantic term or business term
-export function useDeleteTerm() {
+export function useDeleteTerm(opts?: GlossaryMutationOpts) {
   const queryClient = useQueryClient();
-  const { tenant, datasource } = useTenant();
+  const { tenant } = useTenant();
+  const scopeTenant = opts?.tenantOverride || tenant?.id;
 
   return useMutation({
     mutationFn: async (id: string) => {
       const params = new URLSearchParams();
-      if (tenant?.id) {
-        params.append('tenant_id', tenant.id);
-      }
-      if (datasource?.id) {
-        params.append('tenant_instance_id', datasource.id);
+      if (scopeTenant) {
+        params.append('tenant_id', scopeTenant);
       }
 
-      const res = await apiFetch(`/api/glossary/terms/${id}?${params.toString()}`, {
+      const res = await glossaryFetch(`/api/glossary/terms/${id}?${params.toString()}`, scopeTenant, {
         method: 'DELETE',
       });
 
@@ -463,7 +586,7 @@ export function useDeleteTerm() {
 // Create a new edge between terms
 export function useCreateTermEdge() {
   const queryClient = useQueryClient();
-  const { tenant, datasource } = useTenant();
+  const { tenant } = useTenant();
 
   return useMutation({
     mutationFn: async (data: {
@@ -476,11 +599,8 @@ export function useCreateTermEdge() {
       if (tenant?.id) {
         params.append('tenant_id', tenant.id);
       }
-      if (datasource?.id) {
-        params.append('tenant_instance_id', datasource.id);
-      }
 
-      const res = await apiFetch(`/api/glossary/edges?${params.toString()}`, {
+      const res = await glossaryFetch(`/api/glossary/edges?${params.toString()}`, tenant?.id, {
         method: 'POST',
         body: JSON.stringify(data),
       });
@@ -500,7 +620,7 @@ export function useCreateTermEdge() {
 // Update an existing edge
 export function useUpdateTermEdge() {
   const queryClient = useQueryClient();
-  const { tenant, datasource } = useTenant();
+  const { tenant } = useTenant();
 
   return useMutation({
     mutationFn: async (data: { id: string; updates: Partial<CatalogEdge> }) => {
@@ -508,11 +628,8 @@ export function useUpdateTermEdge() {
       if (tenant?.id) {
         params.append('tenant_id', tenant.id);
       }
-      if (datasource?.id) {
-        params.append('tenant_instance_id', datasource.id);
-      }
 
-      const res = await apiFetch(`/api/glossary/edges/${data.id}?${params.toString()}`, {
+      const res = await glossaryFetch(`/api/glossary/edges/${data.id}?${params.toString()}`, tenant?.id, {
         method: 'PUT',
         body: JSON.stringify(data.updates),
       });
@@ -532,7 +649,7 @@ export function useUpdateTermEdge() {
 // Delete an edge
 export function useDeleteTermEdge() {
   const queryClient = useQueryClient();
-  const { tenant, datasource } = useTenant();
+  const { tenant } = useTenant();
 
   return useMutation({
     mutationFn: async (id: string) => {
@@ -540,11 +657,8 @@ export function useDeleteTermEdge() {
       if (tenant?.id) {
         params.append('tenant_id', tenant.id);
       }
-      if (datasource?.id) {
-        params.append('tenant_instance_id', datasource.id);
-      }
 
-      const res = await apiFetch(`/api/glossary/edges/${id}?${params.toString()}`, {
+      const res = await glossaryFetch(`/api/glossary/edges/${id}?${params.toString()}`, tenant?.id, {
         method: 'DELETE',
       });
 

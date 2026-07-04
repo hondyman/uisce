@@ -11,11 +11,11 @@ import (
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/worker"
 
-	"github.com/hondyman/semlayer/internal/activities"
-	"github.com/hondyman/semlayer/internal/ai"
-	"github.com/hondyman/semlayer/internal/drift"
-	"github.com/hondyman/semlayer/internal/uar"
-	"github.com/hondyman/semlayer/internal/workflows"
+	"github.com/hondyman/uisce/internal/activities"
+	"github.com/hondyman/uisce/internal/ai"
+	"github.com/hondyman/uisce/internal/drift"
+	"github.com/hondyman/uisce/internal/uar"
+	"github.com/hondyman/uisce/internal/workflows"
 )
 
 func main() {

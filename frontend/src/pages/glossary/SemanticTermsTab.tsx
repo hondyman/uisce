@@ -1,20 +1,19 @@
-import { IconButton, Tooltip, Chip, Tabs, Tab, Box, ToggleButtonGroup, ToggleButton, Button, Alert } from '@mui/material';
+import { IconButton, Tooltip, ToggleButtonGroup, ToggleButton, Button } from '@mui/material';
 import React, { useState, useMemo, useEffect } from 'react';
 import { useTenant } from '../../contexts/TenantContext';
 import { useAccess } from '../../contexts/AccessContext';
-import { EnhancedSelectedAsset } from '../../types/SemanticTypes'; 
-import { CatalogNode, useAllSemanticData, useAllSemanticDataQuery } from '../../api/glossary';
-import { useNodeTypes } from '../../api/nodeTypes';
-import { usePropertyLookupMaps } from '../../hooks/usePropertyLookupMaps';
+import { EnhancedSelectedAsset } from '../../types/SemanticTypes';
+import { CatalogNode, useAllSemanticData } from '../../api/glossary';
 import { useTranslation } from 'react-i18next';
 import { devDebug } from '../../utils/devLogger';
-import { Add as AddIcon, ArrowBack as ArrowBackIcon, FilterList as FilterListIcon, Settings as SettingsIcon } from '@mui/icons-material';
+import { Add as AddIcon, Settings as SettingsIcon } from '@mui/icons-material';
 import SemanticTermsTree from '../../components/SemanticTermsTree';
 import SemanticTermDetails from '../../pages/TabbedModal/tabs/SemanticTermDetails';
 import { ScopeSelectorDialog } from '../../components/ScopeSelectorDialog';
 import './SemanticTermsTab.css';
 
-export const SemanticTermsTab: React.FC<{ 
+export const SemanticTermsTab: React.FC<{
+  scopeTenantId?: string; 
   searchTerm?: string;
   onCreateTerm?: () => void;
   onEditTerm?: (term: CatalogNode) => void;
@@ -24,16 +23,19 @@ export const SemanticTermsTab: React.FC<{
   // Optional lineage data for advanced mapping checks
   semanticData?: any;
   technicalData?: any;
-}> = ({ searchTerm, onCreateTerm, onEditTerm, onDeleteTerm, onNavigateToBusinessTerm, semanticData, technicalData }) => {
-  const { tenant, datasource } = useTenant();
-  const { isPlatformOperator } = useAccess();
+}> = ({ scopeTenantId, searchTerm, onCreateTerm, onEditTerm, onDeleteTerm, onNavigateToBusinessTerm, semanticData, technicalData }) => {
+  const { datasource } = useTenant();
+  const { isPlatformOperator, currentDatasource } = useAccess();
+  const effectiveDatasourceId = currentDatasource?.id ?? datasource?.id;
   const [selectedAsset, setSelectedAsset] = useState<EnhancedSelectedAsset | null>(null);
   const [filterType, setFilterType] = useState<'all' | 'mapped' | 'unmapped'>('all');
   const [highlightedItem, setHighlightedItem] = useState<string | null>(null);
   const [selectedTermIds, setSelectedTermIds] = useState<string[]>([]);
   const [scopeSelectorOpen, setScopeSelectorOpen] = useState(false);
 
-  const { data, error } = useAllSemanticData();
+  // scopeTenantId (if provided) drives the queries; otherwise the active tenant.
+  // Semantic terms are scoped to the TENANT (no datasource param).
+  const { data, error } = useAllSemanticData({ tenantOverride: scopeTenantId });
   const { t } = useTranslation();
 
   // When data changes, refresh the selected asset if it's currently being viewed
@@ -121,18 +123,9 @@ export const SemanticTermsTab: React.FC<{
     setHighlightedItem(asset.id);
   };
 
-  const handleBackToSplash = () => {
-    setSelectedAsset(null);
-    setHighlightedItem(null);
-  };
-
-  const handleClearFilter = () => {
-    setFilterType('all');
-  };
-
   // Debug logging to track component state - MUST be before any conditional returns
   useEffect(() => {
-    console.info('[SemanticTermsTab] render snapshot', {
+    devDebug('[SemanticTermsTab] render snapshot', {
       selectedAsset: selectedAsset?.name,
       selectedAssetId: selectedAsset?.nodeId,
       semanticTermsCount: semanticTerms?.length,
@@ -144,8 +137,9 @@ export const SemanticTermsTab: React.FC<{
 
   const anyLoading = !data;
 
-  // Show empty state if no scope is selected for platform operators
-  if (!tenant || !datasource) {
+  // Show empty state if no tenant scope is selected for platform operators.
+  // Semantic terms are tenant-scoped and do NOT require a datasource.
+  if (!scopeTenantId) {
     return (
       <div className="semantic-terms-empty-state" style={{
         display: 'flex',
@@ -161,23 +155,23 @@ export const SemanticTermsTab: React.FC<{
           {isPlatformOperator ? 'Select Operating Scope' : 'No Scope Available'}
         </h2>
         <p style={{ color: '#999', marginBottom: '24px', maxWidth: '400px' }}>
-          {isPlatformOperator 
-            ? 'Please select a tenant and datasource to view and manage semantic terms.'
+          {isPlatformOperator
+            ? 'Please select a tenant to view and manage semantic terms.'
             : 'Your user account does not have access to any tenants. Contact your administrator.'}
         </p>
         {isPlatformOperator && (
-          <Button 
-            variant="contained" 
+          <Button
+            variant="contained"
             color="primary"
             onClick={() => setScopeSelectorOpen(true)}
             startIcon={<SettingsIcon />}
           >
-            Select Tenant & Datasource
+            Select Tenant
           </Button>
         )}
-        <ScopeSelectorDialog 
-          open={scopeSelectorOpen} 
-          onClose={() => setScopeSelectorOpen(false)} 
+        <ScopeSelectorDialog
+          open={scopeSelectorOpen}
+          onClose={() => setScopeSelectorOpen(false)}
         />
       </div>
     );
@@ -198,7 +192,7 @@ export const SemanticTermsTab: React.FC<{
     return (
       <div className="semantic-terms-error">
         <h2>Error Loading Semantic Terms</h2>
-        <p>{error instanceof Error ? error.message : String(error)}</p>
+        <p>{typeof error === 'string' ? error : String(error)}</p>
       </div>
     );
   }
@@ -294,7 +288,7 @@ export const SemanticTermsTab: React.FC<{
               technicalData={technicalData}
               allEdges={data?.semantic_edges || []}
               allNodes={data?.all_nodes || []}
-              datasourceId={datasource?.id}
+              datasourceId={effectiveDatasourceId}
               onRefresh={() => {
                 // Trigger a refetch of semantic data
                 // The useAllSemanticData hook should handle this automatically

@@ -12,19 +12,15 @@ import {
   MenuItem,
   Box,
   Typography,
-  Checkbox,
-  FormControlLabel,
   Autocomplete,
 } from '@mui/material';
 import { Lock as LockIcon } from '@mui/icons-material';
-import JsonMonacoEditor from './editors/JsonMonacoEditor';
-import ArrayChips from './editors/ArrayChips';
 import { CatalogNode, useBusinessTerms } from '../api/glossary';
-import { formatProperties, validateProperty, getJsonSchemaForProperty } from '../utils/propertyHelpers';
+import { formatProperties } from '../utils/propertyHelpers';
 import PropertyEditor from './properties/PropertyEditor';
 import { useNodeTypes } from '../api/nodeTypes';
 import { useTenant } from '../contexts/TenantContext';
-import { devDebug } from '../utils/devLogger';
+import { devDebug, devWarn } from '../utils/devLogger';
 
 interface TermFormProps {
   open: boolean;
@@ -37,6 +33,7 @@ interface TermFormProps {
   // and should not be editable in this form. Useful when creating from a
   // specific tab so users don't need to pick the node type.
   disableTypeSelection?: boolean;
+  tenantId?: string;
 }
 
 const TermForm: React.FC<TermFormProps> = ({
@@ -47,12 +44,14 @@ const TermForm: React.FC<TermFormProps> = ({
   termType,
   loading = false,
   disableTypeSelection = false,
+  tenantId: tenantIdProp,
 }) => {
   devDebug('[TermForm] Rendering with props:', { open, term, termType, loading });
   const { tenant } = useTenant();
-  // `useNodeTypes` expects a string tenant id; guard against undefined by providing empty string fallback.
-  const { data: nodeTypes } = useNodeTypes(tenant?.id || '');
-  const { data: businessTerms = [] } = useBusinessTerms();
+  const effectiveTenantId = tenantIdProp || tenant?.id || '';
+  // `useNodeTypes` accepts an options object so we can target the operational-scope tenant.
+  const { data: nodeTypes } = useNodeTypes({ tenantId: effectiveTenantId });
+  const { data: businessTerms = [] } = useBusinessTerms({ tenantOverride: effectiveTenantId || undefined });
 
   const termNodeType = useMemo(() => {
     if (!nodeTypes) return null;
@@ -416,7 +415,6 @@ const TermForm: React.FC<TermFormProps> = ({
             </Typography>
             {termNodeType?.properties?.sort((a: any, b: any) => a.order - b.order).map((prop: any) => {
               const key = prop.name;
-              const label = prop.label;
 
               // Name and description are handled by top-level fields
               if (key === 'name' || key === 'description') {

@@ -8,9 +8,9 @@ import (
 	"net/http"
 	"time"
 
-	hasuraclient "github.com/hondyman/semlayer/libs/hasura-client"
-	sharedtypes "github.com/hondyman/semlayer/libs/shared-types"
-	temporalclient "github.com/hondyman/semlayer/libs/temporal-client"
+	hasuraclient "github.com/hondyman/uisce/libs/hasura-client"
+	sharedtypes "github.com/hondyman/uisce/libs/shared-types"
+	temporalclient "github.com/hondyman/uisce/libs/temporal-client"
 )
 
 // SemanticServiceConfig holds configuration for the semantic service

@@ -5,7 +5,7 @@ import (
 	"os"
 	"strings"
 
-	temporalclient "github.com/hondyman/semlayer/libs/temporal-client"
+	temporalclient "github.com/hondyman/uisce/libs/temporal-client"
 	kafka "github.com/segmentio/kafka-go"
 	"go.temporal.io/sdk/worker"
 )

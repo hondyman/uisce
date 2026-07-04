@@ -1,4 +1,4 @@
-module github.com/hondyman/semlayer/api-gateway
+module github.com/hondyman/uisce/api-gateway
 
 go 1.25.3
 
@@ -7,7 +7,7 @@ require (
 	github.com/gin-contrib/cors v1.7.6
 	github.com/gin-gonic/gin v1.11.0
 	github.com/golang-jwt/jwt/v5 v5.2.2
-	github.com/hondyman/semlayer/libs/temporal-client v0.0.0
+	github.com/hondyman/uisce/libs/temporal-client v0.0.0
 	github.com/joho/godotenv v1.5.1
 	github.com/lib/pq v1.10.9
 	github.com/redis/go-redis/v9 v9.16.0
@@ -18,7 +18,7 @@ require (
 	gopkg.in/yaml.v3 v3.0.1
 )
 
-replace github.com/hondyman/semlayer/libs/temporal-client => ../libs/temporal-client
+replace github.com/hondyman/uisce/libs/temporal-client => ../libs/temporal-client
 
 require (
 	github.com/agnivade/levenshtein v1.2.1 // indirect

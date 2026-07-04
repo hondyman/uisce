@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	sharedtypes "github.com/hondyman/semlayer/libs/shared-types"
+	sharedtypes "github.com/hondyman/uisce/libs/shared-types"
 )
 
 // GovernanceAPI provides HTTP API endpoints for governance operations

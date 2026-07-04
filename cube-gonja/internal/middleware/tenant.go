@@ -8,7 +8,7 @@ import (
 	"cube-gonja/internal/tenant"
 
 	"github.com/gin-gonic/gin"
-	"github.com/hondyman/semlayer/libs/jwt-middleware"
+	"github.com/hondyman/uisce/libs/jwt-middleware"
 )
 
 type TenantContext struct {

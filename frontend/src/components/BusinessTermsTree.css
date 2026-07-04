@@ -328,3 +328,55 @@
 .term-actions .MuiIconButton-root:hover {
   background-color: var(--vscode-toolbar-hoverBackground);
 }
+
+/* ===== Semantic Terms Section ===== */
+
+.semantic-terms-section {
+  margin-top: 12px;
+  padding-top: 8px;
+  border-top: 1px dashed var(--vscode-panel-border);
+}
+
+.semantic-section-header {
+  background: rgba(99, 102, 241, 0.12) !important; /* subtle indigo wash */
+  color: var(--vscode-editor-foreground) !important;
+  border-left: 3px solid #6366f1;
+  font-weight: 600 !important;
+}
+
+.semantic-chip,
+.semantic-chip-header {
+  margin-left: 8px;
+  height: 20px !important;
+  font-size: 10px !important;
+  background-color: #6366f1 !important;
+  color: white !important;
+  border-radius: 10px !important;
+}
+
+.semantic-chip-header {
+  margin-left: 12px;
+}
+
+.semantic-term-item {
+  border-left: 2px solid transparent;
+}
+
+.semantic-term-item:hover {
+  background: rgba(99, 102, 241, 0.06);
+  border-left-color: #6366f1;
+}
+
+.semantic-term-item.selected {
+  background: var(--vscode-list-activeSelectionBackground);
+  border-left-color: #6366f1;
+}
+
+.semantic-term-item-flat {
+  border-left: 3px solid #6366f1 !important;
+}
+
+.semantic-term-item-flat:hover {
+  background: rgba(99, 102, 241, 0.06) !important;
+  border-color: var(--vscode-list-focusOutline) !important;
+}

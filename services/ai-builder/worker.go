@@ -6,7 +6,7 @@ import (
 	"log"
 	"time"
 
-	temporalclient "github.com/hondyman/semlayer/libs/temporal-client"
+	temporalclient "github.com/hondyman/uisce/libs/temporal-client"
 	"go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
 )

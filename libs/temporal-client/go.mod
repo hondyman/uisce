@@ -1,4 +1,4 @@
-module github.com/hondyman/semlayer/libs/temporal-client
+module github.com/hondyman/uisce/libs/temporal-client
 
 go 1.23
 

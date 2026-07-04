@@ -1,13 +1,13 @@
-module github.com/hondyman/semlayer/services/governance
+module github.com/hondyman/uisce/services/governance
 
 go 1.24.0
 
 require (
 	github.com/gin-gonic/gin v1.11.0
-	github.com/hondyman/semlayer/libs/abac-client v0.0.0
-	github.com/hondyman/semlayer/libs/hasura-client v0.0.0
-	github.com/hondyman/semlayer/libs/shared-types v0.0.0
-	github.com/hondyman/semlayer/libs/temporal-client v0.0.0
+	github.com/hondyman/uisce/libs/abac-client v0.0.0
+	github.com/hondyman/uisce/libs/hasura-client v0.0.0
+	github.com/hondyman/uisce/libs/shared-types v0.0.0
+	github.com/hondyman/uisce/libs/temporal-client v0.0.0
 )
 
 require (
@@ -69,8 +69,8 @@ require (
 )
 
 replace (
-	github.com/hondyman/semlayer/libs/abac-client => ../../libs/abac-client
-	github.com/hondyman/semlayer/libs/hasura-client => ../../libs/hasura-client
-	github.com/hondyman/semlayer/libs/shared-types => ../../libs/shared-types
-	github.com/hondyman/semlayer/libs/temporal-client => ../../libs/temporal-client
+	github.com/hondyman/uisce/libs/abac-client => ../../libs/abac-client
+	github.com/hondyman/uisce/libs/hasura-client => ../../libs/hasura-client
+	github.com/hondyman/uisce/libs/shared-types => ../../libs/shared-types
+	github.com/hondyman/uisce/libs/temporal-client => ../../libs/temporal-client
 )

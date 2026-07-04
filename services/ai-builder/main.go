@@ -15,7 +15,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"go.temporal.io/sdk/client"
 
-	temporalclient "github.com/hondyman/semlayer/libs/temporal-client"
+	temporalclient "github.com/hondyman/uisce/libs/temporal-client"
 )
 
 type WorkflowSuggestion struct {

@@ -11,7 +11,7 @@ import (
 	"calendar-service/internal/utils"
 
 	"github.com/google/uuid"
-	"github.com/hondyman/semlayer/libs/jwt-middleware"
+	"github.com/hondyman/uisce/libs/jwt-middleware"
 )
 
 // RecurringEventHandlers handles HTTP requests for recurring events

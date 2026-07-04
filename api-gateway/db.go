@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"net/url"
 
-	"github.com/hondyman/semlayer/api-gateway/internal/config"
+	"github.com/hondyman/uisce/api-gateway/internal/config"
 	_ "github.com/lib/pq"
 )
 

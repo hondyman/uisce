@@ -7,9 +7,9 @@ import (
 	"fmt"
 
 	"github.com/google/uuid"
-	"github.com/hondyman/semlayer/internal/ai"
-	"github.com/hondyman/semlayer/internal/drift"
-	"github.com/hondyman/semlayer/internal/uar"
+	"github.com/hondyman/uisce/internal/ai"
+	"github.com/hondyman/uisce/internal/drift"
+	"github.com/hondyman/uisce/internal/uar"
 )
 
 // Activities bundles dependencies needed by Temporal activities.

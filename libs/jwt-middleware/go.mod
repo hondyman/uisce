@@ -1,4 +1,4 @@
-module github.com/hondyman/semlayer/libs/jwt-middleware
+module github.com/hondyman/uisce/libs/jwt-middleware
 
 go 1.25
 

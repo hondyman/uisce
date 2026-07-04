@@ -57,22 +57,34 @@ export const nodeTypesKeys = {
   nodes: (typeId: string) => [...nodeTypesKeys.detail(typeId), 'nodes'] as const,
 };
 
-// Fetch all node types
-export function useNodeTypes(search?: string) {
+export interface UseNodeTypesOpts {
+  search?: string;
+  tenantId?: string;
+}
+
+// Fetch all node types.
+// Accepts either a legacy search string or an options object. When `tenantId`
+// is provided it overrides the active tenant from TenantContext — required for
+// pages that are driven by the operational scope (e.g. Business Glossary).
+export function useNodeTypes(opts?: string | UseNodeTypesOpts) {
   const { tenant } = useTenant();
 
+  const search = typeof opts === 'string' ? opts : opts?.search;
+  const tenantIdOverride = typeof opts === 'object' ? opts?.tenantId : undefined;
+  const effectiveTenantId = tenantIdOverride || tenant?.id;
+
   return useQuery({
-    queryKey: nodeTypesKeys.list({ search }),
+    queryKey: nodeTypesKeys.list({ search, tenantId: effectiveTenantId }),
     queryFn: async (): Promise<NodeType[]> => {
-      if (!tenant?.id) {
+      if (!effectiveTenantId) {
         return [];
       }
 
       const params = new URLSearchParams();
-      params.append('tenant_id', tenant.id);
+      params.append('tenant_id', effectiveTenantId);
       // Fix: Some legacy callers pass tenant.id as the first argument, which is treated as 'search'.
-      // We ignore it if it matches the tenant ID.
-      if (search && search !== tenant.id) {
+      // We ignore it if it matches the effective tenant ID.
+      if (search && search !== effectiveTenantId) {
         params.append('q', search);
       }
 
@@ -87,7 +99,7 @@ export function useNodeTypes(search?: string) {
       const data = await res.json();
       return data.data || data; // Handle both wrapped and unwrapped responses
     },
-    enabled: !!tenant?.id,
+    enabled: !!effectiveTenantId,
   });
 }
 
@@ -207,7 +219,7 @@ export function useUpdateNodeType() {
 
       return res.json();
     },
-    onSuccess: (data: NodeType, variables: Partial<NodeType> & { id: string }) => {
+    onSuccess: (_data: NodeType, variables: Partial<NodeType> & { id: string }) => {
       queryClient.invalidateQueries({ queryKey: nodeTypesKeys.lists() });
       queryClient.invalidateQueries({ queryKey: nodeTypesKeys.detail(variables.id) });
     },

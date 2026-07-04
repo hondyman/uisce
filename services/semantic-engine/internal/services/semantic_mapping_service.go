@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/hondyman/semlayer/libs/logging"
+	"github.com/hondyman/uisce/libs/logging"
 	"github.com/jmoiron/sqlx"
 )
 

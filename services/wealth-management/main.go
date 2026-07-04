@@ -3,9 +3,9 @@ package main
 import (
 	"log"
 
-	temporalclient "github.com/hondyman/semlayer/libs/temporal-client"
-	"github.com/hondyman/semlayer/services/wealth-management/activities"
-	"github.com/hondyman/semlayer/services/wealth-management/workflows"
+	temporalclient "github.com/hondyman/uisce/libs/temporal-client"
+	"github.com/hondyman/uisce/services/wealth-management/activities"
+	"github.com/hondyman/uisce/services/wealth-management/workflows"
 	"go.temporal.io/sdk/worker"
 )
 

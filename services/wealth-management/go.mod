@@ -1,9 +1,9 @@
-module github.com/hondyman/semlayer/services/wealth-management
+module github.com/hondyman/uisce/services/wealth-management
 
 go 1.24.0
 
 require (
-	github.com/hondyman/semlayer/libs/temporal-client v0.0.0-00010101000000-000000000000
+	github.com/hondyman/uisce/libs/temporal-client v0.0.0-00010101000000-000000000000
 	go.temporal.io/sdk v1.37.0
 )
 
@@ -37,6 +37,6 @@ require (
 )
 
 replace (
-	github.com/hondyman/semlayer/libs/abac-client => ../../libs/abac-client
-	github.com/hondyman/semlayer/libs/temporal-client => ../../libs/temporal-client
+	github.com/hondyman/uisce/libs/abac-client => ../../libs/abac-client
+	github.com/hondyman/uisce/libs/temporal-client => ../../libs/temporal-client
 )

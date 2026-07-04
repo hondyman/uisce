@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { useTenant } from '../../contexts/TenantContext';
+import { useAccess } from '../../contexts/AccessContext';
 import BusinessTermsTree from '../../components/BusinessTermsTree';
 import { EnhancedSelectedAsset } from '../../types/SemanticTypes';
 import { useEdgeTypes } from '../../api/edgeTypes';
@@ -17,19 +18,21 @@ import { useTranslation } from 'react-i18next';
 import { devDebug } from '../../utils/devLogger';
 
 export const BusinessTermsTab: React.FC<{
+  scopeTenantId?: string;
   searchTerm?: string;
   onCreateTerm?: () => void;
   onEditTerm?: (term: CatalogNode) => void;
   onDeleteTerm?: (term: CatalogNode) => void;
   selectedBusinessTerm?: CatalogNode | null;
-}> = ({ searchTerm, onCreateTerm, onEditTerm, onDeleteTerm, selectedBusinessTerm }) => {
+}> = ({ scopeTenantId, searchTerm, onCreateTerm, onEditTerm, onDeleteTerm, selectedBusinessTerm }) => {
   const { datasource, tenant } = useTenant();
+  const { currentDatasource } = useAccess();
+  const effectiveDatasourceId = currentDatasource?.id ?? datasource?.id;
   const [selectedAsset, setSelectedAsset] = useState<EnhancedSelectedAsset | null>(null);
   const [highlightedItem, setHighlightedItem] = useState<string | null>(null);
   const [activeDetailTab, setActiveDetailTab] = useState<'details' | 'lineage'>('details');
   const [selectedSemanticTerm, setSelectedSemanticTerm] = useState<any | null>(null);
   const [filterType, setFilterType] = useState<'all' | 'with_relationships' | 'without_relationships'>('all');
-  const [localSearch, setLocalSearch] = useState('');
   const [wizardOpen, setWizardOpen] = useState(false);
 
   const { t } = useTranslation();
@@ -40,15 +43,17 @@ export const BusinessTermsTab: React.FC<{
   // useBusinessTerms() hits /api/catalog/nodes (the local semlayer-backend,
   // proxied via Vite) and filters client-side for catalog_type='business_term'.
   // useSemanticTerms() hits /api/glossary/semantic-terms.
-  // useGlossaryEdges() currently returns [] (edges come from GraphQL upstream
-  // in the previous implementation — TODO: wire a REST endpoint).
-  const { data: rqBusinessTerms, isLoading: rqBusinessLoading, error: rqBusinessError, refetch } = useBusinessTerms();
-  const { data: rqSemanticTerms, isLoading: rqSemanticLoading, error: rqSemanticError } = useSemanticTerms();
-  const { data: rqEdges, isLoading: rqEdgesLoading, error: rqEdgesError } = useGlossaryEdges();
+  // useGlossaryEdges() fetches business/semantic term edges from
+  // /api/glossary/edges.
+  // scopeTenantId (if provided) drives the queries; otherwise the active tenant.
+  // Semantic/business terms are scoped to the TENANT (no datasource param).
+  const { data: rqBusinessTerms, isLoading: rqBusinessLoading, error: rqBusinessError, refetch } = useBusinessTerms({ tenantOverride: scopeTenantId });
+  const { data: rqSemanticTerms, isLoading: rqSemanticLoading, error: rqSemanticError } = useSemanticTerms({ tenantOverride: scopeTenantId });
+  const { data: rqEdges, isLoading: rqEdgesLoading } = useGlossaryEdges({ tenantOverride: scopeTenantId });
 
-  // Fetch edge types (relationships) for the tenant
-  const { data: _edgeTypesData, isLoading: _edgeTypesLoading } = useEdgeTypes(tenant?.id || '');
-  const { data: nodeTypes } = useNodeTypes(tenant?.id || '');
+  // Fetch edge types and node types for the operational-scope tenant
+  const { data: _edgeTypesData, isLoading: _edgeTypesLoading } = useEdgeTypes(scopeTenantId || '');
+  const { data: nodeTypes } = useNodeTypes({ tenantId: scopeTenantId });
 
   const selectedNodeType = useMemo(() => {
     if (!nodeTypes || !selectedAsset?.node?.node_type_id) return null;
@@ -93,8 +98,7 @@ export const BusinessTermsTab: React.FC<{
   }, [selectedBusinessTerm]);
 
   // REST-only data: business_terms and semantic_terms from /api/catalog/nodes
-  // and /api/glossary/semantic-terms. Edges come from useGlossaryEdges which is
-  // currently a stub returning [] — TODO: wire a real REST endpoint.
+  // and /api/glossary/semantic-terms. Edges come from /api/glossary/edges.
   const businessTerms = enrichNodesWithTypes(rqBusinessTerms || []);
   const semanticTerms = enrichNodesWithTypes(rqSemanticTerms || []);
   const semanticViews: CatalogNode[] = []; // No REST endpoint wired yet
@@ -280,12 +284,6 @@ export const BusinessTermsTab: React.FC<{
     setFilterType('all');
   };
 
-  React.useEffect(() => {
-    if (typeof searchTerm === 'string') {
-      setLocalSearch(searchTerm);
-    }
-  }, [searchTerm]);
-
   const anyLoading = (rqBusinessLoading || rqSemanticLoading || rqEdgesLoading);
 
   if (anyLoading) {
@@ -324,8 +322,8 @@ export const BusinessTermsTab: React.FC<{
         <div className="business-terms-sidebar">
           <BusinessTermsTree
             businessTerms={businessTerms}
-            semanticTerms={semanticTerms}
-            semanticViews={semanticViews}
+            semanticTerms={[]}
+            semanticViews={[]}
             semanticEdges={glossaryEdges}
             selectedAsset={selectedAsset}
             onAssetSelect={handleAssetSelect}
@@ -334,6 +332,7 @@ export const BusinessTermsTab: React.FC<{
             filterType={filterType}
             onEditTerm={onEditTerm}
             onDeleteTerm={onDeleteTerm}
+            tenantId={scopeTenantId}
           />
         </div>
 
@@ -592,7 +591,7 @@ export const BusinessTermsTab: React.FC<{
                                   <td className="relationship-type">{directionArrow} {relationshipLabel}</td>
                                   <td className="relationship-path">{nodePath}</td>
                                   <td className="relationship-action">
-                                    <a href={`/schema-explorer?datasource=${datasource?.id || ''}`} target="_blank" rel="noopener noreferrer">
+                                    <a href={`/schema-explorer?datasource=${effectiveDatasourceId || ''}`} target="_blank" rel="noopener noreferrer">
                                       View
                                     </a>
                                   </td>
@@ -793,8 +792,8 @@ export const BusinessTermsTab: React.FC<{
       <SemanticEnrichmentWizard
         open={wizardOpen}
         onClose={() => setWizardOpen(false)}
-        tenantId={tenant?.id || ''}
-        datasourceId={datasource?.id || ''}
+        tenantId={scopeTenantId || ''}
+        datasourceId={effectiveDatasourceId || ''}
         onSuccess={() => {
           devDebug('SemanticEnrichmentWizard onSuccess triggered');
           refetch();

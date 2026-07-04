@@ -94,6 +94,13 @@ export const ScopeSelectorDialog: React.FC<ScopeSelectorDialogProps> = ({ open, 
     }
   };
 
+  const handleApplyTenantScope = () => {
+    if (selectedTenant) {
+      setTenantScope(selectedTenant);
+      onClose();
+    }
+  };
+
   const handleClearSelection = () => {
     setSelectedTenant(null);
     setSelectedInstance(null);
@@ -299,6 +306,9 @@ export const ScopeSelectorDialog: React.FC<ScopeSelectorDialogProps> = ({ open, 
           <Button onClick={onClose}>Cancel</Button>
           {!selectedTenant && isPlatformOperator && (
              <Button variant="contained" onClick={() => { setGlobalScope(); onClose(); }}>Set Global</Button>
+          )}
+          {selectedTenant && !selectedInstance && (
+            <Button variant="contained" onClick={handleApplyTenantScope}>Use Tenant Scope</Button>
           )}
         </Box>
       </DialogActions>

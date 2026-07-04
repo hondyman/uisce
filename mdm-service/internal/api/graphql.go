@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/hondyman/semlayer/mdm-service/internal/domain"
+	"github.com/hondyman/uisce/mdm-service/internal/domain"
 )
 
 // ============================================================================

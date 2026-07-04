@@ -89,11 +89,16 @@ export async function apiFetch(
 ): Promise<Response> {
   const headers = new Headers(init.headers || {});
 
-  // Inject tenant headers automatically
+  // Inject tenant headers automatically — but only when the caller has NOT
+  // already supplied a value for that header. Caller-supplied values win,
+  // so a component that has the React tenant/datasource in scope can pass
+  // them explicitly and avoid races with stale localStorage.
   const tenantHeaders = getTenantHeadersInternal();
 
   Object.entries(tenantHeaders).forEach(([key, value]) => {
-    headers.set(key, value);
+    if (!headers.has(key)) {
+      headers.set(key, value);
+    }
   });
 
   return fetch(input, { ...init, headers });
