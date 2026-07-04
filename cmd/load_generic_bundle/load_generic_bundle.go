@@ -10,7 +10,7 @@ import (
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
 
-	"github.com/hondyman/semlayer/pkg/types"
+	"github.com/hondyman/uisce/pkg/types"
 	"github.com/jmoiron/sqlx"
 	"github.com/lib/pq"
 )

@@ -1,4 +1,4 @@
-module github.com/hondyman/semlayer/services/fabric-builder
+module github.com/hondyman/uisce/services/fabric-builder
 
 go 1.23.0
 

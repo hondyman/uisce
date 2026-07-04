@@ -7,8 +7,8 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
-	"github.com/hondyman/semlayer/services/fabric-builder/api"
-	"github.com/hondyman/semlayer/services/fabric-builder/db"
+	"github.com/hondyman/uisce/services/fabric-builder/api"
+	"github.com/hondyman/uisce/services/fabric-builder/db"
 )
 
 func main() {

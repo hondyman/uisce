@@ -1,4 +1,4 @@
-module github.com/hondyman/semlayer/libs/logging
+module github.com/hondyman/uisce/libs/logging
 
 go 1.25.3
 

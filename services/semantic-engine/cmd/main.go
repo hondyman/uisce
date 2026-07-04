@@ -5,11 +5,11 @@ import (
 	"log"
 
 	"github.com/gin-gonic/gin"
-	hasuraclient "github.com/hondyman/semlayer/libs/hasura-client"
-	temporalclient "github.com/hondyman/semlayer/libs/temporal-client"
-	"github.com/hondyman/semlayer/services/semantic-engine/internal/api"
-	"github.com/hondyman/semlayer/services/semantic-engine/internal/config"
-	"github.com/hondyman/semlayer/services/semantic-engine/internal/services"
+	hasuraclient "github.com/hondyman/uisce/libs/hasura-client"
+	temporalclient "github.com/hondyman/uisce/libs/temporal-client"
+	"github.com/hondyman/uisce/services/semantic-engine/internal/api"
+	"github.com/hondyman/uisce/services/semantic-engine/internal/config"
+	"github.com/hondyman/uisce/services/semantic-engine/internal/services"
 )
 
 func main() {

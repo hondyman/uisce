@@ -8,7 +8,7 @@ import (
 	"context"
 	"fmt"
 
-	model1 "github.com/hondyman/semlayer/api-gateway/graph/model"
+	model1 "github.com/hondyman/uisce/api-gateway/graph/model"
 )
 
 // CreateAlphaDatasource is the resolver for the create_alpha_datasource field.

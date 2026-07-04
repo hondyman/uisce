@@ -4,8 +4,8 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
-	sharedtypes "github.com/hondyman/semlayer/libs/shared-types"
-	"github.com/hondyman/semlayer/services/semantic-engine/internal/services"
+	sharedtypes "github.com/hondyman/uisce/libs/shared-types"
+	"github.com/hondyman/uisce/services/semantic-engine/internal/services"
 )
 
 // HandlerConfig holds configuration for API handlers

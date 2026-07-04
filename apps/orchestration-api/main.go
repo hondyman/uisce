@@ -8,6 +8,7 @@ import (
 	"net/http"
 
 	"github.com/google/uuid"
+	jwtmiddleware "github.com/hondyman/uisce/libs/jwt-middleware"
 	"go.temporal.io/sdk/client"
 )
 
@@ -25,7 +26,7 @@ func main() {
 	http.HandleFunc("/signal/approve", signalApprove)
 
 	log.Println("Orchestration API listening on :8081")
-	// wrap with JWT middleware
+
 	jwtMw := jwtmiddleware.NewJWTMiddleware("/health")
 	handler := jwtMw.Handler(http.DefaultServeMux)
 	log.Fatal(http.ListenAndServe(":8081", handler))
@@ -55,8 +56,6 @@ func startRebalance(w http.ResponseWriter, r *http.Request) {
 		TaskQueue: "rebalance",
 	}
 
-	// Assuming PortfolioRebalanceWorkflow is registered in the worker
-	// For this API stub, we use the string name
 	we, err := temporalClient.ExecuteWorkflow(context.Background(), workflowOptions, "PortfolioRebalanceWorkflow", input)
 	if err != nil {
 		http.Error(w, "Failed to start workflow", http.StatusInternalServerError)
@@ -64,7 +63,7 @@ func startRebalance(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{"workflow_id": we.GetID(), "run_id": we.GetRunID()})
+	_ = json.NewEncoder(w).Encode(map[string]string{"workflow_id": we.GetID(), "run_id": we.GetRunID()})
 }
 
 type SignalInput struct {
@@ -79,12 +78,11 @@ func signalApprove(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err := temporalClient.SignalWorkflow(context.Background(), sig.WorkflowID, "", sig.Signal, true)
-	if err != nil {
+	if err := temporalClient.SignalWorkflow(context.Background(), sig.WorkflowID, "", sig.Signal, true); err != nil {
 		http.Error(w, "Failed to signal workflow", http.StatusInternalServerError)
 		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{"status": "signaled"})
+	_ = json.NewEncoder(w).Encode(map[string]string{"status": "signaled"})
 }

@@ -10,9 +10,6 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/twmb/franz-go/pkg/kgo"
 	"github.com/twmb/franz-go/pkg/kmsg"
-	"google.golang.org/protobuf/proto"
-
-	eventspb "calendar-service/pkg/proto/calendar/events/v1"
 )
 
 type EventType string
@@ -25,6 +22,74 @@ const (
 	EventTypeIngestionStarted  EventType = "INGESTION_STARTED"
 	EventTypeIngestionComplete EventType = "INGESTION_COMPLETED"
 )
+
+// CalendarEvent is the wire-format shape published to the calendar-updates
+// topic. JSON-serialized for portability — the original calendar-service
+// proto package has been removed (see eventsv1 stub note).
+//
+// Field naming follows the original `eventspb.CalendarEvent` schema so
+// downstream tooling that pattern-matches on `CalendarDate` /
+// `IsBusinessDay` / etc. keeps working.
+type CalendarEvent struct {
+	EventId               string `json:"event_id"`
+	EventType             string `json:"event_type"`
+	TenantId              string `json:"tenant_id"`
+	Region                string `json:"region"`
+	Exchange              string `json:"exchange"`
+	CalendarDate          string `json:"calendar_date"`
+	IsBusinessDay         bool   `json:"is_business_day"`
+	HolidayName           string `json:"holiday_name"`
+	SourceSystem          string `json:"source_system"`
+	ConfidenceScore       int32  `json:"confidence_score"`
+	RuleApplied           string `json:"rule_applied"`
+	SemanticTermVersion   string `json:"semantic_term_version"`
+	BusinessObjectVersion string `json:"business_object_version"`
+	Timestamp             int64  `json:"timestamp_ms"`
+}
+
+// CalendarConflict is the wire-format shape published to the
+// calendar-conflicts topic.
+type CalendarConflict struct {
+	ConflictId        string   `json:"conflict_id"`
+	TenantId          string   `json:"tenant_id"`
+	Region            string   `json:"region"`
+	CalendarDate      string   `json:"calendar_date"`
+	FieldName         string   `json:"field_name"`
+	ConflictingValues []string `json:"conflicting_values"`
+	SourceSystems     []string `json:"source_systems"`
+	Severity          int32    `json:"severity"`
+	Reason            string   `json:"reason"`
+	Resolved          bool     `json:"resolved"`
+	CreatedAt         int64    `json:"created_at_ms"`
+}
+
+// IngestionEvent is the wire-format shape published to the
+// ingestion-lifecycle topic. Tracks ingestion start/complete events.
+type IngestionEvent struct {
+	IngestionId        string   `json:"ingestion_id"`
+	TenantId           string   `json:"tenant_id"`
+	EventType          string   `json:"event_type"` // STARTED | COMPLETED
+	Status             string   `json:"status"`     // RUNNING | SUCCESS | PARTIAL_SUCCESS | FAILURE
+	Regions            []string `json:"regions"`
+	TargetYear         int32    `json:"target_year"`
+	ForceRefresh       bool     `json:"force_refresh"`
+	SourcesQueried     int32    `json:"sources_queried"`
+	StartedAt          int64    `json:"started_at_ms"`
+	TriggeredBy        string   `json:"triggered_by"`
+	WasmRulesVersion   string   `json:"wasm_rules_version"`
+	RecordsIngested    int32    `json:"records_ingested"`
+	RecordsCreated     int32    `json:"records_created"`
+	RecordsUpdated     int32    `json:"records_updated"`
+	RecordsDeleted     int32    `json:"records_deleted"`
+	ConflictsDetected  int32    `json:"conflicts_detected"`
+	ConflictsResolved  int32    `json:"conflicts_resolved"`
+	ConflictsEscalated int32    `json:"conflicts_escalated"`
+	SourcesSucceeded   int32    `json:"sources_succeeded"`
+	SourcesFailed      int32    `json:"sources_failed"`
+	ErrorMessages      []string `json:"error_messages"`
+	CompletedAt        int64    `json:"completed_at_ms"`
+	DurationMs         int64    `json:"duration_ms"`
+}
 
 type PublisherConfig struct {
 	Brokers               []string
@@ -123,7 +188,7 @@ func (p *CalendarEventPublisher) PublishCalendarUpdate(ctx context.Context, tena
 		return nil
 	}
 
-	event := &eventspb.CalendarEvent{
+	event := &CalendarEvent{
 		EventId:               uuid.New().String(),
 		EventType:             string(EventTypeCalendarUpdate),
 		TenantId:              tenantID.String(),
@@ -148,7 +213,7 @@ func (p *CalendarEventPublisher) PublishConflictDetected(ctx context.Context, te
 		return nil
 	}
 
-	conflict := &eventspb.CalendarConflict{
+	conflict := &CalendarConflict{
 		ConflictId:        uuid.New().String(),
 		TenantId:          tenantID.String(),
 		Region:            region,
@@ -162,7 +227,7 @@ func (p *CalendarEventPublisher) PublishConflictDetected(ctx context.Context, te
 		CreatedAt:         time.Now().UnixMilli(),
 	}
 
-	data, err := proto.Marshal(conflict)
+	data, err := json.Marshal(conflict)
 	if err != nil {
 		p.logger.WithError(err).Error("Failed to marshal conflict event")
 		return fmt.Errorf("marshal error: %w", err)
@@ -188,7 +253,7 @@ func (p *CalendarEventPublisher) PublishIngestionStarted(ctx context.Context, in
 		return nil
 	}
 
-	event := &eventspb.IngestionEvent{
+	event := &IngestionEvent{
 		IngestionId:      ingestionID.String(),
 		TenantId:         tenantID.String(),
 		EventType:        "STARTED",
@@ -202,7 +267,7 @@ func (p *CalendarEventPublisher) PublishIngestionStarted(ctx context.Context, in
 		WasmRulesVersion: "1.0",
 	}
 
-	data, err := proto.Marshal(event)
+	data, err := json.Marshal(event)
 	if err != nil {
 		return fmt.Errorf("marshal error: %w", err)
 	}
@@ -230,7 +295,7 @@ func (p *CalendarEventPublisher) PublishIngestionCompleted(ctx context.Context, 
 		}
 	}
 
-	event := &eventspb.IngestionEvent{
+	event := &IngestionEvent{
 		IngestionId:        ingestionID.String(),
 		TenantId:           tenantID.String(),
 		EventType:          "COMPLETED",
@@ -251,7 +316,7 @@ func (p *CalendarEventPublisher) PublishIngestionCompleted(ctx context.Context, 
 		WasmRulesVersion:   "1.0",
 	}
 
-	data, err := proto.Marshal(event)
+	data, err := json.Marshal(event)
 	if err != nil {
 		return fmt.Errorf("marshal error: %w", err)
 	}
@@ -266,8 +331,8 @@ func (p *CalendarEventPublisher) PublishIngestionCompleted(ctx context.Context, 
 	return results.FirstErr()
 }
 
-func (p *CalendarEventPublisher) publishEvent(ctx context.Context, topic string, event *eventspb.CalendarEvent, partitionKey string) error {
-	data, err := proto.Marshal(event)
+func (p *CalendarEventPublisher) publishEvent(ctx context.Context, topic string, event *CalendarEvent, partitionKey string) error {
+	data, err := json.Marshal(event)
 	if err != nil {
 		p.logger.WithError(err).Error("Failed to marshal event")
 		return fmt.Errorf("marshal error: %w", err)

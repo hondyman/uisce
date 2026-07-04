@@ -1,4 +1,4 @@
-module github.com/hondyman/semlayer/calc-engine
+module github.com/hondyman/uisce/calc-engine
 
 go 1.23.0
 

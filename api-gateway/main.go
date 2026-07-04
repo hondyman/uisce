@@ -16,11 +16,11 @@ import (
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
-	temporalclient "github.com/hondyman/semlayer/libs/temporal-client"
+	temporalclient "github.com/hondyman/uisce/libs/temporal-client"
 	"github.com/joho/godotenv"
 	"golang.org/x/time/rate"
 
-	apipkg "github.com/hondyman/semlayer/api-gateway/api"
+	apipkg "github.com/hondyman/uisce/api-gateway/api"
 )
 
 type Config struct {

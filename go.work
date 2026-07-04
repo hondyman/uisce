@@ -10,4 +10,5 @@ use (
 	./libs/logging
 	./libs/shared-types
 	./libs/temporal-client
+	./services/calendar-service
 )

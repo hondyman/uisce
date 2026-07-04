@@ -11,7 +11,7 @@ import (
 	"github.com/jackc/pgx/v4/pgxpool"
 	"go.temporal.io/sdk/client"
 
-	"github.com/semlayer/bp-backend/pkg/workflow"
+	"github.com/hondyman/uisce/bp-backend/pkg/workflow"
 )
 
 func main() {

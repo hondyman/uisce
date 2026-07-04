@@ -1,3 +1,3 @@
-module github.com/hondyman/semlayer/libs/shared-types
+module github.com/hondyman/uisce/libs/shared-types
 
 go 1.23.0

@@ -1,4 +1,4 @@
-module github.com/semlayer/bp-backend
+module github.com/hondyman/uisce/bp-backend
 
 go 1.22
 

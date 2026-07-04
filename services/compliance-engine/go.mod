@@ -13,12 +13,12 @@ require (
 )
 
 require (
-	github.com/hondyman/semlayer/libs/temporal-client v0.0.0
+	github.com/hondyman/uisce/libs/temporal-client v0.0.0
 	github.com/jmoiron/sqlx v1.4.0
 	github.com/lib/pq v1.10.9
 )
 
-replace github.com/hondyman/semlayer/libs/temporal-client => ../../libs/temporal-client
+replace github.com/hondyman/uisce/libs/temporal-client => ../../libs/temporal-client
 
 require (
 	github.com/bytedance/sonic v1.14.0 // indirect

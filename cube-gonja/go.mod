@@ -63,4 +63,4 @@ require (
 	google.golang.org/protobuf v1.36.9 // indirect
 )
 
-replace github.com/hondyman/semlayer/backend => ../backend
+replace github.com/hondyman/uisce/backend => ../backend

@@ -1,4 +1,4 @@
-module github.com/hondyman/semlayer/mdm-service
+module github.com/hondyman/uisce/mdm-service
 
 go 1.24
 

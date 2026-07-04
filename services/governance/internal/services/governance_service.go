@@ -6,10 +6,10 @@ import (
 	"fmt"
 	"time"
 
-	abacclient "github.com/hondyman/semlayer/libs/abac-client"
-	hasuraclient "github.com/hondyman/semlayer/libs/hasura-client"
-	sharedtypes "github.com/hondyman/semlayer/libs/shared-types"
-	temporalclient "github.com/hondyman/semlayer/libs/temporal-client"
+	abacclient "github.com/hondyman/uisce/libs/abac-client"
+	hasuraclient "github.com/hondyman/uisce/libs/hasura-client"
+	sharedtypes "github.com/hondyman/uisce/libs/shared-types"
+	temporalclient "github.com/hondyman/uisce/libs/temporal-client"
 )
 
 // GovernanceServiceConfig holds configuration for the governance service

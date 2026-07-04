@@ -10,7 +10,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/sirupsen/logrus"
-	"github.com/hondyman/semlayer/libs/jwt-middleware"
+	"github.com/hondyman/uisce/libs/jwt-middleware"
 )
 
 // Client is the MDM Calendar Service API client

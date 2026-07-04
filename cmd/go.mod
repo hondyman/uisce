@@ -1,9 +1,9 @@
-module github.com/hondyman/semlayer/cmd
+module github.com/hondyman/uisce/cmd
 
 go 1.25.3
 
 require (
-	github.com/hondyman/semlayer v0.0.0-00010101000000-000000000000
+	github.com/hondyman/uisce v0.0.0-00010101000000-000000000000
 	github.com/jackc/pgx/v5 v5.7.6
 	github.com/jmoiron/sqlx v1.4.0
 	github.com/lib/pq v1.10.9
@@ -24,4 +24,4 @@ require (
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
 
-replace github.com/hondyman/semlayer => ../
+replace github.com/hondyman/uisce => ../

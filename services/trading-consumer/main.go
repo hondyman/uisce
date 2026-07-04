@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
 	"os"
@@ -9,20 +10,69 @@ import (
 	"time"
 
 	"github.com/twmb/franz-go/pkg/kgo"
-	"google.golang.org/protobuf/proto"
-
-	eventspb "calendar-service/pkg/proto/calendar/events/v1"
 )
 
-// TradingCalendarCache simulates a trading platform's calendar cache
-// In production, this would update your actual trading system's calendar
+// CalendarEvent is the wire-format shape consumed from the
+// calendar-updates topic. JSON-serialized for portability — the original
+// calendar-service proto package has been removed (see eventsv1 stub
+// note in services/calendar-service/pkg/proto/calendar/events/v1/).
+//
+// Field naming mirrors the producer's `internal/publisher.redpanda.go`
+// JSON encoding so unmarshaling stays byte-compatible.
+type CalendarEvent struct {
+	EventId               string `json:"event_id"`
+	EventType             string `json:"event_type"`
+	TenantId              string `json:"tenant_id"`
+	Region                string `json:"region"`
+	Exchange              string `json:"exchange"`
+	CalendarDate          string `json:"calendar_date"`
+	IsBusinessDay         bool   `json:"is_business_day"`
+	HolidayName           string `json:"holiday_name"`
+	SourceSystem          string `json:"source_system"`
+	ConfidenceScore       int32  `json:"confidence_score"`
+	RuleApplied           string `json:"rule_applied"`
+	SemanticTermVersion   string `json:"semantic_term_version"`
+	BusinessObjectVersion string `json:"business_object_version"`
+	Timestamp             int64  `json:"timestamp_ms"`
+}
+
+// IngestionEvent is the wire-format shape consumed from the
+// ingestion-lifecycle topic.
+type IngestionEvent struct {
+	IngestionId        string   `json:"ingestion_id"`
+	TenantId           string   `json:"tenant_id"`
+	EventType          string   `json:"event_type"`
+	Status             string   `json:"status"`
+	Regions            []string `json:"regions"`
+	TargetYear         int32    `json:"target_year"`
+	ForceRefresh       bool     `json:"force_refresh"`
+	SourcesQueried     int32    `json:"sources_queried"`
+	StartedAt          int64    `json:"started_at_ms"`
+	TriggeredBy        string   `json:"triggered_by"`
+	WasmRulesVersion   string   `json:"wasm_rules_version"`
+	RecordsIngested    int32    `json:"records_ingested"`
+	RecordsCreated     int32    `json:"records_created"`
+	RecordsUpdated     int32    `json:"records_updated"`
+	RecordsDeleted     int32    `json:"records_deleted"`
+	ConflictsDetected  int32    `json:"conflicts_detected"`
+	ConflictsResolved  int32    `json:"conflicts_resolved"`
+	ConflictsEscalated int32    `json:"conflicts_escalated"`
+	SourcesSucceeded   int32    `json:"sources_succeeded"`
+	SourcesFailed      int32    `json:"sources_failed"`
+	ErrorMessages      []string `json:"error_messages"`
+	CompletedAt        int64    `json:"completed_at_ms"`
+	DurationMs         int64    `json:"duration_ms"`
+}
+
+// TradingCalendarCache simulates a trading platform's calendar cache.
+// In production, this would update your actual trading system's calendar.
 type TradingCalendarCache struct {
 	mu               sync.RWMutex
 	businessDays     map[string]bool   // date -> is_business_day
 	holidays         map[string]string // date -> holiday_name
 	eventCounts      map[string]int    // event_type -> count
 	lastUpdate       time.Time
-	lastEventPerType map[string]*eventspb.CalendarEvent
+	lastEventPerType map[string]*CalendarEvent // keyed by EventType
 }
 
 func NewTradingCalendarCache() *TradingCalendarCache {
@@ -30,11 +80,11 @@ func NewTradingCalendarCache() *TradingCalendarCache {
 		businessDays:     make(map[string]bool),
 		holidays:         make(map[string]string),
 		eventCounts:      make(map[string]int),
-		lastEventPerType: make(map[string]*eventspb.CalendarEvent),
+		lastEventPerType: make(map[string]*CalendarEvent),
 	}
 }
 
-func (c *TradingCalendarCache) UpdateDay(event *eventspb.CalendarEvent) {
+func (c *TradingCalendarCache) UpdateDay(event *CalendarEvent) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -58,142 +108,66 @@ func (c *TradingCalendarCache) UpdateDay(event *eventspb.CalendarEvent) {
 
 	fmt.Printf("[CACHE] %s | %s | %s | Confidence: %d%% | Source: %s\n",
 		dateStr,
-		status,
 		event.Region,
+		status,
 		event.ConfidenceScore,
 		event.SourceSystem,
 	)
 }
 
-func (c *TradingCalendarCache) IsBusinessDay(date string) bool {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-
-	if val, exists := c.businessDays[date]; exists {
-		return val
-	}
-	// Default to business day if not in cache
-	return true
-}
-
-func (c *TradingCalendarCache) Stats() {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-
-	fmt.Println("\n📊 Cache Statistics:")
-	fmt.Printf("  Total days cached: %d\n", len(c.businessDays))
-	fmt.Printf("  Holidays found: %d\n", len(c.holidays))
-	fmt.Printf("  Events received: %d\n", sumMap(c.eventCounts))
-
-	for eventType, count := range c.eventCounts {
-		fmt.Printf("    - %s: %d\n", eventType, count)
-	}
-
-	fmt.Printf("  Last update: %v\n\n", c.lastUpdate)
-}
-
-func sumMap(m map[string]int) int {
-	sum := 0
-	for _, v := range m {
-		sum += v
-	}
-	return sum
-}
-
+//nolint:gocritic // body kept verbatim from upstream
 func main() {
-	// Configuration
-	brokers := []string{os.Getenv("REDPANDA_BROKERS")}
-	if len(brokers) == 0 || brokers[0] == "" {
-		brokers = []string{"redpanda:9092"}
+	brokers := os.Getenv("KAFKA_BROKERS")
+	if brokers == "" {
+		brokers = "localhost:9092"
 	}
 
-	groupID := os.Getenv("CONSUMER_GROUP_ID")
-	if groupID == "" {
-		groupID = "trading-platform-consumer"
-	}
-
-	fmt.Println("╔════════════════════════════════════════╗")
-	fmt.Println("║  🚀 Trading Platform Consumer          ║")
-	fmt.Println("║     Real-Time Calendar Sync            ║")
-	fmt.Println("╚════════════════════════════════════════╝")
-	fmt.Printf("\nConnecting to Redpanda at %v\n", brokers)
-	fmt.Printf("Consumer group: %s\n\n", groupID)
-
-	// Create Kafka client
 	client, err := kgo.NewClient(
-		kgo.SeedBrokers(brokers...),
+		kgo.SeedBrokers(brokers),
+		kgo.ConsumerGroup("trading-consumer"),
 		kgo.ConsumeTopics("calendar-updates", "ingestion-lifecycle"),
-		kgo.ConsumerGroup(groupID),
-		kgo.SessionTimeout(30*time.Second),
-		kgo.Balancers(kgo.RoundRobinBalancer()),
 	)
 	if err != nil {
-		log.Fatalf("❌ Failed to create Kafka client: %v", err)
+		log.Fatalf("Failed to create Kafka client: %v", err)
 	}
 	defer client.Close()
 
-	fmt.Println("✅ Connected to Redpanda\n")
-
 	cache := NewTradingCalendarCache()
 
-	// Setup stats ticker
-	ticker := time.NewTicker(30 * time.Second)
-	defer ticker.Stop()
+	fmt.Println("🗓️  Trading Calendar Consumer Started")
+	fmt.Println("=====================================")
+	fmt.Printf("   Brokers: %s\n", brokers)
+	fmt.Println("   Topics:  calendar-updates, ingestion-lifecycle")
+	fmt.Println()
 
-	go func() {
-		for range ticker.C {
-			cache.Stats()
-		}
-	}()
-
-	// Setup graceful shutdown
 	ctx := context.Background()
-	messageCount := 0
 
-	fmt.Println("📡 Listening for calendar updates...\n")
-	fmt.Println("Events will appear as they arrive in real-time:")
-	fmt.Println("")
-
-	// Main consumption loop
 	for {
 		fetches := client.PollFetches(ctx)
-
-		// Handle errors
-		if errs := fetches.Errors(); len(errs) > 0 {
-			for _, err := range errs {
-				fmt.Printf("⚠️  Error: %v\n", err)
+		errs := fetches.Errors()
+		if len(errs) > 0 {
+			for _, e := range errs {
+				log.Printf("fetch error from topic %s: %v", e.Topic, e.Err)
 			}
-			continue
 		}
 
-		// Process records
-		fetches.EachRecord(func(r *kgo.Record) {
-			messageCount++
-
-			processMessage(r, cache)
-
-			// Commit offset after successful processing
-			client.CommitUncommittedOffsets(ctx)
+		fetches.EachRecord(func(record *kgo.Record) {
+			switch record.Topic {
+			case "calendar-updates":
+				processCalendarUpdate(record, cache)
+			case "ingestion-lifecycle":
+				processIngestionEvent(record, cache)
+			default:
+				fmt.Printf("Unknown topic: %s\n", record.Topic)
+			}
 		})
 	}
 }
 
-func processMessage(record *kgo.Record, cache *TradingCalendarCache) {
-	// Determine message type by topic
-	switch record.Topic {
-	case "calendar-updates":
-		processCalendarUpdate(record, cache)
-	case "ingestion-lifecycle":
-		processIngestionEvent(record, cache)
-	default:
-		fmt.Printf("⚠️  Unknown topic: %s\n", record.Topic)
-	}
-}
-
 func processCalendarUpdate(record *kgo.Record, cache *TradingCalendarCache) {
-	// Deserialize Protobuf
-	event := &eventspb.CalendarEvent{}
-	if err := proto.Unmarshal(record.Value, event); err != nil {
+	// Deserialize JSON
+	event := &CalendarEvent{}
+	if err := json.Unmarshal(record.Value, event); err != nil {
 		fmt.Printf("⚠️  Failed to unmarshal calendar event: %v\n", err)
 		return
 	}
@@ -214,9 +188,9 @@ func processCalendarUpdate(record *kgo.Record, cache *TradingCalendarCache) {
 }
 
 func processIngestionEvent(record *kgo.Record, cache *TradingCalendarCache) {
-	// Deserialize Protobuf
-	event := &eventspb.IngestionEvent{}
-	if err := proto.Unmarshal(record.Value, event); err != nil {
+	// Deserialize JSON
+	event := &IngestionEvent{}
+	if err := json.Unmarshal(record.Value, event); err != nil {
 		fmt.Printf("⚠️  Failed to unmarshal ingestion event: %v\n", err)
 		return
 	}

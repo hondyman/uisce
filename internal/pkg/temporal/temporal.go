@@ -3,7 +3,7 @@ package temporal
 import (
 	"go.temporal.io/sdk/client"
 
-	temporalclient "github.com/hondyman/semlayer/libs/temporal-client"
+	temporalclient "github.com/hondyman/uisce/libs/temporal-client"
 )
 
 // NewClientWithRetry is a thin wrapper that delegates to the canonical

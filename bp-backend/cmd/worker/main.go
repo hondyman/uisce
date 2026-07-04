@@ -6,7 +6,7 @@ import (
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/worker"
 
-	"github.com/semlayer/bp-backend/pkg/workflow"
+	"github.com/hondyman/uisce/bp-backend/pkg/workflow"
 )
 
 func main() {

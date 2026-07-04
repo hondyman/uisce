@@ -68,3 +68,18 @@ Thumbs.db
 # Local logs and tmp dirs
 /logs/
 /tmp/
+
+# Root-level Go scratch / debug scripts
+# These should live under scripts/db_inspect/, scripts/hashgen/, etc.
+# Keeping them at the repo root causes duplicate `package main` errors.
+/test_db*.go
+/test_dbs*.go
+/db_query*.go
+/db_schema*.go
+/gen_hash*.go
+/test_req*.go
+/fix_compilation*.go
+/scratch_*.go
+/probe_*.go
+/demo_*.go
+

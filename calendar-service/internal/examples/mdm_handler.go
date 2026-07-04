@@ -11,7 +11,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/gorilla/mux"
 	"github.com/sirupsen/logrus"
-	"github.com/hondyman/semlayer/libs/jwt-middleware"
+	"github.com/hondyman/uisce/libs/jwt-middleware"
 )
 
 // CalendarHandlerWithMDM demonstrates how to integrate MDM into calendar handlers

@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
+
+	jwtmiddleware "github.com/hondyman/uisce/libs/jwt-middleware"
 )
 
 func main() {
@@ -26,12 +28,11 @@ func queryAnalytics(w http.ResponseWriter, r *http.Request) {
 	sqlQuery := r.URL.Query().Get("sql")
 	log.Printf("Executing query for tenant %s: %s", tenantID, sqlQuery)
 
-	// Mock analytics result
 	results := []map[string]interface{}{
 		{"date": "2023-10-26", "value": 1000},
 		{"date": "2023-10-27", "value": 1050},
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(results)
+	_ = json.NewEncoder(w).Encode(results)
 }

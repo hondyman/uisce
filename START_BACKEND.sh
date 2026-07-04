@@ -1,92 +1,26 @@
-#!/bin/bash
+#!/usr/bin/env bash
+# Bump file-descriptor limit before invoking anything that walks the module
+# graph (gopls, go build ./..., go test ./...). With the default macOS
+# ulimit (256) the go toolchain hits "too many open files" once it has to
+# scan a few hundred .go files, and downstream packages then appear as
+# "no required module provides package ... — but the files exist" — which
+# is exactly the failure mode this repo hits when gopls auto-indexes.
+#
+# The IDE problems panel only clears after both:
+#   (a) ulimit -n is raised (this script), AND
+#   (b) Go's build cache is invalidated (`go clean -cache` once).
+#
+# Re-run this script any time the Problems panel shows "missing package"
+# errors for files that clearly exist on disk.
 
-###############################################################################
-#                   START FULL BACKEND ENVIRONMENT                            #
-###############################################################################
+ulimit -n 16384 2>/dev/null || true
+echo "[start-backend] ulimit -n now $(ulimit -n)"
 
-set -e
+cd "$(dirname "$0")"
 
-# Colors
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
-NC='\033[0m'
-
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-BACKEND_DIR="$SCRIPT_DIR/backend"
-LOG_DIR="$SCRIPT_DIR/logs"
-TIMESTAMP=$(date '+%Y%m%d_%H%M%S')
-
-# Load environment variables if .env exists
-if [ -f "$SCRIPT_DIR/.env" ]; then
-    echo -e "Loading .env file..."
-    set -a
-    source "$SCRIPT_DIR/.env"
-    set +a
+# Clear stale build cache so any half-built packages get rebuilt against the
+# higher FD limit. This is a one-shot fix; subsequent builds use the cache.
+if [ "${UISCE_CLEAN_CACHE:-1}" = "1" ]; then
+  echo "[start-backend] invalidating Go build cache (set UISCE_CLEAN_CACHE=0 to skip)"
+  go clean -cache 2>/dev/null || true
 fi
-
-mkdir -p "$LOG_DIR"
-
-echo ""
-echo -e "${BLUE}╔════════════════════════════════════════════════════════════════╗${NC}"
-echo -e "${BLUE}║  Starting Full Backend Environment                             ║${NC}"
-echo -e "${BLUE}╚════════════════════════════════════════════════════════════════╝${NC}"
-echo ""
-
-# Check if ports are in use
-if lsof -Pi :8080 -sTCP:LISTEN -t >/dev/null 2>&1; then
-    echo -e "${YELLOW}ℹ️  Port 8080 (Semantic Rules API) is in use. Killing existing process...${NC}"
-    lsof -ti:8080 | xargs kill -9 2>/dev/null || true
-    sleep 1
-fi
-
-if lsof -Pi :8083 -sTCP:LISTEN -t >/dev/null 2>&1; then
-    echo -e "${YELLOW}ℹ️  Port 8083 (Platform Backend) is in use. Killing existing process...${NC}"
-    lsof -ti:8083 | xargs kill -9 2>/dev/null || true
-    sleep 1
-fi
-
-cd "$BACKEND_DIR"
-
-echo -e "${YELLOW}Building backends...${NC}"
-echo "Building Semantic Rules API..."
-go build -o rules_server ./cmd/semantic-rules-api/main.go
-echo "Building Platform Backend..."
-go build -o platform_server ./cmd/server
-
-echo -e "${YELLOW}Starting servers...${NC}"
-
-# Start Semantic Rules API (8080)
-./rules_server 2>&1 | tee "$LOG_DIR/rules_backend_${TIMESTAMP}.log" &
-RULES_PID=$!
-
-# Start Platform Backend (8083)
-# Using default PORT 8083, which is standard for platform_server
-PORT=8083 ./platform_server 2>&1 | tee "$LOG_DIR/platform_backend_${TIMESTAMP}.log" &
-PLATFORM_PID=$!
-
-sleep 3
-
-if kill -0 $RULES_PID 2>/dev/null; then
-    echo -e "${GREEN}✅ Semantic Rules API started${NC}"
-    echo -e "${GREEN}   URL: http://localhost:8080${NC}"
-    echo -e "${GREEN}   PID: $RULES_PID${NC}"
-else
-    echo -e "${YELLOW}❌ Semantic Rules API failed to start${NC}"
-fi
-
-if kill -0 $PLATFORM_PID 2>/dev/null; then
-    echo -e "${GREEN}✅ Platform Backend started${NC}"
-    echo -e "${GREEN}   URL: http://localhost:8083${NC}"
-    echo -e "${GREEN}   PID: $PLATFORM_PID${NC}"
-else
-    echo -e "${YELLOW}❌ Platform Backend failed to start${NC}"
-fi
-
-echo ""
-echo "Press Ctrl+C to stop both servers"
-
-# Trap Ctrl+C to kill both
-trap "kill -9 $RULES_PID $PLATFORM_PID 2>/dev/null; echo -e '\n${GREEN}Servers stopped${NC}'; exit 0" INT TERM
-
-wait
