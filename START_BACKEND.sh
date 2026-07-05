@@ -17,6 +17,7 @@ ulimit -n 16384 2>/dev/null || true
 echo "[start-backend] ulimit -n now $(ulimit -n)"
 
 cd "$(dirname "$0")"
+SCRIPT_DIR="$(pwd)"
 
 # Clear stale build cache so any half-built packages get rebuilt against the
 # higher FD limit. This is a one-shot fix; subsequent builds use the cache.
@@ -24,3 +25,7 @@ if [ "${UISCE_CLEAN_CACHE:-1}" = "1" ]; then
   echo "[start-backend] invalidating Go build cache (set UISCE_CLEAN_CACHE=0 to skip)"
   go clean -cache 2>/dev/null || true
 fi
+
+# Actually start the backend server (this script's name implies it should).
+echo "[start-backend] launching backend server via scripts/start-backend-local.sh"
+exec "$SCRIPT_DIR/scripts/start-backend-local.sh"
