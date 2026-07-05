@@ -27,8 +27,6 @@ export default defineConfig({
       '**/*.spec.ts',
       '**/*.spec.tsx',
 
-      'src/vitest/components/**',
-
       'src/components/**/*.test.ts',
       'src/components/**/*.test.tsx',
       'src/components/**/__tests__/**',

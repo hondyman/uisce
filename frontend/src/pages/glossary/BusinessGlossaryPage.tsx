@@ -404,6 +404,7 @@ import { useQueryClient } from '@tanstack/react-query';
           <TabPanel value={currentTab} index={2}>
             <div className="glossary-embed">
               <CalculationTermsTab
+                scopeTenantId={scopeTenantId}
                 searchTerm={searchTerm}
                 onCreateTerm={() => handleCreateTerm('semantic_term')}
                 onEditTerm={handleEditTerm}

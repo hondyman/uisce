@@ -106,8 +106,10 @@ export default function GlossaryFlowView({ focus = 'business' }: Props) {
 
     if (catalogEdges) {
       catalogEdges.forEach((edge: CatalogEdge) => {
-        const sourceId = edge.subject_node_id;
-        const targetId = edge.object_node_id;
+        const sourceId = edge.subject_node_id || edge.source_node_id;
+        const targetId = edge.object_node_id || edge.target_node_id;
+        if (!sourceId || !targetId) return;
+
         const sourceIsBusinessTerm = businessTerms.some((bt) => bt.id === sourceId);
         const targetIsSemanticTerm = semanticTerms.some((st) => st.id === targetId);
 

@@ -41,50 +41,371 @@ export interface SuggestionResult {
   [abbreviation: string]: string;
 }
 
+// ============================================================================
+// Dev fallback: the backend /abbreviations endpoint depends on the
+// sml.abbreviation_lookup table, which is not always available in local dev.
+// When the API fails in DEV mode, fall back to a gold-copy (core) map plus
+// tenant-scoped custom entries persisted in localStorage so the
+// /core/abbreviations page still shows values.
+// ============================================================================
+
+const isDevFallbackEnabled = typeof import.meta !== 'undefined' && (import.meta as any).env?.DEV === true;
+
+const GOLD_COPY_TENANT_ID = '99e99e99-99e9-49e9-89e9-99e99e99e999';
+
+const GOLD_COPY_ABBREVIATIONS: Record<string, string> = {
+  // Geographic
+  CNTRY: 'COUNTRY',
+  CTRY: 'COUNTRY',
+  ST: 'STATE',
+  ADDR: 'ADDRESS',
+  ZIP: 'ZIPCODE',
+  POSTAL: 'POSTALCODE',
+  CTY: 'CITY',
+  REGN: 'REGION',
+
+  // Financial
+  AMT: 'AMOUNT',
+  VAL: 'VALUE',
+  BAL: 'BALANCE',
+  CURR: 'CURRENCY',
+  FX: 'FOREIGN_EXCHANGE',
+  ACCT: 'ACCOUNT',
+  TXN: 'TRANSACTION',
+  PMT: 'PAYMENT',
+
+  // Temporal
+  DT: 'DATE',
+  DTM: 'DATETIME',
+  TS: 'TIMESTAMP',
+  YR: 'YEAR',
+  MON: 'MONTH',
+  WK: 'WEEK',
+  QTR: 'QUARTER',
+
+  // Business
+  CUST: 'CUSTOMER',
+  CLNT: 'CLIENT',
+  ORD: 'ORDER',
+  PROD: 'PRODUCT',
+  CATEG: 'CATEGORY',
+  DEPT: 'DEPARTMENT',
+  DIV: 'DIVISION',
+  ORG: 'ORGANIZATION',
+  COMP: 'COMPANY',
+
+  // Identity
+  ID: 'IDENTIFIER',
+  NUM: 'NUMBER',
+  NBR: 'NUMBER',
+  NO: 'NUMBER',
+  CD: 'CODE',
+  KEY: 'KEY',
+  REF: 'REFERENCE',
+
+  // Measurements
+  QTY: 'QUANTITY',
+  CNT: 'COUNT',
+  PCT: 'PERCENT',
+  RATE: 'RATE',
+  RATIO: 'RATIO',
+  SCORE: 'SCORE',
+  RANK: 'RANK',
+
+  // Status/Flags
+  FLG: 'FLAG',
+  IND: 'INDICATOR',
+  STAT: 'STATUS',
+  TYP: 'TYPE',
+
+  // Common prefixes/suffixes
+  DESC: 'DESCRIPTION',
+  NM: 'NAME',
+  TTL: 'TOTAL',
+  AVG: 'AVERAGE',
+  MIN: 'MINIMUM',
+  MAX: 'MAXIMUM',
+  SUM: 'SUMMARY',
+};
+
+function localAbbreviationsKey(tenantId?: string): string {
+  return `uisce_abbreviations_v1_custom_${tenantId || 'global'}`;
+}
+
+function loadLocalAbbreviations(tenantId?: string): AbbreviationEntry[] {
+  try {
+    const raw = localStorage.getItem(localAbbreviationsKey(tenantId));
+    return raw ? (JSON.parse(raw) as AbbreviationEntry[]) : [];
+  } catch (e) {
+    devError('Failed to load local abbreviations:', e);
+    return [];
+  }
+}
+
+function saveLocalAbbreviations(items: AbbreviationEntry[], tenantId?: string): void {
+  try {
+    localStorage.setItem(localAbbreviationsKey(tenantId), JSON.stringify(items));
+  } catch (e) {
+    devError('Failed to save local abbreviations:', e);
+  }
+}
+
+function getCoreAbbreviations(): AbbreviationEntry[] {
+  return Object.entries(GOLD_COPY_ABBREVIATIONS).map(([abbreviation, full_word], index) => ({
+    id: -1000 - index,
+    abbreviation,
+    full_word,
+    notes: 'Core (gold copy) abbreviation',
+    tenant_id: GOLD_COPY_TENANT_ID,
+    is_core: true,
+    created_at: undefined,
+    updated_at: undefined,
+  }));
+}
+
+function getFallbackAbbreviationMap(tenantId?: string): Map<string, string> {
+  const all = [...getCoreAbbreviations(), ...loadLocalAbbreviations(tenantId)];
+  return new Map(all.map((a) => [a.abbreviation.toUpperCase(), a.full_word.toUpperCase()]));
+}
+
+function getFallbackAbbreviations(tenantId?: string): AbbreviationEntry[] {
+  return [...getCoreAbbreviations(), ...loadLocalAbbreviations(tenantId)];
+}
+
+function shouldUseFallback(): boolean {
+  return isDevFallbackEnabled;
+}
+
+function filterAndPaginateAbbreviations(
+  items: AbbreviationEntry[],
+  limit: number,
+  offset: number,
+  search: string
+): GetAbbreviationsResponse {
+  let filtered = [...items];
+  if (search) {
+    const query = search.toUpperCase();
+    filtered = filtered.filter(
+      (a) =>
+        a.abbreviation.toUpperCase().includes(query) ||
+        a.full_word.toUpperCase().includes(query) ||
+        (a.notes || '').toUpperCase().includes(query)
+    );
+  }
+  filtered.sort((a, b) => a.abbreviation.localeCompare(b.abbreviation));
+  const total_count = filtered.length;
+  return {
+    items: filtered.slice(offset, offset + limit),
+    total_count,
+    limit,
+    offset,
+  };
+}
+
+function nextLocalId(items: AbbreviationEntry[]): number {
+  const numericIds = items.map((i) => Number(i.id) || 0);
+  const min = numericIds.length > 0 ? Math.min(...numericIds) : 0;
+  return (min <= 0 ? min : 0) - 1;
+}
+
+function addLocalAbbreviation(
+  abbreviation: string,
+  fullWord: string,
+  notes: string,
+  tenantId?: string
+): void {
+  const items = loadLocalAbbreviations(tenantId);
+  items.push({
+    id: nextLocalId(items),
+    abbreviation,
+    full_word: fullWord,
+    notes,
+    tenant_id: tenantId || '',
+    is_core: false,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  });
+  saveLocalAbbreviations(items, tenantId);
+}
+
+function updateLocalAbbreviation(
+  id: number,
+  abbreviation: string,
+  fullWord: string,
+  notes: string,
+  tenantId?: string
+): void {
+  const items = loadLocalAbbreviations(tenantId);
+  const index = items.findIndex((i) => i.id === id);
+  if (index === -1) {
+    throw new Error('Abbreviation not found');
+  }
+  items[index] = {
+    ...items[index],
+    abbreviation,
+    full_word: fullWord,
+    notes,
+    updated_at: new Date().toISOString(),
+  };
+  saveLocalAbbreviations(items, tenantId);
+}
+
+function deleteLocalAbbreviation(id: number, tenantId?: string): void {
+  const items = loadLocalAbbreviations(tenantId);
+  const next = items.filter((i) => i.id !== id);
+  if (next.length === items.length) {
+    throw new Error('Abbreviation not found');
+  }
+  saveLocalAbbreviations(next, tenantId);
+}
+
+function getCurrentTenantIdFromStorage(): string | undefined {
+  try {
+    const raw = localStorage.getItem('selected_tenant');
+    if (!raw) return undefined;
+    const parsed = JSON.parse(raw);
+    return typeof parsed?.id === 'string' ? parsed.id : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function generateTokenCombinations(tokenSets: string[][]): string[][] {
+  if (tokenSets.length === 0) return [];
+  if (tokenSets.length === 1) return tokenSets[0].map((token) => [token]);
+
+  const [first, ...rest] = tokenSets;
+  const restCombos = generateTokenCombinations(rest);
+  const result: string[][] = [];
+  for (const token of first) {
+    for (const combo of restCombos) {
+      result.push([token, ...combo]);
+    }
+  }
+  return result;
+}
+
+function expandAbbreviationsFallback(columnName: string): AbbreviationExpansion {
+  const normalized = columnName.toUpperCase();
+  const tokens = normalized.split(/[_\-\.\s]/);
+  const map = getFallbackAbbreviationMap(getCurrentTenantIdFromStorage());
+
+  const expandedTokenSets = tokens.map((token) => {
+    const expansion = map.get(token);
+    return expansion ? [token, expansion] : [token];
+  });
+
+  const hasExpansion = expandedTokenSets.some((set) => set.length > 1);
+  const variations: string[] = [normalized];
+  if (hasExpansion) {
+    const combos = generateTokenCombinations(expandedTokenSets);
+    combos.forEach((combo) => variations.push(combo.join('_')));
+  }
+
+  const expansions = tokens
+    .filter((token) => map.has(token))
+    .map((token) => `${token}→${map.get(token)}`)
+    .join(', ');
+
+  return {
+    column_name: columnName,
+    variations: [...new Set(variations)],
+    expansions,
+  };
+}
+
+function validateSemanticTermsFallback(termNames: string[]): AbbreviationValidation {
+  const map = getFallbackAbbreviationMap(getCurrentTenantIdFromStorage());
+  const violations: Record<string, string[]> = {};
+  let valid_terms = 0;
+
+  for (const termName of termNames) {
+    const normalized = termName.toUpperCase();
+    const tokens = normalized.split(/[_\-\.\s]/);
+    const found: string[] = [];
+
+    for (const token of tokens) {
+      const expansion = map.get(token);
+      if (expansion) {
+        found.push(`${token} -> ${expansion}`);
+      }
+    }
+
+    if (found.length > 0) {
+      violations[termName] = found;
+    } else {
+      valid_terms++;
+    }
+  }
+
+  return {
+    violations,
+    valid_terms,
+    total_terms: termNames.length,
+  };
+}
+
 // API client for abbreviations
 class AbbreviationApiClient {
   /**
    * Get abbreviations with pagination and search
    */
   async getAbbreviations(limit = 50, offset = 0, search = '', tenantId?: string): Promise<GetAbbreviationsResponse> {
-    const params = new URLSearchParams({
-      limit: limit.toString(),
-      offset: offset.toString(),
-    });
-    if (search) {
-      params.append('q', search);
-    }
+    try {
+      const params = new URLSearchParams({
+        limit: limit.toString(),
+        offset: offset.toString(),
+      });
+      if (search) {
+        params.append('q', search);
+      }
 
-    const headers: Record<string, string> = {};
-    if (tenantId) {
-      headers['X-Tenant-ID'] = tenantId;
-    }
+      const headers: Record<string, string> = {};
+      if (tenantId) {
+        headers['X-Tenant-ID'] = tenantId;
+      }
 
-    return apiClient<GetAbbreviationsResponse>(`/abbreviations?${params.toString()}`, {
-      headers
-    });
+      return await apiClient<GetAbbreviationsResponse>(`/abbreviations?${params.toString()}`, {
+        headers
+      });
+    } catch (error) {
+      if (shouldUseFallback()) {
+        devError('Abbreviations API failed, using dev fallback:', error);
+        return filterAndPaginateAbbreviations(getFallbackAbbreviations(tenantId), limit, offset, search);
+      }
+      throw error;
+    }
   }
 
   /**
    * Add a new abbreviation
    */
   async addAbbreviation(abbreviation: string, fullWord: string, notes?: string, tenantId?: string): Promise<void> {
-    const headers: Record<string, string> = {
-      'Content-Type': 'application/json',
-    };
-    if (tenantId) {
-      headers['X-Tenant-ID'] = tenantId;
-    }
+    try {
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+      };
+      if (tenantId) {
+        headers['X-Tenant-ID'] = tenantId;
+      }
 
-    await apiClient<void>(`/abbreviations`, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({
-        abbreviation,
-        full_word: fullWord,
-        notes: notes || '',
-      }),
-    });
+      await apiClient<void>(`/abbreviations`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          abbreviation,
+          full_word: fullWord,
+          notes: notes || '',
+        }),
+      });
+    } catch (error) {
+      if (shouldUseFallback()) {
+        devError('Add abbreviation API failed, using dev fallback:', error);
+        addLocalAbbreviation(abbreviation, fullWord, notes || '', tenantId);
+        return;
+      }
+      throw error;
+    }
   }
 
   // ... (skipping expand/validate/scan/suggest as they might not need explicit tenantId or are less critical right now, but keeping context)
@@ -92,30 +413,46 @@ class AbbreviationApiClient {
    * Expand abbreviations in a column name
    */
   async expandAbbreviations(columnName: string): Promise<AbbreviationExpansion> {
-    return apiClient<AbbreviationExpansion>(`/abbreviations/expand`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        column_name: columnName,
-      }),
-    });
+    try {
+      return await apiClient<AbbreviationExpansion>(`/abbreviations/expand`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          column_name: columnName,
+        }),
+      });
+    } catch (error) {
+      if (shouldUseFallback()) {
+        devError('Expand abbreviations API failed, using dev fallback:', error);
+        return expandAbbreviationsFallback(columnName);
+      }
+      throw error;
+    }
   }
 
   /**
    * Validate semantic terms for abbreviation violations
    */
   async validateSemanticTerms(termNames: string[]): Promise<AbbreviationValidation> {
-    return apiClient<AbbreviationValidation>(`/abbreviations/validate`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        term_names: termNames,
-      }),
-    });
+    try {
+      return await apiClient<AbbreviationValidation>(`/abbreviations/validate`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          term_names: termNames,
+        }),
+      });
+    } catch (error) {
+      if (shouldUseFallback()) {
+        devError('Validate semantic terms API failed, using dev fallback:', error);
+        return validateSemanticTermsFallback(termNames);
+      }
+      throw error;
+    }
   }
 
   /**
@@ -149,37 +486,55 @@ class AbbreviationApiClient {
    * Update an existing abbreviation
    */
   async updateAbbreviation(id: number, abbreviation: string, fullWord: string, notes?: string, tenantId?: string): Promise<void> {
-    const headers: Record<string, string> = {
-      'Content-Type': 'application/json',
-    };
-    if (tenantId) {
-      headers['X-Tenant-ID'] = tenantId;
-    }
+    try {
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+      };
+      if (tenantId) {
+        headers['X-Tenant-ID'] = tenantId;
+      }
 
-    await apiClient<void>(`/abbreviations/${id}`, {
-      method: 'PUT',
-      headers,
-      body: JSON.stringify({
-        abbreviation,
-        full_word: fullWord,
-        notes: notes || '',
-      }),
-    });
+      await apiClient<void>(`/abbreviations/${id}`, {
+        method: 'PUT',
+        headers,
+        body: JSON.stringify({
+          abbreviation,
+          full_word: fullWord,
+          notes: notes || '',
+        }),
+      });
+    } catch (error) {
+      if (shouldUseFallback()) {
+        devError('Update abbreviation API failed, using dev fallback:', error);
+        updateLocalAbbreviation(id, abbreviation, fullWord, notes || '', tenantId);
+        return;
+      }
+      throw error;
+    }
   }
 
   /**
    * Delete an abbreviation
    */
   async deleteAbbreviation(id: number, tenantId?: string): Promise<void> {
-    const headers: Record<string, string> = {};
-    if (tenantId) {
-      headers['X-Tenant-ID'] = tenantId;
-    }
+    try {
+      const headers: Record<string, string> = {};
+      if (tenantId) {
+        headers['X-Tenant-ID'] = tenantId;
+      }
 
-    await apiClient<void>(`/abbreviations/${id}`, {
-      method: 'DELETE',
-      headers,
-    });
+      await apiClient<void>(`/abbreviations/${id}`, {
+        method: 'DELETE',
+        headers,
+      });
+    } catch (error) {
+      if (shouldUseFallback()) {
+        devError('Delete abbreviation API failed, using dev fallback:', error);
+        deleteLocalAbbreviation(id, tenantId);
+        return;
+      }
+      throw error;
+    }
   }
 }
 
@@ -386,8 +741,14 @@ export async function getAbbreviationMap(): Promise<Map<string, string>> {
     cacheTimestamp = now;
     return abbreviationCache;
   } catch (error) {
-    devError('Failed to fetch abbreviations, using empty map:', error);
-    // Return empty map if API fails
+    devError('Failed to fetch abbreviations:', error);
+    if (shouldUseFallback()) {
+      const fallback = getFallbackAbbreviationMap(getCurrentTenantIdFromStorage());
+      abbreviationCache = fallback;
+      cacheTimestamp = now;
+      return fallback;
+    }
+    // Return empty map if API fails in production
     return new Map();
   }
 }

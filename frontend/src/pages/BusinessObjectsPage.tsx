@@ -19,21 +19,17 @@ import {
   CardContent,
   CardActions,
   Chip,
-  TextField,
   Paper,
   Stack,
-  InputAdornment,
   IconButton,
   Avatar,
   Divider,
-  DialogContentText,
   useTheme,
   Alert,
   Tooltip,
 } from '@mui/material';
 import {
   Add as AddIcon,
-  Search as SearchIcon,
   Schema as SchemaIcon,
   Category as CategoryIcon,
   Info as InfoIcon,
@@ -48,7 +44,7 @@ import {
 import ValidationRuleScriptEditor from '../components/ValidationRules/ValidationRuleScriptEditor';
 import { ValidationRuleCreator } from '../components/ValidationRules/ValidationRuleCreator';
 import { EditBusinessObjectModal } from '../components/BusinessObjectManager/EditBusinessObjectModal';
-import { BusinessObjectWizard } from '../components/BusinessObjectManager/BusinessObjectWizard';
+import BusinessObjectBindingWizard from '../components/BusinessObjectManager/BusinessObjectBindingWizard';
 import { GlobalBOSearch } from '../components/Search/GlobalBOSearch';
 import { useTenant } from '../contexts/TenantContext';
 import { useConfirm } from '../components/ConfirmProvider';
@@ -108,7 +104,7 @@ export default function BusinessObjectsPage() {
   const [error, setError] = useState<string | null>(null);
   
   const [viewMode, setViewMode] = useState<'card' | 'table'>('card');
-  const [businessObjectsSearch, setBusinessObjectsSearch] = useState('');
+  const [businessObjectsSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'draft'>('all');
 
   // Validation Rules State
@@ -132,15 +128,22 @@ export default function BusinessObjectsPage() {
   const getAuthHeaders = (additionalHeaders: Record<string, string> = {}): Record<string, string> => {
     const token = typeof localStorage !== 'undefined' ? localStorage.getItem('auth_token') : null;
     const authHeader = token && !token.includes('demo') ? `Bearer ${token}` : '';
-    
-    return {
-      'Authorization': authHeader,
+
+    const headers: Record<string, string> = {
       'Content-Type': 'application/json',
       'X-Tenant-ID': tenantId,
-      'X-Tenant-Datasource-ID': datasourceId,
       'X-Tenant-Region': getSelectedRegion(),
       ...additionalHeaders,
     };
+    // Business Object definitions are tenant-scoped; only send datasource
+    // headers when a datasource/instance is actually selected.
+    if (datasourceId) {
+      headers['X-Tenant-Datasource-ID'] = datasourceId;
+    }
+    if (authHeader) {
+      headers['Authorization'] = authHeader;
+    }
+    return headers;
   };
 
   const getValidationRulesForField = (_fieldKey: string) => {
@@ -184,9 +187,9 @@ export default function BusinessObjectsPage() {
   }, [businessObjects, businessObjectsSearch, statusFilter]);
 
   const fetchBusinessObjects = async () => {
-    if (!tenantId || !datasourceId) {
+    if (!tenantId) {
       setBusinessObjects([]);
-      setError('Please select a tenant and datasource');
+      setError('Please select a tenant');
       return;
     }
 
@@ -245,28 +248,6 @@ export default function BusinessObjectsPage() {
         };
       }).filter(obj => !obj.parent_id); // Filter out subtypes - only show parent business objects
 
-      // Fallback: if primary endpoint returned empty, try the designer list endpoint
-      if (objectsArray.length === 0) {
-        const resp2 = await fetch('/api/business-objects/list', {
-          headers: getAuthHeaders(),
-        });
-        if (resp2.ok) {
-          const items = await resp2.json(); // array of { id, name, display_name, description, fields, icon, config }
-          objectsArray = (Array.isArray(items) ? items : []).map((item: any) => ({
-            id: item.id,
-            name: item.name || item.display_name || item.id,
-            display_name: item.display_name || item.name || item.id,
-            description: item.description,
-            config: item.config || {},
-            subtypes: {},
-            is_active: (item.config?.is_active !== false),
-            enable_history: false,
-            updated_at: undefined,
-            parent_id: null,
-          }));
-        }
-      }
-
       setBusinessObjects(objectsArray);
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : 'Failed to fetch business objects';
@@ -277,10 +258,10 @@ export default function BusinessObjectsPage() {
   };
 
   useEffect(() => {
-    if (tenantId && datasourceId) {
+    if (tenantId) {
       fetchBusinessObjects();
     }
-  }, [tenantId, datasourceId]);
+  }, [tenantId]);
 
   const _handleToggleObjectStatus = (object: BusinessObject) => {
     // Optimistic Update
@@ -1078,7 +1059,7 @@ export default function BusinessObjectsPage() {
       )}
       
       {/* Business Object Creation Wizard */}
-      <BusinessObjectWizard
+      <BusinessObjectBindingWizard
         open={wizardOpen}
         onClose={() => setWizardOpen(false)}
         onSave={handleWizardSave}

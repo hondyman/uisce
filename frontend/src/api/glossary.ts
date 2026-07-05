@@ -253,14 +253,21 @@ export function useGlossaryEdges(opts?: { tenantOverride?: string }) {
           ? (payload as any).edges
           : [];
 
-      // Normalize the newer subject/object naming to the legacy source/target
-      // aliases so existing consumers keep working.
-      return edges.map((edge: CatalogEdge) => ({
-        ...edge,
-        source_node_id: edge.subject_node_id,
-        target_node_id: edge.object_node_id,
-        relationship_type: edge.edge_type_name || edge.relationship_type,
-      })) as CatalogEdge[];
+      // Normalize both naming conventions (subject/object from the REST spec and
+      // source/target returned by the current backend) so every downstream consumer
+      // sees the fields it expects.
+      return edges.map((edge: CatalogEdge) => {
+        const subjectId = edge.subject_node_id || edge.source_node_id || '';
+        const objectId = edge.object_node_id || edge.target_node_id || '';
+        return {
+          ...edge,
+          subject_node_id: subjectId,
+          object_node_id: objectId,
+          source_node_id: edge.source_node_id || subjectId,
+          target_node_id: edge.target_node_id || objectId,
+          relationship_type: edge.edge_type_name || edge.relationship_type || '',
+        } as CatalogEdge;
+      });
     },
     enabled: !!scopeTenant,
   });
@@ -341,7 +348,10 @@ export function useAllSemanticData(opts?: { tenantOverride?: string }) {
   );
   const nodesQuery = useCatalogNodesByTypeIds(requiredTypeIds, { tenantOverride: scopeTenant });
 
-  // 3. Filter and shape data the way the GraphQL version did
+  // 3. Edges between business and semantic terms (used for mapped/unmapped filters)
+  const { data: edgesData, isLoading: edgesLoading, refetch: refetchEdges } = useGlossaryEdges({ tenantOverride: scopeTenant });
+
+  // 4. Filter and shape data the way the GraphQL version did
   const transformedData = useMemo(() => {
     const allNodes = nodesQuery.data || [];
     const allWithType = attachNodeType(allNodes, nodeTypesList);
@@ -353,25 +363,40 @@ export function useAllSemanticData(opts?: { tenantOverride?: string }) {
       (n) => n.node_type_id === SEMANTIC_TERM_TYPE_ID
     );
 
+    // Compute is_mapped for semantic terms based on edges
+    const edges = edgesData || [];
+    const connectedSemanticIds = new Set<string>();
+    edges.forEach((edge: CatalogEdge) => {
+      const subjectId = edge.subject_node_id || edge.source_node_id;
+      const objectId = edge.object_node_id || edge.target_node_id;
+      if (subjectId) connectedSemanticIds.add(subjectId);
+      if (objectId) connectedSemanticIds.add(objectId);
+    });
+    const semantic_terms_with_mapping = semantic_terms.map((term) => ({
+      ...term,
+      is_mapped: connectedSemanticIds.has(term.id),
+    }));
+
     return {
       business_terms,
-      semantic_terms,
-      semantic_edges: [] as CatalogEdge[], // REST edge endpoint not yet implemented
+      semantic_terms: semantic_terms_with_mapping,
+      semantic_edges: edges,
       all_nodes: allWithType,
       node_types: nodeTypesList || [],
       // Keep these keys in the response shape so downstream callers don't break:
       calculation_terms: [] as CatalogNode[],
       semantic_columns: [] as CatalogNode[],
     };
-  }, [nodesQuery.data, nodeTypesList]);
+  }, [nodesQuery.data, nodeTypesList, edgesData]);
 
   return {
     data: transformedData,
-    isLoading: isNodeTypesLoading || nodesQuery.isLoading,
+    isLoading: isNodeTypesLoading || nodesQuery.isLoading || edgesLoading,
     error: (nodesQuery.error as Error | null)?.message || null,
     enabled: !!scopeTenant,
     refetch: () => {
       void nodesQuery.refetch();
+      void refetchEdges();
     },
   };
 }
@@ -665,6 +690,10 @@ export function useDeleteTermEdge() {
       if (!res.ok) {
         const error = await res.text();
         throw new Error(error || 'Failed to delete edge');
+      }
+      // The backend returns 204 No Content on success; avoid parsing an empty body.
+      if (res.status === 204) {
+        return null;
       }
       return res.json();
     },

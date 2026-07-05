@@ -1,7 +1,7 @@
-import { useQuery, gql } from '@apollo/client';
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo, useCallback } from 'react';
 import { devLog } from '../utils/devLogger';
-import apiClient from '../utils/apiClient';
+import { useTenant } from '../contexts/TenantContext';
+import { getSelectedRegion } from '../lib/region';
 
 export interface EnhancedSemanticTerm {
   id: string;
@@ -39,89 +39,80 @@ export interface EnhancedSemanticTerm {
   title_short?: string; // From properties.title_short
 }
 
-// GraphQL query to fetch semantic terms with full metadata
-const GET_SEMANTIC_TERMS_WITH_METADATA = gql`
-  query GetSemanticTermsWithMetadata($datasourceId: uuid!) {
-    catalog_node(
-      where: {
-        tenant_datasource_id: { _eq: $datasourceId }
-        node_type_id: { _eq: "820b942a-9c9e-4abc-acdc-84616db33098" }
-      }
-      order_by: { node_name: asc }
-    ) {
-      id
-      node_name
-      description
-      properties
-      qualified_path
-      created_at
-      updated_at
-    }
-  }
-`;
+const SEMANTIC_TERM_NODE_TYPE_ID = '820b942a-9c9e-4abc-acdc-84616db33098';
 
 /**
- * Hook to fetch semantic terms with metadata
- * Enhances terms with computed fields for field creation
+ * Build auth/tenant headers for direct fetch calls.
+ * Mirrors the header injection in apiClient but avoids URL resolution issues
+ * that can route /api requests to the wrong backend port during local dev.
+ */
+function buildHeaders(tenantId: string, datasourceId?: string): Record<string, string> {
+  const token = typeof localStorage !== 'undefined' ? localStorage.getItem('auth_token') : null;
+  const authHeader = token && !token.includes('demo') ? `Bearer ${token}` : '';
+
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    'X-Tenant-ID': tenantId,
+    'X-Tenant-Region': getSelectedRegion(),
+  };
+  if (datasourceId) {
+    headers['X-Tenant-Datasource-ID'] = datasourceId;
+  }
+  if (authHeader) {
+    headers['Authorization'] = authHeader;
+  }
+  return headers;
+}
+
+/**
+ * Hook to fetch semantic terms with metadata via REST.
+ * GraphQL-free: reads from /api/catalog/nodes so it works against the local
+ * platform backend without requiring a running Hasura/GraphQL endpoint.
  */
 export const useEnhancedSemanticTerms = (datasourceId: string | undefined) => {
-  const { data, loading, error, refetch } = useQuery(GET_SEMANTIC_TERMS_WITH_METADATA, {
-    variables: { datasourceId },
-    skip: !datasourceId,
-    errorPolicy: 'all',
-  });
+  const { tenant } = useTenant();
+  const tenantId = tenant?.id || '';
 
-  // Local state to hold REST fallback rows when GraphQL yields nothing
-  const [restFallback, setRestFallback] = useState<any[] | null>(null);
-  const [restLoading, setRestLoading] = useState(false);
-  const [restError, setRestError] = useState<string | null>(null);
+  const [rows, setRows] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  // Log GraphQL errors separately without onError callback
-  useEffect(() => {
-    if (error) {
-      devLog('[useEnhancedSemanticTerms] GraphQL Error:', { error: error.message });
+  const fetchTerms = useCallback(async () => {
+    if (!tenantId) {
+      setRows([]);
+      setLoading(false);
+      return;
     }
-  }, [error]);
 
-  // If GraphQL returns no rows (or errors) fetch from REST fallback
-  useEffect(() => {
-    let cancelled = false;
-    const shouldAttemptRest = (!loading && (error || (data && Array.isArray(data?.catalog_node) && data.catalog_node.length === 0)));
-    if (!datasourceId) return;
-    if (!shouldAttemptRest) return;
-
-    const fetchRest = async () => {
-      if (cancelled) return;
-      setRestLoading(true);
-      setRestError(null);
-      try {
-        // Request only semantic_term nodes from the catalog to avoid receiving columns/tables
-        const url = `/catalog/nodes?type=semantic_term&tenant_instance_id=${datasourceId}`;
-        const json = await apiClient(url);
-        // apiClient returns parsed JSON, so no need to call .json()
-        if (!cancelled) {
-          setRestFallback(Array.isArray(json) ? json : (json.catalog_node || json));
-          setRestLoading(false);
-        }
-      } catch (e: any) {
-        if (!cancelled) {
-          setRestError(e?.message || String(e));
-          setRestLoading(false);
-        }
+    setLoading(true);
+    setError(null);
+    try {
+      const url = `/api/catalog/nodes?type=semantic_term&node_type_id=${encodeURIComponent(SEMANTIC_TERM_NODE_TYPE_ID)}&limit=100000`;
+      const response = await fetch(url, {
+        headers: buildHeaders(tenantId, datasourceId),
+      });
+      if (!response.ok) {
+        throw new Error(`Failed to fetch semantic terms: ${response.status} ${response.statusText}`);
       }
-    };
+      const json = await response.json();
+      const terms = Array.isArray(json) ? json : (json.catalog_node || json.data || []);
+      setRows(terms);
+    } catch (e: any) {
+      setError(e?.message || String(e));
+      setRows([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [tenantId, datasourceId]);
 
-    fetchRest();
-    return () => { cancelled = true; };
-  }, [datasourceId, data, loading, error]);
-
-  const sourceRows = useMemo(() => (data?.catalog_node && Array.isArray(data.catalog_node) && data.catalog_node.length > 0)
-    ? data.catalog_node
-    : (restFallback || []), [data, restFallback]);
+  useEffect(() => {
+    fetchTerms();
+  }, [fetchTerms]);
 
   // Transform and enhance terms
-  const enhancedTerms: EnhancedSemanticTerm[] = useMemo(() => (sourceRows || []).map((term: any) => {
-    const properties = typeof term.properties === 'string' ? JSON.parse(term.properties) : term.properties || {};
+  const enhancedTerms: EnhancedSemanticTerm[] = useMemo(() => (rows || []).map((term: any) => {
+    const rawProps = typeof term.properties === 'string' ? JSON.parse(term.properties) : term.properties;
+    const properties = rawProps || {};
 
     // Auto-generate technical name if not in properties
     const technicalName = properties.technical_name ||
@@ -137,7 +128,7 @@ export const useEnhancedSemanticTerms = (datasourceId: string | undefined) => {
       id: term.id,
       node_name: term.node_name,
       description: term.description || '',
-      qualified_path: term.qualified_path,
+      qualified_path: term.qualified_path || term.node_name,
       properties,
       // Computed fields for convenience
       businessName: term.node_name,
@@ -147,31 +138,19 @@ export const useEnhancedSemanticTerms = (datasourceId: string | undefined) => {
       role: properties.role || 'DIMENSION',
       title_short: properties.title_short
     } as EnhancedSemanticTerm;
-  }), [sourceRows]);
-
-  const combinedLoading = loading || restLoading;
-
-  // If the REST fallback returned rows, prefer those results and suppress
-  // GraphQL schema errors (for example: "field 'catalog_node' not found").
-  // This avoids showing an error in the UI when the fallback succeeded.
-  let combinedError: string | undefined;
-  if (restFallback && Array.isArray(restFallback) && restFallback.length > 0) {
-    combinedError = restError || undefined;
-  } else {
-    combinedError = error?.message || restError || undefined;
-  }
+  }), [rows]);
 
   devLog('[useEnhancedSemanticTerms] Loaded terms:', {
     count: enhancedTerms.length,
-    loading: combinedLoading,
-    error: combinedError,
+    loading,
+    error,
   });
 
   return {
     semanticTerms: enhancedTerms,
-    loading: combinedLoading,
-    error: combinedError ? new Error(combinedError) : undefined,
-    refetch,
+    loading,
+    error: error ? new Error(error) : undefined,
+    refetch: fetchTerms,
   };
 };
 
@@ -200,31 +179,19 @@ export const semanticTermToField = (
 };
 
 /**
- * Group semantic terms by category
+ * Search semantic terms by name or technical name
  */
-export const groupSemanticTermsByCategory = (terms: EnhancedSemanticTerm[]) => {
-  const grouped: Record<string, EnhancedSemanticTerm[]> = {};
-
-  terms.forEach((term) => {
-    const category = term.properties?.category || 'Other';
-    if (!grouped[category]) {
-      grouped[category] = [];
-    }
-    grouped[category].push(term);
-  });
-
-  return grouped;
-};
-
-/**
- * Search semantic terms by text
- */
-export const searchSemanticTerms = (terms: EnhancedSemanticTerm[], query: string) => {
-  const q = query.toLowerCase();
-  return terms.filter(
-    (term) =>
-      term.node_name.toLowerCase().includes(q) ||
-      term.description.toLowerCase().includes(q) ||
-      (term.technicalName && term.technicalName.toLowerCase().includes(q))
+export const searchSemanticTerms = (
+  terms: EnhancedSemanticTerm[],
+  query: string
+): EnhancedSemanticTerm[] => {
+  if (!query || query.trim() === '') {
+    return terms;
+  }
+  const normalizedQuery = query.toLowerCase().trim();
+  return terms.filter((term) =>
+    term.node_name.toLowerCase().includes(normalizedQuery) ||
+    term.technicalName?.toLowerCase().includes(normalizedQuery) ||
+    term.description?.toLowerCase().includes(normalizedQuery)
   );
 };

@@ -58,7 +58,6 @@ import { NotificationPreferencesPage } from "./features/workflow/pages/Notificat
 import { SLADashboardPage } from "./features/workflow/pages/SLADashboardPage";
 import { RegulatorDashboardPage } from "./features/workflow/pages/RegulatorDashboardPage";
 import { ProcessCatalogPage } from "./features/workflow/pages/ProcessCatalogPage";
-import { BusinessObjectExplorerPage } from "./features/workflow/pages/BusinessObjectExplorerPage";
 import { AuditExplorerPage } from "./features/workflow/pages/AuditExplorerPage";
 import AuditExplorer from "./components/audit/AuditExplorer";
 import TemporalOpsPage from "./features/admin/pages/TemporalOpsPage";
@@ -255,7 +254,7 @@ function ProtectedApp() {
         {/* ═══════════════════════════════════════════════════════════════════
             BUILD - Semantic layer
             ═══════════════════════════════════════════════════════════════════ */}
-        <Route path="/business-objects" element={<ProtectedRoute><BusinessObjectExplorerPage /></ProtectedRoute>} />
+        <Route path="/business-objects" element={<ProtectedRoute><BusinessObjectsPage /></ProtectedRoute>} />
         <Route path="/business-objects/:id" element={<ProtectedRoute><BusinessObjectDetailsPage /></ProtectedRoute>} />
         <Route path="/views" element={<ProtectedRoute><ViewsCatalogPage /></ProtectedRoute>} />
         <Route path="/views/:id" element={<ProtectedRoute><ViewDetailsPage /></ProtectedRoute>} />
@@ -360,7 +359,7 @@ function ProtectedApp() {
         <Route path="/core/audit-explorer" element={<ProtectedRoute><AuditExplorerPage /></ProtectedRoute>} />
         <Route path="/core/approval-inbox" element={<ProtectedRoute><ApprovalInboxPage /></ProtectedRoute>} />
         <Route path="/core/sla-dashboard" element={<ProtectedRoute><SLADashboardPage /></ProtectedRoute>} />
-        <Route path="/core/business-objects" element={<ProtectedRoute><BusinessObjectExplorerPage /></ProtectedRoute>} />
+        <Route path="/core/business-objects" element={<ProtectedRoute><BusinessObjectsPage /></ProtectedRoute>} />
         
         {/* GenUI Routes */}
         <Route path="/core/genui-chat" element={<ProtectedRoute><GenUIChatPage /></ProtectedRoute>} />

@@ -17,8 +17,8 @@ import path from 'path'
 // so the catch-all /api proxy MUST point at PLATFORM_BACKEND_HOST, otherwise
 // the BusinessTermsTab / Glossary / Catalog pages all 404.
 const BACKEND_HOST = process.env.VITE_BACKEND_HOST || process.env.BACKEND_HOST || 'http://localhost:8082';
-const PLATFORM_BACKEND_HOST = process.env.VITE_PLATFORM_BACKEND_HOST || process.env.PLATFORM_BACKEND_HOST || 'http://localhost:8083';
-const GRAPHQL_HOST = process.env.VITE_GRAPHQL_HOST || process.env.GRAPHQL_HOST || 'http://localhost:8083';
+const PLATFORM_BACKEND_HOST = process.env.VITE_PLATFORM_BACKEND_HOST || process.env.PLATFORM_BACKEND_HOST || 'http://localhost:8080';
+const GRAPHQL_HOST = process.env.VITE_GRAPHQL_HOST || process.env.GRAPHQL_HOST || 'http://localhost:8080';
 
 console.log('[Vite Config] Backend Host:', BACKEND_HOST);
 console.log('[Vite Config] Platform Backend Host:', PLATFORM_BACKEND_HOST);

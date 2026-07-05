@@ -8,16 +8,17 @@ import { devDebug } from '../../utils/devLogger';
 import './BusinessTermsTab.css';
 
 interface Props {
+  scopeTenantId?: string;
   searchTerm?: string;
   onCreateTerm?: () => void;
   onEditTerm?: (term: CatalogNode) => void;
   onDeleteTerm?: (term: CatalogNode) => void;
 }
 
-export const CalculationTermsTab: React.FC<Props> = ({ searchTerm, onCreateTerm, onEditTerm, onDeleteTerm }) => {
+export const CalculationTermsTab: React.FC<Props> = ({ scopeTenantId, searchTerm, onCreateTerm, onEditTerm, onDeleteTerm }) => {
   const { t } = useTranslation();
   const { tenant, datasource } = useTenant();
-  const { data, error } = useAllSemanticData();
+  const { data, error } = useAllSemanticData({ tenantOverride: scopeTenantId });
 
   const [selectedTerm, setSelectedTerm] = useState<CatalogNode | null>(null);
 
@@ -41,7 +42,7 @@ export const CalculationTermsTab: React.FC<Props> = ({ searchTerm, onCreateTerm,
     return (
       <div className="business-terms-error">
         <h2>{t('error.loading', 'Error Loading')}</h2>
-        <p>{error instanceof Error ? error.message : String(error)}</p>
+        <p>{String(error)}</p>
       </div>
     );
   }

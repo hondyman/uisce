@@ -9,7 +9,7 @@ interface AbbreviationsTabProps {
 export default function AbbreviationsTab({ tenantId }: AbbreviationsTabProps): JSX.Element {
   return (
     <Box sx={{ p: 0 }}>
-      <AbbreviationManager className="" />
+      <AbbreviationManager className="" tenantId={tenantId} />
     </Box>
   );
 }
