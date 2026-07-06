@@ -72,6 +72,7 @@ export interface WizardField {
   has_local_override?: boolean;
   coreReferenceFieldId?: string;
   core_reference_field_id?: string;
+  driftStatus?: string;
   /** Local formula/expression override for calculated measures. */
   localExpressionOverride?: string;
   /** Audit justification for an override or custom field. */

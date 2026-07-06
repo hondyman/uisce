@@ -16,11 +16,13 @@ import {
   TextField,
   Tooltip,
   Typography,
+  Button,
 } from '@mui/material';
 import {
   AutoAwesome as AutoAwesomeIcon,
   Edit as EditIcon,
   Delete as DeleteIcon,
+  WarningAmber as WarningAmberIcon,
 } from '@mui/icons-material';
 
 import type {
@@ -36,6 +38,7 @@ interface FieldOverridesMatrixProps {
   onUpdateField: (termId: string, updates: Partial<WizardField>) => void;
   onMappingChange: (field: WizardField, mapping: TermColumnMapping | 'unresolved') => void;
   onRemoveField: (termId: string) => void;
+  onRebaseField?: (fieldId: string) => void;
 }
 
 const ROLE_OPTIONS = ['KEY', 'DIMENSION', 'MEASURE', 'ATTRIBUTE', 'IDENTIFIER'];
@@ -51,16 +54,22 @@ function getSourceChip(source: WizardField['eligibilitySource']) {
   switch (source) {
     case 'INHERITED':
       return (
-        <Chip
-          label="Inherited"
-          size="small"
-          color="default"
-          variant="outlined"
-          icon={<AutoAwesomeIcon fontSize="small" />}
-        />
+        <Tooltip title="Managed by Gold Copy. Toggle Customize to unlock edits.">
+          <Chip
+            label="Inherited"
+            size="small"
+            color="default"
+            variant="outlined"
+            icon={<AutoAwesomeIcon fontSize="small" />}
+          />
+        </Tooltip>
       );
     case 'OVERRIDE':
-      return <Chip label="Override" size="small" color="warning" icon={<EditIcon fontSize="small" />} />;
+      return (
+        <Tooltip title="Inherited field with custom local changes.">
+          <Chip label="Custom Override" size="small" color="warning" icon={<EditIcon fontSize="small" />} />
+        </Tooltip>
+      );
     case 'DIRECT':
       return <Chip label="Tenant Custom" size="small" color="primary" />;
     case 'MANUAL':
@@ -93,6 +102,7 @@ export default function FieldOverridesMatrix({
   onUpdateField,
   onMappingChange,
   onRemoveField,
+  onRebaseField,
 }: FieldOverridesMatrixProps) {
   return (
     <TableContainer>
@@ -116,6 +126,7 @@ export default function FieldOverridesMatrix({
             const mappingValue = field.selectedMapping?.columnNodeId || 'unresolved';
             const isInherited = field.eligibilitySource === 'INHERITED';
             const isOverride = field.eligibilitySource === 'OVERRIDE';
+            const isDrifted = field.driftStatus === 'STALE';
             const canOverride = isInherited || isOverride;
             const canRemove = field.eligibilitySource !== 'INHERITED';
 
@@ -123,23 +134,47 @@ export default function FieldOverridesMatrix({
               <TableRow
                 key={field.semanticTermId}
                 sx={{
-                  bgcolor: isOverride ? 'warning.50' : 'inherit',
+                  bgcolor: isDrifted ? 'error.50' : isOverride ? 'warning.50' : 'inherit',
+                  transition: 'background-color 0.3s ease',
                 }}
               >
                 <TableCell>
-                  <Typography variant="body2" sx={{ fontWeight: 500 }}>
-                    {field.displayName}
-                  </Typography>
-                  <Typography variant="caption" color="text.secondary">
-                    {field.semanticTermName}
-                  </Typography>
+                  <Stack direction="row" spacing={1} alignItems="center">
+                    {isDrifted && (
+                      <Tooltip title="Formula/logic has diverged from Gold Copy version. Rebase recommended.">
+                        <WarningAmberIcon color="error" fontSize="small" />
+                      </Tooltip>
+                    )}
+                    <Box>
+                      <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                        {field.displayName}
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        {field.semanticTermName}
+                      </Typography>
+                    </Box>
+                  </Stack>
                 </TableCell>
-                <TableCell>{getSourceChip(field.eligibilitySource)}</TableCell>
+                <TableCell>
+                  {isDrifted && onRebaseField ? (
+                    <Button
+                      size="small"
+                      variant="contained"
+                      color="error"
+                      onClick={() => onRebaseField(field.key || field.name)}
+                      sx={{ fontSize: '0.75rem', py: 0.25 }}
+                    >
+                      Rebase
+                    </Button>
+                  ) : (
+                    getSourceChip(field.eligibilitySource)
+                  )}
+                </TableCell>
                 <TableCell>
                   <FormControl size="small" fullWidth>
                     <Select
                       value={field.role}
-                      disabled={isInherited && !isOverride}
+                      disabled={isInherited}
                       onChange={(e) => onUpdateField(field.semanticTermId, { role: e.target.value })}
                     >
                       {ROLE_OPTIONS.map((r) => (
@@ -154,7 +189,7 @@ export default function FieldOverridesMatrix({
                   <FormControl size="small" fullWidth>
                     <Select
                       value={field.bindingRequirement}
-                      disabled={isInherited && !isOverride}
+                      disabled={isInherited}
                       onChange={(e) =>
                         onUpdateField(field.semanticTermId, {
                           bindingRequirement: e.target.value as BindingRequirement,
@@ -173,7 +208,7 @@ export default function FieldOverridesMatrix({
                   <FormControl size="small" fullWidth>
                     <Select
                       value={mappingValue}
-                      disabled={isInherited && !isOverride}
+                      disabled={isInherited}
                       onChange={(e) => {
                         const value = e.target.value;
                         if (value === 'unresolved') {
@@ -214,7 +249,7 @@ export default function FieldOverridesMatrix({
                           }}
                         />
                         <Typography variant="caption" color="text.secondary">
-                          Enable customizations
+                          Customize
                         </Typography>
                       </Box>
                       {(isOverride || field.hasLocalOverride) && (
@@ -235,13 +270,15 @@ export default function FieldOverridesMatrix({
                           )}
                           <TextField
                             size="small"
-                            placeholder="Audit justification..."
+                            placeholder="Audit justification (required)..."
                             value={field.overrideReason || ''}
                             onChange={(e) =>
                               onUpdateField(field.semanticTermId, { overrideReason: e.target.value })
                             }
                             inputProps={{ style: { fontSize: 12 } }}
                             fullWidth
+                            required
+                            error={!(field.overrideReason || '').trim()}
                           />
                         </>
                       )}

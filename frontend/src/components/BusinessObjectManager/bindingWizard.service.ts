@@ -350,6 +350,12 @@ export async function createTenantDatasource(payload: {
   });
 }
 
+export async function rebaseField(boId: string, fieldId: string): Promise<any> {
+  return fetchAPI(`/business-objects/${boId}/fields/${fieldId}/rebase`, {
+    method: 'POST',
+  });
+}
+
 /**
  * Full wizard save: creates the BO, then persists the binding and field mappings
  * as real DB rows. Falls back gracefully — if binding persist fails, the BO is

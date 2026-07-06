@@ -247,6 +247,7 @@ const categoryConfigs: CategoryConfig[] = [
         icon: <BuildIcon />,
         items: [
           { label: 'Business Objects', path: '/business-objects', icon: <BusinessIcon />, description: 'Core entities' },
+          { label: 'Query Builder', path: '/query-builder', icon: <QueryStatsIcon />, description: 'Alpha Query Builder' },
           { label: 'Views Catalog', path: '/views', icon: <AssessmentIcon />, description: 'Semantic views' },
           { label: 'Bundles', path: '/fabric/bundles', icon: <CategoryIcon />, description: 'Curated bundles', badge: { label: 'AI', color: 'info' } },
         ]

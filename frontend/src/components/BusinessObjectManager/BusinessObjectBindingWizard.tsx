@@ -297,6 +297,13 @@ export default function BusinessObjectBindingWizard({
       issues.push(`${unresolvedRequired.length} REQUIRED field(s) are unresolved.`);
     }
 
+    const missingJustification = binding.fields.filter(
+      (f) => f.eligibilitySource === 'OVERRIDE' && !(f.overrideReason || '').trim()
+    );
+    if (missingJustification.length > 0) {
+      issues.push(`${missingJustification.length} overridden field(s) require an audit justification.`);
+    }
+
     const resolvedCount = binding.fields.filter((f) => f.bindingStatus === 'RESOLVED').length;
     return { issues, resolvedCount, totalFields: binding.fields.length, canSave: issues.length === 0 };
   }, [bo, binding]);
@@ -324,6 +331,25 @@ export default function BusinessObjectBindingWizard({
       setError(err?.message || 'Failed to save Business Object.');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleRebaseField = async (fieldKey: string) => {
+    const field = binding.fields.find((f) => f.key === fieldKey || f.name === fieldKey);
+    if (!field || !field.coreReferenceFieldId) return;
+
+    try {
+      const targetBoId = boId || bo.key; // Fallback to key or ID
+      await rebaseField(targetBoId, field.coreReferenceFieldId);
+      notification.success(`Rebased field ${field.displayName} to latest Gold Copy blueprint.`);
+      // Update local state to clear drift
+      updateField(field.semanticTermId, {
+        driftStatus: 'UP_TO_DATE',
+        hasLocalOverride: false,
+        eligibilitySource: 'INHERITED',
+      });
+    } catch (err: any) {
+      notification.error(err?.message || 'Failed to rebase field.');
     }
   };
 
@@ -609,6 +635,7 @@ export default function BusinessObjectBindingWizard({
                 onUpdateField={updateField}
                 onMappingChange={handleMappingChange}
                 onRemoveField={removeField}
+                onRebaseField={handleRebaseField}
               />
             )}
           </Paper>

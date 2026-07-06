@@ -62,6 +62,7 @@ import { AuditExplorerPage } from "./features/workflow/pages/AuditExplorerPage";
 import AuditExplorer from "./components/audit/AuditExplorer";
 import TemporalOpsPage from "./features/admin/pages/TemporalOpsPage";
 import SeedingPage from "./features/admin/pages/SeedingPage";
+import BusinessObjectQueryBuilder from "./features/query-builder/pages/BusinessObjectQueryBuilder";
 import ScenarioAnalysisPro from "./components/ScenarioAnalysisPro";
 import AIPortfolioRebalancer from "./components/AIPortfolioRebalancer";
 // Metrics Console imports
@@ -267,6 +268,7 @@ function ProtectedApp() {
         <Route path="/core/flow-builder" element={<ProtectedRoute><UisceBuilder /></ProtectedRoute>} />
         <Route path="/core/uisce-builder" element={<ProtectedRoute><UisceBuilderPage /></ProtectedRoute>} />
         <Route path="/core/validation" element={<ProtectedRoute><InvestmentValidationPage /></ProtectedRoute>} />
+        <Route path="/query-builder" element={<ProtectedRoute><BusinessObjectQueryBuilder /></ProtectedRoute>} />
         <Route path="/marketplace" element={<ProtectedRoute><Marketplace /></ProtectedRoute>} />
         <Route path="/marketplace/components" element={<ProtectedRoute><ComponentMarketplacePage /></ProtectedRoute>} />
 
