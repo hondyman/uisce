@@ -13,6 +13,7 @@ import type {
   BindingView,
   PreviewResult,
   QueryExecuteResult,
+  BOSchema,
 } from '../types/queryDef';
 import { installQueryBuilderMock } from './queryBuilderMock';
 
@@ -102,6 +103,15 @@ function normalizeRole(role: unknown): SemanticTermView['role'] {
   if (r === 'MEASURE') return 'MEASURE';
   if (r === 'CALCULATED') return 'CALCULATED';
   return 'DIMENSION';
+}
+
+/**
+ * Fetch the self-describing BO schema from the Meta-API.
+ */
+export async function fetchBOSchema(boId: string, tenantId: string): Promise<BOSchema> {
+  const params = new URLSearchParams({ tenant_id: tenantId });
+  const data = await fetchJSON<unknown>(`/api/metadata/bo/${encodeURIComponent(boId)}?${params.toString()}`);
+  return data as BOSchema;
 }
 
 /**

@@ -13,6 +13,7 @@ import type {
   SemanticTermView,
   PreviewResult,
   QueryExecuteResult,
+  BOSchema,
 } from '../types/queryDef';
 
 let installed = false;
@@ -34,6 +35,12 @@ export function installQueryBuilderMock(): void {
       if (termsMatch && (!init || init.method === undefined || init.method === 'GET')) {
         const [, boId] = termsMatch;
         return mockBOTerms(boId);
+      }
+
+      const schemaMatch = url.match(/\/api\/metadata\/bo\/([^/?]+)/);
+      if (schemaMatch && (!init || init.method === undefined || init.method === 'GET')) {
+        const [, boId] = schemaMatch;
+        return mockBOSchema(boId);
       }
 
       if (url.endsWith('/api/query/preview') && init?.method === 'POST') {
@@ -174,6 +181,27 @@ function getMockTermsForBO(boId: string): SemanticTermView[] {
       defaultAggregation: 'AVG',
     },
   ];
+}
+
+function mockBOSchema(boId: string): Response {
+  const terms = getMockTermsForBO(boId);
+  const fields = terms.map((t): BOSchema['fields'][number] => ({
+    id: t.termNodeId,
+    name: t.termName,
+    displayName: t.displayName,
+    type: t.role,
+    aggregation: t.defaultAggregation,
+    physicalColumn: `${boId}.${t.termKey}`,
+  }));
+
+  const schema: BOSchema = {
+    id: boId,
+    drivingTable: boId,
+    datasourceId: 'mock-postgres',
+    fields,
+    relationships: [],
+  };
+  return jsonResponse(schema);
 }
 
 function mockPreview(queryDef: QueryDef): Response {

@@ -146,6 +146,34 @@ export interface PreviewResult {
   plan?: FederatedPlan;
 }
 
+// Meta-API schema types (mirror backend boresolver.BODefinition)
+export interface BOSchemaField {
+  id: string;
+  name: string;
+  displayName?: string;
+  path?: string;
+  semanticTermId?: string;
+  physicalColumn?: string;
+  override?: boolean;
+  type?: string;
+  referenceBoId?: string;
+  aggregation?: string;
+}
+
+export interface BOSchemaRelationship {
+  targetBoId: string;
+  joinType: string;
+  conditions: string[];
+}
+
+export interface BOSchema {
+  id: string;
+  drivingTable: string;
+  datasourceId?: string;
+  fields: BOSchemaField[];
+  relationships: BOSchemaRelationship[];
+}
+
 export interface QueryResultColumn {
   name: string;
   type?: string;

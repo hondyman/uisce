@@ -343,8 +343,6 @@ export default function BusinessObjectDetailsPage() {
 
         setAddingFields(true);
 
-        setAddingFields(true);
-
         // Use getConfigFields() as the base to ensure we include fields from bo_fields (source of truth)
         // instead of relying on potentially stale/empty config.fields
         const currentFields = getConfigFields();
@@ -915,6 +913,8 @@ export default function BusinessObjectDetailsPage() {
   }, [tenantId, datasourceId, id, isNewObject, businessObject, fields]);
 
   useEffect(() => {
+    // First useEffect above already triggers fetchBusinessObject() when fetchBusinessObject changes,
+    // so this effect only needs to reset form state when entering the "new" route.
     if (isNewObject) {
       setLoading(false);
       setBusinessObject(null);
@@ -924,8 +924,6 @@ export default function BusinessObjectDetailsPage() {
       setIsActive(true);
       setFields([]);
       setHierarchyNodes([]);
-    } else {
-      fetchBusinessObject();
     }
   }, [fetchBusinessObject, isNewObject]);
 

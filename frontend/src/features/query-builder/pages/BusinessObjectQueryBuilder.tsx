@@ -73,6 +73,7 @@ import apiClient from '../../../utils/apiClient';
 import {
   fetchBusinessObjectBindings,
   fetchBOTerms,
+  fetchBOSchema,
   previewQuery,
   executeQuery,
 } from '../services/queryBuilderApi';
@@ -89,9 +90,12 @@ import type {
   FilterDef,
   FilterOperator,
   PreviewResult,
+  BOSchema,
+  BOSchemaField,
 } from '../types/queryDef';
 import ExplainPlanVisualizer from '../components/ExplainPlanVisualizer';
 import QueryPerformanceSummary from '../components/QueryPerformanceSummary';
+import AutoFormRenderer from '../components/AutoFormRenderer';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -192,6 +196,7 @@ const BusinessObjectQueryBuilder: React.FC = () => {
   const [bindings, setBindings] = useState<BindingView[]>([]);
   const [selectedBindingId, setSelectedBindingId] = useState<string>('');
   const [terms, setTerms] = useState<SemanticTermView[]>([]);
+  const [boSchema, setBoSchema] = useState<BOSchema | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
 
   // Query state
@@ -316,8 +321,12 @@ const BusinessObjectQueryBuilder: React.FC = () => {
       setLoading(true);
       setError(null);
       try {
-        const t = await fetchBOTerms(selectedBO.id, selectedBindingId);
+        const [t, schema] = await Promise.all([
+          fetchBOTerms(selectedBO.id, selectedBindingId),
+          fetchBOSchema(selectedBO.id, tenantId),
+        ]);
         setTerms(t.filter((term) => term.bindingStatus === 'RESOLVED'));
+        setBoSchema(schema);
         setQueryDef(createEmptyQueryDef({
           boId: selectedBO.id,
           bindingId: selectedBindingId,
@@ -326,7 +335,7 @@ const BusinessObjectQueryBuilder: React.FC = () => {
         setPreviewResult(null);
         setExecuteResult(null);
       } catch (err) {
-        devError('Failed to load terms', err);
+        devError('Failed to load terms/schema', err);
         setError('Failed to load semantic terms for the selected binding');
       } finally {
         setLoading(false);
@@ -453,6 +462,25 @@ const BusinessObjectQueryBuilder: React.FC = () => {
     });
   };
 
+  const schemaFieldToTerm = (field: BOSchemaField): SemanticTermView => ({
+    termNodeId: field.id,
+    termKey: field.name,
+    termName: field.name,
+    displayName: field.displayName || field.name,
+    dataType: field.type,
+    role: ['measure', 'calculated'].includes((field.type || '').toLowerCase()) ? 'MEASURE' : 'DIMENSION',
+    bindingStatus: 'RESOLVED',
+    defaultAggregation: field.aggregation,
+  });
+
+  const handleAddSchemaField = (field: BOSchemaField) => {
+    handleAddTerm(schemaFieldToTerm(field));
+  };
+
+  const handleAddSchemaFilter = (field: BOSchemaField) => {
+    handleAddFilter(schemaFieldToTerm(field));
+  };
+
   const handleUpdateFilter = (index: number, patch: Partial<FilterDef>) => {
     setQueryDef((prev) => {
       if (!prev) return prev;
@@ -566,6 +594,14 @@ const BusinessObjectQueryBuilder: React.FC = () => {
       return queryDef.query.measures.some((m) => m.termNodeId === termNodeId);
     }
     return queryDef.query.dimensions.some((d) => d.termNodeId === termNodeId);
+  };
+
+  const isSchemaFieldInQuery = (fieldId: string) => {
+    if (!queryDef) return false;
+    return (
+      queryDef.query.dimensions.some((d) => d.termNodeId === fieldId) ||
+      queryDef.query.measures.some((m) => m.termNodeId === fieldId)
+    );
   };
 
   const termById = useMemo(() => {
@@ -740,6 +776,20 @@ const BusinessObjectQueryBuilder: React.FC = () => {
             ) : null
           )}
         </List>
+
+        {boSchema && (
+          <Box sx={{ borderTop: '1px solid #eee', p: 2, flex: 1, overflow: 'auto', minHeight: 200 }}>
+            <Typography variant="overline" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
+              Meta-API Schema
+            </Typography>
+            <AutoFormRenderer
+              schema={boSchema}
+              onAddField={handleAddSchemaField}
+              onAddFilter={handleAddSchemaFilter}
+              isInQuery={isSchemaFieldInQuery}
+            />
+          </Box>
+        )}
       </Paper>
 
       {/* ── Center Canvas ── */}
