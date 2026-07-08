@@ -329,6 +329,52 @@ services:
       test: ["CMD-SHELL", "curl -f http://localhost:8080/healthz || exit 1"]
       interval: 10s
       timeout: 5s
+  # ---------------------------------------------------------
+  # Lakehouse Provisioning Service
+  # Synchronises the Uisce semantic graph → Iceberg cold store.
+  # Credentials are injected by Infisical at runtime.
+  # Start the lakehouse stack first: lakehouse-start
+  # ---------------------------------------------------------
+  uisce-lakehouse-provisioner:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.lakehouse-provisioner
+    container_name: uisce-lakehouse-provisioner
+    networks:
+      - remote-net
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "9091:9091"
+    environment:
+      # PostgreSQL — the semantic metadata graph
+      POSTGRES_DSN: "${LPS_POSTGRES_DSN:-postgresql://postgres:postgres@host.docker.internal:5432/alpha?sslmode=disable}"
+      # Trino REST endpoint (must be reachable from inside the container)
+      TRINO_URL: "${LPS_TRINO_URL:-http://admin@host.docker.internal:8080}"
+      # OAuth2 secret for Polaris catalog auth (injected by Infisical in production)
+      TRINO_OAUTH_SECRET: "${TRINO_OAUTH_SECRET:-secret}"
+      # Redpanda broker for real-time node.created events
+      REDPANDA_BROKERS: "uisce-redpanda:9092"
+      # How often to run the full reconciliation loop
+      RECONCILE_INTERVAL: "${LPS_RECONCILE_INTERVAL:-5m}"
+      # Core (gold_copy) tenant UUID — used to scope node type lookups
+      CORE_TENANT_ID: "${CORE_TENANT_ID:-99e99e99-99e9-49e9-89e9-99e99e99e999}"
+      # Health server port
+      HEALTH_PORT: "9091"
+      # Structured JSON logging in production; set to 'console' for dev
+      LOG_FORMAT: "${LOG_FORMAT:-json}"
+    depends_on:
+      uisce-redpanda:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9091/health"]
+      interval: 20s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    restart: unless-stopped
+
+networks:
   remote-net:
     driver: bridge
 

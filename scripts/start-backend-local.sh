@@ -5,6 +5,17 @@ set -euo pipefail
 # Usage:
 #   ./scripts/start-backend-local.sh            # starts backend using PORT (default 8080)
 #   PORT=29080 ./scripts/start-backend-local.sh # start on different port
+#
+# Secrets are injected via Infisical (project 9af25976-bafc-4895-a057-2effec13c620, env dev).
+# If Infisical is not installed or auth fails, the script falls back to whatever is
+# already in the environment — useful in CI or Docker contexts where secrets are
+# baked in via other means.
+#
+# Override Infisical settings:
+#   INFISICAL_API_URL   - default http://100.84.50.65:8085
+#   INFISICAL_PROJECT   - default 9af25976-bafc-4895-a057-2effec13c620
+#   INFISICAL_ENV       - default dev
+#   SKIP_INFISICAL=1    - bypass Infisical entirely (use env as-is)
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BACKEND_DIR="$SCRIPT_DIR/backend"
@@ -14,26 +25,33 @@ PORT=${PORT:-8080}
 TIMESTAMP="$(date '+%Y%m%d_%H%M%S')"
 LOG_FILE="$LOG_DIR/backend_${TIMESTAMP}.log"
 
+# ── Infisical config ────────────────────────────────────────────────────────
+INFISICAL_API_URL="${INFISICAL_API_URL:-http://100.84.50.65:8085}"
+INFISICAL_PROJECT="${INFISICAL_PROJECT:-9af25976-bafc-4895-a057-2effec13c620}"
+INFISICAL_ENV="${INFISICAL_ENV:-dev}"
+SKIP_INFISICAL="${SKIP_INFISICAL:-0}"
+
+# ── Hardened defaults for remote DB/services ───────────────────────────────
+# These are set BEFORE Infisical runs so Infisical values always win,
+# but they protect against a missing secret leaving the binary blind.
+export DATABASE_URL="${DATABASE_URL:-postgresql://postgres:postgres@100.84.50.65:5432/alpha?sslmode=disable}"
+export TEMPORAL_HOST="${TEMPORAL_HOST:-100.84.50.65:7233}"
+export TEMPORAL_RETRY_ATTEMPTS="${TEMPORAL_RETRY_ATTEMPTS:-1}"
+export KEYCLOAK_JWKS_URL="${KEYCLOAK_JWKS_URL:-https://100.84.50.65:8443/realms/uisce/protocol/openid-connect/certs}"
+
 mkdir -p "$LOG_DIR"
 
 info() { echo "[INFO] $*"; }
 warn() { echo "[WARN] $*"; }
-err() { echo "[ERROR] $*"; }
+err()  { echo "[ERROR] $*"; }
 
 info "Starting backend (PORT=$PORT)"
 
-# Sanity-check that Postgres is reachable before trying to start the server.
-# The backend will crash immediately if it cannot connect to the database.
-# Try to read the DSN and host from the project's config.yaml; fall back to the Docker Compose default.
-CONFIG_FILE="$SCRIPT_DIR/config.yaml"
-DATABASE_URL="${DATABASE_URL:-}"
-if [ -z "$DATABASE_URL" ] && [ -f "$CONFIG_FILE" ] && command -v sed >/dev/null 2>&1; then
-  DATABASE_URL="$(sed -n 's/^dsn: *"\(.*\)".*/\1/p' "$CONFIG_FILE" | head -n1)"
-fi
-
+# ── Postgres reachability check ────────────────────────────────────────────
+# Parse host from DATABASE_URL for the nc check.
 PG_HOST="${PGHOST:-}"
-if [ -z "$PG_HOST" ] && [ -n "$DATABASE_URL" ]; then
-  PG_HOST="$(echo "$DATABASE_URL" | sed -n 's/.*@\([^:]*\):.*/\1/p')"
+if [ -z "$PG_HOST" ] && [ -n "${DATABASE_URL:-}" ]; then
+  PG_HOST="$(echo "$DATABASE_URL" | sed -n 's/.*@\([^:/?]*\).*/\1/p')"
 fi
 PG_HOST="${PG_HOST:-100.84.50.65}"
 PG_PORT="${PGPORT:-5432}"
@@ -41,17 +59,16 @@ PG_PORT="${PGPORT:-5432}"
 if command -v nc >/dev/null 2>&1; then
   if ! nc -z "$PG_HOST" "$PG_PORT" >/dev/null 2>&1; then
     err "Postgres is not reachable at $PG_HOST:$PG_PORT."
-    err "Start the full stack with ./START_FULL_SYSTEM.sh, or start Postgres manually."
+    err "Ensure the remote host is up, or run ./START_FULL_SYSTEM.sh."
     exit 1
   fi
+  info "Postgres reachable at $PG_HOST:$PG_PORT ✓"
 else
   warn "'nc' not found; skipping Postgres readiness check"
 fi
 
-export DATABASE_URL
-
-# Pull JWT secret from config.yaml if one is configured; otherwise the backend
-# falls back to its development default.
+# ── Pull JWT secret from config.yaml if not already set ───────────────────
+CONFIG_FILE="$SCRIPT_DIR/config.yaml"
 JWT_SECRET="${JWT_SECRET:-}"
 if [ -z "$JWT_SECRET" ] && [ -f "$CONFIG_FILE" ] && command -v sed >/dev/null 2>&1; then
   JWT_SECRET="$(sed -n 's/^jwt_secret: *"\(.*\)".*/\1/p' "$CONFIG_FILE" | head -n1)"
@@ -60,14 +77,7 @@ if [ -n "$JWT_SECRET" ]; then
   export JWT_SECRET
 fi
 
-# Keycloak JWKS endpoint for validating RS256 tokens from the browser.
-export KEYCLOAK_JWKS_URL="${KEYCLOAK_JWKS_URL:-https://100.84.50.65:8443/realms/uisce/protocol/openid-connect/certs}"
-
-# Don't block server startup for minutes waiting on Temporal in local dev.
-export TEMPORAL_RETRY_ATTEMPTS="${TEMPORAL_RETRY_ATTEMPTS:-1}"
-export TEMPORAL_HOST="${TEMPORAL_HOST:-temporal:7233}"
-
-# Kill pidfile-managed process if present
+# ── Kill stale pidfile-managed process ────────────────────────────────────
 if [ -f "$PIDFILE" ]; then
   OLD_PID=$(cat "$PIDFILE" 2>/dev/null || echo "")
   if [ -n "$OLD_PID" ] && kill -0 "$OLD_PID" >/dev/null 2>&1; then
@@ -78,46 +88,74 @@ if [ -f "$PIDFILE" ]; then
   rm -f "$PIDFILE" >/dev/null 2>&1 || true
 fi
 
-# Kill any process listening on the requested port (helpful for quick dev restarts)
+# ── Kill any process already on the port ──────────────────────────────────
 if command -v lsof >/dev/null 2>&1 && lsof -ti:"$PORT" >/dev/null 2>&1; then
   info "Killing any process listening on port $PORT"
   lsof -ti:"$PORT" | xargs -r kill -9 2>/dev/null || true
   sleep 1
 fi
 
-# Start the backend. Build once and run the binary — this avoids the output-
-# redirection quirks of 'go run' and starts reliably under nohup.
+# ── Build the server binary ───────────────────────────────────────────────
 cd "$BACKEND_DIR"
 
-if ! command -v go >/dev/null 2>&1; then
-  if [ -x "./server" ]; then
-    info "Launching existing built server binary (logs -> $LOG_FILE)"
-    PORT="$PORT" nohup ./server > "$LOG_FILE" 2>&1 &
-    NEW_PID=$!
-  else
-    err "Neither 'go' is available nor './server' binary exists in $BACKEND_DIR"
-    exit 1
-  fi
-else
-  info "Building backend binary (logs -> $LOG_FILE)"
+if command -v go >/dev/null 2>&1; then
+  info "Building backend binary..."
   if ! go build -o ./server ./cmd/server >> "$LOG_FILE" 2>&1; then
     err "Backend build failed. See $LOG_FILE for details."
     exit 1
   fi
-  info "Launching built server binary (logs -> $LOG_FILE)"
-  PORT="$PORT" nohup ./server > "$LOG_FILE" 2>&1 &
+  info "Build complete ✓"
+elif [ ! -x "./server" ]; then
+  err "Neither 'go' is available nor './server' binary exists in $BACKEND_DIR"
+  exit 1
+fi
+
+# ── Compose the launch command ────────────────────────────────────────────
+# We always pass DATABASE_URL explicitly on the command line so it wins
+# over any stale env var, even when Infisical is skipped.
+LAUNCH_CMD="PORT=$PORT DATABASE_URL=\"$DATABASE_URL\" TEMPORAL_HOST=\"$TEMPORAL_HOST\" nohup ./server > \"$LOG_FILE\" 2>&1"
+
+if [ "$SKIP_INFISICAL" = "1" ]; then
+  warn "SKIP_INFISICAL=1 — launching without Infisical secret injection"
+  info "Launching backend (logs -> $LOG_FILE)"
+  eval "$LAUNCH_CMD" &
+  NEW_PID=$!
+
+elif command -v infisical >/dev/null 2>&1; then
+  info "Injecting secrets via Infisical (project=$INFISICAL_PROJECT env=$INFISICAL_ENV)"
+  INFISICAL_API_URL="$INFISICAL_API_URL" \
+    infisical run \
+      --projectId "$INFISICAL_PROJECT" \
+      --env      "$INFISICAL_ENV" \
+      -- sh -c "$LAUNCH_CMD" &
+  NEW_PID=$!
+
+else
+  warn "Infisical CLI not found — launching without secret injection."
+  warn "Install with: brew install infisical/get-cli/infisical"
+  warn "Falling back to hardened defaults (DATABASE_URL=$DATABASE_URL)"
+  eval "$LAUNCH_CMD" &
   NEW_PID=$!
 fi
 
-# Record pidfile at repo root so other scripts can find/kill it
+# ── Record pidfile ─────────────────────────────────────────────────────────
 echo "$NEW_PID" > "$PIDFILE"
 info "Backend started (PID: $NEW_PID)"
-info "Log file: $LOG_FILE"
+info "Log: $LOG_FILE"
+info "Port: $PORT"
 
-# Tail the log file in foreground when not run from a terminal background
-# If the script was invoked interactively, follow the log; otherwise exit.
+# Brief pause so startup errors surface immediately
+sleep 2
+if ! kill -0 "$NEW_PID" >/dev/null 2>&1; then
+  err "Backend process died immediately after launch. Check $LOG_FILE"
+  tail -20 "$LOG_FILE" || true
+  exit 1
+fi
+info "Backend is alive ✓"
+
+# ── Tail log if running interactively ─────────────────────────────────────
 if [ -t 1 ]; then
-  echo "Tailing log (press Ctrl-C to stop)"
+  echo "Tailing log (press Ctrl-C to stop tailing — server keeps running)"
   tail -f "$LOG_FILE"
 else
   echo "Started in background"
