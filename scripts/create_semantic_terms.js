@@ -23,6 +23,7 @@ Customize the `columns` array below with any list of qualified paths you want pr
 */
 
 const fetch = globalThis.fetch || require('node-fetch');
+const crypto = require('crypto');
 const API_BASE = process.env.API_BASE_URL || 'http://localhost:8080';
 const TENANT_ID = process.env.TENANT_ID || process.env.SELECTED_TENANT_ID || '';
 const DATASOURCE_ID = process.env.DATASOURCE_ID || process.env.SELECTED_DATASOURCE_ID || '';
@@ -36,6 +37,40 @@ if (!TENANT_ID || !DATASOURCE_ID) {
   console.error('Missing TENANT_ID or DATASOURCE_ID. Set TENANT_ID and DATASOURCE_ID env vars.');
   process.exit(1);
 }
+
+// Generate Auth token (HS256 signed with test-jwt-secret)
+function generateToken() {
+  const secret = 'test-jwt-secret';
+  const header = { alg: 'HS256', typ: 'JWT' };
+  const payload = {
+    user_id: '113d0169-4819-42ff-968b-778f72af79e9',
+    tenant_id: TENANT_ID,
+    roles: ['global_admin'],
+    exp: Math.floor(Date.now() / 1000) + 3600
+  };
+
+  const base64UrlEncode = (str) => {
+    return Buffer.from(str)
+      .toString('base64')
+      .replace(/=/g, '')
+      .replace(/\+/g, '-')
+      .replace(/\//g, '_');
+  };
+
+  const headerB64 = base64UrlEncode(JSON.stringify(header));
+  const payloadB64 = base64UrlEncode(JSON.stringify(payload));
+  const signature = crypto
+    .createHmac('sha256', secret)
+    .update(`${headerB64}.${payloadB64}`)
+    .digest('base64')
+    .replace(/=/g, '')
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_');
+
+  return `${headerB64}.${payloadB64}.${signature}`;
+}
+
+const JWT_TOKEN = generateToken();
 
 // --- Customize the list of columns below (qualified_path strings) ---
 const columns = [
@@ -268,14 +303,15 @@ const columns = [
 async function fetchAllCatalogNodes() {
   const params = new URLSearchParams();
   params.append('tenant_id', TENANT_ID);
-  params.append('datasource_id', DATASOURCE_ID);
+  params.append('limit', '100000');
 
   const url = `${API_BASE}/api/catalog/nodes?${params.toString()}`;
   console.log('Fetching catalog nodes from', url);
   const resp = await fetch(url, { headers: {
     'X-Tenant-ID': TENANT_ID,
     'X-Tenant-Datasource-ID': DATASOURCE_ID,
-    'Content-Type': 'application/json'
+    'Content-Type': 'application/json',
+    'Authorization': 'Bearer ' + JWT_TOKEN
   }, credentials: 'include' });
 
   if (!resp.ok) {
@@ -368,6 +404,7 @@ async function createSemanticTerm(nodeName, properties) {
       'Content-Type': 'application/json',
       'X-Tenant-ID': TENANT_ID,
       'X-Tenant-Datasource-ID': DATASOURCE_ID,
+      'Authorization': 'Bearer ' + JWT_TOKEN
     },
     body: JSON.stringify(body),
     credentials: 'include'
@@ -398,6 +435,7 @@ async function createEdge(subjectNodeId, objectNodeId) {
       'Content-Type': 'application/json',
       'X-Tenant-ID': TENANT_ID,
       'X-Tenant-Datasource-ID': DATASOURCE_ID,
+      'Authorization': 'Bearer ' + JWT_TOKEN
     },
     body: JSON.stringify(body),
     credentials: 'include'
@@ -460,6 +498,7 @@ async function createEdge(subjectNodeId, objectNodeId) {
       try {
         const created = await createSemanticTerm(semanticName, semanticProps);
         console.log('  - Created semantic term:', created.id || created);
+        allNodes.push(created);
         if (colNode) {
           // create edge linking semantic term -> column
           try {
