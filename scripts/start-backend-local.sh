@@ -39,6 +39,35 @@ export TEMPORAL_HOST="${TEMPORAL_HOST:-100.84.50.65:7233}"
 export TEMPORAL_RETRY_ATTEMPTS="${TEMPORAL_RETRY_ATTEMPTS:-1}"
 export KEYCLOAK_JWKS_URL="${KEYCLOAK_JWKS_URL:-https://100.84.50.65:8443/realms/uisce/protocol/openid-connect/certs}"
 
+# =====================================================================
+# AUTOMATIC PORT EVICTION (ANTI-ZOMBIE GUARD)
+# =====================================================================
+# Runs BEFORE go build / infisical run to prevent `bind: address already in use`.
+# macOS-native: uses lsof + kill -9 to cleanly evict any stuck listeners.
+TARGET_PORT="${PORT:-8080}"
+
+echo "⏳ Checking for zombie services occupying port :${TARGET_PORT}..."
+
+# Check if anything is listening on the target TCP port on macOS
+# -t = terse: returns only the raw PID(s), no headers/usernames.
+ZOMBIE_PID=$(lsof -t -i tcp:"${TARGET_PORT}" 2>/dev/null || true)
+
+# Fixed: `[ -not -z ]` is invalid bash; use `[ -n ]` for "non-zero length".
+if [ -n "${ZOMBIE_PID}" ]; then
+    echo "⚠️  Found stale process(es) [PID: ${ZOMBIE_PID}] occupying port :${TARGET_PORT}."
+    echo "🔥 Forcing eviction of ghost processes..."
+
+    # Forcefully terminate the process handles hogging the port
+    echo "${ZOMBIE_PID}" | xargs kill -9 2>/dev/null || true
+
+    # Brief pause to let the network socket release cleanly in the macOS kernel
+    sleep 1
+    echo "✅ Port :${TARGET_PORT} successfully cleared and unblocked!"
+else
+    echo "✅ Port :${TARGET_PORT} is vacant and ready for binding."
+fi
+# =====================================================================
+
 mkdir -p "$LOG_DIR"
 
 info() { echo "[INFO] $*"; }
@@ -86,13 +115,6 @@ if [ -f "$PIDFILE" ]; then
     sleep 1
   fi
   rm -f "$PIDFILE" >/dev/null 2>&1 || true
-fi
-
-# ── Kill any process already on the port ──────────────────────────────────
-if command -v lsof >/dev/null 2>&1 && lsof -ti:"$PORT" >/dev/null 2>&1; then
-  info "Killing any process listening on port $PORT"
-  lsof -ti:"$PORT" | xargs -r kill -9 2>/dev/null || true
-  sleep 1
 fi
 
 # ── Build the server binary ───────────────────────────────────────────────
