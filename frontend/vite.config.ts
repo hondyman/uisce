@@ -2,23 +2,23 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import path from 'path'
 
-// Get backend host from environment or use defaults
-// Backend + Auth run in LOCAL compose on MacBook
-// GraphQL (/v1/graphql) is served by the local platform backend on PLATFORM_BACKEND_HOST
-// (semlayer-backend, default :8083) — the platform mounts /v1/graphql itself. The
-// previous default of 100.84.126.19:8085 was a remote Hasura on a Tailscale IP that is
-// no longer reachable; use the local platform backend instead.
+// Backend routing — single Go execution binary owns all /api/* routes.
+// The fresh Go backend listens on http://localhost:8080 and serves the unified
+// surface: auth, tenants, admin, catalog, glossary, node-types, edge-types,
+// semantic-bundles, business-objects, etc. The previous indirection through
+// PLATFORM_BACKEND_HOST (default :8083) was wired for a multi-service compose
+// layout where the platform backend was on :8083 and the semantic-rules-api
+// was on :8080/:8082. With the unified binary on :8080, ALL /api/* traffic
+// must route to http://localhost:8080 — otherwise the SPA ends up hitting
+// its own dev server on :5173 (404) or an unreachable port (400/401/403).
 //
-// IMPORTANT: All /api/* routes (auth, tenants, admin, catalog, glossary,
-// node-types, edge-types, semantic-bundles, etc.) are served by the "full"
-// backend (semlayer-backend on PLATFORM_BACKEND_HOST, default :8083). The
-// semantic-rules-api (BACKEND_HOST on :8080/:8082) only handles a dedicated
-// semantic-rules surface — it does NOT implement catalog / glossary routes,
-// so the catch-all /api proxy MUST point at PLATFORM_BACKEND_HOST, otherwise
-// the BusinessTermsTab / Glossary / Catalog pages all 404.
-const BACKEND_HOST = process.env.VITE_BACKEND_HOST || process.env.BACKEND_HOST || 'http://localhost:8082';
-const PLATFORM_BACKEND_HOST = process.env.VITE_PLATFORM_BACKEND_HOST || process.env.PLATFORM_BACKEND_HOST || 'http://localhost:8080';
-const GRAPHQL_HOST = process.env.VITE_GRAPHQL_HOST || process.env.GRAPHQL_HOST || 'http://localhost:8080';
+// `BACKEND_HOST` is preserved as a derived alias for any code that still
+// reads it (semantic-rules surface), and `GRAPHQL_HOST` keeps its env hook
+// because /v1/graphql is a placeholder that returns 503 on the unified
+// binary and is not user-visible.
+const PLATFORM_BACKEND_HOST = 'http://localhost:8080';
+const BACKEND_HOST = process.env.VITE_BACKEND_HOST || process.env.BACKEND_HOST || PLATFORM_BACKEND_HOST;
+const GRAPHQL_HOST = process.env.VITE_GRAPHQL_HOST || process.env.GRAPHQL_HOST || PLATFORM_BACKEND_HOST;
 
 console.log('[Vite Config] Backend Host:', BACKEND_HOST);
 console.log('[Vite Config] Platform Backend Host:', PLATFORM_BACKEND_HOST);

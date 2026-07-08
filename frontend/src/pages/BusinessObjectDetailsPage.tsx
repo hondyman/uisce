@@ -88,6 +88,7 @@ import { filterValidationRulesForEntity, type AnnotatedValidationRule } from '..
 import ValidationRulesPage from '../features/fabric/pages/ValidationRulesPage';
 import { devError, devDebug, devWarn } from '../utils/devLogger';
 import { normalizeName } from '../utils/nameFormatting';
+import apiClient from '../utils/apiClient';
 import type { Entity, Field, HierarchyNode } from '../types/entity-schema';
 import { UnifiedLineageTab } from '../features/impact-analysis/components/UnifiedLineageTab';
 
@@ -369,30 +370,26 @@ export default function BusinessObjectDetailsPage() {
           },
         };
 
-        const resp = await fetch(`/api/business-objects/${businessObject.id}`,
+        // apiClient: parses JSON, throws on non-OK, and respects VITE_USE_PROXY
+        // so the request routes through the Vite dev-server proxy to the backend.
+        const updated = await apiClient<any>(
+          `/api/business-objects/${businessObject.id}`,
           {
             method: 'PUT',
             headers: getAuthHeaders(),
             body: JSON.stringify(payload),
           }
         );
-
-        if (!resp.ok) {
-          const text = await resp.text();
-          throw new Error(text || 'Failed to update business object');
-        }
-
-        const updated = await resp.json();
         setBusinessObject(prev => prev ? {
           ...prev,
           // Use payload.config if backend response is missing it (optimistic/robust update)
           config: updated.config || payload.config,
           // If updated fields returned, use them. Otherwise unset customFields so getConfigFields uses config.fields fallback.
-          customFields: (updated.customFields && updated.customFields.length > 0) 
-            ? updated.customFields 
-            : undefined, 
+          customFields: (updated.customFields && updated.customFields.length > 0)
+            ? updated.customFields
+            : undefined,
         } : null);
-        
+
         notification.success(`Successfully added ${newFields.length} fields`);
         setFieldWizardOpen(false);
 
@@ -458,19 +455,20 @@ export default function BusinessObjectDetailsPage() {
             customFields: updatedFields
           };
           
-          const response = await fetch(`/api/business-objects/${businessObject.id}`, {
+          // apiClient parses JSON and throws on non-OK, so we don't need
+          // the resp.ok / resp.json() boilerplate.
+          const updated = await apiClient<any>(
+            `/api/business-objects/${businessObject.id}`,
+            {
               method: 'PUT',
               headers: getAuthHeaders(),
               body: JSON.stringify(payload),
-          });
-          
-          if (!response.ok) throw new Error('Failed to update field');
-          
-          const updated = await response.json();
-          setBusinessObject(prev => prev ? { 
-               ...prev, 
-               config: updated.config || updatedFields, 
-               customFields: updated.customFields || updatedFields
+            }
+          );
+          setBusinessObject(prev => prev ? {
+            ...prev,
+            config: updated.config || updatedFields,
+            customFields: updated.customFields || updatedFields
           } : null);
           
           notification.success('Field updated successfully');
@@ -523,20 +521,15 @@ export default function BusinessObjectDetailsPage() {
         },
       };
 
-      const resp = await fetch(`/api/business-objects/${businessObject.id}`,
+      // apiClient: parses JSON, throws on non-OK, routes via Vite proxy.
+      const updated = await apiClient<any>(
+        `/api/business-objects/${businessObject.id}`,
         {
           method: 'PUT',
           headers: getAuthHeaders(),
           body: JSON.stringify(payload),
         }
       );
-
-      if (!resp.ok) {
-        const text = await resp.text();
-        throw new Error(text || 'Failed to update business object');
-      }
-
-      const updated = await resp.json();
       setBusinessObject(prev => prev ? {
         ...prev,
         displayName: updated.displayName || prev.displayName,
@@ -581,14 +574,14 @@ export default function BusinessObjectDetailsPage() {
     if (!businessObject?.id) return;
     
     try {
-      const response = await fetch(`/api/business-objects/${businessObject.id}`, {
-        method: 'DELETE',
-        headers: getAuthHeaders(),
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to delete business object');
-      }
+      // apiClient throws on non-OK, so we can navigate immediately on success.
+      await apiClient<void>(
+        `/api/business-objects/${businessObject.id}`,
+        {
+          method: 'DELETE',
+          headers: getAuthHeaders(),
+        }
+      );
 
       notification.success(`"${businessObject.displayName}" deleted successfully`);
       navigate('/business-objects');
@@ -615,14 +608,20 @@ export default function BusinessObjectDetailsPage() {
       const headers = getAuthHeaders();
       devDebug('[BusinessObjectDetailsPage] Fetching with headers:', headers);
       
-      const response = await fetch(url, {
+      // Use raw fetch (instead of apiClient) here because we need to distinguish
+      // 404 (object not found in this tenant) from other errors and handle them
+      // gracefully without throwing. apiClient throws on every non-OK status.
+      // The URL still flows through resolveApiUrl via apiClient-style logic.
+      const { resolveApiUrl } = await import('../utils/resolveApiUrl');
+      const resolvedUrl = resolveApiUrl(url);
+      const response = await fetch(resolvedUrl, {
         headers
       });
 
       if (!response.ok) {
         const errorText = await response.text();
         devError(`[BusinessObjectDetailsPage] Fetch failed: ${response.status} ${response.statusText}`, errorText);
-        
+
         if (response.status === 404) {
           // Business object not found - handle gracefully
           // Only show error once per ID to avoid spamming notification on effect re-runs
@@ -784,41 +783,35 @@ export default function BusinessObjectDetailsPage() {
     // Reset 404 flag when ID changes
     notFound404Shown.current = false;
     fetchBusinessObject();
-  }, [fetchBusinessObject]);
-
-  // Load catalog nodes for driver table selection (only for new objects)
+  }, [fetchBusinessObject]);  // Load catalog nodes for driver table selection (only for new objects).
+  // Tracks an "aborted" flag in the cleanup to avoid React's setState-on-unmounted
+  // warning when deps change or the component unmounts mid-fetch.
   useEffect(() => {
     if (!isNewObject || !tenantId || !datasourceId) return;
+    let aborted = false;
 
     const loadCatalogNodes = async () => {
       try {
         setLoadingCatalog(true);
         const url = `/api/catalog/nodes?tenant_id=${tenantId}&tenant_instance_id=${datasourceId}&type=table`;
-        
-        const response = await fetch(url, {
-            headers: {
-              'X-Tenant-ID': tenantId,
-              'X-Tenant-Datasource-ID': datasourceId,
-              'X-Tenant-Region': getSelectedRegion(),
-            },
-          }
-        );
-
-        if (!response.ok) {
-          throw new Error('Failed to load catalog nodes');
-        }
-
-        const data = await response.json();
+        // apiClient parses JSON and respects VITE_USE_PROXY; tenant/region
+        // headers are injected automatically.
+        const data = await apiClient<any>(url);
+        if (aborted) return;
         setCatalogNodes(Array.isArray(data) ? data : (data?.nodes || []));
       } catch (err) {
+        if (aborted) return;
         // Silent error for catalog loading to avoid disrupting page load
         devWarn('Failed to load catalog nodes:', err);
       } finally {
-        setLoadingCatalog(false);
+        if (!aborted) setLoadingCatalog(false);
       }
     };
 
     loadCatalogNodes();
+    return () => {
+      aborted = true;
+    };
   }, [isNewObject, tenantId, datasourceId]);
 
   const fetchValidationRules = useCallback(async () => {
@@ -848,18 +841,10 @@ export default function BusinessObjectDetailsPage() {
         const url = `/api/validation-rules?${params.toString()}`;
         devDebug('[fetchValidationRules] Fetching URL:', url);
         
-        const res = await fetch(url, {
+        // apiClient throws on non-OK, so the throw boilerplate goes away.
+        const data = await apiClient<any>(url, {
           headers: getAuthHeaders(),
         });
-        
-        devDebug('[fetchValidationRules] Response status:', res.status);
-        
-        if (!res.ok) {
-          const errorText = await res.text();
-          devError('[fetchValidationRules] API error:', errorText);
-          throw new Error(`Failed to fetch validation rules: ${res.status} ${errorText}`);
-        }
-        const data = await res.json();
         devDebug('[fetchValidationRules] API response:', data);
         
         const raw = Array.isArray(data) ? data : (data.rules || []);
@@ -935,19 +920,28 @@ export default function BusinessObjectDetailsPage() {
     }
   }, [activeTab, fetchValidationRules, isNewObject]);
 
-  // Fetch full schema for rule creator
+  // Fetch full schema for rule creator.
+  // Aborts in-flight requests when tenant/datasource change or when the
+  // component unmounts to avoid the React "setState on unmounted component"
+  // memory-leak warning.
   useEffect(() => {
+    if (!tenantId || !datasourceId) return;
+    const abortController = new AbortController();
     const loadSchema = async () => {
-      if (!tenantId || !datasourceId) return;
       try {
         const schema = await fetchEntitySchema(tenantId, datasourceId);
+        if (abortController.signal.aborted) return;
         setEntitySchema(schema);
         setAvailableEntities(Object.keys(schema).sort());
       } catch (error) {
+        if (abortController.signal.aborted) return;
         devError('Error fetching entity schema:', error);
       }
     };
     loadSchema();
+    return () => {
+      abortController.abort();
+    };
   }, [tenantId, datasourceId]);
 
   const handleAddRule = () => {
@@ -975,15 +969,12 @@ export default function BusinessObjectDetailsPage() {
         ? `/api/validation-rules/${rule.id}`
         : '/api/validation-rules';
 
-      const response = await fetch(endpoint, {
+      // apiClient throws on non-OK. Saves the rule and refreshes the list.
+      await apiClient<void>(endpoint, {
         method,
         headers: getAuthHeaders(),
         body: JSON.stringify(rule),
       });
-
-      if (!response.ok) {
-        throw new Error(`Failed to save rule: ${response.statusText}`);
-      }
 
       // Refresh rules after successful save
       await fetchValidationRules();
@@ -1016,7 +1007,10 @@ export default function BusinessObjectDetailsPage() {
       setSubtypeSaving(true);
       try {
         const parentId = businessObject?.id || id;
-        const response = await fetch(`/api/business-objects/${parentId}/subtypes/${editingSubtypeId}/rename`, {
+        // Use a raw fetch so we can read the response body for the error
+        // message (apiClient throws without the response body).
+        const renameUrl = `/api/business-objects/${parentId}/subtypes/${editingSubtypeId}/rename`;
+        const renameResp = await fetch(renameUrl, {
           method: 'POST',
           headers: getAuthHeaders(),
           body: JSON.stringify({
@@ -1024,9 +1018,9 @@ export default function BusinessObjectDetailsPage() {
           }),
         });
 
-        if (!response.ok) {
-          const text = await response.text();
-          notification.error(`Failed to update subtype: ${text || response.statusText}`);
+        if (!renameResp.ok) {
+          const text = await renameResp.text();
+          notification.error(`Failed to update subtype: ${text || renameResp.statusText}`);
           return;
         }
 
@@ -1078,20 +1072,21 @@ export default function BusinessObjectDetailsPage() {
         isCore: false,
       };
 
-      const response = await fetch(`/api/business-objects?tenant_id=${tenantId}&tenant_instance_id=${datasourceId}`, {
+      // Use raw fetch so we can surface the response body in the error toast.
+      const createUrl = `/api/business-objects?tenant_id=${tenantId}&tenant_instance_id=${datasourceId}`;
+      const createResp = await fetch(createUrl, {
         method: 'POST',
         headers: getAuthHeaders(),
         body: JSON.stringify({ ...body, datasourceId }),
       });
 
-      if (!response.ok) {
-        const text = await response.text();
-        notification.error(`Failed to create subtype: ${text || response.statusText}`);
+      if (!createResp.ok) {
+        const text = await createResp.text();
+        notification.error(`Failed to create subtype: ${text || createResp.statusText}`);
         throw new Error(text || 'Failed to create subtype');
       }
 
-      // const _created = await response.json();
-      await response.json();
+      await createResp.json();
 
       notification.success('Subtype created successfully');
       setAddSubtypeOpen(false);
@@ -1122,7 +1117,9 @@ export default function BusinessObjectDetailsPage() {
     }
 
     try {
-      const response = await fetch(`/api/business-objects/${parentId}/subtypes/${subtypeId}`, {
+      // Use raw fetch so we can read the response body for the error message.
+      const delUrl = `/api/business-objects/${parentId}/subtypes/${subtypeId}`;
+      const response = await fetch(delUrl, {
         method: 'DELETE',
         headers: getAuthHeaders(),
       });
@@ -1634,18 +1631,15 @@ export default function BusinessObjectDetailsPage() {
                         }
                       };
                       
-                      const response = await fetch('/api/business-objects', {
+                      // apiClient parses JSON and throws on non-OK; .catch returns
+                      // {} on empty bodies so we always have a usable error object.
+                      const createdBO = await apiClient<any>('/api/business-objects', {
                         method: 'POST',
                         headers: getAuthHeaders(),
                         body: JSON.stringify(payload),
+                      }).catch((err: any) => {
+                        throw new Error(err?.message || 'Failed to create business object');
                       });
-
-                      if (!response.ok) {
-                        const errorData = await response.json().catch(() => ({}));
-                        throw new Error(errorData.message || 'Failed to create business object');
-                      }
-
-                      const createdBO = await response.json();
                       notification.success('Business Object created successfully!');
                       navigate(`/business-objects/${createdBO.id}`);
                     } catch (error) {
@@ -2482,17 +2476,15 @@ export default function BusinessObjectDetailsPage() {
             
             devDebug('[BusinessObjectDetailsPage] Saving with payload:', payload);
 
-            const response = await fetch(`/api/business-objects/${businessObject.id}`, {
-              method: 'PUT',
-              headers: getAuthHeaders(),
-              body: JSON.stringify(payload),
-            });
-
-            if (!response.ok) {
-              throw new Error('Failed to update business object');
-            }
-
-            const updated = await response.json();
+            // apiClient parses JSON, throws on non-OK.
+            const updated = await apiClient<any>(
+              `/api/business-objects/${businessObject.id}`,
+              {
+                method: 'PUT',
+                headers: getAuthHeaders(),
+                body: JSON.stringify(payload),
+              }
+            );
             setBusinessObject(prev => prev ? { 
               ...prev, 
               displayName: updated.displayName || prev.displayName,

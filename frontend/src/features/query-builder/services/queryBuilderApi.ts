@@ -19,7 +19,7 @@ import { installQueryBuilderMock } from './queryBuilderMock';
 
 // In development, install a lightweight mock so the feature is demoable
 // without the backend endpoints being live.
-if (import.meta.env.DEV) {
+if (false && import.meta.env.DEV) {
   installQueryBuilderMock();
 }
 
