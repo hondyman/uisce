@@ -34,7 +34,7 @@ export default App;
  * ============================================================================
  *
  * 1. Environment Setup (.env):
- *    REACT_APP_API_URL=http://localhost:8082/api
+ *    VITE_API_URL=http://localhost:8082/api
  *
  * 2. Install Dependencies:
  *    npm install react-router-dom

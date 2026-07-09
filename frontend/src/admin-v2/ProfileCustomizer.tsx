@@ -30,7 +30,7 @@ export const ProfileCustomizer: React.FC<ProfileCustomizerProps> = ({ profileKey
     setError(null);
     try {
       const res = await fetch(
-        `${process.env.REACT_APP_API_URL || "http://localhost:8082/api"}/v1/tenant/policies?target_profile_key=${encodeURIComponent(profileKey)}`,
+        `${import.meta.env.VITE_API_URL || "http://localhost:8082/api"}/v1/tenant/policies?target_profile_key=${encodeURIComponent(profileKey)}`,
         { credentials: "include" }
       );
       if (res.ok) {

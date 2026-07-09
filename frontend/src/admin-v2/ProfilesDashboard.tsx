@@ -38,7 +38,7 @@ export const ProfilesDashboard: React.FC = () => {
     setError(null);
     try {
       const tenantRes = await fetch(
-        `${process.env.REACT_APP_API_URL || "http://localhost:8082/api"}/v1/tenant/profiles`,
+        `${import.meta.env.VITE_API_URL || "http://localhost:8082/api"}/v1/tenant/profiles`,
         { credentials: "include" }
       );
       if (tenantRes.ok) {

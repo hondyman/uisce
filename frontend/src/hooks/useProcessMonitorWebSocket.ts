@@ -72,7 +72,7 @@ export function useProcessMonitorWebSocket(options: UseProcessMonitorWSOptions):
       const port = window.location.port || (protocol === 'wss:' ? '443' : '80');
       
       // Use port 8080 for backend in development
-      const wsPort = process.env.NODE_ENV === 'development' ? '8080' : port;
+      const wsPort = import.meta.env.DEV ? '8080' : port;
       const wsUrl = `${protocol}//${host}:${wsPort}/api/process-monitor/ws?tenant_id=${tenantId}&tenant_instance_id=${datasourceId}`;
 
       console.log('Connecting to Process Monitor WebSocket:', wsUrl);

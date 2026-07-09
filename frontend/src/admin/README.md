@@ -43,7 +43,7 @@ frontend/src/admin/
 Create or update `.env` in your frontend root:
 
 ```env
-REACT_APP_API_URL=http://localhost:8082/api
+VITE_API_URL=http://localhost:8082/api
 ```
 
 Adjust the URL to match your backend API endpoint.

@@ -5,7 +5,7 @@
  * Handles all CRUD operations for semantic rules and simulations.
  */
 
-const API_BASE = process.env.REACT_APP_API_URL || 'http://localhost:8080/api/v1';
+const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8080/api/v1';
 
 /**
  * Semantic term from business object catalog
@@ -313,7 +313,7 @@ function getTenantId(): string {
   // For now, try localStorage first, then environment variable, then default
   return (
     localStorage.getItem('tenantId') ||
-    process.env.REACT_APP_TENANT_ID ||
+    import.meta.env.VITE_TENANT_ID ||
     '00000000-0000-0000-0000-000000000001'
   );
 }
