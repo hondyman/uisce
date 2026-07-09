@@ -21,6 +21,7 @@ import {
 import { ThemeToggleButton } from './ThemeToggleButton';
 import {
   Business as BusinessIcon,
+  CorporateFare as CorporateFareIcon,
   AccountBalance as PortfolioIcon,
   Category as CategoryIcon,
   Security as SecurityIcon,
@@ -133,8 +134,8 @@ const categoryConfigs: CategoryConfig[] = [
         icon: <BusinessIcon />,
         requiredCapability: 'menu:organization',
         items: [
-          { label: 'Tenants', path: '/tenants', icon: <BusinessIcon />, description: 'Manage tenant hierarchy' },
-          { label: 'Tenant Management', path: '/fabric/tenants', icon: <BusinessIcon />, description: 'Manage platform tenants' },
+          { label: 'Tenants', path: '/tenants', icon: <BusinessIcon />, description: 'View and edit tenants' },
+          { label: 'Tenant Management', path: '/fabric/tenants', icon: <CorporateFareIcon />, description: 'Platform admin: status, IP, usage' },
           { label: 'Users', path: '/admin/rbac/users', icon: <PersonAddIcon />, description: 'User management' },
           { label: 'Teams', path: '/admin/rbac/teams', icon: <GroupsIcon />, description: 'Team structure' },
           { label: 'User Roles', path: '/admin/rbac/user-roles', icon: <AccountCircleIcon />, description: 'User role assignments' },
@@ -503,14 +504,32 @@ const categoryConfigs: CategoryConfig[] = [
  * Filter navigation config against the backend capability map.  The frontend
  * never inspects roles directly; it only asks "does the backend allow this
  * capability?".
+ *
+ * When the backend capability feed hasn't loaded yet (or is missing keys for
+ * a freshly-provisioned user), we still want to show admin menus to users we
+ * already know are platform operators / global admins — otherwise the entire
+ * Organization / Security / System groups disappear and the user can't
+ * navigate at all.  Pass `isPlatformOperator=true` to fall back to "show
+ * every capability-gated menu" instead of hiding them all.
  */
 function filterNavigationByCapabilities(
   categories: CategoryConfig[],
-  capabilities: Record<string, boolean> | undefined
+  capabilities: Record<string, boolean> | undefined,
+  isPlatformOperator: boolean = false
 ): CategoryConfig[] {
+  // Platform operators bypass the capability gate entirely — they are trusted
+  // to see admin navigation.  This is safe because the canAccess() check in
+  // the menu-item renderer will still block individual routes they lack
+  // scope for, with a clear reason.
+  if (isPlatformOperator) {
+    return categories;
+  }
+
   if (!capabilities) {
-    // If entitlements have not loaded yet, show only menus that require no
-    // capability.  This prevents a flash of unauthorized UI.
+    // If entitlements have not loaded yet (or AuthContext hasn't yet exposed
+    // them — see the entitlements-property-on-AuthContext TS error), fall
+    // back to showing only menus that require no capability.  This prevents a
+    // flash of unauthorized UI for non-admin users.
     return categories
       .filter((cat) => !cat.requiredCapability)
       .map((cat) => ({
@@ -559,9 +578,12 @@ export const MainNavigation: React.FC<MainNavigationProps> = () => {
 
   // Capability-filtered navigation config.  The backend decides which menus
   // the user is allowed to see; the frontend only renders the allowed subset.
+  // Platform operators (global admins) bypass the capability gate so they can
+  // always navigate to admin sections; per-route access is still gated by
+  // canAccess() inside the dropdown renderer.
   const filteredCategoryConfigs = useMemo(
-    () => filterNavigationByCapabilities(categoryConfigs, entitlements?.capabilities),
-    [entitlements?.capabilities]
+    () => filterNavigationByCapabilities(categoryConfigs, entitlements?.capabilities, isPlatformOperator),
+    [entitlements?.capabilities, isPlatformOperator]
   );
 
   const [categoryMenuAnchorEl, setCategoryMenuAnchorEl] = useState<null | HTMLElement>(null);

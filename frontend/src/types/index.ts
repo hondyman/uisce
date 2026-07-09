@@ -61,6 +61,8 @@ export interface Tenant {
   tenant_instances: TenantInstance[];
   tenant_products?: Product[];  // Products now at tenant level
   allowed_regions?: string[];
+  is_deleted?: boolean;        // Soft delete flag (filtered out of list queries)
+  deleted_at?: string | null;  // ISO timestamp when the tenant was soft-deleted
 }
 
 export interface DataSourceConfig {

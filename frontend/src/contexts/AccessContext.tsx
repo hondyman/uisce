@@ -174,8 +174,13 @@ export const AccessProvider: React.FC<AccessProviderProps> = ({ children }) => {
           const json = await response.json();
           const tenantsList = json.success ? json.data : json;
           const list = Array.isArray(tenantsList) ? tenantsList : [];
-          setAccessibleTenants(list);
-          devLog(`Loaded ${list.length} accessible tenants`, list);
+          // Filter out soft-deleted tenants so the fallback REST list matches
+          // the GraphQL `where: { is_deleted: { _eq: false } }` filter.
+          const visibleList = list.filter(
+            (t: { is_deleted?: boolean }) => !t.is_deleted
+          );
+          setAccessibleTenants(visibleList);
+          devLog(`Loaded ${visibleList.length} accessible tenants`, visibleList);
         } else {
           devWarn(`Failed to fetch tenants: ${response.status} ${response.statusText}`);
         }

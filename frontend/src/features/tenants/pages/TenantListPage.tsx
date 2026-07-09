@@ -38,10 +38,17 @@ import { GET_TENANTS } from '../../../graphql/queries/tenantQueries';
 import { DELETE_TENANT, CREATE_TENANT, UPDATE_TENANT } from '../../../graphql/mutations/tenantMutations';
 import type { Tenant } from '../../../types';
 import TenantDialog from '../components/TenantDialog';
+import { useAccess } from '../../../contexts/AccessContext';
 
 export const TenantListPage: React.FC = () => {
   const navigate = useNavigate();
   const { loading, error, data, refetch } = useQuery(GET_TENANTS);
+  // REST fallback: when Hasura / GraphQL is down (we saw a 503), the AccessContext
+  // already populates `accessibleTenants` from /api/tenants/all (platform operators)
+  // or /api/tenants/accessible.  Use that so global admins still see the tenant
+  // list rather than a blank page.
+  const { accessibleTenants } = useAccess();
+  const usingFallback = !!error && accessibleTenants.length > 0;
   
   // Mutations
   const [deleteTenant] = useMutation(DELETE_TENANT, { 
@@ -66,7 +73,12 @@ export const TenantListPage: React.FC = () => {
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [deleteConfirmTenant, setDeleteConfirmTenant] = useState<Tenant | null>(null);
 
-  const tenants: Tenant[] = data?.tenants ?? [];
+  // Prefer the GraphQL response, but fall back to the REST-backed
+  // accessibleTenants list when Hasura is unreachable (503).  This keeps the
+  // Organization → Tenants view usable for global admins even if /v1/graphql
+  // is down.
+  const tenants: Tenant[] =
+    data?.tenants ?? (usingFallback ? accessibleTenants : []);
 
   // Filter and search
   const filteredTenants = useMemo(() => {
@@ -151,12 +163,23 @@ export const TenantListPage: React.FC = () => {
     );
   }
 
-  if (error) {
+  if (error && !usingFallback) {
     return <Alert severity="error">Failed to load tenants: {error.message}</Alert>;
   }
 
   return (
     <Box sx={{ p: { xs: 2, md: 3 } }}>
+      {/* Non-blocking warning when we're rendering from the REST fallback
+          because GraphQL/Hasura is unreachable.  Keeps the page usable while
+          making the degraded state obvious to the operator. */}
+      {usingFallback && (
+        <Alert severity="warning" sx={{ mb: 2 }}>
+          GraphQL endpoint is unreachable ({error?.message ?? 'network error'}).
+          Showing the tenant list from the REST fallback (/api/tenants).
+          Create / edit / delete actions are disabled until Hasura recovers.
+        </Alert>
+      )}
+
       {/* Header */}
       <Box sx={{ mb: 4 }}>
         <Typography variant="h4" sx={{ fontWeight: 'bold', mb: 1 }}>

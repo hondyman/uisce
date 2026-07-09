@@ -4,11 +4,13 @@ import { GET_ERD_CHART } from './datasourceQueries';
 // Query for tenants list with tenant-level products
 export const GET_TENANTS = gql`
   query GetTenants {
-    tenants {
+    tenants(where: { is_deleted: { _eq: false } }) {
       id
       display_name
       description
       is_active
+      is_deleted
+      deleted_at
       gold_copy
       tenant_instances {
         id

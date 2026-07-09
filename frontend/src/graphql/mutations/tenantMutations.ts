@@ -19,8 +19,10 @@ export const UPDATE_TENANT = gql`
 
 export const DELETE_TENANT = gql`
   mutation DeleteTenant($id: uuid!) {
-    delete_tenants_by_pk(id: $id) {
+    update_tenants_by_pk(pk_columns: { id: $id }, _set: { is_deleted: true, deleted_at: "now()" }) {
       id
+      is_deleted
+      deleted_at
     }
   }
 `;

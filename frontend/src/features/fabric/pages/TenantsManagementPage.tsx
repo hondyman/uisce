@@ -52,6 +52,7 @@ interface TenantWithUsage extends IPTenant {
   ipUsageTotal: number;
   lastUpdated: string;
   plan?: string;
+  gold_copy?: boolean;
 }
 
 const TenantsManagementPage: React.FC = () => {
@@ -106,7 +107,8 @@ const TenantsManagementPage: React.FC = () => {
                 ipUsageActive: activeIPs,
                 ipUsageTotal: totalIPs,
                 lastUpdated,
-                plan: t.name || 'Standard Plan'
+                plan: t.name || 'Standard Plan',
+                gold_copy: (t as any).gold_copy ?? false
               };
             } catch (err) {
               // If fetch fails for this tenant, return defaults
@@ -119,7 +121,8 @@ const TenantsManagementPage: React.FC = () => {
                 ipUsageActive: 0,
                 ipUsageTotal: 0,
                 lastUpdated: 'N/A',
-                plan: t.name || 'Standard Plan'
+                plan: t.name || 'Standard Plan',
+                gold_copy: (t as any).gold_copy ?? false
               };
             }
           })
@@ -208,6 +211,14 @@ const TenantsManagementPage: React.FC = () => {
 
   const handleDeleteTenant = useCallback(async () => {
     if (!deleteConfirm) return;
+    
+    // Defensive guard: prevent deletion of gold copy (system) tenants
+    if (deleteConfirm.gold_copy) {
+      notification.error('Gold Copy tenants cannot be deleted');
+      setDeleteConfirm(null);
+      return;
+    }
+    
     try {
       const success = await api.deleteTenant(deleteConfirm.id);
       if (!success) {
@@ -610,7 +621,7 @@ const TenantsManagementPage: React.FC = () => {
         <MenuItem onClick={handleViewDetails}>
           View Details
         </MenuItem>
-        {isPlatformOperator && (
+        {isPlatformOperator && !selectedTenantMenu?.gold_copy && (
           <MenuItem
             onClick={() => {
               handleTenantMenuClose();
@@ -622,6 +633,12 @@ const TenantsManagementPage: React.FC = () => {
           >
             <DeleteIcon sx={{ mr: 1 }} fontSize="small" />
             Delete
+          </MenuItem>
+        )}
+        {isPlatformOperator && selectedTenantMenu?.gold_copy && (
+          <MenuItem disabled sx={{ color: 'text.disabled' }}>
+            <DeleteIcon sx={{ mr: 1 }} fontSize="small" />
+            Gold Copy (cannot delete)
           </MenuItem>
         )}
       </Menu>
