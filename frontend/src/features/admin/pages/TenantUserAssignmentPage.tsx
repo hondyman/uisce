@@ -45,6 +45,10 @@ interface Tenant {
   id: string;
   name: string;
   display_name: string;
+  is_active?: boolean;
+  isActive?: boolean;
+  status?: string;
+  is_deleted?: boolean;
 }
 
 interface User {
@@ -64,7 +68,13 @@ interface TenantAccessMapping {
   email: string;
   created_at: string;
   updated_at: string;
+  tenant_name?: string;
+  tenant_is_active?: boolean;
+  tenant_is_deleted?: boolean;
 }
+
+const isTenantAvailable = (tenant: Tenant): boolean =>
+  !tenant.is_deleted && (tenant.is_active ?? tenant.isActive ?? tenant.status === 'active') === true;
 
 const TenantUserAssignmentPage: React.FC = () => {
   const theme = useTheme();
@@ -113,11 +123,18 @@ const TenantUserAssignmentPage: React.FC = () => {
       const usersRes = await authFetch('/api/rbac/users');
       if (!usersRes.ok) throw new Error(usersRes.error || 'Failed to fetch system users');
 
-      setMappings(mappingsRes.data?.success ? mappingsRes.data.data : (mappingsRes.data || []));
-      // Defensively filter out soft-deleted tenants - only show active tenants
+      // Fetch tenants first to build the active tenant map
       const fetchedTenants = tenantsRes.data?.success ? tenantsRes.data.data : (tenantsRes.data || []);
-      const activeTenants = fetchedTenants.filter((t: any) => !t.is_deleted);
+      const activeTenants = fetchedTenants.filter(isTenantAvailable);
       setTenants(activeTenants);
+      
+      // Build a set of active tenant IDs for filtering mappings
+      const activeTenantIds = new Set(activeTenants.map((t: any) => t.id));
+      
+      // Filter mappings to only show those for active tenants
+      const allMappings = mappingsRes.data?.success ? mappingsRes.data.data : (mappingsRes.data || []);
+      const activeMappings = allMappings.filter((m: any) => activeTenantIds.has(m.tenant_id));
+      setMappings(activeMappings);
       setUsers(Array.isArray(usersRes.data) ? usersRes.data : []);
     } catch (err: any) {
       console.error(err);
@@ -182,6 +199,10 @@ const TenantUserAssignmentPage: React.FC = () => {
       setErrorMsg('Please select a user, tenant, and role.');
       return;
     }
+    if (!tenantMap.has(selectedTenantId)) {
+      setErrorMsg('That tenant is not active or is no longer available.');
+      return;
+    }
     setActionLoading(true);
     try {
       setErrorMsg(null);
@@ -214,6 +235,10 @@ const TenantUserAssignmentPage: React.FC = () => {
   // Update role mapping
   const handleUpdateRole = async () => {
     if (!selectedMapping || !selectedRole) return;
+    if (!tenantMap.has(selectedMapping.tenant_id)) {
+      setErrorMsg('That tenant is not active or is no longer available.');
+      return;
+    }
     setActionLoading(true);
     try {
       setErrorMsg(null);
@@ -240,6 +265,10 @@ const TenantUserAssignmentPage: React.FC = () => {
 
   // Revoke access mapping
   const handleRevokeAccess = async (mapping: TenantAccessMapping) => {
+    if (!tenantMap.has(mapping.tenant_id)) {
+      setErrorMsg('That tenant is not active or is no longer available.');
+      return;
+    }
     if (!window.confirm(`Are you sure you want to revoke tenant access for ${mapping.email}?`)) {
       return;
     }
@@ -365,7 +394,13 @@ const TenantUserAssignmentPage: React.FC = () => {
             ) : (
               filteredMappings.map((m) => {
                 const tenant = tenantMap.get(m.tenant_id);
-                const tenantLabel = tenant ? (tenant.display_name || tenant.name) : m.tenant_id;
+                const tenantLabel = m.tenant_name || (tenant ? (tenant.display_name || tenant.name) : m.tenant_id);
+                const tenantIsInactive = m.tenant_is_active === false || m.tenant_is_deleted === true;
+                const tenantTooltip = m.tenant_is_deleted
+                  ? 'Tenant has been soft-deleted'
+                  : m.tenant_is_active === false
+                  ? 'Tenant is inactive'
+                  : '';
                 return (
                   <TableRow key={m.id} hover>
                     <TableCell sx={{ py: 1.5 }}>
@@ -384,13 +419,17 @@ const TenantUserAssignmentPage: React.FC = () => {
                       </Stack>
                     </TableCell>
                     <TableCell sx={{ py: 1.5 }}>
-                      <Chip
-                        icon={<BusinessIcon />}
-                        label={tenantLabel}
-                        color="primary"
-                        variant="outlined"
-                        size="small"
-                      />
+                      <Tooltip title={tenantTooltip}>
+                        <span>
+                          <Chip
+                            icon={<BusinessIcon />}
+                            label={tenantLabel}
+                            color={tenantIsInactive ? 'default' : 'primary'}
+                            variant="outlined"
+                            size="small"
+                          />
+                        </span>
+                      </Tooltip>
                     </TableCell>
                     <TableCell sx={{ py: 1.5 }}>
                       <Chip
