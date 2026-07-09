@@ -5,6 +5,8 @@ import (
 	"log"
 	"net/http"
 	"strings"
+
+	jwtmiddleware "github.com/hondyman/uisce/libs/jwt-middleware"
 )
 
 // LayoutSchema represents the JSON schema for the UI layout

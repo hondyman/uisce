@@ -2,6 +2,9 @@ go 1.26.3
 
 use (
 	.
+	./apps/analytics-api
+	./apps/genui-api
+	./apps/orchestration-api
 	./backend
 	./calc-engine
 	./libs/abac-client

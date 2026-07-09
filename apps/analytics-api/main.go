@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
+
+	jwtmiddleware "github.com/hondyman/uisce/libs/jwt-middleware"
 )
 
 func main() {

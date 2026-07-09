@@ -8,6 +8,7 @@ import (
 	"net/http"
 
 	"github.com/google/uuid"
+	jwtmiddleware "github.com/hondyman/uisce/libs/jwt-middleware"
 	"go.temporal.io/sdk/client"
 )
 
