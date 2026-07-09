@@ -1,5 +1,6 @@
-import { useState, useCallback, useMemo } from 'react';
-import { IPWhitelistEntry, Tenant, IPWhitelistFilters, ALL_TENANTS_ID } from '../types/ipWhitelist';
+  import { useState, useCallback, useMemo } from 'react';
+  import { apiFetch } from '../../../lib/apiClient';
+  import { IPWhitelistEntry, Tenant, IPWhitelistFilters, ALL_TENANTS_ID } from '../types/ipWhitelist';
 
 export interface ConflictInfo {
   ipAddress: string;
@@ -83,9 +84,8 @@ export const useIPWhitelistAPI = () => {
 
   const deleteTenant = useCallback(async (tenantId: string): Promise<boolean> => {
     try {
-      const response = await fetch(`/api/admin/tenants/${tenantId}`, {
+      const response = await apiFetch(`/api/admin/tenants/${tenantId}`, {
         method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
       });
 
       if (!response.ok) {

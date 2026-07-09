@@ -39,6 +39,7 @@ import {
   GridView as GridViewIcon,
   ViewAgenda as ViewAgendaIcon,
   SupervisorAccount as SupervisorAccountIcon,
+  WorkspacePremium as WorkspacePremiumIcon,
 } from '@mui/icons-material';
 import { useIPWhitelistAPI } from '../hooks/useIPWhitelist';
 import { useNotification } from '../../../hooks/useNotification';
@@ -53,6 +54,7 @@ interface TenantWithUsage extends IPTenant {
   lastUpdated: string;
   plan?: string;
   gold_copy?: boolean;
+  is_deleted?: boolean;
 }
 
 const TenantsManagementPage: React.FC = () => {
@@ -108,7 +110,8 @@ const TenantsManagementPage: React.FC = () => {
                 ipUsageTotal: totalIPs,
                 lastUpdated,
                 plan: t.name || 'Standard Plan',
-                gold_copy: (t as any).gold_copy ?? false
+                gold_copy: (t as any).gold_copy ?? false,
+                is_deleted: t.is_deleted ?? false
               };
             } catch (err) {
               // If fetch fails for this tenant, return defaults
@@ -122,7 +125,8 @@ const TenantsManagementPage: React.FC = () => {
                 ipUsageTotal: 0,
                 lastUpdated: 'N/A',
                 plan: t.name || 'Standard Plan',
-                gold_copy: (t as any).gold_copy ?? false
+                gold_copy: (t as any).gold_copy ?? false,
+                is_deleted: t.is_deleted ?? false
               };
             }
           })
@@ -139,6 +143,9 @@ const TenantsManagementPage: React.FC = () => {
 
   const filteredTenants = useMemo(() => {
     let filtered = tenants;
+
+    // Always filter out soft-deleted tenants as a defensive measure
+    filtered = filtered.filter(t => !t.is_deleted);
 
     if (searchQuery) {
       const query = searchQuery.toLowerCase();
@@ -518,9 +525,29 @@ const TenantsManagementPage: React.FC = () => {
                           {getTenantAvatar(tenant.displayName)}
                         </Avatar>
                         <Box>
-                          <Typography variant="body2" fontWeight={600}>
-                            {tenant.displayName}
-                          </Typography>
+                          <Stack direction="row" spacing={1} alignItems="center">
+                            <Typography variant="body2" fontWeight={600}>
+                              {tenant.displayName}
+                            </Typography>
+                            {tenant.gold_copy && (
+                              <Chip
+                                icon={<WorkspacePremiumIcon />}
+                                label="Gold Copy"
+                                size="small"
+                                color="warning"
+                                variant="outlined"
+                                sx={{
+                                  height: 22,
+                                  fontSize: '0.65rem',
+                                  fontWeight: 600,
+                                  '& .MuiChip-icon': {
+                                    fontSize: 14,
+                                    ml: 0.5,
+                                  },
+                                }}
+                              />
+                            )}
+                          </Stack>
                           <Typography variant="caption" color="text.secondary">
                             {tenant.plan || 'Standard Plan'}
                           </Typography>
