@@ -16,6 +16,10 @@ export interface Tenant {
   name?: string;
   tenant_code?: string;
   gold_copy?: boolean;
+  is_active?: boolean;
+  isActive?: boolean;
+  status?: string;
+  is_deleted?: boolean;
 }
 
 // Special tenant ID for "All Tenants" capability

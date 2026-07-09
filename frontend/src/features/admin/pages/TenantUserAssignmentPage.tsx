@@ -114,7 +114,10 @@ const TenantUserAssignmentPage: React.FC = () => {
       if (!usersRes.ok) throw new Error(usersRes.error || 'Failed to fetch system users');
 
       setMappings(mappingsRes.data?.success ? mappingsRes.data.data : (mappingsRes.data || []));
-      setTenants(tenantsRes.data?.success ? tenantsRes.data.data : (tenantsRes.data || []));
+      // Defensively filter out soft-deleted tenants - only show active tenants
+      const fetchedTenants = tenantsRes.data?.success ? tenantsRes.data.data : (tenantsRes.data || []);
+      const activeTenants = fetchedTenants.filter((t: any) => !t.is_deleted);
+      setTenants(activeTenants);
       setUsers(Array.isArray(usersRes.data) ? usersRes.data : []);
     } catch (err: any) {
       console.error(err);

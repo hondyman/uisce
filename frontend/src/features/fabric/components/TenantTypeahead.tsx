@@ -49,16 +49,22 @@ const TenantTypeahead: React.FC<TenantTypeaheadProps> = ({
   const [inputValue, setInputValue] = useState('');
   const [filteredTenants, setFilteredTenants] = useState<Tenant[]>([]);
 
+  const activeTenants = useMemo(() => {
+    return tenants.filter(tenant =>
+      !tenant.is_deleted && (tenant.is_active ?? tenant.isActive ?? tenant.status === 'active') === true
+    );
+  }, [tenants]);
+
   // Combine options with a virtual "All Tenants" option when allowed
   const allOptions = useMemo(() => {
-    if (!allowAllTenants) return tenants;
+    if (!allowAllTenants) return activeTenants;
     const allTenantsOption: Tenant = {
       id: ALL_TENANTS_ID,
       displayName: ALL_TENANTS_DISPLAY_NAME,
       description: 'Apply to all tenants in the system'
     };
-    return [allTenantsOption, ...tenants];
-  }, [allowAllTenants, tenants]);
+    return [allTenantsOption, ...activeTenants];
+  }, [allowAllTenants, activeTenants]);
 
   useEffect(() => {
     if (!inputValue.trim()) {
@@ -77,7 +83,8 @@ const TenantTypeahead: React.FC<TenantTypeaheadProps> = ({
 
   const handleChange = (_: any, selectedTenants: Tenant[] | Tenant | null) => {
     const tenantArray = Array.isArray(selectedTenants) ? selectedTenants : selectedTenants ? [selectedTenants] : [];
-    const selectedIds = tenantArray.map(t => t.id);
+    const availableIds = new Set(allOptions.map(t => t.id));
+    const selectedIds = tenantArray.map(t => t.id).filter(id => availableIds.has(id));
     
     // If "All Tenants" is selected, clear other selections
     if (selectedIds.includes(ALL_TENANTS_ID)) {

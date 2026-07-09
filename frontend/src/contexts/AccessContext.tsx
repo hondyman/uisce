@@ -174,10 +174,10 @@ export const AccessProvider: React.FC<AccessProviderProps> = ({ children }) => {
           const json = await response.json();
           const tenantsList = json.success ? json.data : json;
           const list = Array.isArray(tenantsList) ? tenantsList : [];
-          // Filter out soft-deleted tenants so the fallback REST list matches
-          // the GraphQL `where: { is_deleted: { _eq: false } }` filter.
+          // Keep only tenants that are available for user selection.
           const visibleList = list.filter(
-            (t: { is_deleted?: boolean }) => !t.is_deleted
+            (t: { is_deleted?: boolean; is_active?: boolean; isActive?: boolean; status?: string }) =>
+              !t.is_deleted && (t.is_active ?? t.isActive ?? t.status === 'active') === true
           );
           setAccessibleTenants(visibleList);
           devLog(`Loaded ${visibleList.length} accessible tenants`, visibleList);

@@ -57,6 +57,13 @@ interface TenantWithUsage extends IPTenant {
   is_deleted?: boolean;
 }
 
+const isActiveTenant = (tenant: Pick<Tenant, 'is_active' | 'is_deleted'> & {
+  isActive?: boolean;
+  status?: string;
+}): boolean => {
+  return !tenant.is_deleted && (tenant.is_active ?? tenant.isActive ?? tenant.status === 'active') === true;
+};
+
 const TenantsManagementPage: React.FC = () => {
   const theme = useTheme();
   const [loadedCount, setLoadedCount] = useState(10);
@@ -87,7 +94,7 @@ const TenantsManagementPage: React.FC = () => {
       setLoading(true);
       try {
         // Only show tenants the current user is authorized to access.
-        const tenantsList = accessibleTenants;
+        const tenantsList = accessibleTenants.filter(isActiveTenant);
 
         // Fetch IP whitelist for each tenant to get real usage data
         const enriched: TenantWithUsage[] = await Promise.all(
@@ -105,7 +112,7 @@ const TenantsManagementPage: React.FC = () => {
                 displayName: t.display_name || t.name || t.id,
                 name: t.name,
                 tenant_code: (t as any).tenant_code,
-                status: totalIPs === 0 ? 'inactive' : 'active' as any,
+                status: 'active',
                 ipUsageActive: activeIPs,
                 ipUsageTotal: totalIPs,
                 lastUpdated,
@@ -120,7 +127,7 @@ const TenantsManagementPage: React.FC = () => {
                 displayName: t.display_name || t.name || t.id,
                 name: t.name,
                 tenant_code: (t as any).tenant_code,
-                status: t.is_active ? 'active' : 'inactive' as any,
+                status: 'active',
                 ipUsageActive: 0,
                 ipUsageTotal: 0,
                 lastUpdated: 'N/A',
@@ -144,8 +151,8 @@ const TenantsManagementPage: React.FC = () => {
   const filteredTenants = useMemo(() => {
     let filtered = tenants;
 
-    // Always filter out soft-deleted tenants as a defensive measure
-    filtered = filtered.filter(t => !t.is_deleted);
+    // Only active tenants are available for this management surface.
+    filtered = filtered.filter(t => !t.is_deleted && t.status === 'active');
 
     if (searchQuery) {
       const query = searchQuery.toLowerCase();
@@ -179,6 +186,7 @@ const TenantsManagementPage: React.FC = () => {
   }, []);
 
   const handleTenantMenuOpen = (event: React.MouseEvent<HTMLElement>, tenant: TenantWithUsage) => {
+    if (tenant.status !== 'active' || tenant.is_deleted) return;
     setTenantMenuAnchor(event.currentTarget);
     setSelectedTenantMenu(tenant);
   };
@@ -190,11 +198,16 @@ const TenantsManagementPage: React.FC = () => {
 
   const handleEditTenant = useCallback(() => {
     if (!selectedTenantMenu) return;
+    if (selectedTenantMenu.status !== 'active' || selectedTenantMenu.is_deleted) {
+      notification.error('Inactive tenants are not available');
+      handleTenantMenuClose();
+      return;
+    }
     setEditingTenant(selectedTenantMenu);
     setEditName(selectedTenantMenu.displayName);
     setEditDialogOpen(true);
     handleTenantMenuClose();
-  }, [selectedTenantMenu]);
+  }, [selectedTenantMenu, notification]);
 
   const handleSaveEdit = useCallback(async () => {
     if (!editingTenant || !editName.trim()) return;
@@ -218,6 +231,11 @@ const TenantsManagementPage: React.FC = () => {
 
   const handleDeleteTenant = useCallback(async () => {
     if (!deleteConfirm) return;
+    if (deleteConfirm.status !== 'active' || deleteConfirm.is_deleted) {
+      notification.error('Inactive tenants are not available');
+      setDeleteConfirm(null);
+      return;
+    }
     
     // Defensive guard: prevent deletion of gold copy (system) tenants
     if (deleteConfirm.gold_copy) {
@@ -242,13 +260,23 @@ const TenantsManagementPage: React.FC = () => {
 
   const handleViewDetails = useCallback(() => {
     if (!selectedTenantMenu) return;
+    if (selectedTenantMenu.status !== 'active' || selectedTenantMenu.is_deleted) {
+      notification.error('Inactive tenants are not available');
+      handleTenantMenuClose();
+      return;
+    }
     setSelectedTenantDetails(selectedTenantMenu);
     setDetailsDialogOpen(true);
     handleTenantMenuClose();
-  }, [selectedTenantMenu]);
+  }, [selectedTenantMenu, notification]);
 
   const handleExportTenant = useCallback((format: 'csv' | 'json') => {
     if (!selectedTenantDetails) return;
+    if (selectedTenantDetails.status !== 'active' || selectedTenantDetails.is_deleted) {
+      notification.error('Inactive tenants are not available');
+      setDownloadMenuAnchor(null);
+      return;
+    }
     
     const data = {
       tenantName: selectedTenantDetails.displayName,
@@ -283,7 +311,7 @@ const TenantsManagementPage: React.FC = () => {
       window.URL.revokeObjectURL(url);
     }
     setDownloadMenuAnchor(null);
-  }, [selectedTenantDetails]);
+  }, [selectedTenantDetails, notification]);
 
   const getStatusColor = (status: string): 'success' | 'error' | 'default' => {
     switch (status) {
@@ -329,7 +357,7 @@ const TenantsManagementPage: React.FC = () => {
   const handleExportTenants = (format: 'csv' | 'json') => {
     if (format === 'csv') {
       const headers = ['ID', 'Name', 'IPs Used', 'IPs Total', 'Status'];
-      const rows = tenants.slice(0, loadedCount).map(t => [
+      const rows = filteredTenants.slice(0, loadedCount).map(t => [
         t.id,
         t.displayName,
         t.ipUsageActive,
@@ -345,7 +373,7 @@ const TenantsManagementPage: React.FC = () => {
       link.click();
       window.URL.revokeObjectURL(url);
     } else {
-      const jsonData = tenants.slice(0, loadedCount).map(t => ({
+      const jsonData = filteredTenants.slice(0, loadedCount).map(t => ({
         id: t.id,
         name: t.displayName,
         ipUsageActive: t.ipUsageActive,
@@ -437,7 +465,7 @@ const TenantsManagementPage: React.FC = () => {
           {/* Status Filter */}
           <Select
             size="small"
-            value={statusFilter}
+            value={statusFilter === 'active' ? 'active' : 'all'}
             onChange={(e) => {
               setStatusFilter(e.target.value as any);
               setLoadedCount(10);
@@ -445,10 +473,8 @@ const TenantsManagementPage: React.FC = () => {
             startAdornment={<FilterListIcon sx={{ mr: 1, color: 'action.active' }} />}
             sx={{ minWidth: 150 }}
           >
-            <MenuItem value="all">All Statuses</MenuItem>
+            <MenuItem value="all">Available Tenants</MenuItem>
             <MenuItem value="active">Active</MenuItem>
-            <MenuItem value="suspended">Suspended</MenuItem>
-            <MenuItem value="inactive">Inactive</MenuItem>
           </Select>
         </Stack>
 

@@ -66,12 +66,17 @@ export const useIPWhitelistAPI = () => {
         if (response.ok) {
           const data = await response.json();
           const raw = data.tenants || [];
-          return raw.map((t: any) => ({
-            id: t.id,
-            displayName: t.display_name || t.displayName || t.name || t.id,
-            name: t.name,
-            tenant_code: t.tenant_code
-          }));
+          return raw
+            .filter((t: any) => !t.is_deleted && (t.is_active ?? t.isActive ?? t.status === 'active') === true)
+            .map((t: any) => ({
+              id: t.id,
+              displayName: t.display_name || t.displayName || t.name || t.id,
+              name: t.name,
+              tenant_code: t.tenant_code,
+              gold_copy: t.gold_copy ?? false,
+              is_active: t.is_active ?? t.isActive ?? t.status === 'active',
+              status: 'active'
+            }));
         }
       } catch {
         continue;
@@ -521,4 +526,3 @@ export const useIPWhitelistFilters = (entries: IPWhitelistEntry[], tenants: Tena
     filteredEntries
   };
 };
-
