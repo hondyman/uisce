@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
-import { Navigate } from 'react-router-dom';
+import { Navigate, useNavigate } from 'react-router-dom';
 import {
   Box,
   Button,
@@ -41,6 +41,7 @@ import {
   ViewAgenda as ViewAgendaIcon,
   SupervisorAccount as _SupervisorAccountIcon,
   WorkspacePremium as WorkspacePremiumIcon,
+  OpenInNew as OpenInNewIcon,
 } from '@mui/icons-material';
 import { useIPWhitelistAPI } from '../hooks/useIPWhitelist';
 import { useNotification } from '../../../hooks/useNotification';
@@ -83,10 +84,7 @@ const TenantsManagementPage: React.FC = () => {
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [editingTenant, setEditingTenant] = useState<TenantWithUsage | null>(null);
   const [editName, setEditName] = useState('');
-  const [detailsDialogOpen, setDetailsDialogOpen] = useState(false);
-  const [selectedTenantDetails, setSelectedTenantDetails] = useState<TenantWithUsage | null>(null);
   const [downloadMenuAnchor, setDownloadMenuAnchor] = useState<null | HTMLElement>(null);
-  const [downloadFromDetails, setDownloadFromDetails] = useState(false);
   const [viewMode, setViewMode] = useState<'tile' | 'table'>('tile');
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [createName, setCreateName] = useState('');
@@ -96,6 +94,7 @@ const TenantsManagementPage: React.FC = () => {
 
   const api = useIPWhitelistAPI();
   const notification = useNotification();
+  const navigate = useNavigate();
   const { accessibleTenants } = useAccess();
   const organization = useOrganizationEntitlement();
   const canWriteOrganization = organization.canWrite;
@@ -362,61 +361,6 @@ const TenantsManagementPage: React.FC = () => {
     }
   }, [canWriteOrganization, createName, createCode, createRegion, notification, resetCreateDialog]);
 
-  const handleViewDetails = useCallback(() => {
-    if (!selectedTenantMenu) return;
-    if (selectedTenantMenu.status !== 'active' || selectedTenantMenu.is_deleted) {
-      notification.error('Inactive tenants are not available');
-      handleTenantMenuClose();
-      return;
-    }
-    setSelectedTenantDetails(selectedTenantMenu);
-    setDetailsDialogOpen(true);
-    handleTenantMenuClose();
-  }, [selectedTenantMenu, notification]);
-
-  const handleExportTenant = useCallback((format: 'csv' | 'json') => {
-    if (!selectedTenantDetails) return;
-    if (selectedTenantDetails.status !== 'active' || selectedTenantDetails.is_deleted) {
-      notification.error('Inactive tenants are not available');
-      setDownloadMenuAnchor(null);
-      return;
-    }
-    
-    const data = {
-      tenantName: selectedTenantDetails.displayName,
-      tenantId: selectedTenantDetails.id,
-      status: selectedTenantDetails.status,
-      plan: selectedTenantDetails.plan,
-      ipUsageActive: selectedTenantDetails.ipUsageActive,
-      ipUsageTotal: selectedTenantDetails.ipUsageTotal,
-      lastUpdated: selectedTenantDetails.lastUpdated,
-      exportedAt: new Date().toISOString()
-    };
-
-    if (format === 'csv') {
-      const headers = Object.keys(data).join(',');
-      const values = Object.values(data).join(',');
-      const csv = `${headers}\n${values}`;
-      const blob = new Blob([csv], { type: 'text/csv' });
-      const url = window.URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `tenant-${selectedTenantDetails.id}-${new Date().toISOString().split('T')[0]}.csv`;
-      link.click();
-      window.URL.revokeObjectURL(url);
-    } else {
-      const json = JSON.stringify(data, null, 2);
-      const blob = new Blob([json], { type: 'application/json' });
-      const url = window.URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `tenant-${selectedTenantDetails.id}-${new Date().toISOString().split('T')[0]}.json`;
-      link.click();
-      window.URL.revokeObjectURL(url);
-    }
-    setDownloadMenuAnchor(null);
-  }, [selectedTenantDetails, notification]);
-
   const getStatusColor = (status: string): 'success' | 'error' | 'default' => {
     switch (status) {
       case 'active':
@@ -529,7 +473,6 @@ const TenantsManagementPage: React.FC = () => {
             <IconButton
               size="small"
               onClick={(e) => {
-                setDownloadFromDetails(false);
                 setDownloadMenuAnchor(e.currentTarget);
               }}
               title="Export"
@@ -917,8 +860,14 @@ const TenantsManagementPage: React.FC = () => {
             Edit
           </MenuItem>
         )}
-        <MenuItem onClick={handleViewDetails}>
-          View Details
+        <MenuItem onClick={() => {
+          handleTenantMenuClose();
+          if (selectedTenantMenu) {
+            navigate(`/tenants/${selectedTenantMenu.id}`);
+          }
+        }}>
+          <OpenInNewIcon sx={{ mr: 1 }} fontSize="small" />
+          Manage Resources
         </MenuItem>
         {canWriteOrganization && !selectedTenantMenu?.gold_copy && (
           <MenuItem
@@ -942,133 +891,18 @@ const TenantsManagementPage: React.FC = () => {
         )}
       </Menu>
 
-      {/* View Details Dialog */}
-      <Dialog open={detailsDialogOpen} onClose={() => setDetailsDialogOpen(false)} maxWidth="sm" fullWidth>
-        <DialogTitle sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <span>{selectedTenantDetails?.displayName} - Details</span>
-          <IconButton
-            size="small"
-            title="Export"
-            onClick={(e) => {
-              setDownloadFromDetails(true);
-              setDownloadMenuAnchor(e.currentTarget);
-            }}
-            sx={{ ml: 2 }}
-          >
-            <DownloadIcon fontSize="small" />
-          </IconButton>
-        </DialogTitle>
-        <DialogContent sx={{ pt: 2 }}>
-          <Stack spacing={3}>
-            {selectedTenantDetails && (
-              <>
-                <Box>
-                  <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 0.5, fontWeight: 700 }}>
-                    TENANT ID
-                  </Typography>
-                  <Typography variant="body2" fontFamily="monospace">
-                    {selectedTenantDetails.id}
-                  </Typography>
-                </Box>
-                <Box>
-                  <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 0.5, fontWeight: 700 }}>
-                    DISPLAY NAME
-                  </Typography>
-                  <Typography variant="body2">
-                    {selectedTenantDetails.displayName}
-                  </Typography>
-                </Box>
-                <Box>
-                  <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 0.5, fontWeight: 700 }}>
-                    PLAN
-                  </Typography>
-                  <Typography variant="body2">
-                    {selectedTenantDetails.plan}
-                  </Typography>
-                </Box>
-                <Box>
-                  <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 0.5, fontWeight: 700 }}>
-                    STATUS
-                  </Typography>
-                  <Chip
-                    label={getStatusLabel(selectedTenantDetails.status)}
-                    color={getStatusColor(selectedTenantDetails.status)}
-                    size="small"
-                  />
-                </Box>
-                <Box>
-                  <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 1, fontWeight: 700 }}>
-                    IP USAGE ({selectedTenantDetails.ipUsageActive}/{selectedTenantDetails.ipUsageTotal})
-                  </Typography>
-                  <LinearProgress
-                    variant="determinate"
-                    value={getUsagePercentage(selectedTenantDetails.ipUsageActive, selectedTenantDetails.ipUsageTotal)}
-                    sx={{
-                      height: 8,
-                      borderRadius: 1,
-                      backgroundColor: alpha(theme.palette.primary.main, 0.1),
-                      '& .MuiLinearProgress-bar': {
-                        backgroundColor: selectedTenantDetails.status === 'suspended' ? theme.palette.error.main : theme.palette.primary.main,
-                        borderRadius: 1
-                      }
-                    }}
-                  />
-                </Box>
-                <Box>
-                  <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 0.5, fontWeight: 700 }}>
-                    REGION
-                  </Typography>
-                  <Typography variant="body2">
-                    {regions.find((r) => r.value === selectedTenantDetails.region)?.label
-                      ? `${regions.find((r) => r.value === selectedTenantDetails.region)!.label} (${selectedTenantDetails.region})`
-                      : (selectedTenantDetails.region || DEFAULT_REGION)}
-                  </Typography>
-                </Box>
-                <Box>
-                  <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 0.5, fontWeight: 700 }}>
-                    LAST UPDATED
-                  </Typography>
-                  <Typography variant="body2">
-                    {selectedTenantDetails.lastUpdated}
-                  </Typography>
-                </Box>
-              </>
-            )}
-          </Stack>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setDetailsDialogOpen(false)}>Close</Button>
-        </DialogActions>
-      </Dialog>
-
-      {/* Download Menu (for either the per-tenant details dialog or the list) */}
+      {/* Download Menu */}
       <Menu
         anchorEl={downloadMenuAnchor}
         open={Boolean(downloadMenuAnchor)}
-        onClose={() => {
-          setDownloadMenuAnchor(null);
-          setDownloadFromDetails(false);
-        }}
+        onClose={() => setDownloadMenuAnchor(null)}
       >
-        {downloadFromDetails ? (
-          <>
-            <MenuItem onClick={() => handleExportTenant('csv')}>
-              📊 Export as CSV
-            </MenuItem>
-            <MenuItem onClick={() => handleExportTenant('json')}>
-              📄 Export as JSON
-            </MenuItem>
-          </>
-        ) : (
-          <>
-            <MenuItem onClick={() => handleExportTenants('csv')}>
-              📊 Export as CSV
-            </MenuItem>
-            <MenuItem onClick={() => handleExportTenants('json')}>
-              📄 Export as JSON
-            </MenuItem>
-          </>
-        )}
+        <MenuItem onClick={() => handleExportTenants('csv')}>
+          📊 Export as CSV
+        </MenuItem>
+        <MenuItem onClick={() => handleExportTenants('json')}>
+          📄 Export as JSON
+        </MenuItem>
       </Menu>
 
       {/* Edit Tenant Dialog */}

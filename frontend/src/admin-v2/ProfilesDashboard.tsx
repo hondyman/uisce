@@ -1,18 +1,61 @@
-// Self-Service Studio — Screen 1
-// Profiles Dashboard & Identity Ingestion Hub
-// Spec: PART 5 § Screen 1
-
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useCallback } from "react";
+import {
+  Alert,
+  Avatar,
+  AvatarGroup,
+  Box,
+  Breadcrumbs,
+  Button,
+  Card,
+  CardContent,
+  Chip,
+  CircularProgress,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
+  Divider,
+  Grid,
+  IconButton,
+  InputAdornment,
+  Link as MuiLink,
+  MenuItem,
+  Paper,
+  Snackbar,
+  Stack,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
+  TextField,
+  Tooltip,
+  Typography,
+  useTheme,
+  alpha,
+} from "@mui/material";
+import {
+  Add as AddIcon,
+  ArrowForward as ArrowForwardIcon,
+  CheckCircle as CheckCircleIcon,
+  Close as CloseIcon,
+  ContentCopy as ContentCopyIcon,
+  Extension as ExtensionIcon,
+  Groups as GroupsIcon,
+  Lock as LockIcon,
+  PersonOutline as PersonOutlineIcon,
+  Refresh as RefreshIcon,
+  Search as SearchIcon,
+  Security as SecurityIcon,
+  Shield as ShieldIcon,
+  Storage as StorageIcon,
+  Tune as TuneIcon,
+  VpnKey as VpnKeyIcon,
+} from "@mui/icons-material";
 import { studioApi, StudioApiError } from "./studioApi";
-import type {
-  CloneProfileRequest,
-  IdpBroker,
-  TenantProfile,
-} from "./types";
+import type { CloneProfileRequest, IdpBroker, TenantProfile } from "./types";
 
-// In a real implementation the system profile list comes from the
-// bootstrap migration (000062) + keycloak realm config. We hard-code
-// the canonical three here for the prototype.
 const SYSTEM_PROFILES = [
   { profileKey: "platform_analyst", profileName: "Platform Analyst", origin: "system" as const, ruleCount: 14 },
   { profileKey: "platform_trader", profileName: "Platform Trader", origin: "system" as const, ruleCount: 32 },
@@ -20,10 +63,12 @@ const SYSTEM_PROFILES = [
 ];
 
 export const ProfilesDashboard: React.FC = () => {
+  const theme = useTheme();
   const [tenantProfiles, setTenantProfiles] = useState<TenantProfile[]>([]);
   const [idpBrokers, setIdpBrokers] = useState<IdpBroker[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [search, setSearch] = useState("");
   const [cloneOpen, setCloneOpen] = useState(false);
   const [cloneSource, setCloneSource] = useState<string>("");
   const [cloneTarget, setCloneTarget] = useState<string>("");
@@ -32,8 +77,13 @@ export const ProfilesDashboard: React.FC = () => {
   const [idpAlias, setIdpAlias] = useState<string>("");
   const [idpProvider, setIdpProvider] = useState<string>("oidc");
   const [targetRealm, setTargetRealm] = useState<string>("uisce");
+  const [snack, setSnack] = useState<{ open: boolean; severity: "success" | "error" | "info"; message: string }>({
+    open: false,
+    severity: "info",
+    message: "",
+  });
 
-  const refresh = async () => {
+  const refresh = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
@@ -44,12 +94,13 @@ export const ProfilesDashboard: React.FC = () => {
       if (tenantRes.ok) {
         const data = await tenantRes.json();
         setTenantProfiles(data.profiles || []);
+      } else {
+        setTenantProfiles([]);
       }
       try {
         const brokers = await studioApi.listIdpBrokers(targetRealm);
         setIdpBrokers(brokers.brokers);
       } catch {
-        // IdP broker service may be unconfigured in dev — non-fatal.
         setIdpBrokers([]);
       }
     } catch (e) {
@@ -57,12 +108,11 @@ export const ProfilesDashboard: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [targetRealm]);
 
   useEffect(() => {
     refresh();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [refresh]);
 
   const handleClone = async () => {
     setError(null);
@@ -72,15 +122,21 @@ export const ProfilesDashboard: React.FC = () => {
         targetProfileKey: cloneTarget,
         targetProfileName: cloneTargetName,
       };
-      await studioApi.cloneProfile(req);
+      const result = await studioApi.cloneProfile(req);
       setCloneOpen(false);
       setCloneSource("");
       setCloneTarget("");
       setCloneTargetName("");
+      setSnack({
+        open: true,
+        severity: "success",
+        message: `Cloned ${result.clonedRulesCount} rules from ${result.sourceProfileKey} → ${result.profileKey}`,
+      });
       await refresh();
     } catch (e) {
       const msg = e instanceof StudioApiError ? `${e.message}: ${e.detail || ""}` : String(e);
       setError(msg);
+      setSnack({ open: true, severity: "error", message: msg });
     }
   };
 
@@ -90,171 +146,664 @@ export const ProfilesDashboard: React.FC = () => {
       await studioApi.registerIdpBroker(targetRealm, idpAlias, idpProvider);
       setIdpOpen(false);
       setIdpAlias("");
+      setSnack({ open: true, severity: "success", message: `Registered IdP broker "${idpAlias}"` });
       await refresh();
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       setError(msg);
+      setSnack({ open: true, severity: "error", message: msg });
     }
   };
 
+  const openCloneFor = (profileKey: string) => {
+    setCloneSource(profileKey);
+    setCloneTarget("");
+    setCloneTargetName("");
+    setCloneOpen(true);
+  };
+
+  const totalSystemRules = SYSTEM_PROFILES.reduce((acc, p) => acc + p.ruleCount, 0);
+  const totalTenantRules = tenantProfiles.reduce((acc, p) => acc + p.ruleCount, 0);
+  const activeBrokers = idpBrokers.filter((b) => b.enabled).length;
+
+  const filteredSystem = SYSTEM_PROFILES.filter(
+    (p) =>
+      !search ||
+      p.profileName.toLowerCase().includes(search.toLowerCase()) ||
+      p.profileKey.toLowerCase().includes(search.toLowerCase())
+  );
+  const filteredTenant = tenantProfiles.filter(
+    (p) =>
+      !search ||
+      p.profileName.toLowerCase().includes(search.toLowerCase()) ||
+      p.profileKey.toLowerCase().includes(search.toLowerCase())
+  );
+
+  const StatCard: React.FC<{
+    label: string;
+    value: number | string;
+    icon: React.ReactNode;
+    color: string;
+    helper?: string;
+  }> = ({ label, value, icon, color, helper }) => (
+    <Card
+      elevation={0}
+      sx={{
+        border: 1,
+        borderColor: "divider",
+        borderRadius: 2,
+        height: "100%",
+        transition: "border-color 0.15s ease, transform 0.15s ease",
+        "&:hover": { borderColor: color, transform: "translateY(-1px)" },
+      }}
+    >
+      <CardContent sx={{ p: 2.5 }}>
+        <Stack direction="row" spacing={2} alignItems="flex-start">
+          <Box
+            sx={{
+              width: 44,
+              height: 44,
+              borderRadius: 1.5,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              bgcolor: alpha(color, 0.12),
+              color: color,
+            }}
+          >
+            {icon}
+          </Box>
+          <Box sx={{ flex: 1, minWidth: 0 }}>
+            <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5 }}>
+              {label}
+            </Typography>
+            <Typography variant="h4" fontWeight={800} sx={{ mt: 0.5, lineHeight: 1.1 }}>
+              {value}
+            </Typography>
+            {helper && (
+              <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5, display: "block" }}>
+                {helper}
+              </Typography>
+            )}
+          </Box>
+        </Stack>
+      </CardContent>
+    </Card>
+  );
+
   return (
-    <div className="studio-screen">
-      <header className="studio-header">
-        <h2>uisce_os — Security &amp; Entitlements Studio</h2>
-        <input
-          className="realm-input"
-          placeholder="Target Realm (e.g. uisce)"
-          value={targetRealm}
-          onChange={(e) => setTargetRealm(e.target.value)}
-        />
-      </header>
+    <Box sx={{ p: { xs: 2, md: 3 }, maxWidth: 1600, mx: "auto" }}>
+      <Breadcrumbs sx={{ mb: 1.5 }}>
+        <MuiLink underline="hover" color="text.secondary" href="/fabric/tenants" sx={{ fontSize: 13 }}>
+          Platform
+        </MuiLink>
+        <Typography variant="body2" sx={{ fontSize: 13 }} color="text.primary">
+          Entitlement Management
+        </Typography>
+      </Breadcrumbs>
 
-      {error && <div className="studio-error">{error}</div>}
-      {loading && <div className="studio-loading">Loading…</div>}
+      <Stack direction={{ xs: "column", md: "row" }} spacing={2} alignItems={{ md: "flex-end" }} sx={{ mb: 3 }}>
+        <Box sx={{ flex: 1 }}>
+          <Stack direction="row" spacing={1.5} alignItems="center" sx={{ mb: 0.5 }}>
+            <Avatar sx={{ bgcolor: alpha(theme.palette.primary.main, 0.12), color: "primary.main", width: 40, height: 40 }}>
+              <ShieldIcon />
+            </Avatar>
+            <Typography variant="h4" fontWeight={800}>
+              Entitlement Management
+            </Typography>
+          </Stack>
+          <Typography variant="body1" color="text.secondary">
+            Define tenant profiles, link corporate identity providers, and govern ABAC overrides.
+          </Typography>
+        </Box>
+        <Stack direction="row" spacing={1}>
+          <TextField
+            size="small"
+            value={targetRealm}
+            onChange={(e) => setTargetRealm(e.target.value)}
+            label="Target Realm"
+            sx={{ minWidth: 180 }}
+          />
+          <Tooltip title="Refresh">
+            <IconButton onClick={refresh} disabled={loading} size="small">
+              <RefreshIcon />
+            </IconButton>
+          </Tooltip>
+          <Button
+            variant="contained"
+            startIcon={<AddIcon />}
+            onClick={() => setCloneOpen(true)}
+            disabled={SYSTEM_PROFILES.length === 0}
+          >
+            Clone Profile
+          </Button>
+        </Stack>
+      </Stack>
 
-      {/* Section 1: Corporate IdP Link */}
-      <section className="studio-section">
-        <header>
-          <h3>1. Corporate Identity Provider Link (Bring-Your-Own-IdP)</h3>
-        </header>
-        {idpBrokers.length === 0 ? (
-          <p className="studio-muted">No IdP brokers linked. Click + Register IdP to connect Azure AD / Okta / Ping.</p>
-        ) : (
-          <ul className="studio-broker-list">
-            {idpBrokers.map((b) => (
-              <li key={b.alias} className={b.enabled ? "broker enabled" : "broker disabled"}>
-                <span className="broker-alias">{b.alias}</span>
-                <span className="broker-provider">{b.providerId}</span>
-                <span className="broker-status">{b.enabled ? "Active" : "Disabled"}</span>
-              </li>
-            ))}
-          </ul>
-        )}
-        {!idpOpen && (
-          <button className="studio-btn primary" onClick={() => setIdpOpen(true)}>
-            + Register IdP
-          </button>
-        )}
-        {idpOpen && (
-          <div className="studio-form">
-            <label>
-              Alias
-              <input value={idpAlias} onChange={(e) => setIdpAlias(e.target.value)} placeholder="acme-oidc" />
-            </label>
-            <label>
-              Provider
-              <select value={idpProvider} onChange={(e) => setIdpProvider(e.target.value)}>
-                <option value="oidc">OpenID Connect</option>
-                <option value="saml">SAML</option>
-                <option value="google">Google</option>
-              </select>
-            </label>
-            <div className="studio-form-actions">
-              <button onClick={() => setIdpOpen(false)}>Cancel</button>
-              <button className="primary" onClick={handleRegisterIdp}>Register</button>
-            </div>
-          </div>
-        )}
-      </section>
+      <Grid container spacing={2} sx={{ mb: 3 }}>
+        <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+          <StatCard
+            label="System Profiles"
+            value={SYSTEM_PROFILES.length}
+            icon={<LockIcon />}
+            color={theme.palette.primary.main}
+            helper={`${totalSystemRules} baseline rules`}
+          />
+        </Grid>
+        <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+          <StatCard
+            label="Custom Profiles"
+            value={tenantProfiles.length}
+            icon={<PersonOutlineIcon />}
+            color={theme.palette.info.main}
+            helper={`${totalTenantRules} tenant rules`}
+          />
+        </Grid>
+        <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+          <StatCard
+            label="IdP Brokers"
+            value={idpBrokers.length}
+            icon={<VpnKeyIcon />}
+            color={theme.palette.success.main}
+            helper={`${activeBrokers} active`}
+          />
+        </Grid>
+        <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+          <StatCard
+            label="Identity Mappings"
+            value="—"
+            icon={<GroupsIcon />}
+            color={theme.palette.warning.main}
+            helper="Configured in catalog"
+          />
+        </Grid>
+      </Grid>
 
-      {/* Section 2: Active Directory Group Mapping */}
-      <section className="studio-section">
-        <header>
-          <h3>2. AD Group Mapping</h3>
-        </header>
-        <p className="studio-muted">
-          Configure corporate group → internal profile mappings via the
-          <code>security.identity_profile_mappings</code> catalog. Cardinal
-          Rule 7.4: group IDs are passed through verbatim from the IdP; resolution
-          is the database plane.
-        </p>
-      </section>
+      {error && (
+        <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError(null)}>
+          {error}
+        </Alert>
+      )}
 
-      {/* Section 3: Platform Profile Register */}
-      <section className="studio-section">
-        <header>
-          <h3>3. Platform Profile Register</h3>
-        </header>
-        <table className="studio-table">
-          <thead>
-            <tr>
-              <th>Profile Name</th>
-              <th>Type</th>
-              <th>Status</th>
-              <th>Rules</th>
-              <th>Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {SYSTEM_PROFILES.map((p) => (
-              <tr key={p.profileKey} className="system-profile">
-                <td>
-                  <span className="lock-icon" aria-label="system">🔒</span> {p.profileName}
-                  <div className="profile-key">{p.profileKey}</div>
-                </td>
-                <td><span className="badge system">SYSTEM</span></td>
-                <td><span className="status-pill baseline">Baseline</span></td>
-                <td>{p.ruleCount}</td>
-                <td>
-                  <button className="studio-btn small" onClick={() => { setCloneSource(p.profileKey); setCloneOpen(true); }}>
-                    ⚡ Clone
-                  </button>
-                </td>
-              </tr>
-            ))}
-            {tenantProfiles.map((p) => (
-              <tr key={p.profileId} className="tenant-profile">
-                <td>
-                  <span aria-label="tenant">👤</span> {p.profileName}
-                  <div className="profile-key">{p.profileKey}</div>
-                </td>
-                <td><span className="badge tenant">CUSTOM</span></td>
-                <td><span className="status-pill active">Active</span></td>
-                <td>{p.ruleCount}</td>
-                <td>
-                  <a href={`/admin/entitlements/profiles/${p.profileKey}/components`} className="studio-btn small">
-                    ✏️ Edit
-                  </a>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        {!cloneOpen && (
-          <button className="studio-btn primary" onClick={() => setCloneOpen(true)} disabled={!cloneSource}>
-            + Clone System Profile
-          </button>
-        )}
-        {cloneOpen && (
-          <div className="studio-form">
-            <label>
-              Source Profile
-              <input value={cloneSource} onChange={(e) => setCloneSource(e.target.value)} readOnly={!!cloneSource} />
-            </label>
-            <label>
-              Target Profile Key
-              <input
-                value={cloneTarget}
-                onChange={(e) => setCloneTarget(e.target.value)}
-                placeholder="inv_senior_analyst"
-              />
-            </label>
-            <label>
-              Target Profile Name
-              <input
-                value={cloneTargetName}
-                onChange={(e) => setCloneTargetName(e.target.value)}
-                placeholder="InvestCo Senior Analyst"
-              />
-            </label>
-            <div className="studio-form-actions">
-              <button onClick={() => setCloneOpen(false)}>Cancel</button>
-              <button className="primary" onClick={handleClone}>Clone</button>
-            </div>
-          </div>
-        )}
-      </section>
-    </div>
+      <Paper elevation={0} sx={{ border: 1, borderColor: "divider", borderRadius: 2, mb: 3 }}>
+        <Box sx={{ p: 2.5, pb: 2 }}>
+          <Stack direction="row" spacing={1.5} alignItems="center" sx={{ mb: 0.5 }}>
+            <Avatar sx={{ bgcolor: alpha(theme.palette.success.main, 0.12), color: "success.main", width: 32, height: 32 }}>
+              <VpnKeyIcon fontSize="small" />
+            </Avatar>
+            <Box>
+              <Typography variant="h6" fontWeight={700}>
+                Corporate Identity Provider Link
+              </Typography>
+              <Typography variant="caption" color="text.secondary">
+                Bring your own IdP — connect Azure AD, Okta, Ping, or Google to realm <strong>{targetRealm}</strong>.
+              </Typography>
+            </Box>
+          </Stack>
+        </Box>
+        <Divider />
+        <Box sx={{ p: 2.5 }}>
+          {idpBrokers.length === 0 ? (
+            <Box
+              sx={{
+                py: 5,
+                px: 3,
+                textAlign: "center",
+                borderRadius: 1.5,
+                border: 1,
+                borderStyle: "dashed",
+                borderColor: "divider",
+                bgcolor: alpha(theme.palette.success.main, 0.04),
+              }}
+            >
+              <VpnKeyIcon sx={{ fontSize: 40, color: "text.disabled", mb: 1 }} />
+              <Typography variant="body1" color="text.secondary" sx={{ mb: 0.5 }}>
+                No IdP brokers linked yet
+              </Typography>
+              <Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 2 }}>
+                Connect your corporate identity provider to enable SSO and AD group mapping.
+              </Typography>
+              <Button variant="outlined" startIcon={<AddIcon />} onClick={() => setIdpOpen(true)}>
+                Register IdP
+              </Button>
+            </Box>
+          ) : (
+            <Grid container spacing={1.5}>
+              {idpBrokers.map((b) => (
+                <Grid size={{ xs: 12, sm: 6, md: 4 }} key={b.alias}>
+                  <Card variant="outlined" sx={{ p: 2 }}>
+                    <Stack direction="row" alignItems="center" spacing={1.5}>
+                      <Avatar sx={{ bgcolor: alpha(theme.palette.success.main, 0.12), color: "success.main", width: 36, height: 36 }}>
+                        <SecurityIcon fontSize="small" />
+                      </Avatar>
+                      <Box sx={{ flex: 1, minWidth: 0 }}>
+                        <Typography variant="subtitle2" fontWeight={700} noWrap>
+                          {b.alias}
+                        </Typography>
+                        <Typography variant="caption" color="text.secondary" noWrap>
+                          {b.providerId} · {b.linkedRealm}
+                        </Typography>
+                      </Box>
+                      <Chip
+                        size="small"
+                        label={b.enabled ? "Active" : "Disabled"}
+                        color={b.enabled ? "success" : "default"}
+                        variant={b.enabled ? "filled" : "outlined"}
+                      />
+                    </Stack>
+                  </Card>
+                </Grid>
+              ))}
+              <Grid size={{ xs: 12, sm: 6, md: 4 }}>
+                <Card
+                  variant="outlined"
+                  sx={{
+                    p: 2,
+                    borderStyle: "dashed",
+                    cursor: "pointer",
+                    transition: "all 0.15s",
+                    "&:hover": { borderColor: "primary.main", bgcolor: alpha(theme.palette.primary.main, 0.04) },
+                  }}
+                  onClick={() => setIdpOpen(true)}
+                >
+                  <Stack direction="row" alignItems="center" spacing={1.5} justifyContent="center">
+                    <AddIcon color="primary" />
+                    <Typography variant="subtitle2" color="primary" fontWeight={700}>
+                      Register another IdP
+                    </Typography>
+                  </Stack>
+                </Card>
+              </Grid>
+            </Grid>
+          )}
+        </Box>
+      </Paper>
+
+      <Paper elevation={0} sx={{ border: 1, borderColor: "divider", borderRadius: 2, mb: 3 }}>
+        <Box sx={{ p: 2.5, pb: 2 }}>
+          <Stack direction="row" spacing={1.5} alignItems="center" sx={{ mb: 0.5 }}>
+            <Avatar sx={{ bgcolor: alpha(theme.palette.warning.main, 0.12), color: "warning.main", width: 32, height: 32 }}>
+              <GroupsIcon fontSize="small" />
+            </Avatar>
+            <Box sx={{ flex: 1 }}>
+              <Typography variant="h6" fontWeight={700}>
+                AD Group Mapping
+              </Typography>
+              <Typography variant="caption" color="text.secondary">
+                Configure corporate group → internal profile mappings via the catalog.
+              </Typography>
+            </Box>
+          </Stack>
+        </Box>
+        <Divider />
+        <Box sx={{ p: 2.5 }}>
+          <Alert severity="info" variant="outlined" icon={<StorageIcon />}>
+            Mappings are stored in <code>security.identity_profile_mappings</code>. Per{" "}
+            <strong>Cardinal Rule 7.4</strong>, group IDs are passed through verbatim from the IdP — resolution
+            is the database plane, not the application.
+          </Alert>
+        </Box>
+      </Paper>
+
+      <Paper elevation={0} sx={{ border: 1, borderColor: "divider", borderRadius: 2 }}>
+        <Box sx={{ p: 2.5, pb: 2 }}>
+          <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 2 }}>
+            <Stack direction="row" spacing={1.5} alignItems="center">
+              <Avatar sx={{ bgcolor: alpha(theme.palette.primary.main, 0.12), color: "primary.main", width: 32, height: 32 }}>
+                <ExtensionIcon fontSize="small" />
+              </Avatar>
+              <Box>
+                <Typography variant="h6" fontWeight={700}>
+                  Platform Profile Register
+                </Typography>
+                <Typography variant="caption" color="text.secondary">
+                  System blueprints and tenant-scoped custom profiles. Click a row to customize.
+                </Typography>
+              </Box>
+            </Stack>
+            <TextField
+              size="small"
+              placeholder="Search profiles…"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              InputProps={{
+                startAdornment: (
+                  <InputAdornment position="start">
+                    <SearchIcon fontSize="small" />
+                  </InputAdornment>
+                ),
+              }}
+              sx={{ minWidth: 240 }}
+            />
+          </Stack>
+
+          <Stack direction="row" spacing={1} sx={{ mb: 2 }}>
+            <Chip
+              icon={<LockIcon />}
+              label={`System · ${SYSTEM_PROFILES.length}`}
+              size="small"
+              color="primary"
+              variant="outlined"
+            />
+            <Chip
+              icon={<PersonOutlineIcon />}
+              label={`Custom · ${tenantProfiles.length}`}
+              size="small"
+              color="info"
+              variant="outlined"
+            />
+            <Box sx={{ flex: 1 }} />
+            <AvatarGroup max={4} sx={{ "& .MuiAvatar-root": { width: 24, height: 24, fontSize: 12 } }}>
+              {[...SYSTEM_PROFILES, ...tenantProfiles].slice(0, 4).map((p) => (
+                <Avatar key={p.profileKey}>{p.profileName.charAt(0)}</Avatar>
+              ))}
+            </AvatarGroup>
+          </Stack>
+        </Box>
+        <Divider />
+        <TableContainer>
+          <Table>
+            <TableHead>
+              <TableRow sx={{ bgcolor: theme.palette.mode === "dark" ? "rgba(0,0,0,0.3)" : "grey.50" }}>
+                <TableCell sx={{ fontWeight: 700, textTransform: "uppercase", fontSize: "0.75rem" }}>Profile</TableCell>
+                <TableCell sx={{ fontWeight: 700, textTransform: "uppercase", fontSize: "0.75rem" }}>Type</TableCell>
+                <TableCell sx={{ fontWeight: 700, textTransform: "uppercase", fontSize: "0.75rem" }}>Status</TableCell>
+                <TableCell align="right" sx={{ fontWeight: 700, textTransform: "uppercase", fontSize: "0.75rem" }}>
+                  Rules
+                </TableCell>
+                <TableCell align="right" sx={{ fontWeight: 700, textTransform: "uppercase", fontSize: "0.75rem" }}>
+                  Actions
+                </TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {loading ? (
+                <TableRow>
+                  <TableCell colSpan={5} align="center" sx={{ py: 6 }}>
+                    <CircularProgress size={28} />
+                  </TableCell>
+                </TableRow>
+              ) : filteredSystem.length === 0 && filteredTenant.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={5} align="center" sx={{ py: 6 }}>
+                    <Typography color="text.secondary">No profiles match "{search}"</Typography>
+                  </TableCell>
+                </TableRow>
+              ) : (
+                <>
+                  {filteredSystem.map((p) => (
+                    <TableRow
+                      key={p.profileKey}
+                      hover
+                      sx={{ "&:last-of-type td": { borderBottom: 0 }, opacity: 0.95 }}
+                    >
+                      <TableCell>
+                        <Stack direction="row" spacing={1.5} alignItems="center">
+                          <Avatar sx={{ bgcolor: alpha(theme.palette.primary.main, 0.12), width: 32, height: 32 }}>
+                            <LockIcon fontSize="small" color="primary" />
+                          </Avatar>
+                          <Box>
+                            <Typography variant="body2" fontWeight={600}>
+                              {p.profileName}
+                            </Typography>
+                            <Typography variant="caption" color="text.secondary" sx={{ fontFamily: "monospace" }}>
+                              {p.profileKey}
+                            </Typography>
+                          </Box>
+                        </Stack>
+                      </TableCell>
+                      <TableCell>
+                        <Chip label="SYSTEM" size="small" color="primary" variant="outlined" />
+                      </TableCell>
+                      <TableCell>
+                        <Chip
+                          label="Immutable Baseline"
+                          size="small"
+                          icon={<ShieldIcon style={{ fontSize: 14 }} />}
+                          sx={{ bgcolor: alpha(theme.palette.primary.main, 0.08) }}
+                        />
+                      </TableCell>
+                      <TableCell align="right">
+                        <Typography variant="body2" fontWeight={600}>
+                          {p.ruleCount}
+                        </Typography>
+                      </TableCell>
+                      <TableCell align="right">
+                        <Tooltip title="Clone to a custom tenant profile">
+                          <Button
+                            size="small"
+                            variant="outlined"
+                            startIcon={<ContentCopyIcon />}
+                            onClick={() => openCloneFor(p.profileKey)}
+                          >
+                            Clone
+                          </Button>
+                        </Tooltip>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                  {filteredTenant.map((p) => (
+                    <TableRow
+                      key={p.profileId}
+                      hover
+                      sx={{ "&:last-of-type td": { borderBottom: 0 } }}
+                    >
+                      <TableCell>
+                        <Stack direction="row" spacing={1.5} alignItems="center">
+                          <Avatar sx={{ bgcolor: alpha(theme.palette.info.main, 0.12), width: 32, height: 32 }}>
+                            <PersonOutlineIcon fontSize="small" color="info" />
+                          </Avatar>
+                          <Box>
+                            <Typography variant="body2" fontWeight={600}>
+                              {p.profileName}
+                            </Typography>
+                            <Typography variant="caption" color="text.secondary" sx={{ fontFamily: "monospace" }}>
+                              {p.profileKey}
+                            </Typography>
+                          </Box>
+                        </Stack>
+                      </TableCell>
+                      <TableCell>
+                        <Chip label="CUSTOM" size="small" color="info" variant="outlined" />
+                      </TableCell>
+                      <TableCell>
+                        <Chip
+                          label="Active"
+                          size="small"
+                          color="success"
+                          icon={<CheckCircleIcon style={{ fontSize: 14 }} />}
+                        />
+                      </TableCell>
+                      <TableCell align="right">
+                        <Typography variant="body2" fontWeight={600}>
+                          {p.ruleCount}
+                        </Typography>
+                      </TableCell>
+                      <TableCell align="right">
+                        <Stack direction="row" spacing={0.5} justifyContent="flex-end">
+                          <Tooltip title="Open functional scope matrix">
+                            <Button
+                              size="small"
+                              variant="text"
+                              startIcon={<TuneIcon />}
+                              href={`/admin/entitlements/profiles/${p.profileKey}/components`}
+                            >
+                              Components
+                            </Button>
+                          </Tooltip>
+                          <Tooltip title="Open profile customizer">
+                            <Button
+                              size="small"
+                              variant="outlined"
+                              startIcon={<ExtensionIcon />}
+                              href={`/admin/entitlements/profiles/${p.profileKey}`}
+                            >
+                              Customize
+                            </Button>
+                          </Tooltip>
+                        </Stack>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </>
+              )}
+            </TableBody>
+          </Table>
+        </TableContainer>
+      </Paper>
+
+      <Dialog open={cloneOpen} onClose={() => setCloneOpen(false)} maxWidth="sm" fullWidth>
+        <DialogTitle sx={{ pb: 1 }}>
+          <Stack direction="row" spacing={1.5} alignItems="center">
+            <Avatar sx={{ bgcolor: alpha(theme.palette.primary.main, 0.12), width: 32, height: 32 }}>
+              <ContentCopyIcon color="primary" fontSize="small" />
+            </Avatar>
+            <Box>
+              <Typography variant="h6" fontWeight={700}>
+                Clone System Profile
+              </Typography>
+              <Typography variant="caption" color="text.secondary">
+                Create a tenant-scoped custom profile from a system baseline.
+              </Typography>
+            </Box>
+          </Stack>
+        </DialogTitle>
+        <DialogContent dividers>
+          <Stack spacing={2.5} sx={{ pt: 1 }}>
+            <TextField
+              select
+              label="Source Profile"
+              value={cloneSource}
+              onChange={(e) => setCloneSource(e.target.value)}
+              fullWidth
+              required
+            >
+              {SYSTEM_PROFILES.map((p) => (
+                <MenuItem key={p.profileKey} value={p.profileKey}>
+                  <Stack direction="row" spacing={1} alignItems="center" sx={{ width: "100%" }}>
+                    <LockIcon fontSize="small" color="primary" />
+                    <Box sx={{ flex: 1 }}>
+                      <Typography variant="body2">{p.profileName}</Typography>
+                      <Typography variant="caption" color="text.secondary" sx={{ fontFamily: "monospace" }}>
+                        {p.profileKey} · {p.ruleCount} rules
+                      </Typography>
+                    </Box>
+                  </Stack>
+                </MenuItem>
+              ))}
+            </TextField>
+            <TextField
+              label="Target Profile Key"
+              value={cloneTarget}
+              onChange={(e) => setCloneTarget(e.target.value)}
+              placeholder="inv_senior_analyst"
+              fullWidth
+              required
+              helperText="Lowercase, underscores only — used in API and condition DSL"
+            />
+            <TextField
+              label="Target Profile Name"
+              value={cloneTargetName}
+              onChange={(e) => setCloneTargetName(e.target.value)}
+              placeholder="InvestCo Senior Analyst"
+              fullWidth
+            />
+            <Alert severity="info" variant="outlined" icon={<ShieldIcon />}>
+              Cloned profiles inherit all system rules. You can then add tenant-scoped overrides in the Profile
+              Customizer.
+            </Alert>
+          </Stack>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, py: 2 }}>
+          <Button onClick={() => setCloneOpen(false)} startIcon={<CloseIcon />}>
+            Cancel
+          </Button>
+          <Button
+            onClick={handleClone}
+            variant="contained"
+            disabled={!cloneSource || !cloneTarget || !cloneTargetName}
+            startIcon={<ContentCopyIcon />}
+          >
+            Clone Profile
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog open={idpOpen} onClose={() => setIdpOpen(false)} maxWidth="sm" fullWidth>
+        <DialogTitle sx={{ pb: 1 }}>
+          <Stack direction="row" spacing={1.5} alignItems="center">
+            <Avatar sx={{ bgcolor: alpha(theme.palette.success.main, 0.12), width: 32, height: 32 }}>
+              <VpnKeyIcon color="success" fontSize="small" />
+            </Avatar>
+            <Box>
+              <Typography variant="h6" fontWeight={700}>
+                Register Identity Provider
+              </Typography>
+              <Typography variant="caption" color="text.secondary">
+                Link a corporate IdP to realm <strong>{targetRealm}</strong>.
+              </Typography>
+            </Box>
+          </Stack>
+        </DialogTitle>
+        <DialogContent dividers>
+          <Stack spacing={2.5} sx={{ pt: 1 }}>
+            <TextField
+              label="Alias"
+              value={idpAlias}
+              onChange={(e) => setIdpAlias(e.target.value)}
+              placeholder="acme-oidc"
+              fullWidth
+              required
+              helperText="Unique identifier within the realm"
+            />
+            <TextField
+              select
+              label="Provider Type"
+              value={idpProvider}
+              onChange={(e) => setIdpProvider(e.target.value)}
+              fullWidth
+            >
+              <MenuItem value="oidc">OpenID Connect</MenuItem>
+              <MenuItem value="saml">SAML 2.0</MenuItem>
+              <MenuItem value="google">Google Workspace</MenuItem>
+            </TextField>
+            <Alert severity="warning" variant="outlined">
+              After registration, configure the IdP metadata (client ID, secret, redirect URI) via the realm's
+              identity provider console.
+            </Alert>
+          </Stack>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, py: 2 }}>
+          <Button onClick={() => setIdpOpen(false)} startIcon={<CloseIcon />}>
+            Cancel
+          </Button>
+          <Button
+            onClick={handleRegisterIdp}
+            variant="contained"
+            disabled={!idpAlias || !idpProvider}
+            startIcon={<ArrowForwardIcon />}
+          >
+            Register Broker
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Snackbar
+        open={snack.open}
+        autoHideDuration={5000}
+        onClose={() => setSnack((s) => ({ ...s, open: false }))}
+        anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
+      >
+        <Alert
+          onClose={() => setSnack((s) => ({ ...s, open: false }))}
+          severity={snack.severity}
+          variant="filled"
+          sx={{ minWidth: 320 }}
+        >
+          {snack.message}
+        </Alert>
+      </Snackbar>
+    </Box>
   );
 };
 

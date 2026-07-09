@@ -50,7 +50,8 @@ import {
   Speed as SpeedIcon,
   AccountTree as AccountTreeIcon,
   Layers as LayersIcon,
-  Event as EventIcon
+  Event as EventIcon,
+  Extension as ExtensionIcon
 } from '@mui/icons-material';
 import {
   Lock as LockIcon,
@@ -121,7 +122,7 @@ const categoryConfigs: CategoryConfig[] = [
     label: 'Platform',
     key: 'tenants',
     icon: <SettingsIcon />,
-    defaultPath: '/tenants',
+    defaultPath: '/fabric/tenants',
     requiredCapability: 'menu:platform',
     color: {
       primary: '#607D8B',
@@ -136,6 +137,7 @@ const categoryConfigs: CategoryConfig[] = [
         requiredCapability: 'menu:organization',
         items: [
           { label: 'Tenant Management', path: '/fabric/tenants', icon: <CorporateFareIcon />, description: 'Platform admin: status, IP, usage' },
+          { label: 'Entitlement Management', path: '/admin/entitlements', icon: <ExtensionIcon />, description: 'Tenant profiles and component entitlements', requiredCapability: 'menu:entitlements' },
           { label: 'Users', path: '/admin/rbac/users', icon: <PersonAddIcon />, description: 'User management' },
           { label: 'Teams', path: '/admin/rbac/teams', icon: <GroupsIcon />, description: 'Team structure' },
           { label: 'User Roles', path: '/admin/rbac/user-roles', icon: <AccountCircleIcon />, description: 'User role assignments' },
