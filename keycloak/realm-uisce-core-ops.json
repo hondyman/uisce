@@ -1,0 +1,217 @@
+{
+  "realm": "uisce-core-ops",
+  "enabled": true,
+  "displayName": "Uisce Platform Operator Realm",
+  "displayNameHtml": "<div class=\"kc-logo-text\"><span>Uisce Core Ops</span></div>",
+  "registrationAllowed": false,
+  "loginWithEmailAllowed": true,
+  "duplicateEmailsAllowed": false,
+  "resetPasswordAllowed": true,
+  "editUsernameAllowed": false,
+  "bruteForceProtected": true,
+  "permanentLockout": false,
+  "maxFailureWaitSeconds": 900,
+  "minimumQuickLoginWaitSeconds": 60,
+  "waitIncrementSeconds": 60,
+  "quickLoginCheckMilliSeconds": 1000,
+  "maxDeltaTimeSeconds": 43200,
+  "failureFactor": 30,
+  "sslRequired": "external",
+  "accessTokenLifespan": 1800,
+  "accessTokenLifespanForImplicitFlow": 900,
+  "ssoSessionIdleTimeout": 1800,
+  "ssoSessionMaxLifespan": 36000,
+  "offlineSessionIdleTimeout": 2592000,
+  "accessCodeLifespan": 60,
+  "accessCodeLifespanUserAction": 300,
+  "accessCodeLifespanLogin": 1800,
+  "actionTokenGeneratedByAdminLifespan": 43200,
+  "actionTokenGeneratedByUserLifespan": 300,
+  "loginTheme": "keycloak",
+  "accountTheme": "keycloak",
+  "adminTheme": "keycloak",
+  "emailTheme": "keycloak",
+  "internationalizationEnabled": false,
+  "supportedLocales": [],
+  "defaultLocale": "en",
+  "_comment_realm": "Isolated administrative realm for internal Uisce platform operators (Part 1.1). No customer tenant authentication paths exist here; federated tenant users authenticate in the separate uisce-tenants realm.",
+  "roles": {
+    "realm": [
+      { "name": "uma_authorization", "description": "${role_uma_authorization}" },
+      { "name": "offline_access",      "description": "${role_offline_access}" },
+      { "name": "global_admin",        "description": "Platform-wide administrator" },
+      { "name": "global_ops",          "description": "Platform-wide operator" },
+      { "name": "helpdesk",            "description": "Read-only support operator" },
+      { "name": "professional_services", "description": "Consulting operator with break-glass capability" }
+    ]
+  },
+  "groups": [
+    {
+      "name": "GG-Uisce-GlobalAdmin",
+      "path": "/GG-Uisce-GlobalAdmin",
+      "realmRoleMappings": [
+        { "name": "global_admin", "required": true }
+      ]
+    },
+    {
+      "name": "GG-Uisce-Helpdesk",
+      "path": "/GG-Uisce-Helpdesk",
+      "realmRoleMappings": [
+        { "name": "helpdesk", "required": true }
+      ]
+    },
+    {
+      "name": "GG-Uisce-ProfessionalServices",
+      "path": "/GG-Uisce-ProfessionalServices",
+      "realmRoleMappings": [
+        { "name": "professional_services", "required": true }
+      ]
+    }
+  ],
+  "clients": [
+    {
+      "_comment_client": "Confidential client for the platform operator studio. Token Exchange Flow enabled (RFC 8693). Standard Flow disabled — the studio issues service-to-service exchange requests, not browser-based redirects.",
+      "clientId": "uisce-studio-ops",
+      "name": "Uisce Studio Ops (Internal Platform Operator Console)",
+      "description": "Confidential client for the internal operator console. Standard Flow disabled; Token Exchange Flow enabled per the Security & Access Mesh spec (Part 1.1).",
+      "enabled": true,
+      "publicClient": false,
+      "bearerOnly": false,
+      "directAccessGrantsEnabled": false,
+      "standardFlowEnabled": false,
+      "implicitFlowEnabled": false,
+      "serviceAccountsEnabled": true,
+      "frontchannelLogout": true,
+      "attributes": {
+        "access.token.lifespan": "3600",
+        "oauth2.token.exchange.grant.enabled": "true"
+      },
+      "protocol": "openid-connect",
+      "fullScopeAllowed": true,
+      "consentRequired": false
+    },
+    {
+      "_comment_client": "Bearer-only backend client — verifies operator JWTs at the API gateway.",
+      "clientId": "uisce-backend",
+      "name": "Uisce Backend (bearer-only)",
+      "description": "Confidential bearer-only client used by the Go backend to verify operator tokens.",
+      "enabled": true,
+      "publicClient": false,
+      "bearerOnly": true,
+      "directAccessGrantsEnabled": false,
+      "standardFlowEnabled": false,
+      "protocol": "openid-connect",
+      "attributes": { "access.token.lifespan": "3600" }
+    }
+  ],
+  "clientScopes": [
+    {
+      "name": "roles",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "true",
+        "display.on.consent.screen": "true",
+        "consent.screen.text": "${rolesScopeConsentText}"
+      },
+      "protocolMappers": [
+        {
+          "name": "realm-roles",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-realm-role-mapper",
+          "config": {
+            "claim.name": "roles",
+            "multivalued": "true",
+            "userinfo.token.claim": "true",
+            "id.token.claim": "true",
+            "access.token.claim": "true"
+          }
+        }
+      ]
+    },
+    {
+      "name": "groups",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "true",
+        "display.on.consent.screen": "true",
+        "consent.screen.text": "${groupsScopeConsentText}"
+      },
+      "protocolMappers": [
+        {
+          "name": "groups",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-group-membership-mapper",
+          "config": {
+            "claim.name": "groups",
+            "full.path": "false",
+            "multivalued": "true",
+            "userinfo.token.claim": "true",
+            "id.token.claim": "true",
+            "access.token.claim": "true"
+          }
+        }
+      ]
+    },
+    {
+      "_comment_scope": "Spec Part 1.1 — emit uisce_metadata.operator_role as a nested JSON object. The hardcoded value approach below produces the literal {operator_role: '...'} sub-object in the access token. Cardinal Rule 1 (config-before-code): the operator role is set as a user attribute by the realm's user federation / lifecycle hooks; the mapper below only shapes it into the spec's nested JWT claim.\n\nPhase B multi-tenant operator scope: tenant_scope ('single' | 'multi') + tenant_ids (array of UUID strings) are emitted as uisce_metadata.tenant_scope and uisce_metadata.tenant_ids. Cardinal Rule 1.3: tenant_ids is the immutable pre-approved binding list; an operator with tenant_scope='multi' may access any tenant in the list without a per-tenant lease (break-glass actions still go through the lease ledger).",
+      "name": "uisce_metadata",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "true",
+        "display.on.consent.screen": "false",
+        "consent.screen.text": "Uisce platform metadata"
+      },
+      "protocolMappers": [
+        {
+          "name": "uisce_metadata_operator_role",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-attribute-mapper",
+          "config": {
+            "user.attribute": "operator_role",
+            "claim.name": "uisce_metadata.operator_role",
+            "jsonType.label": "String",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "userinfo.token.claim": "true"
+          }
+        },
+        {
+          "_comment_mapper": "Phase B — multi-tenant operator scope. tenant_scope is a string user attribute; the access token carries the literal value 'single' or 'multi'.",
+          "name": "uisce_metadata_tenant_scope",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-attribute-mapper",
+          "config": {
+            "user.attribute": "tenant_scope",
+            "claim.name": "uisce_metadata.tenant_scope",
+            "jsonType.label": "String",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "userinfo.token.claim": "true"
+          }
+        },
+        {
+          "_comment_mapper": "Phase B — multi-tenant operator pre-approved tenant list. tenant_ids is a JSON-encoded array of UUID strings stored as a user attribute; the mapper emits it as a JSON array claim so the Go backend can decode it with json.Unmarshal into []string.",
+          "name": "uisce_metadata_tenant_ids",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-attribute-mapper",
+          "config": {
+            "user.attribute": "tenant_ids",
+            "claim.name": "uisce_metadata.tenant_ids",
+            "jsonType.label": "JSON",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "userinfo.token.claim": "true"
+          }
+        }
+      ]
+    }
+  ],
+  "defaultDefaultClientScopes": [
+    "role_list",
+    "profile",
+    "email",
+    "roles",
+    "groups",
+    "uisce_metadata"
+  ]
+}

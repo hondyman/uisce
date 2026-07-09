@@ -1,0 +1,219 @@
+{
+  "_comment_realm": "Federated tenant realm. Customer users authenticate here (directly, via SSO/IdP brokers, or via the pass-through identity engine). Internal platform operators authenticate in the separate uisce-core-ops realm.",
+  "realm": "uisce",
+  "enabled": true,
+  "displayName": "Uisce",
+  "displayNameHtml": "<div class=\"kc-logo-text\"><span>Uisce</span></div>",
+  "registrationAllowed": false,
+  "loginWithEmailAllowed": true,
+  "duplicateEmailsAllowed": false,
+  "resetPasswordAllowed": true,
+  "editUsernameAllowed": false,
+  "bruteForceProtected": true,
+  "permanentLockout": false,
+  "maxFailureWaitSeconds": 900,
+  "minimumQuickLoginWaitSeconds": 60,
+  "waitIncrementSeconds": 60,
+  "quickLoginCheckMilliSeconds": 1000,
+  "maxDeltaTimeSeconds": 43200,
+  "failureFactor": 30,
+  "sslRequired": "external",
+  "accessTokenLifespan": 1800,
+  "accessTokenLifespanForImplicitFlow": 900,
+  "ssoSessionIdleTimeout": 1800,
+  "ssoSessionMaxLifespan": 36000,
+  "offlineSessionIdleTimeout": 2592000,
+  "accessCodeLifespan": 60,
+  "accessCodeLifespanUserAction": 300,
+  "accessCodeLifespanLogin": 1800,
+  "actionTokenGeneratedByAdminLifespan": 43200,
+  "actionTokenGeneratedByUserLifespan": 300,
+  "loginTheme": "keycloak",
+  "accountTheme": "keycloak",
+  "adminTheme": "keycloak",
+  "emailTheme": "keycloak",
+  "internationalizationEnabled": false,
+  "supportedLocales": [],
+  "defaultLocale": "en",
+  "roles": {
+    "realm": [
+      { "name": "uma_authorization", "description": "${role_uma_authorization}" },
+      { "name": "offline_access",      "description": "${role_offline_access}" },
+      { "name": "global_admin",        "description": "Platform-wide administrator" },
+      { "name": "global_ops",          "description": "Platform-wide operator" },
+      { "name": "tenant_user",         "description": "Standard tenant user" }
+    ]
+  },
+  "groups": [
+    {
+      "_comment_group": "GG-Uisce-* groups referenced by the Security & Access Mesh spec (Part 2.1). These are tenant-scoped enterprise groups; their concrete membership is provisioned per tenant via the IDP mapping table security.identity_profile_mappings (Cardinal Rule 7.4 — the raw external group IDs are passed through verbatim and resolved at the database plane).",
+      "name": "GG-Uisce-Users",
+      "path": "/GG-Uisce-Users"
+    },
+    {
+      "name": "GG-Uisce-Compliance",
+      "path": "/GG-Uisce-Compliance"
+    },
+    {
+      "name": "GG-Uisce-Sales-NA",
+      "path": "/GG-Uisce-Sales-NA"
+    },
+    {
+      "name": "GG-Uisce-Traders",
+      "path": "/GG-Uisce-Traders"
+    },
+    {
+      "name": "GG-Uisce-Analysts",
+      "path": "/GG-Uisce-Analysts"
+    }
+  ],
+  "clients": [
+    {
+      "clientId": "semlayer-frontend",
+      "name": "SemLayer Frontend (Vite/React)",
+      "description": "PKCE-protected public SPA client for the SemLayer frontend.",
+      "enabled": true,
+      "publicClient": true,
+      "directAccessGrantsEnabled": false,
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "serviceAccountsEnabled": false,
+      "frontchannelLogout": true,
+      "attributes": {
+        "pkce.code.challenge.method": "S256",
+        "post.logout.redirect.uris": "http://localhost:5173/login##http://localhost:5173/*"
+      },
+      "redirectUris": [
+        "http://localhost:5173/auth/callback",
+        "http://localhost:5173/*"
+      ],
+      "webOrigins": [
+        "http://localhost:5173",
+        "http://localhost:3000",
+        "http://localhost:8080",
+        "+"
+      ],
+      "origin": "http://localhost:5173",
+      "rootUrl": "http://localhost:5173",
+      "baseUrl": "http://localhost:5173",
+      "protocol": "openid-connect",
+      "fullScopeAllowed": true,
+      "consentRequired": false
+    },
+    {
+      "clientId": "uisce-backend",
+      "name": "Uisce Backend (bearer-only)",
+      "description": "Confidential bearer-only client used by the Go backend to verify tokens.",
+      "enabled": true,
+      "publicClient": false,
+      "bearerOnly": true,
+      "directAccessGrantsEnabled": false,
+      "standardFlowEnabled": false,
+      "protocol": "openid-connect",
+      "attributes": { "access.token.lifespan": "3600" }
+    }
+  ],
+  "clientScopes": [
+    {
+      "name": "roles",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "true",
+        "display.on.consent.screen": "true",
+        "consent.screen.text": "${rolesScopeConsentText}"
+      },
+      "protocolMappers": [
+        {
+          "name": "realm-roles",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-realm-role-mapper",
+          "config": {
+            "claim.name": "roles",
+            "multivalued": "true",
+            "userinfo.token.claim": "true",
+            "id.token.claim": "true",
+            "access.token.claim": "true"
+          }
+        }
+      ]
+    },
+    {
+      "name": "groups",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "true",
+        "display.on.consent.screen": "true",
+        "consent.screen.text": "${groupsScopeConsentText}"
+      },
+      "protocolMappers": [
+        {
+          "name": "groups",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-group-membership-mapper",
+          "config": {
+            "claim.name": "groups",
+            "full.path": "false",
+            "multivalued": "true",
+            "userinfo.token.claim": "true",
+            "id.token.claim": "true",
+            "access.token.claim": "true"
+          }
+        }
+      ]
+    },
+    {
+      "name": "uisce-groups",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "true",
+        "display.on.consent.screen": "true",
+        "consent.screen.text": "${groupsScopeConsentText}"
+      },
+      "protocolMappers": [
+        {
+          "name": "groups",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-group-membership-mapper",
+          "config": {
+            "claim.name": "groups",
+            "full.path": "false",
+            "multivalued": "true",
+            "userinfo.token.claim": "true",
+            "id.token.claim": "true",
+            "access.token.claim": "true"
+          }
+        }
+      ]
+    },
+    {
+      "name": "profile",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "true",
+        "display.on.consent.screen": "true"
+      },
+      "protocolMappers": [
+        {
+          "name": "operator_role",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-attribute-mapper",
+          "config": {
+            "user.attribute": "operator_role",
+            "claim.name": "operator_role",
+            "jsonType.label": "String",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "userinfo.token.claim": "true"
+          }
+        }
+      ]
+    }
+  ],
+  "defaultDefaultClientScopes": [
+    "role_list",
+    "profile",
+    "email",
+    "roles",
+    "uisce-groups"
+  ]
+}

@@ -20,6 +20,7 @@
 #   ./scripts/setup-keycloak-realm.sh                          # use defaults
 #   KEYCLOAK_URL=https://100.84.50.65:8443 ./scripts/setup-keycloak-realm.sh
 #   REALM_NAME=uisce CLIENT_ID=semlayer-frontend ./scripts/setup-keycloak-realm.sh
+#   ./scripts/setup-keycloak-realm.sh --idp-config /path/to/azure-ad.json
 #
 # Environment variables (all optional):
 #   KEYCLOAK_URL        base URL of Keycloak                 (default https://100.84.50.65:8443)
@@ -38,12 +39,29 @@
 #                       human account management to your IdP / Azure AD sync.
 #   JOHN_B_PASSWORD     override the generated initial password for john.b
 #                       (otherwise an openssl rand -base64 18 string is shown once)
+#   JOHN_B_TENANT_SCOPE 'single' (default) or 'multi' — Phase B multi-tenant
+#                       operator scope. When 'multi', the user gets a
+#                       pre-approved tenant list and skips per-tenant leases
+#                       for those tenants.
+#   JOHN_B_TENANT_IDS   JSON array of UUID strings, e.g.
+#                       '["a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11",
+#                         "5d8e2c10-9abc-4ef8-bb6d-6bb9bd380a11"]'.
+#                       Only consulted when JOHN_B_TENANT_SCOPE=multi.
 #
 # What this script wires up (when fully run):
 #   Realm roles:        global_admin, global_ops, professional_services, helpdesk
 #   Groups:             Uisce-Global-Admins, Uisce-Professional-Services, Uisce-Helpdesk
 #   Role→Group map:     each group inherits its corresponding realm role
 #   (opt) User:         john.b@example.com → member of Uisce-Global-Admins
+#
+# Isolated operator realm (Security & Access Mesh spec Part 1.1):
+#   uisce-core-ops      separate realm for platform operators
+#   Client:             uisce-studio-ops (Token Exchange Flow enabled)
+#   Groups:             GG-Uisce-GlobalAdmin, GG-Uisce-Helpdesk, GG-Uisce-ProfessionalServices
+#   Mapper:             uisce_metadata.operator_role (nested claim)
+#
+# IdP Federation brokers (Security & Access Mesh spec Part 2.1):
+#   --idp-config <path> provision one or more SAML/OIDC brokers from JSON files
 #
 # When the frontend logs john.b in, his ID token carries:
 #   realm_access.roles: ["global_admin", ...]
@@ -53,6 +71,24 @@
 # ------------------------------------------------------------------------------
 
 set -euo pipefail
+
+# Capture the directory the script lives in so the operator realm + IdP
+# broker JSON paths resolve regardless of where the script is invoked from.
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Collect --idp-config <path> arguments from the command line.
+IDP_CONFIGS=()
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --idp-config)
+      IDP_CONFIGS+=("$2")
+      shift 2
+      ;;
+    *)
+      shift
+      ;;
+  esac
+done
 
 KEYCLOAK_URL="${KEYCLOAK_URL:-https://100.84.50.65:8443}"
 KEYCLOAK_ADMIN="${KEYCLOAK_ADMIN:-admin}"
@@ -71,6 +107,9 @@ JOHN_B_FIRST="${JOHN_B_FIRST:-John}"
 JOHN_B_LAST="${JOHN_B_LAST:-B}"
 # If unset, a fresh base64 password is generated and printed once.
 JOHN_B_PASSWORD="${JOHN_B_PASSWORD:-}"
+# Phase B multi-tenant operator scope.
+JOHN_B_TENANT_SCOPE="${JOHN_B_TENANT_SCOPE:-single}"
+JOHN_B_TENANT_IDS="${JOHN_B_TENANT_IDS:-[]}"
 
 # Canonical (group → role) inheritance table. Keep aligned with the backend's
 # fallback mapping at backend/internal/services/security_manager.go:706-720.
@@ -620,8 +659,116 @@ if [[ "${BOOTSTRAP_USERS}" == "1" ]]; then
   else
     warn "Group 'Uisce-Global-Admins' not found — user was created but not added."
   fi
+
+  # -------------------------------------------------------------------------
+  # Phase B: seed operator_role + tenant_scope user attributes so the JWT
+  # mapper emits uisce_metadata.operator_role and uisce_metadata.tenant_scope.
+  # Phase E multi-tenant operators also need tenant_ids. Cardinal Rule 1.3:
+  # all values flow through JSON via jq --arg; no string concatenation.
+  # -------------------------------------------------------------------------
+  log "Phase B: setting operator_role + tenant_scope user attributes…"
+  TENANT_SCOPE="${JOHN_B_TENANT_SCOPE:-single}"
+  TENANT_IDS_JSON="${JOHN_B_TENANT_IDS:-[]}"
+  ATTRS_PAYLOAD=$(jq -n \
+    --arg operator_role "global_admin" \
+    --arg tenant_scope  "${TENANT_SCOPE}" \
+    --argjson tenant_ids "${TENANT_IDS_JSON}" \
+    '{ operator_role: $operator_role, tenant_scope: $tenant_scope, tenant_ids: $tenant_ids }')
+  curl -sS "${CURL_TLS[@]}" "${ADMIN_AUTH[@]}" \
+    -X PUT "${KEYCLOAK_URL}/admin/realms/${REALM_NAME}/users/${USER_ID}" \
+    -H 'Content-Type: application/json' \
+    -d "${ATTRS_PAYLOAD}" >/dev/null
+  log "User attributes set: operator_role=global_admin, tenant_scope=${TENANT_SCOPE}, tenant_ids=${TENANT_IDS_JSON}"
 else
   log "Skipping user bootstrap (set BOOTSTRAP_USERS=1 to enable)."
+fi
+
+# ---------------------------------------------------------------------------
+# 10b. Provision the uisce-core-ops realm (platform operator isolation)
+# ---------------------------------------------------------------------------
+# Security & Access Mesh spec Part 1.1: internal platform operators must NOT
+# share an authentication realm with customer tenants. This section imports
+# the dedicated operator realm from keycloak/realm-uisce-core-ops.json and
+# provisions the GG-Uisce-* operator tier groups + the uisce-studio-ops
+# confidential client (Token Exchange Flow enabled).
+#
+# Disable with: SKIP_OPS_REALM=1
+# ---------------------------------------------------------------------------
+if [[ "${SKIP_OPS_REALM:-0}" != "1" ]]; then
+  OPS_REALM_NAME="uisce-core-ops"
+  OPS_REALM_FILE="${SCRIPT_DIR:-.}/../keycloak/realm-uisce-core-ops.json"
+  if [[ ! -f "${OPS_REALM_FILE}" ]]; then
+    OPS_REALM_FILE="./keycloak/realm-uisce-core-ops.json"
+  fi
+  if [[ -f "${OPS_REALM_FILE}" ]]; then
+    log "Provisioning isolated operator realm '${OPS_REALM_NAME}' from ${OPS_REALM_FILE}…"
+    OPS_REALM_EXISTS=$(curl -sS "${CURL_TLS[@]}" -o /dev/null -w '%{http_code}' \
+      "${ADMIN_AUTH[@]}" "${KEYCLOAK_URL}/admin/realms/${OPS_REALM_NAME}")
+    if [[ "${OPS_REALM_EXISTS}" == "200" ]]; then
+      log "Realm '${OPS_REALM_NAME}' already exists — leaving intact (delete manually to re-import)."
+    else
+      # Strip the trailing comments (_comment_*) that are valid JSON but not
+      # understood by the Keycloak Admin REST API. jq with --argjson on the
+      # raw file would be cleaner; sed keeps the script bash 3.2 compatible.
+      OPS_REALM_PAYLOAD=$(sed 's/"_comment_[^"]*": *"[^"]*",\?//g; s/^  "_comment_[^"]*": *"[^"]*",\?//g' \
+        "${OPS_REALM_FILE}" | jq 'del(.. | objects | to_entries[] | select(.key | startswith("_comment_")) | .key)')
+      CREATE_OPS_RESP=$(curl -sS "${CURL_TLS[@]}" "${ADMIN_AUTH[@]}" \
+        -w '\n%{http_code}' \
+        -X POST "${KEYCLOAK_URL}/admin/realms" \
+        -d "${OPS_REALM_PAYLOAD}")
+      CREATE_OPS_CODE=$(printf '%s' "${CREATE_OPS_RESP}" | tail -n1)
+      if [[ "${CREATE_OPS_CODE}" != "201" ]]; then
+        err "Operator realm import failed (HTTP ${CREATE_OPS_CODE}):"
+        printf '%s\n' "${CREATE_OPS_RESP}" | head -n -1
+        exit 1
+      fi
+      log "Operator realm '${OPS_REALM_NAME}' created."
+    fi
+  else
+    warn "Operator realm file not found at ${OPS_REALM_FILE} — skipping uisce-core-ops provisioning."
+  fi
+else
+  log "Skipping uisce-core-ops realm provisioning (SKIP_OPS_REALM=1)."
+fi
+
+# ---------------------------------------------------------------------------
+# 10c. Optional IdP Federation broker provisioning
+# ---------------------------------------------------------------------------
+# Security & Access Mesh spec Part 2.1: each tenant implementing SSO has an
+# IdP broker (Azure AD / Okta / Ping) federated into the tenant realm. This
+# helper provisions a SAML or OIDC broker from a JSON config file. Invoke
+# with one or more --idp-config <path> arguments to the script.
+#
+# Disable with: SKIP_IDP_BROKERS=1
+# ---------------------------------------------------------------------------
+if [[ "${SKIP_IDP_BROKERS:-0}" != "1" && ${#IDP_CONFIGS[@]} -gt 0 ]]; then
+  log "Provisioning ${#IDP_CONFIGS[@]} IdP broker(s) into realm '${REALM_NAME}'…"
+  for idp_cfg in "${IDP_CONFIGS[@]}"; do
+    if [[ ! -f "${idp_cfg}" ]]; then
+      warn "IdP config not found: ${idp_cfg}"
+      continue
+    fi
+    ALIAS=$(jq -r '.alias // empty' "${idp_cfg}")
+    PROVIDER_ID=$(jq -r '.providerId // empty' "${idp_cfg}")
+    if [[ -z "${ALIAS}" || -z "${PROVIDER_ID}" ]]; then
+      warn "IdP config missing alias or providerId: ${idp_cfg}"
+      continue
+    fi
+    EXISTING=$(curl -sS "${CURL_TLS[@]}" "${ADMIN_AUTH[@]}" \
+      "${KEYCLOAK_URL}/admin/realms/${REALM_NAME}/identity-provider/instances/${ALIAS}" \
+      -o /dev/null -w '%{http_code}')
+    if [[ "${EXISTING}" == "200" ]]; then
+      log "IdP broker '${ALIAS}' already exists — updating."
+      curl -sS "${CURL_TLS[@]}" "${ADMIN_AUTH[@]}" \
+        -X PUT "${KEYCLOAK_URL}/admin/realms/${REALM_NAME}/identity-provider/instances/${ALIAS}" \
+        -d @"${idp_cfg}" >/dev/null
+    else
+      log "Creating IdP broker '${ALIAS}' (${PROVIDER_ID})…"
+      curl -sS "${CURL_TLS[@]}" "${ADMIN_AUTH[@]}" \
+        -X POST "${KEYCLOAK_URL}/admin/realms/${REALM_NAME}/identity-provider/instances" \
+        -d @"${idp_cfg}" >/dev/null
+    fi
+  done
 fi
 
 # ---------------------------------------------------------------------------
