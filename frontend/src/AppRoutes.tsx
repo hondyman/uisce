@@ -1,5 +1,5 @@
 import React from "react";
-import { Routes, Route, Navigate } from "react-router-dom";
+import { Routes, Route, Navigate, useParams } from "react-router-dom";
 import useBlockableNavigate from './components/RouteBlocker/useBlockableNavigate';
 import { RouteBlockerProvider } from './components/RouteBlocker/RouteBlocker';
 import { MicroBundleCatalogExample } from "./MicroBundleCatalogExample";
@@ -142,11 +142,32 @@ import TenantUserAssignmentPage from "./features/admin/pages/TenantUserAssignmen
 import DelegationManagerPage from "./features/admin/pages/DelegationManagerPage";
 import FieldPermissionEditorPage from "./features/admin/pages/FieldPermissionEditorPage";
 
+// Self-Service Studio — Phase D (Security & Access Mesh spec PART 5)
+import {
+  ProfilesDashboard,
+  ProfileCustomizer,
+  EntitlementMatrix,
+} from "./admin-v2";
+
 import TeamManagerPage from "./features/admin/pages/TeamManagerPage";
 
 // ASO Pages
 import { OptimizationCenter } from "./pages/OptimizationCenter";
 import { ASOOptimizationDetail } from "./components/aso/ASOOptimizationDetail";
+
+// Profile-key → ProfileCustomizer route wrapper. Pulls the URL param
+// out of react-router so the component doesn't need its own router hook.
+const ProfileCustomizerRoute: React.FC = () => {
+  const { profileKey } = useParams<{ profileKey: string }>();
+  // The system blueprint check happens server-side; we render the
+  // customizer read-only for system profiles by setting isSystem=true.
+  return <ProfileCustomizer profileKey={profileKey || ""} isSystem={profileKey?.startsWith("platform_") || false} />;
+};
+
+const EntitlementMatrixRoute: React.FC = () => {
+  const { profileKey } = useParams<{ profileKey: string }>();
+  return <EntitlementMatrix profileKey={profileKey || ""} isCustom={!profileKey?.startsWith("platform_")} />;
+};
 import { LineageExplorerPage } from "./pages/LineageExplorerPage";
 import ObservabilityDashboard from "./pages/ObservabilityDashboard";
 import SLODashboard from "./pages/SLODashboard";
@@ -384,6 +405,11 @@ function ProtectedApp() {
         <Route path="/aso" element={<Navigate to="/optimization" replace />} />
         
         <Route path="/" element={<ProtectedRoute><BundleExplorer /></ProtectedRoute>} />
+
+        {/* Self-Service Studio — Phase D (Spec PART 5) */}
+        <Route path="/admin/entitlements" element={<ProtectedRoute><ProfilesDashboard /></ProtectedRoute>} />
+        <Route path="/admin/entitlements/profiles/:profileKey" element={<ProtectedRoute><ProfileCustomizerRoute /></ProtectedRoute>} />
+        <Route path="/admin/entitlements/profiles/:profileKey/components" element={<ProtectedRoute><EntitlementMatrixRoute /></ProtectedRoute>} />
       </Routes>
     </>
   );

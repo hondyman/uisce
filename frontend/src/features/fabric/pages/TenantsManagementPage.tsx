@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Navigate } from 'react-router-dom';
 import {
   Box,
   Button,
@@ -20,6 +20,7 @@ import {
   IconButton,
   Menu,
   Dialog,
+  Grid,
   DialogTitle,
   DialogContent,
   DialogActions,
@@ -38,14 +39,19 @@ import {
   Download as DownloadIcon,
   GridView as GridViewIcon,
   ViewAgenda as ViewAgendaIcon,
-  SupervisorAccount as SupervisorAccountIcon,
+  SupervisorAccount as _SupervisorAccountIcon,
   WorkspacePremium as WorkspacePremiumIcon,
 } from '@mui/icons-material';
 import { useIPWhitelistAPI } from '../hooks/useIPWhitelist';
 import { useNotification } from '../../../hooks/useNotification';
 import { Tenant as IPTenant } from '../types/ipWhitelist';
 import { useAccess } from '../../../contexts/AccessContext';
+import { useOrganizationEntitlement } from '../../../contexts/useOrganizationEntitlement';
+import { useRegions } from '../../../hooks/useRegions';
+import { apiFetch } from '../../../lib/apiClient';
 import { Tenant } from '../../../types';
+
+const DEFAULT_REGION = 'us-east-1';
 
 interface TenantWithUsage extends IPTenant {
   status: 'active' | 'suspended' | 'inactive';
@@ -55,6 +61,7 @@ interface TenantWithUsage extends IPTenant {
   plan?: string;
   gold_copy?: boolean;
   is_deleted?: boolean;
+  region?: string;
 }
 
 const isActiveTenant = (tenant: Pick<Tenant, 'is_active' | 'is_deleted'> & {
@@ -79,15 +86,28 @@ const TenantsManagementPage: React.FC = () => {
   const [detailsDialogOpen, setDetailsDialogOpen] = useState(false);
   const [selectedTenantDetails, setSelectedTenantDetails] = useState<TenantWithUsage | null>(null);
   const [downloadMenuAnchor, setDownloadMenuAnchor] = useState<null | HTMLElement>(null);
+  const [downloadFromDetails, setDownloadFromDetails] = useState(false);
   const [viewMode, setViewMode] = useState<'tile' | 'table'>('tile');
+  const [createDialogOpen, setCreateDialogOpen] = useState(false);
+  const [createName, setCreateName] = useState('');
+  const [createCode, setCreateCode] = useState('');
+  const [createRegion, setCreateRegion] = useState(DEFAULT_REGION);
+  const [createSubmitting, setCreateSubmitting] = useState(false);
 
   const api = useIPWhitelistAPI();
   const notification = useNotification();
-  const navigate = useNavigate();
-  const { accessibleTenants, isPlatformOperator, accessLevel } = useAccess();
-  const canManageTenantUsers = isPlatformOperator || accessLevel === 'tenant_admin';
+  const { accessibleTenants } = useAccess();
+  const organization = useOrganizationEntitlement();
+  const canWriteOrganization = organization.canWrite;
+  const { regions } = useRegions();
   const [tenants, setTenants] = useState<TenantWithUsage[]>([]);
   const [loading, setLoading] = useState(false);
+
+  // Block direct URL access for users without any organization entitlement.
+  // They wouldn't see the menu link, but they could still type the URL.
+  if (!organization.isVisible) {
+    return <Navigate to="/" replace />;
+  }
 
   useEffect(() => {
     const loadTenants = async () => {
@@ -118,7 +138,8 @@ const TenantsManagementPage: React.FC = () => {
                 lastUpdated,
                 plan: t.name || 'Standard Plan',
                 gold_copy: (t as any).gold_copy ?? false,
-                is_deleted: t.is_deleted ?? false
+                is_deleted: t.is_deleted ?? false,
+                region: (t as any).region || DEFAULT_REGION
               };
             } catch (err) {
               // If fetch fails for this tenant, return defaults
@@ -133,7 +154,8 @@ const TenantsManagementPage: React.FC = () => {
                 lastUpdated: 'N/A',
                 plan: t.name || 'Standard Plan',
                 gold_copy: (t as any).gold_copy ?? false,
-                is_deleted: t.is_deleted ?? false
+                is_deleted: t.is_deleted ?? false,
+                region: (t as any).region || DEFAULT_REGION
               };
             }
           })
@@ -198,6 +220,11 @@ const TenantsManagementPage: React.FC = () => {
 
   const handleEditTenant = useCallback(() => {
     if (!selectedTenantMenu) return;
+    if (!canWriteOrganization) {
+      notification.error('You do not have permission to edit tenants');
+      handleTenantMenuClose();
+      return;
+    }
     if (selectedTenantMenu.status !== 'active' || selectedTenantMenu.is_deleted) {
       notification.error('Inactive tenants are not available');
       handleTenantMenuClose();
@@ -207,7 +234,7 @@ const TenantsManagementPage: React.FC = () => {
     setEditName(selectedTenantMenu.displayName);
     setEditDialogOpen(true);
     handleTenantMenuClose();
-  }, [selectedTenantMenu, notification]);
+  }, [selectedTenantMenu, notification, canWriteOrganization]);
 
   const handleSaveEdit = useCallback(async () => {
     if (!editingTenant || !editName.trim()) return;
@@ -257,6 +284,83 @@ const TenantsManagementPage: React.FC = () => {
       notification.error('Failed to delete tenant');
     }
   }, [deleteConfirm, notification, api]);
+
+  const resetCreateDialog = useCallback(() => {
+    setCreateDialogOpen(false);
+    setCreateName('');
+    setCreateCode('');
+    setCreateRegion(DEFAULT_REGION);
+    setCreateSubmitting(false);
+  }, []);
+
+  const handleCreateTenant = useCallback(async () => {
+    if (!canWriteOrganization) {
+      notification.error('You do not have permission to create tenants');
+      return;
+    }
+    const name = createName.trim();
+    const code = createCode.trim();
+    const region = createRegion.trim();
+    if (!name || !code) {
+      notification.error('Tenant name and code are required');
+      return;
+    }
+    if (!region) {
+      notification.error('Region is required');
+      return;
+    }
+    setCreateSubmitting(true);
+    try {
+      const response = await apiFetch('/api/admin/tenants', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name,
+          tenant_code: code,
+          display_name: name,
+          region,
+        }),
+      });
+      if (!response.ok) {
+        const errorText = await response.text();
+        let message = errorText || response.statusText;
+        try {
+          const parsed = JSON.parse(errorText);
+          message = parsed.message || parsed.error || message;
+        } catch {
+          // keep raw text
+        }
+        throw new Error(`${response.status}: ${message}`);
+      }
+      const created = await response.json();
+      const data = created?.data ?? created;
+      const newId = data?.id;
+      notification.success('Tenant created successfully');
+      resetCreateDialog();
+      if (newId) {
+        setTenants(prev => [
+          ...prev,
+          {
+            id: newId,
+            displayName: data.display_name || data.displayName || name,
+            name: data.name || name,
+            tenant_code: data.tenant_code || code,
+            status: 'active',
+            ipUsageActive: 0,
+            ipUsageTotal: 0,
+            lastUpdated: 'Never',
+            plan: data.name || name || 'Standard Plan',
+            gold_copy: data.gold_copy ?? false,
+            is_deleted: false,
+            region,
+          },
+        ]);
+      }
+    } catch (err: any) {
+      notification.error(err?.message || 'Failed to create tenant');
+      setCreateSubmitting(false);
+    }
+  }, [canWriteOrganization, createName, createCode, createRegion, notification, resetCreateDialog]);
 
   const handleViewDetails = useCallback(() => {
     if (!selectedTenantMenu) return;
@@ -424,24 +528,24 @@ const TenantsManagementPage: React.FC = () => {
             </IconButton>
             <IconButton
               size="small"
-              onClick={(e) => setDownloadMenuAnchor(e.currentTarget)}
+              onClick={(e) => {
+                setDownloadFromDetails(false);
+                setDownloadMenuAnchor(e.currentTarget);
+              }}
               title="Export"
             >
               <DownloadIcon />
             </IconButton>
-            {canManageTenantUsers && (
+            {canWriteOrganization && (
               <Button
-                variant="outlined"
-                startIcon={<SupervisorAccountIcon />}
+                variant="contained"
+                startIcon={<AddIcon />}
                 size="large"
-                onClick={() => navigate('/admin/rbac/user-tenants')}
+                onClick={() => setCreateDialogOpen(true)}
               >
-                Manage User Access
+                Add New Tenant
               </Button>
             )}
-            <Button variant="contained" startIcon={<AddIcon />} size="large">
-              Add New Tenant
-            </Button>
           </Stack>
         </Box>
 
@@ -478,8 +582,137 @@ const TenantsManagementPage: React.FC = () => {
           </Select>
         </Stack>
 
-        {/* Data Table */}
-        <TableContainer
+        {/* Data View — Tile (default) or Table */}
+        {viewMode === 'tile' ? (
+          loading ? (
+            <Box sx={{ display: 'flex', justifyContent: 'center', py: 6 }}>
+              <Typography color="text.secondary">Loading tenants...</Typography>
+            </Box>
+          ) : visibleTenants.length === 0 ? (
+            <Box sx={{ display: 'flex', justifyContent: 'center', py: 6 }}>
+              <Typography color="text.secondary">
+                {tenants.length === 0 ? 'No tenants configured' : 'No matching tenants'}
+              </Typography>
+            </Box>
+          ) : (
+            <Grid container spacing={2} sx={{ mb: 2 }}>
+              {visibleTenants.map((tenant) => (
+                <Grid key={tenant.id} size={{ xs: 12, sm: 6, md: 4, lg: 3 }}>
+                  <Paper
+                    elevation={0}
+                    sx={{
+                      p: 2,
+                      border: 1,
+                      borderColor: 'divider',
+                      borderRadius: 1,
+                      height: '100%',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: 1.5,
+                      transition: 'border-color 0.15s ease, transform 0.15s ease',
+                      '&:hover': {
+                        borderColor: 'primary.main',
+                        transform: 'translateY(-1px)',
+                      },
+                    }}
+                  >
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                      <Stack direction="row" spacing={1.5} alignItems="center" sx={{ minWidth: 0, flex: 1 }}>
+                        <Avatar sx={{ width: 40, height: 40, fontSize: '1.25rem' }}>
+                          {getTenantAvatar(tenant.displayName)}
+                        </Avatar>
+                        <Box sx={{ minWidth: 0 }}>
+                          <Stack direction="row" spacing={1} alignItems="center">
+                            <Typography variant="body2" fontWeight={600} noWrap>
+                              {tenant.displayName}
+                            </Typography>
+                            {tenant.gold_copy && (
+                              <Chip
+                                icon={<WorkspacePremiumIcon />}
+                                label="Gold"
+                                size="small"
+                                color="warning"
+                                variant="outlined"
+                                sx={{ height: 20, fontSize: '0.65rem', fontWeight: 600 }}
+                              />
+                            )}
+                          </Stack>
+                          <Typography variant="caption" color="text.secondary" noWrap>
+                            {tenant.plan || 'Standard Plan'}
+                          </Typography>
+                        </Box>
+                      </Stack>
+                      <IconButton
+                        size="small"
+                        onClick={(e) => handleTenantMenuOpen(e, tenant)}
+                        aria-label="Tenant actions"
+                      >
+                        <MoreVertIcon fontSize="small" />
+                      </IconButton>
+                    </Box>
+
+                    <Box>
+                      <Typography variant="caption" color="text.secondary" display="block" sx={{ fontWeight: 700 }}>
+                        TENANT ID
+                      </Typography>
+                      <Typography variant="body2" fontFamily="monospace" noWrap>
+                        {tenant.id}
+                      </Typography>
+                    </Box>
+
+                    <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+                      <Chip
+                        label={getStatusLabel(tenant.status)}
+                        color={getStatusColor(tenant.status)}
+                        size="small"
+                      />
+                      <Chip
+                        label={
+                          regions.find((r) => r.value === tenant.region)?.label
+                            ? regions.find((r) => r.value === tenant.region)!.label
+                            : (tenant.region || DEFAULT_REGION)
+                        }
+                        size="small"
+                        variant="outlined"
+                      />
+                    </Stack>
+
+                    <Box>
+                      <Stack direction="row" justifyContent="space-between" spacing={1}>
+                        <Typography variant="caption" fontWeight={600}>
+                          {tenant.ipUsageActive} Active
+                        </Typography>
+                        <Typography variant="caption" color="text.secondary">
+                          {tenant.ipUsageTotal} Total
+                        </Typography>
+                      </Stack>
+                      <LinearProgress
+                        variant="determinate"
+                        value={getUsagePercentage(tenant.ipUsageActive, tenant.ipUsageTotal)}
+                        sx={{
+                          mt: 0.5,
+                          height: 6,
+                          borderRadius: 1,
+                          backgroundColor: alpha(theme.palette.primary.main, 0.1),
+                          '& .MuiLinearProgress-bar': {
+                            backgroundColor:
+                              tenant.status === 'suspended' ? theme.palette.error.main : theme.palette.primary.main,
+                            borderRadius: 1,
+                          },
+                        }}
+                      />
+                    </Box>
+
+                    <Typography variant="caption" color="text.secondary">
+                      Updated {tenant.lastUpdated}
+                    </Typography>
+                  </Paper>
+                </Grid>
+              ))}
+            </Grid>
+          )
+        ) : (
+          <TableContainer
           sx={{
             borderRadius: 1,
             border: 1,
@@ -513,6 +746,9 @@ const TenantsManagementPage: React.FC = () => {
                   STATUS
                 </TableCell>
                 <TableCell sx={{ fontWeight: 700, textTransform: 'uppercase', fontSize: '0.75rem' }}>
+                  REGION
+                </TableCell>
+                <TableCell sx={{ fontWeight: 700, textTransform: 'uppercase', fontSize: '0.75rem' }}>
                   IP USAGE (ACTIVE/TOTAL)
                 </TableCell>
                 <TableCell sx={{ fontWeight: 700, textTransform: 'uppercase', fontSize: '0.75rem' }}>
@@ -526,13 +762,13 @@ const TenantsManagementPage: React.FC = () => {
             <TableBody>
               {loading ? (
                 <TableRow>
-                  <TableCell colSpan={6} align="center" sx={{ py: 4 }}>
+                  <TableCell colSpan={7} align="center" sx={{ py: 4 }}>
                     <Typography color="text.secondary">Loading tenants...</Typography>
                   </TableCell>
                 </TableRow>
               ) : visibleTenants.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={6} align="center" sx={{ py: 4 }}>
+                  <TableCell colSpan={7} align="center" sx={{ py: 4 }}>
                     <Typography color="text.secondary">
                       {tenants.length === 0 ? 'No tenants configured' : 'No matching tenants'}
                     </Typography>
@@ -593,6 +829,13 @@ const TenantsManagementPage: React.FC = () => {
                       />
                     </TableCell>
                     <TableCell>
+                      <Typography variant="body2" color="text.secondary">
+                        {regions.find((r) => r.value === tenant.region)?.label
+                          ? `${regions.find((r) => r.value === tenant.region)!.label} (${tenant.region})`
+                          : (tenant.region || DEFAULT_REGION)}
+                      </Typography>
+                    </TableCell>
+                    <TableCell>
                       <Stack spacing={1}>
                         <Stack direction="row" justifyContent="space-between" spacing={1}>
                           <Typography variant="caption" fontWeight={600}>
@@ -636,6 +879,7 @@ const TenantsManagementPage: React.FC = () => {
             </TableBody>
           </Table>
         </TableContainer>
+        )}
 
         {/* Load More Button */}
         {hasMore && (
@@ -667,14 +911,16 @@ const TenantsManagementPage: React.FC = () => {
         open={Boolean(tenantMenuAnchor)}
         onClose={handleTenantMenuClose}
       >
-        <MenuItem onClick={handleEditTenant}>
-          <EditIcon sx={{ mr: 1 }} fontSize="small" />
-          Edit
-        </MenuItem>
+        {canWriteOrganization && (
+          <MenuItem onClick={handleEditTenant}>
+            <EditIcon sx={{ mr: 1 }} fontSize="small" />
+            Edit
+          </MenuItem>
+        )}
         <MenuItem onClick={handleViewDetails}>
           View Details
         </MenuItem>
-        {isPlatformOperator && !selectedTenantMenu?.gold_copy && (
+        {canWriteOrganization && !selectedTenantMenu?.gold_copy && (
           <MenuItem
             onClick={() => {
               handleTenantMenuClose();
@@ -688,7 +934,7 @@ const TenantsManagementPage: React.FC = () => {
             Delete
           </MenuItem>
         )}
-        {isPlatformOperator && selectedTenantMenu?.gold_copy && (
+        {canWriteOrganization && selectedTenantMenu?.gold_copy && (
           <MenuItem disabled sx={{ color: 'text.disabled' }}>
             <DeleteIcon sx={{ mr: 1 }} fontSize="small" />
             Gold Copy (cannot delete)
@@ -702,12 +948,14 @@ const TenantsManagementPage: React.FC = () => {
           <span>{selectedTenantDetails?.displayName} - Details</span>
           <IconButton
             size="small"
+            title="Export"
             onClick={(e) => {
+              setDownloadFromDetails(true);
               setDownloadMenuAnchor(e.currentTarget);
             }}
             sx={{ ml: 2 }}
           >
-            📥
+            <DownloadIcon fontSize="small" />
           </IconButton>
         </DialogTitle>
         <DialogContent sx={{ pt: 2 }}>
@@ -768,6 +1016,16 @@ const TenantsManagementPage: React.FC = () => {
                 </Box>
                 <Box>
                   <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 0.5, fontWeight: 700 }}>
+                    REGION
+                  </Typography>
+                  <Typography variant="body2">
+                    {regions.find((r) => r.value === selectedTenantDetails.region)?.label
+                      ? `${regions.find((r) => r.value === selectedTenantDetails.region)!.label} (${selectedTenantDetails.region})`
+                      : (selectedTenantDetails.region || DEFAULT_REGION)}
+                  </Typography>
+                </Box>
+                <Box>
+                  <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 0.5, fontWeight: 700 }}>
                     LAST UPDATED
                   </Typography>
                   <Typography variant="body2">
@@ -783,32 +1041,34 @@ const TenantsManagementPage: React.FC = () => {
         </DialogActions>
       </Dialog>
 
-      {/* Download Menu */}
+      {/* Download Menu (for either the per-tenant details dialog or the list) */}
       <Menu
         anchorEl={downloadMenuAnchor}
         open={Boolean(downloadMenuAnchor)}
-        onClose={() => setDownloadMenuAnchor(null)}
+        onClose={() => {
+          setDownloadMenuAnchor(null);
+          setDownloadFromDetails(false);
+        }}
       >
-        <MenuItem onClick={() => handleExportTenant('csv')}>
-          📊 Export as CSV
-        </MenuItem>
-        <MenuItem onClick={() => handleExportTenant('json')}>
-          📄 Export as JSON
-        </MenuItem>
-      </Menu>
-
-      {/* Export Menu */}
-      <Menu
-        anchorEl={downloadMenuAnchor}
-        open={Boolean(downloadMenuAnchor)}
-        onClose={() => setDownloadMenuAnchor(null)}
-      >
-        <MenuItem onClick={() => handleExportTenants('csv')}>
-          📊 Export as CSV
-        </MenuItem>
-        <MenuItem onClick={() => handleExportTenants('json')}>
-          📄 Export as JSON
-        </MenuItem>
+        {downloadFromDetails ? (
+          <>
+            <MenuItem onClick={() => handleExportTenant('csv')}>
+              📊 Export as CSV
+            </MenuItem>
+            <MenuItem onClick={() => handleExportTenant('json')}>
+              📄 Export as JSON
+            </MenuItem>
+          </>
+        ) : (
+          <>
+            <MenuItem onClick={() => handleExportTenants('csv')}>
+              📊 Export as CSV
+            </MenuItem>
+            <MenuItem onClick={() => handleExportTenants('json')}>
+              📄 Export as JSON
+            </MenuItem>
+          </>
+        )}
       </Menu>
 
       {/* Edit Tenant Dialog */}
@@ -856,6 +1116,67 @@ const TenantsManagementPage: React.FC = () => {
           <Button onClick={() => setDeleteConfirm(null)}>Cancel</Button>
           <Button onClick={handleDeleteTenant} color="error" variant="contained">
             Delete
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Create Tenant Dialog */}
+      <Dialog
+        open={createDialogOpen}
+        onClose={createSubmitting ? undefined : resetCreateDialog}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>Add New Tenant</DialogTitle>
+        <DialogContent sx={{ pt: 2 }}>
+          <Stack spacing={2}>
+            <TextField
+              fullWidth
+              label="Tenant Name"
+              value={createName}
+              onChange={(e) => setCreateName(e.target.value)}
+              variant="outlined"
+              size="small"
+              required
+              autoFocus
+            />
+            <TextField
+              fullWidth
+              label="Tenant Code"
+              value={createCode}
+              onChange={(e) => setCreateCode(e.target.value)}
+              variant="outlined"
+              size="small"
+              required
+              helperText="Short identifier (e.g. acme-prod)"
+            />
+            <Select
+              fullWidth
+              size="small"
+              value={createRegion}
+              onChange={(e) => setCreateRegion(String(e.target.value))}
+              required
+              displayEmpty
+              inputProps={{ 'aria-label': 'Region' }}
+            >
+              {regions.map((r) => (
+                <MenuItem key={r.value} value={r.value}>
+                  {r.label} ({r.value})
+                </MenuItem>
+              ))}
+            </Select>
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={resetCreateDialog} disabled={createSubmitting}>
+            Cancel
+          </Button>
+          <Button
+            onClick={handleCreateTenant}
+            variant="contained"
+            disabled={createSubmitting || !createName.trim() || !createCode.trim() || !createRegion.trim()}
+          >
+            {createSubmitting ? 'Creating...' : 'Create Tenant'}
           </Button>
         </DialogActions>
       </Dialog>

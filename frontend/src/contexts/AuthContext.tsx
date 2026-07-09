@@ -43,6 +43,13 @@ interface AuthContextType {
   isCoreAdmin: () => boolean;
   /** True when the user holds the global_admin or global_ops role from Keycloak */
   isGlobalAdmin: () => boolean;
+  /**
+   * True when the user is an Organization read-only operator (helpdesk or
+   * professional_services) but does NOT already qualify as a global admin.
+   * Pages use this to gate write actions in the Organization menu while
+   * still letting the user see the menu and view tenant data.
+   */
+  isReadOnlyOperator: () => boolean;
   canManageCoreAssets: () => boolean;
   canManageCustomAssets: () => boolean;
   login: (email?: string, password?: string) => Promise<void>;
@@ -100,8 +107,13 @@ function extractRoles(profile: Record<string, unknown>): string[] {
 // Recognise the platform-operator status from a Keycloak `groups` claim.
 // Keycloak emits the *path* of the group (e.g. "/Uisce-Global-Admins") when full.path=true,
 // or just the leaf name (e.g. "Uisce-Global-Admins") otherwise. Be permissive.
-const GLOBAL_ADMIN_GROUP_RE = /(^|\/)uisce[-_ ]?global[-_ ]?admins?$/i;
-const GLOBAL_OPS_GROUP_RE = /(^|\/)uisce[-_ ]?(global[-_ ]?ops|ops)$/i;
+export const GLOBAL_ADMIN_GROUP_RE = /(^|\/)uisce[-_ ]?global[-_ ]?admins?$/i;
+export const GLOBAL_OPS_GROUP_RE = /(^|\/)uisce[-_ ]?(global[-_ ]?ops|ops)$/i;
+
+// Role names that grant CRUD on the Organization menu.  Used by the
+// global-admin detector and the read-only-org detector below.
+const CRUD_OPERATOR_ROLES = ['global_admin', 'global_ops', 'platform_operator', 'admin'];
+const READ_ONLY_OPERATOR_ROLES = ['helpdesk', 'professional_services'];
 
 function extractGroups(profile: Record<string, unknown>): string[] {
   const result: string[] = [];
@@ -391,8 +403,37 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const computeIsGlobalAdmin = (): boolean => {
     const u: any = user;
     if (!u) return false;
+    // Pre-computed flags from the OIDC profile mapper.
     if (u.is_global_admin) return true;
-    if (Array.isArray(u.roles) && (u.roles.includes('global_admin') || u.roles.includes('global_ops'))) return true;
+    if (u.is_core_admin || u.isCoreAdmin) return true;
+    // Custom `operator_role` claim (the default source for this platform).
+    if (typeof u.operator_role === 'string' && CRUD_OPERATOR_ROLES.includes(u.operator_role)) return true;
+    // Legacy top-level `role` string.
+    if (typeof u.role === 'string' && CRUD_OPERATOR_ROLES.includes(u.role)) return true;
+    // Keycloak realm roles, with the `client:` prefix preserved.
+    if (Array.isArray(u.roles) && u.roles.some((r: unknown) => typeof r === 'string' && CRUD_OPERATOR_ROLES.includes(r))) return true;
+    // Permission grants (used by some IdP mappings).
+    if (Array.isArray(u.permissions) && (u.permissions.includes('platform:operator') || u.permissions.includes('*'))) return true;
+    // Nested Keycloak claim.
+    const meta = u.uisce_metadata as Record<string, unknown> | undefined;
+    if (meta?.is_global_admin === true) return true;
+    if (meta?.operator_role === 'global_admin') return true;
+    // Federated IdP group (e.g. "Uisce-Global-Admins").
+    if (Array.isArray(u.groups) && u.groups.some((g: unknown) =>
+      typeof g === 'string' && (GLOBAL_ADMIN_GROUP_RE.test(g) || GLOBAL_OPS_GROUP_RE.test(g))
+    )) return true;
+    return false;
+  };
+
+  const computeIsReadOnlyOperator = (): boolean => {
+    const u: any = user;
+    if (!u) return false;
+    // Don't double-count a user who is already a global admin — they get full
+    // CRUD access and the read-only check is irrelevant for them.
+    if (computeIsGlobalAdmin()) return false;
+    if (typeof u.operator_role === 'string' && READ_ONLY_OPERATOR_ROLES.includes(u.operator_role)) return true;
+    if (typeof u.role === 'string' && READ_ONLY_OPERATOR_ROLES.includes(u.role)) return true;
+    if (Array.isArray(u.roles) && u.roles.some((r: unknown) => typeof r === 'string' && READ_ONLY_OPERATOR_ROLES.includes(r))) return true;
     return false;
   };
 
@@ -406,6 +447,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     isAdmin: () => computeIsAdmin(),
     isCoreAdmin: () => computeIsCoreAdmin(),
     isGlobalAdmin: () => computeIsGlobalAdmin(),
+    isReadOnlyOperator: () => computeIsReadOnlyOperator(),
     canManageCoreAssets: () => computeIsCoreAdmin(),
     canManageCustomAssets: () => computeIsAdmin(),
     login,

@@ -63,6 +63,7 @@ import {
 } from '@mui/icons-material';
 import { useTenant } from '../contexts/TenantContext';
 import { useAccess } from '../contexts/AccessContext';
+import { useOrganizationEntitlement } from '../contexts/useOrganizationEntitlement';
 import useBlockableNavigate from './RouteBlocker/useBlockableNavigate';
 import { useAuth } from '../contexts/AuthContext';
 import ScopeBadge from './ScopeBadge';
@@ -134,7 +135,6 @@ const categoryConfigs: CategoryConfig[] = [
         icon: <BusinessIcon />,
         requiredCapability: 'menu:organization',
         items: [
-          { label: 'Tenants', path: '/tenants', icon: <BusinessIcon />, description: 'View and edit tenants' },
           { label: 'Tenant Management', path: '/fabric/tenants', icon: <CorporateFareIcon />, description: 'Platform admin: status, IP, usage' },
           { label: 'Users', path: '/admin/rbac/users', icon: <PersonAddIcon />, description: 'User management' },
           { label: 'Teams', path: '/admin/rbac/teams', icon: <GroupsIcon />, description: 'Team structure' },
@@ -511,11 +511,21 @@ const categoryConfigs: CategoryConfig[] = [
  * Organization / Security / System groups disappear and the user can't
  * navigate at all.  Pass `isPlatformOperator=true` to fall back to "show
  * every capability-gated menu" instead of hiding them all.
+ *
+ * The Organization submenu is additionally gated by the operator_role claim
+ * (global_admin / helpdesk / professional_services).  Users with no
+ * organization entitlement never see the submenu; users with read-only
+ * entitlement see the submenu and the page itself enforces read-only mode.
  */
 function filterNavigationByCapabilities(
   categories: CategoryConfig[],
   capabilities: Record<string, boolean> | undefined,
-  isPlatformOperator: boolean = false
+  isPlatformOperator: boolean = false,
+  organizationAccess: { isVisible: boolean; canRead: boolean; canWrite: boolean } = {
+    isVisible: false,
+    canRead: false,
+    canWrite: false,
+  }
 ): CategoryConfig[] {
   // Platform operators bypass the capability gate entirely — they are trusted
   // to see admin navigation.  This is safe because the canAccess() check in
@@ -525,6 +535,19 @@ function filterNavigationByCapabilities(
     return categories;
   }
 
+  // Strip the Organization submenu for users who do not have any
+  // organization entitlement.  The Platform category itself remains visible
+  // because it also contains the Security and System submenus.
+  const stripOrganization = (cat: CategoryConfig): CategoryConfig => ({
+    ...cat,
+    menus: cat.menus.filter((menu) => {
+      if (menu.requiredCapability === 'menu:organization' && !organizationAccess.isVisible) {
+        return false;
+      }
+      return true;
+    }),
+  });
+
   if (!capabilities) {
     // If entitlements have not loaded yet (or AuthContext hasn't yet exposed
     // them — see the entitlements-property-on-AuthContext TS error), fall
@@ -532,6 +555,7 @@ function filterNavigationByCapabilities(
     // flash of unauthorized UI for non-admin users.
     return categories
       .filter((cat) => !cat.requiredCapability)
+      .map(stripOrganization)
       .map((cat) => ({
         ...cat,
         menus: cat.menus
@@ -549,6 +573,7 @@ function filterNavigationByCapabilities(
 
   return categories
     .filter((cat) => hasCap(cat.requiredCapability))
+    .map(stripOrganization)
     .map((cat) => ({
       ...cat,
       menus: cat.menus
@@ -575,6 +600,7 @@ export const MainNavigation: React.FC<MainNavigationProps> = () => {
   // compact scope summary for very small screens
   const scopeSummary = `${tenant?.display_name || tenant?.name || ''}${product ? ` · ${product.alpha_product?.product_name || 'Product'}` : ''}${datasource ? ` · ${datasource.source_name || 'Source'}` : ''}`;
   const { user, logout, entitlements } = useAuth();
+  const organizationAccess = useOrganizationEntitlement();
 
   // Capability-filtered navigation config.  The backend decides which menus
   // the user is allowed to see; the frontend only renders the allowed subset.
@@ -582,8 +608,14 @@ export const MainNavigation: React.FC<MainNavigationProps> = () => {
   // always navigate to admin sections; per-route access is still gated by
   // canAccess() inside the dropdown renderer.
   const filteredCategoryConfigs = useMemo(
-    () => filterNavigationByCapabilities(categoryConfigs, entitlements?.capabilities, isPlatformOperator),
-    [entitlements?.capabilities, isPlatformOperator]
+    () =>
+      filterNavigationByCapabilities(
+        categoryConfigs,
+        entitlements?.capabilities,
+        isPlatformOperator,
+        organizationAccess,
+      ),
+    [entitlements?.capabilities, isPlatformOperator, organizationAccess],
   );
 
   const [categoryMenuAnchorEl, setCategoryMenuAnchorEl] = useState<null | HTMLElement>(null);
