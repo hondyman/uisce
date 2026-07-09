@@ -15,6 +15,7 @@ export interface Tenant {
   description?: string;
   name?: string;
   tenant_code?: string;
+  gold_copy?: boolean;
 }
 
 // Special tenant ID for "All Tenants" capability
