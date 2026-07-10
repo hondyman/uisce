@@ -58,6 +58,41 @@ export interface AbacPolicy {
   updatedAt: string;
 }
 
+export interface BackendSecurityProfile {
+  profile_id: string;
+  tenant_id: string | null;
+  profile_key: string;
+  profile_name: string;
+  parent_profile_id: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface BackendAbacPolicy {
+  policyId: string;
+  tenantId: string | null;
+  targetProfileKey: string;
+  name: string;
+  description: string;
+  effect: PolicyEffect;
+  priority: number;
+  enabled: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface BackendComponentEntitlement {
+  entitlementId: string;
+  tenantId: string;
+  targetProfileKey: string;
+  entitlementType: EntitlementType;
+  nodePath: string;
+  overrideState: OverrideState;
+  conditionalDsl?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface AppendPolicyOverrideRequest {
   targetProfileKey: ProfileKey;
   actionAttribute: string;

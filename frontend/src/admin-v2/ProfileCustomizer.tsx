@@ -52,6 +52,7 @@ import { studioApi, StudioApiError } from "./studioApi";
 import type {
   AbacPolicy,
   AppendPolicyOverrideRequest,
+  BackendAbacPolicy,
   PolicyEffect,
 } from "./types";
 
@@ -82,18 +83,23 @@ export const ProfileCustomizer: React.FC<ProfileCustomizerProps> = ({ profileKey
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch(
-        `${import.meta.env.VITE_API_URL || "http://localhost:8082/api"}/v1/tenant/policies?target_profile_key=${encodeURIComponent(profileKey)}`,
-        { credentials: "include" }
-      );
-      if (res.ok) {
-        const data = await res.json();
-        setPolicies(data.policies || []);
-      } else {
-        setPolicies([]);
-      }
+      const data = await studioApi.listPolicies(profileKey);
+      const mapped: AbacPolicy[] = (data.policies || []).map((p: BackendAbacPolicy) => ({
+        policyId: p.policyId,
+        origin: p.tenantId ? "tenant" : "system",
+        targetProfileKey: p.targetProfileKey,
+        actionAttribute: p.targetProfileKey,
+        effect: p.effect,
+        priorityRank: p.priority,
+        conditionDsl: undefined,
+        name: p.name,
+        description: p.description,
+        updatedAt: p.updatedAt,
+      }));
+      setPolicies(mapped);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
+      setPolicies([]);
     } finally {
       setLoading(false);
     }

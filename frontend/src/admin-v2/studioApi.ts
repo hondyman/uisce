@@ -8,13 +8,12 @@ import type {
   AppendPolicyOverrideResponse,
   CloneProfileRequest,
   CloneProfileResponse,
-  ComponentEntitlement,
   IdpBroker,
   UpsertEntitlementRequest,
   UpsertEntitlementResponse,
 } from "./types";
 
-const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:8082/api";
+const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:8080/api";
 
 class StudioApiError extends Error {
   status: number;
@@ -75,11 +74,19 @@ export const studioApi = {
   cloneProfile: (req: CloneProfileRequest) =>
     post<CloneProfileResponse>("/v1/tenant/profiles/clone", req),
 
+  listProfiles: () =>
+    get<{ profiles: import("./types").BackendSecurityProfile[]; count: number }>("/v1/tenant/profiles"),
+
   // -------------------------------------------------------------------------
   // Screen 2: ABAC policy overrides
   // -------------------------------------------------------------------------
   appendPolicyOverride: (req: AppendPolicyOverrideRequest) =>
     post<AppendPolicyOverrideResponse>("/v1/tenant/policies/override", req),
+
+  listPolicies: (targetProfileKey: string) =>
+    get<{ policies: import("./types").BackendAbacPolicy[]; count: number }>(
+      `/v1/tenant/policies?target_profile_key=${encodeURIComponent(targetProfileKey)}`
+    ),
 
   // -------------------------------------------------------------------------
   // Screen 3: Component entitlements
@@ -87,10 +94,10 @@ export const studioApi = {
   upsertEntitlement: (req: UpsertEntitlementRequest) =>
     post<UpsertEntitlementResponse>("/v1/tenant/entitlements/map", req),
 
-  listEntitlements: async (targetProfileKey: string, entitlementType?: string) => {
+  listEntitlements: (targetProfileKey: string, entitlementType?: string) => {
     const qs = new URLSearchParams({ target_profile_key: targetProfileKey });
     if (entitlementType) qs.set("entitlement_type", entitlementType);
-    return get<{ entitlements: ComponentEntitlement[]; count: number }>(
+    return get<{ entitlements: import("./types").BackendComponentEntitlement[]; count: number }>(
       `/v1/tenant/entitlements?${qs.toString()}`
     );
   },

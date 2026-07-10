@@ -54,17 +54,12 @@ import {
   VpnKey as VpnKeyIcon,
 } from "@mui/icons-material";
 import { studioApi, StudioApiError } from "./studioApi";
-import type { CloneProfileRequest, IdpBroker, TenantProfile } from "./types";
-
-const SYSTEM_PROFILES = [
-  { profileKey: "platform_analyst", profileName: "Platform Analyst", origin: "system" as const, ruleCount: 14 },
-  { profileKey: "platform_trader", profileName: "Platform Trader", origin: "system" as const, ruleCount: 32 },
-  { profileKey: "platform_accountant", profileName: "Platform Accountant", origin: "system" as const, ruleCount: 22 },
-];
+import type { BackendSecurityProfile, CloneProfileRequest, IdpBroker, SystemProfile, TenantProfile } from "./types";
 
 export const ProfilesDashboard: React.FC = () => {
   const theme = useTheme();
   const [tenantProfiles, setTenantProfiles] = useState<TenantProfile[]>([]);
+  const [systemProfiles, setSystemProfiles] = useState<SystemProfile[]>([]);
   const [idpBrokers, setIdpBrokers] = useState<IdpBroker[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -76,7 +71,7 @@ export const ProfilesDashboard: React.FC = () => {
   const [idpOpen, setIdpOpen] = useState(false);
   const [idpAlias, setIdpAlias] = useState<string>("");
   const [idpProvider, setIdpProvider] = useState<string>("oidc");
-  const [targetRealm, setTargetRealm] = useState<string>("uisce");
+  const [targetRealm] = useState<string>("uisce");
   const [snack, setSnack] = useState<{ open: boolean; severity: "success" | "error" | "info"; message: string }>({
     open: false,
     severity: "info",
@@ -87,16 +82,31 @@ export const ProfilesDashboard: React.FC = () => {
     setLoading(true);
     setError(null);
     try {
-      const tenantRes = await fetch(
-        `${import.meta.env.VITE_API_URL || "http://localhost:8082/api"}/v1/tenant/profiles`,
-        { credentials: "include" }
-      );
-      if (tenantRes.ok) {
-        const data = await tenantRes.json();
-        setTenantProfiles(data.profiles || []);
-      } else {
-        setTenantProfiles([]);
-      }
+      const data = await studioApi.listProfiles();
+      const raw: BackendSecurityProfile[] = data.profiles || [];
+      const tenant: TenantProfile[] = raw
+        .filter((p) => p.tenant_id !== null)
+        .map((p) => ({
+          profileId: p.profile_id,
+          profileKey: p.profile_key,
+          profileName: p.profile_name,
+          origin: "tenant" as const,
+          ruleCount: 0,
+          parentProfileKey: p.parent_profile_id ?? null,
+          updatedAt: p.updated_at,
+        }));
+      const system: SystemProfile[] = raw
+        .filter((p) => p.tenant_id === null)
+        .map((p) => ({
+          profileKey: p.profile_key,
+          profileName: p.profile_name,
+          origin: "system" as const,
+          ruleCount: 0,
+        }));
+      setTenantProfiles(tenant);
+      setSystemProfiles(system);
+      setTenantProfiles(tenant);
+      setSystemProfiles(system.map((p) => ({ profileKey: p.profileKey, profileName: p.profileName, origin: "system" as const, ruleCount: 0 })));
       try {
         const brokers = await studioApi.listIdpBrokers(targetRealm);
         setIdpBrokers(brokers.brokers);
@@ -162,11 +172,11 @@ export const ProfilesDashboard: React.FC = () => {
     setCloneOpen(true);
   };
 
-  const totalSystemRules = SYSTEM_PROFILES.reduce((acc, p) => acc + p.ruleCount, 0);
+  const totalSystemRules = systemProfiles.reduce((acc, p) => acc + p.ruleCount, 0);
   const totalTenantRules = tenantProfiles.reduce((acc, p) => acc + p.ruleCount, 0);
   const activeBrokers = idpBrokers.filter((b) => b.enabled).length;
 
-  const filteredSystem = SYSTEM_PROFILES.filter(
+  const filteredSystem = systemProfiles.filter(
     (p) =>
       !search ||
       p.profileName.toLowerCase().includes(search.toLowerCase()) ||
@@ -257,13 +267,6 @@ export const ProfilesDashboard: React.FC = () => {
           </Typography>
         </Box>
         <Stack direction="row" spacing={1}>
-          <TextField
-            size="small"
-            value={targetRealm}
-            onChange={(e) => setTargetRealm(e.target.value)}
-            label="Target Realm"
-            sx={{ minWidth: 180 }}
-          />
           <Tooltip title="Refresh">
             <IconButton onClick={refresh} disabled={loading} size="small">
               <RefreshIcon />
@@ -273,7 +276,7 @@ export const ProfilesDashboard: React.FC = () => {
             variant="contained"
             startIcon={<AddIcon />}
             onClick={() => setCloneOpen(true)}
-            disabled={SYSTEM_PROFILES.length === 0}
+            disabled={systemProfiles.length === 0}
           >
             Clone Profile
           </Button>
@@ -284,7 +287,7 @@ export const ProfilesDashboard: React.FC = () => {
         <Grid size={{ xs: 12, sm: 6, md: 3 }}>
           <StatCard
             label="System Profiles"
-            value={SYSTEM_PROFILES.length}
+            value={systemProfiles.length}
             icon={<LockIcon />}
             color={theme.palette.primary.main}
             helper={`${totalSystemRules} baseline rules`}
@@ -480,7 +483,7 @@ export const ProfilesDashboard: React.FC = () => {
           <Stack direction="row" spacing={1} sx={{ mb: 2 }}>
             <Chip
               icon={<LockIcon />}
-              label={`System · ${SYSTEM_PROFILES.length}`}
+              label={`System · ${systemProfiles.length}`}
               size="small"
               color="primary"
               variant="outlined"
@@ -494,7 +497,7 @@ export const ProfilesDashboard: React.FC = () => {
             />
             <Box sx={{ flex: 1 }} />
             <AvatarGroup max={4} sx={{ "& .MuiAvatar-root": { width: 24, height: 24, fontSize: 12 } }}>
-              {[...SYSTEM_PROFILES, ...tenantProfiles].slice(0, 4).map((p) => (
+              {[...systemProfiles, ...tenantProfiles].slice(0, 4).map((p) => (
                 <Avatar key={p.profileKey}>{p.profileName.charAt(0)}</Avatar>
               ))}
             </AvatarGroup>
@@ -678,7 +681,7 @@ export const ProfilesDashboard: React.FC = () => {
               fullWidth
               required
             >
-              {SYSTEM_PROFILES.map((p) => (
+              {systemProfiles.map((p) => (
                 <MenuItem key={p.profileKey} value={p.profileKey}>
                   <Stack direction="row" spacing={1} alignItems="center" sx={{ width: "100%" }}>
                     <LockIcon fontSize="small" color="primary" />
