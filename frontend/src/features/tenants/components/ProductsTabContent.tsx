@@ -32,10 +32,10 @@ import RemoveIcon from '@mui/icons-material/Remove';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import CancelIcon from '@mui/icons-material/Cancel';
 import InfoIcon from '@mui/icons-material/Info';
-import { useQuery, useMutation, gql } from '@apollo/client';
+import { useQuery, gql } from '@apollo/client';
 import { GET_TENANT_REGISTERED_PRODUCTS } from '../../../graphql/queries/tenantQueries';
-import { ADD_TENANT_PRODUCT, DELETE_TENANT_PRODUCT } from '../../../graphql/mutations/tenantMutations';
 import { useNotification } from '../../../hooks/useNotification';
+import { apiClient } from '../../../utils/apiClient';
 
 // Query to get all available products (from alpha_product table)
 const GET_AVAILABLE_PRODUCTS = gql`
@@ -103,12 +103,8 @@ export const ProductsTabContent: React.FC<ProductsTabContentProps> = ({
     { variables: { tenantId }, skip: !tenantId }
   );
 
-  const [registerProduct, { loading: registerLoading }] = useMutation(ADD_TENANT_PRODUCT, {
-    refetchQueries: [{ query: GET_TENANT_REGISTERED_PRODUCTS, variables: { tenantId } }],
-  });
-  const [unregisterProduct, { loading: unregisterLoading }] = useMutation(DELETE_TENANT_PRODUCT, {
-    refetchQueries: [{ query: GET_TENANT_REGISTERED_PRODUCTS, variables: { tenantId } }],
-  });
+  const [registerLoading, setRegisterLoading] = useState(false);
+  const [unregisterLoading, setUnregisterLoading] = useState(false);
 
   // Check if this is the gold copy tenant
   const isGoldCopy = tenantData?.tenants?.[0]?.gold_copy ?? false;
@@ -174,18 +170,21 @@ export const ProductsTabContent: React.FC<ProductsTabContentProps> = ({
 
   const handleRegisterProduct = async (product: AlphaProduct) => {
     try {
-      await registerProduct({
-        variables: {
-          tenant_id: tenantId,
+      setRegisterLoading(true);
+      await apiClient(`/api/v1/admin/tenants/${tenantId}/products`, {
+        method: 'POST',
+        body: JSON.stringify({
           alpha_product_id: product.id,
           version: 1.0,
           is_active: true,
-        },
+        }),
       });
       notification.success(`Registered "${product.product_name}" for this tenant`);
-      // refetchRegistered is now handled by refetchQueries
+      refetchRegistered();
     } catch (error: any) {
       notification.error(error.message || 'Failed to register product');
+    } finally {
+      setRegisterLoading(false);
     }
     setConfirmDialogOpen(false);
     setSelectedForAction(null);
@@ -199,13 +198,16 @@ export const ProductsTabContent: React.FC<ProductsTabContentProps> = ({
     }
 
     try {
-      await unregisterProduct({
-        variables: { id: tenantProduct.id },
+      setUnregisterLoading(true);
+      await apiClient(`/api/v1/admin/tenants/${tenantId}/products/${tenantProduct.id}`, {
+        method: 'DELETE',
       });
       notification.success(`Unregistered "${product.product_name}" from this tenant`);
-      // refetchRegistered is now handled by refetchQueries
+      refetchRegistered();
     } catch (error: any) {
       notification.error(error.message || 'Failed to unregister product');
+    } finally {
+      setUnregisterLoading(false);
     }
     setConfirmDialogOpen(false);
     setSelectedForAction(null);

@@ -27,9 +27,8 @@ import DeleteIcon from '@mui/icons-material/Delete';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import CancelIcon from '@mui/icons-material/Cancel';
 import VisibilityIcon from '@mui/icons-material/Visibility';
-import { useMutation } from '@apollo/client';
 import { useNotification } from '../../../hooks/useNotification';
-import { CREATE_TENANT_INSTANCE, UPDATE_TENANT_INSTANCE, DELETE_TENANT_INSTANCE } from '../../../graphql/mutations/tenantMutations';
+import { apiClient } from '../../../utils/apiClient';
 
 interface TenantInstance {
   id: string;
@@ -61,10 +60,6 @@ export default function InstancesTab({ tenantId, instances, onRefetch }: Instanc
     is_active: true,
     config: '{}',
   });
-
-  const [createInstance] = useMutation(CREATE_TENANT_INSTANCE);
-  const [updateInstance] = useMutation(UPDATE_TENANT_INSTANCE);
-  const [deleteInstance] = useMutation(DELETE_TENANT_INSTANCE);
 
   const handleOpenDialog = (instance?: TenantInstance) => {
     if (instance) {
@@ -116,29 +111,25 @@ export default function InstancesTab({ tenantId, instances, onRefetch }: Instanc
         return;
       }
 
-      const variables = {
+      const payload = {
         instance_name: formData.instance_name,
         display_name: formData.display_name,
         description: formData.description,
         url: formData.url,
         is_active: formData.is_active,
-        config: configObj,
+        config: typeof configObj === 'string' ? configObj : JSON.stringify(configObj),
       };
 
       if (editingInstance) {
-        await updateInstance({
-          variables: {
-            id: editingInstance.id,
-            ...variables,
-          },
+        await apiClient(`/api/v1/admin/tenants/${tenantId}/instances/${editingInstance.id}`, {
+          method: 'PATCH',
+          body: JSON.stringify(payload),
         });
         notification.success('Instance updated successfully');
       } else {
-        await createInstance({
-          variables: {
-            tenant_id: tenantId,
-            ...variables,
-          },
+        await apiClient(`/api/v1/admin/tenants/${tenantId}/instances`, {
+          method: 'POST',
+          body: JSON.stringify(payload),
         });
         notification.success('Instance created successfully');
       }
@@ -151,9 +142,11 @@ export default function InstancesTab({ tenantId, instances, onRefetch }: Instanc
 
   const handleDelete = async (id: string) => {
     if (!window.confirm('Are you sure you want to delete this instance?')) return;
-    
+
     try {
-      await deleteInstance({ variables: { id } });
+      await apiClient(`/api/v1/admin/tenants/${tenantId}/instances/${id}`, {
+        method: 'DELETE',
+      });
       notification.success('Instance deleted successfully');
       onRefetch();
     } catch (error: any) {

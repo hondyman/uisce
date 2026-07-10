@@ -1,6 +1,4 @@
 import React, { useState } from 'react';
-import { useMutation } from '@apollo/client';
-import { DELETE_CONNECTION } from '../../../graphql/mutations/tenantMutations';
 import {
   Box,
   Button,
@@ -31,6 +29,7 @@ import {
 } from '@mui/icons-material';
 import type { TenantInstance } from '../../../types';
 import InstanceResourcesDialog from './InstanceResourcesDialog';
+import { apiClient } from '../../../utils/apiClient';
 
 // Extended interface with linked resources info
 export interface EnrichedTenantInstance extends TenantInstance {
@@ -43,6 +42,7 @@ export interface EnrichedTenantInstance extends TenantInstance {
 
 interface InstancesTableProps {
   instances: EnrichedTenantInstance[]; // Updated type
+  tenantId: string;
   onAddInstance?: () => void;
   onEditInstance?: (instance: TenantInstance) => void;
   onDeleteInstance?: (instanceId: string) => void;
@@ -51,6 +51,7 @@ interface InstancesTableProps {
 
 export const InstancesTable: React.FC<InstancesTableProps> = ({
   instances,
+  tenantId,
   onAddInstance,
   onEditInstance,
   onDeleteInstance,
@@ -115,26 +116,26 @@ export const InstancesTable: React.FC<InstancesTableProps> = ({
     setDeleteConfirmInstance(null);
   };
 
-  const [deleteConnection] = useMutation(DELETE_CONNECTION);
-
   const handleDeleteConnection = async (connectionId: string) => {
     try {
       if (confirm('Are you sure you want to delete this connection?')) {
-        await deleteConnection({ variables: { id: connectionId } });
-        
+        await apiClient(`/api/v1/admin/tenants/${tenantId}/connections/${connectionId}`, {
+          method: 'DELETE',
+        });
+
         // Update local state to remove the connection immediately from view
         if (selectedInstanceResources) {
           const updatedResources = selectedInstanceResources.resources.map(res => ({
             ...res,
             connections: res.connections.filter((c: any) => c.id !== connectionId)
           }));
-          
+
           setSelectedInstanceResources({
             ...selectedInstanceResources,
             resources: updatedResources
           });
         }
-        
+
         // Refresh table data
         onReload?.();
       }

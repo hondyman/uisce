@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useQuery, useMutation, gql } from '@apollo/client';
+import { useQuery, gql } from '@apollo/client';
 import {
   Table,
   TableBody,
@@ -36,7 +36,8 @@ import {
 } from '@mui/icons-material';
 import { ConnectionTestDialog } from '../../connections/components/ConnectionTestDialog';
 import ScanProgressModal from './ScanProgressModal';
-import { SCAN_DATASOURCE, DELETE_CONNECTION } from '../../../graphql/mutations/tenantMutations';
+import { SCAN_DATASOURCE } from '../../../graphql/mutations/tenantMutations';
+import { apiClient } from '../../../utils/apiClient';
 
 export interface Connection {
   id: string;
@@ -236,20 +237,13 @@ export const ConnectionsTabContent: React.FC<ConnectionsTabContentProps> = ({
     skip: true,  // Skip this query; we'll use tenantData instead
   });
 
-  const [deleteConnection] = useMutation(DELETE_CONNECTION, {
-    onCompleted: () => {
-      refetch();
-    },
-    onError: (err) => {
-      console.error('Error deleting connection:', err);
-      // Optional: Show error alert
-    }
-  });
-
   const handleDeleteConnection = async (id: string) => {
     if (confirm('Are you sure you want to delete this connection? This action cannot be undone.')) {
       try {
-        await deleteConnection({ variables: { id } });
+        await apiClient(`/api/v1/admin/tenants/${tenantId}/connections/${id}`, {
+          method: 'DELETE',
+        });
+        refetch();
       } catch (err) {
         console.error(err);
       }

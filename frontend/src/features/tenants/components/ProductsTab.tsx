@@ -29,9 +29,8 @@ import DeleteIcon from '@mui/icons-material/Delete';
 import VisibilityIcon from '@mui/icons-material/Visibility';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import CancelIcon from '@mui/icons-material/Cancel';
-import { useMutation } from '@apollo/client';
 import { useNotification } from '../../../hooks/useNotification';
-import { ADD_TENANT_PRODUCT, DELETE_TENANT_PRODUCT, UPDATE_TENANT_PRODUCT } from '../../../graphql/mutations/tenantMutations';
+import { apiClient } from '../../../utils/apiClient';
 
 interface TenantInstance {
   id: string;
@@ -80,9 +79,7 @@ export default function ProductsTab({ tenantId, instances, products, availablePr
     product_name: '',
   });
 
-  const [addProduct] = useMutation(ADD_TENANT_PRODUCT);
-  const [updateProduct] = useMutation(UPDATE_TENANT_PRODUCT);
-  const [removeProduct] = useMutation(DELETE_TENANT_PRODUCT);
+  const [removeLoading, setRemoveLoading] = useState(false);
 
   // Filter available products for adding new assignment
   const filteredAvailableProducts = useMemo(() => {
@@ -136,13 +133,14 @@ export default function ProductsTab({ tenantId, instances, products, availablePr
         notification.error('Please select a product');
         return;
       }
-      await addProduct({
-        variables: {
+      await apiClient(`/api/v1/admin/tenants/${tenantId}/products`, {
+        method: 'POST',
+        body: JSON.stringify({
           tenant_instance_id: formData.instance_id,
           alpha_product_id: formData.product_id,
           version: formData.version,
           is_active: formData.is_active,
-        },
+        }),
       });
       notification.success('Product added to instance successfully');
       handleCloseDialog();
@@ -166,13 +164,13 @@ export default function ProductsTab({ tenantId, instances, products, availablePr
 
   const handleEditSave = async () => {
     try {
-      await updateProduct({
-        variables: {
-          id: editFormData.id,
+      await apiClient(`/api/v1/admin/tenants/${tenantId}/products/${editFormData.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({
           version: parseFloat(String(editFormData.version)),
           tenant_instance_id: editFormData.instance_id,
           is_active: editFormData.is_active,
-        },
+        }),
       });
       notification.success('Product updated successfully');
       setEditDialogOpen(false);
@@ -194,13 +192,18 @@ export default function ProductsTab({ tenantId, instances, products, availablePr
 
   const handleDelete = async (id: string) => {
     if (!window.confirm('Are you sure you want to remove this product from the instance?')) return;
-    
+
     try {
-      await removeProduct({ variables: { id } });
+      setRemoveLoading(true);
+      await apiClient(`/api/v1/admin/tenants/${tenantId}/products/${id}`, {
+        method: 'DELETE',
+      });
       notification.success('Product removed successfully');
       onRefetch();
     } catch (error: any) {
       notification.error(error.message || 'Failed to remove product');
+    } finally {
+      setRemoveLoading(false);
     }
   };
 

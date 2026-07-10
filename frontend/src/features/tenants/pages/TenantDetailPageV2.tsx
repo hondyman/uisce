@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { useQuery, useMutation, gql, useApolloClient } from '@apollo/client';
+import { useQuery, gql, useApolloClient } from '@apollo/client';
 import {
   Box,
   Button,
@@ -33,21 +33,10 @@ import {
 import { devLog, devWarn, devError } from '../../../utils/devLogger';
 import { GET_SCOPED_TENANT } from '../../../graphql/queries/tenantQueries';
 import { GET_AVAILABLE_DATASOURCES } from '../../../graphql/queries/datasourceQueries';
-import {
-  UPDATE_TENANT,
-  CREATE_TENANT_INSTANCE,
-  UPDATE_TENANT_INSTANCE,
-  DELETE_TENANT_INSTANCE,
-  CREATE_CONNECTION,
-  UPDATE_CONNECTION,
-  TEST_DATASOURCE_CONNECTION,
-  ADD_TENANT_PRODUCT_DATASOURCE,
-  UPDATE_TENANT_PRODUCT_DATASOURCE,
-  UPDATE_TENANT_PRODUCT_DATASOURCE_LINKING,
-  UPDATE_TPD_CONNECTION_ONLY,
-} from '../../../graphql/mutations/tenantMutations';
+import { useApiMutation } from '../../../hooks/useApiMutation';
 import { useTenant } from '../../../contexts/TenantContext';
 import type { TenantInstance } from '../../../types';
+import { apiClient } from '../../../utils/apiClient';
 import InstancesTableV2 from '../components/InstancesTableV2';
 import { ConnectionsTabContent } from '../components/ConnectionsTabContent';
 import { AuditLogTabContent } from '../components/AuditLogTabContent';
@@ -113,71 +102,59 @@ export const TenantDetailPageV2: React.FC = () => {
     }
   `);
 
-  const [updateTenant] = useMutation(UPDATE_TENANT, {
-    onCompleted: () => refetch(),
-  });
-  const [addTenantProduct] = useMutation(gql`
-    mutation AddTenantProduct($tenant_id: uuid!, $tenant_instance_id: uuid!, $alpha_product_id: uuid!, $version: Float!, $is_active: Boolean!) {
-      insert_tenant_product_one(object: { tenant_id: $tenant_id, tenant_instance_id: $tenant_instance_id, alpha_product_id: $alpha_product_id, version: $version, is_active: $is_active }) {
-        id
-      }
-    }
-  `, {
-    onCompleted: () => refetch(),
-  });
+  const updateTenant = useApiMutation<any, any>(
+    `/api/v1/admin/tenants/${tenantId}/update`,
+    'PATCH',
+    { onCompleted: () => refetch() }
+  );
+  const addTenantProduct = useApiMutation<any, any>(
+    `/api/v1/admin/tenants/${tenantId}/products`,
+    'POST',
+    { onCompleted: () => refetch() }
+  );
 
-  const [createTenantInstance] = useMutation(CREATE_TENANT_INSTANCE, {
-    onCompleted: () => refetch(),
-  });
-  const [updateTenantInstance] = useMutation(UPDATE_TENANT_INSTANCE, {
-    onCompleted: () => refetch(),
-  });
-  const [deleteTenantInstance] = useMutation(DELETE_TENANT_INSTANCE, {
-    onCompleted: () => refetch(),
-  });
-  const [createConnection] = useMutation(CREATE_CONNECTION, {
-    onCompleted: () => {
-      refetch();
-    },
-  });
-  const [updateConnection] = useMutation(UPDATE_CONNECTION, {
-    onCompleted: () => {
-      refetch();
-    },
-  });
-  const [addTenantProductDatasource] = useMutation(ADD_TENANT_PRODUCT_DATASOURCE, {
-    onCompleted: () => {
-      refetch();
-    },
-  });
-  const [updateTenantProductDatasource] = useMutation(UPDATE_TENANT_PRODUCT_DATASOURCE, {
-    onCompleted: () => {
-      refetch();
-    },
-  });
-  const [updateTenantProductDatasourceLinking] = useMutation(UPDATE_TENANT_PRODUCT_DATASOURCE_LINKING, {
-    onCompleted: () => {
-      refetch();
-    },
-  });
-  const [updateTpdConnectionOnly] = useMutation(UPDATE_TPD_CONNECTION_ONLY, {
-    onCompleted: () => {
-      refetch();
-    },
-  });
-  const [testConnection] = useMutation(TEST_DATASOURCE_CONNECTION, {
-    onCompleted: (data) => {
-      setTestConnectionResult(data.test_datasource_connection);
-      setTestConnectionLoading(false);
-    },
-    onError: (err) => {
-      setTestConnectionResult({
-        success: false,
-        message: err.message || 'Failed to test connection',
-      });
-      setTestConnectionLoading(false);
-    },
-  });
+  const createTenantInstance = useApiMutation<any, any>(
+    `/api/v1/admin/tenants/${tenantId}/instances`,
+    'POST',
+    { onCompleted: () => refetch() }
+  );
+  const updateTenantInstance = useApiMutation<any, any>(
+    `/api/v1/admin/tenants/${tenantId}/instances`,
+    'PATCH',
+    { onCompleted: () => refetch() }
+  );
+  const deleteTenantInstance = useApiMutation<any, any>(
+    `/api/v1/admin/tenants/${tenantId}/instances`,
+    'DELETE',
+    { onCompleted: () => refetch() }
+  );
+  const createConnection = useApiMutation<any, any>(
+    `/api/v1/admin/tenants/${tenantId}/connections`,
+    'POST',
+    { onCompleted: () => refetch() }
+  );
+  const addTenantProductDatasource = useApiMutation<any, any>(
+    `/api/v1/admin/tenants/${tenantId}/product-datasources`,
+    'POST',
+    { onCompleted: () => refetch() }
+  );
+  const testConnection = useApiMutation<any, any>(
+    `/api/v1/admin/tenants/${tenantId}/connections/test`,
+    'POST',
+    {
+      onCompleted: (data) => {
+        setTestConnectionResult(data);
+        setTestConnectionLoading(false);
+      },
+      onError: (err) => {
+        setTestConnectionResult({
+          success: false,
+          message: err.message || 'Failed to test connection',
+        });
+        setTestConnectionLoading(false);
+      },
+    }
+  );
 
   // State
   const [activeTab, setActiveTab] = useState(0);
@@ -368,11 +345,9 @@ export const TenantDetailPageV2: React.FC = () => {
 
   const handleSaveTenantEdit = async () => {
     try {
-      await updateTenant({
-        variables: {
-          id: tenant.id,
-          ...tenantEditForm,
-        },
+      await updateTenant.mutate({
+        id: tenant.id,
+        ...tenantEditForm,
       });
       setEditMode(false);
     } catch (err) {
@@ -412,19 +387,13 @@ export const TenantDetailPageV2: React.FC = () => {
   const handleSaveInstance = async () => {
     try {
       if (editingInstance) {
-        await updateTenantInstance({
-          variables: {
-            id: editingInstance.id,
-            tenant_id: tenant.id,
-            ...instanceForm,
-          },
+        await updateTenantInstance.mutate({
+          id: editingInstance.id,
+          ...instanceForm,
         });
       } else {
-        await createTenantInstance({
-          variables: {
-            tenant_id: tenant.id,
-            ...instanceForm,
-          },
+        await createTenantInstance.mutate({
+          ...instanceForm,
         });
       }
       setInstanceDialogOpen(false);
@@ -436,9 +405,7 @@ export const TenantDetailPageV2: React.FC = () => {
 
   const handleDeleteInstance = async (instanceId: string) => {
     try {
-      await deleteTenantInstance({
-        variables: { id: instanceId },
-      });
+      await deleteTenantInstance.mutate({ id: instanceId });
     } catch (err) {
       console.error('Error deleting instance:', err);
     }
@@ -506,7 +473,6 @@ export const TenantDetailPageV2: React.FC = () => {
       setTestConnectionLoading(true);
       setTestConnectionResult(null);
 
-      // Build connection config object
       const connectionConfig = {
         type: connectionForm.type,
         host: connectionForm.host,
@@ -521,16 +487,11 @@ export const TenantDetailPageV2: React.FC = () => {
         ...connectionForm.metadata,
       };
 
-      // Remove undefined values
       Object.keys(connectionConfig).forEach(
         key => connectionConfig[key as keyof typeof connectionConfig] === undefined && delete connectionConfig[key as keyof typeof connectionConfig]
       );
 
-      await testConnection({
-        variables: {
-          connection_details: JSON.stringify(connectionConfig),
-        },
-      });
+      await testConnection.mutate(connectionConfig);
     } catch (err: any) {
       console.error('Error testing connection:', err);
       setTestConnectionResult({
@@ -552,10 +513,8 @@ export const TenantDetailPageV2: React.FC = () => {
         return;
       }
 
-      // Ensure datasources are loaded before proceeding
       if (!datasourcesData?.alpha_datasource || datasourcesData.alpha_datasource.length === 0) {
         console.warn('Datasource types not yet loaded, attempting to refetch...');
-        // Try to fetch fresh if we don't have the data
         const freshDatasources = await client.query({
           query: GET_AVAILABLE_DATASOURCES,
           fetchPolicy: 'network-only',
@@ -564,14 +523,11 @@ export const TenantDetailPageV2: React.FC = () => {
           alert('Unable to load datasource types. Please try again.');
           return;
         }
-        // Proceed with fresh data
       }
 
-      let result;
       let connectionId;
 
       if (editingConnection?.id) {
-        // Update existing connection - exclude tenant_id
         const updateObject = {
             name: connectionForm.name,
             type: connectionForm.type,
@@ -591,17 +547,13 @@ export const TenantDetailPageV2: React.FC = () => {
             is_active: connectionForm.is_active,
         };
 
-        result = await updateConnection({
-          variables: {
-            id: editingConnection.id,
-            object: updateObject,
-          },
+        const updateResult = await apiClient(`/api/v1/admin/tenants/${tenantId}/connections/${editingConnection.id}`, {
+          method: 'PATCH',
+          body: JSON.stringify(updateObject),
         });
-        connectionId = editingConnection.id;
+        connectionId = (updateResult as any).id;
       } else {
-        // Create new connection - include tenant_id
         const createObject = {
-            tenant_id: tenant?.id || scopedTenant?.id || '',
             name: connectionForm.name,
             type: connectionForm.type,
             host: connectionForm.host || null,
@@ -620,28 +572,19 @@ export const TenantDetailPageV2: React.FC = () => {
             is_active: connectionForm.is_active,
         };
 
-        result = await createConnection({
-          variables: {
-            object: createObject,
-          },
-        });
-        connectionId = result.data?.insert_connections_one?.id;
+        const createResult = await createConnection.mutate(createObject);
+        connectionId = (createResult as any).id;
       }
 
       if (connectionId) {
-        // Unlink this connection from any existing datasources to ensure 1:1 relationship
-        // and prevent "stale" links when moving a connection between products/instances.
         if (tenant?.tenant_products) {
           for (const tp of tenant.tenant_products) {
             if (tp.tenant_product_datasources) {
               for (const ds of tp.tenant_product_datasources) {
                 if (ds.connection_id === connectionId) {
-                  // Use the CONNECTION_ONLY mutation which just updates connection_id
-                  await updateTpdConnectionOnly({
-                    variables: {
-                      id: ds.id,
-                      connection_id: null,
-                    },
+                  await apiClient(`/api/v1/admin/tenants/${tenantId}/product-datasources/${ds.id}/connection`, {
+                    method: 'PATCH',
+                    body: JSON.stringify({ connection_id: null }),
                   });
                 }
               }
@@ -649,54 +592,41 @@ export const TenantDetailPageV2: React.FC = () => {
           }
         }
 
-        // Now link the connection to the product/instance via tenant_product_datasource
-        // First, ensure the product is registered to the tenant
         let tenantProductId = selectedConnectionProduct;
         const existingProduct = tenant?.tenant_products?.find(
           (tp: any) => tp.alpha_product_id === selectedConnectionProduct
         );
 
-
         if (!existingProduct) {
-          // Register the product to the tenant first
-          const registerResult = await addTenantProduct({
-            variables: {
-              tenant_id: scopedTenant?.id,
-              tenant_instance_id: selectedConnectionInstance,
-              alpha_product_id: selectedConnectionProduct,
-              version: 1.0,
-              is_active: true,
-            },
+          const registerResult = await addTenantProduct.mutate({
+            alpha_product_id: selectedConnectionProduct,
+            version: 1.0,
+            is_active: true,
           });
-          tenantProductId = registerResult.data?.insert_tenant_product_one?.id;
-          // Refetch to get updated tenant data
+          tenantProductId = (registerResult as any).id;
           await refetch();
         } else {
           tenantProductId = existingProduct.id;
         }
-        
+
         if (tenantProductId) {
-          // Determine the correct Alpha Datasource ID (Datasource Type)
           let resolvedAlphaDatasourceId = selectedAlphaDatasource;
-          
-          // If not explicitly selected, try to auto-resolve based on connection type
+
           if (!resolvedAlphaDatasourceId && datasourcesData?.alpha_datasource?.length > 0) {
             const typeStr = connectionForm.type.toLowerCase();
-            const match = datasourcesData.alpha_datasource.find((ds: any) => 
+            const match = datasourcesData.alpha_datasource.find((ds: any) =>
               ds.datasource_code?.toLowerCase().includes(typeStr)
             );
             if (match) {
               resolvedAlphaDatasourceId = match.id;
               console.log(`Auto-resolved datasource type: ${match.datasource_code}`);
             } else {
-              // Fallback to first available
               const fallback = datasourcesData.alpha_datasource[0];
               resolvedAlphaDatasourceId = fallback?.id;
               console.warn(`Could not match datasource type for ${connectionForm.type}; using ${fallback?.datasource_code}`);
             }
           }
 
-          // Final validation: require non-null datasource type
           if (!resolvedAlphaDatasourceId) {
             console.error('Datasource type resolution failed:', {
               selected: selectedAlphaDatasource,
@@ -708,14 +638,11 @@ export const TenantDetailPageV2: React.FC = () => {
             return;
           }
 
-          // Use fresh data to avoid stale closure issues
           const refreshResult = await refetch();
           const freshTenant = refreshResult.data?.tenants?.[0];
 
-          // Priority 1: Search for an EXACT MATCH for the target (Product, Instance)
-          // We want to update this specific record if it exists, rather than stealing another record.
           let existingDatasource = null;
-          
+
           if (freshTenant?.tenant_products) {
              const targetProduct = freshTenant.tenant_products.find((tp: any) => tp.id === tenantProductId);
              console.log(`Looking for TPD in product ${tenantProductId}:`, targetProduct?.alpha_product?.product_name);
@@ -733,9 +660,7 @@ export const TenantDetailPageV2: React.FC = () => {
              }
           }
 
-          
           if (existingDatasource) {
-            // Validate connectionId before attempting update
             if (!connectionId) {
                 console.error("Critical: connectionId is missing during linking phase");
                 alert("Internal Error: Connection ID is missing. Please refresh and try again.");
@@ -755,42 +680,14 @@ export const TenantDetailPageV2: React.FC = () => {
                 connection_id: connectionId,
             });
 
-            // Verify connection exists before linking
-            // We use a direct client query to bypass potential cache/query structure issues with the main query
-            // AND we explicitly inject the Tenant ID to ensure Hasura context is valid even if global localStorage is empty/stale.
-            const verifyResult = await client.query({
-              query: gql`
-                query VerifyConnection($id: uuid!) {
-                  connections(where: { id: { _eq: $id } }) {
-                    id
-                    name
-                    is_active
-                  }
-                }
-              `,
-              variables: { id: connectionId },
-              fetchPolicy: 'network-only',
-              context: {
-                headers: {
-                  'X-Tenant-ID': tenantId, // Ensure we send the current tenant context
-                }
-              }
-            });
-            
-            const verifyConn = verifyResult.data?.connections?.[0];
-            
+            const verifyConn = await apiClient(`/api/v1/admin/tenants/${tenantId}/connections/${connectionId}`, { method: 'GET' });
             if (!verifyConn) {
                 console.error("Critical: Connection created/updated but not found in subsequent query.", connectionId);
                 alert("Warning: Connection saved, but not visible yet. Linking to product skipped to prevent errors.");
                 return;
             }
 
-            // Update existing datasource with new instance
-            // We use the LINKING mutation which ignores tenant_product_id to avoid null value errors
-            // since we are not moving the datasource between products.
             const updateVars = {
-              id: existingDatasource.id,
-              // tenant_product_id intentionally omitted
               tenant_instance_id: selectedConnectionInstance || null,
               alpha_tenant_instance_id: resolvedAlphaDatasourceId || null,
               connection_id: connectionId,
@@ -800,19 +697,18 @@ export const TenantDetailPageV2: React.FC = () => {
             };
 
             console.log('Linking mutation vars:', updateVars);
-            
+
             try {
-                const linkResult = await updateTenantProductDatasourceLinking({
-                  variables: updateVars,
+                const linkResult = await apiClient(`/api/v1/admin/tenants/${tenantId}/product-datasources/${existingDatasource.id}/linking`, {
+                  method: 'PATCH',
+                  body: JSON.stringify(updateVars),
                 });
-                console.log('Link result:', linkResult.data);
+                console.log('Link result:', linkResult);
             } catch (innerErr) {
                 console.error("Failed to update TPD link:", innerErr);
-                // Don't crash the whole save flow, but alert user
                 alert("Connection saved, but failed to link to Product. Please try linking again.");
             }
           } else {
-            // Ensure we have valid IDs before creating
             if (!selectedConnectionInstance) {
               alert('Unable to link connection: missing instance.');
               return;
@@ -822,24 +718,20 @@ export const TenantDetailPageV2: React.FC = () => {
               return;
             }
 
-            // Create new datasource link
-            await addTenantProductDatasource({
-              variables: {
-                tenant_product_id: tenantProductId,
-                tenant_instance_id: selectedConnectionInstance,
-                alpha_tenant_instance_id: resolvedAlphaDatasourceId,
-                config: {},
-                is_active: true,
-                source_name: connectionForm.name,
-                connection_id: connectionId,
-              },
+            await addTenantProductDatasource.mutate({
+              tenant_product_id: tenantProductId,
+              tenant_instance_id: selectedConnectionInstance,
+              alpha_tenant_instance_id: resolvedAlphaDatasourceId,
+              config: {},
+              is_active: true,
+              source_name: connectionForm.name,
+              connection_id: connectionId,
             });
           }
         }
 
         setConnectionDialogOpen(false);
         setEditingConnection(null);
-        // Reset form
         setConnectionForm({
           name: '',
           type: 'postgres',
@@ -858,7 +750,7 @@ export const TenantDetailPageV2: React.FC = () => {
         setConnectionConfigJson('{}');
         setSelectedConnectionProduct('');
         setSelectedConnectionInstance('');
-        setConnectionsRefreshKey(prev => prev + 1); // Force ConnectionsTabContent to refetch
+        setConnectionsRefreshKey(prev => prev + 1);
         setSelectedAlphaDatasource('');
       }
     } catch (err: any) {
@@ -1069,6 +961,7 @@ export const TenantDetailPageV2: React.FC = () => {
           <Box sx={{ p: 3 }}>
             <InstancesTableV2
               instances={enrichedInstances}
+              tenantId={tenantId || ''}
               onAddInstance={handleAddInstance}
               onEditInstance={handleEditInstance}
               onDeleteInstance={handleDeleteInstance}
