@@ -1,6 +1,5 @@
 import React, { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useQuery, useMutation } from '@apollo/client';
 import {
   Box,
   Button,
@@ -34,32 +33,26 @@ import {
   FilterList as FilterIcon,
   Sort as SortIcon,
 } from '@mui/icons-material';
-import { GET_TENANTS } from '../../../graphql/queries/tenantQueries';
-import { DELETE_TENANT, CREATE_TENANT, UPDATE_TENANT } from '../../../graphql/mutations/tenantMutations';
 import type { Tenant } from '../../../types';
 import TenantDialog from '../components/TenantDialog';
 import { useAccess } from '../../../contexts/AccessContext';
+import { useApiQuery } from '../../../hooks/useApiQuery';
+import { apiClient } from '../../../utils/apiClient';
 
 export const TenantListPage: React.FC = () => {
   const navigate = useNavigate();
-  const { loading, error, data, refetch } = useQuery(GET_TENANTS);
-  // REST fallback: when Hasura / GraphQL is down (we saw a 503), the AccessContext
-  // already populates `accessibleTenants` from /api/tenants/all (platform operators)
-  // or /api/tenants/accessible.  Use that so global admins still see the tenant
-  // list rather than a blank page.
-  const { accessibleTenants } = useAccess();
-  const usingFallback = !!error && accessibleTenants.length > 0;
-  
-  // Mutations
-  const [deleteTenant] = useMutation(DELETE_TENANT, { 
-    onCompleted: () => refetch() 
-  });
-  const [createTenant] = useMutation(CREATE_TENANT, { 
-    onCompleted: () => refetch() 
-  });
-  const [updateTenant] = useMutation(UPDATE_TENANT, { 
-    onCompleted: () => refetch() 
-  });
+  const { accessLevel } = useAccess();
+  const isPlatformOperator = accessLevel === 'platform_operator';
+
+  const { loading, error, data, refetch } = useApiQuery<Tenant[]>(
+    '/api/tenants/all'
+  );
+
+  const tenants: Tenant[] = useMemo(() => {
+    if (!data) return [];
+    if (Array.isArray(data)) return data;
+    return [];
+  }, [data]);
 
   // State management
   const [searchQuery, setSearchQuery] = useState('');
@@ -72,13 +65,6 @@ export const TenantListPage: React.FC = () => {
   });
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [deleteConfirmTenant, setDeleteConfirmTenant] = useState<Tenant | null>(null);
-
-  // Prefer the GraphQL response, but fall back to the REST-backed
-  // accessibleTenants list when Hasura is unreachable (503).  This keeps the
-  // Organization → Tenants view usable for global admins even if /v1/graphql
-  // is down.
-  const tenants: Tenant[] =
-    data?.tenants ?? (usingFallback ? accessibleTenants : []);
 
   // Filter and search
   const filteredTenants = useMemo(() => {
@@ -116,11 +102,20 @@ export const TenantListPage: React.FC = () => {
   const handleSaveTenant = async (tenantData: Partial<Tenant>) => {
     try {
       if (tenantData.id) {
-        await updateTenant({ variables: tenantData });
+        await apiClient(`/api/v1/admin/tenants/${tenantData.id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(tenantData),
+        });
       } else {
-        await createTenant({ variables: tenantData });
+        await apiClient('/api/v1/admin/tenants', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(tenantData),
+        });
       }
       setTenantDialog({ open: false, tenant: null });
+      refetch();
     } catch (err) {
       console.error('Error saving tenant:', err);
     }
@@ -134,7 +129,10 @@ export const TenantListPage: React.FC = () => {
   const handleConfirmDelete = async () => {
     if (deleteConfirmTenant) {
       try {
-        await deleteTenant({ variables: { id: deleteConfirmTenant.id } });
+        await apiClient(`/api/v1/admin/tenants/${deleteConfirmTenant.id}`, {
+          method: 'DELETE',
+        });
+        refetch();
       } catch (err) {
         console.error('Error deleting tenant:', err);
       }
@@ -163,23 +161,12 @@ export const TenantListPage: React.FC = () => {
     );
   }
 
-  if (error && !usingFallback) {
+  if (error) {
     return <Alert severity="error">Failed to load tenants: {error.message}</Alert>;
   }
 
   return (
     <Box sx={{ p: { xs: 2, md: 3 } }}>
-      {/* Non-blocking warning when we're rendering from the REST fallback
-          because GraphQL/Hasura is unreachable.  Keeps the page usable while
-          making the degraded state obvious to the operator. */}
-      {usingFallback && (
-        <Alert severity="warning" sx={{ mb: 2 }}>
-          GraphQL endpoint is unreachable ({error?.message ?? 'network error'}).
-          Showing the tenant list from the REST fallback (/api/tenants).
-          Create / edit / delete actions are disabled until Hasura recovers.
-        </Alert>
-      )}
-
       {/* Header */}
       <Box sx={{ mb: 4 }}>
         <Typography variant="h4" sx={{ fontWeight: 'bold', mb: 1 }}>
@@ -206,6 +193,7 @@ export const TenantListPage: React.FC = () => {
           color="primary"
           startIcon={<AddIcon />}
           onClick={handleAddTenant}
+          disabled={!isPlatformOperator}
           sx={{ alignSelf: { xs: 'flex-start', md: 'auto' } }}
         >
           New Tenant
@@ -374,13 +362,13 @@ export const TenantListPage: React.FC = () => {
                         >
                           <EditIcon fontSize="small" />
                         </IconButton>
-                        <span title={tenant.gold_copy ? "Gold Copy tenants cannot be deleted" : "Delete tenant"}>
+                        <span title={tenant.gold_copy ? "Gold Copy tenants cannot be deleted" : !isPlatformOperator ? "Only platform operators can delete tenants" : "Delete tenant"}>
                           <IconButton
                             size="small"
                             color="error"
                             onClick={() => handleDeleteClick(tenant)}
                             title="Delete"
-                            disabled={tenant.gold_copy}
+                            disabled={tenant.gold_copy || !isPlatformOperator}
                           >
                             <DeleteIcon fontSize="small" />
                           </IconButton>

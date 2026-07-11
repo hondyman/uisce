@@ -1,6 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { useQuery, gql, useApolloClient } from '@apollo/client';
 import {
   Box,
   Button,
@@ -30,10 +29,8 @@ import {
   Edit as EditIcon,
   Delete as DeleteIcon,
 } from '@mui/icons-material';
-import { devLog, devWarn, devError } from '../../../utils/devLogger';
-import { GET_SCOPED_TENANT } from '../../../graphql/queries/tenantQueries';
-import { GET_AVAILABLE_DATASOURCES } from '../../../graphql/queries/datasourceQueries';
 import { useApiMutation } from '../../../hooks/useApiMutation';
+import { useApiQuery } from '../../../hooks/useApiQuery';
 import { useTenant } from '../../../contexts/TenantContext';
 import type { TenantInstance } from '../../../types';
 import { apiClient } from '../../../utils/apiClient';
@@ -71,72 +68,59 @@ function TabPanel(props: TabPanelProps) {
 export const TenantDetailPageV2: React.FC = () => {
   const { tenantId } = useParams<{ tenantId: string }>();
   const navigate = useNavigate();
-  const client = useApolloClient();
-  const { 
-    tenant: scopedTenant, 
+  const {
+    tenant: scopedTenant,
     datasource: scopedDatasource,
-    setSelection
   } = useTenant();
 
+  const { data: tenantData, loading, error, refetch: refetchTenant } = useApiQuery<{ tenant: any }>(
+    tenantId ? `/api/tenants/${tenantId}` : '',
+    { skip: !tenantId }
+  );
 
+  const { data: datasourcesData } = useApiQuery<{ alpha_datasource: any[] }>(
+    '/api/rest/datasources'
+  );
 
-  const { loading, error, data, refetch } = useQuery(GET_SCOPED_TENANT, {
-    variables: { tenantId: tenantId ?? '' },
-    skip: !tenantId,
-  });
-
-  // Fetch available alpha datasources - critical for connection linking, load eagerly
-  const { data: datasourcesData, loading: datasourcesLoading } = useQuery(GET_AVAILABLE_DATASOURCES, {
-    fetchPolicy: 'cache-first',  // Cache aggressively to avoid repeated loads
-  });
-
-  // Fetch all available alpha products
-  const { data: alphaProductsData } = useQuery(gql`
-    query GetAlphaProducts {
-      alpha_product(where: { is_active: { _eq: true } }, order_by: { product_name: asc }) {
-        id
-        product_name
-        product_code
-        is_active
-      }
-    }
-  `);
+  const { data: alphaProductsData } = useApiQuery<{ alpha_product: any[] }>(
+    '/api/rest/products'
+  );
 
   const updateTenant = useApiMutation<any, any>(
     `/api/v1/admin/tenants/${tenantId}/update`,
     'PATCH',
-    { onCompleted: () => refetch() }
+    { onCompleted: () => refetchTenant() }
   );
   const addTenantProduct = useApiMutation<any, any>(
     `/api/v1/admin/tenants/${tenantId}/products`,
     'POST',
-    { onCompleted: () => refetch() }
+    { onCompleted: () => refetchTenant() }
   );
 
   const createTenantInstance = useApiMutation<any, any>(
     `/api/v1/admin/tenants/${tenantId}/instances`,
     'POST',
-    { onCompleted: () => refetch() }
+    { onCompleted: () => refetchTenant() }
   );
   const updateTenantInstance = useApiMutation<any, any>(
     `/api/v1/admin/tenants/${tenantId}/instances`,
     'PATCH',
-    { onCompleted: () => refetch() }
+    { onCompleted: () => refetchTenant() }
   );
   const deleteTenantInstance = useApiMutation<any, any>(
     `/api/v1/admin/tenants/${tenantId}/instances`,
     'DELETE',
-    { onCompleted: () => refetch() }
+    { onCompleted: () => refetchTenant() }
   );
   const createConnection = useApiMutation<any, any>(
     `/api/v1/admin/tenants/${tenantId}/connections`,
     'POST',
-    { onCompleted: () => refetch() }
+    { onCompleted: () => refetchTenant() }
   );
   const addTenantProductDatasource = useApiMutation<any, any>(
     `/api/v1/admin/tenants/${tenantId}/product-datasources`,
     'POST',
-    { onCompleted: () => refetch() }
+    { onCompleted: () => refetchTenant() }
   );
   const testConnection = useApiMutation<any, any>(
     `/api/v1/admin/tenants/${tenantId}/connections/test`,
@@ -202,7 +186,7 @@ export const TenantDetailPageV2: React.FC = () => {
   const [connectionsRefreshKey, setConnectionsRefreshKey] = useState(0);
   const [testConnectionResult, setTestConnectionResult] = useState<{ success: boolean; message: string } | null>(null);
 
-  const tenant = useMemo(() => data?.tenants?.[0] ?? null, [data]);
+  const tenant = useMemo(() => tenantData?.tenant ?? null, [tenantData]);
   const instances = useMemo(() => tenant?.tenant_instances ?? [], [tenant]);
 
   // Automatically switch context to this tenant if not already selected
@@ -220,44 +204,37 @@ export const TenantDetailPageV2: React.FC = () => {
 
   const enrichedInstances = useMemo(() => {
     if (!tenant) return [];
-    
-    // Map instance ID to associated resources
+
     const instanceResourcesMap = new Map<string, { products: string[], connections: any[] }>();
-    
-    // Iterate over tenant products to find linked datasources
-    tenant.tenant_products?.forEach((tp: any) => {
-      tp.tenant_product_datasources?.forEach((tpd: any) => {
-        // Only count datasources that have an actual connection_id assigned
-        if (tpd.tenant_instance_id && tpd.connection_id) {
-            // Found a datasource linked to an instance with an active connection
-            if (!instanceResourcesMap.has(tpd.tenant_instance_id)) {
-                instanceResourcesMap.set(tpd.tenant_instance_id, { products: [], connections: [] });
+
+    // New REST shape: products are nested inside instances (tenant.instances[].products[].Datasources[])
+    tenant.tenant_instances?.forEach((instance: any) => {
+      instance.products?.forEach((product: any) => {
+        product.datasources?.forEach((ds: any) => {
+          if (ds.connection_id) {
+            if (!instanceResourcesMap.has(instance.id)) {
+              instanceResourcesMap.set(instance.id, { products: [], connections: [] });
             }
-            const resource = instanceResourcesMap.get(tpd.tenant_instance_id)!;
-            
-            // Add product details (if not already added)
-            // Wait, we just need the product info for grouping
-            
+            const resource = instanceResourcesMap.get(instance.id)!;
             resource.connections.push({
-                id: tpd.connection_id || tpd.id, 
-                name: tpd.source_name || 'Unknown',
-                type: 'Datasource',
-                productName: tp.alpha_product?.product_name,
-                productId: tp.alpha_product_id
+              id: ds.connection_id,
+              name: ds.source_name || 'Unknown',
+              type: 'Datasource',
+              productName: product.alpha_product?.product_name,
+              productId: product.alpha_product_id
             });
-        }
+          }
+        });
       });
     });
 
     return (tenant.tenant_instances ?? []).map((instance: any) => {
         const resources = instanceResourcesMap.get(instance.id);
         const connections = resources?.connections || [];
-        
-        // Group by product for the dialog details
+
         const detailsMap = new Map<string, any>();
         connections.forEach((conn: any) => {
             if (!detailsMap.has(conn.productId)) {
-                // Use productName if available, otherwise use productId as fallback
                 const displayName = conn.productName || `Product ${conn.productId?.substring(0, 8)}...` || 'Unknown Product';
                 detailsMap.set(conn.productId, {
                     productId: conn.productId,
@@ -273,7 +250,7 @@ export const TenantDetailPageV2: React.FC = () => {
         });
 
         const details = Array.from(detailsMap.values());
-        
+
         return {
             ...instance,
             linkedResources: {
@@ -288,27 +265,27 @@ export const TenantDetailPageV2: React.FC = () => {
   // Calculate instance and connection counts per product
   const productCounts = useMemo(() => {
     if (!tenant) return new Map<string, { instances: Set<string>, connections: number }>();
-    
+
     const countsMap = new Map<string, { instances: Set<string>, connections: number }>();
-    
-    // Iterate over tenant products to count instances and connections per product
-    tenant.tenant_products?.forEach((tp: any) => {
-      const productId = tp.alpha_product_id;
-      if (!countsMap.has(productId)) {
-        countsMap.set(productId, { instances: new Set(), connections: 0 });
-      }
-      
-      const counts = countsMap.get(productId)!;
-      
-      tp.tenant_product_datasources?.forEach((tpd: any) => {
-        // Only count datasources that have an actual connection_id assigned
-        if (tpd.tenant_instance_id && tpd.connection_id) {
-          counts.instances.add(tpd.tenant_instance_id);
-          counts.connections++;
+
+    tenant.tenant_instances?.forEach((instance: any) => {
+      instance.products?.forEach((product: any) => {
+        const productId = product.alpha_product_id;
+        if (!countsMap.has(productId)) {
+          countsMap.set(productId, { instances: new Set(), connections: 0 });
         }
+
+        const counts = countsMap.get(productId)!;
+
+        product.datasources?.forEach((ds: any) => {
+          if (ds.connection_id) {
+            counts.instances.add(instance.id);
+            counts.connections++;
+          }
+        });
       });
     });
-    
+
     return countsMap;
   }, [tenant]);
 
@@ -515,11 +492,8 @@ export const TenantDetailPageV2: React.FC = () => {
 
       if (!datasourcesData?.alpha_datasource || datasourcesData.alpha_datasource.length === 0) {
         console.warn('Datasource types not yet loaded, attempting to refetch...');
-        const freshDatasources = await client.query({
-          query: GET_AVAILABLE_DATASOURCES,
-          fetchPolicy: 'network-only',
-        });
-        if (!freshDatasources.data?.alpha_datasource?.length) {
+        const freshDatasources = await apiClient<{ alpha_datasource: any[] }>('/api/rest/datasources');
+        if (!freshDatasources?.alpha_datasource?.length) {
           alert('Unable to load datasource types. Please try again.');
           return;
         }
@@ -577,10 +551,10 @@ export const TenantDetailPageV2: React.FC = () => {
       }
 
       if (connectionId) {
-        if (tenant?.tenant_products) {
-          for (const tp of tenant.tenant_products) {
-            if (tp.tenant_product_datasources) {
-              for (const ds of tp.tenant_product_datasources) {
+        if (tenant?.tenant_instances) {
+          for (const instance of tenant.tenant_instances) {
+            for (const product of (instance.products || [])) {
+              for (const ds of (product.datasources || [])) {
                 if (ds.connection_id === connectionId) {
                   await apiClient(`/api/v1/admin/tenants/${tenantId}/product-datasources/${ds.id}/connection`, {
                     method: 'PATCH',
@@ -593,9 +567,15 @@ export const TenantDetailPageV2: React.FC = () => {
         }
 
         let tenantProductId = selectedConnectionProduct;
-        const existingProduct = tenant?.tenant_products?.find(
-          (tp: any) => tp.alpha_product_id === selectedConnectionProduct
-        );
+        let existingProduct = null;
+        if (tenant?.tenant_instances) {
+          for (const instance of tenant.tenant_instances) {
+            existingProduct = (instance.products || []).find(
+              (p: any) => p.alpha_product_id === selectedConnectionProduct
+            );
+            if (existingProduct) break;
+          }
+        }
 
         if (!existingProduct) {
           const registerResult = await addTenantProduct.mutate({
@@ -604,7 +584,7 @@ export const TenantDetailPageV2: React.FC = () => {
             is_active: true,
           });
           tenantProductId = (registerResult as any).id;
-          await refetch();
+          await refetchTenant();
         } else {
           tenantProductId = existingProduct.id;
         }
@@ -638,17 +618,18 @@ export const TenantDetailPageV2: React.FC = () => {
             return;
           }
 
-          const refreshResult = await refetch();
-          const freshTenant = refreshResult.data?.tenants?.[0];
+          const freshTenantData = await apiClient<{ tenant: any }>(`/api/tenants/${tenantId}`);
+          const freshTenant = freshTenantData?.tenant;
 
           let existingDatasource = null;
 
-          if (freshTenant?.tenant_products) {
-             const targetProduct = freshTenant.tenant_products.find((tp: any) => tp.id === tenantProductId);
-             console.log(`Looking for TPD in product ${tenantProductId}:`, targetProduct?.alpha_product?.product_name);
-             if (targetProduct?.tenant_product_datasources) {
-                console.log(`  Product has ${targetProduct.tenant_product_datasources.length} datasources`);
-                existingDatasource = targetProduct.tenant_product_datasources.find(
+          if (freshTenant?.tenant_instances) {
+            for (const instance of freshTenant.tenant_instances) {
+              const targetProduct = (instance.products || []).find((p: any) => p.id === tenantProductId);
+              console.log(`Looking for TPD in product ${tenantProductId}:`, targetProduct?.alpha_product?.product_name);
+              if (targetProduct?.datasources) {
+                console.log(`  Product has ${targetProduct.datasources.length} datasources`);
+                existingDatasource = targetProduct.datasources.find(
                     (ds: any) => {
                        const matches = ds.tenant_instance_id === selectedConnectionInstance &&
                        ds.alpha_tenant_instance_id === resolvedAlphaDatasourceId;
@@ -657,7 +638,9 @@ export const TenantDetailPageV2: React.FC = () => {
                     }
                 );
                 console.log(`  Found matching datasource: ${existingDatasource?.id || 'NONE'}`);
-             }
+              }
+              if (existingDatasource) break;
+            }
           }
 
           if (existingDatasource) {
@@ -965,7 +948,7 @@ export const TenantDetailPageV2: React.FC = () => {
               onAddInstance={handleAddInstance}
               onEditInstance={handleEditInstance}
               onDeleteInstance={handleDeleteInstance}
-              onReload={() => refetch()}
+              onReload={() => refetchTenant()}
             />
           </Box>
         </TabPanel>
@@ -997,13 +980,15 @@ export const TenantDetailPageV2: React.FC = () => {
               instances={instances}
               products={Array.from(
                 new Map(
-                  (tenant?.tenant_products || []).map((tp: any) => [
-                    tp.alpha_product_id,
-                    {
-                      id: tp.alpha_product_id,
-                      product_name: tp.alpha_product?.product_name || 'Unknown'
-                    }
-                  ])
+                  (tenant?.tenant_instances || []).flatMap((i: any) =>
+                    (i.products || []).map((p: any) => [
+                      p.alpha_product_id,
+                      {
+                        id: p.alpha_product_id,
+                        product_name: p.alpha_product?.product_name || 'Unknown'
+                      }
+                    ])
+                  )
                 ).values()
               ) as Array<{ id: string; product_name: string }>}
               selectedInstances={selectedInstanceFilters}
@@ -1193,8 +1178,10 @@ export const TenantDetailPageV2: React.FC = () => {
               >
                 {alphaProductsData?.alpha_product?.map((product: any) => {
                   // Check if this product is already registered
-                  const isRegistered = tenant?.tenant_products?.some(
-                    (tp: any) => tp.alpha_product_id === product.id
+                  const isRegistered = (tenant?.tenant_instances || []).some(
+                    (i: any) => (i.products || []).some(
+                      (p: any) => p.alpha_product_id === product.id
+                    )
                   );
                   return (
                     <MenuItem key={product.id} value={product.id}>

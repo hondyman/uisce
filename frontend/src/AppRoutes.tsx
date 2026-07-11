@@ -27,7 +27,6 @@ import RoleListPage from "./pages/roles/RoleListPage";
 import RoleEditorPage from "./pages/roles/RoleEditorPage";
 import DomainsManagementPage from "./features/core/pages/DomainsManagementPage";
 import SemanticMapperPage from "./features/core/pages/SemanticMapperPage";
-import TenantsPage from "./features/tenants/pages/TenantsPage";
 import { TenantDetailPageV2 } from "./features/tenants/pages/TenantDetailPageV2";
 import { TenantListPage } from "./features/tenants/pages/TenantListPage";
 import { SemanticCatalogPage } from "./pages/SemanticCatalogPage";

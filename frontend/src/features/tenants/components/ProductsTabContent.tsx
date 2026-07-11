@@ -32,33 +32,9 @@ import RemoveIcon from '@mui/icons-material/Remove';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import CancelIcon from '@mui/icons-material/Cancel';
 import InfoIcon from '@mui/icons-material/Info';
-import { useQuery, gql } from '@apollo/client';
-import { GET_TENANT_REGISTERED_PRODUCTS } from '../../../graphql/queries/tenantQueries';
 import { useNotification } from '../../../hooks/useNotification';
 import { apiClient } from '../../../utils/apiClient';
-
-// Query to get all available products (from alpha_product table)
-const GET_AVAILABLE_PRODUCTS = gql`
-  query GetAvailableProducts {
-    alpha_product(where: { is_active: { _eq: true } }) {
-      id
-      product_name
-      product_code
-      is_active
-    }
-  }
-`;
-
-// Query to get tenant details including gold_copy status
-const GET_TENANT_INFO = gql`
-  query GetTenantInfo($tenantId: uuid!) {
-    tenants(where: { id: { _eq: $tenantId } }) {
-      id
-      display_name
-      gold_copy
-    }
-  }
-`;
+import { useApiQuery } from '../../../hooks/useApiQuery';
 
 interface AlphaProduct {
   id: string;
@@ -88,31 +64,38 @@ export const ProductsTabContent: React.FC<ProductsTabContentProps> = ({
   const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
   const [selectedForAction, setSelectedForAction] = useState<{ product: any; action: 'register' | 'unregister' } | null>(null);
 
-  // Fetch tenant info to check if it's gold copy
-  const { data: tenantData } = useQuery(GET_TENANT_INFO, {
-    variables: { tenantId },
-    skip: !tenantId,
-  });
+  // Fetch tenant data for gold_copy status and registered products
+  const { data: tenantData, refetch: refetchTenant } = useApiQuery<{ tenant: any }>(
+    tenantId ? `/api/tenants/${tenantId}` : ''
+  );
 
   // Fetch available products from alpha_product table
-  const { data: productsData, loading: productsLoading, error: productsError } = useQuery(GET_AVAILABLE_PRODUCTS);
-  
-  // Fetch tenant's registered products
-  const { data: registeredData, loading: registeredLoading, refetch: refetchRegistered } = useQuery(
-    GET_TENANT_REGISTERED_PRODUCTS,
-    { variables: { tenantId }, skip: !tenantId }
+  const { data: productsData, loading: productsLoading, error: productsError } = useApiQuery<{ alpha_product: AlphaProduct[] }>(
+    '/api/rest/products'
   );
 
   const [registerLoading, setRegisterLoading] = useState(false);
   const [unregisterLoading, setUnregisterLoading] = useState(false);
 
   // Check if this is the gold copy tenant
-  const isGoldCopy = tenantData?.tenants?.[0]?.gold_copy ?? false;
+  const isGoldCopy = tenantData?.tenant?.gold_copy ?? false;
 
   // Get available products
   const availableProducts: AlphaProduct[] = useMemo(() => {
     return productsData?.alpha_product || [];
   }, [productsData]);
+
+  // Extract registered products from nested tenant instances/products structure
+  const registeredProducts = useMemo(() => {
+    if (!tenantData?.tenant) return [];
+    const products: any[] = [];
+    tenantData.tenant.tenant_instances?.forEach((instance: any) => {
+      instance.products?.forEach((p: any) => {
+        products.push(p);
+      });
+    });
+    return products;
+  }, [tenantData]);
 
   // Get registered product IDs for this tenant
   const registeredProductIds = useMemo(() => {
@@ -120,19 +103,17 @@ export const ProductsTabContent: React.FC<ProductsTabContentProps> = ({
     if (isGoldCopy) {
       return new Set(availableProducts.map(p => p.id));
     }
-    const products = registeredData?.tenant_product || [];
-    return new Set(products.map((p: any) => p.alpha_product_id));
-  }, [registeredData, isGoldCopy, availableProducts]);
+    return new Set(registeredProducts.map((p: any) => p.alpha_product_id));
+  }, [registeredProducts, isGoldCopy, availableProducts]);
 
   // Get registered products map for looking up tenant_product.id
   const registeredProductsMap = useMemo(() => {
-    const products = registeredData?.tenant_product || [];
     const map = new Map<string, any>();
-    products.forEach((p: any) => {
+    registeredProducts.forEach((p: any) => {
       if (p.alpha_product_id) map.set(p.alpha_product_id, p);
     });
     return map;
-  }, [registeredData]);
+  }, [registeredProducts]);
 
   // Filter products by search query
   const filteredProducts = useMemo(() => {
@@ -180,7 +161,7 @@ export const ProductsTabContent: React.FC<ProductsTabContentProps> = ({
         }),
       });
       notification.success(`Registered "${product.product_name}" for this tenant`);
-      refetchRegistered();
+      refetchTenant();
     } catch (error: any) {
       notification.error(error.message || 'Failed to register product');
     } finally {
@@ -203,7 +184,7 @@ export const ProductsTabContent: React.FC<ProductsTabContentProps> = ({
         method: 'DELETE',
       });
       notification.success(`Unregistered "${product.product_name}" from this tenant`);
-      refetchRegistered();
+      refetchTenant();
     } catch (error: any) {
       notification.error(error.message || 'Failed to unregister product');
     } finally {
@@ -235,7 +216,7 @@ export const ProductsTabContent: React.FC<ProductsTabContentProps> = ({
     setSortBy(property);
   };
 
-  if (productsLoading || registeredLoading) {
+  if (productsLoading) {
     return (
       <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: 200 }}>
         <CircularProgress />

@@ -28,8 +28,8 @@ import {
   Save,
   Close,
 } from '@mui/icons-material';
-import { gql, useQuery, useMutation } from '@apollo/client';
-
+import { useApiQuery } from '../../../hooks/useApiQuery';
+import { apiClient } from '../../../utils/apiClient';
 export interface TenantConfiguration {
   retention: {
     enabled: boolean;
@@ -52,30 +52,8 @@ export interface TenantConfiguration {
 
 interface ConfigurationTabContentProps {
   tenantId: string;
-  datasourceId: string;
+  datasourceId?: string;
 }
-
-// GraphQL query to fetch tenant configuration
-const GET_TENANT_CONFIGURATION = gql`
-  query GetTenantConfiguration($tenantId: uuid!, $datasourceId: uuid!) {
-    tenants_by_pk(id: $tenantId) {
-      id
-      configuration
-      updated_at
-    }
-  }
-`;
-
-// GraphQL mutation to update tenant configuration
-const UPDATE_TENANT_CONFIGURATION = gql`
-  mutation UpdateTenantConfiguration($tenantId: uuid!, $configuration: jsonb!) {
-    update_tenants_by_pk(pk_columns: {id: $tenantId}, _set: {configuration: $configuration}) {
-      id
-      configuration
-      updated_at
-    }
-  }
-`;
 
 // Default configuration fallback
 const defaultConfig: TenantConfiguration = {
@@ -100,27 +78,23 @@ const defaultConfig: TenantConfiguration = {
 
 export const ConfigurationTabContent: React.FC<ConfigurationTabContentProps> = ({
   tenantId,
-  datasourceId,
 }) => {
   // Fetch configuration from backend
-  const { loading, error, data } = useQuery(GET_TENANT_CONFIGURATION, {
-    variables: { tenantId, datasourceId },
-    skip: !tenantId || !datasourceId,
-  });
-
-  // Mutation for saving configuration
-  const [updateConfiguration, { loading: saving }] = useMutation(UPDATE_TENANT_CONFIGURATION);
+  const { loading, error, data, refetch } = useApiQuery<{ configuration: TenantConfiguration }>(
+    tenantId ? `/api/v1/admin/tenants/${tenantId}/configuration` : ''
+  );
 
   // Get configuration from fetched data or use default
   const initialConfig = useMemo(() => {
-    if (data?.tenants_by_pk?.configuration) {
-      return data.tenants_by_pk.configuration as TenantConfiguration;
+    if (data?.configuration && Object.keys(data.configuration).length > 0) {
+      return { ...defaultConfig, ...data.configuration };
     }
     return defaultConfig;
   }, [data]);
 
   const [formData, setFormData] = useState<TenantConfiguration>(initialConfig);
   const [hasChanges, setHasChanges] = useState(false);
+  const [saving, setSaving] = useState(false);
 
   // Update form data when initial config loads
   React.useEffect(() => {
@@ -152,15 +126,18 @@ export const ConfigurationTabContent: React.FC<ConfigurationTabContentProps> = (
 
   const handleSave = async () => {
     try {
-      await updateConfiguration({
-        variables: {
-          tenantId,
-          configuration: formData,
-        },
+      setSaving(true);
+      await apiClient(`/api/v1/admin/tenants/${tenantId}/configuration`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ configuration: formData }),
       });
       setHasChanges(false);
+      refetch();
     } catch (error) {
       console.error('Failed to save configuration:', error);
+    } finally {
+      setSaving(false);
     }
   };
 

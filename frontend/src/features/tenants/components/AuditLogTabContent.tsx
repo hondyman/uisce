@@ -152,7 +152,7 @@ export const AuditLogTabContent: React.FC<AuditLogTabContentProps> = ({
     setLoading(true);
     setError(null);
     try {
-      let url = `/api/audit-logs?tenantId=${encodeURIComponent(tenantId)}&datasourceId=${encodeURIComponent(datasourceId)}&limit=${LIMIT}&offset=${currentOffset}&sortBy=${sortBy}&sortOrder=${sortOrder ? sortOrder.toUpperCase() : 'DESC'}`;
+      let url = `/api/v1/admin/tenants/${encodeURIComponent(tenantId)}/audit-logs?datasourceId=${encodeURIComponent(datasourceId)}&limit=${LIMIT}&offset=${currentOffset}&sortBy=${sortBy}&sortOrder=${sortOrder ? sortOrder.toUpperCase() : 'DESC'}`;
       
       if (startDate) {
           url += `&startDate=${encodeURIComponent(startDate.toISOString())}`;

@@ -1,5 +1,4 @@
 import React, { useState } from 'react';
-import { useQuery, gql } from '@apollo/client';
 import {
   Table,
   TableBody,
@@ -36,8 +35,8 @@ import {
 } from '@mui/icons-material';
 import { ConnectionTestDialog } from '../../connections/components/ConnectionTestDialog';
 import ScanProgressModal from './ScanProgressModal';
-import { SCAN_DATASOURCE } from '../../../graphql/mutations/tenantMutations';
 import { apiClient } from '../../../utils/apiClient';
+import { useApiQuery } from '../../../hooks/useApiQuery';
 
 export interface Connection {
   id: string;
@@ -75,57 +74,6 @@ interface ConnectionsTabContentProps {
   onEditConnection?: (connection: Connection) => void;
   tenantData?: any;
 }
-
-// GraphQL Queries
-const GET_TENANT_CONNECTIONS = gql`
-  query GetTenantConnections($tenantId: uuid!) {
-    connections(where: { tenant_id: { _eq: $tenantId } }) {
-      id
-      name
-      type
-      host
-      port
-      database
-      schema
-      username
-      password
-      is_active
-      created_at
-      updated_at
-      metadata
-    }
-  }
-`;
-
-// Query to get product and instance info linked to connections via tenant_product_datasources
-const GET_CONNECTION_RELATIONSHIPS = gql`
-  query GetConnectionRelationships($tenantId: uuid!) {
-    tenant_product_datasource(
-      where: {
-        tenant_product: { tenant_id: { _eq: $tenantId } }
-      }
-    ) {
-      id
-      connection_id
-      last_scan_at
-      tenant_instance {
-        id
-        instance_name
-        display_name
-      }
-      tenant_product {
-        id
-        tenant_id
-        alpha_product {
-          id
-          product_name
-        }
-      }
-    }
-  }
-`;
-
-// GraphQL Mutations
 
 const getStatusColor = (status: string) => {
   switch (status) {
@@ -225,17 +173,9 @@ export const ConnectionsTabContent: React.FC<ConnectionsTabContentProps> = ({
   const [scanningDatasourceId, setScanningDatasourceId] = useState<string | null>(null);
 
   // Fetch connections from backend
-  const { data, loading, error, refetch } = useQuery(GET_TENANT_CONNECTIONS, {
-    variables: { tenantId },
-    skip: !tenantId,
-  });
-
-  // Fetch connection relationships for this tenant
-  // NOTE: Temporarily disabled due to schema filter issues; using tenantData.tenant_products instead
-  const { data: relationshipData } = useQuery(GET_CONNECTION_RELATIONSHIPS, {
-    variables: { tenantId },
-    skip: true,  // Skip this query; we'll use tenantData instead
-  });
+  const { data, loading, error, refetch } = useApiQuery<{ connections: Connection[] }>(
+    tenantId ? `/api/v1/admin/tenants/${tenantId}/connections` : ''
+  );
 
   const handleDeleteConnection = async (id: string) => {
     if (confirm('Are you sure you want to delete this connection? This action cannot be undone.')) {
@@ -298,75 +238,34 @@ export const ConnectionsTabContent: React.FC<ConnectionsTabContentProps> = ({
   const lastScanMap = new Map<string, any>();
   const tpdIdMap = new Map<string, string>(); // Map connection_id -> tenant_product_datasource.id
   
-  // Build maps from the relationship data
-  if (relationshipData?.tenant_product_datasource) {
-    console.log(`Relationship query returned ${relationshipData.tenant_product_datasource.length} TPDs`);
-    relationshipData.tenant_product_datasource.forEach((tpd: any) => {
-      const connectionId = tpd.connection_id;
-      
-      // Map TPD ID by connection ID (for scan operations)
-      if (tpd.id && connectionId) {
-        tpdIdMap.set(connectionId, tpd.id);
-      }
-      
-      // Map product info by connection ID
-      const productInfo = {
-        name: tpd.tenant_product?.alpha_product?.product_name,
-        id: tpd.tenant_product?.alpha_product?.id
-      };
-      productMap.set(connectionId, productInfo);
-      
-      // Map instance info by connection ID
+  // Build maps from tenant_instances nested structure (new REST API shape)
+  if (tenantData?.tenant_instances && tenantData.tenant_instances.length > 0) {
+    console.log(`Found ${tenantData.tenant_instances.length} instances in tenant`);
+    tenantData.tenant_instances.forEach((instance: any) => {
       const instanceInfo = {
-        id: tpd.tenant_instance?.id,
-        name: tpd.tenant_instance?.display_name || tpd.tenant_instance?.instance_name
+        id: instance.id,
+        name: instance.display_name || instance.instance_name
       };
-      instanceMap.set(connectionId, instanceInfo);
-      
-      // Map last scan time by connection ID
-      if (tpd.last_scan_at) {
-        lastScanMap.set(connectionId, tpd.last_scan_at);
-      }
-    });
-  } else {
-    console.log('No relationship data returned from query');
-  }
-  
-  // Also try tenant_products if available (from GET_SCOPED_TENANT)
-  if (tenantData?.tenant_products && tenantData.tenant_products.length > 0) {
-    console.log(`Found ${tenantData.tenant_products.length} products in tenant`);
-    tenantData.tenant_products.forEach((tp: any) => {
-      const productInfo = {
-        name: tp.alpha_product?.product_name,
-        id: tp.alpha_product?.id
-      };
-      console.log(`  Checking product ${productInfo.name}: has ${tp.tenant_product_datasources?.length || 0} datasources`);
-      tp.tenant_product_datasources?.forEach((tpd: any) => {
-        if (tpd.connection_id) {
-          console.log(`    Found TPD with connection_id: ${tpd.connection_id}`);
-          
-          // Map TPD ID by connection ID (for scan operations)
-          if (tpd.id) {
-            tpdIdMap.set(tpd.connection_id, tpd.id);
-            console.log(`      Mapped TPD ID: ${tpd.id}`);
-          }
-          
-          productMap.set(tpd.connection_id, productInfo);
-          
-          // Map instance from tenant_instances array using tenant_instance_id
-          if (tpd.tenant_instance_id && tenantData.tenant_instances) {
-            const foundInstance = tenantData.tenant_instances.find((ti: any) => ti.id === tpd.tenant_instance_id);
-            if (foundInstance) {
-              instanceMap.set(tpd.connection_id, {
-                id: foundInstance.id,
-                name: foundInstance.display_name || foundInstance.instance_name
-              });
-              console.log(`      Mapped instance: ${foundInstance.display_name || foundInstance.instance_name}`);
+      instance.products?.forEach((product: any) => {
+        const productInfo = {
+          name: product.alpha_product?.product_name,
+          id: product.alpha_product?.id
+        };
+        console.log(`  Checking product ${productInfo.name}: has ${product.datasources?.length || 0} datasources`);
+        product.datasources?.forEach((ds: any) => {
+          if (ds.connection_id) {
+            console.log(`    Found datasource with connection_id: ${ds.connection_id}`);
+            
+            // Map datasource ID by connection ID (for scan operations)
+            if (ds.id) {
+              tpdIdMap.set(ds.connection_id, ds.id);
+              console.log(`      Mapped datasource ID: ${ds.id}`);
             }
+            
+            productMap.set(ds.connection_id, productInfo);
+            instanceMap.set(ds.connection_id, instanceInfo);
           }
-        } else {
-          console.log(`    Found TPD without connection_id (connection_id=null)`);
-        }
+        });
       });
     });
   }
