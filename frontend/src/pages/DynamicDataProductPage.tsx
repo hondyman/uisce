@@ -9,6 +9,8 @@ import { useForm, Controller } from 'react-hook-form';
 import AddIcon from '@mui/icons-material/Add';
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
+import { useTenant } from '../contexts/TenantContext';
+import { ConfigurableNavigationSidebar } from '../components/ConfigurableNavigationSidebar';
 
 interface WidgetConfig {
   field_id: string;
@@ -32,6 +34,7 @@ interface PageBlueprint {
 
 export const DynamicDataProductPage: React.FC = () => {
   const { pageKey } = useParams<{ pageKey: string }>();
+  const { tenant } = useTenant();
   const [blueprint, setBlueprint] = useState<PageBlueprint | null>(null);
   const [records, setRecords] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -47,7 +50,7 @@ export const DynamicDataProductPage: React.FC = () => {
     try {
       // Step 1: Fetch runtime layout configurations matching our route parameters
       // We pass the active tenant-id as a query param or header (assuming US-WEST default or Northwind tenant context)
-      const tenantId = "11111111-1111-1111-1111-111111111111"; // Default to seed tenant id
+      const tenantId = tenant?.id || "11111111-1111-1111-1111-111111111111"; // Default to seed tenant id
       const metaRes = await fetch(`/api/v1/layout/pages/${pageKey}/resolve?tenant_id=${tenantId}`);
       if (!metaRes.ok) throw new Error("Target page blueprint could not be processed by registry.");
       const metaData: PageBlueprint = await metaRes.json();
@@ -72,7 +75,7 @@ export const DynamicDataProductPage: React.FC = () => {
     if (pageKey) {
       fetchPageMetadataAndData();
     }
-  }, [pageKey]);
+  }, [pageKey, tenant?.id]);
 
   if (loading) return <Box display="flex" justifyContent="center" py={10}><CircularProgress /></Box>;
   if (error || !blueprint) return <Alert severity="error" sx={{ m: 3 }}>{error || "Page definition lost."}</Alert>;
@@ -85,7 +88,7 @@ export const DynamicDataProductPage: React.FC = () => {
 
   const handleFormSubmit = async (data: any) => {
     const method = selectedRecord ? 'PUT' : 'POST';
-    const tenantId = "11111111-1111-1111-1111-111111111111";
+    const tenantId = tenant?.id || "11111111-1111-1111-1111-111111111111";
     const endpoint = selectedRecord 
       ? `/api/v1/data/${blueprint.page_key}/v1.0.0/${selectedRecord.id}?tenant_id=${tenantId}`
       : `/api/v1/data/${blueprint.page_key}/v1.0.0?tenant_id=${tenantId}`;
@@ -110,7 +113,7 @@ export const DynamicDataProductPage: React.FC = () => {
   };
 
   const handleDeleteRecord = async (id: any) => {
-    const tenantId = "11111111-1111-1111-1111-111111111111";
+    const tenantId = tenant?.id || "11111111-1111-1111-1111-111111111111";
     const endpoint = `/api/v1/data/${blueprint.page_key}/v1.0.0/${id}?tenant_id=${tenantId}`;
     try {
       const response = await fetch(endpoint, {
@@ -156,17 +159,19 @@ export const DynamicDataProductPage: React.FC = () => {
   });
 
   return (
-    <Box sx={{ p: 4, bgcolor: '#f8fafc', minHeight: '100vh' }}>
-      <Box display="flex" justifyContent="space-between" alignItems="center" mb={4}>
-        <Typography variant="h4" fontWeight="700" color="slate.900">{blueprint.title}</Typography>
-        <Button variant="contained" startIcon={<AddIcon />} onClick={() => openFormDrawer()}>
-          Add Entry
-        </Button>
-      </Box>
+    <Box sx={{ display: 'flex', minHeight: '100vh' }}>
+      <ConfigurableNavigationSidebar />
+      <Box sx={{ flexGrow: 1, p: 4, bgcolor: '#f8fafc' }}>
+        <Box display="flex" justifyContent="space-between" alignItems="center" mb={4}>
+          <Typography variant="h4" fontWeight="700" color="slate.900">{blueprint.title}</Typography>
+          <Button variant="contained" startIcon={<AddIcon />} onClick={() => openFormDrawer()}>
+            Add Entry
+          </Button>
+        </Box>
 
-      <Paper variant="outlined" sx={{ height: 550, borderRadius: 2, overflow: 'hidden', border: '1px solid #e2e8f0' }}>
-        <DataGrid rows={records} columns={columns} disableRowSelectionOnClick density="comfortable" />
-      </Paper>
+        <Paper variant="outlined" sx={{ height: 550, borderRadius: 2, overflow: 'hidden', border: '1px solid #e2e8f0' }}>
+          <DataGrid rows={records} columns={columns} disableRowSelectionOnClick density="comfortable" />
+        </Paper>
 
       <Drawer anchor="right" open={drawerOpen} onClose={() => setDrawerOpen(false)}>
         <Box sx={{ width: 450, p: 4, display: 'flex', flexDirection: 'column', height: '100%' }}>
@@ -208,6 +213,7 @@ export const DynamicDataProductPage: React.FC = () => {
       </Drawer>
 
       <Snackbar open={Boolean(toastMessage)} autoHideDuration={4000} onClose={() => setToastMessage(null)} message={toastMessage} />
+      </Box>
     </Box>
   );
 };

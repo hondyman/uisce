@@ -9,6 +9,8 @@ import ShoppingCartIcon from '@mui/icons-material/ShoppingCart';
 import InventoryIcon from '@mui/icons-material/Inventory';
 import PeopleIcon from '@mui/icons-material/People';
 
+import { useTenant } from '../contexts/TenantContext';
+
 interface MenuNode {
   id: string;
   node_key: string;
@@ -30,10 +32,11 @@ export const ConfigurableNavigationSidebar: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
   const location = useLocation();
+  const { tenant } = useTenant();
 
   useEffect(() => {
     // Dynamic menu layout loading based on current tenant state boundaries
-    const tenantId = "11111111-1111-1111-1111-111111111111";
+    const tenantId = tenant?.id || "11111111-1111-1111-1111-111111111111";
     fetch(`/api/v1/layout/navigation-menu?tenant_id=${tenantId}`)
       .then(res => res.json())
       .then(data => {
@@ -41,7 +44,7 @@ export const ConfigurableNavigationSidebar: React.FC = () => {
         setLoading(false)
       })
       .catch(() => setLoading(false));
-  }, []);
+  }, [tenant?.id]);
 
   if (loading) {
     return (
