@@ -50,6 +50,7 @@ import UisceBuilder from "./features/uisce-builder/UisceBuilder";
 import { InvestmentValidationPage } from "./pages/InvestmentValidationPage";
 import ApprovalWorkflowDashboard from "./pages/ApprovalWorkflowDashboard";
 import { WorkflowDesignerPage } from "./features/workflow/pages/WorkflowDesignerPage";
+import { DynamicDataProductPage } from "./pages/DynamicDataProductPage";
 
 import { NotificationCenterPage } from "./features/workflow/pages/NotificationCenterPage";
 import { NotificationTemplateEditorPage } from "./features/workflow/pages/NotificationTemplateEditorPage";
@@ -126,6 +127,9 @@ import EntityManagerPage from "./features/admin/pages/EntityManagerPage";
 import EntityDetailsPage from "./pages/EntityDetailsPage";
 import BusinessObjectsPage from "./pages/BusinessObjectsPage";
 import BusinessObjectDetailsPage from "./pages/BusinessObjectDetailsPage";
+import BusinessObjectWizardPage from "./pages/BusinessObjectWizardPage";
+import BusinessObjectEditorPage from "./pages/BusinessObjectEditorPage";
+import SemanticHealthDashboard from "./pages/SemanticHealthDashboard";
 import SchemaExplorerPage from "./features/schema-explorer/pages/SchemaExplorer";
 import PageRuntimeRenderer from "./pages/PageRuntimeRenderer";
 import WorkflowStudioPage from "./pages/WorkflowStudioPage";
@@ -276,7 +280,10 @@ function ProtectedApp() {
             BUILD - Semantic layer
             ═══════════════════════════════════════════════════════════════════ */}
         <Route path="/business-objects" element={<ProtectedRoute><BusinessObjectsPage /></ProtectedRoute>} />
+        <Route path="/business-objects/new" element={<ProtectedRoute><BusinessObjectWizardPage /></ProtectedRoute>} />
         <Route path="/business-objects/:id" element={<ProtectedRoute><BusinessObjectDetailsPage /></ProtectedRoute>} />
+        <Route path="/business-objects/:id/edit" element={<ProtectedRoute><BusinessObjectEditorPage /></ProtectedRoute>} />
+        <Route path="/semantic-health" element={<ProtectedRoute><SemanticHealthDashboard /></ProtectedRoute>} />
         <Route path="/views" element={<ProtectedRoute><ViewsCatalogPage /></ProtectedRoute>} />
         <Route path="/views/:id" element={<ProtectedRoute><ViewDetailsPage /></ProtectedRoute>} />
         <Route path="/fabric/bundles" element={<ProtectedRoute><BundleListPage /></ProtectedRoute>} />
@@ -299,6 +306,7 @@ function ProtectedApp() {
         <Route path="/page-studio" element={<ProtectedRoute><PageStudioPage /></ProtectedRoute>} />
         <Route path="/dynamic-ui" element={<ProtectedRoute><DynamicUIGeneratorPage /></ProtectedRoute>} />
         <Route path="/page-designer" element={<ProtectedRoute><DynamicUIGeneratorPage /></ProtectedRoute>} />
+        <Route path="/app/data-product/:pageKey" element={<ProtectedRoute><DynamicDataProductPage /></ProtectedRoute>} />
         <Route path="/client-portal/workflow-studio" element={<ProtectedRoute><WorkflowStudioPage /></ProtectedRoute>} />
         <Route path="/client-portal/rules-editor" element={<ProtectedRoute><BusinessRuleEditorPage /></ProtectedRoute>} />
         <Route path="/fabric/custom-components" element={<ProtectedRoute><CustomComponentPage /></ProtectedRoute>} />
