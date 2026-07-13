@@ -13,7 +13,7 @@ BLUE='\033[0;34m'
 NC='\033[0m'
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-FRONTEND_DIR="$SCRIPT_DIR/frontend"
+FRONTEND_DIR="$SCRIPT_DIR/frontend/frontend"
 LOG_DIR="$SCRIPT_DIR/logs"
 TIMESTAMP=$(date '+%Y%m%d_%H%M%S')
 
@@ -36,8 +36,8 @@ cd "$FRONTEND_DIR"
 
 # Install dependencies if needed
 if [ ! -d "node_modules" ]; then
-    echo -e "${YELLOW}Installing dependencies...${NC}"
-    npm install
+    echo -e "${YELLOW}Installing dependencies with legacy peer deps...${NC}"
+    npm install --legacy-peer-deps
 fi
 
 # Start dev server

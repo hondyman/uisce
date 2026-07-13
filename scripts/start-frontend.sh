@@ -1,52 +1,41 @@
 #!/usr/bin/env bash
-# Dev helper: wait for API gateway then start frontend dev server
 set -euo pipefail
 
-ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
-FRONTEND_DIR="$ROOT_DIR/frontend"
-GATEWAY_HEALTH_URL="${GATEWAY_HEALTH_URL:-http://localhost:8001/api/_debug/headers}"
-WAIT_TIMEOUT_SECONDS="${WAIT_TIMEOUT_SECONDS:-60}"
+# ==============================================================================
+# LOCAL FRONTEND DEVELOPMENT
+# ==============================================================================
+# Run React frontend locally on MacBook
+# Usage: ./scripts/start-frontend.sh
+#
+# Prerequisites:
+#   1. npm install in frontend/frontend directory
+#   2. Backend should be running on localhost:8080
+#
+# This runs React directly on your MacBook - Docker is only on the remote server.
+# ==============================================================================
 
-echo "Waiting for API gateway at $GATEWAY_HEALTH_URL (timeout ${WAIT_TIMEOUT_SECONDS}s)"
-end=$((SECONDS + WAIT_TIMEOUT_SECONDS))
-while :; do
-  if curl -fsS "$GATEWAY_HEALTH_URL" >/dev/null 2>&1; then
-    echo "API gateway is healthy"
-    break
-  fi
-  if [ $SECONDS -ge $end ]; then
-    echo "Timed out waiting for API gateway after ${WAIT_TIMEOUT_SECONDS}s" >&2
-    exit 1
-  fi
-  sleep 1
-done
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+FRONTEND_DIR="$SCRIPT_DIR/frontend/frontend"
 
-cd "$FRONTEND_DIR/frontend"
-echo "Starting frontend dev server in $FRONTEND_DIR/frontend"
-exec npm run dev
-#!/usr/bin/env bash
-# Dev helper: wait for API gateway then start frontend dev server
-set -euo pipefail
+# Check if frontend dir exists
+if [ ! -d "$FRONTEND_DIR" ]; then
+  echo "[ERROR] Frontend directory not found: $FRONTEND_DIR"
+  exit 1
+fi
 
-ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
-FRONTEND_DIR="$ROOT_DIR/frontend"
-GATEWAY_HEALTH_URL="${GATEWAY_HEALTH_URL:-http://localhost:8001/api/_debug/headers}"
-WAIT_TIMEOUT_SECONDS="${WAIT_TIMEOUT_SECONDS:-60}"
-
-echo "Waiting for API gateway at $GATEWAY_HEALTH_URL (timeout ${WAIT_TIMEOUT_SECONDS}s)"
-end=$((SECONDS + WAIT_TIMEOUT_SECONDS))
-while :; do
-  if curl -fsS "$GATEWAY_HEALTH_URL" >/dev/null 2>&1; then
-    echo "API gateway is healthy"
-    break
-  fi
-  if [ $SECONDS -ge $end ]; then
-    echo "Timed out waiting for API gateway after ${WAIT_TIMEOUT_SECONDS}s" >&2
-    exit 1
-  fi
-  sleep 1
-done
+# Check if node_modules exists
+if [ ! -d "$FRONTEND_DIR/node_modules" ]; then
+  echo "[INFO] node_modules not found, running npm install..."
+  cd "$FRONTEND_DIR"
+  npm install
+fi
 
 cd "$FRONTEND_DIR"
-echo "Starting frontend dev server in $FRONTEND_DIR"
+
+echo ""
+echo "[INFO] Starting React frontend..."
+echo "[INFO] Frontend will connect to backend at: http://localhost:8080"
+echo "[INFO] Frontend dev server URL: http://localhost:5173 (or next available)"
+echo ""
+
 exec npm run dev

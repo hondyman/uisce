@@ -111,7 +111,11 @@ services:
       HASURA_URL: http://hasura:8080
       DATABASE_URL: postgresql://postgres:postgres@host.docker.internal:5432/alpha
       HASURA_ADMIN_SECRET: ${HASURA_ADMIN_SECRET:-newadminsecretkey}
-      JWT_SECRET: ${JWT_SECRET:-dev-jwt-secret-key-change-in-production}
+      # Infisical secrets (set via infisical run or .env.infisical)
+      INFISICAL_DOMAIN: ${INFISICAL_DOMAIN:-http://100.84.50.65:8085}
+      INFISICAL_TOKEN: ${INFISICAL_TOKEN:-}
+      INFISICAL_PROJECT_ID: ${INFISICAL_PROJECT_ID:-}
+      INFISICAL_ENVIRONMENT: ${INFISICAL_ENVIRONMENT:-dev}
     ports:
       - "8080:8080"
     healthcheck:
