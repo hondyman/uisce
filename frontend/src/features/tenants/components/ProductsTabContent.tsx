@@ -41,6 +41,9 @@ interface AlphaProduct {
   product_name: string;
   product_code?: string;
   is_active: boolean;
+  is_registered?: boolean;
+  registered_at?: string | null;
+  registered_is_active?: boolean;
 }
 
 interface ProductsTabContentProps {
@@ -71,7 +74,7 @@ export const ProductsTabContent: React.FC<ProductsTabContentProps> = ({
 
   // Fetch available products from alpha_product table
   const { data: productsData, loading: productsLoading, error: productsError } = useApiQuery<{ alpha_product: AlphaProduct[] }>(
-    '/api/rest/products'
+    tenantId ? `/api/rest/products?tenant_id=${tenantId}` : '/api/rest/products'
   );
 
   const [registerLoading, setRegisterLoading] = useState(false);
@@ -152,7 +155,7 @@ export const ProductsTabContent: React.FC<ProductsTabContentProps> = ({
   const handleRegisterProduct = async (product: AlphaProduct) => {
     try {
       setRegisterLoading(true);
-      await apiClient(`/api/v1/admin/tenants/${tenantId}/products`, {
+      await apiClient(`/api/tenant-ops/${tenantId}/products`, {
         method: 'POST',
         body: JSON.stringify({
           alpha_product_id: product.id,
@@ -180,7 +183,7 @@ export const ProductsTabContent: React.FC<ProductsTabContentProps> = ({
 
     try {
       setUnregisterLoading(true);
-      await apiClient(`/api/v1/admin/tenants/${tenantId}/products/${tenantProduct.id}`, {
+      await apiClient(`/api/tenant-ops/${tenantId}/products/${tenantProduct.id}`, {
         method: 'DELETE',
       });
       notification.success(`Unregistered "${product.product_name}" from this tenant`);
@@ -410,39 +413,44 @@ export const ProductsTabContent: React.FC<ProductsTabContentProps> = ({
                       )}
                     </Box>
                   </TableCell>
-                  {!isGoldCopy && (
-                    <TableCell align="right">
-                      {registered ? (
-                        <Tooltip title="Unregister this product from the tenant">
-                          <IconButton
-                            size="small"
-                            color="error"
-                            onClick={() => openConfirmDialog(product, 'unregister')}
-                            disabled={unregisterLoading}
-                          >
-                            <RemoveIcon />
-                          </IconButton>
-                        </Tooltip>
-                      ) : (
-                        <Tooltip title="Register this product for the tenant">
-                          <IconButton
-                            size="small"
-                            color="primary"
-                            onClick={() => openConfirmDialog(product, 'register')}
-                            disabled={registerLoading}
-                          >
+                  <TableCell align="right">
+                    {isGoldCopy ? (
+                      <Tooltip title="Products cannot be registered at Gold Copy level - they are inherited from master">
+                        <span>
+                          <IconButton size="small" disabled>
                             <AddIcon />
                           </IconButton>
-                        </Tooltip>
-                      )}
-                    </TableCell>
-                  )}
+                        </span>
+                      </Tooltip>
+                    ) : registered ? (
+                      <Tooltip title="Products cannot be unregistered - contact administrator">
+                        <IconButton
+                          size="small"
+                          color="error"
+                          disabled
+                        >
+                          <RemoveIcon />
+                        </IconButton>
+                      </Tooltip>
+                    ) : (
+                      <Tooltip title="Register this product for the tenant">
+                        <IconButton
+                          size="small"
+                          color="primary"
+                          onClick={() => openConfirmDialog(product, 'register')}
+                          disabled={registerLoading}
+                        >
+                          <AddIcon />
+                        </IconButton>
+                      </Tooltip>
+                    )}
+                  </TableCell>
                 </TableRow>
               );
             })}
             {filteredProducts.length === 0 && (
               <TableRow>
-                <TableCell colSpan={isGoldCopy ? 3 : 4} align="center">
+                <TableCell colSpan={4} align="center">
                   {searchQuery ? 'No products match your search.' : 'No products available.'}
                 </TableCell>
               </TableRow>

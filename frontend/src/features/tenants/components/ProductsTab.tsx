@@ -133,7 +133,7 @@ export default function ProductsTab({ tenantId, instances, products, availablePr
         notification.error('Please select a product');
         return;
       }
-      await apiClient(`/api/v1/admin/tenants/${tenantId}/products`, {
+      await apiClient(`/api/tenant-ops/${tenantId}/products`, {
         method: 'POST',
         body: JSON.stringify({
           tenant_instance_id: formData.instance_id,
@@ -164,7 +164,7 @@ export default function ProductsTab({ tenantId, instances, products, availablePr
 
   const handleEditSave = async () => {
     try {
-      await apiClient(`/api/v1/admin/tenants/${tenantId}/products/${editFormData.id}`, {
+      await apiClient(`/api/tenant-ops/${tenantId}/products/${editFormData.id}`, {
         method: 'PATCH',
         body: JSON.stringify({
           version: parseFloat(String(editFormData.version)),
@@ -195,7 +195,7 @@ export default function ProductsTab({ tenantId, instances, products, availablePr
 
     try {
       setRemoveLoading(true);
-      await apiClient(`/api/v1/admin/tenants/${tenantId}/products/${id}`, {
+      await apiClient(`/api/tenant-ops/${tenantId}/products/${id}`, {
         method: 'DELETE',
       });
       notification.success('Product removed successfully');

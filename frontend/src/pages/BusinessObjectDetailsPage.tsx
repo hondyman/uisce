@@ -63,6 +63,7 @@ import {
   Code as JsonIcon,
   ToggleOn as BooleanIcon,
   InfoOutlined as InfoOutlinedIcon,
+  Storage as StorageIcon,
 } from '@mui/icons-material';
 import { SemanticMappingWizard } from '../components/SemanticMappingWizard';
 import { TableSortLabel } from '@mui/material';
@@ -166,6 +167,9 @@ export default function BusinessObjectDetailsPage() {
 
   // Fields State
   const [fields, setFields] = useState<Field[]>([]);
+
+  // Bindings State (from binding-first canonical service)
+  const [bindings, setBindings] = useState<any[]>([]);
 
   // Form State (Legacy usage)
   const [name, setName] = useState('');
@@ -696,7 +700,13 @@ export default function BusinessObjectDetailsPage() {
         driverTableId: data.driverTableId || data.driver_table_id,
         driverTableName: data.driverTableName || data.driver_table_name,
       };
-      
+
+      // Extract bindings from API response (binding-first canonical model)
+      if (data.bindings && Array.isArray(data.bindings)) {
+        devDebug('[BusinessObjectDetailsPage] Found bindings in response:', data.bindings.length);
+        setBindings(data.bindings);
+      }
+
       setBusinessObject(mappedObject);
       
       devDebug('[BusinessObjectDetailsPage] Mapped object driverTableId:', mappedObject.driverTableId, 'driverTableName:', mappedObject.driverTableName);
@@ -914,7 +924,7 @@ export default function BusinessObjectDetailsPage() {
 
   useEffect(() => {
     devDebug('[useEffect-validations] activeTab:', activeTab, 'isNewObject:', isNewObject);
-    if (activeTab === 1 && !isNewObject) { // Updated index from 2 to 1 for Validations
+    if (activeTab === 2 && !isNewObject) { // Validations is now tab 2 (after Bindings)
       devDebug('[useEffect-validations] Triggering fetchValidationRules');
       fetchValidationRules();
     }
@@ -1696,6 +1706,18 @@ export default function BusinessObjectDetailsPage() {
             <Tab
               label={
                 <Stack direction="row" spacing={1} alignItems="center">
+                  <span>Bindings</span>
+                  {bindings.length > 0 && (
+                    <Chip label={bindings.length} size="small" variant="outlined" />
+                  )}
+                </Stack>
+              }
+              icon={<StorageIcon />}
+              iconPosition="start"
+            />
+            <Tab
+              label={
+                <Stack direction="row" spacing={1} alignItems="center">
                   <span>Validations</span>
                   {validationRules.length > 0 && (
                     <Chip label={validationRules.length} size="small" variant="outlined" />
@@ -2017,8 +2039,140 @@ export default function BusinessObjectDetailsPage() {
                   </Box>
                 )}
 
-              {/* Terms Tab - REMOVED */}
+              {/* Bindings Tab - Binding-first canonical view */}
               {activeTab === 1 && (
+                <Box sx={{ p: 3 }}>
+                  <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 3 }}>
+                    <Box>
+                      <Typography variant="h6" sx={{ fontWeight: 700 }}>
+                        Physical Source Bindings
+                      </Typography>
+                      <Typography variant="body2" color="text.secondary">
+                        {bindings.length} binding{bindings.length !== 1 ? 's' : ''} configured for this Business Object
+                      </Typography>
+                    </Box>
+                  </Stack>
+
+                  {bindings.length === 0 ? (
+                    <Paper variant="outlined" sx={{ p: 4, textAlign: 'center' }}>
+                      <StorageIcon sx={{ fontSize: 48, color: 'text.disabled', mb: 2 }} />
+                      <Typography variant="h6" color="text.secondary" gutterBottom>
+                        No Bindings Configured
+                      </Typography>
+                      <Typography variant="body2" color="text.secondary">
+                        This Business Object does not yet have physical source bindings.
+                        Bindings define how this object maps to physical database tables.
+                      </Typography>
+                    </Paper>
+                  ) : (
+                    <Stack spacing={2}>
+                      {bindings.map((binding: any, index: number) => (
+                        <Paper key={binding.boBindingId || index} variant="outlined" sx={{ p: 2 }}>
+                          <Grid container spacing={2}>
+                            <Grid item xs={12}>
+                              <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1 }}>
+                                <StorageIcon color="primary" />
+                                <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
+                                  {binding.bindingName || `Binding ${index + 1}`}
+                                </Typography>
+                                {binding.isActive !== undefined && (
+                                  <Chip
+                                    label={binding.isActive ? 'Active' : 'Inactive'}
+                                    size="small"
+                                    color={binding.isActive ? 'success' : 'default'}
+                                  />
+                                )}
+                                {binding.isCore && (
+                                  <Chip label="Core" size="small" variant="outlined" />
+                                )}
+                              </Stack>
+                            </Grid>
+                            <Grid item xs={12} md={6}>
+                              <Typography variant="caption" color="text.secondary">Binding ID</Typography>
+                              <Typography variant="body2" sx={{ fontFamily: 'monospace' }}>
+                                {binding.boBindingId || 'N/A'}
+                              </Typography>
+                            </Grid>
+                            <Grid item xs={12} md={6}>
+                              <Typography variant="caption" color="text.secondary">Backend</Typography>
+                              <Typography variant="body2">
+                                {binding.backendName || binding.backendId || 'N/A'}
+                              </Typography>
+                            </Grid>
+                            <Grid item xs={12} md={6}>
+                              <Typography variant="caption" color="text.secondary">Driving Node</Typography>
+                              <Typography variant="body2">
+                                {binding.drivingNodeName || binding.drivingNodeId || 'N/A'}
+                              </Typography>
+                            </Grid>
+                            <Grid item xs={12} md={6}>
+                              <Typography variant="caption" color="text.secondary">Temporal Mode</Typography>
+                              <Typography variant="body2">
+                                {binding.temporalMode || 'N/A'}
+                              </Typography>
+                            </Grid>
+                            {binding.baseSql && (
+                              <Grid item xs={12}>
+                                <Typography variant="caption" color="text.secondary">Base SQL</Typography>
+                                <Paper variant="outlined" sx={{ p: 1, mt: 0.5, bgcolor: 'grey.50' }}>
+                                  <Typography variant="body2" sx={{ fontFamily: 'monospace', fontSize: '0.75rem' }}>
+                                    {binding.baseSql}
+                                  </Typography>
+                                </Paper>
+                              </Grid>
+                            )}
+                            {binding.Fields && binding.Fields.length > 0 && (
+                              <Grid item xs={12}>
+                                <Typography variant="caption" color="text.secondary" sx={{ mb: 1, display: 'block' }}>
+                                  Field Mappings ({binding.Fields.length})
+                                </Typography>
+                                <TableContainer component={Paper} variant="outlined">
+                                  <Table size="small">
+                                    <TableHead>
+                                      <TableRow>
+                                        <TableCell>Field Name</TableCell>
+                                        <TableCell>Role</TableCell>
+                                        <TableCell>Data Type</TableCell>
+                                        <TableCell>PK</TableCell>
+                                        <TableCell>Aggregation</TableCell>
+                                      </TableRow>
+                                    </TableHead>
+                                    <TableBody>
+                                      {binding.Fields.slice(0, 10).map((field: any, fIdx: number) => (
+                                        <TableRow key={field.fieldId || fIdx}>
+                                          <TableCell>{field.fieldName}</TableCell>
+                                          <TableCell>
+                                            <Chip label={field.fieldRole || 'ATTRIBUTE'} size="small" variant="outlined" />
+                                          </TableCell>
+                                          <TableCell>{field.dataType}</TableCell>
+                                          <TableCell>{field.isPrimaryKey ? 'Yes' : 'No'}</TableCell>
+                                          <TableCell>{field.aggregationType || 'NONE'}</TableCell>
+                                        </TableRow>
+                                      ))}
+                                      {binding.Fields.length > 10 && (
+                                        <TableRow>
+                                          <TableCell colSpan={5} align="center">
+                                            <Typography variant="body2" color="text.secondary">
+                                              +{binding.Fields.length - 10} more fields
+                                            </Typography>
+                                          </TableCell>
+                                        </TableRow>
+                                      )}
+                                    </TableBody>
+                                  </Table>
+                                </TableContainer>
+                              </Grid>
+                            )}
+                          </Grid>
+                        </Paper>
+                      ))}
+                    </Stack>
+                  )}
+                </Box>
+              )}
+
+              {/* Validations Tab */}
+              {activeTab === 2 && (
                 <ValidationRulesPage 
                   businessObjectId={id}
                   businessObjectName={businessObject?.name}
@@ -2032,9 +2186,9 @@ export default function BusinessObjectDetailsPage() {
                 />
               )}
 
-              {/* Validations Tab - Moved to index 1, effectively replaced above. Keeping index 2 for Related Objects replacement.*/}
-              {/* Related Objects Tab - Moved to index 2 */}
-              {activeTab === 2 && (
+              {/* Validations Tab - Moved to index 2 */}
+              {/* Related Objects Tab - Now index 3 */}
+              {activeTab === 3 && (
                 <Box sx={{ p: 3 }}>
                   <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 3 }}>
                     <Typography variant="h6">Related Objects</Typography>
@@ -2122,15 +2276,15 @@ export default function BusinessObjectDetailsPage() {
                 </Box>
               )}
 
-              {/* Graph Tab - Moved to index 3 */}
-              {activeTab === 3 && (
+              {/* Graph Tab - Now index 4 */}
+              {activeTab === 4 && (
                 <Box sx={{ height: '70vh', p: 2 }}>
                   <BOLineageGraphTab boId={id || ''} />
                 </Box>
               )}
 
-              {/* Semantic Model Tab - Moved to index 4 */}
-              {activeTab === 4 && (
+              {/* Semantic Model Tab - Now index 5 */}
+              {activeTab === 5 && (
                 <Box sx={{ p: 3 }}>
                   <SemanticAssetsTab
                     boId={id}
@@ -2149,9 +2303,8 @@ export default function BusinessObjectDetailsPage() {
                 </Box>
               )}
 
-              {/* Lineage & Impact Tab - Moved to index 5 */}
-              {/* Lineage & Impact Tab - Moved to index 5 */}
-              {activeTab === 5 && (
+              {/* Lineage & Impact Tab - Now index 6 */}
+              {activeTab === 6 && (
                 <Box sx={{ p: 3 }}>
                    <Typography variant="h6" sx={{ fontWeight: 700, mb: 1 }}>
                      Lineage

@@ -87,43 +87,43 @@ export const TenantDetailPageV2: React.FC = () => {
   );
 
   const updateTenant = useApiMutation<any, any>(
-    `/api/v1/admin/tenants/${tenantId}/update`,
+    `/api/tenant-ops/${tenantId}/update`,
     'PATCH',
     { onCompleted: () => refetchTenant() }
   );
   const addTenantProduct = useApiMutation<any, any>(
-    `/api/v1/admin/tenants/${tenantId}/products`,
+    `/api/tenant-ops/${tenantId}/products`,
     'POST',
     { onCompleted: () => refetchTenant() }
   );
 
   const createTenantInstance = useApiMutation<any, any>(
-    `/api/v1/admin/tenants/${tenantId}/instances`,
+    `/api/tenant-ops/${tenantId}/instances`,
     'POST',
     { onCompleted: () => refetchTenant() }
   );
   const updateTenantInstance = useApiMutation<any, any>(
-    `/api/v1/admin/tenants/${tenantId}/instances`,
+    `/api/tenant-ops/${tenantId}/instances`,
     'PATCH',
     { onCompleted: () => refetchTenant() }
   );
   const deleteTenantInstance = useApiMutation<any, any>(
-    `/api/v1/admin/tenants/${tenantId}/instances`,
+    `/api/tenant-ops/${tenantId}/instances`,
     'DELETE',
     { onCompleted: () => refetchTenant() }
   );
   const createConnection = useApiMutation<any, any>(
-    `/api/v1/admin/tenants/${tenantId}/connections`,
+    `/api/tenant-ops/${tenantId}/connections`,
     'POST',
     { onCompleted: () => refetchTenant() }
   );
   const addTenantProductDatasource = useApiMutation<any, any>(
-    `/api/v1/admin/tenants/${tenantId}/product-datasources`,
+    `/api/tenant-ops/${tenantId}/product-datasources`,
     'POST',
     { onCompleted: () => refetchTenant() }
   );
   const testConnection = useApiMutation<any, any>(
-    `/api/v1/admin/tenants/${tenantId}/connections/test`,
+    `/api/tenant-ops/${tenantId}/connections/test`,
     'POST',
     {
       onCompleted: (data) => {
@@ -194,9 +194,8 @@ export const TenantDetailPageV2: React.FC = () => {
     if (tenant && tenant.id) {
        // Only switch if we are NOT already on this tenant.
        // scopedTenant might be null on first load, so we check ID match.
-       if (!scopedTenant || scopedTenant.id !== tenant.id) {
-            console.log('Switching tenant context to:', tenant.display_name);
-            localStorage.setItem('selected_tenant', JSON.stringify(tenant));
+        if (!scopedTenant || scopedTenant.id !== tenant.id) {
+             localStorage.setItem('selected_tenant', JSON.stringify(tenant));
             // Triggers for Apollo Client next request
        }
     }
@@ -414,14 +413,6 @@ export const TenantDetailPageV2: React.FC = () => {
 
   const handleEditConnection = (connection: any) => {
     setEditingConnection(connection);
-    // Use mapped fields from Connection interface
-    console.log('Editing connection:', {
-      id: connection.id,
-      name: connection.name,
-      linkedProductId: connection.linkedProductId,
-      linkedInstanceId: connection.linkedInstanceId,
-      linkedAlphaDatasourceId: connection.linkedAlphaDatasourceId,
-    });
     setSelectedConnectionProduct(connection.linkedProductId || '');
     setSelectedConnectionInstance(connection.linkedInstanceId || '');
     setSelectedAlphaDatasource(connection.linkedAlphaDatasourceId || '');
@@ -521,7 +512,7 @@ export const TenantDetailPageV2: React.FC = () => {
             is_active: connectionForm.is_active,
         };
 
-        const updateResult = await apiClient(`/api/v1/admin/tenants/${tenantId}/connections/${editingConnection.id}`, {
+        const updateResult = await apiClient(`/api/tenant-ops/${tenantId}/connections/${editingConnection.id}`, {
           method: 'PATCH',
           body: JSON.stringify(updateObject),
         });
@@ -556,7 +547,7 @@ export const TenantDetailPageV2: React.FC = () => {
             for (const product of (instance.products || [])) {
               for (const ds of (product.datasources || [])) {
                 if (ds.connection_id === connectionId) {
-                  await apiClient(`/api/v1/admin/tenants/${tenantId}/product-datasources/${ds.id}/connection`, {
+                  await apiClient(`/api/tenant-ops/${tenantId}/product-datasources/${ds.id}/connection`, {
                     method: 'PATCH',
                     body: JSON.stringify({ connection_id: null }),
                   });
@@ -580,6 +571,7 @@ export const TenantDetailPageV2: React.FC = () => {
         if (!existingProduct) {
           const registerResult = await addTenantProduct.mutate({
             alpha_product_id: selectedConnectionProduct,
+            tenant_instance_id: selectedConnectionInstance,
             version: 1.0,
             is_active: true,
           });
@@ -599,7 +591,6 @@ export const TenantDetailPageV2: React.FC = () => {
             );
             if (match) {
               resolvedAlphaDatasourceId = match.id;
-              console.log(`Auto-resolved datasource type: ${match.datasource_code}`);
             } else {
               const fallback = datasourcesData.alpha_datasource[0];
               resolvedAlphaDatasourceId = fallback?.id;
@@ -626,18 +617,13 @@ export const TenantDetailPageV2: React.FC = () => {
           if (freshTenant?.tenant_instances) {
             for (const instance of freshTenant.tenant_instances) {
               const targetProduct = (instance.products || []).find((p: any) => p.id === tenantProductId);
-              console.log(`Looking for TPD in product ${tenantProductId}:`, targetProduct?.alpha_product?.product_name);
               if (targetProduct?.datasources) {
-                console.log(`  Product has ${targetProduct.datasources.length} datasources`);
                 existingDatasource = targetProduct.datasources.find(
                     (ds: any) => {
-                       const matches = ds.tenant_instance_id === selectedConnectionInstance &&
+                       return ds.tenant_instance_id === selectedConnectionInstance &&
                        ds.alpha_tenant_instance_id === resolvedAlphaDatasourceId;
-                       console.log(`  Checking TPD ${ds.id}: instance=${ds.tenant_instance_id} vs ${selectedConnectionInstance}, alpha=${ds.alpha_tenant_instance_id} vs ${resolvedAlphaDatasourceId}, matches=${matches}`);
-                       return matches;
                     }
                 );
-                console.log(`  Found matching datasource: ${existingDatasource?.id || 'NONE'}`);
               }
               if (existingDatasource) break;
             }
@@ -655,15 +641,7 @@ export const TenantDetailPageV2: React.FC = () => {
                 return;
             }
 
-            console.log('Updating TPD:', {
-                id: existingDatasource.id,
-                tenant_product_id: tenantProductId,
-                tenant_instance_id: selectedConnectionInstance,
-                alpha_tenant_instance_id: resolvedAlphaDatasourceId,
-                connection_id: connectionId,
-            });
-
-            const verifyConn = await apiClient(`/api/v1/admin/tenants/${tenantId}/connections/${connectionId}`, { method: 'GET' });
+            const verifyConn = await apiClient(`/api/tenant-ops/${tenantId}/connections/${connectionId}`, { method: 'GET' });
             if (!verifyConn) {
                 console.error("Critical: Connection created/updated but not found in subsequent query.", connectionId);
                 alert("Warning: Connection saved, but not visible yet. Linking to product skipped to prevent errors.");
@@ -679,14 +657,11 @@ export const TenantDetailPageV2: React.FC = () => {
               config: existingDatasource.config,
             };
 
-            console.log('Linking mutation vars:', updateVars);
-
             try {
-                const linkResult = await apiClient(`/api/v1/admin/tenants/${tenantId}/product-datasources/${existingDatasource.id}/linking`, {
+                await apiClient(`/api/tenant-ops/${tenantId}/product-datasources/${existingDatasource.id}/linking`, {
                   method: 'PATCH',
                   body: JSON.stringify(updateVars),
                 });
-                console.log('Link result:', linkResult);
             } catch (innerErr) {
                 console.error("Failed to update TPD link:", innerErr);
                 alert("Connection saved, but failed to link to Product. Please try linking again.");

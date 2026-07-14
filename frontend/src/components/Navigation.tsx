@@ -69,7 +69,7 @@ const WORKFLOWS_MENU: MenuGroup = {
     { id: 'process-catalog', label: 'Process Catalog', description: 'Versioned process definitions.', to: '/core/process-catalog' },
     { id: 'sla', label: 'SLA Dashboard', description: 'Monitor service level agreements.', to: '/core/sla-dashboard' },
     { id: 'notifications', label: 'Notification Center', description: 'System alerts and notifications.', to: '/core/notifications' },
-    { id: 'business-objects', label: 'Business Objects', description: 'Object lifecycle explorer.', to: '/core/business-objects' },
+    { id: 'business-objects', label: 'Business Objects', description: 'Object lifecycle explorer.', to: '/business-objects' },
   ]
 };
 

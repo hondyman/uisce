@@ -128,7 +128,6 @@ import EntityDetailsPage from "./pages/EntityDetailsPage";
 import BusinessObjectsPage from "./pages/BusinessObjectsPage";
 import BusinessObjectDetailsPage from "./pages/BusinessObjectDetailsPage";
 import BusinessObjectWizardPage from "./pages/BusinessObjectWizardPage";
-import BusinessObjectEditorPage from "./pages/BusinessObjectEditorPage";
 import SemanticHealthDashboard from "./pages/SemanticHealthDashboard";
 import SchemaExplorerPage from "./features/schema-explorer/pages/SchemaExplorer";
 import PageRuntimeRenderer from "./pages/PageRuntimeRenderer";
@@ -282,7 +281,6 @@ function ProtectedApp() {
         <Route path="/business-objects" element={<ProtectedRoute><BusinessObjectsPage /></ProtectedRoute>} />
         <Route path="/business-objects/new" element={<ProtectedRoute><BusinessObjectWizardPage /></ProtectedRoute>} />
         <Route path="/business-objects/:id" element={<ProtectedRoute><BusinessObjectDetailsPage /></ProtectedRoute>} />
-        <Route path="/business-objects/:id/edit" element={<ProtectedRoute><BusinessObjectEditorPage /></ProtectedRoute>} />
         <Route path="/semantic-health" element={<ProtectedRoute><SemanticHealthDashboard /></ProtectedRoute>} />
         <Route path="/views" element={<ProtectedRoute><ViewsCatalogPage /></ProtectedRoute>} />
         <Route path="/views/:id" element={<ProtectedRoute><ViewDetailsPage /></ProtectedRoute>} />
@@ -389,8 +387,7 @@ function ProtectedApp() {
         <Route path="/core/audit-explorer" element={<ProtectedRoute><AuditExplorerPage /></ProtectedRoute>} />
         <Route path="/core/approval-inbox" element={<ProtectedRoute><ApprovalInboxPage /></ProtectedRoute>} />
         <Route path="/core/sla-dashboard" element={<ProtectedRoute><SLADashboardPage /></ProtectedRoute>} />
-        <Route path="/core/business-objects" element={<ProtectedRoute><BusinessObjectsPage /></ProtectedRoute>} />
-        
+
         {/* GenUI Routes */}
         <Route path="/core/genui-chat" element={<ProtectedRoute><GenUIChatPage /></ProtectedRoute>} />
         <Route path="/core/genui-proposal" element={<ProtectedRoute><GenUIProposalDemoPage /></ProtectedRoute>} />

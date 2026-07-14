@@ -174,13 +174,13 @@ export const ConnectionsTabContent: React.FC<ConnectionsTabContentProps> = ({
 
   // Fetch connections from backend
   const { data, loading, error, refetch } = useApiQuery<{ connections: Connection[] }>(
-    tenantId ? `/api/v1/admin/tenants/${tenantId}/connections` : ''
+    tenantId ? `/api/tenant-ops/${tenantId}/connections` : ''
   );
 
   const handleDeleteConnection = async (id: string) => {
     if (confirm('Are you sure you want to delete this connection? This action cannot be undone.')) {
       try {
-        await apiClient(`/api/v1/admin/tenants/${tenantId}/connections/${id}`, {
+        await apiClient(`/api/tenant-ops/${tenantId}/connections/${id}`, {
           method: 'DELETE',
         });
         refetch();

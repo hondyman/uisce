@@ -215,7 +215,7 @@ const categoryConfigs: CategoryConfig[] = [
           { label: 'Catalog Test', path: '/core/catalog-setup-test', icon: <SettingsIcon />, description: 'Test catalog setup' },
           { label: 'AI Term Suggestions', path: '/catalog/ai-suggestions', icon: <AutoFixHighIcon />, description: 'Suggested terms' },
           { label: 'Bundle Explorer', path: '/bundle-explorer', icon: <SchemaIcon />, description: 'Explore semantic bundles' },
-          { label: 'BO Explorer', path: '/core/business-objects', icon: <BusinessIcon />, description: 'Business Objects setup' },
+          { label: 'BO Explorer', path: '/business-objects', icon: <BusinessIcon />, description: 'Business Objects setup' },
         ]
       },
       {
