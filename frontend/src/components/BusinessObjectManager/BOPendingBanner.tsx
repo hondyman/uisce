@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { apiClient } from '../../utils/apiClient';
 import {
   Alert,
   Box,
@@ -84,7 +85,7 @@ export const BOPendingBanner: React.FC<BOPendingBannerProps> = ({
   const fetchStatus = () => {
     if (!boId) return;
 
-    fetch(`/api/bo/${boId}/status`)
+    apiClient(`/api/bo/${boId}/status`)
       .then(res => res.json())
       .then(data => {
         setStatus(data);
