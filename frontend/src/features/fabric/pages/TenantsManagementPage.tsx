@@ -95,7 +95,7 @@ const TenantsManagementPage: React.FC = () => {
   const api = useIPWhitelistAPI();
   const notification = useNotification();
   const navigate = useNavigate();
-  const { accessibleTenants } = useAccess();
+  const { accessibleTenants, scope } = useAccess();
   const organization = useOrganizationEntitlement();
   const canWriteOrganization = organization.canWrite;
   const { regions } = useRegions();
@@ -113,7 +113,11 @@ const TenantsManagementPage: React.FC = () => {
       setLoading(true);
       try {
         // Only show tenants the current user is authorized to access.
-        const tenantsList = accessibleTenants.filter(isActiveTenant);
+        // When scoped to a specific tenant, show only that tenant.
+        let tenantsList = accessibleTenants.filter(isActiveTenant);
+        if (scope.level === 'tenant' && scope.tenantId) {
+          tenantsList = tenantsList.filter(t => t.id === scope.tenantId);
+        }
 
         // Fetch IP whitelist for each tenant to get real usage data
         const enriched: TenantWithUsage[] = await Promise.all(
@@ -167,7 +171,7 @@ const TenantsManagementPage: React.FC = () => {
       }
     };
     loadTenants();
-  }, [accessibleTenants]);
+  }, [accessibleTenants, scope]);
 
   const filteredTenants = useMemo(() => {
     let filtered = tenants;
