@@ -1028,7 +1028,7 @@ export const TenantDetailPageV2: React.FC = () => {
       </Card>
 
       {/* Instance Dialog */}
-      <Dialog open={instanceDialogOpen} onClose={() => setInstanceDialogOpen(false)} maxWidth="sm" fullWidth>
+      <Dialog open={instanceDialogOpen} onClose={() => setInstanceDialogOpen(false)} maxWidth="sm" fullWidth disableEnforceFocus>
         <DialogTitle>
           {editingInstance ? 'Edit Instance' : 'Add Instance'}
         </DialogTitle>
@@ -1090,7 +1090,7 @@ export const TenantDetailPageV2: React.FC = () => {
       </Dialog>
 
       {/* Delete Confirmation Dialog */}
-      <Dialog open={deleteConfirmOpen} onClose={() => setDeleteConfirmOpen(false)}>
+      <Dialog open={deleteConfirmOpen} onClose={() => setDeleteConfirmOpen(false)} disableEnforceFocus>
         <DialogTitle>Delete Tenant</DialogTitle>
         <DialogContent>
           <Typography>
@@ -1116,6 +1116,7 @@ export const TenantDetailPageV2: React.FC = () => {
         onClose={() => setConnectionDialogOpen(false)}
         maxWidth="md"
         fullWidth
+        disableEnforceFocus
       >
         <DialogTitle>{editingConnection ? 'Edit Connection' : 'Add New Connection'}</DialogTitle>
         <DialogContent sx={{ pt: 2, maxHeight: '80vh', overflow: 'auto' }}>
