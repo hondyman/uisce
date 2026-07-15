@@ -121,13 +121,13 @@ export default function InstancesTab({ tenantId, instances, onRefetch }: Instanc
       };
 
       if (editingInstance) {
-        await apiClient(`/api/tenant-ops/${tenantId}/instances/${editingInstance.id}`, {
+        await apiClient(`/api/tenant-ops/instances/${editingInstance.id}`, {
           method: 'PATCH',
           body: JSON.stringify(payload),
         });
         notification.success('Instance updated successfully');
       } else {
-        await apiClient(`/api/tenant-ops/${tenantId}/instances`, {
+        await apiClient(`/api/tenant-ops/instances`, {
           method: 'POST',
           body: JSON.stringify(payload),
         });
@@ -144,7 +144,7 @@ export default function InstancesTab({ tenantId, instances, onRefetch }: Instanc
     if (!window.confirm('Are you sure you want to delete this instance?')) return;
 
     try {
-      await apiClient(`/api/tenant-ops/${tenantId}/instances/${id}`, {
+      await apiClient(`/api/tenant-ops/instances/${id}`, {
         method: 'DELETE',
       });
       notification.success('Instance deleted successfully');

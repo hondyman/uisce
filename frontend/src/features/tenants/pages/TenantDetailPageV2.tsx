@@ -92,38 +92,38 @@ export const TenantDetailPageV2: React.FC = () => {
     { onCompleted: () => refetchTenant() }
   );
   const addTenantProduct = useApiMutation<any, any>(
-    `/api/tenant-ops/${tenantId}/products`,
+    `/api/tenant-ops/products`,
     'POST',
     { onCompleted: () => refetchTenant() }
   );
 
   const createTenantInstance = useApiMutation<any, any>(
-    `/api/tenant-ops/${tenantId}/instances`,
+    `/api/tenant-ops/instances`,
     'POST',
     { onCompleted: () => refetchTenant() }
   );
   const updateTenantInstance = useApiMutation<any, any>(
-    `/api/tenant-ops/${tenantId}/instances`,
+    `/api/tenant-ops/instances`,
     'PATCH',
     { onCompleted: () => refetchTenant() }
   );
   const deleteTenantInstance = useApiMutation<any, any>(
-    `/api/tenant-ops/${tenantId}/instances`,
+    `/api/tenant-ops/instances`,
     'DELETE',
     { onCompleted: () => refetchTenant() }
   );
   const createConnection = useApiMutation<any, any>(
-    `/api/tenant-ops/${tenantId}/connections`,
+    `/api/tenant-ops/connections`,
     'POST',
     { onCompleted: () => refetchTenant() }
   );
   const addTenantProductDatasource = useApiMutation<any, any>(
-    `/api/tenant-ops/${tenantId}/product-datasources`,
+    `/api/tenant-ops/product-datasources`,
     'POST',
     { onCompleted: () => refetchTenant() }
   );
   const testConnection = useApiMutation<any, any>(
-    `/api/tenant-ops/${tenantId}/connections/test`,
+    `/api/tenant-ops/connections/test`,
     'POST',
     {
       onCompleted: (data) => {
@@ -512,7 +512,7 @@ export const TenantDetailPageV2: React.FC = () => {
             is_active: connectionForm.is_active,
         };
 
-        const updateResult = await apiClient(`/api/tenant-ops/${tenantId}/connections/${editingConnection.id}`, {
+        const updateResult = await apiClient(`/api/tenant-ops/connections/${editingConnection.id}`, {
           method: 'PATCH',
           body: JSON.stringify(updateObject),
         });
@@ -547,7 +547,7 @@ export const TenantDetailPageV2: React.FC = () => {
             for (const product of (instance.products || [])) {
               for (const ds of (product.datasources || [])) {
                 if (ds.connection_id === connectionId) {
-                  await apiClient(`/api/tenant-ops/${tenantId}/product-datasources/${ds.id}/connection`, {
+                  await apiClient(`/api/tenant-ops/product-datasources/${ds.id}/connection`, {
                     method: 'PATCH',
                     body: JSON.stringify({ connection_id: null }),
                   });
@@ -641,7 +641,7 @@ export const TenantDetailPageV2: React.FC = () => {
                 return;
             }
 
-            const verifyConn = await apiClient(`/api/tenant-ops/${tenantId}/connections/${connectionId}`, { method: 'GET' });
+            const verifyConn = await apiClient(`/api/tenant-ops/connections/${connectionId}`, { method: 'GET' });
             if (!verifyConn) {
                 console.error("Critical: Connection created/updated but not found in subsequent query.", connectionId);
                 alert("Warning: Connection saved, but not visible yet. Linking to product skipped to prevent errors.");
@@ -658,7 +658,7 @@ export const TenantDetailPageV2: React.FC = () => {
             };
 
             try {
-                await apiClient(`/api/tenant-ops/${tenantId}/product-datasources/${existingDatasource.id}/linking`, {
+                await apiClient(`/api/tenant-ops/product-datasources/${existingDatasource.id}/linking`, {
                   method: 'PATCH',
                   body: JSON.stringify(updateVars),
                 });

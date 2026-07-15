@@ -155,7 +155,7 @@ export const ProductsTabContent: React.FC<ProductsTabContentProps> = ({
   const handleRegisterProduct = async (product: AlphaProduct) => {
     try {
       setRegisterLoading(true);
-      await apiClient(`/api/tenant-ops/${tenantId}/products`, {
+      await apiClient(`/api/tenant-ops/products`, {
         method: 'POST',
         body: JSON.stringify({
           alpha_product_id: product.id,
@@ -183,7 +183,7 @@ export const ProductsTabContent: React.FC<ProductsTabContentProps> = ({
 
     try {
       setUnregisterLoading(true);
-      await apiClient(`/api/tenant-ops/${tenantId}/products/${tenantProduct.id}`, {
+      await apiClient(`/api/tenant-ops/products/${tenantProduct.id}`, {
         method: 'DELETE',
       });
       notification.success(`Unregistered "${product.product_name}" from this tenant`);

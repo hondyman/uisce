@@ -119,7 +119,7 @@ export const InstancesTable: React.FC<InstancesTableProps> = ({
   const handleDeleteConnection = async (connectionId: string) => {
     try {
       if (confirm('Are you sure you want to delete this connection?')) {
-        await apiClient(`/api/tenant-ops/${tenantId}/connections/${connectionId}`, {
+        await apiClient(`/api/tenant-ops/connections/${connectionId}`, {
           method: 'DELETE',
         });
 
