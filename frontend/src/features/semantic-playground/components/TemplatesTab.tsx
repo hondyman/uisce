@@ -354,14 +354,14 @@ const TemplateEditor: React.FC<TemplateEditorProps> = ({ template, onSave }) => 
   return (
     <Grid container spacing={2} sx={{ p: 2 }}>
       {/* Template Metadata */}
-      <Grid item xs={12}>
+      <Grid size={12}>
         <Paper sx={{ p: 2 }}>
           <Typography variant="h6" sx={{ mb: 2 }}>
             Template Details
           </Typography>
 
           <Grid container spacing={2}>
-            <Grid item xs={12}>
+            <Grid size={12}>
               <TextField
                 fullWidth
                 label="Template Name"
@@ -381,7 +381,7 @@ const TemplateEditor: React.FC<TemplateEditorProps> = ({ template, onSave }) => 
               />
             </Grid>
 
-            <Grid item xs={6}>
+            <Grid size={6}>
               <TextField
                 fullWidth
                 label="Datasource"
@@ -390,7 +390,7 @@ const TemplateEditor: React.FC<TemplateEditorProps> = ({ template, onSave }) => 
               />
             </Grid>
 
-            <Grid item xs={6}>
+            <Grid size={6}>
               <TextField
                 fullWidth
                 label="Version"
@@ -720,11 +720,11 @@ export const TemplatesTab: React.FC = () => {
       <Box sx={{ flex: 1, overflow: 'auto' }}>
         {mode === 'list' && (
           <Grid container spacing={2} sx={{ p: 2, height: '100%' }}>
-            <Grid item xs={4}>
+            <Grid size={4}>
               <TemplateListPanel onSelectTemplate={(t) => handleEditClick(t)} />
             </Grid>
 
-            <Grid item xs={8}>
+            <Grid size={8}>
               {selectedTemplate && (
                 <Paper sx={{ p: 2 }}>
                   <Typography variant="h6">{selectedTemplate.name}</Typography>

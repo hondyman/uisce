@@ -136,7 +136,7 @@ export const OptimizationCenter: React.FC<OptimizationCenterProps> = ({ scope = 
 
       {/* Summary Cards */}
       <Grid container spacing={3} mb={4}>
-        <Grid item xs={12} md={3}>
+        <Grid size={{ 'xs': 12, 'md': 3 }}>
           <SummaryCard
             title="ASO Status"
             value={envSummary?.policy_enabled ? 'Enabled' : 'Disabled'}
@@ -145,7 +145,7 @@ export const OptimizationCenter: React.FC<OptimizationCenterProps> = ({ scope = 
             icon={<AutoFixHigh />}
           />
         </Grid>
-        <Grid item xs={12} md={3}>
+        <Grid size={{ 'xs': 12, 'md': 3 }}>
           <SummaryCard
             title="Pending Optimizations"
             value={envSummary?.optimizations_pending || 0}

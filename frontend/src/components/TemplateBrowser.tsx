@@ -254,7 +254,7 @@ export const TemplateBrowser: React.FC<{
       {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
 
       <Grid container spacing={2} sx={{ mb: 3 }}>
-        <Grid item xs={12} sm={6}>
+        <Grid size={{ 'xs': 12, 'sm': 6 }}>
           <FormControl fullWidth>
             <InputLabel>Filter by Category</InputLabel>
             <Select
@@ -271,7 +271,7 @@ export const TemplateBrowser: React.FC<{
             </Select>
           </FormControl>
         </Grid>
-        <Grid item xs={12} sm={6}>
+        <Grid size={{ 'xs': 12, 'sm': 6 }}>
           <Typography variant="subtitle2">
             Templates Available: {filteredTemplates.length}
           </Typography>
@@ -285,7 +285,7 @@ export const TemplateBrowser: React.FC<{
       ) : (
         <Grid container spacing={2}>
           {/* Template List */}
-          <Grid item xs={12} md={6}>
+          <Grid size={{ 'xs': 12, 'md': 6 }}>
             <Typography variant="h6" sx={{ mb: 2 }}>
               <TemplateOutlinedIcon sx={{ mr: 1, verticalAlign: 'middle' }} />
               Available Templates
@@ -334,7 +334,7 @@ export const TemplateBrowser: React.FC<{
           </Grid>
 
           {/* Template Preview & Instantiation */}
-          <Grid item xs={12} md={6}>
+          <Grid size={{ 'xs': 12, 'md': 6 }}>
             {preview ? (
               <Card>
                 <CardContent>

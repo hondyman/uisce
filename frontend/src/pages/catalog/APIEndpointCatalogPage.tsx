@@ -389,13 +389,13 @@ const APIEndpointCatalogPage: React.FC = () => {
           {selectedEndpoint && (
             <Grid container spacing={2}>
               {/* Basic Info */}
-              <Grid item xs={12}>
+              <Grid size={12}>
                 <Typography variant="subtitle2" sx={{ fontWeight: 'bold', mb: 1 }}>
                   Basic Information
                 </Typography>
                 <Box sx={{ backgroundColor: '#f5f5f5', p: 2, borderRadius: 1 }}>
                   <Grid container spacing={2}>
-                    <Grid item xs={12} sm={6}>
+                    <Grid size={{ 'xs': 12, 'sm': 6 }}>
                       <Typography variant="caption" color="textSecondary">
                         Path
                       </Typography>
@@ -403,7 +403,7 @@ const APIEndpointCatalogPage: React.FC = () => {
                         {selectedEndpoint.endpoint_path}
                       </Typography>
                     </Grid>
-                    <Grid item xs={12} sm={6}>
+                    <Grid size={{ 'xs': 12, 'sm': 6 }}>
                       <Typography variant="caption" color="textSecondary">
                         Method
                       </Typography>
@@ -431,7 +431,7 @@ const APIEndpointCatalogPage: React.FC = () => {
                         <Chip label={selectedEndpoint.category} variant="outlined" size="small" />
                       </Typography>
                     </Grid>
-                    <Grid item xs={12}>
+                    <Grid size={12}>
                       <Typography variant="caption" color="textSecondary">
                         Description
                       </Typography>

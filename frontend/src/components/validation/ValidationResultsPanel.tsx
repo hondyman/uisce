@@ -178,7 +178,7 @@ const ValidationResultsPanel: React.FC = () => {
       <Card sx={{ mb: 3 }}>
         <CardContent>
           <Grid container spacing={2}>
-            <Grid item xs={12} sm={6}>
+            <Grid size={{ 'xs': 12, 'sm': 6 }}>
               <FieldAutocomplete
                 value={filterBP}
                 onChange={(value) => setFilterBP(value)}
@@ -189,7 +189,7 @@ const ValidationResultsPanel: React.FC = () => {
                 showRecentFields={true}
               />
             </Grid>
-            <Grid item xs={12} sm={6}>
+            <Grid size={{ 'xs': 12, 'sm': 6 }}>
               <FormControl fullWidth size="small">
                 <InputLabel id="filter-status-select-label">Filter by Status</InputLabel>
                 <Select
@@ -214,7 +214,7 @@ const ValidationResultsPanel: React.FC = () => {
                 </Select>
               </FormControl>
             </Grid>
-            <Grid item xs={12}>
+            <Grid size={12}>
               <Button variant="outlined" onClick={fetchResults} disabled={loading}>
                 {loading ? <CircularProgress size={20} sx={{ mr: 1 }} /> : null}
                 Refresh Results
@@ -295,13 +295,13 @@ const ValidationResultsPanel: React.FC = () => {
           {selectedResult && (
             <Box>
               <Grid container spacing={2} sx={{ mb: 2 }}>
-                <Grid item xs={6}>
+                <Grid size={6}>
                   <Typography variant="caption" color="textSecondary">
                     Business Process
                   </Typography>
                   <Typography variant="body2">{selectedResult.bp_name}</Typography>
                 </Grid>
-                <Grid item xs={6}>
+                <Grid size={6}>
                   <Typography variant="caption" color="textSecondary">
                     Step
                   </Typography>

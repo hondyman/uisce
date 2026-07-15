@@ -158,7 +158,7 @@ const RealTimeValidationPanel: React.FC = () => {
       )}
 
       <Grid container spacing={2} sx={{ mb: 3 }}>
-        <Grid item xs={12} sm={6}>
+        <Grid size={{ 'xs': 12, 'sm': 6 }}>
           <TextField
             fullWidth
             label="Business Process"
@@ -167,7 +167,7 @@ const RealTimeValidationPanel: React.FC = () => {
             placeholder="e.g., ChangeMaritalStatus"
           />
         </Grid>
-        <Grid item xs={12} sm={6}>
+        <Grid size={{ 'xs': 12, 'sm': 6 }}>
           <TextField
             fullWidth
             label="Process Step"
@@ -196,7 +196,7 @@ const RealTimeValidationPanel: React.FC = () => {
           </Box>
 
           <Grid container spacing={1} sx={{ mb: 2 }}>
-            <Grid item xs={12} sm={5}>
+            <Grid size={{ 'xs': 12, 'sm': 5 }}>
               <TextField
                 fullWidth
                 label="Field Name"
@@ -206,7 +206,7 @@ const RealTimeValidationPanel: React.FC = () => {
                 placeholder="e.g., age"
               />
             </Grid>
-            <Grid item xs={12} sm={5}>
+            <Grid size={{ 'xs': 12, 'sm': 5 }}>
               <TextField
                 fullWidth
                 label="Field Value"
@@ -216,7 +216,7 @@ const RealTimeValidationPanel: React.FC = () => {
                 placeholder="e.g., 25"
               />
             </Grid>
-            <Grid item xs={12} sm={2}>
+            <Grid size={{ 'xs': 12, 'sm': 2 }}>
               <Button
                 fullWidth
                 variant="outlined"

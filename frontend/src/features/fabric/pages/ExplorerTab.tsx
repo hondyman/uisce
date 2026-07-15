@@ -38,7 +38,7 @@ export default function ExplorerTab({ config, setConfig, searchTerm, setSearchTe
       />
 
       <Grid container spacing={2}>
-        <Grid item xs={12} md={8}>
+        <Grid size={{ 'xs': 12, 'md': 8 }}>
           {filteredTables.map((table) => (
             <Card key={table.table_name} sx={{ mb: 2 }}>
               <CardHeader title={
@@ -75,7 +75,7 @@ export default function ExplorerTab({ config, setConfig, searchTerm, setSearchTe
           ))}
         </Grid>
 
-        <Grid item xs={12} md={4}>
+        <Grid size={{ 'xs': 12, 'md': 4 }}>
           <Card>
             <CardHeader title={
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>

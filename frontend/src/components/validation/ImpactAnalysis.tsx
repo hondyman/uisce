@@ -236,7 +236,7 @@ const ImpactAnalysis: React.FC<ImpactAnalysisProps> = ({
 
             {/* Impact Summary */}
             <Grid container spacing={2} sx={{ mb: 3 }}>
-              <Grid item xs={6} sm={3}>
+              <Grid size={{ 'xs': 6, 'sm': 3 }}>
                 <Paper sx={{ p: 2, textAlign: 'center' }}>
                   <Typography variant="h5" sx={{ color: '#d32f2f' }}>
                     {impactData.by_severity.error}
@@ -244,7 +244,7 @@ const ImpactAnalysis: React.FC<ImpactAnalysisProps> = ({
                   <Typography variant="caption">Errors</Typography>
                 </Paper>
               </Grid>
-              <Grid item xs={6} sm={3}>
+              <Grid size={{ 'xs': 6, 'sm': 3 }}>
                 <Paper sx={{ p: 2, textAlign: 'center' }}>
                   <Typography variant="h5" sx={{ color: '#f57c00' }}>
                     {impactData.by_severity.warning}

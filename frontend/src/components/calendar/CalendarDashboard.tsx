@@ -44,7 +44,7 @@ export const CalendarDashboard: React.FC<Props> = ({ tenantId, userId }) => {
       {msError && <ErrorAlert error={msError} />}
 
       <Grid container spacing={4}>
-        <Grid item xs={12} md={4}>
+        <Grid size={{ 'xs': 12, 'md': 4 }}>
           <Paper sx={{ p: 3, mb: 3 }}>
             <Typography variant="h6" gutterBottom>Google Calendar</Typography>
             
@@ -104,7 +104,7 @@ export const CalendarDashboard: React.FC<Props> = ({ tenantId, userId }) => {
           </Paper>
         </Grid>
 
-        <Grid item xs={12} md={8}>
+        <Grid size={{ 'xs': 12, 'md': 8 }}>
           <SyncStatus status={syncStatus || null} />
           
           <Paper sx={{ p: 3 }}>

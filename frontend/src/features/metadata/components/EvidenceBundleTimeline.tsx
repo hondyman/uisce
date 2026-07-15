@@ -112,13 +112,13 @@ export const EvidenceBundleTimeline: React.FC = () => {
     return (
       <Paper key={artifact.checksum} elevation={0} sx={{ p: 2, mb: 1, bgcolor: 'grey.50' }}>
         <Grid container spacing={2} alignItems="center">
-          <Grid item xs={12} md={4}>
+          <Grid size={{ 'xs': 12, 'md': 4 }}>
             <Typography variant="subtitle2" color="text.secondary">
               Type
             </Typography>
             <Chip label={artifact.type} size="small" />
           </Grid>
-          <Grid item xs={12} md={4}>
+          <Grid size={{ 'xs': 12, 'md': 4 }}>
             <Typography variant="subtitle2" color="text.secondary">
               Created
             </Typography>
@@ -133,7 +133,7 @@ export const EvidenceBundleTimeline: React.FC = () => {
             </Typography>
           </Grid>
           {artifact.metadata && (
-            <Grid item xs={12}>
+            <Grid size={12}>
               <Typography variant="subtitle2" color="text.secondary" gutterBottom>
                 Metadata
               </Typography>
@@ -151,13 +151,13 @@ export const EvidenceBundleTimeline: React.FC = () => {
     return (
       <Box sx={{ pt: 1 }}>
         <Grid container spacing={2} sx={{ mb: 2 }}>
-          <Grid item xs={6}>
+          <Grid size={6}>
             <Typography variant="subtitle2" color="text.secondary">
               Started
             </Typography>
             <Typography variant="body2">{formatDateTime(stage.started_at)}</Typography>
           </Grid>
-          <Grid item xs={6}>
+          <Grid size={6}>
             <Typography variant="subtitle2" color="text.secondary">
               Completed
             </Typography>
@@ -166,7 +166,7 @@ export const EvidenceBundleTimeline: React.FC = () => {
             </Typography>
           </Grid>
           {stage.actor_id && (
-            <Grid item xs={12}>
+            <Grid size={12}>
               <Typography variant="subtitle2" color="text.secondary">
                 Actor
               </Typography>
@@ -260,7 +260,7 @@ export const EvidenceBundleTimeline: React.FC = () => {
             Bundle Information
           </Typography>
           <Grid container spacing={2}>
-            <Grid item xs={12} md={6}>
+            <Grid size={{ 'xs': 12, 'md': 6 }}>
               <Typography variant="subtitle2" color="text.secondary">
                 Bundle ID
               </Typography>
@@ -268,7 +268,7 @@ export const EvidenceBundleTimeline: React.FC = () => {
                 {bundle.id}
               </Typography>
             </Grid>
-            <Grid item xs={12} md={6}>
+            <Grid size={{ 'xs': 12, 'md': 6 }}>
               <Typography variant="subtitle2" color="text.secondary">
                 Upgrade Request ID
               </Typography>

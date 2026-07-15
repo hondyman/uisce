@@ -183,7 +183,7 @@ const WealthManagementDashboard: React.FC<WealthManagementDashboardProps> = ({
 
       {/* Summary Cards */}
       <Grid container spacing={3} mb={3}>
-        <Grid item xs={12} sm={6} md={3}>
+        <Grid size={{ 'xs': 12, 'sm': 6, 'md': 3 }}>
           <Card>
             <CardContent>
               <Typography color="textSecondary" gutterBottom>
@@ -195,7 +195,7 @@ const WealthManagementDashboard: React.FC<WealthManagementDashboardProps> = ({
             </CardContent>
           </Card>
         </Grid>
-        <Grid item xs={12} sm={6} md={3}>
+        <Grid size={{ 'xs': 12, 'sm': 6, 'md': 3 }}>
           <Card>
             <CardContent>
               <Typography color="textSecondary" gutterBottom>
@@ -250,7 +250,7 @@ const WealthManagementDashboard: React.FC<WealthManagementDashboardProps> = ({
       {/* Metrics List */}
       <Grid container spacing={3}>
         {filteredMetrics.map((metric) => (
-          <Grid item xs={12} md={6} lg={4} key={metric.node_id}>
+          <Grid size={{ 'xs': 12, 'md': 6, 'lg': 4 }}>
             <Card sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
               <CardContent sx={{ flexGrow: 1 }}>
                 <Box display="flex" alignItems="center" mb={2}>

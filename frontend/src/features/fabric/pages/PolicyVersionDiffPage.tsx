@@ -234,7 +234,7 @@ const PolicyVersionDiffPage: React.FC = () => {
       </Breadcrumbs>
 
       <Grid container spacing={3} sx={{ flexGrow: 1 }}>
-        <Grid item xs={12} md={3}>
+        <Grid size={{ 'xs': 12, 'md': 3 }}>
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
             <PolicyVersionList
               policyId={policyId}
@@ -280,7 +280,7 @@ const PolicyVersionDiffPage: React.FC = () => {
             </Box>
           </Box>
         </Grid>
-        <Grid item xs={12} md={9} sx={{ display: 'flex', flexDirection: 'column' }}>
+        <Grid size={{ 'xs': 12, 'md': 9 }}>
           <Paper sx={{ flexGrow: 1, p: 2, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
             <Typography variant="h6" gutterBottom>
               Side-by-Side Comparison

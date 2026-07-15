@@ -105,14 +105,14 @@ const MetricDetailDialog: React.FC<MetricDetailDialogProps> = ({
       <DialogContent dividers>
         <Grid container spacing={3}>
           {/* Basic Information */}
-          <Grid item xs={12}>
+          <Grid size={12}>
             <Typography variant="body1" paragraph>
               {metric.description}
             </Typography>
           </Grid>
 
           {/* Status and Category */}
-          <Grid item xs={12} md={6}>
+          <Grid size={{ 'xs': 12, 'md': 6 }}>
             <Paper sx={{ p: 2 }}>
               <Typography variant="h6" gutterBottom>
                 Status & Category
@@ -137,7 +137,7 @@ const MetricDetailDialog: React.FC<MetricDetailDialogProps> = ({
           </Grid>
 
           {/* Technical Details */}
-          <Grid item xs={12} md={6}>
+          <Grid size={{ 'xs': 12, 'md': 6 }}>
             <Paper sx={{ p: 2 }}>
               <Typography variant="h6" gutterBottom>
                 Technical Details
@@ -167,7 +167,7 @@ const MetricDetailDialog: React.FC<MetricDetailDialogProps> = ({
 
           {/* Formula (if available) */}
           {metric.formula && (
-            <Grid item xs={12}>
+            <Grid size={12}>
               <Paper sx={{ p: 2 }}>
                 <Typography variant="h6" gutterBottom>
                   Calculation Formula

@@ -118,7 +118,7 @@ export const ExplainabilityDashboard: React.FC<ExplainabilityDashboardProps> = (
       {error && <Alert severity="warning" sx={{ mb: 3 }}>Running in Demonstration Mode: {error}</Alert>}
 
       <Grid container spacing={3}>
-        <Grid item xs={12} md={8}>
+        <Grid size={{ 'xs': 12, 'md': 8 }}>
           <Card elevation={2} sx={{ borderRadius: 2 }}>
             <CardContent>
               <Typography variant="h6" gutterBottom>Execution Trace (Recursive Lineage)</Typography>
@@ -129,7 +129,7 @@ export const ExplainabilityDashboard: React.FC<ExplainabilityDashboardProps> = (
           </Card>
         </Grid>
 
-        <Grid item xs={12} md={4}>
+        <Grid size={{ 'xs': 12, 'md': 4 }}>
           <Card elevation={2} sx={{ borderRadius: 2, mb: 3 }}>
             <CardContent>
               <Typography variant="h6" gutterBottom>Execution Metadata</Typography>

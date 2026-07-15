@@ -135,7 +135,7 @@ else:
           </Typography>
 
           <Grid container spacing={2} sx={{ mb: 2 }}>
-            <Grid item xs={12} md={6}>
+            <Grid size={{ 'xs': 12, 'md': 6 }}>
               <TextField
                 fullWidth
                 label="Expression Name"
@@ -144,7 +144,7 @@ else:
                 placeholder="e.g., Transaction Amount Limit"
               />
             </Grid>
-            <Grid item xs={12} md={6}>
+            <Grid size={{ 'xs': 12, 'md': 6 }}>
               <FormControl fullWidth>
                 <InputLabel>Expression Type</InputLabel>
                 <Select
@@ -158,7 +158,7 @@ else:
                 </Select>
               </FormControl>
             </Grid>
-            <Grid item xs={12}>
+            <Grid size={12}>
               <TextField
                 fullWidth
                 label="Description"
@@ -297,7 +297,7 @@ else:
             Expression Examples
           </Typography>
           <Grid container spacing={2}>
-            <Grid item xs={12} md={4}>
+            <Grid size={{ 'xs': 12, 'md': 4 }}>
               <Paper variant="outlined" sx={{ p: 2 }}>
                 <Chip label="Validation" size="small" color="primary" sx={{ mb: 1 }} />
                 <Typography variant="subtitle2" gutterBottom>
@@ -311,7 +311,7 @@ else:
                 </Typography>
               </Paper>
             </Grid>
-            <Grid item xs={12} md={4}>
+            <Grid size={{ 'xs': 12, 'md': 4 }}>
               <Paper variant="outlined" sx={{ p: 2 }}>
                 <Chip label="Calculation" size="small" color="success" sx={{ mb: 1 }} />
                 <Typography variant="subtitle2" gutterBottom>

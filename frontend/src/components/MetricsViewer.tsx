@@ -326,7 +326,7 @@ const MetricsViewer: React.FC = () => {
       <TabPanel value={tabValue} index={0}>
         <Box sx={{ mb: 3 }}>
           <Grid container spacing={2} alignItems="center">
-            <Grid item xs={12} md={4}>
+            <Grid size={{ 'xs': 12, 'md': 4 }}>
               <FormControl fullWidth>
                 <InputLabel>Domain</InputLabel>
                 <Select
@@ -343,7 +343,7 @@ const MetricsViewer: React.FC = () => {
                 </Select>
               </FormControl>
             </Grid>
-            <Grid item xs={12} md={8}>
+            <Grid size={{ 'xs': 12, 'md': 8 }}>
               <TextField
                 fullWidth
                 label="Search metrics..."

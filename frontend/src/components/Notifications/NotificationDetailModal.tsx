@@ -163,13 +163,13 @@ export const NotificationDetailModal: React.FC<NotificationDetailModalProps> = (
              Notification Details
            </Typography>
            <Grid container spacing={2} mt={0.5}>
-             <Grid item xs={6}>
+             <Grid size={6}>
                <Typography variant="caption" color="text.secondary" display="block">Opened</Typography>
                <Typography variant="body2" fontWeight="medium">
                  {notification.opened_at ? formatDateTime(notification.opened_at) : 'Not yet opened'}
                </Typography>
              </Grid>
-             <Grid item xs={6}>
+             <Grid size={6}>
                <Typography variant="caption" color="text.secondary" display="block">Action Status</Typography>
                <Stack direction="row" spacing={1} alignItems="center">
                  <Box 

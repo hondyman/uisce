@@ -396,7 +396,7 @@ export default function EntityConfigPageV2() {
             {/* ENTITY CARDS GRID */}
             <Grid container spacing={2}>
               {/* Add New Entity Button */}
-              <Grid item xs={12} sm={6} md={4} lg={3}>
+              <Grid size={{ 'xs': 12, 'sm': 6, 'md': 4, 'lg': 3 }}>
                 <Card
                   onClick={handleAddEntity}
                   sx={{
@@ -418,7 +418,7 @@ export default function EntityConfigPageV2() {
 
               {/* Entity Cards */}
               {Object.entries(filteredEntities).map(([entityKey, entity]) => (
-                <Grid item xs={12} sm={6} md={4} lg={3} key={entityKey}>
+                <Grid size={{ 'xs': 12, 'sm': 6, 'md': 4, 'lg': 3 }}>
                   <Card
                     onDoubleClick={() => navigate(`/entity-config/${encodeURIComponent(entityKey)}`)}
                     sx={{

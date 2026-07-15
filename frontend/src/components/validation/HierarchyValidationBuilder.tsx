@@ -593,7 +593,7 @@ export const HierarchyValidationBuilder: React.FC<{
           <CardContent>
           <Grid container spacing={3}>
             { (ruleType === 'parent_only' || ruleType === 'sub_parent' || ruleType === 'aggregate') && (
-              <Grid item xs={12} lg={6}>
+              <Grid size={{ 'xs': 12, 'lg': 6 }}>
                 <Typography variant="subtitle1" gutterBottom>Parent Field</Typography>
                 {loadingSchema ? <CircularProgress /> : ( // Use Paper for consistent styling
                   <Paper variant="outlined" sx={{ p: 1, height: 250, overflow: 'auto' }}>
@@ -613,7 +613,7 @@ export const HierarchyValidationBuilder: React.FC<{
             )}
 
             { (ruleType === 'sub_only' || ruleType === 'sub_parent' || ruleType === 'aggregate') && ( // Corrected ruleType
-              <Grid item xs={12} lg={6}>
+              <Grid size={{ 'xs': 12, 'lg': 6 }}>
                 <Typography variant="subtitle1" gutterBottom>Sub-Entity Field</Typography>
                  {loadingSchema ? <CircularProgress /> : ( // Use Paper for consistent styling
                    <Paper variant="outlined" sx={{ p: 1, height: 250, overflow: 'auto' }}>

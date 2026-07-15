@@ -165,7 +165,7 @@ export const CollaborationHub: React.FC = () => {
     <Box sx={{ p: 3 }}>
       <Grid container spacing={3}>
         {/* Left Panel: Details & Workflow */}
-        <Grid item xs={12} lg={7}>
+        <Grid size={{ 'xs': 12, 'lg': 7 }}>
           <Card sx={{ mb: 3 }}>
             <CardHeader
               title="Override Request: OR-789"
@@ -176,7 +176,7 @@ export const CollaborationHub: React.FC = () => {
             />
             <CardContent>
               <Grid container spacing={2} sx={{ mb: 3 }}>
-                <Grid item xs={12} sm={6}>
+                <Grid size={{ 'xs': 12, 'sm': 6 }}>
                   <Box>
                     <Typography variant="caption" color="textSecondary">
                       Requester
@@ -196,7 +196,7 @@ export const CollaborationHub: React.FC = () => {
                     </Box>
                   </Box>
                 </Grid>
-                <Grid item xs={12} sm={6}>
+                <Grid size={{ 'xs': 12, 'sm': 6 }}>
                   <Box>
                     <Typography variant="caption" color="textSecondary">
                       Submitted
@@ -371,7 +371,7 @@ export const CollaborationHub: React.FC = () => {
         </Grid>
 
         {/* Right Panel: Collaboration Thread */}
-        <Grid item xs={12} lg={5}>
+        <Grid size={{ 'xs': 12, 'lg': 5 }}>
           <Card sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
             <CardHeader
               title="Collaboration Thread"

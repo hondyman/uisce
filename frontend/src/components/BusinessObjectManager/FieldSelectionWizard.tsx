@@ -352,7 +352,7 @@ export const FieldSelectionWizard: React.FC<FieldSelectionWizardProps> = ({
           ) : viewMode === 'grid' ? (
             <Grid container spacing={2}>
               {filteredFields.map((field) => (
-                <Grid item xs={12} sm={6} key={field.id}>
+                <Grid size={{ 'xs': 12, 'sm': 6 }}>
                   <Paper
                     onClick={() => handleToggleField(field)}
                     sx={{

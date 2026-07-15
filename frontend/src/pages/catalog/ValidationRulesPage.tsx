@@ -628,7 +628,7 @@ export const ValidationRulesPage: React.FC = () => {
             sx={{ backgroundColor: 'white' }}
           />
           <Grid container spacing={2}>
-            <Grid item xs={12} sm={6}>
+            <Grid size={{ 'xs': 12, 'sm': 6 }}>
               <FormControl fullWidth size="small">
                 <InputLabel>Rule Type</InputLabel>
                 <Select
@@ -645,7 +645,7 @@ export const ValidationRulesPage: React.FC = () => {
                 </Select>
               </FormControl>
             </Grid>
-            <Grid item xs={12} sm={6}>
+            <Grid size={{ 'xs': 12, 'sm': 6 }}>
               <FormControl fullWidth size="small">
                 <InputLabel>Severity</InputLabel>
                 <Select
@@ -854,7 +854,7 @@ export const ValidationRulesPage: React.FC = () => {
                     )}
                   />
                   <Grid container spacing={2}>
-                    <Grid item xs={6}>
+                    <Grid size={6}>
                       <FormControl fullWidth>
                         <InputLabel>Operator *</InputLabel>
                         <Select
@@ -873,7 +873,7 @@ export const ValidationRulesPage: React.FC = () => {
                         </Select>
                       </FormControl>
                     </Grid>
-                    <Grid item xs={6}>
+                    <Grid size={6}>
                       <TextField
                         fullWidth
                         label="Threshold Value *"

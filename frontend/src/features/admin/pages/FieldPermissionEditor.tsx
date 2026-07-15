@@ -290,7 +290,7 @@ export const FieldPermissionEditor: React.FC<FieldPermissionEditorProps> = ({ te
           {/* Filters */}
           <Box mb={3}>
              <Grid container spacing={2} alignItems="center">
-                <Grid item xs={12} sm={3}>
+                <Grid size={{ 'xs': 12, 'sm': 3 }}>
                    <Autocomplete
                       options={MOCK_ROLES}
                       getOptionLabel={(option) => option.name}
@@ -299,7 +299,7 @@ export const FieldPermissionEditor: React.FC<FieldPermissionEditorProps> = ({ te
                       renderInput={(params) => <TextField {...params} label="Select Role" size="small" sx={{ bgcolor: 'background.paper' }} />}
                     />
                 </Grid>
-                <Grid item xs={12} sm={3}>
+                <Grid size={{ 'xs': 12, 'sm': 3 }}>
                    <FormControl fullWidth size="small">
                       <InputLabel>Context</InputLabel>
                       <Select
@@ -314,7 +314,7 @@ export const FieldPermissionEditor: React.FC<FieldPermissionEditorProps> = ({ te
                       </Select>
                    </FormControl>
                 </Grid>
-                <Grid item xs={12} sm>
+                <Grid size={12}>
                     <TextField
                       fullWidth
                       size="small"

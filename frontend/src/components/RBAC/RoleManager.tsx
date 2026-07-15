@@ -453,7 +453,7 @@ export const RoleManager: React.FC<RoleManagerProps> = ({ tenant, datasource }) 
         ) : (
             <Grid container spacing={3}>
                 {filteredRoles.map((role) => (
-                    <Grid item xs={12} sm={6} md={4} key={role.id}>
+                    <Grid size={{ 'xs': 12, 'sm': 6, 'md': 4 }}>
                          <Card elevation={0} sx={{ border: '1px solid #e0e0e0', borderRadius: 2, height: '100%', display: 'flex', flexDirection: 'column' }}>
                             <CardContent sx={{ flexGrow: 1 }}>
                                 <Box display="flex" justifyContent="space-between" alignItems="flex-start" mb={2}>
@@ -605,13 +605,13 @@ export const RoleManager: React.FC<RoleManagerProps> = ({ tenant, datasource }) 
                         {selectedRole?.description || 'No description provided.'}
                     </Typography>
                     <Grid container spacing={2} mt={1}>
-                        <Grid item xs={6}>
+                        <Grid size={6}>
                             <Paper variant="outlined" sx={{ p: 2, textAlign: 'center' }}>
                                 <Typography variant="h4" color="primary">{roleUsers.length}</Typography>
                                 <Typography variant="caption" color="text.secondary">Assigned Users</Typography>
                             </Paper>
                         </Grid>
-                        <Grid item xs={6}>
+                        <Grid size={6}>
                             <Paper variant="outlined" sx={{ p: 2, textAlign: 'center' }}>
                                 <Typography variant="h4" color="secondary">{roleFieldPerms.length}</Typography>
                                 <Typography variant="caption" color="text.secondary">Field Policies</Typography>

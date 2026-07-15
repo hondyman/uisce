@@ -152,7 +152,7 @@ const ElementToolbox = ({ onAddElement }: { onAddElement: (type: string) => void
       </Typography>
       <Grid container spacing={2}>
         {elements.map((element) => (
-          <Grid item xs={6} key={element.type}>
+          <Grid size={6}>
             <ToolboxCard 
               sx={{ cursor: 'pointer' }}
               onClick={() => onAddElement(element.type)}
@@ -734,7 +734,7 @@ export default function WorldClassReportingBuilder() {
           <Box sx={{ p: 3 }}>
             <Typography variant="h4" gutterBottom>Reports</Typography>
             <Grid container spacing={3}>
-              <Grid item xs={12} md={6} lg={4}>
+              <Grid size={{ 'xs': 12, 'md': 6, 'lg': 4 }}>
                 <Card sx={{ cursor: 'pointer' }} onClick={() => setActiveTab('designer')}>
                   <CardContent>
                     <Typography variant="h6">Sales Dashboard</Typography>

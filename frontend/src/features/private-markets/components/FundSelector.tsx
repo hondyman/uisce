@@ -105,7 +105,7 @@ export const FundSelector: React.FC<FundSelectorProps> = ({
 
       <Grid container spacing={2}>
         {/* Search */}
-        <Grid item xs={12} md={3}>
+        <Grid size={{ 'xs': 12, 'md': 3 }}>
           <TextField
             fullWidth
             label="Search Funds"
@@ -122,7 +122,7 @@ export const FundSelector: React.FC<FundSelectorProps> = ({
         </Grid>
 
         {/* Filters */}
-        <Grid item xs={12} md={2}>
+        <Grid size={{ 'xs': 12, 'md': 2 }}>
           <FormControl fullWidth>
             <InputLabel>Strategy</InputLabel>
             <Select
@@ -142,7 +142,7 @@ export const FundSelector: React.FC<FundSelectorProps> = ({
           </FormControl>
         </Grid>
 
-        <Grid item xs={12} md={2}>
+        <Grid size={{ 'xs': 12, 'md': 2 }}>
           <FormControl fullWidth>
             <InputLabel>Geography</InputLabel>
             <Select
@@ -182,7 +182,7 @@ export const FundSelector: React.FC<FundSelectorProps> = ({
           </FormControl>
         </Grid>
 
-        <Grid item xs={12} md={3}>
+        <Grid size={{ 'xs': 12, 'md': 3 }}>
           <Box display="flex" gap={1}>
             <Button
               variant="outlined"

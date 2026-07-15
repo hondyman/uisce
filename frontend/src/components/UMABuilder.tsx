@@ -381,7 +381,7 @@ export const UMABuilder: React.FC<UMABuilderProps> = ({
       <Card sx={{ mb: 2 }}>
         <CardContent>
           <Grid container spacing={2}>
-            <Grid item xs={12} sm={6}>
+            <Grid size={{ 'xs': 12, 'sm': 6 }}>
               <Typography variant="subtitle2" gutterBottom>
                 Total Current Allocation
               </Typography>
@@ -389,7 +389,7 @@ export const UMABuilder: React.FC<UMABuilderProps> = ({
                 {(totalAllocation * 100).toFixed(2)}%
               </Typography>
             </Grid>
-            <Grid item xs={12} sm={6}>
+            <Grid size={{ 'xs': 12, 'sm': 6 }}>
               <Typography variant="subtitle2" gutterBottom>
                 Number of Sleeves
               </Typography>

@@ -627,16 +627,16 @@ export default function ProfilerPage({ preselectedSchema, preselectedTable, pres
         <DialogContent>
           <Grid container spacing={3}>
             {/* Basic Info */}
-            <Grid item xs={12}>
+            <Grid size={12}>
               <Card>
                 <CardContent>
                   <Typography variant="h6" gutterBottom>Basic Information</Typography>
                   <Grid container spacing={2}>
-                    <Grid item xs={3}>
+                    <Grid size={3}>
                       <Typography variant="body2" color="textSecondary">Data Type</Typography>
                       <Chip label={selectedColumn.DataType} color="primary" />
                     </Grid>
-                    <Grid item xs={3}>
+                    <Grid size={3}>
                       <Typography variant="body2" color="textSecondary">Cardinality</Typography>
                       <Typography variant="h6">{selectedColumn.Cardinality.toLocaleString()}</Typography>
                     </Grid>
@@ -655,7 +655,7 @@ export default function ProfilerPage({ preselectedSchema, preselectedTable, pres
 
             {/* Frequent Values Chart */}
             {frequentValuesData.length > 0 && (
-              <Grid item xs={12} md={6}>
+              <Grid size={{ 'xs': 12, 'md': 6 }}>
                 <Card>
                   <CardContent>
                     <Typography variant="h6" gutterBottom>Most Frequent Values</Typography>
@@ -680,7 +680,7 @@ export default function ProfilerPage({ preselectedSchema, preselectedTable, pres
 
             {/* Data Patterns */}
             {patternsData.length > 0 && (
-              <Grid item xs={12} md={6}>
+              <Grid size={{ 'xs': 12, 'md': 6 }}>
                 <Card>
                   <CardContent>
                     <Typography variant="h6" gutterBottom>Data Patterns</Typography>
@@ -709,7 +709,7 @@ export default function ProfilerPage({ preselectedSchema, preselectedTable, pres
 
             {/* Length Distribution (if applicable) */}
             {selectedColumn.MinLength !== undefined && selectedColumn.MaxLength !== undefined && (
-              <Grid item xs={12}>
+              <Grid size={12}>
                 <Card>
                   <CardContent>
                     <Typography variant="h6" gutterBottom>Length Distribution</Typography>
@@ -950,11 +950,11 @@ export default function ProfilerPage({ preselectedSchema, preselectedTable, pres
                   {!selectedSchema && !selectedTable && !selectedSchemas.length && ' (All Available)'}
                 </Typography>
                 <Grid container spacing={2} alignItems="center">
-                  <Grid item xs={12} sm={2}>
+                  <Grid size={{ 'xs': 12, 'sm': 2 }}>
                     <Typography variant="body2" color="textSecondary">Columns</Typography>
                     <Typography variant="h5">{profileResults.length}</Typography>
                   </Grid>
-                  <Grid item xs={12} sm={2}>
+                  <Grid size={{ 'xs': 12, 'sm': 2 }}>
                     <Typography variant="body2" color="textSecondary">Avg Cardinality</Typography>
                     <Typography variant="h5">
                       {Math.round(profileResults.reduce((sum, p) => sum + p.Cardinality, 0) / profileResults.length).toLocaleString()}

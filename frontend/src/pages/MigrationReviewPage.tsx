@@ -178,7 +178,7 @@ const MigrationReviewPage: React.FC = () => {
       {/* Three-Panel Layout */}
       <Grid container spacing={2} sx={{ flex: 1, minHeight: 0 }}>
         {/* Left Panel: Source Code */}
-        <Grid item xs={4}>
+        <Grid size={4}>
           <Paper sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
             <Box sx={{ p: 1.5, borderBottom: 1, borderColor: 'divider', display: 'flex', alignItems: 'center', gap: 1 }}>
               <CodeIcon fontSize="small" />
@@ -197,7 +197,7 @@ const MigrationReviewPage: React.FC = () => {
         </Grid>
 
         {/* Center Panel: Extracted Intent */}
-        <Grid item xs={4}>
+        <Grid size={4}>
           <Paper sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
             <Box sx={{ p: 1.5, borderBottom: 1, borderColor: 'divider', display: 'flex', alignItems: 'center', gap: 1 }}>
               <PsychologyIcon fontSize="small" />

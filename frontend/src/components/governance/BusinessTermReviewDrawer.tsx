@@ -26,11 +26,11 @@ const BusinessTermReviewDrawer = ({ draft, onClose }) => {
 
             <Typography variant="subtitle1" gutterBottom>Compliance</Typography>
             <Grid container spacing={2} mb={2}>
-                <Grid item xs={4}>
+                <Grid size={4}>
                     <Typography variant="caption">PII</Typography>
                     <Box><Chip label={detail.piiFlag ? "Yes" : "No"} color="error" size="small" /></Box>
                 </Grid>
-                <Grid item xs={4}>
+                <Grid size={4}>
                     <Typography variant="caption">Sensitivity</Typography>
                     <Box><Chip label={detail.sensitivity} color="warning" size="small" /></Box>
                 </Grid>

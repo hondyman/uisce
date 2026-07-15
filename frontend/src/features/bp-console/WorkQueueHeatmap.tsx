@@ -111,7 +111,7 @@ const WorkQueueHeatmap: React.FC = () => {
 
       {/* Summary Cards */}
       <Grid container spacing={2} sx={{ mb: 3 }}>
-        <Grid item xs={12} md={3}>
+        <Grid size={{ 'xs': 12, 'md': 3 }}>
           <Card>
             <CardContent sx={{ pb: 1 }}>
               <Typography color="text.secondary" variant="caption">Total Pending</Typography>
@@ -119,7 +119,7 @@ const WorkQueueHeatmap: React.FC = () => {
             </CardContent>
           </Card>
         </Grid>
-        <Grid item xs={12} md={3}>
+        <Grid size={{ 'xs': 12, 'md': 3 }}>
           <Card>
             <CardContent sx={{ pb: 1 }}>
               <Typography color="text.secondary" variant="caption">SLA Breached</Typography>

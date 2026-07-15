@@ -294,7 +294,7 @@ export const QueryLibraryDashboard: React.FC = () => {
               </Typography>
               <Grid container spacing={2}>
                 {recentActivity.map((query) => (
-                  <Grid item xs={12} sm={6} md={3} key={query.id}>
+                  <Grid size={{ 'xs': 12, 'sm': 6, 'md': 3 }}>
                     <Paper
                       elevation={0}
                       sx={{
@@ -336,7 +336,7 @@ export const QueryLibraryDashboard: React.FC = () => {
               </Typography>
               <Grid container spacing={2}>
                 {filteredFolders.map((folder) => (
-                  <Grid item xs={12} sm={6} md={3} lg={2.4} key={folder.id}>
+                  <Grid size={{ 'xs': 12, 'sm': 6, 'md': 3, 'lg': 2.4 }}>
                      <Paper
                       elevation={0}
                       sx={{

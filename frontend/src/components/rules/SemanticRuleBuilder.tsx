@@ -152,14 +152,14 @@ export const SemanticRuleBuilder = ({
         {activeTab === 0 && (
           <Grid container spacing={2} sx={{ height: '100%' }}>
             {/* Left: Semantic Catalog */}
-            <Grid item xs={12} md={3} sx={{ overflow: 'auto' }}>
+            <Grid size={{ 'xs': 12, 'md': 3 }}>
               <Paper elevation={1} sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
                 <SemanticCatalog businessObject={businessObject} />
               </Paper>
             </Grid>
 
             {/* Center: Priority Hierarchy */}
-            <Grid item xs={12} md={6} sx={{ overflow: 'auto' }}>
+            <Grid size={{ 'xs': 12, 'md': 6 }}>
               <Paper elevation={1} sx={{ height: '100%', display: 'flex', flexDirection: 'column', p: 2 }}>
                 <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
                   <Typography variant="subtitle1" fontWeight="600">
@@ -247,7 +247,7 @@ export const SemanticRuleBuilder = ({
             </Grid>
 
             {/* Right: Simulation */}
-            <Grid item xs={12} md={3} sx={{ overflow: 'auto' }}>
+            <Grid size={{ 'xs': 12, 'md': 3 }}>
               <Paper elevation={1} sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
                 <SimulationPanel
                   rule={rule}

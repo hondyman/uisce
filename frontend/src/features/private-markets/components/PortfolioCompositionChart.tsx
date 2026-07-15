@@ -116,7 +116,7 @@ export const PortfolioCompositionChart: FC<PortfolioCompositionChartProps> = ({
 
         <Grid container spacing={1} sx={{ mt: 2 }}>
           {data.map((item, index) => (
-            <Grid item xs={6} sm={3} key={index}>
+            <Grid size={{ 'xs': 6, 'sm': 3 }}>
               <Box display="flex" alignItems="center" gap={1}>
                 <Box
                   sx={{

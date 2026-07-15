@@ -93,7 +93,7 @@ export const PreAggSuggestionsPanel: React.FC<PreAggSuggestionsPanelProps> = ({
         </Typography>
         <Grid container spacing={2}>
           {[1, 2, 3].map((i) => (
-            <Grid item xs={12} md={4} key={i}>
+            <Grid size={{ 'xs': 12, 'md': 4 }}>
               <Skeleton variant="rectangular" height={200} sx={{ borderRadius: 2 }} />
             </Grid>
           ))}
@@ -132,7 +132,7 @@ export const PreAggSuggestionsPanel: React.FC<PreAggSuggestionsPanelProps> = ({
       </Typography>
       <Grid container spacing={2}>
         {suggestions.map((sug, idx) => (
-          <Grid item xs={12} md={4} key={sug.fingerprint || idx}>
+          <Grid size={{ 'xs': 12, 'md': 4 }}>
             <Card 
               variant="outlined" 
               sx={{ 

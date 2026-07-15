@@ -230,7 +230,7 @@ const TemporalOpsPage: React.FC = () => {
       {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
 
       <Grid container spacing={2} sx={{ flex: 1, overflow: 'hidden' }}>
-        <Grid item xs={12} md={7} sx={{ display: 'flex', flexDirection: 'column' }}>
+        <Grid size={{ 'xs': 12, 'md': 7 }}>
           <Paper variant="outlined">
             <Tabs value={activeTab} onChange={(_, v) => setActiveTab(v)} sx={{ borderBottom: 1, borderColor: 'divider' }}>
               <Tab label="Running" />
@@ -247,7 +247,7 @@ const TemporalOpsPage: React.FC = () => {
           </Paper>
         </Grid>
 
-        <Grid item xs={12} md={5} sx={{ display: 'flex', flexDirection: 'column' }}>
+        <Grid size={{ 'xs': 12, 'md': 5 }}>
           <Paper variant="outlined" sx={{ flex: 1, position: 'sticky', top: '80px' }}>
             {selectedWorkflow ? (
               <Suspense fallback={<Box sx={{ p: 4, textAlign: 'center' }}><CircularProgress /></Box>}>

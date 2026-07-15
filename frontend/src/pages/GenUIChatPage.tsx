@@ -175,7 +175,7 @@ export default function GenUIChatPage() {
                 { label: "Risks of Futures Trading", query: "What are the risks of Futures Trading?" },
                 { label: "Impact of Rate Hikes", query: "Analyze impact of rate hikes on Real Estate" }
               ].map((btn, index) => (
-                <Grid item xs={12} md={4} key={index}>
+                <Grid size={{ 'xs': 12, 'md': 4 }}>
                   <Button 
                     fullWidth 
                     variant="outlined" 

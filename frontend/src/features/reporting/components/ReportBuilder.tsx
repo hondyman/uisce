@@ -338,7 +338,7 @@ const RunReportDialog: React.FC<RunReportDialogProps> = ({
             </Typography>
             <Grid container spacing={2}>
               {parameters.map((param) => (
-                <Grid item xs={12} sm={6} key={param.name}>
+                <Grid size={{ 'xs': 12, 'sm': 6 }}>
                   <ParameterInput
                     parameter={param}
                     value={paramValues[param.name]}
@@ -560,7 +560,7 @@ export const ReportBuilder: React.FC<ReportBuilderProps> = ({
           {/* Report Grid */}
           <Grid container spacing={2}>
             {filteredReports.map((report) => (
-              <Grid item xs={12} sm={6} md={4} key={report.id}>
+              <Grid size={{ 'xs': 12, 'sm': 6, 'md': 4 }}>
                 <ReportCard report={report} onRun={handleRunClick} />
               </Grid>
             ))}

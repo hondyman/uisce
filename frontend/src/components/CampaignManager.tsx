@@ -318,7 +318,7 @@ function CreateCampaignDialog({ open, onClose, onCreate }: CreateCampaignDialogP
       <form onSubmit={handleSubmit}>
         <DialogContent>
           <Grid container spacing={2}>
-            <Grid item xs={12}>
+            <Grid size={12}>
               <TextField
                 fullWidth
                 label="Campaign Name"
@@ -327,7 +327,7 @@ function CreateCampaignDialog({ open, onClose, onCreate }: CreateCampaignDialogP
                 required
               />
             </Grid>
-            <Grid item xs={12}>
+            <Grid size={12}>
               <TextField
                 fullWidth
                 label="Description"
@@ -337,7 +337,7 @@ function CreateCampaignDialog({ open, onClose, onCreate }: CreateCampaignDialogP
                 rows={3}
               />
             </Grid>
-            <Grid item xs={6}>
+            <Grid size={6}>
               <FormControl fullWidth>
                 <InputLabel>Campaign Type</InputLabel>
                 <Select
@@ -351,7 +351,7 @@ function CreateCampaignDialog({ open, onClose, onCreate }: CreateCampaignDialogP
                 </Select>
               </FormControl>
             </Grid>
-            <Grid item xs={6}>
+            <Grid size={6}>
               <TextField
                 fullWidth
                 label="User Segment (optional)"

@@ -118,7 +118,7 @@ export const MobileResponsiveFoFPrivateMarketsDashboard: React.FC<MobileResponsi
         { title: 'Manager Count', value: '47', change: '+3', icon: <Assessment />, color: 'info' },
         { title: 'Diversification', value: '89%', change: '+1.2%', icon: <WaterDrop />, color: 'warning' },
       ].map((metric, index) => (
-        <Grid item xs={6} sm={6} md={3} key={index}>
+        <Grid size={{ 'xs': 6, 'sm': 6, 'md': 3 }}>
           <Card
             sx={{
               height: isMobile ? '80px' : '100px',
@@ -413,14 +413,14 @@ export const MobileResponsiveFoFPrivateMarketsDashboard: React.FC<MobileResponsi
 
           {activeTab === 0 && (
             <Grid container spacing={3}>
-              <Grid item xs={12} lg={6}>
+              <Grid size={{ 'xs': 12, 'lg': 6 }}>
                 <ChartContainer title="Fund-of-Funds Allocation" chartId="allocation">
                   <FundOfFundsAllocationChart
                     selectedFunds={selectedFunds}
                   />
                 </ChartContainer>
               </Grid>
-              <Grid item xs={12} lg={6}>
+              <Grid size={{ 'xs': 12, 'lg': 6 }}>
                 <ChartContainer title="Portfolio Composition" chartId="composition">
                   <PortfolioCompositionChart
                     selectedFunds={selectedFunds}

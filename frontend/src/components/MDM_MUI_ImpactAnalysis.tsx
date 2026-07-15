@@ -266,7 +266,7 @@ export const ImpactAnalysisDashboard: React.FC = () => {
             <TabPanel value={activeTab} index={0}>
               <Grid container spacing={3}>
                 {/* KPI Cards */}
-                <Grid item xs={12} sm={6} md={3}>
+                <Grid size={{ 'xs': 12, 'sm': 6, 'md': 3 }}>
                   <Card>
                     <CardContent>
                       <Stack direction="row" justifyContent="space-between" alignItems="start">
@@ -300,7 +300,7 @@ export const ImpactAnalysisDashboard: React.FC = () => {
                   </Card>
                 </Grid>
 
-                <Grid item xs={12} sm={6} md={3}>
+                <Grid size={{ 'xs': 12, 'sm': 6, 'md': 3 }}>
                   <Card>
                     <CardContent>
                       <Stack direction="row" justifyContent="space-between" alignItems="start">
@@ -402,7 +402,7 @@ export const ImpactAnalysisDashboard: React.FC = () => {
                 </Grid>
 
                 {/* Top Impact Areas */}
-                <Grid item xs={12}>
+                <Grid size={12}>
                   <Card>
                     <CardHeader
                       title="Top Impact Areas by Revenue"
@@ -466,7 +466,7 @@ export const ImpactAnalysisDashboard: React.FC = () => {
             {/* Business Unit Breakdown Tab */}
             <TabPanel value={activeTab} index={1}>
               <Grid container spacing={3}>
-                <Grid item xs={12}>
+                <Grid size={12}>
                   <Card>
                     <CardHeader title="Business Unit Analysis" />
                     <TableContainer>
@@ -551,7 +551,7 @@ export const ImpactAnalysisDashboard: React.FC = () => {
             {/* Process Distribution Tab */}
             <TabPanel value={activeTab} index={2}>
               <Grid container spacing={3}>
-                <Grid item xs={12} md={6}>
+                <Grid size={{ 'xs': 12, 'md': 6 }}>
                   <Card>
                     <CardHeader title="Rule Application by Process Type" />
                     <CardContent>
@@ -593,7 +593,7 @@ export const ImpactAnalysisDashboard: React.FC = () => {
                   </Card>
                 </Grid>
 
-                <Grid item xs={12} md={6}>
+                <Grid size={{ 'xs': 12, 'md': 6 }}>
                   <Card>
                     <CardHeader title="Platform Distribution" />
                     <CardContent>

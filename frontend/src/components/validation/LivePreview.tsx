@@ -285,14 +285,14 @@ const LivePreview: React.FC<LivePreviewProps> = ({ rule, onTestResults }) => {
               <>
                 {/* Results Summary */}
                 <Grid container spacing={2} sx={{ mb: 3 }}>
-                  <Grid item xs={6} sm={3}>
+                  <Grid size={{ 'xs': 6, 'sm': 3 }}>
                     <Paper sx={{ p: 2, textAlign: 'center', bgcolor: '#e8f5e9' }}>
                       <CheckCircleIcon sx={{ color: '#4caf50', mb: 1, fontSize: 32 }} />
                       <Typography variant="h6">{passCount}</Typography>
                       <Typography variant="caption">Passed</Typography>
                     </Paper>
                   </Grid>
-                  <Grid item xs={6} sm={3}>
+                  <Grid size={{ 'xs': 6, 'sm': 3 }}>
                     <Paper sx={{ p: 2, textAlign: 'center', bgcolor: '#fff3e0' }}>
                       <WarningIcon sx={{ color: '#ff9800', mb: 1, fontSize: 32 }} />
                       <Typography variant="h6">{warningCount}</Typography>

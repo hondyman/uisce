@@ -31,7 +31,7 @@ const AIBusinessTermSuggestionsPage = () => {
             {/* Filters Bar */}
             <Paper sx={{ p: 2, mb: 3 }}>
                 <Grid container spacing={2} alignItems="center">
-                    <Grid item xs={3}>
+                    <Grid size={3}>
                         <TextField 
                             select fullWidth label="Status" 
                             value={filterStatus}
@@ -42,10 +42,10 @@ const AIBusinessTermSuggestionsPage = () => {
                             <MenuItem value="REJECTED">Rejected</MenuItem>
                         </TextField>
                     </Grid>
-                    <Grid item xs={3}>
+                    <Grid size={3}>
                         <TextField fullWidth label="Search" placeholder="Name or Definition..." />
                     </Grid>
-                    <Grid item xs={6} display="flex" justifyContent="flex-end">
+                    <Grid size={6}>
                         <Button variant="contained">Generate New</Button>
                     </Grid>
                 </Grid>

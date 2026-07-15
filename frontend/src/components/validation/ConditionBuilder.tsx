@@ -173,7 +173,7 @@ const ConditionBuilder: React.FC<ConditionBuilderProps> = ({ value, onChange }) 
   }> = ({ cond, onUpdate }) => (
     <Box className={classes.conditionBlock}>
       <Grid container spacing={1} alignItems="flex-end">
-        <Grid item xs={12} sm={4}>
+        <Grid size={{ 'xs': 12, 'sm': 4 }}>
           <TextField
             fullWidth
             label="Field"
@@ -183,7 +183,7 @@ const ConditionBuilder: React.FC<ConditionBuilderProps> = ({ value, onChange }) 
             placeholder="e.g., age, status"
           />
         </Grid>
-        <Grid item xs={12} sm={3}>
+        <Grid size={{ 'xs': 12, 'sm': 3 }}>
           <FormControl fullWidth size="small">
             <InputLabel>Operator</InputLabel>
             <Select
@@ -199,7 +199,7 @@ const ConditionBuilder: React.FC<ConditionBuilderProps> = ({ value, onChange }) 
             </Select>
           </FormControl>
         </Grid>
-        <Grid item xs={12} sm={5}>
+        <Grid size={{ 'xs': 12, 'sm': 5 }}>
           <TextField
             fullWidth
             label="Value"

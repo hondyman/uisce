@@ -57,7 +57,7 @@ const HierarchyDrillMembersEditor: React.FC<Props> = ({ hierarchies, drillMember
   return (
     <Box sx={{ p: 2 }}>
       <Grid container spacing={2}>
-        <Grid item xs={12} md={6}>
+        <Grid size={{ 'xs': 12, 'md': 6 }}>
           <Paper sx={{ p: 2 }}>
             <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
               <Typography variant="h6">Hierarchies</Typography>
@@ -93,7 +93,7 @@ const HierarchyDrillMembersEditor: React.FC<Props> = ({ hierarchies, drillMember
           </Paper>
         </Grid>
 
-        <Grid item xs={12} md={6}>
+        <Grid size={{ 'xs': 12, 'md': 6 }}>
           <Paper sx={{ p: 2 }}>
             <Typography variant="h6" sx={{ mb: 1 }}>Drill Members</Typography>
             <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>

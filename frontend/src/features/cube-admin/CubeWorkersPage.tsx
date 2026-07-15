@@ -315,7 +315,7 @@ const CubeWorkersPage: React.FC = () => {
 
       {/* Summary Cards */}
       <Grid container spacing={3} sx={{ mb: 3 }}>
-        <Grid item xs={12} sm={6} md={3}>
+        <Grid size={{ 'xs': 12, 'sm': 6, 'md': 3 }}>
           <Card>
             <CardContent>
               <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
@@ -328,7 +328,7 @@ const CubeWorkersPage: React.FC = () => {
             </CardContent>
           </Card>
         </Grid>
-        <Grid item xs={12} sm={6} md={3}>
+        <Grid size={{ 'xs': 12, 'sm': 6, 'md': 3 }}>
           <Card>
             <CardContent>
               <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
@@ -395,7 +395,7 @@ const CubeWorkersPage: React.FC = () => {
       <TabPanel value={tabValue} index={0}>
         <Grid container spacing={3}>
           {pools.map((pool) => (
-            <Grid item xs={12} md={6} key={pool.id}>
+            <Grid size={{ 'xs': 12, 'md': 6 }}>
               <Card variant="outlined">
                 <CardContent>
                   <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2 }}>
@@ -416,7 +416,7 @@ const CubeWorkersPage: React.FC = () => {
                   </Box>
 
                   <Grid container spacing={2}>
-                    <Grid item xs={6}>
+                    <Grid size={6}>
                       <Typography variant="caption" color="text.secondary">
                         Workers
                       </Typography>
@@ -429,7 +429,7 @@ const CubeWorkersPage: React.FC = () => {
                         sx={{ mt: 1 }}
                       />
                     </Grid>
-                    <Grid item xs={6}>
+                    <Grid size={6}>
                       <Typography variant="caption" color="text.secondary">
                         Queue Size
                       </Typography>
@@ -494,7 +494,7 @@ const CubeWorkersPage: React.FC = () => {
           ))}
 
           {pools.length === 0 && (
-            <Grid item xs={12}>
+            <Grid size={12}>
               <Alert severity="info">
                 No worker pools configured. Create a pool to start managing pre-aggregation workers.
               </Alert>
@@ -590,7 +590,7 @@ const CubeWorkersPage: React.FC = () => {
         {/* Queue Stats */}
         {queueStats && (
           <Grid container spacing={2} sx={{ mb: 3 }}>
-            <Grid item xs={2}>
+            <Grid size={2}>
               <Paper sx={{ p: 2, textAlign: 'center' }}>
                 <Typography variant="h4" color="warning.main">
                   {queueStats.pending}
@@ -598,7 +598,7 @@ const CubeWorkersPage: React.FC = () => {
                 <Typography variant="caption">Pending</Typography>
               </Paper>
             </Grid>
-            <Grid item xs={2}>
+            <Grid size={2}>
               <Paper sx={{ p: 2, textAlign: 'center' }}>
                 <Typography variant="h4" color="info.main">
                   {queueStats.running}
@@ -622,7 +622,7 @@ const CubeWorkersPage: React.FC = () => {
                 <Typography variant="caption">Failed (1h)</Typography>
               </Paper>
             </Grid>
-            <Grid item xs={4}>
+            <Grid size={4}>
               <Paper sx={{ p: 2, textAlign: 'center' }}>
                 <Typography variant="h4">
                   {formatDuration(queueStats.avg_duration_ms)}
@@ -745,7 +745,7 @@ const CubeWorkersPage: React.FC = () => {
         
         <Grid container spacing={3}>
           {pools.map((pool) => (
-            <Grid item xs={12} md={6} key={pool.id}>
+            <Grid size={{ 'xs': 12, 'md': 6 }}>
               <Paper sx={{ p: 3 }}>
                 <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
                   <Typography variant="h6">{pool.display_name}</Typography>
@@ -812,7 +812,7 @@ const CubeWorkersPage: React.FC = () => {
       {/* Metrics Tab */}
       <TabPanel value={tabValue} index={3}>
         <Grid container spacing={3}>
-          <Grid item xs={12} md={6}>
+          <Grid size={{ 'xs': 12, 'md': 6 }}>
             <Paper sx={{ p: 3 }}>
               <Typography variant="h6" gutterBottom>
                 Job Throughput (24h)
@@ -824,7 +824,7 @@ const CubeWorkersPage: React.FC = () => {
               </Box>
             </Paper>
           </Grid>
-          <Grid item xs={12} md={6}>
+          <Grid size={{ 'xs': 12, 'md': 6 }}>
             <Paper sx={{ p: 3 }}>
               <Typography variant="h6" gutterBottom>
                 Job Duration Distribution

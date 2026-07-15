@@ -707,7 +707,7 @@ const CalculationsLibraryPage: React.FC<CalculationsLibraryPageProps> = () => {
             {/* Calculations Grid */}
             <Grid container spacing={3}>
               {filteredCalculations.map((calculation) => (
-                <Grid item xs={12} sm={6} md={4} key={calculation.name}>
+                <Grid size={{ 'xs': 12, 'sm': 6, 'md': 4 }}>
                   <Card sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
                     <CardContent sx={{ flexGrow: 1 }}>
                       <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
@@ -948,7 +948,7 @@ const CalculationEditorModal: React.FC<CalculationEditorModalProps> = ({ open, o
   <ModalHeader title={isNew ? 'Add New Calculation' : `Edit: ${calculation?.title}`} onClose={onClose} />
       <DialogContent>
         <Grid container spacing={2} sx={{ pt: 2 }}>
-          <Grid item xs={6}>
+          <Grid size={6}>
             <TextField
               label="Name (ID)"
               value={formData.name || ''}
@@ -960,7 +960,7 @@ const CalculationEditorModal: React.FC<CalculationEditorModalProps> = ({ open, o
               disabled={!isNew}
             />
           </Grid>
-          <Grid item xs={6}>
+          <Grid size={6}>
             <TextField
               label="Title"
               value={formData.title || ''}
@@ -971,7 +971,7 @@ const CalculationEditorModal: React.FC<CalculationEditorModalProps> = ({ open, o
               helperText={errors.title}
             />
           </Grid>
-          <Grid item xs={12}>
+          <Grid size={12}>
             <TextField
               label="Description"
               value={formData.description || ''}
@@ -989,10 +989,10 @@ const CalculationEditorModal: React.FC<CalculationEditorModalProps> = ({ open, o
           </Grid>
           
           {/* Domain Selection */}
-          <Grid item xs={12}>
+          <Grid size={12}>
             <Typography variant="subtitle2" gutterBottom>Domain Classification</Typography>
             <Grid container spacing={2}>
-              <Grid item xs={4}>
+              <Grid size={4}>
                 <FormControl fullWidth size="small">
                   <InputLabel>Domain Level 1</InputLabel>
                   <Select
@@ -1004,7 +1004,7 @@ const CalculationEditorModal: React.FC<CalculationEditorModalProps> = ({ open, o
                   </Select>
                 </FormControl>
               </Grid>
-              <Grid item xs={4}>
+              <Grid size={4}>
                 <FormControl fullWidth size="small" disabled={!selectedLevel1}>
                   <InputLabel>Domain Level 2</InputLabel>
                   <Select

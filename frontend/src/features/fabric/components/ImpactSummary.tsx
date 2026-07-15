@@ -17,7 +17,7 @@ interface ImpactSummaryProps {
 }
 
 const StatCard: FC<{ title: string; value: ReactNode }> = ({ title, value }) => (
-  <Grid item xs={6} sm={3}>
+  <Grid size={{ 'xs': 6, 'sm': 3 }}>
     <Paper variant="outlined" sx={{ p: 2, textAlign: 'center' }}>
       <Typography color="text.secondary" gutterBottom>
         {title}

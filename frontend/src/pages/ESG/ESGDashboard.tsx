@@ -137,7 +137,7 @@ export const ESGDashboard: React.FC = () => {
 
       {/* ESG Score Cards */}
       <Grid container spacing={3} sx={{ mb: 3 }}>
-        <Grid item xs={12} md={3}>
+        <Grid size={{ 'xs': 12, 'md': 3 }}>
           <Card>
             <CardContent>
               <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
@@ -156,7 +156,7 @@ export const ESGDashboard: React.FC = () => {
           </Card>
         </Grid>
 
-        <Grid item xs={12} md={3}>
+        <Grid size={{ 'xs': 12, 'md': 3 }}>
           <Card>
             <CardContent>
               <Typography color="text.secondary" gutterBottom>
@@ -216,7 +216,7 @@ export const ESGDashboard: React.FC = () => {
 
       {/* Carbon Metrics */}
       <Grid container spacing={3} sx={{ mb: 3 }}>
-        <Grid item xs={12} md={6}>
+        <Grid size={{ 'xs': 12, 'md': 6 }}>
           <Card>
             <CardContent>
               <Typography variant="h6" gutterBottom>
@@ -245,7 +245,7 @@ export const ESGDashboard: React.FC = () => {
           </Card>
         </Grid>
 
-        <Grid item xs={12} md={6}>
+        <Grid size={{ 'xs': 12, 'md': 6 }}>
           <Card>
             <CardContent>
               <Typography variant="h6" gutterBottom>
@@ -275,7 +275,7 @@ export const ESGDashboard: React.FC = () => {
       {/* SDG Impact Tab */}
       {tab === 0 && (
         <Grid container spacing={3}>
-          <Grid item xs={12}>
+          <Grid size={12}>
             <Paper sx={{ p: 3 }}>
               <Typography variant="h6" gutterBottom>
                 UN Sustainable Development Goals Alignment

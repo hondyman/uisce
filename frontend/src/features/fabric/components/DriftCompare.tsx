@@ -85,7 +85,7 @@ const DriftCompare: FC<DriftCompareProps> = ({ diff }) => {
 
   return (
     <Grid container spacing={4}>
-      <Grid item xs={12} md={6}>
+      <Grid size={{ 'xs': 12, 'md': 6 }}>
         <Typography variant="h5" gutterBottom sx={{color: 'success.main'}}>Added</Typography>
         {Object.keys(addedBySeverity).length > 0 ? (Object.entries(addedBySeverity).map(([sev, entries]: [string, DriftLogEntry[]]) => (
           <SeveritySection key={`added-${sev}`} severity={sev} entries={entries} />
@@ -93,7 +93,7 @@ const DriftCompare: FC<DriftCompareProps> = ({ diff }) => {
           <Typography color="text.secondary">No new entries.</Typography>
         )}
       </Grid>
-      <Grid item xs={12} md={6}>
+      <Grid size={{ 'xs': 12, 'md': 6 }}>
         <Typography variant="h5" gutterBottom sx={{color: 'error.main'}}>Removed</Typography>
         {Object.keys(removedBySeverity).length > 0 ? (Object.entries(removedBySeverity).map(([sev, entries]: [string, DriftLogEntry[]]) => (
           <SeveritySection key={`removed-${sev}`} severity={sev} entries={entries} />
@@ -102,7 +102,7 @@ const DriftCompare: FC<DriftCompareProps> = ({ diff }) => {
         )}
       </Grid>
       {diff.changed.length > 0 && (
-        <Grid item xs={12}>
+        <Grid size={12}>
           <Typography variant="h5" gutterBottom sx={{color: 'warning.main'}}>Changed</Typography>
           {diff.changed.map((change) => (
             <ChangedEntryDiff key={change.before.qualified_path} {...change} />

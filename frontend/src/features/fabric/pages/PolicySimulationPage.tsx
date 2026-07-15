@@ -114,7 +114,7 @@ const PolicySimulationPage: React.FC = () => {
 
       <Paper component="form" onSubmit={handleSubmit} sx={{ p: 3 }}>
         <Grid container spacing={3}>
-          <Grid item xs={12}>
+          <Grid size={12}>
             <FormControl fullWidth required>
               <InputLabel id="policy-select-label">Policy</InputLabel>
               <Select
@@ -133,7 +133,7 @@ const PolicySimulationPage: React.FC = () => {
               <FormHelperText>Select the policy version to test against.</FormHelperText>
             </FormControl>
           </Grid>
-          <Grid item xs={12} sm={6}>
+          <Grid size={{ 'xs': 12, 'sm': 6 }}>
             <FormControl fullWidth required>
               <InputLabel id="from-ds-select-label">From Datasource</InputLabel>
               <Select
@@ -152,7 +152,7 @@ const PolicySimulationPage: React.FC = () => {
               <FormHelperText>The 'before' state for the simulation.</FormHelperText>
             </FormControl>
           </Grid>
-          <Grid item xs={12} sm={6}>
+          <Grid size={{ 'xs': 12, 'sm': 6 }}>
             <FormControl fullWidth required>
               <InputLabel id="to-ds-select-label">To Datasource</InputLabel>
               <Select
@@ -171,7 +171,7 @@ const PolicySimulationPage: React.FC = () => {
               <FormHelperText>The 'after' state for the simulation.</FormHelperText>
             </FormControl>
           </Grid>
-          <Grid item xs={12}>
+          <Grid size={12}>
             <Button type="submit" variant="contained" disabled={simLoading || !policyId || !fromDs || !toDs}>
               {simLoading ? <CircularProgress size={24} /> : 'Run Simulation'}
             </Button>

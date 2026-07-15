@@ -82,7 +82,7 @@ export const FundPerformanceTracker: FC<FundPerformanceTrackerProps> = ({
         </Typography>
 
         <Grid container spacing={2}>
-          <Grid item xs={12} sm={6}>
+          <Grid size={{ 'xs': 12, 'sm': 6 }}>
             <Box>
               <Typography variant="body2" color="text.secondary">
                 TVPI
@@ -93,7 +93,7 @@ export const FundPerformanceTracker: FC<FundPerformanceTrackerProps> = ({
             </Box>
           </Grid>
 
-          <Grid item xs={12} sm={6}>
+          <Grid size={{ 'xs': 12, 'sm': 6 }}>
             <Box>
               <Typography variant="body2" color="text.secondary">
                 IRR
@@ -113,7 +113,7 @@ export const FundPerformanceTracker: FC<FundPerformanceTrackerProps> = ({
 
           {showDetails && (
             <>
-              <Grid item xs={12}>
+              <Grid size={12}>
                 <Box>
                   <Typography variant="body2" color="text.secondary" gutterBottom>
                     IRR Progress vs Target ({performanceData.targetIrr.toFixed(1)}%)
@@ -130,7 +130,7 @@ export const FundPerformanceTracker: FC<FundPerformanceTrackerProps> = ({
                 </Box>
               </Grid>
 
-              <Grid item xs={12}>
+              <Grid size={12}>
                 <Box display="flex" justifyContent="space-between" alignItems="center">
                   <Box>
                     <Typography variant="body2" color="text.secondary">

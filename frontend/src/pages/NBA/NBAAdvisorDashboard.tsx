@@ -228,7 +228,7 @@ export const NBAAdvisorDashboard: React.FC = () => {
       {/* Stats Cards */}
       {stats && (
         <Grid container spacing={3} sx={{ mb: 4 }}>
-          <Grid item xs={12} sm={6} md={3}>
+          <Grid size={{ 'xs': 12, 'sm': 6, 'md': 3 }}>
             <Card>
               <CardContent>
                 <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
@@ -242,7 +242,7 @@ export const NBAAdvisorDashboard: React.FC = () => {
             </Card>
           </Grid>
 
-          <Grid item xs={12} sm={6} md={3}>
+          <Grid size={{ 'xs': 12, 'sm': 6, 'md': 3 }}>
             <Card>
               <CardContent>
                 <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
@@ -323,12 +323,12 @@ export const NBAAdvisorDashboard: React.FC = () => {
       {/* Recommendations List */}
       <Grid container spacing={2}>
         {filteredRecommendations.map((rec) => (
-          <Grid item xs={12} key={rec.recommendation_id}>
+          <Grid size={12}>
             <Card variant="outlined" sx={{ '&:hover': { boxShadow: 3 } }}>
               <CardContent>
                 <Grid container spacing={2}>
                   {/* Left: Client Info & Action */}
-                  <Grid item xs={12} md={8}>
+                  <Grid size={{ 'xs': 12, 'md': 8 }}>
                     <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
                       <Typography variant="h6" sx={{ mr: 2 }}>
                         {rec.client_name || `Client ${rec.client_id.substring(0, 8)}`}
@@ -383,7 +383,7 @@ export const NBAAdvisorDashboard: React.FC = () => {
                   </Grid>
 
                   {/* Right: Actions */}
-                  <Grid item xs={12} md={4}>
+                  <Grid size={{ 'xs': 12, 'md': 4 }}>
                     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, height: '100%', justifyContent: 'center' }}>
                       <Button
                         variant="contained"
@@ -416,7 +416,7 @@ export const NBAAdvisorDashboard: React.FC = () => {
         ))}
 
         {filteredRecommendations.length === 0 && (
-          <Grid item xs={12}>
+          <Grid size={12}>
             <Alert severity="success">
               <Typography variant="h6">All caught up!</Typography>
               <Typography variant="body2">

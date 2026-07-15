@@ -114,7 +114,7 @@ export const AccessRuleDetailPage: React.FC = () => {
 
       {/* Overview Cards */}
       <Grid container spacing={2} sx={{ mb: 3 }}>
-        <Grid item xs={12} md={4}>
+        <Grid size={{ 'xs': 12, 'md': 4 }}>
           <Card>
             <CardContent>
               <Typography variant="caption" color="text.secondary">
@@ -126,7 +126,7 @@ export const AccessRuleDetailPage: React.FC = () => {
             </CardContent>
           </Card>
         </Grid>
-        <Grid item xs={12} md={4}>
+        <Grid size={{ 'xs': 12, 'md': 4 }}>
           <Card>
             <CardContent>
               <Typography variant="caption" color="text.secondary">
@@ -170,7 +170,7 @@ export const AccessRuleDetailPage: React.FC = () => {
                 Rule Configuration
               </Typography>
               <Grid container spacing={2}>
-                <Grid item xs={12} md={6}>
+                <Grid size={{ 'xs': 12, 'md': 6 }}>
                   <Typography variant="caption" color="text.secondary">
                     Applies to APIs
                   </Typography>
@@ -178,7 +178,7 @@ export const AccessRuleDetailPage: React.FC = () => {
                     {rule.scope?.appliesToApis ? 'Yes' : 'No'}
                   </Typography>
                 </Grid>
-                <Grid item xs={12} md={6}>
+                <Grid size={{ 'xs': 12, 'md': 6 }}>
                   <Typography variant="caption" color="text.secondary">
                     Applies to BI
                   </Typography>

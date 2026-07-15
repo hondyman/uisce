@@ -363,19 +363,7 @@ export const CustomDashboardBuilder: React.FC<CustomDashboardBuilderProps> = ({
             <Droppable droppableId="dashboard-grid">
               {(provided: any, snapshot: any) => (
                 <Grid
-                  item
-                  xs={12}
-                  ref={provided.innerRef}
-                  {...provided.droppableProps}
-                  sx={{
-                    minHeight: 400,
-                    bgcolor: snapshot.isDraggingOver ? 'grey.100' : 'transparent',
-                    border: snapshot.isDraggingOver ? '2px dashed' : '2px solid transparent',
-                    borderColor: snapshot.isDraggingOver ? 'primary.main' : 'transparent',
-                    borderRadius: 1,
-                    p: 2,
-                  }}
-                >
+                  size={12}>
                   {dashboard.widgets.length === 0 ? (
                     <Box
                       sx={{
@@ -399,18 +387,7 @@ export const CustomDashboardBuilder: React.FC<CustomDashboardBuilderProps> = ({
                       <Draggable key={widget.id} draggableId={widget.id} index={index}>
                         {(provided: any, snapshot: any) => (
                           <Grid
-                            item
-                            xs={12}
-                            sm={6}
-                            md={4}
-                            lg={3}
-                            ref={provided.innerRef}
-                            {...provided.draggableProps}
-                            sx={{
-                              mb: 2,
-                              opacity: snapshot.isDragging ? 0.5 : 1,
-                            }}
-                          >
+                            size={{ 'xs': 12, 'sm': 6, 'md': 4, 'lg': 3 }}>
                             <Box {...provided.dragHandleProps} sx={{ cursor: 'grab', mb: 1 }}>
                               <DragIcon />
                             </Box>

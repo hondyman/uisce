@@ -117,7 +117,7 @@ export const MobileResponsiveGPPrivateMarketsDashboard: React.FC<MobileResponsiv
         { title: 'Active Funds', value: '12', change: '+1', icon: <Assessment />, color: 'info' },
         { title: 'Capital Deployed', value: '72%', change: '+5.1%', icon: <WaterDrop />, color: 'warning' },
       ].map((metric, index) => (
-        <Grid item xs={6} sm={6} md={3} key={index}>
+        <Grid size={{ 'xs': 6, 'sm': 6, 'md': 3 }}>
           <Card
             sx={{
               height: isMobile ? '80px' : '100px',
@@ -412,14 +412,14 @@ export const MobileResponsiveGPPrivateMarketsDashboard: React.FC<MobileResponsiv
 
           {activeTab === 0 && (
             <Grid container spacing={3}>
-              <Grid item xs={12} lg={6}>
+              <Grid size={{ 'xs': 12, 'lg': 6 }}>
                 <ChartContainer title="Fund Performance Tracker" chartId="performance">
                   <FundPerformanceTracker
                     selectedFunds={selectedFunds}
                   />
                 </ChartContainer>
               </Grid>
-              <Grid item xs={12} lg={6}>
+              <Grid size={{ 'xs': 12, 'lg': 6 }}>
                 <ChartContainer title="IRR Curves" chartId="irr">
                   <IRRCurveChart
                     selectedFunds={selectedFunds}

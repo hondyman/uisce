@@ -151,7 +151,7 @@ export const ComplianceReportPage: React.FC = () => {
           </Box>
 
           <Grid container spacing={3}>
-            <Grid item xs={12} md={6} lg={3}>
+            <Grid size={{ 'xs': 12, 'md': 6, 'lg': 3 }}>
               <Paper elevation={0} sx={{ p: 2, bgcolor: 'grey.50', textAlign: 'center' }}>
                 <Typography variant="h3" color="primary">
                   {executive_summary.breaking_changes}
@@ -161,7 +161,7 @@ export const ComplianceReportPage: React.FC = () => {
                 </Typography>
               </Paper>
             </Grid>
-            <Grid item xs={12} md={6} lg={3}>
+            <Grid size={{ 'xs': 12, 'md': 6, 'lg': 3 }}>
               <Paper elevation={0} sx={{ p: 2, bgcolor: 'grey.50', textAlign: 'center' }}>
                 <Typography variant="h3" color="success.main">
                   {executive_summary.additive_changes}
@@ -261,7 +261,7 @@ export const ComplianceReportPage: React.FC = () => {
           {/* Test Results Tab */}
           <TabPanel value={currentTab} index={1}>
             <Grid container spacing={2} sx={{ mb: 3 }}>
-              <Grid item xs={6} md={3}>
+              <Grid size={{ 'xs': 6, 'md': 3 }}>
                 <Paper elevation={0} sx={{ p: 2, bgcolor: 'grey.50' }}>
                   <Typography variant="h4">{test_summary.total_tests}</Typography>
                   <Typography variant="caption" color="text.secondary">
@@ -269,7 +269,7 @@ export const ComplianceReportPage: React.FC = () => {
                   </Typography>
                 </Paper>
               </Grid>
-              <Grid item xs={6} md={3}>
+              <Grid size={{ 'xs': 6, 'md': 3 }}>
                 <Paper elevation={0} sx={{ p: 2, bgcolor: 'success.50' }}>
                   <Typography variant="h4" color="success.main">
                     {test_summary.passed_tests}
@@ -380,7 +380,7 @@ export const ComplianceReportPage: React.FC = () => {
           {/* Deployment Log Tab */}
           <TabPanel value={currentTab} index={3}>
             <Grid container spacing={2}>
-              <Grid item xs={12} md={4}>
+              <Grid size={{ 'xs': 12, 'md': 4 }}>
                 <Paper elevation={0} sx={{ p: 2, bgcolor: 'grey.50' }}>
                   <Typography variant="h4">{deployment_log.target_tenants.length}</Typography>
                   <Typography variant="caption" color="text.secondary">
@@ -388,7 +388,7 @@ export const ComplianceReportPage: React.FC = () => {
                   </Typography>
                 </Paper>
               </Grid>
-              <Grid item xs={12} md={4}>
+              <Grid size={{ 'xs': 12, 'md': 4 }}>
                 <Paper elevation={0} sx={{ p: 2, bgcolor: 'success.50' }}>
                   <Typography variant="h4" color="success.main">
                     {deployment_log.successful_deploys}

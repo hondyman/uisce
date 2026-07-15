@@ -177,7 +177,7 @@ export const MultipleOverlayPanel: React.FC<MultipleOverlayPanelProps> = ({ sele
 
       <Grid container spacing={2}>
         {metrics.map((fund) => (
-          <Grid item xs={12} key={fund.fundId}>
+          <Grid size={12}>
             <Box mb={2}>
               <Box display="flex" alignItems="center" justifyContent="space-between" mb={2}>
                 <Typography variant="subtitle1" fontWeight="bold">
@@ -198,7 +198,7 @@ export const MultipleOverlayPanel: React.FC<MultipleOverlayPanelProps> = ({ sele
               </Box>
 
               <Grid container spacing={2}>
-                <Grid item xs={6} sm={3}>
+                <Grid size={{ 'xs': 6, 'sm': 3 }}>
                   <Tooltip title="Distributed to Paid-in Capital - Realized returns as multiple of invested capital">
                     <div>
                       <MetricCard
@@ -213,7 +213,7 @@ export const MultipleOverlayPanel: React.FC<MultipleOverlayPanelProps> = ({ sele
                   </Tooltip>
                 </Grid>
 
-                <Grid item xs={6} sm={3}>
+                <Grid size={{ 'xs': 6, 'sm': 3 }}>
                   <Tooltip title="Total Value to Paid-in Capital - Total returns (realized + unrealized) as multiple of invested capital">
                     <div>
                       <MetricCard

@@ -204,7 +204,7 @@ export function IncidentsView({
                     <TableCell colSpan={7}>
                       <Box sx={{ p: 2 }}>
                         <Grid container spacing={2}>
-                          <Grid item xs={12} sm={6}>
+                          <Grid size={{ 'xs': 12, 'sm': 6 }}>
                             <Box>
                               <Typography variant="caption" sx={{ fontWeight: 600 }}>
                                 Blast Radius
@@ -216,7 +216,7 @@ export function IncidentsView({
                               />
                             </Box>
                           </Grid>
-                          <Grid item xs={12} sm={6}>
+                          <Grid size={{ 'xs': 12, 'sm': 6 }}>
                             <Box>
                               <Typography variant="caption" sx={{ fontWeight: 600 }}>
                                 Estimated Impact
@@ -227,7 +227,7 @@ export function IncidentsView({
                             </Box>
                           </Grid>
                           {incident.aiRootCause && (
-                            <Grid item xs={12}>
+                            <Grid size={12}>
                               <Box>
                                 <Typography variant="caption" sx={{ fontWeight: 600 }}>
                                   AI Root Cause Analysis

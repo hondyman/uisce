@@ -444,7 +444,7 @@ export const RealtimeNotificationsDashboard: React.FC = () => {
               <TabPanel value={activeTab} index={1}>
                 <Grid container spacing={3}>
                   {/* Real-time Stats */}
-                  <Grid item xs={12} sm={6} md={3}>
+                  <Grid size={{ 'xs': 12, 'sm': 6, 'md': 3 }}>
                     <Card>
                       <CardContent>
                         <Typography
@@ -477,7 +477,7 @@ export const RealtimeNotificationsDashboard: React.FC = () => {
                     </Card>
                   </Grid>
 
-                  <Grid item xs={12} sm={6} md={3}>
+                  <Grid size={{ 'xs': 12, 'sm': 6, 'md': 3 }}>
                     <Card>
                       <CardContent>
                         <Typography
@@ -556,7 +556,7 @@ export const RealtimeNotificationsDashboard: React.FC = () => {
                   </Grid>
 
                   {/* Throughput Chart */}
-                  <Grid item xs={12}>
+                  <Grid size={12}>
                     <Card>
                       <CardContent>
                         <Typography variant="h6" sx={{ fontWeight: 700, mb: 2 }}>
@@ -615,7 +615,7 @@ export const RealtimeNotificationsDashboard: React.FC = () => {
               {/* Settings Tab */}
               <TabPanel value={activeTab} index={2}>
                 <Grid container spacing={3}>
-                  <Grid item xs={12} md={6}>
+                  <Grid size={{ 'xs': 12, 'md': 6 }}>
                     <Card>
                       <CardHeader title="Transport Channels" />
                       <CardContent>
@@ -666,7 +666,7 @@ export const RealtimeNotificationsDashboard: React.FC = () => {
                     </Card>
                   </Grid>
 
-                  <Grid item xs={12} md={6}>
+                  <Grid size={{ 'xs': 12, 'md': 6 }}>
                     <Card>
                       <CardHeader title="Notification Channels" />
                       <CardContent>

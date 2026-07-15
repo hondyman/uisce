@@ -110,11 +110,11 @@ export const SemanticCatalogPage: React.FC = () => {
         <DialogContent>
           {selectedTerm && (
             <Grid container spacing={3} sx={{ mt: 1 }}>
-              <Grid item xs={12}>
+              <Grid size={12}>
                 <Typography variant="subtitle2">Description</Typography>
                 <Typography variant="body1" paragraph>{selectedTerm.description}</Typography>
               </Grid>
-              <Grid item xs={6}>
+              <Grid size={6}>
                  <Card variant="outlined">
                    <CardContent>
                      <Typography variant="subtitle2" color="text.secondary">Definition</Typography>
@@ -127,7 +127,7 @@ export const SemanticCatalogPage: React.FC = () => {
                    </CardContent>
                  </Card>
               </Grid>
-              <Grid item xs={6}>
+              <Grid size={6}>
                  <Card variant="outlined">
                    <CardContent>
                      <Typography variant="subtitle2" color="text.secondary">Lineage</Typography>

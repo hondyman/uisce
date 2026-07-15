@@ -52,7 +52,7 @@ export const ModelChangeProposalForm: React.FC = () => {
       
       <Grid container spacing={3}>
         {/* Left Panel: Context */}
-        <Grid item xs={12} md={4}>
+        <Grid size={{ 'xs': 12, 'md': 4 }}>
            <Paper variant="outlined" sx={{ p: 2, mb: 2 }}>
              <Typography variant="h6">Client: Jane Doe</Typography>
              <Chip label="Risk Profile: Moderate" color="primary" variant="outlined" size="small" sx={{ mt: 1 }} />
@@ -71,7 +71,7 @@ export const ModelChangeProposalForm: React.FC = () => {
         </Grid>
 
         {/* Right Panel: Proposal */}
-        <Grid item xs={12} md={8}>
+        <Grid size={{ 'xs': 12, 'md': 8 }}>
           <Paper sx={{ p: 3 }}>
              <Typography variant="h6" gutterBottom>Change Details</Typography>
              

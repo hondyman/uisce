@@ -243,7 +243,7 @@ export const SemanticPlaygroundPage: React.FC = () => {
         {/* Three-Pane Layout */}
         <Grid container spacing={2} sx={{ height: "calc(100vh - 200px)" }}>
           {/* Left Pane: Natural Language Input */}
-          <Grid item xs={12} md={4} sx={{ display: "flex" }}>
+          <Grid size={{ 'xs': 12, 'md': 4 }}>
             <Paper sx={{ width: "100%", overflow: "auto" }}>
               <NLInputPanel
                 datasources={datasources}
@@ -268,7 +268,7 @@ export const SemanticPlaygroundPage: React.FC = () => {
           </Grid>
 
           {/* Middle Pane: Semantic Query */}
-          <Grid item xs={12} md={4} sx={{ display: "flex" }}>
+          <Grid size={{ 'xs': 12, 'md': 4 }}>
             <Paper sx={{ width: "100%", overflow: "auto" }}>
               <SemanticQueryEditor
                 query={semanticQuery}
@@ -283,7 +283,7 @@ export const SemanticPlaygroundPage: React.FC = () => {
           </Grid>
 
           {/* Right Pane: SQL + Results (stacked) */}
-          <Grid item xs={12} md={4} sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
+          <Grid size={{ 'xs': 12, 'md': 4 }}>
             {/* SQL Viewer - Top */}
             <Paper sx={{ flex: 0.4, overflow: "auto" }}>
               <SQLViewer

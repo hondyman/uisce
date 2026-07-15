@@ -283,13 +283,13 @@ export function BusinessTermMapper() {
 
       {/* Statistics */}
       <Grid container spacing={2} sx={{ mb: 3 }}>
-        <Grid item xs={4}>
+        <Grid size={4}>
           <Paper sx={{ p: 2, textAlign: 'center' }}>
             <Typography variant="h4" color="primary">{mappingCounts.total}</Typography>
             <Typography variant="body2" color="text.secondary">Total Semantic Terms</Typography>
           </Paper>
         </Grid>
-        <Grid item xs={4}>
+        <Grid size={4}>
           <Paper sx={{ p: 2, textAlign: 'center' }}>
             <Typography variant="h4" color="success.main">{mappingCounts.mapped}</Typography>
             <Typography variant="body2" color="text.secondary">Mapped to Business Terms</Typography>
@@ -402,7 +402,7 @@ export function BusinessTermMapper() {
       {/* Filters and Search */}
       <Card sx={{ p: 2, mb: 3 }}>
         <Grid container spacing={2} alignItems="center">
-          <Grid item xs={6}>
+          <Grid size={6}>
             <TextField
               fullWidth
               label="Search semantic terms or business terms"
@@ -411,7 +411,7 @@ export function BusinessTermMapper() {
               variant="outlined"
             />
           </Grid>
-          <Grid item xs={3}>
+          <Grid size={3}>
             <FormControl fullWidth>
               <InputLabel>Filter Status</InputLabel>
               <Select

@@ -175,7 +175,7 @@ export const GiftTrackingDashboard: React.FC<GiftTrackingDashboardProps> = ({ fa
       {/* Exemption Summary Cards */}
       {exemptionSummary && (
         <Grid container spacing={3} sx={{ mb: 4 }}>
-          <Grid item xs={12} md={4}>
+          <Grid size={{ 'xs': 12, 'md': 4 }}>
             <Card elevation={2}>
               <CardContent>
                 <Typography color="text.secondary" gutterBottom variant="body2">
@@ -199,7 +199,7 @@ export const GiftTrackingDashboard: React.FC<GiftTrackingDashboardProps> = ({ fa
             </Card>
           </Grid>
 
-          <Grid item xs={12} md={4}>
+          <Grid size={{ 'xs': 12, 'md': 4 }}>
             <Card elevation={2}>
               <CardContent>
                 <Typography color="text.secondary" gutterBottom variant="body2">

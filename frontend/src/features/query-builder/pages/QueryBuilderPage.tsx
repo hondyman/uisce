@@ -290,7 +290,7 @@ const PerformanceInsights: React.FC<{
       />
       <CardContent>
         <Grid container spacing={2}>
-          <Grid item xs={6}>
+          <Grid size={6}>
             <Typography variant="body2" color="text.secondary">
               Rows Scanned
             </Typography>
@@ -298,7 +298,7 @@ const PerformanceInsights: React.FC<{
               {_executionStats.rowsScanned.toLocaleString()}
             </Typography>
           </Grid>
-          <Grid item xs={6}>
+          <Grid size={6}>
             <Typography variant="body2" color="text.secondary">
               Rows Returned
             </Typography>
@@ -366,7 +366,7 @@ const TemplateMarketplace: React.FC<{
 
         <Grid container spacing={2}>
           {filteredTemplates.map((template) => (
-            <Grid item xs={12} sm={6} md={4} key={template.id}>
+            <Grid size={{ 'xs': 12, 'sm': 6, 'md': 4 }}>
               <Card sx={{ cursor: 'pointer' }} onClick={() => onTemplateSelect(template)}>
                 <CardHeader
                   avatar={<Avatar>{template.author[0]}</Avatar>}
@@ -997,7 +997,7 @@ const QueryBuilderPage: React.FC = () => {
 
       <Grid container spacing={2}>
         {queries.map((query) => (
-          <Grid item xs={12} md={6} lg={4} key={query.id}>
+          <Grid size={{ 'xs': 12, 'md': 6, 'lg': 4 }}>
             <Card>
               <CardContent>
                 <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
@@ -1104,7 +1104,7 @@ const QueryBuilderPage: React.FC = () => {
       </Box>
 
       <Grid container spacing={2}>
-        <Grid item xs={12} md={8}>
+        <Grid size={{ 'xs': 12, 'md': 8 }}>
           <Card>
             <CardContent>
               <Typography variant="h6" gutterBottom>
@@ -1117,7 +1117,7 @@ const QueryBuilderPage: React.FC = () => {
           </Card>
         </Grid>
 
-        <Grid item xs={12} md={4}>
+        <Grid size={{ 'xs': 12, 'md': 4 }}>
           <Card>
             <CardContent>
               <Typography variant="h6" gutterBottom>

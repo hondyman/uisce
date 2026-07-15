@@ -152,7 +152,7 @@ export const AlternativeInvestmentsDashboard: React.FC = () => {
 
       {/* Summary Cards */}
       <Grid container spacing={3} sx={{ mb: 3 }}>
-        <Grid item xs={12} md={3}>
+        <Grid size={{ 'xs': 12, 'md': 3 }}>
           <Card>
             <CardContent>
               <Typography color="text.secondary" gutterBottom>
@@ -166,7 +166,7 @@ export const AlternativeInvestmentsDashboard: React.FC = () => {
           </Card>
         </Grid>
 
-        <Grid item xs={12} md={3}>
+        <Grid size={{ 'xs': 12, 'md': 3 }}>
           <Card>
             <CardContent>
               <Typography color="text.secondary" gutterBottom>
@@ -327,7 +327,7 @@ export const AlternativeInvestmentsDashboard: React.FC = () => {
       {/* Tab: Allocation */}
       {tab === 2 && (
         <Grid container spacing={3}>
-          <Grid item xs={12} md={6}>
+          <Grid size={{ 'xs': 12, 'md': 6 }}>
             <Paper sx={{ p: 3 }}>
               <Typography variant="h6" gutterBottom>
                 Asset Class Allocation
@@ -353,7 +353,7 @@ export const AlternativeInvestmentsDashboard: React.FC = () => {
             </Paper>
           </Grid>
 
-          <Grid item xs={12} md={6}>
+          <Grid size={{ 'xs': 12, 'md': 6 }}>
             <Paper sx={{ p: 3 }}>
               <Typography variant="h6" gutterBottom>
                 Allocation Breakdown

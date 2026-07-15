@@ -448,7 +448,7 @@ export default function LookupsManagementTab({ tenantId, instanceFilter }: { ten
   const renderCardView = () => (
     <Grid container spacing={2}>
       {filteredAndSorted.map((lk: any) => (
-        <Grid item xs={12} sm={6} md={4} key={lk.id}>
+        <Grid size={{ 'xs': 12, 'sm': 6, 'md': 4 }}>
           <Card sx={{ display: 'flex', flexDirection: 'column', height: '100%' }} elevation={2}>
             <Box sx={{ p: 2, pb: 1 }}>
               <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', mb: 1 }}>

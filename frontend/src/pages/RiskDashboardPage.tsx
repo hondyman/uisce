@@ -96,7 +96,7 @@ const RiskDashboardPage: React.FC = () => {
 
       {/* KPI Cards */}
       <Grid container spacing={3} sx={{ mb: 4 }}>
-        <Grid item xs={12} md={3}>
+        <Grid size={{ 'xs': 12, 'md': 3 }}>
           <Paper sx={{ p: 2, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <Box>
               <Typography color="textSecondary" variant="subtitle2">Model Accuracy</Typography>
@@ -105,7 +105,7 @@ const RiskDashboardPage: React.FC = () => {
             <CheckCircleIcon color="success" sx={{ fontSize: 40, opacity: 0.2 }} />
           </Paper>
         </Grid>
-        <Grid item xs={12} md={3}>
+        <Grid size={{ 'xs': 12, 'md': 3 }}>
           <Paper sx={{ p: 2, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <Box>
               <Typography color="textSecondary" variant="subtitle2">Data Drift</Typography>

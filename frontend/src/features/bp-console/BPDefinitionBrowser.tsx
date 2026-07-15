@@ -111,7 +111,7 @@ const BPDefinitionBrowser: React.FC = () => {
 
       <Grid container spacing={3}>
         {/* Left: Definition List */}
-        <Grid item xs={12} md={7}>
+        <Grid size={{ 'xs': 12, 'md': 7 }}>
           <TableContainer component={Paper} sx={{ borderRadius: 2 }}>
             <Table>
               <TableHead>
@@ -160,7 +160,7 @@ const BPDefinitionBrowser: React.FC = () => {
         </Grid>
 
         {/* Right: Detail View */}
-        <Grid item xs={12} md={5}>
+        <Grid size={{ 'xs': 12, 'md': 5 }}>
           {selectedBP ? (
             <Card variant="outlined">
               <CardContent>
@@ -176,11 +176,11 @@ const BPDefinitionBrowser: React.FC = () => {
                 <Divider sx={{ my: 2 }} />
                 
                 <Grid container spacing={2}>
-                  <Grid item xs={6}>
+                  <Grid size={6}>
                     <Typography variant="caption" color="text.secondary">Total Steps</Typography>
                     <Typography variant="h6">{selectedBP.stepsCount}</Typography>
                   </Grid>
-                  <Grid item xs={6}>
+                  <Grid size={6}>
                     <Typography variant="caption" color="text.secondary">Active Instances</Typography>
                     <Typography variant="h6">14</Typography>
                   </Grid>

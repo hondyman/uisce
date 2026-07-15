@@ -231,7 +231,7 @@ export function TimelineView({
                       <Grid container spacing={2}>
                         {/* Message */}
                         {event.message && (
-                          <Grid item xs={12}>
+                          <Grid size={12}>
                             <Box>
                               <Typography variant="caption" sx={{ fontWeight: 600 }}>
                                 Message
@@ -245,7 +245,7 @@ export function TimelineView({
 
                         {/* Semantic Context */}
                         {event.semanticContext && (
-                          <Grid item xs={12} sm={6}>
+                          <Grid size={{ 'xs': 12, 'sm': 6 }}>
                             <Box>
                               <Typography variant="caption" sx={{ fontWeight: 600 }}>
                                 Semantic Impact
@@ -271,7 +271,7 @@ export function TimelineView({
 
                         {/* Compliance Context */}
                         {event.complianceContext && (
-                          <Grid item xs={12} sm={6}>
+                          <Grid size={{ 'xs': 12, 'sm': 6 }}>
                             <Box>
                               <Typography variant="caption" sx={{ fontWeight: 600 }}>
                                 Compliance Impact
@@ -297,7 +297,7 @@ export function TimelineView({
 
                         {/* AI Narrative */}
                         {event.aiNarrative && (
-                          <Grid item xs={12}>
+                          <Grid size={12}>
                             <Box>
                               <Typography variant="caption" sx={{ fontWeight: 600 }}>
                                 AI Summary

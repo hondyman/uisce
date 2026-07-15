@@ -81,7 +81,7 @@ export const ScenarioPnLChart: React.FC<ScenarioPnLChartProps> = ({
         </Paper>
         <Grid container spacing={2}>
           {[1, 2, 3, 4].map((i) => (
-            <Grid item xs={12} sm={6} md={3} key={i}>
+            <Grid size={{ 'xs': 12, 'sm': 6, 'md': 3 }}>
               <Skeleton variant="rectangular" height={100} />
             </Grid>
           ))}
@@ -219,7 +219,7 @@ export const ScenarioPnLChart: React.FC<ScenarioPnLChartProps> = ({
 
       {/* Summary Statistics */}
       <Grid container spacing={2}>
-        <Grid item xs={12} sm={6} md={3}>
+        <Grid size={{ 'xs': 12, 'sm': 6, 'md': 3 }}>
           <Card
             elevation={1}
             sx={{
@@ -255,7 +255,7 @@ export const ScenarioPnLChart: React.FC<ScenarioPnLChartProps> = ({
           </Card>
         </Grid>
 
-        <Grid item xs={12} sm={6} md={3}>
+        <Grid size={{ 'xs': 12, 'sm': 6, 'md': 3 }}>
           <Card
             elevation={1}
             sx={{

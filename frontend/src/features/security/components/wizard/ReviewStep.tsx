@@ -41,7 +41,7 @@ export const ReviewStep: React.FC<ReviewStepProps> = ({ ruleData }) => {
         </Alert>
 
         <Grid container spacing={2}>
-          <Grid item xs={12} md={6}>
+          <Grid size={{ 'xs': 12, 'md': 6 }}>
             <Card elevation={2}>
               <CardContent>
                 <Stack spacing={2}>
@@ -59,7 +59,7 @@ export const ReviewStep: React.FC<ReviewStepProps> = ({ ruleData }) => {
             </Card>
           </Grid>
 
-          <Grid item xs={12} md={6}>
+          <Grid size={{ 'xs': 12, 'md': 6 }}>
             <Card elevation={2}>
               <CardContent>
                 <Stack spacing={2}>
@@ -115,7 +115,7 @@ export const ReviewStep: React.FC<ReviewStepProps> = ({ ruleData }) => {
             </Card>
           </Grid>
 
-          <Grid item xs={12}>
+          <Grid size={12}>
             <Card elevation={2}>
               <CardContent>
                 <Stack spacing={2}>
@@ -147,7 +147,7 @@ export const ReviewStep: React.FC<ReviewStepProps> = ({ ruleData }) => {
             </Card>
           </Grid>
 
-          <Grid item xs={12}>
+          <Grid size={12}>
             <Card elevation={2}>
               <CardContent>
                 <Stack spacing={2}>

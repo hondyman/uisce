@@ -256,7 +256,7 @@ const TenantsPage: React.FC = () => {
           ) : (
             <Grid container spacing={2}>
               {tenants.map((tenant: Tenant) => (
-                <Grid item xs={12} sm={6} md={4} key={tenant.id}>
+                <Grid size={{ 'xs': 12, 'sm': 6, 'md': 4 }}>
                   <Card
                     sx={{
                       height: '100%',
@@ -303,7 +303,7 @@ const TenantsPage: React.FC = () => {
           ) : (
             <Grid container spacing={2}>
               {tenants.map((tenant: Tenant) => (
-                <Grid item xs={12} md={6} key={tenant.id}>
+                <Grid size={{ 'xs': 12, 'md': 6 }}>
                   <Card>
                     <CardContent>
                       <Typography variant="h6" component="div">
@@ -350,7 +350,7 @@ const TenantsPage: React.FC = () => {
           <Card sx={{ maxWidth: 600, mx: 'auto' }}>
             <CardContent>
               <Grid container spacing={2}>
-                <Grid item xs={12}>
+                <Grid size={12}>
                   <TextField
                     fullWidth
                     label="Tenant Name"
@@ -360,7 +360,7 @@ const TenantsPage: React.FC = () => {
                     helperText="Unique identifier for the tenant"
                   />
                 </Grid>
-                <Grid item xs={12}>
+                <Grid size={12}>
                   <TextField
                     fullWidth
                     label="Display Name"

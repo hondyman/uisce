@@ -191,7 +191,7 @@ export const DashboardManager: React.FC<DashboardManagerProps> = ({
       ) : (
         <Grid container spacing={3}>
           {dashboards.map((dashboard) => (
-            <Grid item xs={12} sm={6} md={4} key={dashboard.id}>
+            <Grid size={{ 'xs': 12, 'sm': 6, 'md': 4 }}>
               <Card sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
                 <CardContent sx={{ flex: 1 }}>
                   <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2 }}>

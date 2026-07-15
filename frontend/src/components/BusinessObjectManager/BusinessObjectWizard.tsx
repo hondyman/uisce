@@ -521,13 +521,13 @@ export const BusinessObjectWizard: React.FC<BusinessObjectWizardProps> = ({
               {wizardContext.drivingTable.name}
             </Typography>
             <Grid container spacing={2}>
-              <Grid item xs={4}>
+              <Grid size={4}>
                 <Typography variant="body2" color="text.secondary">
                   Columns
                 </Typography>
                 <Typography variant="h5">{wizardContext.drivingTable.columnCount}</Typography>
               </Grid>
-              <Grid item xs={4}>
+              <Grid size={4}>
                 <Typography variant="body2" color="text.secondary">
                   Semantic Terms
                 </Typography>
@@ -884,7 +884,7 @@ export const BusinessObjectWizard: React.FC<BusinessObjectWizardProps> = ({
         </Typography>
 
         <Grid container spacing={3}>
-          <Grid item xs={12} md={6}>
+          <Grid size={{ 'xs': 12, 'md': 6 }}>
             <Typography variant="subtitle2" gutterBottom>
               Business Object Details
             </Typography>
@@ -923,7 +923,7 @@ export const BusinessObjectWizard: React.FC<BusinessObjectWizardProps> = ({
             />
           </Grid>
 
-          <Grid item xs={12} md={6}>
+          <Grid size={{ 'xs': 12, 'md': 6 }}>
             <Typography variant="subtitle2" gutterBottom>
               Summary
             </Typography>

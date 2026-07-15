@@ -161,10 +161,10 @@ export const BOAdvisorTab: React.FC<BOAdvisorTabProps> = ({ boName, tenantId, on
       <Paper sx={{ p: 2, mb: 3 }}>
         <Typography variant="subtitle1" gutterBottom>Workload Summary (Last 7 Days)</Typography>
         <Grid container spacing={2}>
-          <Grid item xs={6} sm={2}>
+          <Grid size={{ 'xs': 6, 'sm': 2 }}>
             <MetricCard label="Total Queries" value={workload.total_queries.toLocaleString()} />
           </Grid>
-          <Grid item xs={6} sm={2}>
+          <Grid size={{ 'xs': 6, 'sm': 2 }}>
             <MetricCard label="Slow Queries" value={workload.slow_queries.toLocaleString()} color="warning" />
           </Grid>
           <Grid item xs={6} sm={2}>
@@ -195,7 +195,7 @@ export const BOAdvisorTab: React.FC<BOAdvisorTabProps> = ({ boName, tenantId, on
       ) : (
         <Grid container spacing={2} sx={{ mb: 3 }}>
           {recommendations.map((rec, idx) => (
-            <Grid item xs={12} md={6} key={idx}>
+            <Grid size={{ 'xs': 12, 'md': 6 }}>
               <RecommendationCard rec={rec} onAccept={() => onCreatePreAgg(rec)} />
             </Grid>
           ))}
@@ -269,14 +269,14 @@ const RecommendationCard: React.FC<{ rec: PreAggRecommendation; onAccept: () => 
       </Box>
       <Divider sx={{ my: 1 }} />
       <Grid container spacing={1}>
-        <Grid item xs={4}>
+        <Grid size={4}>
           <Typography variant="caption" color="text.secondary">Speedup</Typography>
           <Typography variant="body2">
             <TrendingUp fontSize="small" color="success" sx={{ mr: 0.5, verticalAlign: 'text-bottom' }} />
             {rec.cost_estimate.estimated_speedup_factor.toFixed(1)}x
           </Typography>
         </Grid>
-        <Grid item xs={4}>
+        <Grid size={4}>
           <Typography variant="caption" color="text.secondary">Queries/Day</Typography>
           <Typography variant="body2">{rec.cost_estimate.estimated_queries_per_day}</Typography>
         </Grid>

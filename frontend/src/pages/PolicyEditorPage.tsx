@@ -184,7 +184,7 @@ const PolicyEditorPage: React.FC = () => {
 
       <Grid container spacing={3} sx={{ flex: 1, minHeight: 0 }}>
         {/* Left: Rule Input & Generation */}
-        <Grid item xs={12} md={4}>
+        <Grid size={{ 'xs': 12, 'md': 4 }}>
           <Paper sx={{ p: 2, height: '100%', display: 'flex', flexDirection: 'column' }}>
             <Typography variant="subtitle1" fontWeight="bold" gutterBottom>
               Describe Your Rule
@@ -271,7 +271,7 @@ const PolicyEditorPage: React.FC = () => {
         </Grid>
 
         {/* Right: Generated Rego Code */}
-        <Grid item xs={12} md={8}>
+        <Grid size={{ 'xs': 12, 'md': 8 }}>
           <Paper sx={{ p: 2, height: '100%', display: 'flex', flexDirection: 'column' }}>
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
               <Typography variant="subtitle1" fontWeight="bold">

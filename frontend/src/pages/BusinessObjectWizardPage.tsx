@@ -433,7 +433,7 @@ export const BusinessObjectWizardPage: React.FC<{ tenantId?: string }> = ({ tena
           <Stack spacing={4}>
             <Typography variant="h6">Step 2: Source Physical Bindings</Typography>
             <Grid container spacing={3}>
-              <Grid item xs={12} md={6}>
+              <Grid size={{ 'xs': 12, 'md': 6 }}>
                 <FormControl fullWidth>
                   <InputLabel>Datasource Type</InputLabel>
                   <Select
@@ -448,7 +448,7 @@ export const BusinessObjectWizardPage: React.FC<{ tenantId?: string }> = ({ tena
                 </FormControl>
               </Grid>
 
-              <Grid item xs={12} md={6}>
+              <Grid size={{ 'xs': 12, 'md': 6 }}>
                 <Autocomplete
                   options={drivingTables}
                   getOptionLabel={(option) => option.label}

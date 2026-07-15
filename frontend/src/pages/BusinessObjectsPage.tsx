@@ -619,7 +619,7 @@ export default function BusinessObjectsPage() {
               /* Card Grid Layout */
               <Grid container spacing={3}>
                 {filteredBusinessObjects.map((object) => (
-                  <Grid item xs={12} sm={6} md={4} lg={3} key={object.id}>
+                  <Grid size={{ 'xs': 12, 'sm': 6, 'md': 4, 'lg': 3 }}>
                     <Card
                       onClick={() => handleViewDetails(object)}
                       sx={{
@@ -765,7 +765,7 @@ export default function BusinessObjectsPage() {
                 ))}
 
                 {/* Create New Card */}
-                <Grid item xs={12} sm={6} md={4} lg={3}>
+                <Grid size={{ 'xs': 12, 'sm': 6, 'md': 4, 'lg': 3 }}>
                   <Card
                     onClick={handleCreateObject}
                     sx={{

@@ -661,7 +661,7 @@ const APIBuilderPage: FC = () => {
 
       <Grid container spacing={2}>
         {apis.map((api) => (
-          <Grid item xs={12} md={6} lg={4} key={api.id}>
+          <Grid size={{ 'xs': 12, 'md': 6, 'lg': 4 }}>
             <Card>
               <CardContent>
                     <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
@@ -988,14 +988,14 @@ const APIBuilderPage: FC = () => {
         <DialogContent>
           <ModalHeader title={selectedEndpoint ? 'Edit Endpoint' : 'Add Endpoint'} onClose={() => setShowEndpointDialog(false)} />
           <Grid container spacing={2} sx={{ mt: 1 }}>
-            <Grid item xs={12} sm={6}>
+            <Grid size={{ 'xs': 12, 'sm': 6 }}>
               <TextField
                 fullWidth
                 label="Path"
                 defaultValue={selectedEndpoint?.path || ''}
               />
             </Grid>
-            <Grid item xs={12} sm={6}>
+            <Grid size={{ 'xs': 12, 'sm': 6 }}>
               <FormControl fullWidth>
                 <InputLabel>Method</InputLabel>
                 <Select defaultValue={selectedEndpoint?.method || 'GET'}>
@@ -1007,7 +1007,7 @@ const APIBuilderPage: FC = () => {
                 </Select>
               </FormControl>
             </Grid>
-            <Grid item xs={12}>
+            <Grid size={12}>
               <TextField
                 fullWidth
                 label="Description"
@@ -1016,7 +1016,7 @@ const APIBuilderPage: FC = () => {
                 defaultValue={selectedEndpoint?.description || ''}
               />
             </Grid>
-            <Grid item xs={12}>
+            <Grid size={12}>
               <FormControl component="fieldset">
                 <FormLabel component="legend">Operation Type</FormLabel>
                 <RadioGroup
@@ -1223,7 +1223,7 @@ const PerformanceInsights: FC<{
       />
       <CardContent>
         <Grid container spacing={2}>
-          <Grid item xs={6}>
+          <Grid size={6}>
             <Typography variant="body2" color="text.secondary">
               Total Requests
             </Typography>
@@ -1231,7 +1231,7 @@ const PerformanceInsights: FC<{
               {executionStats.totalRequests.toLocaleString()}
             </Typography>
           </Grid>
-          <Grid item xs={6}>
+          <Grid size={6}>
             <Typography variant="body2" color="text.secondary">
               Error Rate
             </Typography>
@@ -1314,7 +1314,7 @@ const TemplateMarketplace: FC<{
 
         <Grid container spacing={2}>
           {filteredTemplates.map((template) => (
-            <Grid item xs={12} sm={6} md={4} key={template.id}>
+            <Grid size={{ 'xs': 12, 'sm': 6, 'md': 4 }}>
               <Card sx={{ cursor: 'pointer' }} onClick={() => onTemplateSelect(template)}>
                 <CardHeader
                   avatar={<Avatar>{template.author[0]}</Avatar>}

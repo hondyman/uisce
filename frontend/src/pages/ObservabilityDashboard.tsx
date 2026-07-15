@@ -146,7 +146,7 @@ export const ObservabilityDashboard: React.FC = () => {
 
       {/* Metrics Summary Cards */}
       <Grid container spacing={3} sx={{ mb: 3 }}>
-        <Grid item xs={12} sm={6} md={3}>
+        <Grid size={{ 'xs': 12, 'sm': 6, 'md': 3 }}>
           <Card sx={{ height: '100%', background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' }}>
             <CardContent>
               <Stack direction="row" justifyContent="space-between" alignItems="flex-start">
@@ -164,7 +164,7 @@ export const ObservabilityDashboard: React.FC = () => {
           </Card>
         </Grid>
 
-        <Grid item xs={12} sm={6} md={3}>
+        <Grid size={{ 'xs': 12, 'sm': 6, 'md': 3 }}>
           <Card sx={{ height: '100%', background: 'linear-gradient(135deg, #11998e 0%, #38ef7d 100%)' }}>
             <CardContent>
               <Stack direction="row" justifyContent="space-between" alignItems="flex-start">
@@ -221,7 +221,7 @@ export const ObservabilityDashboard: React.FC = () => {
 
       <Grid container spacing={3}>
         {/* SLO Status Cards */}
-        <Grid item xs={12} md={8}>
+        <Grid size={{ 'xs': 12, 'md': 8 }}>
           <Paper sx={{ p: 3 }}>
             <Typography variant="h6" sx={{ fontWeight: 600, mb: 2 }}>
               SLO Status
@@ -236,7 +236,7 @@ export const ObservabilityDashboard: React.FC = () => {
             ) : (
               <Grid container spacing={2}>
                 {data.slo_statuses.map((slo) => (
-                  <Grid item xs={12} sm={6} key={slo.slo_id}>
+                  <Grid size={{ 'xs': 12, 'sm': 6 }}>
                     <Card variant="outlined" sx={{ borderLeft: `4px solid ${statusColors[slo.status]}` }}>
                       <CardContent>
                         <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 1 }}>
@@ -284,7 +284,7 @@ export const ObservabilityDashboard: React.FC = () => {
         </Grid>
 
         {/* Active Alerts */}
-        <Grid item xs={12} md={4}>
+        <Grid size={{ 'xs': 12, 'md': 4 }}>
           <Paper sx={{ p: 3, height: '100%' }}>
             <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 2 }}>
               <Typography variant="h6" sx={{ fontWeight: 600 }}>
@@ -328,13 +328,13 @@ export const ObservabilityDashboard: React.FC = () => {
         </Grid>
 
         {/* System Health */}
-        <Grid item xs={12}>
+        <Grid size={12}>
           <Paper sx={{ p: 3 }}>
             <Typography variant="h6" sx={{ fontWeight: 600, mb: 2 }}>
               System Health
             </Typography>
             <Grid container spacing={3}>
-              <Grid item xs={12} sm={4}>
+              <Grid size={{ 'xs': 12, 'sm': 4 }}>
                 <Box sx={{ textAlign: 'center' }}>
                   <Typography variant="overline" color="text.secondary">Status</Typography>
                   <Box sx={{ my: 1 }}>
@@ -353,7 +353,7 @@ export const ObservabilityDashboard: React.FC = () => {
                   </Typography>
                 </Box>
               </Grid>
-              <Grid item xs={12} sm={4}>
+              <Grid size={{ 'xs': 12, 'sm': 4 }}>
                 <Box sx={{ textAlign: 'center' }}>
                   <Typography variant="overline" color="text.secondary">CPU Usage</Typography>
                   <Typography variant="h4" sx={{ my: 1 }}>

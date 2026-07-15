@@ -442,7 +442,7 @@ export const UserManagementPage: React.FC = () => {
         ) : (
             <Grid container spacing={3}>
                 {filteredUsers.map((user) => (
-                    <Grid item xs={12} sm={6} md={4} key={user.id}>
+                    <Grid size={{ 'xs': 12, 'sm': 6, 'md': 4 }}>
                         <Card elevation={1} sx={{ borderRadius: 2, height: '100%', display: 'flex', flexDirection: 'column' }}>
                             <CardContent sx={{ flexGrow: 1 }}>
                                 <Box display="flex" justifyContent="space-between" alignItems="flex-start" mb={2}>

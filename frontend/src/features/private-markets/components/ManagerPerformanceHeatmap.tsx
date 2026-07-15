@@ -85,7 +85,7 @@ export const ManagerPerformanceHeatmap: FC<ManagerPerformanceHeatmapProps> = ({
         </Typography>
         <Grid container spacing={1}>
           {data.map((manager, managerIndex) => (
-            <Grid item xs={12} key={managerIndex}>
+            <Grid size={12}>
               <Typography variant="caption" fontWeight="bold">
                 {manager.manager}
               </Typography>
@@ -193,13 +193,13 @@ export const ManagerPerformanceHeatmap: FC<ManagerPerformanceHeatmapProps> = ({
             Performance Legend:
           </Typography>
           <Grid container spacing={1}>
-            <Grid item xs={6} sm={3}>
+            <Grid size={{ 'xs': 6, 'sm': 3 }}>
               <Box display="flex" alignItems="center" gap={1}>
                 <Box sx={{ width: 16, height: 16, backgroundColor: '#4caf50', borderRadius: 1 }} />
                 <Typography variant="caption">Excellent (≥20% IRR, ≥2.0x TVPI)</Typography>
               </Box>
             </Grid>
-            <Grid item xs={6} sm={3}>
+            <Grid size={{ 'xs': 6, 'sm': 3 }}>
               <Box display="flex" alignItems="center" gap={1}>
                 <Box sx={{ width: 16, height: 16, backgroundColor: '#8bc34a', borderRadius: 1 }} />
                 <Typography variant="caption">Good (≥15% IRR, ≥1.5x TVPI)</Typography>

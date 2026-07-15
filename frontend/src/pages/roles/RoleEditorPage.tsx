@@ -386,7 +386,7 @@ const RoleEditorPage: React.FC<RoleEditorPageProps> = ({ roleName: propRoleName,
 
       <Paper sx={{ p: 3, mb: 3 }}>
         <Grid container spacing={2}>
-          <Grid item xs={12} md={6}>
+          <Grid size={{ 'xs': 12, 'md': 6 }}>
             <TextField
               label="Role Name"
               value={name}
@@ -402,7 +402,7 @@ const RoleEditorPage: React.FC<RoleEditorPageProps> = ({ roleName: propRoleName,
               required={!isEditMode}
             />
           </Grid>
-          <Grid item xs={12} md={6}>
+          <Grid size={{ 'xs': 12, 'md': 6 }}>
             <TextField
               label="Role Owner"
               value={owner}
@@ -415,7 +415,7 @@ const RoleEditorPage: React.FC<RoleEditorPageProps> = ({ roleName: propRoleName,
               helperText={isEditMode ? 'Optional: reassign stewardship for this role.' : 'Owner is set automatically on creation.'}
             />
           </Grid>
-          <Grid item xs={12}>
+          <Grid size={12}>
             <TextField
               label="Description"
               value={description}
@@ -434,7 +434,7 @@ const RoleEditorPage: React.FC<RoleEditorPageProps> = ({ roleName: propRoleName,
       </Paper>
 
       <Grid container spacing={3}>
-        <Grid item xs={12} md={4}>
+        <Grid size={{ 'xs': 12, 'md': 4 }}>
           <Card>
             <CardHeader title="Classification" subheader="Control the lifecycle and taxonomy of this role." />
             <Divider />
@@ -519,7 +519,7 @@ const RoleEditorPage: React.FC<RoleEditorPageProps> = ({ roleName: propRoleName,
           </Card>
         </Grid>
 
-        <Grid item xs={12} md={8}>
+        <Grid size={{ 'xs': 12, 'md': 8 }}>
           <Card>
             <CardHeader title="Bundle Assignments" subheader="Bind data bundles that this role should manage." />
             <Divider />

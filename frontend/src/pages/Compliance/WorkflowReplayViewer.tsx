@@ -105,7 +105,7 @@ export const WorkflowReplayViewer: React.FC = () => {
       {/* Search */}
       <Paper elevation={2} sx={{ p: 3, mb: 3 }}>
         <Grid container spacing={2} alignItems="center">
-          <Grid item xs={12} md={8}>
+          <Grid size={{ 'xs': 12, 'md': 8 }}>
             <TextField
               fullWidth
               label="Workflow ID"
@@ -114,7 +114,7 @@ export const WorkflowReplayViewer: React.FC = () => {
               placeholder="Enter workflow ID to replay"
             />
           </Grid>
-          <Grid item xs={12} md={4}>
+          <Grid size={{ 'xs': 12, 'md': 4 }}>
             <Button
               fullWidth
               variant="contained"
@@ -144,7 +144,7 @@ export const WorkflowReplayViewer: React.FC = () => {
             </Typography>
 
             <Grid container spacing={2}>
-              <Grid item xs={12} md={6}>
+              <Grid size={{ 'xs': 12, 'md': 6 }}>
                 <Typography variant="body2" color="text.secondary">
                   Workflow ID
                 </Typography>
@@ -153,7 +153,7 @@ export const WorkflowReplayViewer: React.FC = () => {
                 </Typography>
               </Grid>
 
-              <Grid item xs={12} md={6}>
+              <Grid size={{ 'xs': 12, 'md': 6 }}>
                 <Typography variant="body2" color="text.secondary">
                   Run ID
                 </Typography>
@@ -162,7 +162,7 @@ export const WorkflowReplayViewer: React.FC = () => {
                 </Typography>
               </Grid>
 
-              <Grid item xs={12} md={4}>
+              <Grid size={{ 'xs': 12, 'md': 4 }}>
                 <Typography variant="body2" color="text.secondary">
                   Workflow Type
                 </Typography>
@@ -206,7 +206,7 @@ export const WorkflowReplayViewer: React.FC = () => {
               )}
 
               {execution.ai_model_versions.length > 0 && (
-                <Grid item xs={12}>
+                <Grid size={12}>
                   <Typography variant="body2" color="text.secondary" gutterBottom>
                     AI Model Versions Used
                   </Typography>
@@ -219,7 +219,7 @@ export const WorkflowReplayViewer: React.FC = () => {
               )}
 
               {execution.policy_versions.length > 0 && (
-                <Grid item xs={12}>
+                <Grid size={12}>
                   <Typography variant="body2" color="text.secondary" gutterBottom>
                     Policy Versions Used
                   </Typography>

@@ -274,7 +274,7 @@ export const RuleImpactComparison: React.FC = () => {
               <TabPanel value={activeTab} index={0}>
                 <Grid container spacing={3}>
                   {/* V2.1 */}
-                  <Grid item xs={12} md={6}>
+                  <Grid size={{ 'xs': 12, 'md': 6 }}>
                     <Card>
                       <CardHeader
                         title="V2.1 - PRODUCTION"
@@ -305,7 +305,7 @@ export const RuleImpactComparison: React.FC = () => {
                   </Grid>
 
                   {/* V2.2 */}
-                  <Grid item xs={12} md={6}>
+                  <Grid size={{ 'xs': 12, 'md': 6 }}>
                     <Card>
                       <CardHeader
                         title="V2.2 - DRAFT"
@@ -395,7 +395,7 @@ export const RuleImpactComparison: React.FC = () => {
 
                       {/* Metrics */}
                       <Grid container spacing={2}>
-                        <Grid item xs={12} sm={6} md={3}>
+                        <Grid size={{ 'xs': 12, 'sm': 6, 'md': 3 }}>
                           <Card variant="outlined">
                             <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
                               <Typography variant="caption" sx={{ fontWeight: 700, textTransform: 'uppercase', display: 'block' }}>
@@ -413,7 +413,7 @@ export const RuleImpactComparison: React.FC = () => {
                           </Card>
                         </Grid>
 
-                        <Grid item xs={12} sm={6} md={3}>
+                        <Grid size={{ 'xs': 12, 'sm': 6, 'md': 3 }}>
                           <Card variant="outlined">
                             <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
                               <Typography variant="caption" sx={{ fontWeight: 700, textTransform: 'uppercase', display: 'block' }}>

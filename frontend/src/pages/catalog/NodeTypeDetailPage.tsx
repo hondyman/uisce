@@ -221,7 +221,7 @@ export const NodeTypeDetailPage: React.FC = () => {
         </Box>
         
         <Grid container spacing={4} sx={{ mt: 2 }}>
-            <Grid item xs={12} md={8}>
+            <Grid size={{ 'xs': 12, 'md': 8 }}>
                  <Typography variant="subtitle1" fontWeight="bold" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                     <DescriptionOutlinedIcon fontSize="small"/> Description
                  </Typography>
@@ -230,7 +230,7 @@ export const NodeTypeDetailPage: React.FC = () => {
                  </Typography>
             </Grid>
             
-            <Grid item xs={12} md={4}>
+            <Grid size={{ 'xs': 12, 'md': 4 }}>
                 {/* Properties Card */}
                 <Card variant="outlined" sx={{ borderRadius: 3, height: '100%', minHeight: 450 }}>
                   <Box sx={{ 

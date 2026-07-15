@@ -24,7 +24,7 @@ const UpgradeCenterPage: FC = () => {
       </Typography>
 
       <Grid container spacing={2}>
-        <Grid item xs={12} sm={6} md={4}>
+        <Grid size={{ 'xs': 12, 'sm': 6, 'md': 4 }}>
           <Card variant="outlined">
             <CardContent>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
@@ -40,7 +40,7 @@ const UpgradeCenterPage: FC = () => {
             </CardContent>
           </Card>
         </Grid>
-        <Grid item xs={12} sm={6} md={4}>
+        <Grid size={{ 'xs': 12, 'sm': 6, 'md': 4 }}>
           <Card variant="outlined">
             <CardContent>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>

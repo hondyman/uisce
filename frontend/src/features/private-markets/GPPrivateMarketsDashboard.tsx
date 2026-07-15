@@ -131,9 +131,9 @@ export const GPPrivateMarketsDashboard: React.FC<GPPrivateMarketsDashboardProps>
       {/* Main Dashboard Content */}
       <Grid container spacing={3}>
         {/* Performance Overview Cards */}
-        <Grid item xs={12}>
+        <Grid size={12}>
           <Grid container spacing={2}>
-            <Grid item xs={12} md={3}>
+            <Grid size={{ 'xs': 12, 'md': 3 }}>
               <Card sx={{ bgcolor: 'primary.light', color: 'primary.contrastText' }}>
                 <CardContent>
                   <Box display="flex" alignItems="center" justifyContent="space-between">
@@ -146,7 +146,7 @@ export const GPPrivateMarketsDashboard: React.FC<GPPrivateMarketsDashboardProps>
                 </CardContent>
               </Card>
             </Grid>
-            <Grid item xs={12} md={3}>
+            <Grid size={{ 'xs': 12, 'md': 3 }}>
               <Card sx={{ bgcolor: 'success.light', color: 'success.contrastText' }}>
                 <CardContent>
                   <Box display="flex" alignItems="center" justifyContent="space-between">
@@ -189,7 +189,7 @@ export const GPPrivateMarketsDashboard: React.FC<GPPrivateMarketsDashboardProps>
         </Grid>
 
         {/* Tabbed Content */}
-        <Grid item xs={12}>
+        <Grid size={12}>
           <Paper sx={{ width: '100%' }}>
             <Tabs
               value={activeTab}
@@ -208,10 +208,10 @@ export const GPPrivateMarketsDashboard: React.FC<GPPrivateMarketsDashboardProps>
             <Box sx={{ p: 3 }}>
               {activeTab === 0 && (
                 <Grid container spacing={3}>
-                  <Grid item xs={12} lg={6}>
+                  <Grid size={{ 'xs': 12, 'lg': 6 }}>
                     <DeploymentPacingChart selectedFunds={selectedFunds} />
                   </Grid>
-                  <Grid item xs={12} lg={6}>
+                  <Grid size={{ 'xs': 12, 'lg': 6 }}>
                     <ValueAttributionBridge selectedFunds={selectedFunds} />
                   </Grid>
                 </Grid>

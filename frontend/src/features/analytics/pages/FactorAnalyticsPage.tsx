@@ -101,7 +101,7 @@ export const FactorAnalyticsPage: React.FC = () => {
       ) : (
         <Grid container spacing={3}>
           {exposure && (
-            <Grid item xs={12} md={6}>
+            <Grid size={{ 'xs': 12, 'md': 6 }}>
               <Card elevation={2}>
                 <CardContent>
                   <FactorExposureChart betas={exposure.betas} />
@@ -114,7 +114,7 @@ export const FactorAnalyticsPage: React.FC = () => {
           )}
 
           {attribution && (
-            <Grid item xs={12} md={6}>
+            <Grid size={{ 'xs': 12, 'md': 6 }}>
               <Card elevation={2}>
                 <CardContent>
                   <AttributionTable data={attribution} />
@@ -124,7 +124,7 @@ export const FactorAnalyticsPage: React.FC = () => {
           )}
 
           {!exposure && !attribution && !error && (
-            <Grid item xs={12}>
+            <Grid size={12}>
               <Typography variant="body1" color="text.secondary">
                 Enter a portfolio ID to view analytics.
               </Typography>

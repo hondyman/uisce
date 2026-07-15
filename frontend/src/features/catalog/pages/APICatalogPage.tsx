@@ -204,7 +204,7 @@ const APICatalogPage: React.FC = () => {
       {activeTab === 0 && (
         <Grid container spacing={3}>
           {filteredAPIs.map((api) => (
-            <Grid item xs={12} md={6} lg={4} key={api.id}>
+            <Grid size={{ 'xs': 12, 'md': 6, 'lg': 4 }}>
               <Card sx={{ height: '100%', cursor: 'pointer' }} onClick={() => setSelectedAPI(api)}>
                 <CardContent>
                   <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2 }}>
@@ -319,11 +319,11 @@ const APICatalogPage: React.FC = () => {
 
               <Typography variant="h6" gutterBottom>Details</Typography>
               <Grid container spacing={2}>
-                <Grid item xs={6}>
+                <Grid size={6}>
                   <Typography><strong>Service:</strong> {selectedAPI.service}</Typography>
                   <Typography><strong>Version:</strong> {selectedAPI.version}</Typography>
                 </Grid>
-                <Grid item xs={6}>
+                <Grid size={6}>
                   <Typography><strong>Category:</strong> {selectedAPI.category}</Typography>
                   <Typography><strong>Status:</strong> {selectedAPI.status}</Typography>
                 </Grid>

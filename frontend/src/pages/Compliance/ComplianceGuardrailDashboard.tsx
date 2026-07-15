@@ -105,7 +105,7 @@ export const ComplianceGuardrailDashboard: React.FC = () => {
 
       {/* Summary Cards */}
       <Grid container spacing={3} sx={{ mb: 4 }}>
-        <Grid item xs={12} md={3}>
+        <Grid size={{ 'xs': 12, 'md': 3 }}>
           <Card elevation={3}>
             <CardContent>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
@@ -119,7 +119,7 @@ export const ComplianceGuardrailDashboard: React.FC = () => {
           </Card>
         </Grid>
 
-        <Grid item xs={12} md={3}>
+        <Grid size={{ 'xs': 12, 'md': 3 }}>
           <Card elevation={3}>
             <CardContent>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
@@ -264,13 +264,13 @@ export const ComplianceGuardrailDashboard: React.FC = () => {
             </DialogTitle>
             <DialogContent dividers>
               <Grid container spacing={2}>
-                <Grid item xs={6}>
+                <Grid size={6}>
                   <Typography variant="subtitle2" color="text.secondary">
                     Policy ID
                   </Typography>
                   <Typography variant="body1">{selectedViolation.policy_id}</Typography>
                 </Grid>
-                <Grid item xs={6}>
+                <Grid size={6}>
                   <Typography variant="subtitle2" color="text.secondary">
                     Severity
                   </Typography>
@@ -279,7 +279,7 @@ export const ComplianceGuardrailDashboard: React.FC = () => {
                     color={getSeverityColor(selectedViolation.severity)}
                   />
                 </Grid>
-                <Grid item xs={12}>
+                <Grid size={12}>
                   <Typography variant="subtitle2" color="text.secondary">
                     Description
                   </Typography>

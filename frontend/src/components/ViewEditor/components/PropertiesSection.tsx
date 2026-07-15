@@ -1014,7 +1014,7 @@ export const PropertiesSection: React.FC<PropertiesSectionProps> = ({
       {/* Properties tab */}
       {tabIndex === 0 && (
         <Grid container spacing={3}>
-          <Grid item xs={12} md={4}>
+          <Grid size={{ 'xs': 12, 'md': 4 }}>
             <TextField
               label="Name"
               value={viewData.name || viewData.title || ''}
@@ -1025,7 +1025,7 @@ export const PropertiesSection: React.FC<PropertiesSectionProps> = ({
             />
           </Grid>
 
-          <Grid item xs={12} md={4}>
+          <Grid size={{ 'xs': 12, 'md': 4 }}>
             <ViewTypeahead
               options={extendsOptions as ViewOption[]}
               loading={extendsLoading}
@@ -1063,7 +1063,7 @@ export const PropertiesSection: React.FC<PropertiesSectionProps> = ({
             />
           </Grid>
 
-          <Grid item xs={12} md={6}>
+          <Grid size={{ 'xs': 12, 'md': 6 }}>
             <Typography variant="subtitle2" gutterBottom>
               Primary Cube
             </Typography>
@@ -1116,7 +1116,7 @@ export const PropertiesSection: React.FC<PropertiesSectionProps> = ({
             )}
           </Grid>
 
-          <Grid item xs={12} md={6}>
+          <Grid size={{ 'xs': 12, 'md': 6 }}>
             <TextField
               label="Description"
               value={viewData.description || ''}

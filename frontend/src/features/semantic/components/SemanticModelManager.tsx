@@ -165,7 +165,7 @@ export const SemanticModelManager: React.FC = () => {
 
       <Grid container spacing={3}>
         {/* Core Models (Templates) */}
-        <Grid item xs={12} md={4}>
+        <Grid size={{ 'xs': 12, 'md': 4 }}>
           <Card>
             <CardContent>
               <Typography variant="h6" gutterBottom>
@@ -194,7 +194,7 @@ export const SemanticModelManager: React.FC = () => {
         </Grid>
 
         {/* Tenant Models */}
-        <Grid item xs={12} md={8}>
+        <Grid size={{ 'xs': 12, 'md': 8 }}>
           <Card>
             <CardContent>
               <Typography variant="h6" gutterBottom>

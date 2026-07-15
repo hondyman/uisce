@@ -86,7 +86,7 @@ export const SemanticObjectsSelector: React.FC<SemanticObjectsSelectorProps> = (
 
       <Grid container spacing={3}>
         {/* Measures Section */}
-        <Grid item xs={12} md={6}>
+        <Grid size={{ 'xs': 12, 'md': 6 }}>
           <Paper sx={{ p: 2 }}>
             <Typography variant="subtitle1" gutterBottom>
               Measures ({includedMeasures.length})
@@ -127,7 +127,7 @@ export const SemanticObjectsSelector: React.FC<SemanticObjectsSelectorProps> = (
         </Grid>
 
         {/* Dimensions Section */}
-        <Grid item xs={12} md={6}>
+        <Grid size={{ 'xs': 12, 'md': 6 }}>
           <Paper sx={{ p: 2 }}>
             <Typography variant="subtitle1" gutterBottom>
               Dimensions ({includedDimensions.length})

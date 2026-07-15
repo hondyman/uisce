@@ -2069,7 +2069,7 @@ export default function BusinessObjectDetailsPage() {
                       {bindings.map((binding: any, index: number) => (
                         <Paper key={binding.boBindingId || index} variant="outlined" sx={{ p: 2 }}>
                           <Grid container spacing={2}>
-                            <Grid item xs={12}>
+                            <Grid size={12}>
                               <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1 }}>
                                 <StorageIcon color="primary" />
                                 <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
@@ -2087,13 +2087,13 @@ export default function BusinessObjectDetailsPage() {
                                 )}
                               </Stack>
                             </Grid>
-                            <Grid item xs={12} md={6}>
+                            <Grid size={{ 'xs': 12, 'md': 6 }}>
                               <Typography variant="caption" color="text.secondary">Binding ID</Typography>
                               <Typography variant="body2" sx={{ fontFamily: 'monospace' }}>
                                 {binding.boBindingId || 'N/A'}
                               </Typography>
                             </Grid>
-                            <Grid item xs={12} md={6}>
+                            <Grid size={{ 'xs': 12, 'md': 6 }}>
                               <Typography variant="caption" color="text.secondary">Backend</Typography>
                               <Typography variant="body2">
                                 {binding.backendName || binding.backendId || 'N/A'}
@@ -2112,7 +2112,7 @@ export default function BusinessObjectDetailsPage() {
                               </Typography>
                             </Grid>
                             {binding.baseSql && (
-                              <Grid item xs={12}>
+                              <Grid size={12}>
                                 <Typography variant="caption" color="text.secondary">Base SQL</Typography>
                                 <Paper variant="outlined" sx={{ p: 1, mt: 0.5, bgcolor: 'grey.50' }}>
                                   <Typography variant="body2" sx={{ fontFamily: 'monospace', fontSize: '0.75rem' }}>

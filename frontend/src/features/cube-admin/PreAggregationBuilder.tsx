@@ -279,13 +279,13 @@ const PreAggregationBuilder: React.FC = () => {
 
       <Grid container spacing={3}>
         {/* Basic Configuration */}
-        <Grid item xs={12} md={8}>
+        <Grid size={{ 'xs': 12, 'md': 8 }}>
           <Paper sx={{ p: 3, mb: 3 }}>
             <Typography variant="h6" gutterBottom>
               Basic Configuration
             </Typography>
             <Grid container spacing={2}>
-              <Grid item xs={12} sm={6}>
+              <Grid size={{ 'xs': 12, 'sm': 6 }}>
                 <TextField
                   fullWidth
                   label="Pre-Aggregation Name"
@@ -294,7 +294,7 @@ const PreAggregationBuilder: React.FC = () => {
                   helperText="Unique identifier for this rollup"
                 />
               </Grid>
-              <Grid item xs={12} sm={6}>
+              <Grid size={{ 'xs': 12, 'sm': 6 }}>
                 <TextField
                   fullWidth
                   label="Cube Name"
@@ -383,7 +383,7 @@ const PreAggregationBuilder: React.FC = () => {
                   sx={{ mb: 2 }}
                 />
                 <Grid container spacing={2}>
-                  <Grid item xs={6}>
+                  <Grid size={6}>
                     <FormControl fullWidth>
                       <InputLabel>Granularity</InputLabel>
                       <Select
@@ -402,7 +402,7 @@ const PreAggregationBuilder: React.FC = () => {
                       </Select>
                     </FormControl>
                   </Grid>
-                  <Grid item xs={6}>
+                  <Grid size={6}>
                     <FormControl fullWidth>
                       <InputLabel>Partition Granularity</InputLabel>
                       <Select
@@ -434,7 +434,7 @@ const PreAggregationBuilder: React.FC = () => {
             </AccordionSummary>
             <AccordionDetails>
               <Grid container spacing={2}>
-                <Grid item xs={12}>
+                <Grid size={12}>
                   <FormControlLabel
                     control={
                       <Switch
@@ -446,7 +446,7 @@ const PreAggregationBuilder: React.FC = () => {
                   />
                 </Grid>
 
-                <Grid item xs={12} sm={4}>
+                <Grid size={{ 'xs': 12, 'sm': 4 }}>
                   <FormControl fullWidth>
                     <InputLabel>Refresh Key Type</InputLabel>
                     <Select
@@ -467,7 +467,7 @@ const PreAggregationBuilder: React.FC = () => {
                 </Grid>
 
                 {config.refreshKey.type === 'every' && (
-                  <Grid item xs={12} sm={8}>
+                  <Grid size={{ 'xs': 12, 'sm': 8 }}>
                     <TextField
                       fullWidth
                       label="Refresh Interval"
@@ -481,7 +481,7 @@ const PreAggregationBuilder: React.FC = () => {
                 )}
 
                 {config.refreshKey.type === 'sql' && (
-                  <Grid item xs={12} sm={8}>
+                  <Grid size={{ 'xs': 12, 'sm': 8 }}>
                     <TextField
                       fullWidth
                       multiline
@@ -498,7 +498,7 @@ const PreAggregationBuilder: React.FC = () => {
 
                 {config.refreshKey.type === 'incremental' && (
                   <>
-                    <Grid item xs={12} sm={4}>
+                    <Grid size={{ 'xs': 12, 'sm': 4 }}>
                       <TextField
                         fullWidth
                         label="Update Window"
@@ -586,7 +586,7 @@ const PreAggregationBuilder: React.FC = () => {
               {config.indexes.map((idx, i) => (
                 <Paper key={i} sx={{ p: 2, mb: 2 }} variant="outlined">
                   <Grid container spacing={2} alignItems="center">
-                    <Grid item xs={3}>
+                    <Grid size={3}>
                       <TextField
                         size="small"
                         label="Index Name"
@@ -598,7 +598,7 @@ const PreAggregationBuilder: React.FC = () => {
                         }}
                       />
                     </Grid>
-                    <Grid item xs={5}>
+                    <Grid size={5}>
                       <TextField
                         size="small"
                         label="Columns (comma-separated)"
@@ -610,7 +610,7 @@ const PreAggregationBuilder: React.FC = () => {
                         }}
                       />
                     </Grid>
-                    <Grid item xs={3}>
+                    <Grid size={3}>
                       <FormControl fullWidth size="small">
                         <InputLabel>Type</InputLabel>
                         <Select
@@ -627,7 +627,7 @@ const PreAggregationBuilder: React.FC = () => {
                         </Select>
                       </FormControl>
                     </Grid>
-                    <Grid item xs={1}>
+                    <Grid size={1}>
                       <IconButton color="error" onClick={() => removeIndex(i)}>
                         <DeleteIcon />
                       </IconButton>
@@ -640,7 +640,7 @@ const PreAggregationBuilder: React.FC = () => {
         </Grid>
 
         {/* Side Panel - Premium Features */}
-        <Grid item xs={12} md={4}>
+        <Grid size={{ 'xs': 12, 'md': 4 }}>
           <Paper sx={{ p: 3, mb: 3 }}>
             <Typography variant="h6" gutterBottom>
               <StorageIcon sx={{ mr: 1, verticalAlign: 'middle' }} />

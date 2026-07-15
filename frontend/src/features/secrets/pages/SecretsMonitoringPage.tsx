@@ -137,7 +137,7 @@ export default function SecretsMonitoringPage({ tenantId }: SecretsMonitoringPag
 
       {/* Metrics Grid */}
       <Grid container spacing={2} sx={{ mb: 3 }}>
-        <Grid item xs={12} md={3}>
+        <Grid size={{ 'xs': 12, 'md': 3 }}>
           <Card>
             <CardContent>
               <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -150,7 +150,7 @@ export default function SecretsMonitoringPage({ tenantId }: SecretsMonitoringPag
             </CardContent>
           </Card>
         </Grid>
-        <Grid item xs={12} md={3}>
+        <Grid size={{ 'xs': 12, 'md': 3 }}>
           <Card>
             <CardContent>
               <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>

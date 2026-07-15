@@ -30,7 +30,7 @@ const ComponentPalette: React.FC = () => {
             <Typography variant="overline" color="textSecondary" fontWeight="bold">Layout</Typography>
             <Grid container spacing={1} sx={{ mb: 3, mt: 0.5 }}>
                 {COMPONENT_TYPES.filter(c => c.group === 'Layout').map(c => (
-                    <Grid item xs={6} key={c.type}>
+                    <Grid size={6}>
                         <Card variant="outlined" sx={{ borderRadius: 2 }}>
                             <CardActionArea 
                                 draggable 
@@ -48,7 +48,7 @@ const ComponentPalette: React.FC = () => {
             <Typography variant="overline" color="textSecondary" fontWeight="bold">Data Displays</Typography>
             <Grid container spacing={1} sx={{ mt: 0.5 }}>
                 {COMPONENT_TYPES.filter(c => c.group === 'Data').map(c => (
-                    <Grid item xs={6} key={c.type}>
+                    <Grid size={6}>
                         <Card variant="outlined" sx={{ borderRadius: 2 }}>
                             <CardActionArea 
                                 draggable 

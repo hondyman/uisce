@@ -56,7 +56,7 @@ const APIPreview: React.FC<APIPreviewProps> = ({ endpoint }) => {
     return (
         <Grid container spacing={3}>
             {/* Performance Cockpit */}
-            <Grid item xs={12}>
+            <Grid size={12}>
                 <Paper elevation={0} sx={{ p: 2, borderRadius: 3, background: 'rgba(255, 255, 255, 0.4)', border: '1px solid rgba(0,0,0,0.05)' }}>
                     <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
                         <SpeedIcon sx={{ mr: 1, color: 'primary.main' }} />
@@ -64,12 +64,12 @@ const APIPreview: React.FC<APIPreviewProps> = ({ endpoint }) => {
                         <Chip label="Healthy" size="small" color="success" icon={<HealthyIcon />} sx={{ ml: 2 }} />
                     </Box>
                     <Grid container spacing={2}>
-                        <Grid item xs={6} md={2}>
+                        <Grid size={{ 'xs': 6, 'md': 2 }}>
                             <Typography variant="caption" color="textSecondary">p95 Latency</Typography>
                             <Typography variant="h6">{metrics?.p95}ms</Typography>
                             <LinearProgress variant="determinate" value={60} color="success" sx={{ height: 4, borderRadius: 2 }} />
                         </Grid>
-                        <Grid item xs={6} md={2}>
+                        <Grid size={{ 'xs': 6, 'md': 2 }}>
                             <Typography variant="caption" color="textSecondary">Throughput (QPS)</Typography>
                             <Typography variant="h6">{metrics?.qps}</Typography>
                         </Grid>
@@ -81,7 +81,7 @@ const APIPreview: React.FC<APIPreviewProps> = ({ endpoint }) => {
                             <Typography variant="caption" color="textSecondary">Pre-agg Hit</Typography>
                             <Typography variant="h6">{Math.round(metrics?.preaggHitRate * 100)}%</Typography>
                         </Grid>
-                        <Grid item xs={12} md={4} sx={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center' }}>
+                        <Grid size={{ 'xs': 12, 'md': 4 }}>
                            <Button variant="outlined" startIcon={<DownloadIcon />} onClick={handleDownloadSDK}>
                                Download TypeScript SDK
                            </Button>
@@ -91,7 +91,7 @@ const APIPreview: React.FC<APIPreviewProps> = ({ endpoint }) => {
             </Grid>
 
             {/* Data Response */}
-            <Grid item xs={12} md={6}>
+            <Grid size={{ 'xs': 12, 'md': 6 }}>
                 <Typography variant="subtitle2" gutterBottom color="primary">Sample Data Response</Typography>
                 <Paper sx={{ p: 2, bgcolor: '#1e293b', color: '#f8fafc', borderRadius: 2, maxHeight: 400, overflowY: 'auto' }}>
                     <pre style={{ margin: 0, fontSize: '0.8rem' }}>
@@ -101,7 +101,7 @@ const APIPreview: React.FC<APIPreviewProps> = ({ endpoint }) => {
             </Grid>
 
             {/* OpenAPI / GQL Spec */}
-            <Grid item xs={12} md={6}>
+            <Grid size={{ 'xs': 12, 'md': 6 }}>
                 <Typography variant="subtitle2" gutterBottom color="secondary">Developer Documentation</Typography>
                 <Paper sx={{ p: 2, bgcolor: '#0f172a', color: '#e2e8f0', borderRadius: 2, maxHeight: 400, overflowY: 'auto' }}>
                     <pre style={{ margin: 0, fontSize: '0.8rem' }}>

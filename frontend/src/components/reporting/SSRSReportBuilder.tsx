@@ -394,7 +394,7 @@ const SSRSReportBuilderContent: React.FC = () => {
                     <Divider sx={{ my: 2 }}>Export Options</Divider>
                     <Grid container spacing={1.5}>
                       {(Object.keys(exportOptions) as Array<keyof ExportOptions>).map((key) => (
-                        <Grid item xs={12} sm={6} md={4} key={`export_option_${String(key)}`}>
+                        <Grid size={{ 'xs': 12, 'sm': 6, 'md': 4 }}>
                           <Card variant="outlined" sx={{ p: 1.5, height: '100%' }}>
                             <FormControlLabel control={<Switch size="small" checked={exportOptions[key]} onChange={(e) => handleExportOptionToggle(key, e.target.checked)} />} label={exportFormatLabels[key as keyof ExportOptions]} />
                             <Typography variant="caption" color="text.secondary">{exportOptionDescriptions[key as keyof ExportOptions]}</Typography>
@@ -532,14 +532,14 @@ const SSRSReportBuilderContent: React.FC = () => {
             <Box sx={{ p: 2, overflowY: 'auto' }}>
               <Typography variant="h6" gutterBottom>Data Sources & Datasets</Typography>
               <Grid container spacing={3}>
-                <Grid item xs={12} md={6}>
+                <Grid size={{ 'xs': 12, 'md': 6 }}>
                   <Paper sx={{ p: 2 }}>
                     <Typography variant="h6" gutterBottom>Data Sources</Typography>
                     {(fetchedDataSources || staticDataSources).map((ds: any) => (<Box key={ds.id} sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}><Database size={20} />{ds.name}</Box>))}
                     <Button variant="outlined" startIcon={<Plus />} onClick={() => setDataSourcesOpen(true)}>Add Data Source</Button>
                   </Paper>
                 </Grid>
-                <Grid item xs={12} md={6}>
+                <Grid size={{ 'xs': 12, 'md': 6 }}>
                   <Paper sx={{ p: 2 }}>
                     <Typography variant="h6" gutterBottom>Datasets</Typography>
                     {datasets.map(ds => (<Box key={ds.id} sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}><TableIcon size={20} />{ds.name}</Box>))}
@@ -559,12 +559,12 @@ const SSRSReportBuilderContent: React.FC = () => {
             <Paper sx={{ p: 2, mt: 2 }}>
               <Typography variant="subtitle1" gutterBottom>Layout & Pagination</Typography>
               <Grid container spacing={2}>
-                <Grid item xs={12} sm={6}><FormControlLabel control={<Switch size="small" checked={layoutSettingsState.pageBreakBeforeGroup} onChange={(e) => handleLayoutSettingChange('pageBreakBeforeGroup', e.target.checked)} />} label="Page break before group" /></Grid>
-                <Grid item xs={12} sm={6}><FormControlLabel control={<Switch size="small" checked={layoutSettingsState.pageBreakAfterGroup} onChange={(e) => handleLayoutSettingChange('pageBreakAfterGroup', e.target.checked)} />} label="Page break after group" /></Grid>
+                <Grid size={{ 'xs': 12, 'sm': 6 }}><FormControlLabel control={<Switch size="small" checked={layoutSettingsState.pageBreakBeforeGroup} onChange={(e) => handleLayoutSettingChange('pageBreakBeforeGroup', e.target.checked)} />} label="Page break before group" /></Grid>
+                <Grid size={{ 'xs': 12, 'sm': 6 }}><FormControlLabel control={<Switch size="small" checked={layoutSettingsState.pageBreakAfterGroup} onChange={(e) => handleLayoutSettingChange('pageBreakAfterGroup', e.target.checked)} />} label="Page break after group" /></Grid>
                 <Grid item xs={12} sm={6}><FormControlLabel control={<Switch size="small" checked={layoutSettingsState.pageBreakBetweenRegions} onChange={(e) => handleLayoutSettingChange('pageBreakBetweenRegions', e.target.checked)} />} label="Page break between regions" /></Grid>
                 <Grid item xs={12} sm={6}><FormControlLabel control={<Switch size="small" checked={layoutSettingsState.fixedPageSize} onChange={(e) => handleLayoutSettingChange('fixedPageSize', e.target.checked)} />} label="Fixed page size" /></Grid>
-                <Grid item xs={6} sm={4}><TextField fullWidth size="small" type="number" label="Columns" value={layoutSettingsState.columns} onChange={(e) => handleLayoutSettingChange('columns', Math.max(1, Number(e.target.value) || 1))} /></Grid>
-                <Grid item xs={6} sm={8}><TextField fullWidth size="small" type="number" label="Column Spacing" value={layoutSettingsState.columnSpacing} onChange={(e) => handleLayoutSettingChange('columnSpacing', Math.max(0, Number(e.target.value) || 0))} InputProps={{ endAdornment: <InputAdornment position="end">px</InputAdornment> }} /></Grid>
+                <Grid size={{ 'xs': 6, 'sm': 4 }}><TextField fullWidth size="small" type="number" label="Columns" value={layoutSettingsState.columns} onChange={(e) => handleLayoutSettingChange('columns', Math.max(1, Number(e.target.value) || 1))} /></Grid>
+                <Grid size={{ 'xs': 6, 'sm': 8 }}><TextField fullWidth size="small" type="number" label="Column Spacing" value={layoutSettingsState.columnSpacing} onChange={(e) => handleLayoutSettingChange('columnSpacing', Math.max(0, Number(e.target.value) || 0))} InputProps={{ endAdornment: <InputAdornment position="end">px</InputAdornment> }} /></Grid>
                 <Grid item xs={12} sm={6}><FormControlLabel control={<Switch size="small" checked={layoutSettingsState.includeExecutionTime} onChange={(e) => handleLayoutSettingChange('includeExecutionTime', e.target.checked)} />} label="Include execution time" /></Grid>
                 <Grid item xs={12} sm={6}><FormControlLabel control={<Switch size="small" checked={layoutSettingsState.includeUserName} onChange={(e) => handleLayoutSettingChange('includeUserName', e.target.checked)} />} label="Include user name" /></Grid>
               </Grid>

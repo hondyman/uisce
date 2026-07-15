@@ -801,11 +801,11 @@ enqueueSnackbar('Failed to delete trigger', { variant: 'error' });
                       <Card key={approval.id} style={{ marginBottom: '16px' }}>
                         <CardContent>
                           <Grid container spacing={2}>
-                            <Grid item xs={12} sm={6}>
+                            <Grid size={{ 'xs': 12, 'sm': 6 }}>
                               <Typography variant="h6">Status</Typography>
                               <Typography variant="body1" color={approval.status === 'pending' ? 'orange' : 'green'}>{approval.status}</Typography>
                             </Grid>
-                            <Grid item xs={12} sm={6}>
+                            <Grid size={{ 'xs': 12, 'sm': 6 }}>
                               <Typography variant="h6">Requested By</Typography>
                               <Typography variant="body1">{approval.requested_by}</Typography>
                             </Grid>
@@ -905,11 +905,11 @@ enqueueSnackbar('Failed to delete trigger', { variant: 'error' });
                 <CardContent>
                   {analytics ? (
                     <Grid container spacing={2}>
-                      <Grid item xs={6}>
+                      <Grid size={6}>
                         <Typography variant="h6">Total Invocations</Typography>
                         <Typography variant="body1">{analytics.total_invocations}</Typography>
                       </Grid>
-                      <Grid item xs={6}>
+                      <Grid size={6}>
                         <Typography variant="h6">Success Rate</Typography>
                         <Typography variant="body1">{analytics.success_rate.toFixed(1)}%</Typography>
                       </Grid>

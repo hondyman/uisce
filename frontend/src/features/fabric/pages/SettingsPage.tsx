@@ -160,7 +160,7 @@ const SettingsPage: React.FC = () => {
         {/* Settings Cards Grid */}
         <Grid container spacing={2}>
           {/* IP Validation Card */}
-          <Grid item xs={12} sm={6} md={4}>
+          <Grid size={{ 'xs': 12, 'sm': 6, 'md': 4 }}>
             <Card>
               <CardContent>
                 <Typography variant="h6" fontWeight={700} gutterBottom>
@@ -203,7 +203,7 @@ const SettingsPage: React.FC = () => {
           </Grid>
 
           {/* Tenant Assignment Card */}
-          <Grid item xs={12} sm={6} md={4}>
+          <Grid size={{ 'xs': 12, 'sm': 6, 'md': 4 }}>
             <Card>
               <CardContent>
                 <Typography variant="h6" fontWeight={700} gutterBottom>
@@ -327,7 +327,7 @@ const SettingsPage: React.FC = () => {
           {policyViewMode === 'tile' && (
             <Grid container spacing={2}>
                 {policies.map((policy) => (
-                  <Grid item xs={12} sm={6} md={4} key={policy.id}>
+                  <Grid size={{ 'xs': 12, 'sm': 6, 'md': 4 }}>
                     <Card 
                       sx={{
                         height: '100%',

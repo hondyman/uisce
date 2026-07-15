@@ -232,7 +232,7 @@ const CronBuilder: React.FC<CronBuilderProps> = ({ value, onChange }) => {
       {activeTab === 0 && (
         <Grid container spacing={1}>
           {CRON_PRESETS.map((preset) => (
-            <Grid item xs={12} sm={6} md={4} key={preset.expression}>
+            <Grid size={{ 'xs': 12, 'sm': 6, 'md': 4 }}>
               <Card
                 variant={value === preset.expression ? 'elevation' : 'outlined'}
                 sx={{
@@ -727,7 +727,7 @@ const ReportScheduler: React.FC<ReportSchedulerProps> = ({ reportId, onScheduleC
               : getNextRunTime(schedule.cron_expression, schedule.timezone);
 
             return (
-              <Grid item xs={12} md={6} lg={4} key={schedule.id}>
+              <Grid size={{ 'xs': 12, 'md': 6, 'lg': 4 }}>
                 <Card>
                   <CardContent>
                     <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
@@ -820,14 +820,14 @@ const ReportScheduler: React.FC<ReportSchedulerProps> = ({ reportId, onScheduleC
         <DialogContent dividers>
           <Grid container spacing={3}>
             {/* Basic Info */}
-            <Grid item xs={12}>
+            <Grid size={12}>
               <Typography variant="subtitle2" gutterBottom>
                 Basic Information
               </Typography>
             </Grid>
 
             {!reportId && (
-              <Grid item xs={12}>
+              <Grid size={12}>
                 <Autocomplete
                   options={definitions || []}
                   getOptionLabel={(option: ReportDefinition) => option.display_name}
@@ -845,7 +845,7 @@ const ReportScheduler: React.FC<ReportSchedulerProps> = ({ reportId, onScheduleC
               </Grid>
             )}
 
-            <Grid item xs={12} md={6}>
+            <Grid size={{ 'xs': 12, 'md': 6 }}>
               <TextField
                 fullWidth
                 label="Schedule Name"
@@ -855,7 +855,7 @@ const ReportScheduler: React.FC<ReportSchedulerProps> = ({ reportId, onScheduleC
               />
             </Grid>
 
-            <Grid item xs={12} md={6}>
+            <Grid size={{ 'xs': 12, 'md': 6 }}>
               <FormControl fullWidth>
                 <InputLabel>Output Formats</InputLabel>
                 <Select

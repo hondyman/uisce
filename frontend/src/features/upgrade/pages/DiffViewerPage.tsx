@@ -130,7 +130,7 @@ export default function DiffViewerPage() {
       {error && <Alert severity="error">{error}</Alert>}
       {diff && (
         <Grid container spacing={2}>
-          <Grid item xs={12} md={8}>
+          <Grid size={{ 'xs': 12, 'md': 8 }}>
             <Card variant="outlined" sx={{ mb: 2 }}>
               <CardContent>
                 <Stack direction="row" spacing={1} sx={{ mb: 1 }}>
@@ -147,15 +147,15 @@ export default function DiffViewerPage() {
                 <Divider sx={{ mb: 2 }} />
                 {tab === 0 && (
                   <Grid container spacing={2}>
-                    <Grid item xs={12} md={6}>
+                    <Grid size={{ 'xs': 12, 'md': 6 }}>
                       <Typography variant="subtitle2">Added</Typography>
                       <SimpleList items={diff.cubes.added} />
                     </Grid>
-                    <Grid item xs={12} md={6}>
+                    <Grid size={{ 'xs': 12, 'md': 6 }}>
                       <Typography variant="subtitle2">Removed</Typography>
                       <SimpleList items={diff.cubes.removed} />
                     </Grid>
-                    <Grid item xs={12}>
+                    <Grid size={12}>
                       <Typography variant="subtitle2">Changed</Typography>
                       <KeyValueList data={diff.cubes.changed} />
                     </Grid>
@@ -171,7 +171,7 @@ export default function DiffViewerPage() {
                 )}
                 {tab === 1 && (
                   <Grid container spacing={2}>
-                    <Grid item xs={12}>
+                    <Grid size={12}>
                       <Typography variant="subtitle2">Join path changes</Typography>
                       <SimpleList items={diff.views.join_path_changes} />
                     </Grid>
@@ -219,7 +219,7 @@ export default function DiffViewerPage() {
               </CardContent>
             </Card>
           </Grid>
-          <Grid item xs={12} md={4}>
+          <Grid size={{ 'xs': 12, 'md': 4 }}>
             <Card variant="outlined" sx={{ mb: 2 }}>
               <CardContent>
                 <Typography variant="h6" sx={{ mb: 1 }}>Broken refs & fixes</Typography>

@@ -88,7 +88,7 @@ export const AIGeneratorWizard: React.FC<AIGeneratorWizardProps> = ({ open, onCl
                         <Typography variant="subtitle2" sx={{ mb: 1, fontWeight: 'bold' }}>Select Page Intent</Typography>
                         <Grid container spacing={2}>
                             {INTENTS.map((i) => (
-                                <Grid item xs={4} key={i.id}>
+                                <Grid size={4}>
                                     <Card 
                                         variant="outlined" 
                                         sx={{ 

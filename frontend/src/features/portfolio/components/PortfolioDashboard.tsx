@@ -319,7 +319,7 @@ const PerformanceTable: React.FC<PerformanceTableProps> = ({ metrics }) => {
       </Typography>
       <Grid container spacing={2}>
         {periods.map((period) => (
-          <Grid item xs={6} sm={4} md key={period.label}>
+          <Grid size={{ 'xs': 6, 'sm': 4 }}>
             <Box textAlign="center" sx={{ p: 1 }}>
               <Typography variant="caption" color="text.secondary">
                 {period.label}
@@ -342,13 +342,13 @@ const PerformanceTable: React.FC<PerformanceTableProps> = ({ metrics }) => {
         Risk Metrics
       </Typography>
       <Grid container spacing={2}>
-        <Grid item xs={6} sm={3}>
+        <Grid size={{ 'xs': 6, 'sm': 3 }}>
           <Box>
             <Typography variant="caption" color="text.secondary">Volatility</Typography>
             <Typography variant="body1" fontWeight="medium">{metrics.volatility?.toFixed(2)}%</Typography>
           </Box>
         </Grid>
-        <Grid item xs={6} sm={3}>
+        <Grid size={{ 'xs': 6, 'sm': 3 }}>
           <Box>
             <Typography variant="caption" color="text.secondary">Sharpe Ratio</Typography>
             <Typography variant="body1" fontWeight="medium">{metrics.sharpe_ratio?.toFixed(2)}</Typography>
@@ -411,7 +411,7 @@ export const PortfolioDashboard: React.FC<PortfolioDashboardProps> = ({
 
       {/* Summary Cards */}
       <Grid container spacing={2} sx={{ mb: 3 }}>
-        <Grid item xs={12} sm={6} md={3}>
+        <Grid size={{ 'xs': 12, 'sm': 6, 'md': 3 }}>
           <MetricCard
             title="Total Market Value"
             value={formatCurrency(summary.total_market_value)}
@@ -420,7 +420,7 @@ export const PortfolioDashboard: React.FC<PortfolioDashboardProps> = ({
             icon={<AccountIcon />}
           />
         </Grid>
-        <Grid item xs={12} sm={6} md={3}>
+        <Grid size={{ 'xs': 12, 'sm': 6, 'md': 3 }}>
           <MetricCard
             title="Unrealized Gain/Loss"
             value={formatCurrency(summary.total_unrealized_gain_loss)}
@@ -460,14 +460,14 @@ export const PortfolioDashboard: React.FC<PortfolioDashboardProps> = ({
 
       {activeTab === 1 && (
         <Grid container spacing={2}>
-          <Grid item xs={12} md={6}>
+          <Grid size={{ 'xs': 12, 'md': 6 }}>
             <AllocationChart
               data={summary.asset_allocation}
               title="Asset Allocation"
               showDrift
             />
           </Grid>
-          <Grid item xs={12} md={6}>
+          <Grid size={{ 'xs': 12, 'md': 6 }}>
             <AllocationChart
               data={summary.sector_allocation}
               title="Sector Allocation"

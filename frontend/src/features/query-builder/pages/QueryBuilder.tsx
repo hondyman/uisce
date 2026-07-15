@@ -137,7 +137,7 @@ const QueryBuilder = () => {
       </Tabs>
       {activeTab === 0 && (
         <Grid container spacing={3} sx={{ mt: 2 }}>
-          <Grid item xs={12} md={4}>
+          <Grid size={{ 'xs': 12, 'md': 4 }}>
             <Typography variant="h6" gutterBottom>Schema</Typography>
             <Paper sx={{ p: 2, height: '100%' }}>
               <SchemaBrowserAdapter
@@ -147,7 +147,7 @@ const QueryBuilder = () => {
               />
             </Paper>
           </Grid>
-          <Grid item xs={12} md={8}>
+          <Grid size={{ 'xs': 12, 'md': 8 }}>
             <Typography variant="h6" gutterBottom>Query</Typography>
             <Paper sx={{ p: 2, mb: 3 }}>
               <Box component="form" noValidate autoComplete="off" sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
@@ -201,13 +201,13 @@ const QueryBuilder = () => {
             Results
           </Typography>
           <Grid container spacing={3}>
-            <Grid item xs={12} md={6}>
+            <Grid size={{ 'xs': 12, 'md': 6 }}>
               <Typography variant="h6" gutterBottom>Chart</Typography>
               <Paper sx={{ p: 2, height: 400 }}>
                 <RechartsBarChart data={results} xKey={dimensions[0]} yKey={measures[0]} />
               </Paper>
             </Grid>
-            <Grid item xs={12} md={6}>
+            <Grid size={{ 'xs': 12, 'md': 6 }}>
               <Typography variant="h6" gutterBottom>Table</Typography>
               <TableContainer component={Paper} sx={{maxHeight: 440}}>
                 <Table stickyHeader sx={{ minWidth: 650 }} aria-label="simple table">

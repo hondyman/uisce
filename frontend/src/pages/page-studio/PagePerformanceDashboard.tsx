@@ -65,7 +65,7 @@ export const PagePerformanceDashboard: React.FC<PagePerformanceDashboardProps> =
             )}
 
             <Grid container spacing={3}>
-                <Grid item xs={12} md={4}>
+                <Grid size={{ 'xs': 12, 'md': 4 }}>
                     <Paper variant="outlined" sx={{ p: 3, borderRadius: 3 }}>
                         <Typography variant="subtitle2" color="textSecondary" gutterBottom>Response Time (p95)</Typography>
                         <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 1 }}>
@@ -81,7 +81,7 @@ export const PagePerformanceDashboard: React.FC<PagePerformanceDashboardProps> =
                     </Paper>
                 </Grid>
 
-                <Grid item xs={12} md={4}>
+                <Grid size={{ 'xs': 12, 'md': 4 }}>
                     <Paper variant="outlined" sx={{ p: 3, borderRadius: 3 }}>
                         <Typography variant="subtitle2" color="textSecondary" gutterBottom>Pre-agg Hit Rate</Typography>
                         <Typography variant="h4" fontWeight="bold">{Math.round(metrics.preAggHitRate * 100)}%</Typography>
@@ -105,7 +105,7 @@ export const PagePerformanceDashboard: React.FC<PagePerformanceDashboardProps> =
                     </Paper>
                 </Grid>
 
-                <Grid item xs={12}>
+                <Grid size={12}>
                     <Paper variant="outlined" sx={{ p: 0, borderRadius: 3, overflow: 'hidden' }}>
                         <Box sx={{ p: 2, bgcolor: 'rgba(99, 102, 241, 0.05)', borderBottom: '1px solid', borderColor: 'divider', display: 'flex', alignItems: 'center' }}>
                             <AiIcon color="primary" sx={{ mr: 1 }} />

@@ -215,7 +215,7 @@ export const SemanticRuleBuilderDashboard: React.FC = () => {
         {/* Main Content */}
         <Grid container sx={{ flex: 1, gap: 0 }}>
           {/* Left Panel: Semantic Catalog */}
-          <Grid item xs={12} md={3} sx={{ borderRight: '1px solid #e5e7eb' }}>
+          <Grid size={{ 'xs': 12, 'md': 3 }}>
             <Paper
               elevation={0}
               sx={{
@@ -346,7 +346,7 @@ export const SemanticRuleBuilderDashboard: React.FC = () => {
           </Grid>
 
           {/* Center Panel: Priority Hierarchy Editor */}
-          <Grid item xs={12} md={6} sx={{ bgcolor: '#f9fafb' }}>
+          <Grid size={{ 'xs': 12, 'md': 6 }}>
             <Paper
               elevation={0}
               sx={{
@@ -616,7 +616,7 @@ export const SemanticRuleBuilderDashboard: React.FC = () => {
           </Grid>
 
           {/* Right Panel: Simulation & Impact */}
-          <Grid item xs={12} md={3} sx={{ borderLeft: '1px solid #e5e7eb' }}>
+          <Grid size={{ 'xs': 12, 'md': 3 }}>
             <Paper
               elevation={0}
               sx={{
@@ -675,7 +675,7 @@ export const SemanticRuleBuilderDashboard: React.FC = () => {
                       📊 Impact Summary
                     </Typography>
                     <Grid container spacing={1.5}>
-                      <Grid item xs={6}>
+                      <Grid size={6}>
                         <Card>
                           <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
                             <Typography
@@ -696,7 +696,7 @@ export const SemanticRuleBuilderDashboard: React.FC = () => {
                           </CardContent>
                         </Card>
                       </Grid>
-                      <Grid item xs={6}>
+                      <Grid size={6}>
                         <Card>
                           <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
                             <Typography

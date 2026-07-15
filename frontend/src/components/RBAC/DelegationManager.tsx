@@ -343,7 +343,7 @@ export const DelegationManager: React.FC<DelegationManagerProps> = ({
       {/* Filters and View Toggle */}
       <Paper elevation={0} variant="outlined" sx={{ p: 2, mb: 4, bgcolor: 'background.paper', borderRadius: 2 }}>
         <Grid container spacing={2} alignItems="center">
-          <Grid item xs={12} md={4}>
+          <Grid size={{ 'xs': 12, 'md': 4 }}>
             <Autocomplete
               freeSolo
               options={delegations.flatMap(d => [
@@ -370,7 +370,7 @@ export const DelegationManager: React.FC<DelegationManagerProps> = ({
               )}
             />
           </Grid>
-          <Grid item xs={12} md={3}>
+          <Grid size={{ 'xs': 12, 'md': 3 }}>
             <FormControl fullWidth size="small">
               <Select
                 value={filterType}
@@ -384,7 +384,7 @@ export const DelegationManager: React.FC<DelegationManagerProps> = ({
               </Select>
             </FormControl>
           </Grid>
-          <Grid item xs={12} md={3}>
+          <Grid size={{ 'xs': 12, 'md': 3 }}>
             <ToggleButtonGroup
               value={filterStatus}
               exclusive
@@ -396,7 +396,7 @@ export const DelegationManager: React.FC<DelegationManagerProps> = ({
               <ToggleButton value="inactive" sx={{ textTransform: 'none' }}>Inactive</ToggleButton>
             </ToggleButtonGroup>
           </Grid>
-          <Grid item xs={12} md={2} display="flex" justifyContent="flex-end">
+          <Grid size={{ 'xs': 12, 'md': 2 }}>
              <ToggleButtonGroup
               value={viewMode}
               exclusive
@@ -529,7 +529,7 @@ export const DelegationManager: React.FC<DelegationManagerProps> = ({
       ) : (
         <Grid container spacing={3}>
           {filteredDelegations.map(delegation => (
-            <Grid item xs={12} md={6} lg={4} key={delegation.id}>
+            <Grid size={{ 'xs': 12, 'md': 6, 'lg': 4 }}>
               <Card elevation={2} sx={{ height: '100%', borderRadius: 2 }}>
                 <CardContent>
                   <Box display="flex" justifyContent="space-between" alignItems="flex-start" mb={2}>
@@ -666,7 +666,7 @@ export const DelegationManager: React.FC<DelegationManagerProps> = ({
             </FormControl>
 
             <Grid container spacing={2}>
-              <Grid item xs={6}>
+              <Grid size={6}>
                 <TextField
                   label="Start Date"
                   type="datetime-local"
@@ -679,7 +679,7 @@ export const DelegationManager: React.FC<DelegationManagerProps> = ({
                   error={!formData.start_date}
                 />
               </Grid>
-              <Grid item xs={6}>
+              <Grid size={6}>
                 <TextField
                   label="End Date"
                   type="datetime-local"

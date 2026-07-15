@@ -20,7 +20,7 @@ export const ConflictDetail: React.FC<Props> = ({ conflict }) => {
       </Typography>
       
       <Grid container spacing={3}>
-        <Grid item xs={12} md={6}>
+        <Grid size={{ 'xs': 12, 'md': 6 }}>
           <Paper elevation={0} sx={{ p: 2, bgcolor: '#f5f5f5' }}>
             <Typography variant="subtitle1" fontWeight="bold">Internal Event</Typography>
             <Divider sx={{ my: 1 }} />
@@ -30,7 +30,7 @@ export const ConflictDetail: React.FC<Props> = ({ conflict }) => {
           </Paper>
         </Grid>
         
-        <Grid item xs={12} md={6}>
+        <Grid size={{ 'xs': 12, 'md': 6 }}>
           <Paper elevation={0} sx={{ p: 2, bgcolor: '#e3f2fd' }}>
             <Typography variant="subtitle1" fontWeight="bold">Google Calendar Event</Typography>
             <Divider sx={{ my: 1 }} />

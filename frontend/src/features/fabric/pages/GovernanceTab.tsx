@@ -68,7 +68,7 @@ export default function GovernanceTab({ config, setConfig, modelName, toast }: P
   return (
     <Box sx={{ p: 2 }}>
       <Grid container spacing={2}>
-        <Grid item xs={12} md={6}>
+        <Grid size={{ 'xs': 12, 'md': 6 }}>
           <Card>
             <CardHeader title="Core Governance" />
             <CardContent>
@@ -82,7 +82,7 @@ export default function GovernanceTab({ config, setConfig, modelName, toast }: P
           </Card>
         </Grid>
 
-        <Grid item xs={12} md={6}>
+        <Grid size={{ 'xs': 12, 'md': 6 }}>
           <Card>
             <CardHeader title="Final Cube Governance (overrides)" />
             <CardContent>
@@ -96,7 +96,7 @@ export default function GovernanceTab({ config, setConfig, modelName, toast }: P
           </Card>
         </Grid>
 
-        <Grid item xs={12}>
+        <Grid size={12}>
           <Card>
             <CardHeader title="Validation" />
             <CardContent>
@@ -116,7 +116,7 @@ export default function GovernanceTab({ config, setConfig, modelName, toast }: P
           </Card>
         </Grid>
 
-        <Grid item xs={12}>
+        <Grid size={12}>
           <Card>
             <CardHeader title="Companion Governance JSON" action={
               <Box>

@@ -356,7 +356,7 @@ export const AbbreviationManager: React.FC<AbbreviationManagerProps> = ({
   const renderCardView = () => (
     <Grid container spacing={2}>
       {filteredAndSorted.map((abbrev: any) => (
-        <Grid item xs={12} sm={6} md={4} key={abbrev.id}>
+        <Grid size={{ 'xs': 12, 'sm': 6, 'md': 4 }}>
           <Card sx={{ display: 'flex', flexDirection: 'column', height: '100%' }} elevation={2}>
             <Box sx={{ p: 2, pb: 1 }}>
               <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', mb: 1 }}>
@@ -647,13 +647,13 @@ export const AbbreviationManager: React.FC<AbbreviationManagerProps> = ({
                       Validation Results:
                     </Typography>
                     <Grid container spacing={2}>
-                      <Grid item xs={6}>
+                      <Grid size={6}>
                         <Box sx={{ p: 1, bgcolor: 'success.50', borderRadius: 1 }}>
                           <Typography variant="caption">Valid Terms</Typography>
                           <Typography variant="h6">{validationResult.valid_terms}</Typography>
                         </Box>
                       </Grid>
-                      <Grid item xs={6}>
+                      <Grid size={6}>
                         <Box sx={{ p: 1, bgcolor: 'error.50', borderRadius: 1 }}>
                           <Typography variant="caption">With Abbreviations</Typography>
                           <Typography variant="h6">{Object.keys(validationResult.violations || {}).length}</Typography>

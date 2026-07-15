@@ -269,7 +269,7 @@ export const ReportLibrary: React.FC = () => {
 
       <Grid container spacing={3}>
         {/* Sidebar */}
-        <Grid item xs={12} md={3}>
+        <Grid size={{ 'xs': 12, 'md': 3 }}>
           <Card>
             <List>
               <ListItemButton
@@ -326,7 +326,7 @@ export const ReportLibrary: React.FC = () => {
         </Grid>
 
         {/* Main Content */}
-        <Grid item xs={12} md={9}>
+        <Grid size={{ 'xs': 12, 'md': 9 }}>
           {/* Controls */}
           <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 2 }}>
             <TextField
@@ -409,7 +409,7 @@ export const ReportLibrary: React.FC = () => {
           ) : (
             <Grid container spacing={2}>
               {filteredReports.map(report => (
-                <Grid item xs={12} sm={6} md={4} key={report.id}>
+                <Grid size={{ 'xs': 12, 'sm': 6, 'md': 4 }}>
                   <Card>
                     <CardContent>
                       <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 2 }}>

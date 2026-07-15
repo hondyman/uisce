@@ -123,7 +123,7 @@ const OrchestrationMonitor: React.FC = () => {
 
       <Grid container spacing={3}>
         {/* Left: Active Table */}
-        <Grid item xs={12} md={7}>
+        <Grid size={{ 'xs': 12, 'md': 7 }}>
           <TableContainer component={Paper} sx={{ borderRadius: 2 }}>
             <Table size="small">
               <TableHead>
@@ -186,7 +186,7 @@ const OrchestrationMonitor: React.FC = () => {
         </Grid>
 
         {/* Right: Gantt / Timeline visualization */}
-        <Grid item xs={12} md={5}>
+        <Grid size={{ 'xs': 12, 'md': 5 }}>
           <Paper sx={{ p: 2, height: '100%' }}>
             <Typography variant="subtitle2" sx={{ mb: 2, display: 'flex', alignItems: 'center' }}>
               <TimelineIcon sx={{ mr: 1, fontSize: 20 }} />

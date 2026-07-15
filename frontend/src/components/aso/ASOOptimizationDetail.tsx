@@ -128,12 +128,12 @@ export const ASOOptimizationDetail: React.FC<ASOOptimizationDetailProps> = ({
       {/* ML & Explainability Section (New) */}
       <Grid container spacing={3} mb={3}>
         {mlEvidence && (
-          <Grid item xs={12}>
+          <Grid size={12}>
             <OptimizationMLCard ml={mlEvidence} />
           </Grid>
         )}
         {explain && (
-          <Grid item xs={12}>
+          <Grid size={12}>
             <OptimizationExplainabilityCard explain={explain} />
           </Grid>
         )}
@@ -163,7 +163,7 @@ export const ASOOptimizationDetail: React.FC<ASOOptimizationDetailProps> = ({
               </Typography>
               <Grid container spacing={2}>
                 {optimization.queries_per_day !== undefined && (
-                  <Grid item xs={6} md={3}>
+                  <Grid size={{ 'xs': 6, 'md': 3 }}>
                     <MetricBox
                       label="Queries/Day"
                       value={optimization.queries_per_day.toFixed(0)}
@@ -172,7 +172,7 @@ export const ASOOptimizationDetail: React.FC<ASOOptimizationDetailProps> = ({
                   </Grid>
                 )}
                 {optimization.avg_latency_ms !== undefined && (
-                  <Grid item xs={6} md={3}>
+                  <Grid size={{ 'xs': 6, 'md': 3 }}>
                     <MetricBox
                       label="Avg Latency"
                       value={`${optimization.avg_latency_ms.toFixed(0)}ms`}
@@ -290,11 +290,11 @@ const CreatePreAggDetails: React.FC<{ details: Record<string, any> }> = ({ detai
       <Box sx={{ mt: 2 }}>
         <Typography variant="subtitle2" gutterBottom>Estimated Resources</Typography>
         <Grid container spacing={2}>
-           <Grid item xs={4}>
+           <Grid size={4}>
              <Typography variant="caption">Storage</Typography>
              <Typography variant="body1">{formatBytes(details.cost_estimate.estimated_storage_bytes)}</Typography>
            </Grid>
-           <Grid item xs={4}>
+           <Grid size={4}>
              <Typography variant="caption">Refresh Cost</Typography>
              <Typography variant="body1">${details.cost_estimate.estimated_refresh_cost?.toFixed(2)}</Typography>
            </Grid>

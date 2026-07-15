@@ -244,7 +244,7 @@ const RuleCloneAndConflict: React.FC<RuleCloneAndConflictProps> = ({
     <Box>
       <Grid container spacing={2}>
         {/* Clone Existing Rule */}
-        <Grid item xs={12} sm={6}>
+        <Grid size={{ 'xs': 12, 'sm': 6 }}>
           <Card sx={{ height: '100%' }}>
             <CardHeader title="📋 Clone Existing Rule" />
             <CardContent>
@@ -264,7 +264,7 @@ const RuleCloneAndConflict: React.FC<RuleCloneAndConflictProps> = ({
         </Grid>
 
         {/* Check for Conflicts */}
-        <Grid item xs={12} sm={6}>
+        <Grid size={{ 'xs': 12, 'sm': 6 }}>
           <Card sx={{ height: '100%' }}>
             <CardHeader title="⚠️ Conflict Detection" />
             <CardContent>

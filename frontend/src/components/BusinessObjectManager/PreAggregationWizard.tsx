@@ -440,7 +440,7 @@ const Step1Basics: React.FC<{
   targetDatabase: string;
 }> = ({ name, setName, description, setDescription, boName, tenantId, targetDatabase }) => (
   <Grid container spacing={3}>
-    <Grid item xs={12} md={8}>
+    <Grid size={{ 'xs': 12, 'md': 8 }}>
       <TextField
         label="Pre-Aggregation Name"
         value={name}
@@ -461,7 +461,7 @@ const Step1Basics: React.FC<{
         placeholder="Describe what this pre-aggregation captures..."
       />
     </Grid>
-    <Grid item xs={12} md={4}>
+    <Grid size={{ 'xs': 12, 'md': 4 }}>
       <Paper variant="outlined" sx={{ p: 2 }}>
         <Typography variant="subtitle2" color="text.secondary">Context</Typography>
         <Divider sx={{ my: 1 }} />
@@ -505,7 +505,7 @@ const Step2GrainFields: React.FC<{
 
   return (
     <Grid container spacing={3}>
-      <Grid item xs={12} md={6}>
+      <Grid size={{ 'xs': 12, 'md': 6 }}>
         <Typography variant="subtitle2" gutterBottom>
           Grain (Group By Dimensions)
         </Typography>
@@ -555,7 +555,7 @@ const Step2GrainFields: React.FC<{
         />
       </Grid>
 
-      <Grid item xs={12} md={6}>
+      <Grid size={{ 'xs': 12, 'md': 6 }}>
         <Typography variant="subtitle2" gutterBottom>
           <Code sx={{ fontSize: 16, mr: 0.5, verticalAlign: 'text-bottom' }} />
           SQL Preview

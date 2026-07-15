@@ -176,7 +176,7 @@ function NotificationOverview({ analytics, onRefresh, onTabChange }: Notificatio
 
       <Grid container spacing={3}>
         {/* Key Metrics */}
-        <Grid item xs={12} sm={6} md={3}>
+        <Grid size={{ 'xs': 12, 'sm': 6, 'md': 3 }}>
           <Card>
             <CardContent>
               <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
@@ -192,7 +192,7 @@ function NotificationOverview({ analytics, onRefresh, onTabChange }: Notificatio
           </Card>
         </Grid>
 
-        <Grid item xs={12} sm={6} md={3}>
+        <Grid size={{ 'xs': 12, 'sm': 6, 'md': 3 }}>
           <Card>
             <CardContent>
               <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
@@ -241,7 +241,7 @@ function NotificationOverview({ analytics, onRefresh, onTabChange }: Notificatio
         </Grid>
 
         {/* Performance Metrics */}
-        <Grid item xs={12}>
+        <Grid size={12}>
           <Paper sx={{ p: 3 }}>
             <Typography variant="h6" gutterBottom>
               Performance Overview
@@ -292,7 +292,7 @@ function NotificationOverview({ analytics, onRefresh, onTabChange }: Notificatio
         </Grid>
 
         {/* Quick Actions */}
-        <Grid item xs={12}>
+        <Grid size={12}>
           <Paper sx={{ p: 3 }}>
             <Typography variant="h6" gutterBottom>
               Quick Actions

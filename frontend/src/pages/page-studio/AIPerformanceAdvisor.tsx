@@ -63,7 +63,7 @@ export const AIPerformanceAdvisor: React.FC<AIPerformanceAdvisorProps> = ({ page
             </Box>
 
             <Grid container spacing={3}>
-                <Grid item xs={12} md={4}>
+                <Grid size={{ 'xs': 12, 'md': 4 }}>
                     <Paper variant="outlined" sx={{ p: 2, borderRadius: 2 }}>
                         <Typography variant="overline" color="textSecondary">Est. Page Load</Typography>
                         <Typography variant="h4" fontWeight="bold" sx={{ color: 'warning.main' }}>1.2s</Typography>
@@ -71,7 +71,7 @@ export const AIPerformanceAdvisor: React.FC<AIPerformanceAdvisorProps> = ({ page
                         <LinearProgress variant="determinate" value={80} color="warning" sx={{ height: 8, borderRadius: 4 }} />
                     </Paper>
                 </Grid>
-                <Grid item xs={12} md={4}>
+                <Grid size={{ 'xs': 12, 'md': 4 }}>
                     <Paper variant="outlined" sx={{ p: 2, borderRadius: 2 }}>
                         <Typography variant="overline" color="textSecondary">API Fanout</Typography>
                         <Typography variant="h4" fontWeight="bold" sx={{ color: 'error.main' }}>4</Typography>
@@ -88,7 +88,7 @@ export const AIPerformanceAdvisor: React.FC<AIPerformanceAdvisorProps> = ({ page
                     </Paper>
                 </Grid>
 
-                <Grid item xs={12}>
+                <Grid size={12}>
                     <Typography variant="subtitle2" sx={{ mt: 2, mb: 1, fontWeight: 'bold' }}>AI Recommendations</Typography>
                     <Stack spacing={2}>
                         {RECOMMENDATIONS.map((rec) => (

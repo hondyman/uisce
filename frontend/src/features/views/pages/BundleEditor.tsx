@@ -105,7 +105,7 @@ export const BundleEditor: React.FC<BundleEditorProps> = ({
       <DialogContent>
         <Grid container spacing={3} sx={{ pt: 2 }}>
           {/* Left Panel: Bundle Metadata */}
-          <Grid item xs={12} md={4}>
+          <Grid size={{ 'xs': 12, 'md': 4 }}>
             <Typography variant="h6" gutterBottom>Bundle Details</Typography>
             <TextField
               label="Bundle Name"
@@ -133,7 +133,7 @@ export const BundleEditor: React.FC<BundleEditorProps> = ({
           </Grid>
 
           {/* Center Panel: Available Views */}
-          <Grid item xs={12} md={4}>
+          <Grid size={{ 'xs': 12, 'md': 4 }}>
             <Typography variant="h6" gutterBottom>Available Views</Typography>
             <Paper variant="outlined" sx={{ height: 400, display: 'flex', flexDirection: 'column' }}>
               <Box sx={{ p: 1, borderBottom: 1, borderColor: 'divider' }}>

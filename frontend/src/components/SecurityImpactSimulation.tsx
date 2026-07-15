@@ -105,7 +105,7 @@ export const SecurityImpactSimulation: React.FC<SecurityImpactSimulationProps> =
         </Typography>
 
         <Grid container spacing={3} sx={{ mb: 4 }} alignItems="flex-end">
-          <Grid item xs={12} md={4}>
+          <Grid size={{ 'xs': 12, 'md': 4 }}>
             <TextField
               fullWidth
               label="Simulated Price ($)"
@@ -115,7 +115,7 @@ export const SecurityImpactSimulation: React.FC<SecurityImpactSimulationProps> =
               InputProps={{ inputProps: { min: 0, step: 0.01 } }}
             />
           </Grid>
-          <Grid item xs={12} md={4}>
+          <Grid size={{ 'xs': 12, 'md': 4 }}>
             <TextField
               fullWidth
               label="Simulated Credit Rating"

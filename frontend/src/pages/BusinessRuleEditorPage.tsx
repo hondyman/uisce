@@ -158,7 +158,7 @@ const BusinessRuleEditorPage: React.FC = () => {
 
                     {/* Split View: Code & Explanation */}
                     <Grid container spacing={3} sx={{ height: 'calc(100% - 220px)' }}>
-                        <Grid item xs={12} md={7}>
+                        <Grid size={{ 'xs': 12, 'md': 7 }}>
                             <Typography variant="subtitle2" sx={{ mb: 1, color: '#94a3b8' }}>GENERATED REGO CODE</Typography>
                             <Paper sx={{ 
                                 height: '100%', 
@@ -182,7 +182,7 @@ const BusinessRuleEditorPage: React.FC = () => {
                                 />
                             </Paper>
                         </Grid>
-                        <Grid item xs={12} md={5}>
+                        <Grid size={{ 'xs': 12, 'md': 5 }}>
                              <Typography variant="subtitle2" sx={{ mb: 1, color: '#94a3b8' }}>EXPLANATION</Typography>
                              <Paper sx={{ p: 3, height: '100%', bgcolor: '#1e293b', color: '#e2e8f0', border: '1px solid #334155' }}>
                                  {explanation ? (

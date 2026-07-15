@@ -138,11 +138,11 @@ export const CalculatedFieldBuilder: React.FC<CalculatedFieldBuilderProps> = ({
       
       <Grid container spacing={3}>
         {/* Left Panel: Configuration */}
-        <Grid item xs={12} md={8}>
+        <Grid size={{ 'xs': 12, 'md': 8 }}>
           <Card>
             <CardContent>
               <Grid container spacing={2}>
-                <Grid item xs={12} md={6}>
+                <Grid size={{ 'xs': 12, 'md': 6 }}>
                   <TextField 
                     fullWidth 
                     label="Field Name" 
@@ -151,7 +151,7 @@ export const CalculatedFieldBuilder: React.FC<CalculatedFieldBuilderProps> = ({
                     placeholder="e.g. client.risk_drift"
                   />
                 </Grid>
-                <Grid item xs={12} md={6}>
+                <Grid size={{ 'xs': 12, 'md': 6 }}>
                   <FormControl fullWidth>
                     <InputLabel>Type</InputLabel>
                     <Select
@@ -166,7 +166,7 @@ export const CalculatedFieldBuilder: React.FC<CalculatedFieldBuilderProps> = ({
                   </FormControl>
                 </Grid>
                 
-                <Grid item xs={12}>
+                <Grid size={12}>
                    <Typography variant="subtitle2" gutterBottom>
                      Expression Logic
                    </Typography>
@@ -190,7 +190,7 @@ export const CalculatedFieldBuilder: React.FC<CalculatedFieldBuilderProps> = ({
                    </Typography>
                 </Grid>
                 
-                <Grid item xs={12}>
+                <Grid size={12}>
                   <Box sx={{ display: 'flex', gap: 2, justifyContent: 'flex-end' }}>
                      <Button 
                        variant="outlined" 
@@ -248,7 +248,7 @@ export const CalculatedFieldBuilder: React.FC<CalculatedFieldBuilderProps> = ({
         </Grid>
         
         {/* Right Panel: Term Browser */}
-        <Grid item xs={12} md={4}>
+        <Grid size={{ 'xs': 12, 'md': 4 }}>
            <Card sx={{ height: '100%' }}>
              <CardContent>
                <Typography variant="subtitle2" gutterBottom>

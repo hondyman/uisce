@@ -102,7 +102,7 @@ export const AdvisorConsolePage: React.FC = () => {
 
       <Grid container spacing={3} sx={{ flexGrow: 1, mt: 1 }}>
         {/* Queue List */}
-        <Grid item xs={12} md={4}>
+        <Grid size={{ 'xs': 12, 'md': 4 }}>
           <Paper sx={{ height: '100%', overflow: 'auto' }}>
             <List>
               {queue.map((item) => (
@@ -148,7 +148,7 @@ export const AdvisorConsolePage: React.FC = () => {
         </Grid>
 
         {/* Detail View */}
-        <Grid item xs={12} md={8}>
+        <Grid size={{ 'xs': 12, 'md': 8 }}>
           {selectedItem ? (
             <Paper sx={{ p: 3, height: '100%' }}>
               <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
@@ -164,7 +164,7 @@ export const AdvisorConsolePage: React.FC = () => {
 
               <Typography variant="h6" gutterBottom>Client Context</Typography>
               <Grid container spacing={2}>
-                <Grid item xs={4}>
+                <Grid size={4}>
                   <Card variant="outlined">
                     <CardContent>
                       <Typography color="textSecondary" gutterBottom>Risk Score</Typography>
@@ -172,7 +172,7 @@ export const AdvisorConsolePage: React.FC = () => {
                     </CardContent>
                   </Card>
                 </Grid>
-                <Grid item xs={4}>
+                <Grid size={4}>
                   <Card variant="outlined">
                     <CardContent>
                       <Typography color="textSecondary" gutterBottom>Last Contact</Typography>

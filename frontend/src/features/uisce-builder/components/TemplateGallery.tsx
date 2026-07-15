@@ -157,7 +157,7 @@ const TemplateGallery: React.FC<TemplateGalleryProps> = ({ open, onClose, onAppl
             const Icon = template.icon;
             const isSelected = selectedTemplate === template.id;
             return (
-              <Grid item xs={12} sm={6} key={template.id}>
+              <Grid size={{ 'xs': 12, 'sm': 6 }}>
                 <Card 
                   elevation={isSelected ? 8 : 1}
                   sx={{ 

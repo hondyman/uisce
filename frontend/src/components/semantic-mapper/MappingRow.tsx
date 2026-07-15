@@ -137,7 +137,7 @@ export function MappingRow({ mapping, idx, ...props }: MappingRowProps) {
           </Box>
           <Box sx={{ flex: 1 }}>
             <Grid container spacing={1.5} alignItems="center">
-              <Grid item xs={12} md={5}>
+              <Grid size={{ 'xs': 12, 'md': 5 }}>
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 0.5 }}>
                   <Database width={12} height={12} style={{ color: '#666' }} />
                   <Typography variant="caption" color="text.secondary" fontWeight={600} sx={{ fontSize: '11px' }}>Database Column</Typography>
@@ -174,8 +174,8 @@ export function MappingRow({ mapping, idx, ...props }: MappingRowProps) {
                   </Typography>
                 )}
               </Grid>
-              <Grid item xs={12} md={1} sx={{ textAlign: 'center' }}><ArrowRight width={24} height={24} style={{ color: '#999' }} /></Grid>
-              <Grid item xs={12} md={6}>
+              <Grid size={{ 'xs': 12, 'md': 1 }}><ArrowRight width={24} height={24} style={{ color: '#999' }} /></Grid>
+              <Grid size={{ 'xs': 12, 'md': 6 }}>
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 0.5 }}>
                   <Tag width={12} height={12} style={{ color: '#666' }} />
                   <Typography variant="caption" color="text.secondary" fontWeight={600} sx={{ fontSize: '11px' }}>Semantic Term</Typography>

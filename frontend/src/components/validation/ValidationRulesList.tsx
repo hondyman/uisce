@@ -340,7 +340,7 @@ const ValidationRulesList: React.FC = () => {
             <Grid container spacing={3}>
               {/* Business Process Names Facet */}
               {bpNameFacets.length > 0 && (
-                <Grid item xs={12} md={6}>
+                <Grid size={{ 'xs': 12, 'md': 6 }}>
                   <Box className={classes.facetGroup}>
                     <Typography className={classes.facetTitle}>Business Process</Typography>
                     <FormGroup>
@@ -363,7 +363,7 @@ const ValidationRulesList: React.FC = () => {
 
               {/* Rule Type Facet */}
               {ruleTypeFacets.length > 0 && (
-                <Grid item xs={12} md={6}>
+                <Grid size={{ 'xs': 12, 'md': 6 }}>
                   <Box className={classes.facetGroup}>
                     <Typography className={classes.facetTitle}>Rule Type</Typography>
                     <FormGroup>

@@ -144,10 +144,10 @@ export const SourceComparisonMatrix: React.FC = () => {
         <CardContent>
           <Grid container spacing={3} sx={{ mb: 3 }}>
             {/* Source Cards */}
-            <Grid item xs={12}>
+            <Grid size={12}>
               <Grid container spacing={2}>
                 {mockSources.map((source) => (
-                  <Grid item xs={12} sm={6} key={source.name}>
+                  <Grid size={{ 'xs': 12, 'sm': 6 }}>
                     <Card sx={{ bgcolor: source.preference === '1st' ? '#f0f9ff' : '#fffbf0' }}>
                       <CardContent>
                         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', mb: 2 }}>
@@ -186,7 +186,7 @@ export const SourceComparisonMatrix: React.FC = () => {
             </Grid>
 
             {/* Comparison Table */}
-            <Grid item xs={12}>
+            <Grid size={12}>
               <TableContainer component={Paper}>
                 <Table>
                   <TableHead sx={{ bgcolor: '#f3f4f6' }}>
@@ -275,7 +275,7 @@ export const SourceComparisonMatrix: React.FC = () => {
             </Grid>
 
             {/* Business Impact Card */}
-            <Grid item xs={12} md={6}>
+            <Grid size={{ 'xs': 12, 'md': 6 }}>
               <Card sx={{ bgcolor: '#ecf4ff', borderLeft: '4px solid #137fec' }}>
                 <CardContent>
                   <Box sx={{ display: 'flex', alignItems: 'start', gap: 2, mb: 1 }}>
@@ -302,7 +302,7 @@ export const SourceComparisonMatrix: React.FC = () => {
             </Grid>
 
             {/* Risk Assessment */}
-            <Grid item xs={12} md={6}>
+            <Grid size={{ 'xs': 12, 'md': 6 }}>
               <Card>
                 <CardHeader title="Risk Assessment" />
                 <CardContent>

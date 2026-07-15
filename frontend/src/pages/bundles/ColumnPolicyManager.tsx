@@ -81,7 +81,7 @@ export const ColumnPolicyManager: React.FC<ColumnPolicyManagerProps> = ({
                             }}
                         >
                             <Grid container spacing={2}>
-                                <Grid item xs={12} md={6}>
+                                <Grid size={{ 'xs': 12, 'md': 6 }}>
                                     <TextField
                                         label="Policy Name"
                                         value={policy.name}
@@ -91,7 +91,7 @@ export const ColumnPolicyManager: React.FC<ColumnPolicyManagerProps> = ({
                                         helperText={fieldHelperText(`columnPolicies[${index}].name`)}
                                     />
                                 </Grid>
-                                <Grid item xs={12} md={6}>
+                                <Grid size={{ 'xs': 12, 'md': 6 }}>
                                     <TextField
                                         select
                                         label="Mask Type"
@@ -108,7 +108,7 @@ export const ColumnPolicyManager: React.FC<ColumnPolicyManagerProps> = ({
                                         ))}
                                     </TextField>
                                 </Grid>
-                                <Grid item xs={12}>
+                                <Grid size={12}>
                                     <TextField
                                         label="Description"
                                         value={policy.description}

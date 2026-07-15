@@ -147,7 +147,7 @@ export const PortfolioOverrideDashboard: React.FC = () => {
           {tab === 0 && (
             <Grid container spacing={3}>
               {portfolios.map((portfolio) => (
-                <Grid item xs={12} sm={6} md={4} key={portfolio.id}>
+                <Grid size={{ 'xs': 12, 'sm': 6, 'md': 4 }}>
                   <Card
                     sx={{
                       cursor: 'pointer',
@@ -264,7 +264,7 @@ export const PortfolioOverrideDashboard: React.FC = () => {
           {/* Impact Analysis Tab */}
           {tab === 2 && (
             <Grid container spacing={3}>
-              <Grid item xs={12} md={6}>
+              <Grid size={{ 'xs': 12, 'md': 6 }}>
                 <Card>
                   <CardHeader title="Portfolio Impact Summary" />
                   <CardContent>
@@ -299,7 +299,7 @@ export const PortfolioOverrideDashboard: React.FC = () => {
                 </Card>
               </Grid>
 
-              <Grid item xs={12} md={6}>
+              <Grid size={{ 'xs': 12, 'md': 6 }}>
                 <Card>
                   <CardHeader title="Scenario Analysis" />
                   <CardContent>
@@ -335,12 +335,12 @@ export const PortfolioOverrideDashboard: React.FC = () => {
           {/* Templates Tab */}
           {tab === 3 && (
             <Grid container spacing={2}>
-              <Grid item xs={12}>
+              <Grid size={12}>
                 <Alert severity="info">
                   Save frequently used override configurations as templates for faster deployment.
                 </Alert>
               </Grid>
-              <Grid item xs={12} sm={6} md={4}>
+              <Grid size={{ 'xs': 12, 'sm': 6, 'md': 4 }}>
                 <Card>
                   <CardContent>
                     <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 1 }}>
@@ -355,7 +355,7 @@ export const PortfolioOverrideDashboard: React.FC = () => {
                   </CardContent>
                 </Card>
               </Grid>
-              <Grid item xs={12} sm={6} md={4}>
+              <Grid size={{ 'xs': 12, 'sm': 6, 'md': 4 }}>
                 <Card>
                   <CardContent>
                     <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 1 }}>

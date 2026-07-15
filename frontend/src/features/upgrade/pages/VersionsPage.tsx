@@ -716,7 +716,7 @@ export default function VersionsPage() {
       )}
 
       <Grid container spacing={2}>
-        <Grid item xs={12} md={8}>
+        <Grid size={{ 'xs': 12, 'md': 8 }}>
           {showInteractiveTable ? (
             <Card variant="outlined" sx={{ p: 2 }}>
               <Typography variant="h6" sx={{ mb: 2 }}>Interactive Versions Table</Typography>
@@ -736,7 +736,7 @@ export default function VersionsPage() {
             </Box>
           )}
         </Grid>
-        <Grid item xs={12} md={4}>
+        <Grid size={{ 'xs': 12, 'md': 4 }}>
           <Card variant="outlined" sx={{ mb: 2 }}>
             <CardContent>
               <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 1 }}>
@@ -1157,7 +1157,7 @@ export default function VersionsPage() {
               <Typography variant="h6" sx={{ mb: 1 }}>Component Status</Typography>
               <Grid container spacing={2}>
                 {Object.entries(healthMetrics.components).map(([component, status]: [string, any]) => (
-                  <Grid item xs={12} sm={6} key={component}>
+                  <Grid size={{ 'xs': 12, 'sm': 6 }}>
                     <Card variant="outlined">
                       <CardContent>
                         <Typography variant="subtitle1" sx={{ textTransform: 'capitalize' }}>

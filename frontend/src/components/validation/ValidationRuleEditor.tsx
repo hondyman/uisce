@@ -669,14 +669,14 @@ const ValidationRuleEditor: React.FC<ValidationRuleEditorProps> = ({
           {(dialogTab === 1 || editingId) && (
             <Grid container spacing={2}>
               {selectedTemplate && !editingId && (
-                <Grid item xs={12}>
+                <Grid size={12}>
                   <Alert severity="info">
                     Using template: <strong>{selectedTemplate.name}</strong> - {selectedTemplate.description}
                   </Alert>
                 </Grid>
               )}
 
-              <Grid item xs={12}>
+              <Grid size={12}>
                 <TextField
                   fullWidth
                   label="Rule Name"
@@ -685,7 +685,7 @@ const ValidationRuleEditor: React.FC<ValidationRuleEditorProps> = ({
                   placeholder="e.g., Age Must Be 18 or Older"
                 />
               </Grid>
-              <Grid item xs={12} sm={6}>
+              <Grid size={{ 'xs': 12, 'sm': 6 }}>
                 <TextField
                   fullWidth
                   label="Business Process / Entity"
@@ -695,7 +695,7 @@ const ValidationRuleEditor: React.FC<ValidationRuleEditorProps> = ({
                   disabled={!!contextEntity}
                 />
               </Grid>
-              <Grid item xs={12} sm={6}>
+              <Grid size={{ 'xs': 12, 'sm': 6 }}>
                 <Box sx={{ display: 'flex', gap: 1 }}>
                   <TextField
                     fullWidth

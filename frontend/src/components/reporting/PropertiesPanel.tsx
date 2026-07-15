@@ -27,18 +27,18 @@ const PropertiesPanel: FC<any> = ({ selectedElement, onElementUpdate }) => {
         </AccordionSummary>
         <AccordionDetails>
           <Grid container spacing={2}>
-            <Grid item xs={12}>
+            <Grid size={12}>
               <TextField fullWidth size="small" label="Name" value={selectedElement.properties.name || ''} onChange={(e) => updateProperty('name', e.target.value)} />
             </Grid>
             {selectedElement.type === ELEMENT_TYPES.TEXTBOX && (
               <>
-                <Grid item xs={12}>
+                <Grid size={12}>
                   <TextField fullWidth size="small" multiline rows={3} label="Text" value={selectedElement.properties.text || ''} onChange={(e) => updateProperty('text', e.target.value)} />
                 </Grid>
-                <Grid item xs={6}>
+                <Grid size={6}>
                   <FormControl fullWidth size="small"><InputLabel>Font Size</InputLabel><Select value={selectedElement.properties.fontSize || 12} onChange={(e) => updateProperty('fontSize', e.target.value)}>{[8,9,10,11,12,14,16,18,20,24,28,32].map(size => <MenuItem key={size} value={size}>{size}pt</MenuItem>)}</Select></FormControl>
                 </Grid>
-                <Grid item xs={6}>
+                <Grid size={6}>
                   <FormControl fullWidth size="small"><InputLabel>Text Align</InputLabel><Select value={selectedElement.properties.textAlign || 'left'} onChange={(e) => updateProperty('textAlign', e.target.value)}><MenuItem value="left">Left</MenuItem><MenuItem value="center">Center</MenuItem><MenuItem value="right">Right</MenuItem></Select></FormControl>
                 </Grid>
               </>

@@ -86,13 +86,13 @@ export default function PolicyManagementPage() {
         </Button>
       </Box>
       <Grid container spacing={3}>
-        <Grid item xs={12} md={isEditorOpen ? 6 : 12}>
+        <Grid size={{ 'xs': 12, 'md': isEditorOpen ? 6 : 12 }}>
           <Paper sx={{ p: 2 }}>
             <PolicyList policies={policies} onEdit={handleEdit} />
           </Paper>
         </Grid>
         {isEditorOpen && (
-          <Grid item xs={12} md={6}>
+          <Grid size={{ 'xs': 12, 'md': 6 }}>
             <Paper sx={{ p: 2 }}>
               <EditPolicy
                 id={selectedPolicy?.id}

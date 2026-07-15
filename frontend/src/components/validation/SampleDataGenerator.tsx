@@ -207,7 +207,7 @@ const SampleDataGenerator: React.FC<SampleDataGeneratorProps> = ({
         <DialogContent sx={{ pt: 2 }}>
           {!generatedData ? (
             <Grid container spacing={2}>
-              <Grid item xs={12}>
+              <Grid size={12}>
                 <TextField
                   type="number"
                   label="Number of Records"
@@ -218,7 +218,7 @@ const SampleDataGenerator: React.FC<SampleDataGeneratorProps> = ({
                 />
               </Grid>
 
-              <Grid item xs={12}>
+              <Grid size={12}>
                 <FormControl fullWidth>
                   <InputLabel>Options</InputLabel>
                   <Select

@@ -258,7 +258,7 @@ export const ClientOnboardingWizard: React.FC = () => {
 
   const renderPersonalInfo = () => (
     <Grid container spacing={3}>
-      <Grid item xs={12}>
+      <Grid size={12}>
         <Typography variant="h6" gutterBottom>
           Tell us about yourself
         </Typography>
@@ -267,7 +267,7 @@ export const ClientOnboardingWizard: React.FC = () => {
         </Typography>
       </Grid>
 
-      <Grid item xs={12} sm={6}>
+      <Grid size={{ 'xs': 12, 'sm': 6 }}>
         <TextField
           label="First Name"
           fullWidth
@@ -282,7 +282,7 @@ export const ClientOnboardingWizard: React.FC = () => {
         />
       </Grid>
 
-      <Grid item xs={12} sm={6}>
+      <Grid size={{ 'xs': 12, 'sm': 6 }}>
         <TextField
           label="Last Name"
           fullWidth
@@ -364,7 +364,7 @@ export const ClientOnboardingWizard: React.FC = () => {
         />
       </Grid>
 
-      <Grid item xs={12}>
+      <Grid size={12}>
         <Typography variant="subtitle1" gutterBottom sx={{ mt: 2 }}>
           Address
         </Typography>
@@ -385,7 +385,7 @@ export const ClientOnboardingWizard: React.FC = () => {
         />
       </Grid>
 
-      <Grid item xs={12} sm={4}>
+      <Grid size={{ 'xs': 12, 'sm': 4 }}>
         <TextField
           label="City"
           fullWidth
@@ -400,7 +400,7 @@ export const ClientOnboardingWizard: React.FC = () => {
         />
       </Grid>
 
-      <Grid item xs={12} sm={4}>
+      <Grid size={{ 'xs': 12, 'sm': 4 }}>
         <FormControl fullWidth>
           <InputLabel>State</InputLabel>
           <Select

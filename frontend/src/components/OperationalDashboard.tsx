@@ -523,7 +523,7 @@ export const OperationalDashboard: React.FC<OperationalDashboardProps> = ({
           {/* KPI Cards Section - 2 columns */}
           <Grid container spacing={3} sx={{ mb: 4 }}>
             {kpiData.map((kpi) => (
-              <Grid item xs={12} sm={6} lg={6} key={kpi.id}>
+              <Grid size={{ 'xs': 12, 'sm': 6, 'lg': 6 }}>
                 <KPICardComponent kpi={kpi} />
               </Grid>
             ))}
@@ -533,13 +533,7 @@ export const OperationalDashboard: React.FC<OperationalDashboardProps> = ({
           <Grid container spacing={3} sx={{ mb: 4 }}>
             {sparklineData.map((spark) => (
               <Grid
-                item
-                xs={12}
-                sm={6}
-                md={6}
-                lg={3}
-                key={spark.id}
-              >
+                size={{ 'xs': 12, 'sm': 6, 'md': 6, 'lg': 3 }}>
                 <SparklineCard data={spark} />
               </Grid>
             ))}
@@ -548,12 +542,12 @@ export const OperationalDashboard: React.FC<OperationalDashboardProps> = ({
           {/* Operations and Alerts Section - 2 columns */}
           <Grid container spacing={3}>
             {/* ETL Health */}
-            <Grid item xs={12} lg={6}>
+            <Grid size={{ 'xs': 12, 'lg': 6 }}>
               <ETLHealthSection etlStatus={etlStatus} />
             </Grid>
 
             {/* Critical Alerts */}
-            <Grid item xs={12} lg={6}>
+            <Grid size={{ 'xs': 12, 'lg': 6 }}>
               <Card>
                 <CardHeader
                   title="Critical Alerts"

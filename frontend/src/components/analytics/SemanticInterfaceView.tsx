@@ -193,7 +193,7 @@ const SemanticInterfaceView: React.FC = () => {
             {activeTab === 0 && apiBundle && (
               <Box>
                 <Grid container spacing={3}>
-                  <Grid item xs={12} md={4}>
+                  <Grid size={{ 'xs': 12, 'md': 4 }}>
                     <Card sx={{ borderRadius: '12px', border: '1px solid #e5e7eb', height: '100%' }}>
                       <CardContent>
                         <Typography variant="h6" sx={{ fontWeight: 700, mb: 2 }}>
@@ -228,7 +228,7 @@ const SemanticInterfaceView: React.FC = () => {
                       </CardContent>
                     </Card>
                   </Grid>
-                  <Grid item xs={12} md={8}>
+                  <Grid size={{ 'xs': 12, 'md': 8 }}>
                     <Card sx={{ borderRadius: '12px', border: '1px solid #e5e7eb', bgcolor: '#111827' }}>
                       <Box sx={{ p: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #374151' }}>
                         <Typography variant="subtitle2" sx={{ color: '#9ca3af', fontWeight: 600 }}>

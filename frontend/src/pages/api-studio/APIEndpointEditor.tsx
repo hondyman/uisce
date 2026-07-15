@@ -98,7 +98,7 @@ const APIEndpointEditor: React.FC<APIEndpointEditorProps> = ({ endpoint, bo, onS
             <Box sx={{ flex: 1, overflowY: 'auto' }}>
                 {activeTab === 0 && (
                     <Grid container spacing={4}>
-                        <Grid item xs={12} md={6}>
+                        <Grid size={{ 'xs': 12, 'md': 6 }}>
                             <Typography variant="subtitle2" gutterBottom>Basic Information</Typography>
                             <TextField 
                                 fullWidth label="Endpoint Name" variant="outlined" sx={{ mb: 2 }}
@@ -134,7 +134,7 @@ const APIEndpointEditor: React.FC<APIEndpointEditorProps> = ({ endpoint, bo, onS
                             </Box>
                         </Grid>
 
-                        <Grid item xs={12} md={6}>
+                        <Grid size={{ 'xs': 12, 'md': 6 }}>
                             <Typography variant="subtitle2" gutterBottom>Field Selection ({bo?.name})</Typography>
                             <Box sx={{ p: 2, border: '1px solid rgba(0,0,0,0.1)', borderRadius: 2, maxHeight: 300, overflowY: 'auto' }}>
                                 <FormGroup>

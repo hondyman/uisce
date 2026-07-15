@@ -12,13 +12,13 @@ export const ConflictStats: React.FC<Props> = ({ stats }) => {
     <Paper sx={{ p: 2, mb: 3 }}>
       <Typography variant="h6" gutterBottom>Conflict Overview</Typography>
       <Grid container spacing={2}>
-        <Grid item xs={12} sm={3}>
+        <Grid size={{ 'xs': 12, 'sm': 3 }}>
           <Box p={2} bgcolor="error.light" borderRadius={1}>
             <Typography variant="subtitle2">Pending</Typography>
             <Typography variant="h4">{stats.pending || 0}</Typography>
           </Box>
         </Grid>
-        <Grid item xs={12} sm={3}>
+        <Grid size={{ 'xs': 12, 'sm': 3 }}>
           <Box p={2} bgcolor="success.light" borderRadius={1}>
             <Typography variant="subtitle2">Resolved</Typography>
             <Typography variant="h4">{stats.resolved || 0}</Typography>

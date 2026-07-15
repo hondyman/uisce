@@ -31,7 +31,7 @@ const FailureAnalysis = ({ step }: FailureAnalysisProps) => {
       
       <Grid container spacing={2}>
         {/* Column 1: The Rule */}
-        <Grid item xs={6}>
+        <Grid size={6}>
           <Paper variant="outlined" sx={{ p: 1.5, height: '100%' }}>
             <Typography variant="caption" color="text.secondary" sx={{ display: 'block', textTransform: 'uppercase', mb: 0.5 }}>
               The Rule Required
@@ -43,7 +43,7 @@ const FailureAnalysis = ({ step }: FailureAnalysisProps) => {
         </Grid>
 
         {/* Column 2: The Actual Data */}
-        <Grid item xs={6}>
+        <Grid size={6}>
           <Paper variant="outlined" sx={{ p: 1.5, height: '100%' }}>
             <Typography variant="caption" color="text.secondary" sx={{ display: 'block', textTransform: 'uppercase', mb: 0.5 }}>
               The Trade Contained

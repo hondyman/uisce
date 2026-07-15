@@ -124,7 +124,7 @@ const DetailsDisplay: React.FC<DetailsDisplayProps> = ({
         const products = Array.isArray(instance.tenant_products) ? instance.tenant_products : [];
         return (
             <Grid container spacing={3} sx={{ height: '100%' }}>
-                <Grid item xs={12} md={6} sx={{ display: 'flex', flexDirection: 'column' }}>
+                <Grid size={{ 'xs': 12, 'md': 6 }}>
                     <Card variant="outlined" sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column' }}>
                         <CardHeader title="Assigned Products" action={<IconButton onClick={() => onAddProduct(instance)}><AddIcon /></IconButton>} />
                         <CardContent sx={{ flexGrow: 1, position: 'relative' }}>
@@ -136,7 +136,7 @@ const DetailsDisplay: React.FC<DetailsDisplayProps> = ({
                         </CardContent>
                     </Card>
                 </Grid>
-                <Grid item xs={12} md={6} sx={{ display: 'flex', flexDirection: 'column' }}>
+                <Grid size={{ 'xs': 12, 'md': 6 }}>
                     <Card variant="outlined" sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column' }}>
                         <CardHeader title="Data Sources" action={ <IconButton onClick={() => onAddDatasource(selectedProduct!)} disabled={!selectedProduct}> <AddIcon /> </IconButton> } />
                         <CardContent sx={{ flexGrow: 1, position: 'relative' }}>

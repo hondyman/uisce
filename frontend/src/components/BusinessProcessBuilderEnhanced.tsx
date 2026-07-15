@@ -199,7 +199,7 @@ const StepConfigurator: React.FC<{
         {/* Configuration fields */}
         <Grid container spacing={2}>
           {/* Duration */}
-          <Grid item xs={12} sm={6}>
+          <Grid size={{ 'xs': 12, 'sm': 6 }}>
             <TextField
               fullWidth
               type="number"
@@ -218,7 +218,7 @@ const StepConfigurator: React.FC<{
           </Grid>
 
           {/* Description */}
-          <Grid item xs={12} sm={6}>
+          <Grid size={{ 'xs': 12, 'sm': 6 }}>
             <TextField
               fullWidth
               label="Description"
@@ -234,7 +234,7 @@ const StepConfigurator: React.FC<{
 
           {/* Validation Step - Rules */}
           {step.stepType === 'validate' && (
-            <Grid item xs={12}>
+            <Grid size={12}>
               <FormControl fullWidth size="small">
                 <InputLabel>Validation Rules</InputLabel>
                 <FormGroup sx={{ mt: 1, mb: 1 }}>
@@ -316,7 +316,7 @@ const StepConfigurator: React.FC<{
 
           {/* Notification Step - Template */}
           {step.stepType === 'notify' && (
-            <Grid item xs={12}>
+            <Grid size={12}>
               <TextField
                 fullWidth
                 multiline
@@ -541,7 +541,7 @@ const BusinessProcessBuilderEnhanced: React.FC = () => {
                 Process Information
               </Typography>
               <Grid container spacing={2}>
-                <Grid item xs={12} sm={6} md={4}>
+                <Grid size={{ 'xs': 12, 'sm': 6, 'md': 4 }}>
                   <TextField
                     fullWidth
                     label="Process Name"
@@ -553,7 +553,7 @@ const BusinessProcessBuilderEnhanced: React.FC = () => {
                     variant="outlined"
                   />
                 </Grid>
-                <Grid item xs={12} sm={6} md={4}>
+                <Grid size={{ 'xs': 12, 'sm': 6, 'md': 4 }}>
                   <FormControl fullWidth>
                     <InputLabel>Target Entity</InputLabel>
                     <Select
@@ -610,7 +610,7 @@ const BusinessProcessBuilderEnhanced: React.FC = () => {
 
           {/* Stats Cards */}
           <Grid container spacing={2}>
-            <Grid item xs={12} sm={6} md={3}>
+            <Grid size={{ 'xs': 12, 'sm': 6, 'md': 3 }}>
               <Card elevation={1}>
                 <CardContent sx={{ textAlign: 'center' }}>
                   <Typography
@@ -627,7 +627,7 @@ const BusinessProcessBuilderEnhanced: React.FC = () => {
                 </CardContent>
               </Card>
             </Grid>
-            <Grid item xs={12} sm={6} md={3}>
+            <Grid size={{ 'xs': 12, 'sm': 6, 'md': 3 }}>
               <Card elevation={1}>
                 <CardContent sx={{ textAlign: 'center' }}>
                   <Typography
@@ -688,7 +688,7 @@ const BusinessProcessBuilderEnhanced: React.FC = () => {
               </Typography>
               <Grid container spacing={2}>
                 {STEP_TYPES.map((stepType) => (
-                  <Grid item xs={12} sm={6} md={4} lg={2.4} key={stepType.type}>
+                  <Grid size={{ 'xs': 12, 'sm': 6, 'md': 4, 'lg': 2.4 }}>
                     <Card
                       sx={{
                         cursor: 'pointer',

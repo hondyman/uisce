@@ -24,11 +24,11 @@ const BusinessTermDetail = () => {
             {/* 1. Header Section */}
             <Paper sx={{ p: 3, mb: 3 }}>
                 <Grid container spacing={2}>
-                    <Grid item xs={12}>
+                    <Grid size={12}>
                         <Typography variant="h4">{term.name}</Typography>
                         <Typography variant="subtitle1" color="textSecondary">ID: {term.id}</Typography>
                     </Grid>
-                    <Grid item xs={12}>
+                    <Grid size={12}>
                         <Typography variant="body1">{term.description}</Typography>
                     </Grid>
                 </Grid>
@@ -41,11 +41,11 @@ const BusinessTermDetail = () => {
                     <Button startIcon={<EditIcon />}>Edit Metadata</Button>
                 </Box>
                 <Grid container spacing={3}>
-                    <Grid item xs={4}>
+                    <Grid size={4}>
                         <Typography variant="subtitle2">PII Flag</Typography>
                         <Chip label={term.piiFlag ? "Yes" : "No"} color={term.piiFlag ? "error" : "default"} />
                     </Grid>
-                    <Grid item xs={4}>
+                    <Grid size={4}>
                         <Typography variant="subtitle2">Residency</Typography>
                         <Chip label={term.residency || "Global"} color="primary" variant="outlined" />
                     </Grid>

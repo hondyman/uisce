@@ -102,7 +102,7 @@ const ValuesProfileEditor: React.FC = () => {
 
       <Grid container spacing={3}>
         {/* Left Column: AI Assistant */}
-        <Grid item xs={12} md={4}>
+        <Grid size={{ 'xs': 12, 'md': 4 }}>
           <Paper elevation={3} sx={{ p: 2 }}>
             <Box display="flex" alignItems="center" mb={2}>
               <AutoFixHighIcon color="primary" sx={{ mr: 1 }} />
@@ -136,7 +136,7 @@ const ValuesProfileEditor: React.FC = () => {
         </Grid>
 
         {/* Right Column: Active Constraints */}
-        <Grid item xs={12} md={8}>
+        <Grid size={{ 'xs': 12, 'md': 8 }}>
           <Paper elevation={3} sx={{ p: 2 }}>
             <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
               <Typography variant="h6">Active Constraints</Typography>

@@ -54,7 +54,7 @@ export const SecurityDashboardPage: React.FC = () => {
             </Box>
 
             <Grid container spacing={3}>
-                <Grid item xs={12} sm={6} md={3}>
+                <Grid size={{ 'xs': 12, 'sm': 6, 'md': 3 }}>
                     <MetricCard 
                         title="Total Users" 
                         value={stats.total_users} 
@@ -62,7 +62,7 @@ export const SecurityDashboardPage: React.FC = () => {
                         color="primary" 
                     />
                 </Grid>
-                <Grid item xs={12} sm={6} md={3}>
+                <Grid size={{ 'xs': 12, 'sm': 6, 'md': 3 }}>
                     <MetricCard 
                         title="Active Sessions" 
                         value={stats.active_sessions} 
@@ -89,7 +89,7 @@ export const SecurityDashboardPage: React.FC = () => {
                     />
                 </Grid>
                 
-                <Grid item xs={12} md={6}>
+                <Grid size={{ 'xs': 12, 'md': 6 }}>
                     <Paper sx={{ p: 3 }}>
                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2 }}>
                             <SyncIcon color={stats.sync_status === 'healthy' ? 'success' : 'error'} />

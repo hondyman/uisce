@@ -294,7 +294,7 @@ export const EdgeTypeDetailPage: React.FC = () => {
         </Box>
         
         <Grid container spacing={4} sx={{ mt: 2 }}>
-          <Grid item xs={12} lg={8}>
+          <Grid size={{ 'xs': 12, 'lg': 8 }}>
             <Typography variant="subtitle1" fontWeight="bold" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
               <DescriptionOutlinedIcon fontSize="small"/> Description
             </Typography>
@@ -353,7 +353,7 @@ export const EdgeTypeDetailPage: React.FC = () => {
             </Box>
           </Grid>
           
-          <Grid item xs={12} lg={4}>
+          <Grid size={{ 'xs': 12, 'lg': 4 }}>
             <Stack spacing={3}>
               {/* Properties Sidebar */}
               <Card variant="outlined" sx={{ borderRadius: 3, height: '100%', minHeight: 450 }}>

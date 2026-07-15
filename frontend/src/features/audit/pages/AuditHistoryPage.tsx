@@ -225,7 +225,7 @@ const AuditHistoryPage: React.FC = () => {
         </Stack>
 
         <Grid container spacing={2}>
-          <Grid item xs={12} md={pageMode === 'list' ? 4 : 3}>
+          <Grid size={{ 'xs': 12, 'md': pageMode === 'list' ? 4 : 3 }}>
             <FormControl fullWidth>
               <InputLabel>Entity Type</InputLabel>
               <Select
@@ -243,7 +243,7 @@ const AuditHistoryPage: React.FC = () => {
           </Grid>
 
           {pageMode === 'details' && (
-            <Grid item xs={12} md={3}>
+            <Grid size={{ 'xs': 12, 'md': 3 }}>
               <TextField
                 fullWidth
                 label="Entity ID"
@@ -255,7 +255,7 @@ const AuditHistoryPage: React.FC = () => {
             </Grid>
           )}
 
-          <Grid item xs={12} md={pageMode === 'list' ? 3 : 2}>
+          <Grid size={{ 'xs': 12, 'md': pageMode === 'list' ? 3 : 2 }}>
             <TextField
               fullWidth
               label="From Date"
@@ -266,7 +266,7 @@ const AuditHistoryPage: React.FC = () => {
             />
           </Grid>
 
-          <Grid item xs={12} md={pageMode === 'list' ? 3 : 2}>
+          <Grid size={{ 'xs': 12, 'md': pageMode === 'list' ? 3 : 2 }}>
             <TextField
               fullWidth
               label="To Date"
@@ -278,7 +278,7 @@ const AuditHistoryPage: React.FC = () => {
           </Grid>
 
           {pageMode === 'details' && (
-            <Grid item xs={12} md={2}>
+            <Grid size={{ 'xs': 12, 'md': 2 }}>
               <Stack direction="row" spacing={1} sx={{ height: '100%' }}>
                 <Button
                   fullWidth

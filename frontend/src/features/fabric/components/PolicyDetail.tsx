@@ -72,7 +72,7 @@ const PolicyOverviewTab: React.FC<{ policy: any }> = ({ policy }) => {
 
   return (
     <Grid container spacing={3}>
-      <Grid item xs={12} md={8}>
+      <Grid size={{ 'xs': 12, 'md': 8 }}>
         <Typography variant="h6" gutterBottom>Metadata</Typography>
         <Paper variant="outlined" sx={{ p: 2 }}>
           <Typography variant="body2" color="text.secondary" gutterBottom>Description</Typography>
@@ -86,11 +86,11 @@ const PolicyOverviewTab: React.FC<{ policy: any }> = ({ policy }) => {
         <Typography variant="h6" gutterBottom sx={{ mt: 3 }}>Usage Stats (Last 30 Days)</Typography>
         <Paper variant="outlined" sx={{ p: 2 }}>
           <Grid container spacing={2}>
-            <Grid item xs={4}>
+            <Grid size={4}>
               <Typography variant="h5">{usageStats.evaluations.toLocaleString()}</Typography>
               <Typography color="text.secondary">Evaluations</Typography>
             </Grid>
-            <Grid item xs={4}>
+            <Grid size={4}>
               <Typography variant="h5">{(usageStats.blockRate * 100).toFixed(1)}%</Typography>
               <Typography color="text.secondary">Block Rate</Typography>
             </Grid>
@@ -103,7 +103,7 @@ const PolicyOverviewTab: React.FC<{ policy: any }> = ({ policy }) => {
           </Grid>
         </Paper>
       </Grid>
-      <Grid item xs={12} md={4}>
+      <Grid size={{ 'xs': 12, 'md': 4 }}>
         <Typography variant="h6" gutterBottom>Quick Actions</Typography>
         <ButtonGroup orientation="vertical" fullWidth>
           <Button>Simulate</Button>

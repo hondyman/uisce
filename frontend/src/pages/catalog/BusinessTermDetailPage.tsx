@@ -150,7 +150,7 @@ export const BusinessTermDetailPage: React.FC = () => {
 
             <Grid container spacing={3}>
                 {/* Left Column: Compliance Controls */}
-                <Grid item xs={12} md={7}>
+                <Grid size={{ 'xs': 12, 'md': 7 }}>
                     <Paper sx={{ p: 3, mb: 3 }}>
                         <Typography variant="h6" gutterBottom>
                             Compliance & Governance
@@ -210,7 +210,7 @@ export const BusinessTermDetailPage: React.FC = () => {
                 </Grid>
 
                 {/* Right Column: Semantic Mappings */}
-                <Grid item xs={12} md={5}>
+                <Grid size={{ 'xs': 12, 'md': 5 }}>
                     <Paper sx={{ p: 3 }}>
                         <Stack direction="row" justifyContent="space-between" alignItems="center" mb={2}>
                             <Typography variant="h6">

@@ -233,7 +233,7 @@ export const TemplateReviewDashboard: React.FC<TemplateReviewDashboardProps> = (
       {/* Filters */}
       <Paper sx={{ p: 2, mb: 3 }}>
         <Grid container spacing={2} alignItems="center">
-          <Grid item xs={12} md={3}>
+          <Grid size={{ 'xs': 12, 'md': 3 }}>
             <FormControl fullWidth>
               <InputLabel>Status</InputLabel>
               <Select value={filterStatus} label="Status" onChange={handleStatusFilterChange}>
@@ -244,7 +244,7 @@ export const TemplateReviewDashboard: React.FC<TemplateReviewDashboardProps> = (
               </Select>
             </FormControl>
           </Grid>
-          <Grid item xs={12} md={3}>
+          <Grid size={{ 'xs': 12, 'md': 3 }}>
             <FormControl fullWidth>
               <InputLabel>Category</InputLabel>
               <Select value={filterCategory} label="Category" onChange={handleCategoryFilterChange}>
@@ -257,7 +257,7 @@ export const TemplateReviewDashboard: React.FC<TemplateReviewDashboardProps> = (
               </Select>
             </FormControl>
           </Grid>
-          <Grid item xs={12} md={6}>
+          <Grid size={{ 'xs': 12, 'md': 6 }}>
             <Typography variant="body2" color="text.secondary">
               Showing {filteredTemplates.length} of {templates.length} templates
             </Typography>
@@ -268,7 +268,7 @@ export const TemplateReviewDashboard: React.FC<TemplateReviewDashboardProps> = (
       {/* Main Content */}
       <Grid container spacing={3}>
         {/* Template List */}
-        <Grid item xs={12} lg={4}>
+        <Grid size={{ 'xs': 12, 'lg': 4 }}>
           <Paper sx={{ p: 2, maxHeight: 600, overflow: 'auto' }}>
             <Typography variant="h6" gutterBottom>
               Templates ({filteredTemplates.length})
@@ -311,7 +311,7 @@ export const TemplateReviewDashboard: React.FC<TemplateReviewDashboardProps> = (
         </Grid>
 
         {/* Template Details */}
-        <Grid item xs={12} lg={8}>
+        <Grid size={{ 'xs': 12, 'lg': 8 }}>
           {selectedTemplate ? (
             <Paper sx={{ p: 3 }}>
               <Box display="flex" justifyContent="space-between" alignItems="flex-start" mb={2}>
@@ -369,7 +369,7 @@ export const TemplateReviewDashboard: React.FC<TemplateReviewDashboardProps> = (
               {activeTab === 0 && (
                 <Box>
                   <Grid container spacing={2}>
-                    <Grid item xs={12} md={6}>
+                    <Grid size={{ 'xs': 12, 'md': 6 }}>
                       <Typography variant="subtitle2">Domain</Typography>
                       <Typography>{selectedTemplate.domain}</Typography>
                     </Grid>
@@ -385,7 +385,7 @@ export const TemplateReviewDashboard: React.FC<TemplateReviewDashboardProps> = (
                       <Typography variant="subtitle2">Owner</Typography>
                       <Typography>{selectedTemplate.owner}</Typography>
                     </Grid>
-                    <Grid item xs={12}>
+                    <Grid size={12}>
                       <Typography variant="subtitle2">Tags</Typography>
                       <Box display="flex" gap={1} flexWrap="wrap">
                         {selectedTemplate.tags.map(tag => (

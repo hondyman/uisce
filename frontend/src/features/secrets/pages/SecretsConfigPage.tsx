@@ -213,7 +213,7 @@ export default function SecretsConfigPage({ tenantId }: SecretsConfigPageProps) 
 
       {/* Stats Cards */}
       <Grid container spacing={2} sx={{ mb: 3 }}>
-        <Grid item xs={12} md={3}>
+        <Grid size={{ 'xs': 12, 'md': 3 }}>
           <Card>
             <CardContent>
               <Typography color="text.secondary" gutterBottom>Total Secrets</Typography>
@@ -221,7 +221,7 @@ export default function SecretsConfigPage({ tenantId }: SecretsConfigPageProps) 
             </CardContent>
           </Card>
         </Grid>
-        <Grid item xs={12} md={3}>
+        <Grid size={{ 'xs': 12, 'md': 3 }}>
           <Card>
             <CardContent>
               <Typography color="text.secondary" gutterBottom>With Rotation</Typography>

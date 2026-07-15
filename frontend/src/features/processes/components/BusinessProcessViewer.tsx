@@ -198,7 +198,7 @@ export const BusinessProcessViewer: React.FC<BusinessProcessViewerProps> = ({
 
       {/* Steps */}
       <Grid container spacing={2}>
-        <Grid item xs={12} md={8}>
+        <Grid size={{ 'xs': 12, 'md': 8 }}>
           <Paper sx={{ p: 2 }}>
             <Typography variant="subtitle1" gutterBottom fontWeight="bold">
               Process Steps
@@ -291,7 +291,7 @@ export const BusinessProcessViewer: React.FC<BusinessProcessViewerProps> = ({
         </Grid>
 
         {/* History */}
-        <Grid item xs={12} md={4}>
+        <Grid size={{ 'xs': 12, 'md': 4 }}>
           <Paper sx={{ p: 2 }}>
             <Typography variant="subtitle1" gutterBottom fontWeight="bold">
               <HistoryIcon sx={{ mr: 1, verticalAlign: 'middle' }} />
@@ -442,7 +442,7 @@ export const ProcessSelector: React.FC<ProcessSelectorProps> = ({
           </Typography>
           <Grid container spacing={2}>
             {procs.map((process) => (
-              <Grid item xs={12} sm={6} md={4} key={process.id}>
+              <Grid size={{ 'xs': 12, 'sm': 6, 'md': 4 }}>
                 <Card
                   sx={{
                     cursor: 'pointer',

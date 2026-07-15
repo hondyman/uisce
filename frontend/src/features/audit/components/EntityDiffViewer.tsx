@@ -61,7 +61,7 @@ const EntityDiffViewer: React.FC<Props> = ({ leftVersion, rightVersion }) => {
 
       {/* Version Info */}
       <Grid container spacing={2} sx={{ mb: 3 }}>
-        <Grid item xs={12} md={6}>
+        <Grid size={{ 'xs': 12, 'md': 6 }}>
           <Paper variant="outlined" sx={{ p: 2, bgcolor: 'error.50' }}>
             <Typography variant="subtitle2" color="error" gutterBottom>
               OLD VERSION
@@ -78,7 +78,7 @@ const EntityDiffViewer: React.FC<Props> = ({ leftVersion, rightVersion }) => {
           </Paper>
         </Grid>
 
-        <Grid item xs={12} md={6}>
+        <Grid size={{ 'xs': 12, 'md': 6 }}>
           <Paper variant="outlined" sx={{ p: 2, bgcolor: 'success.50' }}>
             <Typography variant="subtitle2" color="success.dark" gutterBottom>
               NEW VERSION

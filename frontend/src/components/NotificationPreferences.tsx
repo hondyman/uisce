@@ -170,7 +170,7 @@ export const NotificationPreferences: React.FC<NotificationPreferencesProps> = (
 
         <Grid container spacing={3}>
           {/* Channel Preferences */}
-          <Grid item xs={12}>
+          <Grid size={12}>
             <Typography variant="h6" gutterBottom>
               Notification Channels
             </Typography>
@@ -221,7 +221,7 @@ export const NotificationPreferences: React.FC<NotificationPreferencesProps> = (
             </Box>
           </Grid>
 
-          <Grid item xs={12}>
+          <Grid size={12}>
             <Divider />
           </Grid>
 
@@ -331,7 +331,7 @@ export const NotificationPreferences: React.FC<NotificationPreferencesProps> = (
           </Grid>
 
           {/* Timezone */}
-          <Grid item xs={12} sm={6}>
+          <Grid size={{ 'xs': 12, 'sm': 6 }}>
             <TextField
               fullWidth
               label="Timezone"

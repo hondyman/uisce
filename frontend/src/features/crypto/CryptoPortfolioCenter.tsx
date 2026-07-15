@@ -192,7 +192,7 @@ export const CryptoPortfolioCenter: React.FC<{ clientId: string }> = ({ clientId
         </Typography>
         <Grid container spacing={2}>
           {wallets.map((wallet) => (
-            <Grid item xs={12} md={6} lg={4} key={wallet.id}>
+            <Grid size={{ 'xs': 12, 'md': 6, 'lg': 4 }}>
               <Card
                 variant={selectedWallet === wallet.id ? 'outlined' : 'elevation'}
                 sx={{
@@ -223,7 +223,7 @@ export const CryptoPortfolioCenter: React.FC<{ clientId: string }> = ({ clientId
       {/* Portfolio Summary Cards */}
       {portfolioMetrics && (
         <Grid container spacing={3} sx={{ mb: 4 }}>
-          <Grid item xs={12} md={3}>
+          <Grid size={{ 'xs': 12, 'md': 3 }}>
             <Card elevation={2}>
               <CardContent>
                 <Typography color="textSecondary" variant="body2" gutterBottom>
@@ -236,7 +236,7 @@ export const CryptoPortfolioCenter: React.FC<{ clientId: string }> = ({ clientId
             </Card>
           </Grid>
 
-          <Grid item xs={12} md={3}>
+          <Grid size={{ 'xs': 12, 'md': 3 }}>
             <Card elevation={2}>
               <CardContent>
                 <Typography color="textSecondary" variant="body2" gutterBottom>

@@ -424,7 +424,7 @@ const SchemaExplorerPage: React.FC = () => {
               {tablesLoading ? (
                 <Grid container spacing={2}>
                   {[1, 2, 3, 4, 5, 6].map((i) => (
-                    <Grid item xs={12} sm={6} md={4} key={i}>
+                    <Grid size={{ 'xs': 12, 'sm': 6, 'md': 4 }}>
                       <Skeleton variant="rectangular" height={180} />
                     </Grid>
                   ))}
@@ -449,7 +449,7 @@ const SchemaExplorerPage: React.FC = () => {
               ) : loading ? (
                 <Grid container spacing={2}>
                   {[1, 2, 3, 4, 5, 6].map((i) => (
-                    <Grid item xs={12} sm={6} md={4} key={i}>
+                    <Grid size={{ 'xs': 12, 'sm': 6, 'md': 4 }}>
                       <Skeleton variant="rectangular" height={180} />
                     </Grid>
                   ))}
@@ -464,7 +464,7 @@ const SchemaExplorerPage: React.FC = () => {
               ) : (
                 <Grid container spacing={2}>
                   {filteredTables.map((table) => (
-                    <Grid item xs={12} sm={6} md={4} key={`${table.schema}.${table.name}`}>
+                    <Grid size={{ 'xs': 12, 'sm': 6, 'md': 4 }}>
                       <Card 
                         sx={{ 
                           height: '100%',

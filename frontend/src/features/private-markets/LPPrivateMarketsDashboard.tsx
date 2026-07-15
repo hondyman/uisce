@@ -109,9 +109,9 @@ export const LPPrivateMarketsDashboard: React.FC<LPDashboardProps> = ({ realTime
       {/* Main Dashboard Content */}
       <Grid container spacing={3}>
         {/* Performance Overview Cards */}
-        <Grid item xs={12}>
+        <Grid size={12}>
           <Grid container spacing={2}>
-            <Grid item xs={12} md={3}>
+            <Grid size={{ 'xs': 12, 'md': 3 }}>
               <Card sx={{ bgcolor: 'primary.light', color: 'primary.contrastText' }}>
                 <CardContent>
                   <Box display="flex" alignItems="center" justifyContent="space-between">
@@ -124,7 +124,7 @@ export const LPPrivateMarketsDashboard: React.FC<LPDashboardProps> = ({ realTime
                 </CardContent>
               </Card>
             </Grid>
-            <Grid item xs={12} md={3}>
+            <Grid size={{ 'xs': 12, 'md': 3 }}>
               <Card sx={{ bgcolor: 'success.light', color: 'success.contrastText' }}>
                 <CardContent>
                   <Box display="flex" alignItems="center" justifyContent="space-between">
@@ -167,7 +167,7 @@ export const LPPrivateMarketsDashboard: React.FC<LPDashboardProps> = ({ realTime
         </Grid>
 
         {/* Tabbed Content */}
-        <Grid item xs={12}>
+        <Grid size={12}>
           <Paper sx={{ width: '100%' }}>
             <Tabs
               value={activeTab}
@@ -185,14 +185,14 @@ export const LPPrivateMarketsDashboard: React.FC<LPDashboardProps> = ({ realTime
             <Box sx={{ p: 3 }}>
               {activeTab === 0 && (
                 <Grid container spacing={3}>
-                  <Grid item xs={12} lg={8}>
+                  <Grid size={{ 'xs': 12, 'lg': 8 }}>
                     <IRRCurveChart 
                       selectedFunds={selectedEntities} 
                       excelResults={excelResults}
                       bundle={bundle}
                     />
                   </Grid>
-                  <Grid item xs={12} lg={4}>
+                  <Grid size={{ 'xs': 12, 'lg': 4 }}>
                     <MultipleOverlayPanel 
                       selectedFunds={selectedEntities} 
                       excelResults={excelResults}

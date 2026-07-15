@@ -385,7 +385,7 @@ export const PageRuntimeRenderer: React.FC<PageRuntimeRendererProps> = ({ mode: 
                     if (!field) return null;
 
                     return (
-                      <Grid item xs={12} sm={12 / section.columns} key={fieldId}>
+                      <Grid size={{ 'xs': 12, 'sm': 12 / section.columns }}>
                         {renderField(field)}
                       </Grid>
                     );

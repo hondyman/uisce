@@ -54,7 +54,7 @@ const UsageDashboard: React.FC<UsageDashboardProps> = ({ endpoint }) => {
     return (
         <Box sx={{ p: 2 }}>
             <Grid container spacing={3} sx={{ mb: 4 }}>
-                <Grid item xs={12} md={3}>
+                <Grid size={{ 'xs': 12, 'md': 3 }}>
                     <Card elevation={0} sx={{ border: '1px solid #eee', borderRadius: 2 }}>
                         <CardContent>
                             <Typography variant="caption" color="textSecondary">Avg Latency (P95)</Typography>
@@ -63,7 +63,7 @@ const UsageDashboard: React.FC<UsageDashboardProps> = ({ endpoint }) => {
                         </CardContent>
                     </Card>
                 </Grid>
-                <Grid item xs={12} md={3}>
+                <Grid size={{ 'xs': 12, 'md': 3 }}>
                     <Card elevation={0} sx={{ border: '1px solid #eee', borderRadius: 2 }}>
                         <CardContent>
                             <Typography variant="caption" color="textSecondary">Error Rate</Typography>
@@ -94,7 +94,7 @@ const UsageDashboard: React.FC<UsageDashboardProps> = ({ endpoint }) => {
 
             {/* Charts */}
             <Grid container spacing={3}>
-                <Grid item xs={12} md={8}>
+                <Grid size={{ 'xs': 12, 'md': 8 }}>
                     <Paper elevation={0} sx={{ p: 2, border: '1px solid #eee', borderRadius: 2 }}>
                          <Typography variant="subtitle2" gutterBottom fontWeight="bold">Traffic Volume & Latency</Typography>
                          <Box sx={{ height: 300 }}>
@@ -122,7 +122,7 @@ const UsageDashboard: React.FC<UsageDashboardProps> = ({ endpoint }) => {
                          </Box>
                     </Paper>
                 </Grid>
-                <Grid item xs={12} md={4}>
+                <Grid size={{ 'xs': 12, 'md': 4 }}>
                     <Paper elevation={0} sx={{ p: 2, border: '1px solid #eee', borderRadius: 2 }}>
                         <Typography variant="subtitle2" gutterBottom fontWeight="bold">Errors by Type</Typography>
                         <Box sx={{ height: 300 }}>

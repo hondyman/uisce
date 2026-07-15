@@ -265,7 +265,7 @@ function EnhancedMappingRow({
 
               <Grid container spacing={1}>
                 {suggestions.map((suggestion, idx) => (
-                  <Grid item xs={12} sm={4} key={`${suggestion.business_term_name}-${idx}`}>
+                  <Grid size={{ 'xs': 12, 'sm': 4 }}>
                     <Paper sx={{ p: 1.5, border: 1, borderColor: 'divider' }}>
                       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', mb: 0.5 }}>
                         <Typography variant="body2" fontWeight="bold">
@@ -370,7 +370,7 @@ function EnhancedMappingRow({
                 
                 <Collapse in={showCustomEntry}>
                   <Grid container spacing={2} sx={{ mt: 1 }}>
-                    <Grid item xs={12} sm={6}>
+                    <Grid size={{ 'xs': 12, 'sm': 6 }}>
                       <TextField
                         label="Business Term Name"
                         value={customTermName}
@@ -380,7 +380,7 @@ function EnhancedMappingRow({
                         required
                       />
                     </Grid>
-                    <Grid item xs={12} sm={6}>
+                    <Grid size={{ 'xs': 12, 'sm': 6 }}>
                       <TextField
                         label="Category"
                         value={customCategory}
@@ -389,7 +389,7 @@ function EnhancedMappingRow({
                         fullWidth
                       />
                     </Grid>
-                    <Grid item xs={12}>
+                    <Grid size={12}>
                       <TextField
                         label="Description"
                         value={customDescription}
@@ -400,7 +400,7 @@ function EnhancedMappingRow({
                         rows={2}
                       />
                     </Grid>
-                    <Grid item xs={12}>
+                    <Grid size={12}>
                       <Button
                         variant="contained"
                         color="primary"
@@ -1035,7 +1035,7 @@ export function BusinessTermMapper({ searchTerm }: { searchTerm?: string }) {
       {/* Filters and Search */}
       <Card sx={{ p: 2, mb: 3 }}>
         <Grid container spacing={2} alignItems="center">
-          <Grid item xs={6}>
+          <Grid size={6}>
             <FormControl fullWidth>
               <InputLabel>Filter Status</InputLabel>
               <Select
@@ -1049,7 +1049,7 @@ export function BusinessTermMapper({ searchTerm }: { searchTerm?: string }) {
               </Select>
             </FormControl>
           </Grid>
-          <Grid item xs={3}>
+          <Grid size={3}>
             <Button
               fullWidth
               variant="contained"

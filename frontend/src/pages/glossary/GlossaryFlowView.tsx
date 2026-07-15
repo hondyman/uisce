@@ -154,7 +154,7 @@ export default function GlossaryFlowView({ focus = 'business' }: Props) {
       </Typography>
 
       <Grid container spacing={2} sx={{ flex: 1, minHeight: 0 }}>
-        <Grid item xs={12} md={3} sx={{ overflow: 'auto' }}>
+        <Grid size={{ 'xs': 12, 'md': 3 }}>
           <Typography variant="subtitle2" sx={{ mb: 1, fontWeight: 'bold' }}>{leftLabel}</Typography>
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
             {leftList?.map((term: any) => (
@@ -171,7 +171,7 @@ export default function GlossaryFlowView({ focus = 'business' }: Props) {
           </Box>
         </Grid>
 
-        <Grid item xs={12} md={6} sx={{ height: '600px', minHeight: 0 }}>
+        <Grid size={{ 'xs': 12, 'md': 6 }}>
           <Paper sx={{ height: '100%' }}>
             <ReactFlow nodes={nodes} edges={flowEdges} onNodesChange={onNodesChange} onEdgesChange={onEdgesChange} nodeTypes={nodeTypes} fitView>
               <Background />
@@ -180,7 +180,7 @@ export default function GlossaryFlowView({ focus = 'business' }: Props) {
           </Paper>
         </Grid>
 
-        <Grid item xs={12} md={3} sx={{ overflow: 'auto' }}>
+        <Grid size={{ 'xs': 12, 'md': 3 }}>
           <Typography variant="subtitle2" sx={{ mb: 1, fontWeight: 'bold' }}>{rightLabel}</Typography>
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
             {rightList?.map((term: any) => (

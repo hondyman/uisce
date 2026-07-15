@@ -135,7 +135,7 @@ export const CapitalDeploymentChart: FC<CapitalDeploymentChartProps> = ({
         </Typography>
 
         <Grid container spacing={2} sx={{ mb: 2 }}>
-          <Grid item xs={12} sm={4}>
+          <Grid size={{ 'xs': 12, 'sm': 4 }}>
             <Box textAlign="center">
               <Typography variant="body2" color="text.secondary">
                 Total Committed
@@ -145,7 +145,7 @@ export const CapitalDeploymentChart: FC<CapitalDeploymentChartProps> = ({
               </Typography>
             </Box>
           </Grid>
-          <Grid item xs={12} sm={4}>
+          <Grid size={{ 'xs': 12, 'sm': 4 }}>
             <Box textAlign="center">
               <Typography variant="body2" color="text.secondary">
                 Total Deployed

@@ -101,7 +101,7 @@ export const AttributeConditionsEditor: FC<AttributeConditionsEditorProps> = ({
             }}
           >
             <Grid container spacing={2}>
-              <Grid item xs={12} md={4}>
+              <Grid size={{ 'xs': 12, 'md': 4 }}>
                 <TextField
                   label="Attribute"
                   value={condition.attribute}
@@ -115,7 +115,7 @@ export const AttributeConditionsEditor: FC<AttributeConditionsEditorProps> = ({
                   helperText={getErrors(`conditions[${index}].attribute`).join(' ')}
                 />
               </Grid>
-              <Grid item xs={12} md={4}>
+              <Grid size={{ 'xs': 12, 'md': 4 }}>
                 <TextField
                   select
                   label="Operator"

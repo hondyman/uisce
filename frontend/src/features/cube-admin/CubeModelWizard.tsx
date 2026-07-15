@@ -549,7 +549,7 @@ const SourceSelectionStep: React.FC<{
 }> = ({ state, setState, tables, columns, coreModels }) => {
   return (
     <Grid container spacing={3}>
-      <Grid item xs={12}>
+      <Grid size={12}>
         <FormControl fullWidth>
           <InputLabel>Extension Type</InputLabel>
           <Select
@@ -565,7 +565,7 @@ const SourceSelectionStep: React.FC<{
       </Grid>
 
       {state.extensionType !== 'standalone' && (
-        <Grid item xs={12}>
+        <Grid size={12}>
           <Autocomplete
             options={coreModels}
             getOptionLabel={(option) => option.name || ''}
@@ -596,7 +596,7 @@ const SourceSelectionStep: React.FC<{
         />
       </Grid>
 
-      <Grid item xs={12} md={6}>
+      <Grid size={{ 'xs': 12, 'md': 6 }}>
         <TextField
           fullWidth
           label="Cube Name"
@@ -607,7 +607,7 @@ const SourceSelectionStep: React.FC<{
         />
       </Grid>
 
-      <Grid item xs={12} md={6}>
+      <Grid size={{ 'xs': 12, 'md': 6 }}>
         <TextField
           fullWidth
           label="Data Source"
@@ -795,7 +795,7 @@ const MeasuresStep: React.FC<{
           <Card key={measure.id} variant="outlined" sx={{ mb: 2 }}>
             <CardContent>
               <Grid container spacing={2}>
-                <Grid item xs={12} md={3}>
+                <Grid size={{ 'xs': 12, 'md': 3 }}>
                   <TextField
                     fullWidth
                     size="small"
@@ -805,7 +805,7 @@ const MeasuresStep: React.FC<{
                     placeholder="snake_case"
                   />
                 </Grid>
-                <Grid item xs={12} md={2}>
+                <Grid size={{ 'xs': 12, 'md': 2 }}>
                   <FormControl fullWidth size="small">
                     <InputLabel>Type</InputLabel>
                     <Select
@@ -819,7 +819,7 @@ const MeasuresStep: React.FC<{
                     </Select>
                   </FormControl>
                 </Grid>
-                <Grid item xs={12} md={3}>
+                <Grid size={{ 'xs': 12, 'md': 3 }}>
                   <TextField
                     fullWidth
                     size="small"
@@ -829,7 +829,7 @@ const MeasuresStep: React.FC<{
                     placeholder="{CUBE}.column_name"
                   />
                 </Grid>
-                <Grid item xs={12} md={2}>
+                <Grid size={{ 'xs': 12, 'md': 2 }}>
                   <TextField
                     fullWidth
                     size="small"
@@ -838,7 +838,7 @@ const MeasuresStep: React.FC<{
                     onChange={(e) => updateMeasure(index, { title: e.target.value })}
                   />
                 </Grid>
-                <Grid item xs={12} md={1}>
+                <Grid size={{ 'xs': 12, 'md': 1 }}>
                   <FormControl fullWidth size="small">
                     <InputLabel>Format</InputLabel>
                     <Select
@@ -853,7 +853,7 @@ const MeasuresStep: React.FC<{
                     </Select>
                   </FormControl>
                 </Grid>
-                <Grid item xs={12} md={1}>
+                <Grid size={{ 'xs': 12, 'md': 1 }}>
                   <IconButton color="error" onClick={() => removeMeasure(index)}>
                     <DeleteIcon />
                   </IconButton>
@@ -1136,7 +1136,7 @@ const RelationshipsStep: React.FC<{
                     </Select>
                   </FormControl>
                 </Grid>
-                <Grid item xs={12} md={4}>
+                <Grid size={{ 'xs': 12, 'md': 4 }}>
                   <TextField
                     fullWidth
                     size="small"
@@ -1278,7 +1278,7 @@ const PreAggregationsStep: React.FC<{
               </Grid>
 
               {/* Time dimension settings */}
-              <Grid item xs={12} md={4}>
+              <Grid size={{ 'xs': 12, 'md': 4 }}>
                 <Autocomplete
                   options={timeDimensionOptions}
                   value={preAgg.timeDimension || null}

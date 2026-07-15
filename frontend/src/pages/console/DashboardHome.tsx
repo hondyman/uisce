@@ -33,7 +33,7 @@ export function DashboardHome() {
 
       <Grid container spacing={3}>
         {/* Compliance KPIs */}
-        <Grid item xs={12} md={6}>
+        <Grid size={{ 'xs': 12, 'md': 6 }}>
           {compliance.isLoading && <Typography>Loading compliance data…</Typography>}
           {compliance.data && (
             <Card>
@@ -71,7 +71,7 @@ export function DashboardHome() {
         </Grid>
 
         {/* Risk KPIs */}
-        <Grid item xs={12} md={6}>
+        <Grid size={{ 'xs': 12, 'md': 6 }}>
           {risk.isLoading && <Typography>Loading risk data…</Typography>}
           {risk.data && (
             <Card>
@@ -122,11 +122,11 @@ export function DashboardHome() {
         </Grid>
 
         {/* Sparklines */}
-        <Grid item xs={12}>
+        <Grid size={12}>
           {sparklines.isLoading && <Typography>Loading sparklines…</Typography>}
           {sparklines.data && (
             <Grid container spacing={2}>
-              <Grid item xs={12} md={3}>
+              <Grid size={{ 'xs': 12, 'md': 3 }}>
                 <SparklineCard
                   title="Pass Rate (7d)"
                   data={sparklines.data.pass_rate}
@@ -134,7 +134,7 @@ export function DashboardHome() {
                   color="#2ECC71"
                 />
               </Grid>
-              <Grid item xs={12} md={3}>
+              <Grid size={{ 'xs': 12, 'md': 3 }}>
                 <SparklineCard
                   title="Hard Breaches (7d)"
                   data={sparklines.data.hard_breaches}

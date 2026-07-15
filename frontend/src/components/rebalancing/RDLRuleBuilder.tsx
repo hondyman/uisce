@@ -457,7 +457,7 @@ export const RDLRuleBuilder: React.FC<RDLRuleBuilderProps> = ({
           <Card>
             <CardContent>
               <Grid container spacing={3}>
-                <Grid item xs={12} md={6}>
+                <Grid size={{ 'xs': 12, 'md': 6 }}>
                   <FormControl fullWidth>
                     <InputLabel>Rule Type</InputLabel>
                     <Select
@@ -475,7 +475,7 @@ export const RDLRuleBuilder: React.FC<RDLRuleBuilderProps> = ({
                   </FormControl>
                 </Grid>
 
-                <Grid item xs={12} md={6}>
+                <Grid size={{ 'xs': 12, 'md': 6 }}>
                   <FormControl fullWidth>
                     <InputLabel>Jurisdiction</InputLabel>
                     <Select
@@ -512,7 +512,7 @@ export const RDLRuleBuilder: React.FC<RDLRuleBuilderProps> = ({
                   />
                 </Grid>
 
-                <Grid item xs={12}>
+                <Grid size={12}>
                   <TextField
                     fullWidth
                     required
@@ -523,7 +523,7 @@ export const RDLRuleBuilder: React.FC<RDLRuleBuilderProps> = ({
                   />
                 </Grid>
 
-                <Grid item xs={12}>
+                <Grid size={12}>
                   <TextField
                     fullWidth
                     multiline
@@ -564,7 +564,7 @@ export const RDLRuleBuilder: React.FC<RDLRuleBuilderProps> = ({
 
               <Grid container spacing={3}>
                 {currentConfig.parameterSchema.map(param => (
-                  <Grid item xs={12} md={6} key={param.name}>
+                  <Grid size={{ 'xs': 12, 'md': 6 }}>
                     {param.type === 'slider' ? (
                       <Box>
                         <Typography variant="body2" gutterBottom>
@@ -791,7 +791,7 @@ export const RDLRuleBuilder: React.FC<RDLRuleBuilderProps> = ({
                       </AccordionSummary>
                       <AccordionDetails>
                         <Grid container spacing={2}>
-                          <Grid item xs={12} md={4}>
+                          <Grid size={{ 'xs': 12, 'md': 4 }}>
                             <TextField
                               fullWidth
                               type="number"
@@ -806,7 +806,7 @@ export const RDLRuleBuilder: React.FC<RDLRuleBuilderProps> = ({
                               }))}
                             />
                           </Grid>
-                          <Grid item xs={12} md={4}>
+                          <Grid size={{ 'xs': 12, 'md': 4 }}>
                             <TextField
                               fullWidth
                               type="number"

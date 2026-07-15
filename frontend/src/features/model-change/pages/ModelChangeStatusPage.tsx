@@ -53,7 +53,7 @@ export const ModelChangeStatusPage: React.FC = () => {
       {/* Main Content */}
       <Grid container spacing={3}>
          {/* Left: Detail Tabs */}
-         <Grid item xs={12} md={8}>
+         <Grid size={{ 'xs': 12, 'md': 8 }}>
             <Paper>
                 <Tabs value={tabIndex} onChange={(_, v) => setTabIndex(v)} sx={{ borderBottom: 1, borderColor: 'divider' }}>
                     <Tab label="Overview" />
@@ -67,13 +67,13 @@ export const ModelChangeStatusPage: React.FC = () => {
                     <Box p={3}>
                         <Typography variant="h6" gutterBottom>Impact Summary</Typography>
                         <Grid container spacing={2}>
-                            <Grid item xs={4}>
+                            <Grid size={4}>
                                 <Paper variant="outlined" sx={{ p: 2, textAlign: 'center' }}>
                                     <Typography variant="caption">Risk Delta</Typography>
                                     <Typography variant="h5" color="error">+0.8%</Typography>
                                 </Paper>
                             </Grid>
-                            <Grid item xs={4}>
+                            <Grid size={4}>
                                 <Paper variant="outlined" sx={{ p: 2, textAlign: 'center' }}>
                                     <Typography variant="caption">Tax Impact</Typography>
                                     <Typography variant="h5" color="text.secondary">$1,250</Typography>
@@ -125,7 +125,7 @@ export const ModelChangeStatusPage: React.FC = () => {
          </Grid>
 
          {/* Right: Timeline */}
-         <Grid item xs={12} md={4}>
+         <Grid size={{ 'xs': 12, 'md': 4 }}>
             <Paper sx={{ p: 2 }}>
                 <TaskTimeline events={MOCK_INSTANCE.events as any} />
             </Paper>

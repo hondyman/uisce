@@ -56,7 +56,7 @@ const DirectIndexingPage: React.FC = () => {
 
       <Grid container spacing={3}>
         {/* Client List */}
-        <Grid item xs={12} md={6}>
+        <Grid size={{ 'xs': 12, 'md': 6 }}>
           <Paper elevation={3}>
             <Box p={2}>
               <Typography variant="h6">Managed Accounts</Typography>
@@ -110,7 +110,7 @@ const DirectIndexingPage: React.FC = () => {
         </Grid>
 
         {/* Impact Analysis */}
-        <Grid item xs={12} md={6}>
+        <Grid size={{ 'xs': 12, 'md': 6 }}>
           {selectedClient ? (
             <Box>
               <Paper elevation={3} sx={{ p: 2, mb: 3 }}>

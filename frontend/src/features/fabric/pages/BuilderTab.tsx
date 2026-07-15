@@ -12,7 +12,7 @@ export default function BuilderTab({ config }: BuilderTabProps) {
   return (
     <Box sx={{ pt: 2 }}>
       <Grid container spacing={2}>
-        <Grid item xs={12} md={6}>
+        <Grid size={{ 'xs': 12, 'md': 6 }}>
           <Typography variant="h6" gutterBottom>Core Dimensions</Typography>
           {config.core.dimensions.map((dimension) => (
             <Card key={dimension.id} sx={{ mb: 1 }}>
@@ -44,7 +44,7 @@ export default function BuilderTab({ config }: BuilderTabProps) {
           ))}
         </Grid>
         
-        <Grid item xs={12} md={6}>
+        <Grid size={{ 'xs': 12, 'md': 6 }}>
           <Typography variant="h6" gutterBottom>Core Measures</Typography>
           {config.core.measures.map((measure) => (
             <Card key={measure.id} sx={{ mb: 1 }}>

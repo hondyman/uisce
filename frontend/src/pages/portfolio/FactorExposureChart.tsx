@@ -70,7 +70,7 @@ export const FactorExposureChart: React.FC<FactorExposureChartProps> = ({
         <Skeleton variant="rectangular" height={300} sx={{ mb: 2 }} />
         <Grid container spacing={2}>
           {[1, 2, 3].map((i) => (
-            <Grid item xs={12} sm={6} md={4} key={i}>
+            <Grid size={{ 'xs': 12, 'sm': 6, 'md': 4 }}>
               <Skeleton variant="text" height={24} />
             </Grid>
           ))}
@@ -195,7 +195,7 @@ export const FactorExposureChart: React.FC<FactorExposureChartProps> = ({
 
         {/* Summary Statistics */}
         <Grid container spacing={2} sx={{ mt: 1 }}>
-          <Grid item xs={12} sm={4}>
+          <Grid size={{ 'xs': 12, 'sm': 4 }}>
             <Card
               elevation={0}
               sx={{
@@ -229,7 +229,7 @@ export const FactorExposureChart: React.FC<FactorExposureChartProps> = ({
             </Card>
           </Grid>
 
-          <Grid item xs={12} sm={4}>
+          <Grid size={{ 'xs': 12, 'sm': 4 }}>
             <Card
               elevation={0}
               sx={{

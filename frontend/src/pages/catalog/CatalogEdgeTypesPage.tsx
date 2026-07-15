@@ -171,7 +171,7 @@ export const CatalogEdgeTypesPage: React.FC = () => {
           { label: 'CDM Relations', value: edgeTypes?.filter(e => e.edge_type_name.startsWith('CDM')).length || 0, color: theme.palette.info.main },
           { label: 'Active Edges', value: '1.2k', color: theme.palette.success.main }, // Placeholder
         ].map((stat, i) => (
-          <Grid item xs={12} md={4} key={i}>
+          <Grid size={{ 'xs': 12, 'md': 4 }}>
             <Paper 
               elevation={0}
               sx={{ 
@@ -231,7 +231,7 @@ export const CatalogEdgeTypesPage: React.FC = () => {
         <Grid container spacing={3}>
           {isLoading ? (
             Array.from({ length: 6 }).map((_, i) => (
-              <Grid item xs={12} sm={6} md={4} lg={3} key={i}>
+              <Grid size={{ 'xs': 12, 'sm': 6, 'md': 4, 'lg': 3 }}>
                 <Skeleton variant="rectangular" height={200} sx={{ borderRadius: 4 }} />
               </Grid>
             ))
@@ -239,7 +239,7 @@ export const CatalogEdgeTypesPage: React.FC = () => {
             const edgeColor = type.config?.color;
             
             return (
-              <Grid item xs={12} sm={6} md={4} lg={3} key={type.id}>
+              <Grid size={{ 'xs': 12, 'sm': 6, 'md': 4, 'lg': 3 }}>
                 <Card 
                   elevation={0}
                   sx={{ 

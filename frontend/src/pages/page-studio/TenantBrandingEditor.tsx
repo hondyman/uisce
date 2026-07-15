@@ -35,7 +35,7 @@ export const TenantBrandingEditor: React.FC = () => {
             </Box>
 
             <Grid container spacing={4}>
-                <Grid item xs={12} md={6}>
+                <Grid size={{ 'xs': 12, 'md': 6 }}>
                     <Paper variant="outlined" sx={{ p: 3, borderRadius: 3 }}>
                         <Typography variant="subtitle2" gutterBottom fontWeight="bold">Colors</Typography>
                         <Stack spacing={3}>
@@ -67,7 +67,7 @@ export const TenantBrandingEditor: React.FC = () => {
                     </Paper>
                 </Grid>
 
-                <Grid item xs={12} md={6}>
+                <Grid size={{ 'xs': 12, 'md': 6 }}>
                     <Paper variant="outlined" sx={{ p: 3, borderRadius: 3 }}>
                         <Typography variant="subtitle2" gutterBottom fontWeight="bold">Styling</Typography>
                         <Box sx={{ mt: 2 }}>

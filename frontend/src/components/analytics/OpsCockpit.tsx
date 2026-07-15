@@ -90,7 +90,7 @@ const OpsCockpit: React.FC = () => {
 
       <Grid container spacing={3}>
         {/* Health Score Card */}
-        <Grid item xs={12} md={4}>
+        <Grid size={{ 'xs': 12, 'md': 4 }}>
           <Card elevation={0} sx={{ borderRadius: 3, border: '1px solid #e2e8f0', height: '100%' }}>
             <CardContent sx={{ textAlign: 'center', py: 4 }}>
               <Typography variant="h6" gutterBottom color="textSecondary">Tenant Health Score</Typography>
@@ -114,7 +114,7 @@ const OpsCockpit: React.FC = () => {
         </Grid>
 
         {/* Latency Metrics */}
-        <Grid item xs={12} md={8}>
+        <Grid size={{ 'xs': 12, 'md': 8 }}>
           <Card elevation={0} sx={{ borderRadius: 3, border: '1px solid #e2e8f0', height: '100%' }}>
             <CardContent>
               <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center' }}>
@@ -144,7 +144,7 @@ const OpsCockpit: React.FC = () => {
         </Grid>
 
         {/* Incident Timeline */}
-        <Grid item xs={12}>
+        <Grid size={12}>
           <Typography variant="h5" sx={{ mt: 4, mb: 2, fontWeight: 700 }}>Incident Timeline & Events</Typography>
           <Paper elevation={0} sx={{ borderRadius: 3, border: '1px solid #e2e8f0', overflow: 'hidden' }}>
             <List sx={{ p: 0 }}>

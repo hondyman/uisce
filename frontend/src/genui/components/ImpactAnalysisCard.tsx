@@ -47,7 +47,7 @@ export function ImpactAnalysisCard({ headline, affectedSector, impactScore }: Im
           </Typography>
           
           <Grid container spacing={2} sx={{ mt: 1 }}>
-            <Grid item xs={12} sm={6}>
+            <Grid size={{ 'xs': 12, 'sm': 6 }}>
               <Typography variant="body2" color="text.secondary" sx={{ mb: 0.5 }}>
                 Affected Sector
               </Typography>
@@ -56,7 +56,7 @@ export function ImpactAnalysisCard({ headline, affectedSector, impactScore }: Im
               </Typography>
             </Grid>
             
-            <Grid item xs={12} sm={6}>
+            <Grid size={{ 'xs': 12, 'sm': 6 }}>
               <Typography variant="body2" color="text.secondary" sx={{ mb: 0.5 }}>
                 Projected Impact
               </Typography>

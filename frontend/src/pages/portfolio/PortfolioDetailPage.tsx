@@ -219,14 +219,14 @@ export const PortfolioDetailPage: React.FC = () => {
           <Box sx={{ display: 'grid', gap: 3 }}>
             {/* Summary Cards */}
             <Grid container spacing={2}>
-              <Grid item xs={12} sm={6} md={4}>
+              <Grid size={{ 'xs': 12, 'sm': 6, 'md': 4 }}>
                 <PortfolioOverviewCard
                   data={portfolio.overview.data}
                   isLoading={portfolio.overview.isLoading}
                   error={portfolio.overview.error}
                 />
               </Grid>
-              <Grid item xs={12} sm={6} md={4}>
+              <Grid size={{ 'xs': 12, 'sm': 6, 'md': 4 }}>
                 <RiskSnapshotCard
                   data={portfolio.risk.data}
                   isLoading={portfolio.risk.isLoading}
@@ -244,14 +244,14 @@ export const PortfolioDetailPage: React.FC = () => {
 
             {/* Holdings & Scenarios */}
             <Grid container spacing={2}>
-              <Grid item xs={12} md={6}>
+              <Grid size={{ 'xs': 12, 'md': 6 }}>
                 <HoldingsTable
                   data={portfolio.holdings.data}
                   isLoading={portfolio.holdings.isLoading}
                   error={portfolio.holdings.error}
                 />
               </Grid>
-              <Grid item xs={12} md={6}>
+              <Grid size={{ 'xs': 12, 'md': 6 }}>
                 <ScenarioChart
                   data={portfolio.scenarios.data?.results}
                   isLoading={portfolio.scenarios.isLoading}

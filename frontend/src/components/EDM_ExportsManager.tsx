@@ -184,7 +184,7 @@ export const EDM_ExportsManager: React.FC = () => {
           {!initialLoading && (
             <>
               <Grid container spacing={2} sx={{ mb: 3 }}>
-                <Grid item xs={12}>
+                <Grid size={12}>
                   <Button variant="contained" color="primary" onClick={handleOpenDialog}>
                     Create New Export
                   </Button>

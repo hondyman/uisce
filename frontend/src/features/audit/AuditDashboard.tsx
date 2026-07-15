@@ -268,7 +268,7 @@ export const AuditDashboard: React.FC = () => {
         {activeTab === 0 && summary && (
           <Grid container spacing={3}>
             {/* Summary Cards */}
-            <Grid item xs={12} md={3}>
+            <Grid size={{ 'xs': 12, 'md': 3 }}>
               <Card>
                 <CardContent>
                   <Typography color="textSecondary" gutterBottom>
@@ -281,7 +281,7 @@ export const AuditDashboard: React.FC = () => {
               </Card>
             </Grid>
 
-            <Grid item xs={12} md={3}>
+            <Grid size={{ 'xs': 12, 'md': 3 }}>
               <Card>
                 <CardContent>
                   <Typography color="textSecondary" gutterBottom>
@@ -321,7 +321,7 @@ export const AuditDashboard: React.FC = () => {
             </Grid>
 
             {/* Recent Events */}
-            <Grid item xs={12}>
+            <Grid size={12}>
               <Card>
                 <CardContent>
                   <Typography variant="h6" gutterBottom>
@@ -390,7 +390,7 @@ export const AuditDashboard: React.FC = () => {
                 Filters
               </Typography>
               <Grid container spacing={2}>
-                <Grid item xs={12} sm={6} md={3}>
+                <Grid size={{ 'xs': 12, 'sm': 6, 'md': 3 }}>
                   <TextField
                     fullWidth
                     label="User ID"
@@ -399,7 +399,7 @@ export const AuditDashboard: React.FC = () => {
                     size="small"
                   />
                 </Grid>
-                <Grid item xs={12} sm={6} md={3}>
+                <Grid size={{ 'xs': 12, 'sm': 6, 'md': 3 }}>
                   <FormControl fullWidth size="small">
                     <InputLabel>Event Type</InputLabel>
                     <Select
@@ -548,13 +548,13 @@ export const AuditDashboard: React.FC = () => {
             {selectedEvent && (
               <Box>
                 <Grid container spacing={2}>
-                  <Grid item xs={12} sm={6}>
+                  <Grid size={{ 'xs': 12, 'sm': 6 }}>
                     <Typography variant="subtitle2">Event ID</Typography>
                     <Typography variant="body2" sx={{ fontFamily: 'monospace' }}>
                       {selectedEvent.id}
                     </Typography>
                   </Grid>
-                  <Grid item xs={12} sm={6}>
+                  <Grid size={{ 'xs': 12, 'sm': 6 }}>
                     <Typography variant="subtitle2">Timestamp</Typography>
                     <Typography variant="body2">
                       {new Date(selectedEvent.timestamp).toLocaleString()}
@@ -589,7 +589,7 @@ export const AuditDashboard: React.FC = () => {
                       {selectedEvent.ip_address || 'N/A'}
                     </Typography>
                   </Grid>
-                  <Grid item xs={12}>
+                  <Grid size={12}>
                     <Typography variant="subtitle2">Details</Typography>
                     <Paper sx={{ p: 2, mt: 1, backgroundColor: 'grey.50' }}>
                       <Box component="pre" sx={{ m: 0, fontSize: '0.875rem', fontFamily: 'monospace' }}>

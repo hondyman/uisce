@@ -39,10 +39,10 @@ const ComplianceDashboard = () => {
 
             {/* 1. Summary Tiles */}
             <Grid container spacing={3} mb={3}>
-                <Grid item xs={12} md={3}>
+                <Grid size={{ 'xs': 12, 'md': 3 }}>
                     <SummaryCard title="PII Terms" value={summary.piiTerms} color="error.main" />
                 </Grid>
-                <Grid item xs={12} md={3}>
+                <Grid size={{ 'xs': 12, 'md': 3 }}>
                     <SummaryCard title="EU Terms" value={summary.euTerms} color="primary.main" />
                 </Grid>
                 <Grid item xs={12} md={3}>
@@ -55,7 +55,7 @@ const ComplianceDashboard = () => {
 
             <Grid container spacing={3}>
                 {/* 2. Business Terms List */}
-                <Grid item xs={12} lg={8}>
+                <Grid size={{ 'xs': 12, 'lg': 8 }}>
                     <Paper sx={{ p: 2 }}>
                         <Typography variant="h6" gutterBottom>Business Terms with PII</Typography>
                         <Table size="small">
@@ -90,7 +90,7 @@ const ComplianceDashboard = () => {
                 </Grid>
 
                 {/* 3. AI Alerts & Events */}
-                <Grid item xs={12} lg={4}>
+                <Grid size={{ 'xs': 12, 'lg': 4 }}>
                     <Grid container spacing={3} direction="column">
                         <Grid item>
                              <Paper sx={{ p: 2, bgcolor: '#fff4e5' }}>

@@ -188,7 +188,7 @@ export const LiquidityPanel: React.FC<LiquidityPanelProps> = ({ selectedFunds = 
 
             {/* Key Metrics */}
             <Grid container spacing={3} sx={{ mb: 3 }}>
-              <Grid item xs={12} md={3}>
+              <Grid size={{ 'xs': 12, 'md': 3 }}>
                 <LiquidityCard
                   title="Committed Capital"
                   value={fund.committedCapital}
@@ -196,7 +196,7 @@ export const LiquidityPanel: React.FC<LiquidityPanelProps> = ({ selectedFunds = 
                   color="primary"
                 />
               </Grid>
-              <Grid item xs={12} md={3}>
+              <Grid size={{ 'xs': 12, 'md': 3 }}>
                 <LiquidityCard
                   title="Invested Capital"
                   value={fund.investedCapital}

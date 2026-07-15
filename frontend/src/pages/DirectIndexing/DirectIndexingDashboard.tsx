@@ -183,7 +183,7 @@ export const DirectIndexingDashboard: React.FC = () => {
         <>
           {/* Stats Cards */}
           <Grid container spacing={3} sx={{ mb: 4 }}>
-            <Grid item xs={12} sm={6} md={3}>
+            <Grid size={{ 'xs': 12, 'sm': 6, 'md': 3 }}>
               <Card>
                 <CardContent>
                   <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
@@ -199,7 +199,7 @@ export const DirectIndexingDashboard: React.FC = () => {
               </Card>
             </Grid>
 
-            <Grid item xs={12} sm={6} md={3}>
+            <Grid size={{ 'xs': 12, 'sm': 6, 'md': 3 }}>
               <Card>
                 <CardContent>
                   <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
@@ -384,7 +384,7 @@ export const DirectIndexingDashboard: React.FC = () => {
               </Alert>
 
               <Grid container spacing={2}>
-                <Grid item xs={6}>
+                <Grid size={6}>
                   <Typography variant="subtitle2">SELL</Typography>
                   <Typography variant="body2">
                     {selectedOpp.shares_to_sell.toFixed(2)} shares of {selectedOpp.ticker}
@@ -394,7 +394,7 @@ export const DirectIndexingDashboard: React.FC = () => {
                   </Typography>
                 </Grid>
 
-                <Grid item xs={6}>
+                <Grid size={6}>
                   <Typography variant="subtitle2">BUY</Typography>
                   <Typography variant="body2">
                     {selectedOpp.shares_to_sell.toFixed(2)} shares of {selectedOpp.replacement_ticker}

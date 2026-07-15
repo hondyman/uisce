@@ -213,7 +213,7 @@ const AdvancedFieldSelector: React.FC<AdvancedFieldSelectorProps> = ({
               </Typography>
               <Grid container spacing={2}>
                 {entities.map(entity => (
-                  <Grid item xs={12} sm={6} md={4} key={entity.name}>
+                  <Grid size={{ 'xs': 12, 'sm': 6, 'md': 4 }}>
                     <Card
                       sx={{
                         cursor: 'pointer',

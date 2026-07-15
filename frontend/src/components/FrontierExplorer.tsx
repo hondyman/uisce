@@ -404,7 +404,7 @@ export default function FrontierExplorer({
 
       <Grid container spacing={3}>
         {/* Efficient Frontier Chart */}
-        <Grid item xs={12} lg={8}>
+        <Grid size={{ 'xs': 12, 'lg': 8 }}>
           <Card>
             <CardContent>
               <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
@@ -589,12 +589,12 @@ export default function FrontierExplorer({
                     Selected Portfolio Details
                   </Typography>
                   <Grid container spacing={2}>
-                    <Grid item xs={6} sm={3}>
+                    <Grid size={{ 'xs': 6, 'sm': 3 }}>
                       <Typography variant="body2">
                         <strong>Volatility:</strong> {selected.volatility.toFixed(4)}
                       </Typography>
                     </Grid>
-                    <Grid item xs={6} sm={3}>
+                    <Grid size={{ 'xs': 6, 'sm': 3 }}>
                       <Typography variant="body2">
                         <strong>Return:</strong> {selected.exp_return.toFixed(4)}
                       </Typography>
@@ -657,7 +657,7 @@ export default function FrontierExplorer({
         </Grid>
 
         {/* Risk Metrics Table */}
-        <Grid item xs={12} lg={4}>
+        <Grid size={{ 'xs': 12, 'lg': 4 }}>
           <Card>
             <CardContent>
               <Typography variant="h6" gutterBottom>
@@ -700,7 +700,7 @@ export default function FrontierExplorer({
         </Grid>
 
         {/* Stochastic Paths */}
-        <Grid item xs={12} lg={6}>
+        <Grid size={{ 'xs': 12, 'lg': 6 }}>
           <Card>
             <CardContent>
               <Typography variant="h6" gutterBottom>
@@ -761,7 +761,7 @@ export default function FrontierExplorer({
           </Card>
         </Grid>
 
-        <Grid item xs={12} lg={6}>
+        <Grid size={{ 'xs': 12, 'lg': 6 }}>
           <Card>
             <CardContent>
               <Typography variant="h6" gutterBottom>
@@ -823,7 +823,7 @@ export default function FrontierExplorer({
         </Grid>
 
         {/* Monte Carlo Histogram */}
-        <Grid item xs={12}>
+        <Grid size={12}>
           <Card>
             <CardContent>
               <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>

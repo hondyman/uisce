@@ -102,7 +102,7 @@ export const AlternativeInvestmentsCenter: React.FC<{ clientId: string }> = ({ c
       {/* Portfolio Summary Cards */}
       {portfolioSummary && (
         <Grid container spacing={3} sx={{ mb: 4 }}>
-          <Grid item xs={12} md={3}>
+          <Grid size={{ 'xs': 12, 'md': 3 }}>
             <Card elevation={2}>
               <CardContent>
                 <Typography color="textSecondary" variant="body2" gutterBottom>
@@ -115,7 +115,7 @@ export const AlternativeInvestmentsCenter: React.FC<{ clientId: string }> = ({ c
             </Card>
           </Grid>
 
-          <Grid item xs={12} md={3}>
+          <Grid size={{ 'xs': 12, 'md': 3 }}>
             <Card elevation={2}>
               <CardContent>
                 <Typography color="textSecondary" variant="body2" gutterBottom>
@@ -201,7 +201,7 @@ const InvestmentsList: React.FC<{ investments: AlternativeInvestment[] }> = ({ i
   return (
     <Grid container spacing={2}>
       {investments.map((inv) => (
-        <Grid item xs={12} key={inv.id}>
+        <Grid size={12}>
           <Card variant="outlined">
             <CardContent>
               <Box display="flex" justifyContent="space-between">
@@ -222,11 +222,11 @@ const InvestmentsList: React.FC<{ investments: AlternativeInvestment[] }> = ({ i
               </Box>
 
               <Grid container spacing={2} sx={{ mt: 2 }}>
-                <Grid item xs={3}>
+                <Grid size={3}>
                   <Typography variant="caption" color="textSecondary">Commitment</Typography>
                   <Typography variant="body2">${inv.commitmentAmount.toLocaleString()}</Typography>
                 </Grid>
-                <Grid item xs={3}>
+                <Grid size={3}>
                   <Typography variant="caption" color="textSecondary">Called</Typography>
                   <Typography variant="body2">${inv.capitalCalled.toLocaleString()}</Typography>
                 </Grid>

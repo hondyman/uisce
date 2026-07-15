@@ -126,7 +126,7 @@ export const TaxCalculator: React.FC<TaxCalculatorProps> = ({ familyId }) => {
 
       <Grid container spacing={3}>
         {/* Input Panel */}
-        <Grid item xs={12} md={6}>
+        <Grid size={{ 'xs': 12, 'md': 6 }}>
           <Paper elevation={2} sx={{ p: 3 }}>
             <Typography variant="subtitle1" gutterBottom fontWeight="bold">
               Current Situation
@@ -250,7 +250,7 @@ export const TaxCalculator: React.FC<TaxCalculatorProps> = ({ familyId }) => {
         </Grid>
 
         {/* Results Panel */}
-        <Grid item xs={12} md={6}>
+        <Grid size={{ 'xs': 12, 'md': 6 }}>
           <Paper elevation={2} sx={{ p: 3, height: '100%' }}>
             <Typography variant="subtitle1" gutterBottom fontWeight="bold">
               Tax Calculation Results
@@ -345,14 +345,14 @@ export const TaxCalculator: React.FC<TaxCalculatorProps> = ({ familyId }) => {
 
         {/* Tax Savings Scenarios */}
         {results && (
-          <Grid item xs={12}>
+          <Grid size={12}>
             <Paper elevation={2} sx={{ p: 3 }}>
               <Typography variant="subtitle1" gutterBottom fontWeight="bold">
                 Potential Tax Savings with Planning
               </Typography>
 
               <Grid container spacing={2} sx={{ mt: 1 }}>
-                <Grid item xs={12} md={4}>
+                <Grid size={{ 'xs': 12, 'md': 4 }}>
                   <Card variant="outlined">
                     <CardContent>
                       <Typography variant="subtitle2" gutterBottom>
@@ -368,7 +368,7 @@ export const TaxCalculator: React.FC<TaxCalculatorProps> = ({ familyId }) => {
                   </Card>
                 </Grid>
 
-                <Grid item xs={12} md={4}>
+                <Grid size={{ 'xs': 12, 'md': 4 }}>
                   <Card variant="outlined">
                     <CardContent>
                       <Typography variant="subtitle2" gutterBottom>

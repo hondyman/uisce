@@ -133,7 +133,7 @@ export const ColorPaletteEditor: React.FC<ColorPaletteEditorProps> = ({
               const isSelected = selectedColor === color.hex;
 
               return (
-                <Grid item xs={6} sm={4} md={3} key={color.id}>
+                <Grid size={{ 'xs': 6, 'sm': 4, 'md': 3 }}>
                   <Tooltip
                     title={isConflicting ? 'Too similar to existing color' : color.name}
                   >

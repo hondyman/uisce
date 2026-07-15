@@ -117,7 +117,7 @@ export const OptimizationMLCard: React.FC<OptimizationMLCardProps> = ({ ml }) =>
 
         <Grid container spacing={3}>
           {/* ML Score */}
-          <Grid item xs={6} md={3}>
+          <Grid size={{ 'xs': 6, 'md': 3 }}>
             <Stack alignItems="center">
               <Typography variant="caption" color="text.secondary">
                 ML Score
@@ -134,7 +134,7 @@ export const OptimizationMLCard: React.FC<OptimizationMLCardProps> = ({ ml }) =>
           </Grid>
 
           {/* Predicted Speedup */}
-          <Grid item xs={6} md={3}>
+          <Grid size={{ 'xs': 6, 'md': 3 }}>
             <Stack alignItems="center">
               <Typography variant="caption" color="text.secondary">
                 Predicted Speedup
@@ -322,7 +322,7 @@ export const OptimizationExplainabilityCard: React.FC<OptimizationExplainability
 
         <Grid container spacing={3}>
           {/* Workload Evidence */}
-          <Grid item xs={12} md={4}>
+          <Grid size={{ 'xs': 12, 'md': 4 }}>
             <Typography variant="subtitle2" gutterBottom>
               <Speed sx={{ mr: 0.5, verticalAlign: 'middle', fontSize: 18 }} />
               Workload Evidence
@@ -338,7 +338,7 @@ export const OptimizationExplainabilityCard: React.FC<OptimizationExplainability
           </Grid>
 
           {/* ML Assessment Summary */}
-          <Grid item xs={12} md={4}>
+          <Grid size={{ 'xs': 12, 'md': 4 }}>
             <Typography variant="subtitle2" gutterBottom>
               <Psychology sx={{ mr: 0.5, verticalAlign: 'middle', fontSize: 18 }} />
               ML Assessment
@@ -484,7 +484,7 @@ export const OptimizationSimulationCard: React.FC<OptimizationSimulationCardProp
             Pre-Agg Hit Rate Comparison
           </Typography>
           <Grid container spacing={2}>
-            <Grid item xs={5}>
+            <Grid size={5}>
               <Paper variant="outlined" sx={{ p: 2, textAlign: 'center' }}>
                 <Typography variant="caption" color="text.secondary">
                   Before
@@ -494,13 +494,13 @@ export const OptimizationSimulationCard: React.FC<OptimizationSimulationCardProp
                 </Typography>
               </Paper>
             </Grid>
-            <Grid item xs={2} sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <Grid size={2}>
               <TrendingUp
                 color={hitRateImprovement > 0 ? 'success' : 'error'}
                 sx={{ fontSize: 32 }}
               />
             </Grid>
-            <Grid item xs={5}>
+            <Grid size={5}>
               <Paper
                 variant="outlined"
                 sx={{ p: 2, textAlign: 'center', bgcolor: 'success.light' }}

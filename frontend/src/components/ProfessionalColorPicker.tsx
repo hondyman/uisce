@@ -172,7 +172,7 @@ export const ProfessionalColorPicker: React.FC<ProfessionalColorPickerProps> = (
           </Typography>
           <Grid container spacing={1} sx={{ mb: 2 }}>
             {DEFAULT_PALETTE.map((paletteColor) => (
-              <Grid item xs={4} sm={3} md={2} key={paletteColor}>
+              <Grid size={{ 'xs': 4, 'sm': 3, 'md': 2 }}>
                 <Box
                   onClick={() => handleColorChange(paletteColor)}
                   sx={{

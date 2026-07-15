@@ -63,7 +63,7 @@ const SLODashboard: React.FC = () => {
       ) : (
         <Grid container spacing={3}>
           {slos.map((slo) => (
-            <Grid item xs={12} sm={6} md={4} lg={3} key={slo.id}>
+            <Grid size={{ 'xs': 12, 'sm': 6, 'md': 4, 'lg': 3 }}>
               <SLOCard slo={slo} status="unknown" />
             </Grid>
           ))}

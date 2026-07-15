@@ -542,7 +542,7 @@ const PlatformBillingPage: React.FC = () => {
         <Box>
           {/* Summary Cards */}
           <Grid container spacing={3} sx={{ mb: 3 }}>
-            <Grid item xs={12} sm={6} md={3}>
+            <Grid size={{ 'xs': 12, 'sm': 6, 'md': 3 }}>
               <Card sx={{ height: '100%', background: gradients.compute }}>
                 <CardContent>
                   <Stack direction="row" justifyContent="space-between" alignItems="flex-start">
@@ -559,7 +559,7 @@ const PlatformBillingPage: React.FC = () => {
                 </CardContent>
               </Card>
             </Grid>
-            <Grid item xs={12} sm={6} md={3}>
+            <Grid size={{ 'xs': 12, 'sm': 6, 'md': 3 }}>
               <Card sx={{ height: '100%', background: gradients.storage }}>
                 <CardContent>
                   <Stack direction="row" justifyContent="space-between" alignItems="flex-start">
@@ -614,7 +614,7 @@ const PlatformBillingPage: React.FC = () => {
 
           {/* Forecast + Anomaly Summary */}
           <Grid container spacing={3} sx={{ mb: 3 }}>
-            <Grid item xs={12} md={6}>
+            <Grid size={{ 'xs': 12, 'md': 6 }}>
               <Paper sx={{ p: 3, height: '100%' }}>
                 <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 2 }}>
                   <Typography variant="h6" sx={{ fontWeight: 600 }}>
@@ -650,7 +650,7 @@ const PlatformBillingPage: React.FC = () => {
                 )}
               </Paper>
             </Grid>
-            <Grid item xs={12} md={6}>
+            <Grid size={{ 'xs': 12, 'md': 6 }}>
               <Paper sx={{ p: 3, height: '100%' }}>
                 <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 2 }}>
                   <Typography variant="h6" sx={{ fontWeight: 600 }}>
@@ -825,7 +825,7 @@ const PlatformBillingPage: React.FC = () => {
               { label: 'Events', value: tenantData?.estimatedCost.eventsUSD || 0, gradient: gradients.events, icon: <BoltIcon sx={{ color: 'rgba(255,255,255,0.7)', fontSize: 36 }} /> },
               { label: 'Total Estimated', value: tenantData?.estimatedCost.totalUSD || 0, gradient: gradients.total, icon: <MoneyIcon sx={{ color: 'rgba(255,255,255,0.7)', fontSize: 36 }} /> },
             ].map((card) => (
-              <Grid item xs={12} sm={6} md={3} key={card.label}>
+              <Grid size={{ 'xs': 12, 'sm': 6, 'md': 3 }}>
                 <Card sx={{ height: '100%', background: card.gradient }}>
                   <CardContent>
                     <Stack direction="row" justifyContent="space-between" alignItems="flex-start">
@@ -958,7 +958,7 @@ const PlatformBillingPage: React.FC = () => {
                   ? (item.value / platformData.totals.totalUSD) * 100
                   : 0;
                 return (
-                  <Grid item xs={12} sm={4} key={item.label}>
+                  <Grid size={{ 'xs': 12, 'sm': 4 }}>
                     <Box sx={{ textAlign: 'center', p: 2 }}>
                       <Typography variant="overline" color="text.secondary">{item.label}</Typography>
                       <Typography variant="h4" sx={{ fontWeight: 700, my: 1 }}>{fmtUSD(item.value)}</Typography>
@@ -1443,13 +1443,13 @@ const PlatformBillingPage: React.FC = () => {
                 <DialogContent dividers>
                   {/* Dates */}
                   <Grid container spacing={2} sx={{ mb: 3 }}>
-                    <Grid item xs={4}>
+                    <Grid size={4}>
                       <Typography variant="overline" color="text.secondary">Created</Typography>
                       <Typography variant="body2" sx={{ fontWeight: 500 }}>
                         {new Date(selectedInvoice.createdAt).toLocaleDateString()}
                       </Typography>
                     </Grid>
-                    <Grid item xs={4}>
+                    <Grid size={4}>
                       <Typography variant="overline" color="text.secondary">Issued</Typography>
                       <Typography variant="body2" sx={{ fontWeight: 500 }}>
                         {selectedInvoice.issuedAt
