@@ -1,0 +1,2 @@
+#!/bin/bash
+sed -i '' 's/UPDATE public.tenant_product_datasource/UPDATE public.tenant_product_datasource\n\t\tSET last_scan_status = $2, last_scan_at = NOW(), last_scan_message = $3\n\t\tWHERE id = $1;\n\n\t\tUPDATE public.connections\n\t\tSET updated_at = NOW()\n\t\tWHERE id = (SELECT connection_id FROM public.tenant_product_datasource WHERE id = $1);\n\n\t\t-- dummy/g' /Users/eganpj/GitHub/uisce/backend/internal/metadata/catalog_scan_service.go
