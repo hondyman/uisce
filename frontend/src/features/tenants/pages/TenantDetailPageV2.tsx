@@ -179,7 +179,7 @@ export const TenantDetailPageV2: React.FC = () => {
     database: '',
     schema: '',
     username: '',
-    password: '',
+    secret_path: '',
     base_url: '',
     api_key: '',
     auth_type: 'basic', // basic, oauth, key_pair, bearer
@@ -408,7 +408,7 @@ export const TenantDetailPageV2: React.FC = () => {
       database: '',
       schema: '',
       username: '',
-      password: '',
+      secret_path: '',
       base_url: '',
       api_key: '',
       auth_type: 'basic',
@@ -433,7 +433,7 @@ export const TenantDetailPageV2: React.FC = () => {
       database: connection.database || '',
       schema: connection.schema || '',
       username: connection.username || '',
-      password: connection.password || '',
+      secret_path: connection.secret_path || '',
       base_url: connection.base_url || connection.metadata?.base_url || '',
       api_key: connection.api_key || connection.metadata?.api_key || '',
       auth_type: connection.metadata?.auth_type || 'basic',
@@ -457,7 +457,7 @@ export const TenantDetailPageV2: React.FC = () => {
         database: connectionForm.database,
         schema: connectionForm.schema,
         username: connectionForm.username,
-        password: connectionForm.password,
+        secret_path: connectionForm.secret_path,
         base_url: connectionForm.base_url,
         api_key: connectionForm.api_key,
         auth_type: connectionForm.auth_type,
@@ -535,7 +535,7 @@ export const TenantDetailPageV2: React.FC = () => {
             database: connectionForm.database || null,
             schema: connectionForm.schema || null,
             username: connectionForm.username || null,
-            password: connectionForm.password || null,
+            secret_path: connectionForm.secret_path || null,
             metadata: {
               auth_type: connectionForm.auth_type,
               base_url: connectionForm.base_url,
@@ -560,7 +560,7 @@ export const TenantDetailPageV2: React.FC = () => {
             database: connectionForm.database || null,
             schema: connectionForm.schema || null,
             username: connectionForm.username || null,
-            password: connectionForm.password || null,
+            secret_path: connectionForm.secret_path || null,
             metadata: {
               auth_type: connectionForm.auth_type,
               base_url: connectionForm.base_url,
@@ -733,7 +733,7 @@ export const TenantDetailPageV2: React.FC = () => {
           database: '',
           schema: '',
           username: '',
-          password: '',
+          secret_path: '',
           base_url: '',
           api_key: '',
           auth_type: 'basic',
@@ -1365,13 +1365,14 @@ export const TenantDetailPageV2: React.FC = () => {
                       fullWidth
                     />
                     <TextField
-                      label="Password"
-                      type="password"
-                      value={connectionForm.password}
+                      label="Infisical Secret Path"
+                      value={connectionForm.secret_path}
                       onChange={(e) =>
-                        setConnectionForm({ ...connectionForm, password: e.target.value })
+                        setConnectionForm({ ...connectionForm, secret_path: e.target.value })
                       }
                       fullWidth
+                      placeholder="/connections/tenant-<tenant_id>/<connection_name>"
+                      helperText="Infisical path where DB_USERNAME and DB_PASSWORD are stored"
                     />
                   </>
                 )}
