@@ -136,7 +136,7 @@ const categoryConfigs: CategoryConfig[] = [
         icon: <BusinessIcon />,
         requiredCapability: 'menu:organization',
         items: [
-          { label: 'Tenant Management', path: '/fabric/tenants', icon: <CorporateFareIcon />, description: 'Platform admin: status, IP, usage' },
+          { label: 'Manage Resources', path: '/fabric/tenants', icon: <CorporateFareIcon />, description: 'Manage current tenant resources' },
           { label: 'Entitlement Management', path: '/admin/entitlements', icon: <ExtensionIcon />, description: 'Tenant profiles and component entitlements', requiredCapability: 'menu:entitlements' },
           { label: 'Users', path: '/admin/rbac/users', icon: <PersonAddIcon />, description: 'User management' },
           { label: 'Teams', path: '/admin/rbac/teams', icon: <GroupsIcon />, description: 'Team structure' },
@@ -715,9 +715,9 @@ export const MainNavigation: React.FC<MainNavigationProps> = () => {
 
     // Try to pick a product and datasource if available on the instance
     if (selectedInstance) {
-      const instanceProducts = selectedInstance.tenant_products || [];
+      const instanceProducts = selectedInstance.tenant_products || selectedInstance.products || [];
       const selectedProduct = instanceProducts[0] || null;
-      const selectedDatasource = selectedProduct?.tenant_product_datasources?.[0] || null;
+      const selectedDatasource = selectedProduct?.tenant_product_datasources?.[0] || selectedProduct?.datasources?.[0] || null;
       if (selectedTenant && selectedProduct && selectedDatasource) {
         setSelection(selectedTenant, selectedProduct, selectedDatasource);
       }
@@ -949,11 +949,30 @@ export const MainNavigation: React.FC<MainNavigationProps> = () => {
               );
             }
             
+            let scopedPath = item.path;
+            if (tenant?.id) {
+              const iId = scope?.instanceId || datasource?.id;
+              if (item.path === '/fabric/tenants') {
+                scopedPath = `/tenants/${tenant.id}`;
+                if (iId) {
+                  scopedPath += `?instanceId=${iId}`;
+                }
+              } else {
+                const qs = new URLSearchParams();
+                qs.set('tenantId', tenant.id);
+                if (iId) {
+                  qs.set('instanceId', iId);
+                }
+                const hasQuery = item.path.includes('?');
+                scopedPath = `${item.path}${hasQuery ? '&' : '?'}${qs.toString()}`;
+              }
+            }
+
             return (
               <MenuItem
                 key={item.path}
                 component={BlockableLink}
-                {...{ to: item.path }}
+                {...{ to: scopedPath }}
                 onClick={handleMenuClose}
                 selected={selected}
                 sx={{

@@ -40,20 +40,7 @@ export const TenantProvider: React.FC<TenantProviderProps> = ({ children }) => {
       if (storedTenant && storedProduct && storedDatasource) {
         const parsedTenant = JSON.parse(storedTenant);
         const parsedProduct = JSON.parse(storedProduct);
-        let parsedDatasource = JSON.parse(storedDatasource);
-
-        // Auto-fix: Check for incorrect datasource ID (097...) and replace with correct one (25b...)
-        // This fixes the issue where an old auto-fix set the wrong ID
-        if (parsedDatasource.id === '097793ae-ceeb-48f4-a7bb-4bcbba1796ae') {
-          devLog('Auto-fixing incorrect datasource ID in localStorage (097 -> 25b)');
-          parsedDatasource = {
-            ...parsedDatasource,
-            id: '25b5dce3-27d9-4773-933e-6ee29a42871f',
-            source_name: 'Northwinds' 
-          };
-          // Update localStorage immediately
-          localStorage.setItem(TENANT_STORAGE_KEYS.DATASOURCE, JSON.stringify(parsedDatasource));
-        }
+        const parsedDatasource = JSON.parse(storedDatasource);
 
         setTenant(parsedTenant);
         setProduct(parsedProduct);

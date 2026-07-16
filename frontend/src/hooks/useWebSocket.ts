@@ -29,8 +29,10 @@ export const useWebSocket = (audience: string, userId?: string) => {
 
     setConnectionStatus('connecting');
 
-  const _wsBackend = (import.meta.env.VITE_API_BASE_URL as string) || 'http://localhost:29080';
-  const wsUrl = `ws://localhost:29080/api/ws?audience=${audience}${userId ? `&userId=${userId}` : ''}`;
+    // Use window.location to construct the correct WebSocket URL
+    const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const wsHost = window.location.host;
+    const wsUrl = `${wsProtocol}//${wsHost}/api/ws?audience=${audience}${userId ? `&userId=${userId}` : ''}`;
     const ws = new WebSocket(wsUrl);
 
     ws.onopen = () => {

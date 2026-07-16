@@ -48,6 +48,7 @@ interface AlphaProduct {
 
 interface ProductsTabContentProps {
   tenantId: string;
+  activeInstanceId?: string;
   datasourceId?: string;
   productCounts?: Map<string, { instances: Set<string>, connections: number }>;
   onProductInstancesClick?: (productId: string) => void;
@@ -56,6 +57,7 @@ interface ProductsTabContentProps {
 
 export const ProductsTabContent: React.FC<ProductsTabContentProps> = ({ 
   tenantId,
+  activeInstanceId,
   productCounts = new Map(),
   onProductInstancesClick,
   onProductConnectionsClick
@@ -93,12 +95,19 @@ export const ProductsTabContent: React.FC<ProductsTabContentProps> = ({
     if (!tenantData?.tenant) return [];
     const products: any[] = [];
     tenantData.tenant.tenant_instances?.forEach((instance: any) => {
-      instance.products?.forEach((p: any) => {
+      if (activeInstanceId && instance.id !== activeInstanceId) return;
+      (instance.products || instance.tenant_products)?.forEach((p: any) => {
         products.push(p);
       });
     });
     return products;
-  }, [tenantData]);
+  }, [tenantData, activeInstanceId]);
+
+  const instanceName = useMemo(() => {
+    if (!activeInstanceId || !tenantData?.tenant?.tenant_instances) return null;
+    const inst = tenantData.tenant.tenant_instances.find((i: any) => i.id === activeInstanceId);
+    return inst ? (inst.display_name || inst.instance_name) : null;
+  }, [activeInstanceId, tenantData]);
 
   // Get registered product IDs for this tenant
   const registeredProductIds = useMemo(() => {
@@ -159,11 +168,12 @@ export const ProductsTabContent: React.FC<ProductsTabContentProps> = ({
         method: 'POST',
         body: JSON.stringify({
           alpha_product_id: product.id,
+          tenant_instance_id: activeInstanceId,
           version: 1.0,
           is_active: true,
         }),
       });
-      notification.success(`Registered "${product.product_name}" for this tenant`);
+      notification.success(`Registered "${product.product_name}" for this tenant instance`);
       refetchTenant();
     } catch (error: any) {
       notification.error(error.message || 'Failed to register product');
@@ -245,12 +255,14 @@ export const ProductsTabContent: React.FC<ProductsTabContentProps> = ({
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
         <Box>
           <Typography variant="h6" sx={{ fontWeight: 600 }}>
-            {isGoldCopy ? 'Product Catalog (Gold Copy)' : 'Product Registration'}
+            {isGoldCopy ? 'Product Catalog (Gold Copy)' : (instanceName ? `Product Registration for: ${instanceName}` : 'Product Registration')}
           </Typography>
           <Typography variant="body2" color="text.secondary">
             {isGoldCopy 
               ? 'This is the gold copy tenant. All products are available here. Toggle active/inactive to control availability for downstream tenants.'
-              : 'Register products from the available catalog that this tenant will use. Registered products can then be linked to datasources.'
+              : (instanceName 
+                ? `Register products from the available catalog that the scoped instance "${instanceName}" will use. Registered products can then be linked to datasources.` 
+                : 'Register products from the available catalog that this tenant will use. Registered products can then be linked to datasources.')
             }
           </Typography>
         </Box>

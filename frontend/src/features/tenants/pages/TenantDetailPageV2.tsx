@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Box,
   Button,
@@ -32,9 +32,11 @@ import {
 import { useApiMutation } from '../../../hooks/useApiMutation';
 import { useApiQuery } from '../../../hooks/useApiQuery';
 import { useTenant } from '../../../contexts/TenantContext';
+import { useAccess } from '../../../contexts/AccessContext';
 import type { TenantInstance } from '../../../types';
 import { apiClient } from '../../../utils/apiClient';
 import InstancesTableV2 from '../components/InstancesTableV2';
+import { ScopedInstanceEditor } from '../components/ScopedInstanceEditor';
 import { ConnectionsTabContent } from '../components/ConnectionsTabContent';
 import { AuditLogTabContent } from '../components/AuditLogTabContent';
 import { ConfigurationTabContent } from '../components/ConfigurationTabContent';
@@ -68,10 +70,13 @@ function TabPanel(props: TabPanelProps) {
 export const TenantDetailPageV2: React.FC = () => {
   const { tenantId } = useParams<{ tenantId: string }>();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const {
     tenant: scopedTenant,
+    product: scopedProduct,
     datasource: scopedDatasource,
   } = useTenant();
+  const { scope } = useAccess();
 
   const { data: tenantData, loading, error, refetch: refetchTenant } = useApiQuery<{ tenant: any }>(
     tenantId ? `/api/tenants/${tenantId}` : '',
@@ -208,8 +213,8 @@ export const TenantDetailPageV2: React.FC = () => {
 
     // New REST shape: products are nested inside instances (tenant.instances[].products[].Datasources[])
     tenant.tenant_instances?.forEach((instance: any) => {
-      instance.products?.forEach((product: any) => {
-        product.datasources?.forEach((ds: any) => {
+      (instance.products || instance.tenant_products)?.forEach((product: any) => {
+        (product.tenant_product_datasources || product.datasources || []).forEach((ds: any) => {
           if (ds.connection_id) {
             if (!instanceResourcesMap.has(instance.id)) {
               instanceResourcesMap.set(instance.id, { products: [], connections: [] });
@@ -268,7 +273,7 @@ export const TenantDetailPageV2: React.FC = () => {
     const countsMap = new Map<string, { instances: Set<string>, connections: number }>();
 
     tenant.tenant_instances?.forEach((instance: any) => {
-      instance.products?.forEach((product: any) => {
+      (instance.products || instance.tenant_products)?.forEach((product: any) => {
         const productId = product.alpha_product_id;
         if (!countsMap.has(productId)) {
           countsMap.set(productId, { instances: new Set(), connections: 0 });
@@ -276,7 +281,7 @@ export const TenantDetailPageV2: React.FC = () => {
 
         const counts = countsMap.get(productId)!;
 
-        product.datasources?.forEach((ds: any) => {
+        (product.tenant_product_datasources || product.datasources || []).forEach((ds: any) => {
           if (ds.connection_id) {
             counts.instances.add(instance.id);
             counts.connections++;
@@ -287,6 +292,10 @@ export const TenantDetailPageV2: React.FC = () => {
 
     return countsMap;
   }, [tenant]);
+
+  const urlInstanceId = searchParams.get('instanceId');
+  const activeInstanceId = urlInstanceId || scopedDatasource?.id || scope?.instanceId || scopedProduct?.tenant_instance_id;
+  const activeInstance = enrichedInstances.find(i => i.id === activeInstanceId);
 
   // Initialize edit form when tenant loads
   React.useEffect(() => {
@@ -389,8 +398,8 @@ export const TenantDetailPageV2: React.FC = () => {
 
   const handleAddConnection = () => {
     setEditingConnection(null);
-    setSelectedConnectionProduct('');
-    setSelectedConnectionInstance('');
+    setSelectedConnectionProduct(scopedProduct?.id || '');
+    setSelectedConnectionInstance(scopedDatasource?.id || '');
     setConnectionForm({
       name: '',
       type: 'postgres',
@@ -481,6 +490,31 @@ export const TenantDetailPageV2: React.FC = () => {
         return;
       }
 
+      // Validation: Prevent duplicate connections of the same type for the same product on the same instance
+      if (!editingConnection?.id && tenant?.tenant_instances) {
+        let isDuplicate = false;
+        for (const instance of tenant.tenant_instances) {
+          if (instance.id === selectedConnectionInstance) {
+            const targetProduct = ((instance.products || instance.tenant_products) || []).find((p: any) => p.alpha_product_id === selectedConnectionProduct);
+            if (targetProduct) {
+              const dsList = targetProduct.tenant_product_datasources || targetProduct.datasources;
+              if (dsList) {
+                // If there's already a datasource of this type linked to this product/instance
+                const existing = dsList.find((ds: any) => ds.datasource_code?.toLowerCase() === connectionForm.type.toLowerCase() || ds.alpha_datasource?.datasource_type?.toLowerCase() === connectionForm.type.toLowerCase() || (ds.alpha_datasource_id && datasourcesData?.alpha_datasource?.find((a: any) => a.id === ds.alpha_datasource_id)?.datasource_code?.toLowerCase() === connectionForm.type.toLowerCase()));
+                if (existing) {
+                  isDuplicate = true;
+                  break;
+                }
+              }
+            }
+          }
+        }
+        if (isDuplicate) {
+          alert(`A ${connectionForm.type} connection already exists for this Product on this Instance. Duplicate connections are not allowed.`);
+          return;
+        }
+      }
+
       if (!datasourcesData?.alpha_datasource || datasourcesData.alpha_datasource.length === 0) {
         console.warn('Datasource types not yet loaded, attempting to refetch...');
         const freshDatasources = await apiClient<{ alpha_datasource: any[] }>('/api/rest/datasources');
@@ -544,8 +578,8 @@ export const TenantDetailPageV2: React.FC = () => {
       if (connectionId) {
         if (tenant?.tenant_instances) {
           for (const instance of tenant.tenant_instances) {
-            for (const product of (instance.products || [])) {
-              for (const ds of (product.datasources || [])) {
+            for (const product of ((instance.products || instance.tenant_products) || [])) {
+              for (const ds of (product.tenant_product_datasources || product.datasources || [])) {
                 if (ds.connection_id === connectionId) {
                   await apiClient(`/api/tenant-ops/product-datasources/${ds.id}/connection`, {
                     method: 'PATCH',
@@ -561,7 +595,7 @@ export const TenantDetailPageV2: React.FC = () => {
         let existingProduct = null;
         if (tenant?.tenant_instances) {
           for (const instance of tenant.tenant_instances) {
-            existingProduct = (instance.products || []).find(
+            existingProduct = ((instance.products || instance.tenant_products) || []).find(
               (p: any) => p.alpha_product_id === selectedConnectionProduct
             );
             if (existingProduct) break;
@@ -616,12 +650,13 @@ export const TenantDetailPageV2: React.FC = () => {
 
           if (freshTenant?.tenant_instances) {
             for (const instance of freshTenant.tenant_instances) {
-              const targetProduct = (instance.products || []).find((p: any) => p.id === tenantProductId);
-              if (targetProduct?.datasources) {
-                existingDatasource = targetProduct.datasources.find(
+              const targetProduct = ((instance.products || instance.tenant_products) || []).find((p: any) => p.id === tenantProductId);
+              const dsList = targetProduct.tenant_product_datasources || targetProduct.datasources;
+              if (dsList) {
+                existingDatasource = dsList.find(
                     (ds: any) => {
                        return ds.tenant_instance_id === selectedConnectionInstance &&
-                       ds.alpha_tenant_instance_id === resolvedAlphaDatasourceId;
+                       ds.alpha_datasource_id === resolvedAlphaDatasourceId;
                     }
                 );
               }
@@ -650,7 +685,7 @@ export const TenantDetailPageV2: React.FC = () => {
 
             const updateVars = {
               tenant_instance_id: selectedConnectionInstance || null,
-              alpha_tenant_instance_id: resolvedAlphaDatasourceId || null,
+              alpha_datasource_id: resolvedAlphaDatasourceId || null,
               connection_id: connectionId,
               is_active: existingDatasource.is_active,
               source_name: connectionForm.name,
@@ -679,7 +714,7 @@ export const TenantDetailPageV2: React.FC = () => {
             await addTenantProductDatasource.mutate({
               tenant_product_id: tenantProductId,
               tenant_instance_id: selectedConnectionInstance,
-              alpha_tenant_instance_id: resolvedAlphaDatasourceId,
+              alpha_datasource_id: resolvedAlphaDatasourceId,
               config: {},
               is_active: true,
               source_name: connectionForm.name,
@@ -905,7 +940,7 @@ export const TenantDetailPageV2: React.FC = () => {
             px: 3,
           }}
         >
-          <Tab label={`Instances (${instances.length})`} id="tenant-tab-0" aria-controls="tenant-tabpanel-0" />
+          <Tab label="Scoped Instance" id="tenant-tab-0" aria-controls="tenant-tabpanel-0" />
           <Tab label="Products" id="tenant-tab-1" aria-controls="tenant-tabpanel-1" />
           <Tab label="Connections" id="tenant-tab-2" aria-controls="tenant-tabpanel-2" />
           <Tab label="Lookups" id="tenant-tab-3" aria-controls="tenant-tabpanel-3" />
@@ -917,14 +952,23 @@ export const TenantDetailPageV2: React.FC = () => {
         {/* Instances Tab */}
         <TabPanel value={activeTab} index={0}>
           <Box sx={{ p: 3 }}>
-            <InstancesTableV2
-              instances={enrichedInstances}
-              tenantId={tenantId || ''}
-              onAddInstance={handleAddInstance}
-              onEditInstance={handleEditInstance}
-              onDeleteInstance={handleDeleteInstance}
-              onReload={() => refetchTenant()}
-            />
+            {(() => {
+              if (!activeInstance) {
+                return (
+                  <Alert severity="info">
+                    No scoped instance selected. Please select a scoped instance from the global navigation to view its details.
+                  </Alert>
+                );
+              }
+
+              return (
+                <ScopedInstanceEditor
+                  instance={activeInstance}
+                  tenantId={tenantId}
+                  updateMutation={(data: any) => updateTenantInstance.mutate(data).then(() => refetchTenant())}
+                />
+              );
+            })()}
           </Box>
         </TabPanel>
 
@@ -933,6 +977,7 @@ export const TenantDetailPageV2: React.FC = () => {
           <Box sx={{ p: 3 }}>
             <ProductsTabContent 
               tenantId={tenantId || ''}
+              activeInstanceId={activeInstanceId}
               datasourceId={scopedDatasource?.id || ''}
               productCounts={productCounts}
               onProductInstancesClick={(productId) => {
@@ -950,23 +995,24 @@ export const TenantDetailPageV2: React.FC = () => {
         {/* Connections Tab */}
         <TabPanel value={activeTab} index={2}>
           <Box sx={{ display: 'flex', gap: 3, p: 3 }}>
-            {/* Facets Sidebar */}
+            {/* Facets Sidebar (hide instances if we have a scoped instance) */}
             <ConnectionsFacets
-              instances={instances}
+              instances={activeInstanceId ? [] : instances}
               products={Array.from(
                 new Map(
-                  (tenant?.tenant_instances || []).flatMap((i: any) =>
-                    (i.products || []).map((p: any) => [
+                  (tenant?.tenant_instances || []).flatMap((i: any) => {
+                    if (activeInstanceId && i.id !== activeInstanceId) return [];
+                    return ((i.products || i.tenant_products) || []).map((p: any) => [
                       p.alpha_product_id,
                       {
                         id: p.alpha_product_id,
                         product_name: p.alpha_product?.product_name || 'Unknown'
                       }
-                    ])
-                  )
+                    ]);
+                  })
                 ).values()
               ) as Array<{ id: string; product_name: string }>}
-              selectedInstances={selectedInstanceFilters}
+              selectedInstances={activeInstanceId ? [activeInstanceId] : selectedInstanceFilters}
               selectedProducts={selectedProductFilters}
               onInstanceChange={setSelectedInstanceFilters}
               onProductChange={setSelectedProductFilters}
@@ -979,11 +1025,11 @@ export const TenantDetailPageV2: React.FC = () => {
                 tenantId={tenant?.id || tenantId || ''}
                 datasourceId={scopedDatasource?.id || ''}
                 isGoldCopy={tenant?.gold_copy || false}
-                instanceFilter={selectedInstanceFilters.length > 0 ? selectedInstanceFilters : null}
+                instanceFilter={activeInstanceId ? [activeInstanceId] : (selectedInstanceFilters.length > 0 ? selectedInstanceFilters : null)}
                 productFilter={selectedProductFilters.length > 0 ? selectedProductFilters : null}
                 onAddConnection={handleAddConnection}
                 onEditConnection={handleEditConnection}
-                tenantData={tenant}
+                tenantData={tenantData?.tenant}
               />
             </Box>
           </Box>
@@ -1155,7 +1201,7 @@ export const TenantDetailPageV2: React.FC = () => {
                 {alphaProductsData?.alpha_product?.map((product: any) => {
                   // Check if this product is already registered
                   const isRegistered = (tenant?.tenant_instances || []).some(
-                    (i: any) => (i.products || []).some(
+                    (i: any) => ((i.products || i.tenant_products) || []).some(
                       (p: any) => p.alpha_product_id === product.id
                     )
                   );
@@ -1181,7 +1227,7 @@ export const TenantDetailPageV2: React.FC = () => {
               </Typography>
             </FormControl>
 
-            <FormControl fullWidth required disabled={isDerived}>
+            <FormControl fullWidth required disabled>
               <InputLabel>Instance</InputLabel>
               <Select
                 value={selectedConnectionInstance}

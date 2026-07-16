@@ -172,6 +172,16 @@ export const ConnectionsTabContent: React.FC<ConnectionsTabContentProps> = ({
   const [scanError, setScanError] = useState<Error | undefined>(undefined);
   const [scanningDatasourceId, setScanningDatasourceId] = useState<string | null>(null);
 
+  // active instance name for display
+  const activeInstanceName = React.useMemo(() => {
+    if (instanceFilter?.length === 1 && tenantData?.tenant_instances) {
+      const activeId = instanceFilter[0];
+      const inst = tenantData.tenant_instances.find((i: any) => i.id === activeId);
+      return inst ? (inst.display_name || inst.instance_name) : null;
+    }
+    return null;
+  }, [instanceFilter, tenantData]);
+
   // Fetch connections from backend
   const { data, loading, error, refetch } = useApiQuery<{ connections: Connection[] }>(
     tenantId ? `/api/tenant-ops/connections` : ''
@@ -246,13 +256,13 @@ export const ConnectionsTabContent: React.FC<ConnectionsTabContentProps> = ({
         id: instance.id,
         name: instance.display_name || instance.instance_name
       };
-      instance.products?.forEach((product: any) => {
+      (instance.products || instance.tenant_products)?.forEach((product: any) => {
         const productInfo = {
           name: product.alpha_product?.product_name,
           id: product.alpha_product?.id
         };
-        console.log(`  Checking product ${productInfo.name}: has ${product.datasources?.length || 0} datasources`);
-        product.datasources?.forEach((ds: any) => {
+        console.log(`  Checking product ${productInfo.name}: has ${product.tenant_product_datasources || product.datasources?.length || 0} datasources`);
+        (product.tenant_product_datasources || product.datasources || []).forEach((ds: any) => {
           if (ds.connection_id) {
             console.log(`    Found datasource with connection_id: ${ds.connection_id}`);
             
@@ -312,7 +322,7 @@ export const ConnectionsTabContent: React.FC<ConnectionsTabContentProps> = ({
       linkedProductId: linkedProduct?.id,
       linkedDatasourceId: tpdId, // Use TPD ID instead of connection ID
       linkedAlphaDatasourceId: undefined,
-      lastSync: lastScan ? new Date(lastScan).toLocaleString() : '-',
+      lastSync: conn.updated_at ? new Date(conn.updated_at).toLocaleString() : '-',
       status: (conn.is_active ? 'connected' : 'warning'),
     };
   });
@@ -421,10 +431,12 @@ export const ConnectionsTabContent: React.FC<ConnectionsTabContentProps> = ({
       {/* Header */}
       <Box>
         <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 1 }}>
-          Data Source Connections
+          {activeInstanceName ? `Data Source Connections for: ${activeInstanceName}` : 'Data Source Connections'}
         </Typography>
         <Typography variant="body2" color="textSecondary">
-          Manage external connections linked to this tenant's instances.
+          {activeInstanceName
+            ? `Manage external connections linked to the scoped instance "${activeInstanceName}".`
+            : "Manage external connections linked to this tenant's instances."}
         </Typography>
       </Box>
 
@@ -602,16 +614,7 @@ export const ConnectionsTabContent: React.FC<ConnectionsTabContentProps> = ({
                           >
                             <PlayArrow fontSize="small" />
                           </IconButton>
-                          <IconButton
-                            size="small"
-                            component="a"
-                            href={`/schema-explorer?datasource=${conn.linkedDatasourceId}`}
-                            onClick={(e) => e.stopPropagation()}
-                            title="View Catalog"
-                            sx={{ color: 'info.main' }}
-                          >
-                            <SchemaIcon fontSize="small" />
-                          </IconButton>
+
                         </>
                       )}
                       <IconButton

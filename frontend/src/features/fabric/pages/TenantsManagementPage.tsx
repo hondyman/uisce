@@ -51,6 +51,7 @@ import { useOrganizationEntitlement } from '../../../contexts/useOrganizationEnt
 import { useRegions } from '../../../hooks/useRegions';
 import { apiFetch } from '../../../lib/apiClient';
 import { Tenant } from '../../../types';
+import { useTenant } from '../../../contexts/TenantContext';
 
 const DEFAULT_REGION = 'us-east-1';
 
@@ -101,6 +102,7 @@ const TenantsManagementPage: React.FC = () => {
   const { regions } = useRegions();
   const [tenants, setTenants] = useState<TenantWithUsage[]>([]);
   const [loading, setLoading] = useState(false);
+  const { tenant: scopedTenant } = useTenant();
 
   // Block direct URL access for users without any organization entitlement.
   // They wouldn't see the menu link, but they could still type the URL.
@@ -117,6 +119,11 @@ const TenantsManagementPage: React.FC = () => {
         let tenantsList = accessibleTenants.filter(isActiveTenant);
         if (scope.level === 'tenant' && scope.tenantId) {
           tenantsList = tenantsList.filter(t => t.id === scope.tenantId);
+        }
+        
+        // Also enforce the global UI tenant scope if one is selected
+        if (scopedTenant?.id) {
+          tenantsList = tenantsList.filter(t => t.id === scopedTenant.id);
         }
 
         // Fetch IP whitelist for each tenant to get real usage data
@@ -171,7 +178,7 @@ const TenantsManagementPage: React.FC = () => {
       }
     };
     loadTenants();
-  }, [accessibleTenants, scope]);
+  }, [accessibleTenants, scope, scopedTenant]);
 
   const filteredTenants = useMemo(() => {
     let filtered = tenants;

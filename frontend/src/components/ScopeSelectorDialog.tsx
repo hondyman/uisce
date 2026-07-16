@@ -241,7 +241,7 @@ export const ScopeSelectorDialog: React.FC<ScopeSelectorDialogProps> = ({ open, 
                     </ListItemIcon>
                     <ListItemText 
                       primary={instance.display_name || instance.instance_name} 
-                      secondary={`${instance.tenant_products?.length || 0} products registered`}
+                      secondary={`${(instance.tenant_products || instance.products || []).length} products registered`}
                     />
                     <ChevronRightIcon color="action" />
                   </ListItemButton>
@@ -249,7 +249,7 @@ export const ScopeSelectorDialog: React.FC<ScopeSelectorDialogProps> = ({ open, 
               </List>
             ) : !selectedProduct ? (
               <List sx={{ pt: 0 }}>
-                {selectedInstance.tenant_products?.map((product) => (
+                {Array.from(new Map((selectedInstance.tenant_products || selectedInstance.products || []).map((p: any) => [p.alpha_product_id, p])).values()).map((product: any) => (
                   <ListItemButton 
                     key={product.id} 
                     onClick={() => handleSelectProduct(product)}
@@ -260,7 +260,7 @@ export const ScopeSelectorDialog: React.FC<ScopeSelectorDialogProps> = ({ open, 
                     </ListItemIcon>
                     <ListItemText 
                       primary={product.alpha_product?.product_name || 'Unknown Product'} 
-                      secondary={`${product.tenant_product_datasources?.length || 0} datasources available`}
+                      secondary={`${product.tenant_product_datasources?.length || product.datasources?.length || 0} datasources available`}
                     />
                     <ChevronRightIcon color="action" />
                   </ListItemButton>
@@ -268,7 +268,7 @@ export const ScopeSelectorDialog: React.FC<ScopeSelectorDialogProps> = ({ open, 
               </List>
             ) : (
               <List sx={{ pt: 0 }}>
-                {selectedProduct.tenant_product_datasources?.map((datasource) => (
+                {(selectedProduct.tenant_product_datasources || selectedProduct.datasources || []).map((datasource: any) => (
                   <ListItemButton 
                     key={datasource.id} 
                     onClick={() => handleApplyScope(datasource)}

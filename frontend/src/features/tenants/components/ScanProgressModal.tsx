@@ -10,6 +10,7 @@ import ErrorIcon from '@mui/icons-material/Error';
 import AddCircleIcon from '@mui/icons-material/AddCircle';
 import RemoveCircleIcon from '@mui/icons-material/RemoveCircle';
 import UpdateIcon from '@mui/icons-material/Update';
+import { resolveApiUrl } from '../../../utils/resolveApiUrl';
 
 export interface ScanResultDetail {
   tenant_instance_id: string;
@@ -74,9 +75,8 @@ export default function ScanProgressModal({
     console.log('[SSE] Opening connection for datasource:', datasourceId, `(attempt ${connectionAttempts + 1})`);
     setIsStreaming(true);
 
-    // Use backend URL for SSE connection
-    const backendUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:29080';
-    const sseUrl = `${backendUrl}/api/catalog/scan/stream?datasource_id=${datasourceId}`;
+    // Use resolveApiUrl to get the correct backend URL for SSE connection
+    const sseUrl = resolveApiUrl(`/api/catalog/scan/stream?datasource_id=${datasourceId}`);
     console.log('[SSE] Connecting to:', sseUrl);
     
     const eventSource = new EventSource(sseUrl);
