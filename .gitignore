@@ -14,6 +14,7 @@ api-gateway/api-gateway-bin
 api-gateway/server
 backend/app./cmd/server
 backend/cmd/*/main
+backend/main
 backend/e2e_amqp
 backend/rule-engine-service
 backend/semantic-rules-api
