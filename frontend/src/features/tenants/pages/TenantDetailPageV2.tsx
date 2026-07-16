@@ -1166,7 +1166,8 @@ export const TenantDetailPageV2: React.FC = () => {
       >
         <DialogTitle>{editingConnection ? 'Edit Connection' : 'Add New Connection'}</DialogTitle>
         <DialogContent sx={{ pt: 2, maxHeight: '80vh', overflow: 'auto' }}>
-          <Stack spacing={2}>
+          <form onSubmit={(e) => e.preventDefault()}>
+            <Stack spacing={2}>
             {/* Logic for disabled fields: If not gold copy AND has core_id, it is derived/inherited */}
             {(() => {
               const isDerived = !tenant?.gold_copy && !!editingConnection?.core_id;
@@ -1560,6 +1561,7 @@ export const TenantDetailPageV2: React.FC = () => {
             );
             })()}
           </Stack>
+          </form>
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setConnectionDialogOpen(false)}>Cancel</Button>
