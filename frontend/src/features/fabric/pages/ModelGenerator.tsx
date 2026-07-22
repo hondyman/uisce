@@ -8,10 +8,9 @@ import yaml from 'js-yaml';
 import Fuse from 'fuse.js';
 import MonacoCodeEditor from '../../../components/UnifiedSemanticBuilder/MonacoCodeEditor.lazy';
 import '../../../components/UnifiedSemanticBuilder/CodePanel.css';
-import { useQuery } from '@apollo/client';
-import { GET_TECHNICAL_LINEAGE_CHART, transformChartData } from '../../../graphql/queries/semantic';
-import { GET_ALL_BUSINESS_DATA } from '../../../graphql/queries/datasourceQueries';
-// import GET_ALL_BUSINESS_DATA from '../../../pages/Fabric/UnifiedSemanticBuilder';
+import { useQuery } from '@tanstack/react-query';
+import { apiFetch } from '../../../lib/apiClient';
+import { transformChartData } from '../../../graphql/queries/semantic';
 import getErrorMessage from '../../../utils/errors';
 import * as TablerIcons from '@tabler/icons-react';
 import { toast } from '../../../components/ui/sonner';
@@ -100,20 +99,29 @@ const ModelGenerator: React.FC = () => {
 
   // const copyCurrentMatch = async () => { ... };
 
-  // Fetch chart data using GraphQL, similar to TabbedModal
-  const { loading, error: chartError, data: chartData } = useQuery(GET_TECHNICAL_LINEAGE_CHART, {
-    variables: { datasourceId: datasource?.id },
-    skip: !datasource,
-    fetchPolicy: 'network-only', // Ensure we get fresh data
+  // Fetch chart data using REST
+  const { isLoading: loading, error: chartError, data: chartData } = useQuery({
+    queryKey: ['technical-lineage-chart', datasource?.id],
+    queryFn: async () => {
+      const res = await apiFetch(`/api/rest/tenant-chart?datasourceId=${encodeURIComponent(datasource?.id || '')}`);
+      if (!res.ok) throw new Error(await res.text());
+      return res.json();
+    },
+    enabled: !!datasource?.id,
   });
 
   // Fetch business data
-  const { data: businessData, error: businessError } = useQuery(GET_ALL_BUSINESS_DATA, {
-    variables: { datasourceId: datasource?.id },
-    skip: !datasource,
+  const { data: businessData, error: businessError } = useQuery({
+    queryKey: ['business-data', datasource?.id],
+    queryFn: async () => {
+      const res = await apiFetch(`/api/rest/business-data?datasourceId=${encodeURIComponent(datasource?.id || '')}`);
+      if (!res.ok) throw new Error(await res.text());
+      return res.json();
+    },
+    enabled: !!datasource?.id,
   });
 
-  // Log Apollo errors via derived state, per guidance
+  // Log errors via derived state, per guidance
   useEffect(() => {
     if (chartError) devError('Error fetching technical lineage chart:', chartError);
   }, [chartError]);
@@ -272,10 +280,11 @@ const ModelGenerator: React.FC = () => {
         return;
       }
 
-      if (chartData && chartData.tenant_chart && chartData.tenant_chart.length > 0) {
+      const chartArray = chartData?.tenant_chart || chartData;
+      if (chartArray && chartArray.length > 0) {
       try {
-        devLog('📦 ModelGenerator: Received compressed chart data via GraphQL');
-        const compressedChartAsHex = chartData.tenant_chart[0].chart;
+        devLog('📦 ModelGenerator: Received compressed chart data via REST');
+        const compressedChartAsHex = chartArray[0].chart;
         const parsedChartData = transformChartData(compressedChartAsHex) as { nodes: FlowNode[], edges: Edge[] };
         
         if (parsedChartData && parsedChartData.nodes) {
@@ -293,7 +302,7 @@ const ModelGenerator: React.FC = () => {
         setNodes([]);
       }
     } else if (chartData) {
-      devLog('⚠️ ModelGenerator: GraphQL query returned no chart data.');
+      devLog('⚠️ ModelGenerator: REST query returned no chart data.');
       setNodes([]);
     }
     })();

@@ -1,5 +1,6 @@
-import React, { useMemo } from 'react';
-import { useSubscription, useMutation, gql } from '@apollo/client';
+import React, { useMemo, useState } from 'react';
+import { useQuery, useMutation } from '@tanstack/react-query';
+import { apiFetch } from '../lib/apiClient';
 import {
   AlertTriangle,
   Shield,
@@ -11,80 +12,6 @@ import {
   BarChart3,
   TrendingUp,
 } from 'lucide-react';
-
-/**
- * RiskAlphaDashboard Component
- * Real-time portfolio risk monitoring with AI-powered detection and auto-mitigation
- * 
- * Integrates with:
- * - Hasura GraphQL subscriptions (real-time risk_events)
- * - Temporal workflows (Risk Alpha business process)
- * - xAI Grok (comprehensive risk analysis)
- * - ABAC (authorization for mitigation)
- */
-
-// GraphQL Queries & Subscriptions
-const PORTFOLIO_RISK_DASHBOARD_SUBSCRIPTION = gql`
-  subscription PortfolioRiskDashboard($tenantId: uuid!) {
-    v_portfolio_risk_dashboard(
-      where: { tenant_id: { _eq: $tenantId } }
-      order_by: { current_risk_score: desc_nulls_last }
-    ) {
-      portfolio_entity_id
-      portfolio_name
-      current_risk_score
-      active_alerts
-      critical_alerts
-      mitigated_last_30d
-      auto_mitigation_rate
-      var_95
-      cvar_95
-      sharpe_ratio
-      liquidity_ratio
-      top_10_concentration
-      herfindahl_index
-      latest_risk_event
-    }
-  }
-`;
-
-const RISK_EVENTS_SUBSCRIPTION = gql`
-  subscription RiskEvents($tenantId: uuid!) {
-    risk_events(
-      where: {
-        tenant_id: { _eq: $tenantId }
-        status: { _in: ["DETECTED", "ACKNOWLEDGED", "MITIGATING"] }
-      }
-      order_by: { detected_at: desc }
-      limit: 50
-    ) {
-      id
-      portfolio_entity_id
-      event_type
-      severity
-      risk_score
-      confidence_score
-      var_95
-      cvar_95
-      status
-      ai_reasoning
-      ai_recommendations
-      detected_at
-      auto_mitigated
-      mitigation_actions
-      workflow_id
-    }
-  }
-`;
-
-const TRIGGER_RISK_ANALYSIS = gql`
-  mutation TriggerRiskAnalysis($businessProcessId: uuid!, $portfolioId: uuid!) {
-    executeBusinessProcess(processId: $businessProcessId, input: { portfolio_id: $portfolioId }) {
-      execution_id
-      status
-    }
-  }
-`;
 
 interface Portfolio {
   portfolio_entity_id: string;
@@ -120,24 +47,25 @@ interface RiskEvent {
 
 export const RiskAlphaDashboard: React.FC<{ tenantId: string }> = ({ tenantId }) => {
   const [selectedPortfolio, setSelectedPortfolio] = React.useState<string | null>(null);
+  const [triggering, setTriggering] = useState(false);
 
-  // Real-time subscriptions
-  const { data: dashboardData, loading: dashboardLoading } = useSubscription(
-    PORTFOLIO_RISK_DASHBOARD_SUBSCRIPTION,
-    { variables: { tenantId } }
-  );
+  const { data: dashboardData, isLoading: dashboardLoading } = useQuery({
+    queryKey: ['portfolio-risk-dashboard', tenantId],
+    queryFn: () => apiFetch(`/api/rest/portfolio-risk-dashboard?tenant_id=${tenantId}&order_by=current_risk_score desc`).then(r => r.json()),
+    enabled: !!tenantId,
+    refetchInterval: 2000,
+  });
 
-  const { data: eventsData, loading: eventsLoading } = useSubscription(
-    RISK_EVENTS_SUBSCRIPTION,
-    { variables: { tenantId } }
-  );
-
-  const [triggerAnalysis, { loading: triggering }] = useMutation(TRIGGER_RISK_ANALYSIS);
+  const { data: eventsData, isLoading: eventsLoading } = useQuery({
+    queryKey: ['risk-events', tenantId],
+    queryFn: () => apiFetch(`/api/rest/risk-events?tenant_id=${tenantId}&status=in:DETECTED,ACKNOWLEDGED,MITIGATING&order_by=detected_at desc&limit=50`).then(r => r.json()),
+    enabled: !!tenantId,
+    refetchInterval: 2000,
+  });
 
   const portfolios = (dashboardData?.v_portfolio_risk_dashboard || []) as Portfolio[];
   const riskEvents = (eventsData?.risk_events || []) as RiskEvent[];
 
-  // Compute dashboard metrics
   const metrics = useMemo(() => {
     return {
       totalPortfolios: portfolios.length,
@@ -151,16 +79,19 @@ export const RiskAlphaDashboard: React.FC<{ tenantId: string }> = ({ tenantId })
   }, [portfolios, riskEvents]);
 
   const handleTriggerAnalysis = async (portfolioId: string) => {
+    setTriggering(true);
     try {
-      await triggerAnalysis({
-        variables: {
+      await apiFetch('/api/rest/trigger-risk-analysis', {
+        method: 'POST',
+        body: JSON.stringify({
           businessProcessId: 'risk_alpha_v1',
-          portfolioId,
-        },
+          portfolio_id: portfolioId,
+        }),
       });
-      // Toast notification here
     } catch (error) {
       console.error('Failed to trigger analysis:', error);
+    } finally {
+      setTriggering(false);
     }
   };
 
@@ -170,7 +101,6 @@ export const RiskAlphaDashboard: React.FC<{ tenantId: string }> = ({ tenantId })
 
   return (
     <div className="risk-alpha-dashboard p-6 bg-gray-50">
-      {/* Header */}
       <div className="mb-8">
         <h1 className="text-3xl font-bold text-gray-900 flex items-center gap-2">
           <Shield className="text-blue-600" size={32} />
@@ -179,7 +109,6 @@ export const RiskAlphaDashboard: React.FC<{ tenantId: string }> = ({ tenantId })
         <p className="text-gray-600 mt-1">AI-powered portfolio risk detection & automated mitigation</p>
       </div>
 
-      {/* Key Metrics Cards */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
         <MetricCard
           icon={<BarChart3 className="text-blue-500" size={24} />}
@@ -211,7 +140,6 @@ export const RiskAlphaDashboard: React.FC<{ tenantId: string }> = ({ tenantId })
         />
       </div>
 
-      {/* Portfolio Grid */}
       <div className="mb-8">
         <h2 className="text-xl font-semibold text-gray-900 mb-4">Portfolios at Risk</h2>
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -228,7 +156,6 @@ export const RiskAlphaDashboard: React.FC<{ tenantId: string }> = ({ tenantId })
         </div>
       </div>
 
-      {/* Risk Events List */}
       <div>
         <h2 className="text-xl font-semibold text-gray-900 mb-4">Active Risk Events</h2>
         <div className="space-y-3 max-h-96 overflow-y-auto">
@@ -249,7 +176,6 @@ export const RiskAlphaDashboard: React.FC<{ tenantId: string }> = ({ tenantId })
   );
 };
 
-// Portfolio Risk Card
 interface PortfolioCardProps {
   portfolio: Portfolio;
   onAnalyze: () => void;
@@ -319,7 +245,6 @@ const PortfolioCard: React.FC<PortfolioCardProps> = ({
   );
 };
 
-// Risk Event Row
 interface RiskEventRowProps {
   event: RiskEvent;
 }
@@ -360,7 +285,6 @@ const RiskEventRow: React.FC<RiskEventRowProps> = ({ event }) => {
   );
 };
 
-// Helper Components
 interface MetricCardProps {
   icon: React.ReactNode;
   label: string;
@@ -406,7 +330,6 @@ const StatItem: React.FC<StatItemProps> = ({ label, value, highlight }) => (
   </div>
 );
 
-// Helper Functions
 function getRiskLevel(score: number): 'critical' | 'high' | 'medium' | 'low' {
   if (score >= 9) return 'critical';
   if (score >= 7) return 'high';

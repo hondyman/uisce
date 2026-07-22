@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { useMutation } from '@apollo/client';
 import { Box, Typography, Paper, Button, CircularProgress } from '@mui/material';
 import MonacoCodeEditor from '../../components/UnifiedSemanticBuilder/MonacoCodeEditor.lazy';
 import ForecastPanel from './ForecastPanel';
-import { FORECAST_POLICY_RUN } from '../pages/PolicySimulationPage'; // Re-using the mutation
 import RiskMitigationToolbar from './RiskMitigationToolbar';
+import { useMutation } from '@tanstack/react-query';
+import { apiFetch } from '../../../../lib/apiClient';
 
 interface WhatIfEditorProps {
   initialSql?: string;
@@ -25,23 +25,30 @@ const useDebounce = (value: string, delay: number) => {
 
 const WhatIfEditor: React.FC<WhatIfEditorProps> = ({ initialSql = '' }) => {
   const [sql, setSql] = useState(initialSql);
-  const debouncedSql = useDebounce(sql, 750); // 750ms debounce
+  const debouncedSql = useDebounce(sql, 750);
 
-  const [runForecast, { data, loading, error }] = useMutation(FORECAST_POLICY_RUN);
+  const runForecastMutation = useMutation({
+    mutationFn: async ({ fromDs, toDs, migrationSql }: { fromDs: string; toDs: string; migrationSql: string }) => {
+      const res = await apiFetch('/api/rest/forecast', {
+        method: 'POST',
+        body: JSON.stringify({ from_ds: fromDs, to_ds: toDs, migration_sql: migrationSql }),
+      });
+      if (!res.ok) {
+        throw new Error(await res.text());
+      }
+      return res.json();
+    },
+  });
 
   useEffect(() => {
     if (debouncedSql.trim()) {
-      // The forecast action needs `from_ds` and `to_ds`, but they aren't relevant
-      // when providing SQL. We pass dummy values.
-      runForecast({
-        variables: {
-          fromDs: 'dummy',
-          toDs: 'dummy',
-          migrationSql: debouncedSql,
-        },
+      runForecastMutation.mutate({
+        fromDs: 'dummy',
+        toDs: 'dummy',
+        migrationSql: debouncedSql,
       });
     }
-  }, [debouncedSql, runForecast]);
+  }, [debouncedSql]);
 
   return (
     <Box sx={{ mt: 4 }}>
@@ -59,11 +66,11 @@ const WhatIfEditor: React.FC<WhatIfEditorProps> = ({ initialSql = '' }) => {
           <MonacoCodeEditor value={sql} language="json" onChange={(val: string) => setSql(val)} />
         </div>
       </Paper>
-      <Button onClick={() => runForecast({ variables: { fromDs: 'dummy', toDs: 'dummy', migrationSql: sql } })} disabled={loading}>
-        {loading ? <CircularProgress size={24} /> : 'Re-Forecast Now'}
+      <Button onClick={() => runForecastMutation.mutate({ fromDs: 'dummy', toDs: 'dummy', migrationSql: sql })} disabled={runForecastMutation.isPending}>
+        {runForecastMutation.isPending ? <CircularProgress size={24} /> : 'Re-Forecast Now'}
       </Button>
 
-      <ForecastPanel data={data?.forecast_policy_run} loading={loading} error={error} />
+      <ForecastPanel data={runForecastMutation.data?.forecast_policy_run} loading={runForecastMutation.isPending} error={runForecastMutation.error} />
     </Box>
   );
 };

@@ -12,6 +12,7 @@ import {
   CircularProgress,
 } from '@mui/material';
 import { useNodeTypes } from '../api/nodeTypes';
+import { useUpdateTerm } from '../api/glossary';
 import DynamicPropertyForm, { PropertyMetadata } from './DynamicPropertyForm';
 
 interface EditSemanticTermDialogProps {
@@ -24,6 +25,7 @@ interface EditSemanticTermDialogProps {
     properties?: any;
     tenant_id?: string;
     tenant_datasource_id?: string;
+    catalog_type_name?: string;
   };
   onSave?: () => void;
 }
@@ -41,20 +43,29 @@ const EditSemanticTermDialog: React.FC<EditSemanticTermDialogProps> = ({
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
-  // Fetch node types to get the schema for semantic_term
+  const updateTermMutation = useUpdateTerm();
+
+  // Fetch node types to get the schema for the catalog node type
   // Fallback to term's tenant_id if available, otherwise default
   const { data: nodeTypes, isLoading: isLoadingTypes } = useNodeTypes(term?.tenant_id || '');
 
-  const semanticTermType = useMemo(() => {
-    if (!nodeTypes) return null;
+  const isSemantic = term?.catalog_type_name === 'semantic_term';
+
+  const termType = useMemo(() => {
+    if (!nodeTypes || !term?.catalog_type_name) return null;
+    const targetName = String(term.catalog_type_name).toLowerCase();
     return (nodeTypes as any[]).find((nt) => {
       const ntName = String(nt.catalog_type_name || '').toLowerCase();
-      return ntName === 'semantic_term' || ntName === 'semantic term';
+      return ntName === targetName || ntName.replace('_', ' ') === targetName.replace('_', ' ');
     });
-  }, [nodeTypes]);
+  }, [nodeTypes, term?.catalog_type_name]);
 
   const propertyMetadata = useMemo((): PropertyMetadata[] => {
-    const base = (semanticTermType?.properties || []) as PropertyMetadata[];
+    const base = (termType?.properties || []) as PropertyMetadata[];
+    if (!isSemantic) {
+      return [...base].sort((a, b) => (a.order ?? 999) - (b.order ?? 999));
+    }
+    
     const existingNames = new Set(base.map(p => p.name));
 
     const coreProperties: PropertyMetadata[] = [
@@ -83,7 +94,7 @@ const EditSemanticTermDialog: React.FC<EditSemanticTermDialogProps> = ({
 
     const missing = coreProperties.filter(p => !existingNames.has(p.name));
     return [...base, ...missing].sort((a, b) => (a.order ?? 999) - (b.order ?? 999));
-  }, [semanticTermType]);
+  }, [termType, isSemantic]);
 
   useEffect(() => {
     if (open && term) {
@@ -125,24 +136,16 @@ const EditSemanticTermDialog: React.FC<EditSemanticTermDialogProps> = ({
     setSaving(true);
 
     try {
-      // Update semantic term via API
-      const response = await fetch(`/api/glossary/terms/${term.id}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Tenant-ID': term.tenant_id || 'default',
-          'X-Tenant-Datasource-ID': term.tenant_datasource_id || '',
-        },
-        body: JSON.stringify({
-          node_name: name,  // Backend expects 'node_name', not 'name'
+      // Update term using the unified React Query mutation hook
+      await updateTermMutation.mutateAsync({
+        id: term.id,
+        updates: {
+          node_name: name,
           description: description,
           properties: properties,
-        }),
+          catalog_type: term.catalog_type_name,
+        },
       });
-
-      if (!response.ok) {
-        throw new Error('Failed to update semantic term');
-      }
 
       // Trigger refresh before closing to ensure UI updates
       if (onSave) {
@@ -160,9 +163,12 @@ const EditSemanticTermDialog: React.FC<EditSemanticTermDialogProps> = ({
     }
   };
 
+  const title = isSemantic ? 'Edit Semantic Term' : 'Edit Business Term';
+  const nameHelper = isSemantic ? 'Unique identifier for the dimension' : 'Name of the business term';
+
   return (
     <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
-      <DialogTitle>Edit Semantic Term</DialogTitle>
+      <DialogTitle>{title}</DialogTitle>
       <DialogContent>
         {error && (
           <Alert severity="error" sx={{ mb: 2 }}>
@@ -174,7 +180,7 @@ const EditSemanticTermDialog: React.FC<EditSemanticTermDialogProps> = ({
            <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}>
              <CircularProgress />
            </Box>
-        ) : (
+         ) : (
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 1 }}>
             {/* Basic Info */}
             <Typography variant="subtitle2" color="text.secondary" sx={{ mt: 1 }}>
@@ -187,7 +193,7 @@ const EditSemanticTermDialog: React.FC<EditSemanticTermDialogProps> = ({
               onChange={(e) => setName(e.target.value)}
               fullWidth
               required
-              helperText="Unique identifier for the dimension"
+              helperText={nameHelper}
             />
 
             <TextField

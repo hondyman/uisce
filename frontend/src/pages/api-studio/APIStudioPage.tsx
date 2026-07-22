@@ -31,11 +31,12 @@ const APIStudioPage: React.FC = () => {
     const loadData = async () => {
         setLoading(true);
         try {
-            const [boList, epList] = await Promise.all([
-                apiClient<any[]>('/business-objects'),
+            const [boData, epList] = await Promise.all([
+                apiClient<any>('/business-objects'),
                 ApiStudioApi.listEndpoints(env, tenantId)
             ]);
-            setBos(Array.isArray(boList) ? boList : []);
+            const boList = Array.isArray(boData) ? boData : Object.values(boData || {});
+            setBos(boList);
             setEndpoints(Array.isArray(epList) ? epList : []);
         } catch (err) {
             console.error('Failed to load API Studio data', err);

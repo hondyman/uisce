@@ -1,5 +1,5 @@
 import type { FC } from 'react';
-import { gql, useQuery } from '@apollo/client';
+import { useQuery } from '@tanstack/react-query';
 import {
   Box,
   Typography,
@@ -17,16 +17,7 @@ import {
 } from '@mui/material';
 import { Link as RouterLink } from 'react-router-dom';
 import { format } from 'date-fns';
-
-const GET_LATEST_EVALUATIONS = gql`
-  query GetLatestEvaluations {
-    drift_reports(order_by: { generated_at: desc }, limit: 10) {
-      id
-      generated_at
-      severity_summary
-    }
-  }
-`;
+import { apiFetch } from '../../../lib/apiClient';
 
 const getDecisionFromSummary = (summary: any) => {
   if (summary?.breaking > 0) {
@@ -39,7 +30,14 @@ const getDecisionFromSummary = (summary: any) => {
 };
 
 const DashboardPage: FC = () => {
-  const { data, loading, error } = useQuery(GET_LATEST_EVALUATIONS);
+  const { data, isLoading, error } = useQuery({
+    queryKey: ['drift-reports', 'latest'],
+    queryFn: async () => {
+      const res = await apiFetch('/api/rest/drift-reports?order_by=generated_at desc&limit=10');
+      if (!res.ok) throw new Error(await res.text());
+      return res.json();
+    },
+  });
 
   return (
     <Box sx={{ p: 3 }}>
@@ -67,7 +65,7 @@ const DashboardPage: FC = () => {
               </TableRow>
             </TableHead>
             <TableBody>
-              {loading && (
+              {isLoading && (
                 <TableRow>
                   <TableCell colSpan={5} align="center">
                     <CircularProgress />
@@ -77,11 +75,11 @@ const DashboardPage: FC = () => {
               {error && (
                 <TableRow>
                   <TableCell colSpan={5}>
-                    <Alert severity="error">Failed to load evaluations: {error.message}</Alert>
+                    <Alert severity="error">Failed to load evaluations: {error?.message}</Alert>
                   </TableCell>
                 </TableRow>
               )}
-              {data?.drift_reports.map((report: any) => {
+              {data?.map((report: any) => {
                 const decision = getDecisionFromSummary(report.severity_summary);
                 const summary = report.severity_summary || {};
                 return (

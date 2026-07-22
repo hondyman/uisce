@@ -1,6 +1,7 @@
 import React from "react";
 import type { FormComponent } from "../schema";
-import { useMutation, gql } from "@apollo/client";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { apiFetch } from "../../lib/apiClient";
 
 interface FormWidgetProps {
   def: FormComponent;
@@ -8,14 +9,29 @@ interface FormWidgetProps {
 
 export function FormWidget({ def }: FormWidgetProps) {
   const [formData, setFormData] = React.useState<Record<string, any>>({});
+  const queryClient = useQueryClient();
 
-  const [submitMutation, { loading }] = useMutation(gql(def.submitAction.mutation));
+  const submitMutation = useMutation({
+    mutationFn: async (data: Record<string, any>) => {
+      const endpoint = def.submitAction.endpoint || def.submitAction.mutation;
+      const response = await apiFetch(endpoint, {
+        method: def.submitAction.method || 'POST',
+        body: JSON.stringify(data),
+      });
+      return response.json();
+    },
+    onSuccess: () => {
+      if (def.submitAction.queryKey) {
+        queryClient.invalidateQueries({ queryKey: [def.submitAction.queryKey] });
+      }
+    },
+  });
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     try {
-      await submitMutation({ variables: formData });
+      await submitMutation.mutateAsync(formData);
       if (def.submitAction.successMessage) {
         alert(def.submitAction.successMessage);
       }
@@ -42,10 +58,10 @@ export function FormWidget({ def }: FormWidgetProps) {
 
         <button
           type="submit"
-          disabled={loading}
+          disabled={submitMutation.isPending}
           className="w-full bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700 disabled:opacity-50"
         >
-          {loading ? "Submitting..." : "Submit"}
+          {submitMutation.isPending ? "Submitting..." : "Submit"}
         </button>
       </form>
     </div>

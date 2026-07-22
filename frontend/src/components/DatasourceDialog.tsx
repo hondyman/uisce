@@ -6,9 +6,9 @@ import {
 } from '@mui/material';
 import ModalHeader from '@/components/ModalHeader';
 import MonacoCodeEditor from './UnifiedSemanticBuilder/MonacoCodeEditor.lazy';
-import { useQuery } from '@apollo/client';
+import { useQuery } from '@tanstack/react-query';
 import { Product, DataSource } from '../types';
-import { GET_ALPHA_DATASOURCES } from '../graphql/queries/tenantQueries';
+import { apiFetch } from '../lib/apiClient';
 
 
 interface TenantProductDatasource {
@@ -36,7 +36,10 @@ export const DatasourceDialog: React.FC<DatasourceDialogProps> = ({
   const [error, setError] = useState<string>('');
   const [saving, setSaving] = useState<boolean>(false);
 
-  const { data: alphaDatasourceData, loading: datasourcesLoading } = useQuery(GET_ALPHA_DATASOURCES);
+  const { data: alphaDatasourceData, isLoading: datasourcesLoading } = useQuery({
+    queryKey: ['alpha-datasources'],
+    queryFn: () => apiFetch('/api/rest/datasources').then(r => r.json()),
+  });
   const alphaDatasources = alphaDatasourceData?.alpha_datasource || [];
 
 

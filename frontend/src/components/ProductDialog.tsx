@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
-import { useQuery } from '@apollo/client';
+import { useQuery } from '@tanstack/react-query';
 import { Dialog, DialogActions, DialogContent, Button, FormControl, InputLabel, Select, MenuItem, CircularProgress, Alert, TextField } from '@mui/material';
 import ModalHeader from './ModalHeader';
-import { GET_ALL_PRODUCTS } from '../graphql/queries/productQueries';
+import { apiFetch } from '../lib/apiClient';
 import { TenantInstance } from '../types';
 
 interface ProductDialogProps {
@@ -13,7 +13,10 @@ interface ProductDialogProps {
 }
 
 const ProductDialog: React.FC<ProductDialogProps> = ({ open, instance, onClose, onSave }) => {
-  const { loading, error, data } = useQuery(GET_ALL_PRODUCTS);
+  const { isLoading, error, data } = useQuery({
+    queryKey: ['products'],
+    queryFn: () => apiFetch('/api/rest/products').then(r => r.json()),
+  });
   const [selectedProductId, setSelectedProductId] = useState('');
   const [version, setVersion] = useState<number | string>(1.0);
 
@@ -37,7 +40,7 @@ const ProductDialog: React.FC<ProductDialogProps> = ({ open, instance, onClose, 
     <Dialog open={open} onClose={onClose} fullWidth maxWidth="sm">
   <ModalHeader title={`Assign Product to ${String(instance?.display_name || instance?.instance_name || instance?.id || 'Unnamed Instance')}`} onClose={onClose} />
       <DialogContent>
-        {loading && <CircularProgress />}
+        {isLoading && <CircularProgress />}
         {error && <Alert severity="error">Could not load products.</Alert>}
         {data && (
           <>

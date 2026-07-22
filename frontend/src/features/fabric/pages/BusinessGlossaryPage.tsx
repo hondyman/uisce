@@ -1,7 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { useQuery } from '@apollo/client';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
-import { GET_ALL_SEMANTIC_DATA } from '../../../graphql/queries/semantic';
 import { useTenant } from '../../../contexts/TenantContext';
 import BusinessTermsTree from '../../../components/BusinessTermsTree';
 import SemanticFlow from '../../../components/SemanticFlow';
@@ -13,6 +12,7 @@ import ProfessionalSearchInput from '../../../components/ProfessionalSearchInput
 import { devDebug, devError } from '../../../utils/devLogger';
 import { useTranslation } from 'react-i18next';
 import { Add as AddIcon, EditOutlined as EditIcon, DeleteOutline as DeleteIcon } from '@mui/icons-material';
+import { apiFetch } from '../../../lib/apiClient';
 import './BusinessGlossaryPage.css';
 
 const BusinessGlossaryPage: React.FC = () => {
@@ -27,11 +27,16 @@ const BusinessGlossaryPage: React.FC = () => {
   // translate helper
   const { t } = useTranslation();
 
-  const { data, loading, error } = useQuery(GET_ALL_SEMANTIC_DATA, {
-    variables: {
-      datasourceId: datasource?.id || ''
+  const queryClient = useQueryClient();
+
+  const { data, isLoading, error } = useQuery({
+    queryKey: ['semantic-data', datasource?.id],
+    queryFn: async () => {
+      const res = await apiFetch(`/api/rest/semantic-data?datasourceId=${encodeURIComponent(datasource?.id || '')}`);
+      if (!res.ok) throw new Error(await res.text());
+      return res.json();
     },
-    skip: !datasource?.id,
+    enabled: !!datasource?.id,
   });
 
   // Log query results and handle side effects
@@ -56,10 +61,10 @@ const BusinessGlossaryPage: React.FC = () => {
 
   // Redirect to tenant selection if no datasource is selected
   useEffect(() => {
-    if (!loading && !datasource?.id) {
+    if (!isLoading && !datasource?.id) {
       navigate('/');
     }
-  }, [datasource?.id, loading, navigate]);
+  }, [datasource?.id, isLoading, navigate]);
 
   const businessTerms = useMemo(() => {
     if (!data?.business_terms) return [];
@@ -184,12 +189,22 @@ const BusinessGlossaryPage: React.FC = () => {
       if (selectedAsset?.id === termToDelete.id) {
         setSelectedAsset(null);
       }
-    } catch (error) {
-      setSnackbar({
-        open: true,
-        message: `Failed to delete term: ${error instanceof Error ? error.message : 'Unknown error'}`,
-        severity: 'error'
-      });
+    } catch (error: any) {
+      if (error?.code === 'BO_DEPENDENCIES_BLOCK_DELETION') {
+        const deps = error?.dependencies ?? [];
+        const boNames = [...new Set(deps.map((d: any) => d.bo_name))].join(', ');
+        setSnackbar({
+          open: true,
+          message: `Cannot delete: This term is linked to ${deps.length} BO field(s) in: ${boNames || 'unknown BOs'}. Unlink the fields first.`,
+          severity: 'warning'
+        });
+      } else {
+        setSnackbar({
+          open: true,
+          message: `Failed to delete term: ${error instanceof Error ? error.message : 'Unknown error'}`,
+          severity: 'error'
+        });
+      }
     }
   };
 
@@ -197,7 +212,7 @@ const BusinessGlossaryPage: React.FC = () => {
     setSnackbar({ ...snackbar, open: false });
   };
 
-  if (loading) {
+  if (isLoading) {
     return (
       <div className="business-glossary-loading">
         <div className="loading-spinner"></div>
@@ -210,7 +225,7 @@ const BusinessGlossaryPage: React.FC = () => {
     return (
       <div className="business-glossary-error">
         <h2>{t('global_error.business_glossary', 'Error Loading Business Glossary')}</h2>
-        <p>{error.message}</p>
+        <p>{error?.message}</p>
       </div>
     );
   }

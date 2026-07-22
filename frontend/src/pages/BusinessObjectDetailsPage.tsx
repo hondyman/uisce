@@ -4,6 +4,7 @@ import { GOLD_COPY } from '../config';
 import { getSelectedRegion } from '../lib/region';
 import {
   Box,
+  Grid,
   AppBar,
   Toolbar,
   Container,
@@ -803,7 +804,7 @@ export default function BusinessObjectDetailsPage() {
     const loadCatalogNodes = async () => {
       try {
         setLoadingCatalog(true);
-        const url = `/api/catalog/nodes?tenant_id=${tenantId}&tenant_instance_id=${datasourceId}&type=table`;
+        const url = `api/rest/catalog-nodes?tenant_datasource_id=${datasourceId}`;
         // apiClient parses JSON and respects VITE_USE_PROXY; tenant/region
         // headers are injected automatically.
         const data = await apiClient<any>(url);

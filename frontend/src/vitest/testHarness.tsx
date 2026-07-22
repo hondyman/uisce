@@ -75,13 +75,18 @@ vi.mock('@/components/validation/SampleDataGenerator', () => ({
   default: () => <div data-testid="sample-data-generator" />
 }))
 
-// Apollo hooks mock to avoid cache initialization in tests
+// Apollo hooks mock - Apollo has been removed, these are no-ops
+// Keeping the mock structure in case any test files still reference Apollo
 vi.mock('@apollo/client', async () => {
-  const actual = await vi.importActual<any>('@apollo/client')
   return {
-    ...actual,
+    ApolloProvider: ({ children }: { children: React.ReactNode }) => children,
     useQuery: () => ({ data: null, loading: false, error: null }),
-    useMutation: () => [vi.fn(), { data: null, loading: false, error: null }]
+    useMutation: () => [vi.fn(), { data: null, loading: false, error: null }],
+    useSubscription: () => ({ data: null, loading: false, error: null }),
+    useLazyQuery: () => [vi.fn(), { data: null, loading: false, error: null }],
+    gql: (strings: TemplateStringsArray) => strings[0],
+    InMemoryCache: vi.fn(),
+    HttpLink: vi.fn(),
   }
 })
 

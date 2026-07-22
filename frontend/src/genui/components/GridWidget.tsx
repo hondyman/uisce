@@ -1,5 +1,6 @@
 import React from "react";
-import { gql, useQuery } from "@apollo/client";
+import { useQuery } from "@tanstack/react-query";
+import { apiFetch } from "../../lib/apiClient";
 import { AgGridReact } from "ag-grid-react";
 import "ag-grid-community/styles/ag-grid.css";
 import "ag-grid-community/styles/ag-theme-alpine.css";
@@ -12,18 +13,25 @@ interface GridWidgetProps {
 }
 
 export function GridWidget({ def }: GridWidgetProps) {
-  const { data: queryData, loading } = useQuery(gql(def.binding?.gql || ""), {
-    variables: def.binding?.variables || {},
-    skip: !def.binding,
+  const { data: queryData, isLoading } = useQuery({
+    queryKey: ['genui-grid', def.binding?.endpoint, def.binding?.variables],
+    queryFn: async () => {
+      if (!def.binding?.endpoint) return null;
+      const response = await apiFetch(def.binding.endpoint, {
+        method: def.binding.method || 'GET',
+      });
+      return response.json();
+    },
+    enabled: !!def.binding?.endpoint,
   });
 
-  if (loading) {
+  if (isLoading) {
     return <GridSkeleton title={def.title} />;
   }
 
-  const rowData = def.binding
+  const rowData = def.binding?.dataPath
     ? extractDataFromPath(queryData, def.binding.dataPath)
-    : [];
+    : queryData || [];
 
   // Convert schema columns to AG-Grid column definitions
   const columnDefs: ColDef[] = def.columns.map((col) => ({

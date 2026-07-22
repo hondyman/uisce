@@ -1,5 +1,4 @@
 import { useQuery } from "@tanstack/react-query";
-import { useAdminAPIClient } from "./useAdminAPI";
 
 // Pattern types (matching backend)
 export interface IncidentPattern {
@@ -30,16 +29,10 @@ export interface IncidentSimilarity {
  * @returns Pattern with event signature and metadata
  */
 export const useIncidentPattern = (incidentId: string) => {
-  const client = useAdminAPIClient();
-
   return useQuery({
     queryKey: ["pattern", incidentId],
-    queryFn: async () => {
-      const response = await client.get<IncidentPattern>(
-        `/ops/incidents/${incidentId}/pattern`
-      );
-      return response;
-    },
+    queryFn: () =>
+      fetch<IncidentPattern>(`/api/admin/ops/incidents/${incidentId}/pattern`).then(res => res.json()),
     enabled: !!incidentId,
     staleTime: 1000 * 60 * 5, // 5 minutes
   });
@@ -51,17 +44,13 @@ export const useIncidentPattern = (incidentId: string) => {
  * @returns List of similar incidents with similarity scores
  */
 export const useSimilarIncidents = (incidentId: string) => {
-  const client = useAdminAPIClient();
-
   return useQuery({
     queryKey: ["similar", incidentId],
-    queryFn: async () => {
-      const response = await client.get<{
+    queryFn: () =>
+      fetch<{
         incident_id: string;
         similarities: IncidentSimilarity[];
-      }>(`/ops/incidents/${incidentId}/similar`);
-      return response;
-    },
+      }>(`/api/admin/ops/incidents/${incidentId}/similar`).then(res => res.json()),
     enabled: !!incidentId,
     staleTime: 1000 * 60 * 5, // 5 minutes
   });

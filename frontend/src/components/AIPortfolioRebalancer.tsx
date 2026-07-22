@@ -1,21 +1,6 @@
 import React, { useState } from 'react';
-import { useQuery, gql } from '@apollo/client';
 import { useNotification } from '../hooks/useNotification';
 import styles from './AIPortfolioRebalancer.module.css';
-
-const PORTFOLIOS_QUERY = gql`
-  query GetPortfolios {
-    portfolios {
-      id
-      clientId
-      aum
-      drift
-      holdings
-      status
-      lastRebalanced
-    }
-  }
-`;
 
 interface Portfolio {
   id: string;
@@ -45,7 +30,6 @@ interface RebalancePlan {
 }
 
 export const AIPortfolioRebalancer: React.FC = () => {
-  const { data: portfoliosData } = useQuery(PORTFOLIOS_QUERY);
   const notification = useNotification();
   const [selectedModal, setSelectedModal] = useState<string | null>(null);
   const [selectedPlan, setSelectedPlan] = useState<RebalancePlan | null>(null);

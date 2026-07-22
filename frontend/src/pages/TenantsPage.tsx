@@ -28,60 +28,12 @@ import {
   IconButton,
   Tooltip
 } from '@mui/material';
-import { gql, useQuery, useMutation } from '@apollo/client';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { apiFetch } from '../lib/apiClient';
 import AddIcon from '@mui/icons-material/Add';
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
 import SettingsIcon from '@mui/icons-material/Settings';
-
-const GET_TENANTS = gql`
-  query GetTenants {
-    tenants {
-      id
-      name
-      display_name
-      description
-      created_at
-      updated_at
-    }
-  }
-`;
-
-const CREATE_TENANT = gql`
-  mutation CreateTenant($name: String!, $display_name: String, $description: String) {
-    insert_tenants(objects: { name: $name, display_name: $display_name, description: $description }) {
-      returning {
-        id
-        name
-        display_name
-        description
-        created_at
-      }
-    }
-  }
-`;
-
-const UPDATE_TENANT = gql`
-  mutation UpdateTenant($id: uuid!, $display_name: String, $description: String) {
-    update_tenants(where: { id: { _eq: $id } }, _set: { display_name: $display_name, description: $description }) {
-      returning {
-        id
-        name
-        display_name
-        description
-        updated_at
-      }
-    }
-  }
-`;
-
-const DELETE_TENANT = gql`
-  mutation DeleteTenant($id: uuid!) {
-    delete_tenants(where: { id: { _eq: $id } }) {
-      affected_rows
-    }
-  }
-`;
 
 interface Tenant {
   id: string;
@@ -128,10 +80,29 @@ const TenantsPage: React.FC = () => {
   const [editDisplayName, setEditDisplayName] = useState('');
   const [editDescription, setEditDescription] = useState('');
 
-  const { loading, error, data, refetch } = useQuery(GET_TENANTS);
-  const [createTenant] = useMutation(CREATE_TENANT);
-  const [updateTenant] = useMutation(UPDATE_TENANT);
-  const [deleteTenant] = useMutation(DELETE_TENANT);
+  const queryClient = useQueryClient();
+
+  const { data, isLoading, error, refetch } = useQuery({
+    queryKey: ['tenants'],
+    queryFn: () => apiFetch('/api/rest/tenants').then(r => r.json()),
+  });
+
+  const createTenant = useMutation({
+    mutationFn: (input: { name: string; display_name?: string; description?: string }) =>
+      apiFetch('/api/rest/tenants', { method: 'POST', body: JSON.stringify(input) }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['tenants'] }),
+  });
+
+  const updateTenant = useMutation({
+    mutationFn: ({ id, ...input }: { id: string; display_name?: string; description?: string }) =>
+      apiFetch(`/api/rest/tenants/${id}`, { method: 'PATCH', body: JSON.stringify(input) }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['tenants'] }),
+  });
+
+  const deleteTenant = useMutation({
+    mutationFn: (id: string) => apiFetch(`/api/rest/tenants/${id}`, { method: 'DELETE' }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['tenants'] }),
+  });
 
   const handleTabChange = (_event: React.SyntheticEvent, newValue: number) => {
     setActiveTab(newValue);
@@ -139,22 +110,18 @@ const TenantsPage: React.FC = () => {
 
   const handleSelectTenant = (tenant: Tenant) => {
     setSelectedTenant(tenant);
-    // TODO: Implement tenant selection logic (e.g., set context, navigate)
     console.log('Selected tenant:', tenant);
   };
 
   const handleCreateTenant = async () => {
     try {
-      await createTenant({
-        variables: {
-          name: newTenantName,
-          display_name: newTenantDisplayName || null,
-          description: newTenantDescription || null,
-        },
+      await createTenant.mutateAsync({
+        name: newTenantName,
+        display_name: newTenantDisplayName || undefined,
+        description: newTenantDescription || undefined,
       });
       setCreateDialogOpen(false);
       resetCreateForm();
-      refetch();
     } catch (err) {
       console.error('Error creating tenant:', err);
     }
@@ -164,17 +131,14 @@ const TenantsPage: React.FC = () => {
     if (!editingTenant) return;
 
     try {
-      await updateTenant({
-        variables: {
-          id: editingTenant.id,
-          display_name: editDisplayName || null,
-          description: editDescription || null,
-        },
+      await updateTenant.mutateAsync({
+        id: editingTenant.id,
+        display_name: editDisplayName || undefined,
+        description: editDescription || undefined,
       });
       setEditDialogOpen(false);
       setEditingTenant(null);
       resetEditForm();
-      refetch();
     } catch (err) {
       console.error('Error updating tenant:', err);
     }
@@ -186,10 +150,7 @@ const TenantsPage: React.FC = () => {
     }
 
     try {
-      await deleteTenant({
-        variables: { id: tenant.id },
-      });
-      refetch();
+      await deleteTenant.mutateAsync(tenant.id);
     } catch (err) {
       console.error('Error deleting tenant:', err);
     }
@@ -213,7 +174,7 @@ const TenantsPage: React.FC = () => {
     setEditDescription('');
   };
 
-  if (loading) {
+  if (isLoading) {
     return (
       <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '200px' }}>
         <CircularProgress />
@@ -225,13 +186,13 @@ const TenantsPage: React.FC = () => {
     return (
       <Box sx={{ padding: 3 }}>
         <Alert severity="error">
-          Error fetching tenants: {error.message}
+          Error fetching tenants: {(error as Error).message}
         </Alert>
       </Box>
     );
   }
 
-  const tenants = data?.tenants || [];
+  const tenants = data || [];
 
   return (
     <Box sx={{ width: '100%' }}>

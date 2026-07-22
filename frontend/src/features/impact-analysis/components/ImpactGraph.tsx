@@ -168,7 +168,16 @@ export const ImpactGraph: React.FC<ImpactGraphProps> = ({
         return {
           id: n.id,
           data: { 
-            label: n.label, 
+            label: (
+              <div>
+                <div style={{ fontWeight: 'bold' }}>{n.label}</div>
+                <div style={{ fontSize: '0.7rem', marginTop: '6px' }}>
+                  <span style={{ display: 'inline-block', padding: '1px 5px', background: colors.bg, borderRadius: '4px', border: `1px solid ${colors.border}`, color: colors.text, fontWeight: 'bold' }}>
+                    {n.type.toUpperCase()}
+                  </span>
+                </div>
+              </div>
+            ),
             type: n.type, 
             direction,
             ...n.properties 
@@ -177,7 +186,7 @@ export const ImpactGraph: React.FC<ImpactGraphProps> = ({
           style: { 
             border: isHighlighted ? `3px solid ${colors.border}` : (n.id === nodeId ? `2px solid ${colors.border}` : `1px solid ${colors.border}`),
             background: n.id === nodeId ? colors.bg : '#fff',
-            padding: '10px',
+            padding: '12px',
             borderRadius: '8px',
             fontSize: '12px',
             fontWeight: n.id === nodeId ? 'bold' : 'normal',
@@ -217,6 +226,10 @@ export const ImpactGraph: React.FC<ImpactGraphProps> = ({
           label: e.type,
           type: 'smoothstep',
           animated: false,
+          labelStyle: { fill: '#555', fontWeight: 600, fontSize: 10 },
+          labelBgStyle: { fill: '#fafafa', fillOpacity: 0.9 },
+          labelBgPadding: [4, 2],
+          labelBgBorderRadius: 4,
           data: { direction: edgeDirection },
           markerEnd: { 
             type: MarkerType.ArrowClosed,

@@ -1,6 +1,6 @@
 import React, { useState, Suspense } from 'react';
 import { useParams, Link as RouterLink } from 'react-router-dom';
-import { gql, useQuery, useMutation } from '@apollo/client';
+import { useQuery, useMutation } from '@tanstack/react-query';
 import {
   Box,
   Typography,
@@ -35,71 +35,7 @@ const DifferenceOnlyTimeline = React.lazy(() => import('../components/Difference
 const DecisionReplayChart = React.lazy(() => import('../components/DecisionReplayChart'));
 const DecisionDiffTable = React.lazy(() => import('../components/DecisionDiffTable'));
 import { useDrillDown } from '../../../contexts/DrillDownContext';
-
-const GET_POLICY_VERSIONS = gql`
-  query GetPolicyVersions($policyId: String!) {
-    policy_version_history(where: { policy_id: { _eq: $policyId } }, order_by: { version: desc }) {
-      id
-      version
-      author
-      created_at
-      change_summary
-    }
-  }
-`;
-
-const GET_POLICY_VERSION_SPECS = gql`
-  query GetPolicyVersionSpecs($ids: [uuid!]!) {
-    policy_version_history(where: { id: { _in: $ids } }) {
-      id
-      version
-      spec
-    }
-  }
-`;
-
-const COMPARE_POLICY_VERSIONS = gql`
-  mutation ComparePolicyVersions($policyId: String!, $versionA: Int!, $versionB: Int!, $fromDate: date!, $toDate: date!, $differencesOnly: Boolean) {
-    compare_policy_versions(
-      policy_id: $policyId
-      version_a: $versionA
-      version_b: $versionB
-      from_date: $fromDate
-      to_date: $toDate
-      differences_only: $differencesOnly
-    ) {
-      summary {
-        total_runs
-        changed_decisions
-        blocks_added
-        blocks_removed
-        top_new_violation_codes
-        top_removed_violation_codes
-      }
-      timeline {
-        run_id
-        change_id
-        timestamp
-        decision_a
-        decision_b
-        violations_a {
-          rule_id
-          severity
-        }
-        violations_b {
-          rule_id
-          severity
-        }
-        violations_added {
-          rule_id
-        }
-        violations_removed {
-          rule_id
-        }
-      }
-    }
-  }
-`;
+import { apiFetch } from '../../../lib/apiClient';
 
 interface PolicyVersion {
   id: string;
@@ -115,18 +51,25 @@ const PolicyVersionList: React.FC<{
   selectedVersionId: string | null;
   onSelectVersion: (id: string) => void;
 }> = ({ policyId, title, selectedVersionId, onSelectVersion }) => {
-  const { data, loading, error } = useQuery(GET_POLICY_VERSIONS, { variables: { policyId } });
+  const { data, isLoading, error } = useQuery({
+    queryKey: ['policy-versions', policyId],
+    queryFn: async () => {
+      const res = await apiFetch(`/api/rest/policy-versions?policy_id=${encodeURIComponent(policyId)}&order_by=version desc`);
+      if (!res.ok) throw new Error(await res.text());
+      return res.json();
+    },
+  });
 
   return (
     <Box>
       <Typography variant="h6" gutterBottom>
         {title}
       </Typography>
-      {loading && <CircularProgress size={24} />}
+      {isLoading && <CircularProgress size={24} />}
       {error && <Alert severity="error">Failed to load versions.</Alert>}
       <Paper variant="outlined">
         <List dense>
-          {data?.policy_version_history.map((v: PolicyVersion) => (
+          {(data || []).map((v: PolicyVersion) => (
             <ListItemButton key={v.id} selected={selectedVersionId === v.id} onClick={() => onSelectVersion(v.id)}>
               <ListItemText
                 primary={`v${v.version} - ${v.change_summary || 'Initial Version'}`}
@@ -143,18 +86,28 @@ const PolicyVersionList: React.FC<{
 };
 
 const PolicyDiffView: React.FC<{ versionAId: string; versionBId: string }> = ({ versionAId, versionBId }) => {
-  const { data, loading, error } = useQuery(GET_POLICY_VERSION_SPECS, {
-    variables: { ids: [versionAId, versionBId] },
+  const { data, isLoading, error } = useQuery({
+    queryKey: ['policy-version-specs', versionAId, versionBId],
+    queryFn: async () => {
+      const [resA, resB] = await Promise.all([
+        apiFetch(`/api/rest/policy-versions/${versionAId}`),
+        apiFetch(`/api/rest/policy-versions/${versionBId}`),
+      ]);
+      if (!resA.ok) throw new Error(await resA.text());
+      if (!resB.ok) throw new Error(await resB.text());
+      return Promise.all([resA.json(), resB.json()]);
+    },
+    enabled: !!versionAId && !!versionBId,
   });
 
-  if (loading) return <CircularProgress />;
+  if (isLoading) return <CircularProgress />;
   if (error) return <Alert severity="error">Failed to load policy specs for diffing.</Alert>;
-  if (!data || data.policy_version_history.length < 2) {
+  if (!data || data.length < 2) {
     return <Alert severity="info">Select two versions to compare.</Alert>;
   }
 
-  const versionA = data.policy_version_history.find((v: any) => v.id === versionAId);
-  const versionB = data.policy_version_history.find((v: any) => v.id === versionBId);
+  const versionA = data[0];
+  const versionB = data[1];
 
   if (!versionA || !versionB) {
     return <Alert severity="warning">Could not find one of the selected versions.</Alert>;
@@ -193,29 +146,53 @@ const PolicyVersionDiffPage: React.FC = () => {
   const { showDrillDown } = useDrillDown();
   const [viewMode, setViewMode] = useState<'timeline' | 'heatmap'>('timeline');
 
-  const { data: versionsData } = useQuery(GET_POLICY_VERSIONS, { variables: { policyId } });
-  const [runCompare, { data: compareData, loading: compareLoading, error: compareError }] =
-    useMutation(COMPARE_POLICY_VERSIONS);
+  const { data: versionsData } = useQuery({
+    queryKey: ['policy-versions', policyId],
+    queryFn: async () => {
+      const res = await apiFetch(`/api/rest/policy-versions?policy_id=${encodeURIComponent(policyId || '')}&order_by=version desc`);
+      if (!res.ok) throw new Error(await res.text());
+      return res.json();
+    },
+    enabled: !!policyId,
+  });
+
+  const { data: compareData, isPending: compareLoading, error: compareError, mutate: runCompare } = useMutation({
+    mutationFn: async ({ policyId, versionA, versionB, fromDate, toDate, differencesOnly }: {
+      policyId: string; versionA: number; versionB: number; fromDate: string; toDate: string; differencesOnly: boolean
+    }) => {
+      const res = await apiFetch('/api/rest/compare-policy-versions', {
+        method: 'POST',
+        body: JSON.stringify({
+          policy_id: policyId,
+          version_a: versionA,
+          version_b: versionB,
+          from_date: fromDate,
+          to_date: toDate,
+          differences_only: differencesOnly,
+        }),
+      });
+      if (!res.ok) throw new Error(await res.text());
+      return res.json();
+    },
+  });
 
   const handleCompare = () => {
     if (!policyId || !versionA || !versionB || !fromDate || !toDate || !versionsData) {
       return;
     }
 
-    const findVersion = (id: string) => versionsData.policy_version_history.find((v: PolicyVersion) => v.id === id)?.version;
+    const findVersion = (id: string) => versionsData.find((v: PolicyVersion) => v.id === id)?.version;
     const versionANum = findVersion(versionA);
     const versionBNum = findVersion(versionB);
 
     if (versionANum !== undefined && versionBNum !== undefined) {
       runCompare({
-        variables: {
-          policyId,
-          versionA: versionANum,
-          versionB: versionBNum,
-          fromDate: format(fromDate, 'yyyy-MM-dd'),
-          toDate: format(toDate, 'yyyy-MM-dd'),
-          differencesOnly: showDiffOnly,
-        },
+        policyId,
+        versionA: versionANum,
+        versionB: versionBNum,
+        fromDate: format(fromDate, 'yyyy-MM-dd'),
+        toDate: format(toDate, 'yyyy-MM-dd'),
+        differencesOnly: showDiffOnly,
       });
     }
   };
@@ -302,21 +279,21 @@ const PolicyVersionDiffPage: React.FC = () => {
                   <Typography>Select two versions from the lists to see the difference.</Typography>
                 </Box>
               )}
-              {compareError && <Alert severity="error" sx={{ mt: 2 }}>{compareError.message}</Alert>}
+              {compareError && <Alert severity="error" sx={{ mt: 2 }}>{compareError?.message}</Alert>}
               {compareData && (
                 <Suspense fallback={<div>Loading visualizations...</div>}>
                   <Box sx={{ mt: 3 }}>
-                    <ImpactSummary summary={compareData.compare_policy_versions.summary} />
+                    <ImpactSummary summary={compareData.summary} />
                     <Box sx={{ mt: 3, p: 2, height: '500px', border: '1px solid', borderColor: 'divider', borderRadius: 1 }}>
                       {viewMode === 'heatmap' ? (
                         <>
                           <Typography variant="h6" gutterBottom>Decision Change Heatmap</Typography>
                           <ChangeHeatmap
-                            timeline={compareData.compare_policy_versions.timeline}
+                            timeline={compareData.timeline}
                             bucketSize="week"
                             onCellClick={(bucket, changeType) => {
-                              const versionANum = versionsData.policy_version_history.find((v: PolicyVersion) => v.id === versionA)?.version;
-                              const versionBNum = versionsData.policy_version_history.find((v: PolicyVersion) => v.id === versionB)?.version;
+                              const versionANum = versionsData?.find((v: PolicyVersion) => v.id === versionA)?.version;
+                              const versionBNum = versionsData?.find((v: PolicyVersion) => v.id === versionB)?.version;
                               showDrillDown('policy_compare', {
                                 policyId,
                                 versionA: versionANum,
@@ -333,16 +310,16 @@ const PolicyVersionDiffPage: React.FC = () => {
                       ) : showDiffOnly ? (
                         <>
                           <Typography variant="h6" gutterBottom>Decision Change Timeline</Typography>
-                          <DifferenceOnlyTimeline diffs={compareData.compare_policy_versions.timeline} />
+                          <DifferenceOnlyTimeline diffs={compareData.timeline} />
                         </>
                       ) : (
                         <>
                           <Typography variant="h6" gutterBottom>Decision Replay Timeline</Typography>
-                          <DecisionReplayChart timeline={compareData.compare_policy_versions.timeline} />
+                          <DecisionReplayChart timeline={compareData.timeline} />
                         </>
                       )}
                     </Box>
-                    <DecisionDiffTable diffs={compareData.compare_policy_versions.timeline.filter((t: any) => t.decision_a !== t.decision_b)} />
+                    <DecisionDiffTable diffs={compareData.timeline.filter((t: any) => t.decision_a !== t.decision_b)} />
                   </Box>
                 </Suspense>
               )}

@@ -2,7 +2,7 @@
 import { useState, useEffect, useMemo, useCallback, lazy, Suspense } from 'react';
 import { useNotification } from '../../hooks/useNotification';
 import { devLog, devWarn, devError, devDebug } from '../../utils/devLogger';
-import { useQuery } from '@apollo/client';
+import { useApiQuery } from '../../hooks/useApiQuery';
 import { Node as FlowNode, Edge, ReactFlowInstance } from 'reactflow';
 
 // Services and Types
@@ -12,13 +12,6 @@ import { ColumnData, EnhancedSelectedAsset } from '../../types/SemanticTypes';
 import { enrichNodesWithTypes } from '../../utils/nodeTypeMapping';
 
 // Queries
-import { 
-  GET_COMBINED_CHART, 
-  GET_ALL_SEMANTIC_DATA,
-  GET_TECHNICAL_LINEAGE_CHART,
-  GET_SEMANTIC_LINEAGE_CHART,
-  transformChartData
-} from '../../graphql/queries/semantic';
 
 // Components
 import TableNode from '../../components/TableNode';
@@ -159,79 +152,24 @@ const nodeTypes = {
 const TabbedModal: React.FC<TabbedModalProps> = ({ datasourceId, tenantId = 'default', onClose, isModal = true }) => {
   console.log('🚀 TabbedModal mounted with:', { datasourceId, tenantId, isModal, hasOnClose: !!onClose });
   
-  // GraphQL Queries
-  const { loading: chartLoading, error: chartError, data: chartData } = useQuery(GET_COMBINED_CHART, {
-    variables: { datasourceId },
-  });
+  
+  // REST API calls replacing GraphQL
+  const { loading: nodesLoading, error: nodesError, data: rawNodes } = useApiQuery<any[]>(
+    `api/rest/catalog-nodes?limit=10000`,
+    { skip: !datasourceId }
+  );
 
-  console.log('📈 TabbedModal - Query states:', {
-    chartLoading,
-    hasChartError: !!chartError,
-    hasChartData: !!chartData,
-    chartDataKeys: chartData ? Object.keys(chartData) : []
-  });
+  const { loading: edgesLoading, error: edgesError, data: rawEdges } = useApiQuery<any[]>(
+    `api/rest/catalog-edges?limit=10000`,
+    { skip: !datasourceId }
+  );
 
-  const { loading: semanticLoading, error: semanticError, data: semanticData, refetch: refetchSemanticData } = useQuery(GET_ALL_SEMANTIC_DATA, {
-    variables: { datasourceId },
-  });
+  const isLoading = nodesLoading || edgesLoading;
+  const isError = !!nodesError || !!edgesError;
 
-  const { loading: technicalLineageLoading, data: technicalLineageData } = useQuery(GET_TECHNICAL_LINEAGE_CHART, {
-    variables: { datasourceId },
-  });
-
-  const { loading: semanticLineageLoading, data: semanticLineageData } = useQuery(GET_SEMANTIC_LINEAGE_CHART, {
-    variables: { datasourceId },
-  });
-
-  // Log chart data when it arrives
-  useEffect(() => {
-    devDebug('🔍 GET_COMBINED_CHART completed:', {
-      hasData: !!chartData,
-      hasTenantChart: !!chartData?.tenant_chart,
-      chartCount: chartData?.tenant_chart?.length || 0,
-      datasourceId
-    });
-    console.log('📊 TabbedModal - Chart Data Received:', chartData);
-    if (chartData?.tenant_chart?.length > 0) {
-      console.log('✅ Chart data details:', {
-        chart_name: chartData.tenant_chart[0].chart_name,
-        chart_length: chartData.tenant_chart[0].chart?.length,
-        chart_type: typeof chartData.tenant_chart[0].chart
-      });
-    } else if (chartData) {
-      console.warn('⚠️ No chart data found in response');
-    }
-  }, [chartData]);
-
-  // Log chart errors
-  useEffect(() => {
-    if (chartError) {
-      devError('❌ GET_COMBINED_CHART error:', chartError.message);
-      console.error('Full chart query error:', chartError);
-    }
-  }, [chartError]);
-
-  // Log semantic data when it arrives
-  useEffect(() => {
-    console.log('📋 [TabbedModal] GET_ALL_SEMANTIC_DATA returned:', {
-      hasData: !!semanticData,
-      loading: semanticLoading,
-      hasError: !!semanticError,
-      keys: semanticData ? Object.keys(semanticData) : [],
-      businessTermsCount: semanticData?.business_terms?.length || 0,
-      semanticTermsCount: semanticData?.semantic_terms?.length || 0,
-      semanticColumnsCount: semanticData?.semantic_columns?.length || 0,
-      databaseColumnsCount: semanticData?.databaseColumns?.length || 0,
-      semanticEdgesCount: semanticData?.semantic_edges?.length || 0
-    });
-    
-    // Log the actual edges array to see what's in it
-    if (semanticData?.semantic_edges) {
-      console.log('🔗 [TabbedModal] semantic_edges array:', semanticData.semantic_edges);
-    } else {
-      console.warn('⚠️ [TabbedModal] semantic_edges is missing or undefined in semanticData');
-    }
-  }, [semanticData, semanticLoading, semanticError]);
+  // Re-map REST nodes and edges into the format TabbedModal expects
+  // TabbedModal expects `nodes` state to be FlowNode objects, and `edges` to be ReactFlow edges.
+  // It also expects `semanticAssets` which we can filter from `rawNodes`
 
   // Main tab state - elevated from catalog sub-tabs
   const [activeTab, setActiveTab] = useState<'database' | 'diagram' | 'lineage' | 'semantic'>(
@@ -509,189 +447,87 @@ const TabbedModal: React.FC<TabbedModalProps> = ({ datasourceId, tenantId = 'def
   };
 
   // When Hasura was not configured to expose tenant_chart, surface a friendly call-to-action
-  const shouldShowMissingChartWarning = Boolean(chartError && isTenantChartMissingError(chartError));
+  const shouldShowMissingChartWarning = false;
 
-  // Process Chart Data (ERD/Lineage)
+  
+  // Process raw REST data into UI format
   useEffect(() => {
-    if (shouldShowMissingChartWarning) {
-      devWarn('tenant_chart missing in GraphQL schema — skipping chart parsing');
-      setNodes([]);
-      setEdges([]);
-      setAvailableCharts([]);
-      return;
-    }
+    if (!rawNodes || !rawEdges) return;
 
-    if (chartData && chartData.tenant_chart && chartData.tenant_chart.length > 0) {
-      const charts = chartData.tenant_chart;
-      setAvailableCharts(charts);
-      
-      // Determine which chart to display
-      // 1. If user selected one, try to find it
-      // 2. If not, default to the first one
-      let activeChart = charts[0];
-      if (selectedChartId) {
-        const found = charts.find((c: any) => c.id === selectedChartId);
-        if (found) {
-          activeChart = found;
-        } else {
-          // If selected ID not found (e.g. stale), fallback to first
-          setSelectedChartId(charts[0].id);
-        }
-      } else {
-        // Initial load: select first
-        setSelectedChartId(charts[0].id);
-      }
-
-      const compressedChartAsHex = activeChart.chart;
-      devDebug('Processing Chart:', activeChart.chart_name, 'ID:', activeChart.id);
-      
-      // Ensure we have valid hex string
-      if (!compressedChartAsHex || typeof compressedChartAsHex !== 'string') {
-        devError('Invalid chart data - not a string:', typeof compressedChartAsHex);
-        return;
-      }
-      
-      const parsedChartData = transformChartData(compressedChartAsHex) as TechnicalLineageChart;
-      
-      if (parsedChartData && parsedChartData.nodes) {
-        const nodesToSet = Array.isArray(parsedChartData.nodes) ? parsedChartData.nodes : [];
-        const edgesToSet = Array.isArray(parsedChartData.edges) ? parsedChartData.edges : [];
-        
-        setNodes(nodesToSet);
-        setEdges(edgesToSet);
-        
-        // Only select edge if none selected or if previously selected is gone
-        // (Optional refinement: keep selection if valid)
-        if (edgesToSet.length > 0 && !selectedEdge) {
-          setSelectedEdge(edgesToSet[0]);
-        }
-        devDebug('Chart State Updated:', nodesToSet.length, 'nodes', edgesToSet.length, 'edges');
-      } else {
-        devError('Failed to parse chart data');
-      }
-    } else {
-      devWarn('No chart data found');
-      setAvailableCharts([]);
-      setNodes([]);
-      setEdges([]);
-    }
-  }, [chartData, selectedChartId]);
-
-  // Compute semantic edges from GraphQL data (for semantic tab only)
-  // Chart data should only be used for ERD diagram
-  // Keep the original GraphQL format since SemanticCatalogView expects source_node_id/target_node_id
-  const semanticEdgesFromGraphQL = useMemo(() => {
-    if (!semanticData?.semantic_edges) return [];
+    // Filter nodes by type
+    const tables = rawNodes.filter((n: any) => n.node_type_id === '49a50271-ae58-4d3e-ae1c-2f5b89d89192');
+    const columns = rawNodes.filter((n: any) => n.node_type_id === 'a64c1011-16e8-4ddf-b447-363bf8e15c9a');
     
-    // Return edges in their original GraphQL format
-    // SemanticCatalogView expects: source_node_id, target_node_id, edge_type_id, etc.
-    return semanticData.semantic_edges;
-  }, [semanticData?.semantic_edges]);
+    const businessTerms = rawNodes.filter((n: any) => n.node_type_id === '1b5d1a10-2f96-48c6-a734-710e20ec4221' || n.type === 'business_term');
+    const semanticTerms = rawNodes.filter((n: any) => n.node_type_id === 'c5b8b9dc-3693-4fcb-8f74-729221fc3304' || n.type === 'semantic_term');
+
+    // Build flow nodes for ERD
+    const flowNodes: FlowNode<TableNodeData>[] = tables.map((t: any, index: number) => {
+      const tableColumns = columns.filter((c: any) => c.parent_id === t.id);
+      
+      const columnData = tableColumns.map((col: any) => {
+        const props = col.properties || {};
+        return {
+          name: col.node_name,
+          type: props.data_type || 'unknown',
+          nullable: props.is_nullable !== false,
+          isPrimaryKey: props.is_primary_key === true,
+          isForeignKey: props.is_foreign_key === true,
+          isCore: props.is_core === true,
+        };
+      });
+
+      return {
+        id: t.id,
+        type: 'databaseTable',
+        position: { x: (index % 5) * 300, y: Math.floor(index / 5) * 200 },
+        data: {
+          label: t.node_name,
+          tableName: t.node_name,
+          schemaName: t.qualified_path?.split('.')[0] || 'public',
+          isCore: t.properties?.is_core === true,
+          columns: columnData,
+        }
+      };
+    });
+
+    const flowEdges: Edge[] = rawEdges.map((e: any) => ({
+      id: e.id,
+      source: e.source_node_id,
+      target: e.target_node_id,
+      type: 'smoothstep',
+      animated: true,
+      data: e.properties
+    }));
+
+    setNodes(flowNodes);
+    setEdges(flowEdges);
+
+    setProcessedTechnicalData({
+      nodes: flowNodes,
+      edges: flowEdges,
+      viewport: { x: 0, y: 0, zoom: 1 },
+      metadata: { chartType: 'technical_lineage' }
+    });
+
+    // Populate semantic assets
+    setSemanticAssets([...businessTerms, ...semanticTerms, ...columns]);
+    
+    setProcessedSemanticData({
+      businessTerms: enrichNodesWithTypes(businessTerms),
+      semanticTerms: enrichNodesWithTypes(semanticTerms),
+      semanticColumns: enrichNodesWithTypes(columns),
+      databaseColumns: enrichNodesWithTypes(columns),
+      edges: rawEdges,
+      viewport: { x: 0, y: 0, zoom: 1 },
+      metadata: { nodeCount: semanticTerms.length, edgeCount: rawEdges.length }
+    });
+    
+  }, [rawNodes, rawEdges]);
+const semanticEdgesFromGraphQL = rawEdges || [];
 
   // Render a helpful warning banner at the top of the modal when tenant_chart is not available
-  if (shouldShowMissingChartWarning) {
-    return (
-      <div className="tabbed-modal-missing-chart">
-        <div style={{ padding: 24 }}>
-          <h3>Lineage/ERD data not available</h3>
-          <p>
-            The GraphQL field <code>tenant_chart</code> is not present in your Hasura schema for the connected
-            database. This means the Schema Explorer cannot load ERD or lineage charts.
-          </p>
-          <p>
-            Possible fixes:
-          </p>
-          <ul>
-            <li>Ensure the <code>tenant_chart</code> table exists in the database (public.tenant_chart).</li>
-            <li>Register the <code>tenant_chart</code> table in Hasura metadata (expose select permissions).</li>
-            <li>Run platform migrations that add tenant_chart / apply Hasura metadata.</li>
-          </ul>
-        </div>
-      </div>
-    );
-  }
-
-  // Process semantic data
-  useEffect(() => {
-    if (semanticData) {
-      const assets = [
-        ...(semanticData.business_terms || []),
-        ...(semanticData.semantic_terms || []),
-        ...(semanticData.semantic_columns || []),
-      ];
-      setSemanticAssets(assets);
-    }
-  }, [semanticData]);
-
-  // Process technical lineage data
-  useEffect(() => {
-    if (technicalLineageData && technicalLineageData.tenant_chart && technicalLineageData.tenant_chart.length > 0) {
-      const compressedChartAsHex = technicalLineageData.tenant_chart[0].chart;
-      const parsedData = transformChartData(compressedChartAsHex) as TechnicalLineageChart;
-      if (parsedData) {
-        setProcessedTechnicalData(parsedData);
-      }
-    } else if (nodes.length > 0 && edges.length > 0) {
-      setProcessedTechnicalData({
-        nodes,
-        edges,
-        viewport: { x: 0, y: 0, zoom: 1 },
-        metadata: {
-          chartType: 'technical_lineage',
-          databaseNodeCount: nodes.length,
-          databaseEdgeCount: edges.length,
-        }
-      });
-    }
-  }, [technicalLineageData, nodes, edges]);
-
-  // Process semantic lineage data from catalog nodes and edges
-  useEffect(() => {
-    if (semanticLineageData && semanticLineageData.tenant_chart && semanticLineageData.tenant_chart.length > 0) {
-      const compressedChartAsHex = semanticLineageData.tenant_chart[0].chart;
-      const parsedData = transformChartData(compressedChartAsHex) as SemanticLineageChart;
-      if (parsedData) {
-        setProcessedSemanticData(parsedData);
-      }
-    } else if (semanticData) {
-      // Build semantic lineage from catalog data when tenant_chart is not available
-      const businessTerms = enrichNodesWithTypes(semanticData.business_terms || []);
-      const semanticTerms = enrichNodesWithTypes(semanticData.semantic_terms || []);
-      const semanticColumns = enrichNodesWithTypes(semanticData.semantic_columns || []);
-      const databaseColumns = enrichNodesWithTypes(semanticData.databaseColumns || []);
-      const edges = semanticData.semantic_edges || [];
-      
-      console.log('📊 [TabbedModal] Processing semantic data:', {
-        businessTermsCount: businessTerms.length,
-        semanticTermsCount: semanticTerms.length,
-        semanticColumnsCount: semanticColumns.length,
-        databaseColumnsCount: databaseColumns.length,
-        edgesCount: edges.length,
-        hasSemanticData: !!semanticData,
-        semanticDataKeys: semanticData ? Object.keys(semanticData) : []
-      });
-      
-      if (semanticTerms.length > 0 || edges.length > 0) {
-        const lineageData: SemanticLineageChart = {
-          businessTerms,
-          semanticTerms,
-          semanticColumns,
-          databaseColumns,
-          edges,
-          viewport: { x: 0, y: 0, zoom: 1 },
-          metadata: { nodeCount: semanticTerms.length, edgeCount: edges.length }
-        };
-        console.log('✅ [TabbedModal] Setting processedSemanticData:', {
-          nodeCount: lineageData.metadata.nodeCount,
-          edgeCount: lineageData.metadata.edgeCount
-        });
-        setProcessedSemanticData(lineageData);
-      } else {
-        console.log('⚠️ [TabbedModal] Skipping semantic data - no terms or edges');
-      }
-    }
-  }, [semanticLineageData, semanticData]);
-
+  
   // Fetch hierarchical data when selected asset changes
   useEffect(() => {
     const fetchHierarchicalData = async () => {
@@ -1008,8 +844,8 @@ const TabbedModal: React.FC<TabbedModalProps> = ({ datasourceId, tenantId = 'def
   // Loading and error states
   // Only block on critical chart loading for initial render
   // Other queries can load in the background with per-tab indicators
-  if (chartLoading && !chartData) {
-    console.log('⏳ TabbedModal: Showing loading state (chartLoading && !chartData)');
+  if (isLoading && !processedTechnicalData && !processedSemanticData) {
+    console.log('⏳ TabbedModal: Showing loading state (isLoading && !processedTechnicalData && !processedSemanticData)');
     return (
       <div className="tabbed-modal-loading" style={{ 
         display: 'flex', 
@@ -1028,12 +864,13 @@ const TabbedModal: React.FC<TabbedModalProps> = ({ datasourceId, tenantId = 'def
   }
 
   // Show error only if chart query failed (most critical)
-  if (chartError && !shouldShowMissingChartWarning) {
-    console.log('❌ TabbedModal: Showing error state', { chartError: chartError.message });
+  if (isError && !shouldShowMissingChartWarning) {
+    const errorMsg = nodesError?.message || edgesError?.message || 'Unknown error';
+    console.log('❌ TabbedModal: Showing error state', { errorMsg });
     return (
       <div className="tabbed-modal-error" style={{ padding: '24px' }}>
         <h3>Error loading schema data</h3>
-        <p>{chartError.message}</p>
+        <p>{errorMsg}</p>
         <button onClick={() => window.location.reload()} style={{ marginTop: '16px', padding: '8px 16px', cursor: 'pointer' }}>
           Retry
         </button>
@@ -1060,7 +897,7 @@ const TabbedModal: React.FC<TabbedModalProps> = ({ datasourceId, tenantId = 'def
               setIsExportViewVisible(false);
             }}
           >
-            📊 Database ({filteredNodes.length}{filteredNodes.length !== nodes.length ? ` / ${nodes.length}` : ''})
+            📊 Technical Assets ({filteredNodes.length}{filteredNodes.length !== nodes.length ? ` / ${nodes.length}` : ''})
           </button>
           <button
             className={`tab ${activeTab === 'semantic' ? 'active' : ''}`}
@@ -1079,6 +916,15 @@ const TabbedModal: React.FC<TabbedModalProps> = ({ datasourceId, tenantId = 'def
             }}
           >
             📈 ERD Diagram
+          </button>
+          <button
+            className={`tab ${activeTab === 'lineage' ? 'active' : ''}`}
+            onClick={() => {
+              setActiveTab('lineage');
+              setIsExportViewVisible(false);
+            }}
+          >
+            🕸️ Lineage
           </button>
 
         </div>

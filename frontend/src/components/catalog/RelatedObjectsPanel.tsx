@@ -1,94 +1,11 @@
 // frontend/src/components/catalog/RelatedObjectsPanel.tsx
 // JSX only — React runtime import not needed with the new JSX transform and there's no React.* usage here.
 import { lazy, Suspense, useState, useEffect as _useEffect, useMemo } from "react";
-import { useQuery, useMutation, gql } from "@apollo/client";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 // AISuggestButton is loaded lazily below; don't import the default directly to avoid unused-import lint warnings
 import SuggestionPreviewPanel from "./SuggestionPreviewPanel";  // inline preview panel
 import type { Entity, Field } from "../../types/entity-schema";
-
-const GET_RELATED_OBJECTS = gql`
-  query GetRelatedObjects($tenantId: ID!, $datasourceId: ID!, $entity: String!) {
-    getRelatedObjects(tenantId: $tenantId, datasourceId: $datasourceId, entity: $entity) {
-      edgeId
-      direction
-      edgeType
-      cardinality
-      source { id name description }
-      target { id name description }
-    }
-  }
-`;
-
-const _GET_RELATIONSHIP_SUGGESTIONS = gql`
-  query GetRelationshipSuggestions($tenantId: ID!, $datasourceId: ID!, $entity: String!, $limit: Int) {
-    getRelationshipSuggestions(tenantId: $tenantId, datasourceId: $datasourceId, entity: $entity, limit: $limit) {
-      id
-      title
-      description
-      sourceEntity
-      targetEntity
-      edgeType
-      cardinality
-      fkColumn
-      confidence
-      reasoning
-      dismissible
-    }
-  }
-`;
-
-const GET_SEMANTIC_TERM_CATALOG_NODES = gql`
-  query GetSemanticTermCatalogNodes($datasourceId: ID!, $semanticTermIds: [ID!]!) {
-    catalog_node(
-      where: {
-        tenant_datasource_id: { _eq: $datasourceId },
-        _or: [
-          { properties: { path: ["semantic_term_id"], value: { _in: $semanticTermIds } } }
-        ]
-      }
-    ) {
-      id
-      node_name
-      qualified_path
-      properties
-      node_type_id
-      
-      # Find foreign key relationships
-      outbound_edges: catalog_edge(
-        where: {
-          tenant_datasource_id: { _eq: $datasourceId },
-          relationship_type: { _eq: "foreign_key" }
-        }
-      ) {
-        id
-        target_node_id
-        relationship_type
-        properties
-        created_at
-        updated_at
-      }
-    }
-  }
-`;
-
-const APPLY_RELATIONSHIP = gql`
-  mutation ApplyRelationship($tenantId: ID!, $datasourceId: ID!, $sourceEntity: String!, $targetEntity: String!, $edgeType: EdgeType!, $cardinality: String, $fkColumn: String, $confidence: Float) {
-    applyRelationship(tenantId: $tenantId, datasourceId: $datasourceId, sourceEntity: $sourceEntity, targetEntity: $targetEntity, edgeType: $edgeType, cardinality: $cardinality, fkColumn: $fkColumn, confidence: $confidence) {
-      edgeId
-      direction
-      edgeType
-      cardinality
-      source { id name description }
-      target { id name description }
-    }
-  }
-`;
-
-const DISMISS_SUGGESTION = gql`
-  mutation DismissRelationshipSuggestion($tenantId: ID!, $datasourceId: ID!, $suggestionId: ID!, $reason: String) {
-    dismissRelationshipSuggestion(tenantId: $tenantId, datasourceId: $datasourceId, suggestionId: $suggestionId, reason: $reason)
-  }
-`;
+import { apiFetch } from "../../lib/apiClient";
 
 type Props = {
   tenantId: string;
@@ -118,12 +35,45 @@ function isRelationshipSuggestion(obj: any): obj is RelationshipSuggestion {
 }
 
 export default function RelatedObjectsPanel({ tenantId, datasourceId, entity, entityData }: Props) {
-  const { data, loading, error, refetch } = useQuery(GET_RELATED_OBJECTS, {
-    variables: { tenantId, datasourceId, entity },
-    fetchPolicy: "cache-and-network",
+  const queryClient = useQueryClient();
+
+  const { data: relatedObjectsData, isLoading, error, refetch } = useQuery({
+    queryKey: ['related-objects', tenantId, datasourceId, entity],
+    queryFn: async () => {
+      const params = new URLSearchParams({ tenant_id: tenantId, tenant_instance_id: datasourceId, entity });
+      const res = await apiFetch(`/api/related-objects?${params.toString()}`);
+      if (!res.ok) throw new Error('Failed to fetch related objects');
+      return res.json();
+    },
   });
-  const [applyRelationship] = useMutation(APPLY_RELATIONSHIP);
-  const [dismissSuggestion] = useMutation(DISMISS_SUGGESTION);
+
+  const applyRelationshipMutation = useMutation({
+    mutationFn: async ({ sourceEntity, targetEntity, edgeType, cardinality, fkColumn, confidence }: {
+      sourceEntity: string; targetEntity: string; edgeType: string; cardinality?: string; fkColumn?: string; confidence?: number;
+    }) => {
+      const res = await apiFetch('/api/relationships/apply', {
+        method: 'POST',
+        body: JSON.stringify({ tenantId, datasourceId, sourceEntity, targetEntity, edgeType, cardinality, fkColumn, confidence }),
+      });
+      if (!res.ok) throw new Error('Failed to apply relationship');
+      return res.json();
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['related-objects', tenantId, datasourceId, entity] });
+    },
+  });
+
+  const dismissSuggestionMutation = useMutation({
+    mutationFn: async ({ suggestionId, reason }: { suggestionId: string; reason: string }) => {
+      const res = await apiFetch('/api/relationships/suggestions/dismiss', {
+        method: 'POST',
+        body: JSON.stringify({ tenantId, datasourceId, suggestionId, reason }),
+      });
+      if (!res.ok) throw new Error('Failed to dismiss suggestion');
+      return res.json();
+    },
+  });
+
   const [selectedSuggestion, setSelectedSuggestion] = useState<RelationshipSuggestion | null>(null);
 
   // Extract semantic term IDs from entity data
@@ -158,10 +108,16 @@ export default function RelatedObjectsPanel({ tenantId, datasourceId, entity, en
   }, [entityData]);
 
   // Query for catalog nodes and relationships based on semantic terms
-  const { data: catalogData, loading: catalogLoading } = useQuery(GET_SEMANTIC_TERM_CATALOG_NODES, {
-    variables: { datasourceId, semanticTermIds },
-    skip: semanticTermIds.length === 0,
-    fetchPolicy: "cache-and-network",
+  const { data: catalogData, isLoading: catalogLoading } = useQuery({
+    queryKey: ['semantic-term-catalog-nodes', datasourceId, semanticTermIds],
+    queryFn: async () => {
+      const params = new URLSearchParams({ tenant_instance_id: datasourceId });
+      semanticTermIds.forEach(id => params.append('semantic_term_ids', id));
+      const res = await apiFetch(`/api/catalog/nodes?${params.toString()}`);
+      if (!res.ok) throw new Error('Failed to fetch semantic term catalog nodes');
+      return res.json();
+    },
+    enabled: semanticTermIds.length > 0,
   });
 
   // Generate auto-suggestions based on catalog data
@@ -214,24 +170,24 @@ export default function RelatedObjectsPanel({ tenantId, datasourceId, entity, en
       .slice(0, 5);
   }, [catalogData, entityData, entity]);
 
-  if (loading || catalogLoading) return <p>Loading related objects...</p>;
+  if (isLoading || catalogLoading) return <p>Loading related objects...</p>;
   if (error) return <p>Error loading related objects: {String(error)}</p>;
 
   const handleApply = async (sugg: RelationshipSuggestion) => {
     // Map suggestion fields to mutation variables as needed by the backend
     const edgeType = typeof sugg.edgeType === 'string' ? sugg.edgeType : 'references';
     const cardinality = typeof sugg.cardinality === 'string' ? sugg.cardinality : undefined;
-    await applyRelationship({ variables: { tenantId, datasourceId, sourceEntity: sugg.sourceEntity, targetEntity: sugg.targetEntity, edgeType, cardinality, fkColumn: sugg.fkColumn, confidence: sugg.confidence } });
+    await applyRelationshipMutation.mutateAsync({ sourceEntity: sugg.sourceEntity, targetEntity: sugg.targetEntity, edgeType, cardinality, fkColumn: sugg.fkColumn, confidence: sugg.confidence });
     await refetch();
     setSelectedSuggestion(null);
   };
 
   const handleDismiss = async (sugg: RelationshipSuggestion, reason: string) => {
-    await dismissSuggestion({ variables: { tenantId, datasourceId, suggestionId: sugg.id, reason } });
+    await dismissSuggestionMutation.mutateAsync({ suggestionId: sugg.id, reason });
     setSelectedSuggestion(null);
   };
 
-  const items = data?.getRelatedObjects ?? [];
+  const items = relatedObjectsData ?? [];
   const outbound = items.filter((r: any) => r.direction === "OUTBOUND");
   const inbound = items.filter((r: any) => r.direction === "INBOUND");
 

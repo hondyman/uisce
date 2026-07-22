@@ -1,12 +1,10 @@
-import React, { useReducer, useState, useEffect } from 'react';
+import * as React from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Box,
   Container,
   Paper,
-  Stepper,
-  Step,
-  StepLabel,
   Button,
   Typography,
   TextField,
@@ -20,300 +18,354 @@ import {
   CardContent,
   IconButton,
   Divider,
-  List,
-  ListItem,
-  ListItemText,
-  ListItemIcon,
-  Checkbox,
   Grid,
   CircularProgress,
-  Alert
+  Alert,
+  Chip,
+  Accordion,
+  AccordionSummary,
+  AccordionDetails,
+  List,
+  ListItem,
+  ListItemText
 } from '@mui/material';
-import { DataGrid, GridColDef, GridRenderCellParams } from '@mui/x-data-grid';
 import {
   Add as AddIcon,
   Delete as DeleteIcon,
-  AutoAwesome as AutoAwesomeIcon,
   CheckCircle as CheckCircleIcon,
-  NavigateNext as NextIcon,
-  NavigateBefore as BeforeIcon,
-  Save as SaveIcon
+  Error as ErrorIcon,
+  Save as SaveIcon,
+  ExpandMore as ExpandMoreIcon
 } from '@mui/icons-material';
-import { AICopilotInput } from '../components/AICopilotInput';
 import { useTenant } from '../contexts/TenantContext';
 
-// --- Types matching AutoSuggestResponse and SQLGenerationRequest structs ---
-interface SuggestedField {
-  field_name: string;
-  semantic_term_node_id: string;
-  semantic_term_name: string;
-  source_column_node_id: string;
-  source_column_name: string;
-  field_role: string; // KEY, DIMENSION, MEASURE, ATTRIBUTE
-  aggregation_type: string; // NONE, SUM, AVG, MIN, MAX
-  confidence_score: number;
+interface AutoDiscoveryItem {
+  termNodeId: string;
+  termKey: string;
+  termName: string;
+  termType: string;
+  identityRole: string;
+  dataType: string;
+  aggregationType: string;
+  columnNodeId: string;
+  columnKey: string;
+  tableKey: string;
+  sourceType: string;
 }
 
-interface CopilotDraft {
-  suggested_bo_name: string;
-  suggested_bo_key: string;
-  fields: SuggestedField[];
+interface BindingField {
+  termNodeId: string;
+  termName: string;
+  fieldName: string;
+  fieldRole: string; // KEY, DIMENSION, MEASURE, ATTRIBUTE
+  bindingRequirement: string; // REQUIRED, OPTIONAL, BACKEND_SPECIFIC, CALCULATED
+  sourceNodeId: string;
+  sourceType: string; // COLUMN, EXPRESSION
+  transformationType: string; // NONE, CAST, SQL_EXPR
+  transformationSql: string;
+  availableColumns: { id: string; name: string }[]; // For inline resolution
 }
 
-interface FallbackBinding {
-  datasourceType: string;
+interface BindingRelationship {
+  toBoId: string;
+  relKey: string;
+  cardinality: string;
+  joinType: string;
+  joinConditionSql: string;
+}
+
+interface Binding {
+  id: string;
+  backendId: string; // postgres, iceberg, starrocks
   drivingNodeId: string;
-  connectionString?: string;
+  isDefault: boolean;
+  fields: BindingField[];
+  relationships: BindingRelationship[];
+  loading?: boolean;
 }
 
-interface WizardState {
+interface BO {
+  id?: string;
+  key: string;
   name: string;
-  technicalKey: string;
+  displayName: string;
+  technicalName: string;
   description: string;
-  datasourceType: string;
-  drivingNodeId: string;
-  fallbackBindings: FallbackBinding[];
-  selectedTermIds: string[];
-  termsMatrix: SuggestedField[];
+  boTypeId: string;
+  classificationNodeId: string;
+  businessKeyNodeId: string;
+  semanticIdNodeId: string;
+  grainNodeId: string;
 }
-
-type WizardAction =
-  | { type: 'SET_FIELD'; field: keyof WizardState; value: any }
-  | { type: 'HYDRATE_DRAFT'; draft: CopilotDraft }
-  | { type: 'ADD_FALLBACK'; fallback: FallbackBinding }
-  | { type: 'REMOVE_FALLBACK'; index: number }
-  | { type: 'UPDATE_MATRIX_FIELD'; index: number; field: keyof SuggestedField; value: any };
-
-const initialState: WizardState = {
-  name: '',
-  technicalKey: '',
-  description: '',
-  datasourceType: 'Postgres',
-  drivingNodeId: '',
-  fallbackBindings: [],
-  selectedTermIds: [],
-  termsMatrix: []
-};
-
-function wizardReducer(state: WizardState, action: WizardAction): WizardState {
-  switch (action.type) {
-    case 'SET_FIELD':
-      return { ...state, [action.field]: action.value };
-    case 'HYDRATE_DRAFT':
-      return {
-        ...state,
-        name: action.draft.suggested_bo_name,
-        technicalKey: action.draft.suggested_bo_key,
-        termsMatrix: action.draft.fields.map(f => ({
-          ...f,
-          field_role: f.field_role || 'ATTRIBUTE',
-          aggregation_type: f.aggregation_type || 'NONE'
-        })),
-        selectedTermIds: action.draft.fields.map(f => f.semantic_term_node_id)
-      };
-    case 'ADD_FALLBACK':
-      return { ...state, fallbackBindings: [...state.fallbackBindings, action.fallback] };
-    case 'REMOVE_FALLBACK':
-      return {
-        ...state,
-        fallbackBindings: state.fallbackBindings.filter((_, idx) => idx !== action.index)
-      };
-    case 'UPDATE_MATRIX_FIELD':
-      const updatedMatrix = [...state.termsMatrix];
-      updatedMatrix[action.index] = {
-        ...updatedMatrix[action.index],
-        [action.field]: action.value
-      };
-      return { ...state, termsMatrix: updatedMatrix };
-    default:
-      return state;
-  }
-}
-
-const steps = ['Definition', 'Bindings', 'Scope', 'Terms Matrix'];
 
 export const BusinessObjectWizardPage: React.FC<{ tenantId?: string }> = ({ tenantId }) => {
   const navigate = useNavigate();
   const { tenant } = useTenant();
   const activeTenantId = tenantId || tenant?.id || '00000000-0000-0000-0000-000000000000';
-  const [activeStep, setActiveStep] = useState(0);
-  const [state, dispatch] = useReducer(wizardReducer, initialState);
-  
-  // API states
+
+  // State Definitions
+  const [bo, setBo] = useState<BO>({
+    key: '',
+    name: '',
+    displayName: '',
+    technicalName: '',
+    description: '',
+    boTypeId: '',
+    classificationNodeId: '',
+    businessKeyNodeId: '',
+    semanticIdNodeId: '',
+    grainNodeId: ''
+  });
+
+  const [bindings, setBindings] = useState<Binding[]>([
+    {
+      id: '1',
+      backendId: 'postgres',
+      drivingNodeId: '',
+      isDefault: true,
+      fields: [],
+      relationships: []
+    }
+  ]);
+
   const [drivingTables, setDrivingTables] = useState<{ id: string; label: string }[]>([]);
-  const [eligibleTerms, setEligibleTerms] = useState<SuggestedField[]>([]);
-  const [loadingTerms, setLoadingTerms] = useState(false);
+  const [businessObjectsList, setBusinessObjectsList] = useState<{ id: string; name: string }[]>([]);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
 
-  // Auto-format technical key to snake_case
-  const handleNameChange = (nameVal: string) => {
-    dispatch({ type: 'SET_FIELD', field: 'name', value: nameVal });
-    const formattedKey = nameVal
-      .toLowerCase()
-      .replace(/[^a-z0-9_]/g, '_')
-      .replace(/_+/g, '_');
-    dispatch({ type: 'SET_FIELD', field: 'technicalKey', value: formattedKey });
-  };
-
-  // Fetch tables on load
+  // Fetch Driving Tables & Target BOs
   useEffect(() => {
-    const fetchDrivingTables = async () => {
+    const fetchData = async () => {
       try {
-        const response = await fetch(`/api/v1/bo/driving-tables?tenant_id=${activeTenantId}`);
-        if (response.ok) {
-          const data = await response.json();
+        const tblRes = await fetch(`/api/v1/bo/driving-tables?tenant_id=${activeTenantId}`);
+        if (tblRes.ok) {
+          const data = await tblRes.json();
           setDrivingTables(data || []);
         } else {
-          // Fallback static options if API is not fully running
+          // Fallbacks for testing
           setDrivingTables([
-            { id: '11111111-1111-1111-1111-111111111111', label: 'sales_ledger' },
-            { id: '22222222-2222-2222-2222-222222222222', label: 'customer_dim' },
-            { id: '33333333-3333-3333-3333-333333333333', label: 'product_catalog' }
+            { id: '11111111-1111-1111-1111-111111111111', label: 'public.customers' },
+            { id: '22222222-2222-2222-2222-222222222222', label: 'public.orders' },
+            { id: '33333333-3333-3333-3333-333333333333', label: 'public.products' }
           ]);
         }
-      } catch {
-        setDrivingTables([
-          { id: '11111111-1111-1111-1111-111111111111', label: 'sales_ledger' },
-          { id: '22222222-2222-2222-2222-222222222222', label: 'customer_dim' },
-          { id: '33333333-3333-3333-3333-333333333333', label: 'product_catalog' }
-        ]);
-      }
-    };
-    fetchDrivingTables();
-  }, [activeTenantId]);
 
-  // Fetch eligible terms when driving table is selected
-  useEffect(() => {
-    if (!state.drivingNodeId) {
-      setEligibleTerms([]);
-      return;
-    }
-
-    const fetchEligibleTerms = async () => {
-      setLoadingTerms(true);
-      try {
-        const response = await fetch(`/api/v1/bo/eligible-terms?driving_node_id=${state.drivingNodeId}`);
-        if (response.ok) {
-          const data = await response.json();
-          setEligibleTerms(data || []);
-        } else {
-          // Fallbacks for testing/design demonstration
-          setEligibleTerms([
-            {
-              field_name: 'total_revenue',
-              semantic_term_node_id: 'term-rev-100',
-              semantic_term_name: 'Revenue Amount',
-              source_column_node_id: 'col-rev-01',
-              source_column_name: 'amount',
-              field_role: 'MEASURE',
-              aggregation_type: 'SUM',
-              confidence_score: 0.95
-            },
-            {
-              field_name: 'region_code',
-              semantic_term_node_id: 'term-reg-101',
-              semantic_term_name: 'Region Identifier',
-              source_column_node_id: 'col-reg-02',
-              source_column_name: 'region_id',
-              field_role: 'DIMENSION',
-              aggregation_type: 'NONE',
-              confidence_score: 0.88
-            },
-            {
-              field_name: 'created_date',
-              semantic_term_node_id: 'term-date-102',
-              semantic_term_name: 'Creation Date',
-              source_column_node_id: 'col-date-03',
-              source_column_name: 'created_at',
-              field_role: 'ATTRIBUTE',
-              aggregation_type: 'NONE',
-              confidence_score: 0.91
-            }
-          ]);
+        const boRes = await fetch('/api/business-objects');
+        if (boRes.ok) {
+          const boData = await boRes.json();
+          const items = Object.entries(boData).map(([id, item]: any) => ({
+            id: id,
+            name: item.name || item.displayName
+          }));
+          setBusinessObjectsList(items);
         }
       } catch {
         // Fallbacks
-        setEligibleTerms([
-          {
-            field_name: 'total_revenue',
-            semantic_term_node_id: 'term-rev-100',
-            semantic_term_name: 'Revenue Amount',
-            source_column_node_id: 'col-rev-01',
-            source_column_name: 'amount',
-            field_role: 'MEASURE',
-            aggregation_type: 'SUM',
-            confidence_score: 0.95
-          },
-          {
-            field_name: 'region_code',
-            semantic_term_node_id: 'term-reg-101',
-            semantic_term_name: 'Region Identifier',
-            source_column_node_id: 'col-reg-02',
-            source_column_name: 'region_id',
-            field_role: 'DIMENSION',
-            aggregation_type: 'NONE',
-            confidence_score: 0.88
-          }
+        setDrivingTables([
+          { id: '11111111-1111-1111-1111-111111111111', label: 'public.customers' },
+          { id: '22222222-2222-2222-2222-222222222222', label: 'public.orders' },
+          { id: '33333333-3333-3333-3333-333333333333', label: 'public.products' }
         ]);
-      } finally {
-        setLoadingTerms(false);
       }
     };
+    fetchData();
+  }, [activeTenantId]);
 
-    fetchEligibleTerms();
-  }, [state.drivingNodeId]);
+  // Handle BO Metadata Updates
+  const handleBoChange = (field: keyof BO, value: string) => {
+    setBo(prev => {
+      const next = { ...prev, [field]: value };
+      if (field === 'name') {
+        const keyVal = value.toLowerCase().replace(/[^a-z0-9_]/g, '_').replace(/_+/g, '_');
+        next.key = keyVal;
+        next.technicalName = keyVal;
+      }
+      return next;
+    });
+  };
 
-  // Handle Copilot Draft hydration
-  const handleCopilotDraft = (draft: CopilotDraft) => {
-    dispatch({ type: 'HYDRATE_DRAFT', draft });
-    // Auto-select sales_ledger or another matching demo table if draft is hydrated
-    if (draft.fields.length > 0 && drivingTables.length > 0) {
-      dispatch({ type: 'SET_FIELD', field: 'drivingNodeId', value: drivingTables[0].id });
+  // Add a new expandable Backend Binding panel
+  const addBinding = () => {
+    const nextId = (bindings.length + 1).toString();
+    setBindings(prev => [
+      ...prev,
+      {
+        id: nextId,
+        backendId: 'starrocks',
+        drivingNodeId: '',
+        isDefault: false,
+        fields: [],
+        relationships: []
+      }
+    ]);
+  };
+
+  const removeBinding = (id: string) => {
+    setBindings(prev => prev.filter(b => b.id !== id));
+  };
+
+  // Perform Auto-discovery when driving table is selected
+  const handleDrivingTableChange = async (bindingId: string, drivingNodeId: string) => {
+    setBindings(prev => prev.map(b => b.id === bindingId ? { ...b, drivingNodeId, loading: true } : b));
+    if (!drivingNodeId) return;
+
+    try {
+      const response = await fetch(`/api/business-objects/auto-discovery?driving_node_id=${drivingNodeId}`);
+      if (response.ok) {
+        const items: AutoDiscoveryItem[] = await response.json();
+
+        // Group auto-discovery items by term node id to find ambiguity (multiple columns for one term)
+        const termGroups: Record<string, AutoDiscoveryItem[]> = {};
+        items.forEach(item => {
+          if (!termGroups[item.termNodeId]) {
+            termGroups[item.termNodeId] = [];
+          }
+          termGroups[item.termNodeId].push(item);
+        });
+
+        const fields: BindingField[] = Object.entries(termGroups).map(([termNodeId, list]) => {
+          const primary = list[0];
+          return {
+            termNodeId,
+            termName: primary.termName,
+            fieldName: primary.termKey,
+            fieldRole: primary.identityRole || 'DIMENSION',
+            bindingRequirement: 'REQUIRED',
+            sourceNodeId: primary.columnNodeId,
+            sourceType: 'COLUMN',
+            transformationType: 'NONE',
+            transformationSql: '',
+            availableColumns: list.map(item => ({
+              id: item.columnNodeId,
+              name: item.columnKey
+            }))
+          };
+        });
+
+        setBindings(prev => prev.map(b => b.id === bindingId ? { ...b, fields, loading: false } : b));
+      } else {
+        setBindings(prev => prev.map(b => b.id === bindingId ? { ...b, loading: false } : b));
+      }
+    } catch {
+      setBindings(prev => prev.map(b => b.id === bindingId ? { ...b, loading: false } : b));
     }
-    setActiveStep(2); // Jump straight to scope definition / terms check
   };
 
-  const handleNext = () => {
-    if (activeStep === 2) {
-      // Sync terms Matrix from selected term IDs before stepping to matrix view
-      const selected = eligibleTerms.filter(t => state.selectedTermIds.includes(t.semantic_term_node_id));
-      dispatch({ type: 'SET_FIELD', field: 'termsMatrix', value: selected });
-    }
-    setActiveStep((prevActiveStep) => prevActiveStep + 1);
+  const updateFieldProperty = (bindingId: string, termNodeId: string, property: keyof BindingField, value: any) => {
+    setBindings(prev => prev.map(b => {
+      if (b.id !== bindingId) return b;
+      const updatedFields = b.fields.map(f => f.termNodeId === termNodeId ? { ...f, [property]: value } : f);
+      return { ...b, fields: updatedFields };
+    }));
   };
 
-  const handleBack = () => {
-    setActiveStep((prevActiveStep) => prevActiveStep - 1);
+  // Relationship actions
+  const addRelationship = (bindingId: string) => {
+    setBindings(prev => prev.map(b => {
+      if (b.id !== bindingId) return b;
+      return {
+        ...b,
+        relationships: [
+          ...b.relationships,
+          { toBoId: '', relKey: '', cardinality: '1:M', joinType: 'LEFT', joinConditionSql: '' }
+        ]
+      };
+    }));
   };
 
-  const handleToggleTerm = (termId: string) => {
-    const currentIndex = state.selectedTermIds.indexOf(termId);
-    const newSelected = [...state.selectedTermIds];
-
-    if (currentIndex === -1) {
-      newSelected.push(termId);
-    } else {
-      newSelected.splice(currentIndex, 1);
-    }
-
-    dispatch({ type: 'SET_FIELD', field: 'selectedTermIds', value: newSelected });
+  const updateRelationship = (bindingId: string, relIdx: number, property: keyof BindingRelationship, value: any) => {
+    setBindings(prev => prev.map(b => {
+      if (b.id !== bindingId) return b;
+      const updated = [...b.relationships];
+      updated[relIdx] = { ...updated[relIdx], [property]: value };
+      return { ...b, relationships: updated };
+    }));
   };
+
+  const removeRelationship = (bindingId: string, relIdx: number) => {
+    setBindings(prev => prev.map(b => {
+      if (b.id !== bindingId) return b;
+      return { ...b, relationships: b.relationships.filter((_, idx) => idx !== relIdx) };
+    }));
+  };
+
+  // Validation Check Rules (Section 6 Enforcement)
+  const validationSummary = (() => {
+    const allTermIds = Array.from(new Set(bindings.flatMap(b => b.fields.map(f => f.termNodeId))));
+    const errors: string[] = [];
+    const successes: string[] = [];
+
+    allTermIds.forEach(termId => {
+      // Find term requirement across any configuration
+      const sampleField = bindings.flatMap(b => b.fields).find(f => f.termNodeId === termId);
+      if (!sampleField) return;
+
+      const termName = sampleField.termName;
+      const req = sampleField.bindingRequirement;
+
+      const boundCount = bindings.filter(b => b.fields.find(f => f.termNodeId === termId && f.sourceNodeId)).length;
+
+      if (req === 'REQUIRED' && boundCount < bindings.length) {
+        errors.push(`Field "${termName}" is REQUIRED but not mapped in all active backends.`);
+      } else if (req === 'BACKEND_SPECIFIC' && boundCount === 0) {
+        errors.push(`Field "${termName}" is BACKEND_SPECIFIC but is not mapped in any backend.`);
+      } else {
+        successes.push(`Field "${termName}" is fully resolved.`);
+      }
+    });
+
+    return { errors, successes };
+  })();
 
   const handleSave = async () => {
-    setSubmitError(null);
-    try {
-      const payload = {
-        name: state.name,
-        technical_key: state.technicalKey,
-        description: state.description,
-        tenant_id: activeTenantId,
-        datasource_type: state.datasourceType,
-        driving_node_id: state.drivingNodeId,
-        fallback_bindings: state.fallbackBindings,
-        fields: state.termsMatrix
-      };
+    if (!bo.name || !bo.key) {
+      setSubmitError('Name and Technical Key are required.');
+      return;
+    }
 
-      const response = await fetch('/api/business-objects', {
+    setIsSaving(true);
+    setSubmitError(null);
+
+    const payload = {
+      tenantId: activeTenantId,
+      modelId: bo.boTypeId || '00000000-0000-0000-0000-000000000000',
+      businessObject: {
+        boKey: bo.key,
+        boName: bo.name,
+        boTypeId: bo.boTypeId,
+        classificationNodeId: bo.classificationNodeId,
+        businessKeyNodeId: bo.businessKeyNodeId,
+        semanticIdNodeId: bo.semanticIdNodeId,
+        grainNodeId: bo.grainNodeId
+      },
+      bindings: bindings.map(b => ({
+        backendId: b.backendId,
+        drivingNodeId: b.drivingNodeId,
+        isDefault: b.isDefault,
+        temporalOverride: 'NONE',
+        fields: b.fields.map(f => ({
+          termNodeId: f.termNodeId,
+          fieldName: f.fieldName,
+          fieldRole: f.fieldRole,
+          bindingRequirement: f.bindingRequirement,
+          sourceNodeId: f.sourceNodeId,
+          sourceType: f.sourceType,
+          transformationType: f.transformationType,
+          transformationSql: f.transformationSql
+        })),
+        relationships: b.relationships.map(r => ({
+          toBoId: r.toBoId,
+          relKey: r.relKey,
+          cardinality: r.cardinality,
+          joinType: r.joinType,
+          joinConditionSql: r.joinConditionSql
+        }))
+      })),
+      publish: true
+    };
+
+    try {
+      const response = await fetch('/api/business-objects/save', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
@@ -321,292 +373,320 @@ export const BusinessObjectWizardPage: React.FC<{ tenantId?: string }> = ({ tena
 
       if (!response.ok) {
         const text = await response.text();
-        throw new Error(text || 'Failed to create business object');
+        throw new Error(text || 'Failed to save Business Object atomically');
       }
 
       navigate('/business-objects');
     } catch (err: any) {
-      setSubmitError(err.message || 'An error occurred while saving the Business Object');
+      setSubmitError(err.message || 'An error occurred while publishing.');
+    } finally {
+      setIsSaving(false);
     }
   };
 
-  // Matrix Grid column definitions
-  const matrixColumns: GridColDef[] = [
-    { field: 'semantic_term_name', headerName: 'Semantic Term', flex: 1, minWidth: 150 },
-    { field: 'source_column_name', headerName: 'Physical Column', flex: 1, minWidth: 150 },
-    {
-      field: 'field_role',
-      headerName: 'Field Role',
-      width: 180,
-      renderCell: (params: GridRenderCellParams) => {
-        const idx = state.termsMatrix.findIndex(item => item.semantic_term_node_id === params.row.semantic_term_node_id);
-        return (
-          <FormControl fullWidth size="small" variant="standard" sx={{ mt: 0.5 }}>
-            <Select
-              value={params.value || 'ATTRIBUTE'}
-              onChange={(e) => dispatch({ type: 'UPDATE_MATRIX_FIELD', index: idx, field: 'field_role', value: e.target.value })}
-            >
-              <MenuItem value="KEY">KEY</MenuItem>
-              <MenuItem value="DIMENSION">DIMENSION</MenuItem>
-              <MenuItem value="MEASURE">MEASURE</MenuItem>
-              <MenuItem value="ATTRIBUTE">ATTRIBUTE</MenuItem>
-            </Select>
-          </FormControl>
-        );
-      }
-    },
-    {
-      field: 'aggregation_type',
-      headerName: 'Aggregation',
-      width: 180,
-      renderCell: (params: GridRenderCellParams) => {
-        const idx = state.termsMatrix.findIndex(item => item.semantic_term_node_id === params.row.semantic_term_node_id);
-        return (
-          <FormControl fullWidth size="small" variant="standard" sx={{ mt: 0.5 }}>
-            <Select
-              value={params.value || 'NONE'}
-              onChange={(e) => dispatch({ type: 'UPDATE_MATRIX_FIELD', index: idx, field: 'aggregation_type', value: e.target.value })}
-            >
-              <MenuItem value="NONE">NONE</MenuItem>
-              <MenuItem value="SUM">SUM</MenuItem>
-              <MenuItem value="AVG">AVG</MenuItem>
-              <MenuItem value="MIN">MIN</MenuItem>
-              <MenuItem value="MAX">MAX</MenuItem>
-            </Select>
-          </FormControl>
-        );
-      }
-    }
-  ];
-
   return (
     <Container maxWidth="xl" sx={{ mt: 4, mb: 4 }}>
-      <AICopilotInput tenantId={activeTenantId} onDraftGenerated={handleCopilotDraft} />
-
-      <Paper sx={{ p: 4, borderRadius: 3, boxShadow: '0 4px 20px rgba(0,0,0,0.08)' }}>
-        <Typography variant="h5" component="h1" gutterBottom sx={{ fontWeight: 'bold', mb: 3 }}>
-          Create Business Object
-        </Typography>
-
-        <Stepper activeStep={activeStep} sx={{ mb: 4 }}>
-          {steps.map((label) => (
-            <Step key={label}>
-              <StepLabel>{label}</StepLabel>
-            </Step>
-          ))}
-        </Stepper>
-
-        <Divider sx={{ mb: 4 }} />
-
-        {/* STEP 1: DEFINITION */}
-        {activeStep === 0 && (
-          <Stack spacing={3} sx={{ maxWith: 600, mx: 'auto' }}>
-            <Typography variant="h6">Step 1: Core Definition</Typography>
-            <TextField
-              required
-              label="Business Object Name"
-              value={state.name}
-              onChange={(e) => handleNameChange(e.target.value)}
-              fullWidth
-            />
-            <TextField
-              required
-              label="Technical Key (auto-formatted)"
-              value={state.technicalKey}
-              onChange={(e) => dispatch({ type: 'SET_FIELD', field: 'technicalKey', value: e.target.value })}
-              fullWidth
-              helperText="Must be snake_case (e.g. monthly_revenue_by_region)"
-            />
-            <TextField
-              label="Description"
-              value={state.description}
-              onChange={(e) => dispatch({ type: 'SET_FIELD', field: 'description', value: e.target.value })}
-              multiline
-              rows={4}
-              fullWidth
-            />
-          </Stack>
-        )}
-
-        {/* STEP 2: BINDINGS */}
-        {activeStep === 1 && (
-          <Stack spacing={4}>
-            <Typography variant="h6">Step 2: Source Physical Bindings</Typography>
-            <Grid container spacing={3}>
-              <Grid size={{ 'xs': 12, 'md': 6 }}>
-                <FormControl fullWidth>
-                  <InputLabel>Datasource Type</InputLabel>
-                  <Select
-                    value={state.datasourceType}
-                    label="Datasource Type"
-                    onChange={(e) => dispatch({ type: 'SET_FIELD', field: 'datasourceType', value: e.target.value })}
-                  >
-                    <MenuItem value="Postgres">Postgres</MenuItem>
-                    <MenuItem value="Iceberg">Iceberg</MenuItem>
-                    <MenuItem value="StarRocks">StarRocks</MenuItem>
-                  </Select>
-                </FormControl>
-              </Grid>
-
-              <Grid size={{ 'xs': 12, 'md': 6 }}>
-                <Autocomplete
-                  options={drivingTables}
-                  getOptionLabel={(option) => option.label}
-                  value={drivingTables.find(t => t.id === state.drivingNodeId) || null}
-                  onChange={(_, newValue) => {
-                    dispatch({ type: 'SET_FIELD', field: 'drivingNodeId', value: newValue ? newValue.id : '' });
-                  }}
-                  renderInput={(params) => <TextField {...params} label="Anchor/Driving Table" required />}
-                />
-              </Grid>
-            </Grid>
-
-            <Divider sx={{ my: 2 }} />
-
-            <Box>
-              <Typography variant="subtitle2" gutterBottom sx={{ fontWeight: 'bold' }}>
-                Multi-Dialect Fallback Bindings (Iceberg / StarRocks replication)
-              </Typography>
-              <Button
-                variant="outlined"
-                startIcon={<AddIcon />}
-                onClick={() => dispatch({
-                  type: 'ADD_FALLBACK',
-                  fallback: { datasourceType: 'StarRocks', drivingNodeId: state.drivingNodeId }
-                })}
-                disabled={!state.drivingNodeId}
-                sx={{ mb: 2 }}
-              >
-                Add Fallback Replication Endpoint
-              </Button>
-
-              {state.fallbackBindings.length > 0 && (
-                <Stack spacing={2}>
-                  {state.fallbackBindings.map((fb, idx) => (
-                    <Paper key={idx} variant="outlined" sx={{ p: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <Box>
-                        <Typography variant="body2" sx={{ fontWeight: 'bold' }}>Fallback #{idx + 1}</Typography>
-                        <Typography variant="caption" color="text.secondary">
-                          Type: {fb.datasourceType} | Driving Table Node: {fb.drivingNodeId}
-                        </Typography>
-                      </Box>
-                      <IconButton onClick={() => dispatch({ type: 'REMOVE_FALLBACK', index: idx })} color="error">
-                        <DeleteIcon />
-                      </IconButton>
-                    </Paper>
-                  ))}
-                </Stack>
-              )}
-            </Box>
-          </Stack>
-        )}
-
-        {/* STEP 3: SCOPE / ELIGIBLE TERMS */}
-        {activeStep === 2 && (
-          <Stack spacing={3}>
-            <Box>
-              <Typography variant="h6">Step 3: Relationship Scope & Glossary Mapping</Typography>
-              <Typography variant="body2" color="text.secondary">
-                Select eligible terms discovered via semantic graph traversal on your driving table.
-              </Typography>
-            </Box>
-
-            {loadingTerms ? (
-              <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}>
-                <CircularProgress />
-              </Box>
-            ) : eligibleTerms.length === 0 ? (
-              <Alert severity="warning">No eligible terms found. Please select an active driving table in Step 2.</Alert>
-            ) : (
-              <Paper variant="outlined" sx={{ maxHeight: 400, overflow: 'auto', p: 1 }}>
-                <List>
-                  {eligibleTerms.map((term) => {
-                    const labelId = `checkbox-list-label-${term.semantic_term_node_id}`;
-                    return (
-                      <ListItem
-                        key={term.semantic_term_node_id}
-                        dense
-                        button
-                        onClick={() => handleToggleTerm(term.semantic_term_node_id)}
-                      >
-                        <ListItemIcon>
-                          <Checkbox
-                            edge="start"
-                            checked={state.selectedTermIds.indexOf(term.semantic_term_node_id) !== -1}
-                            tabIndex={-1}
-                            disableRipple
-                            inputProps={{ 'aria-labelledby': labelId }}
-                          />
-                        </ListItemIcon>
-                        <ListItemText
-                          id={labelId}
-                          primary={term.semantic_term_name}
-                          secondary={`Maps to physical column: ${term.source_column_name} (Confidence: ${(term.confidence_score * 100).toFixed(0)}%)`}
-                        />
-                      </ListItem>
-                    );
-                  })}
-                </List>
-              </Paper>
-            )}
-          </Stack>
-        )}
-
-        {/* STEP 4: TERMS MATRIX */}
-        {activeStep === 3 && (
-          <Stack spacing={3}>
-            <Typography variant="h6">Step 4: Terms Matrix & Aggregations</Typography>
-            <Box sx={{ height: 400, width: '100%' }}>
-              <DataGrid
-                rows={state.termsMatrix}
-                columns={matrixColumns}
-                getRowId={(row) => row.semantic_term_node_id}
-                pageSizeOptions={[5, 10, 20]}
-                disableRowSelectionOnClick
-              />
-            </Box>
-
-            {submitError && (
-              <Alert severity="error" sx={{ mt: 2 }}>{submitError}</Alert>
-            )}
-          </Stack>
-        )}
-
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 4 }}>
+      <Paper sx={{ p: 4, borderRadius: 3, boxShadow: '0 8px 30px rgba(0,0,0,0.12)', bgcolor: 'background.paper' }}>
+        <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 4 }}>
+          <Typography variant="h4" component="h1" sx={{ fontWeight: 800 }}>
+            Business Object Studio
+          </Typography>
           <Button
-            disabled={activeStep === 0}
-            onClick={handleBack}
-            startIcon={<BeforeIcon />}
-            variant="text"
+            variant="contained"
+            color="success"
+            startIcon={isSaving ? <CircularProgress size={20} color="inherit" /> : <SaveIcon />}
+            onClick={handleSave}
+            disabled={isSaving || validationSummary.errors.length > 0}
+            sx={{ px: 4, py: 1.5, borderRadius: 2, fontWeight: 'bold' }}
           >
-            Back
+            Publish Business Object
           </Button>
+        </Stack>
 
-          {activeStep === steps.length - 1 ? (
-            <Button
-              variant="contained"
-              onClick={handleSave}
-              endIcon={<SaveIcon />}
-              color="success"
-              disabled={state.termsMatrix.length === 0}
-            >
-              Publish Business Object
-            </Button>
-          ) : (
-            <Button
-              variant="contained"
-              onClick={handleNext}
-              endIcon={<NextIcon />}
-              disabled={
-                (activeStep === 0 && (!state.name || !state.technicalKey)) ||
-                (activeStep === 1 && !state.drivingNodeId) ||
-                (activeStep === 2 && state.selectedTermIds.length === 0)
-              }
-            >
-              Next
-            </Button>
-          )}
-        </Box>
+        {submitError && (
+          <Alert severity="error" sx={{ mb: 4, borderRadius: 2 }}>{submitError}</Alert>
+        )}
+
+        <Grid container spacing={4}>
+          {/* Left / Metadata Panel */}
+          <Grid size={{ xs: 12, lg: 4 }}>
+            <Card variant="outlined" sx={{ borderRadius: 2, height: '100%' }}>
+              <CardContent sx={{ p: 3 }}>
+                <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 3 }}>
+                  1. Business Object Identity
+                </Typography>
+                <Stack spacing={3}>
+                  <TextField
+                    required
+                    label="Name"
+                    value={bo.name}
+                    onChange={(e) => handleBoChange('name', e.target.value)}
+                    fullWidth
+                  />
+                  <TextField
+                    required
+                    label="Technical Key"
+                    value={bo.key}
+                    onChange={(e) => handleBoChange('key', e.target.value)}
+                    fullWidth
+                    helperText="Unique snake_case identifier"
+                  />
+                  <TextField
+                    label="Description"
+                    value={bo.description}
+                    onChange={(e) => handleBoChange('description', e.target.value)}
+                    multiline
+                    rows={3}
+                    fullWidth
+                  />
+                  <Divider sx={{ my: 1 }} />
+                  <TextField
+                    label="Level 3 Classification Node"
+                    value={bo.classificationNodeId}
+                    onChange={(e) => handleBoChange('classificationNodeId', e.target.value)}
+                    fullWidth
+                  />
+                  <TextField
+                    label="Business Key (BK)"
+                    value={bo.businessKeyNodeId}
+                    onChange={(e) => handleBoChange('businessKeyNodeId', e.target.value)}
+                    fullWidth
+                  />
+                  <TextField
+                    label="Semantic ID (SID)"
+                    value={bo.semanticIdNodeId}
+                    onChange={(e) => handleBoChange('semanticIdNodeId', e.target.value)}
+                    fullWidth
+                  />
+                </Stack>
+              </CardContent>
+            </Card>
+          </Grid>
+
+          {/* Bindings area */}
+          <Grid size={{ xs: 12, lg: 5 }}>
+            <Stack spacing={3}>
+              <Stack direction="row" justifyContent="space-between" alignItems="center">
+                <Typography variant="h6" sx={{ fontWeight: 'bold' }}>
+                  2. Physical Bindings
+                </Typography>
+                <Button variant="outlined" startIcon={<AddIcon />} onClick={addBinding}>
+                  Add Backend
+                </Button>
+              </Stack>
+
+              {bindings.map((b, idx) => (
+                <Accordion key={b.id} defaultExpanded={idx === 0} sx={{ border: '1px solid rgba(0,0,0,0.12)', borderRadius: 2 }}>
+                  <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+                    <Stack direction="row" spacing={2} alignItems="center" sx={{ width: '100%' }}>
+                      <Chip label={b.backendId.toUpperCase()} color="primary" variant="outlined" size="small" />
+                      <Typography sx={{ fontWeight: 'bold', flexGrow: 1 }}>
+                        {drivingTables.find(t => t.id === b.drivingNodeId)?.label || 'No Driving Table Anchor'}
+                      </Typography>
+                      {bindings.length > 1 && (
+                        <IconButton size="small" color="error" onClick={(e) => { e.stopPropagation(); removeBinding(b.id); }}>
+                          <DeleteIcon />
+                        </IconButton>
+                      )}
+                    </Stack>
+                  </AccordionSummary>
+                  <AccordionDetails>
+                    <Stack spacing={3}>
+                      <Grid container spacing={2}>
+                        <Grid size={{ xs: 6 }}>
+                          <FormControl fullWidth size="small">
+                            <InputLabel>Backend</InputLabel>
+                            <Select
+                              value={b.backendId}
+                              label="Backend"
+                              onChange={(e) => setBindings(prev => prev.map(item => item.id === b.id ? { ...item, backendId: e.target.value } : item))}
+                            >
+                              <MenuItem value="postgres">Postgres</MenuItem>
+                              <MenuItem value="starrocks">StarRocks</MenuItem>
+                              <MenuItem value="iceberg">Iceberg</MenuItem>
+                            </Select>
+                          </FormControl>
+                        </Grid>
+                        <Grid size={{ xs: 6 }}>
+                          <Autocomplete
+                            size="small"
+                            options={drivingTables}
+                            getOptionLabel={(option) => option.label}
+                            value={drivingTables.find(t => t.id === b.drivingNodeId) || null}
+                            onChange={(_, newValue) => handleDrivingTableChange(b.id, newValue ? newValue.id : '')}
+                            renderInput={(params) => <TextField {...params} label="Driving Table" />}
+                          />
+                        </Grid>
+                      </Grid>
+
+                      {b.loading && (
+                        <Box sx={{ display: 'flex', justifyContent: 'center', py: 2 }}>
+                          <CircularProgress size={24} />
+                        </Box>
+                      )}
+
+                      {/* Fields inside binding */}
+                      {b.fields.length > 0 && (
+                        <Box>
+                          <Typography variant="subtitle2" sx={{ fontWeight: 'bold', mb: 1.5 }}>
+                            Field Term mappings
+                          </Typography>
+                          <Stack spacing={2}>
+                            {b.fields.map(f => (
+                              <Paper key={f.termNodeId} variant="outlined" sx={{ p: 2, borderRadius: 2 }}>
+                                <Grid container spacing={2} alignItems="center">
+                                  <Grid size={{ xs: 12, sm: 4 }}>
+                                    <Typography variant="body2" sx={{ fontWeight: 'bold' }}>{f.termName}</Typography>
+                                    <Typography variant="caption" color="text.secondary">{f.fieldName}</Typography>
+                                  </Grid>
+                                  <Grid size={{ xs: 12, sm: 4 }}>
+                                    {f.availableColumns.length > 1 ? (
+                                      <FormControl fullWidth size="small">
+                                        <InputLabel>Source column (Ambiguous)</InputLabel>
+                                        <Select
+                                          value={f.sourceNodeId}
+                                          label="Source column"
+                                          onChange={(e) => updateFieldProperty(b.id, f.termNodeId, 'sourceNodeId', e.target.value)}
+                                        >
+                                          {f.availableColumns.map(col => (
+                                            <MenuItem key={col.id} value={col.id}>{col.name}</MenuItem>
+                                          ))}
+                                        </Select>
+                                      </FormControl>
+                                    ) : (
+                                      <Typography variant="body2">{f.availableColumns[0]?.name || 'Unbound'}</Typography>
+                                    )}
+                                  </Grid>
+                                  <Grid size={{ xs: 12, sm: 4 }}>
+                                    <FormControl fullWidth size="small">
+                                      <Select
+                                        value={f.bindingRequirement}
+                                        onChange={(e) => updateFieldProperty(b.id, f.termNodeId, 'bindingRequirement', e.target.value)}
+                                      >
+                                        <MenuItem value="REQUIRED">REQUIRED</MenuItem>
+                                        <MenuItem value="OPTIONAL">OPTIONAL</MenuItem>
+                                        <MenuItem value="BACKEND_SPECIFIC">BACKEND_SPECIFIC</MenuItem>
+                                        <MenuItem value="CALCULATED">CALCULATED</MenuItem>
+                                      </Select>
+                                    </FormControl>
+                                  </Grid>
+                                </Grid>
+                              </Paper>
+                            ))}
+                          </Stack>
+                        </Box>
+                      )}
+
+                      {/* Relationships */}
+                      <Box>
+                        <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 1 }}>
+                          <Typography variant="subtitle2" sx={{ fontWeight: 'bold' }}>
+                            Relationships
+                          </Typography>
+                          <Button size="small" startIcon={<AddIcon />} onClick={() => addRelationship(b.id)}>
+                            Add Link
+                          </Button>
+                        </Stack>
+                        <Stack spacing={2}>
+                          {b.relationships.map((r, rIdx) => (
+                            <Paper key={rIdx} variant="outlined" sx={{ p: 2, borderRadius: 2 }}>
+                              <Grid container spacing={2} alignItems="center">
+                                <Grid size={{ xs: 12, sm: 4 }}>
+                                  <FormControl fullWidth size="small">
+                                    <InputLabel>Related BO</InputLabel>
+                                    <Select
+                                      value={r.toBoId}
+                                      label="Related BO"
+                                      onChange={(e) => updateRelationship(b.id, rIdx, 'toBoId', e.target.value)}
+                                    >
+                                      {businessObjectsList.map(item => (
+                                        <MenuItem key={item.id} value={item.id}>{item.name}</MenuItem>
+                                      ))}
+                                    </Select>
+                                  </FormControl>
+                                </Grid>
+                                <Grid size={{ xs: 6, sm: 4 }}>
+                                  <TextField
+                                    size="small"
+                                    label="Join Condition SQL"
+                                    value={r.joinConditionSql}
+                                    placeholder="e.g. public.customers.id = public.orders.customer_id"
+                                    onChange={(e) => updateRelationship(b.id, rIdx, 'joinConditionSql', e.target.value)}
+                                    fullWidth
+                                  />
+                                </Grid>
+                                <Grid size={{ xs: 6, sm: 3 }}>
+                                  <FormControl fullWidth size="small">
+                                    <Select
+                                      value={r.cardinality}
+                                      onChange={(e) => updateRelationship(b.id, rIdx, 'cardinality', e.target.value)}
+                                    >
+                                      <MenuItem value="1:M">1:M (One-to-Many)</MenuItem>
+                                      <MenuItem value="M:1">M:1 (Many-to-One)</MenuItem>
+                                      <MenuItem value="1:1">1:1 (One-to-One)</MenuItem>
+                                    </Select>
+                                  </FormControl>
+                                </Grid>
+                                <Grid size={{ xs: 12, sm: 1 }}>
+                                  <IconButton size="small" color="error" onClick={() => removeRelationship(b.id, rIdx)}>
+                                    <DeleteIcon />
+                                  </IconButton>
+                                </Grid>
+                              </Grid>
+                            </Paper>
+                          ))}
+                        </Stack>
+                      </Box>
+                    </Stack>
+                  </AccordionDetails>
+                </Accordion>
+              ))}
+            </Stack>
+          </Grid>
+
+          {/* Validation summary right panel */}
+          <Grid size={{ xs: 12, lg: 3 }}>
+            <Card variant="outlined" sx={{ borderRadius: 2, height: '100%', bgcolor: 'rgba(0,0,0,0.02)' }}>
+              <CardContent sx={{ p: 3 }}>
+                <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 3 }}>
+                  3. Publish Readiness
+                </Typography>
+                {validationSummary.errors.length > 0 ? (
+                  <Stack spacing={2} sx={{ mb: 3 }}>
+                    <Alert severity="error" icon={<ErrorIcon />} sx={{ borderRadius: 2 }}>
+                      <Typography variant="body2" sx={{ fontWeight: 'bold' }}>Coverage checks failed</Typography>
+                      All REQUIRED fields must be bound in all backends before publishing.
+                    </Alert>
+                    <List dense>
+                      {validationSummary.errors.map((err, i) => (
+                        <ListItem key={i} sx={{ px: 0 }}>
+                          <ListItemText primary={err} primaryTypographyProps={{ variant: 'caption', color: 'error.main' }} />
+                        </ListItem>
+                      ))}
+                    </List>
+                  </Stack>
+                ) : (
+                  <Alert severity="success" icon={<CheckCircleIcon />} sx={{ mb: 3, borderRadius: 2 }}>
+                    Ready to publish! All schema checks passed.
+                  </Alert>
+                )}
+
+                <Divider sx={{ my: 2 }} />
+
+                <Typography variant="subtitle2" sx={{ fontWeight: 'bold', mb: 1.5 }}>
+                  Coverage Resolved
+                </Typography>
+                <List dense>
+                  {validationSummary.successes.map((suc, i) => (
+                    <ListItem key={i} sx={{ px: 0 }}>
+                      <ListItemText primary={suc} primaryTypographyProps={{ variant: 'caption', color: 'success.main' }} />
+                    </ListItem>
+                  ))}
+                </List>
+              </CardContent>
+            </Card>
+          </Grid>
+        </Grid>
       </Paper>
     </Container>
   );

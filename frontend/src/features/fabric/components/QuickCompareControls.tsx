@@ -4,36 +4,28 @@ import { LocalizationProvider, DatePicker } from '@mui/x-date-pickers';
 import PushPinIcon from '@mui/icons-material/PushPin';
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
 import { useDrillDown, FilterState } from '../../../contexts/DrillDownContext';
-import { gql, useQuery } from '@apollo/client';
 import { format } from 'date-fns';
-
-// Query to get all policies for the dropdown
-const GET_POLICIES_FOR_SELECT = gql`
-  query GetPoliciesForSelect {
-    policy_rules(order_by: { name: asc }) {
-      id
-      name
-    }
-  }
-`;
-
-// Query to get versions for a specific policy
-const GET_POLICY_VERSIONS_FOR_SELECT = gql`
-  query GetPolicyVersionsForSelect($policyId: String!) {
-    policy_version_history(where: { policy_id: { _eq: $policyId } }, order_by: { version: desc }) {
-      version
-    }
-  }
-`;
+import { useQuery } from '@tanstack/react-query';
+import { apiFetch } from '../../../../lib/apiClient';
 
 const PolicySelect: React.FC<{ value: string; onChange: (value: string) => void }> = ({ value, onChange }) => {
-  const { data, loading } = useQuery(GET_POLICIES_FOR_SELECT);
+  const { data, isLoading } = useQuery({
+    queryKey: ['policies-for-select'],
+    queryFn: async () => {
+      const res = await apiFetch('/api/rest/policies?order_by=name:asc');
+      if (!res.ok) {
+        throw new Error(await res.text());
+      }
+      return res.json();
+    },
+  });
+
   return (
     <FormControl size="small" sx={{ m: 1, minWidth: 200 }}>
       <InputLabel>Policy</InputLabel>
       <Select value={value} label="Policy" onChange={(e) => onChange(e.target.value)}>
-        {loading && <MenuItem disabled><CircularProgress size={20} /></MenuItem>}
-        {data?.policy_rules.map((p: any) => (
+        {isLoading && <MenuItem disabled><CircularProgress size={20} /></MenuItem>}
+        {data?.map((p: any) => (
           <MenuItem key={p.id} value={p.id}>{p.name}</MenuItem>
         ))}
       </Select>
@@ -42,13 +34,24 @@ const PolicySelect: React.FC<{ value: string; onChange: (value: string) => void 
 };
 
 const VersionSelect: React.FC<{ label: string; policyId: string; value: number; onChange: (value: number) => void }> = ({ label, policyId, value, onChange }) => {
-  const { data, loading } = useQuery(GET_POLICY_VERSIONS_FOR_SELECT, { variables: { policyId }, skip: !policyId });
+  const { data, isLoading } = useQuery({
+    queryKey: ['policy-versions-for-select', policyId],
+    queryFn: async () => {
+      const res = await apiFetch(`/api/rest/policy-version-history?policy_id=${encodeURIComponent(policyId)}&order_by=version:desc`);
+      if (!res.ok) {
+        throw new Error(await res.text());
+      }
+      return res.json();
+    },
+    enabled: !!policyId,
+  });
+
   return (
     <FormControl size="small" sx={{ m: 1, minWidth: 120 }}>
       <InputLabel>{label}</InputLabel>
       <Select value={value || ''} label={label} onChange={(e) => onChange(Number(e.target.value))}>
-        {loading && <MenuItem disabled><CircularProgress size={20} /></MenuItem>}
-        {data?.policy_version_history.map((v: any) => (
+        {isLoading && <MenuItem disabled><CircularProgress size={20} /></MenuItem>}
+        {data?.map((v: any) => (
           <MenuItem key={v.version} value={v.version}>v{v.version}</MenuItem>
         ))}
       </Select>
@@ -75,7 +78,7 @@ const QuickCompareControls: React.FC<{ onPin: (filters: FilterState) => void }> 
   const handleFilterChange = (key: keyof FilterState, value: any) => {
     setLocalFilters(prev => prev ? { ...prev, [key]: value } : null);
   };
-  
+
   const handleDateChange = (key: 'from' | 'to', value: any) => {
     const date: Date | null = value instanceof Date ? value : (value?.toDate ? value.toDate() : null);
     if (date) {
@@ -99,7 +102,7 @@ const QuickCompareControls: React.FC<{ onPin: (filters: FilterState) => void }> 
           <VersionSelect label="Version B" policyId={localFilters.policyId} value={localFilters.versionB!} onChange={(v) => handleFilterChange('versionB', v)} />
         </>
       )}
-      
+
       {(context === 'historical' || context === 'policy_compare') && localFilters.dateRange && (
         <LocalizationProvider dateAdapter={AdapterDateFns}>
             <DatePicker

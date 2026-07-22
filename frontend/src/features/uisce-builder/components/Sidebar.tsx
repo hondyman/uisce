@@ -146,7 +146,9 @@ const Sidebar: React.FC<SidebarProps> = ({ categories = defaultFilterCategories 
     setLoadingTerms(true);
     try {
       const response = await axios.get('/api/semantic-terms');
-      setSemanticTerms(response.data || []);
+      const data = response.data;
+      const termList = Array.isArray(data) ? data : (data && typeof data === 'object' ? Object.values(data) : []);
+      setSemanticTerms(termList as SemanticTerm[]);
     } catch (err) {
       // Mock data if API not available
       setSemanticTerms([

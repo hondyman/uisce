@@ -239,13 +239,26 @@ import { useQueryClient } from '@tanstack/react-query';
         await queryClient.invalidateQueries({ queryKey: glossaryKeys.semanticTerms() });
         await queryClient.invalidateQueries({ queryKey: glossaryKeys.businessTerms() });
         await queryClient.invalidateQueries({ queryKey: glossaryKeys.edges() });
+        await queryClient.invalidateQueries({ queryKey: ['business-objects'] });
+        await queryClient.invalidateQueries({ queryKey: ['business-object'] });
+        await queryClient.invalidateQueries({ queryKey: ['bo-bindings'] });
         devDebug('[BusinessGlossaryPage.handleConfirmDelete] Query cache invalidated');
-      } catch (error) {
-        setSnackbar({
-          open: true,
-          message: `Failed to delete term: ${error instanceof Error ? error.message : 'Unknown error'}`,
-          severity: 'error'
-        });
+      } catch (error: any) {
+        if (error?.code === 'BO_DEPENDENCIES_BLOCK_DELETION') {
+          const deps = error?.dependencies ?? [];
+          const boNames = [...new Set(deps.map((d: any) => d.bo_name))].join(', ');
+          setSnackbar({
+            open: true,
+            message: `Cannot delete: This term is linked to ${deps.length} BO field(s) in: ${boNames || 'unknown BOs'}. Unlink the fields first.`,
+            severity: 'warning'
+          });
+        } else {
+          setSnackbar({
+            open: true,
+            message: `Failed to delete term: ${error instanceof Error ? error.message : 'Unknown error'}`,
+            severity: 'error'
+          });
+        }
       }
     };
 

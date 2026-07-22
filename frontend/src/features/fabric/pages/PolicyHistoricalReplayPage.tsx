@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { gql, useMutation } from '@apollo/client';
+import { useMutation } from '@tanstack/react-query';
 import {
   Box,
   Typography,
@@ -18,21 +18,9 @@ import { MatrixController, MatrixElement } from 'chartjs-chart-matrix';
 import { Chart } from 'react-chartjs-2';
 import { subMonths, format } from 'date-fns';
 import { useDrillDown } from '../../../contexts/DrillDownContext';
+import { apiFetch } from '../../../lib/apiClient';
 
 ChartJS.register(MatrixController, MatrixElement, Tooltip, Legend, CategoryScale, LinearScale);
-
-const SIMULATE_HISTORICAL_REPLAY = gql`
-  mutation SimulateHistoricalReplay($fromDate: date!, $toDate: date!, $bucketSize: String!) {
-    simulate_historical_replay(from_date: $fromDate, to_date: $toDate, bucket_size: $bucketSize) {
-      policy_id
-      policy_name
-      time_bucket
-      total_runs
-      blocked_runs
-      top_violation_codes
-    }
-  }
-`;
 
 interface ReplayCell {
   policy_id: string;
@@ -43,34 +31,37 @@ interface ReplayCell {
   top_violation_codes: string[];
 }
 
-interface ReplayData {
-  simulate_historical_replay: ReplayCell[];
-}
-
 const PolicyHistoricalReplayPage: React.FC = () => {
   const [bucketSize, setBucketSize] = useState('week');
-  const [runReplay, { data, loading, error }] = useMutation<ReplayData>(SIMULATE_HISTORICAL_REPLAY);
   const { showDrillDown } = useDrillDown();
 
+  const { data, isPending: loading, error, mutate: runReplay } = useMutation({
+    mutationFn: async (vars: { fromDate: string; toDate: string; bucketSize: string }) => {
+      const res = await apiFetch('/api/rest/simulate-historical-replay', {
+        method: 'POST',
+        body: JSON.stringify({ from_date: vars.fromDate, to_date: vars.toDate, bucket_size: vars.bucketSize }),
+      });
+      if (!res.ok) throw new Error(await res.text());
+      return res.json() as Promise<ReplayCell[]>;
+    },
+  });
+
   useEffect(() => {
-    // Run on initial load
     const toDate = new Date();
     const fromDate = subMonths(toDate, 3);
     runReplay({
-      variables: {
-        fromDate: format(fromDate, 'yyyy-MM-dd'),
-        toDate: format(toDate, 'yyyy-MM-dd'),
-        bucketSize,
-      },
+      fromDate: format(fromDate, 'yyyy-MM-dd'),
+      toDate: format(toDate, 'yyyy-MM-dd'),
+      bucketSize,
     });
-  }, [runReplay, bucketSize]);
+  }, [bucketSize]);
   
   const chartConfig = useMemo(() => {
-    if (!data?.simulate_historical_replay) {
+    if (!data) {
       return null;
     }
 
-    const replayData = data.simulate_historical_replay;
+    const replayData = data;
     const policies: string[] = [...new Set(replayData.map((r) => r.policy_name))].sort();
     const buckets: string[] = [...new Set(replayData.map((r) => r.time_bucket))].sort();
 
@@ -200,7 +191,7 @@ const PolicyHistoricalReplayPage: React.FC = () => {
             <Typography sx={{ ml: 2 }}>Running Historical Replay...</Typography>
           </Box>
         )}
-        {error && <Alert severity="error">Failed to run replay: {error.message}</Alert>}
+        {error && <Alert severity="error">Failed to run replay: {error?.message}</Alert>}
         {chartConfig && (
           <Chart type={"matrix" as any} data={chartConfig.chartData} options={chartConfig.options} />
         )}

@@ -12,17 +12,10 @@ import {
   Stack,
   Box,
 } from '@mui/material';
-import { useMutation } from '@apollo/client';
+import { useMutation } from '@tanstack/react-query';
+import { apiFetch } from '../lib/apiClient';
 import { Zap, Clock, Bell } from 'lucide-react';
 import { useForm, Controller } from 'react-hook-form';
-
-const INSERT_TRIGGER = /* GraphQL */ `
-  mutation InsertBPTrigger($object: bp_triggers_insert_input!) {
-    insert_bp_triggers_one(object: $object) {
-      id
-    }
-  }
-`;
 
 const BPTriggerBuilder: React.FC<{ processId: string }> = ({ processId }) => {
   const { control, handleSubmit } = useForm({
@@ -36,7 +29,14 @@ const BPTriggerBuilder: React.FC<{ processId: string }> = ({ processId }) => {
     },
   });
   const [triggerType, setTriggerType] = useState<string>('event');
-  const [insertTrigger] = useMutation(INSERT_TRIGGER as any);
+
+  const insertTrigger = useMutation({
+    mutationFn: (object: any) =>
+      apiFetch('/api/rest/bp-triggers', {
+        method: 'POST',
+        body: JSON.stringify(object),
+      }),
+  });
 
   const handleSave = async (values: any) => {
     const object: any = {
@@ -50,7 +50,7 @@ const BPTriggerBuilder: React.FC<{ processId: string }> = ({ processId }) => {
       object.event_config = { entity: values.entity, action: values.action };
     }
 
-    await insertTrigger({ variables: { object } });
+    await insertTrigger.mutateAsync(object);
   };
 
   const triggerTypeOptions = [

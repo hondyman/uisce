@@ -1,22 +1,22 @@
 // src/hooks/useUnifiedSemanticBuilder.tsx
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { useQuery } from '@apollo/client';
+import { useQuery } from '@tanstack/react-query';
 import { Node as FlowNode } from 'reactflow';
-import { GET_ALL_BUSINESS_DATA } from '../graphql/queries/datasourceQueries.ts';
-import { 
-  ColumnMapping, 
-  SemanticElement, 
-  SemanticModel, 
-  BusinessTerm, 
-  CollapsedTables as _CollapsedTables, 
-  ShowCode, 
+import {
+  ColumnMapping,
+  SemanticElement,
+  SemanticModel,
+  BusinessTerm,
+  CollapsedTables as _CollapsedTables,
+  ShowCode,
   SelectedColumn,
-  SemanticTerm as SemanticTermType, // Rename import to avoid conflict
+  SemanticTerm as SemanticTermType,
   SemanticView,
   BusinessEdge
 } from './../components/UnifiedSemanticBuilder/types.ts';
 import { devLog } from '../utils/devLogger';
 import { useAuthFetch } from '../utils/authFetch';
+import { apiFetch } from '../lib/apiClient';
 
 const resolveApiBase = () => {
   const raw = (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? '';
@@ -229,8 +229,13 @@ export const useUnifiedSemanticBuilder = (datasourceId: string) => {
   }, [datasourceId, apiBase]);
 
   // Query for business terms data
-  const { loading: businessLoading, error: businessError, data: businessData } = useQuery(GET_ALL_BUSINESS_DATA, {
-    variables: { datasourceId },
+  const { isLoading: businessLoading, error: businessError, data: businessData } = useQuery({
+    queryKey: ['business-data', datasourceId],
+    queryFn: async () => {
+      const response = await apiFetch(`/api/catalog/business-data?datasourceId=${encodeURIComponent(datasourceId)}`);
+      return response.json();
+    },
+    enabled: !!datasourceId,
   });
 
   // Process business data
@@ -248,7 +253,7 @@ export const useUnifiedSemanticBuilder = (datasourceId: string) => {
 
         business_edges.forEach((edge: BusinessEdge) => {
           if (edge.relationship_type === 'SemanticViewToColumn') {
-            const semanticViewId = edge.source_node_id;
+            const semanticViewId = edge.target_node_id;
 
             const semanticToViewEdge = (business_edges as BusinessEdge[]).find(
               (e: BusinessEdge) => e.target_node_id === semanticViewId && e.relationship_type === 'SemanticToView'

@@ -1,23 +1,29 @@
 import React, { useState } from 'react';
-import { useMutation } from '@apollo/client';
-import { UPLOAD_DOCUMENT } from '../../graphql/ragQueries';
+import { useMutation } from '@tanstack/react-query';
+import { apiFetch } from '../../lib/apiClient';
 
 export const DocumentUpload: React.FC = () => {
   const [filePath, setFilePath] = useState('');
   const [title, setTitle] = useState('');
   const [status, setStatus] = useState<string | null>(null);
-  
-  const [uploadDocument, { loading, error }] = useMutation(UPLOAD_DOCUMENT);
+
+  const uploadDocument = useMutation({
+    mutationFn: async ({ filePath, title }: { filePath: string; title: string }) => {
+      const res = await apiFetch('/api/rag/upload', {
+        method: 'POST',
+        body: JSON.stringify({ filePath, title }),
+      });
+      return res.json();
+    },
+  });
 
   const handleUpload = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!filePath.trim() || !title.trim()) return;
 
     try {
-      const { data } = await uploadDocument({
-        variables: { filePath, title },
-      });
-      setStatus(`Upload successful! Job ID: ${data.uploadDocument.document_id}`);
+      const data = await uploadDocument.mutateAsync({ filePath, title });
+      setStatus(`Upload successful! Job ID: ${data.document_id}`);
       setFilePath('');
       setTitle('');
     } catch (err) {
@@ -62,10 +68,10 @@ export const DocumentUpload: React.FC = () => {
 
         <button
           type="submit"
-          disabled={loading}
+          disabled={uploadDocument.isPending}
           className="w-full py-2 px-4 bg-green-600 text-white font-medium rounded-md hover:bg-green-700 disabled:opacity-50 transition-colors"
         >
-          {loading ? 'Processing...' : 'Start Ingestion'}
+          {uploadDocument.isPending ? 'Processing...' : 'Start Ingestion'}
         </button>
       </form>
 
@@ -74,10 +80,10 @@ export const DocumentUpload: React.FC = () => {
           {status}
         </div>
       )}
-      
-      {error && (
+
+      {uploadDocument.error && (
         <div className="mt-4 p-3 bg-red-50 text-red-700 rounded-md text-sm">
-          Error: {error.message}
+          Error: {uploadDocument.error.message}
         </div>
       )}
     </div>

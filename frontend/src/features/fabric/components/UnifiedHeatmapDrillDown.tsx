@@ -18,56 +18,14 @@ import {
   Chip,
 } from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
-import { gql, useQuery } from '@apollo/client';
 import { format } from 'date-fns';
 import { useDrillDown, FilterState } from '../../../contexts/DrillDownContext';
 import DrillDownFilters from './DrillDownFilters';
 import QuickCompareControls from './QuickCompareControls';
 import PinnedTabsBar, { TabState } from './PinnedTabsBar';
 import DiffRunsTable from './DiffRunsTable';
-
-const GET_HEATMAP_CELL_DETAIL = gql`
-  query GetHeatmapCellDetail($context: String!, $filters: jsonb!) {
-    heatmap_cell_detail(context: $context, filters: $filters) {
-      run_id
-      change_id
-      timestamp
-      decision_a
-      decision_b
-      violations_added {
-        rule_id
-        severity
-        message
-      }
-      violations_removed {
-        rule_id
-        severity
-        message
-      }
-    }
-  }
-`;
-
-// --- Manual TypeScript types for the heatmap cell detail query (small, defensive subset)
-interface HeatmapViolation {
-  rule_id: string;
-  severity: string;
-  message: string;
-}
-
-interface HeatmapCellRun {
-  run_id: string;
-  change_id?: string | null;
-  timestamp?: string | number | null;
-  decision_a?: string | null;
-  decision_b?: string | null;
-  violations_added?: HeatmapViolation[] | null;
-  violations_removed?: HeatmapViolation[] | null;
-}
-
-type GetHeatmapCellDetailResult = {
-  heatmap_cell_detail: HeatmapCellRun[];
-};
+import { useQuery } from '@tanstack/react-query';
+import { apiFetch } from '../../../../lib/apiClient';
 
 interface UnifiedDrillDownDrawerProps {
   open: boolean;
@@ -164,7 +122,6 @@ const UnifiedHeatmapDrillDown: React.FC<UnifiedDrillDownDrawerProps> = ({ open, 
 
   const activeTab = tabs.find((t) => t.id === activeTabId);
 
-  // Initialize or reset tabs when the drawer is opened
   useEffect(() => {
     if (open && context && filters) {
       const initialTab: TabState = {
@@ -183,26 +140,32 @@ const UnifiedHeatmapDrillDown: React.FC<UnifiedDrillDownDrawerProps> = ({ open, 
     }
   }, [open, context, filters]);
 
-  // Data fetching for the active tab (typed result)
-  const { loading, error, data: fetchedData } = useQuery<GetHeatmapCellDetailResult, { context: string; filters: any }>(GET_HEATMAP_CELL_DETAIL, {
-    variables: activeTab ? { context: activeTab.context, filters: activeTab.filters } : undefined,
-    skip: !activeTab || !activeTab.isLoading,
+  const { isLoading, error, data: fetchedData } = useQuery({
+    queryKey: ['heatmap-cell-detail', activeTab?.context, activeTab?.filters],
+    queryFn: async () => {
+      if (!activeTab) return null;
+      const params = new URLSearchParams({
+        context: activeTab.context,
+        filters: JSON.stringify(activeTab.filters),
+      });
+      const res = await apiFetch(`/api/rest/heatmap-cell-detail?${params}`);
+      if (!res.ok) {
+        throw new Error(await res.text());
+      }
+      return res.json();
+    },
+    enabled: !!activeTab && activeTab.isLoading,
   });
 
-  // When the query returns, update local tabs state. Using useEffect avoids setting
-  // local React state from within the `onCompleted` callback of Apollo, which can
-  // cause subtle ordering issues and is discouraged by Apollo.
   useEffect(() => {
     if (!fetchedData) return;
 
-    const runs = fetchedData.heatmap_cell_detail || [];
+    const runs = fetchedData || [];
 
-    // Quick debug: log any runs that are missing expected fields so we can spot backend issues
-    const problematic = runs.filter(r => !r || !r.change_id || !r.timestamp || !Array.isArray(r.violations_added) || !Array.isArray(r.violations_removed));
+    const problematic = runs.filter((r: any) => !r || !r.change_id || !r.timestamp || !Array.isArray(r.violations_added) || !Array.isArray(r.violations_removed));
     if (problematic.length > 0) {
       devDebug('UnifiedHeatmapDrillDown: runs with missing/invalid fields detected', problematic);
-      // Lightweight: only log the full raw response when we detected problematic entries
-      devDebug('UnifiedHeatmapDrillDown: full GraphQL response (only shown when problems detected)', fetchedData);
+      devDebug('UnifiedHeatmapDrillDown: full response (only shown when problems detected)', fetchedData);
     }
 
     setTabs((prevTabs) =>
@@ -224,7 +187,7 @@ const UnifiedHeatmapDrillDown: React.FC<UnifiedDrillDownDrawerProps> = ({ open, 
     };
     setTabs([...tabs, newTab]);
     setActiveTabId(newId);
-    setFilters(pinnedFilters); // Update global context to trigger fetch
+    setFilters(pinnedFilters);
   };
 
   const handleCloseTab = (tabId: string) => {
@@ -236,7 +199,6 @@ const UnifiedHeatmapDrillDown: React.FC<UnifiedDrillDownDrawerProps> = ({ open, 
   };
 
   const handleStartDiff = () => {
-    // Simple diff: compare first two tabs. A real implementation would have a picker.
     if (tabs.length >= 2) {
       setDiffMode({ tabAId: tabs[0].id, tabBId: tabs[1].id });
     }
@@ -244,7 +206,7 @@ const UnifiedHeatmapDrillDown: React.FC<UnifiedDrillDownDrawerProps> = ({ open, 
 
   const title = activeTab?.label || 'Drill Down';
   const currentData = diffMode ? null : activeTab?.data;
-  const isLoading = loading || (activeTab?.isLoading && !activeTab?.data);
+  const isLoadingTab = isLoading || (activeTab?.isLoading && !activeTab?.data);
 
   return (
     <Drawer anchor="right" open={open} onClose={onClose}>
@@ -262,8 +224,8 @@ const UnifiedHeatmapDrillDown: React.FC<UnifiedDrillDownDrawerProps> = ({ open, 
 
         <DrillDownFilters context={context} />
 
-        {isLoading && <CircularProgress />}
-        {error && <Alert severity="error">Failed to load details: {error.message}</Alert>}
+        {isLoadingTab && <CircularProgress />}
+        {error && <Alert severity="error">Failed to load details: {(error as Error).message}</Alert>}
 
         {diffMode && (
           <DiffRunsTable

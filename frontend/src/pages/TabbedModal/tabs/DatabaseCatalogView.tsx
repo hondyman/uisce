@@ -72,7 +72,7 @@ const DatabaseCatalogView: React.FC<DatabaseCatalogViewProps> = ({
         <div className="catalog-layout">
           <div className="catalog-sidebar">
             <div className="catalog-section-header">
-              <h3>Database Assets ({nodes.length})</h3>
+              <h3>Technical Assets ({nodes.length})</h3>
               <Button
                 variant="outlined"
                 size="small"

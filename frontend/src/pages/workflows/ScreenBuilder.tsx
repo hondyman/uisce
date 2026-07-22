@@ -6,72 +6,11 @@ import {
   useDroppable,
   useDraggable,
 } from '@dnd-kit/core';
-import { useMutation, useQuery as _useQuery, gql } from '@apollo/client';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { apiFetch } from '../../lib/apiClient';
 import './ScreenBuilder.css';
 import { devError } from '../../utils/devLogger';
 import ActionButton from '../../components/ui/ActionButton';
-
-// ============================================================================
-// GRAPHQL OPERATIONS
-// ============================================================================
-
-const CREATE_SCREEN = gql`
-  mutation CreateScreen(
-    $tenantId: uuid!
-    $boType: String!
-    $screenName: String!
-    $screenType: String!
-    $fields: jsonb!
-    $filters: jsonb!
-    $actions: jsonb!
-    $permissions: jsonb!
-  ) {
-    insert_screen_configs_one(
-      object: {
-        tenant_id: $tenantId
-        bo_type: $boType
-        screen_name: $screenName
-        screen_type: $screenType
-        layout_json: $fields
-        filters_json: $filters
-        actions_json: $actions
-        permissions_json: $permissions
-        is_published: false
-        created_by: "user-id"
-      }
-    ) {
-      id
-      screen_name
-      created_at
-    }
-  }
-`;
-
-const UPDATE_SCREEN = gql`
-  mutation UpdateScreen(
-    $tenantId: uuid!
-    $screenId: uuid!
-    $fields: jsonb!
-  ) {
-    update_screen_configs(
-      where: { id: { _eq: $screenId } }
-      _set: { layout_json: $fields }
-    ) {
-      affected_rows
-    }
-  }
-`;
-
-const PUBLISH_SCREEN = gql`
-  mutation PublishScreen($screenId: uuid!) {
-    update_screen_configs(
-      where: { id: { _eq: $screenId } }
-      _set: { is_published: true }
-    ) {
-      affected_rows
-    }
-  }
-`;
 
 // ============================================================================
 // TYPES
@@ -211,9 +150,60 @@ export const ScreenBuilder: React.FC<ScreenBuilderProps> = ({
   const [actions, setActions] = useState<string[]>(['save', 'delete', 'cancel']);
   const [nextOrder, setNextOrder] = useState(1);
 
-  const [createScreen] = useMutation(CREATE_SCREEN);
-  const [_updateScreen] = useMutation(UPDATE_SCREEN);
-  const [_publishScreen] = useMutation(PUBLISH_SCREEN);
+  const queryClient = useQueryClient();
+
+  const createScreen = useMutation({
+    mutationFn: async (input: {
+      tenantId: string;
+      boType: string;
+      screenName: string;
+      screenType: string;
+      fields: any[];
+      filters: any[];
+      actions: string[];
+      permissions: any;
+    }) => {
+      const response = await apiFetch('/api/screen-configs', {
+        method: 'POST',
+        body: JSON.stringify({
+          tenant_id: input.tenantId,
+          bo_type: input.boType,
+          screen_name: input.screenName,
+          screen_type: input.screenType,
+          layout_json: input.fields,
+          filters_json: input.filters,
+          actions_json: input.actions,
+          permissions_json: input.permissions,
+          is_published: false,
+          created_by: 'user-id',
+        }),
+      });
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['screens'] });
+    },
+  });
+
+  const [_updateScreen] = useMutation({
+    mutationFn: async (input: { tenantId: string; screenId: string; fields: any[] }) => {
+      const response = await apiFetch(`/api/screen-configs/${input.screenId}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ layout_json: input.fields }),
+      });
+      return response.json();
+    },
+  });
+
+  const [_publishScreen] = useMutation({
+    mutationFn: async (screenId: string) => {
+      const response = await apiFetch(`/api/screen-configs/${screenId}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ is_published: true }),
+      });
+      return response.json();
+    },
+  });
 
   // Available fields for drag-drop
   const availableFields: DraggableFieldProps[] = [
@@ -264,41 +254,38 @@ export const ScreenBuilder: React.FC<ScreenBuilderProps> = ({
     }
 
     try {
-      const result = await createScreen({
-        variables: {
-          tenantId,
-          boType,
-          screenName,
-          screenType,
-          fields: fields.map((f) => ({
-            field: f.field,
-            label: f.label,
-            type: f.type,
-            order: f.order,
-            required: f.required,
-            searchable: f.searchable,
-            editable: f.editable,
-          })),
-          filters: filterFields.map((f) => ({
-            field: f.field,
-            label: f.label,
-            type: f.type,
-            order: f.order,
-          })),
-          actions,
-          permissions: {
-            admin: ['save', 'delete', 'view'],
-            user: ['view', 'save'],
-          },
+      const result = await createScreen.mutateAsync({
+        tenantId,
+        boType,
+        screenName,
+        screenType,
+        fields: fields.map((f) => ({
+          field: f.field,
+          label: f.label,
+          type: f.type,
+          order: f.order,
+          required: f.required,
+          searchable: f.searchable,
+          editable: f.editable,
+        })),
+        filters: filterFields.map((f) => ({
+          field: f.field,
+          label: f.label,
+          type: f.type,
+          order: f.order,
+        })),
+        actions,
+        permissions: {
+          admin: ['save', 'delete', 'view'],
+          user: ['view', 'save'],
         },
       });
 
-      if (result.data?.insert_screen_configs_one?.id) {
+      if (result?.id) {
         notification.success(`Screen "${screenName}" created successfully!`);
         if (onScreenCreated) {
-          onScreenCreated(result.data.insert_screen_configs_one.id);
+          onScreenCreated(result.id);
         }
-        // Reset form
         setScreenName('');
         setFields([]);
         setFilterFields([]);

@@ -1,5 +1,4 @@
 import React, { useState, Suspense } from 'react';
-import { gql, useQuery, useMutation } from '@apollo/client';
 import { Link as RouterLink } from 'react-router-dom';
 import {
   Box,
@@ -22,48 +21,11 @@ import {
 import LazySyntaxHighlighter from '../../../components/LazySyntaxHighlighter';
 import yaml from 'js-yaml';
 import { format } from 'date-fns';
-
-const GET_POLICY_DETAIL = gql`
-  query GetPolicyDetail($id: uuid!) {
-    policy_rules_by_pk(id: $id) {
-      id
-      name
-      description
-      is_active
-      spec
-      versions(order_by: { version: desc }, limit: 1) {
-        version
-        author
-        created_at
-      }
-    }
-  }
-`;
-
-const SET_POLICY_ACTIVE = gql`
-  mutation SetPolicyActive($id: uuid!, $isActive: Boolean!) {
-    update_policy_rules_by_pk(pk_columns: { id: $id }, _set: { is_active: $isActive }) {
-      id
-      is_active
-    }
-  }
-`;
-
-const GET_POLICY_VERSIONS = gql`
-  query GetPolicyVersions($policyId: uuid!) {
-    policy_version_history(where: { policy_id: { _eq: $policyId } }, order_by: { version: desc }) {
-      id
-      version
-      author
-      created_at
-      change_summary
-    }
-  }
-`;
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { apiFetch } from '../../../../lib/apiClient';
 
 const PolicyOverviewTab: React.FC<{ policy: any }> = ({ policy }) => {
   const latestVersion = policy.versions?.[0];
-  // Mock data for stats as per the design
   const usageStats = {
     evaluations: 12345,
     blockRate: 0.05,
@@ -94,7 +56,7 @@ const PolicyOverviewTab: React.FC<{ policy: any }> = ({ policy }) => {
               <Typography variant="h5">{(usageStats.blockRate * 100).toFixed(1)}%</Typography>
               <Typography color="text.secondary">Block Rate</Typography>
             </Grid>
-            <Grid item xs={4}>
+            <Grid size={4}>
               <Typography color="text.secondary">Top Violations</Typography>
               <Box>
                 {usageStats.topCodes.map(code => <Chip key={code} label={code} size="small" sx={{ mr: 0.5 }} />)}
@@ -117,15 +79,25 @@ const PolicyOverviewTab: React.FC<{ policy: any }> = ({ policy }) => {
 };
 
 const PolicyVersionHistoryTab: React.FC<{ policyId: string }> = ({ policyId }) => {
-  const { data, loading, error } = useQuery(GET_POLICY_VERSIONS, { variables: { policyId } });
+  const { data, isLoading, error } = useQuery({
+    queryKey: ['policy-versions', policyId],
+    queryFn: async () => {
+      const res = await apiFetch(`/api/rest/policy-version-history?policy_id=${encodeURIComponent(policyId)}`);
+      if (!res.ok) {
+        throw new Error(await res.text());
+      }
+      return res.json();
+    },
+    enabled: !!policyId,
+  });
 
-  if (loading) return <CircularProgress />;
-  if (error) return <Alert severity="error">Failed to load version history: {error.message}</Alert>;
+  if (isLoading) return <CircularProgress />;
+  if (error) return <Alert severity="error">Failed to load version history: {(error as Error).message}</Alert>;
 
   return (
     <Paper variant="outlined">
       <List dense>
-        {data?.policy_version_history.map((v: any) => (
+        {data?.map((v: any) => (
           <ListItemButton key={v.id} component={RouterLink} to={`/fabric/policies/${policyId}/history?versionB=${v.id}`}>
             <ListItemText
               primary={`v${v.version} - ${v.change_summary || 'Initial Version'}`}
@@ -157,31 +129,48 @@ interface PolicyDetailProps {
 
 const PolicyDetail: React.FC<PolicyDetailProps> = ({ policyId }) => {
   const [activeTab, setActiveTab] = useState(0);
-  const { data, loading, error } = useQuery(GET_POLICY_DETAIL, {
-    variables: { id: policyId },
+  const queryClient = useQueryClient();
+
+  const { data, isLoading, error } = useQuery({
+    queryKey: ['policy-detail', policyId],
+    queryFn: async () => {
+      const res = await apiFetch(`/api/rest/policies/${encodeURIComponent(policyId)}`);
+      if (!res.ok) {
+        throw new Error(await res.text());
+      }
+      const result = await res.json();
+      return Array.isArray(result) ? result[0] : result;
+    },
+    enabled: !!policyId,
   });
-  const [setPolicyActive, { loading: mutationLoading }] = useMutation(SET_POLICY_ACTIVE);
 
-  if (loading) return <CircularProgress />;
-  if (error) return <Alert severity="error">Failed to load policy details: {error.message}</Alert>;
+  const setPolicyActiveMutation = useMutation({
+    mutationFn: async ({ id, isActive }: { id: string; isActive: boolean }) => {
+      const res = await apiFetch(`/api/rest/policies/${encodeURIComponent(id)}`, {
+        method: 'PUT',
+        body: JSON.stringify({ is_active: isActive }),
+      });
+      if (!res.ok) {
+        throw new Error(await res.text());
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['policy-detail', policyId] });
+    },
+  });
 
-  const policy = data?.policy_rules_by_pk;
+  if (isLoading) return <CircularProgress />;
+  if (error) return <Alert severity="error">Failed to load policy details: {(error as Error).message}</Alert>;
+
+  const policy = data;
 
   if (!policy) {
     return <Alert severity="warning">Policy not found.</Alert>;
   }
 
   const handleToggleActive = (event: React.ChangeEvent<HTMLInputElement>) => {
-    setPolicyActive({
-      variables: { id: policy.id, isActive: event.target.checked },
-      optimisticResponse: {
-        update_policy_rules_by_pk: {
-          __typename: 'policy_rules',
-          id: policy.id,
-          is_active: event.target.checked,
-        },
-      },
-    });
+    setPolicyActiveMutation.mutate({ id: policy.id, isActive: event.target.checked });
   };
 
   const handleTabChange = (_event: React.SyntheticEvent, newValue: number) => {
@@ -196,7 +185,7 @@ const PolicyDetail: React.FC<PolicyDetailProps> = ({ policyId }) => {
           <Typography color="text.secondary" variant="body2" sx={{ fontFamily: 'monospace' }}>ID: {policy.id}</Typography>
         </Box>
         <FormControlLabel
-          control={<Switch checked={policy.is_active} onChange={handleToggleActive} disabled={mutationLoading} />}
+          control={<Switch checked={policy.is_active} onChange={handleToggleActive} disabled={setPolicyActiveMutation.isPending} />}
           label="Active"
         />
       </Box>

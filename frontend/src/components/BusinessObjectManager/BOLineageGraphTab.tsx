@@ -127,12 +127,16 @@ export const BOLineageGraphTab: React.FC<BOLineageGraphTabProps> = ({ boId }) =>
     // Style edges based on type
     const layoutedEdges = rawEdges.map((edge) => ({
       ...edge,
-      type: edge.type === 'uses' ? 'smoothstep' : 'default',
-      animated: edge.type === 'uses',
+      type: 'smoothstep',
+      animated: false,
+      label: edge.label || edge.type || '',
+      labelStyle: { fill: '#555', fontWeight: 600, fontSize: 10 },
+      labelBgStyle: { fill: '#fafafa', fillOpacity: 0.9 },
+      labelBgPadding: [4, 2],
+      labelBgBorderRadius: 4,
       style: {
         stroke: getEdgeColor(edge.type),
         strokeWidth: edge.type === 'relates_to' ? 3 : 2,
-        strokeDasharray: edge.type === 'joins_via' ? '5,5' : undefined,
       },
     }));
 

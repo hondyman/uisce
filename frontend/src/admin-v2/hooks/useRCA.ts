@@ -1,5 +1,4 @@
 import { useQuery } from "@tanstack/react-query";
-import { useAdminAPIClient } from "./useAdminAPI";
 
 // RCA types (matching backend)
 export interface ScoredEvent {
@@ -40,16 +39,10 @@ export interface RCAResult {
  * @returns RCA result with root cause, causality chain, and suggestions
  */
 export const useRCA = (incidentId: string) => {
-  const client = useAdminAPIClient();
-
   return useQuery({
     queryKey: ["rca", incidentId],
-    queryFn: async () => {
-      const response = await client.get<RCAResult>(
-        `/ops/incidents/${incidentId}/rca`
-      );
-      return response;
-    },
+    queryFn: () =>
+      fetch<RCAResult>(`/api/admin/ops/incidents/${incidentId}/rca`).then(res => res.json()),
     enabled: !!incidentId,
     staleTime: 1000 * 60 * 5, // 5 minutes
   });

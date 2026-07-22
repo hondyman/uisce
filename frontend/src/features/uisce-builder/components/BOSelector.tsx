@@ -46,7 +46,9 @@ const BOSelector: React.FC<BOSelectorProps> = ({ selectedBOId, onSelectBO }) => 
     try {
       setLoading(true);
       const response = await axios.get('/api/business-objects');
-      setBusinessObjects(response.data || []);
+      const data = response.data;
+      const boList = Array.isArray(data) ? data : (data && typeof data === 'object' ? Object.values(data) : []);
+      setBusinessObjects(boList as BusinessObject[]);
       setError(null);
     } catch (err: any) {
       setError('Failed to load business objects');

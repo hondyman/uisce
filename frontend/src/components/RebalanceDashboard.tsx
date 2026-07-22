@@ -1,118 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
-import { useQuery, useSubscription } from '@apollo/client';
-import gql from 'graphql-tag';
+import { useQuery } from '@tanstack/react-query';
+import { apiFetch } from '../lib/apiClient';
 import './RebalanceDashboard.css';
 import { devDebug } from '../utils/devLogger';
-
-// GraphQL Queries & Subscriptions
-const GET_PORTFOLIO_HOLDINGS = gql`
-  query GetPortfolioHoldings($portfolioId: uuid!, $tenantId: uuid!) {
-    proposed_trades(
-      where: { portfolio_id: { _eq: $portfolioId }, tenant_id: { _eq: $tenantId } }
-      order_by: { created_at: desc }
-      limit: 100
-    ) {
-      id
-      symbol
-      action
-      shares
-      price
-      unrealized_gain
-      is_tax_harvest
-      status
-      created_at
-    }
-  }
-`;
-
-const GET_ALLOCATION_MODEL = gql`
-  query GetAllocationModel($modelId: uuid!, $tenantId: uuid!) {
-    allocation_models_by_pk(id: $modelId, tenant_id: $tenantId) {
-      id
-      name
-      model_type
-      allocations
-      created_at
-    }
-  }
-`;
-
-const GET_REBALANCE_SUMMARY = gql`
-  query GetRebalanceSummary($portfolioId: uuid!, $tenantId: uuid!) {
-    v_rebalance_summary(
-      where: { portfolio_id: { _eq: $portfolioId }, tenant_id: { _eq: $tenantId } }
-      order_by: { created_at: desc }
-      limit: 1
-    ) {
-      workflow_id
-      status
-      drift_before
-      drift_after
-      tax_saved
-      trade_count
-      gross_trade_value
-      triggered_by
-      created_at
-    }
-  }
-`;
-
-const ON_PROPOSED_TRADES = gql`
-  subscription OnProposedTrades($portfolioId: uuid!, $tenantId: uuid!) {
-    proposed_trades(
-      where: { portfolio_id: { _eq: $portfolioId }, tenant_id: { _eq: $tenantId } }
-      order_by: { created_at: desc }
-    ) {
-      id
-      symbol
-      action
-      shares
-      price
-      unrealized_gain
-      is_tax_harvest
-      status
-      created_at
-    }
-  }
-`;
-
-const ON_EXECUTION_UPDATES = gql`
-  subscription OnExecutionUpdates($portfolioId: uuid!, $tenantId: uuid!) {
-    trade_execution_log(
-      where: { proposed_trade: { portfolio_id: { _eq: $portfolioId }, tenant_id: { _eq: $tenantId } } }
-      order_by: { executed_at: desc }
-    ) {
-      id
-      custodian
-      order_id
-      symbol
-      action
-      shares
-      price
-      status
-      executed_at
-    }
-  }
-`;
-
-const ON_REBALANCE_SUMMARY = gql`
-  subscription OnRebalanceSummary($portfolioId: uuid!, $tenantId: uuid!) {
-    v_rebalance_summary(
-      where: { portfolio_id: { _eq: $portfolioId }, tenant_id: { _eq: $tenantId } }
-      order_by: { created_at: desc }
-      limit: 1
-    ) {
-      workflow_id
-      status
-      drift_before
-      drift_after
-      tax_saved
-      trade_count
-      gross_trade_value
-    }
-  }
-`;
 
 interface RebalanceDashboardProps {
   portfolioId: string;
@@ -138,36 +29,46 @@ export const RebalanceDashboard: React.FC<RebalanceDashboardProps> = ({
   });
   const [selectedTrade, setSelectedTrade] = useState<any>(null);
 
-  // Portfolio holdings query
-  const { data: holdingsData } = useQuery(GET_PORTFOLIO_HOLDINGS, {
-    variables: { portfolioId, tenantId },
-    pollInterval: 5000,
+  const { data: holdingsData } = useQuery({
+    queryKey: ['proposed-trades', portfolioId, tenantId],
+    queryFn: () => apiFetch(`/api/rest/proposed-trades?portfolio_id=${portfolioId}&tenant_id=${tenantId}&order_by=created_at desc&limit=100`).then(r => r.json()),
+    enabled: !!portfolioId && !!tenantId,
+    refetchInterval: 2000,
   });
 
-  // Allocation model query
-  const { data: modelData } = useQuery(GET_ALLOCATION_MODEL, {
-    variables: { modelId, tenantId },
+  const { data: modelData } = useQuery({
+    queryKey: ['allocation-model', modelId, tenantId],
+    queryFn: () => apiFetch(`/api/rest/allocation-models/${modelId}?tenant_id=${tenantId}`).then(r => r.json()),
+    enabled: !!modelId && !!tenantId,
   });
 
-  // Rebalance summary query
-  const { data: summaryData } = useQuery(GET_REBALANCE_SUMMARY, {
-    variables: { portfolioId, tenantId },
+  const { data: summaryData } = useQuery({
+    queryKey: ['rebalance-summary', portfolioId, tenantId],
+    queryFn: () => apiFetch(`/api/rest/rebalance-summary?portfolio_id=${portfolioId}&tenant_id=${tenantId}&order_by=created_at desc&limit=1`).then(r => r.json()),
+    enabled: !!portfolioId && !!tenantId,
   });
 
-  // Real-time subscriptions
-  const { data: tradesData } = useSubscription(ON_PROPOSED_TRADES, {
-    variables: { portfolioId, tenantId },
+  const { data: tradesData } = useQuery({
+    queryKey: ['proposed-trades-realtime', portfolioId, tenantId],
+    queryFn: () => apiFetch(`/api/rest/proposed-trades?portfolio_id=${portfolioId}&tenant_id=${tenantId}&order_by=created_at desc`).then(r => r.json()),
+    enabled: !!portfolioId && !!tenantId,
+    refetchInterval: 2000,
   });
 
-  const { data: executionData } = useSubscription(ON_EXECUTION_UPDATES, {
-    variables: { portfolioId, tenantId },
+  const { data: executionData } = useQuery({
+    queryKey: ['execution-updates', portfolioId, tenantId],
+    queryFn: () => apiFetch(`/api/rest/trade-execution-log?portfolio_id=${portfolioId}&tenant_id=${tenantId}&order_by=executed_at desc`).then(r => r.json()),
+    enabled: !!portfolioId && !!tenantId,
+    refetchInterval: 2000,
   });
 
-  const { data: summarySubscription } = useSubscription(ON_REBALANCE_SUMMARY, {
-    variables: { portfolioId, tenantId },
+  const { data: summarySubscription } = useQuery({
+    queryKey: ['rebalance-summary-realtime', portfolioId, tenantId],
+    queryFn: () => apiFetch(`/api/rest/rebalance-summary?portfolio_id=${portfolioId}&tenant_id=${tenantId}&order_by=created_at desc&limit=1`).then(r => r.json()),
+    enabled: !!portfolioId && !!tenantId,
+    refetchInterval: 2000,
   });
 
-  // Process drift data
   useEffect(() => {
     if (summaryData?.v_rebalance_summary?.[0]) {
       const summary = summaryData.v_rebalance_summary[0];
@@ -186,24 +87,23 @@ export const RebalanceDashboard: React.FC<RebalanceDashboardProps> = ({
 
       setTaxMetrics({
         taxSaved: summary.tax_saved || 0,
-        estimatedTaxDebt: summary.tax_saved ? (summary.tax_saved * 2) : 0, // Simplified: 2x tax saved as debt
+        estimatedTaxDebt: summary.tax_saved ? (summary.tax_saved * 2) : 0,
         netImpact: -(summary.tax_saved || 0),
         harvested: summary.trade_count || 0,
       });
     }
   }, [summaryData, summarySubscription]);
 
-  // Process allocation comparison
   useEffect(() => {
     if (modelData?.allocation_models_by_pk) {
       const model = modelData.allocation_models_by_pk;
       const allocations = Array.isArray(model.allocations) ? model.allocations : [];
-      
+
       setAllocationComparison(
         allocations.map((alloc: any) => ({
           name: alloc.asset_class || 'Other',
           target: alloc.target_percent * 100,
-          current: (alloc.target_percent * 0.95) * 100, // Mock current (5% drift)
+          current: (alloc.target_percent * 0.95) * 100,
           min: alloc.min_percent * 100,
           max: alloc.max_percent * 100,
         }))
@@ -223,7 +123,6 @@ export const RebalanceDashboard: React.FC<RebalanceDashboardProps> = ({
     if (onExecute) {
       onExecute(trades, taxMetrics);
     }
-    // In real implementation, would call backend API to start workflow
     devDebug('Starting rebalance workflow for portfolio:', portfolioId, 'Dry run:', dryRunMode);
   };
 
@@ -233,7 +132,6 @@ export const RebalanceDashboard: React.FC<RebalanceDashboardProps> = ({
 
   return (
     <div className="rebalance-dashboard">
-      {/* Header */}
       <div className="dashboard-header">
         <h1>Portfolio Rebalancing Dashboard</h1>
         <div className="header-controls">
@@ -245,16 +143,15 @@ export const RebalanceDashboard: React.FC<RebalanceDashboardProps> = ({
             />
             <span>Dry Run Mode</span>
           </label>
-          <button 
+          <button
             className={`btn-execute ${dryRunMode ? 'btn-preview' : 'btn-execute-live'}`}
             onClick={handleExecuteRebalance}
           >
-            {dryRunMode ? '👁 Preview Rebalance' : '▶ Execute Rebalance'}
+            {dryRunMode ? 'Preview Rebalance' : 'Execute Rebalance'}
           </button>
         </div>
       </div>
 
-      {/* Key Metrics Row */}
       <div className="metrics-grid">
         <div className="metric-card">
           <h3>Drift Reduction</h3>
@@ -295,9 +192,7 @@ export const RebalanceDashboard: React.FC<RebalanceDashboardProps> = ({
         </div>
       </div>
 
-      {/* Charts Row */}
       <div className="charts-grid">
-        {/* Drift Comparison Chart */}
         <div className="chart-container">
           <h3>Drift Before & After</h3>
           <ResponsiveContainer width="100%" height={250}>
@@ -305,7 +200,7 @@ export const RebalanceDashboard: React.FC<RebalanceDashboardProps> = ({
               <CartesianGrid strokeDasharray="3 3" />
               <XAxis dataKey="name" />
               <YAxis />
-              <Tooltip 
+              <Tooltip
                 formatter={(value) => `${value}%`}
                 contentStyle={{ backgroundColor: '#1f2937', border: 'none', borderRadius: '8px', color: '#fff' }}
               />
@@ -314,7 +209,6 @@ export const RebalanceDashboard: React.FC<RebalanceDashboardProps> = ({
           </ResponsiveContainer>
         </div>
 
-        {/* Allocation Comparison Chart */}
         <div className="chart-container">
           <h3>Target vs Current Allocation</h3>
           <ResponsiveContainer width="100%" height={250}>
@@ -322,7 +216,7 @@ export const RebalanceDashboard: React.FC<RebalanceDashboardProps> = ({
               <CartesianGrid strokeDasharray="3 3" />
               <XAxis dataKey="name" />
               <YAxis />
-              <Tooltip 
+              <Tooltip
                 formatter={(value) => `${(value as number).toFixed(1)}%`}
                 contentStyle={{ backgroundColor: '#1f2937', border: 'none', borderRadius: '8px', color: '#fff' }}
               />
@@ -334,7 +228,6 @@ export const RebalanceDashboard: React.FC<RebalanceDashboardProps> = ({
         </div>
       </div>
 
-      {/* Proposed Trades Table */}
       <div className="trades-section">
         <h3>Proposed Trades ({trades.length} total)</h3>
         <div className="trades-table-wrapper">
@@ -380,7 +273,7 @@ export const RebalanceDashboard: React.FC<RebalanceDashboardProps> = ({
                     </span>
                   </td>
                   <td>
-                    <button 
+                    <button
                       className="btn-detail"
                       onClick={() => handlePreviewTrade(trade)}
                     >
@@ -394,7 +287,6 @@ export const RebalanceDashboard: React.FC<RebalanceDashboardProps> = ({
         </div>
       </div>
 
-      {/* Trade Detail Modal */}
       {selectedTrade && (
         <div className="modal-overlay" onClick={() => setSelectedTrade(null)}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
@@ -433,7 +325,7 @@ export const RebalanceDashboard: React.FC<RebalanceDashboardProps> = ({
               </div>
               <div className="detail-row">
                 <label>Tax Harvest:</label>
-                <span>{selectedTrade.is_tax_harvest ? '✓ Yes' : '✗ No'}</span>
+                <span>{selectedTrade.is_tax_harvest ? 'Yes' : 'No'}</span>
               </div>
               <div className="detail-row">
                 <label>Status:</label>
@@ -455,7 +347,6 @@ export const RebalanceDashboard: React.FC<RebalanceDashboardProps> = ({
         </div>
       )}
 
-      {/* Execution Timeline */}
       {executions.length > 0 && (
         <div className="execution-timeline">
           <h3>Execution Timeline</h3>

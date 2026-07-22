@@ -21,7 +21,8 @@ import {
   IconButton,
   LinearProgress,
 } from '@mui/material';
-import { gql, useMutation } from '@apollo/client';
+import { useMutation } from '@tanstack/react-query';
+import { apiFetch } from '../lib/apiClient';
 import SearchIcon from '@mui/icons-material/Search';
 import AutoFixHighIcon from '@mui/icons-material/AutoFixHigh';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
@@ -64,12 +65,6 @@ interface SemanticMappingWizardProps {
   onMappingsApplied?: () => void; // Callback to refresh sidebar/catalog after mappings are applied
 }
 
-const LOG_TERM_FEEDBACK = gql`
-  mutation LogTermAISuggestionFeedback($input: LogTermFeedbackInput!) {
-    logTermAISuggestionFeedback(input: $input)
-  }
-`;
-
 export const SemanticMappingWizard: React.FC<SemanticMappingWizardProps> = ({
   tenantId,
   datasourceId,
@@ -98,8 +93,13 @@ export const SemanticMappingWizard: React.FC<SemanticMappingWizardProps> = ({
   ]);
 
   // Feedback logging mutation
-  const [logTermFeedback] = useMutation(LOG_TERM_FEEDBACK, {
-    onError: (e) => console.error('Failed to log feedback:', e)
+  const logTermFeedback = useMutation({
+    mutationFn: (input: any) =>
+      apiFetch('/api/semantic-mapping/feedback', {
+        method: 'POST',
+        body: JSON.stringify(input),
+      }),
+    onError: (e: any) => console.error('Failed to log feedback:', e),
   });
 
   useEffect(() => {
@@ -221,23 +221,19 @@ export const SemanticMappingWizard: React.FC<SemanticMappingWizardProps> = ({
       setRejectedMappings(prev => new Set(prev).add(mapping.column_id));
       
       // Log rejection feedback
-      logTermFeedback({
-        variables: {
-          input: {
-            tenantId,
-            datasourceId,
-            termId: "", // No term created yet
-            nodeId: mapping.column_id, // Use column ID as related node
-            suggestionId: mapping.column_id + "_suggestion", // Synthesis ID since we don't have explicit one
-            action: 'rejected',
-            reason: 'manual_rejection',
-            features: {
-                semantic_term: mapping.suggested_semantic_term,
-                business_term: mapping.suggested_business_term,
-                column_name: mapping.column_name,
-                confidence: mapping.confidence
-            }
-          }
+      await logTermFeedback.mutateAsync({
+        tenantId,
+        datasourceId,
+        termId: "",
+        nodeId: mapping.column_id,
+        suggestionId: mapping.column_id + "_suggestion",
+        action: 'rejected',
+        reason: 'manual_rejection',
+        features: {
+            semantic_term: mapping.suggested_semantic_term,
+            business_term: mapping.suggested_business_term,
+            column_name: mapping.column_name,
+            confidence: mapping.confidence
         }
       });
     } catch (error) {
@@ -353,20 +349,15 @@ export const SemanticMappingWizard: React.FC<SemanticMappingWizardProps> = ({
       const termId = data.term_id || "";
 
       // Log feedback
-      logTermFeedback({
-        variables: {
-          input: {
-            tenantId,
-            datasourceId,
-            termId: termId, // Use returned term ID (empty if rejected)
-             // Use mapping ID as weak node_id reference, though it's the PENDING mapping ID
-            suggestionId: mappingId, 
-            action: approved ? 'approved' : 'rejected',
-            features: {
-                mapping_id: mappingId,
-                approved: approved
-            }
-          }
+      await logTermFeedback.mutateAsync({
+        tenantId,
+        datasourceId,
+        termId: termId,
+        suggestionId: mappingId,
+        action: approved ? 'approved' : 'rejected',
+        features: {
+            mapping_id: mappingId,
+            approved: approved
         }
       });
       

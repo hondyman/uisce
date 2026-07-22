@@ -9,30 +9,10 @@ import {
   FormControlLabel,
   Switch,
 } from '@mui/material';
-import { gql, useQuery } from '@apollo/client';
+import { useQuery } from '@tanstack/react-query';
 import useBlockableNavigate from '../../../components/RouteBlocker/useBlockableNavigate';
 import DriftReportTable from '../components/DriftReportTable';
-
-/**
- * GraphQL query to fetch a list of drift reports.
- * This aligns with the 'Dashboard Query' from the blueprint.
- */
-const GET_DRIFT_REPORTS = gql`
-  query GetDriftReports($limit: Int!, $offset: Int!, $where: drift_reports_with_severity_flag_bool_exp) {
-    drift_reports_with_severity_flag(
-      limit: $limit, 
-      offset: $offset, 
-      order_by: { generated_at: desc },
-      where: $where
-    ) {
-      id
-      generated_at
-      schema_hash
-      severity_summary
-      has_severity_change
-    }
-  }
-`;
+import { apiFetch } from '../../../lib/apiClient';
 
 /**
  * TypeScript interface for a single drift report summary.
@@ -40,7 +20,7 @@ const GET_DRIFT_REPORTS = gql`
  */
 interface DriftReportSummary {
   id: string;
-  generated_at: string; // ISO timestamp
+  generated_at: string;
   schema_hash: string;
   severity_summary: {
     breaking?: number;
@@ -59,13 +39,17 @@ const DriftReportDashboard: React.FC = () => {
   const navigate = useBlockableNavigate();
   const [onlySeverityChanges, setOnlySeverityChanges] = useState(false);
 
-  const { loading, error, data } = useQuery<{ drift_reports_with_severity_flag: DriftReportSummary[] }>(GET_DRIFT_REPORTS, {
-    variables: {
-      limit: 50,
-      offset: 0,
-      where: onlySeverityChanges ? { has_severity_change: { _eq: true } } : {},
+  const { isLoading, error, data } = useQuery<DriftReportSummary[]>({
+    queryKey: ['drift-reports', 'dashboard', onlySeverityChanges],
+    queryFn: async () => {
+      let url = '/api/rest/drift-reports?order_by=generated_at desc&limit=50&offset=0';
+      if (onlySeverityChanges) {
+        url += '&has_severity_change=true';
+      }
+      const res = await apiFetch(url);
+      if (!res.ok) throw new Error(await res.text());
+      return res.json();
     },
-    fetchPolicy: 'network-only',
   });
 
   const handleRowClick = (reportId: string) => {
@@ -100,15 +84,15 @@ const DriftReportDashboard: React.FC = () => {
       {/* DriftReportTable */}
       <Paper sx={{ flexGrow: 1, overflow: 'hidden' }}>
         <TableContainer sx={{ height: '100%' }}>
-          {loading && (
+          {isLoading && (
             <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}>
               <CircularProgress />
               <Typography sx={{ ml: 2 }}>Loading Reports...</Typography>
             </Box>
           )}
-          {error && <Alert severity="error" sx={{ m: 2 }}>Failed to load drift reports: {error.message}</Alert>}
-          {!loading && !error && data && (
-            <DriftReportTable reports={data.drift_reports_with_severity_flag} onSelectReport={handleRowClick} />
+          {error && <Alert severity="error" sx={{ m: 2 }}>Failed to load drift reports: {error?.message}</Alert>}
+          {!isLoading && !error && data && (
+            <DriftReportTable reports={data || []} onSelectReport={handleRowClick} />
           )}
         </TableContainer>
       </Paper>

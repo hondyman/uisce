@@ -588,13 +588,81 @@ export function useDeleteTerm(opts?: GlossaryMutationOpts) {
         params.append('tenant_id', scopeTenant);
       }
 
+      // Step 1: Check BO dependencies before attempting delete
+      const checkRes = await glossaryFetch(
+        `/api/glossary/nodes/${id}/dependencies?${params.toString()}`,
+        scopeTenant
+      );
+
+      if (!checkRes.ok) {
+        const errorText = await checkRes.text();
+        // Try to parse as JSON in case it contains dependency info even on error
+        try {
+          const errJson = JSON.parse(errorText);
+          if (errJson.dependencies && errJson.dependencies.length > 0) {
+            const deps = errJson.dependencies;
+            const boNames = [...new Set(deps.map((d: any) => d.bo_name))].join(', ');
+            const depError = new Error(
+              `Cannot delete: This term is linked to ${deps.length} BO field(s) in: ${boNames || 'unknown business objects'}. Unlink the fields first.`
+            );
+            (depError as any).code = 'BO_DEPENDENCIES_BLOCK_DELETION';
+            (depError as any).dependencies = deps;
+            (depError as any).dependencyReport = errJson;
+            throw depError;
+          }
+        } catch (parseErr) {
+          if (parseErr instanceof Error && (parseErr as any).code === 'BO_DEPENDENCIES_BLOCK_DELETION') {
+            throw parseErr;
+          }
+        }
+        throw new Error(`Dependency check failed: ${errorText}`);
+      }
+
+      const depCheck = await checkRes.json() as {
+        can_delete: boolean;
+        dependencies?: Array<{
+          ref_table: string;
+          ref_id: string;
+          bo_id: string;
+          bo_key: string;
+          bo_name: string;
+          ref_detail: string;
+        }>;
+        message?: string;
+        edge_count?: number;
+        validation_count?: number;
+        suggestion_count?: number;
+      };
+
+      if (!depCheck.can_delete) {
+        const deps = depCheck.dependencies ?? [];
+        const boNames = [...new Set(deps.map((d: any) => d.bo_name))].join(', ');
+        const depError = new Error(
+          `Cannot delete: This term is linked to ${deps.length} BO field(s) in: ${boNames || 'unknown business objects'}. Unlink the fields first.`
+        );
+        (depError as any).code = 'BO_DEPENDENCIES_BLOCK_DELETION';
+        (depError as any).dependencies = deps;
+        (depError as any).dependencyReport = depCheck;
+        throw depError;
+      }
+
+      // Step 2: Proceed with deletion
       const res = await glossaryFetch(`/api/glossary/terms/${id}?${params.toString()}`, scopeTenant, {
         method: 'DELETE',
       });
 
       if (!res.ok) {
-        const error = await res.text();
-        throw new Error(error || 'Failed to delete term');
+        const errorText = await res.text();
+        let errorCode = 'DELETE_FAILED';
+        try {
+          const errJson = JSON.parse(errorText);
+          if (errJson.code === 'BO_DEPENDENCIES_BLOCK_DELETION') {
+            errorCode = 'BO_DEPENDENCIES_BLOCK_DELETION';
+          }
+        } catch { /* not JSON */ }
+        const err = new Error(errorText || 'Failed to delete term');
+        (err as any).code = errorCode;
+        throw err;
       }
       return res.json();
     },
@@ -604,6 +672,10 @@ export function useDeleteTerm(opts?: GlossaryMutationOpts) {
       void queryClient.invalidateQueries({ queryKey: glossaryKeys.edges() });
       void queryClient.invalidateQueries({ queryKey: glossaryKeys.catalogNodes() });
       void queryClient.invalidateQueries({ queryKey: glossaryKeys.semanticData() });
+      // Invalidate BO-related caches since deletion may affect BO bindings
+      void queryClient.invalidateQueries({ queryKey: ['business-objects'] });
+      void queryClient.invalidateQueries({ queryKey: ['business-object'] });
+      void queryClient.invalidateQueries({ queryKey: ['bo-bindings'] });
     },
   });
 }

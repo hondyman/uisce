@@ -1,50 +1,11 @@
 import React, { useState, useMemo } from 'react';
 import { Box, Typography, Paper, Select, MenuItem, CircularProgress, Alert, FormControlLabel, Switch } from '@mui/material';
-import { gql, useQuery } from '@apollo/client';
+import { useQuery } from '@tanstack/react-query';
 import { format } from 'date-fns';
 import DriftCompare from '../components/DriftCompare';
 import { DriftReport } from '../components/DriftReportDetail';
 import { diffReports, DiffResult } from './diff';
-
-// This query is from the blueprint
-const GET_ALL_REPORTS_FOR_SELECT = gql`
-  query GetAllReportsForSelect {
-    drift_reports(order_by: { generated_at: desc }) {
-      id
-      generated_at
-      schema_hash
-    }
-  }
-`;
-
-const COMPARE_DRIFT_REPORTS = gql`
-  query CompareDriftReports($idA: uuid!, $idB: uuid!) {
-    reportA: drift_reports_by_pk(id: $idA) {
-      id
-      generated_at
-      schema_hash
-      severity_summary
-      drift_log_entries {
-        id
-        severity
-        qualified_path
-        explanation
-      }
-    }
-    reportB: drift_reports_by_pk(id: $idB) {
-      id
-      generated_at
-      schema_hash
-      severity_summary
-      drift_log_entries {
-        id
-        severity
-        qualified_path
-        explanation
-      }
-    }
-  }
-`;
+import { apiFetch } from '../../../lib/apiClient';
 
 interface ReportOption {
   id: string;
@@ -62,17 +23,26 @@ const DriftComparePage: React.FC = () => {
   const [reportIdB, setReportIdB] = useState<string>('');
   const [showOnlySeverityChanges, setShowOnlySeverityChanges] = useState(false);
 
-  const { data: optionsData, loading: optionsLoading, error: optionsError } = useQuery<{ drift_reports: ReportOption[] }>(
-    GET_ALL_REPORTS_FOR_SELECT
-  );
+  const { data: optionsData, isLoading: optionsLoading, error: optionsError } = useQuery<ReportOption[]>({
+    queryKey: ['drift-reports', 'all-for-select'],
+    queryFn: async () => {
+      const res = await apiFetch('/api/rest/drift-reports?order_by=generated_at desc');
+      if (!res.ok) throw new Error(await res.text());
+      return res.json();
+    },
+  });
 
-  const { data: compareData, loading: compareLoading, error: compareError } = useQuery<CompareData>(
-    COMPARE_DRIFT_REPORTS,
-    {
-      variables: { idA: reportIdA, idB: reportIdB },
-      skip: !reportIdA || !reportIdB,
-    }
-  );
+  const { data: compareData, isLoading: compareLoading, error: compareError } = useQuery<CompareData>({
+    queryKey: ['drift-reports', 'compare', reportIdA, reportIdB],
+    queryFn: async () => {
+      const [reportA, reportB] = await Promise.all([
+        apiFetch(`/api/rest/drift-reports/${reportIdA}`).then(r => r.json()),
+        apiFetch(`/api/rest/drift-reports/${reportIdB}`).then(r => r.json()),
+      ]);
+      return { reportA, reportB };
+    },
+    enabled: !!reportIdA && !!reportIdB,
+  });
 
   const diff: DiffResult | null = useMemo(() => {
     if (compareData?.reportA && compareData?.reportB) {
@@ -98,7 +68,7 @@ const DriftComparePage: React.FC = () => {
         <Select value={reportIdA} onChange={(e) => setReportIdA(e.target.value)} displayEmpty size="small" sx={{ minWidth: 250 }}>
           <MenuItem value="" disabled>Select Report A (Old)</MenuItem>
           {optionsLoading && <MenuItem disabled>Loading...</MenuItem>}
-          {optionsData?.drift_reports.map((r) => (
+          {(optionsData || []).map((r: ReportOption) => (
             <MenuItem key={r.id} value={r.id}>
               {format(new Date(r.generated_at), 'yy-MM-dd HH:mm')} - {r.schema_hash}
             </MenuItem>
@@ -108,7 +78,7 @@ const DriftComparePage: React.FC = () => {
         <Select value={reportIdB} onChange={(e) => setReportIdB(e.target.value)} displayEmpty size="small" sx={{ minWidth: 250 }}>
           <MenuItem value="" disabled>Select Report B (New)</MenuItem>
           {optionsLoading && <MenuItem disabled>Loading...</MenuItem>}
-          {optionsData?.drift_reports.map((r) => (
+          {(optionsData || []).map((r: ReportOption) => (
             <MenuItem key={r.id} value={r.id}>
               {format(new Date(r.generated_at), 'yy-MM-dd HH:mm')} - {r.schema_hash}
             </MenuItem>
@@ -125,10 +95,10 @@ const DriftComparePage: React.FC = () => {
         />
       </Paper>
 
-      {optionsError && <Alert severity="error">Failed to load report options: {optionsError.message}</Alert>}
+      {optionsError && <Alert severity="error">Failed to load report options: {optionsError?.message}</Alert>}
 
       {compareLoading && <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}><CircularProgress /></Box>}
-      {compareError && <Alert severity="error">Failed to compare reports: {compareError.message}</Alert>}
+      {compareError && <Alert severity="error">Failed to compare reports: {compareError?.message}</Alert>}
       {diff && (
         <DriftCompare diff={diff} />
       )}

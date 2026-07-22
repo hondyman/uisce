@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { useMutation } from '@apollo/client';
-import { SEARCH_RAG } from '../../graphql/ragQueries';
+import { useMutation } from '@tanstack/react-query';
+import { apiFetch } from '../../lib/apiClient';
 
 interface SearchResult {
   chunk_id: string;
@@ -13,17 +13,23 @@ interface SearchResult {
 export const RAGSearch: React.FC = () => {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<SearchResult[]>([]);
-  const [searchRAG, { loading, error }] = useMutation(SEARCH_RAG);
+  const [searchRAG, { isPending, error }] = useMutation({
+    mutationFn: async ({ query, limit }: { query: string; limit: number }) => {
+      const res = await apiFetch('/api/rag/search', {
+        method: 'POST',
+        body: JSON.stringify({ query, limit }),
+      });
+      return res.json();
+    },
+  });
 
   const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!query.trim()) return;
 
     try {
-      const { data } = await searchRAG({
-        variables: { query, limit: 5 },
-      });
-      setResults(data.searchRAG.results);
+      const data = await searchRAG.mutateAsync({ query, limit: 5 });
+      setResults(data.results);
     } catch (err) {
       console.error('Search failed:', err);
     }
@@ -44,10 +50,10 @@ export const RAGSearch: React.FC = () => {
           />
           <button
             type="submit"
-            disabled={loading}
+            disabled={isPending}
             className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
           >
-            {loading ? 'Searching...' : 'Search'}
+            {isPending ? 'Searching...' : 'Search'}
           </button>
         </div>
       </form>

@@ -8,7 +8,6 @@ import {
   Alert,
   Typography,
   Breadcrumbs,
-  Link,
   Tabs,
   Tab,
   Dialog,
@@ -756,20 +755,6 @@ export const TenantDetailPageV2: React.FC = () => {
     <Box sx={{ p: { xs: 2, md: 3 } }}>
       {/* Breadcrumb */}
       <Breadcrumbs sx={{ mb: 3 }}>
-        <Link
-          color="inherit"
-          onClick={() => navigate('/tenants')}
-          sx={{ cursor: 'pointer' }}
-        >
-          Home
-        </Link>
-        <Link
-          color="inherit"
-          onClick={() => navigate('/tenants')}
-          sx={{ cursor: 'pointer' }}
-        >
-          Tenants
-        </Link>
         <Typography color="textPrimary">
           {tenant.display_name || tenant.name || 'Tenant Details'}
         </Typography>

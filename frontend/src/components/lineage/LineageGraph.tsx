@@ -9,7 +9,9 @@ import ReactFlow, {
   useNodesState,
   useEdgesState,
   MarkerType,
-    NodeTypes,
+  NodeTypes,
+  Handle,
+  Position,
 } from 'reactflow';
 import 'reactflow/dist/style.css';
 import { Box, Typography, Chip, Tooltip, IconButton, Paper, CircularProgress } from '@mui/material';
@@ -30,42 +32,51 @@ const CustomLineageNode = ({ data }: { data: any }) => {
     <Paper
       elevation={3}
       sx={{
-        p: 1,
-        minWidth: 180,
+        p: 1.5,
+        minWidth: 200,
         border: '1px solid',
         borderColor: data.selected ? 'primary.main' : 'divider',
-        borderRadius: 1,
+        borderRadius: 2,
         bgcolor: 'background.paper',
-         transition: 'all 0.2s',
-          ...(data.selected && { boxShadow: '0 0 0 2px #2196f3' })
+        position: 'relative',
+        transition: 'all 0.2s',
+        ...(data.selected && { boxShadow: '0 0 0 2px #2196f3' })
       }}
     >
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
-            {data.type === 'BO' && <BOIcon color="primary" fontSize="small" />}
-            {data.type === 'Table' && <TableIcon color="action" fontSize="small" />}
-            {data.type === 'View' && <ViewIcon color="info" fontSize="small" />}
-             {/* Fallback icon */}
-             {!['BO', 'Table', 'View'].includes(data.type) && <StorageIcon color="disabled" fontSize="small" />}
+      <Handle type="target" position={Position.Left} style={{ background: '#777', width: 8, height: 8 }} />
+      
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+        {data.type === 'BO' && <BOIcon color="primary" fontSize="small" />}
+        {data.type === 'Table' && <TableIcon color="action" fontSize="small" />}
+        {data.type === 'View' && <ViewIcon color="info" fontSize="small" />}
+        {!['BO', 'Table', 'View'].includes(data.type) && <StorageIcon color="disabled" fontSize="small" />}
 
-            <Typography variant="subtitle2" sx={{ fontWeight: 600, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                {data.label}
-            </Typography>
-        </Box>
+        <Typography variant="subtitle2" sx={{ fontWeight: 700, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+          {data.label}
+        </Typography>
+      </Box>
 
-        {data.metadata && (
-             <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
-                 {data.metadata.env && <Chip label={data.metadata.env} size="small" variant="outlined" sx={{ fontSize: '0.65rem', height: 20 }} />}
-             </Box>
+      <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap', mt: 1 }}>
+        <Chip 
+          label={data.type || 'UNKNOWN'} 
+          size="small" 
+          color={data.type === 'BO' ? 'primary' : data.type === 'Table' ? 'default' : 'secondary'}
+          sx={{ fontSize: '0.65rem', height: 18, fontWeight: 'bold' }} 
+        />
+        {data.metadata && data.metadata.env && (
+          <Chip label={data.metadata.env} size="small" variant="outlined" sx={{ fontSize: '0.65rem', height: 18 }} />
         )}
+      </Box>
 
-      {/* Expand/Collapse Handle for Columns (Future) */}
       {data.expandable && (
         <Box sx={{ display: 'flex', justifyContent: 'center', mt: 0.5, borderTop: '1px solid', borderColor: 'divider', pt: 0.5 }}>
-            <IconButton size="small" sx={{ p: 0.5 }}>
-                 <KeyboardArrowDown fontSize="inherit" />
-            </IconButton>
+          <IconButton size="small" sx={{ p: 0.5 }}>
+            <KeyboardArrowDown fontSize="inherit" />
+          </IconButton>
         </Box>
       )}
+
+      <Handle type="source" position={Position.Right} style={{ background: '#777', width: 8, height: 8 }} />
     </Paper>
   );
 };
@@ -172,8 +183,13 @@ export const LineageGraph: React.FC<LineageGraphProps> = ({ nodeId, depth = 3, o
                     markerEnd: {
                         type: MarkerType.ArrowClosed,
                     },
-                    animated: true,
-                    style: { stroke: '#b1b1b7' },
+                    animated: false,
+                    label: e.relationship_type || e.edge_type_name || '',
+                    labelStyle: { fill: '#555', fontWeight: 600, fontSize: 10 },
+                    labelBgStyle: { fill: '#fafafa', fillOpacity: 0.9 },
+                    labelBgPadding: [4, 2],
+                    labelBgBorderRadius: 4,
+                    style: { stroke: '#888', strokeWidth: 1.5 },
                 });
             });
         }

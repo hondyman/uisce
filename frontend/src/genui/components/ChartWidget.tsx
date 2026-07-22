@@ -1,6 +1,6 @@
 import React from "react";
 import { useQuery } from "@tanstack/react-query";
-import { gql, useQuery as useGQLQuery } from "@apollo/client";
+import { apiFetch } from "../../lib/apiClient";
 import {
   LineChart,
   Line,
@@ -22,23 +22,25 @@ interface ChartWidgetProps {
 }
 
 export function ChartWidget({ def }: ChartWidgetProps) {
-  // Fetch data if binding is provided
-  const {data: queryData, isLoading} = useGQLQuery(
-    gql(def.binding?.gql || ""),
-    {
-      variables: def.binding?.variables || {},
-      skip: !def.binding,
-    }
-  );
+  const { data: queryData, isLoading } = useQuery({
+    queryKey: ['genui-chart', def.binding?.endpoint, def.binding?.variables],
+    queryFn: async () => {
+      if (!def.binding?.endpoint) return null;
+      const response = await apiFetch(def.binding.endpoint, {
+        method: def.binding.method || 'GET',
+      });
+      return response.json();
+    },
+    enabled: !!def.binding?.endpoint,
+  });
 
   if (isLoading) {
     return <ChartSkeleton title={def.title} />;
   }
 
-  // Extract data from GraphQL response using dataPath
-  const chartData = def.binding
+  const chartData = def.binding?.dataPath
     ? extractDataFromPath(queryData, def.binding.dataPath)
-    : [];
+    : queryData || [];
 
   return (
     <div className="bg-white rounded-lg shadow p-4">

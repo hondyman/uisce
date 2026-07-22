@@ -1,98 +1,8 @@
-import React, { useMemo } from 'react';
-import { useSubscription, useMutation, gql } from '@apollo/client';
+import React, { useMemo, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { apiFetch } from '../lib/apiClient';
 import { format, formatDistance } from 'date-fns';
 import { AlertCircle, TrendingUp, DollarSign, Calendar, CheckCircle, AlertTriangle } from 'lucide-react';
-
-// =============================================================================
-// GRAPHQL SUBSCRIPTIONS & MUTATIONS
-// =============================================================================
-
-const PORTFOLIO_EXPOSURE_SUBSCRIPTION = gql`
-  subscription PortfolioExposure($tenantId: uuid!) {
-    v_portfolio_exposure_summary(where: { tenant_id: { _eq: $tenantId } }) {
-      commitment_id
-      fund_name
-      strategy_type
-      fund_status
-      commitment_amount
-      paid_in_capital
-      distributed_capital
-      current_nav
-      unfunded_commitment
-      current_tvpi
-      current_dpi
-      current_irr_pct
-      projected_calls_12m
-      projected_distributions_12m
-    }
-  }
-`;
-
-const LIQUIDITY_NEEDS_SUBSCRIPTION = gql`
-  subscription LiquidityNeeds($tenantId: uuid!) {
-    v_liquidity_needs_projection(
-      where: { tenant_id: { _eq: $tenantId } }
-      order_by: [{ month: asc }]
-    ) {
-      month
-      scenario
-      total_calls
-      total_distributions
-      net_needs
-      max_probable_calls_95th
-    }
-  }
-`;
-
-const CASH_FLOW_FORECASTS_SUBSCRIPTION = gql`
-  subscription CashFlowForecasts($tenantId: uuid!) {
-    cash_flow_forecasts(
-      where: { tenant_id: { _eq: $tenantId }, scenario: { _eq: "base_case" } }
-      order_by: [{ forecast_date: asc }]
-    ) {
-      commitment_id
-      forecast_date
-      scenario
-      projected_calls
-      projected_distributions
-      projected_tvpi
-      projected_irr_pct
-      p5_percentile
-      p95_percentile
-    }
-  }
-`;
-
-const RECONCILIATION_STATUS_SUBSCRIPTION = gql`
-  subscription ReconciliationStatus($tenantId: uuid!) {
-    v_reconciliation_status(where: { tenant_id: { _eq: $tenantId } }) {
-      reconciliation_period
-      reconciliation_rate_pct
-      reconciled_count
-      exceptions
-      total_variance
-    }
-  }
-`;
-
-const TRIGGER_NAVIGATOR_FORECAST = gql`
-  mutation TriggerForecast($commitmentId: uuid!, $tenantId: uuid!) {
-    executeBusinessProcess(
-      processId: "navigator_v1"
-      input: {
-        commitment_id: $commitmentId
-        tenant_id: $tenantId
-      }
-    ) {
-      workflow_id
-      started_at
-    }
-  }
-`;
-
-// =============================================================================
-// MAIN NAVIGATOR DASHBOARD COMPONENT
-// =============================================================================
 
 interface NavigatorDashboardProps {
   tenantId: string;
@@ -103,31 +13,35 @@ export const NavigatorDashboard: React.FC<NavigatorDashboardProps> = ({
   tenantId,
   currentCashBalance = 0,
 }) => {
-  const { data: exposureData, loading: exposureLoading } = useSubscription(
-    PORTFOLIO_EXPOSURE_SUBSCRIPTION,
-    { variables: { tenantId } }
-  );
+  const [triggerForecastLoading, setTriggerForecastLoading] = useState(false);
 
-  const { data: liquidityData, loading: liquidityLoading } = useSubscription(
-    LIQUIDITY_NEEDS_SUBSCRIPTION,
-    { variables: { tenantId } }
-  );
+  const { data: exposureData, isLoading: exposureLoading } = useQuery({
+    queryKey: ['portfolio-exposure', tenantId],
+    queryFn: () => apiFetch(`/api/rest/portfolio-exposure-summary?tenant_id=${tenantId}`).then(r => r.json()),
+    enabled: !!tenantId,
+    refetchInterval: 2000,
+  });
 
-  const { data: forecastData, loading: forecastDataLoading } = useSubscription(
-    CASH_FLOW_FORECASTS_SUBSCRIPTION,
-    { variables: { tenantId } }
-  );
+  const { data: liquidityData, isLoading: liquidityLoading } = useQuery({
+    queryKey: ['liquidity-needs', tenantId],
+    queryFn: () => apiFetch(`/api/rest/liquidity-needs-projection?tenant_id=${tenantId}&order_by=month asc`).then(r => r.json()),
+    enabled: !!tenantId,
+    refetchInterval: 2000,
+  });
 
-  const { data: reconciliationData, loading: reconciliationLoading } = useSubscription(
-    RECONCILIATION_STATUS_SUBSCRIPTION,
-    { variables: { tenantId } }
-  );
+  const { data: forecastData, isLoading: forecastDataLoading } = useQuery({
+    queryKey: ['cash-flow-forecasts', tenantId],
+    queryFn: () => apiFetch(`/api/rest/cash-flow-forecasts?tenant_id=${tenantId}&scenario=eq:base_case&order_by=forecast_date asc`).then(r => r.json()),
+    enabled: !!tenantId,
+    refetchInterval: 2000,
+  });
 
-  const [triggerForecast, { loading: triggerForecastLoading }] = useMutation(TRIGGER_NAVIGATOR_FORECAST);
-
-  // =========================================================================
-  // COMPUTED METRICS
-  // =========================================================================
+  const { data: reconciliationData, isLoading: reconciliationLoading } = useQuery({
+    queryKey: ['reconciliation-status', tenantId],
+    queryFn: () => apiFetch(`/api/rest/reconciliation-status?tenant_id=${tenantId}`).then(r => r.json()),
+    enabled: !!tenantId,
+    refetchInterval: 2000,
+  });
 
   const metrics = useMemo(() => {
     if (!exposureData?.v_portfolio_exposure_summary) return null;
@@ -173,7 +87,7 @@ export const NavigatorDashboard: React.FC<NavigatorDashboardProps> = ({
       nextMonthCalls: nextMonth?.total_calls || 0,
       nextMonthDist: nextMonth?.total_distributions || 0,
       netNeeds12m: next12m.reduce((sum: number, d: any) => sum + (d.net_needs || 0), 0),
-      mpc: maxProb95, // Maximum Probable Call (95th percentile)
+      mpc: maxProb95,
     };
   }, [liquidityData]);
 
@@ -189,23 +103,22 @@ export const NavigatorDashboard: React.FC<NavigatorDashboardProps> = ({
     };
   }, [reconciliationData]);
 
-  // =========================================================================
-  // EVENT HANDLERS
-  // =========================================================================
-
   const handleTriggerForecast = async (commitmentId: string) => {
+    setTriggerForecastLoading(true);
     try {
-      await triggerForecast({
-        variables: { commitmentId, tenantId },
+      await apiFetch('/api/rest/trigger-navigator-forecast', {
+        method: 'POST',
+        body: JSON.stringify({
+          commitment_id: commitmentId,
+          tenant_id: tenantId,
+        }),
       });
     } catch (error) {
       console.error('Failed to trigger forecast:', error);
+    } finally {
+      setTriggerForecastLoading(false);
     }
   };
-
-  // =========================================================================
-  // RENDER
-  // =========================================================================
 
   if (!metrics || !liquidityMetrics || !reconciliationMetrics) {
     return <div className="p-8 text-center text-gray-500">Loading Navigator data...</div>;
@@ -213,13 +126,11 @@ export const NavigatorDashboard: React.FC<NavigatorDashboardProps> = ({
 
   return (
     <div className="space-y-6 p-6 bg-gray-50">
-      {/* PAGE HEADER */}
       <div className="mb-8">
         <h1 className="text-3xl font-bold text-gray-900">Navigator: Capital Management</h1>
         <p className="mt-1 text-gray-600">PE fund forecasting, reconciliation, and exposure tracking</p>
       </div>
 
-      {/* ALERT SECTION */}
       {metrics.liquidityGap > 0 && (
         <div className="rounded-lg border-2 border-orange-200 bg-orange-50 p-4">
           <div className="flex gap-3">
@@ -238,7 +149,6 @@ export const NavigatorDashboard: React.FC<NavigatorDashboardProps> = ({
         </div>
       )}
 
-      {/* KEY METRICS GRID */}
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
         <MetricCard
           icon={<DollarSign className="h-5 w-5 text-blue-600" />}
@@ -266,7 +176,6 @@ export const NavigatorDashboard: React.FC<NavigatorDashboardProps> = ({
         />
       </div>
 
-      {/* PORTFOLIO SECTION */}
       <div className="rounded-lg border border-gray-200 bg-white shadow-sm">
         <div className="border-b border-gray-200 px-6 py-4">
           <h2 className="text-lg font-semibold text-gray-900">Fund Exposure Summary</h2>
@@ -280,9 +189,7 @@ export const NavigatorDashboard: React.FC<NavigatorDashboardProps> = ({
         </div>
       </div>
 
-      {/* CASH FLOW FORECAST SECTION */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        {/* 12-Month Outlook */}
         <div className="rounded-lg border border-gray-200 bg-white shadow-sm">
           <div className="border-b border-gray-200 px-6 py-4">
             <h3 className="font-semibold text-gray-900">12-Month Liquidity Outlook</h3>
@@ -292,7 +199,6 @@ export const NavigatorDashboard: React.FC<NavigatorDashboardProps> = ({
           </div>
         </div>
 
-        {/* Reconciliation Status */}
         <div className="rounded-lg border border-gray-200 bg-white shadow-sm">
           <div className="border-b border-gray-200 px-6 py-4">
             <h3 className="font-semibold text-gray-900">Reconciliation Status</h3>
@@ -303,7 +209,6 @@ export const NavigatorDashboard: React.FC<NavigatorDashboardProps> = ({
         </div>
       </div>
 
-      {/* FORECAST DETAILS */}
       <div className="rounded-lg border border-gray-200 bg-white shadow-sm">
         <div className="border-b border-gray-200 px-6 py-4">
           <h3 className="font-semibold text-gray-900">Cash Flow Forecast Detail</h3>
@@ -315,10 +220,6 @@ export const NavigatorDashboard: React.FC<NavigatorDashboardProps> = ({
     </div>
   );
 };
-
-// =============================================================================
-// SUBCOMPONENTS
-// =============================================================================
 
 interface MetricCardProps {
   icon: React.ReactNode;
@@ -472,7 +373,7 @@ interface ForecastDetailTableProps {
 }
 
 const ForecastDetailTable: React.FC<ForecastDetailTableProps> = ({ forecasts }) => {
-  const grouped = forecasts.slice(0, 12); // Next 12 months
+  const grouped = forecasts.slice(0, 12);
 
   return (
     <table className="w-full">
@@ -513,10 +414,6 @@ const ForecastDetailTable: React.FC<ForecastDetailTableProps> = ({ forecasts }) 
     </table>
   );
 };
-
-// =============================================================================
-// UTILITIES
-// =============================================================================
 
 function formatCurrency(value: number | null | undefined): string {
   if (!value && value !== 0) return '$0';

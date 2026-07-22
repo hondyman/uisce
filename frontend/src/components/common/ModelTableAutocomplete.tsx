@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Autocomplete, TextField, CircularProgress } from '@mui/material';
-import { useLazyQuery } from '@apollo/client';
-import { GET_TABLES_FOR_DATASOURCE } from '../../graphql/queries/datasourceQueries';
+import { useQuery } from '@tanstack/react-query';
+import { apiFetch } from '../../lib/apiClient';
 import './SimpleTableAutocomplete.css';
 import { devDebug } from '../../utils/devLogger';
 
@@ -67,7 +67,22 @@ const ModelTableAutocomplete: React.FC<ModelTableAutocompleteProps> = ({
       // TODO: filter options based on semanticModel
     }
   }, [semanticModel]);
-  const [runQuery, { loading }] = useLazyQuery(GET_TABLES_FOR_DATASOURCE, { fetchPolicy: 'network-only' });
+  const [trigger, setTrigger] = useState<{ datasourceId?: string; q?: string; limit?: number } | null>(null);
+  const { data: queryData, isLoading } = useQuery({
+    queryKey: ['tables', trigger],
+    queryFn: async () => {
+      if (!trigger?.datasourceId) return [];
+      const params = new URLSearchParams({
+        tenant_datasource_id: trigger.datasourceId,
+        node_type_id: '49a50271-ae58-4d3e-ae1c-2f5b89d89192',
+        limit: String(trigger.limit || 50),
+      });
+      if (trigger.q) params.append('q', trigger.q);
+      const res = await apiFetch(`/api/rest/catalog-nodes?${params}`);
+      return res.json();
+    },
+    enabled: !!trigger,
+  });
 
   // Fallback: if no datasourceId passed via props but tenant selection cached in localStorage
   const effectiveDatasourceId = useMemo(() => {
@@ -139,34 +154,30 @@ const ModelTableAutocomplete: React.FC<ModelTableAutocompleteProps> = ({
       return; // serve from cache
     }
     let active = true;
-  const t = setTimeout(async () => {
-      try {
-        const vars: any = { datasourceId, limit };
-        // GraphQL filter expects pattern; use '%' for match-all when no query typed
-        vars.q = normQ ? `%${normQ}%` : '%';
-  const res: any = await runQuery({ variables: { ...vars, datasourceId: effectiveDatasourceId } });
-        if (!active) return;
-        const rows = (res?.data?.catalog_node_vw || []).map((r: any) => ({
-          id: r.node_id || r.id,
-          node_name: r.node_name,
-          qualified_path: r.qualified_path,
-          description: r.description,
-          catalog_type_name: r.catalog_type_name,
-          node_type_id: r.node_type_id,
-          catalog_defn: r.catalog_defn,
-        })) as SimpleTableOption[];
-        setOptions(rows);
-        TABLE_CACHE.set(cacheKey, { ts: Date.now(), rows });
-        setError(null);
-      } catch {
-        if (active) {
-          setOptions([]);
-          setError('Failed to load tables');
-        }
-      }
+    const t = setTimeout(() => {
+      if (!active) return;
+      setTrigger({ datasourceId: effectiveDatasourceId, q: normQ ? `%${normQ}%` : '%', limit });
     }, debounceMs);
     return () => { active = false; clearTimeout(t); };
-  }, [input, effectiveDatasourceId, limit, debounceMs, runQuery]);
+  }, [input, effectiveDatasourceId, limit, debounceMs]);
+
+  // Process query results
+  useEffect(() => {
+    if (!queryData) return;
+    const cacheKey = `${effectiveDatasourceId}||${trigger?.q || ''}||${limit}`;
+    const rows = (queryData || []).map((r: any) => ({
+      id: r.node_id || r.id,
+      node_name: r.node_name,
+      qualified_path: r.qualified_path,
+      description: r.description,
+      catalog_type_name: r.catalog_type_name,
+      node_type_id: r.node_type_id,
+      catalog_defn: r.catalog_defn,
+    })) as SimpleTableOption[];
+    setOptions(rows);
+    TABLE_CACHE.set(cacheKey, { ts: Date.now(), rows });
+    setError(null);
+  }, [queryData, effectiveDatasourceId, limit, trigger]);
 
   // If we have a string value not yet in options, trigger a broad fetch (empty input) once when mounted / datasource changes.
   useEffect(() => {
@@ -240,7 +251,7 @@ const ModelTableAutocomplete: React.FC<ModelTableAutocompleteProps> = ({
       isOptionEqualToValue={(o: any, v: any) => !!o && !!v && (o.id === v.id || o.qualified_path === v.qualified_path)}
       inputValue={input}
       onInputChange={(_, val) => setInput(val)}
-      loading={loading}
+      loading={isLoading}
       className={className}
       disabled={disabled || !effectiveDatasourceId}
       fullWidth={fullWidth}
@@ -252,7 +263,7 @@ const ModelTableAutocomplete: React.FC<ModelTableAutocompleteProps> = ({
   onOpen={() => devDebug('ModelTableAutocomplete opened')}
   onClose={() => devDebug('ModelTableAutocomplete closed')}
       onFocus={() => {
-        if (showAllOnFocus && !input && options.length === 0 && !loading) setInput('');
+        if (showAllOnFocus && !input && options.length === 0 && !isLoading) setInput('');
       }}
       renderOption={(props, opt: any) => {
         const labelPrimary = opt.qualified_path || opt.node_name || '';
@@ -284,7 +295,7 @@ const ModelTableAutocomplete: React.FC<ModelTableAutocompleteProps> = ({
             ...params.InputProps,
             endAdornment: (
               <>
-                {(input || value) && !loading ? (
+                {(input || value) && !isLoading ? (
                   <button
                     type="button"
                     className="sta-clear-btn"
@@ -292,7 +303,7 @@ const ModelTableAutocomplete: React.FC<ModelTableAutocompleteProps> = ({
                     aria-label="Clear"
                   >×</button>
                 ) : null}
-                {loading ? <CircularProgress size={16} /> : null}
+                {isLoading ? <CircularProgress size={16} /> : null}
                 {params.InputProps.endAdornment}
               </>
             )

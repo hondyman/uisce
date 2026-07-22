@@ -1,22 +1,7 @@
 import React, { useState } from 'react';
-import { gql, useSubscription } from '@apollo/client';
+import { useQuery } from '@tanstack/react-query';
+import { apiFetch } from '../lib/apiClient';
 import './ScenarioAnalysisPro.css';
-
-const PORTFOLIOS_SUBSCRIPTION = gql`
-  subscription {
-    portfolios {
-      id
-      aum
-      sharpe
-      risk
-      status
-      assetAllocation {
-        asset
-        percentage
-      }
-    }
-  }
-`;
 
 interface Portfolio {
   id: string;
@@ -59,7 +44,11 @@ interface AnalysisHistoryItem {
 }
 
 const ScenarioAnalysisPro: React.FC = () => {
-  const { data: portfolioData } = useSubscription(PORTFOLIOS_SUBSCRIPTION);
+  const { data: portfolioData } = useQuery({
+    queryKey: ['portfolios'],
+    queryFn: () => apiFetch('/api/rest/portfolios').then(r => r.json()),
+    refetchInterval: 2000,
+  });
   const [selectedPortfolio, setSelectedPortfolio] = useState<string>('');
   const [selectedScenario, setSelectedScenario] = useState<string>('');
   const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>(null);
@@ -265,5 +254,3 @@ const ScenarioAnalysisPro: React.FC = () => {
 };
 
 export default ScenarioAnalysisPro;
-
-

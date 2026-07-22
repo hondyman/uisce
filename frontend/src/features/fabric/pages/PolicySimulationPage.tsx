@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { gql, useQuery, useMutation } from '@apollo/client';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Box,
   Typography,
@@ -17,81 +17,59 @@ import {
 import SimulationResultDetail from '../components/SimulationResultDetail';
 import ForecastPanel from '../components/ForecastPanel';
 import WhatIfEditor from '../components/WhatIfEditor';
-
-const GET_SIMULATION_OPTIONS = gql`
-  query GetSimulationOptions {
-    policy_rules(order_by: { id: asc }) {
-      id
-      name: id # Using ID as name for now
-      description
-    }
-    tenant_product_datasource(order_by: { source_name: asc }) {
-      id
-      source_name
-    }
-  }
-`;
-
-const SIMULATE_POLICY_RUN = gql`
-  mutation SimulatePolicyRun($policyId: uuid!, $fromDs: String!, $toDs: String!) {
-    SimulatePolicyRun(policy_id: $policyId, from_ds: $fromDs, to_ds: $toDs) {
-      policy_id
-      summary {
-        breaking
-        medium
-        low
-      }
-      violations {
-        rule_id
-        severity
-        message
-        qualified_path
-      }
-      changelog_md
-    }
-  }
-`;
-
-export const FORECAST_POLICY_RUN = gql`
-  mutation ForecastPolicyRun($fromDs: String!, $toDs: String!) {
-    forecast_policy_run(from_ds: $fromDs, to_ds: $toDs) {
-      policy_id
-      policy_name
-      block_probability
-      confidence
-      top_factors
-    }
-  }
-`;
+import { apiFetch } from '../../../lib/apiClient';
 
 const PolicySimulationPage: React.FC = () => {
   const [policyId, setPolicyId] = useState('');
   const [fromDs, setFromDs] = useState('');
   const [toDs, setToDs] = useState('');
 
-  const { data: optionsData, loading: optionsLoading, error: optionsError } = useQuery(GET_SIMULATION_OPTIONS);
+  const queryClient = useQueryClient();
 
-  const [runForecast, { data: forecastData, loading: forecastLoading, error: forecastError }] = useMutation(FORECAST_POLICY_RUN);
+  const { data: optionsData, isLoading: optionsLoading, error: optionsError } = useQuery({
+    queryKey: ['simulation-options'],
+    queryFn: async () => {
+      const [policiesRes, datasourcesRes] = await Promise.all([
+        apiFetch('/api/rest/policies?order_by=id asc'),
+        apiFetch('/api/rest/datasources?order_by=source_name asc'),
+      ]);
+      if (!policiesRes.ok) throw new Error(await policiesRes.text());
+      if (!datasourcesRes.ok) throw new Error(await datasourcesRes.text());
+      const policies = await policiesRes.json();
+      const datasources = await datasourcesRes.json();
+      return { policies, datasources };
+    },
+  });
 
-  const [runSimulation, { data: simData, loading: simLoading, error: simError }] = useMutation(SIMULATE_POLICY_RUN);
+  const runForecast = useMutation({
+    mutationFn: async ({ fromDs, toDs }: { fromDs: string; toDs: string }) => {
+      const res = await apiFetch('/api/rest/forecast-policy-run', {
+        method: 'POST',
+        body: JSON.stringify({ from_ds: fromDs, to_ds: toDs }),
+      });
+      if (!res.ok) throw new Error(await res.text());
+      return res.json();
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['forecast-policy-run'] }),
+  });
+
+  const runSimulation = useMutation({
+    mutationFn: async ({ policyId, fromDs, toDs }: { policyId: string; fromDs: string; toDs: string }) => {
+      const res = await apiFetch('/api/rest/simulate-policy-run', {
+        method: 'POST',
+        body: JSON.stringify({ policy_id: policyId, from_ds: fromDs, to_ds: toDs }),
+      });
+      if (!res.ok) throw new Error(await res.text());
+      return res.json();
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['simulate-policy-run'] }),
+  });
 
   const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (policyId && fromDs && toDs) {
-      runSimulation({
-        variables: {
-          policyId,
-          fromDs,
-          toDs,
-        },
-      });
-      // Also run the forecast in parallel
-      runForecast({
-        variables: {
-          fromDs,
-          toDs,
-        },
-      });
+      runSimulation.mutate({ policyId, fromDs, toDs });
+      runForecast.mutate({ fromDs, toDs });
     }
   };
 
@@ -100,7 +78,7 @@ const PolicySimulationPage: React.FC = () => {
   }
 
   if (optionsError) {
-    return <Alert severity="error">Failed to load simulation options: {optionsError.message}</Alert>;
+    return <Alert severity="error">Failed to load simulation options: {optionsError?.message}</Alert>;
   }
 
   return (
@@ -124,9 +102,9 @@ const PolicySimulationPage: React.FC = () => {
                 label="Policy"
                 onChange={(e) => setPolicyId(e.target.value)}
               >
-                {optionsData?.policy_rules.map((p: any) => (
+                {(optionsData?.policies || []).map((p: any) => (
                   <MenuItem key={p.id} value={p.id}>
-                    {p.name}
+                    {p.name || p.id}
                   </MenuItem>
                 ))}
               </Select>
@@ -143,7 +121,7 @@ const PolicySimulationPage: React.FC = () => {
                 label="From Datasource"
                 onChange={(e) => setFromDs(e.target.value)}
               >
-                {optionsData?.tenant_product_datasource.map((ds: any) => (
+                {(optionsData?.datasources || []).map((ds: any) => (
                   <MenuItem key={ds.id} value={ds.id}>
                     {ds.source_name}
                   </MenuItem>
@@ -162,7 +140,7 @@ const PolicySimulationPage: React.FC = () => {
                 label="To Datasource"
                 onChange={(e) => setToDs(e.target.value)}
               >
-                {optionsData?.tenant_product_datasource.map((ds: any) => (
+                {(optionsData?.datasources || []).map((ds: any) => (
                   <MenuItem key={ds.id} value={ds.id}>
                     {ds.source_name}
                   </MenuItem>
@@ -172,22 +150,22 @@ const PolicySimulationPage: React.FC = () => {
             </FormControl>
           </Grid>
           <Grid size={12}>
-            <Button type="submit" variant="contained" disabled={simLoading || !policyId || !fromDs || !toDs}>
-              {simLoading ? <CircularProgress size={24} /> : 'Run Simulation'}
+            <Button type="submit" variant="contained" disabled={runSimulation.isPending || !policyId || !fromDs || !toDs}>
+              {runSimulation.isPending ? <CircularProgress size={24} /> : 'Run Simulation'}
             </Button>
           </Grid>
         </Grid>
       </Paper>
 
-      {simError && (
+      {runSimulation.error && (
         <Alert severity="error" sx={{ mt: 3 }}>
-          Simulation failed: {simError.message}
+          Simulation failed: {runSimulation.error.message}
         </Alert>
       )}
 
-      {simData?.SimulatePolicyRun && <SimulationResultDetail result={simData.SimulatePolicyRun} />}
+      {runSimulation.data && <SimulationResultDetail result={runSimulation.data} />}
 
-      <ForecastPanel data={forecastData?.forecast_policy_run} loading={forecastLoading} error={forecastError} />
+      <ForecastPanel data={runForecast.data} loading={runForecast.isPending} error={runForecast.error} />
 
       <WhatIfEditor />
     </Box>

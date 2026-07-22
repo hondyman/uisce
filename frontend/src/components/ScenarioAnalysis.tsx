@@ -1,26 +1,19 @@
-
 import React, { useState } from 'react';
-import { gql, useSubscription } from '@apollo/client';
+import { useQuery } from '@tanstack/react-query';
+import { apiFetch } from '../lib/apiClient';
 import styles from './ScenarioAnalysis.module.css';
 
-const PORTFOLIOS_SUBSCRIPTION = gql`
-  subscription { 
-    portfolios {
-      id
-      aum
-      sharpe
-      risk
-      status
-    }
-  }
-`;
-
 const ScenarioAnalysis: React.FC = () => {
-  const { data: portfolioData, loading: portfolioLoading, error: portfolioError } = useSubscription(PORTFOLIOS_SUBSCRIPTION);
   const [selectedPortfolio, setSelectedPortfolio] = useState<string>("");
   const [selectedScenario, setSelectedScenario] = useState<string>("");
   const [analysisResult, setAnalysisResult] = useState<any>(null);
   const [loadingAnalysis, setLoadingAnalysis] = useState(false);
+
+  const { data: portfolioData, isLoading: portfolioLoading } = useQuery({
+    queryKey: ['portfolios'],
+    queryFn: () => apiFetch('/api/rest/portfolios').then(r => r.json()),
+    refetchInterval: 2000,
+  });
 
   const scenarios = [
     "Market Crash (-20%)",
@@ -56,18 +49,18 @@ const ScenarioAnalysis: React.FC = () => {
     }
   };
 
-  const basePortfolio = portfolioData?.portfolios.find((p: any) => p.id === selectedPortfolio);
+  const basePortfolio = portfolioData?.portfolios?.find((p: any) => p.id === selectedPortfolio);
 
   return (
     <div className={styles.container}>
       <div className={styles.panel}>
         <h2>Scenario Analysis</h2>
-        
+
         <div style={{ marginBottom: '1rem' }}>
           <label htmlFor="portfolio-select">Portfolio:</label>
           <select id="portfolio-select" value={selectedPortfolio} onChange={(e) => setSelectedPortfolio(e.target.value)} className="w-full p-2">
             <option value="">Select a portfolio</option>
-            {portfolioData?.portfolios.map((p: any) => (
+            {portfolioData?.portfolios?.map((p: any) => (
               <option key={p.id} value={p.id}>Portfolio {p.id} - ${p.aum.toLocaleString()}</option>
             ))}
           </select>

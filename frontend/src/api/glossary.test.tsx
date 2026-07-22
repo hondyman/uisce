@@ -1,8 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
- 
+
 import { QueryClient } from '@tanstack/react-query';
-import { ApolloClient } from '@apollo/client';
-import { renderWithProviders, createQueryClient, createApolloClient } from '../../test/testUtils';
+import { renderWithProviders, createQueryClient } from '../../test/testUtils';
 import { useUpdateTerm } from './glossary';
 
 // Mock the tenant context
@@ -18,11 +17,9 @@ global.fetch = vi.fn();
 
 describe('useUpdateTerm', () => {
   let queryClient: QueryClient;
-  let mockApolloClient: ApolloClient<any>;
 
   beforeEach(() => {
     queryClient = createQueryClient();
-    mockApolloClient = createApolloClient();
     vi.clearAllMocks();
   });
 
@@ -36,7 +33,7 @@ describe('useUpdateTerm', () => {
       return null;
     };
 
-    renderWithProviders(<Harness />, { queryClient, apolloClient: mockApolloClient });
+    renderWithProviders(<Harness />, { queryClient });
     // @ts-ignore
     const hook = (globalThis as any).__lastHook;
     expect(hook).toBeDefined();
@@ -56,7 +53,7 @@ describe('useUpdateTerm', () => {
       return null;
     };
 
-    renderWithProviders(<Harness />, { queryClient, apolloClient: mockApolloClient });
+    renderWithProviders(<Harness />, { queryClient });
     // @ts-ignore
     const hook = (globalThis as any).__lastHook;
     expect(hook).toBeDefined();

@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
-import { useQuery } from '@apollo/client';
-import { GET_SCOPED_TENANT, GET_TENANTS } from '../../../graphql/queries/tenantQueries';
+import { useQuery } from '@tanstack/react-query';
+import { apiFetch } from '../../../lib/apiClient';
 import { IconPlayerPlay, IconPlugConnected, IconSelect } from '@tabler/icons-react';
 import { Tooltip, Box, CircularProgress, LinearProgress } from '@mui/material';
 import { useNavigate } from 'react-router-dom';
@@ -64,13 +64,15 @@ const Connections = () => {
 
   const navigate = useNavigate();
 
-  // Determine which query to run
-  const query = scopedTenant ? GET_SCOPED_TENANT : GET_TENANTS;
-  const variables = scopedTenant ? { tenantId: scopedTenant.id } : {};
-
-  const { loading, error, data } = useQuery(query, {
-    variables,
-    skip: !scopedTenant && !isPlatformOperator, 
+  const { data, isLoading, error } = useQuery({
+    queryKey: scopedTenant ? ['tenants', scopedTenant.id] : ['tenants'],
+    queryFn: () => {
+      if (scopedTenant) {
+        return apiFetch(`/api/rest/tenants/${scopedTenant.id}`).then(r => r.json());
+      }
+      return apiFetch('/api/rest/tenants').then(r => r.json());
+    },
+    enabled: !!scopedTenant || !!isPlatformOperator,
   });
 
   const handleTestConnection = async (datasourceId: string) => {
@@ -278,9 +280,9 @@ const Connections = () => {
     }
   };
 
-    // Update connections mapping to handle list of tenants (data.tenants is array)
+    // Update connections mapping to handle list of tenants
     const connections = useMemo(() => {
-      const tenants = data?.tenants || [];
+      const tenants = data?.tenants || data || [];
       if (tenants.length === 0) return [] as ConnectionInfo[];
 
       // Map across ALL returned tenants
@@ -361,8 +363,8 @@ const Connections = () => {
   };
 
   if (!scopedTenant && !useAccess().isPlatformOperator) return <p>Select a tenant scope to view connections.</p>;
-  if (loading) return <p>Loading...</p>;
-  if (error) return <p>Error: {error.message}</p>;
+  if (isLoading) return <p>Loading...</p>;
+  if (error) return <p>Error: {(error as Error).message}</p>;
 
   const getSortIndicator = (key: string) => {
     if (sortConfig.key !== key) return null;

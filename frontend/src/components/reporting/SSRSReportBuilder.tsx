@@ -1,6 +1,6 @@
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import { DndContext, DragOverlay, useDraggable as _useDraggable, useDroppable as _useDroppable } from '@dnd-kit/core';
-import { Box, Drawer, Typography, Tabs, Tab, Paper, Grid, LinearProgress, Pagination, Snackbar, Alert, Divider, Chip, InputAdornment, FormControlLabel, Switch, Card, TextField, Button, Tooltip, IconButton } from '@mui/material';
+import { Box, Drawer, Typography, Tabs, Tab, Paper, Grid, LinearProgress, Pagination, Snackbar, Alert, Divider, Chip, InputAdornment, FormControlLabel, Switch, Card, TextField, Button, Tooltip, IconButton, Select, MenuItem, FormControl, InputLabel, Stack } from '@mui/material';
 import { QueryClient, QueryClientProvider, useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import useUndo from 'use-undo';
 
@@ -20,6 +20,8 @@ import EventScriptsEditor from './EventScriptsEditor';
 import { Database, Table as TableIcon, BarChart3, Type, Image, FileText, Square, Minus, Gauge, Activity, Grid3X3, List as ListIcon, Plus, Save, Download, Printer, Eye, Undo2, Redo2, Settings, LayoutDashboard } from 'lucide-react';
 
 import axios from 'axios';
+import { useTenant } from '../../contexts/TenantContext';
+import { getSelectedRegion } from '../../lib/region';
 
 type ReportParameter = {
   id: string;
@@ -42,6 +44,7 @@ const fetchDataSources = async () => { const token = localStorage.getItem('token
 
 const SSRSReportBuilderContent: React.FC = () => {
   const queryClient = useQueryClient();
+  const { tenant, datasource } = useTenant();
 
   const [elementsState, { set: setElements, undo, redo, canUndo, canRedo }] = useUndo<any[]>([]);
   const elements = elementsState.present;
@@ -120,6 +123,128 @@ const SSRSReportBuilderContent: React.FC = () => {
 
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' as 'success' | 'info' | 'warning' | 'error' });
   
+  // Business Object states
+  const [businessObjects, setBusinessObjects] = useState<any[]>([]);
+  const [selectedBOId, setSelectedBOId] = useState<string>('');
+  const [selectedBO, setSelectedBO] = useState<any | null>(null);
+  const [bindings, setBindings] = useState<any[]>([]);
+  const [selectedBindingId, setSelectedBindingId] = useState<string>('');
+  const [relatedBOs, setRelatedBOs] = useState<any[]>([]);
+  const [activeDatasets, setActiveDatasets] = useState<any[]>([...datasets]);
+
+  // Helper to build headers with authentication
+  const getAuthHeaders = useCallback((additionalHeaders: Record<string, string> = {}): Record<string, string> => {
+    const token = typeof localStorage !== 'undefined' ? localStorage.getItem('auth_token') : null;
+    const authHeader = token && !token.includes('demo') ? `Bearer ${token}` : '';
+    
+    const tenantId = tenant?.id || '99e99e99-99e9-49e9-89e9-99e99e99e999';
+    const datasourceId = datasource?.id || 'b7879e02-7e4c-44c9-bade-2b10aab2d3c0';
+
+    return {
+      'Authorization': authHeader,
+      'Content-Type': 'application/json',
+      'X-Tenant-ID': tenantId,
+      'X-Tenant-Datasource-ID': datasourceId,
+      'X-Tenant-Region': getSelectedRegion(),
+      ...additionalHeaders,
+    };
+  }, [tenant, datasource]);
+
+  // Fetch Business Objects list on mount
+  useEffect(() => {
+    const loadBOs = async () => {
+      try {
+        const response = await fetch('/api/business-objects?format=array', {
+          headers: getAuthHeaders(),
+        });
+        if (response.ok) {
+          const data = await response.json();
+          const list = Array.isArray(data) ? data : Object.values(data || {});
+          setBusinessObjects(list);
+        }
+      } catch (err) {
+        console.error('Failed to load business objects for report builder:', err);
+      }
+    };
+    loadBOs();
+  }, [getAuthHeaders]);
+
+  // Fetch BO details, bindings, and relationships on selected BO change
+  useEffect(() => {
+    if (!selectedBOId) {
+      setSelectedBO(null);
+      setBindings([]);
+      setSelectedBindingId('');
+      setRelatedBOs([]);
+      return;
+    }
+
+    const loadBODetails = async () => {
+      try {
+        const boRes = await fetch(`/api/business-objects/${selectedBOId}`, { headers: getAuthHeaders() });
+        if (boRes.ok) {
+          const boData = await boRes.json();
+          setSelectedBO(boData);
+        }
+
+        let bindingsData = [];
+        const bindingsRes = await fetch(`/api/business-objects/${selectedBOId}/bindings/`, { headers: getAuthHeaders() });
+        if (bindingsRes.ok) {
+          bindingsData = await bindingsRes.json();
+        } else {
+          // Fallback to embedded bindings inside the detailed BO response
+          const boResClone = await fetch(`/api/business-objects/${selectedBOId}`, { headers: getAuthHeaders() });
+          if (boResClone.ok) {
+            const boData = await boResClone.json();
+            bindingsData = boData.bindings || [];
+          }
+        }
+        
+        setBindings(bindingsData || []);
+        if (bindingsData && bindingsData.length > 0) {
+          setSelectedBindingId(bindingsData[0].id);
+        } else {
+          setSelectedBindingId('');
+        }
+
+        const relsRes = await fetch(`/api/business-objects/${selectedBOId}/relationships`, { headers: getAuthHeaders() });
+        if (relsRes.ok) {
+          const relsData = await relsRes.json();
+          setRelatedBOs(relsData?.relatedObjects || []);
+        }
+      } catch (err) {
+        console.error('Failed to load BO details / bindings / relationships:', err);
+      }
+    };
+
+    loadBODetails();
+  }, [selectedBOId, getAuthHeaders]);
+
+  // Wire BO fields dynamically into active datasets
+  useEffect(() => {
+    if (!selectedBO) {
+      setActiveDatasets([...datasets]);
+      return;
+    }
+
+    const boFields = [
+      ...(selectedBO.coreFields || []),
+      ...(selectedBO.customFields || [])
+    ].map((f: any) => ({
+      name: f.name || f.technicalName || '',
+      type: f.dataType || 'string'
+    }));
+
+    const dynamicDataset = {
+      id: `ds_${selectedBO.id}`,
+      name: selectedBO.name || 'BODataset',
+      dataSourceId: selectedBindingId || 'bo_binding',
+      fields: boFields
+    };
+
+    setActiveDatasets([dynamicDataset, ...datasets]);
+  }, [selectedBO, selectedBindingId]);
+
   // Preview data state
   const [previewData, setPreviewData] = useState<any[] | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
@@ -269,7 +394,8 @@ const SSRSReportBuilderContent: React.FC = () => {
     { type: ELEMENT_TYPES.SPARKLINE, icon: <Activity size={16} />, label: 'Sparkline' }
   ];
 
-  if (templatesLoading || dataSourcesLoading) return <LinearProgress />;
+  // Remove blocking port 9088 query loading guard
+  // if (templatesLoading || dataSourcesLoading) return <LinearProgress />;
 
   return (
     <DndContext onDragEnd={handleDragEnd} onDragStart={handleDragStart}>
@@ -379,7 +505,7 @@ const SSRSReportBuilderContent: React.FC = () => {
                   <Paper sx={{ p: 2 }}>
                     <CalculatedFieldsEditor
                       calculatedFields={calculatedFields}
-                      datasets={datasets as unknown as any[]}
+                      datasets={activeDatasets as unknown as any[]}
                       onAddCalculatedField={handleAddCalculatedField}
                       onCalculatedFieldChange={handleCalculatedFieldChange}
                       onRemoveCalculatedField={(fieldId) => setCalculatedFields((prev) => prev.filter((c) => c.id !== fieldId))}
@@ -528,22 +654,98 @@ const SSRSReportBuilderContent: React.FC = () => {
             </Box>
           )}
 
-          {activeTab === 'data' && ( // Adjusted for new flex layout
+          {activeTab === 'data' && (
             <Box sx={{ p: 2, overflowY: 'auto' }}>
-              <Typography variant="h6" gutterBottom>Data Sources & Datasets</Typography>
+              <Typography variant="h6" gutterBottom>Business Object Data Mapping</Typography>
               <Grid container spacing={3}>
-                <Grid size={{ 'xs': 12, 'md': 6 }}>
-                  <Paper sx={{ p: 2 }}>
-                    <Typography variant="h6" gutterBottom>Data Sources</Typography>
-                    {(fetchedDataSources || staticDataSources).map((ds: any) => (<Box key={ds.id} sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}><Database size={20} />{ds.name}</Box>))}
-                    <Button variant="outlined" startIcon={<Plus />} onClick={() => setDataSourcesOpen(true)}>Add Data Source</Button>
+                {/* Business Object & Binding Selection */}
+                <Grid size={{ 'xs': 12, 'md': 8 }}>
+                  <Paper sx={{ p: 3, display: 'flex', flexDirection: 'column', gap: 3 }}>
+                    <Typography variant="subtitle1" fontWeight="bold">Report Data Source (Business Object)</Typography>
+                    
+                    <FormControl fullWidth>
+                      <InputLabel id="bo-select-label">Primary Business Object</InputLabel>
+                      <Select
+                        labelId="bo-select-label"
+                        value={selectedBOId}
+                        label="Primary Business Object"
+                        onChange={(e) => setSelectedBOId(e.target.value as string)}
+                      >
+                        <MenuItem value=""><em>None (Select Business Object)</em></MenuItem>
+                        {businessObjects.map((bo: any) => (
+                          <MenuItem key={bo.id} value={bo.id}>
+                            {bo.displayName || bo.name} ({bo.key})
+                          </MenuItem>
+                        ))}
+                      </Select>
+                    </FormControl>
+
+                    {selectedBOId && (
+                      <FormControl fullWidth>
+                        <InputLabel id="binding-select-label">Active Binding Configuration</InputLabel>
+                        <Select
+                          labelId="binding-select-label"
+                          value={selectedBindingId}
+                          label="Active Binding Configuration"
+                          onChange={(e) => setSelectedBindingId(e.target.value as string)}
+                        >
+                          {bindings.length > 0 ? (
+                            bindings.map((b: any) => (
+                              <MenuItem key={b.id} value={b.id}>
+                                {b.name || `Binding: ${b.datasource_id || b.datasourceId}`} ({b.binding_type || b.bindingType || 'physical'})
+                              </MenuItem>
+                            ))
+                          ) : (
+                            <MenuItem value="" disabled>No active bindings defined for this Business Object</MenuItem>
+                          )}
+                        </Select>
+                      </FormControl>
+                    )}
                   </Paper>
                 </Grid>
-                <Grid size={{ 'xs': 12, 'md': 6 }}>
-                  <Paper sx={{ p: 2 }}>
-                    <Typography variant="h6" gutterBottom>Datasets</Typography>
-                    {datasets.map(ds => (<Box key={ds.id} sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}><TableIcon size={20} />{ds.name}</Box>))}
-                    <Button variant="outlined" startIcon={<Plus />}>Add Dataset</Button>
+
+                {/* Related Business Objects Info */}
+                <Grid size={{ 'xs': 12, 'md': 4 }}>
+                  <Paper sx={{ p: 3, height: '100%' }}>
+                    <Typography variant="subtitle1" fontWeight="bold" gutterBottom>Related Business Objects</Typography>
+                    {selectedBOId ? (
+                      relatedBOs.length > 0 ? (
+                        <Stack spacing={1} sx={{ mt: 1 }}>
+                          {relatedBOs.map((rel: any, index: number) => (
+                            <Box key={index} sx={{ p: 1.5, border: '1px solid', borderColor: 'divider', borderRadius: 1, bgcolor: 'action.hover' }}>
+                              <Typography variant="subtitle2" sx={{ fontWeight: 'bold' }}>{rel.relatedObjectName}</Typography>
+                              <Typography variant="caption" color="text.secondary">{rel.relationshipType} | {rel.description}</Typography>
+                            </Box>
+                          ))}
+                        </Stack>
+                      ) : (
+                        <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+                          No related business objects defined.
+                        </Typography>
+                      )
+                    ) : (
+                      <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+                        Select a Business Object to view its relationships.
+                      </Typography>
+                    )}
+                  </Paper>
+                </Grid>
+
+                {/* Active Dataset Fields */}
+                <Grid size={{ 'xs': 12 }}>
+                  <Paper sx={{ p: 3 }}>
+                    <Typography variant="subtitle1" fontWeight="bold" gutterBottom>Active Dataset Fields</Typography>
+                    <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mt: 1 }}>
+                      {activeDatasets.flatMap(ds => ds.fields || []).map((f: any, idx: number) => (
+                        <Chip
+                          key={idx}
+                          label={`${f.name} (${f.type})`}
+                          variant="outlined"
+                          color="primary"
+                          icon={<TableIcon size={14} />}
+                        />
+                      ))}
+                    </Box>
                   </Paper>
                 </Grid>
               </Grid>

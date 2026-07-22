@@ -12,7 +12,8 @@ import {
   Target,
   ShieldAlert
 } from 'lucide-react';
-import { gql, useQuery, useMutation } from '@apollo/client';
+import { useQuery, useMutation } from '@tanstack/react-query';
+import { apiFetch } from '../../lib/apiClient';
 import { devError } from '../../utils/devLogger';
 
 // ============================================================================
@@ -94,47 +95,7 @@ interface AISuggestPanelState {
   dismissedIds: Set<string>;
 }
 
-// Mock GraphQL queries for now
-const GET_AI_SUGGESTIONS = gql`
-  query GetAISuggestions($tenantId: ID!, $datasourceId: ID!, $entity: String!, $context: String!, $existingRuleIds: [ID!]) {
-    getAISuggestions(tenantId: $tenantId, datasourceId: $datasourceId, entity: $entity, context: $context, existingRuleIds: $existingRuleIds) {
-      suggestions {
-        id
-        type
-        title
-        description
-        confidence
-        reasoning
-        impact
-        dismissible
-      }
-      loading
-      timestamp
-    }
-  }
-`;
 
-const GENERATE_AI_RULE = gql`
-  mutation GenerateAIRule($suggestionId: ID!, $tenantId: ID!, $datasourceId: ID!) {
-    generateAIRule(suggestionId: $suggestionId, tenantId: $tenantId, datasourceId: $datasourceId) {
-      id
-      name
-      entity
-    }
-  }
-`;
-
-const DISMISS_SUGGESTION = gql`
-  mutation DismissSuggestion($suggestionId: ID!, $tenantId: ID!, $datasourceId: ID!) {
-    dismissSuggestion(suggestionId: $suggestionId, tenantId: $tenantId, datasourceId: $datasourceId)
-  }
-`;
-
-const LOG_TERM_FEEDBACK = gql`
-  mutation LogTermAISuggestionFeedback($input: LogTermFeedbackInput!) {
-    logTermAISuggestionFeedback(input: $input)
-  }
-`;
 
 // ============================================================================
 // MAIN COMPONENT
@@ -189,43 +150,57 @@ export const AISuggestButton: React.FC<AISuggestButtonProps> = ({
     }
   ];
 
-  // Mock GraphQL Query for suggestions
-  const { data: _suggestionsData, loading: suggestionsLoading, refetch } = useQuery<{
-    getAISuggestions: AISuggestionsResponse;
-  }>(GET_AI_SUGGESTIONS, {
-    variables: {
-      tenantId,
-      datasourceId,
-      entity,
-      context,
-      existingRuleIds: existingRules.map(r => r.id)
+  // Query for suggestions
+  const { data: _suggestionsData, isLoading: suggestionsLoading, refetch } = useQuery({
+    queryKey: ['ai-suggestions', tenantId, datasourceId, entity, context],
+    queryFn: () => {
+      const params = new URLSearchParams({
+        tenantId: tenantId || '',
+        datasourceId: datasourceId || '',
+        entity: entity || '',
+        context,
+        existingRuleIds: existingRules.map(r => r.id).join(','),
+      });
+      return apiFetch(`/api/rest/ai-suggestions?${params}`).then(r => r.json());
     },
-    skip: !panelState.isOpen || !entity || !tenantId || !datasourceId,
-    fetchPolicy: 'cache-and-network'
+    enabled: !!panelState.isOpen && !!entity && !!tenantId && !!datasourceId,
   });
 
-  // Mock GraphQL Mutation to generate rule
-  const [generateRule, { loading: generateLoading }] = useMutation(
-    GENERATE_AI_RULE,
-    {
-      onCompleted: (data) => {
-        if (onSuggestionApplied && panelState.selectedSuggestion) {
-          onSuggestionApplied(panelState.selectedSuggestion, data.generateAIRule);
-        }
-        handleClosePanel();
-      },
-      onError: (error) => {
-        devError('Failed to generate rule:', error);
+  // Mutation to generate rule
+  const { mutate: generateRule, isPending: generateLoading } = useMutation({
+    mutationFn: (input: { suggestionId: string; tenantId?: string; datasourceId?: string }) =>
+      apiFetch('/api/rest/ai-suggestions/generate', {
+        method: 'POST',
+        body: JSON.stringify(input),
+      }).then(r => r.json()),
+    onSuccess: (data) => {
+      if (onSuggestionApplied && panelState.selectedSuggestion) {
+        onSuggestionApplied(panelState.selectedSuggestion, data);
       }
-    }
-  );
+      handleClosePanel();
+    },
+    onError: (error) => {
+      devError('Failed to generate rule:', error);
+    },
+  });
 
-  // Mock GraphQL Mutation to dismiss suggestion
-  const [dismissSuggestion] = useMutation(DISMISS_SUGGESTION);
+  // Mutation to dismiss suggestion
+  const dismissSuggestion = useMutation({
+    mutationFn: (input: { suggestionId: string; tenantId?: string; datasourceId?: string }) =>
+      apiFetch('/api/rest/ai-suggestions/dismiss', {
+        method: 'POST',
+        body: JSON.stringify(input),
+      }),
+  });
 
   // Mutation to log term feedback
-  const [logTermFeedback] = useMutation(LOG_TERM_FEEDBACK, {
-      onError: (e) => devError('Failed to log AI feedback', e)
+  const logTermFeedback = useMutation({
+    mutationFn: (input: any) =>
+      apiFetch('/api/semantic-mapping/feedback', {
+        method: 'POST',
+        body: JSON.stringify(input),
+      }),
+    onError: (e: any) => devError('Failed to log AI feedback', e),
   });
 
   // Handle clicking outside panel
@@ -296,11 +271,9 @@ export const AISuggestButton: React.FC<AISuggestButtonProps> = ({
     if (suggestion.type === 'rule' && suggestion.suggestedRule) {
       try {
         await generateRule({
-          variables: {
-            suggestionId: suggestion.id,
-            tenantId,
-            datasourceId
-          }
+          suggestionId: suggestion.id,
+          tenantId,
+          datasourceId,
         });
       } catch (error) {
         devError('Failed to apply suggestion:', error);
@@ -314,23 +287,19 @@ export const AISuggestButton: React.FC<AISuggestButtonProps> = ({
 
     // Log feedback if termId/nodeId are present
     if (termId && nodeId && tenantId && datasourceId) {
-        logTermFeedback({
-            variables: {
-                input: {
-                    tenantId,
-                    datasourceId,
-                    termId,
-                    nodeId,
-                    suggestionId: suggestion.id,
-                    action: 'approved',
-                    features: {
-                        entity,
-                        context,
-                        confidence: suggestion.confidence
-                    }
-                }
-            }
-        });
+      await logTermFeedback.mutateAsync({
+        tenantId,
+        datasourceId,
+        termId,
+        nodeId,
+        suggestionId: suggestion.id,
+        action: 'approved',
+        features: {
+          entity,
+          context,
+          confidence: suggestion.confidence,
+        },
+      });
     }
   };
 
@@ -341,12 +310,10 @@ export const AISuggestButton: React.FC<AISuggestButtonProps> = ({
     }));
 
     try {
-      await dismissSuggestion({
-        variables: {
-          suggestionId: suggestion.id,
-          tenantId,
-          datasourceId
-        }
+      await dismissSuggestion.mutateAsync({
+        suggestionId: suggestion.id,
+        tenantId,
+        datasourceId,
       });
     } catch (error) {
       devError('Failed to dismiss suggestion:', error);
@@ -354,23 +321,19 @@ export const AISuggestButton: React.FC<AISuggestButtonProps> = ({
 
     // Log feedback (rejected)
     if (termId && nodeId && tenantId && datasourceId) {
-        logTermFeedback({
-            variables: {
-                input: {
-                    tenantId,
-                    datasourceId,
-                    termId,
-                    nodeId,
-                    suggestionId: suggestion.id,
-                    action: 'rejected',
-                    features: {
-                        entity,
-                        context,
-                        confidence: suggestion.confidence
-                    }
-                }
-            }
-        });
+      await logTermFeedback.mutateAsync({
+        tenantId,
+        datasourceId,
+        termId,
+        nodeId,
+        suggestionId: suggestion.id,
+        action: 'rejected',
+        features: {
+          entity,
+          context,
+          confidence: suggestion.confidence,
+        },
+      });
     }
   };
 

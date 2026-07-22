@@ -1,6 +1,7 @@
 import React, { useState, useCallback } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { apiFetch } from '../lib/apiClient';
 import styles from './PortfolioAnalysisDashboard.module.css';
-import { gql, useQuery } from '@apollo/client';
 import {
   ChevronRight,
   ChevronLeft,
@@ -10,86 +11,6 @@ import {
   BarChart3,
   Activity,
 } from 'lucide-react';
-
-const PORTFOLIO_DRILL_DOWN_QUERY = gql`
-  query PortfolioDrillDown(
-    $portfolioId: uuid!
-    $dimension: String!
-    $level: Int
-    $asOfDate: date
-    $tenantId: uuid
-    $datasourceId: uuid
-  ) {
-    analyze_portfolio_drill_down(
-      portfolio_id: $portfolioId
-      dimension: $dimension
-      level: $level
-      as_of_date: $asOfDate
-      tenant_id: $tenantId
-      tenant_instance_id: $datasourceId
-    ) {
-      dimension_value
-      dimension_level
-      position_count
-      market_value
-      cost_basis
-      unrealized_gain_loss
-      gain_loss_pct
-      weight_pct
-      has_children
-    }
-  }
-`;
-
-const PORTFOLIO_PERFORMANCE_QUERY = gql`
-  query PortfolioPerformance(
-    $portfolioId: uuid!
-    $startDate: date!
-    $endDate: date
-    $tenantId: uuid
-    $datasourceId: uuid
-  ) {
-    calculate_portfolio_performance(
-      portfolio_id: $portfolioId
-      start_date: $startDate
-      end_date: $endDate
-      tenant_id: $tenantId
-      tenant_instance_id: $datasourceId
-    ) {
-      period_name
-      start_value
-      end_value
-      net_cash_flows
-      total_return_pct
-      time_weighted_return_pct
-      days_held
-    }
-  }
-`;
-
-const CONCENTRATION_RISK_QUERY = gql`
-  query ConcentrationRisk(
-    $portfolioId: uuid!
-    $dimension: String!
-    $thresholdPct: Float
-    $tenantId: uuid
-    $datasourceId: uuid
-  ) {
-    analyze_concentration_risk(
-      portfolio_id: $portfolioId
-      dimension: $dimension
-      threshold_pct: $thresholdPct
-      tenant_id: $tenantId
-      tenant_instance_id: $datasourceId
-    ) {
-      dimension_value
-      concentration_pct
-      market_value
-      risk_level
-      exceeds_threshold
-    }
-  }
-`;
 
 interface BreadcrumbItem {
   level: number;
@@ -115,51 +36,35 @@ export const PortfolioAnalysisDashboard: React.FC<PortfolioAnalysisDashboardProp
   const [currentDimension, setCurrentDimension] = useState<string>('asset_class');
   const [selectedPeriod, setSelectedPeriod] = useState<'1M' | '3M' | '6M' | '1Y'>('1M');
 
-  // Drill-down query
   const {
     data: drillData,
-    loading: drillLoading,
+    isLoading: drillLoading,
     error: drillError,
-  } = useQuery(PORTFOLIO_DRILL_DOWN_QUERY, {
-    variables: {
-      portfolioId,
-      dimension: currentDimension,
-      level: breadcrumbs.length,
-      asOfDate: new Date().toISOString().split('T')[0],
-      tenantId,
-      datasourceId,
-    },
-    skip: activeView !== 'analysis',
+  } = useQuery({
+    queryKey: ['portfolio-drill-down', portfolioId, currentDimension, breadcrumbs.length, tenantId, datasourceId],
+    queryFn: () => apiFetch(`/api/rest/portfolio-drill-down?portfolio_id=${portfolioId}&dimension=${currentDimension}&level=${breadcrumbs.length}&as_of_date=${new Date().toISOString().split('T')[0]}&tenant_id=${tenantId || ''}&tenant_instance_id=${datasourceId || ''}`).then(r => r.json()),
+    enabled: activeView === 'analysis',
+    refetchInterval: 2000,
   });
 
-  // Performance query
   const {
     data: perfData,
-    loading: perfLoading,
-  } = useQuery(PORTFOLIO_PERFORMANCE_QUERY, {
-    variables: {
-      portfolioId,
-      startDate: getPeriodStart(selectedPeriod),
-      endDate: new Date().toISOString().split('T')[0],
-      tenantId,
-      datasourceId,
-    },
-    skip: activeView !== 'performance',
+    isLoading: perfLoading,
+  } = useQuery({
+    queryKey: ['portfolio-performance', portfolioId, selectedPeriod, tenantId, datasourceId],
+    queryFn: () => apiFetch(`/api/rest/portfolio-performance?portfolio_id=${portfolioId}&start_date=${getPeriodStart(selectedPeriod)}&end_date=${new Date().toISOString().split('T')[0]}&tenant_id=${tenantId || ''}&tenant_instance_id=${datasourceId || ''}`).then(r => r.json()),
+    enabled: activeView === 'performance',
+    refetchInterval: 2000,
   });
 
-  // Risk query
   const {
     data: riskData,
-    loading: riskLoading,
-  } = useQuery(CONCENTRATION_RISK_QUERY, {
-    variables: {
-      portfolioId,
-      dimension: 'security',
-      thresholdPct: 10,
-      tenantId,
-      datasourceId,
-    },
-    skip: activeView !== 'risk',
+    isLoading: riskLoading,
+  } = useQuery({
+    queryKey: ['concentration-risk', portfolioId, tenantId, datasourceId],
+    queryFn: () => apiFetch(`/api/rest/concentration-risk?portfolio_id=${portfolioId}&dimension=security&threshold_pct=10&tenant_id=${tenantId || ''}&tenant_instance_id=${datasourceId || ''}`).then(r => r.json()),
+    enabled: activeView === 'risk',
+    refetchInterval: 2000,
   });
 
   const handleDrillDown = useCallback((dimensionValue: string) => {
@@ -179,7 +84,6 @@ export const PortfolioAnalysisDashboard: React.FC<PortfolioAnalysisDashboardProp
     const newBreadcrumbs = breadcrumbs.slice(0, targetLevel + 1);
     setBreadcrumbs(newBreadcrumbs);
 
-    // Set dimension based on breadcrumb level
     const dimensionMap: Record<number, string> = {
       0: 'asset_class',
       1: 'sector',
@@ -195,7 +99,6 @@ export const PortfolioAnalysisDashboard: React.FC<PortfolioAnalysisDashboardProp
       'asset_class': 'sector',
       'sector': 'industry',
       'industry': 'security',
-      // treat geography as a branch that resolves to security in the drill-down
       'geography': 'security',
       'security': 'security',
     };
@@ -226,7 +129,6 @@ export const PortfolioAnalysisDashboard: React.FC<PortfolioAnalysisDashboardProp
 
   return (
     <div className="space-y-6">
-      {/* Navigation Tabs */}
       <div className="flex gap-4 border-b border-gray-200">
         {(['analysis', 'performance', 'risk'] as const).map((view) => (
           <button
@@ -246,10 +148,8 @@ export const PortfolioAnalysisDashboard: React.FC<PortfolioAnalysisDashboardProp
         ))}
       </div>
 
-      {/* ANALYSIS VIEW */}
       {activeView === 'analysis' && (
         <div className="space-y-4">
-          {/* Breadcrumb Navigation */}
           <div className="flex items-center gap-2 text-sm">
             {breadcrumbs.map((crumb, index) => (
               <React.Fragment key={index}>
@@ -268,7 +168,6 @@ export const PortfolioAnalysisDashboard: React.FC<PortfolioAnalysisDashboardProp
             ))}
           </div>
 
-          {/* Dimension Selector */}
           <div className="flex gap-4">
             <div className="flex-1">
               <label htmlFor="view-by-select" className="block text-sm font-medium text-gray-700 mb-2">
@@ -293,7 +192,6 @@ export const PortfolioAnalysisDashboard: React.FC<PortfolioAnalysisDashboardProp
             </div>
           </div>
 
-          {/* Drill-Down Table */}
           {drillLoading ? (
             <div className="text-center py-12">Loading...</div>
           ) : drillError ? (
@@ -345,7 +243,6 @@ export const PortfolioAnalysisDashboard: React.FC<PortfolioAnalysisDashboardProp
                           <div className="w-16 h-2 bg-gray-200 rounded-full overflow-hidden">
                             <div
                               className={`h-full bg-blue-500 ${styles.progressInner}`}
-                              // set the CSS variable for the module-based rule
                               style={{ ['--progress-width' as any]: `${Math.min(row.weight_pct, 100)}%` } as React.CSSProperties}
                             />
                           </div>
@@ -375,10 +272,8 @@ export const PortfolioAnalysisDashboard: React.FC<PortfolioAnalysisDashboardProp
         </div>
       )}
 
-      {/* PERFORMANCE VIEW */}
       {activeView === 'performance' && (
         <div className="space-y-4">
-          {/* Period Selector */}
           <div className="flex gap-2">
             {(['1M', '3M', '6M', '1Y'] as const).map((period) => (
               <button
@@ -395,7 +290,6 @@ export const PortfolioAnalysisDashboard: React.FC<PortfolioAnalysisDashboardProp
             ))}
           </div>
 
-          {/* Performance Metrics */}
           {perfLoading ? (
             <div className="text-center py-12">Loading...</div>
           ) : (
@@ -439,14 +333,12 @@ export const PortfolioAnalysisDashboard: React.FC<PortfolioAnalysisDashboardProp
         </div>
       )}
 
-      {/* RISK VIEW */}
       {activeView === 'risk' && (
         <div className="space-y-4">
           {riskLoading ? (
             <div className="text-center py-12">Loading...</div>
           ) : (
             <>
-              {/* Summary Cards */}
               <div className="grid grid-cols-3 gap-4">
                 <div className="border border-gray-200 rounded-lg p-4">
                   <p className="text-gray-600 text-sm">Total Positions</p>
@@ -472,7 +364,6 @@ export const PortfolioAnalysisDashboard: React.FC<PortfolioAnalysisDashboardProp
                 </div>
               </div>
 
-              {/* Concentration Table */}
               <div className="border border-gray-200 rounded-lg overflow-hidden">
                 <table className="w-full">
                   <thead>
@@ -524,7 +415,6 @@ export const PortfolioAnalysisDashboard: React.FC<PortfolioAnalysisDashboardProp
   );
 };
 
-// Helper function
 function getPeriodStart(period: string): string {
   const now = new Date();
   const dayMap: Record<string, number> = {

@@ -1,6 +1,7 @@
 // React import removed (automatic JSX runtime)
 import { devLog } from '../../utils/devLogger';
-import { gql, useMutation, ApolloCache, FetchResult } from '@apollo/client';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { apiFetch } from '../../lib/apiClient';
 import { z } from 'zod';
 import type { JSONValue } from '../../types/json';
 
@@ -13,29 +14,12 @@ import {
   FormContextValue,
 } from '../../graphql/helpers/fabric_form';
 
-// ----- GraphQL mutation -----
-export const CREATE_DRAFT = gql`
-  mutation CreateDraft($input: fabric_defn_insert_input!) {
-    insert_fabric_defn_one(object: $input) {
-      id
-      title
-      model_key
-      version
-      description
-    }
-  }
-`;
-
 export type CreateDraftData = {
-  insert_fabric_defn_one: {
-    id: string;
-    title: string;
-    model_key: string;
-    version: number;
-    description?: string | null;
-    // Add __typename for Apollo cache
-    __typename?: string;
-  };
+  id: string;
+  title: string;
+  model_key: string;
+  version: number;
+  description?: string | null;
 };
 
 export type CreateDraftVariables = {
@@ -75,50 +59,26 @@ const draftSchema = z.object({
 
 // ----- Component -----
 export function CreateDraftForm(): JSX.Element {
-  const [mutate, { loading, error }] = useMutation<CreateDraftData, CreateDraftVariables>(CREATE_DRAFT, {
-    optimisticResponse: {
-      insert_fabric_defn_one: {
-        __typename: 'fabric_defn',
-        id: 'temp-id',
-        model_key: 'orders',
-        version: 3,
-        title: 'Orders v3',
-        description: 'Adds revenue measures',
-      },
+  const queryClient = useQueryClient();
+
+  const { mutate, isPending: loading, error } = useMutation({
+    mutationFn: (input: CreateDraftVariables['input']) =>
+      apiFetch('/api/rest/fabric-defns', {
+        method: 'POST',
+        body: JSON.stringify(input),
+      }).then(r => r.json()),
+    onSuccess: (data: CreateDraftData) => {
+      devLog('Created draft:', data.id);
+      queryClient.invalidateQueries({ queryKey: ['fabric-defns'] });
     },
-    update: (cache: ApolloCache<CreateDraftData>, result: FetchResult<CreateDraftData>) => {
-      const newDraft = result.data?.insert_fabric_defn_one;
-      if (!newDraft) return;
-      cache.modify({
-        fields: {
-          fabric_defn(existingRefs = []) {
-            const newRef = cache.writeFragment({
-              data: newDraft,
-              fragment: gql`
-                fragment NewDraft on fabric_defn {
-                  id
-                  title
-                  model_key
-                  version
-                  description
-                }
-              `,
-            });
-            return [newRef, ...existingRefs];
-          },
-        },
-      });
-    },
-    onCompleted: (data: CreateDraftData) =>
-  devLog('Created draft:', data.insert_fabric_defn_one?.id),
   });
 
   const hook = {
     submit: async (vars: Record<string, unknown>) => {
-      await mutate({ variables: vars as CreateDraftVariables });
+      await mutate(vars as CreateDraftVariables['input']);
     },
     submitting: loading,
-    error: error ? { message: error.message } : null,
+    error: error ? { message: (error as Error).message } : null,
   };
 
   return (

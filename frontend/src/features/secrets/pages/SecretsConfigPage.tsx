@@ -33,50 +33,8 @@ import RefreshIcon from '@mui/icons-material/Refresh';
 import LockIcon from '@mui/icons-material/Lock';
 import ScheduleIcon from '@mui/icons-material/Schedule';
 import SecurityIcon from '@mui/icons-material/Security';
-import { useQuery, useMutation } from '@apollo/client';
-import { gql } from '@apollo/client';
-
-// GraphQL Queries
-const GET_SECRETS = gql`
-  query GetSecrets($tenantId: uuid!) {
-    secret_metadata(where: { tenant_id: { _eq: $tenantId }, deleted_at: { _is_null: true } }) {
-      id
-      name
-      path
-      secret_type
-      description
-      ttl
-      tags
-      attributes
-      created_at
-      updated_at
-    }
-  }
-`;
-
-const INSERT_SECRET = gql`
-  mutation InsertSecret($object: secret_metadata_insert_input!) {
-    insert_secret_metadata_one(object: $object) {
-      id
-    }
-  }
-`;
-
-const UPDATE_SECRET = gql`
-  mutation UpdateSecret($id: uuid!, $set: secret_metadata_set_input!) {
-    update_secret_metadata_by_pk(pk_columns: { id: $id }, _set: $set) {
-      id
-    }
-  }
-`;
-
-const DELETE_SECRET = gql`
-  mutation DeleteSecret($id: uuid!) {
-    update_secret_metadata_by_pk(pk_columns: { id: $id }, _set: { deleted_at: "now()" }) {
-      id
-    }
-  }
-`;
+import { useQuery, useMutation } from '@tanstack/react-query';
+import { apiFetch } from '../../../lib/apiClient';
 
 interface SecretMetadata {
   id: string;
@@ -115,16 +73,34 @@ export default function SecretsConfigPage({ tenantId }: SecretsConfigPageProps) 
     tags: '',
   });
 
-  const { data, loading, refetch } = useQuery(GET_SECRETS, {
-    variables: { tenantId },
-    skip: !tenantId,
+  const { data, isLoading, refetch } = useQuery({
+    queryKey: ['secrets', tenantId],
+    queryFn: () => {
+      const params = new URLSearchParams({ tenant_id: tenantId });
+      return apiFetch(`/api/rest/secrets?${params}`).then(r => r.json());
+    },
+    enabled: !!tenantId,
   });
 
-  const [insertSecret] = useMutation(INSERT_SECRET);
-  const [updateSecret] = useMutation(UPDATE_SECRET);
-  const [deleteSecret] = useMutation(DELETE_SECRET);
+  const insertSecret = useMutation({
+    mutationFn: (object: any) =>
+      apiFetch('/api/rest/secrets', { method: 'POST', body: JSON.stringify(object) }),
+    onSuccess: () => refetch(),
+  });
 
-  const secrets: SecretMetadata[] = data?.secret_metadata || [];
+  const updateSecret = useMutation({
+    mutationFn: ({ id, ...set }: { id: string; [key: string]: any }) =>
+      apiFetch(`/api/rest/secrets/${id}`, { method: 'PATCH', body: JSON.stringify(set) }),
+    onSuccess: () => refetch(),
+  });
+
+  const deleteSecret = useMutation({
+    mutationFn: (id: string) =>
+      apiFetch(`/api/rest/secrets/${id}`, { method: 'DELETE' }),
+    onSuccess: () => refetch(),
+  });
+
+  const secrets: SecretMetadata[] = data || [];
 
   const handleOpenDialog = (secret?: SecretMetadata) => {
     if (secret) {
@@ -164,12 +140,11 @@ export default function SecretsConfigPage({ tenantId }: SecretsConfigPageProps) 
 
     try {
       if (editingSecret) {
-        await updateSecret({ variables: { id: editingSecret.id, set: secretData } });
+        await updateSecret.mutateAsync({ id: editingSecret.id, ...secretData });
       } else {
-        await insertSecret({ variables: { object: secretData } });
+        await insertSecret.mutateAsync(secretData);
       }
       setDialogOpen(false);
-      refetch();
     } catch (error) {
       console.error('Error saving secret:', error);
     }
@@ -178,8 +153,7 @@ export default function SecretsConfigPage({ tenantId }: SecretsConfigPageProps) 
   const handleDelete = async (id: string) => {
     if (!window.confirm('Delete this secret configuration?')) return;
     try {
-      await deleteSecret({ variables: { id } });
-      refetch();
+      await deleteSecret.mutateAsync(id);
     } catch (error) {
       console.error('Error deleting secret:', error);
     }
@@ -262,7 +236,7 @@ export default function SecretsConfigPage({ tenantId }: SecretsConfigPageProps) 
             </TableRow>
           </TableHead>
           <TableBody>
-            {loading ? (
+            {isLoading ? (
               <TableRow>
                 <TableCell colSpan={7} align="center">Loading...</TableCell>
               </TableRow>

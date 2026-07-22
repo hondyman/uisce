@@ -2,18 +2,9 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { devDebug } from '../../utils/devLogger';
 import { Autocomplete, TextField, Box, CircularProgress, Typography, TextFieldProps } from '@mui/material';
 import type { AutocompleteRenderInputParams } from '@mui/material/Autocomplete';
-import { useLazyQuery } from '@apollo/client';
-import { GET_TABLES_FOR_DATASOURCE, GET_CATALOG_NODE_BY_ID } from '../../graphql/queries/datasourceQueries';
+import { useQuery } from '@tanstack/react-query';
+import { apiFetch } from '../../lib/apiClient';
 import renderCoreCustomChips from './semanticChips';
-
-// debounce helper
-const debounce = (fn: (...args: any[]) => void, wait = 300) => {
-  let t: any;
-  return (...args: any[]) => {
-    clearTimeout(t);
-    t = setTimeout(() => fn(...args), wait);
-  };
-};
 
 export type TableOption = {
   tenant_tenant_instance_id?: string;
@@ -67,12 +58,40 @@ const TableTypeahead: React.FC<TableTypeaheadProps> = ({
 }) => {
   const [fetchedOptions, setFetchedOptions] = useState<TableOption[]>([]);
   const [internalLoading, setInternalLoading] = useState(false);
-  const abortRef = useRef<AbortController | null>(null);
   // local input state when caller doesn't control inputValue/onInputChange
   const [localInputValue, setLocalInputValue] = useState<string>(inputValue ?? '');
 
-  const [runSearch] = useLazyQuery(GET_TABLES_FOR_DATASOURCE, { fetchPolicy: 'network-only' });
-  const [runGetById] = useLazyQuery(GET_CATALOG_NODE_BY_ID, { fetchPolicy: 'network-only' });
+  const [searchTrigger, setSearchTrigger] = useState<{ datasourceId?: string; q?: string; pageSize?: number } | null>(null);
+  const { data: searchData } = useQuery({
+    queryKey: ['tables', searchTrigger],
+    queryFn: async () => {
+      if (!searchTrigger?.datasourceId) return [];
+      const params = new URLSearchParams({
+        tenant_datasource_id: searchTrigger.datasourceId,
+        node_type_id: '49a50271-ae58-4d3e-ae1c-2f5b89d89192',
+        limit: String(searchTrigger.pageSize || 100),
+      });
+      if (searchTrigger.q) params.append('q', searchTrigger.q);
+      const res = await apiFetch(`/api/rest/catalog-nodes?${params}`);
+      return res.json();
+    },
+    enabled: !!searchTrigger,
+  });
+
+  const [resolveTrigger, setResolveTrigger] = useState<{ datasourceId?: string; nodeId?: string } | null>(null);
+  const { data: resolveData } = useQuery({
+    queryKey: ['catalog-node', resolveTrigger],
+    queryFn: async () => {
+      if (!resolveTrigger?.datasourceId || !resolveTrigger?.nodeId) return [];
+      const params = new URLSearchParams({
+        tenant_datasource_id: resolveTrigger.datasourceId,
+        node_id: resolveTrigger.nodeId,
+      });
+      const res = await apiFetch(`/api/rest/catalog-nodes?${params}`);
+      return res.json();
+    },
+    enabled: !!resolveTrigger,
+  });
 
   const normalizedOptions = useMemo(() => {
     const source = fetchOptions ? fetchedOptions : options;
@@ -161,7 +180,7 @@ const TableTypeahead: React.FC<TableTypeaheadProps> = ({
 
   const renderChips = (option: Partial<TableOption> | null | undefined) => renderCoreCustomChips(option as any);
 
-  // internal fetch logic (debounced) using Apollo lazy query
+  // internal fetch logic (debounced) using TanStack Query
   useEffect(() => {
     if (!fetchOptions) return;
     const q = (currentInput || '').trim();
@@ -169,46 +188,39 @@ const TableTypeahead: React.FC<TableTypeaheadProps> = ({
       setFetchedOptions([]);
       return;
     }
+    if (!datasourceId) {
+      setFetchedOptions([]);
+      return;
+    }
+    devDebug('[TableTypeahead] fetching tables for datasource', datasourceId, 'q=', q);
+    const t = setTimeout(() => {
+      setSearchTrigger({ datasourceId, q: q.length > 0 ? `%${q}%` : undefined, pageSize });
+    }, 300);
+    return () => { clearTimeout(t); };
+  }, [fetchOptions, currentInput, datasourceId, pageSize, minQueryLength]);
 
-    const doFetch = async (query: string) => {
-      if (!datasourceId) {
-        setFetchedOptions([]);
-        return;
-      }
-      // DEV-LOG: indicate a fetch is about to run (helps debug in browser console)
-  devDebug('[TableTypeahead] fetching tables for datasource', datasourceId, 'q=', query);
-      setInternalLoading(true);
-      try {
-        const variables: any = { datasourceId, limit: pageSize };
-        if (query && query.length > 0) variables.q = `%${query}%`;
-        const res: any = await runSearch({ variables });
-        const rows = res?.data?.catalog_node || [];
-        const normalized = (rows || []).map((r: any) => ({
-          tenant_tenant_instance_id: r.tenant_tenant_instance_id,
-          source_name: r.source_name,
-          id: r.node_id ?? r.id,
-          node_name: r.node_name,
-          catalog_type_name: r.catalog_type_name,
-          node_type_id: r.node_type_id,
-          description: r.description,
-          qualified_path: r.qualified_path,
-          properties: r.properties,
-          parent_id: r.parent_id,
-          fetchKey: r.node_id || r.qualified_path || r.node_name,
-        } as TableOption));
-        setFetchedOptions(normalized);
-      } catch (e) {
-        setFetchedOptions([]);
-      } finally {
-        setInternalLoading(false);
-      }
-    };
+  // Process search results
+  useEffect(() => {
+    if (!searchData) return;
+    const normalized = (searchData || []).map((r: any) => ({
+      tenant_tenant_instance_id: r.tenant_tenant_instance_id,
+      source_name: r.source_name,
+      id: r.node_id ?? r.id,
+      node_name: r.node_name,
+      catalog_type_name: r.catalog_type_name,
+      node_type_id: r.node_type_id,
+      description: r.description,
+      qualified_path: r.qualified_path,
+      properties: r.properties,
+      parent_id: r.parent_id,
+      fetchKey: r.node_id || r.qualified_path || r.node_name,
+    } as TableOption));
+    setFetchedOptions(normalized);
+  }, [searchData]);
 
-  const debounced = debounce(doFetch, 300);
-  debounced(q);
-
-    return () => { abortRef.current?.abort?.(); };
-  }, [fetchOptions, currentInput, datasourceId, pageSize, minQueryLength, runSearch]);
+  useEffect(() => {
+    setInternalLoading(!!searchTrigger);
+  }, [searchTrigger]);
 
   // Resolve single string value by fetching catalog node by id
   const resolvingValueRef = useRef<string | null>(null);
@@ -222,47 +234,36 @@ const TableTypeahead: React.FC<TableTypeaheadProps> = ({
     if (resolvingValueRef.current === asStr) return;
 
     resolvingValueRef.current = asStr;
-    let active = true;
+    devDebug('[TableTypeahead] resolving value by id', asStr, 'datasource', datasourceId);
+    setResolveTrigger({ datasourceId, nodeId: asStr });
 
-    (async () => {
-      try {
-        // DEV-LOG: resolving single string value to catalog node
-  devDebug('[TableTypeahead] resolving value by id', asStr, 'datasource', datasourceId);
-        const res: any = await runGetById({ variables: { datasourceId, nodeId: asStr } });
-        const rows = res?.data?.catalog_node || [];
-        const v = rows && rows.length > 0 ? rows[0] : null;
-        if (!v) {
-          resolvingValueRef.current = null;
-          return;
-        }
-        const resolved: TableOption = {
-          tenant_tenant_instance_id: v.tenant_tenant_instance_id,
-          source_name: v.source_name,
-          id: v.node_id ?? v.id,
-          node_name: v.node_name,
-          catalog_type_name: v.catalog_type_name,
-          node_type_id: v.node_type_id,
-          description: v.description,
-          qualified_path: v.qualified_path,
-          properties: v.properties,
-          parent_id: v.parent_id,
-          fetchKey: v.node_id || v.qualified_path || v.node_name,
-        };
-        if (!active) return;
-        setFetchedOptions((prev) => {
-          const exists = prev.some((p) => String(p.id) === String(resolved.id) || String(p.fetchKey) === String(resolved.fetchKey));
-          return exists ? prev.map((p) => (String(p.id) === String(resolved.id) ? { ...p, ...resolved } : p)) : [resolved, ...prev];
-        });
-        if (resolveOnFetch) onChange?.(resolved as any);
-      } catch (e) {
-        // ignore
-      } finally {
-        resolvingValueRef.current = null;
-      }
-    })();
+    return () => { resolvingValueRef.current = null; };
+  }, [value, fetchOptions, datasourceId, findOption]);
 
-    return () => { active = false; resolvingValueRef.current = null; };
-  }, [value, fetchOptions, datasourceId, runGetById, resolveOnFetch, onChange]);
+  // Process resolve result
+  useEffect(() => {
+    if (!resolveData || !resolveData.length) return;
+    const v = resolveData[0];
+    if (!v) return;
+    const resolved: TableOption = {
+      tenant_tenant_instance_id: v.tenant_tenant_instance_id,
+      source_name: v.source_name,
+      id: v.node_id ?? v.id,
+      node_name: v.node_name,
+      catalog_type_name: v.catalog_type_name,
+      node_type_id: v.node_type_id,
+      description: v.description,
+      qualified_path: v.qualified_path,
+      properties: v.properties,
+      parent_id: v.parent_id,
+      fetchKey: v.node_id || v.qualified_path || v.node_name,
+    };
+    setFetchedOptions((prev) => {
+      const exists = prev.some((p) => String(p.id) === String(resolved.id) || String(p.fetchKey) === String(resolved.fetchKey));
+      return exists ? prev.map((p) => (String(p.id) === String(resolved.id) ? { ...p, ...resolved } : p)) : [resolved, ...prev];
+    });
+    if (resolveOnFetch) onChange?.(resolved as any);
+  }, [resolveData, resolveOnFetch, onChange]);
 
   return (
     <Autocomplete

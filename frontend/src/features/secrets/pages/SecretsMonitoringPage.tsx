@@ -27,52 +27,22 @@ import TrendingUpIcon from '@mui/icons-material/TrendingUp';
 import TrendingDownIcon from '@mui/icons-material/TrendingDown';
 import ScheduleIcon from '@mui/icons-material/Schedule';
 import LockIcon from '@mui/icons-material/Lock';
-import { useQuery } from '@apollo/client';
-import { gql } from '@apollo/client';
-
-const GET_MONITORING_DATA = gql`
-  query GetMonitoringData($tenantId: uuid!) {
-    secret_metadata(where: { tenant_id: { _eq: $tenantId }, deleted_at: { _is_null: true } }) {
-      id
-      name
-      path
-      secret_type
-      ttl
-      updated_at
-    }
-    secrets_needing_rotation: secret_metadata(
-      where: { 
-        tenant_id: { _eq: $tenantId }, 
-        deleted_at: { _is_null: true },
-        ttl: { _is_null: false }
-      }
-    ) {
-      id
-      name
-      ttl
-      updated_at
-    }
-    recent_access: secret_access_log(
-      where: { secret_metadata: { tenant_id: { _eq: $tenantId } } }
-      order_by: { requested_at: desc }
-      limit: 50
-    ) {
-      success
-      action
-      requested_at
-    }
-  }
-`;
+import { useQuery } from '@tanstack/react-query';
+import { apiFetch } from '../../../lib/apiClient';
 
 interface SecretsMonitoringPageProps {
   tenantId: string;
 }
 
 export default function SecretsMonitoringPage({ tenantId }: SecretsMonitoringPageProps) {
-  const { data, loading, refetch } = useQuery(GET_MONITORING_DATA, {
-    variables: { tenantId },
-    skip: !tenantId,
-    pollInterval: 30000, // Auto-refresh every 30 seconds
+  const { data, isLoading, refetch } = useQuery({
+    queryKey: ['monitoring-data', tenantId],
+    queryFn: () => {
+      const params = new URLSearchParams({ tenant_id: tenantId });
+      return apiFetch(`/api/rest/secrets/monitoring?${params}`).then(r => r.json());
+    },
+    enabled: !!tenantId,
+    refetchInterval: 30000, // Auto-refresh every 30 seconds
   });
 
   const secrets = data?.secret_metadata || [];

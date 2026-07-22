@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Autocomplete, TextField, CircularProgress } from '@mui/material';
-import { useLazyQuery } from '@apollo/client';
-import { GET_COLUMNS_FOR_TABLE } from '../../graphql/queries/datasourceQueries';
+import { useQuery } from '@tanstack/react-query';
+import { apiFetch } from '../../lib/apiClient';
 import { devDebug } from '../../utils/devLogger';
 
 export interface SimpleColumnOption {
@@ -49,7 +49,23 @@ const SimpleColumnAutocomplete: React.FC<SimpleColumnAutocompleteProps> = ({
 }) => {
   const [input, setInput] = useState('');
   const [options, setOptions] = useState<SimpleColumnOption[]>([]);
-  const [runQuery, { loading }] = useLazyQuery(GET_COLUMNS_FOR_TABLE, { fetchPolicy: 'network-only' });
+  const [trigger, setTrigger] = useState<{ datasourceId?: string; parentId?: string; q?: string; limit?: number } | null>(null);
+  const { data: queryData, isLoading } = useQuery({
+    queryKey: ['columns', trigger],
+    queryFn: async () => {
+      if (!trigger?.datasourceId || !trigger?.parentId) return [];
+      const params = new URLSearchParams({
+        tenant_datasource_id: trigger.datasourceId,
+        parent_id: trigger.parentId,
+        node_type_id: 'a64c1011-16e8-4ddf-b447-363bf8e15c9a',
+        limit: String(trigger.limit || 50),
+      });
+      if (trigger.q) params.append('q', trigger.q);
+      const res = await apiFetch(`/api/rest/catalog-nodes?${params}`);
+      return res.json();
+    },
+    enabled: !!trigger,
+  });
 
   // Decide how to show current value
   const selectedOption = useMemo(() => {
@@ -68,39 +84,35 @@ const SimpleColumnAutocomplete: React.FC<SimpleColumnAutocompleteProps> = ({
     if (!datasourceId || !parentId) { setOptions([]); return; }
     const q = input.trim();
     let active = true;
-    const t = setTimeout(async () => {
-      try {
-        // Only query when input length meets minimum characters (or empty to fetch all)
-        if (q && q.length < minChars) {
-          if (active) setOptions([]);
-          return;
-        }
-        const vars: any = { datasourceId, parentId, limit };
-        if (q.length > 0) vars.q = `%${q}%`;
-        const res: any = await runQuery({ variables: vars });
-        if (!active) return;
-        const rows = (res?.data?.catalog_node_vw || []).map((r: any) => ({
-          id: r.node_id || r.id,
-          node_name: r.node_name,
-          qualified_path: r.qualified_path,
-          description: r.description,
-          catalog_type_name: r.catalog_type_name,
-          node_type_id: r.node_type_id,
-          properties: r.properties,
-          catalog_defn: r.catalog_defn,
-        })) as SimpleColumnOption[];
-        // debug: show the first few rows and the raw response to help trace missing qualified_path
-        try {
-          devDebug('[SimpleColumnAutocomplete] fetched rows (first 5):', rows.slice(0, 5));
-          devDebug('[SimpleColumnAutocomplete] raw response:', res?.data?.catalog_node_vw?.slice(0,5));
-        } catch (e) { /* no-op */ }
-        setOptions(rows);
-      } catch {
+    const t = setTimeout(() => {
+      if (!active) return;
+      if (q && q.length < minChars) {
         if (active) setOptions([]);
+        return;
       }
+      setTrigger({ datasourceId, parentId, q: q.length > 0 ? `%${q}%` : undefined, limit });
     }, debounceMs);
     return () => { active = false; clearTimeout(t); };
-  }, [input, datasourceId, parentId, limit, debounceMs, runQuery]);
+  }, [input, datasourceId, parentId, limit, debounceMs]);
+
+  useEffect(() => {
+    if (!queryData) return;
+    const rows = (queryData || []).map((r: any) => ({
+      id: r.node_id || r.id,
+      node_name: r.node_name,
+      qualified_path: r.qualified_path,
+      description: r.description,
+      catalog_type_name: r.catalog_type_name,
+      node_type_id: r.node_type_id,
+      properties: r.properties,
+      catalog_defn: r.catalog_defn,
+    })) as SimpleColumnOption[];
+    try {
+      devDebug('[SimpleColumnAutocomplete] fetched rows (first 5):', rows.slice(0, 5));
+      devDebug('[SimpleColumnAutocomplete] raw response:', queryData?.slice(0,5));
+    } catch (e) { /* no-op */ }
+    setOptions(rows);
+  }, [queryData]);
 
   // If we have a string value not yet in options, trigger a broad fetch once when parentId changes.
   useEffect(() => {
@@ -128,7 +140,7 @@ const SimpleColumnAutocomplete: React.FC<SimpleColumnAutocompleteProps> = ({
       isOptionEqualToValue={(o: any, v: any) => !!o && !!v && (o.id === v.id || o.node_name === v.node_name)}
       inputValue={input}
       onInputChange={(_, val) => setInput(val)}
-      loading={loading}
+      loading={isLoading}
       className={className}
       disabled={disabled || !datasourceId || !parentId}
       fullWidth={fullWidth}
@@ -139,7 +151,7 @@ const SimpleColumnAutocomplete: React.FC<SimpleColumnAutocompleteProps> = ({
   onOpen={() => devDebug('SimpleColumnAutocomplete opened')}
   onClose={() => devDebug('SimpleColumnAutocomplete closed')}
       onFocus={() => {
-        if (showAllOnFocus && !input && options.length === 0 && !loading) setInput('');
+        if (showAllOnFocus && !input && options.length === 0 && !isLoading) setInput('');
       }}
       slotProps={{ popper: { sx: { zIndex: 999999, backgroundColor: 'white', border: '1px solid red' } } as any }}
       renderOption={(props, opt: any) => (
@@ -161,7 +173,7 @@ const SimpleColumnAutocomplete: React.FC<SimpleColumnAutocompleteProps> = ({
             ...params.InputProps,
             endAdornment: (
               <>
-                {loading ? <CircularProgress size={16} /> : null}
+                {isLoading ? <CircularProgress size={16} /> : null}
                 {params.InputProps.endAdornment}
               </>
             )

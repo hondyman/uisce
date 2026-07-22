@@ -1,67 +1,10 @@
 import React, { useState } from 'react';
 import { devError } from '../../utils/devLogger';
-import { useMutation, useQuery, gql } from '@apollo/client';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { apiFetch } from '../../lib/apiClient';
 import ActionButton from '../../components/ui/ActionButton';
 import './WorkflowDesigner.css';
 import { useNotification } from '../../hooks/useNotification';
-
-// ============================================================================
-// GRAPHQL OPERATIONS
-// ============================================================================
-
-const CREATE_WORKFLOW_RULE = gql`
-  mutation CreateWorkflowRule(
-    $tenantId: uuid!
-    $workflowName: String!
-    $stepName: String!
-    $stepOrder: Int!
-    $conditionJson: jsonb!
-    $actionOnSuccess: String!
-    $actionOnFailure: String!
-    $errorMessage: String!
-  ) {
-    insert_workflow_rules_one(
-      object: {
-        tenant_id: $tenantId
-        workflow_name: $workflowName
-        step_name: $stepName
-        step_order: $stepOrder
-        condition_json: $conditionJson
-        action_on_success: $actionOnSuccess
-        action_on_failure: $actionOnFailure
-        error_message: $errorMessage
-        is_active: true
-        created_by: "user-id"
-      }
-    ) {
-      id
-      workflow_name
-      step_name
-    }
-  }
-`;
-
-const GET_WORKFLOW_RULES = gql`
-  query GetWorkflowRules($tenantId: uuid!, $workflowName: String!) {
-    workflow_rules(
-      where: {
-        tenant_id: { _eq: $tenantId }
-        workflow_name: { _eq: $workflowName }
-      }
-      order_by: { step_order: asc }
-    ) {
-      id
-      workflow_name
-      step_name
-      step_order
-      condition_json
-      action_on_success
-      action_on_failure
-      error_message
-      is_active
-    }
-  }
-`;
 
 // ============================================================================
 // TYPES
@@ -139,9 +82,49 @@ export const WorkflowDesigner: React.FC<WorkflowDesignerProps> = ({
   const [actionOnFailure, setActionOnFailure] = useState('notify:manager');
   const [errorMessage, setErrorMessage] = useState('');
 
-  const [createRule] = useMutation(CREATE_WORKFLOW_RULE);
-  const { data: rulesData, loading: rulesLoading } = useQuery(GET_WORKFLOW_RULES, {
-    variables: { tenantId, workflowName },
+  const queryClient = useQueryClient();
+
+  const { data: rulesData, isLoading: rulesLoading } = useQuery({
+    queryKey: ['workflow-rules', tenantId, workflowName],
+    queryFn: async () => {
+      const response = await apiFetch(
+        `/api/workflow-rules?tenant_id=${encodeURIComponent(tenantId)}&workflow_name=${encodeURIComponent(workflowName)}`
+      );
+      return response.json();
+    },
+  });
+
+  const createRule = useMutation({
+    mutationFn: async (input: {
+      tenantId: string;
+      workflowName: string;
+      stepName: string;
+      stepOrder: number;
+      conditionJson: any;
+      actionOnSuccess: string;
+      actionOnFailure: string;
+      errorMessage: string;
+    }) => {
+      const response = await apiFetch('/api/workflow-rules', {
+        method: 'POST',
+        body: JSON.stringify({
+          tenant_id: input.tenantId,
+          workflow_name: input.workflowName,
+          step_name: input.stepName,
+          step_order: input.stepOrder,
+          condition_json: input.conditionJson,
+          action_on_success: input.actionOnSuccess,
+          action_on_failure: input.actionOnFailure,
+          error_message: input.errorMessage,
+          is_active: true,
+          created_by: 'user-id',
+        }),
+      });
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['workflow-rules', tenantId, workflowName] });
+    },
   });
 
   const handleCreateRule = async () => {
@@ -162,26 +145,22 @@ export const WorkflowDesigner: React.FC<WorkflowDesignerProps> = ({
         ],
       };
 
-      const result = await createRule({
-        variables: {
-          tenantId,
-          workflowName,
-          stepName,
-          stepOrder,
-          conditionJson: condition,
-          actionOnSuccess,
-          actionOnFailure,
-          errorMessage,
-        },
-        refetchQueries: [{ query: GET_WORKFLOW_RULES, variables: { tenantId, workflowName } }],
+      const result = await createRule.mutateAsync({
+        tenantId,
+        workflowName,
+        stepName,
+        stepOrder,
+        conditionJson: condition,
+        actionOnSuccess,
+        actionOnFailure,
+        errorMessage,
       });
 
-      if (result.data?.insert_workflow_rules_one?.id) {
+      if (result?.id) {
         notification.success(`Workflow step "${stepName}" created successfully!`);
         if (onRuleCreated) {
-          onRuleCreated(result.data.insert_workflow_rules_one.id);
+          onRuleCreated(result.id);
         }
-        // Reset form
         setStepName('');
         setStepOrder((stepOrder) => stepOrder + 1);
         setErrorMessage('');
@@ -193,7 +172,7 @@ export const WorkflowDesigner: React.FC<WorkflowDesignerProps> = ({
     }
   };
 
-  const rules = rulesData?.workflow_rules || [];
+  const rules = rulesData || [];
 
   return (
     <div className="workflow-designer">

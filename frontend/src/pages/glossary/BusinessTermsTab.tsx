@@ -12,6 +12,7 @@ import { enrichNodesWithTypes } from '../../utils/nodeTypeMapping';
 import { Tabs, Tab, Box, IconButton, Tooltip, Chip } from '@mui/material';
 import { Add as AddIcon, ArrowBack as ArrowBackIcon, AutoAwesome } from '@mui/icons-material';
 import { SemanticEnrichmentWizard } from '../../components/SemanticEnrichmentWizard';
+import { RelationshipList } from '../../components/glossary/RelationshipList';
 import { Button } from '@mui/material';
 import './BusinessTermsTab.css';
 import { useTranslation } from 'react-i18next';
@@ -49,7 +50,7 @@ export const BusinessTermsTab: React.FC<{
   // Semantic/business terms are scoped to the TENANT (no datasource param).
   const { data: rqBusinessTerms, isLoading: rqBusinessLoading, error: rqBusinessError, refetch } = useBusinessTerms({ tenantOverride: scopeTenantId });
   const { data: rqSemanticTerms, isLoading: rqSemanticLoading, error: rqSemanticError } = useSemanticTerms({ tenantOverride: scopeTenantId });
-  const { data: rqEdges, isLoading: rqEdgesLoading } = useGlossaryEdges({ tenantOverride: scopeTenantId });
+  const { data: rqEdges, isLoading: rqEdgesLoading, refetch: refetchEdges } = useGlossaryEdges({ tenantOverride: scopeTenantId });
 
   // Fetch edge types and node types for the operational-scope tenant
   const { data: _edgeTypesData, isLoading: _edgeTypesLoading } = useEdgeTypes(scopeTenantId || '');
@@ -559,48 +560,14 @@ export const BusinessTermsTab: React.FC<{
                   <div className="business-term-relationships">
                     <h3>Relationships</h3>
                     {relatedEdges.length > 0 ? (
-                      <div className="relationships-table-container">
-                        <table className="relationships-table">
-                          <thead>
-                            <tr>
-                              <th>Relationship</th>
-                              <th>Path</th>
-                              <th>Action</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {relatedEdges.map((edge: any) => {
-                              const isSourceSelected = edge.source_node_id === selectedAsset?.nodeId;
-                              const otherNode = isSourceSelected ? edge.target_node : edge.source_node;
-                              const otherNodeId = isSourceSelected ? edge.target_node_id : edge.source_node_id;
-
-                              // Prefer qualified_path from the edge's node object, then fallback to nodePathMap
-                              let nodePath = '';
-                              if (otherNode?.qualified_path) {
-                                nodePath = otherNode.qualified_path;
-                              } else {
-                                nodePath = nodePathMap[otherNodeId] || nodeNameMap[otherNodeId] || `${otherNodeId.substring(0, 8)}...`;
-                              }
-
-                              // Format relationship label with direction indicator
-                              const relationshipLabel = edge.relationship_type || edge.edge_type_name || 'unknown';
-                              const directionArrow = isSourceSelected ? '→' : '←';
-
-                              return (
-                                <tr key={edge.id}>
-                                  <td className="relationship-type">{directionArrow} {relationshipLabel}</td>
-                                  <td className="relationship-path">{nodePath}</td>
-                                  <td className="relationship-action">
-                                    <a href={`/schema-explorer?datasource=${effectiveDatasourceId || ''}`} target="_blank" rel="noopener noreferrer">
-                                      View
-                                    </a>
-                                  </td>
-                                </tr>
-                              );
-                            })}
-                          </tbody>
-                        </table>
-                      </div>
+                      <RelationshipList
+                        edges={relatedEdges}
+                        selectedNodeId={selectedAsset?.nodeId}
+                        darkMode={false}
+                        getNodeName={(id) => nodeNameMap[id] || id.substring(0, 8)}
+                        getNodePath={(id) => nodePathMap[id]}
+                        onDeleted={() => { refetchEdges(); }}
+                      />
                     ) : (
                       <div className="no-relationships">{t('relationships_table.none_found', 'No relationships found for this term')}</div>
                     )}

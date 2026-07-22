@@ -1,5 +1,4 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
 
 export interface ExecuteActionRequest {
   action_type: string;
@@ -32,6 +31,8 @@ export interface ActionHistory {
  * useExecuteOpsAction - Execute an ops action on an incident
  */
 export function useExecuteOpsAction(incidentId: string | null) {
+  const queryClient = useQueryClient();
+
   return useMutation<ExecuteActionResponse, Error, ExecuteActionRequest>({
     mutationFn: async (req: ExecuteActionRequest) => {
       if (!incidentId) throw new Error("Incident ID required");
@@ -53,8 +54,6 @@ export function useExecuteOpsAction(incidentId: string | null) {
       return response.json();
     },
     onSuccess: () => {
-      // Invalidate both incident and timeline queries to refresh
-      const queryClient = useQueryClient();
       queryClient.invalidateQueries({ queryKey: ["incident", incidentId] });
       queryClient.invalidateQueries({ queryKey: ["opsTimeline"] });
     },

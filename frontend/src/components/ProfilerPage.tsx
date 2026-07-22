@@ -143,7 +143,7 @@ export default function ProfilerPage({ preselectedSchema, preselectedTable, pres
     setLoading(true);
     try {
       const response = await fetch(
-        `/api/catalog/nodes?type=schema&tenant_id=${tenant.id}&tenant_instance_id=${datasource.id}&limit=100`,
+        `api/rest/catalog-nodes?node_type_id=68d6d495-0992-4d92-ad2f-7f66dc1e7d78&limit=100`,
         { headers: getHeaders() }
       );
       if (response.ok) {
@@ -218,7 +218,7 @@ export default function ProfilerPage({ preselectedSchema, preselectedTable, pres
       setLoading(true);
       try {
         const response = await fetch(
-          `/api/catalog/nodes?type=table&q=${selectedSchema}&tenant_id=${tenant.id}&tenant_instance_id=${datasource.id}&limit=100`,
+          `api/rest/catalog-nodes?node_type_id=49a50271-ae58-4d3e-ae1c-2f5b89d89192&q=${selectedSchema}&limit=100`,
           { headers: getHeaders() }
         );
         if (response.ok) {
@@ -270,7 +270,7 @@ export default function ProfilerPage({ preselectedSchema, preselectedTable, pres
         if (!table) return;
 
         const response = await fetch(
-          `/api/catalog/nodes?type=column&tenant_id=${tenant.id}&tenant_instance_id=${datasource.id}&limit=100`,
+          `api/rest/catalog-nodes?node_type_id=a64c1011-16e8-4ddf-b447-363bf8e15c9a&limit=100`,
           { headers: getHeaders() }
         );
         if (response.ok) {
@@ -309,7 +309,7 @@ export default function ProfilerPage({ preselectedSchema, preselectedTable, pres
       // For each table, get all its column node IDs
       const columnPromises = tableNodeIds.map(async (tableId) => {
         try {
-          const response = await fetch(`/api/catalog/nodes?type=column&parent_id=${encodeURIComponent(tableId)}&limit=1000`, { headers: getHeaders() });
+          const response = await fetch(`api/rest/catalog-nodes?node_type_id=a64c1011-16e8-4ddf-b447-363bf8e15c9a&parent_id=${encodeURIComponent(tableId)}&limit=1000`, { headers: getHeaders() });
           if (response.ok) {
             const columnData = await response.json();
             return Array.isArray(columnData) ? columnData.map((c: any) => c.id) : [];
@@ -324,7 +324,7 @@ export default function ProfilerPage({ preselectedSchema, preselectedTable, pres
     } else if (schemasToUse && schemasToUse.length > 0) {
       // Get all column node IDs for the selected schemas
       try {
-        const response = await fetch(`/api/catalog/nodes?type=column&tenant_id=${tenant.id}&tenant_instance_id=${datasource.id}&limit=10000`, { headers: getHeaders() });
+        const response = await fetch(`api/rest/catalog-nodes?node_type_id=a64c1011-16e8-4ddf-b447-363bf8e15c9a&limit=10000`, { headers: getHeaders() });
         if (response.ok) {
           const columnData = await response.json();
           if (Array.isArray(columnData)) {
@@ -412,7 +412,7 @@ export default function ProfilerPage({ preselectedSchema, preselectedTable, pres
             const fetchedColumns: any[] = [];
             await Promise.all(Object.values(tableNameToId).map(async (tableId) => {
               try {
-                const resp = await fetch(`/api/catalog/nodes?type=column&parent_id=${encodeURIComponent(tableId)}&limit=100`, { headers: getHeaders() });
+                const resp = await fetch(`api/rest/catalog-nodes?node_type_id=a64c1011-16e8-4ddf-b447-363bf8e15c9a&parent_id=${encodeURIComponent(tableId)}&limit=100`, { headers: getHeaders() });
                 if (!resp.ok) return;
                 const colData = await resp.json();
                 if (Array.isArray(colData)) {
@@ -488,7 +488,7 @@ export default function ProfilerPage({ preselectedSchema, preselectedTable, pres
           const fetchedColumns: any[] = [];
           await Promise.all(Object.values(tableNameToId).map(async (tableId) => {
             try {
-              const resp = await fetch(`/api/catalog/nodes?type=column&parent_id=${encodeURIComponent(tableId)}&limit=100`, { headers: getHeaders() });
+              const resp = await fetch(`api/rest/catalog-nodes?node_type_id=a64c1011-16e8-4ddf-b447-363bf8e15c9a&parent_id=${encodeURIComponent(tableId)}&limit=100`, { headers: getHeaders() });
               if (!resp.ok) return;
               const colData = await resp.json();
               if (Array.isArray(colData)) {

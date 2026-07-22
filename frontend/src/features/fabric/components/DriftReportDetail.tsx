@@ -20,29 +20,14 @@ import {
 import { format } from 'date-fns';
 import ReactMarkdown from 'react-markdown';
 import LazySyntaxHighlighter from '../../../components/LazySyntaxHighlighter';
-import { gql, useLazyQuery } from '@apollo/client';
 import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
 import KeyboardArrowUpIcon from '@mui/icons-material/KeyboardArrowUp';
 import ReplayIcon from '@mui/icons-material/Replay';
 import SeverityBadge from './SeverityBadge';
 import SchemaHashTag from './SchemaHashTag';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { apiFetch } from '../../../../lib/apiClient';
 
-const RE_EVALUATE_VIOLATION_QUERY = gql`
-  query ReEvaluateViolation($violationId: uuid!) {
-    ReEvaluateViolation(violation_id: $violationId) {
-      rule_id
-      severity
-      message
-      explain {
-        selector
-        path
-        value
-      }
-    }
-  }
-`;
-
-// Based on the blueprint
 export interface DriftLogEntry {
   id: string;
   report_id: string;
@@ -58,7 +43,7 @@ export interface DriftLogEntry {
 
 export interface DriftReport {
   id: string;
-  generated_at: string; // ISO timestamp
+  generated_at: string;
   schema_hash: string;
   severity_summary: {
     breaking?: number;
@@ -82,15 +67,42 @@ const DriftReportDetail: React.FC<DriftReportDetailProps> = ({ report }) => {
   };
 
   const EntryRow: React.FC<{ entry: DriftLogEntry }> = ({ entry }) => {
-  const [open, setOpen] = useState(false);
+    const [open, setOpen] = useState(false);
     const hasExplain = entry.explain && entry.explain.length > 0;
+    const queryClient = useQueryClient();
 
-    const [runExplain, { loading: explainLoading, data: explainData, error: explainError }] = useLazyQuery(
-      RE_EVALUATE_VIOLATION_QUERY,
-      { variables: { violationId: entry.id } }
-    );
+    const reEvaluateQuery = useQuery({
+      queryKey: ['violation-reevaluate', entry.id],
+      queryFn: async () => {
+        const res = await apiFetch(`/api/rest/violations/${entry.id}/reevaluate`);
+        if (!res.ok) {
+          throw new Error(await res.text());
+        }
+        return res.json();
+      },
+      enabled: false,
+    });
 
-    const currentExplain = explainData?.ReEvaluateViolation?.explain || entry.explain;
+    const reEvaluateMutation = useMutation({
+      mutationFn: async () => {
+        const res = await apiFetch(`/api/rest/violations/${entry.id}/reevaluate`, {
+          method: 'POST',
+        });
+        if (!res.ok) {
+          throw new Error(await res.text());
+        }
+        return res.json();
+      },
+      onSuccess: (data) => {
+        queryClient.setQueryData(['violation-reevaluate', entry.id], data);
+      },
+    });
+
+    const runExplain = () => {
+      reEvaluateMutation.mutate();
+    };
+
+    const currentExplain = reEvaluateQuery.data?.explain || entry.explain;
 
     return (
       <Fragment>
@@ -118,15 +130,15 @@ const DriftReportDetail: React.FC<DriftReportDetailProps> = ({ report }) => {
                       Match Details
                     </Typography>
                     <Tooltip title="Re-run explanation against the latest policy">
-                      <IconButton onClick={() => runExplain()} size="small" disabled={explainLoading}>
-                        {explainLoading ? <CircularProgress size={20} /> : <ReplayIcon fontSize="small" />}
+                      <IconButton onClick={() => runExplain()} size="small" disabled={reEvaluateMutation.isPending}>
+                        {reEvaluateMutation.isPending ? <CircularProgress size={20} /> : <ReplayIcon fontSize="small" />}
                       </IconButton>
                     </Tooltip>
                   </Box>
 
-                  {explainError && (
+                  {reEvaluateMutation.isError && (
                     <Alert severity="error" sx={{ mb: 1, fontSize: '0.8rem' }}>
-                      Failed to re-run: {explainError.message}
+                      Failed to re-run: {(reEvaluateMutation.error as Error)?.message}
                     </Alert>
                   )}
 
@@ -142,13 +154,12 @@ const DriftReportDetail: React.FC<DriftReportDetailProps> = ({ report }) => {
             </TableCell>
           </TableRow>
         )}
-  </Fragment>
+      </Fragment>
     );
   };
 
   return (
     <Paper sx={{ p: 3, mt: 2 }}>
-      {/* ReportMeta */}
       <Box sx={{ mb: 3 }}>
         <Typography variant="h5" gutterBottom>
           Report {report.id.substring(0, 8)}...
@@ -166,7 +177,6 @@ const DriftReportDetail: React.FC<DriftReportDetailProps> = ({ report }) => {
         </Box>
       </Box>
 
-      {/* TabNav */}
       <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
         <Tabs value={activeTab} onChange={handleTabChange} aria-label="report detail tabs">
           <Tab label="Changelog" />
@@ -175,7 +185,6 @@ const DriftReportDetail: React.FC<DriftReportDetailProps> = ({ report }) => {
         </Tabs>
       </Box>
 
-      {/* TabContent */}
       <Box sx={{ pt: 3 }}>
         {activeTab === 0 && (
           <Box className="markdown-body">

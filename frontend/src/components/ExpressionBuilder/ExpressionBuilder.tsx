@@ -4,20 +4,14 @@ import { devError } from '../../utils/devLogger';
 import { Card } from '@mui/material';
 import { useNotification } from '../../hooks/useNotification';
 import ActionButton from '../ui/ActionButton';
-import { useMutation, gql } from '@apollo/client';
-import AdvancedConditionBuilder, { 
+import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { apiFetch } from '../../lib/apiClient';
+import AdvancedConditionBuilder, {
   ConditionGroup,
   ConditionNode as _ConditionNode,
   evaluateCondition
 } from './AdvancedConditionBuilder';
 import styles from './ExpressionBuilder.module.css';
-// Apollo GraphQL mutation example (uncomment and adapt if using apollo client)
-// import { useMutation, gql } from '@apollo/client';
-// const INSERT_RULE = gql`
-// mutation InsertRule($object: rules_insert_input!) {
-//   insert_rules_one(object: $object) { id }
-// }
-// `;
 
 interface ExpressionBuilderProps {
   onSave?: (conditionJson: ConditionGroup) => void;
@@ -31,20 +25,6 @@ interface ExpressionBuilderProps {
   availableFields?: Array<{ name: string; type: string; label: string }>;
 }
 
-// Upsert mutation for catalog_validation_rules. Adjust the on_conflict.constraint name if your Hasura
-// schema generates a different constraint name for the UNIQUE(tenant_id, rule_name) constraint.
-const INSERT_DRAFT_RULE = gql`
-  mutation InsertDraftValidationRule($object: catalog_validation_rules_insert_input!) {
-    insert_catalog_validation_rules_one(object: $object) { id }
-  }
-`;
-
-const UPDATE_RULE_BY_PK = gql`
-  mutation UpdateValidationRuleByPk($id: uuid!, $changes: catalog_validation_rules_set_input!) {
-    update_catalog_validation_rules_by_pk(pk_columns: { id: $id }, _set: $changes) { id }
-  }
-`;
-
 const ExpressionBuilder: React.FC<ExpressionBuilderProps> = ({ 
   onSave, 
   onChange, 
@@ -57,7 +37,8 @@ const ExpressionBuilder: React.FC<ExpressionBuilderProps> = ({
   availableFields: propAvailableFields
 }) => {
   const notification = useNotification();
-  
+  const queryClient = useQueryClient();
+
   // Initialize with empty root condition group
   const [conditionTree, setConditionTree] = useState<ConditionGroup>({
     id: 'root',
@@ -66,8 +47,24 @@ const ExpressionBuilder: React.FC<ExpressionBuilderProps> = ({
     conditions: []
   });
 
-  const [insertDraftRule] = useMutation(INSERT_DRAFT_RULE);
-  const [updateRuleByPk] = useMutation(UPDATE_RULE_BY_PK);
+  const insertDraftRule = useMutation({
+    mutationFn: async (object: Record<string, unknown>) => {
+      const res = await apiFetch('/api/rest/validation-rules', {
+        method: 'POST',
+        body: JSON.stringify(object),
+      });
+      return res.json();
+    },
+  });
+  const updateRuleByPk = useMutation({
+    mutationFn: async ({ id, changes }: { id: string; changes: Record<string, unknown> }) => {
+      const res = await apiFetch(`/api/rest/validation-rules/${id}`, {
+        method: 'PUT',
+        body: JSON.stringify(changes),
+      });
+      return res.json();
+    },
+  });
 
   const saveTimer = useRef<number | null>(null);
   const lastPayload = useRef<ConditionGroup | null>(null);
@@ -126,15 +123,7 @@ const ExpressionBuilder: React.FC<ExpressionBuilderProps> = ({
           // If we have an id (existing rule or draft), update-by-pk
           const changes: any = { condition_json: conditionJson };
           if (targetEntity) changes.target_entity = targetEntity;
-          await updateRuleByPk({ 
-            variables: { id: effectiveId, changes }, 
-            context: { 
-              headers: { 
-                'X-Tenant-ID': tenant, 
-                'X-Tenant-Datasource-ID': datasource 
-              } 
-            } 
-          });
+          await updateRuleByPk.mutateAsync({ id: effectiveId, changes });
           notification.success('Rule autosaved');
         } else {
           // No id yet: create a draft row
@@ -143,18 +132,10 @@ const ExpressionBuilder: React.FC<ExpressionBuilderProps> = ({
             rule_name: ruleName || `Draft Rule ${Date.now()}`,
             is_active: false,
           };
-          
-          const res = await insertDraftRule({ 
-            variables: { object: draftObject }, 
-            context: { 
-              headers: { 
-                'X-Tenant-ID': tenant, 
-                'X-Tenant-Datasource-ID': datasource 
-              } 
-            } 
-          });
-          
-          const newId = res?.data?.insert_catalog_validation_rules_one?.id;
+
+          const res = await insertDraftRule.mutateAsync(draftObject);
+
+          const newId = res?.[0]?.id || res?.id;
           if (newId) {
             setDraftId(newId);
             const draftName = typeof draftObject.rule_name === 'string' ? draftObject.rule_name : undefined;

@@ -28,33 +28,8 @@ import ErrorIcon from '@mui/icons-material/Error';
 import VisibilityIcon from '@mui/icons-material/Visibility';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import WarningIcon from '@mui/icons-material/Warning';
-import { useQuery } from '@apollo/client';
-import { gql } from '@apollo/client';
-
-const GET_AUDIT_LOGS = gql`
-  query GetAuditLogs($tenantId: uuid!, $limit: Int, $offset: Int) {
-    secret_access_log(
-      where: { secret_metadata: { tenant_id: { _eq: $tenantId } } }
-      order_by: { requested_at: desc }
-      limit: $limit
-      offset: $offset
-    ) {
-      id
-      action
-      user_id
-      ip_address
-      user_agent
-      requested_at
-      success
-      error_message
-      abac_result
-      secret_metadata {
-        name
-        path
-      }
-    }
-  }
-`;
+import { useQuery } from '@tanstack/react-query';
+import { apiFetch } from '../../../lib/apiClient';
 
 interface AuditLog {
   id: string;
@@ -80,12 +55,16 @@ export default function SecretsAuditPage({ tenantId }: SecretsAuditPageProps) {
   const [actionFilter, setActionFilter] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
 
-  const { data, loading, refetch } = useQuery(GET_AUDIT_LOGS, {
-    variables: { tenantId, limit: 100, offset: 0 },
-    skip: !tenantId,
+  const { data, isLoading, refetch } = useQuery({
+    queryKey: ['audit-logs', tenantId],
+    queryFn: () => {
+      const params = new URLSearchParams({ tenant_id: tenantId, limit: '100', offset: '0' });
+      return apiFetch(`/api/rest/secrets/audit-logs?${params}`).then(r => r.json());
+    },
+    enabled: !!tenantId,
   });
 
-  const logs: AuditLog[] = data?.secret_access_log || [];
+  const logs: AuditLog[] = data || [];
 
   const filteredLogs = logs.filter((log) => {
     if (actionFilter !== 'all' && log.action !== actionFilter) return false;
@@ -220,7 +199,7 @@ export default function SecretsAuditPage({ tenantId }: SecretsAuditPageProps) {
             </TableRow>
           </TableHead>
           <TableBody>
-            {loading ? (
+            {isLoading ? (
               <TableRow>
                 <TableCell colSpan={7} align="center">Loading...</TableCell>
               </TableRow>

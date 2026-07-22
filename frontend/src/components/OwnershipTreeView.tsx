@@ -16,53 +16,8 @@
 
 import React, { useState, useMemo } from 'react';
 import { ChevronDown, ChevronRight, Search, Info } from 'lucide-react';
-import { useQuery, gql } from '@apollo/client';
-
-// ============================================================================
-// GraphQL Query
-// ============================================================================
-
-const OWNERSHIP_TREE_QUERY = gql`
-  query OwnershipTree($rootId: UUID!, $depth: Int!, $includeAttributes: Boolean!, $asOf: Date) {
-    ownershipTree(
-      rootId: $rootId
-      depth: $depth
-      includeAttributes: $includeAttributes
-      asOf: $asOf
-    ) {
-      entity {
-        id
-        modelType
-        displayName
-        originalName
-        ownershipType
-        status
-        attributes {
-          key
-          value
-        }
-      }
-      position {
-        id
-        ownershipPercentage
-        shares
-        value
-      }
-      depth
-      childCount
-      children {
-        entity { id modelType displayName ownershipType }
-        position { ownershipPercentage shares value }
-        childCount
-        children {
-          entity { id modelType displayName ownershipType }
-          position { ownershipPercentage }
-          childCount
-        }
-      }
-    }
-  }
-`;
+import { useQuery } from '@tanstack/react-query';
+import { apiFetch } from '../lib/apiClient';
 
 // ============================================================================
 // Type Definitions
@@ -364,14 +319,17 @@ export const OwnershipTreeView: React.FC<OwnershipTreeViewProps> = ({
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
 
-  const { data, loading, error } = useQuery(OWNERSHIP_TREE_QUERY, {
-    variables: {
-      rootId,
-      depth,
-      includeAttributes: true,
-      asOf,
+  const { data, isLoading, error } = useQuery({
+    queryKey: ['ownership-tree', rootId, depth, asOf],
+    queryFn: () => {
+      const params = new URLSearchParams({
+        rootId,
+        depth: String(depth),
+        includeAttributes: 'true',
+        ...(asOf && { asOf }),
+      });
+      return apiFetch(`/api/rest/ownership-tree?${params}`).then(r => r.json());
     },
-    pollInterval: 0, // No auto-refresh by default
   });
 
   // Legend
@@ -395,7 +353,7 @@ export const OwnershipTreeView: React.FC<OwnershipTreeViewProps> = ({
         { label: 'Pending', color: STATUS_COLORS.PENDING },
       ];
 
-  if (loading) {
+  if (isLoading) {
     return (
       <div className="p-4 text-center text-gray-500">
         <div className="animate-spin h-8 w-8 border-4 border-blue-500 border-t-transparent rounded-full mx-auto mb-2" />
@@ -408,12 +366,12 @@ export const OwnershipTreeView: React.FC<OwnershipTreeViewProps> = ({
     return (
       <div className="p-4 bg-red-50 border border-red-200 rounded">
         <div className="text-red-800 font-semibold">Error loading tree</div>
-        <div className="text-red-700 text-sm">{error.message}</div>
+        <div className="text-red-700 text-sm">{(error as Error).message}</div>
       </div>
     );
   }
 
-  if (!data?.ownershipTree) {
+  if (!data) {
     return (
       <div className="p-4 text-center text-gray-500">
         No data available
@@ -421,7 +379,7 @@ export const OwnershipTreeView: React.FC<OwnershipTreeViewProps> = ({
     );
   }
 
-  const rootNode = data.ownershipTree as OwnershipNode;
+  const rootNode = data as OwnershipNode;
 
   return (
     <div className="w-full bg-white rounded-lg shadow-sm">
