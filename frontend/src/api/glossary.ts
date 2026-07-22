@@ -602,8 +602,9 @@ export function useDeleteTerm(opts?: GlossaryMutationOpts) {
           if (errJson.dependencies && errJson.dependencies.length > 0) {
             const deps = errJson.dependencies;
             const boNames = [...new Set(deps.map((d: any) => d.bo_name))].join(', ');
+            const details = deps.map((d: any) => `- ${d.bo_name}: ${d.ref_detail || d.bo_key}`).join('\n');
             const depError = new Error(
-              `Cannot delete: This term is linked to ${deps.length} BO field(s) in: ${boNames || 'unknown business objects'}. Unlink the fields first.`
+              `Cannot delete: This term is linked to ${deps.length} BO field(s) in: ${boNames || 'unknown business objects'}. Unlink the fields first.\n\nDetails:\n${details}`
             );
             (depError as any).code = 'BO_DEPENDENCIES_BLOCK_DELETION';
             (depError as any).dependencies = deps;
@@ -637,8 +638,9 @@ export function useDeleteTerm(opts?: GlossaryMutationOpts) {
       if (!depCheck.can_delete) {
         const deps = depCheck.dependencies ?? [];
         const boNames = [...new Set(deps.map((d: any) => d.bo_name))].join(', ');
+        const details = deps.map((d: any) => `- ${d.bo_name}: ${d.ref_detail || d.bo_key}`).join('\n');
         const depError = new Error(
-          `Cannot delete: This term is linked to ${deps.length} BO field(s) in: ${boNames || 'unknown business objects'}. Unlink the fields first.`
+          `Cannot delete: This term is linked to ${deps.length} BO field(s) in: ${boNames || 'unknown business objects'}. Unlink the fields first.\n\nDetails:\n${details}`
         );
         (depError as any).code = 'BO_DEPENDENCIES_BLOCK_DELETION';
         (depError as any).dependencies = deps;
@@ -654,14 +656,45 @@ export function useDeleteTerm(opts?: GlossaryMutationOpts) {
       if (!res.ok) {
         const errorText = await res.text();
         let errorCode = 'DELETE_FAILED';
+        let errorMessage = 'Failed to delete term';
+        let dependencies: any[] = [];
+        let dependencyReport: any = null;
         try {
           const errJson = JSON.parse(errorText);
-          if (errJson.code === 'BO_DEPENDENCIES_BLOCK_DELETION') {
+          if (errJson.code === 'BO_DEPENDENCIES_BLOCK_DELETION' || errJson.error === 'BO_DEPENDENCIES_BLOCK_DELETION') {
             errorCode = 'BO_DEPENDENCIES_BLOCK_DELETION';
           }
-        } catch { /* not JSON */ }
-        const err = new Error(errorText || 'Failed to delete term');
+          // Preserve dependency details from the response
+          if (errJson.dependencies && Array.isArray(errJson.dependencies)) {
+            dependencies = errJson.dependencies;
+          }
+          if (errJson.dependency_report) {
+            dependencyReport = errJson.dependency_report;
+          } else if (errJson.dependencyReport) {
+            dependencyReport = errJson.dependencyReport;
+          }
+          errorMessage = errJson.message || errJson.error || errorText;
+        } catch {
+          errorMessage = errorText || 'Failed to delete term';
+        }
+
+        // Clean up double "Failed to delete term" prefixes (with colon)
+        if (errorMessage.startsWith('Failed to delete term: ')) {
+          errorMessage = errorMessage.substring('Failed to delete term: '.length);
+        }
+        // Also handle bare "Failed to delete term" (no colon) by stripping if it appears at start
+        if (errorMessage === 'Failed to delete term') {
+          errorMessage = 'Delete operation failed';
+        }
+
+        const err = new Error(errorMessage);
         (err as any).code = errorCode;
+        if (dependencies.length > 0) {
+          (err as any).dependencies = dependencies;
+        }
+        if (dependencyReport) {
+          (err as any).dependencyReport = dependencyReport;
+        }
         throw err;
       }
       return res.json();

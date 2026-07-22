@@ -247,9 +247,10 @@ import { useQueryClient } from '@tanstack/react-query';
         if (error?.code === 'BO_DEPENDENCIES_BLOCK_DELETION') {
           const deps = error?.dependencies ?? [];
           const boNames = [...new Set(deps.map((d: any) => d.bo_name))].join(', ');
+          const details = deps.map((d: any) => `- ${d.bo_name}: ${d.ref_detail || d.bo_key}`).join('\n');
           setSnackbar({
             open: true,
-            message: `Cannot delete: This term is linked to ${deps.length} BO field(s) in: ${boNames || 'unknown BOs'}. Unlink the fields first.`,
+            message: `Cannot delete: This term is linked to ${deps.length} BO field(s) in: ${boNames || 'unknown BOs'}. Unlink the fields first.\n\nDetails:\n${details}`,
             severity: 'warning'
           });
         } else {
@@ -474,7 +475,7 @@ import { useQueryClient } from '@tanstack/react-query';
           onClose={handleCloseSnackbar}
           anchorOrigin={{ vertical: 'bottom', horizontal: 'left' }}
         >
-          <Alert onClose={handleCloseSnackbar} severity={snackbar.severity} sx={{ width: '100%' }}>
+          <Alert onClose={handleCloseSnackbar} severity={snackbar.severity} sx={{ width: '100%', whiteSpace: 'pre-line' }}>
             {snackbar.message}
           </Alert>
         </Snackbar>

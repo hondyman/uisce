@@ -193,30 +193,34 @@ export default function GlossaryExplorer() {
       setSearchParams({});
     } catch (e: any) {
       console.error(e);
-      if (e?.code === 'BO_DEPENDENCIES_BLOCK_DELETION') {
-        const deps = e?.dependencies ?? [];
+      // Collect dependencies from any available source
+      let deps: any[] = [];
+      if (e?.code === 'BO_DEPENDENCIES_BLOCK_DELETION' || e?.error === 'BO_DEPENDENCIES_BLOCK_DELETION') {
+        deps = e?.dependencies ?? [];
+      }
+      if (deps.length === 0) {
+        deps = e?.dependencyReport?.dependencies ?? e?.dependencies ?? [];
+      }
+      // If we have dependency info, show detailed message
+      if (deps.length > 0) {
         const boNames = [...new Set(deps.map((d: any) => d.bo_name))].join(', ');
         alert(
           `Cannot delete "${term.node_name}":\n\n` +
           `This term is linked to ${deps.length} BO field(s) in:\n${boNames || 'Unknown BOs'}\n\n` +
+          `Details:\n${deps.map((d: any) => `- ${d.bo_name}: ${d.ref_detail || d.bo_key}`).join('\n')}\n\n` +
           `Please unlink these fields from the Business Object before deleting the term.`
         );
-      } else {
-        // Try to parse dependency info from error message or dependencyReport
-        const depReport = e?.dependencyReport;
-        const deps = depReport?.dependencies ?? [];
-        if (deps.length > 0) {
-          const boNames = [...new Set(deps.map((d: any) => d.bo_name))].join(', ');
-          alert(
-            `Cannot delete "${term.node_name}":\n\n` +
-            `This term is linked to ${deps.length} BO field(s) in:\n${boNames || 'Unknown BOs'}\n\n` +
-            `Details:\n${deps.map((d: any) => `- ${d.bo_name}: ${d.ref_detail || d.bo_key}`).join('\n')}\n\n` +
-            `Please unlink these fields from the Business Object before deleting the term.`
-          );
-        } else {
-          alert(`Failed to delete term: ${e?.message || e}`);
-        }
+        return;
       }
+      // No dependency info available - show generic error, avoiding double-prefix
+      let msg = e?.message || String(e);
+      // Strip common prefixes to avoid "Failed to delete term: Failed to delete term"
+      if (msg.startsWith('Failed to delete term: ')) {
+        msg = msg.substring('Failed to delete term: '.length);
+      } else if (msg === 'Failed to delete term' || msg === 'Failed to delete term: Failed to delete term') {
+        msg = 'Delete operation failed. Check console for details.';
+      }
+      alert(`Failed to delete term: ${msg}`);
     }
   };
 

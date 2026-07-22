@@ -193,9 +193,10 @@ const BusinessGlossaryPage: React.FC = () => {
       if (error?.code === 'BO_DEPENDENCIES_BLOCK_DELETION') {
         const deps = error?.dependencies ?? [];
         const boNames = [...new Set(deps.map((d: any) => d.bo_name))].join(', ');
+        const details = deps.map((d: any) => `- ${d.bo_name}: ${d.ref_detail || d.bo_key}`).join('\n');
         setSnackbar({
           open: true,
-          message: `Cannot delete: This term is linked to ${deps.length} BO field(s) in: ${boNames || 'unknown BOs'}. Unlink the fields first.`,
+          message: `Cannot delete: This term is linked to ${deps.length} BO field(s) in: ${boNames || 'unknown BOs'}. Unlink the fields first.\n\nDetails:\n${details}`,
           severity: 'warning'
         });
       } else {
@@ -516,7 +517,7 @@ const BusinessGlossaryPage: React.FC = () => {
         onClose={handleCloseSnackbar}
         anchorOrigin={{ vertical: 'bottom', horizontal: 'left' }}
       >
-        <Alert onClose={handleCloseSnackbar} severity={snackbar.severity}>
+        <Alert onClose={handleCloseSnackbar} severity={snackbar.severity} sx={{ whiteSpace: 'pre-line' }}>
           {snackbar.message}
         </Alert>
       </Snackbar>
