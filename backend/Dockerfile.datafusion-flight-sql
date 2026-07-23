@@ -1,0 +1,22 @@
+FROM python:3.11-slim
+
+WORKDIR /app
+
+RUN pip install --no-cache-dir \
+    flask \
+    flask-cors \
+    datafusion \
+    pyiceberg \
+    boto3
+
+COPY datafusion_server.py /app/
+
+ENV FLIGHT_SQL_PORT=8554
+ENV RUST_LOG=info
+
+EXPOSE 8554 8555
+
+HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=5 \
+    CMD curl -f http://localhost:8554/health || exit 1
+
+ENTRYPOINT ["python", "/app/datafusion_server.py"]
