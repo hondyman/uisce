@@ -105,7 +105,13 @@ fi
 # START BACKEND
 # ==============================================================================
 
-cd "$BACKEND_DIR"
+BACKEND_BINARY="$BACKEND_DIR/backend"
+
+if [ ! -f "$BACKEND_BINARY" ]; then
+  err "Backend binary not found at $BACKEND_BINARY"
+  err "Build it first: cd $BACKEND_DIR && go build -o backend ./cmd/server"
+  exit 1
+fi
 
 info "🚀 Starting Uisce Backend on port $PORT..."
 info "   Frontend should connect to: http://localhost:$PORT"
@@ -115,4 +121,4 @@ echo ""
 exec infisical run \
   --projectId="${INFISICAL_PROJECT_ID}" \
   --env="${INFISICAL_ENVIRONMENT}" \
-  --command="go run ./cmd/server/main.go"
+  --command="$BACKEND_BINARY"
