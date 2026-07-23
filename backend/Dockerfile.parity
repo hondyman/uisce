@@ -1,0 +1,51 @@
+# Dockerfile for cube-parity service
+# Phase 10: Production Migration
+
+FROM golang:1.25-alpine AS builder
+
+RUN apk add --no-cache git ca-certificates
+
+WORKDIR /build
+
+# Copy all local module dependencies needed by replace directives
+COPY backend/go.mod backend/go.sum ./backend/
+COPY libs/ ./libs/
+COPY calc-engine/ ./calc-engine/
+
+# Download dependencies with retry logic for network issues
+WORKDIR /build/backend
+ENV GOPROXY=https://proxy.golang.org,direct
+ENV GOPRIVATE=""
+ENV GONOPROXY=""
+ENV GONOSUMDB=""
+# Increase timeout for slow connections
+RUN go env -w GOPROXY=https://proxy.golang.org,direct && \
+    go mod download || \
+    (echo "Retrying go mod download..." && sleep 5 && go mod download) || \
+    (echo "Final retry with direct mode..." && GOPROXY=direct go mod download)
+
+# Copy source code
+# Copy backend source code
+WORKDIR /build
+COPY backend/ ./backend/
+
+# Build the parity service
+WORKDIR /build/backend
+RUN CGO_ENABLED=0 GOOS=linux go build -o /cube-parity ./cmd/cube-parity
+
+# Final minimal image
+FROM alpine:3.19
+
+RUN apk update && apk add --no-cache --allow-untrusted ca-certificates tzdata
+
+WORKDIR /app
+
+COPY --from=builder /cube-parity /app/cube-parity
+
+# Run as non-root
+RUN adduser -D -u 1000 appuser
+USER appuser
+
+EXPOSE 8090
+
+ENTRYPOINT ["/app/cube-parity"]

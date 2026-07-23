@@ -1,0 +1,279 @@
+{
+    "id": "bp.model_change_with_client_approval.v1",
+    "name": "Model Change with Client Approval",
+    "version": "1.0.0",
+    "status": "Active",
+    "process_type": "ModelChange",
+    "tags": [
+        "client-facing",
+        "suitability",
+        "high-impact"
+    ],
+    "owner_role": "InvestmentOperations",
+    "routing_rules": {
+        "routing.advisor_of_client": {
+            "type": "DynamicRole",
+            "expression": "client.primary_advisor_user_id"
+        },
+        "routing.client_primary_contact": {
+            "type": "DynamicRole",
+            "expression": "client.primary_contact_user_id"
+        }
+    },
+    "condition_rules": {
+        "condition.client_requires_approval": {
+            "expression": "client.discretionary == false"
+        },
+        "condition.suitability_hard_fail": {
+            "expression": "suitability_result.status == 'HARD_FAIL'"
+        },
+        "condition.suitability_not_hard_fail": {
+            "expression": "suitability_result.status != 'HARD_FAIL'"
+        },
+        "condition.client_approved": {
+            "expression": "approval_outcome == 'approved'"
+        },
+        "condition.client_rejected": {
+            "expression": "approval_outcome == 'rejected'"
+        }
+    },
+    "step_graph": {
+        "nodes": [
+            {
+                "id": "S1",
+                "name": "Capture Model Change Intent",
+                "step_type": "Interpretation",
+                "llm_profile": "llm.intent_to_structured_model_change",
+                "input_context": [
+                    {
+                        "type": "ProposalFreeText",
+                        "path": "proposal_free_text"
+                    },
+                    {
+                        "type": "ClientContext",
+                        "path": ""
+                    },
+                    {
+                        "type": "AccountList",
+                        "path": "accounts"
+                    }
+                ],
+                "output_context": [
+                    {
+                        "type": "ModelChangeProposal",
+                        "path": "model_change_proposal"
+                    }
+                ],
+                "audit_flags": {
+                    "capture_llm_reasoning": true
+                }
+            },
+            {
+                "id": "S2",
+                "name": "Run Suitability & Risk Checks",
+                "step_type": "DataValidation",
+                "input_context": [
+                    {
+                        "type": "ModelChangeProposal",
+                        "path": "model_change_proposal"
+                    },
+                    {
+                        "type": "ClientContext",
+                        "path": ""
+                    },
+                    {
+                        "type": "AccountList",
+                        "path": "accounts"
+                    }
+                ],
+                "output_context": [
+                    {
+                        "type": "SuitabilityResult",
+                        "path": "suitability_result"
+                    },
+                    {
+                        "type": "RiskDelta",
+                        "path": "risk_delta"
+                    },
+                    {
+                        "type": "TaxImpact",
+                        "path": "tax_impact"
+                    }
+                ]
+            },
+            {
+                "id": "S3",
+                "name": "Advisor Review & Adjust",
+                "step_type": "Review",
+                "routing_rule": "routing.advisor_of_client",
+                "input_context": [
+                    {
+                        "type": "ModelChangeProposal",
+                        "path": "model_change_proposal"
+                    },
+                    {
+                        "type": "SuitabilityResult",
+                        "path": "suitability_result"
+                    },
+                    {
+                        "type": "RiskDelta",
+                        "path": "risk_delta"
+                    },
+                    {
+                        "type": "TaxImpact",
+                        "path": "tax_impact"
+                    }
+                ],
+                "output_context": [
+                    {
+                        "type": "ModelChangeProposal",
+                        "path": "model_change_proposal"
+                    }
+                ]
+            },
+            {
+                "id": "S4",
+                "name": "Draft Client Explanation",
+                "step_type": "Drafting",
+                "llm_profile": "llm.client_friendly_explanation",
+                "routing_rule": "routing.advisor_of_client",
+                "input_context": [
+                    {
+                        "type": "ModelChangeProposal",
+                        "path": "model_change_proposal"
+                    },
+                    {
+                        "type": "SuitabilityResult",
+                        "path": "suitability_result"
+                    },
+                    {
+                        "type": "RiskDelta",
+                        "path": "risk_delta"
+                    },
+                    {
+                        "type": "TaxImpact",
+                        "path": "tax_impact"
+                    }
+                ],
+                "output_context": [
+                    {
+                        "type": "ClientExplanation",
+                        "path": "client_explanation"
+                    }
+                ]
+            },
+            {
+                "id": "S5",
+                "name": "Client Approval",
+                "step_type": "Approval",
+                "routing_rule": "routing.client_primary_contact",
+                "condition_rule": "condition.client_requires_approval",
+                "input_context": [
+                    {
+                        "type": "ClientExplanation",
+                        "path": "client_explanation"
+                    },
+                    {
+                        "type": "ModelChangeProposal",
+                        "path": "model_change_proposal"
+                    }
+                ]
+            },
+            {
+                "id": "S6",
+                "name": "Execute Trades",
+                "step_type": "ServiceCall",
+                "input_context": [
+                    {
+                        "type": "ModelChangeProposal",
+                        "path": "model_change_proposal"
+                    }
+                ],
+                "output_context": [
+                    {
+                        "type": "TradeExecutionResult",
+                        "path": "trade_execution_result"
+                    }
+                ]
+            },
+            {
+                "id": "S7",
+                "name": "Refresh Rollups & Reports",
+                "step_type": "SemanticRollup",
+                "input_context": [
+                    {
+                        "type": "ClientContext",
+                        "path": ""
+                    }
+                ]
+            },
+            {
+                "id": "S8",
+                "name": "Notify Advisor & Archive",
+                "step_type": "Notification",
+                "routing_rule": "routing.advisor_of_client",
+                "input_context": [
+                    {
+                        "type": "ModelChangeProposal",
+                        "path": "model_change_proposal"
+                    },
+                    {
+                        "type": "TradeExecutionResult",
+                        "path": "trade_execution_result"
+                    }
+                ]
+            },
+            {
+                "id": "S9",
+                "name": "Completion",
+                "step_type": "Completion"
+            }
+        ],
+        "edges": [
+            {
+                "from_step_id": "S1",
+                "to_step_id": "S2"
+            },
+            {
+                "from_step_id": "S2",
+                "to_step_id": "S3",
+                "condition_rule": "condition.suitability_not_hard_fail"
+            },
+            {
+                "from_step_id": "S2",
+                "to_step_id": "S9",
+                "condition_rule": "condition.suitability_hard_fail"
+            },
+            {
+                "from_step_id": "S3",
+                "to_step_id": "S4"
+            },
+            {
+                "from_step_id": "S4",
+                "to_step_id": "S5"
+            },
+            {
+                "from_step_id": "S5",
+                "to_step_id": "S6",
+                "condition_rule": "condition.client_approved"
+            },
+            {
+                "from_step_id": "S5",
+                "to_step_id": "S9",
+                "condition_rule": "condition.client_rejected"
+            },
+            {
+                "from_step_id": "S6",
+                "to_step_id": "S7"
+            },
+            {
+                "from_step_id": "S7",
+                "to_step_id": "S8"
+            },
+            {
+                "from_step_id": "S8",
+                "to_step_id": "S9"
+            }
+        ]
+    }
+}

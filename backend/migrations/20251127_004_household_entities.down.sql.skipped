@@ -1,0 +1,3 @@
+DROP VIEW IF EXISTS household_consolidated;
+DROP TABLE IF EXISTS inter_entity_transfers CASCADE;
+DROP TABLE IF EXISTS entities CASCADE;

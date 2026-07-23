@@ -1,0 +1,68 @@
+package api
+
+import (
+	"io"
+	"net/http"
+	"net/http/httptest"
+	"os"
+	"testing"
+)
+
+func TestProxyTempoTraces_ForwardsQuery(t *testing.T) {
+	// Start a fake upstream trace backend that validates query and returns JSON
+	up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// echo back query params and path
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`{"received":"` + r.URL.RawQuery + `"}`))
+	}))
+	defer up.Close()
+
+	os.Setenv("TRACE_QUERY_URL", up.URL+"/api/traces/search")
+
+	req := httptest.NewRequest(http.MethodGet, "/api/tempo/traces?plan_id=plan-123", nil)
+	rr := httptest.NewRecorder()
+
+	srv := &Server{}
+	srv.proxyTempoTraces(rr, req)
+
+	if status := rr.Result().StatusCode; status != http.StatusOK {
+		t.Fatalf("expected 200 OK but got %d", status)
+	}
+	b, _ := io.ReadAll(rr.Result().Body)
+	if string(b) != `{"received":"plan_id=plan-123"}` {
+		t.Fatalf("unexpected body: %s", string(b))
+	}
+}
+
+func TestProxyTempoGetTrace_ForwardsPath(t *testing.T) {
+	up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`{"path":"` + r.URL.Path + `"}`))
+	}))
+	defer up.Close()
+
+	os.Setenv("TRACE_QUERY_URL", up.URL+"/api/traces")
+
+	req := httptest.NewRequest(http.MethodGet, "/api/tempo/traces/abcd1234", nil)
+	r := httptest.NewRecorder()
+	srv := &Server{}
+	// chi URLParam is used in handler; we simulate by directly calling handler with modified context
+	// but simpler: call proxyTempoGetTrace after setting URL param via chi.NewRouter
+	rq := httptest.NewRequest(http.MethodGet, "/api/tempo/traces/abcd1234", nil)
+	rw := httptest.NewRecorder()
+
+	// Since proxyTempoGetTrace uses chi.URLParam, we need to mount the handler on a chi router
+	router := http.NewServeMux()
+	router.HandleFunc("/api/tempo/traces/abcd1234", srv.proxyTempoGetTrace)
+	router.ServeHTTP(rw, rq)
+
+	if rw.Result().StatusCode != http.StatusOK {
+		t.Fatalf("expected 200 OK but got %d", rw.Result().StatusCode)
+	}
+	b, _ := io.ReadAll(rw.Result().Body)
+	if string(b) != `{"path":"/api/traces/abcd1234"}` {
+		t.Fatalf("unexpected body: %s", string(b))
+	}
+}

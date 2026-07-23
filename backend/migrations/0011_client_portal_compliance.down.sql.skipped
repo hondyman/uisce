@@ -1,0 +1,15 @@
+-- Client Portal & Compliance Rollback Migration
+-- Drops all tables in reverse dependency order
+
+DROP TABLE IF EXISTS audit_trail CASCADE;
+DROP TABLE IF EXISTS suitability_analyses CASCADE;
+DROP TABLE IF EXISTS trade_surveillance_alerts CASCADE;
+DROP TABLE IF EXISTS gips_compliance_reports CASCADE;
+DROP TABLE IF EXISTS form_adv_filings CASCADE;
+DROP TABLE IF EXISTS activity_events CASCADE;
+DROP TABLE IF EXISTS meeting_participants CASCADE;
+DROP TABLE IF EXISTS video_meetings CASCADE;
+DROP TABLE IF EXISTS signature_signers CASCADE;
+DROP TABLE IF EXISTS signature_requests CASCADE;
+DROP TABLE IF EXISTS message_attachments CASCADE;
+DROP TABLE IF EXISTS client_messages CASCADE;

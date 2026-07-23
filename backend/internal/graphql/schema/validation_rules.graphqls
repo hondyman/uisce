@@ -1,0 +1,80 @@
+"""
+Validation Rules Schema
+Defines GraphQL operations for managing validation rules and scenarios
+"""
+
+scalar JSON
+
+"""
+RuleScenario represents a container for testing "what-if" changes to a rule
+"""
+type RuleScenario {
+  id: UUID!
+  tenantId: UUID!
+  baseRuleId: UUID
+  name: String!
+  description: String
+  status: String!
+  versions: [RuleScenarioVersion!]!
+  createdAt: Timestamp!
+}
+
+"""
+RuleScenarioVersion represents a specific immutable snapshot of a rule for simulation
+"""
+type RuleScenarioVersion {
+  id: UUID!
+  version: Int!
+  ruleSnapshot: JSON!
+  createdAt: Timestamp!
+}
+
+"""
+RuleTestRun represents an execution of a rule against a sample dataset
+"""
+type RuleTestRun {
+  id: UUID!
+  tenantId: UUID!
+  scenarioVersionId: UUID
+  status: String!
+  sampleSize: Int!
+  failureCount: Int!
+  failureRate: Float
+  startedAt: Timestamp!
+  completedAt: Timestamp
+}
+
+# Inputs
+
+input CreateRuleScenarioInput {
+  tenantId: UUID!
+  baseRuleId: UUID
+  name: String!
+  description: String
+}
+
+input SaveScenarioVersionInput {
+  scenarioId: UUID!
+  ruleDraft: JSON! 
+}
+
+input RunScenarioInput {
+  tenantId: UUID!
+  scenarioVersionId: UUID!
+  entity: String!
+  sampleSize: Int!
+  filter: JSON
+}
+
+# Operations
+
+extend type Mutation {
+  createRuleScenario(input: CreateRuleScenarioInput!): RuleScenario!
+  saveScenarioVersion(input: SaveScenarioVersionInput!): RuleScenarioVersion!
+  runScenario(input: RunScenarioInput!): RuleTestRun!
+}
+
+extend type Query {
+  ruleScenarios(tenantId: UUID!, ruleId: UUID): [RuleScenario!]!
+  ruleScenario(id: UUID!): RuleScenario
+}

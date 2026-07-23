@@ -1,0 +1,35 @@
+# Multi-stage build for catalog-sync service
+FROM golang:1.24-alpine AS builder
+
+WORKDIR /app
+
+# Install build dependencies
+RUN apk add --no-cache git build-base
+
+# Copy module definitions and local dependencies
+# Matches structure required by backend/go.mod replace directives
+COPY go.mod go.sum ./
+COPY backend/go.mod backend/go.sum ./backend/
+COPY libs/ ./libs/
+COPY calc-engine/ ./calc-engine/
+
+# Download dependencies from backend directory
+WORKDIR /app/backend
+RUN go mod download
+
+# Copy backend source code
+COPY backend/ ./
+
+# Build the catalog-sync binary
+# GOWORK=off ensures we use the module graph from go.mod, consistent with main backend build
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 GOWORK=off go build -o /out/catalog-sync ./cmd/catalog-sync/main.go
+
+FROM alpine:3.20
+WORKDIR /app
+RUN apk add --no-cache ca-certificates git
+COPY --from=builder /out/catalog-sync /app/catalog-sync
+
+ENV PORT="8090"
+EXPOSE 8090
+
+ENTRYPOINT ["/app/catalog-sync"]

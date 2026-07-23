@@ -1,0 +1,129 @@
+{
+    "name": "Batch Order Processing with Control Flow",
+    "description": "Demonstrates Parallel, ForEach, and Wait node usage for processing multiple orders",
+    "startNodeId": "node_start",
+    "globalState": {
+        "orders": [
+            {
+                "id": "ORD-001",
+                "amount": 1500,
+                "customer_id": "CUST-101"
+            },
+            {
+                "id": "ORD-002",
+                "amount": 2500,
+                "customer_id": "CUST-102"
+            },
+            {
+                "id": "ORD-003",
+                "amount": 850,
+                "customer_id": "CUST-103"
+            }
+        ]
+    },
+    "nodes": {
+        "node_start": {
+            "id": "node_start",
+            "type": "ACTIVITY",
+            "name": "Initialize Processing",
+            "config": {
+                "activityName": "ActivityLogEvent",
+                "message": "Starting batch order processing"
+            },
+            "nextNodeId": "node_parallel_checks"
+        },
+        "node_parallel_checks": {
+            "id": "node_parallel_checks",
+            "type": "parallel",
+            "name": "Run Parallel Validations",
+            "config": {
+                "branches": [
+                    {
+                        "name": "fraud_check",
+                        "node_ids": [
+                            "node_fraud"
+                        ]
+                    },
+                    {
+                        "name": "inventory_check",
+                        "node_ids": [
+                            "node_inventory"
+                        ]
+                    },
+                    {
+                        "name": "credit_check",
+                        "node_ids": [
+                            "node_credit"
+                        ]
+                    }
+                ],
+                "output_variable": "validation_results"
+            },
+            "nextNodeId": "node_wait_sync"
+        },
+        "node_fraud": {
+            "id": "node_fraud",
+            "type": "ACTIVITY",
+            "name": "Fraud Detection",
+            "config": {
+                "activityName": "ActivityCheckFraud"
+            }
+        },
+        "node_inventory": {
+            "id": "node_inventory",
+            "type": "ACTIVITY",
+            "name": "Inventory Check",
+            "config": {
+                "activityName": "ActivityCheckInventory"
+            }
+        },
+        "node_credit": {
+            "id": "node_credit",
+            "type": "ACTIVITY",
+            "name": "Credit Check",
+            "config": {
+                "activityName": "ActivityCheckCredit"
+            }
+        },
+        "node_wait_sync": {
+            "id": "node_wait_sync",
+            "type": "wait",
+            "name": "Wait for External Systems",
+            "config": {
+                "wait_type": "duration",
+                "duration": "5s"
+            },
+            "nextNodeId": "node_foreach_orders"
+        },
+        "node_foreach_orders": {
+            "id": "node_foreach_orders",
+            "type": "forEach",
+            "name": "Process Each Order",
+            "config": {
+                "collection": "$.orders",
+                "item_variable": "current_order",
+                "index_variable": "order_index",
+                "mode": "parallel",
+                "max_concurrency": 5,
+                "body_node_ids": [
+                    "node_process_order"
+                ],
+                "output_variable": "processed_orders"
+            },
+            "nextNodeId": "node_end"
+        },
+        "node_process_order": {
+            "id": "node_process_order",
+            "type": "ACTIVITY",
+            "name": "Process Single Order",
+            "config": {
+                "activityName": "ActivityProcessOrder"
+            }
+        },
+        "node_end": {
+            "id": "node_end",
+            "type": "END",
+            "name": "Complete Batch Processing"
+        }
+    }
+}

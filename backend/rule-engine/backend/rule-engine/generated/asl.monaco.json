@@ -1,0 +1,279 @@
+{
+  "keywords": [
+    "rule",
+    "when",
+    "then",
+    "and",
+    "or",
+    "not"
+  ],
+  "operators": [],
+  "nodeKinds": [
+    "BOField",
+    "BOFieldInput",
+    "Change",
+    "Column",
+    "ColumnInfo",
+    "ColumnSchema",
+    "Command",
+    "Connection",
+    "CubeDimension",
+    "CubeMeasure",
+    "DatabaseColumn",
+    "Event",
+    "HierarchicalNode",
+    "Job",
+    "Notification",
+    "ReactFlowNode",
+    "RoleCreateInput",
+    "RoleUpdateInput",
+    "SemanticDimension",
+    "SemanticMeasure",
+    "SourceReference",
+    "WebSocketMessage",
+    "patchChange"
+  ],
+  "snippets": [
+    {
+      "label": "BOField",
+      "insert": "BOField {\n  \n}",
+      "detail": "Insert BOField node"
+    },
+    {
+      "label": "BOFieldInput",
+      "insert": "BOFieldInput {\n  \n}",
+      "detail": "Insert BOFieldInput node"
+    },
+    {
+      "label": "Change",
+      "insert": "Change {\n  \n}",
+      "detail": "Insert Change node"
+    },
+    {
+      "label": "Column",
+      "insert": "Column {\n  \n}",
+      "detail": "Insert Column node"
+    },
+    {
+      "label": "ColumnInfo",
+      "insert": "ColumnInfo {\n  \n}",
+      "detail": "Insert ColumnInfo node"
+    },
+    {
+      "label": "ColumnSchema",
+      "insert": "ColumnSchema {\n  \n}",
+      "detail": "Insert ColumnSchema node"
+    },
+    {
+      "label": "Command",
+      "insert": "Command {\n  \n}",
+      "detail": "Insert Command node"
+    },
+    {
+      "label": "Connection",
+      "insert": "Connection {\n  \n}",
+      "detail": "Insert Connection node"
+    },
+    {
+      "label": "CubeDimension",
+      "insert": "CubeDimension {\n  \n}",
+      "detail": "Insert CubeDimension node"
+    },
+    {
+      "label": "CubeMeasure",
+      "insert": "CubeMeasure {\n  \n}",
+      "detail": "Insert CubeMeasure node"
+    },
+    {
+      "label": "DatabaseColumn",
+      "insert": "DatabaseColumn {\n  \n}",
+      "detail": "Insert DatabaseColumn node"
+    },
+    {
+      "label": "Event",
+      "insert": "Event {\n  \n}",
+      "detail": "Insert Event node"
+    },
+    {
+      "label": "HierarchicalNode",
+      "insert": "HierarchicalNode {\n  \n}",
+      "detail": "Insert HierarchicalNode node"
+    },
+    {
+      "label": "Job",
+      "insert": "Job {\n  \n}",
+      "detail": "Insert Job node"
+    },
+    {
+      "label": "Notification",
+      "insert": "Notification {\n  \n}",
+      "detail": "Insert Notification node"
+    },
+    {
+      "label": "ReactFlowNode",
+      "insert": "ReactFlowNode {\n  \n}",
+      "detail": "Insert ReactFlowNode node"
+    },
+    {
+      "label": "RoleCreateInput",
+      "insert": "RoleCreateInput {\n  \n}",
+      "detail": "Insert RoleCreateInput node"
+    },
+    {
+      "label": "RoleUpdateInput",
+      "insert": "RoleUpdateInput {\n  \n}",
+      "detail": "Insert RoleUpdateInput node"
+    },
+    {
+      "label": "SemanticDimension",
+      "insert": "SemanticDimension {\n  \n}",
+      "detail": "Insert SemanticDimension node"
+    },
+    {
+      "label": "SemanticMeasure",
+      "insert": "SemanticMeasure {\n  \n}",
+      "detail": "Insert SemanticMeasure node"
+    },
+    {
+      "label": "SourceReference",
+      "insert": "SourceReference {\n  \n}",
+      "detail": "Insert SourceReference node"
+    },
+    {
+      "label": "WebSocketMessage",
+      "insert": "WebSocketMessage {\n  \n}",
+      "detail": "Insert WebSocketMessage node"
+    },
+    {
+      "label": "patchChange",
+      "insert": "patchChange {\n  \n}",
+      "detail": "Insert patchChange node"
+    }
+  ],
+  "enums": {
+    "AccessLevel": [
+      "\"NONE\"",
+      "\"READ\"",
+      "\"WRITE\""
+    ],
+    "AdverseCondition": [
+      "0",
+      "1",
+      "2",
+      "3",
+      "4",
+      "5"
+    ],
+    "CircuitState": [
+      "0",
+      "1",
+      "2"
+    ],
+    "CommandStatus": [
+      "\"failed\"",
+      "\"pending\"",
+      "\"success\""
+    ],
+    "CommandType": [
+      "\"command.bo.clone\"",
+      "\"command.bo.create\"",
+      "\"command.bo.delete\"",
+      "\"command.bo.update\"",
+      "\"command.instance.create\"",
+      "\"command.instance.delete\"",
+      "\"command.instance.update\""
+    ],
+    "ConnectionState": [
+      "0",
+      "1",
+      "2",
+      "3"
+    ],
+    "DataSource": [
+      "\"ignite\"",
+      "\"postgres\"",
+      "\"starrocks\""
+    ],
+    "EmailTemplate": [
+      "\"alert\"",
+      "\"monthly_statement\"",
+      "\"password_reset\"",
+      "\"trade_confirmation\"",
+      "\"welcome\""
+    ],
+    "EventType": [
+      "\"event.bo.cloned\"",
+      "\"event.bo.created\"",
+      "\"event.bo.deleted\"",
+      "\"event.bo.updated\"",
+      "\"event.instance.created\"",
+      "\"event.instance.deleted\"",
+      "\"event.instance.updated\"",
+      "\"event.workflow.completed\"",
+      "\"event.workflow.failed\"",
+      "\"event.workflow.progress\"",
+      "\"event.workflow.started\""
+    ],
+    "LayoutType": [
+      "\"flat\"",
+      "\"hierarchical\""
+    ],
+    "ModelType": [
+      "\"core\"",
+      "\"custom\"",
+      "\"override\""
+    ],
+    "QueryType": [
+      "\"analytics\"",
+      "\"historical\"",
+      "\"realtime\""
+    ],
+    "RemovalPolicy": [
+      "0",
+      "1"
+    ],
+    "RuleFrequency": [
+      "\"CONTINUOUS\"",
+      "\"DAILY\"",
+      "\"ON_REBALANCE\"",
+      "\"ON_TRADE\"",
+      "\"WEEKLY\""
+    ],
+    "RuleScope": [
+      "\"ALL_ACCOUNTS\"",
+      "\"INDIVIDUAL_ACCOUNT\"",
+      "\"IRA_ACCOUNT\"",
+      "\"JOINT_ACCOUNT\"",
+      "\"TRUST_ACCOUNT\""
+    ],
+    "RuleSeverity": [
+      "\"BLOCK\"",
+      "\"INFO\"",
+      "\"WARNING\""
+    ],
+    "TenantTier": [
+      "0",
+      "1",
+      "2"
+    ],
+    "VersionStatus": [
+      "\"active\"",
+      "\"archived\"",
+      "\"available\"",
+      "\"canary\"",
+      "\"preview\"",
+      "\"previous\""
+    ],
+    "contextKey": [
+      "\"force_cache_miss\"",
+      "\"invalidation_storm\"",
+      "\"policy_delay\"",
+      "\"throttle_rate\""
+    ],
+    "patchChangeKind": [
+      "\"add\"",
+      "\"deprecate\"",
+      "\"modify\""
+    ]
+  }
+}

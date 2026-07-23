@@ -1,0 +1,4 @@
+# ./internal/api
+stat /Users/eganpj/GitHub/semlayer/backend/internal/api/internal/api: directory not found
+FAIL	./internal/api [setup failed]
+FAIL

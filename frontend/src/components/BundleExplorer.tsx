@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { devWarn, devError } from '../utils/devLogger';
+import { useAuthFetch } from '../utils/authFetch';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Badge } from './ui/badge';
 import { Button } from './ui/button';
@@ -12,6 +13,7 @@ type Bundle = RegistryBundle;
 // Using centralized RegistryBundle/RegistryMetric types from ../types/bundles
 
 export default function BundleExplorer() {
+  const { authFetch } = useAuthFetch();
   const [bundles, setBundles] = useState<Bundle[]>([]);
   const [filteredBundles, setFilteredBundles] = useState<Bundle[]>([]);
   const [loading, setLoading] = useState(true);
@@ -72,10 +74,9 @@ export default function BundleExplorer() {
 
       for (const domain of domains) {
         try {
-          const response = await fetch(`/api/semantic/bundles/${domain}`);
-          if (response.ok) {
-            const bundle = await response.json();
-            loadedBundles.push(bundle);
+          const result = await authFetch<Bundle>(`/api/semantic/bundles/${domain}`);
+          if (result.ok && result.data) {
+            loadedBundles.push(result.data);
           }
         } catch (error) {
           devWarn(`Failed to load ${domain} bundle:`, error);

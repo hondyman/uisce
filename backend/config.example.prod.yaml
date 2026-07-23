@@ -1,0 +1,40 @@
+# SemLayer Production Configuration
+# This is a complete example configuration for production environment
+# IMPORTANT: Change all default values and secrets before deploying!
+
+yaml_dir: "/app/config"
+driver: "postgres"
+dsn: "${DATABASE_URL}" # Use environment variable for security
+port: ":8080"
+pg_port: ":5432"
+
+# Environment settings
+environment: "production"
+log_level: "warn"
+
+# Feature flags
+enable_metrics: true
+enable_caching: true
+enable_security: true
+
+# Database settings (optimized for production)
+db_max_open_conns: 50
+db_max_idle_conns: 10
+db_max_lifetime: "5m"
+
+# Cache settings (optimized for production)
+cache_num_shards: 32
+cache_max_size_per_shard: 50000
+cache_default_ttl: "30m"
+
+# Redis settings (required for production caching)
+redis_addr: "${REDIS_URL}"
+
+# Security settings (critical for production)
+jwt_secret: "${JWT_SECRET}" # Must be set via environment variable
+security_rate_limit_enabled: true
+security_rate_limit_requests: 1000
+security_rate_limit_window: "1m"
+
+# Optional settings
+graphql_url: "${GRAPHQL_URL}"

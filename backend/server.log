@@ -1,0 +1,1292 @@
+main.go:152: Loaded configuration: DSN=postgres://postgres:postgres@localhost:5432/alpha?sslmode=disable
+{"level":"info","ts":1770262337.5566568,"caller":"server/main.go:185","msg":"Database connection established successfully"}
+{"level":"info","ts":1770262337.5567229,"caller":"server/main.go:186","msg":"Connection pool configured: MaxOpen=50, MaxIdle=10, MaxLifetime=10m0s, MaxIdleTime=5m0s"}
+{"level":"info","ts":1770262337.556763,"caller":"server/main.go:206","msg":"🤖 AI Orchestration worker started with 5 strategies"}
+{"level":"info","ts":1770262337.556771,"caller":"observability/dynatrace_manager.go:30","msg":"Dynatrace environment variables not set, disabling Dynatrace integration."}
+{"level":"info","ts":1770262337.5567858,"caller":"services/performance_monitor.go:436","msg":"pprof endpoints available at /debug/pprof/"}
+{"level":"info","ts":1770262337.5568142,"caller":"server/main.go:1154","msg":"✅ Trino Audit Service initialized"}
+2026/02/04 22:32:17 INFO  No logger configured for temporal client. Created default one.
+{"level":"warn","ts":1770262337.619861,"caller":"server/main.go:1179","msg":"Warning: Failed to initialize Temporal worker: failed to create Temporal client: failed reaching server: no children to pick from (metrics will not compute automatically)"}
+{"level":"info","ts":1770262337.706035,"caller":"logging/logging.go:39","msg":"semantic_cache.go:51: Warning: Redis connection failed, semantic view caching disabled: dial tcp: lookup redis: no such host\n"}
+{"level":"info","ts":1770262337.7061172,"caller":"server/main.go:1209","msg":"✅ Semantic view cache initialized at redis:6379"}
+{"level":"info","ts":1770262337.801156,"caller":"logging/logging.go:39","msg":"middleware.go:37: Warning: Redis connection failed, ABAC policy caching disabled: dial tcp: lookup redis: no such host\n"}
+{"level":"info","ts":1770262337.801264,"caller":"server/main.go:1216","msg":"✅ ABAC policy cache middleware initialized"}
+DEBUG: SetupRouter INVOKED! [Version 3]
+{"level":"info","ts":1770262337.801405,"caller":"api/api.go:420","msg":"RequestTracingMiddleware registered on router"}
+{"level":"info","ts":1770262337.801436,"caller":"services/qos_manager.go:98","msg":"Refreshing Tenant Quotas"}
+{"level":"info","ts":1770262337.814729,"caller":"api/api.go:565","msg":"Aggregates database connection established at postgres://postgres:postgres@host.docker.internal:5432/northwinds?sslmode=disable"}
+{"level":"info","ts":1770262337.814976,"caller":"api/api.go:638","msg":"Audit and Semantic publishers initialized for Kafka"}
+{"level":"info","ts":1770262337.815148,"caller":"audit/worker.go:37","msg":"AsyncAuditService started with 5 workers"}
+[GIN-debug] [WARNING] Running in "debug" mode. Switch to "release" mode in production.
+ - using env:	export GIN_MODE=release
+ - using code:	gin.SetMode(gin.ReleaseMode)
+
+[GIN-debug] GET    /audit/job-runs           --> github.com/hondyman/semlayer/backend/internal/audit.(*AuditAPIHandler).GetJobRuns-fm (2 handlers)
+[GIN-debug] GET    /audit/job-runs/:run_id   --> github.com/hondyman/semlayer/backend/internal/audit.(*AuditAPIHandler).GetJobRun-fm (2 handlers)
+[GIN-debug] GET    /audit/dag-runs           --> github.com/hondyman/semlayer/backend/internal/audit.(*AuditAPIHandler).GetDAGRuns-fm (2 handlers)
+[GIN-debug] GET    /audit/changesets         --> github.com/hondyman/semlayer/backend/internal/audit.(*AuditAPIHandler).GetChangeSets-fm (2 handlers)
+[GIN-debug] GET    /audit/changesets/:changeset_id --> github.com/hondyman/semlayer/backend/internal/audit.(*AuditAPIHandler).GetChangeSet-fm (2 handlers)
+[GIN-debug] GET    /audit/violations         --> github.com/hondyman/semlayer/backend/internal/audit.(*AuditAPIHandler).GetComplianceViolations-fm (2 handlers)
+[GIN-debug] GET    /audit/violations/:violation_id --> github.com/hondyman/semlayer/backend/internal/audit.(*AuditAPIHandler).GetComplianceViolation-fm (2 handlers)
+[GIN-debug] GET    /audit/semantic/:semantic_term_id/lineage --> github.com/hondyman/semlayer/backend/internal/audit.(*AuditAPIHandler).GetSemanticLineage-fm (2 handlers)
+[GIN-debug] GET    /audit/semantic/:semantic_term_id/versions --> github.com/hondyman/semlayer/backend/internal/audit.(*AuditAPIHandler).GetSemanticVersions-fm (2 handlers)
+[GIN-debug] GET    /audit/ai-narratives      --> github.com/hondyman/semlayer/backend/internal/audit.(*AuditAPIHandler).GetAINarratives-fm (2 handlers)
+[GIN-debug] GET    /audit/dashboard/slo      --> github.com/hondyman/semlayer/backend/internal/audit.(*AuditAPIHandler).GetSLODashboard-fm (2 handlers)
+[GIN-debug] GET    /audit/dashboard/compliance --> github.com/hondyman/semlayer/backend/internal/audit.(*AuditAPIHandler).GetComplianceDashboard-fm (2 handlers)
+[GIN-debug] GET    /audit/dashboard/governance --> github.com/hondyman/semlayer/backend/internal/audit.(*AuditAPIHandler).GetGovernanceDashboard-fm (2 handlers)
+{"level":"info","ts":1770262337.8184152,"caller":"api/api.go:1036","msg":"Audit Trino & Snapshot Plane routes registered at /api/audit-trino/*"}
+2026/02/04 22:32:17 INFO  No logger configured for temporal client. Created default one.
+Warning: Failed to connect to Ignite: failed to connect to ignite: failed to open connection: dial tcp: lookup ignite: no such host. Cache operations will be skipped.
+[ROUTES-DUMP-START]
+[ROUTE] POST /_debug/validation-rules-proxy
+[ROUTE] GET /_routes
+[ROUTE] POST /ai/analyze-signal
+[ROUTE] POST /ai/explain-portfolio
+[ROUTE] POST /ai/generate-constraints
+[ROUTE] POST /analytics/layout
+[ROUTE] GET /api/debug/headers
+[ROUTE] POST /api/events/tenant-instance-created
+[ROUTE] POST /api/instance/clone-from-goldcopy
+[ROUTE] POST /api/instance/sync-connections-from-goldcopy
+[ROUTE] GET /api/intelligence/storage/plans
+[ROUTE] POST /api/intelligence/storage/plans/generate
+[ROUTE] GET /api/intelligence/storage/plans/{id}
+[ROUTE] POST /api/intelligence/storage/plans/{id}/execute
+[ROUTE] POST /api/intelligence/storage/plans/{id}/status
+[ROUTE] POST /api/layouts
+[ROUTE] GET /api/layouts
+[ROUTE] GET /api/layouts/{id}
+[ROUTE] PUT /api/layouts/{id}
+[ROUTE] DELETE /api/layouts/{id}
+[ROUTE] POST /api/rag/search
+[ROUTE] POST /api/rag/upload
+[ROUTE] GET /api/scheduler/governance/audit
+[ROUTE] GET /api/scheduler/governance/audit/entity/{type}/{id}
+[ROUTE] GET /api/scheduler/governance/audit/stats
+[ROUTE] POST /api/scheduler/governance/changesets
+[ROUTE] GET /api/scheduler/governance/changesets
+[ROUTE] GET /api/scheduler/governance/changesets/{id}
+[ROUTE] POST /api/scheduler/governance/changesets/{id}/apply
+[ROUTE] POST /api/scheduler/governance/changesets/{id}/approve
+[ROUTE] POST /api/scheduler/governance/changesets/{id}/reject
+[ROUTE] POST /api/scheduler/governance/changesets/{id}/rollback
+[ROUTE] GET /api/scheduler/governance/policies
+[ROUTE] POST /api/scheduler/governance/policies
+[ROUTE] PATCH /api/scheduler/governance/policies/{id}
+[ROUTE] DELETE /api/scheduler/governance/policies/{id}
+[ROUTE] GET /api/scheduler/governance/policies/{id}
+[ROUTE] GET /api/v1/folders/
+[ROUTE] GET /api/v1/folders/{id}/analytics
+[ROUTE] GET /api/v1/folders/{id}/diff
+[ROUTE] POST /api/v1/folders/{id}/items
+[ROUTE] GET /api/v1/page-layouts
+[ROUTE] POST /api/v1/page-layouts
+[ROUTE] PUT /api/v1/page-layouts/{id}
+[ROUTE] DELETE /api/v1/page-layouts/{id}
+[ROUTE] GET /api/v1/page-layouts/{id}
+[ROUTE] POST /api/v1/pipelines
+[ROUTE] GET /api/v1/pipelines
+[ROUTE] GET /api/v1/pipelines/activities/safe
+[ROUTE] GET /api/v1/pipelines/{id}
+[ROUTE] PUT /api/v1/pipelines/{id}
+[ROUTE] DELETE /api/v1/pipelines/{id}
+[ROUTE] POST /api/v1/pipelines/{id}/execute
+[ROUTE] POST /api/v1/pipelines/{id}/simulate
+[ROUTE] GET /api/v1/reports/
+[ROUTE] POST /api/v1/reports/
+[ROUTE] GET /api/v1/reports/{id}
+[ROUTE] PUT /api/v1/reports/{id}
+[ROUTE] DELETE /api/v1/reports/{id}
+[ROUTE] GET /api/_debug/amqp-metrics
+[ROUTE] POST /api/_debug/publish-event
+[ROUTE] POST /api/_debug/validation-rules-proxy
+[ROUTE] GET /api/abbreviations/
+[ROUTE] POST /api/abbreviations/
+[ROUTE] POST /api/abbreviations/expand
+[ROUTE] GET /api/abbreviations/export
+[ROUTE] POST /api/abbreviations/scan
+[ROUTE] POST /api/abbreviations/suggest
+[ROUTE] POST /api/abbreviations/validate
+[ROUTE] PUT /api/abbreviations/{id}/
+[ROUTE] DELETE /api/abbreviations/{id}/
+[ROUTE] GET /api/abbreviations/{id}/
+[ROUTE] POST /api/admin/cube/sync
+[ROUTE] POST /api/admin/eval/run
+[ROUTE] GET /api/admin/llm/config
+[ROUTE] PUT /api/admin/llm/config
+[ROUTE] POST /api/admin/llm/test
+[ROUTE] GET /api/admin/quotas
+[ROUTE] POST /api/admin/quotas
+[ROUTE] POST /api/ai/generate-dag
+[ROUTE] POST /api/ai/field-recommendations
+[ROUTE] POST /api/ai/generate-layout
+[ROUTE] POST /api/ai/generate-validation
+[ROUTE] GET /api/ai/layouts
+[ROUTE] POST /api/ai/mark-adopted
+[ROUTE] POST /api/altinvest/
+[ROUTE] POST /api/altinvest/capital-call
+[ROUTE] GET /api/altinvest/client/{clientId}
+[ROUTE] POST /api/api/cube/dry-run
+[ROUTE] POST /api/api/cube/generate
+[ROUTE] POST /api/api/cube/generate/{boID}
+[ROUTE] GET /api/api/cube/meta
+[ROUTE] GET /api/api/cube/pre-aggregations
+[ROUTE] GET /api/api/cube/preview
+[ROUTE] POST /api/api/cube/query
+[ROUTE] GET /api/api/metrics/
+[ROUTE] POST /api/api/metrics/
+[ROUTE] DELETE /api/api/metrics/{metricID}/
+[ROUTE] GET /api/api/metrics/{metricID}/
+[ROUTE] PUT /api/api/metrics/{metricID}/
+[ROUTE] GET /api/api/metrics/{metricID}/anomalies
+[ROUTE] POST /api/api/metrics/{metricID}/compute/anomaly
+[ROUTE] POST /api/api/metrics/{metricID}/compute/pop
+[ROUTE] GET /api/api/metrics/{metricID}/runs
+[ROUTE] POST /api/api/process-analytics/analyze-bottlenecks
+[ROUTE] GET /api/api/process-analytics/bottlenecks
+[ROUTE] GET /api/api/process-analytics/dashboard
+[ROUTE] GET /api/api/process-analytics/predict-duration
+[ROUTE] GET /api/api/process-analytics/recommendations
+[ROUTE] GET /api/api/process-analytics/step-performance
+[ROUTE] GET /api/api/process-benchmarking/best-practices
+[ROUTE] POST /api/api/process-benchmarking/calculate-score
+[ROUTE] GET /api/api/process-benchmarking/gap-analysis
+[ROUTE] GET /api/api/process-benchmarking/industry
+[ROUTE] GET /api/api/process-benchmarking/peers
+[ROUTE] GET /api/api/process-benchmarking/score
+[ROUTE] GET /api/api/process-monitor/active-instances
+[ROUTE] GET /api/api/process-monitor/instance/{workflowID}
+[ROUTE] GET /api/api/process-monitor/instance/{workflowID}/history
+[ROUTE] POST /api/api/process-monitor/intervene
+[ROUTE] GET /api/api/process-monitor/stats
+[ROUTE] GET /api/api/process-monitor/ws
+[ROUTE] POST /api/api/process-optimization/analyze
+[ROUTE] GET /api/api/process-optimization/applied
+[ROUTE] POST /api/api/process-optimization/apply/{suggestionID}
+[ROUTE] POST /api/api/process-optimization/auto-tune/enable
+[ROUTE] GET /api/api/process-optimization/auto-tune/status
+[ROUTE] POST /api/api/process-optimization/dismiss/{suggestionID}
+[ROUTE] GET /api/api/process-optimization/forecast/{suggestionID}
+[ROUTE] GET /api/api/process-optimization/suggestions
+[ROUTE] POST /api/api/rdl/evaluate/
+[ROUTE] POST /api/api/rdl/evaluate/portfolio
+[ROUTE] POST /api/api/rdl/evaluate/tlh
+[ROUTE] GET /api/api/rdl/rules/
+[ROUTE] POST /api/api/rdl/rules/
+[ROUTE] DELETE /api/api/rdl/rules/{ruleID}/
+[ROUTE] GET /api/api/rdl/rules/{ruleID}/
+[ROUTE] PUT /api/api/rdl/rules/{ruleID}/
+[ROUTE] GET /api/api/rdl/templates/
+[ROUTE] GET /api/api/rdl/templates/{templateID}
+[ROUTE] POST /api/api/rdl/validate
+[ROUTE] POST /api/api/rules/
+[ROUTE] GET /api/api/rules/
+[ROUTE] PUT /api/api/rules/{ruleID}/
+[ROUTE] DELETE /api/api/rules/{ruleID}/
+[ROUTE] GET /api/api/rules/{ruleID}/
+[ROUTE] POST /api/api/v1/timeouts
+[ROUTE] GET /api/api/v1/timeouts/pending
+[ROUTE] POST /api/api/v1/timeouts/{id}/escalate
+[ROUTE] GET /api/api/v1/triggers
+[ROUTE] POST /api/api/v1/triggers
+[ROUTE] GET /api/api/v1/triggers/events
+[ROUTE] GET /api/api/v1/triggers/executions
+[ROUTE] GET /api/api/v1/triggers/objects
+[ROUTE] GET /api/api/v1/triggers/operators
+[ROUTE] GET /api/api/v1/triggers/types
+[ROUTE] PUT /api/api/v1/triggers/{id}
+[ROUTE] DELETE /api/api/v1/triggers/{id}
+[ROUTE] OPTIONS /api/audit-trino/*
+[ROUTE] POST /api/audit-trino/*
+[ROUTE] CONNECT /api/audit-trino/*
+[ROUTE] PUT /api/audit-trino/*
+[ROUTE] PATCH /api/audit-trino/*
+[ROUTE] HEAD /api/audit-trino/*
+[ROUTE] GET /api/audit-trino/*
+[ROUTE] DELETE /api/audit-trino/*
+[ROUTE] TRACE /api/audit-trino/*
+[ROUTE] GET /api/audit/events
+[ROUTE] GET /api/audit/stats
+[ROUTE] GET /api/audit/changes
+[ROUTE] POST /api/audit/events/tenant-update
+[ROUTE] GET /api/audit/history/{entityType}/{entityId}
+[ROUTE] GET /api/audit/history/{entityType}/{entityId}/at/{timestamp}
+[ROUTE] POST /api/audit/restore/{entityType}/{entityId}
+[ROUTE] POST /api/auth/login
+[ROUTE] POST /api/auth/logout
+[ROUTE] GET /api/auth/me
+[ROUTE] POST /api/auth/refresh
+[ROUTE] POST /api/auth/register
+[ROUTE] GET /api/auth/users/{userId}/preferences/
+[ROUTE] PUT /api/auth/users/{userId}/preferences/
+[ROUTE] POST /api/billing/calculate
+[ROUTE] POST /api/billing/schedules
+[ROUTE] POST /api/bp-designer/save
+[ROUTE] GET /api/bp-designer/{bpDefId}
+[ROUTE] GET /api/bp-notifications/analytics
+[ROUTE] GET /api/bp-notifications/digests/pending
+[ROUTE] POST /api/bp-notifications/digests/process
+[ROUTE] GET /api/bp-notifications/logs
+[ROUTE] GET /api/bp-notifications/logs/{id}
+[ROUTE] GET /api/bp-notifications/preferences
+[ROUTE] PUT /api/bp-notifications/preferences
+[ROUTE] POST /api/bp-notifications/send
+[ROUTE] POST /api/bp-notifications/send-batch
+[ROUTE] GET /api/bp-notifications/templates
+[ROUTE] POST /api/bp-notifications/templates
+[ROUTE] GET /api/bp-notifications/templates/{id}
+[ROUTE] PUT /api/bp-notifications/templates/{id}
+[ROUTE] DELETE /api/bp-notifications/templates/{id}
+[ROUTE] POST /api/bp-notifications/templates/{id}/render
+[ROUTE] POST /api/bp-notifications/webhook/action/{id}
+[ROUTE] POST /api/bp-notifications/webhook/clicked/{id}
+[ROUTE] POST /api/bp-notifications/webhook/delivered/{id}
+[ROUTE] POST /api/bp-notifications/webhook/opened/{id}
+[ROUTE] POST /api/bp/start-execution
+[ROUTE] POST /api/bundles/
+[ROUTE] GET /api/bundles/
+[ROUTE] GET /api/bundles/{bundleID}/
+[ROUTE] PUT /api/bundles/{bundleID}/
+[ROUTE] POST /api/bundles/{bundleID}/certify
+[ROUTE] POST /api/bundles/{bundleID}/deprecate
+[ROUTE] PUT /api/bundles/{bundleID}/policies
+[ROUTE] POST /api/bundles/{bundleID}/publish
+[ROUTE] POST /api/business-entities/{entityID}/create-custom-model
+[ROUTE] POST /api/business-entities/{entityID}/create-custom-view
+[ROUTE] POST /api/business-entities/{entityID}/generate-core-model
+[ROUTE] POST /api/business-entities/{entityID}/generate-core-view
+[ROUTE] GET /api/business-entities/{entityID}/related-objects
+[ROUTE] GET /api/business-entities/{entityID}/semantic-assets
+[ROUTE] POST /api/business-entities/{entityID}/traverse-graph
+[ROUTE] POST /api/business-objects/execute-sql
+[ROUTE] POST /api/business-objects/generate-sql
+[ROUTE] GET /api/business-objects/list
+[ROUTE] GET /api/business-objects/{id}/validations
+[ROUTE] GET /api/business-objects/{id}/validations/schema
+[ROUTE] POST /api/business-objects/
+[ROUTE] GET /api/business-objects/
+[ROUTE] GET /api/business-objects/{id}
+[ROUTE] PUT /api/business-objects/{id}
+[ROUTE] PATCH /api/business-objects/{id}
+[ROUTE] DELETE /api/business-objects/{id}
+[ROUTE] GET /api/business-objects/{id}/fields
+[ROUTE] GET /api/business-objects/{id}/relationships
+[ROUTE] DELETE /api/business-objects/{id}/subtypes/{subtypeId}
+[ROUTE] POST /api/business-objects/{id}/subtypes/{subtypeId}/rename
+[ROUTE] GET /api/business-term-edges
+[ROUTE] POST /api/business-term-edges
+[ROUTE] DELETE /api/business-term-edges
+[ROUTE] GET /api/business-term-edges-test
+[ROUTE] DELETE /api/business-term-edges/{id}
+[ROUTE] POST /api/business-term/suggestion-feedback
+[ROUTE] POST /api/business-term/suggestions
+[ROUTE] GET /api/business-terms
+[ROUTE] POST /api/business-terms
+[ROUTE] POST /api/business-terms/search
+[ROUTE] DELETE /api/business-terms/{id}
+[ROUTE] PUT /api/business-terms/{id}
+[ROUTE] POST /api/calc/vectorized
+[ROUTE] POST /api/calc/
+[ROUTE] POST /api/calc/preview
+[ROUTE] GET /api/calculations/
+[ROUTE] POST /api/calculations/
+[ROUTE] POST /api/calculations/explain
+[ROUTE] PATCH /api/calculations/{id}
+[ROUTE] GET /api/calculations/{name}
+[ROUTE] GET /api/calculations/{id}/explain
+[ROUTE] GET /api/catalog/nodes
+[ROUTE] POST /api/catalog/scan
+[ROUTE] GET /api/catalog/tables
+[ROUTE] POST /api/catalog/{datasourceId}/refresh-charts
+[ROUTE] GET /api/catalog/business-terms/{id}
+[ROUTE] PUT /api/catalog/business-terms/{id}/compliance
+[ROUTE] POST /api/catalog/business-terms/{id}/mappings
+[ROUTE] DELETE /api/catalog/business-terms/{id}/mappings/{semId}
+[ROUTE] GET /api/catalog/nodes
+[ROUTE] GET /api/catalog/semantic-terms-by-table/{tableId}
+[ROUTE] GET /api/chart/{datasourceId}/debug
+[ROUTE] GET /api/chart/{datasourceId}/health
+[ROUTE] GET /api/chart/{datasourceId}/{chartType}
+[ROUTE] GET /api/charts/{datasourceId}
+[ROUTE] POST /api/charts/{datasourceId}/refresh
+[ROUTE] POST /api/connections/test
+[ROUTE] GET /api/connections/
+[ROUTE] POST /api/connections/
+[ROUTE] GET /api/connections/{id}
+[ROUTE] PUT /api/connections/{id}
+[ROUTE] DELETE /api/connections/{id}
+[ROUTE] GET /api/connections/{id}/datasources
+[ROUTE] POST /api/connections/{id}/link/{datasourceId}
+[ROUTE] POST /api/connections/{id}/test
+[ROUTE] DELETE /api/connections/{id}/unlink/{datasourceId}
+[ROUTE] POST /api/copilot/generate-audit-summary
+[ROUTE] POST /api/copilot/generate-node
+[ROUTE] POST /api/copilot/generate-rego
+[ROUTE] POST /api/crud
+[ROUTE] PUT /api/crud
+[ROUTE] DELETE /api/crud
+[ROUTE] GET /api/custom-components
+[ROUTE] POST /api/custom-components
+[ROUTE] GET /api/custom-components/export
+[ROUTE] POST /api/custom-components/import
+[ROUTE] POST /api/custom-components/test-api
+[ROUTE] PUT /api/custom-components/{id}
+[ROUTE] DELETE /api/custom-components/{id}
+[ROUTE] GET /api/custom-components/{id}
+[ROUTE] POST /api/dashboards/
+[ROUTE] GET /api/dashboards/public
+[ROUTE] GET /api/dashboards/templates
+[ROUTE] GET /api/dashboards/user/{userId}
+[ROUTE] DELETE /api/dashboards/{id}
+[ROUTE] GET /api/dashboards/{id}
+[ROUTE] PUT /api/dashboards/{id}
+[ROUTE] POST /api/dashboards/{id}/duplicate
+[ROUTE] POST /api/data-domains/
+[ROUTE] GET /api/data-domains/
+[ROUTE] GET /api/data-domains/search
+[ROUTE] PUT /api/data-domains/{id}/
+[ROUTE] DELETE /api/data-domains/{id}/
+[ROUTE] GET /api/data-domains/{id}/
+[ROUTE] GET /api/dax/categories
+[ROUTE] POST /api/dax/execute
+[ROUTE] GET /api/dax/functions
+[ROUTE] GET /api/dax/functions/{functionName}
+[ROUTE] GET /api/debug/business-objects/{id}
+[ROUTE] GET /api/debug/edges/{id}
+[ROUTE] GET /api/edge-types
+[ROUTE] POST /api/edge-types
+[ROUTE] DELETE /api/edge-types/{id}
+[ROUTE] GET /api/edge-types/{id}
+[ROUTE] PATCH /api/edge-types/{id}
+[ROUTE] GET /api/edge-types/{id}/properties
+[ROUTE] POST /api/edge-types/{id}/properties
+[ROUTE] PATCH /api/edge-types/{id}/properties/{propName}
+[ROUTE] DELETE /api/edge-types/{id}/properties/{propName}
+[ROUTE] GET /api/entities
+[ROUTE] GET /api/entities/resolve
+[ROUTE] GET /api/entities/{name}
+[ROUTE] POST /api/entity-schema/
+[ROUTE] GET /api/entity-schema/
+[ROUTE] POST /api/events/market
+[ROUTE] GET /api/execution-logs/
+[ROUTE] POST /api/fabric/cubes/generate-from-table
+[ROUTE] POST /api/fabric/extensions
+[ROUTE] GET /api/fabric/extensions
+[ROUTE] GET /api/fabric/extensions/compatibility-report
+[ROUTE] GET /api/fabric/joins/{datasourceId}
+[ROUTE] GET /api/fabric/joins/{datasourceId}/table/{tableName}
+[ROUTE] GET /api/fabric/models
+[ROUTE] GET /api/fabric/models/definition
+[ROUTE] POST /api/fabric/models/generate
+[ROUTE] POST /api/fabric/models/generate-defaults
+[ROUTE] POST /api/fabric/models/metadata
+[ROUTE] POST /api/fabric/models/validate
+[ROUTE] POST /api/fabric/models/{id}/calculations
+[ROUTE] GET /api/fabric/models/{id}/calculations
+[ROUTE] DELETE /api/fabric/models/{id}/calculations/{calc_id}
+[ROUTE] GET /api/funds
+[ROUTE] GET /api/glossary/business-terms
+[ROUTE] GET /api/glossary/edges
+[ROUTE] POST /api/glossary/edges
+[ROUTE] PUT /api/glossary/edges/{id}
+[ROUTE] DELETE /api/glossary/edges/{id}
+[ROUTE] GET /api/glossary/semantic-terms
+[ROUTE] GET /api/glossary/semantic-terms/export/cube-yaml
+[ROUTE] GET /api/glossary/semantic-terms/{id}/cube-definition
+[ROUTE] POST /api/glossary/terms
+[ROUTE] DELETE /api/glossary/terms/{id}
+[ROUTE] PUT /api/glossary/terms/{id}
+[ROUTE] POST /api/households/
+[ROUTE] GET /api/households/{id}/entities
+[ROUTE] POST /api/households/{id}/entities
+[ROUTE] POST /api/instances/{instanceId}/assign-to-me
+[ROUTE] POST /api/instances/{instanceId}/unassign
+[ROUTE] POST /api/integrations/execute/{installationId}
+[ROUTE] GET /api/integrations/executions
+[ROUTE] GET /api/integrations/executions/{executionId}
+[ROUTE] POST /api/integrations/install
+[ROUTE] GET /api/integrations/installed
+[ROUTE] GET /api/integrations/installed/{installationId}
+[ROUTE] DELETE /api/integrations/installed/{installationId}
+[ROUTE] PUT /api/integrations/installed/{installationId}/config
+[ROUTE] GET /api/integrations/installed/{installationId}/stats
+[ROUTE] PUT /api/integrations/installed/{installationId}/toggle
+[ROUTE] GET /api/integrations/marketplace
+[ROUTE] GET /api/integrations/marketplace/category/{category}
+[ROUTE] GET /api/integrations/marketplace/{integrationKey}
+[ROUTE] GET /api/integrations/oauth/authorize/{installationId}
+[ROUTE] GET /api/integrations/oauth/callback
+[ROUTE] POST /api/integrations/test/{installationId}
+[ROUTE] GET /api/ip-whitelist
+[ROUTE] GET /api/lineage/{datasourceId}/{lineageType}
+[ROUTE] GET /api/lineage/dual
+[ROUTE] GET /api/lineage/node/{id}/graph
+[ROUTE] GET /api/lineage/node/{id}/impact
+[ROUTE] GET /api/lookup-values
+[ROUTE] GET /api/lookups
+[ROUTE] POST /api/lookups
+[ROUTE] PUT /api/lookups/{id}
+[ROUTE] DELETE /api/lookups/{id}
+[ROUTE] GET /api/lookups/{id}/export
+[ROUTE] POST /api/lookups/{id}/propagate
+[ROUTE] GET /api/lookups/{id}/values
+[ROUTE] POST /api/lookups/{id}/values
+[ROUTE] PUT /api/lookups/{id}/values/{valueId}
+[ROUTE] DELETE /api/lookups/{id}/values/{valueId}
+[ROUTE] GET /api/marketplace/items
+[ROUTE] POST /api/marketplace/items/add-to-tenant
+[ROUTE] GET /api/marketplace/items/{id}
+[ROUTE] POST /api/marketplace/items/{id}/feedback
+[ROUTE] GET /api/marketplace/items/{id}/feedback
+[ROUTE] GET /api/marketplace/items/{id}/parameters
+[ROUTE] GET /api/marketplace/tenant-items
+[ROUTE] PUT /api/marketplace/tenant-items/{id}
+[ROUTE] DELETE /api/marketplace/tenant-items/{id}
+[ROUTE] GET /api/marketplace/tenant-items/{id}
+[ROUTE] GET /api/marketplace/validation-rules
+[ROUTE] POST /api/mcp
+[ROUTE] GET /api/metadata/{datasourceId}
+[ROUTE] GET /api/metrics-registry/
+[ROUTE] GET /api/metrics-registry/golden-path/readiness
+[ROUTE] POST /api/metrics-registry/refresh-atomic
+[ROUTE] GET /api/metrics-registry/{metricID}
+[ROUTE] POST /api/metrics-registry/{metricID}/compute-comparisons
+[ROUTE] POST /api/metrics-registry/{metricID}/compute-pop
+[ROUTE] POST /api/metrics-registry/{metricID}/detect-anomalies
+[ROUTE] GET /api/metrics-registry/{metricID}/history
+[ROUTE] POST /api/metrics-registry/{metricID}/promote-golden
+[ROUTE] GET /api/metrics/{fundId}
+[ROUTE] POST /api/micro-bundles
+[ROUTE] GET /api/micro-bundles
+[ROUTE] GET /api/micro-bundles/{id}
+[ROUTE] POST /api/migrations/
+[ROUTE] GET /api/migrations/
+[ROUTE] GET /api/migrations/{id}
+[ROUTE] POST /api/migrations/{id}/approve
+[ROUTE] POST /api/migrations/{id}/reject
+[ROUTE] GET /api/models
+[ROUTE] POST /api/models/clone
+[ROUTE] POST /api/models/custom
+[ROUTE] POST /api/models/generated
+[ROUTE] POST /api/models/regenerate
+[ROUTE] GET /api/models/version
+[ROUTE] DELETE /api/models/{model_id}
+[ROUTE] GET /api/models/{model_id}
+[ROUTE] PATCH /api/models/{model_id}
+[ROUTE] GET /api/my-approvals/
+[ROUTE] GET /api/nba/catalog
+[ROUTE] POST /api/nba/complete
+[ROUTE] POST /api/nba/dismiss
+[ROUTE] POST /api/nba/execute
+[ROUTE] GET /api/nba/recommendations
+[ROUTE] GET /api/nba/signals
+[ROUTE] GET /api/nba/stats
+[ROUTE] GET /api/nba/stream
+[ROUTE] POST /api/nlq/ask
+[ROUTE] POST /api/nlq/feedback
+[ROUTE] GET /api/node-types
+[ROUTE] POST /api/node-types
+[ROUTE] GET /api/node-types/{id}
+[ROUTE] PATCH /api/node-types/{id}
+[ROUTE] DELETE /api/node-types/{id}
+[ROUTE] GET /api/node-types/{id}/nodes
+[ROUTE] POST /api/node-types/{id}/properties
+[ROUTE] GET /api/node-types/{id}/properties
+[ROUTE] PATCH /api/node-types/{id}/properties/{propName}
+[ROUTE] DELETE /api/node-types/{id}/properties/{propName}
+[ROUTE] POST /api/object/{ObjectType}
+[ROUTE] GET /api/policies
+[ROUTE] POST /api/policies
+[ROUTE] POST /api/policies/simulate
+[ROUTE] DELETE /api/policies/{id}
+[ROUTE] GET /api/policies/{id}
+[ROUTE] POST /api/profiler/profile
+[ROUTE] GET /api/profiler/results
+[ROUTE] GET /api/profiler/status/{jobId}
+[ROUTE] GET /api/rbac/audit
+[ROUTE] GET /api/rbac/delegations
+[ROUTE] POST /api/rbac/delegations
+[ROUTE] GET /api/rbac/delegations/user/{userId}
+[ROUTE] PUT /api/rbac/delegations/{delegationId}
+[ROUTE] DELETE /api/rbac/delegations/{delegationId}
+[ROUTE] POST /api/rbac/delegations/{delegationId}/log
+[ROUTE] GET /api/rbac/field-permissions
+[ROUTE] POST /api/rbac/field-permissions
+[ROUTE] GET /api/rbac/field-permissions/user/{userId}/resource/{resourceType}/{resourceId}
+[ROUTE] GET /api/rbac/permissions
+[ROUTE] POST /api/rbac/permissions/check
+[ROUTE] GET /api/rbac/permissions/user/{userId}
+[ROUTE] GET /api/rbac/roles
+[ROUTE] POST /api/rbac/roles
+[ROUTE] GET /api/rbac/roles/{roleId}
+[ROUTE] PUT /api/rbac/roles/{roleId}
+[ROUTE] DELETE /api/rbac/roles/{roleId}
+[ROUTE] POST /api/rbac/roles/{roleId}/assign
+[ROUTE] DELETE /api/rbac/roles/{roleId}/unassign/{userId}
+[ROUTE] GET /api/rbac/roles/{roleId}/users
+[ROUTE] GET /api/rbac/teams
+[ROUTE] POST /api/rbac/teams
+[ROUTE] POST /api/rbac/teams/{teamId}/members
+[ROUTE] GET /api/rbac/teams/{teamId}/members
+[ROUTE] DELETE /api/rbac/teams/{teamId}/members/{userId}
+[ROUTE] GET /api/rbac/users
+[ROUTE] POST /api/rbac/users
+[ROUTE] GET /api/rbac/users/{userId}/roles
+[ROUTE] POST /api/relationships/discover
+[ROUTE] POST /api/relationships/existing
+[ROUTE] POST /api/relationships/apply
+[ROUTE] POST /api/relationships/bo/inherit
+[ROUTE] GET /api/relationships/bo/{boId}
+[ROUTE] POST /api/relationships/infer
+[ROUTE] POST /api/relationships/physical
+[ROUTE] GET /api/relationships/physical/{tableId}
+[ROUTE] POST /api/relationships/remove
+[ROUTE] POST /api/relationships/suggestions/dismiss
+[ROUTE] POST /api/relationships/suggestions/generate
+[ROUTE] POST /api/relationships/suggestions/generate-lineage
+[ROUTE] POST /api/relationships/table-mapping/recommend
+[ROUTE] GET /api/relationships/{entityID}
+[ROUTE] GET /api/relationships/{entityID}/objects
+[ROUTE] GET /api/relationships/{entityID}/suggestions
+[ROUTE] POST /api/roles/
+[ROUTE] GET /api/roles/
+[ROUTE] POST /api/rules/generate-cue
+[ROUTE] POST /api/rules/simulate
+[ROUTE] POST /api/semantic-mapping/apply
+[ROUTE] POST /api/semantic-mapping/backfill-physical-mappings
+[ROUTE] POST /api/semantic-mapping/backfill-sql-properties
+[ROUTE] POST /api/semantic-mapping/enrich/apply
+[ROUTE] POST /api/semantic-mapping/enrich/auto
+[ROUTE] POST /api/semantic-mapping/enrich/suggest
+[ROUTE] POST /api/semantic-mapping/generate
+[ROUTE] POST /api/semantic-mapping/hierarchies/create
+[ROUTE] POST /api/semantic-mapping/hierarchies/generate
+[ROUTE] POST /api/semantic-mapping/populate-bo-terms
+[ROUTE] POST /api/semantic-mapping/wizard/apply
+[ROUTE] POST /api/semantic-mapping/wizard/approve/{id}
+[ROUTE] GET /api/semantic-mapping/wizard/created
+[ROUTE] POST /api/semantic-mapping/wizard/enrich-from-feedback
+[ROUTE] POST /api/semantic-mapping/wizard/generate
+[ROUTE] GET /api/semantic-mapping/wizard/pending
+[ROUTE] GET /api/semantic-mappings
+[ROUTE] POST /api/semantic-mappings/apply-custom
+[ROUTE] POST /api/semantic-mappings/business-term-edges
+[ROUTE] POST /api/semantic-mappings/edges
+[ROUTE] POST /api/semantic-mappings/enhanced-match
+[ROUTE] POST /api/semantic-mappings/ignore
+[ROUTE] POST /api/semantic-mappings/replace
+[ROUTE] POST /api/semantic-mappings/upsert-business-term-edge
+[ROUTE] GET /api/semantic-terms
+[ROUTE] POST /api/semantic-terms
+[ROUTE] GET /api/semantic-terms/explain
+[ROUTE] POST /api/semantic-terms/resolve
+[ROUTE] POST /api/semantic-terms/resolve-expression
+[ROUTE] POST /api/semantic-terms/search
+[ROUTE] POST /api/semantic-terms/suggest
+[ROUTE] GET /api/semantic-terms/{id}/suggest-business-terms
+[ROUTE] GET /api/semantic/bundles/{domain}
+[ROUTE] GET /api/semantic/bundles/{bundleName}
+[ROUTE] GET /api/semantic/objects
+[ROUTE] POST /api/slack/callback
+[ROUTE] GET /api/slack/install
+[ROUTE] POST /api/slack/interactive
+[ROUTE] GET /api/succession/metrics/{advisorId}
+[ROUTE] POST /api/succession/plans
+[ROUTE] GET /api/succession/recommend/{advisorId}
+[ROUTE] POST /api/taxplan/detect/{clientId}
+[ROUTE] GET /api/taxplan/opportunities/{clientId}
+[ROUTE] GET /api/templates/{node_id}
+[ROUTE] POST /api/templates/{node_id}/promote
+[ROUTE] GET /api/templates/{node_id}/versions
+[ROUTE] GET /api/templates/
+[ROUTE] GET /api/templates/categories
+[ROUTE] GET /api/templates/categories/{key}/templates
+[ROUTE] GET /api/templates/category/{category}
+[ROUTE] POST /api/templates/clone/{id}
+[ROUTE] GET /api/templates/clones
+[ROUTE] GET /api/templates/clones/{id}
+[ROUTE] DELETE /api/templates/clones/{id}
+[ROUTE] PUT /api/templates/clones/{id}/notes
+[ROUTE] GET /api/templates/featured
+[ROUTE] PUT /api/templates/ratings/{ratingId}/helpful
+[ROUTE] GET /api/templates/{key}
+[ROUTE] POST /api/templates/{id}/rate
+[ROUTE] GET /api/templates/{id}/ratings
+[ROUTE] GET /api/templates/{id}/stats
+[ROUTE] POST /api/temporal
+[ROUTE] GET /api/tenants
+[ROUTE] GET /api/tenants/accessible
+[ROUTE] GET /api/tenants/all
+[ROUTE] GET /api/tenants/debug
+[ROUTE] PATCH /api/tenants/{tenant_id}/datasources/{datasource_id}/models/{model_id}
+[ROUTE] GET /api/tenants/{tenantId}/ip-whitelist
+[ROUTE] POST /api/tenants/{tenantId}/ip-whitelist
+[ROUTE] DELETE /api/tenants/{tenantId}/ip-whitelist
+[ROUTE] GET /api/user/{id}
+[ROUTE] GET /api/users
+[ROUTE] GET /api/users/{user_id}/roles/
+[ROUTE] POST /api/users/{user_id}/roles/
+[ROUTE] DELETE /api/users/{user_id}/roles/{role_id}
+[ROUTE] GET /api/validation-rule-cores
+[ROUTE] POST /api/validation-rule-cores
+[ROUTE] GET /api/validation-rule-cores/{id}
+[ROUTE] GET /api/validation-rule-cores/{id}/impact
+[ROUTE] POST /api/validation-rules
+[ROUTE] GET /api/validation-rules
+[ROUTE] GET /api/validation-rules/schema
+[ROUTE] GET /api/validation-rules/{id}
+[ROUTE] PATCH /api/validation-rules/{id}
+[ROUTE] DELETE /api/validation-rules/{id}
+[ROUTE] GET /api/validation-rules/{id}/audit
+[ROUTE] POST /api/validation-rules/{id}/execute
+[ROUTE] POST /api/validation-rules/{id}/simulate-with-instance
+[ROUTE] POST /api/views
+[ROUTE] GET /api/views
+[ROUTE] POST /api/views/apply
+[ROUTE] GET /api/views/compare
+[ROUTE] POST /api/views/reject
+[ROUTE] POST /api/views/validate
+[ROUTE] GET /api/views/{name}
+[ROUTE] PUT /api/views/{name}
+[ROUTE] DELETE /api/views/{name}
+[ROUTE] GET /api/views/{name}/download
+[ROUTE] GET /api/views/{name}/suggestions
+[ROUTE] GET /api/views/{name}/validate
+[ROUTE] POST /api/workflow-timeout-triggers/
+[ROUTE] GET /api/workflow-timeout-triggers/
+[ROUTE] PUT /api/workflow-timeout-triggers/{triggerId}/
+[ROUTE] DELETE /api/workflow-timeout-triggers/{triggerId}/
+[ROUTE] GET /api/workflow-timeout-triggers/{triggerId}/
+[ROUTE] POST /api/workflow-timeout-triggers/{triggerId}/test
+[ROUTE] GET /api/workflows/{workflowId}/events
+[ROUTE] GET /api/workflows/initiatable
+[ROUTE] POST /api/workflows/{bpDefId}/can-initiate
+[ROUTE] GET /api/ws
+[ROUTE] POST /api/ws/token
+[ROUTE] GET /health
+[ROUTE] POST /layouts
+[ROUTE] GET /layouts
+[ROUTE] GET /layouts/{id}
+[ROUTE] DELETE /layouts/{id}
+[ROUTE] POST /publish/validate
+[ROUTE] GET /reports/definitions/
+[ROUTE] POST /reports/definitions/
+[ROUTE] DELETE /reports/definitions/{id}
+[ROUTE] GET /reports/definitions/{id}
+[ROUTE] PUT /reports/definitions/{id}
+[ROUTE] POST /reports/definitions/{id}/publish
+[ROUTE] GET /reports/extensions/
+[ROUTE] POST /reports/extensions/
+[ROUTE] GET /reports/extensions/{id}
+[ROUTE] PUT /reports/extensions/{id}
+[ROUTE] DELETE /reports/extensions/{id}
+[ROUTE] GET /reports/instances/
+[ROUTE] GET /reports/instances/{id}
+[ROUTE] GET /reports/instances/{id}/download
+[ROUTE] GET /reports/packages
+[ROUTE] POST /reports/provision
+[ROUTE] POST /reports/render
+[ROUTE] POST /reports/render/async
+[ROUTE] POST /reports/schedules/
+[ROUTE] GET /reports/schedules/
+[ROUTE] PUT /reports/schedules/{id}
+[ROUTE] DELETE /reports/schedules/{id}
+[ROUTE] GET /reports/schedules/{id}
+[ROUTE] GET /scheduler/ai/suggestions
+[ROUTE] POST /scheduler/ai/suggestions/{id}/accept
+[ROUTE] POST /scheduler/ai/suggestions/{id}/dismiss
+[ROUTE] POST /scheduler/dags
+[ROUTE] GET /scheduler/dags
+[ROUTE] PATCH /scheduler/dags/{id}
+[ROUTE] DELETE /scheduler/dags/{id}
+[ROUTE] GET /scheduler/dags/{id}
+[ROUTE] POST /scheduler/dags/{id}/run
+[ROUTE] GET /scheduler/dags/{id}/runs
+[ROUTE] GET /scheduler/jobs
+[ROUTE] POST /scheduler/jobs
+[ROUTE] PATCH /scheduler/jobs/{id}
+[ROUTE] DELETE /scheduler/jobs/{id}
+[ROUTE] GET /scheduler/jobs/{id}
+[ROUTE] POST /scheduler/jobs/{id}/run
+[ROUTE] GET /scheduler/jobs/{id}/runs
+[ROUTE] GET /scheduler/runs/dags/{id}
+[ROUTE] GET /scheduler/runs/jobs/{id}
+[ROUTE] GET /scheduler/stats
+[ROUTE] GET /test-root-route
+[ROUTE] PUT /v1/graphql
+[ROUTE] TRACE /v1/graphql
+[ROUTE] OPTIONS /v1/graphql
+[ROUTE] POST /v1/graphql
+[ROUTE] DELETE /v1/graphql
+[ROUTE] HEAD /v1/graphql
+[ROUTE] PATCH /v1/graphql
+[ROUTE] CONNECT /v1/graphql
+[ROUTE] GET /v1/graphql
+[ROUTE] POST /values/constraints
+[ROUTE] GET /values/constraints
+[ROUTE] POST /values/profiles
+[ROUTE] GET /values/profiles/{clientID}
+[ROUTE] PUT /values/profiles/{clientID}
+[ROUTE] POST /values/signals
+[ROUTE] GET /values/signals
+[ROUTE] GET /values/themes
+[ROUTE] POST /values/themes
+[ROUTES-DUMP-END]
+{"level":"info","ts":1770262337.874623,"caller":"server/main.go:1241","msg":"Insurance calculation templates initialized successfully"}
+{"level":"info","ts":1770262337.8854709,"caller":"server/main.go:1248","msg":"Private markets calculation templates initialized successfully"}
+{"level":"info","ts":1770262337.892253,"caller":"server/main.go:1255","msg":"Quant finance calculation templates initialized successfully"}
+{"level":"info","ts":1770262337.89941,"caller":"server/main.go:1262","msg":"Risk management calculation templates initialized successfully"}
+{"level":"info","ts":1770262337.906286,"caller":"server/main.go:1269","msg":"Compliance and regulatory calculation templates initialized successfully"}
+{"level":"warn","ts":1770262337.9063401,"caller":"server/main.go:1349","msg":"Dynatrace URL and API token not configured - capacity metrics collection disabled"}
+{"level":"info","ts":1770262337.9067578,"caller":"workers/edge_queue_worker.go:59","msg":"🚀 Edge queue worker started"}
+{"level":"info","ts":1770262337.907229,"caller":"server/main.go:1515","msg":"✅ Lineage engine initialized (via SetupRouter)"}
+{"level":"info","ts":1770262337.907264,"caller":"server/main.go:1523","msg":"✅ Cost-Based Query Optimizer initialized"}
+{"level":"info","ts":1770262337.907286,"caller":"server/main.go:1536","msg":"✅ Unified Observability + SLO Engine disabled to save resources"}
+{"level":"info","ts":1770262337.907306,"caller":"server/main.go:1538","msg":"✅ All handlers registered including semantic CBO telemetry and advisor"}
+{"level":"info","ts":1770262337.90733,"caller":"server/main.go:1564","msg":"✅ Audit logs endpoint registered at /api/audit-logs"}
+{"level":"info","ts":1770262337.907413,"caller":"audit/worker.go:37","msg":"AsyncAuditService started with 5 workers"}
+{"level":"info","ts":1770262337.907427,"caller":"server/main.go:1591","msg":"✅ Bitemporal audit history endpoints registered"}
+{"level":"info","ts":1770262337.907462,"caller":"server/main.go:1618","msg":"✅ What-If Simulation Engine initialized at /api/simulation"}
+{"level":"info","ts":1770262337.9074838,"caller":"server/main.go:1621","msg":"Initializing Change Review System..."}
+2026/02/04 22:32:17 INFO  No logger configured for temporal client. Created default one.
+{"level":"warn","ts":1770262337.9750452,"caller":"server/main.go:1644","msg":"Failed to create Temporal client for CRS: failed reaching server: no children to pick from"}
+{"level":"info","ts":1770262337.9751601,"caller":"server/main.go:1665","msg":"✅ Change Review System initialized"}
+{"level":"info","ts":1770262337.975192,"caller":"server/main.go:1685","msg":"Initializing NL Intelligence Layer..."}
+{"level":"info","ts":1770262337.9752371,"caller":"server/main.go:1690","msg":"Initializing API Studio..."}
+{"level":"info","ts":1770262337.9752681,"caller":"server/main.go:1698","msg":"Initializing Page Studio..."}
+{"level":"info","ts":1770262337.975341,"caller":"server/main.go:1711","msg":"Initializing Semantic Intelligence..."}
+{"level":"info","ts":1770262337.975383,"caller":"server/main.go:1716","msg":"Initializing Experience Governance..."}
+{"level":"info","ts":1770262337.975445,"caller":"server/main.go:1726","msg":"Initializing Component Extensibility..."}
+{"level":"info","ts":1770262337.975487,"caller":"server/main.go:1735","msg":"Initializing Runtime Superpowers..."}
+{"level":"info","ts":1770262337.975544,"caller":"server/main.go:1743","msg":"Initializing Compliance Engine..."}
+{"level":"info","ts":1770262337.975583,"caller":"server/main.go:1753","msg":"Initializing Testing & Quality Automation..."}
+{"level":"info","ts":1770262337.975631,"caller":"server/main.go:1764","msg":"Initializing App Platform..."}
+{"level":"info","ts":1770262337.975677,"caller":"server/main.go:1773","msg":"Initializing Advanced Semantic Intelligence..."}
+{"level":"info","ts":1770262337.975723,"caller":"server/main.go:1783","msg":"Initializing UX Intelligence..."}
+{"level":"info","ts":1770262337.9757671,"caller":"server/main.go:1796","msg":"Initializing AI Governance..."}
+{"level":"info","ts":1770262337.975809,"caller":"server/main.go:1805","msg":"Initializing Autonomous Runtime..."}
+{"level":"info","ts":1770262337.975858,"caller":"server/main.go:1815","msg":"Initializing Security Intelligence..."}
+{"level":"info","ts":1770262337.975899,"caller":"server/main.go:1824","msg":"Initializing Tenant Intelligence..."}
+{"level":"info","ts":1770262337.975947,"caller":"server/main.go:1833","msg":"✅ API Studio initialized"}
+{"level":"info","ts":1770262337.975981,"caller":"server/main.go:1834","msg":"✅ Page Studio initialized"}
+{"level":"info","ts":1770262337.976021,"caller":"server/main.go:1851","msg":"Server starting on http://localhost:8080"}
+{"level":"info","ts":1770262337.976056,"caller":"server/main.go:1852","msg":"Swagger UI available at: http://localhost:8080/swagger/index.html"}
+[REQ] GET /api/business-objects Headers:Content-Type=,Authorization=,Origin=,X-Tenant-ID=910638ba-a459-4a3f-bb2d-78391b0595f6,X-Tenant-Instance-ID=25b5dce3-27d9-4773-933e-6ee29a42871f Body:
+[DEBUG-MARKER] path=/api/business-objects method=GET contains_bo=true
+[MW-EXEC] Middleware executing for GET /api/business-objects
+{"level":"info","ts":1770262340.647169,"caller":"api/request_trace_middleware.go:40","msg":"RequestTrace Start: id=97b670c7-893e-44cc-a9c2-5a64b8e16197 method=GET path=/api/business-objects tenant=910638ba-a459-4a3f-bb2d-78391b0595f6"}
+[TRACE START] id=97b670c7-893e-44cc-a9c2-5a64b8e16197 method=GET path=/api/business-objects tenant=910638ba-a459-4a3f-bb2d-78391b0595f6
+{"level":"info","ts":1770262340.652704,"caller":"api/request_trace_middleware.go:48","msg":"RequestTrace End: id=97b670c7-893e-44cc-a9c2-5a64b8e16197 method=GET path=/api/business-objects tenant=910638ba-a459-4a3f-bb2d-78391b0595f6 status=200 handler="}
+[TRACE END] id=97b670c7-893e-44cc-a9c2-5a64b8e16197 method=GET path=/api/business-objects tenant=910638ba-a459-4a3f-bb2d-78391b0595f6 status=200 handler=
+2026/02/04 22:32:20 INFO  No logger configured for temporal client. Created default one.
+{"level":"info","ts":1770262342.557944,"caller":"server/main.go:243","msg":"🚀 Starting background schema initialization..."}
+{"level":"info","ts":1770262342.5580401,"caller":"server/main.go:230","msg":"Ensuring views table exists..."}
+{"level":"info","ts":1770262342.568241,"caller":"server/main.go:234","msg":"Ensured views table exists"}
+{"level":"info","ts":1770262342.568287,"caller":"server/main.go:230","msg":"Ensuring catalog_edge_type exists..."}
+{"level":"info","ts":1770262342.569084,"caller":"server/main.go:234","msg":"Ensured catalog_edge_type exists"}
+{"level":"info","ts":1770262342.569097,"caller":"server/main.go:230","msg":"Ensuring tenant_chart exists..."}
+{"level":"info","ts":1770262342.56959,"caller":"server/main.go:234","msg":"Ensured tenant_chart exists"}
+{"level":"info","ts":1770262342.569603,"caller":"server/main.go:230","msg":"Ensuring catalog_edge exists..."}
+{"level":"info","ts":1770262342.57077,"caller":"server/main.go:234","msg":"Ensured catalog_edge exists"}
+{"level":"info","ts":1770262342.570793,"caller":"server/main.go:230","msg":"Ensuring catalog_node exists..."}
+{"level":"info","ts":1770262342.572593,"caller":"server/main.go:234","msg":"Ensured catalog_node exists"}
+{"level":"info","ts":1770262342.5726562,"caller":"server/main.go:230","msg":"Ensuring catalog_node columns exists..."}
+{"level":"info","ts":1770262342.5734,"caller":"server/main.go:234","msg":"Ensured catalog_node columns exists"}
+{"level":"info","ts":1770262342.5734148,"caller":"server/main.go:230","msg":"Ensuring catalog_node_type exists..."}
+{"level":"warn","ts":1770262342.590046,"caller":"server/main.go:232","msg":"Warning: Failed to ensure catalog_node_type: ERROR: insert or update on table \"catalog_edge_type\" violates foreign key constraint \"catalog_edge_type_catalog_node_type_fk\" (SQLSTATE 23503)"}
+{"level":"info","ts":1770262342.590105,"caller":"server/main.go:230","msg":"Ensuring simulation schema exists..."}
+{"level":"info","ts":1770262342.592016,"caller":"server/main.go:234","msg":"Ensured simulation schema exists"}
+{"level":"warn","ts":1770262342.595108,"caller":"server/main.go:553","msg":"Warning: Failed to initialize private markets schema: failed to execute private markets schema: ERROR: syntax error at or near \"EXISTS\" (SQLSTATE 42601)"}
+{"level":"info","ts":1770262342.603002,"caller":"server/main.go:628","msg":"Ensured entity_registry table exists"}
+{"level":"info","ts":1770262342.611884,"caller":"server/main.go:679","msg":"Ensured validation rules tables exist"}
+{"level":"info","ts":1770262342.667574,"caller":"server/main.go:719","msg":"Ensured validation rule cores table exists"}
+{"level":"info","ts":1770262342.670002,"caller":"server/main.go:818","msg":"Ensured metric registry tables exist"}
+{"level":"info","ts":1770262342.670176,"caller":"server/main.go:842","msg":"Ensured semantic assets table exists"}
+{"level":"info","ts":1770262342.672571,"caller":"server/main.go:881","msg":"Ensured relationship suggestions table exists"}
+{"level":"warn","ts":1770262342.673311,"caller":"server/main.go:897","msg":"Warning: Failed to create suggestion audit table: ERROR: column \"suggestion_id\" does not exist (SQLSTATE 42703)"}
+{"level":"info","ts":1770262342.6733298,"caller":"server/main.go:230","msg":"Ensuring pending_semantic_mappings exists..."}
+{"level":"info","ts":1770262342.673953,"caller":"server/main.go:234","msg":"Ensured pending_semantic_mappings exists"}
+{"level":"info","ts":1770262342.673968,"caller":"server/main.go:230","msg":"Ensuring term_ai_feedback exists..."}
+{"level":"info","ts":1770262342.6745741,"caller":"server/main.go:234","msg":"Ensured term_ai_feedback exists"}
+{"level":"info","ts":1770262342.674586,"caller":"server/main.go:230","msg":"Ensuring edge_creation_queue exists..."}
+{"level":"info","ts":1770262342.674857,"caller":"server/main.go:234","msg":"Ensured edge_creation_queue exists"}
+{"level":"info","ts":1770262342.6748958,"caller":"server/main.go:230","msg":"Ensuring edge_creation_dlq exists..."}
+{"level":"info","ts":1770262342.675203,"caller":"server/main.go:234","msg":"Ensured edge_creation_dlq exists"}
+{"level":"info","ts":1770262342.675231,"caller":"server/main.go:230","msg":"Ensuring bo_term_metadata exists..."}
+{"level":"info","ts":1770262342.675493,"caller":"server/main.go:234","msg":"Ensured bo_term_metadata exists"}
+{"level":"info","ts":1770262342.675505,"caller":"server/main.go:230","msg":"Ensuring calculation_definitions exists..."}
+{"level":"info","ts":1770262342.675712,"caller":"server/main.go:234","msg":"Ensured calculation_definitions exists"}
+{"level":"info","ts":1770262342.675722,"caller":"server/main.go:230","msg":"Ensuring calculation_dependencies exists..."}
+{"level":"info","ts":1770262342.675942,"caller":"server/main.go:234","msg":"Ensured calculation_dependencies exists"}
+{"level":"info","ts":1770262342.676298,"caller":"server/main.go:230","msg":"Ensuring core_identities_schema exists..."}
+{"level":"info","ts":1770262342.6765,"caller":"server/main.go:234","msg":"Ensured core_identities_schema exists"}
+{"level":"info","ts":1770262342.676841,"caller":"server/main.go:230","msg":"Ensuring datasource_enhancements_schema exists..."}
+{"level":"info","ts":1770262342.679501,"caller":"server/main.go:234","msg":"Ensured datasource_enhancements_schema exists"}
+{"level":"info","ts":1770262342.6797829,"caller":"server/main.go:230","msg":"Ensuring business_objects_schema exists..."}
+{"level":"info","ts":1770262342.689722,"caller":"server/main.go:234","msg":"Ensured business_objects_schema exists"}
+{"level":"info","ts":1770262342.690092,"caller":"server/main.go:230","msg":"Ensuring workday_schema exists..."}
+{"level":"info","ts":1770262342.691596,"caller":"server/main.go:234","msg":"Ensured workday_schema exists"}
+{"level":"info","ts":1770262342.691642,"caller":"server/main.go:230","msg":"Ensuring ensure_gold_copy_tenant exists..."}
+{"level":"info","ts":1770262342.6923509,"caller":"server/main.go:234","msg":"Ensured ensure_gold_copy_tenant exists"}
+{"level":"info","ts":1770262342.692374,"caller":"server/main.go:230","msg":"Ensuring ensure_display_name_tenant exists..."}
+{"level":"info","ts":1770262342.693287,"caller":"server/main.go:234","msg":"Ensured ensure_display_name_tenant exists"}
+{"level":"info","ts":1770262342.693305,"caller":"server/main.go:230","msg":"Ensuring ensure_description_tenant exists..."}
+{"level":"info","ts":1770262342.694211,"caller":"server/main.go:234","msg":"Ensured ensure_description_tenant exists"}
+{"level":"info","ts":1770262342.694228,"caller":"server/main.go:230","msg":"Ensuring ensure_is_active_tenant exists..."}
+{"level":"info","ts":1770262342.694846,"caller":"server/main.go:234","msg":"Ensured ensure_is_active_tenant exists"}
+{"level":"info","ts":1770262342.695648,"caller":"server/main.go:230","msg":"Ensuring bo_datasource_schema exists..."}
+{"level":"info","ts":1770262342.698627,"caller":"server/main.go:234","msg":"Ensured bo_datasource_schema exists"}
+{"level":"info","ts":1770262342.699185,"caller":"server/main.go:230","msg":"Ensuring notification_engine_schema exists..."}
+{"level":"info","ts":1770262342.703379,"caller":"server/main.go:234","msg":"Ensured notification_engine_schema exists"}
+{"level":"info","ts":1770262342.703538,"caller":"server/main.go:230","msg":"Ensuring ai_orchestration_schema exists..."}
+{"level":"info","ts":1770262342.703757,"caller":"server/main.go:234","msg":"Ensured ai_orchestration_schema exists"}
+{"level":"info","ts":1770262342.703846,"caller":"server/main.go:230","msg":"Ensuring cleanup_legacy_lineage exists..."}
+{"level":"info","ts":1770262342.703991,"caller":"server/main.go:234","msg":"Ensured cleanup_legacy_lineage exists"}
+{"level":"info","ts":1770262342.7040021,"caller":"server/main.go:1133","msg":"✅ Relational lineage repository initialized"}
+{"level":"info","ts":1770262342.704014,"caller":"server/main.go:1135","msg":"✅ Background schema initialization complete"}
+2026/02/04 22:32:23 INFO  No logger configured for temporal client. Created default one.
+2026/02/04 22:32:27 INFO  No logger configured for temporal client. Created default one.
+2026/02/04 22:32:30 INFO  No logger configured for temporal client. Created default one.
+2026/02/04 22:32:33 INFO  No logger configured for temporal client. Created default one.
+2026/02/04 22:32:36 INFO  No logger configured for temporal client. Created default one.
+[REQ] GET /api/bp-notifications/logs Headers:Content-Type=,Authorization=,Origin=,X-Tenant-ID=,X-Tenant-Instance-ID= Body:
+[DEBUG-MARKER] path=/api/bp-notifications/logs method=GET contains_bo=false
+[MW-EXEC] Middleware executing for GET /api/bp-notifications/logs
+{"level":"info","ts":1770262358.9170911,"caller":"api/request_trace_middleware.go:40","msg":"RequestTrace Start: id=72a84964-2ed3-439a-861a-25a8b6833398 method=GET path=/api/bp-notifications/logs tenant="}
+[TRACE START] id=72a84964-2ed3-439a-861a-25a8b6833398 method=GET path=/api/bp-notifications/logs tenant=
+{"level":"info","ts":1770262358.920208,"caller":"api/request_trace_middleware.go:48","msg":"RequestTrace End: id=72a84964-2ed3-439a-861a-25a8b6833398 method=GET path=/api/bp-notifications/logs tenant= status=200 handler="}
+[TRACE END] id=72a84964-2ed3-439a-861a-25a8b6833398 method=GET path=/api/bp-notifications/logs tenant= status=200 handler=
+2026/02/04 22:32:39 INFO  No logger configured for temporal client. Created default one.
+2026/02/04 22:32:42 INFO  No logger configured for temporal client. Created default one.
+2026/02/04 22:32:45 INFO  No logger configured for temporal client. Created default one.
+2026/02/04 22:32:48 INFO  No logger configured for temporal client. Created default one.
+2026/02/04 22:32:51 INFO  No logger configured for temporal client. Created default one.
+2026/02/04 22:32:54 INFO  No logger configured for temporal client. Created default one.
+2026/02/04 22:32:57 INFO  No logger configured for temporal client. Created default one.
+2026/02/04 22:33:00 INFO  No logger configured for temporal client. Created default one.
+2026/02/04 22:33:03 INFO  No logger configured for temporal client. Created default one.
+2026/02/04 22:33:07 INFO  No logger configured for temporal client. Created default one.
+[REQ] GET /api/bp-notifications/logs Headers:Content-Type=,Authorization=,Origin=,X-Tenant-ID=,X-Tenant-Instance-ID= Body:
+[DEBUG-MARKER] path=/api/bp-notifications/logs method=GET contains_bo=false
+[MW-EXEC] Middleware executing for GET /api/bp-notifications/logs
+{"level":"info","ts":1770262388.924334,"caller":"api/request_trace_middleware.go:40","msg":"RequestTrace Start: id=541b51d7-1690-45fd-bf4d-b3eba326de8a method=GET path=/api/bp-notifications/logs tenant="}
+[TRACE START] id=541b51d7-1690-45fd-bf4d-b3eba326de8a method=GET path=/api/bp-notifications/logs tenant=
+{"level":"info","ts":1770262388.925796,"caller":"api/request_trace_middleware.go:48","msg":"RequestTrace End: id=541b51d7-1690-45fd-bf4d-b3eba326de8a method=GET path=/api/bp-notifications/logs tenant= status=200 handler="}
+[TRACE END] id=541b51d7-1690-45fd-bf4d-b3eba326de8a method=GET path=/api/bp-notifications/logs tenant= status=200 handler=
+2026/02/04 22:33:10 INFO  No logger configured for temporal client. Created default one.
+2026/02/04 22:33:13 INFO  No logger configured for temporal client. Created default one.
+2026/02/04 22:33:16 INFO  No logger configured for temporal client. Created default one.
+2026/02/04 22:33:19 INFO  No logger configured for temporal client. Created default one.
+2026/02/04 22:33:22 INFO  No logger configured for temporal client. Created default one.
+2026/02/04 22:33:25 INFO  No logger configured for temporal client. Created default one.
+2026/02/04 22:33:28 INFO  No logger configured for temporal client. Created default one.
+2026/02/04 22:33:31 INFO  No logger configured for temporal client. Created default one.
+2026/02/04 22:33:34 INFO  No logger configured for temporal client. Created default one.
+2026/02/04 22:33:37 INFO  No logger configured for temporal client. Created default one.
+[REQ] GET /api/bp-notifications/logs Headers:Content-Type=,Authorization=,Origin=,X-Tenant-ID=,X-Tenant-Instance-ID= Body:
+[DEBUG-MARKER] path=/api/bp-notifications/logs method=GET contains_bo=false
+[MW-EXEC] Middleware executing for GET /api/bp-notifications/logs
+{"level":"info","ts":1770262419.1184661,"caller":"api/request_trace_middleware.go:40","msg":"RequestTrace Start: id=d9346ad8-9925-439d-908d-4c36c9633650 method=GET path=/api/bp-notifications/logs tenant="}
+[TRACE START] id=d9346ad8-9925-439d-908d-4c36c9633650 method=GET path=/api/bp-notifications/logs tenant=
+{"level":"info","ts":1770262419.126663,"caller":"api/request_trace_middleware.go:48","msg":"RequestTrace End: id=d9346ad8-9925-439d-908d-4c36c9633650 method=GET path=/api/bp-notifications/logs tenant= status=200 handler="}
+[TRACE END] id=d9346ad8-9925-439d-908d-4c36c9633650 method=GET path=/api/bp-notifications/logs tenant= status=200 handler=
+2026/02/04 22:33:40 INFO  No logger configured for temporal client. Created default one.
+2026/02/04 22:33:43 INFO  No logger configured for temporal client. Created default one.
+2026/02/04 22:33:47 INFO  No logger configured for temporal client. Created default one.
+2026/02/04 22:33:50 INFO  No logger configured for temporal client. Created default one.
+2026/02/04 22:33:53 INFO  No logger configured for temporal client. Created default one.
+2026/02/04 22:33:56 INFO  No logger configured for temporal client. Created default one.
+2026/02/04 22:33:59 INFO  No logger configured for temporal client. Created default one.
+2026/02/04 22:34:02 INFO  No logger configured for temporal client. Created default one.
+2026/02/04 22:34:05 INFO  No logger configured for temporal client. Created default one.
+2026/02/04 22:34:08 INFO  No logger configured for temporal client. Created default one.
+[REQ] GET /api/bp-notifications/logs Headers:Content-Type=,Authorization=,Origin=,X-Tenant-ID=,X-Tenant-Instance-ID= Body:
+[DEBUG-MARKER] path=/api/bp-notifications/logs method=GET contains_bo=false
+[MW-EXEC] Middleware executing for GET /api/bp-notifications/logs
+{"level":"info","ts":1770262449.102697,"caller":"api/request_trace_middleware.go:40","msg":"RequestTrace Start: id=b76cca84-3466-48ee-90d4-939895d634f1 method=GET path=/api/bp-notifications/logs tenant="}
+[TRACE START] id=b76cca84-3466-48ee-90d4-939895d634f1 method=GET path=/api/bp-notifications/logs tenant=
+{"level":"info","ts":1770262449.1044018,"caller":"api/request_trace_middleware.go:48","msg":"RequestTrace End: id=b76cca84-3466-48ee-90d4-939895d634f1 method=GET path=/api/bp-notifications/logs tenant= status=200 handler="}
+[TRACE END] id=b76cca84-3466-48ee-90d4-939895d634f1 method=GET path=/api/bp-notifications/logs tenant= status=200 handler=
+2026/02/04 22:34:11 INFO  No logger configured for temporal client. Created default one.
+2026/02/04 22:34:14 INFO  No logger configured for temporal client. Created default one.
+2026/02/04 22:34:17 INFO  No logger configured for temporal client. Created default one.
+{"level":"warn","ts":1770262460.9348521,"caller":"api/api.go:1390","msg":"Temporal client not available at startup: failed to connect to Temporal at temporal:7233 after 40 attempts: failed reaching server: no children to pick from"}
+{"level":"info","ts":1770262460.936067,"caller":"api/api.go:1467","msg":"Temporal admin routes registered"}
+[REQ] GET /api/bp-notifications/logs Headers:Content-Type=,Authorization=,Origin=,X-Tenant-ID=,X-Tenant-Instance-ID= Body:
+[DEBUG-MARKER] path=/api/bp-notifications/logs method=GET contains_bo=false
+[MW-EXEC] Middleware executing for GET /api/bp-notifications/logs
+{"level":"info","ts":1770262490.1096718,"caller":"api/request_trace_middleware.go:40","msg":"RequestTrace Start: id=a21f790c-da25-46de-a866-07357bfe8704 method=GET path=/api/bp-notifications/logs tenant="}
+[TRACE START] id=a21f790c-da25-46de-a866-07357bfe8704 method=GET path=/api/bp-notifications/logs tenant=
+{"level":"info","ts":1770262490.110934,"caller":"api/request_trace_middleware.go:48","msg":"RequestTrace End: id=a21f790c-da25-46de-a866-07357bfe8704 method=GET path=/api/bp-notifications/logs tenant= status=200 handler="}
+[TRACE END] id=a21f790c-da25-46de-a866-07357bfe8704 method=GET path=/api/bp-notifications/logs tenant= status=200 handler=
+[REQ] GET /api/bp-notifications/logs Headers:Content-Type=,Authorization=,Origin=,X-Tenant-ID=,X-Tenant-Instance-ID= Body:
+[DEBUG-MARKER] path=/api/bp-notifications/logs method=GET contains_bo=false
+[MW-EXEC] Middleware executing for GET /api/bp-notifications/logs
+{"level":"info","ts":1770262550.099635,"caller":"api/request_trace_middleware.go:40","msg":"RequestTrace Start: id=4dc0e480-7ee7-422d-b90f-d6ee14863554 method=GET path=/api/bp-notifications/logs tenant="}
+[TRACE START] id=4dc0e480-7ee7-422d-b90f-d6ee14863554 method=GET path=/api/bp-notifications/logs tenant=
+{"level":"info","ts":1770262550.100377,"caller":"api/request_trace_middleware.go:48","msg":"RequestTrace End: id=4dc0e480-7ee7-422d-b90f-d6ee14863554 method=GET path=/api/bp-notifications/logs tenant= status=200 handler="}
+[TRACE END] id=4dc0e480-7ee7-422d-b90f-d6ee14863554 method=GET path=/api/bp-notifications/logs tenant= status=200 handler=
+[REQ] GET /api/bp-notifications/logs Headers:Content-Type=,Authorization=,Origin=,X-Tenant-ID=,X-Tenant-Instance-ID= Body:
+[DEBUG-MARKER] path=/api/bp-notifications/logs method=GET contains_bo=false
+[MW-EXEC] Middleware executing for GET /api/bp-notifications/logs
+{"level":"info","ts":1770262610.110605,"caller":"api/request_trace_middleware.go:40","msg":"RequestTrace Start: id=fc8c6e95-535c-43cf-9bca-10f4d9616186 method=GET path=/api/bp-notifications/logs tenant="}
+[TRACE START] id=fc8c6e95-535c-43cf-9bca-10f4d9616186 method=GET path=/api/bp-notifications/logs tenant=
+{"level":"info","ts":1770262610.111956,"caller":"api/request_trace_middleware.go:48","msg":"RequestTrace End: id=fc8c6e95-535c-43cf-9bca-10f4d9616186 method=GET path=/api/bp-notifications/logs tenant= status=200 handler="}
+[TRACE END] id=fc8c6e95-535c-43cf-9bca-10f4d9616186 method=GET path=/api/bp-notifications/logs tenant= status=200 handler=
+{"level":"info","ts":1770262637.803614,"caller":"services/qos_manager.go:98","msg":"Refreshing Tenant Quotas"}
+[REQ] GET /api/bp-notifications/logs Headers:Content-Type=,Authorization=,Origin=,X-Tenant-ID=,X-Tenant-Instance-ID= Body:
+[DEBUG-MARKER] path=/api/bp-notifications/logs method=GET contains_bo=false
+[MW-EXEC] Middleware executing for GET /api/bp-notifications/logs
+{"level":"info","ts":1770262670.110198,"caller":"api/request_trace_middleware.go:40","msg":"RequestTrace Start: id=4abf9c05-cef5-4a7f-aa16-05a114714beb method=GET path=/api/bp-notifications/logs tenant="}
+[TRACE START] id=4abf9c05-cef5-4a7f-aa16-05a114714beb method=GET path=/api/bp-notifications/logs tenant=
+{"level":"info","ts":1770262670.110925,"caller":"api/request_trace_middleware.go:48","msg":"RequestTrace End: id=4abf9c05-cef5-4a7f-aa16-05a114714beb method=GET path=/api/bp-notifications/logs tenant= status=200 handler="}
+[TRACE END] id=4abf9c05-cef5-4a7f-aa16-05a114714beb method=GET path=/api/bp-notifications/logs tenant= status=200 handler=
+[REQ] GET /api/bp-notifications/logs Headers:Content-Type=,Authorization=,Origin=,X-Tenant-ID=,X-Tenant-Instance-ID= Body:
+[DEBUG-MARKER] path=/api/bp-notifications/logs method=GET contains_bo=false
+[MW-EXEC] Middleware executing for GET /api/bp-notifications/logs
+{"level":"info","ts":1770262730.141595,"caller":"api/request_trace_middleware.go:40","msg":"RequestTrace Start: id=e9c629f0-d455-48af-ae46-cd88a14e5968 method=GET path=/api/bp-notifications/logs tenant="}
+[TRACE START] id=e9c629f0-d455-48af-ae46-cd88a14e5968 method=GET path=/api/bp-notifications/logs tenant=
+{"level":"info","ts":1770262730.142376,"caller":"api/request_trace_middleware.go:48","msg":"RequestTrace End: id=e9c629f0-d455-48af-ae46-cd88a14e5968 method=GET path=/api/bp-notifications/logs tenant= status=200 handler="}
+[TRACE END] id=e9c629f0-d455-48af-ae46-cd88a14e5968 method=GET path=/api/bp-notifications/logs tenant= status=200 handler=
+[REQ] GET /api/bp-notifications/logs Headers:Content-Type=,Authorization=,Origin=,X-Tenant-ID=,X-Tenant-Instance-ID= Body:
+[DEBUG-MARKER] path=/api/bp-notifications/logs method=GET contains_bo=false
+[MW-EXEC] Middleware executing for GET /api/bp-notifications/logs
+{"level":"info","ts":1770262790.105055,"caller":"api/request_trace_middleware.go:40","msg":"RequestTrace Start: id=b8d2e049-0146-492d-9fbe-37fb861a54d1 method=GET path=/api/bp-notifications/logs tenant="}
+[TRACE START] id=b8d2e049-0146-492d-9fbe-37fb861a54d1 method=GET path=/api/bp-notifications/logs tenant=
+{"level":"info","ts":1770262790.10622,"caller":"api/request_trace_middleware.go:48","msg":"RequestTrace End: id=b8d2e049-0146-492d-9fbe-37fb861a54d1 method=GET path=/api/bp-notifications/logs tenant= status=200 handler="}
+[TRACE END] id=b8d2e049-0146-492d-9fbe-37fb861a54d1 method=GET path=/api/bp-notifications/logs tenant= status=200 handler=
+[REQ] GET /api/bp-notifications/logs Headers:Content-Type=,Authorization=,Origin=,X-Tenant-ID=,X-Tenant-Instance-ID= Body:
+[DEBUG-MARKER] path=/api/bp-notifications/logs method=GET contains_bo=false
+[MW-EXEC] Middleware executing for GET /api/bp-notifications/logs
+{"level":"info","ts":1770262850.1018088,"caller":"api/request_trace_middleware.go:40","msg":"RequestTrace Start: id=76174bf3-c9ba-41ef-a3b0-c22789d15b12 method=GET path=/api/bp-notifications/logs tenant="}
+[TRACE START] id=76174bf3-c9ba-41ef-a3b0-c22789d15b12 method=GET path=/api/bp-notifications/logs tenant=
+{"level":"info","ts":1770262850.102535,"caller":"api/request_trace_middleware.go:48","msg":"RequestTrace End: id=76174bf3-c9ba-41ef-a3b0-c22789d15b12 method=GET path=/api/bp-notifications/logs tenant= status=200 handler="}
+[TRACE END] id=76174bf3-c9ba-41ef-a3b0-c22789d15b12 method=GET path=/api/bp-notifications/logs tenant= status=200 handler=
+[REQ] GET /api/bp-notifications/logs Headers:Content-Type=,Authorization=,Origin=,X-Tenant-ID=,X-Tenant-Instance-ID= Body:
+[DEBUG-MARKER] path=/api/bp-notifications/logs method=GET contains_bo=false
+[MW-EXEC] Middleware executing for GET /api/bp-notifications/logs
+{"level":"info","ts":1770262910.1035242,"caller":"api/request_trace_middleware.go:40","msg":"RequestTrace Start: id=aa2d800b-a028-45f4-9aa6-27796e654c22 method=GET path=/api/bp-notifications/logs tenant="}
+[TRACE START] id=aa2d800b-a028-45f4-9aa6-27796e654c22 method=GET path=/api/bp-notifications/logs tenant=
+{"level":"info","ts":1770262910.1072,"caller":"api/request_trace_middleware.go:48","msg":"RequestTrace End: id=aa2d800b-a028-45f4-9aa6-27796e654c22 method=GET path=/api/bp-notifications/logs tenant= status=200 handler="}
+[TRACE END] id=aa2d800b-a028-45f4-9aa6-27796e654c22 method=GET path=/api/bp-notifications/logs tenant= status=200 handler=
+{"level":"info","ts":1770262937.8044028,"caller":"services/qos_manager.go:98","msg":"Refreshing Tenant Quotas"}
+[REQ] GET /api/bp-notifications/logs Headers:Content-Type=,Authorization=,Origin=,X-Tenant-ID=,X-Tenant-Instance-ID= Body:
+[DEBUG-MARKER] path=/api/bp-notifications/logs method=GET contains_bo=false
+[MW-EXEC] Middleware executing for GET /api/bp-notifications/logs
+{"level":"info","ts":1770262970.119572,"caller":"api/request_trace_middleware.go:40","msg":"RequestTrace Start: id=c5b18c3e-9af3-486d-8b64-dd02ae36893e method=GET path=/api/bp-notifications/logs tenant="}
+[TRACE START] id=c5b18c3e-9af3-486d-8b64-dd02ae36893e method=GET path=/api/bp-notifications/logs tenant=
+{"level":"info","ts":1770262970.128268,"caller":"api/request_trace_middleware.go:48","msg":"RequestTrace End: id=c5b18c3e-9af3-486d-8b64-dd02ae36893e method=GET path=/api/bp-notifications/logs tenant= status=200 handler="}
+[TRACE END] id=c5b18c3e-9af3-486d-8b64-dd02ae36893e method=GET path=/api/bp-notifications/logs tenant= status=200 handler=
+[REQ] GET /api/bp-notifications/logs Headers:Content-Type=,Authorization=,Origin=,X-Tenant-ID=,X-Tenant-Instance-ID= Body:
+[DEBUG-MARKER] path=/api/bp-notifications/logs method=GET contains_bo=false
+[MW-EXEC] Middleware executing for GET /api/bp-notifications/logs
+{"level":"info","ts":1770263030.1123462,"caller":"api/request_trace_middleware.go:40","msg":"RequestTrace Start: id=f6378770-f7b4-4b59-85c8-0b4e13a60e1c method=GET path=/api/bp-notifications/logs tenant="}
+[TRACE START] id=f6378770-f7b4-4b59-85c8-0b4e13a60e1c method=GET path=/api/bp-notifications/logs tenant=
+{"level":"info","ts":1770263030.1150131,"caller":"api/request_trace_middleware.go:48","msg":"RequestTrace End: id=f6378770-f7b4-4b59-85c8-0b4e13a60e1c method=GET path=/api/bp-notifications/logs tenant= status=200 handler="}
+[TRACE END] id=f6378770-f7b4-4b59-85c8-0b4e13a60e1c method=GET path=/api/bp-notifications/logs tenant= status=200 handler=
+[REQ] GET /api/bp-notifications/logs Headers:Content-Type=,Authorization=,Origin=,X-Tenant-ID=,X-Tenant-Instance-ID= Body:
+[DEBUG-MARKER] path=/api/bp-notifications/logs method=GET contains_bo=false
+[MW-EXEC] Middleware executing for GET /api/bp-notifications/logs
+{"level":"info","ts":1770263048.924323,"caller":"api/request_trace_middleware.go:40","msg":"RequestTrace Start: id=a9f61b21-9a25-4d48-bc88-f753affe57b2 method=GET path=/api/bp-notifications/logs tenant="}
+[TRACE START] id=a9f61b21-9a25-4d48-bc88-f753affe57b2 method=GET path=/api/bp-notifications/logs tenant=
+{"level":"info","ts":1770263048.926377,"caller":"api/request_trace_middleware.go:48","msg":"RequestTrace End: id=a9f61b21-9a25-4d48-bc88-f753affe57b2 method=GET path=/api/bp-notifications/logs tenant= status=200 handler="}
+[TRACE END] id=a9f61b21-9a25-4d48-bc88-f753affe57b2 method=GET path=/api/bp-notifications/logs tenant= status=200 handler=
+[REQ] GET /api/bp-notifications/logs Headers:Content-Type=,Authorization=,Origin=,X-Tenant-ID=,X-Tenant-Instance-ID= Body:
+[DEBUG-MARKER] path=/api/bp-notifications/logs method=GET contains_bo=false
+[MW-EXEC] Middleware executing for GET /api/bp-notifications/logs
+{"level":"info","ts":1770263078.922884,"caller":"api/request_trace_middleware.go:40","msg":"RequestTrace Start: id=0ee35ad5-90a9-43b3-8a2e-5f52b4a3f0ab method=GET path=/api/bp-notifications/logs tenant="}
+[TRACE START] id=0ee35ad5-90a9-43b3-8a2e-5f52b4a3f0ab method=GET path=/api/bp-notifications/logs tenant=
+{"level":"info","ts":1770263078.928368,"caller":"api/request_trace_middleware.go:48","msg":"RequestTrace End: id=0ee35ad5-90a9-43b3-8a2e-5f52b4a3f0ab method=GET path=/api/bp-notifications/logs tenant= status=200 handler="}
+[TRACE END] id=0ee35ad5-90a9-43b3-8a2e-5f52b4a3f0ab method=GET path=/api/bp-notifications/logs tenant= status=200 handler=
+[REQ] GET /api/bp-notifications/logs Headers:Content-Type=,Authorization=,Origin=,X-Tenant-ID=,X-Tenant-Instance-ID= Body:
+[DEBUG-MARKER] path=/api/bp-notifications/logs method=GET contains_bo=false
+[MW-EXEC] Middleware executing for GET /api/bp-notifications/logs
+{"level":"info","ts":1770263108.922953,"caller":"api/request_trace_middleware.go:40","msg":"RequestTrace Start: id=81192d9a-77cd-45bc-94e8-54b7a0347f4e method=GET path=/api/bp-notifications/logs tenant="}
+[TRACE START] id=81192d9a-77cd-45bc-94e8-54b7a0347f4e method=GET path=/api/bp-notifications/logs tenant=
+{"level":"info","ts":1770263108.924278,"caller":"api/request_trace_middleware.go:48","msg":"RequestTrace End: id=81192d9a-77cd-45bc-94e8-54b7a0347f4e method=GET path=/api/bp-notifications/logs tenant= status=200 handler="}
+[TRACE END] id=81192d9a-77cd-45bc-94e8-54b7a0347f4e method=GET path=/api/bp-notifications/logs tenant= status=200 handler=
+[REQ] GET /api/business-objects Headers:Content-Type=,Authorization=,Origin=,X-Tenant-ID=910638ba-a459-4a3f-bb2d-78391b0595f6,X-Tenant-Instance-ID=25b5dce3-27d9-4773-933e-6ee29a42871f Body:
+[DEBUG-MARKER] path=/api/business-objects method=GET contains_bo=true
+[MW-EXEC] Middleware executing for GET /api/business-objects
+{"level":"info","ts":1770263115.116833,"caller":"api/request_trace_middleware.go:40","msg":"RequestTrace Start: id=bb733627-2335-43c7-a8d2-9181828130b6 method=GET path=/api/business-objects tenant=910638ba-a459-4a3f-bb2d-78391b0595f6"}
+[TRACE START] id=bb733627-2335-43c7-a8d2-9181828130b6 method=GET path=/api/business-objects tenant=910638ba-a459-4a3f-bb2d-78391b0595f6
+{"level":"info","ts":1770263115.1273081,"caller":"api/business_object_handlers.go:253","msg":"[toBusinessObjectResponse] Converting BO be7b9e37-5b9b-41fe-ac6e-58465387eb7c: driverTableID.Valid=true driverTableID.String=79562d6f-b964-5c91-a944-178d092c9c68"}
+{"level":"info","ts":1770263115.127552,"caller":"api/request_trace_middleware.go:48","msg":"RequestTrace End: id=bb733627-2335-43c7-a8d2-9181828130b6 method=GET path=/api/business-objects tenant=910638ba-a459-4a3f-bb2d-78391b0595f6 status=200 handler="}
+[TRACE END] id=bb733627-2335-43c7-a8d2-9181828130b6 method=GET path=/api/business-objects tenant=910638ba-a459-4a3f-bb2d-78391b0595f6 status=200 handler=
+[REQ] GET /api/bp-notifications/logs Headers:Content-Type=,Authorization=,Origin=,X-Tenant-ID=,X-Tenant-Instance-ID= Body:
+[DEBUG-MARKER] path=/api/bp-notifications/logs method=GET contains_bo=false
+[MW-EXEC] Middleware executing for GET /api/bp-notifications/logs
+{"level":"info","ts":1770263138.926291,"caller":"api/request_trace_middleware.go:40","msg":"RequestTrace Start: id=d561b6dc-3cbe-4670-9dee-dad3b88b97d0 method=GET path=/api/bp-notifications/logs tenant="}
+[TRACE START] id=d561b6dc-3cbe-4670-9dee-dad3b88b97d0 method=GET path=/api/bp-notifications/logs tenant=
+{"level":"info","ts":1770263138.928119,"caller":"api/request_trace_middleware.go:48","msg":"RequestTrace End: id=d561b6dc-3cbe-4670-9dee-dad3b88b97d0 method=GET path=/api/bp-notifications/logs tenant= status=200 handler="}
+[TRACE END] id=d561b6dc-3cbe-4670-9dee-dad3b88b97d0 method=GET path=/api/bp-notifications/logs tenant= status=200 handler=
+[REQ] GET /api/bp-notifications/logs Headers:Content-Type=,Authorization=,Origin=,X-Tenant-ID=,X-Tenant-Instance-ID= Body:
+[DEBUG-MARKER] path=/api/bp-notifications/logs method=GET contains_bo=false
+[MW-EXEC] Middleware executing for GET /api/bp-notifications/logs
+{"level":"info","ts":1770263168.923132,"caller":"api/request_trace_middleware.go:40","msg":"RequestTrace Start: id=0cc4df46-573e-4952-8a37-acda1776169c method=GET path=/api/bp-notifications/logs tenant="}
+[TRACE START] id=0cc4df46-573e-4952-8a37-acda1776169c method=GET path=/api/bp-notifications/logs tenant=
+{"level":"info","ts":1770263168.9296079,"caller":"api/request_trace_middleware.go:48","msg":"RequestTrace End: id=0cc4df46-573e-4952-8a37-acda1776169c method=GET path=/api/bp-notifications/logs tenant= status=200 handler="}
+[TRACE END] id=0cc4df46-573e-4952-8a37-acda1776169c method=GET path=/api/bp-notifications/logs tenant= status=200 handler=
+[REQ] GET /api/bp-notifications/logs Headers:Content-Type=,Authorization=,Origin=,X-Tenant-ID=,X-Tenant-Instance-ID= Body:
+[DEBUG-MARKER] path=/api/bp-notifications/logs method=GET contains_bo=false
+[MW-EXEC] Middleware executing for GET /api/bp-notifications/logs
+{"level":"info","ts":1770263198.9226692,"caller":"api/request_trace_middleware.go:40","msg":"RequestTrace Start: id=ef8275ee-c1f8-4516-8536-f84f8c65acaa method=GET path=/api/bp-notifications/logs tenant="}
+[TRACE START] id=ef8275ee-c1f8-4516-8536-f84f8c65acaa method=GET path=/api/bp-notifications/logs tenant=
+{"level":"info","ts":1770263198.9240289,"caller":"api/request_trace_middleware.go:48","msg":"RequestTrace End: id=ef8275ee-c1f8-4516-8536-f84f8c65acaa method=GET path=/api/bp-notifications/logs tenant= status=200 handler="}
+[TRACE END] id=ef8275ee-c1f8-4516-8536-f84f8c65acaa method=GET path=/api/bp-notifications/logs tenant= status=200 handler=
+[REQ] GET /api/bp-notifications/logs Headers:Content-Type=,Authorization=,Origin=,X-Tenant-ID=,X-Tenant-Instance-ID= Body:
+[DEBUG-MARKER] path=/api/bp-notifications/logs method=GET contains_bo=false
+[MW-EXEC] Middleware executing for GET /api/bp-notifications/logs
+{"level":"info","ts":1770263228.922637,"caller":"api/request_trace_middleware.go:40","msg":"RequestTrace Start: id=62f3489f-46ae-42a4-9fce-cedb50a6c9b3 method=GET path=/api/bp-notifications/logs tenant="}
+[TRACE START] id=62f3489f-46ae-42a4-9fce-cedb50a6c9b3 method=GET path=/api/bp-notifications/logs tenant=
+{"level":"info","ts":1770263228.923896,"caller":"api/request_trace_middleware.go:48","msg":"RequestTrace End: id=62f3489f-46ae-42a4-9fce-cedb50a6c9b3 method=GET path=/api/bp-notifications/logs tenant= status=200 handler="}
+[TRACE END] id=62f3489f-46ae-42a4-9fce-cedb50a6c9b3 method=GET path=/api/bp-notifications/logs tenant= status=200 handler=
+{"level":"info","ts":1770263237.803374,"caller":"services/qos_manager.go:98","msg":"Refreshing Tenant Quotas"}
+[REQ] GET /api/bp-notifications/logs Headers:Content-Type=,Authorization=,Origin=,X-Tenant-ID=,X-Tenant-Instance-ID= Body:
+[DEBUG-MARKER] path=/api/bp-notifications/logs method=GET contains_bo=false
+[MW-EXEC] Middleware executing for GET /api/bp-notifications/logs
+{"level":"info","ts":1770263258.923296,"caller":"api/request_trace_middleware.go:40","msg":"RequestTrace Start: id=9633730e-113f-4520-9894-8d2264f9ef79 method=GET path=/api/bp-notifications/logs tenant="}
+[TRACE START] id=9633730e-113f-4520-9894-8d2264f9ef79 method=GET path=/api/bp-notifications/logs tenant=
+{"level":"info","ts":1770263258.924693,"caller":"api/request_trace_middleware.go:48","msg":"RequestTrace End: id=9633730e-113f-4520-9894-8d2264f9ef79 method=GET path=/api/bp-notifications/logs tenant= status=200 handler="}
+[TRACE END] id=9633730e-113f-4520-9894-8d2264f9ef79 method=GET path=/api/bp-notifications/logs tenant= status=200 handler=
+[REQ] GET /api/bp-notifications/logs Headers:Content-Type=,Authorization=,Origin=,X-Tenant-ID=,X-Tenant-Instance-ID= Body:
+[DEBUG-MARKER] path=/api/bp-notifications/logs method=GET contains_bo=false
+[MW-EXEC] Middleware executing for GET /api/bp-notifications/logs
+{"level":"info","ts":1770263288.939617,"caller":"api/request_trace_middleware.go:40","msg":"RequestTrace Start: id=80a0e10a-5778-42f5-8882-79198b469f68 method=GET path=/api/bp-notifications/logs tenant="}
+[TRACE START] id=80a0e10a-5778-42f5-8882-79198b469f68 method=GET path=/api/bp-notifications/logs tenant=
+{"level":"info","ts":1770263288.9440498,"caller":"api/request_trace_middleware.go:48","msg":"RequestTrace End: id=80a0e10a-5778-42f5-8882-79198b469f68 method=GET path=/api/bp-notifications/logs tenant= status=200 handler="}
+[TRACE END] id=80a0e10a-5778-42f5-8882-79198b469f68 method=GET path=/api/bp-notifications/logs tenant= status=200 handler=
+[REQ] GET /api/bp-notifications/logs Headers:Content-Type=,Authorization=,Origin=,X-Tenant-ID=,X-Tenant-Instance-ID= Body:
+[DEBUG-MARKER] path=/api/bp-notifications/logs method=GET contains_bo=false
+[MW-EXEC] Middleware executing for GET /api/bp-notifications/logs
+{"level":"info","ts":1770263318.9230049,"caller":"api/request_trace_middleware.go:40","msg":"RequestTrace Start: id=fc461ecb-5e91-4cdb-bc28-64ecae50e7d4 method=GET path=/api/bp-notifications/logs tenant="}
+[TRACE START] id=fc461ecb-5e91-4cdb-bc28-64ecae50e7d4 method=GET path=/api/bp-notifications/logs tenant=
+{"level":"info","ts":1770263318.924567,"caller":"api/request_trace_middleware.go:48","msg":"RequestTrace End: id=fc461ecb-5e91-4cdb-bc28-64ecae50e7d4 method=GET path=/api/bp-notifications/logs tenant= status=200 handler="}
+[TRACE END] id=fc461ecb-5e91-4cdb-bc28-64ecae50e7d4 method=GET path=/api/bp-notifications/logs tenant= status=200 handler=
+[REQ] GET /api/bp-notifications/logs Headers:Content-Type=,Authorization=,Origin=,X-Tenant-ID=,X-Tenant-Instance-ID= Body:
+[DEBUG-MARKER] path=/api/bp-notifications/logs method=GET contains_bo=false
+[MW-EXEC] Middleware executing for GET /api/bp-notifications/logs
+{"level":"info","ts":1770263348.922583,"caller":"api/request_trace_middleware.go:40","msg":"RequestTrace Start: id=308270be-1cc2-4d94-9dd0-a20e09372844 method=GET path=/api/bp-notifications/logs tenant="}
+[TRACE START] id=308270be-1cc2-4d94-9dd0-a20e09372844 method=GET path=/api/bp-notifications/logs tenant=
+{"level":"info","ts":1770263348.9253602,"caller":"api/request_trace_middleware.go:48","msg":"RequestTrace End: id=308270be-1cc2-4d94-9dd0-a20e09372844 method=GET path=/api/bp-notifications/logs tenant= status=200 handler="}
+[TRACE END] id=308270be-1cc2-4d94-9dd0-a20e09372844 method=GET path=/api/bp-notifications/logs tenant= status=200 handler=
+[REQ] GET /api/bp-notifications/logs Headers:Content-Type=,Authorization=,Origin=,X-Tenant-ID=,X-Tenant-Instance-ID= Body:
+[DEBUG-MARKER] path=/api/bp-notifications/logs method=GET contains_bo=false
+[MW-EXEC] Middleware executing for GET /api/bp-notifications/logs
+{"level":"info","ts":1770263378.924366,"caller":"api/request_trace_middleware.go:40","msg":"RequestTrace Start: id=16c0ac64-3cca-496f-811f-424635a71eed method=GET path=/api/bp-notifications/logs tenant="}
+[TRACE START] id=16c0ac64-3cca-496f-811f-424635a71eed method=GET path=/api/bp-notifications/logs tenant=
+{"level":"info","ts":1770263378.926137,"caller":"api/request_trace_middleware.go:48","msg":"RequestTrace End: id=16c0ac64-3cca-496f-811f-424635a71eed method=GET path=/api/bp-notifications/logs tenant= status=200 handler="}
+[TRACE END] id=16c0ac64-3cca-496f-811f-424635a71eed method=GET path=/api/bp-notifications/logs tenant= status=200 handler=
+[REQ] GET /api/bp-notifications/logs Headers:Content-Type=,Authorization=,Origin=,X-Tenant-ID=,X-Tenant-Instance-ID= Body:
+[DEBUG-MARKER] path=/api/bp-notifications/logs method=GET contains_bo=false
+[MW-EXEC] Middleware executing for GET /api/bp-notifications/logs
+{"level":"info","ts":1770263392.018837,"caller":"api/request_trace_middleware.go:40","msg":"RequestTrace Start: id=f1bd4c15-0fbd-412e-8ac8-09f522746218 method=GET path=/api/bp-notifications/logs tenant="}
+[TRACE START] id=f1bd4c15-0fbd-412e-8ac8-09f522746218 method=GET path=/api/bp-notifications/logs tenant=
+[REQ] GET /api/business-objects Headers:Content-Type=,Authorization=,Origin=,X-Tenant-ID=910638ba-a459-4a3f-bb2d-78391b0595f6,X-Tenant-Instance-ID=25b5dce3-27d9-4773-933e-6ee29a42871f Body:
+[DEBUG-MARKER] path=/api/business-objects method=GET contains_bo=true
+[MW-EXEC] Middleware executing for GET /api/business-objects
+{"level":"info","ts":1770263392.020774,"caller":"api/request_trace_middleware.go:40","msg":"RequestTrace Start: id=1a6286d7-f936-4897-9e14-566426e72bbc method=GET path=/api/business-objects tenant=910638ba-a459-4a3f-bb2d-78391b0595f6"}
+[TRACE START] id=1a6286d7-f936-4897-9e14-566426e72bbc method=GET path=/api/business-objects tenant=910638ba-a459-4a3f-bb2d-78391b0595f6
+[REQ] GET /api/tenants/all Headers:Content-Type=,Authorization=,Origin=,X-Tenant-ID=,X-Tenant-Instance-ID= Body:
+[DEBUG-MARKER] path=/api/tenants/all method=GET contains_bo=false
+[MW-EXEC] Middleware executing for GET /api/tenants/all
+{"level":"info","ts":1770263392.020892,"caller":"api/request_trace_middleware.go:40","msg":"RequestTrace Start: id=9d7d1472-f461-48ca-a79f-b30b3ccaf81f method=GET path=/api/tenants/all tenant="}
+[TRACE START] id=9d7d1472-f461-48ca-a79f-b30b3ccaf81f method=GET path=/api/tenants/all tenant=
+{"level":"info","ts":1770263392.0211341,"caller":"api/request_trace_middleware.go:48","msg":"RequestTrace End: id=f1bd4c15-0fbd-412e-8ac8-09f522746218 method=GET path=/api/bp-notifications/logs tenant= status=200 handler="}
+[TRACE END] id=f1bd4c15-0fbd-412e-8ac8-09f522746218 method=GET path=/api/bp-notifications/logs tenant= status=200 handler=
+{"level":"info","ts":1770263392.134999,"caller":"api/business_object_handlers.go:253","msg":"[toBusinessObjectResponse] Converting BO be7b9e37-5b9b-41fe-ac6e-58465387eb7c: driverTableID.Valid=true driverTableID.String=79562d6f-b964-5c91-a944-178d092c9c68"}
+{"level":"info","ts":1770263392.1351109,"caller":"api/request_trace_middleware.go:48","msg":"RequestTrace End: id=1a6286d7-f936-4897-9e14-566426e72bbc method=GET path=/api/business-objects tenant=910638ba-a459-4a3f-bb2d-78391b0595f6 status=200 handler="}
+[TRACE END] id=1a6286d7-f936-4897-9e14-566426e72bbc method=GET path=/api/business-objects tenant=910638ba-a459-4a3f-bb2d-78391b0595f6 status=200 handler=
+[REQ] GET /api/business-objects Headers:Content-Type=,Authorization=,Origin=,X-Tenant-ID=910638ba-a459-4a3f-bb2d-78391b0595f6,X-Tenant-Instance-ID=25b5dce3-27d9-4773-933e-6ee29a42871f Body:
+[DEBUG-MARKER] path=/api/business-objects method=GET contains_bo=true
+[MW-EXEC] Middleware executing for GET /api/business-objects
+{"level":"info","ts":1770263392.1382778,"caller":"api/request_trace_middleware.go:40","msg":"RequestTrace Start: id=66e7cdcf-852a-4b7e-b20b-be21fd2e549e method=GET path=/api/business-objects tenant=910638ba-a459-4a3f-bb2d-78391b0595f6"}
+[TRACE START] id=66e7cdcf-852a-4b7e-b20b-be21fd2e549e method=GET path=/api/business-objects tenant=910638ba-a459-4a3f-bb2d-78391b0595f6
+{"level":"info","ts":1770263392.1392682,"caller":"api/business_object_handlers.go:253","msg":"[toBusinessObjectResponse] Converting BO be7b9e37-5b9b-41fe-ac6e-58465387eb7c: driverTableID.Valid=true driverTableID.String=79562d6f-b964-5c91-a944-178d092c9c68"}
+{"level":"info","ts":1770263392.139363,"caller":"api/request_trace_middleware.go:48","msg":"RequestTrace End: id=66e7cdcf-852a-4b7e-b20b-be21fd2e549e method=GET path=/api/business-objects tenant=910638ba-a459-4a3f-bb2d-78391b0595f6 status=200 handler="}
+[TRACE END] id=66e7cdcf-852a-4b7e-b20b-be21fd2e549e method=GET path=/api/business-objects tenant=910638ba-a459-4a3f-bb2d-78391b0595f6 status=200 handler=
+{"level":"info","ts":1770263392.14195,"caller":"api/request_trace_middleware.go:48","msg":"RequestTrace End: id=9d7d1472-f461-48ca-a79f-b30b3ccaf81f method=GET path=/api/tenants/all tenant= status=200 handler="}
+[TRACE END] id=9d7d1472-f461-48ca-a79f-b30b3ccaf81f method=GET path=/api/tenants/all tenant= status=200 handler=
+[REQ] GET /api/business-objects/be7b9e37-5b9b-41fe-ac6e-58465387eb7c Headers:Content-Type=,Authorization=,Origin=,X-Tenant-ID=910638ba-a459-4a3f-bb2d-78391b0595f6,X-Tenant-Instance-ID=25b5dce3-27d9-4773-933e-6ee29a42871f Body:
+[DEBUG-MARKER] path=/api/business-objects/be7b9e37-5b9b-41fe-ac6e-58465387eb7c method=GET contains_bo=true
+[MW-EXEC] Middleware executing for GET /api/business-objects/be7b9e37-5b9b-41fe-ac6e-58465387eb7c
+{"level":"info","ts":1770263395.0509188,"caller":"api/request_trace_middleware.go:40","msg":"RequestTrace Start: id=3432e3d2-9342-488f-a9b5-aafb5740fb0a method=GET path=/api/business-objects/be7b9e37-5b9b-41fe-ac6e-58465387eb7c tenant=910638ba-a459-4a3f-bb2d-78391b0595f6"}
+[TRACE START] id=3432e3d2-9342-488f-a9b5-aafb5740fb0a method=GET path=/api/business-objects/be7b9e37-5b9b-41fe-ac6e-58465387eb7c tenant=910638ba-a459-4a3f-bb2d-78391b0595f6
+{"level":"info","ts":1770263395.051011,"caller":"api/business_object_handlers.go:193","msg":"[HANDLER-ENTRY] GetBusinessObject called: tenant=910638ba-a459-4a3f-bb2d-78391b0595f6 id=be7b9e37-5b9b-41fe-ac6e-58465387eb7c"}
+{"level":"info","ts":1770263395.0510662,"caller":"metadata/businessobject_service.go:321","msg":"DEBUG: GetBusinessObject - tenantID: 910638ba-a459-4a3f-bb2d-78391b0595f6, boKey: be7b9e37-5b9b-41fe-ac6e-58465387eb7c, isUUID: true"}
+{"level":"info","ts":1770263395.0543559,"caller":"metadata/businessobject_service.go:344","msg":"DEBUG: GetBusinessObject found in old schema - id=be7b9e37-5b9b-41fe-ac6e-58465387eb7c"}
+{"level":"info","ts":1770263395.0546272,"caller":"metadata/businessobject_service.go:1242","msg":"DEBUG: loadBOSubtypesAndFields start - bo.id=be7b9e37-5b9b-41fe-ac6e-58465387eb7c tenant=910638ba-a459-4a3f-bb2d-78391b0595f6"}
+{"level":"info","ts":1770263395.056556,"caller":"metadata/businessobject_service.go:1290","msg":"DEBUG: no child BOs found for parent be7b9e37-5b9b-41fe-ac6e-58465387eb7c with tenant 910638ba-a459-4a3f-bb2d-78391b0595f6 — trying fallback query without tenant filter"}
+{"level":"info","ts":1770263395.057125,"caller":"metadata/businessobject_service.go:1301","msg":"DEBUG: fallback found 0 child BOs for parent be7b9e37-5b9b-41fe-ac6e-58465387eb7c"}
+{"level":"info","ts":1770263395.057167,"caller":"metadata/businessobject_service.go:1305","msg":"DEBUG: loading 0 child BO(s) for parent be7b9e37-5b9b-41fe-ac6e-58465387eb7c (tenant 910638ba-a459-4a3f-bb2d-78391b0595f6)"}
+{"level":"warn","ts":1770263395.057871,"caller":"metadata/businessobject_service.go:1403","msg":"Warning: failed to load bo_subtypes: ERROR: invalid input syntax for type uuid: \"\" (SQLSTATE 22P02)"}
+{"level":"info","ts":1770263395.0779788,"caller":"metadata/businessobject_service.go:1556","msg":"DEBUG: loadBOSubtypesAndFields - entity fields loaded: 3 for bo.id=be7b9e37-5b9b-41fe-ac6e-58465387eb7c"}
+{"level":"info","ts":1770263395.078121,"caller":"api/business_object_handlers.go:202","msg":"DEBUG: API GetBusinessObject called - tenant=910638ba-a459-4a3f-bb2d-78391b0595f6 id=be7b9e37-5b9b-41fe-ac6e-58465387eb7c boID=be7b9e37-5b9b-41fe-ac6e-58465387eb7c hasSubtypes=false"}
+{"level":"info","ts":1770263395.079434,"caller":"api/business_object_handlers.go:221","msg":"DEBUG: API GetBusinessObject attached 0 child BO(s) to parent be7b9e37-5b9b-41fe-ac6e-58465387eb7c (tenant 910638ba-a459-4a3f-bb2d-78391b0595f6)"}
+{"level":"info","ts":1770263395.0799308,"caller":"api/request_trace_middleware.go:48","msg":"RequestTrace End: id=3432e3d2-9342-488f-a9b5-aafb5740fb0a method=GET path=/api/business-objects/be7b9e37-5b9b-41fe-ac6e-58465387eb7c tenant=910638ba-a459-4a3f-bb2d-78391b0595f6 status=200 handler=api"}
+[TRACE END] id=3432e3d2-9342-488f-a9b5-aafb5740fb0a method=GET path=/api/business-objects/be7b9e37-5b9b-41fe-ac6e-58465387eb7c tenant=910638ba-a459-4a3f-bb2d-78391b0595f6 status=200 handler=api
+[REQ] POST /api/business-objects/generate-sql Headers:Content-Type=application/json,Authorization=,Origin=http://localhost:5173,X-Tenant-ID=910638ba-a459-4a3f-bb2d-78391b0595f6,X-Tenant-Instance-ID= Body:{"businessObjectId":"be7b9e37-5b9b-41fe-ac6e-58465387eb7c","selectedFields":["e1a1f5b0-d4de-4c24-aac3-9208e49f3889"],"filters":[],"limit":100}
+[DEBUG-MARKER] path=/api/business-objects/generate-sql method=POST contains_bo=true
+[REQ-MIDDLEWARE] Matched business-objects POST, path=/api/business-objects/generate-sql
+[REQ-DETAIL] Business Object Create: datasource_id=<nil> parent_id=<nil> name=<nil> header_ds=
+[MW-EXEC] Middleware executing for POST /api/business-objects/generate-sql
+{"level":"info","ts":1770263398.889498,"caller":"api/request_trace_middleware.go:40","msg":"RequestTrace Start: id=40a64d3d-9ed7-4259-974f-99453a88da39 method=POST path=/api/business-objects/generate-sql tenant=910638ba-a459-4a3f-bb2d-78391b0595f6"}
+[TRACE START] id=40a64d3d-9ed7-4259-974f-99453a88da39 method=POST path=/api/business-objects/generate-sql tenant=910638ba-a459-4a3f-bb2d-78391b0595f6
+{"level":"info","ts":1770263398.9095402,"caller":"api/request_trace_middleware.go:48","msg":"RequestTrace End: id=40a64d3d-9ed7-4259-974f-99453a88da39 method=POST path=/api/business-objects/generate-sql tenant=910638ba-a459-4a3f-bb2d-78391b0595f6 status=200 handler="}
+[TRACE END] id=40a64d3d-9ed7-4259-974f-99453a88da39 method=POST path=/api/business-objects/generate-sql tenant=910638ba-a459-4a3f-bb2d-78391b0595f6 status=200 handler=
+[REQ] POST /api/business-objects/execute-sql Headers:Content-Type=application/json,Authorization=,Origin=http://localhost:5173,X-Tenant-ID=910638ba-a459-4a3f-bb2d-78391b0595f6,X-Tenant-Instance-ID= Body:{"sql":"SELECT\n  t0.customer_id AS \"CUSTOMER IDENTIFIER\"\nFROM customers AS t0\n\nLIMIT 100","limit":100,"business_object_id":"be7b9e37-5b9b-41fe-ac6e-58465387eb7c"}
+[DEBUG-MARKER] path=/api/business-objects/execute-sql method=POST contains_bo=true
+[REQ-MIDDLEWARE] Matched business-objects POST, path=/api/business-objects/execute-sql
+[REQ-DETAIL] Business Object Create: datasource_id=<nil> parent_id=<nil> name=<nil> header_ds=
+[MW-EXEC] Middleware executing for POST /api/business-objects/execute-sql
+{"level":"info","ts":1770263398.915916,"caller":"api/request_trace_middleware.go:40","msg":"RequestTrace Start: id=bdf749d3-7ad1-42a4-993d-1902c39f67df method=POST path=/api/business-objects/execute-sql tenant=910638ba-a459-4a3f-bb2d-78391b0595f6"}
+[TRACE START] id=bdf749d3-7ad1-42a4-993d-1902c39f67df method=POST path=/api/business-objects/execute-sql tenant=910638ba-a459-4a3f-bb2d-78391b0595f6
+{"level":"info","ts":1770263398.916039,"caller":"api/bo_sql_routes.go:170","msg":"ExecuteSQLHandler: Looking up datasource for BO: be7b9e37-5b9b-41fe-ac6e-58465387eb7c"}
+{"level":"info","ts":1770263398.9170508,"caller":"api/bo_sql_routes.go:193","msg":"ExecuteSQLHandler: BO be7b9e37-5b9b-41fe-ac6e-58465387eb7c is tied to datasource: 25b5dce3-27d9-4773-933e-6ee29a42871f (name: Northwinds)"}
+{"level":"info","ts":1770263398.917081,"caller":"api/bo_sql_routes.go:207","msg":"ExecuteSQLHandler: Routing query to northwinds for tenant 910638ba-a459-4a3f-bb2d-78391b0595f6"}
+{"level":"info","ts":1770263398.941622,"caller":"api/request_trace_middleware.go:48","msg":"RequestTrace End: id=bdf749d3-7ad1-42a4-993d-1902c39f67df method=POST path=/api/business-objects/execute-sql tenant=910638ba-a459-4a3f-bb2d-78391b0595f6 status=200 handler="}
+[TRACE END] id=bdf749d3-7ad1-42a4-993d-1902c39f67df method=POST path=/api/business-objects/execute-sql tenant=910638ba-a459-4a3f-bb2d-78391b0595f6 status=200 handler=
+[REQ] GET /api/bp-notifications/logs Headers:Content-Type=,Authorization=,Origin=,X-Tenant-ID=,X-Tenant-Instance-ID= Body:
+[DEBUG-MARKER] path=/api/bp-notifications/logs method=GET contains_bo=false
+[MW-EXEC] Middleware executing for GET /api/bp-notifications/logs
+{"level":"info","ts":1770263421.990304,"caller":"api/request_trace_middleware.go:40","msg":"RequestTrace Start: id=eee69f83-e6ff-49f8-8816-b2a8743169f9 method=GET path=/api/bp-notifications/logs tenant="}
+[TRACE START] id=eee69f83-e6ff-49f8-8816-b2a8743169f9 method=GET path=/api/bp-notifications/logs tenant=
+{"level":"info","ts":1770263421.9927402,"caller":"api/request_trace_middleware.go:48","msg":"RequestTrace End: id=eee69f83-e6ff-49f8-8816-b2a8743169f9 method=GET path=/api/bp-notifications/logs tenant= status=200 handler="}
+[TRACE END] id=eee69f83-e6ff-49f8-8816-b2a8743169f9 method=GET path=/api/bp-notifications/logs tenant= status=200 handler=
+[REQ] POST /api/business-objects/generate-sql Headers:Content-Type=application/json,Authorization=,Origin=http://localhost:5173,X-Tenant-ID=910638ba-a459-4a3f-bb2d-78391b0595f6,X-Tenant-Instance-ID= Body:{"businessObjectId":"be7b9e37-5b9b-41fe-ac6e-58465387eb7c","selectedFields":["fdbd3543-9ca2-41f4-927e-a283a00c0d08","e1a1f5b0-d4de-4c24-aac3-9208e49f3889"],"filters":[],"limit":100}
+[DEBUG-MARKER] path=/api/business-objects/generate-sql method=POST contains_bo=true
+[REQ-MIDDLEWARE] Matched business-objects POST, path=/api/business-objects/generate-sql
+[REQ-DETAIL] Business Object Create: datasource_id=<nil> parent_id=<nil> name=<nil> header_ds=
+[MW-EXEC] Middleware executing for POST /api/business-objects/generate-sql
+{"level":"info","ts":1770263430.0833468,"caller":"api/request_trace_middleware.go:40","msg":"RequestTrace Start: id=9b1739f2-bb68-436f-81ed-14768f878b29 method=POST path=/api/business-objects/generate-sql tenant=910638ba-a459-4a3f-bb2d-78391b0595f6"}
+[TRACE START] id=9b1739f2-bb68-436f-81ed-14768f878b29 method=POST path=/api/business-objects/generate-sql tenant=910638ba-a459-4a3f-bb2d-78391b0595f6
+{"level":"info","ts":1770263430.09121,"caller":"api/request_trace_middleware.go:48","msg":"RequestTrace End: id=9b1739f2-bb68-436f-81ed-14768f878b29 method=POST path=/api/business-objects/generate-sql tenant=910638ba-a459-4a3f-bb2d-78391b0595f6 status=200 handler="}
+[TRACE END] id=9b1739f2-bb68-436f-81ed-14768f878b29 method=POST path=/api/business-objects/generate-sql tenant=910638ba-a459-4a3f-bb2d-78391b0595f6 status=200 handler=
+[REQ] POST /api/business-objects/execute-sql Headers:Content-Type=application/json,Authorization=,Origin=http://localhost:5173,X-Tenant-ID=910638ba-a459-4a3f-bb2d-78391b0595f6,X-Tenant-Instance-ID= Body:{"sql":"SELECT\n  t0.address AS \"CUSTOMER_ADDRESS\",\n  t0.customer_id AS \"CUSTOMER IDENTIFIER\"\nFROM customers AS t0\n\nLIMIT 100","limit":100,"business_object_id":"be7b9e37-5b9b-41fe-ac6e-58465387eb7c"}
+[DEBUG-MARKER] path=/api/business-objects/execute-sql method=POST contains_bo=true
+[REQ-MIDDLEWARE] Matched business-objects POST, path=/api/business-objects/execute-sql
+[REQ-DETAIL] Business Object Create: datasource_id=<nil> parent_id=<nil> name=<nil> header_ds=
+[MW-EXEC] Middleware executing for POST /api/business-objects/execute-sql
+{"level":"info","ts":1770263430.1137369,"caller":"api/request_trace_middleware.go:40","msg":"RequestTrace Start: id=059364de-b5d8-4b8e-af6a-ddbb03def360 method=POST path=/api/business-objects/execute-sql tenant=910638ba-a459-4a3f-bb2d-78391b0595f6"}
+[TRACE START] id=059364de-b5d8-4b8e-af6a-ddbb03def360 method=POST path=/api/business-objects/execute-sql tenant=910638ba-a459-4a3f-bb2d-78391b0595f6
+{"level":"info","ts":1770263430.113857,"caller":"api/bo_sql_routes.go:170","msg":"ExecuteSQLHandler: Looking up datasource for BO: be7b9e37-5b9b-41fe-ac6e-58465387eb7c"}
+{"level":"info","ts":1770263430.1147,"caller":"api/bo_sql_routes.go:193","msg":"ExecuteSQLHandler: BO be7b9e37-5b9b-41fe-ac6e-58465387eb7c is tied to datasource: 25b5dce3-27d9-4773-933e-6ee29a42871f (name: Northwinds)"}
+{"level":"info","ts":1770263430.1147368,"caller":"api/bo_sql_routes.go:207","msg":"ExecuteSQLHandler: Routing query to northwinds for tenant 910638ba-a459-4a3f-bb2d-78391b0595f6"}
+{"level":"info","ts":1770263430.1160479,"caller":"api/request_trace_middleware.go:48","msg":"RequestTrace End: id=059364de-b5d8-4b8e-af6a-ddbb03def360 method=POST path=/api/business-objects/execute-sql tenant=910638ba-a459-4a3f-bb2d-78391b0595f6 status=200 handler="}
+[TRACE END] id=059364de-b5d8-4b8e-af6a-ddbb03def360 method=POST path=/api/business-objects/execute-sql tenant=910638ba-a459-4a3f-bb2d-78391b0595f6 status=200 handler=
+[REQ] GET /api/bp-notifications/logs Headers:Content-Type=,Authorization=,Origin=,X-Tenant-ID=,X-Tenant-Instance-ID= Body:
+[DEBUG-MARKER] path=/api/bp-notifications/logs method=GET contains_bo=false
+[MW-EXEC] Middleware executing for GET /api/bp-notifications/logs
+{"level":"info","ts":1770263451.990525,"caller":"api/request_trace_middleware.go:40","msg":"RequestTrace Start: id=04ca8837-b5dd-43f9-9f87-56486388a0e7 method=GET path=/api/bp-notifications/logs tenant="}
+[TRACE START] id=04ca8837-b5dd-43f9-9f87-56486388a0e7 method=GET path=/api/bp-notifications/logs tenant=
+{"level":"info","ts":1770263451.992467,"caller":"api/request_trace_middleware.go:48","msg":"RequestTrace End: id=04ca8837-b5dd-43f9-9f87-56486388a0e7 method=GET path=/api/bp-notifications/logs tenant= status=200 handler="}
+[TRACE END] id=04ca8837-b5dd-43f9-9f87-56486388a0e7 method=GET path=/api/bp-notifications/logs tenant= status=200 handler=
+[REQ] GET /api/bp-notifications/logs Headers:Content-Type=,Authorization=,Origin=,X-Tenant-ID=,X-Tenant-Instance-ID= Body:
+[DEBUG-MARKER] path=/api/bp-notifications/logs method=GET contains_bo=false
+[MW-EXEC] Middleware executing for GET /api/bp-notifications/logs
+{"level":"info","ts":1770263481.990082,"caller":"api/request_trace_middleware.go:40","msg":"RequestTrace Start: id=4839bee2-a4c6-4435-a1e9-dc9a4476039a method=GET path=/api/bp-notifications/logs tenant="}
+[TRACE START] id=4839bee2-a4c6-4435-a1e9-dc9a4476039a method=GET path=/api/bp-notifications/logs tenant=
+{"level":"info","ts":1770263481.992577,"caller":"api/request_trace_middleware.go:48","msg":"RequestTrace End: id=4839bee2-a4c6-4435-a1e9-dc9a4476039a method=GET path=/api/bp-notifications/logs tenant= status=200 handler="}
+[TRACE END] id=4839bee2-a4c6-4435-a1e9-dc9a4476039a method=GET path=/api/bp-notifications/logs tenant= status=200 handler=
+[REQ] GET /api/bp-notifications/logs Headers:Content-Type=,Authorization=,Origin=,X-Tenant-ID=,X-Tenant-Instance-ID= Body:
+[DEBUG-MARKER] path=/api/bp-notifications/logs method=GET contains_bo=false
+[MW-EXEC] Middleware executing for GET /api/bp-notifications/logs
+{"level":"info","ts":1770263511.99023,"caller":"api/request_trace_middleware.go:40","msg":"RequestTrace Start: id=ed2abb9f-9098-447d-8b93-e0c9adb1e7ca method=GET path=/api/bp-notifications/logs tenant="}
+[TRACE START] id=ed2abb9f-9098-447d-8b93-e0c9adb1e7ca method=GET path=/api/bp-notifications/logs tenant=
+{"level":"info","ts":1770263511.991293,"caller":"api/request_trace_middleware.go:48","msg":"RequestTrace End: id=ed2abb9f-9098-447d-8b93-e0c9adb1e7ca method=GET path=/api/bp-notifications/logs tenant= status=200 handler="}
+[TRACE END] id=ed2abb9f-9098-447d-8b93-e0c9adb1e7ca method=GET path=/api/bp-notifications/logs tenant= status=200 handler=
+{"level":"info","ts":1770263537.804781,"caller":"services/qos_manager.go:98","msg":"Refreshing Tenant Quotas"}
+[REQ] GET /api/bp-notifications/logs Headers:Content-Type=,Authorization=,Origin=,X-Tenant-ID=,X-Tenant-Instance-ID= Body:
+[DEBUG-MARKER] path=/api/bp-notifications/logs method=GET contains_bo=false
+[MW-EXEC] Middleware executing for GET /api/bp-notifications/logs
+{"level":"info","ts":1770263541.989726,"caller":"api/request_trace_middleware.go:40","msg":"RequestTrace Start: id=8c33d473-0b65-46d5-87c7-f26a3d75621d method=GET path=/api/bp-notifications/logs tenant="}
+[TRACE START] id=8c33d473-0b65-46d5-87c7-f26a3d75621d method=GET path=/api/bp-notifications/logs tenant=
+{"level":"info","ts":1770263541.990431,"caller":"api/request_trace_middleware.go:48","msg":"RequestTrace End: id=8c33d473-0b65-46d5-87c7-f26a3d75621d method=GET path=/api/bp-notifications/logs tenant= status=200 handler="}
+[TRACE END] id=8c33d473-0b65-46d5-87c7-f26a3d75621d method=GET path=/api/bp-notifications/logs tenant= status=200 handler=
+[REQ] GET /api/bp-notifications/logs Headers:Content-Type=,Authorization=,Origin=,X-Tenant-ID=,X-Tenant-Instance-ID= Body:
+[DEBUG-MARKER] path=/api/bp-notifications/logs method=GET contains_bo=false
+[MW-EXEC] Middleware executing for GET /api/bp-notifications/logs
+{"level":"info","ts":1770263571.99612,"caller":"api/request_trace_middleware.go:40","msg":"RequestTrace Start: id=1116b994-e57d-4984-9395-6c168a577e6f method=GET path=/api/bp-notifications/logs tenant="}
+[TRACE START] id=1116b994-e57d-4984-9395-6c168a577e6f method=GET path=/api/bp-notifications/logs tenant=
+{"level":"info","ts":1770263571.999878,"caller":"api/request_trace_middleware.go:48","msg":"RequestTrace End: id=1116b994-e57d-4984-9395-6c168a577e6f method=GET path=/api/bp-notifications/logs tenant= status=200 handler="}
+[TRACE END] id=1116b994-e57d-4984-9395-6c168a577e6f method=GET path=/api/bp-notifications/logs tenant= status=200 handler=
+[REQ] GET /api/bp-notifications/logs Headers:Content-Type=,Authorization=,Origin=,X-Tenant-ID=,X-Tenant-Instance-ID= Body:
+[DEBUG-MARKER] path=/api/bp-notifications/logs method=GET contains_bo=false
+[MW-EXEC] Middleware executing for GET /api/bp-notifications/logs
+{"level":"info","ts":1770263601.989312,"caller":"api/request_trace_middleware.go:40","msg":"RequestTrace Start: id=baa00566-3ff6-4505-aea9-1d7328d9322f method=GET path=/api/bp-notifications/logs tenant="}
+[TRACE START] id=baa00566-3ff6-4505-aea9-1d7328d9322f method=GET path=/api/bp-notifications/logs tenant=
+{"level":"info","ts":1770263601.99013,"caller":"api/request_trace_middleware.go:48","msg":"RequestTrace End: id=baa00566-3ff6-4505-aea9-1d7328d9322f method=GET path=/api/bp-notifications/logs tenant= status=200 handler="}
+[TRACE END] id=baa00566-3ff6-4505-aea9-1d7328d9322f method=GET path=/api/bp-notifications/logs tenant= status=200 handler=
+[REQ] GET /api/bp-notifications/logs Headers:Content-Type=,Authorization=,Origin=,X-Tenant-ID=,X-Tenant-Instance-ID= Body:
+[DEBUG-MARKER] path=/api/bp-notifications/logs method=GET contains_bo=false
+[MW-EXEC] Middleware executing for GET /api/bp-notifications/logs
+{"level":"info","ts":1770263631.992102,"caller":"api/request_trace_middleware.go:40","msg":"RequestTrace Start: id=d7973005-307c-4446-9a9e-9ee42a709941 method=GET path=/api/bp-notifications/logs tenant="}
+[TRACE START] id=d7973005-307c-4446-9a9e-9ee42a709941 method=GET path=/api/bp-notifications/logs tenant=
+{"level":"info","ts":1770263631.993946,"caller":"api/request_trace_middleware.go:48","msg":"RequestTrace End: id=d7973005-307c-4446-9a9e-9ee42a709941 method=GET path=/api/bp-notifications/logs tenant= status=200 handler="}
+[TRACE END] id=d7973005-307c-4446-9a9e-9ee42a709941 method=GET path=/api/bp-notifications/logs tenant= status=200 handler=
+[REQ] GET /api/bp-notifications/logs Headers:Content-Type=,Authorization=,Origin=,X-Tenant-ID=,X-Tenant-Instance-ID= Body:
+[DEBUG-MARKER] path=/api/bp-notifications/logs method=GET contains_bo=false
+[MW-EXEC] Middleware executing for GET /api/bp-notifications/logs
+{"level":"info","ts":1770263661.987838,"caller":"api/request_trace_middleware.go:40","msg":"RequestTrace Start: id=f46da1a4-07e8-4da0-b4a7-f43438c57508 method=GET path=/api/bp-notifications/logs tenant="}
+[TRACE START] id=f46da1a4-07e8-4da0-b4a7-f43438c57508 method=GET path=/api/bp-notifications/logs tenant=
+{"level":"info","ts":1770263661.988461,"caller":"api/request_trace_middleware.go:48","msg":"RequestTrace End: id=f46da1a4-07e8-4da0-b4a7-f43438c57508 method=GET path=/api/bp-notifications/logs tenant= status=200 handler="}
+[TRACE END] id=f46da1a4-07e8-4da0-b4a7-f43438c57508 method=GET path=/api/bp-notifications/logs tenant= status=200 handler=
+[REQ] GET /api/bp-notifications/logs Headers:Content-Type=,Authorization=,Origin=,X-Tenant-ID=,X-Tenant-Instance-ID= Body:
+[DEBUG-MARKER] path=/api/bp-notifications/logs method=GET contains_bo=false
+[MW-EXEC] Middleware executing for GET /api/bp-notifications/logs
+{"level":"info","ts":1770263691.993431,"caller":"api/request_trace_middleware.go:40","msg":"RequestTrace Start: id=6d0b61ff-dac0-4c26-bc9e-ddf81683549f method=GET path=/api/bp-notifications/logs tenant="}
+[TRACE START] id=6d0b61ff-dac0-4c26-bc9e-ddf81683549f method=GET path=/api/bp-notifications/logs tenant=
+{"level":"info","ts":1770263691.9955049,"caller":"api/request_trace_middleware.go:48","msg":"RequestTrace End: id=6d0b61ff-dac0-4c26-bc9e-ddf81683549f method=GET path=/api/bp-notifications/logs tenant= status=200 handler="}
+[TRACE END] id=6d0b61ff-dac0-4c26-bc9e-ddf81683549f method=GET path=/api/bp-notifications/logs tenant= status=200 handler=
+[REQ] GET /api/bp-notifications/logs Headers:Content-Type=,Authorization=,Origin=,X-Tenant-ID=,X-Tenant-Instance-ID= Body:
+[DEBUG-MARKER] path=/api/bp-notifications/logs method=GET contains_bo=false
+[MW-EXEC] Middleware executing for GET /api/bp-notifications/logs
+{"level":"info","ts":1770263721.992446,"caller":"api/request_trace_middleware.go:40","msg":"RequestTrace Start: id=56ae939a-4cd3-4010-8f0c-e8ba9ab181b0 method=GET path=/api/bp-notifications/logs tenant="}
+[TRACE START] id=56ae939a-4cd3-4010-8f0c-e8ba9ab181b0 method=GET path=/api/bp-notifications/logs tenant=
+{"level":"info","ts":1770263721.997035,"caller":"api/request_trace_middleware.go:48","msg":"RequestTrace End: id=56ae939a-4cd3-4010-8f0c-e8ba9ab181b0 method=GET path=/api/bp-notifications/logs tenant= status=200 handler="}
+[TRACE END] id=56ae939a-4cd3-4010-8f0c-e8ba9ab181b0 method=GET path=/api/bp-notifications/logs tenant= status=200 handler=
+[REQ] GET /api/bp-notifications/logs Headers:Content-Type=,Authorization=,Origin=,X-Tenant-ID=,X-Tenant-Instance-ID= Body:
+[DEBUG-MARKER] path=/api/bp-notifications/logs method=GET contains_bo=false
+[MW-EXEC] Middleware executing for GET /api/bp-notifications/logs
+{"level":"info","ts":1770263751.993114,"caller":"api/request_trace_middleware.go:40","msg":"RequestTrace Start: id=104b4306-8510-4d8b-b50c-88033ba8465b method=GET path=/api/bp-notifications/logs tenant="}
+[TRACE START] id=104b4306-8510-4d8b-b50c-88033ba8465b method=GET path=/api/bp-notifications/logs tenant=
+{"level":"info","ts":1770263751.994859,"caller":"api/request_trace_middleware.go:48","msg":"RequestTrace End: id=104b4306-8510-4d8b-b50c-88033ba8465b method=GET path=/api/bp-notifications/logs tenant= status=200 handler="}
+[TRACE END] id=104b4306-8510-4d8b-b50c-88033ba8465b method=GET path=/api/bp-notifications/logs tenant= status=200 handler=
+[REQ] GET /api/bp-notifications/logs Headers:Content-Type=,Authorization=,Origin=,X-Tenant-ID=,X-Tenant-Instance-ID= Body:
+[DEBUG-MARKER] path=/api/bp-notifications/logs method=GET contains_bo=false
+[MW-EXEC] Middleware executing for GET /api/bp-notifications/logs
+{"level":"info","ts":1770263781.9876108,"caller":"api/request_trace_middleware.go:40","msg":"RequestTrace Start: id=99864dd5-9b6d-49b9-a6d5-1bbcef0e7120 method=GET path=/api/bp-notifications/logs tenant="}
+[TRACE START] id=99864dd5-9b6d-49b9-a6d5-1bbcef0e7120 method=GET path=/api/bp-notifications/logs tenant=
+{"level":"info","ts":1770263781.988289,"caller":"api/request_trace_middleware.go:48","msg":"RequestTrace End: id=99864dd5-9b6d-49b9-a6d5-1bbcef0e7120 method=GET path=/api/bp-notifications/logs tenant= status=200 handler="}
+[TRACE END] id=99864dd5-9b6d-49b9-a6d5-1bbcef0e7120 method=GET path=/api/bp-notifications/logs tenant= status=200 handler=
+[REQ] GET /api/bp-notifications/logs Headers:Content-Type=,Authorization=,Origin=,X-Tenant-ID=,X-Tenant-Instance-ID= Body:
+[DEBUG-MARKER] path=/api/bp-notifications/logs method=GET contains_bo=false
+[MW-EXEC] Middleware executing for GET /api/bp-notifications/logs
+{"level":"info","ts":1770263811.987265,"caller":"api/request_trace_middleware.go:40","msg":"RequestTrace Start: id=d2927f93-3d93-4a09-8687-1ea05ec24223 method=GET path=/api/bp-notifications/logs tenant="}
+[TRACE START] id=d2927f93-3d93-4a09-8687-1ea05ec24223 method=GET path=/api/bp-notifications/logs tenant=
+{"level":"info","ts":1770263811.988008,"caller":"api/request_trace_middleware.go:48","msg":"RequestTrace End: id=d2927f93-3d93-4a09-8687-1ea05ec24223 method=GET path=/api/bp-notifications/logs tenant= status=200 handler="}
+[TRACE END] id=d2927f93-3d93-4a09-8687-1ea05ec24223 method=GET path=/api/bp-notifications/logs tenant= status=200 handler=
+{"level":"info","ts":1770263837.805727,"caller":"services/qos_manager.go:98","msg":"Refreshing Tenant Quotas"}
+[REQ] GET /api/bp-notifications/logs Headers:Content-Type=,Authorization=,Origin=,X-Tenant-ID=,X-Tenant-Instance-ID= Body:
+[DEBUG-MARKER] path=/api/bp-notifications/logs method=GET contains_bo=false
+[MW-EXEC] Middleware executing for GET /api/bp-notifications/logs
+{"level":"info","ts":1770263841.991793,"caller":"api/request_trace_middleware.go:40","msg":"RequestTrace Start: id=b44079ea-98b6-4097-ae07-8416caafd6bd method=GET path=/api/bp-notifications/logs tenant="}
+[TRACE START] id=b44079ea-98b6-4097-ae07-8416caafd6bd method=GET path=/api/bp-notifications/logs tenant=
+{"level":"info","ts":1770263841.993278,"caller":"api/request_trace_middleware.go:48","msg":"RequestTrace End: id=b44079ea-98b6-4097-ae07-8416caafd6bd method=GET path=/api/bp-notifications/logs tenant= status=200 handler="}
+[TRACE END] id=b44079ea-98b6-4097-ae07-8416caafd6bd method=GET path=/api/bp-notifications/logs tenant= status=200 handler=
+[REQ] GET /api/bp-notifications/logs Headers:Content-Type=,Authorization=,Origin=,X-Tenant-ID=,X-Tenant-Instance-ID= Body:
+[DEBUG-MARKER] path=/api/bp-notifications/logs method=GET contains_bo=false
+[MW-EXEC] Middleware executing for GET /api/bp-notifications/logs
+{"level":"info","ts":1770263871.9913878,"caller":"api/request_trace_middleware.go:40","msg":"RequestTrace Start: id=6796eb2c-8787-44bc-8f13-eac963b5e63e method=GET path=/api/bp-notifications/logs tenant="}
+[TRACE START] id=6796eb2c-8787-44bc-8f13-eac963b5e63e method=GET path=/api/bp-notifications/logs tenant=
+{"level":"info","ts":1770263871.9920158,"caller":"api/request_trace_middleware.go:48","msg":"RequestTrace End: id=6796eb2c-8787-44bc-8f13-eac963b5e63e method=GET path=/api/bp-notifications/logs tenant= status=200 handler="}
+[TRACE END] id=6796eb2c-8787-44bc-8f13-eac963b5e63e method=GET path=/api/bp-notifications/logs tenant= status=200 handler=
+[REQ] GET /api/bp-notifications/logs Headers:Content-Type=,Authorization=,Origin=,X-Tenant-ID=,X-Tenant-Instance-ID= Body:
+[DEBUG-MARKER] path=/api/bp-notifications/logs method=GET contains_bo=false
+[MW-EXEC] Middleware executing for GET /api/bp-notifications/logs
+{"level":"info","ts":1770263902.004517,"caller":"api/request_trace_middleware.go:40","msg":"RequestTrace Start: id=da41f85c-b718-4129-bdf3-23dc958dbed7 method=GET path=/api/bp-notifications/logs tenant="}
+[TRACE START] id=da41f85c-b718-4129-bdf3-23dc958dbed7 method=GET path=/api/bp-notifications/logs tenant=
+{"level":"info","ts":1770263902.005502,"caller":"api/request_trace_middleware.go:48","msg":"RequestTrace End: id=da41f85c-b718-4129-bdf3-23dc958dbed7 method=GET path=/api/bp-notifications/logs tenant= status=200 handler="}
+[TRACE END] id=da41f85c-b718-4129-bdf3-23dc958dbed7 method=GET path=/api/bp-notifications/logs tenant= status=200 handler=
+{"level":"info","ts":1770263915.7556129,"caller":"server/main.go:1860","msg":"Shutdown signal received, starting graceful shutdown..."}
+{"level":"info","ts":1770263915.759202,"caller":"server/main.go:1873","msg":"Graceful shutdown complete"}

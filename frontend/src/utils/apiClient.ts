@@ -41,13 +41,35 @@ export async function apiClient<T = Response>(input: RequestInfo | URL, init?: R
         }
     }
 
-    // Inject Authorization Token
-    const token = typeof localStorage !== 'undefined' ? localStorage.getItem('auth_token') : null;
+    // Inject Authorization Token - check multiple storage locations for OIDC tokens
+    let token: string | null = null;
+    if (typeof localStorage !== 'undefined') {
+        // 1. Try standard auth_token key
+        token = localStorage.getItem('auth_token');
+
+        // 2. Fallback: Parse oidc-client-ts namespaced storage if present
+        if (!token) {
+            const oidcKey = Object.keys(localStorage).find(k => k.startsWith('oidc.user:'));
+            if (oidcKey) {
+                try {
+                    const userData = JSON.parse(localStorage.getItem(oidcKey) || '{}');
+                    token = userData.access_token || userData.id_token || null;
+                } catch (e) {
+                    console.warn('[apiClient] Failed to parse OIDC storage user object', e);
+                }
+            }
+        }
+    }
+
     if (token && !headers.has('Authorization')) {
         // Basic JWT check to avoid sending placeholder tokens that break dev envs
         if (token.split('.').length === 3 && !token.includes('demo')) {
             headers.set('Authorization', `Bearer ${token}`);
+        } else {
+            console.warn(`[apiClient] Token found but doesn't appear to be a valid JWT: ${token.substring(0, 50)}...`);
         }
+    } else if (!token) {
+        console.warn(`[apiClient] No bearer token found in storage for request to ${path}`);
     }
 
     // Ensure Content-Type is set for JSON requests

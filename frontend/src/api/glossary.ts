@@ -12,14 +12,45 @@ import { useNodeTypes } from './nodeTypes';
 // filter. They were sourced from the SQL dump on 2026-07-02 — the underlying
 // values live in the central platform DB and are stable.
 // ============================================================================
-export const BUSINESS_TERM_TYPE_ID = '21645d21-de5f-4feb-af99-99273ea75626';
-export const SEMANTIC_TERM_TYPE_ID  = '820b942a-9c9e-4abc-acdc-84616db33098';
+export const BUSINESS_TERM_TYPE_ID   = '21645d21-de5f-4feb-af99-99273ea75626';
+export const SEMANTIC_TERM_TYPE_ID   = '820b942a-9c9e-4abc-acdc-84616db33098';
+export const BUSINESS_OBJECT_TYPE_ID = '06bb774c-8666-4ab1-84eb-4f4d439ac84c';
+export const BO_FIELD_TYPE_ID        = 'e7c7e5a8-5e43-4c91-a12d-887711223344';
+export const TABLE_TYPE_ID           = '49a50271-ae58-4d3e-ae1c-2f5b89d89192';
+export const COLUMN_TYPE_ID          = 'a64c1011-16e8-4ddf-b447-363bf8e15c9a';
+
+/** All searchable node types for the Glossary Landing Page */
+export const CATALOG_NODE_TYPES = [
+  { id: BUSINESS_TERM_TYPE_ID,   key: 'business_term',   label: 'Business Terms',   color: '#6366F1' },
+  { id: SEMANTIC_TERM_TYPE_ID,   key: 'semantic_term',   label: 'Semantic Terms',   color: '#10B981' },
+  { id: BUSINESS_OBJECT_TYPE_ID, key: 'business_object', label: 'Business Objects', color: '#F59E0B' },
+  { id: TABLE_TYPE_ID,           key: 'table',           label: 'Technical Assets', color: '#60A5FA' },
+] as const;
 
 // Effective auth token: impersonation scoped token wins if present, otherwise
-// the primary OIDC token persisted by AuthContext.
+// the primary OIDC token persisted by AuthContext. Also checks oidc-client-ts storage.
 function getEffectiveAuthToken(): string | null {
   try {
-    return localStorage.getItem('uisce_impersonation_token') || localStorage.getItem('auth_token');
+    // 1. Try impersonation token first
+    const impToken = localStorage.getItem('uisce_impersonation_token');
+    if (impToken) return impToken;
+
+    // 2. Try standard auth_token
+    let token = localStorage.getItem('auth_token');
+    if (token) return token;
+
+    // 3. Fallback: Parse oidc-client-ts namespaced storage
+    const oidcKey = Object.keys(localStorage).find(k => k.startsWith('oidc.user:'));
+    if (oidcKey) {
+      try {
+        const userData = JSON.parse(localStorage.getItem(oidcKey) || '{}');
+        return userData.access_token || userData.id_token || null;
+      } catch {
+        return null;
+      }
+    }
+
+    return null;
   } catch {
     return null;
   }
@@ -809,3 +840,117 @@ export function useDeleteTermEdge() {
 }
 
 export const useDeleteSemanticTerm = useDeleteTerm;
+
+// ============================================================================
+// Universal Catalog Search — used by the Glossary Landing Page
+// Searches across multiple node types simultaneously.
+// ============================================================================
+export interface CatalogSearchResult {
+  id: string;
+  node_name: string;
+  description?: string;
+  node_type_id: string;
+  node_type_label: string;
+  node_type_key: string;
+  node_type_color: string;
+  qualified_path?: string;
+  created_at: string;
+}
+
+export function useUniversalCatalogSearch(
+  query: string,
+  nodeTypeIds: string[] = [],
+  opts?: { tenantOverride?: string },
+) {
+  const { tenant } = useTenant();
+  const scopeTenant = opts?.tenantOverride || tenant?.id;
+
+  // Search across all types if none specified
+  const typeIds = nodeTypeIds.length > 0 ? nodeTypeIds : CATALOG_NODE_TYPES.map((t) => t.id);
+
+  return useQuery({
+    queryKey: ['universal-catalog-search', query, typeIds.join(','), scopeTenant ?? null],
+    queryFn: async (): Promise<CatalogSearchResult[]> => {
+      if (!query || query.trim().length < 1) return [];
+
+      const results = await Promise.all(
+        typeIds.map(async (typeId) => {
+          const params = new URLSearchParams();
+          if (scopeTenant) params.append('tenant_id', scopeTenant);
+          params.append('node_type_id', typeId);
+          params.append('limit', '50');
+          const url = `/api/catalog/nodes?${params.toString()}`;
+          const res = await glossaryFetch(url, scopeTenant);
+          if (!res.ok) return [];
+          const nodes = (await res.json()) as CatalogNode[];
+          const q = query.trim().toLowerCase();
+          const typeMeta = CATALOG_NODE_TYPES.find((t) => t.id === typeId);
+          return nodes
+            .filter((n) => n.node_name?.toLowerCase().includes(q) || n.description?.toLowerCase().includes(q))
+            .map((n): CatalogSearchResult => ({
+              id: n.id,
+              node_name: n.node_name ?? 'Unnamed',
+              description: n.description,
+              node_type_id: typeId,
+              node_type_label: typeMeta?.label ?? typeId,
+              node_type_key: typeMeta?.key ?? typeId,
+              node_type_color: typeMeta?.color ?? '#888',
+              qualified_path: n.qualified_path,
+              created_at: n.created_at,
+            }));
+        }),
+      );
+      return results.flat().sort((a, b) => {
+        const qa = a.node_name.toLowerCase().startsWith(query.toLowerCase()) ? 0 : 1;
+        const qb = b.node_name.toLowerCase().startsWith(query.toLowerCase()) ? 0 : 1;
+        return qa - qb;
+      });
+    },
+    enabled: !!scopeTenant && query.trim().length >= 1,
+    staleTime: 15_000,
+  });
+}
+
+/** Fetch counts per node type for the summary cards */
+export function useCatalogNodeCounts(opts?: { tenantOverride?: string }) {
+  const { tenant } = useTenant();
+  const scopeTenant = opts?.tenantOverride || tenant?.id;
+
+  return useQuery({
+    queryKey: ['catalog-node-counts', scopeTenant ?? null],
+    queryFn: async (): Promise<Record<string, number>> => {
+      const counts: Record<string, number> = {};
+      await Promise.all(
+        CATALOG_NODE_TYPES.map(async (typeMeta) => {
+          const params = new URLSearchParams();
+          if (scopeTenant) params.append('tenant_id', scopeTenant);
+          params.append('node_type_id', typeMeta.id);
+          params.append('limit', '1');
+          const url = `/api/catalog/nodes?${params.toString()}`;
+          const res = await glossaryFetch(url, scopeTenant);
+          if (!res.ok) { counts[typeMeta.key] = 0; return; }
+          const nodes = (await res.json()) as CatalogNode[];
+          // Server returns all nodes when limit=1 gives wrong count, fetch a larger limit for a count estimate
+          counts[typeMeta.key] = nodes.length;
+        }),
+      );
+      // Re-fetch with large limit for an accurate count
+      await Promise.all(
+        CATALOG_NODE_TYPES.map(async (typeMeta) => {
+          const params = new URLSearchParams();
+          if (scopeTenant) params.append('tenant_id', scopeTenant);
+          params.append('node_type_id', typeMeta.id);
+          params.append('limit', '100000');
+          const url = `/api/catalog/nodes?${params.toString()}`;
+          const res = await glossaryFetch(url, scopeTenant);
+          if (!res.ok) return;
+          const nodes = (await res.json()) as CatalogNode[];
+          counts[typeMeta.key] = nodes.length;
+        }),
+      );
+      return counts;
+    },
+    enabled: !!scopeTenant,
+    staleTime: 60_000,
+  });
+}

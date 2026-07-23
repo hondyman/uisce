@@ -1,0 +1,760 @@
+---
+# Phase 3.24: Kubernetes Multi-Region Deployment Manifests
+# Deploy to each region cluster with region-specific overrides
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: semlayer
+  labels:
+    region: "{{ REGION_CODE }}"
+---
+# Region-Specific ConfigMap
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: semlayer-region-config
+  namespace: semlayer
+data:
+  REGION_CODE: "{{ REGION_CODE }}"
+  REGION_NAME: "{{ REGION_NAME }}"
+  TEMPORAL_NAMESPACE: "{{ TEMPORAL_NAMESPACE }}"
+  TEMPORAL_ADDRESS: "{{ TEMPORAL_ADDRESS }}"
+  TRINO_CATALOG: "{{ TRINO_CATALOG }}"
+  TRINO_ENDPOINT: "{{ TRINO_ENDPOINT }}"
+  ICEBERG_CATALOG: "{{ ICEBERG_CATALOG }}"
+  ICEBERG_S3_BUCKET: "{{ ICEBERG_S3_BUCKET }}"
+  ICEBERG_WAREHOUSE_PATH: "{{ ICEBERG_WAREHOUSE_PATH }}"
+  API_ENDPOINT: "{{ API_ENDPOINT }}"
+  CONTROL_PLANE_DB: "{{ CONTROL_PLANE_DB_HOST }}"
+  LOG_LEVEL: "info"
+---
+# Region-Specific Secret for mTLS
+apiVersion: v1
+kind: Secret
+metadata:
+  name: semlayer-mtls-certs
+  namespace: semlayer
+type: Opaque
+data:
+  ca.crt: { ? { BASE64_ENCODED_CA_CERT } }
+  client.crt: { ? { BASE64_ENCODED_CLIENT_CERT } }
+  client.key: { ? { BASE64_ENCODED_CLIENT_KEY } }
+---
+# Temporal Worker Pool (Region-Scoped)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: semlayer-temporal-workers
+  namespace: semlayer
+  labels:
+    app: temporal-workers
+    region: "{{ REGION_CODE }}"
+spec:
+  replicas: { ? { TEMPORAL_WORKER_REPLICAS } }
+  selector:
+    matchLabels:
+      app: temporal-workers
+      region: "{{ REGION_CODE }}"
+  template:
+    metadata:
+      labels:
+        app: temporal-workers
+        region: "{{ REGION_CODE }}"
+    spec:
+      serviceAccountName: semlayer-temporal-worker
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                  - temporal-workers
+              topologyKey: kubernetes.io/hostname
+      containers:
+      - name: temporal-worker
+        image: "{{ DOCKER_REGISTRY }}/semlayer-temporal-worker:{{ IMAGE_TAG }}"
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8080
+          name: http
+        envFrom:
+        - configMapRef:
+            name: semlayer-region-config
+        env:
+        - name: TEMPORAL_WORKER_TASK_QUEUES
+          value: "materialization_{{ REGION_CODE }},drift_{{ REGION_CODE }},discovery_{{ REGION_CODE }},activity_{{ REGION_CODE }}"
+        volumeMounts:
+        - name: mtls-certs
+          mountPath: /etc/semlayer/certs
+          readOnly: true
+        resources:
+          requests:
+            cpu: 500m
+            memory: 2Gi
+          limits:
+            cpu: 2000m
+            memory: 4Gi
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: 8080
+          initialDelaySeconds: 10
+          periodSeconds: 5
+      volumes:
+      - name: mtls-certs
+        secret:
+          secretName: semlayer-mtls-certs
+---
+# Materialization Service (Region-Scoped)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: semlayer-materialization-service
+  namespace: semlayer
+  labels:
+    app: materialization-service
+    region: "{{ REGION_CODE }}"
+spec:
+  replicas: { ? { MATERIALIZATION_REPLICAS } }
+  selector:
+    matchLabels:
+      app: materialization-service
+      region: "{{ REGION_CODE }}"
+  template:
+    metadata:
+      labels:
+        app: materialization-service
+        region: "{{ REGION_CODE }}"
+    spec:
+      serviceAccountName: semlayer-materialization-service
+      containers:
+      - name: materialization
+        image: "{{ DOCKER_REGISTRY }}/semlayer-materialization:{{ IMAGE_TAG }}"
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8081
+          name: http
+        envFrom:
+        - configMapRef:
+            name: semlayer-region-config
+        env:
+        - name: SERVICE_PORT
+          value: "8081"
+        - name: MATERIALIZATION_WORKERS
+          value: "{{ MATERIALIZATION_WORKER_COUNT }}"
+        volumeMounts:
+        - name: mtls-certs
+          mountPath: /etc/semlayer/certs
+          readOnly: true
+        resources:
+          requests:
+            cpu: 1000m
+            memory: 4Gi
+          limits:
+            cpu: 4000m
+            memory: 8Gi
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8081
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: 8081
+          initialDelaySeconds: 10
+          periodSeconds: 5
+      volumes:
+      - name: mtls-certs
+        secret:
+          secretName: semlayer-mtls-certs
+---
+# Service for Materialization
+apiVersion: v1
+kind: Service
+metadata:
+  name: semlayer-materialization-service
+  namespace: semlayer
+  labels:
+    app: materialization-service
+    region: "{{ REGION_CODE }}"
+spec:
+  type: ClusterIP
+  ports:
+  - port: 8081
+    targetPort: 8081
+    protocol: TCP
+    name: http
+  selector:
+    app: materialization-service
+    region: "{{ REGION_CODE }}"
+---
+# Drift Detection Service (Region-Scoped)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: semlayer-drift-service
+  namespace: semlayer
+  labels:
+    app: drift-service
+    region: "{{ REGION_CODE }}"
+spec:
+  replicas: { ? { DRIFT_SERVICE_REPLICAS } }
+  selector:
+    matchLabels:
+      app: drift-service
+      region: "{{ REGION_CODE }}"
+  template:
+    metadata:
+      labels:
+        app: drift-service
+        region: "{{ REGION_CODE }}"
+    spec:
+      serviceAccountName: semlayer-drift-service
+      containers:
+      - name: drift-service
+        image: "{{ DOCKER_REGISTRY }}/semlayer-drift-service:{{ IMAGE_TAG }}"
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8082
+          name: http
+        - containerPort: 9090
+          name: prometheus
+        envFrom:
+        - configMapRef:
+            name: semlayer-region-config
+        resources:
+          requests:
+            cpu: 500m
+            memory: 2Gi
+          limits:
+            cpu: 2000m
+            memory: 4Gi
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8082
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: 8082
+          initialDelaySeconds: 10
+          periodSeconds: 5
+---
+# Service for Drift Detection
+apiVersion: v1
+kind: Service
+metadata:
+  name: semlayer-drift-service
+  namespace: semlayer
+  labels:
+    app: drift-service
+    region: "{{ REGION_CODE }}"
+spec:
+  type: ClusterIP
+  ports:
+  - port: 8082
+    targetPort: 8082
+    protocol: TCP
+    name: http
+  - port: 9090
+    targetPort: 9090
+    protocol: TCP
+    name: prometheus
+  selector:
+    app: drift-service
+    region: "{{ REGION_CODE }}"
+---
+# Discovery Service (Region-Scoped)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: semlayer-discovery-service
+  namespace: semlayer
+  labels:
+    app: discovery-service
+    region: "{{ REGION_CODE }}"
+spec:
+  replicas: { ? { DISCOVERY_SERVICE_REPLICAS } }
+  selector:
+    matchLabels:
+      app: discovery-service
+      region: "{{ REGION_CODE }}"
+  template:
+    metadata:
+      labels:
+        app: discovery-service
+        region: "{{ REGION_CODE }}"
+    spec:
+      serviceAccountName: semlayer-discovery-service
+      containers:
+      - name: discovery-service
+        image: "{{ DOCKER_REGISTRY }}/semlayer-discovery-service:{{ IMAGE_TAG }}"
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8083
+          name: http
+        - containerPort: 9091
+          name: prometheus
+        envFrom:
+        - configMapRef:
+            name: semlayer-region-config
+        resources:
+          requests:
+            cpu: 500m
+            memory: 2Gi
+          limits:
+            cpu: 2000m
+            memory: 4Gi
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8083
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: 8083
+          initialDelaySeconds: 10
+          periodSeconds: 5
+---
+# Service for Discovery
+apiVersion: v1
+kind: Service
+metadata:
+  name: semlayer-discovery-service
+  namespace: semlayer
+  labels:
+    app: discovery-service
+    region: "{{ REGION_CODE }}"
+spec:
+  type: ClusterIP
+  ports:
+  - port: 8083
+    targetPort: 8083
+    protocol: TCP
+    name: http
+  - port: 9091
+    targetPort: 9091
+    protocol: TCP
+    name: prometheus
+  selector:
+    app: discovery-service
+    region: "{{ REGION_CODE }}"
+---
+# Time-Series Service (Region-Scoped)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: semlayer-ts-service
+  namespace: semlayer
+  labels:
+    app: ts-service
+    region: "{{ REGION_CODE }}"
+spec:
+  replicas: { ? { TS_SERVICE_REPLICAS } }
+  selector:
+    matchLabels:
+      app: ts-service
+      region: "{{ REGION_CODE }}"
+  template:
+    metadata:
+      labels:
+        app: ts-service
+        region: "{{ REGION_CODE }}"
+    spec:
+      serviceAccountName: semlayer-ts-service
+      containers:
+      - name: ts-service
+        image: "{{ DOCKER_REGISTRY }}/semlayer-ts-service:{{ IMAGE_TAG }}"
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8084
+          name: http
+        - containerPort: 9092
+          name: prometheus
+        envFrom:
+        - configMapRef:
+            name: semlayer-region-config
+        resources:
+          requests:
+            cpu: 1000m
+            memory: 4Gi
+          limits:
+            cpu: 4000m
+            memory: 8Gi
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8084
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: 8084
+          initialDelaySeconds: 10
+          periodSeconds: 5
+---
+# Service for Time-Series
+apiVersion: v1
+kind: Service
+metadata:
+  name: semlayer-ts-service
+  namespace: semlayer
+  labels:
+    app: ts-service
+    region: "{{ REGION_CODE }}"
+spec:
+  type: ClusterIP
+  ports:
+  - port: 8084
+    targetPort: 8084
+    protocol: TCP
+    name: http
+  - port: 9092
+    targetPort: 9092
+    protocol: TCP
+    name: prometheus
+  selector:
+    app: ts-service
+    region: "{{ REGION_CODE }}"
+---
+# Region API Gateway
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: semlayer-api-gateway
+  namespace: semlayer
+  labels:
+    app: api-gateway
+    region: "{{ REGION_CODE }}"
+spec:
+  replicas: { ? { API_GATEWAY_REPLICAS } }
+  selector:
+    matchLabels:
+      app: api-gateway
+      region: "{{ REGION_CODE }}"
+  template:
+    metadata:
+      labels:
+        app: api-gateway
+        region: "{{ REGION_CODE }}"
+    spec:
+      serviceAccountName: semlayer-api-gateway
+      containers:
+      - name: api-gateway
+        image: "{{ DOCKER_REGISTRY }}/semlayer-api-gateway:{{ IMAGE_TAG }}"
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8080
+          name: http
+        - containerPort: 8443
+          name: https
+        - containerPort: 9093
+          name: prometheus
+        envFrom:
+        - configMapRef:
+            name: semlayer-region-config
+        volumeMounts:
+        - name: mtls-certs
+          mountPath: /etc/semlayer/certs
+          readOnly: true
+        resources:
+          requests:
+            cpu: 500m
+            memory: 1Gi
+          limits:
+            cpu: 2000m
+            memory: 2Gi
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 10
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: 8080
+          initialDelaySeconds: 5
+          periodSeconds: 5
+      volumes:
+      - name: mtls-certs
+        secret:
+          secretName: semlayer-mtls-certs
+---
+# Service for API Gateway
+apiVersion: v1
+kind: Service
+metadata:
+  name: semlayer-api-gateway
+  namespace: semlayer
+  labels:
+    app: api-gateway
+    region: "{{ REGION_CODE }}"
+spec:
+  type: LoadBalancer
+  ports:
+  - port: 80
+    targetPort: 8080
+    protocol: TCP
+    name: http
+  - port: 443
+    targetPort: 8443
+    protocol: TCP
+    name: https
+  selector:
+    app: api-gateway
+    region: "{{ REGION_CODE }}"
+---
+# Prometheus (Region-Scoped)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: semlayer-prometheus
+  namespace: semlayer
+  labels:
+    app: prometheus
+    region: "{{ REGION_CODE }}"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: prometheus
+      region: "{{ REGION_CODE }}"
+  template:
+    metadata:
+      labels:
+        app: prometheus
+        region: "{{ REGION_CODE }}"
+    spec:
+      serviceAccountName: semlayer-prometheus
+      containers:
+      - name: prometheus
+        image: "prom/prometheus:latest"
+        ports:
+        - containerPort: 9090
+          name: prometheus
+        args:
+        - "--config.file=/etc/prometheus/prometheus.yml"
+        - "--storage.tsdb.path=/prometheus"
+        - "--storage.tsdb.retention.time=30d"
+        volumeMounts:
+        - name: prometheus-config
+          mountPath: /etc/prometheus
+        - name: prometheus-storage
+          mountPath: /prometheus
+        resources:
+          requests:
+            cpu: 500m
+            memory: 2Gi
+          limits:
+            cpu: 2000m
+            memory: 4Gi
+      volumes:
+      - name: prometheus-config
+        configMap:
+          name: semlayer-prometheus-config
+      - name: prometheus-storage
+        emptyDir: {}
+---
+# Prometheus Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: semlayer-prometheus
+  namespace: semlayer
+  labels:
+    app: prometheus
+    region: "{{ REGION_CODE }}"
+spec:
+  type: ClusterIP
+  ports:
+  - port: 9090
+    targetPort: 9090
+    protocol: TCP
+  selector:
+    app: prometheus
+    region: "{{ REGION_CODE }}"
+---
+# Prometheus ConfigMap (Region-Scoped Scrape Targets)
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: semlayer-prometheus-config
+  namespace: semlayer
+data:
+  prometheus.yml: |
+    global:
+      scrape_interval: 15s
+      evaluation_interval: 15s
+      external_labels:
+        region: '{{ REGION_CODE }}'
+    scrape_configs:
+      - job_name: 'semlayer-materialization'
+        static_configs:
+          - targets: ['semlayer-materialization-service:9090']
+      - job_name: 'semlayer-drift'
+        static_configs:
+          - targets: ['semlayer-drift-service:9090']
+      - job_name: 'semlayer-discovery'
+        static_configs:
+          - targets: ['semlayer-discovery-service:9091']
+      - job_name: 'semlayer-ts'
+        static_configs:
+          - targets: ['semlayer-ts-service:9092']
+      - job_name: 'semlayer-api-gateway'
+        static_configs:
+          - targets: ['semlayer-api-gateway:9093']
+---
+# ServiceAccount for Temporal Worker
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: semlayer-temporal-worker
+  namespace: semlayer
+---
+# ServiceAccount for Materialization Service
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: semlayer-materialization-service
+  namespace: semlayer
+---
+# ServiceAccount for Drift Service
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: semlayer-drift-service
+  namespace: semlayer
+---
+# ServiceAccount for Discovery Service
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: semlayer-discovery-service
+  namespace: semlayer
+---
+# ServiceAccount for TS Service
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: semlayer-ts-service
+  namespace: semlayer
+---
+# ServiceAccount for API Gateway
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: semlayer-api-gateway
+  namespace: semlayer
+---
+# ServiceAccount for Prometheus
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: semlayer-prometheus
+  namespace: semlayer
+---
+# Ingress for Region API Gateway
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: semlayer-api-ingress
+  namespace: semlayer
+  annotations:
+    kubernetes.io/ingress.class: nginx
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+spec:
+  tls:
+  - hosts:
+    - "api-{{ REGION_CODE }}.semlayer.internal"
+    secretName: semlayer-api-tls
+  rules:
+  - host: "api-{{ REGION_CODE }}.semlayer.internal"
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: semlayer-api-gateway
+            port:
+              number: 8080
+---
+# HorizontalPodAutoscaler for Materialization Service
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: semlayer-materialization-hpa
+  namespace: semlayer
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: semlayer-materialization-service
+  minReplicas: { ? { MATERIALIZATION_MIN_REPLICAS } }
+  maxReplicas: { ? { MATERIALIZATION_MAX_REPLICAS } }
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 80
+---
+# HorizontalPodAutoscaler for Drift Service
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: semlayer-drift-hpa
+  namespace: semlayer
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: semlayer-drift-service
+  minReplicas: { ? { DRIFT_MIN_REPLICAS } }
+  maxReplicas: { ? { DRIFT_MAX_REPLICAS } }
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+---
+# PodDisruptionBudget for High Availability
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: semlayer-materialization-pdb
+  namespace: semlayer
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: materialization-service

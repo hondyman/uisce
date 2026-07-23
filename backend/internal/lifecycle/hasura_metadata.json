@@ -1,0 +1,46 @@
+{
+    "type": "bulk",
+    "args": [
+        {
+            "type": "pg_track_table",
+            "args": {
+                "source": "default",
+                "schema": "public",
+                "name": "entities"
+            }
+        },
+        {
+            "type": "pg_track_table",
+            "args": {
+                "source": "default",
+                "schema": "public",
+                "name": "relationships"
+            }
+        },
+        {
+            "type": "pg_create_array_relationship",
+            "args": {
+                "source": "default",
+                "table": "entities",
+                "name": "related_to",
+                "using": {
+                    "foreign_key_constraint_on": {
+                        "table": "relationships",
+                        "column": "from_entity_id"
+                    }
+                }
+            }
+        },
+        {
+            "type": "pg_create_object_relationship",
+            "args": {
+                "source": "default",
+                "table": "relationships",
+                "name": "target_entity",
+                "using": {
+                    "foreign_key_constraint_on": "to_entity_id"
+                }
+            }
+        }
+    ]
+}

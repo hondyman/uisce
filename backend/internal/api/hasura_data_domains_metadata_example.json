@@ -1,0 +1,15 @@
+{
+  "version": 3,
+  "tables": [
+    {
+      "table": { "schema": "public", "name": "data_domain" },
+      "configuration": {
+        "custom_root_fields": {},
+        "custom_column_names": {}
+      }
+    }
+  ],
+  "actions": [],
+  "allowlist": [],
+  "query_collections": []
+}

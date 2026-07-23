@@ -1,0 +1,11 @@
+{
+  "commit": "unknown",
+  "generator": "asl-type-generator",
+  "packages": [
+    "../../../internal/services",
+    "../../../internal/rules",
+    "../../../internal/models"
+  ],
+  "timestamp": "2026-02-02T00:00:00Z",
+  "version": "1.0.0"
+}

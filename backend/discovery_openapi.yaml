@@ -1,0 +1,593 @@
+openapi: 3.0.3
+info:
+  title: SemLayer Feature Discovery API
+  description: Automated feature discovery and candidate ranking for operational intelligence
+  version: 3.23.0
+  contact:
+    name: SemLayer Engineering
+    url: https://semlayer.com
+  license:
+    name: Proprietary
+
+servers:
+- url: http://localhost:8080/api/v3
+  description: Local development
+- url: https://api.semlayer.com/api/v3
+  description: Production
+
+security:
+- bearerAuth: []
+- header_auth: []
+
+paths:
+  /discovery/start:
+    post:
+      summary: Start a new discovery workflow
+      description: Initiates an automated feature discovery process across configured data sources
+      operationId: startDiscovery
+      tags:
+      - Discovery Workflow
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StartDiscoveryRequest'
+      responses:
+        '201':
+          description: Discovery workflow started successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DiscoveryRunResponse'
+        '400':
+          description: Invalid request parameters
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Conflicting discovery workflow already running
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /discovery/runs/{runID}:
+    get:
+      summary: Get discovery run status
+      description: Retrieve the current status and metrics of a discovery workflow execution
+      operationId: getDiscoveryRun
+      tags:
+      - Discovery Workflow
+      parameters:
+      - name: runID
+        in: path
+        required: true
+        description: Unique discovery run identifier
+        schema:
+          type: string
+          example: discovery-1707481200000000
+      responses:
+        '200':
+          description: Discovery run details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DiscoveryRunResponse'
+        '404':
+          description: Discovery run not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /discovery/candidates:
+    get:
+      summary: List discovery candidates
+      description: Retrieve paginated list of discovered feature candidates with optional filtering and sorting
+      operationId: listCandidates
+      tags:
+      - Candidates
+      parameters:
+      - name: page
+        in: query
+        description: Page number (1-indexed)
+        schema:
+          type: integer
+          default: 1
+          minimum: 1
+      - name: page_size
+        in: query
+        description: Items per page (1-100, default capped at 100)
+        schema:
+          type: integer
+          default: 20
+          minimum: 1
+          maximum: 100
+      - name: status
+        in: query
+        description: Filter by candidate status
+        schema:
+          type: string
+          enum: [ candidate, approved, rejected ]
+      - name: source_db
+        in: query
+        description: Filter by source database (postgres, trino, starrocks)
+        schema:
+          type: string
+      - name: min_score
+        in: query
+        description: Minimum scoring threshold (0.0-1.0)
+        schema:
+          type: number
+          format: float
+          default: 0.0
+          minimum: 0.0
+          maximum: 1.0
+      - name: sort_by
+        in: query
+        description: Sorting field
+        schema:
+          type: string
+          enum: [ score, name, discovered_at ]
+          default: score
+      responses:
+        '200':
+          description: Paginated list of candidates
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CandidateListResponse'
+        '400':
+          description: Invalid query parameters
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /discovery/candidates/{candidateID}:
+    get:
+      summary: Get candidate details
+      description: Retrieve complete details and scoring rationale for a specific candidate
+      operationId: getCandidate
+      tags:
+      - Candidates
+      parameters:
+      - name: candidateID
+        in: path
+        required: true
+        description: Unique candidate identifier
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Full candidate details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CandidateDetailResponse'
+        '404':
+          description: Candidate not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /discovery/approve:
+    post:
+      summary: Approve a candidate
+      description: Move a candidate to the feature catalog, triggering materialization pipeline
+      operationId: approveCandidate
+      tags:
+      - Approval Workflow
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ApproveRequest'
+      responses:
+        '200':
+          description: Candidate approved and added to catalog
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CandidateDetailResponse'
+        '404':
+          description: Candidate not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Candidate already in catalog or rejected
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /discovery/reject:
+    post:
+      summary: Reject a candidate
+      description: Reject a candidate, preventing it from being added to the feature catalog
+      operationId: rejectCandidate
+      tags:
+      - Approval Workflow
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RejectRequest'
+      responses:
+        '200':
+          description: Candidate rejected
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CandidateDetailResponse'
+        '404':
+          description: Candidate not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Candidate already approved or rejected
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /discovery/stats:
+    get:
+      summary: Get discovery statistics
+      description: Retrieve aggregated statistics for dashboard visualization (total, approved, rejected counts, distributions)
+      operationId: getDiscoveryStats
+      tags:
+      - Statistics
+      responses:
+        '200':
+          description: Aggregated discovery statistics
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DiscoveryStatsResponse'
+
+  /discovery/search:
+    get:
+      summary: Search candidates by name or field
+      description: Full-text search on candidate names and source field names (minimum 2 characters)
+      operationId: searchCandidates
+      tags:
+      - Candidates
+      parameters:
+      - name: q
+        in: query
+        required: true
+        description: Search query (minimum 2 characters)
+        schema:
+          type: string
+          minLength: 2
+      responses:
+        '200':
+          description: Search results
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SearchResultsResponse'
+        '400':
+          description: Invalid search query
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+    header_auth:
+      type: apiKey
+      in: header
+      name: X-User-ID
+      description: User identifier for audit tracking
+
+  schemas:
+    StartDiscoveryRequest:
+      type: object
+      required:
+      - database_type
+      - use_case
+      properties:
+        database_type:
+          type: string
+          enum: [ postgres, trino, starrocks, auto ]
+          description: Target database or 'auto' for all configured sources
+        scan_interval_hours:
+          type: integer
+          default: 24
+          description: Scanning interval in hours (1-720)
+        use_case:
+          type: string
+          enum: [ forecasting, classification, anomaly_detection, descriptive ]
+          description: Use case for feature scoring optimization
+        scoring_weights:
+          type: object
+          description: Custom scoring weights override (optional)
+          properties:
+            completeness:
+              type: number
+              format: float
+              minimum: 0.0
+              maximum: 1.0
+            cardinality:
+              type: number
+              format: float
+              minimum: 0.0
+              maximum: 1.0
+            business_value:
+              type: number
+              format: float
+              minimum: 0.0
+              maximum: 1.0
+            technical_score:
+              type: number
+              format: float
+              minimum: 0.0
+              maximum: 1.0
+            signal:
+              type: number
+              format: float
+              minimum: 0.0
+              maximum: 1.0
+            timeliness:
+              type: number
+              format: float
+              minimum: 0.0
+              maximum: 1.0
+
+    DiscoveryRunResponse:
+      type: object
+      properties:
+        run_id:
+          type: string
+          example: discovery-1707481200000000
+        status:
+          type: string
+          enum: [ pending, running, success, partial, failed ]
+        sources_scanned:
+          type: array
+          items:
+            type: string
+          example: [ "postgres", "trino" ]
+        candidates_found:
+          type: integer
+          example: 245
+        started_at:
+          type: string
+          format: date-time
+        completed_at:
+          type: string
+          format: date-time
+          nullable: true
+        error_message:
+          type: string
+          nullable: true
+
+    CandidateListResponse:
+      type: object
+      properties:
+        total_count:
+          type: integer
+          example: 1500
+        current_page:
+          type: integer
+          example: 1
+        page_size:
+          type: integer
+          example: 20
+        total_pages:
+          type: integer
+          example: 75
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/CandidateItem'
+
+    CandidateItem:
+      type: object
+      properties:
+        candidate_id:
+          type: string
+        name:
+          type: string
+        source_database:
+          type: string
+        source_field:
+          type: string
+        data_type:
+          type: string
+          enum: [ numeric, categorical, datetime, text, binary ]
+        business_value:
+          type: number
+          format: float
+          description: Composite score 0.0-1.0
+        status:
+          type: string
+          enum: [ candidate, approved, rejected ]
+        discovered_at:
+          type: string
+          format: date-time
+
+    CandidateDetailResponse:
+      type: object
+      properties:
+        candidate_id:
+          type: string
+        name:
+          type: string
+        source_database:
+          type: string
+        source_field:
+          type: string
+        data_type:
+          type: string
+        completeness:
+          type: number
+          format: float
+          description: Non-null percentage
+        cardinality:
+          type: number
+          format: float
+          description: Unique value ratio
+        business_value:
+          type: number
+          format: float
+        technical_score:
+          type: number
+          format: float
+        status:
+          type: string
+        rationale:
+          type: string
+          description: Human-readable explanation of scores
+        discovered_at:
+          type: string
+          format: date-time
+        approved_by:
+          type: string
+          nullable: true
+        approved_at:
+          type: string
+          format: date-time
+          nullable: true
+        rejection_reason:
+          type: string
+          nullable: true
+        notes:
+          type: string
+          nullable: true
+
+    ApproveRequest:
+      type: object
+      required:
+      - candidate_id
+      properties:
+        candidate_id:
+          type: string
+        feature_name:
+          type: string
+          nullable: true
+          description: Override default feature name
+        notes:
+          type: string
+          nullable: true
+
+    RejectRequest:
+      type: object
+      required:
+      - candidate_id
+      - reason
+      properties:
+        candidate_id:
+          type: string
+        reason:
+          type: string
+          minLength: 5
+
+    DiscoveryStatsResponse:
+      type: object
+      properties:
+        total_candidates:
+          type: integer
+        approved_count:
+          type: integer
+        rejected_count:
+          type: integer
+        average_score:
+          type: number
+          format: float
+        median_score:
+          type: number
+          format: float
+        source_distribution:
+          type: object
+          additionalProperties:
+            type: integer
+          example:
+            postgres: 450
+            trino: 300
+            starrocks: 250
+        data_type_distribution:
+          type: object
+          additionalProperties:
+            type: integer
+          example:
+            numeric: 600
+            categorical: 250
+            datetime: 150
+        score_distribution:
+          type: array
+          items:
+            type: object
+            properties:
+              range:
+                type: string
+                example: "0.0-0.2"
+              count:
+                type: integer
+        last_discovery_run:
+          type: object
+          properties:
+            run_id:
+              type: string
+            status:
+              type: string
+            duration_seconds:
+              type: integer
+            candidates_found:
+              type: integer
+
+    SearchResultsResponse:
+      type: object
+      properties:
+        query:
+          type: string
+        result_count:
+          type: integer
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/CandidateItem'
+
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+          description: Error message
+        code:
+          type: string
+          description: Machine-readable error code
+        timestamp:
+          type: string
+          format: date-time
+        request_id:
+          type: string
+          nullable: true
+
+tags:
+- name: Discovery Workflow
+  description: Start and monitor discovery workflows
+- name: Candidates
+  description: Retrieve and search feature candidates
+- name: Approval Workflow
+  description: Approve or reject candidates
+- name: Statistics
+  description: Dashboard statistics and aggregations
+
+x-internal: false

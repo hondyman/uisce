@@ -1,0 +1,7 @@
+2026/01/12 21:55:06 catalog-sync listening on :8090
+Already up to date.
+2026/01/12 21:57:34 sync CDM nodes: publish node event 2016-clearstream-cta-eng-law-schema-1.4.json: fetch schema: {"error_code":40401,"message":"Subject 'catalog-change-event-value' not found."}
+Already up to date.
+2026/01/12 22:15:12 sync CDM nodes: publish node event 2016-clearstream-cta-ny-law-schema-1.4.json: fetch schema: {"error_code":40401,"message":"Subject 'catalog-change-event-value' not found."}
+Already up to date.
+2026/01/12 22:15:47 sync CDM nodes: publish node event 2016-clearstream-sa-lux-law-schema-0.7.json: fetch schema: {"error_code":40401,"message":"Subject 'catalog-change-event-value' not found."}

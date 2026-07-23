@@ -1,0 +1,623 @@
+cubes:
+  - name: categories
+    sql: SELECT * FROM public.categories
+    measures:
+      - name: count
+        type: count
+    dimensions:
+      - name: category_id
+        sql: category_id
+        type: number
+        primary_key: true
+      - name: category_name
+        sql: category_name
+        type: string
+      - name: description
+        sql: description
+        type: string
+
+  - name: customer_demographics
+    sql: SELECT * FROM public.customer_demographics
+    measures:
+      - name: count
+        type: count
+    dimensions:
+      - name: customer_type_id
+        sql: customer_type_id
+        type: string
+        primary_key: true
+      - name: customer_desc
+        sql: customer_desc
+        type: string
+
+  - name: customers
+    sql: SELECT * FROM public.customers
+    joins:
+      - name: orders
+        sql: "{CUBE}.customer_id = {orders}.customer_id"
+        relationship: one_to_many
+      - name: customer_demographics
+        sql: "{CUBE}.customer_id = {customer_customer_demo}.customer_id AND {customer_customer_demo}.customer_type_id = {customer_demographics}.customer_type_id"
+        relationship: many_to_many
+    measures:
+      - name: count
+        type: count
+    dimensions:
+      - name: customer_id
+        sql: customer_id
+        type: string
+        primary_key: true
+      - name: company_name
+        sql: company_name
+        type: string
+      - name: contact_name
+        sql: contact_name
+        type: string
+      - name: contact_title
+        sql: contact_title
+        type: string
+      - name: address
+        sql: address
+        type: string
+      - name: city
+        sql: city
+        type: string
+      - name: region
+        sql: region
+        type: string
+      - name: postal_code
+        sql: postal_code
+        type: string
+      - name: country
+        sql: country
+        type: string
+      - name: phone
+        sql: phone
+        type: string
+      - name: fax
+        sql: fax
+        type: string
+
+  - name: customer_customer_demo
+    sql: SELECT * FROM public.customer_customer_demo
+    measures:
+      - name: count
+        type: count
+    dimensions:
+      - name: customer_id
+        sql: customer_id
+        type: string
+      - name: customer_type_id
+        sql: customer_type_id
+        type: string
+
+  - name: dim_country_cd
+    sql: SELECT * FROM public.dim_country_cd
+    measures:
+      - name: count
+        type: count
+    dimensions:
+      - name: cntry_cd
+        sql: cntry_cd
+        type: string
+        primary_key: true
+      - name: cntry_name
+        sql: cntry_name
+        type: string
+
+  - name: employees
+    sql: SELECT * FROM public.employees
+    joins:
+      - name: orders
+        sql: "{CUBE}.employee_id = {orders}.employee_id"
+        relationship: one_to_many
+      - name: territories
+        sql: "{CUBE}.employee_id = {employee_territories}.employee_id AND {employee_territories}.territory_id = {territories}.territory_id"
+        relationship: many_to_many
+    measures:
+      - name: count
+        type: count
+    dimensions:
+      - name: employee_id
+        sql: employee_id
+        type: number
+        primary_key: true
+      - name: last_name
+        sql: last_name
+        type: string
+      - name: first_name
+        sql: first_name
+        type: string
+      - name: title
+        sql: title
+        type: string
+      - name: title_of_courtesy
+        sql: title_of_courtesy
+        type: string
+      - name: birth_date
+        sql: birth_date
+        type: time
+      - name: hire_date
+        sql: hire_date
+        type: time
+      - name: address
+        sql: address
+        type: string
+      - name: city
+        sql: city
+        type: string
+      - name: region
+        sql: region
+        type: string
+      - name: postal_code
+        sql: postal_code
+        type: string
+      - name: country
+        sql: country
+        type: string
+      - name: home_phone
+        sql: home_phone
+        type: string
+      - name: extension
+        sql: extension
+        type: string
+      - name: notes
+        sql: notes
+        type: string
+      - name: reports_to
+        sql: reports_to
+        type: number
+      - name: photo_path
+        sql: photo_path
+        type: string
+
+  - name: employee_territories
+    sql: SELECT * FROM public.employee_territories
+    measures:
+      - name: count
+        type: count
+    dimensions:
+      - name: employee_id
+        sql: employee_id
+        type: number
+      - name: territory_id
+        sql: territory_id
+        type: string
+
+  - name: orders
+    sql: SELECT * FROM public.orders
+    joins:
+      - name: customers
+        sql: "{CUBE}.customer_id = {customers}.customer_id"
+        relationship: many_to_one
+      - name: employees
+        sql: "{CUBE}.employee_id = {employees}.employee_id"
+        relationship: many_to_one
+      - name: shippers
+        sql: "{CUBE}.ship_via = {shippers}.shipper_id"
+        relationship: many_to_one
+      - name: order_details
+        sql: "{CUBE}.order_id = {order_details}.order_id"
+        relationship: one_to_many
+    measures:
+      - name: count
+        type: count
+      - name: total_freight
+        sql: freight
+        type: sum
+    dimensions:
+      - name: order_id
+        sql: order_id
+        type: number
+        primary_key: true
+      - name: customer_id
+        sql: customer_id
+        type: string
+      - name: employee_id
+        sql: employee_id
+        type: number
+      - name: order_date
+        sql: order_date
+        type: time
+      - name: required_date
+        sql: required_date
+        type: time
+      - name: shipped_date
+        sql: shipped_date
+        type: time
+      - name: ship_via
+        sql: ship_via
+        type: number
+      - name: freight
+        sql: freight
+        type: number
+      - name: ship_name
+        sql: ship_name
+        type: string
+      - name: ship_address
+        sql: ship_address
+        type: string
+      - name: ship_city
+        sql: ship_city
+        type: string
+      - name: ship_region
+        sql: ship_region
+        type: string
+      - name: ship_postal_code
+        sql: ship_postal_code
+        type: string
+      - name: ship_country
+        sql: ship_country
+        type: string
+
+  - name: order_details
+    sql: SELECT * FROM public.order_details
+    joins:
+      - name: orders
+        sql: "{CUBE}.order_id = {orders}.order_id"
+        relationship: many_to_one
+      - name: products
+        sql: "{CUBE}.product_id = {products}.product_id"
+        relationship: many_to_one
+    measures:
+      - name: count
+        type: count
+      - name: total_quantity
+        sql: quantity
+        type: sum
+      - name: total_revenue
+        sql: "unit_price * quantity * (1 - discount)"
+        type: sum
+      - name: average_discount
+        sql: discount
+        type: avg
+    dimensions:
+      - name: order_id
+        sql: order_id
+        type: number
+      - name: product_id
+        sql: product_id
+        type: number
+      - name: unit_price
+        sql: unit_price
+        type: number
+      - name: quantity
+        sql: quantity
+        type: number
+      - name: discount
+        sql: discount
+        type: number
+
+  - name: products
+    sql: SELECT * FROM public.products
+    joins:
+      - name: suppliers
+        sql: "{CUBE}.supplier_id = {suppliers}.supplier_id"
+        relationship: many_to_one
+      - name: categories
+        sql: "{CUBE}.category_id = {categories}.category_id"
+        relationship: many_to_one
+      - name: order_details
+        sql: "{CUBE}.product_id = {order_details}.product_id"
+        relationship: one_to_many
+    measures:
+      - name: count
+        type: count
+      - name: total_units_in_stock
+        sql: units_in_stock
+        type: sum
+      - name: average_unit_price
+        sql: unit_price
+        type: avg
+    dimensions:
+      - name: product_id
+        sql: product_id
+        type: number
+        primary_key: true
+      - name: product_name
+        sql: product_name
+        type: string
+      - name: supplier_id
+        sql: supplier_id
+        type: number
+      - name: category_id
+        sql: category_id
+        type: number
+      - name: quantity_per_unit
+        sql: quantity_per_unit
+        type: string
+      - name: unit_price
+        sql: unit_price
+        type: number
+      - name: units_in_stock
+        sql: units_in_stock
+        type: number
+      - name: units_on_order
+        sql: units_on_order
+        type: number
+      - name: reorder_level
+        sql: reorder_level
+        type: number
+      - name: discontinued
+        sql: discontinued
+        type: boolean
+
+  - name: region
+    sql: SELECT * FROM public.region
+    measures:
+      - name: count
+        type: count
+    dimensions:
+      - name: region_id
+        sql: region_id
+        type: number
+        primary_key: true
+      - name: region_description
+        sql: region_description
+        type: string
+
+  - name: shippers
+    sql: SELECT * FROM public.shippers
+    joins:
+      - name: orders
+        sql: "{CUBE}.shipper_id = {orders}.ship_via"
+        relationship: one_to_many
+    measures:
+      - name: count
+        type: count
+    dimensions:
+      - name: shipper_id
+        sql: shipper_id
+        type: number
+        primary_key: true
+      - name: company_name
+        sql: company_name
+        type: string
+      - name: phone
+        sql: phone
+        type: string
+
+  - name: suppliers
+    sql: SELECT * FROM public.suppliers
+    joins:
+      - name: products
+        sql: "{CUBE}.supplier_id = {products}.supplier_id"
+        relationship: one_to_many
+    measures:
+      - name: count
+        type: count
+    dimensions:
+      - name: supplier_id
+        sql: supplier_id
+        type: number
+        primary_key: true
+      - name: company_name
+        sql: company_name
+        type: string
+      - name: contact_name
+        sql: contact_name
+        type: string
+      - name: contact_title
+        sql: contact_title
+        type: string
+      - name: address
+        sql: address
+        type: string
+      - name: city
+        sql: city
+        type: string
+      - name: region
+        sql: region
+        type: string
+      - name: postal_code
+        sql: postal_code
+        type: string
+      - name: country
+        sql: country
+        type: string
+      - name: phone
+        sql: phone
+        type: string
+      - name: fax
+        sql: fax
+        type: string
+      - name: homepage
+        sql: homepage
+        type: string
+
+  - name: territories
+    sql: SELECT * FROM public.territories
+    joins:
+      - name: region
+        sql: "{CUBE}.region_id = {region}.region_id"
+        relationship: many_to_one
+      - name: employees
+        sql: "{CUBE}.territory_id = {employee_territories}.territory_id AND {employee_territories}.employee_id = {employees}.employee_id"
+        relationship: many_to_many
+    measures:
+      - name: count
+        type: count
+    dimensions:
+      - name: territory_id
+        sql: territory_id
+        type: string
+        primary_key: true
+      - name: territory_description
+        sql: territory_description
+        type: string
+      - name: region_id
+        sql: region_id
+        type: number
+
+  - name: us_states
+    sql: SELECT * FROM public.us_states
+    measures:
+      - name: count
+        type: count
+    dimensions:
+      - name: state_id
+        sql: state_id
+        type: number
+        primary_key: true
+      - name: state_name
+        sql: state_name
+        type: string
+      - name: state_abbr
+        sql: state_abbr
+        type: string
+      - name: state_region
+        sql: state_region
+        type: string
+
+  - name: customers_vw
+    sql: SELECT * FROM public.customers_vw
+    measures:
+      - name: count
+        type: count
+    dimensions:
+      - name: customer_id
+        sql: customer_id
+        type: string
+        primary_key: true
+      - name: company_name
+        sql: company_name
+        type: string
+      - name: contact_name
+        sql: contact_name
+        type: string
+      - name: contact_title
+        sql: contact_title
+        type: string
+      - name: address
+        sql: address
+        type: string
+      - name: city
+        sql: city
+        type: string
+      - name: region
+        sql: region
+        type: string
+      - name: postal_code
+        sql: postal_code
+        type: string
+      - name: country
+        sql: country
+        type: string
+      - name: phone
+        sql: phone
+        type: string
+      - name: fax
+        sql: fax
+        type: string
+
+  - name: employees_vw
+    sql: SELECT * FROM public.employees_vw
+    measures:
+      - name: count
+        type: count
+    dimensions:
+      - name: employee_id
+        sql: employee_id
+        type: number
+        primary_key: true
+      - name: last_name
+        sql: last_name
+        type: string
+      - name: first_name
+        sql: first_name
+        type: string
+      - name: title
+        sql: title
+        type: string
+      - name: title_of_courtesy
+        sql: title_of_courtesy
+        type: string
+      - name: birth_date
+        sql: birth_date
+        type: time
+      - name: hire_date
+        sql: hire_date
+        type: time
+      - name: address
+        sql: address
+        type: string
+      - name: city
+        sql: city
+        type: string
+      - name: region
+        sql: region
+        type: string
+      - name: postal_code
+        sql: postal_code
+        type: string
+      - name: country
+        sql: country
+        type: string
+      - name: home_phone
+        sql: home_phone
+        type: string
+      - name: extension
+        sql: extension
+        type: string
+      - name: notes
+        sql: notes
+        type: string
+      - name: reports_to
+        sql: reports_to
+        type: number
+      - name: photo_path
+        sql: photo_path
+        type: string
+
+  - name: orders_vw
+    sql: SELECT * FROM public.orders_vw
+    measures:
+      - name: count
+        type: count
+      - name: total_freight
+        sql: freight
+        type: sum
+    dimensions:
+      - name: order_id
+        sql: order_id
+        type: number
+        primary_key: true
+      - name: customer_id
+        sql: customer_id
+        type: string
+      - name: employee_id
+        sql: employee_id
+        type: number
+      - name: order_date
+        sql: order_date
+        type: time
+      - name: required_date
+        sql: required_date
+        type: time
+      - name: shipped_date
+        sql: shipped_date
+        type: time
+      - name: ship_via
+        sql: ship_via
+        type: number
+      - name: freight
+        sql: freight
+        type: number
+      - name: ship_name
+        sql: ship_name
+        type: string
+      - name: ship_address
+        sql: ship_address
+        type: string
+      - name: ship_city
+        sql: ship_city
+        type: string
+      - name: ship_region
+        sql: ship_region
+        type: string
+      - name: ship_postal_code
+        sql: ship_postal_code
+        type: string
+      - name: ship_country
+        sql: ship_country
+        type: string

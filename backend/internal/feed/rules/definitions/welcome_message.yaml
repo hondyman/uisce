@@ -1,0 +1,9 @@
+# Welcome Message Rule
+# Always displays - no conditions
+
+id: rule_welcome
+card_id: welcome_message
+description: Always show welcome message
+priority: 100
+
+conditions: []

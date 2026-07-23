@@ -1,0 +1,157 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://your.company/schemas/financial_template.schema.json",
+  "title": "Financial Calculation Template",
+  "type": "object",
+  "required": ["node_id", "node_type", "domain", "category", "subcategory", "version", "owner", "financial_calc", "data_sources"],
+  "properties": {
+    "node_id": { "type": "string", "pattern": "^[a-z0-9_\\.\\-]+$" },
+    "node_type": { "type": "string", "enum": ["financial_calc"] },
+    "domain": { "type": "string", "enum": ["investment_accounting", "insurance", "banking_lending", "general_finance"] },
+    "category": { "type": "string" },
+    "subcategory": { "type": "string" },
+    "version": { "type": "string", "pattern": "^v\\d+\\.\\d+\\.\\d+$" },
+    "owner": { "type": "string" },
+    "description": { "type": "string" },
+    "tags": { "type": "array", "items": { "type": "string" } },
+    "lineage": { "type": "array", "items": { "type": "string" } },
+    "accessType": {
+      "type": "string",
+      "enum": ["read-only"],
+      "description": "Specifies the CRUD access level for this calculation. 'read-only' indicates it cannot be a direct target of mutations."
+    },
+    "governance": {
+      "type": "object",
+      "properties": {
+        "status": { "type": "string", "enum": ["draft", "reviewed", "golden", "deprecated"] },
+        "steward_group": { "type": "string" },
+        "schema_hash": { "type": "string" },
+        "sla": {
+          "type": "object",
+          "properties": {
+            "refresh_frequency": { "type": "string" },
+            "max_latency": { "type": "string" }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "data_sources": {
+      "type": "object",
+      "additionalProperties": { "type": "string" },
+      "minProperties": 1
+    },
+    "dimensions": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "required": ["name", "sql", "type"],
+          "properties": {
+            "name": { "type": "string" },
+            "sql": { "type": "string" },
+            "type": { "type": "string", "enum": ["string", "number", "time", "boolean"] },
+            "primary_key": { "type": "boolean" },
+            "description": { "type": "string" },
+            "tags": { "type": "array", "items": { "type": "string" } }
+          },
+          "additionalProperties": false
+        }
+      }
+    },
+    "measures": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "required": ["name", "type"],
+          "properties": {
+            "name": { "type": "string" },
+            "sql": { "type": "string" },
+            "type": { "type": "string", "enum": ["sum", "count", "avg", "number"] },
+            "format": { "type": "string" },
+            "description": { "type": "string" },
+            "tags": { "type": "array", "items": { "type": "string" } }
+          },
+          "additionalProperties": true
+        }
+      }
+    },
+    "financial_calc": {
+      "type": "object",
+      "required": ["type"],
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": [
+            "irr","xirr","mirr","npv","dcf_terminal","payback_period",
+            "twr","cagr","ratio","sum_of_ratios","stdev","sharpe_ratio",
+            "beta","expected_loss","amortization","wirr"
+          ]
+        },
+
+        "cash_flows": {
+          "type": "array",
+          "items": { "type": "object", "required": ["amount","period"], "properties": { "amount": { "type": "number" }, "period": { "type": "number" } }, "additionalProperties": false }
+        },
+        "cash_flows_dated": {
+          "type": "array",
+          "items": { "type": "object", "required": ["amount","date"], "properties": { "amount": { "type": "number" }, "date": { "type": "string", "format": "date" } }, "additionalProperties": false }
+        },
+        "guess": { "type": "number" },
+
+        "discount_rate": { "type": "number" },
+        "growth_rate": { "type": "number" },
+
+        "finance_rate": { "type": "number" },
+        "reinvest_rate": { "type": "number" },
+
+        "subperiod_returns": { "type": "array", "items": { "type": "number" } },
+        "start_value": { "type": "number" },
+        "end_value": { "type": "number" },
+        "years": { "type": "number" },
+
+        "numerator": { "type": "string" },
+        "denominator": { "type": "string" },
+        "components": {
+          "type": "array",
+          "items": { "type": "object", "required": ["numerator","denominator"], "properties": { "numerator": { "type": "string" }, "denominator": { "type": "string" } }, "additionalProperties": false }
+        },
+
+        "returns": { "type": "array", "items": { "type": "number" } },
+        "population": { "type": "boolean" },
+        "average_return": { "type": "number" },
+        "risk_free_rate": { "type": "number" },
+        "std_dev": { "type": "number" },
+        "asset_returns": { "type": "array", "items": { "type": "number" } },
+        "bench_returns": { "type": "array", "items": { "type": "number" } },
+
+        "pd": { "type": "number" },
+        "lgd": { "type": "number" },
+        "ead": { "type": "number" },
+
+        "principal": { "type": "number" },
+        "rate": { "type": "number" },
+        "periods": { "type": "integer" },
+
+        "investments": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["weight","cash_flows"],
+            "properties": {
+              "weight": { "type": "number" },
+              "cash_flows": { "$ref": "#/properties/financial_calc/properties/cash_flows" }
+            },
+            "additionalProperties": false
+          }
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

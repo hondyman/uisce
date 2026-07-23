@@ -1,0 +1,43 @@
+"""
+AI Suggest Schema
+Defines operations for the Governed Copilot (AI rule suggestions)
+"""
+
+scalar InheritMode
+
+input AISuggestRuleInput {
+  tenantId: UUID!
+  entity: String!
+  intent: String!
+  targetField: String
+  contextRuleId: UUID
+}
+
+type AISuggestedRule {
+  conditionJson: JSON
+  starlarkSrc: String
+  description: String!
+  severity: String!
+  inheritModeSuggestion: InheritMode!
+  conflictsWith: [UUID!]!
+  testFailureRate: Float!
+  runtimeOk: Boolean!
+}
+
+extend type Mutation {
+  aiSuggestRule(input: AISuggestRuleInput!): AISuggestedRule!
+  logTermAISuggestionFeedback(input: LogTermFeedbackInput!): ID!
+}
+
+input LogTermFeedbackInput {
+  tenantId: UUID!
+  datasourceId: UUID!
+  termId: UUID!
+  nodeId: UUID
+  suggestionId: String!
+  action: String!
+  reason: String
+  oldTermId: UUID
+  features: JSON!
+}
+

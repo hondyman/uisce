@@ -1,0 +1,136 @@
+# =============================================================================
+# Temporal Worker Configuration for Phase 3.15 Analytics Orchestration
+# =============================================================================
+# Load this configuration in the Temporal worker via environment variables
+# or by parsing with a config loader (e.g., viper, config).
+# =============================================================================
+
+temporal:
+  # Temporal server connection
+  server_address: "${TEMPORAL_SERVER_ADDRESS:-localhost:7233}"
+  namespace: "${TEMPORAL_NAMESPACE:-default}"
+  task_queue: "${TEMPORAL_TASK_QUEUE:-analytics-worker}"
+
+  # Worker concurrency and tuning
+  max_concurrent_activity_task_polls: 10
+  max_concurrent_workflow_task_polls: 4
+  max_concurrent_activity_executions: 100
+  max_concurrent_workflow_task_executions: 10
+
+  # Retry and timeout policies
+  default_activity_timeout: duration: "5m" # Timeout for individual activities
+  default_workflow_timeout: duration: "30m" # Timeout for entire workflow execution
+  default_workflow_run_timeout: duration: "24h" # Max duration for a single workflow run
+
+trino:
+  # Trino cluster configuration for analytics queries
+  server_url: "${TRINO_URL:-http://trino:8080}"
+  catalog: "iceberg"
+  schema: "ops"
+  user: "${TRINO_USER:-temporal-worker}"
+  password: "${TRINO_PASSWORD:---}"  # Optional; use secrets manager in production
+  
+  # Query execution settings
+  request_timeout_seconds: 300
+  max_result_rows: 100000
+  enable_native_queries: true
+
+spark:
+  # Spark cluster configuration for heavy computations
+  cluster_type: "${SPARK_CLUSTER_TYPE:-yarn}" # Options: yarn, kubernetes, standalone
+  submit_url: "${SPARK_SUBMIT_URL:-http://spark-submit:6066}"
+  master: "${SPARK_MASTER:-yarn}"
+  deploy_mode: "cluster"
+  
+  # Spark job defaults
+  driver_memory: "4g"
+  executor_memory: "8g"
+  executor_cores: 4
+  num_executors: 10
+  
+  # Jar and application settings
+  app_jar: "${SPARK_APP_JAR:-s3://your-bucket/apps/analytics-job.jar}"
+  main_class: "com.example.AnalyticsJobRunner"
+
+s3:
+  # S3 configuration for model artifacts, features, and results
+  bucket: "${S3_BUCKET:-analytics-artifacts}"
+  region: "${S3_REGION:-us-east-1}"
+  access_key: "${AWS_ACCESS_KEY_ID:---}"
+  secret_key: "${AWS_SECRET_ACCESS_KEY:---}"
+  
+  # Paths for various artifacts
+  model_artifacts_prefix: "models/"
+  features_prefix: "features/"
+  results_prefix: "results/"
+
+websocket:
+  # Local WebSocket hub for real-time event publishing
+  hub_listen_address: "${WS_HUB_LISTEN:-http://localhost:8081}"
+  publish_endpoint: "/events/publish"
+  
+  # Hub configuration
+  max_clients: 10000
+  send_buffer_size: 256
+  broadcast_buffer_size: 1024
+
+ml:
+  # ML pipeline configuration
+  feature_store_enabled: true
+  feature_store_table: "iceberg.ops.chain_features"
+  
+  # Training settings
+  training_test_split: 0.8
+  cv_folds: 5
+  
+  # Model registry
+  model_registry_enabled: true
+  model_registry_table: "iceberg.ops.model_registry"
+  
+  # Batch scoring
+  batch_scoring_enabled: true
+  batch_scoring_partition_size: 10000
+
+logging:
+  # Logging configuration
+  level: "${LOG_LEVEL:-info}"
+  format: "json"  # Options: json, text
+  
+  # Log output
+  stdout: true
+  file: 
+    enabled: false
+    path: "/var/log/temporal-worker/workflow.log"
+    max_size_mb: 100
+    max_backups: 10
+
+monitoring:
+  # Prometheus metrics exposition
+  metrics_enabled: true
+  metrics_port: 8090
+  metrics_path: "/metrics"
+  
+  # Metric prefixes
+  namespace: "temporal_analytics"
+  
+  # Key metric names
+  metrics:
+    - name: "workflow_duration_seconds"
+      type: "histogram"
+    - name: "activity_duration_seconds"
+      type: "histogram"
+    - name: "trino_query_duration_seconds"
+      type: "histogram"
+    - name: "spark_job_duration_seconds"
+      type: "histogram"
+    - name: "events_published_total"
+      type: "counter"
+
+observability:
+  # Distributed tracing
+  tracing_enabled: false  # Set to true if using Jaeger/DataDog
+  tracer_endpoint: "${TRACER_ENDPOINT:---}"
+  
+  # Logging
+  structured_logs: true
+  log_level: "info"

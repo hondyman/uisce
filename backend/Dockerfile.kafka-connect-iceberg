@@ -1,0 +1,17 @@
+FROM confluentinc/cp-kafka-connect:7.5.3
+
+# Install Apache Iceberg Sink Connector (Tabular)
+# Manually download Apache Iceberg Sink Connector (Tabular version or Apache)
+# Manually download Apache Iceberg Sink Connector (Tabular version or Apache)
+# Manually download Apache Iceberg Sink Connector (Tabular version or Apache)
+USER root
+RUN if command -v yum >/dev/null 2>&1; then yum install -y unzip; \
+    elif command -v apt-get >/dev/null 2>&1; then apt-get update && apt-get install -y unzip; \
+    fi && \
+    mkdir -p /usr/share/confluent-hub-components/iceberg-kafka-connect && \
+    curl -fL -o /tmp/iceberg-kafka-connect.zip https://github.com/databricks/iceberg-kafka-connect/releases/download/v0.6.17/iceberg-kafka-connect-runtime-0.6.17.zip && \
+    unzip /tmp/iceberg-kafka-connect.zip -d /usr/share/confluent-hub-components/iceberg-kafka-connect && \
+    rm /tmp/iceberg-kafka-connect.zip
+
+# Add other potential dependencies if needed (e.g. AWS headers for MinIO)
+# The connector usually handles S3 compatibility

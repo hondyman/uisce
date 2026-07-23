@@ -1,0 +1,417 @@
+{
+  "products": [
+    {
+      "id": "MockSwap",
+      "label": "MockSwap",
+      "family": "Derivatives",
+      "cdmType": "MockSwap",
+      "description": "Generated from CDM type MockSwap",
+      "attributes": [
+        {
+          "name": "PrimaryAssetClass",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "Payout",
+          "type": "object",
+          "required": true
+        },
+        {
+          "name": "EffectiveDate",
+          "type": "object",
+          "required": true
+        },
+        {
+          "name": "TerminationDate",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "Notional",
+          "type": "number",
+          "required": true
+        },
+        {
+          "name": "IsFixed",
+          "type": "bool",
+          "required": true
+        }
+      ]
+    },
+    {
+      "id": "AssetPayout",
+      "label": "AssetPayout",
+      "family": "Uncategorized",
+      "cdmType": "AssetPayout",
+      "description": "Generated from CDM type AssetPayout",
+      "attributes": [
+        {
+          "name": "PayerReceiver",
+          "type": "object",
+          "required": true
+        },
+        {
+          "name": "PriceQuantity",
+          "type": "object",
+          "required": true
+        },
+        {
+          "name": "PrincipalPayment",
+          "type": "object",
+          "required": true
+        },
+        {
+          "name": "SettlementTerms",
+          "type": "object",
+          "required": true
+        },
+        {
+          "name": "AssetLeg",
+          "type": "array",
+          "required": true
+        },
+        {
+          "name": "Underlier",
+          "type": "object",
+          "required": true
+        },
+        {
+          "name": "MinimumFee",
+          "type": "object",
+          "required": true
+        },
+        {
+          "name": "DividendTerms",
+          "type": "object",
+          "required": true
+        },
+        {
+          "name": "TradeType",
+          "type": "object",
+          "required": true
+        }
+      ]
+    },
+    {
+      "id": "CommodityPayout",
+      "label": "CommodityPayout",
+      "family": "Uncategorized",
+      "cdmType": "CommodityPayout",
+      "description": "Generated from CDM type CommodityPayout",
+      "attributes": [
+        {
+          "name": "PayerReceiver",
+          "type": "object",
+          "required": true
+        },
+        {
+          "name": "PriceQuantity",
+          "type": "object",
+          "required": true
+        },
+        {
+          "name": "PrincipalPayment",
+          "type": "object",
+          "required": true
+        },
+        {
+          "name": "SettlementTerms",
+          "type": "object",
+          "required": true
+        },
+        {
+          "name": "AveragingFeature",
+          "type": "object",
+          "required": true
+        },
+        {
+          "name": "CommodityPriceReturnTerms",
+          "type": "object",
+          "required": true
+        },
+        {
+          "name": "PricingDates",
+          "type": "object",
+          "required": true
+        },
+        {
+          "name": "Schedule",
+          "type": "object",
+          "required": true
+        },
+        {
+          "name": "CalculationPeriodDates",
+          "type": "object",
+          "required": true
+        },
+        {
+          "name": "PaymentDates",
+          "type": "object",
+          "required": true
+        },
+        {
+          "name": "Underlier",
+          "type": "object",
+          "required": true
+        },
+        {
+          "name": "FxFeature",
+          "type": "object",
+          "required": true
+        },
+        {
+          "name": "Delivery",
+          "type": "object",
+          "required": true
+        }
+      ]
+    },
+    {
+      "id": "CreditDefaultPayout",
+      "label": "CreditDefaultPayout",
+      "family": "Uncategorized",
+      "cdmType": "CreditDefaultPayout",
+      "description": "Generated from CDM type CreditDefaultPayout",
+      "attributes": [
+        {
+          "name": "PayerReceiver",
+          "type": "object",
+          "required": true
+        },
+        {
+          "name": "PriceQuantity",
+          "type": "object",
+          "required": true
+        },
+        {
+          "name": "PrincipalPayment",
+          "type": "object",
+          "required": true
+        },
+        {
+          "name": "SettlementTerms",
+          "type": "object",
+          "required": true
+        },
+        {
+          "name": "GeneralTerms",
+          "type": "object",
+          "required": true
+        },
+        {
+          "name": "ProtectionTerms",
+          "type": "array",
+          "required": true
+        },
+        {
+          "name": "TransactedPrice",
+          "type": "object",
+          "required": true
+        }
+      ]
+    },
+    {
+      "id": "ForeignExchange",
+      "label": "ForeignExchange",
+      "family": "Uncategorized",
+      "cdmType": "ForeignExchange",
+      "description": "Generated from CDM type ForeignExchange",
+      "attributes": [
+        {
+          "name": "ExchangedCurrency1",
+          "type": "object",
+          "required": true
+        },
+        {
+          "name": "ExchangedCurrency2",
+          "type": "object",
+          "required": true
+        },
+        {
+          "name": "TenorPeriod",
+          "type": "object",
+          "required": true
+        }
+      ]
+    },
+    {
+      "id": "InterestRatePayout",
+      "label": "InterestRatePayout",
+      "family": "Uncategorized",
+      "cdmType": "InterestRatePayout",
+      "description": "Generated from CDM type InterestRatePayout",
+      "attributes": [
+        {
+          "name": "PayerReceiver",
+          "type": "object",
+          "required": true
+        },
+        {
+          "name": "PriceQuantity",
+          "type": "object",
+          "required": true
+        },
+        {
+          "name": "PrincipalPayment",
+          "type": "object",
+          "required": true
+        },
+        {
+          "name": "SettlementTerms",
+          "type": "object",
+          "required": true
+        },
+        {
+          "name": "RateSpecification",
+          "type": "object",
+          "required": true
+        },
+        {
+          "name": "DayCountFraction",
+          "type": "object",
+          "required": true
+        },
+        {
+          "name": "CalculationPeriodDates",
+          "type": "object",
+          "required": true
+        },
+        {
+          "name": "PaymentDates",
+          "type": "object",
+          "required": true
+        },
+        {
+          "name": "PaymentDate",
+          "type": "object",
+          "required": true
+        },
+        {
+          "name": "PaymentDelay",
+          "type": "bool",
+          "required": true
+        },
+        {
+          "name": "ResetDates",
+          "type": "object",
+          "required": true
+        },
+        {
+          "name": "DiscountingMethod",
+          "type": "object",
+          "required": true
+        },
+        {
+          "name": "CompoundingMethod",
+          "type": "object",
+          "required": true
+        },
+        {
+          "name": "CashflowRepresentation",
+          "type": "object",
+          "required": true
+        },
+        {
+          "name": "StubPeriod",
+          "type": "object",
+          "required": true
+        },
+        {
+          "name": "BondReference",
+          "type": "object",
+          "required": true
+        },
+        {
+          "name": "FixedAmount",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "FloatingAmount",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "SpreadCalculationMethod",
+          "type": "object",
+          "required": true
+        }
+      ]
+    },
+    {
+      "id": "OptionPayout",
+      "label": "OptionPayout",
+      "family": "Uncategorized",
+      "cdmType": "OptionPayout",
+      "description": "Generated from CDM type OptionPayout",
+      "attributes": [
+        {
+          "name": "PayerReceiver",
+          "type": "object",
+          "required": true
+        },
+        {
+          "name": "PriceQuantity",
+          "type": "object",
+          "required": true
+        },
+        {
+          "name": "PrincipalPayment",
+          "type": "object",
+          "required": true
+        },
+        {
+          "name": "SettlementTerms",
+          "type": "object",
+          "required": true
+        },
+        {
+          "name": "BuyerSeller",
+          "type": "object",
+          "required": true
+        },
+        {
+          "name": "Feature",
+          "type": "object",
+          "required": true
+        },
+        {
+          "name": "ObservationTerms",
+          "type": "object",
+          "required": true
+        },
+        {
+          "name": "Schedule",
+          "type": "object",
+          "required": true
+        },
+        {
+          "name": "Delivery",
+          "type": "object",
+          "required": true
+        },
+        {
+          "name": "Underlier",
+          "type": "object",
+          "required": true
+        },
+        {
+          "name": "OptionType",
+          "type": "object",
+          "required": true
+        },
+        {
+          "name": "ExerciseTerms",
+          "type": "object",
+          "required": true
+        },
+        {
+          "name": "Strike",
+          "type": "object",
+          "required": true
+        }
+      ]
+    }
+  ]
+}

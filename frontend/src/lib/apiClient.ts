@@ -22,9 +22,23 @@ function getTenantHeadersInternal(): Record<string, string> {
     'Content-Type': 'application/json',
   };
 
-  // Inject Authorization token
+  // Inject Authorization token - check multiple storage locations for OIDC tokens
   try {
-    const token = localStorage.getItem('auth_token');
+    let token = localStorage.getItem('auth_token');
+
+    // Fallback: Parse oidc-client-ts namespaced storage if present
+    if (!token) {
+      const oidcKey = Object.keys(localStorage).find(k => k.startsWith('oidc.user:'));
+      if (oidcKey) {
+        try {
+          const userData = JSON.parse(localStorage.getItem(oidcKey) || '{}');
+          token = userData.access_token || userData.id_token || null;
+        } catch (e) {
+          console.warn('[apiClient] Failed to parse OIDC storage user object', e);
+        }
+      }
+    }
+
     if (token) {
       headers['Authorization'] = `Bearer ${token}`;
     }
