@@ -5,20 +5,20 @@ import (
 	"log"
 	"net/http"
 
-	jwtmiddleware "github.com/hondyman/uisce/libs/jwt-middleware"
+	"github.com/hondyman/uisce/libs/auth"
 )
 
 func main() {
 	http.HandleFunc("/query", queryAnalytics)
 	log.Println("Analytics API listening on :8082")
 
-	jwtMw := jwtmiddleware.NewJWTMiddleware("/health")
+	jwtMw := auth.NewLegacyMiddleware("/health")
 	handler := jwtMw.Handler(http.DefaultServeMux)
 	log.Fatal(http.ListenAndServe(":8082", handler))
 }
 
 func queryAnalytics(w http.ResponseWriter, r *http.Request) {
-	claims := jwtmiddleware.GetClaimsFromContext(r)
+	claims := auth.GetClaimsFromContext(r)
 	if claims == nil {
 		http.Error(w, "unauthorized", http.StatusUnauthorized)
 		return

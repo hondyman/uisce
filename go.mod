@@ -7,6 +7,7 @@ require (
 	github.com/go-sql-driver/mysql v1.8.1
 	github.com/google/generative-ai-go v0.20.1
 	github.com/google/uuid v1.6.0
+	github.com/hondyman/uisce/libs/auth v0.0.0
 	github.com/hondyman/uisce/libs/jwt-middleware v0.0.0-20260709220518-5861de0374f5
 	github.com/hondyman/uisce/libs/temporal-client v0.0.0
 	github.com/jmoiron/sqlx v1.4.0
@@ -44,7 +45,7 @@ require (
 	github.com/facebookgo/clock v0.0.0-20150410010913-600d898af40a // indirect
 	github.com/felixge/httpsnoop v1.0.4 // indirect
 	github.com/fsnotify/fsnotify v1.7.0 // indirect
-	github.com/gabriel-vasile/mimetype v1.4.8 // indirect
+	github.com/gabriel-vasile/mimetype v1.4.9 // indirect
 	github.com/gin-contrib/sse v1.1.0 // indirect
 	github.com/gin-gonic/gin v1.11.0 // indirect
 	github.com/go-logr/logr v1.4.3 // indirect
@@ -52,10 +53,10 @@ require (
 	github.com/go-playground/locales v0.14.1 // indirect
 	github.com/go-playground/universal-translator v0.18.1 // indirect
 	github.com/go-playground/validator/v10 v10.27.0 // indirect
-	github.com/goccy/go-json v0.10.2 // indirect
+	github.com/goccy/go-json v0.10.5 // indirect
 	github.com/goccy/go-yaml v1.18.0 // indirect
 	github.com/gogo/protobuf v1.3.2 // indirect
-	github.com/golang-jwt/jwt/v5 v5.0.0 // indirect
+	github.com/golang-jwt/jwt/v5 v5.3.0 // indirect
 	github.com/golang/groupcache v0.0.0-20210331224755-41bb18bfe9da // indirect
 	github.com/golang/mock v1.6.0 // indirect
 	github.com/google/s2a-go v0.1.8 // indirect
@@ -116,6 +117,7 @@ replace (
 	github.com/hondyman/uisce/backend => ./backend
 	github.com/hondyman/uisce/calc-engine => ./calc-engine
 	github.com/hondyman/uisce/libs/abac-client => ./libs/abac-client
+	github.com/hondyman/uisce/libs/auth => ./libs/auth
 	github.com/hondyman/uisce/libs/hasura-client => ./libs/hasura-client
 	github.com/hondyman/uisce/libs/logging => ./libs/logging
 	github.com/hondyman/uisce/libs/shared-types => ./libs/shared-types

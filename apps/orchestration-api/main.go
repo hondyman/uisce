@@ -8,7 +8,7 @@ import (
 	"net/http"
 
 	"github.com/google/uuid"
-	jwtmiddleware "github.com/hondyman/uisce/libs/jwt-middleware"
+	"github.com/hondyman/uisce/libs/auth"
 	"go.temporal.io/sdk/client"
 )
 
@@ -27,7 +27,7 @@ func main() {
 
 	log.Println("Orchestration API listening on :8081")
 
-	jwtMw := jwtmiddleware.NewJWTMiddleware("/health")
+	jwtMw := auth.NewLegacyMiddleware("/health")
 	handler := jwtMw.Handler(http.DefaultServeMux)
 	log.Fatal(http.ListenAndServe(":8081", handler))
 }
@@ -37,7 +37,7 @@ type RebalanceInput struct {
 }
 
 func startRebalance(w http.ResponseWriter, r *http.Request) {
-	tclaims := jwtmiddleware.GetClaimsFromContext(r)
+	tclaims := auth.GetClaimsFromContext(r)
 	if tclaims == nil {
 		http.Error(w, "unauthorized", http.StatusUnauthorized)
 		return

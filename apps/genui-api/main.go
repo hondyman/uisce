@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"strings"
 
-	jwtmiddleware "github.com/hondyman/uisce/libs/jwt-middleware"
+	"github.com/hondyman/uisce/libs/auth"
 )
 
 type LayoutSchema struct {
@@ -22,13 +22,13 @@ func main() {
 	http.HandleFunc("/layout", resolveIntent)
 	log.Println("GenUI API listening on :8080")
 
-	jwtMw := jwtmiddleware.NewJWTMiddleware("/health")
+	jwtMw := auth.NewLegacyMiddleware("/health")
 	handler := jwtMw.Handler(http.DefaultServeMux)
 	log.Fatal(http.ListenAndServe(":8080", handler))
 }
 
 func resolveIntent(w http.ResponseWriter, r *http.Request) {
-	claims := jwtmiddleware.GetClaimsFromContext(r)
+	claims := auth.GetClaimsFromContext(r)
 	if claims == nil {
 		http.Error(w, "unauthorized", http.StatusUnauthorized)
 		return
