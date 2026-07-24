@@ -91,7 +91,7 @@ export const TenantDetailPageV2: React.FC = () => {
   );
 
   const updateTenant = useApiMutation<any, any>(
-    `/api/tenant-ops/${tenantId}/update`,
+    '/api/tenant-ops/update',
     'PATCH',
     { onCompleted: () => refetchTenant() }
   );
@@ -220,7 +220,8 @@ export const TenantDetailPageV2: React.FC = () => {
             }
             const resource = instanceResourcesMap.get(instance.id)!;
             resource.connections.push({
-              id: ds.connection_id,
+              id: ds.id, // Use TPD ID for uniqueness, not connection_id which can repeat
+              connectionId: ds.connection_id, // Keep original connection_id for reference
               name: ds.source_name || 'Unknown',
               type: 'Datasource',
               productName: product.alpha_product?.product_name,
@@ -293,8 +294,37 @@ export const TenantDetailPageV2: React.FC = () => {
   }, [tenant]);
 
   const urlInstanceId = searchParams.get('instanceId');
-  const activeInstanceId = urlInstanceId || scopedDatasource?.id || scope?.instanceId || scopedProduct?.tenant_instance_id;
-  const activeInstance = enrichedInstances.find(i => i.id === activeInstanceId);
+  const activeInstanceId = urlInstanceId || (scopedDatasource as any)?.alpha_tenant_instance_id || (scopedDatasource as any)?.tenant_instance_id || scopedDatasource?.id || scope?.instanceId || scopedProduct?.tenant_instance_id;
+  const activeInstanceName = (scopedDatasource as any)?.instance_name || (scopedDatasource as any)?.display_name || (scopedDatasource as any)?.source_name || scopedDatasource?.name;
+
+  const activeInstance = useMemo(() => {
+    if (!enrichedInstances.length) return null;
+    if (activeInstanceId) {
+      const found = enrichedInstances.find(i => i.id === activeInstanceId);
+      if (found) return found;
+    }
+    if (activeInstanceName) {
+      const foundByName = enrichedInstances.find(i => 
+        (i.instance_name && i.instance_name.toLowerCase() === activeInstanceName.toLowerCase()) ||
+        (i.display_name && i.display_name.toLowerCase() === activeInstanceName.toLowerCase())
+      );
+      if (foundByName) return foundByName;
+    }
+    // Check if any instance contains the scopedDatasource in its nested product datasources
+    if (scopedDatasource?.id) {
+      const foundByDs = enrichedInstances.find(i => 
+        (i.tenant_products || (i as any).products || []).some((p: any) =>
+          (p.tenant_product_datasources || p.datasources || []).some((ds: any) => ds.id === scopedDatasource.id)
+        )
+      );
+      if (foundByDs) return foundByDs;
+    }
+    // Fallback: if only 1 instance exists for the tenant, use it
+    if (enrichedInstances.length === 1) {
+      return enrichedInstances[0];
+    }
+    return null;
+  }, [enrichedInstances, activeInstanceId, activeInstanceName, scopedDatasource]);
 
   // Initialize edit form when tenant loads
   React.useEffect(() => {
@@ -925,40 +955,89 @@ export const TenantDetailPageV2: React.FC = () => {
             px: 3,
           }}
         >
-          <Tab label="Scoped Instance" id="tenant-tab-0" aria-controls="tenant-tabpanel-0" />
-          <Tab label="Products" id="tenant-tab-1" aria-controls="tenant-tabpanel-1" />
-          <Tab label="Connections" id="tenant-tab-2" aria-controls="tenant-tabpanel-2" />
-          <Tab label="Lookups" id="tenant-tab-3" aria-controls="tenant-tabpanel-3" />
-          <Tab label="Abbreviations" id="tenant-tab-4" aria-controls="tenant-tabpanel-4" />
-          <Tab label="Audit Log" id="tenant-tab-5" aria-controls="tenant-tabpanel-5" />
-          <Tab label="Configuration" id="tenant-tab-6" aria-controls="tenant-tabpanel-6" />
+          <Tab label="Instances" id="tenant-tab-0" aria-controls="tenant-tabpanel-0" />
+          <Tab label="Scoped Instance" id="tenant-tab-1" aria-controls="tenant-tabpanel-1" />
+          <Tab label="Products" id="tenant-tab-2" aria-controls="tenant-tabpanel-2" />
+          <Tab label="Connections" id="tenant-tab-3" aria-controls="tenant-tabpanel-3" />
+          <Tab label="Lookups" id="tenant-tab-4" aria-controls="tenant-tabpanel-4" />
+          <Tab label="Abbreviations" id="tenant-tab-5" aria-controls="tenant-tabpanel-5" />
+          <Tab label="Audit Log" id="tenant-tab-6" aria-controls="tenant-tabpanel-6" />
+          <Tab label="Configuration" id="tenant-tab-7" aria-controls="tenant-tabpanel-7" />
         </Tabs>
 
         {/* Instances Tab */}
         <TabPanel value={activeTab} index={0}>
           <Box sx={{ p: 3 }}>
-            {(() => {
-              if (!activeInstance) {
-                return (
-                  <Alert severity="info">
-                    No scoped instance selected. Please select a scoped instance from the global navigation to view its details.
-                  </Alert>
-                );
-              }
-
-              return (
+            {activeInstance && (
+              <Box sx={{ mb: 3 }}>
+                <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 1 }}>
+                  Scoped Instance Detail
+                </Typography>
                 <ScopedInstanceEditor
                   instance={activeInstance}
                   tenantId={tenantId}
                   updateMutation={(data: any) => updateTenantInstance.mutate(data).then(() => refetchTenant())}
                 />
+              </Box>
+            )}
+
+            <Box sx={{ mt: activeInstance ? 4 : 0 }}>
+              {activeInstance && (
+                <Typography variant="subtitle1" sx={{ fontWeight: 'bold', mb: 1 }}>
+                  All Tenant Instances ({enrichedInstances.length})
+                </Typography>
+              )}
+              <InstancesTableV2
+                instances={enrichedInstances}
+                tenantId={tenantId || ''}
+                onAddInstance={handleAddInstance}
+                onEditInstance={handleEditInstance}
+                onDeleteInstance={handleDeleteInstance}
+                onReload={refetchTenant}
+              />
+            </Box>
+          </Box>
+        </TabPanel>
+
+        {/* Scoped Instance Tab */}
+        <TabPanel value={activeTab} index={1}>
+          <Box sx={{ p: 3 }}>
+            {(() => {
+              const targetInstance = activeInstance || (enrichedInstances.length > 0 ? enrichedInstances[0] : null);
+
+              if (!targetInstance) {
+                return (
+                  <Alert severity="info">
+                    No instances configured for this tenant yet. Use the "Instances" tab to add a new instance.
+                  </Alert>
+                );
+              }
+
+              return (
+                <Box>
+                  {scopedDatasource && (
+                    <Box sx={{ mb: 2 }}>
+                      <Chip 
+                        label={`Scoped to: ${scopedDatasource.source_name || (scopedDatasource as any).display_name || scopedDatasource.id}`}
+                        color="primary" 
+                        variant="outlined" 
+                        sx={{ fontWeight: 'bold' }}
+                      />
+                    </Box>
+                  )}
+                  <ScopedInstanceEditor
+                    instance={targetInstance}
+                    tenantId={tenantId}
+                    updateMutation={(data: any) => updateTenantInstance.mutate(data).then(() => refetchTenant())}
+                  />
+                </Box>
               );
             })()}
           </Box>
         </TabPanel>
 
         {/* Products Tab */}
-        <TabPanel value={activeTab} index={1}>
+        <TabPanel value={activeTab} index={2}>
           <Box sx={{ p: 3 }}>
             <ProductsTabContent 
               tenantId={tenantId || ''}
@@ -971,33 +1050,32 @@ export const TenantDetailPageV2: React.FC = () => {
               }}
               onProductConnectionsClick={(productId) => {
                 setSelectedProductForCounts(productId);
-                setActiveTab(2);
+                setActiveTab(3);
               }}
             />
           </Box>
         </TabPanel>
 
         {/* Connections Tab */}
-        <TabPanel value={activeTab} index={2}>
+        <TabPanel value={activeTab} index={3}>
           <Box sx={{ display: 'flex', gap: 3, p: 3 }}>
-            {/* Facets Sidebar (hide instances if we have a scoped instance) */}
+            {/* Facets Sidebar */}
             <ConnectionsFacets
-              instances={activeInstanceId ? [] : instances}
+              instances={instances}
               products={Array.from(
                 new Map(
                   (tenant?.tenant_instances || []).flatMap((i: any) => {
-                    if (activeInstanceId && i.id !== activeInstanceId) return [];
                     return ((i.products || i.tenant_products) || []).map((p: any) => [
                       p.alpha_product_id,
                       {
                         id: p.alpha_product_id,
-                        product_name: p.alpha_product?.product_name || 'Unknown'
+                        product_name: p.alpha_product?.product_name || p.product?.product_name || 'Unknown Product'
                       }
                     ]);
                   })
                 ).values()
               ) as Array<{ id: string; product_name: string }>}
-              selectedInstances={activeInstanceId ? [activeInstanceId] : selectedInstanceFilters}
+              selectedInstances={selectedInstanceFilters}
               selectedProducts={selectedProductFilters}
               onInstanceChange={setSelectedInstanceFilters}
               onProductChange={setSelectedProductFilters}
@@ -1010,7 +1088,7 @@ export const TenantDetailPageV2: React.FC = () => {
                 tenantId={tenant?.id || tenantId || ''}
                 datasourceId={scopedDatasource?.id || ''}
                 isGoldCopy={tenant?.gold_copy || false}
-                instanceFilter={activeInstanceId ? [activeInstanceId] : (selectedInstanceFilters.length > 0 ? selectedInstanceFilters : null)}
+                instanceFilter={selectedInstanceFilters.length > 0 ? selectedInstanceFilters : null}
                 productFilter={selectedProductFilters.length > 0 ? selectedProductFilters : null}
                 onAddConnection={handleAddConnection}
                 onEditConnection={handleEditConnection}
@@ -1021,7 +1099,7 @@ export const TenantDetailPageV2: React.FC = () => {
         </TabPanel>
 
         {/* Lookups Tab */}
-        <TabPanel value={activeTab} index={3}>
+        <TabPanel value={activeTab} index={4}>
           <Box sx={{ p: 3 }}>
             <LookupsManagementTab 
               tenantId={scopedTenant?.id || ''} 
@@ -1031,14 +1109,14 @@ export const TenantDetailPageV2: React.FC = () => {
         </TabPanel>
 
         {/* Abbreviations Tab */}
-        <TabPanel value={activeTab} index={4}>
+        <TabPanel value={activeTab} index={5}>
           <Box sx={{ p: 3 }}>
             <AbbreviationsTab tenantId={scopedTenant?.id || ''} />
           </Box>
         </TabPanel>
 
         {/* Audit Log Tab */}
-        <TabPanel value={activeTab} index={5}>
+        <TabPanel value={activeTab} index={6}>
           <Box sx={{ p: 3 }}>
             <AuditLogTabContent 
               tenantId={scopedTenant?.id || ''}
@@ -1048,7 +1126,7 @@ export const TenantDetailPageV2: React.FC = () => {
         </TabPanel>
 
         {/* Configuration Tab */}
-        <TabPanel value={activeTab} index={6}>
+        <TabPanel value={activeTab} index={7}>
           <Box sx={{ p: 3 }}>
             <ConfigurationTabContent 
               tenantId={scopedTenant?.id || ''}

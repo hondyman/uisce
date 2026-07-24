@@ -184,7 +184,7 @@ export const ConnectionsTabContent: React.FC<ConnectionsTabContentProps> = ({
 
   // Fetch connections from backend
   const { data, loading, error, refetch } = useApiQuery<{ connections: Connection[] }>(
-    tenantId ? `/api/tenant-ops/connections` : ''
+    tenantId ? `/api/tenant-ops/connections?tenant_id=${tenantId}` : ''
   );
 
   const handleDeleteConnection = async (id: string) => {
@@ -240,15 +240,10 @@ export const ConnectionsTabContent: React.FC<ConnectionsTabContentProps> = ({
     }
   };
 
-  // Map database connections to the Connection interface
+  // Build connections from tenantData (tenant_product_datasources) instead of API
+  // This avoids needing JWT for listing connections
+  const connectionsMap = new Map<string, Connection>();
   
-  // Build product and instance lookup maps from tenant_product_datasources
-  const productMap = new Map<string, any>();
-  const instanceMap = new Map<string, any>();
-  const lastScanMap = new Map<string, any>();
-  const tpdIdMap = new Map<string, string>(); // Map connection_id -> tenant_product_datasource.id
-  
-  // Build maps from tenant_instances nested structure (new REST API shape)
   if (tenantData?.tenant_instances && tenantData.tenant_instances.length > 0) {
     console.log(`Found ${tenantData.tenant_instances.length} instances in tenant`);
     tenantData.tenant_instances.forEach((instance: any) => {
@@ -258,74 +253,47 @@ export const ConnectionsTabContent: React.FC<ConnectionsTabContentProps> = ({
       };
       (instance.products || instance.tenant_products)?.forEach((product: any) => {
         const productInfo = {
-          name: product.alpha_product?.product_name,
-          id: product.alpha_product?.id
+          name: product.alpha_product?.product_name || product.product?.product_name || product.name || 'Unknown Product',
+          id: product.alpha_product_id || product.alpha_product?.id || product.product_id || product.id
         };
-        console.log(`  Checking product ${productInfo.name}: has ${product.tenant_product_datasources || product.datasources?.length || 0} datasources`);
         (product.tenant_product_datasources || product.datasources || []).forEach((ds: any) => {
           if (ds.connection_id) {
             console.log(`    Found datasource with connection_id: ${ds.connection_id}`);
-            
-            // Map datasource ID by connection ID (for scan operations)
-            if (ds.id) {
-              tpdIdMap.set(ds.connection_id, ds.id);
-              console.log(`      Mapped datasource ID: ${ds.id}`);
+            // Use connection_id as the key to avoid duplicates
+            if (!connectionsMap.has(ds.connection_id)) {
+              connectionsMap.set(ds.connection_id, {
+                id: ds.connection_id,
+                name: ds.source_name || ds.connection_name || 'Unknown Connection',
+                type: 'Datasource',
+                host: ds.host || '',
+                port: ds.port || 0,
+                database: ds.database || '',
+                schema: ds.schema || '',
+                username: '',
+                password: '',
+                base_url: '',
+                api_key: '',
+                metadata: {},
+                is_active: ds.is_active ?? true,
+                endpoint: ds.host ? `${ds.host}:${ds.port || ''}` : '-',
+                linkedInstance: instanceInfo.name,
+                linkedInstanceId: instanceInfo.id,
+                linkedProduct: productInfo.name,
+                linkedProductId: productInfo.id,
+                linkedDatasourceId: ds.id,
+                linkedAlphaDatasourceId: undefined,
+                lastSync: ds.updated_at ? new Date(ds.updated_at).toLocaleString() : '-',
+                status: (ds.is_active ?? true) ? 'connected' : 'warning',
+              });
             }
-            
-            productMap.set(ds.connection_id, productInfo);
-            instanceMap.set(ds.connection_id, instanceInfo);
           }
         });
       });
     });
   }
   
-  console.log('Final product map:', Object.fromEntries(productMap));
-  console.log('Final instance map:', Object.fromEntries(instanceMap));
-  console.log('Final TPD ID map:', Object.fromEntries(tpdIdMap));
-  
-  const connections: Connection[] = (data?.connections || []).map((conn: any) => {
-    // Get linked instance and product from the maps
-    const linkedInstanceInfo = instanceMap.get(conn.id);
-    const linkedProduct = productMap.get(conn.id);
-    const lastScan = lastScanMap.get(conn.id);
-    const tpdId = tpdIdMap.get(conn.id); // Get the tenant_product_datasource ID
-    
-    if (linkedProduct) {
-      console.log(`Connection ${conn.id} (${conn.name}): found product ${linkedProduct.name}`);
-    } else {
-      console.log(`Connection ${conn.id} (${conn.name}): NO PRODUCT FOUND`);
-    }
-    
-    if (tpdId) {
-      console.log(`Connection ${conn.id} (${conn.name}): mapped to TPD ID ${tpdId}`);
-    }
-    
-    return {
-      id: conn.id,
-      name: conn.name,
-      type: conn.type,
-      host: conn.host,
-      port: conn.port,
-      database: conn.database,
-      schema: conn.schema,
-      username: conn.username,
-      password: conn.password,
-      base_url: conn.base_url || conn.metadata?.base_url,
-      api_key: conn.api_key || conn.metadata?.api_key,
-      metadata: conn.metadata,
-      is_active: conn.is_active,
-      endpoint: conn.host ? `${conn.host}:${conn.port || ''}` : (conn.base_url || '-'),
-      linkedInstance: linkedInstanceInfo?.name || '-',
-      linkedInstanceId: linkedInstanceInfo?.id,
-      linkedProduct: linkedProduct?.name || '-',
-      linkedProductId: linkedProduct?.id,
-      linkedDatasourceId: tpdId, // Use TPD ID instead of connection ID
-      linkedAlphaDatasourceId: undefined,
-      lastSync: conn.updated_at ? new Date(conn.updated_at).toLocaleString() : '-',
-      status: (conn.is_active ? 'connected' : 'warning'),
-    };
-  });
+  const connections: Connection[] = Array.from(connectionsMap.values());
+  console.log('Built connections from tenantData:', connections.length);
 
   const filteredConnections: Connection[] = connections.filter((conn: Connection) => {
     const matchesType = filterType === 'all' || conn.type?.toLowerCase() === filterType;
