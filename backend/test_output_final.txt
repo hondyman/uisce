@@ -1,0 +1,2027 @@
+=== RUN   TestHandleGenerateDefaults_ValidationErrors
+--- PASS: TestHandleGenerateDefaults_ValidationErrors (0.00s)
+=== RUN   TestHandleGenerateDefaults_Success
+--- PASS: TestHandleGenerateDefaults_Success (0.00s)
+=== RUN   TestViewsPaginationHandler_DBOnly
+DEBUG: SetupRouter INVOKED! [Version 3]
+{"level":"info","ts":1771080874.300514,"caller":"api/api.go:666","msg":"RequestTracingMiddleware registered on router"}
+{"level":"info","ts":1771080874.3007832,"caller":"api/api.go:898","msg":"✅ Gemini client assigned to LLM gateway (Planner & Executor)"}
+{"level":"info","ts":1771080874.3007948,"caller":"api/api.go:911","msg":"Audit and Semantic publishers initialized for Kafka"}
+{"level":"warn","ts":1771080874.3009548,"caller":"api/api.go:976","msg":"Failed to initialize Trino client for audit history: failed to open trino connection: sql: unknown driver \"trino\" (forgotten import?)"}
+{"level":"warn","ts":1771080874.3023229,"caller":"api/api.go:1305","msg":"Failed to initialize audit Trino querier: failed to connect to trino: sql: unknown driver \"trino\" (forgotten import?)"}
+2026/02/14 09:54:34 INFO  No logger configured for temporal client. Created default one.
+Warning: Failed to connect to Ignite: failed to connect to ignite: failed to open connection: dial tcp: lookup ignite: no such host. Cache operations will be skipped.
+[ROUTES-DUMP-START]
+[ROUTE] POST /_debug/validation-rules-proxy
+[ROUTE] GET /_routes
+[ROUTE] POST /ai/analyze-signal
+[ROUTE] POST /ai/explain-portfolio
+[ROUTE] POST /ai/generate-constraints
+[ROUTE] POST /analytics/layout
+[ROUTE] GET /api/debug/headers
+[ROUTE] POST /api/events/tenant-instance-created
+[ROUTE] GET /api/iceberg/lineage
+[ROUTE] POST /api/instance/clone-from-goldcopy
+[ROUTE] POST /api/instance/sync-connections-from-goldcopy
+[ROUTE] GET /api/intelligence/storage/plans
+[ROUTE] POST /api/intelligence/storage/plans/generate
+[ROUTE] GET /api/intelligence/storage/plans/{id}
+[ROUTE] POST /api/intelligence/storage/plans/{id}/execute
+[ROUTE] POST /api/intelligence/storage/plans/{id}/status
+[ROUTE] POST /api/layouts
+[ROUTE] GET /api/layouts
+[ROUTE] GET /api/layouts/{id}
+[ROUTE] PUT /api/layouts/{id}
+[ROUTE] DELETE /api/layouts/{id}
+[ROUTE] GET /api/metrics/global
+[ROUTE] GET /api/metrics/region-heatmap
+[ROUTE] GET /api/metrics/tenant/{tenantId}
+[ROUTE] GET /api/plans
+[ROUTE] GET /api/plans/timeline
+[ROUTE] POST /api/rag/search
+[ROUTE] POST /api/rag/upload
+[ROUTE] GET /api/scheduler/governance/audit
+[ROUTE] GET /api/scheduler/governance/audit/entity/{type}/{id}
+[ROUTE] GET /api/scheduler/governance/audit/stats
+[ROUTE] GET /api/scheduler/governance/changesets
+[ROUTE] POST /api/scheduler/governance/changesets
+[ROUTE] GET /api/scheduler/governance/changesets/{id}
+[ROUTE] POST /api/scheduler/governance/changesets/{id}/apply
+[ROUTE] POST /api/scheduler/governance/changesets/{id}/approve
+[ROUTE] POST /api/scheduler/governance/changesets/{id}/reject
+[ROUTE] POST /api/scheduler/governance/changesets/{id}/rollback
+[ROUTE] POST /api/scheduler/governance/policies
+[ROUTE] GET /api/scheduler/governance/policies
+[ROUTE] DELETE /api/scheduler/governance/policies/{id}
+[ROUTE] GET /api/scheduler/governance/policies/{id}
+[ROUTE] PATCH /api/scheduler/governance/policies/{id}
+[ROUTE] GET /api/tempo/traces
+[ROUTE] GET /api/tempo/traces/{traceId}
+[ROUTE] GET /api/v1/folders/
+[ROUTE] GET /api/v1/folders/{id}/analytics
+[ROUTE] GET /api/v1/folders/{id}/diff
+[ROUTE] POST /api/v1/folders/{id}/items
+[ROUTE] GET /api/v1/metrics/commit
+[ROUTE] POST /api/v1/page-layouts
+[ROUTE] GET /api/v1/page-layouts
+[ROUTE] PUT /api/v1/page-layouts/{id}
+[ROUTE] DELETE /api/v1/page-layouts/{id}
+[ROUTE] GET /api/v1/page-layouts/{id}
+[ROUTE] POST /api/v1/pipelines
+[ROUTE] GET /api/v1/pipelines
+[ROUTE] GET /api/v1/pipelines/activities/safe
+[ROUTE] DELETE /api/v1/pipelines/{id}
+[ROUTE] GET /api/v1/pipelines/{id}
+[ROUTE] PUT /api/v1/pipelines/{id}
+[ROUTE] POST /api/v1/pipelines/{id}/execute
+[ROUTE] POST /api/v1/pipelines/{id}/simulate
+[ROUTE] GET /api/v1/reports/
+[ROUTE] POST /api/v1/reports/
+[ROUTE] GET /api/v1/reports/{id}
+[ROUTE] PUT /api/v1/reports/{id}
+[ROUTE] DELETE /api/v1/reports/{id}
+[ROUTE] GET /api/_debug/amqp-metrics
+[ROUTE] POST /api/_debug/publish-event
+[ROUTE] POST /api/_debug/validation-rules-proxy
+[ROUTE] GET /api/abbreviations/
+[ROUTE] POST /api/abbreviations/
+[ROUTE] POST /api/abbreviations/expand
+[ROUTE] GET /api/abbreviations/export
+[ROUTE] POST /api/abbreviations/scan
+[ROUTE] POST /api/abbreviations/suggest
+[ROUTE] POST /api/abbreviations/validate
+[ROUTE] GET /api/abbreviations/{id}/
+[ROUTE] PUT /api/abbreviations/{id}/
+[ROUTE] DELETE /api/abbreviations/{id}/
+[ROUTE] POST /api/admin/api-keys
+[ROUTE] POST /api/admin/cube/sync
+[ROUTE] POST /api/admin/eval/run
+[ROUTE] GET /api/admin/llm/config
+[ROUTE] PUT /api/admin/llm/config
+[ROUTE] POST /api/admin/llm/test
+[ROUTE] POST /api/admin/quotas
+[ROUTE] GET /api/admin/quotas
+[ROUTE] POST /api/ai/generate-dag
+[ROUTE] POST /api/ai/field-recommendations
+[ROUTE] POST /api/ai/generate-layout
+[ROUTE] POST /api/ai/generate-validation
+[ROUTE] GET /api/ai/layouts
+[ROUTE] POST /api/ai/mark-adopted
+[ROUTE] POST /api/altinvest/
+[ROUTE] POST /api/altinvest/capital-call
+[ROUTE] GET /api/altinvest/client/{clientId}
+[ROUTE] POST /api/api/cube/dry-run
+[ROUTE] POST /api/api/cube/generate
+[ROUTE] POST /api/api/cube/generate/{boID}
+[ROUTE] GET /api/api/cube/meta
+[ROUTE] GET /api/api/cube/pre-aggregations
+[ROUTE] GET /api/api/cube/preview
+[ROUTE] POST /api/api/cube/query
+[ROUTE] GET /api/api/metrics/
+[ROUTE] POST /api/api/metrics/
+[ROUTE] DELETE /api/api/metrics/{metricID}/
+[ROUTE] GET /api/api/metrics/{metricID}/
+[ROUTE] PUT /api/api/metrics/{metricID}/
+[ROUTE] GET /api/api/metrics/{metricID}/anomalies
+[ROUTE] POST /api/api/metrics/{metricID}/compute/anomaly
+[ROUTE] POST /api/api/metrics/{metricID}/compute/pop
+[ROUTE] GET /api/api/metrics/{metricID}/runs
+[ROUTE] POST /api/api/process-analytics/analyze-bottlenecks
+[ROUTE] GET /api/api/process-analytics/bottlenecks
+[ROUTE] GET /api/api/process-analytics/dashboard
+[ROUTE] GET /api/api/process-analytics/predict-duration
+[ROUTE] GET /api/api/process-analytics/recommendations
+[ROUTE] GET /api/api/process-analytics/step-performance
+[ROUTE] GET /api/api/process-benchmarking/best-practices
+[ROUTE] POST /api/api/process-benchmarking/calculate-score
+[ROUTE] GET /api/api/process-benchmarking/gap-analysis
+[ROUTE] GET /api/api/process-benchmarking/industry
+[ROUTE] GET /api/api/process-benchmarking/peers
+[ROUTE] GET /api/api/process-benchmarking/score
+[ROUTE] GET /api/api/process-monitor/active-instances
+[ROUTE] GET /api/api/process-monitor/instance/{workflowID}
+[ROUTE] GET /api/api/process-monitor/instance/{workflowID}/history
+[ROUTE] POST /api/api/process-monitor/intervene
+[ROUTE] GET /api/api/process-monitor/stats
+[ROUTE] GET /api/api/process-monitor/ws
+[ROUTE] POST /api/api/process-optimization/analyze
+[ROUTE] GET /api/api/process-optimization/applied
+[ROUTE] POST /api/api/process-optimization/apply/{suggestionID}
+[ROUTE] POST /api/api/process-optimization/auto-tune/enable
+[ROUTE] GET /api/api/process-optimization/auto-tune/status
+[ROUTE] POST /api/api/process-optimization/dismiss/{suggestionID}
+[ROUTE] GET /api/api/process-optimization/forecast/{suggestionID}
+[ROUTE] GET /api/api/process-optimization/suggestions
+[ROUTE] POST /api/api/rdl/evaluate/
+[ROUTE] POST /api/api/rdl/evaluate/portfolio
+[ROUTE] POST /api/api/rdl/evaluate/tlh
+[ROUTE] POST /api/api/rdl/rules/
+[ROUTE] GET /api/api/rdl/rules/
+[ROUTE] GET /api/api/rdl/rules/{ruleID}/
+[ROUTE] PUT /api/api/rdl/rules/{ruleID}/
+[ROUTE] DELETE /api/api/rdl/rules/{ruleID}/
+[ROUTE] GET /api/api/rdl/templates/
+[ROUTE] GET /api/api/rdl/templates/{templateID}
+[ROUTE] POST /api/api/rdl/validate
+[ROUTE] POST /api/api/rules/
+[ROUTE] GET /api/api/rules/
+[ROUTE] PUT /api/api/rules/{ruleID}/
+[ROUTE] DELETE /api/api/rules/{ruleID}/
+[ROUTE] GET /api/api/rules/{ruleID}/
+[ROUTE] GET /api/api/semantic/analytics/history
+[ROUTE] GET /api/api/semantic/analytics/performance
+[ROUTE] GET /api/api/semantic/bundles/{domain}
+[ROUTE] GET /api/api/semantic/cubes
+[ROUTE] POST /api/api/semantic/cubes
+[ROUTE] GET /api/api/semantic/cubes/{name}
+[ROUTE] PUT /api/api/semantic/cubes/{name}
+[ROUTE] POST /api/api/semantic/cubes/{name}/dimensions
+[ROUTE] POST /api/api/semantic/cubes/{name}/measures
+[ROUTE] POST /api/api/semantic/plan
+[ROUTE] POST /api/api/semantic/query
+[ROUTE] POST /api/api/semantic/query/sql
+[ROUTE] POST /api/api/v1/timeouts
+[ROUTE] GET /api/api/v1/timeouts/pending
+[ROUTE] POST /api/api/v1/timeouts/{id}/escalate
+[ROUTE] POST /api/api/v1/triggers
+[ROUTE] GET /api/api/v1/triggers
+[ROUTE] GET /api/api/v1/triggers/events
+[ROUTE] GET /api/api/v1/triggers/executions
+[ROUTE] GET /api/api/v1/triggers/objects
+[ROUTE] GET /api/api/v1/triggers/operators
+[ROUTE] GET /api/api/v1/triggers/types
+[ROUTE] DELETE /api/api/v1/triggers/{id}
+[ROUTE] PUT /api/api/v1/triggers/{id}
+[ROUTE] GET /api/audit/events
+[ROUTE] GET /api/audit/stats
+[ROUTE] POST /api/auth/login
+[ROUTE] POST /api/auth/logout
+[ROUTE] GET /api/auth/me
+[ROUTE] POST /api/auth/refresh
+[ROUTE] POST /api/auth/register
+[ROUTE] GET /api/auth/users/{userId}/preferences/
+[ROUTE] PUT /api/auth/users/{userId}/preferences/
+[ROUTE] POST /api/billing/calculate
+[ROUTE] POST /api/billing/schedules
+[ROUTE] POST /api/bp-designer/save
+[ROUTE] GET /api/bp-designer/{bpDefId}
+[ROUTE] GET /api/bp-notifications/analytics
+[ROUTE] GET /api/bp-notifications/digests/pending
+[ROUTE] POST /api/bp-notifications/digests/process
+[ROUTE] GET /api/bp-notifications/logs
+[ROUTE] GET /api/bp-notifications/logs/{id}
+[ROUTE] GET /api/bp-notifications/preferences
+[ROUTE] PUT /api/bp-notifications/preferences
+[ROUTE] POST /api/bp-notifications/send
+[ROUTE] POST /api/bp-notifications/send-batch
+[ROUTE] GET /api/bp-notifications/templates
+[ROUTE] POST /api/bp-notifications/templates
+[ROUTE] DELETE /api/bp-notifications/templates/{id}
+[ROUTE] GET /api/bp-notifications/templates/{id}
+[ROUTE] PUT /api/bp-notifications/templates/{id}
+[ROUTE] POST /api/bp-notifications/templates/{id}/render
+[ROUTE] POST /api/bp-notifications/webhook/action/{id}
+[ROUTE] POST /api/bp-notifications/webhook/clicked/{id}
+[ROUTE] POST /api/bp-notifications/webhook/delivered/{id}
+[ROUTE] POST /api/bp-notifications/webhook/opened/{id}
+[ROUTE] POST /api/bp/start-execution
+[ROUTE] POST /api/bundles/
+[ROUTE] GET /api/bundles/
+[ROUTE] PUT /api/bundles/{bundleID}/
+[ROUTE] GET /api/bundles/{bundleID}/
+[ROUTE] POST /api/bundles/{bundleID}/certify
+[ROUTE] POST /api/bundles/{bundleID}/deprecate
+[ROUTE] PUT /api/bundles/{bundleID}/policies
+[ROUTE] POST /api/bundles/{bundleID}/publish
+[ROUTE] POST /api/business-entities/{entityID}/create-custom-model
+[ROUTE] POST /api/business-entities/{entityID}/create-custom-view
+[ROUTE] POST /api/business-entities/{entityID}/generate-core-model
+[ROUTE] POST /api/business-entities/{entityID}/generate-core-view
+[ROUTE] GET /api/business-entities/{entityID}/related-objects
+[ROUTE] GET /api/business-entities/{entityID}/semantic-assets
+[ROUTE] POST /api/business-entities/{entityID}/traverse-graph
+[ROUTE] GET /api/business-objects/list
+[ROUTE] GET /api/business-objects/
+[ROUTE] POST /api/business-objects/
+[ROUTE] GET /api/business-objects/{id}
+[ROUTE] PUT /api/business-objects/{id}
+[ROUTE] PATCH /api/business-objects/{id}
+[ROUTE] DELETE /api/business-objects/{id}
+[ROUTE] GET /api/business-objects/{id}/fields
+[ROUTE] GET /api/business-objects/{id}/relationships
+[ROUTE] DELETE /api/business-objects/{id}/subtypes/{subtypeId}
+[ROUTE] POST /api/business-objects/{id}/subtypes/{subtypeId}/rename
+[ROUTE] GET /api/business-term-edges
+[ROUTE] POST /api/business-term-edges
+[ROUTE] DELETE /api/business-term-edges
+[ROUTE] GET /api/business-term-edges-test
+[ROUTE] DELETE /api/business-term-edges/{id}
+[ROUTE] POST /api/business-term/suggestion-feedback
+[ROUTE] POST /api/business-term/suggestions
+[ROUTE] POST /api/business-terms
+[ROUTE] GET /api/business-terms
+[ROUTE] POST /api/business-terms/search
+[ROUTE] PUT /api/business-terms/{id}
+[ROUTE] DELETE /api/business-terms/{id}
+[ROUTE] POST /api/calc/vectorized
+[ROUTE] POST /api/calc/
+[ROUTE] POST /api/calc/preview
+[ROUTE] GET /api/calculations/
+[ROUTE] POST /api/calculations/
+[ROUTE] POST /api/calculations/explain
+[ROUTE] PATCH /api/calculations/{id}
+[ROUTE] GET /api/calculations/{name}
+[ROUTE] GET /api/calculations/{id}/explain
+[ROUTE] GET /api/catalog/nodes
+[ROUTE] POST /api/catalog/scan
+[ROUTE] GET /api/catalog/tables
+[ROUTE] POST /api/catalog/{datasourceId}/refresh-charts
+[ROUTE] GET /api/catalog/business-terms/{id}
+[ROUTE] PUT /api/catalog/business-terms/{id}/compliance
+[ROUTE] POST /api/catalog/business-terms/{id}/mappings
+[ROUTE] DELETE /api/catalog/business-terms/{id}/mappings/{semId}
+[ROUTE] GET /api/catalog/nodes
+[ROUTE] GET /api/catalog/semantic-terms-by-table/{tableId}
+[ROUTE] GET /api/chart/{datasourceId}/debug
+[ROUTE] GET /api/chart/{datasourceId}/health
+[ROUTE] GET /api/chart/{datasourceId}/{chartType}
+[ROUTE] GET /api/charts/{datasourceId}
+[ROUTE] POST /api/charts/{datasourceId}/refresh
+[ROUTE] POST /api/connections/test
+[ROUTE] GET /api/connections/
+[ROUTE] POST /api/connections/
+[ROUTE] DELETE /api/connections/{id}
+[ROUTE] GET /api/connections/{id}
+[ROUTE] PUT /api/connections/{id}
+[ROUTE] GET /api/connections/{id}/datasources
+[ROUTE] POST /api/connections/{id}/link/{datasourceId}
+[ROUTE] POST /api/connections/{id}/test
+[ROUTE] DELETE /api/connections/{id}/unlink/{datasourceId}
+[ROUTE] POST /api/copilot/generate-audit-summary
+[ROUTE] POST /api/copilot/generate-node
+[ROUTE] POST /api/copilot/generate-rego
+[ROUTE] PUT /api/crud
+[ROUTE] DELETE /api/crud
+[ROUTE] POST /api/crud
+[ROUTE] GET /api/custom-components
+[ROUTE] POST /api/custom-components
+[ROUTE] GET /api/custom-components/export
+[ROUTE] POST /api/custom-components/import
+[ROUTE] POST /api/custom-components/test-api
+[ROUTE] DELETE /api/custom-components/{id}
+[ROUTE] GET /api/custom-components/{id}
+[ROUTE] PUT /api/custom-components/{id}
+[ROUTE] POST /api/dashboards/
+[ROUTE] GET /api/dashboards/public
+[ROUTE] GET /api/dashboards/templates
+[ROUTE] GET /api/dashboards/user/{userId}
+[ROUTE] GET /api/dashboards/{id}
+[ROUTE] PUT /api/dashboards/{id}
+[ROUTE] DELETE /api/dashboards/{id}
+[ROUTE] POST /api/dashboards/{id}/duplicate
+[ROUTE] GET /api/data-domains/
+[ROUTE] POST /api/data-domains/
+[ROUTE] GET /api/data-domains/search
+[ROUTE] PUT /api/data-domains/{id}/
+[ROUTE] DELETE /api/data-domains/{id}/
+[ROUTE] GET /api/data-domains/{id}/
+[ROUTE] GET /api/dax/categories
+[ROUTE] POST /api/dax/execute
+[ROUTE] GET /api/dax/functions
+[ROUTE] GET /api/dax/functions/{functionName}
+[ROUTE] GET /api/debug/business-objects/{id}
+[ROUTE] GET /api/debug/edges/{id}
+[ROUTE] GET /api/edge-types
+[ROUTE] POST /api/edge-types
+[ROUTE] GET /api/edge-types/{id}
+[ROUTE] PATCH /api/edge-types/{id}
+[ROUTE] DELETE /api/edge-types/{id}
+[ROUTE] GET /api/edge-types/{id}/properties
+[ROUTE] POST /api/edge-types/{id}/properties
+[ROUTE] DELETE /api/edge-types/{id}/properties/{propName}
+[ROUTE] PATCH /api/edge-types/{id}/properties/{propName}
+[ROUTE] GET /api/entities
+[ROUTE] GET /api/entities/resolve
+[ROUTE] GET /api/entities/{name}
+[ROUTE] POST /api/entity-schema/
+[ROUTE] GET /api/entity-schema/
+[ROUTE] POST /api/events/market
+[ROUTE] GET /api/execution-logs/
+[ROUTE] POST /api/explorer/query/compile
+[ROUTE] POST /api/explorer/query/execute
+[ROUTE] POST /api/explorer/query/export
+[ROUTE] GET /api/explorer/query/history
+[ROUTE] POST /api/explorer/saved-queries/
+[ROUTE] GET /api/explorer/saved-queries/
+[ROUTE] GET /api/explorer/saved-queries/duplicates
+[ROUTE] PUT /api/explorer/saved-queries/{id}
+[ROUTE] DELETE /api/explorer/saved-queries/{id}
+[ROUTE] GET /api/explorer/saved-queries/{id}
+[ROUTE] POST /api/explorer/saved-queries/{id}/clone
+[ROUTE] GET /api/explorer/saved-queries/{id}/diff
+[ROUTE] GET /api/explorer/saved-queries/{id}/preview
+[ROUTE] POST /api/explorer/saved-queries/{id}/share
+[ROUTE] POST /api/explorer/search
+[ROUTE] GET /api/explorer/search/suggestions
+[ROUTE] POST /api/fabric/cubes/generate-from-table
+[ROUTE] GET /api/fabric/extensions
+[ROUTE] POST /api/fabric/extensions
+[ROUTE] GET /api/fabric/extensions/compatibility-report
+[ROUTE] GET /api/fabric/joins/{datasourceId}
+[ROUTE] GET /api/fabric/joins/{datasourceId}/table/{tableName}
+[ROUTE] GET /api/fabric/models
+[ROUTE] GET /api/fabric/models/definition
+[ROUTE] POST /api/fabric/models/generate
+[ROUTE] POST /api/fabric/models/generate-defaults
+[ROUTE] POST /api/fabric/models/metadata
+[ROUTE] POST /api/fabric/models/validate
+[ROUTE] POST /api/fabric/models/{id}/calculations
+[ROUTE] GET /api/fabric/models/{id}/calculations
+[ROUTE] DELETE /api/fabric/models/{id}/calculations/{calc_id}
+[ROUTE] POST /api/field-aliases
+[ROUTE] GET /api/field-aliases/{field_id}
+[ROUTE] GET /api/funds
+[ROUTE] GET /api/glossary/business-terms
+[ROUTE] GET /api/glossary/edges
+[ROUTE] POST /api/glossary/edges
+[ROUTE] PUT /api/glossary/edges/{id}
+[ROUTE] DELETE /api/glossary/edges/{id}
+[ROUTE] GET /api/glossary/semantic-terms
+[ROUTE] GET /api/glossary/semantic-terms/export/cube-yaml
+[ROUTE] GET /api/glossary/semantic-terms/{id}/cube-definition
+[ROUTE] POST /api/glossary/terms
+[ROUTE] DELETE /api/glossary/terms/{id}
+[ROUTE] PUT /api/glossary/terms/{id}
+[ROUTE] POST /api/households/
+[ROUTE] GET /api/households/{id}/entities
+[ROUTE] POST /api/households/{id}/entities
+[ROUTE] POST /api/instances/{instanceId}/assign-to-me
+[ROUTE] POST /api/instances/{instanceId}/unassign
+[ROUTE] POST /api/integrations/execute/{installationId}
+[ROUTE] GET /api/integrations/executions
+[ROUTE] GET /api/integrations/executions/{executionId}
+[ROUTE] POST /api/integrations/install
+[ROUTE] GET /api/integrations/installed
+[ROUTE] DELETE /api/integrations/installed/{installationId}
+[ROUTE] GET /api/integrations/installed/{installationId}
+[ROUTE] PUT /api/integrations/installed/{installationId}/config
+[ROUTE] GET /api/integrations/installed/{installationId}/stats
+[ROUTE] PUT /api/integrations/installed/{installationId}/toggle
+[ROUTE] GET /api/integrations/marketplace
+[ROUTE] GET /api/integrations/marketplace/category/{category}
+[ROUTE] GET /api/integrations/marketplace/{integrationKey}
+[ROUTE] GET /api/integrations/oauth/authorize/{installationId}
+[ROUTE] GET /api/integrations/oauth/callback
+[ROUTE] POST /api/integrations/test/{installationId}
+[ROUTE] GET /api/invoices/
+[ROUTE] POST /api/invoices/credits
+[ROUTE] POST /api/invoices/generate
+[ROUTE] GET /api/invoices/{invoiceId}
+[ROUTE] POST /api/invoices/{invoiceId}/issue
+[ROUTE] POST /api/invoices/{invoiceId}/pay
+[ROUTE] POST /api/invoices/{invoiceId}/void
+[ROUTE] GET /api/ip-whitelist
+[ROUTE] GET /api/lineage/{datasourceId}/{lineageType}
+[ROUTE] GET /api/lineage/dual
+[ROUTE] GET /api/lineage/node/{id}/graph
+[ROUTE] GET /api/lineage/node/{id}/impact
+[ROUTE] POST /api/llm/executor
+[ROUTE] GET /api/llm/modes
+[ROUTE] POST /api/llm/planner
+[ROUTE] GET /api/llm/prompts
+[ROUTE] POST /api/llm/query
+[ROUTE] GET /api/lookup-values
+[ROUTE] POST /api/lookups
+[ROUTE] GET /api/lookups
+[ROUTE] PUT /api/lookups/{id}
+[ROUTE] DELETE /api/lookups/{id}
+[ROUTE] GET /api/lookups/{id}/export
+[ROUTE] POST /api/lookups/{id}/propagate
+[ROUTE] GET /api/lookups/{id}/values
+[ROUTE] POST /api/lookups/{id}/values
+[ROUTE] DELETE /api/lookups/{id}/values/{valueId}
+[ROUTE] PUT /api/lookups/{id}/values/{valueId}
+[ROUTE] GET /api/marketplace/items
+[ROUTE] POST /api/marketplace/items/add-to-tenant
+[ROUTE] GET /api/marketplace/items/{id}
+[ROUTE] POST /api/marketplace/items/{id}/feedback
+[ROUTE] GET /api/marketplace/items/{id}/feedback
+[ROUTE] GET /api/marketplace/items/{id}/parameters
+[ROUTE] GET /api/marketplace/tenant-items
+[ROUTE] PUT /api/marketplace/tenant-items/{id}
+[ROUTE] DELETE /api/marketplace/tenant-items/{id}
+[ROUTE] GET /api/marketplace/tenant-items/{id}
+[ROUTE] GET /api/marketplace/validation-rules
+[ROUTE] POST /api/mcp
+[ROUTE] POST /api/metadata/versions
+[ROUTE] GET /api/metadata/versions/{bo_id}
+[ROUTE] GET /api/metadata/{datasourceId}
+[ROUTE] HEAD /api/metrics
+[ROUTE] OPTIONS /api/metrics
+[ROUTE] PATCH /api/metrics
+[ROUTE] PUT /api/metrics
+[ROUTE] TRACE /api/metrics
+[ROUTE] GET /api/metrics
+[ROUTE] CONNECT /api/metrics
+[ROUTE] POST /api/metrics
+[ROUTE] DELETE /api/metrics
+[ROUTE] GET /api/metrics-registry/
+[ROUTE] GET /api/metrics-registry/golden-path/readiness
+[ROUTE] POST /api/metrics-registry/refresh-atomic
+[ROUTE] GET /api/metrics-registry/{metricID}
+[ROUTE] POST /api/metrics-registry/{metricID}/compute-comparisons
+[ROUTE] POST /api/metrics-registry/{metricID}/compute-pop
+[ROUTE] POST /api/metrics-registry/{metricID}/detect-anomalies
+[ROUTE] GET /api/metrics-registry/{metricID}/history
+[ROUTE] POST /api/metrics-registry/{metricID}/promote-golden
+[ROUTE] GET /api/metrics/{fundId}
+[ROUTE] GET /api/micro-bundles
+[ROUTE] POST /api/micro-bundles
+[ROUTE] GET /api/micro-bundles/{id}
+[ROUTE] POST /api/migrations/
+[ROUTE] GET /api/migrations/
+[ROUTE] GET /api/migrations/{id}
+[ROUTE] POST /api/migrations/{id}/approve
+[ROUTE] POST /api/migrations/{id}/reject
+[ROUTE] GET /api/models
+[ROUTE] POST /api/models/clone
+[ROUTE] POST /api/models/custom
+[ROUTE] POST /api/models/generated
+[ROUTE] POST /api/models/regenerate
+[ROUTE] GET /api/models/version
+[ROUTE] DELETE /api/models/{model_id}
+[ROUTE] GET /api/models/{model_id}
+[ROUTE] PATCH /api/models/{model_id}
+[ROUTE] GET /api/my-approvals/
+[ROUTE] GET /api/nba/catalog
+[ROUTE] POST /api/nba/complete
+[ROUTE] POST /api/nba/dismiss
+[ROUTE] POST /api/nba/execute
+[ROUTE] GET /api/nba/recommendations
+[ROUTE] GET /api/nba/signals
+[ROUTE] GET /api/nba/stats
+[ROUTE] GET /api/nba/stream
+[ROUTE] POST /api/nlq/ask
+[ROUTE] POST /api/nlq/feedback
+[ROUTE] POST /api/nlq/search
+[ROUTE] GET /api/node-types
+[ROUTE] POST /api/node-types
+[ROUTE] GET /api/node-types/{id}
+[ROUTE] PATCH /api/node-types/{id}
+[ROUTE] DELETE /api/node-types/{id}
+[ROUTE] GET /api/node-types/{id}/nodes
+[ROUTE] GET /api/node-types/{id}/properties
+[ROUTE] POST /api/node-types/{id}/properties
+[ROUTE] PATCH /api/node-types/{id}/properties/{propName}
+[ROUTE] DELETE /api/node-types/{id}/properties/{propName}
+[ROUTE] POST /api/object/{ObjectType}
+[ROUTE] GET /api/platform-billing/anomalies
+[ROUTE] GET /api/platform-billing/forecast
+[ROUTE] GET /api/platform-billing/platform
+[ROUTE] POST /api/platform-billing/simulate
+[ROUTE] GET /api/platform-billing/tenant/{tenantId}
+[ROUTE] GET /api/policies
+[ROUTE] POST /api/policies
+[ROUTE] POST /api/policies/simulate
+[ROUTE] GET /api/policies/{id}
+[ROUTE] DELETE /api/policies/{id}
+[ROUTE] POST /api/profiler/profile
+[ROUTE] GET /api/profiler/results
+[ROUTE] GET /api/profiler/status/{jobId}
+[ROUTE] POST /api/query/compile
+[ROUTE] POST /api/query/execute
+[ROUTE] POST /api/query/export
+[ROUTE] GET /api/query/history
+[ROUTE] GET /api/rbac/audit
+[ROUTE] GET /api/rbac/delegations
+[ROUTE] POST /api/rbac/delegations
+[ROUTE] GET /api/rbac/delegations/user/{userId}
+[ROUTE] PUT /api/rbac/delegations/{delegationId}
+[ROUTE] DELETE /api/rbac/delegations/{delegationId}
+[ROUTE] POST /api/rbac/delegations/{delegationId}/log
+[ROUTE] GET /api/rbac/field-permissions
+[ROUTE] POST /api/rbac/field-permissions
+[ROUTE] GET /api/rbac/field-permissions/user/{userId}/resource/{resourceType}/{resourceId}
+[ROUTE] GET /api/rbac/permissions
+[ROUTE] POST /api/rbac/permissions/check
+[ROUTE] GET /api/rbac/permissions/user/{userId}
+[ROUTE] GET /api/rbac/roles
+[ROUTE] POST /api/rbac/roles
+[ROUTE] GET /api/rbac/roles/{roleId}
+[ROUTE] PUT /api/rbac/roles/{roleId}
+[ROUTE] DELETE /api/rbac/roles/{roleId}
+[ROUTE] POST /api/rbac/roles/{roleId}/assign
+[ROUTE] DELETE /api/rbac/roles/{roleId}/unassign/{userId}
+[ROUTE] GET /api/rbac/roles/{roleId}/users
+[ROUTE] GET /api/rbac/teams
+[ROUTE] POST /api/rbac/teams
+[ROUTE] POST /api/rbac/teams/{teamId}/members
+[ROUTE] GET /api/rbac/teams/{teamId}/members
+[ROUTE] DELETE /api/rbac/teams/{teamId}/members/{userId}
+[ROUTE] GET /api/rbac/users
+[ROUTE] POST /api/rbac/users
+[ROUTE] GET /api/rbac/users/{userId}/roles
+[ROUTE] POST /api/relationships/discover
+[ROUTE] POST /api/relationships/existing
+[ROUTE] POST /api/relationships/apply
+[ROUTE] POST /api/relationships/bo/inherit
+[ROUTE] GET /api/relationships/bo/{boId}
+[ROUTE] POST /api/relationships/infer
+[ROUTE] POST /api/relationships/physical
+[ROUTE] GET /api/relationships/physical/{tableId}
+[ROUTE] POST /api/relationships/remove
+[ROUTE] POST /api/relationships/suggestions/dismiss
+[ROUTE] POST /api/relationships/suggestions/generate
+[ROUTE] POST /api/relationships/suggestions/generate-lineage
+[ROUTE] POST /api/relationships/table-mapping/recommend
+[ROUTE] GET /api/relationships/{entityID}
+[ROUTE] GET /api/relationships/{entityID}/objects
+[ROUTE] GET /api/relationships/{entityID}/suggestions
+[ROUTE] POST /api/roles/
+[ROUTE] GET /api/roles/
+[ROUTE] POST /api/rules/generate-cue
+[ROUTE] POST /api/rules/simulate
+[ROUTE] GET /api/saved/
+[ROUTE] POST /api/saved/
+[ROUTE] DELETE /api/saved/{id}
+[ROUTE] GET /api/saved/{id}
+[ROUTE] PUT /api/saved/{id}
+[ROUTE] POST /api/search
+[ROUTE] POST /api/semantic-mapping/apply
+[ROUTE] POST /api/semantic-mapping/backfill-physical-mappings
+[ROUTE] POST /api/semantic-mapping/backfill-sql-properties
+[ROUTE] POST /api/semantic-mapping/enrich/apply
+[ROUTE] POST /api/semantic-mapping/enrich/auto
+[ROUTE] POST /api/semantic-mapping/enrich/suggest
+[ROUTE] POST /api/semantic-mapping/generate
+[ROUTE] POST /api/semantic-mapping/hierarchies/create
+[ROUTE] POST /api/semantic-mapping/hierarchies/generate
+[ROUTE] POST /api/semantic-mapping/populate-bo-terms
+[ROUTE] POST /api/semantic-mapping/wizard/apply
+[ROUTE] POST /api/semantic-mapping/wizard/approve/{id}
+[ROUTE] GET /api/semantic-mapping/wizard/created
+[ROUTE] POST /api/semantic-mapping/wizard/enrich-from-feedback
+[ROUTE] POST /api/semantic-mapping/wizard/generate
+[ROUTE] GET /api/semantic-mapping/wizard/pending
+[ROUTE] GET /api/semantic-mappings
+[ROUTE] POST /api/semantic-mappings/apply-custom
+[ROUTE] POST /api/semantic-mappings/business-term-edges
+[ROUTE] POST /api/semantic-mappings/edges
+[ROUTE] POST /api/semantic-mappings/enhanced-match
+[ROUTE] POST /api/semantic-mappings/ignore
+[ROUTE] POST /api/semantic-mappings/replace
+[ROUTE] POST /api/semantic-mappings/upsert-business-term-edge
+[ROUTE] GET /api/semantic-terms
+[ROUTE] POST /api/semantic-terms
+[ROUTE] GET /api/semantic-terms/explain
+[ROUTE] POST /api/semantic-terms/resolve
+[ROUTE] POST /api/semantic-terms/resolve-expression
+[ROUTE] POST /api/semantic-terms/search
+[ROUTE] POST /api/semantic-terms/suggest
+[ROUTE] GET /api/semantic-terms/{id}/suggest-business-terms
+[ROUTE] GET /api/semantic/bundle
+[ROUTE] POST /api/semantic/bundle
+[ROUTE] GET /api/semantic/bundles/by-id
+[ROUTE] GET /api/semantic/bundles/{domain}
+[ROUTE] GET /api/semantic/name-resolver/stats
+[ROUTE] GET /api/semantic/objects
+[ROUTE] GET /api/semantic/bundles/{bundleId}
+[ROUTE] POST /api/slack/callback
+[ROUTE] GET /api/slack/install
+[ROUTE] POST /api/slack/interactive
+[ROUTE] GET /api/succession/metrics/{advisorId}
+[ROUTE] POST /api/succession/plans
+[ROUTE] GET /api/succession/recommend/{advisorId}
+[ROUTE] POST /api/taxplan/detect/{clientId}
+[ROUTE] GET /api/taxplan/opportunities/{clientId}
+[ROUTE] GET /api/templates/{node_id}
+[ROUTE] POST /api/templates/{node_id}/promote
+[ROUTE] GET /api/templates/{node_id}/versions
+[ROUTE] GET /api/templates/
+[ROUTE] GET /api/templates/categories
+[ROUTE] GET /api/templates/categories/{key}/templates
+[ROUTE] GET /api/templates/category/{category}
+[ROUTE] POST /api/templates/clone/{id}
+[ROUTE] GET /api/templates/clones
+[ROUTE] GET /api/templates/clones/{id}
+[ROUTE] DELETE /api/templates/clones/{id}
+[ROUTE] PUT /api/templates/clones/{id}/notes
+[ROUTE] GET /api/templates/featured
+[ROUTE] PUT /api/templates/ratings/{ratingId}/helpful
+[ROUTE] GET /api/templates/{key}
+[ROUTE] POST /api/templates/{id}/rate
+[ROUTE] GET /api/templates/{id}/ratings
+[ROUTE] GET /api/templates/{id}/stats
+[ROUTE] POST /api/temporal
+[ROUTE] GET /api/tenants
+[ROUTE] GET /api/tenants/accessible
+[ROUTE] GET /api/tenants/all
+[ROUTE] GET /api/tenants/debug
+[ROUTE] PATCH /api/tenants/{tenant_id}/datasources/{datasource_id}/models/{model_id}
+[ROUTE] DELETE /api/tenants/{tenantId}/ip-whitelist
+[ROUTE] GET /api/tenants/{tenantId}/ip-whitelist
+[ROUTE] POST /api/tenants/{tenantId}/ip-whitelist
+[ROUTE] GET /api/user/{id}
+[ROUTE] GET /api/users
+[ROUTE] GET /api/users/{user_id}/roles/
+[ROUTE] POST /api/users/{user_id}/roles/
+[ROUTE] DELETE /api/users/{user_id}/roles/{role_id}
+[ROUTE] POST /api/validation-rule-cores
+[ROUTE] GET /api/validation-rule-cores
+[ROUTE] GET /api/validation-rule-cores/{id}
+[ROUTE] GET /api/validation-rule-cores/{id}/impact
+[ROUTE] POST /api/validation-rules
+[ROUTE] GET /api/validation-rules
+[ROUTE] GET /api/validation-rules/schema
+[ROUTE] GET /api/validation-rules/{id}
+[ROUTE] PATCH /api/validation-rules/{id}
+[ROUTE] DELETE /api/validation-rules/{id}
+[ROUTE] GET /api/validation-rules/{id}/audit
+[ROUTE] POST /api/validation-rules/{id}/execute
+[ROUTE] POST /api/validation-rules/{id}/simulate-with-instance
+[ROUTE] GET /api/views
+[ROUTE] POST /api/views
+[ROUTE] POST /api/views/apply
+[ROUTE] GET /api/views/compare
+[ROUTE] POST /api/views/reject
+[ROUTE] POST /api/views/validate
+[ROUTE] PUT /api/views/{name}
+[ROUTE] DELETE /api/views/{name}
+[ROUTE] GET /api/views/{name}
+[ROUTE] GET /api/views/{name}/download
+[ROUTE] GET /api/views/{name}/suggestions
+[ROUTE] GET /api/views/{name}/validate
+[ROUTE] POST /api/workflow-timeout-triggers/
+[ROUTE] GET /api/workflow-timeout-triggers/
+[ROUTE] PUT /api/workflow-timeout-triggers/{triggerId}/
+[ROUTE] DELETE /api/workflow-timeout-triggers/{triggerId}/
+[ROUTE] GET /api/workflow-timeout-triggers/{triggerId}/
+[ROUTE] POST /api/workflow-timeout-triggers/{triggerId}/test
+[ROUTE] GET /api/workflows/{workflowId}/events
+[ROUTE] GET /api/workflows/initiatable
+[ROUTE] POST /api/workflows/{bpDefId}/can-initiate
+[ROUTE] GET /api/ws
+[ROUTE] POST /api/ws/token
+[ROUTE] GET /health
+[ROUTE] GET /layouts
+[ROUTE] POST /layouts
+[ROUTE] DELETE /layouts/{id}
+[ROUTE] GET /layouts/{id}
+[ROUTE] POST /publish/validate
+[ROUTE] GET /reports/definitions/
+[ROUTE] POST /reports/definitions/
+[ROUTE] GET /reports/definitions/{id}
+[ROUTE] PUT /reports/definitions/{id}
+[ROUTE] DELETE /reports/definitions/{id}
+[ROUTE] POST /reports/definitions/{id}/publish
+[ROUTE] GET /reports/extensions/
+[ROUTE] POST /reports/extensions/
+[ROUTE] GET /reports/extensions/{id}
+[ROUTE] PUT /reports/extensions/{id}
+[ROUTE] DELETE /reports/extensions/{id}
+[ROUTE] GET /reports/instances/
+[ROUTE] GET /reports/instances/{id}
+[ROUTE] GET /reports/instances/{id}/download
+[ROUTE] GET /reports/packages
+[ROUTE] POST /reports/provision
+[ROUTE] POST /reports/render
+[ROUTE] POST /reports/render/async
+[ROUTE] POST /reports/schedules/
+[ROUTE] GET /reports/schedules/
+[ROUTE] PUT /reports/schedules/{id}
+[ROUTE] DELETE /reports/schedules/{id}
+[ROUTE] GET /reports/schedules/{id}
+[ROUTE] GET /scheduler/ai/suggestions
+[ROUTE] POST /scheduler/ai/suggestions/{id}/accept
+[ROUTE] POST /scheduler/ai/suggestions/{id}/dismiss
+[ROUTE] GET /scheduler/dags
+[ROUTE] POST /scheduler/dags
+[ROUTE] GET /scheduler/dags/{id}
+[ROUTE] PATCH /scheduler/dags/{id}
+[ROUTE] DELETE /scheduler/dags/{id}
+[ROUTE] POST /scheduler/dags/{id}/run
+[ROUTE] GET /scheduler/dags/{id}/runs
+[ROUTE] GET /scheduler/jobs
+[ROUTE] POST /scheduler/jobs
+[ROUTE] GET /scheduler/jobs/{id}
+[ROUTE] PATCH /scheduler/jobs/{id}
+[ROUTE] DELETE /scheduler/jobs/{id}
+[ROUTE] POST /scheduler/jobs/{id}/run
+[ROUTE] GET /scheduler/jobs/{id}/runs
+[ROUTE] GET /scheduler/runs/dags/{id}
+[ROUTE] GET /scheduler/runs/jobs/{id}
+[ROUTE] GET /scheduler/stats
+[ROUTE] OPTIONS /v1/graphql
+[ROUTE] TRACE /v1/graphql
+[ROUTE] PUT /v1/graphql
+[ROUTE] GET /v1/graphql
+[ROUTE] HEAD /v1/graphql
+[ROUTE] CONNECT /v1/graphql
+[ROUTE] POST /v1/graphql
+[ROUTE] PATCH /v1/graphql
+[ROUTE] DELETE /v1/graphql
+[ROUTE] POST /values/constraints
+[ROUTE] GET /values/constraints
+[ROUTE] POST /values/profiles
+[ROUTE] GET /values/profiles/{clientID}
+[ROUTE] PUT /values/profiles/{clientID}
+[ROUTE] POST /values/signals
+[ROUTE] GET /values/signals
+[ROUTE] GET /values/themes
+[ROUTE] POST /values/themes
+[ROUTES-DUMP-END]
+[REQ] GET /api/views Headers:Content-Type=,Authorization=,Origin=,X-Tenant-ID=,X-Tenant-Datasource-ID= Body:
+[DEBUG-MARKER] path=/api/views method=GET contains_bo=false
+[MW-EXEC] Middleware executing for GET /api/views
+{"level":"info","ts":1771080874.321146,"caller":"api/request_trace_middleware.go:40","msg":"RequestTrace Start: id=041b46a0-ba7c-4fef-9678-078244091255 method=GET path=/api/views tenant="}
+[TRACE START] id=041b46a0-ba7c-4fef-9678-078244091255 method=GET path=/api/views tenant=
+[REGION-MW] path=/api/views, authPrefix=false
+{"level":"info","ts":1771080874.322159,"caller":"api/request_trace_middleware.go:48","msg":"RequestTrace End: id=041b46a0-ba7c-4fef-9678-078244091255 method=GET path=/api/views tenant= status=200 handler="}
+[TRACE END] id=041b46a0-ba7c-4fef-9678-078244091255 method=GET path=/api/views tenant= status=200 handler=
+--- PASS: TestViewsPaginationHandler_DBOnly (0.02s)
+=== RUN   TestListRuntimeViewsAndPagination
+--- PASS: TestListRuntimeViewsAndPagination (0.00s)
+=== RUN   TestGetWsTokenAndValidate
+--- PASS: TestGetWsTokenAndValidate (0.00s)
+=== RUN   TestGetWsTokenExpired
+--- PASS: TestGetWsTokenExpired (2.00s)
+=== RUN   TestHandleWebSocketAuthFailures
+--- PASS: TestHandleWebSocketAuthFailures (0.00s)
+=== RUN   TestCreateBusinessProcess
+--- PASS: TestCreateBusinessProcess (0.00s)
+=== RUN   TestListBusinessProcesses
+--- PASS: TestListBusinessProcesses (0.00s)
+=== RUN   TestGetBusinessProcess
+--- PASS: TestGetBusinessProcess (0.00s)
+=== RUN   TestRegisterBundleRoutes
+--- PASS: TestRegisterBundleRoutes (0.00s)
+=== RUN   TestRegisterCatalogScanRoute
+--- PASS: TestRegisterCatalogScanRoute (0.00s)
+=== RUN   TestRegisterDAXRoutes
+--- PASS: TestRegisterDAXRoutes (0.00s)
+=== RUN   TestRegisterDomainRoutes
+--- PASS: TestRegisterDomainRoutes (0.00s)
+=== RUN   TestGetProfileResults_FiltersBySchemaAndTable
+--- PASS: TestGetProfileResults_FiltersBySchemaAndTable (0.00s)
+=== RUN   TestGetProfileResults_FallbackToHeaders
+--- PASS: TestGetProfileResults_FallbackToHeaders (0.00s)
+=== RUN   TestGetProfileResults_InvalidSchemaTableParams
+--- PASS: TestGetProfileResults_InvalidSchemaTableParams (0.00s)
+=== RUN   TestGetProfileResults_WithPaging
+--- PASS: TestGetProfileResults_WithPaging (0.00s)
+=== RUN   TestValidateSemanticTermPropertiesDimension
+--- PASS: TestValidateSemanticTermPropertiesDimension (0.00s)
+=== RUN   TestValidateSemanticTermPropertiesMeasure
+--- PASS: TestValidateSemanticTermPropertiesMeasure (0.00s)
+=== RUN   TestValidateSemanticTermPropertiesTime
+--- PASS: TestValidateSemanticTermPropertiesTime (0.00s)
+=== RUN   TestValidateSemanticTermPropertiesHierarchy
+--- PASS: TestValidateSemanticTermPropertiesHierarchy (0.00s)
+=== RUN   TestValidateSemanticTermPropertiesSegment
+--- PASS: TestValidateSemanticTermPropertiesSegment (0.00s)
+=== RUN   TestCubePropertiesResponseMarshaling
+--- PASS: TestCubePropertiesResponseMarshaling (0.00s)
+=== RUN   TestCubeYamlExportResponseMarshaling
+--- PASS: TestCubeYamlExportResponseMarshaling (0.00s)
+=== RUN   TestValidateSemanticTermPropertiesUnknownType
+--- PASS: TestValidateSemanticTermPropertiesUnknownType (0.00s)
+=== RUN   TestValidateSemanticTermPropertiesMissingCubeProperties
+--- PASS: TestValidateSemanticTermPropertiesMissingCubeProperties (0.00s)
+=== RUN   TestValidateSemanticTermPropertiesNilProperties
+--- PASS: TestValidateSemanticTermPropertiesNilProperties (0.00s)
+=== RUN   TestEnhancedCubePropertiesMarshaling
+--- PASS: TestEnhancedCubePropertiesMarshaling (0.00s)
+=== RUN   TestEnhancedPropertyValidationWithAllFields
+--- PASS: TestEnhancedPropertyValidationWithAllFields (0.00s)
+=== RUN   TestExpandDomainSpecificAbbreviations
+=== RUN   TestExpandDomainSpecificAbbreviations/Finance:_CAC_abbreviation
+=== RUN   TestExpandDomainSpecificAbbreviations/Finance:_ARR_abbreviation
+=== RUN   TestExpandDomainSpecificAbbreviations/Healthcare:_EMR_abbreviation
+=== RUN   TestExpandDomainSpecificAbbreviations/Unknown_domain_fallback
+--- PASS: TestExpandDomainSpecificAbbreviations (0.00s)
+    --- PASS: TestExpandDomainSpecificAbbreviations/Finance:_CAC_abbreviation (0.00s)
+    --- PASS: TestExpandDomainSpecificAbbreviations/Finance:_ARR_abbreviation (0.00s)
+    --- PASS: TestExpandDomainSpecificAbbreviations/Healthcare:_EMR_abbreviation (0.00s)
+    --- PASS: TestExpandDomainSpecificAbbreviations/Unknown_domain_fallback (0.00s)
+=== RUN   TestGenerateLocalizedTitle
+=== RUN   TestGenerateLocalizedTitle/All_5_original_languages
+=== RUN   TestGenerateLocalizedTitle/English_only
+=== RUN   TestGenerateLocalizedTitle/Multiple_languages_with_unsupported
+=== RUN   TestGenerateLocalizedTitle/Empty_language_list
+=== RUN   TestGenerateLocalizedTitle/All_10_languages_supported
+=== RUN   TestGenerateLocalizedTitle/Portuguese_and_Italian
+=== RUN   TestGenerateLocalizedTitle/Dutch_and_Polish
+=== RUN   TestGenerateLocalizedTitle/Russian_language
+=== RUN   TestGenerateLocalizedTitle/Financial_term_-_Profit
+=== RUN   TestGenerateLocalizedTitle/Financial_term_-_Cost
+=== RUN   TestGenerateLocalizedTitle/Customer_metric_-_Order_Count
+=== RUN   TestGenerateLocalizedTitle/Time_dimension_-_Quarter
+=== RUN   TestGenerateLocalizedTitle/Performance_metric_-_Conversion_Rate
+--- PASS: TestGenerateLocalizedTitle (0.00s)
+    --- PASS: TestGenerateLocalizedTitle/All_5_original_languages (0.00s)
+    --- PASS: TestGenerateLocalizedTitle/English_only (0.00s)
+    --- PASS: TestGenerateLocalizedTitle/Multiple_languages_with_unsupported (0.00s)
+    --- PASS: TestGenerateLocalizedTitle/Empty_language_list (0.00s)
+    --- PASS: TestGenerateLocalizedTitle/All_10_languages_supported (0.00s)
+    --- PASS: TestGenerateLocalizedTitle/Portuguese_and_Italian (0.00s)
+    --- PASS: TestGenerateLocalizedTitle/Dutch_and_Polish (0.00s)
+    --- PASS: TestGenerateLocalizedTitle/Russian_language (0.00s)
+    --- PASS: TestGenerateLocalizedTitle/Financial_term_-_Profit (0.00s)
+    --- PASS: TestGenerateLocalizedTitle/Financial_term_-_Cost (0.00s)
+    --- PASS: TestGenerateLocalizedTitle/Customer_metric_-_Order_Count (0.00s)
+    --- PASS: TestGenerateLocalizedTitle/Time_dimension_-_Quarter (0.00s)
+    --- PASS: TestGenerateLocalizedTitle/Performance_metric_-_Conversion_Rate (0.00s)
+=== RUN   TestValidateAndFormatProperty
+=== RUN   TestValidateAndFormatProperty/Valid_email
+=== RUN   TestValidateAndFormatProperty/Invalid_email
+=== RUN   TestValidateAndFormatProperty/Valid_phone
+=== RUN   TestValidateAndFormatProperty/Valid_currency
+=== RUN   TestValidateAndFormatProperty/Valid_percentage
+=== RUN   TestValidateAndFormatProperty/Invalid_percentage_(>100)
+=== RUN   TestValidateAndFormatProperty/Valid_URL
+=== RUN   TestValidateAndFormatProperty/Valid_JSON
+=== RUN   TestValidateAndFormatProperty/Invalid_JSON
+=== RUN   TestValidateAndFormatProperty/Valid_date
+=== RUN   TestValidateAndFormatProperty/Valid_datetime
+--- PASS: TestValidateAndFormatProperty (0.00s)
+    --- PASS: TestValidateAndFormatProperty/Valid_email (0.00s)
+    --- PASS: TestValidateAndFormatProperty/Invalid_email (0.00s)
+    --- PASS: TestValidateAndFormatProperty/Valid_phone (0.00s)
+    --- PASS: TestValidateAndFormatProperty/Valid_currency (0.00s)
+    --- PASS: TestValidateAndFormatProperty/Valid_percentage (0.00s)
+    --- PASS: TestValidateAndFormatProperty/Invalid_percentage_(>100) (0.00s)
+    --- PASS: TestValidateAndFormatProperty/Valid_URL (0.00s)
+    --- PASS: TestValidateAndFormatProperty/Valid_JSON (0.00s)
+    --- PASS: TestValidateAndFormatProperty/Invalid_JSON (0.00s)
+    --- PASS: TestValidateAndFormatProperty/Valid_date (0.00s)
+    --- PASS: TestValidateAndFormatProperty/Valid_datetime (0.00s)
+=== RUN   TestGenerateAITitle
+=== RUN   TestGenerateAITitle/Decimal_number_column
+=== RUN   TestGenerateAITitle/String_dimension
+=== RUN   TestGenerateAITitle/Timestamp_column
+=== RUN   TestGenerateAITitle/Empty_metadata
+--- PASS: TestGenerateAITitle (0.00s)
+    --- PASS: TestGenerateAITitle/Decimal_number_column (0.00s)
+    --- PASS: TestGenerateAITitle/String_dimension (0.00s)
+    --- PASS: TestGenerateAITitle/Timestamp_column (0.00s)
+    --- PASS: TestGenerateAITitle/Empty_metadata (0.00s)
+=== RUN   TestApplyPropertyTemplate
+=== RUN   TestApplyPropertyTemplate/Finance_measure_template
+=== RUN   TestApplyPropertyTemplate/Finance_dimension_template
+=== RUN   TestApplyPropertyTemplate/Unknown_domain_fallback
+=== RUN   TestApplyPropertyTemplate/Empty_base_properties_with_dimension
+--- PASS: TestApplyPropertyTemplate (0.00s)
+    --- PASS: TestApplyPropertyTemplate/Finance_measure_template (0.00s)
+    --- PASS: TestApplyPropertyTemplate/Finance_dimension_template (0.00s)
+    --- PASS: TestApplyPropertyTemplate/Unknown_domain_fallback (0.00s)
+    --- PASS: TestApplyPropertyTemplate/Empty_base_properties_with_dimension (0.00s)
+=== RUN   TestEnhancementsIntegration
+    glossary_cube_properties_test.go:970: ✅ All 5 enhancements working together successfully
+--- PASS: TestEnhancementsIntegration (0.00s)
+=== RUN   TestValidateTermProperties_StringMinLength
+--- PASS: TestValidateTermProperties_StringMinLength (0.00s)
+=== RUN   TestValidateTermProperties_JSONParse
+--- PASS: TestValidateTermProperties_JSONParse (0.00s)
+=== RUN   TestValidateTermProperties_NumberMinMax
+--- PASS: TestValidateTermProperties_NumberMinMax (0.00s)
+=== RUN   TestValidateTermProperties_MultipleArray
+--- PASS: TestValidateTermProperties_MultipleArray (0.00s)
+=== RUN   TestJSONUnmarshalForProperties
+--- PASS: TestJSONUnmarshalForProperties (0.00s)
+=== RUN   TestDefaultServicesConstruct
+--- PASS: TestDefaultServicesConstruct (0.00s)
+=== RUN   TestIsValidIpOrWildcard
+--- PASS: TestIsValidIpOrWildcard (0.00s)
+=== RUN   TestPatternsOverlap
+--- PASS: TestPatternsOverlap (0.00s)
+=== RUN   TestRegisterIPWhitelistRoutes
+--- PASS: TestRegisterIPWhitelistRoutes (0.00s)
+=== RUN   TestLoadSemanticBundle_RegionMatch
+    llm_gateway_test.go:31: expected bundle, got error: failed to load semantic snapshot: semantic snapshot not found for tenant 'tenant-1' region 'eu-west'
+--- FAIL: TestLoadSemanticBundle_RegionMatch (0.00s)
+=== RUN   TestProcessQuery_RejectsMissingRegionFromPlanner
+--- PASS: TestProcessQuery_RejectsMissingRegionFromPlanner (0.00s)
+=== RUN   TestLoadSemanticBundle_MissingSnapshotForRegion
+--- PASS: TestLoadSemanticBundle_MissingSnapshotForRegion (0.00s)
+=== RUN   TestLoadSemanticBundle_WithSnapshot
+--- PASS: TestLoadSemanticBundle_WithSnapshot (0.00s)
+=== RUN   TestListLookupsPaginationAndSearch
+--- PASS: TestListLookupsPaginationAndSearch (0.00s)
+=== RUN   TestGetLookupValues
+{"level":"info","ts":1771080876.330189,"caller":"logging/logging.go:39","msg":"lookups_routes.go:623: [GetLookupValues] lookup=lu1 tenant=t1 parent= items=2 (static)\n"}
+--- PASS: TestGetLookupValues (0.00s)
+=== RUN   TestLookupCRUD
+{"level":"info","ts":1771080876.330566,"caller":"logging/logging.go:39","msg":"lookups_routes.go:75: [handleCreateLookup] Using tenantID=t1 (header=, query=t1)\n"}
+{"level":"info","ts":1771080876.330731,"caller":"logging/logging.go:39","msg":"lookups_routes.go:211: [handleCreateLookupValue] Using tenantID=t1 (header=, query=t1)\n"}
+--- PASS: TestLookupCRUD (0.00s)
+=== RUN   TestGetLookupValuesWithParent
+{"level":"info","ts":1771080876.3310552,"caller":"logging/logging.go:39","msg":"lookups_routes.go:623: [GetLookupValues] lookup=lu2 tenant=t1 parent= items=1 (static)\n"}
+{"level":"info","ts":1771080876.3311281,"caller":"logging/logging.go:39","msg":"lookups_routes.go:623: [GetLookupValues] lookup=lu2 tenant=t1 parent=p1 items=1 (static)\n"}
+--- PASS: TestGetLookupValuesWithParent (0.00s)
+=== RUN   TestGetLookupValuesFromSourceTable
+{"level":"info","ts":1771080876.331361,"caller":"logging/logging.go:39","msg":"lookups_routes.go:534: [GetLookupValues] SQL=SELECT id, name, COALESCE(parent_id, NULL) as parent_id, tenant_id FROM dept_source WHERE (tenant_id = $1 OR tenant_id = $2) AND parent_id IS NULL ORDER BY name LIMIT $3 OFFSET $4 args=[t1  100 0]\n"}
+{"level":"info","ts":1771080876.33139,"caller":"logging/logging.go:39","msg":"lookups_routes.go:564: [GetLookupValues] lookup=l_src tenant=t1 parent= items=2\n"}
+{"level":"info","ts":1771080876.3314419,"caller":"logging/logging.go:39","msg":"lookups_routes.go:534: [GetLookupValues] SQL=SELECT id, name, COALESCE(parent_id, NULL) as parent_id, tenant_id FROM dept_source WHERE (tenant_id = $1 OR tenant_id = $2) AND parent_id = $3 ORDER BY name LIMIT $4 OFFSET $5 args=[t1  p1 100 0]\n"}
+{"level":"info","ts":1771080876.331465,"caller":"logging/logging.go:39","msg":"lookups_routes.go:564: [GetLookupValues] lookup=l_src tenant=t1 parent=p1 items=1\n"}
+{"level":"info","ts":1771080876.3315032,"caller":"logging/logging.go:39","msg":"lookups_routes.go:534: [GetLookupValues] SQL=SELECT id, name, COALESCE(parent_id, NULL) as parent_id, tenant_id FROM dept_source WHERE (tenant_id = $1 OR tenant_id = $2) AND parent_id = $3 ORDER BY name LIMIT $4 OFFSET $5 args=[t1  p1 100 0]\n"}
+{"level":"info","ts":1771080876.331525,"caller":"logging/logging.go:39","msg":"lookups_routes.go:564: [GetLookupValues] lookup=l_src tenant=t1 parent=p1 items=1\n"}
+--- PASS: TestGetLookupValuesFromSourceTable (0.00s)
+=== RUN   TestHandleListMarketplaceItems_NullIconEmojiReturnsValidJSON
+--- PASS: TestHandleListMarketplaceItems_NullIconEmojiReturnsValidJSON (0.00s)
+=== RUN   TestHandleListMarketplaceItems_ScanErrorReturnsStructuredJSONError
+{"level":"warn","ts":1771080876.331869,"caller":"api/marketplace_routes.go:256","msg":"marketplace items scan error: sql: Scan error on column index 12, name \"implementation_json\": unsupported Scan, storing driver.Value type string into type *json.RawMessage"}
+--- PASS: TestHandleListMarketplaceItems_ScanErrorReturnsStructuredJSONError (0.00s)
+=== RUN   TestCommitMetricsV1Handler
+--- PASS: TestCommitMetricsV1Handler (0.00s)
+=== RUN   TestNLQFeedback
+=== RUN   TestNLQFeedback/Submit_Feedback_Success
+--- PASS: TestNLQFeedback (0.00s)
+    --- PASS: TestNLQFeedback/Submit_Feedback_Success (0.00s)
+=== RUN   TestPlanRequest_ValidateRejectsMissingRegion
+--- PASS: TestPlanRequest_ValidateRejectsMissingRegion (0.00s)
+=== RUN   TestPlanRequest_ValidateAcceptsRegion
+--- PASS: TestPlanRequest_ValidateAcceptsRegion (0.00s)
+=== RUN   TestRegisterPolicyRoutes_ListPolicies
+--- PASS: TestRegisterPolicyRoutes_ListPolicies (0.00s)
+=== RUN   TestProfilerE2E
+    profiler_batch_integration_test.go:21: skipping E2E profiler test; set RUN_PROFILER_E2E=1 to enable
+--- SKIP: TestProfilerE2E (0.00s)
+=== RUN   TestDefaultProfilerGetStatusAndResults
+--- PASS: TestDefaultProfilerGetStatusAndResults (0.00s)
+=== RUN   TestDBAllowedRegionsProvider_JSONBColumn
+--- PASS: TestDBAllowedRegionsProvider_JSONBColumn (0.00s)
+=== RUN   TestDBAllowedRegionsProvider_MetadataFallback_Comma
+--- PASS: TestDBAllowedRegionsProvider_MetadataFallback_Comma (0.00s)
+=== RUN   TestDBAllowedRegionsProvider_EmptyOrNull
+--- PASS: TestDBAllowedRegionsProvider_EmptyOrNull (0.00s)
+=== RUN   TestDBAllowedRegionsProvider_JSONTextInMetadata
+--- PASS: TestDBAllowedRegionsProvider_JSONTextInMetadata (0.00s)
+=== RUN   TestPostDiscoverRelationships
+=== RUN   TestPostDiscoverRelationships/should_discover_relationships_successfully
+{"level":"error","ts":1771080876.337188,"caller":"api/enhanced_relationship_discovery.go:287","msg":"failed to discover relationships: unrecognized token: \":\"","stacktrace":"github.com/hondyman/semlayer/backend/internal/api.(*EnhancedRelationshipDiscoveryService).DiscoverLinkableEntitiesWithSemanticContext\n\t/Users/eganpj/GitHub/semlayer/backend/internal/api/enhanced_relationship_discovery.go:287\ngithub.com/hondyman/semlayer/backend/internal/api.(*Server).postDiscoverRelationships\n\t/Users/eganpj/GitHub/semlayer/backend/internal/api/relationship_api_handlers.go:57\ngithub.com/hondyman/semlayer/backend/internal/api.TestPostDiscoverRelationships.func1\n\t/Users/eganpj/GitHub/semlayer/backend/internal/api/relationship_api_handlers_test.go:46\ntesting.tRunner\n\t/opt/homebrew/Cellar/go/1.25.7_1/libexec/src/testing/testing.go:1934"}
+{"level":"warn","ts":1771080876.337264,"caller":"api/relationship_api_handlers.go:66","msg":"Complex relationship discovery failed (failed to discover relationships: unrecognized token: \":\"), falling back to simple discovery"}
+{"level":"error","ts":1771080876.3373609,"caller":"api/enhanced_relationship_discovery.go:287","msg":"failed to discover relationships: unrecognized token: \":\"","stacktrace":"github.com/hondyman/semlayer/backend/internal/api.(*EnhancedRelationshipDiscoveryService).DiscoverLinkableEntitiesWithSemanticContext\n\t/Users/eganpj/GitHub/semlayer/backend/internal/api/enhanced_relationship_discovery.go:287\ngithub.com/hondyman/semlayer/backend/internal/api.(*EnhancedRelationshipDiscoveryService).DiscoverMultiHopPaths\n\t/Users/eganpj/GitHub/semlayer/backend/internal/api/enhanced_relationship_discovery.go:358\ngithub.com/hondyman/semlayer/backend/internal/api.(*Server).postDiscoverRelationships\n\t/Users/eganpj/GitHub/semlayer/backend/internal/api/relationship_api_handlers.go:88\ngithub.com/hondyman/semlayer/backend/internal/api.TestPostDiscoverRelationships.func1\n\t/Users/eganpj/GitHub/semlayer/backend/internal/api/relationship_api_handlers_test.go:46\ntesting.tRunner\n\t/opt/homebrew/Cellar/go/1.25.7_1/libexec/src/testing/testing.go:1934"}
+{"level":"warn","ts":1771080876.337374,"caller":"api/relationship_api_handlers.go:96","msg":"failed to discover multi-hop paths: failed to discover direct relationships: failed to discover relationships: unrecognized token: \":\""}
+=== RUN   TestPostDiscoverRelationships/should_return_error_without_tenant_context
+=== RUN   TestPostDiscoverRelationships/should_return_error_without_entity_attribute_id
+=== RUN   TestPostDiscoverRelationships/should_cap_hop_depth_at_5
+{"level":"error","ts":1771080876.337641,"caller":"api/enhanced_relationship_discovery.go:287","msg":"failed to discover relationships: unrecognized token: \":\"","stacktrace":"github.com/hondyman/semlayer/backend/internal/api.(*EnhancedRelationshipDiscoveryService).DiscoverLinkableEntitiesWithSemanticContext\n\t/Users/eganpj/GitHub/semlayer/backend/internal/api/enhanced_relationship_discovery.go:287\ngithub.com/hondyman/semlayer/backend/internal/api.(*Server).postDiscoverRelationships\n\t/Users/eganpj/GitHub/semlayer/backend/internal/api/relationship_api_handlers.go:57\ngithub.com/hondyman/semlayer/backend/internal/api.TestPostDiscoverRelationships.func4\n\t/Users/eganpj/GitHub/semlayer/backend/internal/api/relationship_api_handlers_test.go:108\ntesting.tRunner\n\t/opt/homebrew/Cellar/go/1.25.7_1/libexec/src/testing/testing.go:1934"}
+{"level":"warn","ts":1771080876.3376799,"caller":"api/relationship_api_handlers.go:66","msg":"Complex relationship discovery failed (failed to discover relationships: unrecognized token: \":\"), falling back to simple discovery"}
+--- PASS: TestPostDiscoverRelationships (0.00s)
+    --- PASS: TestPostDiscoverRelationships/should_discover_relationships_successfully (0.00s)
+    --- PASS: TestPostDiscoverRelationships/should_return_error_without_tenant_context (0.00s)
+    --- PASS: TestPostDiscoverRelationships/should_return_error_without_entity_attribute_id (0.00s)
+    --- PASS: TestPostDiscoverRelationships/should_cap_hop_depth_at_5 (0.00s)
+=== RUN   TestPostApplyRelationship
+=== RUN   TestPostApplyRelationship/should_apply_relationship_successfully
+{"level":"info","ts":1771080876.338179,"caller":"logging/logging.go:39","msg":"relationships_chi.go:301: postApplyRelationship called\n"}
+{"level":"info","ts":1771080876.3382652,"caller":"logging/logging.go:39","msg":"relationships_chi.go:345: Relationship suggestion not found for 11111111-1111-1111-1111-111111111111 -> 22222222-2222-2222-2222-222222222222, but creating edge anyway\n"}
+{"level":"info","ts":1771080876.338329,"caller":"logging/logging.go:39","msg":"relationships_chi.go:827: Created business object relationship with ID: 3851ee18-d52b-4431-9e9c-a24dcb1f85b9 (source: 11111111-1111-1111-1111-111111111111, target: 22222222-2222-2222-2222-222222222222)\n"}
+{"level":"info","ts":1771080876.338336,"caller":"logging/logging.go:39","msg":"relationships_chi.go:354: Created relationship edge with ID: 3851ee18-d52b-4431-9e9c-a24dcb1f85b9\n"}
+=== RUN   TestPostApplyRelationship/should_return_error_without_tenant_context
+{"level":"info","ts":1771080876.338358,"caller":"logging/logging.go:39","msg":"relationships_chi.go:301: postApplyRelationship called\n"}
+=== RUN   TestPostApplyRelationship/should_return_error_without_required_fields
+{"level":"info","ts":1771080876.338399,"caller":"logging/logging.go:39","msg":"relationships_chi.go:301: postApplyRelationship called\n"}
+--- PASS: TestPostApplyRelationship (0.00s)
+    --- PASS: TestPostApplyRelationship/should_apply_relationship_successfully (0.00s)
+    --- PASS: TestPostApplyRelationship/should_return_error_without_tenant_context (0.00s)
+    --- PASS: TestPostApplyRelationship/should_return_error_without_required_fields (0.00s)
+=== RUN   TestPostTriggerModelRegeneration
+=== RUN   TestPostTriggerModelRegeneration/should_trigger_model_regeneration_successfully
+{"level":"info","ts":1771080876.338751,"caller":"api/semantic_model_regeneration.go:314","msg":"triggered model regeneration for entity 11111111-1111-1111-1111-111111111111 (trigger: c50944c3-bcc1-4b02-a762-49e71bc14c64, queue: 045babfb-3caf-490d-9b40-f540312fa252)"}
+=== RUN   TestPostTriggerModelRegeneration/should_return_error_without_tenant_context
+--- PASS: TestPostTriggerModelRegeneration (0.00s)
+    --- PASS: TestPostTriggerModelRegeneration/should_trigger_model_regeneration_successfully (0.00s)
+    --- PASS: TestPostTriggerModelRegeneration/should_return_error_without_tenant_context (0.00s)
+=== RUN   TestGetModelVersion
+=== RUN   TestGetModelVersion/should_retrieve_model_version_successfully
+=== RUN   TestGetModelVersion/should_return_error_without_tenant_context
+--- PASS: TestGetModelVersion (0.00s)
+    --- PASS: TestGetModelVersion/should_retrieve_model_version_successfully (0.00s)
+    --- PASS: TestGetModelVersion/should_return_error_without_tenant_context (0.00s)
+=== RUN   TestMultiTenantIsolation
+{"level":"error","ts":1771080876.339508,"caller":"api/enhanced_relationship_discovery.go:287","msg":"failed to discover relationships: unrecognized token: \":\"","stacktrace":"github.com/hondyman/semlayer/backend/internal/api.(*EnhancedRelationshipDiscoveryService).DiscoverLinkableEntitiesWithSemanticContext\n\t/Users/eganpj/GitHub/semlayer/backend/internal/api/enhanced_relationship_discovery.go:287\ngithub.com/hondyman/semlayer/backend/internal/api.(*Server).postDiscoverRelationships\n\t/Users/eganpj/GitHub/semlayer/backend/internal/api/relationship_api_handlers.go:57\ngithub.com/hondyman/semlayer/backend/internal/api.TestMultiTenantIsolation\n\t/Users/eganpj/GitHub/semlayer/backend/internal/api/relationship_api_handlers_test.go:300\ntesting.tRunner\n\t/opt/homebrew/Cellar/go/1.25.7_1/libexec/src/testing/testing.go:1934"}
+{"level":"warn","ts":1771080876.339519,"caller":"api/relationship_api_handlers.go:66","msg":"Complex relationship discovery failed (failed to discover relationships: unrecognized token: \":\"), falling back to simple discovery"}
+{"level":"error","ts":1771080876.3396108,"caller":"api/enhanced_relationship_discovery.go:287","msg":"failed to discover relationships: unrecognized token: \":\"","stacktrace":"github.com/hondyman/semlayer/backend/internal/api.(*EnhancedRelationshipDiscoveryService).DiscoverLinkableEntitiesWithSemanticContext\n\t/Users/eganpj/GitHub/semlayer/backend/internal/api/enhanced_relationship_discovery.go:287\ngithub.com/hondyman/semlayer/backend/internal/api.(*Server).postDiscoverRelationships\n\t/Users/eganpj/GitHub/semlayer/backend/internal/api/relationship_api_handlers.go:57\ngithub.com/hondyman/semlayer/backend/internal/api.TestMultiTenantIsolation\n\t/Users/eganpj/GitHub/semlayer/backend/internal/api/relationship_api_handlers_test.go:313\ntesting.tRunner\n\t/opt/homebrew/Cellar/go/1.25.7_1/libexec/src/testing/testing.go:1934"}
+{"level":"warn","ts":1771080876.339624,"caller":"api/relationship_api_handlers.go:66","msg":"Complex relationship discovery failed (failed to discover relationships: unrecognized token: \":\"), falling back to simple discovery"}
+--- PASS: TestMultiTenantIsolation (0.00s)
+=== RUN   TestRegisterRoleRoutes
+--- PASS: TestRegisterRoleRoutes (0.00s)
+=== RUN   TestPlanHandler_RejectsMissingRegion
+--- PASS: TestPlanHandler_RejectsMissingRegion (0.00s)
+=== RUN   TestMemSessionServiceBasicFlow
+--- PASS: TestMemSessionServiceBasicFlow (0.00s)
+=== RUN   TestHandleListExecutions_ReturnsRows
+--- PASS: TestHandleListExecutions_ReturnsRows (0.00s)
+=== RUN   TestHandleCreateTimeoutTrigger
+{"level":"info","ts":1771080876.33995,"caller":"logging/logging.go:39","msg":"timeout_triggers_handlers.go:138: [TimeoutTriggersHandler] Created timeout trigger: HireEmployee.ManagerApproval (id=b7fb638d-f747-4265-ae84-5f28fbe38042)\n"}
+--- PASS: TestHandleCreateTimeoutTrigger (0.00s)
+=== RUN   TestHandleCreateTimeoutTrigger_InvalidActions
+--- PASS: TestHandleCreateTimeoutTrigger_InvalidActions (0.00s)
+=== RUN   TestHandleCreateTimeoutTrigger_NoRBACRole
+--- PASS: TestHandleCreateTimeoutTrigger_NoRBACRole (0.00s)
+=== RUN   TestHandleListTimeoutTriggers
+{"level":"info","ts":1771080876.340076,"caller":"logging/logging.go:39","msg":"timeout_triggers_handlers.go:216: [TimeoutTriggersHandler] Listed 2 timeout triggers for tenant tenant-123\n"}
+--- PASS: TestHandleListTimeoutTriggers (0.00s)
+=== RUN   TestHandleListTimeoutTriggers_FilterByWorkflow
+{"level":"info","ts":1771080876.3401442,"caller":"logging/logging.go:39","msg":"timeout_triggers_handlers.go:216: [TimeoutTriggersHandler] Listed 1 timeout triggers for tenant tenant-123\n"}
+--- PASS: TestHandleListTimeoutTriggers_FilterByWorkflow (0.00s)
+=== RUN   TestHandleGetTimeoutTrigger
+--- PASS: TestHandleGetTimeoutTrigger (0.00s)
+=== RUN   TestHandleDeleteTimeoutTrigger
+{"level":"info","ts":1771080876.3402739,"caller":"logging/logging.go:39","msg":"timeout_triggers_handlers.go:404: [TimeoutTriggersHandler] Deleted timeout trigger: trigger-123\n"}
+--- PASS: TestHandleDeleteTimeoutTrigger (0.00s)
+=== RUN   TestTimeoutScenario_48HourEscalation
+{"level":"info","ts":1771080876.340354,"caller":"logging/logging.go:39","msg":"timeout_triggers_handlers.go:138: [TimeoutTriggersHandler] Created timeout trigger: HireEmployee.ManagerApproval (id=7a664757-cbb3-4364-b93c-193de4292a48)\n"}
+--- PASS: TestTimeoutScenario_48HourEscalation (0.00s)
+=== RUN   TestProxyTempoTracesWithValidAPIKey
+--- PASS: TestProxyTempoTracesWithValidAPIKey (0.00s)
+=== RUN   TestProxyTempoTracesWithoutAuth
+--- PASS: TestProxyTempoTracesWithoutAuth (0.00s)
+=== RUN   TestListWorkflowEvents_MissingTenant
+--- PASS: TestListWorkflowEvents_MissingTenant (0.00s)
+=== RUN   TestListWorkflowEvents_WithTenantReturnsList
+--- PASS: TestListWorkflowEvents_WithTenantReturnsList (0.00s)
+=== RUN   TestUpdateUserPreferences_Success
+--- PASS: TestUpdateUserPreferences_Success (0.00s)
+=== RUN   TestUpdateUserPreferences_Unauthorized
+--- PASS: TestUpdateUserPreferences_Unauthorized (0.00s)
+=== RUN   TestMultiEntityValidationRules
+=== RUN   TestMultiEntityValidationRules/Global_rule_matches_any_entity
+=== RUN   TestMultiEntityValidationRules/Specific_entity_matches_exact_query
+=== RUN   TestMultiEntityValidationRules/Specific_entity_doesn't_match_different_entity
+=== RUN   TestMultiEntityValidationRules/Multiple_entities_in_array
+--- PASS: TestMultiEntityValidationRules (0.00s)
+    --- PASS: TestMultiEntityValidationRules/Global_rule_matches_any_entity (0.00s)
+    --- PASS: TestMultiEntityValidationRules/Specific_entity_matches_exact_query (0.00s)
+    --- PASS: TestMultiEntityValidationRules/Specific_entity_doesn't_match_different_entity (0.00s)
+    --- PASS: TestMultiEntityValidationRules/Multiple_entities_in_array (0.00s)
+=== RUN   TestValidationRuleRequestStructure
+--- PASS: TestValidationRuleRequestStructure (0.00s)
+=== RUN   TestValidationRuleResponseStructure
+--- PASS: TestValidationRuleResponseStructure (0.00s)
+=== RUN   TestMultiEntityQueryBuilder
+=== RUN   TestMultiEntityQueryBuilder/Entity_filter_takes_precedence
+=== RUN   TestMultiEntityQueryBuilder/Legacy_target_entity_fallback
+--- PASS: TestMultiEntityQueryBuilder (0.00s)
+    --- PASS: TestMultiEntityQueryBuilder/Entity_filter_takes_precedence (0.00s)
+    --- PASS: TestMultiEntityQueryBuilder/Legacy_target_entity_fallback (0.00s)
+=== RUN   TestValidationRuleHandlerIntegration
+--- PASS: TestValidationRuleHandlerIntegration (0.00s)
+=== RUN   TestMultiEntityQueryCoverage
+=== RUN   TestMultiEntityQueryCoverage/Global_rule_applies_to_all_entities
+=== RUN   TestMultiEntityQueryCoverage/Specific_entity_matches_its_rules
+=== RUN   TestMultiEntityQueryCoverage/Multiple_matching_rules
+--- PASS: TestMultiEntityQueryCoverage (0.00s)
+    --- PASS: TestMultiEntityQueryCoverage/Global_rule_applies_to_all_entities (0.00s)
+    --- PASS: TestMultiEntityQueryCoverage/Specific_entity_matches_its_rules (0.00s)
+    --- PASS: TestMultiEntityQueryCoverage/Multiple_matching_rules (0.00s)
+=== RUN   TestHandleValidateField_Pass
+--- PASS: TestHandleValidateField_Pass (0.00s)
+=== RUN   TestHandleValidateField_Fail
+--- PASS: TestHandleValidateField_Fail (0.00s)
+=== RUN   TestHandleValidateField_MissingHeaders
+--- PASS: TestHandleValidateField_MissingHeaders (0.00s)
+=== RUN   TestTriggerValidate_Integration
+--- PASS: TestTriggerValidate_Integration (0.00s)
+=== RUN   TestWebSocketEndToEndProfiler
+{"level":"info","ts":1771080876.3419552,"caller":"api/api.go:7158","msg":"DEBUG: runProfile started","jobID":"421fc99b-b3bb-49f4-9201-9e5aa91cc698"}
+{"level":"info","ts":1771080876.341994,"caller":"api/api.go:7174","msg":"profiler running job","job_id":"421fc99b-b3bb-49f4-9201-9e5aa91cc698","batch_size":0,"tables":1}
+{"level":"info","ts":1771080876.341999,"caller":"api/api.go:7176","msg":"DEBUG: profiler running job","schema":"public"}
+{"level":"info","ts":1771080876.3435452,"caller":"api/api.go:7199","msg":"alpha pool created","url":"postgres://postgres:postgres@postgres:5432/alpha?sslmode=disable"}
+{"level":"info","ts":1771080876.3435562,"caller":"api/api.go:7237","msg":"schemas to profile (grouped)","schemas":{"public":["table1"]}}
+{"level":"info","ts":1771080876.343578,"caller":"api/api.go:7240","msg":"starting profiler","schema":"public","tables":["table1"],"datasource":""}
+{"level":"warn","ts":1771080876.35356,"caller":"profiler/profiler.go:56","msg":"failed to list columns","schema":"public","table":"table1","error":"failed to connect to `user=eganpj database=`: /private/tmp/.s.PGSQL.5432 (/private/tmp): server error: FATAL: database \"eganpj\" does not exist (SQLSTATE 3D000)"}
+--- PASS: TestWebSocketEndToEndProfiler (0.01s)
+=== RUN   TestWSPayloadShapes
+--- PASS: TestWSPayloadShapes (0.00s)
+=== RUN   TestSetupRouter_WithSessionAuthAndWsToken
+DEBUG: SetupRouter INVOKED! [Version 3]
+{"level":"info","ts":1771080876.354059,"caller":"api/api.go:666","msg":"RequestTracingMiddleware registered on router"}
+{"level":"info","ts":1771080876.354346,"caller":"api/api.go:898","msg":"✅ Gemini client assigned to LLM gateway (Planner & Executor)"}
+{"level":"info","ts":1771080876.354363,"caller":"api/api.go:911","msg":"Audit and Semantic publishers initialized for Kafka"}
+{"level":"warn","ts":1771080876.3543859,"caller":"api/api.go:976","msg":"Failed to initialize Trino client for audit history: failed to open trino connection: sql: unknown driver \"trino\" (forgotten import?)"}
+{"level":"warn","ts":1771080876.354794,"caller":"api/api.go:1305","msg":"Failed to initialize audit Trino querier: failed to connect to trino: sql: unknown driver \"trino\" (forgotten import?)"}
+2026/02/14 09:54:36 INFO  No logger configured for temporal client. Created default one.
+Warning: Failed to connect to Ignite: failed to connect to ignite: failed to open connection: dial tcp: lookup ignite: no such host. Cache operations will be skipped.
+[ROUTES-DUMP-START]
+[ROUTE] POST /_debug/validation-rules-proxy
+[ROUTE] GET /_routes
+[ROUTE] POST /ai/analyze-signal
+[ROUTE] POST /ai/explain-portfolio
+[ROUTE] POST /ai/generate-constraints
+[ROUTE] POST /analytics/layout
+[ROUTE] GET /api/debug/headers
+[ROUTE] POST /api/events/tenant-instance-created
+[ROUTE] GET /api/iceberg/lineage
+[ROUTE] POST /api/instance/clone-from-goldcopy
+[ROUTE] POST /api/instance/sync-connections-from-goldcopy
+[ROUTE] GET /api/intelligence/storage/plans
+[ROUTE] POST /api/intelligence/storage/plans/generate
+[ROUTE] GET /api/intelligence/storage/plans/{id}
+[ROUTE] POST /api/intelligence/storage/plans/{id}/execute
+[ROUTE] POST /api/intelligence/storage/plans/{id}/status
+[ROUTE] POST /api/layouts
+[ROUTE] GET /api/layouts
+[ROUTE] GET /api/layouts/{id}
+[ROUTE] PUT /api/layouts/{id}
+[ROUTE] DELETE /api/layouts/{id}
+[ROUTE] GET /api/metrics/global
+[ROUTE] GET /api/metrics/region-heatmap
+[ROUTE] GET /api/metrics/tenant/{tenantId}
+[ROUTE] GET /api/plans
+[ROUTE] GET /api/plans/timeline
+[ROUTE] POST /api/rag/search
+[ROUTE] POST /api/rag/upload
+[ROUTE] GET /api/scheduler/governance/audit
+[ROUTE] GET /api/scheduler/governance/audit/entity/{type}/{id}
+[ROUTE] GET /api/scheduler/governance/audit/stats
+[ROUTE] GET /api/scheduler/governance/changesets
+[ROUTE] POST /api/scheduler/governance/changesets
+[ROUTE] GET /api/scheduler/governance/changesets/{id}
+[ROUTE] POST /api/scheduler/governance/changesets/{id}/apply
+[ROUTE] POST /api/scheduler/governance/changesets/{id}/approve
+[ROUTE] POST /api/scheduler/governance/changesets/{id}/reject
+[ROUTE] POST /api/scheduler/governance/changesets/{id}/rollback
+[ROUTE] POST /api/scheduler/governance/policies
+[ROUTE] GET /api/scheduler/governance/policies
+[ROUTE] GET /api/scheduler/governance/policies/{id}
+[ROUTE] PATCH /api/scheduler/governance/policies/{id}
+[ROUTE] DELETE /api/scheduler/governance/policies/{id}
+[ROUTE] GET /api/tempo/traces
+[ROUTE] GET /api/tempo/traces/{traceId}
+[ROUTE] GET /api/v1/folders/
+[ROUTE] GET /api/v1/folders/{id}/analytics
+[ROUTE] GET /api/v1/folders/{id}/diff
+[ROUTE] POST /api/v1/folders/{id}/items
+[ROUTE] GET /api/v1/metrics/commit
+[ROUTE] GET /api/v1/page-layouts
+[ROUTE] POST /api/v1/page-layouts
+[ROUTE] PUT /api/v1/page-layouts/{id}
+[ROUTE] DELETE /api/v1/page-layouts/{id}
+[ROUTE] GET /api/v1/page-layouts/{id}
+[ROUTE] POST /api/v1/pipelines
+[ROUTE] GET /api/v1/pipelines
+[ROUTE] GET /api/v1/pipelines/activities/safe
+[ROUTE] GET /api/v1/pipelines/{id}
+[ROUTE] PUT /api/v1/pipelines/{id}
+[ROUTE] DELETE /api/v1/pipelines/{id}
+[ROUTE] POST /api/v1/pipelines/{id}/execute
+[ROUTE] POST /api/v1/pipelines/{id}/simulate
+[ROUTE] GET /api/v1/reports/
+[ROUTE] POST /api/v1/reports/
+[ROUTE] PUT /api/v1/reports/{id}
+[ROUTE] DELETE /api/v1/reports/{id}
+[ROUTE] GET /api/v1/reports/{id}
+[ROUTE] GET /api/_debug/amqp-metrics
+[ROUTE] POST /api/_debug/publish-event
+[ROUTE] POST /api/_debug/validation-rules-proxy
+[ROUTE] GET /api/abbreviations/
+[ROUTE] POST /api/abbreviations/
+[ROUTE] POST /api/abbreviations/expand
+[ROUTE] GET /api/abbreviations/export
+[ROUTE] POST /api/abbreviations/scan
+[ROUTE] POST /api/abbreviations/suggest
+[ROUTE] POST /api/abbreviations/validate
+[ROUTE] GET /api/abbreviations/{id}/
+[ROUTE] PUT /api/abbreviations/{id}/
+[ROUTE] DELETE /api/abbreviations/{id}/
+[ROUTE] POST /api/admin/api-keys
+[ROUTE] POST /api/admin/cube/sync
+[ROUTE] POST /api/admin/eval/run
+[ROUTE] GET /api/admin/llm/config
+[ROUTE] PUT /api/admin/llm/config
+[ROUTE] POST /api/admin/llm/test
+[ROUTE] POST /api/admin/quotas
+[ROUTE] GET /api/admin/quotas
+[ROUTE] POST /api/ai/generate-dag
+[ROUTE] POST /api/ai/field-recommendations
+[ROUTE] POST /api/ai/generate-layout
+[ROUTE] POST /api/ai/generate-validation
+[ROUTE] GET /api/ai/layouts
+[ROUTE] POST /api/ai/mark-adopted
+[ROUTE] POST /api/altinvest/
+[ROUTE] POST /api/altinvest/capital-call
+[ROUTE] GET /api/altinvest/client/{clientId}
+[ROUTE] POST /api/api/cube/dry-run
+[ROUTE] POST /api/api/cube/generate
+[ROUTE] POST /api/api/cube/generate/{boID}
+[ROUTE] GET /api/api/cube/meta
+[ROUTE] GET /api/api/cube/pre-aggregations
+[ROUTE] GET /api/api/cube/preview
+[ROUTE] POST /api/api/cube/query
+[ROUTE] POST /api/api/metrics/
+[ROUTE] GET /api/api/metrics/
+[ROUTE] DELETE /api/api/metrics/{metricID}/
+[ROUTE] GET /api/api/metrics/{metricID}/
+[ROUTE] PUT /api/api/metrics/{metricID}/
+[ROUTE] GET /api/api/metrics/{metricID}/anomalies
+[ROUTE] POST /api/api/metrics/{metricID}/compute/anomaly
+[ROUTE] POST /api/api/metrics/{metricID}/compute/pop
+[ROUTE] GET /api/api/metrics/{metricID}/runs
+[ROUTE] POST /api/api/process-analytics/analyze-bottlenecks
+[ROUTE] GET /api/api/process-analytics/bottlenecks
+[ROUTE] GET /api/api/process-analytics/dashboard
+[ROUTE] GET /api/api/process-analytics/predict-duration
+[ROUTE] GET /api/api/process-analytics/recommendations
+[ROUTE] GET /api/api/process-analytics/step-performance
+[ROUTE] GET /api/api/process-benchmarking/best-practices
+[ROUTE] POST /api/api/process-benchmarking/calculate-score
+[ROUTE] GET /api/api/process-benchmarking/gap-analysis
+[ROUTE] GET /api/api/process-benchmarking/industry
+[ROUTE] GET /api/api/process-benchmarking/peers
+[ROUTE] GET /api/api/process-benchmarking/score
+[ROUTE] GET /api/api/process-monitor/active-instances
+[ROUTE] GET /api/api/process-monitor/instance/{workflowID}
+[ROUTE] GET /api/api/process-monitor/instance/{workflowID}/history
+[ROUTE] POST /api/api/process-monitor/intervene
+[ROUTE] GET /api/api/process-monitor/stats
+[ROUTE] GET /api/api/process-monitor/ws
+[ROUTE] POST /api/api/process-optimization/analyze
+[ROUTE] GET /api/api/process-optimization/applied
+[ROUTE] POST /api/api/process-optimization/apply/{suggestionID}
+[ROUTE] POST /api/api/process-optimization/auto-tune/enable
+[ROUTE] GET /api/api/process-optimization/auto-tune/status
+[ROUTE] POST /api/api/process-optimization/dismiss/{suggestionID}
+[ROUTE] GET /api/api/process-optimization/forecast/{suggestionID}
+[ROUTE] GET /api/api/process-optimization/suggestions
+[ROUTE] POST /api/api/rdl/evaluate/
+[ROUTE] POST /api/api/rdl/evaluate/portfolio
+[ROUTE] POST /api/api/rdl/evaluate/tlh
+[ROUTE] POST /api/api/rdl/rules/
+[ROUTE] GET /api/api/rdl/rules/
+[ROUTE] GET /api/api/rdl/rules/{ruleID}/
+[ROUTE] PUT /api/api/rdl/rules/{ruleID}/
+[ROUTE] DELETE /api/api/rdl/rules/{ruleID}/
+[ROUTE] GET /api/api/rdl/templates/
+[ROUTE] GET /api/api/rdl/templates/{templateID}
+[ROUTE] POST /api/api/rdl/validate
+[ROUTE] GET /api/api/rules/
+[ROUTE] POST /api/api/rules/
+[ROUTE] PUT /api/api/rules/{ruleID}/
+[ROUTE] DELETE /api/api/rules/{ruleID}/
+[ROUTE] GET /api/api/rules/{ruleID}/
+[ROUTE] GET /api/api/semantic/analytics/history
+[ROUTE] GET /api/api/semantic/analytics/performance
+[ROUTE] GET /api/api/semantic/bundles/{domain}
+[ROUTE] GET /api/api/semantic/cubes
+[ROUTE] POST /api/api/semantic/cubes
+[ROUTE] GET /api/api/semantic/cubes/{name}
+[ROUTE] PUT /api/api/semantic/cubes/{name}
+[ROUTE] POST /api/api/semantic/cubes/{name}/dimensions
+[ROUTE] POST /api/api/semantic/cubes/{name}/measures
+[ROUTE] POST /api/api/semantic/plan
+[ROUTE] POST /api/api/semantic/query
+[ROUTE] POST /api/api/semantic/query/sql
+[ROUTE] POST /api/api/v1/timeouts
+[ROUTE] GET /api/api/v1/timeouts/pending
+[ROUTE] POST /api/api/v1/timeouts/{id}/escalate
+[ROUTE] POST /api/api/v1/triggers
+[ROUTE] GET /api/api/v1/triggers
+[ROUTE] GET /api/api/v1/triggers/events
+[ROUTE] GET /api/api/v1/triggers/executions
+[ROUTE] GET /api/api/v1/triggers/objects
+[ROUTE] GET /api/api/v1/triggers/operators
+[ROUTE] GET /api/api/v1/triggers/types
+[ROUTE] DELETE /api/api/v1/triggers/{id}
+[ROUTE] PUT /api/api/v1/triggers/{id}
+[ROUTE] GET /api/audit/events
+[ROUTE] GET /api/audit/stats
+[ROUTE] POST /api/auth/login
+[ROUTE] POST /api/auth/logout
+[ROUTE] GET /api/auth/me
+[ROUTE] POST /api/auth/refresh
+[ROUTE] POST /api/auth/register
+[ROUTE] PUT /api/auth/users/{userId}/preferences/
+[ROUTE] GET /api/auth/users/{userId}/preferences/
+[ROUTE] POST /api/billing/calculate
+[ROUTE] POST /api/billing/schedules
+[ROUTE] POST /api/bp-designer/save
+[ROUTE] GET /api/bp-designer/{bpDefId}
+[ROUTE] GET /api/bp-notifications/analytics
+[ROUTE] GET /api/bp-notifications/digests/pending
+[ROUTE] POST /api/bp-notifications/digests/process
+[ROUTE] GET /api/bp-notifications/logs
+[ROUTE] GET /api/bp-notifications/logs/{id}
+[ROUTE] GET /api/bp-notifications/preferences
+[ROUTE] PUT /api/bp-notifications/preferences
+[ROUTE] POST /api/bp-notifications/send
+[ROUTE] POST /api/bp-notifications/send-batch
+[ROUTE] GET /api/bp-notifications/templates
+[ROUTE] POST /api/bp-notifications/templates
+[ROUTE] DELETE /api/bp-notifications/templates/{id}
+[ROUTE] GET /api/bp-notifications/templates/{id}
+[ROUTE] PUT /api/bp-notifications/templates/{id}
+[ROUTE] POST /api/bp-notifications/templates/{id}/render
+[ROUTE] POST /api/bp-notifications/webhook/action/{id}
+[ROUTE] POST /api/bp-notifications/webhook/clicked/{id}
+[ROUTE] POST /api/bp-notifications/webhook/delivered/{id}
+[ROUTE] POST /api/bp-notifications/webhook/opened/{id}
+[ROUTE] POST /api/bp/start-execution
+[ROUTE] POST /api/bundles/
+[ROUTE] GET /api/bundles/
+[ROUTE] GET /api/bundles/{bundleID}/
+[ROUTE] PUT /api/bundles/{bundleID}/
+[ROUTE] POST /api/bundles/{bundleID}/certify
+[ROUTE] POST /api/bundles/{bundleID}/deprecate
+[ROUTE] PUT /api/bundles/{bundleID}/policies
+[ROUTE] POST /api/bundles/{bundleID}/publish
+[ROUTE] POST /api/business-entities/{entityID}/create-custom-model
+[ROUTE] POST /api/business-entities/{entityID}/create-custom-view
+[ROUTE] POST /api/business-entities/{entityID}/generate-core-model
+[ROUTE] POST /api/business-entities/{entityID}/generate-core-view
+[ROUTE] GET /api/business-entities/{entityID}/related-objects
+[ROUTE] GET /api/business-entities/{entityID}/semantic-assets
+[ROUTE] POST /api/business-entities/{entityID}/traverse-graph
+[ROUTE] GET /api/business-objects/list
+[ROUTE] GET /api/business-objects/
+[ROUTE] POST /api/business-objects/
+[ROUTE] GET /api/business-objects/{id}
+[ROUTE] PUT /api/business-objects/{id}
+[ROUTE] PATCH /api/business-objects/{id}
+[ROUTE] DELETE /api/business-objects/{id}
+[ROUTE] GET /api/business-objects/{id}/fields
+[ROUTE] GET /api/business-objects/{id}/relationships
+[ROUTE] DELETE /api/business-objects/{id}/subtypes/{subtypeId}
+[ROUTE] POST /api/business-objects/{id}/subtypes/{subtypeId}/rename
+[ROUTE] GET /api/business-term-edges
+[ROUTE] POST /api/business-term-edges
+[ROUTE] DELETE /api/business-term-edges
+[ROUTE] GET /api/business-term-edges-test
+[ROUTE] DELETE /api/business-term-edges/{id}
+[ROUTE] POST /api/business-term/suggestion-feedback
+[ROUTE] POST /api/business-term/suggestions
+[ROUTE] GET /api/business-terms
+[ROUTE] POST /api/business-terms
+[ROUTE] POST /api/business-terms/search
+[ROUTE] DELETE /api/business-terms/{id}
+[ROUTE] PUT /api/business-terms/{id}
+[ROUTE] POST /api/calc/vectorized
+[ROUTE] POST /api/calc/
+[ROUTE] POST /api/calc/preview
+[ROUTE] GET /api/calculations/
+[ROUTE] POST /api/calculations/
+[ROUTE] POST /api/calculations/explain
+[ROUTE] PATCH /api/calculations/{id}
+[ROUTE] GET /api/calculations/{name}
+[ROUTE] GET /api/calculations/{id}/explain
+[ROUTE] GET /api/catalog/nodes
+[ROUTE] POST /api/catalog/scan
+[ROUTE] GET /api/catalog/tables
+[ROUTE] POST /api/catalog/{datasourceId}/refresh-charts
+[ROUTE] GET /api/catalog/business-terms/{id}
+[ROUTE] PUT /api/catalog/business-terms/{id}/compliance
+[ROUTE] POST /api/catalog/business-terms/{id}/mappings
+[ROUTE] DELETE /api/catalog/business-terms/{id}/mappings/{semId}
+[ROUTE] GET /api/catalog/nodes
+[ROUTE] GET /api/catalog/semantic-terms-by-table/{tableId}
+[ROUTE] GET /api/chart/{datasourceId}/debug
+[ROUTE] GET /api/chart/{datasourceId}/health
+[ROUTE] GET /api/chart/{datasourceId}/{chartType}
+[ROUTE] GET /api/charts/{datasourceId}
+[ROUTE] POST /api/charts/{datasourceId}/refresh
+[ROUTE] POST /api/connections/test
+[ROUTE] GET /api/connections/
+[ROUTE] POST /api/connections/
+[ROUTE] PUT /api/connections/{id}
+[ROUTE] DELETE /api/connections/{id}
+[ROUTE] GET /api/connections/{id}
+[ROUTE] GET /api/connections/{id}/datasources
+[ROUTE] POST /api/connections/{id}/link/{datasourceId}
+[ROUTE] POST /api/connections/{id}/test
+[ROUTE] DELETE /api/connections/{id}/unlink/{datasourceId}
+[ROUTE] POST /api/copilot/generate-audit-summary
+[ROUTE] POST /api/copilot/generate-node
+[ROUTE] POST /api/copilot/generate-rego
+[ROUTE] DELETE /api/crud
+[ROUTE] POST /api/crud
+[ROUTE] PUT /api/crud
+[ROUTE] GET /api/custom-components
+[ROUTE] POST /api/custom-components
+[ROUTE] GET /api/custom-components/export
+[ROUTE] POST /api/custom-components/import
+[ROUTE] POST /api/custom-components/test-api
+[ROUTE] GET /api/custom-components/{id}
+[ROUTE] PUT /api/custom-components/{id}
+[ROUTE] DELETE /api/custom-components/{id}
+[ROUTE] POST /api/dashboards/
+[ROUTE] GET /api/dashboards/public
+[ROUTE] GET /api/dashboards/templates
+[ROUTE] GET /api/dashboards/user/{userId}
+[ROUTE] DELETE /api/dashboards/{id}
+[ROUTE] GET /api/dashboards/{id}
+[ROUTE] PUT /api/dashboards/{id}
+[ROUTE] POST /api/dashboards/{id}/duplicate
+[ROUTE] POST /api/data-domains/
+[ROUTE] GET /api/data-domains/
+[ROUTE] GET /api/data-domains/search
+[ROUTE] GET /api/data-domains/{id}/
+[ROUTE] PUT /api/data-domains/{id}/
+[ROUTE] DELETE /api/data-domains/{id}/
+[ROUTE] GET /api/dax/categories
+[ROUTE] POST /api/dax/execute
+[ROUTE] GET /api/dax/functions
+[ROUTE] GET /api/dax/functions/{functionName}
+[ROUTE] GET /api/debug/business-objects/{id}
+[ROUTE] GET /api/debug/edges/{id}
+[ROUTE] POST /api/edge-types
+[ROUTE] GET /api/edge-types
+[ROUTE] PATCH /api/edge-types/{id}
+[ROUTE] DELETE /api/edge-types/{id}
+[ROUTE] GET /api/edge-types/{id}
+[ROUTE] GET /api/edge-types/{id}/properties
+[ROUTE] POST /api/edge-types/{id}/properties
+[ROUTE] PATCH /api/edge-types/{id}/properties/{propName}
+[ROUTE] DELETE /api/edge-types/{id}/properties/{propName}
+[ROUTE] GET /api/entities
+[ROUTE] GET /api/entities/resolve
+[ROUTE] GET /api/entities/{name}
+[ROUTE] GET /api/entity-schema/
+[ROUTE] POST /api/entity-schema/
+[ROUTE] POST /api/events/market
+[ROUTE] GET /api/execution-logs/
+[ROUTE] POST /api/explorer/query/compile
+[ROUTE] POST /api/explorer/query/execute
+[ROUTE] POST /api/explorer/query/export
+[ROUTE] GET /api/explorer/query/history
+[ROUTE] GET /api/explorer/saved-queries/
+[ROUTE] POST /api/explorer/saved-queries/
+[ROUTE] GET /api/explorer/saved-queries/duplicates
+[ROUTE] GET /api/explorer/saved-queries/{id}
+[ROUTE] PUT /api/explorer/saved-queries/{id}
+[ROUTE] DELETE /api/explorer/saved-queries/{id}
+[ROUTE] POST /api/explorer/saved-queries/{id}/clone
+[ROUTE] GET /api/explorer/saved-queries/{id}/diff
+[ROUTE] GET /api/explorer/saved-queries/{id}/preview
+[ROUTE] POST /api/explorer/saved-queries/{id}/share
+[ROUTE] POST /api/explorer/search
+[ROUTE] GET /api/explorer/search/suggestions
+[ROUTE] POST /api/fabric/cubes/generate-from-table
+[ROUTE] GET /api/fabric/extensions
+[ROUTE] POST /api/fabric/extensions
+[ROUTE] GET /api/fabric/extensions/compatibility-report
+[ROUTE] GET /api/fabric/joins/{datasourceId}
+[ROUTE] GET /api/fabric/joins/{datasourceId}/table/{tableName}
+[ROUTE] GET /api/fabric/models
+[ROUTE] GET /api/fabric/models/definition
+[ROUTE] POST /api/fabric/models/generate
+[ROUTE] POST /api/fabric/models/generate-defaults
+[ROUTE] POST /api/fabric/models/metadata
+[ROUTE] POST /api/fabric/models/validate
+[ROUTE] POST /api/fabric/models/{id}/calculations
+[ROUTE] GET /api/fabric/models/{id}/calculations
+[ROUTE] DELETE /api/fabric/models/{id}/calculations/{calc_id}
+[ROUTE] POST /api/field-aliases
+[ROUTE] GET /api/field-aliases/{field_id}
+[ROUTE] GET /api/funds
+[ROUTE] GET /api/glossary/business-terms
+[ROUTE] GET /api/glossary/edges
+[ROUTE] POST /api/glossary/edges
+[ROUTE] PUT /api/glossary/edges/{id}
+[ROUTE] DELETE /api/glossary/edges/{id}
+[ROUTE] GET /api/glossary/semantic-terms
+[ROUTE] GET /api/glossary/semantic-terms/export/cube-yaml
+[ROUTE] GET /api/glossary/semantic-terms/{id}/cube-definition
+[ROUTE] POST /api/glossary/terms
+[ROUTE] DELETE /api/glossary/terms/{id}
+[ROUTE] PUT /api/glossary/terms/{id}
+[ROUTE] POST /api/households/
+[ROUTE] POST /api/households/{id}/entities
+[ROUTE] GET /api/households/{id}/entities
+[ROUTE] POST /api/instances/{instanceId}/assign-to-me
+[ROUTE] POST /api/instances/{instanceId}/unassign
+[ROUTE] POST /api/integrations/execute/{installationId}
+[ROUTE] GET /api/integrations/executions
+[ROUTE] GET /api/integrations/executions/{executionId}
+[ROUTE] POST /api/integrations/install
+[ROUTE] GET /api/integrations/installed
+[ROUTE] GET /api/integrations/installed/{installationId}
+[ROUTE] DELETE /api/integrations/installed/{installationId}
+[ROUTE] PUT /api/integrations/installed/{installationId}/config
+[ROUTE] GET /api/integrations/installed/{installationId}/stats
+[ROUTE] PUT /api/integrations/installed/{installationId}/toggle
+[ROUTE] GET /api/integrations/marketplace
+[ROUTE] GET /api/integrations/marketplace/category/{category}
+[ROUTE] GET /api/integrations/marketplace/{integrationKey}
+[ROUTE] GET /api/integrations/oauth/authorize/{installationId}
+[ROUTE] GET /api/integrations/oauth/callback
+[ROUTE] POST /api/integrations/test/{installationId}
+[ROUTE] GET /api/invoices/
+[ROUTE] POST /api/invoices/credits
+[ROUTE] POST /api/invoices/generate
+[ROUTE] GET /api/invoices/{invoiceId}
+[ROUTE] POST /api/invoices/{invoiceId}/issue
+[ROUTE] POST /api/invoices/{invoiceId}/pay
+[ROUTE] POST /api/invoices/{invoiceId}/void
+[ROUTE] GET /api/ip-whitelist
+[ROUTE] GET /api/lineage/{datasourceId}/{lineageType}
+[ROUTE] GET /api/lineage/dual
+[ROUTE] GET /api/lineage/node/{id}/graph
+[ROUTE] GET /api/lineage/node/{id}/impact
+[ROUTE] POST /api/llm/executor
+[ROUTE] GET /api/llm/modes
+[ROUTE] POST /api/llm/planner
+[ROUTE] GET /api/llm/prompts
+[ROUTE] POST /api/llm/query
+[ROUTE] GET /api/lookup-values
+[ROUTE] GET /api/lookups
+[ROUTE] POST /api/lookups
+[ROUTE] DELETE /api/lookups/{id}
+[ROUTE] PUT /api/lookups/{id}
+[ROUTE] GET /api/lookups/{id}/export
+[ROUTE] POST /api/lookups/{id}/propagate
+[ROUTE] POST /api/lookups/{id}/values
+[ROUTE] GET /api/lookups/{id}/values
+[ROUTE] DELETE /api/lookups/{id}/values/{valueId}
+[ROUTE] PUT /api/lookups/{id}/values/{valueId}
+[ROUTE] GET /api/marketplace/items
+[ROUTE] POST /api/marketplace/items/add-to-tenant
+[ROUTE] GET /api/marketplace/items/{id}
+[ROUTE] POST /api/marketplace/items/{id}/feedback
+[ROUTE] GET /api/marketplace/items/{id}/feedback
+[ROUTE] GET /api/marketplace/items/{id}/parameters
+[ROUTE] GET /api/marketplace/tenant-items
+[ROUTE] DELETE /api/marketplace/tenant-items/{id}
+[ROUTE] GET /api/marketplace/tenant-items/{id}
+[ROUTE] PUT /api/marketplace/tenant-items/{id}
+[ROUTE] GET /api/marketplace/validation-rules
+[ROUTE] POST /api/mcp
+[ROUTE] POST /api/metadata/versions
+[ROUTE] GET /api/metadata/versions/{bo_id}
+[ROUTE] GET /api/metadata/{datasourceId}
+[ROUTE] CONNECT /api/metrics
+[ROUTE] PATCH /api/metrics
+[ROUTE] GET /api/metrics
+[ROUTE] HEAD /api/metrics
+[ROUTE] PUT /api/metrics
+[ROUTE] DELETE /api/metrics
+[ROUTE] POST /api/metrics
+[ROUTE] TRACE /api/metrics
+[ROUTE] OPTIONS /api/metrics
+[ROUTE] GET /api/metrics-registry/
+[ROUTE] GET /api/metrics-registry/golden-path/readiness
+[ROUTE] POST /api/metrics-registry/refresh-atomic
+[ROUTE] GET /api/metrics-registry/{metricID}
+[ROUTE] POST /api/metrics-registry/{metricID}/compute-comparisons
+[ROUTE] POST /api/metrics-registry/{metricID}/compute-pop
+[ROUTE] POST /api/metrics-registry/{metricID}/detect-anomalies
+[ROUTE] GET /api/metrics-registry/{metricID}/history
+[ROUTE] POST /api/metrics-registry/{metricID}/promote-golden
+[ROUTE] GET /api/metrics/{fundId}
+[ROUTE] GET /api/micro-bundles
+[ROUTE] POST /api/micro-bundles
+[ROUTE] GET /api/micro-bundles/{id}
+[ROUTE] GET /api/migrations/
+[ROUTE] POST /api/migrations/
+[ROUTE] GET /api/migrations/{id}
+[ROUTE] POST /api/migrations/{id}/approve
+[ROUTE] POST /api/migrations/{id}/reject
+[ROUTE] GET /api/models
+[ROUTE] POST /api/models/clone
+[ROUTE] POST /api/models/custom
+[ROUTE] POST /api/models/generated
+[ROUTE] POST /api/models/regenerate
+[ROUTE] GET /api/models/version
+[ROUTE] DELETE /api/models/{model_id}
+[ROUTE] GET /api/models/{model_id}
+[ROUTE] PATCH /api/models/{model_id}
+[ROUTE] GET /api/my-approvals/
+[ROUTE] GET /api/nba/catalog
+[ROUTE] POST /api/nba/complete
+[ROUTE] POST /api/nba/dismiss
+[ROUTE] POST /api/nba/execute
+[ROUTE] GET /api/nba/recommendations
+[ROUTE] GET /api/nba/signals
+[ROUTE] GET /api/nba/stats
+[ROUTE] GET /api/nba/stream
+[ROUTE] POST /api/nlq/ask
+[ROUTE] POST /api/nlq/feedback
+[ROUTE] POST /api/nlq/search
+[ROUTE] POST /api/node-types
+[ROUTE] GET /api/node-types
+[ROUTE] PATCH /api/node-types/{id}
+[ROUTE] DELETE /api/node-types/{id}
+[ROUTE] GET /api/node-types/{id}
+[ROUTE] GET /api/node-types/{id}/nodes
+[ROUTE] POST /api/node-types/{id}/properties
+[ROUTE] GET /api/node-types/{id}/properties
+[ROUTE] DELETE /api/node-types/{id}/properties/{propName}
+[ROUTE] PATCH /api/node-types/{id}/properties/{propName}
+[ROUTE] POST /api/object/{ObjectType}
+[ROUTE] GET /api/platform-billing/anomalies
+[ROUTE] GET /api/platform-billing/forecast
+[ROUTE] GET /api/platform-billing/platform
+[ROUTE] POST /api/platform-billing/simulate
+[ROUTE] GET /api/platform-billing/tenant/{tenantId}
+[ROUTE] GET /api/policies
+[ROUTE] POST /api/policies
+[ROUTE] POST /api/policies/simulate
+[ROUTE] DELETE /api/policies/{id}
+[ROUTE] GET /api/policies/{id}
+[ROUTE] POST /api/profiler/profile
+[ROUTE] GET /api/profiler/results
+[ROUTE] GET /api/profiler/status/{jobId}
+[ROUTE] POST /api/query/compile
+[ROUTE] POST /api/query/execute
+[ROUTE] POST /api/query/export
+[ROUTE] GET /api/query/history
+[ROUTE] GET /api/rbac/audit
+[ROUTE] GET /api/rbac/delegations
+[ROUTE] POST /api/rbac/delegations
+[ROUTE] GET /api/rbac/delegations/user/{userId}
+[ROUTE] PUT /api/rbac/delegations/{delegationId}
+[ROUTE] DELETE /api/rbac/delegations/{delegationId}
+[ROUTE] POST /api/rbac/delegations/{delegationId}/log
+[ROUTE] GET /api/rbac/field-permissions
+[ROUTE] POST /api/rbac/field-permissions
+[ROUTE] GET /api/rbac/field-permissions/user/{userId}/resource/{resourceType}/{resourceId}
+[ROUTE] GET /api/rbac/permissions
+[ROUTE] POST /api/rbac/permissions/check
+[ROUTE] GET /api/rbac/permissions/user/{userId}
+[ROUTE] GET /api/rbac/roles
+[ROUTE] POST /api/rbac/roles
+[ROUTE] GET /api/rbac/roles/{roleId}
+[ROUTE] PUT /api/rbac/roles/{roleId}
+[ROUTE] DELETE /api/rbac/roles/{roleId}
+[ROUTE] POST /api/rbac/roles/{roleId}/assign
+[ROUTE] DELETE /api/rbac/roles/{roleId}/unassign/{userId}
+[ROUTE] GET /api/rbac/roles/{roleId}/users
+[ROUTE] GET /api/rbac/teams
+[ROUTE] POST /api/rbac/teams
+[ROUTE] POST /api/rbac/teams/{teamId}/members
+[ROUTE] GET /api/rbac/teams/{teamId}/members
+[ROUTE] DELETE /api/rbac/teams/{teamId}/members/{userId}
+[ROUTE] POST /api/rbac/users
+[ROUTE] GET /api/rbac/users
+[ROUTE] GET /api/rbac/users/{userId}/roles
+[ROUTE] POST /api/relationships/discover
+[ROUTE] POST /api/relationships/existing
+[ROUTE] POST /api/relationships/apply
+[ROUTE] POST /api/relationships/bo/inherit
+[ROUTE] GET /api/relationships/bo/{boId}
+[ROUTE] POST /api/relationships/infer
+[ROUTE] POST /api/relationships/physical
+[ROUTE] GET /api/relationships/physical/{tableId}
+[ROUTE] POST /api/relationships/remove
+[ROUTE] POST /api/relationships/suggestions/dismiss
+[ROUTE] POST /api/relationships/suggestions/generate
+[ROUTE] POST /api/relationships/suggestions/generate-lineage
+[ROUTE] POST /api/relationships/table-mapping/recommend
+[ROUTE] GET /api/relationships/{entityID}
+[ROUTE] GET /api/relationships/{entityID}/objects
+[ROUTE] GET /api/relationships/{entityID}/suggestions
+[ROUTE] POST /api/roles/
+[ROUTE] GET /api/roles/
+[ROUTE] POST /api/rules/generate-cue
+[ROUTE] POST /api/rules/simulate
+[ROUTE] GET /api/saved/
+[ROUTE] POST /api/saved/
+[ROUTE] DELETE /api/saved/{id}
+[ROUTE] GET /api/saved/{id}
+[ROUTE] PUT /api/saved/{id}
+[ROUTE] POST /api/search
+[ROUTE] POST /api/semantic-mapping/apply
+[ROUTE] POST /api/semantic-mapping/backfill-physical-mappings
+[ROUTE] POST /api/semantic-mapping/backfill-sql-properties
+[ROUTE] POST /api/semantic-mapping/enrich/apply
+[ROUTE] POST /api/semantic-mapping/enrich/auto
+[ROUTE] POST /api/semantic-mapping/enrich/suggest
+[ROUTE] POST /api/semantic-mapping/generate
+[ROUTE] POST /api/semantic-mapping/hierarchies/create
+[ROUTE] POST /api/semantic-mapping/hierarchies/generate
+[ROUTE] POST /api/semantic-mapping/populate-bo-terms
+[ROUTE] POST /api/semantic-mapping/wizard/apply
+[ROUTE] POST /api/semantic-mapping/wizard/approve/{id}
+[ROUTE] GET /api/semantic-mapping/wizard/created
+[ROUTE] POST /api/semantic-mapping/wizard/enrich-from-feedback
+[ROUTE] POST /api/semantic-mapping/wizard/generate
+[ROUTE] GET /api/semantic-mapping/wizard/pending
+[ROUTE] GET /api/semantic-mappings
+[ROUTE] POST /api/semantic-mappings/apply-custom
+[ROUTE] POST /api/semantic-mappings/business-term-edges
+[ROUTE] POST /api/semantic-mappings/edges
+[ROUTE] POST /api/semantic-mappings/enhanced-match
+[ROUTE] POST /api/semantic-mappings/ignore
+[ROUTE] POST /api/semantic-mappings/replace
+[ROUTE] POST /api/semantic-mappings/upsert-business-term-edge
+[ROUTE] GET /api/semantic-terms
+[ROUTE] POST /api/semantic-terms
+[ROUTE] GET /api/semantic-terms/explain
+[ROUTE] POST /api/semantic-terms/resolve
+[ROUTE] POST /api/semantic-terms/resolve-expression
+[ROUTE] POST /api/semantic-terms/search
+[ROUTE] POST /api/semantic-terms/suggest
+[ROUTE] GET /api/semantic-terms/{id}/suggest-business-terms
+[ROUTE] GET /api/semantic/bundle
+[ROUTE] POST /api/semantic/bundle
+[ROUTE] GET /api/semantic/bundles/by-id
+[ROUTE] GET /api/semantic/bundles/{domain}
+[ROUTE] GET /api/semantic/name-resolver/stats
+[ROUTE] GET /api/semantic/objects
+[ROUTE] GET /api/semantic/bundles/{bundleId}
+[ROUTE] POST /api/slack/callback
+[ROUTE] GET /api/slack/install
+[ROUTE] POST /api/slack/interactive
+[ROUTE] GET /api/succession/metrics/{advisorId}
+[ROUTE] POST /api/succession/plans
+[ROUTE] GET /api/succession/recommend/{advisorId}
+[ROUTE] POST /api/taxplan/detect/{clientId}
+[ROUTE] GET /api/taxplan/opportunities/{clientId}
+[ROUTE] GET /api/templates/{node_id}
+[ROUTE] POST /api/templates/{node_id}/promote
+[ROUTE] GET /api/templates/{node_id}/versions
+[ROUTE] GET /api/templates/
+[ROUTE] GET /api/templates/categories
+[ROUTE] GET /api/templates/categories/{key}/templates
+[ROUTE] GET /api/templates/category/{category}
+[ROUTE] POST /api/templates/clone/{id}
+[ROUTE] GET /api/templates/clones
+[ROUTE] GET /api/templates/clones/{id}
+[ROUTE] DELETE /api/templates/clones/{id}
+[ROUTE] PUT /api/templates/clones/{id}/notes
+[ROUTE] GET /api/templates/featured
+[ROUTE] PUT /api/templates/ratings/{ratingId}/helpful
+[ROUTE] GET /api/templates/{key}
+[ROUTE] POST /api/templates/{id}/rate
+[ROUTE] GET /api/templates/{id}/ratings
+[ROUTE] GET /api/templates/{id}/stats
+[ROUTE] POST /api/temporal
+[ROUTE] GET /api/tenants
+[ROUTE] GET /api/tenants/accessible
+[ROUTE] GET /api/tenants/all
+[ROUTE] GET /api/tenants/debug
+[ROUTE] PATCH /api/tenants/{tenant_id}/datasources/{datasource_id}/models/{model_id}
+[ROUTE] DELETE /api/tenants/{tenantId}/ip-whitelist
+[ROUTE] GET /api/tenants/{tenantId}/ip-whitelist
+[ROUTE] POST /api/tenants/{tenantId}/ip-whitelist
+[ROUTE] GET /api/user/{id}
+[ROUTE] GET /api/users
+[ROUTE] GET /api/users/{user_id}/roles/
+[ROUTE] POST /api/users/{user_id}/roles/
+[ROUTE] DELETE /api/users/{user_id}/roles/{role_id}
+[ROUTE] POST /api/validation-rule-cores
+[ROUTE] GET /api/validation-rule-cores
+[ROUTE] GET /api/validation-rule-cores/{id}
+[ROUTE] GET /api/validation-rule-cores/{id}/impact
+[ROUTE] GET /api/validation-rules
+[ROUTE] POST /api/validation-rules
+[ROUTE] GET /api/validation-rules/schema
+[ROUTE] GET /api/validation-rules/{id}
+[ROUTE] PATCH /api/validation-rules/{id}
+[ROUTE] DELETE /api/validation-rules/{id}
+[ROUTE] GET /api/validation-rules/{id}/audit
+[ROUTE] POST /api/validation-rules/{id}/execute
+[ROUTE] POST /api/validation-rules/{id}/simulate-with-instance
+[ROUTE] GET /api/views
+[ROUTE] POST /api/views
+[ROUTE] POST /api/views/apply
+[ROUTE] GET /api/views/compare
+[ROUTE] POST /api/views/reject
+[ROUTE] POST /api/views/validate
+[ROUTE] PUT /api/views/{name}
+[ROUTE] DELETE /api/views/{name}
+[ROUTE] GET /api/views/{name}
+[ROUTE] GET /api/views/{name}/download
+[ROUTE] GET /api/views/{name}/suggestions
+[ROUTE] GET /api/views/{name}/validate
+[ROUTE] POST /api/workflow-timeout-triggers/
+[ROUTE] GET /api/workflow-timeout-triggers/
+[ROUTE] PUT /api/workflow-timeout-triggers/{triggerId}/
+[ROUTE] DELETE /api/workflow-timeout-triggers/{triggerId}/
+[ROUTE] GET /api/workflow-timeout-triggers/{triggerId}/
+[ROUTE] POST /api/workflow-timeout-triggers/{triggerId}/test
+[ROUTE] GET /api/workflows/{workflowId}/events
+[ROUTE] GET /api/workflows/initiatable
+[ROUTE] POST /api/workflows/{bpDefId}/can-initiate
+[ROUTE] GET /api/ws
+[ROUTE] POST /api/ws/token
+[ROUTE] GET /health
+[ROUTE] GET /layouts
+[ROUTE] POST /layouts
+[ROUTE] DELETE /layouts/{id}
+[ROUTE] GET /layouts/{id}
+[ROUTE] POST /publish/validate
+[ROUTE] GET /reports/definitions/
+[ROUTE] POST /reports/definitions/
+[ROUTE] GET /reports/definitions/{id}
+[ROUTE] PUT /reports/definitions/{id}
+[ROUTE] DELETE /reports/definitions/{id}
+[ROUTE] POST /reports/definitions/{id}/publish
+[ROUTE] POST /reports/extensions/
+[ROUTE] GET /reports/extensions/
+[ROUTE] PUT /reports/extensions/{id}
+[ROUTE] DELETE /reports/extensions/{id}
+[ROUTE] GET /reports/extensions/{id}
+[ROUTE] GET /reports/instances/
+[ROUTE] GET /reports/instances/{id}
+[ROUTE] GET /reports/instances/{id}/download
+[ROUTE] GET /reports/packages
+[ROUTE] POST /reports/provision
+[ROUTE] POST /reports/render
+[ROUTE] POST /reports/render/async
+[ROUTE] GET /reports/schedules/
+[ROUTE] POST /reports/schedules/
+[ROUTE] DELETE /reports/schedules/{id}
+[ROUTE] GET /reports/schedules/{id}
+[ROUTE] PUT /reports/schedules/{id}
+[ROUTE] GET /scheduler/ai/suggestions
+[ROUTE] POST /scheduler/ai/suggestions/{id}/accept
+[ROUTE] POST /scheduler/ai/suggestions/{id}/dismiss
+[ROUTE] POST /scheduler/dags
+[ROUTE] GET /scheduler/dags
+[ROUTE] DELETE /scheduler/dags/{id}
+[ROUTE] GET /scheduler/dags/{id}
+[ROUTE] PATCH /scheduler/dags/{id}
+[ROUTE] POST /scheduler/dags/{id}/run
+[ROUTE] GET /scheduler/dags/{id}/runs
+[ROUTE] POST /scheduler/jobs
+[ROUTE] GET /scheduler/jobs
+[ROUTE] PATCH /scheduler/jobs/{id}
+[ROUTE] DELETE /scheduler/jobs/{id}
+[ROUTE] GET /scheduler/jobs/{id}
+[ROUTE] POST /scheduler/jobs/{id}/run
+[ROUTE] GET /scheduler/jobs/{id}/runs
+[ROUTE] GET /scheduler/runs/dags/{id}
+[ROUTE] GET /scheduler/runs/jobs/{id}
+[ROUTE] GET /scheduler/stats
+[ROUTE] OPTIONS /v1/graphql
+[ROUTE] PATCH /v1/graphql
+[ROUTE] HEAD /v1/graphql
+[ROUTE] PUT /v1/graphql
+[ROUTE] DELETE /v1/graphql
+[ROUTE] CONNECT /v1/graphql
+[ROUTE] POST /v1/graphql
+[ROUTE] TRACE /v1/graphql
+[ROUTE] GET /v1/graphql
+[ROUTE] GET /values/constraints
+[ROUTE] POST /values/constraints
+[ROUTE] POST /values/profiles
+[ROUTE] GET /values/profiles/{clientID}
+[ROUTE] PUT /values/profiles/{clientID}
+[ROUTE] POST /values/signals
+[ROUTE] GET /values/signals
+[ROUTE] GET /values/themes
+[ROUTE] POST /values/themes
+[ROUTES-DUMP-END]
+[REQ] GET /api/roles/ Headers:Content-Type=,Authorization=,Origin=,X-Tenant-ID=,X-Tenant-Datasource-ID= Body:
+[DEBUG-MARKER] path=/api/roles/ method=GET contains_bo=false
+[MW-EXEC] Middleware executing for GET /api/roles/
+{"level":"info","ts":1771080876.361322,"caller":"api/request_trace_middleware.go:40","msg":"RequestTrace Start: id=01245f1a-3621-4605-bb40-9974c7b36990 method=GET path=/api/roles/ tenant="}
+[TRACE START] id=01245f1a-3621-4605-bb40-9974c7b36990 method=GET path=/api/roles/ tenant=
+[REGION-MW] path=/api/roles/, authPrefix=false
+[SESSION_AUTH] token=token123... err=<nil> active=true expires=2026-02-15 09:54:36.354003 -0500 EST m=+86402.100111126 now=2026-02-14 09:54:36.361406 -0500 EST m=+2.107513834 isExpired=false
+{"level":"info","ts":1771080876.361523,"caller":"api/request_trace_middleware.go:48","msg":"RequestTrace End: id=01245f1a-3621-4605-bb40-9974c7b36990 method=GET path=/api/roles/ tenant= status=200 handler="}
+[TRACE END] id=01245f1a-3621-4605-bb40-9974c7b36990 method=GET path=/api/roles/ tenant= status=200 handler=
+[REQ] POST /api/ws/token Headers:Content-Type=application/json,Authorization=,Origin=,X-Tenant-ID=,X-Tenant-Datasource-ID= Body:{"jobId":"job1","purpose":"profiler","ttl_seconds":60}
+[DEBUG-MARKER] path=/api/ws/token method=POST contains_bo=false
+[MW-EXEC] Middleware executing for POST /api/ws/token
+{"level":"info","ts":1771080876.362079,"caller":"api/request_trace_middleware.go:40","msg":"RequestTrace Start: id=a58c18be-5bee-4698-9ae1-73fbfbc0bd51 method=POST path=/api/ws/token tenant="}
+[TRACE START] id=a58c18be-5bee-4698-9ae1-73fbfbc0bd51 method=POST path=/api/ws/token tenant=
+[REGION-MW] path=/api/ws/token, authPrefix=false
+{"level":"info","ts":1771080876.3621461,"caller":"api/request_trace_middleware.go:48","msg":"RequestTrace End: id=a58c18be-5bee-4698-9ae1-73fbfbc0bd51 method=POST path=/api/ws/token tenant= status=200 handler="}
+[TRACE END] id=a58c18be-5bee-4698-9ae1-73fbfbc0bd51 method=POST path=/api/ws/token tenant= status=200 handler=
+--- PASS: TestSetupRouter_WithSessionAuthAndWsToken (0.01s)
+=== RUN   TestGetBusinessObjectHandler_AttachesChildren
+{"level":"info","ts":1771080876.3626518,"caller":"api/business_object_handlers.go:205","msg":"[HANDLER-ENTRY] GetBusinessObject called: tenant=ten id=parent1"}
+{"level":"info","ts":1771080876.362674,"caller":"api/business_object_handlers.go:214","msg":"DEBUG: API GetBusinessObject called - tenant=ten id=parent1 boID=parent1 hasSubtypes=false"}
+{"level":"info","ts":1771080876.362679,"caller":"api/business_object_handlers.go:232","msg":"DEBUG: API GetBusinessObject attached 1 child BO(s) to parent parent1 (tenant ten)"}
+--- PASS: TestGetBusinessObjectHandler_AttachesChildren (0.00s)
+=== RUN   TestListBusinessObjects_UsesNewDatasourceHeader
+{"level":"info","ts":1771080876.3632488,"caller":"api/business_object_handlers.go:263","msg":"[toBusinessObjectResponse] Converting BO b1: driverTableID.Valid=false driverTableID.String="}
+--- PASS: TestListBusinessObjects_UsesNewDatasourceHeader (0.00s)
+=== RUN   TestMetricAPI
+=== RUN   TestMetricAPI/Create_Metric
+=== RUN   TestMetricAPI/List_Metrics
+--- PASS: TestMetricAPI (0.00s)
+    --- PASS: TestMetricAPI/Create_Metric (0.00s)
+    --- PASS: TestMetricAPI/List_Metrics (0.00s)
+=== RUN   TestReportAPI
+=== RUN   TestReportAPI/Create_Template
+=== RUN   TestReportAPI/List_Templates
+--- PASS: TestReportAPI (0.00s)
+    --- PASS: TestReportAPI/Create_Template (0.00s)
+    --- PASS: TestReportAPI/List_Templates (0.00s)
+=== RUN   TestGetSemanticTermDetail
+=== RUN   TestGetSemanticTermDetail/valid_term_retrieval
+=== RUN   TestGetSemanticTermDetail/term_with_uppercase_and_dots
+=== RUN   TestGetSemanticTermDetail/term_with_underscores
+=== RUN   TestGetSemanticTermDetail/missing_term_id
+=== RUN   TestGetSemanticTermDetail/invalid_term_id_special_chars
+=== RUN   TestGetSemanticTermDetail/invalid_term_id_spaces
+=== RUN   TestGetSemanticTermDetail/missing_tenant_id
+=== RUN   TestGetSemanticTermDetail/very_long_term_id
+--- PASS: TestGetSemanticTermDetail (0.00s)
+    --- PASS: TestGetSemanticTermDetail/valid_term_retrieval (0.00s)
+    --- PASS: TestGetSemanticTermDetail/term_with_uppercase_and_dots (0.00s)
+    --- PASS: TestGetSemanticTermDetail/term_with_underscores (0.00s)
+    --- PASS: TestGetSemanticTermDetail/missing_term_id (0.00s)
+    --- PASS: TestGetSemanticTermDetail/invalid_term_id_special_chars (0.00s)
+    --- PASS: TestGetSemanticTermDetail/invalid_term_id_spaces (0.00s)
+    --- PASS: TestGetSemanticTermDetail/missing_tenant_id (0.00s)
+    --- PASS: TestGetSemanticTermDetail/very_long_term_id (0.00s)
+=== RUN   TestListSemanticTermTraces
+=== RUN   TestListSemanticTermTraces/list_traces_defaults
+=== RUN   TestListSemanticTermTraces/list_traces_custom_limit
+=== RUN   TestListSemanticTermTraces/list_traces_with_pagination
+=== RUN   TestListSemanticTermTraces/list_traces_with_status_filter
+=== RUN   TestListSemanticTermTraces/list_traces_with_region_filter
+=== RUN   TestListSemanticTermTraces/list_traces_limit_exceeds_max
+=== RUN   TestListSemanticTermTraces/list_traces_invalid_limit
+=== RUN   TestListSemanticTermTraces/list_traces_negative_limit
+=== RUN   TestListSemanticTermTraces/list_traces_missing_term_id
+=== RUN   TestListSemanticTermTraces/list_traces_missing_tenant_id
+=== RUN   TestListSemanticTermTraces/list_traces_invalid_term_id
+--- PASS: TestListSemanticTermTraces (0.00s)
+    --- PASS: TestListSemanticTermTraces/list_traces_defaults (0.00s)
+    --- PASS: TestListSemanticTermTraces/list_traces_custom_limit (0.00s)
+    --- PASS: TestListSemanticTermTraces/list_traces_with_pagination (0.00s)
+    --- PASS: TestListSemanticTermTraces/list_traces_with_status_filter (0.00s)
+    --- PASS: TestListSemanticTermTraces/list_traces_with_region_filter (0.00s)
+    --- PASS: TestListSemanticTermTraces/list_traces_limit_exceeds_max (0.00s)
+    --- PASS: TestListSemanticTermTraces/list_traces_invalid_limit (0.00s)
+    --- PASS: TestListSemanticTermTraces/list_traces_negative_limit (0.00s)
+    --- PASS: TestListSemanticTermTraces/list_traces_missing_term_id (0.00s)
+    --- PASS: TestListSemanticTermTraces/list_traces_missing_tenant_id (0.00s)
+    --- PASS: TestListSemanticTermTraces/list_traces_invalid_term_id (0.00s)
+=== RUN   TestGetSemanticTermMetrics
+=== RUN   TestGetSemanticTermMetrics/get_metrics_success
+=== RUN   TestGetSemanticTermMetrics/get_metrics_different_tenant
+=== RUN   TestGetSemanticTermMetrics/get_metrics_missing_term_id
+=== RUN   TestGetSemanticTermMetrics/get_metrics_invalid_term_id
+=== RUN   TestGetSemanticTermMetrics/get_metrics_missing_tenant_id
+--- PASS: TestGetSemanticTermMetrics (0.00s)
+    --- PASS: TestGetSemanticTermMetrics/get_metrics_success (0.00s)
+    --- PASS: TestGetSemanticTermMetrics/get_metrics_different_tenant (0.00s)
+    --- PASS: TestGetSemanticTermMetrics/get_metrics_missing_term_id (0.00s)
+    --- PASS: TestGetSemanticTermMetrics/get_metrics_invalid_term_id (0.00s)
+    --- PASS: TestGetSemanticTermMetrics/get_metrics_missing_tenant_id (0.00s)
+=== RUN   TestSemanticTermHandlerRegistration
+=== RUN   TestSemanticTermHandlerRegistration/GET_/api/semantic-terms/test-term
+=== RUN   TestSemanticTermHandlerRegistration/GET_/api/semantic-terms/test-term/traces
+=== RUN   TestSemanticTermHandlerRegistration/GET_/api/semantic-terms/test-term/metrics
+--- PASS: TestSemanticTermHandlerRegistration (0.00s)
+    --- PASS: TestSemanticTermHandlerRegistration/GET_/api/semantic-terms/test-term (0.00s)
+    --- PASS: TestSemanticTermHandlerRegistration/GET_/api/semantic-terms/test-term/traces (0.00s)
+    --- PASS: TestSemanticTermHandlerRegistration/GET_/api/semantic-terms/test-term/metrics (0.00s)
+=== RUN   TestValidationRulesAPI_ListRulesMissingTenant
+--- PASS: TestValidationRulesAPI_ListRulesMissingTenant (0.00s)
+=== RUN   TestValidationRulesAPI_ListRulesSuccess
+--- PASS: TestValidationRulesAPI_ListRulesSuccess (0.00s)
+=== RUN   TestValidationRulesAPI_CreateRuleRequiresTenantContext
+--- PASS: TestValidationRulesAPI_CreateRuleRequiresTenantContext (0.00s)
+=== RUN   TestValidationRulesAPI_CreateRuleSuccess
+[DEBUG] JSON unmarshal succeeded, req.IsCore=<nil>
+[DEBUG] Final isCore at create: false
+--- PASS: TestValidationRulesAPI_CreateRuleSuccess (0.00s)
+=== RUN   TestValidationRulesAPI_CreateRuleMissingFields
+[DEBUG] JSON unmarshal succeeded, req.IsCore=<nil>
+--- PASS: TestValidationRulesAPI_CreateRuleMissingFields (0.00s)
+=== RUN   TestValidationRulesAPI_CreateRuleHeaderFallback
+[DEBUG] JSON unmarshal succeeded, req.IsCore=<nil>
+[DEBUG] Final isCore at create: false
+--- PASS: TestValidationRulesAPI_CreateRuleHeaderFallback (0.00s)
+=== RUN   TestValidationRulesAPI_ListRulesCountError
+--- PASS: TestValidationRulesAPI_ListRulesCountError (0.00s)
+FAIL
+FAIL	github.com/hondyman/semlayer/backend/internal/api	2.894s
+FAIL

@@ -1,0 +1,8 @@
+-- Risk Management Rollback Migration
+-- Drops all risk management tables in reverse dependency order
+
+DROP TABLE IF EXISTS risk_alerts CASCADE;
+DROP TABLE IF EXISTS drawdown_analyses CASCADE;
+DROP TABLE IF EXISTS tail_risk_analyses CASCADE;
+DROP TABLE IF EXISTS option_legs CASCADE;
+DROP TABLE IF EXISTS options_overlay_strategies CASCADE;

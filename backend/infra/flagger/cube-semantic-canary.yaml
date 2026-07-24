@@ -1,0 +1,88 @@
+apiVersion: flagger.app/v1beta1
+kind: Canary
+metadata:
+  name: cube-semantic
+  namespace: default
+spec:
+  provider: kubernetes
+  targetRef:
+    apiVersion: v1
+    kind: Service
+    name: cube-semantic
+  autoscalerRef:
+    apiVersion: autoscaling/v2
+    kind: HorizontalPodAutoscaler
+    name: cube-semantic
+  service:
+    port: 8080
+    gateways:
+    - semantic-gateway
+  analysis:
+    interval: 1m
+    threshold: 5
+    maxWeight: 100
+    stepWeight: 10
+    metrics:
+    - name: cube-parity-pass-rate
+      templateRef:
+        name: cube-parity-pass-rate
+      thresholdRange:
+        min: 0.999
+    - name: cube-semantic-latency
+      templateRef:
+        name: cube-semantic-latency
+      thresholdRange:
+        max: 2000
+    - name: cube-semantic-error-rate
+      templateRef:
+        name: cube-semantic-error-rate
+      thresholdRange:
+        max: 0.005
+    webhooks:
+    - name: pause-on-incident
+      url: http://flagger-hooks.flagger-system/pause
+      metadata:
+        type: confirm-rollout
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cube-parity-metric-templates
+  namespace: default
+  labels:
+    app.kubernetes.io/name: cube-semantic
+---
+data:
+  cube-parity-pass-rate: |
+    apiVersion: flagger.app/v1alpha3
+    kind: MetricTemplate
+    metadata:
+      name: cube-parity-pass-rate
+    spec:
+      provider:
+        type: prometheus
+        address: http://prometheus.monitoring:9090
+      query: |
+        sum(rate(cube_parity_matches_total[5m])) / sum(rate(cube_parity_comparisons_total[5m]))
+  cube-semantic-latency: |
+    apiVersion: flagger.app/v1alpha3
+    kind: MetricTemplate
+    metadata:
+      name: cube-semantic-latency
+    spec:
+      provider:
+        type: prometheus
+        address: http://prometheus.monitoring:9090
+      query: |
+        histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket{service="cube-semantic"}[2m])) by (le))
+  cube-semantic-error-rate: |
+    apiVersion: flagger.app/v1alpha3
+    kind: MetricTemplate
+    metadata:
+      name: cube-semantic-error-rate
+    spec:
+      provider:
+        type: prometheus
+        address: http://prometheus.monitoring:9090
+      query: |
+        sum(rate(http_requests_total{service="cube-semantic",code=~"5.."}[2m])) / sum(rate(http_requests_total{service="cube-semantic"}[2m]))

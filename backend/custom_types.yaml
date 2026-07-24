@@ -1,0 +1,23 @@
+custom_types:
+  objects:
+    - name: MatchDetail
+      fields:
+        - name: selector
+          type: String!
+        - name: path
+          type: String!
+        - name: value
+          type: String!
+    - name: ExplainResult
+      fields:
+        - name: rule_id
+          type: String!
+        - name: severity
+          type: String!
+        - name: message
+          type: String!
+        - name: explain
+          type: "[MatchDetail!]!"
+  input_objects: []
+  scalars: []
+  enums: []

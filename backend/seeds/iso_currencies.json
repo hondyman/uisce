@@ -1,0 +1,12 @@
+[
+  {"code": "USD", "name": "US Dollar"},
+  {"code": "EUR", "name": "Euro"},
+  {"code": "GBP", "name": "British Pound"},
+  {"code": "JPY", "name": "Japanese Yen"},
+  {"code": "CNY", "name": "Chinese Yuan"},
+  {"code": "INR", "name": "Indian Rupee"},
+  {"code": "AUD", "name": "Australian Dollar"},
+  {"code": "CAD", "name": "Canadian Dollar"},
+  {"code": "BRL", "name": "Brazilian Real"},
+  {"code": "ZAR", "name": "South African Rand"}
+]

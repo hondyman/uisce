@@ -1,0 +1,39 @@
+# SemLayer Staging Configuration
+# This configuration is optimized for staging/testing environment
+
+yaml_dir: "/app/config"
+driver: "postgres"
+dsn: "${DATABASE_URL}"
+port: ":8080"
+pg_port: ":5432"
+
+# Environment settings
+environment: "staging"
+log_level: "info"
+
+# Feature flags
+enable_metrics: true
+enable_caching: true
+enable_security: true
+
+# Database settings (moderate optimization)
+db_max_open_conns: 30
+db_max_idle_conns: 8
+db_max_lifetime: "5m"
+
+# Cache settings (moderate optimization)
+cache_num_shards: 16
+cache_max_size_per_shard: 25000
+cache_default_ttl: "30m"
+
+# Redis settings
+redis_addr: "${REDIS_URL}"
+
+# Security settings
+jwt_secret: "${JWT_SECRET}"
+security_rate_limit_enabled: true
+security_rate_limit_requests: 500
+security_rate_limit_window: "1m"
+
+# Optional settings
+graphql_url: "${GRAPHQL_URL}"

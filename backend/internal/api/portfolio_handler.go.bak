@@ -1,0 +1,116 @@
+package api
+
+import (
+	"encoding/json"
+	"net/http"
+	"time"
+
+	"github.com/go-chi/chi/v5"
+	"github.com/hondyman/semlayer/backend/internal/services"
+	"go.uber.org/zap"
+)
+
+// PortfolioHandler handles portfolio API requests
+type PortfolioHandler struct {
+	service *services.PortfolioService
+	logger  *zap.Logger
+}
+
+// NewPortfolioHandler creates a new handler
+func NewPortfolioHandler(service *services.PortfolioService) *PortfolioHandler {
+	logger, _ := zap.NewProduction()
+	return &PortfolioHandler{
+		service: service,
+		logger:  logger,
+	}
+}
+
+// RegisterRoutes registers portfolio routes
+func (h *PortfolioHandler) RegisterRoutes(r chi.Router) {
+	r.Route("/portfolios", func(r chi.Router) {
+		r.Get("/{id}/summary", h.GetSummary)
+		r.Get("/{id}/performance", h.GetPerformance)
+		r.Get("/{id}/allocation", h.GetAllocation)
+		r.Get("/{id}/drift", h.GetAllocationDrift)
+	})
+}
+
+// GetSummary handles GET /portfolios/{id}/summary
+func (h *PortfolioHandler) GetSummary(w http.ResponseWriter, r *http.Request) {
+	portfolioID := chi.URLParam(r, "id")
+
+	summary, err := h.service.GetPortfolioSummary(r.Context(), portfolioID)
+	if err != nil {
+		h.logger.Error("Failed to get summary", zap.Error(err))
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(summary)
+}
+
+// GetPerformance handles GET /portfolios/{id}/performance
+func (h *PortfolioHandler) GetPerformance(w http.ResponseWriter, r *http.Request) {
+	portfolioID := chi.URLParam(r, "id")
+
+	// Default to YTD if no dates provided
+	endDate := time.Now()
+	startDate := time.Date(endDate.Year(), 1, 1, 0, 0, 0, 0, time.UTC)
+
+	if startStr := r.URL.Query().Get("start"); startStr != "" {
+		if parsed, err := time.Parse("2006-01-02", startStr); err == nil {
+			startDate = parsed
+		}
+	}
+	if endStr := r.URL.Query().Get("end"); endStr != "" {
+		if parsed, err := time.Parse("2006-01-02", endStr); err == nil {
+			endDate = parsed
+		}
+	}
+
+	metrics, err := h.service.CalculatePerformance(r.Context(), portfolioID, startDate, endDate)
+	if err != nil {
+		h.logger.Error("Failed to calculate performance", zap.Error(err))
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(metrics)
+}
+
+// GetAllocation handles GET /portfolios/{id}/allocation
+func (h *PortfolioHandler) GetAllocation(w http.ResponseWriter, r *http.Request) {
+	portfolioID := chi.URLParam(r, "id")
+
+	summary, err := h.service.GetPortfolioSummary(r.Context(), portfolioID)
+	if err != nil {
+		h.logger.Error("Failed to get allocation", zap.Error(err))
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	response := map[string]interface{}{
+		"asset_allocation":  summary.AssetAllocation,
+		"sector_allocation": summary.SectorAllocation,
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(response)
+}
+
+// GetAllocationDrift handles GET /portfolios/{id}/drift
+func (h *PortfolioHandler) GetAllocationDrift(w http.ResponseWriter, r *http.Request) {
+	portfolioID := chi.URLParam(r, "id")
+
+	drift, err := h.service.GetAllocationDrift(r.Context(), portfolioID)
+	if err != nil {
+		h.logger.Error("Failed to get drift", zap.Error(err))
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(drift)
+}

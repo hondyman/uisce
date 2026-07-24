@@ -1,0 +1,21 @@
+FROM golang:1.25-alpine AS builder
+
+WORKDIR /app
+
+# Copy repository and download dependencies
+COPY . .
+RUN go mod download
+
+# Build the worker for Linux (static)
+RUN CGO_ENABLED=0 GOOS=linux go build -o security-sync-worker ./backend/cmd/security-sync-worker
+
+# Final minimal image
+FROM alpine:latest
+
+RUN apk --no-cache add ca-certificates curl
+
+WORKDIR /root/
+
+COPY --from=builder /app/security-sync-worker .
+
+CMD ["./security-sync-worker"]

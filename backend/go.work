@@ -1,0 +1,13 @@
+go 1.25.3
+
+use (
+	.
+	../calc-engine
+	../libs/abac-client
+	../libs/auth
+	../libs/hasura-client
+	../libs/jwt-middleware
+	../libs/logging
+	../libs/shared-types
+	../libs/temporal-client
+)

@@ -1,0 +1,950 @@
+[
+    {
+        "model_type": "household",
+        "display_name": "Household",
+        "ownership_type": "Percent-based",
+        "description": "Represents a household portfolio entity.",
+        "suggested_attributes": [
+            {
+                "key": "original_name",
+                "value_type": "string"
+            },
+            {
+                "key": "display_name",
+                "value_type": "string"
+            },
+            {
+                "key": "currency_factor",
+                "value_type": "string"
+            }
+        ]
+    },
+    {
+        "model_type": "person_node",
+        "display_name": "Client",
+        "ownership_type": "Percent-based",
+        "description": "Represents an individual client or person.",
+        "suggested_attributes": [
+            {
+                "key": "original_name",
+                "value_type": "string"
+            },
+            {
+                "key": "display_name",
+                "value_type": "string"
+            },
+            {
+                "key": "currency_factor",
+                "value_type": "string"
+            }
+        ]
+    },
+    {
+        "model_type": "prospect",
+        "display_name": "Prospect",
+        "ownership_type": "Percent-based",
+        "description": "Represents a prospective client.",
+        "suggested_attributes": [
+            {
+                "key": "original_name",
+                "value_type": "string"
+            },
+            {
+                "key": "display_name",
+                "value_type": "string"
+            },
+            {
+                "key": "currency_factor",
+                "value_type": "string"
+            }
+        ]
+    },
+    {
+        "model_type": "managed_partnership",
+        "display_name": "Managed fund",
+        "ownership_type": "Share-based or value-based",
+        "description": "Represents a managed fund or partnership.",
+        "suggested_attributes": [
+            {
+                "key": "original_name",
+                "value_type": "string"
+            },
+            {
+                "key": "display_name",
+                "value_type": "string"
+            },
+            {
+                "key": "currency_factor",
+                "value_type": "string"
+            }
+        ]
+    },
+    {
+        "model_type": "holding_company",
+        "display_name": "Holding company",
+        "ownership_type": "Percent-based",
+        "description": "Represents a holding company entity.",
+        "suggested_attributes": [
+            {
+                "key": "original_name",
+                "value_type": "string"
+            },
+            {
+                "key": "display_name",
+                "value_type": "string"
+            },
+            {
+                "key": "currency_factor",
+                "value_type": "string"
+            }
+        ]
+    },
+    {
+        "model_type": "manager",
+        "display_name": "Manager",
+        "ownership_type": "Percent-based",
+        "description": "Represents a manager entity.",
+        "suggested_attributes": [
+            {
+                "key": "original_name",
+                "value_type": "string"
+            },
+            {
+                "key": "display_name",
+                "value_type": "string"
+            },
+            {
+                "key": "currency_factor",
+                "value_type": "string"
+            }
+        ]
+    },
+    {
+        "model_type": "fund",
+        "display_name": "Private fund",
+        "ownership_type": "Value-based",
+        "description": "Represents a private fund.",
+        "suggested_attributes": [
+            {
+                "key": "original_name",
+                "value_type": "string"
+            },
+            {
+                "key": "display_name",
+                "value_type": "string"
+            },
+            {
+                "key": "currency_factor",
+                "value_type": "string"
+            }
+        ]
+    },
+    {
+        "model_type": "trust",
+        "display_name": "Trust",
+        "ownership_type": "Percent-based",
+        "description": "Represents a trust entity.",
+        "suggested_attributes": [
+            {
+                "key": "original_name",
+                "value_type": "string"
+            },
+            {
+                "key": "display_name",
+                "value_type": "string"
+            },
+            {
+                "key": "currency_factor",
+                "value_type": "string"
+            }
+        ]
+    },
+    {
+        "model_type": "vehicle",
+        "display_name": "Vehicle",
+        "ownership_type": "Percent-based",
+        "description": "Represents a vehicle entity.",
+        "suggested_attributes": [
+            {
+                "key": "original_name",
+                "value_type": "string"
+            },
+            {
+                "key": "display_name",
+                "value_type": "string"
+            },
+            {
+                "key": "currency_factor",
+                "value_type": "string"
+            }
+        ]
+    },
+    {
+        "model_type": "financial_account",
+        "display_name": "Holding Account",
+        "ownership_type": "Percent-based",
+        "description": "Represents a financial or holding account.",
+        "suggested_attributes": [
+            {
+                "key": "original_name",
+                "value_type": "string"
+            },
+            {
+                "key": "display_name",
+                "value_type": "string"
+            },
+            {
+                "key": "currency_factor",
+                "value_type": "string"
+            }
+        ]
+    },
+    {
+        "model_type": "sleeve",
+        "display_name": "Sleeve",
+        "ownership_type": "Percent-based",
+        "description": "Represents a sleeve in a portfolio.",
+        "suggested_attributes": [
+            {
+                "key": "original_name",
+                "value_type": "string"
+            },
+            {
+                "key": "display_name",
+                "value_type": "string"
+            },
+            {
+                "key": "currency_factor",
+                "value_type": "string"
+            }
+        ]
+    },
+    {
+        "model_type": "annuity",
+        "display_name": "Annuity",
+        "ownership_type": "Value-based",
+        "description": "Represents an annuity investment.",
+        "suggested_attributes": [
+            {
+                "key": "original_name",
+                "value_type": "string"
+            },
+            {
+                "key": "display_name",
+                "value_type": "string"
+            },
+            {
+                "key": "currency_factor",
+                "value_type": "string"
+            }
+        ]
+    },
+    {
+        "model_type": "art",
+        "display_name": "Art",
+        "ownership_type": "Share-based or value-based",
+        "description": "Represents art as an asset. Available only to firms that started using Addepar on or after September 12, 2025.",
+        "suggested_attributes": [
+            {
+                "key": "original_name",
+                "value_type": "string"
+            },
+            {
+                "key": "display_name",
+                "value_type": "string"
+            },
+            {
+                "key": "currency_factor",
+                "value_type": "string"
+            }
+        ]
+    },
+    {
+        "model_type": "bond",
+        "display_name": "Bond",
+        "ownership_type": "Share-based",
+        "description": "Represents a bond investment.",
+        "suggested_attributes": [
+            {
+                "key": "cusip",
+                "value_type": "string"
+            },
+            {
+                "key": "maturity_date",
+                "value_type": "date"
+            },
+            {
+                "key": "original_name",
+                "value_type": "string"
+            },
+            {
+                "key": "display_name",
+                "value_type": "string"
+            },
+            {
+                "key": "currency_factor",
+                "value_type": "string"
+            }
+        ]
+    },
+    {
+        "model_type": "car",
+        "display_name": "Car",
+        "ownership_type": "Share-based or value-based",
+        "description": "Represents a car as an asset. Available only to firms that started using Addepar on or after September 12, 2025.",
+        "suggested_attributes": [
+            {
+                "key": "original_name",
+                "value_type": "string"
+            },
+            {
+                "key": "display_name",
+                "value_type": "string"
+            },
+            {
+                "key": "currency_factor",
+                "value_type": "string"
+            }
+        ]
+    },
+    {
+        "model_type": "certificate_of_deposit",
+        "display_name": "Certificate of deposit",
+        "ownership_type": "Share-based",
+        "description": "Represents a certificate of deposit.",
+        "suggested_attributes": [
+            {
+                "key": "original_name",
+                "value_type": "string"
+            },
+            {
+                "key": "display_name",
+                "value_type": "string"
+            },
+            {
+                "key": "currency_factor",
+                "value_type": "string"
+            }
+        ]
+    },
+    {
+        "model_type": "closed_end_fund",
+        "display_name": "Closed end fund",
+        "ownership_type": "Share-based",
+        "description": "Represents a closed-end fund.",
+        "suggested_attributes": [
+            {
+                "key": "original_name",
+                "value_type": "string"
+            },
+            {
+                "key": "display_name",
+                "value_type": "string"
+            },
+            {
+                "key": "currency_factor",
+                "value_type": "string"
+            }
+        ]
+    },
+    {
+        "model_type": "cmo",
+        "display_name": "CMO",
+        "ownership_type": "Share-based",
+        "description": "Represents a collateralized mortgage obligation.",
+        "suggested_attributes": [
+            {
+                "key": "original_name",
+                "value_type": "string"
+            },
+            {
+                "key": "display_name",
+                "value_type": "string"
+            },
+            {
+                "key": "currency_factor",
+                "value_type": "string"
+            }
+        ]
+    },
+    {
+        "model_type": "collectible",
+        "display_name": "Collectible",
+        "ownership_type": "Share-based or value-based",
+        "description": "Represents a collectible asset. Available only to firms that started using Addepar on or after September 12, 2025.",
+        "suggested_attributes": [
+            {
+                "key": "original_name",
+                "value_type": "string"
+            },
+            {
+                "key": "display_name",
+                "value_type": "string"
+            },
+            {
+                "key": "currency_factor",
+                "value_type": "string"
+            }
+        ]
+    },
+    {
+        "model_type": "convertible_note",
+        "display_name": "Convertible note",
+        "ownership_type": "Share-based",
+        "description": "Represents a convertible note.",
+        "suggested_attributes": [
+            {
+                "key": "original_name",
+                "value_type": "string"
+            },
+            {
+                "key": "display_name",
+                "value_type": "string"
+            },
+            {
+                "key": "currency_factor",
+                "value_type": "string"
+            }
+        ]
+    },
+    {
+        "model_type": "generic_asset",
+        "display_name": "Custom asset, or any other custom investment type that's not in this list",
+        "ownership_type": "Any",
+        "description": "Catch-all for custom or unspecified assets.",
+        "suggested_attributes": [
+            {
+                "key": "original_name",
+                "value_type": "string"
+            },
+            {
+                "key": "display_name",
+                "value_type": "string"
+            },
+            {
+                "key": "currency_factor",
+                "value_type": "string"
+            }
+        ]
+    },
+    {
+        "model_type": "cash",
+        "display_name": "Currency",
+        "ownership_type": "Share-based",
+        "description": "Represents cash or currency holdings.",
+        "suggested_attributes": [
+            {
+                "key": "original_name",
+                "value_type": "string"
+            },
+            {
+                "key": "display_name",
+                "value_type": "string"
+            },
+            {
+                "key": "currency_factor",
+                "value_type": "string"
+            }
+        ]
+    },
+    {
+        "model_type": "digital_asset",
+        "display_name": "Digital asset",
+        "ownership_type": "Share-based",
+        "description": "Represents digital assets like cryptocurrencies.",
+        "suggested_attributes": [
+            {
+                "key": "original_name",
+                "value_type": "string"
+            },
+            {
+                "key": "display_name",
+                "value_type": "string"
+            },
+            {
+                "key": "currency_factor",
+                "value_type": "string"
+            }
+        ]
+    },
+    {
+        "model_type": "etf",
+        "display_name": "ETF",
+        "ownership_type": "Share-based",
+        "description": "Represents an exchange-traded fund.",
+        "suggested_attributes": [
+            {
+                "key": "cusip",
+                "value_type": "string"
+            },
+            {
+                "key": "original_name",
+                "value_type": "string"
+            },
+            {
+                "key": "display_name",
+                "value_type": "string"
+            },
+            {
+                "key": "currency_factor",
+                "value_type": "string"
+            }
+        ]
+    },
+    {
+        "model_type": "etn",
+        "display_name": "ETN",
+        "ownership_type": "Share-based",
+        "description": "Represents an exchange-traded note.",
+        "suggested_attributes": [
+            {
+                "key": "original_name",
+                "value_type": "string"
+            },
+            {
+                "key": "display_name",
+                "value_type": "string"
+            },
+            {
+                "key": "currency_factor",
+                "value_type": "string"
+            }
+        ]
+    },
+    {
+        "model_type": "forward_contract",
+        "display_name": "Forward contract",
+        "ownership_type": "Share-based",
+        "description": "Represents a forward contract.",
+        "suggested_attributes": [
+            {
+                "key": "underlying_type",
+                "value_type": "string"
+            },
+            {
+                "key": "delivery_price",
+                "value_type": "numeric"
+            },
+            {
+                "key": "original_name",
+                "value_type": "string"
+            },
+            {
+                "key": "display_name",
+                "value_type": "string"
+            },
+            {
+                "key": "currency_factor",
+                "value_type": "string"
+            }
+        ]
+    },
+    {
+        "model_type": "futures_contract",
+        "display_name": "Futures contract",
+        "ownership_type": "Share-based",
+        "description": "Represents a futures contract.",
+        "suggested_attributes": [
+            {
+                "key": "underlying_type",
+                "value_type": "string"
+            },
+            {
+                "key": "delivery_price",
+                "value_type": "numeric"
+            },
+            {
+                "key": "original_name",
+                "value_type": "string"
+            },
+            {
+                "key": "display_name",
+                "value_type": "string"
+            },
+            {
+                "key": "currency_factor",
+                "value_type": "string"
+            }
+        ]
+    },
+    {
+        "model_type": "hedge_fund",
+        "display_name": "Hedge fund",
+        "ownership_type": "Share-based or value-based",
+        "description": "Represents a hedge fund. Available only to firms that started using Addepar on or after September 12, 2025.",
+        "suggested_attributes": [
+            {
+                "key": "original_name",
+                "value_type": "string"
+            },
+            {
+                "key": "display_name",
+                "value_type": "string"
+            },
+            {
+                "key": "currency_factor",
+                "value_type": "string"
+            }
+        ]
+    },
+    {
+        "model_type": "historical_segment",
+        "display_name": "Historical segment",
+        "ownership_type": "Value-based",
+        "description": "Represents historical data segments.",
+        "suggested_attributes": [
+            {
+                "key": "original_name",
+                "value_type": "string"
+            },
+            {
+                "key": "display_name",
+                "value_type": "string"
+            },
+            {
+                "key": "currency_factor",
+                "value_type": "string"
+            }
+        ]
+    },
+    {
+        "model_type": "loan",
+        "display_name": "Loan",
+        "ownership_type": "Value-based",
+        "description": "Represents a loan asset.",
+        "suggested_attributes": [
+            {
+                "key": "original_name",
+                "value_type": "string"
+            },
+            {
+                "key": "display_name",
+                "value_type": "string"
+            },
+            {
+                "key": "currency_factor",
+                "value_type": "string"
+            }
+        ]
+    },
+    {
+        "model_type": "master_limited_partnership",
+        "display_name": "Master limited partnership",
+        "ownership_type": "Share-based",
+        "description": "Represents a master limited partnership.",
+        "suggested_attributes": [
+            {
+                "key": "original_name",
+                "value_type": "string"
+            },
+            {
+                "key": "display_name",
+                "value_type": "string"
+            },
+            {
+                "key": "currency_factor",
+                "value_type": "string"
+            }
+        ]
+    },
+    {
+        "model_type": "money_market_fund",
+        "display_name": "Money market fund",
+        "ownership_type": "Share-based",
+        "description": "Represents a money market fund.",
+        "suggested_attributes": [
+            {
+                "key": "original_name",
+                "value_type": "string"
+            },
+            {
+                "key": "display_name",
+                "value_type": "string"
+            },
+            {
+                "key": "currency_factor",
+                "value_type": "string"
+            }
+        ]
+    },
+    {
+        "model_type": "mutual_fund",
+        "display_name": "Mutual fund",
+        "ownership_type": "Share-based",
+        "description": "Represents a mutual fund.",
+        "suggested_attributes": [
+            {
+                "key": "original_name",
+                "value_type": "string"
+            },
+            {
+                "key": "display_name",
+                "value_type": "string"
+            },
+            {
+                "key": "currency_factor",
+                "value_type": "string"
+            }
+        ]
+    },
+    {
+        "model_type": "option",
+        "display_name": "Option",
+        "ownership_type": "Share-based",
+        "description": "Represents an option contract.",
+        "suggested_attributes": [
+            {
+                "key": "original_name",
+                "value_type": "string"
+            },
+            {
+                "key": "display_name",
+                "value_type": "string"
+            },
+            {
+                "key": "currency_factor",
+                "value_type": "string"
+            }
+        ]
+    },
+    {
+        "model_type": "preferred_stock",
+        "display_name": "Preferred stock",
+        "ownership_type": "Share-based",
+        "description": "Represents preferred stock.",
+        "suggested_attributes": [
+            {
+                "key": "original_name",
+                "value_type": "string"
+            },
+            {
+                "key": "display_name",
+                "value_type": "string"
+            },
+            {
+                "key": "currency_factor",
+                "value_type": "string"
+            }
+        ]
+    },
+    {
+        "model_type": "private_equity_fund",
+        "display_name": "Private equity fund",
+        "ownership_type": "Share-based or value-based",
+        "description": "Represents a private equity fund. Available only to firms that started using Addepar on or after September 12, 2025.",
+        "suggested_attributes": [
+            {
+                "key": "original_name",
+                "value_type": "string"
+            },
+            {
+                "key": "display_name",
+                "value_type": "string"
+            },
+            {
+                "key": "currency_factor",
+                "value_type": "string"
+            }
+        ]
+    },
+    {
+        "model_type": "private_investment",
+        "display_name": "Private investment",
+        "ownership_type": "Share-based or value-based",
+        "description": "Represents a private investment. Available only to firms that started using Addepar on or after September 12, 2025.",
+        "suggested_attributes": [
+            {
+                "key": "original_name",
+                "value_type": "string"
+            },
+            {
+                "key": "display_name",
+                "value_type": "string"
+            },
+            {
+                "key": "currency_factor",
+                "value_type": "string"
+            }
+        ]
+    },
+    {
+        "model_type": "promissory_note",
+        "display_name": "Promissory note",
+        "ownership_type": "Share-based or value-based",
+        "description": "Represents a promissory note. Available only to firms that started using Addepar on or after September 12, 2025.",
+        "suggested_attributes": [
+            {
+                "key": "original_name",
+                "value_type": "string"
+            },
+            {
+                "key": "display_name",
+                "value_type": "string"
+            },
+            {
+                "key": "currency_factor",
+                "value_type": "string"
+            }
+        ]
+    },
+    {
+        "model_type": "real_estate",
+        "display_name": "Real estate",
+        "ownership_type": "Share-based or value-based",
+        "description": "Represents real estate assets. Available only to firms that started using Addepar on or after September 12, 2025.",
+        "suggested_attributes": [
+            {
+                "key": "original_name",
+                "value_type": "string"
+            },
+            {
+                "key": "display_name",
+                "value_type": "string"
+            },
+            {
+                "key": "currency_factor",
+                "value_type": "string"
+            }
+        ]
+    },
+    {
+        "model_type": "reit",
+        "display_name": "REIT",
+        "ownership_type": "Share-based",
+        "description": "Represents a real estate investment trust.",
+        "suggested_attributes": [
+            {
+                "key": "original_name",
+                "value_type": "string"
+            },
+            {
+                "key": "display_name",
+                "value_type": "string"
+            },
+            {
+                "key": "currency_factor",
+                "value_type": "string"
+            }
+        ]
+    },
+    {
+        "model_type": "stock",
+        "display_name": "Stock",
+        "ownership_type": "Share-based",
+        "description": "Represents common stock.",
+        "suggested_attributes": [
+            {
+                "key": "original_name",
+                "value_type": "string"
+            },
+            {
+                "key": "display_name",
+                "value_type": "string"
+            },
+            {
+                "key": "currency_factor",
+                "value_type": "string"
+            }
+        ]
+    },
+    {
+        "model_type": "structured_product",
+        "display_name": "Structured product",
+        "ownership_type": "Share-based",
+        "description": "Represents a structured product investment.",
+        "suggested_attributes": [
+            {
+                "key": "original_name",
+                "value_type": "string"
+            },
+            {
+                "key": "display_name",
+                "value_type": "string"
+            },
+            {
+                "key": "currency_factor",
+                "value_type": "string"
+            }
+        ]
+    },
+    {
+        "model_type": "uit",
+        "display_name": "UIT",
+        "ownership_type": "Share-based",
+        "description": "Represents a unit investment trust.",
+        "suggested_attributes": [
+            {
+                "key": "original_name",
+                "value_type": "string"
+            },
+            {
+                "key": "display_name",
+                "value_type": "string"
+            },
+            {
+                "key": "currency_factor",
+                "value_type": "string"
+            }
+        ]
+    },
+    {
+        "model_type": "unknown_security",
+        "display_name": "Unknown security",
+        "ownership_type": "Share-based",
+        "description": "Catch-all for unknown securities.",
+        "suggested_attributes": [
+            {
+                "key": "original_name",
+                "value_type": "string"
+            },
+            {
+                "key": "display_name",
+                "value_type": "string"
+            },
+            {
+                "key": "currency_factor",
+                "value_type": "string"
+            }
+        ]
+    },
+    {
+        "model_type": "venture_capital",
+        "display_name": "Venture capital",
+        "ownership_type": "Share-based or value-based",
+        "description": "Represents venture capital investments. Available only to firms that started using Addepar on or after September 12, 2025.",
+        "suggested_attributes": [
+            {
+                "key": "original_name",
+                "value_type": "string"
+            },
+            {
+                "key": "display_name",
+                "value_type": "string"
+            },
+            {
+                "key": "currency_factor",
+                "value_type": "string"
+            }
+        ]
+    },
+    {
+        "model_type": "warrant",
+        "display_name": "Warrant",
+        "ownership_type": "Share-based",
+        "description": "Represents a warrant.",
+        "suggested_attributes": [
+            {
+                "key": "original_name",
+                "value_type": "string"
+            },
+            {
+                "key": "display_name",
+                "value_type": "string"
+            },
+            {
+                "key": "currency_factor",
+                "value_type": "string"
+            }
+        ]
+    }
+]

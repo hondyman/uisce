@@ -1,0 +1,13 @@
+# Portfolio Drift Rule
+# Triggers when portfolio allocation drifts more than 5% from target
+
+id: rule_portfolio_drift
+card_id: portfolio_drift
+description: Show drift alert when portfolio drift exceeds threshold
+priority: 70
+
+conditions:
+  # Portfolio drift must exceed 5%
+  - field: Portfolio.DriftPct
+    operator: gt
+    value: 0.05

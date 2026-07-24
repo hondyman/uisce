@@ -1,0 +1,20 @@
+# Portfolio Drift Rule (CEL-based)
+
+id: rule_portfolio_drift
+type: CardRule
+version: 1.0.0
+card_id: portfolio_drift
+persona: planning_specialist
+
+eligibility:
+  # Portfolio drift exceeds 5% threshold
+  expression: "client.Portfolio.DriftPct > 0.05"
+
+rank:
+  # Higher drift = higher priority
+  expression: "client.Portfolio.DriftPct * 100.0"
+
+metadata:
+  description: "Portfolio rebalancing recommendation when drift exceeds threshold"
+  priority: "medium"
+  approval_required: false

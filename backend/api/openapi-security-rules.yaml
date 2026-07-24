@@ -1,0 +1,372 @@
+openapi: 3.0.3
+info:
+  title: Security Access Rules API
+  description: |
+    Complete API for managing access rules in the Business Object security subsystem.
+    Access rules bind LDAP groups to Business Objects with row-level and column-level security controls.
+  version: 1.0.0
+  contact:
+    name: SemLayer Security Team
+
+servers:
+- url: http://localhost:8080
+  description: Development server
+- url: https://staging.semlayer.com
+  description: Staging server
+- url: https://api.semlayer.com
+  description: Production server
+
+paths:
+  /security/rules:
+    get:
+      summary: List access rules
+      description: Retrieve all access rules with optional filters
+      operationId: listAccessRules
+      tags:
+      - Access Rules
+      parameters:
+      - in: query
+        name: tenantId
+        schema:
+          type: string
+          format: uuid
+        description: Filter by tenant ID
+      - in: query
+        name: businessObjectId
+        schema:
+          type: string
+        description: Filter by business object ID
+      - in: query
+        name: status
+        schema:
+          type: string
+          enum: [ DRAFT, REVIEW, APPROVED, DEPRECATED ]
+        description: Filter by rule status
+      responses:
+        '200':
+          description: List of access rules
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AccessRule'
+        '400':
+          description: Invalid request parameters
+        '500':
+          description: Internal server error
+
+    post:
+      summary: Create access rule
+      description: Create a new access rule
+      operationId: createAccessRule
+      tags:
+      - Access Rules
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AccessRuleCreateRequest'
+      responses:
+        '201':
+          description: Created rule
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccessRule'
+        '400':
+          description: Invalid request body or validation failed
+        '500':
+          description: Internal server error
+
+  /security/rules/{ruleId}:
+    get:
+      summary: Get access rule
+      description: Retrieve a single access rule by ID
+      operationId: getAccessRule
+      tags:
+      - Access Rules
+      parameters:
+      - in: path
+        name: ruleId
+        required: true
+        schema:
+          type: string
+        description: The access rule ID
+      responses:
+        '200':
+          description: Access rule
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccessRule'
+        '404':
+          description: Rule not found
+        '500':
+          description: Internal server error
+
+    put:
+      summary: Update access rule
+      description: Update an existing access rule
+      operationId: updateAccessRule
+      tags:
+      - Access Rules
+      parameters:
+      - in: path
+        name: ruleId
+        required: true
+        schema:
+          type: string
+        description: The access rule ID
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AccessRuleUpdateRequest'
+      responses:
+        '200':
+          description: Updated rule
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccessRule'
+        '400':
+          description: Invalid request or validation failed
+        '404':
+          description: Rule not found
+        '500':
+          description: Internal server error
+
+  /security/rules/validate:
+    post:
+      summary: Validate row filter DSL
+      description: Validate a DSL expression against business object schema
+      operationId: validateAccessRuleDsl
+      tags:
+      - Access Rules
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+              - businessObjectId
+              - rowFilterDsl
+              properties:
+                businessObjectId:
+                  type: string
+                  description: Business object ID to validate against
+                rowFilterDsl:
+                  type: string
+                  description: DSL expression to validate
+      responses:
+        '200':
+          description: Validation result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DslValidationResult'
+        '400':
+          description: Invalid request
+        '500':
+          description: Internal server error
+
+  /security/rules/{ruleId}/impact:
+    get:
+      summary: Get impact of an access rule
+      description: Analyze downstream impact of a rule across APIs, BI, and AI artifacts
+      operationId: getAccessRuleImpact
+      tags:
+      - Access Rules
+      parameters:
+      - in: path
+        name: ruleId
+        required: true
+        schema:
+          type: string
+        description: The access rule ID
+      responses:
+        '200':
+          description: Impact report
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccessRuleImpact'
+        '404':
+          description: Rule not found
+        '500':
+          description: Internal server error
+
+components:
+  schemas:
+    AccessRule:
+      type: object
+      required:
+      - ruleId
+      - tenantId
+      - businessObjectId
+      - groupDn
+      - accessLevel
+      - status
+      properties:
+        ruleId:
+          type: string
+          description: Unique identifier for the rule
+        tenantId:
+          type: string
+          format: uuid
+          description: Tenant ID
+        businessObjectId:
+          type: string
+          description: Business object ID (e.g., "bo:portfolio")
+        groupDn:
+          type: string
+          description: LDAP group distinguished name
+        accessLevel:
+          type: string
+          enum: [ NONE, READ, WRITE ]
+          description: Access level granted by this rule
+        status:
+          type: string
+          enum: [ DRAFT, REVIEW, APPROVED, DEPRECATED ]
+          description: Rule lifecycle status
+        rowFilterDsl:
+          type: string
+          nullable: true
+          description: DSL expression for row-level filtering
+        columnMasks:
+          type: array
+          items:
+            $ref: '#/components/schemas/ColumnMask'
+          description: Column-level masking rules
+        scope:
+          $ref: '#/components/schemas/Scope'
+        metadata:
+          $ref: '#/components/schemas/AccessRuleMetadata'
+
+    AccessRuleCreateRequest:
+      allOf:
+      - $ref: '#/components/schemas/AccessRule'
+      required:
+      - tenantId
+      - businessObjectId
+      - groupDn
+      - accessLevel
+
+    AccessRuleUpdateRequest:
+      allOf:
+      - $ref: '#/components/schemas/AccessRule'
+
+    ColumnMask:
+      type: object
+      required:
+      - semanticTermId
+      - maskType
+      properties:
+        semanticTermId:
+          type: string
+          description: Semantic term ID to apply mask to
+        maskType:
+          type: string
+          enum: [ HIDE, MASK, NONE ]
+          description: |
+            - HIDE: Remove field from result
+            - MASK: Obfuscate field value
+            - NONE: No masking
+
+    Scope:
+      type: object
+      properties:
+        appliesToApis:
+          type: boolean
+          default: true
+          description: Whether rule applies to API queries
+        appliesToBi:
+          type: boolean
+          default: true
+          description: Whether rule applies to BI queries
+        appliesToAi:
+          type: boolean
+          default: true
+          description: Whether rule applies to AI queries
+
+    AccessRuleMetadata:
+      type: object
+      properties:
+        createdBy:
+          type: string
+          description: User who created the rule
+        createdAt:
+          type: string
+          format: date-time
+          description: Creation timestamp
+        updatedBy:
+          type: string
+          description: User who last updated the rule
+        updatedAt:
+          type: string
+          format: date-time
+          description: Last update timestamp
+        version:
+          type: integer
+          description: Rule version for optimistic locking
+        description:
+          type: string
+          description: Human-readable description of the rule
+
+    DslValidationResult:
+      type: object
+      required:
+      - valid
+      properties:
+        valid:
+          type: boolean
+          description: Whether the DSL is valid
+        sqlPredicate:
+          type: string
+          nullable: true
+          description: Generated SQL predicate if valid
+        errorMessage:
+          type: string
+          nullable: true
+          description: Error message if invalid
+
+    AccessRuleImpact:
+      type: object
+      required:
+      - ruleId
+      - businessObjectId
+      properties:
+        ruleId:
+          type: string
+          description: Rule ID
+        businessObjectId:
+          type: string
+          description: Business object ID
+        semanticTerms:
+          type: array
+          items:
+            type: string
+          description: Semantic terms affected by this rule
+        apis:
+          type: array
+          items:
+            type: string
+          description: API endpoints affected by this rule
+        biArtifacts:
+          type: array
+          items:
+            type: string
+          description: BI artifacts (reports, dashboards) affected
+        aiArtifacts:
+          type: array
+          items:
+            type: string
+          description: AI artifacts (models, agents) affected
+
+tags:
+- name: Access Rules
+  description: Operations for managing access rules

@@ -1,0 +1,26 @@
+FROM golang:1.25-alpine AS builder
+
+WORKDIR /app
+
+# Copy isolated go mod files
+COPY cmd/snapshot-worker/go.mod cmd/snapshot-worker/go.sum ./
+
+# Download dependencies
+RUN go mod download
+
+# Copy source code
+COPY cmd/snapshot-worker/ .
+
+# Build the worker
+RUN CGO_ENABLED=0 GOOS=linux go build -o snapshot-worker .
+
+# Final stage
+FROM alpine:latest
+
+RUN apk --no-cache add ca-certificates
+
+WORKDIR /root/
+
+COPY --from=builder /app/snapshot-worker .
+
+CMD ["./snapshot-worker"]

@@ -1,0 +1,90 @@
+[
+  {
+    "code": "numeric",
+    "name": "Numeric",
+    "children": [
+      { "code": "integer", "name": "integers" },
+      { "code": "decimal", "name": "decimals" },
+      { "code": "float", "name": "floating point" },
+      { "code": "money", "name": "money" }
+    ]
+  },
+  {
+    "code": "text",
+    "name": "Text / String",
+    "children": [
+      { "code": "char", "name": "char" },
+      { "code": "varchar", "name": "varchar" },
+      { "code": "text", "name": "text" },
+      { "code": "enum", "name": "enums" }
+    ]
+  },
+  {
+    "code": "date_time",
+    "name": "Date / Time",
+    "children": [
+      { "code": "date", "name": "date" },
+      { "code": "time", "name": "time" },
+      { "code": "timestamp", "name": "timestamp" },
+      { "code": "interval", "name": "interval" }
+    ]
+  },
+  {
+    "code": "boolean",
+    "name": "Boolean",
+    "children": [
+      { "code": "boolean", "name": "true/false" }
+    ]
+  },
+  {
+    "code": "binary",
+    "name": "Binary",
+    "children": [
+      { "code": "bytea", "name": "raw bytes" },
+      { "code": "files", "name": "files" },
+      { "code": "images", "name": "images" }
+    ]
+  },
+  {
+    "code": "json_struct",
+    "name": "JSON / Structured",
+    "children": [
+      { "code": "json", "name": "JSON" },
+      { "code": "jsonb", "name": "JSONB" },
+      { "code": "xml", "name": "XML" },
+      { "code": "composite", "name": "composite types" }
+    ]
+  },
+  {
+    "code": "array", 
+    "name": "Array / Collection",
+    "children": [
+      { "code": "array", "name": "arrays of base types" }
+    ]
+  },
+  {
+    "code": "uuid",
+    "name": "UUID / Identifier",
+    "children": [
+      { "code": "uuid", "name": "unique identifiers" }
+    ]
+  },
+  {
+    "code": "range",
+    "name": "Range",
+    "children": [
+      { "code": "range_numeric", "name": "ranges of numbers" },
+      { "code": "range_timestamp", "name": "ranges of timestamps" },
+      { "code": "range_date", "name": "ranges of dates" }
+    ]
+  },
+  {
+    "code": "specialized",
+    "name": "Specialized / Domain-specific",
+    "children": [
+      { "code": "geom", "name": "geometric types" },
+      { "code": "network", "name": "network (IP, MAC)" },
+      { "code": "fts", "name": "full-text search types" }
+    ]
+  }
+]

@@ -1,0 +1,131 @@
+{
+    "name": "Order Processing with Saga Pattern",
+    "description": "Demonstrates Wait For Event, Try/Catch, and Compensate nodes for robust order processing",
+    "startNodeId": "node_start",
+    "globalState": {
+        "order_id": "ORD-12345",
+        "amount": 1500.00,
+        "customer_id": "CUST-789"
+    },
+    "nodes": {
+        "node_start": {
+            "id": "node_start",
+            "type": "ACTIVITY",
+            "name": "Initialize Order",
+            "config": {
+                "activityName": "ActivityLogEvent",
+                "message": "Starting order processing"
+            },
+            "nextNodeId": "node_try_catch"
+        },
+        "node_try_catch": {
+            "id": "node_try_catch",
+            "type": "tryCatch",
+            "name": "Try Order Processing",
+            "config": {
+                "try_node_ids": [
+                    "node_reserve_inventory",
+                    "node_charge_payment"
+                ],
+                "catch_node_ids": [
+                    "node_handle_error"
+                ],
+                "finally_node_ids": [
+                    "node_cleanup"
+                ],
+                "error_variable": "processing_error"
+            },
+            "nextNodeId": "node_wait_confirmation"
+        },
+        "node_reserve_inventory": {
+            "id": "node_reserve_inventory",
+            "type": "ACTIVITY",
+            "name": "Reserve Inventory",
+            "config": {
+                "activityName": "ActivityReserveInventory"
+            },
+            "nextNodeId": "node_compensate_inventory"
+        },
+        "node_compensate_inventory": {
+            "id": "node_compensate_inventory",
+            "type": "compensate",
+            "name": "Register Inventory Rollback",
+            "config": {
+                "compensation_name": "release_inventory",
+                "compensation_node_ids": [
+                    "node_release_inventory"
+                ]
+            },
+            "nextNodeId": "node_charge_payment"
+        },
+        "node_charge_payment": {
+            "id": "node_charge_payment",
+            "type": "ACTIVITY",
+            "name": "Charge Payment",
+            "config": {
+                "activityName": "ActivityChargePayment"
+            },
+            "nextNodeId": "node_compensate_payment"
+        },
+        "node_compensate_payment": {
+            "id": "node_compensate_payment",
+            "type": "compensate",
+            "name": "Register Payment Refund",
+            "config": {
+                "compensation_name": "refund_payment",
+                "compensation_node_ids": [
+                    "node_refund_payment"
+                ]
+            }
+        },
+        "node_release_inventory": {
+            "id": "node_release_inventory",
+            "type": "ACTIVITY",
+            "name": "Release Inventory (Rollback)",
+            "config": {
+                "activityName": "ActivityReleaseInventory"
+            }
+        },
+        "node_refund_payment": {
+            "id": "node_refund_payment",
+            "type": "ACTIVITY",
+            "name": "Refund Payment (Rollback)",
+            "config": {
+                "activityName": "ActivityRefundPayment"
+            }
+        },
+        "node_handle_error": {
+            "id": "node_handle_error",
+            "type": "ACTIVITY",
+            "name": "Handle Error",
+            "config": {
+                "activityName": "ActivityLogError"
+            }
+        },
+        "node_cleanup": {
+            "id": "node_cleanup",
+            "type": "ACTIVITY",
+            "name": "Cleanup Resources",
+            "config": {
+                "activityName": "ActivityCleanup"
+            }
+        },
+        "node_wait_confirmation": {
+            "id": "node_wait_confirmation",
+            "type": "waitForEvent",
+            "name": "Wait for Shipping Confirmation",
+            "config": {
+                "signal_name": "shipping_confirmed",
+                "timeout": "48h",
+                "timeout_action": "continue",
+                "output_variable": "shipping_data"
+            },
+            "nextNodeId": "node_end"
+        },
+        "node_end": {
+            "id": "node_end",
+            "type": "END",
+            "name": "Order Complete"
+        }
+    }
+}

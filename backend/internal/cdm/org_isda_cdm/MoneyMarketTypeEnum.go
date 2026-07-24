@@ -1,0 +1,10 @@
+/**
+ * This file is auto-generated from the ISDA Common Domain Model, do not edit.
+ * Version: 7.0.0-dev.78
+ */
+package org_isda_cdm
+  
+  const (
+  MoneyMarketTypeEnum_CERTIFICATE_OF_DEPOSIT MoneyMarketTypeEnum = iota + 1
+  MoneyMarketTypeEnum_COMMERCIAL_PAPER MoneyMarketTypeEnum = iota + 1
+  )    

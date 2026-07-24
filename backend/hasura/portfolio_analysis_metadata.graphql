@@ -1,0 +1,121 @@
+-- Hasura metadata for portfolio analysis functions
+-- Add this to your Hasura console or metadata.json
+
+type Query {
+  """
+  Drill-down portfolio analysis by any dimension
+  Returns hierarchical breakdown: asset_class -> sector -> industry -> security
+  """
+  analyze_portfolio_drill_down(
+    portfolio_id: UUID!
+    dimension: String!
+    level: Int
+    as_of_date: Date
+    tenant_id: UUID
+    datasource_id: UUID
+  ): [PortfolioDrillDownResult!]!
+
+  """
+  Aggregate all holdings across a household's accounts
+  Shows duplicate holdings across clients/advisors
+  """
+  aggregate_household_holdings(
+    household_id: UUID!
+    as_of_date: Date
+    tenant_id: UUID
+    datasource_id: UUID
+  ): [HouseholdHoldingsResult!]!
+
+  """
+  Calculate portfolio performance for any time period
+  Returns time-weighted returns, total returns, cash flows
+  """
+  calculate_portfolio_performance(
+    portfolio_id: UUID!
+    start_date: Date!
+    end_date: Date
+    tenant_id: UUID
+    datasource_id: UUID
+  ): [PortfolioPerformanceResult!]!
+
+  """
+  Analyze concentration risk at any dimension
+  Identifies overweight positions and risk levels
+  """
+  analyze_concentration_risk(
+    portfolio_id: UUID!
+    dimension: String!
+    threshold_pct: Float
+    as_of_date: Date
+    tenant_id: UUID
+    datasource_id: UUID
+  ): [ConcentrationRiskResult!]!
+
+  """
+  Model portfolio scenarios for what-if analysis
+  Supports price changes, share adjustments, liquidations
+  """
+  model_portfolio_scenario(
+    portfolio_id: UUID!
+    scenario_changes: JSON!
+    as_of_date: Date
+    tenant_id: UUID
+    datasource_id: UUID
+  ): [ScenarioModelResult!]!
+}
+
+type PortfolioDrillDownResult {
+  dimension_value: String!
+  dimension_level: Int!
+  position_count: Int!
+  market_value: Float!
+  cost_basis: Float!
+  unrealized_gain_loss: Float!
+  gain_loss_pct: Float!
+  weight_pct: Float!
+  has_children: Boolean!
+}
+
+type HouseholdHoldingsResult {
+  security_id: UUID!
+  ticker: String!
+  security_name: String!
+  asset_class: String!
+  total_market_value: Float!
+  total_cost_basis: Float!
+  total_unrealized_gain_loss: Float!
+  weight_pct: Float!
+  account_count: Int!
+  position_count: Int!
+}
+
+type PortfolioPerformanceResult {
+  period_name: String!
+  start_value: Float!
+  end_value: Float!
+  net_cash_flows: Float!
+  total_return_pct: Float!
+  time_weighted_return_pct: Float!
+  days_held: Int!
+}
+
+type ConcentrationRiskResult {
+  dimension_value: String!
+  concentration_pct: Float!
+  market_value: Float!
+  risk_level: String!  # HIGH, MEDIUM, LOW
+  exceeds_threshold: Boolean!
+}
+
+type ScenarioModelResult {
+  ticker: String!
+  security_name: String!
+  current_shares: Float!
+  current_price: Float!
+  current_value: Float!
+  scenario_shares: Float!
+  scenario_price: Float!
+  scenario_value: Float!
+  value_change: Float!
+  value_change_pct: Float!
+}
