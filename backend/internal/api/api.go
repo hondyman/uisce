@@ -30,7 +30,6 @@ import (
 	"github.com/hondyman/uisce/backend/internal/billing"
 	"github.com/hondyman/uisce/backend/internal/boresolver"
 	"github.com/hondyman/uisce/backend/internal/bp"
-	"github.com/hondyman/uisce/backend/internal/cube"
 	"github.com/hondyman/uisce/backend/internal/data_intelligence/tiering"
 	charts "github.com/hondyman/uisce/backend/internal/db/charts"
 	"github.com/hondyman/uisce/backend/internal/events"
@@ -125,7 +124,6 @@ type Server struct {
 	NLQService              *services.NLQService
 	FeedbackService         *services.FeedbackService
 	EvalService             *services.EvalService
-	CubeSyncService         *analytics.CubeSyncService
 	LLMConfigSvc            *llm.LLMConfigService
 	TemporalClient          temporalclient.Client
 	EvidenceBundleService   *services.EvidenceBundleService
@@ -152,7 +150,6 @@ type Server struct {
 	GenAICopilotHandler     *handlers.GenAICopilotHandler
 	PolicyGenerationHandler *handlers.PolicyGenerationHandler
 	CalcHandler             *handlers.CalcHandler
-	CubeHandler             *CubeHandler
 	DatasourceResolver      security.DatasourceResolver
 	BusinessObjectService   *catalogmeta.BusinessObjectService
 	QueryHandler            *handlers.QueryHandler
@@ -947,11 +944,6 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 	srv.FeedbackService = services.NewFeedbackService(sqlxDB)
 	srv.EvalService = services.NewEvalService(sqlxDB, nlqService)
 
-	// Initialize Cube Sync Service
-	// Defaulting to a local 'cube_schema' directory for now
-	_ = filepath.Join(runtimeBase, "cube_schema")
-	srv.CubeSyncService = nil // Stub: NewCubeSyncService returns interface{}
-
 	// --- Audit & History Wiring ---
 	// initialize Trino Client for Bitemporal Tracker (Iceberg)
 	trinoDSN := getEnv("TRINO_DSN", "http://admin@trino:8080?catalog=iceberg&schema=audit")
@@ -1200,13 +1192,6 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 	}
 	hasura := hasuraclient.NewHasuraClient(hasuraCfg)
 	srv.CalcHandler = handlers.NewCalcHandler(hasura)
-
-	// Initialize Cube Client and Generator (Phase 9)
-	cubeURL = getEnv("CUBE_API_URL", "http://cube:4000")
-	cubeClient := cube.NewClient(cubeURL, "") // No secret for dev
-	cubeTermRepo := &services.SQLTermRepository{DB: db}
-	cubeGenerator := services.NewCubeGeneratorWithEngines(cubeTermRepo, srv.CueEngine, sqlxDB)
-	srv.CubeHandler = NewCubeHandler(cubeClient, cubeGenerator)
 
 	// Initialize RAG Services
 	ragConfigService := rag.NewConfigService(db)
@@ -3125,11 +3110,6 @@ func (s *Server) registerAdminRoutes(r chi.Router) {
 		r.Post("/run", s.handleRunEval)
 	})
 
-	// Admin Cube Sync
-	r.Route("/admin/cube", func(r chi.Router) {
-		r.Post("/sync", s.handleCubeSync)
-	})
-
 	// Role Management
 	s.RegisterRoleRoutes(r)
 
@@ -3173,7 +3153,6 @@ func (s *Server) registerCalculationRoutes(r chi.Router) {
 		r.Post("/preview", s.CalcHandler.Preview)
 		r.Post("/vectorized", s.runVectorizedCalculations)
 	})
-	s.CubeHandler.RegisterRoutes(r)
 	r.Mount("/calculations", s.CalculationHandler.Routes())
 	r.Mount("/execution-logs", s.ExecutionMonitorHandler.Routes())
 }

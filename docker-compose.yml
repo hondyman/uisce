@@ -156,29 +156,6 @@ services:
       - ./trino/etc/catalog:/etc/trino/catalog
     depends_on: [minio]
 
-  cube:
-    image: cubejs/cube:latest
-    environment:
-      CUBEJS_API_SECRET: devsecret
-      CUBEJS_DEV_MODE: "true"
-      CUBEJS_LOG_LEVEL: trace
-      DEBUG_LOG: "true"
-      CUBEJS_DATASOURCES: trino
-      CUBEJS_DS_TRINO_HOST: trino
-      CUBEJS_DS_TRINO_PORT: 8080
-      CUBEJS_DS_TRINO_CATALOG: iceberg
-      CUBEJS_DS_TRINO_SCHEMA: default
-      CUBEJS_PG_SQL_PORT: 5432
-    networks:
-      - semlayer-net
-    ports:
-      - "${CUBE_API_PORT:-4000}:4000"
-      - "${CUBE_PG_PORT:-15432}:5432"
-    volumes:
-      - ./services/cube-semantic/model:/cube/conf/model:ro
-      - ./services/cube-semantic/cube.js:/cube/conf/cube.js:ro
-    depends_on: [trino]
-
   backend:
     build:
       context: .
@@ -403,48 +380,6 @@ services:
       - semlayer-net
     ports:
       - "${RULE_ENGINE_PORT:-8091}:8080"
-    environment:
-      - DATABASE_URL=postgres://postgres:postgres@${DB_HOST:-100.84.50.65}:5432/alpha?sslmode=disable
-      - PORT=8080
-      - REDIS_ADDR=redis:6379
-      - TEMPORAL_HOSTPORT=temporal:7233
-      - KAFKA_BROKERS=redpanda:9092
-      - JWT_SECRET=${JWT_SECRET:-dev-jwt-secret-key-change-in-production}
-      - ENABLE_SECURITY=true
-      - JWT_ENFORCE=true
-    restart: unless-stopped
-    # depends_on:
-    #   - postgres
-
-  search-service:
-    build:
-      context: .
-      dockerfile: backend/Dockerfile.search
-    networks:
-      - semlayer-net
-    ports:
-      - "${SEARCH_SERVICE_PORT:-8092}:8080"
-    environment:
-      - DATABASE_URL=postgres://postgres:postgres@${DB_HOST:-100.84.50.65}:5432/alpha?sslmode=disable
-      - PORT=8080
-      - REDIS_ADDR=redis:6379
-      - TEMPORAL_HOSTPORT=temporal:7233
-      - KAFKA_BROKERS=redpanda:9092
-      - JWT_SECRET=${JWT_SECRET:-dev-jwt-secret-key-change-in-production}
-      - ENABLE_SECURITY=true
-      - JWT_ENFORCE=true
-    restart: unless-stopped
-    # depends_on:
-    #   - postgres
-
-  policy-engine:
-    build:
-      context: .
-      dockerfile: backend/Dockerfile.policy
-    networks:
-      - semlayer-net
-    ports:
-      - "${POLICY_ENGINE_PORT:-8102}:8080"
     environment:
       - DATABASE_URL=postgres://postgres:postgres@${DB_HOST:-100.84.50.65}:5432/alpha?sslmode=disable
       - PORT=8080
