@@ -8,8 +8,8 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/hondyman/uisce/backend/internal/services"
+	"github.com/hondyman/uisce/libs/auth"
 	"github.com/jmoiron/sqlx"
-	"github.com/hondyman/uisce/libs/jwt-middleware"
 )
 
 // RegisterConnectionsRoutes registers connection management endpoints
@@ -39,12 +39,12 @@ func RegisterConnectionsRoutes(r chi.Router, db *sqlx.DB) {
 }
 
 func getTenantIDFromRequest(r *http.Request) string {
-	// Check headers first (added by tenant fetch shim)
-	claims := jwtmiddleware.GetClaimsFromContext(r)
-	if claims != nil && claims.TenantID != "" {
+	if claims := auth.GetClaimsFromRequest(r); claims != nil && claims.TenantID != "" {
 		return claims.TenantID
 	}
-	// Check query parameters
+	if tenantID := r.Header.Get("X-Tenant-ID"); tenantID != "" {
+		return tenantID
+	}
 	return r.URL.Query().Get("tenant_id")
 }
 

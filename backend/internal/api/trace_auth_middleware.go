@@ -9,9 +9,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/golang-jwt/jwt/v5"
 	"github.com/hondyman/uisce/backend/internal/security"
-	"github.com/hondyman/uisce/libs/jwt-middleware"
+	"github.com/hondyman/uisce/libs/auth"
 )
 
 // TraceAuthConfig holds configuration for trace proxy authentication
@@ -50,24 +49,18 @@ func ValidateTraceAuth(r *http.Request, config *TraceAuthConfig) (*security.Auth
 		if parts := strings.Count(tokenStr, "."); parts == 2 {
 			secret := os.Getenv("JWT_SECRET")
 			if secret != "" {
-				token, err := jwt.Parse(tokenStr, func(t *jwt.Token) (interface{}, error) {
-					return []byte(secret), nil
-				})
-				if err == nil && token.Valid {
-					claims, ok := token.Claims.(jwt.MapClaims)
-					if ok {
-						roleStr, _ := claims["role"].(string)
-						tenantID, _ := claims["tenant_id"].(string)
-						sub, _ := claims["sub"].(string)
-						if sub == "" {
-							sub = "jwt-user"
-						}
-						roles := []string{}
-						if roleStr != "" {
-							roles = append(roles, roleStr)
-						}
-						return &security.AuthInfo{UserID: sub, Roles: roles, TenantIDs: []string{tenantID}}, tenantID, nil, 0
+				claims, err := auth.VerifyHS256(tokenStr, []byte(secret))
+				if err == nil {
+					tenantID := claims.TenantID
+					sub := claims.UserID
+					if sub == "" {
+						sub = "jwt-user"
 					}
+					roles := claims.Roles
+					if len(roles) == 0 {
+						roles = []string{}
+					}
+					return &security.AuthInfo{UserID: sub, Roles: roles, TenantIDs: []string{tenantID}}, tenantID, nil, 0
 				}
 			}
 		}
@@ -114,7 +107,7 @@ func ValidateTraceAuth(r *http.Request, config *TraceAuthConfig) (*security.Auth
 	}
 
 	var tenantID string
-	if claims := jwtmiddleware.GetClaimsFromContext(r); claims != nil {
+	if claims := auth.GetClaimsFromRequest(r); claims != nil {
 		tenantID = claims.TenantID
 	}
 	if tenantID == "" {

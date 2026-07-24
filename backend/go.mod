@@ -275,6 +275,7 @@ require (
 	github.com/grpc-ecosystem/go-grpc-middleware/v2 v2.3.2 // indirect
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.27.2 // indirect
 	github.com/hashicorp/golang-lru/v2 v2.0.7
+	github.com/hondyman/uisce/libs/auth v0.0.1
 	github.com/jackc/pgpassfile v1.0.0 // indirect
 	github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 // indirect
 	github.com/jackc/puddle/v2 v2.2.2 // indirect
@@ -340,3 +341,5 @@ replace github.com/hondyman/uisce/libs/shared-types => ../libs/shared-types
 replace github.com/hondyman/uisce/libs/hasura-client => ../libs/hasura-client
 
 replace github.com/hondyman/uisce/libs/jwt-middleware => ../libs/jwt-middleware
+
+replace github.com/hondyman/uisce/libs/auth => ../../libs/auth

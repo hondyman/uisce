@@ -1267,6 +1267,11 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 			routes.RegisterAudit(r, auditHistoryHandler)
 		}
 
+		// Register tenant-ops connections routes
+		r.Route("/tenant-ops", func(r chi.Router) {
+			RegisterConnectionsRoutes(r, sqlxDB)
+		})
+
 		// Register Gold Copy Engine routes
 		gcHandler.RegisterRoutes(r)
 

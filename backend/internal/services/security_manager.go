@@ -15,6 +15,7 @@ import (
 
 	jwt "github.com/golang-jwt/jwt/v5"
 	"github.com/hondyman/uisce/backend/internal/analytics"
+	"github.com/hondyman/uisce/libs/auth"
 )
 
 // RateLimiter provides advanced rate limiting capabilities
@@ -382,78 +383,94 @@ func NewJWTManager(secret []byte) *JWTManager {
 
 // SignMapClaims signs the provided claims with HS256 and returns the token string.
 func (jm *JWTManager) SignMapClaims(claims jwt.MapClaims) (string, error) {
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	return token.SignedString(jm.secretKey)
+	authClaims := &auth.Claims{
+		UserID: getStringClaim(claims, "user_id"),
+		Email:  getStringClaim(claims, "email"),
+		RegisteredClaims: jwt.RegisteredClaims{
+			Subject:   getSubjectClaim(claims),
+			ExpiresAt: getExpiresAtClaim(claims),
+			IssuedAt:  getIssuedAtClaim(claims),
+		},
+	}
+	return auth.SignHS256(authClaims, jm.secretKey)
+}
+
+func getStringClaim(claims jwt.MapClaims, key string) string {
+	if v, ok := claims[key].(string); ok {
+		return v
+	}
+	return ""
+}
+
+func getSubjectClaim(claims jwt.MapClaims) string {
+	if v, ok := claims["sub"].(string); ok {
+		return v
+	}
+	if v, ok := claims["user_id"].(string); ok {
+		return v
+	}
+	return ""
+}
+
+func getExpiresAtClaim(claims jwt.MapClaims) *jwt.NumericDate {
+	if v, ok := claims["exp"].(float64); ok {
+		t := time.Unix(int64(v), 0)
+		return jwt.NewNumericDate(t)
+	}
+	return nil
+}
+
+func getIssuedAtClaim(claims jwt.MapClaims) *jwt.NumericDate {
+	if v, ok := claims["iat"].(float64); ok {
+		t := time.Unix(int64(v), 0)
+		return jwt.NewNumericDate(t)
+	}
+	return nil
 }
 
 // ParseMapClaims parses a token string and returns the MapClaims if valid.
 func (jm *JWTManager) ParseMapClaims(tokenString string) (jwt.MapClaims, error) {
-	token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
-		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
-			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
-		}
-		return jm.secretKey, nil
-	})
+	claims, err := auth.VerifyHS256(tokenString, jm.secretKey)
 	if err != nil {
 		return nil, err
 	}
-	if !token.Valid {
-		return nil, fmt.Errorf("invalid token")
+	mc := jwt.MapClaims{
+		"user_id":    claims.UserID,
+		"tenant_id":  claims.TenantID,
+		"tenant_ids": claims.TenantIDs,
+		"roles":      claims.Roles,
+		"email":      claims.Email,
 	}
-	if claims, ok := token.Claims.(jwt.MapClaims); ok {
-		return claims, nil
+	if claims.Subject != "" {
+		mc["sub"] = claims.Subject
 	}
-	return nil, fmt.Errorf("invalid token claims")
+	return mc, nil
 }
 
 // ValidateToken validates a JWT token and returns claims
 func (jm *JWTManager) ValidateToken(tokenString string) (*JWTClaims, error) {
-	// Accept optional "Bearer " prefix
-	if strings.HasPrefix(strings.ToLower(tokenString), "bearer ") {
-		tokenString = strings.TrimSpace(tokenString[7:])
-	}
-	if tokenString == "" {
-		return nil, fmt.Errorf("empty token")
-	}
-
-	// Parse token and extract claims
-	claims, err := jm.ParseMapClaims(tokenString)
+	authClaims, err := auth.VerifyHS256(tokenString, jm.secretKey)
 	if err != nil {
 		return nil, err
 	}
 
-	// Try common claim names for user id
-	var userID string
-	if sub, ok := claims["user_id"].(string); ok && sub != "" {
-		userID = sub
-	} else if sub, ok := claims["sub"].(string); ok && sub != "" {
-		userID = sub
-	} else if sub, ok := claims["uid"].(string); ok && sub != "" {
-		userID = sub
-	}
-
-	if userID == "" {
+	if authClaims.UserID == "" {
 		return nil, fmt.Errorf("token missing user identifier")
 	}
 
-	issuedAt := time.Now()
-	if iat, ok := claims["iat"].(float64); ok {
-		issuedAt = time.Unix(int64(iat), 0)
+	roles := authClaims.Roles
+	if roles == nil {
+		roles = []string{}
 	}
+	tenantIDs := auth.NormalizeTenantIDs(authClaims.TenantIDs, authClaims.TenantID)
 
-	// Extract tenant_id if present
-	var tenantID string
-	if tid, ok := claims["tenant_id"].(string); ok {
-		tenantID = tid
-	}
-
-	roles := parseStringListClaim(claims["roles"])
-	tenantIDs := parseStringListClaim(claims["tenant_ids"])
-	if len(tenantIDs) == 0 && tenantID != "" {
-		tenantIDs = []string{tenantID}
-	}
-
-	return &JWTClaims{UserID: userID, TenantID: tenantID, TenantIDs: tenantIDs, Roles: roles, IssuedAt: issuedAt}, nil
+	return &JWTClaims{
+		UserID:    authClaims.UserID,
+		TenantID:  authClaims.TenantID,
+		TenantIDs: tenantIDs,
+		Roles:     roles,
+		IssuedAt:  time.Now(),
+	}, nil
 }
 
 // JWTClaims represents JWT token claims
