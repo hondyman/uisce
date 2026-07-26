@@ -28,40 +28,53 @@ import (
 // ============================================================================
 // BO DOMAIN TYPE ALIASES (non-conflicting only)
 // ============================================================================
-//
-// Only re-export types that do NOT already exist in services/. Types that
-// conflict (BOField, AccessDecision, BusinessObject) remain defined in
-// services/ until consumers migrate. New code should import internal/bo
-// directly to access the canonical governance types.
 
 type (
-	BOAccessController     = bo.AccessController
-	BOAccessPolicy         = bo.AccessPolicy
-	BOBusinessProcess      = bo.BusinessProcess
-	BOFieldClassification  = bo.FieldClassification
-	BOFieldMaskResult      = bo.FieldMaskResult
-	BOFieldSecurityConfig  = bo.FieldSecurityConfig
-	BOFieldSecurityMasker  = bo.FieldSecurityMasker
-	BOFieldType            = bo.FieldType
-	BOFieldVisibility      = bo.FieldVisibility
-	BOGovernanceHandlers   = bo.GovernanceHandlers
-	BOPageLayout           = bo.PageLayout
-	BOPolicyEngine         = bo.PolicyEngine
-	BOPolicyEvalContext    = bo.PolicyEvalContext
-	BOPolicyEvalResult     = bo.PolicyEvalResult
-	BOProcessInstance      = bo.ProcessInstance
-	BOProcessStep          = bo.ProcessStep
-	BOValidationEngine     = bo.ValidationEngine
-	BOValidationResult     = bo.ValidationResult
+	BusinessObjectSvc        = bo.BusinessObjectService
+	BOAccessController       = bo.AccessController
+	BOAccessPolicy           = bo.AccessPolicy
+	BOBusinessProcess        = bo.BusinessProcess
+	BOFieldClassification    = bo.FieldClassification
+	BOFieldMaskResult        = bo.FieldMaskResult
+	BOFieldSecurityConfig    = bo.FieldSecurityConfig
+	BOFieldSecurityMasker    = bo.FieldSecurityMasker
+	BOFieldType              = bo.FieldType
+	BOFieldVisibility        = bo.FieldVisibility
+	BOGovernanceHandlers     = bo.GovernanceHandlers
+	BOPageLayout             = bo.PageLayout
+	BOPolicyEngine           = bo.PolicyEngine
+	BOPolicyEvalContext      = bo.PolicyEvalContext
+	BOPolicyEvalResult       = bo.PolicyEvalResult
+	BOProcessInstance        = bo.ProcessInstance
+	BOProcessStep            = bo.ProcessStep
+	BOValidationEngine       = bo.ValidationEngine
+	BOValidationResult       = bo.ValidationResult
+)
+
+// ============================================================================
+// BO DEPENDENCY INTERFACES (re-exported for legacy callers)
+// ============================================================================
+
+// BOHasuraClient is the Hasura client interface used by BO services.
+// Concrete implementations in services/ satisfy this contract.
+type BOHasuraClient = bo.HasuraClient
+
+// BOAccessRuleRepository is the access rule repository interface.
+type BOAccessRuleRepository = bo.AccessRuleRepository
+
+// BOAccessRule is a single access rule from the repository.
+type BOAccessRule = bo.AccessRule
+
+// BOAccessLevel constants (NONE, READ, WRITE) re-exported.
+const (
+	BOAccessLevelNone  = bo.AccessLevelNone
+	BOAccessLevelRead  = bo.AccessLevelRead
+	BOAccessLevelWrite = bo.AccessLevelWrite
 )
 
 // ============================================================================
 // CONSTRUCTOR WRAPPERS
 // ============================================================================
-//
-// These thin wrappers allow existing services-package callers to construct
-// bo types using the canonical signatures. New code should call
-// the internal/bo constructors directly.
 
 func NewBOAccessController(db *sql.DB, log *zap.Logger) *bo.AccessController {
 	return bo.NewAccessController(db, log)
@@ -81,4 +94,16 @@ func NewBOPolicyEngine(db *sql.DB, log *zap.Logger) *bo.PolicyEngine {
 
 func NewBOValidationEngine(db *sql.DB, log *zap.Logger) *bo.ValidationEngine {
 	return bo.NewValidationEngine(db, log)
+}
+
+// NewBusinessObjectService delegates to internal/bo.NewBusinessObjectService.
+// Accepts interface{} for backward compat (was *sqlx.DB or *sql.DB).
+func NewBusinessObjectService(db interface{}) *bo.BusinessObjectService {
+	return bo.NewBusinessObjectService(db)
+}
+
+// NewBusinessObjectServiceWithHasura delegates to internal/bo.
+// accepts any hasura client implementing the BO HasuraClient interface.
+func NewBusinessObjectServiceWithHasura(db interface{}, hasura bo.HasuraClient) *bo.BusinessObjectService {
+	return bo.NewBusinessObjectServiceWithHasura(db, hasura)
 }

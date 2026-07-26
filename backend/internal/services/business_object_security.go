@@ -268,7 +268,7 @@ func (l AccessLevel) atLeast(required AccessLevel) bool {
 }
 
 // resolveAccessDecision loads the decision for a BO using the attached repository.
-func (s *BusinessObjectService) resolveAccessDecision(ctx context.Context, tenantID, boID string) (*AccessDecision, error) {
+func resolveAccessDecision(ctx context.Context, tenantID, boID string, repo AccessRuleRepository) (*AccessDecision, error) {
 	// 1. Resolve Principal from context (Handler vs Service layer gap)
 	principal := PrincipalFromContext(ctx)
 
@@ -293,17 +293,20 @@ func (s *BusinessObjectService) resolveAccessDecision(ctx context.Context, tenan
 		}
 	}
 
-	if s.rules == nil {
+	if repo == nil {
 		logging.GetLogger().Sugar().Warn("[SECURITY] access rule repository not configured; allowing all access")
 		return &AccessDecision{AccessLevel: AccessLevelWrite, ColumnMasks: map[string]string{}}, nil
 	}
 
-	return s.rules.ResolveDecision(ctx, tenantID, boID, principal)
+	return repo.ResolveDecision(ctx, tenantID, boID, principal)
 }
 
-// requireAccess enforces the required level and returns the decision for downstream use.
-func (s *BusinessObjectService) requireAccess(ctx context.Context, tenantID, boID string, required AccessLevel) (*AccessDecision, error) {
-	decision, err := s.resolveAccessDecision(ctx, tenantID, boID)
+// RequireAccessForBusinessObject is a standalone helper that enforces the required
+// level and returns the decision for downstream use. Takes a repository parameter
+// rather than a receiver so it can be called from anywhere in the services package
+// without requiring the bo.BusinessObjectService receiver.
+func RequireAccessForBusinessObject(ctx context.Context, tenantID, boID string, required AccessLevel, repo AccessRuleRepository) (*AccessDecision, error) {
+	decision, err := resolveAccessDecision(ctx, tenantID, boID, repo)
 	if err != nil {
 		return nil, err
 	}

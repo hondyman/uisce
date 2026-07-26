@@ -1473,8 +1473,8 @@ func handleSimulateValidationRuleWithInstance(db *sql.DB, boServiceInterface int
 			return
 		}
 
-		// Try to use the services.BusinessObjectService if available
-		if boService, ok := boServiceInterface.(*services.BusinessObjectService); ok {
+		// Try to use the services.BusinessObjectSvc if available
+		if boService, ok := boServiceInterface.(*services.BusinessObjectSvc); ok {
 			// Get instance data formatted for validation
 			record, err := boService.GetInstanceForValidation(r.Context(), tenantID, req.InstanceID)
 			if err != nil {
