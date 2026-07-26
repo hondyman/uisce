@@ -1,105 +1,129 @@
-import React, { useState } from 'react';
-import { 
-  Box, TextField, List, ListItem, ListItemText, 
-  Paper, InputAdornment, Chip, Stack, CircularProgress, Alert 
-} from '@mui/material';
-import SearchIcon from '@mui/icons-material/Search';
-import PageviewIcon from '@mui/icons-material/Pageview';
-import HubIcon from '@mui/icons-material/Hub';
-import MenuOpenIcon from '@mui/icons-material/MenuOpen';
+import React, { useState, useEffect } from 'react';
+import { Calculator, AlertTriangle, Sparkles, X, Bot } from 'lucide-react';
 
-interface SearchMatch {
-  source_type: string;
-  entity_key: string;
-  display_name: string;
-  context_blob: string;
+interface Props {
+  tenantId: string;
 }
 
-export const SemanticDiscoveryOmnibox: React.FC<{ tenantId: string }> = ({ tenantId }) => {
-  const [query, setQuery] = useState('');
-  const [results, setResults] = useState<SearchMatch[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+export const SemanticDiscoveryOmnibox: React.FC<Props> = ({ tenantId }) => {
+  const [isOpen, setIsOpen] = useState<boolean>(false);
+  const [query, setQuery] = useState<string>('');
+  const [loading, setLoading] = useState<boolean>(false);
+  const [result, setResult] = useState<any | null>(null);
 
-  const triggerSearch = async (val: string) => {
-    setQuery(val);
-    if (val.length < 3) {
-      setResults([]);
-      return;
-    }
+  // Keyboard shortcut listener (Cmd + K or Ctrl + K)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault();
+        setIsOpen((prev) => !prev);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
+  const handleSearch = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!query.trim()) return;
+
     setLoading(true);
-    setError(null);
     try {
-      const response = await fetch('/api/v1/discovery/search', {
+      const res = await fetch('/api/v1/discovery/search', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'X-Tenant-ID': tenantId
+          'X-Tenant-ID': tenantId,
         },
-        body: JSON.stringify({ query: val })
+        body: JSON.stringify({ query }),
       });
-      if (!response.ok) throw new Error("Context lookups rejected by authorization filters.");
-      const data = await response.json();
-      setResults(data.matches || []);
-    } catch (err: any) {
-      setError(err.message);
+      const data = await res.json();
+      setResult(data);
+    } catch (err) {
+      console.error('Discovery search failed:', err);
     } finally {
       setLoading(false);
     }
   };
 
-  const renderSourceIcon = (type: string) => {
-    switch (type) {
-      case 'PAGE': return <PageviewIcon sx={{ color: '#38bdf8' }} />;
-      case 'MENU_ITEM': return <MenuOpenIcon sx={{ color: '#fbbf24' }} />;
-      default: return <HubIcon sx={{ color: '#34d399' }} />;
-    }
-  };
+  if (!isOpen) return null;
 
   return (
-    <Box sx={{ width: '100%', maxWidth: 700, mx: 'auto', p: 2 }}>
-      <TextField
-        fullWidth
-        placeholder="Discover pages, fields, or semantic structures... (e.g. net revenue)"
-        value={query}
-        onChange={(e) => triggerSearch(e.target.value)}
-        size="small"
-        InputProps={{
-          startAdornment: (
-            <InputAdornment position="start">
-              {loading ? <CircularProgress size={20} /> : <SearchIcon />}
-            </InputAdornment>
-          ),
-          sx: { bgcolor: '#1e293b', color: '#f8fafc', borderRadius: 2, '& fieldset': { border: 'none' } }
-        }}
-      />
+    <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-md flex items-start justify-center pt-20 p-4 font-sans">
+      <div className="bg-slate-900 border border-slate-700/80 rounded-2xl shadow-2xl w-full max-w-3xl overflow-hidden flex flex-col max-h-[80vh]">
+        {/* Search Input Bar */}
+        <form onSubmit={handleSearch} className="flex items-center px-4 py-3 border-b border-slate-800 bg-slate-950/50">
+          <Sparkles className="text-sky-400 mr-3 shrink-0 animate-pulse" size={20} />
+          <input
+            type="text"
+            autoFocus
+            placeholder="Ask Uisce AI... (e.g., 'Show open pricing breaks for Fund Alpha and run Monte Carlo VaR')"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            className="bg-transparent text-white placeholder-slate-500 text-sm focus:outline-none w-full font-medium"
+          />
+          {loading && <div className="text-xs text-sky-400 font-mono animate-pulse mr-2">Evaluating...</div>}
+          <button type="button" onClick={() => setIsOpen(false)} className="text-slate-500 hover:text-slate-300">
+            <X size={18} />
+          </button>
+        </form>
 
-      {error && <Alert severity="error" sx={{ mt: 2, borderRadius: 2 }}>{error}</Alert>}
+        {/* Results Body */}
+        <div className="p-6 overflow-y-auto space-y-6 flex-1 text-slate-200">
+          {!result && !loading && (
+            <div className="text-center py-12 text-slate-500 text-xs font-mono">
+              Press <kbd className="bg-slate-800 px-1.5 py-0.5 rounded text-slate-300">Enter</kbd> to execute conversational discovery.
+            </div>
+          )}
 
-      {results.length > 0 && (
-        <Paper sx={{ mt: 1, bgcolor: '#0f172a', border: '1px solid #334155', borderRadius: 2, overflow: 'hidden' }} elevation={4}>
-          <List disablePadding>
-            {results.map((match, idx) => (
-              <ListItem 
-                key={idx} 
-                sx={{ borderBottom: idx !== results.length - 1 ? '1px solid #334155' : 'none', py: 1.5, px: 3, '&:hover': { bgcolor: 'rgba(255,255,255,0.02)' } }}
-              >
-                <Stack direction="row" spacing={2} alignItems="center" width="100%">
-                  {renderSourceIcon(match.source_type)}
-                  <ListItemText 
-                    primary={match.display_name} 
-                    secondary={match.entity_key}
-                    primaryTypographyProps={{ color: '#f1f5f9', fontWeight: 500, fontSize: '14px' }}
-                    secondaryTypographyProps={{ color: '#64748b', fontSize: '11px', fontFamily: 'monospace' }}
-                  />
-                  <Box sx={{ flexGrow: 1 }} />
-                  <Chip label={match.source_type} size="small" sx={{ bgcolor: '#334155', color: '#94a3b8', fontSize: '10px', fontWeight: 600 }} />
-                </Stack>
-              </ListItem>
-            ))}
-          </List>
-        </Paper>
-      )}
-    </Box>
+          {result && (
+            <>
+              {/* WASM Analytics Cards */}
+              {result.wasm_metrics && result.wasm_metrics.length > 0 && (
+                <div>
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-sky-400 flex items-center gap-1.5 mb-3">
+                    <Calculator size={14} /> WASM Calculated Metrics
+                  </h4>
+                  <div className="grid grid-cols-2 gap-4">
+                    {result.wasm_metrics.map((m: any) => (
+                      <div key={m.metric_key} className="bg-slate-800/90 border border-sky-500/30 p-4 rounded-xl">
+                        <span className="text-[11px] text-slate-400 font-medium">{m.metric_label}</span>
+                        <div className="text-2xl font-bold font-mono text-emerald-400 mt-1">{m.formatted}</div>
+                        <span className="text-[10px] text-slate-500 font-mono mt-2 block">Execution Latency: {m.duration_us}µs</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* MDM Exception Breaks */}
+              {result.mdm_breaks && result.mdm_breaks.length > 0 && (
+                <div>
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-amber-400 flex items-center gap-1.5 mb-3">
+                    <AlertTriangle size={14} /> Open Master Data Breaks
+                  </h4>
+                  <div className="space-y-3">
+                    {result.mdm_breaks.map((b: any) => (
+                      <div key={b.exception_id} className="bg-slate-800/60 border border-amber-500/30 p-4 rounded-xl">
+                        <div className="flex justify-between items-center mb-1">
+                          <span className="text-xs font-bold text-white font-mono">{b.entity_key}</span>
+                          <span className="text-[10px] bg-amber-500/20 text-amber-300 px-2 py-0.5 rounded uppercase font-semibold">
+                            {b.field_name}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2 text-xs text-emerald-300 bg-emerald-950/40 p-2 rounded-lg border border-emerald-500/20 mt-2">
+                          <Bot size={14} className="shrink-0" />
+                          <span>{b.ai_recommendation}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      </div>
+    </div>
   );
 };
