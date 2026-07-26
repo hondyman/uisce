@@ -112,6 +112,7 @@ backend/services/compliance-engine
 backend/services/uma-events-listener
 backend/services/uma-rebalance
 backend/services/compliance-engine/compliance-engine
+backend/bo-service
 
 # Phase 0 Safety Net: protect microservice scaffolding directories
 # Source files only — no compiled outputs
