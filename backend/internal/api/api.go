@@ -85,6 +85,7 @@ import (
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/metadata"
+	"github.com/hondyman/uisce/libs/hasura-client"
 	"github.com/hondyman/uisce/libs/jwt-middleware"
 )
 
@@ -581,6 +582,19 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 
 	// Initialize sqlxDB early for services that need it
 	sqlxDB := sqlx.NewDb(db, "postgres")
+
+	// Initialize Hasura client (used by calc handler, google sync repo, etc.)
+	hasuraEndpoint := os.Getenv("HASURA_URL")
+	if hasuraEndpoint == "" {
+		hasuraEndpoint = "http://localhost:8080/v1/graphql"
+	} else if !strings.HasSuffix(hasuraEndpoint, "/v1/graphql") {
+		hasuraEndpoint = strings.TrimSuffix(hasuraEndpoint, "/") + "/v1/graphql"
+	}
+	hasuraAdminSecret := os.Getenv("HASURA_ADMIN_SECRET")
+	hasuraClient := hasuraclient.NewHasuraClient(&hasuraclient.HasuraConfig{
+		Endpoint:    hasuraEndpoint,
+		AdminSecret: hasuraAdminSecret,
+	})
 
 	// Initialize relational lineage repository (replacing AGE)
 	sqlRepo := lineage.NewDBLineageRepository(sqlxDB)
@@ -1186,7 +1200,7 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 	srv.PolicyGenerationHandler = handlers.NewPolicyGenerationHandler(sqlxDB)
 
 	// Initialize Calc Handler
-	srv.CalcHandler = handlers.NewCalcHandler(sqlxDB)
+	srv.CalcHandler = handlers.NewCalcHandler(hasuraClient)
 
 	// Initialize RAG Services
 	ragConfigService := rag.NewConfigService(db)
@@ -1470,7 +1484,7 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 			)
 
 			// Sync Repo
-			googleSyncRepo := repository.NewGoogleSyncRepo(sqlxDB)
+			googleSyncRepo := repository.NewGoogleSyncRepo(hasuraClient)
 
 			// Sync Processor
 			// Note: SyncProcessor uses logrus, while the rest of the app uses zap.
