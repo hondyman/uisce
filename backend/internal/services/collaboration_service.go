@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/hondyman/uisce/backend/internal/access"
 	"github.com/hondyman/uisce/backend/internal/logging"
 	"github.com/hondyman/uisce/backend/models"
 	"github.com/jmoiron/sqlx"
@@ -20,7 +21,7 @@ import (
 type CollaborationService struct {
 	db *sqlx.DB
 
-	accessPolicyRepo AccessPolicyRepository
+	accessPolicyRepo access.AccessPolicyRepository
 	accessPolicyMu   sync.RWMutex
 	accessPolicies   map[uuid.UUID]models.AccessControlPolicy
 }
@@ -29,7 +30,7 @@ type CollaborationService struct {
 func NewCollaborationService(db *sqlx.DB) *CollaborationService {
 	svc := &CollaborationService{
 		db:               db,
-		accessPolicyRepo: newAccessPolicyRepository(db),
+		accessPolicyRepo: access.NewSqlAccessPolicyRepository(db),
 		accessPolicies:   make(map[uuid.UUID]models.AccessControlPolicy),
 	}
 	svc.initializeAccessPolicies()
