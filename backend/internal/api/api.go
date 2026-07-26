@@ -44,7 +44,7 @@ import (
 	appmid "github.com/hondyman/uisce/backend/internal/middleware"
 	"github.com/hondyman/uisce/backend/internal/notifications"
 	models "github.com/hondyman/uisce/backend/internal/models"
-	"github.com/hondyman/uisce/libs/oauth"
+	"github.com/hondyman/uisce/backend/internal/oauth"
 	"github.com/hondyman/uisce/backend/internal/platform"
 	"github.com/hondyman/uisce/backend/internal/portfoliomaster"
 	"github.com/hondyman/uisce/backend/internal/querybuilder"
