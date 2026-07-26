@@ -279,3 +279,181 @@ func (s *EngagementNotificationService) TrackEngagementEvent(ctx context.Context
 		analytics.EventType, analytics.EventTimestamp)
 	return err
 }
+
+// CreateNotification persists a new engagement notification and broadcasts it.
+func (s *EngagementNotificationService) CreateNotification(ctx context.Context, notification *models.EngagementNotification) error {
+	if s.DB == nil {
+		return fmt.Errorf("engagement notification service: db is nil")
+	}
+	if notification == nil {
+		return fmt.Errorf("notification is nil")
+	}
+
+	if notification.ID == "" {
+		notification.ID = uuid.New().String()
+	}
+	if notification.Status == "" {
+		notification.Status = "draft"
+	}
+
+	_, err := s.DB.ExecContext(ctx,
+		`INSERT INTO engagement_notifications (id, user_id, type, title, message, priority, channels, status)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+		 ON CONFLICT (id) DO NOTHING`,
+		notification.ID, notification.UserID, notification.Type,
+		notification.Title, notification.Message, notification.Priority,
+		pq.Array(notification.Channels), notification.Status)
+	if err != nil {
+		return fmt.Errorf("failed to create notification: %w", err)
+	}
+
+	// Broadcast the event
+	if s.BroadcastFunc != nil {
+		payload, _ := json.Marshal(notification)
+		s.BroadcastFunc(notification.UserID, payload)
+	}
+	return nil
+}
+
+// SendNotification immediately broadcasts a stored notification by ID.
+func (s *EngagementNotificationService) SendNotification(ctx context.Context, notificationID string) error {
+	if s.DB == nil {
+		return fmt.Errorf("engagement notification service: db is nil")
+	}
+
+	var notification models.EngagementNotification
+	err := s.DB.QueryRowContext(ctx,
+		`SELECT id, user_id, type, title, message, priority, channels, status
+		 FROM engagement_notifications WHERE id = $1`, notificationID).Scan(
+		&notification.ID, &notification.UserID, &notification.Type,
+		&notification.Title, &notification.Message, &notification.Priority,
+		&notification.Channels, &notification.Status)
+	if err != nil {
+		return fmt.Errorf("failed to load notification %s: %w", notificationID, err)
+	}
+
+	// Mark as sent
+	now := time.Now()
+	notification.Status = "sent"
+	notification.SentAt = &now
+	_, _ = s.DB.ExecContext(ctx,
+		`UPDATE engagement_notifications SET status = 'sent', sent_at = $1 WHERE id = $2`,
+		now, notificationID)
+
+	// Broadcast
+	if s.BroadcastFunc != nil {
+		payload, _ := json.Marshal(notification)
+		s.BroadcastFunc(notification.UserID, payload)
+	}
+	return nil
+}
+
+// GetUserPreferences returns user notification preferences.
+func (s *EngagementNotificationService) GetUserPreferences(ctx context.Context, userID string) (*models.UserNotificationPreferences, error) {
+	if s.DB == nil {
+		return nil, fmt.Errorf("engagement notification service: db is nil")
+	}
+	var prefs models.UserNotificationPreferences
+	err := s.DB.QueryRowContext(ctx,
+		`SELECT user_id, email_enabled, sms_enabled, push_enabled, in_app_enabled,
+		        quiet_hours_start, quiet_hours_end, updated_at
+		 FROM user_notification_preferences WHERE user_id = $1`,
+		userID).Scan(
+		&prefs.UserID, &prefs.EmailEnabled, &prefs.SMSEnabled,
+		&prefs.PushEnabled, &prefs.InAppEnabled, &prefs.QuietHoursStart,
+		&prefs.QuietHoursEnd, &prefs.UpdatedAt)
+	if err != nil {
+		// Return defaults on first lookup
+		return &models.UserNotificationPreferences{
+			UserID:        userID,
+			EmailEnabled:  true,
+			SMSEnabled:    false,
+			PushEnabled:   true,
+			InAppEnabled:  true,
+			UpdatedAt:     time.Now(),
+		}, nil
+	}
+	return &prefs, nil
+}
+
+// UpdateUserPreferences upserts user notification preferences.
+func (s *EngagementNotificationService) UpdateUserPreferences(ctx context.Context, prefs *models.UserNotificationPreferences) error {
+	if s.DB == nil {
+		return fmt.Errorf("engagement notification service: db is nil")
+	}
+	if prefs == nil {
+		return fmt.Errorf("preferences is nil")
+	}
+	prefs.UpdatedAt = time.Now()
+	_, err := s.DB.ExecContext(ctx,
+		`INSERT INTO user_notification_preferences
+		 (user_id, email_enabled, sms_enabled, push_enabled, in_app_enabled, quiet_hours_start, quiet_hours_end, updated_at)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+		 ON CONFLICT (user_id) DO UPDATE SET
+		   email_enabled = EXCLUDED.email_enabled,
+		   sms_enabled = EXCLUDED.sms_enabled,
+		   push_enabled = EXCLUDED.push_enabled,
+		   in_app_enabled = EXCLUDED.in_app_enabled,
+		   quiet_hours_start = EXCLUDED.quiet_hours_start,
+		   quiet_hours_end = EXCLUDED.quiet_hours_end,
+		   updated_at = EXCLUDED.updated_at`,
+		prefs.UserID, prefs.EmailEnabled, prefs.SMSEnabled,
+		prefs.PushEnabled, prefs.InAppEnabled, prefs.QuietHoursStart,
+		prefs.QuietHoursEnd, prefs.UpdatedAt)
+	return err
+}
+
+// CreateNotificationTemplate persists a reusable notification template.
+func (s *EngagementNotificationService) CreateNotificationTemplate(ctx context.Context, template *models.NotificationTemplate) error {
+	if s.DB == nil {
+		return fmt.Errorf("engagement notification service: db is nil")
+	}
+	if template == nil {
+		return fmt.Errorf("template is nil")
+	}
+	if template.ID == "" {
+		template.ID = uuid.New().String()
+	}
+	template.CreatedAt = time.Now()
+	template.UpdatedAt = time.Now()
+	_, err := s.DB.ExecContext(ctx,
+		`INSERT INTO notification_templates (id, name, type, subject, title, message, channels, created_at, updated_at)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+		 ON CONFLICT (id) DO NOTHING`,
+		template.ID, template.Name, template.Type, template.Subject,
+		template.Title, template.Message, pq.Array(template.Channels),
+		template.CreatedAt, template.UpdatedAt)
+	return err
+}
+
+// GetEngagementAnalytics returns aggregated analytics for a date range.
+func (s *EngagementNotificationService) GetEngagementAnalytics(ctx context.Context, startDate, endDate time.Time) (map[string]interface{}, error) {
+	if s.DB == nil {
+		return nil, fmt.Errorf("engagement notification service: db is nil")
+	}
+	var total, delivered, opened, clicked, dismissed int
+	err := s.DB.QueryRowContext(ctx,
+		`SELECT
+		   COUNT(*) FILTER (WHERE event_type = 'sent'),
+		   COUNT(*) FILTER (WHERE event_type = 'delivered'),
+		   COUNT(*) FILTER (WHERE event_type = 'opened'),
+		   COUNT(*) FILTER (WHERE event_type = 'clicked'),
+		   COUNT(*) FILTER (WHERE event_type = 'dismissed')
+		 FROM notification_analytics
+		 WHERE event_timestamp BETWEEN $1 AND $2`,
+		startDate, endDate).Scan(&total, &delivered, &opened, &clicked, &dismissed)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query analytics: %w", err)
+	}
+	return map[string]interface{}{
+		"total":     total,
+		"delivered": delivered,
+		"opened":    opened,
+		"clicked":   clicked,
+		"dismissed": dismissed,
+		"period": map[string]interface{}{
+			"start": startDate,
+			"end":   endDate,
+		},
+	}, nil
+}

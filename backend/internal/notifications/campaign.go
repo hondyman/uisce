@@ -58,9 +58,12 @@ func NewNotificationCampaignService(db *sql.DB, notificationService *EngagementN
 }
 
 // CreateCampaign creates a new notification campaign.
-func (s *NotificationCampaignService) CreateCampaign(ctx context.Context, campaign NotificationCampaign) (*NotificationCampaign, error) {
+func (s *NotificationCampaignService) CreateCampaign(ctx context.Context, campaign *NotificationCampaign) error {
 	if s.DB == nil {
-		return nil, fmt.Errorf("notification campaign service: db is nil")
+		return fmt.Errorf("notification campaign service: db is nil")
+	}
+	if campaign == nil {
+		return fmt.Errorf("campaign is nil")
 	}
 	if campaign.ID == uuid.Nil {
 		campaign.ID = uuid.New()
@@ -78,16 +81,30 @@ func (s *NotificationCampaignService) CreateCampaign(ctx context.Context, campai
 		campaign.Channel, campaign.Audience, campaign.ScheduleAt, campaign.Status,
 		campaign.Metadata, campaign.CreatedAt, campaign.UpdatedAt)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create campaign: %w", err)
+		return fmt.Errorf("failed to create campaign: %w", err)
 	}
-	return &campaign, nil
+	return nil
 }
 
-// GetCampaign retrieves a campaign by ID.
-func (s *NotificationCampaignService) GetCampaign(ctx context.Context, id uuid.UUID) (*NotificationCampaign, error) {
+// GetCampaign retrieves a campaign by ID. Accepts UUID or string for legacy callers.
+func (s *NotificationCampaignService) GetCampaign(ctx context.Context, idOrString interface{}) (*NotificationCampaign, error) {
 	if s.DB == nil {
 		return nil, fmt.Errorf("notification campaign service: db is nil")
 	}
+	var id uuid.UUID
+	switch v := idOrString.(type) {
+	case uuid.UUID:
+		id = v
+	case string:
+		parsed, err := uuid.Parse(v)
+		if err != nil {
+			return nil, fmt.Errorf("invalid campaign ID %q: %w", v, err)
+		}
+		id = parsed
+	default:
+		return nil, fmt.Errorf("unsupported ID type %T", idOrString)
+	}
+
 	var c NotificationCampaign
 	err := s.DB.QueryRowContext(ctx,
 		`SELECT id, tenant_id, name, description, channel, audience, schedule_at,
@@ -146,6 +163,105 @@ func (s *NotificationCampaignService) UpdateCampaignStatus(ctx context.Context, 
 		`UPDATE notification_campaigns SET status = $1, updated_at = $2 WHERE id = $3`,
 		status, time.Now(), id)
 	return err
+}
+
+// LaunchCampaign transitions a campaign to "running" and executes it.
+func (s *NotificationCampaignService) LaunchCampaign(ctx context.Context, campaignID string) error {
+	if s.DB == nil {
+		return fmt.Errorf("notification campaign service: db is nil")
+	}
+	id, err := uuid.Parse(campaignID)
+	if err != nil {
+		return fmt.Errorf("invalid campaign ID: %w", err)
+	}
+	if err := s.UpdateCampaignStatus(ctx, id, "running"); err != nil {
+		return err
+	}
+	return s.ExecuteCampaign(ctx, id)
+}
+
+// GetCampaignAnalytics returns per-campaign analytics for the given ID.
+func (s *NotificationCampaignService) GetCampaignAnalytics(ctx context.Context, campaignID string) (map[string]interface{}, error) {
+	if s.DB == nil {
+		return nil, fmt.Errorf("notification campaign service: db is nil")
+	}
+	id, err := uuid.Parse(campaignID)
+	if err != nil {
+		return nil, fmt.Errorf("invalid campaign ID: %w", err)
+	}
+	var sent, delivered, opened, clicked int
+	err = s.DB.QueryRowContext(ctx,
+		`SELECT
+		   COUNT(*) FILTER (WHERE event_type = 'sent'),
+		   COUNT(*) FILTER (WHERE event_type = 'delivered'),
+		   COUNT(*) FILTER (WHERE event_type = 'opened'),
+		   COUNT(*) FILTER (WHERE event_type = 'clicked')
+		 FROM notification_analytics
+		 WHERE notification_id = $1`, id).Scan(&sent, &delivered, &opened, &clicked)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query campaign analytics: %w", err)
+	}
+	return map[string]interface{}{
+		"campaign_id": id,
+		"sent":        sent,
+		"delivered":   delivered,
+		"opened":      opened,
+		"clicked":     clicked,
+	}, nil
+}
+
+// GetActiveCampaigns returns all currently-running campaigns.
+func (s *NotificationCampaignService) GetActiveCampaigns(ctx context.Context) ([]NotificationCampaign, error) {
+	if s.DB == nil {
+		return nil, fmt.Errorf("notification campaign service: db is nil")
+	}
+	rows, err := s.DB.QueryContext(ctx,
+		`SELECT id, tenant_id, name, description, channel, audience, schedule_at,
+		        status, metadata, created_at, updated_at
+		 FROM notification_campaigns WHERE status = 'running' ORDER BY created_at DESC`)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list active campaigns: %w", err)
+	}
+	defer rows.Close()
+	var campaigns []NotificationCampaign
+	for rows.Next() {
+		var c NotificationCampaign
+		if err := rows.Scan(
+			&c.ID, &c.TenantID, &c.Name, &c.Description, &c.Channel, &c.Audience,
+			&c.ScheduleAt, &c.Status, &c.Metadata, &c.CreatedAt, &c.UpdatedAt,
+		); err != nil {
+			return nil, fmt.Errorf("failed to scan campaign: %w", err)
+		}
+		campaigns = append(campaigns, c)
+	}
+	return campaigns, rows.Err()
+}
+
+// PauseCampaign pauses a running campaign.
+func (s *NotificationCampaignService) PauseCampaign(ctx context.Context, campaignID string) error {
+	id, err := uuid.Parse(campaignID)
+	if err != nil {
+		return fmt.Errorf("invalid campaign ID: %w", err)
+	}
+	return s.UpdateCampaignStatus(ctx, id, "paused")
+}
+
+// ResumeCampaign resumes a paused campaign.
+func (s *NotificationCampaignService) ResumeCampaign(ctx context.Context, campaignID string) error {
+	id, err := uuid.Parse(campaignID)
+	if err != nil {
+		return fmt.Errorf("invalid campaign ID: %w", err)
+	}
+	return s.UpdateCampaignStatus(ctx, id, "running")
+}
+
+// StopCampaign stops a campaign permanently.
+func (s *NotificationCampaignService) StopCampaign(ctx context.Context, campaignID string) error {
+	id, err := uuid.Parse(campaignID)
+	if err != nil {
+		return fmt.Errorf("invalid campaign ID: %w", err)
+	}
+	return s.UpdateCampaignStatus(ctx, id, "stopped")
 }
 
 // DeleteCampaign removes a campaign by ID.

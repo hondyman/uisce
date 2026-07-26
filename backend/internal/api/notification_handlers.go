@@ -8,6 +8,7 @@ import (
 
 	chi "github.com/go-chi/chi/v5"
 	"github.com/hondyman/uisce/backend/internal/models"
+	"github.com/hondyman/uisce/backend/internal/notifications"
 	"github.com/hondyman/uisce/backend/internal/services"
 )
 
@@ -212,7 +213,7 @@ func (h *NotificationAPIHandlers) GetEngagementAnalytics(w http.ResponseWriter, 
 
 // CreateCampaign creates a new notification campaign
 func (h *NotificationAPIHandlers) CreateCampaign(w http.ResponseWriter, r *http.Request) {
-	var campaign models.NotificationCampaign
+	var campaign notifications.NotificationCampaign
 	if err := json.NewDecoder(r.Body).Decode(&campaign); err != nil {
 		respondWithError(w, http.StatusBadRequest, "Invalid request body")
 		return
