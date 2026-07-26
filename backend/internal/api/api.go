@@ -23,6 +23,7 @@ import (
 	"github.com/go-playground/validator/v10"
 	"github.com/go-redis/redis/v8"
 	"github.com/google/uuid"
+	"github.com/hondyman/uisce/backend/internal/abac"
 	"github.com/hondyman/uisce/backend/internal/ai"
 	"github.com/hondyman/uisce/backend/internal/altinvest"
 	"github.com/hondyman/uisce/backend/internal/analytics"
@@ -1334,7 +1335,7 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 		}
 
 		srv.GraphService = catalogmeta.NewGraphService(sqlxDB)
-		abacService := services.NewAbacService(sqlxDB)
+		abacService := abac.NewAbacService(sqlxDB)
 		srv.WriteHandler = handlers.NewWriteHandler(srv.GraphService, sqlxDB, srv.IgniteClient, abacService)
 		srv.MCPHandler = handlers.NewMCPHandler(srv.GraphService)
 

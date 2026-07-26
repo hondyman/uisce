@@ -9,9 +9,9 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/hondyman/uisce/backend/internal/abac"
 	"github.com/hondyman/uisce/backend/internal/infrastructure"
 	"github.com/hondyman/uisce/backend/internal/metadata"
-	"github.com/hondyman/uisce/backend/internal/services"
 	"github.com/jmoiron/sqlx"
 	"github.com/hondyman/uisce/libs/jwt-middleware"
 )
@@ -21,11 +21,11 @@ type WriteHandler struct {
 	GraphService *metadata.GraphService
 	DB           *sqlx.DB
 	Ignite       *infrastructure.IgniteClient
-	AbacService  *services.AbacService
+	AbacService  *abac.AbacService
 }
 
 // NewWriteHandler creates a new WriteHandler
-func NewWriteHandler(gs *metadata.GraphService, db *sqlx.DB, ignite *infrastructure.IgniteClient, abac *services.AbacService) *WriteHandler {
+func NewWriteHandler(gs *metadata.GraphService, db *sqlx.DB, ignite *infrastructure.IgniteClient, abac *abac.AbacService) *WriteHandler {
 	return &WriteHandler{
 		GraphService: gs,
 		DB:           db,

@@ -6,17 +6,17 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
-	"github.com/hondyman/uisce/backend/internal/services"
+	"github.com/hondyman/uisce/backend/internal/abac"
 	"github.com/hondyman/uisce/backend/models"
 )
 
 // AbacHandler handles API requests for the ABAC service.
 type AbacHandler struct {
-	svc *services.AbacService
+	svc *abac.AbacService
 }
 
 // NewAbacHandler creates a new AbacHandler.
-func NewAbacHandler(svc *services.AbacService) *AbacHandler {
+func NewAbacHandler(svc *abac.AbacService) *AbacHandler {
 	return &AbacHandler{svc: svc}
 }
 
