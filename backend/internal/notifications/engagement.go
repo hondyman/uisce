@@ -17,6 +17,8 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/lib/pq"
+
+	"github.com/hondyman/uisce/backend/internal/models"
 )
 
 // ============================================================================
@@ -207,3 +209,73 @@ var _ = (*EngagementNotificationService)(nil)
 var (
 	_ = pq.StringArray{}
 )
+
+// ============================================================================
+// USER NOTIFICATIONS
+// ============================================================================
+
+// GetUserNotifications retrieves notifications for a user with pagination.
+func (s *EngagementNotificationService) GetUserNotifications(ctx context.Context, userID string, limit, offset int) ([]map[string]interface{}, error) {
+	if s.DB == nil {
+		return nil, fmt.Errorf("engagement notification service: db is nil")
+	}
+	if limit <= 0 || limit > 100 {
+		limit = 20
+	}
+	if offset < 0 {
+		offset = 0
+	}
+
+	rows, err := s.DB.QueryContext(ctx,
+		`SELECT id, tenant_id, title, body, channel, priority, metadata, created_at
+		 FROM notification_events
+		 WHERE user_id = $1
+		 ORDER BY created_at DESC
+		 LIMIT $2 OFFSET $3`,
+		userID, limit, offset)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list user notifications: %w", err)
+	}
+	defer rows.Close()
+
+	var notifs []map[string]interface{}
+	for rows.Next() {
+		var (
+			id, tenantID, title, body, channel string
+			priority                            int
+			metadata                            []byte
+			createdAt                           time.Time
+		)
+		if err := rows.Scan(&id, &tenantID, &title, &body, &channel, &priority, &metadata, &createdAt); err != nil {
+			return nil, fmt.Errorf("failed to scan notification: %w", err)
+		}
+		notifs = append(notifs, map[string]interface{}{
+			"id":         id,
+			"tenant_id":  tenantID,
+			"title":      title,
+			"body":       body,
+			"channel":    channel,
+			"priority":   priority,
+			"metadata":   string(metadata),
+			"created_at": createdAt,
+		})
+	}
+	return notifs, rows.Err()
+}
+
+// TrackEngagementEvent records user interaction with a notification (open, click, dismiss).
+// Accepts *models.NotificationAnalytics for the legacy callers.
+func (s *EngagementNotificationService) TrackEngagementEvent(ctx context.Context, analytics *models.NotificationAnalytics) error {
+	if s.DB == nil {
+		return fmt.Errorf("engagement notification service: db is nil")
+	}
+	if analytics == nil {
+		return fmt.Errorf("analytics is nil")
+	}
+	_, err := s.DB.ExecContext(ctx,
+		`INSERT INTO notification_analytics (id, notification_id, user_id, event_type, event_timestamp)
+		 VALUES ($1, $2, $3, $4, $5)`,
+		uuid.New(), analytics.NotificationID, analytics.UserID,
+		analytics.EventType, analytics.EventTimestamp)
+	return err
+}
