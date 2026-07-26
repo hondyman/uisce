@@ -187,7 +187,7 @@ services:
   api-gateway:
     build:
       context: .
-      dockerfile: api-gateway/Dockerfile
+      dockerfile: backend/apps/api-gateway/Dockerfile
     networks:
       - semlayer-net
     ports:
@@ -241,7 +241,7 @@ services:
 
   bp-backend:
     build:
-      context: ./bp-backend
+      context: ./backend/apps/bp-backend
       dockerfile: Dockerfile
     networks:
       - semlayer-net
@@ -471,7 +471,7 @@ services:
   compliance-engine:
     build:
       context: .
-      dockerfile: Dockerfile.compliance-engine
+      dockerfile: backend/apps/compliance-engine/Dockerfile
     networks:
       - semlayer-net
     ports:
@@ -489,29 +489,6 @@ services:
     # depends_on:
     #   - postgres
 
-  catalog-sync:
-    build:
-      context: .
-      dockerfile: backend/Dockerfile.catalog-sync
-    networks:
-      - semlayer-net
-    ports:
-      - "${CATALOG_SYNC_PORT:-8097}:8090"
-    environment:
-      - DATABASE_URL=postgres://postgres:postgres@${DB_HOST:-100.84.50.65}:5432/alpha?sslmode=disable
-      - POSTGRES_DSN=postgres://postgres:postgres@${DB_HOST:-100.84.50.65}:5432/alpha?sslmode=disable
-      - KAFKA_BROKERS=redpanda:9092
-      - SCHEMA_REGISTRY_URL=http://redpanda:8081
-      - PORT=8090
-      - TENANT_ID=99e99e99-99e9-49e9-89e9-99e99e99e999
-      - JWT_SECRET=${JWT_SECRET:-dev-jwt-secret-key-change-in-production}
-      - ENABLE_SECURITY=true
-    restart: unless-stopped
-    depends_on:
-      - redpanda
-      # - postgres
-
-  outbox-processor:
     build:
       context: ./backend
       dockerfile: Dockerfile.outbox-processor

@@ -26,7 +26,7 @@ services:
   api-gateway:
     build:
       context: .
-      dockerfile: api-gateway/Dockerfile
+      dockerfile: backend/apps/api-gateway/Dockerfile
     networks:
       - local-net
     ports:
@@ -46,7 +46,7 @@ services:
 
   bp-backend:
     build:
-      context: ./bp-backend
+      context: ./backend/apps/bp-backend
       dockerfile: Dockerfile
     networks:
       - local-net
@@ -206,7 +206,7 @@ services:
   compliance-engine:
     build:
       context: .
-      dockerfile: Dockerfile.compliance-engine
+      dockerfile: backend/apps/compliance-engine/Dockerfile
     networks:
       - local-net
     ports:
@@ -220,25 +220,6 @@ services:
     depends_on: []  # No local dependencies
     restart: unless-stopped
 
-  catalog-sync:
-    build:
-      context: .
-      dockerfile: backend/Dockerfile.catalog-sync
-    networks:
-      - local-net
-    ports:
-      - "${CATALOG_SYNC_PORT:-8097}:8090"
-    environment:
-      - DATABASE_URL=postgres://postgres:postgres@100.84.126.19:5432/alpha?sslmode=disable
-      - POSTGRES_DSN=postgres://postgres:postgres@100.84.126.19:5432/alpha?sslmode=disable
-      - KAFKA_BROKERS=100.84.126.19:9092
-      - SCHEMA_REGISTRY_URL=http://100.84.126.19:8081
-      - PORT=8090
-      - TENANT_ID=99e99e99-99e9-49e9-89e9-99e99e99e999
-    depends_on: []  # No local dependencies
-    restart: unless-stopped
-
-  outbox-processor:
     build:
       context: ./backend
       dockerfile: Dockerfile.outbox-processor

@@ -1,0 +1,11 @@
+apiVersion: redpanda.vectorized.io/v1alpha1
+kind: Topic
+metadata:
+  name: uisce-calculation-audit-passport
+  namespace: uisce-core
+spec:
+  partitions: 12
+  replicationFactor: 3
+  config:
+    cleanup.policy: "compact,delete"
+    retention.ms: "2520000000" # 7-Year Retention for SEC/FINRA Regulatory Audit Compliance

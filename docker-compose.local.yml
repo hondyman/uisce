@@ -76,7 +76,7 @@ services:
   api-gateway:
     build:
       context: .
-      dockerfile: api-gateway/Dockerfile
+      dockerfile: backend/apps/api-gateway/Dockerfile
     container_name: semlayer-api-gateway
     networks:
       - local-net
@@ -102,7 +102,7 @@ services:
   # ==========================================
   bp-backend:
     build:
-      context: ./bp-backend
+      context: ./backend/apps/bp-backend
       dockerfile: Dockerfile
     container_name: semlayer-bp-backend
     networks:
@@ -283,7 +283,7 @@ services:
   compliance-engine:
     build:
       context: .
-      dockerfile: Dockerfile.compliance-engine
+      dockerfile: backend/apps/compliance-engine/Dockerfile
     container_name: semlayer-compliance-engine
     networks:
       - local-net
@@ -299,28 +299,6 @@ services:
   # ==========================================
   # CATALOG SYNC (Go)
   # ==========================================
-  catalog-sync:
-    build:
-      context: .
-      dockerfile: backend/Dockerfile.catalog-sync
-    container_name: semlayer-catalog-sync
-    networks:
-      - local-net
-    ports:
-      - "${CATALOG_SYNC_PORT:-8097}:8090"
-    environment:
-      - DATABASE_URL=postgres://postgres:${POSTGRES_PASSWORD:-postgres}@${REMOTE_HOST:-100.84.126.19}:5432/alpha?sslmode=disable
-      - POSTGRES_DSN=postgres://postgres:${POSTGRES_PASSWORD:-postgres}@${REMOTE_HOST:-100.84.126.19}:5432/alpha?sslmode=disable
-      - KAFKA_BROKERS=${REMOTE_HOST:-100.84.126.19}:19092
-      - SCHEMA_REGISTRY_URL=http://${REMOTE_HOST:-100.84.126.19}:8081
-      - PORT=8090
-      - TENANT_ID=99e99e99-99e9-49e9-89e9-99e99e99e999
-    restart: unless-stopped
-
-  # ==========================================
-  # OUTBOX PROCESSOR (Go)
-  # ==========================================
-  outbox-processor:
     build:
       context: ./backend
       dockerfile: Dockerfile.outbox-processor
@@ -380,7 +358,7 @@ services:
   # ==========================================
   calendar-service:
     build:
-      context: ./calendar-service
+      context: ./backend/apps/calendar-service
       dockerfile: Dockerfile
     container_name: semlayer-calendar-service
     networks:

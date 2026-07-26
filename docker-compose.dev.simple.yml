@@ -130,7 +130,7 @@ services:
   fabric-builder:
     build:
       context: .
-      dockerfile: ./services/fabric-builder/Dockerfile
+      dockerfile: ./backend/apps/fabric-builder/Dockerfile
     container_name: semlayer-fabric-builder
     restart: unless-stopped
     environment:

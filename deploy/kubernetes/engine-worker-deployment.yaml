@@ -1,0 +1,62 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: uisce-rules-engine-worker
+  namespace: uisce-core
+  labels:
+    app.kubernetes.io/name: engine-worker
+    app.kubernetes.io/part-of: uisce-semantic-os
+spec:
+  replicas: 4
+  selector:
+    matchLabels:
+      app: engine-worker
+  template:
+    metadata:
+      labels:
+        app: engine-worker
+    spec:
+      containers:
+        - name: engine-worker
+          image: uisce-registry.internal/engine-worker:v2.4.0
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: REDIS_HOST
+              value: "redis-cluster.uisce-core.svc.cluster.local:6379"
+            - name: REDPANDA_BROKERS
+              value: "redpanda.uisce-core.svc.cluster.local:9092"
+            - name: WASM_MODULE_PATH
+              value: "/opt/uisce/wasm"
+          resources:
+            requests:
+              cpu: "500m"
+              memory: "512Mi"
+            limits:
+              cpu: "2000m"
+              memory: "2Gi"
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 10
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: uisce-rules-engine-worker-hpa
+  namespace: uisce-core
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: uisce-rules-engine-worker
+  minReplicas: 4
+  maxReplicas: 32
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
