@@ -20,7 +20,7 @@ import (
 	"go.uber.org/zap"
 )
 
-func formatStarlarkError(err error) string {
+func FormatStarlarkError(err error) string {
 	if err == nil {
 		return ""
 	}
@@ -260,14 +260,14 @@ func (e *StarlarkEngine) EvaluateUserRule(ctx context.Context, script string, da
 	// 3. Execute the user script to define 'validate' function (compiled+cached)
 	prog, err := e.getOrCompileProgram("rule.star", script, predeclared)
 	if err != nil {
-		res := &StarlarkValidationResult{IsValid: false, Message: "Script error: " + formatStarlarkError(err), Severity: "error"}
+		res := &StarlarkValidationResult{IsValid: false, Message: "Script error: " + FormatStarlarkError(err), Severity: "error"}
 		span.end(res, nil)
 		observeStarlarkRule(ruleID, "legacy", time.Since(start), classifyStarlarkOutcome(res, nil))
 		return res, nil
 	}
 	globals, err := prog.Init(thread, predeclared)
 	if err != nil {
-		res := &StarlarkValidationResult{IsValid: false, Message: "Script error: " + formatStarlarkError(err), Severity: "error"}
+		res := &StarlarkValidationResult{IsValid: false, Message: "Script error: " + FormatStarlarkError(err), Severity: "error"}
 		span.end(res, nil)
 		observeStarlarkRule(ruleID, "legacy", time.Since(start), classifyStarlarkOutcome(res, nil))
 		return res, nil
@@ -296,7 +296,7 @@ func (e *StarlarkEngine) EvaluateUserRule(ctx context.Context, script string, da
 	// 6. Call validate(context)
 	result, err := starlark.Call(thread, validateFn, starlark.Tuple{ctxVal}, nil)
 	if err != nil {
-		res := &StarlarkValidationResult{IsValid: false, Message: "Runtime error: " + formatStarlarkError(err), Severity: "error"}
+		res := &StarlarkValidationResult{IsValid: false, Message: "Runtime error: " + FormatStarlarkError(err), Severity: "error"}
 		span.end(res, nil)
 		observeStarlarkRule(ruleID, "legacy", time.Since(start), classifyStarlarkOutcome(res, nil))
 		return res, nil
@@ -702,7 +702,7 @@ func (e *StarlarkEngine) evaluateOkProgram(
 ) (*StarlarkValidationResult, error) {
 	resultGlobals, err := prog.Init(thread, globals)
 	if err != nil {
-		return &StarlarkValidationResult{IsValid: false, Message: "Script error: " + formatStarlarkError(err), Severity: "error"}, nil
+		return &StarlarkValidationResult{IsValid: false, Message: "Script error: " + FormatStarlarkError(err), Severity: "error"}, nil
 	}
 
 	v := resultGlobals["ok"]
@@ -760,7 +760,7 @@ func (e *StarlarkEngine) evaluateOkRule(ctx context.Context, script string, data
 
 	prog, err := e.getOrCompileProgram("rule.star", script, globals)
 	if err != nil {
-		return &StarlarkValidationResult{IsValid: false, Message: "Script error: " + formatStarlarkError(err), Severity: "error"}, nil
+		return &StarlarkValidationResult{IsValid: false, Message: "Script error: " + FormatStarlarkError(err), Severity: "error"}, nil
 	}
 	return e.evaluateOkRuleWithProgram(thread, prog, script, data)
 }
