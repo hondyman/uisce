@@ -18,7 +18,7 @@ import (
 )
 
 var ErrRoleNotFound = errors.New("role not found")
-var errRoleRepositoryUnavailable = errors.New("role repository not configured")
+var ErrRoleRepositoryUnavailable = errors.New("role repository not configured")
 
 // RoleService defines the interface for managing roles and their bundle assignments with full persistence.
 type RoleService interface {
@@ -88,27 +88,27 @@ type sqlRoleRepository struct {
 type noopRoleRepository struct{}
 
 func (noopRoleRepository) CreateRole(ctx context.Context, role *models.Role) error {
-	return errRoleRepositoryUnavailable
+	return ErrRoleRepositoryUnavailable
 }
 
 func (noopRoleRepository) SaveRole(ctx context.Context, role *models.Role) error {
-	return errRoleRepositoryUnavailable
+	return ErrRoleRepositoryUnavailable
 }
 
 func (noopRoleRepository) GetRoleByName(ctx context.Context, tenantID *uuid.UUID, normalized string) (*models.Role, error) {
-	return nil, errRoleRepositoryUnavailable
+	return nil, ErrRoleRepositoryUnavailable
 }
 
 func (noopRoleRepository) ListRoles(ctx context.Context, tenantID *uuid.UUID) ([]*models.Role, error) {
-	return nil, errRoleRepositoryUnavailable
+	return nil, ErrRoleRepositoryUnavailable
 }
 
 func (noopRoleRepository) RoleExists(ctx context.Context, tenantID *uuid.UUID, normalized string) (bool, error) {
-	return false, errRoleRepositoryUnavailable
+	return false, ErrRoleRepositoryUnavailable
 }
 
 func (noopRoleRepository) DeleteRole(ctx context.Context, tenantID *uuid.UUID, normalized string) error {
-	return errRoleRepositoryUnavailable
+	return ErrRoleRepositoryUnavailable
 }
 
 type roleRow struct {
