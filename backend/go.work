@@ -1,13 +1,31 @@
-go 1.25.3
+go 1.26.3
 
 use (
 	.
 	../calc-engine
 	../libs/abac-client
+	../libs/ai_routing
 	../libs/auth
+	../libs/custodian
+	../libs/guardrails
+	../libs/governance
 	../libs/hasura-client
 	../libs/jwt-middleware
+	../libs/llm
 	../libs/logging
+	../libs/metrics
+	../libs/migration
+	../libs/multitenancy
+	../libs/nl-intelligence
+	../libs/oauth
+	../libs/optimizer
+	../libs/policy
+	../libs/realtime
+	../libs/request-context
+	../libs/resilience
+	../libs/risk-analytics
+	../libs/saga
 	../libs/shared-types
 	../libs/temporal-client
+	../libs/validation
 )

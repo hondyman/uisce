@@ -6,3 +6,7 @@ require (
 	github.com/hondyman/uisce/libs/custodian v0.0.0
 	github.com/hondyman/uisce/libs/optimizer v0.0.0
 )
+
+replace github.com/hondyman/uisce/libs/custodian => ../custodian
+
+replace github.com/hondyman/uisce/libs/optimizer => ../optimizer

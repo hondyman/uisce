@@ -19,37 +19,39 @@ use (
 	./backend/tools/cmd
 	./calc-engine
 	./libs/abac-client
+	./libs/ai_routing
 	./libs/auth
+	./libs/bp
 	./libs/cache
-	./libs/multitenancy
-	./libs/resilience
-	./libs/canonical
 	./libs/canon
-	./libs/realtime
-	./libs/policy
+	./libs/canonical
+	./libs/custodian
+	./libs/domain-types
 	./libs/factor
 	./libs/factors
-	./libs/custodian
-	./libs/optimizer
-	./libs/saga
-	./libs/migration
-	./libs/ai_routing
 	./libs/governance
-	./libs/bp
-	./libs/domain-types
 	./libs/guardrails
 	./libs/help
-	./libs/metrics
 	./libs/identity
-	./libs/request-context
-	./libs/risk-analytics
 
 	./libs/jwt-middleware
-	./libs/logging
 	./libs/llm
+	./libs/logging
+	./libs/metrics
+	./libs/migration
+	./libs/multitenancy
 	./libs/nl-intelligence
 	./libs/oauth
+	./libs/optimizer
+	./libs/policy
+	./libs/realtime
+	./libs/request-context
+	./libs/resilience
+	./libs/risk-analytics
+	./libs/saga
 	./libs/shared-types
 	./libs/temporal-client
 	./libs/validation
 )
+
+replace github.com/hondyman/uisce/libs/temporal-client => /Users/eganpj/GitHub/uisce/libs/temporal-client
