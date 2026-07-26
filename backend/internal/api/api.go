@@ -38,11 +38,12 @@ import (
 	"github.com/hondyman/uisce/backend/internal/household"
 	"github.com/hondyman/uisce/backend/internal/infrastructure"
 	"github.com/hondyman/uisce/backend/internal/lineage"
-	"github.com/hondyman/uisce/backend/internal/logging"
+	"github.com/hondyman/uisce/libs/logging"
 	"github.com/hondyman/uisce/backend/internal/mdm"
 	appmid "github.com/hondyman/uisce/backend/internal/middleware"
+	"github.com/hondyman/uisce/backend/internal/notifications"
 	models "github.com/hondyman/uisce/backend/internal/models"
-	"github.com/hondyman/uisce/backend/internal/oauth"
+	"github.com/hondyman/uisce/libs/oauth"
 	"github.com/hondyman/uisce/backend/internal/platform"
 	"github.com/hondyman/uisce/backend/internal/portfoliomaster"
 	"github.com/hondyman/uisce/backend/internal/querybuilder"
@@ -64,7 +65,7 @@ import (
 	"github.com/hondyman/uisce/backend/internal/trino"
 	coremodels "github.com/hondyman/uisce/backend/models"
 	"github.com/hondyman/uisce/backend/pkg/ingestion"
-	"github.com/hondyman/uisce/backend/pkg/llm"
+	"github.com/hondyman/uisce/libs/llm"
 	"github.com/hondyman/uisce/backend/pkg/semantic"
 	"github.com/robfig/cron/v3"
 	"github.com/sirupsen/logrus"
@@ -77,7 +78,6 @@ import (
 	"github.com/jmoiron/sqlx"
 
 	catalogmeta "github.com/hondyman/uisce/backend/internal/metadata"
-	hasuraclient "github.com/hondyman/uisce/libs/hasura-client"
 	temporalclientlib "github.com/hondyman/uisce/libs/temporal-client"
 	temporalclient "go.temporal.io/sdk/client"
 	"google.golang.org/grpc"
@@ -98,8 +98,8 @@ type Server struct {
 	WsHub                   *WebSocketHub
 	SemanticNameResolver    *SemanticNameResolver
 	AuditSvc                *audit.Service
-	NotificationSvc         *services.EngagementNotificationService
-	CampaignSvc             *services.NotificationCampaignService
+	NotificationSvc         *notifications.EngagementNotificationService
+	CampaignSvc             *notifications.NotificationCampaignService
 	NotificationHandlers    *NotificationAPIHandlers
 	DashboardHandlers       *DashboardAPIHandlers
 	ModelCatalogHandler     *handlers.ModelCatalogHandler
@@ -126,7 +126,6 @@ type Server struct {
 	EvalService             *services.EvalService
 	LLMConfigSvc            *llm.LLMConfigService
 	TemporalClient          temporalclient.Client
-	EvidenceBundleService   *services.EvidenceBundleService
 	ApprovalService         *services.ApprovalService
 	ImpersonationSweeper    *security.Sweeper
 	SemanticLayerHandler    *SemanticLayerHandler
@@ -746,8 +745,8 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 	// We use the chi-compatible corsMiddleware above for dev CORS handling.
 	runtimeBase := getEnv("SEMLAYER_RUNTIME_DIR", ".")
 	auditSvc := audit.NewService(db)
-	notificationSvc := services.NewEngagementNotificationService(db)
-	campaignSvc := services.NewNotificationCampaignService(db, notificationSvc)
+	notificationSvc := notifications.NewEngagementNotificationService(db)
+	campaignSvc := notifications.NewNotificationCampaignService(db, notificationSvc)
 
 	// Analytics & Governance
 	registerAnalyticsRoutes(r)
@@ -1185,13 +1184,8 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 	// Initialize Policy Generation Handler (Phase 9)
 	srv.PolicyGenerationHandler = handlers.NewPolicyGenerationHandler(sqlxDB)
 
-	// Initialize Hasura Client and Calc Handler (Phase 9)
-	hasuraCfg := &hasuraclient.HasuraConfig{
-		Endpoint:    getEnv("HASURA_GRAPHQL_ENDPOINT", "http://hasura:8080/v1/graphql"),
-		AdminSecret: getEnv("HASURA_GRAPHQL_ADMIN_SECRET", "myadminsecret"),
-	}
-	hasura := hasuraclient.NewHasuraClient(hasuraCfg)
-	srv.CalcHandler = handlers.NewCalcHandler(hasura)
+	// Initialize Calc Handler
+	srv.CalcHandler = handlers.NewCalcHandler(sqlxDB)
 
 	// Initialize RAG Services
 	ragConfigService := rag.NewConfigService(db)
@@ -1475,24 +1469,7 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 			)
 
 			// Sync Repo
-			hasuraURL := os.Getenv("HASURA_URL")
-			if hasuraURL == "" {
-				hasuraURL = "http://localhost:8085/v1/graphql"
-			}
-			hasuraAdminSecret := os.Getenv("HASURA_GRAPHQL_ADMIN_SECRET")
-			if hasuraAdminSecret == "" {
-				hasuraAdminSecret = os.Getenv("HASURA_ADMIN_SECRET")
-				if hasuraAdminSecret == "" {
-					hasuraAdminSecret = "myadminsecret"
-				}
-			}
-
-			syncHasuraClient := hasuraclient.NewHasuraClient(&hasuraclient.HasuraConfig{
-				Endpoint:    hasuraURL,
-				AdminSecret: hasuraAdminSecret,
-			})
-
-			googleSyncRepo := repository.NewGoogleSyncRepo(syncHasuraClient)
+			googleSyncRepo := repository.NewGoogleSyncRepo(sqlxDB)
 
 			// Sync Processor
 			// Note: SyncProcessor uses logrus, while the rest of the app uses zap.

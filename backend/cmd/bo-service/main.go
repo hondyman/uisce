@@ -10,8 +10,9 @@ import (
 
 	metadata "github.com/hondyman/uisce/backend/internal/metadata"
 
-	"github.com/hondyman/uisce/backend/internal/logging"
+	"github.com/hondyman/uisce/libs/logging"
 	"github.com/hondyman/uisce/backend/internal/security"
+	"github.com/hondyman/uisce/backend/internal/bo"
 	"github.com/hondyman/uisce/backend/internal/services"
 	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/jmoiron/sqlx"
@@ -105,7 +106,7 @@ func main() {
 	sugar.Infof("📝 Registering command handlers...")
 
 	// Business Object handlers
-	boCmdHandler := services.NewBOCommandHandler(boService, eventPublisher)
+	boCmdHandler := bo.NewBOCommandHandler(boService, eventPublisher)
 	consumer.RegisterHandler(services.CommandCreateBO, boCmdHandler.HandleCreateBO)
 	consumer.RegisterHandler(services.CommandUpdateBO, boCmdHandler.HandleUpdateBO)
 	consumer.RegisterHandler(services.CommandDeleteBO, boCmdHandler.HandleDeleteBO)
