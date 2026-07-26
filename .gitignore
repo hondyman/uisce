@@ -96,3 +96,27 @@ backend/notifications-service
 backend/platform_server
 semlayer
 trading-consumer
+
+# Microservice binaries (compiled from go build within cmd/* and apps/*/)
+# These are NEVER committed — only source files (.go) and Dockerfiles
+backend/cmd/*/[a-zA-Z]*
+!backend/cmd/*/Dockerfile
+!backend/cmd/*/*.go
+!backend/cmd/*/*.yaml
+!backend/cmd/*/*.yml
+backend/apps/*/[a-zA-Z]*-service
+backend/apps/*/[a-zA-Z]*-engine
+backend/apps/*/apps/*/[a-zA-Z]*
+backend/services/automation_service
+backend/services/compliance-engine
+backend/services/uma-events-listener
+backend/services/uma-rebalance
+backend/services/compliance-engine/compliance-engine
+
+# Phase 0 Safety Net: protect microservice scaffolding directories
+# Source files only — no compiled outputs
+backend/cmd/audit-worker/audit-worker
+backend/cmd/catalog-worker/catalog-worker
+backend/cmd/event-router/event-router
+backend/cmd/outbox-processor/outbox-processor
+backend/cmd/snapshot-worker/snapshot-worker
