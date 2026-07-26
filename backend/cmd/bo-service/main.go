@@ -107,10 +107,35 @@ func main() {
 
 	// Business Object handlers
 	boCmdHandler := bo.NewBOCommandHandler(boService, eventPublisher)
-	consumer.RegisterHandler(services.CommandCreateBO, boCmdHandler.HandleCreateBO)
-	consumer.RegisterHandler(services.CommandUpdateBO, boCmdHandler.HandleUpdateBO)
-	consumer.RegisterHandler(services.CommandDeleteBO, boCmdHandler.HandleDeleteBO)
-	consumer.RegisterHandler(services.CommandCloneBO, boCmdHandler.HandleCloneBO)
+
+	// Adapter functions bridge services.Command <-> bo.BOCommand envelopes.
+	// This keeps Cardinal Rule 3 (no cycles): internal/bo does NOT import
+	// internal/services. The conversion happens at the binary boundary.
+	adaptHandle := func(handle func(ctx context.Context, cmd *bo.BOCommand) *bo.BOCommandResponse) services.CommandHandler {
+		return func(ctx context.Context, sc *services.Command) (*services.CommandResponse, error) {
+			bc := &bo.BOCommand{
+				ID:            sc.ID,
+				CorrelationID: sc.CorrelationID,
+				TenantID:      sc.TenantID,
+				UserID:        sc.UserID,
+				Data:          sc.Data,
+			}
+			br := handle(ctx, bc)
+			return &services.CommandResponse{
+				ID:            br.ID,
+				CorrelationID: br.CorrelationID,
+				Status:        services.CommandStatus(br.Status),
+				Message:       br.Message,
+				Data:          br.Data,
+				Error:         br.Error,
+			}, nil
+		}
+	}
+
+	consumer.RegisterHandler(services.CommandCreateBO, adaptHandle(boCmdHandler.HandleCreateBO))
+	consumer.RegisterHandler(services.CommandUpdateBO, adaptHandle(boCmdHandler.HandleUpdateBO))
+	consumer.RegisterHandler(services.CommandDeleteBO, adaptHandle(boCmdHandler.HandleDeleteBO))
+	consumer.RegisterHandler(services.CommandCloneBO, adaptHandle(boCmdHandler.HandleCloneBO))
 
 	sugar.Infof("✅ Registered 4 BO handlers (Create, Update, Delete, Clone)")
 
