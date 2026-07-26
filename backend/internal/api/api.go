@@ -66,7 +66,7 @@ import (
 	"github.com/hondyman/uisce/backend/internal/trino"
 	coremodels "github.com/hondyman/uisce/backend/models"
 	"github.com/hondyman/uisce/backend/pkg/ingestion"
-	"github.com/hondyman/uisce/libs/llm"
+	"github.com/hondyman/uisce/backend/pkg/llm"
 	"github.com/hondyman/uisce/backend/pkg/semantic"
 	"github.com/robfig/cron/v3"
 	"github.com/sirupsen/logrus"
