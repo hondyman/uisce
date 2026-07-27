@@ -294,6 +294,30 @@ services:
     restart: unless-stopped
 
   # ---------------------------------------------------------
+  # MinIO Object Storage (Iceberg Warehouse)
+  # ---------------------------------------------------------
+  uisce-minio:
+    image: minio/minio:latest
+    container_name: uisce-minio
+    command: server /data --console-address ":9001"
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    networks:
+      - remote-net
+    volumes:
+      - uisce_minio_data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # ---------------------------------------------------------
   # DataFusion Arrow Flight SQL Server (Iceberg query engine)
   # Replaces Trino in this stack. Provides:
   #   - REST SQL endpoint on :8555
@@ -332,8 +356,8 @@ services:
       AWS_SECRET_ACCESS_KEY: "${DATA_FUSION_AWS_SECRET_ACCESS_KEY:-minioadmin}"
       AWS_REGION: "${DATA_FUSION_AWS_REGION:-us-east-1}"
       AWS_DEFAULT_REGION: "${DATA_FUSION_AWS_REGION:-us-east-1}"
-      AWS_S3_ENDPOINT: "${DATA_FUSION_S3_ENDPOINT:-http://host.docker.internal:9000}"
-      S3_ENDPOINT: "${DATA_FUSION_S3_ENDPOINT:-http://host.docker.internal:9000}"
+      AWS_S3_ENDPOINT: "${DATA_FUSION_S3_ENDPOINT:-http://uisce-minio:9000}"
+      S3_ENDPOINT: "${DATA_FUSION_S3_ENDPOINT:-http://uisce-minio:9000}"
       S3_ACCESS_KEY: "${DATA_FUSION_AWS_ACCESS_KEY_ID:-minioadmin}"
       S3_SECRET_KEY: "${DATA_FUSION_AWS_SECRET_ACCESS_KEY:-minioadmin}"
       S3_PATH_STYLE_ACCESS: "true"
@@ -383,12 +407,13 @@ services:
       POLARIS_PERSISTENCE_TYPE: "relational-jdbc"
       # Bootstrap root principal (realm:POLARIS, client:root, secret:secret)
       POLARIS_BOOTSTRAP_CREDENTIALS: "POLARIS,root,secret"
+      POLARIS_STORAGE_INTEGRATION_S3_TYPE: "test-in-memory"
       # Default storage config (S3 via host MinIO with path style access)
       POLARIS_DEFAULT_STORAGE_CONFIG: |
         {
           "storage-type": "s3",
           "allowed-storage-locations": ["s3://iceberg-warehouse/"],
-          "s3.endpoint": "http://100.84.50.65:9000",
+          "s3.endpoint": "http://uisce-minio:9000",
           "s3.path-style-access": "true",
           "s3.region": "us-east-1"
         }
@@ -421,4 +446,5 @@ networks:
 volumes:
   uisce_redpanda_data:
   uisce_redis_data:
+  uisce_minio_data:
   open-webui-data:
