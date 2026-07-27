@@ -2,6 +2,8 @@ package middleware
 
 import (
 	"context"
+	"database/sql"
+	"fmt"
 	"net/http"
 
 	"github.com/google/uuid"
@@ -47,3 +49,34 @@ func GetTenantContext(ctx context.Context) *scheduler_intelligence.TenantContext
 	}
 	return v.(*scheduler_intelligence.TenantContext)
 }
+
+// ValidateTenantAccess checks if the active request context is authorized to access targetTenantID
+func ValidateTenantAccess(ctx context.Context, targetTenantID string) error {
+	tc := GetTenantContext(ctx)
+	if tc == nil {
+		return nil // unconstrained if no middleware context set
+	}
+	if tc.Actor == scheduler_intelligence.ActorGlobalOps {
+		return nil // global ops authorized for all tenants
+	}
+	if tc.TenantID == nil {
+		return fmt.Errorf("security boundary violation: active session lacks tenant context")
+	}
+	if tc.TenantID.String() != targetTenantID {
+		return fmt.Errorf("security boundary violation: tenant '%s' cannot access resource belonging to '%s'", tc.TenantID.String(), targetTenantID)
+	}
+	return nil
+}
+
+// SetSessionTenantContext injects 'SET LOCAL uisce.current_tenant = ...' into PostgreSQL session
+func SetSessionTenantContext(ctx context.Context, db *sql.DB, tenantID string) error {
+	if _, err := uuid.Parse(tenantID); err != nil {
+		return fmt.Errorf("invalid tenant ID format for RLS session setting: %w", err)
+	}
+	_, err := db.ExecContext(ctx, "SET LOCAL uisce.current_tenant = $1", tenantID)
+	if err != nil {
+		return fmt.Errorf("failed to set session RLS parameter uisce.current_tenant: %w", err)
+	}
+	return nil
+}
+

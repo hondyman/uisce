@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/hondyman/uisce/backend/internal/api/middleware"
 )
 
 // TenantAccessHandlers provides endpoints for tenant access control
@@ -123,7 +124,18 @@ func (h *TenantAccessHandlers) listAccessibleTenants(w http.ResponseWriter, r *h
 	}
 
 	// For non-operators, filter by tenant assignments
-	// This requires a user_tenant_assignments table
+	// Validate tenant access if X-Tenant-Id is set
+	if tenantIDHeader := r.Header.Get("X-Tenant-Id"); tenantIDHeader != "" {
+		if err := middleware.ValidateTenantAccess(r.Context(), tenantIDHeader); err != nil {
+			http.Error(w, err.Error(), http.StatusForbidden)
+			return
+		}
+		if err := middleware.SetSessionTenantContext(r.Context(), h.DB, tenantIDHeader); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+	}
+
 	tenants, err := h.getTenantsByUser(r, userID)
 	if err != nil {
 		fmt.Printf("[DEBUG] getTenantsByUser error: %v\n", err)
