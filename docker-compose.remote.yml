@@ -272,7 +272,7 @@ services:
       # Flight SQL endpoint (gRPC, optional)
       DATAFUSION_FLIGHT_URL: "${LPS_DATAFUSION_FLIGHT_URL:-grpc://uisce-datafusion:8554}"
       # Iceberg REST catalog endpoint
-      ICEBERG_CATALOG_URI: "${ICEBERG_CATALOG_URI:-http://host.docker.internal:8181}"
+      ICEBERG_CATALOG_URI: "${ICEBERG_CATALOG_URI:-http://uisce-polaris:8181}"
       # Redpanda broker for real-time node.created events
       REDPANDA_BROKERS: "uisce-redpanda:9092"
       # How often to run the full reconciliation loop
@@ -327,11 +327,16 @@ services:
       AWS_SECRET_ACCESS_KEY: "${DATA_FUSION_AWS_SECRET_ACCESS_KEY:-minioadmin}"
       AWS_REGION: "${DATA_FUSION_AWS_REGION:-us-east-1}"
       AWS_S3_ENDPOINT: "${DATA_FUSION_S3_ENDPOINT:-http://host.docker.internal:9000}"
-      # Iceberg REST catalog endpoint
-      ICEBERG_CATALOG_URI: "${ICEBERG_CATALOG_URI:-http://host.docker.internal:8181}"
-      ICEBERG_WAREHOUSE: "${ICEBERG_WAREHOUSE:-s3://iceberg/warehouse}"
+      S3_ENDPOINT: "${DATA_FUSION_S3_ENDPOINT:-http://host.docker.internal:9000}"
+      S3_ACCESS_KEY: "${DATA_FUSION_AWS_ACCESS_KEY_ID:-minioadmin}"
+      S3_SECRET_KEY: "${DATA_FUSION_AWS_SECRET_ACCESS_KEY:-minioadmin}"
+      # Iceberg REST catalog endpoint & credentials for Apache Polaris
+      ICEBERG_CATALOG_URI: "${ICEBERG_CATALOG_URI:-http://uisce-polaris:8181/api/catalog}"
+      ICEBERG_CREDENTIAL: "${ICEBERG_CREDENTIAL:-root:secret}"
+      ICEBERG_WAREHOUSE: "${ICEBERG_WAREHOUSE:-tenant-alpha}"
+      ICEBERG_SCOPE: "${ICEBERG_SCOPE:-PRINCIPAL_ROLE:ALL}"
       # Warehouse bucket
-      WAREHOUSE_BUCKET: "${WAREHOUSE_BUCKET:-iceberg}"
+      WAREHOUSE_BUCKET: "${WAREHOUSE_BUCKET:-iceberg-warehouse}"
       # Logging
       RUST_LOG: "info"
       PYTHONUNBUFFERED: "1"
