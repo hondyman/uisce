@@ -85,14 +85,18 @@ To register new multi-tenant Iceberg catalogs (e.g. `tenant-alpha`), use the ten
 ./scripts/polaris-bootstrap-tenant.sh tenant-alpha http://localhost:8185
 ```
 
+> **NOTE:** The bootstrap script reads `S3_ENDPOINT` and `S3_BUCKET` from the environment.
+> Default S3_ENDPOINT is `http://uisce-minio:9000` (containerized MinIO).
+> If using a host MinIO on a different address, set it explicitly:
+> `S3_ENDPOINT=http://host:port ./scripts/polaris-bootstrap-tenant.sh tenant-alpha http://localhost:8185`
+
 ### Direct REST Management API Payload Structure
 If creating via `curl` directly:
 ```bash
 TOKEN=$(curl -s -X POST "http://localhost:8185/api/catalog/v1/oauth/tokens" \
   -d "grant_type=client_credentials&client_id=root&client_secret=secret&scope=PRINCIPAL_ROLE:ALL" \
-  | grep -o '"access_token":"[^"]*' | cut -d'"' -f4)
+  | python3 -c "import sys,json; print(json.load(sys.stdin)['access_token'])")
 
-# 1. Create Catalog
 curl -X POST "http://localhost:8185/api/management/v1/catalogs" \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
@@ -102,51 +106,144 @@ curl -X POST "http://localhost:8185/api/management/v1/catalogs" \
       "type": "INTERNAL",
       "readOnly": false,
       "properties": {
-        "default-base-location": "s3://iceberg-warehouse/tenant-alpha"
+        "default-base-location": "s3://iceberg-warehouse/tenant-alpha",
+        "s3.credentials-type": "MANUAL",
+        "s3.endpoint": "http://uisce-minio:9000",
+        "s3.path-style-access": "true"
       },
       "storageConfigInfo": {
         "storageType": "S3",
-        "allowedLocations": ["s3://iceberg-warehouse/tenant-alpha"],
-        "roleArn": "arn:aws:iam::000000000000:role/dummy",
-        "pathStyleAccess": true
+        "allowedLocations": ["s3://iceberg-warehouse/tenant-alpha"]
       }
     }
   }'
+```
 
-# 2. Grant catalog_admin role to service_admin
-curl -X PUT "http://localhost:8185/api/management/v1/principal-roles/service_admin/catalog-roles/tenant-alpha" \
+### Creating Namespaces and Tables
+
+After bootstrapping the catalog, create namespaces via the Iceberg REST API:
+
+```bash
+# Create analytics namespace
+NS_RESP=$(curl -s -o /dev/null -w "%{http_code}" -X POST \
+  "http://localhost:8185/api/catalog/v1/tenant-alpha/namespaces" \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"catalogRole": {"name": "catalog_admin"}}'
+  -d '{"namespace": ["analytics"], "properties": {}}')
+echo "Namespace create: $NS_RESP"
+```
 
-# 3. Grant CATALOG_MANAGE_CONTENT privilege to catalog_admin
-curl -X PUT "http://localhost:8185/api/management/v1/catalogs/tenant-alpha/catalog-roles/catalog_admin/grants" \
-  -H "Authorization: Bearer $TOKEN" \
+Then use PyIceberg inside `uisce-datafusion` to create tables and ingest data.
+
+---
+
+## 4. End-to-End DataFusion Iceberg Query Verification
+
+### 4.1 SQL Query Test (native DataFusion)
+```bash
+curl -s -X POST "http://localhost:8555/api/v1/query" \
   -H "Content-Type: application/json" \
-  -d '{"grant": {"type": "catalog", "privilege": "CATALOG_MANAGE_CONTENT"}}'
+  -d '{"query": "SELECT 42 AS answer, '\''datafusion'\'' AS engine"}'
+```
+
+### 4.2 Iceberg Table Query (via PyIceberg bridge)
+```bash
+# Query from PyIceberg inside the container
+docker exec uisce-datafusion python3 -c "
+from pyiceberg.catalog import load_catalog
+cat = load_catalog('rest',
+    uri='http://uisce-polaris:8181/api/catalog',
+    credential='root:secret',
+    warehouse='tenant-alpha',
+    scope='PRINCIPAL_ROLE:ALL'
+)
+print('Namespaces:', cat.list_namespaces())
+print('Tables in analytics:', cat.list_tables('analytics'))
+"
+
+# Query via DataFusion REST (intercepts fully-qualified Iceberg table refs)
+curl -s -X POST "http://localhost:8555/api/v1/query" \
+  -H "Content-Type: application/json" \
+  -d '{"query": "SELECT * FROM tenant_alpha.analytics.events ORDER BY ts"}'
+```
+
+### 4.3 Watermark-Routed Cold Tier Query
+```bash
+# Cold tier: records older than 7 days
+curl -s -X POST "http://localhost:8555/api/v1/query" \
+  -H "Content-Type: application/json" \
+  -d "{\"query\": \"SELECT id, name, ts FROM tenant_alpha.analytics.events WHERE ts < TIMESTAMP '\''2025-12-31 00:00:00'\'' ORDER BY ts\"}"
+
+# Hot tier: recent records
+curl -s -X POST "http://localhost:8555/api/v1/query" \
+  -H "Content-Type: application/json" \
+  -d "{\"query\": \"SELECT id, name FROM tenant_alpha.analytics.events WHERE ts >= TIMESTAMP '\''2026-01-01 00:00:00'\''\"}"
+```
+
+### 4.4 Verify Parquet in MinIO
+```bash
+mc ls --recursive local/iceberg-warehouse/tenant-alpha/analytics/events/
 ```
 
 ---
 
-## 4. End-to-End DataFusion Query Verification
+## 5. Known Issues and Troubleshooting
 
-Verify DataFusion catalog integration against Polaris and MinIO:
+### STS 403 when creating Iceberg tables
 
-```bash
-# 1. SQL Query Test
-curl -s -X POST "http://localhost:8555/api/v1/query" \
-  -H "Content-Type: application/json" \
-  -d '{"query": "SELECT 42 AS answer, '\''datafusion'\'' AS engine"}'
+**Symptom:** `pyiceberg.exceptions.ServerError: StsException: The security token included in the request is invalid` when calling `create_table()`.
 
-# 2. PyIceberg Catalog Inspection inside container
-docker exec uisce-datafusion python3 -c '
-from pyiceberg.catalog import load_catalog
-cat = load_catalog("rest", **{
-    "uri": "http://uisce-polaris:8181/api/catalog",
-    "credential": "root:secret",
-    "warehouse": "tenant-alpha",
-    "scope": "PRINCIPAL_ROLE:ALL"
-})
-print("Namespaces:", cat.list_namespaces())
-'
+**Root Cause:** Polaris's `AwsCredentialsStorageIntegration.compute()` calls AWS STS `AssumeRole` regardless of the `s3.credentials-type` setting when `roleArn` is present in the catalog's storage config. For MinIO, there is no real AWS STS endpoint at the default regional endpoint (`sts.us-east-1.amazonaws.com`).
+
+**Resolution:** The `polaris-bootstrap-tenant.sh` script now omits `roleArn` from the storage config. If tables were created before this fix was applied, patch the catalog entity directly in Postgres:
+
+```python
+import psycopg2, json
+conn = psycopgg2.connect(host="host.docker.internal", port=5432, dbname="polaris",
+                          user="postgres", password="postgres")
+conn.autocommit = True
+cur = conn.cursor()
+cur.execute("SELECT id, entity_version, internal_properties FROM polaris_schema.entities WHERE name = %s",
+            ("tenant-alpha",))
+entity_id, entity_version, internal_props = row
+sci = json.loads(internal_props["storage_configuration_info"])
+sci["credentialsType"] = "MANUAL"
+sci["accessKey"] = "minioadmin"
+sci["secretKey"] = "minioadmin"
+sci["endpoint"] = "http://uisce-minio:9000"
+sci.pop("roleArn", None)
+sci.pop("stsEndpoint", None)
+new_internal_props = dict(internal_props)
+new_internal_props["storage_configuration_info"] = json.dumps(sci)
+cur.execute("UPDATE polaris_schema.entities SET internal_properties = %s WHERE id = %s",
+            (json.dumps(new_internal_props), entity_id))
+conn.close()
+print("Patched. Restart Polaris to clear credential cache.")
 ```
+
+> **Cardinal Rule 1 Caveat:** The above DB patch is a last-resort workaround that directly modifies Polaris's internal catalog state, bypassing the Management REST API. This violates the config-before-code principle and may be overwritten if the catalog is updated via the Management API. Document this deviation when using this approach.
+
+### DataFusion Iceberg catalog returns 401 Unauthorized
+
+**Symptom:** DataFusion logs show `Failed to initialize Iceberg catalog: RESTError 401`.
+
+**Root Cause:** `datafusion_server.py`'s `_init_iceberg()` was not passing `credential`, `warehouse`, or `scope` to `load_catalog()`, causing unauthenticated Iceberg REST API calls.
+
+**Resolution:** Fixed in `datafusion-build/datafusion_server.py`. Rebuild `uisce-datafusion` after pulling the fix.
+
+### DataFusion SQL query returns "table not found" for Iceberg tables
+
+**Symptom:** `SELECT * FROM tenant_alpha.analytics.events` returns `Error during planning: table 'tenant_alpha.analytics.events' not found` even though PyIceberg can see the table.
+
+**Root Cause:** DataFusion's native SQL engine does not auto-discover Iceberg tables. The `datafusion_server.py` implements `_rewrite_and_register_iceberg_tables()` which intercepts 3-part fully-qualified table references, loads the table via PyIceberg REST, serializes to Arrow IPC, and registers with DataFusion.
+
+**Resolution:** Ensure the query uses 3-part fully-qualified names matching the pattern `catalog.namespace.table` (e.g. `tenant_alpha.analytics.events`). The warehouse prefix is stripped automatically when it matches `ICEBERG_WAREHOUSE`.
+
+### MinIO S3 binding to loopback only
+
+**Symptom:** Container-to-container S3 operations fail with connection refused, but host-to-S3 works.
+
+**Root Cause:** MinIO was bound to `127.0.0.1:9000` (loopback only).
+
+**Resolution:** Containerize MinIO in `docker-compose.remote.yml` on the same Docker network as Polaris and DataFusion (`remote-net`). Use `http://uisce-minio:9000` as the S3 endpoint. Ensure `POLARIS_DEFAULT_STORAGE_CONFIG` uses `http://uisce-minio:9000` and `POLARIS_STORAGE_INTEGRATION_S3_TYPE=aws`.
+

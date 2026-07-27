@@ -68,3 +68,17 @@ Thumbs.db
 # Local logs and tmp dirs
 /logs/
 /tmp/
+
+# Compiled service binaries (untracked)
+/apps/analytics-api/analytics-api
+/apps/genui-api/genui-api
+/apps/orchestration-api/orchestration-api
+/backend/apps/
+/backend/cmd/audit-worker/audit-worker
+/backend/cmd/event-router/event-router
+/backend/cmd/outbox-processor/outbox-processor
+/backend/cmd/snapshot-worker/snapshot-worker
+/platform_server
+/rules_server
+/semlayer
+/trading-consumer
