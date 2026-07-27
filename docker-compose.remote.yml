@@ -407,15 +407,16 @@ services:
       POLARIS_PERSISTENCE_TYPE: "relational-jdbc"
       # Bootstrap root principal (realm:POLARIS, client:root, secret:secret)
       POLARIS_BOOTSTRAP_CREDENTIALS: "POLARIS,root,secret"
-      POLARIS_STORAGE_INTEGRATION_S3_TYPE: "test-in-memory"
-      # Default storage config (S3 via host MinIO with path style access)
+      POLARIS_STORAGE_INTEGRATION_S3_TYPE: "aws"
+      # Default storage config (S3 via uisce-minio with path style access and manual credentials)
       POLARIS_DEFAULT_STORAGE_CONFIG: |
         {
           "storage-type": "s3",
           "allowed-storage-locations": ["s3://iceberg-warehouse/"],
           "s3.endpoint": "http://uisce-minio:9000",
           "s3.path-style-access": "true",
-          "s3.region": "us-east-1"
+          "s3.region": "us-east-1",
+          "s3.credentials-type": "MANUAL"
         }
       POLARIS_SSL_ENABLED: "false"
       # S3 credentials & region (for accessing MinIO)

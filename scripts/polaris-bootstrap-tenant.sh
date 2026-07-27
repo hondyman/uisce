@@ -14,9 +14,8 @@ POLARIS_URL="${2:-http://localhost:8185}"
 CLIENT_ID="${POLARIS_CLIENT_ID:-root}"
 CLIENT_SECRET="${POLARIS_CLIENT_SECRET:-secret}"
 
-# S3 bucket and endpoint for MinIO (path-style access)
 S3_BUCKET="${S3_BUCKET:-iceberg-warehouse}"
-S3_ENDPOINT="${S3_ENDPOINT:-http://host.docker.internal:9000}"
+S3_ENDPOINT="${S3_ENDPOINT:-http://uisce-minio:9000}"
 
 echo "=== Polaris Tenant Catalog Bootstrap ==="
 echo "Catalog Name: $CATALOG_NAME"
@@ -50,12 +49,13 @@ CREATE_HTTP_CODE=$(curl -s -o /tmp/polaris_create.json -w "%{http_code}" -X POST
        \"readOnly\": false,
        \"properties\": {
          \"default-base-location\": \"s3://${S3_BUCKET}/${CATALOG_NAME}\",
-         \"s3.credentials-type\": \"MANUAL\"
+         \"s3.credentials-type\": \"MANUAL\",
+         \"s3.endpoint\": \"${S3_ENDPOINT}\",
+         \"s3.path-style-access\": \"true\"
        },
        \"storageConfigInfo\": {
          \"storageType\": \"S3\",
-         \"allowedLocations\": [\"s3://${S3_BUCKET}/${CATALOG_NAME}\"],
-         \"pathStyleAccess\": true
+         \"allowedLocations\": [\"s3://${S3_BUCKET}/${CATALOG_NAME}\"]
        }
      }
    }")
