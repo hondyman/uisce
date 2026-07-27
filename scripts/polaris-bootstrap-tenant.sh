@@ -55,9 +55,7 @@ CREATE_HTTP_CODE=$(curl -s -o /tmp/polaris_create.json -w "%{http_code}" -X POST
        \"storageConfigInfo\": {
          \"storageType\": \"S3\",
          \"allowedLocations\": [\"s3://${S3_BUCKET}/${CATALOG_NAME}\"],
-         \"roleArn\": \"arn:aws:iam::000000000000:role/dummy\",
-         \"pathStyleAccess\": true,
-         \"endpoint\": \"${S3_ENDPOINT}\"
+         \"pathStyleAccess\": true
        }
      }
    }")

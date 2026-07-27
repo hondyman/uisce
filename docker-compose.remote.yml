@@ -383,12 +383,12 @@ services:
       POLARIS_PERSISTENCE_TYPE: "relational-jdbc"
       # Bootstrap root principal (realm:POLARIS, client:root, secret:secret)
       POLARIS_BOOTSTRAP_CREDENTIALS: "POLARIS,root,secret"
-      # Default storage config (S3 via host MinIO)
+      # Default storage config (S3 via host MinIO with path style access)
       POLARIS_DEFAULT_STORAGE_CONFIG: |
         {
           "storage-type": "s3",
           "allowed-storage-locations": ["s3://iceberg-warehouse/"],
-          "s3.endpoint": "http://host.docker.internal:9000",
+          "s3.endpoint": "http://100.84.50.65:9000",
           "s3.path-style-access": "true",
           "s3.region": "us-east-1"
         }
@@ -398,6 +398,8 @@ services:
       AWS_SECRET_ACCESS_KEY: "minioadmin"
       AWS_REGION: "us-east-1"
       AWS_DEFAULT_REGION: "us-east-1"
+      POLARIS_STORAGE_INTEGRATION_S3_PATH_STYLE_ACCESS: "true"
+      POLARIS_STORAGE_INTEGRATION_S3_CREDENTIAL_VENDING_ALLOWED: "false"
       # Heap size
       JAVA_OPTS: "-Xmx2g"
       QUARKUS_LOG_LEVEL: "INFO"
