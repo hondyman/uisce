@@ -297,19 +297,19 @@ services:
   # DataFusion Arrow Flight SQL Server (Iceberg query engine)
   # Replaces Trino in this stack. Provides:
   #   - REST SQL endpoint on :8555
-  #   - Arrow Flight SQL on :8554
+  #   - Arrow Flight SQL on :8554 (reserved for future Flight clients)
   #   - Native PyIceberg integration for the Iceberg cold store
   #
-  # Uses python:3.11-slim with inline pip install. The source script
-  # (backend/datafusion_server.py) is baked into the image via inline
-  # heredoc. To override with a real Dockerfile build, change to:
-  #   build:
-  #     context: ./backend
-  #     dockerfile: Dockerfile.datafusion-flight-sql
-  #   (requires ./backend to be the source tree on the build host)
+  # Built from ./datafusion-build/ (server.py + Dockerfile) on the
+  # remote host. Use the same Dockerfile in backend/ for local dev:
+  #   context: ./backend
+  #   dockerfile: Dockerfile.datafusion-flight-sql
   # ---------------------------------------------------------
   uisce-datafusion:
-    image: python:3.11-slim
+    build:
+      context: ./datafusion-build
+      dockerfile: Dockerfile
+    image: uisce-datafusion:local
     container_name: uisce-datafusion
     user: root
     networks:
@@ -319,75 +319,6 @@ services:
     ports:
       - "8554:8554"
       - "8555:8555"
-    command:
-      - bash
-      - -c
-      - |
-        set -e
-        apt-get update -qq && apt-get install -y --no-install-recommends curl ca-certificates > /dev/null
-        pip install --no-cache-dir --quiet flask flask-cors datafusion pyiceberg boto3 pyarrow
-        mkdir -p /app
-        cat > /app/server.py <<'PYEOF'
-        #!/usr/bin/env python3
-        """Uisce DataFusion Arrow Flight SQL REST server (inline)."""
-        import os, json, asyncio, logging, threading
-        from typing import Dict, List, Any, Optional
-        from flask import Flask, request, jsonify
-        from flask_cors import CORS
-        try:
-          import datafusion
-          from datafusion import SessionContext
-          HAS_DATAFUSION = True
-        except Exception:
-          HAS_DATAFUSION = False
-        logging.basicConfig(level=logging.INFO)
-        logger = logging.getLogger("uisce-datafusion")
-        app = Flask(__name__)
-        CORS(app)
-        ctx = SessionContext() if HAS_DATAFUSION else None
-        @app.route("/health", methods=["GET"])
-        def health():
-          return jsonify({"status": "ok", "datafusion": HAS_DATAFUSION}), 200
-        @app.route("/query", methods=["POST"])
-        def query():
-          payload = request.get_json(force=True) or {}
-          sql = payload.get("sql", "")
-          if not sql: return jsonify({"error": "sql required"}), 400
-          if not HAS_DATAFUSION:
-            return jsonify({"error": "datafusion not installed"}), 503
-          try:
-            df = ctx.sql(sql)
-            batches = df.collect()
-            rows = []
-            schema = []
-            for b in batches:
-              if not schema:
-                schema = [(f.name, str(f.type)) for f in b.schema]
-              for row in b.to_pylist():
-                rows.append(row)
-            return jsonify({"schema": schema, "rows": rows, "row_count": len(rows)})
-          except Exception as e:
-            logger.exception("query failed")
-            return jsonify({"error": str(e)}), 500
-        @app.route("/query/stream", methods=["POST"])
-        def query_stream():
-          payload = request.get_json(force=True) or {}
-          sql = payload.get("sql", "")
-          if not HAS_DATAFUSION: return jsonify({"error": "datafusion not installed"}), 503
-          try:
-            df = ctx.sql(sql)
-            batches = [b.to_pylist() for b in df.collect()]
-            return jsonify({"batches": batches})
-          except Exception as e:
-            return jsonify({"error": str(e)}), 500
-        if __name__ == "__main__":
-          port = int(os.environ.get("FLIGHT_SQL_PORT", 8554))
-          logger.info(f"Starting DataFusion REST server on port {port}")
-          app.run(host="0.0.0.0", port=port, debug=False, threaded=True)
-        PYEOF
-        # Patch to use port 8555 (REST) instead of 8554 (gRPC)
-        sed -i 's/FLIGHT_SQL_PORT", 8554/FLIGHT_SQL_PORT", 8555/' /app/server.py
-        python /app/server.py
     environment:
       # REST SQL port (using 8555 since 8554 is reserved for Flight SQL gRPC)
       FLIGHT_SQL_PORT: "8555"

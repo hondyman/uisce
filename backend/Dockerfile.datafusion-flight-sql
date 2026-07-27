@@ -7,16 +7,18 @@ RUN pip install --no-cache-dir \
     flask-cors \
     datafusion \
     pyiceberg \
-    boto3
+    boto3 \
+    pyarrow
 
-COPY datafusion_server.py /app/
+COPY datafusion_server.py /app/server.py
 
-ENV FLIGHT_SQL_PORT=8554
+# REST SQL endpoint on 8555 (canonical Uisce port)
+ENV FLIGHT_SQL_PORT=8555
 ENV RUST_LOG=info
 
 EXPOSE 8554 8555
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=5 \
-    CMD curl -f http://localhost:8554/health || exit 1
+    CMD curl -f http://localhost:8555/health || exit 1
 
-ENTRYPOINT ["python", "/app/datafusion_server.py"]
+ENTRYPOINT ["python", "/app/server.py"]
