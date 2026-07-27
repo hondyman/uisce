@@ -19,6 +19,7 @@ import (
 	"github.com/jmoiron/sqlx"
 	"github.com/lib/pq"
 
+	"github.com/hondyman/uisce/backend/internal/boresolver"
 	"github.com/hondyman/uisce/backend/internal/handlers"
 	"github.com/hondyman/uisce/backend/internal/security"
 	"github.com/hondyman/uisce/backend/internal/services"
@@ -114,6 +115,7 @@ func RegisterValidationRulesRoutes(r chi.Router, db *sql.DB, cueEngine *services
 
 	// Execution and testing endpoints
 	r.Post("/validation-rules/{id}/execute", handleExecuteValidationRule(db, cueEngine, resolver))
+	r.Post("/validation-rules/execute-binding", handleExecuteValidationRuleBinding(db, resolver))
 	// r.Post("/validation-rules/execute-batch", handleExecuteValidationRulesBatch(db, cueEngine)) // Batch disabled for now if relies on Starlark logic mismatch
 	r.Get("/validation-rules/{id}/audit", handleGetValidationRuleAudit(db, resolver))
 
@@ -1588,3 +1590,115 @@ func handleSimulateValidationRuleWithInstance(db *sql.DB, boServiceInterface int
 		writeJSONError(w, http.StatusInternalServerError, "Business object service not available", "service_error", "")
 	}
 }
+
+type sqlDBBORepository struct {
+	db *sql.DB
+}
+
+func (s *sqlDBBORepository) GetBODefinition(boID string) (*boresolver.BODefinition, error) {
+	var drivingTable string
+	var datasourceID string
+	err := s.db.QueryRow(`SELECT COALESCE(driving_table, technical_name, name), datasource_id::text FROM public.business_objects WHERE id::text = $1`, boID).Scan(&drivingTable, &datasourceID)
+	if err != nil {
+		drivingTable = "target_entity"
+	}
+
+	rows, err := s.db.Query(`SELECT id::text, field_name, display_name, physical_column FROM public.bo_fields WHERE business_object_id::text = $1`, boID)
+	var fields []boresolver.BOField
+	if err == nil {
+		defer rows.Close()
+		for rows.Next() {
+			var f boresolver.BOField
+			var pCol sql.NullString
+			if err := rows.Scan(&f.ID, &f.Name, &f.DisplayName, &pCol); err == nil {
+				if pCol.Valid {
+					f.PhysicalColumn = pCol.String
+				} else {
+					f.PhysicalColumn = f.Name
+				}
+				fields = append(fields, f)
+			}
+		}
+	}
+
+	return &boresolver.BODefinition{
+		ID:           boID,
+		DrivingTable: drivingTable,
+		DatasourceID: datasourceID,
+		Fields:       fields,
+	}, nil
+}
+
+func (s *sqlDBBORepository) GetBOByTechnicalName(technicalName, tenantID, datasourceID string) (*boresolver.BODefinition, error) {
+	var boID string
+	err := s.db.QueryRow(`SELECT id::text FROM public.business_objects WHERE (technical_name = $1 OR name = $1) AND (tenant_id::text = $2 OR tenant_id IS NULL) LIMIT 1`, technicalName, tenantID).Scan(&boID)
+	if err != nil {
+		return nil, err
+	}
+	return s.GetBODefinition(boID)
+}
+
+func handleExecuteValidationRuleBinding(db *sql.DB, resolver security.DatasourceResolver) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", handlers.SecurityContextDeps{
+			Resolver: resolver,
+		})
+		if err != nil {
+			writeJSONError(w, http.StatusUnauthorized, "Security context initialization failed", "auth_error", map[string]string{"error": err.Error()})
+			return
+		}
+
+		var req boresolver.ValidationRuleCompilationRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeJSONError(w, http.StatusBadRequest, "Invalid request body", "invalid_json", err.Error())
+			return
+		}
+
+		if req.TenantID == "" {
+			req.TenantID = secCtx.TenantID
+		}
+
+		// Rule 1.3 Defense: Safe UUID validation
+		if req.BusinessObjectID != "" {
+			if _, err := uuid.Parse(req.BusinessObjectID); err != nil {
+				writeJSONError(w, http.StatusBadRequest, "Invalid businessObjectId format", "invalid_uuid", err.Error())
+				return
+			}
+		} else {
+			writeJSONError(w, http.StatusBadRequest, "businessObjectId is required", "missing_param", nil)
+			return
+		}
+
+		if req.TenantID != "" {
+			if _, err := uuid.Parse(req.TenantID); err != nil {
+				writeJSONError(w, http.StatusBadRequest, "Invalid tenantId format", "invalid_uuid", err.Error())
+				return
+			}
+		}
+
+		repo := &sqlDBBORepository{db: db}
+		generator, err := boresolver.NewBOSQLGenerator(repo, "postgres")
+		if err != nil {
+			writeJSONError(w, http.StatusInternalServerError, "Failed to initialize SQL generator", "generator_error", err.Error())
+			return
+		}
+
+		compiled, err := generator.CompileValidationRuleSQL(req)
+		if err != nil {
+			writeJSONError(w, http.StatusBadRequest, fmt.Sprintf("Failed to compile rule into binding SQL: %v", err), "compile_error", err.Error())
+			return
+		}
+
+		startTime := time.Now()
+
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"status":          "compiled",
+			"compiled_sql":    compiled.SQL,
+			"args":            compiled.Args,
+			"physical_column": compiled.PhysicalColumn,
+			"execution_time":  time.Since(startTime).String(),
+		})
+	}
+}
+
