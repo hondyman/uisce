@@ -43,7 +43,8 @@ CREATE_HTTP_CODE=$(curl -s -o /tmp/polaris_create.json -w "%{http_code}" -X POST
       \"type\": \"INTERNAL\",
       \"readOnly\": false,
       \"properties\": {
-        \"default-base-location\": \"s3://iceberg-warehouse/${CATALOG_NAME}\"
+        \"default-base-location\": \"s3://iceberg-warehouse/${CATALOG_NAME}\",
+        \"s3.credentials-type\": \"MANUAL\"
       },
       \"storageConfigInfo\": {
         \"storageType\": \"S3\",
