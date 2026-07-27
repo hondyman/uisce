@@ -14,6 +14,12 @@ This guide describes how to bootstrap, manage, and verify the production-grade A
 [ Host Postgres (DB: polaris) ]          [ Host MinIO S3 (port 9000) ]
 ```
 
+## Cardinal Rule 1: Config-Before-Code
+
+> All S3/path-style configuration must be in place **before** running any Go compiler integration.
+> Do NOT bypass the Management API with direct SQL inserts into `polaris_schema.entities`.
+> Always use `./scripts/polaris-bootstrap-tenant.sh` for catalog creation.
+
 ---
 
 ## 1. Initial Database & Schema Setup
@@ -48,6 +54,26 @@ curl http://localhost:8186/q/health
 # DataFusion health:
 curl http://localhost:8555/health
 ```
+
+### Required DataFusion Environment Variables
+
+On Linux, `host.docker.internal` requires explicit mapping to the host gateway:
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `ICEBERG_CATALOG_URI` | `http://uisce-polaris:8181/api/catalog` | Polaris container DNS (avoids host-routing loops) |
+| `ICEBERG_REST_CREDENTIAL` | `root:secret` | Polaris principal credential |
+| `ICEBERG_REST_WAREHOUSE` | `tenant-alpha` | Default catalog name |
+| `ICEBERG_REST_SCOPE` | `PRINCIPAL_ROLE:ALL` | Required Polaris OAuth scope |
+| `AWS_ENDPOINT_URL` | `http://host.docker.internal:9000` | MinIO S3 endpoint |
+| `AWS_S3_FORCE_PATH_STYLE` | `true` | Mandatory for MinIO — prevents subdomain DNS lookup |
+| `S3_PATH_STYLE_ACCESS` | `true` | Alternate flag for some S3 clients |
+| `AWS_ALLOW_HTTP` / `AWS_S3_ALLOW_HTTP` | `true` | Allow non-TLS for MinIO |
+| `AWS_ACCESS_KEY_ID` | `minioadmin` | S3 credential |
+| `AWS_SECRET_ACCESS_KEY` | `minioadmin` | S3 credential |
+| `AWS_REGION` / `AWS_DEFAULT_REGION` | `us-east-1` | Required by Iceberg spec |
+
+> **Linux-specific:** `extra_hosts: - "host.docker.internal:host-gateway"` is required in `docker-compose.remote.yml` for `uisce-datafusion` so that `host.docker.internal` resolves correctly on the Docker bridge gateway.
 
 ---
 

@@ -14,9 +14,15 @@ POLARIS_URL="${2:-http://localhost:8185}"
 CLIENT_ID="${POLARIS_CLIENT_ID:-root}"
 CLIENT_SECRET="${POLARIS_CLIENT_SECRET:-secret}"
 
+# S3 bucket and endpoint for MinIO (path-style access)
+S3_BUCKET="${S3_BUCKET:-iceberg-warehouse}"
+S3_ENDPOINT="${S3_ENDPOINT:-http://host.docker.internal:9000}"
+
 echo "=== Polaris Tenant Catalog Bootstrap ==="
 echo "Catalog Name: $CATALOG_NAME"
 echo "Polaris URL : $POLARIS_URL"
+echo "S3 Bucket   : s3://${S3_BUCKET}/${CATALOG_NAME}"
+echo "S3 Endpoint : $S3_ENDPOINT"
 echo ""
 
 # 1. Fetch OAuth Access Token
@@ -38,22 +44,23 @@ CREATE_HTTP_CODE=$(curl -s -o /tmp/polaris_create.json -w "%{http_code}" -X POST
   -H "Authorization: Bearer ${ACCESS_TOKEN}" \
   -H "Content-Type: application/json" \
   -d "{
-    \"catalog\": {
-      \"name\": \"${CATALOG_NAME}\",
-      \"type\": \"INTERNAL\",
-      \"readOnly\": false,
-      \"properties\": {
-        \"default-base-location\": \"s3://iceberg-warehouse/${CATALOG_NAME}\",
-        \"s3.credentials-type\": \"MANUAL\"
-      },
-      \"storageConfigInfo\": {
-        \"storageType\": \"S3\",
-        \"allowedLocations\": [\"s3://iceberg-warehouse/${CATALOG_NAME}\"],
-        \"roleArn\": \"arn:aws:iam::000000000000:role/dummy\",
-        \"pathStyleAccess\": true
-      }
-    }
-  }")
+     \"catalog\": {
+       \"name\": \"${CATALOG_NAME}\",
+       \"type\": \"INTERNAL\",
+       \"readOnly\": false,
+       \"properties\": {
+         \"default-base-location\": \"s3://${S3_BUCKET}/${CATALOG_NAME}\",
+         \"s3.credentials-type\": \"MANUAL\"
+       },
+       \"storageConfigInfo\": {
+         \"storageType\": \"S3\",
+         \"allowedLocations\": [\"s3://${S3_BUCKET}/${CATALOG_NAME}\"],
+         \"roleArn\": \"arn:aws:iam::000000000000:role/dummy\",
+         \"pathStyleAccess\": true,
+         \"endpoint\": \"${S3_ENDPOINT}\"
+       }
+     }
+   }")
 
 if [ "$CREATE_HTTP_CODE" -eq 201 ]; then
   echo "      Catalog '${CATALOG_NAME}' created successfully."

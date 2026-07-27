@@ -322,19 +322,26 @@ services:
     environment:
       # REST SQL port (using 8555 since 8554 is reserved for Flight SQL gRPC)
       FLIGHT_SQL_PORT: "8555"
-      # S3 / MinIO config for Iceberg (override in production)
+      # S3 / MinIO Path-Style Access (mandatory for MinIO — prevents subdomain DNS lookup)
+      AWS_ENDPOINT_URL: "${AWS_ENDPOINT_URL:-http://host.docker.internal:9000}"
+      AWS_S3_FORCE_PATH_STYLE: "true"
+      AWS_ALLOW_HTTP: "true"
+      AWS_S3_ALLOW_HTTP: "true"
+      # Legacy S3 vars retained for older clients (PyIceberg uses AWS_ENDPOINT_URL)
       AWS_ACCESS_KEY_ID: "${DATA_FUSION_AWS_ACCESS_KEY_ID:-minioadmin}"
       AWS_SECRET_ACCESS_KEY: "${DATA_FUSION_AWS_SECRET_ACCESS_KEY:-minioadmin}"
       AWS_REGION: "${DATA_FUSION_AWS_REGION:-us-east-1}"
+      AWS_DEFAULT_REGION: "${DATA_FUSION_AWS_REGION:-us-east-1}"
       AWS_S3_ENDPOINT: "${DATA_FUSION_S3_ENDPOINT:-http://host.docker.internal:9000}"
       S3_ENDPOINT: "${DATA_FUSION_S3_ENDPOINT:-http://host.docker.internal:9000}"
       S3_ACCESS_KEY: "${DATA_FUSION_AWS_ACCESS_KEY_ID:-minioadmin}"
       S3_SECRET_KEY: "${DATA_FUSION_AWS_SECRET_ACCESS_KEY:-minioadmin}"
+      S3_PATH_STYLE_ACCESS: "true"
       # Iceberg REST catalog endpoint & credentials for Apache Polaris
       ICEBERG_CATALOG_URI: "${ICEBERG_CATALOG_URI:-http://uisce-polaris:8181/api/catalog}"
-      ICEBERG_CREDENTIAL: "${ICEBERG_CREDENTIAL:-root:secret}"
+      ICEBERG_REST_CREDENTIAL: "${ICEBERG_REST_CREDENTIAL:-root:secret}"
       ICEBERG_WAREHOUSE: "${ICEBERG_WAREHOUSE:-tenant-alpha}"
-      ICEBERG_SCOPE: "${ICEBERG_SCOPE:-PRINCIPAL_ROLE:ALL}"
+      ICEBERG_REST_SCOPE: "${ICEBERG_REST_SCOPE:-PRINCIPAL_ROLE:ALL}"
       # Warehouse bucket
       WAREHOUSE_BUCKET: "${WAREHOUSE_BUCKET:-iceberg-warehouse}"
       # Logging
