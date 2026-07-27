@@ -150,6 +150,24 @@ func (d SnowflakeDialect) Func(name string, args ...string) string {
 
 type SQLServerDialect struct{}
 
+// GetDialect resolves string dialect identifiers to concrete Dialect implementations.
+func GetDialect(name string) (Dialect, error) {
+	switch strings.ToLower(strings.TrimSpace(name)) {
+	case "postgres", "postgresql":
+		return PostgresDialect{}, nil
+	case "snowflake":
+		return SnowflakeDialect{}, nil
+	case "sqlserver", "mssql":
+		return SQLServerDialect{}, nil
+	case "datafusion", "datafusion_iceberg", "iceberg":
+		return DataFusionIcebergDialect{}, nil
+	case "starrocks", "mysql":
+		return PostgresDialect{}, nil
+	default:
+		return nil, fmt.Errorf("unsupported or unregistered database dialect: '%s'", name)
+	}
+}
+
 func (d SQLServerDialect) Name() string { return "sqlserver" }
 
 func (d SQLServerDialect) QuoteIdent(s string) string {

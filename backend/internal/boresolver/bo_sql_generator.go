@@ -5,6 +5,9 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"time"
+
+	"github.com/google/uuid"
 )
 
 // SQLGenerationRequest defines the input for generating SQL from a Business Object.
@@ -19,6 +22,11 @@ type SQLGenerationRequest struct {
 	Filters          []FilterClause `json:"filters"`
 	WhereClause      string         `json:"whereClause"` // Optional pre-built WHERE clause from frontend
 	Limit            int            `json:"limit"`
+	// AsOfDate triggers Hot/Cold Watermark Routing: if set and before the
+	// hot/cold watermark, routes to DataFusionIcebergDialect (cold tier).
+	AsOfDate time.Time `json:"asOfDate,omitempty"`
+	// DialectOverride explicitly selects a dialect, bypassing watermark routing.
+	DialectOverride string `json:"dialectOverride,omitempty"`
 }
 
 // SemanticSQLGenerationRequest defines a human-friendly semantic query format
@@ -92,8 +100,9 @@ type SQLGenerationResponse struct {
 
 // BOSQLGenerator handles the Logic for generating SQL
 type BOSQLGenerator struct {
-	BORepository BORepository
-	Dialect      Dialect
+	BORepository      BORepository
+	Dialect           Dialect
+	WatermarkResolver WatermarkResolver
 }
 
 // BORepository interface to fetch BO metadata
@@ -129,6 +138,19 @@ type BORelationship struct {
 	Conditions []string // e.g. "${SOURCE}.customer_id = ${TARGET}.id"
 }
 
+// BOBinding represents a registered data source binding with its dialect.
+type BOBinding struct {
+	ID               string
+	Name             string
+	DialectName      string
+	ConnectionString string
+}
+
+// WatermarkResolver resolves the hot/cold watermark timestamp for a tenant.
+type WatermarkResolver interface {
+	GetHotColdWatermark(tenantID string) time.Time
+}
+
 // NewBOSQLGenerator creates a new generator
 func NewBOSQLGenerator(repo BORepository, dialectName string) (*BOSQLGenerator, error) {
 	var dialect Dialect
@@ -139,6 +161,8 @@ func NewBOSQLGenerator(repo BORepository, dialectName string) (*BOSQLGenerator, 
 		dialect = SnowflakeDialect{}
 	case "sqlserver":
 		dialect = SQLServerDialect{}
+	case "datafusion", "datafusion_iceberg", "iceberg":
+		dialect = DataFusionIcebergDialect{}
 	default:
 		dialect = PostgresDialect{}
 	}
@@ -147,6 +171,42 @@ func NewBOSQLGenerator(repo BORepository, dialectName string) (*BOSQLGenerator, 
 		BORepository: repo,
 		Dialect:      dialect,
 	}, nil
+}
+
+// NewBOSQLGeneratorWithWatermark creates a generator with watermark routing enabled.
+func NewBOSQLGeneratorWithWatermark(repo BORepository, dialectName string, wmr WatermarkResolver) (*BOSQLGenerator, error) {
+	gen, err := NewBOSQLGenerator(repo, dialectName)
+	if err != nil {
+		return nil, err
+	}
+	gen.WatermarkResolver = wmr
+	return gen, nil
+}
+
+// ResolveEffectiveDialect evaluates Cardinal Rule 4 (Hot/Cold Watermark) to select the correct query engine.
+// It returns the effective Dialect after applying (1) explicit override, (2) watermark seam, (3) binding fallback.
+func (g *BOSQLGenerator) ResolveEffectiveDialect(req *SQLGenerationRequest, binding *BOBinding) (Dialect, error) {
+	// Rule 1: Explicit request override takes priority
+	if req.DialectOverride != "" {
+		return GetDialect(req.DialectOverride)
+	}
+
+	// Rule 4: Evaluate Hot vs. Cold Watermark Seam
+	if !req.AsOfDate.IsZero() && g.WatermarkResolver != nil {
+		watermark := g.WatermarkResolver.GetHotColdWatermark(req.TenantID)
+		// If requesting historical cold data (before watermark) -> route to DataFusion Iceberg Engine
+		if req.AsOfDate.Before(watermark) {
+			return DataFusionIcebergDialect{}, nil
+		}
+	}
+
+	// Rule 2: Fallback to active target binding dialect registered in catalog graph
+	if binding != nil && binding.DialectName != "" {
+		return GetDialect(binding.DialectName)
+	}
+
+	// Rule 3: Fallback to the generator's default dialect
+	return g.Dialect, nil
 }
 
 // GenerationContext holds state for the current generation request
@@ -724,4 +784,158 @@ func (g *BOSQLGenerator) GenerateSQLFromSemantic(semanticReq *SemanticSQLGenerat
 
 	// Generate SQL using existing logic
 	return g.GenerateSQL(*req)
+}
+
+// ValidationRuleCompilationRequest specifies parameters for compiling a semantic validation rule into physical binding SQL
+type ValidationRuleCompilationRequest struct {
+	BusinessObjectID string                 `json:"businessObjectId"`
+	TenantID         string                 `json:"tenantId"`
+	RuleID           string                 `json:"ruleId,omitempty"`
+	RuleType         string                 `json:"ruleType"` // field_format, cardinality, uniqueness, referential_integrity, business_logic
+	ConditionJSON    map[string]interface{} `json:"conditionJson"`
+	Limit            int                    `json:"limit,omitempty"`
+}
+
+// CompiledValidationSQL holds compiled physical SQL for validating data in a binding
+type CompiledValidationSQL struct {
+	SQL            string        `json:"sql"`
+	Args           []interface{} `json:"args"`
+	PhysicalColumn string        `json:"physicalColumn"`
+}
+
+// CompileValidationRuleSQL compiles a semantic validation rule into physical binding SQL execution queries.
+func (g *BOSQLGenerator) CompileValidationRuleSQL(compReq ValidationRuleCompilationRequest) (*CompiledValidationSQL, error) {
+	// Rule 1.3 Defense: Parse UUID for BusinessObjectID
+	if compReq.BusinessObjectID != "" {
+		if _, err := uuid.Parse(compReq.BusinessObjectID); err != nil {
+			return nil, fmt.Errorf("invalid businessObjectId format: %w", err)
+		}
+	} else {
+		return nil, fmt.Errorf("businessObjectId is required")
+	}
+
+	// Rule 1.3 Defense: Parse UUID for TenantID if provided
+	if compReq.TenantID != "" {
+		if _, err := uuid.Parse(compReq.TenantID); err != nil {
+			return nil, fmt.Errorf("invalid tenantId format: %w", err)
+		}
+	}
+
+	boDef, err := g.BORepository.GetBODefinition(compReq.BusinessObjectID)
+	if err != nil || boDef == nil {
+		return nil, fmt.Errorf("failed to retrieve business object definition for id '%s': %v", compReq.BusinessObjectID, err)
+	}
+
+	// Target field resolution from condition JSON
+	var targetTerm string
+	if fieldVal, ok := compReq.ConditionJSON["field"].(string); ok {
+		targetTerm = fieldVal
+	} else if fieldIdVal, ok := compReq.ConditionJSON["fieldId"].(string); ok {
+		targetTerm = fieldIdVal
+	} else if termVal, ok := compReq.ConditionJSON["term"].(string); ok {
+		targetTerm = termVal
+	}
+
+	var matchedField *BOField
+	if targetTerm != "" {
+		mf, err := g.findFieldBySemanticTerm(boDef, targetTerm)
+		if err == nil && mf != nil {
+			matchedField = mf
+		} else {
+			// Fallback: check if targetTerm matches field ID directly
+			for _, f := range boDef.Fields {
+				if f.ID == targetTerm || f.Name == targetTerm {
+					matchedField = &f
+					break
+				}
+			}
+		}
+	}
+
+	physicalCol := "t0.id"
+	if matchedField != nil && matchedField.PhysicalColumn != "" {
+		physicalCol = matchedField.PhysicalColumn
+		if !strings.Contains(physicalCol, ".") {
+			physicalCol = "t0." + physicalCol
+		}
+	}
+
+	limit := compReq.Limit
+	if limit <= 0 {
+		limit = 100
+	}
+
+	table := boDef.DrivingTable
+	if table == "" {
+		table = "target_table"
+	}
+
+	var sqlStr string
+	args := []interface{}{}
+
+	switch compReq.RuleType {
+	case "uniqueness":
+		sqlStr = fmt.Sprintf("SELECT %s, COUNT(*) AS dup_count FROM %s t0 WHERE 1=1", physicalCol, table)
+		if compReq.TenantID != "" {
+			sqlStr += " AND t0.tenant_id = $1"
+			args = append(args, compReq.TenantID)
+		}
+		sqlStr += fmt.Sprintf(" GROUP BY %s HAVING COUNT(*) > 1 LIMIT %d", physicalCol, limit)
+
+	case "field_format":
+		pattern, _ := compReq.ConditionJSON["pattern"].(string)
+		if pattern == "" {
+			pattern = ".*"
+		}
+		sqlStr = fmt.Sprintf("SELECT t0.* FROM %s t0 WHERE (%s IS NOT NULL AND %s !~ $1)", table, physicalCol, physicalCol)
+		args = append(args, pattern)
+		if compReq.TenantID != "" {
+			sqlStr += fmt.Sprintf(" AND t0.tenant_id = $%d", len(args)+1)
+			args = append(args, compReq.TenantID)
+		}
+		sqlStr += fmt.Sprintf(" LIMIT %d", limit)
+
+	case "cardinality":
+		minVal, hasMin := compReq.ConditionJSON["min"].(float64)
+		maxVal, hasMax := compReq.ConditionJSON["max"].(float64)
+		whereConds := []string{fmt.Sprintf("%s IS NOT NULL", physicalCol)}
+		if hasMin {
+			args = append(args, minVal)
+			whereConds = append(whereConds, fmt.Sprintf("%s < $%d", physicalCol, len(args)))
+		}
+		if hasMax {
+			args = append(args, maxVal)
+			whereConds = append(whereConds, fmt.Sprintf("%s > $%d", physicalCol, len(args)))
+		}
+		sqlStr = fmt.Sprintf("SELECT t0.* FROM %s t0 WHERE (%s)", table, strings.Join(whereConds, " OR "))
+		if compReq.TenantID != "" {
+			args = append(args, compReq.TenantID)
+			sqlStr += fmt.Sprintf(" AND t0.tenant_id = $%d", len(args))
+		}
+		sqlStr += fmt.Sprintf(" LIMIT %d", limit)
+
+	default: // business_logic, referential_integrity
+		op, _ := compReq.ConditionJSON["operator"].(string)
+		if op == "" {
+			op = "="
+		}
+		val := compReq.ConditionJSON["value"]
+		if val != nil {
+			args = append(args, val)
+			sqlStr = fmt.Sprintf("SELECT t0.* FROM %s t0 WHERE NOT (%s %s $1)", table, physicalCol, op)
+		} else {
+			sqlStr = fmt.Sprintf("SELECT t0.* FROM %s t0 WHERE %s IS NULL", table, physicalCol)
+		}
+		if compReq.TenantID != "" {
+			args = append(args, compReq.TenantID)
+			sqlStr += fmt.Sprintf(" AND t0.tenant_id = $%d", len(args))
+		}
+		sqlStr += fmt.Sprintf(" LIMIT %d", limit)
+	}
+
+	return &CompiledValidationSQL{
+		SQL:            sqlStr,
+		Args:           args,
+		PhysicalColumn: physicalCol,
+	}, nil
 }
