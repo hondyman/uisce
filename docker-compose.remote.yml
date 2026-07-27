@@ -343,6 +343,58 @@ services:
       retries: 5
     restart: unless-stopped
 
+  # =========================================================
+  # Apache Polaris — Iceberg REST Catalog (PRODUCTION mode)
+  # Uses the HOST's existing Postgres 18 (via host.docker.internal)
+  # for persistent state. Talks to host MinIO (port 9000) for S3.
+  # Replaces the host Polaris (which is in test mode) and Trino.
+  #
+  # Per architecture: writes go Redpanda -> audit-sink -> Polaris REST API
+  # Reads go: DataFusion (REST) -> Polaris REST -> MinIO/S3
+  # =========================================================
+  uisce-polaris:
+    image: apache/polaris:latest
+    container_name: uisce-polaris
+    networks:
+      - remote-net
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "8185:8181"
+      - "8186:8182"
+    environment:
+      # Postgres for persistent catalog state (NOT test mode!)
+      QUARKUS_DATASOURCE_JDBC_URL: "jdbc:postgresql://host.docker.internal:5432/polaris"
+      QUARKUS_DATASOURCE_USERNAME: "postgres"
+      QUARKUS_DATASOURCE_PASSWORD: "${POLARIS_DB_PASSWORD:-postgres}"
+      # Production persistence (relational-jdbc, not test/in-memory)
+      POLARIS_PERSISTENCE_TYPE: "relational-jdbc"
+      # Bootstrap root principal (realm:POLARIS, client:root, secret:secret)
+      POLARIS_BOOTSTRAP_CREDENTIALS: "POLARIS,root,secret"
+      # Default storage config (S3 via host MinIO)
+      POLARIS_DEFAULT_STORAGE_CONFIG: |
+        {
+          "storage-type": "s3",
+          "allowed-storage-locations": ["s3://iceberg-warehouse/"],
+          "s3.endpoint": "http://host.docker.internal:9000",
+          "s3.path-style-access": "true",
+          "s3.region": "us-east-1"
+        }
+      POLARIS_SSL_ENABLED: "false"
+      # S3 credentials (for accessing MinIO)
+      AWS_ACCESS_KEY_ID: "minioadmin"
+      AWS_SECRET_ACCESS_KEY: "minioadmin"
+      # Heap size
+      JAVA_OPTS: "-Xmx2g"
+      QUARKUS_LOG_LEVEL: "INFO"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8182/q/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      start_period: 90s
+      retries: 5
+    restart: unless-stopped
+
 networks:
   remote-net:
     driver: bridge
