@@ -1,0 +1,7 @@
+-- Pre-flight: Create polaris database for Apache Polaris catalog
+-- Run on host (not in a container) since polaris DB doesn't exist yet:
+--   docker run --rm --network host -e PGPASSWORD=postgres postgres:18-alpine \
+--     psql -h 127.0.0.1 -U postgres -c 'CREATE DATABASE polaris;'
+--
+-- Verified: works with `postgres` user password (matches keycloak config)
+-- Do NOT use `password123` (that's the temporal compose password, different user)
