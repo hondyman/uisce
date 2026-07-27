@@ -386,9 +386,10 @@ services:
           "s3.region": "us-east-1"
         }
       POLARIS_SSL_ENABLED: "false"
-      # S3 credentials (for accessing MinIO)
+      # S3 credentials & region (for accessing MinIO)
       AWS_ACCESS_KEY_ID: "minioadmin"
       AWS_SECRET_ACCESS_KEY: "minioadmin"
+      AWS_REGION: "us-east-1"
       # Heap size
       JAVA_OPTS: "-Xmx2g"
       QUARKUS_LOG_LEVEL: "INFO"

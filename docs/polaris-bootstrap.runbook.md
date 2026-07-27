@@ -66,6 +66,7 @@ TOKEN=$(curl -s -X POST "http://localhost:8185/api/catalog/v1/oauth/tokens" \
   -d "grant_type=client_credentials&client_id=root&client_secret=secret&scope=PRINCIPAL_ROLE:ALL" \
   | grep -o '"access_token":"[^"]*' | cut -d'"' -f4)
 
+# 1. Create Catalog
 curl -X POST "http://localhost:8185/api/management/v1/catalogs" \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
@@ -80,10 +81,23 @@ curl -X POST "http://localhost:8185/api/management/v1/catalogs" \
       "storageConfigInfo": {
         "storageType": "S3",
         "allowedLocations": ["s3://iceberg-warehouse/tenant-alpha"],
-        "roleArn": "arn:aws:iam::000000000000:role/dummy"
+        "roleArn": "arn:aws:iam::000000000000:role/dummy",
+        "pathStyleAccess": true
       }
     }
   }'
+
+# 2. Grant catalog_admin role to service_admin
+curl -X PUT "http://localhost:8185/api/management/v1/principal-roles/service_admin/catalog-roles/tenant-alpha" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"catalogRole": {"name": "catalog_admin"}}'
+
+# 3. Grant CATALOG_MANAGE_CONTENT privilege to catalog_admin
+curl -X PUT "http://localhost:8185/api/management/v1/catalogs/tenant-alpha/catalog-roles/catalog_admin/grants" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"grant": {"type": "catalog", "privilege": "CATALOG_MANAGE_CONTENT"}}'
 ```
 
 ---

@@ -48,7 +48,8 @@ CREATE_HTTP_CODE=$(curl -s -o /tmp/polaris_create.json -w "%{http_code}" -X POST
       \"storageConfigInfo\": {
         \"storageType\": \"S3\",
         \"allowedLocations\": [\"s3://iceberg-warehouse/${CATALOG_NAME}\"],
-        \"roleArn\": \"arn:aws:iam::000000000000:role/dummy\"
+        \"roleArn\": \"arn:aws:iam::000000000000:role/dummy\",
+        \"pathStyleAccess\": true
       }
     }
   }")
@@ -63,24 +64,37 @@ else
   exit 1
 fi
 
-# 3. Grant CATALOG_MANAGE_CONTENT to service_admin
-echo "[3/3] Granting privileges on catalog '${CATALOG_NAME}' to service_admin..."
-GRANT_HTTP_CODE=$(curl -s -o /tmp/polaris_grant.json -w "%{http_code}" -X PUT "${POLARIS_URL}/api/management/v1/principal-roles/service_admin/grants" \
+# 3. Grant catalog_admin role and CATALOG_MANAGE_CONTENT privilege
+echo "[3/3] Granting privileges on catalog '${CATALOG_NAME}'..."
+GRANT_ROLE_CODE=$(curl -s -o /tmp/polaris_grant_role.json -w "%{http_code}" -X PUT "${POLARIS_URL}/api/management/v1/principal-roles/service_admin/catalog-roles/${CATALOG_NAME}" \
+  -H "Authorization: Bearer ${ACCESS_TOKEN}" \
+  -H "Content-Type: application/json" \
+  -d "{
+    \"catalogRole\": {
+      \"name\": \"catalog_admin\"
+    }
+  }")
+
+GRANT_PRIV_CODE=$(curl -s -o /tmp/polaris_grant_priv.json -w "%{http_code}" -X PUT "${POLARIS_URL}/api/management/v1/catalogs/${CATALOG_NAME}/catalog-roles/catalog_admin/grants" \
   -H "Authorization: Bearer ${ACCESS_TOKEN}" \
   -H "Content-Type: application/json" \
   -d "{
     \"grant\": {
       \"type\": \"catalog\",
-      \"catalogName\": \"${CATALOG_NAME}\",
       \"privilege\": \"CATALOG_MANAGE_CONTENT\"
     }
   }")
 
-if [ "$GRANT_HTTP_CODE" -eq 201 ] || [ "$GRANT_HTTP_CODE" -eq 200 ] || [ "$GRANT_HTTP_CODE" -eq 409 ]; then
-  echo "      Privileges granted to service_admin role."
+if [ "$GRANT_ROLE_CODE" -eq 201 ] || [ "$GRANT_ROLE_CODE" -eq 200 ] || [ "$GRANT_ROLE_CODE" -eq 409 ]; then
+  echo "      Granted 'catalog_admin' catalog role to 'service_admin' principal role."
 else
-  echo "WARNING: Granting privilege returned HTTP status $GRANT_HTTP_CODE"
-  cat /tmp/polaris_grant.json
+  echo "WARNING: Granting catalog_admin role returned HTTP status $GRANT_ROLE_CODE"
+fi
+
+if [ "$GRANT_PRIV_CODE" -eq 201 ] || [ "$GRANT_PRIV_CODE" -eq 200 ] || [ "$GRANT_PRIV_CODE" -eq 409 ]; then
+  echo "      Granted 'CATALOG_MANAGE_CONTENT' privilege on catalog '${CATALOG_NAME}'."
+else
+  echo "WARNING: Granting CATALOG_MANAGE_CONTENT returned HTTP status $GRANT_PRIV_CODE"
 fi
 
 echo ""
