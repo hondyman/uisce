@@ -1,31 +1,56 @@
 services:
-
-  # ---------------------------------------------------------
-  # Redpanda (Streaming Event Backbone)
-  # ---------------------------------------------------------
-  redpanda:
+  uisce-redpanda:
     image: docker.redpanda.com/redpandadata/redpanda:latest
     container_name: uisce-redpanda
     user: root
-    command: redpanda start --overprovisioned --smp 1 --memory 1G --reserve-memory 0M --node-id 0 --check=false --kafka-addr PLAINTEXT://0.0.0.0:9092,OUTSIDE://0.0.0.0:19092 --advertise-kafka-addr PLAINTETEXT://redpanda:9092,OUTSIDE://100.84.50.65:19092 --pandaproxy-addr 0.0.0.0:8082 --advertise-pandaproxy-addr 100.84.50.65:8082 --schema-registry-addr 0.0.0.0:8081
+    # Let rpk start naturally using purely environment configurations
+    command:
+      - redpanda
+      - start
+      - --overprovisioned
+      - --kafka-addr=0.0.0.0:9092,0.0.0.0:19092
+      - --advertise-kafka-addr=uisce-redpanda:9092,100.84.50.65:19092
+      - --rpc-addr=0.0.0.0:33145
+      - --advertise-rpc-addr=uisce-redpanda:33145
+      - --pandaproxy-addr=0.0.0.0:8082
+      - --advertise-pandaproxy-addr=100.84.50.65:8082
+      - --schema-registry-addr=0.0.0.0:8081
+    environment:
+      # General settings
+      REDPANDA_ENVIRONMENT: "development"
+      
+      # Kafka API configuration (Explicit internal & external mappings)
+      REDPANDA_LISTENERS: "0.0.0.0:9092,0.0.0.0:19092"
+      REDPANDA_ADVERTISE_LISTENERS: "uisce-redpanda:9092,100.84.50.65:19092"
+      
+      # RPC Configuration (Explicitly specifying the listener mappings)
+      REDPANDA_RPC_ADDRESS: "0.0.0.0:33145"
+      REDPANDA_RPC_ADVERTISED_ADDRESS: "uisce-redpanda:33145"
+      
+      # Other core settings
+      REDPANDA_PANDAPROXY_ADDRESS: "0.0.0.0:8082"
+      REDPANDA_PANDAPROXY_ADVERTISED_ADDRESS: "100.84.50.65:8082"
+      REDPANDA_SCHEMA_REGISTRY_ADDRESS: "0.0.0.0:8081"
     networks:
       - remote-net
     ports:
       - "9092:9092"
       - "19092:19092"
-      - "9644:9644"
       - "8081:8081"
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9644/v1/status"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    restart: unless-stopped
+      - "8082:8082"
+      - "9644:9644"
+    volumes:
+      - uisce_redpanda_data:/var/lib/redpanda/data
 
+    healthcheck:
+      test: ["CMD-SHELL", "rpk cluster info || exit 1"]
+      interval: 20s
+      timeout: 10s
+      retries: 5
   # ---------------------------------------------------------
-  # Redpanda Console (UI Inspector)
+  # Redpanda Console
   # ---------------------------------------------------------
-  redpanda-console:
+  uisce-redpanda-console:
     image: docker.redpanda.com/redpandadata/console:latest
     container_name: uisce-redpanda-console
     user: root
@@ -34,54 +59,52 @@ services:
     ports:
       - "8096:8080"
     environment:
-      KAFKA_BROKERS: redpanda:9092
+      KAFKA_BROKERS: uisce-redpanda:9092
       KAFKA_SCHEMAREGISTRY_ENABLED: "true"
-      KAFKA_SCHEMAREGISTRY_URLS: http://redpanda:8081
+      KAFKA_SCHEMAREGISTRY_URLS: http://uisce-redpanda:8081
     depends_on:
-      redpanda:
+      uisce-redpanda:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080"]
       interval: 10s
-      timeout: 5s
       retries: 5
     restart: unless-stopped
 
   # ---------------------------------------------------------
-  # Debezium (CDC Stream Consumer)
+  # Debezium
   # ---------------------------------------------------------
-  debezium:
+  uisce-debezium:
     image: debezium/connect:2.3
     container_name: uisce-debezium
     environment:
-      BOOTSTRAP_SERVERS: redpanda:9092
+      BOOTSTRAP_SERVERS: uisce-redpanda:9092
       GROUP_ID: 1
       CONFIG_STORAGE_TOPIC: debezium_configs
       OFFSET_STORAGE_TOPIC: debezium_offsets
       STATUS_STORAGE_TOPIC: debezium_status
       KEY_CONVERTER: org.apache.kafka.connect.json.JsonConverter
       VALUE_CONVERTER: org.apache.kafka.connect.json.JsonConverter
-      CONNECT_REST_ADVERTISED_HOST_NAME: debezium
+      CONNECT_REST_ADVERTISED_HOST_NAME: uisce-debezium
     networks:
       - remote-net
     ports:
       - "8083:8083"
     depends_on:
-      redpanda:
+      uisce-redpanda:
         condition: service_healthy
     extra_hosts:
       - "host.docker.internal:host-gateway"
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8083"]
       interval: 10s
-      timeout: 5s
       retries: 5
     restart: unless-stopped
 
   # ---------------------------------------------------------
-  # Temporal (Workflow Engine)
+  # Temporal
   # ---------------------------------------------------------
-  temporal:
+  uisce-temporal:
     image: temporalio/auto-setup:latest
     container_name: uisce-temporal
     environment:
@@ -99,72 +122,87 @@ services:
       - "7234:7234"
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    depends_on:
+      uisce-redpanda:
+        condition: service_healthy
     healthcheck:
-      test: ["CMD", "temporal", "workflow", "list", "--address", "localhost:7233", "--limit", "1"]
-      interval: 10s
-      timeout: 5s
+      test: ["CMD-SHELL", "nc -z uisce-temporal 7233 || exit 1"]
+      interval: 20s
+      timeout: 10s
       retries: 5
     restart: unless-stopped
 
   # ---------------------------------------------------------
   # Temporal UI
   # ---------------------------------------------------------
-  temporal-ui:
+  uisce-temporal-ui:
     image: temporalio/ui:latest
     container_name: uisce-temporal-ui
+    restart: always
     environment:
-      TEMPORAL_ADDRESS: temporal:7233
-      TEMPORAL_CORS_ORIGINS: http://localhost:3000
+      - TEMPORAL_ADDRESS=uisce-temporal:7233
+      - TEMPORAL_CORS_ORIGINS=http://localhost:3000
     ports:
       - "8088:8080"
-    depends_on:
-      temporal:
-        condition: service_healthy
     networks:
       - remote-net
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080"]
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080 > /dev/null || exit 1"]
       interval: 10s
-      timeout: 5s
       retries: 5
-    restart: unless-stopped
 
+
+# ---------------------------------------------------------
+  # Keycloak (Production-ready with Persistence)
   # ---------------------------------------------------------
-  # Keycloak (OIDC Identity Provider)
-  # ---------------------------------------------------------
-  keycloak:
+  uisce-keycloak:
     image: quay.io/keycloak/keycloak:latest
     container_name: uisce-keycloak
-    command: start-dev --https-port=8443
+    # Use 'start' instead of 'start-dev' to enable permanent database persistence
+    command: start --https-port=8443
     ports:
       - "8443:8443"
     environment:
+      # Database Configuration
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://host.docker.internal:5432/keycloak
+      KC_DB_USERNAME: postgres
+      KC_DB_PASSWORD: postgres
+      
+      # Admin Credentials
       KC_BOOTSTRAP_ADMIN_USERNAME: admin
       KC_BOOTSTRAP_ADMIN_PASSWORD: password
+      
+      # SSL and Proxy Configuration
       KC_HTTPS_ENABLED: "true"
-      KC_HTTPS_CERTIFICATE_FILE: /opt/keycloak/conf/server.crt.pem
-      KC_HTTPS_CERTIFICATE_KEY_FILE: /opt/keycloak/conf/server.key.pem
+      # Point directly to the isolated certs directory
+      KC_HTTPS_CERTIFICATE_FILE: /opt/keycloak/certs/server.crt.pem
+      KC_HTTPS_CERTIFICATE_KEY_FILE: /opt/keycloak/certs/server.key.pem
       KC_HOSTNAME_STRICT: "false"
       KC_HOSTNAME_STRICT_HTTPS: "false"
       KC_PROXY_HEADERS: "xforwarded"
+      
+      # Integration Settings
       KC_CORS_ALLOWED_ORIGINS: "http://localhost:5173,http://localhost:3000"
       KC_FEATURES: token-exchange
     volumes:
-      - ./keycloak-ssl/server.crt.pem:/opt/keycloak/conf/server.crt.pem:ro
-      - ./keycloak-ssl/server.key.pem:/opt/keycloak/conf/server.key.pem:ro
+      # Mount to an independent subdirectory to safeguard internal config layouts
+      - ./keycloak-ssl:/opt/keycloak/certs:ro
     networks:
       - remote-net
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     healthcheck:
-      test: ["CMD", "curl", "-k", "-f", "https://localhost:8443"]
-      interval: 10s
-      timeout: 5s
+      test: ["CMD-SHELL", "bash -c 'echo > /dev/tcp/localhost/8443' 2>/dev/null || exit 1"]
+      interval: 30s
+      timeout: 10s
       retries: 5
     restart: unless-stopped
 
   # ---------------------------------------------------------
-  # Redis Cache
+  # Redis
   # ---------------------------------------------------------
-  redis:
+  uisce-redis:
     image: redis:7-alpine
     container_name: uisce-redis
     command: redis-server --appendonly yes
@@ -177,18 +215,17 @@ services:
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
-      timeout: 5s
       retries: 5
     restart: unless-stopped
 
   # ---------------------------------------------------------
-  # Infisical (Secrets Vault)
+  # Infisical
   # ---------------------------------------------------------
-  infisical:
+  uisce-infisical:
     image: infisical/infisical:latest
     container_name: uisce-infisical
     depends_on:
-      redis:
+      uisce-redis:
         condition: service_healthy
     ports:
       - "8085:8080"
@@ -204,23 +241,173 @@ services:
     networks:
       - remote-net
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/api/health"]
-      interval: 10s
-      timeout: 5s
+      test: ["CMD", "curl", "-f", "http://localhost:8080/api/status"]
+      interval: 20s
+      timeout: 10s
       retries: 5
     restart: unless-stopped
 
-# ---------------------------------------------------------
-# Networking Configuration Contract
-# ---------------------------------------------------------
+  # ---------------------------------------------------------
+  # Lakehouse Provisioning Service
+  # Synchronises the Uisce semantic graph → Iceberg cold store.
+  # Credentials are injected by Infisical at runtime.
+  # Start the lakehouse stack first: lakehouse-start
+  # ---------------------------------------------------------
+  uisce-lakehouse-provisioner:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.lakehouse-provisioner
+    container_name: uisce-lakehouse-provisioner
+    networks:
+      - remote-net
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "9091:9091"
+    environment:
+      # PostgreSQL — the semantic metadata graph
+      POSTGRES_DSN: "${LPS_POSTGRES_DSN:-postgresql://postgres:postgres@host.docker.internal:5432/alpha?sslmode=disable}"
+      # DataFusion REST SQL endpoint (Arrow Flight + REST) — replaces Trino in this stack
+      DATAFUSION_URL: "${LPS_DATAFUSION_URL:-http://uisce-datafusion:8555}"
+      # Flight SQL endpoint (gRPC, optional)
+      DATAFUSION_FLIGHT_URL: "${LPS_DATAFUSION_FLIGHT_URL:-grpc://uisce-datafusion:8554}"
+      # Iceberg REST catalog endpoint
+      ICEBERG_CATALOG_URI: "${ICEBERG_CATALOG_URI:-http://uisce-polaris:8181}"
+      # Redpanda broker for real-time node.created events
+      REDPANDA_BROKERS: "uisce-redpanda:9092"
+      # How often to run the full reconciliation loop
+      RECONCILE_INTERVAL: "${LPS_RECONCILE_INTERVAL:-5m}"
+      # Core (gold_copy) tenant UUID — used to scope node type lookups
+      CORE_TENANT_ID: "${CORE_TENANT_ID:-99e99e99-99e9-49e9-89e9-99e99e99e999}"
+      # Health server port
+      HEALTH_PORT: "9091"
+      # Structured JSON logging in production; set to 'console' for dev
+      LOG_FORMAT: "${LOG_FORMAT:-json}"
+    depends_on:
+      uisce-redpanda:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9091/health"]
+      interval: 20s
+      retries: 5
+      start_period: 30s
+    restart: unless-stopped
+
+  # ---------------------------------------------------------
+  # DataFusion Arrow Flight SQL Server (Iceberg query engine)
+  # Replaces Trino in this stack. Provides:
+  #   - REST SQL endpoint on :8555
+  #   - Arrow Flight SQL on :8554 (reserved for future Flight clients)
+  #   - Native PyIceberg integration for the Iceberg cold store
+  #
+  # Built from ./datafusion-build/ (server.py + Dockerfile) on the
+  # remote host. Use the same Dockerfile in backend/ for local dev:
+  #   context: ./backend
+  #   dockerfile: Dockerfile.datafusion-flight-sql
+  # ---------------------------------------------------------
+  uisce-datafusion:
+    build:
+      context: ./datafusion-build
+      dockerfile: Dockerfile
+    image: uisce-datafusion:local
+    container_name: uisce-datafusion
+    user: root
+    networks:
+      - remote-net
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "8554:8554"
+      - "8555:8555"
+    environment:
+      # REST SQL port (using 8555 since 8554 is reserved for Flight SQL gRPC)
+      FLIGHT_SQL_PORT: "8555"
+      # S3 / MinIO config for Iceberg (override in production)
+      AWS_ACCESS_KEY_ID: "${DATA_FUSION_AWS_ACCESS_KEY_ID:-minioadmin}"
+      AWS_SECRET_ACCESS_KEY: "${DATA_FUSION_AWS_SECRET_ACCESS_KEY:-minioadmin}"
+      AWS_REGION: "${DATA_FUSION_AWS_REGION:-us-east-1}"
+      AWS_S3_ENDPOINT: "${DATA_FUSION_S3_ENDPOINT:-http://host.docker.internal:9000}"
+      S3_ENDPOINT: "${DATA_FUSION_S3_ENDPOINT:-http://host.docker.internal:9000}"
+      S3_ACCESS_KEY: "${DATA_FUSION_AWS_ACCESS_KEY_ID:-minioadmin}"
+      S3_SECRET_KEY: "${DATA_FUSION_AWS_SECRET_ACCESS_KEY:-minioadmin}"
+      # Iceberg REST catalog endpoint & credentials for Apache Polaris
+      ICEBERG_CATALOG_URI: "${ICEBERG_CATALOG_URI:-http://uisce-polaris:8181/api/catalog}"
+      ICEBERG_CREDENTIAL: "${ICEBERG_CREDENTIAL:-root:secret}"
+      ICEBERG_WAREHOUSE: "${ICEBERG_WAREHOUSE:-tenant-alpha}"
+      ICEBERG_SCOPE: "${ICEBERG_SCOPE:-PRINCIPAL_ROLE:ALL}"
+      # Warehouse bucket
+      WAREHOUSE_BUCKET: "${WAREHOUSE_BUCKET:-iceberg-warehouse}"
+      # Logging
+      RUST_LOG: "info"
+      PYTHONUNBUFFERED: "1"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8555/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      start_period: 90s
+      retries: 5
+    restart: unless-stopped
+
+  # =========================================================
+  # Apache Polaris — Iceberg REST Catalog (PRODUCTION mode)
+  # Uses the HOST's existing Postgres 18 (via host.docker.internal)
+  # for persistent state. Talks to host MinIO (port 9000) for S3.
+  # Replaces the host Polaris (which is in test mode) and Trino.
+  #
+  # Per architecture: writes go Redpanda -> audit-sink -> Polaris REST API
+  # Reads go: DataFusion (REST) -> Polaris REST -> MinIO/S3
+  # =========================================================
+  uisce-polaris:
+    image: apache/polaris:latest
+    container_name: uisce-polaris
+    networks:
+      - remote-net
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "8185:8181"
+      - "8186:8182"
+    environment:
+      # Postgres for persistent catalog state (NOT test mode!)
+      QUARKUS_DATASOURCE_JDBC_URL: "jdbc:postgresql://host.docker.internal:5432/polaris"
+      QUARKUS_DATASOURCE_USERNAME: "postgres"
+      QUARKUS_DATASOURCE_PASSWORD: "${POLARIS_DB_PASSWORD:-postgres}"
+      # Production persistence (relational-jdbc, not test/in-memory)
+      POLARIS_PERSISTENCE_TYPE: "relational-jdbc"
+      # Bootstrap root principal (realm:POLARIS, client:root, secret:secret)
+      POLARIS_BOOTSTRAP_CREDENTIALS: "POLARIS,root,secret"
+      # Default storage config (S3 via host MinIO)
+      POLARIS_DEFAULT_STORAGE_CONFIG: |
+        {
+          "storage-type": "s3",
+          "allowed-storage-locations": ["s3://iceberg-warehouse/"],
+          "s3.endpoint": "http://host.docker.internal:9000",
+          "s3.path-style-access": "true",
+          "s3.region": "us-east-1"
+        }
+      POLARIS_SSL_ENABLED: "false"
+      # S3 credentials (for accessing MinIO)
+      AWS_ACCESS_KEY_ID: "minioadmin"
+      AWS_SECRET_ACCESS_KEY: "minioadmin"
+      # Heap size
+      JAVA_OPTS: "-Xmx2g"
+      QUARKUS_LOG_LEVEL: "INFO"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8182/q/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      start_period: 90s
+      retries: 5
+    restart: unless-stopped
+
 networks:
   remote-net:
     driver: bridge
-    name: remote-net
 
 # ---------------------------------------------------------
-# Volume Management Layout
+# Volumes
 # ---------------------------------------------------------
 volumes:
+  uisce_redpanda_data:
   uisce_redis_data:
   open-webui-data:
