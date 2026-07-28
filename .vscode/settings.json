@@ -8,5 +8,98 @@
     },
     "chat.tools.terminal.autoApprove": {
         "/Users/eganpj/GitHub/semlayer/backend/catalog-sync": true
-    }
+    },
+    "files.exclude": {
+        "uisce_frontend": true,
+        "uisce_backend": true,
+        ".gitnexus": true,
+        ".archive": true,
+        "backups": true,
+        "migrations_backup": true,
+        "**/.vite": true,
+        "**/.storybook-cache": true,
+        "**/.next": true,
+        "**/dist": true,
+        "**/coverage": true,
+        "**/node_modules": true,
+        "**/*.bak": true,
+        "**/*.backup": true,
+        "**/*.BACKUP": true,
+        "**/*.OLD": true,
+        "**/*.old": true,
+        "**/*.swp": true,
+        "**/vite.config.ts.timestamp-*.mjs": true,
+        "**/vite.config.ts.backup": true,
+        "**/eslint-report.json": true,
+        "**/eslint-warnings.json": true
+    },
+    "files.watcherExclude": {
+        "**/uisce_frontend/**": true,
+        "**/uisce_backend/**": true,
+        "**/.gitnexus/**": true,
+        "**/node_modules/**": true,
+        "**/dist/**": true,
+        "**/logs/**": true,
+        "**/.vite/**": true,
+        "**/backups/**": true,
+        "**/migrations_backup/**": true,
+        "**/*.bak": true,
+        "**/*.dump": true,
+        "**/schema_backup_*.sql": true
+    },
+    "search.exclude": {
+        "**/uisce_frontend/**": true,
+        "**/uisce_backend/**": true,
+        "**/.gitnexus/**": true,
+        "**/node_modules/**": true,
+        "**/backups/**": true,
+        "**/migrations_backup/**": true,
+        "**/*.bak": true,
+        "**/*.dump": true,
+        "**/schema_backup_*.sql": true
+    },
+    "typescript.tsdk": "frontend/node_modules/typescript/lib",
+    "typescript.tsserver.maxTsServerMemory": 8192,
+    "eslint.workingDirectories": [
+        "frontend",
+        "libs/shared-types",
+        "libs/hasura-client",
+        "libs/ai-sdk",
+        "dashboard",
+        "business-process-designer",
+        "entity-manager",
+        "frontend-temporal",
+        "apps/genui-frontend",
+        "rebalancing/frontend",
+        "backend/temporal-ops"
+    ],
+    "eslint.validate": [
+        "javascript",
+        "javascriptreact",
+        "typescript",
+        "typescriptreact"
+    ],
+    "gopls": {
+        "ui.diagnostic.dropElements": ["generated_*"],
+        "build.exclude": [
+            "uisce_frontend",
+            "uisce_backend",
+            ".gitnexus",
+            "node_modules",
+            "logs",
+            "backups"
+        ]
+    },
+    "yaml.schemas": {
+        "https://json.schemastore.org/github-workflow.json": [".github/workflows/*.{yml,yaml}"],
+        "https://json.schemastore.org/k8s.json": ["k8s/**/*.yaml"],
+        "https://raw.githubusercontent.com/compose-spec/compose-spec/master/schema/compose-spec.json": ["docker-compose*.{yml,yaml}"]
+    },
+    "json.schemas": [
+        { "fileMatch": ["package.json"], "url": "https://json.schemastore.org/package.json" },
+        { "fileMatch": ["tsconfig*.json", "**/tsconfig*.json"], "url": "https://json.schemastore.org/tsconfig.json" },
+        { "fileMatch": [".eslintrc*", "eslint.config.*"], "url": "https://json.schemastore.org/eslintrc.json" }
+    ],
+    "json.maxItemsComputed": 5000,
+    "files.maxMemoryForLargeFilesUnopened": 200
 }

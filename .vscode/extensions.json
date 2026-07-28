@@ -2,6 +2,11 @@
   "recommendations": [
     "bazelbuild.vscode-starlark",
     "stackbuild.bazel-stack-vscode",
-    "ms-vscode.vscode-json"
+    "ms-vscode.vscode-json",
+    "dbaeumer.vscode-eslint",
+    "golang.go",
+    "redhat.vscode-yaml",
+    "bradlc.vscode-tailwindcss",
+    "esbenp.prettier-vscode"
   ]
 }
