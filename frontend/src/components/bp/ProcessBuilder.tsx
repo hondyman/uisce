@@ -227,19 +227,19 @@ export const ProcessBuilder: React.FC = () => {
               variant="outline"
               size="sm"
               onClick={handleSave}
-              disabled={!isDirty || saveProcess.isLoading}
+              disabled={!isDirty || saveProcess.isPending}
             >
               <Save size={16} className="mr-1" />
-              {saveProcess.isLoading ? 'Saving...' : 'Save'}
+              {saveProcess.isPending ? 'Saving...' : 'Save'}
             </Button>
 
             <Button
               size="sm"
               onClick={handleDeploy}
-              disabled={!process.id || deployProcess.isLoading}
+              disabled={!process.id || deployProcess.isPending}
             >
               <Play size={16} className="mr-1" />
-              {deployProcess.isLoading ? 'Deploying...' : 'Deploy'}
+              {deployProcess.isPending ? 'Deploying...' : 'Deploy'}
             </Button>
           </div>
         </div>

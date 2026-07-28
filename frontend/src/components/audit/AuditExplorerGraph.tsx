@@ -206,8 +206,8 @@ const AIPanelWithChangeSetProposal: React.FC<{ event: AuditEvent }> = ({ event }
               </Button>
             </div>
           ) : (
-            <Button onClick={handleExplain} disabled={explainFlow.explain.isLoading} className="w-full" size="sm">
-              {explainFlow.explain.isLoading ? (
+            <Button onClick={handleExplain} disabled={explainFlow.explain.isPending} className="w-full" size="sm">
+              {explainFlow.explain.isPending ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                   Analyzing...

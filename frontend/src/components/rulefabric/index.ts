@@ -10,11 +10,9 @@ export { UnifiedRuleEditor } from './UnifiedRuleEditor';
 
 // Governance Components
 export {
-  RuleGovernance,
-  VersionHistoryPanel,
-  ApprovalWorkflowPanel,
-  ImpactAnalysisPanel,
-  ConflictDetectionPanel
+  VersionHistory,
+  ApprovalWorkflow,
+  AuditTrail,
 } from './RuleGovernance';
 
 // AI & Suggestions

@@ -37,6 +37,64 @@ export type LayoutRow = z.infer<typeof LayoutRowSchema>;
 export type LayoutItem = z.infer<typeof LayoutItemSchema>;
 export type GridComponent = z.infer<typeof ComponentSchema>;
 
+export const CardComponentSchema = z.object({
+    icon: z.string().optional(),
+    variant: z.string().optional(),
+    className: z.string().optional(),
+    title: z.string().optional(),
+    value: z.union([z.string(), z.number()]).optional(),
+    metric: z.string().optional(),
+    trend: z.object({
+        direction: z.enum(["up", "down", "flat"]),
+        value: z.string(),
+    }).optional(),
+});
+export type CardComponent = z.infer<typeof CardComponentSchema>;
+
+export const ChartComponentSchema = z.object({
+    binding: z.object({
+        endpoint: z.string().optional(),
+        method: z.string().optional(),
+        variables: z.record(z.any()).optional(),
+    }).optional(),
+    type: z.enum(["line", "bar", "area"]).optional(),
+    title: z.string().optional(),
+});
+export type ChartComponent = z.infer<typeof ChartComponentSchema>;
+
+export const DisclosureBannerSchema = z.object({
+    variant: z.string().optional(),
+    dismissible: z.boolean().optional(),
+    content: z.string(),
+});
+export type DisclosureBanner = z.infer<typeof DisclosureBannerSchema>;
+
+export const FormComponentSchema = z.object({
+    submitAction: z.object({
+        endpoint: z.string().optional(),
+        mutation: z.string().optional(),
+        method: z.string().optional(),
+        queryKey: z.string().optional(),
+    }).optional(),
+    fields: z.array(z.object({
+        name: z.string(),
+        label: z.string(),
+        type: z.string(),
+        required: z.boolean().optional(),
+    })).optional(),
+});
+export type FormComponent = z.infer<typeof FormComponentSchema>;
+
+export const TimelineComponentSchema = z.object({
+    orientation: z.enum(["horizontal", "vertical"]).optional(),
+    title: z.string().optional(),
+    events: z.array(z.object({
+        id: z.string(),
+        type: z.string().optional(),
+    })).optional(),
+});
+export type TimelineComponent = z.infer<typeof TimelineComponentSchema>;
+
 export const RebalanceProposalSchema = z.object({
     proposal_id: z.string(),
     portfolio_id: z.string(),

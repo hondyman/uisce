@@ -457,12 +457,12 @@ export function useAuditExplainerFlow(event: AuditEvent) {
   return {
     explain: {
       mutate: handleExplain,
-      isLoading: explainMutation.isPending,
+      isPending: explainMutation.isPending,
       error: explainMutation.error,
     },
     proposeChangeSet: {
       mutate: handleProposeChangeSet,
-      isLoading: createChangeSetMutation.isPending,
+      isPending: createChangeSetMutation.isPending,
       error: createChangeSetMutation.error,
     },
   };
