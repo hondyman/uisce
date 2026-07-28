@@ -35,6 +35,7 @@ import (
 	"github.com/hondyman/uisce/backend/internal/data_intelligence/tiering"
 	charts "github.com/hondyman/uisce/backend/internal/db/charts"
 	"github.com/hondyman/uisce/backend/internal/events"
+	"github.com/hondyman/uisce/backend/internal/financial"
 	"github.com/hondyman/uisce/backend/internal/goldcopy"
 	"github.com/hondyman/uisce/backend/internal/governance"
 	"github.com/hondyman/uisce/backend/internal/handlers"
@@ -1295,6 +1296,12 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 		r.Post("/audit/lookback-diff", audit.NewLookbackAuditService(sqlxDB).LookbackDiffHandler)
 		r.Get("/audit/ledger/verify", audit.NewLedgerService(sqlxDB).VerifyChainHandler)
 		r.Get("/governance/certification/evaluate", governance.NewDataCertificationService(sqlxDB).EvaluateCertificationHandler)
+
+		superpowersSvc := financial.NewSuperpowersService(sqlxDB)
+		r.Post("/financial/instrument-master/resolve", superpowersSvc.ResolveSymbologyHandler)
+		r.Post("/financial/compliance/evaluate-trade", superpowersSvc.EvaluateComplianceHandler)
+		r.Post("/financial/posting/execute-trade-post", superpowersSvc.PostTransactionHandler)
+		r.Get("/financial/household/optimize-harvesting", superpowersSvc.OptimizeHouseholdHandler)
 
 		// Register audit history routes if handler is active (INSIDE /api group)
 		if auditHistoryHandler != nil {
