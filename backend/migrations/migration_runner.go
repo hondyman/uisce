@@ -185,9 +185,17 @@ func (mr *MigrationRunner) ApplyMigration(migration Migration) error {
 	}
 	defer tx.Rollback()
 
-	// Execute migration SQL
-	if _, err := tx.Exec(migration.UpSQL); err != nil {
-		return fmt.Errorf("failed to execute migration SQL: %w", err)
+	// Split multi-statement SQL on semicolons and execute each statement separately.
+	// This handles migration files that contain multiple DDL/DML statements.
+	statements := splitSQLStatements(migration.UpSQL)
+	for i, stmt := range statements {
+		stmt = strings.TrimSpace(stmt)
+		if stmt == "" || strings.HasPrefix(stmt, "--") {
+			continue
+		}
+		if _, err := tx.Exec(stmt); err != nil {
+			return fmt.Errorf("failed to execute statement %d/%d (%q): %w", i+1, len(statements), truncateString(stmt, 60), err)
+		}
 	}
 
 	// Record migration as applied
@@ -207,6 +215,82 @@ func (mr *MigrationRunner) ApplyMigration(migration Migration) error {
 
 	log.Printf("Successfully applied migration: %s", migration.ID)
 	return nil
+}
+
+// splitSQLStatements splits a SQL string on semicolons, preserving content inside
+// dollar-quoted strings ($$...$$ or $tag$...$tag$) and comments.
+func splitSQLStatements(sql string) []string {
+	var stmts []string
+	var current strings.Builder
+	inDollarQuote := false
+	var dollarTag string
+	depth := 0
+	wasLastCharSemicolon := false
+
+	for i := 0; i < len(sql); i++ {
+		ch := sql[i]
+
+		// Handle dollar-quoted strings
+		if !inDollarQuote && (ch == '$') {
+			// Check for dollar tag start
+			j := i + 1
+			tagEnd := j
+			for tagEnd < len(sql) && sql[tagEnd] != '$' && (sql[tagEnd] != ' ' && sql[tagEnd] != '\t' && sql[tagEnd] != '\n') {
+				tagEnd++
+			}
+			if tagEnd < len(sql) && sql[tagEnd] == '$' && tagEnd > j {
+				inDollarQuote = true
+				dollarTag = sql[j:tagEnd]
+				current.WriteByte(ch)
+				i = tagEnd
+				continue
+			}
+		}
+
+		if inDollarQuote {
+			current.WriteByte(ch)
+			if sql[i] == '$' && i+1 < len(sql) && sql[i+1] == '$' {
+				// End of dollar quote
+				current.WriteByte('$')
+				i++
+				inDollarQuote = false
+				dollarTag = ""
+			}
+			continue
+		}
+
+		if ch == ';' {
+			stmt := strings.TrimSpace(current.String())
+			if stmt != "" {
+				stmts = append(stmts, stmt)
+			}
+			current.Reset()
+			wasLastCharSemicolon = true
+			continue
+		}
+
+		// Skip leading whitespace on new statement after semicolon
+		if wasLastCharSemicolon && (ch == ' ' || ch == '\t' || ch == '\n' || ch == '\r') {
+			continue
+		}
+		wasLastCharSemicolon = false
+		current.WriteByte(ch)
+	}
+
+	// Append any remaining statement (without trailing semicolon)
+	stmt := strings.TrimSpace(current.String())
+	if stmt != "" {
+		stmts = append(stmts, stmt)
+	}
+
+	return stmts
+}
+
+func truncateString(s string, maxLen int) string {
+	if len(s) <= maxLen {
+		return s
+	}
+	return s[:maxLen] + "..."
 }
 
 // RollbackMigration rolls back a single migration
