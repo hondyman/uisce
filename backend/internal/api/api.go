@@ -58,6 +58,7 @@ import (
 	"github.com/hondyman/uisce/backend/internal/region"
 	"github.com/hondyman/uisce/backend/internal/reports"
 	"github.com/hondyman/uisce/backend/internal/repository"
+	"github.com/hondyman/uisce/backend/internal/simulation"
 	"github.com/hondyman/uisce/backend/internal/rules"
 	si "github.com/hondyman/uisce/backend/internal/scheduler_intelligence"
 	"github.com/hondyman/uisce/backend/internal/security"
@@ -1302,6 +1303,10 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 		r.Post("/financial/compliance/evaluate-trade", superpowersSvc.EvaluateComplianceHandler)
 		r.Post("/financial/posting/execute-trade-post", superpowersSvc.PostTransactionHandler)
 		r.Get("/financial/household/optimize-harvesting", superpowersSvc.OptimizeHouseholdHandler)
+
+		scenarioSvc := simulation.NewScenarioService(sqlxDB)
+		r.Get("/simulations/scenarios", scenarioSvc.ListScenariosHandler)
+		r.Post("/simulations/scenarios", scenarioSvc.CreateScenarioHandler)
 
 		// Register audit history routes if handler is active (INSIDE /api group)
 		if auditHistoryHandler != nil {
