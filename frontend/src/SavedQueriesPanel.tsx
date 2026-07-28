@@ -10,7 +10,6 @@ import { useDebounce } from './hooks/useDebounce';
 import { ItemTypes } from './FolderBrowser';
 import DuplicateQueriesPanel from './DuplicateQueriesPanel';
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function DraggableQueryRow({ q, children }: { q: SavedQuery; children: React.ReactNode }) {
   const [{ isDragging }, drag] = useDrag(() => ({
     type: ItemTypes.SAVED_ITEM,

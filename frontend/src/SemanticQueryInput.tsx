@@ -4,8 +4,7 @@ import type { SemanticQuery, NLQueryRequest, NLQueryResponse } from './types';
 import { compileNLQuery } from './api';
 
 interface SemanticQueryInputProps {
-  // These parameter names are type-only in some call sites; disable the unused-var rule only for the type line
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  // _viewName and _query are type-only in some call sites; underscore prefix satisfies eslint unused-vars rule
     onQuery: (_viewName: string, _query: SemanticQuery) => void;
   // In a real app, these would come from context
   currentDatasource: string;

@@ -8,15 +8,13 @@ interface SearchResult {
   tableName: string;
 }
 
-/* eslint-disable no-unused-vars */
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
+// All callback params prefixed with _ to satisfy @typescript-eslint/no-unused-vars
 interface SearchBarProps {
   searchTerm: string;
   searchResults: SearchResult[];
   onSearchChange: (_term: string) => void;
   onSearchSelect: (_item: SearchResult) => void;
 }
-/* eslint-enable no-unused-vars */
 
 const SearchBar: React.FC<SearchBarProps> = ({
   searchTerm,

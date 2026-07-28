@@ -8,7 +8,6 @@ const TagPicker = ({ label, value, onChange }: any) => (
   <label>{label}: <input value={value.join(',')} onChange={e => (onChange as any)(e.target.value.split(','))} /></label>
 );
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
 export default function SearchFiltersPanel({ filters, onChange }: { filters: SearchFilters; onChange: (f: SearchFilters) => void }) {
   return (
     <div className="search-filters">

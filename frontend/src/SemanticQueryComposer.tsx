@@ -50,7 +50,7 @@ function MemberList({ title, members, selected, onToggle, disabled = false, onRe
 interface SemanticQueryComposerProps {
   view: SemanticViewMeta | ViewMeta;
   claims: SemanticModelClaim[];
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  // _query is type-only; underscore prefix satisfies eslint
   onExecute: (_query: SemanticQuery) => void;
   onRequestAccess: (assetType: 'dimensions' | 'metrics') => void;
 }

@@ -15,11 +15,9 @@ const Badge = ({ children, type = 'default' }: { children: ReactNode, type?: 'de
 
 interface SearchResultCardProps {
   result: SemanticSearchResult;
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  // Underscore prefix satisfies @typescript-eslint/no-unused-vars
   onOpen: (_r: SemanticSearchResult) => void;
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   onExplain: (_r: SemanticSearchResult) => void;
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   onFeedback: (_r: SemanticSearchResult, _action: 'favorited' | 'ignored') => void;
 }
 

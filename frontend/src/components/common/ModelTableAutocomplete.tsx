@@ -40,7 +40,6 @@ const MAX_RECENTS = 10;
 
 const ModelTableAutocomplete: React.FC<ModelTableAutocompleteProps> = ({
   datasourceId,
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   semanticModel,
   value,
   onChange,
