@@ -36,6 +36,7 @@ import (
 	charts "github.com/hondyman/uisce/backend/internal/db/charts"
 	"github.com/hondyman/uisce/backend/internal/events"
 	"github.com/hondyman/uisce/backend/internal/goldcopy"
+	"github.com/hondyman/uisce/backend/internal/governance"
 	"github.com/hondyman/uisce/backend/internal/handlers"
 	"github.com/hondyman/uisce/backend/internal/household"
 	"github.com/hondyman/uisce/backend/internal/iceberg"
@@ -1292,6 +1293,8 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 		r.Post("/admin/upgrade/preflight-simulation", impactEngine.PreFlightSimulationHandler)
 		r.Post("/admin/upgrade/deploy-globally", distExecutor.DeployGloballyHandler)
 		r.Post("/audit/lookback-diff", audit.NewLookbackAuditService(sqlxDB).LookbackDiffHandler)
+		r.Get("/audit/ledger/verify", audit.NewLedgerService(sqlxDB).VerifyChainHandler)
+		r.Get("/governance/certification/evaluate", governance.NewDataCertificationService(sqlxDB).EvaluateCertificationHandler)
 
 		// Register audit history routes if handler is active (INSIDE /api group)
 		if auditHistoryHandler != nil {
