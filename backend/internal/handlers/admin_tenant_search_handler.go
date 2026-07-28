@@ -3,6 +3,7 @@ package handlers
 import (
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
@@ -10,6 +11,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	"github.com/hondyman/uisce/backend/internal/db"
 	"github.com/lib/pq"
 )
 
@@ -122,9 +124,6 @@ type TenantScopeNode struct {
 	Children []TenantScopeNode `json:"children,omitempty"`
 }
 
-// GetTenantScope handles GET /api/admin/tenants/{tenantID}/scope
-// Returns the hierarchical instance → product → datasource tree for a tenant.
-// Used by the impersonation picker to render the right-pane scope selector.
 func (h *AdminTenantSearchHandler) GetTenantScope(w http.ResponseWriter, r *http.Request) {
 	if h.db == nil {
 		http.Error(w, "tenant search handler not configured", http.StatusInternalServerError)
@@ -132,52 +131,76 @@ func (h *AdminTenantSearchHandler) GetTenantScope(w http.ResponseWriter, r *http
 	}
 
 	tenantIDStr := chi.URLParam(r, "tenantID")
-	tenantID, err := uuid.Parse(tenantIDStr)
-	if err != nil {
+	if _, err := uuid.Parse(tenantIDStr); err != nil {
 		http.Error(w, "invalid tenant_id", http.StatusBadRequest)
 		return
 	}
 
-	// Fetch all instances for the tenant in one query.
-	instanceRows, err := h.db.QueryContext(r.Context(),
-		`SELECT id, COALESCE(display_name, name) FROM tenant_instance WHERE tenant_id = $1 ORDER BY name`, tenantID)
-	if err != nil {
-		http.Error(w, "failed to query instances: "+err.Error(), http.StatusInternalServerError)
+	if err := db.RequireVerifiedTenantFromCtx(r.Context()); err != nil {
+		http.Error(w, err.Error(), http.StatusForbidden)
 		return
 	}
-	defer instanceRows.Close()
 
-	instances := []TenantScopeNode{}
-	instanceIDs := []string{}
-	for instanceRows.Next() {
+	var result struct {
+		TenantID  string             `json:"tenant_id"`
+		Instances []TenantScopeNode  `json:"instances"`
+	}
+
+	err := db.WithTenantTransaction(r.Context(), h.db, tenantIDStr, func(tx *sql.Tx) error {
+		instances, err := h.getTenantScopeTx(r.Context(), tx, tenantIDStr)
+		if err != nil {
+			return err
+		}
+		result.TenantID = tenantIDStr
+		result.Instances = instances
+		return nil
+	})
+	if err != nil {
+		http.Error(w, "failed to fetch tenant scope: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(result)
+}
+
+func (h *AdminTenantSearchHandler) getTenantScopeTx(ctx context.Context, tx *sql.Tx, tenantID string) ([]TenantScopeNode, error) {
+	dbQ := func(query string, args ...interface{}) (*sql.Rows, error) {
+		return tx.QueryContext(ctx, query, args...)
+	}
+
+	rows, err := dbQ(`SELECT id, COALESCE(display_name, name) FROM tenant_instance WHERE tenant_id = $1 ORDER BY name`, tenantID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query instances: %w", err)
+	}
+	defer rows.Close()
+
+	var instances []TenantScopeNode
+	var instanceIDs []string
+	for rows.Next() {
 		var inst TenantScopeNode
-		if err := instanceRows.Scan(&inst.ID, &inst.Name); err != nil {
-			http.Error(w, "scan failed: "+err.Error(), http.StatusInternalServerError)
-			return
+		if err := rows.Scan(&inst.ID, &inst.Name); err != nil {
+			return nil, fmt.Errorf("scan failed: %w", err)
 		}
 		inst.Type = "instance"
 		instances = append(instances, inst)
 		instanceIDs = append(instanceIDs, inst.ID)
 	}
 
-	// Fetch all products keyed by instance.
 	productsByInstance := map[string][]TenantScopeNode{}
-	productIDs := []string{}
+	var productIDs []string
 	if len(instanceIDs) > 0 {
-		productRows, err := h.db.QueryContext(r.Context(),
-			`SELECT id, COALESCE(display_name, ''), tenant_instance_id FROM tenant_product WHERE tenant_instance_id = ANY($1)`,
+		prows, err := dbQ(`SELECT id, COALESCE(display_name, ''), tenant_instance_id FROM tenant_product WHERE tenant_instance_id = ANY($1)`,
 			pq.Array(instanceIDs))
 		if err != nil {
-			http.Error(w, "failed to query products: "+err.Error(), http.StatusInternalServerError)
-			return
+			return nil, fmt.Errorf("failed to query products: %w", err)
 		}
-		defer productRows.Close()
-		for productRows.Next() {
+		defer prows.Close()
+		for prows.Next() {
 			var p TenantScopeNode
 			var instID string
-			if err := productRows.Scan(&p.ID, &p.Name, &instID); err != nil {
-				http.Error(w, "scan failed: "+err.Error(), http.StatusInternalServerError)
-				return
+			if err := prows.Scan(&p.ID, &p.Name, &instID); err != nil {
+				return nil, fmt.Errorf("scan failed: %w", err)
 			}
 			p.Type = "product"
 			productsByInstance[instID] = append(productsByInstance[instID], p)
@@ -185,30 +208,25 @@ func (h *AdminTenantSearchHandler) GetTenantScope(w http.ResponseWriter, r *http
 		}
 	}
 
-	// Fetch all datasources keyed by product.
 	datasourcesByProduct := map[string][]TenantScopeNode{}
 	if len(productIDs) > 0 {
-		dsRows, err := h.db.QueryContext(r.Context(),
-			`SELECT id, COALESCE(source_name, ''), tenant_product_id FROM tenant_product_datasource WHERE tenant_product_id = ANY($1)`,
+		dsrows, err := dbQ(`SELECT id, COALESCE(source_name, ''), tenant_product_id FROM tenant_product_datasource WHERE tenant_product_id = ANY($1)`,
 			pq.Array(productIDs))
 		if err != nil {
-			http.Error(w, "failed to query datasources: "+err.Error(), http.StatusInternalServerError)
-			return
+			return nil, fmt.Errorf("failed to query datasources: %w", err)
 		}
-		defer dsRows.Close()
-		for dsRows.Next() {
+		defer dsrows.Close()
+		for dsrows.Next() {
 			var d TenantScopeNode
 			var prodID string
-			if err := dsRows.Scan(&d.ID, &d.Name, &prodID); err != nil {
-				http.Error(w, "scan failed: "+err.Error(), http.StatusInternalServerError)
-				return
+			if err := dsrows.Scan(&d.ID, &d.Name, &prodID); err != nil {
+				return nil, fmt.Errorf("scan failed: %w", err)
 			}
 			d.Type = "datasource"
 			datasourcesByProduct[prodID] = append(datasourcesByProduct[prodID], d)
 		}
 	}
 
-	// Assemble the tree.
 	for i := range instances {
 		if products, ok := productsByInstance[instances[i].ID]; ok {
 			for j := range products {
@@ -220,9 +238,5 @@ func (h *AdminTenantSearchHandler) GetTenantScope(w http.ResponseWriter, r *http
 		}
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(map[string]interface{}{
-		"tenant_id": tenantID.String(),
-		"instances": instances,
-	})
+	return instances, nil
 }

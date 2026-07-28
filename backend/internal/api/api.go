@@ -37,6 +37,7 @@ import (
 	"github.com/hondyman/uisce/backend/internal/goldcopy"
 	"github.com/hondyman/uisce/backend/internal/handlers"
 	"github.com/hondyman/uisce/backend/internal/household"
+	"github.com/hondyman/uisce/backend/internal/iceberg"
 	"github.com/hondyman/uisce/backend/internal/infrastructure"
 	"github.com/hondyman/uisce/backend/internal/lineage"
 	"github.com/hondyman/uisce/backend/internal/logging"
@@ -707,6 +708,8 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 
 	// Apply Auth Context Middleware globally (does not block, but populates context)
 	r.Use(appmid.AuthContextMiddleware(secMgr))
+	// Derive verified tenant ID from AuthContext and store in request context
+	r.Use(appmid.WithTenantContext)
 	// Enforce region header and validate tenant scoping on all semantic requests
 	// Use new TenantRegionResolver for cleaner region + Gold Copy handling
 	regionResolver := region.NewTenantRegionResolver(db)
@@ -816,6 +819,9 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 
 	// Initialize Tenant Access handler for multi-tenant access control
 	tenantAccessHandler := NewTenantAccessHandlers(db)
+
+	// Initialize Onboarding handler for tenant provisioning (OLTP + Iceberg)
+	onboardingHandler := NewOnboardingHandler(db, iceberg.PolarisFromEnv())
 
 	// Initialize BP Notification handlers
 	// Note: sqlxDB is initialized below, so we need to move this or use db if compatible,
@@ -1369,6 +1375,7 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 		// Register handlers that were previously orphaned
 		ipWhitelistHandler.RegisterRoutes(r)
 		tenantAccessHandler.RegisterRoutes(r)
+		onboardingHandler.RegisterRoutes(r)
 		abbreviationHandler.RegisterRoutes(r)
 		bundleHandler.RegisterRoutes(r)
 		domainHandler.RegisterRoutes(r)

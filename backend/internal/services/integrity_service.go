@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/hondyman/uisce/backend/internal/db"
 	"github.com/jmoiron/sqlx"
 	"go.uber.org/zap"
 )
@@ -70,7 +71,6 @@ func NewIntegrityService(db *sqlx.DB) *IntegrityService {
 	}
 }
 
-// RunIntegrityCheck performs a full integrity check for a datasource
 func (s *IntegrityService) RunIntegrityCheck(ctx context.Context, datasourceID string, checkType string, executedBy string) (*IntegrityCheckResult, error) {
 	startTime := time.Now()
 
@@ -83,13 +83,22 @@ func (s *IntegrityService) RunIntegrityCheck(ctx context.Context, datasourceID s
 		ChecksumValid: true,
 	}
 
-	// Get datasource configuration
+	tenantID, err := db.GetTenantIDFromCtx(ctx)
+	if err != nil {
+		result.Status = "failed"
+		result.ErrorMessage = fmt.Sprintf("security boundary violation: %v", err)
+		return result, err
+	}
+
 	var config struct {
 		IntegrityChecks json.RawMessage `db:"integrity_checks"`
-		ConnectionID    sql.NullString  `db:"connection_id"`
+		ConnectionID   sql.NullString  `db:"connection_id"`
 	}
-	err := s.db.GetContext(ctx, &config,
-		"SELECT integrity_checks, connection_id FROM tenant_product_datasource WHERE id = $1", datasourceID)
+	err = db.WithTenantTransaction(ctx, s.db.DB, tenantID, func(tx *sql.Tx) error {
+		return tx.QueryRowContext(ctx,
+			"SELECT integrity_checks, connection_id FROM tenant_product_datasource WHERE id = $1",
+			datasourceID).Scan(&config.IntegrityChecks, &config.ConnectionID)
+	})
 	if err != nil {
 		result.Status = "failed"
 		result.ErrorMessage = fmt.Sprintf("Failed to get datasource config: %v", err)

@@ -84,31 +84,31 @@ func GetTenantIDForUser(db *sql.DB, userID string) (string, error) {
 	return tenantID.String, nil
 }
 
-// SetTenantContext sets the PostgreSQL session variable for RLS
-func SetTenantContext(ctx context.Context, db *sql.DB, tenantID string) error {
-	if db == nil {
-		return fmt.Errorf("database connection is nil")
+// SetTenantContext sets the PostgreSQL session variable for RLS.
+// tenantID must be a valid UUID. This function MUST be called within
+// a transaction (via db.BeginTx) — otherwise SET LOCAL reverts immediately
+// when the connection is returned to the pool.
+func SetTenantContext(ctx context.Context, tx *sql.Tx, tenantID string) error {
+	if tx == nil {
+		return fmt.Errorf("database transaction is nil")
 	}
-
-	_, err := db.ExecContext(ctx, "SET LOCAL app.current_tenant_id = $1", tenantID)
+	_, err := tx.ExecContext(ctx, "SET LOCAL uisce.current_tenant = $1", tenantID)
 	if err != nil {
 		return fmt.Errorf("failed to set tenant context: %w", err)
 	}
-
 	return nil
 }
 
-// SetGlobalAdminContext sets the session variable indicating global admin access
-func SetGlobalAdminContext(ctx context.Context, db *sql.DB) error {
-	if db == nil {
-		return fmt.Errorf("database connection is nil")
+// SetGlobalAdminContext sets the PostgreSQL session variable for global admin bypass.
+// MUST be called within a transaction (via tx.ExecContext, not db.ExecContext).
+func SetGlobalAdminContext(ctx context.Context, tx *sql.Tx) error {
+	if tx == nil {
+		return fmt.Errorf("database transaction is nil")
 	}
-
-	_, err := db.ExecContext(ctx, "SET LOCAL app.is_global_admin = 'true'")
+	_, err := tx.ExecContext(ctx, "SET LOCAL uisce.is_global_admin = 'true'")
 	if err != nil {
 		return fmt.Errorf("failed to set global admin context: %w", err)
 	}
-
 	return nil
 }
 

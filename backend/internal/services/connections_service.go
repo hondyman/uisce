@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/hondyman/uisce/backend/internal/db"
 	"github.com/jmoiron/sqlx"
 )
 
@@ -240,94 +241,96 @@ func (s *ConnectionsService) DeleteConnection(ctx context.Context, tenantID, con
 	return nil
 }
 
-// LinkConnectionToDatasource links a connection to a datasource
 func (s *ConnectionsService) LinkConnectionToDatasource(ctx context.Context, tenantID, datasourceID, connectionID string) error {
-	query := `
-		UPDATE tenant_product_datasource
-		SET connection_id = $1, updated_at = NOW()
-		WHERE id = $2 
-		  AND tenant_product_id IN (
-			SELECT id FROM tenant_product WHERE datasource_id IN (
-				SELECT id FROM tenant_instance WHERE tenant_id = $3
-			)
-		  )
-		  AND EXISTS (
-			SELECT 1 FROM tenant_connections 
-			WHERE id = $1 AND tenant_id = $3
-		  )
-	`
-
-	result, err := s.db.ExecContext(ctx, query, connectionID, datasourceID, tenantID)
+	if err := db.RequireVerifiedTenantFromCtx(ctx); err != nil {
+		return fmt.Errorf("security: %w", err)
+	}
+	var result sql.Result
+	err := db.WithTenantTransaction(ctx, s.db.DB, tenantID, func(tx *sql.Tx) error {
+		query := `
+			UPDATE tenant_product_datasource
+			SET connection_id = $1, updated_at = NOW()
+			WHERE id = $2
+			  AND tenant_product_id IN (
+				SELECT id FROM tenant_product WHERE datasource_id IN (
+					SELECT id FROM tenant_instance WHERE tenant_id = $3
+				)
+			  )
+			  AND EXISTS (
+				SELECT 1 FROM tenant_connections
+				WHERE id = $1 AND tenant_id = $3
+			  )
+		`
+		var err2 error
+		result, err2 = tx.ExecContext(ctx, query, connectionID, datasourceID, tenantID)
+		return err2
+	})
 	if err != nil {
 		return fmt.Errorf("failed to link connection to datasource: %w", err)
 	}
-
-	rows, err := result.RowsAffected()
-	if err != nil {
-		return fmt.Errorf("failed to get rows affected: %w", err)
-	}
-
+	rows, _ := result.RowsAffected()
 	if rows == 0 {
 		return fmt.Errorf("datasource not found")
 	}
-
 	return nil
 }
 
-// UnlinkConnectionFromDatasource unlinks a connection from a datasource
 func (s *ConnectionsService) UnlinkConnectionFromDatasource(ctx context.Context, tenantID, datasourceID string) error {
-	query := `
-		UPDATE tenant_product_datasource
-		SET connection_id = NULL, updated_at = NOW()
-		WHERE id = $1 AND tenant_product_id IN (
-			SELECT id FROM tenant_product WHERE datasource_id IN (
-				SELECT id FROM tenant_instance WHERE tenant_id = $2
+	if err := db.RequireVerifiedTenantFromCtx(ctx); err != nil {
+		return fmt.Errorf("security: %w", err)
+	}
+	var result sql.Result
+	err := db.WithTenantTransaction(ctx, s.db.DB, tenantID, func(tx *sql.Tx) error {
+		query := `
+			UPDATE tenant_product_datasource
+			SET connection_id = NULL, updated_at = NOW()
+			WHERE id = $1 AND tenant_product_id IN (
+				SELECT id FROM tenant_product WHERE datasource_id IN (
+					SELECT id FROM tenant_instance WHERE tenant_id = $2
+				)
 			)
-		)
-	`
-
-	result, err := s.db.ExecContext(ctx, query, datasourceID, tenantID)
+		`
+		var err2 error
+		result, err2 = tx.ExecContext(ctx, query, datasourceID, tenantID)
+		return err2
+	})
 	if err != nil {
 		return fmt.Errorf("failed to unlink connection from datasource: %w", err)
 	}
-
-	rows, err := result.RowsAffected()
-	if err != nil {
-		return fmt.Errorf("failed to get rows affected: %w", err)
-	}
-
+	rows, _ := result.RowsAffected()
 	if rows == 0 {
 		return fmt.Errorf("datasource not found")
 	}
-
 	return nil
 }
 
-// GetDatasourcesForConnection retrieves all datasources linked to a connection
 func (s *ConnectionsService) GetDatasourcesForConnection(ctx context.Context, tenantID, connectionID string) ([]string, error) {
-	query := `
-		SELECT id FROM tenant_product_datasource
-		WHERE connection_id = $1 AND tenant_product_id IN (
-			SELECT id FROM tenant_product WHERE datasource_id IN (
-				SELECT id FROM tenant_instance WHERE tenant_id = $2
-			)
-		)
-	`
-
-	rows, err := s.db.QueryContext(ctx, query, connectionID, tenantID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get datasources: %w", err)
+	if err := middleware.RequireVerifiedTenant(ctx); err != nil {
+		return nil, fmt.Errorf("security: %w", err)
 	}
-	defer rows.Close()
-
 	var datasourceIDs []string
-	for rows.Next() {
-		var id string
-		if err := rows.Scan(&id); err != nil {
-			return nil, fmt.Errorf("failed to scan datasource id: %w", err)
+	err := db.WithTenantTransaction(ctx, s.db.DB, tenantID, func(tx *sql.Tx) error {
+		query := `
+			SELECT id FROM tenant_product_datasource
+			WHERE connection_id = $1 AND tenant_product_id IN (
+				SELECT id FROM tenant_product WHERE datasource_id IN (
+					SELECT id FROM tenant_instance WHERE tenant_id = $2
+				)
+			)
+		`
+		rows, err := tx.QueryContext(ctx, query, connectionID, tenantID)
+		if err != nil {
+			return err
 		}
-		datasourceIDs = append(datasourceIDs, id)
-	}
-
-	return datasourceIDs, rows.Err()
+		defer rows.Close()
+		for rows.Next() {
+			var id string
+			if err := rows.Scan(&id); err != nil {
+				return err
+			}
+			datasourceIDs = append(datasourceIDs, id)
+		}
+		return rows.Err()
+	})
+	return datasourceIDs, err
 }

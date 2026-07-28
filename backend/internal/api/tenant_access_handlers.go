@@ -10,6 +10,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/hondyman/uisce/backend/internal/api/middleware"
+	"github.com/hondyman/uisce/backend/internal/db"
 )
 
 // TenantAccessHandlers provides endpoints for tenant access control
@@ -124,33 +125,36 @@ func (h *TenantAccessHandlers) listAccessibleTenants(w http.ResponseWriter, r *h
 	}
 
 	// For non-operators, filter by tenant assignments
-	// Validate tenant access if X-Tenant-Id is set
-	if tenantIDHeader := r.Header.Get("X-Tenant-Id"); tenantIDHeader != "" {
+	tenantIDHeader := r.Header.Get("X-Tenant-Id")
+	if tenantIDHeader != "" {
 		if err := middleware.ValidateTenantAccess(r.Context(), tenantIDHeader); err != nil {
 			http.Error(w, err.Error(), http.StatusForbidden)
 			return
 		}
-		if err := middleware.SetSessionTenantContext(r.Context(), h.DB, tenantIDHeader); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+		var tenants []TenantResponse
+		err := db.WithTenantTransaction(r.Context(), h.DB, tenantIDHeader, func(tx *sql.Tx) error {
+			tenants, err = h.getTenantsByUser(r.Context(), userID, tx)
+			return err
+		})
+		if err != nil {
+			http.Error(w, "Failed to fetch accessible tenants: "+err.Error(), http.StatusInternalServerError)
 			return
 		}
-	}
-
-	tenants, err := h.getTenantsByUser(r, userID)
-	if err != nil {
-		fmt.Printf("[DEBUG] getTenantsByUser error: %v\n", err)
-		http.Error(w, "Failed to fetch accessible tenants: "+err.Error(), http.StatusInternalServerError)
+		fmt.Printf("[DEBUG] listAccessibleTenants found %d tenants for user %s\n", len(tenants), userID)
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(tenants)
 		return
 	}
-	fmt.Printf("[DEBUG] listAccessibleTenants found %d tenants for user %s\n", len(tenants), userID)
 
+	// No tenant ID: fall through to returning empty (fail-closed for non-operators)
+	fmt.Printf("[DEBUG] listAccessibleTenants: no X-Tenant-Id header, returning empty for user %s\n", userID)
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(tenants)
+	json.NewEncoder(w).Encode([]TenantResponse{})
 }
 
 // listAllTenants returns all tenants with full hierarchy
 func (h *TenantAccessHandlers) listAllTenants(w http.ResponseWriter, r *http.Request) {
-	tenants, err := h.getAllTenantsInternal(r.Context(), nil) // nil means fetch all
+	tenants, err := h.getAllTenantsInternal(r.Context(), nil, nil) // nil means fetch all
 	if err != nil {
 		http.Error(w, "Failed to query tenants: "+err.Error(), http.StatusInternalServerError)
 		return
@@ -160,12 +164,19 @@ func (h *TenantAccessHandlers) listAllTenants(w http.ResponseWriter, r *http.Req
 	json.NewEncoder(w).Encode(tenants)
 }
 
-func (h *TenantAccessHandlers) getAllTenantsInternal(ctx context.Context, targetTenantID *string) ([]TenantResponse, error) {
+func (h *TenantAccessHandlers) getAllTenantsInternal(ctx context.Context, targetTenantID *string, tx *sql.Tx) ([]TenantResponse, error) {
+	dbForQuery := func(query string, args ...interface{}) (*sql.Rows, error) {
+		if tx != nil {
+			return tx.QueryContext(ctx, query, args...)
+		}
+		return h.DB.QueryContext(ctx, query, args...)
+	}
+
 	// 1. Query tenants (optionally filtered)
 	var args []interface{}
 	query := `
-		SELECT id, COALESCE(display_name, name, '') as display_name, 
-		       COALESCE(name, '') as name, description, 
+		SELECT id, COALESCE(display_name, name, '') as display_name,
+		       COALESCE(name, '') as name, description,
 		       COALESCE(is_active, true) as is_active,
 		       COALESCE(gold_copy, false) as gold_copy,
 		       COALESCE(region, 'us-west') as region,
@@ -178,7 +189,7 @@ func (h *TenantAccessHandlers) getAllTenantsInternal(ctx context.Context, target
 	}
 	query += " ORDER BY display_name"
 
-	tenantRows, err := h.DB.QueryContext(ctx, query, args...)
+	tenantRows, err := dbForQuery(query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query tenants: %w", err)
 	}
@@ -194,7 +205,6 @@ func (h *TenantAccessHandlers) getAllTenantsInternal(ctx context.Context, target
 		}
 		if len(allowedRegionsJSON) > 0 {
 			if err := json.Unmarshal(allowedRegionsJSON, &t.AllowedRegions); err != nil {
-				// Log error but continue with empty regions to avoid breaking the API
 				fmt.Printf("Error unmarshaling allowed_regions for tenant %s: %v\n", t.ID, err)
 				t.AllowedRegions = []string{}
 			}
@@ -211,14 +221,7 @@ func (h *TenantAccessHandlers) getAllTenantsInternal(ctx context.Context, target
 		return []TenantResponse{}, nil
 	}
 
-	// Helper to check if a tenant is in our target list (efficient for large sets)
-	// For SQL filtering, we can just use the targetTenantID if present, or IN clause if multiple.
-	// However, since we already have the memory protection in the upper layer, and we passed targetTenantID for root,
-	// checking instances by tenant_id is sufficient.
-
 	// 2. Query instances
-	// We optimize by filtering instances to the found tenants
-	// using ANY($1) is better but requires pq.Array. Let's just use string building for simplicity or single ID if set.
 	instanceQuery := `
 		SELECT id, COALESCE(display_name, instance_name, '') as display_name,
 		       COALESCE(instance_name, '') as instance_name, NULL::text as description,
@@ -229,20 +232,17 @@ func (h *TenantAccessHandlers) getAllTenantsInternal(ctx context.Context, target
 	if targetTenantID != nil {
 		instanceQuery += " AND tenant_id = $1"
 		iArgs = append(iArgs, *targetTenantID)
-	} else {
-		// If fetching all, no filter needed.
-		// (Optional: AND tenant_id = ANY(...) if we suspected orphan instances, but fetching all is fine here)
 	}
 	instanceQuery += " ORDER BY display_name"
 
-	instanceRows, err := h.DB.QueryContext(ctx, instanceQuery, iArgs...)
+	instanceRows, err := dbForQuery(instanceQuery, iArgs...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query instances: %w", err)
 	}
 	defer instanceRows.Close()
 
 	instanceMap := make(map[string][]InstanceResponse)
-	var instanceIDs []string // Track IDs for product filtering
+	var instanceIDs []string
 	for instanceRows.Next() {
 		var i InstanceResponse
 		if err := instanceRows.Scan(&i.ID, &i.DisplayName, &i.Name, &i.Description, &i.IsActive, &i.URL, &i.TenantID); err != nil {
@@ -288,7 +288,7 @@ func (h *TenantAccessHandlers) getAllTenantsInternal(ctx context.Context, target
 	}
 	productQuery += " ORDER BY ap.product_name"
 
-	productRows, err := h.DB.QueryContext(ctx, productQuery, pArgs...)
+	productRows, err := dbForQuery(productQuery, pArgs...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query products: %w", err)
 	}
@@ -318,7 +318,6 @@ func (h *TenantAccessHandlers) getAllTenantsInternal(ctx context.Context, target
 	`
 	var dArgs []interface{}
 	if targetTenantID != nil {
-		// JOIN back to tenant for filtering
 		dsQuery = `
 			SELECT tpd.id, COALESCE(tpd.is_active, true) as is_active,
 			       COALESCE(tpd.source_name, '') as source_name, tpd.tenant_product_id,
@@ -331,18 +330,16 @@ func (h *TenantAccessHandlers) getAllTenantsInternal(ctx context.Context, target
 		`
 		dArgs = append(dArgs, *targetTenantID)
 	} else {
-		// When fetching all, filter by products we found
 		if len(instanceIDs) > 0 {
 			dsQuery += ` AND tpd.tenant_product_id IN (SELECT id FROM tenant_product WHERE tenant_instance_id = ANY($1))`
 			dArgs = append(dArgs, instanceIDs)
 		} else {
-			// No products, so no datasources
 			dsQuery += ` AND 1=0`
 		}
 	}
 	dsQuery += " ORDER BY tpd.source_name"
 
-	dsRows, err := h.DB.QueryContext(ctx, dsQuery, dArgs...)
+	dsRows, err := dbForQuery(dsQuery, dArgs...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query datasources: %w", err)
 	}
@@ -381,26 +378,27 @@ func (h *TenantAccessHandlers) getAllTenantsInternal(ctx context.Context, target
 	return tenants, nil
 }
 
-// getTenantsByUser returns tenants accessible to a specific user
-func (h *TenantAccessHandlers) getTenantsByUser(r *http.Request, userID string) ([]TenantResponse, error) {
-	ctx := r.Context()
+func (h *TenantAccessHandlers) getTenantsByUser(ctx context.Context, userID string, tx *sql.Tx) ([]TenantResponse, error) {
+	dbForQueryRow := func(query string, args ...interface{}) *sql.Row {
+		if tx != nil {
+			return tx.QueryRowContext(ctx, query, args...)
+		}
+		return h.DB.QueryRowContext(ctx, query, args...)
+	}
 
-	// 1. Check for explicit tenant binding in users table
 	var tenantID sql.NullString
-	err := h.DB.QueryRowContext(ctx, "SELECT tenant_id FROM users WHERE id = $1", userID).Scan(&tenantID)
+	err := dbForQueryRow("SELECT tenant_id FROM users WHERE id = $1", userID).Scan(&tenantID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch user tenant info: %w", err)
 	}
 
-	// 2. Fetch all tenants (with full hierarchy)
-	// We pass the explicit tenantID to filter efficiently at the DB level
 	var targetTenantID *string
 	if tenantID.Valid && tenantID.String != "" {
 		s := tenantID.String
 		targetTenantID = &s
 	}
 
-	allTenants, err := h.getAllTenantsInternal(ctx, targetTenantID)
+	allTenants, err := h.getAllTenantsInternal(ctx, targetTenantID, tx)
 	if err != nil {
 		return nil, err
 	}
