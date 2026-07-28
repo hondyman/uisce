@@ -37,7 +37,46 @@ func (s *PageCopilotService) GeneratePageLayoutSpec(ctx context.Context, req Pag
 		isLookbackRequested = true
 	}
 
-	// Generate structured layout spec based on prompt intent and schema metadata
+	// Build component list dynamically based on prompt intent
+	firstRowComponents := []map[string]interface{}{
+		{
+			"id":       "comp_chart_1",
+			"type":     "BO_ANALYTICS_CHART",
+			"title":    "Breakdown by Asset Class",
+			"bo_id":    "customers",
+			"bindings": map[string]interface{}{"dimensions": []string{"region"}, "measures": []string{"balance"}},
+			"interactions": map[string]interface{}{
+				"emits_context": []map[string]string{{"source_field": "region", "target_context_key": "selected_region"}},
+			},
+			"config": map[string]interface{}{"chartType": "bar"},
+		},
+	}
+
+	secondRowComponents := []map[string]interface{}{
+		{
+			"id":       "comp_form_1",
+			"type":     "BO_FORM",
+			"title":    "Master Detail View",
+			"bo_id":    "customers",
+			"bindings": map[string]interface{}{"fields": []string{"id", "name", "region", "status", "notes"}},
+			"config":   map[string]interface{}{"is_mutable": true},
+		},
+	}
+
+	if isLookbackRequested {
+		secondRowComponents = append(secondRowComponents, map[string]interface{}{
+			"id":       "comp_lookback_manager_1",
+			"type":     "BO_LOOKBACK_MANAGER",
+			"title":    "Compliance Lookback Audit Diff Matrix",
+			"bo_id":    "customers",
+			"bindings": map[string]interface{}{"fields": []string{"id", "balance", "status"}},
+			"config": map[string]interface{}{
+				"timestamp_a": "2025-12-31T00:00:00Z",
+				"timestamp_b": "2026-06-30T00:00:00Z",
+			},
+		})
+	}
+
 	spec := map[string]interface{}{
 		"id":           fmt.Sprintf("page_ai_%s", req.Domain),
 		"tenant_id":    req.TenantID,
@@ -58,21 +97,9 @@ func (s *PageCopilotService) GeneratePageLayoutSpec(ctx context.Context, req Pag
 						"id": "row_1",
 						"columns": []map[string]interface{}{
 							{
-								"id":   "col_1",
-								"span": 6,
-								"components": []map[string]interface{}{
-									{
-										"id":       "comp_chart_1",
-										"type":     "BO_ANALYTICS_CHART",
-										"title":    "Breakdown by Asset Class",
-										"bo_id":    "customers",
-										"bindings": map[string]interface{}{"dimensions": []string{"region"}, "measures": []string{"balance"}},
-										"interactions": map[string]interface{}{
-											"emits_context": []map[string]string{{"source_field": "region", "target_context_key": "selected_region"}},
-										},
-										"config": map[string]interface{}{"chartType": "bar"},
-									},
-								},
+								"id":         "col_1",
+								"span":       6,
+								"components": firstRowComponents,
 							},
 							{
 								"id":   "col_2",
@@ -103,18 +130,9 @@ func (s *PageCopilotService) GeneratePageLayoutSpec(ctx context.Context, req Pag
 						"id": "row_2",
 						"columns": []map[string]interface{}{
 							{
-								"id":   "col_3",
-								"span": 12,
-								"components": []map[string]interface{}{
-									{
-										"id":       "comp_form_1",
-										"type":     "BO_FORM",
-										"title":    "Master Detail View",
-										"bo_id":    "customers",
-										"bindings": map[string]interface{}{"fields": []string{"id", "name", "region", "status", "notes"}},
-										"config":   map[string]interface{}{"is_mutable": true},
-									},
-								},
+								"id":         "col_3",
+								"span":       12,
+								"components": secondRowComponents,
 							},
 						},
 					},
