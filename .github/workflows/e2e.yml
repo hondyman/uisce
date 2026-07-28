@@ -9,7 +9,7 @@ jobs:
     - name: Set up Go
       uses: actions/setup-go@v5
       with:
-        go-version: '1.24'
+        go-version: '1.25'
     - name: Make e2e script executable
       run: chmod +x ./scripts/e2e_amqp.sh
     - name: Run E2E AMQP

@@ -342,4 +342,4 @@ replace github.com/hondyman/uisce/libs/hasura-client => ../libs/hasura-client
 
 replace github.com/hondyman/uisce/libs/jwt-middleware => ../libs/jwt-middleware
 
-replace github.com/hondyman/uisce/libs/auth => ../../libs/auth
+replace github.com/hondyman/uisce/libs/auth => ../libs/jwt-middleware

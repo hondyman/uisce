@@ -79,12 +79,15 @@ type SemanticTermView struct {
 }
 
 // BOBinding captures the physical binding context for a Business Object.
-// When the explicit business_object_bindings table is introduced, this can
-// be populated from that table; until then it is derived from the BO row.
 type BOBinding struct {
-	BindingID      string
-	BOID           string
-	DatasourceID   string
-	DrivingTable   string
-	DrivingTableID string
+	ID               string
+	Name             string
+	DialectName      string
+	ConnectionString string
+	BindingID        string
+	BOID             string
+	DatasourceID     string
+	DrivingTable     string
+	DrivingTableID   string
 }
+

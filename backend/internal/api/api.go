@@ -30,6 +30,7 @@ import (
 	"github.com/hondyman/uisce/backend/internal/billing"
 	"github.com/hondyman/uisce/backend/internal/boresolver"
 	"github.com/hondyman/uisce/backend/internal/bp"
+	"github.com/hondyman/uisce/backend/internal/calculation"
 	"github.com/hondyman/uisce/backend/internal/cube"
 	"github.com/hondyman/uisce/backend/internal/data_intelligence/tiering"
 	charts "github.com/hondyman/uisce/backend/internal/db/charts"
@@ -42,6 +43,7 @@ import (
 	"github.com/hondyman/uisce/backend/internal/lineage"
 	"github.com/hondyman/uisce/backend/internal/logging"
 	"github.com/hondyman/uisce/backend/internal/mdm"
+	"github.com/hondyman/uisce/backend/internal/metadata"
 	appmid "github.com/hondyman/uisce/backend/internal/middleware"
 	models "github.com/hondyman/uisce/backend/internal/models"
 	"github.com/hondyman/uisce/backend/internal/oauth"
@@ -64,6 +66,7 @@ import (
 	temporal "github.com/hondyman/uisce/backend/internal/temporal"
 	"github.com/hondyman/uisce/backend/internal/tenant"
 	"github.com/hondyman/uisce/backend/internal/trino"
+	"github.com/hondyman/uisce/backend/internal/upgrade"
 	coremodels "github.com/hondyman/uisce/backend/models"
 	"github.com/hondyman/uisce/backend/pkg/ingestion"
 	"github.com/hondyman/uisce/backend/pkg/llm"
@@ -170,6 +173,8 @@ type Server struct {
 	EventBus                EventBus
 	ExportHandlers          *handlers.ExportHandlers
 	SchedulerHandlers       *handlers.SchedulerHandlers
+	auditService            *audit.ChannelAuditService
+	semanticCache           *cache.SemanticCache
 
 	// Phase 8: Advanced Cross-Domain Intelligence
 	PortfolioSecuritySvc *mdm.PortfolioSecurityService
@@ -770,6 +775,7 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 	}
 	srv := &Server{
 		DB:                     db,
+		auditService:           audit.NewChannelAuditService(sqlxDB),
 		Reg:                    &Registry{DB: db}, // This needs to be adjusted based on the actual store structure
 		WsHub:                  newWebSocketHub(),
 		SemanticNameResolver:   semanticNameResolver,
@@ -1268,6 +1274,21 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 	routes := NewRoutes()
 
 	r.Route("/api", func(r chi.Router) {
+		r.Post("/ai/generate-page", ai.NewPageCopilotService(sqlxDB).GeneratePageHandler)
+		r.Post("/calculation/compile", calculation.NewService().CompileExpressionHandler)
+
+		customAttrSvc := metadata.NewCustomAttributeService(sqlxDB)
+		r.Post("/tenants/custom-attributes", customAttrSvc.RegisterAttributeHandler)
+		r.Get("/tenants/custom-attributes", customAttrSvc.GetAttributesHandler)
+
+		upgradeSvc := upgrade.NewService(sqlxDB)
+		impactEngine := upgrade.NewImpactEngine(sqlxDB)
+		distExecutor := upgrade.NewDistributedExecutor(sqlxDB)
+		r.Post("/admin/tenants/upgrade", upgradeSvc.UpgradeTenantHandler)
+		r.Get("/admin/tenants/deltas", upgradeSvc.GetTenantDeltaHandler)
+		r.Post("/admin/upgrade/preflight-simulation", impactEngine.PreFlightSimulationHandler)
+		r.Post("/admin/upgrade/deploy-globally", distExecutor.DeployGloballyHandler)
+
 		// Register audit history routes if handler is active (INSIDE /api group)
 		if auditHistoryHandler != nil {
 			routes.RegisterAudit(r, auditHistoryHandler)
@@ -1426,8 +1447,8 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 
 
 			// Tenant search + scope (impersonation picker)
-			tenantSearchHandler := handlers.NewAdminTenantSearchHandler(db)
-			r.Get("/admin/tenants/search", tenantSearchHandler.SearchTenants)
+			r.Get("/api/v1/audit/channel-billing", srv.GetChannelAuditBillingSummaryHandler)
+			r.Get("/api/v1/audit/channel-logs", srv.GetChannelAuditLogsHandler)
 			r.Get("/admin/tenants/{tenantID}/scope", tenantSearchHandler.GetTenantScope)
 		}
 

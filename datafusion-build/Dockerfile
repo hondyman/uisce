@@ -8,7 +8,9 @@ RUN pip install --no-cache-dir \
     datafusion \
     pyiceberg \
     boto3 \
-    pyarrow
+    pyarrow \
+    sqlglot \
+    pymysql
 
 COPY datafusion_server.py /app/server.py
 

@@ -152,3 +152,45 @@ func TestCompileValidationRuleSQL(t *testing.T) {
 	assert.Contains(t, compiled.SQL, "t0.tenant_id = $2")
 }
 
+func TestBuildUnionSafeQuery(t *testing.T) {
+	generator, _ := NewBOSQLGenerator(&MockBORepository{}, "postgres")
+
+	hotSQL := "SELECT id, total_amount FROM orders t0 WHERE t0.tenant_id = $1 AND t0.created_at >= '2026-01-01'"
+	coldSQL := "SELECT id, line_total_revenue AS total_amount FROM iceberg.analytics.sales_ledger_flat t0 WHERE t0.tenant_id = $1 AND t0.created_at < '2026-01-01'"
+
+	unionSQL := generator.BuildUnionSafeQuery(hotSQL, coldSQL, 50)
+	assert.Contains(t, unionSQL, "UNION ALL")
+	assert.Contains(t, unionSQL, "FROM orders t0")
+	assert.Contains(t, unionSQL, "FROM iceberg.analytics.sales_ledger_flat t0")
+	assert.Contains(t, unionSQL, "LIMIT 50")
+}
+
+func TestResolvePolymorphicField(t *testing.T) {
+	pgDialect := PostgresDialect{}
+	coldDialect := DataFusionIcebergDialect{}
+
+	jsonField := BOField{
+		Name:           "custom_loyalty_score",
+		PhysicalColumn: "customers.tenant_extensions",
+		SourceType:     "JSON_PATH",
+		JSONPath:       "$.loyalty_score",
+	}
+
+	exprField := BOField{
+		Name:              "custom_loyalty_score",
+		SourceType:        "EXPRESSION",
+		TransformationSQL: "get_json_string(${alias}.tenant_extensions, '$.loyalty_score')",
+	}
+
+	pgExpr := ResolvePolymorphicField(jsonField, "t0", pgDialect)
+	assert.Equal(t, "t0.tenant_extensions->>'loyalty_score'", pgExpr)
+
+	coldJsonExpr := ResolvePolymorphicField(jsonField, "t0", coldDialect)
+	assert.Equal(t, "get_json_string(t0.tenant_extensions, '$.loyalty_score')", coldJsonExpr)
+
+	coldTransExpr := ResolvePolymorphicField(exprField, "t1", coldDialect)
+	assert.Equal(t, "get_json_string(t1.tenant_extensions, '$.loyalty_score')", coldTransExpr)
+}
+
+
+

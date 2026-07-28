@@ -61,8 +61,10 @@ func registerWorkflows(w worker.Worker) {
 	w.RegisterWorkflow(workflows.RegionHourlyRollupWorkflow)
 	w.RegisterWorkflow(workflows.DailySLAWorkflow)
 	w.RegisterWorkflow(workflows.MLTrainingWorkflow)
+	w.RegisterWorkflow(TenantOnboardingWorkflow)
+	w.RegisterWorkflow(LakehouseMaintenanceWorkflow)
 
-	log.Println("Workflows registered: HourlyRollupWorkflow, RegionHourlyRollupWorkflow, DailySLAWorkflow, MLTrainingWorkflow")
+	log.Println("Workflows registered: HourlyRollupWorkflow, RegionHourlyRollupWorkflow, DailySLAWorkflow, MLTrainingWorkflow, TenantOnboardingWorkflow, LakehouseMaintenanceWorkflow")
 }
 
 // registerActivities registers all activity definitions
@@ -73,5 +75,17 @@ func registerActivities(w worker.Worker) {
 	w.RegisterActivity(activities.RunPythonScriptActivity)
 	w.RegisterActivity(activities.PublishEventActivity)
 
-	log.Println("Activities registered: RunTrinoQueryActivity, RunSparkJobActivity, RunPythonScriptActivity, PublishEventActivity")
+	// Register tenant activities struct methods
+	act := &TenantActivities{}
+	w.RegisterActivity(act.CreatePostgresTenant)
+	w.RegisterActivity(act.RollbackPostgresTenant)
+	w.RegisterActivity(act.InitializeMinIOPrefix)
+	w.RegisterActivity(act.RollbackMinIOPrefix)
+	w.RegisterActivity(act.ProvisionPolarisCatalog)
+	w.RegisterActivity(act.DeprovisionPolarisCatalog)
+	w.RegisterActivity(act.ExpireIcebergSnapshots)
+	w.RegisterActivity(act.RemoveOrphanFiles)
+	w.RegisterActivity(act.CompactManifests)
+
+	log.Println("Activities registered: RunTrinoQueryActivity, RunSparkJobActivity, RunPythonScriptActivity, PublishEventActivity, TenantActivities")
 }

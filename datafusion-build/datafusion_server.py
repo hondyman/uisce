@@ -201,6 +201,87 @@ def get_server() -> DataFusionServer:
     return _server
 
 
+try:
+    import sqlglot
+    from sqlglot import exp
+    HAS_SQLGLOT = True
+except ImportError:
+    HAS_SQLGLOT = False
+    print("WARNING: sqlglot not installed. Install with: pip install sqlglot")
+
+try:
+    import pymysql
+    HAS_PYMYSQL = True
+except ImportError:
+    HAS_PYMYSQL = False
+    print("WARNING: pymysql not installed. Install with: pip install pymysql")
+
+HOT_WATERMARK = os.getenv("HOT_WATERMARK", "2026-01-01 00:00:00")
+STARROCKS_HOST = os.getenv("STARROCKS_HOST", "100.84.50.65")
+STARROCKS_PORT = int(os.getenv("STARROCKS_PORT", "9030"))
+STARROCKS_USER = os.getenv("STARROCKS_USER", "root")
+STARROCKS_PASSWORD = os.getenv("STARROCKS_PASSWORD", "")
+
+
+def classify_query_tier(sql_query: str, watermark: str = HOT_WATERMARK) -> str:
+    """
+    Parses the SQL query via sqlglot, inspects temporal predicates on 
+    'ts', 'created_at', or 'timestamp', and classifies execution tier.
+    """
+    if not HAS_SQLGLOT:
+        return "COLD_TIER"
+
+    try:
+        parsed = sqlglot.parse_one(sql_query)
+    except Exception as e:
+        logger.warning(f"AST parsing failed for query: {e}. Falling back to COLD_TIER.")
+        return "COLD_TIER"
+
+    has_temporal_filter = False
+    is_strictly_hot = True
+    is_strictly_cold = True
+
+    for node in parsed.find_all(exp.Between, exp.Gte, exp.Gt, exp.Lte, exp.Lt):
+        if any(col.name in ("ts", "created_at", "timestamp") for col in node.find_all(exp.Column)):
+            has_temporal_filter = True
+            for lit in node.find_all(exp.Literal):
+                val = str(lit.this)
+                if val < watermark:
+                    is_strictly_hot = False
+                if val >= watermark:
+                    is_strictly_cold = False
+
+    if not has_temporal_filter:
+        return "COLD_TIER"
+    if is_strictly_hot:
+        return "HOT_TIER"
+    if is_strictly_cold:
+        return "COLD_TIER"
+    return "HYBRID_FEDERATED"
+
+
+def execute_starrocks_query(tenant_id: str, query: str) -> List[Dict[str, Any]]:
+    """Executes query against StarRocks hot tier via MySQL wire protocol."""
+    if not HAS_PYMYSQL:
+        raise RuntimeError("pymysql dependency missing")
+
+    conn = pymysql.connect(
+        host=STARROCKS_HOST,
+        port=STARROCKS_PORT,
+        user=STARROCKS_USER,
+        password=STARROCKS_PASSWORD,
+        database=tenant_id if tenant_id else "default",
+        cursorclass=pymysql.cursors.DictCursor
+    )
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute(query)
+            rows = cursor.fetchall()
+            return rows
+    finally:
+        conn.close()
+
+
 @app.route("/health", methods=["GET"])
 def health():
     return jsonify({
@@ -208,31 +289,68 @@ def health():
         "service": "datafusion-flight-sql",
         "datafusion_available": HAS_DATAFUSION,
         "iceberg_available": HAS_ICEBERG,
+        "sqlglot_available": HAS_SQLGLOT,
+        "pymysql_available": HAS_PYMYSQL,
+        "hot_watermark": HOT_WATERMARK,
     })
 
 
 @app.route("/api/v1/query", methods=["POST"])
 def query():
+    import time
     data = request.get_json()
     if not data or "query" not in data:
         return jsonify({"error": "Missing 'query' in request body"}), 400
 
     query_str = data["query"]
-    logger.info(f"Executing query: {query_str[:200]}...")
+    tenant_id = data.get("tenant_id", "tenant-alpha")
+    logger.info(f"Executing query for tenant={tenant_id}: {query_str[:200]}...")
+
+    tier = classify_query_tier(query_str)
+    start_time = time.time()
 
     try:
-        server = get_server()
-        result = server.execute_query(query_str)
+        if tier == "HOT_TIER":
+            records = execute_starrocks_query(tenant_id, query_str)
+            execution_time = (time.time() - start_time) * 1000
+            return jsonify({
+                "target_tier": "HOT_TIER",
+                "execution_time_ms": execution_time,
+                "records": records,
+                "row_count": len(records),
+            })
 
-        return jsonify({
-            "schema": result.schema,
-            "records": result.records,
-            "execution_time_ms": result.execution_time_ms,
-            "row_count": len(result.records),
-        })
+        elif tier == "COLD_TIER":
+            server = get_server()
+            result = server.execute_query(query_str)
+            return jsonify({
+                "target_tier": "COLD_TIER",
+                "schema": result.schema,
+                "records": result.records,
+                "execution_time_ms": result.execution_time_ms,
+                "row_count": len(result.records),
+            })
+
+        elif tier == "HYBRID_FEDERATED":
+            server = get_server()
+            cold_query = f"{query_str} AND ts < '{HOT_WATERMARK}'" if "WHERE" in query_str.upper() else f"{query_str} WHERE ts < '{HOT_WATERMARK}'"
+            hot_query = f"{query_str} AND ts >= '{HOT_WATERMARK}'" if "WHERE" in query_str.upper() else f"{query_str} WHERE ts >= '{HOT_WATERMARK}'"
+
+            cold_res = server.execute_query(cold_query)
+            hot_records = execute_starrocks_query(tenant_id, hot_query)
+
+            merged_records = cold_res.records + [list(r.values()) if isinstance(r, dict) else r for r in hot_records]
+            execution_time = (time.time() - start_time) * 1000
+
+            return jsonify({
+                "target_tier": "HYBRID_FEDERATED",
+                "execution_time_ms": execution_time,
+                "records": merged_records,
+                "row_count": len(merged_records),
+            })
     except Exception as e:
-        logger.error(f"Query failed: {e}")
-        return jsonify({"error": str(e)}), 500
+        logger.error(f"Query failed (tier={tier}): {e}")
+        return jsonify({"error": str(e), "target_tier": tier}), 500
 
 
 @app.route("/api/v1/catalog/namespaces", methods=["GET"])

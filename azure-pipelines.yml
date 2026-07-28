@@ -45,7 +45,7 @@ stages:
     - task: GoTool@0
       displayName: 'Install Go'
       inputs:
-        version: '1.22'
+        version: '1.25'
 
     - task: Cache@2
       displayName: 'Cache Go modules'

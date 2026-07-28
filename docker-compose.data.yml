@@ -1,0 +1,54 @@
+version: '3.8'
+
+services:
+  minio:
+    image: minio/minio
+    container_name: uisce-minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio_data:/data
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+
+  starrocks-fe:
+    image: starrocks/fe-ubuntu:latest
+    container_name: starrocks-fe
+    ports:
+      - "8030:8030" # HTTP
+      - "9020:9020" # Query
+      - "9030:9030" # MySQL Protocol
+    environment:
+      - TZ=UTC
+    volumes:
+      - starrocks_fe_meta:/opt/starrocks/fe/meta
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+
+  starrocks-be:
+    image: starrocks/be-ubuntu:latest
+    container_name: starrocks-be
+    depends_on:
+      - starrocks-fe
+    environment:
+      - TZ=UTC
+    volumes:
+      - starrocks_be_data:/opt/starrocks/be/storage
+    deploy:
+      resources:
+        limits:
+          memory: 4G # StarRocks BE requires high RAM
+
+volumes:
+  minio_data:
+  starrocks_fe_meta:
+  starrocks_be_data:

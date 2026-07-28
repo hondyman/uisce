@@ -6,8 +6,10 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/hondyman/uisce/backend/internal/boresolver"
+	"github.com/hondyman/uisce/backend/internal/cache"
 	"github.com/hondyman/uisce/backend/internal/logging"
 	"github.com/jmoiron/sqlx"
 	"github.com/hondyman/uisce/libs/jwt-middleware"
@@ -47,6 +49,30 @@ func (s *Server) GenerateSQLHandler(w http.ResponseWriter, r *http.Request) {
 		req.TenantID = claims.TenantID
 	}
 
+	// Intercept X-Uisce-As-Of-Date / X-Uisce-Effective-Time header for event-time routing if AsOfDate is zero
+	asOfHeader := r.Header.Get("X-Uisce-As-Of-Date")
+	if asOfHeader == "" {
+		asOfHeader = r.Header.Get("X-Uisce-Effective-Time")
+	}
+	if asOfHeader != "" && req.AsOfDate.IsZero() {
+		if parsedTime, err := time.Parse(time.RFC3339, asOfHeader); err == nil {
+			req.AsOfDate = parsedTime
+		} else if parsedTime, err := time.Parse("2006-01-02", asOfHeader); err == nil {
+			req.AsOfDate = parsedTime
+		}
+	}
+
+	// Intercept X-Uisce-Knowledge-Date header for system transaction time bitemporality
+	if knowHeader := r.Header.Get("X-Uisce-Knowledge-Date"); knowHeader != "" && req.KnowledgeDate.IsZero() {
+		if parsedTime, err := time.Parse(time.RFC3339, knowHeader); err == nil {
+			req.KnowledgeDate = parsedTime
+		} else if parsedTime, err := time.Parse("2006-01-02", knowHeader); err == nil {
+			req.KnowledgeDate = parsedTime
+		}
+	}
+
+
+
 	// Initialize Generator
 	// In a real app, we should reuse a singleton or factory from the Server struct
 	// For now, we instantiate on demand.
@@ -76,6 +102,19 @@ func (s *Server) GenerateSQLHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Check AST Semantic Cache (Redis)
+	astHash, _ := cache.ComputeASTHash(req)
+	if s.semanticCache != nil && astHash != "" {
+		var cachedResp boresolver.SQLGenerationResponse
+		if found, _ := s.semanticCache.Get(r.Context(), astHash, &cachedResp); found {
+			logging.GetLogger().Sugar().Infof("GenerateSQLHandler: AST Cache HIT for hash %s", astHash)
+			w.Header().Set("Content-Type", "application/json")
+			w.Header().Set("X-Uisce-Cache", "HIT")
+			json.NewEncoder(w).Encode(cachedResp)
+			return
+		}
+	}
+
 	sql, args, err := generator.GenerateSQL(req)
 	if err != nil {
 		logging.GetLogger().Sugar().Errorf("SQL Generation failed: %v", err)
@@ -86,6 +125,10 @@ func (s *Server) GenerateSQLHandler(w http.ResponseWriter, r *http.Request) {
 	resp := boresolver.SQLGenerationResponse{
 		SQL:  sql,
 		Args: args,
+	}
+
+	if s.semanticCache != nil && astHash != "" {
+		_ = s.semanticCache.Set(r.Context(), astHash, resp)
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -402,3 +445,52 @@ func (s *Server) ExecuteSQLHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(result)
 }
+
+// GetChannelAuditBillingSummaryHandler returns aggregated query billing and usage telemetry by channel
+func (s *Server) GetChannelAuditBillingSummaryHandler(w http.ResponseWriter, r *http.Request) {
+	tenantID := r.URL.Query().Get("tenant_id")
+	if tenantID == "" {
+		if claims := jwtmiddleware.GetClaimsFromContext(r); claims != nil && claims.TenantID != "" {
+			tenantID = claims.TenantID
+		} else {
+			tenantID = "core"
+		}
+	}
+
+	summaries, err := s.auditService.GetChannelBillingSummary(r.Context(), tenantID)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Failed to fetch channel audit summaries: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"tenantId":  tenantID,
+		"summaries": summaries,
+	})
+}
+
+// GetChannelAuditLogsHandler returns recent channel query execution audit logs
+func (s *Server) GetChannelAuditLogsHandler(w http.ResponseWriter, r *http.Request) {
+	tenantID := r.URL.Query().Get("tenant_id")
+	if tenantID == "" {
+		if claims := jwtmiddleware.GetClaimsFromContext(r); claims != nil && claims.TenantID != "" {
+			tenantID = claims.TenantID
+		} else {
+			tenantID = "core"
+		}
+	}
+
+	logs, err := s.auditService.GetRecentAuditLogs(r.Context(), tenantID, 100)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Failed to fetch channel audit logs: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"tenantId": tenantID,
+		"logs":     logs,
+	})
+}
+

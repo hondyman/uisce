@@ -66,11 +66,28 @@ up-minimal:
 	@echo "Starting minimal backend services (hasura, rabbitmq, backend)"
 	@./scripts/docker-start.sh up-minimal
 
-down:
-	@docker compose -f $(COMPOSE_FILE) down
+.PHONY: dev server down logs
 
+# Runs ONLY the Core Plane (Laptop Mode)
+dev:
+	@echo "Starting Uisce Core (Laptop Mode)..."
+	docker compose up -d --build
+
+# Runs Core + Heavy Data Plane (Linux Server Mode)
+server:
+	@echo "Starting Uisce Full Stack (Server Mode)..."
+	export ENABLE_STARROCKS=true && \
+	docker compose -f docker-compose.yml -f docker-compose.data.yml up -d --build
+
+# Tears down everything
+down:
+	@echo "Shutting down Uisce OS..."
+	docker compose -f docker-compose.yml -f docker-compose.data.yml down
+
+# View backend logs
 logs:
-	@./scripts/docker-start.sh logs
+	docker compose logs -f backend
+
 
 migrate-runner:
 	@./scripts/migrate.sh

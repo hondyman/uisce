@@ -17,20 +17,9 @@ jobs:
       run: |
         find metadata -name "*.yml" -exec yamllint -d relaxed {} \;
 
-    - name: Install registry CLI (placeholder)
-      run: |
-        # TODO: Install your registry-cli tool
-        echo "registry-cli would be installed here"
-
-    - name: Dry-run publish
-      run: |
-        # registry-cli publish --dir metadata --dry-run
-        echo "Would validate metadata publishability"
-
     - name: Validate expressions
       run: |
-        # registry-cli publish --dir metadata --validate-only
-        echo "Would compile CEL/Rego expressions"
+        echo "Metadata validation scaffolding — registry-cli not yet integrated"
 
   unit-tests:
     name: Unit Tests
@@ -41,7 +30,7 @@ jobs:
     - name: Set up Go
       uses: actions/setup-go@v5
       with:
-        go-version: '1.21'
+        go-version: '1.25'
 
     - name: Install dependencies
       working-directory: backend
@@ -86,7 +75,7 @@ jobs:
     - name: Set up Go
       uses: actions/setup-go@v5
       with:
-        go-version: '1.21'
+        go-version: '1.25'
 
     - name: Start backend services
       working-directory: backend
@@ -137,7 +126,7 @@ jobs:
     - name: Set up Go
       uses: actions/setup-go@v5
       with:
-        go-version: '1.21'
+        go-version: '1.25'
 
     - name: Start all services
       working-directory: backend

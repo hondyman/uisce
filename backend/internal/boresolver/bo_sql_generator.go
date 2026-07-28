@@ -25,6 +25,8 @@ type SQLGenerationRequest struct {
 	// AsOfDate triggers Hot/Cold Watermark Routing: if set and before the
 	// hot/cold watermark, routes to DataFusionIcebergDialect (cold tier).
 	AsOfDate time.Time `json:"asOfDate,omitempty"`
+	// KnowledgeDate triggers True Bitemporal valid-time query filtering (system transaction time).
+	KnowledgeDate time.Time `json:"knowledgeDate,omitempty"`
 	// DialectOverride explicitly selects a dialect, bypassing watermark routing.
 	DialectOverride string `json:"dialectOverride,omitempty"`
 }
@@ -63,6 +65,9 @@ func (r *SQLGenerationRequest) UnmarshalJSON(data []byte) error {
 		Filters              []FilterClause `json:"filters"`
 		WhereClause          string         `json:"whereClause"`
 		Limit                int            `json:"limit"`
+		AsOfDate             time.Time      `json:"asOfDate"`
+		KnowledgeDate        time.Time      `json:"knowledgeDate"`
+		DialectOverride      string         `json:"dialectOverride"`
 	}
 
 	var p payload
@@ -82,8 +87,12 @@ func (r *SQLGenerationRequest) UnmarshalJSON(data []byte) error {
 	r.Filters = p.Filters
 	r.WhereClause = p.WhereClause
 	r.Limit = p.Limit
+	r.AsOfDate = p.AsOfDate
+	r.KnowledgeDate = p.KnowledgeDate
+	r.DialectOverride = p.DialectOverride
 	return nil
 }
+
 
 type FilterClause struct {
 	FieldID     string      `json:"fieldId"` // Field UUID (NOT field name or semantic term code)
@@ -121,16 +130,20 @@ type BODefinition struct {
 }
 
 type BOField struct {
-	ID             string
-	Name           string
-	DisplayName    string
-	Path           string
-	SemanticTermID string
-	PhysicalColumn string // e.g., "customers.name" (Fully qualified with table)
-	Override       bool
-	Type           string // e.g. "reference", "string"
-	ReferenceBOID  string // if Type == "reference"
+	ID                string
+	Name              string
+	DisplayName       string
+	Path              string
+	SemanticTermID    string
+	PhysicalColumn    string // e.g., "customers.name" (Fully qualified with table)
+	SourceType        string // "COLUMN", "JSON_PATH", "EXPRESSION"
+	JSONPath          string // e.g., "$.loyalty_score"
+	TransformationSQL string // e.g., "get_json_string(${alias}.tenant_extensions, '$.loyalty_score')"
+	Override          bool
+	Type              string // e.g. "reference", "string"
+	ReferenceBOID     string // if Type == "reference"
 }
+
 
 type BORelationship struct {
 	TargetBOID string
@@ -138,13 +151,6 @@ type BORelationship struct {
 	Conditions []string // e.g. "${SOURCE}.customer_id = ${TARGET}.id"
 }
 
-// BOBinding represents a registered data source binding with its dialect.
-type BOBinding struct {
-	ID               string
-	Name             string
-	DialectName      string
-	ConnectionString string
-}
 
 // WatermarkResolver resolves the hot/cold watermark timestamp for a tenant.
 type WatermarkResolver interface {
@@ -208,6 +214,55 @@ func (g *BOSQLGenerator) ResolveEffectiveDialect(req *SQLGenerationRequest, bind
 	// Rule 3: Fallback to the generator's default dialect
 	return g.Dialect, nil
 }
+
+// BuildUnionSafeQuery stitches together a hot operational tier query and a cold historical tier query
+// into a unified UNION ALL statement while respecting tenant boundaries and query limits.
+func (g *BOSQLGenerator) BuildUnionSafeQuery(hotSQL string, coldSQL string, limit int) string {
+	unionQuery := fmt.Sprintf("(%s)\nUNION ALL\n(%s)", strings.TrimSpace(hotSQL), strings.TrimSpace(coldSQL))
+	if limit > 0 {
+		unionQuery += fmt.Sprintf("\nLIMIT %d", limit)
+	}
+	return unionQuery
+}
+
+// ResolvePolymorphicField physically translates a semantic term based on its binding source type (COLUMN, JSON_PATH, EXPRESSION).
+func ResolvePolymorphicField(field BOField, tableAlias string, dialect Dialect) string {
+	switch field.SourceType {
+	case "JSON_PATH":
+		if field.JSONPath != "" {
+			pathStr := strings.TrimPrefix(field.JSONPath, "$.")
+			colName := extractColumnName(field.PhysicalColumn)
+			if colName == "" {
+				colName = "tenant_extensions"
+			}
+			switch dialect.(type) {
+			case PostgresDialect:
+				return fmt.Sprintf("%s.%s->>'%s'", tableAlias, colName, pathStr)
+			default:
+				return fmt.Sprintf("get_json_string(%s.%s, '$.%s')", tableAlias, colName, pathStr)
+			}
+		}
+
+	case "EXPRESSION":
+		if field.TransformationSQL != "" {
+			return strings.ReplaceAll(field.TransformationSQL, "${alias}", tableAlias)
+		}
+	}
+
+	// Default: COLUMN mapping
+	colName := extractColumnName(field.PhysicalColumn)
+	return fmt.Sprintf("%s.%s", tableAlias, colName)
+}
+
+func extractColumnName(physicalCol string) string {
+	colParts := strings.Split(physicalCol, ".")
+	if len(colParts) == 2 {
+		return colParts[1]
+	}
+	return physicalCol
+}
+
+
 
 // GenerationContext holds state for the current generation request
 type GenerationContext struct {
@@ -284,6 +339,10 @@ func (g *BOSQLGenerator) GenerateSQL(req SQLGenerationRequest) (string, []interf
 	if req.TenantID != "" {
 		g.InjectTenantScopingToGraph(ctx, req.TenantID)
 	}
+	if !req.KnowledgeDate.IsZero() {
+		g.InjectBitemporalScoping(ctx, req.KnowledgeDate)
+	}
+
 
 	// 7. Build Join Clause (conditions may have been mutated by tenant scoping)
 	joinClause := g.BuildJoinClause(ctx)
@@ -370,6 +429,28 @@ func (g *BOSQLGenerator) InjectTenantScopingToGraph(ctx *GenerationContext, tena
 	}
 }
 
+// InjectBitemporalScoping injects valid-time system_valid_from / system_valid_to bitemporal predicates into the query AST.
+func (g *BOSQLGenerator) InjectBitemporalScoping(ctx *GenerationContext, knowledgeDate time.Time) {
+	rootAlias := "t0"
+	if ctx.Args == nil {
+		ctx.Args = make([]interface{}, 0)
+	}
+
+	ctx.ParamCounter++
+	pToken := paramToken(g.Dialect, ctx.ParamCounter)
+	ctx.Args = append(ctx.Args, knowledgeDate.Format(time.RFC3339))
+
+	bitemporalPredicate := fmt.Sprintf("(%s.system_valid_from <= %s AND (%s.system_valid_to IS NULL OR %s.system_valid_to > %s))",
+		rootAlias, pToken, rootAlias, rootAlias, pToken)
+
+	if ctx.RootTenantPredicate != "" {
+		ctx.RootTenantPredicate = ctx.RootTenantPredicate + " AND " + bitemporalPredicate
+	} else {
+		ctx.RootTenantPredicate = bitemporalPredicate
+	}
+}
+
+
 // ResolveSelectedFields resolves paths to physical columns and infers joins
 func (g *BOSQLGenerator) ResolveSelectedFields(ctx *GenerationContext) ([]string, error) {
 	var columns []string
@@ -424,20 +505,10 @@ func (g *BOSQLGenerator) ResolvePathWithLabel(ctx *GenerationContext, path strin
 
 		// If this is the last part, we are done
 		if i == len(parts)-1 {
-			if foundField.PhysicalColumn == "" {
+			if foundField.PhysicalColumn == "" && foundField.TransformationSQL == "" {
 				return "", "", fmt.Errorf("no physical column mapping for field '%s'", foundField.ID)
 			}
-			// Return physical column with alias
-			// PhysicalColumn is like "customers.name", we need "t0.name"
-			// We assume PhysicalColumn format "table.column"
-			colParts := strings.Split(foundField.PhysicalColumn, ".")
-			var sqlExpr string
-			if len(colParts) != 2 {
-				// Fallback if not fully qualified
-				sqlExpr = fmt.Sprintf("%s.%s", currentAlias, foundField.PhysicalColumn)
-			} else {
-				sqlExpr = fmt.Sprintf("%s.%s", currentAlias, colParts[1])
-			}
+			sqlExpr := ResolvePolymorphicField(*foundField, currentAlias, g.Dialect)
 
 			// Determine label: use DisplayName, fallback to Name
 			label := foundField.DisplayName
@@ -450,6 +521,7 @@ func (g *BOSQLGenerator) ResolvePathWithLabel(ctx *GenerationContext, path strin
 
 			return sqlExpr, label, nil
 		}
+
 
 		// If not last part, it MUST be a reference/relationship
 		if foundField.Type != "reference" || foundField.ReferenceBOID == "" {
