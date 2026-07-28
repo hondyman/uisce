@@ -223,8 +223,7 @@ func splitSQLStatements(sql string) []string {
 	var stmts []string
 	var current strings.Builder
 	inDollarQuote := false
-	var dollarTag string
-	depth := 0
+	var dollarTagStr string
 	wasLastCharSemicolon := false
 
 	for i := 0; i < len(sql); i++ {
@@ -240,7 +239,7 @@ func splitSQLStatements(sql string) []string {
 			}
 			if tagEnd < len(sql) && sql[tagEnd] == '$' && tagEnd > j {
 				inDollarQuote = true
-				dollarTag = sql[j:tagEnd]
+				dollarTagStr = sql[j:tagEnd]
 				current.WriteByte(ch)
 				i = tagEnd
 				continue
@@ -249,12 +248,23 @@ func splitSQLStatements(sql string) []string {
 
 		if inDollarQuote {
 			current.WriteByte(ch)
-			if sql[i] == '$' && i+1 < len(sql) && sql[i+1] == '$' {
-				// End of dollar quote
+			if ch == '$' && i+1 < len(sql) && sql[i+1] == '$' {
+				// End of dollar quote (handles both $$ and $tag$)
 				current.WriteByte('$')
 				i++
 				inDollarQuote = false
-				dollarTag = ""
+				dollarTagStr = ""
+			} else if ch == '$' && dollarTagStr != "" {
+				// Check for named tag end
+				closeTag := "$" + dollarTagStr + "$"
+				if i+len(closeTag) <= len(sql) && sql[i:i+len(closeTag)] == closeTag {
+					for _, c := range closeTag[1:] {
+						current.WriteByte(byte(c))
+					}
+					i += len(closeTag) - 1
+					inDollarQuote = false
+					dollarTagStr = ""
+				}
 			}
 			continue
 		}

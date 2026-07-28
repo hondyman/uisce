@@ -15,7 +15,6 @@ import (
 
 	jwt "github.com/golang-jwt/jwt/v5"
 	"github.com/hondyman/uisce/backend/internal/analytics"
-	"github.com/hondyman/uisce/libs/auth"
 )
 
 // RateLimiter provides advanced rate limiting capabilities
@@ -383,16 +382,8 @@ func NewJWTManager(secret []byte) *JWTManager {
 
 // SignMapClaims signs the provided claims with HS256 and returns the token string.
 func (jm *JWTManager) SignMapClaims(claims jwt.MapClaims) (string, error) {
-	authClaims := &auth.Claims{
-		UserID: getStringClaim(claims, "user_id"),
-		Email:  getStringClaim(claims, "email"),
-		RegisteredClaims: jwt.RegisteredClaims{
-			Subject:   getSubjectClaim(claims),
-			ExpiresAt: getExpiresAtClaim(claims),
-			IssuedAt:  getIssuedAtClaim(claims),
-		},
-	}
-	return auth.SignHS256(authClaims, jm.secretKey)
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	return token.SignedString(jm.secretKey)
 }
 
 func getStringClaim(claims jwt.MapClaims, key string) string {
@@ -430,43 +421,65 @@ func getIssuedAtClaim(claims jwt.MapClaims) *jwt.NumericDate {
 
 // ParseMapClaims parses a token string and returns the MapClaims if valid.
 func (jm *JWTManager) ParseMapClaims(tokenString string) (jwt.MapClaims, error) {
-	claims, err := auth.VerifyHS256(tokenString, jm.secretKey)
+	mc := jwt.MapClaims{}
+	token, err := jwt.ParseWithClaims(tokenString, mc, func(token *jwt.Token) (interface{}, error) {
+		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
+		}
+		return jm.secretKey, nil
+	})
 	if err != nil {
 		return nil, err
 	}
-	mc := jwt.MapClaims{
-		"user_id":    claims.UserID,
-		"tenant_id":  claims.TenantID,
-		"tenant_ids": claims.TenantIDs,
-		"roles":      claims.Roles,
-		"email":      claims.Email,
-	}
-	if claims.Subject != "" {
-		mc["sub"] = claims.Subject
+	if !token.Valid {
+		return nil, fmt.Errorf("invalid token")
 	}
 	return mc, nil
 }
 
 // ValidateToken validates a JWT token and returns claims
 func (jm *JWTManager) ValidateToken(tokenString string) (*JWTClaims, error) {
-	authClaims, err := auth.VerifyHS256(tokenString, jm.secretKey)
+	mc := jwt.MapClaims{}
+	token, err := jwt.ParseWithClaims(tokenString, mc, func(token *jwt.Token) (interface{}, error) {
+		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
+		}
+		return jm.secretKey, nil
+	})
 	if err != nil {
 		return nil, err
 	}
-
-	if authClaims.UserID == "" {
+	if !token.Valid {
+		return nil, fmt.Errorf("invalid token")
+	}
+	userID := getStringClaim(mc, "user_id")
+	if userID == "" {
 		return nil, fmt.Errorf("token missing user identifier")
 	}
-
-	roles := authClaims.Roles
-	if roles == nil {
-		roles = []string{}
+	tenantID := getStringClaim(mc, "tenant_id")
+	var tenantIDs []string
+	if tids, ok := mc["tenant_ids"].([]interface{}); ok {
+		for _, tid := range tids {
+			if s, ok := tid.(string); ok {
+				tenantIDs = append(tenantIDs, s)
+			}
+		}
 	}
-	tenantIDs := auth.NormalizeTenantIDs(authClaims.TenantIDs, authClaims.TenantID)
+	if tenantID != "" && len(tenantIDs) == 0 {
+		tenantIDs = []string{tenantID}
+	}
+	var roles []string
+	if rs, ok := mc["roles"].([]interface{}); ok {
+		for _, r := range rs {
+			if s, ok := r.(string); ok {
+				roles = append(roles, s)
+			}
+		}
+	}
 
 	return &JWTClaims{
-		UserID:    authClaims.UserID,
-		TenantID:  authClaims.TenantID,
+		UserID:    userID,
+		TenantID:  tenantID,
 		TenantIDs: tenantIDs,
 		Roles:     roles,
 		IssuedAt:  time.Now(),

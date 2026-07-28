@@ -19,10 +19,10 @@ func NewScenarioService(db *sqlx.DB) *ScenarioService {
 	return &ScenarioService{db: db}
 }
 
-func (s *ScenarioService) ListScenarios(ctx context.Context, tenantID string) ([]SimulationScenario, error) {
+func (s *ScenarioService) ListScenarios(ctx context.Context, tenantID string) ([]ScenarioDefinition, error) {
 	if s.db == nil {
 		// Mock fallback scenarios if DB is uninitialized
-		return []SimulationScenario{
+		return []ScenarioDefinition{
 			{
 				ScenarioID:  "scen-rate-hike-150",
 				TenantID:    tenantID,
@@ -59,9 +59,9 @@ func (s *ScenarioService) ListScenarios(ctx context.Context, tenantID string) ([
 	}
 	defer rows.Close()
 
-	var scenarios []SimulationScenario
+	var scenarios []ScenarioDefinition
 	for rows.Next() {
-		var sc SimulationScenario
+		var sc ScenarioDefinition
 		var shockJSON []byte
 		if err := rows.Scan(&sc.ScenarioID, &sc.TenantID, &sc.Name, &sc.Description, &sc.TargetBOID, &shockJSON, &sc.IsGlobal, &sc.CreatedBy); err != nil {
 			continue
@@ -73,7 +73,7 @@ func (s *ScenarioService) ListScenarios(ctx context.Context, tenantID string) ([
 	return scenarios, nil
 }
 
-func (s *ScenarioService) CreateScenario(ctx context.Context, sc SimulationScenario) error {
+func (s *ScenarioService) CreateScenario(ctx context.Context, sc ScenarioDefinition) error {
 	if sc.ScenarioID == "" {
 		sc.ScenarioID = uuid.New().String()
 	}
@@ -109,7 +109,7 @@ func (s *ScenarioService) ListScenariosHandler(w http.ResponseWriter, r *http.Re
 }
 
 func (s *ScenarioService) CreateScenarioHandler(w http.ResponseWriter, r *http.Request) {
-	var sc SimulationScenario
+	var sc ScenarioDefinition
 	if err := json.NewDecoder(r.Body).Decode(&sc); err != nil {
 		http.Error(w, "Invalid scenario payload", http.StatusBadRequest)
 		return

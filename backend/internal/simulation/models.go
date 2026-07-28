@@ -20,6 +20,7 @@ const (
 type ScenarioStatus string
 
 const (
+	ScenarioStatusPending   ScenarioStatus = "PENDING"
 	ScenarioStatusDraft     ScenarioStatus = "DRAFT"
 	ScenarioStatusRunning   ScenarioStatus = "RUNNING"
 	ScenarioStatusCompleted ScenarioStatus = "COMPLETED"

@@ -9,7 +9,7 @@ import (
 func TestApplySimulationTransform(t *testing.T) {
 	projections := []string{"account.balance", "account.market_value", "account.status"}
 
-	scenario := &SimulationScenario{
+	scenario := &ScenarioDefinition{
 		Name: "Interest Rate Shock",
 		Rules: []ShockRule{
 			{Field: "balance", Operator: "MULTIPLY", Value: 0.92},

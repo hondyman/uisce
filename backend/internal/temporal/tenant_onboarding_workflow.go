@@ -23,7 +23,7 @@ func TenantOnboardingWorkflow(ctx workflow.Context, p TenantProvisionParams) err
 
 	// Define compensating actions via deferred execution
 	defer func() {
-		if workflow.IsCanceled(ctx) || ctx.Err() != nil {
+		if ctx.Err() != nil {
 			disconnectedCtx, _ := workflow.NewDisconnectedContext(ctx)
 
 			if step2Done {

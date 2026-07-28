@@ -40,6 +40,13 @@ func (s *PageCopilotService) GeneratePageLayoutSpec(ctx context.Context, req Pag
 	// Build component list dynamically based on prompt intent
 	firstRowComponents := []map[string]interface{}{
 		{
+			"id":       "comp_rec_bar_1",
+			"type":     "AI_RECOMMENDATION_BAR",
+			"title":    "AI Proactive Recommendations",
+			"bo_id":    "customers",
+			"bindings": map[string]interface{}{"bo_keys": []string{"customers"}},
+		},
+		{
 			"id":       "comp_chart_1",
 			"type":     "BO_ANALYTICS_CHART",
 			"title":    "Breakdown by Asset Class",

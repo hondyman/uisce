@@ -79,7 +79,6 @@ type GeneratorContext struct {
 
 // ResolveCalculatedMeasures builds a topological sort DAG for derived metrics and compiles their expressions
 func (g *GeneratorContext) ResolveCalculatedMeasures(requestedMeasures []string) ([]string, map[string]string, error) {
-	exprMap := make(map[string]string)
 	adjacency := make(map[string][]string)
 	inDegree := make(map[string]int)
 	attributeRegistry := make(map[string]*Attribute)

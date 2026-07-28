@@ -11,7 +11,8 @@ type ShockRule struct {
 	Value    float64 `json:"value"`
 }
 
-type SimulationScenario struct {
+// ScenarioDefinition defines a What-If scenario with AST shock rules
+type ScenarioDefinition struct {
 	ScenarioID  string      `json:"scenario_id" db:"scenario_id"`
 	TenantID    string      `json:"tenant_id" db:"tenant_id"`
 	Name        string      `json:"scenario_name" db:"scenario_name"`
@@ -23,7 +24,7 @@ type SimulationScenario struct {
 }
 
 // ApplySimulationTransform mutates field projections in the AST to reflect simulation shocks
-func ApplySimulationTransform(fieldProjections []string, scenario *SimulationScenario) []string {
+func ApplySimulationTransform(fieldProjections []string, scenario *ScenarioDefinition) []string {
 	if scenario == nil || len(scenario.Rules) == 0 {
 		return fieldProjections
 	}

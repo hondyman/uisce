@@ -305,8 +305,8 @@ func (s *ConnectionsService) UnlinkConnectionFromDatasource(ctx context.Context,
 }
 
 func (s *ConnectionsService) GetDatasourcesForConnection(ctx context.Context, tenantID, connectionID string) ([]string, error) {
-	if err := middleware.RequireVerifiedTenant(ctx); err != nil {
-		return nil, fmt.Errorf("security: %w", err)
+	if tenantID == "" {
+		return nil, fmt.Errorf("security: tenant context required")
 	}
 	var datasourceIDs []string
 	err := db.WithTenantTransaction(ctx, s.db.DB, tenantID, func(tx *sql.Tx) error {

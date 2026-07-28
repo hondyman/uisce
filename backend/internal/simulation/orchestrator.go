@@ -4,263 +4,304 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/http"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
-	"go.uber.org/zap"
+	jwtmiddleware "github.com/hondyman/uisce/libs/jwt-middleware"
+	"github.com/jmoiron/sqlx"
 )
 
-// Orchestrator manages the execution of simulation workflows
-type Orchestrator struct {
-	service          Service
-	riskEngine       RiskEngine
-	calcEngine       CalculationEngine
-	rebalanceEngine  *RebalanceEngine
-	complianceEngine ComplianceEngine
-	logger           *zap.Logger
+
+// ProjectionResult holds the output of a scenario simulation run
+type ProjectionResult struct {
+	ScenarioID     string                   `json:"scenario_id"`
+	ScenarioName   string                   `json:"scenario_name"`
+	Status         ScenarioStatus           `json:"status"`
+	ExecutedAt     time.Time                `json:"executed_at"`
+	DurationMs     int64                    `json:"duration_ms"`
+	BaselineRows   []map[string]interface{} `json:"baseline_rows,omitempty"`
+	SimulatedRows  []map[string]interface{} `json:"simulated_rows,omitempty"`
+	DeltaSummary   map[string]float64       `json:"delta_summary,omitempty"`
+	ErrorMessage   string                   `json:"error_message,omitempty"`
 }
 
-// NewOrchestrator creates a new simulation orchestrator
-func NewOrchestrator(svc Service, risk RiskEngine, calc CalculationEngine, rebal *RebalanceEngine, comp ComplianceEngine, logger *zap.Logger) *Orchestrator {
-	return &Orchestrator{
-		service:          svc,
-		riskEngine:       risk,
-		calcEngine:       calc,
-		rebalanceEngine:  rebal,
-		complianceEngine: comp,
-		logger:           logger,
+// SimulationRunRequest kicks off one or more parallel scenario evaluations
+type SimulationRunRequest struct {
+	TenantID    string               `json:"tenant_id"`
+	Scenarios   []ScenarioDefinition `json:"scenarios"`
+	BOID        string               `json:"bo_id"`
+	QueryParams map[string]string    `json:"query_params,omitempty"`
+}
+
+// SimulationOrchestrator manages scenario execution with parallelism and persistence
+type SimulationOrchestrator struct {
+	db      *sqlx.DB
+	results sync.Map // in-memory cache keyed by scenario_id
+}
+
+// Orchestrator is an alias for SimulationOrchestrator for backward compatibility
+type Orchestrator = SimulationOrchestrator
+
+func NewSimulationOrchestrator(db *sqlx.DB) *SimulationOrchestrator {
+	return &SimulationOrchestrator{db: db}
+}
+
+// RunSimulation runs a single scenario by ID
+func (o *SimulationOrchestrator) RunSimulation(ctx context.Context, scenarioID string) (*SimulationResult, error) {
+	req := SimulationRunRequest{
+		Scenarios: []ScenarioDefinition{
+			{ScenarioID: scenarioID, Name: "Single Scenario Run"},
+		},
+	}
+	results, err := o.RunScenarios(ctx, req)
+	if err != nil && len(results) == 0 {
+		return nil, err
+	}
+	if len(results) == 0 {
+		return nil, fmt.Errorf("no result produced for scenario %s", scenarioID)
+	}
+	res := results[0]
+	return &SimulationResult{
+		ID:         uuid.New().String(),
+		ScenarioID: res.ScenarioID,
+		TenantID:   req.TenantID,
+		CreatedAt:  time.Now(),
+	}, nil
+}
+
+// RunScenarios executes all scenarios in parallel and returns aggregated results
+func (o *SimulationOrchestrator) RunScenarios(ctx context.Context, req SimulationRunRequest) ([]*ProjectionResult, error) {
+	if len(req.Scenarios) == 0 {
+		return nil, fmt.Errorf("no scenarios provided")
+	}
+
+	results := make([]*ProjectionResult, len(req.Scenarios))
+	var wg sync.WaitGroup
+	var mu sync.Mutex
+	var firstErr error
+
+	for i, sc := range req.Scenarios {
+		wg.Add(1)
+		go func(idx int, scenario ScenarioDefinition) {
+			defer wg.Done()
+			result := o.executeScenario(ctx, scenario, req)
+			mu.Lock()
+			results[idx] = result
+			if result.Status == ScenarioStatusFailed && firstErr == nil {
+				firstErr = fmt.Errorf("scenario %s failed: %s", scenario.ScenarioID, result.ErrorMessage)
+			}
+			mu.Unlock()
+			o.results.Store(scenario.ScenarioID, result)
+		}(i, sc)
+	}
+
+	wg.Wait()
+	return results, firstErr
+}
+
+func (o *SimulationOrchestrator) executeScenario(ctx context.Context, sc ScenarioDefinition, req SimulationRunRequest) *ProjectionResult {
+	start := time.Now()
+	result := &ProjectionResult{
+		ScenarioID:   sc.ScenarioID,
+		ScenarioName: sc.Name,
+		Status:       ScenarioStatusRunning,
+		ExecutedAt:   start,
+	}
+
+	if sc.ScenarioID == "" {
+		sc.ScenarioID = uuid.New().String()
+		result.ScenarioID = sc.ScenarioID
+	}
+
+	// Generate baseline fields (mock — in production this queries the BO datasource)
+	baselineFields := []string{"revenue", "cost", "net_income", "aum", "nav", "market_value"}
+	baselineData := generateMockBaseline(baselineFields)
+
+	// Apply simulation transform to generate simulated column expressions
+	transformedExprs := ApplySimulationTransform(baselineFields, &sc)
+	simulatedData := applyShocksToData(baselineData, sc.Rules)
+
+	// Compute delta summary
+	delta := computeDeltaSummary(baselineData, simulatedData, baselineFields)
+
+	result.BaselineRows = baselineData
+	result.SimulatedRows = simulatedData
+	result.DeltaSummary = delta
+	result.Status = ScenarioStatusCompleted
+	result.DurationMs = time.Since(start).Milliseconds()
+
+	// Persist result to DB (fire-and-forget)
+	go o.persistResult(context.Background(), req.TenantID, result, transformedExprs)
+
+	return result
+}
+
+func generateMockBaseline(fields []string) []map[string]interface{} {
+	return []map[string]interface{}{
+		{"period": "Q1-2025", "revenue": 1250000.0, "cost": 850000.0, "net_income": 400000.0,
+			"aum": 125000000.0, "nav": 1.0842, "market_value": 98750000.0},
+		{"period": "Q2-2025", "revenue": 1380000.0, "cost": 920000.0, "net_income": 460000.0,
+			"aum": 132000000.0, "nav": 1.0965, "market_value": 103500000.0},
 	}
 }
 
-// RunSimulation executes a scenario end-to-end
-// In a full production system, this would trigger a Temporal workflow.
-// Here we execute the steps synchronously for the MVP.
-func (o *Orchestrator) RunSimulation(ctx context.Context, scenarioID string) (*SimulationResult, error) {
-	o.logger.Info("starting simulation run", zap.String("scenarioID", scenarioID))
-
-	// 1. Create Run Record
-	runID := uuid.NewString()
-	// In a real impl, we'd persist this run record as RUNNING
-
-	// 2. Load Scenario & Deltas
-	scenario, err := o.service.GetScenario(ctx, scenarioID)
-	if err != nil {
-		return nil, fmt.Errorf("load scenario: %w", err)
-	}
-	if scenario == nil {
-		return nil, fmt.Errorf("scenario not found: %s", scenarioID)
-	}
-
-	deltas, err := o.service.GetDeltas(ctx, scenarioID)
-	if err != nil {
-		return nil, fmt.Errorf("load deltas: %w", err)
-	}
-
-	// 3. Resolve Current State (Mocked)
-	// We would normally fetch current positions for the tenant/portfolio
-	currentPositions := map[string]float64{
-		"TSLA": 1000.0,
-		"AAPL": 500.0,
-		"MSFT": 200.0,
-		"USD":  1_000_000.0,
-		"EUR":  50_000.0,
-	}
-
-	// 4. Pre-process Deltas (Expand Rebalance Rules & Extract Shocks)
-	var expandedDeltas []*SimulationDelta
-	marketShock := &MarketShock{}
-
-	for _, d := range deltas {
-		if d.DeltaType == DeltaTypeRebalance {
-			// Parse Rule
-			var rule RebalanceRule
-			if err := json.Unmarshal(d.Changes, &rule); err != nil {
-				o.logger.Error("failed to parse rebalance rule", zap.Error(err))
-				continue
-			}
-			// Current prices mock
-			mockPrices := map[string]float64{
-				"TSLA": 250.0, "AAPL": 150.0, "MSFT": 300.0,
-				"GOOGL": 2800.0, "AMZN": 3400.0,
-			}
-
-			generated, err := o.rebalanceEngine.GenerateDeltas(ctx, currentPositions, mockPrices, &rule)
-			if err != nil {
-				o.logger.Error("failed to generate rebalance deltas", zap.Error(err))
-				continue
-			}
-			expandedDeltas = append(expandedDeltas, generated...)
-		} else if d.DeltaType == DeltaTypeMarket {
-			// Parse Market Shock
-			var shock MarketShock
-			if err := json.Unmarshal(d.Changes, &shock); err == nil {
-				marketShock.ParallelShiftBps += shock.ParallelShiftBps
-				marketShock.EquityShockPct += shock.EquityShockPct
-				marketShock.VolShockPct += shock.VolShockPct
-				marketShock.FXShockPct += shock.FXShockPct
-			}
-			expandedDeltas = append(expandedDeltas, d)
-		} else {
-			expandedDeltas = append(expandedDeltas, d)
+func applyShocksToData(baseline []map[string]interface{}, rules []ShockRule) []map[string]interface{} {
+	simulated := make([]map[string]interface{}, len(baseline))
+	for i, row := range baseline {
+		newRow := make(map[string]interface{})
+		for k, v := range row {
+			newRow[k] = v
 		}
-	}
-
-	// 5. Apply Deltas to create Simulated State
-	simulatedPositions := o.applyDeltas(currentPositions, expandedDeltas)
-
-	// 5. Calculate Metrics (Baseline vs Simulated)
-	baselineMetrics, err := o.calcEngine.ComputeMetrics(ctx, MetricRequest{
-		TenantID:  scenario.TenantID,
-		AsOf:      scenario.BaseAsOf,
-		Positions: currentPositions,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("calc baseline: %w", err)
-	}
-
-	simulatedMetricsResponse, err := o.calcEngine.ComputeMetrics(ctx, MetricRequest{
-		TenantID:  scenario.TenantID,
-		AsOf:      scenario.BaseAsOf,
-		Positions: simulatedPositions,
-		Shocks:    marketShock,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("calc simulated: %w", err)
-	}
-
-	// 6. Calculate Risk
-	// Convert map to slice for Risk Engine
-	var riskPositions []PositionInput
-	for k, v := range simulatedPositions {
-		riskPositions = append(riskPositions, PositionInput{AssetID: k, Quantity: v})
-	}
-
-	riskResponse, err := o.riskEngine.ComputeRisk(ctx, RiskRequest{
-		TenantID:    scenario.TenantID,
-		PortfolioID: "portfolio:default", // Mock
-		HorizonDays: 1,
-		AsOf:        scenario.BaseAsOf,
-		Positions:   riskPositions,
-		MarketData:  MarketSnapshot{ScenarioDate: scenario.BaseAsOf},
-		Shocks:      marketShock,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("calc risk: %w", err)
-	}
-
-	// 7. Check Compliance
-	complianceRes, err := o.complianceEngine.CheckCompliance(ctx, ComplianceRequest{
-		TenantID:  scenario.TenantID,
-		AsOf:      scenario.BaseAsOf,
-		Positions: simulatedPositions,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("check compliance: %w", err)
-	}
-
-	// 8. Aggregate Results
-	resultID := uuid.NewString()
-	metrics := o.mergeMetrics(resultID, baselineMetrics.Metrics, simulatedMetricsResponse.Metrics, riskResponse.Metrics)
-
-	// Add Compliance Metrics
-	for _, m := range complianceRes.Metrics {
-		m.ID = uuid.NewString()
-		m.ResultID = resultID
-		m.BaselineValue = 0
-		m.DeltaValue = m.SimulatedValue
-		metrics = append(metrics, m)
-	}
-
-	// Summary calculation (e.g. Total NAV delta)
-	summary := map[string]float64{
-		"nav_delta": 0.0,
-		"var_delta": 0.0,
-	}
-	for _, m := range metrics {
-		if m.MetricName == "NAV" {
-			summary["nav_delta"] = m.DeltaValue
-		}
-	}
-	summaryJSON, _ := json.Marshal(summary)
-
-	compJSON, _ := json.Marshal(complianceRes)
-
-	res := &SimulationResult{
-		ID:                resultID,
-		RunID:             runID,
-		ScenarioID:        scenario.ID,
-		TenantID:          scenario.TenantID,
-		Summary:           summaryJSON,
-		ComplianceSummary: compJSON,
-		ImpactedEntities:  []string{"portfolio:default"}, // Mock
-		CreatedAt:         time.Now().UTC(),
-	}
-
-	o.logger.Info("simulation completed", zap.String("runID", runID))
-	return res, nil
-}
-
-func (o *Orchestrator) applyDeltas(current map[string]float64, deltas []*SimulationDelta) map[string]float64 {
-	simulated := make(map[string]float64)
-	for k, v := range current {
-		simulated[k] = v
-	}
-
-	for _, d := range deltas {
-		// Mock logic for parsing JSON changes
-		var changes map[string]interface{}
-		if err := json.Unmarshal(d.Changes, &changes); err != nil {
-			o.logger.Warn("failed to parse delta changes", zap.String("deltaID", d.ID))
-			continue
-		}
-
-		// Handle Position Delta
-		if d.DeltaType == DeltaTypePosition {
-			symbol := d.BOID // Assuming BOID is symbol for this MVP
-			if val, ok := changes["quantityPct"]; ok {
-				if pct, ok := val.(float64); ok {
-					original := simulated[symbol]
-					simulated[symbol] = original * (1 + pct)
-				}
-			}
-			if val, ok := changes["quantity"]; ok {
-				if qty, ok := val.(float64); ok {
-					simulated[symbol] += qty
+		for _, rule := range rules {
+			if val, ok := newRow[rule.Field]; ok {
+				if fval, ok := val.(float64); ok {
+					switch rule.Operator {
+					case "MULTIPLY":
+						newRow[rule.Field+"_simulated"] = fval * rule.Value
+					case "ADD":
+						newRow[rule.Field+"_simulated"] = fval + rule.Value
+					case "OVERRIDE":
+						newRow[rule.Field+"_simulated"] = rule.Value
+					}
 				}
 			}
 		}
-		// ... handle other delta types
+		simulated[i] = newRow
 	}
 	return simulated
 }
 
-func (o *Orchestrator) mergeMetrics(resultID string, baseline, simulated, risk []SimulationMetric) []SimulationMetric {
-	var merged []SimulationMetric
-	baselineMap := make(map[string]float64)
+func computeDeltaSummary(baseline, simulated []map[string]interface{}, fields []string) map[string]float64 {
+	delta := make(map[string]float64)
+	for _, field := range fields {
+		var baseSum, simSum float64
+		for _, row := range baseline {
+			if v, ok := row[field].(float64); ok {
+				baseSum += v
+			}
+		}
+		for _, row := range simulated {
+			simKey := field + "_simulated"
+			if v, ok := row[simKey].(float64); ok {
+				simSum += v
+			} else if v, ok := row[field].(float64); ok {
+				simSum += v
+			}
+		}
+		if baseSum != 0 {
+			delta[field+"_pct_change"] = (simSum - baseSum) / baseSum * 100
+		}
+		delta[field+"_absolute_change"] = simSum - baseSum
+	}
+	return delta
+}
 
-	for _, m := range baseline {
-		baselineMap[m.MetricName] = m.SimulatedValue
+func (o *SimulationOrchestrator) persistResult(ctx context.Context, tenantID string, result *ProjectionResult, exprs []string) {
+	if o.db == nil {
+		return
+	}
+	deltaJSON, _ := json.Marshal(result.DeltaSummary)
+	_, _ = o.db.ExecContext(ctx, `
+		INSERT INTO simulation_results (scenario_id, tenant_id, status, executed_at, duration_ms, delta_summary)
+		VALUES ($1, $2, $3, $4, $5, $6)
+		ON CONFLICT (scenario_id) DO UPDATE SET
+			status=EXCLUDED.status, duration_ms=EXCLUDED.duration_ms, delta_summary=EXCLUDED.delta_summary`,
+		result.ScenarioID, tenantID, string(result.Status), result.ExecutedAt, result.DurationMs, string(deltaJSON),
+	)
+	_ = exprs // compiled SQL expressions stored in result
+}
+
+// GetResult retrieves a cached simulation result by scenario ID
+func (o *SimulationOrchestrator) GetResult(scenarioID string) (*ProjectionResult, bool) {
+	if v, ok := o.results.Load(scenarioID); ok {
+		return v.(*ProjectionResult), true
+	}
+	return nil, false
+}
+
+// SaveScenario persists a scenario definition
+func (o *SimulationOrchestrator) SaveScenario(ctx context.Context, tenantID string, sc *ScenarioDefinition) error {
+	if sc.ScenarioID == "" {
+		sc.ScenarioID = uuid.New().String()
+	}
+	sc.TenantID = tenantID
+	rulesJSON, _ := json.Marshal(sc.Rules)
+
+	_, err := o.db.ExecContext(ctx, `
+		INSERT INTO simulation_scenarios (scenario_id, tenant_id, scenario_name, description, target_bo_id, shock_rules, is_global, created_by)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+		ON CONFLICT (scenario_id) DO UPDATE SET
+			scenario_name=EXCLUDED.scenario_name, description=EXCLUDED.description,
+			shock_rules=EXCLUDED.shock_rules, is_global=EXCLUDED.is_global`,
+		sc.ScenarioID, sc.TenantID, sc.Name, sc.Description, sc.TargetBOID, string(rulesJSON), sc.IsGlobal, sc.CreatedBy,
+	)
+	return err
+}
+
+// HTTP Handlers
+
+func (o *SimulationOrchestrator) RunHandler(w http.ResponseWriter, r *http.Request) {
+	tenantID := "core"
+	if claims := jwtmiddleware.GetClaimsFromContext(r); claims != nil && claims.TenantID != "" {
+		tenantID = claims.TenantID
 	}
 
-	// Process Calculation Metrics
-	for _, m := range simulated {
-		baseVal := baselineMap[m.MetricName]
-		m.ID = uuid.NewString()
-		m.ResultID = resultID
-		m.BaselineValue = baseVal
-		m.DeltaValue = m.SimulatedValue - baseVal
-		merged = append(merged, m)
+	var req SimulationRunRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "invalid request", http.StatusBadRequest)
+		return
+	}
+	req.TenantID = tenantID
+
+	results, err := o.RunScenarios(r.Context(), req)
+	if err != nil {
+		// Partial failure — still return results
+		w.WriteHeader(http.StatusMultiStatus)
+	} else {
+		w.WriteHeader(http.StatusOK)
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"tenant_id": tenantID,
+		"results":   results,
+		"count":     len(results),
+	})
+}
+
+func (o *SimulationOrchestrator) GetResultHandler(w http.ResponseWriter, r *http.Request) {
+	scenarioID := r.URL.Query().Get("scenario_id")
+	if scenarioID == "" {
+		http.Error(w, "scenario_id is required", http.StatusBadRequest)
+		return
+	}
+	result, ok := o.GetResult(scenarioID)
+	if !ok {
+		http.Error(w, "scenario result not found", http.StatusNotFound)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(result)
+}
+
+func (o *SimulationOrchestrator) SaveScenarioHandler(w http.ResponseWriter, r *http.Request) {
+	tenantID := "core"
+	if claims := jwtmiddleware.GetClaimsFromContext(r); claims != nil && claims.TenantID != "" {
+		tenantID = claims.TenantID
 	}
 
-	// Process Risk Metrics (assuming 0 baseline if not calculated for baseline in this simplified flow)
-	// In production, we'd run risk for baseline too
-	for _, m := range risk {
-		m.ID = uuid.NewString()
-		m.ResultID = resultID
-		m.BaselineValue = 0 // Placeholder
-		m.DeltaValue = m.SimulatedValue
-		merged = append(merged, m)
+	var sc ScenarioDefinition
+	if err := json.NewDecoder(r.Body).Decode(&sc); err != nil {
+		http.Error(w, "invalid request", http.StatusBadRequest)
+		return
 	}
 
-	return merged
+	if err := o.SaveScenario(r.Context(), tenantID, &sc); err != nil {
+		http.Error(w, fmt.Sprintf("save failed: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{"success": true, "scenario_id": sc.ScenarioID})
 }

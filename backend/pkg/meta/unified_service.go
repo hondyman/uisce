@@ -94,7 +94,7 @@ func (s *UnifiedMetadataService) MapBusinessObjectToSemanticView(
 		BOKey:         boKey,
 		BOName:        bo.DisplayName,
 		ViewID:        viewID,
-		ViewName:      view.ViewName,
+		ViewName:      view.Name,
 		FieldMappings: fieldMappings,
 	}
 
@@ -199,16 +199,16 @@ func (s *UnifiedMetadataService) getSemanticViewsFromDB(ctx context.Context, ten
 func (s *UnifiedMetadataService) createFieldMappings(bo *BusinessObjectDefinition, view *cache.SemanticViewSchema) []FieldMapping {
 	var mappings []FieldMapping
 
-	// Map business object fields to semantic view fields
+	// Map business object fields to semantic view columns
 	for _, boField := range bo.Fields {
-		for _, viewField := range view.Fields {
+		for _, col := range view.Columns {
 			// Simple name-based matching (can be enhanced with fuzzy matching)
-			if boField.Name == viewField.FieldName || boField.Label == viewField.FieldName {
+			if boField.Name == col.Name || boField.Label == col.Name {
 				mappings = append(mappings, FieldMapping{
 					BOFieldName:   boField.Name,
 					BOFieldType:   string(boField.Type),
-					ViewFieldName: viewField.FieldName,
-					ViewFieldType: viewField.FieldType,
+					ViewFieldName: col.Name,
+					ViewFieldType: col.Type,
 					MappingType:   "direct",
 				})
 			}
