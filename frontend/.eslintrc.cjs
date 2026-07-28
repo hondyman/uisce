@@ -1,3 +1,5 @@
+// TODO(phase5): delete this legacy config after migrating rules to eslint.config.cjs
+// Note: has duplicate `plugins` key — ESLint merges them but this is invalid JS object semantics
 module.exports = {
   root: true,
   parser: '@typescript-eslint/parser',
