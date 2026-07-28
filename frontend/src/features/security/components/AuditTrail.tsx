@@ -6,20 +6,7 @@ import {
   Typography,
   Chip,
   Divider,
-  List,
-  ListItem,
-  ListItemText,
-  ListItemIcon,
 } from '@mui/material';
-import {
-  Timeline,
-  TimelineItem,
-  TimelineSeparator,
-  TimelineConnector,
-  TimelineContent,
-  TimelineDot,
-  TimelineOppositeContent,
-} from '@mui/lab';
 import {
   Edit as EditIcon,
   Add as AddIcon,
@@ -57,6 +44,36 @@ const actionColors = {
   rejected: 'warning',
 } as const;
 
+const TimelineDot: React.FC<{ color: string; children: React.ReactNode }> = ({ color, children }) => (
+  <Box
+    sx={{
+      width: 32,
+      height: 32,
+      borderRadius: '50%',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      bgcolor: `${color}.main`,
+      color: 'white',
+      flexShrink: 0,
+    }}
+  >
+    {children}
+  </Box>
+);
+
+const TimelineConnector: React.FC = () => (
+  <Box
+    sx={{
+      width: 2,
+      flex: 1,
+      bgcolor: 'divider',
+      minHeight: 24,
+      mx: 'auto',
+    }}
+  />
+);
+
 export const AuditTrail: React.FC<AuditTrailProps> = ({ ruleId, entries }) => {
   const formatDate = (timestamp: string) => {
     const date = new Date(timestamp);
@@ -83,25 +100,27 @@ export const AuditTrail: React.FC<AuditTrailProps> = ({ ruleId, entries }) => {
           </Typography>
         </Paper>
       ) : (
-        <Timeline position="right">
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
           {entries.map((entry, index) => (
-            <TimelineItem key={entry.id}>
-              <TimelineOppositeContent color="text.secondary" sx={{ flex: 0.3 }}>
-                <Typography variant="caption">{formatDate(entry.timestamp)}</Typography>
-                <Typography variant="caption" sx={{ display: 'block', fontWeight: 600 }}>
-                  {entry.user}
-                </Typography>
-              </TimelineOppositeContent>
-
-              <TimelineSeparator>
+            <Box key={entry.id} sx={{ display: 'flex', gap: 2 }}>
+              <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flexShrink: 0 }}>
                 <TimelineDot color={actionColors[entry.action]}>
                   {actionIcons[entry.action]}
                 </TimelineDot>
                 {index < entries.length - 1 && <TimelineConnector />}
-              </TimelineSeparator>
+              </Box>
 
-              <TimelineContent>
-                <Paper elevation={2} sx={{ p: 2, mb: 2 }}>
+              <Box sx={{ flex: 1, pb: index < entries.length - 1 ? 3 : 0 }}>
+                <Box sx={{ display: 'flex', gap: 2, mb: 1 }}>
+                  <Typography variant="caption" color="text.secondary" sx={{ flex: 0.3 }}>
+                    {formatDate(entry.timestamp)}
+                  </Typography>
+                  <Typography variant="caption" sx={{ fontWeight: 600 }}>
+                    {entry.user}
+                  </Typography>
+                </Box>
+
+                <Paper elevation={2} sx={{ p: 2 }}>
                   <Stack spacing={2}>
                     <Stack direction="row" spacing={1} alignItems="center">
                       <Chip
@@ -151,10 +170,10 @@ export const AuditTrail: React.FC<AuditTrailProps> = ({ ruleId, entries }) => {
                     )}
                   </Stack>
                 </Paper>
-              </TimelineContent>
-            </TimelineItem>
+              </Box>
+            </Box>
           ))}
-        </Timeline>
+        </Box>
       )}
     </Box>
   );

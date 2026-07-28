@@ -33,14 +33,6 @@ import {
   Paper,
 } from '@mui/material';
 import {
-  Timeline,
-  TimelineItem,
-  TimelineSeparator,
-  TimelineConnector,
-  TimelineContent,
-  TimelineDot,
-} from '@mui/lab';
-import {
   Add as PlusOutlined,
   Edit as EditOutlined,
   Delete as DeleteOutlined,
@@ -63,8 +55,8 @@ import { useNotification } from '../../hooks/useNotification';
 import { devError } from '../utils/devLogger';
 import { getSelectedRegion } from '../lib/region';
 
-// Use MUI Timeline from @mui/lab directly (types are available now that @mui/lab is installed)
-  import TextPromptDialog from '../../components/TextPromptDialog';
+// MUI Timeline removed — replaced with custom Box-based implementation (phase4b).
+import TextPromptDialog from '../../components/TextPromptDialog';
 
 // void Tree;
 // void Collapse;
@@ -723,57 +715,70 @@ enqueueSnackbar('Failed to delete trigger', { variant: 'error' });
                 <CardHeader title={`Version History (${versions.length} versions)`} />
                 <CardContent>
                   {versions.length > 0 ? (
-                    <Timeline>
+                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
                       {versions.map((v, idx) => (
-                        <TimelineItem
-                          key={v.version}
-                        >
-                          <TimelineSeparator>
-                            <TimelineDot color={idx === 0 ? 'success' : 'primary'} />
-                            {idx < versions.length - 1 && <TimelineConnector />}
-                          </TimelineSeparator>
-                          <TimelineContent>
-                            <Card>
-                              <CardHeader
-                                title={
-                                  <Typography variant="h6">
-                                    <strong>Version {v.version}</strong>
-                                    {idx === 0 && <Chip label="CURRENT" color="success" style={{ marginLeft: '8px' }} />}
-                                  </Typography>
-                                }
-                                action={
-                                  idx !== 0 && (
-                                    <Button
-                                      variant="contained"
-                                      size="small"
-                                      onClick={() => handleRestoreVersion(v.version)}
-                                    >
-                                      <RollbackOutlined /> Restore
-                                    </Button>
-                                  )
-                                }
-                              />
-                              <CardContent>
-                                <Stack direction="column" spacing={1}>
-                                  <Typography><strong>Author:</strong> {v.author_name} ({v.author_email})</Typography>
-                                  <Typography><strong>Date:</strong> {new Date(v.timestamp).toLocaleString()}</Typography>
-                                  {v.changes.length > 0 && (
-                                    <div>
-                                      <Typography><strong>Changes:</strong></Typography>
-                                      <ul>
-                                        {v.changes.map((change, i) => (
-                                          <li key={i}>{change}</li>
-                                        ))}
-                                      </ul>
-                                    </div>
-                                  )}
-                                </Stack>
-                              </CardContent>
-                            </Card>
-                          </TimelineContent>
-                        </TimelineItem>
+                        <Box key={v.version} sx={{ display: 'flex', gap: 2 }}>
+                          <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flexShrink: 0 }}>
+                            <Box
+                              sx={{
+                                width: 32,
+                                height: 32,
+                                borderRadius: '50%',
+                                bgcolor: idx === 0 ? 'success.main' : 'primary.main',
+                                color: 'white',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                fontSize: 14,
+                                fontWeight: 700,
+                              }}
+                            >
+                              {v.version}
+                            </Box>
+                            {idx < versions.length - 1 && (
+                              <Box sx={{ width: 2, flex: 1, bgcolor: 'divider', minHeight: 24, my: 0.5 }} />
+                            )}
+                          </Box>
+                          <Card sx={{ flex: 1, mb: idx < versions.length - 1 ? 3 : 0 }}>
+                            <CardHeader
+                              title={
+                                <Typography variant="h6">
+                                  <strong>Version {v.version}</strong>
+                                  {idx === 0 && <Chip label="CURRENT" color="success" size="small" sx={{ ml: 1 }} />}
+                                </Typography>
+                              }
+                              action={
+                                idx !== 0 ? (
+                                  <Button
+                                    variant="contained"
+                                    size="small"
+                                    onClick={() => handleRestoreVersion(v.version)}
+                                  >
+                                    <RollbackOutlined /> Restore
+                                  </Button>
+                                ) : undefined
+                              }
+                            />
+                            <CardContent>
+                              <Stack direction="column" spacing={1}>
+                                <Typography><strong>Author:</strong> {v.author_name} ({v.author_email})</Typography>
+                                <Typography><strong>Date:</strong> {new Date(v.timestamp).toLocaleString()}</Typography>
+                                {v.changes.length > 0 && (
+                                  <Box>
+                                    <Typography><strong>Changes:</strong></Typography>
+                                    <Box component="ul" sx={{ m: 0, pl: 3 }}>
+                                      {v.changes.map((change, i) => (
+                                        <Box component="li" key={i}>{change}</Box>
+                                      ))}
+                                    </Box>
+                                  </Box>
+                                )}
+                              </Stack>
+                            </CardContent>
+                          </Card>
+                        </Box>
                       ))}
-                      </Timeline>
+                    </Box>
                   ) : (
                     <Box>No version history</Box>
                   )}
