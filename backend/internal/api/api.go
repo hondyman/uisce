@@ -1278,8 +1278,11 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 		r.Post("/calculation/compile", calculation.NewService().CompileExpressionHandler)
 
 		customAttrSvc := metadata.NewCustomAttributeService(sqlxDB)
+		bindingSvc := metadata.NewBindingService(sqlxDB)
 		r.Post("/tenants/custom-attributes", customAttrSvc.RegisterAttributeHandler)
 		r.Get("/tenants/custom-attributes", customAttrSvc.GetAttributesHandler)
+		r.Post("/business-objects/bindings", bindingSvc.SaveBindingHandler)
+		r.Get("/business-objects/bindings", bindingSvc.GetBindingsHandler)
 
 		upgradeSvc := upgrade.NewService(sqlxDB)
 		impactEngine := upgrade.NewImpactEngine(sqlxDB)

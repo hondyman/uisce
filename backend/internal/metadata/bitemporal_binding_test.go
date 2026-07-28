@@ -1,0 +1,37 @@
+package metadata
+
+import (
+	"context"
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+)
+
+func TestBuildBiTemporalWhereClause(t *testing.T) {
+	config := BiTemporalConfig{
+		ValidStartCol:       "effective_from",
+		ValidEndCol:         "effective_to",
+		TransactionStartCol: "sys_start_time",
+		TransactionEndCol:   "sys_end_time",
+	}
+
+	whereClause := BuildBiTemporalWhereClause(config, "2025-12-31 00:00:00", "2026-01-01 00:00:00")
+	assert.Contains(t, whereClause, "effective_from")
+	assert.Contains(t, whereClause, "sys_start_time")
+	assert.Contains(t, whereClause, "AND")
+}
+
+func TestBindingService_Validation(t *testing.T) {
+	svc := NewBindingService(nil)
+
+	validCol := ""
+	invalidBinding := BusinessObjectBinding{
+		BOID:              "customers",
+		BindingName:       "iceberg_bitemporal",
+		BindingMode:       BindingModeBiTemporalOLAP,
+		ValidTimeStartCol: &validCol,
+	}
+
+	err := svc.SaveBinding(context.Background(), invalidBinding)
+	assert.Error(t, err, "BI_TEMPORAL_OLAP mode must require valid_time_start_col")
+}
