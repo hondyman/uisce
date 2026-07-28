@@ -82,3 +82,24 @@ Thumbs.db
 /rules_server
 /semlayer
 /trading-consumer
+
+# Stale diagnostic outputs
+/frontend/eslint-report.json
+/frontend/eslint-warnings.json
+
+# Vite and tool artifacts
+*.bak
+*.backup
+*.bak.*
+*.OLD
+*.old
+*.BACKUP
+*.swp
+*.swo
+*.tmp
+*.orig
+*.rej
+*.before_fix.bak
+.env.before_fix.bak
+schema_backup_*.sql
+vite.config.ts.timestamp-*.mjs
