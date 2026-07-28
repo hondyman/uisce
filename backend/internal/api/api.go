@@ -23,6 +23,7 @@ import (
 	"github.com/go-playground/validator/v10"
 	"github.com/go-redis/redis/v8"
 	"github.com/google/uuid"
+	"github.com/hondyman/uisce/backend/internal/agentic"
 	"github.com/hondyman/uisce/backend/internal/ai"
 	"github.com/hondyman/uisce/backend/internal/altinvest"
 	"github.com/hondyman/uisce/backend/internal/analytics"
@@ -1307,6 +1308,12 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 		scenarioSvc := simulation.NewScenarioService(sqlxDB)
 		r.Get("/simulations/scenarios", scenarioSvc.ListScenariosHandler)
 		r.Post("/simulations/scenarios", scenarioSvc.CreateScenarioHandler)
+
+		mcSvc := agentic.NewMakerCheckerService(sqlxDB)
+		mcpRouter := agentic.NewMCPToolRouter(sqlxDB)
+		r.Get("/agentic/tickets", mcSvc.ListTicketsHandler)
+		r.Post("/agentic/tickets/review", mcSvc.ReviewTicketHandler)
+		r.Post("/mcp/tools/call", mcpRouter.HandleToolCall)
 
 		// Register audit history routes if handler is active (INSIDE /api group)
 		if auditHistoryHandler != nil {
