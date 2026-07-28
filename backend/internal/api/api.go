@@ -1288,6 +1288,7 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 		r.Get("/admin/tenants/deltas", upgradeSvc.GetTenantDeltaHandler)
 		r.Post("/admin/upgrade/preflight-simulation", impactEngine.PreFlightSimulationHandler)
 		r.Post("/admin/upgrade/deploy-globally", distExecutor.DeployGloballyHandler)
+		r.Post("/audit/lookback-diff", audit.NewLookbackAuditService(sqlxDB).LookbackDiffHandler)
 
 		// Register audit history routes if handler is active (INSIDE /api group)
 		if auditHistoryHandler != nil {

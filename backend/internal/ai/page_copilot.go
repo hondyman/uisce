@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 
 	"github.com/hondyman/uisce/libs/jwt-middleware"
 	"github.com/jmoiron/sqlx"
@@ -29,6 +30,13 @@ func (s *PageCopilotService) GeneratePageLayoutSpec(ctx context.Context, req Pag
 		req.Domain = "PORTFOLIO"
 	}
 
+	// Detect temporal / lookback intent in user prompt
+	isLookbackRequested := false
+	lowerPrompt := strings.ToLower(req.Prompt)
+	if strings.Contains(lowerPrompt, "as of") || strings.Contains(lowerPrompt, "historical") || strings.Contains(lowerPrompt, "lookback") || strings.Contains(lowerPrompt, "audit") || strings.Contains(lowerPrompt, "point in time") {
+		isLookbackRequested = true
+	}
+
 	// Generate structured layout spec based on prompt intent and schema metadata
 	spec := map[string]interface{}{
 		"id":           fmt.Sprintf("page_ai_%s", req.Domain),
@@ -37,6 +45,10 @@ func (s *PageCopilotService) GeneratePageLayoutSpec(ctx context.Context, req Pag
 		"title":        fmt.Sprintf("AI Dashboard: %s", req.Prompt),
 		"domain":       req.Domain,
 		"target_bo_id": "customers",
+		"lookback": map[string]interface{}{
+			"enabled":         isLookbackRequested,
+			"as_of_timestamp": "2025-12-31T23:59:59Z",
+		},
 		"layout": []map[string]interface{}{
 			{
 				"id":   "region_1",
