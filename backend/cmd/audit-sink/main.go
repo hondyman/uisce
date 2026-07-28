@@ -14,16 +14,42 @@ import (
 func main() {
 	log.Println("Starting Audit Sink Consumer...")
 
-	// Configuration from environment
-	kafkaBrokers := getEnv("KAFKA_BROKERS", "localhost:19092")
-	groupID := getEnv("KAFKA_GROUP_ID", "audit-sink-consumer")
-	s3Endpoint := getEnv("S3_ENDPOINT", "http://localhost:9000")
-	// s3AccessKey := getEnv("S3_ACCESS_KEY", "minioadmin")    // For S3 authentication
-	// s3SecretKey := getEnv("S3_SECRET_KEY", "minioadmin")    // For S3 authentication
-	s3Bucket := getEnv("S3_BUCKET", "audit")
-	icebergCatalogURI := getEnv("ICEBERG_CATALOG_URI", "http://localhost:8181")
+	kafkaBrokers := os.Getenv("KAFKA_BROKERS")
+	if kafkaBrokers == "" {
+		kafkaBrokers = os.Getenv("REDPLANDA_BROKERS")
+	}
+	if kafkaBrokers == "" {
+		kafkaBrokers = "localhost:19092"
+	}
+	groupID := os.Getenv("KAFKA_GROUP_ID")
+	if groupID == "" {
+		groupID = "audit-sink-consumer"
+	}
 
-	// Kafka topics to consume
+	s3Endpoint := os.Getenv("S3_ENDPOINT")
+	if s3Endpoint == "" {
+		s3Endpoint = "http://localhost:9000"
+	}
+	s3AccessKey := os.Getenv("S3_ACCESS_KEY")
+	if s3AccessKey == "" {
+		s3AccessKey = "minioadmin"
+	}
+	s3SecretKey := os.Getenv("S3_SECRET_KEY")
+	if s3SecretKey == "" {
+		s3SecretKey = "minioadmin"
+	}
+	s3Bucket := os.Getenv("S3_BUCKET")
+	if s3Bucket == "" {
+		s3Bucket = "iceberg-warehouse"
+	}
+	catalogURI := os.Getenv("POLARIS_URI")
+	if catalogURI == "" {
+		catalogURI = os.Getenv("ICEBERG_CATALOG_URI")
+		if catalogURI == "" {
+			catalogURI = "http://localhost:8181"
+		}
+	}
+
 	topics := []string{
 		audit.TopicSchedulerJobRuns,
 		audit.TopicSchedulerDAGRuns,
@@ -34,64 +60,55 @@ func main() {
 		audit.TopicAISuggestions,
 	}
 
-	log.Printf("Kafka Brokers: %s", kafkaBrokers)
-	log.Printf("S3 Endpoint: %s", s3Endpoint)
-	log.Printf("S3 Bucket: %s", s3Bucket)
-	log.Printf("Iceberg Catalog: %s", icebergCatalogURI)
-	log.Printf("Subscribing to topics: %v", topics)
+	log.Printf("[Audit-Sink] Kafka Brokers: %s", kafkaBrokers)
+	log.Printf("[Audit-Sink] S3 Endpoint: %s", s3Endpoint)
+	log.Printf("[Audit-Sink] S3 Bucket: %s", s3Bucket)
+	log.Printf("[Audit-Sink] Iceberg Catalog: %s", catalogURI)
+	log.Printf("[Audit-Sink] Subscribing to topics: %v", topics)
 
-	// Initialize Iceberg writer
-	// For now this is a placeholder - full implementation would use:
-	// github.com/minio/minio-go/v7
-	// S3Client would be initialized here with MinIO client
+	s3Client, err := audit.NewMinIOClient(s3Endpoint, s3AccessKey, s3SecretKey)
+	if err != nil {
+		log.Fatalf("[Audit-Sink] Failed to create MinIO client: %v", err)
+	}
+	log.Printf("[Audit-Sink] MinIO client connected to %s", s3Endpoint)
+
 	icebergWriter := &audit.IcebergWriter{
+		S3Client:   s3Client,
 		BucketName: s3Bucket,
-		CatalogURI: icebergCatalogURI,
+		CatalogURI: catalogURI,
 	}
 
-	// Create Kafka consumer
 	consumer, err := audit.NewIcebergSinkConsumer(kafkaBrokers, groupID, topics, icebergWriter)
 	if err != nil {
-		log.Fatalf("Failed to create consumer: %v", err)
+		log.Fatalf("[Audit-Sink] Failed to create consumer: %v", err)
 	}
 	defer consumer.Close()
 
-	log.Println("Consumer created successfully")
+	log.Println("[Audit-Sink] Consumer created successfully")
 
-	// Context for graceful shutdown
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	// Handle shutdown signals
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 
-	// Start consumer in goroutine
 	errChan := make(chan error, 1)
 	go func() {
 		errChan <- consumer.Start(ctx)
 	}()
 
-	log.Println("Audit Sink Consumer is running. Press Ctrl+C to stop.")
+	log.Printf("[Audit-Sink] Running. Press Ctrl+C to stop.")
 
-	// Wait for shutdown signal or error
 	select {
 	case <-sigChan:
-		log.Println("Received shutdown signal")
+		log.Println("[Audit-Sink] Received shutdown signal")
 		cancel()
-		time.Sleep(2 * time.Second) // Give consumer time to finish processing
+		time.Sleep(2 * time.Second)
 	case err := <-errChan:
-		if err != nil {
-			log.Printf("Consumer error: %v", err)
+		if err != nil && err != context.Canceled {
+			log.Printf("[Audit-Sink] Consumer error: %v", err)
 		}
 	}
 
-	log.Println("Audit Sink Consumer stopped")
-}
-
-func getEnv(key, defaultValue string) string {
-	if value := os.Getenv(key); value != "" {
-		return value
-	}
-	return defaultValue
+	log.Println("[Audit-Sink] Stopped")
 }
