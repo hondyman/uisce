@@ -64,7 +64,10 @@ type UserFeedbackPayload struct {
 	SessionHash         string `json:"session_hash"`
 	BOKey               string `json:"bo_key"`
 	RecommendationLabel string `json:"recommendation_label"`
-	Action              string `json:"action"` // CLICKED, DISMISSED, ADOPTED
+	Action              string `json:"action"` // CLICKED, DISMISSED, ADOPTED, THUMBS_UP, THUMBS_DOWN
+	StarScore           int    `json:"star_score,omitempty"`
+	ErrorCategory       string `json:"error_category,omitempty"` // WRONG_TABLE, INCORRECT_FORMULA, MISSING_DATA, HALLUCINATED_SCHEMA
+	UserComment         string `json:"user_comment,omitempty"`
 }
 
 // ----------------------------------------------------
@@ -325,17 +328,30 @@ func (e *RecommendationEngine) ProcessFeedback(ctx context.Context, payload User
 	scoreMultiplier := 1.0
 
 	switch payload.Action {
-	case "CLICKED", "ADOPTED":
+	case "CLICKED", "ADOPTED", "THUMBS_UP":
 		posDelta = 1
 		scoreMultiplier = 1.15 // Boost weight
-	case "DISMISSED", "IGNORED":
+	case "DISMISSED", "IGNORED", "THUMBS_DOWN":
 		negDelta = 1
 		scoreMultiplier = cfg.DecayFactor // Apply metadata decay factor
 	}
 
 	if e.db == nil {
-		log.Printf("[AI Feedback Processed] Action %s recorded for %s (Multiplier: %.2f)", payload.Action, payload.RecommendationLabel, scoreMultiplier)
+		log.Printf("[AI Feedback Processed] Action %s recorded for %s (Category: %s, Multiplier: %.2f)", payload.Action, payload.RecommendationLabel, payload.ErrorCategory, scoreMultiplier)
 		return nil
+	}
+
+	// Persist explicit diagnostic record
+	if payload.ErrorCategory != "" || payload.StarScore > 0 || payload.Action == "THUMBS_DOWN" || payload.Action == "THUMBS_UP" {
+		_, err := e.db.ExecContext(ctx, `
+			INSERT INTO ai_explicit_feedback (
+				tenant_id, session_hash, target_bo_key, rating_type, star_score, error_category, user_comment, created_at
+			) VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())`,
+			payload.TenantID, payload.SessionHash, payload.BOKey, payload.Action, payload.StarScore, payload.ErrorCategory, payload.UserComment,
+		)
+		if err != nil {
+			log.Printf("[Explicit Feedback Warning] Failed to log diagnostic record: %v", err)
+		}
 	}
 
 	query := `
