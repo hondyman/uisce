@@ -3,6 +3,11 @@
 # Creates an Iceberg REST catalog in Apache Polaris using the official
 # Management REST API and grants full access to the service_admin principal role.
 #
+# NOTE: The preferred path for automated tenant onboarding is the Go REST endpoint:
+#   POST /api/admin/tenants  (requires admin auth)
+#   Body: {"name": "tenant-key", "display_name": "My Tenant"}
+# This script is retained for ad-hoc manual bootstrapping and backwards compatibility.
+#
 # Usage:
 #   ./scripts/polaris-bootstrap-tenant.sh <catalog_name> [polaris_host_port]
 #   e.g.: ./scripts/polaris-bootstrap-tenant.sh tenant-alpha http://localhost:8185

@@ -79,7 +79,32 @@ On Linux, `host.docker.internal` requires explicit mapping to the host gateway:
 
 ## 3. Register Tenant Catalogs
 
-To register new multi-tenant Iceberg catalogs (e.g. `tenant-alpha`), use the tenant bootstrap script:
+### 3a. Via Go REST API (preferred for automated flows)
+
+```bash
+# Onboard a new tenant — creates Postgres tenant record + Polaris catalog atomically
+curl -X POST "http://localhost:8080/api/admin/tenants" \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <admin-token>" \
+  -d '{"name": "acme-corp", "display_name": "Acme Corporation"}'
+
+# Response:
+# {
+#   "tenant_id": "<uuid>",
+#   "tenant_key": "acme-corp",
+#   "polaris_catalog_url": "http://uisce-polaris:8185/api/catalog/v1/acme-corp",
+#   "status": "provisioned"
+# }
+```
+
+> **Env vars required by the Go backend:**
+> - `POLARIS_URL` (default: `http://uisce-polaris:8185`)
+> - `POLARIS_CLIENT_ID` (default: `root`)
+> - `POLARIS_CLIENT_SECRET` (default: `secret`)
+> - `S3_BUCKET` (default: `iceberg-warehouse`)
+> - `S3_ENDPOINT` (default: `http://uisce-minio:9000`)
+
+### 3b. Via shell script (ad-hoc / manual)
 
 ```bash
 ./scripts/polaris-bootstrap-tenant.sh tenant-alpha http://localhost:8185
@@ -246,4 +271,32 @@ print("Patched. Restart Polaris to clear credential cache.")
 **Root Cause:** MinIO was bound to `127.0.0.1:9000` (loopback only).
 
 **Resolution:** Containerize MinIO in `docker-compose.remote.yml` on the same Docker network as Polaris and DataFusion (`remote-net`). Use `http://uisce-minio:9000` as the S3 endpoint. Ensure `POLARIS_DEFAULT_STORAGE_CONFIG` uses `http://uisce-minio:9000` and `POLARIS_STORAGE_INTEGRATION_S3_TYPE=aws`.
+
+### Multi-tenant row-level security returns zero rows for valid tenant
+
+**Symptom:** Queries against `tenant_product`, `tenant_product_datasource`, or `connections` return 0 rows even though data exists for the tenant.
+
+**Root Cause:** The RLS policy requires `SET LOCAL uisce.current_tenant` to be set within the same transaction. If queries run on a pooled connection (not wrapped in `WithTenantTransaction`), the RLS context is lost.
+
+**Resolution:** Ensure all multi-tenant read paths use `db.WithTenantTransaction(ctx, db, tenantID, func(tx) { ... })` which wraps `SET LOCAL` and all queries in a single `BeginTx` → `tx.QueryContext` → `Commit` flow. The Go test in `backend/internal/db/tenant_tx_test.go` verifies this:
+
+```bash
+UISCE_TEST_DB_DSN="host=100.84.50.65 port=5432 dbname=polaris user=postgres password=postgres" \
+  go test -v ./backend/internal/db/
+```
+
+### tenant_product_datasource has no tenant_id column
+
+**Symptom:** RLS policy on `tenant_product_datasource` fails with `column "tenant_id" does not exist`.
+
+**Root Cause:** The `tenant_id` column was added in migration `20260727000025_add_tenant_id_to_datasource.sql`. If not applied, RLS policies referencing `tenant_id` will error.
+
+**Resolution:** Run the migration:
+```bash
+# Apply via migration runner
+go run ./backend/cmd/migrate --direction=up --migration=20260727000025
+# Or verify:
+psql -h 100.84.50.65 -U postgres -d polaris -c "SELECT column_name FROM information_schema.columns WHERE table_name='tenant_product_datasource' AND column_name='tenant_id';"
+```
+
 
