@@ -84,3 +84,84 @@ func mustMarshal(v interface{}) json.RawMessage {
 	}
 	return data
 }
+
+// ConsumerDomain categorizes downstream artifacts by their consumption layer
+type ConsumerDomain string
+
+const (
+	DomainReactDashboards        ConsumerDomain = "REACT_DASHBOARDS"
+	DomainRegulatoryExporters    ConsumerDomain = "REGULATORY_EXPORTERS"
+	DomainDownstreamTenantQueries ConsumerDomain = "DOWNSTREAM_TENANT_QUERIES"
+	DomainInternalAPIs           ConsumerDomain = "INTERNAL_APIS"
+	DomainBusinessObjects        ConsumerDomain = "BUSINESS_OBJECTS"
+	DomainUnknown                ConsumerDomain = "UNKNOWN"
+)
+
+// Severity levels for blast radius reports
+type BlastRadiusSeverity string
+
+const (
+	BlastSeverityCritical BlastRadiusSeverity = "CRITICAL"
+	BlastSeverityHigh     BlastRadiusSeverity = "HIGH"
+	BlastSeverityMedium   BlastRadiusSeverity = "MEDIUM"
+	BlastSeverityLow      BlastRadiusSeverity = "LOW"
+)
+
+// ConsumerCriticalityWeights assigns a blast-radius weight per consumer domain
+var ConsumerCriticalityWeights = map[ConsumerDomain]float64{
+	DomainRegulatoryExporters:     10.0,
+	DomainReactDashboards:          8.0,
+	DomainDownstreamTenantQueries: 6.0,
+	DomainInternalAPIs:            5.0,
+	DomainBusinessObjects:         4.0,
+	DomainUnknown:                 1.0,
+}
+
+// DefaultWeight is the weight used when a domain is not recognized
+const DefaultWeight = 1.0
+
+// WeightFor returns the criticality weight for a given consumer domain
+func WeightFor(domain ConsumerDomain) float64 {
+	if w, ok := ConsumerCriticalityWeights[domain]; ok {
+		return w
+	}
+	return DefaultWeight
+}
+
+// BlastRadiusSummary holds the computed blast radius score and severity
+type BlastRadiusSummary struct {
+	TotalImpactedArtifacts int                   `json:"total_impacted_artifacts"`
+	Severity                BlastRadiusSeverity   `json:"severity"`
+	WeightedScore           float64              `json:"weighted_score"`
+}
+
+// ImpactedConsumer groups artifacts by their consumer domain
+type ImpactedConsumer struct {
+	Domain    ConsumerDomain `json:"domain"`
+	Artifacts []string      `json:"artifacts"`
+	Risk      string        `json:"risk"`
+}
+
+// BlastRadiusReport is the structured output of the Impact Simulator
+type BlastRadiusReport struct {
+	TargetNode          string             `json:"target_node"`
+	Action              string             `json:"action"`
+	BlastRadiusSummary  BlastRadiusSummary `json:"blast_radius_summary"`
+	UpstreamNodes       []LineageNode     `json:"upstream_nodes"`
+	DownstreamNodes     []LineageNode     `json:"downstream_nodes"`
+	ImpactedConsumers   []ImpactedConsumer `json:"impacted_consumers"`
+}
+
+// ComputeBlastRadiusSeverity computes severity from a distance-decay weighted score
+func ComputeBlastRadiusSeverity(score float64) BlastRadiusSeverity {
+	switch {
+	case score >= 8.0:
+		return BlastSeverityCritical
+	case score >= 4.0:
+		return BlastSeverityHigh
+	case score >= 1.0:
+		return BlastSeverityMedium
+	default:
+		return BlastSeverityLow
+	}
+}

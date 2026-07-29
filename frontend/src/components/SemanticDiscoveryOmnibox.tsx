@@ -1,8 +1,19 @@
 import React, { useState, useEffect } from 'react';
-import { Calculator, AlertTriangle, Sparkles, X, Bot } from 'lucide-react';
+import { Calculator, AlertTriangle, Sparkles, X, Bot, Pin, Clock, AlertCircle } from 'lucide-react';
+import DriftBadge from './DriftBadge';
 
 interface Props {
   tenantId: string;
+}
+
+interface PinnedItem {
+  bo_key: string;
+  label: string;
+}
+
+interface RecentThread {
+  prompt_text: string;
+  created_at: string;
 }
 
 export const SemanticDiscoveryOmnibox: React.FC<Props> = ({ tenantId }) => {
@@ -10,6 +21,9 @@ export const SemanticDiscoveryOmnibox: React.FC<Props> = ({ tenantId }) => {
   const [query, setQuery] = useState<string>('');
   const [loading, setLoading] = useState<boolean>(false);
   const [result, setResult] = useState<any | null>(null);
+  const [pinnedItems, setPinnedItems] = useState<PinnedItem[]>([]);
+  const [recentThreads, setRecentThreads] = useState<RecentThread[]>([]);
+  const [driftCount, setDriftCount] = useState<number>(0);
 
   // Keyboard shortcut listener (Cmd + K or Ctrl + K)
   useEffect(() => {
@@ -22,6 +36,38 @@ export const SemanticDiscoveryOmnibox: React.FC<Props> = ({ tenantId }) => {
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
+
+  // Fetch personalization context on open
+  useEffect(() => {
+    if (!isOpen || !tenantId) return;
+    const fetchPersonalization = async () => {
+      try {
+        const [profileRes, notificationsRes] = await Promise.all([
+          fetch('/api/v1/personalization/profile', {
+            headers: { 'X-Tenant-ID': tenantId },
+          }),
+          fetch('/api/v1/personalization/notifications', {
+            headers: { 'X-Tenant-ID': tenantId },
+          }),
+        ]);
+        if (profileRes.ok) {
+          const profile = await profileRes.json();
+          const pinned: PinnedItem[] = (profile.pinned_bo_keys || []).map((key: string) => ({
+            bo_key: key,
+            label: key,
+          }));
+          setPinnedItems(pinned);
+        }
+        if (notificationsRes.ok) {
+          const notifs = await notificationsRes.json();
+          setDriftCount(notifs.active_drifts || 0);
+        }
+      } catch (err) {
+        console.error('Failed to load personalization context:', err);
+      }
+    };
+    fetchPersonalization();
+  }, [isOpen, tenantId]);
 
   const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -46,6 +92,12 @@ export const SemanticDiscoveryOmnibox: React.FC<Props> = ({ tenantId }) => {
     }
   };
 
+  const handlePinnedClick = async (boKey: string) => {
+    setQuery(`Show me ${boKey} overview`);
+    const form = document.createElement('form');
+    form.dispatchEvent(new Event('submit', { cancelable: true }));
+  };
+
   if (!isOpen) return null;
 
   return (
@@ -63,6 +115,13 @@ export const SemanticDiscoveryOmnibox: React.FC<Props> = ({ tenantId }) => {
             className="bg-transparent text-white placeholder-slate-500 text-sm focus:outline-none w-full font-medium"
           />
           {loading && <div className="text-xs text-sky-400 font-mono animate-pulse mr-2">Evaluating...</div>}
+          <DriftBadge tenantId={tenantId} className="mr-3" />
+          {driftCount > 0 && (
+            <div className="flex items-center gap-1 mr-3 px-2 py-1 bg-amber-500/20 border border-amber-500/40 rounded-full">
+              <AlertCircle size={14} className="text-amber-400" />
+              <span className="text-xs text-amber-400 font-mono">{driftCount}</span>
+            </div>
+          )}
           <button type="button" onClick={() => setIsOpen(false)} className="text-slate-500 hover:text-slate-300">
             <X size={18} />
           </button>
@@ -71,9 +130,43 @@ export const SemanticDiscoveryOmnibox: React.FC<Props> = ({ tenantId }) => {
         {/* Results Body */}
         <div className="p-6 overflow-y-auto space-y-6 flex-1 text-slate-200">
           {!result && !loading && (
-            <div className="text-center py-12 text-slate-500 text-xs font-mono">
-              Press <kbd className="bg-slate-800 px-1.5 py-0.5 rounded text-slate-300">Enter</kbd> to execute conversational discovery.
-            </div>
+            <>
+              {/* Pinned Workspaces */}
+              {pinnedItems.length > 0 && (
+                <div>
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1.5 mb-3">
+                    <Pin size={12} /> Pinned Workspaces
+                  </h4>
+                  <div className="flex flex-wrap gap-2">
+                    {pinnedItems.map((item) => (
+                      <button
+                        key={item.bo_key}
+                        onClick={() => handlePinnedClick(item.bo_key)}
+                        className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 border border-sky-500/30 rounded-full text-xs text-sky-300 hover:bg-slate-700 transition-colors"
+                      >
+                        <Pin size={10} />
+                        {item.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Drift Alerts */}
+              {driftCount > 0 && (
+                <div className="flex items-center gap-2 p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl">
+                  <AlertCircle size={16} className="text-amber-400 shrink-0" />
+                  <span className="text-xs text-amber-300">
+                    {driftCount} active schema {driftCount === 1 ? 'drift' : 'drifts'} detected on your pinned objects.{' '}
+                    <a href="/governance" className="underline hover:text-amber-200">Review in Governance Studio</a>
+                  </span>
+                </div>
+              )}
+
+              <div className="text-center py-8 text-slate-500 text-xs font-mono">
+                Press <kbd className="bg-slate-800 px-1.5 py-0.5 rounded text-slate-300">Enter</kbd> to execute conversational discovery.
+              </div>
+            </>
           )}
 
           {result && (

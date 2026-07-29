@@ -1,6 +1,8 @@
 package boresolver
 
 import (
+	"context"
+	"fmt"
 	"testing"
 	"time"
 )
@@ -218,4 +220,129 @@ type mockWatermarkResolver struct {
 
 func (m *mockWatermarkResolver) GetHotColdWatermark(tenantID string) time.Time {
 	return m.watermark
+}
+
+type mockTelemetryRouter struct {
+	flavor string
+	err    error
+}
+
+func (m *mockTelemetryRouter) GetOptimalFlavor(ctx context.Context, tenantID, boKey, defaultFlavor string) (string, error) {
+	return m.flavor, m.err
+}
+
+func TestBOSQLGenerator_ResolveEffectiveDialect_CBOOverridesToIceberg(t *testing.T) {
+	gen := &BOSQLGenerator{
+		Dialect: PostgresDialect{},
+		TelemetryRouter: &mockTelemetryRouter{
+			flavor: "ICEBERG",
+			err:    nil,
+		},
+	}
+
+	req := &SQLGenerationRequest{
+		TenantID:         "tenant-123",
+		BusinessObjectID: "bo_orders",
+	}
+
+	dialect, err := gen.ResolveEffectiveDialect(req, nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if dialect.Name() != "datafusion_iceberg" {
+		t.Errorf("expected datafusion_iceberg (CBO override), got %s", dialect.Name())
+	}
+}
+
+func TestBOSQLGenerator_ResolveEffectiveDialect_CBOOverridesToSnowflake(t *testing.T) {
+	gen := &BOSQLGenerator{
+		Dialect: PostgresDialect{},
+		TelemetryRouter: &mockTelemetryRouter{
+			flavor: "SNOWFLAKE",
+			err:    nil,
+		},
+	}
+
+	req := &SQLGenerationRequest{
+		TenantID:         "tenant-123",
+		BusinessObjectID: "bo_orders",
+	}
+
+	dialect, err := gen.ResolveEffectiveDialect(req, nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if dialect.Name() != "snowflake" {
+		t.Errorf("expected snowflake (CBO override), got %s", dialect.Name())
+	}
+}
+
+func TestBOSQLGenerator_ResolveEffectiveDialect_CBOWithExplicitOverride(t *testing.T) {
+	gen := &BOSQLGenerator{
+		Dialect: PostgresDialect{},
+		TelemetryRouter: &mockTelemetryRouter{
+			flavor: "ICEBERG",
+			err:    nil,
+		},
+	}
+
+	req := &SQLGenerationRequest{
+		TenantID:         "tenant-123",
+		BusinessObjectID: "bo_orders",
+		DialectOverride:   "snowflake",
+	}
+
+	dialect, err := gen.ResolveEffectiveDialect(req, nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if dialect.Name() != "snowflake" {
+		t.Errorf("expected snowflake (explicit override wins), got %s", dialect.Name())
+	}
+}
+
+func TestBOSQLGenerator_ResolveEffectiveDialect_CBOReturnsSameFlavor(t *testing.T) {
+	gen := &BOSQLGenerator{
+		Dialect: PostgresDialect{},
+		TelemetryRouter: &mockTelemetryRouter{
+			flavor: "POSTGRES",
+			err:    nil,
+		},
+	}
+
+	req := &SQLGenerationRequest{
+		TenantID:         "tenant-123",
+		BusinessObjectID: "bo_orders",
+	}
+
+	dialect, err := gen.ResolveEffectiveDialect(req, nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if dialect.Name() != "postgres" {
+		t.Errorf("expected postgres (CBO no-op), got %s", dialect.Name())
+	}
+}
+
+func TestBOSQLGenerator_ResolveEffectiveDialect_CBOFallbackOnError(t *testing.T) {
+	gen := &BOSQLGenerator{
+		Dialect: PostgresDialect{},
+		TelemetryRouter: &mockTelemetryRouter{
+			flavor: "",
+			err:    fmt.Errorf("telemetry unavailable"),
+		},
+	}
+
+	req := &SQLGenerationRequest{
+		TenantID:         "tenant-123",
+		BusinessObjectID: "bo_orders",
+	}
+
+	dialect, err := gen.ResolveEffectiveDialect(req, nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if dialect.Name() != "postgres" {
+		t.Errorf("expected postgres (CBO error fallback), got %s", dialect.Name())
+	}
 }

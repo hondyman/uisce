@@ -4,13 +4,16 @@ import { TenantSwitcher } from './TenantSwitcher';
 import { ActiveSessionsIndicator } from '../components/admin/ActiveSessionsIndicator';
 import { useAuth } from '../contexts/AuthContext';
 import { useImpersonation } from '../contexts/ImpersonationContext';
+import { useTenant } from '../contexts/TenantContext';
 import { useState, useCallback } from 'react';
 import { ImpersonationTenantPicker } from '../components/admin/ImpersonationTenantPicker';
 import type { ActiveImpersonationSession } from '../contexts/ImpersonationContext';
+import DriftBadge from '../components/DriftBadge';
 
 export function ConsoleTopBar() {
   const { token: adminToken } = useAuth();
   const { exitImpersonation, recentSessions, clearRecentSessions } = useImpersonation();
+  const { tenant } = useTenant();
   const [pickerOpen, setPickerOpen] = useState(false);
 
   // Switching to a different active session: exit current, then open the picker
@@ -31,6 +34,7 @@ export function ConsoleTopBar() {
         <Stack direction="row" spacing={2} alignItems="center">
           <ActiveSessionsIndicator onSwitchToTenant={handleSwitchToTenant} />
           <GlobalSearch />
+          <DriftBadge tenantId={tenant?.id ?? ''} />
           <TenantSwitcher />
         </Stack>
       </Toolbar>

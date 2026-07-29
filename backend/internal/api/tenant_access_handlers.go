@@ -9,8 +9,8 @@ import (
 	"strings"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/hondyman/uisce/backend/internal/api/middleware"
 	"github.com/hondyman/uisce/backend/internal/db"
+	jwtmiddleware "github.com/hondyman/uisce/libs/auth"
 )
 
 // TenantAccessHandlers provides endpoints for tenant access control
@@ -127,12 +127,17 @@ func (h *TenantAccessHandlers) listAccessibleTenants(w http.ResponseWriter, r *h
 	// For non-operators, filter by tenant assignments
 	tenantIDHeader := r.Header.Get("X-Tenant-Id")
 	if tenantIDHeader != "" {
-		if err := middleware.ValidateTenantAccess(r.Context(), tenantIDHeader); err != nil {
+		claims, err := jwtmiddleware.ValidateTokenFromRequest(r)
+		if err != nil || claims == nil {
+			http.Error(w, "Unauthorized", http.StatusUnauthorized)
+			return
+		}
+		if err := jwtmiddleware.ValidateTenantAccess(claims, tenantIDHeader); err != nil {
 			http.Error(w, err.Error(), http.StatusForbidden)
 			return
 		}
 		var tenants []TenantResponse
-		err := db.WithTenantTransaction(r.Context(), h.DB, tenantIDHeader, func(tx *sql.Tx) error {
+		err = db.WithTenantTransaction(r.Context(), h.DB, tenantIDHeader, func(tx *sql.Tx) error {
 			tenants, err = h.getTenantsByUser(r.Context(), userID, tx)
 			return err
 		})

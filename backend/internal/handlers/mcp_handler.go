@@ -7,7 +7,11 @@ import (
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/gorilla/mux"
+	"github.com/hondyman/uisce/backend/internal/agentic"
 	"github.com/hondyman/uisce/backend/internal/metadata"
+	"github.com/hondyman/uisce/backend/internal/security"
+	"github.com/hondyman/uisce/libs/jwt-middleware"
 )
 
 // MCPHandler handles Model Context Protocol requests (JSON-RPC 2.0)
@@ -199,4 +203,65 @@ func (h *MCPHandler) writeResult(w http.ResponseWriter, id interface{}, result i
 // RegisterRoutes helper for wiring
 func (h *MCPHandler) RegisterRoutes(r chi.Router) {
 	r.Post("/mcp", h.HandleMCPRequest)
+}
+
+// MCPToolsHandler serves the MCP tool registry API
+type MCPToolsHandler struct {
+	registry *agentic.MCPRegistryService
+}
+
+// NewMCPToolsHandler creates a new MCP tools handler
+func NewMCPToolsHandler(registry *agentic.MCPRegistryService) *MCPToolsHandler {
+	return &MCPToolsHandler{registry: registry}
+}
+
+// ListTools handles GET /api/v1/mcp/tools
+func (h *MCPToolsHandler) ListTools(w http.ResponseWriter, r *http.Request) {
+	tenantID := "core"
+	functionalRole := ""
+
+	if claims := jwtmiddleware.GetClaimsFromContext(r); claims != nil {
+		if claims.TenantID != "" {
+			tenantID = claims.TenantID
+		}
+	}
+	if authInfo, ok := security.AuthInfoFromContext(r.Context()); ok {
+		functionalRole = authInfo.FunctionalRole
+	}
+
+	roleHeader := r.Header.Get("X-Functional-Role")
+	if roleHeader != "" && functionalRole == "" {
+		functionalRole = roleHeader
+	}
+
+	entries, err := h.registry.ListToolsForRole(r.Context(), tenantID, functionalRole)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	tools := make([]map[string]interface{}, 0, len(entries))
+	for _, e := range entries {
+		tools = append(tools, map[string]interface{}{
+			"name":        e.ToolName,
+			"description": e.Description,
+			"inputSchema": map[string]interface{}{
+				"type": "object",
+				"properties": map[string]interface{}{},
+			},
+		})
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{"tools": tools})
+}
+
+// RegisterRoutes wires the tools endpoint
+func (h *MCPToolsHandler) RegisterRoutes(r chi.Router) {
+	r.Get("/mcp/tools", h.ListTools)
+}
+
+// RegisterMuxRoutes wires the tools endpoint onto a gorilla/mux router
+func (h *MCPToolsHandler) RegisterMuxRoutes(r *mux.Router) {
+	r.HandleFunc("/api/v1/mcp/tools", h.ListTools).Methods("GET")
 }

@@ -1,6 +1,7 @@
 package boresolver
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"sort"
@@ -112,6 +113,12 @@ type BOSQLGenerator struct {
 	BORepository      BORepository
 	Dialect           Dialect
 	WatermarkResolver WatermarkResolver
+	TelemetryRouter   TelemetryRouter
+}
+
+// TelemetryRouter resolves the optimal execution flavor for a BO based on telemetry.
+type TelemetryRouter interface {
+	GetOptimalFlavor(ctx context.Context, tenantID string, boKey string, defaultFlavor string) (string, error)
 }
 
 // BORepository interface to fetch BO metadata
@@ -189,8 +196,24 @@ func NewBOSQLGeneratorWithWatermark(repo BORepository, dialectName string, wmr W
 	return gen, nil
 }
 
+// NewBOSQLGeneratorWithCBO creates a generator with watermark routing and CBO telemetry routing enabled.
+func NewBOSQLGeneratorWithCBO(repo BORepository, dialectName string, wmr WatermarkResolver, tr TelemetryRouter) (*BOSQLGenerator, error) {
+	gen, err := NewBOSQLGeneratorWithWatermark(repo, dialectName, wmr)
+	if err != nil {
+		return nil, err
+	}
+	gen.TelemetryRouter = tr
+	return gen, nil
+}
+
+// SetTelemetryRouter injects a telemetry router after generator construction.
+// This allows the CBO to be wired at runtime without changing existing constructors.
+func (g *BOSQLGenerator) SetTelemetryRouter(tr TelemetryRouter) {
+	g.TelemetryRouter = tr
+}
+
 // ResolveEffectiveDialect evaluates Cardinal Rule 4 (Hot/Cold Watermark) to select the correct query engine.
-// It returns the effective Dialect after applying (1) explicit override, (2) watermark seam, (3) binding fallback.
+// It returns the effective Dialect after applying (1) explicit override, (2) watermark seam, (3) binding fallback, (4) CBO telemetry override.
 func (g *BOSQLGenerator) ResolveEffectiveDialect(req *SQLGenerationRequest, binding *BOBinding) (Dialect, error) {
 	// Rule 1: Explicit request override takes priority
 	if req.DialectOverride != "" {
@@ -207,12 +230,53 @@ func (g *BOSQLGenerator) ResolveEffectiveDialect(req *SQLGenerationRequest, bind
 	}
 
 	// Rule 2: Fallback to active target binding dialect registered in catalog graph
+	var baseDialect Dialect
 	if binding != nil && binding.DialectName != "" {
-		return GetDialect(binding.DialectName)
+		d, err := GetDialect(binding.DialectName)
+		if err == nil {
+			baseDialect = d
+		}
 	}
 
 	// Rule 3: Fallback to the generator's default dialect
-	return g.Dialect, nil
+	if baseDialect == nil {
+		baseDialect = g.Dialect
+	}
+
+	// Rule 5 (CBO): Consult telemetry router for flavor override on the base dialect
+	if g.TelemetryRouter != nil {
+		defaultFlavor := dialectToFlavor(baseDialect)
+		boKey := req.BusinessObjectID
+		if boKey == "" && binding != nil {
+			boKey = binding.BOID
+		}
+
+		ctx := context.Background()
+		recommendedFlavor, err := g.TelemetryRouter.GetOptimalFlavor(ctx, req.TenantID, boKey, defaultFlavor)
+		if err == nil && recommendedFlavor != defaultFlavor {
+			if overrideDialect, err := GetDialect(recommendedFlavor); err == nil {
+				return overrideDialect, nil
+			}
+		}
+	}
+
+	return baseDialect, nil
+}
+
+// dialectToFlavor maps a Dialect to a flavor constant for CBO telemetry lookup
+func dialectToFlavor(dialect Dialect) string {
+	switch dialect.(type) {
+	case DataFusionIcebergDialect:
+		return "ICEBERG"
+	case PostgresDialect:
+		return "POSTGRES"
+	case SnowflakeDialect:
+		return "SNOWFLAKE"
+	case SQLServerDialect:
+		return "SQLSERVER"
+	default:
+		return "STARROCKS"
+	}
 }
 
 // BuildUnionSafeQuery stitches together a hot operational tier query and a cold historical tier query

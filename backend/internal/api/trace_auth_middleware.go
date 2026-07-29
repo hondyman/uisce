@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/hondyman/uisce/backend/internal/security"
-	"github.com/hondyman/uisce/libs/auth"
+	jwtmiddleware "github.com/hondyman/uisce/libs/auth"
 )
 
 // TraceAuthConfig holds configuration for trace proxy authentication
@@ -49,7 +49,7 @@ func ValidateTraceAuth(r *http.Request, config *TraceAuthConfig) (*security.Auth
 		if parts := strings.Count(tokenStr, "."); parts == 2 {
 			secret := os.Getenv("JWT_SECRET")
 			if secret != "" {
-				claims, err := auth.VerifyHS256(tokenStr, []byte(secret))
+				claims, err := jwtmiddleware.ValidateToken(tokenStr)
 				if err == nil {
 					tenantID := claims.TenantID
 					sub := claims.UserID
@@ -107,7 +107,7 @@ func ValidateTraceAuth(r *http.Request, config *TraceAuthConfig) (*security.Auth
 	}
 
 	var tenantID string
-	if claims := auth.GetClaimsFromRequest(r); claims != nil {
+	if claims, err := jwtmiddleware.ValidateTokenFromRequest(r); err == nil && claims != nil {
 		tenantID = claims.TenantID
 	}
 	if tenantID == "" {

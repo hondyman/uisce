@@ -416,10 +416,25 @@ export const AIRuleSuggestions: React.FC<AIRuleSuggestionsProps> = ({
     }
   };
 
-  const handleFeedback = (_suggestionId: string, _positive: boolean) => {
-    // Track feedback for model improvement - in production, send to analytics/ML pipeline
-    // Example: analyticsService.trackFeedback(_suggestionId, _positive);
-    // In production, this would send to analytics/ML pipeline
+  const handleFeedback = async (suggestionId: string, positive: boolean) => {
+    try {
+      await fetch('/api/v1/ai/feedback', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Tenant-ID': props.tenantId,
+        },
+        body: JSON.stringify({
+          tenant_id: props.tenantId,
+          rating_type: positive ? 'THUMBS_UP' : 'THUMBS_DOWN',
+          target_bo_key: '',
+          recommendation_label: suggestionId,
+          error_category: 'OTHER',
+        }),
+      });
+    } catch (err) {
+      console.error('Failed to submit feedback:', err);
+    }
   };
 
   const getConfidenceColor = (confidence: number) => {

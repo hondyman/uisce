@@ -31,7 +31,10 @@ import (
 	"github.com/hondyman/uisce/backend/internal/billing"
 	"github.com/hondyman/uisce/backend/internal/boresolver"
 	"github.com/hondyman/uisce/backend/internal/bp"
+	"github.com/hondyman/uisce/backend/internal/cache"
 	"github.com/hondyman/uisce/backend/internal/calculation"
+	"github.com/hondyman/uisce/backend/internal/cbo"
+	"github.com/hondyman/uisce/backend/internal/calcengine"
 	"github.com/hondyman/uisce/backend/internal/cube"
 	"github.com/hondyman/uisce/backend/internal/data_intelligence/tiering"
 	charts "github.com/hondyman/uisce/backend/internal/db/charts"
@@ -39,6 +42,7 @@ import (
 	"github.com/hondyman/uisce/backend/internal/financial"
 	"github.com/hondyman/uisce/backend/internal/goldcopy"
 	"github.com/hondyman/uisce/backend/internal/governance"
+	"github.com/hondyman/uisce/backend/internal/governance/contracts"
 	"github.com/hondyman/uisce/backend/internal/handlers"
 	"github.com/hondyman/uisce/backend/internal/household"
 	"github.com/hondyman/uisce/backend/internal/iceberg"
@@ -92,7 +96,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
-	"google.golang.org/grpc/metadata"
+	grpcmetadata "google.golang.org/grpc/metadata"
 	"github.com/hondyman/uisce/libs/jwt-middleware"
 )
 
@@ -184,6 +188,9 @@ type Server struct {
 	PortfolioSecuritySvc *mdm.PortfolioSecurityService
 	SecurityLineageSvc   *mdm.SecurityLineageService
 	ExecutionEngine      *mdm.ExecutionEngine
+
+	// Phase 11: CBO-backed calculation engine (nil if CBO_ENABLED != "true" or engine init fails)
+	CalcEngine *calcengine.UnifiedCalcEngine
 }
 
 // queryBuilderExecutor resolves datasource IDs to sqlx DB connections for the
@@ -920,12 +927,31 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 	if err != nil {
 		log.Printf("[NewServer] Warning: failed to create BO SQL generator: %v", err)
 	} else {
+		if cboEnabled := os.Getenv("CBO_ENABLED"); cboEnabled == "true" {
+			if tr := newCBOTelemetryRouter(sqlxDB); tr != nil {
+				boGenerator.SetTelemetryRouter(tr)
+				log.Println("[NewServer] CBO TelemetryRouter injected into BOSQLGenerator")
+			}
+		}
 		qbService := querybuilder.NewQueryService(boGenerator, boResolver)
 		qbExecutor := &queryBuilderExecutor{
 			defaultDB:    srv.SQLXDB,
 			aggregatesDB: sqlx.NewDb(srv.AggregatesDB, "postgres"),
 		}
 		srv.QueryBuilderHandler = querybuilder.NewQueryBuilderHandler(qbService, qbExecutor, securityDeps)
+	}
+
+	// Phase 11: CBO-backed UnifiedCalcEngine
+	if cboEnabled := os.Getenv("CBO_ENABLED"); cboEnabled == "true" {
+		if tr := newCBOTelemetryRouter(sqlxDB); tr != nil {
+			cfg := calcengine.LoadUnifiedCalcConfigFromEnv()
+			if engine, err := calcengine.NewUnifiedCalcEngine(cfg); err == nil {
+				srv.CalcEngine = engine.WithOptimizer(tr)
+				log.Println("[NewServer] CBO TelemetryRouter injected into UnifiedCalcEngine")
+			} else {
+				log.Printf("[NewServer] Warning: UnifiedCalcEngine init failed (check CALC_STARROCKS_* env vars): %v", err)
+			}
+		}
 	}
 
 	searchHandler := handlers.NewSearchHandler(searchSvc, securityDeps)
@@ -1315,6 +1341,14 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 		r.Post("/agentic/tickets/review", mcSvc.ReviewTicketHandler)
 		r.Post("/mcp/tools/call", mcpRouter.HandleToolCall)
 
+		// Data Contract Gateway (CI/CD schema-change validation)
+		if os.Getenv("CONTRACT_GATEWAY_ENABLED") == "true" {
+			contractGatekeeper := contracts.NewGatekeeper(sqlxDB, mcSvc)
+			contractHandler := NewDataContractHandler(contractGatekeeper)
+			contractHandler.RegisterRoutes(r)
+			log.Println("[NewServer] Data Contract Gateway enabled")
+		}
+
 		// Register audit history routes if handler is active (INSIDE /api group)
 		if auditHistoryHandler != nil {
 			routes.RegisterAudit(r, auditHistoryHandler)
@@ -1341,6 +1375,9 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 
 		// Auth routes must come BEFORE middleware to avoid chicken-and-egg problem
 		registerAuthRoutes(r, srv)
+
+		// WebSocket token endpoint for short-lived signed tokens
+		r.Post("/ws/token", srv.getWsToken)
 
 		// Policy Generation Requests (No auth required for prototype, but should be protected)
 		// Adding it here before middleware for simplicity if needed, but optimally after.
@@ -1475,6 +1512,7 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 			// Tenant search + scope (impersonation picker)
 			r.Get("/api/v1/audit/channel-billing", srv.GetChannelAuditBillingSummaryHandler)
 			r.Get("/api/v1/audit/channel-logs", srv.GetChannelAuditLogsHandler)
+			tenantSearchHandler := handlers.NewAdminTenantSearchHandler(db)
 			r.Get("/admin/tenants/{tenantID}/scope", tenantSearchHandler.GetTenantScope)
 		}
 
@@ -3205,6 +3243,14 @@ func (s *Server) registerLineageRoutes(r chi.Router) {
 		r.Get("/node/{id}/impact", s.LineageHandler.GetImpactAnalysis)
 		r.Get("/dual", s.LineageHandler.GetDualLineage)
 	})
+
+	// Impact Simulator (Phase 12)
+	if os.Getenv("IMPACT_SIMULATOR_ENABLED") != "false" {
+		simRepo := lineage.NewDBLineageRepository(s.SQLXDB)
+		simSvc := lineage.NewLineageService(simRepo)
+		impactSimHandler := NewImpactSimulatorHandler(simSvc)
+		impactSimHandler.RegisterRoutes(r)
+	}
 }
 
 // registerTemplateRoutes mounts template and dynamic CRUD endpoints
@@ -4076,7 +4122,7 @@ func (s *Server) registerTemporalAdminRoutes(r chi.Router, db *sql.DB) {
 		// If an auth token is provided, add an interceptor to inject metadata
 		if authToken != "" {
 			unary := func(ctx context.Context, method string, req, reply interface{}, cc *grpc.ClientConn, invoker grpc.UnaryInvoker, opts ...grpc.CallOption) error {
-				ctx = metadata.AppendToOutgoingContext(ctx, "authorization", "Bearer "+authToken)
+				ctx = grpcmetadata.AppendToOutgoingContext(ctx, "authorization", "Bearer "+authToken)
 				return invoker(ctx, method, req, reply, cc, opts...)
 			}
 			dialOpts = append(dialOpts, grpc.WithUnaryInterceptor(unary))
@@ -4100,4 +4146,61 @@ func (s *Server) registerTemporalAdminRoutes(r chi.Router, db *sql.DB) {
 			r.Get("/_health/temporal", temporal.HealthHandler(adminClient))
 		}
 	}()
+}
+
+func newCBOTelemetryRouter(sqlxDB *sqlx.DB) *cbo.TelemetryRouter {
+	windowMinutes := 60
+	if v := os.Getenv("CBO_WINDOW_MINUTES"); v != "" {
+		if parsed, err := strconv.Atoi(v); err == nil && parsed > 0 {
+			windowMinutes = parsed
+		}
+	}
+	minSamples := 5
+	if v := os.Getenv("CBO_MIN_SAMPLES"); v != "" {
+		if parsed, err := strconv.Atoi(v); err == nil && parsed > 0 {
+			minSamples = parsed
+		}
+	}
+	failureThreshold := 0.15
+	if v := os.Getenv("CBO_FAILURE_THRESHOLD"); v != "" {
+		if parsed, err := strconv.ParseFloat(v, 64); err == nil && parsed > 0 {
+			failureThreshold = parsed
+		}
+	}
+	latencyDegradedMs := 2500.0
+	if v := os.Getenv("CBO_LATENCY_THRESHOLD_MS"); v != "" {
+		if parsed, err := strconv.ParseFloat(v, 64); err == nil && parsed > 0 {
+			latencyDegradedMs = parsed
+		}
+	}
+	cacheTTLSeconds := 60
+	if v := os.Getenv("CBO_CACHE_TTL_SECONDS"); v != "" {
+		if parsed, err := strconv.Atoi(v); err == nil && parsed > 0 {
+			cacheTTLSeconds = parsed
+		}
+	}
+	cfg := &cbo.CBOConfig{
+		Enabled:             true,
+		WindowMinutes:       windowMinutes,
+		MinSampleCount:      minSamples,
+		FailureRateFailover: failureThreshold,
+		LatencyDegradedMs:   latencyDegradedMs,
+		CacheTTLSeconds:     cacheTTLSeconds,
+		RedisURL:            os.Getenv("REDIS_URL"),
+	}
+	redisURL := os.Getenv("REDIS_URL")
+	var redisClient cbo.RedisClient
+	var err error
+	if redisURL != "" {
+		redisClient, err = cbo.NewRedisClient(redisURL)
+		if err != nil {
+			log.Printf("[CBO] Warning: failed to connect to Redis: %v", err)
+		}
+	}
+	if redisClient == nil {
+		redisClient = cbo.NewNoopRedisClient()
+		log.Println("[CBO] Running in degraded mode (no Redis)")
+	}
+	tr := cbo.NewTelemetryRouter(sqlxDB, redisClient, cfg, cbo.NewNopLogger())
+	return tr
 }

@@ -1,18 +1,20 @@
 package agentic
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 
+	"github.com/hondyman/uisce/backend/internal/security"
 	"github.com/hondyman/uisce/libs/jwt-middleware"
 	"github.com/jmoiron/sqlx"
 )
 
 type MCPToolCallRequest struct {
-	JSONRPC string          `json:"jsonrpc"`
-	ID      string          `json:"id"`
-	Method  string          `json:"method"` // tools/call
-	Params  MCPToolParams   `json:"params"`
+	JSONRPC string        `json:"jsonrpc"`
+	ID      string        `json:"id"`
+	Method  string        `json:"method"` // tools/call
+	Params  MCPToolParams `json:"params"`
 }
 
 type MCPToolParams struct {
@@ -32,14 +34,45 @@ type MCPError struct {
 	Message string `json:"message"`
 }
 
+func (e *MCPError) Error() string {
+	return e.Message
+}
+
 type MCPToolRouter struct {
+	db       *sqlx.DB
 	mcService *MakerCheckerService
 }
 
 func NewMCPToolRouter(db *sqlx.DB) *MCPToolRouter {
 	return &MCPToolRouter{
+		db:       db,
 		mcService: NewMakerCheckerService(db),
 	}
+}
+
+func (router *MCPToolRouter) checkRoleAccess(ctx context.Context, toolName, tenantID, functionalRole string) error {
+	if functionalRole == "" {
+		return nil
+	}
+
+	var allowedRoles []string
+	err := router.db.GetContext(ctx, &allowedRoles,
+		`SELECT allowed_roles FROM mcp_tool_registry
+		 WHERE tool_name = $1 AND tenant_id IN ($2, '00000000-0000-0000-0000-000000000000')
+		 ORDER BY CASE WHEN tenant_id = '00000000-0000-0000-0000-000000000000' THEN 1 ELSE 0 END
+		 LIMIT 1`,
+		toolName, tenantID)
+	if err != nil {
+		return nil
+	}
+
+	for _, role := range allowedRoles {
+		if role == functionalRole {
+			return nil
+		}
+	}
+
+	return &MCPError{Code: 403, Message: "role not authorized for this tool"}
 }
 
 func (router *MCPToolRouter) HandleToolCall(w http.ResponseWriter, r *http.Request) {
@@ -50,11 +83,30 @@ func (router *MCPToolRouter) HandleToolCall(w http.ResponseWriter, r *http.Reque
 	}
 
 	tenantID := "core"
-	if claims := jwtmiddleware.GetClaimsFromContext(r); claims != nil && claims.TenantID != "" {
-		tenantID = claims.TenantID
+	functionalRole := ""
+	if claims := jwtmiddleware.GetClaimsFromContext(r); claims != nil {
+		if claims.TenantID != "" {
+			tenantID = claims.TenantID
+		}
+	}
+	if authInfo, ok := security.AuthInfoFromContext(r.Context()); ok {
+		functionalRole = authInfo.FunctionalRole
 	}
 
-	// Intercept AI action and route through Maker-Checker Gateway
+	if err := router.checkRoleAccess(r.Context(), req.Params.Name, tenantID, functionalRole); err != nil {
+		errResp, ok := err.(*MCPError)
+		if !ok {
+			errResp = &MCPError{Code: http.StatusForbidden, Message: err.Error()}
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(MCPToolCallResponse{
+			JSONRPC: "2.0",
+			ID:      req.ID,
+			Error:   errResp,
+		})
+		return
+	}
+
 	proposal := ProposalRequest{
 		TenantID:   tenantID,
 		AgentID:    "AutonomousMCP-Agent",

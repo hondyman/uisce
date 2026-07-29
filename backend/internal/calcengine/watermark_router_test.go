@@ -37,6 +37,91 @@ func expectWatermark(mock sqlmock.Sqlmock, cutoff time.Time, state string) {
 		WillReturnRows(rows)
 }
 
+func TestUnifiedCalcEngine_CBOOverrideIceberg(t *testing.T) {
+	cfg := &UnifiedCalcConfig{
+		HotRetentionDays: 90,
+	}
+	engine := &UnifiedCalcEngine{
+		config: cfg,
+	}
+
+	mockOpt := &mockTelemetryRouterForCalc{recommendedFlavor: "ICEBERG"}
+	engine.Optimizer = mockOpt
+
+	mode := engine.determineQueryModeForTesting(context.Background(), &CalcRequest{
+		TenantID:     "tenant-1",
+		DatasourceID: "ds-1",
+		Params:       map[string]interface{}{},
+	})
+
+	if mode != ModeCold {
+		t.Errorf("expected ModeCold (CBO ICEBERG override), got %s", mode)
+	}
+}
+
+func TestUnifiedCalcEngine_CBOOverrideNoChange(t *testing.T) {
+	cfg := &UnifiedCalcConfig{
+		HotRetentionDays: 90,
+	}
+	engine := &UnifiedCalcEngine{
+		config: cfg,
+	}
+
+	mockOpt := &mockTelemetryRouterForCalc{recommendedFlavor: "STARROCKS"}
+	engine.Optimizer = mockOpt
+
+	mode := engine.determineQueryModeForTesting(context.Background(), &CalcRequest{
+		TenantID:     "tenant-1",
+		DatasourceID: "ds-1",
+		Params:       map[string]interface{}{},
+	})
+
+	if mode != ModeHot {
+		t.Errorf("expected ModeHot (CBO no change), got %s", mode)
+	}
+}
+
+func TestUnifiedCalcEngine_CBODisabled(t *testing.T) {
+	cfg := &UnifiedCalcConfig{
+		HotRetentionDays: 90,
+	}
+	engine := &UnifiedCalcEngine{
+		config:    cfg,
+		Optimizer: nil,
+	}
+
+	mode := engine.determineQueryModeForTesting(context.Background(), &CalcRequest{
+		TenantID:     "tenant-1",
+		DatasourceID: "ds-1",
+		Params:       map[string]interface{}{},
+	})
+
+	if mode != ModeHot {
+		t.Errorf("expected ModeHot (no CBO), got %s", mode)
+	}
+}
+
+func TestUnifiedCalcEngine_CBOWithDateRange_ColdWins(t *testing.T) {
+	cfg := &UnifiedCalcConfig{
+		HotRetentionDays: 90,
+	}
+	engine := &UnifiedCalcEngine{
+		config:    cfg,
+		Optimizer: &mockTelemetryRouterForCalc{recommendedFlavor: "ICEBERG"},
+	}
+
+	startDate := time.Now().AddDate(0, 0, -180)
+	mode := engine.determineQueryModeForTesting(context.Background(), &CalcRequest{
+		TenantID:     "tenant-1",
+		DatasourceID: "ds-1",
+		Params:       map[string]interface{}{"start_date": startDate},
+	})
+
+	if mode != ModeCold {
+		t.Errorf("expected ModeCold (date-based cold wins over CBO), got %s", mode)
+	}
+}
+
 func TestBuildSafeQuery_UnionSafe_Postgres(t *testing.T) {
 	cutoff := time.Date(2024, 1, 15, 0, 0, 0, 0, time.UTC)
 	manager, mock := setupManager(t, PostgresQueryDialect{})

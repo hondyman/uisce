@@ -76,6 +76,10 @@ const (
 	EventTypeRegionFailover      EventType = "region.failover"
 	EventTypePropagationDetected EventType = "propagation.detected"
 	EventTypePropagationBlocked  EventType = "propagation.blocked"
+
+	EventTypeDriftAlert         EventType = "drift.alert"
+	EventTypePersonalizationInsight EventType = "personalization.insight"
+	EventTypeCBOReroute         EventType = "cbo.reroute"
 )
 
 // APIEndpointEvent represents an API endpoint lifecycle event
@@ -447,3 +451,25 @@ func (e *ComplianceViolationDetectedEvent) GetEventType() EventType { return e.E
 func (e *ComplianceViolationDetectedEvent) GetTenantID() string     { return e.TenantID }
 func (e *ComplianceViolationDetectedEvent) GetTimestamp() time.Time { return e.Timestamp }
 func (e *SemanticTermComplianceUpdatedEvent) GetUserID() *string    { return e.UserID }
+
+type CBORerouteEvent struct {
+	EventID            string    `json:"event_id"`
+	EventType          EventType `json:"event_type"`
+	TenantID           string    `json:"tenant_id"`
+	BOName             string    `json:"bo_name"`
+	DefaultFlavor      string    `json:"default_flavor"`
+	RecommendedFlavor  string    `json:"recommended_flavor"`
+	OverrideReason     string    `json:"override_reason"`
+	AvgLatencyMs       float64   `json:"avg_latency_ms,omitempty"`
+	FailureRate        float64   `json:"failure_rate,omitempty"`
+	CacheHitRate       float64   `json:"cache_hit_rate,omitempty"`
+	SampleCount        int       `json:"sample_count,omitempty"`
+	WindowMinutes      int       `json:"window_minutes,omitempty"`
+	Timestamp          time.Time `json:"timestamp"`
+}
+
+func (e *CBORerouteEvent) GetEventID() string      { return e.EventID }
+func (e *CBORerouteEvent) GetEventType() EventType { return e.EventType }
+func (e *CBORerouteEvent) GetTenantID() string     { return e.TenantID }
+func (e *CBORerouteEvent) GetTimestamp() time.Time { return e.Timestamp }
+func (e *CBORerouteEvent) GetUserID() *string     { return nil }

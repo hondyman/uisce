@@ -75,7 +75,7 @@ type cacheEntry struct {
 	timestamp   time.Time
 }
 
-var cache = sync.Map{}
+var suggestionCache = sync.Map{}
 
 const cacheTTL = 5 * time.Minute
 
@@ -101,7 +101,7 @@ func (s *RelationshipService) GetRelationshipSuggestions(
 
 	// Check cache first
 	cacheKey := fmt.Sprintf("%s:%s:%s", tenantID, datasourceID, entity)
-	if entry, ok := cache.Load(cacheKey); ok {
+	if entry, ok := suggestionCache.Load(cacheKey); ok {
 		e := entry.(cacheEntry)
 		if time.Since(e.timestamp) < cacheTTL {
 			// Slice to requested limit from cache
@@ -174,7 +174,7 @@ func (s *RelationshipService) GetRelationshipSuggestions(
 	}
 
 	// Cache result
-	cache.Store(cacheKey, cacheEntry{suggestions: suggestions, timestamp: time.Now()})
+	suggestionCache.Store(cacheKey, cacheEntry{suggestions: suggestions, timestamp: time.Now()})
 
 	return suggestions, nil
 }

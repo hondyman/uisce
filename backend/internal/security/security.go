@@ -47,6 +47,15 @@ type AuthInfo struct {
 	ImpersonationSessionID string
 	ImpersonationMode      string
 	ImpersonationAdminRole string // "global_admin" | "helpdesk" | "professional_services"
+
+	// FunctionalRole is the abstract role resolved from IdP groups via
+	// security.identity_profile_mappings. Used for persona-aware AI rendering.
+	FunctionalRole string
+	// ClearanceLevel is the ABAC clearance resolved from IdP groups (e.g. "L1", "L2").
+	ClearanceLevel string
+	// RawClaims holds the validated JWT claims for downstream enrichment.
+	// Nil when authentication used API keys or impersonation tokens.
+	RawClaims interface{}
 }
 
 type BuildContextRequest struct {

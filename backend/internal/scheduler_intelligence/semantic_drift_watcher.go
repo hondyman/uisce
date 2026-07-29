@@ -3,11 +3,17 @@ package scheduler_intelligence
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/hondyman/uisce/backend/internal/events"
 	"go.uber.org/zap"
 )
+
+type DriftAlertPublisher interface {
+	PublishDriftAlert(ctx context.Context, event *events.DriftAlertEvent) error
+}
 
 // DriftWatcher monitors jobs for semantic drift
 type DriftWatcher struct {
@@ -15,6 +21,8 @@ type DriftWatcher struct {
 	semanticClient SemanticClient
 	logger         *zap.Logger
 	stopChan       chan struct{}
+	kafkaPub       DriftAlertPublisher
+	broker         *events.EventStreamBroker
 }
 
 // NewDriftWatcher creates a new drift watcher
@@ -25,6 +33,18 @@ func NewDriftWatcher(repo *Repository, semanticClient SemanticClient, logger *za
 		logger:         logger,
 		stopChan:       make(chan struct{}),
 	}
+}
+
+// WithKafkaPublisher sets the Kafka publisher for drift alerts
+func (w *DriftWatcher) WithKafkaPublisher(pub DriftAlertPublisher) *DriftWatcher {
+	w.kafkaPub = pub
+	return w
+}
+
+// WithBroker sets the event broker for real-time WebSocket broadcasting
+func (w *DriftWatcher) WithBroker(broker *events.EventStreamBroker) *DriftWatcher {
+	w.broker = broker
+	return w
 }
 
 // Start begins the monitoring loop
@@ -120,5 +140,52 @@ func (w *DriftWatcher) triggerDriftSuggestion(ctx context.Context, job Job, issu
 
 	if err := w.repo.CreateAISuggestion(ctx, suggestion); err != nil {
 		w.logger.Sugar().Errorf("failed to save drift suggestion: %v", err)
+	}
+
+	tenantID := job.TenantID.String()
+	maxSeverity := "LOW"
+	for _, issue := range issues {
+		if issue.Severity == "CRITICAL" || issue.Severity == "HIGH" {
+			maxSeverity = issue.Severity
+			break
+		}
+		if issue.Severity == "MEDIUM" && maxSeverity == "LOW" {
+			maxSeverity = issue.Severity
+		}
+	}
+
+	if w.kafkaPub != nil {
+		alert := &events.DriftAlertEvent{
+			ID:          uuid.New().String(),
+			Timestamp:   time.Now(),
+			TenantID:    tenantID,
+			JobID:       job.ID.String(),
+			JobName:     job.Name,
+			IssueCount:  len(issues),
+			Severity:    maxSeverity,
+			Description: strings.TrimSpace(desc),
+		}
+		if err := w.kafkaPub.PublishDriftAlert(ctx, alert); err != nil {
+			w.logger.Sugar().Warnf("failed to publish drift alert to Kafka: %v", err)
+		}
+	}
+
+	if w.broker != nil {
+		streamedEvent := &events.StreamedEvent{
+			ID:        uuid.New().String(),
+			Type:      events.EventTypeDriftAlert,
+			Timestamp: time.Now(),
+			TenantID:  tenantID,
+			Severity:  maxSeverity,
+			Payload: map[string]interface{}{
+				"job_id":      job.ID.String(),
+				"job_name":    job.Name,
+				"issue_count": len(issues),
+				"description": title,
+			},
+		}
+		if err := w.broker.PublishEvent(ctx, streamedEvent); err != nil {
+			w.logger.Sugar().Warnf("failed to publish drift alert to event broker: %v", err)
+		}
 	}
 }

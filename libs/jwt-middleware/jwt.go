@@ -20,6 +20,7 @@ type JWTClaims struct {
 	IsActive       bool     `json:"is_active"`
 	IsCoreAdmin    bool     `json:"is_core_admin"`
 	OrganizationID string   `json:"organization_id,omitempty"`
+	IdpGroups      []string `json:"idp_groups,omitempty"`
 	jwt.RegisteredClaims
 }
 

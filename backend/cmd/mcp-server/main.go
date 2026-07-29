@@ -16,12 +16,18 @@ func main() {
 	// The User's API key is passed via the Cursor/Claude MCP configuration
 	apiToken := os.Getenv("UISCE_API_TOKEN")
 	targetURL := os.Getenv("UISCE_API_URL") // e.g., http://localhost:8080
+	functionalRole := os.Getenv("UISCE_FUNCTIONAL_ROLE") // e.g., DATA_ENGINEER
 
 	if apiToken == "" {
 		log.Fatalf("FATAL: UISCE_API_TOKEN environment variable required for ABAC enforcement")
 	}
 
-	copilot := mcp.NewUisceCopilot(targetURL, apiToken)
+	var copilot *mcp.UisceCopilot
+	if functionalRole != "" {
+		copilot = mcp.NewUisceCopilotWithRole(targetURL, apiToken, functionalRole)
+	} else {
+		copilot = mcp.NewUisceCopilot(targetURL, apiToken)
+	}
 	scanner := bufio.NewScanner(os.Stdin)
 
 	// Listen for MCP Tool Execution Requests from Claude/Cursor

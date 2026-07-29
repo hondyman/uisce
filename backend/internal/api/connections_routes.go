@@ -39,7 +39,7 @@ func RegisterConnectionsRoutes(r chi.Router, db *sqlx.DB) {
 }
 
 func getTenantIDFromRequest(r *http.Request) string {
-	if claims := auth.GetClaimsFromRequest(r); claims != nil && claims.TenantID != "" {
+	if claims, err := jwtmiddleware.ValidateTokenFromRequest(r); err == nil && claims != nil && claims.TenantID != "" {
 		return claims.TenantID
 	}
 	if tenantID := r.Header.Get("X-Tenant-ID"); tenantID != "" {

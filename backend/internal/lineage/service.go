@@ -308,3 +308,131 @@ func (s *LineageService) ImpactOfNode(ctx context.Context, nodeID string, depth 
 type ASOInvalidator interface {
 	MarkStale(ctx context.Context, optID uuid.UUID) error
 }
+
+// ImpactSimulator wraps LineageService to provide distance-decay weighted impact analysis.
+type ImpactSimulator struct {
+	svc *LineageService
+}
+
+// NewImpactSimulator constructs an ImpactSimulator backed by a LineageService.
+func NewImpactSimulator(svc *LineageService) *ImpactSimulator {
+	return &ImpactSimulator{svc: svc}
+}
+
+// SimulateImpact performs a bi-directional blast-radius analysis for a given target node.
+func (is *ImpactSimulator) SimulateImpact(ctx context.Context, tenantID, targetNodeID, action string, depth int) (*BlastRadiusReport, error) {
+	if depth == 0 {
+		depth = 5
+	}
+
+	upstream, err := is.svc.repo.FindUpstreamGraph(ctx, targetNodeID, depth)
+	if err != nil {
+		log.Printf("[ImpactSimulator] upstream trace failed for %s: %v", targetNodeID, err)
+		upstream = &Graph{}
+	}
+
+	downstream, err := is.svc.repo.FindDownstreamGraph(ctx, targetNodeID, depth)
+	if err != nil {
+		log.Printf("[ImpactSimulator] downstream trace failed for %s: %v", targetNodeID, err)
+		downstream = &Graph{}
+	}
+
+	consumers := categorizeByConsumerDomain(downstream.Nodes)
+	var weightedScore float64
+	for _, consumer := range consumers {
+		for range consumer.Artifacts {
+			weightedScore += WeightFor(consumer.Domain) / float64(depth)
+		}
+	}
+
+	totalArtifacts := 0
+	for _, consumer := range consumers {
+		totalArtifacts += len(consumer.Artifacts)
+	}
+
+	report := &BlastRadiusReport{
+		TargetNode: targetNodeID,
+		Action:    action,
+		BlastRadiusSummary: BlastRadiusSummary{
+			TotalImpactedArtifacts: totalArtifacts,
+			Severity:               ComputeBlastRadiusSeverity(weightedScore),
+			WeightedScore:           weightedScore,
+		},
+		UpstreamNodes:     upstream.Nodes,
+		DownstreamNodes:   downstream.Nodes,
+		ImpactedConsumers: consumers,
+	}
+
+	return report, nil
+}
+
+// categorizeByConsumerDomain groups downstream nodes by their consumer domain.
+func categorizeByConsumerDomain(nodes []LineageNode) []ImpactedConsumer {
+	domainMap := make(map[ConsumerDomain][]string)
+
+	for _, node := range nodes {
+		domain := inferConsumerDomain(node)
+		domainMap[domain] = append(domainMap[domain], node.Name)
+	}
+
+	consumers := make([]ImpactedConsumer, 0, len(domainMap))
+	for domain, artifacts := range domainMap {
+		consumers = append(consumers, ImpactedConsumer{
+			Domain:   domain,
+			Artifacts: artifacts,
+			Risk:     riskDescription(domain),
+		})
+	}
+
+	return consumers
+}
+
+// inferConsumerDomain determines the consumer domain from a node's type and metadata.
+func inferConsumerDomain(node LineageNode) ConsumerDomain {
+	var md map[string]interface{}
+	if len(node.Metadata) > 0 {
+		_ = json.Unmarshal(node.Metadata, &md)
+	}
+	if domainVal, ok := md["consumer_domain"]; ok {
+		switch d := domainVal.(type) {
+		case string:
+			switch ConsumerDomain(d) {
+			case DomainReactDashboards, DomainRegulatoryExporters,
+				DomainDownstreamTenantQueries, DomainInternalAPIs,
+				DomainBusinessObjects:
+				return ConsumerDomain(d)
+			}
+		}
+	}
+
+	switch node.Type {
+	case NodePage:
+		return DomainReactDashboards
+	case NodeAPIEndpoint:
+		return DomainDownstreamTenantQueries
+	case NodeASOOpt:
+		return DomainRegulatoryExporters
+	case NodeBO:
+		return DomainBusinessObjects
+	default:
+		return DomainUnknown
+	}
+}
+
+// riskDescription returns a human-readable risk summary for a consumer domain.
+func riskDescription(domain ConsumerDomain) string {
+	switch domain {
+	case DomainReactDashboards:
+		return "UI components will render null values or fail to load."
+	case DomainRegulatoryExporters:
+		return "Regulatory report generation will fail schema validation."
+	case DomainDownstreamTenantQueries:
+		return "Compilation AST will throw unbound semantic term errors."
+	case DomainInternalAPIs:
+		return "Internal API contracts will be violated, potentially breaking callers."
+	case DomainBusinessObjects:
+		return "Business Object definitions will reference invalid fields."
+	default:
+		return "Downstream consumers may experience degraded functionality."
+	}
+}

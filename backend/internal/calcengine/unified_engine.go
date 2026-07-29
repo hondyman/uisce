@@ -5,6 +5,8 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"os"
+	"strconv"
 	"sync"
 	"time"
 
@@ -31,6 +33,9 @@ type UnifiedCalcEngine struct {
 	calcRegistry map[string]*CalculationDef
 	resultCache  *ResultCache
 	mu           sync.RWMutex
+
+	// CBO telemetry optimizer for hot/cold routing decisions
+	Optimizer TelemetryRouter
 }
 
 // UnifiedCalcConfig configures the unified calc engine
@@ -198,6 +203,56 @@ func NewUnifiedCalcEngine(cfg *UnifiedCalcConfig) (*UnifiedCalcEngine, error) {
 	return engine, nil
 }
 
+func getEnvInt(key string, defaultVal int) int {
+	if v := os.Getenv(key); v != "" {
+		if parsed, err := strconv.Atoi(v); err == nil {
+			return parsed
+		}
+	}
+	return defaultVal
+}
+
+func getEnvStr(key, defaultVal string) string {
+	if v := os.Getenv(key); v != "" {
+		return v
+	}
+	return defaultVal
+}
+
+// LoadUnifiedCalcConfigFromEnv builds a *UnifiedCalcConfig from environment variables.
+// Other fields (retention, cache TTL, resource groups) auto-default inside NewUnifiedCalcEngine.
+func LoadUnifiedCalcConfigFromEnv() *UnifiedCalcConfig {
+	return &UnifiedCalcConfig{
+		StarRocksHost:     os.Getenv("CALC_STARROCKS_HOST"),
+		StarRocksPort:     getEnvInt("CALC_STARROCKS_PORT", 9030),
+		StarRocksUser:     os.Getenv("CALC_STARROCKS_USER"),
+		StarRocksPassword: os.Getenv("CALC_STARROCKS_PASSWORD"),
+		StarRocksDB:       os.Getenv("CALC_STARROCKS_DB"),
+		HotDatabase:       getEnvStr("CALC_HOT_DB", "semantic_hot"),
+		ColdDatabase:      getEnvStr("CALC_COLD_DB", "semantic_cold"),
+	}
+}
+
+// WithOptimizer returns a copy of the engine with the CBO optimizer set.
+func (e *UnifiedCalcEngine) WithOptimizer(opt TelemetryRouter) *UnifiedCalcEngine {
+	e2 := *e
+	e2.Optimizer = opt
+	return &e2
+}
+
+type mockTelemetryRouterForCalc struct {
+	recommendedFlavor string
+	err               error
+}
+
+func (m *mockTelemetryRouterForCalc) GetOptimalFlavor(ctx context.Context, tenantID, boKey, defaultFlavor string) (string, error) {
+	return m.recommendedFlavor, m.err
+}
+
+func (e *UnifiedCalcEngine) determineQueryModeForTesting(ctx context.Context, req *CalcRequest) QueryMode {
+	return e.determineQueryMode(ctx, req)
+}
+
 // ============================================================================
 // REAL-TIME CALCULATION API (for your app)
 // ============================================================================
@@ -223,7 +278,7 @@ func (e *UnifiedCalcEngine) Calculate(ctx context.Context, req *CalcRequest) (*C
 	// Determine query mode
 	mode := req.Mode
 	if mode == "" || mode == ModeAuto {
-		mode = e.determineQueryMode(req)
+		mode = e.determineQueryMode(ctx, req)
 	}
 
 	// Set resource group based on mode
@@ -770,7 +825,7 @@ func (e *UnifiedCalcEngine) loadCalculationRegistry() error {
 // HELPERS
 // ============================================================================
 
-func (e *UnifiedCalcEngine) determineQueryMode(req *CalcRequest) QueryMode {
+func (e *UnifiedCalcEngine) determineQueryMode(ctx context.Context, req *CalcRequest) QueryMode {
 	// Check for explicit date range
 	if startDate := getTimeParam(req.Params, "start_date", time.Time{}); !startDate.IsZero() {
 		boundary := time.Now().AddDate(0, 0, -e.config.HotRetentionDays)
@@ -786,7 +841,21 @@ func (e *UnifiedCalcEngine) determineQueryMode(req *CalcRequest) QueryMode {
 		}
 	}
 
-	return ModeHot
+	mode := ModeHot
+
+	// CBO Rule: If optimizer is configured, consult telemetry for flavor override
+	if e.Optimizer != nil {
+		boKey := req.CalculationID
+		if boKey == "" {
+			boKey = req.MetricName
+		}
+		recommendedFlavor, err := e.Optimizer.GetOptimalFlavor(ctx, req.TenantID, boKey, "STARROCKS")
+		if err == nil && recommendedFlavor == "ICEBERG" {
+			mode = ModeCold
+		}
+	}
+
+	return mode
 }
 
 func (e *UnifiedCalcEngine) getDatabase(mode QueryMode) string {

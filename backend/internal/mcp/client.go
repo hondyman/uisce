@@ -10,9 +10,10 @@ import (
 )
 
 type SecureAPIClient struct {
-	BaseURL    string
-	APIToken   string
-	HTTPClient *http.Client
+	BaseURL        string
+	APIToken       string
+	FunctionalRole string
+	HTTPClient     *http.Client
 }
 
 func NewSecureAPIClient(baseURL, token string) *SecureAPIClient {
@@ -20,8 +21,8 @@ func NewSecureAPIClient(baseURL, token string) *SecureAPIClient {
 		baseURL = "http://localhost:8080"
 	}
 	return &SecureAPIClient{
-		BaseURL:  baseURL,
-		APIToken: token,
+		BaseURL:    baseURL,
+		APIToken:   token,
 		HTTPClient: &http.Client{
 			Timeout: 10 * time.Second,
 		},
@@ -29,12 +30,19 @@ func NewSecureAPIClient(baseURL, token string) *SecureAPIClient {
 }
 
 func (c *SecureAPIClient) Get(path string) (interface{}, error) {
+	return c.getWithRole(path, c.FunctionalRole)
+}
+
+func (c *SecureAPIClient) getWithRole(path, role string) (interface{}, error) {
 	req, err := http.NewRequest("GET", c.BaseURL+path, nil)
 	if err != nil {
 		return nil, err
 	}
 	req.Header.Set("Authorization", "Bearer "+c.APIToken)
 	req.Header.Set("X-Uisce-Api-Token", c.APIToken)
+	if role != "" {
+		req.Header.Set("X-Functional-Role", role)
+	}
 
 	resp, err := c.HTTPClient.Do(req)
 	if err != nil {
@@ -67,6 +75,9 @@ func (c *SecureAPIClient) Post(path string, payload interface{}) (map[string]int
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+c.APIToken)
 	req.Header.Set("X-Uisce-Api-Token", c.APIToken)
+	if c.FunctionalRole != "" {
+		req.Header.Set("X-Functional-Role", c.FunctionalRole)
+	}
 
 	resp, err := c.HTTPClient.Do(req)
 	if err != nil {
@@ -81,7 +92,6 @@ func (c *SecureAPIClient) Post(path string, payload interface{}) (map[string]int
 
 	var data map[string]interface{}
 	if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
-		// If response is array or scalar, wrap in map
 		return map[string]interface{}{"status": "success"}, nil
 	}
 	return data, nil

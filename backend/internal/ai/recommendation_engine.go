@@ -370,7 +370,71 @@ func (e *RecommendationEngine) ProcessFeedback(ctx context.Context, payload User
 }
 
 // ----------------------------------------------------
-// 5. REST & HTTP Handler Middleware Integration
+// 5. HNSW Memory Recall (Cross-Session Analytic Continuity)
+// ----------------------------------------------------
+
+type RecallResult struct {
+	PromptText      string  `db:"prompt_text" json:"prompt_text"`
+	EmbeddingScore float64 `db:"score" json:"score"`
+	CreatedAt      string  `db:"created_at" json:"created_at"`
+}
+
+func (e *RecommendationEngine) RecallSimilarQueries(ctx context.Context, tenantID, userHash string, limit int) ([]RecallResult, error) {
+	if e.db == nil || limit <= 0 {
+		return nil, nil
+	}
+	if limit > 5 {
+		limit = 5
+	}
+
+	query := `
+		SELECT
+			aie.prompt_text,
+			1 - (aie.embedding <=> COALESCE(
+				(SELECT embedding FROM ai_interaction_embeddings
+				 WHERE tenant_id = $1 AND session_hash = $2
+				 ORDER BY created_at DESC LIMIT 1),
+				aie.embedding
+			)) AS score,
+			aie.created_at::text AS created_at
+		FROM ai_interaction_embeddings aie
+		WHERE aie.tenant_id = $1
+		  AND aie.session_hash = $2
+		ORDER BY aie.embedding <=> COALESCE(
+			(SELECT embedding FROM ai_interaction_embeddings
+			 WHERE tenant_id = $1 AND session_hash = $2
+			 ORDER BY created_at DESC LIMIT 1),
+			aie.embedding
+		)
+		LIMIT $3
+	`
+	var results []RecallResult
+	err := e.db.SelectContext(ctx, &results, query, tenantID, userHash, limit)
+	if err != nil {
+		return nil, err
+	}
+	return results, nil
+}
+
+func (e *RecommendationEngine) InjectMemoryRecall(ctx context.Context, tenantID, userHash string) (string, error) {
+	recalls, err := e.RecallSimilarQueries(ctx, tenantID, userHash, 3)
+	if err != nil || len(recalls) == 0 {
+		return "", nil
+	}
+	var prompts []string
+	for _, r := range recalls {
+		if r.PromptText != "" {
+			prompts = append(prompts, r.PromptText)
+		}
+	}
+	if len(prompts) == 0 {
+		return "", nil
+	}
+	return strings.Join(prompts, " | "), nil
+}
+
+// ----------------------------------------------------
+// 6. REST & HTTP Handler Middleware Integration
 // ----------------------------------------------------
 
 func (e *RecommendationEngine) RecommendationHandler(w http.ResponseWriter, r *http.Request) {

@@ -508,6 +508,17 @@ func (r *Repository) GetPendingAISuggestions(ctx context.Context, tenantID uuid.
 	return suggestions, err
 }
 
+// CountPendingDriftSuggestions counts pending drift suggestions for a tenant
+func (r *Repository) CountPendingDriftSuggestions(ctx context.Context, tenantID uuid.UUID) (int, error) {
+	var count int
+	query := `
+		SELECT COUNT(*) FROM scheduler_ai_suggestions
+		WHERE tenant_id = $1 AND status = 'pending' AND suggestion_type = 'semantic_drift'
+	`
+	err := r.db.GetContext(ctx, &count, query, tenantID)
+	return count, err
+}
+
 // UpdateAISuggestionStatus updates the status of an AI suggestion
 func (r *Repository) UpdateAISuggestionStatus(ctx context.Context, id uuid.UUID, status string, dismissedReason *string, changesetID *uuid.UUID) error {
 	query := `

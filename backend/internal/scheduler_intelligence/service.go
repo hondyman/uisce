@@ -580,6 +580,11 @@ func (s *Service) GetPendingAISuggestions(ctx context.Context, tenantID uuid.UUI
 	return s.repo.GetPendingAISuggestions(ctx, tenantID)
 }
 
+// CountPendingDriftSuggestions returns the count of pending drift alerts for a tenant
+func (s *Service) CountPendingDriftSuggestions(ctx context.Context, tenantID uuid.UUID) (int, error) {
+	return s.repo.CountPendingDriftSuggestions(ctx, tenantID)
+}
+
 // AcceptAISuggestion accepts an AI suggestion and creates a changeset
 func (s *Service) AcceptAISuggestion(ctx context.Context, id uuid.UUID) error {
 	// TODO: Integrate with CRS to create changeset

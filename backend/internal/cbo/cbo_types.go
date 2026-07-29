@@ -139,3 +139,49 @@ type CBOStats struct {
 	TopPatterns            []QueryPattern `json:"top_patterns"`
 	PendingRecommendations int            `json:"pending_recommendations"`
 }
+
+// OverrideReason documents why the CBO overrode the default flavor
+type OverrideReason string
+
+const (
+	OverrideInsufficientTelemetry OverrideReason = "INSUFFICIENT_TELEMETRY"
+	OverrideFailoverHighFailure   OverrideReason = "FAILOVER_HIGH_FAILURE_RATE"
+	OverrideLatencyDegraded        OverrideReason = "LATENCY_DEGRADED"
+	OverrideWithinSLO              OverrideReason = "WITHIN_SLO"
+	OverrideCacheHit               OverrideReason = "CACHE_HIT"
+	OverrideRedisDown             OverrideReason = "REDIS_DOWN_FALLBACK"
+)
+
+// TelemetryFlavorDecision represents a CBO routing decision based on telemetry
+type TelemetryFlavorDecision struct {
+	TenantID            string          `json:"tenant_id"`
+	BOName              string          `json:"bo_key"`
+	DefaultFlavor       string          `json:"default_flavor"`
+	RecommendedFlavor   string          `json:"recommended_flavor"`
+	Source              string          `json:"source"`               // "rule" or "telemetry"
+	OverrideReason      OverrideReason  `json:"override_reason"`
+	AvgLatencyMs        float64         `json:"avg_latency_ms"`
+	FailureRate         float64         `json:"failure_rate"`
+	CacheHitRate        float64         `json:"cache_hit_rate"`
+	SampleCount         int             `json:"sample_count"`
+	WindowMinutes       int             `json:"window_minutes"`
+}
+
+// FlavorConstants define the supported execution flavors for routing
+const (
+	FlavorStarRocks  = "STARROCKS"
+	FlavorIceberg    = "ICEBERG"
+	FlavorDatafusion = "DATAFUSION"
+	FlavorDefault    = "POSTGRES"
+)
+
+// CBOConfig holds all tunable parameters for telemetry-driven routing
+type CBOConfig struct {
+	Enabled             bool    `json:"enabled"`
+	WindowMinutes       int     `json:"window_minutes"`
+	MinSampleCount      int     `json:"min_sample_count"`
+	FailureRateFailover float64 `json:"failure_rate_failover"`
+	LatencyDegradedMs   float64 `json:"latency_degraded_ms"`
+	CacheTTLSeconds     int     `json:"cache_ttl_seconds"`
+	RedisURL            string  `json:"redis_url"`
+}

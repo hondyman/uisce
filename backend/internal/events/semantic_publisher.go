@@ -113,6 +113,39 @@ func (p *SemanticPublisher) PublishTermEvent(ctx context.Context, tenantID, user
 	return p.PublishEvent(ctx, event)
 }
 
+// DriftAlertEvent is published to drift.alerts.v1 when active drift is detected
+type DriftAlertEvent struct {
+	ID          string    `json:"id"`
+	Timestamp   time.Time `json:"timestamp"`
+	TenantID    string    `json:"tenant_id"`
+	JobID       string    `json:"job_id"`
+	JobName     string    `json:"job_name"`
+	IssueCount  int       `json:"issue_count"`
+	Severity    string    `json:"severity"`
+	Description string    `json:"description"`
+}
+
+// PublishDriftAlert publishes a drift alert to the drift.alerts.v1 topic
+func (p *SemanticPublisher) PublishDriftAlert(ctx context.Context, event *DriftAlertEvent) error {
+	body, err := json.Marshal(event)
+	if err != nil {
+		return fmt.Errorf("failed to marshal drift alert: %w", err)
+	}
+
+	msg := kafka.Message{
+		Topic: "drift.alerts.v1",
+		Key:   []byte(event.TenantID),
+		Value: body,
+		Time:  time.Now(),
+		Headers: []kafka.Header{
+			{Key: "job_id", Value: []byte(event.JobID)},
+			{Key: "severity", Value: []byte(event.Severity)},
+		},
+	}
+
+	return p.writer.WriteMessages(ctx, msg)
+}
+
 // PublishDriftEvent publishes a drift detection event
 func (p *SemanticPublisher) PublishDriftEvent(ctx context.Context, tenantID, modelID, severity string, issues int) error {
 	event := map[string]interface{}{
@@ -135,6 +168,35 @@ func (p *SemanticPublisher) PublishDriftEvent(ctx context.Context, tenantID, mod
 
 	return p.writer.WriteMessages(ctx, msg)
 }
+
+// PublishCBOReroute publishes a CBO routing override event for governance audit
+func (p *SemanticPublisher) PublishCBOReroute(ctx context.Context, event *CBORerouteEvent) error {
+	body, err := json.Marshal(event)
+	if err != nil {
+		return fmt.Errorf("failed to marshal CBO reroute event: %w", err)
+	}
+
+	msg := kafka.Message{
+		Topic: "cbo.events",
+		Key:   []byte(event.TenantID),
+		Value: body,
+		Time:  time.Now(),
+		Headers: []kafka.Header{
+			{Key: "event_type", Value: []byte(string(event.EventType))},
+			{Key: "bo_name", Value: []byte(event.BOName)},
+			{Key: "override_reason", Value: []byte(event.OverrideReason)},
+		},
+	}
+
+	return p.writer.WriteMessages(ctx, msg)
+}
+
+// CBOPublisher is implemented by SemanticPublisher for publishing CBO routing events
+type CBOPublisher interface {
+	PublishCBOReroute(ctx context.Context, event *CBORerouteEvent) error
+}
+
+var _ CBOPublisher = (*SemanticPublisher)(nil)
 
 // Close closes the publisher connection
 func (p *SemanticPublisher) Close() error {

@@ -15,14 +15,20 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/jmoiron/sqlx"
 	_ "github.com/lib/pq"
+	"go.uber.org/zap"
 
+	"github.com/hondyman/uisce/backend/internal/ai"
+	"github.com/hondyman/uisce/backend/internal/agentic"
 	"github.com/hondyman/uisce/backend/internal/audit"
 	"github.com/hondyman/uisce/backend/internal/cash"
 	"github.com/hondyman/uisce/backend/internal/compliance"
+	"github.com/hondyman/uisce/backend/internal/events"
 	"github.com/hondyman/uisce/backend/internal/handlers"
 	"github.com/hondyman/uisce/backend/internal/observability"
+	"github.com/hondyman/uisce/backend/internal/personalization"
 	"github.com/hondyman/uisce/backend/internal/risk"
 	"github.com/hondyman/uisce/backend/internal/scheduler"
+	"github.com/hondyman/uisce/backend/internal/scheduler_intelligence"
 	"github.com/hondyman/uisce/backend/internal/services"
 	"github.com/hondyman/uisce/backend/internal/transaction"
 	"github.com/hondyman/uisce/backend/internal/validation"
@@ -55,6 +61,13 @@ func main() {
 	}
 
 	log.Println("Connected to database successfully")
+
+	// sqlx wrapper for typed queries (used by CBO and other services)
+	sqlxDB := sqlx.NewDb(db, "postgres")
+
+	// Initialize zap logger for scheduler intelligence
+	logger, _ := zap.NewProduction()
+	defer logger.Sync()
 
 	// Create router
 	router := mux.NewRouter()
@@ -107,7 +120,6 @@ func main() {
 	bulkHandler := handlers.NewBulkOperationsHandler(db)
 
 	// Transaction Master
-	sqlxDB := sqlx.NewDb(db, "postgres")
 	txRepo := transaction.NewTransactionRepository(sqlxDB, nil) // Engine nil for now
 	txHandler := handlers.NewTransactionHandler(txRepo)
 
@@ -177,6 +189,35 @@ func main() {
 	// Initialize scheduler service (Feature 4)
 	schedulerService := services.NewPostgresSchedulerService(db)
 
+	// ── Phase 8-10: Personalization, Drift Detection, MCP Tool Registry ──
+	personalizationSvc := personalization.NewService(sqlxDB)
+	pageCopilotSvc := ai.NewPageCopilotService(sqlxDB)
+	personalizationHandler := handlers.NewPersonalizationHandler(personalizationSvc, pageCopilotSvc)
+
+	schedulerIntellRepo := scheduler_intelligence.NewRepository(sqlxDB)
+	semanticAdapter := scheduler_intelligence.NewSemanticAdapter(sqlxDB, nil)
+	schedulerIntellSvc := scheduler_intelligence.NewService(sqlxDB, semanticAdapter, logger)
+	notificationsHandler := handlers.NewNotificationsHandler(personalizationSvc, schedulerIntellSvc)
+
+	mcpRegistry := agentic.NewMCPRegistryService(sqlxDB)
+	mcpToolsHandler := handlers.NewMCPToolsHandler(mcpRegistry)
+
+	eventBroker := events.NewEventStreamBroker(1000)
+
+	driftWatcher := scheduler_intelligence.NewDriftWatcher(schedulerIntellRepo, semanticAdapter, logger)
+	kafkaBrokers := os.Getenv("KAFKA_BROKERS")
+	if kafkaBrokers != "" {
+		if semPub, err := events.NewSemanticPublisher(kafkaBrokers); err == nil {
+			driftWatcher.WithKafkaPublisher(semPub)
+		}
+	}
+	driftWatcher.WithBroker(eventBroker)
+	go driftWatcher.Start(context.Background(), 5*time.Minute)
+
+	driftWSHub := handlers.NewDriftWSHub()
+	driftWSHandler := handlers.NewDriftWSHandler(driftWSHub)
+	// ── End Phase 8-10 ──
+
 	// Start job processor in background
 	if err := jobProcessor.Start(context.Background()); err != nil {
 		log.Printf("Warning: Failed to start job processor: %v", err)
@@ -197,6 +238,8 @@ func main() {
 		log.Println("Shutdown signal received, stopping services...")
 		_ = jobProcessor.Stop(10 * time.Second)
 		schedulerService.Stop()
+		driftWatcher.Stop()
+		eventBroker.Stop()
 		if goldCopyPublisher != nil {
 			_ = goldCopyPublisher.Close()
 		}
@@ -263,12 +306,20 @@ func main() {
 	api.HandleFunc("/schedules/{scheduleId}/resume", schedulerHandlers.ResumeSchedule).Methods("POST")
 	api.HandleFunc("/schedules/{scheduleId}", schedulerHandlers.DeleteSchedule).Methods("DELETE")
 
+	// Register personalization, notifications, page-copilot, and MCP tool registry routes
+	personalizationHandler.RegisterMuxRoutes(api)
+	notificationsHandler.RegisterMuxRoutes(api)
+	mcpToolsHandler.RegisterMuxRoutes(api)
+
+	// Register drift WebSocket
+	router.Handle("/api/v1/ws/drift", driftWSHandler).Methods("GET")
+
 	// Start server with basic CORS setup
 	router.Use(func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Access-Control-Allow-Origin", "*")
 			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
-			w.Header().Set("Access-Control-Allow-Headers", "Content-Type, X-Tenant-ID, X-User-ID, Authorization")
+			w.Header().Set("Access-Control-Allow-Headers", "Content-Type, X-Tenant-ID, X-User-ID, X-Functional-Role, Authorization")
 			if r.Method == "OPTIONS" {
 				w.WriteHeader(http.StatusOK)
 				return
@@ -334,6 +385,18 @@ func main() {
 	fmt.Println("\n  Health:")
 	fmt.Println("    GET    /health")
 	fmt.Println("    GET    /ready")
+
+	fmt.Println("\n  Personalization (Wave 2):")
+	fmt.Println("    GET    /api/v1/personalization/profile")
+	fmt.Println("    PUT    /api/v1/personalization/profile")
+	fmt.Println("    POST   /api/v1/personalization/pin/{boKey}")
+	fmt.Println("    DELETE /api/v1/personalization/pin/{boKey}")
+	fmt.Println("    POST   /api/v1/personalization/bump/{boKey}")
+	fmt.Println("    GET    /api/v1/personalization/context")
+	fmt.Println("    GET    /api/v1/personalization/notifications")
+	fmt.Println("    POST   /api/v1/ai/page-copilot/layout")
+	fmt.Println("    GET    /api/v1/mcp/tools")
+	fmt.Println("    WS     /api/v1/ws/drift?tenant_id=...")
 
 	log.Fatal(http.ListenAndServe(addr, router))
 }
