@@ -69,9 +69,12 @@ fi
 # POSTGRES_DSN is used by internal/api/server.go
 export POSTGRES_DSN="${POSTGRES_DSN:-postgresql://postgres:postgres@100.84.50.65:5432/alpha?sslmode=disable}"
 export JWT_SECRET="${JWT_SECRET:-TND5KO7xY/Fz1ifgTR5QMm9T+R5/aPxxavmMzp+hURJxRWTm2Pns+RC+q9NKMxMB3F/R2KAWXnwo7r8N5JIACQ==}"
+export TEMPORAL_HOST="${TEMPORAL_HOST:-100.84.50.65:7233}"
+export TEMPORAL_RETRY_ATTEMPTS="${TEMPORAL_RETRY_ATTEMPTS:-2}"
 
 echo -e "${YELLOW}Starting server...${NC}"
 echo -e "${YELLOW}   POSTGRES_DSN: ${POSTGRES_DSN:0:50}...${NC}"
+echo -e "${YELLOW}   TEMPORAL_HOST: $TEMPORAL_HOST${NC}"
 
 # Start server
 ./server > "$LOG_DIR/backend_${TIMESTAMP}.log" 2>&1 &
