@@ -35,45 +35,46 @@ fi
 
 cd "$BACKEND_DIR"
 
-# Load secrets from Infisical if available, otherwise use defaults
+# Ensure cmd/server/main.go exists
+if [ ! -f "cmd/server/main.go" ]; then
+    echo -e "${RED}❌ Missing cmd/server/main.go - creating...${NC}"
+    mkdir -p cmd/server
+    cat > cmd/server/main.go << 'EOF'
+package main
+
+import (
+	"github.com/hondyman/uisce/backend/internal/api"
+)
+
+func main() {
+	api.StartServer()
+}
+EOF
+    echo -e "${GREEN}✅ Created cmd/server/main.go${NC}"
+fi
+
+# Build the backend
+echo -e "${YELLOW}Building backend...${NC}"
+go build -o server ./cmd/server/main.go
+
+# Load secrets from Infisical if available
 if [ -f "$SCRIPT_DIR/.env.infisical" ]; then
     echo -e "${YELLOW}Loading secrets from .env.infisical...${NC}"
     set -a
     source "$SCRIPT_DIR/.env.infisical"
     set +a
-
-    # Fetch DATABASE_URL from Infisical if not set
-    if [ -z "${DATABASE_URL:-}" ] && [ -n "${INFISICAL_TOKEN:-}" ] && [ -n "${INFISICAL_PROJECT_ID:-}" ]; then
-        echo -e "${YELLOW}Fetching DATABASE_URL from Infisical...${NC}"
-        export DATABASE_URL=$(curl -s -X GET \
-            "$INFISICAL_DOMAIN/api/v3/secrets/raw?projectId=$INFISICAL_PROJECT_ID&environment=$INFISICAL_ENVIRONMENT&path=/core" \
-            -H "Authorization: Bearer $INFISICAL_TOKEN" 2>/dev/null | \
-            python3 -c "import sys,json; print(next(s['secretValue'] for s in json.load(sys.stdin)['secrets'] if s['secretKey']=='DATABASE_URL'))" 2>/dev/null || echo "")
-    fi
-
-    if [ -z "${JWT_SECRET:-}" ] && [ -n "${INFISICAL_TOKEN:-}" ] && [ -n "${INFISICAL_PROJECT_ID:-}" ]; then
-        export JWT_SECRET=$(curl -s -X GET \
-            "$INFISICAL_DOMAIN/api/v3/secrets/raw?projectId=$INFISICAL_PROJECT_ID&environment=$INFISICAL_ENVIRONMENT&path=/core" \
-            -H "Authorization: Bearer $INFISICAL_TOKEN" 2>/dev/null | \
-            python3 -c "import sys,json; print(next(s['secretValue'] for s in json.load(sys.stdin)['secrets'] if s['secretKey']=='JWT_SECRET'))" 2>/dev/null || echo "")
-    fi
 fi
 
 # Set defaults if not loaded
-export DATABASE_URL="${DATABASE_URL:-postgresql://postgres:postgres@100.84.50.65:5432/alpha?sslmode=disable}"
+# POSTGRES_DSN is used by internal/api/server.go
+export POSTGRES_DSN="${POSTGRES_DSN:-postgresql://postgres:postgres@100.84.50.65:5432/alpha?sslmode=disable}"
 export JWT_SECRET="${JWT_SECRET:-TND5KO7xY/Fz1ifgTR5QMm9T+R5/aPxxavmMzp+hURJxRWTm2Pns+RC+q9NKMxMB3F/R2KAWXnwo7r8N5JIACQ==}"
 
-# Check if main binary exists
-if [ ! -f "./main" ]; then
-    echo -e "${RED}❌ Backend binary not found at $BACKEND_DIR/main${NC}"
-    echo -e "${RED}   Please build the backend first or restore the binary${NC}"
-    exit 1
-fi
+echo -e "${YELLOW}Starting server...${NC}"
+echo -e "${YELLOW}   POSTGRES_DSN: ${POSTGRES_DSN:0:50}...${NC}"
 
 # Start server
-echo -e "${YELLOW}Starting server...${NC}"
-echo -e "${YELLOW}   DATABASE_URL: ${DATABASE_URL:0:50}...${NC}"
-./main > "$LOG_DIR/backend_${TIMESTAMP}.log" 2>&1 &
+./server > "$LOG_DIR/backend_${TIMESTAMP}.log" 2>&1 &
 BACKEND_PID=$!
 
 sleep 3
