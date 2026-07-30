@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { Dialog, DialogTitle, DialogContent, DialogActions, Button, Box, TableContainer, Paper, Table, TableHead, TableRow, TableCell, TableBody, IconButton, TextField, Select, MenuItem, FormControl, InputLabel, Checkbox, FormControlLabel } from '@mui/material';
-import { Plus, Settings, Trash2 } from 'lucide-react';
+import AddIcon from '@mui/icons-material/Add';
+import SettingsIcon from '@mui/icons-material/Settings';
+import DeleteIcon from '@mui/icons-material/Delete';
 
 type ReportParameter = {
   id: string;
@@ -85,7 +87,7 @@ const ParametersDialog: React.FC<Props> = ({ open, onClose, parameters, onAdd, o
         <DialogTitle>Report Parameters</DialogTitle>
         <DialogContent>
           <Box sx={{ mb: 2 }}>
-            <Button variant="contained" startIcon={<Plus />} sx={{ mb: 2 }} onClick={() => setEditingParam({})}>Add Parameter</Button>
+            <Button variant="contained" startIcon={<AddIcon />} sx={{ mb: 2 }} onClick={() => setEditingParam({})}>Add Parameter</Button>
           </Box>
           <TableContainer component={Paper}>
             <Table>
@@ -106,8 +108,8 @@ const ParametersDialog: React.FC<Props> = ({ open, onClose, parameters, onAdd, o
                     <TableCell>{param.prompt}</TableCell>
                     <TableCell>{param.defaultValue}</TableCell>
                     <TableCell>
-                      <IconButton size="small" onClick={() => setEditingParam(param)}><Settings size={16} /></IconButton>
-                      <IconButton size="small" onClick={() => onDelete(param.id)}><Trash2 size={16} /></IconButton>
+                      <IconButton size="small" onClick={() => setEditingParam(param)}><SettingsIcon fontSize="small" /></IconButton>
+                      <IconButton size="small" onClick={() => onDelete(param.id)}><DeleteIcon fontSize="small" /></IconButton>
                     </TableCell>
                   </TableRow>
                 ))}

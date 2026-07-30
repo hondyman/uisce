@@ -1,7 +1,13 @@
 import React, { useState } from 'react';
 import { useConfirm } from '../components/ConfirmProvider';
 import { useNotification } from '../hooks/useNotification';
-import { Plus, Trash2, Save, X, Edit2, Check, AlertCircle } from 'lucide-react';
+import AddIcon from '@mui/icons-material/Add';
+import DeleteIcon from '@mui/icons-material/Delete';
+import SaveIcon from '@mui/icons-material/Save';
+import CloseIcon from '@mui/icons-material/Close';
+import EditIcon from '@mui/icons-material/Edit';
+import CheckIcon from '@mui/icons-material/Check';
+import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline';
 import ParameterBuilder from './ParameterBuilder';
 import { getParameterSchema, getAvailableRuleTypes, validateParameters } from '../lib/parameterSchemas';
 
@@ -289,7 +295,7 @@ export const RuleBuilder: React.FC<RuleBuilderProps> = ({
             {/* Error Display */}
             {validationErrors.base && showValidation && (
               <div className="p-3 bg-red-100 dark:bg-red-900 border border-red-400 dark:border-red-700 rounded-lg flex items-center gap-2">
-                <AlertCircle size={18} className="text-red-600 dark:text-red-300 flex-shrink-0" />
+                <ErrorOutlineIcon sx={{ fontSize: 18 }} color="error" />
                 <p className="text-sm text-red-800 dark:text-red-200">{validationErrors.base}</p>
               </div>
             )}
@@ -300,7 +306,7 @@ export const RuleBuilder: React.FC<RuleBuilderProps> = ({
                 onClick={handleCancelEdit}
                 className="flex items-center gap-2 px-4 py-2 bg-gray-400 hover:bg-gray-500 text-white rounded-lg font-semibold transition-colors"
               >
-                <X size={18} />
+                <CloseIcon />
                 Cancel
               </button>
               <button
@@ -321,7 +327,7 @@ export const RuleBuilder: React.FC<RuleBuilderProps> = ({
           onClick={() => setIsEditingNew(true)}
           className="mb-6 flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg font-semibold transition-colors"
         >
-          <Plus size={18} />
+          <AddIcon />
           Create New Rule
         </button>
       )}
@@ -394,7 +400,7 @@ export const RuleBuilder: React.FC<RuleBuilderProps> = ({
                       }`}
                       title={rule.enabled ? 'Disable rule' : 'Enable rule'}
                     >
-                      <Check size={18} />
+<CheckIcon />
                     </button>
 
                     <button
@@ -402,7 +408,7 @@ export const RuleBuilder: React.FC<RuleBuilderProps> = ({
                       className="p-2 text-blue-600 hover:bg-blue-100 dark:text-blue-400 dark:hover:bg-slate-700 rounded transition-colors"
                       title="Edit rule"
                     >
-                      <Edit2 size={18} />
+                      <EditIcon />
                     </button>
 
                     <button
@@ -410,7 +416,7 @@ export const RuleBuilder: React.FC<RuleBuilderProps> = ({
                       className="p-2 text-red-600 hover:bg-red-100 dark:text-red-400 dark:hover:bg-slate-700 rounded transition-colors"
                       title="Delete rule"
                     >
-                      <Trash2 size={18} />
+                      <DeleteIcon />
                     </button>
                   </div>
                 </div>

@@ -1,6 +1,8 @@
 // src/components/DimensionBuilder/DimensionBuilder.tsx
 import { useState } from 'react';
-import { Plus, Code, Type } from 'lucide-react';
+import AddIcon from '@mui/icons-material/Add';
+import CodeIcon from '@mui/icons-material/Code';
+import TextFieldsIcon from '@mui/icons-material/TextFields';
 import { Dimension } from './types';
 import { DimensionCard } from './DimensionCard';
 import { NewDimensionForm } from './NewDimensionForm';
@@ -79,7 +81,7 @@ export default function DimensionBuilder({
       <div className="mb-6 bg-gradient-to-r from-indigo-500 to-purple-600 text-white p-6 rounded-xl shadow-lg">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <Type className="w-8 h-8" />
+            <TextFieldsIcon sx={{ fontSize: 32 }} />
             <div>
               <h2 className="text-2xl font-bold">Dimension Builder</h2>
               <p className="text-indigo-100">Create and manage Cube.js dimensions with advanced features</p>
@@ -94,7 +96,7 @@ export default function DimensionBuilder({
               onClick={() => setShowNewDimensionForm(prev => !prev)}
               className="bg-white/20 hover:bg-white/30 px-4 py-2 rounded-lg transition-colors flex items-center gap-2"
             >
-              <Plus className="w-4 h-4" />
+              <AddIcon fontSize="small" />
               Add Dimension
             </button>
           </div>
@@ -137,7 +139,7 @@ export default function DimensionBuilder({
             onClick={onGenerateCode}
             className="w-full bg-green-500 hover:bg-green-600 text-white px-4 py-3 rounded-lg transition-colors flex items-center gap-2 justify-center font-medium"
           >
-            <Code className="w-5 h-5" />
+            <CodeIcon />
             Generate Complete Cube Schema
           </button>
         </div>

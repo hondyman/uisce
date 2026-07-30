@@ -1,25 +1,23 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import {
-  FileText,
-  Save,
-  Download,
-  Settings,
-  Database,
-  Table,
-  BarChart3,
-  Filter,
-  Grid3x3,
-  Type,
-  Image,
-  Trash2,
-  Copy,
-  Layers,
-  Eye,
-  MousePointer,
-  Maximize2,
-  Square,
-  Circle,
-} from 'lucide-react';
+import DescriptionIcon from '@mui/icons-material/Description';
+import SaveIcon from '@mui/icons-material/Save';
+import DownloadIcon from '@mui/icons-material/Download';
+import SettingsIcon from '@mui/icons-material/Settings';
+import StorageIcon from '@mui/icons-material/Storage';
+import TableChartIcon from '@mui/icons-material/TableChart';
+import BarChartIcon from '@mui/icons-material/BarChart';
+import FilterListIcon from '@mui/icons-material/FilterList';
+import GridViewIcon from '@mui/icons-material/GridView';
+import TextFieldsIcon from '@mui/icons-material/TextFields';
+import ImageIcon from '@mui/icons-material/Image';
+import DeleteIcon from '@mui/icons-material/Delete';
+import ContentCopyIcon from '@mui/icons-material/ContentCopy';
+import LayersIcon from '@mui/icons-material/Layers';
+import VisibilityIcon from '@mui/icons-material/Visibility';
+import ClickIcon from '@mui/icons-material/Click';
+import OpenInFullIcon from '@mui/icons-material/OpenInFull';
+import SquareIcon from '@mui/icons-material/Square';
+import CircleIcon from '@mui/icons-material/Circle';
 
 // Drag and drop imports
 import { DndProvider } from 'react-dnd';
@@ -137,17 +135,17 @@ const ElementToolbox = ({ onAddElement }: { onAddElement: (type: string) => void
   const theme = useTheme();
   
   const elements = [
-    { type: 'chart', label: 'Chart', icon: <BarChart3 />, color: theme.palette.primary.main },
-    { type: 'table', label: 'Table', icon: <Table />, color: theme.palette.secondary.main },
-    { type: 'text', label: 'Text', icon: <Type />, color: theme.palette.success.main },
-    { type: 'image', label: 'Image', icon: <Image />, color: theme.palette.warning.main },
-    { type: 'filter', label: 'Filter', icon: <Filter />, color: theme.palette.error.main },
+    { type: 'chart', label: 'Chart', icon: <BarChartIcon />, color: theme.palette.primary.main },
+    { type: 'table', label: 'Table', icon: <TableChartIcon />, color: theme.palette.secondary.main },
+    { type: 'text', label: 'Text', icon: <TextFieldsIcon />, color: theme.palette.success.main },
+    { type: 'image', label: 'Image', icon: <ImageIcon />, color: theme.palette.warning.main },
+    { type: 'filter', label: 'Filter', icon: <FilterListIcon />, color: theme.palette.error.main },
   ];
 
   return (
     <Box sx={{ p: 2 }}>
       <Typography variant="h6" gutterBottom sx={{ fontWeight: 700, color: 'primary.main' }}>
-        <Layers className="inline w-5 h-5 mr-2" />
+        <LayersIcon sx={{ fontSize: 20 }} className="mr-2" />
         Elements
       </Typography>
       <Grid container spacing={2}>
@@ -244,7 +242,7 @@ const AdvancedPropertiesPanel = ({ selectedElement, onUpdate }: { selectedElemen
     return (
       <Box sx={{ p: 3, textAlign: 'center' }}>
         <Typography variant="h6" color="text.secondary" gutterBottom>
-          <Settings className="inline w-5 h-5 mr-2" />
+<SettingsIcon sx={{ fontSize: 20 }} className="mr-2" />
           Properties
         </Typography>
         <Typography variant="body2" color="text.secondary">
@@ -252,7 +250,7 @@ const AdvancedPropertiesPanel = ({ selectedElement, onUpdate }: { selectedElemen
         </Typography>
         <Box sx={{ mt: 2 }}>
           <Avatar sx={{ mx: 'auto', bgcolor: 'primary.main' }}>
-            <MousePointer />
+            <ClickIcon />
           </Avatar>
         </Box>
       </Box>
@@ -262,7 +260,7 @@ const AdvancedPropertiesPanel = ({ selectedElement, onUpdate }: { selectedElemen
   return (
     <Box sx={{ p: 2 }}>
       <Typography variant="h6" gutterBottom sx={{ fontWeight: 700, color: 'primary.main' }}>
-        <Settings className="inline w-5 h-5 mr-2" />
+        <SettingsIcon sx={{ fontSize: 20 }} className="mr-2" />
         Properties
       </Typography>
       
@@ -395,7 +393,7 @@ const LivePreviewPanel = ({ reportConfig }: { reportConfig: any }) => {
     <Box sx={{ p: 2, height: '100%', display: 'flex', flexDirection: 'column' }}>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
         <Typography variant="h6" sx={{ fontWeight: 700, color: 'primary.main' }}>
-          <Eye className="inline w-5 h-5 mr-2" />
+          <VisibilityIcon sx={{ fontSize: 20 }} className="mr-2" />
           Live Preview
         </Typography>
         <ToggleButtonGroup
@@ -405,8 +403,8 @@ const LivePreviewPanel = ({ reportConfig }: { reportConfig: any }) => {
           size="small"
         >
           <ToggleButton value="desktop"><Maximize2 className="w-4 h-4" /></ToggleButton>
-          <ToggleButton value="tablet"><Square className="w-4 h-4" /></ToggleButton>
-          <ToggleButton value="mobile"><Circle className="w-4 h-4" /></ToggleButton>
+          <ToggleButton value="tablet"><SquareIcon sx={{ fontSize: 16 }} /></ToggleButton>
+          <ToggleButton value="mobile"><CircleIcon sx={{ fontSize: 16 }} /></ToggleButton>
         </ToggleButtonGroup>
       </Box>
       
@@ -476,10 +474,10 @@ const ResponsiveDrawer: React.FC<{ activeTab: string; setActiveTab: (t: 'reports
   }, [isSmall]);
 
   const items = [
-    { key: 'reports', label: 'Reports', icon: <FileText />, color: theme.palette.primary.main },
-    { key: 'designer', label: 'Designer', icon: <Grid3x3 />, color: theme.palette.secondary.main },
-    { key: 'preview', label: 'Preview', icon: <Eye />, color: theme.palette.success.main },
-    { key: 'data', label: 'Data', icon: <Database />, color: theme.palette.warning.main },
+    { key: 'reports', label: 'Reports', icon: <DescriptionIcon />, color: theme.palette.primary.main },
+    { key: 'designer', label: 'Designer', icon: <GridViewIcon />, color: theme.palette.secondary.main },
+    { key: 'preview', label: 'Preview', icon: <VisibilityIcon />, color: theme.palette.success.main },
+    { key: 'data', label: 'Data', icon: <StorageIcon />, color: theme.palette.warning.main },
   ];
 
   return (
@@ -678,7 +676,7 @@ export default function WorldClassReportingBuilder() {
                   {element.type === 'table' && (
                     <Box sx={{ p: 2, height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                       <Box sx={{ textAlign: 'center' }}>
-                        <Table className="w-8 h-8 mx-auto mb-2 text-gray-400" />
+                        <TableChartIcon sx={{ fontSize: 32 }} className="mx-auto mb-2" color="disabled" />
                         <Typography variant="caption" color="text.secondary">
                           Table Element
                         </Typography>
@@ -690,7 +688,7 @@ export default function WorldClassReportingBuilder() {
                     <Box sx={{ position: 'absolute', top: -40, right: 0, display: 'flex', gap: 1 }}>
                       <Tooltip title="Duplicate">
                         <IconButton size="small" sx={{ bgcolor: 'background.paper', boxShadow: 1 }}>
-                          <Copy className="w-4 h-4" />
+                          <ContentCopyIcon sx={{ fontSize: 16 }} />
                         </IconButton>
                       </Tooltip>
                       <Tooltip title="Delete">
@@ -705,7 +703,7 @@ export default function WorldClassReportingBuilder() {
                             setSelectedElement(null);
                           }}
                         >
-                          <Trash2 className="w-4 h-4" />
+                          <DeleteIcon sx={{ fontSize: 16 }} />
                         </IconButton>
                       </Tooltip>
                     </Box>
@@ -778,13 +776,13 @@ export default function WorldClassReportingBuilder() {
             World-Class Report Builder
           </Typography>
           <ButtonGroup variant="contained" sx={{ mr: 2 }}>
-            <Button startIcon={<Save />} size="small">
+            <Button startIcon={<SaveIcon />} size="small">
               Save
             </Button>
-            <Button startIcon={<Eye />} size="small" onClick={() => setActiveTab('preview')}>
+            <Button startIcon={<VisibilityIcon />} size="small" onClick={() => setActiveTab('preview')}>
               Preview
             </Button>
-            <Button startIcon={<Download />} size="small">
+            <Button startIcon={<DownloadIcon />} size="small">
               Export
             </Button>
           </ButtonGroup>
@@ -815,17 +813,17 @@ export default function WorldClassReportingBuilder() {
         icon={<SpeedDialIcon />}
       >
         <SpeedDialAction
-          icon={<BarChart3 />}
+          icon={<BarChartIcon />}
           tooltipTitle="Add Chart"
           onClick={() => addElement('chart')}
         />
         <SpeedDialAction
-          icon={<Table />}
+          icon={<TableChartIcon />}
           tooltipTitle="Add Table"
           onClick={() => addElement('table')}
         />
         <SpeedDialAction
-          icon={<Type />}
+          icon={<TextFieldsIcon />}
           tooltipTitle="Add Text"
           onClick={() => addElement('text')}
         />

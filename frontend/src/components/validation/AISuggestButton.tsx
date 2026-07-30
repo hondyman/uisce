@@ -2,16 +2,16 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import {
-  Sparkles,
-  X,
-  Loader,
+  AutoAwesome,
+  Close,
+  CircularProgress,
   Lightbulb,
-  AlertTriangle,
+  Warning,
   TrendingUp,
-  Zap,
-  Target,
-  ShieldAlert
-} from 'lucide-react';
+  FlashOn,
+  GpsFixed,
+  Shield
+} from '@mui/icons-material';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { apiFetch } from '../../lib/apiClient';
 import { devError } from '../../utils/devLogger';
@@ -363,7 +363,7 @@ export const AISuggestButton: React.FC<AISuggestButtonProps> = ({
           className={`relative p-2 hover:bg-purple-100 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${className || ''}`}
           title="Get AI suggestions"
         >
-          <Sparkles className="text-purple-600" size={20} aria-hidden="true" />
+          <AutoAwesome sx={{ color: 'purple.600', fontSize: 20 }} aria-hidden="true" />
           {badgeCount > 0 && (
             <span className="absolute top-1 right-1 w-5 h-5 bg-red-500 text-white text-xs font-bold rounded-full flex items-center justify-center">
               {badgeCount}
@@ -385,7 +385,7 @@ export const AISuggestButton: React.FC<AISuggestButtonProps> = ({
           aria-controls="ai-suggestions-panel"
           className={`flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-purple-600 to-blue-600 text-white rounded-lg hover:shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed ${className || ''}`}
         >
-          <Sparkles size={18} aria-hidden="true" />
+          <AutoAwesome sx={{ fontSize: 18 }} aria-hidden="true" />
           <span>
             AI Ideas
             {badgeCount > 0 && ` (${badgeCount})`}
@@ -406,7 +406,7 @@ export const AISuggestButton: React.FC<AISuggestButtonProps> = ({
           aria-controls="ai-suggestions-panel"
           className={`fixed bottom-6 right-6 w-14 h-14 bg-gradient-to-r from-purple-600 to-blue-600 text-white rounded-full shadow-lg hover:shadow-xl transition-shadow flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed ${className || ''}`}
         >
-          <Sparkles size={24} aria-hidden="true" />
+          <AutoAwesome sx={{ fontSize: 24 }} aria-hidden="true" />
           {badgeCount > 0 && (
             <span className="absolute top-0 right-0 w-6 h-6 bg-red-500 text-white text-xs font-bold rounded-full flex items-center justify-center">
               {badgeCount}
@@ -435,7 +435,7 @@ export const AISuggestButton: React.FC<AISuggestButtonProps> = ({
           {/* Panel Header */}
           <div className="sticky top-0 bg-gradient-to-r from-purple-600 to-blue-600 text-white p-4 flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <Sparkles size={20} aria-hidden="true" />
+              <AutoAwesome sx={{ fontSize: 20 }} aria-hidden="true" />
               <span className="font-semibold">AI Assistant</span>
             </div>
             <button
@@ -443,7 +443,7 @@ export const AISuggestButton: React.FC<AISuggestButtonProps> = ({
               aria-label="Close suggestions panel"
               className="p-1 hover:bg-white hover:bg-opacity-20 rounded transition-colors"
             >
-              <X size={18} aria-hidden="true" />
+              <Close sx={{ fontSize: 18 }} aria-hidden="true" />
             </button>
           </div>
 
@@ -474,7 +474,7 @@ export const AISuggestButton: React.FC<AISuggestButtonProps> = ({
           {/* Panel Content */}
           {suggestionsLoading ? (
             <div className="p-8 flex flex-col items-center justify-center">
-              <Loader className="animate-spin text-purple-600 mb-2" size={24} aria-hidden="true" />
+              <CircularProgress sx={{ color: 'purple.600', mb: 1, fontSize: 24 }} aria-hidden="true" />
               <p className="text-sm text-gray-600">Analyzing your rules...</p>
             </div>
           ) : visibleSuggestions.length > 0 ? (
@@ -531,17 +531,17 @@ const SuggestionCard: React.FC<SuggestionCardProps> = ({
   const getIcon = () => {
     switch (suggestion.type) {
       case 'rule':
-        return <Lightbulb className="text-yellow-600" size={16} />;
+        return <Lightbulb sx={{ color: 'yellow.600', fontSize: 16 }} />;
       case 'optimization':
-        return <Zap className="text-blue-600" size={16} />;
+        return <FlashOn sx={{ color: 'blue.600', fontSize: 16 }} />;
       case 'conflict':
-        return <AlertTriangle className="text-red-600" size={16} />;
+        return <Warning sx={{ color: 'red.600', fontSize: 16 }} />;
       case 'pattern':
-        return <TrendingUp className="text-green-600" size={16} />;
+        return <TrendingUp sx={{ color: 'green.600', fontSize: 16 }} />;
       case 'dependency':
-        return <ShieldAlert className="text-orange-600" size={16} />;
+        return <Shield sx={{ color: 'orange.600', fontSize: 16 }} />;
       default:
-        return <Sparkles className="text-purple-600" size={16} />;
+        return <AutoAwesome sx={{ color: 'purple.600', fontSize: 16 }} />;
     }
   };
 
@@ -582,7 +582,7 @@ const SuggestionCard: React.FC<SuggestionCardProps> = ({
       {/* Impact Badge */}
       {suggestion.impact && (
         <div className="flex items-center gap-2 text-xs text-purple-700 mb-3">
-          <Target size={14} aria-hidden="true" />
+          <GpsFixed sx={{ fontSize: 14 }} aria-hidden="true" />
           <span className="font-medium">{suggestion.impact}</span>
         </div>
       )}

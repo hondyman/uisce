@@ -1,6 +1,6 @@
 import type { FC } from 'react';
 import { Box, Typography, Accordion, AccordionSummary, AccordionDetails, Grid, TextField, FormControl, InputLabel, Select, MenuItem } from '@mui/material';
-import { ChevronDown } from 'lucide-react';
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import { ELEMENT_TYPES, datasets, sanitizeInput } from './reportingUtils';
 
 const PropertiesPanel: FC<any> = ({ selectedElement, onElementUpdate }) => {
@@ -22,7 +22,7 @@ const PropertiesPanel: FC<any> = ({ selectedElement, onElementUpdate }) => {
     <Box sx={{ p: 2, maxHeight: '70vh', overflow: 'auto' }}>
       <Typography variant="h6" gutterBottom>{selectedElement.type} Properties</Typography>
       <Accordion defaultExpanded>
-        <AccordionSummary expandIcon={<ChevronDown />}>
+        <AccordionSummary expandIcon={<ExpandMoreIcon />}>
           <Typography variant="subtitle2">General</Typography>
         </AccordionSummary>
         <AccordionDetails>
@@ -55,7 +55,7 @@ const PropertiesPanel: FC<any> = ({ selectedElement, onElementUpdate }) => {
         </AccordionDetails>
       </Accordion>
       <Accordion>
-        <AccordionSummary expandIcon={<ChevronDown />}><Typography variant="subtitle2">Expressions & Formatting</Typography></AccordionSummary>
+        <AccordionSummary expandIcon={<ExpandMoreIcon />}><Typography variant="subtitle2">Expressions & Formatting</Typography></AccordionSummary>
         <AccordionDetails>
           <Grid container spacing={2}>
             <Grid item xs={12}><TextField fullWidth size="small" multiline minRows={2} label="Value Expression" value={selectedElement.properties.valueExpression || ''} onChange={(e) => updateProperty('valueExpression', e.target.value)} /></Grid>
@@ -64,7 +64,7 @@ const PropertiesPanel: FC<any> = ({ selectedElement, onElementUpdate }) => {
         </AccordionDetails>
       </Accordion>
       <Accordion>
-        <AccordionSummary expandIcon={<ChevronDown />}><Typography variant="subtitle2">Layout</Typography></AccordionSummary>
+        <AccordionSummary expandIcon={<ExpandMoreIcon />}><Typography variant="subtitle2">Layout</Typography></AccordionSummary>
         <AccordionDetails>
           <Grid container spacing={2}>
             <Grid item xs={6}><TextField fullWidth size="small" type="number" label="Width" value={selectedElement.size.width} onChange={(e) => onElementUpdate(selectedElement.id, { size: { ...selectedElement.size, width: Number(e.target.value) } })} /></Grid>

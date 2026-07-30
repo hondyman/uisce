@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { DynamicBODataGrid, FieldMeta } from './DynamicBODataGrid';
-import { Loader2, AlertCircle } from 'lucide-react';
+import { CircularProgress } from '@mui/material';
+import { Error } from '@mui/icons-material';
 
 export interface PageLayoutBlueprint {
   page_key: string;
@@ -48,7 +49,7 @@ export const DynamicPageResolver: React.FC<{ pageKey: string; tenantId: string }
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64 text-slate-400 gap-2 font-sans">
-        <Loader2 className="animate-spin" size={20} /> Resolving Metadata Layout...
+        <CircularProgress size={20} /> Resolving Metadata Layout...
       </div>
     );
   }
@@ -56,7 +57,7 @@ export const DynamicPageResolver: React.FC<{ pageKey: string; tenantId: string }
   if (error || !layout) {
     return (
       <div className="p-6 bg-red-950/30 border border-red-500/30 rounded-xl text-red-300 flex items-center gap-3 font-sans">
-        <AlertCircle size={20} /> Failed loading dynamic layout: {error}
+        <Error /> Failed loading dynamic layout: {error}
       </div>
     );
   }

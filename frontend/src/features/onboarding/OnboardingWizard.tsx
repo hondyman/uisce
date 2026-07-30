@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ChevronRight, ChevronLeft, Check, Upload, FileText, Shield } from 'lucide-react';
+import { ChevronRight, ChevronLeft, Check, Upload, Description, Security } from '@mui/icons-material';
 
 interface OnboardingWizardProps {
   onComplete: (data: OnboardingData) => void;
@@ -77,12 +77,12 @@ interface SignatureData {
 }
 
 const STEPS = [
-  { number: 1, name: 'Personal Information', icon: Shield },
-  { number: 2, name: 'Employment & Income', icon: FileText },
+  { number: 1, name: 'Personal Information', icon: Security },
+  { number: 2, name: 'Employment & Income', icon: Description },
   { number: 3, name: 'Financial Goals', icon: Check },
-  { number: 4, name: 'Risk Assessment', icon: Shield },
+  { number: 4, name: 'Risk Assessment', icon: Security },
   { number: 5, name: 'Documents', icon: Upload },
-  { number: 6, name: 'Account Setup', icon: FileText },
+  { number: 6, name: 'Account Setup', icon: Description },
   { number: 7, name: 'Signatures', icon: Check },
 ];
 
@@ -312,7 +312,7 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ onComplete }
                       : 'bg-gray-200 text-gray-400'
                   }`}
                 >
-                  {isCompleted ? <Check className="w-6 h-6" /> : <Icon className="w-6 h-6" />}
+                  {isCompleted ? <Check sx={{ width: 24, height: 24 }} /> : <Icon sx={{ width: 24, height: 24 }} />}
                 </div>
                 <span className={`text-xs text-center ${isActive ? 'font-semibold' : 'text-gray-600'}`}>
                   {step.name}
@@ -383,7 +383,7 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ onComplete }
               disabled={currentStep === 1}
               className="flex items-center px-6 py-3 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
-              <ChevronLeft className="w-5 h-5 mr-2" />
+              <ChevronLeft sx={{ width: 20, height: 20, mr: 1 }} />
               Previous
             </button>
 
@@ -396,7 +396,7 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ onComplete }
                 className="flex items-center px-8 py-3 text-white bg-gradient-to-r from-blue-600 to-indigo-600 rounded-lg hover:from-blue-700 hover:to-indigo-700 transition-all shadow-lg hover:shadow-xl"
               >
                 {currentStep === 7 ? 'Complete' : 'Continue'}
-                {currentStep < 7 && <ChevronRight className="w-5 h-5 ml-2" />}
+                {currentStep < 7 && <ChevronRight sx={{ width: 20, height: 20, ml: 1 }} />}
               </button>
             </div>
           </div>
@@ -404,7 +404,7 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ onComplete }
 
         {/* Auto-save Indicator */}
         <div className="text-center mt-4 text-sm text-gray-500">
-          <Shield className="w-4 h-4 inline mr-2" />
+          <Security sx={{ width: 16, height: 16, mr: 0.5, verticalAlign: 'middle' }} />
           Your progress is automatically saved. You can resume anytime.
         </div>
       </div>

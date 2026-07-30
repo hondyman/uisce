@@ -1,5 +1,8 @@
 // src/components/DimensionBuilder/ViewDimensionDetails.tsx
-import { Info, Code, ChevronDown, ChevronRight } from 'lucide-react';
+import InfoIcon from '@mui/icons-material/Info';
+import CodeIcon from '@mui/icons-material/Code';
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 import { Dimension } from './types';
 import { CaseEditor } from './CaseEditor';
 import GranularitySection from './GranularitySection';
@@ -47,7 +50,7 @@ export function ViewDimensionDetails({
           className="w-full flex items-center justify-between p-4 hover:bg-gray-50 transition-colors"
         >
           <div className="flex items-center gap-2">
-            <Info className="w-5 h-5 text-blue-500" />
+            <InfoIcon color="primary" />
             <span className="font-medium">Case Statement</span>
             {dimension.case && (
               <span className="text-sm text-gray-500">
@@ -90,13 +93,13 @@ export function ViewDimensionDetails({
             className="w-full flex items-center justify-between p-4 hover:bg-gray-50 transition-colors"
           >
             <div className="flex items-center gap-2">
-              <Code className="w-5 h-5 text-purple-500" />
+              <CodeIcon color="secondary" />
               <span className="font-medium">Meta Information</span>
             </div>
             {expandedSections[getSectionKey('meta')] ? (
-              <ChevronDown className="w-5 h-5 text-gray-400" />
+<ExpandMoreIcon color="disabled" />
             ) : (
-              <ChevronRight className="w-5 h-5 text-gray-400" />
+<ExpandLessIcon color="disabled" />
             )}
           </button>
           

@@ -1,6 +1,11 @@
 import type { FC } from 'react';
 import { Button, ButtonGroup } from '@mui/material';
-import { Save, Eye, Printer, Download, Database, Filter } from 'lucide-react';
+import SaveIcon from '@mui/icons-material/Save';
+import VisibilityIcon from '@mui/icons-material/Visibility';
+import PrintIcon from '@mui/icons-material/Print';
+import DownloadIcon from '@mui/icons-material/Download';
+import StorageIcon from '@mui/icons-material/Storage';
+import FilterListIcon from '@mui/icons-material/FilterList';
 
 type Props = {
   canUndo: boolean;
@@ -21,14 +26,14 @@ const TopControls: FC<Props> = ({ canUndo, canRedo, onUndo, onRedo, onSave, onPr
       <ButtonGroup variant="contained" sx={{ mr: 2 }}>
         <Button disabled={!canUndo} onClick={onUndo} size="small">Undo</Button>
         <Button disabled={!canRedo} onClick={onRedo} size="small">Redo</Button>
-        <Button startIcon={<Save />} size="small" onClick={onSave}>Save</Button>
-        <Button startIcon={<Eye />} size="small" onClick={onPreview}>Preview</Button>
-        <Button startIcon={<Printer />} size="small" onClick={onPrint}>Print</Button>
-        <Button startIcon={<Download />} size="small" onClick={onExport}>Export</Button>
+        <Button startIcon={<SaveIcon />} size="small" onClick={onSave}>Save</Button>
+        <Button startIcon={<VisibilityIcon />} size="small" onClick={onPreview}>Preview</Button>
+        <Button startIcon={<PrintIcon />} size="small" onClick={onPrint}>Print</Button>
+        <Button startIcon={<DownloadIcon />} size="small" onClick={onExport}>Export</Button>
       </ButtonGroup>
 
-      <Button startIcon={<Database />} size="small" sx={{ mr: 1 }} onClick={onOpenDataSources}>Data Sources</Button>
-      <Button startIcon={<Filter />} size="small" onClick={onOpenParameters}>Parameters</Button>
+      <Button startIcon={<StorageIcon />} size="small" sx={{ mr: 1 }} onClick={onOpenDataSources}>Data Sources</Button>
+      <Button startIcon={<FilterListIcon />} size="small" onClick={onOpenParameters}>Parameters</Button>
     </>
   );
 };

@@ -2,7 +2,8 @@ import type { FC } from 'react';
 import { useDroppable } from '@dnd-kit/core';
 import { Box, Typography, Chip } from '@mui/material';
 import { alpha } from '@mui/material/styles';
-import { Printer, Sigma } from 'lucide-react';
+import PrintIcon from '@mui/icons-material/Print';
+import FunctionsIcon from '@mui/icons-material/Functions';
 import ReportElement from './ReportElement';
 import { REPORT_SECTIONS } from './reportingUtils';
 
@@ -54,14 +55,14 @@ const ReportSection: FC<any> = ({ section, elements, onElementUpdate, onElementD
       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', p: 0.5, bgcolor: '#f0f0f0', borderBottom: '1px solid #ddd' }}>
         <Typography variant="caption" sx={{ fontWeight: 600 }}>{getSectionLabel(section)}</Typography>
         {shouldIndicatePageBreak && (
-          <Chip size="small" label="Page Break" color={layoutSettings.pageBreakAfterGroup ? 'primary' : 'default'} icon={<Printer size={12} />} />
+          <Chip size="small" label="Page Break" color={layoutSettings.pageBreakAfterGroup ? 'primary' : 'default'} icon={<PrintIcon sx={{ fontSize: 12 }} />} />
         )}
       </Box>
       {(isHeader || isFooter) && (
         <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, p: 0.5 }}>
           {(isHeader ? layoutSettings.headerTokens : layoutSettings.footerTokens).map((token: string) => (
             <Box key={`${section}_${token}`}>
-              <Chip size="small" label={token} icon={<Sigma size={12} />} />
+              <Chip size="small" label={token} icon={<FunctionsIcon sx={{ fontSize: 12 }} />} />
             </Box>
           ))}
         </Box>

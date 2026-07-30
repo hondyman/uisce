@@ -1,6 +1,9 @@
 // src/components/DimensionBuilder/GranularityEditor.tsx
 import { useState } from 'react';
-import { Save, X, Edit3, Trash2 } from 'lucide-react';
+import SaveIcon from '@mui/icons-material/Save';
+import CloseIcon from '@mui/icons-material/Close';
+import EditIcon from '@mui/icons-material/Edit';
+import DeleteIcon from '@mui/icons-material/Delete';
 import { Granularity } from './types';
 
 interface GranularityEditorProps {
@@ -77,14 +80,14 @@ export function GranularityEditor({ granularity, onUpdate, onRemove }: Granulari
               onClick={saveEdit}
               className="bg-green-500 hover:bg-green-600 text-white px-3 py-1 rounded text-sm transition-colors flex items-center gap-1"
             >
-              <Save className="w-3 h-3" />
+              <SaveIcon sx={{ fontSize: 12 }} />
               Save
             </button>
             <button
               onClick={cancelEdit}
               className="bg-gray-500 hover:bg-gray-600 text-white px-3 py-1 rounded text-sm transition-colors flex items-center gap-1"
             >
-              <X className="w-3 h-3" />
+              <CloseIcon sx={{ fontSize: 12 }} />
               Cancel
             </button>
           </div>
@@ -103,13 +106,13 @@ export function GranularityEditor({ granularity, onUpdate, onRemove }: Granulari
               onClick={() => setIsEditing(true)}
               className="text-green-600 hover:text-green-800 p-1 rounded transition-colors"
             >
-              <Edit3 className="w-3 h-3" />
+              <EditIcon sx={{ fontSize: 12 }} />
             </button>
             <button
               onClick={onRemove}
               className="text-red-500 hover:text-red-700 p-1 rounded transition-colors"
             >
-              <Trash2 className="w-3 h-3" />
+              <DeleteIcon sx={{ fontSize: 12 }} />
             </button>
           </div>
         </div>

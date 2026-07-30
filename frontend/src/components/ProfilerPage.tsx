@@ -49,7 +49,7 @@ import {
   Line
 } from 'recharts';
 import { Tooltip as RechartsTooltip } from 'recharts';
-import { BarChart as BarChartIcon } from 'lucide-react';
+import { BarChart as BarChartIcon } from '@mui/icons-material';
 import { useTenant } from '../contexts/TenantContext';
 import { Tooltip } from '@mui/material';
 import ExpandLess from '@mui/icons-material/ExpandLess';

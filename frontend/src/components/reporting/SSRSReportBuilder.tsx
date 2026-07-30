@@ -17,7 +17,27 @@ import GroupsEditor from './GroupsEditor';
 import CalculatedFieldsEditor from './CalculatedFieldsEditor';
 import ExpressionsEditor from './ExpressionsEditor';
 import EventScriptsEditor from './EventScriptsEditor';
-import { Database, Table as TableIcon, BarChart3, Type, Image, FileText, Square, Minus, Gauge, Activity, Grid3X3, List as ListIcon, Plus, Save, Download, Printer, Eye, Undo2, Redo2, Settings, LayoutDashboard } from 'lucide-react';
+import StorageIcon from '@mui/icons-material/Storage';
+import TableChartIcon from '@mui/icons-material/TableChart';
+import BarChartIcon from '@mui/icons-material/BarChart';
+import TextFieldsIcon from '@mui/icons-material/TextFields';
+import ImageIcon from '@mui/icons-material/Image';
+import DescriptionIcon from '@mui/icons-material/Description';
+import SquareIcon from '@mui/icons-material/Square';
+import RemoveIcon from '@mui/icons-material/Remove';
+import SpeedIcon from '@mui/icons-material/Speed';
+import TrendingUpIcon from '@mui/icons-material/TrendingUp';
+import GridViewIcon from '@mui/icons-material/GridView';
+import ListAltIcon from '@mui/icons-material/ListAlt';
+import AddIcon from '@mui/icons-material/Add';
+import SaveIcon from '@mui/icons-material/Save';
+import DownloadIcon from '@mui/icons-material/Download';
+import PrintIcon from '@mui/icons-material/Print';
+import VisibilityIcon from '@mui/icons-material/Visibility';
+import UndoIcon from '@mui/icons-material/Undo';
+import RedoIcon from '@mui/icons-material/Redo';
+import SettingsIcon from '@mui/icons-material/Settings';
+import DashboardIcon from '@mui/icons-material/Dashboard';
 
 import axios from 'axios';
 import { useTenant } from '../../contexts/TenantContext';
@@ -381,17 +401,17 @@ const SSRSReportBuilderContent: React.FC = () => {
   const selectedElementData = useMemo(() => elements.find((el: any) => el.id === selectedElement), [elements, selectedElement]);
 
   const toolboxItems = [
-    { type: ELEMENT_TYPES.TEXTBOX, icon: <Type size={16} />, label: 'Text Box' },
-    { type: ELEMENT_TYPES.TABLE, icon: <TableIcon size={16} />, label: 'Table' },
-    { type: ELEMENT_TYPES.MATRIX, icon: <Grid3X3 size={16} />, label: 'Matrix' },
-    { type: ELEMENT_TYPES.LIST, icon: <ListIcon size={16} />, label: 'List' },
-    { type: ELEMENT_TYPES.CHART, icon: <BarChart3 size={16} />, label: 'Chart' },
-    { type: ELEMENT_TYPES.IMAGE, icon: <Image size={16} />, label: 'Image' },
-    { type: ELEMENT_TYPES.SUBREPORT, icon: <FileText size={16} />, label: 'Subreport' },
-    { type: ELEMENT_TYPES.RECTANGLE, icon: <Square size={16} />, label: 'Rectangle' },
-    { type: ELEMENT_TYPES.LINE, icon: <Minus size={16} />, label: 'Line' },
-    { type: ELEMENT_TYPES.GAUGE, icon: <Gauge size={16} />, label: 'Gauge / KPI' },
-    { type: ELEMENT_TYPES.SPARKLINE, icon: <Activity size={16} />, label: 'Sparkline' }
+    { type: ELEMENT_TYPES.TEXTBOX, icon: <TextFieldsIcon sx={{ fontSize: 16 }} />, label: 'Text Box' },
+    { type: ELEMENT_TYPES.TABLE, icon: <TableChartIcon sx={{ fontSize: 16 }} />, label: 'Table' },
+    { type: ELEMENT_TYPES.MATRIX, icon: <GridViewIcon sx={{ fontSize: 16 }} />, label: 'Matrix' },
+    { type: ELEMENT_TYPES.LIST, icon: <ListAltIcon sx={{ fontSize: 16 }} />, label: 'List' },
+    { type: ELEMENT_TYPES.CHART, icon: <BarChartIcon sx={{ fontSize: 16 }} />, label: 'Chart' },
+    { type: ELEMENT_TYPES.IMAGE, icon: <ImageIcon sx={{ fontSize: 16 }} />, label: 'Image' },
+    { type: ELEMENT_TYPES.SUBREPORT, icon: <DescriptionIcon sx={{ fontSize: 16 }} />, label: 'Subreport' },
+    { type: ELEMENT_TYPES.RECTANGLE, icon: <SquareIcon sx={{ fontSize: 16 }} />, label: 'Rectangle' },
+    { type: ELEMENT_TYPES.LINE, icon: <RemoveIcon sx={{ fontSize: 16 }} />, label: 'Line' },
+    { type: ELEMENT_TYPES.GAUGE, icon: <SpeedIcon sx={{ fontSize: 16 }} />, label: 'Gauge / KPI' },
+    { type: ELEMENT_TYPES.SPARKLINE, icon: <TrendingUpIcon sx={{ fontSize: 16 }} />, label: 'Sparkline' }
   ];
 
   // Remove blocking port 9088 query loading guard
@@ -404,55 +424,55 @@ const SSRSReportBuilderContent: React.FC = () => {
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, px: 2 }}>
             <Tooltip title="Save Report">
               <IconButton color="inherit" onClick={() => { /* noop for now */ }}>
-                <Save />
+                <SaveIcon />
               </IconButton>
             </Tooltip>
             <Divider orientation="vertical" flexItem sx={{ borderColor: 'rgba(255,255,255,0.2)' }} />
             <Tooltip title="Undo">
               <span>
                 <IconButton color="inherit" onClick={undo} disabled={!canUndo}>
-                  <Undo2 />
+                  <UndoIcon />
                 </IconButton>
               </span>
             </Tooltip>
             <Tooltip title="Redo">
               <span>
                 <IconButton color="inherit" onClick={redo} disabled={!canRedo}>
-                  <Redo2 />
+                  <RedoIcon />
                 </IconButton>
               </span>
             </Tooltip>
             <Divider orientation="vertical" flexItem sx={{ borderColor: 'rgba(255,255,255,0.2)' }} />
             <Tooltip title="Preview">
               <IconButton color="inherit" onClick={() => setActiveTab('preview')}>
-                <Eye />
+<VisibilityIcon />
               </IconButton>
             </Tooltip>
             <Tooltip title="Print">
               <IconButton color="inherit" onClick={() => { /* noop for now */ }}>
-                <Printer />
+                <PrintIcon />
               </IconButton>
             </Tooltip>
             <Tooltip title="Export to PDF">
               <IconButton color="inherit" onClick={() => generatePixelPerfectPDF(elements, layoutSettingsState)}>
-                <Download />
+                <DownloadIcon />
               </IconButton>
             </Tooltip>
             <Divider orientation="vertical" flexItem sx={{ borderColor: 'rgba(255,255,255,0.2)' }} />
             <Tooltip title="Data Sources">
               <IconButton color="inherit" onClick={() => setDataSourcesOpen(true)}>
-                <Database />
+                <StorageIcon />
               </IconButton>
             </Tooltip>
             <Tooltip title="Parameters">
               <IconButton color="inherit" onClick={() => setParametersOpen(true)}>
-                <Settings />
+                <SettingsIcon />
               </IconButton>
             </Tooltip>
             <Divider orientation="vertical" flexItem sx={{ borderColor: 'rgba(255,255,255,0.2)' }} />
             <Tooltip title="Layout & Page Settings">
               <IconButton color="inherit" onClick={() => setLayoutDrawerOpen(true)}>
-                <LayoutDashboard />
+                <DashboardIcon />
               </IconButton>
             </Tooltip>
           </Box>
@@ -553,7 +573,7 @@ const SSRSReportBuilderContent: React.FC = () => {
                     <Button
                       variant="contained"
                       size="small"
-                      startIcon={previewLoading ? undefined : <Eye />}
+                      startIcon={previewLoading ? undefined : <VisibilityIcon />}
                       onClick={async () => {
                         setPreviewLoading(true);
                         setPreviewError(null);

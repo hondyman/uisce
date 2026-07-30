@@ -1,5 +1,6 @@
 // src/components/DimensionBuilder/EditDimensionForm.tsx
-import { Save, X } from 'lucide-react';
+import SaveIcon from '@mui/icons-material/Save';
+import CloseIcon from '@mui/icons-material/Close';
 import { Dimension, dimensionTypes, formatOptions } from './types';
 
 interface EditDimensionFormProps {
@@ -142,14 +143,14 @@ export function EditDimensionForm({
           onClick={onSave}
           className="bg-indigo-500 hover:bg-indigo-600 text-white px-4 py-2 rounded-lg transition-colors flex items-center gap-2"
         >
-          <Save className="w-4 h-4" />
+          <SaveIcon fontSize="small" />
           Save
         </button>
         <button
           onClick={onCancel}
           className="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded-lg transition-colors flex items-center gap-2"
         >
-          <X className="w-4 h-4" />
+          <CloseIcon fontSize="small" />
           Cancel
         </button>
       </div>

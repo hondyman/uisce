@@ -1,6 +1,6 @@
 // src/components/DimensionBuilder/GranularityForm.tsx
 import { useState } from 'react';
-import { Plus } from 'lucide-react';
+import AddIcon from '@mui/icons-material/Add';
 import { Granularity, timeUnits } from './types';
 
 interface GranularityFormProps {
@@ -118,7 +118,7 @@ export function GranularityForm({ onAdd }: GranularityFormProps) {
         disabled={!name || !intervalValue}
         className="bg-green-500 hover:bg-green-600 disabled:opacity-50 text-white px-4 py-2 rounded-lg transition-colors flex items-center gap-2"
       >
-        <Plus className="w-4 h-4" />
+        <AddIcon fontSize="small" />
         Add Granularity
       </button>
     </div>

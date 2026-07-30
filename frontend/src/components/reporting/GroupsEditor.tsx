@@ -1,6 +1,7 @@
 import type { FC } from 'react';
 import { Box, Grid, Typography, Button, IconButton, TextField, FormControl, InputLabel, Select, MenuItem, Divider, FormControlLabel, Switch } from '@mui/material';
-import { Plus, Trash2 } from 'lucide-react';
+import AddIcon from '@mui/icons-material/Add';
+import DeleteIcon from '@mui/icons-material/Delete';
 import { aggregateHandlers } from './reportingUtils';
 
 type Aggregate = any;
@@ -21,13 +22,13 @@ const GroupsEditor: FC<Props> = ({ groupDefinitions, onAddGroup, onRemoveGroup, 
     <>
       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
         <Typography variant="subtitle1">Groups & Aggregations</Typography>
-        <Button size="small" startIcon={<Plus size={16} />} onClick={onAddGroup}>Add Group</Button>
+        <Button size="small" startIcon={<AddIcon sx={{ fontSize: 16 }} />} onClick={onAddGroup}>Add Group</Button>
       </Box>
 
       {groupDefinitions.map((group) => (
         <Box key={group.id} sx={{ mb: 2, p: 2, border: '1px solid #e5e7eb', borderRadius: 1, position: 'relative', backgroundColor: '#fafafa' }}>
           <Box sx={{ position: 'absolute', top: 8, right: 8 }}>
-            <IconButton size="small" onClick={() => onRemoveGroup(group.id)}><Trash2 size={16} /></IconButton>
+            <IconButton size="small" onClick={() => onRemoveGroup(group.id)}><DeleteIcon fontSize="small" /></IconButton>
           </Box>
           <Grid container spacing={2}>
             <Grid size={{ 'xs': 12, 'sm': 4 }}><TextField fullWidth size="small" label="Group Name" value={group.name} onChange={(e) => onGroupChange(group.id, 'name', e.target.value)} /></Grid>
@@ -43,10 +44,10 @@ const GroupsEditor: FC<Props> = ({ groupDefinitions, onAddGroup, onRemoveGroup, 
               <Grid size={{ 'xs': 12, 'sm': 3 }}><FormControl fullWidth size="small"><InputLabel>Function</InputLabel><Select label="Function" value={aggregate.function} onChange={(e) => onAggregateChange(group.id, aggregate.id, 'function', e.target.value)}>{Object.keys(aggregateHandlers).map((fn) => (<MenuItem key={`${aggregate.id}_${fn}`} value={fn}>{fn}</MenuItem>))}</Select></FormControl></Grid>
               <Grid item xs={12} sm={3}><FormControl fullWidth size="small"><InputLabel>Scope</InputLabel><Select label="Scope" value={aggregate.scope} onChange={(e) => onAggregateChange(group.id, aggregate.id, 'scope', e.target.value)}><MenuItem value="Group">Group</MenuItem><MenuItem value="Report">Report</MenuItem></Select></FormControl></Grid>
               <Grid size={{ 'xs': 12, 'sm': 2 }}><TextField fullWidth size="small" label="Display Name" value={aggregate.displayName ?? ''} onChange={(e) => onAggregateChange(group.id, aggregate.id, 'displayName', e.target.value)} /></Grid>
-              <Grid size={{ 'xs': 12, 'sm': 1 }}><IconButton size="small" onClick={() => onRemoveAggregate(group.id, aggregate.id)}><Trash2 size={16} /></IconButton></Grid>
+              <Grid size={{ 'xs': 12, 'sm': 1 }}><IconButton size="small" onClick={() => onRemoveAggregate(group.id, aggregate.id)}><DeleteIcon fontSize="small" /></IconButton></Grid>
             </Grid>
           ))}
-          <Button size="small" variant="text" startIcon={<Plus size={14} />} onClick={() => onAddAggregate(group.id)}>Add Aggregate</Button>
+          <Button size="small" variant="text" startIcon={<AddIcon sx={{ fontSize: 14 }} />} onClick={() => onAddAggregate(group.id)}>Add Aggregate</Button>
         </Box>
       ))}
 

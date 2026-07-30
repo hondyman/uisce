@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Search, AlertCircle, CheckCircle, AlertTriangle, Link2 } from 'lucide-react';
+import { Search, Error, CheckCircle, Warning, Link as LinkIcon } from '@mui/icons-material';
 import { Link } from 'react-router-dom';
 import { devLog } from '../../utils/devLogger';
 
@@ -87,19 +87,19 @@ const AdvancedRuleConfiguration: React.FC<
         bg: 'bg-red-50 dark:bg-red-950/20',
         text: 'text-red-900 dark:text-red-200',
         border: 'border-red-200 dark:border-red-800',
-        icon: <AlertCircle size={16} className="text-red-600 dark:text-red-400" />,
+        icon: <Error sx={{ fontSize: 16, color: 'red.600' }} />,
       },
       warning: {
         bg: 'bg-amber-50 dark:bg-amber-950/20',
         text: 'text-amber-900 dark:text-amber-200',
         border: 'border-amber-200 dark:border-amber-800',
-        icon: <AlertTriangle size={16} className="text-amber-600 dark:text-amber-400" />,
+        icon: <Warning sx={{ fontSize: 16, color: 'amber.600' }} />,
       },
       info: {
         bg: 'bg-blue-50 dark:bg-blue-950/20',
         text: 'text-blue-900 dark:text-blue-200',
         border: 'border-blue-200 dark:border-blue-800',
-        icon: <CheckCircle size={16} className="text-blue-600 dark:text-blue-400" />,
+        icon: <CheckCircle sx={{ fontSize: 16, color: 'blue.600' }} />,
       },
     };
     return severities[severityType] || severities.info;
@@ -117,7 +117,7 @@ const AdvancedRuleConfiguration: React.FC<
     <div className="flex flex-col gap-6">
       {/* Search Bar */}
       <div className="flex items-center gap-2 px-4 py-3 bg-slate-100 dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700">
-        <Search size={20} className="text-slate-400 dark:text-slate-500 flex-shrink-0" />
+        <Search sx={{ fontSize: 20, color: 'slate.400', flexShrink: 0 }} />
         <input
           type="text"
           placeholder="Search rules by name or description..."
@@ -157,7 +157,7 @@ const AdvancedRuleConfiguration: React.FC<
           <div>
             {filteredRules.length === 0 ? (
               <div className="p-8 bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 rounded-lg text-center">
-                <AlertCircle className="w-12 h-12 mx-auto mb-4 text-blue-400 opacity-50" />
+                <Error sx={{ width: 48, height: 48, mx: 'auto', mb: 4, color: 'blue.400', opacity: 0.5 }} />
                 <h3 className="font-semibold text-blue-950 dark:text-blue-200 mb-1">No rules found</h3>
                 <p className="text-blue-900/70 dark:text-blue-300/70 text-sm">
                   {searchTerm
@@ -210,7 +210,7 @@ const AdvancedRuleConfiguration: React.FC<
                               to={`/core/validation-rules?ruleId=${encodeURIComponent(rule.id)}`}
                               className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/20 transition-colors font-medium text-xs"
                             >
-                              <Link2 size={16} />
+                              <LinkIcon sx={{ fontSize: 16 }} />
                               <span>Go to Rule</span>
                             </Link>
                           </td>

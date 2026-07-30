@@ -1,6 +1,10 @@
 // src/components/DimensionBuilder/DimensionCard.tsx
 import { useState, useEffect } from 'react';
-import { Code, Copy, Edit3, Trash2, EyeOff } from 'lucide-react';
+import CodeIcon from '@mui/icons-material/Code';
+import ContentCopyIcon from '@mui/icons-material/ContentCopy';
+import EditIcon from '@mui/icons-material/Edit';
+import DeleteIcon from '@mui/icons-material/Delete';
+import VisibilityOffIcon from '@mui/icons-material/VisibilityOff';
 import { Dimension, dimensionTypes } from './types';
 import { EditDimensionForm } from './EditDimensionForm';
 import { ViewDimensionDetails } from './ViewDimensionDetails';
@@ -63,7 +67,7 @@ export function DimensionCard({
             <div>
               <h3 className="font-semibold text-gray-900 flex items-center gap-2">
                 {dimension.title || dimension.name}
-                {!dimension.public && <EyeOff className="w-4 h-4 text-gray-400" />}
+                {!dimension.public && <VisibilityOffIcon fontSize="small" color="disabled" />}
               </h3>
               <div className="flex items-center gap-3 text-sm text-gray-600">
                 <span className="font-mono bg-gray-200 text-gray-800 px-2 py-1 rounded text-xs">
@@ -85,14 +89,14 @@ export function DimensionCard({
               className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-200 rounded-lg transition-colors"
               title="Show/Hide Code"
             >
-              <Code className="w-4 h-4" />
+              <CodeIcon fontSize="small" />
             </button>
             <button
               onClick={() => onCopyCode(generateDimensionCode(dimension))}
               className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-200 rounded-lg transition-colors"
               title="Copy Code"
             >
-              <Copy className="w-4 h-4" />
+              <ContentCopyIcon fontSize="small" />
             </button>
             <button
               onClick={() => onToggleEdit(dimension.id)}
@@ -100,7 +104,7 @@ export function DimensionCard({
               aria-label="Edit dimension"
               title="Edit"
             >
-              <Edit3 className="w-4 h-4" />
+              <EditIcon fontSize="small" />
             </button>
             <button
               onClick={() => onDelete(dimension.id)}
@@ -108,7 +112,7 @@ export function DimensionCard({
               aria-label="Delete dimension"
               title="Delete"
             >
-              <Trash2 className="w-4 h-4" />
+              <DeleteIcon fontSize="small" />
             </button>
           </div>
         </div>

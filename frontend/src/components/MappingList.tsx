@@ -1,5 +1,5 @@
 import { Box, Card, Typography, Stack, Pagination, Select, MenuItem } from '@mui/material';
-import { Database } from 'lucide-react';
+import { Storage } from '@mui/icons-material';
 import { MappingRow } from './MappingRow';
 import { getMappingUniqueId } from './semantic-mapper/utils/mappingId';
 
@@ -38,7 +38,7 @@ export function MappingList(props: MappingListProps) {
   if (props.mappings.length === 0) {
     return (
       <Card sx={{ p: 6, textAlign: 'center', borderRadius: 2 }} elevation={2}>
-        <Database width={64} height={64} style={{ margin: '0 auto 16px', color: '#ccc' }} />
+        <Storage sx={{ width: 64, height: 64, margin: '0 auto 16px', color: '#ccc' }} />
         <Typography variant="h6" sx={{ mb: 1 }}>No Mappings Found</Typography>
         <Typography variant="body2" color="text.secondary">
           No database columns found to map. Check your database connection or scope filters.

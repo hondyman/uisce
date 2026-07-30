@@ -1,5 +1,5 @@
 import React, { useState, useCallback as _useCallback } from 'react';
-import { ChevronRight, Plus as _Plus, Trash2, AlertCircle, Link2, ExternalLink } from 'lucide-react';
+import { ChevronRight, Add, Delete, Error, Link, OpenInNew } from '@mui/icons-material';
 import type { ValidationRule } from './types';
 
 interface EntityPath {
@@ -104,7 +104,7 @@ const RuleDependencyChain: React.FC<{
     <div className="space-y-6">
       <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
         <div className="flex items-start gap-3">
-          <AlertCircle className="text-blue-600 flex-shrink-0 mt-0.5" size={20} />
+          <Error sx={{ color: 'blue[600]', flexShrink: 0, mt: 0.5, fontSize: 20 }} />
           <div className="text-sm text-blue-800">
             <strong>Rule Dependencies:</strong> Define which rules must pass before this rule executes.
             This creates a validation chain where dependent rules are evaluated first.
@@ -161,7 +161,7 @@ const RuleDependencyChain: React.FC<{
                       className="text-red-600 hover:bg-red-50 p-2 rounded"
                       title={`Remove ${depRule?.name} dependency`}
                     >
-                      <Trash2 size={16} />
+                      <Delete sx={{ fontSize: 16 }} />
                     </button>
                   </div>
                 </div>
@@ -217,7 +217,7 @@ const RuleDependencyChain: React.FC<{
                   <div className="text-xs text-gray-600">{rule.entity}</div>
                 </div>
                 {index < getExecutionOrder().length - 1 && (
-                  <ChevronRight className="flex-shrink-0 text-gray-400" size={24} />
+                  <ChevronRight sx={{ flexShrink: 0, color: 'gray.400', fontSize: 24 }} />
                 )}
               </React.Fragment>
             ))}
@@ -287,7 +287,7 @@ const EntityPathPicker: React.FC<{
         {value ? (
           <div className="flex items-center justify-between">
             <span className="font-mono text-sm text-blue-600">{value.displayPath}</span>
-            <ExternalLink size={16} className="text-gray-400" />
+            <OpenInNew sx={{ fontSize: 16, color: 'gray.400' }} />
           </div>
         ) : (
           <div className="text-gray-400 text-sm">Click to select a field path...</div>
@@ -322,7 +322,7 @@ const EntityPathPicker: React.FC<{
               {relationships.length > 0 && (
                 <div className="mb-6">
                   <h4 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
-                    <Link2 size={18} className="text-purple-600" />
+                    <Link sx={{ fontSize: 18, color: 'purple.600' }} />
                     Related Entities
                   </h4>
                   <div className="grid grid-cols-2 gap-3">
@@ -411,7 +411,7 @@ export const CrossEntityValidationBuilder: React.FC<{
     <div className="space-y-6">
       <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
         <div className="flex items-start gap-3">
-          <AlertCircle className="text-purple-600 flex-shrink-0 mt-0.5" size={20} />
+          <Error sx={{ color: 'purple.600', flexShrink: 0, mt: 0.5, fontSize: 20 }} />
           <div className="text-sm text-purple-800">
             <strong>Cross-Entity Validation:</strong> Compare fields across related entities.
             Example: Validate that "Employee → Position → min_salary" is less than "Employee → salary"

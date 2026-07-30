@@ -5,7 +5,10 @@
  */
 
 import React, { useMemo, useCallback } from 'react';
-import { Edit2, Trash2, Eye, EyeOff } from 'lucide-react';
+import EditIcon from '@mui/icons-material/Edit';
+import DeleteIcon from '@mui/icons-material/Delete';
+import VisibilityIcon from '@mui/icons-material/Visibility';
+import VisibilityOffIcon from '@mui/icons-material/VisibilityOff';
 import {
   getRuleTypeBadgeColorClasses,
   getSeverityBadgeColorClasses,
@@ -72,7 +75,7 @@ const RuleCard: React.FC<RuleCardProps> = React.memo(
               </span>
 
               <span className={`flex items-center gap-1 px-3 py-1 rounded-full text-sm ${statusBadgeClass}`}>
-                {rule.isActive ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
+                {rule.isActive ? <VisibilityIcon fontSize="small" /> : <VisibilityOffIcon fontSize="small" />}
                 {rule.isActive ? 'Active' : 'Inactive'}
               </span>
             </div>
@@ -101,7 +104,7 @@ const RuleCard: React.FC<RuleCardProps> = React.memo(
               title="Edit rule"
               disabled={isDeleting}
             >
-              <Edit2 className="w-5 h-5 text-gray-600 dark:text-gray-400" />
+              <EditIcon color="action" />
             </button>
             <button
               onClick={handleDeleteClick}
@@ -110,7 +113,7 @@ const RuleCard: React.FC<RuleCardProps> = React.memo(
               title="Delete rule"
               disabled={isDeleting}
             >
-              <Trash2 className="w-5 h-5 text-red-600 dark:text-red-400" />
+              <DeleteIcon color="error" />
             </button>
           </div>
         </div>

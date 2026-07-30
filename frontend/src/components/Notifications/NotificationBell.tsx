@@ -9,7 +9,7 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { Bell } from 'lucide-react';
+import NotificationsIcon from '@mui/icons-material/Notifications';
 import { useTenant } from '../../contexts/TenantContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
@@ -68,8 +68,9 @@ export const NotificationBell: React.FC = () => {
       className="relative p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-all"
       title="Notifications"
     >
-      <Bell 
-        className={`w-6 h-6 text-gray-700 dark:text-gray-300 ${
+      <NotificationsIcon 
+        sx={{ fontSize: 24 }}
+        className={`text-gray-700 dark:text-gray-300 ${
           unreadCount > 0 ? 'animate-pulse' : ''
         }`}
       />

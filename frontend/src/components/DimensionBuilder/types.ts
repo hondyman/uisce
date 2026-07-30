@@ -1,5 +1,9 @@
 // src/components/DimensionBuilder/types.ts
-import { Type, Hash, Clock, CheckCircle, Globe } from 'lucide-react';
+import TextFieldsIcon from '@mui/icons-material/TextFields';
+import HashIcon from '@mui/icons-material/Tag'; // No direct Hash in MUI, using Tag as approximation
+import AccessTimeIcon from '@mui/icons-material/AccessTime';
+import CheckCircleIcon from '@mui/icons-material/CheckCircle';
+import LanguageIcon from '@mui/icons-material/Language';
 
 export interface CaseWhen {
   sql: string;
@@ -41,11 +45,11 @@ export interface Dimension {
 }
 
 export const dimensionTypes = [
-  { value: 'string' as const, label: 'String', icon: Type },
-  { value: 'number' as const, label: 'Number', icon: Hash },
-  { value: 'time' as const, label: 'Time', icon: Clock },
-  { value: 'boolean' as const, label: 'Boolean', icon: CheckCircle },
-  { value: 'geo' as const, label: 'Geo', icon: Globe }
+  { value: 'string' as const, label: 'String', icon: TextFieldsIcon },
+  { value: 'number' as const, label: 'Number', icon: HashIcon },
+  { value: 'time' as const, label: 'Time', icon: AccessTimeIcon },
+  { value: 'boolean' as const, label: 'Boolean', icon: CheckCircleIcon },
+  { value: 'geo' as const, label: 'Geo', icon: LanguageIcon }
 ];
 
 export const formatOptions = [

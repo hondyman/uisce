@@ -1,6 +1,8 @@
 // src/components/DimensionBuilder/NewDimensionForm.tsx
 import { useState } from 'react';
-import { Plus, Save, X } from 'lucide-react';
+import AddIcon from '@mui/icons-material/Add';
+import SaveIcon from '@mui/icons-material/Save';
+import CloseIcon from '@mui/icons-material/Close';
 import { Dimension, dimensionTypes, formatOptions } from './types';
 import SqlMonacoEditor from '../SqlMonacoEditor';
 
@@ -24,7 +26,7 @@ export function NewDimensionForm({ onCreateDimension, onCancel }: NewDimensionFo
   return (
     <div className="mb-6 bg-white border border-gray-200 rounded-xl p-6 shadow-sm">
       <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
-        <Plus className="w-5 h-5 text-indigo-500" />
+        <AddIcon color="primary" />
         Create New Dimension
       </h3>
       
@@ -148,14 +150,14 @@ export function NewDimensionForm({ onCreateDimension, onCancel }: NewDimensionFo
           disabled={!newDimension.name || !newDimension.sql || !newDimension.type}
           className="bg-indigo-500 hover:bg-indigo-600 disabled:opacity-50 disabled:cursor-not-allowed text-white px-4 py-2 rounded-lg transition-colors flex items-center gap-2"
         >
-          <Save className="w-4 h-4" />
+          <SaveIcon fontSize="small" />
           Create Dimension
         </button>
         <button
           onClick={onCancel}
           className="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded-lg transition-colors flex items-center gap-2"
         >
-          <X className="w-4 h-4" />
+          <CloseIcon fontSize="small" />
           Cancel
         </button>
       </div>

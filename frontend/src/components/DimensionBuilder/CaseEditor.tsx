@@ -1,6 +1,9 @@
 // src/components/DimensionBuilder/CaseEditor.tsx
 import { useState } from 'react';
-import { Plus, Save, X, Trash2 } from 'lucide-react';
+import AddIcon from '@mui/icons-material/Add';
+import SaveIcon from '@mui/icons-material/Save';
+import CloseIcon from '@mui/icons-material/Close';
+import DeleteIcon from '@mui/icons-material/Delete';
 import { Dimension, CaseWhen, CaseElse } from './types';
 
 interface CaseEditorProps {
@@ -57,7 +60,7 @@ export function CaseEditor({ caseObj, onUpdate }: CaseEditorProps) {
             onClick={addWhen}
             className="bg-blue-500 hover:bg-blue-600 text-white px-3 py-1 rounded text-sm transition-colors flex items-center gap-1"
           >
-            <Plus className="w-3 h-3" />
+            <AddIcon fontSize="small" />
             Add Condition
           </button>
         </div>
@@ -95,7 +98,7 @@ export function CaseEditor({ caseObj, onUpdate }: CaseEditorProps) {
               onClick={() => removeWhen(index)}
               className="text-red-500 hover:text-red-700 p-2"
             >
-              <Trash2 className="w-4 h-4" />
+              <DeleteIcon fontSize="small" />
             </button>
           </div>
         ))}
@@ -126,14 +129,14 @@ export function CaseEditor({ caseObj, onUpdate }: CaseEditorProps) {
           onClick={saveCase}
           className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg transition-colors flex items-center gap-2"
         >
-          <Save className="w-4 h-4" />
+          <SaveIcon fontSize="small" />
           Apply Case
         </button>
         <button
           onClick={clearCase}
           className="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded-lg transition-colors flex items-center gap-2"
         >
-          <X className="w-4 h-4" />
+          <CloseIcon fontSize="small" />
           Clear Case
         </button>
       </div>

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Calculator, Key, Database } from 'lucide-react';
+import { Calculate, VpnKey, Storage } from '@mui/icons-material';
 
 export interface FieldMeta {
   field_name: string;
@@ -46,9 +46,9 @@ export const DynamicBODataGrid: React.FC<Props> = ({ fields, data }) => {
             {fields.map((field) => (
               <th key={field.field_name} style={{ width: field.column_width }} className="py-3.5 px-4">
                 <div className="flex items-center gap-1.5">
-                  {field.field_role === 'KEY' && <Key size={12} className="text-amber-400" />}
-                  {field.binding_status === 'CALCULATED' && <Calculator size={12} className="text-sky-400" />}
-                  {field.binding_status === 'RESOLVED' && <Database size={12} className="text-slate-500" />}
+                  {field.field_role === 'KEY' && <VpnKey sx={{ fontSize: 12 }} className="text-amber-400" />}
+                  {field.binding_status === 'CALCULATED' && <Calculate sx={{ fontSize: 12 }} className="text-sky-400" />}
+                  {field.binding_status === 'RESOLVED' && <Storage sx={{ fontSize: 12 }} className="text-slate-500" />}
                   <span>{field.display_label}</span>
                 </div>
               </th>

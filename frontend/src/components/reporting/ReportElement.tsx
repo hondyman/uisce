@@ -2,7 +2,7 @@ import type { FC, KeyboardEvent } from 'react';
 import { motion } from 'framer-motion';
 import { Rnd } from 'react-rnd';
 import { Box, Typography, IconButton } from '@mui/material';
-import { Trash2 } from 'lucide-react';
+import DeleteIcon from '@mui/icons-material/Delete';
 
 interface ReportElementProps {
   id: string;
@@ -72,7 +72,7 @@ const ReportElement: FC<ReportElementProps> = ({
           {isSelected && (
             <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: 'spring', stiffness: 500, damping: 30 }}>
               <IconButton size="small" sx={{ position: 'absolute', top: -12, right: -12, bgcolor: '#ef4444', color: '#ffffff', '&:hover': { bgcolor: '#dc2626' }, width: 24, height: 24, zIndex: 1000 }} onClick={(e) => { e.stopPropagation(); onDelete(id); }} aria-label="Delete element">
-                <Trash2 size={12} />
+                <DeleteIcon sx={{ fontSize: 12 }} />
               </IconButton>
             </motion.div>
           )}

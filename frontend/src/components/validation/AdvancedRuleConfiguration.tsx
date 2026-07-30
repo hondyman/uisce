@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Trash2 } from 'lucide-react';
+import { Delete } from '@mui/icons-material';
 import './AdvancedRuleConfiguration.css';
 
 interface ValidationRule {
@@ -236,7 +236,7 @@ const AdvancedRuleConfiguration: React.FC<AdvancedRuleConfigurationProps> = ({
                                     aria-label={`Delete rule ${rule.name}`} 
                                     className="p-2 rounded-lg hover:bg-red-400/30 dark:hover:bg-red-500/30 text-slate-500 hover:text-red-600 dark:hover:text-red-300 transition-all duration-200 hover:scale-110 backdrop-blur-sm"
                                   >
-                                    <Trash2 size={16} />
+                                    <Delete sx={{ fontSize: 16 }} />
                                   </button>
                                 </div>
                               </td>

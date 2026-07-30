@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Target, TrendingUp, Calendar, DollarSign, Sliders } from 'lucide-react';
+import { GpsFixed, TrendingUp, CalendarToday, AttachMoney, Tune } from '@mui/icons-material';
 import Slider from 'rc-slider';
 import 'rc-slider/assets/index.css';
 
@@ -140,7 +140,7 @@ export const GoalSimulator: React.FC<GoalSimulatorProps> = ({ goalId, onSave }) 
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-3">
           <div className="p-3 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-xl">
-            <Target className="w-6 h-6 text-white" />
+            <GpsFixed sx={{ width: 24, height: 24, color: 'white' }} />
           </div>
           <div>
             <h2 className="text-2xl font-bold text-gray-900">Goal Simulator</h2>
@@ -161,7 +161,7 @@ export const GoalSimulator: React.FC<GoalSimulatorProps> = ({ goalId, onSave }) 
         <div className="space-y-6">
           <div className="bg-gradient-to-br from-gray-50 to-blue-50 p-6 rounded-xl">
             <h3 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
-              <Sliders className="w-5 h-5" />
+              <Tune sx={{ width: 20, height: 20 }} />
               Adjust Your Inputs
             </h3>
 
@@ -297,7 +297,7 @@ export const GoalSimulator: React.FC<GoalSimulatorProps> = ({ goalId, onSave }) 
           {results && (
             <div className="space-y-3">
               <ResultCard
-                icon={<DollarSign />}
+                icon={<AttachMoney />}
                 label="Investment Growth"
                 value={formatCurrency(results.investmentGrowth)}
                 subtext={`From ${formatCurrency(results.totalContributions)} contributed`}
@@ -316,7 +316,7 @@ export const GoalSimulator: React.FC<GoalSimulatorProps> = ({ goalId, onSave }) 
 
               {results.shortfall > 0 && (
                 <ResultCard
-                  icon={<Target />}
+                  icon={<GpsFixed />}
                   label="Current Shortfall"
                   value={formatCurrency(results.shortfall)}
                   subtext="below target"

@@ -1,6 +1,6 @@
 import type { FC } from 'react';
 import { Typography, TextField, Button, Divider, Box } from '@mui/material';
-import { Plus } from 'lucide-react';
+import AddIcon from '@mui/icons-material/Add';
 
 type Props = {
   expressionLibrary: string[];
@@ -28,7 +28,7 @@ const ExpressionsEditor: FC<Props> = ({ expressionLibrary, onExpressionChange, o
           onChange={(e) => onExpressionChange(index, e.target.value)}
         />
       ))}
-      <Button size="small" startIcon={<Plus size={14} />} onClick={onAddExpression}>Add Expression</Button>
+      <Button size="small" startIcon={<AddIcon sx={{ fontSize: 14 }} />} onClick={onAddExpression}>Add Expression</Button>
     </>
   );
 };

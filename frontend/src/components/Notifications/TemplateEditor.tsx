@@ -13,22 +13,20 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import {
-  Mail,
-  MessageSquare,
-  Smartphone,
-  Plus,
-  Save,
-  Eye,
-  Send,
-  X,
-  AlertCircle,
-  CheckCircle,
-  Copy,
-  Zap,
-  Clock,
-  Users,
-} from 'lucide-react';
+import EmailIcon from '@mui/icons-material/Email';
+import ChatBubbleIcon from '@mui/icons-material/ChatBubble';
+import SmartphoneIcon from '@mui/icons-material/Smartphone';
+import AddIcon from '@mui/icons-material/Add';
+import SaveIcon from '@mui/icons-material/Save';
+import VisibilityIcon from '@mui/icons-material/Visibility';
+import SendIcon from '@mui/icons-material/Send';
+import CloseIcon from '@mui/icons-material/Close';
+import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline';
+import CheckCircleIcon from '@mui/icons-material/CheckCircle';
+import ContentCopyIcon from '@mui/icons-material/ContentCopy';
+import FlashOnIcon from '@mui/icons-material/FlashOn';
+import AccessTimeIcon from '@mui/icons-material/AccessTime';
+import GroupIcon from '@mui/icons-material/Group';
 
 // ============================================================================
 // TYPE DEFINITIONS
@@ -254,7 +252,7 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-3xl font-bold text-gray-900 flex items-center gap-3">
-              <Mail className="w-8 h-8 text-blue-600" />
+              <EmailIcon sx={{ fontSize: 32 }} color="primary" />
               {templateId ? 'Edit Template' : 'Create Template'}
             </h1>
             <p className="text-gray-600 mt-2">
@@ -266,7 +264,7 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
               onClick={generatePreview}
               className="px-4 py-2 bg-purple-600 text-white rounded-lg font-medium hover:bg-purple-700 transition-all flex items-center gap-2"
             >
-              <Eye className="w-4 h-4" />
+              <VisibilityIcon sx={{ fontSize: 16 }} />
               Preview
             </button>
             <button
@@ -274,7 +272,7 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
               disabled={saving}
               className="px-4 py-2 bg-green-600 text-white rounded-lg font-medium hover:bg-green-700 transition-all flex items-center gap-2 disabled:opacity-50"
             >
-              <Save className="w-4 h-4" />
+              <SaveIcon sx={{ fontSize: 16 }} />
               {saving ? 'Saving...' : 'Save'}
             </button>
             {onCancel && (
@@ -435,12 +433,12 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
                     }`}
                   >
                     <div className="flex flex-col items-center gap-2">
-                      {channel === 'email' && <Mail className="w-5 h-5" />}
-                      {channel === 'sms' && <MessageSquare className="w-5 h-5" />}
+                      {channel === 'email' && <EmailIcon fontSize="small" />}
+                      {channel === 'sms' && <ChatBubbleIcon fontSize="small" />}
                       {(channel === 'slack' || channel === 'teams') && (
-                        <MessageSquare className="w-5 h-5" />
+                        <ChatBubbleIcon fontSize="small" />
                       )}
-                      {channel === 'push' && <Smartphone className="w-5 h-5" />}
+                      {channel === 'push' && <SmartphoneIcon fontSize="small" />}
                       <span className="text-xs font-medium capitalize">{channel}</span>
                     </div>
                   </button>
@@ -490,7 +488,7 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
           {/* Escalation */}
           <div className="bg-white rounded-2xl shadow-xl p-6">
             <h3 className="text-xl font-bold text-gray-900 mb-4 flex items-center gap-2">
-              <Zap className="w-5 h-5 text-orange-600" />
+              <FlashOnIcon sx={{ fontSize: 20 }} color="warning" />
               Escalation Settings
             </h3>
             <div className="space-y-4">
@@ -581,7 +579,7 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
                     className="p-1 text-gray-400 hover:text-blue-600 transition-all"
                     title="Insert into body"
                   >
-                    <Copy className="w-4 h-4" />
+                    <ContentCopyIcon sx={{ fontSize: 16 }} />
                   </button>
                 </div>
               ))}
@@ -625,7 +623,7 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
                 onClick={() => setShowPreview(false)}
                 className="p-2 hover:bg-gray-100 rounded-lg transition-all"
               >
-                <X className="w-5 h-5 text-gray-600" />
+                <CloseIcon sx={{ fontSize: 20 }} color="action" />
               </button>
             </div>
             <div className="p-6 space-y-4">

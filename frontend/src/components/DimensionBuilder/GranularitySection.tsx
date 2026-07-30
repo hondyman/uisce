@@ -1,5 +1,7 @@
 // src/components/DimensionBuilder/GranularitySection.tsx
-import { Calendar, ChevronDown, ChevronRight } from 'lucide-react';
+import CalendarTodayIcon from '@mui/icons-material/CalendarToday';
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 import { Dimension, Granularity } from './types';
 import { GranularityForm } from './GranularityForm';
 import { GranularityEditor } from './GranularityEditor';
@@ -45,16 +47,16 @@ export default function GranularitySection({
         className="w-full flex items-center justify-between p-4 hover:bg-gray-50 transition-colors"
       >
         <div className="flex items-center gap-2">
-          <Calendar className="w-5 h-5 text-green-500" />
+          <CalendarTodayIcon color="primary" />
           <span className="font-medium">Granularities</span>
           <span className="text-sm text-gray-500">
             ({(dimension.granularities || []).length})
           </span>
         </div>
         {expandedSections[sectionKey] ? (
-          <ChevronDown className="w-5 h-5 text-gray-400" />
+          <ExpandMoreIcon color="disabled" />
         ) : (
-          <ChevronRight className="w-5 h-5 text-gray-400" />
+          <ExpandLessIcon color="disabled" />
         )}
       </button>
 

@@ -6,7 +6,7 @@
 import React, { useMemo, useCallback, useState } from 'react';
 import { useConfirm } from '../components/ConfirmProvider';
 import { useNotification } from '../hooks/useNotification';
-import { AlertCircle } from 'lucide-react';
+import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline';
 import RuleCard from './RuleCard';
 
 interface RulesListProps {
@@ -104,7 +104,7 @@ const RulesList: React.FC<RulesListProps> = ({
   if (rules.length === 0) {
     return (
       <div className="text-center py-12 border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg">
-        <AlertCircle className="w-12 h-12 text-gray-400 dark:text-gray-500 mx-auto mb-4" />
+        <ErrorOutlineIcon sx={{ fontSize: 48 }} className="mx-auto mb-4" color="disabled" />
         <p className="text-gray-600 dark:text-gray-400 mb-4">No validation rules yet</p>
         <button
           onClick={onCreateNew}
@@ -119,7 +119,7 @@ const RulesList: React.FC<RulesListProps> = ({
   if (displayedRules.length === 0) {
     return (
       <div className="text-center py-12 border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg">
-        <AlertCircle className="w-12 h-12 text-gray-400 dark:text-gray-500 mx-auto mb-4" />
+        <ErrorOutlineIcon sx={{ fontSize: 48 }} className="mx-auto mb-4" color="disabled" />
         <p className="text-gray-600 dark:text-gray-400 mb-4">No rules match your filters</p>
         <p className="text-sm text-gray-500 dark:text-gray-500">
           {searchTerm && `Search: "${searchTerm}"`}
