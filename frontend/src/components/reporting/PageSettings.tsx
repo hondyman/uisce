@@ -12,10 +12,10 @@ const PageSettings: FC<Props> = ({ pageSize, orientation, onChangePageSize, onCh
   return (
     <Paper sx={{ p: 2, mb: 2 }}>
       <Grid container spacing={2} alignItems="center">
-        <Grid item>
+        <Grid size="auto">
           <Typography variant="subtitle2">Page Setup:</Typography>
         </Grid>
-        <Grid item>
+        <Grid size="auto">
           <FormControl size="small" sx={{ minWidth: 100 }}>
             <InputLabel>Size</InputLabel>
             <Select value={pageSize} onChange={(e) => onChangePageSize(e.target.value)}>
@@ -25,7 +25,7 @@ const PageSettings: FC<Props> = ({ pageSize, orientation, onChangePageSize, onCh
             </Select>
           </FormControl>
         </Grid>
-        <Grid item>
+        <Grid size="auto">
           <FormControl size="small" sx={{ minWidth: 120 }}>
             <InputLabel>Orientation</InputLabel>
             <Select value={orientation} onChange={(e) => onChangeOrientation(e.target.value)}>

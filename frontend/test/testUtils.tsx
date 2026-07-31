@@ -9,7 +9,7 @@ type RenderOptions = {
 };
 
 export function createQueryClient() {
-  return new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } });
+  return new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
 }
 
 export function renderWithProviders(ui: React.ReactElement, options: RenderOptions = {}) {
