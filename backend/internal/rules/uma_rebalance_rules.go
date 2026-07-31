@@ -331,7 +331,7 @@ func (e *UMARebalanceRulesEngine) EvaluateRebalancePlan(ctx context.Context, uma
 					continue
 				}
 				// Evaluate: true means compliant, false means violation
-				compliant, err := e.engine.Evaluate(ctx, rule.Expression, input)
+				compliant, err := e.engine.EvaluateCEL(ctx, rule.Expression, input)
 				if err != nil {
 					log.Printf("Error evaluating rule %s: %v", rule.Name, err)
 					continue
