@@ -1,0 +1,310 @@
+From b87e8bd17d9b4572590bf5c5d1c326e35faec2b4 Mon Sep 17 00:00:00 2001
+From: hondyman <54151500+hondyman@users.noreply.github.com>
+Date: Tue, 28 Jul 2026 12:32:35 -0400
+Subject: [PATCH 2/9] feat(frontend): Time-Travel LookbackToolbar &
+ LookbackManager Compliance Audit Workspace
+
+---
+ frontend/src/AppRoutes.tsx                    |   5 +
+ .../components/runtime/LookbackToolbar.tsx    |  76 +++++++++
+ .../src/components/runtime/PageRenderer.tsx   |   3 +
+ frontend/src/pages/LookbackManagerPage.tsx    | 160 ++++++++++++++++++
+ 4 files changed, 244 insertions(+)
+ create mode 100644 frontend/src/components/runtime/LookbackToolbar.tsx
+ create mode 100644 frontend/src/pages/LookbackManagerPage.tsx
+
+diff --git a/frontend/src/AppRoutes.tsx b/frontend/src/AppRoutes.tsx
+index 5ffb25ff5..b60e10782 100644
+--- a/frontend/src/AppRoutes.tsx
++++ b/frontend/src/AppRoutes.tsx
+@@ -62,6 +62,7 @@ import { ChannelGatewayManagement } from "./features/gateway/ChannelGatewayManag
+ import { PageRenderer } from "./components/runtime/PageRenderer";
+ import { UpgradeDeltaMigrationStudio } from "./features/admin/pages/UpgradeDeltaMigrationStudio";
+ import { PreFlightUpgradeConsole } from "./features/admin/pages/PreFlightUpgradeConsole";
++import { LookbackManagerPage } from "./pages/LookbackManagerPage";
+ import { AuditExplorerPage } from "./features/workflow/pages/AuditExplorerPage";
+ import AuditExplorer from "./components/audit/AuditExplorer";
+ import TemporalOpsPage from "./features/admin/pages/TemporalOpsPage";
+@@ -409,6 +410,10 @@ function ProtectedApp() {
+         <Route path="/admin/upgrade-preflight" element={<PreFlightUpgradeConsole />} />
+         <Route path="/app/data-product/upgrade-preflight" element={<PreFlightUpgradeConsole />} />
+ 
++        {/* Compliance & Lookback Audit Manager */}
++        <Route path="/core/lookback-manager" element={<ProtectedRoute><LookbackManagerPage /></ProtectedRoute>} />
++        <Route path="/app/data-product/lookback-manager" element={<LookbackManagerPage />} />
++
+         {/* Admin Routes */}
+         {/* GenUI Routes */}
+         <Route path="/core/genui-chat" element={<ProtectedRoute><GenUIChatPage /></ProtectedRoute>} />
+diff --git a/frontend/src/components/runtime/LookbackToolbar.tsx b/frontend/src/components/runtime/LookbackToolbar.tsx
+new file mode 100644
+index 000000000..a25ad90cf
+--- /dev/null
++++ b/frontend/src/components/runtime/LookbackToolbar.tsx
+@@ -0,0 +1,76 @@
++import React, { useState } from 'react';
++import { Box, TextField, Button, Switch, FormControlLabel, Typography, Paper } from '@mui/material';
++import HistoryIcon from '@mui/icons-material/History';
++import { usePageContextStore } from '../../store/usePageContextStore';
++
++export const LookbackToolbar: React.FC = () => {
++  const [enabled, setEnabled] = useState(false);
++  const [timestamp, setTimestamp] = useState<string>(
++    new Date().toISOString().slice(0, 16)
++  );
++
++  const setContextValue = usePageContextStore((state) => state.setContextValue);
++  const clearContextValue = usePageContextStore((state) => state.clearContextValue);
++
++  const handleToggle = (event: React.ChangeEvent<HTMLInputElement>) => {
++    const isChecked = event.target.checked;
++    setEnabled(isChecked);
++    if (isChecked) {
++      setContextValue('lookback', { enabled: true, as_of_timestamp: new Date(timestamp).toISOString() });
++    } else {
++      clearContextValue('lookback');
++    }
++  };
++
++  const handleApply = () => {
++    if (enabled) {
++      setContextValue('lookback', { enabled: true, as_of_timestamp: new Date(timestamp).toISOString() });
++    }
++  };
++
++  return (
++    <Paper
++      elevation={1}
++      sx={{
++        p: 1.5,
++        mb: 2,
++        display: 'flex',
++        alignItems: 'center',
++        gap: 3,
++        bgcolor: enabled ? 'rgba(234, 179, 8, 0.12)' : '#1e293b',
++        border: enabled ? '1px solid #facc15' : '1px solid #334155',
++        color: '#f8fafc',
++      }}
++    >
++      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
++        <HistoryIcon sx={{ color: enabled ? '#facc15' : '#94a3b8' }} />
++        <Typography variant="subtitle2" fontWeight="bold">
++          Point-in-Time Time-Travel
++        </Typography>
++      </Box>
++
++      <FormControlLabel
++        control={<Switch checked={enabled} onChange={handleToggle} color="warning" />}
++        label={enabled ? 'Historical Mode Active' : 'Live Data Mode'}
++        sx={{ color: enabled ? '#facc15' : '#94a3b8' }}
++      />
++
++      {enabled && (
++        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
++          <TextField
++            label="As Of Timestamp"
++            type="datetime-local"
++            size="small"
++            value={timestamp}
++            onChange={(e) => setTimestamp(e.target.value)}
++            InputLabelProps={{ shrink: true }}
++            sx={{ bgcolor: '#0f172a', input: { color: '#fff' } }}
++          />
++          <Button variant="contained" size="small" color="warning" onClick={handleApply}>
++            Apply Time-Travel
++          </Button>
++        </Box>
++      )}
++    </Paper>
++  );
++};
+diff --git a/frontend/src/components/runtime/PageRenderer.tsx b/frontend/src/components/runtime/PageRenderer.tsx
+index e487dba71..91333bfad 100644
+--- a/frontend/src/components/runtime/PageRenderer.tsx
++++ b/frontend/src/components/runtime/PageRenderer.tsx
+@@ -5,6 +5,7 @@ import { usePageContextStore } from '../../store/usePageContextStore';
+ import { EChartRenderer } from './EChartRenderer';
+ import { DynamicBOGrid } from './DynamicBOGrid';
+ import { DynamicBOForm } from './DynamicBOForm';
++import { LookbackToolbar } from './LookbackToolbar';
+ 
+ interface PageRendererProps {
+   spec?: PageLayoutSpec;
+@@ -165,6 +166,8 @@ export const PageRenderer: React.FC<PageRendererProps> = ({ spec = defaultDemoSp
+         {spec.title}
+       </Typography>
+ 
++      <LookbackToolbar />
++
+       {spec.layout.map((region) => (
+         <Box key={region.id} mb={4}>
+           {region.rows.map((row) => (
+diff --git a/frontend/src/pages/LookbackManagerPage.tsx b/frontend/src/pages/LookbackManagerPage.tsx
+new file mode 100644
+index 000000000..7bcfa6c6a
+--- /dev/null
++++ b/frontend/src/pages/LookbackManagerPage.tsx
+@@ -0,0 +1,160 @@
++import React, { useState } from 'react';
++import {
++  Box,
++  Typography,
++  Paper,
++  Grid,
++  TextField,
++  Button,
++  Table,
++  TableBody,
++  TableCell,
++  TableHead,
++  TableRow,
++  Chip,
++  Alert,
++  CircularProgress
++} from '@mui/material';
++import HistoryIcon from '@mui/icons-material/History';
++import CompareArrowsIcon from '@mui/icons-material/CompareArrows';
++import { AICopilotBar } from '../components/designer/AICopilotBar';
++
++export const LookbackManagerPage: React.FC = () => {
++  const [boKey, setBoKey] = useState('Account');
++  const [timeA, setTimeA] = useState('2025-12-31T00:00');
++  const [timeB, setTimeB] = useState('2026-06-30T00:00');
++  const [diffResults, setDiffResults] = useState<any[]>([]);
++  const [loading, setLoading] = useState(false);
++
++  const handleRunAudit = async () => {
++    setLoading(true);
++    try {
++      const res = await fetch('/api/audit/lookback-diff', {
++        method: 'POST',
++        headers: { 'Content-Type': 'application/json' },
++        body: JSON.stringify({
++          bo_key: boKey,
++          timestamp_a: new Date(timeA).toISOString(),
++          timestamp_b: new Date(timeB).toISOString(),
++        }),
++      });
++      const data = await res.json();
++      setDiffResults(data.differences || []);
++    } catch (err) {
++      console.error('Failed to run lookback audit comparison', err);
++    } finally {
++      setLoading(false);
++    }
++  };
++
++  return (
++    <Box sx={{ p: 4, bgcolor: '#0f172a', minHeight: '100vh', color: '#f8fafc' }}>
++      <Box display="flex" alignItems="center" gap={1.5} mb={1}>
++        <HistoryIcon sx={{ color: '#38bdf8', fontSize: 32 }} />
++        <Typography variant="h4" fontWeight="700">
++          Compliance & Lookback Audit Manager
++        </Typography>
++      </Box>
++      <Typography variant="body1" color="#94a3b8" mb={3}>
++        Perform side-by-side point-in-time forensic audits across multi-datasource Business Objects.
++      </Typography>
++
++      {/* AI Layout Copilot with Lookback Intent Support */}
++      <AICopilotBar
++        domain="PORTFOLIO"
++        onLayoutGenerated={() => handleRunAudit()}
++      />
++
++      <Paper sx={{ p: 3, bgcolor: '#1e293b', border: '1px solid #334155', mb: 4 }}>
++        <Grid container spacing={3} alignItems="center">
++          <Grid item xs={12} md={3}>
++            <TextField
++              label="Business Object"
++              fullWidth
++              size="small"
++              value={boKey}
++              onChange={(e) => setBoKey(e.target.value)}
++              sx={{ bgcolor: '#0f172a', input: { color: '#fff' } }}
++            />
++          </Grid>
++          <Grid item xs={12} md={3}>
++            <TextField
++              label="Baseline Timestamp (A)"
++              type="datetime-local"
++              fullWidth
++              size="small"
++              value={timeA}
++              onChange={(e) => setTimeA(e.target.value)}
++              InputLabelProps={{ shrink: true }}
++              sx={{ bgcolor: '#0f172a', input: { color: '#fff' } }}
++            />
++          </Grid>
++          <Grid item xs={12} md={3}>
++            <TextField
++              label="Comparison Timestamp (B)"
++              type="datetime-local"
++              fullWidth
++              size="small"
++              value={timeB}
++              onChange={(e) => setTimeB(e.target.value)}
++              InputLabelProps={{ shrink: true }}
++              sx={{ bgcolor: '#0f172a', input: { color: '#fff' } }}
++            />
++          </Grid>
++          <Grid item xs={12} md={3}>
++            <Button
++              variant="contained"
++              fullWidth
++              startIcon={loading ? <CircularProgress size={20} color="inherit" /> : <CompareArrowsIcon />}
++              onClick={handleRunAudit}
++              disabled={loading}
++              sx={{ bgcolor: '#0284c7', '&:hover': { bgcolor: '#0369a1' } }}
++            >
++              {loading ? 'Computing Diffs...' : 'Generate Audit Matrix'}
++            </Button>
++          </Grid>
++        </Grid>
++      </Paper>
++
++      {diffResults.length > 0 && (
++        <Paper sx={{ p: 3, bgcolor: '#1e293b', border: '1px solid #334155' }}>
++          <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
++            <Typography variant="h6" fontWeight="600">
++              Audit Diff Matrix ({diffResults.length} changes detected)
++            </Typography>
++            <Chip label={`Comparing ${timeA.slice(0, 10)} vs ${timeB.slice(0, 10)}`} color="info" size="small" />
++          </Box>
++          <Table size="small">
++            <TableHead sx={{ bgcolor: '#0f172a' }}>
++              <TableRow>
++                <TableCell sx={{ color: '#94a3b8', fontWeight: 600 }}>Record ID</TableCell>
++                <TableCell sx={{ color: '#94a3b8', fontWeight: 600 }}>Field Modified</TableCell>
++                <TableCell sx={{ color: '#94a3b8', fontWeight: 600 }}>Value at Timestamp A</TableCell>
++                <TableCell sx={{ color: '#94a3b8', fontWeight: 600 }}>Value at Timestamp B</TableCell>
++                <TableCell sx={{ color: '#94a3b8', fontWeight: 600 }}>Delta / Shift</TableCell>
++              </TableRow>
++            </TableHead>
++            <TableBody>
++              {diffResults.map((row, idx) => (
++                <TableRow
++                  key={idx}
++                  sx={{
++                    bgcolor: row.is_significant ? 'rgba(244, 63, 94, 0.1)' : 'transparent',
++                  }}
++                >
++                  <TableCell sx={{ color: '#38bdf8', fontWeight: 600 }}>{row.record_id}</TableCell>
++                  <TableCell sx={{ color: '#f8fafc' }}>{row.field_name}</TableCell>
++                  <TableCell sx={{ color: '#cbd5e1' }}>{row.value_a}</TableCell>
++                  <TableCell sx={{ color: '#4ade80', fontWeight: 600 }}>{row.value_b}</TableCell>
++                  <TableCell sx={{ color: row.is_significant ? '#f43f5e' : '#facc15', fontWeight: 600 }}>
++                    {row.delta}
++                  </TableCell>
++                </TableRow>
++              ))}
++            </TableBody>
++          </Table>
++        </Paper>
++      )}
++    </Box>
++  );
++};
+-- 
+2.50.1 (Apple Git-155)
+

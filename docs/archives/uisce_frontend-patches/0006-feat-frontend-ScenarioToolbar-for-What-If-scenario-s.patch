@@ -1,0 +1,127 @@
+From f7d5357ef613515be70384032e8305b2733b3631 Mon Sep 17 00:00:00 2001
+From: hondyman <54151500+hondyman@users.noreply.github.com>
+Date: Tue, 28 Jul 2026 12:56:25 -0400
+Subject: [PATCH 6/9] feat(frontend): ScenarioToolbar for What-If scenario
+ simulation in PageRenderer
+
+---
+ .../src/components/runtime/PageRenderer.tsx   |  2 +
+ .../components/runtime/ScenarioToolbar.tsx    | 86 +++++++++++++++++++
+ 2 files changed, 88 insertions(+)
+ create mode 100644 frontend/src/components/runtime/ScenarioToolbar.tsx
+
+diff --git a/frontend/src/components/runtime/PageRenderer.tsx b/frontend/src/components/runtime/PageRenderer.tsx
+index b61380e62..220cb956b 100644
+--- a/frontend/src/components/runtime/PageRenderer.tsx
++++ b/frontend/src/components/runtime/PageRenderer.tsx
+@@ -6,6 +6,7 @@ import { EChartRenderer } from './EChartRenderer';
+ import { DynamicBOGrid } from './DynamicBOGrid';
+ import { DynamicBOForm } from './DynamicBOForm';
+ import { LookbackToolbar } from './LookbackToolbar';
++import { ScenarioToolbar } from './ScenarioToolbar';
+ 
+ interface PageRendererProps {
+   spec?: PageLayoutSpec;
+@@ -177,6 +178,7 @@ export const PageRenderer: React.FC<PageRendererProps> = ({ spec = defaultDemoSp
+         {spec.title}
+       </Typography>
+ 
++      <ScenarioToolbar />
+       <LookbackToolbar />
+ 
+       {spec.layout.map((region) => (
+diff --git a/frontend/src/components/runtime/ScenarioToolbar.tsx b/frontend/src/components/runtime/ScenarioToolbar.tsx
+new file mode 100644
+index 000000000..6f42047ac
+--- /dev/null
++++ b/frontend/src/components/runtime/ScenarioToolbar.tsx
+@@ -0,0 +1,86 @@
++import React, { useState, useEffect } from 'react';
++import { Box, Paper, Typography, FormControl, Select, MenuItem, InputLabel, Chip } from '@mui/material';
++import TrendingUpIcon from '@mui/icons-material/TrendingUp';
++import { usePageContextStore } from '../../store/usePageContextStore';
++
++export function ScenarioToolbar() {
++  const [scenarios, setScenarios] = useState<any[]>([]);
++  const [activeScenarioId, setActiveScenarioId] = useState<string>('');
++  const setContextValue = usePageContextStore((state) => state.setContextValue);
++  const clearContextValue = usePageContextStore((state) => state.clearContextValue);
++
++  useEffect(() => {
++    async function fetchScenarios() {
++      try {
++        const res = await fetch('/api/simulations/scenarios');
++        const data = await res.json();
++        setScenarios(data.scenarios || []);
++      } catch (err) {
++        console.error('Failed to load simulation scenarios', err);
++      }
++    }
++    fetchScenarios();
++  }, []);
++
++  const handleChange = (id: string) => {
++    setActiveScenarioId(id);
++    if (id) {
++      const selected = scenarios.find((s) => s.scenario_id === id);
++      setContextValue('active_scenario', selected);
++    } else {
++      clearContextValue('active_scenario');
++    }
++  };
++
++  return (
++    <Paper
++      elevation={1}
++      sx={{
++        p: 1.5,
++        mb: 2,
++        display: 'flex',
++        alignItems: 'center',
++        gap: 3,
++        backgroundColor: activeScenarioId ? '#14532d' : '#1e293b',
++        border: activeScenarioId ? '1px solid #22c55e' : '1px solid #334155',
++        color: '#f8fafc',
++      }}
++    >
++      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
++        <TrendingUpIcon sx={{ color: activeScenarioId ? '#4ade80' : '#94a3b8' }} />
++        <Typography variant="subtitle2" fontWeight="bold">
++          What-If Simulation & Projections Engine
++        </Typography>
++      </Box>
++
++      <FormControl size="small" sx={{ minWidth: 280, bgcolor: '#0f172a' }}>
++        <InputLabel sx={{ color: '#94a3b8' }}>Select Macro Shock / Scenario</InputLabel>
++        <Select
++          value={activeScenarioId}
++          label="Select Macro Shock / Scenario"
++          onChange={(e) => handleChange(e.target.value)}
++          sx={{ color: '#fff' }}
++        >
++          <MenuItem value="">
++            <em>None (Live Base Data)</em>
++          </MenuItem>
++          {scenarios.map((s) => (
++            <MenuItem key={s.scenario_id} value={s.scenario_id}>
++              {s.scenario_name}
++            </MenuItem>
++          ))}
++        </Select>
++      </FormControl>
++
++      {activeScenarioId && (
++        <Chip
++          label="Simulation Mode Active — Non-Destructive AST Projections"
++          color="success"
++          size="small"
++          variant="outlined"
++          sx={{ color: '#4ade80', borderColor: '#22c55e' }}
++        />
++      )}
++    </Paper>
++  );
++}
+-- 
+2.50.1 (Apple Git-155)
+

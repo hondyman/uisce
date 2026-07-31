@@ -103,3 +103,9 @@ Thumbs.db
 .env.before_fix.bak
 schema_backup_*.sql
 vite.config.ts.timestamp-*.mjs
+
+# Block accidental nested clones of the frontend repo (consolidated 2026-07-30)
+uisce_frontend/
+
+# Block zero-byte shell-glob artifacts created by unquoted cp/mv (e.g. `[ai-builder]`)
+/[*

@@ -1,0 +1,50 @@
+From 01bf615bdaf42fc9a103cb6f2446f4acb4aa8b95 Mon Sep 17 00:00:00 2001
+From: hondyman <54151500+hondyman@users.noreply.github.com>
+Date: Tue, 28 Jul 2026 12:35:00 -0400
+Subject: [PATCH 3/9] feat(ai): AI Copilot lookback intent detection and
+ BO_LOOKBACK_MANAGER component injection
+
+---
+ frontend/src/components/runtime/PageRenderer.tsx | 11 +++++++++++
+ frontend/src/types/pageDesigner.ts               |  3 ++-
+ 2 files changed, 13 insertions(+), 1 deletion(-)
+
+diff --git a/frontend/src/components/runtime/PageRenderer.tsx b/frontend/src/components/runtime/PageRenderer.tsx
+index 91333bfad..b61380e62 100644
+--- a/frontend/src/components/runtime/PageRenderer.tsx
++++ b/frontend/src/components/runtime/PageRenderer.tsx
+@@ -147,6 +147,17 @@ export const PageRenderer: React.FC<PageRendererProps> = ({ spec = defaultDemoSp
+         return <DynamicBOGrid key={comp.id} component={comp} />;
+       case 'BO_FORM':
+         return <DynamicBOForm key={comp.id} component={comp} />;
++      case 'BO_LOOKBACK_MANAGER':
++        return (
++          <Paper key={comp.id} sx={{ p: 3, bgcolor: '#1e293b', border: '1px solid #facc15' }}>
++            <Typography variant="h6" fontWeight="600" color="#facc15" mb={1}>
++              {comp.title} (AI Lookback Manager Active)
++            </Typography>
++            <Typography variant="body2" color="#94a3b8" mb={2}>
++              Point-in-time diff matrix automatically generated for Business Object '{comp.bo_id}'.
++            </Typography>
++          </Paper>
++        );
+       default:
+         return (
+           <Box key={comp.id} p={2} sx={{ bgcolor: '#1e293b', color: '#fff', border: '1px solid #334155' }}>
+diff --git a/frontend/src/types/pageDesigner.ts b/frontend/src/types/pageDesigner.ts
+index d3f74a784..52a219eea 100644
+--- a/frontend/src/types/pageDesigner.ts
++++ b/frontend/src/types/pageDesigner.ts
+@@ -34,7 +34,8 @@ export type ComponentType =
+   | 'BO_ANALYTICS_CHART'
+   | 'BO_METRIC_CARD'
+   | 'BO_TIMELINE'
+-  | 'RELATIONSHIP_TREE';
++  | 'RELATIONSHIP_TREE'
++  | 'BO_LOOKBACK_MANAGER';
+ 
+ export interface PageComponent {
+   id: string;
+-- 
+2.50.1 (Apple Git-155)
+
