@@ -188,7 +188,7 @@ export const PortfolioDetailPage: React.FC = () => {
             value={activeTab}
             onChange={handleTabChange}
             variant={isMobile ? 'scrollable' : 'standard'}
-            scrollButtonsDisplay={isMobile ? 'auto' : 'off'}
+            scrollButtons={isMobile ? 'auto' : false}
             sx={{
               '& .MuiTab-root': {
                 fontSize: isMobile ? '0.875rem' : '1rem',
@@ -269,7 +269,7 @@ export const PortfolioDetailPage: React.FC = () => {
                     Compliance Status
                   </Typography>
                   <Box sx={{ display: 'grid', gap: 1.5 }}>
-                    {portfolio.compliance.data.hard_breaches.map((breach) => (
+                    {portfolio.compliance.data.hard_breaches.map((breach: any) => (
                       <ComplianceBreach
                         key={breach.rule_code}
                         rule_code={breach.rule_code}
@@ -278,7 +278,7 @@ export const PortfolioDetailPage: React.FC = () => {
                         severity="hard"
                       />
                     ))}
-                    {portfolio.compliance.data.soft_breaches.map((breach) => (
+                    {portfolio.compliance.data.soft_breaches.map((breach: any) => (
                       <ComplianceBreach
                         key={breach.rule_code}
                         rule_code={breach.rule_code}
@@ -314,7 +314,7 @@ export const PortfolioDetailPage: React.FC = () => {
                     Geographic Distribution
                   </Typography>
                   <SectorWeights
-                    data={portfolio.holdings.data?.country_weights?.map((c) => ({
+                    data={portfolio.holdings.data?.country_weights?.map((c: any) => ({
                       sector: c.country,
                       weight: c.weight,
                     }))}
@@ -354,7 +354,7 @@ export const PortfolioDetailPage: React.FC = () => {
                     Factor Exposures (Legacy View)
                   </Typography>
                   <Box sx={{ display: 'grid', gap: 2 }}>
-                    {portfolio.risk.data?.factor_exposures.map((factor) => (
+                    {portfolio.risk.data?.factor_exposures.map((factor: any) => (
                       <Box key={factor.factor_id}>
                         <Box
                           sx={{
@@ -453,7 +453,7 @@ export const PortfolioDetailPage: React.FC = () => {
                   Detailed Results
                 </Typography>
                 <Box sx={{ display: 'grid', gap: 1 }}>
-                  {portfolio.scenarios.data.results.map((scenario) => (
+                  {portfolio.scenarios.data.results.map((scenario: any) => (
                     <Card
                       key={scenario.scenario_id}
                       elevation={0}

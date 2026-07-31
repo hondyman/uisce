@@ -11,6 +11,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/hondyman/uisce/backend/internal/db"
 	jwtmiddleware "github.com/hondyman/uisce/libs/auth"
+	"github.com/lib/pq"
 )
 
 // TenantAccessHandlers provides endpoints for tenant access control
@@ -261,8 +262,8 @@ func (h *TenantAccessHandlers) getAllTenantsInternal(ctx context.Context, target
 	// 3. Query products
 	// Filter by instance IDs found
 	productQuery := `
-		SELECT tp.id, tp.version, tp.tenant_instance_id, tp.alpha_product_id,
-		       ap.id as ap_id, COALESCE(ap.product_name, '') as product_name, 
+		SELECT tp.id, COALESCE(tp.version, 1.0) as version, tp.tenant_instance_id, COALESCE(tp.alpha_product_id, '') as alpha_product_id,
+		       COALESCE(ap.id, '') as ap_id, COALESCE(ap.product_name, '') as product_name, 
 		       NULL::text as product_code, COALESCE(ap.is_active, true) as ap_is_active
 		FROM tenant_product tp
 		LEFT JOIN alpha_product ap ON ap.id = tp.alpha_product_id
@@ -272,8 +273,8 @@ func (h *TenantAccessHandlers) getAllTenantsInternal(ctx context.Context, target
 	if targetTenantID != nil {
 		// If specific tenant, we can join back to tenant_instance to filter safely at DB level
 		productQuery = `
-			SELECT tp.id, tp.version, tp.tenant_instance_id, tp.alpha_product_id,
-			       ap.id as ap_id, COALESCE(ap.product_name, '') as product_name, 
+			SELECT tp.id, COALESCE(tp.version, 1.0) as version, tp.tenant_instance_id, COALESCE(tp.alpha_product_id, '') as alpha_product_id,
+			       COALESCE(ap.id, '') as ap_id, COALESCE(ap.product_name, '') as product_name, 
 			       NULL::text as product_code, COALESCE(ap.is_active, true) as ap_is_active
 			FROM tenant_product tp
 			JOIN tenant_instance ti ON tp.tenant_instance_id = ti.id
@@ -285,7 +286,7 @@ func (h *TenantAccessHandlers) getAllTenantsInternal(ctx context.Context, target
 		// When fetching all, filter by the instances we found
 		if len(instanceIDs) > 0 {
 			productQuery += ` AND tp.tenant_instance_id = ANY($1)`
-			pArgs = append(pArgs, instanceIDs)
+			pArgs = append(pArgs, pq.Array(instanceIDs))
 		} else {
 			// No instances, so no products
 			productQuery += ` AND 1=0`
@@ -303,9 +304,26 @@ func (h *TenantAccessHandlers) getAllTenantsInternal(ctx context.Context, target
 	for productRows.Next() {
 		var p ProductResponse
 		var ap AlphaProductInfo
-		if err := productRows.Scan(&p.ID, &p.Version, &p.TenantInstanceID, &p.AlphaProductID,
-			&ap.ID, &ap.ProductName, &ap.ProductCode, &ap.IsActive); err != nil {
-			return nil, err
+		var version sql.NullFloat64
+		var alphaProductID sql.NullString
+		var apID sql.NullString
+		var apProductCode sql.NullString
+
+		if err := productRows.Scan(&p.ID, &version, &p.TenantInstanceID, &alphaProductID,
+			&apID, &ap.ProductName, &apProductCode, &ap.IsActive); err != nil {
+			return nil, fmt.Errorf("failed to scan product row: %w", err)
+		}
+		if version.Valid {
+			p.Version = version.Float64
+		}
+		if alphaProductID.Valid {
+			p.AlphaProductID = alphaProductID.String
+		}
+		if apID.Valid {
+			ap.ID = apID.String
+		}
+		if apProductCode.Valid {
+			ap.ProductCode = &apProductCode.String
 		}
 		p.AlphaProduct = &ap
 		p.Datasources = []DatasourceResponse{}
@@ -337,7 +355,7 @@ func (h *TenantAccessHandlers) getAllTenantsInternal(ctx context.Context, target
 	} else {
 		if len(instanceIDs) > 0 {
 			dsQuery += ` AND tpd.tenant_product_id IN (SELECT id FROM tenant_product WHERE tenant_instance_id = ANY($1))`
-			dArgs = append(dArgs, instanceIDs)
+			dArgs = append(dArgs, pq.Array(instanceIDs))
 		} else {
 			dsQuery += ` AND 1=0`
 		}
@@ -357,7 +375,7 @@ func (h *TenantAccessHandlers) getAllTenantsInternal(ctx context.Context, target
 		var productID string
 		if err := dsRows.Scan(&ds.ID, &ds.IsActive, &ds.SourceName, &productID,
 			&ads.ID, &ads.DatasourceName, &ads.DatasourceType, &ads.DatasourceCode); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("failed to scan datasource row: %w", err)
 		}
 		ds.AlphaDatasource = &ads
 		dsMap[productID] = append(dsMap[productID], ds)

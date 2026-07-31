@@ -186,7 +186,7 @@ export const ComplianceReportPage: React.FC = () => {
                 <Chip
                   label={executive_summary.risk_level}
                   color={getRiskColor(executive_summary.risk_level)}
-                  size="large"
+                  size="medium"
                   sx={{ fontSize: '1.25rem', fontWeight: 'bold' }}
                 />
                 <Typography variant="subtitle2" color="text.secondary" sx={{ mt: 1 }}>
@@ -231,7 +231,7 @@ export const ComplianceReportPage: React.FC = () => {
                   </TableRow>
                 </TableHead>
                 <TableBody>
-                  {change_inventory.map((change, idx) => (
+                  {change_inventory.map((change: any, idx: any) => (
                     <TableRow key={idx}>
                       <TableCell>
                         <Typography variant="body2" fontFamily="monospace" fontSize="0.875rem">
@@ -316,7 +316,7 @@ export const ComplianceReportPage: React.FC = () => {
                 <Typography variant="h6" gutterBottom>
                   Failed Tests
                 </Typography>
-                {test_summary.failed_test_details.map((test, idx) => (
+                {test_summary.failed_test_details.map((test: any, idx: any) => (
                   <Alert key={idx} severity="error" sx={{ mb: 1 }}>
                     <Typography variant="subtitle2">{test.test_name}</Typography>
                     <Typography variant="body2">{test.error_message}</Typography>
@@ -344,7 +344,7 @@ export const ComplianceReportPage: React.FC = () => {
                   </TableRow>
                 </TableHead>
                 <TableBody>
-                  {approval_chain.map((approval, idx) => (
+                  {approval_chain.map((approval: any, idx: any) => (
                     <TableRow key={idx}>
                       <TableCell>{approval.approver_id}</TableCell>
                       <TableCell>
@@ -427,7 +427,7 @@ export const ComplianceReportPage: React.FC = () => {
                   <Typography variant="subtitle2" gutterBottom>
                     Rollback Events ({deployment_log.rollback_events.length})
                   </Typography>
-                  {deployment_log.rollback_events.map((event, idx) => (
+                  {deployment_log.rollback_events.map((event: any, idx: any) => (
                     <Box key={idx} sx={{ mt: 1 }}>
                       <Typography variant="body2">
                         <strong>{event.tenant_id}</strong>: {event.reason}

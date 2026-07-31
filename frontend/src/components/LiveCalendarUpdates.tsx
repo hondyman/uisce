@@ -312,7 +312,7 @@ const IngestionEventsTab: React.FC<{ events: IngestionEvent[] }> = ({ events }) 
               </p>
               <p>
                 <span className="text-gray-500">Conflicts:</span> {event.conflictsDetected} (
-                <span className="text-green-600">✓{event.conflictsResolved}</span>)
+                <span className="text-green-600">✓{(event as any).conflictsResolved}</span>)
               </p>
               <p>
                 <span className="text-gray-500">Sources:</span> {event.sourcesSucceeded}/

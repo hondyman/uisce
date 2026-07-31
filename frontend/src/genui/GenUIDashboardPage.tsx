@@ -8,7 +8,7 @@ import { Search, Loader2 } from "lucide-react";
  */
 export function GenUIDashboardPage() {
   const [query, setQuery] = useState("");
-  const { mutate: generateLayout, data, isLoading } = useGenUIIntent();
+  const { mutate: generateLayout, data, isPending: isLoading } = useGenUIIntent();
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();

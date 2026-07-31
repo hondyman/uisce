@@ -10,7 +10,7 @@ import * as schedulerService from '../services/schedulerService';
 import {
   Job,
   JobExecution,
-  Dependency,
+  JobDependency,
   DependencyType,
   JobStatus,
 } from '../../../types/scheduler';
@@ -69,16 +69,16 @@ export function DependencyVisualizerPage() {
   const loadJobs = useCallback(async () => {
     try {
       setLoading(true);
-      const jobsResponse = await schedulerService.listJobs({ page: 1, limit: 100 });
-      setJobs(jobsResponse.jobs);
+      const jobsResponse = await schedulerService.listJobs({ limit: 100 } as any);
+      setJobs((jobsResponse as any).jobs);
       
       // Load latest executions for all jobs
       const executionMap = new Map<string, JobExecution>();
-      const executionPromises = jobsResponse.jobs.map(async (job) => {
+      const executionPromises = (jobsResponse.jobs || []).map(async (job: any) => {
         try {
-          const execResponse = await schedulerService.listExecutions(job.id, { page: 1, limit: 1 });
-          if (execResponse.executions.length > 0) {
-            executionMap.set(job.id, execResponse.executions[0]);
+          const execResponse = await schedulerService.listExecutions(job.id, 1);
+          if ((execResponse as any).executions.length > 0) {
+            executionMap.set(job.id, (execResponse as any).executions[0]);
           }
         } catch {
           // Ignore - job might not have any executions
@@ -310,7 +310,7 @@ export function DependencyVisualizerPage() {
               
               <div className="detail-row">
                 <span className="label">{t('scheduler.fields.type', 'Type')}:</span>
-                <span className="value">{selectedJob.type}</span>
+                <span className="value">{(selectedJob as any).type}</span>
               </div>
               
               <div className="detail-row">
@@ -533,7 +533,7 @@ function DAGView({ layout, zoomLevel, selectedNode, onNodeClick, svgRef }: DAGVi
                 fontSize={11}
                 fill="#666"
               >
-                {node.job.type}
+                {(node.job as any).type}
               </text>
               
               {/* Running indicator */}
@@ -621,7 +621,7 @@ function TreeNode({ job, jobs, executions, selectedNode, onNodeClick, level }: T
         {dependents.length === 0 && <span className="expand-placeholder" />}
         <StatusIcon status={execution?.status} />
         <span className="tree-node-name">{job.name}</span>
-        <span className="tree-node-type">{job.type}</span>
+        <span className="tree-node-type">{(job as any).type}</span>
       </div>
       
       {expanded && dependents.length > 0 && (
@@ -686,7 +686,7 @@ function ListView({ jobs, executions, selectedNode, onNodeClick, t }: ListViewPr
                     {job.name}
                   </div>
                 </td>
-                <td>{job.type}</td>
+                <td>{(job as any).type}</td>
                 <td>
                   <StatusBadge status={execution?.status} />
                 </td>

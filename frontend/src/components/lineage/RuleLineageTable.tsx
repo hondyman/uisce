@@ -20,29 +20,29 @@ export function RuleLineageTable({ ruleId }: { ruleId: string }) {
       field: 'status',
       headerName: 'Status',
       width: 120,
-      renderCell: (params) => <StatusBadge status={params.value} />,
+      renderCell: (params: any) => <StatusBadge status={params.value} />,
     },
     {
       field: 'metric_value',
       headerName: 'Metric Value',
       width: 150,
       type: 'number',
-      valueGetter: (params) => parseFloat(params.value),
-      renderCell: (params) => params.value?.toFixed(6),
+      valueGetter: (params: any) => parseFloat(params.value),
+      renderCell: (params: any) => params.value?.toFixed(6),
     },
     {
       field: 'threshold_value',
       headerName: 'Threshold',
       width: 150,
       type: 'number',
-      valueGetter: (params) => parseFloat(params.value),
-      renderCell: (params) => params.value?.toFixed(6),
+      valueGetter: (params: any) => parseFloat(params.value),
+      renderCell: (params: any) => params.value?.toFixed(6),
     },
     {
       field: 'etl_run_id',
       headerName: 'ETL Run',
       width: 200,
-      renderCell: (params) => (
+      renderCell: (params: any) => (
         <a href={`/console/etl-runs/${params.value}`} style={{ textDecoration: 'none' }}>
           {params.value}
         </a>

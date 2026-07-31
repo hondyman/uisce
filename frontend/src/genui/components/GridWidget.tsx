@@ -13,24 +13,25 @@ interface GridWidgetProps {
 }
 
 export function GridWidget({ def }: GridWidgetProps) {
+  const binding = def.binding as any;
   const { data: queryData, isLoading } = useQuery({
-    queryKey: ['genui-grid', def.binding?.endpoint, def.binding?.variables],
+    queryKey: ['genui-grid', binding?.endpoint, binding?.variables],
     queryFn: async () => {
-      if (!def.binding?.endpoint) return null;
-      const response = await apiFetch(def.binding.endpoint, {
-        method: def.binding.method || 'GET',
+      if (!binding?.endpoint) return null;
+      const response = await apiFetch(binding.endpoint, {
+        method: binding.method || 'GET',
       });
       return response.json();
     },
-    enabled: !!def.binding?.endpoint,
+    enabled: !!binding?.endpoint,
   });
 
   if (isLoading) {
     return <GridSkeleton title={def.title} />;
   }
 
-  const rowData = def.binding?.dataPath
-    ? extractDataFromPath(queryData, def.binding.dataPath)
+  const rowData = binding?.dataPath
+    ? extractDataFromPath(queryData, binding.dataPath)
     : queryData || [];
 
   // Convert schema columns to AG-Grid column definitions

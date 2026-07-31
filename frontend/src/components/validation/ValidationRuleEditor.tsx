@@ -420,7 +420,7 @@ const ValidationRuleEditor: React.FC<ValidationRuleEditorProps> = ({
     }
   };
 
-  const handleFormChange = (field: keyof RuleFormData, value) => {
+  const handleFormChange = (field: keyof RuleFormData, value: any) => {
     // Narrow unknown -> expected types for specific fields at the boundary
     setFormData((prev) => {
       const next: RuleFormData = { ...prev };
@@ -453,7 +453,7 @@ const ValidationRuleEditor: React.FC<ValidationRuleEditorProps> = ({
     setShowFieldSelector(false);
   };
 
-  const handleRuleCloned = (clonedRule) => {
+  const handleRuleCloned = (clonedRule: any) => {
     // Populate form with cloned rule data (defensive narrowing)
     const c = (clonedRule as Record<string, unknown>) || {}
     const name = typeof c.name === 'string' ? `${c.name} (Copy)` : `${formData.name} (Copy)`

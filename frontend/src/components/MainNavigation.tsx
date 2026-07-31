@@ -601,7 +601,7 @@ export const MainNavigation: React.FC<MainNavigationProps> = () => {
   const { isPlatformOperator, accessLevel, canAccess, scope, scopeDescription } = useAccess();
   // compact scope summary for very small screens
   const scopeSummary = `${tenant?.display_name || tenant?.name || ''}${product ? ` · ${product.alpha_product?.product_name || 'Product'}` : ''}${datasource ? ` · ${datasource.source_name || 'Source'}` : ''}`;
-  const { user, logout, entitlements } = useAuth();
+  const { user, logout } = useAuth();
   const organizationAccess = useOrganizationEntitlement();
 
   // Capability-filtered navigation config.  The backend decides which menus
@@ -613,11 +613,11 @@ export const MainNavigation: React.FC<MainNavigationProps> = () => {
     () =>
       filterNavigationByCapabilities(
         categoryConfigs,
-        entitlements?.capabilities,
+        undefined,
         isPlatformOperator,
         organizationAccess,
       ),
-    [entitlements?.capabilities, isPlatformOperator, organizationAccess],
+    [isPlatformOperator, organizationAccess],
   );
 
   const [categoryMenuAnchorEl, setCategoryMenuAnchorEl] = useState<null | HTMLElement>(null);

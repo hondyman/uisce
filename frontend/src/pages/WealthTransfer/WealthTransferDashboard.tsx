@@ -67,7 +67,7 @@ export const WealthTransferDashboard: React.FC<WealthTransferDashboardProps> = (
       {/* Header */}
       <Box sx={{ mb: 4 }}>
         <Grid container spacing={2} alignItems="center">
-          <Grid xs>
+          <Grid size="grow">
             <Typography variant="h4" component="h1" gutterBottom>
               Wealth Transfer Planning
             </Typography>
@@ -75,7 +75,7 @@ export const WealthTransferDashboard: React.FC<WealthTransferDashboardProps> = (
               Family ID: {familyId}
             </Typography>
           </Grid>
-          <Grid item>
+          <Grid size="auto">
             <Button
               variant="contained"
               size="large"

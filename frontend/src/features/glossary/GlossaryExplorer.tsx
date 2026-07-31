@@ -246,25 +246,25 @@ export default function GlossaryExplorer() {
   const [busLinkSem, setBusLinkSem] = useState('');
 
   // Fetching
-  const { data: semTermsRaw, isLoading: semLoading, refetch: refetchSem } = useApiQuery<any[]>(
+  const { data: semTermsRaw, loading: semLoading, refetch: refetchSem } = useApiQuery<any[]>(
     `/api/glossary/semantic-terms?tenant_id=${tenantId}`,
-    { enabled: !!tenantId }
+    { skip: !tenantId }
   );
 
-  const { data: busTermsRaw, isLoading: busLoading, refetch: refetchBus } = useApiQuery<any[]>(
+  const { data: busTermsRaw, loading: busLoading, refetch: refetchBus } = useApiQuery<any[]>(
     `/api/glossary/business-terms?tenant_id=${tenantId}`,
-    { enabled: !!tenantId }
+    { skip: !tenantId }
   );
 
-  const { data: nodeGraph, isLoading: graphLoading, refetch: refetchGraph } = useApiQuery<any>(
+  const { data: nodeGraph, loading: graphLoading, refetch: refetchGraph } = useApiQuery<any>(
     `/api/glossary/node-graph?node_id=${selectedId}&tenant_id=${tenantId}`,
-    { enabled: !!tenantId && !!selectedId }
+    { skip: !(tenantId && selectedId) }
   );
 
   // Technical assets — dedicated endpoint with proper edge direction
-  const { data: technicalAssetsRaw, isLoading: taLoading, refetch: refetchTa } = useApiQuery<any>(
+  const { data: technicalAssetsRaw, loading: taLoading, refetch: refetchTa } = useApiQuery<any>(
     `/api/glossary/technical-assets?node_id=${selectedId}&tenant_id=${tenantId}`,
-    { enabled: !!tenantId && !!selectedId }
+    { skip: !(tenantId && selectedId) }
   );
 
   // Technical assets UI state
@@ -274,9 +274,9 @@ export default function GlossaryExplorer() {
   const [mappingColSearch, setMappingColSearch] = useState('');
   const [selectedColIds, setSelectedColIds] = useState<string[]>([]);
 
-  const { data: allColumns, isLoading: columnsLoading } = useApiQuery<any[]>(
+  const { data: allColumns, loading: columnsLoading } = useApiQuery<any[]>(
     `/api/rest/catalog-nodes?node_type_id=a64c1011-16e8-4ddf-b447-363bf8e15c9a&tenant_id=${tenantId}&limit=10000`,
-    { enabled: !!tenantId && (isGenModalOpen || isAddMappingOpen) }
+    { skip: !tenantId || !(isGenModalOpen || isAddMappingOpen) }
   );
 
   const semTerms = useMemo(() => {
@@ -329,7 +329,7 @@ export default function GlossaryExplorer() {
   const createBusiness = async () => {
     if (!tenantId || !busName) return;
     try {
-      const res = await apiClient(`/api/glossary/terms?tenant_id=${tenantId}`, {
+      const res = await apiClient<any>(`/api/glossary/terms?tenant_id=${tenantId}`, {
         method: 'POST',
         body: JSON.stringify({
           node_name: busName,

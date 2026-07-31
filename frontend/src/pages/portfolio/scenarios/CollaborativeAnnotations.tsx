@@ -347,7 +347,7 @@ export function CollaborativeAnnotationsPanel({
                 {/* Mentions */}
                 {annotation.mentions && annotation.mentions.length > 0 && (
                   <Box sx={{ mb: 1, display: 'flex', gap: 0.5, flexWrap: 'wrap' }}>
-                    {annotation.mentions.map(mention => (
+                    {annotation.mentions.map((mention: any) => (
                       <Chip
                         key={mention}
                         label={`@${mention}`}
@@ -409,7 +409,7 @@ export function CollaborativeAnnotationsPanel({
                 {/* Replies */}
                 {annotation.replies && annotation.replies.length > 0 && (
                   <Box sx={{ mt: 2, ml: 2, pl: 2, borderLeft: 2, borderColor: 'divider' }}>
-                    {annotation.replies.map(reply => (
+                    {annotation.replies.map((reply: any) => (
                       <Box key={reply.id} sx={{ mb: 1 }}>
                         <Box sx={{ display: 'flex', gap: 1, mb: 0.5 }}>
                           <Avatar

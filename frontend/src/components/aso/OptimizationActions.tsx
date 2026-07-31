@@ -182,7 +182,7 @@ export const OptimizationActions: React.FC<OptimizationActionsProps> = ({
 
   // Get user roles and tenants
   const userRoles = useMemo(() => user?.roles || [], [user]);
-  const userTenants = useMemo(() => user?.tenant_ids || [], [user]);
+  const userTenants = useMemo(() => (user as any)?.tenant_ids || [], [user]);
 
   // Calculate permissions
   const permissions = useMemo(

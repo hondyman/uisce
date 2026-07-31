@@ -606,7 +606,7 @@ export const ClientOnboardingWizard: React.FC = () => {
         'application/pdf': ['.pdf'],
       },
       maxSize: 10485760, // 10MB
-      onDrop: async (acceptedFiles) => {
+      onDrop: async (acceptedFiles: any) => {
         for (const file of acceptedFiles) {
           await uploadDocument(file);
         }

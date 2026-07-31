@@ -83,7 +83,7 @@ export function GlobalSearch() {
           }}
         />
       )}
-      onOptionSelected={(_, option) => {
+      onOptionSelected={(_: any, option: any) => {
         window.location.href = option.href;
       }}
       noOptionsText={query ? 'No results found' : 'Type to search'}

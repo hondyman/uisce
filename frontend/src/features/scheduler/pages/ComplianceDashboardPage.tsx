@@ -61,12 +61,12 @@ export function ComplianceDashboardPage() {
         schedulerService.listAllExecutions({ page: 1, limit: 500 }),
       ]);
       
-      setAuditLogs(auditData.entries);
-      setJobs(jobsData.jobs);
-      setExecutions(executionsData.executions);
+      setAuditLogs((auditData as any).entries);
+      setJobs((jobsData as any).jobs);
+      setExecutions((executionsData as any).executions);
       
       // Calculate metrics
-      setMetrics(calculateMetrics(auditData.entries, jobsData.jobs, executionsData.executions));
+      setMetrics(calculateMetrics((auditData as any).entries, (jobsData as any).jobs, (executionsData as any).executions));
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load compliance data');
     } finally {
@@ -409,7 +409,7 @@ function AuditTab({ logs, filter, setFilter, t }: AuditTabProps) {
                         <span className="entity-badge">
                           {log.entity_type}
                         </span>
-                        <span className="entity-id">{log.entity_id.slice(0, 8)}...</span>
+                        <span className="entity-id">{(log as any).entity_id?.slice(0, 8)}...</span>
                       </td>
                       <td>{log.user_id || t('scheduler.system', 'System')}</td>
                       <td className="ip-cell">{log.ip_address || '—'}</td>
@@ -491,7 +491,7 @@ function AuditTab({ logs, filter, setFilter, t }: AuditTabProps) {
                 <dd>{selectedLog.entity_type}</dd>
                 
                 <dt>{t('scheduler.fields.entityId', 'Entity ID')}</dt>
-                <dd><code>{selectedLog.entity_id}</code></dd>
+                <dd><code>{(selectedLog as any).entity_id}</code></dd>
                 
                 <dt>{t('scheduler.fields.user', 'User')}</dt>
                 <dd>{selectedLog.user_id || t('scheduler.system', 'System')}</dd>
@@ -502,12 +502,12 @@ function AuditTab({ logs, filter, setFilter, t }: AuditTabProps) {
                 <dt>{t('scheduler.fields.userAgent', 'User Agent')}</dt>
                 <dd className="user-agent">{selectedLog.user_agent || '—'}</dd>
                 
-                {selectedLog.changes && (
+                {(selectedLog as any).changes && (
                   <>
                     <dt>{t('scheduler.fields.changes', 'Changes')}</dt>
                     <dd>
                       <pre className="changes-json">
-                        {JSON.stringify(selectedLog.changes, null, 2)}
+                        {JSON.stringify((selectedLog as any).changes, null, 2)}
                       </pre>
                     </dd>
                   </>
@@ -543,9 +543,9 @@ function SLATab({ jobs, executions, t }: SLATabProps) {
         ? completedExecutions.reduce((sum, e) => sum + (e.duration_ms || 0), 0) / completedExecutions.length
         : 0;
       
-      const slaTarget = job.sla_seconds ? job.sla_seconds * 1000 : null;
+      const slaTarget = (job as any).sla_seconds ? (job as any).sla_seconds * 1000 : null;
       const slaBreaches = slaTarget
-        ? completedExecutions.filter(e => (e.duration_ms || 0) > slaTarget).length
+        ? completedExecutions.filter((e: any) => (e.duration_ms || 0) > slaTarget).length
         : 0;
       
       return {

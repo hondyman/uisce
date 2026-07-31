@@ -73,7 +73,7 @@ export function MultiScenarioComparison({
   const chartData = useMemo(() => {
     if (!comparison || comparison.scenarios.length === 0) return [];
 
-    return comparison.scenarios.map(s => ({
+    return comparison.scenarios.map((s: any) => ({
       name: s.scenarioName,
       scenarioId: s.scenarioId,
       pnl: parseFloat(s.avgPnL.toFixed(2)),
@@ -334,7 +334,7 @@ export function MultiScenarioComparison({
                   AGGREGATED IMPACT
                 </Typography>
 
-                {comparison?.scenarios.map((scenario, idx) => (
+                {comparison?.scenarios.map((scenario: any, idx: any) => (
                   <Box key={scenario.scenarioId} sx={{ mb: 2, pb: 2, borderBottom: '1px solid', borderColor: 'divider' }}>
                     <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
                       <Typography variant="caption" sx={{ fontWeight: 600 }}>
@@ -444,12 +444,12 @@ export function MultiScenarioComparison({
               variant="h6"
               sx={{
                 color:
-                  Math.max(...comparison.scenarios.map(s => s.avgPnL)) > 0
+                  Math.max(...comparison.scenarios.map((s: any) => s.avgPnL)) > 0
                     ? theme.palette.success.main
                     : theme.palette.error.main,
               }}
             >
-              {Math.max(...comparison.scenarios.map(s => s.avgPnL)).toFixed(2)}M
+              {Math.max(...comparison.scenarios.map((s: any) => s.avgPnL)).toFixed(2)}M
             </Typography>
           </Box>
 
@@ -461,12 +461,12 @@ export function MultiScenarioComparison({
               variant="h6"
               sx={{
                 color:
-                  Math.min(...comparison.scenarios.map(s => s.avgPnL)) < 0
+                  Math.min(...comparison.scenarios.map((s: any) => s.avgPnL)) < 0
                     ? theme.palette.error.main
                     : theme.palette.success.main,
               }}
             >
-              {Math.min(...comparison.scenarios.map(s => s.avgPnL)).toFixed(2)}M
+              {Math.min(...comparison.scenarios.map((s: any) => s.avgPnL)).toFixed(2)}M
             </Typography>
           </Box>
         </Paper>

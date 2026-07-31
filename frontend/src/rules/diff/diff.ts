@@ -1,7 +1,7 @@
-export function diffRules(a, b) {
-  const changes = []
+export function diffRules(a: any, b: any) {
+  const changes: any[] = []
 
-  function walk(path, aNode, bNode) {
+  function walk(path: any, aNode: any, bNode: any) {
     if (JSON.stringify(aNode) === JSON.stringify(bNode)) return
 
     if (!aNode) {

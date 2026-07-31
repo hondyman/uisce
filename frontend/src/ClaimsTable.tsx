@@ -31,7 +31,7 @@ export default function ClaimsTable({ domain, statusFilter }: ClaimsTableProps) 
         }
       });
       setModelDomainMap(newMap);
-    }).catch((e) => {
+    }).catch((e: any) => {
       // Log in dev environment
       const { devError } = require('../utils/devLogger');
       devError(e);

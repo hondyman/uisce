@@ -180,9 +180,9 @@ export const AuditLogViewer: FC<AuditLogViewerProps> = ({
           <Select
             size="small"
             sx={{ width: 150 }}
-            placeholder="Filter by action"
             value={filters.action || ''}
             onChange={(e) => setFilters({ ...filters, action: e.target.value === '' ? undefined : (e.target.value as any) })}
+            displayEmpty
           >
             <MenuItem value="">All Actions</MenuItem>
             <MenuItem value="evaluate">Evaluate</MenuItem>
@@ -193,9 +193,9 @@ export const AuditLogViewer: FC<AuditLogViewerProps> = ({
           <Select
             size="small"
             sx={{ width: 150 }}
-            placeholder="Filter by result"
             value={filters.result || ''}
             onChange={(e) => setFilters({ ...filters, result: e.target.value === '' ? undefined : (e.target.value as any) })}
+            displayEmpty
           >
             <MenuItem value="">All Results</MenuItem>
             <MenuItem value="allow">Allow</MenuItem>

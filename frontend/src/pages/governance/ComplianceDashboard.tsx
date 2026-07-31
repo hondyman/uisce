@@ -92,7 +92,7 @@ const ComplianceDashboard = () => {
                 {/* 3. AI Alerts & Events */}
                 <Grid size={{ 'xs': 12, 'lg': 4 }}>
                     <Grid container spacing={3} direction="column">
-                        <Grid item>
+                        <Grid size="auto">
                              <Paper sx={{ p: 2, bgcolor: '#fff4e5' }}>
                                 <Typography variant="h6" gutterBottom color="warning.dark" display="flex" alignItems="center">
                                     <WarningIcon sx={{ mr: 1 }} /> AI Compliance Alerts
@@ -104,7 +104,7 @@ const ComplianceDashboard = () => {
                                 ))}
                             </Paper>
                         </Grid>
-                        <Grid item>
+                        <Grid size="auto">
                             <Paper sx={{ p: 2 }}>
                                 <Typography variant="h6" gutterBottom>Recent Events</Typography>
                                 <Table size="small">

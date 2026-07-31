@@ -268,7 +268,7 @@ export const ScopeSelectorDialog: React.FC<ScopeSelectorDialogProps> = ({ open, 
               </List>
             ) : (
               <List sx={{ pt: 0 }}>
-                {(selectedProduct.tenant_product_datasources || selectedProduct.datasources || []).map((datasource: any) => (
+                {(selectedProduct.tenant_product_datasources || []).map((datasource: any) => (
                   <ListItemButton 
                     key={datasource.id} 
                     onClick={() => handleApplyScope(datasource)}

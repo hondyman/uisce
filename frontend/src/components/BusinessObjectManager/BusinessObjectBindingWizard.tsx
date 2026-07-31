@@ -95,7 +95,7 @@ export default function BusinessObjectBindingWizard({
   const notification = useNotification();
   const tenantId = tenant?.id || '';
   const datasourceId = (datasource?.id || datasource?.alpha_tenant_instance_id || '') as string;
-  const datasourceName = (datasource?.name || datasource?.display_name || 'Current Backend') as string;
+  const datasourceName = (datasource?.source_name || datasource?.alpha_datasource?.datasource_name || 'Current Backend') as string;
 
   const [bo, setBo] = useState<WizardBusinessObject>(() =>
     createEmptyBusinessObject(datasourceId, datasourceName)

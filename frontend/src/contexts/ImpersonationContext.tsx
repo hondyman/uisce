@@ -227,14 +227,28 @@ export const ImpersonationProvider: React.FC<{ children: ReactNode }> = ({ child
   // Then poll every 30s while the admin is authenticated so the picker
   // stays current even when the admin has not opened it recently.
   useEffect(() => {
-    if (!adminToken) return;
+    if (!adminToken || !user) return;
+    const isPlatformOp =
+      user.is_core_admin === true ||
+      user.isCoreAdmin === true ||
+      user.is_global_admin === true ||
+      (Array.isArray(user.groups) && user.groups.some((g: string) => typeof g === 'string' && /(^|\/)uisce[-_ ]?global[-_ ]?admins?$/i.test(g))) ||
+      user.role === 'platform_operator' ||
+      user.role === 'global_ops' ||
+      user.role === 'admin' ||
+      user.role === 'global_admin' ||
+      user.operator_role === 'global_admin' ||
+      user.operator_role === 'platform_operator';
+
+    if (!isPlatformOp) return;
+
     void refreshRecentSessionsFromServer();
     const id = setInterval(() => {
       void refreshRecentSessionsFromServer();
     }, 30_000);
     return () => clearInterval(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [adminToken]);
+  }, [adminToken, user]);
 
   // Live countdown ticker
   useEffect(() => {

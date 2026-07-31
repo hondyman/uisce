@@ -1,7 +1,7 @@
 // frontend/src/contexts/AccessContext.tsx
 // Unified access control context - replaces fragmented TenantContext
 
-import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useMemo, ReactNode } from 'react';
 import { 
   UserAccessLevel, 
   TenantAssignment, 
@@ -292,7 +292,7 @@ export const AccessProvider: React.FC<AccessProviderProps> = ({ children }) => {
       const firstTenant = accessibleTenants[0];
       const firstInstance = firstTenant.tenant_instances?.[0];
       const firstProduct = firstInstance ? (firstInstance.tenant_products?.[0] || firstInstance.products?.[0]) : undefined;
-      const firstDs = firstProduct ? (firstProduct.tenant_product_datasources?.[0] || firstProduct.datasources?.[0]) : undefined;
+      const firstDs = firstProduct ? (firstProduct.tenant_product_datasources?.[0]) : undefined;
 
       if (firstInstance && firstProduct && firstDs) {
         setDatasourceScope(firstTenant, firstInstance, firstProduct, firstDs);

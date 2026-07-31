@@ -16,7 +16,7 @@ export function WASMVersionTable({ moduleName }: { moduleName: string }) {
       field: 'build_hash',
       headerName: 'Build Hash',
       width: 200,
-      renderCell: (params) => (
+      renderCell: (params: any) => (
         <code style={{ fontSize: '0.75rem' }}>{params.value?.substring(0, 8)}</code>
       ),
     },
@@ -24,7 +24,7 @@ export function WASMVersionTable({ moduleName }: { moduleName: string }) {
       field: 'build_time',
       headerName: 'Build Time',
       width: 150,
-      valueGetter: (params) => {
+      valueGetter: (params: any) => {
         try {
           return new Date(params.value).toLocaleString();
         } catch {
@@ -36,7 +36,7 @@ export function WASMVersionTable({ moduleName }: { moduleName: string }) {
       field: 'artifact_uri',
       headerName: 'Artifact',
       width: 250,
-      renderCell: (params) => (
+      renderCell: (params: any) => (
         <a href={params.value} target="_blank" rel="noreferrer" style={{ fontSize: '0.875rem' }}>
           {new URL(params.value).pathname.split('/').pop()}
         </a>
@@ -46,7 +46,7 @@ export function WASMVersionTable({ moduleName }: { moduleName: string }) {
       field: 'is_active',
       headerName: 'Active',
       width: 100,
-      renderCell: (params) => (params.value ? '✓ Yes' : 'No'),
+      renderCell: (params: any) => (params.value ? '✓ Yes' : 'No'),
     },
     {
       field: 'actions',

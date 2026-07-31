@@ -1,7 +1,7 @@
-export async function simulatePortfolio(bundle, contexts, pool) {
-  const results = []
+export async function simulatePortfolio(bundle: any, contexts: any[], pool: any) {
+  const results: any[] = []
   for (const ctx of contexts) {
-    const row = []
+    const row: any[] = []
     for (const rule of bundle.rules) {
       row.push(await pool.evaluate(rule, ctx))
     }

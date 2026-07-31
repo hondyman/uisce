@@ -50,7 +50,7 @@ const LineageVisualizer: React.FC<LineageVisualizerProps> = ({
   onNodeClick
 }) => {
   const notification = useNotification();
-  const cyRef = useRef<ReturnType<typeof cytoscape> | null>(null);
+  const cyRef = useRef<any>(null);
   const [loading, setLoading] = useState(false);
   const [lineageData, setLineageData] = useState<LineageData | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -79,7 +79,7 @@ const LineageVisualizer: React.FC<LineageVisualizerProps> = ({
     }
   }, [nodeId, fetchLineageData]);
 
-  const handleCyInit = (cy: ReturnType<typeof cytoscape>) => {
+  const handleCyInit = (cy: any) => {
     cyRef.current = cy;
 
     // Configure layout

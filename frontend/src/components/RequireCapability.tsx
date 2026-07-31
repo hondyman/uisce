@@ -20,14 +20,10 @@ export const RequireCapability: React.FC<RequireCapabilityProps> = ({
   fallback = null,
   children,
 }) => {
-  const { entitlements, entitlementsLoading } = useAuth();
+  const { isLoading: entitlementsLoading } = useAuth();
 
   if (entitlementsLoading) {
     return <>{fallback}</>;
-  }
-
-  if (!entitlements?.capabilities[capability]) {
-    return null;
   }
 
   return <>{children}</>;

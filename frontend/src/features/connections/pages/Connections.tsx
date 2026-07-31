@@ -350,7 +350,7 @@ const Connections = () => {
 
   // Clear selected datasources when search/filter changes
   useMemo(() => {
-    const currentIds = sortedAndFilteredConnections.map(conn => conn.datasourceId);
+    const currentIds = sortedAndFilteredConnections.map((conn: any) => conn.datasourceId);
     setSelectedDatasources(prev => prev.filter(id => currentIds.includes(id)));
   }, [sortedAndFilteredConnections]);
 

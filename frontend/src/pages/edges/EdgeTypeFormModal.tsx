@@ -344,8 +344,8 @@ export const EdgeTypeFormModal: React.FC<EdgeTypeFormModalProps> = ({
     }
   };
 
-  const subjectNodeType = nodeTypes.find((nt: NodeType) => nt.id === formData.subject_node_type_id);
-  const objectNodeType = nodeTypes.find((nt: NodeType) => nt.id === formData.object_node_type_id);
+  const subjectNodeType = nodeTypes.find((nt) => nt.id === formData.subject_node_type_id);
+  const objectNodeType = nodeTypes.find((nt) => nt.id === formData.object_node_type_id);
 
   // Derive if the form is currently valid for enabling the submit button
   const isSubmitDisabled = createEdgeType.isPending || updateEdgeType.isPending || Object.keys(errors).length > 0;

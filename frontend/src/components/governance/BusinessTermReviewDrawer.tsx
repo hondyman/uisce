@@ -54,9 +54,9 @@ const BusinessTermReviewDrawer = ({ draft, onClose }: { draft: any; onClose: any
             <Typography variant="subtitle1" gutterBottom>Source</Typography>
             <Box mb={2}>
                 <Typography variant="caption" display="block">Semantic Terms:</Typography>
-                {detail.sourceSemanticTerms.map(t => <Typography key={t} variant="body2" sx={{ ml: 1 }}>- {t}</Typography>)}
+                {detail.sourceSemanticTerms.map((t: string) => <Typography key={t} variant="body2" sx={{ ml: 1 }}>- {t}</Typography>)}
                 <Typography variant="caption" display="block" sx={{ mt: 1 }}>Columns:</Typography>
-                {detail.sourceColumns.map(c => <Typography key={c} variant="body2" sx={{ ml: 1 }}>- {c}</Typography>)}
+                {detail.sourceColumns.map((c: string) => <Typography key={c} variant="body2" sx={{ ml: 1 }}>- {c}</Typography>)}
             </Box>
 
             <Box mt={4} display="flex" gap={2}>

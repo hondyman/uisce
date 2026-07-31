@@ -88,7 +88,7 @@ const BusinessTermDetail = () => {
                         </TableRow>
                     </TableHead>
                     <TableBody>
-                        {term.semanticTerms && term.semanticTerms.map((st) => (
+                        {term.semanticTerms && term.semanticTerms.map((st: any) => (
                             <TableRow key={st.id}>
                                 <TableCell>{st.name}</TableCell>
                                 <TableCell>Field</TableCell> {/* Mock type for now */}

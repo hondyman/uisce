@@ -73,7 +73,11 @@ export const SemanticRuleBuilder = ({
   const [simulationResults, setSimulationResults] = useState<any>(null);
 
   const sensors = useSensors(
-    useSensor(PointerSensor, { distance: 8 }),
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 8,
+      },
+    }),
     useSensor(KeyboardSensor)
   );
 
@@ -187,10 +191,10 @@ export const SemanticRuleBuilder = ({
                         rule.steps.map((step: any) => (
                           <PriorityHierarchyEditor
                             key={step.id}
-                            step={step}
+                            step={step as any}
                             isExpanded={expandedSteps.has(step.id)}
                             onToggleExpand={() => toggleStepExpanded(step.id)}
-                            onUpdate={(updates) => updateStep(step.id, updates)}
+                            onUpdate={(updates) => updateStep(step.id, updates as any)}
                             onDelete={() => deleteStep(step.id)}
                             readOnly={readOnly}
                           />

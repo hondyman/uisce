@@ -127,11 +127,11 @@ const CohortFilterSelector: React.FC<CohortFilterSelectorProps> = ({
             </Typography>
             <Select
               className={styles.cohortSelect}
-              placeholder="Choose a cohort filter"
               value={selectedCohort?.name || ''}
               onChange={handleCohortChange}
               disabled={loading}
               fullWidth
+              displayEmpty
             >
               {cohorts.map(cohort => (
                 <MenuItem key={cohort.name} value={cohort.name}>

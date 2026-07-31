@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { ThemeToggle } from '../theme/ThemeToggle'
 
-export function StatusBar({kernel }) {
+export function StatusBar({kernel }: {kernel: any}) {
   const [status, setStatus] = useState({
     wasm: "loading",
     workers: 0,
@@ -11,11 +11,11 @@ export function StatusBar({kernel }) {
   })
 
   useEffect(() => {
-    kernel.events.on("wasm.ready", () => setStatus(s => ({ ...s, wasm: "ready" })))
-    kernel.events.on("pool.updated", n => setStatus(s => ({ ...s, workers: n })))
-    kernel.events.on("lintUpdated", w => setStatus(s => ({ ...s, lint: w.length })))
-    kernel.events.on("version.loaded", v => setStatus(s => ({ ...s, version: v })))
-    kernel.events.on("schema.loaded", sc => setStatus(s => ({ ...s, schema: sc })))
+    kernel.events.on("wasm.ready", () => setStatus((s: any) => ({ ...s, wasm: "ready" })))
+    kernel.events.on("pool.updated", (n: any) => setStatus((s: any) => ({ ...s, workers: n })))
+    kernel.events.on("lintUpdated", (w: any) => setStatus((s: any) => ({ ...s, lint: w.length })))
+    kernel.events.on("version.loaded", (v: any) => setStatus((s: any) => ({ ...s, version: v })))
+    kernel.events.on("schema.loaded", (sc: any) => setStatus((s: any) => ({ ...s, schema: sc })))
   }, [])
 
   return (

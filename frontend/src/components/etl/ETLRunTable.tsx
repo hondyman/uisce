@@ -1,5 +1,5 @@
 import { DataGrid, GridColDef } from '@mui/x-data-grid';
-import { useETLRuns } from '../../api/etlRuns';
+import { useETLRuns, ETLRun } from '../../api/etlRuns';
 import { StatusBadge } from '../design/StatusBadge';
 
 export interface ETLRunTableProps {
@@ -13,7 +13,7 @@ export function ETLRunTable({ tenantId, onRowClick }: ETLRunTableProps) {
     limit: 200,
   });
 
-  const rows = data ?? [];
+  const rows: ETLRun[] = data ?? [];
 
   const columns: GridColDef[] = [
     {
@@ -54,10 +54,11 @@ export function ETLRunTable({ tenantId, onRowClick }: ETLRunTableProps) {
       field: 'duration',
       headerName: 'Duration',
       width: 120,
-      valueGetter: (params) => {
-        if (!params.row.completed_at) return '—';
-        const start = new Date(params.row.started_at).getTime();
-        const end = new Date(params.row.completed_at).getTime();
+      valueGetter: (params: any) => {
+        const row = params.row as ETLRun;
+        if (!row.completed_at) return '—';
+        const start = new Date(row.started_at).getTime();
+        const end = new Date(row.completed_at).getTime();
         return `${((end - start) / 1000).toFixed(1)}s`;
       },
     },
@@ -65,12 +66,12 @@ export function ETLRunTable({ tenantId, onRowClick }: ETLRunTableProps) {
 
   return (
     <div style={{ width: '100%', height: 600 }}>
-      <DataGrid
+      <DataGrid<ETLRun>
         rows={rows}
         columns={columns}
         loading={isLoading}
         getRowId={(row) => row.etl_run_id}
-        onRowClick={(params) => onRowClick?.(params.row.etl_run_id)}
+        onRowClick={(params: any) => onRowClick?.(params.row.etl_run_id)}
         sx={{ cursor: onRowClick ? 'pointer' : 'default' }}
         pageSizeOptions={[10, 25, 50, 100]}
         initialState={{

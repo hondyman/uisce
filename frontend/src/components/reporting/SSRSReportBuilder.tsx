@@ -566,7 +566,7 @@ const SSRSReportBuilderContent: React.FC = () => {
             <Box sx={{ p: 2 }}>
               <Paper sx={{ p: 2, mb: 2 }}>
                 <Grid container spacing={2} alignItems="center" justifyContent="space-between">
-                  <Grid item>
+                  <Grid size="auto">
                     <Typography variant="h6">Report Preview</Typography>
                   </Grid>
                   <Grid sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>

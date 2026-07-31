@@ -1,4 +1,4 @@
-export async function validateRule(rule, contexts, pool) {
+export async function validateRule(rule: any, contexts: any[], pool: any) {
   return {
     schema: validateSchema(rule),
     lint: lintRule(rule),

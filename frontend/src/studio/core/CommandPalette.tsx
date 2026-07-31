@@ -1,12 +1,12 @@
 import React, { useState, useEffect } from 'react'
 
-export function CommandPalette({kernel }) {
+export function CommandPalette({kernel }: {kernel: any}) {
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState("")
-  const [results, setResults] = useState([])
+  const [results, setResults] = useState<any[]>([])
 
   useEffect(() => {
-    const handler = e => {
+    const handler = (e: any) => {
       if (e.key === "p" && e.metaKey) {
         e.preventDefault()
         setOpen(true)
@@ -25,7 +25,7 @@ export function CommandPalette({kernel }) {
     }
   }, [query])
 
-  const handleExecute = (cmd) => {
+  const handleExecute = (cmd: any) => {
     kernel.services.commands.execute(cmd.id, kernel)
     setOpen(false)
     setQuery("")

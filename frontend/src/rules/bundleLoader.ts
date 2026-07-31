@@ -1,3 +1,3 @@
-export function loadBundle(json) {
+export function loadBundle(json: string) {
   return JSON.parse(json)
 }

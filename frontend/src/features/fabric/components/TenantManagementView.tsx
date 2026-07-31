@@ -552,7 +552,7 @@ new Date(entry.createdAt || '').toLocaleDateString()
                       )}
                     </TableCell>
                     <TableCell>
-                      {new Date(entry.createdAt).toLocaleDateString()}
+                      {new Date(entry.createdAt || '').toLocaleDateString()}
                     </TableCell>
                     <TableCell align="right">
                       <Stack direction="row" spacing={0.5} justifyContent="flex-end" className="action-buttons" sx={{ opacity: 0, transition: 'opacity 0.2s' }}>

@@ -66,6 +66,7 @@ export interface RuleDiff {
   // Alternate names used by diff UIs (`current` ↔ `after`, `base` ↔ `before`).
   current?: any;
   base?: any;
+  diffs?: RuleDiff[];
 }
 
 export type DiffField = keyof RuleDiff | string;

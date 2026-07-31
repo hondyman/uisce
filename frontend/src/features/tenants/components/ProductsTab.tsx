@@ -157,7 +157,7 @@ export default function ProductsTab({ tenantId, instances, products, availablePr
       instance_id: product.tenant_instance.id,
       current_product_id: product.alpha_product.id,
       product_name: product.alpha_product.product_name,
-      is_active: product.is_active,
+      is_active: (product as any).is_active,
     });
     setEditDialogOpen(true);
   };

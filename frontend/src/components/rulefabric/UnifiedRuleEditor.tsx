@@ -994,7 +994,7 @@ export const UnifiedRuleEditor: React.FC<UnifiedRuleEditorProps> = ({
                 {logic.logic_type === 'condition' && selectedEntity && (
                   <AdvancedConditionBuilder
                     value={logic.condition_tree || { id: generateId(), type: 'group', operator: 'AND', conditions: [] }}
-                    onChange={(tree) => updateLogic(idx, { condition_tree: tree })}
+                    onChange={(tree: any) => updateLogic(idx, { condition_tree: tree })}
                     availableFields={selectedEntity.fields}
                     entityName={rule.target_entity}
                   />

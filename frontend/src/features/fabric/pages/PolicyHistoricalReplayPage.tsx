@@ -166,7 +166,7 @@ const PolicyHistoricalReplayPage: React.FC = () => {
 
       <Paper sx={{ p: 2, mb: 3 }}>
         <Grid container spacing={2} alignItems="center">
-          <Grid item>
+          <Grid size="auto">
             <FormControl size="small">
               <InputLabel id="bucket-size-label">Bucket Size</InputLabel>
               <Select

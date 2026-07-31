@@ -544,7 +544,7 @@ export const WorldClassReportBuilder: React.FC = () => {
       <Box sx={{ p: 3 }}>
         <Grid container spacing={3}>
           {/* Main Content */}
-          <Grid item xs={12} md={showPreview && activeStep > 0 ? 7 : 12}>
+          <Grid size={{ xs: 12, md: showPreview && activeStep > 0 ? 7 : 12 }}>
             <Fade in={true}>
               <Box>
                 {/* Step 0: Choose Data Source */}

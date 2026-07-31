@@ -80,7 +80,7 @@ export const EvidenceBundleTimeline: React.FC = () => {
       
       // Set active step to the first non-completed stage
       const activeIndex = data.stages.findIndex(
-        (s) => s.status !== 'success' && s.status !== 'skipped'
+        (s: any) => s.status !== 'success' && s.status !== 'skipped'
       );
       setActiveStep(activeIndex !== -1 ? activeIndex : data.stages.length - 1);
     } catch (err: any) {
@@ -231,7 +231,7 @@ export const EvidenceBundleTimeline: React.FC = () => {
       <Card>
         <CardContent>
           <Stepper activeStep={activeStep} orientation="vertical">
-            {bundle.stages.map((stage, index) => (
+            {bundle.stages.map((stage: any, index: any) => (
               <Step key={stage.id} expanded>
                 <StepLabel
                   icon={STATUS_ICONS[stage.status]}

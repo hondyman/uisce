@@ -295,16 +295,16 @@ export const TenantDetailPageV2: React.FC = () => {
 
   const urlInstanceId = searchParams.get('instanceId');
   const activeInstanceId = urlInstanceId || (scopedDatasource as any)?.alpha_tenant_instance_id || (scopedDatasource as any)?.tenant_instance_id || scopedDatasource?.id || scope?.instanceId || scopedProduct?.tenant_instance_id;
-  const activeInstanceName = (scopedDatasource as any)?.instance_name || (scopedDatasource as any)?.display_name || (scopedDatasource as any)?.source_name || scopedDatasource?.name;
+  const activeInstanceName = (scopedDatasource as any)?.instance_name || (scopedDatasource as any)?.display_name || (scopedDatasource as any)?.source_name || (scopedDatasource as any)?.name;
 
   const activeInstance = useMemo(() => {
     if (!enrichedInstances.length) return null;
     if (activeInstanceId) {
-      const found = enrichedInstances.find(i => i.id === activeInstanceId);
+      const found = enrichedInstances.find((i: any) => i.id === activeInstanceId);
       if (found) return found;
     }
     if (activeInstanceName) {
-      const foundByName = enrichedInstances.find(i => 
+      const foundByName = enrichedInstances.find((i: any) => 
         (i.instance_name && i.instance_name.toLowerCase() === activeInstanceName.toLowerCase()) ||
         (i.display_name && i.display_name.toLowerCase() === activeInstanceName.toLowerCase())
       );
@@ -312,7 +312,7 @@ export const TenantDetailPageV2: React.FC = () => {
     }
     // Check if any instance contains the scopedDatasource in its nested product datasources
     if (scopedDatasource?.id) {
-      const foundByDs = enrichedInstances.find(i => 
+      const foundByDs = enrichedInstances.find((i: any) => 
         (i.tenant_products || (i as any).products || []).some((p: any) =>
           (p.tenant_product_datasources || p.datasources || []).some((ds: any) => ds.id === scopedDatasource.id)
         )

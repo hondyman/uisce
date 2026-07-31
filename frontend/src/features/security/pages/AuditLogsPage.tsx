@@ -19,7 +19,7 @@ export const AuditLogsPage: React.FC = () => {
 
     const columns: GridColDef[] = [
         { field: 'created_at', headerName: 'Time', width: 180,
-            valueFormatter: (params) => {
+            valueFormatter: (params: any) => {
                 if (!params.value) return '';
                 return format(new Date(params.value), 'yyyy-MM-dd HH:mm:ss');
             }
@@ -32,7 +32,7 @@ export const AuditLogsPage: React.FC = () => {
             field: 'payload', 
             headerName: 'Details', 
             flex: 1,
-            renderCell: (params) => (
+            renderCell: (params: any) => (
                 <Typography variant="body2" noWrap title={JSON.stringify(params.value, null, 2)}>
                     {JSON.stringify(params.value)}
                 </Typography>

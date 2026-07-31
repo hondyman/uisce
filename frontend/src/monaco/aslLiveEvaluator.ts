@@ -1,6 +1,6 @@
 import { evaluateRuleWasm } from "../rules/wasmRuntime"
 
-export function attachLiveEvaluation(_monaco, editor) {
+export function attachLiveEvaluation(_monaco: any, editor: any) {
   let timeout
 
   editor.onDidChangeModelContent(async () => {
@@ -18,7 +18,7 @@ export function attachLiveEvaluation(_monaco, editor) {
   })
 }
 
-function showStatus(msg) {
+function showStatus(msg: any) {
   const el = document.getElementById("asl-status")
   if (el) el.textContent = msg
 }

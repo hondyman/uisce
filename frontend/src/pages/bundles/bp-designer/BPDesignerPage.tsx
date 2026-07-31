@@ -60,7 +60,7 @@ export const BPDesignerPage: FC = () => {
   }, [process]);
 
   // Handlers
-  const handleDragStart = (e: DragEvent<Element>, stepType) => {
+  const handleDragStart = (e: DragEvent<Element>, stepType: any) => {
     setDragging({ isActive: true, stepType });
     e.dataTransfer.effectAllowed = 'copy';
   };

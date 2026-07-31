@@ -441,7 +441,7 @@ export const QueryPlannerBehaviorPanel: React.FC<QueryPlannerBehaviorPanelProps>
     {
       title: 'Latency (Est/Actual)',
       key: 'latency',
-      render: (_, record: PlannerDecision) => (
+      render: (_: any, record: PlannerDecision) => (
         <span>
           {record.estimated_latency_ms.toFixed(1)}ms{' '}
           {record.actual_latency_ms ? `/ ${record.actual_latency_ms.toFixed(1)}ms` : '/ -'}
@@ -463,7 +463,7 @@ export const QueryPlannerBehaviorPanel: React.FC<QueryPlannerBehaviorPanelProps>
     {
       title: 'Actions',
       key: 'actions',
-      render: (_, record: PlannerDecision) => (
+      render: (_: any, record: PlannerDecision) => (
         <Button
           type="link"
           size="small"

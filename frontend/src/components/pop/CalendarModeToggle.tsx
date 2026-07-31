@@ -120,7 +120,7 @@ const CalendarModeToggle: React.FC<CalendarModeToggleProps> = ({
               value={calendarMode}
               onChange={(e) => handleModeChange(e.target.value)}
               sx={{ width: '100%', marginTop: 1 }}
-              placeholder="Select calendar mode"
+              displayEmpty
             >
               <MenuItem value="gregorian">
                 <Stack direction="row" spacing={1} alignItems="center">
@@ -157,7 +157,7 @@ const CalendarModeToggle: React.FC<CalendarModeToggleProps> = ({
               value={selectedGranularity}
               onChange={(e) => handleGranularityChange(e.target.value)}
               sx={{ width: '100%', marginTop: 1 }}
-              placeholder="Select time granularity"
+              displayEmpty
             >
               {getAvailableGranularities().map(granularity => (
                 <MenuItem key={granularity} value={granularity}>

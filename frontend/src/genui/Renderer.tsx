@@ -12,11 +12,11 @@ export function GenUIRenderer({ layoutJson, fallback }: GenUIRendererProps) {
 
   return (
     <div className="genui-container">
-      {layout.title && <h1 className="text-2xl font-bold mb-4">{layout.title}</h1>}
-      {layout.description && <p className="text-gray-600 mb-6">{layout.description}</p>}
+      {(layout as any).title && <h1 className="text-2xl font-bold mb-4">{(layout as any).title}</h1>}
+      {(layout as any).description && <p className="text-gray-600 mb-6">{(layout as any).description}</p>}
 
-      <div className={`genui-layout-${layout.layout || "grid"} gap-4`}>
-        {layout.components.map((component) => (
+      <div className={`genui-layout-${(layout as any).layout || "grid"} gap-4`}>
+        {(layout as any).components?.map((component: any) => (
           <Suspense
             key={component.id}
             fallback={fallback || <ComponentSkeleton type={component.type} />}

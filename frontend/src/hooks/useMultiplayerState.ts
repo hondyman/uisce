@@ -177,7 +177,7 @@ export function useMultiplayerState(
       const cellsMap = new Map<string, string[]>();
       const metricsMap = new Map<string, string>();
       
-      state.activeUsers.forEach(user => {
+      state.activeUsers.forEach((user: any) => {
         if (user.activeCells) {
           cellsMap.set(user.id, user.activeCells);
         }

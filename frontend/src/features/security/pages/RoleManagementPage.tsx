@@ -59,7 +59,7 @@ export const RoleManagementPage: React.FC = () => {
       field: 'created_at',
       headerName: 'Created At',
       width: 180,
-      valueFormatter: (params) => {
+      valueFormatter: (params: any) => {
         if (!params.value) return '';
         return format(new Date(params.value), 'yyyy-MM-dd HH:mm');
       },

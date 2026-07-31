@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { DynamicBODataGrid, FieldMeta } from './DynamicBODataGrid';
 import { CircularProgress } from '@mui/material';
-import { Error } from '@mui/icons-material';
+import { Error as ErrorIcon } from '@mui/icons-material';
 
 export interface PageLayoutBlueprint {
   page_key: string;
@@ -57,7 +57,7 @@ export const DynamicPageResolver: React.FC<{ pageKey: string; tenantId: string }
   if (error || !layout) {
     return (
       <div className="p-6 bg-red-950/30 border border-red-500/30 rounded-xl text-red-300 flex items-center gap-3 font-sans">
-        <Error /> Failed loading dynamic layout: {error}
+        <ErrorIcon /> Failed loading dynamic layout: {error}
       </div>
     );
   }

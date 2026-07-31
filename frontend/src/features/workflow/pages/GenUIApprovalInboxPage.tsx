@@ -4,7 +4,7 @@ import { useGenUIQuery } from '../../../genui/hooks';
 
 export const GenUIApprovalInboxPage: React.FC = () => {
   const [selectedWorkflowId, setSelectedWorkflowId] = useState<string | null>(null);
-  const { data: layout, loading, error } = useGenUIQuery('show my pending approvals');
+  const { data: layout, isLoading: loading, error } = useGenUIQuery('show my pending approvals');
 
   const handleFormSubmit = async (formId: string, data: Record<string, any>) => {
     if (formId === 'approval_form' && selectedWorkflowId) {

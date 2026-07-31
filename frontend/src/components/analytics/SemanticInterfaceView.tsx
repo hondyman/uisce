@@ -302,10 +302,17 @@ const SemanticInterfaceView: React.FC = () => {
   );
 };
 
-const Grid: React.FC<{ container?: boolean, item?: boolean, xs?: number, md?: number, spacing?: number, sx?: any, children: React.ReactNode }> = ({ container, spacing, children, sx, ...props }) => {
+const Grid: React.FC<{ container?: boolean, item?: boolean, xs?: number, md?: number, spacing?: number, sx?: any, size?: object | string, children: React.ReactNode }> = ({ container, spacing, children, sx, size, ...props }) => {
   if (container) {
     return (
       <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(12, 1fr)', gap: (spacing || 0) * 8, ...sx }}>
+        {children}
+      </Box>
+    );
+  }
+  if (size) {
+    return (
+      <Box sx={{ ...(typeof size === 'object' ? { gridColumn: { xs: `span ${(size as any).xs || 12}`, md: `span ${(size as any).md || (size as any).xs || 12}` } } : {}), ...sx }}>
         {children}
       </Box>
     );

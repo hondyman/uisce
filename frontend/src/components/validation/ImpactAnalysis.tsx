@@ -206,7 +206,7 @@ const ImpactAnalysis: React.FC<ImpactAnalysisProps> = ({
             {/* Risk Assessment */}
             <Paper sx={{ p: 2, mb: 3, bgcolor: getRiskColor(impactData.estimated_risk) + '15', border: `2px solid ${getRiskColor(impactData.estimated_risk)}` }}>
               <Grid container alignItems="center" spacing={2}>
-                <Grid item>
+                <Grid size="auto">
                   <Box
                     sx={{
                       width: 60,
@@ -222,7 +222,7 @@ const ImpactAnalysis: React.FC<ImpactAnalysisProps> = ({
                     <WarningIcon sx={{ fontSize: 32 }} />
                   </Box>
                 </Grid>
-                <Grid xs>
+                <Grid size="grow">
                   <Typography variant="h6">
                     {getRiskLabel(impactData.estimated_risk)} Risk
                   </Typography>

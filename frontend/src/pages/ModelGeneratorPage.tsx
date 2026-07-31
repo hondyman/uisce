@@ -737,10 +737,7 @@ const ModelGeneratorPage: React.FC = () => {
         <Grid container spacing={3}>
           {tablesWithoutModels.map((table, index) => (
             <Grid
-              item
-              xs={12}
-              md={6}
-              lg={4}
+              size={{ xs: 12, md: 6, lg: 4 }}
               key={`${table.schema}.${table.name}-${table.coreModelId ?? table.coreModelKey ?? index}`}
             >
               <TableCard table={table} />

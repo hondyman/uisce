@@ -203,7 +203,7 @@ export const DelegationManager: FC<DelegationManagerProps> = ({
                 onChange={(e) =>
                   setSelectedUsers({ ...selectedUsers, toUserId: e.target.value })
                 }
-                placeholder="Select user"
+                displayEmpty
               />
             </Box>
 
@@ -215,7 +215,7 @@ export const DelegationManager: FC<DelegationManagerProps> = ({
                 onChange={(e) =>
                   setSelectedUsers({ ...selectedUsers, policyId: e.target.value })
                 }
-                placeholder="Select policy"
+                displayEmpty
               />
             </Box>
 

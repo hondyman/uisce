@@ -328,28 +328,28 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ onComplete }
           {currentStep === 1 && (
             <PersonalInfoStep
               data={formData.personalInfo}
-              onChange={(data) => updateFormData('personalInfo', data)}
+              onChange={(data: any) => updateFormData('personalInfo', data)}
               errors={errors}
             />
           )}
           {currentStep === 2 && (
             <EmploymentStep
               data={formData.employment}
-              onChange={(data) => updateFormData('employment', data)}
+              onChange={(data: any) => updateFormData('employment', data)}
               errors={errors}
             />
           )}
           {currentStep === 3 && (
             <GoalsStep
               data={formData.goals}
-              onChange={(data) => updateFormData('goals', data)}
+              onChange={(data: any) => updateFormData('goals', data)}
               errors={errors}
             />
           )}
           {currentStep === 4 && (
             <RiskAssessmentStep
               data={formData.riskAssessment}
-              onChange={(data) => updateFormData('riskAssessment', data)}
+              onChange={(data: any) => updateFormData('riskAssessment', data)}
               errors={errors}
             />
           )}
@@ -357,14 +357,14 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ onComplete }
             <DocumentUploadStep
               sessionId={sessionId!}
               documents={formData.documents || []}
-              onChange={(data) => updateFormData('documents', data)}
+              onChange={(data: any) => updateFormData('documents', data)}
               errors={errors}
             />
           )}
           {currentStep === 6 && (
             <AccountSetupStep
               data={formData.accountFunding}
-              onChange={(data) => updateFormData('accountFunding', data)}
+              onChange={(data: any) => updateFormData('accountFunding', data)}
               errors={errors}
             />
           )}
@@ -372,7 +372,7 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ onComplete }
             <SignatureStep
               sessionId={sessionId!}
               signatures={formData.signatures || []}
-              onChange={(data) => updateFormData('signatures', data)}
+              onChange={(data: any) => updateFormData('signatures', data)}
             />
           )}
 

@@ -45,7 +45,7 @@ import type { ValidationRule as SharedValidationRule } from '../../components/va
 import { fetchEntitySchema } from '../../api/entitySchema';
 
 // Local narrowers to avoid `(rule as any)` casts in render/filter logic
-const asRecord = (v): Record<string, unknown> => (v && typeof v === 'object' ? (v as Record<string, unknown>) : {});
+const asRecord = (v: any): Record<string, unknown> => (v && typeof v === 'object' ? (v as Record<string, unknown>) : {});
 
 
 const RULE_TYPES = [
@@ -571,7 +571,7 @@ export const ValidationRulesPage: React.FC = () => {
     return RULE_TYPES.find((t) => t.value === type);
   };
 
-  const handleFormChange = (field: string, value) => {
+  const handleFormChange = (field: string, value: any) => {
     // Dynamic field updater: narrow to unknown and assign locally
     setFormData((prev) => ({ ...prev, [field]: value as any }));
   };

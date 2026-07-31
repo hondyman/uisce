@@ -4,17 +4,17 @@ export class CommandRegistry {
     this.commands = new Map()
   }
 
-  register(cmd) {
+  register(cmd: any) {
     this.commands.set(cmd.id, cmd)
   }
 
-  execute(id, kernel) {
+  execute(id: string, kernel: any) {
     const cmd = this.commands.get(id)
     if (cmd) cmd.run(kernel)
   }
 
-  search(query) {
-    const results = []
+  search(query: string) {
+    const results: any[] = []
     for (const [id, cmd] of this.commands) {
       if (cmd.title.toLowerCase().includes(query.toLowerCase())) {
         results.push(cmd)

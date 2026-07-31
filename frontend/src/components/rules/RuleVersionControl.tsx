@@ -26,7 +26,7 @@ import {
 } from '@mui/material';
 import {
   ExpandMore as ExpandMoreIcon,
-  GitCompare as CompareIcon,
+  Compare as CompareIcon,
   Check as CheckIcon,
   Schedule as ScheduleIcon,
   Warning as WarningIcon,
@@ -188,7 +188,7 @@ export const RuleVersionControl = ({
                           {col.title}
                         </Typography>
                         <Chip label="Staging" size="small" color="info" sx={{ mb: 1.5 }} />
-                        <Stack spacing={0.5} variant="caption">
+                        <Stack spacing={0.5}>
                           <Typography variant="caption">Priority 1: IsBusinessDay = true</Typography>
                           <Typography variant="caption">Confidence: 85%</Typography>
                           <Typography variant="caption" sx={{ fontWeight: 600, mt: 1 }}>
