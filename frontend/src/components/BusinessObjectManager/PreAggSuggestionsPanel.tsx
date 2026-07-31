@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { devError } from '@/utils/devLogger';
 import {
   Box,
   Typography,

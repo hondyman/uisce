@@ -167,16 +167,16 @@ export const BOAdvisorTab: React.FC<BOAdvisorTabProps> = ({ boName, tenantId, on
           <Grid size={{ 'xs': 6, 'sm': 2 }}>
             <MetricCard label="Slow Queries" value={workload.slow_queries.toLocaleString()} color="warning" />
           </Grid>
-          <Grid item xs={6} sm={2}>
+          <Grid   size={{ xs: 6, sm: 2 }}>
             <MetricCard label="Avg Duration" value={`${workload.avg_duration_ms.toFixed(0)} ms`} />
           </Grid>
-          <Grid item xs={6} sm={2}>
+          <Grid   size={{ xs: 6, sm: 2 }}>
             <MetricCard label="P95 Duration" value={`${workload.p95_duration_ms.toFixed(0)} ms`} />
           </Grid>
-          <Grid item xs={6} sm={2}>
+          <Grid   size={{ xs: 6, sm: 2 }}>
             <MetricCard label="Avg Rows Scanned" value={workload.avg_rows_scanned.toLocaleString()} />
           </Grid>
-          <Grid item xs={6} sm={2}>
+          <Grid   size={{ xs: 6, sm: 2 }}>
             <MetricCard label="P95 Rows Scanned" value={workload.p95_rows_scanned.toLocaleString()} />
           </Grid>
         </Grid>
@@ -280,7 +280,7 @@ const RecommendationCard: React.FC<{ rec: PreAggRecommendation; onAccept: () => 
           <Typography variant="caption" color="text.secondary">Queries/Day</Typography>
           <Typography variant="body2">{rec.cost_estimate.estimated_queries_per_day}</Typography>
         </Grid>
-        <Grid item xs={4}>
+        <Grid  size={{ xs: 4 }}>
           <Typography variant="caption" color="text.secondary">Est. Storage</Typography>
           <Typography variant="body2">
             {(rec.cost_estimate.estimated_storage_bytes / (1024 * 1024)).toFixed(1)} MB

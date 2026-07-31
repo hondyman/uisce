@@ -11,7 +11,7 @@ export function App() {
     <BrowserRouter>
       <Routes>
         {/* Admin Routes */}
-        {adminRoutes.map((route) => (
+        {adminRoutes.map((route: { path: string; element: React.ReactNode }) => (
           <Route key={route.path} {...route} />
         ))}
 

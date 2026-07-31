@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react'
 
-export function BundleManagerPanel({ kernel }) {
+export function BundleManagerPanel({kernel }) {
   const [bundle, setBundle] = useState({ rules: [] })
 
   useEffect(() => {

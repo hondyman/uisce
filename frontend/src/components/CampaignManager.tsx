@@ -387,7 +387,7 @@ function AnalyticsDialog({ open, onClose, campaign, analytics }: AnalyticsDialog
       <ModalHeader title={`Campaign Analytics`} subtitle={campaign.name} onClose={onClose} />
       <DialogContent>
         <Grid container spacing={2}>
-          <Grid item xs={6}>
+          <Grid  size={{ xs: 6 }}>
             <Card>
               <CardContent>
                 <Typography variant="h6" color="primary">
@@ -397,7 +397,7 @@ function AnalyticsDialog({ open, onClose, campaign, analytics }: AnalyticsDialog
               </CardContent>
             </Card>
           </Grid>
-          <Grid item xs={6}>
+          <Grid  size={{ xs: 6 }}>
             <Card>
               <CardContent>
                 <Typography variant="h6" color="success.main">
@@ -407,7 +407,7 @@ function AnalyticsDialog({ open, onClose, campaign, analytics }: AnalyticsDialog
               </CardContent>
             </Card>
           </Grid>
-          <Grid item xs={6}>
+          <Grid  size={{ xs: 6 }}>
             <Card>
               <CardContent>
                 <Typography variant="h6" color="info.main">
@@ -417,7 +417,7 @@ function AnalyticsDialog({ open, onClose, campaign, analytics }: AnalyticsDialog
               </CardContent>
             </Card>
           </Grid>
-          <Grid item xs={6}>
+          <Grid  size={{ xs: 6 }}>
             <Card>
               <CardContent>
                 <Typography variant="h6" color="warning.main">
@@ -427,7 +427,7 @@ function AnalyticsDialog({ open, onClose, campaign, analytics }: AnalyticsDialog
               </CardContent>
             </Card>
           </Grid>
-          <Grid item xs={12}>
+          <Grid  size={{ xs: 12 }}>
             <Typography variant="h6" gutterBottom>
               Performance Metrics
             </Typography>
@@ -438,7 +438,7 @@ function AnalyticsDialog({ open, onClose, campaign, analytics }: AnalyticsDialog
             </Box>
           </Grid>
           {analytics.step_performance && analytics.step_performance.length > 0 && (
-            <Grid item xs={12}>
+            <Grid  size={{ xs: 12 }}>
               <Typography variant="h6" gutterBottom>
                 Step Performance
               </Typography>

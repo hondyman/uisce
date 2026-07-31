@@ -3,6 +3,8 @@ import { render, screen } from '@testing-library/react';
 import { I18nextProvider } from 'react-i18next';
 import i18n from '../../../i18n';
 
+import { vi } from 'vitest';
+
 // Mock Apollo useQuery
 vi.mock('@apollo/client', () => ({
   useQuery: () => ({ data: { semantic_terms: [{ id: 'st-1', node_name: 'Semantic A', description: 'desc' }], semantic_edges: [] }, loading: false, error: null })

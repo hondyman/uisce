@@ -247,7 +247,7 @@ const SettingsPage: React.FC = () => {
           </Grid>
 
           {/* Notifications Card */}
-          <Grid item xs={12} sm={6} md={4}>
+          <Grid    size={{ xs: 12, sm: 6, md: 4 }}>
             <Card>
               <CardContent>
                 <Typography variant="h6" fontWeight={700} gutterBottom>

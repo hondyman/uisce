@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from 'react'
 import { devError } from '../utils/devLogger';
 import { useScope } from '../contexts/ScopeContext'
-import { Box, Button, CircularProgress, Paper, Typography, Table, TableHead, TableRow, TableCell, TableBody, Alert, IconButton, List, ListItem, ListItemIcon, ListItemText, Collapse, Checkbox, Chip, Tooltip } from '@mui/material'
+import { Alert, Box, Button, Checkbox, Chip, CircularProgress, Collapse, IconButton, List, ListItem, ListItemButton, ListItemIcon, ListItemText, Paper, Table, TableBody, TableCell, TableHead, TableRow, Tooltip, Typography } from '@mui/material';
 import ProfessionalSearchInput from './common/ProfessionalSearchInput'
 import FolderIcon from '@mui/icons-material/Folder'
 import TableChartIcon from '@mui/icons-material/TableChart'
@@ -318,9 +318,7 @@ export default function DbScanner({ refreshMappings: _refreshMappings, onProfile
                 const isExpanded = expanded.includes(schema.id)
                 return (
                   <div key={schema.id}>
-                    <ListItem
-                      secondaryAction={isExpanded ? <ExpandLess /> : <ExpandMore />}
-                      button
+                    <ListItemButton
                       onClick={async () => {
                         // ensure tables are loaded, then toggle expand
                         if (!tablesBySchema[schema.id]) await fetchTables(schema.id)
@@ -345,12 +343,13 @@ export default function DbScanner({ refreshMappings: _refreshMappings, onProfile
                       </ListItemIcon>
                       <ListItemIcon><FolderIcon fontSize="small" /></ListItemIcon>
                       <ListItemText primary={schema.node_name} />
-                    </ListItem>
+                      {isExpanded ? <ExpandLess /> : <ExpandMore />}
+                    </ListItemButton>
 
                     <Collapse in={isExpanded} timeout="auto" unmountOnExit>
                       <List component="div" disablePadding>
                           {(tablesBySchema[schema.id] || []).map(table => (
-                          <ListItem key={table.id} button sx={{ pl: 4 }} onClick={() => handleTableSelect(table)} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleTableSelect(table) } }} data-testid={`table-${table.node_name}`}>
+                          <ListItemButton  key={table.id} sx={{ pl: 4 }} onClick={() => handleTableSelect(table)} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleTableSelect(table) } }} data-testid={`table-${table.node_name}`}>
                             <ListItemIcon>
                               <Checkbox
                                 edge="start"
@@ -362,7 +361,7 @@ export default function DbScanner({ refreshMappings: _refreshMappings, onProfile
                             </ListItemIcon>
                             <ListItemIcon><TableChartIcon fontSize="small" /></ListItemIcon>
                             <ListItemText primary={table.node_name} />
-                          </ListItem>
+                          </ListItemButton>
                         ))}
                       </List>
                     </Collapse>

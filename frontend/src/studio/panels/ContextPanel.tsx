@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 
-export function ContextPanel({ kernel }) {
+export function ContextPanel({kernel }) {
   const [context, setContext] = useState(kernel.state.context)
 
   const update = (key, value) => {

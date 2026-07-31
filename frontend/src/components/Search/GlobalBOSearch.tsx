@@ -1,20 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import {
-  Box,
-  TextField,
-  Select,
-  MenuItem,
-  List,
-  ListItem,
-  ListItemIcon,
-  ListItemText,
-  Chip,
-  IconButton,
-  Typography,
-  CircularProgress,
-  InputAdornment,
-  Paper,
-} from '@mui/material';
+import { Box, Chip, CircularProgress, IconButton, InputAdornment, List, ListItem, ListItemButton, ListItemIcon, ListItemText, MenuItem, Paper, Select, TextField, Typography } from '@mui/material';
 import {
   Search as SearchIcon,
   DataObject as TermIcon,
@@ -184,9 +169,8 @@ export const GlobalBOSearch: React.FC<GlobalBOSearchProps> = ({ onResultClick })
               </Typography>
               <List>
                 {results.map((result) => (
-                  <ListItem
+                  <ListItemButton 
                     key={result.id}
-                    button
                     onClick={() => handleResultClick(result)}
                     sx={{
                       '&:hover': {
@@ -226,7 +210,7 @@ export const GlobalBOSearch: React.FC<GlobalBOSearchProps> = ({ onResultClick })
                     <IconButton size="small">
                       <OpenInNewIcon fontSize="small" />
                     </IconButton>
-                  </ListItem>
+                  </ListItemButton>
                 ))}
               </List>
             </>

@@ -38,6 +38,7 @@ interface TenantInstance {
   url?: string;
   status?: string;
   is_active: boolean;
+  config?: Record<string, any>;
 }
 
 interface InstancesTabProps {

@@ -1,3 +1,13 @@
+export interface NodePropertyValidation {
+  min?: number;
+  max?: number;
+  minLength?: number;
+  maxLength?: number;
+  pattern?: string;
+  required?: boolean;
+  enumValues?: string[];
+}
+
 export type NodePropertyConfig = {
   name: string;
   label?: string;
@@ -6,6 +16,8 @@ export type NodePropertyConfig = {
   data_type?: string;
   input_type?: string;
   enumValues?: string[];
+  validation?: NodePropertyValidation;
+  format?: 'object' | 'array' | string;
 };
 
 // Format a single property value according to its NodeProperty config

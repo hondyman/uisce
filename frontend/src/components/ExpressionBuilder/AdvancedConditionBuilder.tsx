@@ -50,9 +50,11 @@ export interface EntityDefinition {
 
 export interface Condition {
   id: string;
-  type: 'condition';
+  type?: 'condition' | string;
   field: string;
   fieldPath?: string; // For cross-entity: "order.customer.name"
+  // Alternate spelling used by tests — same as `field`.
+  fieldType?: string;
   operator: string;
   value: string | number | boolean | string[];
   valueType?: string;

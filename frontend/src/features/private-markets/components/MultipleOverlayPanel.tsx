@@ -228,7 +228,7 @@ export const MultipleOverlayPanel: React.FC<MultipleOverlayPanelProps> = ({ sele
                   </Tooltip>
                 </Grid>
 
-                <Grid item xs={6} sm={3}>
+                <Grid   size={{ xs: 6, sm: 3 }}>
                   <Tooltip title="Residual Value to Paid-in Capital - Unrealized returns as multiple of invested capital">
                     <div>
                       <MetricCard
@@ -243,7 +243,7 @@ export const MultipleOverlayPanel: React.FC<MultipleOverlayPanelProps> = ({ sele
                   </Tooltip>
                 </Grid>
 
-                <Grid item xs={6} sm={3}>
+                <Grid   size={{ xs: 6, sm: 3 }}>
                   <Tooltip title="Multiple on Invested Capital - Total returns as multiple of invested capital (same as TVPI)">
                     <div>
                       <MetricCard

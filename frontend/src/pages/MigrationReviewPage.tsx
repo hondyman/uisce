@@ -244,7 +244,7 @@ const MigrationReviewPage: React.FC = () => {
         </Grid>
 
         {/* Right Panel: Generated Config */}
-        <Grid item xs={4}>
+        <Grid  size={{ xs: 4 }}>
           <Paper sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
             <Box sx={{ p: 1.5, borderBottom: 1, borderColor: 'divider', display: 'flex', alignItems: 'center', gap: 1 }}>
               <AccountTreeIcon fontSize="small" />

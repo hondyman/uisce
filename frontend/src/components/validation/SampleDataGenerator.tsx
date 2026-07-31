@@ -232,14 +232,14 @@ const SampleDataGenerator: React.FC<SampleDataGeneratorProps> = ({
                 </FormControl>
               </Grid>
 
-              <Grid item xs={12}>
+              <Grid  size={{ xs: 12 }}>
                 <Alert severity="info">
                   Will generate {recordCount} sample records for {entity} with {fields.length} fields.
                   {includeEdgeCases && ' Includes edge cases like nulls and empty values.'}
                 </Alert>
               </Grid>
 
-              <Grid item xs={12}>
+              <Grid  size={{ xs: 12 }}>
                 <Button
                   variant="contained"
                   onClick={handleGenerateData}

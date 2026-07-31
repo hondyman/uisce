@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 
-export function LintPanel({ kernel }) {
+export function LintPanel({kernel }) {
   const [warnings, setWarnings] = useState([])
 
   useEffect(() => {

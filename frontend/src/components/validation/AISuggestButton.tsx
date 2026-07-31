@@ -4,7 +4,6 @@ import React, { useState, useRef, useEffect } from 'react';
 import {
   AutoAwesome,
   Close,
-  CircularProgress,
   Lightbulb,
   Warning,
   TrendingUp,
@@ -12,6 +11,7 @@ import {
   GpsFixed,
   Shield
 } from '@mui/icons-material';
+import { CircularProgress } from '@mui/material';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { apiFetch } from '../../lib/apiClient';
 import { devError } from '../../utils/devLogger';

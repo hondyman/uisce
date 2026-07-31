@@ -14,7 +14,8 @@ import {
   Wifi,
   WifiOff,
 } from 'lucide-react';
-import { useProcessMonitorWebSocket, ProcessEvent } from '../hooks/useProcessMonitorWebSocket';
+import { useProcessMonitorWebSocket } from '../hooks/useProcessMonitorWebSocket';
+import type { ProcessEvent } from '../hooks/useProcessMonitorWebSocket';
 
 interface ProcessMonitorDashboardProps {
   tenant: { id: string; display_name: string };

@@ -7,7 +7,7 @@ import { SafeModeScreen } from './SafeModeScreen'
 import { Onboarding } from '../onboarding'
 import { ThemeProvider } from '../theme/ThemeProvider'
 
-export function StudioShell({ kernel }) {
+export function StudioShell({kernel }) {
   const [ready, setReady] = useState(kernel.ready)
   const [safeMode, setSafeMode] = useState(false)
 
@@ -30,7 +30,7 @@ export function StudioShell({ kernel }) {
           case 's':
             e.preventDefault()
             kernel.services.persistence.save(kernel)
-            window.notify('Rule saved', 'success')
+            window.notify?.('Rule saved', 'success')
             break
           case 'p':
             // Command palette is handled in CommandPalette component
@@ -39,7 +39,7 @@ export function StudioShell({ kernel }) {
             if (e.shiftKey) {
               e.preventDefault()
               kernel.services.simulation.run(kernel.state.rule, kernel.state.context)
-              window.notify('Simulation started', 'info')
+              window.notify?.('Simulation started', 'info')
             }
             break
           case 't':

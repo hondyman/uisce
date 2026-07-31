@@ -154,7 +154,7 @@ export const OptimizationCenter: React.FC<OptimizationCenterProps> = ({ scope = 
             icon={<Pending />}
           />
         </Grid>
-        <Grid item xs={12} md={3}>
+        <Grid   size={{ xs: 12, md: 3 }}>
           <SummaryCard
             title="Applied (7d)"
             value={envSummary?.optimizations_applied_7d || 0}
@@ -163,7 +163,7 @@ export const OptimizationCenter: React.FC<OptimizationCenterProps> = ({ scope = 
             icon={<CheckCircle />}
           />
         </Grid>
-        <Grid item xs={12} md={3}>
+        <Grid   size={{ xs: 12, md: 3 }}>
           <SummaryCard
             title="Hot Paths Detected"
             value={envSummary?.hot_paths_detected || 0}

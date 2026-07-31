@@ -1,5 +1,5 @@
 
-export function SafeModeScreen({ kernel }) {
+export function SafeModeScreen({kernel }) {
   return (
     <div className="safe-mode">
       <h1>Safe Mode</h1>

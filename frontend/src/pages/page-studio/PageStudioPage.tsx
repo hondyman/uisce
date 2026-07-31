@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Box, Typography, Paper, List, ListItem, ListItemText, ListItemIcon, Button, Divider, Chip, IconButton } from '@mui/material';
+import { Box, Button, Chip, Divider, IconButton, List, ListItem, ListItemButton, ListItemIcon, ListItemText, Paper, Typography } from '@mui/material';
 import { 
     Dashboard as PageIcon, 
     Add as AddIcon, 
@@ -91,9 +91,8 @@ const PageStudioPage: React.FC = () => {
                 <Divider />
                 <List sx={{ flex: 1, overflowY: 'auto' }}>
                     {pages.map((page) => (
-                        <ListItem 
+                        <ListItemButton  
                             key={page.id} 
-                            button 
                             selected={selectedPage?.id === page.id}
                             onClick={() => setSelectedPage(page)}
                             sx={{ 
@@ -113,7 +112,7 @@ const PageStudioPage: React.FC = () => {
                                 secondaryTypographyProps={{ variant: 'caption', color: 'inherit', sx: { opacity: 0.7 } }}
                             />
                             <ChevronIcon sx={{ fontSize: 14, opacity: 0.5 }} />
-                        </ListItem>
+                        </ListItemButton>
                     ))}
                 </List>
                 <Box sx={{ p: 2 }}>

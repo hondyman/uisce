@@ -48,6 +48,8 @@ export interface TenantInstance {
   config: any;
   tenant_id: string;
   tenant_products: Product[];
+  // Alternate name used by some UIs (ScopeSelectorDialog) as a fallback.
+  products?: Product[];
 }
 
 export interface Tenant {

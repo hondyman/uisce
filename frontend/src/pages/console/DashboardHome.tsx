@@ -142,7 +142,7 @@ export function DashboardHome() {
                   color="#E74C3C"
                 />
               </Grid>
-              <Grid item xs={12} md={3}>
+              <Grid   size={{ xs: 12, md: 3 }}>
                 <SparklineCard
                   title="Volatility (7d)"
                   data={sparklines.data.volatility}
@@ -150,7 +150,7 @@ export function DashboardHome() {
                   color="#3498DB"
                 />
               </Grid>
-              <Grid item xs={12} md={3}>
+              <Grid   size={{ xs: 12, md: 3 }}>
                 <SparklineCard
                   title="ETL Duration (7d)"
                   data={sparklines.data.etl_duration}
@@ -163,7 +163,7 @@ export function DashboardHome() {
         </Grid>
 
         {/* ETL Health */}
-        <Grid item xs={12} md={6}>
+        <Grid   size={{ xs: 12, md: 6 }}>
           {etl.isLoading && <Typography>Loading ETL health…</Typography>}
           {etl.data && (
             <Card>
@@ -201,7 +201,7 @@ export function DashboardHome() {
         </Grid>
 
         {/* Alerts */}
-        <Grid item xs={12} md={6}>
+        <Grid   size={{ xs: 12, md: 6 }}>
           {alerts.isLoading && <Typography>Loading alerts…</Typography>}
           {alerts.data && (
             <Card>

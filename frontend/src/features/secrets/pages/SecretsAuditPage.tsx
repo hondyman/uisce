@@ -130,7 +130,7 @@ export default function SecretsAuditPage({ tenantId }: SecretsAuditPageProps) {
             </CardContent>
           </Card>
         </Grid>
-        <Grid item xs={12} md={3}>
+        <Grid   size={{ xs: 12, md: 3 }}>
           <Card sx={{ borderLeft: '4px solid red' }}>
             <CardContent>
               <Typography color="text.secondary" gutterBottom>Failed</Typography>
@@ -138,7 +138,7 @@ export default function SecretsAuditPage({ tenantId }: SecretsAuditPageProps) {
             </CardContent>
           </Card>
         </Grid>
-        <Grid item xs={12} md={3}>
+        <Grid   size={{ xs: 12, md: 3 }}>
           <Card>
             <CardContent>
               <Typography color="text.secondary" gutterBottom>Unique Users</Typography>

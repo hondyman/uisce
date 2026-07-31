@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { devError } from '@/utils/devLogger';
 import {
   Box,
   Grid,
@@ -576,7 +577,7 @@ const PlatformBillingPage: React.FC = () => {
                 </CardContent>
               </Card>
             </Grid>
-            <Grid item xs={12} sm={6} md={3}>
+            <Grid    size={{ xs: 12, sm: 6, md: 3 }}>
               <Card sx={{ height: '100%', background: gradients.events }}>
                 <CardContent>
                   <Stack direction="row" justifyContent="space-between" alignItems="flex-start">
@@ -593,7 +594,7 @@ const PlatformBillingPage: React.FC = () => {
                 </CardContent>
               </Card>
             </Grid>
-            <Grid item xs={12} sm={6} md={3}>
+            <Grid    size={{ xs: 12, sm: 6, md: 3 }}>
               <Card sx={{ height: '100%', background: gradients.total }}>
                 <CardContent>
                   <Stack direction="row" justifyContent="space-between" alignItems="flex-start">
@@ -708,7 +709,7 @@ const PlatformBillingPage: React.FC = () => {
 
           {/* Top Tenants */}
           <Grid container spacing={3}>
-            <Grid item xs={12} md={6}>
+            <Grid   size={{ xs: 12, md: 6 }}>
               <Paper sx={{ p: 3 }}>
                 <Typography variant="h6" sx={{ fontWeight: 600, mb: 2 }}>
                   Top Tenants by Cost
@@ -757,7 +758,7 @@ const PlatformBillingPage: React.FC = () => {
                 </TableContainer>
               </Paper>
             </Grid>
-            <Grid item xs={12} md={6}>
+            <Grid   size={{ xs: 12, md: 6 }}>
               <Paper sx={{ p: 3 }}>
                 <Typography variant="h6" sx={{ fontWeight: 600, mb: 2 }}>
                   Cost by Region
@@ -847,7 +848,7 @@ const PlatformBillingPage: React.FC = () => {
 
           {/* Usage Details */}
           <Grid container spacing={3}>
-            <Grid item xs={12} md={6}>
+            <Grid   size={{ xs: 12, md: 6 }}>
               <Paper sx={{ p: 3 }}>
                 <Typography variant="h6" sx={{ fontWeight: 600, mb: 2 }}>
                   Usage Summary
@@ -869,7 +870,7 @@ const PlatformBillingPage: React.FC = () => {
               </Paper>
             </Grid>
 
-            <Grid item xs={12} md={6}>
+            <Grid   size={{ xs: 12, md: 6 }}>
               <Paper sx={{ p: 3, mb: 3 }}>
                 <Typography variant="h6" sx={{ fontWeight: 600, mb: 2 }}>
                   Usage by Region
@@ -1096,7 +1097,7 @@ const PlatformBillingPage: React.FC = () => {
       {/* ═══ TAB 4: Cost Simulator ═════════════════════════════ */}
       {activeTab === 4 && (
         <Grid container spacing={3}>
-          <Grid item xs={12} md={6}>
+          <Grid   size={{ xs: 12, md: 6 }}>
             <Paper sx={{ p: 3 }}>
               <Typography variant="h6" sx={{ fontWeight: 600, mb: 3 }}>
                 What-If Cost Simulator
@@ -1164,7 +1165,7 @@ const PlatformBillingPage: React.FC = () => {
             </Paper>
           </Grid>
 
-          <Grid item xs={12} md={6}>
+          <Grid   size={{ xs: 12, md: 6 }}>
             <Paper sx={{ p: 3, height: '100%' }}>
               <Typography variant="h6" sx={{ fontWeight: 600, mb: 3 }}>
                 Estimated Monthly Cost
@@ -1457,7 +1458,7 @@ const PlatformBillingPage: React.FC = () => {
                           : '—'}
                       </Typography>
                     </Grid>
-                    <Grid item xs={4}>
+                    <Grid  size={{ xs: 4 }}>
                       <Typography variant="overline" color="text.secondary">Due Date</Typography>
                       <Typography variant="body2" sx={{ fontWeight: 500 }}>
                         {selectedInvoice.dueAt

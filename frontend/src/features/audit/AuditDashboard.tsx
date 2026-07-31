@@ -294,7 +294,7 @@ export const AuditDashboard: React.FC = () => {
               </Card>
             </Grid>
 
-            <Grid item xs={12} md={3}>
+            <Grid   size={{ xs: 12, md: 3 }}>
               <Card>
                 <CardContent>
                   <Typography color="textSecondary" gutterBottom>
@@ -307,7 +307,7 @@ export const AuditDashboard: React.FC = () => {
               </Card>
             </Grid>
 
-            <Grid item xs={12} md={3}>
+            <Grid   size={{ xs: 12, md: 3 }}>
               <Card>
                 <CardContent>
                   <Typography color="textSecondary" gutterBottom>
@@ -415,7 +415,7 @@ export const AuditDashboard: React.FC = () => {
                     </Select>
                   </FormControl>
                 </Grid>
-                <Grid item xs={12} sm={6} md={3}>
+                <Grid    size={{ xs: 12, sm: 6, md: 3 }}>
                   <FormControl fullWidth size="small">
                     <InputLabel>Severity</InputLabel>
                     <Select
@@ -430,7 +430,7 @@ export const AuditDashboard: React.FC = () => {
                     </Select>
                   </FormControl>
                 </Grid>
-                <Grid item xs={12} sm={6} md={3}>
+                <Grid    size={{ xs: 12, sm: 6, md: 3 }}>
                   <FormControl fullWidth size="small">
                     <InputLabel>Status</InputLabel>
                     <Select
@@ -560,7 +560,7 @@ export const AuditDashboard: React.FC = () => {
                       {new Date(selectedEvent.timestamp).toLocaleString()}
                     </Typography>
                   </Grid>
-                  <Grid item xs={12} sm={6}>
+                  <Grid   size={{ xs: 12, sm: 6 }}>
                     <Typography variant="subtitle2">Event Type</Typography>
                     <Chip
                       label={selectedEvent.event_type.replace('_', ' ')}
@@ -568,7 +568,7 @@ export const AuditDashboard: React.FC = () => {
                       color={getEventTypeColor(selectedEvent.event_type)}
                     />
                   </Grid>
-                  <Grid item xs={12} sm={6}>
+                  <Grid   size={{ xs: 12, sm: 6 }}>
                     <Typography variant="subtitle2">Severity</Typography>
                     <Box display="flex" alignItems="center">
                       {getSeverityIcon(selectedEvent.severity)}
@@ -577,13 +577,13 @@ export const AuditDashboard: React.FC = () => {
                       </Typography>
                     </Box>
                   </Grid>
-                  <Grid item xs={12} sm={6}>
+                  <Grid   size={{ xs: 12, sm: 6 }}>
                     <Typography variant="subtitle2">User ID</Typography>
                     <Typography variant="body2">
                       {selectedEvent.user_id || 'System'}
                     </Typography>
                   </Grid>
-                  <Grid item xs={12} sm={6}>
+                  <Grid   size={{ xs: 12, sm: 6 }}>
                     <Typography variant="subtitle2">IP Address</Typography>
                     <Typography variant="body2">
                       {selectedEvent.ip_address || 'N/A'}
@@ -598,7 +598,7 @@ export const AuditDashboard: React.FC = () => {
                     </Paper>
                   </Grid>
                   {!selectedEvent.success && selectedEvent.error_message && (
-                    <Grid item xs={12}>
+                    <Grid  size={{ xs: 12 }}>
                       <Typography variant="subtitle2">Error Message</Typography>
                       <Alert severity="error" sx={{ mt: 1 }}>
                         {selectedEvent.error_message}

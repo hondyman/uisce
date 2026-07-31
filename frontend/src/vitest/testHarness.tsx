@@ -3,6 +3,8 @@ import { SnackbarProvider } from 'notistack'
 import { MemoryRouter } from 'react-router-dom'
 import { ConfirmProvider } from '@/components/ConfirmProvider'
 
+import { vi } from 'vitest';
+
 const ensureTenantScope = () => {
   try {
     if (!localStorage.getItem('selected_tenant')) {

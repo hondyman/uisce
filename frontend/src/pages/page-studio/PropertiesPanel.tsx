@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Box, Typography, TextField, MenuItem, Divider, Switch, FormControlLabel, Button, Chip, Dialog, DialogTitle, DialogContent, List, ListItem, ListItemText, ListItemIcon, Paper, IconButton } from '@mui/material';
+import { Box, Button, Chip, Dialog, DialogContent, DialogTitle, Divider, FormControlLabel, IconButton, List, ListItem, ListItemButton, ListItemIcon, ListItemText, MenuItem, Paper, Switch, TextField, Typography } from '@mui/material';
 import { 
     Link as BindIcon, 
     Visibility as ViewIcon, 
@@ -198,7 +198,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({ selectedId, draft, se
                 <DialogContent>
                     <List>
                         {endpoints.map((ep) => (
-                            <ListItem button key={ep.id} onClick={() => handleBindSource(ep)}>
+                            <ListItemButton  key={ep.id} onClick={() => handleBindSource(ep)}>
                                 <ListItemIcon>
                                     {ep.type === 'graphql' ? <GqlIcon color="secondary" /> : <ApiIcon color="primary" />}
                                 </ListItemIcon>
@@ -207,7 +207,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({ selectedId, draft, se
                                     secondary={`${ep.method} ${ep.path}`} 
                                 />
                                 <Chip label={ep.type} size="small" variant="outlined" />
-                            </ListItem>
+                            </ListItemButton>
                         ))}
                     </List>
                 </DialogContent>

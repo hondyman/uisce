@@ -24,13 +24,13 @@ export const ConflictStats: React.FC<Props> = ({ stats }) => {
             <Typography variant="h4">{stats.resolved || 0}</Typography>
           </Box>
         </Grid>
-        <Grid item xs={12} sm={3}>
+        <Grid   size={{ xs: 12, sm: 3 }}>
           <Box p={2} bgcolor="info.light" borderRadius={1}>
             <Typography variant="subtitle2">Time Overlap</Typography>
             <Typography variant="h4">{stats.by_type?.time_overlap || 0}</Typography>
           </Box>
         </Grid>
-        <Grid item xs={12} sm={3}>
+        <Grid   size={{ xs: 12, sm: 3 }}>
           <Box p={2} bgcolor="warning.light" borderRadius={1}>
             <Typography variant="subtitle2">Title Mismatch</Typography>
             <Typography variant="h4">{stats.by_type?.title_mismatch || 0}</Typography>

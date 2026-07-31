@@ -279,7 +279,7 @@ const StepConfigurator: React.FC<{
           {/* Approval Step - Role and User */}
           {step.stepType === 'approve' && (
             <>
-              <Grid item xs={12} sm={6}>
+              <Grid   size={{ xs: 12, sm: 6 }}>
                 <FormControl fullWidth size="small">
                   <InputLabel>Assignee Role</InputLabel>
                   <Select
@@ -298,7 +298,7 @@ const StepConfigurator: React.FC<{
                   </Select>
                 </FormControl>
               </Grid>
-              <Grid item xs={12} sm={6}>
+              <Grid   size={{ xs: 12, sm: 6 }}>
                 <TextField
                   fullWidth
                   label="Or Specific User"
@@ -341,7 +341,7 @@ const StepConfigurator: React.FC<{
 
           {/* Condition Step - Logic */}
           {step.stepType === 'condition' && (
-            <Grid item xs={12}>
+            <Grid  size={{ xs: 12 }}>
               <TextField
                 fullWidth
                 label="Condition Logic"
@@ -369,7 +369,7 @@ const StepConfigurator: React.FC<{
 
           {/* Integration Step - API */}
           {step.stepType === 'integrate' && (
-            <Grid item xs={12}>
+            <Grid  size={{ xs: 12 }}>
               <TextField
                 fullWidth
                 label="API Endpoint"
@@ -570,7 +570,7 @@ const BusinessProcessBuilderEnhanced: React.FC = () => {
                     </Select>
                   </FormControl>
                 </Grid>
-                <Grid item xs={12} sm={6} md={4}>
+                <Grid    size={{ xs: 12, sm: 6, md: 4 }}>
                   <FormControlLabel
                     control={
                       <Checkbox
@@ -587,7 +587,7 @@ const BusinessProcessBuilderEnhanced: React.FC = () => {
                     sx={{ mt: 1 }}
                   />
                 </Grid>
-                <Grid item xs={12}>
+                <Grid  size={{ xs: 12 }}>
                   <TextField
                     fullWidth
                     multiline
@@ -644,7 +644,7 @@ const BusinessProcessBuilderEnhanced: React.FC = () => {
                 </CardContent>
               </Card>
             </Grid>
-            <Grid item xs={12} sm={6} md={3}>
+            <Grid    size={{ xs: 12, sm: 6, md: 3 }}>
               <Card elevation={1}>
                 <CardContent sx={{ textAlign: 'center' }}>
                   <Typography
@@ -661,7 +661,7 @@ const BusinessProcessBuilderEnhanced: React.FC = () => {
                 </CardContent>
               </Card>
             </Grid>
-            <Grid item xs={12} sm={6} md={3}>
+            <Grid    size={{ xs: 12, sm: 6, md: 3 }}>
               <Card elevation={1}>
                 <CardContent sx={{ textAlign: 'center' }}>
                   <Typography

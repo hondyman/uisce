@@ -297,7 +297,7 @@ export const ClientOnboardingWizard: React.FC = () => {
         />
       </Grid>
 
-      <Grid item xs={12} sm={6}>
+      <Grid   size={{ xs: 12, sm: 6 }}>
         <TextField
           label="Email"
           type="email"
@@ -313,7 +313,7 @@ export const ClientOnboardingWizard: React.FC = () => {
         />
       </Grid>
 
-      <Grid item xs={12} sm={6}>
+      <Grid   size={{ xs: 12, sm: 6 }}>
         <TextField
           label="Phone"
           fullWidth
@@ -326,7 +326,7 @@ export const ClientOnboardingWizard: React.FC = () => {
         />
       </Grid>
 
-      <Grid item xs={12} sm={6}>
+      <Grid   size={{ xs: 12, sm: 6 }}>
         <TextField
           label="Date of Birth"
           type="date"
@@ -343,7 +343,7 @@ export const ClientOnboardingWizard: React.FC = () => {
         />
       </Grid>
 
-      <Grid item xs={12} sm={6}>
+      <Grid   size={{ xs: 12, sm: 6 }}>
         <TextField
           label="Social Security Number"
           fullWidth
@@ -370,7 +370,7 @@ export const ClientOnboardingWizard: React.FC = () => {
         </Typography>
       </Grid>
 
-      <Grid item xs={12}>
+      <Grid  size={{ xs: 12 }}>
         <TextField
           label="Street Address"
           fullWidth
@@ -421,7 +421,7 @@ export const ClientOnboardingWizard: React.FC = () => {
         </FormControl>
       </Grid>
 
-      <Grid item xs={12} sm={4}>
+      <Grid   size={{ xs: 12, sm: 4 }}>
         <TextField
           label="ZIP Code"
           fullWidth
@@ -470,7 +470,7 @@ export const ClientOnboardingWizard: React.FC = () => {
       {data.financialGoals.map((goal, index) => (
         <Paper key={index} sx={{ p: 2, mb: 2 }}>
           <Grid container spacing={2}>
-            <Grid item xs={12} sm={6}>
+            <Grid   size={{ xs: 12, sm: 6 }}>
               <FormControl fullWidth>
                 <InputLabel>Goal Type</InputLabel>
                 <Select
@@ -490,7 +490,7 @@ export const ClientOnboardingWizard: React.FC = () => {
               </FormControl>
             </Grid>
 
-            <Grid item xs={12} sm={6}>
+            <Grid   size={{ xs: 12, sm: 6 }}>
               <TextField
                 label="Target Amount"
                 fullWidth
@@ -505,7 +505,7 @@ export const ClientOnboardingWizard: React.FC = () => {
               />
             </Grid>
 
-            <Grid item xs={12} sm={6}>
+            <Grid   size={{ xs: 12, sm: 6 }}>
               <TextField
                 label="Target Date"
                 type="date"
@@ -520,7 +520,7 @@ export const ClientOnboardingWizard: React.FC = () => {
               />
             </Grid>
 
-            <Grid item xs={12} sm={6}>
+            <Grid   size={{ xs: 12, sm: 6 }}>
               <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <Chip label={`Priority ${goal.priority}`} color="primary" size="small" />
                 <IconButton
@@ -683,13 +683,13 @@ export const ClientOnboardingWizard: React.FC = () => {
 
   const renderAccountSelection = () => (
     <Grid container spacing={3}>
-      <Grid item xs={12}>
+      <Grid  size={{ xs: 12 }}>
         <Typography variant="h6" gutterBottom>
           Choose Your Account
         </Typography>
       </Grid>
 
-      <Grid item xs={12}>
+      <Grid  size={{ xs: 12 }}>
         <FormControl fullWidth>
           <InputLabel>Account Type</InputLabel>
           <Select
@@ -707,7 +707,7 @@ export const ClientOnboardingWizard: React.FC = () => {
         </FormControl>
       </Grid>
 
-      <Grid item xs={12}>
+      <Grid  size={{ xs: 12 }}>
         <FormControl fullWidth>
           <InputLabel>Funding Method</InputLabel>
           <Select
@@ -724,7 +724,7 @@ export const ClientOnboardingWizard: React.FC = () => {
         </FormControl>
       </Grid>
 
-      <Grid item xs={12}>
+      <Grid  size={{ xs: 12 }}>
         <TextField
           label="Initial Investment"
           fullWidth

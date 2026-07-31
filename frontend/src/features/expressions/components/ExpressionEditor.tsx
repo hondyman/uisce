@@ -325,7 +325,7 @@ else:
                 </Typography>
               </Paper>
             </Grid>
-            <Grid item xs={12} md={4}>
+            <Grid   size={{ xs: 12, md: 4 }}>
               <Paper variant="outlined" sx={{ p: 2 }}>
                 <Chip label="Condition" size="small" color="warning" sx={{ mb: 1 }} />
                 <Typography variant="subtitle2" gutterBottom>

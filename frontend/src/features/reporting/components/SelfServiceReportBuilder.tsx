@@ -580,7 +580,7 @@ export const WorldClassReportBuilder: React.FC = () => {
                       </Typography>
                       <Grid container spacing={2} sx={{ mb: 3 }}>
                         {filteredSources.filter(s => s.type === 'business_object').map(source => (
-                          <Grid item xs={12} sm={6} md={4} key={source.id}>
+                          <Grid    key={source.id} size={{ xs: 12, sm: 6, md: 4 }}>
                             <Paper
                               variant="outlined"
                               onClick={() => handleSelectDataSource(source)}
@@ -628,7 +628,7 @@ export const WorldClassReportBuilder: React.FC = () => {
                       </Typography>
                       <Grid container spacing={2}>
                         {filteredSources.filter(s => s.type === 'semantic_model').map(source => (
-                          <Grid item xs={12} sm={6} md={4} key={source.id}>
+                          <Grid    key={source.id} size={{ xs: 12, sm: 6, md: 4 }}>
                             <Paper
                               variant="outlined"
                               onClick={() => handleSelectDataSource(source)}
@@ -702,7 +702,7 @@ export const WorldClassReportBuilder: React.FC = () => {
 
                       <Grid container spacing={2}>
                         {/* Available Fields */}
-                        <Grid item xs={12} md={6}>
+                        <Grid   size={{ xs: 12, md: 6 }}>
                           <Paper variant="outlined" sx={{ height: 400, overflow: 'hidden' }}>
                             <Box sx={{ p: 1.5, bgcolor: 'grey.50', borderBottom: 1, borderColor: 'divider' }}>
                               <Typography variant="subtitle2" fontWeight="bold">
@@ -743,7 +743,7 @@ export const WorldClassReportBuilder: React.FC = () => {
 
                         {/* Measures (for semantic models) */}
                         {config.dataSource.type === 'semantic_model' && config.dataSource.measures && (
-                          <Grid item xs={12} md={6}>
+                          <Grid   size={{ xs: 12, md: 6 }}>
                             <Paper variant="outlined" sx={{ height: 400, overflow: 'hidden' }}>
                               <Box sx={{ p: 1.5, bgcolor: 'secondary.50', borderBottom: 1, borderColor: 'divider' }}>
                                 <Typography variant="subtitle2" fontWeight="bold" color="secondary.main">
@@ -826,7 +826,7 @@ export const WorldClassReportBuilder: React.FC = () => {
                           {config.filters.map((filter, index) => (
                             <Paper key={filter.id} variant="outlined" sx={{ p: 2 }}>
                               <Grid container spacing={2} alignItems="center">
-                                <Grid item xs={12} sm={3}>
+                                <Grid   size={{ xs: 12, sm: 3 }}>
                                   <FormControl fullWidth size="small">
                                     <InputLabel>Field</InputLabel>
                                     <Select
@@ -850,7 +850,7 @@ export const WorldClassReportBuilder: React.FC = () => {
                                     </Select>
                                   </FormControl>
                                 </Grid>
-                                <Grid item xs={12} sm={3}>
+                                <Grid   size={{ xs: 12, sm: 3 }}>
                                   <FormControl fullWidth size="small">
                                     <InputLabel>Operator</InputLabel>
                                     <Select
@@ -874,7 +874,7 @@ export const WorldClassReportBuilder: React.FC = () => {
                                     </Select>
                                   </FormControl>
                                 </Grid>
-                                <Grid item xs={12} sm={5}>
+                                <Grid   size={{ xs: 12, sm: 5 }}>
                                   <TextField
                                     fullWidth
                                     size="small"
@@ -890,7 +890,7 @@ export const WorldClassReportBuilder: React.FC = () => {
                                     }}
                                   />
                                 </Grid>
-                                <Grid item xs={12} sm={1}>
+                                <Grid   size={{ xs: 12, sm: 1 }}>
                                   <IconButton onClick={() => handleRemoveFilter(filter.id)} color="error">
                                     <DeleteIcon />
                                   </IconButton>
@@ -913,7 +913,7 @@ export const WorldClassReportBuilder: React.FC = () => {
                       </Typography>
 
                       <Grid container spacing={3}>
-                        <Grid item xs={12} md={6}>
+                        <Grid   size={{ xs: 12, md: 6 }}>
                           <TextField
                             fullWidth
                             label="Report Name"
@@ -923,7 +923,7 @@ export const WorldClassReportBuilder: React.FC = () => {
                             required
                           />
                         </Grid>
-                        <Grid item xs={12} md={6}>
+                        <Grid   size={{ xs: 12, md: 6 }}>
                           <TextField
                             fullWidth
                             label="Description"
@@ -933,7 +933,7 @@ export const WorldClassReportBuilder: React.FC = () => {
                           />
                         </Grid>
 
-                        <Grid item xs={12}>
+                        <Grid  size={{ xs: 12 }}>
                           <Divider sx={{ my: 1 }} />
                           <Typography variant="subtitle2" gutterBottom sx={{ mt: 2 }}>
                             Visualization
@@ -945,7 +945,7 @@ export const WorldClassReportBuilder: React.FC = () => {
                               { type: 'line', icon: <LineChartIcon />, label: 'Line Chart' },
                               { type: 'pie', icon: <PieChartIcon />, label: 'Pie Chart' },
                             ].map(({ type, icon, label }) => (
-                              <Grid item key={type}>
+                              <Grid key={type}>
                                 <Paper
                                   variant="outlined"
                                   onClick={() => setConfig(prev => ({ ...prev, chartType: type as any }))}
@@ -968,7 +968,7 @@ export const WorldClassReportBuilder: React.FC = () => {
                           </Grid>
                         </Grid>
 
-                        <Grid item xs={12} md={6}>
+                        <Grid   size={{ xs: 12, md: 6 }}>
                           <Typography variant="subtitle2" gutterBottom>
                             Result Limit
                           </Typography>
@@ -988,7 +988,7 @@ export const WorldClassReportBuilder: React.FC = () => {
                           />
                         </Grid>
 
-                        <Grid item xs={12} md={6}>
+                        <Grid   size={{ xs: 12, md: 6 }}>
                           <Typography variant="subtitle2" gutterBottom>
                             Options
                           </Typography>
@@ -1057,7 +1057,7 @@ export const WorldClassReportBuilder: React.FC = () => {
 
           {/* Live Preview Panel */}
           {showPreview && activeStep > 0 && (
-            <Grid item xs={12} md={5}>
+            <Grid   size={{ xs: 12, md: 5 }}>
               <Zoom in={true}>
                 <Card sx={{ borderRadius: 2, position: 'sticky', top: 16 }}>
                   <CardContent>

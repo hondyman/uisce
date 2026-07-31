@@ -1,4 +1,5 @@
 export class CommandRegistry {
+  commands: Map<string, any>;
   constructor() {
     this.commands = new Map()
   }

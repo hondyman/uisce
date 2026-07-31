@@ -34,6 +34,32 @@ export default defineConfig({
     },
   },
   optimizeDeps: {},
+  build: {
+    chunkSizeWarningLimit: 5000,
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (id.includes('node_modules')) {
+            if (id.includes('monaco-editor') || id.includes('@monaco-editor')) {
+              return 'vendor-monaco';
+            }
+            if (id.includes('@mui/x-data-grid') || id.includes('@mui/x-date-pickers') || id.includes('@mui/x-tree-view')) {
+              return 'vendor-mui-x';
+            }
+            if (id.includes('@mui/material') || id.includes('@mui/icons-material') || id.includes('@emotion')) {
+              return 'vendor-mui-core';
+            }
+            if (id.includes('echarts') || id.includes('chart.js') || id.includes('recharts') || id.includes('cytoscape')) {
+              return 'vendor-charts';
+            }
+            if (id.includes('ag-grid-community') || id.includes('ag-grid-react') || id.includes('framer-motion')) {
+              return 'vendor-ui-heavy';
+            }
+          }
+        },
+      },
+    },
+  },
   server: {
     proxy: {
       // Platform/auth/admin routes are served by the full backend (ABAC, auth,

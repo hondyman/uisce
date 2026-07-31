@@ -226,7 +226,7 @@ export const NotificationPreferences: React.FC<NotificationPreferencesProps> = (
           </Grid>
 
           {/* Quiet Hours */}
-          <Grid item xs={12}>
+          <Grid  size={{ xs: 12 }}>
             <Typography variant="h6" gutterBottom>
               Quiet Hours
             </Typography>
@@ -261,12 +261,12 @@ export const NotificationPreferences: React.FC<NotificationPreferencesProps> = (
             </Box>
           </Grid>
 
-          <Grid item xs={12}>
+          <Grid  size={{ xs: 12 }}>
             <Divider />
           </Grid>
 
           {/* Notification Types */}
-          <Grid item xs={12}>
+          <Grid  size={{ xs: 12 }}>
             <Typography variant="h6" gutterBottom>
               Notification Types
             </Typography>
@@ -290,12 +290,12 @@ export const NotificationPreferences: React.FC<NotificationPreferencesProps> = (
             </Box>
           </Grid>
 
-          <Grid item xs={12}>
+          <Grid  size={{ xs: 12 }}>
             <Divider />
           </Grid>
 
           {/* Frequency Preferences */}
-          <Grid item xs={12}>
+          <Grid  size={{ xs: 12 }}>
             <Typography variant="h6" gutterBottom>
               Notification Frequency
             </Typography>
@@ -326,7 +326,7 @@ export const NotificationPreferences: React.FC<NotificationPreferencesProps> = (
             </Box>
           </Grid>
 
-          <Grid item xs={12}>
+          <Grid  size={{ xs: 12 }}>
             <Divider />
           </Grid>
 
@@ -342,7 +342,7 @@ export const NotificationPreferences: React.FC<NotificationPreferencesProps> = (
           </Grid>
 
           {/* Save Button */}
-          <Grid item xs={12}>
+          <Grid  size={{ xs: 12 }}>
             <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 2 }}>
               <Button
                 variant="outlined"

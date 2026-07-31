@@ -184,10 +184,10 @@ const ValidationDashboard: React.FC = () => {
             <Grid size={{ 'xs': 12, 'sm': 6, 'md': 3 }}>
               <StatCard label="Enabled Rules" value={stats.enabledRules} />
             </Grid>
-            <Grid item xs={12} sm={6} md={3}>
+            <Grid    size={{ xs: 12, sm: 6, md: 3 }}>
               <StatCard label="Recent Validations" value={stats.recentValidations} />
             </Grid>
-            <Grid item xs={12} sm={6} md={3}>
+            <Grid    size={{ xs: 12, sm: 6, md: 3 }}>
               <StatCard label="Success Rate" value={stats.successRate.toFixed(1)} unit="%" />
             </Grid>
           </Grid>

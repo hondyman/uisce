@@ -8,6 +8,7 @@
 import { useState, useRef, useEffect } from 'react';
 import type { FC, DragEvent } from 'react';
 import { useParams } from 'react-router-dom';
+import { useNotification } from '../../../hooks/useNotification';
 import { StepPalette } from './StepPalette';
 import { RuleBuilderModal } from './RuleBuilderModal';
 import {
@@ -30,6 +31,7 @@ interface DraggingState {
 export const BPDesignerPage: FC = () => {
   const { id } = useParams<{ id?: string }>();
   const canvasRef = useRef<HTMLDivElement>(null);
+  const notification = useNotification();
 
   // State
   const [nodes, setNodes] = useState<ProcessNode[]>([]);
@@ -58,7 +60,7 @@ export const BPDesignerPage: FC = () => {
   }, [process]);
 
   // Handlers
-  const handleDragStart = (e: DragEvent<Element>, stepType: unknown) => {
+  const handleDragStart = (e: DragEvent<Element>, stepType) => {
     setDragging({ isActive: true, stepType });
     e.dataTransfer.effectAllowed = 'copy';
   };
@@ -109,7 +111,6 @@ export const BPDesignerPage: FC = () => {
 
   const handleSaveProcess = async () => {
     if (!id) {
-      const notification = useNotification();
       notification.error('Process ID not found');
       return;
     }
@@ -121,10 +122,8 @@ export const BPDesignerPage: FC = () => {
         edges,
       });
       setIsUnsaved(false);
-      const notification = useNotification();
       notification.success('Process saved successfully');
     } catch (error) {
-      const notification = useNotification();
       notification.error(`Failed to save process: ${error}`);
     }
   };

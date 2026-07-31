@@ -354,7 +354,7 @@ const PerformanceTable: React.FC<PerformanceTableProps> = ({ metrics }) => {
             <Typography variant="body1" fontWeight="medium">{metrics.sharpe_ratio?.toFixed(2)}</Typography>
           </Box>
         </Grid>
-        <Grid item xs={6} sm={3}>
+        <Grid   size={{ xs: 6, sm: 3 }}>
           <Box>
             <Typography variant="caption" color="text.secondary">Max Drawdown</Typography>
             <Typography variant="body1" fontWeight="medium" sx={{ color: '#f44336' }}>
@@ -362,7 +362,7 @@ const PerformanceTable: React.FC<PerformanceTableProps> = ({ metrics }) => {
             </Typography>
           </Box>
         </Grid>
-        <Grid item xs={6} sm={3}>
+        <Grid   size={{ xs: 6, sm: 3 }}>
           <Box>
             <Typography variant="caption" color="text.secondary">Beta</Typography>
             <Typography variant="body1" fontWeight="medium">{metrics.beta?.toFixed(2) || 'N/A'}</Typography>
@@ -428,14 +428,14 @@ export const PortfolioDashboard: React.FC<PortfolioDashboardProps> = ({
             subtitle="Total P&L"
           />
         </Grid>
-        <Grid item xs={12} sm={6} md={3}>
+        <Grid    size={{ xs: 12, sm: 6, md: 3 }}>
           <MetricCard
             title="YTD Return"
             value={formatPercent(summary.ytd_return)}
             icon={<ChartIcon />}
           />
         </Grid>
-        <Grid item xs={12} sm={6} md={3}>
+        <Grid    size={{ xs: 12, sm: 6, md: 3 }}>
           <MetricCard
             title="Cost Basis"
             value={formatCurrency(summary.total_cost_basis)}

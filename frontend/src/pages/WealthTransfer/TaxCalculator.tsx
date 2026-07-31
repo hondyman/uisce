@@ -384,7 +384,7 @@ export const TaxCalculator: React.FC<TaxCalculatorProps> = ({ familyId }) => {
                   </Card>
                 </Grid>
 
-                <Grid item xs={12} md={4}>
+                <Grid   size={{ xs: 12, md: 4 }}>
                   <Card variant="outlined">
                     <CardContent>
                       <Typography variant="subtitle2" gutterBottom>

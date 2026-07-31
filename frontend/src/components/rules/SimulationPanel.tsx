@@ -12,8 +12,8 @@ import {
   LinearProgress,
   Stack,
   Paper,
-  TabPanel,
 } from '@mui/material';
+import { TabPanel } from '@mui/lab';
 import {
   PlayArrow as PlayIcon,
   Download as DownloadIcon,

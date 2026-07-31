@@ -13,16 +13,17 @@ export function FormWidget({ def }: FormWidgetProps) {
 
   const submitMutation = useMutation({
     mutationFn: async (data: Record<string, any>) => {
-      const endpoint = def.submitAction.endpoint || def.submitAction.mutation;
+      if (!def.submitAction) return null;
+      const endpoint = def.submitAction?.endpoint || def.submitAction?.mutation || '';
       const response = await apiFetch(endpoint, {
-        method: def.submitAction.method || 'POST',
+        method: def.submitAction?.method || 'POST',
         body: JSON.stringify(data),
       });
       return response.json();
     },
     onSuccess: () => {
-      if (def.submitAction.queryKey) {
-        queryClient.invalidateQueries({ queryKey: [def.submitAction.queryKey] });
+      if (def.submitAction?.queryKey) {
+        queryClient.invalidateQueries({ queryKey: [def.submitAction?.queryKey] });
       }
     },
   });
@@ -32,8 +33,8 @@ export function FormWidget({ def }: FormWidgetProps) {
 
     try {
       await submitMutation.mutateAsync(formData);
-      if (def.submitAction.successMessage) {
-        alert(def.submitAction.successMessage);
+      if (def.submitAction?.successMessage) {
+        alert(def.submitAction?.successMessage);
       }
     } catch (error) {
       console.error("Form submission error:", error);
@@ -45,7 +46,7 @@ export function FormWidget({ def }: FormWidgetProps) {
       {def.title && <h3 className="text-lg font-semibold mb-4">{def.title}</h3>}
       
       <form onSubmit={handleSubmit} className="space-y-4">
-        {def.fields.map((field) => (
+        {(def.fields || []).map((field) => (
           <div key={field.name}>
             <label className="block text-sm font-medium text-gray-700 mb-1">
               {field.label}
@@ -69,7 +70,7 @@ export function FormWidget({ def }: FormWidgetProps) {
 }
 
 function renderField(
-  field: FormComponent["fields"][0],
+  field: NonNullable<FormComponent["fields"]>[0],
   formData: Record<string, any>,
   setFormData: React.Dispatch<React.SetStateAction<Record<string, any>>>
 ) {
@@ -110,7 +111,7 @@ function renderField(
           className="w-full border border-gray-300 rounded-lg px-3 py-2"
         >
           <option value="">Select...</option>
-          {field.options?.map((opt) => (
+          {((field as any).options as any[])?.map((opt: any) => (
             <option key={opt.value} value={opt.value}>
               {opt.label}
             </option>

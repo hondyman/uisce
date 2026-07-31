@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { Upload, FileText, CheckCircle, AlertCircle, Download, Eye, Trash2, Shield } from 'lucide-react';
 import { useDropzone } from 'react-dropzone';
 

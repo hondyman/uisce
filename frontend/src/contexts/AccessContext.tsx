@@ -73,7 +73,6 @@ interface AccessProviderProps {
 export const AccessProvider: React.FC<AccessProviderProps> = ({ children }) => {
   const { user, isAuthenticated } = useAuth();
   
-  const [accessLevel, setAccessLevel] = useState<UserAccessLevel>('tenant_user');
   const [tenantAssignments, _setTenantAssignments] = useState<TenantAssignment[]>([]);
   const [accessibleTenants, setAccessibleTenants] = useState<Tenant[]>([]);
   const [scope, setScope] = useState<OperatingScope>({ level: 'global', isGlobal: true });
@@ -85,26 +84,25 @@ export const AccessProvider: React.FC<AccessProviderProps> = ({ children }) => {
   const [currentProduct, setCurrentProduct] = useState<Product | null>(null);
   const [currentDatasource, setCurrentDatasource] = useState<DataSource | null>(null);
 
-  // Derive access level from user
-  useEffect(() => {
+  // Derive access level from user synchronously
+  const accessLevel = useMemo<UserAccessLevel>(() => {
     if (!user) {
-      setAccessLevel('tenant_user');
-      return;
+      return 'tenant_user';
     }
 
-    // Check for platform operator status
-    // Platform operators are identified by:
-    // 1. is_core_admin or isCoreAdmin flag
-    // 2. role === 'platform_operator' or 'admin' or 'global_ops'
-    // 3. Having 'platform:operator' permission
+    const hasGlobalGroup = Array.isArray(user.groups) && user.groups.some((g: string) => 
+      typeof g === 'string' && /(^|\/)uisce[-_ ]?global[-_ ]?admins?$/i.test(g)
+    );
+
     const isPlatformOp = 
       user.is_core_admin === true ||
       user.isCoreAdmin === true ||
+      user.is_global_admin === true ||
+      hasGlobalGroup ||
       user.role === 'platform_operator' ||
       user.role === 'global_ops' ||
       user.role === 'admin' ||
       user.role === 'global_admin' ||
-      user.is_global_admin === true ||
       user.uisce_metadata?.is_global_admin === true ||
       user.operator_role === 'global_admin' ||
       user.operator_role === 'platform_operator' ||
@@ -114,14 +112,11 @@ export const AccessProvider: React.FC<AccessProviderProps> = ({ children }) => {
       user.permissions?.includes('*');
 
     if (isPlatformOp) {
-      setAccessLevel('platform_operator');
-      devLog('User is platform operator');
+      return 'platform_operator';
     } else if (user.role === 'tenant_admin' || user.permissions?.includes('tenant:admin')) {
-      setAccessLevel('tenant_admin');
-      devLog('User is tenant admin');
+      return 'tenant_admin';
     } else {
-      setAccessLevel('tenant_user');
-      devLog('User is tenant user');
+      return 'tenant_user';
     }
   }, [user]);
 
@@ -147,62 +142,6 @@ export const AccessProvider: React.FC<AccessProviderProps> = ({ children }) => {
 
     loadPersistedScope();
   }, []);
-
-  // Fetch accessible tenants based on user access level
-  useEffect(() => {
-    if (!isAuthenticated) {
-      setAccessibleTenants([]);
-      return;
-    }
-
-    const fetchTenants = async () => {
-      try {
-        // Platform operators see all tenants with full hierarchy (instances, products,
-        // datasources) via /api/tenants/all. Non-operators get a user-scoped projection
-        // via /api/tenants/accessible.
-        const endpoint = accessLevel === 'platform_operator'
-          ? '/api/tenants/all'
-          : '/api/tenants/accessible';
-
-        devLog(`Fetching tenants from ${endpoint}`);
-        // apiFetch injects Authorization: Bearer <jwt> + X-Tenant-ID + region automatically
-        const response = await apiFetch(endpoint, {
-          credentials: import.meta.env.DEV ? 'include' : 'same-origin'
-        });
-
-        if (response.ok) {
-          const json = await response.json();
-          const tenantsList = json.success ? json.data : json;
-          const list = Array.isArray(tenantsList) ? tenantsList : [];
-          // Keep only tenants that are available for user selection.
-          const visibleList = list.filter(
-            (t: { is_deleted?: boolean; is_active?: boolean; isActive?: boolean; status?: string }) =>
-              !t.is_deleted && (t.is_active ?? t.isActive ?? t.status === 'active') === true
-          );
-          setAccessibleTenants(visibleList);
-          devLog(`Loaded ${visibleList.length} accessible tenants`, visibleList);
-        } else {
-          devWarn(`Failed to fetch tenants: ${response.status} ${response.statusText}`);
-        }
-      } catch (error) {
-        devWarn('Failed to fetch tenants:', error);
-        setAccessibleTenants([]);
-      }
-    };
-
-    fetchTenants();
-  }, [isAuthenticated, accessLevel]);
-
-  // Persist scope changes
-  useEffect(() => {
-    if (!isLoading) {
-      try {
-        localStorage.setItem(ACCESS_STORAGE_KEYS.SCOPE, JSON.stringify(scope));
-      } catch (error) {
-        devError('Error persisting scope:', error);
-      }
-    }
-  }, [scope, isLoading]);
 
   // Scope setters
   const setGlobalScope = useCallback(() => {
@@ -301,6 +240,78 @@ export const AccessProvider: React.FC<AccessProviderProps> = ({ children }) => {
     
     devLog('Scope set to datasource:', datasource.source_name);
   }, []);
+
+  // Fetch accessible tenants based on user access level
+  useEffect(() => {
+    if (!isAuthenticated) {
+      setAccessibleTenants([]);
+      return;
+    }
+
+    const fetchTenants = async () => {
+      try {
+        // Platform operators see all tenants with full hierarchy (instances, products,
+        // datasources) via /api/tenants/all. Non-operators get a user-scoped projection
+        // via /api/tenants/accessible.
+        const endpoint = accessLevel === 'platform_operator'
+          ? '/api/tenants/all'
+          : '/api/tenants/accessible';
+
+        devLog(`Fetching tenants from ${endpoint}`);
+        // apiFetch injects Authorization: Bearer <jwt> + X-Tenant-ID + region automatically
+        const response = await apiFetch(endpoint, {
+          credentials: import.meta.env.DEV ? 'include' : 'same-origin'
+        });
+
+        if (response.ok) {
+          const json = await response.json();
+          const tenantsList = json.success ? json.data : json;
+          const list = Array.isArray(tenantsList) ? tenantsList : [];
+          // Keep only tenants that are available for user selection.
+          const visibleList = list.filter(
+            (t: { is_deleted?: boolean; is_active?: boolean; isActive?: boolean; status?: string }) =>
+              !t.is_deleted && (t.is_active ?? t.isActive ?? t.status === 'active') === true
+          );
+          setAccessibleTenants(visibleList);
+          devLog(`Loaded ${visibleList.length} accessible tenants`, visibleList);
+        } else {
+          devWarn(`Failed to fetch tenants: ${response.status} ${response.statusText}`);
+        }
+      } catch (error) {
+        devWarn('Failed to fetch tenants:', error);
+        setAccessibleTenants([]);
+      }
+    };
+
+    fetchTenants();
+  }, [isAuthenticated, accessLevel]);
+
+  // Auto-select first accessible tenant when none is selected or when current scope is global/invalid
+  useEffect(() => {
+    if (accessibleTenants.length > 0 && (!currentTenant || !accessibleTenants.some(t => t.id === currentTenant.id))) {
+      const firstTenant = accessibleTenants[0];
+      const firstInstance = firstTenant.tenant_instances?.[0];
+      const firstProduct = firstInstance ? (firstInstance.tenant_products?.[0] || firstInstance.products?.[0]) : undefined;
+      const firstDs = firstProduct ? (firstProduct.tenant_product_datasources?.[0] || firstProduct.datasources?.[0]) : undefined;
+
+      if (firstInstance && firstProduct && firstDs) {
+        setDatasourceScope(firstTenant, firstInstance, firstProduct, firstDs);
+      } else {
+        setTenantScope(firstTenant);
+      }
+    }
+  }, [accessibleTenants, currentTenant, setDatasourceScope, setTenantScope]);
+
+  // Persist scope changes
+  useEffect(() => {
+    if (!isLoading) {
+      try {
+        localStorage.setItem(ACCESS_STORAGE_KEYS.SCOPE, JSON.stringify(scope));
+      } catch (error) {
+        devError('Error persisting scope:', error);
+      }
+    }
+  }, [scope, isLoading]);
 
   const clearScope = useCallback(() => {
     if (accessLevel === 'platform_operator') {

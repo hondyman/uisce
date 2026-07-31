@@ -299,14 +299,14 @@ const LivePreview: React.FC<LivePreviewProps> = ({ rule, onTestResults }) => {
                       <Typography variant="caption">Warnings</Typography>
                     </Paper>
                   </Grid>
-                  <Grid item xs={6} sm={3}>
+                  <Grid   size={{ xs: 6, sm: 3 }}>
                     <Paper sx={{ p: 2, textAlign: 'center', bgcolor: '#ffebee' }}>
                       <ErrorIcon sx={{ color: '#f44336', mb: 1, fontSize: 32 }} />
                       <Typography variant="h6">{failCount}</Typography>
                       <Typography variant="caption">Failed</Typography>
                     </Paper>
                   </Grid>
-                  <Grid item xs={6} sm={3}>
+                  <Grid   size={{ xs: 6, sm: 3 }}>
                     <Paper sx={{ p: 2, textAlign: 'center' }}>
                       <Typography variant="h6">{testResults.length}</Typography>
                       <Typography variant="caption">Total Records</Typography>

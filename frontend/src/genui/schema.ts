@@ -56,9 +56,17 @@ export const ChartComponentSchema = z.object({
         endpoint: z.string().optional(),
         method: z.string().optional(),
         variables: z.record(z.any()).optional(),
+        gql: z.string().optional(),
+        dataPath: z.string().optional(),
     }).optional(),
     type: z.enum(["line", "bar", "area"]).optional(),
+    chartType: z.string().optional(),
     title: z.string().optional(),
+    subtitle: z.string().optional(),
+    colors: z.array(z.string()).optional(),
+    xField: z.string().optional(),
+    yFields: z.array(z.string()).optional(),
+    legend: z.boolean().optional(),
 });
 export type ChartComponent = z.infer<typeof ChartComponentSchema>;
 
@@ -70,11 +78,13 @@ export const DisclosureBannerSchema = z.object({
 export type DisclosureBanner = z.infer<typeof DisclosureBannerSchema>;
 
 export const FormComponentSchema = z.object({
+    title: z.string().optional(),
     submitAction: z.object({
         endpoint: z.string().optional(),
         mutation: z.string().optional(),
         method: z.string().optional(),
         queryKey: z.string().optional(),
+        successMessage: z.string().optional(),
     }).optional(),
     fields: z.array(z.object({
         name: z.string(),

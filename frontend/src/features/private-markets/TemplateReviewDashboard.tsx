@@ -1,39 +1,39 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
+  Accordion,
+  AccordionDetails,
+  AccordionSummary,
+  Alert,
   Box,
-  Typography,
-  Paper,
-  Grid,
+  Button,
   Card as _Card,
   CardContent as _CardContent,
-  Button,
   Chip,
+  CircularProgress,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  FormControl,
+  Grid,
+  InputLabel,
+  List,
+  ListItem,
+  ListItemButton,
+  ListItemText,
+  MenuItem,
+  Paper,
+  Select,
+  SelectChangeEvent,
+  Tab,
   Table as _Table,
   TableBody as _TableBody,
   TableCell as _TableCell,
   TableContainer as _TableContainer,
   TableHead as _TableHead,
   TableRow as _TableRow,
-  Dialog,
-  DialogContent,
-  DialogActions,
-  List,
   Tabs,
-  Tab,
-  Accordion,
-  AccordionSummary,
-  AccordionDetails,
   TextField,
-  FormControl,
-  InputLabel,
-  Select,
-  MenuItem,
-  SelectChangeEvent,
-  Alert,
-  CircularProgress,
-  // ...existing code...
-  ListItem,
-  ListItemText,
+  Typography
 } from '@mui/material';
   // Divider not used
 import ModalHeader from '../../components/ModalHeader';
@@ -109,7 +109,7 @@ export const TemplateReviewDashboard: React.FC<TemplateReviewDashboardProps> = (
       }
       const data = await response.json();
       setTemplates(data);
-    } catch (err: unknown) {
+    } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load templates');
     } finally {
       setLoading(false);
@@ -174,7 +174,7 @@ export const TemplateReviewDashboard: React.FC<TemplateReviewDashboardProps> = (
 
       // Refresh templates
       await loadTemplates();
-    } catch (err: unknown) {
+    } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to promote template');
     }
   };
@@ -201,7 +201,7 @@ export const TemplateReviewDashboard: React.FC<TemplateReviewDashboardProps> = (
       setNewComment('');
       setCommentDialogOpen(false);
       await loadTemplates();
-    } catch (err: unknown) {
+    } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to add comment');
     }
   };
@@ -275,9 +275,8 @@ export const TemplateReviewDashboard: React.FC<TemplateReviewDashboardProps> = (
             </Typography>
             <List>
               {filteredTemplates.map((template) => (
-                <ListItem
+                <ListItemButton 
                   key={template.id}
-                  button
                   onClick={() => setSelectedTemplate(template)}
                   selected={selectedTemplate?.id === template.id}
                 >
@@ -304,7 +303,7 @@ export const TemplateReviewDashboard: React.FC<TemplateReviewDashboardProps> = (
                       </Box>
                     }
                   />
-                </ListItem>
+                </ListItemButton>
               ))}
             </List>
           </Paper>
@@ -373,15 +372,15 @@ export const TemplateReviewDashboard: React.FC<TemplateReviewDashboardProps> = (
                       <Typography variant="subtitle2">Domain</Typography>
                       <Typography>{selectedTemplate.domain}</Typography>
                     </Grid>
-                    <Grid item xs={12} md={6}>
+                    <Grid   size={{ xs: 12, md: 6 }}>
                       <Typography variant="subtitle2">Category</Typography>
                       <Typography>{selectedTemplate.category}</Typography>
                     </Grid>
-                    <Grid item xs={12} md={6}>
+                    <Grid   size={{ xs: 12, md: 6 }}>
                       <Typography variant="subtitle2">Version</Typography>
                       <Typography>{selectedTemplate.version}</Typography>
                     </Grid>
-                    <Grid item xs={12} md={6}>
+                    <Grid   size={{ xs: 12, md: 6 }}>
                       <Typography variant="subtitle2">Owner</Typography>
                       <Typography>{selectedTemplate.owner}</Typography>
                     </Grid>
@@ -403,7 +402,7 @@ export const TemplateReviewDashboard: React.FC<TemplateReviewDashboardProps> = (
                     Governance Information
                   </Typography>
                   <Grid container spacing={2}>
-                    <Grid item xs={12} md={6}>
+                    <Grid   size={{ xs: 12, md: 6 }}>
                       <Typography variant="subtitle2">Status</Typography>
                       <Chip
                         label={selectedTemplate.governance.status}
@@ -411,15 +410,15 @@ export const TemplateReviewDashboard: React.FC<TemplateReviewDashboardProps> = (
                         icon={getStatusIcon(selectedTemplate.status)}
                       />
                     </Grid>
-                    <Grid item xs={12} md={6}>
+                    <Grid   size={{ xs: 12, md: 6 }}>
                       <Typography variant="subtitle2">Steward Group</Typography>
                       <Typography>{selectedTemplate.governance.steward_group}</Typography>
                     </Grid>
-                    <Grid item xs={12} md={6}>
+                    <Grid   size={{ xs: 12, md: 6 }}>
                       <Typography variant="subtitle2">Refresh Frequency</Typography>
                       <Typography>{selectedTemplate.governance.sla.refresh_frequency}</Typography>
                     </Grid>
-                    <Grid item xs={12} md={6}>
+                    <Grid   size={{ xs: 12, md: 6 }}>
                       <Typography variant="subtitle2">Max Latency</Typography>
                       <Typography>{selectedTemplate.governance.sla.max_latency}</Typography>
                     </Grid>

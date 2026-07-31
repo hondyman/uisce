@@ -1,39 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import {
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
-  Button,
-  Stepper,
-  Step,
-  StepLabel,
-  Typography,
-  Box,
-  TextField,
-  IconButton,
-  FormControl,
-  FormLabel,
-  RadioGroup,
-  FormControlLabel,
-  Radio,
-  Checkbox,
-  List,
-  ListItem,
-  ListItemIcon,
-  ListItemText,
-  Paper,
-  Divider,
-  Alert,
-  CircularProgress,
-  Select,
-  MenuItem,
-  InputLabel,
-  Grid,
-  Chip,
-  Card,
-  CardContent,
-} from '@mui/material';
+import { Alert, Box, Button, Card, CardContent, Checkbox, Chip, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle, Divider, FormControl, FormControlLabel, FormLabel, Grid, IconButton, InputLabel, List, ListItem, ListItemButton, ListItemIcon, ListItemText, MenuItem, Paper, Radio, RadioGroup, Select, Step, StepLabel, Stepper, TextField, Typography } from '@mui/material';
 import { Close, Bolt, Storage, Schedule, Code, CheckCircle } from '@mui/icons-material';
 
 // --- Types ---
@@ -512,12 +478,12 @@ const Step2GrainFields: React.FC<{
         <Paper variant="outlined" sx={{ maxHeight: 200, overflow: 'auto' }}>
           <List dense>
             {boTerms.map((term) => (
-              <ListItem key={term.id} button onClick={() => toggleTerm(term.name)}>
+              <ListItemButton  key={term.id} onClick={() => toggleTerm(term.name)}>
                 <ListItemIcon>
                   <Checkbox checked={selectedTerms.includes(term.name)} edge="start" />
                 </ListItemIcon>
                 <ListItemText primary={term.name} />
-              </ListItem>
+              </ListItemButton>
             ))}
             {boTerms.length === 0 && (
               <ListItem><ListItemText primary="No terms found" /></ListItem>
@@ -531,12 +497,12 @@ const Step2GrainFields: React.FC<{
         <Paper variant="outlined" sx={{ maxHeight: 200, overflow: 'auto' }}>
           <List dense>
             {boCalcs.map((calc) => (
-              <ListItem key={calc.id} button onClick={() => toggleCalc(calc.name)}>
+              <ListItemButton  key={calc.id} onClick={() => toggleCalc(calc.name)}>
                 <ListItemIcon>
                   <Checkbox checked={selectedCalcs.includes(calc.name)} edge="start" />
                 </ListItemIcon>
                 <ListItemText primary={calc.name} />
-              </ListItem>
+              </ListItemButton>
             ))}
             {boCalcs.length === 0 && (
               <ListItem><ListItemText primary="No calculations found" /></ListItem>
@@ -599,7 +565,7 @@ const Step3Materialization: React.FC<{
   setRefreshInterval: (v: number) => void;
 }> = (props) => (
   <Grid container spacing={3}>
-    <Grid item xs={12} md={6}>
+    <Grid   size={{ xs: 12, md: 6 }}>
       <FormControl component="fieldset">
         <FormLabel>Materialization Type</FormLabel>
         <RadioGroup
@@ -646,7 +612,7 @@ const Step3Materialization: React.FC<{
       )}
     </Grid>
 
-    <Grid item xs={12} md={6}>
+    <Grid   size={{ xs: 12, md: 6 }}>
       <FormControl component="fieldset">
         <FormLabel>Refresh Strategy</FormLabel>
         <RadioGroup
@@ -696,7 +662,7 @@ const Step4Review: React.FC<{
   ddlPreview: string;
 }> = (props) => (
   <Grid container spacing={3}>
-    <Grid item xs={12} md={6}>
+    <Grid   size={{ xs: 12, md: 6 }}>
       <Card variant="outlined">
         <CardContent>
           <Typography variant="h6" gutterBottom>
@@ -757,7 +723,7 @@ const Step4Review: React.FC<{
       </Card>
     </Grid>
     
-    <Grid item xs={12} md={6}>
+    <Grid   size={{ xs: 12, md: 6 }}>
       <Typography variant="subtitle2" gutterBottom>
         <Code sx={{ fontSize: 16, mr: 0.5, verticalAlign: 'text-bottom' }} />
         Generated DDL

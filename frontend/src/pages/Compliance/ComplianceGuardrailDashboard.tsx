@@ -141,7 +141,7 @@ export const ComplianceGuardrailDashboard: React.FC = () => {
           </Card>
         </Grid>
 
-        <Grid item xs={12} md={3}>
+        <Grid   size={{ xs: 12, md: 3 }}>
           <Card elevation={3}>
             <CardContent>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
@@ -158,7 +158,7 @@ export const ComplianceGuardrailDashboard: React.FC = () => {
           </Card>
         </Grid>
 
-        <Grid item xs={12} md={3}>
+        <Grid   size={{ xs: 12, md: 3 }}>
           <Card elevation={3}>
             <CardContent>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
@@ -285,7 +285,7 @@ export const ComplianceGuardrailDashboard: React.FC = () => {
                   </Typography>
                   <Typography variant="body1">{selectedViolation.description}</Typography>
                 </Grid>
-                <Grid item xs={6}>
+                <Grid  size={{ xs: 6 }}>
                   <Typography variant="subtitle2" color="text.secondary">
                     Timestamp
                   </Typography>
@@ -293,7 +293,7 @@ export const ComplianceGuardrailDashboard: React.FC = () => {
                     {new Date(selectedViolation.timestamp).toLocaleString()}
                   </Typography>
                 </Grid>
-                <Grid item xs={6}>
+                <Grid  size={{ xs: 6 }}>
                   <Typography variant="subtitle2" color="text.secondary">
                     User
                   </Typography>

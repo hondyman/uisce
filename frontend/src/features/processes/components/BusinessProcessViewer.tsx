@@ -1,33 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import {
-  Box,
-  Paper,
-  Typography,
-  Stepper,
-  Step,
-  StepLabel,
-  StepContent,
-  Button,
-  Card,
-  CardContent,
-  Chip,
-  Grid,
-  IconButton,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
-  TextField,
-  List,
-  ListItem,
-  ListItemIcon,
-  ListItemText,
-  Divider,
-  Alert,
-  CircularProgress,
-  Tooltip,
-  Stack,
-} from '@mui/material';
+import { Alert, Box, Button, Card, CardContent, Chip, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle, Divider, Grid, IconButton, List, ListItem, ListItemButton, ListItemIcon, ListItemText, Paper, Stack, Step, StepContent, StepLabel, Stepper, TextField, Tooltip, Typography } from '@mui/material';
 import {
   PlayArrow as StartIcon,
   CheckCircle as CompleteIcon,
@@ -553,8 +525,7 @@ export const ProcessInstancesList: React.FC<ProcessInstancesListProps> = ({
       {instances.map((instance, index) => (
         <React.Fragment key={instance.id}>
           {index > 0 && <Divider />}
-          <ListItem
-            button
+          <ListItemButton 
             onClick={() => onSelect(instance)}
             sx={{ '&:hover': { bgcolor: 'action.hover' } }}
           >
@@ -583,7 +554,7 @@ export const ProcessInstancesList: React.FC<ProcessInstancesListProps> = ({
               color={getStatusColor(instance.status) as any}
               size="small"
             />
-          </ListItem>
+          </ListItemButton>
         </React.Fragment>
       ))}
     </List>

@@ -5,13 +5,6 @@ import {
   Typography,
   TextField,
   Button,
-  Timeline,
-  TimelineItem,
-  TimelineSeparator,
-  TimelineConnector,
-  TimelineContent,
-  TimelineDot,
-  TimelineOppositeContent,
   Card,
   CardContent,
   Chip,
@@ -19,6 +12,15 @@ import {
   Grid,
   Divider,
 } from '@mui/material';
+import {
+  Timeline,
+  TimelineItem,
+  TimelineSeparator,
+  TimelineConnector,
+  TimelineContent,
+  TimelineDot,
+  TimelineOppositeContent,
+} from '@mui/lab';
 import {
   PlayArrow as PlayIcon,
   Search as SearchIcon,
@@ -169,14 +171,14 @@ export const WorkflowReplayViewer: React.FC = () => {
                 <Typography variant="body1">{execution.workflow_type}</Typography>
               </Grid>
 
-              <Grid item xs={12} md={4}>
+              <Grid   size={{ xs: 12, md: 4 }}>
                 <Typography variant="body2" color="text.secondary">
                   Status
                 </Typography>
                 <Chip label={execution.status} color={getStatusColor(execution.status)} />
               </Grid>
 
-              <Grid item xs={12} md={4}>
+              <Grid   size={{ xs: 12, md: 4 }}>
                 <Typography variant="body2" color="text.secondary">
                   Execution Time
                 </Typography>
@@ -185,7 +187,7 @@ export const WorkflowReplayViewer: React.FC = () => {
                 </Typography>
               </Grid>
 
-              <Grid item xs={12} md={6}>
+              <Grid   size={{ xs: 12, md: 6 }}>
                 <Typography variant="body2" color="text.secondary">
                   Start Time
                 </Typography>
@@ -195,7 +197,7 @@ export const WorkflowReplayViewer: React.FC = () => {
               </Grid>
 
               {execution.close_time && (
-                <Grid item xs={12} md={6}>
+                <Grid   size={{ xs: 12, md: 6 }}>
                   <Typography variant="body2" color="text.secondary">
                     Close Time
                   </Typography>

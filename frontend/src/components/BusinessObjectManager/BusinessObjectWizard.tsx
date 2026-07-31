@@ -1,50 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import {
-  Box,
-  Button,
-  Stepper,
-  Step,
-  StepLabel,
-  TextField,
-  Typography,
-  Paper,
-  List,
-  ListItem,
-  ListItemText,
-  ListItemIcon,
-  ListItemSecondaryAction,
-  Checkbox,
-  Chip,
-  Alert,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
-  FormControl,
-  InputLabel,
-  Select,
-  MenuItem,
-  Autocomplete,
-  IconButton,
-  Collapse,
-  Radio,
-  RadioGroup,
-  FormControlLabel,
-  Divider,
-  Tooltip,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
-  InputAdornment,
-  CircularProgress,
-  Grid,
-  Card,
-  CardContent,
-  Badge,
-} from '@mui/material';
+import { Alert, Autocomplete, Badge, Box, Button, Card, CardContent, Checkbox, Chip, CircularProgress, Collapse, Dialog, DialogActions, DialogContent, DialogTitle, Divider, FormControl, FormControlLabel, Grid, IconButton, InputAdornment, InputLabel, List, ListItem, ListItemButton, ListItemIcon, ListItemSecondaryAction, ListItemText, MenuItem, Paper, Radio, RadioGroup, Select, Step, StepLabel, Stepper, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, TextField, Tooltip, Typography } from '@mui/material';
 import {
   Close as CloseIcon,
   TableChart as TableIcon,
@@ -535,7 +490,7 @@ export const BusinessObjectWizard: React.FC<BusinessObjectWizardProps> = ({
                   {wizardContext.drivingTable.termCount}
                 </Typography>
               </Grid>
-              <Grid item xs={4}>
+              <Grid  size={{ xs: 4 }}>
                 <Typography variant="body2" color="text.secondary">
                   Related Tables
                 </Typography>
@@ -741,8 +696,7 @@ export const BusinessObjectWizard: React.FC<BusinessObjectWizardProps> = ({
           <List>
           {relatedTables.map((table) => (
             <Paper key={table.tableId} variant="outlined" sx={{ mb: 2 }}>
-              <ListItem
-                button
+              <ListItemButton 
                 onClick={() => toggleRelatedTableExpanded(table.tableId)}
               >
                 <ListItemIcon>
@@ -770,7 +724,7 @@ export const BusinessObjectWizard: React.FC<BusinessObjectWizardProps> = ({
                     {table.expanded ? <ExpandLessIcon /> : <ExpandMoreIcon />}
                   </IconButton>
                 </ListItemSecondaryAction>
-              </ListItem>
+              </ListItemButton>
 
               <Collapse in={table.expanded}>
                 <Box sx={{ p: 2, bgcolor: 'background.default' }}>
@@ -780,7 +734,7 @@ export const BusinessObjectWizard: React.FC<BusinessObjectWizardProps> = ({
 
                   <Grid container spacing={1}>
                     {table.existingBOId && (
-                      <Grid item>
+                      <Grid size="auto">
                         <Chip
                           label="Link to Business Object"
                           onClick={() => setRelatedTableLinkType(table.tableId, 'link_bo')}
@@ -790,7 +744,7 @@ export const BusinessObjectWizard: React.FC<BusinessObjectWizardProps> = ({
                         />
                       </Grid>
                     )}
-                    <Grid item>
+                    <Grid size="auto">
                       <Chip
                         label="Include Terms"
                         onClick={() => setRelatedTableLinkType(table.tableId, 'include_terms')}
@@ -799,7 +753,7 @@ export const BusinessObjectWizard: React.FC<BusinessObjectWizardProps> = ({
                         icon={<TermIcon />}
                       />
                     </Grid>
-                    <Grid item>
+                    <Grid size="auto">
                       <Chip
                         label="Ignore"
                         onClick={() => setRelatedTableLinkType(table.tableId, 'ignore')}
@@ -816,9 +770,8 @@ export const BusinessObjectWizard: React.FC<BusinessObjectWizardProps> = ({
                       </Typography>
                       <List dense sx={{ maxHeight: 200, overflow: 'auto' }}>
                         {table.semanticTerms.map((term) => (
-                          <ListItem
+                          <ListItemButton 
                             key={term.termId}
-                            button
                             onClick={() => toggleRelatedTableTerm(table.tableId, term.termId)}
                             dense
                           >
@@ -843,7 +796,7 @@ export const BusinessObjectWizard: React.FC<BusinessObjectWizardProps> = ({
                               }
                               secondary={term.columnName}
                             />
-                          </ListItem>
+                          </ListItemButton>
                         ))}
                       </List>
                       <Typography variant="caption" color="text.secondary">

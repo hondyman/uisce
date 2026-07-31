@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { ThemeToggle } from '../theme/ThemeToggle'
 
-export function StatusBar({ kernel }) {
+export function StatusBar({kernel }) {
   const [status, setStatus] = useState({
     wasm: "loading",
     workers: 0,

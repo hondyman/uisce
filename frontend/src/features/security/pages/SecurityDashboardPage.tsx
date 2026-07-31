@@ -71,7 +71,7 @@ export const SecurityDashboardPage: React.FC = () => {
                         subtext="Last 24 hours"
                     />
                 </Grid>
-                <Grid item xs={12} sm={6} md={3}>
+                <Grid    size={{ xs: 12, sm: 6, md: 3 }}>
                     <MetricCard 
                         title="Active Roles" 
                         value={stats.active_roles} 
@@ -79,7 +79,7 @@ export const SecurityDashboardPage: React.FC = () => {
                         color="info" 
                     />
                 </Grid>
-                <Grid item xs={12} sm={6} md={3}>
+                <Grid    size={{ xs: 12, sm: 6, md: 3 }}>
                     <MetricCard 
                         title="Recent Alerts" 
                         value={stats.recent_alerts} 

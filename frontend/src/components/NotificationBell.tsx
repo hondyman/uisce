@@ -1,22 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import {
-  Box,
-  Paper,
-  Typography,
-  IconButton,
-  Badge,
-  Menu,
-  MenuItem,
-  List,
-  ListItem,
-  ListItemText,
-  ListItemSecondaryAction,
-  Divider,
-  Button,
-  Chip,
-  Stack,
-  Avatar,
-} from '@mui/material';
+import { Avatar, Badge, Box, Button, Chip, Divider, IconButton, List, ListItem, ListItemButton, ListItemSecondaryAction, ListItemText, Menu, MenuItem, Paper, Stack, Typography } from '@mui/material';
 import {
   Notifications as NotificationsIcon,
   NotificationsActive as NotificationsActiveIcon,
@@ -175,8 +158,7 @@ export const NotificationBell: React.FC<NotificationBellProps> = ({
               {notifications.map((notification, index) => (
                 <React.Fragment key={notification.id}>
                   {index > 0 && <Divider />}
-                  <ListItem
-                    button
+                  <ListItemButton 
                     onClick={() => handleNotificationClick(notification)}
                     sx={{
                       bgcolor: notification.read_at ? 'transparent' : 'action.hover',
@@ -219,7 +201,7 @@ export const NotificationBell: React.FC<NotificationBellProps> = ({
                         </Typography>
                       </Box>
                     </Stack>
-                  </ListItem>
+                  </ListItemButton>
                 </React.Fragment>
               ))}
             </List>

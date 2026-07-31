@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 
-export function TracePanel({ kernel }) {
+export function TracePanel({kernel }) {
   const [trace, setTrace] = useState(null)
 
   useEffect(() => {
@@ -21,7 +21,7 @@ export function TracePanel({ kernel }) {
   )
 }
 
-function TraceNode({ node }) {
+function TraceNode({node }) {
   return (
     <div className={`trace-node ${node.passed ? "pass" : "fail"}`}>
       <div className="header">

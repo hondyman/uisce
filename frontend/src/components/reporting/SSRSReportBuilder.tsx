@@ -569,7 +569,7 @@ const SSRSReportBuilderContent: React.FC = () => {
                   <Grid item>
                     <Typography variant="h6">Report Preview</Typography>
                   </Grid>
-                  <Grid item sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                  <Grid sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
                     <Button
                       variant="contained"
                       size="small"
@@ -783,12 +783,12 @@ const SSRSReportBuilderContent: React.FC = () => {
               <Grid container spacing={2}>
                 <Grid size={{ 'xs': 12, 'sm': 6 }}><FormControlLabel control={<Switch size="small" checked={layoutSettingsState.pageBreakBeforeGroup} onChange={(e) => handleLayoutSettingChange('pageBreakBeforeGroup', e.target.checked)} />} label="Page break before group" /></Grid>
                 <Grid size={{ 'xs': 12, 'sm': 6 }}><FormControlLabel control={<Switch size="small" checked={layoutSettingsState.pageBreakAfterGroup} onChange={(e) => handleLayoutSettingChange('pageBreakAfterGroup', e.target.checked)} />} label="Page break after group" /></Grid>
-                <Grid item xs={12} sm={6}><FormControlLabel control={<Switch size="small" checked={layoutSettingsState.pageBreakBetweenRegions} onChange={(e) => handleLayoutSettingChange('pageBreakBetweenRegions', e.target.checked)} />} label="Page break between regions" /></Grid>
-                <Grid item xs={12} sm={6}><FormControlLabel control={<Switch size="small" checked={layoutSettingsState.fixedPageSize} onChange={(e) => handleLayoutSettingChange('fixedPageSize', e.target.checked)} />} label="Fixed page size" /></Grid>
+                <Grid   size={{ xs: 12, sm: 6 }}><FormControlLabel control={<Switch size="small" checked={layoutSettingsState.pageBreakBetweenRegions} onChange={(e) => handleLayoutSettingChange('pageBreakBetweenRegions', e.target.checked)} />} label="Page break between regions" /></Grid>
+                <Grid   size={{ xs: 12, sm: 6 }}><FormControlLabel control={<Switch size="small" checked={layoutSettingsState.fixedPageSize} onChange={(e) => handleLayoutSettingChange('fixedPageSize', e.target.checked)} />} label="Fixed page size" /></Grid>
                 <Grid size={{ 'xs': 6, 'sm': 4 }}><TextField fullWidth size="small" type="number" label="Columns" value={layoutSettingsState.columns} onChange={(e) => handleLayoutSettingChange('columns', Math.max(1, Number(e.target.value) || 1))} /></Grid>
                 <Grid size={{ 'xs': 6, 'sm': 8 }}><TextField fullWidth size="small" type="number" label="Column Spacing" value={layoutSettingsState.columnSpacing} onChange={(e) => handleLayoutSettingChange('columnSpacing', Math.max(0, Number(e.target.value) || 0))} InputProps={{ endAdornment: <InputAdornment position="end">px</InputAdornment> }} /></Grid>
-                <Grid item xs={12} sm={6}><FormControlLabel control={<Switch size="small" checked={layoutSettingsState.includeExecutionTime} onChange={(e) => handleLayoutSettingChange('includeExecutionTime', e.target.checked)} />} label="Include execution time" /></Grid>
-                <Grid item xs={12} sm={6}><FormControlLabel control={<Switch size="small" checked={layoutSettingsState.includeUserName} onChange={(e) => handleLayoutSettingChange('includeUserName', e.target.checked)} />} label="Include user name" /></Grid>
+                <Grid   size={{ xs: 12, sm: 6 }}><FormControlLabel control={<Switch size="small" checked={layoutSettingsState.includeExecutionTime} onChange={(e) => handleLayoutSettingChange('includeExecutionTime', e.target.checked)} />} label="Include execution time" /></Grid>
+                <Grid   size={{ xs: 12, sm: 6 }}><FormControlLabel control={<Switch size="small" checked={layoutSettingsState.includeUserName} onChange={(e) => handleLayoutSettingChange('includeUserName', e.target.checked)} />} label="Include user name" /></Grid>
               </Grid>
               <Divider sx={{ my: 2 }}>Header Tokens</Divider>
               <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mb: 1 }}>

@@ -45,10 +45,10 @@ const ComplianceDashboard = () => {
                 <Grid size={{ 'xs': 12, 'md': 3 }}>
                     <SummaryCard title="EU Terms" value={summary.euTerms} color="primary.main" />
                 </Grid>
-                <Grid item xs={12} md={3}>
+                <Grid   size={{ xs: 12, md: 3 }}>
                     <SummaryCard title="High Sensitivity" value={summary.highSensitivity} color="warning.main" />
                 </Grid>
-                <Grid item xs={12} md={3}>
+                <Grid   size={{ xs: 12, md: 3 }}>
                     <SummaryCard title="Open Violations" value={summary.openViolations} color="error.dark" />
                 </Grid>
             </Grid>
@@ -135,7 +135,7 @@ const ComplianceDashboard = () => {
     );
 };
 
-const SummaryCard = ({ title, value, color }) => (
+const SummaryCard = ({title, value, color }) => (
     <Card sx={{ height: '100%' }}>
         <CardContent>
             <Typography color="textSecondary" gutterBottom>{title}</Typography>

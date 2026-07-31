@@ -45,7 +45,7 @@ import type { ValidationRule as SharedValidationRule } from '../../components/va
 import { fetchEntitySchema } from '../../api/entitySchema';
 
 // Local narrowers to avoid `(rule as any)` casts in render/filter logic
-const asRecord = (v: unknown): Record<string, unknown> => (v && typeof v === 'object' ? (v as Record<string, unknown>) : {});
+const asRecord = (v): Record<string, unknown> => (v && typeof v === 'object' ? (v as Record<string, unknown>) : {});
 
 
 const RULE_TYPES = [
@@ -138,7 +138,7 @@ export const ValidationRulesPage: React.FC = () => {
         : (data && typeof data === 'object' && Array.isArray((data as Record<string, unknown>)['rules'])
           ? ((data as Record<string, unknown>)['rules'] as unknown[])
           : []);
-      const normalized = rawArr.map((r: unknown) => {
+      const normalized = rawArr.map((r) => {
         const rr = (r && typeof r === 'object') ? (r as Record<string, unknown>) : {};
         return {
           id: String(rr['id'] ?? ''),
@@ -571,7 +571,7 @@ export const ValidationRulesPage: React.FC = () => {
     return RULE_TYPES.find((t) => t.value === type);
   };
 
-  const handleFormChange = (field: string, value: unknown) => {
+  const handleFormChange = (field: string, value) => {
     // Dynamic field updater: narrow to unknown and assign locally
     setFormData((prev) => ({ ...prev, [field]: value as any }));
   };
@@ -917,7 +917,7 @@ export const ValidationRulesPage: React.FC = () => {
                   </Alert>
                   
                   <Grid container spacing={2}>
-                    <Grid item xs={6}>
+                    <Grid  size={{ xs: 6 }}>
                       <FormControl fullWidth error={!!validationErrors.ref_source_entity}>
                         <InputLabel>Source Entity *</InputLabel>
                         <Select
@@ -940,7 +940,7 @@ export const ValidationRulesPage: React.FC = () => {
                         )}
                       </FormControl>
                     </Grid>
-                    <Grid item xs={6}>
+                    <Grid  size={{ xs: 6 }}>
                       <Autocomplete
                         freeSolo
                         options={['id', 'customer_id', 'employee_id', 'supplier_id', 'order_id', 'product_id', 'department_id', 'email', 'phone']}
@@ -966,7 +966,7 @@ export const ValidationRulesPage: React.FC = () => {
                   </Grid>
                   
                   <Grid container spacing={2}>
-                    <Grid item xs={6}>
+                    <Grid  size={{ xs: 6 }}>
                       <FormControl fullWidth error={!!validationErrors.ref_target_entity}>
                         <InputLabel>Target Entity *</InputLabel>
                         <Select
@@ -989,7 +989,7 @@ export const ValidationRulesPage: React.FC = () => {
                         )}
                       </FormControl>
                     </Grid>
-                    <Grid item xs={6}>
+                    <Grid  size={{ xs: 6 }}>
                       <Autocomplete
                         freeSolo
                         options={['id', 'customer_id', 'employee_id', 'supplier_id', 'order_id', 'product_id', 'department_id', 'email', 'phone']}
@@ -1038,7 +1038,7 @@ export const ValidationRulesPage: React.FC = () => {
               <Divider />
 
               <Grid container spacing={2}>
-                <Grid item xs={12} sm={6}>
+                <Grid   size={{ xs: 12, sm: 6 }}>
                   <FormControl fullWidth>
                     <InputLabel>Severity *</InputLabel>
                     <Select
@@ -1054,7 +1054,7 @@ export const ValidationRulesPage: React.FC = () => {
                     </Select>
                   </FormControl>
                 </Grid>
-                <Grid item xs={12} sm={6}>
+                <Grid   size={{ xs: 12, sm: 6 }}>
                   <FormControlLabel
                     control={
                       <Checkbox

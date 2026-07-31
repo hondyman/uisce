@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 
-export function DiffPanel({ kernel }) {
+export function DiffPanel({kernel }) {
   const [diffs, setDiffs] = useState([])
 
   useEffect(() => {

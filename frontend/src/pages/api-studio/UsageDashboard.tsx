@@ -72,7 +72,7 @@ const UsageDashboard: React.FC<UsageDashboardProps> = ({ endpoint }) => {
                         </CardContent>
                     </Card>
                 </Grid>
-                <Grid item xs={12} md={3}>
+                <Grid   size={{ xs: 12, md: 3 }}>
                     <Card elevation={0} sx={{ border: '1px solid #eee', borderRadius: 2 }}>
                         <CardContent>
                             <Typography variant="caption" color="textSecondary">Requests (24h)</Typography>
@@ -81,7 +81,7 @@ const UsageDashboard: React.FC<UsageDashboardProps> = ({ endpoint }) => {
                         </CardContent>
                     </Card>
                 </Grid>
-                <Grid item xs={12} md={3}>
+                <Grid   size={{ xs: 12, md: 3 }}>
                     <Card elevation={0} sx={{ border: '1px solid #eee', borderRadius: 2 }}>
                         <CardContent>
                             <Typography variant="caption" color="textSecondary">Cache Hit Rate</Typography>

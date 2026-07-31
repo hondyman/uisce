@@ -369,11 +369,11 @@ const APICatalogPage: React.FC = () => {
 
               <Typography variant="h6" gutterBottom>Details</Typography>
               <Grid container spacing={2}>
-                <Grid item xs={6}>
+                <Grid  size={{ xs: 6 }}>
                   <Typography><strong>Category:</strong> {selectedBusinessTerm.category}</Typography>
                   <Typography><strong>Owner:</strong> {selectedBusinessTerm.owner}</Typography>
                 </Grid>
-                <Grid item xs={6}>
+                <Grid  size={{ xs: 6 }}>
                   <Typography><strong>Status:</strong> {selectedBusinessTerm.status}</Typography>
                   <Typography><strong>Related APIs:</strong> {selectedBusinessTerm.relatedAPIs.length}</Typography>
                 </Grid>

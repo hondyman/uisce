@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Box, Typography, Button, List, ListItem, ListItemText, ListItemSecondaryAction, IconButton, Paper, Divider, Chip, TextField, Select, MenuItem, FormControl, InputLabel } from '@mui/material';
+import { Box, Button, Chip, Divider, FormControl, IconButton, InputLabel, List, ListItem, ListItemButton, ListItemSecondaryAction, ListItemText, MenuItem, Paper, Select, TextField, Typography } from '@mui/material';
 import { Add as AddIcon, Edit as EditIcon, PlayArrow as PlayIcon, Code as CodeIcon, Storage as StorageIcon, CloudQueue as ApiIcon } from '@mui/icons-material';
 import { ApiStudioApi } from '../../api/apiStudio';
 import { APIEndpoint } from '../../types/apiStudio';
@@ -100,7 +100,7 @@ const APIStudioPage: React.FC = () => {
                             <Typography variant="overline" color="primary" fontWeight="bold">Business Objects</Typography>
                             <List dense>
                                 {bos.map(bo => (
-                                    <ListItem key={bo.id} button onClick={() => setSelectedBO(bo)}>
+                                    <ListItemButton  key={bo.id} onClick={() => setSelectedBO(bo)}>
                                         <StorageIcon fontSize="small" sx={{ mr: 1, color: 'primary.main' }} />
                                         <ListItemText primary={bo.name} />
                                         <ListItemSecondaryAction>
@@ -108,7 +108,7 @@ const APIStudioPage: React.FC = () => {
                                                 <AddIcon fontSize="small" />
                                             </IconButton>
                                         </ListItemSecondaryAction>
-                                    </ListItem>
+                                    </ListItemButton>
                                 ))}
                             </List>
 
@@ -116,7 +116,7 @@ const APIStudioPage: React.FC = () => {
                             <Typography variant="overline" color="secondary" fontWeight="bold">Existing Endpoints</Typography>
                             <List dense>
                                 {endpoints.map(ep => (
-                                    <ListItem key={ep.id} button onClick={() => setEditingEndpoint(ep)}>
+                                    <ListItemButton  key={ep.id} onClick={() => setEditingEndpoint(ep)}>
                                         <ApiIcon fontSize="small" sx={{ mr: 1, color: 'secondary.main' }} />
                                         <ListItemText primary={ep.name} secondary={ep.path} />
                                         <ListItemSecondaryAction>
@@ -124,7 +124,7 @@ const APIStudioPage: React.FC = () => {
                                                 <EditIcon fontSize="small" />
                                             </IconButton>
                                         </ListItemSecondaryAction>
-                                    </ListItem>
+                                    </ListItemButton>
                                 ))}
                             </List>
                         </>

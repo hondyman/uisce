@@ -423,7 +423,7 @@ function EnhancedMappingRow({
         <DialogTitle>Edit Business Term</DialogTitle>
         <DialogContent>
           <Grid container spacing={2} sx={{ mt: 1 }}>
-            <Grid item xs={12}>
+            <Grid  size={{ xs: 12 }}>
               <TextField
                 label="Term Name"
                 value={editingTerm?.term_name || ''}
@@ -431,7 +431,7 @@ function EnhancedMappingRow({
                 fullWidth
               />
             </Grid>
-            <Grid item xs={12}>
+            <Grid  size={{ xs: 12 }}>
               <TextField
                 label="Category"
                 value={customCategory}
@@ -439,7 +439,7 @@ function EnhancedMappingRow({
                 fullWidth
               />
             </Grid>
-            <Grid item xs={12}>
+            <Grid  size={{ xs: 12 }}>
               <TextField
                 label="Description"
                 value={customDescription}

@@ -205,7 +205,7 @@ const MetricDetailDialog: React.FC<MetricDetailDialogProps> = ({
           )}
 
           {/* Audience and Tags */}
-          <Grid item xs={12} md={6}>
+          <Grid   size={{ xs: 12, md: 6 }}>
             <Paper sx={{ p: 2 }}>
               <Typography variant="h6" gutterBottom>
                 Target Audience
@@ -224,7 +224,7 @@ const MetricDetailDialog: React.FC<MetricDetailDialogProps> = ({
             </Paper>
           </Grid>
 
-          <Grid item xs={12} md={6}>
+          <Grid   size={{ xs: 12, md: 6 }}>
             <Paper sx={{ p: 2 }}>
               <Typography variant="h6" gutterBottom>
                 Tags
@@ -244,7 +244,7 @@ const MetricDetailDialog: React.FC<MetricDetailDialogProps> = ({
           </Grid>
 
           {/* Usage Information */}
-          <Grid item xs={12}>
+          <Grid  size={{ xs: 12 }}>
             <Alert severity="info">
               <Typography variant="body2">
                 <strong>Usage:</strong> This metric is available in the semantic layer and can be used in dashboards,

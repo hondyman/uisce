@@ -1,22 +1,6 @@
 
 import React, { useState } from 'react';
-import { 
-  Box, 
-  Typography, 
-  Paper, 
-  List, 
-  ListItem, 
-  ListItemText, 
-  TextField, 
-  Button, 
-  Grid,
-  IconButton,
-  Chip,
-  AppBar,
-  Toolbar,
-  Divider,
-  CircularProgress
-} from '@mui/material';
+import { AppBar, Box, Button, Chip, CircularProgress, Divider, Grid, IconButton, List, ListItem, ListItemButton, ListItemText, Paper, TextField, Toolbar, Typography } from '@mui/material';
 import AutoFixHighIcon from '@mui/icons-material/AutoFixHigh';
 import SaveIcon from '@mui/icons-material/Save';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
@@ -86,9 +70,8 @@ const BusinessRuleEditorPage: React.FC = () => {
                 </Box>
                 <List dense>
                     {mockPolicies.map(policy => (
-                        <ListItem 
+                        <ListItemButton  
                             key={policy.id} 
-                            button 
                             selected={selectedPolicyId === policy.id}
                             onClick={() => setSelectedPolicyId(policy.id)}
                             sx={{ 
@@ -107,7 +90,7 @@ const BusinessRuleEditorPage: React.FC = () => {
                                 primaryTypographyProps={{ color: 'white' }}
                             />
                             <IconButton size="small" sx={{ color: 'rgba(255,255,255,0.3)' }}><EditIcon fontSize="small" /></IconButton>
-                        </ListItem>
+                        </ListItemButton>
                     ))}
                 </List>
             </Paper>

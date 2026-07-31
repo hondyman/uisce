@@ -330,7 +330,7 @@ const TenantsPage: React.FC = () => {
                     helperText="Human-readable name (optional)"
                   />
                 </Grid>
-                <Grid item xs={12}>
+                <Grid  size={{ xs: 12 }}>
                   <TextField
                     fullWidth
                     multiline
@@ -362,7 +362,7 @@ const TenantsPage: React.FC = () => {
         <DialogTitle>Create New Tenant</DialogTitle>
         <DialogContent>
           <Grid container spacing={2} sx={{ mt: 1 }}>
-            <Grid item xs={12}>
+            <Grid  size={{ xs: 12 }}>
               <TextField
                 fullWidth
                 label="Tenant Name"
@@ -371,7 +371,7 @@ const TenantsPage: React.FC = () => {
                 required
               />
             </Grid>
-            <Grid item xs={12}>
+            <Grid  size={{ xs: 12 }}>
               <TextField
                 fullWidth
                 label="Display Name"
@@ -379,7 +379,7 @@ const TenantsPage: React.FC = () => {
                 onChange={(e) => setNewTenantDisplayName(e.target.value)}
               />
             </Grid>
-            <Grid item xs={12}>
+            <Grid  size={{ xs: 12 }}>
               <TextField
                 fullWidth
                 multiline
@@ -404,7 +404,7 @@ const TenantsPage: React.FC = () => {
         <DialogTitle>Edit Tenant</DialogTitle>
         <DialogContent>
           <Grid container spacing={2} sx={{ mt: 1 }}>
-            <Grid item xs={12}>
+            <Grid  size={{ xs: 12 }}>
               <TextField
                 fullWidth
                 label="Display Name"
@@ -412,7 +412,7 @@ const TenantsPage: React.FC = () => {
                 onChange={(e) => setEditDisplayName(e.target.value)}
               />
             </Grid>
-            <Grid item xs={12}>
+            <Grid  size={{ xs: 12 }}>
               <TextField
                 fullWidth
                 multiline

@@ -307,7 +307,7 @@ const ValidationResultsPanel: React.FC = () => {
                   </Typography>
                   <Typography variant="body2">{selectedResult.step_name}</Typography>
                 </Grid>
-                <Grid item xs={6}>
+                <Grid  size={{ xs: 6 }}>
                   <Typography variant="caption" color="textSecondary">
                     Status
                   </Typography>
@@ -317,7 +317,7 @@ const ValidationResultsPanel: React.FC = () => {
                     size="small"
                   />
                 </Grid>
-                <Grid item xs={6}>
+                <Grid  size={{ xs: 6 }}>
                   <Typography variant="caption" color="textSecondary">
                     Execution Time
                   </Typography>

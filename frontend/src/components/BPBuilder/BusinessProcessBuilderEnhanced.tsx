@@ -1078,7 +1078,7 @@ export const BusinessProcessBuilderEnhanced: React.FC = () => {
               onTemplateCloned={(processId) => {
                 // Refresh or navigate to cloned process
                 setViewMode('canvas');
-                showNotification('Template cloned successfully!', 'success');
+                setToast({ message: 'Template cloned successfully!', type: 'success' });
               }}
             />
           )}

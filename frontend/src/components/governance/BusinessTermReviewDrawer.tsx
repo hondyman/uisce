@@ -3,7 +3,7 @@ import {
   Box, Typography, Button, Divider, Chip, Grid 
 } from '@mui/material';
 
-const BusinessTermReviewDrawer = ({ draft, onClose }) => {
+const BusinessTermReviewDrawer = ({ draft, onClose }: { draft: any; onClose: any }) => {
     // Mock Detail Data (would fetch in real app)
     const detail = {
         ...draft,
@@ -34,7 +34,7 @@ const BusinessTermReviewDrawer = ({ draft, onClose }) => {
                     <Typography variant="caption">Sensitivity</Typography>
                     <Box><Chip label={detail.sensitivity} color="warning" size="small" /></Box>
                 </Grid>
-                <Grid item xs={4}>
+                <Grid  size={{ xs: 4 }}>
                     <Typography variant="caption">Residency</Typography>
                     <Box><Chip label={detail.residency} variant="outlined" size="small" /></Box>
                 </Grid>

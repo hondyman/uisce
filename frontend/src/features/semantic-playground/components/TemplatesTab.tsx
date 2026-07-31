@@ -370,7 +370,7 @@ const TemplateEditor: React.FC<TemplateEditorProps> = ({ template, onSave }) => 
               />
             </Grid>
 
-            <Grid item xs={12}>
+            <Grid  size={{ xs: 12 }}>
               <TextField
                 fullWidth
                 label="Description"
@@ -399,7 +399,7 @@ const TemplateEditor: React.FC<TemplateEditorProps> = ({ template, onSave }) => 
               />
             </Grid>
 
-            <Grid item xs={6}>
+            <Grid  size={{ xs: 6 }}>
               <FormControl fullWidth>
                 <InputLabel>Visibility</InputLabel>
                 <Select
@@ -418,7 +418,7 @@ const TemplateEditor: React.FC<TemplateEditorProps> = ({ template, onSave }) => 
       </Grid>
 
       {/* Semantic Query */}
-      <Grid item xs={12}>
+      <Grid  size={{ xs: 12 }}>
         <Paper sx={{ p: 2 }}>
           <Typography variant="h6" sx={{ mb: 1 }}>
             Semantic Query (JSON)
@@ -436,7 +436,7 @@ const TemplateEditor: React.FC<TemplateEditorProps> = ({ template, onSave }) => 
       </Grid>
 
       {/* Parameters */}
-      <Grid item xs={12}>
+      <Grid  size={{ xs: 12 }}>
         <Paper sx={{ p: 2 }}>
           <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
             <Typography variant="h6">Parameters</Typography>
@@ -516,7 +516,7 @@ const TemplateEditor: React.FC<TemplateEditorProps> = ({ template, onSave }) => 
 
       {/* Change Message (for versioning) */}
       {template && (
-        <Grid item xs={12}>
+        <Grid  size={{ xs: 12 }}>
           <TextField
             fullWidth
             label="Change Message"
@@ -530,7 +530,7 @@ const TemplateEditor: React.FC<TemplateEditorProps> = ({ template, onSave }) => 
       )}
 
       {/* Save Button */}
-      <Grid item xs={12}>
+      <Grid  size={{ xs: 12 }}>
         <Button variant="contained" onClick={handleSave} fullWidth>
           {template ? 'Update Template' : 'Create Template'}
         </Button>

@@ -1,4 +1,5 @@
 export class WorkerPoolService {
+  workers: number;
   constructor() {
     this.workers = 0
   }

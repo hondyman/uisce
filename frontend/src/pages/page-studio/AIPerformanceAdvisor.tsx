@@ -79,7 +79,7 @@ export const AIPerformanceAdvisor: React.FC<AIPerformanceAdvisorProps> = ({ page
                         <LinearProgress variant="determinate" value={100} color="error" sx={{ height: 8, borderRadius: 4 }} />
                     </Paper>
                 </Grid>
-                <Grid item xs={12} md={4}>
+                <Grid   size={{ xs: 12, md: 4 }}>
                     <Paper variant="outlined" sx={{ p: 2, borderRadius: 2 }}>
                         <Typography variant="overline" color="textSecondary">Pre-agg Hits</Typography>
                         <Typography variant="h4" fontWeight="bold" sx={{ color: 'success.main' }}>95%</Typography>

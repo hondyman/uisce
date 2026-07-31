@@ -2100,13 +2100,13 @@ export default function BusinessObjectDetailsPage() {
                                 {binding.backendName || binding.backendId || 'N/A'}
                               </Typography>
                             </Grid>
-                            <Grid item xs={12} md={6}>
+                            <Grid   size={{ xs: 12, md: 6 }}>
                               <Typography variant="caption" color="text.secondary">Driving Node</Typography>
                               <Typography variant="body2">
                                 {binding.drivingNodeName || binding.drivingNodeId || 'N/A'}
                               </Typography>
                             </Grid>
-                            <Grid item xs={12} md={6}>
+                            <Grid   size={{ xs: 12, md: 6 }}>
                               <Typography variant="caption" color="text.secondary">Temporal Mode</Typography>
                               <Typography variant="body2">
                                 {binding.temporalMode || 'N/A'}
@@ -2123,7 +2123,7 @@ export default function BusinessObjectDetailsPage() {
                               </Grid>
                             )}
                             {binding.Fields && binding.Fields.length > 0 && (
-                              <Grid item xs={12}>
+                              <Grid  size={{ xs: 12 }}>
                                 <Typography variant="caption" color="text.secondary" sx={{ mb: 1, display: 'block' }}>
                                   Field Mappings ({binding.Fields.length})
                                 </Typography>

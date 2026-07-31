@@ -17,7 +17,6 @@ import {
   FileText as _FileText, Hash as _Hash, Eye as _Eye
 } from 'lucide-react';
 import { PoPMetricForm } from './PoPMetricForm';
-import { useNotification } from '../../hooks/useNotification';
 import { PoPChart } from './PoPChart';
 
 // Contract Schema Types (aligned with period_over_period.schema.json)

@@ -981,10 +981,10 @@ const CalculationEditorModal: React.FC<CalculationEditorModalProps> = ({ open, o
               rows={2}
             />
           </Grid>
-          <Grid item xs={6}>
+          <Grid  size={{ xs: 6 }}>
             <TextField label="Category" value={formData.category || ''} onChange={(e) => handleChange('category', e.target.value)} fullWidth required error={!!errors.category} helperText={errors.category} />
           </Grid>
-          <Grid item xs={6}>
+          <Grid  size={{ xs: 6 }}>
             <TextField label="Subcategory" value={formData.subcategory || ''} onChange={(e) => handleChange('subcategory', e.target.value)} fullWidth />
           </Grid>
           
@@ -1016,7 +1016,7 @@ const CalculationEditorModal: React.FC<CalculationEditorModalProps> = ({ open, o
                   </Select>
                 </FormControl>
               </Grid>
-              <Grid item xs={4}>
+              <Grid  size={{ xs: 4 }}>
                 <FormControl fullWidth size="small" disabled={!selectedLevel2}>
                   <InputLabel>Domain Level 3</InputLabel>
                   <Select
@@ -1032,7 +1032,7 @@ const CalculationEditorModal: React.FC<CalculationEditorModalProps> = ({ open, o
           </Grid>
 
           {/* Execution Settings */}
-          <Grid item xs={6}>
+          <Grid  size={{ xs: 6 }}>
             <FormControl fullWidth>
               <InputLabel>Execution Type</InputLabel>
               <Select
@@ -1045,7 +1045,7 @@ const CalculationEditorModal: React.FC<CalculationEditorModalProps> = ({ open, o
               </Select>
             </FormControl>
           </Grid>
-          <Grid item xs={6}>
+          <Grid  size={{ xs: 6 }}>
             <FormControl fullWidth>
               <InputLabel>Engine</InputLabel>
               <Select
@@ -1059,7 +1059,7 @@ const CalculationEditorModal: React.FC<CalculationEditorModalProps> = ({ open, o
               </Select>
             </FormControl>
           </Grid>
-          <Grid item xs={12}>
+          <Grid  size={{ xs: 12 }}>
             <Typography variant="subtitle2" gutterBottom>SQL / Formula</Typography>
             <Paper variant="outlined" sx={{ p: 1, borderColor: errors.sql ? 'error.main' : 'divider' }}>
               <TextField

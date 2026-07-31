@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react'
 
-export function CoveragePanel({ kernel }) {
+export function CoveragePanel({kernel }) {
   const [coverage, setCoverage] = useState(null)
 
   useEffect(() => {

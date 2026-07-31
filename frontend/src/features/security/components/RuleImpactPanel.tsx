@@ -190,7 +190,7 @@ export const RuleImpactPanel: React.FC<RuleImpactPanelProps> = ({ rule }) => {
           </Card>
         </Grid>
 
-        <Grid item xs={12} md={6}>
+        <Grid   size={{ xs: 12, md: 6 }}>
           <Card elevation={2}>
             <CardContent>
               <Stack direction="row" spacing={2} alignItems="center">
@@ -208,7 +208,7 @@ export const RuleImpactPanel: React.FC<RuleImpactPanelProps> = ({ rule }) => {
           </Card>
         </Grid>
 
-        <Grid item xs={12} md={6}>
+        <Grid   size={{ xs: 12, md: 6 }}>
           <Card elevation={2}>
             <CardContent>
               <Stack direction="row" spacing={2} alignItems="center">

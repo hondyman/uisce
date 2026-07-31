@@ -159,7 +159,7 @@ export const GPPrivateMarketsDashboard: React.FC<GPPrivateMarketsDashboardProps>
                 </CardContent>
               </Card>
             </Grid>
-            <Grid item xs={12} md={3}>
+            <Grid   size={{ xs: 12, md: 3 }}>
               <Card sx={{ bgcolor: 'warning.light', color: 'warning.contrastText' }}>
                 <CardContent>
                   <Box display="flex" alignItems="center" justifyContent="space-between">
@@ -172,7 +172,7 @@ export const GPPrivateMarketsDashboard: React.FC<GPPrivateMarketsDashboardProps>
                 </CardContent>
               </Card>
             </Grid>
-            <Grid item xs={12} md={3}>
+            <Grid   size={{ xs: 12, md: 3 }}>
               <Card sx={{ bgcolor: 'info.light', color: 'info.contrastText' }}>
                 <CardContent>
                   <Box display="flex" alignItems="center" justifyContent="space-between">
@@ -219,10 +219,10 @@ export const GPPrivateMarketsDashboard: React.FC<GPPrivateMarketsDashboardProps>
 
               {activeTab === 1 && (
                 <Grid container spacing={3}>
-                  <Grid item xs={12} lg={6}>
+                  <Grid   size={{ xs: 12, lg: 6 }}>
                     <GrossIRRChart selectedFunds={selectedFunds} />
                   </Grid>
-                  <Grid item xs={12} lg={6}>
+                  <Grid   size={{ xs: 12, lg: 6 }}>
                     <NAVEvolutionChart selectedFunds={selectedFunds} />
                   </Grid>
                 </Grid>
@@ -230,7 +230,7 @@ export const GPPrivateMarketsDashboard: React.FC<GPPrivateMarketsDashboardProps>
 
               {activeTab === 2 && (
                 <Grid container spacing={3}>
-                  <Grid item xs={12}>
+                  <Grid  size={{ xs: 12 }}>
                     <FeeCarryPanel selectedFunds={selectedFunds} />
                   </Grid>
                 </Grid>
@@ -238,10 +238,10 @@ export const GPPrivateMarketsDashboard: React.FC<GPPrivateMarketsDashboardProps>
 
               {activeTab === 4 && (
                 <Grid container spacing={3}>
-                  <Grid item xs={12}>
+                  <Grid  size={{ xs: 12 }}>
                     <PerformanceAttributionChart selectedFunds={selectedFunds} />
                   </Grid>
-                  <Grid item xs={12}>
+                  <Grid  size={{ xs: 12 }}>
                     <RiskMetricsPanel selectedFunds={selectedFunds} />
                   </Grid>
                 </Grid>

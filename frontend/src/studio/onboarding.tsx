@@ -1,5 +1,5 @@
 
-export function Onboarding({ kernel }) {
+export function Onboarding({kernel }) {
   const start = () => {
     kernel.services.persistence.markOnboardingComplete()
     kernel.events.dispatch("onboarding.complete")

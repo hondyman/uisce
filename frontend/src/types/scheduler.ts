@@ -315,6 +315,8 @@ export interface JobDependency {
   depends_on_job_name?: string;
 
   dependency_type: DependencyType;
+  // Alias of dependency_type for UIs that read `dependency.type`.
+  type?: DependencyType;
 
   // Conditions
   required_status?: JobStatus[];  // default: [COMPLETED]
@@ -492,8 +494,23 @@ export interface NotificationTemplate {
   // Content by language
   content: Record<string, NotificationContent>;  // keyed by language code
 
+  // Legacy / alternate shape used by NotificationTemplatesPage forms —
+  // same content model, but the property is called `localized_content`.
+  localized_content?: Record<string, NotificationContent>;
+
   // Supported channels
   channels: NotificationChannel[];
+
+  // Per-instance UI helper — many UIs treat the template as if it has a single
+  // "primary" channel for filters/forms, even though the type models a list.
+  channel?: NotificationChannel;
+
+  // Lifecycle flags commonly used by UIs.
+  is_active?: boolean;
+
+  // Event triggers and recipients, used by NotificationTemplatesPage and friends.
+  event_type?: string;
+  recipients?: string[];
 
   created_at: string;
   updated_at: string;
@@ -542,6 +559,8 @@ export interface AuditLog {
   // Action details
   action: AuditAction;
   resource_type: 'job' | 'execution' | 'schedule' | 'calendar' | 'notification' | 'dependency' | 'chain';
+  // Alternate name used by ComplianceDashboardPage.
+  entity_type?: string;
   resource_id: string;
   resource_name?: string;
 
@@ -570,6 +589,9 @@ export interface AuditLog {
 
   timestamp: string;
 }
+
+// Alias used by some UIs (ComplianceDashboardPage) — prefer AuditLog for new code.
+export type AuditLogEntry = AuditLog;
 
 export interface ComplianceReport {
   id: string;
@@ -671,6 +693,10 @@ export interface RecentFailure {
 
 export interface PaginatedResponse<T> {
   data: T[];
+  // Alternate name for `data` used by some UIs (schedulerApi returns `jobs`,
+  // `data`, `items` depending on endpoint).
+  jobs?: T[];
+  items?: T[];
   total: number;
   page: number;
   page_size: number;

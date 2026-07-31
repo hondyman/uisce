@@ -918,11 +918,11 @@ enqueueSnackbar('Failed to delete trigger', { variant: 'error' });
                         <Typography variant="h6">Success Rate</Typography>
                         <Typography variant="body1">{analytics.success_rate.toFixed(1)}%</Typography>
                       </Grid>
-                      <Grid item xs={6}>
+                      <Grid  size={{ xs: 6 }}>
                         <Typography variant="h6">Avg Execution Time</Typography>
                         <Typography variant="body1">{analytics.avg_execution_time_ms.toFixed(2)}ms</Typography>
                       </Grid>
-                      <Grid item xs={6}>
+                      <Grid  size={{ xs: 6 }}>
                         <Typography variant="h6">Last 30 Days</Typography>
                         <Typography variant="body1">{analytics.last_30_days_invocations}</Typography>
                       </Grid>

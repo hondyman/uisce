@@ -1,4 +1,4 @@
-export function DebuggerPanel({ trace }) {
+export function DebuggerPanel({trace }) {
   return (
     <div className="debugger-panel">
       <h3>Rule Debugger</h3>

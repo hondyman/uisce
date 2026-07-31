@@ -1,5 +1,5 @@
 
-export function ExportPanel({ kernel }) {
+export function ExportPanel({kernel }) {
   const exportRule = () => {
     const blob = new Blob([kernel.state.rule], { type: "application/json" })
     const url = URL.createObjectURL(blob)
@@ -8,7 +8,7 @@ export function ExportPanel({ kernel }) {
     a.download = "rule.json"
     a.click()
     URL.revokeObjectURL(url)
-    window.notify("Rule exported", "success")
+    window.notify?.("Rule exported", "success")
   }
 
   const exportBundle = () => {
@@ -20,7 +20,7 @@ export function ExportPanel({ kernel }) {
     a.download = "rule-bundle.json"
     a.click()
     URL.revokeObjectURL(url)
-    window.notify("Bundle exported", "success")
+    window.notify?.("Bundle exported", "success")
   }
 
   const exportTrace = () => {
@@ -32,7 +32,7 @@ export function ExportPanel({ kernel }) {
     a.download = "rule-trace.json"
     a.click()
     URL.revokeObjectURL(url)
-    window.notify("Trace exported", "success")
+    window.notify?.("Trace exported", "success")
   }
 
   const handleImport = (event) => {
@@ -44,9 +44,9 @@ export function ExportPanel({ kernel }) {
           const content = e.target.result
           kernel.state.rule = content
           kernel.events.dispatch("ruleChanged", content)
-          window.notify("Rule imported", "success")
+          window.notify?.("Rule imported", "success")
         } catch (error) {
-          window.notify("Import failed", "error")
+          window.notify?.("Import failed", "error")
         }
       }
       reader.readAsText(file)

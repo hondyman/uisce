@@ -205,13 +205,13 @@ export const ManagerPerformanceHeatmap: FC<ManagerPerformanceHeatmapProps> = ({
                 <Typography variant="caption">Good (≥15% IRR, ≥1.5x TVPI)</Typography>
               </Box>
             </Grid>
-            <Grid item xs={6} sm={3}>
+            <Grid   size={{ xs: 6, sm: 3 }}>
               <Box display="flex" alignItems="center" gap={1}>
                 <Box sx={{ width: 16, height: 16, backgroundColor: '#ffc107', borderRadius: 1 }} />
                 <Typography variant="caption">Average (≥10% IRR, ≥1.2x TVPI)</Typography>
               </Box>
             </Grid>
-            <Grid item xs={6} sm={3}>
+            <Grid   size={{ xs: 6, sm: 3 }}>
               <Box display="flex" alignItems="center" gap={1}>
                 <Box sx={{ width: 16, height: 16, backgroundColor: '#f44336', borderRadius: 1 }} />
                 <Typography variant="caption">Below Average (&lt;10% IRR, &lt;1.2x TVPI)</Typography>

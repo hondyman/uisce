@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 
-export function SimulationPanel({ kernel }) {
+export function SimulationPanel({kernel }) {
   const [result, setResult] = useState(null)
 
   useEffect(() => {

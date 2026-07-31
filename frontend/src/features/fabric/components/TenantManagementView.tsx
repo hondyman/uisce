@@ -112,7 +112,7 @@ const TenantManagementView: React.FC = () => {
           return (a.label || '').localeCompare(b.label || '');
         case 'dateAdded':
         default:
-          return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+          return new Date(b.createdAt || '').getTime() - new Date(a.createdAt || '').getTime();
       }
     });
   }, [entries, searchQuery, tenantFilter, sortBy]);
@@ -164,7 +164,7 @@ const TenantManagementView: React.FC = () => {
         entry.label || '',
         entry.tenantIds.map(id => tenants.find(t => t.id === id)?.displayName || id).join('; '),
         (entry as any).allTenants ? 'Global' : 'Active',
-        new Date(entry.createdAt).toLocaleDateString()
+new Date(entry.createdAt || '').toLocaleDateString()
       ]);
       const csvContent = [headers, ...rows].map(row => row.map(cell => `"${cell}"`).join(',')).join('\n');
       const blob = new Blob([csvContent], { type: 'text/csv' });
@@ -180,7 +180,7 @@ const TenantManagementView: React.FC = () => {
         label: entry.label || '',
         assignedTenants: entry.tenantIds.map(id => tenants.find(t => t.id === id)?.displayName || id),
         status: (entry as any).allTenants ? 'Global' : 'Active',
-        dateAdded: new Date(entry.createdAt).toLocaleDateString()
+        dateAdded: new Date(entry.createdAt || '').toLocaleDateString()
       }));
       const json = JSON.stringify(jsonData, null, 2);
       const blob = new Blob([json], { type: 'application/json' });
@@ -258,13 +258,13 @@ const TenantManagementView: React.FC = () => {
         <Stack component="nav" spacing={1} px={2} flex={1}>
           <Button
             fullWidth
-            justifyContent="flex-start"
             startIcon={<span>📊</span>}
             onClick={() => setCurrentView('dashboard')}
             variant={currentView === 'dashboard' ? 'contained' : 'text'}
             disableElevation
             sx={{
               textTransform: 'none',
+              justifyContent: 'flex-start',
               color: currentView === 'dashboard' ? 'primary.contrastText' : 'text.primary',
               bgcolor: currentView === 'dashboard' ? 'primary.main' : 'transparent',
               '&:hover': { bgcolor: currentView === 'dashboard' ? 'primary.dark' : 'action.hover' }
@@ -274,7 +274,6 @@ const TenantManagementView: React.FC = () => {
           </Button>
           <Button
             fullWidth
-            justifyContent="flex-start"
             startIcon={<span>👥</span>}
             onClick={() => setCurrentView('tenants')}
             variant={currentView === 'tenants' ? 'contained' : 'text'}
@@ -290,13 +289,13 @@ const TenantManagementView: React.FC = () => {
           </Button>
           <Button
             fullWidth
-            justifyContent="flex-start"
             startIcon={<span>🔐</span>}
             onClick={() => setCurrentView('ip-whitelist')}
             variant={currentView === 'ip-whitelist' ? 'contained' : 'text'}
             disableElevation
             sx={{
               textTransform: 'none',
+              justifyContent: 'flex-start',
               color: currentView === 'ip-whitelist' ? 'primary.contrastText' : 'text.primary',
               bgcolor: currentView === 'ip-whitelist' ? 'primary.main' : 'transparent',
               '&:hover': { bgcolor: currentView === 'ip-whitelist' ? 'primary.dark' : 'action.hover' }
@@ -306,13 +305,13 @@ const TenantManagementView: React.FC = () => {
           </Button>
           <Button
             fullWidth
-            justifyContent="flex-start"
             startIcon={<span>📋</span>}
             onClick={() => setCurrentView('audit-logs')}
             variant={currentView === 'audit-logs' ? 'contained' : 'text'}
             disableElevation
             sx={{
               textTransform: 'none',
+              justifyContent: 'flex-start',
               color: currentView === 'audit-logs' ? 'primary.contrastText' : 'text.primary',
               bgcolor: currentView === 'audit-logs' ? 'primary.main' : 'transparent',
               '&:hover': { bgcolor: currentView === 'audit-logs' ? 'primary.dark' : 'action.hover' }
@@ -322,13 +321,13 @@ const TenantManagementView: React.FC = () => {
           </Button>
           <Button
             fullWidth
-            justifyContent="flex-start"
             startIcon={<span>⚙️</span>}
             onClick={() => setCurrentView('settings')}
             variant={currentView === 'settings' ? 'contained' : 'text'}
             disableElevation
             sx={{
               textTransform: 'none',
+              justifyContent: 'flex-start',
               color: currentView === 'settings' ? 'primary.contrastText' : 'text.primary',
               bgcolor: currentView === 'settings' ? 'primary.main' : 'transparent',
               '&:hover': { bgcolor: currentView === 'settings' ? 'primary.dark' : 'action.hover' }

@@ -116,7 +116,7 @@ export const ColumnPolicyManager: React.FC<ColumnPolicyManagerProps> = ({
                                         fullWidth
                                     />
                                 </Grid>
-                                <Grid item xs={12} md={6}>
+                                <Grid   size={{ xs: 12, md: 6 }}>
                                     <TextField
                                         label="Columns (comma separated)"
                                         value={policy.columns.join(', ')}
@@ -127,7 +127,7 @@ export const ColumnPolicyManager: React.FC<ColumnPolicyManagerProps> = ({
                                         helperText={fieldHelperText(`columnPolicies[${index}].columns`)}
                                     />
                                 </Grid>
-                                <Grid item xs={12} md={6}>
+                                <Grid   size={{ xs: 12, md: 6 }}>
                                     <TextField
                                         label="Mask Value"
                                         value={policy.maskValue ?? ''}

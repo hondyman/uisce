@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
+import { ImpactPanel } from './ImpactPanel'
 
-export function PromotionWorkflow({ oldRule, newRule, contexts }) {
+export function PromotionWorkflow({oldRule, newRule, contexts }) {
   const [diffs, setDiffs] = useState([])
   const [impact, setImpact] = useState([])
   const [regressions, setRegressions] = useState([])
@@ -12,9 +13,8 @@ export function PromotionWorkflow({ oldRule, newRule, contexts }) {
 
   return (
     <div className="promotion-workflow">
-      <DiffViewer diffs={diffs} />
+      {/* DiffViewer and RegressionPanel not yet implemented; see docs/archives/uisce_frontend-patches */}
       <ImpactPanel diffs={impact} />
-      <RegressionPanel regressions={regressions} />
     </div>
   )
 }

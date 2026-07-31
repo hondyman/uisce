@@ -102,7 +102,7 @@ export const PropagationVisualizer: React.FC<PropagationVisualizerProps> = ({
               percent={region.health * 100}
               width={40}
               strokeColor={getSeverityColor(region.severity)}
-              format={(percent) => `${percent}%`}
+              format={(percent: number) => `${percent}%`}
             />
           </div>
         </div>

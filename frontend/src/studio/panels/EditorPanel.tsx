@@ -1,6 +1,6 @@
 import { useRef, useEffect } from 'react'
 
-export function EditorPanel({ kernel }) {
+export function EditorPanel({kernel }) {
   const ref = useRef(null)
 
   useEffect(() => {

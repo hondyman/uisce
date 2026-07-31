@@ -86,7 +86,7 @@ function renderChart(def: ChartComponent, data: any[]) {
           <YAxis />
           <Tooltip />
           {def.legend && <Legend />}
-          {def.yFields.map((field, idx) => (
+          {(def.yFields || []).map((field, idx) => (
             <Area
               key={field}
               type="monotone"
@@ -106,7 +106,7 @@ function renderChart(def: ChartComponent, data: any[]) {
           <YAxis />
           <Tooltip />
           {def.legend && <Legend />}
-          {def.yFields.map((field, idx) => (
+          {(def.yFields || []).map((field, idx) => (
             <Bar key={field} dataKey={field} fill={colors[idx % colors.length]} />
           ))}
         </BarChart>

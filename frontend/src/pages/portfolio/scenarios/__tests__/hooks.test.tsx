@@ -43,7 +43,7 @@ const useScenarioConfig = (initialConfig?: Partial<ScenarioConfig>) => {
   return { config, updateConfig };
 };
 
-const useSimulationState = (onComplete?: (results: unknown) => void) => {
+const useSimulationState = (onComplete?: (results) => void) => {
   const [state, setState] = React.useState<SimulationState>({
     status: 'idle',
     progress: 0,
@@ -359,7 +359,7 @@ describe('Phase 3 Custom Hooks', () => {
 
     test('updates synced annotations when props change', async () => {
       const { result, rerender } = renderHook(
-        ({ annotations }) => useAnnotationSync(annotations),
+        ({annotations }) => useAnnotationSync(annotations),
         {
           initialProps: { annotations: [{ id: '1', text: 'First' }] },
         }

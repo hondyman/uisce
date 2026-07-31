@@ -162,7 +162,7 @@ export const FundSelector: React.FC<FundSelectorProps> = ({
           </FormControl>
         </Grid>
 
-        <Grid item xs={12} md={2}>
+        <Grid   size={{ xs: 12, md: 2 }}>
           <FormControl fullWidth>
             <InputLabel>Vintage</InputLabel>
             <Select

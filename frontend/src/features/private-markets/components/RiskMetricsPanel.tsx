@@ -77,7 +77,7 @@ export const RiskMetricsPanel: FC<RiskMetricsPanelProps> = ({ selectedFunds: _se
           </Card>
         </Grid>
 
-        <Grid item xs={12} sm={6} md={4}>
+        <Grid    size={{ xs: 12, sm: 6, md: 4 }}>
           <Card>
             <CardContent>
               <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
@@ -93,7 +93,7 @@ export const RiskMetricsPanel: FC<RiskMetricsPanelProps> = ({ selectedFunds: _se
           </Card>
         </Grid>
 
-        <Grid item xs={12} sm={6} md={4}>
+        <Grid    size={{ xs: 12, sm: 6, md: 4 }}>
           <Card>
             <CardContent>
               <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
@@ -109,7 +109,7 @@ export const RiskMetricsPanel: FC<RiskMetricsPanelProps> = ({ selectedFunds: _se
           </Card>
         </Grid>
 
-        <Grid item xs={12} sm={6} md={4}>
+        <Grid    size={{ xs: 12, sm: 6, md: 4 }}>
           <Card>
             <CardContent>
               <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
@@ -125,7 +125,7 @@ export const RiskMetricsPanel: FC<RiskMetricsPanelProps> = ({ selectedFunds: _se
           </Card>
         </Grid>
 
-        <Grid item xs={12} sm={6} md={4}>
+        <Grid    size={{ xs: 12, sm: 6, md: 4 }}>
           <Card>
             <CardContent>
               <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>

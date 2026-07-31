@@ -138,7 +138,7 @@ export default function SecretsMonitoringPage({ tenantId }: SecretsMonitoringPag
             </CardContent>
           </Card>
         </Grid>
-        <Grid item xs={12} md={3}>
+        <Grid   size={{ xs: 12, md: 3 }}>
           <Card sx={{ borderLeft: overdueRotations.length > 0 ? '4px solid orange' : '4px solid green' }}>
             <CardContent>
               <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -157,7 +157,7 @@ export default function SecretsMonitoringPage({ tenantId }: SecretsMonitoringPag
             </CardContent>
           </Card>
         </Grid>
-        <Grid item xs={12} md={3}>
+        <Grid   size={{ xs: 12, md: 3 }}>
           <Card>
             <CardContent>
               <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -226,7 +226,7 @@ export default function SecretsMonitoringPage({ tenantId }: SecretsMonitoringPag
         <Box sx={{ p: 2 }}>
           <Grid container spacing={1}>
             {recentAccess.slice(0, 20).map((access: any, index: number) => (
-              <Grid item key={index}>
+              <Grid key={index}>
                 <Tooltip title={`${access.action} - ${new Date(access.requested_at).toLocaleString()}`}>
                   <Box
                     sx={{

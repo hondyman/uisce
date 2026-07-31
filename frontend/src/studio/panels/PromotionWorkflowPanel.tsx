@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react'
 
-export function PromotionWorkflowPanel({ kernel }) {
+export function PromotionWorkflowPanel({kernel }) {
   const [status, setStatus] = useState({
     lint: [],
     impact: [],
@@ -33,7 +33,7 @@ export function PromotionWorkflowPanel({ kernel }) {
     if (canPromote()) {
       // Perform promotion
       kernel.events.dispatch("rule.promoted", kernel.state.rule)
-      window.notify("Rule promoted successfully!", "success")
+      window.notify?.("Rule promoted successfully!", "success")
     }
   }
 

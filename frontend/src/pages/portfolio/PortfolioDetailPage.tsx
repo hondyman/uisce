@@ -233,7 +233,7 @@ export const PortfolioDetailPage: React.FC = () => {
                   error={portfolio.risk.error}
                 />
               </Grid>
-              <Grid item xs={12} sm={6} md={4}>
+              <Grid    size={{ xs: 12, sm: 6, md: 4 }}>
                 <ComplianceSnapshotCard
                   data={portfolio.compliance.data}
                   isLoading={portfolio.compliance.isLoading}
@@ -297,7 +297,7 @@ export const PortfolioDetailPage: React.FC = () => {
         {activeTab === 1 && (
           <Box sx={{ display: 'grid', gap: 3 }}>
             <Grid container spacing={2}>
-              <Grid item xs={12} md={6}>
+              <Grid   size={{ xs: 12, md: 6 }}>
                 <Paper elevation={0} sx={{ p: 2, backgroundColor, borderColor, border: 1 }}>
                   <Typography variant="h6" sx={{ fontWeight: 700, mb: 2 }}>
                     Sector Breakdown
@@ -308,7 +308,7 @@ export const PortfolioDetailPage: React.FC = () => {
                   />
                 </Paper>
               </Grid>
-              <Grid item xs={12} md={6}>
+              <Grid   size={{ xs: 12, md: 6 }}>
                 <Paper elevation={0} sx={{ p: 2, backgroundColor, borderColor, border: 1 }}>
                   <Typography variant="h6" sx={{ fontWeight: 700, mb: 2 }}>
                     Geographic Distribution
@@ -341,14 +341,14 @@ export const PortfolioDetailPage: React.FC = () => {
             />
 
             <Grid container spacing={2}>
-              <Grid item xs={12} md={6}>
+              <Grid   size={{ xs: 12, md: 6 }}>
                 <RiskSnapshotCard
                   data={portfolio.risk.data}
                   isLoading={portfolio.risk.isLoading}
                   error={portfolio.risk.error}
                 />
               </Grid>
-              <Grid item xs={12} md={6}>
+              <Grid   size={{ xs: 12, md: 6 }}>
                 <Paper elevation={0} sx={{ p: 2, backgroundColor, borderColor, border: 1 }}>
                   <Typography variant="h6" sx={{ fontWeight: 700, mb: 2 }}>
                     Factor Exposures (Legacy View)

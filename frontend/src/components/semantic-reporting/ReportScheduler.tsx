@@ -884,21 +884,21 @@ const ReportScheduler: React.FC<ReportSchedulerProps> = ({ reportId, onScheduleC
             </Grid>
 
             {/* Schedule */}
-            <Grid item xs={12}>
+            <Grid  size={{ xs: 12 }}>
               <Divider sx={{ my: 2 }} />
               <Typography variant="subtitle2" gutterBottom>
                 Schedule Configuration
               </Typography>
             </Grid>
 
-            <Grid item xs={12}>
+            <Grid  size={{ xs: 12 }}>
               <CronBuilder
                 value={formData.cronExpression}
                 onChange={(value) => setFormData((prev) => ({ ...prev, cronExpression: value }))}
               />
             </Grid>
 
-            <Grid item xs={12} md={6}>
+            <Grid   size={{ xs: 12, md: 6 }}>
               <FormControl fullWidth>
                 <InputLabel>Timezone</InputLabel>
                 <Select
@@ -915,7 +915,7 @@ const ReportScheduler: React.FC<ReportSchedulerProps> = ({ reportId, onScheduleC
               </FormControl>
             </Grid>
 
-            <Grid item xs={12} md={6}>
+            <Grid   size={{ xs: 12, md: 6 }}>
               <Alert severity="info" sx={{ height: '100%' }}>
                 <Typography variant="body2">
                   Next run: {getNextRunTime(formData.cronExpression, formData.timezone)?.toLocaleString() || 'N/A'}
@@ -924,14 +924,14 @@ const ReportScheduler: React.FC<ReportSchedulerProps> = ({ reportId, onScheduleC
             </Grid>
 
             {/* Delivery Channels */}
-            <Grid item xs={12}>
+            <Grid  size={{ xs: 12 }}>
               <Divider sx={{ my: 2 }} />
               <Typography variant="subtitle2" gutterBottom>
                 Delivery Options
               </Typography>
             </Grid>
 
-            <Grid item xs={12}>
+            <Grid  size={{ xs: 12 }}>
               <DeliveryChannelEditor
                 channels={formData.deliveryChannels}
                 onChange={(channels) => setFormData((prev) => ({ ...prev, deliveryChannels: channels }))}
@@ -939,7 +939,7 @@ const ReportScheduler: React.FC<ReportSchedulerProps> = ({ reportId, onScheduleC
             </Grid>
 
             {/* Enable/Disable */}
-            <Grid item xs={12}>
+            <Grid  size={{ xs: 12 }}>
               <Divider sx={{ my: 2 }} />
               <FormControlLabel
                 control={

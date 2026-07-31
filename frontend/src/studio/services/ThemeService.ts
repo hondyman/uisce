@@ -1,6 +1,8 @@
 import { applyTheme, themes } from '../theme'
 
 export class ThemeService {
+  current: string;
+  themes: any;
   constructor() {
     this.current = "dark"
     this.themes = themes

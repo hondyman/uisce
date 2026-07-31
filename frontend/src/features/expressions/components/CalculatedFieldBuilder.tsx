@@ -1,31 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import {
-  Box,
-  Card,
-  CardContent,
-  Typography,
-  Button,
-  TextField,
-  Select,
-  MenuItem,
-  FormControl,
-  InputLabel,
-  Grid,
-  Chip,
-  Alert,
-  Paper,
-  Tabs,
-  Tab,
-  IconButton,
-  List,
-  ListItem,
-  ListItemText,
-  CircularProgress,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
-} from '@mui/material';
+import { Alert, Box, Button, Card, CardContent, Chip, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle, FormControl, Grid, IconButton, InputLabel, List, ListItem, ListItemButton, ListItemText, MenuItem, Paper, Select, Tab, Tabs, TextField, Typography } from '@mui/material';
 import {
   PlayArrow as RunIcon,
   Save as SaveIcon,
@@ -268,9 +242,8 @@ export const CalculatedFieldBuilder: React.FC<CalculatedFieldBuilderProps> = ({
                  ) : (
                    <List dense>
                      {availableTerms.map(term => (
-                       <ListItem 
+                       <ListItemButton  
                          key={term.id} 
-                         button 
                          onClick={() => handleInsertTerm(term.node_name)}
                        >
                          <ListItemText 
@@ -280,7 +253,7 @@ export const CalculatedFieldBuilder: React.FC<CalculatedFieldBuilderProps> = ({
                          <IconButton size="small" edge="end">
                            <AddIcon fontSize="small" />
                          </IconButton>
-                       </ListItem>
+                       </ListItemButton>
                      ))}
                    </List>
                  )}
@@ -311,7 +284,7 @@ export const CalculatedFieldBuilder: React.FC<CalculatedFieldBuilderProps> = ({
                 <Typography variant="subtitle2">Suggestions:</Typography>
                 <List>
                   {aiSuggestions.map((s, idx) => (
-                    <ListItem key={idx} button onClick={() => {
+                    <ListItemButton  key={idx} onClick={() => {
                         setName(s.node_name);
                         setExpression(s.expression);
                         setTermType(s.type);
@@ -327,7 +300,7 @@ export const CalculatedFieldBuilder: React.FC<CalculatedFieldBuilderProps> = ({
                           setTermType(s.type);
                           setAiDialogOpen(false);
                       }} />
-                    </ListItem>
+                    </ListItemButton>
                   ))}
                 </List>
              </Box>

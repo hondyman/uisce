@@ -1,4 +1,5 @@
 export class PanelRegistry {
+  panels: Map<string, any>;
   constructor() {
     this.panels = new Map()
   }

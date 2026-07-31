@@ -370,7 +370,7 @@ export const PortfolioOverrideDashboard: React.FC = () => {
                   </CardContent>
                 </Card>
               </Grid>
-              <Grid item xs={12} sm={6} md={4}>
+              <Grid    size={{ xs: 12, sm: 6, md: 4 }}>
                 <Card>
                   <CardContent>
                     <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 1 }}>

@@ -67,7 +67,7 @@ export const WealthTransferDashboard: React.FC<WealthTransferDashboardProps> = (
       {/* Header */}
       <Box sx={{ mb: 4 }}>
         <Grid container spacing={2} alignItems="center">
-          <Grid item xs>
+          <Grid xs>
             <Typography variant="h4" component="h1" gutterBottom>
               Wealth Transfer Planning
             </Typography>
@@ -121,7 +121,7 @@ export const WealthTransferDashboard: React.FC<WealthTransferDashboardProps> = (
           </Card>
         </Grid>
         
-        <Grid item xs={12} md={3}>
+        <Grid   size={{ xs: 12, md: 3 }}>
           <Card elevation={2}>
             <CardContent>
               <Typography color="text.secondary" gutterBottom variant="body2">
@@ -137,7 +137,7 @@ export const WealthTransferDashboard: React.FC<WealthTransferDashboardProps> = (
           </Card>
         </Grid>
         
-        <Grid item xs={12} md={3}>
+        <Grid   size={{ xs: 12, md: 3 }}>
           <Card elevation={2}>
             <CardContent>
               <Typography color="text.secondary" gutterBottom variant="body2">

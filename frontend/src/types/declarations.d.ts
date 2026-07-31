@@ -82,3 +82,34 @@ declare module '@radix-ui/react-dialog' {
 
 // Fallback for any other missing module
 declare module '*';
+
+// react-grid-layout doesn't ship its own .d.ts — define Layout here so
+// consumers can use it as a type (avoids the "Cannot use namespace as a type"
+// error when `react-grid-layout` is missing from node_modules).
+declare module 'react-grid-layout' {
+  export interface Layout {
+    i: string;
+    x: number;
+    y: number;
+    w: number;
+    h: number;
+    minW?: number;
+    minH?: number;
+    maxW?: number;
+    maxH?: number;
+    static?: boolean;
+    isDraggable?: boolean;
+    isResizable?: boolean;
+  }
+  export const Responsive: any;
+  export const WidthProvider: any;
+}
+
+// Window extensions for studio notifications (declared in src/studio/notifications/Notifications.tsx)
+// Pragma: these are intentionally loose so studio internals can use them without
+// pulling in the full notifications module everywhere.
+declare global {
+  interface Window {
+    notify?: (msg: string, type?: 'info' | 'success' | 'warning' | 'error') => void;
+  }
+}

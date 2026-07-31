@@ -9,6 +9,9 @@ export interface NodeType {
   description: string;
   is_active: boolean;
   parent_type_id?: string | null;
+  // Classification of the node type as "core" or "custom".
+  type?: string;
+  core?: boolean;
   config: Record<string, any>;
   properties: NodeProperty[];
   created_at: string;

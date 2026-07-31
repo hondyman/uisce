@@ -420,7 +420,7 @@ const ValidationRuleEditor: React.FC<ValidationRuleEditorProps> = ({
     }
   };
 
-  const handleFormChange = (field: keyof RuleFormData, value: unknown) => {
+  const handleFormChange = (field: keyof RuleFormData, value) => {
     // Narrow unknown -> expected types for specific fields at the boundary
     setFormData((prev) => {
       const next: RuleFormData = { ...prev };
@@ -453,7 +453,7 @@ const ValidationRuleEditor: React.FC<ValidationRuleEditorProps> = ({
     setShowFieldSelector(false);
   };
 
-  const handleRuleCloned = (clonedRule: unknown) => {
+  const handleRuleCloned = (clonedRule) => {
     // Populate form with cloned rule data (defensive narrowing)
     const c = (clonedRule as Record<string, unknown>) || {}
     const name = typeof c.name === 'string' ? `${c.name} (Copy)` : `${formData.name} (Copy)`
@@ -716,7 +716,7 @@ const ValidationRuleEditor: React.FC<ValidationRuleEditorProps> = ({
                   </Button>
                 </Box>
               </Grid>
-              <Grid item xs={12} sm={6}>
+              <Grid   size={{ xs: 12, sm: 6 }}>
                 <TextField
                   fullWidth
                   type="number"
@@ -726,7 +726,7 @@ const ValidationRuleEditor: React.FC<ValidationRuleEditorProps> = ({
                   inputProps={{ min: 0, max: 100 }}
                 />
               </Grid>
-              <Grid item xs={12} sm={6}>
+              <Grid   size={{ xs: 12, sm: 6 }}>
                 <FormControl fullWidth>
                   <InputLabel>Status</InputLabel>
                   <Select
@@ -739,7 +739,7 @@ const ValidationRuleEditor: React.FC<ValidationRuleEditorProps> = ({
                   </Select>
                 </FormControl>
               </Grid>
-              <Grid item xs={12}>
+              <Grid  size={{ xs: 12 }}>
                 <Typography variant="subtitle2" sx={{ mb: 1, fontWeight: 600 }}>
                   Condition (Visual Builder)
                 </Typography>
@@ -770,7 +770,7 @@ const ValidationRuleEditor: React.FC<ValidationRuleEditorProps> = ({
                   </Button>
                 </Box>
               </Grid>
-              <Grid item xs={12}>
+              <Grid  size={{ xs: 12 }}>
                 <TextField
                   fullWidth
                   label="Action on Success"
@@ -780,7 +780,7 @@ const ValidationRuleEditor: React.FC<ValidationRuleEditorProps> = ({
                   helperText="Format: route:queue_name, notify:email, or webhook:url"
                 />
               </Grid>
-              <Grid item xs={12}>
+              <Grid  size={{ xs: 12 }}>
                 <TextField
                   fullWidth
                   label="Action on Failure"

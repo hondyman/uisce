@@ -131,7 +131,7 @@ export const AlternativeInvestmentsCenter: React.FC<{ clientId: string }> = ({ c
             </Card>
           </Grid>
 
-          <Grid item xs={12} md={3}>
+          <Grid   size={{ xs: 12, md: 3 }}>
             <Card elevation={2}>
               <CardContent>
                 <Typography color="textSecondary" variant="body2" gutterBottom>
@@ -147,7 +147,7 @@ export const AlternativeInvestmentsCenter: React.FC<{ clientId: string }> = ({ c
             </Card>
           </Grid>
 
-          <Grid item xs={12} md={3}>
+          <Grid   size={{ xs: 12, md: 3 }}>
             <Card elevation={2}>
               <CardContent>
                 <Typography color="textSecondary" variant="body2" gutterBottom>
@@ -230,11 +230,11 @@ const InvestmentsList: React.FC<{ investments: AlternativeInvestment[] }> = ({ i
                   <Typography variant="caption" color="textSecondary">Called</Typography>
                   <Typography variant="body2">${inv.capitalCalled.toLocaleString()}</Typography>
                 </Grid>
-                <Grid item xs={3}>
+                <Grid  size={{ xs: 3 }}>
                   <Typography variant="caption" color="textSecondary">Distributed</Typography>
                   <Typography variant="body2">${inv.capitalDistributed.toLocaleString()}</Typography>
                 </Grid>
-                <Grid item xs={3}>
+                <Grid  size={{ xs: 3 }}>
                   <Typography variant="caption" color="textSecondary">Unfunded</Typography>
                   <Typography variant="body2" color="warning.main">
                     ${inv.unfundedCommitment.toLocaleString()}

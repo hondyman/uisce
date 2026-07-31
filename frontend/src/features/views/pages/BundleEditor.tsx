@@ -166,7 +166,7 @@ export const BundleEditor: React.FC<BundleEditorProps> = ({
           </Grid>
 
           {/* Right Panel: Selected Views */}
-          <Grid item xs={12} md={4}>
+          <Grid   size={{ xs: 12, md: 4 }}>
             <Typography variant="h6" gutterBottom>Selected Views in Bundle</Typography>
             <Paper variant="outlined" sx={{ height: 400, overflow: 'auto' }}>
               {bundle.view_refs.length === 0 ? (

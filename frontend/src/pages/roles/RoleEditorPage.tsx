@@ -530,7 +530,7 @@ const RoleEditorPage: React.FC<RoleEditorPageProps> = ({ roleName: propRoleName,
                 </Alert>
               )}
               <Grid container spacing={2}>
-                <Grid item xs={12} md={6}>
+                <Grid   size={{ xs: 12, md: 6 }}>
                   <Typography variant="subtitle1" gutterBottom>
                     Available Bundles
                   </Typography>
@@ -558,7 +558,7 @@ const RoleEditorPage: React.FC<RoleEditorPageProps> = ({ roleName: propRoleName,
                   </List>
                 </Grid>
 
-                <Grid item xs={12} md={6}>
+                <Grid   size={{ xs: 12, md: 6 }}>
                   <Typography variant="subtitle1" gutterBottom>
                     Assigned Bundles
                   </Typography>

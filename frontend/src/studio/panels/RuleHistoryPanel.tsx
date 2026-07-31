@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react'
 
-export function RuleHistoryPanel({ kernel }) {
+export function RuleHistoryPanel({kernel }) {
   const [versions, setVersions] = useState([])
 
   useEffect(() => {
@@ -12,7 +12,7 @@ export function RuleHistoryPanel({ kernel }) {
   const restoreVersion = (version) => {
     kernel.state.rule = version.content
     kernel.events.dispatch('ruleChanged', version.content)
-    window.notify('Version restored', 'success')
+    window.notify?.('Version restored', 'success')
   }
 
   return (

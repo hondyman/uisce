@@ -1,5 +1,6 @@
 // Custom hook for fetching semantic bundles
 import { useEffect, useState } from "react";
+import { devError } from "@/utils/devLogger";
 import {
   SemanticBundle,
   BundleVersion,

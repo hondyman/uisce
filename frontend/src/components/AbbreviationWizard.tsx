@@ -1,15 +1,16 @@
 import React, { useState } from 'react';
-import { 
-  Box, 
-  Button, 
-  Typography, 
-  Stepper, 
-  Step, 
-  StepLabel, 
-  Paper, 
+import {
+  Box,
+  Button,
+  Typography,
+  Stepper,
+  Step,
+  StepLabel,
+  Paper,
   CircularProgress,
   List,
   ListItem,
+  ListItemButton,
   ListItemText,
   ListItemIcon,
   Checkbox,
@@ -129,32 +130,31 @@ export const AbbreviationWizard: React.FC<AbbreviationWizardProps> = ({ onComple
           {scannedCandidates.map((abbr) => {
              const labelId = `checkbox-list-label-${abbr}`;
              return (
-               <ListItem
-                 key={abbr}
-                 button
-                 onClick={() => {
-                   const currentIndex = selectedCandidates.indexOf(abbr);
-                   const newChecked = [...selectedCandidates];
-                   if (currentIndex === -1) {
-                     newChecked.push(abbr);
-                   } else {
-                     newChecked.splice(currentIndex, 1);
-                   }
-                   setSelectedCandidates(newChecked);
-                 }}
-               >
-                 <ListItemIcon>
-                   <Checkbox
-                     edge="start"
-                     checked={selectedCandidates.indexOf(abbr) !== -1}
-                     tabIndex={-1}
-                     disableRipple
-                     inputProps={{ 'aria-labelledby': labelId }}
-                   />
-                 </ListItemIcon>
-                 <ListItemText id={labelId} primary={abbr} />
-               </ListItem>
-             );
+                <ListItemButton
+                  key={abbr}
+                  onClick={() => {
+                    const currentIndex = selectedCandidates.indexOf(abbr);
+                    const newChecked = [...selectedCandidates];
+                    if (currentIndex === -1) {
+                      newChecked.push(abbr);
+                    } else {
+                      newChecked.splice(currentIndex, 1);
+                    }
+                    setSelectedCandidates(newChecked);
+                  }}
+                >
+                  <ListItemIcon>
+                    <Checkbox
+                      edge="start"
+                      checked={selectedCandidates.indexOf(abbr) !== -1}
+                      tabIndex={-1}
+                      disableRipple
+                      inputProps={{ 'aria-labelledby': labelId }}
+                    />
+                  </ListItemIcon>
+                  <ListItemText id={labelId} primary={abbr} />
+                </ListItemButton>
+              );
           })}
         </List>
       </Paper>

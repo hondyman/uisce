@@ -4,7 +4,28 @@ import {
   Paper, Chip, Button 
 } from '@mui/material';
 
-const SuggestionsTable = ({ drafts, onSelect }) => {
+interface Hierarchy {
+  level1?: string;
+  level2?: string;
+  level3?: string;
+}
+
+interface DraftItem {
+  businessTermId: string;
+  name: string;
+  piiFlag?: boolean;
+  sensitivity?: string;
+  hierarchy?: Hierarchy;
+  status?: string;
+  [key: string]: unknown;
+}
+
+interface SuggestionsTableProps {
+  drafts: DraftItem[];
+  onSelect: (draft: DraftItem) => void;
+}
+
+const SuggestionsTable = ({ drafts, onSelect }: SuggestionsTableProps) => {
     return (
         <Paper>
             <Table>

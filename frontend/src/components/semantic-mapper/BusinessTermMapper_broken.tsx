@@ -295,7 +295,7 @@ export function BusinessTermMapper() {
             <Typography variant="body2" color="text.secondary">Mapped to Business Terms</Typography>
           </Paper>
         </Grid>
-        <Grid item xs={4}>
+        <Grid  size={{ xs: 4 }}>
           <Paper sx={{ p: 2, textAlign: 'center' }}>
             <Typography variant="h4" color="warning.main">{mappingCounts.unmapped}</Typography>
             <Typography variant="body2" color="text.secondary">Unmapped</Typography>

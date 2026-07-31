@@ -490,7 +490,7 @@ export const RDLRuleBuilder: React.FC<RDLRuleBuilderProps> = ({
                   </FormControl>
                 </Grid>
 
-                <Grid item xs={12} md={6}>
+                <Grid   size={{ xs: 12, md: 6 }}>
                   <TextField
                     fullWidth
                     required
@@ -502,7 +502,7 @@ export const RDLRuleBuilder: React.FC<RDLRuleBuilderProps> = ({
                   />
                 </Grid>
 
-                <Grid item xs={12} md={6}>
+                <Grid   size={{ xs: 12, md: 6 }}>
                   <TextField
                     fullWidth
                     label="Version"
@@ -535,7 +535,7 @@ export const RDLRuleBuilder: React.FC<RDLRuleBuilderProps> = ({
                   />
                 </Grid>
 
-                <Grid item xs={12}>
+                <Grid  size={{ xs: 12 }}>
                   <FormControlLabel
                     control={
                       <Switch
@@ -635,7 +635,7 @@ export const RDLRuleBuilder: React.FC<RDLRuleBuilderProps> = ({
                 ))}
 
                 {currentConfig.parameterSchema.length === 0 && (
-                  <Grid item xs={12}>
+                  <Grid  size={{ xs: 12 }}>
                     <Alert severity="info">
                       Custom rules have no predefined parameters. Define your parameters in the JSON below or in the Expression tab.
                     </Alert>
@@ -744,7 +744,7 @@ export const RDLRuleBuilder: React.FC<RDLRuleBuilderProps> = ({
               </Typography>
 
               <Grid container spacing={3}>
-                <Grid item xs={12}>
+                <Grid  size={{ xs: 12 }}>
                   <Typography variant="subtitle2" gutterBottom>Scoring Formula (Optional)</Typography>
                   <TextField
                     fullWidth
@@ -758,7 +758,7 @@ export const RDLRuleBuilder: React.FC<RDLRuleBuilderProps> = ({
                   />
                 </Grid>
 
-                <Grid item xs={12} md={6}>
+                <Grid   size={{ xs: 12, md: 6 }}>
                   <TextField
                     fullWidth
                     type="date"
@@ -770,7 +770,7 @@ export const RDLRuleBuilder: React.FC<RDLRuleBuilderProps> = ({
                   />
                 </Grid>
 
-                <Grid item xs={12} md={6}>
+                <Grid   size={{ xs: 12, md: 6 }}>
                   <TextField
                     fullWidth
                     type="date"
@@ -784,7 +784,7 @@ export const RDLRuleBuilder: React.FC<RDLRuleBuilderProps> = ({
 
                 {/* Wash Sale Config for TLH rules */}
                 {(rule.type === 'tax_loss_harvesting' || rule.type === 'wash_sale') && (
-                  <Grid item xs={12}>
+                  <Grid  size={{ xs: 12 }}>
                     <Accordion>
                       <AccordionSummary expandIcon={<ExpandMoreIcon />}>
                         <Typography>Wash Sale Configuration</Typography>
@@ -821,7 +821,7 @@ export const RDLRuleBuilder: React.FC<RDLRuleBuilderProps> = ({
                               }))}
                             />
                           </Grid>
-                          <Grid item xs={12} md={4}>
+                          <Grid   size={{ xs: 12, md: 4 }}>
                             <FormControlLabel
                               control={
                                 <Switch
@@ -845,14 +845,14 @@ export const RDLRuleBuilder: React.FC<RDLRuleBuilderProps> = ({
                 )}
 
                 {/* Notifications */}
-                <Grid item xs={12}>
+                <Grid  size={{ xs: 12 }}>
                   <Accordion>
                     <AccordionSummary expandIcon={<ExpandMoreIcon />}>
                       <Typography>Notifications</Typography>
                     </AccordionSummary>
                     <AccordionDetails>
                       <Grid container spacing={2}>
-                        <Grid item xs={12} md={4}>
+                        <Grid   size={{ xs: 12, md: 4 }}>
                           <FormControlLabel
                             control={
                               <Switch
@@ -869,7 +869,7 @@ export const RDLRuleBuilder: React.FC<RDLRuleBuilderProps> = ({
                             label="Email Notifications"
                           />
                         </Grid>
-                        <Grid item xs={12} md={4}>
+                        <Grid   size={{ xs: 12, md: 4 }}>
                           <FormControlLabel
                             control={
                               <Switch
@@ -886,7 +886,7 @@ export const RDLRuleBuilder: React.FC<RDLRuleBuilderProps> = ({
                             label="In-App Notifications"
                           />
                         </Grid>
-                        <Grid item xs={12}>
+                        <Grid  size={{ xs: 12 }}>
                           <TextField
                             fullWidth
                             label="Webhook URL"

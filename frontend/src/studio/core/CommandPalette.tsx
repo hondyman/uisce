@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react'
 
-export function CommandPalette({ kernel }) {
+export function CommandPalette({kernel }) {
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState("")
   const [results, setResults] = useState([])

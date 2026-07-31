@@ -1050,7 +1050,7 @@ export const PropertiesSection: React.FC<PropertiesSectionProps> = ({
             />
           </Grid>
 
-          <Grid item xs={12} md={4}>
+          <Grid   size={{ xs: 12, md: 4 }}>
             <FormControlLabel
               control={
                 <Switch

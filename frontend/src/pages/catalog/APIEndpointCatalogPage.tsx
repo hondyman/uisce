@@ -415,7 +415,7 @@ const APIEndpointCatalogPage: React.FC = () => {
                         />
                       </Typography>
                     </Grid>
-                    <Grid item xs={12} sm={6}>
+                    <Grid   size={{ xs: 12, sm: 6 }}>
                       <Typography variant="caption" color="textSecondary">
                         Version
                       </Typography>
@@ -423,7 +423,7 @@ const APIEndpointCatalogPage: React.FC = () => {
                         {selectedEndpoint.version}
                       </Typography>
                     </Grid>
-                    <Grid item xs={12} sm={6}>
+                    <Grid   size={{ xs: 12, sm: 6 }}>
                       <Typography variant="caption" color="textSecondary">
                         Category
                       </Typography>
@@ -444,7 +444,7 @@ const APIEndpointCatalogPage: React.FC = () => {
               </Grid>
 
               {/* Status Information */}
-              <Grid item xs={12}>
+              <Grid  size={{ xs: 12 }}>
                 <Typography variant="subtitle2" sx={{ fontWeight: 'bold', mb: 1 }}>
                   Status
                 </Typography>
@@ -464,7 +464,7 @@ const APIEndpointCatalogPage: React.FC = () => {
               </Grid>
 
               {/* Request/Response Schemas */}
-              <Grid item xs={12}>
+              <Grid  size={{ xs: 12 }}>
                 <Typography variant="subtitle2" sx={{ fontWeight: 'bold', mb: 1 }}>
                   Request & Response
                 </Typography>
@@ -485,13 +485,13 @@ const APIEndpointCatalogPage: React.FC = () => {
               </Grid>
 
               {/* Metadata */}
-              <Grid item xs={12}>
+              <Grid  size={{ xs: 12 }}>
                 <Typography variant="subtitle2" sx={{ fontWeight: 'bold', mb: 1 }}>
                   Metadata
                 </Typography>
                 <Box sx={{ backgroundColor: '#f5f5f5', p: 2, borderRadius: 1 }}>
                   <Grid container spacing={2}>
-                    <Grid item xs={12} sm={6}>
+                    <Grid   size={{ xs: 12, sm: 6 }}>
                       <Typography variant="caption" color="textSecondary">
                         Rate Limit
                       </Typography>
@@ -499,7 +499,7 @@ const APIEndpointCatalogPage: React.FC = () => {
                         {selectedEndpoint.rate_limit} requests/min
                       </Typography>
                     </Grid>
-                    <Grid item xs={12} sm={6}>
+                    <Grid   size={{ xs: 12, sm: 6 }}>
                       <Typography variant="caption" color="textSecondary">
                         Subcategory
                       </Typography>
@@ -507,7 +507,7 @@ const APIEndpointCatalogPage: React.FC = () => {
                         {selectedEndpoint.subcategory}
                       </Typography>
                     </Grid>
-                    <Grid item xs={12} sm={6}>
+                    <Grid   size={{ xs: 12, sm: 6 }}>
                       <Typography variant="caption" color="textSecondary">
                         Created
                       </Typography>
@@ -515,7 +515,7 @@ const APIEndpointCatalogPage: React.FC = () => {
                         {new Date(selectedEndpoint.created_at).toLocaleDateString()}
                       </Typography>
                     </Grid>
-                    <Grid item xs={12} sm={6}>
+                    <Grid   size={{ xs: 12, sm: 6 }}>
                       <Typography variant="caption" color="textSecondary">
                         Updated
                       </Typography>

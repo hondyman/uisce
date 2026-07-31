@@ -114,7 +114,7 @@ const RiskDashboardPage: React.FC = () => {
             <AssessmentIcon color="warning" sx={{ fontSize: 40, opacity: 0.2 }} />
           </Paper>
         </Grid>
-        <Grid item xs={12} md={3}>
+        <Grid   size={{ xs: 12, md: 3 }}>
           <Paper sx={{ p: 2, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <Box>
               <Typography color="textSecondary" variant="subtitle2">High Risk Vol.</Typography>
@@ -123,7 +123,7 @@ const RiskDashboardPage: React.FC = () => {
             <WarningIcon color="error" sx={{ fontSize: 40, opacity: 0.2 }} />
           </Paper>
         </Grid>
-        <Grid item xs={12} md={3}>
+        <Grid   size={{ xs: 12, md: 3 }}>
           <Paper sx={{ p: 2, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <Box>
               <Typography color="textSecondary" variant="subtitle2">Avg. Risk Score</Typography>

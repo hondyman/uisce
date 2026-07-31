@@ -1,22 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import {
-  Box,
-  Paper,
-  List,
-  ListItem,
-  ListItemText,
-  ListItemAvatar,
-  Avatar,
-  TextField,
-  IconButton,
-  Typography,
-  Badge,
-  Divider,
-  InputAdornment,
-  Chip,
-  Menu,
-  MenuItem,
-} from '@mui/material';
+import { Avatar, Badge, Box, Chip, Divider, IconButton, InputAdornment, List, ListItem, ListItemAvatar, ListItemButton, ListItemText, Menu, MenuItem, Paper, TextField, Typography } from '@mui/material';
 import {
   Send as SendIcon,
   AttachFile as AttachIcon,
@@ -185,9 +168,8 @@ export const SecureMessagingPortal: React.FC = () => {
 
         <List sx={{ flex: 1, overflow: 'auto' }}>
           {filteredThreads.map((thread) => (
-            <ListItem
+            <ListItemButton 
               key={thread.thread_id}
-              button
               selected={selectedThread?.thread_id === thread.thread_id}
               onClick={() => setSelectedThread(thread)}
               sx={{
@@ -216,7 +198,7 @@ export const SecureMessagingPortal: React.FC = () => {
                   </Typography>
                 }
               />
-            </ListItem>
+            </ListItemButton>
           ))}
         </List>
       </Paper>

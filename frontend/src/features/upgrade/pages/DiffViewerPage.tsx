@@ -97,7 +97,7 @@ export default function DiffViewerPage() {
       try {
         const data = await fetchDiff(from, to);
         setDiff(data as DiffReport);
-      } catch (e: unknown) {
+      } catch (e) {
         setError(getErrorMessage(e, 'Failed to load diff'));
       } finally {
         setLoading(false);
@@ -159,11 +159,11 @@ export default function DiffViewerPage() {
                       <Typography variant="subtitle2">Changed</Typography>
                       <KeyValueList data={diff.cubes.changed} />
                     </Grid>
-                    <Grid item xs={12} md={6}>
+                    <Grid   size={{ xs: 12, md: 6 }}>
                       <Typography variant="subtitle2">PK/FK diffs</Typography>
                       <SimpleList items={diff.cubes.pk_fk_diffs} />
                     </Grid>
-                    <Grid item xs={12} md={6}>
+                    <Grid   size={{ xs: 12, md: 6 }}>
                       <Typography variant="subtitle2">Join path diffs</Typography>
                       <SimpleList items={diff.cubes.join_path_diffs} />
                     </Grid>
@@ -175,11 +175,11 @@ export default function DiffViewerPage() {
                       <Typography variant="subtitle2">Join path changes</Typography>
                       <SimpleList items={diff.views.join_path_changes} />
                     </Grid>
-                    <Grid item xs={12}>
+                    <Grid  size={{ xs: 12 }}>
                       <Typography variant="subtitle2">Include impacts</Typography>
                       <SimpleList items={diff.views.include_impacts} />
                     </Grid>
-                    <Grid item xs={12}>
+                    <Grid  size={{ xs: 12 }}>
                       <Typography variant="subtitle2">Folder diffs</Typography>
                       <SimpleList items={diff.views.folder_diffs} />
                     </Grid>
@@ -187,15 +187,15 @@ export default function DiffViewerPage() {
                 )}
                 {tab === 2 && (
                   <Grid container spacing={2}>
-                    <Grid item xs={12} md={6}>
+                    <Grid   size={{ xs: 12, md: 6 }}>
                       <Typography variant="subtitle2">PII changes</Typography>
                       <SimpleList items={diff.governance.pii_changes} />
                     </Grid>
-                    <Grid item xs={12} md={6}>
+                    <Grid   size={{ xs: 12, md: 6 }}>
                       <Typography variant="subtitle2">Access policy diffs</Typography>
                       <SimpleList items={diff.governance.access_policy_diffs} />
                     </Grid>
-                    <Grid item xs={12}>
+                    <Grid  size={{ xs: 12 }}>
                       <Typography variant="subtitle2">Tenant isolation checks</Typography>
                       <SimpleList items={diff.governance.tenant_isolation_checks} />
                     </Grid>
@@ -203,11 +203,11 @@ export default function DiffViewerPage() {
                 )}
                 {tab === 3 && (
                   <Grid container spacing={2}>
-                    <Grid item xs={12}>
+                    <Grid  size={{ xs: 12 }}>
                       <Typography variant="subtitle2">Rebuild plan</Typography>
                       <SimpleList items={diff.pre_aggs.rebuild_plan} />
                     </Grid>
-                    <Grid item xs={12}>
+                    <Grid  size={{ xs: 12 }}>
                       <Typography variant="subtitle2">Estimates</Typography>
                       <Stack direction="row" spacing={2}>
                         <Chip label={`Cost: ${diff.pre_aggs.estimated_cost}`} size="small" />

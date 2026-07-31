@@ -1,6 +1,6 @@
 import { EditorPanel } from '../panels/EditorPanel'
 
-export function StudioLayout({ kernel }) {
+export function StudioLayout({kernel }) {
   const panels = kernel.services.plugins.getPanels()
 
   return (

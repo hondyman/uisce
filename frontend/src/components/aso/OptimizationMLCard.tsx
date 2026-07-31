@@ -156,7 +156,7 @@ export const OptimizationMLCard: React.FC<OptimizationMLCardProps> = ({ ml }) =>
           </Grid>
 
           {/* Predicted Cost Savings */}
-          <Grid item xs={6} md={3}>
+          <Grid   size={{ xs: 6, md: 3 }}>
             <Stack alignItems="center">
               <Typography variant="caption" color="text.secondary">
                 Cost Savings
@@ -178,7 +178,7 @@ export const OptimizationMLCard: React.FC<OptimizationMLCardProps> = ({ ml }) =>
           </Grid>
 
           {/* Risk Score */}
-          <Grid item xs={6} md={3}>
+          <Grid   size={{ xs: 6, md: 3 }}>
             <Stack alignItems="center">
               <Typography variant="caption" color="text.secondary">
                 Risk Score
@@ -354,7 +354,7 @@ export const OptimizationExplainabilityCard: React.FC<OptimizationExplainability
 
           {/* Simulation Results */}
           {simulation && (
-            <Grid item xs={12} md={4}>
+            <Grid   size={{ xs: 12, md: 4 }}>
               <Typography variant="subtitle2" gutterBottom>
                 <Analytics sx={{ mr: 0.5, verticalAlign: 'middle', fontSize: 18 }} />
                 Simulation (What-If)
@@ -429,7 +429,7 @@ export const OptimizationSimulationCard: React.FC<OptimizationSimulationCardProp
         </Typography>
 
         <Grid container spacing={2}>
-          <Grid item xs={6} md={3}>
+          <Grid   size={{ xs: 6, md: 3 }}>
             <Stack alignItems="center">
               <Typography variant="caption" color="text.secondary">
                 Expected Speedup
@@ -440,7 +440,7 @@ export const OptimizationSimulationCard: React.FC<OptimizationSimulationCardProp
             </Stack>
           </Grid>
 
-          <Grid item xs={6} md={3}>
+          <Grid   size={{ xs: 6, md: 3 }}>
             <Stack alignItems="center">
               <Typography variant="caption" color="text.secondary">
                 Cost Savings
@@ -451,7 +451,7 @@ export const OptimizationSimulationCard: React.FC<OptimizationSimulationCardProp
             </Stack>
           </Grid>
 
-          <Grid item xs={6} md={3}>
+          <Grid   size={{ xs: 6, md: 3 }}>
             <Stack alignItems="center">
               <Typography variant="caption" color="text.secondary">
                 Queries Improved
@@ -462,7 +462,7 @@ export const OptimizationSimulationCard: React.FC<OptimizationSimulationCardProp
             </Stack>
           </Grid>
 
-          <Grid item xs={6} md={3}>
+          <Grid   size={{ xs: 6, md: 3 }}>
             <Stack alignItems="center">
               <Typography variant="caption" color="text.secondary">
                 Queries Regressed

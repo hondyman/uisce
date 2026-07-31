@@ -71,7 +71,7 @@ export const FeeCarryPanel: React.FC<FeeCarryPanelProps> = ({ selectedFunds: _se
           </Card>
         </Grid>
 
-        <Grid item xs={12} md={6}>
+        <Grid   size={{ xs: 12, md: 6 }}>
           <Card>
             <CardContent>
               <Box display="flex" alignItems="center" gap={1} mb={1}>
@@ -88,7 +88,7 @@ export const FeeCarryPanel: React.FC<FeeCarryPanelProps> = ({ selectedFunds: _se
           </Card>
         </Grid>
 
-        <Grid item xs={12} md={6}>
+        <Grid   size={{ xs: 12, md: 6 }}>
           <Card>
             <CardContent>
               <Box display="flex" alignItems="center" gap={1} mb={1}>

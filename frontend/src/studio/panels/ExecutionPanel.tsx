@@ -1,6 +1,6 @@
 import { useState } from 'react'
 
-export function ExecutionPanel({ kernel }) {
+export function ExecutionPanel({kernel }) {
   const [results, setResults] = useState([])
 
   const run = async () => {

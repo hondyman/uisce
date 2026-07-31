@@ -4,13 +4,6 @@ import {
   Paper,
   Typography,
   Button,
-  Timeline,
-  TimelineItem,
-  TimelineSeparator,
-  TimelineConnector,
-  TimelineContent,
-  TimelineDot,
-  TimelineOppositeContent,
   Card,
   CardContent,
   Grid,
@@ -23,9 +16,16 @@ import {
   TextField,
   MenuItem,
   Alert,
-  IconButton,
-  Tooltip,
 } from '@mui/material';
+import {
+  Timeline,
+  TimelineItem,
+  TimelineSeparator,
+  TimelineConnector,
+  TimelineContent,
+  TimelineDot,
+  TimelineOppositeContent,
+} from '@mui/lab';
 import {
   Add as AddIcon,
   Description as FormIcon,
@@ -224,7 +224,7 @@ export const GiftTrackingDashboard: React.FC<GiftTrackingDashboardProps> = ({ fa
             </Card>
           </Grid>
 
-          <Grid item xs={12} md={4}>
+          <Grid   size={{ xs: 12, md: 4 }}>
             <Card elevation={2}>
               <CardContent>
                 <Typography color="text.secondary" gutterBottom variant="body2">

@@ -138,7 +138,7 @@ export const AccessRuleDetailPage: React.FC = () => {
             </CardContent>
           </Card>
         </Grid>
-        <Grid item xs={12} md={4}>
+        <Grid   size={{ xs: 12, md: 4 }}>
           <Card>
             <CardContent>
               <Typography variant="caption" color="text.secondary">
@@ -186,7 +186,7 @@ export const AccessRuleDetailPage: React.FC = () => {
                     {rule.scope?.appliesToBi ? 'Yes' : 'No'}
                   </Typography>
                 </Grid>
-                <Grid item xs={12} md={6}>
+                <Grid   size={{ xs: 12, md: 6 }}>
                   <Typography variant="caption" color="text.secondary">
                     Applies to AI
                   </Typography>

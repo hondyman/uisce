@@ -313,10 +313,17 @@ export interface ScenarioConfigDialogProps {
 }
 
 export interface SimulationProgressProps {
-  simulationRun: SimulationRun;
-  results: SimulationResult[];
-  onAbort: () => Promise<void>;
+  simulationRun?: SimulationRun;
+  results?: SimulationResult[];
+  onAbort?: () => Promise<void>;
   isAborting?: boolean;
+  // Alternate names used by older tests/UI:
+  progress?: number;
+  status?: 'pending' | 'running' | 'completed' | 'failed';
+  message?: string;
+  estimatedTimeRemaining?: number;
+  elapsedTime?: number;
+  onCancel?: () => Promise<void>;
 }
 
 export interface MultiScenarioComparisonProps {
@@ -419,3 +426,14 @@ export const SCENARIO_CONFIG_CONSTRAINTS = {
 export const SIMULATION_TIMEOUT_MS = 300000; // 5 minutes
 export const STREAMING_UPDATE_INTERVAL_MS = 500; // 500ms
 export const ANNOTATION_FETCH_DEBOUNCE_MS = 300;
+
+// Minimal User shape — extend as fields become needed by collaborators.
+// Lives here because useMultiplayerState.ts and ScenarioComparison use this name.
+export interface User {
+  id: string;
+  name?: string;
+  email?: string;
+  role?: UserRole;
+  color?: string;
+  avatarUrl?: string;
+}

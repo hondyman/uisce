@@ -432,14 +432,14 @@ export const MobileResponsiveFoFPrivateMarketsDashboard: React.FC<MobileResponsi
 
           {activeTab === 1 && (
             <Grid container spacing={3}>
-              <Grid item xs={12} lg={6}>
+              <Grid   size={{ xs: 12, lg: 6 }}>
                 <ChartContainer title="Manager Performance Heatmap" chartId="heatmap">
                   <ManagerPerformanceHeatmap
                     selectedFunds={selectedFunds}
                   />
                 </ChartContainer>
               </Grid>
-              <Grid item xs={12} lg={6}>
+              <Grid   size={{ xs: 12, lg: 6 }}>
                 <ChartContainer title="Fund Performance Tracker" chartId="performance">
                   <FundPerformanceTracker
                     selectedFunds={selectedFunds}
@@ -451,14 +451,14 @@ export const MobileResponsiveFoFPrivateMarketsDashboard: React.FC<MobileResponsi
 
           {activeTab === 2 && (
             <Grid container spacing={3}>
-              <Grid item xs={12} lg={6}>
+              <Grid   size={{ xs: 12, lg: 6 }}>
                 <ChartContainer title="Risk Metrics" chartId="risk">
                   <RiskMetricsPanel
                     selectedFunds={selectedFunds}
                   />
                 </ChartContainer>
               </Grid>
-              <Grid item xs={12} lg={6}>
+              <Grid   size={{ xs: 12, lg: 6 }}>
                 <ChartContainer title="Benchmark Comparison" chartId="benchmark">
                   <BenchmarkComparison
                     selectedFunds={selectedFunds}

@@ -1,6 +1,7 @@
 import { CommandRegistry } from '../commands/CommandRegistry'
 
 export class CommandService {
+  registry: CommandRegistry;
   constructor() {
     this.registry = new CommandRegistry()
     this.registerDefaults()

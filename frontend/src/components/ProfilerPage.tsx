@@ -1,39 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { devDebug, devWarn, devError } from '../utils/devLogger';
-import {
-  Box,
-  Typography,
-  Card,
-  CardContent,
-  Button,
-  Select,
-  MenuItem,
-  FormControl,
-  InputLabel,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
-  Paper,
-  Chip,
-  LinearProgress,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
-  Grid,
-  Alert,
-  CircularProgress,
-  List,
-  ListItem,
-  ListItemIcon,
-  ListItemText,
-  Collapse,
-  Divider,
-  IconButton
-} from '@mui/material';
+import { Alert, Box, Button, Card, CardContent, Chip, CircularProgress, Collapse, Dialog, DialogActions, DialogContent, DialogTitle, Divider, FormControl, Grid, IconButton, InputLabel, LinearProgress, List, ListItem, ListItemButton, ListItemIcon, ListItemText, MenuItem, Paper, Select, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Typography } from '@mui/material';
 import { Checkbox, Snackbar } from '@mui/material';
 import {
   BarChart,
@@ -640,11 +607,11 @@ export default function ProfilerPage({ preselectedSchema, preselectedTable, pres
                       <Typography variant="body2" color="textSecondary">Cardinality</Typography>
                       <Typography variant="h6">{selectedColumn.Cardinality.toLocaleString()}</Typography>
                     </Grid>
-                    <Grid item xs={3}>
+                    <Grid  size={{ xs: 3 }}>
                       <Typography variant="body2" color="textSecondary">Min Length</Typography>
                       <Typography variant="h6">{selectedColumn.MinLength || 'N/A'}</Typography>
                     </Grid>
-                    <Grid item xs={3}>
+                    <Grid  size={{ xs: 3 }}>
                       <Typography variant="body2" color="textSecondary">Max Length</Typography>
                       <Typography variant="h6">{selectedColumn.MaxLength || 'N/A'}</Typography>
                     </Grid>
@@ -771,9 +738,7 @@ export default function ProfilerPage({ preselectedSchema, preselectedTable, pres
                   <List>
                     {schemas.map(schema => (
                       <div key={schema.id}>
-                        <ListItem
-                          secondaryAction={expandedSchemas[schema.node_name] ? <ExpandLess /> : <ExpandMore />}
-                          button
+                        <ListItemButton
                           onClick={() => toggleSchema(schema.node_name)}
                           data-testid={`schema-${schema.node_name}`}
                         >
@@ -787,15 +752,18 @@ export default function ProfilerPage({ preselectedSchema, preselectedTable, pres
                             />
                           </ListItemIcon>
                           <ListItemIcon><FolderIcon fontSize="small" /></ListItemIcon>
-                          <ListItemText primary={schema.node_name} />
-                        </ListItem>
+                          <ListItemText 
+                            primary={schema.node_name}
+                            secondary={expandedSchemas[schema.node_name] ? <ExpandLess /> : <ExpandMore />}
+                          />
+                        </ListItemButton>
 
                         <Collapse in={Boolean(expandedSchemas[schema.node_name])} timeout="auto" unmountOnExit>
                           <List component="div" disablePadding>
                             {tables
                               .filter(t => t.qualified_path?.startsWith(`/${schema.node_name}/`))
                               .map((table) => (
-                                <ListItem key={table.id} button sx={{ pl: 4 }} onClick={() => { setSelectedSchema(schema.node_name); setSelectedTable(table.node_name); setProfileResults([]); }} data-testid={`table-${table.node_name}`}>
+                                <ListItemButton  key={table.id} sx={{ pl: 4 }} onClick={() => { setSelectedSchema(schema.node_name); setSelectedTable(table.node_name); setProfileResults([]); }} data-testid={`table-${table.node_name}`}>
                                   <ListItemIcon>
                                     <Checkbox
                                       edge="start"
@@ -807,7 +775,7 @@ export default function ProfilerPage({ preselectedSchema, preselectedTable, pres
                                   </ListItemIcon>
                                   <ListItemIcon><TableChartIcon fontSize="small" /></ListItemIcon>
                                   <ListItemText primary={table.node_name} />
-                                </ListItem>
+                                </ListItemButton>
                               ))}
                           </List>
                         </Collapse>
@@ -824,7 +792,7 @@ export default function ProfilerPage({ preselectedSchema, preselectedTable, pres
               <CardContent>
                 <Typography variant="h6" gutterBottom>Run Profiler</Typography>
                 <Grid container spacing={2} alignItems="center">
-                  <Grid item xs={12}>
+                  <Grid  size={{ xs: 12 }}>
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, justifyContent: 'space-between' }}>
                       <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', flexWrap: 'wrap' }}>
                         <Typography variant="body2">
@@ -960,25 +928,25 @@ export default function ProfilerPage({ preselectedSchema, preselectedTable, pres
                       {Math.round(profileResults.reduce((sum, p) => sum + p.Cardinality, 0) / profileResults.length).toLocaleString()}
                     </Typography>
                   </Grid>
-                  <Grid item xs={12} sm={2}>
+                  <Grid   size={{ xs: 12, sm: 2 }}>
                     <Typography variant="body2" color="textSecondary">Data Types</Typography>
                     <Typography variant="h5">
                       {new Set(profileResults.map(p => p.DataType)).size}
                     </Typography>
                   </Grid>
-                  <Grid item xs={12} sm={2}>
+                  <Grid   size={{ xs: 12, sm: 2 }}>
                     <Typography variant="body2" color="textSecondary">Tables</Typography>
                     <Typography variant="h5">
                       {new Set(profileResults.map(p => p.TableName)).size}
                     </Typography>
                   </Grid>
-                  <Grid item xs={12} sm={2}>
+                  <Grid   size={{ xs: 12, sm: 2 }}>
                     <Typography variant="body2" color="textSecondary">Patterns Found</Typography>
                     <Typography variant="h5">
                       {profileResults.reduce((sum, p) => sum + (p.InferredPatterns?.length || 0), 0)}
                     </Typography>
                   </Grid>
-                  <Grid item xs={12} sm={2}>
+                  <Grid   size={{ xs: 12, sm: 2 }}>
                     <FormControl size="small" fullWidth>
                       <InputLabel>Limit</InputLabel>
                       <Select value={limit} label="Limit" onChange={handleLimitChange}>
@@ -990,7 +958,7 @@ export default function ProfilerPage({ preselectedSchema, preselectedTable, pres
                     </FormControl>
                   </Grid>
                   
-                  <Grid item xs={12}>
+                  <Grid  size={{ xs: 12 }}>
                     <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 1 }}>
                       <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
                         <Typography variant="body2" color="textSecondary">

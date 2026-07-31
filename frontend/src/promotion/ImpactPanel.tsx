@@ -1,4 +1,4 @@
-export function ImpactPanel({ diffs }) {
+export function ImpactPanel({diffs }) {
   return (
     <div className="impact-panel">
       <h3>Promotion Impact</h3>

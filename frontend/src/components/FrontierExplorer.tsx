@@ -599,12 +599,12 @@ export default function FrontierExplorer({
                         <strong>Return:</strong> {selected.exp_return.toFixed(4)}
                       </Typography>
                     </Grid>
-                    <Grid item xs={6} sm={3}>
+                    <Grid   size={{ xs: 6, sm: 3 }}>
                       <Typography variant="body2">
                         <strong>Sharpe:</strong> {selected.sharpe?.toFixed(3) || 'N/A'}
                       </Typography>
                     </Grid>
-                    <Grid item xs={6} sm={3}>
+                    <Grid   size={{ xs: 6, sm: 3 }}>
                       <Typography variant="body2">
                         <strong>Assets:</strong> {selected.weights.length}
                       </Typography>

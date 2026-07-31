@@ -3,6 +3,8 @@ import { render, screen } from '@testing-library/react';
 import { I18nextProvider } from 'react-i18next';
 import i18n from '../../../i18n';
 
+import { vi } from 'vitest';
+
 // Mock hooks used in BusinessTermsTab
 vi.mock('../../../api/glossary', () => ({
   useBusinessTerms: () => ({ data: [{ id: 'bt-1', node_name: 'Business A', is_active: true }], isLoading: false }),

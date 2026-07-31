@@ -172,7 +172,7 @@ export const AccessRulesDashboard: React.FC = () => {
           </Card>
         </Grid>
 
-        <Grid item xs={12} sm={6} md={3}>
+        <Grid    size={{ xs: 12, sm: 6, md: 3 }}>
           <Card elevation={2}>
             <CardContent>
               <Stack direction="row" justifyContent="space-between" alignItems="center">
@@ -190,7 +190,7 @@ export const AccessRulesDashboard: React.FC = () => {
           </Card>
         </Grid>
 
-        <Grid item xs={12} sm={6} md={3}>
+        <Grid    size={{ xs: 12, sm: 6, md: 3 }}>
           <Card elevation={2}>
             <CardContent>
               <Stack direction="row" justifyContent="space-between" alignItems="center">
@@ -244,7 +244,7 @@ export const AccessRulesDashboard: React.FC = () => {
               }}
             />
           </Grid>
-          <Grid item xs={12} md={3}>
+          <Grid   size={{ xs: 12, md: 3 }}>
             <FormControl fullWidth size="small">
               <InputLabel>Status</InputLabel>
               <Select
@@ -261,7 +261,7 @@ export const AccessRulesDashboard: React.FC = () => {
               </Select>
             </FormControl>
           </Grid>
-          <Grid item xs={12} md={3}>
+          <Grid   size={{ xs: 12, md: 3 }}>
             <Stack direction="row" spacing={1}>
               <Button
                 variant="contained"

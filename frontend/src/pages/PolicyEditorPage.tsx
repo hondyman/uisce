@@ -1,25 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import {
-  Box,
-  Paper,
-  Typography,
-  TextField,
-  Button,
-  Grid,
-  CircularProgress,
-  Alert,
-  Divider,
-  List,
-  ListItem,
-  ListItemText,
-  ListItemSecondaryAction,
-  IconButton,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
-  Chip
-} from '@mui/material';
+import { Alert, Box, Button, Chip, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle, Divider, Grid, IconButton, List, ListItem, ListItemButton, ListItemSecondaryAction, ListItemText, Paper, TextField, Typography } from '@mui/material';
 import {
   Psychology as AIIcon,
   Save as SaveIcon,
@@ -241,9 +221,8 @@ const PolicyEditorPage: React.FC = () => {
             </Typography>
             <List dense sx={{ flex: 1, overflow: 'auto' }}>
               {policies.map((policy) => (
-                <ListItem
+                <ListItemButton 
                   key={policy.id}
-                  button
                   selected={selectedPolicy?.id === policy.id}
                   onClick={() => {
                     setSelectedPolicy(policy);
@@ -259,7 +238,7 @@ const PolicyEditorPage: React.FC = () => {
                       <DeleteIcon fontSize="small" />
                     </IconButton>
                   </ListItemSecondaryAction>
-                </ListItem>
+                </ListItemButton>
               ))}
               {policies.length === 0 && (
                 <Typography variant="body2" color="text.secondary" sx={{ p: 2 }}>

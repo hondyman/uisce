@@ -94,7 +94,7 @@ export const PagePerformanceDashboard: React.FC<PagePerformanceDashboardProps> =
                     </Paper>
                 </Grid>
 
-                <Grid item xs={12} md={4}>
+                <Grid   size={{ xs: 12, md: 4 }}>
                     <Paper variant="outlined" sx={{ p: 3, borderRadius: 3 }}>
                         <Typography variant="subtitle2" color="textSecondary" gutterBottom>Throughput (RPS)</Typography>
                         <Typography variant="h4" fontWeight="bold">{metrics.requestsPerSecond}</Typography>

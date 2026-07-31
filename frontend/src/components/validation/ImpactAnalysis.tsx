@@ -222,7 +222,7 @@ const ImpactAnalysis: React.FC<ImpactAnalysisProps> = ({
                     <WarningIcon sx={{ fontSize: 32 }} />
                   </Box>
                 </Grid>
-                <Grid item xs>
+                <Grid xs>
                   <Typography variant="h6">
                     {getRiskLabel(impactData.estimated_risk)} Risk
                   </Typography>
@@ -252,7 +252,7 @@ const ImpactAnalysis: React.FC<ImpactAnalysisProps> = ({
                   <Typography variant="caption">Warnings</Typography>
                 </Paper>
               </Grid>
-              <Grid item xs={6} sm={3}>
+              <Grid   size={{ xs: 6, sm: 3 }}>
                 <Paper sx={{ p: 2, textAlign: 'center' }}>
                   <Typography variant="h5" sx={{ color: '#1976d2' }}>
                     {impactData.by_severity.info}
@@ -260,7 +260,7 @@ const ImpactAnalysis: React.FC<ImpactAnalysisProps> = ({
                   <Typography variant="caption">Info</Typography>
                 </Paper>
               </Grid>
-              <Grid item xs={6} sm={3}>
+              <Grid   size={{ xs: 6, sm: 3 }}>
                 <Paper sx={{ p: 2, textAlign: 'center' }}>
                   <Typography variant="h5">
                     {impactData.affected_percentage.toFixed(1)}%

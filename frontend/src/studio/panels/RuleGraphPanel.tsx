@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react'
 
-export function RuleGraphPanel({ kernel }) {
-  const [graph, setGraph] = useState({ nodes: [], edges: [] })
+export function RuleGraphPanel({ kernel }: { kernel?: any }) {
+  const [graph, setGraph] = useState<{ nodes: any[]; edges: any[] }>({ nodes: [], edges: [] })
 
   useEffect(() => {
+    if (!kernel) return
     kernel.events.on("ruleChanged", () => {
       const rule = JSON.parse(kernel.state.rule || "{}")
       const graphData = buildRuleGraph(rule)
@@ -11,13 +12,13 @@ export function RuleGraphPanel({ kernel }) {
     })
   }, [])
 
-  const buildRuleGraph = (rule) => {
-    const nodes = []
-    const edges = []
+  const buildRuleGraph = (rule: any) => {
+    const nodes: any[] = []
+    const edges: any[] = []
     let nodeId = 0
 
-    const walk = (node, parentId = null) => {
-      const id = nodeId++
+    const walk = (node: any, parentId: string | null = null) => {
+      const id = String(nodeId++)
       nodes.push({
         id,
         label: node.Type || "Unknown",
@@ -34,7 +35,7 @@ export function RuleGraphPanel({ kernel }) {
 
       if (node.Group && node.Group.Children) {
         for (const child of node.Group.Children) {
-          walk(child, id)
+          walk(child, id as any)
         }
       }
     }

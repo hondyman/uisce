@@ -171,7 +171,7 @@ export const ComplianceReportPage: React.FC = () => {
                 </Typography>
               </Paper>
             </Grid>
-            <Grid item xs={12} md={6} lg={3}>
+            <Grid    size={{ xs: 12, md: 6, lg: 3 }}>
               <Paper elevation={0} sx={{ p: 2, bgcolor: 'grey.50', textAlign: 'center' }}>
                 <Typography variant="h3" color="info.main">
                   {(executive_summary.test_pass_rate * 100).toFixed(1)}%
@@ -181,7 +181,7 @@ export const ComplianceReportPage: React.FC = () => {
                 </Typography>
               </Paper>
             </Grid>
-            <Grid item xs={12} md={6} lg={3}>
+            <Grid    size={{ xs: 12, md: 6, lg: 3 }}>
               <Paper elevation={0} sx={{ p: 2, bgcolor: 'grey.50', textAlign: 'center' }}>
                 <Chip
                   label={executive_summary.risk_level}
@@ -279,7 +279,7 @@ export const ComplianceReportPage: React.FC = () => {
                   </Typography>
                 </Paper>
               </Grid>
-              <Grid item xs={6} md={3}>
+              <Grid   size={{ xs: 6, md: 3 }}>
                 <Paper elevation={0} sx={{ p: 2, bgcolor: 'error.50' }}>
                   <Typography variant="h4" color="error.main">
                     {test_summary.failed_tests}
@@ -289,7 +289,7 @@ export const ComplianceReportPage: React.FC = () => {
                   </Typography>
                 </Paper>
               </Grid>
-              <Grid item xs={6} md={3}>
+              <Grid   size={{ xs: 6, md: 3 }}>
                 <Paper elevation={0} sx={{ p: 2, bgcolor: 'grey.50' }}>
                   <Typography variant="h4">{test_summary.coverage.toFixed(1)}%</Typography>
                   <Typography variant="caption" color="text.secondary">
@@ -398,7 +398,7 @@ export const ComplianceReportPage: React.FC = () => {
                   </Typography>
                 </Paper>
               </Grid>
-              <Grid item xs={12} md={4}>
+              <Grid   size={{ xs: 12, md: 4 }}>
                 <Paper elevation={0} sx={{ p: 2, bgcolor: 'error.50' }}>
                   <Typography variant="h4" color="error.main">
                     {deployment_log.failed_deploys}

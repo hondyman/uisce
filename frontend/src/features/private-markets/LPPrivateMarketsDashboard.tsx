@@ -137,7 +137,7 @@ export const LPPrivateMarketsDashboard: React.FC<LPDashboardProps> = ({ realTime
                 </CardContent>
               </Card>
             </Grid>
-            <Grid item xs={12} md={3}>
+            <Grid   size={{ xs: 12, md: 3 }}>
               <Card sx={{ bgcolor: 'warning.light', color: 'warning.contrastText' }}>
                 <CardContent>
                   <Box display="flex" alignItems="center" justifyContent="space-between">
@@ -150,7 +150,7 @@ export const LPPrivateMarketsDashboard: React.FC<LPDashboardProps> = ({ realTime
                 </CardContent>
               </Card>
             </Grid>
-            <Grid item xs={12} md={3}>
+            <Grid   size={{ xs: 12, md: 3 }}>
               <Card sx={{ bgcolor: 'info.light', color: 'info.contrastText' }}>
                 <CardContent>
                   <Box display="flex" alignItems="center" justifyContent="space-between">
@@ -199,7 +199,7 @@ export const LPPrivateMarketsDashboard: React.FC<LPDashboardProps> = ({ realTime
                       bundle={bundle}
                     />
                   </Grid>
-                  <Grid item xs={12}>
+                  <Grid  size={{ xs: 12 }}>
                     <JCurvePlot 
                       selectedFunds={selectedEntities} 
                       excelResults={excelResults}
@@ -211,7 +211,7 @@ export const LPPrivateMarketsDashboard: React.FC<LPDashboardProps> = ({ realTime
 
               {activeTab === 1 && (
                 <Grid container spacing={3}>
-                  <Grid item xs={12}>
+                  <Grid  size={{ xs: 12 }}>
                     <LiquidityPanel 
                       selectedFunds={selectedEntities} 
                       excelResults={excelResults}
@@ -223,14 +223,14 @@ export const LPPrivateMarketsDashboard: React.FC<LPDashboardProps> = ({ realTime
 
               {activeTab === 3 && (
                 <Grid container spacing={3}>
-                  <Grid item xs={12}>
+                  <Grid  size={{ xs: 12 }}>
                     <PerformanceAttributionChart 
                       selectedFunds={selectedEntities} 
                       excelResults={excelResults}
                       bundle={bundle}
                     />
                   </Grid>
-                  <Grid item xs={12}>
+                  <Grid  size={{ xs: 12 }}>
                     <RiskMetricsPanel 
                       selectedFunds={selectedEntities} 
                       excelResults={excelResults}

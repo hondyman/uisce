@@ -19,6 +19,7 @@ export default function ClaimsTable({ domain, statusFilter }: ClaimsTableProps) 
   const [renewTargetClaim, setRenewTargetClaim] = useState<string | null>(null);
   const [renewReason, setRenewReason] = useState('');
   const [modelDomainMap, setModelDomainMap] = useState<Map<string, string>>(new Map());
+  const notification = useNotification();
 
   // Fetch all models to map their domains
   useEffect(() => {
@@ -30,7 +31,7 @@ export default function ClaimsTable({ domain, statusFilter }: ClaimsTableProps) 
         }
       });
       setModelDomainMap(newMap);
-    }).catch((e: unknown) => {
+    }).catch((e) => {
       // Log in dev environment
       const { devError } = require('../utils/devLogger');
       devError(e);
@@ -73,7 +74,6 @@ export default function ClaimsTable({ domain, statusFilter }: ClaimsTableProps) 
 
   const handleRevoke = async (claimId: string) => {
     const confirm = useConfirm();
-    const notification = useNotification();
     if (!(await confirm({ title: 'Revoke claim', description: 'Are you sure you want to revoke this claim?' }))) return;
     try {
       await revokeDirectClaim(claimId);

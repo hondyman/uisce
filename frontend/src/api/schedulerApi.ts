@@ -24,6 +24,8 @@ export interface Job {
     description?: string;
     category: string;
     job_type: string;
+    // Alias of `job_type` — UIs that read `job.type` instead.
+    type?: string;
     parameters?: Record<string, unknown>;
     semantic_bindings?: SemanticBinding;
     schedule_type: 'cron' | 'event' | 'predictive' | 'manual';

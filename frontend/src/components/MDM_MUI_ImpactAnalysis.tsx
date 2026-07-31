@@ -334,7 +334,7 @@ export const ImpactAnalysisDashboard: React.FC = () => {
                   </Card>
                 </Grid>
 
-                <Grid item xs={12} sm={6} md={3}>
+                <Grid    size={{ xs: 12, sm: 6, md: 3 }}>
                   <Card>
                     <CardContent>
                       <Stack direction="row" justifyContent="space-between" alignItems="start">
@@ -368,7 +368,7 @@ export const ImpactAnalysisDashboard: React.FC = () => {
                   </Card>
                 </Grid>
 
-                <Grid item xs={12} sm={6} md={3}>
+                <Grid    size={{ xs: 12, sm: 6, md: 3 }}>
                   <Card>
                     <CardContent>
                       <Stack direction="row" justifyContent="space-between" alignItems="start">
@@ -632,7 +632,7 @@ export const ImpactAnalysisDashboard: React.FC = () => {
             {/* Trend Analysis Tab */}
             <TabPanel value={activeTab} index={3}>
               <Grid container spacing={3}>
-                <Grid item xs={12}>
+                <Grid  size={{ xs: 12 }}>
                   <Card>
                     <CardHeader
                       title="7-Day Performance Trend"

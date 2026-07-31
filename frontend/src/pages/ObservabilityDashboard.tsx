@@ -182,7 +182,7 @@ export const ObservabilityDashboard: React.FC = () => {
           </Card>
         </Grid>
 
-        <Grid item xs={12} sm={6} md={3}>
+        <Grid    size={{ xs: 12, sm: 6, md: 3 }}>
           <Card sx={{ height: '100%', background: 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)' }}>
             <CardContent>
               <Stack direction="row" justifyContent="space-between" alignItems="flex-start">
@@ -200,7 +200,7 @@ export const ObservabilityDashboard: React.FC = () => {
           </Card>
         </Grid>
 
-        <Grid item xs={12} sm={6} md={3}>
+        <Grid    size={{ xs: 12, sm: 6, md: 3 }}>
           <Card sx={{ height: '100%', background: 'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)' }}>
             <CardContent>
               <Stack direction="row" justifyContent="space-between" alignItems="flex-start">
@@ -366,7 +366,7 @@ export const ObservabilityDashboard: React.FC = () => {
                   />
                 </Box>
               </Grid>
-              <Grid item xs={12} sm={4}>
+              <Grid   size={{ xs: 12, sm: 4 }}>
                 <Box sx={{ textAlign: 'center' }}>
                   <Typography variant="overline" color="text.secondary">Memory Usage</Typography>
                   <Typography variant="h4" sx={{ my: 1 }}>

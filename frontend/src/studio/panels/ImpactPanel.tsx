@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 
-export function ImpactPanel({ kernel }) {
+export function ImpactPanel({kernel }) {
   const [impact, setImpact] = useState([])
 
   useEffect(() => {

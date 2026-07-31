@@ -204,7 +204,7 @@ export const LiquidityPanel: React.FC<LiquidityPanelProps> = ({ selectedFunds = 
                   color="success"
                 />
               </Grid>
-              <Grid item xs={12} md={3}>
+              <Grid   size={{ xs: 12, md: 3 }}>
                 <LiquidityCard
                   title="Unfunded Commitment"
                   value={fund.unfundedCommitment}
@@ -213,7 +213,7 @@ export const LiquidityPanel: React.FC<LiquidityPanelProps> = ({ selectedFunds = 
                   color="warning"
                 />
               </Grid>
-              <Grid item xs={12} md={3}>
+              <Grid   size={{ xs: 12, md: 3 }}>
                 <LiquidityCard
                   title="Unfunded Ratio"
                   value={fund.unfundedRatio}

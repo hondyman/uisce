@@ -18,6 +18,8 @@ import { ExportPanel } from '../panels/ExportPanel'
 import { PluginMarketplacePanel } from '../panels/PluginMarketplacePanel'
 
 export class PluginService {
+  plugins: any[];
+  available: any[];
   constructor() {
     this.plugins = []
     this.available = this.getAvailablePlugins()

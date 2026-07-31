@@ -77,6 +77,8 @@ export const ValidationRulesWithFacets: React.FC<ValidationRulesProps> = ({
   const [totalCount, setTotalCount] = useState(0);
   const [error, setError] = useState<string | null>(null);
 
+  const notification = useNotification();
+
   const [filters, setFilters] = useState<FilterState>({
     selectedEntities: [],
     selectedRuleTypes: [],
@@ -255,7 +257,7 @@ export const ValidationRulesWithFacets: React.FC<ValidationRulesProps> = ({
           ? (dataJson as unknown[])
           : (Array.isArray(dataObj.rules as unknown) ? (dataObj.rules as unknown[]) : []);
 
-        const rulesArr: SharedValidationRule[] = rawRules.map((r: unknown) => {
+        const rulesArr: SharedValidationRule[] = rawRules.map((r) => {
           const rec = (r && typeof r === 'object') ? (r as Record<string, unknown>) : {};
           const id = String(rec['id'] ?? '');
           const ruleName = (rec['rule_name'] ?? rec['name']) as string | undefined;
@@ -316,15 +318,15 @@ export const ValidationRulesWithFacets: React.FC<ValidationRulesProps> = ({
           const severityCounts: Record<string, number> = {};
 
           // Build counts from facet data
-          ((facetSource.entities as unknown[]) || []).forEach((facet: unknown) => {
+          ((facetSource.entities as unknown[]) || []).forEach((facet) => {
             const f = (facet && typeof facet === 'object') ? (facet as FacetOption) : null;
             if (f) entityCounts[f.value] = f.count;
           });
-          ((facetSource.rule_types as unknown[]) || []).forEach((facet: unknown) => {
+          ((facetSource.rule_types as unknown[]) || []).forEach((facet) => {
             const f = (facet && typeof facet === 'object') ? (facet as FacetOption) : null;
             if (f) ruleTypeCounts[f.value] = f.count;
           });
-          ((facetSource.severities as unknown[]) || []).forEach((facet: unknown) => {
+          ((facetSource.severities as unknown[]) || []).forEach((facet) => {
             const f = (facet && typeof facet === 'object') ? (facet as FacetOption) : null;
             if (f) severityCounts[f.value] = f.count;
           });
@@ -468,7 +470,6 @@ export const ValidationRulesWithFacets: React.FC<ValidationRulesProps> = ({
   const handleImportRules = async () => {
     if (!engine) { return; }
     const confirm = useConfirm();
-    const notification = useNotification();
     if (!(await confirm({ title: 'Import sample rules', description: 'Import sample wealth-management validation rules into the current tenant/datasource?' }))) return;
     setLoading(true);
     try {

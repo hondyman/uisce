@@ -1,19 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { devError } from '../utils/devLogger';
-import {
-  IconButton,
-  Badge,
-  Popover,
-  List,
-  ListItem,
-  ListItemText,
-  ListItemSecondaryAction,
-  Typography,
-  Divider,
-  Box,
-  Chip,
-  Tooltip,
-} from '@mui/material';
+import { Badge, Box, Chip, Divider, IconButton, List, ListItem, ListItemButton, ListItemSecondaryAction, ListItemText, Popover, Tooltip, Typography } from '@mui/material';
 import NotificationsIcon from '@mui/icons-material/Notifications';
 import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
 import { listNotifications, markNotificationAsRead } from '../api';
@@ -92,9 +79,8 @@ export default function NotificationCenter() {
               </ListItem>
             ) : (
               notifications.map((n) => (
-                <ListItem
+                <ListItemButton 
                   key={n.id}
-                  button
                   onClick={() => handleMarkAsRead(n.id)}
                   sx={{
                     backgroundColor: n.is_read ? 'transparent' : 'action.hover',
@@ -120,7 +106,7 @@ export default function NotificationCenter() {
                       </Tooltip>
                     </ListItemSecondaryAction>
                   )}
-                </ListItem>
+                </ListItemButton>
               ))
             )}
           </List>

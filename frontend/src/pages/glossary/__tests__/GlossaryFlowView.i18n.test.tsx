@@ -3,6 +3,8 @@ import { render, screen } from '@testing-library/react';
 import { I18nextProvider } from 'react-i18next';
 import i18n from '../../../i18n';
 
+import { vi } from 'vitest';
+
 // Mock glossary hooks so the component mounts without hitting network
 vi.mock('../../../api/glossary', () => ({
   useBusinessTerms: () => ({ data: [{ id: 'bt-1', description: 'Business A', catalog_type_name: 'Business Term', is_active: true }], isLoading: false }),

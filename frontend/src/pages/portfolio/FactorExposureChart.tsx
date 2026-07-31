@@ -263,7 +263,7 @@ export const FactorExposureChart: React.FC<FactorExposureChartProps> = ({
             </Card>
           </Grid>
 
-          <Grid item xs={12} sm={4}>
+          <Grid   size={{ xs: 12, sm: 4 }}>
             <Card
               elevation={0}
               sx={{

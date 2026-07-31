@@ -1,4 +1,5 @@
 export class MonacoService {
+  editor: any;
   constructor() {
     this.editor = null
   }

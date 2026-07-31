@@ -1,20 +1,5 @@
 import React, { useState } from 'react';
-import {
-    Dialog,
-    DialogTitle,
-    DialogContent,
-    DialogActions,
-    Button,
-    TextField,
-    List,
-    ListItem,
-    ListItemText,
-    Checkbox,
-    ListItemIcon,
-    Typography,
-    Box,
-    CircularProgress,
-} from '@mui/material';
+import { Box, Button, Checkbox, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle, List, ListItem, ListItemButton, ListItemIcon, ListItemText, TextField, Typography } from '@mui/material';
 // We'll need a way to search semantic terms. 
 // Assuming there might be an API for this, or we mock it for now.
 // For now, let's assume we can pass a search function or just use a mock list.
@@ -97,7 +82,7 @@ export const MappingModal: React.FC<MappingModalProps> = ({ open, onClose, onAdd
                 
                 <List sx={{ height: 300, overflow: 'auto', border: '1px solid #eee', borderRadius: 1 }}>
                     {filteredTerms.map((term) => (
-                        <ListItem key={term.id} button onClick={() => handleToggle(term.id)}>
+                        <ListItemButton  key={term.id} onClick={() => handleToggle(term.id)}>
                             <ListItemIcon>
                                 <Checkbox
                                     edge="start"
@@ -107,7 +92,7 @@ export const MappingModal: React.FC<MappingModalProps> = ({ open, onClose, onAdd
                                 />
                             </ListItemIcon>
                             <ListItemText primary={term.name} />
-                        </ListItem>
+                        </ListItemButton>
                     ))}
                     {filteredTerms.length === 0 && (
                         <ListItem>

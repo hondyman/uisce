@@ -45,10 +45,10 @@ const PropertiesPanel: FC<any> = ({ selectedElement, onElementUpdate }) => {
             )}
             {selectedElement.type === ELEMENT_TYPES.TABLE && (
               <>
-                <Grid item xs={12}>
+                <Grid  size={{ xs: 12 }}>
                   <FormControl fullWidth size="small"><InputLabel>Data Source</InputLabel><Select value={selectedElement.properties.dataSource || ''} onChange={(e) => updateProperty('dataSource', e.target.value)}>{datasets.map(ds => <MenuItem key={ds.id} value={ds.id}>{ds.name}</MenuItem>)}</Select></FormControl>
                 </Grid>
-                <Grid item xs={12}><TextField fullWidth size="small" label="Columns (comma separated)" value={(selectedElement.properties.columns || []).join(', ')} onChange={(e) => updateProperty('columns', e.target.value.split(', '))} /></Grid>
+                <Grid  size={{ xs: 12 }}><TextField fullWidth size="small" label="Columns (comma separated)" value={(selectedElement.properties.columns || []).join(', ')} onChange={(e) => updateProperty('columns', e.target.value.split(', '))} /></Grid>
               </>
             )}
           </Grid>
@@ -58,8 +58,8 @@ const PropertiesPanel: FC<any> = ({ selectedElement, onElementUpdate }) => {
         <AccordionSummary expandIcon={<ExpandMoreIcon />}><Typography variant="subtitle2">Expressions & Formatting</Typography></AccordionSummary>
         <AccordionDetails>
           <Grid container spacing={2}>
-            <Grid item xs={12}><TextField fullWidth size="small" multiline minRows={2} label="Value Expression" value={selectedElement.properties.valueExpression || ''} onChange={(e) => updateProperty('valueExpression', e.target.value)} /></Grid>
-            <Grid item xs={12}><TextField fullWidth size="small" multiline minRows={2} label="Conditional Expression" helperText="Example: =IIF(Fields!Growth.Value < 0, true, false)" value={selectedElement.properties.conditionalExpression || ''} onChange={(e) => updateProperty('conditionalExpression', e.target.value)} /></Grid>
+            <Grid  size={{ xs: 12 }}><TextField fullWidth size="small" multiline minRows={2} label="Value Expression" value={selectedElement.properties.valueExpression || ''} onChange={(e) => updateProperty('valueExpression', e.target.value)} /></Grid>
+            <Grid  size={{ xs: 12 }}><TextField fullWidth size="small" multiline minRows={2} label="Conditional Expression" helperText="Example: =IIF(Fields!Growth.Value < 0, true, false)" value={selectedElement.properties.conditionalExpression || ''} onChange={(e) => updateProperty('conditionalExpression', e.target.value)} /></Grid>
           </Grid>
         </AccordionDetails>
       </Accordion>
@@ -67,10 +67,10 @@ const PropertiesPanel: FC<any> = ({ selectedElement, onElementUpdate }) => {
         <AccordionSummary expandIcon={<ExpandMoreIcon />}><Typography variant="subtitle2">Layout</Typography></AccordionSummary>
         <AccordionDetails>
           <Grid container spacing={2}>
-            <Grid item xs={6}><TextField fullWidth size="small" type="number" label="Width" value={selectedElement.size.width} onChange={(e) => onElementUpdate(selectedElement.id, { size: { ...selectedElement.size, width: Number(e.target.value) } })} /></Grid>
-            <Grid item xs={6}><TextField fullWidth size="small" type="number" label="Height" value={selectedElement.size.height} onChange={(e) => onElementUpdate(selectedElement.id, { size: { ...selectedElement.size, height: Number(e.target.value) } })} /></Grid>
-            <Grid item xs={6}><TextField fullWidth size="small" type="number" label="X Position" value={selectedElement.position.x} onChange={(e) => onElementUpdate(selectedElement.id, { position: { ...selectedElement.position, x: Number(e.target.value) } })} /></Grid>
-            <Grid item xs={6}><TextField fullWidth size="small" type="number" label="Y Position" value={selectedElement.position.y} onChange={(e) => onElementUpdate(selectedElement.id, { position: { ...selectedElement.position, y: Number(e.target.value) } })} /></Grid>
+            <Grid  size={{ xs: 6 }}><TextField fullWidth size="small" type="number" label="Width" value={selectedElement.size.width} onChange={(e) => onElementUpdate(selectedElement.id, { size: { ...selectedElement.size, width: Number(e.target.value) } })} /></Grid>
+            <Grid  size={{ xs: 6 }}><TextField fullWidth size="small" type="number" label="Height" value={selectedElement.size.height} onChange={(e) => onElementUpdate(selectedElement.id, { size: { ...selectedElement.size, height: Number(e.target.value) } })} /></Grid>
+            <Grid  size={{ xs: 6 }}><TextField fullWidth size="small" type="number" label="X Position" value={selectedElement.position.x} onChange={(e) => onElementUpdate(selectedElement.id, { position: { ...selectedElement.position, x: Number(e.target.value) } })} /></Grid>
+            <Grid  size={{ xs: 6 }}><TextField fullWidth size="small" type="number" label="Y Position" value={selectedElement.position.y} onChange={(e) => onElementUpdate(selectedElement.id, { position: { ...selectedElement.position, y: Number(e.target.value) } })} /></Grid>
           </Grid>
         </AccordionDetails>
       </Accordion>

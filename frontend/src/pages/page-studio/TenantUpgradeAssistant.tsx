@@ -1,20 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import {
-    Box,
-    Typography,
-    Paper,
-    Stack,
-    Button,
-    Chip,
-    Divider,
-    Alert,
-    List,
-    ListItem,
-    ListItemText,
-    ListItemIcon,
-    Collapse,
-    CircularProgress
-} from '@mui/material';
+import { Alert, Box, Button, Chip, CircularProgress, Collapse, Divider, List, ListItem, ListItemButton, ListItemIcon, ListItemText, Paper, Stack, Typography } from '@mui/material';
 import {
     AutoAwesome as AiIcon,
     Upgrade as UpgradeIcon,
@@ -174,8 +159,7 @@ export const TenantUpgradeAssistant: React.FC = () => {
                             {/* Inherited section */}
                             {impact.inheritedChanges.length > 0 && (
                                 <>
-                                    <ListItem 
-                                        button 
+                                    <ListItemButton  
                                         onClick={() => setExpanded(expanded === impact.id ? null : impact.id)}
                                         sx={{ bgcolor: 'success.lighter', py: 1 }}
                                     >
@@ -184,7 +168,7 @@ export const TenantUpgradeAssistant: React.FC = () => {
                                             primary={<Typography variant="subtitle2" color="success.dark" fontWeight="bold">Safe Inherited Changes ({impact.inheritedChanges.length})</Typography>} 
                                         />
                                         {expanded === impact.id ? <ExpandLessIcon /> : <ExpandMoreIcon />}
-                                    </ListItem>
+                                    </ListItemButton>
                                     <Collapse in={expanded === impact.id}>
                                         <Box sx={{ p: 2 }}>
                                             {impact.inheritedChanges.map((change, idx) => (

@@ -138,7 +138,7 @@ export const ASOOptimizationDetail: React.FC<ASOOptimizationDetailProps> = ({
           </Grid>
         )}
         {simulationEvidence && (
-          <Grid item xs={12}>
+          <Grid  size={{ xs: 12 }}>
             <OptimizationSimulationCard simulation={simulationEvidence} />
           </Grid>
         )}
@@ -146,7 +146,7 @@ export const ASOOptimizationDetail: React.FC<ASOOptimizationDetailProps> = ({
 
       {/* Legacy/Standard Details */}
       <Grid container spacing={3}>
-        <Grid item xs={12}>
+        <Grid  size={{ xs: 12 }}>
           <Card sx={{ mb: 3 }}>
             <CardContent>
               <Typography variant="h6" gutterBottom>
@@ -181,7 +181,7 @@ export const ASOOptimizationDetail: React.FC<ASOOptimizationDetailProps> = ({
                   </Grid>
                 )}
                 {optimization.p95_latency_ms !== undefined && (
-                  <Grid item xs={6} md={3}>
+                  <Grid   size={{ xs: 6, md: 3 }}>
                     <MetricBox
                       label="P95 Latency"
                       value={`${optimization.p95_latency_ms.toFixed(0)}ms`}

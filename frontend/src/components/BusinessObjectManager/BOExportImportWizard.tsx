@@ -1,37 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import {
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
-  Button,
-  Stepper,
-  Step,
-  StepLabel,
-  Typography,
-  Box,
-  IconButton,
-  Radio,
-  RadioGroup,
-  FormControlLabel,
-  FormControl,
-  FormLabel,
-  List,
-  ListItem,
-  ListItemIcon,
-  ListItemText,
-  Checkbox,
-  Alert,
-  CircularProgress,
-  Divider,
-  Paper,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
-} from '@mui/material';
+import { Alert, Box, Button, Checkbox, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle, Divider, FormControl, FormControlLabel, FormLabel, IconButton, List, ListItem, ListItemButton, ListItemIcon, ListItemText, Paper, Radio, RadioGroup, Step, StepLabel, Stepper, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Typography } from '@mui/material';
 import { Close, Download, Upload, CheckCircle, Warning, Error as ErrorIcon } from '@mui/icons-material';
 
 // --- Types ---
@@ -395,12 +363,12 @@ const Step2Export: React.FC<{
        <Paper variant="outlined" sx={{ maxHeight: 300, overflow: 'auto' }}>
            <List dense>
                {bos.map(bo => (
-                   <ListItem key={bo.id} button onClick={() => handleToggle(bo.id)}>
+                   <ListItemButton  key={bo.id} onClick={() => handleToggle(bo.id)}>
                        <ListItemIcon>
                            <Checkbox checked={selectedBOs.includes(bo.id)} edge="start" />
                        </ListItemIcon>
                        <ListItemText primary={bo.name} secondary={bo.description} />
-                   </ListItem>
+                   </ListItemButton>
                ))}
                {bos.length === 0 && <ListItem><ListItemText primary="No Business Objects found." /></ListItem>}
            </List>

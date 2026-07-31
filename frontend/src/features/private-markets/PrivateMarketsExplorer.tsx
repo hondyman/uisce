@@ -1,27 +1,7 @@
 import { useState, MouseEvent } from 'react';
 import useBlockableNavigate from '../../components/RouteBlocker/useBlockableNavigate';
 import { useAuth } from '../../contexts/AuthContext';
-import {
-  Box,
-  Typography,
-  Button,
-  Menu,
-  MenuItem,
-  Avatar,
-  Chip,
-  Alert,
-  CircularProgress,
-  Drawer,
-  List,
-  ListItem,
-  ListItemIcon,
-  ListItemText,
-  Divider,
-  IconButton,
-  Tooltip,
-  useTheme,
-  useMediaQuery,
-} from '@mui/material';
+import { Alert, Avatar, Box, Button, Chip, CircularProgress, Divider, Drawer, IconButton, List, ListItem, ListItemButton, ListItemIcon, ListItemText, Menu, MenuItem, Tooltip, Typography, useMediaQuery, useTheme } from '@mui/material';
 import {
   AccountCircle,
   Business,
@@ -265,8 +245,7 @@ export const PrivateMarketsExplorer: React.FC<PrivateMarketsExplorerProps> = ({ 
         </Box>
 
         <List>
-          <ListItem
-            button
+          <ListItemButton 
             selected={currentView === 'dashboard'}
             onClick={() => setCurrentView('dashboard')}
           >
@@ -274,11 +253,10 @@ export const PrivateMarketsExplorer: React.FC<PrivateMarketsExplorerProps> = ({ 
               <Dashboard />
             </ListItemIcon>
             <ListItemText primary="Dashboard" />
-          </ListItem>
+          </ListItemButton>
 
           {user?.role === 'steward' && (
-            <ListItem
-              button
+            <ListItemButton 
               selected={currentView === 'review'}
               onClick={() => setCurrentView('review')}
             >
@@ -286,11 +264,10 @@ export const PrivateMarketsExplorer: React.FC<PrivateMarketsExplorerProps> = ({ 
                 <Assessment />
               </ListItemIcon>
               <ListItemText primary="Template Review" />
-            </ListItem>
+            </ListItemButton>
           )}
 
-          <ListItem
-            button
+          <ListItemButton 
             selected={currentView === 'analytics'}
             onClick={() => setCurrentView('analytics')}
           >
@@ -298,7 +275,7 @@ export const PrivateMarketsExplorer: React.FC<PrivateMarketsExplorerProps> = ({ 
               <Compare />
             </ListItemIcon>
             <ListItemText primary="Analytics" />
-          </ListItem>
+          </ListItemButton>
         </List>
 
         <Divider />

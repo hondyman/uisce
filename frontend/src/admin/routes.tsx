@@ -2,10 +2,10 @@
 
 import { RouteObject } from "react-router-dom";
 import { AdminLayout } from "../layout/AdminLayout";
-import { DashboardPage } from "../pages/DashboardPage";
-import { TenantsPage } from "../pages/TenantsPage";
-import { APIKeysPage } from "../pages/APIKeysPage";
-import { UsageAnalyticsPage } from "../pages/UsageAnalyticsPage";
+import DashboardPage from "./pages/DashboardPage";
+import TenantsPage from "./pages/TenantsPage";
+import APIKeysPage from "./pages/APIKeysPage";
+import UsageAnalyticsPage from "./pages/UsageAnalyticsPage";
 
 export const adminRoutes: RouteObject[] = [
   {

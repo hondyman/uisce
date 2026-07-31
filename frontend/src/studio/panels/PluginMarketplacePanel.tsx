@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react'
 
-export function PluginMarketplacePanel({ kernel }) {
-  const [plugins, setPlugins] = useState([])
+export function PluginMarketplacePanel({ kernel }: { kernel?: any }) {
+  const [plugins, setPlugins] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -45,13 +45,13 @@ export function PluginMarketplacePanel({ kernel }) {
 
       setPlugins(mockPlugins)
     } catch (error) {
-      window.notify("Failed to load plugins", "error")
+      window.notify?.("Failed to load plugins", "error")
     } finally {
       setLoading(false)
     }
   }
 
-  const installPlugin = async (plugin) => {
+  const installPlugin = async (plugin: any) => {
     try {
       // Mock installation
       await new Promise(resolve => setTimeout(resolve, 1000))
@@ -61,13 +61,13 @@ export function PluginMarketplacePanel({ kernel }) {
       ))
 
       kernel.services.plugins.install(plugin)
-      window.notify(`${plugin.name} installed`, "success")
+      window.notify?.(`${plugin.name} installed`, "success")
     } catch (error) {
-      window.notify(`Failed to install ${plugin.name}`, "error")
+      window.notify?.(`Failed to install ${plugin.name}`, "error")
     }
   }
 
-  const uninstallPlugin = async (plugin) => {
+  const uninstallPlugin = async (plugin: any) => {
     try {
       // Mock uninstallation
       await new Promise(resolve => setTimeout(resolve, 500))
@@ -77,9 +77,9 @@ export function PluginMarketplacePanel({ kernel }) {
       ))
 
       kernel.services.plugins.uninstall(plugin.id)
-      window.notify(`${plugin.name} uninstalled`, "success")
+      window.notify?.(`${plugin.name} uninstalled`, "success")
     } catch (error) {
-      window.notify(`Failed to uninstall ${plugin.name}`, "error")
+      window.notify?.(`Failed to uninstall ${plugin.name}`, "error")
     }
   }
 

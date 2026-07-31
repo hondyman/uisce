@@ -49,14 +49,14 @@ const BusinessTermDetail = () => {
                         <Typography variant="subtitle2">Residency</Typography>
                         <Chip label={term.residency || "Global"} color="primary" variant="outlined" />
                     </Grid>
-                    <Grid item xs={4}>
+                    <Grid  size={{ xs: 4 }}>
                         <Typography variant="subtitle2">Sensitivity</Typography>
                         <Chip 
                             label={term.sensitivity} 
                             color={term.sensitivity === 'HIGH' ? "error" : term.sensitivity === 'MEDIUM' ? "warning" : "success"} 
                         />
                     </Grid>
-                    <Grid item xs={12}>
+                    <Grid  size={{ xs: 12 }}>
                         <Typography variant="caption" display="block">
                             Last Updated By: {term.updatedBy} at {new Date(term.updatedAt).toLocaleString()}
                         </Typography>
@@ -113,7 +113,7 @@ const BusinessTermDetail = () => {
 };
 
 // 1.2 Add Semantic Term Mapping Modal
-const AddMappingModal = ({ open, onClose, businessTermId }) => {
+const AddMappingModal = ({open, onClose, businessTermId }) => {
     const [searchTerm, setSearchTerm] = useState('');
     // Mock search results
     const results = [

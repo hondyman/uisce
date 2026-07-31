@@ -1,29 +1,7 @@
 import { useState, MouseEvent } from 'react';
 import useBlockableNavigate from '../../components/RouteBlocker/useBlockableNavigate';
 import { useAuth } from '../../contexts/AuthContext';
-import {
-  Box,
-  Typography,
-  Button,
-  Menu,
-  MenuItem,
-  Avatar,
-  Chip,
-  Alert,
-  CircularProgress,
-  Drawer,
-  List,
-  ListItem,
-  ListItemIcon,
-  ListItemText,
-  IconButton,
-  Tooltip,
-  Divider,
-  useTheme,
-  useMediaQuery,
-  AppBar,
-  Toolbar,
-} from '@mui/material';
+import { Alert, AppBar, Avatar, Box, Button, Chip, CircularProgress, Divider, Drawer, IconButton, List, ListItem, ListItemButton, ListItemIcon, ListItemText, Menu, MenuItem, Toolbar, Tooltip, Typography, useMediaQuery, useTheme } from '@mui/material';
 import {
   AccountCircle,
   Business,
@@ -431,8 +409,7 @@ export const MobileResponsivePrivateMarketsExplorer: React.FC<PrivateMarketsExpl
         </Box>
 
         <List sx={{ py: 0 }}>
-          <ListItem
-            button
+          <ListItemButton 
             selected={currentView === 'dashboard'}
             onClick={() => {
               setCurrentView('dashboard');
@@ -457,11 +434,10 @@ export const MobileResponsivePrivateMarketsExplorer: React.FC<PrivateMarketsExpl
                 fontWeight: currentView === 'dashboard' ? 'bold' : 'normal',
               }}
             />
-          </ListItem>
+          </ListItemButton>
 
           {user?.role === 'steward' && (
-            <ListItem
-              button
+            <ListItemButton 
               selected={currentView === 'review'}
               onClick={() => {
                 setCurrentView('review');
@@ -486,11 +462,10 @@ export const MobileResponsivePrivateMarketsExplorer: React.FC<PrivateMarketsExpl
                   fontWeight: currentView === 'review' ? 'bold' : 'normal',
                 }}
               />
-            </ListItem>
+            </ListItemButton>
           )}
 
-          <ListItem
-            button
+          <ListItemButton 
             selected={currentView === 'analytics'}
             onClick={() => {
               setCurrentView('analytics');
@@ -515,7 +490,7 @@ export const MobileResponsivePrivateMarketsExplorer: React.FC<PrivateMarketsExpl
                 fontWeight: currentView === 'analytics' ? 'bold' : 'normal',
               }}
             />
-          </ListItem>
+          </ListItemButton>
         </List>
 
         <Divider />

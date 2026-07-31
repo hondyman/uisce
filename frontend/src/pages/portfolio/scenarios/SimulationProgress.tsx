@@ -51,6 +51,13 @@ interface SimulationProgressProps {
   results: SimulationResult[];
   onAbort: () => Promise<void>;
   isAborting?: boolean;
+  // Alternate names used by older tests/UI:
+  progress?: number;
+  status?: 'pending' | 'queued' | 'running' | 'completed' | 'failed';
+  message?: string;
+  estimatedTimeRemaining?: number;
+  elapsedTime?: number;
+  onCancel?: () => Promise<void>;
 }
 
 /**

@@ -1,26 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Responsive, WidthProvider, Layout } from 'react-grid-layout';
-import {
-  Box,
-  Paper,
-  Typography,
-  IconButton,
-  Menu,
-  MenuItem,
-  Button,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  List,
-  ListItem,
-  ListItemText,
-  ListItemIcon,
-  Checkbox,
-  Switch,
-  FormControlLabel,
-  Tabs,
-  Tab,
-} from '@mui/material';
+import { Box, Button, Checkbox, Dialog, DialogContent, DialogTitle, FormControlLabel, IconButton, List, ListItem, ListItemButton, ListItemIcon, ListItemText, Menu, MenuItem, Paper, Switch, Tab, Tabs, Typography } from '@mui/material';
 import {
   Settings as SettingsIcon,
   Add as AddIcon,
@@ -369,9 +349,8 @@ export const ClientPortalDashboard: React.FC = () => {
             {Object.values(WIDGET_REGISTRY)
               .filter(config => !enabledWidgets.includes(config.id))
               .map((config) => (
-                <ListItem
+                <ListItemButton 
                   key={config.id}
-                  button
                   onClick={() => addWidget(config.id)}
                 >
                   <ListItemIcon>
@@ -381,7 +360,7 @@ export const ClientPortalDashboard: React.FC = () => {
                     primary={config.title}
                     secondary={config.description}
                   />
-                </ListItem>
+                </ListItemButton>
               ))}
           </List>
         </DialogContent>

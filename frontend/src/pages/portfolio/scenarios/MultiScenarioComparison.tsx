@@ -6,8 +6,6 @@ import {
   CardContent,
   Chip,
   CircularProgress,
-  DataGrid,
-  GridColDef,
   Paper,
   ToggleButton,
   ToggleButtonGroup,
@@ -16,6 +14,7 @@ import {
   useTheme,
   useMediaQuery,
 } from '@mui/material';
+import { DataGrid, GridColDef } from '@mui/x-data-grid';
 import {
   BarChart,
   Bar,

@@ -249,7 +249,7 @@ export const CryptoPortfolioCenter: React.FC<{ clientId: string }> = ({ clientId
             </Card>
           </Grid>
 
-          <Grid item xs={12} md={3}>
+          <Grid   size={{ xs: 12, md: 3 }}>
             <Card elevation={2}>
               <CardContent>
                 <Typography color="textSecondary" variant="body2" gutterBottom>
@@ -278,7 +278,7 @@ export const CryptoPortfolioCenter: React.FC<{ clientId: string }> = ({ clientId
             </Card>
           </Grid>
 
-          <Grid item xs={12} md={3}>
+          <Grid   size={{ xs: 12, md: 3 }}>
             <Card elevation={2}>
               <CardContent>
                 <Typography color="textSecondary" variant="body2" gutterBottom>

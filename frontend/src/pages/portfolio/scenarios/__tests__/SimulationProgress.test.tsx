@@ -27,6 +27,22 @@ const renderWithTheme = (component: React.ReactElement) => {
 describe('SimulationProgress Component', () => {
   const mockOnCancel = jest.fn();
 
+  // Stubs for the strict props the component actually requires.
+  const runStub = {
+    id: 'run-1',
+    simulationId: 'sim-1',
+    scenarioId: 'sc-1',
+    status: 'running' as const,
+    progress: 50,
+    portfoliosTotal: 1,
+    portfoliosProcessed: 0,
+    portfoliosFailed: 0,
+    startedAt: new Date(Date.now() - 60_000),
+    estimatedDuration: 120,
+    executionEngine: 'wasm' as const,
+  };
+  const resultStub: any[] = [];
+
   const defaultProps = {
     progress: 50,
     status: 'running' as const,
@@ -34,6 +50,9 @@ describe('SimulationProgress Component', () => {
     estimatedTimeRemaining: 120,
     elapsedTime: 60,
     onCancel: mockOnCancel,
+    simulationRun: runStub,
+    results: resultStub,
+    onAbort: mockOnCancel,
   };
 
   beforeEach(() => {

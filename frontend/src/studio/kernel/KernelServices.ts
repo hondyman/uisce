@@ -15,6 +15,21 @@ import { CommandService } from "../services/CommandService"
 import { SimulationService } from "../services/SimulationService"
 
 export class KernelServices {
+  wasm: WasmService;
+  pool: WorkerPoolService;
+  monaco: MonacoService;
+  lint: LintService;
+  migration: MigrationService;
+  diff: DiffService;
+  trace: TraceService;
+  impact: ImpactService;
+  health: HealthService;
+  persistence: PersistenceService;
+  telemetry: TelemetryService;
+  plugins: PluginService;
+  theme: ThemeService;
+  commands: CommandService;
+  simulation: SimulationService;
   constructor() {
     this.wasm = new WasmService()
     this.pool = new WorkerPoolService()

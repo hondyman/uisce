@@ -63,6 +63,21 @@ export interface RuleDiff {
   before: any;
   after: any;
   type: 'added' | 'removed' | 'modified';
+  // Alternate names used by diff UIs (`current` ↔ `after`, `base` ↔ `before`).
+  current?: any;
+  base?: any;
+}
+
+export type DiffField = keyof RuleDiff | string;
+
+export interface AuditLogEntry {
+  id: string;
+  actor: string;
+  action: string;
+  resource_type: string;
+  resource_id: string;
+  timestamp: string;
+  metadata?: Record<string, any>;
 }
 
 export interface RuleVersion {

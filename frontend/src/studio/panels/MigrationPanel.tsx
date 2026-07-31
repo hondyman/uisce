@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 
-export function MigrationPanel({ kernel }) {
+export function MigrationPanel({kernel }) {
   const [migrated, setMigrated] = useState(null)
 
   useEffect(() => {

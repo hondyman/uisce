@@ -208,7 +208,7 @@ function NotificationOverview({ analytics, onRefresh, onTabChange }: Notificatio
           </Card>
         </Grid>
 
-        <Grid item xs={12} sm={6} md={3}>
+        <Grid    size={{ xs: 12, sm: 6, md: 3 }}>
           <Card>
             <CardContent>
               <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
@@ -224,7 +224,7 @@ function NotificationOverview({ analytics, onRefresh, onTabChange }: Notificatio
           </Card>
         </Grid>
 
-        <Grid item xs={12} sm={6} md={3}>
+        <Grid    size={{ xs: 12, sm: 6, md: 3 }}>
           <Card>
             <CardContent>
               <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
@@ -247,7 +247,7 @@ function NotificationOverview({ analytics, onRefresh, onTabChange }: Notificatio
               Performance Overview
             </Typography>
             <Grid container spacing={2}>
-              <Grid item xs={12} sm={6} md={3}>
+              <Grid    size={{ xs: 12, sm: 6, md: 3 }}>
                 <Box sx={{ textAlign: 'center' }}>
                   <Typography variant="h4" color="success.main">
                     {(analytics.avg_open_rate * 100).toFixed(1)}%
@@ -257,7 +257,7 @@ function NotificationOverview({ analytics, onRefresh, onTabChange }: Notificatio
                   </Typography>
                 </Box>
               </Grid>
-              <Grid item xs={12} sm={6} md={3}>
+              <Grid    size={{ xs: 12, sm: 6, md: 3 }}>
                 <Box sx={{ textAlign: 'center' }}>
                   <Typography variant="h4" color="info.main">
                     {(analytics.avg_click_rate * 100).toFixed(1)}%
@@ -267,7 +267,7 @@ function NotificationOverview({ analytics, onRefresh, onTabChange }: Notificatio
                   </Typography>
                 </Box>
               </Grid>
-              <Grid item xs={12} sm={6} md={3}>
+              <Grid    size={{ xs: 12, sm: 6, md: 3 }}>
                 <Box sx={{ textAlign: 'center' }}>
                   <Typography variant="h4" color="primary.main">
                     {analytics.total_sent > 0 ? ((analytics.total_opened / analytics.total_sent) * 100).toFixed(1) : 0}%
@@ -277,7 +277,7 @@ function NotificationOverview({ analytics, onRefresh, onTabChange }: Notificatio
                   </Typography>
                 </Box>
               </Grid>
-              <Grid item xs={12} sm={6} md={3}>
+              <Grid    size={{ xs: 12, sm: 6, md: 3 }}>
                 <Box sx={{ textAlign: 'center' }}>
                   <Typography variant="h4" color="secondary.main">
                     {analytics.total_opened > 0 ? ((analytics.total_clicked / analytics.total_opened) * 100).toFixed(1) : 0}%

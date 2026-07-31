@@ -73,11 +73,11 @@ const APIPreview: React.FC<APIPreviewProps> = ({ endpoint }) => {
                             <Typography variant="caption" color="textSecondary">Throughput (QPS)</Typography>
                             <Typography variant="h6">{metrics?.qps}</Typography>
                         </Grid>
-                        <Grid item xs={6} md={2}>
+                        <Grid   size={{ xs: 6, md: 2 }}>
                             <Typography variant="caption" color="textSecondary">Cache Hit</Typography>
                             <Typography variant="h6">{Math.round(metrics?.cacheHitRate * 100)}%</Typography>
                         </Grid>
-                        <Grid item xs={6} md={2}>
+                        <Grid   size={{ xs: 6, md: 2 }}>
                             <Typography variant="caption" color="textSecondary">Pre-agg Hit</Typography>
                             <Typography variant="h6">{Math.round(metrics?.preaggHitRate * 100)}%</Typography>
                         </Grid>

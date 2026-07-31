@@ -1,6 +1,6 @@
 import React, { useState } from 'react'
 
-export function ProfilerPanel({ kernel }) {
+export function ProfilerPanel({kernel }) {
   const [profile, setProfile] = useState(null)
   const [running, setRunning] = useState(false)
 

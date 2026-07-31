@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 
-export function HealthPanel({ kernel }) {
+export function HealthPanel({kernel }) {
   const [health, setHealth] = useState(null)
 
   useEffect(() => {

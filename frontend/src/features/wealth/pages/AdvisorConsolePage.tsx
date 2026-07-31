@@ -1,21 +1,5 @@
 import React, { useState } from 'react';
-import { 
-  Box, 
-  Typography, 
-  Paper, 
-  List, 
-  ListItem, 
-  ListItemText, 
-  ListItemSecondaryAction, 
-  IconButton, 
-  Button, 
-  Chip, 
-  Divider,
-  Grid,
-  Card,
-  CardContent,
-  CardActions
-} from '@mui/material';
+import { Box, Button, Card, CardActions, CardContent, Chip, Divider, Grid, IconButton, List, ListItem, ListItemButton, ListItemSecondaryAction, ListItemText, Paper, Typography } from '@mui/material';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import CancelIcon from '@mui/icons-material/Cancel';
 import InfoIcon from '@mui/icons-material/Info';
@@ -107,8 +91,7 @@ export const AdvisorConsolePage: React.FC = () => {
             <List>
               {queue.map((item) => (
                 <React.Fragment key={item.id}>
-                  <ListItem 
-                    button 
+                  <ListItemButton  
                     selected={selectedItem?.id === item.id}
                     onClick={() => setSelectedItem(item)}
                   >
@@ -134,7 +117,7 @@ export const AdvisorConsolePage: React.FC = () => {
                         </>
                       }
                     />
-                  </ListItem>
+                  </ListItemButton>
                   <Divider />
                 </React.Fragment>
               ))}
@@ -180,7 +163,7 @@ export const AdvisorConsolePage: React.FC = () => {
                     </CardContent>
                   </Card>
                 </Grid>
-                <Grid item xs={4}>
+                <Grid  size={{ xs: 4 }}>
                   <Card variant="outlined">
                     <CardContent>
                       <Typography color="textSecondary" gutterBottom>Holdings</Typography>

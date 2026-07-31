@@ -124,7 +124,7 @@ export const EvidenceBundleTimeline: React.FC = () => {
             </Typography>
             <Typography variant="body2">{formatDateTime(artifact.created_at)}</Typography>
           </Grid>
-          <Grid item xs={12} md={4}>
+          <Grid   size={{ xs: 12, md: 4 }}>
             <Typography variant="subtitle2" color="text.secondary">
               Size
             </Typography>
@@ -276,14 +276,14 @@ export const EvidenceBundleTimeline: React.FC = () => {
                 {bundle.upgrade_request_id}
               </Typography>
             </Grid>
-            <Grid item xs={12} md={6}>
+            <Grid   size={{ xs: 12, md: 6 }}>
               <Typography variant="subtitle2" color="text.secondary">
                 Created
               </Typography>
               <Typography variant="body2">{formatDateTime(bundle.created_at)}</Typography>
             </Grid>
             {bundle.completed_at && (
-              <Grid item xs={12} md={6}>
+              <Grid   size={{ xs: 12, md: 6 }}>
                 <Typography variant="subtitle2" color="text.secondary">
                   Completed
                 </Typography>

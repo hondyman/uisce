@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback, useMemo } from 'react'
 import { devError } from '../utils/devLogger';
 import { useScope } from '../contexts/ScopeContext'
-import { Box, CircularProgress, Paper, Typography, List, ListItem, ListItemIcon, ListItemText, Collapse, IconButton, Alert, Checkbox, Tooltip } from '@mui/material'
+import { Alert, Box, Checkbox, CircularProgress, Collapse, IconButton, List, ListItem, ListItemButton, ListItemIcon, ListItemText, Paper, Tooltip, Typography } from '@mui/material';
 import { Database, Link, Unlink } from 'lucide-react'
 import FolderIcon from '@mui/icons-material/Folder'
 import TableChartIcon from '@mui/icons-material/TableChart'
@@ -282,16 +282,7 @@ export default function DatabaseTreePanel({
               const tables = tablesBySchema[schema.id] || []
               return (
                 <div key={schema.id}>
-                  <ListItem
-                    secondaryAction={
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                        <Typography variant="caption" color="text.secondary">
-                          {matchCounts[schema.node_name]?.schema || 0} matches
-                        </Typography>
-                        {isExpanded ? <ExpandLess /> : <ExpandMore />}
-                      </Box>
-                    }
-                    button
+                  <ListItemButton
                     onClick={() => {
                       toggleSchema(schema.node_name)
                       toggleSchemaSelection(schema.node_name)
@@ -302,9 +293,19 @@ export default function DatabaseTreePanel({
                       '&:hover': { bgcolor: 'action.hover' }
                     }}
                   >
+                    <ListItemText
+                      primary={
+                        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
+                          <Typography variant="caption" color="text.secondary">
+                            {matchCounts[schema.node_name]?.schema || 0} matches
+                          </Typography>
+                          {isExpanded ? <ExpandLess /> : <ExpandMore />}
+                        </Box>
+                      }
+                    />
                     <ListItemIcon><FolderIcon fontSize="small" /></ListItemIcon>
                     <ListItemText primary={schema.node_name} />
-                  </ListItem>
+                  </ListItemButton>
 
                   <Collapse in={isExpanded} timeout="auto" unmountOnExit>
                     <List component="div" disablePadding>
@@ -313,29 +314,24 @@ export default function DatabaseTreePanel({
                         const columns = columnsByTable[table.id] || []
                         return (
                           <div key={table.id}>
-                            <ListItem
-                              button
+                            <ListItemButton 
                               sx={{ pl: 4, bgcolor: selectedTables.includes(table.node_name) ? 'action.selected' : 'transparent', '&:hover': { bgcolor: 'action.hover' } }}
-                              secondaryAction={
-                                showColumns && columns.length > 0 ? (
+                              onClick={() => showColumns ? toggleTable(table.id) : toggleTableSelection(table.node_name)}
+                              data-testid={`table-${table.node_name}`}
+                            >
+                              <ListItemIcon><TableChartIcon fontSize="small" /></ListItemIcon>
+                              <ListItemText 
+                                primary={table.node_name}
+                                secondary={
                                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                                     <Typography variant="caption" color="text.secondary">
                                       {matchCounts[schemas.find(s => s.id === table.parent_id)?.node_name || '']?.tables[table.node_name] || 0} matches
                                     </Typography>
                                     {isTableExpanded ? <ExpandLess /> : <ExpandMore />}
                                   </Box>
-                                ) : (
-                                  <Typography variant="caption" color="text.secondary">
-                                    {matchCounts[schemas.find(s => s.id === table.parent_id)?.node_name || '']?.tables[table.node_name] || 0} matches
-                                  </Typography>
-                                )
-                              }
-                              onClick={() => showColumns ? toggleTable(table.id) : toggleTableSelection(table.node_name)}
-                              data-testid={`table-${table.node_name}`}
-                            >
-                              <ListItemIcon><TableChartIcon fontSize="small" /></ListItemIcon>
-                              <ListItemText primary={table.node_name} />
-                            </ListItem>
+                                }
+                              />
+                            </ListItemButton>
 
                             {showColumns && (
                               <Collapse in={isTableExpanded} timeout="auto" unmountOnExit>

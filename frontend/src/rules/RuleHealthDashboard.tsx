@@ -1,4 +1,4 @@
-export function RuleHealthDashboard({ health }) {
+export function RuleHealthDashboard({health }) {
   return (
     <div className="rule-health">
       <HealthItem label="Schema" value={health.schema} />
@@ -9,7 +9,7 @@ export function RuleHealthDashboard({ health }) {
   )
 }
 
-function HealthItem({ label, value }) {
+function HealthItem({label, value }) {
   return (
     <div className="health-item">
       <span>{label}:</span>

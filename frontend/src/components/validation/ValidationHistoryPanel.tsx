@@ -168,7 +168,7 @@ const ValidationHistoryPanel: React.FC = () => {
             </CardContent>
           </Card>
         </Grid>
-        <Grid item xs={12} sm={3}>
+        <Grid   size={{ xs: 12, sm: 3 }}>
           <Card>
             <CardContent sx={{ textAlign: 'center' }}>
               <Typography color="textSecondary" gutterBottom>
@@ -180,7 +180,7 @@ const ValidationHistoryPanel: React.FC = () => {
             </CardContent>
           </Card>
         </Grid>
-        <Grid item xs={12} sm={3}>
+        <Grid   size={{ xs: 12, sm: 3 }}>
           <Card>
             <CardContent sx={{ textAlign: 'center' }}>
               <Typography color="textSecondary" gutterBottom>
@@ -207,7 +207,7 @@ const ValidationHistoryPanel: React.FC = () => {
                 placeholder="e.g., ChangeMaritalStatus"
               />
             </Grid>
-            <Grid item xs={12} sm={3}>
+            <Grid   size={{ xs: 12, sm: 3 }}>
               <Button
                 fullWidth
                 variant="outlined"
@@ -297,13 +297,13 @@ const ValidationHistoryPanel: React.FC = () => {
                   </Typography>
                   <Typography variant="body2">{selectedRecord.step_name}</Typography>
                 </Grid>
-                <Grid item xs={6}>
+                <Grid  size={{ xs: 6 }}>
                   <Typography variant="caption" color="textSecondary">
                     Rule
                   </Typography>
                   <Typography variant="body2">{selectedRecord.rule_name}</Typography>
                 </Grid>
-                <Grid item xs={6}>
+                <Grid  size={{ xs: 6 }}>
                   <Typography variant="caption" color="textSecondary">
                     Status
                   </Typography>
@@ -313,13 +313,13 @@ const ValidationHistoryPanel: React.FC = () => {
                     size="small"
                   />
                 </Grid>
-                <Grid item xs={6}>
+                <Grid  size={{ xs: 6 }}>
                   <Typography variant="caption" color="textSecondary">
                     Executed By
                   </Typography>
                   <Typography variant="body2">{selectedRecord.executed_by}</Typography>
                 </Grid>
-                <Grid item xs={6}>
+                <Grid  size={{ xs: 6 }}>
                   <Typography variant="caption" color="textSecondary">
                     Execution Time
                   </Typography>
