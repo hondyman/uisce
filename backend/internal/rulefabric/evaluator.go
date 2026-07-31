@@ -620,6 +620,11 @@ type RuleEvaluator struct {
 	db        *sqlx.DB
 	operators *OperatorRegistry
 	celEnv    *cel.Env
+
+	// vmManager is the optional VM-backed fast path. Nil until SetVMManager
+	// is called at service startup. When nil, all evaluations use the
+	// legacy recursive evaluator.
+	vmManager *VMManager
 }
 
 // NewRuleEvaluator creates a new evaluator service
@@ -641,6 +646,24 @@ func NewRuleEvaluator(db *sqlx.DB) (*RuleEvaluator, error) {
 		operators: NewOperatorRegistry(),
 		celEnv:    env,
 	}, nil
+}
+
+// SetVMManager wires the VM-backed fast path. Idempotent — second call
+// is a no-op. The caller must have already called RegisterAndFreeze
+// on the manager (typically once at startup with the full rule corpus).
+func (e *RuleEvaluator) SetVMManager(m *VMManager) {
+	if m != nil {
+		e.vmManager = m
+	}
+}
+
+// VMSnapshot returns the manager's metrics. Returns zero snapshot if
+// the VM is uninitialised.
+func (e *RuleEvaluator) VMSnapshot() VMSnapshot {
+	if e.vmManager == nil {
+		return VMSnapshot{}
+	}
+	return e.vmManager.Snapshot()
 }
 
 // Evaluate evaluates a single rule against the context
@@ -668,8 +691,19 @@ func (e *RuleEvaluator) Evaluate(ctx context.Context, rule *RuleWithLogic, evalC
 		return result, nil
 	}
 
-	// Evaluate condition tree
-	passed, details := e.evaluateConditionGroup(&conditionGroup, evalCtx.Data, evalCtx.RelatedData)
+	// Evaluate condition tree via VM fast path when available.
+	var passed bool
+	var details EvaluationDetails
+	if e.vmManager != nil {
+		passed, details = e.vmManager.EvaluateWithFallback(
+			rule, &conditionGroup, evalCtx.Data, evalCtx.RelatedData,
+			func() (bool, EvaluationDetails) {
+				return e.evaluateConditionGroup(&conditionGroup, evalCtx.Data, evalCtx.RelatedData)
+			},
+		)
+	} else {
+		passed, details = e.evaluateConditionGroup(&conditionGroup, evalCtx.Data, evalCtx.RelatedData)
+	}
 
 	result.Details = details
 	if passed {

@@ -3,6 +3,7 @@ package rules
 import (
 	"context"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/google/cel-go/cel"
@@ -13,6 +14,11 @@ import (
 type RuleEngine struct {
 	env  *cel.Env
 	repo RuleRepository
+
+	// VM-backed path for RuleNode evaluation.
+	// Nil until SetVMManager is called (lazy init).
+	manager *VMManager
+	mgrOnce sync.Once
 }
 
 // NewRuleEngine creates a new RuleEngine.
@@ -24,6 +30,38 @@ func NewRuleEngine(repo RuleRepository) *RuleEngine {
 	)
 	// Error handling ignored for brevity in stub/refactor
 	return &RuleEngine{env: env, repo: repo}
+}
+
+// SetVMManager injects a pre-initialised VM Manager. Idempotent.
+// Call this once at service startup after the schema has been Intern'd
+// into the manager's dictionaries and they have been Freeze()'d.
+func (e *RuleEngine) SetVMManager(m *VMManager) {
+	e.mgrOnce.Do(func() {
+		e.manager = m
+	})
+}
+
+// EvaluateNode evaluates a structured RuleNode via the VM path
+// (when SetVMManager has been called) or falls back to the recursive
+// evaluator (AdvancedEvaluator) when the VM is uninitialised.
+func (e *RuleEngine) EvaluateNode(ctx context.Context, node *RuleNode, input map[string]any) (bool, error) {
+	if e.manager == nil {
+		ae := NewAdvancedEvaluator()
+		return ae.Evaluate(*node, input)
+	}
+	return e.manager.EvaluateWithFallback(node.ID(), node, input, func(n *RuleNode, i map[string]any) (bool, error) {
+		ae := NewAdvancedEvaluator()
+		return ae.Evaluate(*n, i)
+	})
+}
+
+// VMSnapshot returns the manager's metrics. Returns zero snapshot if
+// the VM is uninitialised.
+func (e *RuleEngine) VMSnapshot() VMSnapshot {
+	if e.manager == nil {
+		return VMSnapshot{}
+	}
+	return e.manager.Snapshot()
 }
 
 // Evaluate evaluates a CEL expression against the provided input.

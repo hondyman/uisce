@@ -13,7 +13,7 @@ BLUE='\033[0;34m'
 NC='\033[0m'
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-FRONTEND_DIR="$SCRIPT_DIR/frontend/frontend"
+FRONTEND_DIR="$SCRIPT_DIR/frontend"
 LOG_DIR="$SCRIPT_DIR/logs"
 TIMESTAMP=$(date '+%Y%m%d_%H%M%S')
 
