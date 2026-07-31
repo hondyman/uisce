@@ -4,11 +4,11 @@ export class WorkerPoolService {
     this.workers = 0
   }
 
-  async spawn(count) {
+  async spawn(count: any) {
     this.workers = count
   }
 
-  evaluate(_rule, _context) {
+  evaluate(_rule: any, _context: any) {
     return this.workers > 0 ? { result: true } : null
   }
 }

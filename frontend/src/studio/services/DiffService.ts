@@ -1,5 +1,5 @@
 export class DiffService {
-  compute(_oldRule, _newRule) {
+  compute(_oldRule: any, _newRule: any) {
     return []
   }
 }

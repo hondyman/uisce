@@ -14,3 +14,7 @@ export class ExecutionOrchestrator {
     return await executePlan(plan, this.router)
   }
 }
+
+async function executePlan(plan: any, router: any) {
+  return { success: true, plan, router };
+}

@@ -1,7 +1,11 @@
 import { useRef, useEffect } from 'react'
 
-export function EditorPanel({kernel }) {
-  const ref = useRef(null)
+interface EditorPanelProps {
+  kernel: any;
+}
+
+export function EditorPanel({kernel }: EditorPanelProps) {
+  const ref = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     const monaco = kernel.services.monaco.instance

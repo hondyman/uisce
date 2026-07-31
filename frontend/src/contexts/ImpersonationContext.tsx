@@ -177,7 +177,7 @@ const API_BASE = import.meta.env.VITE_API_URL ?? '/api';
 // ---------------------------------------------------------------------------
 
 export const ImpersonationProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-  const { token: adminToken, user } = useAuth();
+  const { token: adminToken, user, isGlobalAdmin } = useAuth();
   const [session, setSession] = useState<ImpersonationSession | null>(null);
   const [impersonationToken, setImpersonationToken] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -228,19 +228,7 @@ export const ImpersonationProvider: React.FC<{ children: ReactNode }> = ({ child
   // stays current even when the admin has not opened it recently.
   useEffect(() => {
     if (!adminToken || !user) return;
-    const isPlatformOp =
-      user.is_core_admin === true ||
-      user.isCoreAdmin === true ||
-      user.is_global_admin === true ||
-      (Array.isArray(user.groups) && user.groups.some((g: string) => typeof g === 'string' && /(^|\/)uisce[-_ ]?global[-_ ]?admins?$/i.test(g))) ||
-      user.role === 'platform_operator' ||
-      user.role === 'global_ops' ||
-      user.role === 'admin' ||
-      user.role === 'global_admin' ||
-      user.operator_role === 'global_admin' ||
-      user.operator_role === 'platform_operator';
-
-    if (!isPlatformOp) return;
+    if (!isGlobalAdmin()) return;
 
     void refreshRecentSessionsFromServer();
     const id = setInterval(() => {
@@ -248,7 +236,7 @@ export const ImpersonationProvider: React.FC<{ children: ReactNode }> = ({ child
     }, 30_000);
     return () => clearInterval(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [adminToken, user]);
+  }, [adminToken, user, isGlobalAdmin]);
 
   // Live countdown ticker
   useEffect(() => {

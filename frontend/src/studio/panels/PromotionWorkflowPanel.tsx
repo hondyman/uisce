@@ -1,7 +1,15 @@
 import React, { useState, useEffect } from 'react'
 
-export function PromotionWorkflowPanel({kernel }) {
-  const [status, setStatus] = useState({
+interface PromotionWorkflowPanelProps {
+  kernel: any;
+}
+
+export function PromotionWorkflowPanel({kernel }: PromotionWorkflowPanelProps) {
+  const [status, setStatus] = useState<{
+    lint: any[];
+    impact: any[];
+    health: { score: number };
+  }>({
     lint: [],
     impact: [],
     health: { score: 0 }
@@ -31,7 +39,6 @@ export function PromotionWorkflowPanel({kernel }) {
 
   const handlePromote = () => {
     if (canPromote()) {
-      // Perform promotion
       kernel.events.dispatch("rule.promoted", kernel.state.rule)
       window.notify?.("Rule promoted successfully!", "success")
     }

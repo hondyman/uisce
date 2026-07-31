@@ -1,7 +1,11 @@
 import { useState } from 'react'
 
-export function ExecutionPanel({kernel }) {
-  const [results, setResults] = useState([])
+interface ExecutionPanelProps {
+  kernel: any;
+}
+
+export function ExecutionPanel({kernel }: ExecutionPanelProps) {
+  const [results, setResults] = useState<any[]>([])
 
   const run = async () => {
     const bundle = { rules: [JSON.parse(kernel.state.rule)] }

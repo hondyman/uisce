@@ -18,6 +18,7 @@ import CalculatedFieldsEditor from './CalculatedFieldsEditor';
 import ExpressionsEditor from './ExpressionsEditor';
 import EventScriptsEditor from './EventScriptsEditor';
 import StorageIcon from '@mui/icons-material/Storage';
+import { TableIcon } from 'lucide-react';
 import TableChartIcon from '@mui/icons-material/TableChart';
 import BarChartIcon from '@mui/icons-material/BarChart';
 import TextFieldsIcon from '@mui/icons-material/TextFields';

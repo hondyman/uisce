@@ -13,7 +13,7 @@ interface SearchResult {
 export const RAGSearch: React.FC = () => {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<SearchResult[]>([]);
-  const [searchRAG, { isPending, error }] = useMutation({
+  const { mutate: searchRAG, isPending, error } = useMutation({
     mutationFn: async ({ query, limit }: { query: string; limit: number }) => {
       const res = await apiFetch('/api/rag/search', {
         method: 'POST',
@@ -79,7 +79,7 @@ export const RAGSearch: React.FC = () => {
           </div>
         ))}
         
-        {results.length === 0 && !loading && query && (
+        {results.length === 0 && !isPending && query && (
           <p className="text-center text-gray-500 mt-8">No results found.</p>
         )}
       </div>

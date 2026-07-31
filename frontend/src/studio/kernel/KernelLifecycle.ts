@@ -1,5 +1,5 @@
 export class KernelLifecycle {
-  async start(kernel) {
+  async start(kernel: any) {
     await kernel.services.wasm.init()
     await kernel.services.pool.init()
     await kernel.services.monaco.init()

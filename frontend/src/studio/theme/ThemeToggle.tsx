@@ -1,5 +1,9 @@
 
-export function ThemeToggle({kernel }) {
+interface ThemeToggleProps {
+  kernel: any;
+}
+
+export function ThemeToggle({kernel }: ThemeToggleProps) {
   const toggle = () => {
     const current = kernel.services.theme.current
     const next = current === "dark" ? "light" : "dark"

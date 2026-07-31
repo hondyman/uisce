@@ -1,5 +1,9 @@
 
-export function SafeModeScreen({kernel }) {
+interface SafeModeScreenProps {
+  kernel: any;
+}
+
+export function SafeModeScreen({kernel }: SafeModeScreenProps) {
   return (
     <div className="safe-mode">
       <h1>Safe Mode</h1>

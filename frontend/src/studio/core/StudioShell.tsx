@@ -7,7 +7,11 @@ import { SafeModeScreen } from './SafeModeScreen'
 import { Onboarding } from '../onboarding'
 import { ThemeProvider } from '../theme/ThemeProvider'
 
-export function StudioShell({kernel }) {
+interface StudioShellProps {
+  kernel: any;
+}
+
+export function StudioShell({kernel }: StudioShellProps) {
   const [ready, setReady] = useState(kernel.ready)
   const [safeMode, setSafeMode] = useState(false)
 
@@ -15,7 +19,6 @@ export function StudioShell({kernel }) {
     kernel.events.on("kernel.ready", () => setReady(true))
     kernel.events.on("kernel.error", () => setSafeMode(true))
 
-    // Autosave every 2 seconds
     const autosaveInterval = setInterval(() => {
       if (kernel.ready && kernel.state.rule) {
         kernel.services.persistence.save(kernel)
@@ -23,8 +26,7 @@ export function StudioShell({kernel }) {
       }
     }, 2000)
 
-    // Keyboard shortcuts
-    const handleKeyDown = (e) => {
+    const handleKeyDown = (e: any) => {
       if (e.metaKey || e.ctrlKey) {
         switch (e.key) {
           case 's':
@@ -33,7 +35,6 @@ export function StudioShell({kernel }) {
             window.notify?.('Rule saved', 'success')
             break
           case 'p':
-            // Command palette is handled in CommandPalette component
             break
           case 'r':
             if (e.shiftKey) {
@@ -45,28 +46,24 @@ export function StudioShell({kernel }) {
           case 't':
             if (e.shiftKey) {
               e.preventDefault()
-              // Show trace panel
               kernel.events.dispatch('panel.show', 'trace')
             }
             break
           case 'd':
             if (e.shiftKey) {
               e.preventDefault()
-              // Show diff panel
               kernel.events.dispatch('panel.show', 'diff')
             }
             break
           case 'i':
             if (e.shiftKey) {
               e.preventDefault()
-              // Show impact panel
               kernel.events.dispatch('panel.show', 'impact')
             }
             break
           case 'm':
             if (e.shiftKey) {
               e.preventDefault()
-              // Show migration panel
               kernel.events.dispatch('panel.show', 'migration')
             }
             break

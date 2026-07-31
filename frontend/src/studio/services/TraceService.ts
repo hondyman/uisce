@@ -1,5 +1,5 @@
 export class TraceService {
-  build(_result) {
+  build(_result: any) {
     return []
   }
 }

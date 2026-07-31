@@ -1,4 +1,4 @@
-export function notify(message, type = "info") {
+export function notify(message: any, type = "info") {
   const el = document.createElement("div")
   el.className = `toast ${type}`
   el.textContent = message

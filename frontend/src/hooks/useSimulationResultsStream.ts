@@ -140,13 +140,13 @@ export function useSimulationResultsStream(
           }
           break;
 
-        case 'complete':
+        case 'complete' as any:
           setProgress(100);
           break;
 
-        case 'error':
-          if (message.error) {
-            setError(new Error(message.error));
+        case 'error' as any:
+          if ((message as any).errorMessage) {
+            setError(new Error((message as any).errorMessage));
           }
           break;
 

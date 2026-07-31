@@ -1,15 +1,25 @@
 import React, { useState, useEffect } from 'react'
 
-export function RuleHistoryPanel({kernel }) {
-  const [versions, setVersions] = useState([])
+interface RuleHistoryPanelProps {
+  kernel: any;
+}
+
+interface Version {
+  id: string;
+  content: string;
+  timestamp: string;
+  type?: string;
+}
+
+export function RuleHistoryPanel({kernel }: RuleHistoryPanelProps) {
+  const [versions, setVersions] = useState<Version[]>([])
 
   useEffect(() => {
-    // Load versions from persistence
     const loadedVersions = kernel.services.persistence.getVersions() || []
     setVersions(loadedVersions)
   }, [])
 
-  const restoreVersion = (version) => {
+  const restoreVersion = (version: Version) => {
     kernel.state.rule = version.content
     kernel.events.dispatch('ruleChanged', version.content)
     window.notify?.('Version restored', 'success')
@@ -22,7 +32,7 @@ export function RuleHistoryPanel({kernel }) {
         <p>No versions saved yet</p>
       ) : (
         <div className="history-list">
-          {versions.map(v => (
+          {versions.map((v: Version) => (
             <div key={v.id} className="history-item">
               <div className="history-meta">
                 <span className="timestamp">{new Date(v.timestamp).toLocaleString()}</span>

@@ -1,8 +1,7 @@
-import { devLog, devDebug, devWarn } from '../utils/devLogger';
+import { devLog } from '../utils/devLogger';
 
 export class TelemetryService {
-  track(event, data) {
-    // Send to analytics service
+  track(event: any, data: any) {
     devLog("Telemetry:", event, data)
   }
 }

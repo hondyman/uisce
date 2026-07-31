@@ -1,4 +1,12 @@
 export class StudioState {
+  mode: any;
+  rule: any;
+  context: any;
+  trace: any;
+  diffs: any[];
+  impact: any[];
+  health: any;
+
   constructor() {
     this.mode = "editing"
     this.rule = ""
@@ -9,7 +17,7 @@ export class StudioState {
     this.health = null
   }
 
-  setMode(mode) {
+  setMode(mode: any) {
     this.mode = mode
   }
 }

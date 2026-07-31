@@ -30,14 +30,14 @@ const calculateComparison = (
     const scenarioRes = results.get(scenario.id) || [];
     if (scenarioRes.length === 0) return;
 
-    const pnls = scenarioRes.map(r => r.pnl);
-    const totalPnL = pnls.reduce((sum, pnl) => sum + pnl, 0);
+    const pnls = scenarioRes.map((r: any) => r.pnl);
+    const totalPnL = pnls.reduce((sum: number, pnl: number) => sum + pnl, 0);
     const avgPnL = totalPnL / pnls.length;
-    const avgConfidence = 
-      scenarioRes.reduce((sum, r) => sum + r.confidence, 0) / scenarioRes.length;
+    const avgConfidence =
+      scenarioRes.reduce((sum: number, r: any) => sum + (r.confidence || 0), 0) / scenarioRes.length;
 
     const variance =
-      pnls.reduce((sum, pnl) => sum + Math.pow(pnl - avgPnL, 2), 0) / pnls.length;
+      pnls.reduce((sum: number, pnl: number) => sum + Math.pow(pnl - avgPnL, 2), 0) / pnls.length;
 
     const idx = scenarioResults.findIndex(r => r.scenarioId === scenario.id);
     if (idx >= 0) {
@@ -56,16 +56,16 @@ const calculateComparison = (
 
   return {
     id: `comparison_${Date.now()}`,
-    scenarios: scenarioResults,
+    scenarios: scenarioResults as any,
     timestamp: new Date(),
     metadata: {
       comparedScenarioCount: scenarios.length,
       totalPortfolios: Array.from(results.values()).reduce(
-        (sum, res) => Math.max(sum, res.length),
+        (sum: number, res: any) => Math.max(sum, res.length),
         0
       ),
     },
-  };
+  } as any;
 };
 
 /**

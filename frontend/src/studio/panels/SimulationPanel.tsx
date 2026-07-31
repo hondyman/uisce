@@ -1,7 +1,11 @@
 import { useState, useEffect } from 'react'
 
-export function SimulationPanel({kernel }) {
-  const [result, setResult] = useState(null)
+interface SimulationPanelProps {
+  kernel: any;
+}
+
+export function SimulationPanel({kernel }: SimulationPanelProps) {
+  const [result, setResult] = useState<any>(null)
 
   useEffect(() => {
     const handler = async () => {

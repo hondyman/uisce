@@ -8,7 +8,7 @@ export class ThemeService {
     this.themes = themes
   }
 
-  setTheme(theme) {
+  setTheme(theme: string) {
     this.current = theme
     applyTheme(this.themes[theme])
     localStorage.setItem("studio-theme", theme)

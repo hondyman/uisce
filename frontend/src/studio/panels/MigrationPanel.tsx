@@ -1,7 +1,11 @@
 import { useState, useEffect } from 'react'
 
-export function MigrationPanel({kernel }) {
-  const [migrated, setMigrated] = useState(null)
+interface MigrationPanelProps {
+  kernel: any;
+}
+
+export function MigrationPanel({kernel }: MigrationPanelProps) {
+  const [migrated, setMigrated] = useState<any>(null)
 
   useEffect(() => {
     kernel.events.on("ruleChanged", () => {

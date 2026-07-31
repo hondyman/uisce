@@ -1,10 +1,10 @@
 export class PersistenceService {
-  save(kernel) {
+  save(kernel: any) {
     localStorage.setItem("asl.rule", kernel.state.rule)
     localStorage.setItem("asl.context", JSON.stringify(kernel.state.context))
   }
 
-  restore(kernel) {
+  restore(kernel: any) {
     kernel.state.rule = localStorage.getItem("asl.rule") || ""
     kernel.state.context = JSON.parse(localStorage.getItem("asl.context") || "{}")
   }
@@ -17,7 +17,7 @@ export class PersistenceService {
     localStorage.setItem("asl.onboarding.complete", "true")
   }
 
-  saveVersion(content, type = "manual") {
+  saveVersion(content: any, type = "manual") {
     const versions = this.getVersions()
     const version = {
       id: Date.now().toString(),
@@ -26,7 +26,6 @@ export class PersistenceService {
       type
     }
     versions.unshift(version)
-    // Keep only last 50 versions
     if (versions.length > 50) {
       versions.splice(50)
     }

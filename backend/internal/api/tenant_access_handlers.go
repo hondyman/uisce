@@ -6,10 +6,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"strings"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/hondyman/uisce/backend/internal/db"
+	"github.com/hondyman/uisce/backend/internal/security"
 	jwtmiddleware "github.com/hondyman/uisce/libs/auth"
 	"github.com/lib/pq"
 )
@@ -97,65 +97,61 @@ type AlphaDatasourceInfo struct {
 // listAccessibleTenants returns tenants the current user can access
 // Platform operators see all tenants
 // Tenant admins/users see only their assigned tenants
+//
+// This endpoint is fail-closed: if we cannot identify the caller (no auth
+// context) or a tenant user fails to supply an explicit X-Tenant-Id, we
+// reject the request rather than returning a silent empty list.
 func (h *TenantAccessHandlers) listAccessibleTenants(w http.ResponseWriter, r *http.Request) {
 	defer func() {
-		if r := recover(); r != nil {
-			fmt.Printf("PANIC in listAccessibleTenants: %v\n", r)
-			// Print stack trace
-			// debug.PrintStack() // debug package check
+		if rec := recover(); rec != nil {
+			fmt.Printf("PANIC in listAccessibleTenants: %v\n", rec)
 			http.Error(w, "Panic", http.StatusInternalServerError)
 		}
 	}()
 
-	// Get user info from headers (set by auth middleware)
-	userRole := r.Header.Get("X-User-Role")
-	userID := r.Header.Get("X-User-ID")
-	isCoreAdmin := r.Header.Get("X-Is-Core-Admin") == "true"
+	authInfo, ok := security.AuthInfoFromContext(r.Context())
+	if !ok || authInfo.UserID == "" {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+	userID := authInfo.UserID
+	isPlatformOperator := authInfo.IsGlobalAdmin
 
-	fmt.Printf("[DEBUG] listAccessibleTenants: UserID=%s Role=%s CoreAdmin=%v\n", userID, userRole, isCoreAdmin)
-
-	// Platform operators (core admins) see all tenants
-	isPlatformOperator := isCoreAdmin ||
-		userRole == "platform_operator" ||
-		userRole == "admin" ||
-		strings.Contains(r.Header.Get("X-User-Permissions"), "platform:operator")
+	fmt.Printf("[DEBUG] listAccessibleTenants: UserID=%s PlatformOp=%v\n", userID, isPlatformOperator)
 
 	if isPlatformOperator {
 		h.listAllTenants(w, r)
 		return
 	}
 
-	// For non-operators, filter by tenant assignments
 	tenantIDHeader := r.Header.Get("X-Tenant-Id")
-	if tenantIDHeader != "" {
-		claims, err := jwtmiddleware.ValidateTokenFromRequest(r)
-		if err != nil || claims == nil {
-			http.Error(w, "Unauthorized", http.StatusUnauthorized)
-			return
-		}
-		if err := jwtmiddleware.ValidateTenantAccess(claims, tenantIDHeader); err != nil {
-			http.Error(w, err.Error(), http.StatusForbidden)
-			return
-		}
-		var tenants []TenantResponse
-		err = db.WithTenantTransaction(r.Context(), h.DB, tenantIDHeader, func(tx *sql.Tx) error {
-			tenants, err = h.getTenantsByUser(r.Context(), userID, tx)
-			return err
-		})
-		if err != nil {
-			http.Error(w, "Failed to fetch accessible tenants: "+err.Error(), http.StatusInternalServerError)
-			return
-		}
-		fmt.Printf("[DEBUG] listAccessibleTenants found %d tenants for user %s\n", len(tenants), userID)
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(tenants)
+	if tenantIDHeader == "" {
+		http.Error(w, "Forbidden: tenant scope required", http.StatusForbidden)
 		return
 	}
 
-	// No tenant ID: fall through to returning empty (fail-closed for non-operators)
-	fmt.Printf("[DEBUG] listAccessibleTenants: no X-Tenant-Id header, returning empty for user %s\n", userID)
+	claims, err := jwtmiddleware.ValidateTokenFromRequest(r)
+	if err != nil || claims == nil {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+	if err := jwtmiddleware.ValidateTenantAccess(claims, tenantIDHeader); err != nil {
+		http.Error(w, err.Error(), http.StatusForbidden)
+		return
+	}
+
+	var tenants []TenantResponse
+	err = db.WithTenantTransaction(r.Context(), h.DB, tenantIDHeader, func(tx *sql.Tx) error {
+		tenants, err = h.getTenantsByUser(r.Context(), userID, tx)
+		return err
+	})
+	if err != nil {
+		http.Error(w, "Failed to fetch accessible tenants: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	fmt.Printf("[DEBUG] listAccessibleTenants found %d tenants for user %s\n", len(tenants), userID)
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode([]TenantResponse{})
+	json.NewEncoder(w).Encode(tenants)
 }
 
 // listAllTenants returns all tenants with full hierarchy
@@ -260,37 +256,48 @@ func (h *TenantAccessHandlers) getAllTenantsInternal(ctx context.Context, target
 	}
 
 	// 3. Query products
-	// Filter by instance IDs found
+	// tenant_product.datasource_id is the FK to tenant_instance.id (the schema
+	// does not have a tenant_instance_id column on tenant_product).
+	// Note: id, datasource_id, and alpha_product_id are NOT NULL on
+	// tenant_product — COALESCE on those columns is unnecessary and breaks
+	// UUID→text inference at plan time. ap.id / ap.product_name can be NULL
+	// due to the LEFT JOIN.
 	productQuery := `
-		SELECT tp.id, COALESCE(tp.version, 1.0) as version, tp.tenant_instance_id, COALESCE(tp.alpha_product_id, '') as alpha_product_id,
-		       COALESCE(ap.id, '') as ap_id, COALESCE(ap.product_name, '') as product_name, 
-		       NULL::text as product_code, COALESCE(ap.is_active, true) as ap_is_active
+		SELECT tp.id, COALESCE(tp.version, 1.0) AS version,
+		       tp.datasource_id,
+		       tp.alpha_product_id,
+		       ap.id AS ap_id,
+		       COALESCE(ap.product_name, '') AS product_name,
+		       ap.product_code,
+		       COALESCE(ap.is_active, true) AS ap_is_active
 		FROM tenant_product tp
 		LEFT JOIN alpha_product ap ON ap.id = tp.alpha_product_id
 		WHERE 1=1
 	`
 	var pArgs []interface{}
 	if targetTenantID != nil {
-		// If specific tenant, we can join back to tenant_instance to filter safely at DB level
+		// Filter at DB level by joining back to tenant_instance via datasource_id.
 		productQuery = `
-			SELECT tp.id, COALESCE(tp.version, 1.0) as version, tp.tenant_instance_id, COALESCE(tp.alpha_product_id, '') as alpha_product_id,
-			       COALESCE(ap.id, '') as ap_id, COALESCE(ap.product_name, '') as product_name, 
-			       NULL::text as product_code, COALESCE(ap.is_active, true) as ap_is_active
+			SELECT tp.id, COALESCE(tp.version, 1.0) AS version,
+			       tp.datasource_id,
+			       tp.alpha_product_id,
+			       ap.id AS ap_id,
+			       COALESCE(ap.product_name, '') AS product_name,
+			       ap.product_code,
+			       COALESCE(ap.is_active, true) AS ap_is_active
 			FROM tenant_product tp
-			JOIN tenant_instance ti ON tp.tenant_instance_id = ti.id
+			JOIN tenant_instance ti ON tp.datasource_id = ti.id
 			LEFT JOIN alpha_product ap ON ap.id = tp.alpha_product_id
 			WHERE ti.tenant_id = $1
 		`
 		pArgs = append(pArgs, *targetTenantID)
+	} else if len(instanceIDs) > 0 {
+		// When fetching all, filter by the instances we found.
+		productQuery += ` AND tp.datasource_id = ANY($1)`
+		pArgs = append(pArgs, pq.Array(instanceIDs))
 	} else {
-		// When fetching all, filter by the instances we found
-		if len(instanceIDs) > 0 {
-			productQuery += ` AND tp.tenant_instance_id = ANY($1)`
-			pArgs = append(pArgs, pq.Array(instanceIDs))
-		} else {
-			// No instances, so no products
-			productQuery += ` AND 1=0`
-		}
+		// No instances, so no products.
+		productQuery += ` AND 1=0`
 	}
 	productQuery += " ORDER BY ap.product_name"
 
@@ -331,34 +338,32 @@ func (h *TenantAccessHandlers) getAllTenantsInternal(ctx context.Context, target
 	}
 
 	// 4. Query datasources
+	// tenant_product_datasource.datasource_id is the FK to alpha_datasource.id;
+	// joining against it is what populates the alpha_datasource JSON block.
+	// Note: tpd.id and tpd.tenant_product_id are NOT NULL uuids — do not
+	// COALESCE those (breaks type inference). The LEFT JOIN to alpha_datasource
+	// can produce NULL on every ads.* column, so we scan those via sql.NullString.
 	dsQuery := `
-		SELECT tpd.id, COALESCE(tpd.is_active, true) as is_active,
-		       COALESCE(tpd.source_name, '') as source_name, tpd.tenant_product_id,
-		       ''::text as ads_id, '' as ds_name,
-		       ''::text as ds_type, ''::text as ds_code
+		SELECT tpd.id, COALESCE(tpd.is_active, true) AS is_active,
+		       COALESCE(tpd.source_name, '') AS source_name, tpd.tenant_product_id,
+		       ads.id AS ads_id,
+		       COALESCE(ads.datasource_name, '') AS ds_name,
+		       COALESCE(ads.datasource_type, '') AS ds_type,
+		       COALESCE(ads.datasource_code, '') AS ds_code
 		FROM tenant_product_datasource tpd
+		LEFT JOIN alpha_datasource ads ON ads.id = tpd.datasource_id
 		WHERE 1=1
 	`
 	var dArgs []interface{}
 	if targetTenantID != nil {
-		dsQuery = `
-			SELECT tpd.id, COALESCE(tpd.is_active, true) as is_active,
-			       COALESCE(tpd.source_name, '') as source_name, tpd.tenant_product_id,
-			       ''::text as ads_id, '' as ds_name,
-			       ''::text as ds_type, ''::text as ds_code
-			FROM tenant_product_datasource tpd
-			JOIN tenant_product tp ON tpd.tenant_product_id = tp.id
-			JOIN tenant_instance ti ON tp.tenant_instance_id = ti.id
-			WHERE ti.tenant_id = $1
-		`
+		dsQuery += ` AND tpd.tenant_id = $1`
 		dArgs = append(dArgs, *targetTenantID)
+	} else if len(instanceIDs) > 0 {
+		dsQuery += ` AND tpd.tenant_product_id IN
+		             (SELECT id FROM tenant_product WHERE datasource_id = ANY($1))`
+		dArgs = append(dArgs, pq.Array(instanceIDs))
 	} else {
-		if len(instanceIDs) > 0 {
-			dsQuery += ` AND tpd.tenant_product_id IN (SELECT id FROM tenant_product WHERE tenant_instance_id = ANY($1))`
-			dArgs = append(dArgs, pq.Array(instanceIDs))
-		} else {
-			dsQuery += ` AND 1=0`
-		}
+		dsQuery += ` AND 1=0`
 	}
 	dsQuery += " ORDER BY tpd.source_name"
 
@@ -373,9 +378,13 @@ func (h *TenantAccessHandlers) getAllTenantsInternal(ctx context.Context, target
 		var ds DatasourceResponse
 		var ads AlphaDatasourceInfo
 		var productID string
+		var adsID sql.NullString
 		if err := dsRows.Scan(&ds.ID, &ds.IsActive, &ds.SourceName, &productID,
-			&ads.ID, &ads.DatasourceName, &ads.DatasourceType, &ads.DatasourceCode); err != nil {
+			&adsID, &ads.DatasourceName, &ads.DatasourceType, &ads.DatasourceCode); err != nil {
 			return nil, fmt.Errorf("failed to scan datasource row: %w", err)
+		}
+		if adsID.Valid {
+			ads.ID = adsID.String
 		}
 		ds.AlphaDatasource = &ads
 		dsMap[productID] = append(dsMap[productID], ds)

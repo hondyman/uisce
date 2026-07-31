@@ -4,11 +4,11 @@ export class PanelRegistry {
     this.panels = new Map()
   }
 
-  register(panel) {
+  register(panel: any) {
     this.panels.set(panel.id, panel)
   }
 
-  get(id) {
+  get(id: string) {
     return this.panels.get(id)
   }
 

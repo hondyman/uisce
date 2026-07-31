@@ -12,11 +12,12 @@ import (
 // never mutated thereafter. The atomic.Pointer swap is the only way to
 // publish a new state — readers see a consistent view at all times.
 type EngineState struct {
-	Syms     *vm.SymbolDict
-	Enums    *vm.EnumDict
-	Cache    *sync.Map // map[cacheKey]*vm.CompileResult
-	Version  int       // externally-supplied schema version
-	Revision uint64    // monotonic counter incremented on each Rewarm
+	Syms            *vm.SymbolDict
+	Enums           *vm.EnumDict
+	Cache           *sync.Map // map[cacheKey]*vm.CompileResult
+	Version         int       // externally-supplied schema version
+	Revision        uint64    // monotonic counter incremented on each Rewarm
+	LastUsedUnixNano int64   // Unix nano timestamp of last getState() access; used for TTL eviction
 }
 
 // CacheSize returns the number of cached compile results.
@@ -82,4 +83,6 @@ type EvalTrace struct {
 	UsedVM    bool   // true if the VM fast path executed
 	Fallback  string // reason for fallback; empty if UsedVM is true
 	Revision  uint64 // which EngineState.Revision served this call
+	IsTenant  bool   // true if evaluated against a tenant-specific state
+	TenantID  string // tenant that was charged with this evaluation (empty for core)
 }

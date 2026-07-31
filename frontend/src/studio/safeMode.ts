@@ -1,7 +1,7 @@
-export function safeEvaluate(fn) {
+export function safeEvaluate(fn: any) {
   try {
     return fn()
-  } catch (e) {
+  } catch (e: any) {
     return { error: e.message }
   }
 }

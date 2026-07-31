@@ -333,8 +333,8 @@ export const AIRuleSuggestions: React.FC<AIRuleSuggestionsProps> = ({
   entitySchema,
   onApplySuggestion,
   onApplyCondition,
-  tenantId: _tenantId,
-  datasourceId: _datasourceId
+  tenantId,
+  datasourceId
 }) => {
   const [activeTab, setActiveTab] = useState<'chat' | 'suggestions' | 'patterns' | 'conflicts'>('chat');
   const [messages, setMessages] = useState<ConversationMessage[]>([]);

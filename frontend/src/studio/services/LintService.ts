@@ -1,11 +1,9 @@
 export class LintService {
-  run(_rule) {
-    // Basic linting
+  run(_rule: any) {
     return []
   }
 
-  format(rule) {
-    // Format rule
+  format(rule: any) {
     return rule
   }
 }

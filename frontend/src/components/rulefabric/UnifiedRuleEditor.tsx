@@ -42,7 +42,7 @@ import {
   Lock,
   Unlock
 } from 'lucide-react';
-import { AdvancedConditionBuilder, ConditionGroup } from '../ExpressionBuilder/AdvancedConditionBuilder';
+import { AdvancedConditionBuilder, ConditionGroup } from '../AdvancedConditionBuilder';
 
 // ============================================================================
 // Types

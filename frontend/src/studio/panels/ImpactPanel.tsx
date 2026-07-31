@@ -1,7 +1,17 @@
 import { useState, useEffect } from 'react'
 
-export function ImpactPanel({kernel }) {
-  const [impact, setImpact] = useState([])
+interface ImpactPanelProps {
+  kernel: any;
+}
+
+interface ImpactItem {
+  index: number;
+  before: string;
+  after: string;
+}
+
+export function ImpactPanel({kernel }: ImpactPanelProps) {
+  const [impact, setImpact] = useState<ImpactItem[]>([])
 
   useEffect(() => {
     kernel.events.on("diffComputed", async () => {
@@ -17,7 +27,7 @@ export function ImpactPanel({kernel }) {
   return (
     <div className="impact-panel">
       <h3>Impact</h3>
-      {impact.map((i, idx) => (
+      {impact.map((i: ImpactItem, idx: number) => (
         <div key={idx} className="impact-item">
           <strong>Context {i.index}</strong>: {i.before} → {i.after}
         </div>

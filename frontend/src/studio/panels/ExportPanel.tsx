@@ -1,5 +1,9 @@
 
-export function ExportPanel({kernel }) {
+interface ExportPanelProps {
+  kernel: any;
+}
+
+export function ExportPanel({kernel }: ExportPanelProps) {
   const exportRule = () => {
     const blob = new Blob([kernel.state.rule], { type: "application/json" })
     const url = URL.createObjectURL(blob)
@@ -35,11 +39,11 @@ export function ExportPanel({kernel }) {
     window.notify?.("Trace exported", "success")
   }
 
-  const handleImport = (event) => {
+  const handleImport = (event: any) => {
     const file = event.target.files[0]
     if (file) {
       const reader = new FileReader()
-      reader.onload = (e) => {
+      reader.onload = (e: any) => {
         try {
           const content = e.target.result
           kernel.state.rule = content

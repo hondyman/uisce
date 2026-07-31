@@ -8,8 +8,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { gql } from 'graphql-request';
 
-import type { GraphQLClient } from 'graphql-request';
-let graphqlClient: GraphQLClient | null = null; // Injected by app context
+let graphqlClient: any = null;
 
 export function setGraphQLClient(client: GraphQLClient) {
   graphqlClient = client;

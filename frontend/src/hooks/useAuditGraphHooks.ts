@@ -37,6 +37,14 @@ export interface ChangeSet {
   history?: ChangeSetEvent[];
 }
 
+export interface ChangeSetEvent {
+  id: string;
+  type: string;
+  actor: string;
+  timestamp: Date;
+  details?: string;
+}
+
 export interface ImpactedEntity {
   id: string;
   nodeId: string;

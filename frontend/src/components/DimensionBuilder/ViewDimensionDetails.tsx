@@ -3,6 +3,7 @@ import InfoIcon from '@mui/icons-material/Info';
 import CodeIcon from '@mui/icons-material/Code';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import ExpandLessIcon from '@mui/icons-material/ExpandLess';
+import { ChevronDown, ChevronRight } from 'lucide-react';
 import { Dimension } from './types';
 import { CaseEditor } from './CaseEditor';
 import GranularitySection from './GranularitySection';

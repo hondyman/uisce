@@ -1,10 +1,13 @@
 import React, { useState, useEffect } from 'react'
 
-export function BundleManagerPanel({kernel }) {
-  const [bundle, setBundle] = useState({ rules: [] })
+interface BundleManagerPanelProps {
+  kernel: any;
+}
+
+export function BundleManagerPanel({kernel }: BundleManagerPanelProps) {
+  const [bundle, setBundle] = useState<{ rules: any[] }>({ rules: [] })
 
   useEffect(() => {
-    // Load bundle from kernel state
     if (kernel.state.bundle) {
       setBundle(kernel.state.bundle)
     }
@@ -28,16 +31,16 @@ export function BundleManagerPanel({kernel }) {
     kernel.events.dispatch('bundleChanged', updatedBundle)
   }
 
-  const updateRule = (index, rule) => {
-    const updatedBundle = { ...bundle }
+  const updateRule = (index: number, rule: any) => {
+    const updatedBundle: any = { ...bundle }
     updatedBundle.rules[index] = rule
     setBundle(updatedBundle)
     kernel.state.bundle = updatedBundle
     kernel.events.dispatch('bundleChanged', updatedBundle)
   }
 
-  const removeRule = (index) => {
-    const updatedBundle = { ...bundle }
+  const removeRule = (index: number) => {
+    const updatedBundle: any = { ...bundle }
     updatedBundle.rules.splice(index, 1)
     setBundle(updatedBundle)
     kernel.state.bundle = updatedBundle
@@ -52,7 +55,7 @@ export function BundleManagerPanel({kernel }) {
       </button>
 
       <div className="bundle-rules">
-        {bundle.rules.map((rule, index) => (
+        {bundle.rules.map((rule: any, index: number) => (
           <div key={index} className="bundle-rule">
             <div className="rule-header">
               <span>Rule {index + 1}</span>

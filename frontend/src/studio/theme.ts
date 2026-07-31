@@ -1,4 +1,4 @@
-export const themes = {
+export const themes: any = {
   light: {
     background: "#ffffff",
     foreground: "#000000",
@@ -13,9 +13,9 @@ export const themes = {
   }
 }
 
-export function applyTheme(theme) {
+export function applyTheme(theme: any) {
   const root = document.documentElement
   for (const [key, value] of Object.entries(theme)) {
-    root.style.setProperty(`--${key}`, value)
+    root.style.setProperty(`--${key}`, value as string)
   }
 }

@@ -1,7 +1,11 @@
 import React, { useState, useEffect } from 'react'
 
-export function CoveragePanel({kernel }) {
-  const [coverage, setCoverage] = useState(null)
+interface CoveragePanelProps {
+  kernel: any;
+}
+
+export function CoveragePanel({kernel }: CoveragePanelProps) {
+  const [coverage, setCoverage] = useState<{ covered: number; total: number; percentage: number } | null>(null)
 
   useEffect(() => {
     kernel.events.on("traceUpdated", () => {
@@ -11,13 +15,11 @@ export function CoveragePanel({kernel }) {
     })
   }, [])
 
-  const computeCoverage = (trace) => {
-    // Simple coverage computation
+  const computeCoverage = (trace: any[]) => {
     const covered = new Set()
     const total = new Set()
 
-    // Walk through trace and mark covered nodes
-    const walk = (node) => {
+    const walk = (node: any) => {
       total.add(JSON.stringify(node))
       if (node.executed) {
         covered.add(JSON.stringify(node))

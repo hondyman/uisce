@@ -11,25 +11,25 @@ export class CommandService {
     this.registry.register({
       id: "save",
       title: "Save Rule",
-      run: (kernel) => kernel.services.persistence.save(kernel)
+      run: (kernel: any) => kernel.services.persistence.save(kernel)
     })
 
     this.registry.register({
       id: "format",
       title: "Format Rule",
-      run: (kernel) => kernel.services.lint.format(kernel.state.rule)
+      run: (kernel: any) => kernel.services.lint.format(kernel.state.rule)
     })
 
     this.registry.register({
       id: "simulate",
       title: "Run Simulation",
-      run: (kernel) => kernel.services.simulation.run(kernel.state.rule, kernel.state.context)
+      run: (kernel: any) => kernel.services.simulation.run(kernel.state.rule, kernel.state.context)
     })
 
     this.registry.register({
       id: "toggle-theme",
       title: "Toggle Theme",
-      run: (kernel) => {
+      run: (kernel: any) => {
         const current = kernel.services.theme.current
         const next = current === "dark" ? "light" : "dark"
         kernel.services.theme.setTheme(next)
@@ -37,11 +37,11 @@ export class CommandService {
     })
   }
 
-  search(query) {
+  search(query: string) {
     return this.registry.search(query)
   }
 
-  execute(id, kernel) {
+  execute(id: string, kernel: any) {
     return this.registry.execute(id, kernel)
   }
 }

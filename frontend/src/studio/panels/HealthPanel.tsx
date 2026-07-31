@@ -1,7 +1,11 @@
 import { useState, useEffect } from 'react'
 
-export function HealthPanel({kernel }) {
-  const [health, setHealth] = useState(null)
+interface HealthPanelProps {
+  kernel: any;
+}
+
+export function HealthPanel({kernel }: HealthPanelProps) {
+  const [health, setHealth] = useState<any>(null)
 
   useEffect(() => {
     kernel.events.on("lintUpdated", async () => {

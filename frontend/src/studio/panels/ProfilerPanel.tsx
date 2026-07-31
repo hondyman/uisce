@@ -1,16 +1,28 @@
 import React, { useState } from 'react'
 
-export function ProfilerPanel({kernel }) {
-  const [profile, setProfile] = useState(null)
+interface ProfilerPanelProps {
+  kernel: any;
+}
+
+interface Profile {
+  averageTime: number;
+  minTime: number;
+  maxTime: number;
+  totalRuns: number;
+  slowestContexts: { context: any; time: number }[];
+  slowestBranches: { path: string; time: number }[];
+}
+
+export function ProfilerPanel({kernel }: ProfilerPanelProps) {
+  const [profile, setProfile] = useState<Profile | null>(null)
   const [running, setRunning] = useState(false)
 
   const runProfile = async () => {
     setRunning(true)
     try {
-      // Simulate profiling
       await new Promise(resolve => setTimeout(resolve, 1000))
 
-      const mockProfile = {
+      const mockProfile: Profile = {
         averageTime: 0.023,
         minTime: 0.015,
         maxTime: 0.045,
@@ -66,7 +78,7 @@ export function ProfilerPanel({kernel }) {
 
           <div className="profile-details">
             <h4>Slowest Contexts</h4>
-            {profile.slowestContexts.map((ctx, index) => (
+            {profile.slowestContexts.map((ctx: any, index: number) => (
               <div key={index} className="profile-item">
                 <pre>{JSON.stringify(ctx.context, null, 2)}</pre>
                 <span>{ctx.time.toFixed(3)}ms</span>
@@ -74,7 +86,7 @@ export function ProfilerPanel({kernel }) {
             ))}
 
             <h4>Slowest Branches</h4>
-            {profile.slowestBranches.map((branch, index) => (
+            {profile.slowestBranches.map((branch: any, index: number) => (
               <div key={index} className="profile-item">
                 <span>{branch.path}</span>
                 <span>{branch.time.toFixed(3)}ms</span>

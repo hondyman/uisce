@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { Box, Grid, Typography, Container, Breadcrumbs } from '@mui/material';
+import { Box, Grid, Typography, Container, Breadcrumbs, Paper } from '@mui/material';
 import { PageLayoutSpec, PageComponent } from '../../types/pageDesigner';
 import { usePageContextStore } from '../../store/usePageContextStore';
 import { EChartRenderer } from './EChartRenderer';

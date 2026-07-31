@@ -8,6 +8,7 @@ import CloseIcon from '@mui/icons-material/Close';
 import EditIcon from '@mui/icons-material/Edit';
 import CheckIcon from '@mui/icons-material/Check';
 import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline';
+import { Check } from 'lucide-react';
 import ParameterBuilder from './ParameterBuilder';
 import { getParameterSchema, getAvailableRuleTypes, validateParameters } from '../lib/parameterSchemas';
 

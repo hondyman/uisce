@@ -1,5 +1,9 @@
 
-export function Onboarding({kernel }) {
+interface OnboardingProps {
+  kernel: any;
+}
+
+export function Onboarding({kernel }: OnboardingProps) {
   const start = () => {
     kernel.services.persistence.markOnboardingComplete()
     kernel.events.dispatch("onboarding.complete")

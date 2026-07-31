@@ -18,6 +18,7 @@ import ClickIcon from '@mui/icons-material/Click';
 import OpenInFullIcon from '@mui/icons-material/OpenInFull';
 import SquareIcon from '@mui/icons-material/Square';
 import CircleIcon from '@mui/icons-material/Circle';
+import { Maximize2 } from 'lucide-react';
 
 // Drag and drop imports
 import { DndProvider } from 'react-dnd';

@@ -1,4 +1,5 @@
-import { useQuery, UseQueryResult } from 'react-query';
+import { useQuery } from 'react-query';
+import type { UseQueryResult } from 'react-query';
 import {
   fetchComplianceKPIs,
   fetchRiskKPIs,

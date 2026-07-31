@@ -4,14 +4,12 @@ export class MonacoService {
     this.editor = null
   }
 
-  createEditor(container, options) {
-    // Create Monaco editor
+  createEditor(container: any, options: any) {
     this.editor = { container, options }
   }
 
-  setValue(_value) {
+  setValue(_value: any) {
     if (this.editor) {
-      // Set editor value
     }
   }
 }

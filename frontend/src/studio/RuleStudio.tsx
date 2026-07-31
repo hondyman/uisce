@@ -1,4 +1,14 @@
 import { useState } from 'react'
+import { EditorPanel } from './panels/EditorPanel'
+import { ContextPanel } from './panels/ContextPanel'
+import { SimulationPanel } from './panels/SimulationPanel'
+import { TracePanel } from './panels/TracePanel'
+import { LintPanel } from './panels/LintPanel'
+import { HealthPanel } from './panels/HealthPanel'
+import { DiffPanel } from './panels/DiffPanel'
+import { ImpactPanel } from './panels/ImpactPanel'
+import { MigrationPanel } from './panels/MigrationPanel'
+import { ExecutionPanel } from './panels/ExecutionPanel'
 
 export function RuleStudio() {
   const [rule, setRule] = useState("")

@@ -1,5 +1,5 @@
 export class ImpactService {
-  analyze(_diff) {
+  analyze(_diff: any) {
     return []
   }
 }

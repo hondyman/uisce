@@ -1,4 +1,3 @@
-import { EditorPanel } from '../panels/EditorPanel'
 import { SimulationPanel } from '../panels/SimulationPanel'
 import { TracePanel } from '../panels/TracePanel'
 import { LintPanel } from '../panels/LintPanel'
@@ -10,12 +9,10 @@ import { MigrationPanel } from '../panels/MigrationPanel'
 import { ExecutionPanel } from '../panels/ExecutionPanel'
 import { RuleHistoryPanel } from '../panels/RuleHistoryPanel'
 import { BundleManagerPanel } from '../panels/BundleManagerPanel'
-import { RuleGraphPanel } from '../panels/RuleGraphPanel'
 import { CoveragePanel } from '../panels/CoveragePanel'
 import { ProfilerPanel } from '../panels/ProfilerPanel'
 import { PromotionWorkflowPanel } from '../panels/PromotionWorkflowPanel'
 import { ExportPanel } from '../panels/ExportPanel'
-import { PluginMarketplacePanel } from '../panels/PluginMarketplacePanel'
 
 export class PluginService {
   plugins: any[];
@@ -39,12 +36,10 @@ export class PluginService {
       { id: 'execution', component: ExecutionPanel },
       { id: 'history', component: RuleHistoryPanel },
       { id: 'bundle', component: BundleManagerPanel },
-      { id: 'graph', component: RuleGraphPanel },
       { id: 'coverage', component: CoveragePanel },
       { id: 'profiler', component: ProfilerPanel },
       { id: 'promotion', component: PromotionWorkflowPanel },
-      { id: 'export', component: ExportPanel },
-      { id: 'marketplace', component: PluginMarketplacePanel }
+      { id: 'export', component: ExportPanel }
     ]
 
     for (const panel of corePanels) {
@@ -52,40 +47,37 @@ export class PluginService {
     }
   }
 
-  async load(kernel) {
+  async load(kernel: any) {
     for (const plugin of this.plugins) {
       await plugin.activate?.(kernel)
     }
   }
 
-  register(plugin) {
+  register(plugin: any) {
     this.plugins.push(plugin)
   }
 
   getPanels() {
-    return this.plugins.filter(p => p.component)
+    return this.plugins.filter((p: any) => p.component)
   }
 
   getAvailablePlugins() {
-    // Mock available plugins
     return [
       {
         id: "advanced-linter",
         name: "Advanced Linter",
         description: "Enhanced linting with custom rules",
         install: () => {
-          // Install logic
         }
       }
     ]
   }
 
-  install(plugin) {
-    // Mock installation
+  install(plugin: any) {
     this.register(plugin)
   }
 
-  uninstall(pluginId) {
-    this.plugins = this.plugins.filter(p => p.id !== pluginId)
+  uninstall(pluginId: any) {
+    this.plugins = this.plugins.filter((p: any) => p.id !== pluginId)
   }
 }

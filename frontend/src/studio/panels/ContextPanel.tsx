@@ -1,10 +1,14 @@
 import { useState, useEffect } from 'react'
 
-export function ContextPanel({kernel }) {
-  const [context, setContext] = useState(kernel.state.context)
+interface ContextPanelProps {
+  kernel: any;
+}
 
-  const update = (key, value) => {
-    const newCtx = { ...context, [key]: value }
+export function ContextPanel({kernel }: ContextPanelProps) {
+  const [context, setContext] = useState<any>(kernel.state.context)
+
+  const update = (key: any, value: any) => {
+    const newCtx: any = { ...context, [key]: value }
     setContext(newCtx)
     kernel.state.context = newCtx
     kernel.events.dispatch("contextChanged", newCtx)
@@ -14,10 +18,10 @@ export function ContextPanel({kernel }) {
   return (
     <div className="context-panel">
       <h3>Context</h3>
-      {Object.entries(context).map(([k, v]) => (
+      {Object.entries(context).map(([k, v]: [any, any]) => (
         <div key={k}>
           <label>{k}</label>
-          <input value={v} onChange={e => update(k, e.target.value)} />
+          <input value={v} onChange={(e: any) => update(k, e.target.value)} />
         </div>
       ))}
     </div>
