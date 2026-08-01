@@ -70,6 +70,11 @@ require (
 	github.com/gorilla/mux v1.8.1
 	github.com/hondyman/uisce/libs/jwt-middleware v0.0.0-00010101000000-000000000000
 	github.com/minio/minio-go/v7 v7.0.97
+	github.com/quickfixgo/enum v0.1.0
+	github.com/quickfixgo/field v0.1.0
+	github.com/quickfixgo/fix44 v0.1.0
+	github.com/quickfixgo/quickfix v0.9.0
+	github.com/quickfixgo/tag v0.1.0
 	github.com/segmentio/kafka-go v0.4.49
 	github.com/streadway/amqp v1.1.0
 	github.com/testcontainers/testcontainers-go/modules/postgres v0.32.0
@@ -310,3 +315,4 @@ replace github.com/hondyman/uisce/libs/hasura-client => ../libs/hasura-client
 replace github.com/hondyman/uisce/libs/jwt-middleware => ../libs/jwt-middleware
 
 replace github.com/hondyman/uisce/libs/auth => ../libs/jwt-middleware
+require github.com/quickfixgo/quickfix v0.9.0

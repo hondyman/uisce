@@ -33,7 +33,7 @@ func TestGoogleSyncRoutes(t *testing.T) {
 	qosManager := services.NewQoSManager(sqlxDB)
 
 	// Call SetupRouter
-	router := SetupRouter(db, nil, nil, nil, qosManager, nil, nil, nil, redisClient)
+	router := SetupRouter(db, nil, nil, nil, qosManager, nil, nil, nil, redisClient, nil)
 
 	// Verify Routes
 	routes := []struct {

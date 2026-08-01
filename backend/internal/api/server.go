@@ -5,6 +5,8 @@ import (
 	"net/http"
 	"os"
 
+	"github.com/go-redis/redis/v8"
+	"github.com/hondyman/uisce/backend/internal/rules"
 	"github.com/hondyman/uisce/backend/internal/services"
 	temporalclient "github.com/hondyman/uisce/libs/temporal-client"
 	"github.com/jmoiron/sqlx"
@@ -39,7 +41,21 @@ func StartServer() {
 	// Initialize QoSManager
 	qosManager := services.NewQoSManager(db)
 
-	router := SetupRouter(db.DB, nil, nil, temporalC, qosManager, nil, nil, nil, nil)
+	var complianceDeps *ComplianceDeps
+	redisAddr := os.Getenv("REDIS_ADDR")
+	if redisAddr != "" {
+		redisClient := redis.NewClient(&redis.Options{Addr: redisAddr})
+		ruleEngine := rules.NewRuleEngine(nil)
+		complianceDeps = &ComplianceDeps{
+			RuleEngine:   ruleEngine,
+			RedisClient:  redisClient,
+			DB:           db.DB,
+			KafkaBrokers: os.Getenv("KAFKA_BROKERS"),
+		}
+		log.Println("[Compliance] Pre-trade compliance engine initialized")
+	}
+
+	router := SetupRouter(db.DB, nil, nil, temporalC, qosManager, nil, nil, nil, nil, complianceDeps)
 	log.Println("Server listening on :8080")
 	http.ListenAndServe(":8080", router)
 }

@@ -2,18 +2,38 @@ package rules
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"runtime"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/google/cel-go/cel"
 	"github.com/google/cel-go/checker/decls"
+	"github.com/google/uuid"
 	"golang.org/x/sync/singleflight"
 
 	vm "github.com/hondyman/uisce/backend/internal/rules/vm"
 )
+
+type contextKey string
+
+const boIDKey contextKey = "bo_id"
+
+func WithBOID(ctx context.Context, boID uuid.UUID) context.Context {
+	return context.WithValue(ctx, boIDKey, boID)
+}
+
+func BOIDFromContext(ctx context.Context) uuid.UUID {
+	v, _ := ctx.Value(boIDKey).(uuid.UUID)
+	return v
+}
+
+type DriftHealerInterface interface {
+	HandleCompileFailure(ctx context.Context, tenantID uuid.UUID, boID uuid.UUID, ruleID string, missingSymbol string) error
+}
 
 // RuleEngine evaluates RuleNode ASTs via the VM-backed fast path with
 // atomic-pointer state swaps for multi-tenant dynamic rewarming.
@@ -57,6 +77,8 @@ type RuleEngine struct {
 	metrics     *EngineMetrics
 	recursive   *AdvancedEvaluator
 	rewarmGroup singleflight.Group
+	profiler    *LatencyProfiler
+	driftHealer DriftHealerInterface
 }
 
 func NewRuleEngine(repo RuleRepository) *RuleEngine {
@@ -82,6 +104,10 @@ func NewRuleEngine(repo RuleRepository) *RuleEngine {
 	})
 	return e
 }
+
+func (e *RuleEngine) SetProfiler(p *LatencyProfiler) { e.profiler = p }
+
+func (e *RuleEngine) SetDriftHealer(d DriftHealerInterface) { e.driftHealer = d }
 
 // getState resolves the correct state for a tenant. If tenantID is non-empty
 // and a tenant-specific state exists, it is returned; otherwise the core state
@@ -114,6 +140,7 @@ func (e *RuleEngine) Evaluate(
 	input map[string]any,
 	force bool,
 ) (bool, *EvalTrace, error) {
+	start := time.Now()
 
 	state := e.getState(tenantID)
 	trace := &EvalTrace{
@@ -123,10 +150,18 @@ func (e *RuleEngine) Evaluate(
 		TenantID: tenantID,
 	}
 
+	finish := func(passed bool, t *EvalTrace, err error) (bool, *EvalTrace, error) {
+		nanos := time.Since(start).Nanoseconds()
+		if e.profiler != nil {
+			e.profiler.RecordExecution(nanos)
+		}
+		return passed, t, err
+	}
+
 	if node == nil {
 		e.metrics.fallbacks.Add(1)
 		trace.Fallback = "nil rule node"
-		return false, trace, fmt.Errorf("nil rule node")
+		return finish(false, trace, fmt.Errorf("nil rule node"))
 	}
 
 	key := trace.RuleID
@@ -153,11 +188,26 @@ func (e *RuleEngine) Evaluate(
 		if res.Unsupported != nil {
 			e.metrics.compileErrors.Add(1)
 			trace.Fallback = res.Unsupported.Error()
+
+			if e.driftHealer != nil {
+				var compileErr *CompileError
+				if errors.As(res.Unsupported, &compileErr) && strings.Contains(compileErr.Reason, "symbol not registered for ") {
+					missing := extractSymbolFromReason(compileErr.Reason)
+					boID := BOIDFromContext(ctx)
+					var tenantUUID uuid.UUID
+					if tenantID != "" {
+						tenantUUID, _ = uuid.Parse(tenantID)
+					}
+					go func() {
+						_ = e.driftHealer.HandleCompileFailure(context.Background(), tenantUUID, boID, ruleID, missing)
+					}()
+				}
+			}
 		} else {
 			trace.Fallback = "empty compiled program"
 		}
 		passed, err := e.recursive.Evaluate(*node, input)
-		return passed, trace, err
+		return finish(passed, trace, err)
 	}
 
 	e.metrics.vmPathCount.Add(1)
@@ -170,7 +220,7 @@ func (e *RuleEngine) Evaluate(
 	defer vm.PutStack(stack)
 
 	passed := e.vm.Run(res.Program, rec, stack)
-	return passed, trace, nil
+	return finish(passed, trace, nil)
 }
 
 // buildState is the internal O(N) helper that compiles a rule corpus,
@@ -193,11 +243,12 @@ func buildState(rules []*RuleNode, version int, revision uint64) *EngineState {
 	}
 
 	return &EngineState{
-		Syms:     newSyms,
-		Enums:    newEnums,
-		Cache:    newCache,
-		Version:  version,
-		Revision: revision,
+		Syms:            newSyms,
+		Enums:           newEnums,
+		Cache:           newCache,
+		Version:         version,
+		Revision:        revision,
+		LastUsedUnixNano: time.Now().UnixNano(),
 	}
 }
 
@@ -509,4 +560,28 @@ func extractPathsAndEnums(node *RuleNode, syms *vm.SymbolDict, enums *vm.EnumDic
 			}
 		}
 	}
+}
+
+func extractSymbolFromReason(reason string) string {
+	idx := strings.Index(reason, `"`)
+	if idx == -1 {
+		return reason
+	}
+	end := strings.Index(reason[idx+1:], `"`)
+	if end == -1 {
+		return reason
+	}
+	return reason[idx+1 : idx+1+end]
+}
+
+func (e *RuleEngine) GetSymsForTenant(tenantID string) *vm.SymbolDict {
+	return e.getState(tenantID).Syms
+}
+
+func (e *RuleEngine) GetEnumsForTenant(tenantID string) *vm.EnumDict {
+	return e.getState(tenantID).Enums
+}
+
+func (e *RuleEngine) GetState(tenantID string) *EngineState {
+	return e.getState(tenantID)
 }
