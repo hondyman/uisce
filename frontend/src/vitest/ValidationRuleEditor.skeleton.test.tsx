@@ -14,7 +14,7 @@ import ValidationRuleEditor from '@/components/validation/ValidationRuleEditor'
 
 describe('ValidationRuleEditor (skeleton)', () => {
   it('renders the validation rules heading', () => {
-    const fetchMock = globalThis.fetch as unknown as vi.Mock
+    const fetchMock = globalThis.fetch as any
     fetchMock.mockResolvedValueOnce(
       new Response(JSON.stringify([]), { status: 200, headers: { 'Content-Type': 'application/json' } })
     )

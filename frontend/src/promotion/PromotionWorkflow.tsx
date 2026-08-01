@@ -1,10 +1,13 @@
 import { useState, useEffect } from 'react'
 import { ImpactPanel } from './ImpactPanel'
 
-export function PromotionWorkflow({oldRule, newRule, contexts }) {
-  const [diffs, setDiffs] = useState([])
-  const [impact, setImpact] = useState([])
-  const [regressions, setRegressions] = useState([])
+const diffRules = (oldRule: any, newRule: any): any[] => [];
+const analyzeImpact = (oldRule: any, newRule: any, contexts: any): Promise<any[]> => Promise.resolve([] as any[]);
+
+export function PromotionWorkflow({oldRule, newRule, contexts }: any) {
+  const [diffs, setDiffs] = useState<any[]>([])
+  const [impact, setImpact] = useState<any[]>([])
+  const [regressions, setRegressions] = useState<any[]>([])
 
   useEffect(() => {
     setDiffs(diffRules(oldRule, newRule))

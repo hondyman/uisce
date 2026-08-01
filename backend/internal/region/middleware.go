@@ -85,8 +85,14 @@ func RegionValidationMiddleware(provider interface{}) func(http.Handler) http.Ha
 			}
 
 			// Exempt health and admin routes from region validation (JWT/API key auth sufficient)
-			if r.URL.Path == "/health" || strings.HasPrefix(r.URL.Path, "/api/admin/") || strings.HasPrefix(r.URL.Path, "/api/auth/") {
+			if r.URL.Path == "/health" || r.URL.Path == "/_routes" || strings.HasPrefix(r.URL.Path, "/api/admin/") || strings.HasPrefix(r.URL.Path, "/api/auth/") {
 				next.ServeHTTP(w, r)
+				return
+			}
+
+			// Exempt GraphQL endpoints (Hasura removed - these now 404)
+			if r.URL.Path == "/v1/graphql" || r.URL.Path == "/graphql" {
+				http.NotFound(w, r)
 				return
 			}
 
@@ -111,13 +117,18 @@ func RegionValidationMiddleware(provider interface{}) func(http.Handler) http.Ha
 				strings.HasPrefix(path, "/api/users") ||
 				strings.HasPrefix(path, "/api/audit") ||
 				strings.HasPrefix(path, "/api/ws/token") ||
-				strings.HasPrefix(path, "/api/auth/") {
+				strings.HasPrefix(path, "/api/auth/") ||
+				strings.HasPrefix(path, "/api/semantic/") {
 				next.ServeHTTP(w, r)
 				return
 			}
 
 			// Get tenant and region from headers
-			tenantID := strings.TrimSpace(jwtmiddleware.GetClaimsFromContext(r).TenantID)
+			claims := jwtmiddleware.GetClaimsFromContext(r)
+			tenantID := ""
+			if claims != nil {
+				tenantID = strings.TrimSpace(claims.TenantID)
+			}
 			region := strings.TrimSpace(r.Header.Get("X-Tenant-Region"))
 
 			// Gold Copy bypass — always allow, no region required

@@ -7,44 +7,63 @@ import (
 	"github.com/google/uuid"
 )
 
-// AST types are defined in this package to break an import cycle:
-// the rules package imports vm, but vm's compiler needs the AST types.
-// Re-exported as type aliases in rules/types.go for backward compat.
-
-// RuleNodeType identifies whether a rule node is a group or a leaf condition.
 type RuleNodeType string
 
 const (
-	NodeTypeGroup     RuleNodeType = "group"
-	NodeTypeCondition RuleNodeType = "condition"
+	NodeTypeGroup       RuleNodeType = "group"
+	NodeTypeCondition  RuleNodeType = "condition"
+	NodeTypeExpression RuleNodeType = "expression"
 )
 
-// RuleNode is a wrapper that holds either a Group or a Condition.
 type RuleNode struct {
-	Type      RuleNodeType
-	Group     *RuleGroup
-	Condition *RuleCondition
+	Type       RuleNodeType
+	Group      *RuleGroup
+	Condition  *RuleCondition
+	Expression *Expression
 }
 
-// RuleGroup represents a logical grouping of rules (AND/OR/NOT).
 type RuleGroup struct {
 	ID         string
-	Operator   string // AND, OR, NOT
+	Operator   string
 	Conditions []RuleNode
 }
 
-// RuleCondition represents a single leaf condition.
 type RuleCondition struct {
 	ID          string
 	Field       string
 	FieldPath   string
 	Operator    string
-	Value       interface{}
+	Value       any
 	ValueType   string
-	SecondValue interface{}
+	SecondValue any
 }
 
-// UnmarshalJSON implements custom unmarshalling for polymorphic AST nodes.
+type ExprNode interface {
+	exprNode()
+}
+
+type BinaryExpr struct {
+	Op    string
+	Left  ExprNode
+	Right ExprNode
+}
+
+type FieldRef struct {
+	Path string
+}
+
+type Literal struct {
+	Value float64
+}
+
+func (*BinaryExpr) exprNode() {}
+func (*FieldRef) exprNode()   {}
+func (*Literal) exprNode()    {}
+
+type Expression struct {
+	Root ExprNode
+}
+
 func (n *RuleNode) UnmarshalJSON(data []byte) error {
 	var temp struct {
 		Type RuleNodeType `json:"type"`
@@ -67,37 +86,106 @@ func (n *RuleNode) UnmarshalJSON(data []byte) error {
 			return err
 		}
 		n.Condition = &c
+	case NodeTypeExpression:
+		var e Expression
+		if err := json.Unmarshal(data, &e); err != nil {
+			return err
+		}
+		n.Expression = &e
 	default:
 		return fmt.Errorf("unknown rule node type: %s", n.Type)
 	}
 	return nil
 }
 
-// RuleRecord represents a persisted rule from the database. Used by
-// callers that load rules before evaluating them.
-type RuleRecord struct {
-	ID                uuid.UUID
-	TenantID          uuid.UUID
-	TargetEntityID    uuid.UUID
-	Name              string
-	Description       string
-	RuleType          string
-	CompiledSQL       string
-	CompiledWASM      []byte
-	CompiledCUE       string
-	ExecuteServerSide bool
-	ExecuteClientSide bool
-	RunOnSubmit       bool
-	Severity          string
-	RemediationHint   string
-	EvaluationOrder   int
-	IsActive          bool
-	CoreRuleID        *uuid.UUID
-	DatasourceID      *uuid.UUID
+func (e *Expression) UnmarshalJSON(data []byte) error {
+	var raw map[string]any
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	if root, ok := raw["root"]; ok {
+		rootData, err := json.Marshal(root)
+		if err != nil {
+			return err
+		}
+		node, err := unmarshalExprNode(rootData)
+		if err != nil {
+			return err
+		}
+		e.Root = node
+	}
+	return nil
 }
 
-// RuleID returns a stable string identifier for cache keying.
-// For rules without an ID (e.g., ad-hoc test rules), this is empty.
+func unmarshalExprNode(data []byte) (ExprNode, error) {
+	var m map[string]any
+	if err := json.Unmarshal(data, &m); err != nil {
+		return nil, err
+	}
+	if _, ok := m["op"].(string); ok {
+		rootData, err := json.Marshal(m)
+		if err != nil {
+			return nil, err
+		}
+		var be BinaryExpr
+		if err := json.Unmarshal(rootData, &be); err != nil {
+			return nil, err
+		}
+		return &be, nil
+	}
+	if path, ok := m["path"].(string); ok {
+		return &FieldRef{Path: path}, nil
+	}
+	if val, ok := m["value"].(float64); ok {
+		return &Literal{Value: val}, nil
+	}
+	return nil, fmt.Errorf("unknown ExprNode shape: %s", string(data))
+}
+
+func (be *BinaryExpr) UnmarshalJSON(data []byte) error {
+	var m map[string]any
+	if err := json.Unmarshal(data, &m); err != nil {
+		return err
+	}
+	be.Op = m["op"].(string)
+	if leftData, err := json.Marshal(m["left"]); err != nil {
+		return err
+	} else if leftNode, err := unmarshalExprNode(leftData); err != nil {
+		return err
+	} else {
+		be.Left = leftNode
+	}
+	if rightData, err := json.Marshal(m["right"]); err != nil {
+		return err
+	} else if rightNode, err := unmarshalExprNode(rightData); err != nil {
+		return err
+	} else {
+		be.Right = rightNode
+	}
+	return nil
+}
+
+type RuleRecord struct {
+	ID                 uuid.UUID
+	TenantID           uuid.UUID
+	TargetEntityID     uuid.UUID
+	Name               string
+	Description        string
+	RuleType           string
+	CompiledSQL        string
+	CompiledWASM       []byte
+	CompiledCUE        string
+	ExecuteServerSide  bool
+	ExecuteClientSide  bool
+	RunOnSubmit        bool
+	Severity           string
+	RemediationHint    string
+	EvaluationOrder    int
+	IsActive           bool
+	CoreRuleID         *uuid.UUID
+	DatasourceID       *uuid.UUID
+}
+
 func (n *RuleNode) ID() string {
 	if n == nil {
 		return ""

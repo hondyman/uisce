@@ -11,7 +11,8 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, waitFor, fireEvent, act } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent } from '@testing-library/react';
+import { act } from 'react';
 import { ActiveSessionsIndicator } from '@/components/admin/ActiveSessionsIndicator';
 import * as ImpersonationContext from '@/contexts/ImpersonationContext';
 import * as AuthContext from '@/contexts/AuthContext';
@@ -28,9 +29,7 @@ const useAuthSpy = vi.spyOn(AuthContext, 'useAuth');
 useImpersonationSpy.mockReturnValue({
   listActiveSessions: listActiveSessionsMock,
   exitImpersonation: exitImpersonationMock,
-  // Other context methods are not used by this component:
   assumeTenantContext: vi.fn(),
-  exitImpersonation: exitImpersonationMock,
   isImpersonating: false,
   session: null,
   impersonationToken: null,
@@ -38,8 +37,6 @@ useImpersonationSpy.mockReturnValue({
   recentSessions: [],
   clearRecentSessions: vi.fn(),
   refreshRecentSessionsFromServer: vi.fn(),
-  listActiveSessions: listActiveSessionsMock,
-  // Tolerant fallback for any extra props the component might add later
 } as any);
 
 useAuthSpy.mockReturnValue({ token: 'test-admin-token' } as any);

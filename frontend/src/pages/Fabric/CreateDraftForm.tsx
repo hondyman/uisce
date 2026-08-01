@@ -95,7 +95,7 @@ export function CreateDraftForm(): JSX.Element {
         },
       }}
       hook={hook}
-      render={(ctx: FormContextValue<DraftFormValues>) => (
+      render={(ctx: any) => (
         <>
           {/* Model key with ILIKE mask */}
           <InputField<DraftFormValues, 'input.model_key'>

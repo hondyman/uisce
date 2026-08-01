@@ -34,7 +34,7 @@ interface GraphEdge {
   id: string;
   source: string;
   target: string;
-  dependency: Dependency;
+  dependency: any;
 }
 
 interface GraphLayout {
@@ -350,7 +350,7 @@ export function DependencyVisualizerPage() {
                             {depJob?.name || dep.job_id}
                           </button>
                           <span className="dependency-type">
-                            {formatDependencyType(dep.type)}
+                            {formatDependencyType(dep.type as any)}
                           </span>
                         </li>
                       );
@@ -412,7 +412,7 @@ function DAGView({ layout, zoomLevel, selectedNode, onNodeClick, svgRef }: DAGVi
   
   return (
     <svg
-      ref={svgRef}
+      ref={svgRef as any}
       className="dag-svg"
       width={layout.width * zoomLevel}
       height={layout.height * zoomLevel}

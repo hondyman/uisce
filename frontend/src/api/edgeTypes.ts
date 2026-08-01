@@ -18,7 +18,7 @@ export const edgeTypesKeys = {
   lists: () => [...edgeTypesKeys.all, 'list'] as const,
   list: (tenantId: string) => [...edgeTypesKeys.lists(), tenantId] as const,
   details: () => [...edgeTypesKeys.all, 'detail'] as const,
-  detail: (id: string, tenantId: string) => [...edgeTypesKeys.detail(id, tenantId)] as const,
+  detail: (id: string, tenantId: string) => [...edgeTypesKeys.details(), id, tenantId] as const,
   properties: (id: string, tenantId: string) => [...edgeTypesKeys.all, 'properties', id, tenantId] as const,
   search: (tenantId: string, q: string) => [...edgeTypesKeys.all, 'search', tenantId, q] as const,
 };

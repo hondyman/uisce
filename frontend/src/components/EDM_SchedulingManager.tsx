@@ -56,7 +56,7 @@ export const EDM_SchedulingManager: React.FC = () => {
   const [newSchedule, setNewSchedule] = useState({
     name: '',
     operation_type: 'bulk-publish',
-    schedule_type: SCHEDULER_CONFIG.DEFAULT_SCHEDULE_TYPE as const,
+    schedule_type: SCHEDULER_CONFIG.DEFAULT_SCHEDULE_TYPE as any,
     timezone: SCHEDULER_CONFIG.DEFAULT_TIMEZONE,
     cron_expression: '0 2 * * *',
   });
@@ -122,7 +122,7 @@ export const EDM_SchedulingManager: React.FC = () => {
           operation_type: newSchedule.operation_type,
           schedule_type: newSchedule.schedule_type,
           timezone: newSchedule.timezone,
-          cron_expression: newSchedule.schedule_type === 'cron' ? newSchedule.cron_expression : undefined,
+          cron_expression: (newSchedule.schedule_type as any) === 'cron' ? newSchedule.cron_expression : undefined,
           job_template: {},
           created_by: DEFAULT_TENANT_ID,
         }),
@@ -365,7 +365,7 @@ export const EDM_SchedulingManager: React.FC = () => {
             </Select>
           </FormControl>
 
-          {newSchedule.schedule_type === 'cron' && (
+          {(newSchedule.schedule_type as any) === 'cron' && (
             <TextField
               label="Cron Expression"
               fullWidth

@@ -126,7 +126,7 @@ export function validateProperty(prop: NodePropertyConfig, value: any, allProper
     }
   }
 
-  if (prop.validation?.multiple && Array.isArray(value)) {
+  if ((prop.validation as any)?.multiple && Array.isArray(value)) {
     if (prop.validation?.minLength !== undefined && value.length < prop.validation.minLength) return `${prop.label || prop.name} must have at least ${prop.validation.minLength} items`;
     if (prop.validation?.maxLength !== undefined && value.length > prop.validation.maxLength) return `${prop.label || prop.name} must have at most ${prop.validation.maxLength} items`;
   }

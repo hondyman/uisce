@@ -10,7 +10,7 @@ import { gql } from 'graphql-request';
 
 let graphqlClient: any = null;
 
-export function setGraphQLClient(client: GraphQLClient) {
+export function setGraphQLClient(client: any) {
   graphqlClient = client;
 }
 

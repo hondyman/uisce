@@ -54,7 +54,7 @@ const AIBusinessTermSuggestionsPage = () => {
             {/* Suggestions Table */}
             <SuggestionsTable 
                 drafts={mockDrafts} 
-                onSelect={(draft) => setSelectedDraft(draft)} 
+                onSelect={(draft: any) => setSelectedDraft(draft)} 
             />
 
             {/* Review Drawer */}

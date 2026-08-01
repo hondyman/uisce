@@ -82,9 +82,9 @@ const ComplianceBreach: React.FC<ComplianceBreachProps> = ({
         p: 2,
         borderLeft: 4,
         borderColor: isHard ? 'error.main' : 'warning.main',
-        backgroundColor: isHard 
-          ? theme.palette.error.lighter || 'rgba(211, 47, 47, 0.05)'
-          : theme.palette.warning.lighter || 'rgba(251, 188, 28, 0.05)',
+        backgroundColor: isHard
+          ? (theme.palette.error as any).lighter || 'rgba(211, 47, 47, 0.05)'
+          : (theme.palette.warning as any).lighter || 'rgba(251, 188, 28, 0.05)',
       }}
     >
       <Box sx={{ display: 'flex', gap: 2, alignItems: 'flex-start' }}>

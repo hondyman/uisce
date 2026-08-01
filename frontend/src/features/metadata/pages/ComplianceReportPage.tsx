@@ -46,7 +46,7 @@ const TabPanel: React.FC<TabPanelProps> = ({ children, value, index }) => {
 
 export const ComplianceReportPage: React.FC = () => {
   const { bundleId } = useParams<{ bundleId: string }>();
-  const [report, setReport] = useState<ComplianceReport | null>(null);
+  const [report, setReport] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [currentTab, setCurrentTab] = useState(0);

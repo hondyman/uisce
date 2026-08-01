@@ -422,10 +422,10 @@ export const AIRuleSuggestions: React.FC<AIRuleSuggestionsProps> = ({
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'X-Tenant-ID': props.tenantId,
+          'X-Tenant-ID': tenantId,
         },
         body: JSON.stringify({
-          tenant_id: props.tenantId,
+          tenant_id: tenantId,
           rating_type: positive ? 'THUMBS_UP' : 'THUMBS_DOWN',
           target_bo_key: '',
           recommendation_label: suggestionId,

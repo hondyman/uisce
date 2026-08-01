@@ -7,31 +7,18 @@ import (
 	"fmt"
 )
 
-// HasuraClient defines the interface for Hasura GraphQL operations
-type HasuraClient interface {
-	Query(ctx context.Context, query string, variables map[string]interface{}) (map[string]interface{}, error)
-	Mutate(ctx context.Context, mutation string, variables map[string]interface{}) (map[string]interface{}, error)
-}
-
-// ToolRepository defines the interface for tool storage
 type ToolRepository interface {
 	List(ctx context.Context) ([]FinancialTool, error)
 	GetByName(ctx context.Context, name string) (*FinancialTool, error)
 	Create(ctx context.Context, tool *FinancialTool) error
 }
 
-// SQLToolRepository implements ToolRepository using database/sql
 type SQLToolRepository struct {
-	DB           *sql.DB
-	hasuraClient HasuraClient
+	DB *sql.DB
 }
 
 func NewSQLToolRepository(db *sql.DB) *SQLToolRepository {
 	return &SQLToolRepository{DB: db}
-}
-
-func NewSQLToolRepositoryWithHasura(db *sql.DB, hasura HasuraClient) *SQLToolRepository {
-	return &SQLToolRepository{DB: db, hasuraClient: hasura}
 }
 
 func (r *SQLToolRepository) List(ctx context.Context) ([]FinancialTool, error) {

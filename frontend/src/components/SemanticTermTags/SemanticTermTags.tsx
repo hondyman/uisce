@@ -57,27 +57,9 @@ export const SemanticTermTagsEditor: React.FC<SemanticTermTagsProps> = ({
 
   const fetchAvailableTags = async () => {
     try {
-      const response = await fetch('/api/graphql', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          query: `
-            query {
-              semanticTags {
-                id
-                tagKey
-                tagLabel
-                tagCategory
-                description
-                colorCode
-                iconName
-              }
-            }
-          `,
-        }),
-      });
+      const response = await fetch('/api/semantic/tags');
       const data = await response.json();
-      const tags = data.data?.semanticTags || [];
+      const tags = data.data || [];
       setAvailableTags(tags);
 
       // Group by category
@@ -252,46 +234,26 @@ export const TagSuggestionWizard: React.FC<TagWizardProps> = ({
     setError(null);
 
     try {
-      const response = await fetch('/api/graphql', {
+      const response = await fetch('/api/semantic/tags/suggest', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          query: `
-            query SuggestTags($input: TagSuggestionInput!) {
-              suggestSemanticTermTags(input: $input) {
-                suggestions {
-                  tagKey
-                  tagLabel
-                  tagCategory
-                  suggestionReason
-                  confidenceScore
-                  colorCode
-                  iconName
-                }
-                reasons
-              }
-            }
-          `,
-          variables: {
-            input: {
-              nodeName: termName,
-              displayName,
-              description,
-              dataType,
-              domain,
-              expression,
-              existingTags,
-            },
-          },
+          nodeName: termName,
+          displayName,
+          description,
+          dataType,
+          domain,
+          expression,
+          existingTags,
         }),
       });
 
       const data = await response.json();
 
-      if (data.errors) {
-        setError(data.errors[0]?.message || 'Failed to fetch suggestions');
+      if (data.error) {
+        setError(data.error || 'Failed to fetch suggestions');
       } else {
-        const suggestionData = data.data?.suggestSemanticTermTags?.suggestions || [];
+        const suggestionData = data.data?.suggestions || [];
         setSuggestions(suggestionData);
         // Pre-select high-confidence suggestions (>0.8)
         const preSelected = new Set<string>(
@@ -483,15 +445,9 @@ export const BatchTagManager: React.FC<BatchTagManagerProps> = ({
 
   const fetchAvailableTags = async () => {
     try {
-      const response = await fetch('/api/graphql', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          query: `query { semanticTags { id tagKey tagLabel tagCategory colorCode } }`,
-        }),
-      });
+      const response = await fetch('/api/semantic/tags');
       const data = await response.json();
-      setAvailableTags(data.data?.semanticTags || []);
+      setAvailableTags(data.data || []);
     } catch (error) {
       console.error('Failed to fetch tags:', error);
     }

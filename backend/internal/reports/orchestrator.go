@@ -10,25 +10,12 @@ import (
 	"github.com/google/uuid"
 )
 
-// ReportOrchestrator coordinates report generation
 type ReportOrchestrator struct {
-	db     *sql.DB
-	hasura HasuraClient
+	db *sql.DB
 }
 
-// NewReportOrchestrator creates a new report orchestrator
 func NewReportOrchestrator(db *sql.DB) *ReportOrchestrator {
-	return &ReportOrchestrator{
-		db: db,
-	}
-}
-
-// NewReportOrchestratorWithHasura creates a new report orchestrator with Hasura support
-func NewReportOrchestratorWithHasura(db *sql.DB, hasura HasuraClient) *ReportOrchestrator {
-	return &ReportOrchestrator{
-		db:     db,
-		hasura: hasura,
-	}
+	return &ReportOrchestrator{db: db}
 }
 
 // GenerateReport executes a report template (synchronous version)
@@ -142,39 +129,7 @@ func (ro *ReportOrchestrator) generatePDF(ctx context.Context, template *ReportT
 // HASURA-FIRST HELPERS
 // ============================================================================
 
-// updateExecutionMetrics updates execution metrics
-// Hasura-first with SQL fallback
 func (ro *ReportOrchestrator) updateExecutionMetrics(ctx context.Context, executionID uuid.UUID, outputURL string, sizeBytes, rowsProcessed, executionTimeMS int) error {
-	if ro.hasura != nil {
-		mutation := `
-			mutation UpdateMetrics($id: uuid!, $outputURL: String!, $sizeBytes: Int!, $rows: Int!, $timeMS: Int!) {
-				update_report_executions_by_pk(pk_columns: {id: $id}, _set: {
-					output_url: $outputURL
-					output_size_bytes: $sizeBytes
-					rows_processed: $rows
-					execution_time_ms: $timeMS
-				}) {
-					id
-				}
-			}
-		`
-
-		variables := map[string]interface{}{
-			"id":        executionID,
-			"outputURL": outputURL,
-			"sizeBytes": sizeBytes,
-			"rows":      rowsProcessed,
-			"timeMS":    executionTimeMS,
-		}
-
-		_, err := ro.hasura.Mutate(mutation, variables)
-		if err == nil {
-			return nil
-		}
-		// Fall through to SQL on Hasura error
-	}
-
-	// SQL fallback
 	query := `
 		UPDATE report_executions
 		SET output_url = $1,
@@ -187,57 +142,7 @@ func (ro *ReportOrchestrator) updateExecutionMetrics(ctx context.Context, execut
 	return err
 }
 
-// getTemplate retrieves a report template
-// Hasura-first with SQL fallback
 func (ro *ReportOrchestrator) getTemplate(ctx context.Context, templateID, tenantID uuid.UUID) (*ReportTemplate, error) {
-	if ro.hasura != nil {
-		query := `
-			query GetTemplate($id: uuid!, $tenantID: uuid!) {
-				report_templates(where: {
-					id: {_eq: $id}
-					_or: [
-						{tenant_id: {_eq: $tenantID}}
-						{is_public: {_eq: true}}
-					]
-				}) {
-					id
-					tenant_id
-					template_name
-					description
-					category
-					semantic_view_ids
-					layout_config
-					parameter_schema
-					is_active
-					is_public
-					created_at
-					updated_at
-					created_by
-					version
-				}
-			}
-		`
-
-		variables := map[string]interface{}{
-			"id":       templateID,
-			"tenantID": tenantID,
-		}
-
-		result, err := ro.hasura.Query(query, variables)
-		if err == nil {
-			if templates, ok := result["report_templates"].([]interface{}); ok && len(templates) > 0 {
-				if tplData, ok := templates[0].(map[string]interface{}); ok {
-					template, err := parseTemplateFromHasura(tplData)
-					if err == nil {
-						return template, nil
-					}
-				}
-			}
-		}
-		// Fall through to SQL on Hasura error
-	}
-
-	// SQL fallback
 	query := `
 		SELECT id, tenant_id, template_name, description, category,
 		       semantic_view_ids, layout_config, parameter_schema,
@@ -298,61 +203,7 @@ func (ro *ReportOrchestrator) getTemplate(ctx context.Context, templateID, tenan
 	return &template, nil
 }
 
-// listTemplates lists available report templates
-// Hasura-first with SQL fallback
 func (ro *ReportOrchestrator) listTemplates(ctx context.Context, tenantID uuid.UUID, category string) ([]ReportTemplate, error) {
-	if ro.hasura != nil {
-		whereClause := map[string]interface{}{
-			"_or": []interface{}{
-				map[string]interface{}{"tenant_id": map[string]interface{}{"_eq": tenantID}},
-				map[string]interface{}{"is_public": map[string]interface{}{"_eq": true}},
-			},
-			"is_active": map[string]interface{}{"_eq": true},
-		}
-
-		if category != "" {
-			whereClause["category"] = map[string]interface{}{"_eq": category}
-		}
-
-		query := `
-			query ListTemplates($where: report_templates_bool_exp!) {
-				report_templates(where: $where, order_by: {template_name: asc}) {
-					id
-					tenant_id
-					template_name
-					description
-					category
-					is_active
-					is_public
-					created_at
-					version
-				}
-			}
-		`
-
-		variables := map[string]interface{}{
-			"where": whereClause,
-		}
-
-		result, err := ro.hasura.Query(query, variables)
-		if err == nil {
-			if templates, ok := result["report_templates"].([]interface{}); ok {
-				var out []ReportTemplate
-				for _, t := range templates {
-					if tplData, ok := t.(map[string]interface{}); ok {
-						template, err := parseTemplateSummaryFromHasura(tplData)
-						if err == nil {
-							out = append(out, template)
-						}
-					}
-				}
-				return out, nil
-			}
-		}
-		// Fall through to SQL on Hasura error
-	}
-
-	// SQL fallback
 	query := `
 		SELECT id, tenant_id, template_name, description, category,
 		       is_active, is_public, created_at, version
@@ -397,56 +248,7 @@ func (ro *ReportOrchestrator) listTemplates(ctx context.Context, tenantID uuid.U
 	return templates, nil
 }
 
-// getExecution retrieves a report execution
-// Hasura-first with SQL fallback
 func (ro *ReportOrchestrator) getExecution(ctx context.Context, executionID, tenantID uuid.UUID) (*ReportExecution, error) {
-	if ro.hasura != nil {
-		query := `
-			query GetExecution($id: uuid!, $tenantID: uuid!) {
-				report_executions_by_pk(id: $id) {
-					id
-					tenant_id
-					template_id
-					household_id
-					parameters
-					status
-					error_message
-					output_url
-					output_size_bytes
-					execution_time_ms
-					rows_processed
-					workflow_id
-					run_id
-					created_at
-					completed_at
-					created_by
-				}
-			}
-		`
-
-		variables := map[string]interface{}{
-			"id":       executionID,
-			"tenantID": tenantID,
-		}
-
-		result, err := ro.hasura.Query(query, variables)
-		if err == nil {
-			if execData, ok := result["report_executions_by_pk"].(map[string]interface{}); ok {
-				// Check tenant match
-				if tid, ok := execData["tenant_id"].(string); ok {
-					if tid == tenantID.String() {
-						execution, err := parseExecutionFromHasura(execData)
-						if err == nil {
-							return execution, nil
-						}
-					}
-				}
-			}
-		}
-		// Fall through to SQL on Hasura error
-	}
-
-	// SQL fallback
 	query := `
 		SELECT id, tenant_id, template_id, household_id, parameters,
 		       status, error_message, output_url, output_size_bytes,
@@ -494,55 +296,7 @@ func (ro *ReportOrchestrator) getExecution(ctx context.Context, executionID, ten
 	return &execution, nil
 }
 
-// createExecutionRecord inserts a new execution record
-// Hasura-first with SQL fallback
 func (ro *ReportOrchestrator) createExecutionRecord(ctx context.Context, execution *ReportExecution) error {
-	if ro.hasura != nil {
-		mutation := `
-			mutation InsertExecution(
-				$id: uuid!
-				$tenantID: uuid!
-				$templateID: uuid!
-				$householdID: uuid
-				$parameters: jsonb!
-				$status: String!
-				$createdAt: timestamptz!
-				$createdBy: String
-			) {
-				insert_report_executions_one(object: {
-					id: $id
-					tenant_id: $tenantID
-					template_id: $templateID
-					household_id: $householdID
-					parameters: $parameters
-					status: $status
-					created_at: $createdAt
-					created_by: $createdBy
-				}) {
-					id
-				}
-			}
-		`
-
-		variables := map[string]interface{}{
-			"id":          execution.ID,
-			"tenantID":    execution.TenantID,
-			"templateID":  execution.TemplateID,
-			"householdID": execution.HouseholdID,
-			"parameters":  execution.Parameters,
-			"status":      execution.Status,
-			"createdAt":   execution.CreatedAt,
-			"createdBy":   execution.CreatedBy,
-		}
-
-		_, err := ro.hasura.Mutate(mutation, variables)
-		if err == nil {
-			return nil
-		}
-		// Fall through to SQL on Hasura error
-	}
-
-	// SQL fallback
 	query := `
 		INSERT INTO report_executions (
 			id, tenant_id, template_id, household_id, parameters,
@@ -572,37 +326,7 @@ func (ro *ReportOrchestrator) createExecutionRecord(ctx context.Context, executi
 	return nil
 }
 
-// updateStatus updates the status of an execution
-// Hasura-first with SQL fallback
 func (ro *ReportOrchestrator) updateStatus(ctx context.Context, executionID uuid.UUID, status, errorMessage string, completedAt *time.Time) error {
-	if ro.hasura != nil {
-		mutation := `
-			mutation UpdateStatus($id: uuid!, $status: String!, $errorMessage: String, $completedAt: timestamptz) {
-				update_report_executions_by_pk(pk_columns: {id: $id}, _set: {
-					status: $status
-					error_message: $errorMessage
-					completed_at: $completedAt
-				}) {
-					id
-				}
-			}
-		`
-
-		variables := map[string]interface{}{
-			"id":           executionID,
-			"status":       status,
-			"errorMessage": errorMessage,
-			"completedAt":  completedAt,
-		}
-
-		_, err := ro.hasura.Mutate(mutation, variables)
-		if err == nil {
-			return nil
-		}
-		// Fall through to SQL on Hasura error
-	}
-
-	// SQL fallback
 	query := `
 		UPDATE report_executions
 		SET status = $1,
@@ -617,143 +341,4 @@ func (ro *ReportOrchestrator) updateStatus(ctx context.Context, executionID uuid
 	}
 
 	return nil
-}
-
-// ============================================================================
-// HELPER FUNCTIONS FOR PARSING HASURA RESPONSES
-// ============================================================================
-
-func parseTemplateFromHasura(data map[string]interface{}) (*ReportTemplate, error) {
-	template := &ReportTemplate{}
-
-	if id, ok := data["id"].(string); ok {
-		template.ID, _ = uuid.Parse(id)
-	}
-	if tenantID, ok := data["tenant_id"].(string); ok {
-		template.TenantID, _ = uuid.Parse(tenantID)
-	}
-	if name, ok := data["template_name"].(string); ok {
-		template.TemplateName = name
-	}
-	if desc, ok := data["description"].(string); ok {
-		template.Description = desc
-	}
-	if cat, ok := data["category"].(string); ok {
-		template.Category = cat
-	}
-	if isActive, ok := data["is_active"].(bool); ok {
-		template.IsActive = isActive
-	}
-	if isPublic, ok := data["is_public"].(bool); ok {
-		template.IsPublic = isPublic
-	}
-	if version, ok := data["version"].(float64); ok {
-		template.Version = int(version)
-	}
-	if createdBy, ok := data["created_by"].(string); ok {
-		template.CreatedBy = createdBy
-	}
-
-	// Parse semantic view IDs
-	if viewIDs, ok := data["semantic_view_ids"].([]interface{}); ok {
-		template.SemanticViewIDs = make([]uuid.UUID, 0, len(viewIDs))
-		for _, vid := range viewIDs {
-			if idStr, ok := vid.(string); ok {
-				if id, err := uuid.Parse(idStr); err == nil {
-					template.SemanticViewIDs = append(template.SemanticViewIDs, id)
-				}
-			}
-		}
-	}
-
-	// Parse JSONB fields
-	if layoutConfig, ok := data["layout_config"].(map[string]interface{}); ok {
-		template.LayoutConfig = layoutConfig
-	}
-	if paramSchema, ok := data["parameter_schema"].(map[string]interface{}); ok {
-		template.ParameterSchema = paramSchema
-	}
-
-	return template, nil
-}
-
-func parseTemplateSummaryFromHasura(data map[string]interface{}) (ReportTemplate, error) {
-	template := ReportTemplate{}
-
-	if id, ok := data["id"].(string); ok {
-		template.ID, _ = uuid.Parse(id)
-	}
-	if tenantID, ok := data["tenant_id"].(string); ok {
-		template.TenantID, _ = uuid.Parse(tenantID)
-	}
-	if name, ok := data["template_name"].(string); ok {
-		template.TemplateName = name
-	}
-	if desc, ok := data["description"].(string); ok {
-		template.Description = desc
-	}
-	if cat, ok := data["category"].(string); ok {
-		template.Category = cat
-	}
-	if isActive, ok := data["is_active"].(bool); ok {
-		template.IsActive = isActive
-	}
-	if isPublic, ok := data["is_public"].(bool); ok {
-		template.IsPublic = isPublic
-	}
-	if version, ok := data["version"].(float64); ok {
-		template.Version = int(version)
-	}
-
-	return template, nil
-}
-
-func parseExecutionFromHasura(data map[string]interface{}) (*ReportExecution, error) {
-	execution := &ReportExecution{}
-
-	if id, ok := data["id"].(string); ok {
-		execution.ID, _ = uuid.Parse(id)
-	}
-	if tenantID, ok := data["tenant_id"].(string); ok {
-		execution.TenantID, _ = uuid.Parse(tenantID)
-	}
-	if templateID, ok := data["template_id"].(string); ok {
-		execution.TemplateID, _ = uuid.Parse(templateID)
-	}
-	if householdID, ok := data["household_id"].(string); ok {
-		hid, _ := uuid.Parse(householdID)
-		execution.HouseholdID = &hid
-	}
-	if params, ok := data["parameters"].(map[string]interface{}); ok {
-		execution.Parameters = params
-	}
-	if status, ok := data["status"].(string); ok {
-		execution.Status = status
-	}
-	if errMsg, ok := data["error_message"].(string); ok {
-		execution.ErrorMessage = errMsg
-	}
-	if outputURL, ok := data["output_url"].(string); ok {
-		execution.OutputURL = outputURL
-	}
-	if sizeBytes, ok := data["output_size_bytes"].(float64); ok {
-		execution.OutputSizeBytes = int(sizeBytes)
-	}
-	if timeMS, ok := data["execution_time_ms"].(float64); ok {
-		execution.ExecutionTimeMS = int(timeMS)
-	}
-	if rows, ok := data["rows_processed"].(float64); ok {
-		execution.RowsProcessed = int(rows)
-	}
-	if workflowID, ok := data["workflow_id"].(string); ok {
-		execution.WorkflowID = workflowID
-	}
-	if runID, ok := data["run_id"].(string); ok {
-		execution.RunID = runID
-	}
-	if createdBy, ok := data["created_by"].(string); ok {
-		execution.CreatedBy = createdBy
-	}
-
-	return execution, nil
 }

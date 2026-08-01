@@ -85,7 +85,7 @@ const SemanticCatalogView: React.FC<SemanticCatalogViewProps> = ({
           type: 'semantic_term',
           id: `semantic_term-${term.id}`,
           nodeId: term.id,
-          name: term.node_name,
+          name: term.node_name || '',
           node: term
       });
   };

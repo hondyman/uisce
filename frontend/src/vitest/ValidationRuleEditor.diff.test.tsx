@@ -5,7 +5,7 @@ import ValidationRuleEditor from '@/components/validation/ValidationRuleEditor'
 
 describe('ValidationRuleEditor - list rendering', () => {
   it('renders rules returned by the API', async () => {
-    const fetchMock = globalThis.fetch as unknown as vi.Mock
+    const fetchMock = globalThis.fetch as any
     fetchMock.mockResolvedValueOnce(
       new Response(
         JSON.stringify([

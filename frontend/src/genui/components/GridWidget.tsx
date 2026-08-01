@@ -35,7 +35,7 @@ export function GridWidget({ def }: GridWidgetProps) {
     : queryData || [];
 
   // Convert schema columns to AG-Grid column definitions
-  const columnDefs: ColDef[] = def.columns.map((col) => ({
+  const columnDefs: ColDef[] = (def.columns || []).map((col: any) => ({
     field: col.field,
     headerName: col.headerName,
     width: col.width,

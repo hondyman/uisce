@@ -29,10 +29,12 @@ type vmCompiler struct {
 	out    vm.CompiledProgram
 	err    *CompileError
 
-	numDepth  uint8
+	numDepth   uint8
 	boolDepth uint8
-	numMax    uint8
-	boolMax   uint8
+	fNumDepth  uint8
+	numMax     uint8
+	boolMax    uint8
+	fNumMax    uint8
 }
 
 // CompileVM is the entry point for compiling rules to VM bytecode.
@@ -55,6 +57,7 @@ func CompileVM(node *RuleNode, syms *vm.SymbolDict, enums *vm.EnumDict) vm.Compi
 	c.emit(vm.OpReturnBool, 0, 0)
 	c.out.NumPeakDepth = c.numMax
 	c.out.BoolPeakDepth = c.boolMax
+	c.out.FNumPeakDepth = c.fNumMax
 
 	return vm.CompileResult{Program: &c.out}
 }
@@ -85,8 +88,12 @@ func (c *vmCompiler) updateDepth(op vm.OpCode) {
 		if c.boolDepth > c.boolMax {
 			c.boolMax = c.boolDepth
 		}
+	case vm.OpLoadSymbolFNum, vm.OpLoadConstFNum:
+		c.fNumDepth++
+		if c.fNumDepth > c.fNumMax {
+			c.fNumMax = c.fNumDepth
+		}
 
-	// Numeric/enum compare: pop 2 nums, push 1 bool
 	case vm.OpEqualNum, vm.OpNotEqualNum, vm.OpGreaterNum, vm.OpLessNum, vm.OpGreaterEqNum,
 		vm.OpLessEqNum, vm.OpEqualEnum, vm.OpNotEqualEnum, vm.OpInNum:
 		c.numDepth -= 2
@@ -95,16 +102,31 @@ func (c *vmCompiler) updateDepth(op vm.OpCode) {
 			c.boolMax = c.boolDepth
 		}
 
-	// String compare: pop 2 strs, push 1 bool (num stack unchanged)
 	case vm.OpEqualStr, vm.OpNotEqualStr:
 		c.boolDepth++
 		if c.boolDepth > c.boolMax {
 			c.boolMax = c.boolDepth
 		}
 
-	// Bool compare: pop 2 bools, push 1 bool (net -1)
 	case vm.OpEqualBool, vm.OpNotEqualBool:
 		c.boolDepth--
+
+	case vm.OpAddFNum, vm.OpSubFNum, vm.OpMulFNum, vm.OpDivFNum:
+		c.fNumDepth -= 2
+		c.fNumDepth++
+		if c.fNumDepth > c.fNumMax {
+			c.fNumMax = c.fNumDepth
+		}
+	case vm.OpAbsFNum:
+		// net 0 (pop 1, push 1)
+
+	case vm.OpEqualFNum, vm.OpNotEqualFNum, vm.OpGreaterFNum, vm.OpLessFNum,
+		vm.OpGreaterEqFNum, vm.OpLessEqFNum:
+		c.fNumDepth -= 2
+		c.boolDepth++
+		if c.boolDepth > c.boolMax {
+			c.boolMax = c.boolDepth
+		}
 
 	case vm.OpAnd, vm.OpOr:
 		c.boolDepth--
@@ -121,11 +143,14 @@ func (c *vmCompiler) compileNode(n *RuleNode) {
 	if c.err != nil {
 		return
 	}
-	if n.Type == NodeTypeGroup {
+	switch n.Type {
+	case NodeTypeGroup:
 		c.compileGroup(n.Group)
-	} else if n.Type == NodeTypeCondition {
+	case NodeTypeCondition:
 		c.compileCondition(n.Condition)
-	} else {
+	case vm.NodeTypeExpression:
+		c.compileExpression(n.Expression)
+	default:
 		c.fail(n, "", fmt.Sprintf("unknown rule node type: %s", n.Type))
 	}
 }
@@ -406,4 +431,67 @@ func (c *vmCompiler) addEnumConst(val uint32) uint16 {
 	idx := uint16(len(c.out.EnumConsts))
 	c.out.EnumConsts = append(c.out.EnumConsts, val)
 	return idx
+}
+
+func (c *vmCompiler) addFNumConst(val float64) uint16 {
+	idx := uint16(len(c.out.FNumConsts))
+	c.out.FNumConsts = append(c.out.FNumConsts, val)
+	return idx
+}
+
+func (c *vmCompiler) compileExpression(expr *vm.Expression) {
+	if expr == nil || expr.Root == nil {
+		c.fail(nil, "expression", "nil expression")
+		return
+	}
+	c.compileExprNode(expr.Root)
+}
+
+func (c *vmCompiler) compileExprNode(node vm.ExprNode) {
+	switch n := node.(type) {
+	case *vm.BinaryExpr:
+		c.compileExprNode(n.Left)
+		c.compileExprNode(n.Right)
+		switch n.Op {
+		case "+":
+			c.emit(vm.OpAddFNum, 0, 0)
+		case "-":
+			c.emit(vm.OpSubFNum, 0, 0)
+		case "*":
+			c.emit(vm.OpMulFNum, 0, 0)
+		case "/":
+			c.emit(vm.OpDivFNum, 0, 0)
+		case "==":
+			c.emit(vm.OpEqualFNum, 0, 0)
+		case "!=":
+			c.emit(vm.OpNotEqualFNum, 0, 0)
+		case ">":
+			c.emit(vm.OpGreaterFNum, 0, 0)
+		case "<":
+			c.emit(vm.OpLessFNum, 0, 0)
+		case ">=":
+			c.emit(vm.OpGreaterEqFNum, 0, 0)
+		case "<=":
+			c.emit(vm.OpLessEqFNum, 0, 0)
+		default:
+			c.fail(nil, n.Op, fmt.Sprintf("unsupported expression operator: %s", n.Op))
+		}
+	case *vm.FieldRef:
+		path := n.Path
+		symID, err := c.syms.Intern(path)
+		if err != nil {
+			if id, ok := c.syms.Resolve(path); ok {
+				symID = id
+			} else {
+				c.fail(nil, "field_ref", fmt.Sprintf("symbol not registered for field %q: %v", path, err))
+				return
+			}
+		}
+		c.emit(vm.OpLoadSymbolFNum, symID, 0)
+	case *vm.Literal:
+		idx := c.addFNumConst(n.Value)
+		c.emit(vm.OpLoadConstFNum, 0, idx)
+	default:
+		c.fail(nil, "", fmt.Sprintf("unknown ExprNode type: %T", node))
+	}
 }

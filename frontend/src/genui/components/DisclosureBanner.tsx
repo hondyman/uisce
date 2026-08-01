@@ -14,10 +14,10 @@ export function DisclosureBannerWidget({ def }: DisclosureBannerWidgetProps) {
   }
 
   return (
-    <div className={`rounded-lg p-4 ${getVariantStyles(def.variant)}`}>
+    <div className={`rounded-lg p-4 ${getVariantStyles(def.variant || "")}`}>
       <div className="flex items-start gap-3">
         <div className="flex-shrink-0">
-          <VariantIcon variant={def.variant} />
+          <VariantIcon variant={def.variant || ""} />
         </div>
 
         <div className="flex-1 text-sm">{def.content}</div>

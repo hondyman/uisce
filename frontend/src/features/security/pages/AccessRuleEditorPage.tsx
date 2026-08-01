@@ -240,12 +240,12 @@ export const AccessRuleEditorPage: React.FC = () => {
 
       {/* Preview Tab */}
       {activeTab === 'preview' && (
-        <RulePreview rule={model} />
+        <RulePreview rule={model as any} />
       )}
 
       {/* Test Tab */}
       {activeTab === 'test' && (
-        <RuleTest rule={model} />
+        <RuleTest rule={model as any} />
       )}
     </div>
   );

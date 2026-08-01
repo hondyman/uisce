@@ -29,12 +29,13 @@ export const GenUIApprovalInboxPage: React.FC = () => {
   };
 
   if (loading) return <div className="flex items-center justify-center min-h-screen"><p>Loading...</p></div>;
-  if (error) return <div className="flex items-center justify-center min-h-screen"><p>Error: {error}</p></div>;
+  if (error) return <div className="flex items-center justify-center min-h-screen"><p>Error: {(error as any).message || error}</p></div>;
 
+  const renderer = layout ? <GenUIRenderer layoutJson={layout} /> as any : null;
   return (
     <div className="min-h-screen bg-background-light dark:bg-background-dark p-6">
       <h1 className="text-4xl font-black mb-6">Approval Inbox (GenUI)</h1>
-      {layout && <GenUIRenderer layout={layout} onFormSubmit={handleFormSubmit} />}
+      {renderer}
     </div>
   );
 };

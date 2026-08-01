@@ -106,7 +106,7 @@ export const TemplateBrowser: React.FC<{
       setTemplates(data || []);
 
       // Extract unique categories
-      const cats = [...new Set((data || []).map((t: Template) => t.category))];
+      const cats = [...new Set((data || []).map((t: Template) => t.category))] as string[];
       setCategories(cats);
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to load templates';

@@ -4,7 +4,7 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import SearchBar from '../SearchBar';
 import { test, expect, vi } from 'vitest';
 
-const sampleResults = [
+const sampleResults: any[] = [
   { id: 'r1', type: 'table', label: 'Users', nodeId: 'n1', tableName: 'users' },
   { id: 'r2', type: 'column', label: 'email', nodeId: 'n1', tableName: 'users' }
 ];

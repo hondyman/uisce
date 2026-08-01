@@ -253,7 +253,7 @@ export const SemanticPlaygroundPage: React.FC = () => {
                 prompt={nlPrompt}
                 mode={mode}
                 loading={plannerLoading || executorLoading}
-                error={plannerError}
+                error={plannerError || undefined}
                 onDatasourceChange={setSelectedDatasource}
                 onVersionChange={setSelectedVersion}
                 onPromptChange={setNlPrompt}
@@ -274,7 +274,7 @@ export const SemanticPlaygroundPage: React.FC = () => {
                 query={semanticQuery}
                 bundle={bundle}
                 loading={plannerLoading}
-                error={plannerError}
+                error={plannerError || undefined}
                 warnings={plannerWarnings}
                 onQueryChange={handleUpdateSemanticQuery}
                 onExplain={handleExplainQuery}
@@ -289,7 +289,7 @@ export const SemanticPlaygroundPage: React.FC = () => {
               <SQLViewer
                 sql={generatedSQL}
                 loading={executorLoading}
-                error={executorError}
+                error={executorError || undefined}
                 warnings={executorWarnings}
                 onExecute={handleRunSQL}
                 onDownloadCSV={handleExportCSV}
@@ -303,7 +303,7 @@ export const SemanticPlaygroundPage: React.FC = () => {
                 results={results}
                 executionTime={executionTime}
                 loading={sqlRunnerLoading}
-                error={sqlRunnerError}
+                error={sqlRunnerError || undefined}
                 sql={generatedSQL || undefined}
               />
             </Paper>

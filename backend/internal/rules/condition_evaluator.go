@@ -236,3 +236,22 @@ func (ce *ConditionEvaluator) isLessThan(a, b interface{}) (bool, error) {
 	}
 	return numA < numB, nil
 }
+
+func (ce *ConditionEvaluator) GetFieldValue(fieldPath string, data map[string]interface{}) (interface{}, bool) {
+	return ce.hierarchyResolver.ResolveFieldPath(data, fieldPath)
+}
+
+func (ce *ConditionEvaluator) EvaluateConditionWithValues(cond *RuleCondition, data map[string]interface{}) (bool, interface{}, interface{}, error) {
+	field := cond.Field
+	if cond.FieldPath != "" {
+		field = cond.FieldPath
+	}
+
+	actualVal, found := ce.hierarchyResolver.ResolveFieldPath(data, field)
+	if !found {
+		return false, nil, cond.Value, fmt.Errorf("field not found: %s", field)
+	}
+
+	passed, err := ce.compareValues(actualVal, cond.Operator, cond.Value)
+	return passed, actualVal, cond.Value, err
+}

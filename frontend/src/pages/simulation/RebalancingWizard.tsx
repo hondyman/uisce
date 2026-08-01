@@ -99,7 +99,7 @@ const RebalancingWizard: React.FC = () => {
                   type: config.type,
                   constraints: config.constraints
               }
-          });
+          } as any);
 
           // 3. Run Simulation (to generate result)
           await simulationApi.runSimulation(scenario.id);

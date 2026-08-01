@@ -5,7 +5,7 @@ import ValidationRuleEditor from '@/components/validation/ValidationRuleEditor'
 
 describe('ValidationRuleEditor - templates tab', () => {
   it('shows template section when creating a new rule', async () => {
-    const fetchMock = globalThis.fetch as unknown as vi.Mock
+    const fetchMock = globalThis.fetch as any
     fetchMock.mockResolvedValueOnce(
       new Response(JSON.stringify([]), { status: 200, headers: { 'Content-Type': 'application/json' } })
     )

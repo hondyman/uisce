@@ -3,6 +3,7 @@ package vm
 import (
 	"bytes"
 	"errors"
+	"math"
 	"strconv"
 	"sync"
 )
@@ -193,7 +194,6 @@ func (d *jsonScanner) parseValue(rec *FastRecord, syms *SymbolDict, enums *EnumD
 		return errors.New("json: invalid token starting with n")
 
 	default:
-		// Number
 		start := d.pos
 		for !d.eof() {
 			c := d.data[d.pos]
@@ -205,11 +205,14 @@ func (d *jsonScanner) parseValue(rec *FastRecord, syms *SymbolDict, enums *EnumD
 		}
 		numBytes := d.data[start:d.pos]
 
-		// Parse as float64, then cast to int64 for FastRecord.
 		if val, err := strconv.ParseFloat(string(numBytes), 64); err == nil {
 			if id, ok := syms.ResolveBytes(d.path); ok {
-				rec.NumVals[id] = int64(val)
-				rec.Present[id] |= HasNum
+				rec.FNumVals[id] = val
+				rec.Present[id] |= HasFNum
+				if val == float64(int64(val)) && !math.IsInf(val, 0) {
+					rec.NumVals[id] = int64(val)
+					rec.Present[id] |= HasNum
+				}
 			}
 		}
 		return nil

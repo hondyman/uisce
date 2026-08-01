@@ -103,7 +103,7 @@ export const CatalogNodeTypesPage: React.FC = () => {
     try {
       await deleteMutation.mutateAsync({
         id: type.id,
-      });
+      } as any);
       notification.success(`Node type "${type.catalog_type_name}" deleted successfully`);
     } catch (error) {
       notification.error(`Failed to delete node type: ${error instanceof Error ? error.message : 'Unknown error'}`);

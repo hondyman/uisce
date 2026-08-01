@@ -66,7 +66,7 @@ function renderChart(def: ChartComponent, data: any[]) {
           <YAxis />
           <Tooltip />
           {def.legend && <Legend />}
-          {def.yFields.map((field, idx) => (
+          {(def.yFields || []).map((field: any, idx: any) => (
             <Line
               key={field}
               type="monotone"

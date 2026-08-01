@@ -470,7 +470,7 @@ const BusinessObjectQueryBuilder: React.FC = () => {
     dataType: field.type,
     role: ['measure', 'calculated'].includes((field.type || '').toLowerCase()) ? 'MEASURE' : 'DIMENSION',
     bindingStatus: 'RESOLVED',
-    defaultAggregation: field.aggregation,
+    defaultAggregation: field.aggregation as any,
   });
 
   const handleAddSchemaField = (field: BOSchemaField) => {

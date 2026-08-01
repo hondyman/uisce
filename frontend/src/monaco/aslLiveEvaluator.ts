@@ -1,7 +1,7 @@
 import { evaluateRuleWasm } from "../rules/wasmRuntime"
 
 export function attachLiveEvaluation(_monaco: any, editor: any) {
-  let timeout
+  let timeout: any
 
   editor.onDidChangeModelContent(async () => {
     clearTimeout(timeout)
@@ -11,7 +11,7 @@ export function attachLiveEvaluation(_monaco: any, editor: any) {
         const rule = JSON.parse(text)
         const result = await evaluateRuleWasm(rule, {})
         showStatus(`Result: ${result}`)
-      } catch (e) {
+      } catch (e: any) {
         showStatus(`Error: ${e.message}`)
       }
     }, 300)

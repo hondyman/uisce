@@ -171,7 +171,7 @@ export function useMultiplayerState(
     managerRef.current = manager;
 
     const handleStateChange = (state: CollaborationState) => {
-      setCollaborators(state.activeUsers);
+      setCollaborators(state.activeUsers as any);
       
       // Update tracked cells/metrics from state
       const cellsMap = new Map<string, string[]>();

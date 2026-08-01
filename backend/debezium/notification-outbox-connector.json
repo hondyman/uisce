@@ -1,0 +1,30 @@
+{
+  "name": "notification-outbox-connector",
+  "config": {
+    "connector.class": "io.debezium.connector.postgresql.PostgresConnector",
+    "database.hostname": "${ENV:DATABASE_HOSTNAME:localhost}",
+    "database.port": "${ENV:DATABASE_PORT:5432}",
+    "database.user": "${ENV:DATABASE_USER:postgres}",
+    "database.password": "${ENV:DATABASE_PASSWORD:postgres}",
+    "database.dbname": "${ENV:DATABASE_NAME:alpha}",
+    "database.server.name": "notifications-db",
+    "table.include.list": "public.notification_outbox",
+    "topic.prefix": "notifications",
+    "plugin.name": "pgoutput",
+    "publication.autocreate.mode": "filtered",
+    "slot.name": "debezium_notification_outbox",
+    "snapshot.mode": "initial",
+    "key.converter": "org.apache.kafka.connect.json.JsonConverter",
+    "value.converter": "org.apache.kafka.connect.json.JsonConverter",
+    "key.converter.schemas.enable": "false",
+    "value.converter.schemas.enable": "false",
+    "transforms": "outbox",
+    "transforms.outbox.type": "io.debezium.transforms.outbox.EventToJson",
+    "transforms.outbox.table.expand.json.payload": "true",
+    "transforms.outbox.route.topic.replacement": "notification-events",
+    "transforms.outbox.route.by.field": "aggregate_type",
+    "predicates": "isOutbox",
+    "predicates.isOutbox.type": "org.apache.kafka.connect.transforms.FilterPredicate",
+    "predicates.isOutbox.filter.condition": "${ENV:OUTBOX_FILTER:aggregate_type = 'notification'}"
+  }
+}

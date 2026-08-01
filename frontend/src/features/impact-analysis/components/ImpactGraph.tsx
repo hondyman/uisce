@@ -321,7 +321,7 @@ export const ImpactGraph: React.FC<ImpactGraphProps> = ({
       <Controls />
       {showMiniMap && <MiniMap nodeStrokeWidth={3} zoomable pannable />}
       
-      <Panel position="top-right" sx={{ display: 'flex', gap: 1 }}>
+      {(Panel as any)({ position: "top-right", sx: { display: 'flex', gap: 1 }, children: <>
         <Tooltip title={showMiniMap ? "Hide Map" : "Show Map"}>
           <IconButton onClick={() => setShowMiniMap(!showMiniMap)} size="small" sx={{ bgcolor: 'white', '&:hover': { bgcolor: '#f0f0f0' }, boxShadow: 2 }}>
             <MapIcon fontSize="small" color={showMiniMap ? "primary" : "inherit"} />
@@ -332,7 +332,7 @@ export const ImpactGraph: React.FC<ImpactGraphProps> = ({
             {isFullScreen ? <FullscreenExitIcon fontSize="small" /> : <FullscreenIcon fontSize="small" />}
           </IconButton>
         </Tooltip>
-      </Panel>
+      </> })}
     </ReactFlow>
   );
 

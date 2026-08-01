@@ -79,10 +79,11 @@ func (m *EngineMetrics) Snapshot() EngineMetricsSnapshot {
 // EvalTrace provides observability into a single evaluation. Returned
 // alongside the boolean result so SREs can log/alert on fallback rates.
 type EvalTrace struct {
-	RuleID    string // the versioned cache key actually used (ruleID@version)
-	UsedVM    bool   // true if the VM fast path executed
-	Fallback  string // reason for fallback; empty if UsedVM is true
-	Revision  uint64 // which EngineState.Revision served this call
-	IsTenant  bool   // true if evaluated against a tenant-specific state
-	TenantID  string // tenant that was charged with this evaluation (empty for core)
+	RuleID         string   // the versioned cache key actually used (ruleID@version)
+	UsedVM         bool     // true if the VM fast path executed
+	Fallback       string   // reason for fallback; empty if UsedVM is true
+	FailureReasons  []string // human-readable reasons for rule failure (from recursive evaluator)
+	Revision       uint64   // which EngineState.Revision served this call
+	IsTenant       bool     // true if evaluated against a tenant-specific state
+	TenantID       string   // tenant that was charged with this evaluation (empty for core)
 }

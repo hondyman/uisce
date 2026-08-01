@@ -42,11 +42,11 @@ func TestDecodeJSON_FastPath(t *testing.T) {
 		t.Errorf("tier: EnumVals should be non-zero (interned id)")
 	}
 
-	if rec.NumVals[balanceID] != 15000 {
-		t.Errorf("balance: expected 15000, got %d", rec.NumVals[balanceID])
+	if rec.FNumVals[balanceID] != 15000.5 {
+		t.Errorf("balance: expected 15000.5, got %f", rec.FNumVals[balanceID])
 	}
-	if rec.Present[balanceID]&HasNum == 0 {
-		t.Errorf("balance: Present HasNum bit not set")
+	if rec.Present[balanceID]&HasFNum == 0 {
+		t.Errorf("balance: Present HasFNum bit not set")
 	}
 
 	if !rec.BoolVals[activeID] {

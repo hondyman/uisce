@@ -693,7 +693,7 @@ new Date(entry.createdAt || '').toLocaleDateString()
         <DialogTitle>Add New IP Address</DialogTitle>
         <DialogContent sx={{ pt: 2 }}>
           <AddIPForm
-            tenantId={selectedTenant}
+            _tenantId={selectedTenant}
             onSubmit={handleAddIPSubmit}
             onCancel={() => setAddIPDialogOpen(false)}
           />

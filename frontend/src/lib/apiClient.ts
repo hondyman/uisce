@@ -130,7 +130,7 @@ export function getApiClient(): AxiosInstance {
     axiosInstance = axios.create();
 
     // Request interceptor: inject tenant + region headers
-    axiosInstance.interceptors.request.use((config: AxiosRequestConfig) => {
+    axiosInstance.interceptors.request.use((config: any) => {
       if (!config.headers) {
         config.headers = {};
       }

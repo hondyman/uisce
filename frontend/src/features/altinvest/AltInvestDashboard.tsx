@@ -36,7 +36,7 @@ export const AltInvestDashboard: React.FC<AltInvestDashboardProps> = ({ clientId
   const loadInvestments = async () => {
     setLoading(true);
     try {
-      const data = await fetchAPI<AlternativeInvestment[]>(`/altinvest/client/${clientId}`);
+      const data = await fetchAPI(`/altinvest/client/${clientId}`) as AlternativeInvestment[];
       setInvestments(data);
     } catch (error) {
       console.error('Failed to load investments:', error);

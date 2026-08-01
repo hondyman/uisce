@@ -240,7 +240,7 @@ interface TemplateCardProps {
 }
 
 function TemplateCard({ template, onEdit, onDelete, onToggleActive, currentLanguage, t }: TemplateCardProps) {
-  const channelIcons: Record<NotificationChannel, string> = {
+  const channelIcons: Record<string, string> = {
     [NotificationChannel.EMAIL]: '📧',
     [NotificationChannel.SLACK]: '💬',
     [NotificationChannel.WEBHOOK]: '🔗',
@@ -248,7 +248,7 @@ function TemplateCard({ template, onEdit, onDelete, onToggleActive, currentLangu
     [NotificationChannel.TEAMS]: '🟦',
     [NotificationChannel.PAGERDUTY]: '🚨',
   };
-  
+
   const eventLabels: Record<string, string> = {
     job_started: t('scheduler.event.jobStarted', 'Job Started'),
     job_completed: t('scheduler.event.jobCompleted', 'Job Completed'),
@@ -258,12 +258,12 @@ function TemplateCard({ template, onEdit, onDelete, onToggleActive, currentLangu
     sla_warning: t('scheduler.event.slaWarning', 'SLA Warning'),
     sla_breach: t('scheduler.event.slaBreach', 'SLA Breach'),
   };
-  
+
   // Get content for current language
-  const localizedContent = template.localized_content?.[currentLanguage] || 
+  const localizedContent = template.localized_content?.[currentLanguage] ||
     template.localized_content?.['en'] ||
-    { subject: template.subject_template, body: template.body_template };
-  
+    { subject: '', body: '' };
+
   const supportedLanguages = Object.keys(template.localized_content || {});
   
   return (
@@ -271,7 +271,7 @@ function TemplateCard({ template, onEdit, onDelete, onToggleActive, currentLangu
       <div className="card-header">
         <div className="template-header-info">
           <span className="channel-icon" title={template.channel}>
-            {channelIcons[template.channel]}
+            {template.channel ? channelIcons[template.channel] : '📧'}
           </span>
           <h3>{template.name}</h3>
         </div>
@@ -294,8 +294,8 @@ function TemplateCard({ template, onEdit, onDelete, onToggleActive, currentLangu
       
       <div className="card-content">
         <div className="template-meta">
-          <span className={`badge ${getEventBadgeClass(template.event_type)}`}>
-            {eventLabels[template.event_type] || template.event_type}
+          <span className={`badge ${getEventBadgeClass(template.event_type || '')}`}>
+            {template.event_type ? (eventLabels[template.event_type] || template.event_type) : 'Event'}
           </span>
           {!template.is_active && (
             <span className="badge badge-secondary">{t('scheduler.inactive', 'Inactive')}</span>
@@ -359,7 +359,7 @@ export function NotificationTemplateEditorPage() {
   const [editingLanguage, setEditingLanguage] = useState(i18n.language || 'en');
   
   // Form state
-  const [formData, setFormData] = useState<Partial<NotificationTemplate>>({
+  const [formData, setFormData] = useState<any>({
     name: '',
     channel: NotificationChannel.EMAIL,
     event_type: 'job_completed',
@@ -418,7 +418,7 @@ export function NotificationTemplateEditorPage() {
   
   // Handle localized content change
   const handleLocalizedContentChange = (lang: string, field: 'subject' | 'body', value: string) => {
-    setFormData(prev => ({
+    setFormData((prev: any) => ({
       ...prev,
       localized_content: {
         ...prev.localized_content,
@@ -433,7 +433,7 @@ export function NotificationTemplateEditorPage() {
   // Handle add language
   const handleAddLanguage = (lang: string) => {
     if (!formData.localized_content?.[lang]) {
-      setFormData(prev => ({
+      setFormData((prev: any) => ({
         ...prev,
         localized_content: {
           ...prev.localized_content,
@@ -448,7 +448,7 @@ export function NotificationTemplateEditorPage() {
   const handleRemoveLanguage = (lang: string) => {
     const newContent = { ...formData.localized_content };
     delete newContent[lang];
-    setFormData(prev => ({ ...prev, localized_content: newContent }));
+    setFormData((prev: any) => ({ ...prev, localized_content: newContent }));
     if (editingLanguage === lang) {
       setEditingLanguage('en');
     }
@@ -457,7 +457,7 @@ export function NotificationTemplateEditorPage() {
   // Handle recipients change
   const handleRecipientsChange = (value: string) => {
     const recipients = value.split(',').map(r => r.trim()).filter(Boolean);
-    setFormData(prev => ({ ...prev, recipients }));
+    setFormData((prev: any) => ({ ...prev, recipients }));
   };
   
   if (loading) {
@@ -540,7 +540,7 @@ export function NotificationTemplateEditorPage() {
                   type="text"
                   className="form-control"
                   value={formData.name || ''}
-                  onChange={e => setFormData(prev => ({ ...prev, name: e.target.value }))}
+                  onChange={e => setFormData((prev: any) => ({ ...prev, name: e.target.value }))}
                   placeholder={t('scheduler.placeholder.templateName', 'e.g., Job Failed Alert')}
                   required
                 />
@@ -553,7 +553,7 @@ export function NotificationTemplateEditorPage() {
                     id="channel"
                     className="form-control"
                     value={formData.channel}
-                    onChange={e => setFormData(prev => ({ ...prev, channel: e.target.value as NotificationChannel }))}
+                    onChange={e => setFormData((prev: any) => ({ ...prev, channel: e.target.value as NotificationChannel }))}
                     required
                   >
                     <option value={NotificationChannel.EMAIL}>📧 Email</option>
@@ -571,7 +571,7 @@ export function NotificationTemplateEditorPage() {
                     id="event_type"
                     className="form-control"
                     value={formData.event_type}
-                    onChange={e => setFormData(prev => ({ ...prev, event_type: e.target.value }))}
+                    onChange={e => setFormData((prev: any) => ({ ...prev, event_type: e.target.value }))}
                     required
                   >
                     <option value="job_started">{t('scheduler.event.jobStarted', 'Job Started')}</option>
@@ -590,7 +590,7 @@ export function NotificationTemplateEditorPage() {
                   <input
                     type="checkbox"
                     checked={formData.is_active ?? true}
-                    onChange={e => setFormData(prev => ({ ...prev, is_active: e.target.checked }))}
+                    onChange={e => setFormData((prev: any) => ({ ...prev, is_active: e.target.checked }))}
                   />
                   {t('scheduler.templateActive', 'Template is active')}
                 </label>

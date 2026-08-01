@@ -13,7 +13,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/99designs/gqlgen/graphql/playground"
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
@@ -26,24 +25,10 @@ import (
 
 type Config struct {
 	Port         string
-	HasuraURL    string
-	HasuraSecret string
 	JWTSecret    string
 	RateLimitRPM int
 	EnableAudit  bool
 	BackendURL   string
-}
-
-type GraphQLRequest struct {
-	Query     string                 `json:"query"`
-	Variables map[string]interface{} `json:"variables,omitempty"`
-}
-
-type GraphQLResponse struct {
-	Data   interface{} `json:"data,omitempty"`
-	Errors []struct {
-		Message string `json:"message"`
-	} `json:"errors,omitempty"`
 }
 
 type APIKey struct {
@@ -643,23 +628,12 @@ func main() {
 	}
 
 	config := Config{
-		Port:         getEnv("PORT", "8001"),
-		HasuraURL:    getEnv("HASURA_URL", "http://localhost:8081"),
-		HasuraSecret: getEnv("HASURA_ADMIN_SECRET", "newadminsecretkey"),
-		BackendURL:   getEnv("BACKEND_URL", "http://localhost:8080"),
+		Port:       getEnv("PORT", "8001"),
+		BackendURL: getEnv("BACKEND_URL", "http://localhost:8080"),
 	}
 
 	// DEBUG: Verify config is populated
 	log.Printf("DEBUG: Config initialized: Port=%s, BackendURL=%s", config.Port, config.BackendURL)
-
-	// Normalize Hasura URL so callers can reliably append "/v1/graphql".
-	// Accept either a base URL (e.g. http://hasura:8080) or a full path
-	// (e.g. http://hasura:8080/v1/graphql) in env. We strip any trailing
-	// "/v1/graphql" and any trailing slash so code below can do
-	// config.HasuraURL + "/v1/graphql" without duplicating segments.
-	h := strings.TrimSuffix(config.HasuraURL, "/v1/graphql")
-	h = strings.TrimSuffix(h, "/")
-	config.HasuraURL = h
 
 	r := gin.Default()
 	log.Printf("ROUTER CREATED")
@@ -722,26 +696,7 @@ func main() {
 	}
 
 	// Log resolved upstream endpoints for easier debugging in dev
-	resolvedHasura := getEnv("HASURA_URL", "http://localhost:8081")
-	resolvedHasuraSecret := getEnv("HASURA_ADMIN_SECRET", "newadminsecretkey")
-	maskedSecret := "(not set)"
-	if resolvedHasuraSecret != "" {
-		if len(resolvedHasuraSecret) > 4 {
-			maskedSecret = "****" + resolvedHasuraSecret[len(resolvedHasuraSecret)-4:]
-		} else {
-			maskedSecret = "****"
-		}
-	}
-	log.Printf("Resolved HASURA_URL=%s HASURA_ADMIN_SECRET=%s BACKEND_URL=%s AUTH_SERVICE_URL=%s", resolvedHasura, maskedSecret, backendBase, authServiceBase)
-
-	// Validate upstream Hasura endpoint is reachable in dev so developers get
-	// an early, helpful warning instead of an opaque gateway error.
-	// if ok := validateHasura(resolvedHasura, resolvedHasuraSecret); !ok {
-	//     log.Printf("WARNING: Unable to reach Hasura at %s. If you run Hasura locally, set HASURA_URL=http://localhost:8080 and ensure Hasura is running and accessible.", resolvedHasura)
-	// }
-	if strings.Contains(resolvedHasura, ":"+config.Port) {
-		log.Printf("WARNING: HASURA_URL (%s) seems to be pointing to the gateway's own address and port (%s). This will cause a proxy loop. Make sure HASURA_URL points to your separate Hasura service.", resolvedHasura, config.Port)
-	}
+	log.Printf("Resolved BACKEND_URL=%s AUTH_SERVICE_URL=%s", backendBase, authServiceBase)
 
 	// CORS middleware (restrict to local frontend dev origin)
 	r.Use(cors.New(cors.Config{
@@ -939,20 +894,6 @@ func main() {
 
 	api.POST("/validate/business-term", func(c *gin.Context) {
 		handleBusinessTermValidation(c, config)
-	})
-
-	// GraphQL endpoint (canonical under /api/graphql)
-	api.POST("/graphql", func(c *gin.Context) { handleGraphQLProxy(c, config) })
-
-	// Aliases: accept requests at top-level /graphql and /v1/graphql so clients
-	// that post directly to the gateway's GraphQL path (or expect v1 path)
-	// will be proxied the same as /api/graphql. This avoids 404s when the
-	// frontend or tools call /graphql or /v1/graphql on the gateway.
-	r.POST("/graphql", func(c *gin.Context) { handleGraphQLProxy(c, config) })
-	r.POST("/v1/graphql", func(c *gin.Context) { handleGraphQLProxy(c, config) })
-
-	r.GET("/playground", func(c *gin.Context) {
-		playground.Handler("GraphQL playground", "/api/graphql").ServeHTTP(c.Writer, c.Request)
 	})
 
 	// Create a reusable proxy handler for the backend service
@@ -1684,103 +1625,6 @@ func handleBusinessTermValidation(c *gin.Context, config Config) {
 		"errors":   []string{},
 		"warnings": []string{},
 	})
-}
-
-func handleGraphQLProxy(c *gin.Context, config Config) {
-	// Use GetRawData to safely read the body, even if a middleware has already read it.
-	body, err := c.GetRawData()
-	if err != nil {
-		c.JSON(400, gin.H{"error": "Failed to read request body"})
-		return
-	}
-
-	// Forward raw request to Hasura and return the upstream status/body directly so
-	// the frontend can see meaningful GraphQL errors instead of a generic gateway 500.
-	status, respBody, err := executeRawGraphQLRequest(config, body, c.Request.Header)
-	if err == nil {
-		c.Header("X-Hasura-Admin-Secret", config.HasuraSecret)
-	}
-	if err != nil {
-		// Log and return an internal error if we couldn't reach Hasura
-		log.Printf("error proxying GraphQL request: %v", err)
-		c.JSON(502, gin.H{"error": "Bad gateway: failed to contact GraphQL upstream"})
-		return
-	}
-
-	// If upstream returned an error status, also log the body for debugging
-	if status >= 400 {
-		log.Printf("upstream GraphQL returned status %d: %s", status, string(respBody))
-	}
-
-	// Forward Hasura response exactly (content type is application/json)
-	c.Data(status, "application/json", respBody)
-}
-
-func executeGraphQLQuery(config Config, query string, variables map[string]interface{}) (*GraphQLResponse, error) {
-	req := GraphQLRequest{
-		Query:     query,
-		Variables: variables,
-	}
-
-	reqBody, err := json.Marshal(req)
-	if err != nil {
-		return nil, err
-	}
-
-	_, respBody, err := executeRawGraphQLRequest(config, reqBody, http.Header{})
-	if err != nil {
-		return nil, err
-	}
-	var gqlResp GraphQLResponse
-	if err := json.Unmarshal(respBody, &gqlResp); err != nil {
-		return nil, err
-	}
-	return &gqlResp, nil
-}
-
-// executeRawGraphQLRequest sends the raw request body to Hasura and returns the
-// upstream HTTP status code and response body. This lets the gateway forward
-// Hasura errors directly to clients for easier debugging in development.
-func executeRawGraphQLRequest(config Config, reqBody []byte, incomingHeaders http.Header) (int, []byte, error) {
-	// Ensure we post to the Hasura GraphQL endpoint path.
-	target := strings.TrimSuffix(config.HasuraURL, "/") + "/v1/graphql"
-	req, err := http.NewRequest("POST", target, bytes.NewBuffer(reqBody))
-	if err != nil {
-		return 0, nil, err
-	}
-
-	req.Header.Set("Content-Type", "application/json")
-	// Set multiple header variants to ensure upstream Hasura recognizes the admin secret
-	req.Header.Set("X-Hasura-Admin-Secret", config.HasuraSecret)
-	req.Header.Set("x-hasura-admin-secret", config.HasuraSecret)
-	req.Header.Set("x-hasura-access-key", config.HasuraSecret)
-
-	// Forward Authorization header from client so Hasura can validate JWT tokens
-	if authHeader := incomingHeaders.Get("Authorization"); authHeader != "" {
-		req.Header.Set("Authorization", authHeader)
-	}
-
-	// Forward tenant-related headers if present
-	if tenantID := incomingHeaders.Get("X-Tenant-ID"); tenantID != "" {
-		req.Header.Set("X-Tenant-ID", tenantID)
-	}
-	if tenantDS := incomingHeaders.Get("X-Tenant-Datasource-ID"); tenantDS != "" {
-		req.Header.Set("X-Tenant-Datasource-ID", tenantDS)
-	}
-
-	client := &http.Client{Timeout: 30 * time.Second}
-	resp, err := client.Do(req)
-	if err != nil {
-		return 0, nil, err
-	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return resp.StatusCode, nil, err
-	}
-
-	return resp.StatusCode, body, nil
 }
 
 func handleGetAPIs(c *gin.Context) {

@@ -59,6 +59,10 @@ export const NodeTypeDetailPage: React.FC = () => {
     }
   };
 
+  const handleDeleteProperty = (name: string) => {
+    setEditProps(editProps.filter(p => p.name !== name));
+  };
+
   // Open properties editor and map existing properties to PropertyDefinition[]
   const handleEditPropsOpen = () => {
     if (!nodeType) return;

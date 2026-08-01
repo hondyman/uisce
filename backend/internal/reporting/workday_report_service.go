@@ -8,7 +8,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/hondyman/uisce/backend/internal/services"
-	hasuraclient "github.com/hondyman/uisce/libs/hasura-client"
 	"go.uber.org/zap"
 )
 
@@ -21,7 +20,6 @@ type WorkdayReportService struct {
 	reportService    *Service
 	processService   *services.BusinessProcessService
 	portfolioService *services.PortfolioService
-	hasuraClient     *hasuraclient.HasuraClient
 	logger           *zap.Logger
 }
 
@@ -30,14 +28,12 @@ func NewWorkdayReportService(
 	reportService *Service,
 	processService *services.BusinessProcessService,
 	portfolioService *services.PortfolioService,
-	hasuraClient *hasuraclient.HasuraClient,
 ) *WorkdayReportService {
 	logger, _ := zap.NewProduction()
 	return &WorkdayReportService{
 		reportService:    reportService,
 		processService:   processService,
 		portfolioService: portfolioService,
-		hasuraClient:     hasuraClient,
 		logger:           logger,
 	}
 }
@@ -260,125 +256,12 @@ func (s *WorkdayReportService) ExecuteReport(ctx context.Context, req ReportExec
 
 // GetReportBO fetches a report business object
 func (s *WorkdayReportService) GetReportBO(ctx context.Context, key string) (*ReportBusinessObject, error) {
-	query := `
-		query GetReportBO($key: String!) {
-			report_business_objects(where: { key: { _eq: $key } }, limit: 1) {
-				id
-				key
-				name
-				display_name
-				description
-				category
-				report_type
-				data_source
-				layout
-				parameters
-				semantic_bindings
-				permissions
-				schedule
-				output_formats
-				is_system
-				is_active
-				version
-			}
-		}
-	`
-
-	result, err := s.hasuraClient.Query(query, map[string]interface{}{"key": key})
-	if err != nil {
-		return nil, err
-	}
-
-	reports, ok := result["report_business_objects"].([]interface{})
-	if !ok || len(reports) == 0 {
-		return nil, fmt.Errorf("report not found: %s", key)
-	}
-
-	// Parse and return
-	data := reports[0].(map[string]interface{})
-	report := &ReportBusinessObject{
-		ID:          data["id"].(string),
-		Key:         data["key"].(string),
-		Name:        getString(data, "name"),
-		DisplayName: getString(data, "display_name"),
-		Description: getString(data, "description"),
-		Category:    getString(data, "category"),
-		ReportType:  getString(data, "report_type"),
-		IsSystem:    getBool(data, "is_system"),
-		IsActive:    getBool(data, "is_active"),
-	}
-
-	// Parse data source
-	if ds, ok := data["data_source"].(map[string]interface{}); ok {
-		dsJSON, _ := json.Marshal(ds)
-		json.Unmarshal(dsJSON, &report.DataSource)
-	}
-
-	// Parse semantic bindings
-	if bindings, ok := data["semantic_bindings"].([]interface{}); ok {
-		for _, b := range bindings {
-			bJSON, _ := json.Marshal(b)
-			var binding SemanticBinding
-			json.Unmarshal(bJSON, &binding)
-			report.SemanticBindings = append(report.SemanticBindings, binding)
-		}
-	}
-
-	return report, nil
+	return nil, fmt.Errorf("GetReportBO: Hasura removed from WorkdayReportService")
 }
 
 // ListReportBOs lists available reports by category
 func (s *WorkdayReportService) ListReportBOs(ctx context.Context, category string) ([]*ReportBusinessObject, error) {
-	query := `
-		query ListReportBOs($category: String) {
-			report_business_objects(
-				where: { is_active: { _eq: true }, category: { _eq: $category } }
-				order_by: { name: asc }
-			) {
-				id
-				key
-				name
-				display_name
-				description
-				category
-				report_type
-				is_system
-				output_formats
-			}
-		}
-	`
-
-	vars := map[string]interface{}{}
-	if category != "" {
-		vars["category"] = category
-	}
-
-	result, err := s.hasuraClient.Query(query, vars)
-	if err != nil {
-		return nil, err
-	}
-
-	items, ok := result["report_business_objects"].([]interface{})
-	if !ok {
-		return []*ReportBusinessObject{}, nil
-	}
-
-	reports := make([]*ReportBusinessObject, 0, len(items))
-	for _, item := range items {
-		data := item.(map[string]interface{})
-		reports = append(reports, &ReportBusinessObject{
-			ID:          data["id"].(string),
-			Key:         getString(data, "key"),
-			Name:        getString(data, "name"),
-			DisplayName: getString(data, "display_name"),
-			Description: getString(data, "description"),
-			Category:    getString(data, "category"),
-			ReportType:  getString(data, "report_type"),
-			IsSystem:    getBool(data, "is_system"),
-		})
-	}
-
-	return reports, nil
+	return nil, fmt.Errorf("ListReportBOs: Hasura removed from WorkdayReportService")
 }
 
 // buildSemanticQuery builds a query from semantic bindings

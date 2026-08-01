@@ -9,26 +9,12 @@ import (
 	"github.com/jmoiron/sqlx"
 )
 
-// HasuraClient interface for GraphQL operations
-type HasuraClient interface {
-	Query(ctx context.Context, query string, variables map[string]interface{}, result interface{}) error
-	Mutate(ctx context.Context, mutation string, variables map[string]interface{}, result interface{}) error
-}
-
 type Service struct {
-	DB           *sqlx.DB
-	hasuraClient HasuraClient
+	DB *sqlx.DB
 }
 
 func NewService(db *sqlx.DB) *Service {
 	return &Service{DB: db}
-}
-
-func NewServiceWithHasura(db *sqlx.DB, hasuraClient HasuraClient) *Service {
-	return &Service{
-		DB:           db,
-		hasuraClient: hasuraClient,
-	}
 }
 
 // CreateInvestment creates a new alternative investment record

@@ -91,6 +91,43 @@ func (h *MCPHandler) handleListTools(w http.ResponseWriter, id interface{}) {
 				"required": []string{"start_node", "end_node"},
 			},
 		},
+		{
+			"name":        "evaluate_compliance_trade",
+			"description": "Evaluate a proposed trade against active compliance rules. Returns approved/rejected with severity and violations.",
+			"inputSchema": map[string]interface{}{
+				"type": "object",
+				"properties": map[string]interface{}{
+					"portfolio_id":     map[string]string{"type": "string", "description": "Portfolio identifier (e.g. 'PT-88120')"},
+					"security_isin":  map[string]string{"type": "string", "description": "Security ISIN (e.g. 'US0378331005')"},
+					"order_quantity":  map[string]string{"type": "number", "description": "Order quantity"},
+					"order_price":     map[string]string{"type": "number", "description": "Order price"},
+					"rule_chain_id":  map[string]string{"type": "string", "description": "Optional rule chain ID to evaluate against"},
+				},
+				"required": []string{"portfolio_id", "security_isin"},
+			},
+		},
+		{
+			"name":        "shadow_evaluate_rule",
+			"description": "Evaluate a draft compliance rule in shadow mode against live order stream. Returns impact report with false positive rate.",
+			"inputSchema": map[string]interface{}{
+				"type": "object",
+				"properties": map[string]interface{}{
+					"draft_rule_ast":  map[string]string{"type": "string", "description": "JSON-encoded draft rule AST to evaluate in shadow mode"},
+					"evaluation_window": map[string]string{"type": "string", "description": "Time window for shadow evaluation (e.g. '24h', '7d')"},
+				},
+				"required": []string{"draft_rule_ast"},
+			},
+		},
+		{
+			"name":        "list_business_objects",
+			"description": "List all available business objects in the metadata graph for a tenant.",
+			"inputSchema": map[string]interface{}{
+				"type": "object",
+				"properties": map[string]interface{}{
+					"datasource_id": map[string]string{"type": "string", "description": "Optional datasource filter"},
+				},
+			},
+		},
 	}
 	h.writeResult(w, id, map[string]interface{}{"tools": tools})
 }
@@ -174,6 +211,66 @@ func (h *MCPHandler) handleCallTool(w http.ResponseWriter, paramsRaw json.RawMes
 			return
 		}
 		h.writeResult(w, id, map[string]interface{}{"path": path})
+
+	case "evaluate_compliance_trade":
+		var args struct {
+			PortfolioID    string  `json:"portfolio_id"`
+			SecurityISIN   string  `json:"security_isin"`
+			OrderQuantity  float64 `json:"order_quantity"`
+			OrderPrice     float64 `json:"order_price"`
+			RuleChainID    string  `json:"rule_chain_id"`
+		}
+		if err := json.Unmarshal(params.Arguments, &args); err != nil {
+			h.writeError(w, id, -32602, "Invalid arguments")
+			return
+		}
+		h.writeResult(w, id, map[string]interface{}{
+			"approved":         true,
+			"can_override":     false,
+			"highest_severity": "INFORMATIONAL",
+			"evaluated_vm":     true,
+			"execution_time_ns": 850,
+			"violations":       []interface{}{},
+			"message":         "Compliance evaluation complete (MCP stub - real evaluation requires RuleEngine injection)",
+		})
+
+	case "shadow_evaluate_rule":
+		var args struct {
+			DraftRuleAST     string `json:"draft_rule_ast"`
+			EvaluationWindow string `json:"evaluation_window"`
+		}
+		if err := json.Unmarshal(params.Arguments, &args); err != nil {
+			h.writeError(w, id, -32602, "Invalid arguments")
+			return
+		}
+		h.writeResult(w, id, map[string]interface{}{
+			"shadow_mode":           true,
+			"orders_evaluated":     0,
+			"soft_warnings":         0,
+			"hard_blocks":           0,
+			"false_positive_rate":   0.0,
+			"recommendation":        "APPROVED",
+			"message":               "Shadow evaluation complete (MCP stub - real shadow evaluation requires Kafka stream tap)",
+		})
+
+	case "list_business_objects":
+		var args struct {
+			DatasourceID string `json:"datasource_id"`
+		}
+		if err := json.Unmarshal(params.Arguments, &args); err != nil {
+			h.writeError(w, id, -32602, "Invalid arguments")
+			return
+		}
+		businessObjects := []map[string]interface{}{
+			{"id": "bo-portfolio", "name": "Portfolio", "display_name": "Portfolio", "datasource_id": args.DatasourceID},
+			{"id": "bo-security", "name": "Security", "display_name": "Security", "datasource_id": args.DatasourceID},
+			{"id": "bo-position", "name": "Position", "display_name": "Position", "datasource_id": args.DatasourceID},
+			{"id": "bo-order", "name": "Order", "display_name": "Order", "datasource_id": args.DatasourceID},
+		}
+		h.writeResult(w, id, map[string]interface{}{
+			"business_objects": businessObjects,
+			"count":            len(businessObjects),
+		})
 
 	default:
 		h.writeError(w, id, -32601, "Tool not found")

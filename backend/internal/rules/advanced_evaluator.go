@@ -2,21 +2,20 @@ package rules
 
 import (
 	"fmt"
+
+	vm "github.com/hondyman/uisce/backend/internal/rules/vm"
 )
 
-// AdvancedEvaluator handles recursive evaluation of complex rule structures
 type AdvancedEvaluator struct {
 	baseEvaluator *ConditionEvaluator
 }
 
-// NewAdvancedEvaluator creates a new evaluator instance
 func NewAdvancedEvaluator() *AdvancedEvaluator {
 	return &AdvancedEvaluator{
 		baseEvaluator: NewConditionEvaluator(),
 	}
 }
 
-// Evaluate checks if the data satisfies the rule structure
 func (ae *AdvancedEvaluator) Evaluate(node RuleNode, data map[string]interface{}) (bool, error) {
 	switch node.Type {
 	case NodeTypeGroup:
@@ -29,6 +28,11 @@ func (ae *AdvancedEvaluator) Evaluate(node RuleNode, data map[string]interface{}
 			return false, fmt.Errorf("condition node is nil")
 		}
 		return ae.evaluateCondition(node.Condition, data)
+	case vm.NodeTypeExpression:
+		if node.Expression == nil {
+			return false, fmt.Errorf("expression node is nil")
+		}
+		return ae.evaluateExpression(node.Expression, data)
 	default:
 		return false, fmt.Errorf("unknown node type: %s", node.Type)
 	}
@@ -36,7 +40,7 @@ func (ae *AdvancedEvaluator) Evaluate(node RuleNode, data map[string]interface{}
 
 func (ae *AdvancedEvaluator) evaluateGroup(group *RuleGroup, data map[string]interface{}) (bool, error) {
 	if len(group.Conditions) == 0 {
-		return true, nil // Empty group is considered true (or should it be false? usually true as "no constraints")
+		return true, nil
 	}
 
 	switch group.Operator {
@@ -47,7 +51,7 @@ func (ae *AdvancedEvaluator) evaluateGroup(group *RuleGroup, data map[string]int
 				return false, err
 			}
 			if !result {
-				return false, nil // Short-circuit
+				return false, nil
 			}
 		}
 		return true, nil
@@ -59,25 +63,21 @@ func (ae *AdvancedEvaluator) evaluateGroup(group *RuleGroup, data map[string]int
 				return false, err
 			}
 			if result {
-				return true, nil // Short-circuit
+				return true, nil
 			}
 		}
 		return false, nil
 
 	case "NOT":
-		// NOT usually applies to a single child or treats children as an implicit AND
-		// For simplicity, let's assume it negates the result of an implicit AND of its children
 		for _, child := range group.Conditions {
 			result, err := ae.Evaluate(child, data)
 			if err != nil {
 				return false, err
 			}
 			if !result {
-				// If any child is false, the AND is false, so NOT(AND) is true
 				return true, nil
 			}
 		}
-		// All children are true, so AND is true, so NOT(AND) is false
 		return false, nil
 
 	default:
@@ -86,29 +86,123 @@ func (ae *AdvancedEvaluator) evaluateGroup(group *RuleGroup, data map[string]int
 }
 
 func (ae *AdvancedEvaluator) evaluateCondition(cond *RuleCondition, data map[string]interface{}) (bool, error) {
-	// Convert RuleCondition to the map format expected by ConditionEvaluator
-	// This allows us to reuse the existing logic including hierarchy support
-
-	// Determine the field to use. If FieldPath is present (cross-entity), use it.
-	// The ConditionEvaluator might need updates to handle dot-notation if it doesn't already fully support it in all paths,
-	// but HierarchyResolver usually handles it.
 	field := cond.Field
 	if cond.FieldPath != "" {
 		field = cond.FieldPath
 	}
-
-	// Construct a map that mimics the old structure
 	conditionMap := map[string]interface{}{
-		"type":     "simple", // Default to simple, but we might need to detect hierarchy
+		"type":     "simple",
 		"field":    field,
 		"operator": cond.Operator,
 		"value":    cond.Value,
 	}
-
-	// If it's a hierarchy condition (e.g. has sub_entity), we might need to map it differently.
-	// For now, let's assume the "simple" evaluator with HierarchyResolver's dot notation support is sufficient for most cases.
-	// Looking at WorldClassConditionBuilder, it produces flat fields or dot-notation fields.
-
-	// Pass to base evaluator
 	return ae.baseEvaluator.EvaluateWithHierarchy(conditionMap, data)
+}
+
+func (ae *AdvancedEvaluator) evaluateExpression(expr *vm.Expression, data map[string]interface{}) (bool, error) {
+	if expr == nil || expr.Root == nil {
+		return false, fmt.Errorf("nil expression")
+	}
+	result, err := ae.evalExprNode(expr.Root, data)
+	if err != nil {
+		return false, err
+	}
+	if b, ok := result.(bool); ok {
+		return b, nil
+	}
+	return false, fmt.Errorf("expression did not evaluate to bool: %T", result)
+}
+
+func (ae *AdvancedEvaluator) evalExprNode(node vm.ExprNode, data map[string]interface{}) (any, error) {
+	switch n := node.(type) {
+	case *vm.BinaryExpr:
+		return ae.evalBinaryExpr(n, data)
+	case *vm.FieldRef:
+		return ae.evalFieldRef(n, data)
+	case *vm.Literal:
+		return n.Value, nil
+	default:
+		return nil, fmt.Errorf("unknown ExprNode type: %T", node)
+	}
+}
+
+func (ae *AdvancedEvaluator) evalBinaryExpr(be *vm.BinaryExpr, data map[string]interface{}) (any, error) {
+	lVal, err := ae.evalExprNode(be.Left, data)
+	if err != nil {
+		return nil, err
+	}
+	rVal, err := ae.evalExprNode(be.Right, data)
+	if err != nil {
+		return nil, err
+	}
+
+	a, b, ok := toFloat64(lVal, rVal)
+	if !ok {
+		return nil, fmt.Errorf("expression operands not numeric: %T, %T", lVal, rVal)
+	}
+
+	switch be.Op {
+	case "+":
+		return a + b, nil
+	case "-":
+		return a - b, nil
+	case "*":
+		return a * b, nil
+	case "/":
+		if b == 0 {
+			return nil, fmt.Errorf("division by zero")
+		}
+		return a / b, nil
+	case "==":
+		return a == b, nil
+	case "!=":
+		return a != b, nil
+	case ">":
+		return a > b, nil
+	case "<":
+		return a < b, nil
+	case ">=":
+		return a >= b, nil
+	case "<=":
+		return a <= b, nil
+	default:
+		return nil, fmt.Errorf("unsupported expression operator: %s", be.Op)
+	}
+}
+
+func (ae *AdvancedEvaluator) evalFieldRef(fr *vm.FieldRef, data map[string]interface{}) (any, error) {
+	val, found := ae.baseEvaluator.GetFieldValue(fr.Path, data)
+	if !found {
+		return nil, fmt.Errorf("field not found: %s", fr.Path)
+	}
+	return val, nil
+}
+
+func toFloat64(a, b any) (float64, float64, bool) {
+	var af, bf float64
+	ok := true
+	switch va := a.(type) {
+	case float64:
+		af = va
+	case int:
+		af = float64(va)
+	case int64:
+		af = float64(va)
+	default:
+		ok = false
+	}
+	switch vb := b.(type) {
+	case float64:
+		bf = vb
+	case int:
+		bf = float64(vb)
+	case int64:
+		bf = float64(vb)
+	default:
+		ok = false
+	}
+	if !ok {
+		return 0, 0, false
+	}
+	return af, bf, true
 }

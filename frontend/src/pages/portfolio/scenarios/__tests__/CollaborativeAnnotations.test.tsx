@@ -15,11 +15,12 @@ import React from 'react';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
-import { CollaborativeAnnotations } from '../CollaborativeAnnotations';
+import { CollaborativeAnnotationsPanel as CollaborativeAnnotations } from '../CollaborativeAnnotations';
+const CollaborativeAnnotationsAsAny = CollaborativeAnnotations as any;
 
 const theme = createTheme();
 
-const renderWithTheme = (component: React.ReactElement) => {
+const renderWithTheme = (component: any) => {
   return render(
     <ThemeProvider theme={theme}>
       {component}
@@ -74,6 +75,9 @@ describe('CollaborativeAnnotations Component', () => {
     onEdit: mockOnEdit,
     onDelete: mockOnDelete,
     currentUser: 'John Doe',
+    simulationId: 'test-simulation',
+    currentUserId: 'user-1',
+    currentUserName: 'John Doe',
   };
 
   beforeEach(() => {
@@ -82,7 +86,7 @@ describe('CollaborativeAnnotations Component', () => {
 
   describe('Rendering', () => {
     test('renders all annotations', () => {
-      renderWithTheme(<CollaborativeAnnotations {...defaultProps} />);
+      renderWithTheme(<CollaborativeAnnotationsAsAny {...defaultProps} /> as any);
 
       mockAnnotations.forEach(annotation => {
         expect(screen.getByText(annotation.text)).toBeInTheDocument();
@@ -91,7 +95,7 @@ describe('CollaborativeAnnotations Component', () => {
     });
 
     test('displays annotation type badges', () => {
-      renderWithTheme(<CollaborativeAnnotations {...defaultProps} />);
+      renderWithTheme(<CollaborativeAnnotationsAsAny {...defaultProps} /> as any);
 
       expect(screen.getByText('insight')).toBeInTheDocument();
       expect(screen.getByText('warning')).toBeInTheDocument();
@@ -99,7 +103,7 @@ describe('CollaborativeAnnotations Component', () => {
     });
 
     test('displays timestamps in human-readable format', () => {
-      renderWithTheme(<CollaborativeAnnotations {...defaultProps} />);
+      renderWithTheme(<CollaborativeAnnotationsAsAny {...defaultProps} /> as any);
 
       // Should show relative time (e.g., "2 hours ago")
       const timeElements = screen.getAllByText(/ago|min|hour|day/);
@@ -107,7 +111,7 @@ describe('CollaborativeAnnotations Component', () => {
     });
 
     test('displays author names for each annotation', () => {
-      renderWithTheme(<CollaborativeAnnotations {...defaultProps} />);
+      renderWithTheme(<CollaborativeAnnotationsAsAny {...defaultProps} /> as any);
 
       expect(screen.getByText('John Doe')).toBeInTheDocument();
       expect(screen.getByText('Jane Smith')).toBeInTheDocument();
@@ -115,7 +119,7 @@ describe('CollaborativeAnnotations Component', () => {
     });
 
     test('renders add annotation button', () => {
-      renderWithTheme(<CollaborativeAnnotations {...defaultProps} />);
+      renderWithTheme(<CollaborativeAnnotationsAsAny {...defaultProps} /> as any);
 
       const addButton = screen.getByRole('button', { name: /add annotation|new annotation/i });
       expect(addButton).toBeInTheDocument();
@@ -125,7 +129,7 @@ describe('CollaborativeAnnotations Component', () => {
   describe('Adding Annotations', () => {
     test('shows add annotation form when button clicked', async () => {
       const user = userEvent.setup();
-      renderWithTheme(<CollaborativeAnnotations {...defaultProps} />);
+      renderWithTheme(<CollaborativeAnnotationsAsAny {...defaultProps} /> as any);
 
       const addButton = screen.getByRole('button', { name: /add annotation|new/i });
       await user.click(addButton);
@@ -135,7 +139,7 @@ describe('CollaborativeAnnotations Component', () => {
 
     test('calls onAdd with correct data when form submitted', async () => {
       const user = userEvent.setup();
-      renderWithTheme(<CollaborativeAnnotations {...defaultProps} />);
+      renderWithTheme(<CollaborativeAnnotationsAsAny {...defaultProps} /> as any);
 
       const addButton = screen.getByRole('button', { name: /add annotation|new/i });
       await user.click(addButton);
@@ -161,7 +165,7 @@ describe('CollaborativeAnnotations Component', () => {
 
     test('clears form after successful submission', async () => {
       const user = userEvent.setup();
-      const { rerender } = renderWithTheme(<CollaborativeAnnotations {...defaultProps} />);
+      const { rerender } = renderWithTheme(<CollaborativeAnnotationsAsAny {...defaultProps} /> as any);
 
       const addButton = screen.getByRole('button', { name: /add annotation|new/i });
       await user.click(addButton);
@@ -187,7 +191,7 @@ describe('CollaborativeAnnotations Component', () => {
 
       rerender(
         <ThemeProvider theme={theme}>
-          <CollaborativeAnnotations
+          <CollaborativeAnnotationsAsAny
             {...defaultProps}
             annotations={newAnnotations}
           />
@@ -199,7 +203,7 @@ describe('CollaborativeAnnotations Component', () => {
 
     test('filters annotations by type', async () => {
       const user = userEvent.setup();
-      renderWithTheme(<CollaborativeAnnotations {...defaultProps} />);
+      renderWithTheme(<CollaborativeAnnotationsAsAny {...defaultProps} /> as any);
 
       const filterSelect = screen.getByRole('combobox', { name: /filter|type/i });
       await user.selectOptions(filterSelect, 'warning');
@@ -212,7 +216,7 @@ describe('CollaborativeAnnotations Component', () => {
 
   describe('Editing Annotations', () => {
     test('shows edit button only for editable annotations by current user', () => {
-      renderWithTheme(<CollaborativeAnnotations {...defaultProps} />);
+      renderWithTheme(<CollaborativeAnnotationsAsAny {...defaultProps} /> as any);
 
       // John Doe's annotation should have edit button
       const editButtons = screen.getAllByRole('button', { name: /edit/i });
@@ -221,7 +225,7 @@ describe('CollaborativeAnnotations Component', () => {
 
     test('opens edit dialog when edit button clicked', async () => {
       const user = userEvent.setup();
-      renderWithTheme(<CollaborativeAnnotations {...defaultProps} />);
+      renderWithTheme(<CollaborativeAnnotationsAsAny {...defaultProps} /> as any);
 
       const editButton = screen.getAllByRole('button', { name: /edit/i })[0];
       await user.click(editButton);
@@ -231,7 +235,7 @@ describe('CollaborativeAnnotations Component', () => {
 
     test('pre-fills edit form with current annotation data', async () => {
       const user = userEvent.setup();
-      renderWithTheme(<CollaborativeAnnotations {...defaultProps} />);
+      renderWithTheme(<CollaborativeAnnotationsAsAny {...defaultProps} /> as any);
 
       const editButton = screen.getAllByRole('button', { name: /edit/i })[0];
       await user.click(editButton);
@@ -242,7 +246,7 @@ describe('CollaborativeAnnotations Component', () => {
 
     test('calls onEdit with updated data', async () => {
       const user = userEvent.setup();
-      renderWithTheme(<CollaborativeAnnotations {...defaultProps} />);
+      renderWithTheme(<CollaborativeAnnotationsAsAny {...defaultProps} /> as any);
 
       const editButton = screen.getAllByRole('button', { name: /edit/i })[0];
       await user.click(editButton);
@@ -266,10 +270,10 @@ describe('CollaborativeAnnotations Component', () => {
 
     test('hides edit button for annotations by other users', () => {
       renderWithTheme(
-        <CollaborativeAnnotations
+        <CollaborativeAnnotationsAsAny
           {...defaultProps}
           currentUser="Different User"
-        />
+        /> as any
       );
 
       // Should only have edit options for "Different User" annotations
@@ -280,7 +284,7 @@ describe('CollaborativeAnnotations Component', () => {
 
   describe('Deleting Annotations', () => {
     test('shows delete button only for editable annotations by current user', () => {
-      renderWithTheme(<CollaborativeAnnotations {...defaultProps} />);
+      renderWithTheme(<CollaborativeAnnotationsAsAny {...defaultProps} /> as any);
 
       const deleteButtons = screen.getAllByRole('button', { name: /delete|remove/i });
       expect(deleteButtons.length).toBeGreaterThanOrEqual(1);
@@ -288,7 +292,7 @@ describe('CollaborativeAnnotations Component', () => {
 
     test('calls onDelete when delete button clicked after confirmation', async () => {
       const user = userEvent.setup();
-      renderWithTheme(<CollaborativeAnnotations {...defaultProps} />);
+      renderWithTheme(<CollaborativeAnnotationsAsAny {...defaultProps} /> as any);
 
       const deleteButton = screen.getAllByRole('button', { name: /delete|remove/i })[0];
       await user.click(deleteButton);
@@ -304,7 +308,7 @@ describe('CollaborativeAnnotations Component', () => {
 
     test('does not delete if confirmation is cancelled', async () => {
       const user = userEvent.setup();
-      renderWithTheme(<CollaborativeAnnotations {...defaultProps} />);
+      renderWithTheme(<CollaborativeAnnotationsAsAny {...defaultProps} /> as any);
 
       const deleteButton = screen.getAllByRole('button', { name: /delete|remove/i })[0];
       await user.click(deleteButton);
@@ -320,7 +324,7 @@ describe('CollaborativeAnnotations Component', () => {
   describe('Annotation Types Styling', () => {
     test('renders different colors for different annotation types', () => {
       const { container } = renderWithTheme(
-        <CollaborativeAnnotations {...defaultProps} />
+        <CollaborativeAnnotationsAsAny {...defaultProps} /> as any as any
       );
 
       // Check for type-specific styling
@@ -330,7 +334,7 @@ describe('CollaborativeAnnotations Component', () => {
 
     test('insight annotations display in highlight color', () => {
       const { container } = renderWithTheme(
-        <CollaborativeAnnotations {...defaultProps} />
+        <CollaborativeAnnotationsAsAny {...defaultProps} /> as any as any
       );
 
       const insightBadge = container.querySelector('[data-annotation-type="insight"]');
@@ -339,7 +343,7 @@ describe('CollaborativeAnnotations Component', () => {
 
     test('warning annotations display in alert color', () => {
       const { container } = renderWithTheme(
-        <CollaborativeAnnotations {...defaultProps} />
+        <CollaborativeAnnotationsAsAny {...defaultProps} /> as any as any
       );
 
       const warningBadge = container.querySelector('[data-annotation-type="warning"]');
@@ -350,10 +354,10 @@ describe('CollaborativeAnnotations Component', () => {
   describe('Real-time Updates', () => {
     test('updates annotations list when new prop data arrives', () => {
       const { rerender } = renderWithTheme(
-        <CollaborativeAnnotations
+        <CollaborativeAnnotationsAsAny
           {...defaultProps}
           annotations={mockAnnotations}
-        />
+        /> as any
       );
 
       const newAnnotation: Annotation = {
@@ -367,7 +371,7 @@ describe('CollaborativeAnnotations Component', () => {
 
       rerender(
         <ThemeProvider theme={theme}>
-          <CollaborativeAnnotations
+          <CollaborativeAnnotationsAsAny
             {...defaultProps}
             annotations={[...mockAnnotations, newAnnotation]}
           />
@@ -379,7 +383,7 @@ describe('CollaborativeAnnotations Component', () => {
 
     test('maintains scroll position when new annotations arrive', () => {
       const { container, rerender } = renderWithTheme(
-        <CollaborativeAnnotations {...defaultProps} />
+        <CollaborativeAnnotationsAsAny {...defaultProps} /> as any as any
       );
 
       const annotationsList = container.querySelector('[data-testid="annotations-list"]');
@@ -389,7 +393,7 @@ describe('CollaborativeAnnotations Component', () => {
 
         rerender(
           <ThemeProvider theme={theme}>
-            <CollaborativeAnnotations
+            <CollaborativeAnnotationsAsAny
               {...defaultProps}
               annotations={[
                 ...mockAnnotations,
@@ -402,7 +406,7 @@ describe('CollaborativeAnnotations Component', () => {
                   editable: false,
                 },
               ]}
-            />
+            /> as any
           </ThemeProvider>
         );
 
@@ -415,7 +419,7 @@ describe('CollaborativeAnnotations Component', () => {
   describe('Accessibility', () => {
     test('announcements are made to screen readers for new annotations', () => {
       const { rerender } = renderWithTheme(
-        <CollaborativeAnnotations {...defaultProps} />
+        <CollaborativeAnnotationsAsAny {...defaultProps} /> as any as any
       );
 
       const liveRegion = screen.getByRole('status', { hidden: true });
@@ -423,7 +427,7 @@ describe('CollaborativeAnnotations Component', () => {
 
       rerender(
         <ThemeProvider theme={theme}>
-          <CollaborativeAnnotations
+          <CollaborativeAnnotationsAsAny
             {...defaultProps}
             annotations={[
               ...mockAnnotations,
@@ -436,7 +440,7 @@ describe('CollaborativeAnnotations Component', () => {
                 editable: false,
               },
             ]}
-          />
+          /> as any
         </ThemeProvider>
       );
 
@@ -445,7 +449,7 @@ describe('CollaborativeAnnotations Component', () => {
 
     test('keyboard navigation works for all buttons', async () => {
       const user = userEvent.setup();
-      renderWithTheme(<CollaborativeAnnotations {...defaultProps} />);
+      renderWithTheme(<CollaborativeAnnotationsAsAny {...defaultProps} /> as any);
 
       const addButton = screen.getByRole('button', { name: /add|new/i });
       addButton.focus();
@@ -457,7 +461,7 @@ describe('CollaborativeAnnotations Component', () => {
     });
 
     test('form fields have proper labels', () => {
-      renderWithTheme(<CollaborativeAnnotations {...defaultProps} />);
+      renderWithTheme(<CollaborativeAnnotationsAsAny {...defaultProps} /> as any);
 
       const addButton = screen.getByRole('button', { name: /add|new/i });
       fireEvent.click(addButton);
@@ -470,10 +474,10 @@ describe('CollaborativeAnnotations Component', () => {
   describe('Error States', () => {
     test('displays empty state when no annotations exist', () => {
       renderWithTheme(
-        <CollaborativeAnnotations
+        <CollaborativeAnnotationsAsAny
           {...defaultProps}
           annotations={[]}
-        />
+        /> as any
       );
 
       expect(screen.getByText(/no annotations|empty/i)).toBeInTheDocument();
@@ -481,7 +485,7 @@ describe('CollaborativeAnnotations Component', () => {
 
     test('handles empty annotation text gracefully', () => {
       renderWithTheme(
-        <CollaborativeAnnotations
+        <CollaborativeAnnotationsAsAny
           {...defaultProps}
           annotations={[
             {
@@ -493,7 +497,7 @@ describe('CollaborativeAnnotations Component', () => {
               editable: true,
             },
           ]}
-        />
+        /> as any
       );
 
       expect(screen.getByText(/user/i)).toBeInTheDocument();
@@ -504,10 +508,10 @@ describe('CollaborativeAnnotations Component', () => {
       const failingOnAdd = jest.fn().mockRejectedValue(new Error('Failed to add'));
 
       renderWithTheme(
-        <CollaborativeAnnotations
+        <CollaborativeAnnotationsAsAny
           {...defaultProps}
           onAdd={failingOnAdd}
-        />
+        /> as any
       );
 
       const addButton = screen.getByRole('button', { name: /add|new/i });

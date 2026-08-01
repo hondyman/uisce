@@ -42,7 +42,8 @@ import {
   Lock,
   Unlock
 } from 'lucide-react';
-import { AdvancedConditionBuilder, ConditionGroup } from '../AdvancedConditionBuilder';
+import { AdvancedConditionBuilder } from '../AdvancedConditionBuilder';
+import { ConditionGroup } from '../ExpressionBuilder/AdvancedConditionBuilder';
 
 // ============================================================================
 // Types
@@ -991,13 +992,14 @@ export const UnifiedRuleEditor: React.FC<UnifiedRuleEditorProps> = ({
                   </select>
                 </div>
 
-                {logic.logic_type === 'condition' && selectedEntity && (
-                  <AdvancedConditionBuilder
-                    value={logic.condition_tree || { id: generateId(), type: 'group', operator: 'AND', conditions: [] }}
-                    onChange={(tree: any) => updateLogic(idx, { condition_tree: tree })}
-                    availableFields={selectedEntity.fields}
-                    entityName={rule.target_entity}
-                  />
+                {logic.logic_type === 'condition' && selectedEntity && React.createElement(
+                  AdvancedConditionBuilder as any,
+                  {
+                    value: logic.condition_tree || { id: generateId(), type: 'group', operator: 'AND', conditions: [] },
+                    onChange: (tree: any) => updateLogic(idx, { condition_tree: tree }),
+                    availableFields: selectedEntity.fields,
+                    entityName: rule.target_entity,
+                  }
                 )}
 
                 {logic.logic_type === 'expression' && (

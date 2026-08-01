@@ -8,7 +8,7 @@ export const ComponentSchema = z.object({
     subtitle: z.string().optional(),
     binding: z.object({
         gql: z.string(),
-        variables: z.record(z.any()).optional(),
+        variables: z.record(z.string(), z.any()).optional(),
         dataPath: z.string(),
     }).optional(),
     // Specific component props can be unioned here or kept loose
@@ -55,7 +55,7 @@ export const ChartComponentSchema = z.object({
     binding: z.object({
         endpoint: z.string().optional(),
         method: z.string().optional(),
-        variables: z.record(z.any()).optional(),
+        variables: z.record(z.string(), z.any()).optional(),
         gql: z.string().optional(),
         dataPath: z.string().optional(),
     }).optional(),

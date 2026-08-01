@@ -266,6 +266,25 @@ Responses echo the computed `status`, `max_delta`, hashes, and diff summary. Whe
 
 ---
 
+## Compliance Surface Status
+
+| Phase | Component | Runtime Status |
+|---|---|---|
+| 1 | Profiler + Drift Healer | ✅ Wired into `Evaluate()` |
+| 2 | Public REST endpoints | ✅ Wired (activated when `REDIS_ADDR` set) |
+| 3 | Survivorship / Lookthrough / Telemetry handlers | ✅ Wired (`/api/v1/mdm/survivorship/merge`, `/api/v1/compliance/telemetry`) |
+| 4 | Advisor background worker | ✅ Started in composition root (`5m` scan interval) |
+| 5 | CDC schema consumer | ✅ Started on topic `uisce.cdc.schema` |
+| 7 | QuickFIX TCP Acceptor | ✅ Listening on port `:8980` (or `FIX_ACCEPTOR_PORT`) |
+
+## Required Environment Variables
+
+| Variable | Default | Effect |
+|---|---|---|
+| `REDIS_ADDR` | (unset) | Activates `ComplianceDeps` and registers public endpoints |
+| `KAFKA_BROKERS` | (unset) | Activates override audit publishing & Redpanda CDC schema listener |
+| `FIX_ACCEPTOR_PORT` | `8980` | QuickFIX TCP acceptor port |
+
 ## Database migrations (development)
 
 The backend image runs the migration runner during container startup. The migration runner now includes the seed file `migrations/000023_seed_private_markets_bundles.sql` which inserts example private markets bundles.

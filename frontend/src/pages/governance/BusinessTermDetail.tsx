@@ -113,7 +113,7 @@ const BusinessTermDetail = () => {
 };
 
 // 1.2 Add Semantic Term Mapping Modal
-const AddMappingModal = ({open, onClose, businessTermId }) => {
+const AddMappingModal = ({open, onClose, businessTermId }: any) => {
     const [searchTerm, setSearchTerm] = useState('');
     // Mock search results
     const results = [

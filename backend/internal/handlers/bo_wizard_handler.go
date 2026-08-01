@@ -10,22 +10,17 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/hondyman/uisce/backend/internal/events"
-	hasuraclient "github.com/hondyman/uisce/libs/hasura-client"
 	"github.com/jmoiron/sqlx"
 	"github.com/hondyman/uisce/libs/jwt-middleware"
 )
 
-// BOWizardHandler handles Business Object creation wizard endpoints
 type BOWizardHandler struct {
-	db           *sqlx.DB
-	hasuraClient *hasuraclient.HasuraClient
+	db *sqlx.DB
 }
 
-// NewBOWizardHandler creates a new wizard handler
-func NewBOWizardHandler(db *sqlx.DB, hasuraClient *hasuraclient.HasuraClient) *BOWizardHandler {
+func NewBOWizardHandler(db *sqlx.DB) *BOWizardHandler {
 	return &BOWizardHandler{
-		db:           db,
-		hasuraClient: hasuraClient,
+		db: db,
 	}
 }
 
@@ -243,207 +238,7 @@ func (h *BOWizardHandler) GetRelatedBusinessObjects(w http.ResponseWriter, r *ht
 
 // SaveBusinessObject creates a new BO and queues edge creation
 func (h *BOWizardHandler) SaveBusinessObject(w http.ResponseWriter, r *http.Request) {
-	var req SaveWizardRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "Invalid request body: "+err.Error(), http.StatusBadRequest)
-		return
-	}
-
-	claims := jwtmiddleware.GetClaimsFromContext(r)
-	if claims == nil {
-		http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
-		return
-	}
-	tenantID := claims.TenantID
-	datasourceID := r.Header.Get("X-Tenant-Datasource-ID")
-	if tenantID == "" || datasourceID == "" {
-		http.Error(w, "X-Tenant-ID and X-Tenant-Datasource-ID headers required", http.StatusBadRequest)
-		return
-	}
-
-	// Validate datasourceID is a proper UUID (or empty)
-	if datasourceID != "" {
-		if _, err := uuid.Parse(datasourceID); err != nil {
-			http.Error(w, "Invalid X-Tenant-Datasource-ID header: "+err.Error(), http.StatusBadRequest)
-			return
-		}
-	}
-
-	ctx := r.Context()
-
-	// Validate the request
-	validationResult := ValidateBusinessObject(ctx, h.db, req, tenantID, datasourceID)
-	if !validationResult.Valid {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(validationResult)
-		return
-	}
-
-	// 1. Reserve BO identifier (used across write model and catalog worker)
-	boID := uuid.New().String()
-
-	// Persist the canonical Business Object definition into business_objects via Hasura Mutation
-	configPayload := map[string]interface{}{
-		"driver_table_id":            req.DriverTableID,
-		"selected_terms":             req.SelectedTerms,
-		"linked_bos":                 req.LinkedBOs,
-		"included_terms_from_tables": req.IncludedTermsFromTables,
-	}
-
-	var desc interface{} = nil
-	if req.Description != nil {
-		desc = *req.Description
-	}
-
-	// Prepare mutation for Business Object
-	boMutation := `
-		mutation InsertBusinessObject($object: business_objects_insert_input!) {
-			insert_business_objects_one(object: $object) {
-				id
-			}
-		}
-	`
-
-	boVariables := map[string]interface{}{
-		"object": map[string]interface{}{
-			"id":                   boID,
-			"tenant_id":            tenantID,
-			"tenant_datasource_id": datasourceID,
-			"key":                  req.BOKey,
-			"name":                 req.Name,
-			"display_name":         req.DisplayName,
-			"technical_name":       req.BOKey,
-			"description":          desc,
-			// "fields": []interface{}{} removed as it causes validation error (handled separately)
-			"config":          configPayload,
-			"driver_table_id": req.DriverTableID,
-		},
-	}
-
-	if datasourceID == "" {
-		boVariables["object"].(map[string]interface{})["tenant_datasource_id"] = nil
-	}
-
-	// Execute mutation
-	fmt.Printf("[BO_WIZARD] Executing Hasura mutation for BO: %s\n", boID)
-	// Marshal and log variables for debugging
-	debugBytes, _ := json.Marshal(boVariables)
-	fmt.Printf("[BO_WIZARD] Mutation variables: %s\n", string(debugBytes))
-
-	resp, err := h.hasuraClient.Mutate(boMutation, boVariables)
-	if err != nil {
-		fmt.Printf("[BO_WIZARD] Failed to create business object via Hasura: %v\n", err)
-		http.Error(w, "Failed to create business object: "+err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	// Verify response data
-	if resp == nil || resp["insert_business_objects_one"] == nil {
-		fmt.Printf("[BO_WIZARD] Critical: Hasura returned success but no data for BO %s. Response: %+v\n", boID, resp)
-		http.Error(w, "Failed to persist business object (no data returned)", http.StatusInternalServerError)
-		return
-	}
-	fmt.Printf("[BO_WIZARD] Successfully created BO %s. Response: %+v\n", boID, resp)
-
-	// 2. Populate bo_fields with selected semantic terms via Hasura Mutation
-	if len(req.SelectedTerms) > 0 {
-		var fieldsToInsert []map[string]interface{}
-
-		for i, termID := range req.SelectedTerms {
-			var termName string
-			// We still use SQL to fetch term name from catalog_node (read-only op)
-			err := h.db.GetContext(ctx, &termName, `
-				SELECT node_name FROM catalog_node WHERE id = $1::uuid LIMIT 1
-			`, termID)
-			if err != nil {
-				fmt.Printf("[BO_WIZARD] Warning: Failed to fetch term name for %s: %v\n", termID, err)
-				termName = termID
-			}
-
-			termDisplayName := termName
-
-			fieldsToInsert = append(fieldsToInsert, map[string]interface{}{
-				"id":                 uuid.New().String(),
-				"tenant_id":          tenantID,
-				"business_object_id": boID,
-				"key":                termID, // Using termID as key for now
-				"name":               termName,
-				"field_name":         termName,
-				"display_label":      termDisplayName,
-				"technical_name":     termID,
-				"field_type":         "semantic_term",
-				"is_core":            false,
-				"display_order":      i,
-				"semantic_term_id":   termID,
-			})
-		}
-
-		if len(fieldsToInsert) > 0 {
-			fieldsMutation := `
-				mutation InsertBOFields($objects: [bo_fields_insert_input!]!) {
-					insert_bo_fields(objects: $objects) {
-						affected_rows
-					}
-				}
-			`
-			fieldsVariables := map[string]interface{}{
-				"objects": fieldsToInsert,
-			}
-
-			fmt.Printf("[BO_WIZARD] Executing Hasura mutation for %d fields\n", len(fieldsToInsert))
-			_, err = h.hasuraClient.Mutate(fieldsMutation, fieldsVariables)
-			if err != nil {
-				fmt.Printf("[BO_WIZARD] Warning: Failed to insert bo_fields via Hasura: %v\n", err)
-			}
-		}
-	}
-
-	// Publish event via SQL (using a new transaction since PublishEvent requires *sqlx.Tx)
-	// We do this despite having already committed the data to Hasura.
-	catalogEvent := map[string]interface{}{
-		"bo_id":                      boID,
-		"bo_key":                     req.BOKey,
-		"name":                       req.Name,
-		"display_name":               req.DisplayName,
-		"description":                req.Description,
-		"driver_table_id":            req.DriverTableID,
-		"selected_terms":             req.SelectedTerms,
-		"linked_bos":                 req.LinkedBOs,
-		"included_terms_from_tables": req.IncludedTermsFromTables,
-		"tenant_id":                  tenantID,
-		"datasource_id":              datasourceID,
-	}
-
-	tx, err := h.db.BeginTxx(ctx, nil)
-	if err != nil {
-		fmt.Printf("[BO_WIZARD] Warning: Failed to start transaction for event publishing: %v\n", err)
-	} else {
-		err = events.PublishEvent(ctx, tx, "BusinessObject.CatalogSync", catalogEvent)
-		if err != nil {
-			fmt.Printf("[BO_WIZARD] Warning: Failed to queue catalog sync event: %v\n", err)
-			_ = tx.Rollback()
-		} else {
-			if err := tx.Commit(); err != nil {
-				fmt.Printf("[BO_WIZARD] Warning: Failed to commit event transaction: %v\n", err)
-			}
-		}
-	}
-
-	// Return created BO
-	response := map[string]interface{}{
-		"id":              boID,
-		"bo_key":          req.BOKey,
-		"name":            req.Name,
-		"display_name":    req.DisplayName,
-		"driver_table_id": req.DriverTableID,
-		"status":          "draft",
-		"queued_edges":    0,
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(response)
+	http.Error(w, "SaveBusinessObject: Hasura removed from BOWizardHandler", http.StatusNotImplemented)
 }
 
 // syncBusinessObjectToCatalog creates/updates catalog node and edges for a BO

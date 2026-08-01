@@ -14,7 +14,7 @@ export function TimelineWidget({ def }: TimelineWidgetProps) {
       {def.title && <h3 className="text-lg font-semibold mb-4">{def.title}</h3>}
 
       <div className={isVertical ? "space-y-4" : "flex space-x-4 overflow-x-auto"}>
-        {def.events.map((event: any, idx: number) => (
+        {(def.events || []).map((event: any, idx: number) => (
           <div
             key={event.id}
             className={`flex ${isVertical ? "flex-row" : "flex-col"} gap-4`}
@@ -33,7 +33,7 @@ export function TimelineWidget({ def }: TimelineWidgetProps) {
               )}
             </div>
 
-            {isVertical && idx < def.events.length - 1 && (
+            {isVertical && idx < (def.events?.length || 0) - 1 && (
               <div className="border-l-2 border-gray-200 h-8 ml-4"></div>
             )}
           </div>

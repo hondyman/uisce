@@ -36,13 +36,13 @@ export function FabricFormComponent<TData, TVars extends Record<string, any>>({
   onError,
   render,
 }: FabricFormComponentProps<TData, TVars>): React.ReactElement {
-  const useFormHook = useMutationForm<TData, TVars>({
+  const useFormHook = (useMutationForm as any)({
     mutationFn,
     onSuccess,
     onError,
   });
 
-  return React.createElement(Form<TData, TVars>, {
+  return React.createElement(Form as any, {
     schema,
     useFormHook,
     initialValues,

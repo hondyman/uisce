@@ -13,7 +13,6 @@ import (
 	"time"
 
 	"github.com/hondyman/uisce/backend/internal/starlib"
-	hasuraclient "github.com/hondyman/uisce/libs/hasura-client"
 	"go.starlark.net/starlark"
 	"go.starlark.net/starlarkstruct"
 	"go.starlark.net/syntax"
@@ -47,21 +46,19 @@ type ValidationResponse struct {
 
 // StarlarkEngine provides Workday-style expression evaluation
 type StarlarkEngine struct {
-	hasuraClient *hasuraclient.HasuraClient
-	logger       *zap.Logger
-	cache        map[string]*starlark.Program // Compiled expression cache
-	cacheMu      sync.RWMutex
-	maxSteps     uint64
+	logger   *zap.Logger
+	cache    map[string]*starlark.Program // Compiled expression cache
+	cacheMu  sync.RWMutex
+	maxSteps uint64
 }
 
 // NewStarlarkEngine creates a new expression engine
-func NewStarlarkEngine(hasuraClient *hasuraclient.HasuraClient) *StarlarkEngine {
+func NewStarlarkEngine() *StarlarkEngine {
 	logger, _ := zap.NewProduction()
 	return &StarlarkEngine{
-		hasuraClient: hasuraClient,
-		logger:       logger,
-		cache:        make(map[string]*starlark.Program),
-		maxSteps:     1_000_000,
+		logger:   logger,
+		cache:    make(map[string]*starlark.Program),
+		maxSteps: 1_000_000,
 	}
 }
 
@@ -122,29 +119,6 @@ func (e *StarlarkEngine) getOrCompileProgram(filename string, script string, pre
 	e.cache[key] = compiled
 	starlarkProgramCacheEntries.Set(float64(len(e.cache)))
 	return compiled, nil
-}
-
-// ExpressionType defines the type of expression
-type ExpressionType string
-
-const (
-	ExpressionTypeValidation  ExpressionType = "validation"
-	ExpressionTypeCalculation ExpressionType = "calculation"
-	ExpressionTypeCondition   ExpressionType = "condition"
-)
-
-// Expression represents a stored expression rule
-type Expression struct {
-	ID               string         `json:"id"`
-	TenantID         string         `json:"tenant_id"`
-	BusinessObjectID string         `json:"business_object_id,omitempty"`
-	FieldKey         string         `json:"field_key,omitempty"`
-	RuleType         ExpressionType `json:"rule_type"`
-	Name             string         `json:"name"`
-	Description      string         `json:"description,omitempty"`
-	Script           string         `json:"script"`
-	IsActive         bool           `json:"is_active"`
-	Version          int            `json:"version"`
 }
 
 // StarlarkValidationResult represents the result of a validation expression
@@ -1079,134 +1053,4 @@ func (e *StarlarkEngine) builtinFail(_ *starlark.Thread, _ *starlark.Builtin, ar
 		"message": starlark.String(msg),
 	}
 	return starlarkstruct.FromStringDict(starlark.String("ValidationResponse"), dict), nil
-}
-
-// ============================================================================
-// EXPRESSION STORAGE
-// ============================================================================
-
-// GetExpression fetches an expression by ID
-func (e *StarlarkEngine) GetExpression(ctx context.Context, id string) (*Expression, error) {
-	query := `
-		query GetExpression($id: uuid!) {
-			expression_rules_by_pk(id: $id) {
-				id
-				tenant_id
-				business_object_id
-				field_key
-				rule_type
-				name
-				description
-				script
-				is_active
-				version
-			}
-		}
-	`
-
-	result, err := e.hasuraClient.Query(query, map[string]interface{}{"id": id})
-	if err != nil {
-		return nil, err
-	}
-
-	data, ok := result["expression_rules_by_pk"].(map[string]interface{})
-	if !ok {
-		return nil, fmt.Errorf("expression not found")
-	}
-
-	return &Expression{
-		ID:               getString(data, "id"),
-		TenantID:         getString(data, "tenant_id"),
-		BusinessObjectID: getString(data, "business_object_id"),
-		FieldKey:         getString(data, "field_key"),
-		RuleType:         ExpressionType(getString(data, "rule_type")),
-		Name:             getString(data, "name"),
-		Description:      getString(data, "description"),
-		Script:           getString(data, "script"),
-		IsActive:         getBool(data, "is_active"),
-		Version:          getInt(data, "version"),
-	}, nil
-}
-
-// SaveExpression creates or updates an expression
-func (e *StarlarkEngine) SaveExpression(ctx context.Context, expr *Expression) (string, error) {
-	mutation := `
-		mutation UpsertExpression($object: expression_rules_insert_input!) {
-			insert_expression_rules_one(
-				object: $object,
-				on_conflict: { constraint: expression_rules_pkey, update_columns: [script, name, description, is_active, version] }
-			) {
-				id
-			}
-		}
-	`
-
-	object := map[string]interface{}{
-		"tenant_id": expr.TenantID,
-		"rule_type": string(expr.RuleType),
-		"name":      expr.Name,
-		"script":    expr.Script,
-		"is_active": expr.IsActive,
-		"version":   expr.Version + 1,
-	}
-
-	if expr.ID != "" {
-		object["id"] = expr.ID
-	}
-	if expr.BusinessObjectID != "" {
-		object["business_object_id"] = expr.BusinessObjectID
-	}
-	if expr.FieldKey != "" {
-		object["field_key"] = expr.FieldKey
-	}
-	if expr.Description != "" {
-		object["description"] = expr.Description
-	}
-
-	result, err := e.hasuraClient.Mutate(mutation, map[string]interface{}{"object": object})
-	if err != nil {
-		return "", err
-	}
-
-	data := result["insert_expression_rules_one"].(map[string]interface{})
-	return data["id"].(string), nil
-}
-
-// GetExpressionsByBO fetches all expressions for a business object
-func (e *StarlarkEngine) GetExpressionsByBO(ctx context.Context, boID string) ([]*Expression, error) {
-	query := `
-		query GetExpressions($boID: uuid!) {
-			expression_rules(where: { business_object_id: { _eq: $boID }, is_active: { _eq: true } }) {
-				id
-				rule_type
-				name
-				script
-				field_key
-			}
-		}
-	`
-
-	result, err := e.hasuraClient.Query(query, map[string]interface{}{"boID": boID})
-	if err != nil {
-		return nil, err
-	}
-
-	items, ok := result["expression_rules"].([]interface{})
-	if !ok {
-		return []*Expression{}, nil
-	}
-
-	expressions := make([]*Expression, 0, len(items))
-	for _, item := range items {
-		data := item.(map[string]interface{})
-		expressions = append(expressions, &Expression{
-			ID:       getString(data, "id"),
-			RuleType: ExpressionType(getString(data, "rule_type")),
-			Name:     getString(data, "name"),
-			Script:   getString(data, "script"),
-			FieldKey: getString(data, "field_key"),
-		})
-	}
-
-	return expressions, nil
 }

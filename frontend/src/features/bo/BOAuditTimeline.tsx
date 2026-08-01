@@ -102,7 +102,7 @@ const BOAuditTimeline: React.FC<BOAuditTimelineProps> = ({ tenantId, boKey }) =>
   // Live mode: poll every 5s
   useEffect(() => {
     if (liveMode) {
-      intervalRef.current = setInterval(load, 5000);
+      (intervalRef as any).current = setInterval(load, 5000);
     } else {
       if (intervalRef.current) clearInterval(intervalRef.current);
     }

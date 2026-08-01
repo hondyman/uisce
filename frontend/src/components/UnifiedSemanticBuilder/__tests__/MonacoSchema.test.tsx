@@ -5,7 +5,7 @@ describe('cube semantic schema', () => {
   it('loads schema and has expected top-level keys', () => {
     expect(schema).toBeDefined();
     expect(schema.properties).toBeDefined();
-    expect(schema.properties.tenant_instance_id).toBeDefined();
+    expect((schema.properties as any).tenant_instance_id).toBeDefined();
     expect(schema.properties.joins).toBeDefined();
   });
 

@@ -201,6 +201,7 @@ export const PoPMetricExplorer: React.FC<PoPMetricExplorerProps> = ({ metrics, o
 
   const handleBulkCompute = async () => {
       const notification = useNotification();
+      const result: any = {};
       notification.success(`Computed ${result.success_count} metrics successfully`);
       notification.error('Failed to compute metrics');
     try {
@@ -385,7 +386,7 @@ export const PoPMetricExplorer: React.FC<PoPMetricExplorerProps> = ({ metrics, o
               <SelectContent>
                 <SelectItem value="">All Domains</SelectItem>
                 {domains.map(domain => (
-                  <SelectItem key={domain} value={domain}>{domain}</SelectItem>
+                  <SelectItem key={domain!} value={domain!}>{domain!}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
@@ -397,7 +398,7 @@ export const PoPMetricExplorer: React.FC<PoPMetricExplorerProps> = ({ metrics, o
               <SelectContent>
                 <SelectItem value="">All Categories</SelectItem>
                 {categories.map(category => (
-                  <SelectItem key={category} value={category}>{category}</SelectItem>
+                  <SelectItem key={category!} value={category!}>{category!}</SelectItem>
                 ))}
               </SelectContent>
             </Select>

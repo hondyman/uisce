@@ -5,7 +5,7 @@ import ValidationRuleEditor from '@/components/validation/ValidationRuleEditor'
 
 describe('ValidationRuleEditor - create flow', () => {
   it('opens the create dialog when Add Rule is clicked', async () => {
-    const fetchMock = globalThis.fetch as unknown as vi.Mock
+    const fetchMock = globalThis.fetch as any
     fetchMock.mockResolvedValueOnce(
       new Response(JSON.stringify([]), { status: 200, headers: { 'Content-Type': 'application/json' } })
     )

@@ -38,23 +38,6 @@ export async function previewCalcField(req: PreviewRequest): Promise<PreviewResp
 }
 
 export async function getCalcFields(objectId: string): Promise<CalcField[]> {
-    // This will use Hasura via the proxy
-    return fetchAPI(`/graphql`, {
-        method: 'POST',
-        body: JSON.stringify({
-            query: `
-        query GetCalcFields($objectId: uuid!) {
-          calc_fields(where: {object_id: {_eq: $objectId}}) {
-            id
-            name
-            sql_expr
-            data_type
-            is_measure
-            realtime
-          }
-        }
-      `,
-            variables: { objectId },
-        }),
-    }).then((res: any) => res.data?.calc_fields || []);
+    const response = await fetchAPI<{ data: CalcField[] }>(`/calc?object_id=${encodeURIComponent(objectId)}`);
+    return response.data || [];
 }

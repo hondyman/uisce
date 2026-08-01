@@ -154,14 +154,14 @@ export const RelationshipList: React.FC<RelationshipListProps> = ({
       {edges.map((edge) => {
         const sourceId = edge.subject_node_id || edge.source_node_id;
         const targetId = edge.object_node_id || edge.target_node_id;
-        const source = resolveNode(sourceId);
-        const target = resolveNode(targetId);
+        const source = sourceId ? resolveNode(sourceId) : undefined;
+        const target = targetId ? resolveNode(targetId) : undefined;
         const isOutbound = sourceId === selectedNodeId;
 
-        const sourceName = getNodeName?.(sourceId) || source?.node_name || source?.name || sourceId?.substring(0, 8);
-        const targetName = getNodeName?.(targetId) || target?.node_name || target?.name || targetId?.substring(0, 8);
-        const sourcePath = getNodePath?.(sourceId) || source?.qualified_path;
-        const targetPath = getNodePath?.(targetId) || target?.qualified_path;
+        const sourceName = (sourceId ? getNodeName?.(sourceId) : undefined) || source?.node_name || source?.name || sourceId?.substring(0, 8);
+        const targetName = (targetId ? getNodeName?.(targetId) : undefined) || target?.node_name || target?.name || targetId?.substring(0, 8);
+        const sourcePath = (sourceId ? getNodePath?.(sourceId) : undefined) || source?.qualified_path;
+        const targetPath = (targetId ? getNodePath?.(targetId) : undefined) || target?.qualified_path;
         const sourceType = source?.catalog_type_name || source?.node_type || 'Node';
         const targetType = target?.catalog_type_name || target?.node_type || 'Node';
         const edgeHasProps = hasProperties(edge);

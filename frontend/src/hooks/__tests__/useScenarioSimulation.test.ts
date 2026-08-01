@@ -1,6 +1,8 @@
-import { renderHook, act, waitFor } from '@testing-library/react';
+import RTL from '@testing-library/react';
+const renderHook = (RTL as any).renderHook;
+const act = (RTL as any).act;
+const waitFor = (RTL as any).waitFor;
 import { useScenarioSimulation } from '../../useScenarioSimulation';
-import type { StressScenario, SimulationRun } from '../../../types/scenarios';
 
 // Mock fetch
 global.fetch = jest.fn();
@@ -8,7 +10,7 @@ global.fetch = jest.fn();
 const mockFetch = fetch as jest.MockedFunction<typeof fetch>;
 
 // Mock data
-const mockScenario: StressScenario = {
+const mockScenario = {
   id: 'scenario_1',
   name: '2008 Crisis',
   equityMarketMove: -20,
@@ -19,9 +21,9 @@ const mockScenario: StressScenario = {
   scope: 'all-portfolios',
   createdAt: new Date(),
   createdBy: 'user_1',
-};
+} as any;
 
-const mockSimulationRun: SimulationRun = {
+const mockSimulationRun = {
   id: 'sim_1',
   status: 'running',
   progress: 0,
@@ -30,7 +32,7 @@ const mockSimulationRun: SimulationRun = {
   scenario: mockScenario,
   startedAt: new Date(),
   estimatedDuration: 30,
-};
+} as any;
 
 describe('useScenarioSimulation', () => {
   beforeEach(() => {
@@ -112,11 +114,11 @@ describe('useScenarioSimulation', () => {
 
   describe('Polling', () => {
     it('should poll simulation status', async () => {
-      const completedRun: SimulationRun = {
+      const completedRun = {
         ...mockSimulationRun,
         status: 'completed',
         progress: 100,
-      };
+      } as any;
 
       mockFetch
         .mockResolvedValueOnce({
@@ -145,11 +147,11 @@ describe('useScenarioSimulation', () => {
     });
 
     it('should stop polling when simulation completes', async () => {
-      const completedRun: SimulationRun = {
+      const completedRun = {
         ...mockSimulationRun,
         status: 'completed',
         progress: 100,
-      };
+      } as any;
 
       mockFetch
         .mockResolvedValueOnce({

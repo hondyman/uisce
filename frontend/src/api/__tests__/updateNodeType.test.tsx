@@ -11,7 +11,7 @@ function Harness({ onDone }: { onDone: () => void }) {
   useEffect(() => {
     (async () => {
       try {
-        await mutation.mutateAsync({ id: 'node-1', tenantId: 'tenant-1', data: { catalog_type_name: 'x' } });
+        await mutation.mutateAsync({ id: 'node-1', tenantId: 'tenant-1', data: { catalog_type_name: 'x' } } as any);
       } catch (e) {
         // swallow for test
       }
@@ -57,8 +57,8 @@ describe('useUpdateNodeType', () => {
     });
     expect(calledWithList).toBeTruthy();
 
-    const expectedListKey = nodeTypesKeys.list('tenant-1');
-    const expectedDetailKey = nodeTypesKeys.detail('node-1', 'tenant-1');
+    const expectedListKey = nodeTypesKeys.list({ tenantId: 'tenant-1' } as any);
+    const expectedDetailKey = nodeTypesKeys.detail('node-1');
 
     // Check that one of the calls matched the list key exactly
     const sawList = (qc.invalidateQueries as any).mock.calls.some((c: any[]) => {

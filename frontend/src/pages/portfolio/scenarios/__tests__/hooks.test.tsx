@@ -1,17 +1,21 @@
 /**
  * Phase 3 Custom Hooks Tests
- * 
+ *
  * Tests for:
  * - useScenarioConfig hook
- * - useSimulationState hook  
+ * - useSimulationState hook
  * - useScenarioComparison hook
  * - useAnnotationSync hook
  * - useProgressTracking hook
  */
 
-import { renderHook, act, waitFor } from '@testing-library/react';
+import RTL from '@testing-library/react';
+const renderHook = (RTL as any).renderHook;
+const act = (RTL as any).act;
+const waitFor = (RTL as any).waitFor;
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import React from 'react';
+import { vi } from 'vitest';
 
 // Mock hooks for testing (in real implementation, these would be imported)
 interface ScenarioConfig {
@@ -43,7 +47,7 @@ const useScenarioConfig = (initialConfig?: Partial<ScenarioConfig>) => {
   return { config, updateConfig };
 };
 
-const useSimulationState = (onComplete?: (results) => void) => {
+const useSimulationState = (onComplete?: (results: any) => void) => {
   const [state, setState] = React.useState<SimulationState>({
     status: 'idle',
     progress: 0,
@@ -359,7 +363,7 @@ describe('Phase 3 Custom Hooks', () => {
 
     test('updates synced annotations when props change', async () => {
       const { result, rerender } = renderHook(
-        ({annotations }) => useAnnotationSync(annotations),
+        ({annotations }: {annotations: any}) => useAnnotationSync(annotations),
         {
           initialProps: { annotations: [{ id: '1', text: 'First' }] },
         }
@@ -397,7 +401,13 @@ describe('Phase 3 Custom Hooks', () => {
   });
 
   describe('useProgressTracking', () => {
-    jest.useFakeTimers();
+    beforeEach(() => {
+      vi.useFakeTimers();
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
 
     test('initializes with zero progress', () => {
       const { result } = renderHook(() => useProgressTracking());
@@ -424,7 +434,7 @@ describe('Phase 3 Custom Hooks', () => {
       });
 
       act(() => {
-        jest.advanceTimersByTime(500);
+        vi.advanceTimersByTime(500);
       });
 
       expect(result.current.progress).toBeGreaterThan(0);
@@ -438,7 +448,7 @@ describe('Phase 3 Custom Hooks', () => {
       });
 
       act(() => {
-        jest.advanceTimersByTime(5000);
+        vi.advanceTimersByTime(5000);
       });
 
       expect(result.current.progress).toBe(100);
@@ -453,12 +463,10 @@ describe('Phase 3 Custom Hooks', () => {
       });
 
       act(() => {
-        jest.advanceTimersByTime(5000);
+        vi.advanceTimersByTime(5000);
       });
 
       expect(result.current.progress).toBeLessThanOrEqual(50);
     });
-
-    jest.useRealTimers();
   });
 });

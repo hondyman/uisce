@@ -27,6 +27,9 @@ func NewTenantRewarmerAdapter(e *rules.RuleEngine) *TenantRewarmerAdapter {
 }
 
 func (a *TenantRewarmerAdapter) RewarmTenantAdapter(ctx context.Context, tenantID uuid.UUID, ruleNodes []*rules.RuleNode, version int) error {
+	if a.engine == nil {
+		return nil
+	}
 	_, err := a.engine.RewarmTenant(tenantID.String(), ruleNodes, version)
 	return err
 }
@@ -98,6 +101,10 @@ func (c *SchemaCDCConsumer) ProcessSchemaEvent(ctx context.Context, payload []by
 }
 
 func (c *SchemaCDCConsumer) doRewarm(ctx context.Context, tenantID uuid.UUID) {
+	if c.repo == nil || c.rewarmer == nil {
+		log.Printf("[SchemaCDC] Skipping rewarm: repo or rewarmer is nil")
+		return
+	}
 	log.Printf("[SchemaCDC] Debounce window elapsed. Rewarming tenant %s...", tenantID)
 	ruleNodes, err := c.repo.GetRulesForTenant(ctx, tenantID)
 	if err != nil {

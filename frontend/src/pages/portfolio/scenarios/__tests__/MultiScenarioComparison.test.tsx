@@ -3,7 +3,6 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import { MultiScenarioComparison } from '../MultiScenarioComparison';
-import type { StressScenario, SimulationResult } from '../../../types/scenarios';
 
 const theme = createTheme();
 
@@ -12,7 +11,7 @@ const renderWithTheme = (component: React.ReactElement) => {
 };
 
 // Mock data
-const mockScenario1: StressScenario = {
+const mockScenario1 = {
   id: 'scenario_1',
   name: '2008 Crisis',
   equityMarketMove: -20,
@@ -25,7 +24,7 @@ const mockScenario1: StressScenario = {
   createdBy: 'user_1',
 };
 
-const mockScenario2: StressScenario = {
+const mockScenario2 = {
   id: 'scenario_2',
   name: 'COVID Shock',
   equityMarketMove: -30,
@@ -38,7 +37,7 @@ const mockScenario2: StressScenario = {
   createdBy: 'user_1',
 };
 
-const mockResults: SimulationResult[] = [
+const mockResults = [
   {
     id: 'result_1',
     simulationId: 'sim_1',

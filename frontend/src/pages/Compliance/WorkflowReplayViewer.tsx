@@ -244,7 +244,7 @@ export const WorkflowReplayViewer: React.FC = () => {
             <Timeline position="alternate">
               {execution.events.map((event, index) => (
                 <TimelineItem key={event.event_id}>
-                  <TimelineOppositeContent color="text.secondary">
+                  <TimelineOppositeContent color="text.secondary" sx={{ flex: 1 }} {...({} as any)}>
                     <Typography variant="caption">
                       {format(new Date(event.timestamp), 'HH:mm:ss.SSS')}
                     </Typography>

@@ -1,4 +1,4 @@
-// React default import not required with new JSX transform
+import React from 'react';
 
 interface SearchResult {
   id: string;
@@ -48,7 +48,6 @@ const SearchBar: React.FC<SearchBarProps> = ({
             setHighlighted(null);
           }
         }}
-        aria-controls="search-results-dropdown"
         aria-controls="search-results-dropdown"
         aria-autocomplete="list"
         className="search-input"

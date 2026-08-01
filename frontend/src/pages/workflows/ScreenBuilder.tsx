@@ -185,7 +185,7 @@ export const ScreenBuilder: React.FC<ScreenBuilderProps> = ({
     },
   });
 
-  const [_updateScreen] = useMutation({
+  const [_updateScreen] = (useMutation as any)({
     mutationFn: async (input: { tenantId: string; screenId: string; fields: any[] }) => {
       const response = await apiFetch(`/api/screen-configs/${input.screenId}`, {
         method: 'PATCH',
@@ -195,7 +195,7 @@ export const ScreenBuilder: React.FC<ScreenBuilderProps> = ({
     },
   });
 
-  const [_publishScreen] = useMutation({
+  const [_publishScreen] = (useMutation as any)({
     mutationFn: async (screenId: string) => {
       const response = await apiFetch(`/api/screen-configs/${screenId}`, {
         method: 'PATCH',

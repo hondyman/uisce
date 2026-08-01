@@ -1,4 +1,4 @@
-export function MigrationPreview({ rule }: { rule }) {
+export function MigrationPreview({ rule }: { rule: any }) {
   return (
     <div>
       <h3>Migration Preview</h3>

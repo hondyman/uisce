@@ -89,7 +89,7 @@ export const ProcessMonitorDashboard: React.FC<ProcessMonitorDashboardProps> = (
     autoReconnect: true,
   });
 
-  function handleProcessEvent(event: ProcessEvent) {
+  function handleProcessEvent(event: any) {
     console.log('Received process event:', event);
 
     // Update instances based on event type

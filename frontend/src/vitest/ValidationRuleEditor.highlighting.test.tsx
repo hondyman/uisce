@@ -5,7 +5,7 @@ import ValidationRuleEditor from '@/components/validation/ValidationRuleEditor'
 
 describe('ValidationRuleEditor - empty state', () => {
   it('shows an empty state when no rules are returned', async () => {
-    const fetchMock = globalThis.fetch as unknown as vi.Mock
+    const fetchMock = globalThis.fetch as any
     fetchMock.mockResolvedValueOnce(
       new Response(JSON.stringify([]), { status: 200, headers: { 'Content-Type': 'application/json' } })
     )

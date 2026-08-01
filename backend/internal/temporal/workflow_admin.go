@@ -17,37 +17,18 @@ import (
 // Provides operational controls: Signal, Update, Cancel, Terminate, Reset
 // ============================================================================
 
-// HasuraClient defines the interface for Hasura GraphQL operations
-type HasuraClient interface {
-	Query(query string, variables map[string]interface{}) (map[string]interface{}, error)
-	Mutate(mutation string, variables map[string]interface{}) (map[string]interface{}, error)
-}
-
 type WorkflowAdminService struct {
 	client    client.Client
 	namespace string
 	db        *sql.DB
-	hasura    HasuraClient
 	admin     *AdminClient
 }
 
-// NewWorkflowAdminService creates a new admin service
 func NewWorkflowAdminService(c client.Client, namespace string, db *sql.DB, admin *AdminClient) *WorkflowAdminService {
 	return &WorkflowAdminService{
 		client:    c,
 		namespace: namespace,
 		db:        db,
-		admin:     admin,
-	}
-}
-
-// NewWorkflowAdminServiceWithHasura creates a new admin service with Hasura support
-func NewWorkflowAdminServiceWithHasura(c client.Client, namespace string, db *sql.DB, hasura HasuraClient, admin *AdminClient) *WorkflowAdminService {
-	return &WorkflowAdminService{
-		client:    c,
-		namespace: namespace,
-		db:        db,
-		hasura:    hasura,
 		admin:     admin,
 	}
 }
@@ -427,52 +408,7 @@ func (was *WorkflowAdminService) ListExecutions(ctx context.Context, limit int) 
 	return was.listExecutions(ctx, limit)
 }
 
-// ============================================================================
-// HASURA-FIRST HELPERS
-// ============================================================================
-
-// recordWorkflowStart inserts a workflow record into temporal_workflows
-// Hasura-first with SQL fallback
 func (was *WorkflowAdminService) recordWorkflowStart(ctx context.Context, workflowID, status string, input []byte, tenantID string) (string, error) {
-	if was.hasura != nil {
-		mutation := `
-			mutation InsertWorkflow($workflowID: String!, $status: String!, $input: jsonb!, $tenantID: uuid!) {
-				insert_temporal_workflows_one(object: {
-					workflow_id: $workflowID
-					status: $status
-					input: $input
-					tenant_id: $tenantID
-					created_at: "now()"
-				}) {
-					id
-				}
-			}
-		`
-
-		var inputJSON interface{}
-		if err := json.Unmarshal(input, &inputJSON); err != nil {
-			inputJSON = string(input)
-		}
-
-		variables := map[string]interface{}{
-			"workflowID": workflowID,
-			"status":     status,
-			"input":      inputJSON,
-			"tenantID":   tenantID,
-		}
-
-		result, err := was.hasura.Mutate(mutation, variables)
-		if err == nil {
-			if data, ok := result["insert_temporal_workflows_one"].(map[string]interface{}); ok {
-				if id, ok := data["id"].(string); ok {
-					return id, nil
-				}
-			}
-		}
-		// Fall through to SQL on Hasura error
-	}
-
-	// SQL fallback
 	var id string
 	err := was.db.QueryRowContext(ctx, `
 		INSERT INTO temporal_workflows (workflow_id, status, input, tenant_id, created_at)
@@ -486,69 +422,7 @@ func (was *WorkflowAdminService) recordWorkflowStart(ctx context.Context, workfl
 	return id, nil
 }
 
-// persistAuditLog inserts an audit log record
-// Hasura-first with SQL fallback
 func (was *WorkflowAdminService) persistAuditLog(ctx context.Context, audit AdminActionAudit, inputJSON []byte) error {
-	if was.hasura != nil {
-		mutation := `
-			mutation InsertAuditLog(
-				$id: uuid!
-				$tenantID: uuid!
-				$actorID: String!
-				$action: String!
-				$workflowID: String!
-				$runID: String!
-				$reason: String!
-				$input: jsonb!
-				$status: String!
-				$errorMessage: String
-				$timestamp: timestamptz!
-			) {
-				insert_admin_audit_logs_one(object: {
-					id: $id
-					tenant_id: $tenantID
-					actor_id: $actorID
-					action: $action
-					workflow_id: $workflowID
-					run_id: $runID
-					reason: $reason
-					input: $input
-					status: $status
-					error_message: $errorMessage
-					created_at: $timestamp
-				}) {
-					id
-				}
-			}
-		`
-
-		var inputJSONObj interface{}
-		if err := json.Unmarshal(inputJSON, &inputJSONObj); err != nil {
-			inputJSONObj = string(inputJSON)
-		}
-
-		variables := map[string]interface{}{
-			"id":           audit.ID,
-			"tenantID":     audit.TenantID,
-			"actorID":      audit.ActorID,
-			"action":       audit.Action,
-			"workflowID":   audit.WorkflowID,
-			"runID":        audit.RunID,
-			"reason":       audit.Reason,
-			"input":        inputJSONObj,
-			"status":       audit.Status,
-			"errorMessage": audit.ErrorMessage,
-			"timestamp":    audit.Timestamp,
-		}
-
-		_, err := was.hasura.Mutate(mutation, variables)
-		if err == nil {
-			return nil
-		}
-		// Fall through to SQL on Hasura error
-	}
-
-	// SQL fallback
 	_, err := was.db.ExecContext(ctx, `
 		INSERT INTO public.admin_audit_logs (
 			id, tenant_id, actor_id, action, workflow_id, run_id, reason, input, status, error_message, created_at
@@ -557,42 +431,7 @@ func (was *WorkflowAdminService) persistAuditLog(ctx context.Context, audit Admi
 	return err
 }
 
-// listExecutions queries recent workflow executions
-// Hasura-first with SQL fallback
 func (was *WorkflowAdminService) listExecutions(ctx context.Context, limit int) ([]map[string]interface{}, error) {
-	if was.hasura != nil {
-		query := `
-			query ListWorkflows($limit: Int!) {
-				temporal_workflows(order_by: {id: desc}, limit: $limit) {
-					id
-					workflow_id
-					status
-					input
-					result
-				}
-			}
-		`
-
-		variables := map[string]interface{}{
-			"limit": limit,
-		}
-
-		result, err := was.hasura.Query(query, variables)
-		if err == nil {
-			if workflows, ok := result["temporal_workflows"].([]interface{}); ok {
-				out := make([]map[string]interface{}, 0, len(workflows))
-				for _, w := range workflows {
-					if wf, ok := w.(map[string]interface{}); ok {
-						out = append(out, wf)
-					}
-				}
-				return out, nil
-			}
-		}
-		// Fall through to SQL on Hasura error
-	}
-
-	// SQL fallback
 	rows, err := was.db.QueryContext(ctx, `
 		SELECT id, workflow_id, status, input, result
 		FROM temporal_workflows

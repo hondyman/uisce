@@ -647,15 +647,15 @@ export const TenantDetailPageV2: React.FC = () => {
         if (tenantProductId) {
           let resolvedAlphaDatasourceId = selectedAlphaDatasource;
 
-          if (!resolvedAlphaDatasourceId && datasourcesData?.alpha_datasource?.length > 0) {
+          if (!resolvedAlphaDatasourceId && (datasourcesData as any)?.alpha_datasource?.length > 0) {
             const typeStr = connectionForm.type.toLowerCase();
-            const match = datasourcesData.alpha_datasource.find((ds: any) =>
+            const match = (datasourcesData as any).alpha_datasource.find((ds: any) =>
               ds.datasource_code?.toLowerCase().includes(typeStr)
             );
             if (match) {
               resolvedAlphaDatasourceId = match.id;
             } else {
-              const fallback = datasourcesData.alpha_datasource[0];
+              const fallback = (datasourcesData as any).alpha_datasource[0];
               resolvedAlphaDatasourceId = fallback?.id;
               console.warn(`Could not match datasource type for ${connectionForm.type}; using ${fallback?.datasource_code}`);
             }

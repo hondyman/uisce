@@ -1,5 +1,5 @@
 import React, { Suspense } from "react";
-import { LayoutSchema, ComponentSchema } from "./schema";
+import { LayoutSchema } from "./schema";
 
 interface GenUIRendererProps {
   layoutJson: unknown;
@@ -30,7 +30,7 @@ export function GenUIRenderer({ layoutJson, fallback }: GenUIRendererProps) {
 }
 
 interface ComponentRendererProps {
-  component: ComponentSchema;
+  component: any;
 }
 
 function ComponentRenderer({ component }: ComponentRendererProps) {

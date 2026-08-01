@@ -56,9 +56,9 @@ export function ComplianceDashboardPage() {
           end_date: dateRange.end,
           page: 1,
           limit: 500,
-        }),
-        schedulerService.listJobs({ page: 1, limit: 100 }),
-        schedulerService.listAllExecutions({ page: 1, limit: 500 }),
+        } as any),
+        schedulerService.listJobs({ page: 1, limit: 100 } as any),
+        schedulerService.listAllExecutions({ page: 1, limit: 500 } as any),
       ]);
       
       setAuditLogs((auditData as any).entries);

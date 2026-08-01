@@ -45,7 +45,7 @@ export const NodeTypeSetupPage: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState<string>('');
 
   // Use server-side search when there's a query, otherwise use the full list
-  const { data: searchResults, isLoading: isSearching } = useSearchNodeTypes(tenantId, searchQuery);
+  const { data: searchResults, isLoading: isSearching } = useSearchNodeTypes({ tenantId, searchQuery } as any);
 
   // Determine which data to display: search results or full list
   // Fallback to client-side filtering if server search returns nothing
@@ -57,13 +57,13 @@ export const NodeTypeSetupPage: React.FC = () => {
       return nodeTypes || [];
     }
 
-    const filterByQuery = (items: NodeType[]) =>
-      items.filter((nt) =>
+    const filterByQuery = (items: any[]) =>
+      items.filter((nt: any) =>
         nt.catalog_type_name.toLowerCase().includes(normalizedQuery) ||
         (nt.description || '').toLowerCase().includes(normalizedQuery)
       );
 
-    const filtered = filterByQuery(baseList);
+    const filtered = filterByQuery(baseList as any[]);
     if (filtered.length > 0) {
       return filtered;
     }
@@ -86,7 +86,7 @@ export const NodeTypeSetupPage: React.FC = () => {
     if (!(await confirm({ title: 'Delete node type', description: 'Are you sure you want to delete this node type? This action cannot be undone.' }))) return;
 
     try {
-      await deleteNodeType.mutateAsync({ id, tenantId });
+      await deleteNodeType.mutateAsync({ id, tenantId } as any);
     } catch (error) {
       notification.error(`Failed to delete node type: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
@@ -215,7 +215,7 @@ export const NodeTypeSetupPage: React.FC = () => {
       {/* Table */}
       {!isLoading && !error && displayedNodeTypes && (
         <NodeTypeTable
-          nodeTypes={displayedNodeTypes}
+          nodeTypes={displayedNodeTypes as any}
           onEdit={handleEdit}
           onDelete={handleDelete}
         />
@@ -227,7 +227,7 @@ export const NodeTypeSetupPage: React.FC = () => {
         onClose={handleModalClose}
         nodeType={editingNodeType}
         tenantId={tenantId}
-        allNodeTypes={nodeTypes || []}
+        allNodeTypes={(nodeTypes || []) as any}
         onChange={handleEditChange}
       />
     </Container>

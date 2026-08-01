@@ -28,7 +28,7 @@ const MOCK_INSTANCE = {
       warnings: ['Asset allocation deviation > 5%', 'Turnover > 20%']
   },
   clientExplanation: "Dear Jane, based on our discussion, I recommend shifting 20% of your portfolio to the Growth strategy to capture...",
-  report: null
+  report: null as any
 };
 
 export const ModelChangeStatusPage: React.FC = () => {

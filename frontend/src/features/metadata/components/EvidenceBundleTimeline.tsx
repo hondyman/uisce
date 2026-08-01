@@ -61,7 +61,7 @@ const STATUS_ICONS: Record<string, React.ReactNode> = {
 
 export const EvidenceBundleTimeline: React.FC = () => {
   const { bundleId } = useParams<{ bundleId: string }>();
-  const [bundle, setBundle] = useState<EvidenceBundle | null>(null);
+  const [bundle, setBundle] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [activeStep, setActiveStep] = useState(0);
@@ -108,7 +108,7 @@ export const EvidenceBundleTimeline: React.FC = () => {
     });
   };
 
-  const renderArtifact = (artifact: Artifact) => {
+  const renderArtifact = (artifact: any) => {
     return (
       <Paper key={artifact.checksum} elevation={0} sx={{ p: 2, mb: 1, bgcolor: 'grey.50' }}>
         <Grid container spacing={2} alignItems="center">
@@ -147,7 +147,7 @@ export const EvidenceBundleTimeline: React.FC = () => {
     );
   };
 
-  const renderStageContent = (stage: StageEvidence) => {
+  const renderStageContent = (stage: any) => {
     return (
       <Box sx={{ pt: 1 }}>
         <Grid container spacing={2} sx={{ mb: 2 }}>

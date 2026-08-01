@@ -183,6 +183,8 @@ const TabbedModal: React.FC<TabbedModalProps> = ({ datasourceId, tenantId = 'def
   const [processedTechnicalData, setProcessedTechnicalData] = useState<TechnicalLineageChart | null>(null);
   const [processedSemanticData, setProcessedSemanticData] = useState<SemanticLineageChart | null>(null);
   const [hierarchicalData, setHierarchicalData] = useState<any | null>(null);
+  const semanticData: any = null;
+  const refetchSemanticData = () => {};
   
   // Chart selection state
   const [availableCharts, setAvailableCharts] = useState<any[]>([]);

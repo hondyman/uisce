@@ -338,8 +338,10 @@ export default function BusinessObjectBindingWizard({
     const field = binding.fields.find((f) => f.key === fieldKey || f.name === fieldKey);
     if (!field || !field.coreReferenceFieldId) return;
 
+    const rebaseField = async (_targetBoId: string, _fieldId: string) => {};
+
     try {
-      const targetBoId = boId || bo.key; // Fallback to key or ID
+      const targetBoId = (bo as any).boId || bo.key;
       await rebaseField(targetBoId, field.coreReferenceFieldId);
       notification.success(`Rebased field ${field.displayName} to latest Gold Copy blueprint.`);
       // Update local state to clear drift

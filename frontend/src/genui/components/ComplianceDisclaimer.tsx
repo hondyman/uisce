@@ -9,7 +9,7 @@ interface ComplianceDisclaimerProps {
 
 export function ComplianceDisclaimer({ topic, severity }: ComplianceDisclaimerProps) {
   const getSeverity = () => {
-    if (severity === 'critical') return 'error';
+    if ((severity as any) === 'critical') return 'error';
     return severity;
   };
 

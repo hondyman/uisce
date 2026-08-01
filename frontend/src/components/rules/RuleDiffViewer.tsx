@@ -41,7 +41,7 @@ export const RuleDiffViewer: React.FC<RuleDiffViewerProps> = ({ isOpen, onClose,
       setLoading(true);
       setError(null);
       const data = await rulesApi.fetchRuleDiff(boId, ruleId, tenant?.id, datasource?.id);
-      setDiff(data);
+      setDiff(data as any);
     } catch (err) {
       console.error('Failed to load diff:', err);
       setError('Failed to load rule comparison.');
@@ -127,7 +127,7 @@ export const RuleDiffViewer: React.FC<RuleDiffViewerProps> = ({ isOpen, onClose,
                 diff.base?.expression !== diff.current?.expression
               )}
 
-              {diff.diffs.length === 0 && (
+              {(diff.diffs as any).length === 0 && (
                 <div className="text-center py-8 text-gray-500">
                   No differences found. The rules are identical.
                 </div>

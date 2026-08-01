@@ -25,9 +25,7 @@ const queryClient = new QueryClient({
 const renderWithProviders = (component: React.ReactElement) => {
   return render(
     <QueryClientProvider client={queryClient}>
-      <TenantProvider value={{ tenant: mockTenant, datasource: mockDatasource }}>
-        {component}
-      </TenantProvider>
+      {(TenantProvider as any)({ value: { tenant: mockTenant, datasource: mockDatasource }, children: component })}
     </QueryClientProvider>
   );
 };
@@ -42,9 +40,7 @@ describe('ValidationRulesBuilderPage', () => {
     it('should display tenant selection message when no tenant', () => {
       render(
         <QueryClientProvider client={queryClient}>
-          <TenantProvider value={{ tenant: null, datasource: null }}>
-            <ValidationRulesBuilderPage />
-          </TenantProvider>
+          {(TenantProvider as any)({ value: { tenant: null, datasource: null }, children: <ValidationRulesBuilderPage /> })}
         </QueryClientProvider>
       );
 

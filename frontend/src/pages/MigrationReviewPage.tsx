@@ -210,26 +210,26 @@ const MigrationReviewPage: React.FC = () => {
                     {migration.extractedIntent.summary}
                   </Typography>
                   
-                  {migration.extractedIntent.preconditions?.length > 0 && (
+                  {migration.extractedIntent!.preconditions!.length > 0 && (
                     <>
                       <Typography variant="subtitle2" color="primary" sx={{ mt: 2 }}>
                         Preconditions
                       </Typography>
                       <ul>
-                        {migration.extractedIntent.preconditions.map((p, i) => (
+                        {migration.extractedIntent!.preconditions!.map((p: any, i: any) => (
                           <li key={i}><Typography variant="body2">{p.description}</Typography></li>
                         ))}
                       </ul>
                     </>
                   )}
                   
-                  {migration.extractedIntent.actions?.length > 0 && (
+                  {migration.extractedIntent!.actions!.length > 0 && (
                     <>
                       <Typography variant="subtitle2" color="secondary" sx={{ mt: 2 }}>
                         Actions
                       </Typography>
                       <ul>
-                        {migration.extractedIntent.actions.map((a, i) => (
+                        {migration.extractedIntent!.actions!.map((a: any, i: any) => (
                           <li key={i}><Typography variant="body2">{a.description}</Typography></li>
                         ))}
                       </ul>

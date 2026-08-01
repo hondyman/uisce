@@ -35,7 +35,7 @@ export const TaxDashboard: React.FC<TaxDashboardProps> = ({ clientId }) => {
   const loadOpportunities = async () => {
     setLoading(true);
     try {
-      const data = await fetchAPI<TaxOpportunity[]>(`/taxplan/opportunities/${clientId}`);
+      const data = await fetchAPI(`/taxplan/opportunities/${clientId}`) as TaxOpportunity[];
       setOpportunities(data || []);
     } catch (error) {
       console.error('Failed to load tax opportunities:', error);

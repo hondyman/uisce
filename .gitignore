@@ -82,6 +82,17 @@ Thumbs.db
 /rules_server
 /semlayer
 /trading-consumer
+/notifications-service
+/uisce-mcp-server
+/semantic-sandbox
+/semctl
+/provision_tenant
+/load_wealth_management_bundle
+/load_wealth_management_super_bundle
+/load_generic_bundle
+/demo
+/api.test
+/fabric-builder
 
 # Stale diagnostic outputs
 /frontend/eslint-report.json

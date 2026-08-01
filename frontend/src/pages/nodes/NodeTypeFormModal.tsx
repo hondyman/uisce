@@ -33,14 +33,14 @@ import { devDebug, devWarn, devError } from '../../utils/devLogger';
 const nodePropertyToPropertyDef = (np: NodeProperty): PropertyDef => ({
   name: np.name,
   label: np.label,
-  data_type: np.data_type === 'integer' || np.data_type === 'float' ? 'number' : 
-             np.data_type === 'text' || np.data_type === 'json' ? 'string' : 
-             np.data_type,
-  original_data_type: np.data_type, // Preserve original
-  input_type: np.input_type === 'date-picker' ? 'date' : 
-              np.input_type === 'textarea' || np.input_type === 'number' || np.input_type === 'json-editor' ? 'text' :
-              np.input_type,
-  original_input_type: np.input_type, // Preserve original
+  data_type: np.data_type === 'integer' || np.data_type === 'float' ? 'number' as any :
+             np.data_type === 'text' || np.data_type === 'json' ? 'string' as any :
+             np.data_type as any,
+  original_data_type: np.data_type as any,
+  input_type: np.input_type === 'date-picker' ? 'date' as any :
+                np.input_type === 'textarea' || np.input_type === 'number' || np.input_type === 'json-editor' ? 'text' as any :
+                np.input_type as any,
+  original_input_type: np.input_type as any,
   required: !np.nullable,
   options: np.options || [],
   lookup: (np as any).lookup_id || null,
@@ -301,7 +301,7 @@ export const NodeTypeFormModal: React.FC<NodeTypeFormModalProps> = ({
       }
 
       // Optimistic update: snapshot current list data
-      const listKey = nodeTypesKeys.list(tenantId);
+      const listKey = nodeTypesKeys.list({ tenantId } as any);
       previousList = queryClient.getQueryData(listKey) as NodeType[] | undefined;
       // Build optimistic object
       const optimisticNode: Partial<NodeType> = {
@@ -327,7 +327,7 @@ export const NodeTypeFormModal: React.FC<NodeTypeFormModalProps> = ({
         // Call the mutation and log response for debugging
         // This should produce an XHR/fetch entry in the Network tab
         devDebug('[NodeTypeFormModal] Calling updateNodeType.mutateAsync', { id: nodeType.id, tenantId, data: payload });
-        resp = await updateNodeType.mutateAsync({ id: nodeType.id, tenantId, data: payload });
+        resp = await updateNodeType.mutateAsync({ id: nodeType.id, tenantId: tenantId as any, data: payload } as any);
         if (ENABLE_MODAL_DEBUG) {
           devDebug('[NodeTypeFormModal] updateNodeType response', resp);
         }
@@ -338,7 +338,7 @@ export const NodeTypeFormModal: React.FC<NodeTypeFormModalProps> = ({
         }
 
         devDebug('[NodeTypeFormModal] Calling createNodeType.mutateAsync', { payload: { ...payload, tenant_id: tenantId } });
-        resp = await createNodeType.mutateAsync({ ...payload, tenant_id: tenantId });
+        resp = await createNodeType.mutateAsync({ ...payload, tenant_id: tenantId } as any);
         if (ENABLE_MODAL_DEBUG) {
           devDebug('[NodeTypeFormModal] createNodeType response', resp);
         }
@@ -348,10 +348,10 @@ export const NodeTypeFormModal: React.FC<NodeTypeFormModalProps> = ({
       try {
         if (resp && resp.tenant_id) {
           queryClient.invalidateQueries({ queryKey: nodeTypesKeys.list(resp.tenant_id) });
-          queryClient.invalidateQueries({ queryKey: nodeTypesKeys.detail(resp.id, resp.tenant_id) });
+          queryClient.invalidateQueries({ queryKey: nodeTypesKeys.detail(resp.id) });
         } else {
           // Fallback: use local tenantId to invalidate list
-          queryClient.invalidateQueries({ queryKey: nodeTypesKeys.list(tenantId) });
+          queryClient.invalidateQueries({ queryKey: nodeTypesKeys.list({ tenantId } as any) });
         }
       } catch (e) {
         devWarn('[NodeTypeFormModal] Query invalidation error', e);
@@ -378,7 +378,7 @@ export const NodeTypeFormModal: React.FC<NodeTypeFormModalProps> = ({
       });
       // rollback optimistic update
       try {
-        const listKey = nodeTypesKeys.list(tenantId);
+      const listKey = nodeTypesKeys.list(tenantId as any);
         if (previousList) {
           queryClient.setQueryData(listKey, previousList);
         }

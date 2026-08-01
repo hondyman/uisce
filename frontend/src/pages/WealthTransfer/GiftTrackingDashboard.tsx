@@ -277,7 +277,7 @@ export const GiftTrackingDashboard: React.FC<GiftTrackingDashboardProps> = ({ fa
           <Timeline position="alternate">
             {gifts.map((gift, index) => (
               <TimelineItem key={gift.gift_id}>
-                <TimelineOppositeContent color="text.secondary">
+                <TimelineOppositeContent sx={{ color: 'text.secondary' } as any}>
                   {format(new Date(gift.gift_date), 'MMM d, yyyy')}
                 </TimelineOppositeContent>
                 <TimelineSeparator>

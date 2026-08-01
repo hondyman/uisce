@@ -28,8 +28,8 @@ export const RAGSearch: React.FC = () => {
     if (!query.trim()) return;
 
     try {
-      const data = await searchRAG.mutateAsync({ query, limit: 5 });
-      setResults(data.results);
+      const data = await searchRAG({ query, limit: 5 });
+      setResults((data as any).results);
     } catch (err) {
       console.error('Search failed:', err);
     }

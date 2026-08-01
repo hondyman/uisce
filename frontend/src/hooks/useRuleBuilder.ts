@@ -87,7 +87,7 @@ export const useRuleBuilder = (
         setLoading(true);
         setError(null);
         const data = await ruleService.getRule(ruleId);
-        setRule(data as Rule);
+        setRule(data as unknown as Rule);
       } catch (err) {
         const message = err instanceof Error ? err.message : 'Failed to load rule';
         setError(message);
@@ -211,7 +211,7 @@ export const useRuleBuilder = (
         saved = await ruleService.updateRule(rule.id, payload);
       }
 
-      setRule(saved as Rule);
+      setRule(saved as unknown as Rule);
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to save rule';
       setError(message);
@@ -235,7 +235,7 @@ export const useRuleBuilder = (
         `Published to testing for validation`
       );
 
-      setRule(published as Rule);
+      setRule(published as unknown as Rule);
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to publish rule';
       setError(message);

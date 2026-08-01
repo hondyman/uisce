@@ -1,3 +1,4 @@
+import * as React from 'react';
 import { Stack, TextField, Autocomplete, CircularProgress } from '@mui/material';
 import SearchIcon from '@mui/icons-material/Search';
 import { useEffect, useState } from 'react';
@@ -55,38 +56,39 @@ export function GlobalSearch() {
     {} as Record<string, SearchResult[]>
   );
 
-  return (
-    <Autocomplete
-      open={open}
-      onOpen={() => setOpen(true)}
-      onClose={() => setOpen(false)}
-      inputValue={query}
-      onInputChange={(_, value) => setQuery(value)}
-      options={results}
-      groupBy={(option) => option.category}
-      getOptionLabel={(option) => option.label}
-      renderInput={(params) => (
-        <TextField
-          {...params}
-          placeholder="Search rules, scenarios, portfolios..."
-          size="small"
-          sx={{ width: 300 }}
-          InputProps={{
+  return React.createElement(
+    Autocomplete as any,
+    {
+      open,
+      onOpen: () => setOpen(true),
+      onClose: () => setOpen(false),
+      inputValue: query,
+      onInputChange: (_: any, value: string) => setQuery(value),
+      options: results,
+      groupBy: (option: any) => option.category,
+      getOptionLabel: (option: any) => option.label,
+      renderInput: (params: any) => React.createElement(
+        TextField,
+        {
+          ...params,
+          placeholder: "Search rules, scenarios, portfolios...",
+          size: "small",
+          sx: { width: 300 },
+          InputProps: {
             ...params.InputProps,
-            startAdornment: <SearchIcon sx={{ mr: 1, color: 'textSecondary' }} />,
-            endAdornment:
-              loading ? (
-                <CircularProgress color="inherit" size={20} />
-              ) : (
-                params.InputProps.endAdornment
-              ),
-          }}
-        />
-      )}
-      onOptionSelected={(_: any, option: any) => {
+            startAdornment: React.createElement(React.Fragment, null,
+              React.createElement(SearchIcon, { sx: { mr: 1, color: 'textSecondary' } })
+            ),
+            endAdornment: loading
+              ? React.createElement(CircularProgress, { color: 'inherit', size: 20 })
+              : params.InputProps.endAdornment,
+          },
+        }
+      ),
+      onOptionSelected: (_: any, option: any) => {
         window.location.href = option.href;
-      }}
-      noOptionsText={query ? 'No results found' : 'Type to search'}
-    />
+      },
+      noOptionsText: query ? 'No results found' : 'Type to search',
+    }
   );
 }

@@ -11,7 +11,7 @@ export function CardWidget({ def }: CardWidgetProps) {
 
   return (
     <div
-      className={`bg-white rounded-lg shadow p-6 ${getVariantStyles(def.variant)} ${
+      className={`bg-white rounded-lg shadow p-6 ${getVariantStyles(def.variant || "")} ${
         def.className || ""
       }`}
     >

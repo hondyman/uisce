@@ -40,7 +40,7 @@ export const HouseholdDashboard: React.FC<HouseholdDashboardProps> = ({ househol
   const loadHierarchy = async () => {
     setLoading(true);
     try {
-      const data = await fetchAPI<HouseholdHierarchy>(`/households/${householdId}/entities`);
+      const data = await fetchAPI(`/households/${householdId}/entities`) as HouseholdHierarchy;
       setHierarchy(data);
     } catch (error) {
       console.error('Failed to load household hierarchy:', error);

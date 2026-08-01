@@ -1,5 +1,4 @@
 import { useQuery } from 'react-query';
-import type { UseQueryResult } from 'react-query';
 import {
   fetchPortfolioOverview,
   fetchPortfolioHoldings,
@@ -22,7 +21,7 @@ const CACHE_TIME = 5 * 60000; // 5 minutes
 export function usePortfolioOverview(
   portfolioId: string | null,
   valuationDate: string
-): UseQueryResult<PortfolioOverview, Error> {
+): any {
   return useQuery(
     ['portfolioOverview', portfolioId, valuationDate],
     () => fetchPortfolioOverview(portfolioId!, valuationDate),
@@ -41,7 +40,7 @@ export function usePortfolioOverview(
 export function usePortfolioHoldings(
   portfolioId: string | null,
   valuationDate: string
-): UseQueryResult<HoldingsSummary, Error> {
+): any {
   return useQuery(
     ['portfolioHoldings', portfolioId, valuationDate],
     () => fetchPortfolioHoldings(portfolioId!, valuationDate),
@@ -60,7 +59,7 @@ export function usePortfolioHoldings(
 export function usePortfolioRisk(
   portfolioId: string | null,
   valuationDate: string
-): UseQueryResult<RiskSnapshot, Error> {
+): any {
   return useQuery(
     ['portfolioRisk', portfolioId, valuationDate],
     () => fetchPortfolioRisk(portfolioId!, valuationDate),
@@ -79,7 +78,7 @@ export function usePortfolioRisk(
 export function usePortfolioCompliance(
   portfolioId: string | null,
   valuationDate: string
-): UseQueryResult<ComplianceSnapshot, Error> {
+): any {
   return useQuery(
     ['portfolioCompliance', portfolioId, valuationDate],
     () => fetchPortfolioCompliance(portfolioId!, valuationDate),
@@ -98,7 +97,7 @@ export function usePortfolioCompliance(
 export function usePortfolioScenarios(
   portfolioId: string | null,
   valuationDate: string
-): UseQueryResult<ScenarioResults, Error> {
+): any {
   return useQuery(
     ['portfolioScenarios', portfolioId, valuationDate],
     () => fetchPortfolioScenarios(portfolioId!, valuationDate),

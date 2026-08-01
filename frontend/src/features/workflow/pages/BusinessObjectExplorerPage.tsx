@@ -600,17 +600,17 @@ export const BusinessObjectExplorerPage: React.FC = () => {
       </main>
 
       {/* Edit Object Modal */}
-      {editModalOpen && editingObject && (
+      {editModalOpen && editingObject ? (
         <EditBusinessObjectModal
-          open={editModalOpen}
+          isOpen={editModalOpen}
           onClose={() => {
             setEditModalOpen(false);
             setEditingObject(null);
           }}
           onSave={handleSaveBusinessObject}
-          businessObject={editingObject as any}
-        />
-      )}
+          object={editingObject as any}
+        /> as any
+      ) : null}
 
       {/* Create Object Wizard */}
       {wizardOpen && (

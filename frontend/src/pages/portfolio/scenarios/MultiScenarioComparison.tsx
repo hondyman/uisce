@@ -1,3 +1,4 @@
+import * as React from 'react';
 import {
   Alert,
   Box,
@@ -31,8 +32,8 @@ import { useScenarioComparison } from '../../hooks/useScenarioComparison';
 import type { SimulationResult, ScenarioComparison, StressScenario } from '../../types/scenarios';
 
 export interface MultiScenarioComparisonProps {
-  scenarios: StressScenario[];
-  scenarioResults: Map<string, SimulationResult[]>;
+  scenarios: any[];
+  scenarioResults: any;
   onSelectScenario?: (scenarioId: string) => void;
   isLoading?: boolean;
 }
@@ -91,7 +92,7 @@ export function MultiScenarioComparison({
     const portfolioIds = new Set<string>();
     scenarios.forEach(scenario => {
       const results = scenarioResults.get(scenario.id) || [];
-      results.forEach(r => portfolioIds.add(r.portfolioId));
+      results.forEach((r: any) => portfolioIds.add(r.portfolioId));
     });
 
     // Build rows with PnL for each scenario
@@ -104,7 +105,7 @@ export function MultiScenarioComparison({
 
       scenarios.forEach(scenario => {
         const results = scenarioResults.get(scenario.id) || [];
-        const result = results.find(r => r.portfolioId === portfolioId);
+        const result = results.find((r: any) => r.portfolioId === portfolioId);
         if (result) {
           row[`pnl_${scenario.id}`] = result.pnl;
           row[`confidence_${scenario.id}`] = result.confidence;
@@ -389,23 +390,23 @@ export function MultiScenarioComparison({
           </Typography>
 
           <Box sx={{ height: 400, width: '100%' }}>
-            <DataGrid
-              rows={filteredRows}
-              columns={gridColumns}
-              pageSizeOptions={[5, 10, 25]}
-              initialState={{
+            {React.createElement(DataGrid as any, {
+              rows: filteredRows as any,
+              columns: gridColumns as any,
+              pageSizeOptions: [5, 10, 25],
+              initialState: {
                 pagination: { paginationModel: { pageSize: 10 } },
-              }}
-              disableSelectionOnClick
-              sx={{
+              },
+              disableSelectionOnClick: true,
+              sx: {
                 '& .MuiDataGrid-cell': {
                   borderColor: theme.palette.divider,
                 },
                 '& .MuiDataGrid-row:hover': {
                   backgroundColor: theme.palette.action.hover,
                 },
-              }}
-            />
+              },
+            })}
           </Box>
         </CardContent>
       </Card>
@@ -474,5 +475,3 @@ export function MultiScenarioComparison({
     </Box>
   );
 }
-
-export type { MultiScenarioComparisonProps };

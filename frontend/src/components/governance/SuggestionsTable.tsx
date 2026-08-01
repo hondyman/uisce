@@ -52,7 +52,7 @@ const SuggestionsTable = ({ drafts, onSelect }: SuggestionsTableProps) => {
                                 />
                             </TableCell>
                             <TableCell>
-                                {`${draft.hierarchy.level1} / ${draft.hierarchy.level2} / ${draft.hierarchy.level3}`}
+                                {`${draft.hierarchy!.level1} / ${draft.hierarchy!.level2} / ${draft.hierarchy!.level3}`}
                             </TableCell>
                             <TableCell>{draft.status}</TableCell>
                             <TableCell align="right">

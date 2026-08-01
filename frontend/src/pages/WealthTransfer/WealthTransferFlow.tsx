@@ -65,7 +65,8 @@ export const WealthTransferFlow: React.FC<WealthTransferFlowProps> = ({ familyId
     const links: SankeyLink[] = getLinksForScenario(scenarioType);
 
     // Create Sankey layout
-    const sankeyLayout = sankey<SankeyNode, SankeyLink>()
+    const sankeyFn = sankey as any;
+    const sankeyLayout: any = sankeyFn()
       .nodeWidth(15)
       .nodePadding(30)
       .extent([
@@ -73,10 +74,10 @@ export const WealthTransferFlow: React.FC<WealthTransferFlowProps> = ({ familyId
         [width - margin.right, height - margin.bottom],
       ]);
 
-    const { nodes: sankeyNodes, links: sankeyLinks } = sankeyLayout({
+    const { nodes: sankeyNodes, links: sankeyLinks } = (sankeyLayout({
       nodes: nodes.map(d => ({ ...d })),
       links: links.map(d => ({ ...d })),
-    } as any);
+    }) as any) as { nodes: any[]; links: any[] };
 
     const svg = d3
       .select(svgRef.current)

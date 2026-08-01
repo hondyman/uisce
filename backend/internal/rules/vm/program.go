@@ -9,9 +9,11 @@ type CompiledProgram struct {
 	BoolConsts    []bool
 	EnumConsts    []uint32
 	NumInSet      [][]int64
+	FNumConsts    []float64
 
-	NumPeakDepth  uint8
-	BoolPeakDepth uint8
+	NumPeakDepth   uint8
+	BoolPeakDepth  uint8
+	FNumPeakDepth  uint8
 }
 
 // CompileResult tells the caller whether the VM path is usable.

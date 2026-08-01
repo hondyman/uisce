@@ -238,7 +238,7 @@ export const EdgeTypeSetupPage: React.FC = () => {
       {!isLoading && !error && displayedEdgeTypes && (
         <EdgeTypeTable
           edgeTypes={displayedEdgeTypes}
-          nodeTypes={nodeTypes || []}
+          nodeTypes={(nodeTypes || []) as any}
           onEdit={handleEdit}
           onDelete={handleDelete}
         />

@@ -936,7 +936,7 @@ const ConditionGroupComponent: React.FC<ConditionGroupComponentProps> = ({
               />
             ) : (
               <ConditionGroupComponent
-                group={node}
+                group={node as any}
                 entities={entities}
                 primaryEntity={primaryEntity}
                 depth={depth + 1}

@@ -5,6 +5,7 @@ go 1.25
 require (
 	github.com/DATA-DOG/go-sqlmock v1.5.2
 	github.com/bits-and-blooms/bloom/v3 v3.7.0
+	github.com/apache/arrow-go/v18 v18.7.1-0.20260728150822-666f8dc2ea47
 	github.com/cespare/xxhash/v2 v2.3.0
 	github.com/go-playground/validator/v10 v10.27.0
 	github.com/go-redis/redis/v8 v8.11.5
@@ -45,7 +46,6 @@ require (
 	github.com/go-sql-driver/mysql v1.8.1
 	github.com/google/generative-ai-go v0.20.1
 	github.com/hashicorp/vault/api v1.22.0
-	github.com/hondyman/uisce/libs/hasura-client v0.0.0-00010101000000-000000000000
 	github.com/hondyman/uisce/libs/temporal-client v0.0.0
 	github.com/jackc/pglogrepl v0.0.0-20251213150135-2e8d0df862c1
 	github.com/linkedin/goavro/v2 v2.14.1
@@ -309,8 +309,6 @@ replace github.com/hondyman/uisce/calc-engine => ../calc-engine
 // replace github.com/hondyman/uisce => ..
 
 replace github.com/hondyman/uisce/libs/shared-types => ../libs/shared-types
-
-replace github.com/hondyman/uisce/libs/hasura-client => ../libs/hasura-client
 
 replace github.com/hondyman/uisce/libs/jwt-middleware => ../libs/jwt-middleware
 

@@ -197,7 +197,7 @@ const BusinessGlossaryPage: React.FC = () => {
         setSnackbar({
           open: true,
           message: `Cannot delete: This term is linked to ${deps.length} BO field(s) in: ${boNames || 'unknown BOs'}. Unlink the fields first.\n\nDetails:\n${details}`,
-          severity: 'warning'
+          severity: 'warning' as any
         });
       } else {
         setSnackbar({

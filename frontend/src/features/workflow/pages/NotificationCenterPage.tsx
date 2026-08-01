@@ -30,11 +30,7 @@ export const NotificationCenterPage: React.FC = () => {
   }
 
   return (
-    <NotificationCenter
-      tenant={tenant}
-      datasource={datasource}
-      userId={user.id}
-    />
+    <NotificationCenter /> as any
   );
 };
 

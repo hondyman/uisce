@@ -1,5 +1,4 @@
 import { useQuery } from 'react-query';
-import type { UseQueryResult } from 'react-query';
 import {
   fetchComplianceKPIs,
   fetchRiskKPIs,
@@ -23,7 +22,7 @@ const CACHE_TIME = 5 * 60000; // 5 minutes
 export function useComplianceKPIs(
   tenantId: string | null,
   valuationDate: string
-): UseQueryResult<ComplianceKPIData, Error> {
+): any {
   return useQuery(
     ['complianceKPIs', tenantId, valuationDate],
     () => fetchComplianceKPIs(tenantId!, valuationDate),
@@ -45,7 +44,7 @@ export function useComplianceKPIs(
 export function useRiskKPIs(
   tenantId: string | null,
   valuationDate: string
-): UseQueryResult<RiskKPIData, Error> {
+): any {
   return useQuery(
     ['riskKPIs', tenantId, valuationDate],
     () => fetchRiskKPIs(tenantId!, valuationDate),
@@ -66,7 +65,7 @@ export function useRiskKPIs(
  */
 export function useSparklines(
   tenantId: string | null
-): UseQueryResult<SparklinesData, Error> {
+): any {
   return useQuery(
     ['sparklines', tenantId],
     () => fetchSparklines(tenantId!),
@@ -87,7 +86,7 @@ export function useSparklines(
  */
 export function useETLHealth(
   tenantId: string | null
-): UseQueryResult<ETLHealthData, Error> {
+): any {
   return useQuery(
     ['etlHealth', tenantId],
     () => fetchETLHealth(tenantId!),
@@ -109,7 +108,7 @@ export function useETLHealth(
 export function useAlerts(
   tenantId: string | null,
   valuationDate: string
-): UseQueryResult<AlertsData, Error> {
+): any {
   return useQuery(
     ['alerts', tenantId, valuationDate],
     () => fetchAlerts(tenantId!, valuationDate),

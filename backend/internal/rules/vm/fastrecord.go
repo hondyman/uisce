@@ -2,6 +2,7 @@ package vm
 
 import (
 	"encoding/json"
+	"math"
 	"sync"
 )
 
@@ -11,6 +12,7 @@ const (
 	HasBool uint8 = 1 << 1
 	HasStr  uint8 = 1 << 2
 	HasEnum uint8 = 1 << 3
+	HasFNum uint8 = 1 << 4
 )
 
 // EnumMissing is the zero-value for an unassigned enum ID.
@@ -24,6 +26,7 @@ type FastRecord struct {
 	BoolVals []bool
 	StrVals  []string
 	EnumVals []uint32
+	FNumVals []float64
 	Present  []uint8
 }
 
@@ -46,6 +49,7 @@ func GetFastRecord(syms *SymbolDict) *FastRecord {
 		r.BoolVals = make([]bool, cap)
 		r.StrVals = make([]string, cap)
 		r.EnumVals = make([]uint32, cap)
+		r.FNumVals = make([]float64, cap)
 		r.Present = make([]uint8, cap)
 	} else {
 		// Go 1.21+ builtin: zero out slices efficiently without allocation
@@ -53,6 +57,7 @@ func GetFastRecord(syms *SymbolDict) *FastRecord {
 		clear(r.BoolVals[:cap])
 		clear(r.StrVals[:cap])
 		clear(r.EnumVals[:cap])
+		clear(r.FNumVals[:cap])
 		clear(r.Present[:cap])
 	}
 
@@ -88,22 +93,30 @@ func projectRecursive(prefix string, data any, r *FastRecord, syms *SymbolDict, 
 			projectRecursive(newPrefix, val, r, syms, enums)
 		}
 
-	case float64: // JSON numbers unmarshal to float64
+	case float64:
 		if id, ok := syms.Resolve(prefix); ok {
-			r.NumVals[id] = int64(v)
-			r.Present[id] |= HasNum
+			r.FNumVals[id] = v
+			r.Present[id] |= HasFNum
+			if v == float64(int64(v)) && !math.IsInf(v, 0) {
+				r.NumVals[id] = int64(v)
+				r.Present[id] |= HasNum
+			}
 		}
 
 	case int:
 		if id, ok := syms.Resolve(prefix); ok {
 			r.NumVals[id] = int64(v)
 			r.Present[id] |= HasNum
+			r.FNumVals[id] = float64(v)
+			r.Present[id] |= HasFNum
 		}
 
 	case int64:
 		if id, ok := syms.Resolve(prefix); ok {
 			r.NumVals[id] = v
 			r.Present[id] |= HasNum
+			r.FNumVals[id] = float64(v)
+			r.Present[id] |= HasFNum
 		}
 
 	case bool:
@@ -126,9 +139,9 @@ func projectRecursive(prefix string, data any, r *FastRecord, syms *SymbolDict, 
 
 	case json.Number:
 		if id, ok := syms.Resolve(prefix); ok {
-			if n, err := v.Int64(); err == nil {
-				r.NumVals[id] = n
-				r.Present[id] |= HasNum
+			if n, err := v.Float64(); err == nil {
+				r.FNumVals[id] = n
+				r.Present[id] |= HasFNum
 			}
 		}
 	}

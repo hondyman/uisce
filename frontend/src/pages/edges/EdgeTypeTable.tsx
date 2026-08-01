@@ -233,7 +233,7 @@ export const EdgeTypeTable: React.FC<EdgeTypeTableProps> = ({
                 {/* Direction Column */}
                 <TableCell>
                   <Chip
-                    label={edgeType.is_directed ? 'Directed' : 'Undirected'}
+                    label={(edgeType as any).is_directed ? 'Directed' : 'Undirected'}
                     size="small"
                     variant="outlined"
                     sx={{ fontWeight: 600, fontSize: '0.75rem' }}

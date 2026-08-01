@@ -277,17 +277,17 @@ export const RuleBreachTable: React.FC<RuleBreachTableProps> = ({
       </Box>
 
       <Box sx={{ height: 500, width: '100%' }}>
-        <DataGrid
-          rows={rows}
-          columns={columns}
-          pageSizeOptions={[5, 10, 25]}
-          initialState={{
+        {React.createElement(DataGrid as any, {
+          rows: rows as any,
+          columns: columns as any,
+          pageSizeOptions: [5, 10, 25],
+          initialState: {
             pagination: { paginationModel: { pageSize: 5 } },
             sorting: {
               sortModel: [{ field: 'severity', sort: 'asc' }],
             },
-          }}
-          sx={{
+          },
+          sx: {
             border: 'none',
             backgroundColor: 'transparent',
             '& .MuiDataGrid-cell': {
@@ -324,10 +324,10 @@ export const RuleBreachTable: React.FC<RuleBreachTableProps> = ({
             '& .MuiSelect-icon': {
               color: textColor,
             },
-          }}
-          disableSelectionOnClick
-          density="compact"
-        />
+          },
+          disableSelectionOnClick: false,
+          density: 'compact',
+        })}
       </Box>
     </Paper>
   );

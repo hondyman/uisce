@@ -46,7 +46,7 @@ describe('WASM Runtime', () => {
 
   it('should evaluate rule correctly', async () => {
     // Mock successful script loading
-    const mockScript = {
+    const mockScript: { onload: any; onerror: any; src: string } = {
       onload: null,
       onerror: null,
       src: '',
@@ -92,7 +92,7 @@ describe('WASM Runtime', () => {
     delete (global as any).evaluateRule;
 
     // Mock failed script loading
-    const mockScript = {
+    const mockScript: { onload: any; onerror: any; src: string } = {
       onload: null,
       onerror: null,
       src: '',
@@ -119,7 +119,7 @@ describe('WASM Runtime', () => {
 
   it('should handle evaluation errors', async () => {
     // Mock successful script loading
-    const mockScript = {
+    const mockScript: { onload: any; onerror: any; src: string } = {
       onload: null,
       onerror: null,
       src: '',

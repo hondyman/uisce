@@ -107,7 +107,7 @@ export function CollaborativeAnnotationsPanel({
         text: newAnnotationText,
         cellReference: newCellReference || undefined,
         mentions: [],
-      } as AddAnnotationRequest);
+      } as any);
 
       setNewAnnotationText('');
       setNewCellReference('');
@@ -130,7 +130,7 @@ export function CollaborativeAnnotationsPanel({
         userId: currentUserId,
         text: replyText,
         mentions: [],
-      } as AddAnnotationRequest);
+      } as any);
 
       setReplyText('');
       setReplyingTo(null);
@@ -539,5 +539,3 @@ export function CollaborativeAnnotationsPanel({
     </Box>
   );
 }
-
-export type { CollaborativeAnnotationsPanelProps };

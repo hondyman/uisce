@@ -1,5 +1,6 @@
 import { useQuery, useMutation } from "@tanstack/react-query";
-import type { LayoutSchema } from "./schema";
+import { z } from "zod";
+import { Layout } from "./schema";
 
 // API base URL (configure via env)
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8080";
@@ -18,7 +19,7 @@ interface IntentResponse {
         metrics: string[];
         confidence: number;
     };
-    layout: LayoutSchema;
+    layout: Layout;
 }
 
 /**
@@ -73,7 +74,7 @@ interface TemplateInfo {
  * Hook to load a layout by template ID
  */
 export function useGenUITemplate(templateId: string) {
-    return useQuery<LayoutSchema>({
+    return useQuery<Layout>({
         queryKey: ["genui", "template", templateId],
         queryFn: async () => {
             const response = await fetch(`${API_BASE_URL}/genui/templates/${templateId}`);
@@ -92,7 +93,7 @@ export function useGenUITemplate(templateId: string) {
  * Hook to automatically fetch a layout from a natural language query
  */
 export function useGenUIQuery(query: string, tenantId?: string) {
-    return useQuery<LayoutSchema, Error>({
+    return useQuery<Layout, Error>({
         queryKey: ["genui", "query", query, tenantId],
         queryFn: async () => {
             const response = await fetch(`${API_BASE_URL}/genui/intent`, {

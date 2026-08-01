@@ -653,7 +653,7 @@ const ValidationRuleEditor: React.FC<ValidationRuleEditorProps> = ({
                     severity: 'error' as const,
                     targetEntity: r.bp_name,
                     fieldName: r.step_name,
-                  }))}
+                  } as any))}
                   onRuleCloned={handleRuleCloned}
                   newRuleData={{
                     condition: formData.condition_json,

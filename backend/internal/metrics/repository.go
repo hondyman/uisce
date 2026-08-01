@@ -7,13 +7,6 @@ import (
 	"fmt"
 )
 
-// HasuraClient defines the interface for Hasura GraphQL operations
-type HasuraClient interface {
-	Query(ctx context.Context, query string, variables map[string]interface{}) (map[string]interface{}, error)
-	Mutate(ctx context.Context, mutation string, variables map[string]interface{}) (map[string]interface{}, error)
-}
-
-// MetricRepository defines the interface for metric storage
 type MetricRepository interface {
 	List(ctx context.Context) ([]MetricDefinition, error)
 	Get(ctx context.Context, id string) (*MetricDefinition, error)
@@ -21,18 +14,12 @@ type MetricRepository interface {
 	Update(ctx context.Context, metric *MetricDefinition) error
 }
 
-// SQLMetricRepository implements MetricRepository using database/sql
 type SQLMetricRepository struct {
-	DB           *sql.DB
-	hasuraClient HasuraClient
+	DB *sql.DB
 }
 
 func NewSQLMetricRepository(db *sql.DB) *SQLMetricRepository {
 	return &SQLMetricRepository{DB: db}
-}
-
-func NewSQLMetricRepositoryWithHasura(db *sql.DB, hasura HasuraClient) *SQLMetricRepository {
-	return &SQLMetricRepository{DB: db, hasuraClient: hasura}
 }
 
 func (r *SQLMetricRepository) List(ctx context.Context) ([]MetricDefinition, error) {

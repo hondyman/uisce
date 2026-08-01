@@ -47,7 +47,7 @@ export const CatalogEdgeTypesPage: React.FC = () => {
   const usedColors = useMemo(() => {
     return edgeTypes
       ?.filter(type => type.config?.color)
-      .map(type => type.config.color) || [];
+      .map(type => type.config!.color) || [];
   }, [edgeTypes]);
 
   const filteredTypes = edgeTypes?.filter(t => 

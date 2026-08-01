@@ -145,7 +145,7 @@ export function useScenarioComparison() {
   const getRanking = useCallback(
     (metric: 'avgPnL' | 'variance' | 'confidence') => {
       if (!comparison) return [];
-      return [...comparison.scenarios].sort((a, b) => {
+      return [...(comparison as any).scenarios].sort((a: any, b: any) => {
         if (metric === 'variance') return a.variance - b.variance; // Lower is better
         if (metric === 'confidence') return b.avgConfidence - a.avgConfidence; // Higher is better
         return b.avgPnL - a.avgPnL; // Higher PnL is better

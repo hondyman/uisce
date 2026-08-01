@@ -135,7 +135,7 @@ const ComplianceDashboard = () => {
     );
 };
 
-const SummaryCard = ({title, value, color }) => (
+const SummaryCard = ({title, value, color }: any) => (
     <Card sx={{ height: '100%' }}>
         <CardContent>
             <Typography color="textSecondary" gutterBottom>{title}</Typography>

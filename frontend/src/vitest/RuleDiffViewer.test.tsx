@@ -21,7 +21,7 @@ import { RuleDiffViewer } from '@/components/rules/RuleDiffViewer'
 
 describe('RuleDiffViewer', () => {
   it('renders the diff editor fallback when Monaco DiffEditor is unavailable', async () => {
-    ;(rulesApi.fetchRuleDiff as unknown as vi.Mock).mockResolvedValue({
+    ;(rulesApi.fetchRuleDiff as any).mockResolvedValue({
       base: {
         name: 'Base Rule',
         severity: 'low',

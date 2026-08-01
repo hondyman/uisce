@@ -40,6 +40,8 @@ import (
 	charts "github.com/hondyman/uisce/backend/internal/db/charts"
 	"github.com/hondyman/uisce/backend/internal/events"
 	"github.com/hondyman/uisce/backend/internal/financial"
+	"github.com/hondyman/uisce/backend/internal/fix"
+	"github.com/hondyman/uisce/backend/internal/flight"
 	"github.com/hondyman/uisce/backend/internal/goldcopy"
 	"github.com/hondyman/uisce/backend/internal/governance"
 	"github.com/hondyman/uisce/backend/internal/governance/contracts"
@@ -69,6 +71,7 @@ import (
 	"github.com/hondyman/uisce/backend/internal/security"
 	"github.com/hondyman/uisce/backend/internal/services"
 	"github.com/hondyman/uisce/backend/internal/succession"
+	"github.com/hondyman/uisce/backend/internal/streaming"
 	"github.com/hondyman/uisce/backend/internal/taxplan"
 	"github.com/hondyman/uisce/backend/internal/telemetry/optimize"
 	temporal "github.com/hondyman/uisce/backend/internal/temporal"
@@ -82,15 +85,12 @@ import (
 	"github.com/robfig/cron/v3"
 	"github.com/sirupsen/logrus"
 
-	calendarsync "github.com/hondyman/uisce/backend/internal/sync"
-
 	"regexp"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/jmoiron/sqlx"
 
 	catalogmeta "github.com/hondyman/uisce/backend/internal/metadata"
-	hasuraclient "github.com/hondyman/uisce/libs/hasura-client"
 	temporalclientlib "github.com/hondyman/uisce/libs/temporal-client"
 	temporalclient "go.temporal.io/sdk/client"
 	"google.golang.org/grpc"
@@ -99,6 +99,41 @@ import (
 	grpcmetadata "google.golang.org/grpc/metadata"
 	"github.com/hondyman/uisce/libs/jwt-middleware"
 )
+
+type ComplianceDeps struct {
+	RuleEngine          *rules.RuleEngine
+	RedisClient         *redis.Client
+	DB                  *sql.DB
+	KafkaBrokers        string
+	SurvivorshipEngine *mdm.SurvivorshipEngine
+	DriftHealer        *governance.SelfHealingService
+	AdvisorWorker       *rules.AdvisorWorker
+	FIXServer           *fix.Server
+	CDCConsumer        *streaming.SchemaCDCConsumer
+	FlightServer       *flight.FlightServer
+}
+
+func (c *ComplianceDeps) RuleRepo() rules.RuleRepository {
+	return rules.NewSQLRuleRepository(c.DB)
+}
+
+func (c *ComplianceDeps) RefFetcher() ReferenceDataFetcher {
+	return &liveRefFetcher{db: c.DB}
+}
+
+type liveRefFetcher struct{ db *sql.DB }
+
+func (f *liveRefFetcher) GetPortfolioReferenceState(ctx context.Context, tenantID uuid.UUID, portfolioID, isin string) (map[string]any, error) {
+	return nil, fmt.Errorf("not implemented")
+}
+
+func (f *liveRefFetcher) GetExternalMapping(ctx context.Context, tenantID uuid.UUID, systemID string) (map[string]string, error) {
+	return nil, fmt.Errorf("not implemented")
+}
+
+func (f *liveRefFetcher) GetRuleChain(ctx context.Context, tenantID uuid.UUID, chainID string) (*rules.RuleChain, error) {
+	return nil, fmt.Errorf("not implemented")
+}
 
 // Create server instance
 
@@ -593,7 +628,7 @@ func registerAuthRoutes(r chi.Router, srv *Server) {
 	})
 }
 
-func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService, temporalClient temporalclient.Client, qosManager *services.QoSManager, trinoAuditService *audit.TrinoAuditService, geminiClient *GeminiClient, resolver security.DatasourceResolver, redisClient *redis.Client) *chi.Mux {
+func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService, temporalClient temporalclient.Client, qosManager *services.QoSManager, trinoAuditService *audit.TrinoAuditService, geminiClient *GeminiClient, resolver security.DatasourceResolver, redisClient *redis.Client, complianceDeps *ComplianceDeps) *chi.Mux {
 
 	// Create chi router and helper services required for setup
 	fmt.Println("DEBUG: SetupRouter INVOKED! [Version 3]")
@@ -1235,13 +1270,8 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 	// Initialize Policy Generation Handler (Phase 9)
 	srv.PolicyGenerationHandler = handlers.NewPolicyGenerationHandler(sqlxDB)
 
-	// Initialize Hasura Client and Calc Handler (Phase 9)
-	hasuraCfg := &hasuraclient.HasuraConfig{
-		Endpoint:    getEnv("HASURA_GRAPHQL_ENDPOINT", "http://hasura:8080/v1/graphql"),
-		AdminSecret: getEnv("HASURA_GRAPHQL_ADMIN_SECRET", "myadminsecret"),
-	}
-	hasura := hasuraclient.NewHasuraClient(hasuraCfg)
-	srv.CalcHandler = handlers.NewCalcHandler(hasura)
+	// Initialize Calc Handler
+	srv.CalcHandler = handlers.NewCalcHandler(sqlxDB)
 
 	// Initialize Cube Client and Generator (Phase 9)
 	cubeURL = getEnv("CUBE_API_URL", "http://cube:4000")
@@ -1297,13 +1327,12 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 	// Register layout routes (saved UI layouts)
 	srv.registerLayoutRoutes(r)
 
-	// GraphQL proxy endpoints (proxied to Hasura)
-	registerGraphQLProxyRoutesV2(r)
-
 	// API routes
 	routes := NewRoutes()
 
 	r.Route("/api", func(r chi.Router) {
+		RegisterSemanticTagsRoutes(r, sqlxDB)
+
 		r.Post("/ai/generate-page", ai.NewPageCopilotService(sqlxDB).GeneratePageHandler)
 		r.Post("/calculation/compile", calculation.NewService().CompileExpressionHandler)
 
@@ -1514,6 +1543,33 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 			r.Get("/api/v1/audit/channel-logs", srv.GetChannelAuditLogsHandler)
 			tenantSearchHandler := handlers.NewAdminTenantSearchHandler(db)
 			r.Get("/admin/tenants/{tenantID}/scope", tenantSearchHandler.GetTenantScope)
+
+			// Public Pre-Trade Compliance & Ephemeral Hydration Engine
+			if complianceDeps != nil && complianceDeps.RuleEngine != nil {
+				refFetcher := complianceDeps.RefFetcher()
+				externalHandler := NewExternalComplianceHandler(
+					complianceDeps.RuleEngine,
+					refFetcher,
+					complianceDeps.RedisClient,
+					complianceDeps.DB,
+					complianceDeps.KafkaBrokers,
+				)
+				externalHandler.RegisterRoutes(r)
+
+				survivorshipHandler := NewSurvivorshipHandler(mdm.NewSurvivorshipEngine())
+				survivorshipHandler.RegisterRoutes(r)
+
+				lookthroughHandler := NewLookThroughSQLHandler()
+				lookthroughHandler.RegisterRoutes(r)
+
+				profiler := rules.NewLatencyProfiler()
+				complianceDeps.RuleEngine.SetProfiler(profiler)
+				driftHealer := governance.NewSelfHealingService(complianceDeps.DB)
+				complianceDeps.RuleEngine.SetDriftHealer(driftHealer)
+
+				telemetryHandler := NewRuleTelemetryHandler(complianceDeps.RuleEngine, profiler)
+				telemetryHandler.RegisterRoutes(r)
+			}
 		}
 
 		// WebSocket token issuance
@@ -1543,108 +1599,7 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 		w.WriteHeader(http.StatusOK)
 	})
 
-	// --- Google Calendar Sync ---
-	if redisClient != nil {
-		logging.GetLogger().Sugar().Info("Initializing Google Calendar Sync...")
 
-		// Token Encryption
-		encKey := os.Getenv("OAUTH_TOKEN_ENCRYPTION_KEY")
-		if encKey == "" {
-			logging.GetLogger().Sugar().Warn("OAUTH_TOKEN_ENCRYPTION_KEY not set. Generating ephemeral key tokens will be lost on restart.")
-		}
-
-		var tokenEncryptor *security.TokenEncryptor
-		if len(encKey) == 32 {
-			var err error
-			tokenEncryptor, err = security.NewTokenEncryptor([]byte(encKey))
-			if err != nil {
-				logging.GetLogger().Sugar().Errorf("Failed to create token encryptor: %v", err)
-			}
-		}
-
-		// OAuth Provider
-		googleClientID := os.Getenv("GOOGLE_CLIENT_ID")
-		googleClientSecret := os.Getenv("GOOGLE_CLIENT_SECRET")
-		// Host URL for redirect
-		serverURL := os.Getenv("SERVER_URL")
-		if serverURL == "" {
-			serverURL = "http://localhost:8080"
-		}
-		redirectURL := serverURL + "/auth/google/callback"
-
-		if googleClientID != "" && googleClientSecret != "" && tokenEncryptor != nil {
-			oauthProvider := oauth.NewGoogleOAuth2Provider(
-				googleClientID,
-				googleClientSecret,
-				redirectURL,
-				redisClient,
-				tokenEncryptor,
-			)
-
-			// Sync Repo
-			hasuraURL := os.Getenv("HASURA_URL")
-			if hasuraURL == "" {
-				hasuraURL = "http://localhost:8085/v1/graphql"
-			}
-			hasuraAdminSecret := os.Getenv("HASURA_GRAPHQL_ADMIN_SECRET")
-			if hasuraAdminSecret == "" {
-				hasuraAdminSecret = os.Getenv("HASURA_ADMIN_SECRET")
-				if hasuraAdminSecret == "" {
-					hasuraAdminSecret = "myadminsecret"
-				}
-			}
-
-			syncHasuraClient := hasuraclient.NewHasuraClient(&hasuraclient.HasuraConfig{
-				Endpoint:    hasuraURL,
-				AdminSecret: hasuraAdminSecret,
-			})
-
-			googleSyncRepo := repository.NewGoogleSyncRepo(syncHasuraClient)
-
-			// Sync Processor
-			// Note: SyncProcessor uses logrus, while the rest of the app uses zap.
-			// We create a logrus logger here for compatibility.
-			logrusLogger := logrus.New()
-			logrusEntry := logrus.NewEntry(logrusLogger)
-
-			syncProcessor := calendarsync.NewSyncProcessor(
-				oauthProvider,
-				googleSyncRepo,
-				logrusEntry,
-				10, // Max concurrent
-			)
-
-			// Sync Handler
-			syncHandler := NewSyncHandler(oauthProvider, syncProcessor, googleSyncRepo, logrusEntry)
-			syncHandler.RegisterRoutes(r)
-
-			// Conflict Handler
-			conflictHandler := NewConflictHandler(googleSyncRepo, logrusEntry)
-			conflictHandler.RegisterRoutes(r)
-
-			// Internal Event Handler (for testing bi-directional sync)
-			// Need a publisher
-			brokers := getEnv("KAFKA_BROKERS", "redpanda:9092")
-			eventPublisher, _ := services.NewEventPublisher(brokers) // Ignoring error for brevity, logs inside
-			internalEventService := services.NewInternalEventService(googleSyncRepo, eventPublisher)
-			internalEventHandler := NewInternalEventHandler(internalEventService, logrusEntry)
-			internalEventHandler.RegisterRoutes(r)
-
-			// Google Sync Listener
-			kafkaBrokers := getEnv("KAFKA_BROKERS", "redpanda:9092")
-			eventConsumer, err := services.NewEventConsumer(kafkaBrokers, "google-sync-service")
-			if err != nil {
-				logging.GetLogger().Sugar().Warnf("Failed to init event consumer for google sync: %v", err)
-			} else {
-				listener := calendarsync.NewGoogleSyncListener(syncProcessor, logrusEntry, eventConsumer)
-				listener.Start()
-			}
-
-			logging.GetLogger().Sugar().Info("✅ Google Calendar Sync initialized")
-		} else {
-			logging.GetLogger().Sugar().Warn("Skipping Google Calendar Sync (missing credentials or encryption key)")
-		}
-	}
 
 	rootMux.Mount("/", r)
 	return rootMux
@@ -2567,92 +2522,6 @@ func buildDynamicCRUDMutation(entityType string, data map[string]interface{}, id
 	}
 }
 
-func (s *Server) handleDynamicCrud(w http.ResponseWriter, r *http.Request) {
-	defer r.Body.Close()
-
-	var req dynamicCRUDRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, fmt.Sprintf("invalid request body: %v", err), http.StatusBadRequest)
-		return
-	}
-
-	if req.Data == nil {
-		req.Data = make(map[string]interface{})
-	}
-
-	if claims := jwtmiddleware.GetClaimsFromContext(r); claims != nil && claims.TenantID != "" {
-		req.Data["tenant_id"] = claims.TenantID
-	}
-	if datasourceID := r.Header.Get("X-Tenant-Datasource-ID"); datasourceID != "" {
-		req.Data["tenant_datasource_id"] = datasourceID
-	}
-
-	query, vars, err := buildDynamicCRUDMutation(req.EntityType, req.Data, req.IDs, r.Method)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-
-	result, err := executeGraphQLQuery(vars, query)
-	if err != nil {
-		logging.GetLogger().Sugar().Errorf("dynamic CRUD failed: %v", err)
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	respond(w, r, result, nil)
-}
-
-// executeGraphQLQuery sends a query to the Hasura GraphQL endpoint.
-func executeGraphQLQuery(variables map[string]interface{}, query string) (map[string]interface{}, error) {
-	hasuraURL := os.Getenv("HASURA_URL")
-	if hasuraURL == "" {
-		return nil, fmt.Errorf("HASURA_URL environment variable not set")
-	}
-	// Ensure URL has the correct path
-	if !strings.HasSuffix(hasuraURL, "/v1/graphql") {
-		hasuraURL = strings.TrimSuffix(hasuraURL, "/") + "/v1/graphql"
-	}
-
-	hasuraSecret := os.Getenv("HASURA_ADMIN_SECRET")
-
-	reqBody, err := json.Marshal(map[string]interface{}{
-		"query":     query,
-		"variables": variables,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal graphQL request body: %w", err)
-	}
-
-	req, err := http.NewRequest("POST", hasuraURL, bytes.NewBuffer(reqBody))
-	if err != nil {
-		return nil, fmt.Errorf("failed to create graphQL request: %w", err)
-	}
-	req.Header.Set("Content-Type", "application/json")
-	if hasuraSecret != "" {
-		req.Header.Set("X-Hasura-Admin-Secret", hasuraSecret)
-	}
-
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("failed to execute graphQL request: %w", err)
-	}
-	defer resp.Body.Close()
-
-	var result map[string]interface{}
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		bodyBytes, _ := io.ReadAll(resp.Body)
-		logging.GetLogger().Sugar().Errorf("Failed to decode GraphQL response. Status: %s, Body: %s", resp.Status, string(bodyBytes))
-		return nil, fmt.Errorf("failed to decode graphQL response: %w", err)
-	}
-
-	if errs, ok := result["errors"]; ok {
-		return nil, fmt.Errorf("graphql query failed: %v", errs)
-	}
-
-	return result, nil
-}
-
 // Profiler methods
 func (s *Server) startProfile(w http.ResponseWriter, r *http.Request) {
 	var req ProfileRequest
@@ -3260,15 +3129,12 @@ func (s *Server) registerTemplateRoutes(r chi.Router) {
 	r.Get("/templates/{node_id}", s.getTemplate)
 	r.Post("/templates/{node_id}/promote", s.promoteTemplate)
 	r.Get("/templates/{node_id}/versions", s.listVersions)
-
-	r.Post("/crud", s.handleDynamicCrud)
-	r.Put("/crud", s.handleDynamicCrud)
-	r.Delete("/crud", s.handleDynamicCrud)
 }
 
 // registerCalculationRoutes mounts calculation and cube-related routes
 func (s *Server) registerCalculationRoutes(r chi.Router) {
 	r.Route("/calc", func(r chi.Router) {
+		r.Get("/", s.CalcHandler.GetByObjectID)
 		r.Post("/", s.CalcHandler.Create)
 		r.Post("/preview", s.CalcHandler.Preview)
 		r.Post("/vectorized", s.runVectorizedCalculations)

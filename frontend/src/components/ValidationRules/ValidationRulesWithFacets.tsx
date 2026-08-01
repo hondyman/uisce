@@ -597,7 +597,7 @@ export const ValidationRulesWithFacets: React.FC<ValidationRulesProps> = ({
       notification.error('Import failed: Engine not initialized');
       return;
     }
-    if (!(await confirm({ title: 'Import marketplace rules', description: 'Import marketplace validation rules into the current tenant/datasource?' }))) return;
+    if (!(await confirm({ title: 'Import marketplace rules', description: 'Import marketplace validation rules into the current tenant/datasource?' } as any))) return;
     setLoading(true);
     try {
       let created = 0;

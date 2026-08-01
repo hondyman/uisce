@@ -49,6 +49,25 @@ const (
 	OpJumpIfTrue
 	OpJump // unconditional relative jump (pops nothing)
 
+	// Float loads (push 1 float64 to float operand stack)
+	OpLoadSymbolFNum // FNumVals[SymID]
+	OpLoadConstFNum  // FNumConsts[Aux]
+
+	// Float arithmetic (pop 2 floats, push 1 float result)
+	OpAddFNum // push a + b
+	OpSubFNum // push a - b
+	OpMulFNum // push a * b
+	OpDivFNum // push a / b
+	OpAbsFNum // pop 1, push |a|
+
+	// Float comparisons (pop 2 floats, push 1 bool)
+	OpEqualFNum
+	OpNotEqualFNum
+	OpGreaterFNum
+	OpLessFNum
+	OpGreaterEqFNum
+	OpLessEqFNum
+
 	// Result terminator
 	OpReturnBool // pop 1 bool; halt VM with that result
 )

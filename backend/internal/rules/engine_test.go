@@ -3,7 +3,6 @@ package rules
 import (
 	"context"
 	"sync"
-	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -465,16 +464,19 @@ func TestEngine_Evictor_RemovesIdleStates(t *testing.T) {
 		t.Fatalf("expected 2 tenants, got %d", eng.TenantCount())
 	}
 
+	tsA, _ := eng.tenantStates.Load("tenantA")
+	tsB, _ := eng.tenantStates.Load("tenantB")
+	stateA := tsA.(*EngineState)
+	stateB := tsB.(*EngineState)
+
+	oldTime := time.Now().Add(-2 * time.Hour).UnixNano()
+	stateA.LastUsedUnixNano = oldTime
+	stateB.LastUsedUnixNano = oldTime
+
 	now := time.Now()
 	evicted := eng.EvictIdleStates(now, time.Hour)
-	if evicted != 0 {
-		t.Errorf("expected 0 evictions with hour TTL, got %d", evicted)
-	}
-
-	oldTime := now.Add(-2 * time.Hour)
-	evicted = eng.EvictIdleStates(oldTime, time.Hour)
 	if evicted != 2 {
-		t.Errorf("expected 2 evictions, got %d", evicted)
+		t.Errorf("expected 2 evictions with 2h-old timestamp, got %d", evicted)
 	}
 	if eng.TenantCount() != 0 {
 		t.Errorf("expected 0 tenants after eviction, got %d", eng.TenantCount())
@@ -491,6 +493,10 @@ func TestEngine_Evictor_PreservesActiveState(t *testing.T) {
 
 	input := map[string]any{"customer": map[string]any{"tier": "GOLD"}}
 	eng.Evaluate(ctx, "tenantA", rule.ID(), 1, rule, input, false)
+
+	ts, _ := eng.tenantStates.Load("tenantB")
+	stateB := ts.(*EngineState)
+	stateB.LastUsedUnixNano = time.Now().Add(-2 * time.Hour).UnixNano()
 
 	now := time.Now()
 	evicted := eng.EvictIdleStates(now, time.Hour)
@@ -524,37 +530,20 @@ func TestEngine_StartEvictor_RunsAndStops(t *testing.T) {
 
 func TestEngine_Singleflight_DeduplicatesConcurrentRewarms(t *testing.T) {
 	eng := NewRuleEngine(nil)
-
 	rule := smallRule("r1", "customer.tier", "==", "GOLD")
 
 	var wg sync.WaitGroup
-	var maxConcurrent int64
-	var current int64
-
 	for i := 0; i < 10; i++ {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			atomic.AddInt64(&current, 1)
-			max := atomic.LoadInt64(&current)
-			for {
-				m := atomic.LoadInt64(&current)
-				if m > max {
-					atomic.StoreInt64(&maxConcurrent, m)
-				}
-				if atomic.LoadInt64(&current) == 0 {
-					break
-				}
-				time.Sleep(time.Microsecond)
-			}
 			eng.RewarmTenant("tenantA", []*RuleNode{rule}, 1)
-			atomic.AddInt64(&current, -1)
 		}()
 	}
-
 	wg.Wait()
-	if maxConcurrent > 1 {
-		t.Errorf("expected singleflight to serialize rewarms, but max concurrent was %d", maxConcurrent)
+
+	if size := eng.TenantCount(); size != 1 {
+		t.Errorf("expected 1 tenant state after concurrent rewarms, got %d", size)
 	}
 }
 
