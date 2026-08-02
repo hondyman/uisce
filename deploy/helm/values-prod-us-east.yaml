@@ -1,0 +1,19 @@
+# =============================================================================
+# Uisce Semantic OS — Helm Values: Production (US East 1)
+# =============================================================================
+
+global:
+  environment: production
+  complianceLevel: g-sifi
+  region: us-east-1
+
+raftLedger:
+  nodeID: "uisce-node-us-east-1"
+  clusterPeers:
+    - "uisce-node-us-east-1.uisce.svc.cluster.local:7946"
+    - "uisce-node-eu-central-1.uisce.svc.cluster.local:7946"
+    - "uisce-node-ap-east-1.uisce.svc.cluster.local:7946"
+
+# Infisical secret ref — adjust to match your Infisical project secret name
+infisical:
+  secretRef: uisce-infisical-secrets-us-east

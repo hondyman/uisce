@@ -1,13 +1,16 @@
 import { useCallback, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import type { CalendarProvider } from '../services/api';
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8081/api/v1';
 
 export interface SyncConflict {
     id: string;
     tenant_id: string;
-    internal_event_id: string;
-    google_event_id: string;
+    provider: CalendarProvider;
+    internal_event_id?: string;
+    external_event_id: string;
+    external_calendar_id: string;
     conflict_type: string;
     severity: string;
     status: string;
@@ -15,7 +18,7 @@ export interface SyncConflict {
     created_at: string;
     updated_at: string;
     internal_event_data?: any;
-    google_event_data?: any;
+    external_event_data?: any;
 }
 
 export const useConflictResolution = (tenantId: string) => {
@@ -44,7 +47,7 @@ export const useConflictResolution = (tenantId: string) => {
     });
 
     const resolveMutation = useMutation({
-        mutationFn: async ({ conflictId, strategy }: { conflictId: string, strategy: string }) => {
+        mutationFn: async ({ conflictId, strategy }: { conflictId: string; strategy: string }) => {
             const res = await fetch(`${API_BASE}/sync/conflicts/${conflictId}/resolve`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },

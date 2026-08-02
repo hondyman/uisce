@@ -1,13 +1,13 @@
 import React from 'react';
-import { 
-  List, ListItem, ListItemText, ListItemSecondaryAction, 
-  IconButton, Typography, Paper, Chip 
+import {
+  List, ListItem, ListItemText, ListItemSecondaryAction,
+  IconButton, Typography, Paper, Chip
 } from '@mui/material';
 import SyncIcon from '@mui/icons-material/Sync';
-import { GoogleCalendar } from '../../types/calendar';
+import type { ExternalCalendar } from '../../types/calendar';
 
 interface Props {
-  calendars: GoogleCalendar[];
+  calendars: ExternalCalendar[];
   onSync: (calendarId: string) => void;
   isSyncing: boolean;
 }
@@ -25,17 +25,18 @@ export const CalendarList: React.FC<Props> = ({ calendars, onSync, isSyncing }) 
             <ListItemText
               primary={
                 <React.Fragment>
-                  {calendar.summary}
+                  {calendar.name}
                   {calendar.primary && (
                     <Chip size="small" label="Primary" color="primary" sx={{ ml: 1 }} />
                   )}
+                  <Chip size="small" label={calendar.provider} variant="outlined" sx={{ ml: 1 }} />
                 </React.Fragment>
               }
-              secondary={calendar.description || calendar.timezone}
+              secondary={calendar.description || calendar.color}
             />
             <ListItemSecondaryAction>
-              <IconButton 
-                edge="end" 
+              <IconButton
+                edge="end"
                 aria-label="sync"
                 onClick={() => onSync(calendar.id)}
                 disabled={isSyncing}

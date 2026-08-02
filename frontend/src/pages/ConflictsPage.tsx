@@ -4,7 +4,7 @@ import { useConflictResolution } from '../hooks/useConflictResolution';
 import { ConflictStats } from '../components/calendar/ConflictStats';
 import { ConflictList } from '../components/calendar/ConflictList';
 
-export const ConflictsPage: React.FC = () => {
+const ConflictsPage: React.FC = () => {
   // Hardcode tenant ID for demo purposes.
   const tenantId = import.meta.env.VITE_TENANT_ID || 'tenant-1';
 
@@ -60,3 +60,5 @@ export const ConflictsPage: React.FC = () => {
     </Box>
   );
 };
+
+export default ConflictsPage;

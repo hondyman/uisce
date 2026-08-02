@@ -3,9 +3,7 @@ package services
 import (
 	"context"
 	"fmt"
-	"time"
 
-	"github.com/google/uuid"
 	"github.com/hondyman/uisce/backend/internal/bo"
 	"go.uber.org/zap"
 )

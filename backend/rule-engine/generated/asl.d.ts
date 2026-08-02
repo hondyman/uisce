@@ -8,8 +8,6 @@ export type DataSource = ignite | postgres | starrocks;
 
 export type ExportFormat = csv | json | parquet;
 
-export type ExpressionType = calculation | condition | validation;
-
 export type FieldRole = DIMENSION | EVENT_DATE | MEASURE | PARTITION_KEY | VALIDITY_END | VALIDITY_START;
 
 export type HistoryMode = EVENT_LOG | EXPLICIT_RANGE;
@@ -37,6 +35,8 @@ export type ScheduleStatus = active | completed | disabled | failed | paused;
 export type ScheduleType = daily | monthly | once | weekly;
 
 export type ScriptState = certified | deprecated | draft | published;
+
+export type Severity = BLOCK | INFO | WARNING | error | hard_block | info | quarantine | warning;
 
 /** ABACPolicy contains the fine-grained access control rules for a view. */
 export interface ABACPolicy {
@@ -200,7 +200,6 @@ export interface AdminQoSHandler {
   tenantConfig: TenantConfigService;
 }
 
-/** AdvancedEvaluator handles recursive evaluation of complex rule structures */
 export interface AdvancedEvaluator {
   baseEvaluator: ConditionEvaluator;
 }
@@ -220,6 +219,13 @@ export interface AdverseTestScenario {
   Conditions: AdverseCondition[];
   Duration: any;
   Name: string;
+}
+
+export interface AdvisorWorker {
+  engine: RuleEngine;
+  interval: any;
+  stopChan: any;
+  threshold: uint64;
 }
 
 /** AlertsService handles business logic for alerts. */
@@ -253,7 +259,6 @@ export interface AliasMeta {
   SuggestedReplacement: string;
 }
 
-/** AllocationItem represents an allocation breakdown item */
 export interface AllocationItem {
   Category: string;
   Drift: number;
@@ -372,7 +377,6 @@ export interface AuditAlert {
   UpdatedAt: any;
 }
 
-/** AuditEntry represents an audit log entry */
 export interface AuditEntry {
   Action: string;
   Actor: string;
@@ -426,9 +430,7 @@ export interface AuditRetentionPolicy {
   RetentionDays: number;
 }
 
-/** AuditService provides comprehensive audit logging */
 export interface AuditService {
-  hasuraClient: any;
   logger: any;
 }
 
@@ -496,41 +498,6 @@ export interface BOCommandHandler {
   eventPublisher: EventPublisher;
 }
 
-/** BOField represents a business object field with metadata */
-export interface BOField {
-  DisplayName: string;
-  ID: string;
-  InheritedFrom: string;
-  InheritedFromKey: string;
-  IsCore: boolean;
-  IsCustom: boolean;
-  IsInherited: boolean;
-  IsRequired: boolean;
-  Key: string;
-  Name: string;
-  Role: string;
-  SemanticTermID: string;
-  Sequence: number;
-  Type: string;
-}
-
-/** BOFieldInput represents input for creating/updating a field */
-export interface BOFieldInput {
-  BusinessObjectID: string;
-  Description: string;
-  DisplayName: string;
-  IsRequired: boolean;
-  Key: string;
-  Name: string;
-  ReferenceEntity: string;
-  Role: string;
-  SemanticTermID: string;
-  Sequence: number;
-  SubtypeID: string;
-  TechnicalName: string;
-  Type: string;
-}
-
 /** BOWorkloadProfile represents aggregated workload metrics for a BO. */
 export interface BOWorkloadProfile {
   AvgDurationMs: number;
@@ -582,6 +549,12 @@ export interface BPValidationResponse {
 export interface BackgroundJobQueue {
   mu: any;
   queues: Record<string, TenantQueue>;
+}
+
+export interface BatchResult {
+  PassedAll: boolean;
+  Results: RuleResult[];
+  TotalTimeNs: number;
 }
 
 export interface BenchmarkScoreResponse {
@@ -874,9 +847,7 @@ export interface BusinessObjectDefinition {
   TenantID: string;
 }
 
-/** BusinessObjectFieldService manages BO fields with Workday-style inheritance */
 export interface BusinessObjectFieldService {
-  hasuraClient: any;
   isAdminCore: boolean;
   logger: any;
 }
@@ -949,9 +920,7 @@ export interface BusinessObjectService {
   rules: AccessRuleRepository;
 }
 
-/** BusinessProcessService manages business process execution */
 export interface BusinessProcessService {
-  client: any;
   logger: any;
 }
 
@@ -1203,6 +1172,16 @@ export interface CommandResponse {
   Message: string;
   Status: CommandStatus;
   Timestamp: any;
+}
+
+/** CompileError provides observability into why a rule failed to compile.
+It carries the offending AST node, the operator that triggered the
+failure, and a human-readable reason — surfaced via Snapshot.Fallbacks
+metrics and emitted to logs for post-mortem analysis. */
+export interface CompileError {
+  Node: RuleNode;
+  Operator: string;
+  Reason: string;
 }
 
 /** ComplexCondition supports AND/OR logic for multi-field validation */
@@ -1951,6 +1930,36 @@ export interface EngagementNotificationService {
   db: any;
 }
 
+/** EngineMetrics holds cumulative counters that survive state swaps.
+These are business-level metrics (cache hit rate, fallback rate, etc.)
+and must not be lost when an EngineState is replaced. Fields are
+unexported; use the typed accessor methods. */
+export interface EngineMetrics {
+  cacheHits: any;
+  cacheMisses: any;
+  compileErrors: any;
+  fallbacks: any;
+  vmPathCount: any;
+}
+
+/** EngineMetricsSnapshot is a point-in-time copy of the metrics. */
+export interface EngineMetricsSnapshot {
+  CacheHits: uint64;
+}
+
+/** EngineState is an immutable snapshot of the rule engine's schema and
+compile cache. Created by Rewarm() (or SetInitialState at startup) and
+never mutated thereafter. The atomic.Pointer swap is the only way to
+publish a new state — readers see a consistent view at all times. */
+export interface EngineState {
+  Cache: any;
+  Enums: any;
+  LastUsedUnixNano: number;
+  Revision: uint64;
+  Syms: any;
+  Version: number;
+}
+
 /** EnhancedLineageData holds the data for the lineage chart, including the layout type. */
 export interface EnhancedLineageData {
   Edges: LineageEdge[];
@@ -1976,6 +1985,18 @@ export interface EvalError {
 export interface EvalService {
   db: any;
   nlqService: NLQService;
+}
+
+/** EvalTrace provides observability into a single evaluation. Returned
+alongside the boolean result so SREs can log/alert on fallback rates. */
+export interface EvalTrace {
+  FailureReasons: string[];
+  Fallback: string;
+  IsTenant: boolean;
+  Revision: uint64;
+  RuleID: string;
+  TenantID: string;
+  UsedVM: boolean;
 }
 
 /** Event represents a domain event (immutable fact) */
@@ -2170,20 +2191,6 @@ export interface ExportSummary {
   Status: string;
 }
 
-/** Expression represents a stored expression rule */
-export interface Expression {
-  BusinessObjectID: string;
-  Description: string;
-  FieldKey: string;
-  ID: string;
-  IsActive: boolean;
-  Name: string;
-  RuleType: ExpressionType;
-  Script: string;
-  TenantID: string;
-  Version: number;
-}
-
 export interface ExtensionFix {
   FilePath: string;
   Fixes: ExtensionFixEntry[];
@@ -2213,6 +2220,17 @@ export interface FailedJobItem {
   Error: string;
   Index: number;
   Name: string;
+}
+
+/** FallbackQueryPattern is the input to the advisor: a summary of one
+query pattern that is currently falling back to the recursive evaluator
+because it is too expensive for the VM fast path. */
+export interface FallbackQueryPattern {
+  FallbackCount: number;
+  GroupByFields: string[];
+  MeasureFields: string[];
+  TargetBOID: string;
+  TargetTable: string;
 }
 
 /** FeatureCandidate represents a discovered feature that could be added to the catalog */
@@ -2350,6 +2368,15 @@ export interface FinancialPlugin {
 /** FinancialToolService wraps financial calculation tools for LLM usage */
 export interface FinancialToolService {
   registry: any;
+}
+
+export interface Fixture {
+  AST: RuleNode;
+  Compiled: any;
+  Enums: any;
+  FastRecord: any;
+  MapInput: Record<string, any>;
+  Syms: any;
 }
 
 /** FolderService provides methods for managing folders. */
@@ -2967,6 +2994,18 @@ export interface LatencyHistogram {
   mu: any;
 }
 
+export interface LatencyProfiler {
+  idx: any;
+  samples: any[];
+}
+
+export interface LatencyReport {
+  Count: uint64;
+  P50Ns: number;
+  P95Ns: number;
+  P99Ns: number;
+}
+
 /** LineageAsset represents a single asset in the lineage graph. */
 export interface LineageAsset {
   ID: string;
@@ -3098,6 +3137,15 @@ export interface MaterializationConfig {
   Type: string;
 }
 
+/** MaterializationProposal is the output of the advisor: a StarRocks MV
+DDL statement that pre-aggregates the hot pattern so subsequent rule
+evaluations can hit the VM fast path instead of the recursive fallback. */
+export interface MaterializationProposal {
+  EstimatedGain: string;
+  SuggestedMV: string;
+  TargetBOID: string;
+}
+
 /** MeasureProfile represents usage stats for a specific measure. */
 export interface MeasureProfile {
   AvgDurationMs: number;
@@ -3158,7 +3206,9 @@ export interface MockEventPublisher {
 export interface MockRepo {
 }
 
-/** MockRuleRepository implements RuleRepository for testing */
+/** MockRuleRepository is a no-op RuleRepository used by tests in this package.
+Kept here (rather than in engine_test.go) so scenario_test.go and any
+future test files can reuse it without duplicating the type. */
 export interface MockRuleRepository {
 }
 
@@ -3332,7 +3382,6 @@ export interface NotificationCampaignStep {
   TriggerEvent: string;
 }
 
-/** NotificationMessage represents a notification message */
 export interface NotificationMessage {
   Category: string;
   Channel: string;
@@ -3353,9 +3402,7 @@ export interface NotificationRecord {
   Timestamp: any;
 }
 
-/** NotificationService provides notification management */
 export interface NotificationService {
-  hasuraClient: any;
   logger: any;
 }
 
@@ -3467,7 +3514,6 @@ export interface PeerMetricComparison {
   YourValue: number;
 }
 
-/** PerformanceMetrics represents calculated performance data */
 export interface PerformanceMetrics {
   Alpha: number;
   AsOfDate: any;
@@ -3731,13 +3777,10 @@ export interface PortfolioAnalytics {
   TotalValue: number;
 }
 
-/** PortfolioService handles portfolio aggregations and calculations */
 export interface PortfolioService {
-  client: any;
   logger: any;
 }
 
-/** PortfolioSummary represents aggregated portfolio data */
 export interface PortfolioSummary {
   AccountCount: number;
   AsOfDate: any;
@@ -3765,7 +3808,6 @@ export interface PositionConcentration {
   Weight: number;
 }
 
-/** PositionSummary represents a position for display */
 export interface PositionSummary {
   DayChange: number;
   DayChangePercent: number;
@@ -4382,6 +4424,19 @@ export interface Rule {
   Version: number;
 }
 
+export interface RuleAction {
+  Params: Record<string, any>;
+  Type: string;
+}
+
+export interface RuleChain {
+  ID: string;
+  Name: string;
+  Operator: string;
+  Rules: RuleWithMetadata[];
+  StopOnFirst: Severity;
+}
+
 /** RuleCondition represents a single validation condition */
 export interface RuleCondition {
   Field: string;
@@ -4389,10 +4444,47 @@ export interface RuleCondition {
   Value: any;
 }
 
-/** RuleEngine evaluates CEL expressions against input data. */
+/** RuleEngine evaluates RuleNode ASTs via the VM-backed fast path with
+atomic-pointer state swaps for multi-tenant dynamic rewarming.
+
+Architecture: Two-Level Execution Model
+
+  Level 1 — Core (platform-wide):  coreState atomic.Pointer[EngineState]
+    Holds gold-copy rules and standard fields. Serves all tenants.
+
+  Level 2 — Custom (tenant-isolated): tenantStates sync.Map
+    Per-tenant states for custom fields and custom rules. A tenant
+    state is built by merging Core rules + Tenant rules so it is
+    fully self-contained. When Tenant A adds a custom field, only
+    Tenant A's state is rebuilt; Tenant B and Core are untouched.
+
+Lifecycle:
+
+  1. NewRuleEngine → empty core state
+  2. RewarmCore(allCoreRules, version) once at platform startup
+  3. RewarmTenant(tenantID, allTenantRules, version) when a tenant
+     adds a custom field or custom rule
+  4. UpdateRule / DeleteRule for O(1) rule logic changes
+  5. Evaluate(ctx, tenantID, ruleID, version, node, input, force)
+
+Concurrency: Evaluate is lock-free. getState() resolves the correct
+state via atomic.Pointer.Load (core) or sync.Map.Load (tenant) — both
+are wait-free reads. RewarmCore/RewarmTenant build a new state in local
+memory and atomically swap it in. */
 export interface RuleEngine {
+  coreState: any;
+  driftHealer: DriftHealerInterface;
   env: any;
+  metrics: EngineMetrics;
+  profiler: LatencyProfiler;
+  recursive: AdvancedEvaluator;
   repo: RuleRepository;
+  rewarmGroup: any;
+  /** tenantStates holds isolated states for tenants with custom rules/fields.
+Key: tenantID (string). Value: *EngineState.
+If a tenant has no custom state, evaluation falls back to coreState. */
+  tenantStates: any;
+  vm: any;
 }
 
 /** RuleEvaluationResult holds the outcome of rule evaluation */
@@ -4405,13 +4497,6 @@ export interface RuleEvaluationResult {
   RuleID: string;
 }
 
-/** RuleGroup represents a logical grouping of rules (AND/OR/NOT) */
-export interface RuleGroup {
-  Conditions: RuleNode[];
-  ID: string;
-  Operator: string;
-}
-
 /** RuleMetrics holds the calculated global approval/rejection rates for a rule. */
 export interface RuleMetrics {
   ApprovalRate: number;
@@ -4419,13 +4504,6 @@ export interface RuleMetrics {
   RejectionRate: number;
   RuleID: string;
   Total: number;
-}
-
-/** RuleNode is a wrapper that can hold either a Group or a Condition */
-export interface RuleNode {
-  Condition: RuleCondition;
-  Group: RuleGroup;
-  Type: RuleNodeType;
 }
 
 /** RulePerformanceResponse is the top-level struct for the rule performance cockpit. */
@@ -4455,6 +4533,20 @@ export interface RuleRecord {
   Severity: string;
   TargetEntityID: any;
   TenantID: any;
+}
+
+export interface RuleResult {
+  Actions: RuleAction[];
+  Category: string;
+  Details: string[];
+  EvalTimeNs: number;
+  FailureReasons: string[];
+  Passed: boolean;
+  RuleID: string;
+  RuleName: string;
+  Score: number;
+  Severity: Severity;
+  Violations: RuleViolation[];
 }
 
 /** RuleScenario represents a container for testing "what-if" changes */
@@ -4504,6 +4596,29 @@ export interface RuleTestRun {
   StartedAt: any;
   Status: string;
   TenantID: string;
+}
+
+export interface RuleViolation {
+  ConditionID: string;
+  EvaluatedVal: any;
+  FieldPath: string;
+  Message: string;
+  Operator: string;
+  RuleID: string;
+  RuleName: string;
+  Severity: Severity;
+  ThresholdLimit: any;
+}
+
+export interface RuleWithMetadata {
+  Actions: RuleAction[];
+  Category: string;
+  ID: string;
+  Name: string;
+  Node: RuleNode;
+  ScoringFormula: string;
+  Severity: Severity;
+  Version: number;
 }
 
 /** RuntimeSet holds the merged cubes and views for a version. */
@@ -4761,7 +4876,6 @@ export interface SemanticAssistant {
   llmProvider: any;
 }
 
-/** SemanticDimension represents a cube dimension */
 export interface SemanticDimension {
   ID: string;
   IsInherited: boolean;
@@ -4772,7 +4886,6 @@ export interface SemanticDimension {
   Type: string;
 }
 
-/** SemanticMeasure represents a cube measure */
 export interface SemanticMeasure {
   ID: string;
   IsInherited: boolean;
@@ -4783,7 +4896,6 @@ export interface SemanticMeasure {
   Type: string;
 }
 
-/** SemanticModel represents a semantic cube with inheritance */
 export interface SemanticModel {
   BusinessObjectID: string;
   Description: string;
@@ -4797,9 +4909,7 @@ export interface SemanticModel {
   TenantID: string;
 }
 
-/** SemanticModelInheritanceService manages semantic cubes with BO sync */
 export interface SemanticModelInheritanceService {
-  hasuraClient: any;
   logger: any;
 }
 
@@ -4912,7 +5022,6 @@ export interface SourceReference {
 export interface StarlarkEngine {
   cache: Record<string, any>;
   cacheMu: any;
-  hasuraClient: any;
   logger: any;
   maxSteps: uint64;
 }
@@ -5242,10 +5351,8 @@ export interface TourService {
   db: any;
 }
 
-/** TranslationService provides multilingual support */
 export interface TranslationService {
   cache: Record<string, Record<string, string>>;
-  hasuraClient: any;
   logger: any;
 }
 
@@ -5970,6 +6077,10 @@ export interface dbPoliciesEnvelope {
   Row: any[];
 }
 
+export interface fakeDriftHealer {
+  calls: any;
+}
+
 /** inMemoryBundleStore simulates a database for bundles and their policies. */
 export interface inMemoryBundleStore {
   bundleRoles: Record<string, Record<string, any>>;
@@ -6092,5 +6203,22 @@ export interface starlarkRuleSpan {
 export interface valuesServiceImpl {
   auditSvc: ValuesAuditLogger;
   db: any;
+}
+
+/** vmCompiler walks a RuleNode tree once and emits a flat vm.CompiledProgram.
+It is unexported because callers should use CompileVM() rather than
+constructing a vmCompiler directly — that gives the package control
+over emit order and stack-depth tracking invariants. */
+export interface vmCompiler {
+  boolDepth: uint8;
+  boolMax: uint8;
+  enums: any;
+  err: CompileError;
+  fNumDepth: uint8;
+  fNumMax: uint8;
+  numDepth: uint8;
+  numMax: uint8;
+  out: any;
+  syms: any;
 }
 

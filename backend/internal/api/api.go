@@ -55,7 +55,6 @@ import (
 	"github.com/hondyman/uisce/backend/internal/metadata"
 	appmid "github.com/hondyman/uisce/backend/internal/middleware"
 	models "github.com/hondyman/uisce/backend/internal/models"
-	"github.com/hondyman/uisce/backend/internal/oauth"
 	"github.com/hondyman/uisce/backend/internal/platform"
 	"github.com/hondyman/uisce/backend/internal/portfoliomaster"
 	"github.com/hondyman/uisce/backend/internal/querybuilder"
@@ -64,12 +63,12 @@ import (
 	"github.com/hondyman/uisce/backend/internal/rag"
 	"github.com/hondyman/uisce/backend/internal/region"
 	"github.com/hondyman/uisce/backend/internal/reports"
-	"github.com/hondyman/uisce/backend/internal/repository"
 	"github.com/hondyman/uisce/backend/internal/simulation"
 	"github.com/hondyman/uisce/backend/internal/rules"
 	si "github.com/hondyman/uisce/backend/internal/scheduler_intelligence"
 	"github.com/hondyman/uisce/backend/internal/security"
 	"github.com/hondyman/uisce/backend/internal/services"
+	"github.com/hondyman/uisce/backend/internal/shadow"
 	"github.com/hondyman/uisce/backend/internal/succession"
 	"github.com/hondyman/uisce/backend/internal/streaming"
 	"github.com/hondyman/uisce/backend/internal/taxplan"
@@ -83,7 +82,6 @@ import (
 	"github.com/hondyman/uisce/backend/pkg/llm"
 	"github.com/hondyman/uisce/backend/pkg/semantic"
 	"github.com/robfig/cron/v3"
-	"github.com/sirupsen/logrus"
 
 	"regexp"
 
@@ -111,6 +109,7 @@ type ComplianceDeps struct {
 	FIXServer           *fix.Server
 	CDCConsumer        *streaming.SchemaCDCConsumer
 	FlightServer       *flight.FlightServer
+	ShadowEngine       *shadow.ReplayEngine
 }
 
 func (c *ComplianceDeps) RuleRepo() rules.RuleRepository {
@@ -1394,13 +1393,7 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 		// Register Catalog Node/Edge Type Routes
 		RegisterNodeTypesRoutes(r, db)
 		RegisterEdgeTypesRoutes(r, db)
-
-		// Log unmatched /api requests for debugging 404s inside the /api subrouter
-		r.NotFound(func(w http.ResponseWriter, r *http.Request) {
-			bodyBytes, _ := io.ReadAll(r.Body)
-			fmt.Fprintf(os.Stderr, "[API-NOTFOUND] %s %s Body: %s\n", r.Method, r.URL.Path, string(bodyBytes))
-			http.NotFound(w, r)
-		})
+		RegisterLookupsRoutes(r, db)
 
 		// Auth routes must come BEFORE middleware to avoid chicken-and-egg problem
 		registerAuthRoutes(r, srv)
@@ -1486,8 +1479,10 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 		routes.RegisterMCP(r, srv.MCPHandler)
 
 		// Register handlers that were previously orphaned
-		ipWhitelistHandler.RegisterRoutes(r)
 		tenantAccessHandler.RegisterRoutes(r)
+		r.Get("/rest/datasources", tenantAccessHandler.ListAlphaDatasources)
+		r.Get("/rest/products", tenantAccessHandler.ListAlphaProducts)
+		ipWhitelistHandler.RegisterRoutes(r)
 		onboardingHandler.RegisterRoutes(r)
 		abbreviationHandler.RegisterRoutes(r)
 		bundleHandler.RegisterRoutes(r)
@@ -1536,11 +1531,15 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 			// Session-history queries (used by the picker)
 			r.Get("/admin/impersonate/sessions/active", impersonateHandler.ListActiveSessions)
 			r.Get("/admin/impersonate/sessions/recent", impersonateHandler.ListRecentSessions)
+			r.Get("/api/admin/impersonate/sessions/active", impersonateHandler.ListActiveSessions)
+			r.Get("/api/admin/impersonate/sessions/recent", impersonateHandler.ListRecentSessions)
 
 
-			// Tenant search + scope (impersonation picker)
+			// Tenant search + scope (impersonation picker) & audit logs
 			r.Get("/api/v1/audit/channel-billing", srv.GetChannelAuditBillingSummaryHandler)
 			r.Get("/api/v1/audit/channel-logs", srv.GetChannelAuditLogsHandler)
+			r.Get("/admin/tenants/{tenantID}/audit-logs", handlers.HandleGetAuditLogs)
+			r.Get("/v1/admin/tenants/{tenantID}/audit-logs", handlers.HandleGetAuditLogs)
 			tenantSearchHandler := handlers.NewAdminTenantSearchHandler(db)
 			r.Get("/admin/tenants/{tenantID}/scope", tenantSearchHandler.GetTenantScope)
 
@@ -1569,12 +1568,23 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 
 				telemetryHandler := NewRuleTelemetryHandler(complianceDeps.RuleEngine, profiler)
 				telemetryHandler.RegisterRoutes(r)
+
+				if complianceDeps.ShadowEngine != nil {
+					shadowHandler := NewShadowHandler(complianceDeps.ShadowEngine)
+					shadowHandler.RegisterRoutes(r)
+				}
 			}
 		}
 
 		// WebSocket token issuance
 
 		// Legacy Compatibility & Misc
+		// Log unmatched /api requests for debugging 404s inside the /api subrouter
+		r.NotFound(func(w http.ResponseWriter, r *http.Request) {
+			bodyBytes, _ := io.ReadAll(r.Body)
+			fmt.Fprintf(os.Stderr, "[API-NOTFOUND] %s %s Body: %s\n", r.Method, r.URL.Path, string(bodyBytes))
+			http.NotFound(w, r)
+		})
 	})
 
 	// Debug: dump registered routes to stderr to help diagnose missing handlers during local runs

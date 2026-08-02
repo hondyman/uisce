@@ -6,7 +6,7 @@ import (
 )
 
 func TestStarlarkEngine_EvaluateUserRule_OkStyle(t *testing.T) {
-	engine := NewStarlarkEngine(nil)
+	engine := NewStarlarkEngine()
 
 	script := `
 ok = eq(field("account", "account_type"), "ADVISORY") and gt(num_field("account", "aum"), 100)

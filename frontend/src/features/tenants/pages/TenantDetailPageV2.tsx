@@ -214,20 +214,18 @@ export const TenantDetailPageV2: React.FC = () => {
     tenant.tenant_instances?.forEach((instance: any) => {
       (instance.products || instance.tenant_products)?.forEach((product: any) => {
         (product.tenant_product_datasources || product.datasources || []).forEach((ds: any) => {
-          if (ds.connection_id) {
-            if (!instanceResourcesMap.has(instance.id)) {
-              instanceResourcesMap.set(instance.id, { products: [], connections: [] });
-            }
-            const resource = instanceResourcesMap.get(instance.id)!;
-            resource.connections.push({
-              id: ds.id, // Use TPD ID for uniqueness, not connection_id which can repeat
-              connectionId: ds.connection_id, // Keep original connection_id for reference
-              name: ds.source_name || 'Unknown',
-              type: 'Datasource',
-              productName: product.alpha_product?.product_name,
-              productId: product.alpha_product_id
-            });
+          if (!instanceResourcesMap.has(instance.id)) {
+            instanceResourcesMap.set(instance.id, { products: [], connections: [] });
           }
+          const resource = instanceResourcesMap.get(instance.id)!;
+          resource.connections.push({
+            id: ds.id, // Use TPD ID for uniqueness
+            connectionId: ds.connection_id || ds.id,
+            name: ds.source_name || ds.alpha_datasource?.datasource_name || 'Datasource',
+            type: 'Datasource',
+            productName: product.alpha_product?.product_name,
+            productId: product.alpha_product_id
+          });
         });
       });
     });
@@ -282,10 +280,8 @@ export const TenantDetailPageV2: React.FC = () => {
         const counts = countsMap.get(productId)!;
 
         (product.tenant_product_datasources || product.datasources || []).forEach((ds: any) => {
-          if (ds.connection_id) {
-            counts.instances.add(instance.id);
-            counts.connections++;
-          }
+          counts.instances.add(instance.id);
+          counts.connections++;
         });
       });
     });
@@ -956,13 +952,12 @@ export const TenantDetailPageV2: React.FC = () => {
           }}
         >
           <Tab label="Instances" id="tenant-tab-0" aria-controls="tenant-tabpanel-0" />
-          <Tab label="Scoped Instance" id="tenant-tab-1" aria-controls="tenant-tabpanel-1" />
-          <Tab label="Products" id="tenant-tab-2" aria-controls="tenant-tabpanel-2" />
-          <Tab label="Connections" id="tenant-tab-3" aria-controls="tenant-tabpanel-3" />
-          <Tab label="Lookups" id="tenant-tab-4" aria-controls="tenant-tabpanel-4" />
-          <Tab label="Abbreviations" id="tenant-tab-5" aria-controls="tenant-tabpanel-5" />
-          <Tab label="Audit Log" id="tenant-tab-6" aria-controls="tenant-tabpanel-6" />
-          <Tab label="Configuration" id="tenant-tab-7" aria-controls="tenant-tabpanel-7" />
+          <Tab label="Products" id="tenant-tab-1" aria-controls="tenant-tabpanel-1" />
+          <Tab label="Connections" id="tenant-tab-2" aria-controls="tenant-tabpanel-2" />
+          <Tab label="Lookups" id="tenant-tab-3" aria-controls="tenant-tabpanel-3" />
+          <Tab label="Abbreviations" id="tenant-tab-4" aria-controls="tenant-tabpanel-4" />
+          <Tab label="Audit Log" id="tenant-tab-5" aria-controls="tenant-tabpanel-5" />
+          <Tab label="Configuration" id="tenant-tab-6" aria-controls="tenant-tabpanel-6" />
         </Tabs>
 
         {/* Instances Tab */}
@@ -999,45 +994,8 @@ export const TenantDetailPageV2: React.FC = () => {
           </Box>
         </TabPanel>
 
-        {/* Scoped Instance Tab */}
-        <TabPanel value={activeTab} index={1}>
-          <Box sx={{ p: 3 }}>
-            {(() => {
-              const targetInstance = activeInstance || (enrichedInstances.length > 0 ? enrichedInstances[0] : null);
-
-              if (!targetInstance) {
-                return (
-                  <Alert severity="info">
-                    No instances configured for this tenant yet. Use the "Instances" tab to add a new instance.
-                  </Alert>
-                );
-              }
-
-              return (
-                <Box>
-                  {scopedDatasource && (
-                    <Box sx={{ mb: 2 }}>
-                      <Chip 
-                        label={`Scoped to: ${scopedDatasource.source_name || (scopedDatasource as any).display_name || scopedDatasource.id}`}
-                        color="primary" 
-                        variant="outlined" 
-                        sx={{ fontWeight: 'bold' }}
-                      />
-                    </Box>
-                  )}
-                  <ScopedInstanceEditor
-                    instance={targetInstance}
-                    tenantId={tenantId}
-                    updateMutation={(data: any) => updateTenantInstance.mutate(data).then(() => refetchTenant())}
-                  />
-                </Box>
-              );
-            })()}
-          </Box>
-        </TabPanel>
-
         {/* Products Tab */}
-        <TabPanel value={activeTab} index={2}>
+        <TabPanel value={activeTab} index={1}>
           <Box sx={{ p: 3 }}>
             <ProductsTabContent 
               tenantId={tenantId || ''}
@@ -1050,14 +1008,14 @@ export const TenantDetailPageV2: React.FC = () => {
               }}
               onProductConnectionsClick={(productId) => {
                 setSelectedProductForCounts(productId);
-                setActiveTab(3);
+                setActiveTab(2);
               }}
             />
           </Box>
         </TabPanel>
 
         {/* Connections Tab */}
-        <TabPanel value={activeTab} index={3}>
+        <TabPanel value={activeTab} index={2}>
           <Box sx={{ display: 'flex', gap: 3, p: 3 }}>
             {/* Facets Sidebar */}
             <ConnectionsFacets
@@ -1099,7 +1057,7 @@ export const TenantDetailPageV2: React.FC = () => {
         </TabPanel>
 
         {/* Lookups Tab */}
-        <TabPanel value={activeTab} index={4}>
+        <TabPanel value={activeTab} index={3}>
           <Box sx={{ p: 3 }}>
             <LookupsManagementTab 
               tenantId={scopedTenant?.id || ''} 
@@ -1109,14 +1067,14 @@ export const TenantDetailPageV2: React.FC = () => {
         </TabPanel>
 
         {/* Abbreviations Tab */}
-        <TabPanel value={activeTab} index={5}>
+        <TabPanel value={activeTab} index={4}>
           <Box sx={{ p: 3 }}>
             <AbbreviationsTab tenantId={scopedTenant?.id || ''} />
           </Box>
         </TabPanel>
 
         {/* Audit Log Tab */}
-        <TabPanel value={activeTab} index={6}>
+        <TabPanel value={activeTab} index={5}>
           <Box sx={{ p: 3 }}>
             <AuditLogTabContent 
               tenantId={scopedTenant?.id || ''}
@@ -1126,7 +1084,7 @@ export const TenantDetailPageV2: React.FC = () => {
         </TabPanel>
 
         {/* Configuration Tab */}
-        <TabPanel value={activeTab} index={7}>
+        <TabPanel value={activeTab} index={6}>
           <Box sx={{ p: 3 }}>
             <ConfigurationTabContent 
               tenantId={scopedTenant?.id || ''}

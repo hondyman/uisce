@@ -249,7 +249,15 @@ export const ScopeSelectorDialog: React.FC<ScopeSelectorDialogProps> = ({ open, 
               </List>
             ) : !selectedProduct ? (
               <List sx={{ pt: 0 }}>
-                {Array.from(new Map((selectedInstance.tenant_products || selectedInstance.products || []).map((p: any) => [p.alpha_product_id, p])).values()).map((product: any) => (
+                {Array.from(new Map((selectedInstance.tenant_products || selectedInstance.products || []).reduce((acc: Map<string, any>, p: any) => {
+                  const existing = acc.get(p.alpha_product_id);
+                  const currentDSCount = p.tenant_product_datasources?.length || p.datasources?.length || 0;
+                  const existingDSCount = existing ? (existing.tenant_product_datasources?.length || existing.datasources?.length || 0) : 0;
+                  if (!existing || currentDSCount > existingDSCount) {
+                    acc.set(p.alpha_product_id, p);
+                  }
+                  return acc;
+                }, new Map())).values()).map((product: any) => (
                   <ListItemButton 
                     key={product.id} 
                     onClick={() => handleSelectProduct(product)}

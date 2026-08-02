@@ -13,6 +13,8 @@ import CalculationsLibraryPage from "./features/fabric/pages/CalculationsLibrary
 import LoginPage from "./pages/AuthPage";
 import AuthCallbackPage from "./pages/AuthCallbackPage";
 import ProtectedRoute from "./components/ProtectedRoute";
+import CalendarPage from "./pages/CalendarPage";
+import ConflictsPage from "./pages/ConflictsPage";
 import CalculatedFieldBuilderPage from "./pages/CalculatedFieldBuilderPage";
 import IPWhitelistManagementPage from "./features/fabric/pages/IPWhitelistManagementPage";
 import DashboardPage from "./features/fabric/pages/DashboardPage";
@@ -335,6 +337,12 @@ function ProtectedApp() {
         <Route path="/core/notifications" element={<ProtectedRoute><NotificationCenterPage /></ProtectedRoute>} />
         <Route path="/core/notifications/templates" element={<ProtectedRoute><NotificationTemplateEditorPage /></ProtectedRoute>} />
         <Route path="/core/notifications/preferences" element={<ProtectedRoute><NotificationPreferencesPage /></ProtectedRoute>} />
+
+        {/* ═══════════════════════════════════════════════════════════════════
+            CALENDAR SYNC - Multi-provider calendar integration
+            ═══════════════════════════════════════════════════════════════════ */}
+        <Route path="/calendar" element={<ProtectedRoute><CalendarPage /></ProtectedRoute>} />
+        <Route path="/calendar/conflicts" element={<ProtectedRoute><ConflictsPage /></ProtectedRoute>} />
 
         {/* ═══════════════════════════════════════════════════════════════════
             INTELLIGENCE - Optimization and observability

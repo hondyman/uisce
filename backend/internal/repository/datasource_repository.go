@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"fmt"
+	"time"
 )
 
 type DatasourceRepository struct{}
@@ -109,12 +110,6 @@ func (r *DatasourceRepository) UpdateHealthStatus(ctx context.Context, id, statu
 func (r *DatasourceRepository) UpdateIntegrityStatus(ctx context.Context, id, status, message string) error {
 	return fmt.Errorf("UpdateIntegrityStatus: Hasura removed from DatasourceRepository")
 }
-		"status":   status,
-		"message":  message,
-		"check_at": now,
-	})
-	return err
-}
 
 // Delete removes a datasource
 func (r *DatasourceRepository) Delete(ctx context.Context, id string) error {
@@ -149,6 +144,103 @@ func (r *DatasourceRepository) SaveSchemaSnapshot(ctx context.Context, snapshot 
 // GetHealthSummary gets aggregated health status counts
 func (r *DatasourceRepository) GetHealthSummary(ctx context.Context, tenantProductID string) (map[string]int, error) {
 	return nil, fmt.Errorf("GetHealthSummary: Hasura removed from DatasourceRepository")
+}
+
+type Provider string
+
+const (
+	ProviderGoogle    Provider = "google"
+	ProviderMicrosoft Provider = "microsoft"
+	ProviderApple     Provider = "apple"
+)
+
+type CalendarSyncRepo struct{}
+
+func NewCalendarSyncRepo(client interface{}) *CalendarSyncRepo {
+	return &CalendarSyncRepo{}
+}
+
+func (r *CalendarSyncRepo) CreateInternalEvent(ctx context.Context, event interface{}) error {
+	return fmt.Errorf("CreateInternalEvent: calendar sync removed")
+}
+
+func (r *CalendarSyncRepo) UpdateInternalEvent(ctx context.Context, event interface{}) error {
+	return fmt.Errorf("UpdateInternalEvent: calendar sync removed")
+}
+
+func (r *CalendarSyncRepo) DeleteInternalEvent(ctx context.Context, eventID string) error {
+	return fmt.Errorf("DeleteInternalEvent: calendar sync removed")
+}
+
+func (r *CalendarSyncRepo) GetSyncedEventByExternalID(ctx context.Context, connectionID string, provider Provider, externalEventID, externalCalendarID string) (*SyncedCalendarEvent, error) {
+	return nil, fmt.Errorf("GetSyncedEventByExternalID: calendar sync removed")
+}
+
+func (r *CalendarSyncRepo) FindConflictingEvents(ctx context.Context, tenantID string, startTime, endTime time.Time, filter interface{}) ([]SyncedCalendarEvent, error) {
+	return nil, fmt.Errorf("FindConflictingEvents: calendar sync removed")
+}
+
+func (r *CalendarSyncRepo) SaveConflict(ctx context.Context, conflict interface{}) error {
+	return fmt.Errorf("SaveConflict: calendar sync removed")
+}
+
+func (r *CalendarSyncRepo) GetConflict(ctx context.Context, conflictID string) (*ConflictRecord, error) {
+	return nil, fmt.Errorf("GetConflict: calendar sync removed")
+}
+
+type ConflictRecord struct {
+	InternalEventID   *string
+	ExternalEventData interface{}
+	InternalEventData interface{}
+	ResolutionStatus  string
+}
+
+func (r *CalendarSyncRepo) UpdateConflictStatus(ctx context.Context, conflictID, status string, resolutionNote *string) error {
+	return fmt.Errorf("UpdateConflictStatus: calendar sync removed")
+}
+
+func (r *CalendarSyncRepo) UpsertSyncedEvent(ctx context.Context, event *SyncedCalendarEvent) error {
+	return fmt.Errorf("UpsertSyncedEvent: calendar sync removed")
+}
+
+func (r *CalendarSyncRepo) GetPrimaryCalendarID(ctx context.Context, tenantID, userID string, provider Provider) (string, error) {
+	return "", fmt.Errorf("GetPrimaryCalendarID: calendar sync removed")
+}
+
+func (r *CalendarSyncRepo) GetSyncedEventByInternalID(ctx context.Context, internalEventID string) (*SyncedCalendarEvent, error) {
+	return nil, fmt.Errorf("GetSyncedEventByInternalID: calendar sync removed")
+}
+
+func (r *CalendarSyncRepo) ListSyncedEvents(ctx context.Context, tenantID, userID string, start, end time.Time, provider ...Provider) ([]*SyncedCalendarEvent, error) {
+	return nil, fmt.Errorf("ListSyncedEvents: calendar sync removed")
+}
+
+type EventFilter struct{}
+
+type SyncedCalendarEvent struct {
+	ID                  string
+	Provider            Provider
+	EventType           string
+	Summary             string
+	Status              string
+	Title               string
+	InternalEventID     *string
+	ExternalEventID     string
+	ExternalCalendarID  string
+	StartTime           time.Time
+	EndTime             time.Time
+	IsRecurring         bool
+	UpdatedAt           time.Time
+	ConnectionID        string
+	LastSyncedAt        time.Time
+	TenantID            string
+	Description         *string
+	Location            *string
+	IsAllDay            bool
+	RecurrenceRule      *string
+	RecurrenceID        *string
+	SyncStatus          string
+	InternalCalendarID *string
 }
 
 

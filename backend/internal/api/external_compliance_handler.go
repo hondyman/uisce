@@ -89,6 +89,7 @@ func (h *ExternalComplianceHandler) HandleEvaluateExternal(w http.ResponseWriter
 	if cacheKey != "" {
 		if cached, ok := h.checkIdempotency(ctx, cacheKey); ok {
 			w.Header().Set("Content-Type", "application/json")
+			w.Header().Set("X-Cache-Status", "HIT")
 			w.Write(cached)
 			return
 		}
@@ -169,6 +170,7 @@ func (h *ExternalComplianceHandler) HandleEvaluateExternal(w http.ResponseWriter
 	}
 
 	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("X-Cache-Status", "MISS")
 	json.NewEncoder(w).Encode(response)
 }
 
@@ -203,6 +205,7 @@ func (h *ExternalComplianceHandler) HandleEvaluateExternalBatch(w http.ResponseW
 	if batchCacheKey != "" {
 		if cached, ok := h.checkIdempotency(ctx, batchCacheKey); ok {
 			w.Header().Set("Content-Type", "application/json")
+			w.Header().Set("X-Cache-Status", "HIT")
 			w.Write(cached)
 			return
 		}
@@ -312,6 +315,7 @@ func (h *ExternalComplianceHandler) HandleEvaluateExternalBatch(w http.ResponseW
 	}
 
 	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("X-Cache-Status", "MISS")
 	json.NewEncoder(w).Encode(response)
 }
 

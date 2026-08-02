@@ -287,8 +287,8 @@ func (rs *Routes) RegisterViews(r chi.Router, srv *Server, viewService *services
 	})
 }
 
-// RegisterGoogleSync mounts the Google Sync endpoints
-func (rs *Routes) RegisterGoogleSync(r chi.Router, handler interface{ RegisterRoutes(chi.Router) }) {
+// RegisterCalendarSync mounts the calendar sync endpoints
+func (rs *Routes) RegisterCalendarSync(r chi.Router, handler interface{ RegisterRoutes(chi.Router) }) {
 	handler.RegisterRoutes(r)
 }
 

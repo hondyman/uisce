@@ -455,6 +455,9 @@ func handleGetLookupValues(db *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		tenantID := getSecureTenantID(r)
 		if tenantID == "" {
+			tenantID = r.URL.Query().Get("tenant_id")
+		}
+		if tenantID == "" {
 			http.Error(w, "tenant_id is required", http.StatusBadRequest)
 			return
 		}

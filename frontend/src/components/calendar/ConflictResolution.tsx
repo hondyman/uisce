@@ -7,40 +7,40 @@ interface Props {
   isResolving: boolean;
 }
 
-export const ConflictResolution: React.FC<Props> = ({ conflictId, onResolve, isResolving }) => {
+export const ConflictResolution: React.FC<Props> = ({ onResolve, isResolving }) => {
   return (
     <Box display="flex" gap={2} mt={2}>
       <Typography variant="subtitle2" sx={{ alignSelf: 'center' }}>Resolve using:</Typography>
-      <Button 
-        variant="contained" 
-        color="primary" 
+      <Button
+        variant="contained"
+        color="primary"
         size="small"
         disabled={isResolving}
         onClick={() => onResolve('keep_internal')}
       >
         Keep Internal
       </Button>
-      <Button 
-        variant="contained" 
-        color="info" 
+      <Button
+        variant="contained"
+        color="info"
         size="small"
         disabled={isResolving}
-        onClick={() => onResolve('keep_google')}
+        onClick={() => onResolve('keep_external')}
       >
-        Keep Google
+        Keep External
       </Button>
-      <Button 
-        variant="outlined" 
-        color="warning" 
+      <Button
+        variant="outlined"
+        color="warning"
         size="small"
         disabled={isResolving}
         onClick={() => onResolve('merge')}
       >
         Merge
       </Button>
-      <Button 
-        variant="text" 
-        color="error" 
+      <Button
+        variant="text"
+        color="error"
         size="small"
         disabled={isResolving}
         onClick={() => onResolve('skip')}

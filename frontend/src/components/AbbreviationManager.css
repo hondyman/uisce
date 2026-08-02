@@ -85,20 +85,20 @@
 .abbreviation-term {
   font-size: 18px;
   font-weight: 700;
-  color: rgb(17, 24, 39);
+  color: #0f172a;
   margin-bottom: 4px;
   font-family: 'SF Mono', 'Monaco', 'Consolas', monospace;
 }
 
 .abbreviation-expansion {
   font-size: 16px;
-  color: rgb(29, 78, 216);
-  font-weight: 500;
+  color: #2563eb;
+  font-weight: 600;
 }
 
 .abbreviation-notes {
   font-size: 14px;
-  color: rgb(75, 85, 99);
+  color: #334155;
   margin-top: 8px;
   font-style: italic;
 }
@@ -452,4 +452,26 @@
     flex-direction: column;
     gap: 8px;
   }
+}
+
+/* Dark theme support */
+[data-theme='dark'] .abbreviation-card,
+.dark .abbreviation-card {
+  background: #1e293b;
+  border-color: #334155;
+}
+
+[data-theme='dark'] .abbreviation-term,
+.dark .abbreviation-term {
+  color: #f8fafc;
+}
+
+[data-theme='dark'] .abbreviation-expansion,
+.dark .abbreviation-expansion {
+  color: #60a5fa;
+}
+
+[data-theme='dark'] .abbreviation-notes,
+.dark .abbreviation-notes {
+  color: #cbd5e1;
 }

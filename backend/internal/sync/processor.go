@@ -7,30 +7,26 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/hondyman/uisce/backend/internal/google"
 	"github.com/hondyman/uisce/backend/internal/models"
-	"github.com/hondyman/uisce/backend/internal/oauth"
 	"github.com/hondyman/uisce/backend/internal/repository"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/sirupsen/logrus"
-	"google.golang.org/api/calendar/v3"
 )
 
-// Prometheus metrics for sync operations
 var (
 	syncJobsTotal = promauto.NewCounterVec(
 		prometheus.CounterOpts{
-			Name: "google_sync_jobs_total",
-			Help: "Total number of Google Calendar sync jobs",
+			Name: "calendar_sync_jobs_total",
+			Help: "Total number of calendar sync jobs",
 		},
 		[]string{"status"},
 	)
 
 	syncDuration = promauto.NewHistogramVec(
 		prometheus.HistogramOpts{
-			Name:    "google_sync_duration_seconds",
-			Help:    "Duration of Google Calendar sync operations",
+			Name:    "calendar_sync_duration_seconds",
+			Help:    "Duration of calendar sync operations",
 			Buckets: prometheus.DefBuckets,
 		},
 		[]string{"status"},
@@ -38,19 +34,19 @@ var (
 
 	syncEventsProcessed = promauto.NewCounterVec(
 		prometheus.CounterOpts{
-			Name: "google_sync_events_processed_total",
+			Name: "calendar_sync_events_processed_total",
 			Help: "Total number of events processed during sync",
 		},
 		[]string{"status"},
 	)
 )
 
-// SyncStatus represents the status of a sync job
 type SyncStatus struct {
 	ID              string     `json:"id"`
 	UserID          string     `json:"user_id"`
 	TenantID        string     `json:"tenant_id"`
-	Status          string     `json:"status"` // pending, running, completed, failed, cancelled
+	Provider        string     `json:"provider"`
+	Status          string     `json:"status"`
 	Progress        int        `json:"progress"`
 	TotalEvents     int        `json:"total_events"`
 	ProcessedEvents int        `json:"processed_events"`
@@ -60,10 +56,9 @@ type SyncStatus struct {
 	TimeRange       TimeRange  `json:"time_range"`
 }
 
-// SyncProcessor handles background Google Calendar sync operations
 type SyncProcessor struct {
-	oauthProvider *oauth.GoogleOAuth2Provider
-	syncRepo      *repository.GoogleSyncRepo
+	clients       map[repository.Provider]CalendarClient
+	syncRepo      *repository.CalendarSyncRepo
 	logger        *logrus.Entry
 	activeSyncs   map[string]*SyncStatus
 	mu            stdsync.RWMutex
@@ -72,29 +67,26 @@ type SyncProcessor struct {
 	recurringService *RecurringEventService
 }
 
-// NewSyncProcessor creates a new sync processor
 func NewSyncProcessor(
-	oauthProvider *oauth.GoogleOAuth2Provider,
-	syncRepo *repository.GoogleSyncRepo,
+	clients map[repository.Provider]CalendarClient,
+	syncRepo *repository.CalendarSyncRepo,
 	logger *logrus.Entry,
 	maxConcurrent int,
 ) *SyncProcessor {
 	if maxConcurrent == 0 {
 		maxConcurrent = 10
 	}
-
 	return &SyncProcessor{
-		oauthProvider:    oauthProvider,
-		syncRepo:         syncRepo,
-		logger:           logger.WithField("component", "sync_processor"),
-		activeSyncs:      make(map[string]*SyncStatus),
-		maxConcurrent:    maxConcurrent,
+		clients:         clients,
+		syncRepo:        syncRepo,
+		logger:          logger.WithField("component", "sync_processor"),
+		activeSyncs:     make(map[string]*SyncStatus),
+		maxConcurrent:   maxConcurrent,
 		recurringService: NewRecurringEventService(),
 	}
 }
 
-// StartSync initiates a sync job for a user's Google Calendar
-func (p *SyncProcessor) StartSync(ctx context.Context, userID, tenantID, googleCalendarID, internalCalendarID string, timeRange TimeRange) (*SyncStatus, error) {
+func (p *SyncProcessor) StartSync(ctx context.Context, userID, tenantID string, provider repository.Provider, externalCalendarID, internalCalendarID string, timeRange TimeRange) (*SyncStatus, error) {
 	p.mu.RLock()
 	activeCount := len(p.activeSyncs)
 	p.mu.RUnlock()
@@ -110,6 +102,7 @@ func (p *SyncProcessor) StartSync(ctx context.Context, userID, tenantID, googleC
 		ID:        syncID,
 		UserID:    userID,
 		TenantID:  tenantID,
+		Provider:  string(provider),
 		Status:    "pending",
 		Progress:  0,
 		StartedAt: &now,
@@ -121,18 +114,18 @@ func (p *SyncProcessor) StartSync(ctx context.Context, userID, tenantID, googleC
 	p.activeSyncs[syncID] = status
 	p.mu.Unlock()
 
-	go p.runSync(context.Background(), status, googleCalendarID, internalCalendarID, timeRange)
+	go p.runSync(context.Background(), status, provider, externalCalendarID, internalCalendarID, timeRange)
 
 	p.logger.WithFields(logrus.Fields{
 		"sync_id":     syncID,
 		"user_id":     userID,
-		"calendar_id": googleCalendarID,
-	}).Info("Started Google Calendar sync")
+		"provider":    provider,
+		"calendar_id": externalCalendarID,
+	}).Info("Started calendar sync")
 
 	return status, nil
 }
 
-// GetSyncStatus returns the status of a sync job
 func (p *SyncProcessor) GetSyncStatus(syncID string) (*SyncStatus, error) {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
@@ -144,7 +137,6 @@ func (p *SyncProcessor) GetSyncStatus(syncID string) (*SyncStatus, error) {
 	return status, nil
 }
 
-// CancelSync cancels an active sync job
 func (p *SyncProcessor) CancelSync(syncID string) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -166,7 +158,6 @@ func (p *SyncProcessor) CancelSync(syncID string) error {
 	return nil
 }
 
-// ListActiveSyncs returns all active sync jobs for a user
 func (p *SyncProcessor) ListActiveSyncs(userID string) []*SyncStatus {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
@@ -183,7 +174,8 @@ func (p *SyncProcessor) ListActiveSyncs(userID string) []*SyncStatus {
 func (p *SyncProcessor) runSync(
 	ctx context.Context,
 	status *SyncStatus,
-	googleCalendarID, internalCalendarID string,
+	provider repository.Provider,
+	externalCalendarID, internalCalendarID string,
 	timeRange TimeRange,
 ) {
 	startTime := time.Now()
@@ -199,19 +191,14 @@ func (p *SyncProcessor) runSync(
 
 	status.Status = "running"
 
-	client, err := google.NewCalendarClient(google.CalendarClientConfig{
-		OAuthProvider: p.oauthProvider,
-		UserID:        status.UserID,
-		TenantID:      status.TenantID,
-		Logger:        p.logger,
-	})
-	if err != nil {
-		p.addError(status, fmt.Sprintf("Failed to create calendar client: %v", err))
+	client, ok := p.clients[provider]
+	if !ok {
+		p.addError(status, fmt.Sprintf("no calendar client for provider: %s", provider))
 		status.Status = "failed"
 		return
 	}
 
-	events, err := client.GetCalendarEvents(ctx, googleCalendarID, google.EventQueryOptions{
+	events, err := client.GetEvents(externalCalendarID, EventQueryOptions{
 		TimeMin:      timeRange.Start,
 		TimeMax:      timeRange.End,
 		SingleEvents: true,
@@ -223,10 +210,10 @@ func (p *SyncProcessor) runSync(
 		return
 	}
 
-	status.TotalEvents = len(events.Items)
+	status.TotalEvents = len(events)
 	processedCount := 0
 
-	for _, event := range events.Items {
+	for _, event := range events {
 		select {
 		case <-ctx.Done():
 			status.Status = "cancelled"
@@ -234,13 +221,9 @@ func (p *SyncProcessor) runSync(
 		default:
 		}
 
-		if event.Status == "cancelled" {
-			continue
-		}
-
-		err := p.syncEventToDB(ctx, status, event, googleCalendarID, internalCalendarID)
+		err := p.syncEventToDB(ctx, status, provider, &event, externalCalendarID, internalCalendarID)
 		if err != nil {
-			p.addError(status, fmt.Sprintf("Failed to sync event %s: %v", event.Id, err))
+			p.addError(status, fmt.Sprintf("Failed to sync event %s: %v", event.ID, err))
 			syncEventsProcessed.WithLabelValues("failed").Inc()
 		} else {
 			syncEventsProcessed.WithLabelValues("success").Inc()
@@ -261,16 +244,16 @@ func (p *SyncProcessor) runSync(
 		"sync_id":       status.ID,
 		"events_synced": processedCount,
 		"duration_ms":   time.Since(startTime).Milliseconds(),
-	}).Info("Google Calendar sync completed")
+	}).Info("Calendar sync completed")
 }
 
 func (p *SyncProcessor) syncEventToDB(
 	ctx context.Context,
 	status *SyncStatus,
-	event *calendar.Event,
-	googleCalendarID, internalCalendarID string,
+	provider repository.Provider,
+	event *NormalizedEvent,
+	externalCalendarID, internalCalendarID string,
 ) error {
-	// Conflict Detection
 	cd := NewConflictDetector(ConflictDetectorConfig{
 		SyncRepo:               p.syncRepo,
 		Logger:                 p.logger,
@@ -282,16 +265,15 @@ func (p *SyncProcessor) syncEventToDB(
 		ctx,
 		status.TenantID,
 		status.UserID,
-		"", // ConnectionID would be needed here
+		provider,
 		event,
-		googleCalendarID,
+		externalCalendarID,
 	)
 	if err == nil && len(conflicts) > 0 {
 		autoResolved := cd.AutoResolveConflicts(ctx, conflicts)
 		for _, c := range autoResolved {
 			cd.SaveConflict(ctx, c)
 		}
-		// If there are pending conflicts, skip sync
 		hasPending := false
 		for _, c := range conflicts {
 			if c.ResolutionStatus == ResolutionPending {
@@ -300,18 +282,16 @@ func (p *SyncProcessor) syncEventToDB(
 			}
 		}
 		if hasPending {
-			return nil // Skip
+			return nil
 		}
 	}
 
-	// Use EventMapper to create SyncedGoogleEvent
 	mapper := NewEventMapper()
-	syncedEvent, err := mapper.ToSyncedEvent(event, status.TenantID, googleCalendarID, nil) // InternalEventID nil for now
+	syncedEvent, err := mapper.ToSyncedEvent(provider, event, status.TenantID, externalCalendarID, nil)
 	if err != nil {
 		return fmt.Errorf("map event: %w", err)
 	}
 
-	// If internalCalendarID provided, set it
 	if internalCalendarID != "" {
 		syncedEvent.InternalCalendarID = &internalCalendarID
 	}
@@ -326,74 +306,52 @@ func (p *SyncProcessor) addError(status *SyncStatus, errMsg string) {
 	p.logger.WithField("sync_id", status.ID).Warnf("Sync error: %s", errMsg)
 }
 
-// TimeRange represents a time range for sync
 type TimeRange struct {
 	Start time.Time `json:"start"`
 	End   time.Time `json:"end"`
 }
 
-// PushEventToGoogle pushes an internal event to Google Calendar
 func (p *SyncProcessor) PushEventToGoogle(ctx context.Context, userID, tenantID string, event *models.InternalEvent) error {
-	// 1. Get Primary Calendar ID
-	calendarID, err := p.syncRepo.GetPrimaryCalendarID(ctx, tenantID, userID)
+	calendarID, err := p.syncRepo.GetPrimaryCalendarID(ctx, tenantID, userID, repository.ProviderGoogle)
 	if err != nil {
 		return fmt.Errorf("get primary calendar: %w", err)
 	}
 
-	// 2. Create Client
-	client, err := google.NewCalendarClient(google.CalendarClientConfig{
-		OAuthProvider: p.oauthProvider,
-		UserID:        userID,
-		TenantID:      tenantID,
-		Logger:        p.logger,
-	})
-	if err != nil {
-		return fmt.Errorf("create calendar client: %w", err)
+	client, ok := p.clients[repository.ProviderGoogle]
+	if !ok {
+		return fmt.Errorf("no google calendar client")
 	}
 
-	// 3. Check if event is already synced
 	syncedEvent, err := p.syncRepo.GetSyncedEventByInternalID(ctx, event.ID.String())
 	if err != nil {
 		return fmt.Errorf("check synced event: %w", err)
 	}
 
-	googleEvent := NewEventMapper().ToGoogleEvent(event)
+	externalEvent := NewEventMapper().ToProviderEvent(event)
 
 	if syncedEvent != nil {
-		// Update existing event
-		// Avoid loop: if the event was just synced *from* Google, we might shouldn't push back?
-		// But here we assume this is called when internal event changed.
-		// We should update Google.
-
-		// Avoid loop: if the event was just synced from Google, LastSyncedAt should be >= InternalEvent.UpdatedAt
-		// But we need to be careful with clock skew.
-		// If InternalEvent.UpdatedAt is significantly newer than LastSyncedAt, it's a local change.
-		if !event.UpdatedAt.After(syncedEvent.LastSyncedAt) {
+		if !event.UpdatedAt.After(syncedEvent.UpdatedAt) {
 			p.logger.WithField("event_id", event.ID).Info("Skipping push: event not updated since last sync")
 			return nil
 		}
 
-		updatedEvent, err := client.UpdateEvent(ctx, syncedEvent.GoogleCalendarID, syncedEvent.GoogleEventID, googleEvent)
+		updatedEvent, err := client.UpdateEvent(syncedEvent.ExternalCalendarID, syncedEvent.ExternalEventID, externalEvent)
 		if err != nil {
-			return fmt.Errorf("update google event: %w", err)
+			return fmt.Errorf("update external event: %w", err)
 		}
 
-		// Update synced event record
 		syncedEvent.LastSyncedAt = time.Now().UTC()
-		syncedEvent.Title = updatedEvent.Summary // Update local record with latest from Google? Or trust internal?
-		// Actually we just pushed internal to Google, so they should match.
+		syncedEvent.Title = updatedEvent.Title
 
 		return p.syncRepo.UpsertSyncedEvent(ctx, syncedEvent)
 	}
 
-	// Insert new event
-	createdEvent, err := client.CreateEvent(ctx, calendarID, googleEvent)
+	createdEvent, err := client.CreateEvent(calendarID, externalEvent)
 	if err != nil {
-		return fmt.Errorf("create google event: %w", err)
+		return fmt.Errorf("create external event: %w", err)
 	}
 
-	// Create synced event record
-	newSyncedEvent, err := NewEventMapper().ToSyncedEvent(createdEvent, tenantID, calendarID, nil)
+	newSyncedEvent, err := NewEventMapper().ToSyncedEvent(repository.ProviderGoogle, createdEvent, tenantID, calendarID, nil)
 	if err != nil {
 		return fmt.Errorf("map created event: %w", err)
 	}

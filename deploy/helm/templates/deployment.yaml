@@ -1,0 +1,152 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "uisce.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "uisce.labels" . | nindent 4 }}
+    app.kubernetes.io/component: backend
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "uisce.labels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "uisce.labels" . | nindent 8 }}
+        app.kubernetes.io/component: backend
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: "/metrics"
+    spec:
+      serviceAccountName: {{ include "uisce.fullname" . }}-sa
+      {{- with .Values.podSecurityContext }}
+      securityContext: {{ toYaml . | nindent 8 }}
+      {{- end }}
+      affinity:
+        {{- toYaml .Values.affinity | nindent 8 }}
+      tolerations:
+        {{- toYaml .Values.tolerations | nindent 8 }}
+      nodeSelector:
+        {{- toYaml .Values.nodeSelector | nindent 8 }}
+
+      # Aspirational init container (runs DB migrations before core starts)
+      {{- if .Values.initContainers.enabled }}
+      initContainers:
+        - name: migrations
+          image: {{ .Values.initContainers.image }}
+          command:
+            {{- toYaml .Values.initContainers.command | nindent 12 }}
+          env:
+            - name: POSTGRES_HOST
+              value: "postgres"
+            - name: POSTGRES_USER
+              value: "uisce_admin"
+            - name: POSTGRES_DB
+              value: "uisce_control_plane"
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.infisical.secretRef }}
+                  key: POSTGRES_PASSWORD
+                  optional: true
+          volumeMounts:
+            - name: docker-entrypoint-initdb
+              mountPath: /docker-entrypoint-initdb.d
+              readOnly: true
+          resources:
+            requests:
+              cpu: 100m
+              memory: 64Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+          {{- with .Values.containerSecurityContext }}
+          securityContext: {{ toYaml . | nindent 12 }}
+          {{- end }}
+      {{- end }}
+
+      containers:
+        - name: uisce-core
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: gateway
+              containerPort: 8080
+              protocol: TCP
+            - name: flight-sql
+              containerPort: 8090
+              protocol: TCP
+            {{/* QuickFIX acceptor — aspirational stub */}}
+            - name: fix-acceptor
+              containerPort: 8980
+              protocol: TCP
+
+          env:
+            {{- range .Values.env }}
+            - name: {{ .name }}
+              value: {{ .value | quote }}
+            {{- end }}
+            {{- if .Values.infisical.enabled }}
+            - name: POSTGRES_DSN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.infisical.secretRef }}
+                  key: POSTGRES_DSN
+                  optional: true
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.infisical.secretRef }}
+                  key: JWT_SECRET
+                  optional: true
+            - name: REDIS_ADDR
+              value: "redis:6379"
+            {{- end }}
+            {{/* Raft node ID injected for multi-region consensus */}}
+            - name: RAFT_NODE_ID
+              value: {{ .Values.raftLedger.nodeID | quote }}
+            - name: RAFT_DATA_DIR
+              value: {{ .Values.raftLedger.dataDir | quote }}
+            {{/* Aspirational: STARROCKS_HOST passed but not currently read by backend */}}
+            {{/* - name: STARROCKS_HOST
+              value: "starrocks-fe:9030" */}}
+
+          {{- with .Values.containerSecurityContext }}
+          securityContext: {{ toYaml . | nindent 10 }}
+          {{- end }}
+
+          {{- with .Values.resources }}
+          resources: {{ toYaml . | nindent 12 }}
+          {{- end }}
+
+          volumeMounts:
+            {{- range .Values.extraVolumeMounts }}
+            - name: {{ .name }}
+              mountPath: {{ .mountPath }}
+            {{- end }}
+            {{- if .Values.initContainers.enabled }}
+            - name: docker-entrypoint-initdb
+              mountPath: /docker-entrypoint-initdb.d
+              readOnly: true
+            {{- end }}
+
+          livenessProbe:
+            {{- toYaml .Values.livenessProbe | nindent 10 }}
+          readinessProbe:
+            {{- toYaml .Values.readinessProbe | nindent 10 }}
+
+      volumes:
+        {{- range .Values.extraVolumes }}
+        - name: {{ .name }}
+          {{- if .emptyDir }}
+          emptyDir: {{ toYaml .emptyDir | nindent 10 }}
+          {{- end }}
+        {{- end }}
+        {{- if .Values.initContainers.enabled }}
+        - name: docker-entrypoint-initdb
+          configMap:
+            name: {{ include "uisce.fullname" . }}-migrations
+        {{- end }}

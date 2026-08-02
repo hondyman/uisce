@@ -1,0 +1,175 @@
+# ============================================================================
+# Uisce Semantic OS — Production Staging Mesh
+# =============================================================================
+# Spinning up the complete containerized mesh for staging validation,
+# performance benchmarks, and end-to-end stress tests.
+#
+# NOT for daily developer iteration — use docker-compose.backend.yml for that.
+#
+# Usage:
+#   docker compose -f docker-compose.production.yml up --build -d
+#   docker compose -f docker-compose.production.yml down -v
+#
+# Environment (.env or .env.infisical):
+#   POSTGRES_PASSWORD=...     (required; default: uisce_admin_password_localdev)
+#   JWT_SECRET=...             (required for production)
+#   INFISICAL_TOKEN=...       (optional; falls back to hardcoded dev creds)
+#   INFISICAL_PROJECT_ID=...  (optional)
+# ============================================================================
+
+services:
+  # --------------------------------------------------------------------------
+  # 1. Transactional Control Plane Datastore (PostgreSQL 15 + pg_trgm)
+  # --------------------------------------------------------------------------
+  postgres:
+    image: postgres:15-alpine
+    container_name: uisce_postgres
+    environment:
+      POSTGRES_DB: uisce_control_plane
+      POSTGRES_USER: uisce_admin
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-uisce_admin_password_localdev}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      # Canonical migration path: backend/db/migrations/ (pg_trgm, shadow_replay, etc.)
+      - ./backend/db/migrations:/docker-entrypoint-initdb.d:ro
+    networks:
+      - uisce_mesh
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U uisce_admin -d uisce_control_plane"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # --------------------------------------------------------------------------
+  # 2. Idempotency & Metadata Cache Layer (Redis 7)
+  # --------------------------------------------------------------------------
+  redis:
+    image: redis:7.2-alpine
+    container_name: uisce_redis
+    command: redis-server --save 60 1 --loglevel warning
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - uisce_mesh
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+
+  # --------------------------------------------------------------------------
+  # 3. High-Throughput Event Streaming & CDC (Redpanda v23.3)
+  # --------------------------------------------------------------------------
+  redpanda:
+    image: docker.redpanda.com/redpandadata/redpanda:v23.3.3
+    container_name: uisce_redpanda
+    command:
+      - redpanda start
+      - --overprovisioned
+      - --smp 1
+      - --memory 1G
+      - --reserve-memory 0M
+      - --node-id 0
+      - --check=false
+      - --kafka-addr PLAINTEXT://0.0.0.0:29092,OUTSIDE://0.0.0.0:9092
+      - --advertise-kafka-addr PLAINTEXT://redpanda:29092,OUTSIDE://localhost:9092
+    ports:
+      - "9092:9092"
+      - "29092:29092"
+    volumes:
+      - redpanda_data:/var/lib/redpanda/data
+    networks:
+      - uisce_mesh
+    restart: unless-stopped
+
+  # --------------------------------------------------------------------------
+  # 4. Hot Analytical Compute Engine (StarRocks FE — all-in-one)
+  # --------------------------------------------------------------------------
+  starrocks-fe:
+    image: starrocks/allin1-ubuntu:latest
+    container_name: uisce_starrocks
+    environment:
+      - USER_LIMIT=65536
+    ports:
+      - "9030:9030"    # MySQL protocol (StarRocks query interface)
+      - "8088:8080"    # HTTP FE UI (8080 conflicts with uisce-core gateway)
+    volumes:
+      - starrocks_data:/opt/starrocks/metadata
+    networks:
+      - uisce_mesh
+    restart: unless-stopped
+
+  # --------------------------------------------------------------------------
+  # 5. Uisce Semantic OS Core Backend (built from ./backend/Dockerfile)
+  # --------------------------------------------------------------------------
+  uisce-core:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: uisce_core_engine
+    environment:
+      # Primary Postgres DSN (backend reads POSTGRES_DSN, not DATABASE_URL)
+      - POSTGRES_DSN=postgres://uisce_admin:${POSTGRES_PASSWORD:-uisce_admin_password_localdev}@postgres:5432/uisce_control_plane?sslmode=disable
+      # Redis for rule engine, caching, and shadow replay job tracking
+      - REDIS_ADDR=redis:6379
+      # Kafka-compatible broker list for CDC and audit log streaming
+      - KAFKA_BROKERS=redpanda:29092
+      # StarRocks host (aspirational — not currently read by backend)
+      # - STARROCKS_HOST=starrocks-fe:9030
+      # Arrow Flight SQL port (aspirational stub — listener wired; no query handler yet)
+      - FLIGHT_PORT=8090
+      # QuickFIX acceptor port (aspirational stub — server starts but no FIX session configured)
+      # - FIX_ACCEPTOR_PORT=8980
+      # JWT secret for API authentication
+      - JWT_SECRET=${JWT_SECRET:-dev-jwt-secret-key-change-in-production}
+      # Infisical (optional — set INFISICAL_TOKEN and INFISICAL_PROJECT_ID to activate)
+      - INFISICAL_TOKEN=${INFISICAL_TOKEN:-}
+      - INFISICAL_PROJECT_ID=${INFISICAL_PROJECT_ID:-}
+      # eBPF disabled for local Docker; requires host network + CAP_NET_ADMIN
+      - EBPF_ENABLED=false
+      - EBPF_IFNAME=eth0
+    ports:
+      - "8081:8080"    # Main REST / MCP API Gateway
+      - "8090:8090"    # Arrow Flight SQL (aspirational stub — listener active, no handler)
+      - "8980:8980"    # QuickFIX Acceptor (aspirational stub)
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - uisce_mesh
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8080/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+# ============================================================================
+# Volumes — named volumes for persistent data across restarts
+# ============================================================================
+volumes:
+  postgres_data:
+    name: uisce_postgres_data
+  redis_data:
+    name: uisce_redis_data
+  redpanda_data:
+    name: uisce_redpanda_data
+  starrocks_data:
+    name: uisce_starrocks_data
+
+# ============================================================================
+# Network
+# ============================================================================
+networks:
+  uisce_mesh:
+    name: uisce_production_mesh
+    driver: bridge

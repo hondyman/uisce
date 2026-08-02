@@ -80,6 +80,27 @@ func (e *OverlayMergeEngine) ThreeWayMerge(
 		case !inBase && inUpstream && !inTenant:
 			result.MergedBO.Fields = append(result.MergedBO.Fields, upField)
 
+		case inBase && !inUpstream && inTenant:
+			if tenField.DataType == baseField.DataType {
+				// Tenant kept ancestor field; upstream deleted it — deletion wins, skip
+			} else {
+				// Tenant modified field that upstream deleted — conflict
+				result.HasConflict = true
+				result.Conflicts = append(result.Conflicts, MergeConflict{
+					FieldKey:      key,
+					BaseValue:     baseField.DataType,
+					UpstreamValue: "DELETED",
+					TenantValue:   tenField.DataType,
+				})
+			}
+
+		case inBase && inUpstream && !inTenant:
+			// Tenant deleted the field; upstream and ancestor preserved it — tenant deletion wins
+			_ = baseField
+
+		case inBase && !inUpstream && !inTenant:
+			// All three removed the field — skip (no action needed)
+
 		case !inBase && inUpstream && inTenant:
 			if upField.DataType == tenField.DataType {
 				result.MergedBO.Fields = append(result.MergedBO.Fields, tenField)

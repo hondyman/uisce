@@ -1,0 +1,133 @@
+{{/*
+StatefulSet for the Uisce Raft Consensus Ledger.
+Provides:
+  - Stable network identity (node-0, node-1, ...) for Raft peer discovery
+  - Persistent Volume Claim for /var/lib/uisce/raft (WAL + snapshots)
+  - Headless Service for peer DNS discovery
+
+Raft consensus is used for the SHA-256 audit ledger (Module 3A).
+*/}}
+{{- if .Values.raftLedger.enabled }}
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "uisce.fullname" . }}-raft
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "uisce.labels" . | nindent 4 }}
+    app.kubernetes.io/component: raft-ledger
+spec:
+  serviceName: {{ include "uisce.fullname" . }}-raft-headless
+  replicas: 1   # Raft cluster is 3-region; each pod manages one node
+  podManagementPolicy: Parallel
+  updateStrategy:
+    type: RollingUpdate
+  selector:
+    matchLabels:
+      {{- include "uisce.labels" . | nindent 6 }}
+      app.kubernetes.io/component: raft-ledger
+  template:
+    metadata:
+      labels:
+        {{- include "uisce.labels" . | nindent 8 }}
+        app.kubernetes.io/component: raft-ledger
+    spec:
+      serviceAccountName: {{ include "uisce.fullname" . }}-sa
+      {{- with .Values.podSecurityContext }}
+      securityContext: {{ toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: raft-ledger
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command:
+            - /bin/sh
+            - -c
+            - |
+              exec ./uisce-core --raft-mode
+          ports:
+            - name: raft-consensus
+              containerPort: 7946
+              protocol: TCP
+          env:
+            - name: POSTGRES_DSN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.infisical.secretRef }}
+                  key: POSTGRES_DSN
+                  optional: true
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.infisical.secretRef }}
+                  key: JWT_SECRET
+                  optional: true
+            - name: RAFT_NODE_ID
+              value: {{ .Values.raftLedger.nodeID | quote }}
+            - name: RAFT_DATA_DIR
+              value: {{ .Values.raftLedger.dataDir | quote }}
+            {{/* Inform raft which peers to contact for cluster bootstrap */}}
+            {{- range .Values.raftLedger.clusterPeers }}
+            - name: RAFT_PEER_{{ . | replace "." "_" | replace "-" "_" | upper }}
+              value: {{ . | quote }}
+            {{- end }}
+          {{- with .Values.containerSecurityContext }}
+          securityContext: {{ toYaml . | nindent 10 }}
+          {{- end }}
+          volumeMounts:
+            - name: uisce-raft
+              mountPath: /var/lib/uisce/raft
+          livenessProbe:
+            tcpSocket:
+              port: 7946
+            initialDelaySeconds: 10
+            periodSeconds: 30
+          readinessProbe:
+            tcpSocket:
+              port: 7946
+            initialDelaySeconds: 5
+            periodSeconds: 10
+      volumes:
+        - name: uisce-raft
+          persistentVolumeClaim:
+            claimName: {{ include "uisce.fullname" . }}-raft-pvc
+
+---
+# PersistentVolumeClaim for Raft WAL data
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "uisce.fullname" . }}-raft-pvc
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "uisce.labels" . | nindent 4 }}
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi
+  storageClassName: standard
+  volumeMode: Filesystem
+
+---
+# Headless Service for Raft peer DNS discovery
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "uisce.fullname" . }}-raft-headless
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "uisce.labels" . | nindent 4 }}
+    app.kubernetes.io/component: raft-ledger
+spec:
+  clusterIP: None
+  ports:
+    - name: raft-consensus
+      port: 7946
+      targetPort: 7946
+      protocol: TCP
+  selector:
+    {{- include "uisce.labels" . | nindent 4 }}
+    app.kubernetes.io/component: raft-ledger
+{{- end }}

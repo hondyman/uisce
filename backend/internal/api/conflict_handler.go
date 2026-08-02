@@ -11,11 +11,11 @@ import (
 )
 
 type ConflictHandler struct {
-	syncRepo *repository.GoogleSyncRepo
+	syncRepo *repository.CalendarSyncRepo
 	logger   *logrus.Entry
 }
 
-func NewConflictHandler(syncRepo *repository.GoogleSyncRepo, logger *logrus.Entry) *ConflictHandler {
+func NewConflictHandler(syncRepo *repository.CalendarSyncRepo, logger *logrus.Entry) *ConflictHandler {
 	return &ConflictHandler{
 		syncRepo: syncRepo,
 		logger:   logger.WithField("component", "conflict_handler"),

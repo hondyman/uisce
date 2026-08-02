@@ -315,8 +315,8 @@ func TestThreeWayMerge_TenantDeletesField(t *testing.T) {
 		t.Errorf("expected no conflict for tenant removing field")
 	}
 
-	if len(res.MergedBO.Fields) != 2 {
-		t.Errorf("expected 2 fields (tenant removal should not auto-delete upstream-preserved field), got %d", len(res.MergedBO.Fields))
+	if len(res.MergedBO.Fields) != 1 {
+		t.Errorf("expected 1 field (tenant deletion removes legacy_ref), got %d", len(res.MergedBO.Fields))
 	}
 }
 

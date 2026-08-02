@@ -1,0 +1,19 @@
+{{/*
+ConfigMap holding backend environment configuration.
+Secrets (POSTGRES_DSN, JWT_SECRET) are injected from Infisical Secret CRD
+referenced in the Deployment env, not here.
+*/}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "uisce.fullname" . }}-backend-config
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "uisce.labels" . | nindent 4 }}
+data:
+  REDIS_ADDR: "redis:6379"
+  KAFKA_BROKERS: "redpanda:29092"
+  LOG_LEVEL: "info"
+  ENVIRONMENT: {{ .Values.global.environment | quote }}
+  REGION: {{ .Values.global.region | quote }}
+  COMPLIANCE_LEVEL: {{ .Values.global.complianceLevel | quote }}

@@ -1,0 +1,249 @@
+# =============================================================================
+# Uisce Semantic OS — Helm Values (Base)
+# =============================================================================
+# G-SIFI baseline configuration. Override per environment/region.
+#
+# Security posture (G-SIFI):
+#   - readOnlyRootFilesystem: true  (with emptyDir mounts for /tmp, /var/lib)
+#   - capabilities.drop: [ALL]
+#   - seccompProfile: RuntimeDefault
+#   - runAsNonRoot: true / runAsUser: 1000
+#   - allowPrivilegeEscalation: false
+#   - PDB ensures minimum 2 replicas during node drains
+# =============================================================================
+
+# --------------------------------------------------------------------------
+# Global settings
+# --------------------------------------------------------------------------
+global:
+  environment: production        # production | staging
+  complianceLevel: g-sifi
+  region: us-east-1              # us-east-1 | eu-central-1 | ap-east-1
+  imagePullSecrets: []
+
+# --------------------------------------------------------------------------
+# Replica count
+# --------------------------------------------------------------------------
+replicaCount: 3
+
+# --------------------------------------------------------------------------
+# Container image (local source build — no external registry)
+# --------------------------------------------------------------------------
+image:
+  repository: uisce-core-local   # kaniko / source-to-image builds this from ./backend/
+  tag: latest
+  pullPolicy: Never             # Always pull from local build, never external
+
+# --------------------------------------------------------------------------
+# Service configuration
+# --------------------------------------------------------------------------
+service:
+  type: ClusterIP
+  ports:
+    gateway:       8080   # Main REST / MCP API Gateway
+    flightSql:     8090   # Arrow Flight SQL (aspirational stub — listener active, no handler)
+    fixAcceptor:   8980   # QuickFIX Acceptor (aspirational stub)
+    raftConsensus: 7946   # HashiCorp Raft consensus port (TCP)
+
+# --------------------------------------------------------------------------
+# Ingress (TLS-terminated at load balancer)
+# --------------------------------------------------------------------------
+ingress:
+  enabled: true
+  className: nginx
+  annotations:
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/proxy-body-size: "10m"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "60"
+  hosts:
+    - host: uisce.local
+      paths:
+        - path: /
+          pathType: Prefix
+
+# --------------------------------------------------------------------------
+# Autoscaling (HPA)
+# --------------------------------------------------------------------------
+autoscaling:
+  enabled: true
+  minReplicas: 3
+  maxReplicas: 12
+  targetCPUUtilizationPercentage: 70
+  # NOTE: Requires prometheus-adapter or metrics-server for custom VM latency metrics
+  customMetrics: []   # TODO: wire uisce_vm_eval_duration_seconds:p99
+
+# --------------------------------------------------------------------------
+# Raft Consensus Ledger Configuration
+# --------------------------------------------------------------------------
+raftLedger:
+  enabled: true
+  nodeID: "uisce-node-us-east-1"   # overridden per region in values-*.yaml
+  dataDir: "/var/lib/uisce/raft"
+  # All three peers are always listed; Raft handles leader election
+  clusterPeers:
+    - "uisce-node-us-east-1.uisce.svc.cluster.local:7946"
+    - "uisce-node-eu-central-1.uisce.svc.cluster.local:7946"
+    - "uisce-node-ap-east-1.uisce.svc.cluster.local:7946"
+
+# --------------------------------------------------------------------------
+# Resource requests and limits
+# --------------------------------------------------------------------------
+resources:
+  limits:
+    cpu: "4"
+    memory: 8Gi
+  requests:
+    cpu: "2"
+    memory: 4Gi
+
+# --------------------------------------------------------------------------
+# G-SIFI Security Context
+# --------------------------------------------------------------------------
+# Pod-level security context (all containers inherit unless overridden)
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  runAsGroup: 1000
+  fsGroup: 1000
+  seccompProfile:
+    type: RuntimeDefault
+  # Drop all capabilities at pod level; containers add back NET_ADMIN only where needed
+  capabilities:
+    drop:
+      - ALL
+
+# Container-level security context (most restrictive baseline)
+containerSecurityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  runAsNonRoot: true
+  runAsUser: 1000
+  capabilities:
+    drop:
+      - ALL
+
+# --------------------------------------------------------------------------
+# Pod disruption budget (ensures 2 replicas survive node drains)
+# --------------------------------------------------------------------------
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 2
+
+# --------------------------------------------------------------------------
+# Network policy (restrict ingress to exactly what's needed)
+# --------------------------------------------------------------------------
+networkPolicy:
+  enabled: true
+  # Egress: allow DNS + PostgreSQL (5432) + Redis (6379) + Kafka (9092) + HTTPS
+  egress:
+    - to:
+        - podSelector: {}     # all pods in namespace
+      ports:
+        - { port: 53, protocol: TCP }
+        - { port: 53, protocol: UDP }   # DNS
+        - { port: 5432, protocol: TCP } # PostgreSQL
+        - { port: 6379, protocol: TCP } # Redis
+        - { port: 9092, protocol: TCP } # Kafka/Redpanda
+
+# --------------------------------------------------------------------------
+# Node affinity and tolerations
+# --------------------------------------------------------------------------
+nodeSelector: {}
+tolerations: []
+affinity:
+  podAntiAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+      - weight: 100
+        podAffinityTerm:
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: uisce
+          topologyKey: topology.kubernetes.io/zone
+
+# --------------------------------------------------------------------------
+# EmptyDir volumes (required when readOnlyRootFilesystem: true)
+# --------------------------------------------------------------------------
+extraVolumes:
+  - name: tmp
+    emptyDir: {}
+  - name: uisce-raft
+    emptyDir: {}
+  - name: uisce-logs
+    emptyDir: {}
+
+extraVolumeMounts:
+  - name: tmp
+    mountPath: /tmp
+  - name: uisce-raft
+    mountPath: /var/lib/uisce/raft
+  - name: uisce-logs
+    mountPath: /var/log/uisce
+
+# --------------------------------------------------------------------------
+# Infisical secret integration
+# --------------------------------------------------------------------------
+# Reference to a pre-provisioned Infisical Secret CRD in the target namespace.
+# Infisical operator syncs these into native Kubernetes Secrets.
+# Required keys: POSTGRES_DSN, JWT_SECRET, RAFT_ENCRYPTION_KEY, KAFKA_SASL_PASSWORD
+infisical:
+  enabled: true
+  secretRef: uisce-infisical-secrets   # Must exist in namespace before helm install
+
+# --------------------------------------------------------------------------
+# Init containers (migrations)
+# --------------------------------------------------------------------------
+initContainers:
+  enabled: true
+  image: postgres:15-alpine
+  command:
+    - sh
+    - -c
+    - |
+      echo "Waiting for PostgreSQL to be ready..."
+      until pg_isready -h $POSTGRES_HOST -p 5432 -U $POSTGRES_USER; do
+        sleep 2
+      done
+      echo "PostgreSQL ready — running migrations..."
+      for f in /docker-entrypoint-initdb.d/*.up.sql; do
+        [ -e "$f" ] || continue
+        echo "Applying $f..."
+        psql -h $POSTGRES_HOST -p 5432 -U $POSTGRES_USER -d $POSTGRES_DB -f "$f" || true
+      done
+
+# --------------------------------------------------------------------------
+# Environment variables (non-secret)
+# --------------------------------------------------------------------------
+env:
+  - name: PORT
+    value: "8080"
+  - name: FLIGHT_PORT
+    value: "8090"
+  - name: KAFKA_BROKERS
+    value: "redpanda:29092"
+  - name: EBPF_ENABLED
+    value: "false"
+  - name: EBPF_IFNAME
+    value: "eth0"
+  - name: LOG_LEVEL
+    value: "info"
+  - name: ENVIRONMENT
+    value: "production"
+
+# --------------------------------------------------------------------------
+# Liveness and readiness probes
+# --------------------------------------------------------------------------
+livenessProbe:
+  httpGet:
+    path: /health
+    port: gateway
+  initialDelaySeconds: 15
+  periodSeconds: 20
+  failureThreshold: 3
+
+readinessProbe:
+  httpGet:
+    path: /health
+    port: gateway
+  initialDelaySeconds: 5
+  periodSeconds: 10
+  failureThreshold: 3

@@ -348,6 +348,19 @@
       },
       "type": "object"
     },
+    "AdvisorWorker": {
+      "properties": {
+        "engine": {
+          "$ref": "#/definitions/RuleEngine"
+        },
+        "interval": {},
+        "stopChan": {},
+        "threshold": {
+          "$ref": "#/definitions/uint64"
+        }
+      },
+      "type": "object"
+    },
     "AlertsService": {
       "properties": {
         "db": {},
@@ -770,7 +783,6 @@
     },
     "AuditService": {
       "properties": {
-        "hasuraClient": {},
         "logger": {}
       },
       "type": "object"
@@ -898,97 +910,6 @@
       },
       "type": "object"
     },
-    "BOField": {
-      "properties": {
-        "DisplayName": {
-          "type": "string"
-        },
-        "ID": {
-          "type": "string"
-        },
-        "InheritedFrom": {
-          "type": "string"
-        },
-        "InheritedFromKey": {
-          "type": "string"
-        },
-        "IsCore": {
-          "type": "boolean"
-        },
-        "IsCustom": {
-          "type": "boolean"
-        },
-        "IsInherited": {
-          "type": "boolean"
-        },
-        "IsRequired": {
-          "type": "boolean"
-        },
-        "Key": {
-          "type": "string"
-        },
-        "Name": {
-          "type": "string"
-        },
-        "Role": {
-          "type": "string"
-        },
-        "SemanticTermID": {
-          "type": "string"
-        },
-        "Sequence": {
-          "type": "number"
-        },
-        "Type": {
-          "type": "string"
-        }
-      },
-      "type": "object"
-    },
-    "BOFieldInput": {
-      "properties": {
-        "BusinessObjectID": {
-          "type": "string"
-        },
-        "Description": {
-          "type": "string"
-        },
-        "DisplayName": {
-          "type": "string"
-        },
-        "IsRequired": {
-          "type": "boolean"
-        },
-        "Key": {
-          "type": "string"
-        },
-        "Name": {
-          "type": "string"
-        },
-        "ReferenceEntity": {
-          "type": "string"
-        },
-        "Role": {
-          "type": "string"
-        },
-        "SemanticTermID": {
-          "type": "string"
-        },
-        "Sequence": {
-          "type": "number"
-        },
-        "SubtypeID": {
-          "type": "string"
-        },
-        "TechnicalName": {
-          "type": "string"
-        },
-        "Type": {
-          "type": "string"
-        }
-      },
-      "type": "object"
-    },
     "BOWorkloadProfile": {
       "properties": {
         "AvgDurationMs": {
@@ -1101,6 +1022,20 @@
         "mu": {},
         "queues": {
           "$ref": "#/definitions/Record\u003cstring, TenantQueue\u003e"
+        }
+      },
+      "type": "object"
+    },
+    "BatchResult": {
+      "properties": {
+        "PassedAll": {
+          "type": "boolean"
+        },
+        "Results": {
+          "$ref": "#/definitions/RuleResult[]"
+        },
+        "TotalTimeNs": {
+          "type": "number"
         }
       },
       "type": "object"
@@ -1753,7 +1688,6 @@
     },
     "BusinessObjectFieldService": {
       "properties": {
-        "hasuraClient": {},
         "isAdminCore": {
           "type": "boolean"
         },
@@ -1915,7 +1849,6 @@
     },
     "BusinessProcessService": {
       "properties": {
-        "client": {},
         "logger": {}
       },
       "type": "object"
@@ -2416,6 +2349,20 @@
         "success"
       ],
       "type": "string"
+    },
+    "CompileError": {
+      "properties": {
+        "Node": {
+          "$ref": "#/definitions/RuleNode"
+        },
+        "Operator": {
+          "type": "string"
+        },
+        "Reason": {
+          "type": "string"
+        }
+      },
+      "type": "object"
     },
     "ComplexCondition": {
       "properties": {
@@ -3947,6 +3894,41 @@
       },
       "type": "object"
     },
+    "EngineMetrics": {
+      "properties": {
+        "cacheHits": {},
+        "cacheMisses": {},
+        "compileErrors": {},
+        "fallbacks": {},
+        "vmPathCount": {}
+      },
+      "type": "object"
+    },
+    "EngineMetricsSnapshot": {
+      "properties": {
+        "CacheHits": {
+          "$ref": "#/definitions/uint64"
+        }
+      },
+      "type": "object"
+    },
+    "EngineState": {
+      "properties": {
+        "Cache": {},
+        "Enums": {},
+        "LastUsedUnixNano": {
+          "type": "number"
+        },
+        "Revision": {
+          "$ref": "#/definitions/uint64"
+        },
+        "Syms": {},
+        "Version": {
+          "type": "number"
+        }
+      },
+      "type": "object"
+    },
     "EnhancedLineageData": {
       "properties": {
         "Edges": {
@@ -3995,6 +3977,32 @@
         "db": {},
         "nlqService": {
           "$ref": "#/definitions/NLQService"
+        }
+      },
+      "type": "object"
+    },
+    "EvalTrace": {
+      "properties": {
+        "FailureReasons": {
+          "$ref": "#/definitions/string[]"
+        },
+        "Fallback": {
+          "type": "string"
+        },
+        "IsTenant": {
+          "type": "boolean"
+        },
+        "Revision": {
+          "$ref": "#/definitions/uint64"
+        },
+        "RuleID": {
+          "type": "string"
+        },
+        "TenantID": {
+          "type": "string"
+        },
+        "UsedVM": {
+          "type": "boolean"
         }
       },
       "type": "object"
@@ -4407,49 +4415,6 @@
       },
       "type": "object"
     },
-    "Expression": {
-      "properties": {
-        "BusinessObjectID": {
-          "type": "string"
-        },
-        "Description": {
-          "type": "string"
-        },
-        "FieldKey": {
-          "type": "string"
-        },
-        "ID": {
-          "type": "string"
-        },
-        "IsActive": {
-          "type": "boolean"
-        },
-        "Name": {
-          "type": "string"
-        },
-        "RuleType": {
-          "$ref": "#/definitions/ExpressionType"
-        },
-        "Script": {
-          "type": "string"
-        },
-        "TenantID": {
-          "type": "string"
-        },
-        "Version": {
-          "type": "number"
-        }
-      },
-      "type": "object"
-    },
-    "ExpressionType": {
-      "enum": [
-        "calculation",
-        "condition",
-        "validation"
-      ],
-      "type": "string"
-    },
     "ExtensionFix": {
       "properties": {
         "FilePath": {
@@ -4516,6 +4481,26 @@
           "type": "number"
         },
         "Name": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "FallbackQueryPattern": {
+      "properties": {
+        "FallbackCount": {
+          "type": "number"
+        },
+        "GroupByFields": {
+          "$ref": "#/definitions/string[]"
+        },
+        "MeasureFields": {
+          "$ref": "#/definitions/string[]"
+        },
+        "TargetBOID": {
+          "type": "string"
+        },
+        "TargetTable": {
           "type": "string"
         }
       },
@@ -4817,6 +4802,21 @@
     "FinancialToolService": {
       "properties": {
         "registry": {}
+      },
+      "type": "object"
+    },
+    "Fixture": {
+      "properties": {
+        "AST": {
+          "$ref": "#/definitions/RuleNode"
+        },
+        "Compiled": {},
+        "Enums": {},
+        "FastRecord": {},
+        "MapInput": {
+          "$ref": "#/definitions/Record\u003cstring, any\u003e"
+        },
+        "Syms": {}
       },
       "type": "object"
     },
@@ -6095,6 +6095,32 @@
       },
       "type": "object"
     },
+    "LatencyProfiler": {
+      "properties": {
+        "idx": {},
+        "samples": {
+          "$ref": "#/definitions/any[]"
+        }
+      },
+      "type": "object"
+    },
+    "LatencyReport": {
+      "properties": {
+        "Count": {
+          "$ref": "#/definitions/uint64"
+        },
+        "P50Ns": {
+          "type": "number"
+        },
+        "P95Ns": {
+          "type": "number"
+        },
+        "P99Ns": {
+          "type": "number"
+        }
+      },
+      "type": "object"
+    },
     "LineageAsset": {
       "properties": {
         "ID": {
@@ -6344,6 +6370,20 @@
           "type": "string"
         },
         "Type": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "MaterializationProposal": {
+      "properties": {
+        "EstimatedGain": {
+          "type": "string"
+        },
+        "SuggestedMV": {
+          "type": "string"
+        },
+        "TargetBOID": {
           "type": "string"
         }
       },
@@ -6882,7 +6922,6 @@
     },
     "NotificationService": {
       "properties": {
-        "hasuraClient": {},
         "logger": {}
       },
       "type": "object"
@@ -7692,7 +7731,6 @@
     },
     "PortfolioService": {
       "properties": {
-        "client": {},
         "logger": {}
       },
       "type": "object"
@@ -9088,6 +9126,37 @@
       },
       "type": "object"
     },
+    "RuleAction": {
+      "properties": {
+        "Params": {
+          "$ref": "#/definitions/Record\u003cstring, any\u003e"
+        },
+        "Type": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "RuleChain": {
+      "properties": {
+        "ID": {
+          "type": "string"
+        },
+        "Name": {
+          "type": "string"
+        },
+        "Operator": {
+          "type": "string"
+        },
+        "Rules": {
+          "$ref": "#/definitions/RuleWithMetadata[]"
+        },
+        "StopOnFirst": {
+          "$ref": "#/definitions/Severity"
+        }
+      },
+      "type": "object"
+    },
     "RuleCondition": {
       "properties": {
         "Field": {
@@ -9102,10 +9171,28 @@
     },
     "RuleEngine": {
       "properties": {
+        "coreState": {},
+        "driftHealer": {
+          "$ref": "#/definitions/DriftHealerInterface"
+        },
         "env": {},
+        "metrics": {
+          "$ref": "#/definitions/EngineMetrics"
+        },
+        "profiler": {
+          "$ref": "#/definitions/LatencyProfiler"
+        },
+        "recursive": {
+          "$ref": "#/definitions/AdvancedEvaluator"
+        },
         "repo": {
           "$ref": "#/definitions/RuleRepository"
-        }
+        },
+        "rewarmGroup": {},
+        "tenantStates": {
+          "description": "tenantStates holds isolated states for tenants with custom rules/fields.\nKey: tenantID (string). Value: *EngineState.\nIf a tenant has no custom state, evaluation falls back to coreState."
+        },
+        "vm": {}
       },
       "type": "object"
     },
@@ -9130,20 +9217,6 @@
       },
       "type": "object"
     },
-    "RuleGroup": {
-      "properties": {
-        "Conditions": {
-          "$ref": "#/definitions/RuleNode[]"
-        },
-        "ID": {
-          "type": "string"
-        },
-        "Operator": {
-          "type": "string"
-        }
-      },
-      "type": "object"
-    },
     "RuleMetrics": {
       "properties": {
         "ApprovalRate": {
@@ -9160,20 +9233,6 @@
         },
         "Total": {
           "type": "number"
-        }
-      },
-      "type": "object"
-    },
-    "RuleNode": {
-      "properties": {
-        "Condition": {
-          "$ref": "#/definitions/RuleCondition"
-        },
-        "Group": {
-          "$ref": "#/definitions/RuleGroup"
-        },
-        "Type": {
-          "$ref": "#/definitions/RuleNodeType"
         }
       },
       "type": "object"
@@ -9230,6 +9289,44 @@
         },
         "TargetEntityID": {},
         "TenantID": {}
+      },
+      "type": "object"
+    },
+    "RuleResult": {
+      "properties": {
+        "Actions": {
+          "$ref": "#/definitions/RuleAction[]"
+        },
+        "Category": {
+          "type": "string"
+        },
+        "Details": {
+          "$ref": "#/definitions/string[]"
+        },
+        "EvalTimeNs": {
+          "type": "number"
+        },
+        "FailureReasons": {
+          "$ref": "#/definitions/string[]"
+        },
+        "Passed": {
+          "type": "boolean"
+        },
+        "RuleID": {
+          "type": "string"
+        },
+        "RuleName": {
+          "type": "string"
+        },
+        "Score": {
+          "type": "number"
+        },
+        "Severity": {
+          "$ref": "#/definitions/Severity"
+        },
+        "Violations": {
+          "$ref": "#/definitions/RuleViolation[]"
+        }
       },
       "type": "object"
     },
@@ -9329,6 +9426,63 @@
         },
         "TenantID": {
           "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "RuleViolation": {
+      "properties": {
+        "ConditionID": {
+          "type": "string"
+        },
+        "EvaluatedVal": {},
+        "FieldPath": {
+          "type": "string"
+        },
+        "Message": {
+          "type": "string"
+        },
+        "Operator": {
+          "type": "string"
+        },
+        "RuleID": {
+          "type": "string"
+        },
+        "RuleName": {
+          "type": "string"
+        },
+        "Severity": {
+          "$ref": "#/definitions/Severity"
+        },
+        "ThresholdLimit": {}
+      },
+      "type": "object"
+    },
+    "RuleWithMetadata": {
+      "properties": {
+        "Actions": {
+          "$ref": "#/definitions/RuleAction[]"
+        },
+        "Category": {
+          "type": "string"
+        },
+        "ID": {
+          "type": "string"
+        },
+        "Name": {
+          "type": "string"
+        },
+        "Node": {
+          "$ref": "#/definitions/RuleNode"
+        },
+        "ScoringFormula": {
+          "type": "string"
+        },
+        "Severity": {
+          "$ref": "#/definitions/Severity"
+        },
+        "Version": {
+          "type": "number"
         }
       },
       "type": "object"
@@ -9974,7 +10128,6 @@
     },
     "SemanticModelInheritanceService": {
       "properties": {
-        "hasuraClient": {},
         "logger": {}
       },
       "type": "object"
@@ -10101,6 +10254,19 @@
       },
       "type": "object"
     },
+    "Severity": {
+      "enum": [
+        "BLOCK",
+        "INFO",
+        "WARNING",
+        "error",
+        "hard_block",
+        "info",
+        "quarantine",
+        "warning"
+      ],
+      "type": "string"
+    },
     "ShadowRunResult": {
       "properties": {
         "DiffPct": {
@@ -10199,7 +10365,6 @@
           "$ref": "#/definitions/Record\u003cstring, any\u003e"
         },
         "cacheMu": {},
-        "hasuraClient": {},
         "logger": {},
         "maxSteps": {
           "$ref": "#/definitions/uint64"
@@ -10910,7 +11075,6 @@
         "cache": {
           "$ref": "#/definitions/Record\u003cstring, Record\u003cstring, string\u003e\u003e"
         },
-        "hasuraClient": {},
         "logger": {}
       },
       "type": "object"
@@ -12455,6 +12619,12 @@
       },
       "type": "object"
     },
+    "fakeDriftHealer": {
+      "properties": {
+        "calls": {}
+      },
+      "type": "object"
+    },
     "inMemoryBundleStore": {
       "properties": {
         "bundleRoles": {
@@ -12664,6 +12834,35 @@
           "$ref": "#/definitions/ValuesAuditLogger"
         },
         "db": {}
+      },
+      "type": "object"
+    },
+    "vmCompiler": {
+      "properties": {
+        "boolDepth": {
+          "$ref": "#/definitions/uint8"
+        },
+        "boolMax": {
+          "$ref": "#/definitions/uint8"
+        },
+        "enums": {},
+        "err": {
+          "$ref": "#/definitions/CompileError"
+        },
+        "fNumDepth": {
+          "$ref": "#/definitions/uint8"
+        },
+        "fNumMax": {
+          "$ref": "#/definitions/uint8"
+        },
+        "numDepth": {
+          "$ref": "#/definitions/uint8"
+        },
+        "numMax": {
+          "$ref": "#/definitions/uint8"
+        },
+        "out": {},
+        "syms": {}
       },
       "type": "object"
     }

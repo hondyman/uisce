@@ -335,7 +335,7 @@ func generateRandomString(length int) string {
 	const chars = "abcdefghijklmnopqrstuvwxyz0123456789"
 	result := make([]byte, length)
 	for i := range result {
-		result[i] = chars[time.Now().UnixNano()%len(chars)]
+		result[i] = chars[time.Now().UnixNano()%int64(len(chars))]
 		time.Sleep(time.Nanosecond)
 	}
 	return string(result)

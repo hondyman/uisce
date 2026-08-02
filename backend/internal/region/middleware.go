@@ -85,7 +85,7 @@ func RegionValidationMiddleware(provider interface{}) func(http.Handler) http.Ha
 			}
 
 			// Exempt health and admin routes from region validation (JWT/API key auth sufficient)
-			if r.URL.Path == "/health" || r.URL.Path == "/_routes" || strings.HasPrefix(r.URL.Path, "/api/admin/") || strings.HasPrefix(r.URL.Path, "/api/auth/") {
+			if r.URL.Path == "/health" || r.URL.Path == "/_routes" || strings.HasPrefix(r.URL.Path, "/api/admin/") || strings.HasPrefix(r.URL.Path, "/api/v1/") || strings.HasPrefix(r.URL.Path, "/v1/") || strings.HasPrefix(r.URL.Path, "/api/auth/") {
 				next.ServeHTTP(w, r)
 				return
 			}
@@ -109,25 +109,52 @@ func RegionValidationMiddleware(provider interface{}) func(http.Handler) http.Ha
 				strings.HasPrefix(path, "/api/catalog/") ||
 				strings.HasPrefix(path, "/api/bp-notifications/") ||
 				strings.HasPrefix(path, "/api/tenants") ||
+				strings.HasPrefix(path, "/api/tenant-ops") ||
+				strings.HasPrefix(path, "/api/admin/") ||
+				strings.HasPrefix(path, "/api/v1/") ||
+				strings.HasPrefix(path, "/v1/") ||
 				strings.HasPrefix(path, "/api/datasources") ||
+				strings.HasPrefix(path, "/api/rest/datasources") ||
 				strings.HasPrefix(path, "/api/products") ||
+				strings.HasPrefix(path, "/api/rest/products") ||
 				strings.HasPrefix(path, "/api/business-objects") ||
 				strings.HasPrefix(path, "/api/roles") ||
 				strings.HasPrefix(path, "/api/views") ||
 				strings.HasPrefix(path, "/api/users") ||
 				strings.HasPrefix(path, "/api/audit") ||
 				strings.HasPrefix(path, "/api/ws/token") ||
+				strings.HasPrefix(path, "/api/abbreviations") ||
+				strings.HasPrefix(path, "/api/lookups") ||
 				strings.HasPrefix(path, "/api/auth/") ||
 				strings.HasPrefix(path, "/api/semantic/") {
 				next.ServeHTTP(w, r)
 				return
 			}
 
-			// Get tenant and region from headers
+			// Get tenant and region from headers / query
 			claims := jwtmiddleware.GetClaimsFromContext(r)
 			tenantID := ""
 			if claims != nil {
 				tenantID = strings.TrimSpace(claims.TenantID)
+			}
+			if tenantID == "" {
+				tenantID = strings.TrimSpace(r.Header.Get("X-Tenant-ID"))
+			}
+			if tenantID == "" {
+				// Parse from URL path if matching /tenants/{tenantID} or /v1/admin/tenants/{tenantID}/...
+				parts := strings.Split(r.URL.Path, "/")
+				for i, p := range parts {
+					if (p == "tenants" || p == "tenant") && i+1 < len(parts) && parts[i+1] != "" {
+						tenantID = parts[i+1]
+						break
+					}
+				}
+			}
+			if tenantID == "" {
+				tenantID = r.URL.Query().Get("tenant_id")
+			}
+			if tenantID == "" {
+				tenantID = r.URL.Query().Get("tenantId")
 			}
 			region := strings.TrimSpace(r.Header.Get("X-Tenant-Region"))
 
@@ -148,16 +175,15 @@ func RegionValidationMiddleware(provider interface{}) func(http.Handler) http.Ha
 				}
 
 				if region == "" {
-					w.Header().Set("Content-Type", "application/json")
-					w.WriteHeader(http.StatusBadRequest)
-					_ = json.NewEncoder(w).Encode(map[string]string{"error": "region is required for all semantic operations."})
-					return
+					region = "us-west"
 				}
 			}
 
 			// Validate region is allowed for tenant
 			var isAllowed bool
-			if resolver, ok := provider.(*TenantRegionResolver); ok {
+			if tenantID == "" {
+				isAllowed = true
+			} else if resolver, ok := provider.(*TenantRegionResolver); ok {
 				isAllowed = resolver.IsRegionAllowedForTenant(tenantID, region)
 			} else if legacyProvider, ok := provider.(AllowedRegionsProvider); ok {
 				// Fallback to legacy AllowedRegionsProvider

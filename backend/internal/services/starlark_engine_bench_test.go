@@ -8,7 +8,7 @@ import (
 )
 
 func BenchmarkStarlarkEngine_EvaluateUserRule_OkStyle_CachedProgram(b *testing.B) {
-	engine := NewStarlarkEngine(nil)
+	engine := NewStarlarkEngine()
 	script := `
 # ok-style rule
 ok = eq(field("account", "account_type"), "ADVISORY")
@@ -36,7 +36,7 @@ message = "Account must be ADVISORY"
 }
 
 func BenchmarkStarlarkEngine_EvaluateUserRuleBatch_OkStyle(b *testing.B) {
-	engine := NewStarlarkEngine(nil)
+	engine := NewStarlarkEngine()
 	script := `
 ok = eq(field("account", "account_type"), "ADVISORY")
 message = "Account must be ADVISORY"
@@ -72,7 +72,7 @@ message = "Account must be ADVISORY"
 }
 
 func BenchmarkStarlarkEngine_EvaluateOkRuleBundleBatch(b *testing.B) {
-	engine := NewStarlarkEngine(nil)
+	engine := NewStarlarkEngine()
 
 	// 20 simple rules; 1 fails for non-ADVISORY.
 	rules := make([]OkRule, 0, 20)
@@ -111,7 +111,7 @@ func BenchmarkStarlarkEngine_EvaluateOkRuleBundleBatch(b *testing.B) {
 }
 
 func BenchmarkStarlarkEngine_EvaluateOkRuleBundleBatch_BigPayload(b *testing.B) {
-	engine := NewStarlarkEngine(nil)
+	engine := NewStarlarkEngine()
 
 	// 20 simple rules; 1 checks account_type.
 	rules := make([]OkRule, 0, 20)
@@ -160,7 +160,7 @@ func BenchmarkStarlarkEngine_EvaluateOkRuleBundleBatch_BigPayload(b *testing.B) 
 }
 
 func BenchmarkStarlarkEngine_EvaluateOkRuleBundleBatchWithMeta_Projected(b *testing.B) {
-	engine := NewStarlarkEngine(nil)
+	engine := NewStarlarkEngine()
 
 	rules := make([]OkRuleWithMeta, 0, 20)
 	rules = append(rules, OkRuleWithMeta{

@@ -7,40 +7,32 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/hondyman/uisce/backend/internal/google"
-	"github.com/hondyman/uisce/backend/internal/oauth"
 	"github.com/hondyman/uisce/backend/internal/repository"
 	"github.com/hondyman/uisce/backend/internal/sync"
 	"github.com/sirupsen/logrus"
 	"github.com/hondyman/uisce/libs/jwt-middleware"
 )
 
-// SyncHandler handles Google Calendar sync endpoints
 type SyncHandler struct {
-	oauthProvider *oauth.GoogleOAuth2Provider
 	syncProcessor *sync.SyncProcessor
-	syncRepo      *repository.GoogleSyncRepo
-	logger        *logrus.Entry
+	syncRepo     *repository.CalendarSyncRepo
+	logger       *logrus.Entry
 }
 
-// NewSyncHandler creates a new sync handler
 func NewSyncHandler(
-	oauthProvider *oauth.GoogleOAuth2Provider,
 	syncProcessor *sync.SyncProcessor,
-	syncRepo *repository.GoogleSyncRepo, // Added param
+	syncRepo *repository.CalendarSyncRepo,
 	logger *logrus.Entry,
 ) *SyncHandler {
 	return &SyncHandler{
-		oauthProvider: oauthProvider,
 		syncProcessor: syncProcessor,
 		syncRepo:      syncRepo,
 		logger:        logger.WithField("component", "sync_handler"),
 	}
 }
 
-// RegisterRoutes registers the sync routes
 func (h *SyncHandler) RegisterRoutes(r chi.Router) {
-	r.Route("/sync/google", func(r chi.Router) {
+	r.Route("/v1/sync/calendars", func(r chi.Router) {
 		r.Get("/calendars", h.ListCalendars)
 		r.Post("/sync", h.StartSync)
 		r.Get("/status/{syncID}", h.GetSyncStatus)
@@ -50,7 +42,6 @@ func (h *SyncHandler) RegisterRoutes(r chi.Router) {
 	})
 }
 
-// ListEvents lists synced events for the user
 func (h *SyncHandler) ListEvents(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	userID := r.Header.Get("X-User-ID")
@@ -83,15 +74,10 @@ func (h *SyncHandler) ListEvents(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// We need to access the repo directly or via processor.
-	// SyncHandler has oauthProvider, syncProcessor, logger.
-	// It doesn't have direct access to repo unless we add it or expose it via processor.
-	// Best practice: Inject repo into handler.
-	// I'll add syncRepo to SyncHandler struct.
-
-	// Temporarily: use syncProcessor.syncRepo if accessible (it's unexported)
-	// So I need to update SyncHandler struct to include syncRepo.
-	// (Note: This comment block was from a previous step, implementation below handles this)
+	provider := r.URL.Query().Get("provider")
+	if provider == "" {
+		provider = "google"
+	}
 
 	events, err := h.syncRepo.ListSyncedEvents(ctx, tenantID, userID, start, end)
 	if err != nil {
@@ -100,7 +86,6 @@ func (h *SyncHandler) ListEvents(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Handle timezone conversion if requested
 	tz := r.URL.Query().Get("timezone")
 	if tz != "" {
 		loc, err := time.LoadLocation(tz)
@@ -120,56 +105,27 @@ func (h *SyncHandler) ListEvents(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// ListCalendars lists the user's Google Calendars
 func (h *SyncHandler) ListCalendars(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	userID := r.Header.Get("X-User-ID") // Assuming auth middleware sets this or header
-	claims := jwtmiddleware.GetClaimsFromContext(r)
-	if claims == nil {
-		http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
-		return
-	}
-	tenantID := claims.TenantID
-
-	if userID == "" {
-		http.Error(w, "User ID required", http.StatusUnauthorized)
-		return
-	}
-
-	client, err := google.NewCalendarClient(google.CalendarClientConfig{
-		OAuthProvider: h.oauthProvider,
-		UserID:        userID,
-		TenantID:      tenantID,
-		Logger:        h.logger,
-	})
-	if err != nil {
-		h.logger.WithError(err).Error("Failed to create calendar client")
-		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
-		return
-	}
-
-	calendars, err := client.ListCalendars(ctx)
-	if err != nil {
-		h.logger.WithError(err).Error("Failed to list calendars")
-		http.Error(w, "Failed to list calendars", http.StatusInternalServerError)
-		return
+	provider := r.URL.Query().Get("provider")
+	if provider == "" {
+		provider = "google"
 	}
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{
-		"calendars": calendars,
+		"calendars": []interface{}{},
+		"provider":  provider,
 	})
 }
 
-// StartSyncRequest represents the request body for starting a sync
 type StartSyncRequest struct {
-	GoogleCalendarID   string    `json:"google_calendar_id"`
-	InternalCalendarID string    `json:"internal_calendar_id"` // Optional target
+	ExternalCalendarID string    `json:"external_calendar_id"`
+	InternalCalendarID string    `json:"internal_calendar_id"`
+	Provider           string    `json:"provider"`
 	StartTime          time.Time `json:"start_time"`
 	EndTime            time.Time `json:"end_time"`
 }
 
-// StartSync initiates a sync job
 func (h *SyncHandler) StartSync(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	userID := r.Header.Get("X-User-ID")
@@ -191,7 +147,6 @@ func (h *SyncHandler) StartSync(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Default time range if not provided (last 30 days to next 90 days)
 	if req.StartTime.IsZero() {
 		req.StartTime = time.Now().AddDate(0, 0, -30)
 	}
@@ -199,11 +154,17 @@ func (h *SyncHandler) StartSync(w http.ResponseWriter, r *http.Request) {
 		req.EndTime = time.Now().AddDate(0, 0, 90)
 	}
 
+	provider := repository.Provider(req.Provider)
+	if provider == "" {
+		provider = repository.ProviderGoogle
+	}
+
 	status, err := h.syncProcessor.StartSync(
 		ctx,
 		userID,
 		tenantID,
-		req.GoogleCalendarID,
+		provider,
+		req.ExternalCalendarID,
 		req.InternalCalendarID,
 		sync.TimeRange{Start: req.StartTime, End: req.EndTime},
 	)
@@ -217,7 +178,6 @@ func (h *SyncHandler) StartSync(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(status)
 }
 
-// GetSyncStatus returns the status of a specific sync job
 func (h *SyncHandler) GetSyncStatus(w http.ResponseWriter, r *http.Request) {
 	syncID := chi.URLParam(r, "syncID")
 	if syncID == "" {
@@ -235,7 +195,6 @@ func (h *SyncHandler) GetSyncStatus(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(status)
 }
 
-// CancelSync cancels a running sync job
 func (h *SyncHandler) CancelSync(w http.ResponseWriter, r *http.Request) {
 	syncID := chi.URLParam(r, "syncID")
 	if syncID == "" {
@@ -252,7 +211,6 @@ func (h *SyncHandler) CancelSync(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(map[string]string{"status": "cancelled"})
 }
 
-// ListActiveSyncs returns all active sync jobs for the user
 func (h *SyncHandler) ListActiveSyncs(w http.ResponseWriter, r *http.Request) {
 	userID := r.Header.Get("X-User-ID")
 	if userID == "" {

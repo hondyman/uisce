@@ -6,27 +6,25 @@ import (
 )
 
 var (
-	// Conflict Metrics
 	conflictsDetectedTotal = promauto.NewCounterVec(
 		prometheus.CounterOpts{
-			Name: "google_sync_conflicts_detected_total",
-			Help: "Total number of conflicts detected between Google and Internal events",
+			Name: "calendar_sync_conflicts_detected_total",
+			Help: "Total number of conflicts detected between external and internal events",
 		},
 		[]string{"type", "severity"},
 	)
 
 	conflictResolvedTotal = promauto.NewCounterVec(
 		prometheus.CounterOpts{
-			Name: "google_sync_conflicts_resolved_total",
+			Name: "calendar_sync_conflicts_resolved_total",
 			Help: "Total number of conflicts resolved",
 		},
 		[]string{"strategy"},
 	)
 
-	// Recurring Event Metrics
 	recurringEventsExpanded = promauto.NewCounterVec(
 		prometheus.CounterOpts{
-			Name: "google_recurring_events_expanded_total",
+			Name: "calendar_recurring_events_expanded_total",
 			Help: "Total number of recurring events expanded",
 		},
 		[]string{"status"},
@@ -34,7 +32,7 @@ var (
 
 	recurringEventInstances = promauto.NewHistogramVec(
 		prometheus.HistogramOpts{
-			Name:    "google_recurring_event_instances",
+			Name:    "calendar_recurring_event_instances",
 			Help:    "Number of instances per recurring event",
 			Buckets: prometheus.ExponentialBuckets(1, 2, 10),
 		},
@@ -43,13 +41,12 @@ var (
 
 	recurringEventExpansionErrors = promauto.NewCounterVec(
 		prometheus.CounterOpts{
-			Name: "google_recurring_event_expansion_errors_total",
+			Name: "calendar_recurring_event_expansion_errors_total",
 			Help: "Total number of recurring event expansion errors",
 		},
 		[]string{"error_type"},
 	)
 
-	// Timezone Metrics
 	timezoneConversions = promauto.NewCounterVec(
 		prometheus.CounterOpts{
 			Name: "timezone_conversions_total",
@@ -66,19 +63,18 @@ var (
 		[]string{"error_type"},
 	)
 
-	// Listener/Push Metrics
 	internalEventsReceivedTotal = promauto.NewCounterVec(
 		prometheus.CounterOpts{
-			Name: "google_sync_internal_events_received_total",
+			Name: "calendar_sync_internal_events_received_total",
 			Help: "Total number of internal events received for sync",
 		},
 		[]string{"event_type"},
 	)
 
-	pushToGoogleDuration = promauto.NewHistogramVec(
+	pushToExternalDuration = promauto.NewHistogramVec(
 		prometheus.HistogramOpts{
-			Name:    "google_sync_push_duration_seconds",
-			Help:    "Duration of pushing events to Google",
+			Name:    "calendar_sync_push_duration_seconds",
+			Help:    "Duration of pushing events to external calendar",
 			Buckets: prometheus.DefBuckets,
 		},
 		[]string{"status"},

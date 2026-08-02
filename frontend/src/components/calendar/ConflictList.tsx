@@ -29,7 +29,7 @@ export const ConflictList: React.FC<Props> = ({ conflicts, onResolve, isResolvin
                 color={conflict.severity === 'critical' ? 'error' : (conflict.severity === 'warning' ? 'warning' : 'info')} 
               />
               <Typography variant="subtitle1">
-                {conflict.internal_event_data?.title || conflict.google_event_data?.summary || 'Unknown Event'}
+                {conflict.internal_event_data?.title || conflict.external_event_data?.title || conflict.external_event_data?.summary || 'Unknown Event'}
               </Typography>
               <Typography variant="caption" color="textSecondary">
                 ({conflict.conflict_type})

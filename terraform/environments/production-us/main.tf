@@ -683,6 +683,215 @@ resource "aws_secretsmanager_secret_version" "rabbitmq" {
 }
 
 # =============================================================================
+# Uisce Helm Chart (RC1 — Production Mesh)
+# Deploys the Uisce Semantic OS control plane via Helm using local chart path.
+# Helm provider must be configured in the terraform provider block.
+# =============================================================================
+
+resource "helm_release" "uisce" {
+  name       = "uisce"
+  chart      = "${path.module}/../../deploy/helm"
+  namespace  = "uisce"
+  create_namespace = true
+
+  values = [
+    file("${path.module}/../../deploy/helm/values-prod-us-east.yaml"),
+  ]
+
+  set {
+    name  = "global.region"
+    value = "us-east-1"
+  }
+
+  set {
+    name  = "global.environment"
+    value = "production"
+  }
+
+  set {
+    name  = "global.complianceLevel"
+    value = "g-sifi"
+  }
+
+  # Enable raft consensus ledger (managed as a StatefulSet)
+  set {
+    name  = "raftLedger.enabled"
+    value = "true"
+  }
+
+  set {
+    name  = "raftLedger.nodeID"
+    value = "uisce-node-us-east-1"
+  }
+
+  set {
+    name  = "raftLedger.dataDir"
+    value = "/var/lib/uisce/raft"
+  }
+
+  set {
+    name  = "raftLedger.clusterPeers[0]"
+    value = "uisce-node-us-east-1.uisce.svc.cluster.local:7946"
+  }
+
+  set {
+    name  = "raftLedger.clusterPeers[1]"
+    value = "uisce-node-eu-central-1.uisce.svc.cluster.local:7946"
+  }
+
+  set {
+    name  = "raftLedger.clusterPeers[2]"
+    value = "uisce-node-ap-east-1.uisce.svc.cluster.local:7946"
+  }
+
+  # Infisical secret integration
+  set {
+    name  = "infisical.enabled"
+    value = "true"
+  }
+
+  set {
+    name  = "infisical.secretRef"
+    value = "uisce-infisical-secrets-us-east"
+  }
+
+  # Init containers (migration runner)
+  set {
+    name  = "initContainers.enabled"
+    value = "true"
+  }
+
+  # Image — local source build (kaniko / source-to-image)
+  set {
+    name  = "image.repository"
+    value = "uisce-core-local"
+  }
+
+  set {
+    name  = "image.tag"
+    value = "latest"
+  }
+
+  set {
+    name  = "image.pullPolicy"
+    value = "Never"
+  }
+
+  # Autoscaling
+  set {
+    name  = "autoscaling.enabled"
+    value = "true"
+  }
+
+  set {
+    name  = "autoscaling.minReplicas"
+    value = "3"
+  }
+
+  set {
+    name  = "autoscaling.maxReplicas"
+    value = "12"
+  }
+
+  set {
+    name  = "autoscaling.targetCPUUtilizationPercentage"
+    value = "70"
+  }
+
+  # G-SIFI security context
+  set {
+    name  = "podSecurityContext.runAsNonRoot"
+    value = "true"
+  }
+
+  set {
+    name  = "podSecurityContext.runAsUser"
+    value = "1000"
+  }
+
+  set {
+    name  = "containerSecurityContext.readOnlyRootFilesystem"
+    value = "true"
+  }
+
+  set {
+    name  = "containerSecurityContext.allowPrivilegeEscalation"
+    value = "false"
+  }
+
+  set {
+    name  = "containerSecurityContext.capabilities.drop[0]"
+    value = "ALL"
+  }
+
+  set {
+    name  = "podDisruptionBudget.enabled"
+    value = "true"
+  }
+
+  set {
+    name  = "podDisruptionBudget.minAvailable"
+    value = "2"
+  }
+
+  set {
+    name  = "networkPolicy.enabled"
+    value = "true"
+  }
+
+  set {
+    name  = "replicaCount"
+    value = "3"
+  }
+
+  set {
+    name  = "resources.requests.cpu"
+    value = "2"
+  }
+
+  set {
+    name  = "resources.requests.memory"
+    value = "4Gi"
+  }
+
+  set {
+    name  = "resources.limits.cpu"
+    value = "4"
+  }
+
+  set {
+    name  = "resources.limits.memory"
+    value = "8Gi"
+  }
+
+  # Ingress
+  set {
+    name  = "ingress.enabled"
+    value = "true"
+  }
+
+  set {
+    name  = "ingress.className"
+    value = "nginx"
+  }
+
+  # NOTE: the infisical secret must be pre-provisioned:
+  #   kubectl create secret generic uisce-infisical-secrets-us-east \
+  #     --from-literal=POSTGRES_DSN="postgres://..." \
+  #     --from-literal=JWT_SECRET="$(openssl rand -base64 32)"
+  #   or use the Infisical operator to sync from Infisical cloud.
+  #
+  # The infisical.* set values above reference the secret name;
+  # they assume the secret exists before helm install runs.
+
+  depends_on = [
+    module.eks,
+    module.rds,
+    module.elasticache,
+  ]
+}
+
+# =============================================================================
 # Outputs
 # =============================================================================
 

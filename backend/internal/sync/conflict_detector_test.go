@@ -43,14 +43,14 @@ func TestResolveConflict(t *testing.T) {
 		},
 	}
 
-	repo := repository.NewGoogleSyncRepo(mockClient)
+	repo := repository.NewCalendarSyncRepo(mockClient)
 	detector := NewConflictDetector(ConflictDetectorConfig{
 		SyncRepo: repo,
 		Logger:   logrus.NewEntry(logrus.New()),
 	})
 
-	// Test KeepGoogle
-	err := detector.ResolveConflict(context.Background(), "conflict-1", StrategyKeepGoogle)
+	// Test KeepExternal
+	err := detector.ResolveConflict(context.Background(), "conflict-1", StrategyKeepExternal)
 	if err != nil {
 		t.Fatalf("Expected no error, got %v", err)
 	}

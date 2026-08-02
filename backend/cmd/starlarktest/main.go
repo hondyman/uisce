@@ -45,7 +45,7 @@ func main() {
 		os.Exit(2)
 	}
 
-	engine := services.NewStarlarkEngine(nil)
+	engine := services.NewStarlarkEngine()
 	var failed int
 
 	for i, tc := range cases {

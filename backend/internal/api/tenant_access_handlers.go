@@ -29,6 +29,15 @@ func (h *TenantAccessHandlers) RegisterRoutes(r chi.Router) {
 	r.Get("/tenants/accessible", h.listAccessibleTenants)
 	r.Get("/tenants/debug", h.listAccessibleTenants)
 	r.Get("/tenants/all", h.listAllTenants)
+	r.Get("/tenants/{tenantId}", h.getTenantByID)
+
+	r.Get("/rest/datasources", h.ListAlphaDatasources)
+	r.Get("/rest/products", h.ListAlphaProducts)
+
+	r.Get("/v1/admin/tenants/{tenantId}/configuration", h.getTenantConfiguration)
+	r.Put("/v1/admin/tenants/{tenantId}/configuration", h.updateTenantConfiguration)
+	r.Get("/admin/tenants/{tenantId}/configuration", h.getTenantConfiguration)
+	r.Put("/admin/tenants/{tenantId}/configuration", h.updateTenantConfiguration)
 
 	// Connection sync handler moved to handlers.ConnectionSyncHandler
 	// r.Post("/tenants/{tenantId}/sync-connections", syncHandler.SyncConnectionsFromGoldCopy)
@@ -81,6 +90,7 @@ type AlphaProductInfo struct {
 type DatasourceResponse struct {
 	ID                string               `json:"id"`
 	AlphaDatasourceID string               `json:"alpha_datasource_id"`
+	ConnectionID      string               `json:"connection_id,omitempty"`
 	IsActive          bool                 `json:"is_active"`
 	SourceName        string               `json:"source_name"`
 	AlphaDatasource   *AlphaDatasourceInfo `json:"alpha_datasource,omitempty"`
@@ -164,6 +174,140 @@ func (h *TenantAccessHandlers) listAllTenants(w http.ResponseWriter, r *http.Req
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(tenants)
+}
+
+// getTenantByID returns a single tenant by ID wrapped in {"tenant": ...}
+func (h *TenantAccessHandlers) getTenantByID(w http.ResponseWriter, r *http.Request) {
+	tenantID := chi.URLParam(r, "tenantId")
+	if tenantID == "" {
+		http.Error(w, "Missing tenant ID", http.StatusBadRequest)
+		return
+	}
+
+	tenants, err := h.getAllTenantsInternal(r.Context(), &tenantID, nil)
+	if err != nil {
+		http.Error(w, "Failed to query tenant: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	if len(tenants) == 0 {
+		http.Error(w, "Tenant not found", http.StatusNotFound)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"tenant": tenants[0],
+	})
+}
+
+func (h *TenantAccessHandlers) ListAlphaDatasources(w http.ResponseWriter, r *http.Request) {
+	rows, err := h.DB.QueryContext(r.Context(), `
+		SELECT id, datasource_name, datasource_code, is_active
+		FROM alpha_datasource
+		WHERE is_active = true
+	`)
+	if err != nil {
+		http.Error(w, "Failed to query alpha datasources: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	defer rows.Close()
+
+	var results []map[string]interface{}
+	for rows.Next() {
+		var id, name, code string
+		var isActive bool
+		if err := rows.Scan(&id, &name, &code, &isActive); err != nil {
+			continue
+		}
+		results = append(results, map[string]interface{}{
+			"id":              id,
+			"datasource_name": name,
+			"datasource_code": code,
+			"is_active":       isActive,
+		})
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"alpha_datasource": results,
+	})
+}
+
+func (h *TenantAccessHandlers) ListAlphaProducts(w http.ResponseWriter, r *http.Request) {
+	rows, err := h.DB.QueryContext(r.Context(), `
+		SELECT id, product_name, product_code, is_active
+		FROM alpha_product
+		WHERE is_active = true
+	`)
+	if err != nil {
+		http.Error(w, "Failed to query alpha products: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	defer rows.Close()
+
+	var results []map[string]interface{}
+	for rows.Next() {
+		var id, name, code string
+		var isActive bool
+		if err := rows.Scan(&id, &name, &code, &isActive); err != nil {
+			continue
+		}
+		results = append(results, map[string]interface{}{
+			"id":           id,
+			"product_name": name,
+			"product_code": code,
+			"is_active":    isActive,
+		})
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"alpha_product": results,
+	})
+}
+
+func (h *TenantAccessHandlers) getTenantConfiguration(w http.ResponseWriter, r *http.Request) {
+	tenantID := chi.URLParam(r, "tenantId")
+	if tenantID == "" {
+		http.Error(w, "Missing tenant ID", http.StatusBadRequest)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"configuration": map[string]interface{}{
+			"general": map[string]interface{}{
+				"displayName": "",
+				"environment": "production",
+				"timeZone":    "UTC",
+			},
+			"security": map[string]interface{}{
+				"requireMfa":        false,
+				"sessionTimeoutMin": 60,
+				"ipWhitelist":       []string{},
+			},
+			"features": map[string]interface{}{
+				"enableAiCopilot":         true,
+				"enableDataQualityChecks": true,
+				"enableAdvancedLineage":   true,
+			},
+		},
+	})
+}
+
+func (h *TenantAccessHandlers) updateTenantConfiguration(w http.ResponseWriter, r *http.Request) {
+	var body map[string]interface{}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		http.Error(w, "Invalid JSON payload: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"status":        "success",
+		"configuration": body["configuration"],
+	})
 }
 
 func (h *TenantAccessHandlers) getAllTenantsInternal(ctx context.Context, targetTenantID *string, tx *sql.Tx) ([]TenantResponse, error) {
@@ -346,12 +490,13 @@ func (h *TenantAccessHandlers) getAllTenantsInternal(ctx context.Context, target
 	dsQuery := `
 		SELECT tpd.id, COALESCE(tpd.is_active, true) AS is_active,
 		       COALESCE(tpd.source_name, '') AS source_name, tpd.tenant_product_id,
+		       tpd.connection_id,
 		       ads.id AS ads_id,
 		       COALESCE(ads.datasource_name, '') AS ds_name,
 		       COALESCE(ads.datasource_type, '') AS ds_type,
 		       COALESCE(ads.datasource_code, '') AS ds_code
 		FROM tenant_product_datasource tpd
-		LEFT JOIN alpha_datasource ads ON ads.id = tpd.datasource_id
+		LEFT JOIN alpha_datasource ads ON ads.id = COALESCE(tpd.alpha_datasource_id, tpd.datasource_id)
 		WHERE 1=1
 	`
 	var dArgs []interface{}
@@ -379,12 +524,18 @@ func (h *TenantAccessHandlers) getAllTenantsInternal(ctx context.Context, target
 		var ads AlphaDatasourceInfo
 		var productID string
 		var adsID sql.NullString
+		var connectionID sql.NullString
 		if err := dsRows.Scan(&ds.ID, &ds.IsActive, &ds.SourceName, &productID,
+			&connectionID,
 			&adsID, &ads.DatasourceName, &ads.DatasourceType, &ads.DatasourceCode); err != nil {
 			return nil, fmt.Errorf("failed to scan datasource row: %w", err)
 		}
 		if adsID.Valid {
 			ads.ID = adsID.String
+			ds.AlphaDatasourceID = adsID.String
+		}
+		if connectionID.Valid {
+			ds.ConnectionID = connectionID.String
 		}
 		ds.AlphaDatasource = &ads
 		dsMap[productID] = append(dsMap[productID], ds)

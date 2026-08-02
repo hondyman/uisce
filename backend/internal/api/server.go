@@ -15,7 +15,9 @@ import (
 	"github.com/hondyman/uisce/backend/internal/governance"
 	"github.com/hondyman/uisce/backend/internal/mdm"
 	"github.com/hondyman/uisce/backend/internal/rules"
+	"github.com/hondyman/uisce/backend/internal/rules/vm"
 	"github.com/hondyman/uisce/backend/internal/services"
+	"github.com/hondyman/uisce/backend/internal/shadow"
 	"github.com/hondyman/uisce/backend/internal/streaming"
 	temporalclient "github.com/hondyman/uisce/libs/temporal-client"
 	"github.com/jmoiron/sqlx"
@@ -109,6 +111,8 @@ func StartServer() {
 			log.Printf("[Warning] eBPF ingestion service failed to start: %v", err)
 		}
 
+		shadowEngine := shadow.NewReplayEngine(db.DB, vm.NewSymbolDict(), vm.NewEnumDict())
+
 		complianceDeps = &ComplianceDeps{
 			RuleEngine:         ruleEngine,
 			RedisClient:        redisClient,
@@ -120,6 +124,7 @@ func StartServer() {
 			FIXServer:          fixServer,
 			CDCConsumer:        cdcConsumer,
 			FlightServer:       flightServer,
+			ShadowEngine:       shadowEngine,
 		}
 		log.Println("[Compliance] Pre-trade compliance engine initialized")
 	}

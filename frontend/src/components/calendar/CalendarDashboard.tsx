@@ -1,10 +1,11 @@
 import React from 'react';
 import { Box, Typography, Grid, Paper, Divider } from '@mui/material';
 import { ConnectGoogleButton } from './ConnectGoogleButton';
+import { ConnectMicrosoftButton } from './ConnectMicrosoftButton';
+import { ConnectAppleButton } from './ConnectAppleButton';
 import { CalendarList } from './CalendarList';
 import { EventList } from './EventList';
-import { ConnectMicrosoftButton } from './ConnectMicrosoftButton';
-import { SyncStatus } from './SyncStatus';
+import { SyncStatusCard } from './SyncStatus';
 import { useCalendarSync } from '../../hooks/useCalendarSync';
 import { LoadingSpinner, ErrorAlert } from '../common/LoadingComponents';
 
@@ -15,6 +16,7 @@ interface Props {
 
 export const CalendarDashboard: React.FC<Props> = ({ tenantId, userId }) => {
   const {
+    // Google
     isConnected,
     isLoadingAuth,
     calendars,
@@ -26,6 +28,7 @@ export const CalendarDashboard: React.FC<Props> = ({ tenantId, userId }) => {
     syncedEvents,
     isLoadingEvents,
     error,
+    // Microsoft
     isLoadingMsAuth,
     isMicrosoftConnected,
     msCalendars,
@@ -34,12 +37,15 @@ export const CalendarDashboard: React.FC<Props> = ({ tenantId, userId }) => {
     handleMicrosoftSync,
     isMsSyncing,
     msError,
+    // Apple
+    appleCalendars,
+    isLoadingAppleCalendars,
   } = useCalendarSync(tenantId, userId);
 
   return (
-    <Box sx={{ p: 3, maxWidth: 1200, margin: '0 auto' }}>
+    <Box sx={{ p: 3, maxWidth: 1400, margin: '0 auto' }}>
       <Typography variant="h4" gutterBottom>Calendar Integrations</Typography>
-      
+
       {error && <ErrorAlert error={error} />}
       {msError && <ErrorAlert error={msError} />}
 
@@ -47,12 +53,12 @@ export const CalendarDashboard: React.FC<Props> = ({ tenantId, userId }) => {
         <Grid size={{ 'xs': 12, 'md': 4 }}>
           <Paper sx={{ p: 3, mb: 3 }}>
             <Typography variant="h6" gutterBottom>Google Calendar</Typography>
-            
+
             <Box mb={3} display="flex" justifyContent="center">
-              <ConnectGoogleButton 
-                isConnected={!!isConnected} 
-                isLoading={isLoadingAuth} 
-                onConnect={handleConnect} 
+              <ConnectGoogleButton
+                isConnected={!!isConnected}
+                isLoading={isLoadingAuth}
+                onConnect={handleConnect}
               />
             </Box>
 
@@ -64,24 +70,24 @@ export const CalendarDashboard: React.FC<Props> = ({ tenantId, userId }) => {
                 {isLoadingCalendars ? (
                   <LoadingSpinner message="Loading calendars..." />
                 ) : (
-                  <CalendarList 
-                    calendars={calendars || []} 
-                    onSync={handleSync} 
-                    isSyncing={!!isSyncing} 
+                  <CalendarList
+                    calendars={calendars || []}
+                    onSync={handleSync}
+                    isSyncing={!!isSyncing}
                   />
                 )}
               </React.Fragment>
             )}
           </Paper>
 
-          <Paper sx={{ p: 3 }}>
+          <Paper sx={{ p: 3, mb: 3 }}>
             <Typography variant="h6" gutterBottom>Microsoft Calendar</Typography>
-            
+
             <Box mb={3} display="flex" justifyContent="center">
-              <ConnectMicrosoftButton 
-                isConnected={!!isMicrosoftConnected} 
-                isLoading={isLoadingMsAuth} 
-                onConnect={handleMicrosoftConnect} 
+              <ConnectMicrosoftButton
+                isConnected={!!isMicrosoftConnected}
+                isLoading={isLoadingMsAuth}
+                onConnect={handleMicrosoftConnect}
               />
             </Box>
 
@@ -93,10 +99,39 @@ export const CalendarDashboard: React.FC<Props> = ({ tenantId, userId }) => {
                 {isLoadingMsCalendars ? (
                   <LoadingSpinner message="Loading calendars..." />
                 ) : (
-                  <CalendarList 
-                    calendars={msCalendars || []} 
-                    onSync={handleMicrosoftSync} 
-                    isSyncing={!!isMsSyncing} 
+                  <CalendarList
+                    calendars={msCalendars || []}
+                    onSync={handleMicrosoftSync}
+                    isSyncing={!!isMsSyncing}
+                  />
+                )}
+              </React.Fragment>
+            )}
+          </Paper>
+
+          <Paper sx={{ p: 3 }}>
+            <Typography variant="h6" gutterBottom>Apple Calendar</Typography>
+
+            <Box mb={3} display="flex" justifyContent="center">
+              <ConnectAppleButton
+                isConnected={false}
+                isLoading={false}
+                onConnect={() => {}}
+              />
+            </Box>
+
+            <Divider sx={{ my: 2 }} />
+
+            {false && (
+              <React.Fragment>
+                <Typography variant="subtitle1" gutterBottom>Connected Calendars</Typography>
+                {isLoadingAppleCalendars ? (
+                  <LoadingSpinner message="Loading calendars..." />
+                ) : (
+                  <CalendarList
+                    calendars={appleCalendars || []}
+                    onSync={() => {}}
+                    isSyncing={false}
                   />
                 )}
               </React.Fragment>
@@ -105,8 +140,8 @@ export const CalendarDashboard: React.FC<Props> = ({ tenantId, userId }) => {
         </Grid>
 
         <Grid size={{ 'xs': 12, 'md': 8 }}>
-          <SyncStatus status={syncStatus || null} />
-          
+          <SyncStatusCard status={syncStatus || null} />
+
           <Paper sx={{ p: 3 }}>
             <Typography variant="h6" gutterBottom>Recent Synced Events</Typography>
             {isLoadingEvents ? (

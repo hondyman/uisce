@@ -499,7 +499,7 @@
       }
     },
     "AdvancedEvaluator": {
-      "documentation": "AdvancedEvaluator handles recursive evaluation of complex rule structures",
+      "documentation": "",
       "kind": "interface",
       "properties": {
         "baseEvaluator": {
@@ -553,6 +553,28 @@
         "Name": {
           "documentation": "",
           "type": "string"
+        }
+      }
+    },
+    "AdvisorWorker": {
+      "documentation": "",
+      "kind": "interface",
+      "properties": {
+        "engine": {
+          "documentation": "",
+          "type": "RuleEngine"
+        },
+        "interval": {
+          "documentation": "",
+          "type": "any"
+        },
+        "stopChan": {
+          "documentation": "",
+          "type": "any"
+        },
+        "threshold": {
+          "documentation": "",
+          "type": "uint64"
         }
       }
     },
@@ -649,7 +671,7 @@
       }
     },
     "AllocationItem": {
-      "documentation": "AllocationItem represents an allocation breakdown item",
+      "documentation": "",
       "kind": "interface",
       "properties": {
         "Category": {
@@ -1004,7 +1026,7 @@
       }
     },
     "AuditEntry": {
-      "documentation": "AuditEntry represents an audit log entry",
+      "documentation": "",
       "kind": "interface",
       "properties": {
         "Action": {
@@ -1170,13 +1192,9 @@
       }
     },
     "AuditService": {
-      "documentation": "AuditService provides comprehensive audit logging",
+      "documentation": "",
       "kind": "interface",
       "properties": {
-        "hasuraClient": {
-          "documentation": "",
-          "type": "any"
-        },
         "logger": {
           "documentation": "",
           "type": "any"
@@ -1365,126 +1383,6 @@
         }
       }
     },
-    "BOField": {
-      "documentation": "BOField represents a business object field with metadata",
-      "kind": "interface",
-      "properties": {
-        "DisplayName": {
-          "documentation": "",
-          "type": "string"
-        },
-        "ID": {
-          "documentation": "",
-          "type": "string"
-        },
-        "InheritedFrom": {
-          "documentation": "",
-          "type": "string"
-        },
-        "InheritedFromKey": {
-          "documentation": "",
-          "type": "string"
-        },
-        "IsCore": {
-          "documentation": "",
-          "type": "boolean"
-        },
-        "IsCustom": {
-          "documentation": "",
-          "type": "boolean"
-        },
-        "IsInherited": {
-          "documentation": "",
-          "type": "boolean"
-        },
-        "IsRequired": {
-          "documentation": "",
-          "type": "boolean"
-        },
-        "Key": {
-          "documentation": "",
-          "type": "string"
-        },
-        "Name": {
-          "documentation": "",
-          "type": "string"
-        },
-        "Role": {
-          "documentation": "",
-          "type": "string"
-        },
-        "SemanticTermID": {
-          "documentation": "",
-          "type": "string"
-        },
-        "Sequence": {
-          "documentation": "",
-          "type": "number"
-        },
-        "Type": {
-          "documentation": "",
-          "type": "string"
-        }
-      }
-    },
-    "BOFieldInput": {
-      "documentation": "BOFieldInput represents input for creating/updating a field",
-      "kind": "interface",
-      "properties": {
-        "BusinessObjectID": {
-          "documentation": "",
-          "type": "string"
-        },
-        "Description": {
-          "documentation": "",
-          "type": "string"
-        },
-        "DisplayName": {
-          "documentation": "",
-          "type": "string"
-        },
-        "IsRequired": {
-          "documentation": "",
-          "type": "boolean"
-        },
-        "Key": {
-          "documentation": "",
-          "type": "string"
-        },
-        "Name": {
-          "documentation": "",
-          "type": "string"
-        },
-        "ReferenceEntity": {
-          "documentation": "",
-          "type": "string"
-        },
-        "Role": {
-          "documentation": "",
-          "type": "string"
-        },
-        "SemanticTermID": {
-          "documentation": "",
-          "type": "string"
-        },
-        "Sequence": {
-          "documentation": "",
-          "type": "number"
-        },
-        "SubtypeID": {
-          "documentation": "",
-          "type": "string"
-        },
-        "TechnicalName": {
-          "documentation": "",
-          "type": "string"
-        },
-        "Type": {
-          "documentation": "",
-          "type": "string"
-        }
-      }
-    },
     "BOWorkloadProfile": {
       "documentation": "BOWorkloadProfile represents aggregated workload metrics for a BO.",
       "kind": "interface",
@@ -1644,6 +1542,24 @@
         "queues": {
           "documentation": "",
           "type": "Record\u003cstring, TenantQueue\u003e"
+        }
+      }
+    },
+    "BatchResult": {
+      "documentation": "",
+      "kind": "interface",
+      "properties": {
+        "PassedAll": {
+          "documentation": "",
+          "type": "boolean"
+        },
+        "Results": {
+          "documentation": "",
+          "type": "RuleResult[]"
+        },
+        "TotalTimeNs": {
+          "documentation": "",
+          "type": "number"
         }
       }
     },
@@ -2566,13 +2482,9 @@
       }
     },
     "BusinessObjectFieldService": {
-      "documentation": "BusinessObjectFieldService manages BO fields with Workday-style inheritance",
+      "documentation": "",
       "kind": "interface",
       "properties": {
-        "hasuraClient": {
-          "documentation": "",
-          "type": "any"
-        },
         "isAdminCore": {
           "documentation": "",
           "type": "boolean"
@@ -2802,13 +2714,9 @@
       }
     },
     "BusinessProcessService": {
-      "documentation": "BusinessProcessService manages business process execution",
+      "documentation": "",
       "kind": "interface",
       "properties": {
-        "client": {
-          "documentation": "",
-          "type": "any"
-        },
         "logger": {
           "documentation": "",
           "type": "any"
@@ -3543,6 +3451,24 @@
         "pending",
         "success"
       ]
+    },
+    "CompileError": {
+      "documentation": "CompileError provides observability into why a rule failed to compile.\nIt carries the offending AST node, the operator that triggered the\nfailure, and a human-readable reason — surfaced via Snapshot.Fallbacks\nmetrics and emitted to logs for post-mortem analysis.",
+      "kind": "interface",
+      "properties": {
+        "Node": {
+          "documentation": "",
+          "type": "RuleNode"
+        },
+        "Operator": {
+          "documentation": "",
+          "type": "string"
+        },
+        "Reason": {
+          "documentation": "",
+          "type": "string"
+        }
+      }
     },
     "ComplexCondition": {
       "documentation": "ComplexCondition supports AND/OR logic for multi-field validation",
@@ -5760,6 +5686,72 @@
         }
       }
     },
+    "EngineMetrics": {
+      "documentation": "EngineMetrics holds cumulative counters that survive state swaps.\nThese are business-level metrics (cache hit rate, fallback rate, etc.)\nand must not be lost when an EngineState is replaced. Fields are\nunexported; use the typed accessor methods.",
+      "kind": "interface",
+      "properties": {
+        "cacheHits": {
+          "documentation": "",
+          "type": "any"
+        },
+        "cacheMisses": {
+          "documentation": "",
+          "type": "any"
+        },
+        "compileErrors": {
+          "documentation": "",
+          "type": "any"
+        },
+        "fallbacks": {
+          "documentation": "",
+          "type": "any"
+        },
+        "vmPathCount": {
+          "documentation": "",
+          "type": "any"
+        }
+      }
+    },
+    "EngineMetricsSnapshot": {
+      "documentation": "EngineMetricsSnapshot is a point-in-time copy of the metrics.",
+      "kind": "interface",
+      "properties": {
+        "CacheHits": {
+          "documentation": "",
+          "type": "uint64"
+        }
+      }
+    },
+    "EngineState": {
+      "documentation": "EngineState is an immutable snapshot of the rule engine's schema and\ncompile cache. Created by Rewarm() (or SetInitialState at startup) and\nnever mutated thereafter. The atomic.Pointer swap is the only way to\npublish a new state — readers see a consistent view at all times.",
+      "kind": "interface",
+      "properties": {
+        "Cache": {
+          "documentation": "",
+          "type": "any"
+        },
+        "Enums": {
+          "documentation": "",
+          "type": "any"
+        },
+        "LastUsedUnixNano": {
+          "documentation": "",
+          "type": "number"
+        },
+        "Revision": {
+          "documentation": "",
+          "type": "uint64"
+        },
+        "Syms": {
+          "documentation": "",
+          "type": "any"
+        },
+        "Version": {
+          "documentation": "",
+          "type": "number"
+        }
+      }
+    },
     "EnhancedLineageData": {
       "documentation": "EnhancedLineageData holds the data for the lineage chart, including the layout type.",
       "kind": "interface",
@@ -5829,6 +5821,40 @@
         "nlqService": {
           "documentation": "",
           "type": "NLQService"
+        }
+      }
+    },
+    "EvalTrace": {
+      "documentation": "EvalTrace provides observability into a single evaluation. Returned\nalongside the boolean result so SREs can log/alert on fallback rates.",
+      "kind": "interface",
+      "properties": {
+        "FailureReasons": {
+          "documentation": "",
+          "type": "string[]"
+        },
+        "Fallback": {
+          "documentation": "",
+          "type": "string"
+        },
+        "IsTenant": {
+          "documentation": "",
+          "type": "boolean"
+        },
+        "Revision": {
+          "documentation": "",
+          "type": "uint64"
+        },
+        "RuleID": {
+          "documentation": "",
+          "type": "string"
+        },
+        "TenantID": {
+          "documentation": "",
+          "type": "string"
+        },
+        "UsedVM": {
+          "documentation": "",
+          "type": "boolean"
         }
       }
     },
@@ -6432,60 +6458,6 @@
         }
       }
     },
-    "Expression": {
-      "documentation": "Expression represents a stored expression rule",
-      "kind": "interface",
-      "properties": {
-        "BusinessObjectID": {
-          "documentation": "",
-          "type": "string"
-        },
-        "Description": {
-          "documentation": "",
-          "type": "string"
-        },
-        "FieldKey": {
-          "documentation": "",
-          "type": "string"
-        },
-        "ID": {
-          "documentation": "",
-          "type": "string"
-        },
-        "IsActive": {
-          "documentation": "",
-          "type": "boolean"
-        },
-        "Name": {
-          "documentation": "",
-          "type": "string"
-        },
-        "RuleType": {
-          "documentation": "",
-          "type": "ExpressionType"
-        },
-        "Script": {
-          "documentation": "",
-          "type": "string"
-        },
-        "TenantID": {
-          "documentation": "",
-          "type": "string"
-        },
-        "Version": {
-          "documentation": "",
-          "type": "number"
-        }
-      }
-    },
-    "ExpressionType": {
-      "kind": "enum",
-      "values": [
-        "calculation",
-        "condition",
-        "validation"
-      ]
-    },
     "ExtensionFix": {
       "documentation": "",
       "kind": "interface",
@@ -6573,6 +6545,32 @@
           "type": "number"
         },
         "Name": {
+          "documentation": "",
+          "type": "string"
+        }
+      }
+    },
+    "FallbackQueryPattern": {
+      "documentation": "FallbackQueryPattern is the input to the advisor: a summary of one\nquery pattern that is currently falling back to the recursive evaluator\nbecause it is too expensive for the VM fast path.",
+      "kind": "interface",
+      "properties": {
+        "FallbackCount": {
+          "documentation": "",
+          "type": "number"
+        },
+        "GroupByFields": {
+          "documentation": "",
+          "type": "string[]"
+        },
+        "MeasureFields": {
+          "documentation": "",
+          "type": "string[]"
+        },
+        "TargetBOID": {
+          "documentation": "",
+          "type": "string"
+        },
+        "TargetTable": {
           "documentation": "",
           "type": "string"
         }
@@ -6996,6 +6994,36 @@
       "kind": "interface",
       "properties": {
         "registry": {
+          "documentation": "",
+          "type": "any"
+        }
+      }
+    },
+    "Fixture": {
+      "documentation": "",
+      "kind": "interface",
+      "properties": {
+        "AST": {
+          "documentation": "",
+          "type": "RuleNode"
+        },
+        "Compiled": {
+          "documentation": "",
+          "type": "any"
+        },
+        "Enums": {
+          "documentation": "",
+          "type": "any"
+        },
+        "FastRecord": {
+          "documentation": "",
+          "type": "any"
+        },
+        "MapInput": {
+          "documentation": "",
+          "type": "Record\u003cstring, any\u003e"
+        },
+        "Syms": {
           "documentation": "",
           "type": "any"
         }
@@ -8854,6 +8882,42 @@
         }
       }
     },
+    "LatencyProfiler": {
+      "documentation": "",
+      "kind": "interface",
+      "properties": {
+        "idx": {
+          "documentation": "",
+          "type": "any"
+        },
+        "samples": {
+          "documentation": "",
+          "type": "any[]"
+        }
+      }
+    },
+    "LatencyReport": {
+      "documentation": "",
+      "kind": "interface",
+      "properties": {
+        "Count": {
+          "documentation": "",
+          "type": "uint64"
+        },
+        "P50Ns": {
+          "documentation": "",
+          "type": "number"
+        },
+        "P95Ns": {
+          "documentation": "",
+          "type": "number"
+        },
+        "P99Ns": {
+          "documentation": "",
+          "type": "number"
+        }
+      }
+    },
     "LineageAsset": {
       "documentation": "LineageAsset represents a single asset in the lineage graph.",
       "kind": "interface",
@@ -9240,6 +9304,24 @@
         }
       }
     },
+    "MaterializationProposal": {
+      "documentation": "MaterializationProposal is the output of the advisor: a StarRocks MV\nDDL statement that pre-aggregates the hot pattern so subsequent rule\nevaluations can hit the VM fast path instead of the recursive fallback.",
+      "kind": "interface",
+      "properties": {
+        "EstimatedGain": {
+          "documentation": "",
+          "type": "string"
+        },
+        "SuggestedMV": {
+          "documentation": "",
+          "type": "string"
+        },
+        "TargetBOID": {
+          "documentation": "",
+          "type": "string"
+        }
+      }
+    },
     "MeasureProfile": {
       "documentation": "MeasureProfile represents usage stats for a specific measure.",
       "kind": "interface",
@@ -9424,7 +9506,7 @@
       "properties": {}
     },
     "MockRuleRepository": {
-      "documentation": "MockRuleRepository implements RuleRepository for testing",
+      "documentation": "MockRuleRepository is a no-op RuleRepository used by tests in this package.\nKept here (rather than in engine_test.go) so scenario_test.go and any\nfuture test files can reuse it without duplicating the type.",
       "kind": "interface",
       "properties": {}
     },
@@ -9916,7 +9998,7 @@
       }
     },
     "NotificationMessage": {
-      "documentation": "NotificationMessage represents a notification message",
+      "documentation": "",
       "kind": "interface",
       "properties": {
         "Category": {
@@ -9980,13 +10062,9 @@
       }
     },
     "NotificationService": {
-      "documentation": "NotificationService provides notification management",
+      "documentation": "",
       "kind": "interface",
       "properties": {
-        "hasuraClient": {
-          "documentation": "",
-          "type": "any"
-        },
         "logger": {
           "documentation": "",
           "type": "any"
@@ -10304,7 +10382,7 @@
       }
     },
     "PerformanceMetrics": {
-      "documentation": "PerformanceMetrics represents calculated performance data",
+      "documentation": "",
       "kind": "interface",
       "properties": {
         "Alpha": {
@@ -11139,13 +11217,9 @@
       }
     },
     "PortfolioService": {
-      "documentation": "PortfolioService handles portfolio aggregations and calculations",
+      "documentation": "",
       "kind": "interface",
       "properties": {
-        "client": {
-          "documentation": "",
-          "type": "any"
-        },
         "logger": {
           "documentation": "",
           "type": "any"
@@ -11153,7 +11227,7 @@
       }
     },
     "PortfolioSummary": {
-      "documentation": "PortfolioSummary represents aggregated portfolio data",
+      "documentation": "",
       "kind": "interface",
       "properties": {
         "AccountCount": {
@@ -11245,7 +11319,7 @@
       }
     },
     "PositionSummary": {
-      "documentation": "PositionSummary represents a position for display",
+      "documentation": "",
       "kind": "interface",
       "properties": {
         "DayChange": {
@@ -13145,6 +13219,46 @@
         }
       }
     },
+    "RuleAction": {
+      "documentation": "",
+      "kind": "interface",
+      "properties": {
+        "Params": {
+          "documentation": "",
+          "type": "Record\u003cstring, any\u003e"
+        },
+        "Type": {
+          "documentation": "",
+          "type": "string"
+        }
+      }
+    },
+    "RuleChain": {
+      "documentation": "",
+      "kind": "interface",
+      "properties": {
+        "ID": {
+          "documentation": "",
+          "type": "string"
+        },
+        "Name": {
+          "documentation": "",
+          "type": "string"
+        },
+        "Operator": {
+          "documentation": "",
+          "type": "string"
+        },
+        "Rules": {
+          "documentation": "",
+          "type": "RuleWithMetadata[]"
+        },
+        "StopOnFirst": {
+          "documentation": "",
+          "type": "Severity"
+        }
+      }
+    },
     "RuleCondition": {
       "documentation": "RuleCondition represents a single validation condition",
       "kind": "interface",
@@ -13164,16 +13278,48 @@
       }
     },
     "RuleEngine": {
-      "documentation": "RuleEngine evaluates CEL expressions against input data.",
+      "documentation": "RuleEngine evaluates RuleNode ASTs via the VM-backed fast path with\natomic-pointer state swaps for multi-tenant dynamic rewarming.\n\nArchitecture: Two-Level Execution Model\n\n  Level 1 — Core (platform-wide):  coreState atomic.Pointer[EngineState]\n    Holds gold-copy rules and standard fields. Serves all tenants.\n\n  Level 2 — Custom (tenant-isolated): tenantStates sync.Map\n    Per-tenant states for custom fields and custom rules. A tenant\n    state is built by merging Core rules + Tenant rules so it is\n    fully self-contained. When Tenant A adds a custom field, only\n    Tenant A's state is rebuilt; Tenant B and Core are untouched.\n\nLifecycle:\n\n  1. NewRuleEngine → empty core state\n  2. RewarmCore(allCoreRules, version) once at platform startup\n  3. RewarmTenant(tenantID, allTenantRules, version) when a tenant\n     adds a custom field or custom rule\n  4. UpdateRule / DeleteRule for O(1) rule logic changes\n  5. Evaluate(ctx, tenantID, ruleID, version, node, input, force)\n\nConcurrency: Evaluate is lock-free. getState() resolves the correct\nstate via atomic.Pointer.Load (core) or sync.Map.Load (tenant) — both\nare wait-free reads. RewarmCore/RewarmTenant build a new state in local\nmemory and atomically swap it in.",
       "kind": "interface",
       "properties": {
+        "coreState": {
+          "documentation": "",
+          "type": "any"
+        },
+        "driftHealer": {
+          "documentation": "",
+          "type": "DriftHealerInterface"
+        },
         "env": {
           "documentation": "",
           "type": "any"
         },
+        "metrics": {
+          "documentation": "",
+          "type": "EngineMetrics"
+        },
+        "profiler": {
+          "documentation": "",
+          "type": "LatencyProfiler"
+        },
+        "recursive": {
+          "documentation": "",
+          "type": "AdvancedEvaluator"
+        },
         "repo": {
           "documentation": "",
           "type": "RuleRepository"
+        },
+        "rewarmGroup": {
+          "documentation": "",
+          "type": "any"
+        },
+        "tenantStates": {
+          "documentation": "tenantStates holds isolated states for tenants with custom rules/fields.\nKey: tenantID (string). Value: *EngineState.\nIf a tenant has no custom state, evaluation falls back to coreState.",
+          "type": "any"
+        },
+        "vm": {
+          "documentation": "",
+          "type": "any"
         }
       }
     },
@@ -13207,24 +13353,6 @@
         }
       }
     },
-    "RuleGroup": {
-      "documentation": "RuleGroup represents a logical grouping of rules (AND/OR/NOT)",
-      "kind": "interface",
-      "properties": {
-        "Conditions": {
-          "documentation": "",
-          "type": "RuleNode[]"
-        },
-        "ID": {
-          "documentation": "",
-          "type": "string"
-        },
-        "Operator": {
-          "documentation": "",
-          "type": "string"
-        }
-      }
-    },
     "RuleMetrics": {
       "documentation": "RuleMetrics holds the calculated global approval/rejection rates for a rule.",
       "kind": "interface",
@@ -13248,24 +13376,6 @@
         "Total": {
           "documentation": "",
           "type": "number"
-        }
-      }
-    },
-    "RuleNode": {
-      "documentation": "RuleNode is a wrapper that can hold either a Group or a Condition",
-      "kind": "interface",
-      "properties": {
-        "Condition": {
-          "documentation": "",
-          "type": "RuleCondition"
-        },
-        "Group": {
-          "documentation": "",
-          "type": "RuleGroup"
-        },
-        "Type": {
-          "documentation": "",
-          "type": "RuleNodeType"
         }
       }
     },
@@ -13362,6 +13472,56 @@
         "TenantID": {
           "documentation": "",
           "type": "any"
+        }
+      }
+    },
+    "RuleResult": {
+      "documentation": "",
+      "kind": "interface",
+      "properties": {
+        "Actions": {
+          "documentation": "",
+          "type": "RuleAction[]"
+        },
+        "Category": {
+          "documentation": "",
+          "type": "string"
+        },
+        "Details": {
+          "documentation": "",
+          "type": "string[]"
+        },
+        "EvalTimeNs": {
+          "documentation": "",
+          "type": "number"
+        },
+        "FailureReasons": {
+          "documentation": "",
+          "type": "string[]"
+        },
+        "Passed": {
+          "documentation": "",
+          "type": "boolean"
+        },
+        "RuleID": {
+          "documentation": "",
+          "type": "string"
+        },
+        "RuleName": {
+          "documentation": "",
+          "type": "string"
+        },
+        "Score": {
+          "documentation": "",
+          "type": "number"
+        },
+        "Severity": {
+          "documentation": "",
+          "type": "Severity"
+        },
+        "Violations": {
+          "documentation": "",
+          "type": "RuleViolation[]"
         }
       }
     },
@@ -13508,6 +13668,86 @@
         "TenantID": {
           "documentation": "",
           "type": "string"
+        }
+      }
+    },
+    "RuleViolation": {
+      "documentation": "",
+      "kind": "interface",
+      "properties": {
+        "ConditionID": {
+          "documentation": "",
+          "type": "string"
+        },
+        "EvaluatedVal": {
+          "documentation": "",
+          "type": "any"
+        },
+        "FieldPath": {
+          "documentation": "",
+          "type": "string"
+        },
+        "Message": {
+          "documentation": "",
+          "type": "string"
+        },
+        "Operator": {
+          "documentation": "",
+          "type": "string"
+        },
+        "RuleID": {
+          "documentation": "",
+          "type": "string"
+        },
+        "RuleName": {
+          "documentation": "",
+          "type": "string"
+        },
+        "Severity": {
+          "documentation": "",
+          "type": "Severity"
+        },
+        "ThresholdLimit": {
+          "documentation": "",
+          "type": "any"
+        }
+      }
+    },
+    "RuleWithMetadata": {
+      "documentation": "",
+      "kind": "interface",
+      "properties": {
+        "Actions": {
+          "documentation": "",
+          "type": "RuleAction[]"
+        },
+        "Category": {
+          "documentation": "",
+          "type": "string"
+        },
+        "ID": {
+          "documentation": "",
+          "type": "string"
+        },
+        "Name": {
+          "documentation": "",
+          "type": "string"
+        },
+        "Node": {
+          "documentation": "",
+          "type": "RuleNode"
+        },
+        "ScoringFormula": {
+          "documentation": "",
+          "type": "string"
+        },
+        "Severity": {
+          "documentation": "",
+          "type": "Severity"
+        },
+        "Version": {
+          "documentation": "",
+          "type": "number"
         }
       }
     },
@@ -14300,7 +14540,7 @@
       }
     },
     "SemanticDimension": {
-      "documentation": "SemanticDimension represents a cube dimension",
+      "documentation": "",
       "kind": "interface",
       "properties": {
         "ID": {
@@ -14334,7 +14574,7 @@
       }
     },
     "SemanticMeasure": {
-      "documentation": "SemanticMeasure represents a cube measure",
+      "documentation": "",
       "kind": "interface",
       "properties": {
         "ID": {
@@ -14368,7 +14608,7 @@
       }
     },
     "SemanticModel": {
-      "documentation": "SemanticModel represents a semantic cube with inheritance",
+      "documentation": "",
       "kind": "interface",
       "properties": {
         "BusinessObjectID": {
@@ -14414,13 +14654,9 @@
       }
     },
     "SemanticModelInheritanceService": {
-      "documentation": "SemanticModelInheritanceService manages semantic cubes with BO sync",
+      "documentation": "",
       "kind": "interface",
       "properties": {
-        "hasuraClient": {
-          "documentation": "",
-          "type": "any"
-        },
         "logger": {
           "documentation": "",
           "type": "any"
@@ -14598,6 +14834,19 @@
         }
       }
     },
+    "Severity": {
+      "kind": "enum",
+      "values": [
+        "BLOCK",
+        "INFO",
+        "WARNING",
+        "error",
+        "hard_block",
+        "info",
+        "quarantine",
+        "warning"
+      ]
+    },
     "ShadowRunResult": {
       "documentation": "ShadowRunResult holds results of shadow queries.",
       "kind": "interface",
@@ -14731,10 +14980,6 @@
           "type": "Record\u003cstring, any\u003e"
         },
         "cacheMu": {
-          "documentation": "",
-          "type": "any"
-        },
-        "hasuraClient": {
           "documentation": "",
           "type": "any"
         },
@@ -15743,16 +15988,12 @@
       }
     },
     "TranslationService": {
-      "documentation": "TranslationService provides multilingual support",
+      "documentation": "",
       "kind": "interface",
       "properties": {
         "cache": {
           "documentation": "",
           "type": "Record\u003cstring, Record\u003cstring, string\u003e\u003e"
-        },
-        "hasuraClient": {
-          "documentation": "",
-          "type": "any"
         },
         "logger": {
           "documentation": "",
@@ -18006,6 +18247,16 @@
         }
       }
     },
+    "fakeDriftHealer": {
+      "documentation": "",
+      "kind": "interface",
+      "properties": {
+        "calls": {
+          "documentation": "",
+          "type": "any"
+        }
+      }
+    },
     "inMemoryBundleStore": {
       "documentation": "inMemoryBundleStore simulates a database for bundles and their policies.",
       "kind": "interface",
@@ -18371,6 +18622,52 @@
           "type": "ValuesAuditLogger"
         },
         "db": {
+          "documentation": "",
+          "type": "any"
+        }
+      }
+    },
+    "vmCompiler": {
+      "documentation": "vmCompiler walks a RuleNode tree once and emits a flat vm.CompiledProgram.\nIt is unexported because callers should use CompileVM() rather than\nconstructing a vmCompiler directly — that gives the package control\nover emit order and stack-depth tracking invariants.",
+      "kind": "interface",
+      "properties": {
+        "boolDepth": {
+          "documentation": "",
+          "type": "uint8"
+        },
+        "boolMax": {
+          "documentation": "",
+          "type": "uint8"
+        },
+        "enums": {
+          "documentation": "",
+          "type": "any"
+        },
+        "err": {
+          "documentation": "",
+          "type": "CompileError"
+        },
+        "fNumDepth": {
+          "documentation": "",
+          "type": "uint8"
+        },
+        "fNumMax": {
+          "documentation": "",
+          "type": "uint8"
+        },
+        "numDepth": {
+          "documentation": "",
+          "type": "uint8"
+        },
+        "numMax": {
+          "documentation": "",
+          "type": "uint8"
+        },
+        "out": {
+          "documentation": "",
+          "type": "any"
+        },
+        "syms": {
           "documentation": "",
           "type": "any"
         }

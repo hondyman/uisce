@@ -6,7 +6,7 @@ import (
 )
 
 func TestStarlarkEngine_EvaluateUserRuleBatch_OkStyle_OrderPreserved(t *testing.T) {
-	engine := NewStarlarkEngine(nil)
+	engine := NewStarlarkEngine()
 	script := `
 ok = eq(field("account", "account_type"), "ADVISORY")
 message = "Account must be ADVISORY"
@@ -43,7 +43,7 @@ message = "Account must be ADVISORY"
 }
 
 func TestStarlarkEngine_EvaluateOkRuleBundleBatch_ShortCircuit(t *testing.T) {
-	engine := NewStarlarkEngine(nil)
+	engine := NewStarlarkEngine()
 
 	rules := []OkRule{
 		{ID: "r1", Script: `ok = eq(field("account", "account_type"), "ADVISORY")`},
@@ -75,7 +75,7 @@ func TestStarlarkEngine_EvaluateOkRuleBundleBatch_ShortCircuit(t *testing.T) {
 }
 
 func TestStarlarkEngine_EvaluateOkRuleBundleBatchWithMeta_OrdersByCostAndShortCircuits(t *testing.T) {
-	engine := NewStarlarkEngine(nil)
+	engine := NewStarlarkEngine()
 
 	// Both rules fail; ordering decides which result becomes non-nil under short-circuit.
 	rules := []OkRuleWithMeta{

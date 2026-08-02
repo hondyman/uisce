@@ -9,12 +9,12 @@ import (
 
 // InternalEventService manages internal events and publishes changes
 type InternalEventService struct {
-	repo      *repository.GoogleSyncRepo
+	repo      *repository.CalendarSyncRepo
 	publisher *EventPublisher
 }
 
 // NewInternalEventService creates a new service
-func NewInternalEventService(repo *repository.GoogleSyncRepo, publisher *EventPublisher) *InternalEventService {
+func NewInternalEventService(repo *repository.CalendarSyncRepo, publisher *EventPublisher) *InternalEventService {
 	return &InternalEventService{
 		repo:      repo,
 		publisher: publisher,

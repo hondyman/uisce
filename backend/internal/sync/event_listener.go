@@ -77,10 +77,10 @@ func (l *GoogleSyncListener) handleEvent(event *services.BOEvent) {
 
 		start := time.Now()
 		if err := l.processor.PushEventToGoogle(ctx, event.UserID, event.TenantID, &internalEvent); err != nil {
-			pushToGoogleDuration.WithLabelValues("error").Observe(time.Since(start).Seconds())
+			pushToExternalDuration.WithLabelValues("error").Observe(time.Since(start).Seconds())
 			l.logger.WithError(err).Errorf("Failed to push event %s to Google", event.EntityID)
 		} else {
-			pushToGoogleDuration.WithLabelValues("success").Observe(time.Since(start).Seconds())
+			pushToExternalDuration.WithLabelValues("success").Observe(time.Since(start).Seconds())
 			l.logger.Infof("Successfully pushed event %s to Google", event.EntityID)
 		}
 

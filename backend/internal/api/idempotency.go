@@ -5,7 +5,7 @@ import (
 	"time"
 )
 
-const idempTTL = 10 * time.Second
+const idempTTL = 24 * time.Hour
 
 func idempKey(tenantID, idempHeader, fallbackID string) string {
 	if idempHeader != "" {

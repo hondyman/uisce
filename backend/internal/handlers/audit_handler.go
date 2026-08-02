@@ -1,13 +1,14 @@
 package handlers
 
 import (
-	"database/sql"
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"os"
 	"strconv"
 	"time"
 
+	"github.com/hondyman/uisce/backend/internal/boresolver"
 	"github.com/hondyman/uisce/backend/internal/logging"
 )
 
@@ -30,7 +31,7 @@ type AuditLogResponse struct {
 	Total   int             `json:"total"`
 }
 
-// HandleGetAuditLogs returns audit log entries for a tenant/datasource
+// HandleGetAuditLogs returns audit log entries for a tenant/datasource via DataFusion
 func HandleGetAuditLogs(w http.ResponseWriter, r *http.Request) {
 	// Parse query params
 	limitStr := r.URL.Query().Get("limit")
@@ -52,50 +53,27 @@ func HandleGetAuditLogs(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Connect to Trino
-	dsn := "http://admin@trino:8080?catalog=iceberg&schema=audit"
-	db, err := sql.Open("trino", dsn)
-	if err != nil {
-		http.Error(w, "Failed to connect to Trino: "+err.Error(), http.StatusInternalServerError)
-		return
+	datafusionURL := os.Getenv("DATAFUSION_URL")
+	if datafusionURL == "" {
+		datafusionURL = "http://100.84.50.65:8555"
 	}
-	defer db.Close()
+	dfClient := boresolver.NewDataFusionClient(datafusionURL)
 
-	// Build Query
-	baseQuery := " FROM iceberg.audit.audit_logs WHERE 1=1"
-	var args []interface{}
-
+	// Build Query for DataFusion / Apache Iceberg catalog
+	whereClause := " WHERE 1=1"
 	if startDateStr != "" {
-		// Expect ISO format or simple YYYY-MM-DD
-		// Trino expects TIMESTAMP type, so we might need casting if passing string directly,
-		// but Go driver might handle time.Time. Let's try passing string as timestamp literal or compatible format.
-		// Safe bet: cast to timestamp in SQL
-		baseQuery += " AND timestamp >= CAST(? AS TIMESTAMP)"
-		args = append(args, startDateStr)
+		whereClause += fmt.Sprintf(" AND timestamp >= '%s'", startDateStr)
 	}
 	if endDateStr != "" {
-		baseQuery += " AND timestamp <= CAST(? AS TIMESTAMP)"
-		args = append(args, endDateStr)
+		whereClause += fmt.Sprintf(" AND timestamp <= '%s'", endDateStr)
 	}
 	if tenantID != "" {
-		baseQuery += " AND tenant_id = ?"
-		args = append(args, tenantID)
-	}
-
-	// Count Query
-	countQuery := "SELECT COUNT(*)" + baseQuery
-	var total int
-	// Use separate slice for count args to avoid modifying the common args list if we appended limit/offset later
-	// actually we haven't appended limit/offset yet.
-	if err := db.QueryRow(countQuery, args...).Scan(&total); err != nil {
-		logging.GetLogger().Sugar().Warnf("Trino count query failed: %v", err)
-		// Don't fail completely, just use 0 or estimate
+		whereClause += fmt.Sprintf(" AND tenant_id = '%s'", tenantID)
 	}
 
 	sortBy := r.URL.Query().Get("sortBy")
 	sortOrder := r.URL.Query().Get("sortOrder")
 
-	// Whitelist allowed sort columns
 	allowedSort := map[string]bool{
 		"timestamp": true,
 		"user_name": true,
@@ -109,46 +87,53 @@ func HandleGetAuditLogs(w http.ResponseWriter, r *http.Request) {
 		sortOrder = "DESC"
 	}
 
-	// Data Query
-	query := fmt.Sprintf("SELECT id, tenant_id, timestamp, user_name, user_email, action, resource, resource_type, details"+baseQuery+" ORDER BY %s %s OFFSET ? LIMIT ?", sortBy, sortOrder)
-	args = append(args, offset, limit)
+	sqlQuery := fmt.Sprintf(
+		"SELECT id, tenant_id, timestamp, user_name, user_email, action, resource, resource_type, details FROM iceberg.audit.audit_logs%s ORDER BY %s %s LIMIT %d OFFSET %d",
+		whereClause, sortBy, sortOrder, limit, offset,
+	)
 
-	rows, err := db.Query(query, args...)
+	ctx := r.Context()
+	resp, err := dfClient.ExecuteQuery(ctx, tenantID, sqlQuery)
 	if err != nil {
-		logging.GetLogger().Sugar().Warnf("Trino query failed: %v", err)
-		// Return empty list on error instead of mock data
-		response := AuditLogResponse{
-			Entries: []AuditLogEntry{},
-			Total:   0,
-		}
+		logging.GetLogger().Sugar().Warnf("DataFusion audit query failed: %v", err)
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(response)
+		json.NewEncoder(w).Encode(AuditLogResponse{Entries: []AuditLogEntry{}, Total: 0})
 		return
 	}
-	defer rows.Close()
 
 	var entries []AuditLogEntry
-	for rows.Next() {
-		var e AuditLogEntry
-		var detailsStr string
-		if err := rows.Scan(&e.ID, &e.TenantID, &e.Timestamp, &e.UserName, &e.UserEmail, &e.Action, &e.Resource, &e.ResourceType, &detailsStr); err != nil {
-			logging.GetLogger().Sugar().Errorf("Failed to scan row: %v", err)
+	for _, record := range resp.Records {
+		if len(record) < 9 {
 			continue
 		}
-		var detailsMap map[string]interface{}
-		if err := json.Unmarshal([]byte(detailsStr), &detailsMap); err == nil {
-			e.Details = detailsMap
-		} else {
-			e.Details = map[string]interface{}{"raw": detailsStr}
+		e := AuditLogEntry{
+			ID:           fmt.Sprintf("%v", record[0]),
+			TenantID:     fmt.Sprintf("%v", record[1]),
+			UserName:     fmt.Sprintf("%v", record[3]),
+			UserEmail:    fmt.Sprintf("%v", record[4]),
+			Action:       fmt.Sprintf("%v", record[5]),
+			Resource:     fmt.Sprintf("%v", record[6]),
+			ResourceType: fmt.Sprintf("%v", record[7]),
+		}
+		if tsStr := fmt.Sprintf("%v", record[2]); tsStr != "" {
+			if parsedTs, err := time.Parse(time.RFC3339, tsStr); err == nil {
+				e.Timestamp = parsedTs
+			}
+		}
+		if detailsStr := fmt.Sprintf("%v", record[8]); detailsStr != "" {
+			var detailsMap map[string]interface{}
+			if err := json.Unmarshal([]byte(detailsStr), &detailsMap); err == nil {
+				e.Details = detailsMap
+			} else {
+				e.Details = map[string]interface{}{"raw": detailsStr}
+			}
 		}
 		entries = append(entries, e)
 	}
 
-	response := AuditLogResponse{
-		Entries: entries,
-		Total:   total,
-	}
-
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(response)
+	json.NewEncoder(w).Encode(AuditLogResponse{
+		Entries: entries,
+		Total:   resp.RowCount,
+	})
 }

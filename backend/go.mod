@@ -12,6 +12,8 @@ require (
 	github.com/golang-jwt/jwt/v5 v5.3.0
 	github.com/google/cel-go v0.25.0
 	github.com/google/uuid v1.6.0
+	github.com/hashicorp/raft v1.6.1
+	github.com/hashicorp/raft-boltdb/v2 v2.2.0
 	github.com/hondyman/uisce/calc-engine v0.0.0
 	github.com/hondyman/uisce/libs/shared-types v0.0.0-00010101000000-000000000000
 	github.com/jackc/pgx/v5 v5.7.6
