@@ -42,6 +42,7 @@ import { ConfigurationTabContent } from '../components/ConfigurationTabContent';
 import { ProductsTabContent } from '../components/ProductsTabContent';
 import LookupsManagementTab from '../components/LookupsManagementTabV2';
 import AbbreviationsTab from '../components/AbbreviationsTab';
+import IPWhitelistTab from '../components/IPWhitelistTab';
 import { ConnectionsFacets } from '../components/ConnectionsFacets';
 
 interface TabPanelProps {
@@ -958,6 +959,7 @@ export const TenantDetailPageV2: React.FC = () => {
           <Tab label="Abbreviations" id="tenant-tab-4" aria-controls="tenant-tabpanel-4" />
           <Tab label="Audit Log" id="tenant-tab-5" aria-controls="tenant-tabpanel-5" />
           <Tab label="Configuration" id="tenant-tab-6" aria-controls="tenant-tabpanel-6" />
+          <Tab label="IP Whitelist" id="tenant-tab-7" aria-controls="tenant-tabpanel-7" />
         </Tabs>
 
         {/* Instances Tab */}
@@ -971,7 +973,13 @@ export const TenantDetailPageV2: React.FC = () => {
                 <ScopedInstanceEditor
                   instance={activeInstance}
                   tenantId={tenantId}
-                  updateMutation={(data: any) => updateTenantInstance.mutate(data).then(() => refetchTenant())}
+                  updateMutation={async (data: any) => {
+                    await apiClient(`/api/tenant-ops/instances/${data.id}`, {
+                      method: 'PATCH',
+                      body: JSON.stringify(data),
+                    });
+                    refetchTenant();
+                  }}
                 />
               </Box>
             )}
@@ -1060,7 +1068,7 @@ export const TenantDetailPageV2: React.FC = () => {
         <TabPanel value={activeTab} index={3}>
           <Box sx={{ p: 3 }}>
             <LookupsManagementTab 
-              tenantId={scopedTenant?.id || ''} 
+              tenantId={tenantId || ''} 
               instanceFilter={null}
             />
           </Box>
@@ -1069,7 +1077,7 @@ export const TenantDetailPageV2: React.FC = () => {
         {/* Abbreviations Tab */}
         <TabPanel value={activeTab} index={4}>
           <Box sx={{ p: 3 }}>
-            <AbbreviationsTab tenantId={scopedTenant?.id || ''} />
+            <AbbreviationsTab tenantId={tenantId || ''} />
           </Box>
         </TabPanel>
 
@@ -1090,6 +1098,13 @@ export const TenantDetailPageV2: React.FC = () => {
               tenantId={scopedTenant?.id || ''}
               datasourceId={scopedDatasource?.id || ''}
             />
+          </Box>
+        </TabPanel>
+
+        {/* IP Whitelist Tab */}
+        <TabPanel value={activeTab} index={7}>
+          <Box sx={{ p: 3 }}>
+            <IPWhitelistTab tenantId={scopedTenant?.id || ''} />
           </Box>
         </TabPanel>
       </Card>

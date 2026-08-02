@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -17,19 +18,15 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
 	temporalclient "github.com/hondyman/uisce/libs/temporal-client"
-	"github.com/joho/godotenv"
+	"github.com/hondyman/uisce/libs/logging"
+	"github.com/hondyman/uisce/api-gateway/internal/config"
+	"github.com/hondyman/uisce/api-gateway/handlers"
+	"go.uber.org/zap"
 	"golang.org/x/time/rate"
 
 	apipkg "github.com/hondyman/uisce/api-gateway/api"
+	"github.com/hondyman/uisce/api-gateway/proxy"
 )
-
-type Config struct {
-	Port         string
-	JWTSecret    string
-	RateLimitRPM int
-	EnableAudit  bool
-	BackendURL   string
-}
 
 type APIKey struct {
 	ID          string     `json:"id"`
@@ -97,6 +94,7 @@ func (rl *RateLimiter) GetLimiter(key string, rps float64) *rate.Limiter {
 var (
 	rateLimiter = NewRateLimiter()
 	apiKeys     = make(map[string]APIKey) // In production, use Redis/database
+	gatewayConfig *config.GatewayConfig
 )
 
 // Middleware functions
@@ -247,7 +245,7 @@ func JWTMiddleware() gin.HandlerFunc {
 			if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
 				return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
 			}
-			return []byte(getEnv("JWT_SECRET", "your-secret-key")), nil
+			return []byte(getEnvRequired("JWT_SECRET")), nil
 		})
 
 		if err != nil || !token.Valid {
@@ -299,10 +297,22 @@ func RateLimitMiddleware() gin.HandlerFunc {
 				return
 			}
 		}
-		// Get client identifier (API key or IP)
-		clientID := c.GetHeader("X-API-Key")
+		// SECURITY: Use tenant-aware rate limiting to prevent one tenant from
+		// exhausting another tenant's rate limit. Get tenant from context set
+		// by JWTMiddleware (runs before this middleware).
+		var clientID string
+		if tenantID, ok := c.Get("semlayer_tenant_id"); ok {
+			if tid, ok := tenantID.(string); ok && tid != "" {
+				// Rate limit per tenant to prevent tenant A exhausting tenant B's limit
+				clientID = "tenant:" + tid
+			}
+		}
 		if clientID == "" {
-			clientID = c.ClientIP()
+			// Fallback to API key or IP for unauthenticated requests
+			clientID = c.GetHeader("X-API-Key")
+			if clientID == "" {
+				clientID = c.ClientIP()
+			}
 		}
 
 		// Get rate limiter for this client
@@ -622,21 +632,20 @@ type LineageRequest struct {
 }
 
 func main() {
-	// Load environment variables
-	if err := godotenv.Load(); err != nil {
-		log.Println("No .env file found")
-	}
+	logging.InitGlobalLogger()
+	logger := logging.GetLogger()
 
-	config := Config{
-		Port:       getEnv("PORT", "8001"),
-		BackendURL: getEnv("BACKEND_URL", "http://localhost:8080"),
+	var err error
+	gatewayConfig, err = config.LoadGatewayConfig()
+	if err != nil {
+		logger.Fatal("Failed to load configuration", zap.Error(err))
 	}
+	logger.Info("Configuration loaded", zap.String("env", gatewayConfig.Env), zap.String("logLevel", gatewayConfig.LogLevel))
 
-	// DEBUG: Verify config is populated
-	log.Printf("DEBUG: Config initialized: Port=%s, BackendURL=%s", config.Port, config.BackendURL)
+	handlers.SetBackendURL(gatewayConfig.BackendURL)
 
 	r := gin.Default()
-	log.Printf("ROUTER CREATED")
+	logger.Info("Router created")
 	// Debug endpoint: echo tenant headers for frontend debugging
 	r.GET("/api/_debug/headers", func(c *gin.Context) {
 		tenantID := c.GetHeader("X-Tenant-ID")
@@ -677,26 +686,25 @@ func main() {
 		}
 	}
 
-	// Backend base URL (can be overridden in local/dev environments)
-	// Default to 8080 where the backend service runs in local dev.
-	backendBase := getEnv("BACKEND_URL", "http://localhost:8080")
+	// Backend base URL
+	backendBase := gatewayConfig.BackendURL
 
-	// Auth service URL (separate from backend, defaults to auth-service on port 8001 in Docker)
-	authServiceBase := getEnv("AUTH_SERVICE_URL", "http://auth-service:8001")
+	// Auth service URL
+	authServiceBase := gatewayConfig.AuthServiceURL
 
 	// Initialize KeyManager and RevocationStore
 	keyManager = NewKeyManager()
-	// Use Redis for revocation in prod via REVOCATION_REDIS_ADDR, otherwise in-memory
-	if addr := getEnv("REVOCATION_REDIS_ADDR", ""); addr != "" {
-		revocationStore = NewRedisRevocationStore(addr)
-		log.Printf("Using Redis revocation store at %s", addr)
+	if gatewayConfig.RevocationRedisAddr != "" {
+		revocationStore = NewRedisRevocationStore(gatewayConfig.RevocationRedisAddr)
+		logger.Info("Using Redis revocation store", zap.String("addr", gatewayConfig.RevocationRedisAddr))
 	} else {
 		revocationStore = NewInMemoryRevocationStore()
-		log.Printf("Using in-memory revocation store (dev only)")
+		logger.Info("Using in-memory revocation store (dev only)")
 	}
 
-	// Log resolved upstream endpoints for easier debugging in dev
-	log.Printf("Resolved BACKEND_URL=%s AUTH_SERVICE_URL=%s", backendBase, authServiceBase)
+	logger.Info("Upstream endpoints resolved",
+		zap.String("backendURL", backendBase),
+		zap.String("authServiceURL", authServiceBase))
 
 	// CORS middleware (restrict to local frontend dev origin)
 	r.Use(cors.New(cors.Config{
@@ -833,9 +841,7 @@ func main() {
 	})
 
 	// API catalog endpoints
-	api.GET("/catalog/apis", func(c *gin.Context) {
-		handleGetAPIs(c)
-	})
+	api.GET("/catalog/apis", handlers.HandleGetAPIs)
 
 	// Admin rotate endpoint exposed under /api for operators
 	api.POST("/keys/rotate", func(c *gin.Context) {
@@ -867,90 +873,29 @@ func main() {
 		c.JSON(200, gin.H{"status": "ok"})
 	})
 
-	api.GET("/catalog/business-terms", func(c *gin.Context) {
-		handleGetBusinessTerms(c)
-	})
+	api.GET("/catalog/business-terms", handlers.HandleGetBusinessTerms)
 
-	api.POST("/catalog/apis", func(c *gin.Context) {
-		handleCreateAPI(c)
-	})
+	api.POST("/catalog/apis", handlers.HandleCreateAPI)
 
-	api.POST("/catalog/business-terms", func(c *gin.Context) {
-		handleCreateBusinessTerm(c)
-	})
+	api.POST("/catalog/business-terms", handlers.HandleCreateBusinessTerm)
+
+	proxyHandler := proxy.NewProxyHandler(backendBase).WithWhitelistCache(wlCache).WithDevBypass(true)
 
 	// Catalog scan endpoint - proxy to backend service
 	api.POST("/catalog/scan", func(c *gin.Context) {
-		// This specific endpoint has a different auth requirement (no JWT),
-		// so we call the proxy handler directly.
-		createProxyHandler(backendBase)(c)
+		proxyHandler.ServeHTTP()(c)
 	})
 
 	// Business terms endpoints
 	api.POST("/test-search", func(c *gin.Context) {
 		log.Printf("ANONYMOUS HANDLER CALLED for /api/test-search")
-		handleBusinessTermSearch(c, config)
+		handlers.HandleBusinessTermSearch(c)
 	})
 
-	api.POST("/validate/business-term", func(c *gin.Context) {
-		handleBusinessTermValidation(c, config)
-	})
+	api.POST("/validate/business-term", handlers.HandleBusinessTermValidation)
 
-	// Create a reusable proxy handler for the backend service
-	proxy := createProxyHandler(backendBase)
-
-	// Ensure a small set of backend-only endpoints that the frontend expects
-	// are explicitly proxied by the gateway. This avoids returning 404s when
-	// the frontend (via dev-proxy) points at the gateway in local dev.
-	// These endpoints are implemented by the backend service and should be
-	// forwarded transparently.
-	api.GET("/semantic/objects", proxy)
-	// Endpoint for singular 'semantic-mapping' (matching backend service definition)
-	api.Any("/semantic-mapping", proxy)
-	api.Any("/semantic-mapping/*path", proxy)
-
-	api.Any("/semantic-mappings", proxy)
-	api.Any("/semantic-mappings/*path", proxy)
-	api.Any("/semantic-terms", proxy)
-	api.Any("/semantic-terms/*path", proxy)
-	// Forward singular business-term lookup to backend so frontend GET /api/business-term
-	// is not met with a gateway 404. Backend will return JSON payloads.
-	api.Any("/business-term", proxy)
-	// Forward plural business-terms endpoints to backend for frontend compatibility
-	api.Any("/business-terms", proxy)
-	api.Any("/business-terms/*path", proxy)
-	// Forward business-term-edges endpoints to backend for frontend compatibility
-	api.Any("/business-term-edges", proxy)
-	api.Any("/business-term-edges/*path", proxy)
-
-	// Instance management endpoints (cloning, syncing etc.)
-	api.Any("/instance", proxy)
-	api.Any("/instance/*path", proxy)
-
-	// Impact Analysis endpoints (Dynamic Graph Queries via AGE)
-	api.Any("/impact", proxy)
-	api.Any("/impact/*path", proxy)
-
-	// Data bundles endpoints used by the BundleEditor/UI. Register both
-	// explicit and wildcard routes so GET/PUT/POST requests are forwarded.
-	api.GET("/bundles", proxy)
-	api.POST("/bundles", proxy)
-	api.GET("/bundles/:id", proxy)
-	api.PUT("/bundles/:id", proxy)
-	api.Any("/bundles/:id/*any", proxy)
-
-	// Register models endpoints on the `api` group with explicit paths to
-	// avoid Gin wildcard/static route conflicts. The backend only exposes a
-	// handful of model-related endpoints, so listing them precisely prevents
-	// catch-all wildcard conflicts while preserving the same middleware chain
-	// already applied to `api` (JWT, rate limiting, IP whitelist, policy,
-	// audit).
-	api.Any("/models", proxy)
-	api.POST("/models/generated", proxy)
-	api.POST("/models/custom", proxy)
-	api.POST("/models/clone", proxy)
-	// model id routes: GET, PATCH, DELETE etc.
-	api.Any("/models/:model_id", proxy)
+	// Register all backend proxy routes
+	proxy.NewRouteRegistrar(proxyHandler, api).RegisterAll()
 
 	// Gateway login endpoint: proxy credentials to auth service, then issue a gateway-signed JWT
 	r.POST("/api/auth/login", func(c *gin.Context) {
@@ -1036,7 +981,7 @@ func main() {
 			signed, kid, signErr = keyManager.SignTokenRS256(claims)
 		} else {
 			token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-			signed, signErr = token.SignedString([]byte(getEnv("JWT_SECRET", "your-secret-key")))
+			signed, signErr = token.SignedString([]byte(getEnvRequired("JWT_SECRET")))
 		}
 		if signErr != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to sign token"})
@@ -1072,160 +1017,27 @@ func main() {
 		c.JSON(http.StatusOK, out)
 	})
 
-	// Proxy routes to the backend service
-	api.POST("/auth/logout", proxy)
-	api.Any("/fabric/*path", proxy)
-	// Tenants & IP whitelist routes (backend chi server under /api)
-	api.Any("/tenants", proxy)
-	api.Any("/tenants/*path", proxy)
-	api.Any("/ip-whitelist", proxy)
-	api.Any("/ip-whitelist/*path", proxy)
-
-	// Proxy specific backend endpoints used directly by the frontend
-	// e.g. POST /api/query -> backend /api/query
-	api.Any("/query", proxy)
-	// Pre-aggregation endpoints sometimes called without /api prefix from frontend dev UI
-	api.Any("/pre_aggregations", proxy)
-	api.Any("/pre_aggregations/*path", proxy)
-	// Model catalog endpoints are registered at the root with middleware to
-	// avoid Gin wildcard/static route conflicts. See registration above.
-	// Views catalog endpoints - forward to backend service
-	api.Any("/views", proxy)
-	api.Any("/views/*path", proxy)
-
-	// Calculations endpoints - forward to backend service (backend exposes /api/calculations)
-	api.Any("/calculations", proxy)
-	api.Any("/calculations/*path", proxy)
-
-	// Roles endpoints - forward to backend service (backend exposes /api/roles)
-	api.Any("/roles", proxy)
-	api.Any("/roles/*path", proxy)
-
-	// Policies endpoints - forward to backend service (backend exposes /api/policies)
-	api.Any("/policies", proxy)
-	api.Any("/policies/*path", proxy)
-
-	// Profiler endpoints - forward to backend service (backend exposes /api/profiler)
-	api.Any("/profiler", proxy)
-	api.Any("/profiler/*path", proxy)
-
-	// Data Domains endpoints - forward to backend service (backend exposes /api/data-domains)
-	api.Any("/data-domains", proxy)
-	api.Any("/data-domains/*path", proxy)
-
-	// Entity Schema endpoints - forward to backend service (backend exposes /api/entity-schema)
-	api.GET("/entity-schema", proxy)
-	api.POST("/entity-schema", proxy)
-
-	// Validation Rules endpoints - forward to backend service (backend exposes /api/validation-rules)
-	api.GET("/validation-rules", proxy)
-	api.POST("/validation-rules", proxy)
-	api.GET("/validation-rules/:id", proxy)
-	api.PATCH("/validation-rules/:id", proxy)
-	api.DELETE("/validation-rules/:id", proxy)
-	api.POST("/validation-rules/:id/execute", proxy)
-	api.POST("/validation-rules/execute-batch", proxy)
-	api.GET("/validation-rules/:id/audit", proxy)
-
-	// Schema introspection and rule testing endpoints
-	api.GET("/schema/:entity", proxy)                      // Proxy to backend for dynamic schema
-	api.POST("/rules/test", proxy)                         // Proxy to backend for rule testing
-	api.GET("/ai/discover-relationships/:entityId", proxy) // Proxy to backend for AI suggestions
-	api.POST("/ai/generate-rule", proxy)                   // Proxy to backend for AI rule generation from natural language
-
-	// Relationships endpoints - forward to backend service (backend exposes /api/relationships)
-	api.Any("/relationships", proxy)
-	api.Any("/relationships/*path", proxy)
-
-	// Bundles endpoints are proxied via explicit routes registered earlier
-
-	// Catalog endpoints - forward specific catalog backend routes to the
-	// backend service. We avoid registering a broad catch-all here because
-	// Gin disallows wildcard segments that conflict with existing prefixes
-	// (e.g. /apis). Register the handful of catalog endpoints the frontend
-	// uses directly.
-	api.Any("/catalog/tables", proxy)
-	api.Any("/catalog/tables/*path", proxy)
-	api.Any("/catalog/nodes", proxy)
-
-	// Lineage endpoints - forward to backend service (replaces previous mock)
-	api.Any("/lineage", proxy)
-	api.Any("/lineage/*path", proxy)
-
-	// Node Types & Edge Types endpoints - forward to backend service
-	api.Any("/node-types", proxy)
-	api.Any("/node-types/*path", proxy)
-	api.Any("/edge-types", proxy)
-	api.Any("/edge-types/*path", proxy)
-
-	// Business Process Notifications endpoints - forward to backend service
-	api.Any("/bp-notifications", proxy)
-	api.Any("/bp-notifications/*path", proxy)
-
-	// Model generator endpoint - handled by the models route registration above
-
 	// Query management endpoints
-	api.POST("/queries", func(c *gin.Context) {
-		handleCreateQuery(c, config)
-	})
-
-	api.GET("/queries", func(c *gin.Context) {
-		handleGetQueries(c, config)
-	})
-
-	api.GET("/queries/:id", func(c *gin.Context) {
-		handleGetQuery(c, config)
-	})
-
-	api.PUT("/queries/:id", func(c *gin.Context) {
-		handleUpdateQuery(c, config)
-	})
-
-	api.DELETE("/queries/:id", func(c *gin.Context) {
-		handleDeleteQuery(c, config)
-	})
-
-	api.POST("/queries/:id/clone", func(c *gin.Context) {
-		handleCloneQuery(c, config)
-	})
-
-	api.POST("/queries/:id/share", func(c *gin.Context) {
-		handleShareQuery(c, config)
-	})
+	api.POST("/queries", handlers.HandleCreateQuery)
+	api.GET("/queries", handlers.HandleGetQueries)
+	api.GET("/queries/:id", handlers.HandleGetQuery)
+	api.PUT("/queries/:id", handlers.HandleUpdateQuery)
+	api.DELETE("/queries/:id", handlers.HandleDeleteQuery)
+	api.POST("/queries/:id/clone", handlers.HandleCloneQuery)
+	api.POST("/queries/:id/share", handlers.HandleShareQuery)
 
 	// API management endpoints
-	api.POST("/apis", func(c *gin.Context) {
-		handleCreateAPI(c)
-	})
+	api.POST("/apis", handlers.HandleCreateAPI)
+	api.GET("/apis", handlers.HandleGetAPIs)
+	api.GET("/apis/:id", handlers.HandleGetAPI)
 
-	api.GET("/apis", func(c *gin.Context) {
-		handleGetAPIs(c)
-	})
-
-	api.GET("/apis/:id", func(c *gin.Context) {
-		handleGetAPI(c, config)
-	})
-
-	api.PUT("/apis/:id", func(c *gin.Context) {
-		handleUpdateAPI(c, config)
-	})
-
-	api.DELETE("/apis/:id", func(c *gin.Context) {
-		handleDeleteAPI(c, config)
-	})
-
-	api.POST("/apis/:id/clone", func(c *gin.Context) {
-		handleCloneAPI(c, config)
-	})
-
-	api.POST("/apis/:id/share", func(c *gin.Context) {
-		handleShareAPI(c, config)
-	})
+	api.PUT("/apis/:id", handlers.HandleUpdateAPI)
+	api.DELETE("/apis/:id", handlers.HandleDeleteAPI)
+	api.POST("/apis/:id/clone", handlers.HandleCloneAPI)
+	api.POST("/apis/:id/share", handlers.HandleShareAPI)
 
 	// Dynamic API execution endpoints
-	api.POST("/execute/:apiId/*path", func(c *gin.Context) {
-		handleExecuteAPI(c, config)
-	})
+	api.POST("/execute/:apiId/*path", handlers.HandleExecuteAPI)
 
 	// OpenAPI/Swagger UI
 	r.Static("/docs", "./docs")
@@ -1238,7 +1050,7 @@ func main() {
 	// Initialize Temporal client (env-driven + retries)
 	tc, err := temporalclient.NewClientWithRetry()
 	if err != nil {
-		log.Printf("WARNING: Failed to create Temporal client: %v. Some features may be unavailable.", err)
+		logger.Warn("Failed to create Temporal client", zap.Error(err))
 	} else {
 		defer tc.Close()
 		// Register custom routes only if temporal client is available
@@ -1248,445 +1060,35 @@ func main() {
 		apipkg.RegisterRebalancerRoutes(r, tc)
 	}
 
-	log.Printf("API Gateway starting on port %s", config.Port)
-	log.Fatal(r.Run(":" + config.Port))
-}
+		logger.Info("API Gateway starting", zap.String("port", gatewayConfig.Port))
 
-func handleCreateQuery(c *gin.Context, _ Config) {
-	var req struct {
-		Name        string                 `json:"name" binding:"required"`
-		Description string                 `json:"description"`
-		Type        string                 `json:"type" binding:"required"`
-		Config      map[string]interface{} `json:"config" binding:"required"`
-		Tags        []string               `json:"tags"`
-	}
-
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(400, gin.H{"error": err.Error()})
-		return
-	}
-
-	// In production, save to database
-	query := gin.H{
-		"id":          generateID(),
-		"name":        req.Name,
-		"description": req.Description,
-		"type":        req.Type,
-		"config":      req.Config,
-		"tags":        req.Tags,
-		"created_by":  "current_user", // Get from JWT
-		"created_at":  time.Now(),
-		"updated_at":  time.Now(),
-		"is_core":     false,
-	}
-
-	c.JSON(201, query)
-}
-
-func handleGetQueries(c *gin.Context, _ Config) {
-	// In production, fetch from database with filtering
-	queries := []gin.H{
-		{
-			"id":          "1",
-			"name":        "Monthly Sales Report",
-			"description": "Sales performance by month",
-			"type":        "public",
-			"created_by":  "john.doe",
-			"created_at":  "2024-01-15T10:00:00Z",
-			"updated_at":  "2024-01-15T10:00:00Z",
-			"is_core":     true,
-			"tags":        []string{"sales", "monthly"},
-		},
-	}
-
-	c.JSON(200, gin.H{"queries": queries})
-}
-
-func handleGetQuery(c *gin.Context, _ Config) {
-	id := c.Param("id")
-	// In production, fetch from database
-	query := gin.H{
-		"id":          id,
-		"name":        "Sample Query",
-		"description": "Sample query description",
-		"type":        "public",
-		"config":      gin.H{"dataSource": "orders", "measures": []string{"total_amount"}},
-		"created_by":  "john.doe",
-		"created_at":  "2024-01-15T10:00:00Z",
-		"updated_at":  "2024-01-15T10:00:00Z",
-		"is_core":     false,
-	}
-
-	c.JSON(200, query)
-}
-
-func handleUpdateQuery(c *gin.Context, _ Config) {
-	id := c.Param("id")
-	var req struct {
-		Name        string                 `json:"name"`
-		Description string                 `json:"description"`
-		Type        string                 `json:"type"`
-		Config      map[string]interface{} `json:"config"`
-		Tags        []string               `json:"tags"`
-	}
-
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(400, gin.H{"error": err.Error()})
-		return
-	}
-
-	// In production, update in database
-	query := gin.H{
-		"id":          id,
-		"name":        req.Name,
-		"description": req.Description,
-		"type":        req.Type,
-		"config":      req.Config,
-		"tags":        req.Tags,
-		"updated_at":  time.Now(),
-	}
-
-	c.JSON(200, query)
-}
-
-func handleDeleteQuery(c *gin.Context, _ Config) {
-	id := c.Param("id")
-	// In production, delete from database
-	log.Printf("Deleting query with id: %s", id)
-	c.JSON(204, gin.H{})
-}
-
-func handleCloneQuery(c *gin.Context, _ Config) {
-	id := c.Param("id")
-	// In production, clone the query in database
-	log.Printf("Cloning query with id: %s", id)
-	clonedQuery := gin.H{
-		"id":          generateID(),
-		"name":        "Cloned Query",
-		"description": "Cloned from original query",
-		"type":        "private",
-		"created_by":  "current_user",
-		"created_at":  time.Now(),
-		"updated_at":  time.Now(),
-		"is_core":     false,
-	}
-
-	c.JSON(201, clonedQuery)
-}
-
-func handleShareQuery(c *gin.Context, _ Config) {
-	id := c.Param("id")
-	log.Printf("Sharing query with id: %s", id)
-	var req struct {
-		Users []string `json:"users"`
-		Teams []string `json:"teams"`
-	}
-
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(400, gin.H{"error": err.Error()})
-		return
-	}
-
-	// In production, update sharing permissions in database
-	c.JSON(200, gin.H{"message": "Query shared successfully"})
-}
-
-func handleCreateAPI(c *gin.Context) {
-	var req struct {
-		Name        string                   `json:"name" binding:"required"`
-		Description string                   `json:"description"`
-		Type        string                   `json:"type" binding:"required"`
-		Config      map[string]interface{}   `json:"config" binding:"required"`
-		Endpoints   []map[string]interface{} `json:"endpoints"`
-		Tags        []string                 `json:"tags"`
-	}
-
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(400, gin.H{"error": err.Error()})
-		return
-	}
-
-	// In production, save to database
-	api := gin.H{
-		"id":          generateID(),
-		"name":        req.Name,
-		"description": req.Description,
-		"type":        req.Type,
-		"config":      req.Config,
-		"endpoints":   req.Endpoints,
-		"tags":        req.Tags,
-		"created_by":  "current_user",
-		"created_at":  time.Now(),
-		"updated_at":  time.Now(),
-		"is_core":     false,
-	}
-
-	c.JSON(201, api)
-}
-
-func handleGetAPI(c *gin.Context, _ Config) {
-	id := c.Param("id")
-	// In production, fetch from database
-	api := gin.H{
-		"id":          id,
-		"name":        "Sample API",
-		"description": "Sample API description",
-		"type":        "public",
-		"config":      gin.H{"basePath": "/api", "authentication": "jwt"},
-		"endpoints":   []gin.H{},
-		"created_by":  "john.doe",
-		"created_at":  "2024-01-15T10:00:00Z",
-		"updated_at":  "2024-01-15T10:00:00Z",
-		"is_core":     false,
-	}
-
-	c.JSON(200, api)
-}
-
-func handleUpdateAPI(c *gin.Context, _ Config) {
-	id := c.Param("id")
-	var req struct {
-		Name        string                   `json:"name"`
-		Description string                   `json:"description"`
-		Type        string                   `json:"type"`
-		Config      map[string]interface{}   `json:"config"`
-		Endpoints   []map[string]interface{} `json:"endpoints"`
-		Tags        []string                 `json:"tags"`
-	}
-
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(400, gin.H{"error": err.Error()})
-		return
-	}
-
-	// In production, update in database
-	api := gin.H{
-		"id":          id,
-		"name":        req.Name,
-		"description": req.Description,
-		"type":        req.Type,
-		"config":      req.Config,
-		"endpoints":   req.Endpoints,
-		"tags":        req.Tags,
-		"updated_at":  time.Now(),
-	}
-
-	c.JSON(200, api)
-}
-
-func handleDeleteAPI(c *gin.Context, _ Config) {
-	id := c.Param("id")
-	// In production, delete from database
-	log.Printf("Deleting API with id: %s", id)
-	c.JSON(204, gin.H{})
-}
-
-func handleCloneAPI(c *gin.Context, _ Config) {
-	id := c.Param("id")
-	// In production, clone the API in database
-	log.Printf("Cloning API with id: %s", id)
-	clonedAPI := gin.H{
-		"id":          generateID(),
-		"name":        "Cloned API",
-		"description": "Cloned from original API",
-		"type":        "private",
-		"created_by":  "current_user",
-		"created_at":  time.Now(),
-		"updated_at":  time.Now(),
-		"is_core":     false,
-	}
-
-	c.JSON(201, clonedAPI)
-}
-
-func handleShareAPI(c *gin.Context, _ Config) {
-	id := c.Param("id")
-	log.Printf("Sharing API with id: %s", id)
-	var req struct {
-		Users []string `json:"users"`
-		Teams []string `json:"teams"`
-	}
-
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(400, gin.H{"error": err.Error()})
-		return
-	}
-
-	// In production, update sharing permissions in database
-	c.JSON(200, gin.H{"message": "API shared successfully"})
-}
-
-func handleExecuteAPI(c *gin.Context, _ Config) {
-	apiId := c.Param("apiId")
-	path := c.Param("path")
-	method := c.Request.Method
-
-	// In production, look up the API configuration and execute against tenant database
-	result := gin.H{
-		"api_id": apiId,
-		"path":   path,
-		"method": method,
-		"result": "API executed successfully",
-		"data":   []gin.H{}, // Mock data
-	}
-
-	c.JSON(200, result)
-}
-
-func handleBusinessTermSearch(c *gin.Context, config Config) {
-	log.Printf("HANDLER CALLED: handleBusinessTermSearch")
-
-	// Log the raw request body
-	rawBody, _ := c.GetRawData()
-	log.Printf("RAW REQUEST BODY: %s", string(rawBody))
-	// Restore the body for binding
-	c.Request.Body = io.NopCloser(bytes.NewBuffer(rawBody))
-
-	var req BusinessTermSearchRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		log.Printf("JSON BINDING ERROR: %v", err)
-		c.JSON(400, gin.H{"error": err.Error()})
-		return
-	}
-	log.Printf("PARSED REQUEST: %+v", req)
-
-	// Set defaults
-	if req.Limit == 0 {
-		req.Limit = 20
-	}
-	tenantID := req.TenantID
-	if tenantID == "" {
-		tenantID = c.GetHeader("X-Tenant-ID")
-		if tenantID == "" {
-			tenantID = "default"
+	tlsEnabled := os.Getenv("TLS_ENABLED") == "true"
+	if tlsEnabled {
+		certFile := os.Getenv("TLS_CERT_FILE")
+		keyFile := os.Getenv("TLS_KEY_FILE")
+		if certFile == "" || keyFile == "" {
+			logger.Fatal("TLS_CERT_FILE and TLS_KEY_FILE are required when TLS_ENABLED=true")
+		}
+		server := &http.Server{
+			Addr:    ":" + gatewayConfig.Port,
+			Handler: r,
+			TLSConfig: &tls.Config{
+				MinVersion: tls.VersionTLS12,
+			},
+		}
+		logger.Info("API Gateway starting with TLS", zap.String("port", gatewayConfig.Port))
+		if err := server.ListenAndServeTLS(certFile, keyFile); err != nil {
+			logger.Fatal("Failed to start TLS server", zap.Error(err))
+		}
+	} else {
+		env := os.Getenv("ENV")
+		if env == "production" || env == "staging" {
+			logger.Warn("TLS is not enabled in " + env)
+		}
+		if err := r.Run(":" + gatewayConfig.Port); err != nil {
+			logger.Fatal("Failed to start server", zap.Error(err))
 		}
 	}
-
-	// Get datasource ID from headers
-	datasourceID := c.GetHeader("X-Tenant-Datasource-ID")
-	if datasourceID == "" {
-		datasourceID = "default"
-	}
-
-	// Create search request for backend (backend expects Query and Limit)
-	backendReq := map[string]interface{}{
-		"query": req.Query,
-		"limit": req.Limit,
-	}
-
-	bodyJSON, err := json.Marshal(backendReq)
-	if err != nil {
-		c.JSON(500, gin.H{"error": "Failed to marshal request: " + err.Error()})
-		return
-	}
-
-	// Call backend /business-terms/search endpoint
-	backendURL := config.BackendURL + "/business-terms/search"
-	httpReq, err := http.NewRequest("POST", backendURL, bytes.NewBuffer(bodyJSON))
-	if err != nil {
-		c.JSON(500, gin.H{"error": "Failed to create backend request: " + err.Error()})
-		return
-	}
-
-	// Set required headers for backend
-	httpReq.Header.Set("Content-Type", "application/json")
-	httpReq.Header.Set("X-Tenant-ID", tenantID)
-	httpReq.Header.Set("X-Tenant-Datasource-ID", datasourceID)
-
-	client := &http.Client{Timeout: 10 * time.Second}
-	resp, err := client.Do(httpReq)
-	if err != nil {
-		c.JSON(500, gin.H{"error": "Failed to reach backend service: " + err.Error()})
-		return
-	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		c.JSON(500, gin.H{"error": "Failed to read backend response: " + err.Error()})
-		return
-	}
-
-	// Forward the response from backend
-	c.Data(resp.StatusCode, "application/json", body)
-}
-
-func handleBusinessTermValidation(c *gin.Context, config Config) {
-	var req BusinessTermValidationRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(400, gin.H{"error": err.Error()})
-		return
-	}
-
-	// For now, return a placeholder validation response
-	// In production, this would call the backend validation service
-	c.JSON(200, gin.H{
-		"valid":    true,
-		"errors":   []string{},
-		"warnings": []string{},
-	})
-}
-
-func handleGetAPIs(c *gin.Context) {
-	// For now, return mock data - replace with actual database queries
-	apis := []gin.H{
-		{
-			"id":             "1",
-			"path":           "/api/search/business-terms",
-			"method":         "POST",
-			"description":    "Search for business terms in the catalog",
-			"category":       "Business Terms",
-			"service":        "API Gateway",
-			"version":        "v1.0",
-			"status":         "active",
-			"last_updated":   "2024-01-15",
-			"business_terms": []string{"customer_id", "order_value"},
-			"dependencies":   []string{"hasura", "postgres"},
-		},
-		{
-			"id":             "2",
-			"path":           "/api/validate/business-term",
-			"method":         "POST",
-			"description":    "Validate business term definitions",
-			"category":       "Business Terms",
-			"service":        "API Gateway",
-			"version":        "v1.0",
-			"status":         "active",
-			"last_updated":   "2024-01-15",
-			"business_terms": []string{"customer_id"},
-			"dependencies":   []string{"hasura"},
-		},
-	}
-
-	c.JSON(200, gin.H{"apis": apis})
-}
-
-func handleGetBusinessTerms(c *gin.Context) {
-	// For now, return mock data - replace with actual database queries
-	businessTerms := []gin.H{
-		{
-			"id":           "customer_id",
-			"name":         "Customer ID",
-			"description":  "Unique identifier for customers",
-			"category":     "Customer Data",
-			"owner":        "Data Team",
-			"status":       "approved",
-			"related_apis": []string{"1", "2"},
-		},
-	}
-
-	c.JSON(200, gin.H{"business_terms": businessTerms})
-}
-
-func handleCreateBusinessTerm(c *gin.Context) {
-	var termData map[string]interface{}
-	if err := c.ShouldBindJSON(&termData); err != nil {
-		c.JSON(400, gin.H{"error": err.Error()})
-		return
-	}
-
-	// TODO: Save to database
-	c.JSON(201, gin.H{"message": "Business term created successfully", "business_term": termData})
 }
 
 func getEnv(key, defaultValue string) string {
@@ -1694,6 +1096,14 @@ func getEnv(key, defaultValue string) string {
 		return value
 	}
 	return defaultValue
+}
+
+func getEnvRequired(key string) string {
+	if value := os.Getenv(key); value != "" {
+		return value
+	}
+	log.Fatalf("required environment variable %s is not set", key)
+	return ""
 }
 
 func generateID() string {
@@ -1707,154 +1117,4 @@ func generateAPIKey() string {
 		bytes[i] = byte(65 + (time.Now().UnixNano()+int64(i))%26) // A-Z
 	}
 	return string(bytes)
-}
-
-func createProxyHandler(backendBase string) gin.HandlerFunc {
-	return func(c *gin.Context) {
-		// Handle OPTIONS requests for CORS preflight - return 200 OK without proxying
-		if c.Request.Method == http.MethodOptions {
-			c.Status(200)
-			return
-		}
-
-		// Build backend URL preserving the original path and query.
-		// c.Request.URL.Path already contains the full path including the group prefix (e.g., /api/fabric/some/thing).
-		// If the gateway has no HASURA_URL configured and the frontend requested source=resolved
-		// for /api/views, rewrite to source=runtime so the backend will return runtime files instead
-		// of attempting a GraphQL query that would fail in this dev configuration.
-		// Note: this only affects proxied requests; it avoids returning 500s to the dev frontend.
-		reqURL := *c.Request.URL
-		if strings.HasPrefix(c.Request.URL.Path, "/api/views") {
-			q := reqURL.Query()
-			if strings.ToLower(strings.TrimSpace(q.Get("source"))) == "resolved" && strings.TrimSpace(getEnv("HASURA_URL", "")) == "" {
-				q.Set("source", "runtime")
-				reqURL.RawQuery = q.Encode()
-			}
-		}
-		backendURL := backendBase + reqURL.Path
-		if reqURL.RawQuery != "" {
-			backendURL = backendURL + "?" + reqURL.RawQuery
-		}
-
-		// Read incoming request body
-		body, err := io.ReadAll(c.Request.Body)
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to read request body"})
-			return
-		}
-
-		// Create new request to backend
-		req, err := http.NewRequest(c.Request.Method, backendURL, bytes.NewBuffer(body))
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create backend request"})
-			return
-		}
-
-		// Copy headers from the original request
-		req.Header = c.Request.Header.Clone()
-
-		// Propagate forwarding headers
-		clientIP := c.ClientIP()
-		if existing := req.Header.Get("X-Forwarded-For"); existing != "" {
-			req.Header.Set("X-Forwarded-For", existing+", "+clientIP)
-		} else {
-			req.Header.Set("X-Forwarded-For", clientIP)
-		}
-		if proto := c.Request.Header.Get("X-Forwarded-Proto"); proto != "" {
-			req.Header.Set("X-Forwarded-Proto", proto)
-		} else if c.Request.TLS != nil {
-			req.Header.Set("X-Forwarded-Proto", "https")
-		} else {
-			req.Header.Set("X-Forwarded-Proto", "http")
-		}
-
-		// Let the http.Client set the correct Content-Length
-		req.Header.Del("Content-Length")
-
-		// Execute the request
-		client := &http.Client{Timeout: 60 * time.Second}
-		resp, err := client.Do(req)
-		if err != nil {
-			c.JSON(http.StatusBadGateway, gin.H{"error": "Failed to connect to backend service", "details": err.Error()})
-			return
-		}
-		defer resp.Body.Close()
-
-		// Read backend response
-		respBody, err := io.ReadAll(resp.Body)
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to read backend response"})
-			return
-		}
-
-		// Special-case: ensure requests to /api/business-term always return
-		// a JSON payload the frontend can parse. If the backend returned a
-		// non-JSON body or a non-200 status (for example a 404 HTML page),
-		// respond with a safe JSON fallback instead of forwarding opaque
-		// HTML which would break frontend JSON.parse.
-		if strings.HasPrefix(c.Request.URL.Path, "/api/business-term") {
-			ct := resp.Header.Get("Content-Type")
-			if resp.StatusCode != http.StatusOK || !strings.Contains(strings.ToLower(ct), "application/json") {
-				// Reply with the backend status but a safe JSON body.
-				c.Status(resp.StatusCode)
-				c.Header("Content-Type", "application/json")
-				_, _ = c.Writer.Write([]byte("{\"business_term\":\"\"}"))
-				return
-			}
-		}
-
-		// If we modified tenant IP whitelist, invalidate cache for that tenant so
-		// subsequent requests see the latest state.
-		if strings.Contains(c.Request.URL.Path, "/api/tenants/") && strings.Contains(c.Request.URL.Path, "/ip-whitelist") {
-			// path format: /api/tenants/{tenantId}/ip-whitelist[...]
-			parts := strings.Split(c.Request.URL.Path, "/")
-			for i := 0; i < len(parts)-1; i++ {
-				if parts[i] == "tenants" && i+1 < len(parts) {
-					wlCache.Delete(parts[i+1])
-					break
-				}
-			}
-		}
-
-		// Propagate status, headers, and body from the backend response
-		c.Status(resp.StatusCode)
-		for k, v := range resp.Header {
-			// Copy backend headers but avoid duplicating hop-by-hop headers
-			c.Header(k, strings.Join(v, ","))
-		}
-		// Ensure CORS header is present for browser clients. Prefer backend's
-		// Access-Control-Allow-Origin when provided; otherwise use request Origin
-		// (set by browser) so dev server at http://localhost:5173 is allowed.
-		// Apply dev-only CORS fallback when enabled via DEV_ALLOW_UNAUTH_FABRIC.
-		// Dev-friendly CORS: if backend didn't set CORS or set '*', reflect
-		// the request Origin for common localhost dev ports so browser preflight
-		// passes when running the frontend locally on Vite (5173/5174).
-		origin := c.Request.Header.Get("Origin")
-		acao := c.Writer.Header().Get("Access-Control-Allow-Origin")
-		if acao == "" || acao == "*" {
-			if origin != "" {
-				// Allow common dev origins automatically
-				if strings.HasPrefix(origin, "http://localhost:517") || strings.HasPrefix(origin, "http://127.0.0.1:517") || strings.HasPrefix(origin, "http://localhost:3000") {
-					c.Header("Access-Control-Allow-Origin", origin)
-					c.Header("Access-Control-Allow-Credentials", "true")
-					// Allow common headers used by the frontend and preflight
-					c.Header("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept, Authorization, X-User-Id, X-Tenant-Id, X-Datasource-Id")
-					c.Header("Access-Control-Allow-Methods", "GET, POST, OPTIONS, PUT, PATCH, DELETE")
-					log.Printf("proxy: dev CORS reflected origin=%s path=%s original=%s", origin, c.Request.URL.Path, acao)
-				} else if strings.ToLower(getEnv("DEV_ALLOW_UNAUTH_FABRIC", "false")) == "true" {
-					// Fallback when explicit dev override is enabled
-					c.Header("Access-Control-Allow-Origin", origin)
-					c.Header("Access-Control-Allow-Credentials", "true")
-					c.Header("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept, Authorization, X-User-Id, X-Tenant-Id, X-Datasource-Id")
-					c.Header("Access-Control-Allow-Methods", "GET, POST, OPTIONS, PUT, PATCH, DELETE")
-					log.Printf("proxy: dev CORS override applied, origin=%s path=%s original=%s", origin, c.Request.URL.Path, acao)
-				}
-			} else {
-				// As a final fallback allow localhost:5173 for non-browser clients
-				c.Header("Access-Control-Allow-Origin", "http://localhost:5173")
-				log.Printf("proxy: dev CORS fallback applied, no Origin header present, using http://localhost:5173 for path=%s original=%s", c.Request.URL.Path, acao)
-			}
-		}
-		c.Writer.Write(respBody)
-	}
 }
