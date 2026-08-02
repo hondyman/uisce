@@ -107,7 +107,7 @@ func CleanupTempTables(tx *sqlx.Tx, datasourceID uuid.UUID) error {
 			source_node_id uuid,
 			target_node_id uuid,
 			edge_type_id uuid,
-			edge_type text,
+			edge_type_name text,
 			properties jsonb,
 			created_at timestamptz DEFAULT NOW(),
 			updated_at timestamptz DEFAULT NOW()
@@ -211,8 +211,8 @@ func InsertTempCatalogEdges(ctx context.Context, tx *sqlx.Tx, edges []models.Cat
 
 	// If no duplicates, proceed with insert
 	query := `
-		INSERT INTO temp_catalog_edge (id, core_id, tenant_id, tenant_datasource_id, source_node_id, target_node_id, edge_type_id, edge_type, properties)
-		VALUES (:id, :core_id, :tenant_id, :tenant_datasource_id, :source_node_id, :target_node_id, :edge_type_id, :edge_type, :properties)`
+		INSERT INTO temp_catalog_edge (id, core_id, tenant_id, tenant_datasource_id, source_node_id, target_node_id, edge_type_id, edge_type_name, properties)
+		VALUES (:id, :core_id, :tenant_id, :tenant_datasource_id, :source_node_id, :target_node_id, :edge_type_id, :edge_type_name, :properties)`
 
 	result, err := tx.NamedExecContext(ctx, query, edges)
 	if err != nil {
@@ -308,7 +308,7 @@ func MergeCatalogData(tx *sqlx.Tx, datasourceID uuid.UUID) (int64, int64, int64,
 				te.id, te.core_id, te.tenant_id, te.tenant_datasource_id,
 				source_map.final_id AS final_source_id,
 				target_map.final_id AS final_target_id,
-				te.edge_type_id, te.edge_type, te.properties
+				te.edge_type_id, te.edge_type_name, te.properties
 			FROM temp_catalog_edge te
 			LEFT JOIN node_id_mapping source_map ON te.source_node_id = source_map.temp_id
 			LEFT JOIN node_id_mapping target_map ON te.target_node_id = target_map.temp_id
@@ -317,15 +317,15 @@ func MergeCatalogData(tx *sqlx.Tx, datasourceID uuid.UUID) (int64, int64, int64,
 		ON target.tenant_datasource_id = source.tenant_datasource_id 
 		   AND target.source_node_id = source.final_source_id 
 		   AND target.target_node_id = source.final_target_id 
-		   AND target.edge_type = source.edge_type
+		   AND target.edge_type_id = source.edge_type_id
 		WHEN MATCHED THEN
 			UPDATE SET
 				properties = source.properties,
 				core_id = source.core_id,
 				updated_at = NOW()
 		WHEN NOT MATCHED THEN
-			INSERT (id, core_id, tenant_id, tenant_datasource_id, source_node_id, target_node_id, edge_type_id, edge_type, properties, created_at, updated_at)
-			VALUES (source.id, source.core_id, source.tenant_id, source.tenant_datasource_id, source.final_source_id, source.final_target_id, source.edge_type_id, source.edge_type, source.properties, NOW(), NOW())
+			INSERT (id, core_id, tenant_id, tenant_datasource_id, source_node_id, target_node_id, edge_type_id, relationship_type, properties, created_at, updated_at)
+			VALUES (source.id, source.core_id, source.tenant_id, source.tenant_datasource_id, source.final_source_id, source.final_target_id, source.edge_type_id, source.edge_type_name, source.properties, NOW(), NOW())
 	`, datasourceID)
 	if err != nil {
 		var pgErr *pgconn.PgError

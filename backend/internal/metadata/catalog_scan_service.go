@@ -384,7 +384,7 @@ func (s *CatalogScanService) getDatasourcesToScan(tenantDatasourceID *uuid.UUID)
 					)::jsonb
 				ELSE tpd.config 
 			END AS connection_details,
-			t.gold_copy AS is_gold_copy
+			t.is_gold_copy AS is_gold_copy
 		FROM
 			public.tenant_product_datasource tpd
 		LEFT JOIN
