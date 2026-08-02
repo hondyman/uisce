@@ -48,14 +48,14 @@ class ApiClient {
   }
 
   // SLA Analytics
-  async getSLAComplianceTrends(tenantId: string, limit = 30): Promise<SLAComplianceTrend[]> {
+  async getSLAComplianceTrends(_tenantId: string, limit = 30): Promise<SLAComplianceTrend[]> {
     const response = await this.client.get('/admin/ops/analytics/sla-trends', {
       params: { limit }
     })
     return response.data
   }
 
-  async getConflictResolutionTrend(tenantId: string, periodStart: string): Promise<ConflictResolutionTrend> {
+  async getConflictResolutionTrend(_tenantId: string, periodStart: string): Promise<ConflictResolutionTrend> {
     const response = await this.client.get('/admin/ops/analytics/conflict-trends', {
       params: { period_start: periodStart }
     })
@@ -74,13 +74,13 @@ class ApiClient {
   }
 
   // Predictions
-  async getChainPredictions(tenantId: string): Promise<ChainPrediction[]> {
+  async getChainPredictions(_tenantId: string): Promise<ChainPrediction[]> {
     const response = await this.client.get('/admin/ops/chains/predictions')
     return response.data
   }
 
   // Search and Filter
-  async searchChains(tenantId: string, query: string, limit = 50): Promise<Chain[]> {
+  async searchChains(_tenantId: string, query: string, limit = 50): Promise<Chain[]> {
     const response = await this.client.get('/admin/ops/chains/search', {
       params: { q: query, limit }
     })
@@ -94,7 +94,7 @@ class ApiClient {
 
   // Batch Operations
   async batchResolveConflicts(
-    tenantId: string,
+    _tenantId: string,
     conflictIds: string[],
     rule: 'priority' | 'first_win' | 'serial_execute'
   ): Promise<{ batch_id: string }> {
@@ -111,12 +111,12 @@ class ApiClient {
   }
 
   // Reports
-  async getScheduledReports(tenantId: string): Promise<any[]> {
+  async getScheduledReports(_tenantId: string): Promise<any[]> {
     const response = await this.client.get('/admin/ops/reports')
     return response.data
   }
 
-  async generateReport(tenantId: string, reportType: string, startDate: string, endDate: string): Promise<any> {
+  async generateReport(_tenantId: string, reportType: string, startDate: string, endDate: string): Promise<any> {
     const response = await this.client.post('/admin/ops/reports/generate', {
       report_type: reportType,
       start_date: startDate,

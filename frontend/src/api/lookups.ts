@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { useTenant } from '../contexts/TenantContext';
 import { devDebug } from '../utils/devLogger';
+import { apiClient } from '../utils/apiClient';
 
 export interface Lookup {
   id: string;
@@ -26,16 +27,15 @@ export function useLookups(tenantId?: string, q?: string, limit?: number) {
     queryKey: ['lookups', tenantId, q, limit],
     queryFn: async () => {
       if (!tenantId) return [] as Lookup[];
-      const params = new URLSearchParams({ tenant_id: tenantId });
+      const params = new URLSearchParams();
       if (q) params.set('q', q);
       if (limit && limit > 0) params.set('limit', String(limit));
-      const res = await fetch(`/api/lookups?${params.toString()}`, { credentials: 'include' });
+      const query = params.toString() ? `?${params.toString()}` : '';
+      const res = await apiClient(`/api/lookups${query}`);
       if (!res.ok) {
         const err = await res.text();
         throw new Error(err || 'Failed to fetch lookups');
       }
-      // API returns { items: Lookup[], next_cursor: number } for paginated responses.
-      // Normalize that shape to return the array of lookups so callers can assume an array.
       const raw = await res.json();
       if (Array.isArray(raw)) return raw as Lookup[];
       return (raw?.items as Lookup[]) || [];

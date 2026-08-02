@@ -63,7 +63,7 @@ function AppWithTheme() {
           },
           text: {
             primary: effectiveTheme === 'dark' ? '#e6edf3' : '#000000',
-            secondary: effectiveTheme === 'dark' ? '#8b949e' : '#666666',
+            secondary: effectiveTheme === 'dark' ? '#b0b8c4' : '#666666',
           },
         },
         components: {
