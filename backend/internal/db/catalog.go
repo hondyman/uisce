@@ -314,7 +314,7 @@ func MergeCatalogData(tx *sqlx.Tx, datasourceID uuid.UUID) (int64, int64, int64,
 			LEFT JOIN node_id_mapping target_map ON te.target_node_id = target_map.temp_id
 			WHERE te.tenant_datasource_id = $1
 		) AS source
-		ON target.tenant_datasource_id = source.tenant_datasource_id 
+		ON target.tenant_datasource_id = source.tenant_datasource_id::text 
 		   AND target.source_node_id = source.final_source_id 
 		   AND target.target_node_id = source.final_target_id 
 		   AND target.edge_type_id = source.edge_type_id
