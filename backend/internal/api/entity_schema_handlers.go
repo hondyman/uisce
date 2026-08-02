@@ -8,7 +8,6 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/hondyman/uisce/backend/internal/metadata"
 	"github.com/hondyman/uisce/backend/internal/security"
-	"github.com/hondyman/uisce/libs/jwt-middleware"
 )
 
 // EntitySchemaHandler wraps BusinessObjectService to provide entity schema endpoints
@@ -33,15 +32,7 @@ func (h *EntitySchemaHandler) RegisterRoutes(r chi.Router) {
 // GetEntitySchema returns all business objects as a map keyed by entity key
 // GET /api/entity-schema
 func (h *EntitySchemaHandler) GetEntitySchema(w http.ResponseWriter, r *http.Request) {
-	claims := jwtmiddleware.GetClaimsFromContext(r)
-	if claims == nil {
-		http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
-		return
-	}
-	tenantID := claims.TenantID
-	if tenantID == "" {
-		tenantID = r.URL.Query().Get("tenant_id")
-	}
+	tenantID := getSecureTenantID(r)
 
 	if tenantID == "" {
 		http.Error(w, "Missing tenant_id", http.StatusBadRequest)
@@ -148,15 +139,7 @@ func (h *EntitySchemaHandler) GetEntitySchema(w http.ResponseWriter, r *http.Req
 // SaveEntitySchema saves entity schema updates
 // POST /api/entity-schema
 func (h *EntitySchemaHandler) SaveEntitySchema(w http.ResponseWriter, r *http.Request) {
-	claims := jwtmiddleware.GetClaimsFromContext(r)
-	if claims == nil {
-		http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
-		return
-	}
-	tenantID := claims.TenantID
-	if tenantID == "" {
-		tenantID = r.URL.Query().Get("tenant_id")
-	}
+	tenantID := getSecureTenantID(r)
 
 	if tenantID == "" {
 		http.Error(w, "Missing tenant_id", http.StatusBadRequest)

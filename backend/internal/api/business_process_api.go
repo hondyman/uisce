@@ -125,7 +125,7 @@ func APICreateBusinessProcess(s *Server) http.HandlerFunc {
 			return
 		}
 
-		tenantID := r.URL.Query().Get("tenant_id")
+		tenantID := getSecureTenantID(r)
 		datasourceID := r.URL.Query().Get("datasource_id")
 		if tenantID == "" || datasourceID == "" {
 			http.Error(w, "tenant_id and datasource_id required", http.StatusBadRequest)
@@ -206,7 +206,7 @@ func APIListBusinessProcesses(s *Server) http.HandlerFunc {
 			return
 		}
 
-		tenantID := r.URL.Query().Get("tenant_id")
+		tenantID := getSecureTenantID(r)
 		datasourceID := r.URL.Query().Get("datasource_id")
 		if tenantID == "" || datasourceID == "" {
 			http.Error(w, "tenant_id and datasource_id required", http.StatusBadRequest)
@@ -266,7 +266,7 @@ func APIGetBusinessProcess(s *Server) http.HandlerFunc {
 			return
 		}
 
-		tenantID := r.URL.Query().Get("tenant_id")
+		tenantID := getSecureTenantID(r)
 		datasourceID := r.URL.Query().Get("datasource_id")
 		if tenantID == "" || datasourceID == "" {
 			http.Error(w, "tenant_id and datasource_id required", http.StatusBadRequest)
@@ -315,7 +315,7 @@ func APIStartBusinessProcessExecution(s *Server) http.HandlerFunc {
 			return
 		}
 
-		tenantID := r.URL.Query().Get("tenant_id")
+		tenantID := getSecureTenantID(r)
 		datasourceID := r.URL.Query().Get("datasource_id")
 		if tenantID == "" || datasourceID == "" {
 			http.Error(w, "tenant_id and datasource_id required", http.StatusBadRequest)
@@ -422,7 +422,7 @@ func APIGetBusinessProcessInstanceStatus(s *Server) http.HandlerFunc {
 			return
 		}
 
-		tenantID := r.URL.Query().Get("tenant_id")
+		tenantID := getSecureTenantID(r)
 		datasourceID := r.URL.Query().Get("datasource_id")
 		if tenantID == "" || datasourceID == "" {
 			http.Error(w, "tenant_id and datasource_id required", http.StatusBadRequest)
@@ -482,7 +482,7 @@ func APIApproveBusinessProcessStep(s *Server) http.HandlerFunc {
 			return
 		}
 
-		tenantID := r.URL.Query().Get("tenant_id")
+		tenantID := getSecureTenantID(r)
 		if tenantID == "" {
 			http.Error(w, "tenant_id required", http.StatusBadRequest)
 			return
@@ -556,7 +556,7 @@ func APIGetBusinessProcessAuditTrail(s *Server) http.HandlerFunc {
 			return
 		}
 
-		tenantID := r.URL.Query().Get("tenant_id")
+		tenantID := getSecureTenantID(r)
 		datasourceID := r.URL.Query().Get("datasource_id")
 		if tenantID == "" || datasourceID == "" {
 			http.Error(w, "tenant_id and datasource_id required", http.StatusBadRequest)

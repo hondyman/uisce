@@ -8,7 +8,6 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/hondyman/uisce/backend/internal/investment/alts"
-	"github.com/hondyman/uisce/libs/jwt-middleware"
 )
 
 type AltsHandler struct {
@@ -55,12 +54,8 @@ func (h *AltsHandler) CreateAsset(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *AltsHandler) ListAssets(w http.ResponseWriter, r *http.Request) {
-	tenantIDStr := jwtmiddleware.GetClaimsFromContext(r).TenantID // Or query param
-	if tenantIDStr == "" {
-		// Fallback for demo/testing
-		tenantIDStr = r.URL.Query().Get("tenant_id")
-	}
-	
+	tenantIDStr := getSecureTenantID(r)
+
 	if tenantIDStr == "" {
 		http.Error(w, "tenant_id is required", http.StatusBadRequest)
 		return

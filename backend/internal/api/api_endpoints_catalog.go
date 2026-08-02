@@ -96,7 +96,7 @@ func RegisterAPIEndpointsCatalogRoutes(r chi.Router, db *sql.DB) {
 // handleListAPIEndpoints retrieves all API endpoints with pagination and filtering
 func handleListAPIEndpoints(db *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		tenantID := r.URL.Query().Get("tenant_id")
+		tenantID := getSecureTenantID(r)
 		datasourceID := r.URL.Query().Get("datasource_id")
 
 		if tenantID == "" {
@@ -308,7 +308,7 @@ func handleCreateAPIEndpoint(db *sql.DB) http.HandlerFunc {
 // handleGetAPIEndpoint retrieves a specific API endpoint
 func handleGetAPIEndpoint(db *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		tenantID := r.URL.Query().Get("tenant_id")
+		tenantID := getSecureTenantID(r)
 		id := chi.URLParam(r, "id")
 
 		if tenantID == "" {
@@ -365,7 +365,7 @@ func handleGetAPIEndpoint(db *sql.DB) http.HandlerFunc {
 // handleUpdateAPIEndpoint updates an existing API endpoint
 func handleUpdateAPIEndpoint(db *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		tenantID := r.URL.Query().Get("tenant_id")
+		tenantID := getSecureTenantID(r)
 		id := chi.URLParam(r, "id")
 
 		if tenantID == "" {
@@ -444,7 +444,7 @@ func handleUpdateAPIEndpoint(db *sql.DB) http.HandlerFunc {
 // handleDeleteAPIEndpoint deletes an API endpoint
 func handleDeleteAPIEndpoint(db *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		tenantID := r.URL.Query().Get("tenant_id")
+		tenantID := getSecureTenantID(r)
 		id := chi.URLParam(r, "id")
 
 		if tenantID == "" {
@@ -475,7 +475,7 @@ func handleDeleteAPIEndpoint(db *sql.DB) http.HandlerFunc {
 // handleListAPIEndpointsByCategory retrieves endpoints by category
 func handleListAPIEndpointsByCategory(db *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		tenantID := r.URL.Query().Get("tenant_id")
+		tenantID := getSecureTenantID(r)
 		category := chi.URLParam(r, "category")
 
 		if tenantID == "" {
@@ -544,7 +544,7 @@ func handleListAPIEndpointsByCategory(db *sql.DB) http.HandlerFunc {
 // handleSearchAPIEndpoints searches for endpoints by multiple criteria
 func handleSearchAPIEndpoints(db *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		tenantID := r.URL.Query().Get("tenant_id")
+		tenantID := getSecureTenantID(r)
 		search := r.URL.Query().Get("q")
 		method := r.URL.Query().Get("method")
 		category := r.URL.Query().Get("category")
@@ -637,7 +637,7 @@ func handleSearchAPIEndpoints(db *sql.DB) http.HandlerFunc {
 // handleGetOpenAPISpec generates an OpenAPI specification for all endpoints
 func handleGetOpenAPISpec(db *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		tenantID := r.URL.Query().Get("tenant_id")
+		tenantID := getSecureTenantID(r)
 
 		if tenantID == "" {
 			writeJSONError(w, http.StatusBadRequest, "tenant_id is required", "missing_tenant", "")
@@ -688,7 +688,7 @@ func handleGetOpenAPISpec(db *sql.DB) http.HandlerFunc {
 // handleGetEndpointDocumentation retrieves documentation for a specific endpoint
 func handleGetEndpointDocumentation(db *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		tenantID := r.URL.Query().Get("tenant_id")
+		tenantID := getSecureTenantID(r)
 		id := chi.URLParam(r, "id")
 
 		if tenantID == "" {

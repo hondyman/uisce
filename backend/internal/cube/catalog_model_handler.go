@@ -77,7 +77,7 @@ func (h *CatalogModelHandler) RegisterRoutes(r chi.Router) {
 
 // ListCoreModels returns all core models for a tenant
 func (h *CatalogModelHandler) ListCoreModels(w http.ResponseWriter, r *http.Request) {
-	tenantID := r.URL.Query().Get("tenant_id")
+	tenantID := getSecureTenantID(r)
 	datasourceID := r.URL.Query().Get("datasource_id")
 
 	if tenantID == "" || datasourceID == "" {
@@ -96,7 +96,7 @@ func (h *CatalogModelHandler) ListCoreModels(w http.ResponseWriter, r *http.Requ
 
 // SyncCoreModelsFromCatalog synchronizes core models from the metadata catalog
 func (h *CatalogModelHandler) SyncCoreModelsFromCatalog(w http.ResponseWriter, r *http.Request) {
-	tenantID := r.URL.Query().Get("tenant_id")
+	tenantID := getSecureTenantID(r)
 	datasourceID := r.URL.Query().Get("datasource_id")
 
 	if tenantID == "" || datasourceID == "" {
@@ -168,7 +168,7 @@ func (h *CatalogModelHandler) GetCoreModelYAML(w http.ResponseWriter, r *http.Re
 // DeleteCoreModel deletes a core model
 func (h *CatalogModelHandler) DeleteCoreModel(w http.ResponseWriter, r *http.Request) {
 	modelID := chi.URLParam(r, "id")
-	tenantID := r.URL.Query().Get("tenant_id")
+	tenantID := getSecureTenantID(r)
 
 	id, err := uuid.Parse(modelID)
 	if err != nil {
@@ -195,7 +195,7 @@ func (h *CatalogModelHandler) DeleteCoreModel(w http.ResponseWriter, r *http.Req
 
 // ListCustomModels returns all custom models for a tenant
 func (h *CatalogModelHandler) ListCustomModels(w http.ResponseWriter, r *http.Request) {
-	tenantID := r.URL.Query().Get("tenant_id")
+	tenantID := getSecureTenantID(r)
 	datasourceID := r.URL.Query().Get("datasource_id")
 
 	if tenantID == "" || datasourceID == "" {
@@ -395,7 +395,7 @@ func (h *CatalogModelHandler) UpdateCustomModel(w http.ResponseWriter, r *http.R
 // DeleteCustomModel deletes a custom model
 func (h *CatalogModelHandler) DeleteCustomModel(w http.ResponseWriter, r *http.Request) {
 	modelID := chi.URLParam(r, "id")
-	tenantID := r.URL.Query().Get("tenant_id")
+	tenantID := getSecureTenantID(r)
 
 	id, err := uuid.Parse(modelID)
 	if err != nil {
@@ -603,7 +603,7 @@ func (h *CatalogModelHandler) ValidateYAML(w http.ResponseWriter, r *http.Reques
 
 // ListSecurityPolicies returns all security policies for a tenant
 func (h *CatalogModelHandler) ListSecurityPolicies(w http.ResponseWriter, r *http.Request) {
-	tenantID := r.URL.Query().Get("tenant_id")
+	tenantID := getSecureTenantID(r)
 	if tenantID == "" {
 		writeError(w, http.StatusBadRequest, "tenant_id is required")
 		return
@@ -644,7 +644,7 @@ func (h *CatalogModelHandler) CreateSecurityPolicy(w http.ResponseWriter, r *htt
 // GetSecurityPolicy returns a single security policy
 func (h *CatalogModelHandler) GetSecurityPolicy(w http.ResponseWriter, r *http.Request) {
 	policyID := chi.URLParam(r, "id")
-	tenantID := r.URL.Query().Get("tenant_id")
+	tenantID := getSecureTenantID(r)
 
 	pid, err := uuid.Parse(policyID)
 	if err != nil {
@@ -696,7 +696,7 @@ func (h *CatalogModelHandler) UpdateSecurityPolicy(w http.ResponseWriter, r *htt
 // DeleteSecurityPolicy deletes a security policy
 func (h *CatalogModelHandler) DeleteSecurityPolicy(w http.ResponseWriter, r *http.Request) {
 	policyID := chi.URLParam(r, "id")
-	tenantID := r.URL.Query().Get("tenant_id")
+	tenantID := getSecureTenantID(r)
 
 	pid, err := uuid.Parse(policyID)
 	if err != nil {
@@ -753,7 +753,7 @@ func (h *CatalogModelHandler) GetCacheStats(w http.ResponseWriter, r *http.Reque
 
 // InvalidateCache invalidates the security cache for a tenant
 func (h *CatalogModelHandler) InvalidateCache(w http.ResponseWriter, r *http.Request) {
-	tenantID := r.URL.Query().Get("tenant_id")
+	tenantID := getSecureTenantID(r)
 	if tenantID == "" {
 		writeError(w, http.StatusBadRequest, "tenant_id is required")
 		return
@@ -1196,7 +1196,7 @@ func (h *CatalogModelHandler) buildCustomModelFromWizard(tenantID, datasourceID,
 
 // ListCatalogTables lists tables from the metadata catalog
 func (h *CatalogModelHandler) ListCatalogTables(w http.ResponseWriter, r *http.Request) {
-	tenantID := r.URL.Query().Get("tenant_id")
+	tenantID := getSecureTenantID(r)
 	datasourceID := r.URL.Query().Get("datasource_id")
 
 	if tenantID == "" || datasourceID == "" {
@@ -1284,7 +1284,7 @@ func (h *CatalogModelHandler) ListCatalogColumns(w http.ResponseWriter, r *http.
 
 // ListCatalogRelationships lists relationships between catalog tables
 func (h *CatalogModelHandler) ListCatalogRelationships(w http.ResponseWriter, r *http.Request) {
-	tenantID := r.URL.Query().Get("tenant_id")
+	tenantID := getSecureTenantID(r)
 	_ = r.URL.Query().Get("datasource_id") // May be used for filtering
 
 	if tenantID == "" {

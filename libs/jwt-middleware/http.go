@@ -122,11 +122,8 @@ func RequireTenant(next http.Handler) http.Handler {
 			return
 		}
 
-		// Get tenant ID from header or query parameter
+		// Get tenant ID from header only (JWT-authoritative, no URL fallback)
 		tenantID := r.Header.Get("X-Tenant-ID")
-		if tenantID == "" {
-			tenantID = r.URL.Query().Get("tenant_id")
-		}
 
 		if tenantID == "" {
 			http.Error(w, `{"error": "missing tenant_id"}`, http.StatusBadRequest)
@@ -253,4 +250,32 @@ func GetGinClaimsFromContext(c *gin.Context) *JWTClaims {
 		return GetClaimsFromContext(c.Request)
 	}
 	return nil
+}
+
+// RejectTenantIDInURL middleware rejects requests that contain tenant_id
+// in URL query parameters for tenant-scoped endpoints.
+// This is a security measure to prevent tenant ID injection via URL parameters.
+// Tenant ID must come from validated JWT claims or X-Tenant-ID header.
+func RejectTenantIDInURL(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Has("tenant_id") {
+			http.Error(w, `{"error": "forbidden", "message": "tenant_id in URL query params is not allowed. Use X-Tenant-ID header instead."}`, http.StatusForbidden)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+// RejectTenantIDInURLGin is a Gin middleware version of RejectTenantIDInURL
+func RejectTenantIDInURLGin() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if c.Request.URL.Query().Has("tenant_id") {
+			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{
+				"error":   "forbidden",
+				"message": "tenant_id in URL query params is not allowed. Use X-Tenant-ID header instead.",
+			})
+			return
+		}
+		c.Next()
+	}
 }

@@ -61,12 +61,9 @@ func (h *GlossaryHandler) RegisterRoutes(r chi.Router) {
 func (h *GlossaryHandler) listTerms(w http.ResponseWriter, r *http.Request, termType string) {
 	tenantID, _ := identity.TenantIDFromContext(r.Context())
 
-	// Fallback to Header/Query if Context is empty
+	// Use secure tenant ID from JWT claims or X-Tenant-ID header
 	if tenantID == "" {
-		tenantID = jwtmiddleware.GetClaimsFromContext(r).TenantID
-		if tenantID == "" {
-			tenantID = r.URL.Query().Get("tenant_id")
-		}
+		tenantID = getSecureTenantID(r)
 	}
 
 	if tenantID == "" {
@@ -195,13 +192,9 @@ func (h *GlossaryHandler) ListEdges(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
 		return
 	}
-	tenantID := claims.TenantID
+	tenantID := getSecureTenantID(r)
 	tenantDatasourceID := r.Header.Get("X-Tenant-Datasource-ID")
 
-	// Allow query params as fallback
-	if tenantID == "" {
-		tenantID = r.URL.Query().Get("tenant_id")
-	}
 	if tenantDatasourceID == "" {
 		tenantDatasourceID = r.URL.Query().Get("datasource_id")
 	}
@@ -327,13 +320,9 @@ func (h *GlossaryHandler) CreateTerm(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
 		return
 	}
-	tenantID := claims.TenantID
+	tenantID := getSecureTenantID(r)
 	tenantDatasourceID := r.Header.Get("X-Tenant-Datasource-ID")
 
-	// Allow query params as fallback
-	if tenantID == "" {
-		tenantID = r.URL.Query().Get("tenant_id")
-	}
 	if tenantDatasourceID == "" {
 		tenantDatasourceID = r.URL.Query().Get("datasource_id")
 	}
@@ -581,13 +570,9 @@ func (h *GlossaryHandler) UpdateTerm(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
 		return
 	}
-	tenantID := claims.TenantID
+	tenantID := getSecureTenantID(r)
 	tenantDatasourceID := r.Header.Get("X-Tenant-Datasource-ID")
 
-	// Allow query params as fallback
-	if tenantID == "" {
-		tenantID = r.URL.Query().Get("tenant_id")
-	}
 	if tenantDatasourceID == "" {
 		tenantDatasourceID = r.URL.Query().Get("datasource_id")
 	}
@@ -967,13 +952,9 @@ func (h *GlossaryHandler) CreateEdge(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
 		return
 	}
-	tenantID := claims.TenantID
+	tenantID := getSecureTenantID(r)
 	tenantDatasourceID := r.Header.Get("X-Tenant-Datasource-ID")
 
-	// Allow query params as fallback
-	if tenantID == "" {
-		tenantID = r.URL.Query().Get("tenant_id")
-	}
 	if tenantDatasourceID == "" {
 		tenantDatasourceID = r.URL.Query().Get("datasource_id")
 	}
@@ -1142,11 +1123,8 @@ func (h *GlossaryHandler) DeleteTerm(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Get tenant and datasource from query params or headers
-	tenantID := r.URL.Query().Get("tenant_id")
-	if tenantID == "" {
-		tenantID = jwtmiddleware.GetClaimsFromContext(r).TenantID
-	}
+	// Get tenant and datasource from secure source
+	tenantID := getSecureTenantID(r)
 
 	datasourceID := r.URL.Query().Get("datasource_id")
 	if datasourceID == "" {
@@ -1208,11 +1186,7 @@ func (h *GlossaryHandler) DeleteEdge(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
 		return
 	}
-	tenantID := claims.TenantID
-
-	if tenantID == "" {
-		tenantID = r.URL.Query().Get("tenant_id")
-	}
+	tenantID := getSecureTenantID(r)
 
 	if tenantID == "" {
 		http.Error(w, "X-Tenant-ID header/param is required", http.StatusBadRequest)
@@ -1267,12 +1241,9 @@ func (h *GlossaryHandler) UpdateEdge(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
 		return
 	}
-	tenantID := claims.TenantID
+	tenantID := getSecureTenantID(r)
 	tenantDatasourceID := r.Header.Get("X-Tenant-Datasource-ID")
 
-	if tenantID == "" {
-		tenantID = r.URL.Query().Get("tenant_id")
-	}
 	if tenantDatasourceID == "" {
 		tenantDatasourceID = r.URL.Query().Get("datasource_id")
 	}
@@ -1494,7 +1465,7 @@ type CubeYamlExportResponse struct {
 
 // HandleExportSemanticTermsAsCubeYaml exports all semantic terms as Cube.js configuration
 func (h *GlossaryHandler) HandleExportSemanticTermsAsCubeYaml(w http.ResponseWriter, r *http.Request) {
-	tenantID := r.URL.Query().Get("tenant_id")
+	tenantID := getSecureTenantID(r)
 	datasourceID := r.URL.Query().Get("datasource_id")
 
 	if tenantID == "" || datasourceID == "" {

@@ -82,7 +82,7 @@ func (h *AIRoutingHandlers) RouteWorkflow(w http.ResponseWriter, r *http.Request
 // GetMetrics returns current routing metrics
 // GET /api/ai-routing/metrics
 func (h *AIRoutingHandlers) GetMetrics(w http.ResponseWriter, r *http.Request) {
-	tenantID := r.URL.Query().Get("tenant_id")
+	tenantID := getSecureTenantID(r)
 	if tenantID == "" {
 		http.Error(w, "tenant_id required", http.StatusBadRequest)
 		return
@@ -107,7 +107,7 @@ func (h *AIRoutingHandlers) GetLiveDecisions(w http.ResponseWriter, r *http.Requ
 		limit = 100
 	}
 
-	tenantID := r.URL.Query().Get("tenant_id")
+	tenantID := getSecureTenantID(r)
 	if tenantID == "" {
 		http.Error(w, "tenant_id required", http.StatusBadRequest)
 		return
@@ -157,7 +157,7 @@ func (h *AIRoutingHandlers) RecordOutcome(w http.ResponseWriter, r *http.Request
 // GetBranchPerformance returns performance metrics per branch
 // GET /api/ai-routing/branch-performance
 func (h *AIRoutingHandlers) GetBranchPerformance(w http.ResponseWriter, r *http.Request) {
-	tenantID := r.URL.Query().Get("tenant_id")
+	tenantID := getSecureTenantID(r)
 	if tenantID == "" {
 		http.Error(w, "tenant_id required", http.StatusBadRequest)
 		return
@@ -204,7 +204,7 @@ func (h *AIRoutingHandlers) GetDecisionHistory(w http.ResponseWriter, r *http.Re
 // GetModelPerformance returns ML model performance metrics
 // GET /api/ai-routing/model-performance
 func (h *AIRoutingHandlers) GetModelPerformance(w http.ResponseWriter, r *http.Request) {
-	tenantID := r.URL.Query().Get("tenant_id")
+	tenantID := getSecureTenantID(r)
 	if tenantID == "" {
 		http.Error(w, "tenant_id required", http.StatusBadRequest)
 		return

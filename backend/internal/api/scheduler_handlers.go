@@ -79,10 +79,7 @@ func (h *SchedulerHandlers) ListJobs(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
 		return
 	}
-	tenantID := claims.TenantID
-	if tenantID == "" {
-		tenantID = r.URL.Query().Get("tenant_id")
-	}
+	tenantID := getSecureTenantID(r)
 	if tenantID == "" {
 		respondWithError(w, http.StatusBadRequest, "tenant_id is required")
 		return
@@ -126,10 +123,7 @@ func (h *SchedulerHandlers) CreateJob(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
 		return
 	}
-	tenantID := claims.TenantID
-	if tenantID == "" {
-		tenantID = r.URL.Query().Get("tenant_id")
-	}
+	tenantID := getSecureTenantID(r)
 	if tenantID == "" {
 		respondWithError(w, http.StatusBadRequest, "tenant_id is required")
 		return
@@ -317,10 +311,7 @@ func (h *SchedulerHandlers) ListDAGs(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
 		return
 	}
-	tenantID := claims.TenantID
-	if tenantID == "" {
-		tenantID = r.URL.Query().Get("tenant_id")
-	}
+	tenantID := getSecureTenantID(r)
 	if tenantID == "" {
 		respondWithError(w, http.StatusBadRequest, "tenant_id is required")
 		return
@@ -351,10 +342,7 @@ func (h *SchedulerHandlers) CreateDAG(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
 		return
 	}
-	tenantID := claims.TenantID
-	if tenantID == "" {
-		tenantID = r.URL.Query().Get("tenant_id")
-	}
+	tenantID := getSecureTenantID(r)
 	if tenantID == "" {
 		respondWithError(w, http.StatusBadRequest, "tenant_id is required")
 		return
@@ -532,10 +520,7 @@ func (h *SchedulerHandlers) GetAISuggestions(w http.ResponseWriter, r *http.Requ
 		http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
 		return
 	}
-	tenantID := claims.TenantID
-	if tenantID == "" {
-		tenantID = r.URL.Query().Get("tenant_id")
-	}
+	tenantID := getSecureTenantID(r)
 	if tenantID == "" {
 		respondWithError(w, http.StatusBadRequest, "tenant_id is required")
 		return
@@ -611,10 +596,7 @@ func (h *SchedulerHandlers) GetStats(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
 		return
 	}
-	tenantID := claims.TenantID
-	if tenantID == "" {
-		tenantID = r.URL.Query().Get("tenant_id")
-	}
+	tenantID := getSecureTenantID(r)
 	if tenantID == "" {
 		respondWithError(w, http.StatusBadRequest, "tenant_id is required")
 		return

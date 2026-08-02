@@ -8,7 +8,6 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
-	"github.com/hondyman/uisce/libs/jwt-middleware"
 )
 
 // CubeAdminHandler provides HTTP handlers for the Cube admin console
@@ -85,10 +84,7 @@ func (h *CubeAdminHandler) RegisterRoutes(r chi.Router) {
 
 // Context helpers
 func getTenantID(r *http.Request) uuid.UUID {
-	tidStr := jwtmiddleware.GetClaimsFromContext(r).TenantID
-	if tidStr == "" {
-		tidStr = r.URL.Query().Get("tenant_id")
-	}
+	tidStr := getSecureTenantID(r)
 	tid, _ := uuid.Parse(tidStr)
 	return tid
 }

@@ -11,7 +11,7 @@ export const customComponentService = {
    */
   async listComponents(tenantId: string, datasourceId: string): Promise<CustomComponent[]> {
     const response = await fetch(
-      resolveApiUrl(`/api/custom-components?tenant_id=${tenantId}&datasource_id=${datasourceId}`),
+      resolveApiUrl(`/api/custom-components`),
       {
         method: 'GET',
         headers: {
@@ -35,7 +35,7 @@ export const customComponentService = {
    */
   async getComponent(tenantId: string, datasourceId: string, componentId: string): Promise<CustomComponent> {
     const response = await fetch(
-      resolveApiUrl(`/api/custom-components/${componentId}?tenant_id=${tenantId}&datasource_id=${datasourceId}`),
+      resolveApiUrl(`/api/custom-components/${componentId}`),
       {
         method: 'GET',
         headers: {
@@ -58,7 +58,7 @@ export const customComponentService = {
    */
   async createComponent(tenantId: string, datasourceId: string, component: CustomComponent): Promise<CustomComponentResponse> {
     const response = await fetch(
-      resolveApiUrl(`/api/custom-components?tenant_id=${tenantId}&datasource_id=${datasourceId}`),
+      resolveApiUrl(`/api/custom-components`),
       {
         method: 'POST',
         headers: {
@@ -68,8 +68,6 @@ export const customComponentService = {
         },
         body: JSON.stringify({
           ...component,
-          tenant_id: tenantId,
-          datasource_id: datasourceId,
         }),
       }
     );
@@ -86,7 +84,7 @@ export const customComponentService = {
    */
   async updateComponent(tenantId: string, datasourceId: string, component: CustomComponent): Promise<CustomComponentResponse> {
     const response = await fetch(
-      resolveApiUrl(`/api/custom-components/${component.id}?tenant_id=${tenantId}&datasource_id=${datasourceId}`),
+      resolveApiUrl(`/api/custom-components/${component.id}`),
       {
         method: 'PUT',
         headers: {
@@ -96,8 +94,6 @@ export const customComponentService = {
         },
         body: JSON.stringify({
           ...component,
-          tenant_id: tenantId,
-          datasource_id: datasourceId,
         }),
       }
     );
@@ -114,7 +110,7 @@ export const customComponentService = {
    */
   async deleteComponent(tenantId: string, datasourceId: string, componentId: string): Promise<void> {
     const response = await fetch(
-      resolveApiUrl(`/api/custom-components/${componentId}?tenant_id=${tenantId}&datasource_id=${datasourceId}`),
+      resolveApiUrl(`/api/custom-components/${componentId}`),
       {
         method: 'DELETE',
         headers: {
@@ -139,7 +135,7 @@ export const customComponentService = {
     apiEndpoint: string
   ): Promise<any> {
     const response = await fetch(
-      resolveApiUrl(`/api/custom-components/test-api?tenant_id=${tenantId}&datasource_id=${datasourceId}`),
+      resolveApiUrl(`/api/custom-components/test-api`),
       {
         method: 'POST',
         headers: {
@@ -163,7 +159,7 @@ export const customComponentService = {
    */
   async exportComponents(tenantId: string, datasourceId: string): Promise<Blob> {
     const response = await fetch(
-      resolveApiUrl(`/api/custom-components/export?tenant_id=${tenantId}&datasource_id=${datasourceId}`),
+      resolveApiUrl(`/api/custom-components/export`),
       {
         method: 'GET',
         headers: {
@@ -188,7 +184,7 @@ export const customComponentService = {
     formData.append('file', file);
 
     const response = await fetch(
-      resolveApiUrl(`/api/custom-components/import?tenant_id=${tenantId}&datasource_id=${datasourceId}`),
+      resolveApiUrl(`/api/custom-components/import`),
       {
         method: 'POST',
         headers: {

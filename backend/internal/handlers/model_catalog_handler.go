@@ -117,8 +117,8 @@ func retryInsertGeneratedModel(h *ModelCatalogHandler, tenantID uuid.UUID, datas
 func (h *ModelCatalogHandler) GetModels(w http.ResponseWriter, r *http.Request) {
 	logger := logging.GetLogger().Sugar()
 
-	tenantIDStr := r.URL.Query().Get("tenant_id")
-	datasourceIDStr := r.URL.Query().Get("datasource_id")
+	tenantIDStr := getSecureTenantID(r)
+	datasourceIDStr := r.Header.Get("X-Tenant-Datasource-ID")
 
 	tenantID, err := uuid.Parse(tenantIDStr)
 	if err != nil {
@@ -164,8 +164,8 @@ func (h *ModelCatalogHandler) GetModels(w http.ResponseWriter, r *http.Request) 
 func (h *ModelCatalogHandler) CreateCustomModel(w http.ResponseWriter, r *http.Request) {
 	logger := logging.GetLogger().Sugar()
 
-	tenantIDStr := r.URL.Query().Get("tenant_id")
-	datasourceIDStr := r.URL.Query().Get("datasource_id")
+	tenantIDStr := getSecureTenantID(r)
+	datasourceIDStr := r.Header.Get("X-Tenant-Datasource-ID")
 
 	var bodyReq CreateCustomModelRequest
 	if err := json.NewDecoder(r.Body).Decode(&bodyReq); err != nil {
@@ -286,7 +286,7 @@ func (h *ModelCatalogHandler) CreateCustomModel(w http.ResponseWriter, r *http.R
 func (h *ModelCatalogHandler) CloneModel(w http.ResponseWriter, r *http.Request) {
 	logger := logging.GetLogger().Sugar()
 
-	tenantIDStr := r.URL.Query().Get("tenant_id")
+	tenantIDStr := getSecureTenantID(r)
 	datasourceIDStr := r.URL.Query().Get("datasource_id")
 
 	var bodyReq CloneModelRequest
@@ -353,7 +353,7 @@ func (h *ModelCatalogHandler) CloneModel(w http.ResponseWriter, r *http.Request)
 func (h *ModelCatalogHandler) GetModel(w http.ResponseWriter, r *http.Request) {
 	logger := logging.GetLogger().Sugar()
 
-	tenantIDStr := r.URL.Query().Get("tenant_id")
+	tenantIDStr := getSecureTenantID(r)
 	datasourceIDStr := r.URL.Query().Get("datasource_id")
 	modelID := chi.URLParam(r, "model_id")
 
@@ -416,7 +416,7 @@ func (h *ModelCatalogHandler) GetModel(w http.ResponseWriter, r *http.Request) {
 func (h *ModelCatalogHandler) UpdateModel(w http.ResponseWriter, r *http.Request) {
 	logger := logging.GetLogger().Sugar()
 
-	tenantIDStr := r.URL.Query().Get("tenant_id")
+	tenantIDStr := getSecureTenantID(r)
 	datasourceIDStr := r.URL.Query().Get("datasource_id")
 	modelIDStr := chi.URLParam(r, "model_id")
 
@@ -570,7 +570,7 @@ func (h *ModelCatalogHandler) UpdateModel(w http.ResponseWriter, r *http.Request
 func (h *ModelCatalogHandler) DeleteModel(w http.ResponseWriter, r *http.Request) {
 	logger := logging.GetLogger().Sugar()
 
-	tenantIDStr := r.URL.Query().Get("tenant_id")
+	tenantIDStr := getSecureTenantID(r)
 	datasourceIDStr := r.URL.Query().Get("datasource_id")
 	modelID := chi.URLParam(r, "model_id")
 
@@ -788,7 +788,7 @@ func (h *ModelCatalogHandler) DeleteModel(w http.ResponseWriter, r *http.Request
 func (h *ModelCatalogHandler) CreateGeneratedModel(w http.ResponseWriter, r *http.Request) {
 	logger := logging.GetLogger().Sugar()
 
-	tenantIDStr := r.URL.Query().Get("tenant_id")
+	tenantIDStr := getSecureTenantID(r)
 	datasourceIDStr := r.URL.Query().Get("datasource_id")
 
 	var bodyReq CreateGeneratedModelRequest

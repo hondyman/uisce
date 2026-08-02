@@ -70,15 +70,13 @@ func handleCreateLookup(db *sql.DB) http.HandlerFunc {
 				tenantID = user.TenantID
 			}
 		}
-		// Priority 3: query param for backwards compatibility
 		if tenantID == "" {
-			tenantID = r.URL.Query().Get("tenant_id")
+			tenantID = r.Header.Get("X-Tenant-ID")
 		}
 		if tenantID == "" {
 			writeJSONError(w, http.StatusBadRequest, "tenant_id is required", "missing_tenant", nil)
 			return
 		}
-		log.Printf("[handleCreateLookup] Using tenantID=%s (header=%s, query=%s)", tenantID, jwtmiddleware.GetClaimsFromContext(r).TenantID, r.URL.Query().Get("tenant_id"))
 
 		var payload struct {
 			Name        string  `json:"name"`
@@ -130,7 +128,7 @@ func handleCreateLookup(db *sql.DB) http.HandlerFunc {
 // handleUpdateLookup updates a lookup's name/description
 func handleUpdateLookup(db *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		tenantID := r.URL.Query().Get("tenant_id")
+		tenantID := getSecureTenantID(r)
 		if tenantID == "" {
 			writeJSONError(w, http.StatusBadRequest, "tenant_id is required", "missing_tenant", nil)
 			return
@@ -161,7 +159,7 @@ func handleUpdateLookup(db *sql.DB) http.HandlerFunc {
 // handleDeleteLookup deletes a lookup and its values
 func handleDeleteLookup(db *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		tenantID := r.URL.Query().Get("tenant_id")
+		tenantID := getSecureTenantID(r)
 		if tenantID == "" {
 			writeJSONError(w, http.StatusBadRequest, "tenant_id is required", "missing_tenant", nil)
 			return
@@ -211,15 +209,13 @@ func handleCreateLookupValue(db *sql.DB) http.HandlerFunc {
 				tenantID = user.TenantID
 			}
 		}
-		// Priority 3: query param for backwards compatibility
 		if tenantID == "" {
-			tenantID = r.URL.Query().Get("tenant_id")
+			tenantID = r.Header.Get("X-Tenant-ID")
 		}
 		if tenantID == "" {
 			writeJSONError(w, http.StatusBadRequest, "tenant_id is required", "missing_tenant", nil)
 			return
 		}
-		log.Printf("[handleCreateLookupValue] Using tenantID=%s (header=%s, query=%s)", tenantID, jwtmiddleware.GetClaimsFromContext(r).TenantID, r.URL.Query().Get("tenant_id"))
 
 		lookupID := chi.URLParam(r, "id")
 		if lookupID == "" {
@@ -282,7 +278,7 @@ func handleCreateLookupValue(db *sql.DB) http.HandlerFunc {
 // handleUpdateLookupValue updates an existing lookup value
 func handleUpdateLookupValue(db *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		tenantID := r.URL.Query().Get("tenant_id")
+		tenantID := getSecureTenantID(r)
 		if tenantID == "" {
 			writeJSONError(w, http.StatusBadRequest, "tenant_id is required", "missing_tenant", nil)
 			return
@@ -321,7 +317,7 @@ func handleUpdateLookupValue(db *sql.DB) http.HandlerFunc {
 // handleDeleteLookupValue deletes a lookup value
 func handleDeleteLookupValue(db *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		tenantID := r.URL.Query().Get("tenant_id")
+		tenantID := getSecureTenantID(r)
 		if tenantID == "" {
 			writeJSONError(w, http.StatusBadRequest, "tenant_id is required", "missing_tenant", nil)
 			return
@@ -343,7 +339,7 @@ func handleDeleteLookupValue(db *sql.DB) http.HandlerFunc {
 // handleListLookups returns configured lookup tables for a tenant
 func handleListLookups(db *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		tenantID := r.URL.Query().Get("tenant_id")
+		tenantID := getSecureTenantID(r)
 		q := r.URL.Query().Get("q")
 		limitStr := r.URL.Query().Get("limit")
 		limit := 50
@@ -457,7 +453,7 @@ func handleListLookups(db *sql.DB) http.HandlerFunc {
 // Supports both static lookup_values and table-backed lookups (if source_table is set)
 func handleGetLookupValues(db *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		tenantID := r.URL.Query().Get("tenant_id")
+		tenantID := getSecureTenantID(r)
 		if tenantID == "" {
 			http.Error(w, "tenant_id is required", http.StatusBadRequest)
 			return
@@ -652,7 +648,7 @@ func handleGetLookupValues(db *sql.DB) http.HandlerFunc {
 // handlePropagateLookup copies a lookup and its values to all other tenants
 func handlePropagateLookup(db *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		srcTenantID := r.URL.Query().Get("tenant_id")
+		srcTenantID := getSecureTenantID(r)
 		if srcTenantID == "" {
 			writeJSONError(w, http.StatusBadRequest, "tenant_id is required", "missing_tenant", nil)
 			return
@@ -789,8 +785,8 @@ func handlePropagateLookup(db *sql.DB) http.HandlerFunc {
 // handleExportLookupValues exports all lookup values for a specific dataset in CSV format
 func handleExportLookupValues(db *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		tenantID := r.URL.Query().Get("tenant_id")
-		datasourceID := r.URL.Query().Get("datasource_id")
+		tenantID := getSecureTenantID(r)
+		datasourceID := r.Header.Get("X-Tenant-Datasource-ID")
 		if tenantID == "" {
 			http.Error(w, "tenant_id is required", http.StatusBadRequest)
 			return

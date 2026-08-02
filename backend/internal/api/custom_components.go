@@ -62,7 +62,7 @@ func (s *Server) registerCustomComponentRoutes(r chi.Router) {
 
 // listCustomComponents lists all custom components for a tenant/datasource
 func (s *Server) listCustomComponents(w http.ResponseWriter, r *http.Request) {
-	tenantID := r.URL.Query().Get("tenant_id")
+	tenantID := getSecureTenantID(r)
 	datasourceID := r.URL.Query().Get("datasource_id")
 
 	if tenantID == "" || datasourceID == "" {
@@ -155,7 +155,7 @@ func (s *Server) listCustomComponents(w http.ResponseWriter, r *http.Request) {
 
 // createCustomComponent creates a new custom component
 func (s *Server) createCustomComponent(w http.ResponseWriter, r *http.Request) {
-	tenantID := r.URL.Query().Get("tenant_id")
+	tenantID := getSecureTenantID(r)
 	datasourceID := r.URL.Query().Get("datasource_id")
 
 	if tenantID == "" || datasourceID == "" {
@@ -228,7 +228,7 @@ func (s *Server) createCustomComponent(w http.ResponseWriter, r *http.Request) {
 // getCustomComponent retrieves a single custom component
 func (s *Server) getCustomComponent(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
-	tenantID := r.URL.Query().Get("tenant_id")
+	tenantID := getSecureTenantID(r)
 	datasourceID := r.URL.Query().Get("datasource_id")
 
 	if tenantID == "" || datasourceID == "" {
@@ -310,7 +310,7 @@ func (s *Server) getCustomComponent(w http.ResponseWriter, r *http.Request) {
 // updateCustomComponent updates an existing custom component
 func (s *Server) updateCustomComponent(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
-	tenantID := r.URL.Query().Get("tenant_id")
+	tenantID := getSecureTenantID(r)
 	datasourceID := r.URL.Query().Get("datasource_id")
 
 	if tenantID == "" || datasourceID == "" {
@@ -378,7 +378,7 @@ func (s *Server) updateCustomComponent(w http.ResponseWriter, r *http.Request) {
 // deleteCustomComponent soft-deletes a custom component
 func (s *Server) deleteCustomComponent(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
-	tenantID := r.URL.Query().Get("tenant_id")
+	tenantID := getSecureTenantID(r)
 	datasourceID := r.URL.Query().Get("datasource_id")
 
 	if tenantID == "" || datasourceID == "" {
@@ -425,7 +425,7 @@ func (s *Server) deleteCustomComponent(w http.ResponseWriter, r *http.Request) {
 
 // testComponentAPI tests connectivity to an API component
 func (s *Server) testComponentAPI(w http.ResponseWriter, r *http.Request) {
-	tenantID := r.URL.Query().Get("tenant_id")
+	tenantID := getSecureTenantID(r)
 	datasourceID := r.URL.Query().Get("datasource_id")
 
 	if tenantID == "" || datasourceID == "" {
@@ -512,7 +512,7 @@ func (s *Server) testComponentAPI(w http.ResponseWriter, r *http.Request) {
 
 // exportComponents exports all components as JSON or ZIP
 func (s *Server) exportComponents(w http.ResponseWriter, r *http.Request) {
-	tenantID := r.URL.Query().Get("tenant_id")
+	tenantID := getSecureTenantID(r)
 	datasourceID := r.URL.Query().Get("datasource_id")
 	format := r.URL.Query().Get("format") // "json" or "zip"
 
@@ -624,7 +624,7 @@ func (s *Server) exportComponents(w http.ResponseWriter, r *http.Request) {
 
 // importComponents imports components from JSON file
 func (s *Server) importComponents(w http.ResponseWriter, r *http.Request) {
-	tenantID := r.URL.Query().Get("tenant_id")
+	tenantID := getSecureTenantID(r)
 	datasourceID := r.URL.Query().Get("datasource_id")
 
 	if tenantID == "" || datasourceID == "" {

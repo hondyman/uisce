@@ -277,7 +277,7 @@ func (h *WorkerHandler) FailJob(w http.ResponseWriter, r *http.Request) {
 
 // ListPreAggDefinitions handles GET /preagg-definitions
 func (h *WorkerHandler) ListPreAggDefinitions(w http.ResponseWriter, r *http.Request) {
-	tenantID, _ := uuid.Parse(r.URL.Query().Get("tenant_id"))
+	tenantID, _ := uuid.Parse(getSecureTenantID(r))
 	datasourceID, _ := uuid.Parse(r.URL.Query().Get("datasource_id"))
 
 	defs, err := h.service.ListPreAggDefinitions(r.Context(), tenantID, datasourceID)
@@ -391,7 +391,7 @@ func (h *WorkerHandler) TriggerBuild(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	tenantID, _ := uuid.Parse(r.URL.Query().Get("tenant_id"))
+	tenantID, _ := uuid.Parse(getSecureTenantID(r))
 	datasourceID, _ := uuid.Parse(r.URL.Query().Get("datasource_id"))
 
 	job := &PreAggJob{
@@ -414,7 +414,7 @@ func (h *WorkerHandler) TriggerBuild(w http.ResponseWriter, r *http.Request) {
 
 // ListJobs handles GET /jobs
 func (h *WorkerHandler) ListJobs(w http.ResponseWriter, r *http.Request) {
-	tenantID, _ := uuid.Parse(r.URL.Query().Get("tenant_id"))
+	tenantID, _ := uuid.Parse(getSecureTenantID(r))
 	status := r.URL.Query().Get("status")
 	limit := 50
 	if l := r.URL.Query().Get("limit"); l != "" {

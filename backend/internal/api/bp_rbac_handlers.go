@@ -94,7 +94,7 @@ type Role struct {
 }
 
 func (h *RBACHandlers) listRoles(w http.ResponseWriter, r *http.Request) {
-	tenantID := r.URL.Query().Get("tenant_id")
+	tenantID := getSecureTenantID(r)
 	datasourceID := r.URL.Query().Get("datasource_id")
 
 	if tenantID == "" || datasourceID == "" {
@@ -118,7 +118,7 @@ func (h *RBACHandlers) listRoles(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *RBACHandlers) createRole(w http.ResponseWriter, r *http.Request) {
-	tenantID := r.URL.Query().Get("tenant_id")
+	tenantID := getSecureTenantID(r)
 	datasourceID := r.URL.Query().Get("datasource_id")
 
 	if tenantID == "" || datasourceID == "" {
@@ -236,7 +236,7 @@ func (h *RBACHandlers) deleteRole(w http.ResponseWriter, r *http.Request) {
 // ============================================================================
 
 func (h *RBACHandlers) listPermissions(w http.ResponseWriter, r *http.Request) {
-	tenantID := r.URL.Query().Get("tenant_id")
+	tenantID := getSecureTenantID(r)
 
 	if tenantID == "" {
 		http.Error(w, "tenant_id required", http.StatusBadRequest)
@@ -279,7 +279,7 @@ func (h *RBACHandlers) listPermissions(w http.ResponseWriter, r *http.Request) {
 
 func (h *RBACHandlers) getUserPermissions(w http.ResponseWriter, r *http.Request) {
 	userID := chi.URLParam(r, "userId")
-	tenantID := r.URL.Query().Get("tenant_id")
+	tenantID := getSecureTenantID(r)
 	datasourceID := r.URL.Query().Get("datasource_id")
 
 	if tenantID == "" || datasourceID == "" {
@@ -372,7 +372,7 @@ func (h *RBACHandlers) assignRoleToUser(w http.ResponseWriter, r *http.Request) 
 
 	// Allow tenant_id and datasource_id from query params if not in body
 	if req.TenantID == "" {
-		req.TenantID = r.URL.Query().Get("tenant_id")
+		req.TenantID = getSecureTenantID(r)
 	}
 	if req.DatasourceID == "" {
 		req.DatasourceID = r.URL.Query().Get("datasource_id")
@@ -417,7 +417,7 @@ func (h *RBACHandlers) unassignRoleFromUser(w http.ResponseWriter, r *http.Reque
 
 func (h *RBACHandlers) getUserRoles(w http.ResponseWriter, r *http.Request) {
 	userID := chi.URLParam(r, "userId")
-	tenantID := r.URL.Query().Get("tenant_id")
+	tenantID := getSecureTenantID(r)
 	datasourceID := r.URL.Query().Get("datasource_id")
 
 	if tenantID == "" || datasourceID == "" {
@@ -477,7 +477,7 @@ func (h *RBACHandlers) getUserRoles(w http.ResponseWriter, r *http.Request) {
 
 func (h *RBACHandlers) getRoleUsers(w http.ResponseWriter, r *http.Request) {
 	roleID := chi.URLParam(r, "roleId")
-	tenantID := r.URL.Query().Get("tenant_id")
+	tenantID := getSecureTenantID(r)
 	datasourceID := r.URL.Query().Get("datasource_id")
 
 	if tenantID == "" || datasourceID == "" {
@@ -536,7 +536,7 @@ func (h *RBACHandlers) getRoleUsers(w http.ResponseWriter, r *http.Request) {
 // ============================================================================
 
 func (h *RBACHandlers) listFieldPermissions(w http.ResponseWriter, r *http.Request) {
-	tenantID := r.URL.Query().Get("tenant_id")
+	tenantID := getSecureTenantID(r)
 	datasourceID := r.URL.Query().Get("datasource_id")
 
 	if tenantID == "" || datasourceID == "" {
@@ -627,7 +627,7 @@ func (h *RBACHandlers) getUserFieldPermissions(w http.ResponseWriter, r *http.Re
 	userID := chi.URLParam(r, "userId")
 	resourceType := chi.URLParam(r, "resourceType")
 	resourceID := chi.URLParam(r, "resourceId")
-	tenantID := r.URL.Query().Get("tenant_id")
+	tenantID := getSecureTenantID(r)
 	datasourceID := r.URL.Query().Get("datasource_id")
 
 	if tenantID == "" || datasourceID == "" {
@@ -683,7 +683,7 @@ func (h *RBACHandlers) getUserFieldPermissions(w http.ResponseWriter, r *http.Re
 // ============================================================================
 
 func (h *RBACHandlers) listDelegations(w http.ResponseWriter, r *http.Request) {
-	tenantID := r.URL.Query().Get("tenant_id")
+	tenantID := getSecureTenantID(r)
 	datasourceID := r.URL.Query().Get("datasource_id")
 
 	if tenantID == "" || datasourceID == "" {
@@ -874,7 +874,7 @@ func (h *RBACHandlers) logDelegationUsage(w http.ResponseWriter, r *http.Request
 // ============================================================================
 
 func (h *RBACHandlers) listTeams(w http.ResponseWriter, r *http.Request) {
-	tenantID := r.URL.Query().Get("tenant_id")
+	tenantID := getSecureTenantID(r)
 	datasourceID := r.URL.Query().Get("datasource_id")
 
 	if tenantID == "" || datasourceID == "" {
@@ -1031,7 +1031,7 @@ func (h *RBACHandlers) getTeamMembers(w http.ResponseWriter, r *http.Request) {
 // ============================================================================
 
 func (h *RBACHandlers) listPermissionAudit(w http.ResponseWriter, r *http.Request) {
-	tenantID := r.URL.Query().Get("tenant_id")
+	tenantID := getSecureTenantID(r)
 	datasourceID := r.URL.Query().Get("datasource_id")
 	limit := r.URL.Query().Get("limit")
 

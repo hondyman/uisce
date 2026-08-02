@@ -209,7 +209,7 @@ func (h *MarketplaceIntegrationHandlers) GetIntegrationsByCategory(w http.Respon
 
 // InstallIntegration installs an integration for a tenant
 func (h *MarketplaceIntegrationHandlers) InstallIntegration(w http.ResponseWriter, r *http.Request) {
-	tenantID := r.URL.Query().Get("tenant_id")
+	tenantID := getSecureTenantID(r)
 	datasourceID := r.URL.Query().Get("datasource_id")
 
 	if tenantID == "" || datasourceID == "" {
@@ -306,7 +306,7 @@ func (h *MarketplaceIntegrationHandlers) InstallIntegration(w http.ResponseWrite
 
 // GetInstalledIntegrations returns all installed integrations for a tenant
 func (h *MarketplaceIntegrationHandlers) GetInstalledIntegrations(w http.ResponseWriter, r *http.Request) {
-	tenantID := r.URL.Query().Get("tenant_id")
+	tenantID := getSecureTenantID(r)
 	datasourceID := r.URL.Query().Get("datasource_id")
 
 	if tenantID == "" || datasourceID == "" {
@@ -335,7 +335,7 @@ func (h *MarketplaceIntegrationHandlers) GetInstalledIntegrations(w http.Respons
 // GetInstalledIntegration returns a single installed integration
 func (h *MarketplaceIntegrationHandlers) GetInstalledIntegration(w http.ResponseWriter, r *http.Request) {
 	installationID := chi.URLParam(r, "installationId")
-	tenantID := r.URL.Query().Get("tenant_id")
+	tenantID := getSecureTenantID(r)
 	datasourceID := r.URL.Query().Get("datasource_id")
 
 	var installation InstalledIntegration
@@ -361,7 +361,7 @@ func (h *MarketplaceIntegrationHandlers) GetInstalledIntegration(w http.Response
 // UpdateIntegrationConfig updates the configuration of an installed integration
 func (h *MarketplaceIntegrationHandlers) UpdateIntegrationConfig(w http.ResponseWriter, r *http.Request) {
 	installationID := chi.URLParam(r, "installationId")
-	tenantID := r.URL.Query().Get("tenant_id")
+	tenantID := getSecureTenantID(r)
 	datasourceID := r.URL.Query().Get("datasource_id")
 
 	var req struct {
@@ -404,7 +404,7 @@ func (h *MarketplaceIntegrationHandlers) UpdateIntegrationConfig(w http.Response
 // ToggleIntegration enables or disables an installed integration
 func (h *MarketplaceIntegrationHandlers) ToggleIntegration(w http.ResponseWriter, r *http.Request) {
 	installationID := chi.URLParam(r, "installationId")
-	tenantID := r.URL.Query().Get("tenant_id")
+	tenantID := getSecureTenantID(r)
 	datasourceID := r.URL.Query().Get("datasource_id")
 
 	var req struct {
@@ -449,7 +449,7 @@ func (h *MarketplaceIntegrationHandlers) ToggleIntegration(w http.ResponseWriter
 // UninstallIntegration removes an installed integration
 func (h *MarketplaceIntegrationHandlers) UninstallIntegration(w http.ResponseWriter, r *http.Request) {
 	installationID := chi.URLParam(r, "installationId")
-	tenantID := r.URL.Query().Get("tenant_id")
+	tenantID := getSecureTenantID(r)
 	datasourceID := r.URL.Query().Get("datasource_id")
 
 	// Get integration_id before deletion for install count update
@@ -501,7 +501,7 @@ func (h *MarketplaceIntegrationHandlers) UninstallIntegration(w http.ResponseWri
 // ExecuteIntegration executes an integration action
 func (h *MarketplaceIntegrationHandlers) ExecuteIntegration(w http.ResponseWriter, r *http.Request) {
 	installationID := chi.URLParam(r, "installationId")
-	tenantID := r.URL.Query().Get("tenant_id")
+	tenantID := getSecureTenantID(r)
 	datasourceID := r.URL.Query().Get("datasource_id")
 
 	var req struct {
@@ -611,7 +611,7 @@ func (h *MarketplaceIntegrationHandlers) ExecuteIntegration(w http.ResponseWrite
 // TestIntegration tests an integration connection without executing
 func (h *MarketplaceIntegrationHandlers) TestIntegration(w http.ResponseWriter, r *http.Request) {
 	installationID := chi.URLParam(r, "installationId")
-	tenantID := r.URL.Query().Get("tenant_id")
+	tenantID := getSecureTenantID(r)
 	datasourceID := r.URL.Query().Get("datasource_id")
 
 	// Get installation
@@ -640,7 +640,7 @@ func (h *MarketplaceIntegrationHandlers) TestIntegration(w http.ResponseWriter, 
 
 // GetIntegrationExecutions returns execution logs
 func (h *MarketplaceIntegrationHandlers) GetIntegrationExecutions(w http.ResponseWriter, r *http.Request) {
-	tenantID := r.URL.Query().Get("tenant_id")
+	tenantID := getSecureTenantID(r)
 	datasourceID := r.URL.Query().Get("datasource_id")
 	installationID := r.URL.Query().Get("installation_id")
 	status := r.URL.Query().Get("status")
@@ -678,7 +678,7 @@ func (h *MarketplaceIntegrationHandlers) GetIntegrationExecutions(w http.Respons
 // GetIntegrationExecution returns a single execution
 func (h *MarketplaceIntegrationHandlers) GetIntegrationExecution(w http.ResponseWriter, r *http.Request) {
 	executionID := chi.URLParam(r, "executionId")
-	tenantID := r.URL.Query().Get("tenant_id")
+	tenantID := getSecureTenantID(r)
 	datasourceID := r.URL.Query().Get("datasource_id")
 
 	var execution IntegrationExecution
@@ -702,7 +702,7 @@ func (h *MarketplaceIntegrationHandlers) GetIntegrationExecution(w http.Response
 // GetInstallationStats returns usage statistics for an installation
 func (h *MarketplaceIntegrationHandlers) GetInstallationStats(w http.ResponseWriter, r *http.Request) {
 	installationID := chi.URLParam(r, "installationId")
-	tenantID := r.URL.Query().Get("tenant_id")
+	tenantID := getSecureTenantID(r)
 	datasourceID := r.URL.Query().Get("datasource_id")
 
 	var stats struct {
@@ -748,7 +748,7 @@ func (h *MarketplaceIntegrationHandlers) GetInstallationStats(w http.ResponseWri
 // InitiateOAuthFlow starts the OAuth authorization flow
 func (h *MarketplaceIntegrationHandlers) InitiateOAuthFlow(w http.ResponseWriter, r *http.Request) {
 	installationID := chi.URLParam(r, "installationId")
-	tenantID := r.URL.Query().Get("tenant_id")
+	tenantID := getSecureTenantID(r)
 	datasourceID := r.URL.Query().Get("datasource_id")
 
 	// Get integration OAuth config

@@ -6,7 +6,6 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/hondyman/uisce/backend/internal/analytics"
-	"github.com/hondyman/uisce/libs/jwt-middleware"
 )
 
 // CubeSchemaHandler serves dynamic Cube.js schema per tenant.
@@ -25,11 +24,7 @@ func (h *CubeSchemaHandler) RegisterRoutes(r chi.Router) {
 // GetCubeSchema returns dynamically generated Cube.js schema for a tenant.
 // Cube.js can call this endpoint to load schema dynamically.
 func (h *CubeSchemaHandler) GetCubeSchema(w http.ResponseWriter, r *http.Request) {
-	tenantID := r.URL.Query().Get("tenant_id")
-	if tenantID == "" {
-		tenantID = jwtmiddleware.GetClaimsFromContext(r).TenantID
-	}
-
+	tenantID := getSecureTenantID(r)
 	if tenantID == "" {
 		http.Error(w, "tenant_id required", http.StatusBadRequest)
 		return

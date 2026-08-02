@@ -42,10 +42,7 @@ func getTenantIDFromRequest(r *http.Request) string {
 	if claims, err := jwtmiddleware.ValidateTokenFromRequest(r); err == nil && claims != nil && claims.TenantID != "" {
 		return claims.TenantID
 	}
-	if tenantID := r.Header.Get("X-Tenant-ID"); tenantID != "" {
-		return tenantID
-	}
-	return r.URL.Query().Get("tenant_id")
+	return r.Header.Get("X-Tenant-ID")
 }
 
 // handleListConnections lists all connections for a tenant
@@ -348,7 +345,7 @@ type testConnectionResult struct {
 
 // testConnectionByType tests a connection based on its type
 func testConnectionByType(conn *services.Connection) testConnectionResult {
-	switch strings.ToLower(conn.Type) {
+	switch strings.ToLower(conn.DatabaseType) {
 	case "postgres", "postgresql":
 		return testPostgresConnection(conn)
 	case "mysql":
@@ -362,95 +359,91 @@ func testConnectionByType(conn *services.Connection) testConnectionResult {
 	default:
 		return testConnectionResult{
 			Success: false,
-			Message: fmt.Sprintf("connection type '%s' not supported for testing", conn.Type),
-			Type:    conn.Type,
+			Message: fmt.Sprintf("connection type '%s' not supported for testing", conn.DatabaseType),
+			Type:    conn.DatabaseType,
 		}
 	}
 }
 
 func testPostgresConnection(conn *services.Connection) testConnectionResult {
-	if conn.Host == nil || conn.Port == nil || conn.Database == nil {
+	if conn.DSN == "" {
 		return testConnectionResult{
 			Success: false,
-			Message: "host, port, and database are required for postgres connections",
+			Message: "dsn is required for postgres connections",
 			Type:    "postgres",
 		}
 	}
 
-	// In a real implementation, you would attempt to connect to the database
-	// For now, we'll just validate the configuration
 	return testConnectionResult{
 		Success: true,
-		Message: "postgres connection configuration is valid",
+		Message: "postgres connection DSN is configured",
 		Type:    "postgres",
 		Details: map[string]interface{}{
-			"host":     *conn.Host,
-			"port":     *conn.Port,
-			"database": *conn.Database,
+			"dsn": conn.DSN,
 		},
 	}
 }
 
 func testMySQLConnection(conn *services.Connection) testConnectionResult {
-	if conn.Host == nil || conn.Port == nil || conn.Database == nil {
+	if conn.DSN == "" {
 		return testConnectionResult{
 			Success: false,
-			Message: "host, port, and database are required for mysql connections",
+			Message: "dsn is required for mysql connections",
 			Type:    "mysql",
 		}
 	}
 
 	return testConnectionResult{
 		Success: true,
-		Message: "mysql connection configuration is valid",
+		Message: "mysql connection DSN is configured",
 		Type:    "mysql",
 	}
 }
 
 func testSnowflakeConnection(conn *services.Connection) testConnectionResult {
-	if conn.BaseURL == nil && conn.Username == nil {
+	if conn.DSN == "" {
 		return testConnectionResult{
 			Success: false,
-			Message: "base_url and username are required for snowflake connections",
+			Message: "dsn is required for snowflake connections",
 			Type:    "snowflake",
 		}
 	}
 
 	return testConnectionResult{
 		Success: true,
-		Message: "snowflake connection configuration is valid",
+		Message: "snowflake connection DSN is configured",
 		Type:    "snowflake",
 	}
 }
 
 func testS3Connection(conn *services.Connection) testConnectionResult {
-	if conn.APIKey == nil {
+	if conn.DSN == "" {
 		return testConnectionResult{
 			Success: false,
-			Message: "api_key (AWS access key) is required for s3 connections",
+			Message: "dsn is required for s3 connections",
 			Type:    "s3",
 		}
 	}
 
 	return testConnectionResult{
 		Success: true,
-		Message: "s3 connection configuration is valid",
+		Message: "s3 connection DSN is configured",
 		Type:    "s3",
 	}
 }
 
 func testAPIConnection(conn *services.Connection) testConnectionResult {
-	if conn.BaseURL == nil {
+	if conn.DSN == "" {
 		return testConnectionResult{
 			Success: false,
-			Message: "base_url is required for api connections",
+			Message: "dsn is required for api connections",
 			Type:    "api",
 		}
 	}
 
 	return testConnectionResult{
 		Success: true,
-		Message: "api connection configuration is valid",
+		Message: "api connection DSN is configured",
 		Type:    "api",
 	}
 }

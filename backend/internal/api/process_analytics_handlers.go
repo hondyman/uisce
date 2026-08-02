@@ -123,7 +123,7 @@ type PredictionFactor struct {
 
 // GetDashboardStats retrieves overall process analytics dashboard statistics
 func (h *ProcessAnalyticsHandlers) GetDashboardStats(w http.ResponseWriter, r *http.Request) {
-	tenantID := r.URL.Query().Get("tenant_id")
+	tenantID := getSecureTenantID(r)
 	if tenantID == "" {
 		respondJSON(w, http.StatusBadRequest, map[string]string{"error": "tenant_id required"})
 		return
@@ -141,7 +141,7 @@ func (h *ProcessAnalyticsHandlers) GetDashboardStats(w http.ResponseWriter, r *h
 
 // GetBottlenecks retrieves identified bottlenecks with filtering
 func (h *ProcessAnalyticsHandlers) GetBottlenecks(w http.ResponseWriter, r *http.Request) {
-	tenantID := r.URL.Query().Get("tenant_id")
+	tenantID := getSecureTenantID(r)
 	workflowType := r.URL.Query().Get("workflow_type")
 
 	if tenantID == "" {
@@ -178,7 +178,7 @@ func (h *ProcessAnalyticsHandlers) GetBottlenecks(w http.ResponseWriter, r *http
 
 // GetOptimizationRecommendations retrieves AI-generated recommendations
 func (h *ProcessAnalyticsHandlers) GetOptimizationRecommendations(w http.ResponseWriter, r *http.Request) {
-	tenantID := r.URL.Query().Get("tenant_id")
+	tenantID := getSecureTenantID(r)
 	status := r.URL.Query().Get("status") // pending, implemented, rejected, in_progress
 
 	if tenantID == "" {
@@ -215,7 +215,7 @@ func (h *ProcessAnalyticsHandlers) GetOptimizationRecommendations(w http.Respons
 
 // GetStepPerformance retrieves detailed performance metrics for individual steps
 func (h *ProcessAnalyticsHandlers) GetStepPerformance(w http.ResponseWriter, r *http.Request) {
-	tenantID := r.URL.Query().Get("tenant_id")
+	tenantID := getSecureTenantID(r)
 	workflowType := r.URL.Query().Get("workflow_type")
 
 	if tenantID == "" || workflowType == "" {
@@ -235,7 +235,7 @@ func (h *ProcessAnalyticsHandlers) GetStepPerformance(w http.ResponseWriter, r *
 
 // PredictWorkflowDuration uses ML to predict workflow completion time
 func (h *ProcessAnalyticsHandlers) PredictWorkflowDuration(w http.ResponseWriter, r *http.Request) {
-	tenantID := r.URL.Query().Get("tenant_id")
+	tenantID := getSecureTenantID(r)
 	workflowType := r.URL.Query().Get("workflow_type")
 
 	if tenantID == "" || workflowType == "" {
@@ -255,7 +255,7 @@ func (h *ProcessAnalyticsHandlers) PredictWorkflowDuration(w http.ResponseWriter
 
 // RunBottleneckAnalysis triggers ML-based bottleneck detection
 func (h *ProcessAnalyticsHandlers) RunBottleneckAnalysis(w http.ResponseWriter, r *http.Request) {
-	tenantID := r.URL.Query().Get("tenant_id")
+	tenantID := getSecureTenantID(r)
 
 	if tenantID == "" {
 		respondJSON(w, http.StatusBadRequest, map[string]string{"error": "tenant_id required"})

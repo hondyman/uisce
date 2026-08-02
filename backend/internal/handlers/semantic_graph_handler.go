@@ -286,7 +286,7 @@ func (h *SemanticGraphHandler) GenerateBOSQL(w http.ResponseWriter, r *http.Requ
 func (h *SemanticGraphHandler) GetBOCalculations(w http.ResponseWriter, r *http.Request) {
 	boName := chi.URLParam(r, "boName")
 	datasourceID := r.URL.Query().Get("datasource_id")
-	tenantID := r.URL.Query().Get("tenant_id")
+	tenantID := getSecureTenantID(r)
 
 	tID, _ := uuid.Parse(tenantID)
 	dsID, _ := uuid.Parse(datasourceID)
@@ -312,7 +312,7 @@ func (h *SemanticGraphHandler) GetBOCalculations(w http.ResponseWriter, r *http.
 func (h *SemanticGraphHandler) GetBOTerms(w http.ResponseWriter, r *http.Request) {
 	boName := chi.URLParam(r, "boName")
 	datasourceID := r.URL.Query().Get("datasource_id")
-	tenantID := r.URL.Query().Get("tenant_id")
+	tenantID := getSecureTenantID(r)
 
 	tID, _ := uuid.Parse(tenantID)
 	dsID, _ := uuid.Parse(datasourceID)

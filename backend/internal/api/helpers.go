@@ -22,24 +22,21 @@ type TenantContext struct {
 	DatasourceID string
 }
 
-// extractTenantContext extracts tenant context from request headers and query params
+// extractTenantContext extracts tenant context from request headers (JWT-validated)
+// WARNING: This function intentionally does NOT fall back to URL query params for security.
+// Tenant ID must come from validated JWT claims or X-Tenant-ID header set by auth middleware.
 func extractTenantContext(r *http.Request) (*TenantContext, error) {
 	var tenantID string
-	if claims := jwtmiddleware.GetClaimsFromContext(r); claims != nil {
+	if claims := jwtmiddleware.GetClaimsFromContext(r); claims != nil && claims.TenantID != "" {
 		tenantID = claims.TenantID
+	}
+	if tenantID == "" {
+		tenantID = r.Header.Get("X-Tenant-ID")
 	}
 	datasourceID := r.Header.Get("X-Tenant-Datasource-ID")
 
-	// Fall back to query params
-	if tenantID == "" {
-		tenantID = r.URL.Query().Get("tenant_id")
-	}
-	if datasourceID == "" {
-		datasourceID = r.URL.Query().Get("datasource_id")
-	}
-
 	if tenantID == "" || datasourceID == "" {
-		return nil, fmt.Errorf("tenant context not found in headers or query params")
+		return nil, fmt.Errorf("tenant context not found: X-Tenant-ID and X-Tenant-Datasource-ID headers required")
 	}
 
 	return &TenantContext{
@@ -178,6 +175,16 @@ func nilIfNullFloat64(n sql.NullFloat64) *float64 {
 	}
 	v := n.Float64
 	return &v
+}
+
+// getSecureTenantID extracts tenant ID from validated JWT claims or X-Tenant-ID header.
+// SECURITY: This function intentionally does NOT fall back to URL query parameters.
+// Tenant ID must come from a validated JWT token or the X-Tenant-ID header set by auth middleware.
+func getSecureTenantID(r *http.Request) string {
+	if claims := jwtmiddleware.GetClaimsFromContext(r); claims != nil && claims.TenantID != "" {
+		return claims.TenantID
+	}
+	return r.Header.Get("X-Tenant-ID")
 }
 
 // respondJSON responds with JSON

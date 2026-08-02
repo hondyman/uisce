@@ -292,7 +292,7 @@ func (h *SemanticMappingHandler) HandleApplyMappingsWizard(w http.ResponseWriter
 func (h *SemanticMappingHandler) HandleGetPendingApprovalsWizard(w http.ResponseWriter, r *http.Request) {
 	logger := logging.GetLogger().Sugar()
 
-	tenantID := r.URL.Query().Get("tenant_id")
+	tenantID := getSecureTenantID(r)
 	datasourceID := r.URL.Query().Get("datasource_id")
 
 	if tenantID == "" || datasourceID == "" {
@@ -359,7 +359,7 @@ func (h *SemanticMappingHandler) HandleApprovePendingMappingWizard(w http.Respon
 func (h *SemanticMappingHandler) HandleGetCreatedMappingsWizard(w http.ResponseWriter, r *http.Request) {
 	logger := logging.GetLogger().Sugar()
 
-	tenantID := r.URL.Query().Get("tenant_id")
+	tenantID := getSecureTenantID(r)
 	datasourceID := r.URL.Query().Get("datasource_id")
 	limit := r.URL.Query().Get("limit")
 
@@ -451,7 +451,7 @@ func (h *SemanticMappingHandler) HandlePopulateBusinessObjectSemanticTerms(w htt
 func (h *SemanticMappingHandler) HandleBackfillSemanticTermSQLProperties(w http.ResponseWriter, r *http.Request) {
 	logger := logging.GetLogger().Sugar()
 
-	tenantID := r.URL.Query().Get("tenant_id")
+	tenantID := getSecureTenantID(r)
 	datasourceID := r.URL.Query().Get("datasource_id")
 	backfillAll := r.URL.Query().Get("all") == "true"
 
@@ -505,7 +505,7 @@ func (h *SemanticMappingHandler) HandleBackfillSemanticTermSQLProperties(w http.
 func (h *SemanticMappingHandler) HandleBackfillPhysicalMappings(w http.ResponseWriter, r *http.Request) {
 	logger := logging.GetLogger().Sugar()
 
-	tenantID := r.URL.Query().Get("tenant_id")
+	tenantID := getSecureTenantID(r)
 	datasourceID := r.URL.Query().Get("datasource_id")
 	backfillAll := r.URL.Query().Get("all") == "true"
 

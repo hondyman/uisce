@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"net/http"
 	"time"
+
+	"github.com/hondyman/uisce/libs/jwt-middleware"
 )
 
 // Tenant represents tenant metadata
@@ -120,10 +122,17 @@ type Rollup struct {
 	LastBuild        time.Time `json:"last_build"`
 }
 
+func getSecureTenantID(r *http.Request) string {
+	if claims := jwtmiddleware.GetClaimsFromContext(r); claims != nil && claims.TenantID != "" {
+		return claims.TenantID
+	}
+	return r.Header.Get("X-Tenant-ID")
+}
+
 // ListRollupsHandler returns rollup status for tenant(s)
 func ListRollupsHandler(db *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		tenantID := r.URL.Query().Get("tenantId")
+		tenantID := getSecureTenantID(r)
 
 		query := `
 			SELECT rollup_id, cube_name, tenant_id, 
