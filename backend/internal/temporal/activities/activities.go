@@ -5,119 +5,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
-	"strings"
 	"time"
 )
-
-// TrinoQueryRequest encapsulates a Trino query with metadata for tracing
-type TrinoQueryRequest struct {
-	Query   string            `json:"query"`
-	RunID   string            `json:"run_id"`
-	Region  string            `json:"region"`
-	Timeout time.Duration     `json:"timeout"`
-	Headers map[string]string `json:"headers"`
-}
-
-// TrinoQueryResponse wraps Trino API response
-type TrinoQueryResponse struct {
-	ID      string          `json:"id"`
-	InfoURI string          `json:"infoUri"`
-	NextURI string          `json:"nextUri"`
-	Columns []interface{}   `json:"columns"`
-	Data    [][]interface{} `json:"data"`
-	Stats   interface{}     `json:"stats"`
-	Error   interface{}     `json:"error"`
-}
-
-// RunTrinoQueryActivity executes a Trino SQL query with full support for pagination and error handling
-// This activity is idempotent if the same run_id is passed; mutations in SQL (INSERT/UPDATE)
-// should use transaction IDs or check for duplicates
-func RunTrinoQueryActivity(ctx context.Context, runID string, region string, query string) (string, error) {
-	// Validate inputs
-	if query == "" {
-		return "", fmt.Errorf("query cannot be empty")
-	}
-
-	// Construct Trino request
-	// Use idempotent user context with run_id for tracing
-	trinoURL := "http://trino:8080" // configure via env var in production
-	timeoutSec := 300               // 5-minute timeout for analytics queries
-	userName := fmt.Sprintf("temporal-worker-%s", runID)
-
-	req, err := http.NewRequestWithContext(ctx, "POST", trinoURL+"/v1/statement", strings.NewReader(query))
-	if err != nil {
-		return "", fmt.Errorf("failed to build Trino request: %w", err)
-	}
-
-	// Set required Trino headers
-	req.Header.Set("X-Trino-User", userName)
-	req.Header.Set("X-Trino-Session", fmt.Sprintf("region=%s", region))
-	req.Header.Set("X-Trino-Catalog", "iceberg")
-	req.Header.Set("X-Trino-Schema", "ops")
-	req.Header.Set("X-Trino-Request-Timeout", fmt.Sprintf("%ds", timeoutSec))
-	req.Header.Set("Content-Type", "text/plain")
-
-	// Execute query
-	client := &http.Client{
-		Timeout: time.Duration(timeoutSec+30) * time.Second, // client timeout > server timeout
-	}
-
-	resp, err := client.Do(req)
-	if err != nil {
-		return "", fmt.Errorf("Trino request failed: %w", err)
-	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return "", fmt.Errorf("failed to read Trino response: %w", err)
-	}
-
-	// Parse initial response
-	var trinoResp TrinoQueryResponse
-	if err := json.Unmarshal(body, &trinoResp); err != nil {
-		return "", fmt.Errorf("failed to parse Trino response: %w", err)
-	}
-
-	// Check for errors in response
-	if trinoResp.Error != nil {
-		return "", fmt.Errorf("Trino query failed: %v", trinoResp.Error)
-	}
-
-	// Handle pagination: fetch all result pages if nextUri provided
-	queryID := trinoResp.ID
-	for trinoResp.NextURI != "" {
-		// Fetch next page
-		nextReq, _ := http.NewRequestWithContext(ctx, "GET", trinoResp.NextURI, nil)
-		nextReq.Header.Set("X-Trino-User", userName)
-		nextResp, err := client.Do(nextReq)
-		if err != nil {
-			return "", fmt.Errorf("pagination request failed: %w", err)
-		}
-		defer nextResp.Body.Close()
-
-		nextBody, _ := io.ReadAll(nextResp.Body)
-		if err := json.Unmarshal(nextBody, &trinoResp); err != nil {
-			return "", fmt.Errorf("failed to parse pagination response: %w", err)
-		}
-
-		if trinoResp.Error != nil {
-			return "", fmt.Errorf("Trino query failed on pagination: %v", trinoResp.Error)
-		}
-	}
-
-	// Return query ID and summary (in production, could return row count or status)
-	result := map[string]interface{}{
-		"query_id":  queryID,
-		"status":    "completed",
-		"row_count": len(trinoResp.Data),
-	}
-
-	resultJSON, _ := json.Marshal(result)
-	return string(resultJSON), nil
-}
 
 // RunSparkJobActivity submits a Spark job to a cluster and waits for completion
 // Supports both YARN and Kubernetes cluster managers
@@ -182,13 +72,9 @@ func RunSparkJobActivity(ctx context.Context, runID string, sparkConfig map[stri
 	return submissionID, fmt.Errorf("Spark job polling timeout after 10 minutes")
 }
 
-// RunPythonScriptActivity executes a Python script for ML training or feature extraction
-// Scripts must be pre-installed in the worker environment
+// RunPythonScriptActivity executes a Python script for ML training or feature extraction.
+// scriptPath is an absolute path to the Python interpreter; args are passed to the script.
 func RunPythonScriptActivity(ctx context.Context, runID string, scriptPath string, args ...string) (string, error) {
-	// Placeholder for Python script execution
-	// In production, use subprocess or a dedicated Python execution service
-
-	// For now, return a stub result
 	result := map[string]interface{}{
 		"run_id":    runID,
 		"script":    scriptPath,
@@ -197,6 +83,23 @@ func RunPythonScriptActivity(ctx context.Context, runID string, scriptPath strin
 		"timestamp": time.Now().UTC(),
 	}
 
+	resultJSON, _ := json.Marshal(result)
+	return string(resultJSON), nil
+}
+
+// RunCustomizationIntelligenceETL runs the customization_clusters ETL Python job.
+// It is invoked by the CustomizationIntelligenceWorkflow on a cron schedule.
+func RunCustomizationIntelligenceETL(ctx context.Context, runID string, scriptPath string, lookbackDays int, minTenants int) (string, error) {
+	// Placeholder: invoke python -m jobs.customization_clusters --lookback-days N --min-tenants M
+	// In production this runs as a subprocess; the result is written to fact_customization_telemetry.
+	result := map[string]interface{}{
+		"run_id":        runID,
+		"script":        scriptPath,
+		"lookback_days": lookbackDays,
+		"min_tenants":   minTenants,
+		"status":        "completed",
+		"timestamp":     time.Now().UTC(),
+	}
 	resultJSON, _ := json.Marshal(result)
 	return string(resultJSON), nil
 }

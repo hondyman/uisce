@@ -62,7 +62,7 @@ func TestViewsPaginationHandler_DBOnly(t *testing.T) {
 	// Issue request to /api/views?source=resolved&page=1&page_size=10
 	req := httptest.NewRequest(http.MethodGet, "/api/views?source=resolved&page=1&page_size=10", nil)
 	rr := httptest.NewRecorder()
-	router.ServeHTTP(rr, req)
+	router.Router.ServeHTTP(rr, req)
 
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected 200 got %d body=%s", rr.Code, rr.Body.String())

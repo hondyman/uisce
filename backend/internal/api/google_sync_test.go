@@ -54,7 +54,7 @@ func TestGoogleSyncRoutes(t *testing.T) {
 		t.Run(route.method+" "+route.path, func(t *testing.T) {
 			// We handle the route match check
 			rctx := chi.NewRouteContext()
-			if !router.Match(rctx, route.method, route.path) {
+			if !router.Router.Match(rctx, route.method, route.path) {
 				t.Errorf("Route %s %s not found", route.method, route.path)
 			}
 		})

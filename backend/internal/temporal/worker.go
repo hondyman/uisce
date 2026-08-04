@@ -63,16 +63,17 @@ func registerWorkflows(w worker.Worker) {
 	w.RegisterWorkflow(workflows.MLTrainingWorkflow)
 	w.RegisterWorkflow(TenantOnboardingWorkflow)
 	w.RegisterWorkflow(LakehouseMaintenanceWorkflow)
+	w.RegisterWorkflow(workflows.CustomizationIntelligenceWorkflow)
 
-	log.Println("Workflows registered: HourlyRollupWorkflow, RegionHourlyRollupWorkflow, DailySLAWorkflow, MLTrainingWorkflow, TenantOnboardingWorkflow, LakehouseMaintenanceWorkflow")
+	log.Println("Workflows registered: HourlyRollupWorkflow, RegionHourlyRollupWorkflow, DailySLAWorkflow, MLTrainingWorkflow, TenantOnboardingWorkflow, LakehouseMaintenanceWorkflow, CustomizationIntelligenceWorkflow")
 }
 
 // registerActivities registers all activity definitions
 func registerActivities(w worker.Worker) {
 	// Register activity functions directly
-	w.RegisterActivity(activities.RunTrinoQueryActivity)
 	w.RegisterActivity(activities.RunSparkJobActivity)
 	w.RegisterActivity(activities.RunPythonScriptActivity)
+	w.RegisterActivity(activities.RunCustomizationIntelligenceETL)
 	w.RegisterActivity(activities.PublishEventActivity)
 
 	// Register tenant activities struct methods
@@ -87,5 +88,5 @@ func registerActivities(w worker.Worker) {
 	w.RegisterActivity(act.RemoveOrphanFiles)
 	w.RegisterActivity(act.CompactManifests)
 
-	log.Println("Activities registered: RunTrinoQueryActivity, RunSparkJobActivity, RunPythonScriptActivity, PublishEventActivity, TenantActivities")
+	log.Println("Activities registered: RunDataFusionQueryActivity, RunSparkJobActivity, RunPythonScriptActivity, PublishEventActivity, TenantActivities")
 }

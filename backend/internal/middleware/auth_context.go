@@ -91,7 +91,7 @@ func AuthContextMiddleware(secMgr *services.SecurityManager) func(http.Handler) 
 					}
 
 					// ── Standard JWT validation ──────────────────────────────
-					if jclaims, err := secMgr.ValidateToken(authHeader); err == nil {
+					if jclaims, err := secMgr.ValidateToken(rawToken); err == nil {
 						uid := jclaims.UserID
 						if uid != "" {
 							// Inject UserID into headers for legacy handlers that rely on it
