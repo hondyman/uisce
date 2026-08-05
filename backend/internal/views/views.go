@@ -4,7 +4,7 @@ import (
 	"context"
 	"database/sql"
 
-	"github.com/hondyman/uisce/backend/internal/cube"
+	"github.com/hondyman/uisce/backend/models"
 	"github.com/jmoiron/sqlx"
 )
 
@@ -20,16 +20,16 @@ type Plan struct {
 // Manager manages views.
 type Manager struct {
 	db      *sql.DB
-	catalog *cube.Catalog
+	catalog *models.Catalog
 }
 
 // NewManager creates a new Manager.
-func NewManager(db *sql.DB, catalog *cube.Catalog) *Manager {
+func NewManager(db *sql.DB, catalog *models.Catalog) *Manager {
 	return &Manager{db: db, catalog: catalog}
 }
 
 // CompareAll compares all views. (Placeholder)
-func (m *Manager) CompareAll(ctx context.Context, views []cube.ViewMeta) ([]Plan, error) {
+func (m *Manager) CompareAll(ctx context.Context, views []models.ViewMeta) ([]Plan, error) {
 	// Placeholder implementation
 	return []Plan{}, nil
 }
@@ -41,7 +41,7 @@ func (m *Manager) ApplyPlanInTx(ctx context.Context, tx *sqlx.Tx, plan Plan) err
 }
 
 // RejectPlans rejects plans. (Placeholder)
-func (m *Manager) RejectPlans(ctx context.Context, plans []Plan, vmMap map[string]cube.ViewMeta, reviewer, reason string) error {
+func (m *Manager) RejectPlans(ctx context.Context, plans []Plan, vmMap map[string]models.ViewMeta, reviewer, reason string) error {
 	// Placeholder implementation
 	return nil
 }

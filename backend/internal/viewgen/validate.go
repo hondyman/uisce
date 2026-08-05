@@ -4,13 +4,13 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/hondyman/uisce/backend/internal/cube"
 	"github.com/hondyman/uisce/backend/internal/viewmodel"
+	"github.com/hondyman/uisce/backend/models"
 )
 
 // ValidateViews runs structural validation on generated or user-authored views.
-func ValidateViews(cubes []cube.Cube, views []viewmodel.View) []cube.ValidationIssue {
-	var issues []cube.ValidationIssue
+func ValidateViews(cubes []models.Cube, views []viewmodel.View) []models.ValidationIssue {
+	var issues []models.ValidationIssue
 	graph := buildGraph(cubes)
 	idx := indexCubes(cubes)
 
@@ -78,8 +78,8 @@ func ValidateViews(cubes []cube.Cube, views []viewmodel.View) []cube.ValidationI
 	return issues
 }
 
-func vi(level, code, msg string) cube.ValidationIssue {
-	return cube.ValidationIssue{Level: level, Code: code, Message: msg}
+func vi(level, code, msg string) models.ValidationIssue {
+	return models.ValidationIssue{Level: level, Code: code, Message: msg}
 }
 
 func validateJoinPath(graph map[string][]string, path string) bool {
@@ -112,7 +112,7 @@ func hasStar(incl []viewmodel.IncludeItem) bool {
 	return false
 }
 
-func membersSet(c cube.Cube) map[string]struct{} {
+func membersSet(c models.Cube) map[string]struct{} {
 	m := map[string]struct{}{}
 	for n := range c.Dimensions {
 		m[n] = struct{}{}
@@ -123,7 +123,7 @@ func membersSet(c cube.Cube) map[string]struct{} {
 	return m
 }
 
-func flattenMembers(v viewmodel.View, idx map[string]cube.Cube) map[string]struct{} {
+func flattenMembers(v viewmodel.View, idx map[string]models.Cube) map[string]struct{} {
 	out := map[string]struct{}{}
 	for _, blk := range v.Cubes {
 		leaf := lastSegment(blk.JoinPath)
@@ -161,7 +161,7 @@ func flattenMembers(v viewmodel.View, idx map[string]cube.Cube) map[string]struc
 	return out
 }
 
-func hasTenantGuard(v viewmodel.View, idx map[string]cube.Cube) bool {
+func hasTenantGuard(v viewmodel.View, idx map[string]models.Cube) bool {
 	// If access policy specified assume tenant guard is handled
 	if v.AccessPolicy != nil && v.AccessPolicy.Rules != nil {
 		return true
@@ -187,7 +187,7 @@ func hasTenantGuard(v viewmodel.View, idx map[string]cube.Cube) bool {
 	return false
 }
 
-func isDimPII(c cube.Cube, name string) bool {
+func isDimPII(c models.Cube, name string) bool {
 	if d, ok := c.Dimensions[name]; ok {
 		return isPII(d, Options{PiiMetaKey: "pii"})
 	}
@@ -212,7 +212,7 @@ func foldersCyclic(folders []viewmodel.Folder, seen map[string]struct{}) bool {
 	return false
 }
 
-func validateFolderMembers(viewName string, f viewmodel.Folder, members map[string]struct{}, out *[]cube.ValidationIssue) {
+func validateFolderMembers(viewName string, f viewmodel.Folder, members map[string]struct{}, out *[]models.ValidationIssue) {
 	for _, it := range f.Includes {
 		if it.Nested != nil {
 			validateFolderMembers(viewName, *it.Nested, members, out)

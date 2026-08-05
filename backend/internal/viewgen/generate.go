@@ -6,8 +6,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/hondyman/uisce/backend/internal/cube"
 	"github.com/hondyman/uisce/backend/internal/viewmodel"
+	"github.com/hondyman/uisce/backend/models"
 )
 
 // Options controls view generation behavior.
@@ -32,7 +32,7 @@ type Result struct {
 }
 
 // GenerateViews builds views for custom/extension cubes using merged runtime cubes.
-func GenerateViews(cubes []cube.Cube, opt Options) Result {
+func GenerateViews(cubes []models.Cube, opt Options) Result {
 	if opt.MaxDepth <= 0 {
 		opt.MaxDepth = 2
 	}
@@ -64,7 +64,7 @@ func GenerateViews(cubes []cube.Cube, opt Options) Result {
 
 // ---- helpers ----
 
-func buildGraph(cubes []cube.Cube) map[string][]string {
+func buildGraph(cubes []models.Cube) map[string][]string {
 	g := map[string][]string{}
 	for _, c := range cubes {
 		for jn := range c.Joins {
@@ -80,8 +80,8 @@ func buildGraph(cubes []cube.Cube) map[string][]string {
 	return g
 }
 
-func indexCubes(cubes []cube.Cube) map[string]cube.Cube {
-	m := make(map[string]cube.Cube, len(cubes))
+func indexCubes(cubes []models.Cube) map[string]models.Cube {
+	m := make(map[string]models.Cube, len(cubes))
 	for _, c := range cubes {
 		m[c.Name] = c
 	}
@@ -101,7 +101,7 @@ func uniq(ss []string) []string {
 	return out
 }
 
-func isCustomCube(c cube.Cube) bool {
+func isCustomCube(c models.Cube) bool {
 	// Prefer explicit metadata from merge pipeline
 	if c.Metadata != nil {
 		if _, ok := c.Metadata["extension_changes"]; ok {
@@ -125,7 +125,7 @@ func isCustomCube(c cube.Cube) bool {
 	return false
 }
 
-func buildRootView(root cube.Cube, cubes []cube.Cube, graph map[string][]string, idx map[string]cube.Cube, opt Options) viewmodel.View {
+func buildRootView(root models.Cube, cubes []models.Cube, graph map[string][]string, idx map[string]models.Cube, opt Options) viewmodel.View {
 	viewName := fmt.Sprintf("%s_view", root.Name)
 	title := root.Title
 	if title == "" {
@@ -212,7 +212,7 @@ func humanize(s string) string {
 	return strings.ToUpper(s[:1]) + s[1:]
 }
 
-func defaultViewDescription(root cube.Cube) string {
+func defaultViewDescription(root models.Cube) string {
 	if root.Description != "" {
 		return root.Description
 	}
@@ -220,7 +220,7 @@ func defaultViewDescription(root cube.Cube) string {
 }
 
 // makeAdminVariant creates a parallel admin view with relaxed excludes and role/expr public.
-func makeAdminVariant(base viewmodel.View, idx map[string]cube.Cube, opt Options) viewmodel.View {
+func makeAdminVariant(base viewmodel.View, idx map[string]models.Cube, opt Options) viewmodel.View {
 	v := base
 	// Name and title tweaks
 	if strings.HasSuffix(v.Name, "_view") {
@@ -284,7 +284,7 @@ func makeAdminVariant(base viewmodel.View, idx map[string]cube.Cube, opt Options
 
 // include/exclude policies
 
-func decideRootIncludes(c cube.Cube, opt Options) []viewmodel.IncludeItem {
+func decideRootIncludes(c models.Cube, opt Options) []viewmodel.IncludeItem {
 	var items []viewmodel.IncludeItem
 	// dimensions: PK, business keys, descriptors, time
 	for n, d := range c.Dimensions {
@@ -315,11 +315,11 @@ func decideRootIncludes(c cube.Cube, opt Options) []viewmodel.IncludeItem {
 	return applyOverrides(c, items)
 }
 
-func decideJoinedIncludes(c cube.Cube, opt Options) []viewmodel.IncludeItem {
+func decideJoinedIncludes(c models.Cube, opt Options) []viewmodel.IncludeItem {
 	return []viewmodel.IncludeItem{{Name: "*"}}
 }
 
-func decideExcludes(c cube.Cube, opt Options) []string {
+func decideExcludes(c models.Cube, opt Options) []string {
 	ex := append([]string{}, opt.ExcludeFields...)
 	// exclude pii
 	for n, d := range c.Dimensions {
@@ -406,7 +406,7 @@ func isCoreMeasure(mea map[string]any) bool {
 }
 
 // autoFolders creates simple folders based on root and related blocks.
-func autoFolders(v viewmodel.View, idx map[string]cube.Cube, opt Options) []viewmodel.Folder {
+func autoFolders(v viewmodel.View, idx map[string]models.Cube, opt Options) []viewmodel.Folder {
 	var folders []viewmodel.Folder
 	// Basic folders for root
 	var basic []viewmodel.FolderItem
@@ -492,7 +492,7 @@ func renderName(blk viewmodel.ViewCube, member string) string {
 
 // applyOverrides maps cube-level member overrides (if any) into include items.
 // Expectation: c.Meta["member_overrides"] is map[string]map[string]any keyed by member name.
-func applyOverrides(c cube.Cube, items []viewmodel.IncludeItem) []viewmodel.IncludeItem {
+func applyOverrides(c models.Cube, items []viewmodel.IncludeItem) []viewmodel.IncludeItem {
 	if c.Meta == nil {
 		return items
 	}

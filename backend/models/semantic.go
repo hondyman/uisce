@@ -5,12 +5,11 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/hondyman/uisce/backend/internal/cube"
 )
 
 // ModelProvider defines the interface for obtaining the semantic model catalog.
 type ModelProvider interface {
-	GetActiveCatalog(ctx context.Context, tenantID, datasourceID string) (*cube.Catalog, error)
+	GetActiveCatalog(ctx context.Context, tenantID, datasourceID string) (*Catalog, error)
 }
 
 // SemanticViewMeta represents a high-level, business-friendly view of data.

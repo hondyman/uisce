@@ -9,7 +9,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/hondyman/uisce/backend/internal/cube"
 	"github.com/lib/pq"
 
 	"github.com/google/uuid"
@@ -392,7 +391,7 @@ func (s *TuningService) getSideBySidePreview(p *models.TuningProposal) []models.
 	// --- Create a "before" state ---
 	beforeConfig := models.ResolvedModelConfig{
 		ModelKey: modelName,
-		Cubes: []cube.Cube{
+		Cubes: []models.Cube{
 			{
 				Name:       modelName,
 				Dimensions: map[string]map[string]any{"order_date": {"sql": "order_date", "type": "time"}},
@@ -404,7 +403,7 @@ func (s *TuningService) getSideBySidePreview(p *models.TuningProposal) []models.
 	// --- Create an "after" state that reflects the proposed change ---
 	afterConfig := beforeConfig // Start with the same base
 	// Deep copy to avoid modifying the original
-	afterConfig.Cubes = make([]cube.Cube, len(beforeConfig.Cubes))
+	afterConfig.Cubes = make([]models.Cube, len(beforeConfig.Cubes))
 	copy(afterConfig.Cubes, beforeConfig.Cubes)
 	afterConfig.Cubes[0].Measures = make(map[string]map[string]any)
 	for k, v := range beforeConfig.Cubes[0].Measures {

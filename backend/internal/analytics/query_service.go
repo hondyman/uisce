@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/hondyman/uisce/backend/internal/cube"
 	"github.com/hondyman/uisce/backend/internal/cubeengine"
 	"github.com/hondyman/uisce/backend/internal/logging"
 	"github.com/hondyman/uisce/backend/internal/security"
@@ -39,9 +38,9 @@ func NewQueryService(db *sqlx.DB, optService *optimize.Service, modelProvider *M
 
 // buildEngineRequestFromView merges a user's query with a view's definition
 // to create a request for the query engine.
-func buildEngineRequestFromView(req models.ExplorerQueryRequest, view cube.ViewMeta, secCtx security.Context) (cube.QueryRequest, error) {
+func buildEngineRequestFromView(req models.ExplorerQueryRequest, view models.ViewMeta, secCtx security.Context) (models.QueryRequest, error) {
 	// Start with the user's request
-	engineReq := cube.QueryRequest{
+	engineReq := models.QueryRequest{
 		Cubes:      view.Cubes, // The view determines the cube(s)
 		QueryType:  "regular",
 		Measures:   req.Measures,

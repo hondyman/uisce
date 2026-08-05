@@ -1,0 +1,144 @@
+/* ── Uisce Nav Shared Styles & Animations ─────────────────────────────── */
+
+/* Frosted glass overlay for AppBar when scrolled */
+.uisce-nav-glass {
+  backdrop-filter: blur(16px) saturate(180%);
+  -webkit-backdrop-filter: blur(16px) saturate(180%);
+}
+
+/* Teal accent hairline at the bottom of the top nav */
+.uisce-nav-accent-bar {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    var(--nav-accent) 30%,
+    var(--nav-accent) 70%,
+    transparent 100%
+  );
+  opacity: 0.65;
+  pointer-events: none;
+}
+
+/* 4px teal left-rail for active sidebar / menu items */
+.uisce-nav-rail {
+  width: 4px;
+  background-color: var(--nav-rail-accent);
+  border-radius: 0 3px 3px 0;
+  flex-shrink: 0;
+  transition: opacity 200ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Teal dot with tinted halo for category indicators */
+.uisce-nav-category-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  transition: box-shadow 150ms ease;
+}
+
+/* Smooth hover lift for nav buttons */
+.uisce-nav-btn {
+  transition:
+    background-color 150ms cubic-bezier(0.4, 0, 0.2, 1),
+    color 150ms cubic-bezier(0.4, 0, 0.2, 1),
+    transform 100ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+.uisce-nav-btn:hover {
+  transform: translateY(-1px);
+}
+
+/* Pill-shaped search input shell */
+.uisce-nav-search {
+  border-radius: 20px;
+  transition:
+    border-color 150ms cubic-bezier(0.4, 0, 0.2, 1),
+    box-shadow 150ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+.uisce-nav-search:focus-within {
+  outline: 2px solid var(--nav-accent);
+  outline-offset: 1px;
+}
+
+/* Dropdown menu container */
+.uisce-nav-menu {
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+/* Active item glow for dark mode */
+.dark .uisce-nav-active-glow {
+  box-shadow: 0 0 12px var(--nav-glow-color);
+}
+
+/* Notification badge pulse animation */
+@keyframes uisce-badge-pulse {
+  0%   { box-shadow: 0 0 0 0 rgba(0, 201, 200, 0.5); }
+  60%  { box-shadow: 0 0 0 6px rgba(0, 201, 200, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(0, 201, 200, 0); }
+}
+
+.uisce-badge-unread {
+  animation: uisce-badge-pulse 2s ease-out infinite;
+}
+
+/* Subtle sidebar top teal inset line (dark mode "water surface") */
+.uisce-sidebar-waterline {
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    var(--nav-accent) 20%,
+    var(--nav-accent) 80%,
+    transparent 100%
+  );
+  opacity: 0.3;
+  margin: 0 12px;
+  flex-shrink: 0;
+}
+
+/* AppBar frosted glass when scrolled */
+.uisce-appbar-scrolled {
+  backdrop-filter: blur(16px) saturate(180%);
+  -webkit-backdrop-filter: blur(16px) saturate(180%);
+  background-color: var(--nav-glass-bg) !important;
+  border-bottom: 1px solid var(--nav-glass-border) !important;
+}
+
+/* Smooth color transitions across the nav chrome */
+.uisce-nav-chrome {
+  transition:
+    background-color 200ms cubic-bezier(0.4, 0, 0.2, 1),
+    border-color 200ms cubic-bezier(0.4, 0, 0.2, 1),
+    color 150ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Focus ring that matches the brand */
+.uisce-nav-focus:focus-visible {
+  outline: 2px solid var(--nav-accent);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* Menu item left-border accent */
+.uisce-menu-item-active {
+  border-left: 3px solid var(--nav-accent);
+  background-color: var(--nav-item-active);
+  color: var(--nav-accent);
+}
+
+/* Sidebar section label (uppercase, dimmed) */
+.uisce-sidebar-section-label {
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--nav-item-text-dim);
+  padding: 0.5rem 1rem 0.25rem;
+  margin: 0;
+}

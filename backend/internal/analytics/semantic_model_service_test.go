@@ -5,7 +5,7 @@ import (
 
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/google/uuid"
-	"github.com/hondyman/uisce/backend/internal/cube"
+	"github.com/hondyman/uisce/backend/models"
 	"github.com/jmoiron/sqlx"
 	"github.com/stretchr/testify/require"
 )
@@ -13,7 +13,7 @@ import (
 func TestPruneMissingColumnsFromExtension(t *testing.T) {
 	svc := &SemanticModelService{DB: nil}
 
-	ext := &cube.Cube{
+	ext := &models.Cube{
 		Name: "ext",
 		Dimensions: map[string]map[string]any{
 			"d1": {"sql": "missing_col"},
@@ -69,7 +69,7 @@ func TestSaveExtensionModelRejectsSelfExtend(t *testing.T) {
 		Title:        "t",
 		Description:  "d",
 		Status:       "draft",
-		ModelObject:  cube.Cube{},
+		ModelObject:  models.Cube{},
 		ActorID:      uuid.Nil,
 	}
 
@@ -97,7 +97,7 @@ func TestValidateJoinsWithCatalogFKs(t *testing.T) {
 		WillReturnRows(rows)
 
 	// Build an extension with a join that matches and one that doesn't
-	ext := &cube.Cube{
+	ext := &models.Cube{
 		Name:  "orders",
 		Joins: map[string]map[string]any{},
 	}

@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 150">
+  <defs>
+    <linearGradient id="dg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0D1B6E"/>
+      <stop offset="50%" stop-color="#1565C0"/>
+      <stop offset="100%" stop-color="#00BCD4"/>
+    </linearGradient>
+    <linearGradient id="cg" x1="0%" y1="100%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#00C9C8" stop-opacity="0.8"/>
+      <stop offset="100%" stop-color="#ffffff" stop-opacity="0.95"/>
+    </linearGradient>
+    <clipPath id="dc">
+      <path d="M60 5 C60 5 10 65 10 92 C10 120 33 140 60 140 C87 140 110 120 110 92 C110 65 60 5 60 5 Z"/>
+    </clipPath>
+  </defs>
+  <path d="M60 5 C60 5 10 65 10 92 C10 120 33 140 60 140 C87 140 110 120 110 92 C110 65 60 5 60 5 Z" fill="url(#dg)"/>
+  <g clip-path="url(#dc)">
+    <rect x="24" y="102" width="14" height="28" fill="url(#cg)" opacity="0.85" rx="2"/>
+    <rect x="42" y="90"  width="14" height="40" fill="url(#cg)" opacity="0.9"  rx="2"/>
+    <rect x="60" y="78"  width="14" height="52" fill="url(#cg)" opacity="0.95" rx="2"/>
+    <rect x="78" y="65"  width="14" height="65" fill="url(#cg)"                rx="2"/>
+    <polyline points="31,108 49,94 67,80 85,60" stroke="white" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" fill="none" opacity="0.95"/>
+    <polyline points="78,52 88,60 80,68" stroke="white" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" fill="none" opacity="0.95"/>
+  </g>
+</svg>

@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/hondyman/uisce/backend/internal/cube"
 	"github.com/hondyman/uisce/backend/internal/logging"
 	"github.com/hondyman/uisce/backend/models"
 	"github.com/jmoiron/sqlx"
@@ -64,7 +63,7 @@ type semanticCatalogItem struct {
 	ColumnNode *models.CatalogNode
 }
 
-func (s *SemanticModelService) syncCatalogForGeneratedModel(ctx context.Context, tenantID, tenantDatasourceID uuid.UUID, tableNode models.CatalogNode, columns []models.CatalogNode, cube *cube.Cube, defn *models.FabricDefn) error {
+func (s *SemanticModelService) syncCatalogForGeneratedModel(ctx context.Context, tenantID, tenantDatasourceID uuid.UUID, tableNode models.CatalogNode, columns []models.CatalogNode, cube *models.Cube, defn *models.FabricDefn) error {
 	if s.DB == nil {
 		return fmt.Errorf("db handle is nil")
 	}
@@ -564,13 +563,13 @@ type SaveExtensionModelRequest struct {
 	Description  string    `json:"description"`
 	Status       string    `json:"status"` // draft|published
 	CoreVersion  *int      `json:"core_version,omitempty"`
-	ModelObject  cube.Cube `json:"model_object"`
+	ModelObject  models.Cube `json:"model_object"`
 	ActorID      uuid.UUID `json:"actor_id"`
 }
 
 // SaveExtensionModel upserts an extension FabricDefn row for a base model, versioning via is_current flag.
 // Returns the saved definition and any validation issues detected against the current core base.
-func (s *SemanticModelService) SaveExtensionModel(tenantDatasourceID uuid.UUID, req SaveExtensionModelRequest) (*models.FabricDefn, []cube.ValidationIssue, error) {
+func (s *SemanticModelService) SaveExtensionModel(tenantDatasourceID uuid.UUID, req SaveExtensionModelRequest) (*models.FabricDefn, []models.ValidationIssue, error) {
 	// The base model key can be in the request or inside the model object itself.
 	baseKeyFromObject, _ := req.ModelObject.Extends.(string)
 	if req.BaseModelKey == "" && baseKeyFromObject != "" {
@@ -636,7 +635,7 @@ func (s *SemanticModelService) SaveExtensionModel(tenantDatasourceID uuid.UUID, 
 	}
 
 	// Validate against base cube
-	issues := cube.ValidateExtension(baseCube, extensionCube)
+	issues := ValidateExtension(baseCube, extensionCube)
 
 	// Prevent extending itself: extKey should not equal baseKey
 	if strings.EqualFold(strings.TrimSpace(extKey), strings.TrimSpace(baseKey)) || strings.EqualFold(strings.TrimPrefix(extKey, "/"), strings.TrimPrefix(baseKey, "/")) {
@@ -662,13 +661,13 @@ func (s *SemanticModelService) SaveExtensionModel(tenantDatasourceID uuid.UUID, 
 	}
 
 	// Build resolved config with merged cube (base + extension)
-	mergedCube, mergeIssues := cube.MergeCube(baseCube, extensionCube)
+	mergedCube, mergeIssues := MergeCube(baseCube, extensionCube)
 	if len(mergeIssues) > 0 {
 		issues = append(issues, mergeIssues...)
 	}
 	resolved := models.ResolvedModelConfig{
 		ModelKey: extKey, // The key for the custom/extension model
-		Cubes:    []cube.Cube{mergedCube},
+		Cubes:    []models.Cube{mergedCube},
 	}
 	resolvedJSON, err := json.Marshal(resolved)
 	if err != nil {
@@ -738,12 +737,12 @@ type ExtensionCompatibility struct {
 	ExtensionCoreTarget *int                   `json:"extension_core_version_target,omitempty"`
 	VersionMismatch     bool                   `json:"version_mismatch"`
 	Status              string                 `json:"status"`
-	Issues              []cube.ValidationIssue `json:"issues"`
+	Issues              []models.ValidationIssue `json:"issues"`
 	ExtensionChanges    map[string]any         `json:"extension_changes,omitempty"`
 }
 
 // GetExtensionsCompatibilityReport validates all current extensions against current core and reports issues.
-func (s *SemanticModelService) GetExtensionsCompatibilityReport(tenantDatasourceID uuid.UUID) ([]ExtensionCompatibility, []cube.ValidationIssue, error) {
+func (s *SemanticModelService) GetExtensionsCompatibilityReport(tenantDatasourceID uuid.UUID) ([]ExtensionCompatibility, []models.ValidationIssue, error) {
 	// Load all current core (published) models and all current extensions (any status)
 	var defns []models.FabricDefn
 	q := `SELECT * FROM public.fabric_defn WHERE tenant_datasource_id = $1 AND is_current = true`
@@ -751,9 +750,9 @@ func (s *SemanticModelService) GetExtensionsCompatibilityReport(tenantDatasource
 		return nil, nil, fmt.Errorf("failed to load fabric_defn rows: %w", err)
 	}
 
-	coreCubes := map[string]cube.Cube{}
+	coreCubes := map[string]models.Cube{}
 	coreByModelKey := map[string]models.FabricDefn{}
-	extCubes := map[string]cube.Cube{}
+	extCubes := map[string]models.Cube{}
 	// Track extension rows for per-extension base lookup
 	var extRows []models.FabricDefn
 
@@ -790,7 +789,7 @@ func (s *SemanticModelService) GetExtensionsCompatibilityReport(tenantDatasource
 		}
 	}
 
-	merged, issues := cube.ComposeCatalog(coreCubes, extCubes)
+	merged, issues := ComposeCatalog(coreCubes, extCubes)
 	_ = merged // merged not used further here, but compose yields global issues we return
 
 	// Build per-extension compatibility summary
@@ -812,7 +811,7 @@ func (s *SemanticModelService) GetExtensionsCompatibilityReport(tenantDatasource
 		var baseVersion int
 		var target *int
 		var mismatch bool
-		var perIssues []cube.ValidationIssue
+		var perIssues []models.ValidationIssue
 		var extChanges map[string]any
 
 		for mk, coreDef := range coreByModelKey {
@@ -1292,8 +1291,8 @@ func (s *SemanticModelService) GatherColumnsMapForDatasource(tenantDatasourceID 
 
 // PruneMissingColumnsFromExtension inspects the extension cube and removes dimensions/measures/joins whose 'sql' is a simple column
 // reference that does not exist in the catalog. It returns ValidationIssues describing what was removed.
-func (s *SemanticModelService) PruneMissingColumnsFromExtension(ext *cube.Cube, colsMap map[string]struct{}, baseCubeName string) []cube.ValidationIssue {
-	issues := []cube.ValidationIssue{}
+func (s *SemanticModelService) PruneMissingColumnsFromExtension(ext *models.Cube, colsMap map[string]struct{}, baseCubeName string) []models.ValidationIssue {
+	issues := []models.ValidationIssue{}
 	// Helper to check if sql is a simple identifier like "col" or "table.col"
 	isSimpleIdentifier := func(sql string) (string, bool) {
 		sql = strings.TrimSpace(sql)
@@ -1321,7 +1320,7 @@ func (s *SemanticModelService) PruneMissingColumnsFromExtension(ext *cube.Cube, 
 				if _, exists := colsMap[col]; !exists {
 					// remove this dimension
 					delete(ext.Dimensions, name)
-					issues = append(issues, cube.ValidationIssue{Level: "warning", Code: "MISSING_COLUMN_PRUNED", Message: fmt.Sprintf("dimension '%s' removed: column '%s' not found in catalog for base '%s'", name, col, baseCubeName)})
+					issues = append(issues, models.ValidationIssue{Level: "warning", Code: "MISSING_COLUMN_PRUNED", Message: fmt.Sprintf("dimension '%s' removed: column '%s' not found in catalog for base '%s'", name, col, baseCubeName)})
 				}
 			}
 		}
@@ -1333,7 +1332,7 @@ func (s *SemanticModelService) PruneMissingColumnsFromExtension(ext *cube.Cube, 
 				// strip any aggregate wrapper like SUM(col) — our heuristic only prunes plain identifiers
 				if _, exists := colsMap[col]; !exists {
 					delete(ext.Measures, name)
-					issues = append(issues, cube.ValidationIssue{Level: "warning", Code: "MISSING_COLUMN_PRUNED", Message: fmt.Sprintf("measure '%s' removed: column '%s' not found in catalog for base '%s'", name, col, baseCubeName)})
+					issues = append(issues, models.ValidationIssue{Level: "warning", Code: "MISSING_COLUMN_PRUNED", Message: fmt.Sprintf("measure '%s' removed: column '%s' not found in catalog for base '%s'", name, col, baseCubeName)})
 				}
 			}
 		}
@@ -1352,7 +1351,7 @@ func (s *SemanticModelService) PruneMissingColumnsFromExtension(ext *cube.Cube, 
 			if col != "" {
 				if _, exists := colsMap[col]; !exists {
 					delete(ext.Joins, name)
-					issues = append(issues, cube.ValidationIssue{Level: "warning", Code: "MISSING_COLUMN_PRUNED", Message: fmt.Sprintf("join '%s' removed: column '%s' not found in catalog for base '%s'", name, col, baseCubeName)})
+					issues = append(issues, models.ValidationIssue{Level: "warning", Code: "MISSING_COLUMN_PRUNED", Message: fmt.Sprintf("join '%s' removed: column '%s' not found in catalog for base '%s'", name, col, baseCubeName)})
 				}
 			}
 		}
@@ -1364,8 +1363,8 @@ func (s *SemanticModelService) PruneMissingColumnsFromExtension(ext *cube.Cube, 
 // to ensure that referenced columns exist on the referenced tables. This is a conservative validation that
 // adds warnings when a join condition references a column that is not part of any FK relationship between
 // the involved tables according to the catalog. It does not mutate the extension cube.
-func (s *SemanticModelService) ValidateJoinsWithCatalogFKs(tenantDatasourceID uuid.UUID, ext *cube.Cube) []cube.ValidationIssue {
-	issues := []cube.ValidationIssue{}
+func (s *SemanticModelService) ValidateJoinsWithCatalogFKs(tenantDatasourceID uuid.UUID, ext *models.Cube) []models.ValidationIssue {
+	issues := []models.ValidationIssue{}
 	if len(ext.Joins) == 0 {
 		return issues
 	}
@@ -1481,13 +1480,13 @@ func (s *SemanticModelService) ValidateJoinsWithCatalogFKs(tenantDatasourceID uu
 		}
 		allowed := fkMap[key]
 		if allowed == nil {
-			issues = append(issues, cube.ValidationIssue{Level: "warning", Code: "JOIN_NOT_IN_CATALOG_FK", Message: fmt.Sprintf("join '%s' not backed by any catalog FK between '%s' and '%s'", joinName, lt, rt)})
+			issues = append(issues, models.ValidationIssue{Level: "warning", Code: "JOIN_NOT_IN_CATALOG_FK", Message: fmt.Sprintf("join '%s' not backed by any catalog FK between '%s' and '%s'", joinName, lt, rt)})
 			continue
 		}
 		// Look for matching column pair in either direction
 		_, okPair := allowed[colPair{from: strings.ToLower(lc), to: strings.ToLower(rc)}]
 		if !okPair {
-			issues = append(issues, cube.ValidationIssue{Level: "warning", Code: "JOIN_COLUMNS_NOT_IN_FK", Message: fmt.Sprintf("join '%s' uses columns '%s' and '%s' which are not part of an FK between '%s' and '%s'", joinName, lc, rc, lt, rt)})
+			issues = append(issues, models.ValidationIssue{Level: "warning", Code: "JOIN_COLUMNS_NOT_IN_FK", Message: fmt.Sprintf("join '%s' uses columns '%s' and '%s' which are not part of an FK between '%s' and '%s'", joinName, lc, rc, lt, rt)})
 		}
 	}
 	return issues
@@ -1502,7 +1501,7 @@ func (s *SemanticModelService) createFabricDefnFromTable(tenantID, tenantDatasou
 	}
 
 	// Create a single cube for this table
-	c := cube.Cube{
+	c := models.Cube{
 		Name:       tableName,
 		SQL:        modelKey,
 		SQLTable:   strings.Replace(strings.TrimPrefix(modelKey, "/"), "/", ".", 1),
@@ -1598,7 +1597,7 @@ func (s *SemanticModelService) createFabricDefnFromTable(tenantID, tenantDatasou
 
 	resolvedConfig := models.ResolvedModelConfig{
 		ModelKey: modelKey,
-		Cubes:    []cube.Cube{c},
+		Cubes:    []models.Cube{c},
 	}
 	resolvedJSON, err := json.Marshal(resolvedConfig)
 	if err != nil {
@@ -1664,7 +1663,7 @@ func (s *SemanticModelService) createFabricDefnFromTable(tenantID, tenantDatasou
 
 			resolvedExt := models.ResolvedModelConfig{
 				ModelKey: customKey,
-				Cubes:    []cube.Cube{extCube},
+				Cubes:    []models.Cube{extCube},
 			}
 			resolvedExtJSON, _ := json.Marshal(resolvedExt)
 

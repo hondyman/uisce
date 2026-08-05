@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/hondyman/uisce/backend/internal/cube"
 	"github.com/hondyman/uisce/backend/internal/query"
 	"github.com/hondyman/uisce/backend/models"
 )
@@ -41,12 +40,12 @@ type DynamicQueryRequest struct {
 
 // DynamicQueryEngine handles dynamic parameter and measure resolution
 type DynamicQueryEngine struct {
-	cubeEngine  *cube.Cube
+	cubeEngine  *models.Cube
 	templateMgr *query.QueryTemplateManager
 }
 
 // NewDynamicQueryEngine creates a new dynamic query engine
-func NewDynamicQueryEngine(cubeEngine *cube.Cube, templateMgr *query.QueryTemplateManager) *DynamicQueryEngine {
+func NewDynamicQueryEngine(cubeEngine *models.Cube, templateMgr *query.QueryTemplateManager) *DynamicQueryEngine {
 	return &DynamicQueryEngine{
 		cubeEngine:  cubeEngine,
 		templateMgr: templateMgr,

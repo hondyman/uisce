@@ -13,7 +13,6 @@ import (
 	"golang.org/x/text/language"
 
 	"github.com/google/uuid"
-	"github.com/hondyman/uisce/backend/internal/cube"
 	"github.com/hondyman/uisce/backend/internal/cubeengine"
 	"github.com/hondyman/uisce/backend/internal/db"
 	"github.com/hondyman/uisce/backend/internal/logging"
@@ -336,7 +335,7 @@ func DiffModels(current, desired models.ResolvedModelConfig) patchDiff {
 	return patchDiff{Changes: changes}
 }
 
-func diffCube(name string, cur, des cube.Cube) []patchChange {
+func diffCube(name string, cur, des models.Cube) []patchChange {
 	var out []patchChange
 	// Diff dimensions
 	out = append(out, diffMap(cur.Dimensions, des.Dimensions, []string{"cube", name, "dimensions"})...)
@@ -375,7 +374,7 @@ func ApplyPatch(base models.ResolvedModelConfig, diff patchDiff, policy RemovalP
 		switch ch.Kind {
 		case patchAdd:
 			if len(ch.Path) == 2 && ch.Path[0] == "cube" {
-				cubes[ch.Path[1]] = ch.After.(cube.Cube)
+				cubes[ch.Path[1]] = ch.After.(models.Cube)
 			} else {
 				patchInMap(cubes, ch.Path, ch.After)
 			}
@@ -391,7 +390,7 @@ func ApplyPatch(base models.ResolvedModelConfig, diff patchDiff, policy RemovalP
 	}
 
 	// Rebuild the slice of cubes from the map to maintain order.
-	var updatedCubes []cube.Cube
+	var updatedCubes []models.Cube
 	for _, c := range base.Cubes {
 		if updatedCube, exists := cubes[c.Name]; exists {
 			updatedCubes = append(updatedCubes, updatedCube)
@@ -408,7 +407,7 @@ func ApplyPatch(base models.ResolvedModelConfig, diff patchDiff, policy RemovalP
 	return next
 }
 
-func patchInMap(cubes map[string]cube.Cube, path []string, value any) {
+func patchInMap(cubes map[string]models.Cube, path []string, value any) {
 	if len(path) < 3 {
 		return
 	}
@@ -435,7 +434,7 @@ func patchInMap(cubes map[string]cube.Cube, path []string, value any) {
 	}
 }
 
-func deleteAtPath(cubes map[string]cube.Cube, path []string) {
+func deleteAtPath(cubes map[string]models.Cube, path []string) {
 	if len(path) < 2 {
 		return
 	}
@@ -459,7 +458,7 @@ func deleteAtPath(cubes map[string]cube.Cube, path []string) {
 	}
 }
 
-func addTombstone(cubes map[string]cube.Cube, path []string) {
+func addTombstone(cubes map[string]models.Cube, path []string) {
 	if len(path) < 2 {
 		return
 	}
@@ -486,8 +485,8 @@ func addTombstone(cubes map[string]cube.Cube, path []string) {
 
 // --- Helper Functions ---
 
-func indexCubes(cubes []cube.Cube) map[string]cube.Cube {
-	idx := make(map[string]cube.Cube)
+func indexCubes(cubes []models.Cube) map[string]models.Cube {
+	idx := make(map[string]models.Cube)
 	for _, c := range cubes {
 		idx[c.Name] = c
 	}
@@ -506,10 +505,10 @@ func inferDimType(dt string) string {
 	}
 }
 
-func CatalogToCubes(cat *cubeengine.Catalog, tags []string) []cube.Cube {
-	var cubes []cube.Cube
+func CatalogToCubes(cat *cubeengine.Catalog, tags []string) []models.Cube {
+	var cubes []models.Cube
 	for _, tbl := range cat.Tables {
-		c := cube.Cube{
+		c := models.Cube{
 			Name:       fmt.Sprintf("%s_%s", tbl.Schema, tbl.Name),
 			Tags:       append([]string{}, tags...),
 			SQL:        fmt.Sprintf("SELECT * FROM %s.%s", tbl.Schema, tbl.Name),

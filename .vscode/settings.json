@@ -101,5 +101,12 @@
         { "fileMatch": [".eslintrc*", "eslint.config.*"], "url": "https://json.schemastore.org/eslintrc.json" }
     ],
     "json.maxItemsComputed": 5000,
-    "files.maxMemoryForLargeFilesUnopened": 200
+    "files.maxMemoryForLargeFilesUnopened": 200,
+    "workbench.editorAssociations": {
+        "*.copilotmd": "vscode.markdown.preview.editor",
+        "*.parquet": "duckdb.dataFileViewer",
+        "*.csv": "duckdb.dataFileViewer",
+        "*.tsv": "duckdb.dataFileViewer",
+        "*.xlsx": "duckdb.dataFileViewer"
+    }
 }

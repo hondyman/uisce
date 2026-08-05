@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/hondyman/uisce/backend/internal/cube"
+	"github.com/hondyman/uisce/backend/internal/analytics"
 	"github.com/hondyman/uisce/backend/internal/logging"
 	"github.com/hondyman/uisce/backend/models"
 )
@@ -288,7 +288,7 @@ func (s *FabricCatalogScanner) createCustomModelNode(baseKey string, coreModel *
 					// If custom config has the old format (direct extends/dimensions), convert it
 					if len(customConfig.Cubes) == 0 {
 						// Convert old format to new format
-						customCube := cube.Cube{
+						customCube := models.Cube{
 							Name:       customModel.ModelKey,
 							Extends:    baseKey,
 							Dimensions: s.convertOldDimensionsFormat(customModel.ResolvedConfig),
@@ -296,16 +296,16 @@ func (s *FabricCatalogScanner) createCustomModelNode(baseKey string, coreModel *
 						}
 						customConfig = models.ResolvedModelConfig{
 							ModelKey: customModel.ModelKey,
-							Cubes:    []cube.Cube{customCube},
+							Cubes:    []models.Cube{customCube},
 						}
 					}
 
 					// Merge the cubes
 					if len(coreConfig.Cubes) > 0 && len(customConfig.Cubes) > 0 {
-						mergedCube, _ := cube.MergeCube(coreConfig.Cubes[0], customConfig.Cubes[0])
+						mergedCube, _ := analytics.MergeCube(coreConfig.Cubes[0], customConfig.Cubes[0])
 						mergedConfig := models.ResolvedModelConfig{
 							ModelKey: customModel.ModelKey,
-							Cubes:    []cube.Cube{mergedCube},
+							Cubes:    []models.Cube{mergedCube},
 						}
 						mergedConfigJSON, _ := json.Marshal(mergedConfig)
 						resolvedConfig = mergedConfigJSON

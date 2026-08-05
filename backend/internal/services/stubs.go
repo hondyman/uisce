@@ -4,7 +4,6 @@ import (
 	"context"
 
 	"github.com/google/uuid"
-	"github.com/hondyman/uisce/backend/internal/cube"
 	"github.com/hondyman/uisce/backend/internal/models"
 	"github.com/hondyman/uisce/backend/internal/platform"
 	"github.com/hondyman/uisce/backend/internal/security"
@@ -137,7 +136,7 @@ func (s *SemanticModelService) GatherColumnsMapForDatasource(datasourceID uuid.U
 	return nil, nil
 }
 
-func (s *SemanticModelService) PruneMissingColumnsFromExtension(ext *cube.Cube, colsMap map[string]string, baseCubeName string) []cube.ValidationIssue {
+func (s *SemanticModelService) PruneMissingColumnsFromExtension(ext *coremodels.Cube, colsMap map[string]string, baseCubeName string) []coremodels.ValidationIssue {
 	return nil
 }
 

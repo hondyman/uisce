@@ -10,7 +10,6 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/hondyman/uisce/backend/internal/analytics"
-	"github.com/hondyman/uisce/backend/internal/cube"
 	charts "github.com/hondyman/uisce/backend/internal/db/charts"
 	"github.com/hondyman/uisce/backend/internal/handlers"
 	"github.com/hondyman/uisce/backend/internal/scanner"
@@ -114,7 +113,7 @@ func (s *Server) registerFabricRoutes(r chi.Router) {
 			http.Error(w, "invalid model_object payload", http.StatusBadRequest)
 			return
 		}
-		var ext cube.Cube
+		var ext coremodels.Cube
 		if err := json.Unmarshal(b, &ext); err != nil {
 			http.Error(w, "invalid model_object structure", http.StatusBadRequest)
 			return
@@ -317,7 +316,7 @@ func (s *Server) registerFabricRoutes(r chi.Router) {
 			http.Error(w, "invalid model_object payload", http.StatusBadRequest)
 			return
 		}
-		var ext cube.Cube
+		var ext coremodels.Cube
 		if err := json.Unmarshal(b, &ext); err != nil {
 			http.Error(w, "invalid model_object structure", http.StatusBadRequest)
 			return
@@ -362,9 +361,9 @@ func (s *Server) registerFabricRoutes(r chi.Router) {
 			return
 		}
 		baseCube := baseConfig.Cubes[0]
-		issues := cube.ValidateExtension(baseCube, ext)
+		issues := analytics.ValidateExtension(baseCube, ext)
 		colsMap, errCols := semanticSvc.GatherColumnsMapForDatasource(dsID)
-		pruning := []cube.ValidationIssue{}
+		pruning := []coremodels.ValidationIssue{}
 		if errCols == nil {
 			pruning = semanticSvc.PruneMissingColumnsFromExtension(&ext, colsMap, baseCube.Name)
 		}

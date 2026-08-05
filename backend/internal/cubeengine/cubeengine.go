@@ -4,8 +4,8 @@ import (
 	"context"
 	"database/sql"
 
-	"github.com/hondyman/uisce/backend/internal/cube"
 	"github.com/hondyman/uisce/backend/internal/telemetry/optimize"
+	"github.com/hondyman/uisce/backend/models"
 )
 
 type Table struct {
@@ -29,18 +29,18 @@ type FK struct {
 }
 
 type Catalog struct {
-	Cubes  map[string]cube.Cube
-	Views  map[string]cube.ViewMeta
+	Cubes  map[string]models.Cube
+	Views  map[string]models.ViewMeta
 	Tables []Table
 }
 
 type Engine struct {
-	catalog    *cube.Catalog
+	catalog    *models.Catalog
 	db         *sql.DB
 	optService *optimize.Service
 }
 
-func NewEngine(catalog *cube.Catalog, db *sql.DB, optService *optimize.Service) *Engine {
+func NewEngine(catalog *models.Catalog, db *sql.DB, optService *optimize.Service) *Engine {
 	return &Engine{
 		catalog:    catalog,
 		db:         db,
@@ -56,7 +56,7 @@ type EmittedSQL struct {
 	}
 }
 
-func (e *Engine) Compile(ctx context.Context, req cube.QueryRequest) (*EmittedSQL, error) {
+func (e *Engine) Compile(ctx context.Context, req models.QueryRequest) (*EmittedSQL, error) {
 	return &EmittedSQL{
 		SQL: "SELECT * FROM mock_table",
 	}, nil

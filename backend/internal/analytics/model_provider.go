@@ -3,8 +3,8 @@ package analytics
 import (
 	"context"
 
-	"github.com/hondyman/uisce/backend/internal/cube"
 	"github.com/hondyman/uisce/backend/internal/logging"
+	"github.com/hondyman/uisce/backend/models"
 	"github.com/jmoiron/sqlx"
 )
 
@@ -20,12 +20,12 @@ func NewModelProvider(db *sqlx.DB) *ModelProvider { return &ModelProvider{db: db
 
 // GetActiveCatalog loads all current, published fabric definitions and compiles them
 // into a single catalog for the query engine.
-func (p *ModelProvider) GetActiveCatalog(ctx context.Context, tenantID string, datasourceID string) (*cube.Catalog, error) {
+func (p *ModelProvider) GetActiveCatalog(ctx context.Context, tenantID string, datasourceID string) (*models.Catalog, error) {
 	logging.GetLogger().Sugar().Info("Loading active catalog (stub)...")
 
-	catalog := &cube.Catalog{
-		Cubes: make(map[string]cube.Cube),
-		Views: make(map[string]cube.ViewMeta),
+	catalog := &models.Catalog{
+		Cubes: make(map[string]models.Cube),
+		Views: make(map[string]models.ViewMeta),
 	}
 
 	logging.GetLogger().Sugar().Infof("Loaded %d cubes into active catalog.", len(catalog.Cubes))
@@ -33,7 +33,7 @@ func (p *ModelProvider) GetActiveCatalog(ctx context.Context, tenantID string, d
 	return catalog, nil
 }
 
-func hasTag(c cube.Cube, tag string) bool {
+func hasTag(c models.Cube, tag string) bool {
 	for _, t := range c.Tags {
 		if t == tag {
 			return true
@@ -42,11 +42,11 @@ func hasTag(c cube.Cube, tag string) bool {
 	return false
 }
 
-func preferScopedCube(existing cube.Cube, candidate cube.Cube) bool {
+func preferScopedCube(existing models.Cube, candidate models.Cube) bool {
 	return cubeScopeRank(candidate) > cubeScopeRank(existing)
 }
 
-func cubeScopeRank(c cube.Cube) int {
+func cubeScopeRank(c models.Cube) int {
 	rank := 0
 	if v := metadataString(c, "_fabric_tenant_id"); v != "" && v != globalScopeSentinel {
 		rank += 2
@@ -57,7 +57,7 @@ func cubeScopeRank(c cube.Cube) int {
 	return rank
 }
 
-func metadataString(c cube.Cube, key string) string {
+func metadataString(c models.Cube, key string) string {
 	if c.Metadata == nil {
 		return ""
 	}

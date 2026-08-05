@@ -11,7 +11,6 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/hondyman/uisce/backend/internal/analytics"
-	"github.com/hondyman/uisce/backend/internal/cube"
 	"github.com/hondyman/uisce/backend/internal/logging"
 	"github.com/hondyman/uisce/backend/internal/scanner"
 	models "github.com/hondyman/uisce/backend/models"
@@ -549,7 +548,7 @@ func (h *SemanticModelHandler) SaveExtension(w http.ResponseWriter, r *http.Requ
 			actor = a
 		}
 	}
-	// Convert generic map payload to cube.Cube
+	// Convert generic map payload to models.Cube
 	// Marshal then unmarshal for robust shape conversion.
 	b, err := json.Marshal(req.ModelObject)
 	if err != nil {
@@ -558,7 +557,7 @@ func (h *SemanticModelHandler) SaveExtension(w http.ResponseWriter, r *http.Requ
 		json.NewEncoder(w).Encode(map[string]interface{}{"error": "Invalid model_object payload"})
 		return
 	}
-	var ext cube.Cube
+	var ext models.Cube
 	if err := json.Unmarshal(b, &ext); err != nil {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest)
@@ -633,7 +632,7 @@ func (h *SemanticModelHandler) ValidateModel(w http.ResponseWriter, r *http.Requ
 		json.NewEncoder(w).Encode(map[string]interface{}{"error": "Invalid model_object payload"})
 		return
 	}
-	var ext cube.Cube
+	var ext models.Cube
 	if err := json.Unmarshal(b, &ext); err != nil {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest)
@@ -677,11 +676,11 @@ func (h *SemanticModelHandler) ValidateModel(w http.ResponseWriter, r *http.Requ
 	baseCube := baseConfig.Cubes[0]
 
 	// Run extension validation
-	issues := cube.ValidateExtension(baseCube, ext)
+	issues := analytics.ValidateExtension(baseCube, ext)
 
 	// Prune-finding: gather columns and run pruning heuristics (without mutating DB)
 	colsMap, errCols := h.Service.GatherColumnsMapForDatasource(dsID)
-	pruning := []cube.ValidationIssue{}
+	pruning := []models.ValidationIssue{}
 	if errCols == nil {
 		pruning = h.Service.PruneMissingColumnsFromExtension(&ext, colsMap, baseCube.Name)
 	}

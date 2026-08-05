@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/hondyman/uisce/backend/internal/cube"
 	"github.com/hondyman/uisce/backend/internal/logging"
 	internal_models "github.com/hondyman/uisce/backend/internal/models"
 	"github.com/hondyman/uisce/backend/internal/platform"
@@ -346,7 +345,7 @@ func (s *ViewService) CompareAllViews(ctx context.Context) ([]views.Plan, error)
 		return nil, fmt.Errorf("could not load active model catalog: %w", err)
 	}
 	manager := views.NewManager(s.db.DB, catalog)
-	var viewList []cube.ViewMeta
+	var viewList []models.ViewMeta
 	for _, v := range catalog.Views {
 		viewList = append(viewList, v)
 	}
@@ -465,7 +464,7 @@ func (s *ViewService) RejectViewChanges(ctx context.Context, plans []views.Plan,
 		return fmt.Errorf("could not load active model catalog: %w", err)
 	}
 	manager := views.NewManager(s.db.DB, catalog)
-	vmMap := make(map[string]cube.ViewMeta)
+	vmMap := make(map[string]models.ViewMeta)
 	for _, vm := range catalog.Views {
 		vmMap[fmt.Sprintf("%s.%s", vm.Schema, vm.Name)] = vm
 	}
