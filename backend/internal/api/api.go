@@ -35,7 +35,6 @@ import (
 	"github.com/hondyman/uisce/backend/internal/calculation"
 	"github.com/hondyman/uisce/backend/internal/cbo"
 	"github.com/hondyman/uisce/backend/internal/calcengine"
-	"github.com/hondyman/uisce/backend/internal/cube"
 	"github.com/hondyman/uisce/backend/internal/data_intelligence/tiering"
 	charts "github.com/hondyman/uisce/backend/internal/db/charts"
 	"github.com/hondyman/uisce/backend/internal/events"
@@ -198,7 +197,6 @@ type Server struct {
 	GenAICopilotHandler     *handlers.GenAICopilotHandler
 	PolicyGenerationHandler *handlers.PolicyGenerationHandler
 	CalcHandler             *handlers.CalcHandler
-	CubeHandler             *CubeHandler
 	DatasourceResolver      security.DatasourceResolver
 	BusinessObjectService   *catalogmeta.BusinessObjectService
 	QueryHandler            *handlers.QueryHandler
@@ -1271,13 +1269,6 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 
 	// Initialize Calc Handler
 	srv.CalcHandler = handlers.NewCalcHandler(sqlxDB)
-
-	// Initialize Cube Client and Generator (Phase 9)
-	cubeURL = getEnv("CUBE_API_URL", "http://cube:4000")
-	cubeClient := cube.NewClient(cubeURL, "") // No secret for dev
-	cubeTermRepo := &services.SQLTermRepository{DB: db}
-	cubeGenerator := services.NewCubeGeneratorWithEngines(cubeTermRepo, srv.CueEngine, sqlxDB)
-	srv.CubeHandler = NewCubeHandler(cubeClient, cubeGenerator)
 
 	// Initialize RAG Services
 	ragConfigService := rag.NewConfigService(db)
@@ -3149,7 +3140,6 @@ func (s *Server) registerCalculationRoutes(r chi.Router) {
 		r.Post("/preview", s.CalcHandler.Preview)
 		r.Post("/vectorized", s.runVectorizedCalculations)
 	})
-	s.CubeHandler.RegisterRoutes(r)
 	r.Mount("/calculations", s.CalculationHandler.Routes())
 	r.Mount("/execution-logs", s.ExecutionMonitorHandler.Routes())
 }
