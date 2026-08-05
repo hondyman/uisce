@@ -3362,6 +3362,15 @@ func (s *Server) registerWorkflowRoutes(r chi.Router, db *sql.DB, cronJob *cron.
 	// Advanced RBAC & Permissions
 	rbacHandlers := NewRBACHandlers(s.SQLXDB)
 	rbacHandlers.RegisterRoutes(r)
+
+	// ── Marketplace Ecosystem (secured) ─────────────────────────────────────────
+	// All /api/marketplace/* routes require at minimum a valid AuthInfo.
+	// Browse (GET) passes through because every authenticated tenant can browse.
+	// Publish and install require their own additional scope checks inside handlers.
+	r.Route("/marketplace", func(mr chi.Router) {
+		mr.Use(appmid.RequireMarketplaceScope(appmid.ScopeMarketplaceInstall))
+		RegisterMarketplaceEcosystemRoutes(mr, rbacHandlers)
+	})
 }
 
 // registerTriggerEngineRoutes mounts the Trigger and Automation engine endpoints

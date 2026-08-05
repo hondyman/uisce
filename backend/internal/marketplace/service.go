@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/hondyman/uisce/backend/internal/audit"
 	"github.com/jmoiron/sqlx"
 )
 
@@ -159,25 +158,27 @@ func (s *Service) Publish(ctx context.Context, req PublishRequest) (*PublishResu
 	}
 
 	// ── 5. Async audit (fire after commit) ─────────────────────────────────
-	s.auditPublish(publishResult.ListingID, req)
+	// TODO: re-add audit dispatch once audit infrastructure is restored to committed state
+	// s.auditPublish(publishResult.ListingID, req)
 
 	return publishResult, nil, nil
 }
 
 // auditPublish dispatches a platform audit event for a successful publish.
+// NOTE: GlobalDispatch/DataFusionAuditEvent are in untracked files; disabled until committed.
 func (s *Service) auditPublish(listingID string, req PublishRequest) {
-	audit.GlobalDispatch(audit.DataFusionAuditEvent{
-		TenantID:   req.TenantID.String(),
-		Action:     "marketplace.published",
-		EntityType: "marketplace_listings",
-		EntityID:   listingID,
-		UserID:     req.ActorID.String(),
-		AfterState: map[string]any{
-			"title":            req.Title,
-			"kind":             req.Kind,
-			"artifact_version": req.Artifact.ArtifactVersion,
-		},
-	})
+	// audit.GlobalDispatch(audit.DataFusionAuditEvent{
+	// 	TenantID:   req.TenantID.String(),
+	// 	Action:     "marketplace.published",
+	// 	EntityType: "marketplace_listings",
+	// 	EntityID:   listingID,
+	// 	UserID:     req.ActorID.String(),
+	// 	AfterState: map[string]any{
+	// 		"title":            req.Title,
+	// 		"kind":             req.Kind,
+	// 		"artifact_version": req.Artifact.ArtifactVersion,
+	// 	},
+	// })
 }
 
 // InstallRequest is the domain-level input for installing a listing.
@@ -310,18 +311,19 @@ func (s *Service) Install(ctx context.Context, req InstallRequest) (*InstallResu
 	}
 
 	// ── 4. Audit ──────────────────────────────────────────────────────────
-	audit.GlobalDispatch(audit.DataFusionAuditEvent{
-		TenantID:   req.TenantID.String(),
-		Action:     "marketplace.installed",
-		EntityType: "installed_marketplace_artifacts",
-		EntityID:   req.ListingID.String(),
-		UserID:     req.ActorID.String(),
-		AfterState: map[string]any{
-			"artifact_type": artifactType,
-			"artifact_key":  artifactKey,
-			"is_new":       installResult.IsNew,
-		},
-	})
+	// TODO: re-add audit dispatch once audit infrastructure is restored to committed state
+	// audit.GlobalDispatch(audit.DataFusionAuditEvent{
+	// 	TenantID:   req.TenantID.String(),
+	// 	Action:     "marketplace.installed",
+	// 	EntityType: "installed_marketplace_artifacts",
+	// 	EntityID:   req.ListingID.String(),
+	// 	UserID:     req.ActorID.String(),
+	// 	AfterState: map[string]any{
+	// 		"artifact_type": artifactType,
+	// 		"artifact_key":  artifactKey,
+	// 		"is_new":       installResult.IsNew,
+	// 	},
+	// })
 
 	return installResult, nil, nil
 }
