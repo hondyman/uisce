@@ -138,48 +138,8 @@ func (dqh *DynamicQueryHandler) HandleParameterValidation(w http.ResponseWriter,
 
 // HandleCubeConfigGeneration generates enhanced Cube.js configuration
 func (dqh *DynamicQueryHandler) HandleCubeConfigGeneration(w http.ResponseWriter, r *http.Request) {
-	var req CubeConfigRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"error":   "Invalid request format",
-			"details": err.Error(),
-		})
-		return
-	}
-
-	// Generate Cube.js configuration
-	cubeEnhancer := dynamic.NewCubeDynamicEnhancer(nil) // Would use your existing cube
-	config, err := cubeEnhancer.GenerateCubeJSConfig(req.Parameters, req.DynamicMeasures)
-	if err != nil {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusInternalServerError)
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"error":   "Configuration generation failed",
-			"details": err.Error(),
-		})
-		return
-	}
-
-	// Generate parameter schema
-	schema, err := cubeEnhancer.GenerateParameterSchema(req.Parameters)
-	if err != nil {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusInternalServerError)
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"error":   "Schema generation failed",
-			"details": err.Error(),
-		})
-		return
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{
-		"cube_config":      config,
-		"parameter_schema": schema,
-		"generated_at":     "now",
-	})
+	w.WriteHeader(http.StatusNotImplemented)
+	json.NewEncoder(w).Encode(map[string]string{"error": "not implemented"})
 }
 
 // Helper functions

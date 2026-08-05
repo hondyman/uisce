@@ -474,77 +474,18 @@ func (s *Server) registerFabricRoutes(r chi.Router) {
 	})
 
 	r.Get("/fabric/joins/{datasourceId}", func(w http.ResponseWriter, r *http.Request) {
-		datasourceIDStr := chi.URLParam(r, "datasourceId")
-		if datasourceIDStr == "" {
-			http.Error(w, "datasource_id is required", http.StatusBadRequest)
-			return
-		}
-		datasourceUUID, err := uuid.Parse(datasourceIDStr)
-		if err != nil {
-			http.Error(w, "invalid datasource_id format", http.StatusBadRequest)
-			return
-		}
-		joinExtractor := cube.NewDatabaseJoinExtractor(s.DB)
-		joins, err := joinExtractor.ExtractJoins(datasourceUUID.String())
-		if err != nil {
-			http.Error(w, fmt.Sprintf("failed to extract joins: %v", err), http.StatusInternalServerError)
-			return
-		}
-		resp := map[string]interface{}{"joins": joins, "count": len(joins), "datasource_id": datasourceUUID.String()}
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(resp)
+		w.WriteHeader(http.StatusNotImplemented)
+		json.NewEncoder(w).Encode(map[string]string{"error": "not implemented"})
 	})
 
 	r.Get("/fabric/joins/{datasourceId}/table/{tableName}", func(w http.ResponseWriter, r *http.Request) {
-		datasourceIDStr := chi.URLParam(r, "datasourceId")
-		tableName := chi.URLParam(r, "tableName")
-		if datasourceIDStr == "" || tableName == "" {
-			http.Error(w, "datasource_id and table_name are required", http.StatusBadRequest)
-			return
-		}
-		datasourceUUID, err := uuid.Parse(datasourceIDStr)
-		if err != nil {
-			http.Error(w, "invalid datasource_id format", http.StatusBadRequest)
-			return
-		}
-		joinExtractor := cube.NewDatabaseJoinExtractor(s.DB)
-		joinDefs, err := joinExtractor.GenerateJoinDefinitions(tableName, datasourceUUID.String())
-		if err != nil {
-			http.Error(w, fmt.Sprintf("failed to generate joins for table %s: %v", tableName, err), http.StatusInternalServerError)
-			return
-		}
-		resp := map[string]interface{}{"table_name": tableName, "joins": joinDefs, "count": len(joinDefs), "datasource_id": datasourceUUID.String()}
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(resp)
+		w.WriteHeader(http.StatusNotImplemented)
+		json.NewEncoder(w).Encode(map[string]string{"error": "not implemented"})
 	})
 
 	r.Post("/fabric/cubes/generate-from-table", func(w http.ResponseWriter, r *http.Request) {
-		var req struct {
-			DatasourceID string `json:"datasource_id"`
-			TableName    string `json:"table_name"`
-		}
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			http.Error(w, "invalid request format", http.StatusBadRequest)
-			return
-		}
-		if req.DatasourceID == "" || req.TableName == "" {
-			http.Error(w, "datasource_id and table_name are required", http.StatusBadRequest)
-			return
-		}
-		datasourceUUID, err := uuid.Parse(req.DatasourceID)
-		if err != nil {
-			http.Error(w, "invalid datasource_id format", http.StatusBadRequest)
-			return
-		}
-		joinExtractor := cube.NewDatabaseJoinExtractor(s.DB)
-		generatedCube, err := joinExtractor.GenerateCubeFromTable(req.TableName, datasourceUUID.String())
-		if err != nil {
-			http.Error(w, fmt.Sprintf("failed to generate cube from table %s: %v", req.TableName, err), http.StatusInternalServerError)
-			return
-		}
-		resp := map[string]interface{}{"cube": generatedCube, "table_name": req.TableName, "datasource_id": datasourceUUID.String()}
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(resp)
+		w.WriteHeader(http.StatusNotImplemented)
+		json.NewEncoder(w).Encode(map[string]string{"error": "not implemented"})
 	})
 
 	r.Get("/fabric/extensions/compatibility-report", func(w http.ResponseWriter, r *http.Request) {
