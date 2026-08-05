@@ -6,23 +6,18 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/hondyman/uisce/backend/internal/analytics"
 	"github.com/jmoiron/sqlx"
 )
 
 // SemanticAdapter wraps the analytics semantic service to provide
 // scheduler specific semantic operations
 type SemanticAdapter struct {
-	db          *sqlx.DB
-	semanticSvc *analytics.SemanticService
+	db *sqlx.DB
 }
 
 // NewSemanticAdapter creates a new adapter
-func NewSemanticAdapter(db *sqlx.DB, svc *analytics.SemanticService) *SemanticAdapter {
-	return &SemanticAdapter{
-		db:          db,
-		semanticSvc: svc,
-	}
+func NewSemanticAdapter(db *sqlx.DB) *SemanticAdapter {
+	return &SemanticAdapter{db: db}
 }
 
 // ResolveBindings resolves string references to IDs

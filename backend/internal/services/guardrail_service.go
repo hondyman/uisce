@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/hondyman/uisce/backend/internal/analytics"
 	public_models "github.com/hondyman/uisce/backend/models"
 	"github.com/jmoiron/sqlx"
 	"github.com/lib/pq"
@@ -16,15 +15,11 @@ import (
 // GuardrailService handles the logic for proactive access guardrails.
 type GuardrailService struct {
 	db *sqlx.DB
-	// Dependency on SemanticModelService to get asset metadata like certification status.
-	semanticService *analytics.SemanticModelService
 }
 
 // NewGuardrailService creates a new GuardrailService.
-func NewGuardrailService(db *sqlx.DB, modelService *analytics.SemanticModelService) *GuardrailService {
-	return &GuardrailService{
-		semanticService: modelService,
-	}
+func NewGuardrailService(db *sqlx.DB) *GuardrailService {
+	return &GuardrailService{db: db}
 }
 
 // EvaluateClaimRequest runs a proposed claim against all active guardrail rules.

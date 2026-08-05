@@ -27,6 +27,10 @@ func NewTuningService(db *sqlx.DB) *TuningService {
 	return &TuningService{DB: db}
 }
 
+func GenerateAnnotatedDiff(before, after models.ResolvedModelConfig) []models.ChangeAnnotation {
+	return nil
+}
+
 // RuleMetrics holds the calculated global approval/rejection rates for a rule.
 type RuleMetrics struct {
 	RuleID        string  `db:"rule_id"`

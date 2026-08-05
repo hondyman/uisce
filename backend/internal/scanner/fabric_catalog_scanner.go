@@ -10,9 +10,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/hondyman/uisce/backend/internal/analytics"
 	"github.com/hondyman/uisce/backend/internal/logging"
-	"github.com/hondyman/uisce/backend/models"
 )
 
 // FabricStatus enum values
@@ -278,41 +276,7 @@ func (s *FabricCatalogScanner) createCustomModelNode(baseKey string, coreModel *
 		displayName := s.getDisplayName(*customModel)
 		description := s.getDescription(*customModel)
 
-		// Merge resolved config if we have both core and custom models
 		resolvedConfig := customModel.ResolvedConfig
-		if coreModel != nil {
-			// Parse the core and custom resolved configs
-			var coreConfig, customConfig models.ResolvedModelConfig
-			if err := json.Unmarshal(coreModel.ResolvedConfig, &coreConfig); err == nil {
-				if err := json.Unmarshal(customModel.ResolvedConfig, &customConfig); err == nil {
-					// If custom config has the old format (direct extends/dimensions), convert it
-					if len(customConfig.Cubes) == 0 {
-						// Convert old format to new format
-						customCube := models.Cube{
-							Name:       customModel.ModelKey,
-							Extends:    baseKey,
-							Dimensions: s.convertOldDimensionsFormat(customModel.ResolvedConfig),
-							Measures:   s.convertOldMeasuresFormat(customModel.ResolvedConfig),
-						}
-						customConfig = models.ResolvedModelConfig{
-							ModelKey: customModel.ModelKey,
-							Cubes:    []models.Cube{customCube},
-						}
-					}
-
-					// Merge the cubes
-					if len(coreConfig.Cubes) > 0 && len(customConfig.Cubes) > 0 {
-						mergedCube, _ := analytics.MergeCube(coreConfig.Cubes[0], customConfig.Cubes[0])
-						mergedConfig := models.ResolvedModelConfig{
-							ModelKey: customModel.ModelKey,
-							Cubes:    []models.Cube{mergedCube},
-						}
-						mergedConfigJSON, _ := json.Marshal(mergedConfig)
-						resolvedConfig = mergedConfigJSON
-					}
-				}
-			}
-		}
 
 		metadata := map[string]interface{}{
 			"generator":       "custom",

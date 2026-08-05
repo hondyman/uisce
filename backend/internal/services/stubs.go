@@ -7,7 +7,6 @@ import (
 	"github.com/hondyman/uisce/backend/internal/models"
 	"github.com/hondyman/uisce/backend/internal/platform"
 	"github.com/hondyman/uisce/backend/internal/security"
-	"github.com/hondyman/uisce/backend/internal/views"
 	coremodels "github.com/hondyman/uisce/backend/models"
 	"github.com/jmoiron/sqlx"
 )
@@ -201,15 +200,15 @@ func (s *PolicyService) Can(user models.User, action, resource string, policies 
 // ViewService handles view operations
 type ViewService struct{}
 
-func (s *ViewService) CompareAllViews(ctx context.Context) ([]views.Plan, error) {
+func (s *ViewService) CompareAllViews(ctx context.Context) ([]interface{}, error) {
 	return nil, nil
 }
 
-func (s *ViewService) ApplyViewChanges(ctx context.Context, plans []views.Plan) error {
+func (s *ViewService) ApplyViewChanges(ctx context.Context, plans []interface{}) error {
 	return nil
 }
 
-func (s *ViewService) RejectViewChanges(ctx context.Context, plans []views.Plan, reviewer, reason string) error {
+func (s *ViewService) RejectViewChanges(ctx context.Context, plans []interface{}, reviewer, reason string) error {
 	return nil
 }
 
@@ -325,3 +324,12 @@ func (s *ApprovalService) RecordDecision(ctx context.Context, requestID, approve
 func (s *ApprovalService) GetApprovalChain(ctx context.Context, bundleID string) ([]interface{}, error) {
 	return nil, nil
 }
+
+var SeverityThresholds = map[string]int{
+	"critical": 0,
+	"high":      1,
+	"medium":    2,
+	"low":       3,
+}
+
+var placeholderUserID = uuid.MustParse("00000000-0000-0000-0000-000000000000")

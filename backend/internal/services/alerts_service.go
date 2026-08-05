@@ -5,7 +5,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/hondyman/uisce/backend/internal/analytics"
 	"github.com/hondyman/uisce/backend/internal/logging"
 	public_models "github.com/hondyman/uisce/backend/models"
 	"github.com/jmoiron/sqlx"
@@ -13,13 +12,12 @@ import (
 
 // AlertsService handles business logic for alerts.
 type AlertsService struct {
-	db            *sqlx.DB
-	modelProvider *analytics.ModelProvider
+	db *sqlx.DB
 }
 
 // NewAlertsService creates a new AlertsService.
-func NewAlertsService(db *sqlx.DB, modelProvider *analytics.ModelProvider) *AlertsService {
-	return &AlertsService{db: db, modelProvider: modelProvider}
+func NewAlertsService(db *sqlx.DB) *AlertsService {
+	return &AlertsService{db: db}
 }
 
 // List retrieves alerts for a user. Mock implementation.
