@@ -2,10 +2,14 @@ package agentic
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
+	"errors"
 	"net/http"
 
+	"github.com/google/uuid"
 	"github.com/hondyman/uisce/backend/internal/security"
+	"github.com/hondyman/uisce/backend/internal/tenant/goldcopy"
 	"github.com/hondyman/uisce/libs/jwt-middleware"
 	"github.com/jmoiron/sqlx"
 )
@@ -39,8 +43,9 @@ func (e *MCPError) Error() string {
 }
 
 type MCPToolRouter struct {
-	db       *sqlx.DB
-	mcService *MakerCheckerService
+	db               *sqlx.DB
+	mcService        *MakerCheckerService
+	goldcopyResolver *goldcopy.Resolver
 }
 
 func NewMCPToolRouter(db *sqlx.DB) *MCPToolRouter {
@@ -50,18 +55,28 @@ func NewMCPToolRouter(db *sqlx.DB) *MCPToolRouter {
 	}
 }
 
+// SetGoldCopyResolver injects the gold copy tenant resolver.
+func (r *MCPToolRouter) SetGoldCopyResolver(resolver *goldcopy.Resolver) {
+	r.goldcopyResolver = resolver
+}
+
 func (router *MCPToolRouter) checkRoleAccess(ctx context.Context, toolName, tenantID, functionalRole string) error {
 	if functionalRole == "" {
 		return nil
 	}
 
+	goldCopyID, err := router.resolveGoldCopyID(ctx)
+	if err != nil {
+		return nil
+	}
+
 	var allowedRoles []string
-	err := router.db.GetContext(ctx, &allowedRoles,
+	err = router.db.GetContext(ctx, &allowedRoles,
 		`SELECT allowed_roles FROM mcp_tool_registry
-		 WHERE tool_name = $1 AND tenant_id IN ($2, '00000000-0000-0000-0000-000000000000')
-		 ORDER BY CASE WHEN tenant_id = '00000000-0000-0000-0000-000000000000' THEN 1 ELSE 0 END
+		 WHERE tool_name = $1 AND tenant_id IN ($2, $3)
+		 ORDER BY CASE WHEN tenant_id = $3 THEN 1 ELSE 0 END
 		 LIMIT 1`,
-		toolName, tenantID)
+		toolName, tenantID, goldCopyID.String())
 	if err != nil {
 		return nil
 	}
@@ -140,4 +155,19 @@ func (router *MCPToolRouter) HandleToolCall(w http.ResponseWriter, r *http.Reque
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(resp)
+}
+
+func (r *MCPToolRouter) resolveGoldCopyID(ctx context.Context) (uuid.UUID, error) {
+	if r.goldcopyResolver != nil {
+		return r.goldcopyResolver.Resolve(ctx)
+	}
+	var id string
+	err := r.db.GetContext(ctx, &id, `SELECT id FROM public.tenants WHERE gold_copy = true LIMIT 1`)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return uuid.Nil, goldcopy.ErrGoldCopyNotFound
+		}
+		return uuid.Nil, err
+	}
+	return uuid.Parse(id)
 }

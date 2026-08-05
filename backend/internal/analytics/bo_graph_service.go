@@ -10,6 +10,7 @@ import (
 	"github.com/jmoiron/sqlx"
 
 	"github.com/hondyman/uisce/backend/internal/calculation"
+	"github.com/hondyman/uisce/backend/internal/tenant/goldcopy"
 )
 
 // GraphNode represents a node in the BO lineage graph
@@ -38,12 +39,19 @@ type BOGraph struct {
 
 // BOGraphService generates lineage graphs for Business Objects
 type BOGraphService struct {
-	db *sqlx.DB
+	db              *sqlx.DB
+	goldcopyResolve *goldcopy.Resolver
 }
 
 // NewBOGraphService creates a new graph service
 func NewBOGraphService(db *sqlx.DB) *BOGraphService {
 	return &BOGraphService{db: db}
+}
+
+// SetGoldCopyResolver injects the gold copy tenant resolver.
+// Call this before using ResolveEffectiveFields in production.
+func (s *BOGraphService) SetGoldCopyResolver(r *goldcopy.Resolver) {
+	s.goldcopyResolve = r
 }
 
 // GenerateGraph creates a complete lineage graph for a Business Object
@@ -493,9 +501,6 @@ func (s *BOGraphService) buildRelatedBONode(relBO RelatedBO) GraphNode {
 	}
 }
 
-// GoldCopyTenantID is the canonical baseline master tenant context.
-var GoldCopyTenantID = uuid.MustParse("99e99e99-99e9-49e9-89e9-99e99e99e999")
-
 // ResolveEffectiveFields performs a delta merge between a Gold Copy blueprint
 // and custom tenant extensions. The tenant scoping is enforced by the caller
 // through the tenantID parameter.
@@ -513,7 +518,11 @@ func (s *BOGraphService) ResolveEffectiveFields(ctx context.Context, boID uuid.U
 
 	// 1. Seed Gold Copy blueprint fields when a parent is declared.
 	if parentBOID != nil {
-		goldFields, err := s.fetchRawFieldsForBO(ctx, *parentBOID, GoldCopyTenantID)
+		goldCopyID, err := s.resolveGoldCopyID(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("failed to resolve gold copy tenant: %w", err)
+		}
+		goldFields, err := s.fetchRawFieldsForBO(ctx, *parentBOID, goldCopyID)
 		if err != nil {
 			return nil, fmt.Errorf("failed to compile master gold copy structural nodes: %w", err)
 		}
@@ -599,4 +608,16 @@ func (s *BOGraphService) fetchRawFieldsForBO(ctx context.Context, boID uuid.UUID
 		return nil, err
 	}
 	return fields, nil
+}
+
+func (s *BOGraphService) resolveGoldCopyID(ctx context.Context) (uuid.UUID, error) {
+	if s.goldcopyResolve != nil {
+		return s.goldcopyResolve.Resolve(ctx)
+	}
+	var id string
+	err := s.db.GetContext(ctx, &id, `SELECT id FROM public.tenants WHERE gold_copy = true LIMIT 1`)
+	if err != nil {
+		return uuid.Nil, err
+	}
+	return uuid.Parse(id)
 }

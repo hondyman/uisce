@@ -8,13 +8,16 @@ import (
 	"math"
 	"strings"
 
+	"github.com/google/uuid"
 	"github.com/jmoiron/sqlx"
+	"github.com/hondyman/uisce/backend/internal/tenant/goldcopy"
 )
 
 // CostEstimator estimates query execution costs
 type CostEstimator struct {
-	db         *sqlx.DB
-	statsCache map[string]*TableStats
+	db               *sqlx.DB
+	statsCache      map[string]*TableStats
+	goldcopyResolver *goldcopy.Resolver
 }
 
 // NewCostEstimator creates a new cost estimator
@@ -23,6 +26,11 @@ func NewCostEstimator(db *sqlx.DB) *CostEstimator {
 		db:         db,
 		statsCache: make(map[string]*TableStats),
 	}
+}
+
+// SetGoldCopyResolver injects the gold copy tenant resolver.
+func (e *CostEstimator) SetGoldCopyResolver(resolver *goldcopy.Resolver) {
+	e.goldcopyResolver = resolver
 }
 
 // EstimateCost estimates the cost of executing a query
@@ -119,8 +127,11 @@ func (e *CostEstimator) RefreshTableStats(ctx context.Context, tableName string)
 			avg_row_size = EXCLUDED.avg_row_size,
 			analyzed_at = NOW()
 	`
-	// Use a system tenant for system-wide stats
-	_, err = e.db.ExecContext(ctx, upsertQuery, "00000000-0000-0000-0000-000000000000", tableName, rowCount, avgSize)
+	tenantID, err := e.resolveGoldCopyID(ctx)
+	if err != nil {
+		return fmt.Errorf("cost_estimator: failed to resolve gold copy tenant: %w", err)
+	}
+	_, err = e.db.ExecContext(ctx, upsertQuery, tenantID.String(), tableName, rowCount, avgSize)
 	if err != nil {
 		return fmt.Errorf("failed to save table stats: %w", err)
 	}
@@ -278,4 +289,16 @@ func ExtractPattern(query *SemanticQuery) string {
 		strings.Join(filterTypes, ","),
 		strings.Join(query.GroupBy, ","),
 	)
+}
+
+func (e *CostEstimator) resolveGoldCopyID(ctx context.Context) (uuid.UUID, error) {
+	if e.goldcopyResolver != nil {
+		return e.goldcopyResolver.Resolve(ctx)
+	}
+	var id string
+	err := e.db.QueryRowContext(ctx, `SELECT id FROM public.tenants WHERE gold_copy = true LIMIT 1`).Scan(&id)
+	if err != nil {
+		return uuid.Nil, err
+	}
+	return uuid.Parse(id)
 }

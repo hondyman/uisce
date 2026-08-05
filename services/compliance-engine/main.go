@@ -110,24 +110,39 @@ func NewComplianceEngine() (*ComplianceEngine, error) {
 	workflowABAC := NewWorkflowABACEngine(db, kWriter, temporalClient)
 
 	// Initialize default policies for demo tenant
-	demoTenantID := getEnv("DEMO_TENANT_ID", "00000000-0000-0000-0000-000000000000")
-	demoDatasourceID := getEnv("DEMO_DATASOURCE_ID", "11111111-1111-1111-1111-111111111111")
-
-	// Prefer sqlx for performance-sensitive, complex DB ops when requested
-	if getEnv("USE_SQLX", "false") == "true" {
-		if sqlxdb, err := ConnectSQLX(); err != nil {
-			logger.Warnf("Failed to connect sqlx DB; falling back to GORM for default policy init: %v", err)
-			if err := workflowABAC.InitializeDefaultWorkflowPolicies(demoTenantID, demoDatasourceID); err != nil {
-				logger.Warnf("Failed to initialize default workflow policies with GORM fallback: %v", err)
-			}
-		} else {
-			if err := InitializeDefaultWorkflowPoliciesSQLX(sqlxdb, demoTenantID, demoDatasourceID); err != nil {
-				logger.Warnf("Failed to initialize default workflow policies (sqlx): %v", err)
+	demoTenantID := getEnv("DEMO_TENANT_ID", "")
+	demoDatasourceID := getEnv("DEMO_DATASOURCE_ID", "")
+	if demoTenantID == "" {
+		if underlyingDB, err := db.DB(); err == nil {
+			var goldCopyID string
+			if err := underlyingDB.QueryRowContext(context.Background(),
+				`SELECT id FROM public.tenants WHERE gold_copy = true LIMIT 1`).Scan(&goldCopyID); err == nil {
+				demoTenantID = goldCopyID
+				logger.Infof("Using gold copy tenant for default policies: %s", demoTenantID)
 			}
 		}
-	} else {
-		if err := workflowABAC.InitializeDefaultWorkflowPolicies(demoTenantID, demoDatasourceID); err != nil {
-			logger.Warnf("Failed to initialize default workflow policies: %v", err)
+		if demoTenantID == "" {
+			logger.Warn("DEMO_TENANT_ID not set and gold copy tenant could not be resolved; skipping default policy initialization")
+		}
+	}
+
+	// Prefer sqlx for performance-sensitive, complex DB ops when requested
+	if demoTenantID != "" {
+		if getEnv("USE_SQLX", "false") == "true" {
+			if sqlxdb, err := ConnectSQLX(); err != nil {
+				logger.Warnf("Failed to connect sqlx DB; falling back to GORM for default policy init: %v", err)
+				if err := workflowABAC.InitializeDefaultWorkflowPolicies(demoTenantID, demoDatasourceID); err != nil {
+					logger.Warnf("Failed to initialize default workflow policies with GORM fallback: %v", err)
+				}
+			} else {
+				if err := InitializeDefaultWorkflowPoliciesSQLX(sqlxdb, demoTenantID, demoDatasourceID); err != nil {
+					logger.Warnf("Failed to initialize default workflow policies (sqlx): %v", err)
+				}
+			}
+		} else {
+			if err := workflowABAC.InitializeDefaultWorkflowPolicies(demoTenantID, demoDatasourceID); err != nil {
+				logger.Warnf("Failed to initialize default workflow policies: %v", err)
+			}
 		}
 	}
 

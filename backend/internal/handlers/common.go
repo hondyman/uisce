@@ -79,3 +79,8 @@ func (e *Error) Error() string {
 }
 
 var placeholderUserID = "00000000-0000-0000-0000-000000000000"
+
+// SystemUserID is the sentinel user ID used for operations performed by the
+// platform itself rather than by a specific human user (e.g. background jobs,
+// system-initiated migrations). It must never appear in user-facing data.
+var SystemUserID = "00000000-0000-0000-0000-000000000000"

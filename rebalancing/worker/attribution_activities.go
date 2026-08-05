@@ -39,27 +39,25 @@ func (a *RebalanceActivities) ExecuteAttribution(ctx context.Context, attrResult
 // Update Attribution Status Activity
 func (a *RebalanceActivities) UpdateAttributionStatus(ctx context.Context, portfolioID string, attrResult map[string]interface{}) error {
 	logger := activity.GetLogger(ctx)
-	logger.Info("Updating attribution status in Hasura", "portfolioID", portfolioID)
+	logger.Info("Updating attribution status", "portfolioID", portfolioID)
 
 	sectorAttributionJSON, err := json.Marshal(attrResult["sector_attribution"])
 	if err != nil {
 		return fmt.Errorf("failed to marshal sector attribution: %w", err)
 	}
 
-	mutation := `
-		mutation UpdateAttribution($id: uuid!, $alpha: numeric!, $sector: jsonb!, $summary: String!) {
-			update_portfolios_by_pk(pk_columns: {id: $id}, _set: {alpha: $alpha, sector_attribution: $sector, rebalance_status: $summary}) {
-				id
-			}
-		}
-	`
-
-	variables := map[string]interface{}{
-		"id":      portfolioID,
-		"alpha":   attrResult["alpha"],
-		"sector":  string(sectorAttributionJSON),
-		"summary": attrResult["summary"],
+	id, err := parseUUID(portfolioID)
+	if err != nil {
+		return err
 	}
 
-	return a.hasuraMutate(ctx, mutation, variables)
+	_, err = a.db.pool.Exec(ctx, `
+		UPDATE portfolios
+		SET alpha = $2,
+			sector_attribution = $3,
+			rebalance_status = $4,
+			updated_at = NOW()
+		WHERE id = $1
+	`, id, attrResult["alpha"], string(sectorAttributionJSON), attrResult["summary"])
+	return err
 }

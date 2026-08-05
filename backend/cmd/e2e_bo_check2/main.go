@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"flag"
 	"fmt"
 	"os"
 
@@ -28,7 +29,13 @@ func main() {
 	}
 
 	ctx := context.Background()
-	tenantID := "00000000-0000-0000-0000-000000000000"
+	var tenantID string
+	flag.StringVar(&tenantID, "tenant-id", "", "tenant ID (required)")
+	flag.Parse()
+	if tenantID == "" {
+		fmt.Println("ERROR: --tenant-id flag is required")
+		os.Exit(1)
+	}
 	parentID := uuid.NewString()
 	childID := uuid.NewString()
 

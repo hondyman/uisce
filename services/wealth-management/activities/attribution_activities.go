@@ -1,12 +1,9 @@
 package activities
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
-	"net/http"
-	"os"
 	"time"
 )
 
@@ -137,57 +134,32 @@ func calculateFactorContributions(ctx context.Context, portfolioID, startDate, e
 	}
 }
 
-// storeAttributionResults saves attribution analysis to database via Hasura
+// storeAttributionResults saves attribution analysis to database
 func storeAttributionResults(ctx context.Context, results map[string]interface{}) error {
-	hasuraURL := os.Getenv("HASURA_GRAPHQL_URL")
-	if hasuraURL == "" {
-		hasuraURL = "http://localhost:8080/v1/graphql"
-	}
-
-	mutation := `
-		mutation StoreAttribution($data: performance_attribution_insert_input!) {
-			insert_performance_attribution_one(object: $data) {
-				id
-				calculated_at
-			}
-		}
-	`
-
-	variables := map[string]interface{}{
-		"data": results,
-	}
-
-	request := map[string]interface{}{
-		"query":     mutation,
-		"variables": variables,
-	}
-
-	body, _ := json.Marshal(request)
-	req, _ := http.NewRequestWithContext(ctx, "POST", hasuraURL, bytes.NewReader(body))
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("x-hasura-admin-secret", os.Getenv("HASURA_ADMIN_SECRET"))
-
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		// Log error but don't fail the attribution
-		fmt.Printf("  ⚠️  Failed to store attribution results: %v\n", err)
+	pool := getPool()
+	if pool == nil {
+		fmt.Printf("  ⚠️  Database not initialized, skipping attribution storage\n")
 		return nil
 	}
-	defer resp.Body.Close()
 
-	var result struct {
-		Data   map[string]interface{} `json:"data"`
-		Errors []struct {
-			Message string `json:"message"`
-		} `json:"errors"`
-	}
+	resultsJSON, _ := json.Marshal(results)
 
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return fmt.Errorf("failed to decode response: %w", err)
-	}
+	_, err := pool.Exec(ctx, `
+		INSERT INTO performance_attribution (
+			portfolio_id, start_date, end_date, total_return, benchmark_return,
+			active_return, allocation_effect, selection_effect, interaction_effect,
+			factor_contributions, calculated_at
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW())
+	`,
+		results["portfolioID"], results["startDate"], results["endDate"],
+		results["totalReturn"], results["benchmarkReturn"],
+		results["activeReturn"], results["allocationEffect"],
+		results["selectionEffect"], results["interactionEffect"],
+		string(resultsJSON))
 
-	if len(result.Errors) > 0 {
-		return fmt.Errorf("Hasura error: %s", result.Errors[0].Message)
+	if err != nil {
+		fmt.Printf("  ⚠️  Failed to store attribution results: %v\n", err)
+		return nil
 	}
 
 	fmt.Printf("  ✓ Attribution results stored to database\n")

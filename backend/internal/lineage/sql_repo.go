@@ -7,16 +7,23 @@ import (
 	"fmt"
 
 	"github.com/jmoiron/sqlx"
+	"github.com/hondyman/uisce/backend/internal/tenant/goldcopy"
 )
 
 // DBLineageRepository implements LineageRepository using recursive SQL queries
 type DBLineageRepository struct {
-	db *sqlx.DB
+	db               *sqlx.DB
+	goldcopyResolver *goldcopy.Resolver
 }
 
 // NewDBLineageRepository creates a new DBLineageRepository
 func NewDBLineageRepository(db *sqlx.DB) *DBLineageRepository {
 	return &DBLineageRepository{db: db}
+}
+
+// SetGoldCopyResolver injects the gold copy tenant resolver.
+func (r *DBLineageRepository) SetGoldCopyResolver(resolver *goldcopy.Resolver) {
+	r.goldcopyResolver = resolver
 }
 
 // UpsertNode inserts or updates a lineage node in the public catalog
@@ -46,18 +53,18 @@ func (r *DBLineageRepository) UpsertNode(ctx context.Context, node LineageNode) 
 
 // UpsertEdge inserts or updates a lineage edge in the public catalog
 func (r *DBLineageRepository) UpsertEdge(ctx context.Context, edge LineageEdge) error {
-	// Map edge_type_name to its UUID if possible, but store the name directly in edge_type_name
+	resolvedTenantID := r.resolveTenantIDForEdge(ctx, edge)
 	query := `
 		INSERT INTO public.catalog_edge (
-			tenant_id, tenant_datasource_id, source_node_id, target_node_id, 
+			tenant_id, tenant_datasource_id, source_node_id, target_node_id,
 			edge_type_name, edge_type_id, properties, created_at
 		)
 		VALUES (
-			COALESCE(:tenant_id, '00000000-0000-0000-0000-000000000000'), '00000000-0000-0000-0000-000000000000', :from_id, :to_id,
+			` + resolvedTenantID + `, '00000000-0000-0000-0000-000000000000', :from_id, :to_id,
 			:type, (SELECT id FROM catalog_edge_type WHERE edge_type_name = :type LIMIT 1),
 			:metadata, now()
 		)
-		ON CONFLICT (tenant_datasource_id, source_node_id, edge_type_name, target_node_id) 
+		ON CONFLICT (tenant_datasource_id, source_node_id, edge_type_name, target_node_id)
 		DO UPDATE SET
 			properties = EXCLUDED.properties
 	`
@@ -450,3 +457,21 @@ func (r *DBLineageRepository) FindGraphByDatasource(ctx context.Context, datasou
 }
 
 // Helper types for sqlx scanning if needed (sqlx handles structs well if tags match)
+
+func (r *DBLineageRepository) resolveTenantIDForEdge(ctx context.Context, edge LineageEdge) string {
+	if edge.TenantID != nil && *edge.TenantID != "" {
+		return fmt.Sprintf("'%s'", *edge.TenantID)
+	}
+	if r.goldcopyResolver != nil {
+		id, err := r.goldcopyResolver.Resolve(ctx)
+		if err == nil {
+			return fmt.Sprintf("'%s'", id.String())
+		}
+	}
+	var id string
+	_ = r.db.QueryRowContext(ctx, `SELECT id FROM public.tenants WHERE gold_copy = true LIMIT 1`).Scan(&id)
+	if id != "" {
+		return fmt.Sprintf("'%s'", id)
+	}
+	return "NULL"
+}

@@ -21,8 +21,13 @@ func main() {
 	}
 
 	var workflowID string
+	var tenantID string
 	flag.StringVar(&workflowID, "workflow", "test-workflow-123", "workflow id to use for the test audit row")
+	flag.StringVar(&tenantID, "tenant-id", "", "tenant ID (required)")
 	flag.Parse()
+	if tenantID == "" {
+		log.Fatal("flag --tenant-id is required")
+	}
 
 	db, err := sql.Open("postgres", dsn)
 	if err != nil {
@@ -35,7 +40,6 @@ func main() {
 	inputBytes, _ := json.Marshal(inputMap)
 
 	id := uuid.New().String()
-	tenantID := "00000000-0000-0000-0000-000000000000"
 	actorID := "tester@example.com"
 	action := "signal"
 	reason := "integration test"

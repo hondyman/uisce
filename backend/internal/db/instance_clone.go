@@ -104,7 +104,7 @@ func LogGoldCopySyncAudit(
 	// Determine tenant_id to use - use actual Gold Copy tenant ID if available
 	tenantIDStr := entry.GoldCopyTenantID.String()
 	if entry.GoldCopyTenantID == uuid.Nil {
-		tenantIDStr = "00000000-0000-0000-0000-000000000000" // Fallback
+		tenantIDStr = "unresolved-goldcopy" // Fallback sentinel — indicates gold copy could not be resolved
 	}
 
 	// Write to Iceberg audit table

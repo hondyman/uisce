@@ -2,7 +2,11 @@ package agentic
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 
+	"github.com/google/uuid"
+	"github.com/hondyman/uisce/backend/internal/tenant/goldcopy"
 	"github.com/jmoiron/sqlx"
 )
 
@@ -14,23 +18,34 @@ type ToolEntry struct {
 }
 
 type MCPRegistryService struct {
-	db *sqlx.DB
+	db               *sqlx.DB
+	goldcopyResolver *goldcopy.Resolver
 }
 
 func NewMCPRegistryService(db *sqlx.DB) *MCPRegistryService {
 	return &MCPRegistryService{db: db}
 }
 
+// SetGoldCopyResolver injects the gold copy tenant resolver.
+func (s *MCPRegistryService) SetGoldCopyResolver(resolver *goldcopy.Resolver) {
+	s.goldcopyResolver = resolver
+}
+
 func (s *MCPRegistryService) ListToolsForRole(ctx context.Context, tenantID, functionalRole string) ([]ToolEntry, error) {
+	goldCopyID, err := s.resolveGoldCopyID(ctx)
+	if err != nil {
+		return nil, err
+	}
+
 	var all []ToolEntry
 	query := `
 		SELECT tool_name, display_name, description, allowed_roles
 		FROM mcp_tool_registry
 		WHERE is_active = true
-		  AND tenant_id IN ($1, '00000000-0000-0000-0000-000000000000')
+		  AND tenant_id IN ($1, $2)
 		ORDER BY tool_name
 	`
-	rows, err := s.db.QueryxContext(ctx, query, tenantID)
+	rows, err := s.db.QueryxContext(ctx, query, tenantID, goldCopyID.String())
 	if err != nil {
 		return nil, err
 	}
@@ -58,4 +73,19 @@ func (s *MCPRegistryService) ListToolsForRole(ctx context.Context, tenantID, fun
 		}
 	}
 	return filtered, nil
+}
+
+func (s *MCPRegistryService) resolveGoldCopyID(ctx context.Context) (uuid.UUID, error) {
+	if s.goldcopyResolver != nil {
+		return s.goldcopyResolver.Resolve(ctx)
+	}
+	var id string
+	err := s.db.GetContext(ctx, &id, `SELECT id FROM public.tenants WHERE gold_copy = true LIMIT 1`)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return uuid.Nil, goldcopy.ErrGoldCopyNotFound
+		}
+		return uuid.Nil, err
+	}
+	return uuid.Parse(id)
 }

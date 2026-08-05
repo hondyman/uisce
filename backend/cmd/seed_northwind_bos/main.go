@@ -112,7 +112,7 @@ func main() {
 
 		// Create BO
 		secCtx := &security.Context{TenantID: tenantID}
-		bo, err := boService.CreateBusinessObject(ctx, secCtx, boReq, "00000000-0000-0000-0000-000000000000")
+		bo, err := boService.CreateBusinessObject(ctx, secCtx, boReq, "")
 		if err != nil {
 			log.Printf("✗ Failed to create %s: %v\n", boReq.Name, err)
 			continue

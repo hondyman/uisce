@@ -61,7 +61,7 @@ func (h *SearchHandler) HandleLogFeedback(w http.ResponseWriter, r *http.Request
 	}
 
 	// Use placeholder user for now
-	userID := placeholderUserID
+	userID := SystemUserID
 	// Run in a goroutine so it doesn't block the user's next action.
 	go func() { _ = h.service.LogFeedback(r.Context(), req, userID) }()
 

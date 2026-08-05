@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"log"
 	"os"
 	"strings"
@@ -11,12 +12,28 @@ import (
 )
 
 func main() {
+	ctx := context.Background()
+
 	// Connect to Temporal using centralized helper (env-driven + retries)
 	c, err := temporalclient.NewClientWithRetry()
 	if err != nil {
 		log.Fatal(err)
 	}
 	defer c.Close()
+
+	// Initialize database connection
+	dbURL := os.Getenv("DATABASE_URL")
+	if dbURL == "" {
+		log.Fatal("DATABASE_URL must be set")
+	}
+
+	pool, err := NewPool(ctx, dbURL)
+	if err != nil {
+		log.Fatalf("Failed to connect to database: %v", err)
+	}
+	defer pool.Close()
+
+	repo := NewRepository(pool.Pool)
 
 	// Initialize Kafka writer for publishing trade/notification events
 	kafkaBrokers := os.Getenv("KAFKA_BROKERS")
@@ -44,7 +61,7 @@ func main() {
 	// Register activities
 	activities := &RebalanceActivities{
 		kafkaWriter:   wWriter,
-		hasuraURL:     os.Getenv("HASURA_URL"),
+		db:            repo,
 		xaiAPIKey:     os.Getenv("XAI_API_KEY"),
 		finnhubAPIKey: os.Getenv("FINNHUB_API_KEY"),
 	}

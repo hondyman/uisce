@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -74,6 +75,7 @@ import (
 	"github.com/hondyman/uisce/backend/internal/telemetry/optimize"
 	temporal "github.com/hondyman/uisce/backend/internal/temporal"
 	"github.com/hondyman/uisce/backend/internal/tenant"
+	tenantgoldcopy "github.com/hondyman/uisce/backend/internal/tenant/goldcopy"
 	"github.com/hondyman/uisce/backend/internal/trino"
 	"github.com/hondyman/uisce/backend/internal/upgrade"
 	coremodels "github.com/hondyman/uisce/backend/models"
@@ -625,6 +627,26 @@ func registerAuthRoutes(r chi.Router, srv *Server) {
 	})
 }
 
+type redisClientAdapter struct {
+	client *redis.Client
+}
+
+func (a *redisClientAdapter) Get(ctx context.Context, key string) (string, error) {
+	return a.client.Get(ctx, key).Result()
+}
+
+func (a *redisClientAdapter) Set(ctx context.Context, key string, val interface{}, exp time.Duration) error {
+	return a.client.Set(ctx, key, val, exp).Err()
+}
+
+func (a *redisClientAdapter) Del(ctx context.Context, keys ...string) error {
+	return a.client.Del(ctx, keys...).Err()
+}
+
+func (a *redisClientAdapter) Ping(ctx context.Context) error {
+	return a.client.Ping(ctx).Err()
+}
+
 func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService, temporalClient temporalclient.Client, qosManager *services.QoSManager, trinoAuditService *audit.TrinoAuditService, geminiClient *GeminiClient, resolver security.DatasourceResolver, redisClient *redis.Client, complianceDeps *ComplianceDeps) *chi.Mux {
 
 	// Create chi router and helper services required for setup
@@ -633,6 +655,21 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 
 	// Initialize sqlxDB early for services that need it
 	sqlxDB := sqlx.NewDb(db, "postgres")
+
+	// Initialize goldcopy tenant resolver (Redis-backed, long TTL)
+	var goldcopyResolver *tenantgoldcopy.Resolver
+	if redisClient != nil {
+		goldcopyResolver = tenantgoldcopy.NewResolver(sqlxDB, &redisClientAdapter{client: redisClient}, slog.Default())
+		go func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			defer cancel()
+			if id, err := goldcopyResolver.Warmup(ctx); err != nil {
+				log.Printf("[goldcopy] warmup failed: %v", err)
+			} else {
+				log.Printf("[goldcopy] resolved gold copy tenant: %s", id.String())
+			}
+		}()
+	}
 
 	// Initialize relational lineage repository (replacing AGE)
 	sqlRepo := lineage.NewDBLineageRepository(sqlxDB)
@@ -760,7 +797,7 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 	r.Use(appmid.WithTenantContext)
 	// Enforce region header and validate tenant scoping on all semantic requests
 	// Use new TenantRegionResolver for cleaner region + Gold Copy handling
-	regionResolver := region.NewTenantRegionResolver(db)
+	regionResolver := region.NewTenantRegionResolver(db, goldcopyResolver)
 	r.Use(region.RegionValidationMiddleware(regionResolver))
 
 	// Health check endpoint for Docker health checks
@@ -1356,6 +1393,9 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 
 		mcSvc := agentic.NewMakerCheckerService(sqlxDB)
 		mcpRouter := agentic.NewMCPToolRouter(sqlxDB)
+		if goldcopyResolver != nil {
+			mcpRouter.SetGoldCopyResolver(goldcopyResolver)
+		}
 		r.Get("/agentic/tickets", mcSvc.ListTicketsHandler)
 		r.Post("/agentic/tickets/review", mcSvc.ReviewTicketHandler)
 		r.Post("/mcp/tools/call", mcpRouter.HandleToolCall)

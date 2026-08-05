@@ -32,8 +32,7 @@ func (h *FolderHandler) RegisterRoutes(r chi.Router) {
 
 // HandleListFolders lists all folders for the current user.
 func (h *FolderHandler) HandleListFolders(w http.ResponseWriter, r *http.Request) {
-	// Use placeholder user for now
-	folders, err := h.service.ListFolders(r.Context(), placeholderUserID)
+	folders, err := h.service.ListFolders(r.Context(), SystemUserID)
 	if err != nil {
 		http.Error(w, "Failed to list folders", http.StatusInternalServerError)
 		return
@@ -55,7 +54,7 @@ func (h *FolderHandler) HandleAddItemToFolder(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	if err := h.service.AddItemToFolder(r.Context(), folderID, req.ItemID, req.ItemType, placeholderUserID); err != nil {
+	if err := h.service.AddItemToFolder(r.Context(), folderID, req.ItemID, req.ItemType, SystemUserID); err != nil {
 		http.Error(w, "Failed to add item to folder", http.StatusInternalServerError)
 		return
 	}

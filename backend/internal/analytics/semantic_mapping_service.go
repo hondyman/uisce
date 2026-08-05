@@ -2005,7 +2005,6 @@ const (
 	HasContextEdgeTypeID      = "0434ca1a-6543-42d3-9fce-f0b58b5fba34"
 	HasBusinessTermEdgeTypeID = "3be9d6ae-1598-4628-a3dd-b606921a9193"
 	HierarchyLevelEdgeTypeID  = "e3d93700-1014-411a-826d-966953288921"
-	CoreTenantID              = "99e99e99-99e9-49e9-89e9-99e99e99e999" // uiscé gold copy tenant
 )
 
 // Parse qualified path to extract schema, table, column

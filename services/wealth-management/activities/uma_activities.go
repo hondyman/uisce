@@ -1,12 +1,13 @@
 package activities
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
-	"net/http"
 	"os"
+
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 // ABACCheck performs ABAC authorization check for UMA rebalance
@@ -100,98 +101,74 @@ func executeSingleTrade(ctx context.Context, trade map[string]interface{}) error
 	return nil
 }
 
-// HasuraUpdate updates the Hasura database with rebalance results
+var dbPool *pgxpool.Pool
+
+func initDB() error {
+	if dbPool != nil {
+		return nil
+	}
+	dbURL := os.Getenv("DATABASE_URL")
+	if dbURL == "" {
+		dbURL = "postgres://postgres:postgres@localhost:5432/portfolio"
+	}
+	pool, err := pgxpool.New(context.Background(), dbURL)
+	if err != nil {
+		return fmt.Errorf("failed to create db pool: %w", err)
+	}
+	dbPool = pool
+	return nil
+}
+
+func getPool() *pgxpool.Pool {
+	if dbPool == nil {
+		initDB()
+	}
+	return dbPool
+}
+
+// HasuraUpdate updates the database with rebalance results
 func HasuraUpdate(ctx context.Context, update map[string]any) error {
-	hasuraURL := os.Getenv("HASURA_GRAPHQL_URL")
-	if hasuraURL == "" {
-		hasuraURL = "http://localhost:8080/v1/graphql" // Default Hasura URL
+	pool := getPool()
+	if pool == nil {
+		return fmt.Errorf("database not initialized")
 	}
 
-	hasuraSecret := os.Getenv("HASURA_ADMIN_SECRET")
-	if hasuraSecret == "" {
-		hasuraSecret = "your-secret-key"
-	}
-
-	// Build GraphQL mutation based on update type
 	updateType, _ := update["type"].(string)
 	entityID, _ := update["entityID"].(string)
 
-	var mutation string
-	var variables map[string]interface{}
-
 	switch updateType {
 	case "rebalance_complete":
-		mutation = `
-			mutation UpdateRebalance($id: uuid!, $status: String!, $results: jsonb!) {
-				update_rebalance_executions_by_pk(
-					pk_columns: {id: $id},
-					_set: {status: $status, results: $results, completed_at: "now()"}
-				) {
-					id
-					status
-				}
-			}
-		`
-		variables = map[string]interface{}{
-			"id":      entityID,
-			"status":  "completed",
-			"results": update["results"],
+		resultsJSON, _ := json.Marshal(update["results"])
+		_, err := pool.Exec(ctx, `
+			UPDATE rebalance_executions
+			SET status = 'completed', results = $2, completed_at = NOW(), updated_at = NOW()
+			WHERE id = $1
+		`, entityID, resultsJSON)
+		if err != nil {
+			return fmt.Errorf("failed to update rebalance execution: %w", err)
 		}
 
 	case "portfolio_update":
-		mutation = `
-			mutation UpdatePortfolio($id: uuid!, $holdings: jsonb!) {
-				update_portfolios_by_pk(
-					pk_columns: {id: $id},
-					_set: {holdings: $holdings, updated_at: "now()"}
-				) {
-					id
-					updated_at
-				}
-			}
-		`
-		variables = map[string]interface{}{
-			"id":       entityID,
-			"holdings": update["holdings"],
+		holdingsJSON, _ := json.Marshal(update["holdings"])
+		_, err := pool.Exec(ctx, `
+			UPDATE portfolios
+			SET holdings = $2, updated_at = NOW()
+			WHERE id = $1
+		`, entityID, holdingsJSON)
+		if err != nil {
+			return fmt.Errorf("failed to update portfolio: %w", err)
 		}
 
 	default:
 		return fmt.Errorf("unknown update type: %s", updateType)
 	}
 
-	request := map[string]interface{}{
-		"query":     mutation,
-		"variables": variables,
-	}
-
-	body, _ := json.Marshal(request)
-	req, _ := http.NewRequestWithContext(ctx, "POST", hasuraURL, bytes.NewReader(body))
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("x-hasura-admin-secret", hasuraSecret)
-
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return fmt.Errorf("Hasura request failed: %w", err)
-	}
-	defer resp.Body.Close()
-
-	var result struct {
-		Data   map[string]interface{} `json:"data"`
-		Errors []struct {
-			Message string `json:"message"`
-		} `json:"errors"`
-	}
-
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return fmt.Errorf("failed to decode Hasura response: %w", err)
-	}
-
-	if len(result.Errors) > 0 {
-		return fmt.Errorf("Hasura mutation error: %s", result.Errors[0].Message)
-	}
-
-	fmt.Printf("Hasura updated successfully: type=%s, entityID=%s\n", updateType, entityID)
+	fmt.Printf("Database updated successfully: type=%s, entityID=%s\n", updateType, entityID)
 	return nil
+}
+
+func parseUUID(s string) (uuid.UUID, error) {
+	return uuid.Parse(s)
 }
 
 // Helper functions to extract context values

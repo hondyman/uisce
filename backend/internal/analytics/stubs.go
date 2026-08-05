@@ -3,6 +3,7 @@ package analytics
 import (
 	"context"
 
+	"github.com/google/uuid"
 	"github.com/jmoiron/sqlx"
 	"github.com/hondyman/uisce/backend/internal/telemetry/optimize"
 )
@@ -19,6 +20,10 @@ func (s *SemanticService) ListSemanticObjects(ctx context.Context, tenantID, dat
 	return []interface{}{}, nil
 }
 
+func (s *SemanticService) PersistIgnore(ctx context.Context, tenantID, datasourceID, colNodeID, termName string) error {
+	return nil
+}
+
 type SemanticModelService struct {
 	DB *sqlx.DB
 }
@@ -27,11 +32,11 @@ func NewSemanticModelService(db *sqlx.DB) *SemanticModelService {
 	return &SemanticModelService{DB: db}
 }
 
-func (s *SemanticModelService) ListExtensionModels(ctx context.Context, tenantID, datasourceID string) (interface{}, error) {
+func (s *SemanticModelService) ListExtensionModels(datasourceID uuid.UUID) (interface{}, error) {
 	return []interface{}{}, nil
 }
 
-func (s *SemanticModelService) SaveExtensionModel(ctx context.Context, tenantID, datasourceID string, model interface{}) error {
+func (s *SemanticModelService) SaveExtensionModel(ctx context.Context, datasourceID uuid.UUID, model interface{}) error {
 	return nil
 }
 

@@ -1,11 +1,9 @@
 package activities
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
-	"net/http"
 	"os"
 	"time"
 )
@@ -204,49 +202,27 @@ func executeHarvestTrade(ctx context.Context, trade map[string]interface{}) erro
 
 // recordTaxHarvestResults saves harvest execution results to database
 func recordTaxHarvestResults(ctx context.Context, harvest map[string]any, tradeCount int) error {
-	hasuraURL := os.Getenv("HASURA_GRAPHQL_URL")
-	if hasuraURL == "" {
-		hasuraURL = "http://localhost:8080/v1/graphql"
+	pool := getPool()
+	if pool == nil {
+		fmt.Printf("  ⚠️  Database not initialized, skipping tax harvest recording\n")
+		return nil
 	}
 
-	mutation := `
-		mutation RecordTaxHarvest($data: tax_harvests_insert_input!) {
-			insert_tax_harvests_one(object: $data) {
-				id
-				executed_at
-			}
-		}
-	`
+	harvestID, _ := harvest["harvestID"].(string)
+	clientID, _ := harvest["clientID"].(string)
+	estimatedSavings, _ := harvest["estimatedTaxSavings"].(float64)
 
-	variables := map[string]interface{}{
-		"data": map[string]interface{}{
-			"harvest_id":             harvest["harvestID"],
-			"client_id":              harvest["clientID"],
-			"trade_count":            tradeCount,
-			"estimated_tax_savings":  harvest["estimatedTaxSavings"],
-			"actual_losses_realized": 0, // Will be updated after settlement
-			"executed_at":            time.Now().Format(time.RFC3339),
-			"status":                 "executed",
-		},
-	}
+	_, err := pool.Exec(ctx, `
+		INSERT INTO tax_harvests (
+			harvest_id, client_id, trade_count, estimated_tax_savings,
+			actual_losses_realized, executed_at, status
+		) VALUES ($1, $2, $3, $4, 0, NOW(), 'executed')
+	`, harvestID, clientID, tradeCount, estimatedSavings)
 
-	request := map[string]interface{}{
-		"query":     mutation,
-		"variables": variables,
-	}
-
-	body, _ := json.Marshal(request)
-	req, _ := http.NewRequestWithContext(ctx, "POST", hasuraURL, bytes.NewReader(body))
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("x-hasura-admin-secret", os.Getenv("HASURA_ADMIN_SECRET"))
-
-	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		// Log error but don't fail the harvest
 		fmt.Printf("  ⚠️  Failed to record results to database: %v\n", err)
 		return nil
 	}
-	defer resp.Body.Close()
 
 	return nil
 }

@@ -30,6 +30,7 @@ import (
 	"github.com/hondyman/uisce/backend/internal/scheduler"
 	"github.com/hondyman/uisce/backend/internal/scheduler_intelligence"
 	"github.com/hondyman/uisce/backend/internal/services"
+	"github.com/hondyman/uisce/backend/internal/tenant/goldcopy"
 	"github.com/hondyman/uisce/backend/internal/transaction"
 	"github.com/hondyman/uisce/backend/internal/validation"
 	"github.com/hondyman/uisce/backend/internal/wasm"
@@ -199,7 +200,9 @@ func main() {
 	schedulerIntellSvc := scheduler_intelligence.NewService(sqlxDB, semanticAdapter, logger)
 	notificationsHandler := handlers.NewNotificationsHandler(personalizationSvc, schedulerIntellSvc)
 
+	gcResolver := goldcopy.NewResolver(sqlxDB, nil, nil)
 	mcpRegistry := agentic.NewMCPRegistryService(sqlxDB)
+	mcpRegistry.SetGoldCopyResolver(gcResolver)
 	mcpToolsHandler := handlers.NewMCPToolsHandler(mcpRegistry)
 
 	eventBroker := events.NewEventStreamBroker(1000)

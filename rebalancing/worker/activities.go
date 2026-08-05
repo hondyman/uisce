@@ -9,12 +9,13 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	kafka "github.com/segmentio/kafka-go"
 )
 
 type RebalanceActivities struct {
 	kafkaWriter   *kafka.Writer
-	hasuraURL     string
+	db            *Repository
 	xaiAPIKey     string
 	finnhubAPIKey string
 }
@@ -145,20 +146,11 @@ Summary:`, plan.CurrentDrift, plan.ExpectedDrift, plan.TaxImpact.TaxSavingsVsRan
 
 // Activity: Update Plan With Summary
 func (a *RebalanceActivities) UpdatePlanWithSummary(ctx context.Context, planID, summary string) error {
-	mutation := `
-		mutation UpdatePlanSummary($id: uuid!, $summary: String!) {
-			update_rebalance_plans_by_pk(pk_columns: {id: $id}, _set: {summary: $summary}) {
-				id
-			}
-		}
-	`
-
-	variables := map[string]interface{}{
-		"id":      planID,
-		"summary": summary,
+	id, err := parseUUID(planID)
+	if err != nil {
+		return err
 	}
-
-	return a.hasuraMutate(ctx, mutation, variables)
+	return a.db.UpdatePlanSummary(ctx, id, summary)
 }
 
 func buildRebalancePrompt(p Portfolio) string {
@@ -385,59 +377,21 @@ func (a *RebalanceActivities) ExecuteTrades(ctx context.Context, plan *Rebalance
 	return orderIDs, nil
 }
 
-// Activity 6: Update Portfolio State in Hasura
+// Activity 6: Update Portfolio State
 func (a *RebalanceActivities) UpdatePortfolioState(ctx context.Context, portfolioID string, plan *RebalancePlan) error {
-	mutation := `
-        mutation UpdatePortfolio($id: uuid!, $drift: numeric!, $tax_saved: numeric!) {
-            update_portfolios_by_pk(
-                pk_columns: {id: $id},
-                _set: {
-                    drift: $drift,
-                    last_rebalance: "now()",
-                    tax_saved: $tax_saved,
-                    rebalance_status: "completed"
-                }
-            ) {
-                id
-            }
-        }
-    `
-
-	variables := map[string]interface{}{
-		"id":        portfolioID,
-		"drift":     plan.ExpectedDrift,
-		"tax_saved": plan.TaxImpact.TaxSavingsVsRandom,
+	id, err := parseUUID(portfolioID)
+	if err != nil {
+		return err
 	}
-
-	return a.hasuraMutate(ctx, mutation, variables)
+	return a.db.UpdatePortfolioState(ctx, id, plan.ExpectedDrift, plan.TaxImpact.TaxSavingsVsRandom)
 }
 
-// Activity 7: Insert Rebalance Plan to Hasura
+// Activity 7: Insert Rebalance Plan
 func (a *RebalanceActivities) InsertRebalancePlan(ctx context.Context, plan *RebalancePlan) error {
-	mutation := `
-        mutation InsertPlan($plan: rebalance_plans_insert_input!) {
-            insert_rebalance_plans_one(object: $plan) {
-                id
-            }
-        }
-    `
-
-	variables := map[string]interface{}{
-		"plan": map[string]interface{}{
-			"portfolio_id":    plan.PortfolioID,
-			"timestamp":       plan.Timestamp,
-			"current_drift":   plan.CurrentDrift,
-			"expected_drift":  plan.ExpectedDrift,
-			"tax_savings":     plan.TaxImpact.TaxSavingsVsRandom,
-			"confidence":      plan.Confidence,
-			"status":          plan.Status,
-			"rationale":       plan.Rationale,
-			"proposed_trades": toJSON(plan.ProposedTrades),
-			"tax_analysis":    toJSON(plan.TaxImpact),
-		},
-	}
-
-	return a.hasuraMutate(ctx, mutation, variables)
+	plan.PortfolioID = mustParseUUID(plan.PortfolioID)
+	plan.ProposedTrades = toJSON(plan.ProposedTrades)
+	plan.TaxAnalysis = toJSON(plan.TaxImpact)
+	return a.db.InsertRebalancePlan(ctx, plan)
 }
 
 // Activity 8: Send Notification
@@ -463,81 +417,26 @@ func (a *RebalanceActivities) NotifyStakeholders(ctx context.Context, plan *Reba
 }
 
 func (a *RebalanceActivities) fetchPortfolio(ctx context.Context, id string) (*Portfolio, error) {
-	query := `
-        query GetPortfolio($id: uuid!) {
-            portfolios_by_pk(id: $id) {
-                id tenant_id name aum drift last_rebalance
-                target_model constraints
-                holdings { symbol shares current_price cost_basis purchase_date tax_lot_id sector }
-            }
-        }
-    `
-
-	var result struct {
-		Data struct {
-			Portfolio Portfolio `json:"portfolios_by_pk"`
-		} `json:"data"`
-	}
-
-	if err := a.hasuraQuery(ctx, query, map[string]interface{}{"id": id}, &result); err != nil {
+	portfolioID, err := parseUUID(id)
+	if err != nil {
 		return nil, err
 	}
-
-	return &result.Data.Portfolio, nil
+	return a.db.GetPortfolio(ctx, portfolioID)
 }
 
-func (a *RebalanceActivities) hasuraQuery(ctx context.Context, query string, variables map[string]interface{}, result interface{}) error {
-	body, _ := json.Marshal(map[string]interface{}{"query": query, "variables": variables})
-	req, _ := http.NewRequestWithContext(ctx, "POST", a.hasuraURL, bytes.NewBuffer(body))
-	req.Header.Set("Content-Type", "application/json")
-
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-
-	return json.NewDecoder(resp.Body).Decode(result)
+func parseUUID(s string) (uuid.UUID, error) {
+	return uuid.Parse(s)
 }
 
-func (a *RebalanceActivities) hasuraMutate(ctx context.Context, mutation string, variables map[string]interface{}) error {
-	body, _ := json.Marshal(map[string]interface{}{"query": mutation, "variables": variables})
-	req, _ := http.NewRequestWithContext(ctx, "POST", a.hasuraURL, bytes.NewBuffer(body))
-	req.Header.Set("Content-Type", "application/json")
-
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != 200 {
-		return fmt.Errorf("hasura mutation failed: %d", resp.StatusCode)
-	}
-
-	return nil
+func mustParseUUID(s string) uuid.UUID {
+	id, _ := uuid.Parse(s)
+	return id
 }
 
 func (a *RebalanceActivities) insertAuditLog(ctx context.Context, userID, tenantID, action, resource, resourceID string, allowed bool) {
-	mutation := `
-        mutation InsertAudit($log: audit_logs_insert_input!) {
-            insert_audit_logs_one(object: $log) { id }
-        }
-    `
-
-	variables := map[string]interface{}{
-		"log": map[string]interface{}{
-			"user_id":     userID,
-			"tenant_id":   tenantID,
-			"action":      action,
-			"resource":    resource,
-			"resource_id": resourceID,
-			"allowed":     allowed,
-			"timestamp":   time.Now(),
-		},
-	}
-
-	a.hasuraMutate(ctx, mutation, variables)
+	uid, _ := parseUUID(userID)
+	tid, _ := parseUUID(tenantID)
+	_ = a.db.InsertAuditLog(ctx, uid, tid, action, resource, resourceID, allowed)
 }
 
 func abs(x float64) float64 {

@@ -28,9 +28,14 @@ func main() {
 
 	var workflowID string
 	var actorID string
+	var tenantID string
 	flag.StringVar(&workflowID, "workflow", "test-run-42", "workflow id to use for the test audit row")
 	flag.StringVar(&actorID, "actor", "tester@example.com", "actor id to inject into request context")
+	flag.StringVar(&tenantID, "tenant-id", "", "tenant ID (required)")
 	flag.Parse()
+	if tenantID == "" {
+		log.Fatal("flag --tenant-id is required")
+	}
 
 	db, err := sql.Open("postgres", dsn)
 	if err != nil {
@@ -53,7 +58,7 @@ func main() {
 	req := httptest.NewRequest("POST", "/api/temporal/workflows/"+workflowID+"/signal", bytes.NewReader(b))
 	req.Header.Set("Content-Type", "application/json")
 	// Ensure tenant header is set to valid UUID for DB insert
-	req.Header.Set("X-Tenant-ID", "00000000-0000-0000-0000-000000000000")
+	req.Header.Set("X-Tenant-ID", tenantID)
 
 	// Inject identity into context as if AuthContextMiddleware had run
 	ctx := identity.WithActorTenant(context.Background(), actorID, "")

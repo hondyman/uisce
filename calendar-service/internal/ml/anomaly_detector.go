@@ -21,10 +21,11 @@ type AnomalyDetector struct {
 
 // AnomalyDetectorConfig holds configuration
 type AnomalyDetectorConfig struct {
-	HasuraClient  *hasura.Client
-	AlertService  AnomalyAlertService
-	Logger        *logrus.Entry
-	CheckInterval time.Duration
+	HasuraClient    *hasura.Client
+	AlertService    AnomalyAlertService
+	Logger          *logrus.Entry
+	CheckInterval   time.Duration
+	SystemTenantID string
 }
 
 // AnomalyAlertService interface for dependency injection
@@ -140,7 +141,7 @@ func (ad *AnomalyDetector) checkSyncFailureSpikes(ctx context.Context) error {
 		}
 
 		// Create anomaly in DB
-		ad.createAnomaly(ctx, "00000000-0000-0000-0000-000000000000", "sync_failure_spike", "critical",
+		ad.createAnomaly(ctx, ad.config.SystemTenantID, "sync_failure_spike", "critical",
 			fmt.Sprintf("High sync failure rate detected: %.2f%%", float64(failed)/float64(total)*100),
 			metrics, threshold, "threshold_based", 0.95)
 	}
@@ -172,7 +173,7 @@ func (ad *AnomalyDetector) createAnomaly(ctx context.Context, tenantID, anomalyT
 	thresholdJSON, _ := json.Marshal(threshold)
 
 	var tenantIDVal *string
-	if tenantID != "00000000-0000-0000-0000-000000000000" && tenantID != "" {
+	if tenantID != "" && tenantID != ad.config.SystemTenantID {
 		tenantIDVal = &tenantID
 	}
 

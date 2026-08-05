@@ -7,12 +7,14 @@ import (
 	"sort"
 
 	"github.com/google/uuid"
+	"github.com/hondyman/uisce/backend/internal/tenant/goldcopy"
 )
 
 // ValidationRuleRepository handles validation rules for business objects
 type ValidationRuleRepository struct {
-	db             *sql.DB
-	catalogService CatalogService
+	db               *sql.DB
+	catalogService   CatalogService
+	goldcopyResolver *goldcopy.Resolver
 }
 
 // CatalogService provides catalog graph queries
@@ -31,6 +33,11 @@ func NewValidationRuleRepository(db *sql.DB, catalogService CatalogService) *Val
 	}
 }
 
+// SetGoldCopyResolver injects the gold copy tenant resolver.
+func (r *ValidationRuleRepository) SetGoldCopyResolver(resolver *goldcopy.Resolver) {
+	r.goldcopyResolver = resolver
+}
+
 // ResolveRulesForBusinessObject resolves the final list of rules for a business object
 // considering core rules, tenant overrides, and enrichment via catalog
 func (r *ValidationRuleRepository) ResolveRulesForBusinessObject(
@@ -47,8 +54,10 @@ func (r *ValidationRuleRepository) ResolveRulesForBusinessObject(
 	}
 
 	// 2. Load core rules (Gold Copy tenant)
-	// TODO: Get GoldCopyTenantID from configuration
-	goldCopyID := uuid.MustParse("00000000-0000-0000-0000-000000000000") // placeholder
+	goldCopyID, err := r.resolveGoldCopyID(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to resolve gold copy tenant: %w", err)
+	}
 	coreRules, err := r.loadRules(ctx, goldCopyID, boID, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load core rules: %w", err)
@@ -285,4 +294,16 @@ type ValidationRuleRecord struct {
 	DatasourceID      *uuid.UUID
 	CreatedAt         sql.NullTime
 	UpdatedAt         sql.NullTime
+}
+
+func (r *ValidationRuleRepository) resolveGoldCopyID(ctx context.Context) (uuid.UUID, error) {
+	if r.goldcopyResolver != nil {
+		return r.goldcopyResolver.Resolve(ctx)
+	}
+	var id string
+	err := r.db.QueryRowContext(ctx, `SELECT id FROM public.tenants WHERE gold_copy = true LIMIT 1`).Scan(&id)
+	if err != nil {
+		return uuid.Nil, fmt.Errorf("validation_rule_repository: failed to resolve gold copy: %w", err)
+	}
+	return uuid.Parse(id)
 }

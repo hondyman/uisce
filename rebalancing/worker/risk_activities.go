@@ -47,24 +47,22 @@ func (a *RebalanceActivities) ExecuteMitigation(ctx context.Context, riskResult 
 // Update Risk Status Activity
 func (a *RebalanceActivities) UpdateRiskStatus(ctx context.Context, portfolioID string, riskResult map[string]interface{}) error {
 	logger := activity.GetLogger(ctx)
-	logger.Info("Updating risk status in Hasura", "portfolioID", portfolioID)
+	logger.Info("Updating risk status", "portfolioID", portfolioID)
 
-	mutation := `
-		mutation UpdateRiskStatus($id: uuid!, $score: numeric!, $action: String!, $summary: String!) {
-			update_portfolios_by_pk(pk_columns: {id: $id}, _set: {risk_score: $score, mitigation_action: $action, rebalance_status: $summary}) {
-				id
-			}
-		}
-	`
-
-	variables := map[string]interface{}{
-		"id":      portfolioID,
-		"score":   riskResult["risk_score"],
-		"action":  riskResult["mitigation_action"],
-		"summary": riskResult["risk_summary"],
+	id, err := parseUUID(portfolioID)
+	if err != nil {
+		return err
 	}
 
-	return a.hasuraMutate(ctx, mutation, variables)
+	_, err = a.db.pool.Exec(ctx, `
+		UPDATE portfolios
+		SET risk_score = $2,
+			mitigation_action = $3,
+			rebalance_status = $4,
+			updated_at = NOW()
+		WHERE id = $1
+	`, id, riskResult["risk_score"], riskResult["mitigation_action"], riskResult["risk_summary"])
+	return err
 }
 
 // ============================================================================
@@ -274,56 +272,40 @@ func (a *RebalanceActivities) ExecuteRiskMitigation(ctx context.Context, portfol
 	return result, nil
 }
 
-// CreateRiskEvent - Insert risk_events record in Hasura
+// CreateRiskEvent - Insert risk_events record
 func (a *RebalanceActivities) CreateRiskEvent(ctx context.Context, portfolioID, tenantID, eventType, severity string, riskAnalysis map[string]interface{}, workflowID string) (string, error) {
 	logger := activity.GetLogger(ctx)
 
-	mutation := `
-		mutation CreateRiskEvent($object: risk_events_insert_input!) {
-			insert_risk_events_one(object: $object) {
-				id
-			}
-		}
-	`
-
-	riskEventObject := map[string]interface{}{
-		"tenant_id":           tenantID,
-		"portfolio_entity_id": portfolioID,
-		"event_type":          eventType,
-		"severity":            severity,
-		"risk_score":          riskAnalysis["risk_score"],
-		"confidence_score":    riskAnalysis["confidence"],
-		"var_95":              riskAnalysis["var_95"],
-		"cvar_95":             riskAnalysis["cvar_95"],
-		"concentration_pct":   riskAnalysis["concentration_pct"],
-		"liquidity_ratio":     riskAnalysis["liquidity_ratio"],
-		"ai_reasoning":        riskAnalysis["reasoning"],
-		"ai_recommendations":  riskAnalysis["recommendations"],
-		"status":              "DETECTED",
-		"workflow_id":         workflowID,
+	tid, err := parseUUID(tenantID)
+	if err != nil {
+		return "", err
 	}
 
-	variables := map[string]interface{}{
-		"object": riskEventObject,
-	}
+	reasoningJSON, _ := json.Marshal(riskAnalysis["reasoning"])
+	recommendationsJSON, _ := json.Marshal(riskAnalysis["recommendations"])
 
-	var result struct {
-		Data struct {
-			InsertRiskEventsOne struct {
-				ID string `json:"id"`
-			} `json:"insert_risk_events_one"`
-		} `json:"data"`
-	}
+	var riskEventID string
+	err = a.db.pool.QueryRow(ctx, `
+		INSERT INTO risk_events (
+			tenant_id, portfolio_id, event_type, severity,
+			risk_score, confidence_score, var_95, cvar_95,
+			concentration_pct, liquidity_ratio, ai_reasoning,
+			ai_recommendations, status, workflow_id
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, 'DETECTED', $13)
+		RETURNING id
+	`, tid, portfolioID, eventType, severity,
+		riskAnalysis["risk_score"], riskAnalysis["confidence"],
+		riskAnalysis["var_95"], riskAnalysis["cvar_95"],
+		riskAnalysis["concentration_pct"], riskAnalysis["liquidity_ratio"],
+		string(reasoningJSON), string(recommendationsJSON), workflowID,
+	).Scan(&riskEventID)
 
-	if err := a.hasuraQuery(ctx, mutation, variables, &result); err != nil {
+	if err != nil {
 		logger.Error("Failed to create risk event", "error", err)
 		return "", err
 	}
 
-	// Extract risk event ID from response
-	riskEventID := result.Data.InsertRiskEventsOne.ID
 	logger.Info("Risk event created", "id", riskEventID)
-
 	return riskEventID, nil
 }
 
@@ -331,27 +313,24 @@ func (a *RebalanceActivities) CreateRiskEvent(ctx context.Context, portfolioID, 
 func (a *RebalanceActivities) UpdateRiskEventMitigated(ctx context.Context, riskEventID string, mitigationResult map[string]interface{}) error {
 	logger := activity.GetLogger(ctx)
 
-	mutation := `
-		mutation UpdateRiskEvent($id: uuid!, $set: risk_events_set_input!) {
-			update_risk_events_by_pk(pk_columns: {id: $id}, _set: $set) {
-				id
-			}
-		}
-	`
-
-	setData := map[string]interface{}{
-		"status":             "MITIGATED",
-		"mitigated_at":       "NOW()",
-		"auto_mitigated":     true,
-		"mitigation_actions": mitigationResult["executed_trades"],
+	id, err := parseUUID(riskEventID)
+	if err != nil {
+		return err
 	}
 
-	variables := map[string]interface{}{
-		"id":  riskEventID,
-		"set": setData,
-	}
+	mitigationJSON, _ := json.Marshal(mitigationResult["executed_trades"])
 
-	if err := a.hasuraMutate(ctx, mutation, variables); err != nil {
+	_, err = a.db.pool.Exec(ctx, `
+		UPDATE risk_events
+		SET status = 'MITIGATED',
+			resolved_at = NOW(),
+			resolved = true,
+			mitigation_actions = $2,
+			updated_at = NOW()
+		WHERE id = $1
+	`, id, string(mitigationJSON))
+
+	if err != nil {
 		logger.Error("Failed to update risk event", "error", err)
 		return err
 	}
@@ -364,38 +343,30 @@ func (a *RebalanceActivities) UpdateRiskEventMitigated(ctx context.Context, risk
 func (a *RebalanceActivities) recordMitigationActions(ctx context.Context, portfolioID string, strategy map[string]interface{}) error {
 	logger := activity.GetLogger(ctx)
 
-	// Insert each action as a row in risk_mitigation_actions
-	mutation := `
-		mutation InsertMitigationActions($objects: [risk_mitigation_actions_insert_input!]!) {
-			insert_risk_mitigation_actions(objects: $objects) {
-				affected_rows
-			}
-		}
-	`
-
-	actions := strategy["actions"].([]interface{})
-	actionObjects := make([]map[string]interface{}, 0)
+	actions, ok := strategy["actions"].([]interface{})
+	if !ok {
+		return nil
+	}
 
 	for _, actionRaw := range actions {
 		action := actionRaw.(map[string]interface{})
-		actionObjects = append(actionObjects, map[string]interface{}{
-			"action_type":        action["type"],
-			"action_description": fmt.Sprintf("Mitigation trade: %v shares of %v", action["shares_to_trade"], action["ticker"]),
-			"action_parameters":  action,
-			"status":             "PENDING",
-		})
+		actionParamsJSON, _ := json.Marshal(action)
+
+		_, err := a.db.pool.Exec(ctx, `
+			INSERT INTO risk_mitigation_actions (
+				risk_event_id, action_type, action_description, action_parameters, status
+			) VALUES ($1, $2, $3, $4, 'PENDING')
+		`, portfolioID, action["type"],
+			fmt.Sprintf("Mitigation trade: %v shares of %v", action["shares_to_trade"], action["ticker"]),
+			string(actionParamsJSON))
+
+		if err != nil {
+			logger.Error("Failed to record mitigation action", "error", err)
+			return err
+		}
 	}
 
-	variables := map[string]interface{}{
-		"objects": actionObjects,
-	}
-
-	if err := a.hasuraMutate(ctx, mutation, variables); err != nil {
-		logger.Error("Failed to record mitigation actions", "error", err)
-		return err
-	}
-
-	logger.Info("Mitigation actions recorded", "count", len(actionObjects))
+	logger.Info("Mitigation actions recorded", "count", len(actions))
 	return nil
 }
 

@@ -1,14 +1,8 @@
 package api
 
 import (
-	"net/http"
-
-	"database/sql"
-	"encoding/json"
 	"fmt"
-	"os"
-	"path/filepath"
-	"strings"
+	"net/http"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/hondyman/uisce/backend/internal/handlers"
@@ -212,79 +206,6 @@ func (rs *Routes) RegisterMetadataWrite(r chi.Router, handler interface {
 // RegisterMCP mounts the Agentic AI Interface (MCP)
 func (rs *Routes) RegisterMCP(r chi.Router, handler interface{ RegisterRoutes(chi.Router) }) {
 	handler.RegisterRoutes(r)
-}
-
-// RegisterViews mounts the views endpoint. This mirrors the previous inline
-// handler that reads runtime files and falls back to DB.
-func (rs *Routes) RegisterViews(r chi.Router, srv *Server, viewService *services.ViewService, modelProvider *services.ModelProvider, db *sql.DB, runtimeBase string) {
-	r.Get("/views/{name}", func(w http.ResponseWriter, req *http.Request) {
-		name := chi.URLParam(req, "name")
-		if name == "" || strings.Contains(name, string(os.PathSeparator)) || strings.Contains(name, "..") {
-			http.Error(w, "invalid view name", http.StatusBadRequest)
-			return
-		}
-		source := strings.ToLower(strings.TrimSpace(req.URL.Query().Get("source")))
-		dir := filepath.Join(runtimeBase, "runtime", "views")
-		if source == "resolved" {
-			dir = filepath.Join(runtimeBase, "runtime", "views_resolved")
-		}
-		fp := filepath.Join(dir, name+".json")
-		b, err := os.ReadFile(fp)
-		if err != nil {
-			tenantID := strings.TrimSpace(req.URL.Query().Get("tenant_id"))
-			datasourceID := strings.TrimSpace(req.URL.Query().Get("datasource_id"))
-			_, _ = modelProvider.GetActiveCatalog(req.Context(), tenantID, datasourceID)
-			b, err = os.ReadFile(fp)
-			if err != nil {
-				// Try DB fallback
-				if tenantID != "" && datasourceID != "" {
-					var viewJSON string
-					dbErr := db.QueryRowContext(req.Context(), `
-                        SELECT view FROM public.views 
-                        WHERE tenant_id = $1 AND tenant_datasource_id = $2 AND name = $3
-                    `, tenantID, datasourceID, name).Scan(&viewJSON)
-					if dbErr == nil {
-						b = []byte(viewJSON)
-						var v any
-						if err := json.Unmarshal(b, &v); err != nil {
-							http.Error(w, fmt.Sprintf("invalid view json from database: %v", err), http.StatusBadRequest)
-							return
-						}
-						resp := map[string]any{"view": sanitizeViewPayload(v)}
-						w.Header().Set("Content-Type", "application/json")
-						json.NewEncoder(w).Encode(resp)
-						return
-					}
-				}
-				// Check if this is a new view request (check for create=true parameter)
-				createNew := strings.ToLower(strings.TrimSpace(req.URL.Query().Get("create"))) == "true"
-				if createNew {
-					skeleton := map[string]any{"name": name, "description": "New view skeleton", "measures": []any{}, "dimensions": []any{}}
-					resp := map[string]any{"view": skeleton}
-					w.Header().Set("Content-Type", "application/json")
-					json.NewEncoder(w).Encode(resp)
-					return
-				}
-				http.Error(w, "view not found", http.StatusNotFound)
-				return
-			}
-		}
-		fi, _ := os.Stat(fp)
-		etag := fileETag(b, fi)
-		w.Header().Set("ETag", etag)
-		if inm := req.Header.Get("If-None-Match"); inm != "" && inm == etag {
-			w.WriteHeader(http.StatusNotModified)
-			return
-		}
-		var v any
-		if err := json.Unmarshal(b, &v); err != nil {
-			http.Error(w, fmt.Sprintf("invalid view json: %v", err), http.StatusBadRequest)
-			return
-		}
-		resp := map[string]any{"view": sanitizeViewPayload(v)}
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(resp)
-	})
 }
 
 // RegisterCalendarSync mounts the calendar sync endpoints

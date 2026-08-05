@@ -8,8 +8,13 @@ import (
 	"net/http"
 	"os"
 	"strings"
+
+	"github.com/google/uuid"
 	"github.com/hondyman/uisce/libs/jwt-middleware"
 )
+
+// GoldCopyTenantID is the canonical baseline master tenant context.
+var GoldCopyTenantID = uuid.MustParse("99e99e99-99e9-49e9-89e9-99e99e99e999")
 
 // Header name for region
 const RegionHeader = "X-Tenant-Region"
@@ -159,7 +164,7 @@ func RegionValidationMiddleware(provider interface{}) func(http.Handler) http.Ha
 			region := strings.TrimSpace(r.Header.Get("X-Tenant-Region"))
 
 			// Gold Copy bypass — always allow, no region required
-			if tenantID == GoldCopyTenantID {
+			if tenantID == GoldCopyTenantID.String() {
 				ctx := context.WithValue(r.Context(), RegionCtxKey, "global")
 				next.ServeHTTP(w, r.WithContext(ctx))
 				return

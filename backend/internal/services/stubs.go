@@ -332,4 +332,6 @@ var SeverityThresholds = map[string]int{
 	"low":       3,
 }
 
-var placeholderUserID = uuid.MustParse("00000000-0000-0000-0000-000000000000")
+// SystemUserID is the sentinel user ID for platform-level operations that are
+// not attributed to a specific human user.
+var SystemUserID = uuid.Nil
