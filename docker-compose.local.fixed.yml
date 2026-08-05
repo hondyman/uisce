@@ -2,8 +2,8 @@ services:
   hasura:
     image: hasura/graphql-engine:v2.37.0.cli-migrations-v3
     environment:
-      HASURA_GRAPHQL_DATABASE_URL: "${POSTGRES_URL:-postgresql://postgres:postgres@host.docker.internal:5433/alpha?sslmode=disable}"
-      HASURA_GRAPHQL_ADMIN_SECRET: "${HASURA_ADMIN_SECRET:-adminsecret}"
+      HASURA_GRAPHQL_DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD}@host.docker.internal:5433/alpha?sslmode=disable
+      HASURA_GRAPHQL_ADMIN_SECRET: ${HASURA_ADMIN_SECRET}
       HASURA_GRAPHQL_DEV_MODE: "true"
       HASURA_GRAPHQL_CORS_DOMAIN: "*"
     ports:
@@ -15,8 +15,8 @@ services:
       dockerfile: backend/cmd/rule-engine-service/Dockerfile
     environment:
       PORT: 8083
-      DATABASE_URL: "${POSTGRES_URL:-postgresql://postgres:postgres@host.docker.internal:5433/alpha?sslmode=disable}"
-      RABBITMQ_URL: "amqp://guest:guest@host.docker.internal:5672/"
+      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD}@host.docker.internal:5433/alpha?sslmode=disable
+      RABBITMQ_URL: amqp://${RABBITMQ_DEFAULT_USER:-guest}:${RABBITMQ_DEFAULT_PASS:-guest}@host.docker.internal:5672/
     ports:
       - "8083:8083"
     depends_on:
@@ -25,8 +25,8 @@ services:
   rabbitmq:
     image: rabbitmq:3.12-management-alpine
     environment:
-      RABBITMQ_DEFAULT_USER: guest
-      RABBITMQ_DEFAULT_PASS: guest
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_DEFAULT_USER:-guest}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_DEFAULT_PASS:-guest}
     ports:
       - "5672:5672"
       - "15672:15672"
@@ -42,8 +42,8 @@ services:
     image: temporalio/auto-setup:latest
     environment:
       DB: postgres12
-      POSTGRES_USER: temporal
-      POSTGRES_PASSWORD: temporal
+      POSTGRES_USER: ${TEMPORAL_DB_USER:-temporal}
+      POSTGRES_PASSWORD: ${TEMPORAL_DB_PASSWORD:-temporal}
       POSTGRES_DB: temporal
       POSTGRES_HOST: host.docker.internal
       DB_PORT: 5433
@@ -73,7 +73,7 @@ services:
     environment:
       PORT: ${PORT:-3000}
       HASURA_URL: http://hasura:8080
-      HASURA_ADMIN_SECRET: ${HASURA_ADMIN_SECRET:-adminsecret}
+      HASURA_ADMIN_SECRET: ${HASURA_ADMIN_SECRET}
     ports:
       - "3000:3000"
     depends_on:
@@ -87,8 +87,8 @@ services:
       dockerfile: backend/cmd/workflow-service/Dockerfile
     environment:
       HASURA_URL: http://hasura:8080
-      HASURA_ADMIN_SECRET: ${HASURA_ADMIN_SECRET:-adminsecret}
-      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/
+      HASURA_ADMIN_SECRET: ${HASURA_ADMIN_SECRET}
+      RABBITMQ_URL: amqp://${RABBITMQ_DEFAULT_USER:-guest}:${RABBITMQ_DEFAULT_PASS:-guest}@rabbitmq:5672/
       WORKFLOW_SERVICE_PORT: 8082
     ports:
       - "8082:8082"
@@ -103,7 +103,7 @@ services:
       dockerfile: backend/cmd/screen-builder-service/Dockerfile
     environment:
       HASURA_URL: http://hasura:8080
-      HASURA_ADMIN_SECRET: ${HASURA_ADMIN_SECRET:-adminsecret}
+      HASURA_ADMIN_SECRET: ${HASURA_ADMIN_SECRET}
       SCREEN_BUILDER_SERVICE_PORT: 8083
     ports:
       - "8084:8083"

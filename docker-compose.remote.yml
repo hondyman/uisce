@@ -278,7 +278,7 @@ services:
       # How often to run the full reconciliation loop
       RECONCILE_INTERVAL: "${LPS_RECONCILE_INTERVAL:-5m}"
       # Core (gold_copy) tenant UUID — used to scope node type lookups
-      CORE_TENANT_ID: "${CORE_TENANT_ID:-99e99e99-99e9-49e9-89e9-99e99e99e999}"
+      CORE_TENANT_ID: "${CORE_TENANT_ID:-}"
       # Health server port
       HEALTH_PORT: "9091"
       # Structured JSON logging in production; set to 'console' for dev

@@ -16,12 +16,6 @@ import (
 	"github.com/jmoiron/sqlx"
 )
 
-// HasuraClient defines the interface for Hasura GraphQL operations
-type HasuraClient interface {
-	Query(ctx context.Context, query string, variables map[string]interface{}, result interface{}) error
-	Mutate(ctx context.Context, mutation string, variables map[string]interface{}, result interface{}) error
-}
-
 // Service provides secure messaging operations
 type Service interface {
 	// Messages
@@ -43,7 +37,6 @@ type service struct {
 	encryptionKey []byte // AES-256 key (32 bytes)
 	emailService  EmailService
 	smsService    SMSService
-	hasuraClient  HasuraClient
 }
 
 // EmailService handles email delivery
@@ -68,22 +61,6 @@ func NewService(db *sqlx.DB, encryptionKey string, emailSvc EmailService, smsSvc
 		encryptionKey: keyBytes,
 		emailService:  emailSvc,
 		smsService:    smsSvc,
-	}
-}
-
-// NewServiceWithHasura creates a new messaging service with Hasura support
-func NewServiceWithHasura(db *sqlx.DB, encryptionKey string, emailSvc EmailService, smsSvc SMSService, hasuraClient HasuraClient) Service {
-	keyBytes := []byte(encryptionKey)
-	if len(keyBytes) != 32 {
-		panic("encryption key must be 32 bytes for AES-256")
-	}
-
-	return &service{
-		db:            db,
-		encryptionKey: keyBytes,
-		emailService:  emailSvc,
-		smsService:    smsSvc,
-		hasuraClient:  hasuraClient,
 	}
 }
 

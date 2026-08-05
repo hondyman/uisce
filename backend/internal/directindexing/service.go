@@ -9,12 +9,6 @@ import (
 	"github.com/jmoiron/sqlx"
 )
 
-// HasuraClient interface for GraphQL operations
-type HasuraClient interface {
-	Query(ctx context.Context, query string, variables map[string]interface{}, result interface{}) error
-	Mutate(ctx context.Context, mutation string, variables map[string]interface{}, result interface{}) error
-}
-
 // Account represents a direct indexing account
 type Account struct {
 	AccountID               uuid.UUID       `db:"account_id" json:"account_id"`
@@ -95,21 +89,12 @@ type Opportunity struct {
 
 // Service provides direct indexing operations
 type Service struct {
-	db           *sqlx.DB
-	hasuraClient HasuraClient
+	db *sqlx.DB
 }
 
 // NewService creates a new direct indexing service
 func NewService(db *sqlx.DB) *Service {
 	return &Service{db: db}
-}
-
-// NewServiceWithHasura creates a service with Hasura GraphQL client
-func NewServiceWithHasura(db *sqlx.DB, hasuraClient HasuraClient) *Service {
-	return &Service{
-		db:           db,
-		hasuraClient: hasuraClient,
-	}
 }
 
 // GetAccount retrieves an account by ID

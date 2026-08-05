@@ -1,0 +1,1 @@
+export const TEST_GOLD_COPY_TENANT_ID = import.meta.env?.VITE_GOLD_COPY_TENANT_ID ?? '99e99e99-99e9-49e9-89e9-99e99e99e999';

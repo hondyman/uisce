@@ -189,51 +189,16 @@ func LogReconciliationAudit(ctx context.Context, db *sql.DB, resultID uuid.UUID,
 	return actCtx.LogAudit(ctx, resultID, action, details)
 }
 
-// LogAudit creates an audit log entry with Hasura-first approach
+// LogAudit creates an audit log entry
 func (ac *ActivityContext) LogAudit(ctx context.Context, resultID uuid.UUID, action string, details json.RawMessage) error {
 	auditID := uuid.New()
 	now := time.Now()
 
-	if ac.hasura != nil {
-		err := ac.logAuditWithHasura(ctx, auditID, resultID, action, details, now)
-		if err == nil {
-			return nil
-		}
-		fmt.Printf("Hasura mutation failed, falling back to SQL: %v\n", err)
-	}
-
-	// TODO: Hasura-first pattern already implemented via logAuditWithHasura()
-	// Primary implementation uses Hasura GraphQL, this SQL is fallback only
-	// See logAuditWithHasura() for the Hasura mutation: mutation LogAudit
-	// SQL fallback
 	_, err := ac.db.ExecContext(ctx, `
-		INSERT INTO reconciliation_audit_logs 
+		INSERT INTO reconciliation_audit_logs
 			(id, result_id, action, details, created_at)
 		VALUES ($1, $2, $3, $4, $5)
 	`, auditID, resultID, action, details, now)
 
-	return err
-}
-
-func (ac *ActivityContext) logAuditWithHasura(ctx context.Context, auditID, resultID uuid.UUID, action string, details json.RawMessage, now time.Time) error {
-	mutation := `
-		mutation LogAudit($log: reconciliation_audit_logs_insert_input!) {
-			insert_reconciliation_audit_logs_one(object: $log) {
-				id
-			}
-		}
-	`
-
-	variables := map[string]interface{}{
-		"log": map[string]interface{}{
-			"id":         auditID.String(),
-			"result_id":  resultID.String(),
-			"action":     action,
-			"details":    string(details),
-			"created_at": now.Format(time.RFC3339),
-		},
-	}
-
-	_, err := ac.hasura.Mutate(mutation, variables)
 	return err
 }

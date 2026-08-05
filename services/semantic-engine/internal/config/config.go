@@ -12,9 +12,8 @@ type Config struct {
 	// Server configuration
 	ServerPort int
 
-	// Hasura configuration
-	HasuraEndpoint    string
-	HasuraAdminSecret string
+	// Database configuration
+	DatabaseURL string
 
 	// Service endpoints
 	AIServiceEndpoint         string
@@ -29,8 +28,7 @@ type Config struct {
 func LoadFromEnv() (*Config, error) {
 	cfg := &Config{
 		ServerPort:                getEnvInt("SEMANTIC_ENGINE_PORT", 8086),
-		HasuraEndpoint:            getEnv("HASURA_ENDPOINT", ""),
-		HasuraAdminSecret:         getEnv("HASURA_ADMIN_SECRET", ""),
+		DatabaseURL:               getEnv("DATABASE_URL", ""),
 		AIServiceEndpoint:         getEnv("AI_SERVICE_ENDPOINT", "http://localhost:8082"),
 		GovernanceServiceEndpoint: getEnv("GOVERNANCE_SERVICE_ENDPOINT", "http://localhost:8084"),
 		TemporalHostPort:          getEnv("TEMPORAL_HOST_PORT", "localhost:7233"),
@@ -50,6 +48,10 @@ func Validate(cfg *Config) error {
 		return fmt.Errorf("invalid server port: %d", cfg.ServerPort)
 	}
 
+	if cfg.DatabaseURL == "" {
+		return errors.New("DATABASE_URL is required")
+	}
+
 	if cfg.AIServiceEndpoint == "" {
 		return errors.New("AI_SERVICE_ENDPOINT is required")
 	}
@@ -58,7 +60,6 @@ func Validate(cfg *Config) error {
 		return errors.New("GOVERNANCE_SERVICE_ENDPOINT is required")
 	}
 
-	// Hasura is optional - may not be needed for all deployments
 	// Temporal is optional - may not be needed for all deployments
 
 	return nil

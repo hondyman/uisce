@@ -11,23 +11,12 @@ import (
 	"github.com/jmoiron/sqlx"
 )
 
-// HasuraClient defines the interface for Hasura GraphQL operations
-type HasuraClient interface {
-	Query(query string, variables map[string]interface{}) (map[string]interface{}, error)
-	Mutate(mutation string, variables map[string]interface{}) (map[string]interface{}, error)
-}
-
 type Service struct {
-	DB     *sqlx.DB
-	hasura HasuraClient
+	DB *sqlx.DB
 }
 
 func NewService(db *sqlx.DB) *Service {
 	return &Service{DB: db}
-}
-
-func NewServiceWithHasura(db *sqlx.DB, hasura HasuraClient) *Service {
-	return &Service{DB: db, hasura: hasura}
 }
 
 // CreateFeeSchedule creates a new fee schedule

@@ -95,12 +95,6 @@ type EmbeddingClient interface {
 	GenerateEmbedding(ctx context.Context, text string) ([]float32, error)
 }
 
-// HasuraClient interface for GraphQL operations
-type HasuraClient interface {
-	Query(ctx context.Context, query string, variables map[string]interface{}, result interface{}) error
-	Mutate(ctx context.Context, mutation string, variables map[string]interface{}, result interface{}) error
-}
-
 // NewFKGService creates a new FKG service.
 func NewFKGService(db *sqlx.DB, embeddingClient EmbeddingClient) *FKGService {
 	return &FKGService{

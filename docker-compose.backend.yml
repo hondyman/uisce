@@ -50,8 +50,8 @@ services:
     restart: on-failure
     environment:
       DB: postgres12
-      POSTGRES_USER: temporal
-      POSTGRES_PASSWORD: temporal
+      POSTGRES_USER: ${TEMPORAL_DB_USER:-temporal}
+      POSTGRES_PASSWORD: ${TEMPORAL_DB_PASSWORD:-temporal}
       POSTGRES_DB: temporal_db
       POSTGRES_HOST: host.docker.internal
       POSTGRES_SEEDS: host.docker.internal
@@ -89,8 +89,8 @@ services:
     restart: unless-stopped
     environment:
       PORT: 8080
-      DATABASE_URL: postgresql://postgres:postgres@host.docker.internal:5432/alpha
-      JWT_SECRET: ${JWT_SECRET:-dev-jwt-secret-key-change-in-production}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD}@host.docker.internal:5432/alpha
+      JWT_SECRET: ${JWT_SECRET}
     ports:
       - "8080:8080"
     healthcheck:
@@ -139,7 +139,7 @@ services:
     restart: on-failure
     environment:
       PORT: 8085
-      DATABASE_URL: "postgresql://postgres:postgres@host.docker.internal:5432/alpha?sslmode=disable"
+      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD}@host.docker.internal:5432/alpha?sslmode=disable
       KAFKA_BROKERS: redpanda:9092
       # Note: messaging now uses Redpanda (Kafka-compatible)
     expose:

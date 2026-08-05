@@ -36,19 +36,19 @@ services:
       PORT: 8080
       
       # ===== Remote Database =====
-      DATABASE_URL: postgresql://postgres:postgres@100.84.126.19:5432/alpha?sslmode=disable
-      DB_HOST: 100.84.126.19
+      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD}@${DB_HOST:-100.84.126.19}:5432/alpha?sslmode=disable
+      DB_HOST: ${DB_HOST:-100.84.126.19}
       DB_PORT: 5432
-      DB_USER: postgres
-      DB_PASSWORD: postgres
+      DB_USER: ${POSTGRES_USER:-postgres}
+      DB_PASSWORD: ${POSTGRES_PASSWORD}
       DB_NAME: alpha
       
       # ===== Remote Hasura =====
-      HASURA_URL: http://100.84.126.19:8085
-      HASURA_ADMIN_SECRET: ${HASURA_ADMIN_SECRET:-myadminsecret}
+      HASURA_URL: http://${DB_HOST:-100.84.126.19}:8085
+      HASURA_ADMIN_SECRET: ${HASURA_ADMIN_SECRET}
       
       # ===== JWT & Auth =====
-      JWT_SECRET: ${JWT_SECRET:-dev-jwt-secret-key-change-in-production}
+      JWT_SECRET: ${JWT_SECRET}
       JWT_EXPIRY: 1h
       REFRESH_TOKEN_EXPIRY: 24h
       

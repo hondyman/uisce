@@ -1,11 +1,12 @@
 package main
 
 import (
+	"database/sql"
 	"fmt"
 	"log"
 
 	"github.com/gin-gonic/gin"
-	hasuraclient "github.com/hondyman/uisce/libs/hasura-client"
+	_ "github.com/lib/pq"
 	temporalclient "github.com/hondyman/uisce/libs/temporal-client"
 	"github.com/hondyman/uisce/services/semantic-engine/internal/api"
 	"github.com/hondyman/uisce/services/semantic-engine/internal/config"
@@ -24,17 +25,14 @@ func main() {
 	log.Printf("Semantic Engine config loaded: AI=%s, Governance=%s, Port=%d",
 		cfg.AIServiceEndpoint, cfg.GovernanceServiceEndpoint, cfg.ServerPort)
 
-	// Initialize Hasura client (optional)
-	var hasuraClient *hasuraclient.HasuraClient
-	if cfg.HasuraEndpoint != "" {
-		hasuraClient = hasuraclient.NewHasuraClient(&hasuraclient.HasuraConfig{
-			Endpoint:    cfg.HasuraEndpoint,
-			AdminSecret: cfg.HasuraAdminSecret,
-		})
-		log.Println("Hasura client initialized")
-	} else {
-		log.Println("Hasura client not configured (HASURA_ENDPOINT not set)")
+	db, err := sql.Open("postgres", cfg.DatabaseURL)
+	if err != nil {
+		log.Fatalf("Failed to connect to database: %v", err)
 	}
+	if err := db.Ping(); err != nil {
+		log.Fatalf("Failed to ping database: %v", err)
+	}
+	log.Println("Database connection established")
 
 	// Initialize temporal client (will be nil for now if not configured)
 	var temporalClient *temporalclient.Client
@@ -44,7 +42,7 @@ func main() {
 	semanticService := services.NewSemanticService(services.SemanticServiceConfig{
 		AIEndpoint:         cfg.AIServiceEndpoint,
 		GovernanceEndpoint: cfg.GovernanceServiceEndpoint,
-		HasuraClient:       hasuraClient,
+		DB:                 db,
 		TemporalClient:     temporalClient,
 	})
 

@@ -29,11 +29,6 @@ func NewCompleteABranchEvaluator(db *sqlx.DB, tenantID string) *CompleteABranchE
 	}
 }
 
-// NewCompleteABranchEvaluatorWithHasura creates evaluator with an injected Hasura client
-func NewCompleteABranchEvaluatorWithHasura(db *sqlx.DB, hasura HasuraClient, tenantID string) *CompleteABranchEvaluator {
-	return &CompleteABranchEvaluator{db: db, tenantID: tenantID}
-}
-
 // ============================================================================
 // FEATURE 1: AI-POWERED PREDICTIVE ROUTING
 // ============================================================================

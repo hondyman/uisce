@@ -3,12 +3,12 @@ package services
 import (
 	"bytes"
 	"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"time"
 
-	hasuraclient "github.com/hondyman/uisce/libs/hasura-client"
 	sharedtypes "github.com/hondyman/uisce/libs/shared-types"
 	temporalclient "github.com/hondyman/uisce/libs/temporal-client"
 )
@@ -17,19 +17,21 @@ import (
 type SemanticServiceConfig struct {
 	AIEndpoint         string
 	GovernanceEndpoint string
-	HasuraClient       *hasuraclient.HasuraClient
+	DB                 *sql.DB
 	TemporalClient     *temporalclient.Client
 }
 
 // SemanticService provides semantic processing capabilities
 type SemanticService struct {
 	config SemanticServiceConfig
+	db     *sql.DB
 }
 
 // NewSemanticService creates a new semantic service instance
 func NewSemanticService(config SemanticServiceConfig) *SemanticService {
 	return &SemanticService{
 		config: config,
+		db:     config.DB,
 	}
 }
 
@@ -120,49 +122,28 @@ func (s *SemanticService) evaluateAccess(ctx context.Context, req sharedtypes.Ac
 
 // GetSemanticMappings retrieves semantic mappings for a datasource
 func (s *SemanticService) GetSemanticMappings(ctx context.Context, tenantID, datasourceID string) ([]sharedtypes.SemanticMapping, error) {
-	// Query Hasura for semantic mappings
-	query := `
-		query GetSemanticMappings($tenantId: String!, $datasourceId: String!) {
-			semantic_mappings(
-				where: {
-					tenant_id: { _eq: $tenantId }
-					datasource_id: { _eq: $datasourceId }
-				}
-			) {
-				id
-				source_field
-				target_field
-				mapping_type
-				confidence_score
-				created_at
-			}
-		}
+	sqlQuery := `
+		SELECT id, source_field, target_field, mapping_type, confidence_score, created_at
+		FROM semantic_mappings
+		WHERE tenant_id = $1 AND datasource_id = $2
 	`
-
-	result, err := s.config.HasuraClient.Query(query, map[string]interface{}{
-		"tenantId":     tenantID,
-		"datasourceId": datasourceID,
-	})
+	rows, err := s.db.QueryContext(ctx, sqlQuery, tenantID, datasourceID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query semantic mappings: %w", err)
 	}
+	defer rows.Close()
 
-	// Parse response
-	mappings := make([]sharedtypes.SemanticMapping, 0)
-	if data, ok := result["semantic_mappings"].([]interface{}); ok {
-		for _, item := range data {
-			if mappingData, ok := item.(map[string]interface{}); ok {
-				mapping := sharedtypes.SemanticMapping{
-					ID:              mappingData["id"].(string),
-					SourceField:     mappingData["source_field"].(string),
-					TargetField:     mappingData["target_field"].(string),
-					MappingType:     mappingData["mapping_type"].(string),
-					ConfidenceScore: mappingData["confidence_score"].(float64),
-					CreatedAt:       mappingData["created_at"].(string),
-				}
-				mappings = append(mappings, mapping)
-			}
+	var mappings []sharedtypes.SemanticMapping
+	for rows.Next() {
+		var mapping sharedtypes.SemanticMapping
+		if err := rows.Scan(&mapping.ID, &mapping.SourceField, &mapping.TargetField, &mapping.MappingType, &mapping.ConfidenceScore, &mapping.CreatedAt); err != nil {
+			return nil, fmt.Errorf("failed to scan mapping row: %w", err)
 		}
+		mappings = append(mappings, mapping)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating mapping rows: %w", err)
 	}
 
 	return mappings, nil

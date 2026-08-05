@@ -20,8 +20,8 @@ services:
       - HASURA_GRAPHQL_DATABASE_URL=postgres://postgres:postgres@host.docker.internal:${PORT_POSTGRES_HOST}/alpha?sslmode=disable
       - HASURA_GRAPHQL_ENABLE_CONSOLE=true
       - HASURA_GRAPHQL_DEV_MODE=true
-      - HASURA_GRAPHQL_ADMIN_SECRET=${HASURA_ADMIN_SECRET:-newadminsecretkey}
-      - HASURA_GRAPHQL_JWT_SECRET={"type":"HS256","key":"${JWT_SECRET:-development_jwt_secret_key_that_is_long_enough_for_hasura_requirements}"}
+      - HASURA_GRAPHQL_ADMIN_SECRET=${HASURA_ADMIN_SECRET}
+      - HASURA_GRAPHQL_JWT_SECRET={"type":"HS256","key":"${JWT_SECRET}"}
       - HASURA_GRAPHQL_UNAUTHORIZED_ROLE=anonymous
       - HASURA_GRAPHQL_ENABLE_CORS=true
       - HASURA_GRAPHQL_CORS_DOMAIN=http://localhost:${PORT_VITE_DEV_SERVER},http://localhost:${PORT_BACKEND_API},http://localhost:${PORT_LEGACY_GATEWAY}
@@ -41,8 +41,8 @@ services:
     container_name: semlayer-rabbitmq
     restart: unless-stopped
     environment:
-      - RABBITMQ_DEFAULT_USER=guest
-      - RABBITMQ_DEFAULT_PASS=guest
+      - RABBITMQ_DEFAULT_USER=${RABBITMQ_DEFAULT_USER:-guest}
+      - RABBITMQ_DEFAULT_PASS=${RABBITMQ_DEFAULT_PASS:-guest}
     ports:
       - "${PORT_RABBITMQ_AMQP}:5672"
       - "${PORT_RABBITMQ_MANAGEMENT}:15672"
@@ -104,9 +104,9 @@ services:
       - POSTGRES_PORT=${PORT_POSTGRES_HOST}
       - POSTGRES_DB=alpha
       - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
       - RABBIT_URL=amqp://guest:guest@rabbitmq:5672/
-      - JWT_SECRET=${JWT_SECRET:-development-secret-key}
+      - JWT_SECRET=${JWT_SECRET}
     ports:
       - "${PORT_BACKEND_API}:8080"
     depends_on:
@@ -140,9 +140,9 @@ services:
       - POSTGRES_PORT=${PORT_POSTGRES_HOST}
       - POSTGRES_DB=alpha
       - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
       - RABBIT_URL=amqp://guest:guest@rabbitmq:5672/
-      - JWT_SECRET=${JWT_SECRET:-development-secret-key}
+      - JWT_SECRET=${JWT_SECRET}
       - HTTP_PORT=${PORT_FABRIC_BUILDER}
     ports:
       - "${PORT_FABRIC_BUILDER}:${PORT_FABRIC_BUILDER}"

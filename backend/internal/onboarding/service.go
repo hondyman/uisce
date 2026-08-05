@@ -11,12 +11,6 @@ import (
 	"github.com/jmoiron/sqlx"
 )
 
-// HasuraClient interface for GraphQL operations
-type HasuraClient interface {
-	Query(query string, variables map[string]interface{}) (map[string]interface{}, error)
-	Mutate(mutation string, variables map[string]interface{}) (map[string]interface{}, error)
-}
-
 // Service provides onboarding operations
 type Service interface {
 	// Session management
@@ -50,7 +44,6 @@ type Service interface {
 
 type service struct {
 	db             *sqlx.DB
-	hasuraClient   HasuraClient
 	geminiAPIKey   string
 	docusignAPIKey string
 	s3Bucket       string
@@ -59,17 +52,6 @@ type service struct {
 func NewService(db *sqlx.DB, geminiAPIKey, docusignAPIKey, s3Bucket string) Service {
 	return &service{
 		db:             db,
-		geminiAPIKey:   geminiAPIKey,
-		docusignAPIKey: docusignAPIKey,
-		s3Bucket:       s3Bucket,
-	}
-}
-
-// NewServiceWithHasura creates a new service with Hasura support
-func NewServiceWithHasura(db *sqlx.DB, hasuraClient HasuraClient, geminiAPIKey, docusignAPIKey, s3Bucket string) Service {
-	return &service{
-		db:             db,
-		hasuraClient:   hasuraClient,
 		geminiAPIKey:   geminiAPIKey,
 		docusignAPIKey: docusignAPIKey,
 		s3Bucket:       s3Bucket,

@@ -155,14 +155,6 @@ services:
     depends_on:
       - temporal
 
-  entity-manager:
-    healthcheck:
-      test: ["CMD-SHELL", "curl -fsS http://localhost:8080/ready || exit 1"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 10s
-
 volumes:
   redis_data:
   prometheus_data:

@@ -22,10 +22,6 @@ func main() {
 	defer database.Close()
 	log.Println("✅ Database connection established")
 
-	// Initialize Hasura GraphQL client
-	hasuraClient := api.NewHasuraClientFromEnv()
-	log.Println("✅ Hasura GraphQL client initialized")
-
 	r := chi.NewRouter()
 
 	// Middleware
@@ -65,14 +61,14 @@ func main() {
 	// Register both SQL-based (v1) and GraphQL-based (v2) business process routes
 	// v1: Legacy SQL handlers at /api/business-process/*
 	api.RegisterBusinessProcessRoutes(r, database)
-	// v2: GraphQL handlers at /api/business-process/v2/* (preferred for scalability)
-	api.RegisterBusinessProcessGraphQLRoutes(r, hasuraClient)
+	// v2: SQL handlers at /api/business-process/v2/* (preferred for scalability)
+	api.RegisterBusinessProcessGraphQLRoutes(r, database)
 
 	log.Println("✅ Fabric Builder Service started successfully")
 	log.Println("📊 Registered endpoints:")
 	log.Println("   - /api/fabric/*")
 	log.Println("   - /api/business-process/* (v1 - SQL)")
-	log.Println("   - /api/business-process/v2/* (v2 - GraphQL)")
+	log.Println("   - /api/business-process/v2/* (v2 - SQL)")
 
 	log.Fatal(http.ListenAndServe(":8081", r))
 }

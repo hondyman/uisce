@@ -118,7 +118,7 @@ export const FEATURE_REQUIREMENTS: Record<string, FeatureRequirement> = {
   '/admin/tenants': { minScope: 'global', minAccess: 'platform_operator' },
   '/admin/monitoring': { minScope: 'global', minAccess: 'platform_operator' },
   '/admin/support': { minScope: 'global', minAccess: 'platform_operator' },
-  '/admin/entity-manager': { minScope: 'global', minAccess: 'platform_operator' },
+
   '/admin/temporal-ops': { minScope: 'global', minAccess: 'platform_operator' },
   '/admin/seeding': { minScope: 'global', minAccess: 'platform_operator' },
   '/admin/related-objects': { minScope: 'global', minAccess: 'platform_operator' },

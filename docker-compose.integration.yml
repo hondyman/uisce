@@ -65,34 +65,6 @@ services:
     depends_on:
       - postgres
 
-  entity-manager:
-    build:
-      context: .
-      dockerfile: entity-manager/Dockerfile
-    environment:
-      - DATABASE_URL=postgres://postgres:postgres@postgres:5432/alpha?sslmode=disable
-      - PORT=8080
-      - REDIS_ADDR=redis:6379
-      - KAFKA_BROKERS=redpanda:9092
-      - TEMPORAL_HOSTPORT=temporal:7233
-      - KAFKA_PRODUCE_RETRIES=8
-      - KAFKA_PRODUCE_DELAY_MS=1000
-      - KAFKA_CONNECT_RETRIES=8
-      - KAFKA_CONNECT_DELAY_MS=1000
-      - TEST_CONSUME_TIMEOUT_MS=60000
-    ports:
-      - "8087:8080"
-    depends_on:
-      - postgres
-      - redis
-      - redpanda
-      - temporal
-    healthcheck:
-      test: ["CMD-SHELL", "curl -fsS http://localhost:8080/ready || exit 1"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
 networks:
   default:
     name: semlayer-test-net

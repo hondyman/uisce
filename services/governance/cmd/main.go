@@ -1,14 +1,17 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 	"strconv"
 
 	"github.com/gin-gonic/gin"
+	"github.com/jackc/pgx/v5/pgxpool"
+
 	abacclient "github.com/hondyman/uisce/libs/abac-client"
-	hasuraclient "github.com/hondyman/uisce/libs/hasura-client"
 	sharedtypes "github.com/hondyman/uisce/libs/shared-types"
 	temporalclient "github.com/hondyman/uisce/libs/temporal-client"
 	"github.com/hondyman/uisce/services/governance/internal/config"
@@ -22,23 +25,31 @@ func main() {
 		log.Fatalf("Failed to load configuration: %v", err)
 	}
 
-	log.Printf("Starting Governance service with config: Hasura=%s, Temporal=%s, Port=%d",
-		cfg.HasuraEndpoint, cfg.TemporalHostPort, cfg.ServerPort)
+	log.Printf("Starting Governance service with config: Temporal=%s, Port=%d",
+		cfg.TemporalHostPort, cfg.ServerPort)
 
 	// Initialize shared clients
 	abacClient := abacclient.NewClient()
-	hasuraClient := hasuraclient.NewHasuraClient(&hasuraclient.HasuraConfig{
-		Endpoint:    cfg.HasuraEndpoint,
-		AdminSecret: cfg.HasuraAdminSecret,
-	})
+
+	// Initialize PostgreSQL connection
+	dbURL := os.Getenv("DATABASE_URL")
+	if dbURL == "" {
+		log.Fatalf("DATABASE_URL environment variable is not set")
+	}
+	dbPool, err := pgxpool.New(context.Background(), dbURL)
+	if err != nil {
+		log.Fatalf("Failed to connect to database: %v", err)
+	}
+	defer dbPool.Close()
+
 	// Initialize temporal client (will be nil for now if not configured)
 	var temporalClient *temporalclient.Client
 	// TODO: Initialize actual temporal client.Client and wrap it when ready
 
 	// Initialize governance service
 	governanceService := services.NewGovernanceService(services.GovernanceServiceConfig{
+		DB:             dbPool,
 		ABACClient:     abacClient,
-		HasuraClient:   hasuraClient,
 		TemporalClient: temporalClient,
 	})
 

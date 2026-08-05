@@ -8,24 +8,12 @@ import (
 	"github.com/google/uuid"
 )
 
-// HasuraClient defines the interface for Hasura GraphQL operations
-type HasuraClient interface {
-	Query(ctx context.Context, query string, variables map[string]interface{}, result interface{}) error
-	Mutate(ctx context.Context, mutation string, variables map[string]interface{}, result interface{}) error
-}
-
 type MetadataService struct {
-	DB           *sql.DB
-	hasuraClient HasuraClient
+	DB *sql.DB
 }
 
 func NewMetadataService(db *sql.DB) *MetadataService {
 	return &MetadataService{DB: db}
-}
-
-// NewMetadataServiceWithHasura creates a new trade metadata service with Hasura support
-func NewMetadataServiceWithHasura(db *sql.DB, hasuraClient HasuraClient) *MetadataService {
-	return &MetadataService{DB: db, hasuraClient: hasuraClient}
 }
 
 // GetWorkflowDefinition retrieves a workflow definition by name and tenant

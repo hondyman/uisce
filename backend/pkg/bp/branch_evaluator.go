@@ -157,11 +157,6 @@ func NewBranchEvaluator(db *sqlx.DB) *BranchEvaluator {
 	return &BranchEvaluator{db: db}
 }
 
-// NewBranchEvaluatorWithHasura creates evaluator - hasura parameter is ignored (retained for backwards compatibility)
-func NewBranchEvaluatorWithHasura(db *sqlx.DB, hasura HasuraClient) *BranchEvaluator {
-	return &BranchEvaluator{db: db}
-}
-
 // ============================================
 // Main Evaluation Logic
 // ============================================

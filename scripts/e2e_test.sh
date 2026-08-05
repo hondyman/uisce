@@ -143,7 +143,6 @@ test_service_endpoints() {
     local services=(
         "backend:8080"
         "compliance-engine:8095"
-        "entity-manager:8087"
         "validation-engine:8090"
         "rule-engine:8091"
         "policy-engine:8102"

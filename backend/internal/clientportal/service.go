@@ -10,12 +10,6 @@ import (
 	"github.com/jmoiron/sqlx"
 )
 
-// HasuraClient defines the interface for Hasura GraphQL operations
-type HasuraClient interface {
-	Query(ctx context.Context, query string, variables map[string]interface{}, result interface{}) error
-	Mutate(ctx context.Context, mutation string, variables map[string]interface{}, result interface{}) error
-}
-
 // Preferences represents client portal preferences
 type Preferences struct {
 	PreferenceID        uuid.UUID       `db:"preference_id" json:"preference_id"`
@@ -57,18 +51,12 @@ type AnalyticsEvent struct {
 
 // Service provides client portal operations
 type Service struct {
-	db           *sqlx.DB
-	hasuraClient HasuraClient
+	db *sqlx.DB
 }
 
 // NewService creates a new client portal service
 func NewService(db *sqlx.DB) *Service {
 	return &Service{db: db}
-}
-
-// NewServiceWithHasura creates a new client portal service with Hasura support
-func NewServiceWithHasura(db *sqlx.DB, hasuraClient HasuraClient) *Service {
-	return &Service{db: db, hasuraClient: hasuraClient}
 }
 
 // GetPreferences retrieves portal preferences for a client

@@ -16,23 +16,12 @@ import (
 // Backtest Service - Core Business Logic
 // ============================================================================
 
-// HasuraClient interface for GraphQL operations
-type HasuraClient interface {
-	Query(query string, variables map[string]interface{}) (map[string]interface{}, error)
-	Mutate(mutation string, variables map[string]interface{}) (map[string]interface{}, error)
-}
-
 type Service struct {
-	db     *sqlx.DB
-	hasura HasuraClient
+	db *sqlx.DB
 }
 
 func NewService(db *sqlx.DB) *Service {
 	return &Service{db: db}
-}
-
-func NewServiceWithHasura(db *sqlx.DB, hasura HasuraClient) *Service {
-	return &Service{db: db, hasura: hasura}
 }
 
 // ============================================================================
@@ -41,14 +30,6 @@ func NewServiceWithHasura(db *sqlx.DB, hasura HasuraClient) *Service {
 
 // GetPortfolio retrieves a portfolio with all holdings
 func (s *Service) GetPortfolio(ctx context.Context, portfolioID string) (*Portfolio, error) {
-	// Use Hasura if available, otherwise fallback to direct DB
-	if s.hasura != nil {
-		return s.getPortfolioWithHasura(ctx, portfolioID)
-	}
-
-	// TODO: Hasura-first pattern already implemented via getPortfolioWithHasura()
-	// Primary implementation uses Hasura GraphQL, this SQL is fallback only
-	// See getPortfolioWithHasura() for the Hasura query: query GetPortfolio($id: uuid!)
 	portfolio := &Portfolio{}
 	query := `
 		SELECT id, tenant_id, client_id, type, benchmark, asset_allocation_targets, 
@@ -62,7 +43,6 @@ func (s *Service) GetPortfolio(ctx context.Context, portfolioID string) (*Portfo
 		return nil, err
 	}
 
-	// Fetch holdings
 	holdings, err := s.GetHoldings(ctx, portfolioID)
 	if err != nil {
 		return nil, err
@@ -72,80 +52,8 @@ func (s *Service) GetPortfolio(ctx context.Context, portfolioID string) (*Portfo
 	return portfolio, nil
 }
 
-func (s *Service) getPortfolioWithHasura(ctx context.Context, portfolioID string) (*Portfolio, error) {
-	query := `
-		query GetPortfolio($id: uuid!) {
-			portfolios_by_pk(id: $id) {
-				id
-				tenant_id
-				client_id
-				type
-				benchmark
-				asset_allocation_targets
-				performance_metrics
-				advisor_discretion
-				client_approval_required
-				template_id
-				custom_fields
-				created_at
-				updated_at
-			}
-		}
-	`
-
-	result, err := s.hasura.Query(query, map[string]interface{}{"id": portfolioID})
-	if err != nil {
-		return nil, err
-	}
-
-	portfolioData, ok := result["portfolios_by_pk"].(map[string]interface{})
-	if !ok || portfolioData == nil {
-		return nil, fmt.Errorf("portfolio not found")
-	}
-
-	portfolio := &Portfolio{}
-	if id, ok := portfolioData["id"].(string); ok {
-		portfolio.ID = uuid.MustParse(id)
-	}
-	if tenantID, ok := portfolioData["tenant_id"].(string); ok {
-		portfolio.TenantID = uuid.MustParse(tenantID)
-	}
-	if clientID, ok := portfolioData["client_id"].(string); ok {
-		portfolio.ClientID = uuid.MustParse(clientID)
-	}
-	if typ, ok := portfolioData["type"].(string); ok {
-		portfolio.Type = typ
-	}
-	if benchmark, ok := portfolioData["benchmark"].(string); ok {
-		portfolio.Benchmark = benchmark
-	}
-	if targets, ok := portfolioData["asset_allocation_targets"].(string); ok {
-		portfolio.AssetAllocationTargets = json.RawMessage(targets)
-	}
-	if metrics, ok := portfolioData["performance_metrics"].(string); ok {
-		portfolio.PerformanceMetrics = json.RawMessage(metrics)
-	}
-	if discretion, ok := portfolioData["advisor_discretion"].(bool); ok {
-		portfolio.AdvisorDiscretion = discretion
-	}
-	if approval, ok := portfolioData["client_approval_required"].(bool); ok {
-		portfolio.ClientApprovalRequired = approval
-	}
-	if templateID, ok := portfolioData["template_id"].(string); ok && templateID != "" {
-		tid := uuid.MustParse(templateID)
-		portfolio.TemplateID = &tid
-	}
-	if customFields, ok := portfolioData["custom_fields"].(string); ok {
-		portfolio.CustomFields = json.RawMessage(customFields)
-	}
-
-	return portfolio, nil
-} // GetHoldings retrieves all holdings for a portfolio
+// GetHoldings retrieves all holdings for a portfolio
 func (s *Service) GetHoldings(ctx context.Context, portfolioID string) ([]Holding, error) {
-	// TODO: Refactor to Hasura GraphQL
-	// query { holdings(where: {portfolio_id: {_eq: $portfolio_id}}, order_by: {current_value: desc}) {
-	//   id portfolio_id symbol name asset_class quantity average_cost current_price current_value sector geography
-	// }}
 	var holdings []Holding
 	query := `
 		SELECT id, portfolio_id, symbol, name, asset_class, quantity, average_cost, 
@@ -160,14 +68,6 @@ func (s *Service) GetHoldings(ctx context.Context, portfolioID string) ([]Holdin
 
 // CreatePortfolio creates a new portfolio
 func (s *Service) CreatePortfolio(ctx context.Context, req CreatePortfolioRequest, tenantID, clientID string) (*Portfolio, error) {
-	// Use Hasura if available, otherwise fallback to direct DB
-	if s.hasura != nil {
-		return s.createPortfolioWithHasura(ctx, req, tenantID, clientID)
-	}
-
-	// TODO: Hasura-first pattern already implemented via createPortfolioWithHasura()
-	// Primary implementation uses Hasura GraphQL, this SQL is fallback only
-	// See createPortfolioWithHasura() for the Hasura mutation: mutation InsertPortfolio($object: portfolios_insert_input!)
 	portfolioID := uuid.New()
 
 	query := `
@@ -188,7 +88,6 @@ func (s *Service) CreatePortfolio(ctx context.Context, req CreatePortfolioReques
 		return nil, err
 	}
 
-	// Create holdings if provided
 	for _, h := range req.Holdings {
 		holding := Holding{
 			ID:           uuid.New(),
@@ -198,14 +97,12 @@ func (s *Service) CreatePortfolio(ctx context.Context, req CreatePortfolioReques
 			AssetClass:   h.AssetClass,
 			Quantity:     h.Quantity,
 			AverageCost:  h.AverageCost,
-			CurrentPrice: h.AverageCost, // Start with average cost
+			CurrentPrice: h.AverageCost,
 			CurrentValue: h.Quantity * h.AverageCost,
 			Sector:       h.Sector,
 			Geography:    h.Geography,
 		}
 
-		// TODO: Refactor to Hasura GraphQL bulk mutation
-		// mutation { insert_holdings(objects: [{...}]) { returning { id } affected_rows }}
 		holdingQuery := `
 			INSERT INTO holdings (id, portfolio_id, symbol, name, asset_class, quantity, average_cost, 
 					current_price, current_value, sector, geography, created_at, updated_at)
@@ -225,94 +122,12 @@ func (s *Service) CreatePortfolio(ctx context.Context, req CreatePortfolioReques
 	return portfolio, nil
 }
 
-func (s *Service) createPortfolioWithHasura(ctx context.Context, req CreatePortfolioRequest, tenantID, clientID string) (*Portfolio, error) {
-	mutation := `
-		mutation InsertPortfolio($object: portfolios_insert_input!) {
-			insert_portfolios_one(object: $object) {
-				id
-				tenant_id
-				client_id
-				type
-				benchmark
-				asset_allocation_targets
-				performance_metrics
-				advisor_discretion
-				client_approval_required
-				template_id
-				custom_fields
-				created_at
-				updated_at
-			}
-		}
-	`
-
-	portfolioID := uuid.New()
-	variables := map[string]interface{}{
-		"object": map[string]interface{}{
-			"id":                       portfolioID.String(),
-			"tenant_id":                tenantID,
-			"client_id":                clientID,
-			"type":                     req.Type,
-			"benchmark":                req.Benchmark,
-			"asset_allocation_targets": req.AssetAllocationTargets,
-			"performance_metrics":      req.PerformanceMetrics,
-			"advisor_discretion":       req.AdvisorDiscretion,
-			"client_approval_required": req.ClientApprovalRequired,
-			"custom_fields":            req.CustomFields,
-		},
-	}
-
-	result, err := s.hasura.Mutate(mutation, variables)
-	if err != nil {
-		return nil, err
-	}
-
-	portfolioData, ok := result["insert_portfolios_one"].(map[string]interface{})
-	if !ok || portfolioData == nil {
-		return nil, fmt.Errorf("failed to create portfolio")
-	}
-
-	portfolio := &Portfolio{
-		ID:                     portfolioID,
-		AdvisorDiscretion:      req.AdvisorDiscretion,
-		ClientApprovalRequired: req.ClientApprovalRequired,
-	}
-
-	if tid, ok := portfolioData["tenant_id"].(string); ok {
-		portfolio.TenantID = uuid.MustParse(tid)
-	}
-	if cid, ok := portfolioData["client_id"].(string); ok {
-		portfolio.ClientID = uuid.MustParse(cid)
-	}
-	if typ, ok := portfolioData["type"].(string); ok {
-		portfolio.Type = typ
-	}
-	if benchmark, ok := portfolioData["benchmark"].(string); ok {
-		portfolio.Benchmark = benchmark
-	}
-	if targets, ok := portfolioData["asset_allocation_targets"].(string); ok {
-		portfolio.AssetAllocationTargets = json.RawMessage(targets)
-	}
-	if metrics, ok := portfolioData["performance_metrics"].(string); ok {
-		portfolio.PerformanceMetrics = json.RawMessage(metrics)
-	}
-	if customFields, ok := portfolioData["custom_fields"].(string); ok {
-		portfolio.CustomFields = json.RawMessage(customFields)
-	}
-
-	return portfolio, nil
-}
-
 // ============================================================================
 // Recommendation Operations
 // ============================================================================
 
 // CreateRecommendation creates a new recommendation
 func (s *Service) CreateRecommendation(ctx context.Context, portfolioID, userID string, req CreateRecommendationRequest) (*Recommendation, error) {
-	// TODO: Refactor to Hasura GraphQL
-	// mutation { insert_recommendations_one(object: {id, portfolio_id, created_by, title, ...}) {
-	//   id portfolio_id created_by title description type status priority
-	// }}
 	recID := uuid.New()
 
 	allocJSON, _ := json.Marshal(req.TargetAllocations)
@@ -353,11 +168,6 @@ func (s *Service) CreateRecommendation(ctx context.Context, portfolioID, userID 
 
 // GetRecommendation retrieves a specific recommendation
 func (s *Service) GetRecommendation(ctx context.Context, recID string) (*Recommendation, error) {
-	// TODO: Refactor to Hasura GraphQL
-	// query { recommendations_by_pk(id: $id) {
-	//   id portfolio_id created_by title description type status priority
-	//   target_allocations recommended_actions rationale risk_score expected_return time_horizon backtest_id
-	// }}
 	rec := &Recommendation{}
 	query := `
 		SELECT id, portfolio_id, created_by, title, description, type, status, priority,
@@ -371,7 +181,6 @@ func (s *Service) GetRecommendation(ctx context.Context, recID string) (*Recomme
 		return nil, err
 	}
 
-	// Parse JSON fields
 	if len(rec.Metadata) > 0 {
 		var allocs []TargetAllocation
 		json.Unmarshal(rec.Metadata, &allocs)
@@ -383,11 +192,6 @@ func (s *Service) GetRecommendation(ctx context.Context, recID string) (*Recomme
 
 // UpdateRecommendationStatus updates recommendation status
 func (s *Service) UpdateRecommendationStatus(ctx context.Context, recID, status, notes string) error {
-	// TODO: Refactor to Hasura GraphQL
-	// mutation { update_recommendations_by_pk(
-	//   pk_columns: {id: $id}
-	//   _set: {status: $status, metadata: $metadata, updated_at: "now()"}
-	// ) { id status }}
 	query := `
 		UPDATE recommendations 
 		SET status = $1, metadata = jsonb_set(COALESCE(metadata, '{}'::jsonb), '{notes}', $2::jsonb), updated_at = NOW()
@@ -648,11 +452,6 @@ func (s *Service) calculateConfidenceScore(dataPoints float64) float64 {
 func (s *Service) fetchHistoricalPrices(ctx context.Context, holdings []Holding, startDate, endDate time.Time) (map[string][]float64, error) {
 	prices := make(map[string][]float64)
 
-	// TODO: Refactor to Hasura GraphQL
-	// query { historical_prices(
-	//   where: {ticker: {_in: $tickers}, date: {_gte: $start_date, _lte: $end_date}}
-	//   order_by: {date: asc}
-	// ) { ticker close_price date }}
 	for _, h := range holdings {
 		query := `
 			SELECT close_price FROM historical_prices
@@ -680,11 +479,6 @@ func (s *Service) fetchHistoricalPrices(ctx context.Context, holdings []Holding,
 // ============================================================================
 
 func (s *Service) saveBacktestResult(ctx context.Context, result *BacktestResult) error {
-	// TODO: Refactor to Hasura GraphQL
-	// mutation { insert_backtest_results_one(object: {
-	//   id, recommendation_id, portfolio_id, simulation_type, start_date, end_date,
-	//   baseline_return, recommendation_return, alpha_generated, ..., simulation_data
-	// }) { id }}
 	query := `
 		INSERT INTO backtest_results 
 		(id, recommendation_id, portfolio_id, simulation_type, start_date, end_date,
@@ -706,12 +500,6 @@ func (s *Service) saveBacktestResult(ctx context.Context, result *BacktestResult
 
 // GetBacktestResults retrieves historical backtest results
 func (s *Service) GetBacktestResults(ctx context.Context, portfolioID string, limit int) ([]BacktestResult, error) {
-	// TODO: Refactor to Hasura GraphQL
-	// query { backtest_results(
-	//   where: {portfolio_id: {_eq: $portfolio_id}}
-	//   order_by: {created_at: desc}
-	//   limit: $limit
-	// ) { id recommendation_id portfolio_id ... }}
 	var results []BacktestResult
 	query := `
 		SELECT id, recommendation_id, portfolio_id, simulation_type, start_date, end_date,
@@ -729,11 +517,6 @@ func (s *Service) GetBacktestResults(ctx context.Context, portfolioID string, li
 
 // GetBacktestByID retrieves a specific backtest result
 func (s *Service) GetBacktestByID(ctx context.Context, backtestID string) (*BacktestResult, error) {
-	// TODO: Refactor to Hasura GraphQL
-	// query { backtest_results_by_pk(id: $id) {
-	//   id recommendation_id portfolio_id simulation_type start_date end_date
-	//   baseline_return recommendation_return alpha_generated ... simulation_data
-	// }}
 	result := &BacktestResult{}
 	query := `
 		SELECT id, recommendation_id, portfolio_id, simulation_type, start_date, end_date,
@@ -749,13 +532,6 @@ func (s *Service) GetBacktestByID(ctx context.Context, backtestID string) (*Back
 
 // CompareBacktests compares two recommendations
 func (s *Service) CompareBacktests(ctx context.Context, req ComparisonRequest) (*ComparisonResult, error) {
-	// Get latest backtest for each recommendation
-	// TODO: Refactor to Hasura GraphQL
-	// query { backtest_results(
-	//   where: {recommendation_id: {_eq: $rec_id}, portfolio_id: {_eq: $portfolio_id}}
-	//   order_by: {created_at: desc}
-	//   limit: 1
-	// ) { ... all fields }}
 	var backtest1, backtest2 *BacktestResult
 
 	query := `
@@ -814,11 +590,6 @@ func (s *Service) CompareBacktests(ctx context.Context, req ComparisonRequest) (
 }
 
 func (s *Service) saveComparison(ctx context.Context, comparison *ComparisonResult) error {
-	// TODO: Refactor to Hasura GraphQL
-	// mutation { insert_backtest_comparisons_one(object: {
-	//   id, portfolio_id, recommendation_id_1, recommendation_id_2, winner,
-	//   performance_diff, risk_diff, sharpe_ratio_diff, drawdown_diff, tax_diff, cost_diff, reasoning
-	// }) { id }}
 	query := `
 		INSERT INTO backtest_comparisons
 		(id, portfolio_id, recommendation_id_1, recommendation_id_2, winner, performance_diff, 
@@ -906,11 +677,6 @@ func (s *Service) CalculateRiskMetrics(ctx context.Context, portfolioID string) 
 }
 
 func (s *Service) saveRiskMetrics(ctx context.Context, metrics *PortfolioRiskMetrics) error {
-	// TODO: Refactor to Hasura GraphQL
-	// mutation { insert_portfolio_risk_metrics_one(object: {
-	//   id, portfolio_id, as_of_date, expected_return, volatility, sharpe_ratio,
-	//   beta, alpha, max_drawdown, var_95, cvar_95, diversification_ratio, herfindahl_index
-	// }) { id }}
 	query := `
 		INSERT INTO portfolio_risk_metrics
 		(id, portfolio_id, as_of_date, expected_return, volatility, sharpe_ratio, sortino_ratio,
@@ -931,12 +697,6 @@ func (s *Service) saveRiskMetrics(ctx context.Context, metrics *PortfolioRiskMet
 
 // GetRiskMetrics retrieves latest risk metrics for a portfolio
 func (s *Service) GetRiskMetrics(ctx context.Context, portfolioID string) (*PortfolioRiskMetrics, error) {
-	// TODO: Refactor to Hasura GraphQL
-	// query { portfolio_risk_metrics(
-	//   where: {portfolio_id: {_eq: $portfolio_id}}
-	//   order_by: {as_of_date: desc}
-	//   limit: 1
-	// ) { id portfolio_id as_of_date expected_return volatility sharpe_ratio ... }}
 	metrics := &PortfolioRiskMetrics{}
 	query := `
 		SELECT id, portfolio_id, as_of_date, expected_return, volatility, sharpe_ratio, sortino_ratio,

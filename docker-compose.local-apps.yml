@@ -61,23 +61,6 @@ services:
     depends_on: []  # No local dependencies
     restart: unless-stopped
 
-  entity-manager:
-    build:
-      context: .
-      dockerfile: entity-manager/Dockerfile
-    networks:
-      - local-net
-    ports:
-      - "${ENTITY_MANAGER_PORT:-8087}:8080"
-    environment:
-      - DATABASE_URL=postgres://postgres:postgres@100.84.126.19:5432/alpha?sslmode=disable
-      - PORT=8080
-      - REDIS_ADDR=100.84.126.19:6379
-      - TEMPORAL_HOSTPORT=100.84.126.19:7233
-      - KAFKA_BROKERS=100.84.126.19:9092
-    depends_on: []  # No local dependencies
-    restart: unless-stopped
-
   sync-worker:
     build:
       context: .
@@ -268,7 +251,7 @@ services:
       - KAFKA_BROKERS=100.84.126.19:9092
       - SCHEMA_REGISTRY_URL=http://100.84.126.19:8081
       - PORT=8090
-      - TENANT_ID=99e99e99-99e9-49e9-89e9-99e99e99e999
+      - TENANT_ID=${TENANT_ID:-}
     depends_on: []  # No local dependencies
     restart: unless-stopped
 

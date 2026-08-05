@@ -99,7 +99,7 @@ services:
       - DB=postgres12_pgx
       - DB_PORT=5432
       - POSTGRES_USER=${POSTGRES_USER:-postgres}
-      - POSTGRES_PWD=${POSTGRES_PASSWORD:-postgres}
+      - POSTGRES_PWD=${POSTGRES_PASSWORD}
       - POSTGRES_SEEDS=host.docker.internal
     ports:
       - "7233:7233"
@@ -126,8 +126,8 @@ services:
     hostname: hasura
     container_name: semlayer-hasura
     environment:
-      - HASURA_GRAPHQL_DATABASE_URL=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@host.docker.internal:5432/alpha
-      - HASURA_GRAPHQL_ADMIN_SECRET=${HASURA_ADMIN_SECRET:-myadminsecretkey}
+      - HASURA_GRAPHQL_DATABASE_URL=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD}@host.docker.internal:5432/alpha
+      - HASURA_GRAPHQL_ADMIN_SECRET=${HASURA_ADMIN_SECRET}
       - HASURA_GRAPHQL_DEV_MODE=true
       - HASURA_GRAPHQL_ENABLE_CONSOLE=true
       - HASURA_GRAPHQL_CORS_DOMAIN=*
@@ -148,8 +148,8 @@ services:
       dockerfile: backend/Dockerfile
     command: ["./server"]
     environment:
-      - HASURA_GRAPHQL_ADMIN_SECRET=${HASURA_ADMIN_SECRET:-myadminsecretkey}
-      - DATABASE_URL=postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@host.docker.internal:5432/alpha?sslmode=disable
+      - HASURA_GRAPHQL_ADMIN_SECRET=${HASURA_ADMIN_SECRET}
+      - DATABASE_URL=postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD}@host.docker.internal:5432/alpha?sslmode=disable
       - TEMPORAL_HOST_PORT=temporal:7233
       # NBA ML Service
       - NBA_ML_SERVICE_URL=http://nba-ml-service:8000
@@ -189,7 +189,7 @@ services:
       dockerfile: backend/Dockerfile
     command: ["./worker"]
     environment:
-      - DATABASE_URL=postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@host.docker.internal:5432/alpha?sslmode=disable
+      - DATABASE_URL=postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD}@host.docker.internal:5432/alpha?sslmode=disable
       - TEMPORAL_HOST_PORT=temporal:7233
       # StarRocks connection (MySQL protocol)
       - STARROCKS_HOST=starrocks-fe
@@ -225,7 +225,7 @@ services:
       context: ./services/nba-ml-service
       dockerfile: Dockerfile
     environment:
-      - DATABASE_URL=postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@host.docker.internal:5432/alpha?sslmode=disable
+      - DATABASE_URL=postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD}@host.docker.internal:5432/alpha?sslmode=disable
       - MODEL_PATH=/app/models/nba_model.pt
       - MIN_CONFIDENCE_THRESHOLD=0.5
       - MAX_BATCH_SIZE=32
@@ -289,7 +289,7 @@ services:
       
       # Multi-tenancy & security
       - CUBEJS_DEV_MODE=false
-      - CUBEJS_API_SECRET=${CUBE_API_SECRET:-dev-secret-change-in-production}
+      - CUBEJS_API_SECRET=${CUBE_API_SECRET}
       - CUBEJS_SCHEDULED_REFRESH_TIMER=true
       
       # Performance

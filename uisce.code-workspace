@@ -7,7 +7,7 @@
     { "name": "libs/shared-types",            "path": "libs/shared-types" },
     { "name": "apps/genui-frontend",          "path": "apps/genui-frontend" },
     { "name": "dashboard",                    "path": "dashboard" },
-    { "name": "entity-manager",               "path": "entity-manager" },
+
     { "name": "business-process-designer",    "path": "business-process-designer" },
     { "name": "rebalancing/frontend",         "path": "rebalancing/frontend" },
     { "name": "frontend-temporal",            "path": "frontend-temporal" },
@@ -73,7 +73,7 @@
       "libs/ai-sdk",
       "dashboard",
       "business-process-designer",
-      "entity-manager",
+
       "frontend-temporal",
       "apps/genui-frontend",
       "rebalancing/frontend",

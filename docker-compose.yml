@@ -179,23 +179,23 @@ services:
       - ./services/cube-semantic/cube.js:/cube/conf/cube.js:ro
     depends_on: [trino]
 
-  hasura:
-    image: hasura/graphql-engine:v2.33.0
-    networks:
-      - semlayer-net
-    ports:
-      - "${HASURA_PORT:-8085}:8080"
-    environment:
-      HASURA_GRAPHQL_DATABASE_URL: postgres://postgres:postgres@${DB_HOST:-100.84.50.65}:5432/alpha
-      HASURA_GRAPHQL_ENABLE_CONSOLE: "true"
-      HASURA_GRAPHQL_DEV_MODE: "true"
-      HASURA_GRAPHQL_ADMIN_SECRET: myadminsecret
-      HASURA_GRAPHQL_JWT_SECRET: '{"type":"HS256", "key":"${JWT_SECRET:-dev-jwt-secret-key-change-in-production}"}'
-      BACKEND_URL: http://backend:8080
-    extra_hosts:
-      - "host.docker.internal:host-gateway"  # fallback; primary DB now uses ${DB_HOST}
-    # depends_on:
-    #   - postgres
+  # hasura:
+  #   image: hasura/graphql-engine:v2.33.0
+  #   networks:
+  #     - semlayer-net
+  #   ports:
+  #     - "${HASURA_PORT:-8085}:8080"
+  #   environment:
+  #     HASURA_GRAPHQL_DATABASE_URL: postgres://postgres:postgres@${DB_HOST:-100.84.50.65}:5432/alpha
+  #     HASURA_GRAPHQL_ENABLE_CONSOLE: "true"
+  #     HASURA_GRAPHQL_DEV_MODE: "true"
+  #     HASURA_GRAPHQL_ADMIN_SECRET: myadminsecret
+  #     HASURA_GRAPHQL_JWT_SECRET: '{"type":"HS256", "key":"${JWT_SECRET:-dev-jwt-secret-key-change-in-production}"}'
+  #     BACKEND_URL: http://backend:8080
+  #   extra_hosts:
+  #     - "host.docker.internal:host-gateway"  # fallback; primary DB now uses ${DB_HOST}
+  #   # depends_on:
+  #   #   - postgres
 
   backend:
     build:
@@ -208,8 +208,6 @@ services:
     environment:
       - DATABASE_URL=postgres://postgres:postgres@${DB_HOST:-100.84.50.65}:5432/alpha?sslmode=disable
       - PORT=8080
-      - HASURA_URL=http://hasura:8080/v1/graphql
-      - HASURA_ADMIN_SECRET=myadminsecret
       - REDIS_ADDR=redis:6379
       - TEMPORAL_HOSTPORT=temporal:7233
       - KAFKA_BROKERS=redpanda:9092
@@ -232,8 +230,6 @@ services:
       - DATABASE_URL=postgres://postgres:postgres@${DB_HOST:-100.84.50.65}:5432/alpha?sslmode=disable
       - BACKEND_URL=http://backend:8080
       - AUTH_SERVICE_URL=http://auth-service:8001
-      - HASURA_URL=http://hasura:8080/v1/graphql
-      - HASURA_ADMIN_SECRET=myadminsecret
       - JWT_SECRET=${JWT_SECRET:-dev-jwt-secret-key-change-in-production}
       - REDIS_ADDR=redis:6379
       - TEMPORAL_HOSTPORT=temporal:7233
@@ -326,27 +322,6 @@ services:
   #   restart: unless-stopped
   #   # depends_on:
   #   #   - postgres
-
-  entity-manager:
-    build:
-      context: .
-      dockerfile: entity-manager/Dockerfile
-    networks:
-      - semlayer-net
-    ports:
-      - "${ENTITY_MANAGER_PORT:-8087}:8080"
-    environment:
-      - DATABASE_URL=postgres://postgres:postgres@${DB_HOST:-100.84.50.65}:5432/alpha?sslmode=disable
-      - PORT=8080
-      - REDIS_ADDR=redis:6379
-      - TEMPORAL_HOSTPORT=temporal:7233
-      - KAFKA_BROKERS=redpanda:9092
-      - JWT_SECRET=${JWT_SECRET:-dev-jwt-secret-key-change-in-production}
-      - ENABLE_SECURITY=true
-      - JWT_ENFORCE=true
-    restart: unless-stopped
-    # depends_on:
-    #   - postgres
 
   sync-worker:
     build:
@@ -583,7 +558,7 @@ services:
       - KAFKA_BROKERS=redpanda:9092
       - SCHEMA_REGISTRY_URL=http://redpanda:8081
       - PORT=8090
-      - TENANT_ID=99e99e99-99e9-49e9-89e9-99e99e99e999
+      - TENANT_ID=${TENANT_ID:-}
       - JWT_SECRET=${JWT_SECRET:-dev-jwt-secret-key-change-in-production}
       - ENABLE_SECURITY=true
     restart: unless-stopped

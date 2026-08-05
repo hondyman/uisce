@@ -9,12 +9,6 @@ import (
 	"github.com/jmoiron/sqlx"
 )
 
-// HasuraClient interface for GraphQL operations
-type HasuraClient interface {
-	Query(ctx context.Context, query string, variables map[string]interface{}, result interface{}) error
-	Mutate(ctx context.Context, mutation string, variables map[string]interface{}, result interface{}) error
-}
-
 // FactorModel represents a collection of risk factors (e.g., Fama-French)
 type FactorModel struct {
 	ID          uuid.UUID `db:"model_id" json:"id"`
@@ -42,19 +36,11 @@ type FactorReturn struct {
 }
 
 type Service struct {
-	db           *sqlx.DB
-	hasuraClient HasuraClient
+	db *sqlx.DB
 }
 
 func NewService(db *sql.DB) *Service {
 	return &Service{db: sqlx.NewDb(db, "postgres")}
-}
-
-func NewServiceWithHasura(db *sql.DB, hasuraClient HasuraClient) *Service {
-	return &Service{
-		db:           sqlx.NewDb(db, "postgres"),
-		hasuraClient: hasuraClient,
-	}
 }
 
 // CreateModel creates a new factor model

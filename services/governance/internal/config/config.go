@@ -12,10 +12,6 @@ type Config struct {
 	// Server configuration
 	ServerPort int
 
-	// Hasura configuration
-	HasuraEndpoint    string
-	HasuraAdminSecret string
-
 	// Temporal configuration
 	TemporalHostPort  string
 	TemporalNamespace string
@@ -31,8 +27,6 @@ type Config struct {
 func LoadFromEnv() (*Config, error) {
 	cfg := &Config{
 		ServerPort:        getEnvInt("GOVERNANCE_PORT", 8084),
-		HasuraEndpoint:    getEnv("HASURA_GRAPHQL_ENDPOINT", "http://localhost:8080/v1/graphql"),
-		HasuraAdminSecret: getEnv("HASURA_ADMIN_SECRET", ""),
 		TemporalHostPort:  getEnv("TEMPORAL_HOST_PORT", "localhost:7233"),
 		TemporalNamespace: getEnv("TEMPORAL_NAMESPACE", "default"),
 		ABACEnabled:       getEnvBool("ABAC_ENABLED", true),
@@ -48,14 +42,6 @@ func LoadFromEnv() (*Config, error) {
 
 // Validate ensures all required configuration is present
 func Validate(cfg *Config) error {
-	if cfg.HasuraEndpoint == "" {
-		return errors.New("HASURA_GRAPHQL_ENDPOINT is required")
-	}
-
-	if cfg.HasuraAdminSecret == "" {
-		return errors.New("HASURA_ADMIN_SECRET is required for production")
-	}
-
 	if cfg.TemporalHostPort == "" {
 		return errors.New("TEMPORAL_HOST_PORT is required")
 	}

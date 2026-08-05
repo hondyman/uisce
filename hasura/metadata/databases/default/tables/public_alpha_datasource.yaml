@@ -1,6 +1,0 @@
-table:
-  name: alpha_datasource
-  schema: public
-configuration:
-  custom_name: alpha_tenant_instance
-

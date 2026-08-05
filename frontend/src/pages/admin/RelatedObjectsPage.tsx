@@ -84,36 +84,6 @@ export default function RelatedObjectsPage() {
       <Row gutter={16} className="marginBottom24">
         <Col span={24}>
           <Card
-            className="migrationCard"
-            title={
-              <Space>
-                <DatabaseOutlined className="dbIcon" />
-                <Text strong>Enhanced Integration Available</Text>
-              </Space>
-            }
-          >
-            <Space direction="vertical" style={{ width: '100%' }}>
-              <Text>
-                The Related Objects feature is now integrated directly into the <strong>Entity Manager</strong> (Schema Builder) as a "Relationships" tab.
-              </Text>
-              <Text type="secondary">
-                You can continue using this page, but for the best experience with entity schema management, relationship discovery, and AI suggestions, visit the Entity Manager's Relationships tab.
-              </Text>
-              <ActionButton
-                variant="primary"
-                onClick={() => (window.location.href = '/admin/entity-manager')}
-              >
-                <SVGIcon name="link" className="inline-block mr-2" ariaLabel="go-to-entity-manager" />
-                Go to Entity Manager Relationships Tab
-              </ActionButton>
-            </Space>
-          </Card>
-        </Col>
-      </Row>
-
-      <Row gutter={16}>
-        <Col span={24}>
-          <Card
             title={
               <Space>
                 <SVGIcon name="link" className="linkIcon" ariaLabel="related-objects" />

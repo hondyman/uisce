@@ -25,11 +25,11 @@ services:
       - NODE_ENV=development
       - AUTH_SERVICE_PORT=8001
       - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
       - POSTGRES_HOST=${REMOTE_HOST:-100.84.126.19}
       - POSTGRES_PORT=5432
       - POSTGRES_DB=alpha
-      - JWT_SECRET=${JWT_SECRET:-dev-jwt-secret-key-change-in-production}
+      - JWT_SECRET=${JWT_SECRET}
       - JWT_EXPIRY=1h
       - REFRESH_TOKEN_EXPIRY=24h
       - ALLOWED_ORIGINS=http://localhost:5173,http://localhost:5174,http://127.0.0.1:5173,http://127.0.0.1:5174
@@ -54,13 +54,13 @@ services:
     ports:
       - "${BACKEND_PORT:-8082}:8080"
     environment:
-      - DATABASE_URL=postgres://postgres:${POSTGRES_PASSWORD:-postgres}@${REMOTE_HOST:-100.84.126.19}:5432/alpha?sslmode=disable
+      - DATABASE_URL=postgres://postgres:${POSTGRES_PASSWORD}@${REMOTE_HOST:-100.84.126.19}:5432/alpha?sslmode=disable
       - PORT=8080
       - HASURA_URL=http://${REMOTE_HOST:-100.84.126.19}:8085/v1/graphql
-      - HASURA_ADMIN_SECRET=${HASURA_ADMIN_SECRET:-myadminsecret}
+      - HASURA_ADMIN_SECRET=${HASURA_ADMIN_SECRET}
       - TEMPORAL_HOSTPORT=${REMOTE_HOST:-100.84.126.19}:7233
       - KAFKA_BROKERS=${REMOTE_HOST:-100.84.126.19}:19092
-      - JWT_SECRET=${JWT_SECRET:-dev-jwt-secret-key-change-in-production}
+      - JWT_SECRET=${JWT_SECRET}
     depends_on:
       - auth-service
     restart: unless-stopped
@@ -78,11 +78,11 @@ services:
     ports:
       - "${API_GATEWAY_PORT:-8001}:8001"
     environment:
-      - DATABASE_URL=postgres://postgres:${POSTGRES_PASSWORD:-postgres}@${REMOTE_HOST:-100.84.126.19}:5432/alpha?sslmode=disable
+      - DATABASE_URL=postgres://postgres:${POSTGRES_PASSWORD}@${REMOTE_HOST:-100.84.126.19}:5432/alpha?sslmode=disable
       - BACKEND_URL=http://backend:8080
       - HASURA_URL=http://${REMOTE_HOST:-100.84.126.19}:8085/v1/graphql
-      - HASURA_ADMIN_SECRET=${HASURA_ADMIN_SECRET:-myadminsecret}
-      - JWT_SECRET=${JWT_SECRET:-dev-jwt-secret-key-change-in-production}
+      - HASURA_ADMIN_SECRET=${HASURA_ADMIN_SECRET}
+      - JWT_SECRET=${JWT_SECRET}
       - TEMPORAL_HOSTPORT=${REMOTE_HOST:-100.84.126.19}:7233
       - KAFKA_BROKERS=${REMOTE_HOST:-100.84.126.19}:19092
       - PORT=8001
@@ -105,26 +105,7 @@ services:
     ports:
       - "${BP_BACKEND_PORT:-8086}:8080"
     environment:
-      - DATABASE_URL=postgres://postgres:${POSTGRES_PASSWORD:-postgres}@${REMOTE_HOST:-100.84.126.19}:5432/alpha?sslmode=disable
-      - PORT=8080
-      - TEMPORAL_HOSTPORT=${REMOTE_HOST:-100.84.126.19}:7233
-      - KAFKA_BROKERS=${REMOTE_HOST:-100.84.126.19}:19092
-    restart: unless-stopped
-
-  # ==========================================
-  # ENTITY MANAGER (Go)
-  # ==========================================
-  entity-manager:
-    build:
-      context: .
-      dockerfile: entity-manager/Dockerfile
-    container_name: semlayer-entity-manager
-    networks:
-      - local-net
-    ports:
-      - "${ENTITY_MANAGER_PORT:-8087}:8080"
-    environment:
-      - DATABASE_URL=postgres://postgres:${POSTGRES_PASSWORD:-postgres}@${REMOTE_HOST:-100.84.126.19}:5432/alpha?sslmode=disable
+      - DATABASE_URL=postgres://postgres:${POSTGRES_PASSWORD}@${REMOTE_HOST:-100.84.126.19}:5432/alpha?sslmode=disable
       - PORT=8080
       - TEMPORAL_HOSTPORT=${REMOTE_HOST:-100.84.126.19}:7233
       - KAFKA_BROKERS=${REMOTE_HOST:-100.84.126.19}:19092
@@ -141,7 +122,7 @@ services:
     networks:
       - local-net
     environment:
-      - DATABASE_URL=postgres://postgres:${POSTGRES_PASSWORD:-postgres}@${REMOTE_HOST:-100.84.126.19}:5432/alpha?sslmode=disable
+      - DATABASE_URL=postgres://postgres:${POSTGRES_PASSWORD}@${REMOTE_HOST:-100.84.126.19}:5432/alpha?sslmode=disable
       - KAFKA_BROKERS=${REMOTE_HOST:-100.84.126.19}:19092
       - TEMPORAL_HOSTPORT=${REMOTE_HOST:-100.84.126.19}:7233
     depends_on:
@@ -161,7 +142,7 @@ services:
     ports:
       - "${NOTIFICATIONS_PORT:-8089}:8080"
     environment:
-      - DATABASE_URL=postgres://postgres:${POSTGRES_PASSWORD:-postgres}@${REMOTE_HOST:-100.84.126.19}:5432/alpha?sslmode=disable
+      - DATABASE_URL=postgres://postgres:${POSTGRES_PASSWORD}@${REMOTE_HOST:-100.84.126.19}:5432/alpha?sslmode=disable
       - KAFKA_BROKERS=${REMOTE_HOST:-100.84.126.19}:19092
       - PORT=8080
       - TEMPORAL_HOSTPORT=${REMOTE_HOST:-100.84.126.19}:7233
@@ -180,7 +161,7 @@ services:
     ports:
       - "${VALIDATION_ENGINE_PORT:-8090}:8080"
     environment:
-      - DATABASE_URL=postgres://postgres:${POSTGRES_PASSWORD:-postgres}@${REMOTE_HOST:-100.84.126.19}:5432/alpha?sslmode=disable
+      - DATABASE_URL=postgres://postgres:${POSTGRES_PASSWORD}@${REMOTE_HOST:-100.84.126.19}:5432/alpha?sslmode=disable
       - PORT=8080
       - TEMPORAL_HOSTPORT=${REMOTE_HOST:-100.84.126.19}:7233
       - KAFKA_BROKERS=${REMOTE_HOST:-100.84.126.19}:19092
@@ -199,7 +180,7 @@ services:
     ports:
       - "${RULE_ENGINE_PORT:-8091}:8080"
     environment:
-      - DATABASE_URL=postgres://postgres:${POSTGRES_PASSWORD:-postgres}@${REMOTE_HOST:-100.84.126.19}:5432/alpha?sslmode=disable
+      - DATABASE_URL=postgres://postgres:${POSTGRES_PASSWORD}@${REMOTE_HOST:-100.84.126.19}:5432/alpha?sslmode=disable
       - PORT=8080
       - TEMPORAL_HOSTPORT=${REMOTE_HOST:-100.84.126.19}:7233
       - KAFKA_BROKERS=${REMOTE_HOST:-100.84.126.19}:19092
@@ -218,7 +199,7 @@ services:
     ports:
       - "${SEARCH_SERVICE_PORT:-8092}:8080"
     environment:
-      - DATABASE_URL=postgres://postgres:${POSTGRES_PASSWORD:-postgres}@${REMOTE_HOST:-100.84.126.19}:5432/alpha?sslmode=disable
+      - DATABASE_URL=postgres://postgres:${POSTGRES_PASSWORD}@${REMOTE_HOST:-100.84.126.19}:5432/alpha?sslmode=disable
       - PORT=8080
       - TEMPORAL_HOSTPORT=${REMOTE_HOST:-100.84.126.19}:7233
       - KAFKA_BROKERS=${REMOTE_HOST:-100.84.126.19}:19092
@@ -237,7 +218,7 @@ services:
     ports:
       - "${POLICY_ENGINE_PORT:-8102}:8080"
     environment:
-      - DATABASE_URL=postgres://postgres:${POSTGRES_PASSWORD:-postgres}@${REMOTE_HOST:-100.84.126.19}:5432/alpha?sslmode=disable
+      - DATABASE_URL=postgres://postgres:${POSTGRES_PASSWORD}@${REMOTE_HOST:-100.84.126.19}:5432/alpha?sslmode=disable
       - PORT=8080
       - TEMPORAL_HOSTPORT=${REMOTE_HOST:-100.84.126.19}:7233
       - KAFKA_BROKERS=${REMOTE_HOST:-100.84.126.19}:19092
@@ -254,7 +235,7 @@ services:
     networks:
       - local-net
     environment:
-      - DATABASE_URL=postgres://postgres:${POSTGRES_PASSWORD:-postgres}@${REMOTE_HOST:-100.84.126.19}:5432/alpha?sslmode=disable
+      - DATABASE_URL=postgres://postgres:${POSTGRES_PASSWORD}@${REMOTE_HOST:-100.84.126.19}:5432/alpha?sslmode=disable
       - TEMPORAL_HOSTPORT=${REMOTE_HOST:-100.84.126.19}:7233
       - KAFKA_BROKERS=${REMOTE_HOST:-100.84.126.19}:19092
     restart: unless-stopped
@@ -270,7 +251,7 @@ services:
     networks:
       - local-net
     environment:
-      - DATABASE_URL=postgres://postgres:${POSTGRES_PASSWORD:-postgres}@${REMOTE_HOST:-100.84.126.19}:5432/alpha?sslmode=disable
+      - DATABASE_URL=postgres://postgres:${POSTGRES_PASSWORD}@${REMOTE_HOST:-100.84.126.19}:5432/alpha?sslmode=disable
       - KAFKA_BROKERS=${REMOTE_HOST:-100.84.126.19}:19092
       - TEMPORAL_HOSTPORT=${REMOTE_HOST:-100.84.126.19}:7233
     restart: unless-stopped
@@ -286,7 +267,7 @@ services:
     networks:
       - local-net
     environment:
-      - DATABASE_URL=postgres://postgres:${POSTGRES_PASSWORD:-postgres}@${REMOTE_HOST:-100.84.126.19}:5432/alpha?sslmode=disable
+      - DATABASE_URL=postgres://postgres:${POSTGRES_PASSWORD}@${REMOTE_HOST:-100.84.126.19}:5432/alpha?sslmode=disable
       - KAFKA_BROKERS=${REMOTE_HOST:-100.84.126.19}:19092
       - TEMPORAL_HOSTPORT=${REMOTE_HOST:-100.84.126.19}:7233
     restart: unless-stopped
@@ -304,7 +285,7 @@ services:
     ports:
       - "${ANALYTICS_ENGINE_PORT:-8101}:8080"
     environment:
-      - DATABASE_URL=postgres://postgres:${POSTGRES_PASSWORD:-postgres}@${REMOTE_HOST:-100.84.126.19}:5432/alpha?sslmode=disable
+      - DATABASE_URL=postgres://postgres:${POSTGRES_PASSWORD}@${REMOTE_HOST:-100.84.126.19}:5432/alpha?sslmode=disable
       - PORT=8080
       - TEMPORAL_HOSTPORT=${REMOTE_HOST:-100.84.126.19}:7233
       - KAFKA_BROKERS=${REMOTE_HOST:-100.84.126.19}:19092
@@ -323,7 +304,7 @@ services:
     ports:
       - "${COMPLIANCE_ENGINE_PORT:-8095}:8080"
     environment:
-      - DATABASE_URL=postgres://postgres:${POSTGRES_PASSWORD:-postgres}@${REMOTE_HOST:-100.84.126.19}:5432/alpha?sslmode=disable
+      - DATABASE_URL=postgres://postgres:${POSTGRES_PASSWORD}@${REMOTE_HOST:-100.84.126.19}:5432/alpha?sslmode=disable
       - PORT=8080
       - TEMPORAL_HOSTPORT=${REMOTE_HOST:-100.84.126.19}:7233
       - KAFKA_BROKERS=${REMOTE_HOST:-100.84.126.19}:19092
@@ -342,12 +323,12 @@ services:
     ports:
       - "${CATALOG_SYNC_PORT:-8097}:8090"
     environment:
-      - DATABASE_URL=postgres://postgres:${POSTGRES_PASSWORD:-postgres}@${REMOTE_HOST:-100.84.126.19}:5432/alpha?sslmode=disable
-      - POSTGRES_DSN=postgres://postgres:${POSTGRES_PASSWORD:-postgres}@${REMOTE_HOST:-100.84.126.19}:5432/alpha?sslmode=disable
+      - DATABASE_URL=postgres://postgres:${POSTGRES_PASSWORD}@${REMOTE_HOST:-100.84.126.19}:5432/alpha?sslmode=disable
+      - POSTGRES_DSN=postgres://postgres:${POSTGRES_PASSWORD}@${REMOTE_HOST:-100.84.126.19}:5432/alpha?sslmode=disable
       - KAFKA_BROKERS=${REMOTE_HOST:-100.84.126.19}:19092
       - SCHEMA_REGISTRY_URL=http://${REMOTE_HOST:-100.84.126.19}:8081
       - PORT=8090
-      - TENANT_ID=99e99e99-99e9-49e9-89e9-99e99e99e999
+      - TENANT_ID=${TENANT_ID:-}
     restart: unless-stopped
 
   # ==========================================
@@ -361,7 +342,7 @@ services:
     networks:
       - local-net
     environment:
-      - DATABASE_URL=postgres://postgres:${POSTGRES_PASSWORD:-postgres}@${REMOTE_HOST:-100.84.126.19}:5432/alpha?sslmode=disable
+      - DATABASE_URL=postgres://postgres:${POSTGRES_PASSWORD}@${REMOTE_HOST:-100.84.126.19}:5432/alpha?sslmode=disable
       - KAFKA_BROKERS=${REMOTE_HOST:-100.84.126.19}:19092
     restart: unless-stopped
 
@@ -376,7 +357,7 @@ services:
     networks:
       - local-net
     environment:
-      - DATABASE_URL=postgres://postgres:${POSTGRES_PASSWORD:-postgres}@${REMOTE_HOST:-100.84.126.19}:5432/alpha?sslmode=disable
+      - DATABASE_URL=postgres://postgres:${POSTGRES_PASSWORD}@${REMOTE_HOST:-100.84.126.19}:5432/alpha?sslmode=disable
       - KAFKA_BROKERS=${REMOTE_HOST:-100.84.126.19}:19092
     restart: unless-stopped
 
@@ -391,7 +372,7 @@ services:
     networks:
       - local-net
     environment:
-      - DATABASE_URL=postgres://postgres:${POSTGRES_PASSWORD:-postgres}@${REMOTE_HOST:-100.84.126.19}:5432/alpha?sslmode=disable
+      - DATABASE_URL=postgres://postgres:${POSTGRES_PASSWORD}@${REMOTE_HOST:-100.84.126.19}:5432/alpha?sslmode=disable
       - KAFKA_BROKERS=${REMOTE_HOST:-100.84.126.19}:19092
     restart: unless-stopped
 
@@ -404,7 +385,7 @@ services:
   #   networks:
   #     - local-net
   #   environment:
-  #     - DATABASE_URL=postgres://postgres:${POSTGRES_PASSWORD:-postgres}@${REMOTE_HOST:-100.84.126.19}:5432/alpha?sslmode=disable
+  #     - DATABASE_URL=postgres://postgres:${POSTGRES_PASSWORD}@${REMOTE_HOST:-100.84.126.19}:5432/alpha?sslmode=disable
   #     - KAFKA_BROKERS=${REMOTE_HOST:-100.84.126.19}:19092
   #   restart: unless-stopped
 
@@ -423,11 +404,11 @@ services:
     environment:
       - SERVER_PORT=8080
       - HASURA_ENDPOINT=${HASURA_ENDPOINT:-http://${REMOTE_HOST:-100.84.126.19}:8085/v1/graphql}
-      - HASURA_ADMIN_SECRET=${HASURA_ADMIN_SECRET:-myadminsecret}
+      - HASURA_ADMIN_SECRET=${HASURA_ADMIN_SECRET}
       - POSTGRES_HOST=${REMOTE_HOST:-100.84.126.19}
       - POSTGRES_PORT=5432
       - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
       - POSTGRES_DB=semlayer
       - TEMPORAL_HOST=${REMOTE_HOST:-100.84.126.19}
       - TEMPORAL_PORT=7233

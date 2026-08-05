@@ -8,12 +8,6 @@ import (
 	"github.com/google/uuid"
 )
 
-// HasuraClient interface for GraphQL operations
-type HasuraClient interface {
-	Query(ctx context.Context, query string, variables map[string]interface{}, result interface{}) error
-	Mutate(ctx context.Context, mutation string, variables map[string]interface{}, result interface{}) error
-}
-
 // RuleRepository defines the interface for accessing compliance rules.
 type RuleRepository interface {
 	CreateRule(ctx context.Context, rule *ComplianceRule) error
@@ -31,20 +25,12 @@ type CoreRuleRepository interface {
 
 // SQLRuleRepository implements RuleRepository using a SQL database.
 type SQLRuleRepository struct {
-	db           *sql.DB
-	hasuraClient HasuraClient
+	db *sql.DB
 }
 
 // NewSQLRuleRepository creates a new SQLRuleRepository.
 func NewSQLRuleRepository(db *sql.DB) *SQLRuleRepository {
 	return &SQLRuleRepository{db: db}
-}
-
-func NewSQLRuleRepositoryWithHasura(db *sql.DB, hasuraClient HasuraClient) *SQLRuleRepository {
-	return &SQLRuleRepository{
-		db:           db,
-		hasuraClient: hasuraClient,
-	}
 }
 
 func (r *SQLRuleRepository) CreateRule(ctx context.Context, rule *ComplianceRule) error {
