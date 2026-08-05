@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect, ReactNode, useCa
 import { Tenant, Product, DataSource } from '../types';
 import { devLog, devError } from '../utils/devLogger';
 import { setSelectedRegion, getSelectedRegion } from '../lib/region';
+import { resolveGoldCopyTenantId, getCachedGoldCopyId } from '../utils/goldCopy';
 
 interface TenantContextType {
   tenant: Tenant | null;
@@ -54,66 +55,72 @@ export const TenantProvider: React.FC<TenantProviderProps> = ({ children }) => {
           // Fallback to first allowed region if region field is not set
           devLog(`Setting region from allowed_regions: ${parsedTenant.allowed_regions[0]}`);
           setSelectedRegion(parsedTenant.allowed_regions[0]);
+        } else if ((import.meta as any).env && (import.meta as any).env.DEV) {
+          devLog('Setting default tenant scope for development');
+          const defaultTenant = {
+            id: '99e99e99-99e9-49e9-89e9-99e99e99e999',
+            name: 'Uiscé',
+            display_name: 'Uiscé',
+            gold_copy: true,
+            description: 'Default test tenant for development',
+            is_active: true,
+            region: 'us-west',
+            tenant_instances: [],
+            allowed_regions: ['us-west']
+          };
+          const defaultProduct = {
+            id: 'test-product-id',
+            version: 1,
+            tenant_instance_id: 'test-instance-id',
+            alpha_product_id: 'test-alpha-product-id',
+            alpha_product: {
+              id: 'test-alpha-product-id',
+              product_name: 'Test Product',
+              product_code: 'TEST',
+              is_active: true
+            },
+            tenant_product_datasources: []
+          };
+          const defaultDatasource = {
+            id: '25b5dce3-27d9-4773-933e-6ee29a42871f',
+            alpha_tenant_instance_id: 'test-alpha-ds-id',
+            is_active: true,
+            config: {},
+            source_name: 'Northwinds',
+            alpha_datasource: {
+              id: 'test-alpha-ds-id',
+              datasource_name: 'Northwinds',
+              datasource_type: 'postgres'
+            }
+          };
+          setTenant(defaultTenant);
+          setProduct(defaultProduct);
+          setDatasource(defaultDatasource);
+          setSelectedRegion('us-west');
+          localStorage.setItem(TENANT_STORAGE_KEYS.TENANT, JSON.stringify(defaultTenant));
+          localStorage.setItem(TENANT_STORAGE_KEYS.PRODUCT, JSON.stringify(defaultProduct));
+          localStorage.setItem(TENANT_STORAGE_KEYS.DATASOURCE, JSON.stringify(defaultDatasource));
         }
-      } else if ((import.meta as any).env && (import.meta as any).env.DEV) {
-        // Set default test data for development
-        devLog('Setting default tenant scope for development');
-        const defaultTenant = {
-          id: '99e99e99-99e9-49e9-89e9-99e99e99e999',
-          name: 'Uiscé',
-          display_name: 'Uiscé',
-          gold_copy: true,
-          description: 'Default test tenant for development',
-          is_active: true,
-          region: 'us-west',
-          tenant_instances: [],
-          allowed_regions: ['us-west']
-        };
-        const defaultProduct = {
-          id: 'test-product-id',
-          version: 1,
-          tenant_instance_id: 'test-instance-id',
-          alpha_product_id: 'test-alpha-product-id',
-          alpha_product: {
-            id: 'test-alpha-product-id',
-            product_name: 'Test Product',
-            product_code: 'TEST',
-            is_active: true
-          },
-          tenant_product_datasources: []
-        };
-        const defaultDatasource = {
-          id: '25b5dce3-27d9-4773-933e-6ee29a42871f', // Northwinds Data
-          alpha_tenant_instance_id: 'test-alpha-ds-id',
-          is_active: true,
-          config: {},
-          source_name: 'Northwinds',
-          alpha_datasource: {
-            id: 'test-alpha-ds-id',
-            datasource_name: 'Northwinds',
-            datasource_type: 'postgres'
-          }
-        };
-        setTenant(defaultTenant);
-        setProduct(defaultProduct);
-        setDatasource(defaultDatasource);
-        
-        // Set region from default tenant
-        devLog('Setting region from default tenant: us-west');
-        setSelectedRegion('us-west');
-        // Immediately save to localStorage for setupTenantFetch
-        localStorage.setItem(TENANT_STORAGE_KEYS.TENANT, JSON.stringify(defaultTenant));
-        localStorage.setItem(TENANT_STORAGE_KEYS.PRODUCT, JSON.stringify(defaultProduct));
-        localStorage.setItem(TENANT_STORAGE_KEYS.DATASOURCE, JSON.stringify(defaultDatasource));
+      } catch (error) {
+        devError('Error loading tenant selection from localStorage:', error);
+        setTenant(null);
+        setProduct(null);
+        setDatasource(null);
       }
-    } catch (error) {
-      devError('Error loading tenant selection from localStorage:', error);
-      // Clear invalid data
-      setTenant(null);
-      setProduct(null);
-      setDatasource(null);
-    }
   }, []);
+  useEffect(() => {
+    if (!(import.meta as any).env?.DEV) return;
+    resolveGoldCopyTenantId().then(goldCopyId => {
+      if (!goldCopyId) return;
+      const hardcodedDevId = '99e99e99-99e9-49e9-89e9-99e99e99e999';
+      if (tenant && tenant.id === hardcodedDevId) {
+        devLog(`Updating dev default tenant from hardcoded ID to resolved gold copy: ${goldCopyId}`);
+        const updatedTenant = { ...tenant, id: goldCopyId };
+        setTenant(updatedTenant);
+        localStorage.setItem(TENANT_STORAGE_KEYS.TENANT, JSON.stringify(updatedTenant));
+      }
+    });
+  }, [tenant]);
 
   // Save selection to localStorage whenever it changes
   useEffect(() => {

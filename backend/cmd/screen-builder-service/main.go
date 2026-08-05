@@ -1,16 +1,17 @@
 package main
 
 import (
-	"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
 	"os"
-	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	_ "github.com/lib/pq"
 )
 
 // ============================================================================
@@ -19,17 +20,17 @@ import (
 
 // ScreenConfig represents a screen configuration
 type ScreenConfig struct {
-	ID          string          `json:"id"`
-	TenantID    string          `json:"tenant_id"`
-	BOType      string          `json:"bo_type"`
-	ScreenName  string          `json:"screen_name"`
-	ScreenType  string          `json:"screen_type"` // "detail", "list", "create", "edit"
-	LayoutJSON  json.RawMessage `json:"layout_json"`
-	FiltersJSON json.RawMessage `json:"filters_json"`
-	ActionsJSON json.RawMessage `json:"actions_json"`
-	Permissions json.RawMessage `json:"permissions_json"`
-	IsPublished bool            `json:"is_published"`
-	CreatedAt   string          `json:"created_at"`
+	ID            string          `json:"id"`
+	TenantID      string          `json:"tenant_id"`
+	BOType        string          `json:"bo_type"`
+	ScreenName    string          `json:"screen_name"`
+	ScreenType    string          `json:"screen_type"` // "detail", "list", "create", "edit"
+	LayoutJSON    json.RawMessage `json:"layout_json"`
+	FiltersJSON   json.RawMessage `json:"filters_json"`
+	ActionsJSON   json.RawMessage `json:"actions_json"`
+	PermissionsJSON json.RawMessage `json:"permissions_json"`
+	IsPublished   bool            `json:"is_published"`
+	CreatedAt     string          `json:"created_at"`
 }
 
 // ScreenField represents a single field in a screen layout
@@ -61,8 +62,7 @@ type CreateScreenRequest struct {
 // ============================================================================
 
 var (
-	hasuraURL   string
-	hasuraToken string
+	db *sql.DB
 )
 
 // ============================================================================
@@ -70,14 +70,27 @@ var (
 // ============================================================================
 
 func init() {
-	hasuraURL = os.Getenv("HASURA_URL")
-	if hasuraURL == "" {
-		hasuraURL = "http://localhost:8080"
+	databaseURL := os.Getenv("DATABASE_URL")
+	if databaseURL == "" {
+		panic("DATABASE_URL environment variable is required")
 	}
-	hasuraToken = os.Getenv("HASURA_ADMIN_SECRET")
+
+	var err error
+	db, err = sql.Open("postgres", databaseURL)
+	if err != nil {
+		log.Fatalf("Failed to connect to database: %v", err)
+	}
+
+	db.SetMaxOpenConns(25)
+	db.SetMaxIdleConns(5)
+	db.SetConnMaxLifetime(5 * time.Minute)
+
+	if err := db.Ping(); err != nil {
+		log.Fatalf("Failed to ping database: %v", err)
+	}
 
 	log.Println("✓ Screen Builder Service initialized")
-	log.Printf("  Hasura: %s\n", hasuraURL)
+	log.Printf("  Database: connected\n")
 }
 
 // ============================================================================
@@ -139,56 +152,32 @@ func createScreen(c *gin.Context) {
 
 	screenID := uuid.New().String()
 
-	// Build layout JSON
 	layoutJSON, _ := json.Marshal(req.Fields)
 	filtersJSON, _ := json.Marshal(req.Filters)
 	actionsJSON, _ := json.Marshal(req.Actions)
 	permissionsJSON, _ := json.Marshal(req.Permissions)
 
 	query := `
-		mutation CreateScreen($object: screen_configs_insert_input!) {
-			insert_screen_configs_one(object: $object) {
-				id
-				screen_name
-				bo_type
-				created_at
-			}
-		}
+		INSERT INTO screen_configs (id, tenant_id, bo_type, screen_name, screen_type, layout_json, filters_json, actions_json, permissions_json, is_published, created_by)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+		RETURNING id, screen_name, bo_type, created_at
 	`
 
-	object := map[string]interface{}{
-		"id":               screenID,
-		"tenant_id":        req.TenantID,
-		"bo_type":          req.BOType,
-		"screen_name":      req.ScreenName,
-		"screen_type":      req.ScreenType,
-		"layout_json":      json.RawMessage(layoutJSON),
-		"filters_json":     json.RawMessage(filtersJSON),
-		"actions_json":     json.RawMessage(actionsJSON),
-		"permissions_json": json.RawMessage(permissionsJSON),
-		"is_published":     false,
-		"created_by":       req.UserID,
+	var result struct {
+		ID        string    `json:"id"`
+		ScreenName string   `json:"screen_name"`
+		BOType    string    `json:"bo_type"`
+		CreatedAt time.Time `json:"created_at"`
 	}
 
-	variables := map[string]interface{}{
-		"object": object,
-	}
+	err := db.QueryRowContext(c.Request.Context(), query,
+		screenID, req.TenantID, req.BOType, req.ScreenName, req.ScreenType,
+		layoutJSON, filtersJSON, actionsJSON, permissionsJSON, false, req.UserID,
+	).Scan(&result.ID, &result.ScreenName, &result.BOType, &result.CreatedAt)
 
-	data, err := hasuraGraphQLQuery(c.Request.Context(), query, variables)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error": fmt.Sprintf("Failed to create screen: %v", err),
-		})
-		return
-	}
-
-	var resp struct {
-		InsertScreenConfigsOne ScreenConfig `json:"insert_screen_configs_one"`
-	}
-
-	if err := json.Unmarshal(data, &resp); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": fmt.Sprintf("Failed to parse response: %v", err),
 		})
 		return
 	}
@@ -205,45 +194,41 @@ func listScreens(c *gin.Context) {
 	boType := c.Param("bo_type")
 
 	query := `
-		query ListScreens($tenantID: uuid!, $boType: String!) {
-			screen_configs(
-				where: {tenant_id: {_eq: $tenantID}, bo_type: {_eq: $boType}}
-				order_by: {created_at: desc}
-			) {
-				id
-				screen_name
-				screen_type
-				is_published
-				created_at
-			}
-		}
+		SELECT id, screen_name, screen_type, is_published, created_at
+		FROM screen_configs
+		WHERE tenant_id = $1 AND bo_type = $2
+		ORDER BY created_at DESC
 	`
 
-	variables := map[string]interface{}{
-		"tenantID": tenantID,
-		"boType":   boType,
-	}
-
-	data, err := hasuraGraphQLQuery(c.Request.Context(), query, variables)
+	rows, err := db.QueryContext(c.Request.Context(), query, tenantID, boType)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error": fmt.Sprintf("Failed to fetch screens: %v", err),
 		})
 		return
 	}
+	defer rows.Close()
 
-	var resp struct {
-		ScreenConfigs []map[string]interface{} `json:"screen_configs"`
-	}
+	var screens []map[string]interface{}
+	for rows.Next() {
+		var id, screenName, screenType string
+		var isPublished bool
+		var createdAt time.Time
 
-	if err := json.Unmarshal(data, &resp); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": fmt.Sprintf("Failed to parse screens: %v", err),
+		if err := rows.Scan(&id, &screenName, &screenType, &isPublished, &createdAt); err != nil {
+			continue
+		}
+
+		screens = append(screens, map[string]interface{}{
+			"id":           id,
+			"screen_name":  screenName,
+			"screen_type":  screenType,
+			"is_published": isPublished,
+			"created_at":   createdAt,
 		})
-		return
 	}
 
-	c.JSON(http.StatusOK, resp.ScreenConfigs)
+	c.JSON(http.StatusOK, screens)
 }
 
 // getScreen retrieves a single screen configuration
@@ -252,30 +237,26 @@ func getScreen(c *gin.Context) {
 	screenID := c.Param("screen_id")
 
 	query := `
-		query GetScreen($tenantID: uuid!, $screenID: uuid!) {
-			screen_configs(
-				where: {tenant_id: {_eq: $tenantID}, id: {_eq: $screenID}}
-			) {
-				id
-				screen_name
-				bo_type
-				screen_type
-				layout_json
-				filters_json
-				actions_json
-				permissions_json
-				is_published
-				created_at
-			}
-		}
+		SELECT id, tenant_id, bo_type, screen_name, screen_type, layout_json, filters_json, actions_json, permissions_json, is_published, created_at
+		FROM screen_configs
+		WHERE tenant_id = $1 AND id = $2
 	`
 
-	variables := map[string]interface{}{
-		"tenantID": tenantID,
-		"screenID": screenID,
+	var screen ScreenConfig
+	var layoutJSON, filtersJSON, actionsJSON, permissionsJSON []byte
+
+	err := db.QueryRowContext(c.Request.Context(), query, tenantID, screenID).Scan(
+		&screen.ID, &screen.TenantID, &screen.BOType, &screen.ScreenName, &screen.ScreenType,
+		&layoutJSON, &filtersJSON, &actionsJSON, &permissionsJSON, &screen.IsPublished, &screen.CreatedAt,
+	)
+
+	if err == sql.ErrNoRows {
+		c.JSON(http.StatusNotFound, gin.H{
+			"error": "Screen not found",
+		})
+		return
 	}
 
-	data, err := hasuraGraphQLQuery(c.Request.Context(), query, variables)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error": fmt.Sprintf("Failed to fetch screen: %v", err),
@@ -283,25 +264,12 @@ func getScreen(c *gin.Context) {
 		return
 	}
 
-	var resp struct {
-		ScreenConfigs []ScreenConfig `json:"screen_configs"`
-	}
+	screen.LayoutJSON = layoutJSON
+	screen.FiltersJSON = filtersJSON
+	screen.ActionsJSON = actionsJSON
+	screen.PermissionsJSON = permissionsJSON
 
-	if err := json.Unmarshal(data, &resp); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": fmt.Sprintf("Failed to parse screen: %v", err),
-		})
-		return
-	}
-
-	if len(resp.ScreenConfigs) == 0 {
-		c.JSON(http.StatusNotFound, gin.H{
-			"error": "Screen not found",
-		})
-		return
-	}
-
-	c.JSON(http.StatusOK, resp.ScreenConfigs[0])
+	c.JSON(http.StatusOK, screen)
 }
 
 // updateScreen updates a screen configuration
@@ -317,47 +285,59 @@ func updateScreen(c *gin.Context) {
 		return
 	}
 
-	// Build update payload
-	updates := map[string]interface{}{}
+	query := `UPDATE screen_configs SET `
+	args := []interface{}{}
+	argIdx := 1
+	setParts := []string{}
 
 	if layout, ok := req["fields"]; ok {
 		layoutJSON, _ := json.Marshal(layout)
-		updates["layout_json"] = layoutJSON
+		setParts = append(setParts, fmt.Sprintf("layout_json = $%d", argIdx))
+		args = append(args, layoutJSON)
+		argIdx++
 	}
 	if filters, ok := req["filters"]; ok {
 		filtersJSON, _ := json.Marshal(filters)
-		updates["filters_json"] = filtersJSON
+		setParts = append(setParts, fmt.Sprintf("filters_json = $%d", argIdx))
+		args = append(args, filtersJSON)
+		argIdx++
 	}
 	if actions, ok := req["actions"]; ok {
 		actionsJSON, _ := json.Marshal(actions)
-		updates["actions_json"] = actionsJSON
+		setParts = append(setParts, fmt.Sprintf("actions_json = $%d", argIdx))
+		args = append(args, actionsJSON)
+		argIdx++
 	}
 	if permissions, ok := req["permissions"]; ok {
 		permissionsJSON, _ := json.Marshal(permissions)
-		updates["permissions_json"] = permissionsJSON
+		setParts = append(setParts, fmt.Sprintf("permissions_json = $%d", argIdx))
+		args = append(args, permissionsJSON)
+		argIdx++
 	}
 	if screenName, ok := req["screen_name"]; ok {
-		updates["screen_name"] = screenName
+		setParts = append(setParts, fmt.Sprintf("screen_name = $%d", argIdx))
+		args = append(args, screenName)
+		argIdx++
 	}
 
-	query := `
-		mutation UpdateScreen($tenantID: uuid!, $screenID: uuid!, $updates: screen_configs_set_input!) {
-			update_screen_configs(
-				where: {tenant_id: {_eq: $tenantID}, id: {_eq: $screenID}}
-				_set: $updates
-			) {
-				affected_rows
-			}
+	if len(setParts) == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "No fields to update",
+		})
+		return
+	}
+
+	for i, part := range setParts {
+		if i > 0 {
+			query += ", "
 		}
-	`
-
-	variables := map[string]interface{}{
-		"tenantID": tenantID,
-		"screenID": screenID,
-		"updates":  updates,
+		query += part
 	}
 
-	_, err := hasuraGraphQLQuery(c.Request.Context(), query, variables)
+	query += fmt.Sprintf(" WHERE tenant_id = $%d AND id = $%d", argIdx, argIdx+1)
+	args = append(args, tenantID, screenID)
+
+	_, err := db.ExecContext(c.Request.Context(), query, args...)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error": fmt.Sprintf("Failed to update screen: %v", err),
@@ -375,22 +355,9 @@ func deleteScreen(c *gin.Context) {
 	tenantID := c.Param("tenant_id")
 	screenID := c.Param("screen_id")
 
-	query := `
-		mutation DeleteScreen($tenantID: uuid!, $screenID: uuid!) {
-			delete_screen_configs(
-				where: {tenant_id: {_eq: $tenantID}, id: {_eq: $screenID}}
-			) {
-				affected_rows
-			}
-		}
-	`
+	query := `DELETE FROM screen_configs WHERE tenant_id = $1 AND id = $2`
 
-	variables := map[string]interface{}{
-		"tenantID": tenantID,
-		"screenID": screenID,
-	}
-
-	_, err := hasuraGraphQLQuery(c.Request.Context(), query, variables)
+	_, err := db.ExecContext(c.Request.Context(), query, tenantID, screenID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error": fmt.Sprintf("Failed to delete screen: %v", err),
@@ -408,23 +375,9 @@ func publishScreen(c *gin.Context) {
 	tenantID := c.Param("tenant_id")
 	screenID := c.Param("screen_id")
 
-	query := `
-		mutation PublishScreen($tenantID: uuid!, $screenID: uuid!) {
-			update_screen_configs(
-				where: {tenant_id: {_eq: $tenantID}, id: {_eq: $screenID}}
-				_set: {is_published: true}
-			) {
-				affected_rows
-			}
-		}
-	`
+	query := `UPDATE screen_configs SET is_published = true WHERE tenant_id = $1 AND id = $2`
 
-	variables := map[string]interface{}{
-		"tenantID": tenantID,
-		"screenID": screenID,
-	}
-
-	_, err := hasuraGraphQLQuery(c.Request.Context(), query, variables)
+	_, err := db.ExecContext(c.Request.Context(), query, tenantID, screenID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error": fmt.Sprintf("Failed to publish screen: %v", err),
@@ -435,50 +388,4 @@ func publishScreen(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"message": "Screen published successfully",
 	})
-}
-
-// ============================================================================
-// HELPERS
-// ============================================================================
-
-// hasuraGraphQLQuery makes a GraphQL query to Hasura and returns the result
-func hasuraGraphQLQuery(ctx context.Context, query string, variables map[string]interface{}) (json.RawMessage, error) {
-	payload := map[string]interface{}{
-		"query":     query,
-		"variables": variables,
-	}
-
-	body, err := json.Marshal(payload)
-	if err != nil {
-		return nil, err
-	}
-
-	req, err := http.NewRequestWithContext(ctx, "POST", hasuraURL+"/v1/graphql", strings.NewReader(string(body)))
-	if err != nil {
-		return nil, err
-	}
-
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("x-hasura-admin-secret", hasuraToken)
-
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	var result struct {
-		Data   json.RawMessage `json:"data"`
-		Errors []interface{}   `json:"errors"`
-	}
-
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return nil, err
-	}
-
-	if len(result.Errors) > 0 {
-		return nil, fmt.Errorf("GraphQL error: %v", result.Errors[0])
-	}
-
-	return result.Data, nil
 }

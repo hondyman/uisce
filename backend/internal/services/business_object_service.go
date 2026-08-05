@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
-	"time"
 
 	"github.com/google/uuid"
 	"github.com/hondyman/uisce/backend/internal/events"
@@ -17,9 +16,8 @@ import (
 
 // BusinessObjectService handles business object operations with real database queries
 type BusinessObjectService struct {
-	db     *sqlx.DB
-	hasura HasuraClient
-	rules  AccessRuleRepository
+	db    *sqlx.DB
+	rules AccessRuleRepository
 }
 
 // NewBusinessObjectService creates a new BusinessObjectService with database connection
@@ -33,13 +31,6 @@ func NewBusinessObjectService(db interface{}) *BusinessObjectService {
 		return &BusinessObjectService{db: sqlxDB, rules: NewPgAccessRuleRepository(sqlxDB)}
 	}
 	return &BusinessObjectService{}
-}
-
-// NewBusinessObjectServiceWithHasura creates a new service with Hasura support
-func NewBusinessObjectServiceWithHasura(db interface{}, hasura HasuraClient) *BusinessObjectService {
-	svc := NewBusinessObjectService(db)
-	svc.hasura = hasura
-	return svc
 }
 
 // CreateBusinessObject creates a new business object definition
@@ -123,14 +114,6 @@ func (s *BusinessObjectService) CreateBusinessObject(ctx context.Context, tenant
 		bo.DriverTableName = req.DriverTableName
 	}
 
-	if s.hasura != nil {
-		result, err := s.createBusinessObjectWithHasura(ctx, bo)
-		if err == nil {
-			return result, nil
-		}
-		fmt.Printf("Hasura mutation failed, falling back to SQL: %v\n", err)
-	}
-
 	// SQL fallback
 	// Prepare datasource param and cast to uuid to avoid driver type mismatches
 	var datasourceParam interface{}
@@ -172,69 +155,10 @@ func (s *BusinessObjectService) CreateBusinessObject(ctx context.Context, tenant
 	return bo, nil
 }
 
-func (s *BusinessObjectService) createBusinessObjectWithHasura(ctx context.Context, bo *models.BusinessObjectDefinition) (*models.BusinessObjectDefinition, error) {
-	mutation := `
-		mutation CreateBusinessObject($object: business_objects_insert_input!) {
-			insert_business_objects_one(object: $object) {
-				id
-				created_at
-				last_modified_at
-			}
-		}
-	`
-
-	// Assuming we pass config as jsonb fields if Hasura expects 'fields'.
-	// If Hasura expects 'config', we should use that.
-	// For now, let's assume 'config' maps to 'config' in Hasura too if we updated DB.
-	// If Hasura schema is old, this might break.
-	// But aligning with Go models is priority.
-
-	variables := map[string]interface{}{
-		"object": map[string]interface{}{
-			"id":             bo.ID,
-			"tenant_id":      bo.TenantID,
-			"name":           bo.Name,
-			"description":    bo.Description,
-			"config":         string(bo.Config),
-			"enable_history": bo.EnableHistory,
-			"history_mode":   bo.HistoryMode,
-			"created_by":     bo.CreatedBy,
-		},
-	}
-
-	resp, err := s.hasura.Mutate(mutation, variables)
-	if err != nil {
-		return nil, err
-	}
-
-	if result, ok := resp["insert_business_objects_one"].(map[string]interface{}); ok {
-		if createdAt, ok := result["created_at"].(string); ok {
-			if t, err := time.Parse(time.RFC3339, createdAt); err == nil {
-				bo.CreatedAt = t
-			}
-		}
-		if updatedAt, ok := result["last_modified_at"].(string); ok {
-			if t, err := time.Parse(time.RFC3339, updatedAt); err == nil {
-				bo.LastModifiedAt = t
-			}
-		}
-	}
-
-	return bo, nil
-}
-
 // ListBusinessObjects lists all business objects for a tenant
 func (s *BusinessObjectService) ListBusinessObjects(ctx context.Context, tenantID, datasourceID string) ([]*models.BusinessObjectDefinition, error) {
 	if s.db == nil {
 		return nil, fmt.Errorf("database connection not initialized")
-	}
-
-	if s.hasura != nil {
-		objects, err := s.listBusinessObjectsWithHasura(ctx, tenantID, datasourceID)
-		if err == nil {
-			return objects, nil
-		}
-		fmt.Printf("Hasura query failed, falling back to SQL: %v\n", err)
 	}
 
 	// SQL fallback - include parent_id to allow frontend to filter subtypes
@@ -1116,89 +1040,6 @@ func (s *BusinessObjectService) getInstanceBusinessObjectID(ctx context.Context,
 		return "", fmt.Errorf("failed to resolve business object id: %w", err)
 	}
 	return boID, nil
-}
-
-// Hasura helper functions
-
-// listBusinessObjectsWithHasura lists all business objects via Hasura
-func (s *BusinessObjectService) listBusinessObjectsWithHasura(ctx context.Context, tenantID, datasourceID string) ([]*models.BusinessObjectDefinition, error) {
-	query := `
-		query ListBusinessObjects($tenantId: uuid!) {
-			business_objects(where: {tenant_id: {_eq: $tenantId}}, order_by: {created_at: desc}) {
-				id
-				tenant_id
-				name
-				description
-				fields
-				parent_id
-				technical_name
-				created_by
-				created_at
-				updated_at
-			}
-		}
-	`
-
-	variables := map[string]interface{}{
-		"tenantId": tenantID,
-	}
-
-	resp, err := s.hasura.Query(query, variables)
-	if err != nil {
-		return nil, err
-	}
-
-	objectsData, ok := resp["business_objects"].([]interface{})
-	if !ok {
-		return nil, fmt.Errorf("unexpected response format")
-	}
-
-	var objects []*models.BusinessObjectDefinition
-	for _, item := range objectsData {
-		objMap, ok := item.(map[string]interface{})
-		if !ok {
-			continue
-		}
-
-		bo := &models.BusinessObjectDefinition{}
-		if id, ok := objMap["id"].(string); ok {
-			bo.ID = id
-		}
-		if tenantID, ok := objMap["tenant_id"].(string); ok {
-			bo.TenantID = tenantID
-		}
-		if name, ok := objMap["name"].(string); ok {
-			bo.Name = name
-		}
-		if description, ok := objMap["description"].(string); ok {
-			bo.Description = description
-		}
-		// Assuming Hasura returns 'config' or 'fields'
-		// If it returns 'fields' as string, we put it into Config for now as legacy
-		if fieldsStr, ok := objMap["fields"].(string); ok {
-			bo.Config = json.RawMessage(fieldsStr)
-		} else if configStr, ok := objMap["config"].(string); ok {
-			bo.Config = json.RawMessage(configStr)
-		}
-
-		if createdBy, ok := objMap["created_by"].(string); ok {
-			bo.CreatedBy = createdBy
-		}
-		if createdAt, ok := objMap["created_at"].(string); ok {
-			if t, err := time.Parse(time.RFC3339, createdAt); err == nil {
-				bo.CreatedAt = t
-			}
-		}
-		if updatedAt, ok := objMap["last_modified_at"].(string); ok {
-			if t, err := time.Parse(time.RFC3339, updatedAt); err == nil {
-				bo.LastModifiedAt = t
-			}
-		}
-
-		objects = append(objects, bo)
-	}
-
-	return objects, nil
 }
 
 // ============================================================================

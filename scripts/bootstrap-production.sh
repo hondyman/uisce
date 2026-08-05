@@ -36,8 +36,7 @@ if [[ -z "${POSTGRES_DSN:-}" ]]; then
 fi
 
 if [[ -z "${JWT_SECRET:-}" ]]; then
-  log_warn "JWT_SECRET not set — using insecure default (DO NOT use in production)."
-  export JWT_SECRET="dev-jwt-secret-key-change-in-production"
+  log_fatal "JWT_SECRET environment variable is not set"
 fi
 
 if [[ -z "${INFISICAL_TOKEN:-}" ]]; then

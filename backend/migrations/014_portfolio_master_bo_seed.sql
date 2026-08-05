@@ -5,8 +5,8 @@
 
 DO $$
 DECLARE
-    v_gold_tenant   UUID := '99e99e99-99e9-49e9-89e9-99e99e99e999';
-    v_system_user   UUID := '99e99e99-99e9-49e9-89e9-99e99e99e999';
+    v_gold_tenant   UUID;
+    v_system_user   UUID;
 
     -- BO IDs (resolved after insert)
     bo_portfolio_id          UUID;
@@ -59,6 +59,10 @@ DECLARE
     st_hier_weight_id        UUID := gen_random_uuid();
 
 BEGIN
+    PERFORM set_config('app.goldcopy', (SELECT id FROM public.tenants WHERE gold_copy = true LIMIT 1)::text, true);
+    v_gold_tenant := current_setting('app.goldcopy', true)::uuid;
+    v_system_user := v_gold_tenant;
+
     -- ================================================================
     -- 1. RESOLVE CATALOG NODE / EDGE TYPE IDs
     -- ================================================================

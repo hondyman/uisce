@@ -11,22 +11,13 @@ import (
 
 // FeedbackService handles user feedback for NLQ responses.
 type FeedbackService struct {
-	db     *sqlx.DB
-	hasura HasuraClient
+	db *sqlx.DB
 }
 
 // NewFeedbackService creates a new FeedbackService.
 func NewFeedbackService(db *sqlx.DB) *FeedbackService {
 	return &FeedbackService{
 		db: db,
-	}
-}
-
-// NewFeedbackServiceWithHasura creates a FeedbackService with Hasura support
-func NewFeedbackServiceWithHasura(db *sqlx.DB, hasura HasuraClient) *FeedbackService {
-	return &FeedbackService{
-		db:     db,
-		hasura: hasura,
 	}
 }
 
@@ -53,53 +44,8 @@ func (s *FeedbackService) SubmitFeedback(ctx context.Context, req FeedbackReques
 	return nil
 }
 
-// ============================================================================
-// HASURA-FIRST HELPERS
-// ============================================================================
-
 // submitFeedbackRecord inserts feedback into the database
-// Hasura-first with SQL fallback
 func (s *FeedbackService) submitFeedbackRecord(ctx context.Context, queryID uuid.UUID, tenantID, userID string, rating int, comment string, createdAt time.Time) error {
-	if s.hasura != nil {
-		mutation := `
-			mutation SubmitFeedback(
-				$queryID: uuid!
-				$tenantID: String!
-				$userID: String!
-				$rating: Int!
-				$comment: String!
-				$createdAt: timestamptz!
-			) {
-				insert_nlq_feedback_one(object: {
-					query_id: $queryID
-					tenant_id: $tenantID
-					user_id: $userID
-					rating: $rating
-					comment: $comment
-					created_at: $createdAt
-				}) {
-					query_id
-				}
-			}
-		`
-
-		variables := map[string]interface{}{
-			"queryID":   queryID,
-			"tenantID":  tenantID,
-			"userID":    userID,
-			"rating":    rating,
-			"comment":   comment,
-			"createdAt": createdAt,
-		}
-
-		_, err := s.hasura.Mutate(mutation, variables)
-		if err == nil {
-			return nil
-		}
-		// Fall through to SQL on Hasura error
-	}
-
-	// SQL fallback
 	query := `
 		INSERT INTO nlq_feedback (query_id, tenant_id, user_id, rating, comment, created_at)
 		VALUES ($1, $2, $3, $4, $5, $6)

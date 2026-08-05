@@ -50,7 +50,7 @@ type MCPToolRouter struct {
 
 func NewMCPToolRouter(db *sqlx.DB) *MCPToolRouter {
 	return &MCPToolRouter{
-		db:       db,
+		db:        db,
 		mcService: NewMakerCheckerService(db),
 	}
 }

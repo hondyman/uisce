@@ -150,8 +150,6 @@ type BranchExecutionResult struct {
 // BranchEvaluator orchestrates branch evaluation and selection
 type BranchEvaluator struct {
 	db *sqlx.DB
-	// Optional Hasura GraphQL client for Hasura-first execution paths
-	hasura HasuraClient
 }
 
 // NewBranchEvaluator creates a new branch evaluator
@@ -159,9 +157,9 @@ func NewBranchEvaluator(db *sqlx.DB) *BranchEvaluator {
 	return &BranchEvaluator{db: db}
 }
 
-// NewBranchEvaluatorWithHasura creates evaluator with optional Hasura client
+// NewBranchEvaluatorWithHasura creates evaluator - hasura parameter is ignored (retained for backwards compatibility)
 func NewBranchEvaluatorWithHasura(db *sqlx.DB, hasura HasuraClient) *BranchEvaluator {
-	return &BranchEvaluator{db: db, hasura: hasura}
+	return &BranchEvaluator{db: db}
 }
 
 // ============================================

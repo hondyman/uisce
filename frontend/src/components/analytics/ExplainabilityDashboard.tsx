@@ -1,22 +1,23 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  Box, 
-  Card, 
-  CardContent, 
-  Typography, 
-  Grid, 
-  Chip, 
-  Table, 
-  TableBody, 
-  TableCell, 
-  TableContainer, 
-  TableHead, 
-  TableRow, 
+import {
+  Box,
+  Card,
+  CardContent,
+  Typography,
+  Grid,
+  Chip,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
   Paper,
   CircularProgress,
   Alert
 } from '@mui/material';
-import { 
+import { getCachedGoldCopyId } from '../../utils/goldCopy';
+import {
   AccountTree as TreeIcon, 
   CheckCircle as SuccessIcon, 
   Error as ErrorIcon,
@@ -54,7 +55,7 @@ export const ExplainabilityDashboard: React.FC<ExplainabilityDashboardProps> = (
       // For demo purposes, we fetch the simulation trace which includes execution logic
       const response = await fetch(`/api/v1/execute/${id}`, {
         headers: {
-          'X-Tenant-ID': '99e99e99-99e9-49e9-89e9-99e99e99e999',
+          'X-Tenant-ID': getCachedGoldCopyId() ?? '',
           'X-User-ID': 'admin'
         }
       });

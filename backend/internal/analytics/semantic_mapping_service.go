@@ -305,7 +305,7 @@ func (s *SemanticMappingService) inferSemanticTermProperties(column *DatabaseCol
 		}
 	} else if columnName != "" {
 		// Fallback if we only have the name (e.g. from UI override)
-		// We might need to split semantic_term/%s or similar if available, 
+		// We might need to split semantic_term/%s or similar if available,
 		// but for now relying on having column context is safest.
 		// If we are here, we likely have properties["table"] and properties["source_column"] populated above.
 		if tbl, ok := properties["table"].(string); ok && tbl != "" {

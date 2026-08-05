@@ -16,7 +16,7 @@ import (
 func main() {
 	dbURL := os.Getenv("DATABASE_URL")
 	if dbURL == "" {
-		dbURL = "postgres://postgres:postgres@localhost:5432/alpha?sslmode=disable"
+		log.Fatal("DATABASE_URL environment variable is not set")
 	}
 
 	port := os.Getenv("PORT")

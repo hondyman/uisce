@@ -73,12 +73,9 @@ var library = []LibraryItem{
 }
 
 func main() {
-	// 1. Connect to DB
-	// Use 'alpha' database
-	connStr := "postgres://postgres:postgres@localhost:5432/alpha?sslmode=disable"
-	// Or use environment variable if set
-	if env := os.Getenv("DATABASE_URL"); env != "" {
-		connStr = env
+	connStr := os.Getenv("DATABASE_URL")
+	if connStr == "" {
+		panic("DATABASE_URL environment variable is required")
 	}
 
 	db, err := sql.Open("postgres", connStr)

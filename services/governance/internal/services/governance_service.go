@@ -4,17 +4,20 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"time"
 
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgxpool"
+
 	abacclient "github.com/hondyman/uisce/libs/abac-client"
-	hasuraclient "github.com/hondyman/uisce/libs/hasura-client"
 	sharedtypes "github.com/hondyman/uisce/libs/shared-types"
 	temporalclient "github.com/hondyman/uisce/libs/temporal-client"
 )
 
 // GovernanceServiceConfig holds configuration for the governance service
 type GovernanceServiceConfig struct {
-	HasuraClient   *hasuraclient.HasuraClient
+	DB             *pgxpool.Pool
 	TemporalClient *temporalclient.Client
 	ABACClient     *abacclient.Client
 }
@@ -29,6 +32,18 @@ func NewGovernanceService(config GovernanceServiceConfig) *GovernanceService {
 	return &GovernanceService{
 		config: config,
 	}
+}
+
+func getDB() (*pgxpool.Pool, error) {
+	dbURL := os.Getenv("DATABASE_URL")
+	if dbURL == "" {
+		return nil, fmt.Errorf("DATABASE_URL environment variable is not set")
+	}
+	pool, err := pgxpool.New(context.Background(), dbURL)
+	if err != nil {
+		return nil, fmt.Errorf("failed to connect to db: %w", err)
+	}
+	return pool, nil
 }
 
 // EvaluateAccess evaluates access control for a given request
@@ -57,72 +72,42 @@ func (s *GovernanceService) EvaluateAccess(ctx context.Context, request sharedty
 	}, nil
 }
 
-// GetPolicies retrieves policies for a tenant from Hasura
+// GetPolicies retrieves policies for a tenant from database
 func (s *GovernanceService) GetPolicies(ctx context.Context, tenantID string) ([]sharedtypes.Policy, error) {
-	if s.config.HasuraClient == nil {
-		return nil, fmt.Errorf("Hasura client not configured")
+	if s.config.DB == nil {
+		return nil, fmt.Errorf("database not configured")
 	}
 
-	// Query Hasura for policies
-	query := `
-		query GetPolicies($tenantId: String!) {
-			policies(
-				where: { tenant_id: { _eq: $tenantId } }
-				order_by: { created_at: desc }
-			) {
-				id
-				name
-				description
-				effect
-				conditions
-				actions
-				created_at
-				updated_at
-			}
-		}
-	`
-
-	result, err := s.config.HasuraClient.Query(query, map[string]interface{}{
-		"tenantId": tenantID,
-	})
+	rows, err := s.config.DB.Query(ctx, `
+		SELECT id, name, description, effect, conditions, actions, created_at, updated_at
+		FROM policies
+		WHERE tenant_id = $1
+		ORDER BY created_at DESC
+	`, tenantID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query policies: %w", err)
 	}
+	defer rows.Close()
 
-	// Parse response
 	policies := make([]sharedtypes.Policy, 0)
-	if data, ok := result["policies"].([]interface{}); ok {
-		for _, item := range data {
-			if policyData, ok := item.(map[string]interface{}); ok {
-				policy := sharedtypes.Policy{
-					ID:          getString(policyData, "id"),
-					Name:        getString(policyData, "name"),
-					Description: getString(policyData, "description"),
-					Effect:      getString(policyData, "effect"),
-				}
+	for rows.Next() {
+		var policy sharedtypes.Policy
+		var conditionsJSON, actionsJSON []byte
+		var createdAt, updatedAt time.Time
 
-				// Parse conditions (stored as JSONB in Hasura)
-				if conditions, ok := policyData["conditions"].(map[string]interface{}); ok {
-					policy.Conditions = conditions
-				} else {
-					policy.Conditions = make(map[string]interface{})
-				}
-
-				// Parse actions array
-				if actions, ok := policyData["actions"].([]interface{}); ok {
-					policy.Actions = make([]string, 0, len(actions))
-					for _, action := range actions {
-						if actionStr, ok := action.(string); ok {
-							policy.Actions = append(policy.Actions, actionStr)
-						}
-					}
-				} else {
-					policy.Actions = []string{}
-				}
-
-				policies = append(policies, policy)
-			}
+		err := rows.Scan(&policy.ID, &policy.Name, &policy.Description, &policy.Effect, &conditionsJSON, &actionsJSON, &createdAt, &updatedAt)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan policy: %w", err)
 		}
+
+		if err := json.Unmarshal(conditionsJSON, &policy.Conditions); err != nil {
+			policy.Conditions = make(map[string]interface{})
+		}
+		if err := json.Unmarshal(actionsJSON, &policy.Actions); err != nil {
+			policy.Actions = []string{}
+		}
+
+		policies = append(policies, policy)
 	}
 
 	return policies, nil
@@ -130,62 +115,29 @@ func (s *GovernanceService) GetPolicies(ctx context.Context, tenantID string) ([
 
 // CreatePolicy creates a new policy
 func (s *GovernanceService) CreatePolicy(ctx context.Context, policy sharedtypes.Policy) (*sharedtypes.Policy, error) {
-	// Validate policy structure
 	if err := validatePolicy(policy); err != nil {
 		return nil, fmt.Errorf("invalid policy: %w", err)
 	}
 
-	if s.config.HasuraClient == nil {
-		return nil, fmt.Errorf("Hasura client not configured")
+	if s.config.DB == nil {
+		return nil, fmt.Errorf("database not configured")
 	}
 
-	// Generate ID if not provided
 	if policy.ID == "" {
-		policy.ID = fmt.Sprintf("pol_%d", time.Now().UnixNano())
+		policy.ID = uuid.New().String()
 	}
 
-	// Store in Hasura GraphQL
-	mutation := `
-		mutation CreatePolicy(
-			$id: String!,
-			$name: String!,
-			$description: String!,
-			$effect: String!,
-			$conditions: jsonb!,
-			$actions: jsonb!
-		) {
-			insert_policies_one(
-				object: {
-					id: $id,
-					name: $name,
-					description: $description,
-					effect: $effect,
-					conditions: $conditions,
-					actions: $actions
-				}
-			) {
-				id
-				name
-				created_at
-			}
-		}
-	`
+	conditionsJSON, _ := json.Marshal(policy.Conditions)
+	actionsJSON, _ := json.Marshal(policy.Actions)
 
-	variables := map[string]interface{}{
-		"id":          policy.ID,
-		"name":        policy.Name,
-		"description": policy.Description,
-		"effect":      policy.Effect,
-		"conditions":  policy.Conditions,
-		"actions":     policy.Actions,
-	}
-
-	_, err := s.config.HasuraClient.Query(mutation, variables)
+	_, err := s.config.DB.Exec(ctx, `
+		INSERT INTO policies (id, tenant_id, name, description, effect, conditions, actions)
+		VALUES ($1, $2, $3, $4, $5, $6, $7)
+	`, policy.ID, "", policy.Name, policy.Description, policy.Effect, conditionsJSON, actionsJSON)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create policy in Hasura: %w", err)
+		return nil, fmt.Errorf("failed to create policy: %w", err)
 	}
 
-	// Also add to ABAC client for in-memory evaluation
 	conditions := convertConditionsToABAC(policy.Conditions)
 	abacPolicy := abacclient.Policy{
 		ID:          policy.ID,
@@ -200,66 +152,43 @@ func (s *GovernanceService) CreatePolicy(ctx context.Context, policy sharedtypes
 
 // GetAuditLog retrieves audit entries for a tenant
 func (s *GovernanceService) GetAuditLog(ctx context.Context, tenantID string, limit int) ([]sharedtypes.AuditEntry, error) {
-	// Query Hasura for audit entries
-	query := `
-		query GetAuditLog($tenantId: String!, $limit: Int!) {
-			audit_entries(
-				where: { tenant_id: { _eq: $tenantId } }
-				order_by: { timestamp: desc }
-				limit: $limit
-			) {
-				id
-				user_id
-				action
-				resource
-				result
-				timestamp
-				details
-			}
-		}
-	`
+	if s.config.DB == nil {
+		return nil, fmt.Errorf("database not configured")
+	}
 
-	result, err := s.config.HasuraClient.Query(query, map[string]interface{}{
-		"tenantId": tenantID,
-		"limit":    limit,
-	})
+	rows, err := s.config.DB.Query(ctx, `
+		SELECT id, user_id, action, resource, result, timestamp, details
+		FROM audit_entries
+		WHERE tenant_id = $1
+		ORDER BY timestamp DESC
+		LIMIT $2
+	`, tenantID, limit)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query audit log: %w", err)
 	}
+	defer rows.Close()
 
-	// Parse response
 	entries := make([]sharedtypes.AuditEntry, 0)
-	if data, ok := result["audit_entries"].([]interface{}); ok {
-		for _, item := range data {
-			if entryData, ok := item.(map[string]interface{}); ok {
-				result := "unknown"
-				if res, ok := entryData["result"].(bool); ok {
-					if res {
-						result = "allow"
-					} else {
-						result = "deny"
-					}
-				}
+	for rows.Next() {
+		var entry sharedtypes.AuditEntry
+		var result bool
+		var timestamp time.Time
+		var details string
 
-				timestamp := time.Now()
-				if ts, ok := entryData["timestamp"].(string); ok {
-					if parsed, err := time.Parse(time.RFC3339, ts); err == nil {
-						timestamp = parsed
-					}
-				}
-
-				entry := sharedtypes.AuditEntry{
-					ID:        entryData["id"].(string),
-					UserID:    entryData["user_id"].(string),
-					Action:    entryData["action"].(string),
-					Resource:  entryData["resource"].(string),
-					Result:    result,
-					Timestamp: timestamp,
-					Reason:    entryData["details"].(string),
-				}
-				entries = append(entries, entry)
-			}
+		err := rows.Scan(&entry.ID, &entry.UserID, &entry.Action, &entry.Resource, &result, &timestamp, &details)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan audit entry: %w", err)
 		}
+
+		if result {
+			entry.Result = "allow"
+		} else {
+			entry.Result = "deny"
+		}
+		entry.Timestamp = timestamp
+		entry.Reason = details
+
+		entries = append(entries, entry)
 	}
 
 	return entries, nil
@@ -269,46 +198,17 @@ func (s *GovernanceService) GetAuditLog(ctx context.Context, tenantID string, li
 
 // logAccessEvaluation logs an access evaluation to the audit log
 func (s *GovernanceService) logAccessEvaluation(ctx context.Context, request sharedtypes.AccessEvaluationRequest, response abacclient.ABACResponse) error {
-	if s.config.HasuraClient == nil {
-		return fmt.Errorf("Hasura client not configured")
+	if s.config.DB == nil {
+		return fmt.Errorf("database not configured")
 	}
-
-	mutation := `
-		mutation LogAuditEntry(
-			$userId: String!,
-			$action: String!,
-			$resource: String!,
-			$result: Boolean!,
-			$reason: String!,
-			$policies: jsonb!
-		) {
-			insert_audit_entries_one(
-				object: {
-					user_id: $userId,
-					action: $action,
-					resource: $resource,
-					result: $result,
-					reason: $reason,
-					policies: $policies,
-					timestamp: "now()"
-				}
-			) {
-				id
-			}
-		}
-	`
 
 	policiesJSON, _ := json.Marshal(response.Policies)
-	variables := map[string]interface{}{
-		"userId":   request.UserID,
-		"action":   request.Action,
-		"resource": request.Resource,
-		"result":   response.Allowed,
-		"reason":   response.Reason,
-		"policies": string(policiesJSON),
-	}
 
-	_, err := s.config.HasuraClient.Query(mutation, variables)
+	_, err := s.config.DB.Exec(ctx, `
+		INSERT INTO audit_entries (user_id, tenant_id, action, resource, result, reason, policies, timestamp)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
+	`, request.UserID, "", request.Action, request.Resource, response.Allowed, response.Reason, string(policiesJSON))
+
 	return err
 }
 
@@ -343,12 +243,4 @@ func convertConditionsToABAC(conditions map[string]interface{}) []abacclient.Con
 	}
 
 	return abacConditions
-}
-
-// getString safely extracts string from map
-func getString(m map[string]interface{}, key string) string {
-	if val, ok := m[key].(string); ok {
-		return val
-	}
-	return ""
 }

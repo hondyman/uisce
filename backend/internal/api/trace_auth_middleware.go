@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/hondyman/uisce/backend/internal/security"
-	jwtmiddleware "github.com/hondyman/uisce/libs/auth"
+	jwtmiddleware "github.com/hondyman/uisce/libs/jwt-middleware"
 )
 
 // TraceAuthConfig holds configuration for trace proxy authentication

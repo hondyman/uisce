@@ -3,6 +3,7 @@ import { DndContext, DragOverlay, useDraggable as _useDraggable, useDroppable as
 import { Box, Drawer, Typography, Tabs, Tab, Paper, Grid, LinearProgress, Pagination, Snackbar, Alert, Divider, Chip, InputAdornment, FormControlLabel, Switch, Card, TextField, Button, Tooltip, IconButton, Select, MenuItem, FormControl, InputLabel, Stack } from '@mui/material';
 import { QueryClient, QueryClientProvider, useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import useUndo from 'use-undo';
+import { getCachedGoldCopyId } from '../../utils/goldCopy';
 
 // Modular components & utils
 import ToolboxItem from './ToolboxItem';
@@ -158,7 +159,7 @@ const SSRSReportBuilderContent: React.FC = () => {
     const token = typeof localStorage !== 'undefined' ? localStorage.getItem('auth_token') : null;
     const authHeader = token && !token.includes('demo') ? `Bearer ${token}` : '';
     
-    const tenantId = tenant?.id || '99e99e99-99e9-49e9-89e9-99e99e99e999';
+    const tenantId = tenant?.id || getCachedGoldCopyId() ?? '';
     const datasourceId = datasource?.id || 'b7879e02-7e4c-44c9-bade-2b10aab2d3c0';
 
     return {

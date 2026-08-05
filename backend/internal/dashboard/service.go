@@ -3,7 +3,6 @@ package dashboard
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
 	"fmt"
 	"time"
 
@@ -31,23 +30,12 @@ type Service interface {
 	GetPortfolioSummary(ctx context.Context, clientID uuid.UUID) (*PortfolioSummary, error)
 }
 
-// HasuraClient defines the interface for Hasura GraphQL operations
-type HasuraClient interface {
-	Query(query string, variables map[string]interface{}) (map[string]interface{}, error)
-	Mutate(mutation string, variables map[string]interface{}) (map[string]interface{}, error)
-}
-
 type service struct {
-	db     *sqlx.DB
-	hasura HasuraClient
+	db *sqlx.DB
 }
 
 func NewService(db *sqlx.DB) Service {
 	return &service{db: db}
-}
-
-func NewServiceWithHasura(db *sqlx.DB, hasura HasuraClient) Service {
-	return &service{db: db, hasura: hasura}
 }
 
 type WidgetUpdate struct {
@@ -294,45 +282,7 @@ func (s *service) calculateProjection(targetAmount, currentAmount, monthlyContri
 	}
 }
 
-// ============================================================================
-// HASURA-FIRST HELPERS
-// ============================================================================
-
-// updateWidgetLayoutSingle updates a single widget's layout
-// Hasura-first with SQL fallback
 func (s *service) updateWidgetLayoutSingle(ctx context.Context, tx *sqlx.Tx, w WidgetUpdate, clientID uuid.UUID) error {
-	if s.hasura != nil && tx == nil {
-		mutation := `
-			mutation UpdateWidgetLayout($widgetID: uuid!, $position: Int!, $size: String!, $isVisible: Boolean!) {
-				update_dashboard_widgets_by_pk(
-					pk_columns: {widget_id: $widgetID}
-					_set: {
-						position: $position
-						size: $size
-						is_visible: $isVisible
-						updated_at: "now()"
-					}
-				) {
-					widget_id
-				}
-			}
-		`
-
-		variables := map[string]interface{}{
-			"widgetID":  w.WidgetID,
-			"position":  w.Position,
-			"size":      w.Size,
-			"isVisible": w.IsVisible,
-		}
-
-		_, err := s.hasura.Mutate(mutation, variables)
-		if err == nil {
-			return nil
-		}
-		// Fall through to SQL on Hasura error
-	}
-
-	// SQL fallback (use transaction if provided)
 	query := `
 		UPDATE dashboard_widgets
 		SET position = $1, size = $2, is_visible = $3, updated_at = NOW()
@@ -347,64 +297,7 @@ func (s *service) updateWidgetLayoutSingle(ctx context.Context, tx *sqlx.Tx, w W
 	return err
 }
 
-// createWidgetRecord inserts a new dashboard widget
-// TODO: Already has Hasura GraphQL mutation implemented
-// SQL fallback: NamedExec INSERT for 9 widget fields with JSONB config
 func (s *service) createWidgetRecord(ctx context.Context, widget *DashboardWidget) error {
-	if s.hasura != nil {
-		mutation := `
-			mutation CreateWidget(
-				$widgetID: uuid!
-				$clientID: uuid!
-				$widgetType: String!
-				$position: Int!
-				$size: String!
-				$config: jsonb!
-				$isVisible: Boolean!
-				$createdAt: timestamptz!
-				$updatedAt: timestamptz!
-			) {
-				insert_dashboard_widgets_one(object: {
-					widget_id: $widgetID
-					client_id: $clientID
-					widget_type: $widgetType
-					position: $position
-					size: $size
-					config: $config
-					is_visible: $isVisible
-					created_at: $createdAt
-					updated_at: $updatedAt
-				}) {
-					widget_id
-				}
-			}
-		`
-
-		var configJSON interface{}
-		if err := json.Unmarshal(widget.Config, &configJSON); err != nil {
-			configJSON = "{}"
-		}
-
-		variables := map[string]interface{}{
-			"widgetID":   widget.WidgetID,
-			"clientID":   widget.ClientID,
-			"widgetType": widget.WidgetType,
-			"position":   widget.Position,
-			"size":       widget.Size,
-			"config":     configJSON,
-			"isVisible":  widget.IsVisible,
-			"createdAt":  widget.CreatedAt,
-			"updatedAt":  widget.UpdatedAt,
-		}
-
-		_, err := s.hasura.Mutate(mutation, variables)
-		if err == nil {
-			return nil
-		}
-		// Fall through to SQL on Hasura error
-	}
-
-	// SQL fallback
 	query := `
 		INSERT INTO dashboard_widgets (
 			widget_id, client_id, widget_type, position, size, config, is_visible, created_at, updated_at
@@ -416,107 +309,13 @@ func (s *service) createWidgetRecord(ctx context.Context, widget *DashboardWidge
 	return err
 }
 
-// deleteWidgetRecord deletes a dashboard widget
-// TODO: Already has Hasura GraphQL mutation implemented
-// SQL fallback: DELETE by widget_id
 func (s *service) deleteWidgetRecord(ctx context.Context, widgetID uuid.UUID) error {
-	if s.hasura != nil {
-		mutation := `
-			mutation DeleteWidget($widgetID: uuid!) {
-				delete_dashboard_widgets_by_pk(widget_id: $widgetID) {
-					widget_id
-				}
-			}
-		`
-
-		variables := map[string]interface{}{
-			"widgetID": widgetID,
-		}
-
-		_, err := s.hasura.Mutate(mutation, variables)
-		if err == nil {
-			return nil
-		}
-		// Fall through to SQL on Hasura error
-	}
-
-	// SQL fallback
 	query := `DELETE FROM dashboard_widgets WHERE widget_id = $1`
 	_, err := s.db.ExecContext(ctx, query, widgetID)
 	return err
 }
 
-// createGoalRecord inserts a new client goal
-// TODO: Already has Hasura GraphQL mutation implemented
-// SQL fallback: NamedExec INSERT for 15 goal fields with projections
 func (s *service) createGoalRecord(ctx context.Context, goal *ClientGoal) error {
-	if s.hasura != nil {
-		mutation := `
-			mutation CreateGoal(
-				$goalID: uuid!
-				$clientID: uuid!
-				$goalType: String!
-				$goalName: String!
-				$description: String
-				$targetAmount: numeric!
-				$targetDate: timestamptz!
-				$currentProgress: numeric!
-				$monthlyContribution: numeric
-				$assumedReturnRate: numeric
-				$projectedCompletionDate: timestamptz
-				$confidenceLevel: numeric
-				$status: String!
-				$createdAt: timestamptz!
-				$updatedAt: timestamptz!
-			) {
-				insert_client_goals_one(object: {
-					goal_id: $goalID
-					client_id: $clientID
-					goal_type: $goalType
-					goal_name: $goalName
-					description: $description
-					target_amount: $targetAmount
-					target_date: $targetDate
-					current_progress: $currentProgress
-					monthly_contribution: $monthlyContribution
-					assumed_return_rate: $assumedReturnRate
-					projected_completion_date: $projectedCompletionDate
-					confidence_level: $confidenceLevel
-					status: $status
-					created_at: $createdAt
-					updated_at: $updatedAt
-				}) {
-					goal_id
-				}
-			}
-		`
-
-		variables := map[string]interface{}{
-			"goalID":                  goal.GoalID,
-			"clientID":                goal.ClientID,
-			"goalType":                goal.GoalType,
-			"goalName":                goal.GoalName,
-			"description":             goal.Description,
-			"targetAmount":            goal.TargetAmount,
-			"targetDate":              goal.TargetDate,
-			"currentProgress":         goal.CurrentProgress,
-			"monthlyContribution":     goal.MonthlyContribution,
-			"assumedReturnRate":       goal.AssumedReturnRate,
-			"projectedCompletionDate": goal.ProjectedCompletionDate,
-			"confidenceLevel":         goal.ConfidenceLevel,
-			"status":                  goal.Status,
-			"createdAt":               goal.CreatedAt,
-			"updatedAt":               goal.UpdatedAt,
-		}
-
-		_, err := s.hasura.Mutate(mutation, variables)
-		if err == nil {
-			return nil
-		}
-		// Fall through to SQL on Hasura error
-	}
-
-	// SQL fallback
 	query := `
 		INSERT INTO client_goals (
 			goal_id, client_id, goal_type, goal_name, description, target_amount, target_date,
@@ -532,38 +331,7 @@ func (s *service) createGoalRecord(ctx context.Context, goal *ClientGoal) error 
 	return err
 }
 
-// updateGoalProgressRecord updates a goal's progress
-// TODO: Already has Hasura GraphQL mutation implemented
-// SQL fallback: UPDATE current_progress with NOW()
 func (s *service) updateGoalProgressRecord(ctx context.Context, goalID uuid.UUID, currentProgress float64) error {
-	if s.hasura != nil {
-		mutation := `
-			mutation UpdateGoalProgress($goalID: uuid!, $progress: numeric!) {
-				update_client_goals_by_pk(
-					pk_columns: {goal_id: $goalID}
-					_set: {
-						current_progress: $progress
-						updated_at: "now()"
-					}
-				) {
-					goal_id
-				}
-			}
-		`
-
-		variables := map[string]interface{}{
-			"goalID":   goalID,
-			"progress": currentProgress,
-		}
-
-		_, err := s.hasura.Mutate(mutation, variables)
-		if err == nil {
-			return nil
-		}
-		// Fall through to SQL on Hasura error
-	}
-
-	// SQL fallback
 	query := `
 		UPDATE client_goals
 		SET current_progress = $1, updated_at = NOW()

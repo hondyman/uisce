@@ -3,7 +3,7 @@
 
 DO $$
 DECLARE
-    v_tenant_id UUID := '99e99e99-99e9-49e9-89e9-99e99e99e999'; -- uisce tenant
+    v_tenant_id UUID;
     v_calc_type_id UUID;
     v_term_type_id UUID;
     v_dep_term_edge_type_id UUID;
@@ -11,6 +11,9 @@ DECLARE
     v_nav_node_id UUID := '7f3c2c4e-0c8e-4c1a-9b8e-3b8c9e6b4f72'; -- Reusing the ID we found or using a fresh one
     v_pos_val_node_id UUID := gen_random_uuid();
 BEGIN
+    PERFORM set_config('app.goldcopy', (SELECT id FROM public.tenants WHERE gold_copy = true LIMIT 1)::text, true);
+    v_tenant_id := current_setting('app.goldcopy', true)::uuid;
+
     -- 1. Ensure calculation_term node type exists (lowercase standard)
     INSERT INTO public.catalog_node_type (catalog_type_name, description, tenant_id)
     VALUES ('calculation_term', 'Term defined by an executable expression', v_tenant_id)

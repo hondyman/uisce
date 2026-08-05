@@ -15,7 +15,7 @@ import (
 func main() {
 	dsn := os.Getenv("TEST_DATABASE_URL")
 	if dsn == "" {
-		dsn = "postgres://postgres:postgres@localhost:5432/alpha?sslmode=disable"
+		panic("TEST_DATABASE_URL environment variable is required")
 	}
 	db, err := sqlx.Open("postgres", dsn)
 	if err != nil {

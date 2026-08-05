@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -14,7 +15,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
-	"github.com/machinebox/graphql"
+	_ "github.com/lib/pq"
 	kafka "github.com/segmentio/kafka-go"
 )
 
@@ -52,24 +53,31 @@ type RoutedEvent struct {
 }
 
 var (
-	hasuraClient *graphql.Client
+	db           *sql.DB
 	kafkaWriter  *kafka.Writer
 	configCache  = make(map[string][]EventConfig)
 	cacheMu      sync.RWMutex
 )
 
 func main() {
-	// Initialize Hasura client
-	hasuraURL := os.Getenv("HASURA_URL")
-	if hasuraURL == "" {
-		hasuraURL = "http://localhost:8080/v1/graphql"
-	}
-	hasuraSecret := os.Getenv("HASURA_ADMIN_SECRET")
-	if hasuraSecret == "" {
-		hasuraSecret = "your-secret-key"
+	databaseURL := os.Getenv("DATABASE_URL")
+	if databaseURL == "" {
+		panic("DATABASE_URL environment variable is required")
 	}
 
-	hasuraClient = graphql.NewClient(hasuraURL)
+	var err error
+	db, err = sql.Open("postgres", databaseURL)
+	if err != nil {
+		log.Fatalf("Failed to connect to database: %v", err)
+	}
+
+	db.SetMaxOpenConns(25)
+	db.SetMaxIdleConns(5)
+	db.SetConnMaxLifetime(5 * time.Minute)
+
+	if err := db.Ping(); err != nil {
+		log.Fatalf("Failed to ping database: %v", err)
+	}
 
 	// Initialize Kafka writer (Redpanda)
 	kafkaBrokers := os.Getenv("KAFKA_BROKERS")
@@ -85,7 +93,7 @@ func main() {
 	defer kafkaWriter.Close()
 
 	// Start config cache refresher (every 5 minutes)
-	go refreshConfigCache(hasuraSecret)
+	go refreshConfigCache()
 
 	// Gin router
 	r := gin.Default()
@@ -104,57 +112,58 @@ func main() {
 	}
 }
 
-// refreshConfigCache periodically fetches configurations from Hasura and updates the in-memory cache
-func refreshConfigCache(hasuraSecret string) {
+// refreshConfigCache periodically fetches configurations from the database and updates the in-memory cache
+func refreshConfigCache() {
 	tick := time.NewTicker(5 * time.Minute)
 	defer tick.Stop()
 
 	// Initial load
-	fetchAndCacheConfigs(hasuraSecret)
+	fetchAndCacheConfigs()
 
 	for range tick.C {
-		fetchAndCacheConfigs(hasuraSecret)
+		fetchAndCacheConfigs()
 	}
 }
 
-// fetchAndCacheConfigs executes a GraphQL query against Hasura to fetch all event configs
-func fetchAndCacheConfigs(hasuraSecret string) {
-	req := graphql.NewRequest(`
-		query FetchConfigs {
-			event_configs {
-				id
-				tenant_id
-				event_type
-				bo_type
-				field_name
-				filter_json
-				route_queue
-				created_at
-			}
-		}
-	`)
-
+// fetchAndCacheConfigs executes a SQL query to fetch all event configs
+func fetchAndCacheConfigs() {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	var resp struct {
-		EventConfigs []EventConfig `json:"event_configs"`
-	}
+	query := `
+		SELECT id, tenant_id, event_type, bo_type, field_name, filter_json, route_queue, created_at
+		FROM event_configs
+	`
 
-	if err := hasuraClient.Run(ctx, req, &resp); err != nil {
+	rows, err := db.QueryContext(ctx, query)
+	if err != nil {
 		log.Printf("Config fetch failed: %v, will retry", err)
 		return
+	}
+	defer rows.Close()
+
+	var configs []EventConfig
+	for rows.Next() {
+		var config EventConfig
+		var tenantIDStr, idStr string
+		if err := rows.Scan(&idStr, &tenantIDStr, &config.EventType, &config.BOType, &config.FieldName, &config.FilterJSON, &config.RouteQueue, &config.CreatedAt); err != nil {
+			log.Printf("Scan failed: %v", err)
+			continue
+		}
+		config.ID, _ = uuid.Parse(idStr)
+		config.TenantID, _ = uuid.Parse(tenantIDStr)
+		configs = append(configs, config)
 	}
 
 	cacheMu.Lock()
 	configCache = make(map[string][]EventConfig)
-	for _, config := range resp.EventConfigs {
+	for _, config := range configs {
 		key := fmt.Sprintf("%s_%s", config.BOType, config.EventType)
 		configCache[key] = append(configCache[key], config)
 	}
 	cacheMu.Unlock()
 
-	log.Printf("Config cache updated: %d total configs", len(resp.EventConfigs))
+	log.Printf("Config cache updated: %d total configs", len(configs))
 }
 
 // processEventHandler handles incoming events and routes them to Redpanda/Kafka (publishes to configured topic)

@@ -1,27 +1,26 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"time"
 
-	"calendar-service/internal/hasura"
+	"calendar-service/internal/database"
 	"calendar-service/internal/middleware"
 
 	"github.com/sirupsen/logrus"
 )
 
-// AnalyticsHandler handles analytics API endpoints
 type AnalyticsHandler struct {
-	hasuraClient *hasura.Client
-	logger       *logrus.Entry
+	dbClient *database.Client
+	logger   *logrus.Entry
 }
 
-// NewAnalyticsHandler creates a new analytics handler
-func NewAnalyticsHandler(hc *hasura.Client, logger *logrus.Entry) *AnalyticsHandler {
+func NewAnalyticsHandler(dc *database.Client, logger *logrus.Entry) *AnalyticsHandler {
 	return &AnalyticsHandler{
-		hasuraClient: hc,
-		logger:       logger.WithField("handler", "analytics"),
+		dbClient: dc,
+		logger:   logger.WithField("handler", "analytics"),
 	}
 }
 
@@ -57,38 +56,33 @@ func (h *AnalyticsHandler) GetSyncAnalytics(w http.ResponseWriter, r *http.Reque
 		endDate = time.Now().Format("2006-01-02")
 	}
 
-	query := `
-    query GetSyncAnalytics($tenant_id: uuid!, $start_date: date!, $end_date: date!) {
-        sync_daily_stats(
-            where: {
-                tenant_id: {_eq: $tenant_id},
-                date: {_gte: $start_date, _lte: $end_date}
-            },
-            order_by: {date: asc}
-        ) {
-            date total_syncs successful_syncs failed_syncs 
-            success_rate avg_duration_seconds total_events_synced avg_events_per_sync
-        }
-    }
-    `
+	sqlQuery := `
+		SELECT date, total_syncs, successful_syncs, failed_syncs,
+			success_rate, avg_duration_seconds, total_events_synced, avg_events_per_sync
+		FROM sync_daily_stats
+		WHERE tenant_id = $1 AND date >= $2 AND date <= $3
+		ORDER BY date ASC`
 
-	var result struct {
-		Stats []SyncAnalyticsResponse `json:"sync_daily_stats"`
-	}
-
-	if err := h.hasuraClient.QueryRaw(ctx, query, map[string]interface{}{
-		"tenant_id":  tenantID,
-		"start_date": startDate,
-		"end_date":   endDate,
-	}, &result); err != nil {
+	rows, err := h.dbClient.Pool().Query(ctx, sqlQuery, tenantID, startDate, endDate)
+	if err != nil {
 		http.Error(w, "Failed to get analytics", http.StatusInternalServerError)
 		return
+	}
+	defer rows.Close()
+
+	var stats []SyncAnalyticsResponse
+	for rows.Next() {
+		var s SyncAnalyticsResponse
+		if err := rows.Scan(&s.Date, &s.TotalSyncs, &s.Successful, &s.Failed, &s.SuccessRate, &s.AvgDuration, &s.TotalEvents, &s.AvgEventsSync); err != nil {
+			continue
+		}
+		stats = append(stats, s)
 	}
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{
-		"data":  result.Stats,
-		"count": len(result.Stats),
+		"data":  stats,
+		"count": len(stats),
 	})
 }
 
@@ -115,34 +109,34 @@ func (h *AnalyticsHandler) GetConflictAnalytics(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	query := `
-    query GetConflictAnalytics($tenant_id: uuid!) {
-        conflict_stats(
-            where: {tenant_id: {_eq: $tenant_id}},
-            order_by: {date: desc},
-            limit: 30
-        ) {
-            date conflict_type severity total_conflicts resolved_conflicts
-            resolution_rate auto_resolved user_overrides avg_ml_confidence
-        }
-    }
-    `
+	sqlQuery := `
+		SELECT date, conflict_type, severity, total_conflicts, resolved_conflicts,
+			resolution_rate, auto_resolved, user_overrides, avg_ml_confidence
+		FROM conflict_stats
+		WHERE tenant_id = $1
+		ORDER BY date DESC
+		LIMIT 30`
 
-	var result struct {
-		Stats []ConflictAnalyticsResponse `json:"conflict_stats"`
-	}
-
-	if err := h.hasuraClient.QueryRaw(ctx, query, map[string]interface{}{
-		"tenant_id": tenantID,
-	}, &result); err != nil {
+	rows, err := h.dbClient.Pool().Query(ctx, sqlQuery, tenantID)
+	if err != nil {
 		http.Error(w, "Failed to get analytics", http.StatusInternalServerError)
 		return
+	}
+	defer rows.Close()
+
+	var stats []ConflictAnalyticsResponse
+	for rows.Next() {
+		var s ConflictAnalyticsResponse
+		if err := rows.Scan(&s.Date, &s.ConflictType, &s.Severity, &s.TotalConflicts, &s.Resolved, &s.ResolutionRate, &s.AutoResolved, &s.UserOverrides, &s.AvgMLConfidence); err != nil {
+			continue
+		}
+		stats = append(stats, s)
 	}
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{
-		"data":  result.Stats,
-		"count": len(result.Stats),
+		"data":  stats,
+		"count": len(stats),
 	})
 }
 
@@ -157,26 +151,28 @@ type ExecutiveDashboardResponse struct {
 func (h *AnalyticsHandler) GetExecutiveDashboard(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	query := `
-    query GetExecutiveDashboard {
-        executive_dashboard {
-            metric value new_this_week
-        }
-    }
-    `
+	sqlQuery := `SELECT metric, value, new_this_week FROM executive_dashboard`
 
-	var result struct {
-		Metrics []ExecutiveDashboardResponse `json:"executive_dashboard"`
-	}
-
-	if err := h.hasuraClient.QueryRaw(ctx, query, nil, &result); err != nil {
+	rows, err := h.dbClient.Pool().Query(ctx, sqlQuery)
+	if err != nil {
 		http.Error(w, "Failed to get dashboard", http.StatusInternalServerError)
 		return
+	}
+	defer rows.Close()
+
+	var metrics []ExecutiveDashboardResponse
+	for rows.Next() {
+		var m ExecutiveDashboardResponse
+		var newThisWeek bool
+		if err := rows.Scan(&m.Metric, &m.Value, &newThisWeek); err != nil {
+			continue
+		}
+		metrics = append(metrics, m)
 	}
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{
-		"metrics": result.Metrics,
+		"metrics": metrics,
 	})
 }
 
@@ -193,26 +189,27 @@ type UserCohortResponse struct {
 func (h *AnalyticsHandler) GetUserCohorts(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	query := `
-    query GetUserCohorts {
-        user_cohorts(order_by: {cohort_month: desc}) {
-            cohort_month week_number users_in_cohort active_users retention_rate
-        }
-    }
-    `
+	sqlQuery := `SELECT cohort_month, week_number, users_in_cohort, active_users, retention_rate FROM user_cohorts ORDER BY cohort_month DESC`
 
-	var result struct {
-		Cohorts []UserCohortResponse `json:"user_cohorts"`
-	}
-
-	if err := h.hasuraClient.QueryRaw(ctx, query, nil, &result); err != nil {
+	rows, err := h.dbClient.Pool().Query(ctx, sqlQuery)
+	if err != nil {
 		http.Error(w, "Failed to get cohorts", http.StatusInternalServerError)
 		return
+	}
+	defer rows.Close()
+
+	var cohorts []UserCohortResponse
+	for rows.Next() {
+		var c UserCohortResponse
+		if err := rows.Scan(&c.CohortMonth, &c.WeekNumber, &c.UsersInCohort, &c.ActiveUsers, &c.RetentionRate); err != nil {
+			continue
+		}
+		cohorts = append(cohorts, c)
 	}
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{
-		"cohorts": result.Cohorts,
+		"cohorts": cohorts,
 	})
 }
 

@@ -12,12 +12,6 @@ import (
 	"github.com/lib/pq"
 )
 
-// HasuraClient defines the interface for Hasura GraphQL operations
-type HasuraClient interface {
-	Query(query string, variables map[string]interface{}) (map[string]interface{}, error)
-	Mutate(mutation string, variables map[string]interface{}) (map[string]interface{}, error)
-}
-
 // ValidationTrigger represents a trigger that ties actions to validation rules
 type ValidationTrigger struct {
 	ID           string          `json:"id"`
@@ -47,7 +41,6 @@ type ValidationRule struct {
 type TriggerValidationEngine struct {
 	*ValidationEngine
 	db     *sql.DB
-	hasura HasuraClient
 	logger Logger
 	// test-only in-memory overrides to avoid DB access during unit tests
 	testTriggers []ValidationTrigger
@@ -82,19 +75,6 @@ func NewTriggerValidationEngine(db *sql.DB, logger Logger) *TriggerValidationEng
 	return &TriggerValidationEngine{
 		ValidationEngine: NewValidationEngine(),
 		db:               db,
-		logger:           logger,
-	}
-}
-
-// NewTriggerValidationEngineWithHasura creates a new validation engine with Hasura support
-func NewTriggerValidationEngineWithHasura(db *sql.DB, hasura HasuraClient, logger Logger) *TriggerValidationEngine {
-	if logger == nil {
-		logger = &SimpleLogger{}
-	}
-	return &TriggerValidationEngine{
-		ValidationEngine: NewValidationEngine(),
-		db:               db,
-		hasura:           hasura,
 		logger:           logger,
 	}
 }
@@ -196,15 +176,6 @@ func (tve *TriggerValidationEngine) fetchTriggers(ctx context.Context, tenantID,
 		return out, nil
 	}
 
-	if tve.hasura != nil {
-		triggers, err := tve.fetchTriggersWithHasura(ctx, tenantID, triggerType, targetEntity, stepName)
-		if err == nil {
-			return triggers, nil
-		}
-		tve.logger.Warn("Hasura query failed, falling back to SQL", "err", err.Error())
-	}
-
-	// SQL fallback
 	q := `
 	SELECT id, tenant_id, trigger_type, target_entity, step_name, rule_ids, COALESCE(meta, '{}'::jsonb)::text
 	FROM validation_triggers
@@ -263,15 +234,6 @@ func (tve *TriggerValidationEngine) fetchRuleByID(ctx context.Context, ruleID st
 		return nil, fmt.Errorf("rule not found: %s", ruleID)
 	}
 
-	if tve.hasura != nil {
-		rule, err := tve.fetchRuleByIDWithHasura(ctx, ruleID)
-		if err == nil {
-			return rule, nil
-		}
-		tve.logger.Warn("Hasura query failed, falling back to SQL", "err", err.Error())
-	}
-
-	// SQL fallback
 	q := `
 	SELECT id, tenant_id, rule_name, rule_type, target_entities, condition_json, error_message,
 	       core_rule_id, inherit_mode, core_version_pin
@@ -472,159 +434,4 @@ func (tve *TriggerValidationEngine) ValidateField(ctx context.Context, tenantID 
 	}
 
 	return nil
-}
-
-// Hasura helper functions
-
-func (tve *TriggerValidationEngine) fetchTriggersWithHasura(ctx context.Context, tenantID, triggerType, targetEntity, stepName string) ([]ValidationTrigger, error) {
-	query := `
-		query FetchTriggers($tenantId: String!, $triggerType: String!, $targetEntity: String!, $stepName: String) {
-			validation_triggers(
-where: {
-tenant_id: {_eq: $tenantId},
-trigger_type: {_eq: $triggerType},
-target_entity: {_eq: $targetEntity},
-_or: [
-{step_name: {_is_null: true}},
-{step_name: {_eq: ""}},
-{step_name: {_eq: $stepName}}
-]
-},
-order_by: {created_at: desc}
-) {
-				id
-				tenant_id
-				trigger_type
-				target_entity
-				step_name
-				rule_ids
-				meta
-			}
-		}
-	`
-
-	variables := map[string]interface{}{
-		"tenantId":     tenantID,
-		"triggerType":  triggerType,
-		"targetEntity": targetEntity,
-	}
-	if stepName != "" {
-		variables["stepName"] = stepName
-	}
-
-	resp, err := tve.hasura.Query(query, variables)
-	if err != nil {
-		return nil, err
-	}
-
-	triggersData, ok := resp["validation_triggers"].([]interface{})
-	if !ok {
-		return nil, fmt.Errorf("unexpected response format")
-	}
-
-	var out []ValidationTrigger
-	for _, item := range triggersData {
-		trigMap, ok := item.(map[string]interface{})
-		if !ok {
-			continue
-		}
-
-		t := ValidationTrigger{}
-		if id, ok := trigMap["id"].(string); ok {
-			t.ID = id
-		}
-		if tenantID, ok := trigMap["tenant_id"].(string); ok {
-			t.TenantID = tenantID
-		}
-		if triggerType, ok := trigMap["trigger_type"].(string); ok {
-			t.TriggerType = triggerType
-		}
-		if targetEntity, ok := trigMap["target_entity"].(string); ok {
-			t.TargetEntity = targetEntity
-		}
-		if stepName, ok := trigMap["step_name"].(string); ok && stepName != "" {
-			t.StepName = &stepName
-		}
-		if ruleIDs, ok := trigMap["rule_ids"].([]interface{}); ok {
-			var stringArray pq.StringArray
-			for _, rid := range ruleIDs {
-				if ridStr, ok := rid.(string); ok {
-					stringArray = append(stringArray, ridStr)
-				}
-			}
-			t.RuleIDs = stringArray
-		}
-		if meta, ok := trigMap["meta"]; ok {
-			if metaJSON, err := json.Marshal(meta); err == nil {
-				t.Meta = metaJSON
-			}
-		}
-
-		out = append(out, t)
-	}
-
-	return out, nil
-}
-
-func (tve *TriggerValidationEngine) fetchRuleByIDWithHasura(ctx context.Context, ruleID string) (*ValidationRule, error) {
-	query := `
-		query FetchRuleByID($ruleId: String!) {
-			catalog_validation_rules_by_pk(id: $ruleId) {
-				id
-				tenant_id
-				rule_name
-				rule_type
-				target_entities
-				condition_json
-				error_message
-			}
-		}
-	`
-
-	variables := map[string]interface{}{
-		"ruleId": ruleID,
-	}
-
-	resp, err := tve.hasura.Query(query, variables)
-	if err != nil {
-		return nil, err
-	}
-
-	ruleData, ok := resp["catalog_validation_rules_by_pk"].(map[string]interface{})
-	if !ok || ruleData == nil {
-		return nil, fmt.Errorf("rule not found: %s", ruleID)
-	}
-
-	rule := &ValidationRule{}
-	if id, ok := ruleData["id"].(string); ok {
-		rule.ID = id
-	}
-	if tenantID, ok := ruleData["tenant_id"].(string); ok {
-		rule.TenantID = tenantID
-	}
-	if ruleName, ok := ruleData["rule_name"].(string); ok {
-		rule.RuleName = ruleName
-	}
-	if ruleType, ok := ruleData["rule_type"].(string); ok {
-		rule.RuleType = ruleType
-	}
-	if targetEntities, ok := ruleData["target_entities"].([]interface{}); ok {
-		var stringArray pq.StringArray
-		for _, te := range targetEntities {
-			if teStr, ok := te.(string); ok {
-				stringArray = append(stringArray, teStr)
-			}
-		}
-		rule.TargetEntities = stringArray
-	}
-	if conditionJSON, ok := ruleData["condition_json"]; ok {
-		if condJSON, err := json.Marshal(conditionJSON); err == nil {
-			rule.ConditionJSON = condJSON
-		}
-	}
-	if errorMessage, ok := ruleData["error_message"].(string); ok {
-		rule.ErrorMessage = errorMessage
-	}
-
-	return rule, nil
 }

@@ -9,19 +9,17 @@ import (
 	"net/http"
 	"time"
 
-	"calendar-service/internal/hasura"
+	"calendar-service/internal/database"
 
 	"github.com/sirupsen/logrus"
 )
 
-// Define local FeatureEngineer stub since one was omitted from the complete files
 type FeatureEngineer struct{}
 
-// ConflictResolver uses ML to recommend conflict resolutions
 type ConflictResolver struct {
 	modelEndpoint        string
 	modelVersion         string
-	hasuraClient         *hasura.Client
+	dbClient             *database.Client
 	featureEngineer      *FeatureEngineer
 	logger               *logrus.Entry
 	httpClient           *http.Client
@@ -31,7 +29,7 @@ type ConflictResolver struct {
 type ConflictResolverConfig struct {
 	ModelEndpoint        string
 	ModelVersion         string
-	HasuraClient         *hasura.Client
+	DBClient             *database.Client
 	FeatureEngineer      *FeatureEngineer
 	Logger               *logrus.Entry
 	AutoResolveThreshold float64
@@ -41,7 +39,7 @@ func NewConflictResolver(cfg ConflictResolverConfig) *ConflictResolver {
 	return &ConflictResolver{
 		modelEndpoint:   cfg.ModelEndpoint,
 		modelVersion:    cfg.ModelVersion,
-		hasuraClient:    cfg.HasuraClient,
+		dbClient:        cfg.DBClient,
 		featureEngineer: cfg.FeatureEngineer,
 		logger:          cfg.Logger.WithField("component", "conflict_resolver"),
 		httpClient: &http.Client{
@@ -107,46 +105,34 @@ func (cr *ConflictResolver) RecommendResolution(ctx context.Context, conflictID 
 }
 
 func (cr *ConflictResolver) extractConflictFeatures(ctx context.Context, conflictID string) (*ConflictFeatures, error) {
-	query := `
-    query GetConflictFeatures($conflict_id: uuid!) {
-        sync_conflicts_by_pk(id: $conflict_id) {
-            id conflict_type severity detected_at user_id tenant_id
-            google_event_id internal_event_id
-        }
-    }
-    `
-
-	var result struct {
-		Conflict struct {
-			ID              string    `json:"id"`
-			ConflictType    string    `json:"conflict_type"`
-			Severity        string    `json:"severity"`
-			DetectedAt      time.Time `json:"detected_at"`
-			UserID          string    `json:"user_id"`
-			TenantID        string    `json:"tenant_id"`
-			GoogleEventID   string    `json:"google_event_id"`
-			InternalEventID *string   `json:"internal_event_id"`
-		} `json:"sync_conflicts_by_pk"`
+	var conflict struct {
+		ID              string
+		ConflictType    string
+		Severity        string
+		DetectedAt      time.Time
+		UserID          string
+		TenantID        string
+		GoogleEventID   string
+		InternalEventID *string
 	}
 
-	if err := cr.hasuraClient.QueryRaw(ctx, query, map[string]interface{}{
-		"conflict_id": conflictID,
-	}, &result); err != nil {
+	query := `SELECT id, conflict_type, severity, detected_at, user_id, tenant_id, google_event_id, internal_event_id FROM sync_conflicts WHERE id = $1`
+	if err := cr.dbClient.Pool().QueryRow(ctx, query, conflictID).Scan(&conflict.ID, &conflict.ConflictType, &conflict.Severity, &conflict.DetectedAt, &conflict.UserID, &conflict.TenantID, &conflict.GoogleEventID, &conflict.InternalEventID); err != nil {
 		return nil, err
 	}
 
 	features := &ConflictFeatures{
-		ConflictType:    result.Conflict.ConflictType,
-		Severity:        result.Conflict.Severity,
+		ConflictType:    conflict.ConflictType,
+		Severity:        conflict.Severity,
 		HourOfDay:       time.Now().Hour(),
 		IsBusinessHours: cr.isBusinessHours(time.Now()),
 		DayOfWeek:       int(time.Now().Weekday()),
 	}
 
-	features.TitleSimilarity = cr.calculateTitleSimilarity(ctx, result.Conflict.GoogleEventID, result.Conflict.InternalEventID)
-	features.TimeOverlap = cr.calculateTimeOverlap(ctx, result.Conflict.GoogleEventID, result.Conflict.InternalEventID)
+	features.TitleSimilarity = cr.calculateTitleSimilarity(ctx, conflict.GoogleEventID, conflict.InternalEventID)
+	features.TimeOverlap = cr.calculateTimeOverlap(ctx, conflict.GoogleEventID, conflict.InternalEventID)
 
-	userHistory, err := cr.getUserConflictHistory(ctx, result.Conflict.UserID)
+	userHistory, err := cr.getUserConflictHistory(ctx, conflict.UserID)
 	if err == nil {
 		features.UserPreference = userHistory.Preference
 		features.PastResolutions = userHistory.TotalResolutions
@@ -154,7 +140,7 @@ func (cr *ConflictResolver) extractConflictFeatures(ctx context.Context, conflic
 		features.TotalConflicts = userHistory.TotalConflicts
 	}
 
-	features.GoogleEventAge = int(time.Since(result.Conflict.DetectedAt).Hours())
+	features.GoogleEventAge = int(time.Since(conflict.DetectedAt).Hours())
 	features.InternalEventAge = features.GoogleEventAge
 
 	return features, nil
@@ -253,80 +239,21 @@ func (cr *ConflictResolver) AutoResolveConflict(ctx context.Context, conflictID 
 }
 
 func (cr *ConflictResolver) applyResolution(ctx context.Context, conflictID, strategy string) error {
-	mutation := `
-    mutation ResolveConflict($conflict_id: uuid!, $strategy: String!) {
-        update_sync_conflicts_by_pk(
-            pk_columns: {id: $conflict_id},
-            _set: {
-                resolution_status: "auto_resolved",
-                resolution_strategy: $strategy,
-                resolved_at: "now()",
-                auto_resolved: true
-            }
-        ) {
-            id
-        }
-    }
-    `
-
-	var result struct {
-		Update struct {
-			ID string `json:"id"`
-		} `json:"update_sync_conflicts_by_pk"`
-	}
-
-	return cr.hasuraClient.QueryRaw(ctx, mutation, map[string]interface{}{
-		"conflict_id": conflictID,
-		"strategy":    strategy,
-	}, &result)
+	query := `UPDATE sync_conflicts SET resolution_status = 'auto_resolved', resolution_strategy = $2, resolved_at = NOW(), auto_resolved = true WHERE id = $1`
+	_, err := cr.dbClient.Pool().Exec(ctx, query, conflictID, strategy)
+	return err
 }
 
 func (cr *ConflictResolver) storeRecommendation(ctx context.Context, conflictID string, rec *ResolutionRecommendation) error {
-	mutation := `
-    mutation StoreMLRecommendation($conflict_id: uuid!, $ml_recommendation: String!, $ml_confidence: Float!, $ml_reasoning: String!, $ml_model_version: String!) {
-        update_sync_conflicts_by_pk(
-            pk_columns: {id: $conflict_id},
-            _set: {
-                ml_recommendation: $ml_recommendation,
-                ml_confidence: $ml_confidence,
-                ml_reasoning: $ml_reasoning,
-                ml_model_version: $ml_model_version
-            }
-        ) {
-            id
-        }
-    }
-    `
-
-	return cr.hasuraClient.QueryRaw(ctx, mutation, map[string]interface{}{
-		"conflict_id":       conflictID,
-		"ml_recommendation": rec.Strategy,
-		"ml_confidence":     rec.Confidence,
-		"ml_reasoning":      rec.Reasoning,
-		"ml_model_version":  rec.ModelVersion,
-	}, &struct{}{})
+	query := `UPDATE sync_conflicts SET ml_recommendation = $2, ml_confidence = $3, ml_reasoning = $4, ml_model_version = $5 WHERE id = $1`
+	_, err := cr.dbClient.Pool().Exec(ctx, query, conflictID, rec.Strategy, rec.Confidence, rec.Reasoning, rec.ModelVersion)
+	return err
 }
 
 func (cr *ConflictResolver) logPrediction(ctx context.Context, conflictID string, features *ConflictFeatures, rec *ResolutionRecommendation) {
-	mutation := `
-    mutation LogMLPrediction($input: ml_predictions_log_insert_input!) {
-        insert_ml_predictions_log_one(object: $input) {
-            id
-        }
-    }
-    `
-
-	input := map[string]interface{}{
-		"model_name":     "conflict_resolution",
-		"model_version":  rec.ModelVersion,
-		"input_features": features,
-		"prediction":     rec.Strategy,
-		"confidence":     rec.Confidence,
-	}
-
-	_ = cr.hasuraClient.QueryRaw(ctx, mutation, map[string]interface{}{
-		"input": input,
-	}, &struct{}{})
+	featuresJSON, _ := json.Marshal(features)
+	query := `INSERT INTO ml_predictions_log (id, model_name, model_version, input_features, prediction, confidence, created_at) VALUES (gen_random_uuid(), 'conflict_resolution', $1, $2, $3, $4, NOW())`
+	cr.dbClient.Pool().Exec(ctx, query, rec.ModelVersion, featuresJSON, rec.Strategy, rec.Confidence)
 }
 
 func (cr *ConflictResolver) isBusinessHours(t time.Time) bool {

@@ -104,22 +104,17 @@ func handleListNodeTypes(db *sql.DB) http.HandlerFunc {
 		var rows *sql.Rows
 		var err error
 		if qParam == "" {
-			// Include both core tenant (uiscé) and current tenant's types
-			coreTenantID := "99e99e99-99e9-49e9-89e9-99e99e99e999"
 			query := `
 		     SELECT cnt.id, cnt.tenant_id, cnt.catalog_type_name, cnt.description, cnt.is_active, 
 				  cnt.parent_type_id, cnt.config, cnt.created_at, cnt.updated_at,
 				  COALESCE(t.gold_copy, false) as is_core
 				FROM catalog_node_type cnt
 				JOIN tenants t ON cnt.tenant_id::uuid = t.id
-				WHERE cnt.tenant_id = $1 OR cnt.tenant_id = $2
+				WHERE cnt.tenant_id = $1 OR cnt.tenant_id = (SELECT id FROM public.tenants WHERE gold_copy = true LIMIT 1)
 				ORDER BY CASE WHEN cnt.tenant_id = $1 THEN 0 ELSE 1 END, cnt.catalog_type_name
 			`
-			rows, err = db.Query(query, tenantID, coreTenantID)
+			rows, err = db.Query(query, tenantID)
 		} else {
-			// Use ILIKE for case-insensitive partial matches on name or description
-			// Include both core tenant (uiscé) and current tenant's types
-			coreTenantID := "99e99e99-99e9-49e9-89e9-99e99e99e999"
 			search := "%" + qParam + "%"
 			query := `
 				SELECT cnt.id, cnt.tenant_id, cnt.catalog_type_name, cnt.description, cnt.is_active, 
@@ -127,11 +122,11 @@ func handleListNodeTypes(db *sql.DB) http.HandlerFunc {
 					   COALESCE(t.gold_copy, false) as is_core
 				FROM catalog_node_type cnt
 				JOIN tenants t ON cnt.tenant_id::uuid = t.id
-				WHERE (cnt.tenant_id = $1 OR cnt.tenant_id = $3)
+				WHERE (cnt.tenant_id = $1 OR cnt.tenant_id = (SELECT id FROM public.tenants WHERE gold_copy = true LIMIT 1))
 				  AND (cnt.catalog_type_name ILIKE $2 OR COALESCE(cnt.description, '') ILIKE $2)
 				ORDER BY CASE WHEN cnt.tenant_id = $1 THEN 0 ELSE 1 END, cnt.catalog_type_name
 			`
-			rows, err = db.Query(query, tenantID, search, coreTenantID)
+			rows, err = db.Query(query, tenantID, search)
 		}
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -742,13 +737,12 @@ func handleGetNodesForType(db *sql.DB) http.HandlerFunc {
 			return
 		}
 
-		coreTenantID := "99e99e99-99e9-49e9-89e9-99e99e99e999"
 		query := `
 			SELECT id, node_name, description, node_type_id, tenant_id, tenant_datasource_id, properties, config, created_at, updated_at
 			FROM catalog_node
-			WHERE node_type_id = $1 AND (tenant_id = $2 OR tenant_id = $3)
+			WHERE node_type_id = $1 AND (tenant_id = $2 OR tenant_id = (SELECT id FROM public.tenants WHERE gold_copy = true LIMIT 1))
 		`
-		args := []interface{}{id, tenantID, coreTenantID}
+		args := []interface{}{id, tenantID}
 
 		if tenantDatasourceID != "" {
 			query += " AND (tenant_datasource_id = $4 OR tenant_datasource_id IS NULL)"

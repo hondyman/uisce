@@ -8,6 +8,7 @@ import (
 "encoding/base64"
 "fmt"
 "io"
+"os"
 "time"
 
 "github.com/google/uuid"
@@ -658,8 +659,13 @@ quietEnd, quietTZ, time.Now(),
 // ENCRYPTION HELPERS
 // ============================================================================
 
-// encryptionKey should be loaded from secure configuration
-var encryptionKey = []byte("32-byte-key-for-aes-256-encrypt!") // Replace with secure key management
+var encryptionKey = []byte(os.Getenv("ENCRYPTION_KEY"))
+var _ = func() bool {
+	if len(encryptionKey) != 32 {
+		panic("ENCRYPTION_KEY environment variable must be exactly 32 bytes for AES-256")
+	}
+	return true
+}()
 
 // encryptMessage encrypts a message using AES-256-GCM
 func (s *ClientPortalService) encryptMessage(plaintext string) (string, error) {

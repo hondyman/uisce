@@ -3,8 +3,14 @@ set -euo pipefail
 
 # Configuration
 API_URL="${API_URL:-http://localhost:8080/api}"
-TENANT_ID="${TENANT_ID:-99e99e99-99e9-49e9-89e9-99e99e99e999}"
+TENANT_ID="${TENANT_ID:-}"  # Required: set via environment or pass --tenant-id
 RESOURCE_TYPE="tenant_instance"
+
+if [[ -z "$TENANT_ID" ]]; then
+    echo "ERROR: TENANT_ID environment variable is required" >&2
+    echo "Usage: TENANT_ID=<uuid> $0" >&2
+    exit 1
+fi
 
 echo "=== 1. Simulating Instance Lifecycle (Writing Logs) ==="
 

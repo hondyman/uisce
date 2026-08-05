@@ -9,6 +9,7 @@ import (
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/go-redis/redis/v8"
 	"github.com/google/uuid"
+	"github.com/jmoiron/sqlx"
 )
 
 type mockRedis struct {
@@ -52,7 +53,7 @@ func TestResolver_Resolve_FromDB(t *testing.T) {
 		WillReturnRows(rows)
 
 	r := NewResolver(nil, nil, nil)
-	r.db = db
+	r.db = sqlx.NewDb(db, "postgres")
 
 	id, err := r.resolveFromDB(context.Background())
 	if err != nil {
@@ -71,7 +72,7 @@ func TestResolver_Resolve_DBError(t *testing.T) {
 		WillReturnError(errors.New("db error"))
 
 	r := NewResolver(nil, nil, nil)
-	r.db = db
+	r.db = sqlx.NewDb(db, "postgres")
 
 	_, err := r.resolveFromDB(context.Background())
 	if err == nil {
@@ -88,7 +89,7 @@ func TestResolver_Resolve_NoRows(t *testing.T) {
 		WillReturnRows(rows)
 
 	r := NewResolver(nil, nil, nil)
-	r.db = db
+	r.db = sqlx.NewDb(db, "postgres")
 
 	_, err := r.resolveFromDB(context.Background())
 	if !errors.Is(err, ErrGoldCopyNotFound) {
@@ -114,7 +115,7 @@ func TestResolver_Resolve_RedisCacheHit(t *testing.T) {
 	}
 
 	r := NewResolver(nil, redisClient, nil)
-	r.db = db
+	r.db = sqlx.NewDb(db, "postgres")
 
 	id, err := r.Resolve(context.Background())
 	if err != nil {
@@ -144,7 +145,7 @@ func TestResolver_Resolve_RedisMissFallsBackToDB(t *testing.T) {
 	}
 
 	r := NewResolver(nil, redisClient, nil)
-	r.db = db
+	r.db = sqlx.NewDb(db, "postgres")
 
 	id, err := r.Resolve(context.Background())
 	if err != nil {
@@ -184,7 +185,7 @@ func TestResolver_IsGoldCopy(t *testing.T) {
 		WillReturnRows(rows)
 
 	r := NewResolver(nil, nil, nil)
-	r.db = db
+	r.db = sqlx.NewDb(db, "postgres")
 
 	isGold, err := r.IsGoldCopy(uuid.Nil)
 	if err != nil {

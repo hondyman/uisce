@@ -33,8 +33,7 @@ func StartServer() {
 
 	dsn := os.Getenv("POSTGRES_DSN")
 	if dsn == "" {
-		log.Println("WARN: POSTGRES_DSN not set, using default.")
-		dsn = "postgres://postgres:postgres@localhost:5432/semlayer?sslmode=disable"
+		panic("POSTGRES_DSN environment variable is required")
 	}
 
 	db, err := sqlx.Connect("postgres", dsn)

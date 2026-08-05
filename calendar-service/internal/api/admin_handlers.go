@@ -1,11 +1,11 @@
 package api
 
 import (
+	"database/sql"
 	"encoding/json"
 	"net/http"
-	"time"
 
-	"calendar-service/internal/hasura"
+	"calendar-service/internal/database"
 	"calendar-service/internal/middleware"
 	"calendar-service/internal/services"
 
@@ -13,82 +13,52 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-// AdminHandler handles admin API endpoints
 type AdminHandler struct {
-	hasuraClient   *hasura.Client
+	dbClient       *database.Client
 	healthHandlers *HealthHandlers
 	auditService   services.AuditService
 	logger         *logrus.Entry
 }
 
-// NewAdminHandler creates a new admin handler
-func NewAdminHandler(hc *hasura.Client, hh *HealthHandlers, audit services.AuditService, logger *logrus.Entry) *AdminHandler {
+func NewAdminHandler(db *database.Client, hh *HealthHandlers, audit services.AuditService, logger *logrus.Entry) *AdminHandler {
 	return &AdminHandler{
-		hasuraClient:   hc,
+		dbClient:       db,
 		healthHandlers: hh,
 		auditService:   audit,
 		logger:         logger.WithField("handler", "admin"),
 	}
 }
 
-// GetAdminStats returns admin statistics
-// @Summary Get admin statistics
-// @Tags admin
-// @Produce json
-// @Success 200 {object} map[string]interface{}
-// @Router /api/v1/admin/stats [get]
 func (h *AdminHandler) GetAdminStats(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	// Check admin role
 	if !middleware.HasRole(ctx, "admin") {
 		http.Error(w, "Forbidden", http.StatusForbidden)
 		return
 	}
 
-	// Query various stats
 	stats := make(map[string]interface{})
 
-	// Total users
-	var userCount struct {
-		Count int `json:"count"`
-	}
-	h.hasuraClient.QueryRaw(ctx, "query { count: user_settings_aggregate { aggregate { count } } }", nil, &userCount)
-	stats["total_users"] = userCount.Count
+	var userCount int
+	h.dbClient.Pool().QueryRow(ctx, "SELECT COUNT(*) FROM user_settings").Scan(&userCount)
+	stats["total_users"] = userCount
 
-	// Active syncs
-	var syncCount struct {
-		Count int `json:"count"`
-	}
-	h.hasuraClient.QueryRaw(ctx, "query { count: google_calendar_connections_aggregate(where: {sync_enabled: {_eq: true}}) { aggregate { count } } }", nil, &syncCount)
-	stats["active_syncs"] = syncCount.Count
+	var syncCount int
+	h.dbClient.Pool().QueryRow(ctx, "SELECT COUNT(*) FROM google_calendar_connections WHERE sync_enabled = true").Scan(&syncCount)
+	stats["active_syncs"] = syncCount
 
-	// Pending conflicts
-	var conflictCount struct {
-		Count int `json:"count"`
-	}
-	h.hasuraClient.QueryRaw(ctx, "query { count: sync_conflicts_aggregate(where: {resolution_status: {_eq: \"pending\"}}) { aggregate { count } } }", nil, &conflictCount)
-	stats["pending_conflicts"] = conflictCount.Count
+	var conflictCount int
+	h.dbClient.Pool().QueryRow(ctx, "SELECT COUNT(*) FROM sync_conflicts WHERE resolution_status = 'pending'").Scan(&conflictCount)
+	stats["pending_conflicts"] = conflictCount
 
-	// Errors in last 24h
-	var errorCount struct {
-		Count int `json:"count"`
-	}
-	h.hasuraClient.QueryRaw(ctx, "query { count: error_logs_aggregate(where: {created_at: {_gte: \"now() - interval '24 hours'\"}}) { aggregate { count } } }", nil, &errorCount)
-	stats["errors_24h"] = errorCount.Count
+	var errorCount int
+	h.dbClient.Pool().QueryRow(ctx, "SELECT COUNT(*) FROM error_logs WHERE created_at >= NOW() - INTERVAL '24 hours'").Scan(&errorCount)
+	stats["errors_24h"] = errorCount
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(stats)
 }
 
-// ListUsers returns list of users
-// @Summary List users
-// @Tags admin
-// @Produce json
-// @Param page query int false "Page"
-// @Param limit query int false "Limit"
-// @Success 200 {object} map[string]interface{}
-// @Router /api/v1/admin/users [get]
 func (h *AdminHandler) ListUsers(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
@@ -101,66 +71,50 @@ func (h *AdminHandler) ListUsers(w http.ResponseWriter, r *http.Request) {
 	limit := 20
 
 	query := `
-	query ListUsers($limit: Int!, $offset: Int!) {
-		user_settings(
-			limit: $limit,
-			offset: $offset,
-			order_by: {created_at: desc}
-		) {
-			user_id tenant_id display_name email
-			sync_frequency auto_sync_enabled
-			created_at updated_at
-		}
-		user_settings_aggregate {
-			aggregate {
-				count
-			}
-		}
-	}
+		SELECT user_id, tenant_id, display_name, email, sync_frequency, auto_sync_enabled, created_at, updated_at
+		FROM user_settings
+		ORDER BY created_at DESC
+		LIMIT $1 OFFSET $2
 	`
 
-	var result struct {
-		Settings []struct {
-			UserID          string    `json:"user_id"`
-			TenantID        string    `json:"tenant_id"`
-			DisplayName     string    `json:"display_name"`
-			Email           string    `json:"email"`
-			SyncFrequency   string    `json:"sync_frequency"`
-			AutoSyncEnabled bool      `json:"auto_sync_enabled"`
-			CreatedAt       time.Time `json:"created_at"`
-			UpdatedAt       time.Time `json:"updated_at"`
-		} `json:"user_settings"`
-		Aggregate struct {
-			Aggregate struct {
-				Count int `json:"count"`
-			} `json:"aggregate"`
-		} `json:"user_settings_aggregate"`
-	}
-
-	if err := h.hasuraClient.QueryRaw(ctx, query, map[string]interface{}{
-		"limit":  limit,
-		"offset": (page - 1) * limit,
-	}, &result); err != nil {
+	offset := (page - 1) * limit
+	rows, err := h.dbClient.Pool().Query(ctx, query, limit, offset)
+	if err != nil {
 		http.Error(w, "Failed to list users", http.StatusInternalServerError)
 		return
 	}
+	defer rows.Close()
+
+	var users []map[string]interface{}
+	for rows.Next() {
+		var userID, tenantID, displayName, email, syncFreq string
+		var autoSync bool
+		var createdAt, updatedAt string
+		if err := rows.Scan(&userID, &tenantID, &displayName, &email, &syncFreq, &autoSync, &createdAt, &updatedAt); err != nil {
+			continue
+		}
+		users = append(users, map[string]interface{}{
+			"user_id":           userID,
+			"tenant_id":         tenantID,
+			"display_name":      displayName,
+			"email":             email,
+			"sync_frequency":    syncFreq,
+			"auto_sync_enabled": autoSync,
+			"created_at":        createdAt,
+			"updated_at":        updatedAt,
+		})
+	}
+
+	var total int
+	h.dbClient.Pool().QueryRow(ctx, "SELECT COUNT(*) FROM user_settings").Scan(&total)
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{
-		"users": result.Settings,
-		"total": result.Aggregate.Aggregate.Count,
+		"users": users,
+		"total": total,
 	})
 }
 
-// UpdateUserRole updates user role
-// @Summary Update user role
-// @Tags admin
-// @Accept json
-// @Produce json
-// @Param user_id path string true "User ID"
-// @Param request body map[string]string true "Role"
-// @Success 200 {object} map[string]string
-// @Router /api/v1/admin/users/{user_id}/role [put]
 func (h *AdminHandler) UpdateUserRole(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
@@ -180,22 +134,10 @@ func (h *AdminHandler) UpdateUserRole(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Update user role in user_settings table
-	mutation := `
-	mutation UpdateUserRole($user_id: uuid!, $role: String!) {
-		update_user_settings(
-			where: {user_id: {_eq: $user_id}},
-			_set: {role: $role}
-		) {
-			affected_rows
-		}
-	}
-	`
+	query := `UPDATE user_settings SET role = $2 WHERE user_id = $1`
 
-	if err := h.hasuraClient.QueryRaw(ctx, mutation, map[string]interface{}{
-		"user_id": userID,
-		"role":    req.Role,
-	}, nil); err != nil {
+	_, err := h.dbClient.Pool().Exec(ctx, query, userID, req.Role)
+	if err != nil {
 		h.logger.WithError(err).Error("Failed to update user role")
 		http.Error(w, "Failed to update user role", http.StatusInternalServerError)
 		return
@@ -207,13 +149,6 @@ func (h *AdminHandler) UpdateUserRole(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// DeleteUser deletes a user
-// @Summary Delete user
-// @Tags admin
-// @Produce json
-// @Param user_id path string true "User ID"
-// @Success 200 {object} map[string]string
-// @Router /api/v1/admin/users/{user_id} [delete]
 func (h *AdminHandler) DeleteUser(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
@@ -224,21 +159,10 @@ func (h *AdminHandler) DeleteUser(w http.ResponseWriter, r *http.Request) {
 
 	userID := mux.Vars(r)["user_id"]
 
-	// Soft delete user by setting deleted_at
-	mutation := `
-	mutation DeleteUser($user_id: uuid!) {
-		update_user_settings(
-			where: {user_id: {_eq: $user_id}},
-			_set: {deleted_at: "now()"}
-		) {
-			affected_rows
-		}
-	}
-	`
+	query := `UPDATE user_settings SET deleted_at = NOW() WHERE user_id = $1`
 
-	if err := h.hasuraClient.QueryRaw(ctx, mutation, map[string]interface{}{
-		"user_id": userID,
-	}, nil); err != nil {
+	_, err := h.dbClient.Pool().Exec(ctx, query, userID)
+	if err != nil {
 		h.logger.WithError(err).Error("Failed to delete user")
 		http.Error(w, "Failed to delete user", http.StatusInternalServerError)
 		return
@@ -250,15 +174,6 @@ func (h *AdminHandler) DeleteUser(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// GetErrorLogs returns error logs
-// @Summary Get error logs
-// @Tags admin
-// @Produce json
-// @Param page query int false "Page"
-// @Param limit query int false "Limit"
-// @Param level query string false "Level"
-// @Success 200 {object} map[string]interface{}
-// @Router /api/v1/admin/error-logs [get]
 func (h *AdminHandler) GetErrorLogs(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
@@ -267,46 +182,47 @@ func (h *AdminHandler) GetErrorLogs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Query error logs from your error_logs table
 	query := `
-	query GetErrorLogs {
-		error_logs(order_by: {created_at: desc}, limit: 100) {
-			id level message component stack_trace created_at
-		}
-		error_logs_aggregate {
-			aggregate { count }
-		}
-	}
+		SELECT id, level, message, component, stack_trace, created_at
+		FROM error_logs
+		ORDER BY created_at DESC
+		LIMIT 100
 	`
 
-	var result struct {
-		Logs []map[string]interface{} `json:"error_logs"`
-		Agg  struct {
-			Agg struct {
-				Count int `json:"count"`
-			} `json:"aggregate"`
-		} `json:"error_logs_aggregate"`
-	}
-
-	if err := h.hasuraClient.QueryRaw(ctx, query, nil, &result); err != nil {
+	rows, err := h.dbClient.Pool().Query(ctx, query)
+	if err != nil {
 		h.logger.WithError(err).Error("Failed to get error logs")
 		http.Error(w, "Failed to get error logs", http.StatusInternalServerError)
 		return
 	}
+	defer rows.Close()
+
+	var logs []map[string]interface{}
+	for rows.Next() {
+		var id, level, message, component, stackTrace, createdAt sql.NullString
+		if err := rows.Scan(&id, &level, &message, &component, &stackTrace, &createdAt); err != nil {
+			continue
+		}
+		logs = append(logs, map[string]interface{}{
+			"id":          id.String,
+			"level":       level.String,
+			"message":     message.String,
+			"component":   component.String,
+			"stack_trace": stackTrace.String,
+			"created_at":  createdAt.String,
+		})
+	}
+
+	var total int
+	h.dbClient.Pool().QueryRow(ctx, "SELECT COUNT(*) FROM error_logs").Scan(&total)
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{
-		"logs":  result.Logs,
-		"total": result.Agg.Agg.Count,
+		"logs":  logs,
+		"total": total,
 	})
 }
 
-// GetSystemHealth returns system health status
-// @Summary Get system health
-// @Tags admin
-// @Produce json
-// @Success 200 {object} map[string]interface{}
-// @Router /api/v1/admin/health [get]
 func (h *AdminHandler) GetSystemHealth(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
@@ -321,14 +237,6 @@ func (h *AdminHandler) GetSystemHealth(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(health)
 }
 
-// GetAuditLogs returns audit logs
-// @Summary Get audit logs
-// @Tags admin
-// @Produce json
-// @Param page query int false "Page"
-// @Param limit query int false "Limit"
-// @Success 200 {object} map[string]interface{}
-// @Router /api/v1/admin/audit-logs [get]
 func (h *AdminHandler) GetAuditLogs(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
@@ -337,46 +245,48 @@ func (h *AdminHandler) GetAuditLogs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Query audit logs from calendar.audit_log table
 	query := `
-	query GetAuditLogs {
-		audit_logs(order_by: {created_at: desc}, limit: 100) {
-			id tenant_id entity_type entity_id action changed_by created_at
-		}
-		audit_logs_aggregate {
-			aggregate { count }
-		}
-	}
+		SELECT id, tenant_id, entity_type, entity_id, action, changed_by, created_at
+		FROM audit_logs
+		ORDER BY created_at DESC
+		LIMIT 100
 	`
 
-	var result struct {
-		Logs []map[string]interface{} `json:"audit_logs"`
-		Agg  struct {
-			Agg struct {
-				Count int `json:"count"`
-			} `json:"aggregate"`
-		} `json:"audit_logs_aggregate"`
-	}
-
-	if err := h.hasuraClient.QueryRaw(ctx, query, nil, &result); err != nil {
+	rows, err := h.dbClient.Pool().Query(ctx, query)
+	if err != nil {
 		h.logger.WithError(err).Error("Failed to get audit logs")
 		http.Error(w, "Failed to get audit logs", http.StatusInternalServerError)
 		return
 	}
+	defer rows.Close()
+
+	var logs []map[string]interface{}
+	for rows.Next() {
+		var id, tenantID, entityType, entityID, action, changedBy, createdAt string
+		if err := rows.Scan(&id, &tenantID, &entityType, &entityID, &action, &changedBy, &createdAt); err != nil {
+			continue
+		}
+		logs = append(logs, map[string]interface{}{
+			"id":          id,
+			"tenant_id":   tenantID,
+			"entity_type": entityType,
+			"entity_id":   entityID,
+			"action":      action,
+			"changed_by":  changedBy,
+			"created_at":  createdAt,
+		})
+	}
+
+	var total int
+	h.dbClient.Pool().QueryRow(ctx, "SELECT COUNT(*) FROM audit_logs").Scan(&total)
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{
-		"logs":  result.Logs,
-		"total": result.Agg.Agg.Count,
+		"logs":  logs,
+		"total": total,
 	})
 }
 
-// GetSyncStats returns detailed sync statistics
-// @Summary Get sync statistics
-// @Tags admin
-// @Produce json
-// @Success 200 {object} map[string]interface{}
-// @Router /api/v1/admin/sync-stats [get]
 func (h *AdminHandler) GetSyncStats(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
@@ -385,61 +295,15 @@ func (h *AdminHandler) GetSyncStats(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	query := `
-	query GetSyncStats {
-		google_sync_aggregated: google_calendar_connections_aggregate {
-			aggregate {
-				count
-			}
-			nodes {
-				last_sync_status
-			}
-		}
-		sync_errors: error_logs_aggregate(where: {component: {_eq: "sync_processor"}}) {
-			aggregate { count }
-		}
-	}
-	`
+	var totalConnections int
+	h.dbClient.Pool().QueryRow(ctx, "SELECT COUNT(*) FROM google_calendar_connections").Scan(&totalConnections)
 
-	var result struct {
-		GoogleSync struct {
-			Agg struct {
-				Count int `json:"count"`
-			} `json:"aggregate"`
-			Nodes []struct {
-				Status string `json:"last_sync_status"`
-			} `json:"nodes"`
-		} `json:"google_sync_aggregated"`
-		SyncErrors struct {
-			Agg struct {
-				Count int `json:"count"`
-			} `json:"aggregate"`
-		} `json:"sync_errors"`
-	}
-
-	if err := h.hasuraClient.QueryRaw(ctx, query, nil, &result); err != nil {
-		h.logger.WithError(err).Error("Failed to get sync stats")
-		http.Error(w, "Failed to get sync stats", http.StatusInternalServerError)
-		return
-	}
-
-	// Calculate breakdown
-	successCount := 0
-	failedCount := 0
-	for _, n := range result.GoogleSync.Nodes {
-		if n.Status == "success" || n.Status == "synced" {
-			successCount++
-		} else if n.Status == "failed" {
-			failedCount++
-		}
-	}
+	var syncErrors int
+	h.dbClient.Pool().QueryRow(ctx, "SELECT COUNT(*) FROM error_logs WHERE component = 'sync_processor'").Scan(&syncErrors)
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{
-		"total_connections": result.GoogleSync.Agg.Count,
-		"success_count":     successCount,
-		"failed_count":      failedCount,
-		"error_logs_count":  result.SyncErrors.Agg.Count,
-		"timestamp":         time.Now().UTC(),
+		"total_connections": totalConnections,
+		"error_logs_count":  syncErrors,
 	})
 }

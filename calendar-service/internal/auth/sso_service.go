@@ -11,7 +11,7 @@ import (
 	"os"
 	"time"
 
-	"calendar-service/internal/hasura"
+	"calendar-service/internal/database"
 
 	"github.com/coreos/go-oidc/v3/oidc"
 	"github.com/crewjam/saml"
@@ -19,24 +19,21 @@ import (
 	"golang.org/x/oauth2"
 )
 
-// SSOService handles SAML and OIDC authentication
 type SSOService struct {
-	hasuraClient  *hasura.Client
+	dbClient      *database.Client
 	logger        *logrus.Entry
 	samlProviders map[string]*saml.ServiceProvider
 	oidcProviders map[string]*oidc.Provider
 }
 
-// SSOServiceConfig holds configuration
 type SSOServiceConfig struct {
-	HasuraClient *hasura.Client
-	Logger       *logrus.Entry
+	DBClient *database.Client
+	Logger   *logrus.Entry
 }
 
-// NewSSOService creates a new SSO service
 func NewSSOService(cfg SSOServiceConfig) *SSOService {
 	return &SSOService{
-		hasuraClient:  cfg.HasuraClient,
+		dbClient:      cfg.DBClient,
 		logger:        cfg.Logger.WithField("component", "sso_service"),
 		samlProviders: make(map[string]*saml.ServiceProvider),
 		oidcProviders: make(map[string]*oidc.Provider),
@@ -124,28 +121,28 @@ func (s *SSOService) storeOIDCSessionState(ctx context.Context, state, providerI
 
 func (s *SSOService) getProviderConfig(ctx context.Context, providerID string) (*SSOProvider, error) {
 	query := `
-    query GetSSOProvider($id: uuid!) {
-        sso_providers_by_pk(id: $id) {
-            id tenant_id provider_type provider_name is_active is_primary 
-            auto_provision_users default_user_role saml_entity_id saml_sso_url 
-            saml_certificate oidc_issuer oidc_client_id oidc_client_secret 
-            oidc_redirect_uri oidc_scopes
-        }
-    }
-    `
-	var result struct {
-		Provider *SSOProvider `json:"sso_providers_by_pk"`
-	}
+		SELECT id, tenant_id, provider_type, provider_name, is_active, is_primary,
+			auto_provision_users, default_user_role, saml_entity_id, saml_sso_url,
+			saml_certificate, oidc_issuer, oidc_client_id, oidc_client_secret,
+			oidc_redirect_uri, oidc_scopes
+		FROM sso_providers WHERE id = $1`
 
-	if err := s.hasuraClient.QueryRaw(ctx, query, map[string]interface{}{"id": providerID}, &result); err != nil {
+	var p SSOProvider
+	var oidcScopes []byte
+	err := s.dbClient.Pool().QueryRow(ctx, query, providerID).Scan(
+		&p.ID, &p.TenantID, &p.ProviderType, &p.ProviderName, &p.IsActive, &p.IsPrimary,
+		&p.AutoProvision, &p.DefaultRole, &p.SAMLEntityID, &p.SAMLSSOURL,
+		&p.SAMLCertificate, &p.OIDCIssuer, &p.OIDCClientID, &p.OIDCClientSecret,
+		&p.OIDCRedirectURI, &oidcScopes,
+	)
+	if err != nil {
 		return nil, fmt.Errorf("failed to query sso provider: %w", err)
 	}
-
-	if result.Provider == nil {
+	if p.ID == "" {
 		return nil, fmt.Errorf("sso provider not found: %s", providerID)
 	}
-
-	return result.Provider, nil
+	json.Unmarshal(oidcScopes, &p.OIDCScopes)
+	return &p, nil
 }
 
 // ensureProviderLoaded ensures the provider is initialized in memory
@@ -387,87 +384,34 @@ func (s *SSOService) HandleOIDCCallback(w http.ResponseWriter, r *http.Request, 
 
 func (s *SSOService) getUserByIDPUser(ctx context.Context, providerID, idpUserID string) (*User, error) {
 	query := `
-    query GetUserBySSO($provider_id: uuid!, $idp_user_id: String!) {
-        sso_sessions(where: {
-            sso_provider_id: {_eq: $provider_id}, 
-            idp_user_id: {_eq: $idp_user_id}
-        }, limit: 1) {
-            user {
-                id
-                email
-                tenant_id
-            }
-        }
-    }
-    `
-	var result struct {
-		Sessions []struct {
-			User struct {
-				ID       string `json:"id"`
-				Email    string `json:"email"`
-				TenantID string `json:"tenant_id"`
-			} `json:"user"`
-		} `json:"sso_sessions"`
-	}
+		SELECT u.id, u.email, u.tenant_id
+		FROM users u
+		JOIN sso_sessions ss ON u.id = ss.user_id
+		WHERE ss.sso_provider_id = $1 AND ss.idp_user_id = $2
+		LIMIT 1`
 
-	err := s.hasuraClient.QueryRaw(ctx, query, map[string]interface{}{
-		"provider_id": providerID,
-		"idp_user_id": idpUserID,
-	}, &result)
-
-	if err != nil || len(result.Sessions) == 0 {
+	var u User
+	err := s.dbClient.Pool().QueryRow(ctx, query, providerID, idpUserID).Scan(&u.ID, &u.Email, &u.TenantID)
+	if err != nil {
 		return nil, fmt.Errorf("user not found")
 	}
-
-	u := result.Sessions[0].User
-	return &User{
-		ID:       u.ID,
-		TenantID: u.TenantID,
-		Email:    u.Email,
-	}, nil
+	return &u, nil
 }
 
 func (s *SSOService) createUser(ctx context.Context, tenantID, email string, attributes map[string]interface{}, role string) (*User, error) {
-	mutation := `
-    mutation CreateAutoProvisionedUser($object: users_insert_input!) {
-        insert_users_one(object: $object) {
-            id
-            email
-            tenant_id
-        }
-    }
-    `
-
 	username := email
 	if name, ok := attributes["name"].(string); ok && name != "" {
 		username = name
 	}
 
-	object := map[string]interface{}{
-		"tenant_id":    tenantID,
-		"email":        email,
-		"username":     username,
-		"is_active":    true,
-		"tenant_scope": "single",
-	}
+	query := `INSERT INTO users (id, tenant_id, email, username, is_active, tenant_scope, created_at) VALUES (gen_random_uuid(), $1, $2, $3, true, 'single', NOW()) RETURNING id, email, tenant_id`
 
-	var result struct {
-		InsertOne struct {
-			ID       string `json:"id"`
-			Email    string `json:"email"`
-			TenantID string `json:"tenant_id"`
-		} `json:"insert_users_one"`
-	}
-
-	if err := s.hasuraClient.Mutate(ctx, mutation, map[string]interface{}{"object": object}, &result); err != nil {
+	var u User
+	err := s.dbClient.Pool().QueryRow(ctx, query, tenantID, email, username).Scan(&u.ID, &u.Email, &u.TenantID)
+	if err != nil {
 		return nil, fmt.Errorf("failed to provision user: %w", err)
 	}
-
-	return &User{
-		ID:       result.InsertOne.ID,
-		TenantID: result.InsertOne.TenantID,
-		Email:    result.InsertOne.Email,
-	}, nil
+	return &u, nil
 }
 
 // Helper functions
@@ -502,33 +446,14 @@ func (s *SSOService) createSSOSession(ctx context.Context, user *User, providerI
 	sessionID := generateSessionID()
 	expiresAt := time.Now().Add(24 * time.Hour)
 
-	mutation := `
-    mutation CreateSSOSession($input: sso_sessions_insert_input!) {
-        insert_sso_sessions_one(object: $input) {
-            id session_id
-        }
-    }
-    `
-
 	var idpAttributes []byte
 	if samlAssertion != nil {
 		idpAttributes, _ = json.Marshal(samlAssertion)
 	}
 
-	input := map[string]interface{}{
-		"tenant_id":        user.TenantID,
-		"user_id":          user.ID,
-		"sso_provider_id":  providerID,
-		"session_id":       sessionID,
-		"idp_user_id":      user.IDPUserID,
-		"idp_email":        user.Email,
-		"idp_attributes":   string(idpAttributes),
-		"expires_at":       expiresAt,
-		"last_activity_at": time.Now(),
-	}
-
-	// execute mutation
-	return sessionID, s.hasuraClient.Mutate(ctx, mutation, map[string]interface{}{"input": input}, &struct{}{})
+	query := `INSERT INTO sso_sessions (id, tenant_id, user_id, sso_provider_id, session_id, idp_user_id, idp_email, idp_attributes, expires_at, last_activity_at, created_at) VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, $8, $9, NOW())`
+	_, err := s.dbClient.Pool().Exec(ctx, query, user.TenantID, user.ID, providerID, sessionID, user.IDPUserID, user.Email, string(idpAttributes), expiresAt, time.Now())
+	return sessionID, err
 }
 
 func generateSessionID() string {

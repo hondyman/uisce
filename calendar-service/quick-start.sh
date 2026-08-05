@@ -21,7 +21,8 @@ LOG_LEVEL=debug
 ENVIRONMENT=dev
 
 HASURA_ENDPOINT=http://localhost:8080/v1/graphql
-HASURA_ADMIN_SECRET=myadminsecretkey
+HASURA_ADMIN_SECRET=  # Set via Infisical or manually
+POSTGRES_PASSWORD=    # Set via Infisical or manually
 
 REDIS_URL=redis://localhost:6379
 REDPANDA_BROKERS=localhost:9092
@@ -30,7 +31,7 @@ ENABLE_CDC=true
 TEMPORAL_HOST_PORT=localhost:7233
 CACHE_TTL_MINUTES=60
 EOF
-  echo "✓ Created .env.local (update with your values)"
+  echo "✓ Created .env.local (set HASURA_ADMIN_SECRET and POSTGRES_PASSWORD)"
 fi
 
 # Download dependencies

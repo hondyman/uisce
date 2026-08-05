@@ -25,15 +25,8 @@ import (
 // Exposes REST API for initiating UMA rebalances via Temporal workflows
 // ============================================================================
 
-// HasuraClient defines the interface for Hasura GraphQL operations
-type HasuraClient interface {
-	Query(query string, variables map[string]interface{}) (map[string]interface{}, error)
-	Mutate(mutation string, variables map[string]interface{}) (map[string]interface{}, error)
-}
-
 type UMARebalanceService struct {
 	db             *sql.DB
-	hasura         HasuraClient
 	temporalClient client.Client
 	abacEngine     interface{} // Your ABAC engine
 	eventBus       interface{} // Your event bus (Redpanda/Kafka)
@@ -44,18 +37,6 @@ type UMARebalanceService struct {
 func NewUMARebalanceService(db *sql.DB, tc client.Client, abacEngine interface{}, eventBus interface{}) *UMARebalanceService {
 	return &UMARebalanceService{
 		db:             db,
-		temporalClient: tc,
-		abacEngine:     abacEngine,
-		eventBus:       eventBus,
-		taskQueue:      "uma-rebalance",
-	}
-}
-
-// NewUMARebalanceServiceWithHasura creates a new service instance with Hasura support
-func NewUMARebalanceServiceWithHasura(db *sql.DB, hasura HasuraClient, tc client.Client, abacEngine interface{}, eventBus interface{}) *UMARebalanceService {
-	return &UMARebalanceService{
-		db:             db,
-		hasura:         hasura,
 		temporalClient: tc,
 		abacEngine:     abacEngine,
 		eventBus:       eventBus,
@@ -428,24 +409,11 @@ func tenantContextMiddleware() gin.HandlerFunc {
 }
 
 // ============================================================================
-// HASURA HELPER METHODS
+// DATABASE HELPER METHODS
 // ============================================================================
 
-// saveRebalanceRequest saves a rebalance request using Hasura or SQL fallback
+// saveRebalanceRequest saves a rebalance request to the database
 func (s *UMARebalanceService) saveRebalanceRequest(ctx context.Context, requestID, tenantID, datasourceID, umaAccountID, requestType, reason, initiatedBy string) error {
-	if s.hasura != nil {
-		err := s.saveRebalanceRequestWithHasura(ctx, requestID, tenantID, datasourceID, umaAccountID, requestType, reason, initiatedBy)
-		if err == nil {
-			return nil
-		}
-		log.Printf("Hasura mutation failed, falling back to SQL: %v\n", err)
-	}
-
-	// SQL fallback
-	// TODO: Hasura-first pattern already implemented via saveRebalanceRequestWithHasura()
-	// Primary implementation uses Hasura GraphQL, this SQL is fallback only
-	// See saveRebalanceRequestWithHasura() for the Hasura mutation:
-	// mutation CreateRebalanceRequest($object: uma_rebalance_requests_insert_input!)
 	saveQuery := `
 		INSERT INTO uma_rebalance_requests (id, tenant_id, datasource_id, uma_account_id, request_type, reason, initiated_by, status, created_at, updated_at)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW(), NOW())
@@ -454,44 +422,8 @@ func (s *UMARebalanceService) saveRebalanceRequest(ctx context.Context, requestI
 	return err
 }
 
-// saveRebalanceRequestWithHasura saves a rebalance request using Hasura GraphQL
-func (s *UMARebalanceService) saveRebalanceRequestWithHasura(ctx context.Context, requestID, tenantID, datasourceID, umaAccountID, requestType, reason, initiatedBy string) error {
-	mutation := `
-		mutation CreateRebalanceRequest($object: uma_rebalance_requests_insert_input!) {
-			insert_uma_rebalance_requests_one(object: $object) {
-				id
-			}
-		}
-	`
-
-	variables := map[string]interface{}{
-		"object": map[string]interface{}{
-			"id":             requestID,
-			"tenant_id":      tenantID,
-			"datasource_id":  datasourceID,
-			"uma_account_id": umaAccountID,
-			"request_type":   requestType,
-			"reason":         reason,
-			"initiated_by":   initiatedBy,
-			"status":         "pending",
-		},
-	}
-
-	_, err := s.hasura.Mutate(mutation, variables)
-	return err
-}
-
-// getPlanByID retrieves a plan ID using Hasura or SQL fallback
+// getPlanByID retrieves a plan ID from the database
 func (s *UMARebalanceService) getPlanByID(ctx context.Context, planID string) (string, error) {
-	if s.hasura != nil {
-		id, err := s.getPlanByIDWithHasura(ctx, planID)
-		if err == nil {
-			return id, nil
-		}
-		log.Printf("Hasura query failed, falling back to SQL: %v\n", err)
-	}
-
-	// SQL fallback
 	query := `
 		SELECT uma_rebalance_plans.id
 		FROM uma_rebalance_plans
@@ -505,52 +437,8 @@ func (s *UMARebalanceService) getPlanByID(ctx context.Context, planID string) (s
 	return id, err
 }
 
-// getPlanByIDWithHasura retrieves a plan ID using Hasura GraphQL
-func (s *UMARebalanceService) getPlanByIDWithHasura(ctx context.Context, planID string) (string, error) {
-	query := `
-		query GetPlan($id: String!) {
-			uma_rebalance_plans_by_pk(id: $id) {
-				id
-			}
-		}
-	`
-
-	variables := map[string]interface{}{
-		"id": planID,
-	}
-
-	result, err := s.hasura.Query(query, variables)
-	if err != nil {
-		return "", err
-	}
-
-	planData, ok := result["uma_rebalance_plans_by_pk"].(map[string]interface{})
-	if !ok || planData == nil {
-		return "", fmt.Errorf("plan not found")
-	}
-
-	if id, ok := planData["id"].(string); ok {
-		return id, nil
-	}
-
-	return "", fmt.Errorf("invalid plan data")
-}
-
-// approvePlan approves a rebalance plan using Hasura or SQL fallback
+// approvePlan approves a rebalance plan in the database
 func (s *UMARebalanceService) approvePlan(ctx context.Context, planID, approvedBy string) error {
-	if s.hasura != nil {
-		err := s.approvePlanWithHasura(ctx, planID, approvedBy)
-		if err == nil {
-			return nil
-		}
-		log.Printf("Hasura mutation failed, falling back to SQL: %v\n", err)
-	}
-
-	// SQL fallback
-	// TODO: Hasura-first pattern already implemented via approvePlanWithHasura()
-	// Primary implementation uses Hasura GraphQL, this SQL is fallback only
-	// See approvePlanWithHasura() for the Hasura mutation:
-	// mutation ApprovePlan($id: String!, $approved_by: String!)
 	updateQuery := `
 		UPDATE uma_rebalance_plans
 		SET status = 'approved', approved_at = NOW(), approved_by = $1, updated_at = NOW()
@@ -560,72 +448,13 @@ func (s *UMARebalanceService) approvePlan(ctx context.Context, planID, approvedB
 	return err
 }
 
-// approvePlanWithHasura approves a rebalance plan using Hasura GraphQL
-func (s *UMARebalanceService) approvePlanWithHasura(ctx context.Context, planID, approvedBy string) error {
-	mutation := `
-		mutation ApprovePlan($id: String!, $approved_by: String!) {
-			update_uma_rebalance_plans(
-where: {id: {_eq: $id}},
-_set: {
-status: "approved",
-approved_by: $approved_by
-}
-) {
-				affected_rows
-			}
-		}
-	`
-
-	variables := map[string]interface{}{
-		"id":          planID,
-		"approved_by": approvedBy,
-	}
-
-	_, err := s.hasura.Mutate(mutation, variables)
-	return err
-}
-
-// rejectPlan rejects a rebalance plan using Hasura or SQL fallback
+// rejectPlan rejects a rebalance plan in the database
 func (s *UMARebalanceService) rejectPlan(ctx context.Context, planID string) error {
-	if s.hasura != nil {
-		err := s.rejectPlanWithHasura(ctx, planID)
-		if err == nil {
-			return nil
-		}
-		log.Printf("Hasura mutation failed, falling back to SQL: %v\n", err)
-	}
-
-	// SQL fallback
-	// TODO: Hasura-first pattern already implemented via rejectPlanWithHasura()
-	// Primary implementation uses Hasura GraphQL, this SQL is fallback only
-	// See rejectPlanWithHasura() for the Hasura mutation:
-	// mutation RejectPlan($id: String!)
 	updateQuery := `
 		UPDATE uma_rebalance_plans
 		SET status = 'rejected', updated_at = NOW()
 		WHERE id = $1
 	`
 	_, err := s.db.ExecContext(ctx, updateQuery, planID)
-	return err
-}
-
-// rejectPlanWithHasura rejects a rebalance plan using Hasura GraphQL
-func (s *UMARebalanceService) rejectPlanWithHasura(ctx context.Context, planID string) error {
-	mutation := `
-		mutation RejectPlan($id: String!) {
-			update_uma_rebalance_plans(
-where: {id: {_eq: $id}},
-_set: {status: "rejected"}
-) {
-				affected_rows
-			}
-		}
-	`
-
-	variables := map[string]interface{}{
-		"id": planID,
-	}
-
-	_, err := s.hasura.Mutate(mutation, variables)
 	return err
 }

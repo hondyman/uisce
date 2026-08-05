@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"os"
 
 	"github.com/google/uuid"
 	"github.com/hondyman/uisce/backend/pkg/workflows"
@@ -19,7 +20,11 @@ func main() {
 	fmt.Println("==================================================")
 
 	// 1. Connect DB
-	db, err := sqlx.Connect("postgres", "postgresql://postgres:postgres@localhost:5432/alpha?sslmode=disable")
+	dbURL := os.Getenv("DATABASE_URL")
+	if dbURL == "" {
+		panic("DATABASE_URL environment variable is required")
+	}
+	db, err := sqlx.Connect("postgres", dbURL)
 	if err != nil {
 		log.Fatalf("DB Connection failed: %v", err)
 	}

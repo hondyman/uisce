@@ -16,7 +16,7 @@ func main() {
 	// Database connection (for API-only mode)
 	dsn := os.Getenv("DATABASE_URL")
 	if dsn == "" {
-		dsn = "postgres://postgres:postgres@100.84.126.19:5432/alpha?sslmode=disable"
+		log.Fatal("DATABASE_URL environment variable is not set")
 	}
 
 	db, err := sql.Open("postgres", dsn)

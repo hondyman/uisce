@@ -41,7 +41,7 @@ func main() {
 	// Database connection
 	dbURL := os.Getenv("DB_URL")
 	if dbURL == "" {
-		dbURL = "postgres://postgres:password@localhost:5432/semlayer?sslmode=disable"
+		log.Fatal("DB_URL environment variable is not set")
 	}
 
 	db, err := sql.Open("postgres", dbURL)

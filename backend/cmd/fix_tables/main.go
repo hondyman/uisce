@@ -5,13 +5,17 @@ import (
 	"fmt"
 	"io/ioutil"
 	"log"
+	"os"
 
 	_ "github.com/lib/pq"
 )
 
 func main() {
-	// Try alpha first
-	connStr := "postgres://postgres:postgres@localhost:5432/alpha?sslmode=disable"
+	dbName := os.Getenv("DB_NAME")
+	if dbName == "" {
+		dbName = "alpha"
+	}
+	connStr := fmt.Sprintf("postgres://postgres@localhost:5432/%s?sslmode=disable", dbName)
 	db, err := sql.Open("postgres", connStr)
 	if err != nil {
 		log.Fatal(err)
@@ -20,19 +24,11 @@ func main() {
 
 	err = db.Ping()
 	if err != nil {
-		fmt.Printf("Failed to connect to alpha: %v. Trying semlayer...\n", err)
-		connStr = "postgres://postgres:postgres@localhost:5432/semlayer?sslmode=disable"
-		db, err = sql.Open("postgres", connStr)
-		if err != nil {
-			log.Fatal(err)
-		}
-		if err := db.Ping(); err != nil {
-			log.Fatal("Failed to connect to semlayer too:", err)
-		}
+		fmt.Printf("Failed to connect to %s: %v\n", dbName, err)
+		os.Exit(1)
 	}
-	fmt.Println("Connected to database.")
+	fmt.Printf("Connected to %s.\n", dbName)
 
-	// Read SQL file
 	content, err := ioutil.ReadFile("backend/migrations/20260126_create_missing_relationship_tables.sql")
 	if err != nil {
 		log.Fatal("Failed to read SQL file:", err)

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"os"
 
 	"github.com/hondyman/uisce/backend/internal/analytics"
 	"github.com/jmoiron/sqlx"
@@ -11,7 +12,10 @@ import (
 )
 
 func main() {
-	connStr := "postgresql://postgres:postgres@localhost:5432/alpha?sslmode=disable"
+	connStr := os.Getenv("DATABASE_URL")
+	if connStr == "" {
+		log.Fatal("DATABASE_URL environment variable is required")
+	}
 	db, err := sqlx.Connect("postgres", connStr)
 	if err != nil {
 		log.Fatal(err)

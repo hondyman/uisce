@@ -29,7 +29,8 @@ func main() {
 
 	secret := os.Getenv("JWT_SECRET")
 	if secret == "" {
-		secret = "dev-jwt-secret-key-change-in-production"
+		fmt.Fprintln(os.Stderr, "JWT_SECRET environment variable is not set")
+		os.Exit(1)
 	}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)

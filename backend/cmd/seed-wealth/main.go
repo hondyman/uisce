@@ -248,9 +248,9 @@ var wealthRelationships = []WealthRelationship{
 }
 
 func main() {
-	connStr := "postgres://postgres:postgres@localhost:5432/alpha?sslmode=disable"
-	if env := os.Getenv("DATABASE_URL"); env != "" {
-		connStr = env
+	connStr := os.Getenv("DATABASE_URL")
+	if connStr == "" {
+		log.Fatal("DATABASE_URL environment variable is not set")
 	}
 
 	db, err := sql.Open("postgres", connStr)

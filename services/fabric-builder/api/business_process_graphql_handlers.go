@@ -1,205 +1,129 @@
 package api
 
 import (
-	"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"os"
-	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
-	"github.com/machinebox/graphql"
 )
 
-// HasuraConfig holds configuration for the Hasura client
-type HasuraConfig struct {
-	Endpoint    string
-	AdminSecret string
-}
-
-// HasuraClient provides typed GraphQL operations for business process data access
-type HasuraClient struct {
-	client      *graphql.Client
-	adminSecret string
-}
-
-// NewHasuraClient creates a new Hasura GraphQL client
-func NewHasuraClient(config *HasuraConfig) *HasuraClient {
-	httpClient := &http.Client{
-		Timeout: 30 * time.Second,
-	}
-
-	client := graphql.NewClient(config.Endpoint, graphql.WithHTTPClient(httpClient))
-
-	return &HasuraClient{
-		client:      client,
-		adminSecret: config.AdminSecret,
-	}
-}
-
-// NewHasuraClientFromEnv creates a Hasura client from environment variables
-func NewHasuraClientFromEnv() *HasuraClient {
-	endpoint := os.Getenv("HASURA_GRAPHQL_ENDPOINT")
-	if endpoint == "" {
-		endpoint = "http://localhost:8080/v1/graphql"
-	}
-
-	adminSecret := os.Getenv("HASURA_ADMIN_SECRET")
-	if adminSecret == "" {
-		adminSecret = "adminsecret"
-	}
-
-	return NewHasuraClient(&HasuraConfig{
-		Endpoint:    endpoint,
-		AdminSecret: adminSecret,
-	})
-}
-
-// Query executes a GraphQL query with admin secret header
-func (c *HasuraClient) Query(ctx context.Context, query string, variables map[string]interface{}, result interface{}) error {
-	req := graphql.NewRequest(query)
-
-	// Add admin secret header
-	req.Header.Set("X-Hasura-Admin-Secret", c.adminSecret)
-
-	// Add variables if provided
-	for key, value := range variables {
-		req.Var(key, value)
-	}
-
-	return c.client.Run(ctx, req, result)
-}
-
-// BusinessProcessGraphQLHandlers contains handlers that use Hasura GraphQL
 type BusinessProcessGraphQLHandlers struct {
-	hasura *HasuraClient
+	db *sql.DB
 }
 
-// NewBusinessProcessGraphQLHandlers creates handlers that use Hasura GraphQL
-func NewBusinessProcessGraphQLHandlers(hasura *HasuraClient) *BusinessProcessGraphQLHandlers {
-	return &BusinessProcessGraphQLHandlers{hasura: hasura}
+func NewBusinessProcessGraphQLHandlers(db *sql.DB) *BusinessProcessGraphQLHandlers {
+	return &BusinessProcessGraphQLHandlers{db: db}
 }
 
-// ListBusinessProcessesGraphQL returns all business processes using GraphQL
 func (h *BusinessProcessGraphQLHandlers) ListBusinessProcessesGraphQL(w http.ResponseWriter, r *http.Request) {
 	tenantID := r.URL.Query().Get("tenant_id")
 
 	query := `
-		query ListBusinessProcesses($tenantId: uuid) {
-			business_processes(
-				where: {
-					tenant_id: { _eq: $tenantId }
-					is_active: { _eq: true }
-				}
-				order_by: { created_at: desc }
-			) {
-				id
-				tenant_id
-				process_name
-				description
-				entity_type
-				status
-				is_active
-				version_number
-				created_at
-				updated_at
-				created_by
-				steps(order_by: { step_order: asc }) {
-					id
-					step_order
-					step_type
-					step_name
-					description
-					duration_hours
-					status
-				}
-			}
-		}
+		SELECT id, tenant_id, process_name, description, entity_type,
+		       status, is_active, version_number, created_at, updated_at, created_by
+		FROM business_processes
+		WHERE ($1 = '' OR tenant_id::text = $1)
+		  AND is_active = true
+		ORDER BY created_at DESC
 	`
 
-	var variables map[string]interface{}
-	if tenantID != "" {
-		variables = map[string]interface{}{
-			"tenantId": tenantID,
-		}
-	}
-
-	var result struct {
-		BusinessProcesses []BusinessProcessGraphQL `json:"business_processes"`
-	}
-
-	if err := h.hasura.Query(r.Context(), query, variables, &result); err != nil {
-		http.Error(w, fmt.Sprintf("GraphQL query failed: %v", err), http.StatusInternalServerError)
+	rows, err := h.db.Query(query, tenantID)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("database query failed: %v", err), http.StatusInternalServerError)
 		return
 	}
+	defer rows.Close()
 
-	// Convert to API response format
-	processes := make([]BusinessProcess, 0, len(result.BusinessProcesses))
-	for _, bp := range result.BusinessProcesses {
-		process := BusinessProcess{
-			ID:          bp.ID,
-			TenantID:    bp.TenantID,
-			ProcessName: bp.ProcessName,
-			Description: bp.Description,
-			Entity:      bp.EntityType,
-			IsActive:    bp.IsActive,
-			Version:     bp.VersionNumber,
-			CreatedAt:   bp.CreatedAt,
-			UpdatedAt:   bp.UpdatedAt,
-			CreatedBy:   bp.CreatedBy,
+	type stepResult struct {
+		ID            string
+		StepOrder     int
+		StepType      string
+		StepName      string
+		Description   *string
+		DurationHours float64
+		Status        *string
+	}
+
+	processesMap := make(map[string]BusinessProcess)
+
+	for rows.Next() {
+		var p BusinessProcess
+		var updatedAt sql.NullString
+		var entityType, status sql.NullString
+		var versionNumber int
+
+		err := rows.Scan(&p.ID, &p.TenantID, &p.ProcessName, &p.Description,
+			&entityType, &status, &p.IsActive, &versionNumber, &p.CreatedAt, &updatedAt, &p.CreatedBy)
+		if err != nil {
+			http.Error(w, fmt.Sprintf("scan failed: %v", err), http.StatusInternalServerError)
+			return
+		}
+		if entityType.Valid {
+			p.Entity = entityType.String
+		}
+		if updatedAt.Valid {
+			p.UpdatedAt = &updatedAt.String
+		}
+		p.Version = versionNumber
+		processesMap[p.ID] = p
+	}
+
+	if len(processesMap) > 0 {
+		stepQuery := `
+			SELECT id, business_process_id, step_order, step_type, step_name,
+			       description, duration_hours, status
+			FROM bp_steps
+			WHERE business_process_id = ANY($1)
+			ORDER BY step_order
+		`
+		ids := make([]string, 0, len(processesMap))
+		for id := range processesMap {
+			ids = append(ids, id)
 		}
 
-		// Convert steps
-		for _, s := range bp.Steps {
-			step := BPStep{
-				ID:            s.ID,
-				StepOrder:     s.StepOrder,
-				StepType:      s.StepType,
-				StepName:      s.StepName,
-				Description:   s.Description,
-				DurationHours: s.DurationHours,
-				Status:        s.Status,
+		stepRows, err := h.db.Query(stepQuery, ids)
+		if err != nil {
+			http.Error(w, fmt.Sprintf("step query failed: %v", err), http.StatusInternalServerError)
+			return
+		}
+		defer stepRows.Close()
+
+		for stepRows.Next() {
+			var s BPStep
+			var businessProcessID string
+			var durationHours sql.NullFloat64
+			var desc, status *string
+
+			err := stepRows.Scan(&s.ID, &businessProcessID, &s.StepOrder, &s.StepType,
+				&s.StepName, &desc, &durationHours, &status)
+			if err != nil {
+				http.Error(w, fmt.Sprintf("step scan failed: %v", err), http.StatusInternalServerError)
+				return
 			}
-			process.Steps = append(process.Steps, step)
+			s.Description = desc
+			s.Status = status
+			if durationHours.Valid {
+				s.DurationHours = durationHours.Float64
+			}
+			if p, ok := processesMap[businessProcessID]; ok {
+				p.Steps = append(p.Steps, s)
+				processesMap[businessProcessID] = p
+			}
 		}
+	}
 
-		processes = append(processes, process)
+	processes := make([]BusinessProcess, 0, len(processesMap))
+	for _, p := range processesMap {
+		processes = append(processes, p)
 	}
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(processes)
 }
 
-// BusinessProcessGraphQL represents the GraphQL response structure
-type BusinessProcessGraphQL struct {
-	ID            string          `json:"id"`
-	TenantID      string          `json:"tenant_id"`
-	ProcessName   string          `json:"process_name"`
-	Description   string          `json:"description"`
-	EntityType    string          `json:"entity_type"`
-	Status        string          `json:"status"`
-	IsActive      bool            `json:"is_active"`
-	VersionNumber int             `json:"version_number"`
-	CreatedAt     string          `json:"created_at"`
-	UpdatedAt     *string         `json:"updated_at"`
-	CreatedBy     string          `json:"created_by"`
-	Steps         []BPStepGraphQL `json:"steps"`
-}
-
-// BPStepGraphQL represents a step in the GraphQL response
-type BPStepGraphQL struct {
-	ID            string  `json:"id"`
-	StepOrder     int     `json:"step_order"`
-	StepType      string  `json:"step_type"`
-	StepName      string  `json:"step_name"`
-	Description   *string `json:"description"`
-	DurationHours float64 `json:"duration_hours"`
-	Status        *string `json:"status"`
-}
-
-// CreateBusinessProcessGraphQL creates a new business process using GraphQL
 func (h *BusinessProcessGraphQLHandlers) CreateBusinessProcessGraphQL(w http.ResponseWriter, r *http.Request) {
 	var input BusinessProcess
 	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
@@ -207,223 +131,133 @@ func (h *BusinessProcessGraphQLHandlers) CreateBusinessProcessGraphQL(w http.Res
 		return
 	}
 
-	// Generate ID if not provided
 	if input.ID == "" {
 		input.ID = uuid.New().String()
 	}
 
+	tx, err := h.db.Begin()
+	if err != nil {
+		http.Error(w, fmt.Sprintf("transaction failed: %v", err), http.StatusInternalServerError)
+		return
+	}
+	defer tx.Rollback()
+
 	mutation := `
-		mutation CreateBusinessProcess(
-			$id: uuid!
-			$tenant_id: uuid!
-			$process_name: String!
-			$description: String
-			$entity_type: String!
-			$is_active: Boolean
-			$created_by: String!
-		) {
-			insert_business_processes_one(
-				object: {
-					id: $id
-					tenant_id: $tenant_id
-					process_name: $process_name
-					description: $description
-					entity_type: $entity_type
-					is_active: $is_active
-					created_by: $created_by
-				}
-			) {
-				id
-				tenant_id
-				process_name
-				description
-				entity_type
-				status
-				is_active
-				version_number
-				created_at
-				updated_at
-				created_by
-			}
-		}
+		INSERT INTO business_processes
+		(id, tenant_id, process_name, description, entity_type, status, is_active, created_by)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+		RETURNING created_at, updated_at, version_number
 	`
 
-	variables := map[string]interface{}{
-		"id":           input.ID,
-		"tenant_id":    input.TenantID,
-		"process_name": input.ProcessName,
-		"description":  input.Description,
-		"entity_type":  input.Entity,
-		"is_active":    input.IsActive,
-		"created_by":   input.CreatedBy,
-	}
-
-	var result struct {
-		InsertBusinessProcessesOne BusinessProcessGraphQL `json:"insert_business_processes_one"`
-	}
-
-	if err := h.hasura.Query(r.Context(), mutation, variables, &result); err != nil {
-		http.Error(w, fmt.Sprintf("GraphQL mutation failed: %v", err), http.StatusInternalServerError)
+	var createdAt, updatedAt string
+	var versionNumber int
+	err = tx.QueryRow(mutation, input.ID, input.TenantID, input.ProcessName,
+		input.Description, input.Entity, "active", input.IsActive, input.CreatedBy).
+		Scan(&createdAt, &updatedAt, &versionNumber)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("insert failed: %v", err), http.StatusInternalServerError)
 		return
 	}
 
-	// Insert steps if provided
-	if len(input.Steps) > 0 {
-		for i, step := range input.Steps {
-			if step.ID == "" {
-				step.ID = uuid.New().String()
-			}
-
-			stepMutation := `
-				mutation CreateBPStep(
-					$id: uuid!
-					$business_process_id: uuid!
-					$step_order: Int!
-					$step_type: String!
-					$step_name: String!
-					$description: String
-					$duration_hours: Int
-				) {
-					insert_bp_steps_one(
-						object: {
-							id: $id
-							business_process_id: $business_process_id
-							step_order: $step_order
-							step_type: $step_type
-							step_name: $step_name
-							description: $description
-							duration_hours: $duration_hours
-						}
-					) {
-						id
-					}
-				}
-			`
-
-			stepVars := map[string]interface{}{
-				"id":                  step.ID,
-				"business_process_id": input.ID,
-				"step_order":          i + 1,
-				"step_type":           step.StepType,
-				"step_name":           step.StepName,
-				"description":         step.Description,
-				"duration_hours":      int(step.DurationHours),
-			}
-
-			var stepResult struct {
-				InsertBPStepsOne struct {
-					ID string `json:"id"`
-				} `json:"insert_bp_steps_one"`
-			}
-
-			if err := h.hasura.Query(r.Context(), stepMutation, stepVars, &stepResult); err != nil {
-				// Log error but continue - process was created
-				fmt.Printf("Warning: failed to create step %d: %v\n", i+1, err)
-			}
-			input.Steps[i].ID = step.ID
+	for i, step := range input.Steps {
+		if step.ID == "" {
+			step.ID = uuid.New().String()
 		}
+
+		stepMutation := `
+			INSERT INTO bp_steps
+			(id, business_process_id, tenant_id, step_order, step_type, step_name,
+			 description, duration_hours)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+		`
+
+		_, err = tx.Exec(stepMutation, step.ID, input.ID, input.TenantID,
+			i+1, step.StepType, step.StepName, step.Description, step.DurationHours)
+		if err != nil {
+			fmt.Printf("Warning: failed to create step %d: %v\n", i+1, err)
+		}
+		input.Steps[i].ID = step.ID
 	}
 
-	// Build response
-	response := BusinessProcess{
-		ID:          result.InsertBusinessProcessesOne.ID,
-		TenantID:    result.InsertBusinessProcessesOne.TenantID,
-		ProcessName: result.InsertBusinessProcessesOne.ProcessName,
-		Description: result.InsertBusinessProcessesOne.Description,
-		Entity:      result.InsertBusinessProcessesOne.EntityType,
-		IsActive:    result.InsertBusinessProcessesOne.IsActive,
-		Version:     result.InsertBusinessProcessesOne.VersionNumber,
-		CreatedAt:   result.InsertBusinessProcessesOne.CreatedAt,
-		CreatedBy:   result.InsertBusinessProcessesOne.CreatedBy,
-		Steps:       input.Steps,
+	if err = tx.Commit(); err != nil {
+		http.Error(w, fmt.Sprintf("commit failed: %v", err), http.StatusInternalServerError)
+		return
 	}
+
+	input.CreatedAt = createdAt
+	input.UpdatedAt = &updatedAt
+	input.Version = versionNumber
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(response)
+	json.NewEncoder(w).Encode(input)
 }
 
-// GetBusinessProcessGraphQL returns a specific business process using GraphQL
 func (h *BusinessProcessGraphQLHandlers) GetBusinessProcessGraphQL(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 
 	query := `
-		query GetBusinessProcess($id: uuid!) {
-			business_processes_by_pk(id: $id) {
-				id
-				tenant_id
-				process_name
-				description
-				entity_type
-				status
-				is_active
-				version_number
-				created_at
-				updated_at
-				created_by
-				steps(order_by: { step_order: asc }) {
-					id
-					step_order
-					step_type
-					step_name
-					description
-					duration_hours
-					status
-				}
-			}
-		}
+		SELECT id, tenant_id, process_name, description, entity_type,
+		       status, is_active, version_number, created_at, updated_at, created_by
+		FROM business_processes
+		WHERE id = $1
 	`
 
-	variables := map[string]interface{}{
-		"id": id,
-	}
+	var p BusinessProcess
+	var updatedAt sql.NullString
+	var entityType, status sql.NullString
+	var versionNumber int
 
-	var result struct {
-		BusinessProcessesByPK *BusinessProcessGraphQL `json:"business_processes_by_pk"`
-	}
-
-	if err := h.hasura.Query(r.Context(), query, variables, &result); err != nil {
-		http.Error(w, fmt.Sprintf("GraphQL query failed: %v", err), http.StatusInternalServerError)
-		return
-	}
-
-	if result.BusinessProcessesByPK == nil {
+	err := h.db.QueryRow(query, id).Scan(&p.ID, &p.TenantID, &p.ProcessName, &p.Description,
+		&entityType, &status, &p.IsActive, &versionNumber, &p.CreatedAt, &updatedAt, &p.CreatedBy)
+	if err == sql.ErrNoRows {
 		http.Error(w, "process not found", http.StatusNotFound)
 		return
+	} else if err != nil {
+		http.Error(w, fmt.Sprintf("query failed: %v", err), http.StatusInternalServerError)
+		return
 	}
-
-	bp := result.BusinessProcessesByPK
-	response := BusinessProcess{
-		ID:          bp.ID,
-		TenantID:    bp.TenantID,
-		ProcessName: bp.ProcessName,
-		Description: bp.Description,
-		Entity:      bp.EntityType,
-		IsActive:    bp.IsActive,
-		Version:     bp.VersionNumber,
-		CreatedAt:   bp.CreatedAt,
-		UpdatedAt:   bp.UpdatedAt,
-		CreatedBy:   bp.CreatedBy,
+	if entityType.Valid {
+		p.Entity = entityType.String
 	}
+	if updatedAt.Valid {
+		p.UpdatedAt = &updatedAt.String
+	}
+	p.Version = versionNumber
 
-	for _, s := range bp.Steps {
-		step := BPStep{
-			ID:            s.ID,
-			StepOrder:     s.StepOrder,
-			StepType:      s.StepType,
-			StepName:      s.StepName,
-			Description:   s.Description,
-			DurationHours: s.DurationHours,
-			Status:        s.Status,
+	stepQuery := `
+		SELECT id, step_order, step_type, step_name, description, duration_hours, status
+		FROM bp_steps
+		WHERE business_process_id = $1
+		ORDER BY step_order
+	`
+	rows, err := h.db.Query(stepQuery, id)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("step query failed: %v", err), http.StatusInternalServerError)
+		return
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var s BPStep
+		var durationHours sql.NullFloat64
+
+		err := rows.Scan(&s.ID, &s.StepOrder, &s.StepType, &s.StepName,
+			&s.Description, &durationHours, &s.Status)
+		if err != nil {
+			http.Error(w, fmt.Sprintf("step scan failed: %v", err), http.StatusInternalServerError)
+			return
 		}
-		response.Steps = append(response.Steps, step)
+		if durationHours.Valid {
+			s.DurationHours = durationHours.Float64
+		}
+		p.Steps = append(p.Steps, s)
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(response)
+	json.NewEncoder(w).Encode(p)
 }
 
-// UpdateBusinessProcessGraphQL updates a business process using GraphQL
 func (h *BusinessProcessGraphQLHandlers) UpdateBusinessProcessGraphQL(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 
@@ -433,20 +267,10 @@ func (h *BusinessProcessGraphQLHandlers) UpdateBusinessProcessGraphQL(w http.Res
 		return
 	}
 
-	mutation := `
-		mutation UpdateBusinessProcess($id: uuid!, $updates: business_processes_set_input!) {
-			update_business_processes_by_pk(
-				pk_columns: { id: $id }
-				_set: $updates
-			) {
-				id
-				updated_at
-			}
-		}
-	`
+	setClause := ""
+	args := make([]interface{}, 0)
+	argCount := 1
 
-	// Build the _set input - only include fields that are valid for update
-	setInput := make(map[string]interface{})
 	allowedFields := map[string]bool{
 		"process_name":         true,
 		"description":          true,
@@ -458,148 +282,86 @@ func (h *BusinessProcessGraphQLHandlers) UpdateBusinessProcessGraphQL(w http.Res
 
 	for key, value := range updates {
 		if allowedFields[key] {
-			setInput[key] = value
+			if setClause != "" {
+				setClause += ", "
+			}
+			setClause += key + " = $" + fmt.Sprintf("%d", argCount)
+			args = append(args, value)
+			argCount++
 		}
 	}
 
-	variables := map[string]interface{}{
-		"id":      id,
-		"updates": setInput,
+	if setClause == "" {
+		http.Error(w, "no valid fields to update", http.StatusBadRequest)
+		return
 	}
 
-	var result struct {
-		UpdateBusinessProcessesByPK struct {
-			ID        string `json:"id"`
-			UpdatedAt string `json:"updated_at"`
-		} `json:"update_business_processes_by_pk"`
-	}
+	query := fmt.Sprintf(`
+		UPDATE business_processes
+		SET %s, updated_at = NOW()
+		WHERE id = $%d
+		RETURNING updated_at
+	`, setClause, argCount)
 
-	if err := h.hasura.Query(r.Context(), mutation, variables, &result); err != nil {
-		http.Error(w, fmt.Sprintf("GraphQL mutation failed: %v", err), http.StatusInternalServerError)
+	args = append(args, id)
+
+	var updatedAt string
+	err := h.db.QueryRow(query, args...).Scan(&updatedAt)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("update failed: %v", err), http.StatusInternalServerError)
 		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{
-		"id":         result.UpdateBusinessProcessesByPK.ID,
+		"id":         id,
 		"updated":    true,
-		"updated_at": result.UpdateBusinessProcessesByPK.UpdatedAt,
+		"updated_at": updatedAt,
 	})
 }
 
-// DeleteBusinessProcessGraphQL deletes a business process using GraphQL
 func (h *BusinessProcessGraphQLHandlers) DeleteBusinessProcessGraphQL(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 
-	mutation := `
-		mutation DeleteBusinessProcess($id: uuid!) {
-			delete_business_processes_by_pk(id: $id) {
-				id
-			}
-		}
-	`
-
-	variables := map[string]interface{}{
-		"id": id,
-	}
-
-	var result struct {
-		DeleteBusinessProcessesByPK *struct {
-			ID string `json:"id"`
-		} `json:"delete_business_processes_by_pk"`
-	}
-
-	if err := h.hasura.Query(r.Context(), mutation, variables, &result); err != nil {
-		http.Error(w, fmt.Sprintf("GraphQL mutation failed: %v", err), http.StatusInternalServerError)
+	query := `DELETE FROM business_processes WHERE id = $1`
+	_, err := h.db.Exec(query, id)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("delete failed: %v", err), http.StatusInternalServerError)
 		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{
 		"id":      id,
-		"deleted": result.DeleteBusinessProcessesByPK != nil,
+		"deleted": true,
 	})
 }
 
-// ExecuteBusinessProcessGraphQL starts execution of a business process using GraphQL
 func (h *BusinessProcessGraphQLHandlers) ExecuteBusinessProcessGraphQL(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 
-	// First, get the business process to get tenant_id
-	query := `
-		query GetProcessForExecution($id: uuid!) {
-			business_processes_by_pk(id: $id) {
-				id
-				tenant_id
-			}
-		}
-	`
-
-	var processResult struct {
-		BusinessProcessesByPK *struct {
-			ID       string `json:"id"`
-			TenantID string `json:"tenant_id"`
-		} `json:"business_processes_by_pk"`
-	}
-
-	if err := h.hasura.Query(r.Context(), query, map[string]interface{}{"id": id}, &processResult); err != nil {
-		http.Error(w, fmt.Sprintf("GraphQL query failed: %v", err), http.StatusInternalServerError)
-		return
-	}
-
-	if processResult.BusinessProcessesByPK == nil {
+	var tenantID string
+	err := h.db.QueryRow(`SELECT tenant_id FROM business_processes WHERE id = $1`, id).Scan(&tenantID)
+	if err == sql.ErrNoRows {
 		http.Error(w, "process not found", http.StatusNotFound)
 		return
+	} else if err != nil {
+		http.Error(w, fmt.Sprintf("query failed: %v", err), http.StatusInternalServerError)
+		return
 	}
 
-	// Create execution record
 	executionID := uuid.New().String()
 	mutation := `
-		mutation CreateBPExecution(
-			$id: uuid!
-			$tenant_id: uuid!
-			$business_process_id: uuid!
-			$entity_id: uuid!
-			$initiated_by: String!
-			$execution_status: String!
-			$current_step_order: Int!
-		) {
-			insert_bp_executions_one(
-				object: {
-					id: $id
-					tenant_id: $tenant_id
-					business_process_id: $business_process_id
-					entity_id: $entity_id
-					initiated_by: $initiated_by
-					execution_status: $execution_status
-					current_step_order: $current_step_order
-				}
-			) {
-				id
-				initiated_at
-			}
-		}
+		INSERT INTO bp_executions
+		(id, tenant_id, business_process_id, entity_id, initiated_by, execution_status, current_step_order)
+		VALUES ($1, $2, $3, $4, $5, $6, $7)
+		RETURNING initiated_at
 	`
 
-	variables := map[string]interface{}{
-		"id":                  executionID,
-		"tenant_id":           processResult.BusinessProcessesByPK.TenantID,
-		"business_process_id": id,
-		"entity_id":           uuid.New().String(), // Placeholder entity
-		"initiated_by":        "system",
-		"execution_status":    "running",
-		"current_step_order":  1,
-	}
-
-	var execResult struct {
-		InsertBPExecutionsOne struct {
-			ID          string `json:"id"`
-			InitiatedAt string `json:"initiated_at"`
-		} `json:"insert_bp_executions_one"`
-	}
-
-	if err := h.hasura.Query(r.Context(), mutation, variables, &execResult); err != nil {
-		http.Error(w, fmt.Sprintf("GraphQL mutation failed: %v", err), http.StatusInternalServerError)
+	var initiatedAt string
+	err = h.db.QueryRow(mutation, executionID, tenantID, id, uuid.New().String(), "system", "running", 1).Scan(&initiatedAt)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("insert failed: %v", err), http.StatusInternalServerError)
 		return
 	}
 
@@ -608,13 +370,12 @@ func (h *BusinessProcessGraphQLHandlers) ExecuteBusinessProcessGraphQL(w http.Re
 		"id":           id,
 		"execution_id": executionID,
 		"status":       "started",
-		"started_at":   execResult.InsertBPExecutionsOne.InitiatedAt,
+		"started_at":   initiatedAt,
 	})
 }
 
-// RegisterBusinessProcessGraphQLRoutes registers routes that use GraphQL instead of SQL
-func RegisterBusinessProcessGraphQLRoutes(r chi.Router, hasura *HasuraClient) {
-	h := NewBusinessProcessGraphQLHandlers(hasura)
+func RegisterBusinessProcessGraphQLRoutes(r chi.Router, db *sql.DB) {
+	h := NewBusinessProcessGraphQLHandlers(db)
 
 	r.Route("/api/business-process/v2", func(r chi.Router) {
 		r.Get("/", h.ListBusinessProcessesGraphQL)
@@ -624,7 +385,6 @@ func RegisterBusinessProcessGraphQLRoutes(r chi.Router, hasura *HasuraClient) {
 		r.Delete("/{id}", h.DeleteBusinessProcessGraphQL)
 		r.Post("/{id}/execute", h.ExecuteBusinessProcessGraphQL)
 
-		// Static configuration endpoints (no GraphQL needed)
 		r.Get("/step-types", func(w http.ResponseWriter, r *http.Request) {
 			stepTypes := []ProcessStepType{
 				{

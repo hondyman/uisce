@@ -26,7 +26,11 @@ type BusinessObject struct {
 }
 
 func main() {
-	dbURL := "postgres://postgres:postgres@localhost/alpha?sslmode=disable"
+	dbURL := os.Getenv("DATABASE_URL")
+	if dbURL == "" {
+		fmt.Fprintln(os.Stderr, "DATABASE_URL environment variable is not set")
+		os.Exit(1)
+	}
 	db, err := sql.Open("pgx", dbURL)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Unable to connect to database: %v\n", err)

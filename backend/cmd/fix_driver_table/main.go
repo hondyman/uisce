@@ -5,14 +5,19 @@ import (
 	"fmt"
 	"io/ioutil"
 	"log"
+	"os"
 
 	_ "github.com/lib/pq"
 )
 
 func main() {
+	dbURL := os.Getenv("DATABASE_URL")
+	if dbURL == "" {
+		log.Fatal("DATABASE_URL environment variable is required")
+	}
+
 	// Try alpha first
-	connStr := "postgres://postgres:postgres@localhost:5432/alpha?sslmode=disable"
-	db, err := sql.Open("postgres", connStr)
+	db, err := sql.Open("postgres", dbURL)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -21,8 +26,12 @@ func main() {
 	err = db.Ping()
 	if err != nil {
 		fmt.Printf("Failed to connect to alpha: %v. Trying semlayer...\n", err)
-		connStr = "postgres://postgres:postgres@localhost:5432/semlayer?sslmode=disable"
-		db, err = sql.Open("postgres", connStr)
+		// Fallback to semlayer if alpha fails
+		dbURL = os.Getenv("SEMLAYER_DATABASE_URL")
+		if dbURL == "" {
+			log.Fatal("SEMLAYER_DATABASE_URL environment variable is required as fallback")
+		}
+		db, err = sql.Open("postgres", dbURL)
 		if err != nil {
 			log.Fatal(err)
 		}

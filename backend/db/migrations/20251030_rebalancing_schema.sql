@@ -225,73 +225,82 @@ CREATE TRIGGER trigger_refresh_rebalance_summary_after_audit
 -- SAMPLE DATA (for development/testing)
 -- ============================================================================
 
-INSERT INTO allocation_models (tenant_id, name, description, model_type, created_by, allocations)
-VALUES (
-  '00000000-0000-0000-0000-000000000000',
-  'Classic 60/40',
-  'Traditional balanced portfolio: 60% stocks, 40% bonds',
-  '60-40',
-  'system',
-  '[
-    {
-      "asset_class": "US Equities",
-      "target_percent": 0.60,
-      "min_percent": 0.55,
-      "max_percent": 0.65,
-      "benchmark": "SPY"
-    },
-    {
-      "asset_class": "Bonds",
-      "target_percent": 0.30,
-      "min_percent": 0.25,
-      "max_percent": 0.35,
-      "benchmark": "BND"
-    },
-    {
-      "asset_class": "Intl Equities",
-      "target_percent": 0.07,
-      "min_percent": 0.05,
-      "max_percent": 0.10,
-      "benchmark": "VXUS"
-    },
-    {
-      "asset_class": "Real Estate",
-      "target_percent": 0.03,
-      "min_percent": 0.00,
-      "max_percent": 0.05,
-      "benchmark": "VNQ"
-    }
-  ]'
-);
+DO $$
+DECLARE
+    v_gold_tenant UUID;
+BEGIN
+    PERFORM set_config('app.goldcopy', (SELECT id FROM public.tenants WHERE gold_copy = true LIMIT 1)::text, true);
+    v_gold_tenant := current_setting('app.goldcopy', true)::uuid;
 
-INSERT INTO allocation_models (tenant_id, name, description, model_type, created_by, allocations)
-VALUES (
-  '00000000-0000-0000-0000-000000000000',
-  'Aggressive Growth',
-  'Growth-focused: 80% stocks, 20% alternatives',
-  '80-20',
-  'system',
-  '[
-    {
-      "asset_class": "US Equities",
-      "target_percent": 0.65,
-      "min_percent": 0.60,
-      "max_percent": 0.70,
-      "benchmark": "QQQ"
-    },
-    {
-      "asset_class": "Intl Equities",
-      "target_percent": 0.15,
-      "min_percent": 0.10,
-      "max_percent": 0.20,
-      "benchmark": "VXUS"
-    },
-    {
-      "asset_class": "Alternatives",
-      "target_percent": 0.20,
-      "min_percent": 0.15,
-      "max_percent": 0.25,
-      "benchmark": "PDBC"
-    }
-  ]'
-);
+    INSERT INTO allocation_models (tenant_id, name, description, model_type, created_by, allocations)
+    VALUES (
+      v_gold_tenant,
+      'Classic 60/40',
+      'Traditional balanced portfolio: 60% stocks, 40% bonds',
+      '60-40',
+      'system',
+      '[
+        {
+          "asset_class": "US Equities",
+          "target_percent": 0.60,
+          "min_percent": 0.55,
+          "max_percent": 0.65,
+          "benchmark": "SPY"
+        },
+        {
+          "asset_class": "Bonds",
+          "target_percent": 0.30,
+          "min_percent": 0.25,
+          "max_percent": 0.35,
+          "benchmark": "BND"
+        },
+        {
+          "asset_class": "Intl Equities",
+          "target_percent": 0.07,
+          "min_percent": 0.05,
+          "max_percent": 0.10,
+          "benchmark": "VXUS"
+        },
+        {
+          "asset_class": "Real Estate",
+          "target_percent": 0.03,
+          "min_percent": 0.00,
+          "max_percent": 0.05,
+          "benchmark": "VNQ"
+        }
+      ]'
+    );
+
+    INSERT INTO allocation_models (tenant_id, name, description, model_type, created_by, allocations)
+    VALUES (
+      v_gold_tenant,
+      'Aggressive Growth',
+      'Growth-focused: 80% stocks, 20% alternatives',
+      '80-20',
+      'system',
+      '[
+        {
+          "asset_class": "US Equities",
+          "target_percent": 0.65,
+          "min_percent": 0.60,
+          "max_percent": 0.70,
+          "benchmark": "QQQ"
+        },
+        {
+          "asset_class": "Intl Equities",
+          "target_percent": 0.15,
+          "min_percent": 0.10,
+          "max_percent": 0.20,
+          "benchmark": "VXUS"
+        },
+        {
+          "asset_class": "Alternatives",
+          "target_percent": 0.20,
+          "min_percent": 0.15,
+          "max_percent": 0.25,
+          "benchmark": "PDBC"
+        }
+      ]'
+    );
+
+END $$;

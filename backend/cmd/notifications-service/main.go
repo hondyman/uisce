@@ -29,7 +29,10 @@ func main() {
 	defer logger.Sync()
 
 	port := getEnv("PORT", "8084")
-	databaseURL := getEnv("DATABASE_URL", "postgres://postgres:postgres@localhost:5432/alpha?sslmode=disable")
+	databaseURL := os.Getenv("DATABASE_URL")
+	if databaseURL == "" {
+		log.Fatal("DATABASE_URL environment variable is required")
+	}
 	kafkaBrokers := getEnv("KAFKA_BROKERS", "localhost:9092")
 
 	logger.Info("Starting Notifications Service",

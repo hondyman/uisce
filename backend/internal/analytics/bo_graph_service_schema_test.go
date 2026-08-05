@@ -7,6 +7,7 @@ import (
 
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/google/uuid"
+	"github.com/hondyman/uisce/backend/internal/testutil"
 	"github.com/jmoiron/sqlx"
 )
 
@@ -50,7 +51,7 @@ func TestResolveEffectiveFields_DeltaMerge(t *testing.T) {
 			is_inherited_override
 		FROM public.bo_fields
 		WHERE business_object_id = $1 AND tenant_id = $2;`,
-	)).WithArgs(parentBOID, GoldCopyTenantID).WillReturnRows(
+	)).WithArgs(parentBOID, uuid.MustParse(testutil.GoldCopyTenantID(t))).WillReturnRows(
 		sqlmock.NewRows([]string{
 			"id", "business_object_id", "field_name", "semantic_term_id",
 			"field_role", "binding_requirement", "binding_status",

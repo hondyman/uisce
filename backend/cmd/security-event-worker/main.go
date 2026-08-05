@@ -11,10 +11,9 @@ import (
 )
 
 func main() {
-	// Get configuration from environment
 	dbURL := os.Getenv("DATABASE_URL")
 	if dbURL == "" {
-		dbURL = "postgres://postgres:postgres@localhost:5432/alpha?sslmode=disable"
+		panic("DATABASE_URL environment variable is required")
 	}
 
 	kafkaBrokers := os.Getenv("KAFKA_BROKERS")

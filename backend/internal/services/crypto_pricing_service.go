@@ -13,28 +13,15 @@ import (
 
 // CryptoPricingService handles real-time and historical crypto pricing
 type CryptoPricingService struct {
-	db           *sql.DB
-	hasuraClient HasuraClient
-	httpClient   *http.Client
-	apiKey       string // CoinGecko/CoinMarketCap API key
+	db         *sql.DB
+	httpClient *http.Client
+	apiKey     string // CoinGecko/CoinMarketCap API key
 }
 
 // NewCryptoPricingService creates a new pricing service
 func NewCryptoPricingService(db *sql.DB, apiKey string) *CryptoPricingService {
 	return &CryptoPricingService{
 		db: db,
-		httpClient: &http.Client{
-			Timeout: 10 * time.Second,
-		},
-		apiKey: apiKey,
-	}
-}
-
-// NewCryptoPricingServiceWithHasura creates a new service with Hasura support
-func NewCryptoPricingServiceWithHasura(db *sql.DB, hasuraClient HasuraClient, apiKey string) *CryptoPricingService {
-	return &CryptoPricingService{
-		db:           db,
-		hasuraClient: hasuraClient,
 		httpClient: &http.Client{
 			Timeout: 10 * time.Second,
 		},

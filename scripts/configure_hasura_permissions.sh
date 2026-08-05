@@ -6,7 +6,10 @@
 set -e
 
 HASURA_URL="${HASURA_URL:-http://localhost:8081}"
-HASURA_ADMIN_SECRET="${HASURA_ADMIN_SECRET:-myadminsecretkey}"
+if [[ -z "${HASURA_ADMIN_SECRET:-}" ]]; then
+  echo "ERROR: HASURA_ADMIN_SECRET environment variable is not set" >&2
+  exit 1
+fi
 
 echo "🔐 Configuring Hasura Permissions for Multi-Tenant Security"
 echo "Hasura URL: $HASURA_URL"

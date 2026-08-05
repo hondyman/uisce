@@ -9,14 +9,14 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
-	"github.com/jmoiron/sqlx"
 	"github.com/hondyman/uisce/backend/internal/tenant/goldcopy"
+	"github.com/jmoiron/sqlx"
 )
 
 // CostEstimator estimates query execution costs
 type CostEstimator struct {
 	db               *sqlx.DB
-	statsCache      map[string]*TableStats
+	statsCache       map[string]*TableStats
 	goldcopyResolver *goldcopy.Resolver
 }
 

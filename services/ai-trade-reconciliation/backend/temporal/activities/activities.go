@@ -12,26 +12,14 @@ import (
 	"github.com/hondyman/uisce/services/ai-trade-reconciliation/backend/internal/models"
 )
 
-// HasuraClient defines the interface for Hasura GraphQL operations
-type HasuraClient interface {
-	Query(query string, variables map[string]interface{}) (map[string]interface{}, error)
-	Mutate(mutation string, variables map[string]interface{}) (map[string]interface{}, error)
-}
-
 // ActivityContext holds shared dependencies for activity functions
 type ActivityContext struct {
-	db     *sql.DB
-	hasura HasuraClient
+	db *sql.DB
 }
 
 // NewActivityContext creates a new activity context
 func NewActivityContext(db *sql.DB) *ActivityContext {
 	return &ActivityContext{db: db}
-}
-
-// NewActivityContextWithHasura creates a new activity context with Hasura support
-func NewActivityContextWithHasura(db *sql.DB, hasura HasuraClient) *ActivityContext {
-	return &ActivityContext{db: db, hasura: hasura}
 }
 
 // Activity functions for Temporal workflow
@@ -124,26 +112,14 @@ func SaveReconciliationResult(ctx context.Context, db *sql.DB, output *ai.Reconc
 	return actCtx.SaveResult(ctx, output, modelVersion)
 }
 
-// SaveResult saves the reconciliation result with Hasura-first approach
+// SaveResult saves the reconciliation result
 func (ac *ActivityContext) SaveResult(ctx context.Context, output *ai.ReconcileOutput, modelVersion int) (uuid.UUID, error) {
 	resultID := uuid.New()
 	now := time.Now()
 	discrepanciesJSON, _ := json.Marshal(output.Discrepancies)
 
-	if ac.hasura != nil {
-		id, err := ac.saveResultWithHasura(ctx, resultID, now, output, discrepanciesJSON, modelVersion)
-		if err == nil {
-			return id, nil
-		}
-		fmt.Printf("Hasura mutation failed, falling back to SQL: %v\n", err)
-	}
-
-	// TODO: Hasura-first pattern already implemented via saveResultWithHasura()
-	// Primary implementation uses Hasura GraphQL, this SQL is fallback only
-	// See saveResultWithHasura() for the Hasura mutation: mutation SaveResult
-	// SQL fallback
 	err := ac.db.QueryRowContext(ctx, `
-		INSERT INTO reconciliation_results 
+		INSERT INTO reconciliation_results
 			(id, run_date, match_rate, matched_count, unmatched_count, discrepancies, model_version, status, created_at, updated_at)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 		RETURNING id
@@ -158,71 +134,19 @@ func (ac *ActivityContext) SaveResult(ctx context.Context, output *ai.ReconcileO
 	return resultID, nil
 }
 
-func (ac *ActivityContext) saveResultWithHasura(ctx context.Context, resultID uuid.UUID, now time.Time, output *ai.ReconcileOutput, discrepanciesJSON []byte, modelVersion int) (uuid.UUID, error) {
-	mutation := `
-		mutation SaveResult($result: reconciliation_results_insert_input!) {
-			insert_reconciliation_results_one(object: $result) {
-				id
-			}
-		}
-	`
-
-	variables := map[string]interface{}{
-		"result": map[string]interface{}{
-			"id":              resultID.String(),
-			"run_date":        now.Format(time.RFC3339),
-			"match_rate":      output.MatchRate,
-			"matched_count":   len(output.Matched),
-			"unmatched_count": len(output.UnmatchedTrades) + len(output.UnmatchedConfirms),
-			"discrepancies":   string(discrepanciesJSON),
-			"model_version":   modelVersion,
-			"status":          "completed",
-			"created_at":      now.Format(time.RFC3339),
-			"updated_at":      now.Format(time.RFC3339),
-		},
-	}
-
-	resp, err := ac.hasura.Mutate(mutation, variables)
-	if err != nil {
-		return uuid.Nil, err
-	}
-
-	if result, ok := resp["insert_reconciliation_results_one"].(map[string]interface{}); ok {
-		if idStr, ok := result["id"].(string); ok {
-			if id, err := uuid.Parse(idStr); err == nil {
-				return id, nil
-			}
-		}
-	}
-
-	return resultID, nil
-}
-
 // CreateReconciliationTask creates a task for high-severity discrepancies
 func CreateReconciliationTask(ctx context.Context, db *sql.DB, resultID uuid.UUID, discrepancy models.Discrepancy, priority string) error {
 	actCtx := &ActivityContext{db: db}
 	return actCtx.CreateTask(ctx, resultID, discrepancy, priority)
 }
 
-// CreateTask creates a reconciliation task with Hasura-first approach
+// CreateTask creates a reconciliation task
 func (ac *ActivityContext) CreateTask(ctx context.Context, resultID uuid.UUID, discrepancy models.Discrepancy, priority string) error {
 	taskID := uuid.New()
 	now := time.Now()
 
-	if ac.hasura != nil {
-		err := ac.createTaskWithHasura(ctx, taskID, resultID, discrepancy.ID, priority, now)
-		if err == nil {
-			return nil
-		}
-		fmt.Printf("Hasura mutation failed, falling back to SQL: %v\n", err)
-	}
-
-	// TODO: Hasura-first pattern already implemented via createTaskWithHasura()
-	// Primary implementation uses Hasura GraphQL, this SQL is fallback only
-	// See createTaskWithHasura() for the Hasura mutation: mutation CreateTask
-	// SQL fallback
 	_, err := ac.db.ExecContext(ctx, `
-		INSERT INTO reconciliation_tasks 
+		INSERT INTO reconciliation_tasks
 			(id, result_id, discrepancy_id, status, priority, created_at, updated_at)
 		VALUES ($1, $2, $3, $4, $5, $6, $7)
 	`, taskID, resultID, discrepancy.ID, "open", priority, now, now)
@@ -232,31 +156,6 @@ func (ac *ActivityContext) CreateTask(ctx context.Context, resultID uuid.UUID, d
 	}
 
 	return nil
-}
-
-func (ac *ActivityContext) createTaskWithHasura(ctx context.Context, taskID, resultID, discrepancyID uuid.UUID, priority string, now time.Time) error {
-	mutation := `
-		mutation CreateTask($task: reconciliation_tasks_insert_input!) {
-			insert_reconciliation_tasks_one(object: $task) {
-				id
-			}
-		}
-	`
-
-	variables := map[string]interface{}{
-		"task": map[string]interface{}{
-			"id":             taskID.String(),
-			"result_id":      resultID.String(),
-			"discrepancy_id": discrepancyID.String(),
-			"status":         "open",
-			"priority":       priority,
-			"created_at":     now.Format(time.RFC3339),
-			"updated_at":     now.Format(time.RFC3339),
-		},
-	}
-
-	_, err := ac.hasura.Mutate(mutation, variables)
-	return err
 }
 
 // NotifyDiscrepancy sends a notification about a discrepancy

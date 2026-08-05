@@ -8,46 +8,37 @@ import (
 	"net/http"
 	"strings"
 
-	"calendar-service/internal/hasura"
+	"calendar-service/internal/database"
 
 	"github.com/sirupsen/logrus"
 )
 
-// RegionAuthMiddleware validates tenant can access requested region
-// Enforces data residency compliance
-func RegionAuthMiddleware(hasuraClient *hasura.Client, logger *logrus.Entry) func(http.Handler) http.Handler {
+func RegionAuthMiddleware(dbClient *database.Client, logger *logrus.Entry) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			ctx := r.Context()
 
-			// Extract tenant ID from header
 			tenantID := r.Header.Get("X-Hasura-Tenant-Id")
 			if tenantID == "" {
 				http.Error(w, "Missing X-Hasura-Tenant-Id header", http.StatusUnauthorized)
 				return
 			}
 
-			// Extract region from query parameter or request body
 			region := r.URL.Query().Get("region")
 
-			// If not in query, try to extract from body (for POST/PATCH)
 			if region == "" && (r.Method == "POST" || r.Method == "PATCH" || r.Method == "PUT") {
-				// Read body
 				bodyBytes, err := io.ReadAll(r.Body)
 				if err == nil {
-					// Parse JSON to find region
 					var reqBody map[string]interface{}
 					if err := json.Unmarshal(bodyBytes, &reqBody); err == nil {
 						if r, ok := reqBody["region"].(string); ok && r != "" {
 							region = r
 						}
 					}
-					// Restore body for next handler
 					r.Body = io.NopCloser(strings.NewReader(string(bodyBytes)))
 				}
 			}
 
-			// Default to us-east-1 if not provided
 			if region == "" {
 				region = "us-east-1"
 			}
@@ -58,8 +49,7 @@ func RegionAuthMiddleware(hasuraClient *hasura.Client, logger *logrus.Entry) fun
 				"path":      r.RequestURI,
 			})
 
-			// Validate tenant region authorization
-			authorized, err := validateTenantRegion(ctx, hasuraClient, tenantID, region)
+			authorized, err := validateTenantRegion(ctx, dbClient, tenantID, region)
 			if err != nil {
 				logger.WithError(err).Error("Failed to validate region authorization")
 				http.Error(w, "Authorization check failed", http.StatusInternalServerError)
@@ -76,9 +66,8 @@ func RegionAuthMiddleware(hasuraClient *hasura.Client, logger *logrus.Entry) fun
 				return
 			}
 
-			logger.Debug("ℹ️ Region authorization successful")
+			logger.Debug("Region authorization successful")
 
-			// Add region to context for downstream handlers
 			ctx = context.WithValue(ctx, contextKeyRegion, region)
 			ctx = context.WithValue(ctx, contextKeyTenantID, tenantID)
 
@@ -87,8 +76,7 @@ func RegionAuthMiddleware(hasuraClient *hasura.Client, logger *logrus.Entry) fun
 	}
 }
 
-// ValidateTenantRegion checks if tenant is authorized for region
-func validateTenantRegion(ctx context.Context, hc *hasura.Client, tenantID, region string) (bool, error) {
+func validateTenantRegion(ctx context.Context, dc *database.Client, tenantID, region string) (bool, error) {
 	if tenantID == "" {
 		return false, fmt.Errorf("tenant_id required")
 	}
@@ -96,35 +84,12 @@ func validateTenantRegion(ctx context.Context, hc *hasura.Client, tenantID, regi
 		return false, fmt.Errorf("region required")
 	}
 
-	// Actual Hasura query to verify tenant-region mapping
-	var result struct {
-		TenantRegions []struct {
-			TenantID string `json:"tenant_id"`
-		} `json:"tenant_regions"`
-	}
-
-	query := `
-	query GetTenantRegion($tenant_id: String!, $region: String!) {
-		tenant_regions(
-			where: {
-				tenant_id: {_eq: $tenant_id},
-				region: {_eq: $region}
-			},
-			limit: 1
-		) {
-			tenant_id
-		}
-	}
-	`
-
-	if err := hc.QueryRaw(ctx, query, map[string]interface{}{
-		"tenant_id": tenantID,
-		"region":    region,
-	}, &result); err != nil {
+	query := `SELECT COUNT(*) FROM tenant_regions WHERE tenant_id = $1 AND region = $2 LIMIT 1`
+	var count int
+	if err := dc.Pool().QueryRow(ctx, query, tenantID, region).Scan(&count); err != nil {
 		return false, fmt.Errorf("region auth query failed: %w", err)
 	}
-
-	return len(result.TenantRegions) > 0, nil
+	return count > 0, nil
 }
 
 // GetRegionFromContext extracts region from request context

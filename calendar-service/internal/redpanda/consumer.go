@@ -14,18 +14,17 @@ import (
 
 	"calendar-service/internal/availability"
 	"calendar-service/internal/cache"
-	"calendar-service/internal/hasura"
+	"calendar-service/internal/database"
 	"calendar-service/internal/metrics"
 )
 
-// CDCProcessor consumes CDC events from Redpanda and triggers cache invalidation
 type CDCProcessor struct {
 	brokers             []string
 	topics              []string
 	consumerGroup       string
 	temporalClient      client.Client
 	cacheClient         *cache.Client
-	hasuraClient        *hasura.Client
+	dbClient            *database.Client
 	availabilityChecker *availability.Checker
 	logger              *logrus.Entry
 	kafkaClient         *kgo.Client
@@ -42,7 +41,7 @@ func NewCDCProcessor(
 	topics []string,
 	temporalClient client.Client,
 	cacheClient *cache.Client,
-	hasuraClient *hasura.Client,
+	dbClient *database.Client,
 	availabilityChecker *availability.Checker,
 	eventListener interface {
 		OnEventCreated(ctx context.Context, userID, eventID string)
@@ -58,7 +57,7 @@ func NewCDCProcessor(
 		consumerGroup:       "calendar-cdc-group",
 		temporalClient:      temporalClient,
 		cacheClient:         cacheClient,
-		hasuraClient:        hasuraClient,
+		dbClient:            dbClient,
 		availabilityChecker: availabilityChecker,
 		eventListener:       eventListener,
 		metrics:             metrics,
@@ -443,35 +442,35 @@ func (p *CDCProcessor) extractField(after, before json.RawMessage, fieldName str
 	return val
 }
 
-// findProfilesUsingCalendar queries Hasura to find all profiles using a calendar
+// findProfilesUsingCalendar queries the database to find all profiles using a calendar
 func (p *CDCProcessor) findProfilesUsingCalendar(ctx context.Context, tenantID, calendarID string) ([]string, error) {
-	if p.hasuraClient == nil {
-		return nil, fmt.Errorf("hasura client not configured")
+	if p.dbClient == nil {
+		return nil, fmt.Errorf("database client not configured")
 	}
 
-	var result struct {
-		ProfileCalendars []struct {
-			ScheduleProfile struct {
-				ID          string `json:"id"`
-				ProfileName string `json:"profile_name"`
-			} `json:"schedule_profile"`
-		} `json:"profile_calendars"`
-	}
+	query := `
+		SELECT sp.profile_name
+		FROM schedule_profiles sp
+		JOIN profile_calendars pc ON sp.id = pc.schedule_profile_id
+		WHERE sp.tenant_id = $1 AND pc.calendar_id = $2
+	`
 
-	// Use hashaClient.Query with correct signature
 	queryCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 
-	if err := p.hasuraClient.Query(queryCtx, &result, map[string]interface{}{
-		"tenant_id":   tenantID,
-		"calendar_id": calendarID,
-	}); err != nil {
+	rows, err := p.dbClient.Pool().Query(queryCtx, tenantID, calendarID)
+	if err != nil {
 		return nil, fmt.Errorf("query failed: %w", err)
 	}
+	defer rows.Close()
 
 	var profileNames []string
-	for _, pc := range result.ProfileCalendars {
-		profileNames = append(profileNames, pc.ScheduleProfile.ProfileName)
+	for rows.Next() {
+		var profileName string
+		if err := rows.Scan(&profileName); err != nil {
+			continue
+		}
+		profileNames = append(profileNames, profileName)
 	}
 	return profileNames, nil
 }

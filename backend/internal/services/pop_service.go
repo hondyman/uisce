@@ -14,21 +14,12 @@ import (
 
 // PoPService handles Period-over-Period analysis and anomaly detection
 type PoPService struct {
-	db           *sql.DB
-	hasuraClient HasuraClient
+	db *sql.DB
 }
 
 // NewPoPService creates a new PoP service instance
 func NewPoPService(db *sql.DB) *PoPService {
 	return &PoPService{db: db}
-}
-
-// NewPoPServiceWithHasura creates a new service with Hasura support
-func NewPoPServiceWithHasura(db *sql.DB, hasuraClient HasuraClient) *PoPService {
-	return &PoPService{
-		db:           db,
-		hasuraClient: hasuraClient,
-	}
 }
 
 // PoPMetric represents a period-over-period metric definition

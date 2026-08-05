@@ -109,7 +109,7 @@ func initDB() error {
 	}
 	dbURL := os.Getenv("DATABASE_URL")
 	if dbURL == "" {
-		dbURL = "postgres://postgres:postgres@localhost:5432/portfolio"
+		return fmt.Errorf("DATABASE_URL environment variable is not set")
 	}
 	pool, err := pgxpool.New(context.Background(), dbURL)
 	if err != nil {

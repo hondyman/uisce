@@ -51,7 +51,7 @@ func main() {
 	// Connect to PostgreSQL for activity operations
 	dbURL := os.Getenv("DATABASE_URL")
 	if dbURL == "" {
-		dbURL = "postgresql://postgres:postgres@localhost:5432/alpha?sslmode=disable"
+		log.Fatal("DATABASE_URL environment variable is required")
 	}
 	db, err := sql.Open("postgres", dbURL)
 	if err != nil {

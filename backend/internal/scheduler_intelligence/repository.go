@@ -4,19 +4,25 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"time"
 
 	"github.com/google/uuid"
+	"github.com/hondyman/uisce/backend/internal/db"
 	"github.com/jmoiron/sqlx"
 )
 
 // Repository provides data access for scheduler intelligence
 type Repository struct {
-	db *sqlx.DB
+	sqlxDB         *sqlx.DB
+	jobRunStatus    *db.StatusUpdater
 }
 
 // NewRepository creates a new scheduler intelligence repository
-func NewRepository(db *sqlx.DB) *Repository {
-	return &Repository{db: db}
+func NewRepository(sqlxDB *sqlx.DB) *Repository {
+	return &Repository{
+		sqlxDB:        sqlxDB,
+		jobRunStatus:   db.NewStatusUpdater(sqlxDB, "job_runs", "id"),
+	}
 }
 
 // ============================================================================
@@ -42,7 +48,7 @@ func (r *Repository) CreateJob(ctx context.Context, job *Job) error {
 		job.ID = uuid.New()
 	}
 
-	return r.db.QueryRowxContext(ctx, query,
+	return r.sqlxDB.QueryRowxContext(ctx, query,
 		job.ID, job.Scope, job.TenantID, job.ParentJobID, job.DatasourceID, job.Name, job.Description, job.Category, job.JobType,
 		job.Parameters, job.SemanticBindings, job.ScheduleType, job.CronExpression, job.EventTrigger,
 		job.Timezone, job.CalendarIDs, job.BlackoutWindows, job.Constraints, job.RetryPolicy,
@@ -55,7 +61,7 @@ func (r *Repository) CreateJob(ctx context.Context, job *Job) error {
 func (r *Repository) GetJob(ctx context.Context, id uuid.UUID) (*Job, error) {
 	var job Job
 	query := `SELECT * FROM scheduled_jobs WHERE id = $1`
-	err := r.db.GetContext(ctx, &job, query, id)
+	err := r.sqlxDB.GetContext(ctx, &job, query, id)
 	if err != nil {
 		return nil, err
 	}
@@ -69,10 +75,10 @@ func (r *Repository) GetJobByName(ctx context.Context, tenantID *uuid.UUID, name
 	var err error
 	if tenantID == nil {
 		query = `SELECT * FROM scheduled_jobs WHERE scope = 'GLOBAL' AND name = $1`
-		err = r.db.GetContext(ctx, &job, query, name)
+		err = r.sqlxDB.GetContext(ctx, &job, query, name)
 	} else {
 		query = `SELECT * FROM scheduled_jobs WHERE tenant_id = $1 AND name = $2`
-		err = r.db.GetContext(ctx, &job, query, tenantID, name)
+		err = r.sqlxDB.GetContext(ctx, &job, query, tenantID, name)
 	}
 	if err != nil {
 		return nil, err
@@ -96,7 +102,7 @@ func (r *Repository) UpdateJob(ctx context.Context, job *Job) error {
 		RETURNING updated_at
 	`
 
-	return r.db.QueryRowxContext(ctx, query,
+	return r.sqlxDB.QueryRowxContext(ctx, query,
 		job.ID, job.Name, job.Description, job.Category, job.JobType,
 		job.Parameters, job.SemanticBindings, job.ScheduleType,
 		job.CronExpression, job.EventTrigger, job.Timezone,
@@ -111,7 +117,7 @@ func (r *Repository) UpdateJob(ctx context.Context, job *Job) error {
 // DeleteJob soft-deletes a job by setting is_active to false
 func (r *Repository) DeleteJob(ctx context.Context, id uuid.UUID) error {
 	query := `UPDATE scheduled_jobs SET is_active = false WHERE id = $1`
-	_, err := r.db.ExecContext(ctx, query, id)
+	_, err := r.sqlxDB.ExecContext(ctx, query, id)
 	return err
 }
 
@@ -162,7 +168,7 @@ func (r *Repository) ListJobs(ctx context.Context, filters JobListFilters) ([]Jo
 
 	// Get count
 	countQuery := "SELECT COUNT(*) " + baseQuery
-	err := r.db.GetContext(ctx, &total, countQuery, args...)
+	err := r.sqlxDB.GetContext(ctx, &total, countQuery, args...)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -176,7 +182,7 @@ func (r *Repository) ListJobs(ctx context.Context, filters JobListFilters) ([]Jo
 		selectQuery += fmt.Sprintf(" OFFSET %d", filters.Offset)
 	}
 
-	err = r.db.SelectContext(ctx, &jobs, selectQuery, args...)
+	err = r.sqlxDB.SelectContext(ctx, &jobs, selectQuery, args...)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -187,7 +193,7 @@ func (r *Repository) ListJobs(ctx context.Context, filters JobListFilters) ([]Jo
 // UpdateJobLastRun updates the last run timestamp
 func (r *Repository) UpdateJobLastRun(ctx context.Context, jobID uuid.UUID) error {
 	query := `UPDATE scheduled_jobs SET last_run_at = NOW() WHERE id = $1`
-	_, err := r.db.ExecContext(ctx, query, jobID)
+	_, err := r.sqlxDB.ExecContext(ctx, query, jobID)
 	return err
 }
 
@@ -195,7 +201,7 @@ func (r *Repository) UpdateJobLastRun(ctx context.Context, jobID uuid.UUID) erro
 func (r *Repository) GetTenantJobOverride(ctx context.Context, parentJobID uuid.UUID, tenantID uuid.UUID) (*Job, error) {
 	var job Job
 	query := `SELECT * FROM scheduled_jobs WHERE parent_job_id = $1 AND tenant_id = $2`
-	err := r.db.GetContext(ctx, &job, query, parentJobID, tenantID)
+	err := r.sqlxDB.GetContext(ctx, &job, query, parentJobID, tenantID)
 	if err != nil {
 		return nil, err
 	}
@@ -224,7 +230,7 @@ func (r *Repository) CreateDAG(ctx context.Context, dag *DAG) error {
 		dag.ID = uuid.New()
 	}
 
-	return r.db.QueryRowxContext(ctx, query,
+	return r.sqlxDB.QueryRowxContext(ctx, query,
 		dag.ID, dag.Scope, dag.TenantID, dag.ParentDAGID, dag.Name, dag.Description, dag.Category,
 		dag.Nodes, dag.Edges, dag.SemanticBindings, dag.ScheduleType, dag.CronExpression,
 		dag.CalendarIDs, dag.Timezone, dag.MaxParallelJobs, dag.FailFast,
@@ -237,7 +243,7 @@ func (r *Repository) CreateDAG(ctx context.Context, dag *DAG) error {
 func (r *Repository) GetDAG(ctx context.Context, id uuid.UUID) (*DAG, error) {
 	var dag DAG
 	query := `SELECT * FROM scheduled_dags WHERE id = $1`
-	err := r.db.GetContext(ctx, &dag, query, id)
+	err := r.sqlxDB.GetContext(ctx, &dag, query, id)
 	if err != nil {
 		return nil, err
 	}
@@ -257,7 +263,7 @@ func (r *Repository) UpdateDAG(ctx context.Context, dag *DAG) error {
 		RETURNING updated_at
 	`
 
-	return r.db.QueryRowxContext(ctx, query,
+	return r.sqlxDB.QueryRowxContext(ctx, query,
 		dag.ID, dag.Name, dag.Description, dag.Category, dag.Nodes, dag.Edges,
 		dag.SemanticBindings, dag.ScheduleType, dag.CronExpression, dag.CalendarIDs, dag.Timezone,
 		dag.MaxParallelJobs, dag.FailFast, dag.TimeoutSeconds,
@@ -268,7 +274,7 @@ func (r *Repository) UpdateDAG(ctx context.Context, dag *DAG) error {
 // DeleteDAG soft-deletes a DAG
 func (r *Repository) DeleteDAG(ctx context.Context, id uuid.UUID) error {
 	query := `UPDATE scheduled_dags SET is_active = false WHERE id = $1`
-	_, err := r.db.ExecContext(ctx, query, id)
+	_, err := r.sqlxDB.ExecContext(ctx, query, id)
 	return err
 }
 
@@ -281,7 +287,7 @@ func (r *Repository) ListDAGs(ctx context.Context, tenantID uuid.UUID, activeOnl
 	}
 	query += ` ORDER BY name`
 
-	err := r.db.SelectContext(ctx, &dags, query, tenantID)
+	err := r.sqlxDB.SelectContext(ctx, &dags, query, tenantID)
 	return dags, err
 }
 
@@ -306,7 +312,7 @@ func (r *Repository) CreateJobRun(ctx context.Context, run *JobRun) error {
 		run.ID = uuid.New()
 	}
 
-	return r.db.QueryRowxContext(ctx, query,
+	return r.sqlxDB.QueryRowxContext(ctx, query,
 		run.ID, run.JobID, run.DAGRunID, run.TenantID,
 		run.TemporalWorkflowID, run.TemporalRunID, run.TaskQueue,
 		run.Status, run.AttemptNumber, run.TriggerType, run.TriggeredBy,
@@ -318,7 +324,7 @@ func (r *Repository) CreateJobRun(ctx context.Context, run *JobRun) error {
 func (r *Repository) GetJobRun(ctx context.Context, id uuid.UUID) (*JobRun, error) {
 	var run JobRun
 	query := `SELECT * FROM job_runs WHERE id = $1`
-	err := r.db.GetContext(ctx, &run, query, id)
+	err := r.sqlxDB.GetContext(ctx, &run, query, id)
 	if err != nil {
 		return nil, err
 	}
@@ -337,21 +343,20 @@ func (r *Repository) UpdateJobRunStatus(ctx context.Context, id uuid.UUID, statu
 				ELSE duration_ms END
 		WHERE id = $1
 	`
-	_, err := r.db.ExecContext(ctx, query, id, status, errorMsg)
+	_, err := r.sqlxDB.ExecContext(ctx, query, id, status, errorMsg)
 	return err
 }
 
 // UpdateJobRunStarted marks a job run as started
 func (r *Repository) UpdateJobRunStarted(ctx context.Context, id uuid.UUID) error {
-	query := `UPDATE job_runs SET status = 'running', started_at = NOW() WHERE id = $1`
-	_, err := r.db.ExecContext(ctx, query, id)
-	return err
+	return r.jobRunStatus.UpdateStatusWithContext(ctx, id, uuid.Nil, "running",
+		map[string]interface{}{"started_at": time.Now()})
 }
 
 // UpdateJobRunResult updates the result of a completed job run
 func (r *Repository) UpdateJobRunResult(ctx context.Context, id uuid.UUID, result json.RawMessage) error {
 	query := `UPDATE job_runs SET result = $2 WHERE id = $1`
-	_, err := r.db.ExecContext(ctx, query, id, result)
+	_, err := r.sqlxDB.ExecContext(ctx, query, id, result)
 	return err
 }
 
@@ -396,7 +401,7 @@ func (r *Repository) ListJobRuns(ctx context.Context, filters JobRunListFilters)
 		query += fmt.Sprintf(" OFFSET %d", filters.Offset)
 	}
 
-	err := r.db.SelectContext(ctx, &runs, query, args...)
+	err := r.sqlxDB.SelectContext(ctx, &runs, query, args...)
 	return runs, err
 }
 
@@ -420,7 +425,7 @@ func (r *Repository) CreateDAGRun(ctx context.Context, run *DAGRun) error {
 		run.ID = uuid.New()
 	}
 
-	return r.db.QueryRowxContext(ctx, query,
+	return r.sqlxDB.QueryRowxContext(ctx, query,
 		run.ID, run.DAGID, run.TenantID, run.TemporalWorkflowID, run.TemporalRunID,
 		run.Status, run.TriggerType, run.TriggeredBy, run.ScheduledAt, run.Metadata,
 	).Scan(&run.CreatedAt)
@@ -430,7 +435,7 @@ func (r *Repository) CreateDAGRun(ctx context.Context, run *DAGRun) error {
 func (r *Repository) GetDAGRun(ctx context.Context, id uuid.UUID) (*DAGRun, error) {
 	var run DAGRun
 	query := `SELECT * FROM dag_runs WHERE id = $1`
-	err := r.db.GetContext(ctx, &run, query, id)
+	err := r.sqlxDB.GetContext(ctx, &run, query, id)
 	if err != nil {
 		return nil, err
 	}
@@ -452,7 +457,7 @@ func (r *Repository) UpdateDAGRunStatus(ctx context.Context, id uuid.UUID, statu
 				ELSE duration_ms END
 		WHERE id = $1
 	`
-	_, err := r.db.ExecContext(ctx, query, id, status, completedJobs, failedJobs, skippedJobs, errorMsg)
+	_, err := r.sqlxDB.ExecContext(ctx, query, id, status, completedJobs, failedJobs, skippedJobs, errorMsg)
 	return err
 }
 
@@ -463,7 +468,7 @@ func (r *Repository) ListDAGRuns(ctx context.Context, dagID uuid.UUID, limit int
 	if limit > 0 {
 		query += fmt.Sprintf(" LIMIT %d", limit)
 	}
-	err := r.db.SelectContext(ctx, &runs, query, dagID)
+	err := r.sqlxDB.SelectContext(ctx, &runs, query, dagID)
 	return runs, err
 }
 
@@ -488,7 +493,7 @@ func (r *Repository) CreateAISuggestion(ctx context.Context, suggestion *AISugge
 		suggestion.ID = uuid.New()
 	}
 
-	return r.db.QueryRowxContext(ctx, query,
+	return r.sqlxDB.QueryRowxContext(ctx, query,
 		suggestion.ID, suggestion.TenantID, suggestion.SuggestionType,
 		suggestion.TargetType, suggestion.TargetID, suggestion.Title,
 		suggestion.Description, suggestion.ImpactSummary, suggestion.RiskLevel,
@@ -504,7 +509,7 @@ func (r *Repository) GetPendingAISuggestions(ctx context.Context, tenantID uuid.
 		WHERE tenant_id = $1 AND status = 'pending'
 		ORDER BY created_at DESC
 	`
-	err := r.db.SelectContext(ctx, &suggestions, query, tenantID)
+	err := r.sqlxDB.SelectContext(ctx, &suggestions, query, tenantID)
 	return suggestions, err
 }
 
@@ -515,7 +520,7 @@ func (r *Repository) CountPendingDriftSuggestions(ctx context.Context, tenantID 
 		SELECT COUNT(*) FROM scheduler_ai_suggestions
 		WHERE tenant_id = $1 AND status = 'pending' AND suggestion_type = 'semantic_drift'
 	`
-	err := r.db.GetContext(ctx, &count, query, tenantID)
+	err := r.sqlxDB.GetContext(ctx, &count, query, tenantID)
 	return count, err
 }
 
@@ -528,7 +533,7 @@ func (r *Repository) UpdateAISuggestionStatus(ctx context.Context, id uuid.UUID,
 			changeset_id = $4
 		WHERE id = $1
 	`
-	_, err := r.db.ExecContext(ctx, query, id, status, dismissedReason, changesetID)
+	_, err := r.sqlxDB.ExecContext(ctx, query, id, status, dismissedReason, changesetID)
 	return err
 }
 
@@ -554,7 +559,7 @@ func (r *Repository) SaveChangeSet(ctx context.Context, cs *SchedulerChangeSet) 
 		RETURNING created_at, updated_at
 	`
 
-	return r.db.QueryRowxContext(ctx, query,
+	return r.sqlxDB.QueryRowxContext(ctx, query,
 		cs.ID, cs.TenantID, cs.Scope, cs.Type, cs.Title, cs.Description, cs.Author, cs.Status,
 		cs.TargetType, cs.TargetID, cs.Diff, cs.ImpactAnalysis, cs.AIReview, cs.RiskScore,
 	).Scan(&cs.CreatedAt, &cs.UpdatedAt)
@@ -564,7 +569,7 @@ func (r *Repository) SaveChangeSet(ctx context.Context, cs *SchedulerChangeSet) 
 func (r *Repository) GetChangeSet(ctx context.Context, id uuid.UUID) (*SchedulerChangeSet, error) {
 	var cs SchedulerChangeSet
 	query := `SELECT * FROM scheduler_changesets WHERE id = $1`
-	err := r.db.GetContext(ctx, &cs, query, id)
+	err := r.sqlxDB.GetContext(ctx, &cs, query, id)
 	return &cs, err
 }
 
@@ -588,7 +593,7 @@ func (r *Repository) ListChangeSets(ctx context.Context, tenantID uuid.UUID, sta
 	}
 
 	query += " ORDER BY created_at DESC"
-	err := r.db.SelectContext(ctx, &css, query, args...)
+	err := r.sqlxDB.SelectContext(ctx, &css, query, args...)
 	return css, err
 }
 
@@ -605,7 +610,7 @@ func (r *Repository) SaveApproval(ctx context.Context, app *ChangeSetApproval) e
 	if app.ID == uuid.Nil {
 		app.ID = uuid.New()
 	}
-	return r.db.QueryRowxContext(ctx, query,
+	return r.sqlxDB.QueryRowxContext(ctx, query,
 		app.ID, app.ChangeSetID, app.ApproverID, app.ApproverRole, app.Decision, app.Comment,
 	).Scan(&app.CreatedAt)
 }
@@ -614,7 +619,7 @@ func (r *Repository) SaveApproval(ctx context.Context, app *ChangeSetApproval) e
 func (r *Repository) GetApprovals(ctx context.Context, changesetID uuid.UUID) ([]ChangeSetApproval, error) {
 	var apps []ChangeSetApproval
 	query := `SELECT * FROM scheduler_changeset_approvals WHERE changeset_id = $1 ORDER BY created_at ASC`
-	err := r.db.SelectContext(ctx, &apps, query, changesetID)
+	err := r.sqlxDB.SelectContext(ctx, &apps, query, changesetID)
 	return apps, err
 }
 
@@ -627,7 +632,7 @@ func (r *Repository) GetDownstreamJobs(ctx context.Context, jobID uuid.UUID) ([]
 		JOIN job_dependencies d ON j.id = d.job_id
 		WHERE d.depends_on_job_id = $1 AND j.is_active = true
 	`
-	err := r.db.SelectContext(ctx, &jobs, query, jobID)
+	err := r.sqlxDB.SelectContext(ctx, &jobs, query, jobID)
 	return jobs, err
 }
 
@@ -644,6 +649,6 @@ func (r *Repository) GetDAGsContainingJob(ctx context.Context, jobID uuid.UUID) 
 	// nodes is [{id, job_id, ...}]
 	// We check for any element in the array matching {"job_id": "..."}
 	jobIDStr := fmt.Sprintf(`[{"job_id": "%s"}]`, jobID.String())
-	err := r.db.SelectContext(ctx, &dags, query, jobIDStr)
+	err := r.sqlxDB.SelectContext(ctx, &dags, query, jobIDStr)
 	return dags, err
 }

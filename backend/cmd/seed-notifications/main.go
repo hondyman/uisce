@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"log"
+	"os"
 	"time"
 
 	"github.com/google/uuid"
@@ -27,8 +28,10 @@ type Notification struct {
 }
 
 func main() {
-	// Connect to database
-	dsn := "host=localhost port=5432 user=postgres password=postgres dbname=alpha sslmode=disable"
+	dsn := os.Getenv("DATABASE_URL")
+	if dsn == "" {
+		log.Fatal("DATABASE_URL environment variable is not set")
+	}
 	db, err := sqlx.Connect("postgres", dsn)
 	if err != nil {
 		log.Fatal("Failed to connect to database:", err)

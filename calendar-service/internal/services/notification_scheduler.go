@@ -1,31 +1,31 @@
 package services
 
 import (
+	"context"
 	"time"
 
-	"github.com/sirupsen/logrus"
+	"calendar-service/internal/database"
 
-	"calendar-service/internal/hasura"
+	"github.com/sirupsen/logrus"
 )
 
 type NotificationScheduler struct {
-	hasuraClient *hasura.Client
-	notifier     interface{}
-	logger       *logrus.Entry
-	ticker       *time.Ticker
-	quit         chan struct{}
+	dbClient  *database.Client
+	notifier interface{}
+	logger   *logrus.Entry
+	ticker   *time.Ticker
+	quit     chan struct{}
 }
 
-func NewNotificationScheduler(client *hasura.Client, notifier interface{}, logger *logrus.Entry) *NotificationScheduler {
+func NewNotificationScheduler(db *database.Client, notifier interface{}, logger *logrus.Entry) *NotificationScheduler {
 	return &NotificationScheduler{
-		hasuraClient: client,
-		notifier:     notifier,
-		logger:       logger.WithField("component", "notification_scheduler"),
-		quit:         make(chan struct{}),
+		dbClient:  db,
+		notifier: notifier,
+		logger:   logger.WithField("component", "notification_scheduler"),
+		quit:     make(chan struct{}),
 	}
 }
 
-// Start starts the scheduler loop. In production this would use cron or a dedicated task queue.
 func (s *NotificationScheduler) Start(interval time.Duration) {
 	s.ticker = time.NewTicker(interval)
 	go func() {
@@ -50,9 +50,28 @@ func (s *NotificationScheduler) Stop() {
 }
 
 func (s *NotificationScheduler) runScheduledTasks() {
-	// For demonstration, processing "weekly digests".
-	// In a complete implementation, we would check if it's the start of the week.
+	ctx := context.Background()
 
-	// In a real scenario, this would perform a Hasura query to get all users where digest_frequency = 'weekly'
+	query := `
+		SELECT user_id, email, digest_frequency
+		FROM user_notification_settings
+		WHERE digest_frequency = 'weekly'
+	`
+
+	rows, err := s.dbClient.Pool().Query(ctx, query)
+	if err != nil {
+		s.logger.WithError(err).Error("Failed to fetch users for notifications")
+		return
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var userID, email, digestFreq string
+		if err := rows.Scan(&userID, &email, &digestFreq); err != nil {
+			continue
+		}
+		s.logger.WithField("user_id", userID).Debug("Processing weekly digest notification")
+	}
+
 	s.logger.Debug("Running scheduled notification tasks")
 }

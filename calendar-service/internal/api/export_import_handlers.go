@@ -8,36 +8,27 @@ import (
 	"net/http"
 	"time"
 
-	"calendar-service/internal/hasura"
+	"calendar-service/internal/database"
 	"calendar-service/internal/middleware"
 	"calendar-service/internal/services"
 
 	"github.com/sirupsen/logrus"
 )
 
-// ExportImportHandler handles data export/import API endpoints
 type ExportImportHandler struct {
-	hasuraClient *hasura.Client
+	dbClient     *database.Client
 	auditService services.AuditService
 	logger       *logrus.Entry
 }
 
-// NewExportImportHandler creates a new export/import handler
-func NewExportImportHandler(hc *hasura.Client, audit services.AuditService, logger *logrus.Entry) *ExportImportHandler {
+func NewExportImportHandler(db *database.Client, audit services.AuditService, logger *logrus.Entry) *ExportImportHandler {
 	return &ExportImportHandler{
-		hasuraClient: hc,
+		dbClient:     db,
 		auditService: audit,
 		logger:       logger.WithField("handler", "export_import"),
 	}
 }
 
-// ExportData exports user data
-// @Summary Export user data
-// @Tags settings
-// @Produce json
-// @Param request body ExportRequest true "Export request"
-// @Success 200 file application/json
-// @Router /api/v1/settings/export [post]
 func (h *ExportImportHandler) ExportData(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
@@ -69,7 +60,6 @@ func (h *ExportImportHandler) ExportData(w http.ResponseWriter, r *http.Request)
 
 	exportData := make(map[string]interface{})
 
-	// Export calendars
 	if req.IncludeCalendars {
 		calendars, err := h.exportCalendars(ctx, tenantID, userID)
 		if err != nil {
@@ -79,7 +69,6 @@ func (h *ExportImportHandler) ExportData(w http.ResponseWriter, r *http.Request)
 		}
 	}
 
-	// Export events
 	if req.IncludeEvents {
 		events, err := h.exportEvents(ctx, tenantID, userID, req.StartDate, req.EndDate)
 		if err != nil {
@@ -89,7 +78,6 @@ func (h *ExportImportHandler) ExportData(w http.ResponseWriter, r *http.Request)
 		}
 	}
 
-	// Export settings
 	if req.IncludeSettings {
 		settings, err := h.exportSettings(ctx, userID)
 		if err != nil {
@@ -99,7 +87,6 @@ func (h *ExportImportHandler) ExportData(w http.ResponseWriter, r *http.Request)
 		}
 	}
 
-	// Set content type based on format
 	filename := "calendar-export-" + time.Now().Format("2006-01-02")
 
 	switch req.Format {
@@ -111,7 +98,7 @@ func (h *ExportImportHandler) ExportData(w http.ResponseWriter, r *http.Request)
 		w.Header().Set("Content-Type", "text/calendar")
 		w.Header().Set("Content-Disposition", "attachment; filename="+filename+".ics")
 		h.exportICS(w, exportData)
-	default: // json
+	default:
 		w.Header().Set("Content-Type", "application/json")
 		w.Header().Set("Content-Disposition", "attachment; filename="+filename+".json")
 		json.NewEncoder(w).Encode(exportData)
@@ -120,95 +107,116 @@ func (h *ExportImportHandler) ExportData(w http.ResponseWriter, r *http.Request)
 
 func (h *ExportImportHandler) exportCalendars(ctx context.Context, tenantID, userID string) ([]map[string]interface{}, error) {
 	query := `
-	query ExportCalendars($tenant_id: uuid!) {
-		calendars(
-			where: {tenant_id: {_eq: $tenant_id}, valid_to: {_is_null: true}}
-		) {
-			id name description region priority holidays
-			created_at updated_at
-		}
-	}
+		SELECT id, name, description, region, priority, holidays, created_at, updated_at
+		FROM calendars
+		WHERE tenant_id = $1 AND valid_to IS NULL
 	`
 
-	var result struct {
-		Calendars []map[string]interface{} `json:"calendars"`
-	}
-
-	if err := h.hasuraClient.QueryRaw(ctx, query, map[string]interface{}{"tenant_id": tenantID}, &result); err != nil {
+	rows, err := h.dbClient.Pool().Query(ctx, query, tenantID)
+	if err != nil {
 		return nil, err
 	}
+	defer rows.Close()
 
-	return result.Calendars, nil
+	var calendars []map[string]interface{}
+	for rows.Next() {
+		var id, name, description, region, holidays string
+		var priority int
+		var createdAt, updatedAt time.Time
+		if err := rows.Scan(&id, &name, &description, &region, &priority, &holidays, &createdAt, &updatedAt); err != nil {
+			continue
+		}
+		calendars = append(calendars, map[string]interface{}{
+			"id":          id,
+			"name":        name,
+			"description": description,
+			"region":      region,
+			"priority":    priority,
+			"holidays":    holidays,
+			"created_at":  createdAt,
+			"updated_at":  updatedAt,
+		})
+	}
+	return calendars, nil
 }
 
 func (h *ExportImportHandler) exportEvents(ctx context.Context, tenantID, userID, startDate, endDate string) ([]map[string]interface{}, error) {
 	query := `
-	query ExportEvents($tenant_id: uuid!, $start: timestamptz, $end: timestamptz) {
-		synced_google_events(
-			where: {
-				tenant_id: {_eq: $tenant_id},
-				start_time: {_gte: $start, _lte: $end}
-			}
-		) {
-			id google_event_id title description location
-			start_time end_time is_all_day is_recurring
-			created_at
-		}
-	}
+		SELECT id, google_event_id, title, description, location, start_time, end_time, is_all_day, is_recurring, created_at
+		FROM synced_google_events
+		WHERE tenant_id = $1 AND start_time >= $2 AND end_time <= $3
 	`
 
-	var result struct {
-		Events []map[string]interface{} `json:"synced_google_events"`
-	}
-
-	if err := h.hasuraClient.QueryRaw(ctx, query, map[string]interface{}{
-		"tenant_id": tenantID,
-		"start":     startDate,
-		"end":       endDate,
-	}, &result); err != nil {
+	rows, err := h.dbClient.Pool().Query(ctx, query, tenantID, startDate, endDate)
+	if err != nil {
 		return nil, err
 	}
+	defer rows.Close()
 
-	return result.Events, nil
+	var events []map[string]interface{}
+	for rows.Next() {
+		var id, googleEventID, title, description, location string
+		var startTime, endTime time.Time
+		var isAllDay, isRecurring bool
+		var createdAt time.Time
+		if err := rows.Scan(&id, &googleEventID, &title, &description, &location, &startTime, &endTime, &isAllDay, &isRecurring, &createdAt); err != nil {
+			continue
+		}
+		events = append(events, map[string]interface{}{
+			"id":              id,
+			"google_event_id": googleEventID,
+			"title":           title,
+			"description":     description,
+			"location":        location,
+			"start_time":      startTime,
+			"end_time":        endTime,
+			"is_all_day":      isAllDay,
+			"is_recurring":    isRecurring,
+			"created_at":      createdAt,
+		})
+	}
+	return events, nil
 }
 
 func (h *ExportImportHandler) exportSettings(ctx context.Context, userID string) (map[string]interface{}, error) {
 	query := `
-	query ExportSettings($user_id: uuid!) {
-		user_settings(
-			where: {user_id: {_eq: $user_id}},
-			limit: 1
-		) {
-			display_name email timezone language
-			sync_frequency auto_sync_enabled
-			email_notifications push_notifications
-		}
-	}
+		SELECT display_name, email, timezone, language, sync_frequency, auto_sync_enabled, email_notifications, push_notifications
+		FROM user_settings
+		WHERE user_id = $1
 	`
 
-	var result struct {
-		Settings []map[string]interface{} `json:"user_settings"`
-	}
+	var settings map[string]interface{}
+	var displayName, email, timezone, language, syncFreq string
+	var autoSync, emailNotif, pushNotif bool
 
-	if err := h.hasuraClient.QueryRaw(ctx, query, map[string]interface{}{"user_id": userID}, &result); err != nil {
+	err := h.dbClient.Pool().QueryRow(ctx, query, userID).Scan(
+		&displayName, &email, &timezone, &language, &syncFreq, &autoSync, &emailNotif, &pushNotif,
+	)
+
+	if err != nil {
 		return nil, err
 	}
 
-	if len(result.Settings) > 0 {
-		return result.Settings[0], nil
+	settings = map[string]interface{}{
+		"display_name":        displayName,
+		"email":               email,
+		"timezone":            timezone,
+		"language":            language,
+		"sync_frequency":      syncFreq,
+		"auto_sync_enabled":   autoSync,
+		"email_notifications": emailNotif,
+		"push_notifications":  pushNotif,
 	}
 
-	return nil, nil
+	return settings, nil
 }
 
 func (h *ExportImportHandler) exportCSV(w http.ResponseWriter, data map[string]interface{}) {
 	writer := csv.NewWriter(w)
 	defer writer.Flush()
 
-	// Write events as CSV (most common use case)
 	if events, ok := data["events"].([]map[string]interface{}); ok {
 		writer.Write([]string{"id", "title", "description", "start_time", "end_time", "location", "is_all_day"})
-
 		for _, event := range events {
 			writer.Write([]string{
 				getString(event, "id"),
@@ -224,7 +232,6 @@ func (h *ExportImportHandler) exportCSV(w http.ResponseWriter, data map[string]i
 }
 
 func (h *ExportImportHandler) exportICS(w http.ResponseWriter, data map[string]interface{}) {
-	// Simple ICS export
 	w.Write([]byte("BEGIN:VCALENDAR\r\n"))
 	w.Write([]byte("VERSION:2.0\r\n"))
 	w.Write([]byte("PRODID:-//Calendar Sync//EN\r\n"))
@@ -241,19 +248,9 @@ func (h *ExportImportHandler) exportICS(w http.ResponseWriter, data map[string]i
 			w.Write([]byte("END:VEVENT\r\n"))
 		}
 	}
-
 	w.Write([]byte("END:VCALENDAR\r\n"))
 }
 
-// ImportData imports user data
-// @Summary Import user data
-// @Tags settings
-// @Accept multipart/form-data
-// @Produce json
-// @Param file formData file true "Import file"
-// @Param merge_strategy formData string true "Merge strategy"
-// @Success 200 {object} map[string]interface{}
-// @Router /api/v1/settings/import [post]
 func (h *ExportImportHandler) ImportData(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
@@ -269,8 +266,7 @@ func (h *ExportImportHandler) ImportData(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	// Parse multipart form
-	if err := r.ParseMultipartForm(10 << 20); err != nil { // 10MB max
+	if err := r.ParseMultipartForm(10 << 20); err != nil {
 		http.Error(w, "File too large", http.StatusBadRequest)
 		return
 	}
@@ -287,7 +283,6 @@ func (h *ExportImportHandler) ImportData(w http.ResponseWriter, r *http.Request)
 		mergeStrategy = "merge"
 	}
 
-	// Parse and import based on file type
 	var importData struct {
 		Calendars []map[string]interface{} `json:"calendars"`
 		Events    []map[string]interface{} `json:"events"`
@@ -305,22 +300,16 @@ func (h *ExportImportHandler) ImportData(w http.ResponseWriter, r *http.Request)
 
 	if len(importData.Calendars) > 0 {
 		for _, cal := range importData.Calendars {
-			// Mutation to insert or upsert calendar
-			mutation := `
-			mutation ImportCalendar($object: calendars_insert_input!) {
-				insert_calendars_one(object: $object, on_conflict: {constraint: calendars_pkey, update_columns: [name, description]}) {
-					id
-				}
-			}
-			`
-			// Ensure it has required fields for the user/tenant
 			cal["tenant_id"] = tenantID
-			if _, ok := cal["id"]; !ok {
-				// Generate UUID if missing
-			}
-
-			if err := h.hasuraClient.QueryRaw(ctx, mutation, map[string]interface{}{"object": cal}, nil); err != nil {
-				h.logger.WithError(err).Error("Failed to import calendar")
+			query := `
+				INSERT INTO calendars (id, tenant_id, name, description, region, priority, holidays)
+				VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6)
+				ON CONFLICT DO NOTHING
+			`
+			_, err := h.dbClient.Pool().Exec(ctx, query,
+				tenantID, cal["name"], cal["description"], cal["region"], cal["priority"], cal["holidays"],
+			)
+			if err != nil {
 				errors = append(errors, fmt.Sprintf("Calendar import failed: %v", err))
 				errorCount++
 			} else {
@@ -331,16 +320,16 @@ func (h *ExportImportHandler) ImportData(w http.ResponseWriter, r *http.Request)
 
 	if len(importData.Events) > 0 {
 		for _, event := range importData.Events {
-			mutation := `
-			mutation ImportEvent($object: synced_google_events_insert_input!) {
-				insert_synced_google_events_one(object: $object, on_conflict: {constraint: synced_google_events_pkey, update_columns: [title, description, start_time, end_time]}) {
-					id
-				}
-			}
-			`
 			event["tenant_id"] = tenantID
-			if err := h.hasuraClient.QueryRaw(ctx, mutation, map[string]interface{}{"object": event}, nil); err != nil {
-				h.logger.WithError(err).Error("Failed to import event")
+			query := `
+				INSERT INTO synced_google_events (id, tenant_id, google_event_id, title, description, start_time, end_time)
+				VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6)
+				ON CONFLICT DO NOTHING
+			`
+			_, err := h.dbClient.Pool().Exec(ctx, query,
+				tenantID, event["google_event_id"], event["title"], event["description"], event["start_time"], event["end_time"],
+			)
+			if err != nil {
 				errors = append(errors, fmt.Sprintf("Event import failed: %v", err))
 				errorCount++
 			} else {
@@ -349,7 +338,6 @@ func (h *ExportImportHandler) ImportData(w http.ResponseWriter, r *http.Request)
 		}
 	}
 
-	// Audit log
 	_ = h.auditService.Record(ctx, services.AuditEntry{
 		TenantID:   tenantID,
 		EntityType: "data_import",
@@ -367,7 +355,6 @@ func (h *ExportImportHandler) ImportData(w http.ResponseWriter, r *http.Request)
 	})
 }
 
-// Helper functions
 func getString(m map[string]interface{}, key string) string {
 	if v, ok := m[key].(string); ok {
 		return v

@@ -6,8 +6,8 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/jmoiron/sqlx"
 	"github.com/hondyman/uisce/backend/internal/tenant/goldcopy"
+	"github.com/jmoiron/sqlx"
 )
 
 // DBLineageRepository implements LineageRepository using recursive SQL queries

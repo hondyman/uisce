@@ -6,37 +6,33 @@ import (
 	"fmt"
 	"time"
 
-	"calendar-service/internal/hasura"
+	"calendar-service/internal/database"
 
 	"github.com/sirupsen/logrus"
 )
 
-// AnomalyDetector identifies anomalies in calendar syncs and system performance
 type AnomalyDetector struct {
-	hasuraClient *hasura.Client
+	dbClient     *database.Client
 	alertService AnomalyAlertService
 	logger       *logrus.Entry
 	config       AnomalyDetectorConfig
 }
 
-// AnomalyDetectorConfig holds configuration
 type AnomalyDetectorConfig struct {
-	HasuraClient    *hasura.Client
-	AlertService    AnomalyAlertService
-	Logger          *logrus.Entry
-	CheckInterval   time.Duration
+	DBClient       *database.Client
+	AlertService   AnomalyAlertService
+	Logger         *logrus.Entry
+	CheckInterval  time.Duration
 	SystemTenantID string
 }
 
-// AnomalyAlertService interface for dependency injection
 type AnomalyAlertService interface {
 	TriggerAlert(ctx context.Context, anomalyID string, anomalyType string, severity string, description string) error
 }
 
-// NewAnomalyDetector creates a new anomaly detector
 func NewAnomalyDetector(cfg AnomalyDetectorConfig) *AnomalyDetector {
 	return &AnomalyDetector{
-		hasuraClient: cfg.HasuraClient,
+		dbClient:     cfg.DBClient,
 		alertService: cfg.AlertService,
 		logger:       cfg.Logger.WithField("component", "anomaly_detector"),
 		config:       cfg,
@@ -80,53 +76,22 @@ func (ad *AnomalyDetector) runChecks(ctx context.Context) {
 }
 
 func (ad *AnomalyDetector) checkSyncFailureSpikes(ctx context.Context) error {
-	// Query recent sync jobs (last 15 mins) and compare failure rate to threshold
-	query := `
-	query GetRecentSyncStats {
-		sync_jobs_aggregate(where: {
-			created_at: {_gt: $time_threshold}
-		}) {
-			aggregate {
-				count
-			}
-		}
-		failed_syncs: sync_jobs_aggregate(where: {
-			created_at: {_gt: $time_threshold},
-			status: {_eq: "failed"}
-		}) {
-			aggregate {
-				count
-			}
-		}
-	}
-	`
+	timeThreshold := time.Now().Add(-15 * time.Minute)
 
-	timeThreshold := time.Now().Add(-15 * time.Minute).Format(time.RFC3339)
+	var total int
+	var failed int
 
-	var result struct {
-		Total struct {
-			Aggregate struct {
-				Count int `json:"count"`
-			} `json:"aggregate"`
-		} `json:"sync_jobs_aggregate"`
-		Failed struct {
-			Aggregate struct {
-				Count int `json:"count"`
-			} `json:"aggregate"`
-		} `json:"failed_syncs"`
-	}
-
-	if err := ad.hasuraClient.QueryRaw(ctx, query, map[string]interface{}{
-		"time_threshold": timeThreshold,
-	}, &result); err != nil {
+	totalQuery := `SELECT COUNT(*) FROM sync_jobs WHERE created_at > $1`
+	if err := ad.dbClient.Pool().QueryRow(ctx, totalQuery, timeThreshold).Scan(&total); err != nil {
 		return err
 	}
 
-	total := result.Total.Aggregate.Count
-	failed := result.Failed.Aggregate.Count
+	failedQuery := `SELECT COUNT(*) FROM sync_jobs WHERE created_at > $1 AND status = 'failed'`
+	if err := ad.dbClient.Pool().QueryRow(ctx, failedQuery, timeThreshold).Scan(&failed); err != nil {
+		return err
+	}
 
 	if total > 50 && float64(failed)/float64(total) > 0.15 {
-		// Greater than 15% failure rate
 		ad.logger.Warn("Sync failure spike detected")
 
 		metrics := map[string]interface{}{
@@ -140,7 +105,6 @@ func (ad *AnomalyDetector) checkSyncFailureSpikes(ctx context.Context) error {
 			"min_syncs":        50,
 		}
 
-		// Create anomaly in DB
 		ad.createAnomaly(ctx, ad.config.SystemTenantID, "sync_failure_spike", "critical",
 			fmt.Sprintf("High sync failure rate detected: %.2f%%", float64(failed)/float64(total)*100),
 			metrics, threshold, "threshold_based", 0.95)
@@ -161,53 +125,25 @@ func (ad *AnomalyDetector) checkLatencySpikes(ctx context.Context) error {
 
 // createAnomaly stores anomaly in the database and triggers alert
 func (ad *AnomalyDetector) createAnomaly(ctx context.Context, tenantID, anomalyType, severity, description string, metrics, threshold map[string]interface{}, detectionMethod string, confidence float64) {
-	mutation := `
-	mutation CreateAnomaly($input: anomalies_insert_input!) {
-		insert_anomalies_one(object: $input) {
-			id
-		}
-	}
-	`
-
 	metricsJSON, _ := json.Marshal(metrics)
 	thresholdJSON, _ := json.Marshal(threshold)
 
-	var tenantIDVal *string
+	var anomalyID string
+	query := `INSERT INTO anomalies (id, tenant_id, anomaly_type, severity, description, metrics, threshold_violated, detection_method, confidence_score, created_at) VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, $8, NOW()) RETURNING id`
+
+	var tenantIDVal interface{}
 	if tenantID != "" && tenantID != ad.config.SystemTenantID {
-		tenantIDVal = &tenantID
+		tenantIDVal = tenantID
 	}
 
-	input := map[string]interface{}{
-		"anomaly_type":       anomalyType,
-		"severity":           severity,
-		"description":        description,
-		"metrics":            string(metricsJSON),
-		"threshold_violated": string(thresholdJSON),
-		"detection_method":   detectionMethod,
-		"confidence_score":   confidence,
-	}
-
-	if tenantIDVal != nil {
-		input["tenant_id"] = *tenantIDVal
-	}
-
-	var result struct {
-		InsertAnomaliesOne struct {
-			ID string `json:"id"`
-		} `json:"insert_anomalies_one"`
-	}
-
-	if err := ad.hasuraClient.Mutate(ctx, mutation, map[string]interface{}{
-		"input": input,
-	}, &result); err != nil {
+	err := ad.dbClient.Pool().QueryRow(ctx, query, tenantIDVal, anomalyType, severity, description, string(metricsJSON), string(thresholdJSON), detectionMethod, confidence).Scan(&anomalyID)
+	if err != nil {
 		ad.logger.WithError(err).Error("Failed to store anomaly in database")
 		return
 	}
 
-	anomalyID := result.InsertAnomaliesOne.ID
 	ad.logger.WithField("anomaly_id", anomalyID).Info("Anomaly recorded successfully")
 
-	// Trigger Alert
 	if ad.alertService != nil {
 		if err := ad.alertService.TriggerAlert(ctx, anomalyID, anomalyType, severity, description); err != nil {
 			ad.logger.WithError(err).Error("Failed to trigger alert for anomaly")

@@ -23,7 +23,7 @@ import (
 func main() {
 	dsn := os.Getenv("POSTGRES_DSN")
 	if dsn == "" {
-		dsn = "postgres://postgres:postgres@localhost:5432/alpha?sslmode=disable"
+		log.Fatal("POSTGRES_DSN environment variable is not set")
 	}
 
 	var workflowID string
@@ -43,8 +43,11 @@ func main() {
 	}
 	defer db.Close()
 
-	// Security manager now accepts cache and metrics manager parameters - pass nil for test utility
-	sec := services.NewSecurityManager(nil, nil, []byte("dev-jwt-secret"))
+	jwtSecret := os.Getenv("JWT_SECRET")
+	if jwtSecret == "" {
+		log.Fatal("JWT_SECRET environment variable is not set")
+	}
+	sec := services.NewSecurityManager(nil, nil, []byte(jwtSecret))
 
 	handler := httpapi.NewTemporalAdminHandler(nil, db, sec, nil)
 

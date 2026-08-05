@@ -20,7 +20,7 @@ func init() {
 	var err error
 	databaseURL := os.Getenv("DATABASE_URL")
 	if databaseURL == "" {
-		databaseURL = "postgres://postgres:postgres@100.84.126.19:5432/alpha?sslmode=disable"
+		log.Fatal("DATABASE_URL environment variable is not set")
 	}
 
 	db, err = sql.Open("postgres", databaseURL)
@@ -41,7 +41,7 @@ func main() {
 	// Setup listener for metric_registry changes
 	databaseURL := os.Getenv("DATABASE_URL")
 	if databaseURL == "" {
-		databaseURL = "postgres://postgres:postgres@100.84.126.19:5432/alpha?sslmode=disable"
+		log.Fatal("DATABASE_URL environment variable is not set")
 	}
 
 	listener := pq.NewListener(databaseURL, 10*time.Second, time.Minute, func(ev pq.ListenerEventType, err error) {

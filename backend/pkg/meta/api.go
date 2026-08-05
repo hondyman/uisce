@@ -9,14 +9,14 @@ import (
 
 // API handlers for metadata management
 type API struct {
-	service   *Service
-	hasuraGen *HasuraMetadataGenerator
+	service *Service
+	migGen  *SQLMigrationGenerator
 }
 
-func NewAPI(service *Service, hasuraGen *HasuraMetadataGenerator) *API {
+func NewAPI(service *Service, migGen *SQLMigrationGenerator) *API {
 	return &API{
-		service:   service,
-		hasuraGen: hasuraGen,
+		service: service,
+		migGen:  migGen,
 	}
 }
 
@@ -26,7 +26,7 @@ func (api *API) RegisterRoutes(r chi.Router) {
 	r.Get("/meta/business-objects/{id}", api.getBusinessObject)
 	r.Put("/meta/business-objects/{id}", api.updateBusinessObject)
 	r.Delete("/meta/business-objects/{id}", api.deleteBusinessObject)
-	r.Post("/meta/business-objects/{id}/hasura", api.generateHasuraMetadata)
+	r.Post("/meta/business-objects/{id}/migration", api.generateSQLMigration)
 }
 
 func (api *API) listBusinessObjects(w http.ResponseWriter, r *http.Request) {
@@ -107,7 +107,7 @@ func (api *API) deleteBusinessObject(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func (api *API) generateHasuraMetadata(w http.ResponseWriter, r *http.Request) {
+func (api *API) generateSQLMigration(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 
 	bo, err := api.service.GetBusinessObject(r.Context(), id)
@@ -116,13 +116,12 @@ func (api *API) generateHasuraMetadata(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := api.hasuraGen.GenerateAndApply(r.Context(), bo); err != nil {
+	sql, err := api.migGen.GenerateMigration(bo)
+	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{
-		"status": "metadata generated and applied",
-	})
+	w.Header().Set("Content-Type", "text/plain")
+	w.Write([]byte(sql))
 }

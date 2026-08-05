@@ -6,22 +6,20 @@ import (
 	"time"
 
 	"calendar-service/internal/availability"
-	"calendar-service/internal/hasura"
+	"calendar-service/internal/database"
 
 	"github.com/sirupsen/logrus"
 )
 
-// Activities holds activity dependencies
 type Activities struct {
-	hasuraClient    *hasura.Client
+	dbClient        *database.Client
 	availabilityChk *availability.Checker
 	logger          *logrus.Entry
 }
 
-// NewActivities creates a new Activities instance
-func NewActivities(hc *hasura.Client, ac *availability.Checker, logger *logrus.Entry) *Activities {
+func NewActivities(dc *database.Client, ac *availability.Checker, logger *logrus.Entry) *Activities {
 	return &Activities{
-		hasuraClient:    hc,
+		dbClient:        dc,
 		availabilityChk: ac,
 		logger:          logger.WithField("component", "temporal_activities"),
 	}
@@ -43,66 +41,59 @@ func (a *Activities) FetchAffectedJobsActivity(ctx context.Context, req FetchAff
 	})
 	logger.Info("Fetching affected jobs")
 
-	query := ""
-	variables := map[string]interface{}{
-		"tenant_id": req.TenantID,
-	}
+	var sqlQuery string
+	var args []interface{}
 
 	switch req.EntityType {
 	case "calendar":
-		// Find all profiles using this calendar
-		query = `
-		query GetAffectedJobs($calendar_id: uuid!, $tenant_id: uuid!) {
-			jobs(where: {calendar_aware: {_eq: true}, tenant_id: {_eq: $tenant_id}, schedule_profile: {profile_calendars: {calendar_id: {_eq: $calendar_id}}}}) {
-				id
-				next_run
-				profile_id
-			}
-		}
-		`
-		variables["calendar_id"] = req.EntityID
+		sqlQuery = `
+			SELECT j.id, j.next_run::text, j.profile_id
+			FROM jobs j
+			JOIN schedule_profiles sp ON j.profile_id = sp.id
+			JOIN profile_calendars pc ON sp.id = pc.profile_id
+			WHERE j.calendar_aware = true
+			  AND j.tenant_id = $1
+			  AND pc.calendar_id = $2`
+		args = []interface{}{req.TenantID, req.EntityID}
 
 	case "schedule_profile":
-		// Find all jobs using this profile
-		query = `
-		query GetAffectedJobs($profile_id: uuid!, $tenant_id: uuid!) {
-			jobs(where: {profile_id: {_eq: $profile_id}, calendar_aware: {_eq: true}, tenant_id: {_eq: $tenant_id}}) {
-				id
-				next_run
-				profile_id
-			}
-		}
-		`
-		variables["profile_id"] = req.EntityID
+		sqlQuery = `
+			SELECT id, next_run::text, profile_id
+			FROM jobs
+			WHERE profile_id = $1 AND calendar_aware = true AND tenant_id = $2`
+		args = []interface{}{req.EntityID, req.TenantID}
 
 	case "blackout":
-		// Find all jobs in profiles covered by blackout (simplified)
-		// In reality would query jobs that overlap with blackout
-		query = `
-		query GetAffectedJobs($tenant_id: uuid!) {
-			jobs(where: {calendar_aware: {_eq: true}, tenant_id: {_eq: $tenant_id}}) {
-				id
-				next_run
-				profile_id
-			}
+		sqlQuery = `
+			SELECT id, next_run::text, profile_id
+			FROM jobs
+			WHERE calendar_aware = true AND tenant_id = $1`
+		args = []interface{}{req.TenantID}
+	}
+
+	rows, err := a.dbClient.Pool().Query(ctx, sqlQuery, args...)
+	if err != nil {
+		logger.WithError(err).Error("Failed to fetch affected jobs")
+		return nil, err
+	}
+	defer rows.Close()
+
+	result := []map[string]interface{}{}
+	for rows.Next() {
+		var id, nextRun, profileID string
+		if err := rows.Scan(&id, &nextRun, &profileID); err != nil {
+			logger.WithError(err).Error("Failed to scan row")
+			continue
 		}
-		`
+		result = append(result, map[string]interface{}{
+			"id":         id,
+			"next_run":   nextRun,
+			"profile_id": profileID,
+		})
 	}
 
-	var response struct {
-		Jobs []map[string]interface{} `json:"jobs"`
-	}
-
-	if query != "" {
-		err := a.hasuraClient.QueryRaw(ctx, query, variables, &response)
-		if err != nil {
-			logger.WithError(err).Error("Failed to fetch affected jobs")
-			return nil, err
-		}
-	}
-
-	logger.WithField("count", len(response.Jobs)).Info("Fetched affected jobs")
-	return response.Jobs, nil
+	logger.WithField("count", len(result)).Info("Fetched affected jobs")
+	return result, nil
 }
 
 // CheckAvailabilityRequest checks if a time slot is available
@@ -118,30 +109,12 @@ type CheckAvailabilityRequest struct {
 func (a *Activities) CheckAvailabilityActivity(ctx context.Context, req CheckAvailabilityRequest) (bool, error) {
 	logger := a.logger.WithField("activity", "CheckAvailability")
 
-	// Query profile name from profile ID
-	query := `
-	query GetProfileName($id: uuid!) {
-		schedule_profiles(where: {id: {_eq: $id}, valid_to: {_is_null: true}}) {
-			name
-		}
-	}
-	`
-	var profileResp struct {
-		ScheduleProfiles []struct {
-			Name string `json:"name"`
-		} `json:"schedule_profiles"`
-	}
-
-	if err := a.hasuraClient.QueryRaw(ctx, query, map[string]interface{}{"id": req.ProfileID}, &profileResp); err != nil {
+	var profileName string
+	query := `SELECT name FROM schedule_profiles WHERE id = $1 AND valid_to IS NULL LIMIT 1`
+	if err := a.dbClient.Pool().QueryRow(ctx, query, req.ProfileID).Scan(&profileName); err != nil {
 		logger.WithError(err).Error("Failed to get profile name")
 		return false, err
 	}
-
-	if len(profileResp.ScheduleProfiles) == 0 {
-		logger.Warn("Profile not found")
-		return false, nil
-	}
-	profileName := profileResp.ScheduleProfiles[0].Name
 
 	result, err := a.availabilityChk.CheckAvailability(ctx, req.TenantID, profileName, req.Region, req.Start, req.End)
 	if err != nil {
@@ -165,29 +138,12 @@ type FindNextSlotRequest struct {
 func (a *Activities) FindNextSlotActivity(ctx context.Context, req FindNextSlotRequest) (time.Time, error) {
 	logger := a.logger.WithField("activity", "FindNextSlot")
 
-	// Query profile name from profile ID
-	query := `
-	query GetProfileName($id: uuid!) {
-		schedule_profiles(where: {id: {_eq: $id}, valid_to: {_is_null: true}}) {
-			name
-		}
-	}
-	`
-	var profileResp struct {
-		ScheduleProfiles []struct {
-			Name string `json:"name"`
-		} `json:"schedule_profiles"`
-	}
-
-	if err := a.hasuraClient.QueryRaw(ctx, query, map[string]interface{}{"id": req.ProfileID}, &profileResp); err != nil {
+	var profileName string
+	query := `SELECT name FROM schedule_profiles WHERE id = $1 AND valid_to IS NULL LIMIT 1`
+	if err := a.dbClient.Pool().QueryRow(ctx, query, req.ProfileID).Scan(&profileName); err != nil {
 		logger.WithError(err).Error("Failed to get profile name")
 		return time.Time{}, err
 	}
-
-	if len(profileResp.ScheduleProfiles) == 0 {
-		return time.Time{}, fmt.Errorf("profile not found")
-	}
-	profileName := profileResp.ScheduleProfiles[0].Name
 
 	nextSlot, err := a.availabilityChk.FindNextAvailableSlot(ctx, req.TenantID, profileName, req.Region, req.After, req.Duration)
 	if err != nil {
@@ -215,31 +171,14 @@ func (a *Activities) RescheduleJobActivity(ctx context.Context, req RescheduleRe
 	})
 	logger.WithField("newTime", req.NewTime.Format(time.RFC3339)).Info("Rescheduling job")
 
-	mutation := `
-	mutation RescheduleJob($id: uuid!, $next_run: timestamptz!) {
-		update_jobs_by_pk(pk_columns: {id: $id}, _set: {next_run: $next_run}) {
-			id
-			next_run
-		}
-	}
-	`
-	var response struct {
-		UpdateJobsByPk struct {
-			ID      string    `json:"id"`
-			NextRun time.Time `json:"next_run"`
-		} `json:"update_jobs_by_pk"`
-	}
-
-	err := a.hasuraClient.QueryRaw(ctx, mutation, map[string]interface{}{
-		"id":       req.JobID,
-		"next_run": req.NewTime,
-	}, &response)
-	if err != nil {
+	var nextRun time.Time
+	query := `UPDATE jobs SET next_run = $2 WHERE id = $1 RETURNING next_run`
+	if err := a.dbClient.Pool().QueryRow(ctx, query, req.JobID, req.NewTime).Scan(&nextRun); err != nil {
 		logger.WithError(err).Error("Failed to reschedule job")
 		return err
 	}
 
-	logger.WithField("newTime", response.UpdateJobsByPk.NextRun).Info("Successfully rescheduled job")
+	logger.WithField("newTime", nextRun).Info("Successfully rescheduled job")
 	return nil
 }
 
@@ -247,30 +186,34 @@ func (a *Activities) RescheduleJobActivity(ctx context.Context, req RescheduleRe
 func (a *Activities) ListAffectedProfilesActivity(ctx context.Context, tenantID, calendarID string) ([]map[string]interface{}, error) {
 	logger := a.logger.WithField("activity", "ListAffectedProfiles")
 
-	query := `
-	query GetAffectedProfiles($calendar_id: uuid!, $tenant_id: uuid!) {
-		schedule_profiles(where: {tenant_id: {_eq: $tenant_id}, valid_to: {_is_null: true}, profile_calendars: {calendar_id: {_eq: $calendar_id}}}) {
-			id
-			name
-		}
-	}
-	`
+	sqlQuery := `
+		SELECT sp.id, sp.name
+		FROM schedule_profiles sp
+		JOIN profile_calendars pc ON sp.id = pc.profile_id
+		WHERE sp.tenant_id = $1 AND sp.valid_to IS NULL AND pc.calendar_id = $2`
 
-	var response struct {
-		ScheduleProfiles []map[string]interface{} `json:"schedule_profiles"`
-	}
-
-	err := a.hasuraClient.QueryRaw(ctx, query, map[string]interface{}{
-		"tenant_id":   tenantID,
-		"calendar_id": calendarID,
-	}, &response)
+	rows, err := a.dbClient.Pool().Query(ctx, sqlQuery, tenantID, calendarID)
 	if err != nil {
 		logger.WithError(err).Error("Failed to list affected profiles")
 		return nil, err
 	}
+	defer rows.Close()
 
-	logger.WithField("count", len(response.ScheduleProfiles)).Info("Listed affected profiles")
-	return response.ScheduleProfiles, nil
+	result := []map[string]interface{}{}
+	for rows.Next() {
+		var id, name string
+		if err := rows.Scan(&id, &name); err != nil {
+			logger.WithError(err).Error("Failed to scan row")
+			continue
+		}
+		result = append(result, map[string]interface{}{
+			"id":   id,
+			"name": name,
+		})
+	}
+
+	logger.WithField("count", len(result)).Info("Listed affected profiles")
+	return result, nil
 }
 
 // RegisterActivities registers all activities with a Temporal worker

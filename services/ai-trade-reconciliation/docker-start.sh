@@ -68,12 +68,18 @@ setup_env_file() {
 # Phase 2/3: Core Improvements + Advanced Features
 
 # Database
-DB_HOST=atr-db
-DB_PORT=5432
-DB_USER=postgres
-DB_PASSWORD=postgres
-DB_NAME=alpha
-DATABASE_URL=postgres://postgres:postgres@atr-db:5432/alpha?sslmode=disable
+DB_HOST="${DB_HOST:-atr-db}"
+DB_PORT="${DB_PORT:-5432}"
+DB_USER="${DB_USER:-postgres}"
+DB_PASSWORD="${DB_PASSWORD:-}"
+DB_NAME="${DB_NAME:-alpha}"
+if [[ -z "${DATABASE_URL:-}" ]]; then
+  if [[ -z "${DB_PASSWORD}" ]]; then
+    echo "ERROR: DB_PASSWORD or DATABASE_URL environment variable must be set" >&2
+    exit 1
+  fi
+  DATABASE_URL="postgres://${DB_USER}:${DB_PASSWORD}@${DB_HOST}:${DB_PORT}/${DB_NAME}?sslmode=disable"
+fi
 
 # Temporal
 TEMPORAL_HOST=temporal

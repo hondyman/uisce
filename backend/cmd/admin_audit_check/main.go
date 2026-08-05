@@ -17,7 +17,7 @@ import (
 func main() {
 	dsn := os.Getenv("POSTGRES_DSN")
 	if dsn == "" {
-		dsn = "postgres://postgres:postgres@localhost:5432/alpha?sslmode=disable"
+		log.Fatal("POSTGRES_DSN environment variable is not set")
 	}
 
 	var workflowID string

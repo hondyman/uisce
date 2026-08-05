@@ -12,14 +12,17 @@ const { Pool } = pkg;
 
 const app = express();
 const port = process.env.AUTH_SERVICE_PORT || 8001;
-const jwtSecret = process.env.JWT_SECRET || 'dev-jwt-secret-key-change-in-production';
+const jwtSecret = process.env.JWT_SECRET;
+if (!jwtSecret) {
+  throw new Error('JWT_SECRET environment variable is not set');
+}
 const jwtExpiry = process.env.JWT_EXPIRY || '1h';
 const refreshTokenExpiry = process.env.REFRESH_TOKEN_EXPIRY || '24h';
 
 // Database connection pool
 const pool = new Pool({
-  user: process.env.POSTGRES_USER || 'postgres',
-  password: process.env.POSTGRES_PASSWORD || 'postgres',
+  user: process.env.POSTGRES_USER,
+  password: process.env.POSTGRES_PASSWORD,
   host: process.env.POSTGRES_HOST || 'localhost',
   port: parseInt(process.env.POSTGRES_PORT) || 5432,
   database: process.env.POSTGRES_DB || 'alpha',
@@ -170,18 +173,6 @@ app.post('/api/auth/register', async (req, res) => {
       tenantClaims.org_id = newUser.org_id;
     }
 
-    // Build Hasura-specific claims
-    const allowedRoles = ['user'];
-    let defaultRole = 'user';
-    const hasuraClaims = {
-      'x-hasura-allowed-roles': allowedRoles,
-      'x-hasura-default-role': defaultRole,
-      'x-hasura-user-id': newUser.id,
-    };
-    if (newUser.tenant_id) {
-      hasuraClaims['x-hasura-tenant-id'] = newUser.tenant_id;
-    }
-    
     const accessToken = jwt.sign(
       {
         sub: newUser.id,
@@ -193,7 +184,6 @@ app.post('/api/auth/register', async (req, res) => {
         tenant_scope: newUser.tenant_scope,
         ...tenantClaims,
         jti: jti,
-        'https://hasura.io/jwt/claims': hasuraClaims
       },
       jwtSecret,
       { expiresIn: jwtExpiry }
@@ -313,34 +303,6 @@ app.post('/api/auth/login', async (req, res) => {
       tenantClaims.org_id = user.org_id;
     }
 
-    // Build Hasura-specific claims (required for Hasura GraphQL authorization)
-    const allowedRoles = ['user'];
-    let defaultRole = 'user';
-
-    // Global admins (uisce organization) get global_admin role
-    if (user.organization === 'uisce' && user.is_core_admin) {
-      allowedRoles.push('global_admin');
-      defaultRole = 'global_admin';
-    }
-
-    // Add user's role if it's not already in the list
-    if (user.role && user.role !== 'user' && user.role !== 'global_admin') {
-      allowedRoles.push(user.role);
-    }
-
-    const hasuraClaims = {
-      'x-hasura-allowed-roles': allowedRoles,
-      'x-hasura-default-role': defaultRole,
-      'x-hasura-user-id': user.id,
-    };
-
-    // Add tenant_id to Hasura claims for RLS filtering (use from tenantClaims if available)
-    if (tenantClaims.tenant_id) {
-      hasuraClaims['x-hasura-tenant-id'] = tenantClaims.tenant_id;
-    } else if (user.tenant_id) {
-      hasuraClaims['x-hasura-tenant-id'] = user.tenant_id;
-    }
-    
     const accessToken = jwt.sign(
       {
         sub: user.id,
@@ -352,7 +314,6 @@ app.post('/api/auth/login', async (req, res) => {
         tenant_scope: user.tenant_scope,
         ...tenantClaims,
         jti: jti,
-        'https://hasura.io/jwt/claims': hasuraClaims
       },
       jwtSecret,
       { expiresIn: jwtExpiry }
@@ -468,32 +429,6 @@ app.post('/api/auth/refresh', async (req, res) => {
       tenantClaims.tenant_ids = assignments.rows.map(r => r.tenant_id);
     }
 
-    // Build Hasura-specific claims (required for Hasura GraphQL authorization)
-    const allowedRoles = ['user'];
-    let defaultRole = 'user';
-
-    // Global admins (uisce organization) get global_admin role
-    if (tokenData.organization === 'uisce' && tokenData.is_core_admin) {
-      allowedRoles.push('global_admin');
-      defaultRole = 'global_admin';
-    }
-
-    // Add user's role if it's not already in the list
-    if (tokenData.role && tokenData.role !== 'user' && tokenData.role !== 'global_admin') {
-      allowedRoles.push(tokenData.role);
-    }
-
-    const hasuraClaims = {
-      'x-hasura-allowed-roles': allowedRoles,
-      'x-hasura-default-role': defaultRole,
-      'x-hasura-user-id': tokenData.id,
-    };
-
-    // Add tenant_id to Hasura claims for RLS filtering
-    if (tenantClaims.tenant_id) {
-      hasuraClaims['x-hasura-tenant-id'] = tenantClaims.tenant_id;
-    }
-
     // Generate new access token
     const jti = crypto.randomUUID();
     const accessToken = jwt.sign(
@@ -506,7 +441,6 @@ app.post('/api/auth/refresh', async (req, res) => {
         tenant_scope: tokenData.tenant_scope,
         ...tenantClaims,
         jti: jti,
-        'https://hasura.io/jwt/claims': hasuraClaims
       },
       jwtSecret,
       { expiresIn: jwtExpiry }

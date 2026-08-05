@@ -17,7 +17,9 @@ func main() {
 	// Connect to database (optional for demo)
 	dbURL := os.Getenv("DATABASE_URL")
 	if dbURL == "" {
-		dbURL = "postgres://postgres:password@localhost:5432/semlayer?sslmode=disable"
+		fmt.Println("ERROR: DATABASE_URL environment variable is not set")
+		fmt.Println("Example: postgres://user:password@host:5432/dbname?sslmode=disable")
+		os.Exit(1)
 	}
 
 	db, err := sqlx.Connect("postgres", dbURL)

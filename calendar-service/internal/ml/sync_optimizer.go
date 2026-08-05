@@ -9,27 +9,25 @@ import (
 	"net/http"
 	"time"
 
-	"calendar-service/internal/hasura"
+	"calendar-service/internal/database"
 
 	"github.com/sirupsen/logrus"
 )
 
-// SyncOptimizer optimizes sync scheduling and execution
 type SyncOptimizer struct {
 	modelEndpoint   string
 	modelVersion    string
-	hasuraClient    *hasura.Client
+	dbClient        *database.Client
 	featureEngineer *FeatureEngineer
 	logger          *logrus.Entry
 	httpClient      *http.Client
 	costConfig      SyncCostConfig
 }
 
-// SyncOptimizerConfig holds configuration
 type SyncOptimizerConfig struct {
 	ModelEndpoint   string
 	ModelVersion    string
-	HasuraClient    *hasura.Client
+	DBClient        *database.Client
 	FeatureEngineer *FeatureEngineer
 	Logger          *logrus.Entry
 	CostConfig      SyncCostConfig
@@ -93,7 +91,7 @@ func NewSyncOptimizer(cfg SyncOptimizerConfig) *SyncOptimizer {
 	return &SyncOptimizer{
 		modelEndpoint:   cfg.ModelEndpoint,
 		modelVersion:    cfg.ModelVersion,
-		hasuraClient:    cfg.HasuraClient,
+		dbClient:        cfg.DBClient,
 		featureEngineer: cfg.FeatureEngineer,
 		logger:          cfg.Logger.WithField("component", "sync_optimizer"),
 		httpClient: &http.Client{
@@ -145,51 +143,31 @@ func (so *SyncOptimizer) RecommendSyncTime(ctx context.Context, userID, calendar
 
 // extractSyncFeatures extracts features for sync optimization
 func (so *SyncOptimizer) extractSyncFeatures(ctx context.Context, userID, calendarID string) (*SyncFeatures, error) {
-	query := `
-    query GetSyncFeatures($user_id: uuid!, $calendar_id: uuid!) {
-        users_by_pk(id: $user_id) {
-            id created_at timezone
-        }
-        calendars_by_pk(id: $calendar_id) {
-            id created_at provider sync_frequency
-        }
-        sync_jobs_aggregate(
-            where: {user_id: {_eq: $user_id}, calendar_id: {_eq: $calendar_id}}
-        ) {
-            aggregate {
-                count
-                avg { duration_seconds }
-            }
-        }
-    }
-    `
-
-	var result struct {
-		User struct {
-			ID        string    `json:"id"`
-			CreatedAt time.Time `json:"created_at"`
-			Timezone  string    `json:"timezone"`
-		} `json:"users_by_pk"`
-		Calendar struct {
-			ID            string    `json:"id"`
-			CreatedAt     time.Time `json:"created_at"`
-			Provider      string    `json:"provider"`
-			SyncFrequency string    `json:"sync_frequency"`
-		} `json:"calendars_by_pk"`
-		SyncJobs struct {
-			Aggregate struct {
-				Count              int     `json:"count"`
-				AvgDurationSeconds float64 `json:"avg"`
-			} `json:"aggregate"`
-		} `json:"sync_jobs_aggregate"`
+	userQuery := `SELECT id, created_at, timezone FROM users WHERE id = $1`
+	var user struct {
+		ID        string
+		CreatedAt time.Time
+		Timezone  string
 	}
-
-	if err := so.hasuraClient.QueryRaw(ctx, query, map[string]interface{}{
-		"user_id":     userID,
-		"calendar_id": calendarID,
-	}, &result); err != nil {
+	if err := so.dbClient.Pool().QueryRow(ctx, userQuery, userID).Scan(&user.ID, &user.CreatedAt, &user.Timezone); err != nil {
 		return nil, err
 	}
+
+	calQuery := `SELECT id, created_at, provider, sync_frequency FROM calendars WHERE id = $1`
+	var calendar struct {
+		ID            string
+		CreatedAt     time.Time
+		Provider      string
+		SyncFrequency string
+	}
+	if err := so.dbClient.Pool().QueryRow(ctx, calQuery, calendarID).Scan(&calendar.ID, &calendar.CreatedAt, &calendar.Provider, &calendar.SyncFrequency); err != nil {
+		return nil, err
+	}
+
+	syncQuery := `SELECT COUNT(*), COALESCE(AVG(duration_seconds), 0) FROM sync_jobs WHERE user_id = $1 AND calendar_id = $2`
+	var syncCount int
+	var avgDuration float64
+	so.dbClient.Pool().QueryRow(ctx, syncQuery, userID, calendarID).Scan(&syncCount, &avgDuration)
 
 	now := time.Now()
 
@@ -198,12 +176,12 @@ func (so *SyncOptimizer) extractSyncFeatures(ctx context.Context, userID, calend
 		DayOfWeek:       int(now.Weekday()),
 		IsWeekend:       now.Weekday() == time.Saturday || now.Weekday() == time.Sunday,
 		IsBusinessHours: now.Hour() >= 9 && now.Hour() <= 17 && now.Weekday() >= time.Monday && now.Weekday() <= time.Friday,
-		UserTenureDays:  int(now.Sub(result.User.CreatedAt).Hours() / 24),
-		TotalSyncs:      result.SyncJobs.Aggregate.Count,
-		AvgSyncDuration: result.SyncJobs.Aggregate.AvgDurationSeconds,
-		CalendarAgeDays: int(now.Sub(result.Calendar.CreatedAt).Hours() / 24),
-		Provider:        result.Calendar.Provider,
-		SyncFrequency:   result.Calendar.SyncFrequency,
+		UserTenureDays:  int(now.Sub(user.CreatedAt).Hours() / 24),
+		TotalSyncs:      syncCount,
+		AvgSyncDuration: avgDuration,
+		CalendarAgeDays: int(now.Sub(calendar.CreatedAt).Hours() / 24),
+		Provider:        calendar.Provider,
+		SyncFrequency:   calendar.SyncFrequency,
 		Timezone:        result.User.Timezone,
 	}
 
@@ -343,33 +321,22 @@ func (so *SyncOptimizer) calculatePredictedCost(features *SyncFeatures, batchSiz
 
 // storeRecommendation stores optimization recommendation
 func (so *SyncOptimizer) storeRecommendation(ctx context.Context, userID, calendarID string, features *SyncFeatures, rec *SyncRecommendation) error {
-	mutation := `
-    mutation StoreSyncRecommendation($input: sync_optimization_recommendations_insert_input!) {
-        insert_sync_optimization_recommendations_one(object: $input) {
-            id
-        }
-    }
-    `
-
 	featuresJSON, _ := json.Marshal(features)
 
-	input := map[string]interface{}{
-		"tenant_id":                    userID, // Simplified - use actual tenant_id
-		"calendar_id":                  calendarID,
-		"user_id":                      userID,
-		"recommended_sync_time":        rec.OptimalTime,
-		"recommended_batch_size":       rec.BatchSize,
-		"recommended_resource_profile": rec.ResourceProfile,
-		"predicted_duration_seconds":   rec.ExpectedDuration,
-		"predicted_cost_cents":         rec.PredictedCostCents,
-		"model_version":                rec.ModelVersion,
-		"confidence_score":             rec.Confidence,
-		"features_used":                featuresJSON,
-	}
+	query := `
+		INSERT INTO sync_optimization_recommendations (
+			id, tenant_id, calendar_id, user_id, recommended_sync_time, recommended_batch_size,
+			recommended_resource_profile, predicted_duration_seconds, predicted_cost_cents,
+			model_version, confidence_score, features_used, created_at
+		) VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, NOW())
+	`
 
-	return so.hasuraClient.Mutate(ctx, mutation, map[string]interface{}{
-		"input": input,
-	}, &struct{}{})
+	_, err := so.dbClient.Pool().Exec(ctx, query,
+		userID, calendarID, userID, rec.OptimalTime, rec.BatchSize,
+		rec.ResourceProfile, rec.ExpectedDuration, rec.PredictedCostCents,
+		rec.ModelVersion, rec.Confidence, featuresJSON,
+	)
+	return err
 }
 
 // ScheduleOptimizedSyncs schedules all syncs at optimal times

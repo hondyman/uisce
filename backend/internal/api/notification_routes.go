@@ -2,6 +2,7 @@ package api
 
 import (
 	"database/sql"
+	"os"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/hondyman/uisce/backend/internal/jobs"
@@ -10,13 +11,24 @@ import (
 )
 
 func registerNotificationRoutes(r chi.Router, db *sql.DB, cronJob *cron.Cron) {
-	// Notifications
-	emailKey := getEnv("SENDGRID_API_KEY", "FAKE_KEY")
-	emailFrom := getEnv("NOTIFICATIONS_FROM_EMAIL", "no-reply@test.com")
-	emailFromNames := getEnv("NOTIFICATIONS_FROM_NAME", "Workflow")
+	emailKey := os.Getenv("SENDGRID_API_KEY")
+	if emailKey == "" {
+		panic("SENDGRID_API_KEY environment variable is not set")
+	}
+	emailFrom := os.Getenv("NOTIFICATIONS_FROM_EMAIL")
+	if emailFrom == "" {
+		emailFrom = "no-reply@test.com"
+	}
+	emailFromNames := os.Getenv("NOTIFICATIONS_FROM_NAME")
+	if emailFromNames == "" {
+		emailFromNames = "Workflow"
+	}
 	emailClient := notifications.NewSendGridClient(emailKey, emailFrom, emailFromNames)
 
-	slackToken := getEnv("SLACK_API_TOKEN", "FAKE_TOKEN")
+	slackToken := os.Getenv("SLACK_API_TOKEN")
+	if slackToken == "" {
+		panic("SLACK_API_TOKEN environment variable is not set")
+	}
 	slackClient := notifications.NewSlackClient(slackToken)
 
 	notifService := notifications.NewNotificationService(db, emailClient, slackClient)

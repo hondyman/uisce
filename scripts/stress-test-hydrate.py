@@ -168,7 +168,7 @@ async def main():
         default="http://localhost:8081/api/v1/compliance/external/evaluate-external",
         help="API endpoint",
     )
-    parser.add_argument("--tenant-id", default="99e99e99-99e9-49e9-89e9-99e99e99e999")
+    parser.add_argument("--tenant-id", required=True, help="Tenant ID (required)")
     parser.add_argument("--requests", type=int, default=10000, help="Total requests (Phase A + B)")
     parser.add_argument("--concurrency", type=int, default=50, help="Max concurrent connections")
     parser.add_argument("--phase-b-ratio", type=float, default=0.20,

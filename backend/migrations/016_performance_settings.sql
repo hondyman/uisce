@@ -62,11 +62,14 @@ $$;
 -- ============================================================
 DO $$
 DECLARE
-    v_gold_tenant   UUID := '99e99e99-99e9-49e9-89e9-99e99e99e999';
+    v_gold_tenant   UUID;
     bo_ps_id        UUID;
     bo_portfolio_id UUID;
     semantic_term_type_id    UUID;
 BEGIN
+    PERFORM set_config('app.goldcopy', (SELECT id FROM public.tenants WHERE gold_copy = true LIMIT 1)::text, true);
+    v_gold_tenant := current_setting('app.goldcopy', true)::uuid;
+
     -- 1. Register Performance Settings BO
     INSERT INTO business_objects (id, tenant_id, key, name, display_name, technical_name, description, icon, is_core, category, created_at)
     VALUES (gen_random_uuid(), v_gold_tenant, 'performance_settings', 'Performance Settings', 'Performance Settings', 'performance_settings',

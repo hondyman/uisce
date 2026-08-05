@@ -47,12 +47,17 @@ type AggregateServiceConfig struct {
 
 // NewAggregateService creates a new aggregate service
 func NewAggregateService() *AggregateService {
+	postgresURL := os.Getenv("DATABASE_URL")
+	if postgresURL == "" {
+		fmt.Println("ERROR: DATABASE_URL environment variable is required")
+		return nil
+	}
 	cfg := AggregateServiceConfig{
 		StarRocksHost:     getEnv("STARROCKS_HOST", "127.0.0.1"),
 		StarRocksPort:     getEnvInt("STARROCKS_PORT", 9030),
 		StarRocksUser:     getEnv("STARROCKS_USER", "root"),
 		StarRocksPassword: getEnv("STARROCKS_PASSWORD", ""),
-		PostgresURL:       getEnv("DATABASE_URL", "postgres://postgres:postgres@localhost:5432/alpha?sslmode=disable"),
+		PostgresURL:       postgresURL,
 		CatalogName:       "iceberg_catalog",
 		Database:          "wealth",
 	}

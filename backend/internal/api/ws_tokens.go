@@ -5,6 +5,7 @@ import (
 	"fmt"
 	jwt "github.com/golang-jwt/jwt/v5"
 	"net/http"
+	"os"
 	"time"
 )
 
@@ -39,9 +40,13 @@ func (s *Server) getWsToken(w http.ResponseWriter, r *http.Request) {
 	if s.SecMgr != nil {
 		signed, err = s.SecMgr.SignToken(claims)
 	} else {
-		secret := []byte(getEnv("JWT_SECRET", "dev-jwt-secret-key-change-in-production"))
+		secret := os.Getenv("JWT_SECRET")
+		if secret == "" {
+			http.Error(w, "JWT_SECRET environment variable is not set", http.StatusInternalServerError)
+			return
+		}
 		token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-		signed, err = token.SignedString(secret)
+		signed, err = token.SignedString([]byte(secret))
 	}
 	if err != nil {
 		http.Error(w, fmt.Sprintf("failed to sign token: %v", err), http.StatusInternalServerError)
@@ -73,12 +78,15 @@ func (s *Server) validateWsToken(tokenString string, jobId string) (map[string]i
 			}
 		}
 	} else {
-		secret := []byte(getEnv("JWT_SECRET", "dev-jwt-secret-key-change-in-production"))
+		secret := os.Getenv("JWT_SECRET")
+		if secret == "" {
+			return nil, fmt.Errorf("JWT_SECRET environment variable is not set")
+		}
 		token, err2 := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
 			if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
 				return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
 			}
-			return secret, nil
+			return []byte(secret), nil
 		})
 		if err2 != nil {
 			return nil, err2

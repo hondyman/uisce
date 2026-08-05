@@ -45,7 +45,7 @@ func ensureValue(ctx context.Context, db *sqlx.DB, lookupID, tenantID, code, lab
 func main() {
 	dbURL := os.Getenv("DATABASE_URL")
 	if dbURL == "" {
-		dbURL = "postgres://postgres:postgres@100.84.126.19:5432/alpha?sslmode=disable"
+		log.Fatal("DATABASE_URL environment variable is not set")
 	}
 
 	db, err := sqlx.Connect("postgres", dbURL)

@@ -1,19 +1,19 @@
 package db
 
 import (
-"database/sql"
-"fmt"
-"os"
+	"database/sql"
+	"fmt"
+	"log"
+	"os"
 
-_ "github.com/lib/pq"
+	_ "github.com/lib/pq"
 )
 
 // NewConnection creates a new PostgreSQL database connection
 func NewConnection() (*sql.DB, error) {
 dsn := os.Getenv("DATABASE_URL")
 if dsn == "" {
-// Default connection string
-dsn = "host=localhost port=5432 user=postgres password=postgres dbname=semlayer sslmode=disable"
+	log.Fatal("DATABASE_URL environment variable is not set")
 }
 
 db, err := sql.Open("postgres", dsn)

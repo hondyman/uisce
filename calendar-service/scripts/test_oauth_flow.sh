@@ -6,7 +6,10 @@
 set -e
 
 SERVICE_URL="${SERVICE_URL:-http://localhost:9081}"
-JWT_SECRET="${JWT_SECRET:-dev-jwt-secret-key-change-in-production}"
+if [[ -z "${JWT_SECRET:-}" ]]; then
+  echo "ERROR: JWT_SECRET environment variable is not set" >&2
+  exit 1
+fi
 USER_ID="${USER_ID:-test-user-$(date +%s)}"
 TENANT_ID="${TENANT_ID:-test-tenant}"
 

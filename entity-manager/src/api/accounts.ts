@@ -4,18 +4,17 @@ import { UnifiedValidator } from '../services/UnifiedValidator.js';
 import { PersonalAccount, IRAAccount, TrustAccount, RiskTolerance, InvestmentObjective, IRAType, TrustType } from '../entities/index.js';
 import type { AccountStatus } from '../entities/index.js';
 import { logger } from '../utils/logger.js';
-import { getClaims } from '../../libs/jwt-middleware-node.js';
+import { requireAuth, AuthenticatedRequest } from '../middleware/auth.js';
+import { sendCreated, sendValidationError, handleError } from '../middleware/response.js';
 
 const router = express.Router();
 const entityManager = EntityManager.getInstance();
 const validator = UnifiedValidator.getInstance();
 
-// Create Personal Account
-router.post('/personal', async (req, res) => {
+router.post('/personal', requireAuth, async (req: AuthenticatedRequest, res: express.Response) => {
   try {
-    // Get JWT claims for tenant isolation
-    const claims = getClaims(req);
-    if (!claims) {
+    const tenantId = req.claims?.tenant_id;
+    if (!tenantId) {
       return res.status(401).json({ error: 'Unauthorized' });
     }
 
@@ -31,9 +30,6 @@ router.post('/personal', async (req, res) => {
       netWorth
     } = req.body;
 
-    // Use tenant_id from JWT claims, not from request body
-    const tenantId = claims.tenant_id;
-
     const account = new PersonalAccount(
       id,
       tenantId,
@@ -48,29 +44,17 @@ router.post('/personal', async (req, res) => {
       netWorth
     );
 
-    // Validate account
     const validation = await validator.validateAccount(account);
     if (!validation.isValid) {
-      return res.status(400).json({
-        error: 'Validation failed',
-        details: validation
-      });
+      return sendValidationError(res, validation);
     }
 
-    // Save account
     await entityManager.saveEntity(account);
 
-    return res.status(201).json({
-      success: true,
-      account: account.toJSON()
-    });
+    return sendCreated(res, { success: true, account: account.toJSON() });
 
   } catch (error) {
-    logger.error('Failed to create personal account:', error);
-    return res.status(500).json({
-      error: 'Failed to create account',
-      message: error instanceof Error ? error.message : 'Unknown error'
-    });
+    return handleError(res, error, 'create personal account');
   }
 });
 

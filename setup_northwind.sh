@@ -9,9 +9,9 @@ echo "===================================="
 echo ""
 
 # Check environment
-if [ -z "$DATABASE_URL" ]; then
-  echo "⚠️  DATABASE_URL not set, using default..."
-  export DATABASE_URL="postgres://postgres:postgres@100.84.126.19:5432/alpha?sslmode=disable"
+if [ -z "${DATABASE_URL:-}" ]; then
+  echo "ERROR: DATABASE_URL environment variable is not set" >&2
+  exit 1
 fi
 
 echo "📦 Step 1: Running database migrations..."

@@ -3,10 +3,13 @@
 
 DO $$
 DECLARE
-    v_gold_tenant        UUID := '99e99e99-99e9-49e9-89e9-99e99e99e999';
-    v_system_user        UUID := '99e99e99-99e9-49e9-89e9-99e99e99e999';
+    v_gold_tenant        UUID;
+    v_system_user        UUID;
     validation_rule_type_id UUID;
 BEGIN
+    PERFORM set_config('app.goldcopy', (SELECT id FROM public.tenants WHERE gold_copy = true LIMIT 1)::text, true);
+    v_gold_tenant := current_setting('app.goldcopy', true)::uuid;
+    v_system_user := v_gold_tenant;
 
     -- ================================================================
     -- 1. SURVIVORSHIP RULES — edm.survivorship_rules

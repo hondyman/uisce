@@ -10,7 +10,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/hondyman/uisce/backend/internal/db"
 	"github.com/hondyman/uisce/backend/internal/security"
-	jwtmiddleware "github.com/hondyman/uisce/libs/auth"
+	jwtmiddleware "github.com/hondyman/uisce/libs/jwt-middleware"
 	"github.com/lib/pq"
 )
 
@@ -29,6 +29,7 @@ func (h *TenantAccessHandlers) RegisterRoutes(r chi.Router) {
 	r.Get("/tenants/accessible", h.listAccessibleTenants)
 	r.Get("/tenants/debug", h.listAccessibleTenants)
 	r.Get("/tenants/all", h.listAllTenants)
+	r.Get("/tenants/gold-copy", h.getGoldCopyTenant)
 	r.Get("/tenants/{tenantId}", h.getTenantByID)
 
 	r.Get("/rest/datasources", h.ListAlphaDatasources)
@@ -174,6 +175,29 @@ func (h *TenantAccessHandlers) listAllTenants(w http.ResponseWriter, r *http.Req
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(tenants)
+}
+
+type GoldCopyResponse struct {
+	ID        string `json:"id"`
+	GoldCopy  bool   `json:"gold_copy"`
+	Resolved  bool   `json:"resolved"` // true if found, false if not found
+}
+
+// getGoldCopyTenant returns the gold copy tenant ID (public, no auth required)
+func (h *TenantAccessHandlers) getGoldCopyTenant(w http.ResponseWriter, r *http.Request) {
+	var id string
+	err := h.DB.QueryRowContext(r.Context(), `SELECT id FROM public.tenants WHERE gold_copy = true LIMIT 1`).Scan(&id)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(GoldCopyResponse{ID: "", GoldCopy: false, Resolved: false})
+			return
+		}
+		http.Error(w, "Failed to resolve gold copy tenant: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(GoldCopyResponse{ID: id, GoldCopy: true, Resolved: true})
 }
 
 // getTenantByID returns a single tenant by ID wrapped in {"tenant": ...}

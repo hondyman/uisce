@@ -163,8 +163,12 @@ type Config struct {
 }
 
 func loadConfig() Config {
+	dbURL := os.Getenv("DATABASE_URL")
+	if dbURL == "" {
+		log.Fatal("DATABASE_URL environment variable is required")
+	}
 	return Config{
-		DatabaseURL:    getEnv("DATABASE_URL", "postgres://postgres:postgres@localhost:5432/alpha?sslmode=disable"),
+		DatabaseURL:    dbURL,
 		KafkaBrokers:   getEnv("KAFKA_BROKERS", "redpanda:9092"),
 		PolicyPath:     getEnv("POLICY_PATH", "/app/policy"),
 		Port:           formatPort(getEnv("PORT", "8080")),

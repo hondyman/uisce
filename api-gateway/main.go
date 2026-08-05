@@ -710,7 +710,6 @@ func main() {
 	r.Use(cors.New(cors.Config{
 		AllowOrigins: []string{"http://localhost:5173", "http://localhost:5174"},
 		AllowMethods: []string{"GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"},
-		// Add custom headers commonly used by the frontend and Hasura proxied requests.
 		AllowHeaders: []string{
 			"Origin",
 			"Content-Length",
@@ -720,9 +719,6 @@ func main() {
 			"X-Tenant-Datasource-ID",
 			"x-tenant-datasource-id",
 			"X-API-Key",
-			"X-Hasura-Role",
-			"X-Hasura-Admin-Secret",
-			"x-hasura-admin-secret",
 			"x-requested-with",
 			"Accept",
 			"x-user-id",
@@ -758,7 +754,6 @@ func main() {
 			"status":  "healthy",
 			"version": "1.0.0",
 			"services": gin.H{
-				"hasura":   "up",
 				"database": "up",
 				"cache":    "up",
 			},

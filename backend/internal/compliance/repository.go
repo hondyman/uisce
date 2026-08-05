@@ -6,10 +6,10 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/hondyman/uisce/backend/internal/db"
 	"github.com/jmoiron/sqlx"
 )
 
-// ComplianceRepository defines persistence operations for the Compliance domain
 type ComplianceRepository interface {
 	ListComplianceRules(ctx context.Context, includeInactive bool) ([]ComplianceRule, error)
 	ListComplianceEvaluations(ctx context.Context, portfolioID uuid.UUID, asOfDate time.Time) ([]ComplianceEvaluation, error)
@@ -18,12 +18,15 @@ type ComplianceRepository interface {
 }
 
 type pgComplianceRepo struct {
-	db *sqlx.DB
+	*db.BitemporalRepository[ComplianceRule]
+	sqlxDB *sqlx.DB
 }
 
-// NewComplianceRepository creates a new Postgres-backed ComplianceRepository
-func NewComplianceRepository(db *sqlx.DB) ComplianceRepository {
-	return &pgComplianceRepo{db: db}
+func NewComplianceRepository(sqlxDB *sqlx.DB) ComplianceRepository {
+	return &pgComplianceRepo{
+		BitemporalRepository: db.NewBitemporalRepository[ComplianceRule](sqlxDB, "edm.compliance_rule", "rule_id"),
+		sqlxDB:              sqlxDB,
+	}
 }
 
 func (r *pgComplianceRepo) ListComplianceRules(ctx context.Context, includeInactive bool) ([]ComplianceRule, error) {
@@ -32,18 +35,21 @@ func (r *pgComplianceRepo) ListComplianceRules(ctx context.Context, includeInact
 		return nil, fmt.Errorf("tenant_id not found in context")
 	}
 
-	query := `
-		SELECT * FROM edm.compliance_rule
-		WHERE tenant_id = $1 AND valid_to = 'infinity'
-	`
+	opts := []db.QueryOption{db.WithOrderBy("rule_code", "ASC")}
 	if !includeInactive {
-		query += ` AND status = 'ACTIVE'`
+		opts = append(opts, db.WithFilter("status", "ACTIVE"))
 	}
-	query += ` ORDER BY rule_code ASC`
 
-	var rules []ComplianceRule
-	err := r.db.SelectContext(ctx, &rules, query, tenantID)
-	return rules, err
+	records, err := r.BitemporalRepository.ListCurrent(ctx, tenantID, opts...)
+	if err != nil {
+		return nil, err
+	}
+
+	result := make([]ComplianceRule, len(records))
+	for i, rec := range records {
+		result[i] = *rec
+	}
+	return result, nil
 }
 
 func (r *pgComplianceRepo) ListComplianceEvaluations(ctx context.Context, portfolioID uuid.UUID, asOfDate time.Time) ([]ComplianceEvaluation, error) {
@@ -52,14 +58,10 @@ func (r *pgComplianceRepo) ListComplianceEvaluations(ctx context.Context, portfo
 		return nil, fmt.Errorf("tenant_id not found in context")
 	}
 
-	query := `
-		SELECT * FROM edm.compliance_evaluation
-		WHERE tenant_id = $1 AND portfolio_id = $2 AND valuation_date = $3
-		ORDER BY evaluated_at DESC
-	`
+	query := `SELECT * FROM edm.compliance_evaluation WHERE tenant_id = $1 AND portfolio_id = $2 AND valuation_date = $3 ORDER BY evaluated_at DESC`
 
 	var evals []ComplianceEvaluation
-	err := r.db.SelectContext(ctx, &evals, query, tenantID, portfolioID, asOfDate)
+	err := r.sqlxDB.SelectContext(ctx, &evals, query, tenantID, portfolioID, asOfDate)
 	return evals, err
 }
 
@@ -69,10 +71,7 @@ func (r *pgComplianceRepo) ListComplianceBreaches(ctx context.Context, portfolio
 		return nil, fmt.Errorf("tenant_id not found in context")
 	}
 
-	query := `
-		SELECT * FROM edm.compliance_breach
-		WHERE tenant_id = $1 AND portfolio_id = $2
-	`
+	query := `SELECT * FROM edm.compliance_breach WHERE tenant_id = $1 AND portfolio_id = $2`
 	args := []interface{}{tenantID, portfolioID}
 
 	if status != "" {
@@ -83,7 +82,7 @@ func (r *pgComplianceRepo) ListComplianceBreaches(ctx context.Context, portfolio
 	query += ` ORDER BY created_at DESC`
 
 	var breaches []ComplianceBreach
-	err := r.db.SelectContext(ctx, &breaches, query, args...)
+	err := r.sqlxDB.SelectContext(ctx, &breaches, query, args...)
 	return breaches, err
 }
 
@@ -93,13 +92,9 @@ func (r *pgComplianceRepo) GetLineageForEvaluation(ctx context.Context, evaluati
 		return nil, fmt.Errorf("tenant_id not found in context")
 	}
 
-	query := `
-		SELECT * FROM edm.compliance_lineage
-		WHERE tenant_id = $1 AND evaluation_id = $2
-		ORDER BY processed_at ASC
-	`
+	query := `SELECT * FROM edm.compliance_lineage WHERE tenant_id = $1 AND evaluation_id = $2 ORDER BY processed_at ASC`
 
 	var lineages []ComplianceLineage
-	err := r.db.SelectContext(ctx, &lineages, query, tenantID, evaluationID)
+	err := r.sqlxDB.SelectContext(ctx, &lineages, query, tenantID, evaluationID)
 	return lineages, err
 }

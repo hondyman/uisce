@@ -7,7 +7,11 @@
 
 set -euo pipefail
 
-ALPHA_DB_URL="${ALPHA_DB_URL:-postgres://postgres:postgres@localhost:5432/alpha?sslmode=disable}"
+if [[ -z "${ALPHA_DB_URL:-}" ]]; then
+  echo "ERROR: ALPHA_DB_URL environment variable is not set" >&2
+  exit 1
+fi
+ALPHA_DB_URL="${ALPHA_DB_URL}"
 TEMPORAL_CLI="${TEMPORAL_CLI:-docker run --rm --network host temporalio/cli:1.27.0}"
 TEMPORAL_NAMESPACE="semlayer-dev"
 

@@ -1136,9 +1136,11 @@ func (h *GlossaryHandler) DeleteTerm(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Resolve "default" tenant to core UUID to prevent UUID parsing errors
 	if tenantID == "default" {
-		tenantID = "99e99e99-99e9-49e9-89e9-99e99e99e999"
+		var coreID string
+		if err := h.db.QueryRowContext(r.Context(), `SELECT id FROM public.tenants WHERE gold_copy = true LIMIT 1`).Scan(&coreID); err == nil && coreID != "" {
+			tenantID = coreID
+		}
 	}
 
 	// Delete the term (cascading deletes for catalog_edge are handled at the DB level)

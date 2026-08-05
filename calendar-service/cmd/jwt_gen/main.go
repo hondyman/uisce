@@ -18,7 +18,12 @@ type JWTClaims struct {
 }
 
 func main() {
-	secret := "dev-jwt-secret-key-change-in-production"
+	secret := os.Getenv("JWT_SECRET")
+	if secret == "" {
+		fmt.Fprintln(os.Stderr, "Usage: jwt_gen [secret] [user_id] [tenant_id]")
+		fmt.Fprintln(os.Stderr, "Or set JWT_SECRET environment variable")
+		os.Exit(1)
+	}
 	userID := "test-user-phase5-2"
 	tenantID := "test-tenant"
 

@@ -67,8 +67,14 @@ fi
 
 # Set defaults if not loaded
 # POSTGRES_DSN is used by internal/api/server.go
-export POSTGRES_DSN="${POSTGRES_DSN:-postgresql://postgres:postgres@100.84.50.65:5432/alpha?sslmode=disable}"
-export JWT_SECRET="${JWT_SECRET:-TND5KO7xY/Fz1ifgTR5QMm9T+R5/aPxxavmMzp+hURJxRWTm2Pns+RC+q9NKMxMB3F/R2KAWXnwo7r8N5JIACQ==}"
+if [[ -z "${POSTGRES_DSN:-}" ]]; then
+  echo "ERROR: POSTGRES_DSN environment variable is not set" >&2
+  exit 1
+fi
+if [[ -z "${JWT_SECRET:-}" ]]; then
+  echo "ERROR: JWT_SECRET environment variable is not set" >&2
+  exit 1
+fi
 export TEMPORAL_HOST="${TEMPORAL_HOST:-100.84.50.65:7233}"
 export TEMPORAL_RETRY_ATTEMPTS="${TEMPORAL_RETRY_ATTEMPTS:-2}"
 

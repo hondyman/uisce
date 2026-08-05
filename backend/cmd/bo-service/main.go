@@ -52,7 +52,10 @@ func main() {
 	sugar.Infof("📋 Service: %s | Version: %s", getEnv("SERVICE_NAME", "bo-service"), "1.0.0")
 
 	// Load configuration from environment
-	databaseURL := getEnv("DATABASE_URL", "postgres://postgres:postgres@localhost:5432/alpha?sslmode=disable")
+	databaseURL := os.Getenv("DATABASE_URL")
+	if databaseURL == "" {
+		sugar.Fatal("DATABASE_URL environment variable is required")
+	}
 	// Prefer KAFKA_BROKERS for bootstrap servers; fallback to RABBITMQ_URL for legacy setups
 	brokers := getEnv("KAFKA_BROKERS", getEnv("RABBITMQ_URL", "redpanda:9092"))
 

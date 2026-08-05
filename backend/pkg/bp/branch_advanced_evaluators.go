@@ -51,31 +51,6 @@ func (e *BranchEvaluator) EvaluateAIModels(ctx context.Context, config json.RawM
 		}
 	}
 
-	// Prefer Hasura-first: try GraphQL query for model performance when a client is available
-	hasuraFound := false
-	if e.hasura != nil {
-		gql := `query GetAIModel($modelId: uuid!, $tenantId: uuid!) { bp_ai_models(where: {model_id: {_eq: $modelId}, tenant_id: {_eq: $tenantId}}) { model_id last_accuracy predictions_count drift_detected } }`
-		vars := map[string]interface{}{"modelId": selectedModel.ModelID, "tenantId": tenantID}
-		if res, err := e.hasura.Query(gql, vars); err == nil {
-			if arr, ok := res["bp_ai_models"].([]interface{}); ok && len(arr) > 0 {
-				if item, ok := arr[0].(map[string]interface{}); ok {
-					if v, ok := item["last_accuracy"].(float64); ok {
-						selectedModel.LastAccuracy = v
-					}
-					if v, ok := item["predictions_count"].(float64); ok {
-						selectedModel.Predictions = int64(v)
-					}
-					if v, ok := item["drift_detected"].(bool); ok {
-						selectedModel.DriftDetected = v
-					}
-					hasuraFound = true
-				}
-			}
-		} else {
-			// Hasura query failed; count fallback and continue to SQL when available
-			IncHasuraFallback("branch_evaluator")
-		}
-	}
 	// query {
 	//   bp_ai_models(where: {model_id: {_eq: "model-1"}, tenant_id: {_eq: "tenant-uuid"}}) {
 	//     model_id last_accuracy predictions_count drift_detected
@@ -87,7 +62,7 @@ func (e *BranchEvaluator) EvaluateAIModels(ctx context.Context, config json.RawM
 		WHERE model_id = $1 AND tenant_id = $2
 	`
 	// Only run SQL fallback if Hasura did not return a result and a DB is available
-	if !hasuraFound && e.db != nil {
+	if e.db != nil {
 		row := e.db.QueryRowContext(ctx, query, selectedModel.ModelID, tenantID)
 		var lastAccuracy float64
 		var predCount int64
@@ -119,18 +94,7 @@ func (e *BranchEvaluator) EvaluateAIModels(ctx context.Context, config json.RawM
 		SET predictions_count = predictions_count + 1, last_updated = NOW()
 		WHERE model_id = $1 AND tenant_id = $2
 	`
-	// Prefer Hasura mutation to increment prediction count; fall back to SQL if mutate fails or no client
-	if e.hasura != nil {
-		mut := `mutation IncPred($id: uuid!, $tenantId: uuid!) { update_bp_ai_models(where: {model_id: {_eq: $id}, tenant_id: {_eq: $tenantId}}, _inc: {predictions_count: 1}) { affected_rows } }`
-		if _, err := e.hasura.Mutate(mut, map[string]interface{}{"id": selectedModel.ModelID, "tenantId": tenantID}); err != nil {
-			IncHasuraFallback("branch_evaluator")
-			if e.db != nil {
-				if _, err := e.db.ExecContext(ctx, logQuery, selectedModel.ModelID, tenantID); err != nil {
-					log.Printf("Failed to update model metrics fallback: %v", err)
-				}
-			}
-		}
-	} else if e.db != nil {
+	if e.db != nil {
 		if _, err := e.db.ExecContext(ctx, logQuery, selectedModel.ModelID, tenantID); err != nil {
 			log.Printf("Failed to update model metrics: %v", err)
 		}
@@ -204,18 +168,7 @@ func (e *BranchEvaluator) EvaluateSemanticIntent(ctx context.Context, config jso
 			match_count = match_count + 1,
 			avg_confidence = ($2 + avg_confidence) / 2
 	`
-	// Prefer Hasura mutation to record semantic intent when a client exists; fall back to SQL
-	if e.hasura != nil {
-		mut := `mutation InsertIntent($id: uuid!, $confidence: float8!, $tenantId: uuid!) { insert_bp_semantic_intents_one(object: {intent_id: $id, match_count: 1, avg_confidence: $confidence, tenant_id: $tenantId}, on_conflict: {constraint: bp_semantic_intents_pkey, update_columns: [match_count, avg_confidence]}) { intent_id } }`
-		if _, err := e.hasura.Mutate(mut, map[string]interface{}{"id": bestMatch.IntentID, "confidence": bestSimilarity, "tenantId": tenantID}); err != nil {
-			IncHasuraFallback("branch_evaluator")
-			if e.db != nil {
-				if _, err := e.db.ExecContext(ctx, logQuery, bestMatch.IntentID, bestSimilarity, tenantID); err != nil {
-					log.Printf("Failed to log semantic intent fallback: %v", err)
-				}
-			}
-		}
-	} else if e.db != nil {
+	if e.db != nil {
 		e.db.ExecContext(ctx, logQuery, bestMatch.IntentID, bestSimilarity, tenantID)
 	}
 
@@ -307,18 +260,7 @@ func (e *BranchEvaluator) EvaluateScoringMatrix(ctx context.Context, config json
 			evaluations_total = evaluations_total + 1,
 			avg_score = ($2 + avg_score) / 2
 	`
-	// Prefer Hasura mutation to record matrix evaluation; fall back to SQL on mutate failure
-	if e.hasura != nil {
-		mut := `mutation InsertMatrix($name: String!, $score: float8!, $tenantId: uuid!) { insert_bp_scoring_matrices_one(object: {matrix_name: $name, evaluations_total: 1, avg_score: $score, tenant_id: $tenantId}, on_conflict: {constraint: bp_scoring_matrices_pkey, update_columns: [evaluations_total, avg_score]}) { matrix_name } }`
-		if _, err := e.hasura.Mutate(mut, map[string]interface{}{"name": matrixConfig.MatrixName, "score": finalScore, "tenantId": tenantID}); err != nil {
-			IncHasuraFallback("branch_evaluator")
-			if e.db != nil {
-				if _, err := e.db.ExecContext(ctx, logQuery, matrixConfig.MatrixName, finalScore, tenantID); err != nil {
-					log.Printf("Failed to log scoring metrics fallback: %v", err)
-				}
-			}
-		}
-	} else if e.db != nil {
+	if e.db != nil {
 		e.db.ExecContext(ctx, logQuery, matrixConfig.MatrixName, finalScore, tenantID)
 	}
 
@@ -397,49 +339,22 @@ func (e *BranchEvaluator) EvaluateTimeSeries(ctx context.Context, config json.Ra
 	//     order_by: {created_at: desc}, limit: 1
 	//   ) { predicted_queue_depth predicted_approval_time_minutes forecast_accuracy }
 	// }
-	hasuraFound := false
 	var queueDepth int
 	var approvalTime int
 	var accuracy float64
 
-	if e.hasura != nil {
-		gql := `query GetForecast($model: String!, $tenantId: uuid!) { bp_time_series_forecasts(where: {forecast_model: {_eq: $model}, tenant_id: {_eq: $tenantId}}, order_by: {created_at: desc}, limit: 1) { predicted_queue_depth predicted_approval_time_minutes forecast_accuracy } }`
-		vars := map[string]interface{}{"model": forecastConfig.ForecastModel, "tenantId": tenantID}
-		if res, err := e.hasura.Query(gql, vars); err == nil {
-			if arr, ok := res["bp_time_series_forecasts"].([]interface{}); ok && len(arr) > 0 {
-				if item, ok := arr[0].(map[string]interface{}); ok {
-					if v, ok := item["predicted_queue_depth"].(float64); ok {
-						queueDepth = int(v)
-					}
-					if v, ok := item["predicted_approval_time_minutes"].(float64); ok {
-						approvalTime = int(v)
-					}
-					if v, ok := item["forecast_accuracy"].(float64); ok {
-						accuracy = v
-					}
-					hasuraFound = true
-				}
-			}
-		} else {
-			IncHasuraFallback("branch_evaluator")
-		}
+	if e.db == nil {
+		return "", fmt.Errorf("no forecast available: hasura missing result and db unavailable")
 	}
-
-	// SQL fallback when Hasura did not return a result and DB is available
-	if !hasuraFound {
-		if e.db == nil {
-			return "", fmt.Errorf("no forecast available: hasura missing result and db unavailable")
-		}
-		query := `
+	query := `
 		SELECT predicted_queue_depth, predicted_approval_time_minutes, forecast_accuracy
 		FROM bp_time_series_forecasts
 		WHERE forecast_model = $1 AND tenant_id = $2
 		ORDER BY created_at DESC LIMIT 1
 	`
-		row := e.db.QueryRowContext(ctx, query, forecastConfig.ForecastModel, tenantID)
-		if err := row.Scan(&queueDepth, &approvalTime, &accuracy); err != nil {
-			return "", fmt.Errorf("no forecast available: %w", err)
-		}
+	row := e.db.QueryRowContext(ctx, query, forecastConfig.ForecastModel, tenantID)
+	if err := row.Scan(&queueDepth, &approvalTime, &accuracy); err != nil {
+		return "", fmt.Errorf("no forecast available: %w", err)
 	}
 
 	// Route based on predicted queue depth
@@ -509,18 +424,7 @@ func (e *BranchEvaluator) EvaluateAdaptive(ctx context.Context, config json.RawM
 				triggered_count = triggered_count + 1,
 				last_triggered_at = NOW()
 		`
-			// Prefer Hasura mutation for adaptive trigger logging; fall back to SQL on failure
-			if e.hasura != nil {
-				mut := `mutation InsertAdaptive($id: uuid!, $tenantId: uuid!) { insert_bp_adaptive_triggers_one(object: {trigger_id: $id, triggered_count: 1, tenant_id: $tenantId}, on_conflict: {constraint: bp_adaptive_triggers_pkey, update_columns: [triggered_count, last_triggered_at]}) { trigger_id } }`
-				if _, err := e.hasura.Mutate(mut, map[string]interface{}{"id": trigger.TriggerID, "tenantId": tenantID}); err != nil {
-					IncHasuraFallback("branch_evaluator")
-					if e.db != nil {
-						if _, err := e.db.ExecContext(ctx, logQuery, trigger.TriggerID, tenantID); err != nil {
-							log.Printf("Failed to log adaptive trigger fallback: %v", err)
-						}
-					}
-				}
-			} else if e.db != nil {
+			if e.db != nil {
 				e.db.ExecContext(ctx, logQuery, trigger.TriggerID, tenantID)
 			}
 
@@ -579,65 +483,31 @@ func (e *BranchEvaluator) EvaluateResilience(ctx context.Context, policyID strin
 	//     circuit_breaker_failure_threshold fallback_branch_id
 	//   }
 	// }
-	// Prefer Hasura first for resiliency policies
-	hasuraFound := false
 	var policy ResiliencePolicy
 	var failureCount int
 
-	if e.hasura != nil {
-		gql := `query GetPolicy($policyId: uuid!, $tenantId: uuid!) { bp_resilience_policies(where: {policy_id: {_eq: $policyId}, tenant_id: {_eq: $tenantId}}) { retry_max_attempts retry_initial_interval_seconds circuit_breaker_failure_threshold failure_count fallback_branch_id } }`
-		vars := map[string]interface{}{"policyId": policyID, "tenantId": tenantID}
-		if res, err := e.hasura.Query(gql, vars); err == nil {
-			if arr, ok := res["bp_resilience_policies"].([]interface{}); ok && len(arr) > 0 {
-				if item, ok := arr[0].(map[string]interface{}); ok {
-					if v, ok := item["retry_max_attempts"].(float64); ok {
-						policy.RetryMaxAttempts = int(v)
-					}
-					if v, ok := item["retry_initial_interval_seconds"].(float64); ok {
-						policy.RetryInitialInterval = int(v)
-					}
-					if v, ok := item["circuit_breaker_failure_threshold"].(float64); ok {
-						policy.CircuitBreakerFailures = int(v)
-					}
-					if v, ok := item["failure_count"].(float64); ok {
-						failureCount = int(v)
-					}
-					if v, ok := item["fallback_branch_id"].(string); ok {
-						policy.FallbackBranch = v
-					}
-					hasuraFound = true
-				}
-			}
-		} else {
-			IncHasuraFallback("branch_evaluator")
-		}
+	if e.db == nil {
+		return targetBranch, nil // No policy and no DB: continue normally
 	}
-
-	// SQL fallback when Hasura did not return a result or is missing
-	if !hasuraFound {
-		if e.db == nil {
-			return targetBranch, nil // No policy and no DB: continue normally
-		}
-		query := `
+	query := `
 		SELECT retry_max_attempts, retry_initial_interval_seconds, 
 			   circuit_breaker_failure_threshold, fallback_branch_id
 		FROM bp_resilience_policies
 		WHERE policy_id = $1 AND tenant_id = $2
 	`
-		row := e.db.QueryRowContext(ctx, query, policyID, tenantID)
-		if err := row.Scan(&policy.RetryMaxAttempts, &policy.RetryInitialInterval,
-			&policy.CircuitBreakerFailures, &policy.FallbackBranch); err != nil {
-			return targetBranch, nil // No policy: continue normally
-		}
+	row := e.db.QueryRowContext(ctx, query, policyID, tenantID)
+	if err := row.Scan(&policy.RetryMaxAttempts, &policy.RetryInitialInterval,
+		&policy.CircuitBreakerFailures, &policy.FallbackBranch); err != nil {
+		return targetBranch, nil // No policy: continue normally
+	}
 
-		// Check circuit breaker status from SQL
-		cbQuery := `
+	// Check circuit breaker status from SQL
+	cbQuery := `
 		SELECT failure_count FROM bp_resilience_policies
 		WHERE policy_id = $1 AND tenant_id = $2
 	`
-		cbRow := e.db.QueryRowContext(ctx, cbQuery, policyID, tenantID)
-		cbRow.Scan(&failureCount)
-	}
+	cbRow := e.db.QueryRowContext(ctx, cbQuery, policyID, tenantID)
+	cbRow.Scan(&failureCount)
 
 	if failureCount > policy.CircuitBreakerFailures {
 		// Circuit breaker open, use fallback
@@ -662,60 +532,23 @@ type BranchAnalytics struct {
 
 // EvaluateAnalytics provides performance and operational analytics for branches
 func (e *BranchEvaluator) EvaluateAnalytics(ctx context.Context, branchID string, tenantID string) (*BranchAnalytics, error) {
-	// Prefer Hasura first
-	hasuraFound := false
 	var analytics BranchAnalytics
 
-	if e.hasura != nil {
-		gql := `query GetAnalytics($branchId: uuid!, $tenantId: uuid!) { bp_branch_analytics_extended(where: {branch_id: {_eq: $branchId}, tenant_id: {_eq: $tenantId}}, order_by: {metric_period: desc}, limit: 1) { selection_count completion_count abandonment_count avg_duration_ms anomaly_score trend_direction } }`
-		vars := map[string]interface{}{"branchId": branchID, "tenantId": tenantID}
-		if res, err := e.hasura.Query(gql, vars); err == nil {
-			if arr, ok := res["bp_branch_analytics_extended"].([]interface{}); ok && len(arr) > 0 {
-				if item, ok := arr[0].(map[string]interface{}); ok {
-					if v, ok := item["selection_count"].(float64); ok {
-						analytics.SelectionCount = int64(v)
-					}
-					if v, ok := item["completion_count"].(float64); ok {
-						analytics.CompletionCount = int64(v)
-					}
-					if v, ok := item["abandonment_count"].(float64); ok {
-						analytics.AbandonmentCount = int64(v)
-					}
-					if v, ok := item["avg_duration_ms"].(float64); ok {
-						analytics.AvgDurationMs = v
-					}
-					if v, ok := item["anomaly_score"].(float64); ok {
-						analytics.AnomalyScore = v
-					}
-					if v, ok := item["trend_direction"].(string); ok {
-						analytics.TrendDirection = v
-					}
-					hasuraFound = true
-				}
-			}
-		} else {
-			IncHasuraFallback("branch_evaluator")
-		}
+	if e.db == nil {
+		return nil, fmt.Errorf("failed to fetch analytics: no hasura result and db unavailable")
 	}
-
-	// SQL fallback
-	if !hasuraFound {
-		if e.db == nil {
-			return nil, fmt.Errorf("failed to fetch analytics: no hasura result and db unavailable")
-		}
-		query := `
+	query := `
 		SELECT selection_count, completion_count, abandonment_count,
 		       avg_duration_ms, anomaly_score, trend_direction
 		FROM bp_branch_analytics_extended
 		WHERE branch_id = $1 AND tenant_id = $2
 		ORDER BY metric_period DESC LIMIT 1
 	`
-		row := e.db.QueryRowContext(ctx, query, branchID, tenantID)
-		if err := row.Scan(&analytics.SelectionCount, &analytics.CompletionCount,
-			&analytics.AbandonmentCount, &analytics.AvgDurationMs,
-			&analytics.AnomalyScore, &analytics.TrendDirection); err != nil {
-			return nil, fmt.Errorf("failed to fetch analytics: %w", err)
-		}
+	row := e.db.QueryRowContext(ctx, query, branchID, tenantID)
+	if err := row.Scan(&analytics.SelectionCount, &analytics.CompletionCount,
+		&analytics.AbandonmentCount, &analytics.AvgDurationMs,
+		&analytics.AnomalyScore, &analytics.TrendDirection); err != nil {
+		return nil, fmt.Errorf("failed to fetch analytics: %w", err)
 	}
 	return &analytics, nil
 }
@@ -744,53 +577,22 @@ type StakeholderVote struct {
 
 // EvaluateVoting calculates consensus and makes routing decision
 func (e *BranchEvaluator) EvaluateVoting(ctx context.Context, decisionID string, tenantID string) (string, error) {
-	// Prefer Hasura first
-	hasuraFound := false
 	var stakeholdersJSON []byte
 	var votesReceived int
 	var totalWeight float64
 	var outcome string
 
-	if e.hasura != nil {
-		gql := `query GetDecision($decisionId: uuid!, $tenantId: uuid!) { bp_collaborative_decisions(where: {decision_id: {_eq: $decisionId}, tenant_id: {_eq: $tenantId}}) { decision_id stakeholders votes_received total_weight outcome } }`
-		vars := map[string]interface{}{"decisionId": decisionID, "tenantId": tenantID}
-		if res, err := e.hasura.Query(gql, vars); err == nil {
-			if arr, ok := res["bp_collaborative_decisions"].([]interface{}); ok && len(arr) > 0 {
-				if item, ok := arr[0].(map[string]interface{}); ok {
-					if v, ok := item["stakeholders"].(string); ok {
-						stakeholdersJSON = []byte(v)
-					}
-					if v, ok := item["votes_received"].(float64); ok {
-						votesReceived = int(v)
-					}
-					if v, ok := item["total_weight"].(float64); ok {
-						totalWeight = v
-					}
-					if v, ok := item["outcome"].(string); ok {
-						outcome = v
-					}
-					hasuraFound = true
-				}
-			}
-		} else {
-			IncHasuraFallback("branch_evaluator")
-		}
+	if e.db == nil {
+		return "", fmt.Errorf("decision not found: no hasura result and db unavailable")
 	}
-
-	// SQL fallback
-	if !hasuraFound {
-		if e.db == nil {
-			return "", fmt.Errorf("decision not found: no hasura result and db unavailable")
-		}
-		query := `
+	query := `
 		SELECT decision_id, stakeholders, votes_received, total_weight, outcome
 		FROM bp_collaborative_decisions
 		WHERE decision_id = $1 AND tenant_id = $2
 	`
-		row := e.db.QueryRowContext(ctx, query, decisionID, tenantID)
-		if err := row.Scan(&decisionID, &stakeholdersJSON, &votesReceived, &totalWeight, &outcome); err != nil {
-			return "", fmt.Errorf("decision not found: %w", err)
-		}
+	row := e.db.QueryRowContext(ctx, query, decisionID, tenantID)
+	if err := row.Scan(&decisionID, &stakeholdersJSON, &votesReceived, &totalWeight, &outcome); err != nil {
+		return "", fmt.Errorf("decision not found: %w", err)
 	}
 
 	var stakeholders []StakeholderVote
@@ -1014,29 +816,6 @@ func (e *BranchEvaluator) EvaluateExplainability(ctx context.Context, branchID s
 		VALUES ($1, $2, $3, $4, $5, $6)
 		RETURNING record_id
 	`
-	// Prefer Hasura mutation to insert explainability record; fall back to SQL when mutate fails
-	if e.hasura != nil {
-		mut := `mutation InsertExplain($branch: uuid!, $features: jsonb!, $path: String!, $summary: String!, $confidence: float8!, $tenantId: uuid!) { insert_bp_explainability_records_one(object: {branch_id: $branch, feature_importance: $features, decision_path: $path, natural_language_summary: $summary, confidence_score: $confidence, tenant_id: $tenantId}) { record_id } }`
-		vars := map[string]interface{}{"branch": branchID, "features": string(featuresJSON), "path": record.DecisionPath, "summary": record.NaturalLanguageSummary, "confidence": record.Confidence, "tenantId": tenantID}
-		if res, err := e.hasura.Mutate(mut, vars); err == nil {
-			if ins, ok := res["insert_bp_explainability_records_one"].(map[string]interface{}); ok {
-				if id, ok := ins["record_id"].(string); ok {
-					record.RecordID = id
-					return record, nil
-				}
-			}
-			// If mutate didn't provide an ID, still consider it successful
-			return record, nil
-		} else {
-			IncHasuraFallback("branch_evaluator")
-			// attempt SQL fallback if DB present
-			if e.db == nil {
-				return record, err
-			}
-		}
-	}
-
-	// SQL fallback
 	err := e.db.QueryRowContext(ctx, query, branchID, string(featuresJSON), record.DecisionPath,
 		record.NaturalLanguageSummary, record.Confidence, tenantID).Scan(&record.RecordID)
 
@@ -1101,26 +880,6 @@ func (e *BranchEvaluator) LogBlockchainAudit(ctx context.Context, eventID string
 	// Generate SHA-256 hash of decision
 	eventHash := fmt.Sprintf("sha256_%s_%d", decision, time.Now().Unix())
 
-	// Prefer Hasura mutation
-	if e.hasura != nil {
-		mut := `mutation InsertAudit($eventId: uuid!, $hash: String!, $tenantId: uuid!) { insert_bp_blockchain_audit_one(object: {event_id: $eventId, event_type: "branch_decision", event_hash: $hash, network: "hyperledger_fabric", tenant_id: $tenantId}) { id } }`
-		vars := map[string]interface{}{"eventId": eventID, "hash": eventHash, "tenantId": tenantID}
-		if _, err := e.hasura.Mutate(mut, vars); err != nil {
-			IncHasuraFallback("branch_evaluator")
-			if e.db != nil {
-				query := `
-		INSERT INTO bp_blockchain_audit (event_id, event_type, event_hash, network, tenant_id)
-		VALUES ($1, 'branch_decision', $2, 'hyperledger_fabric', $3)
-	`
-				_, sqlErr := e.db.ExecContext(ctx, query, eventID, eventHash, tenantID)
-				return sqlErr
-			}
-			return err
-		}
-		return nil
-	}
-
-	// SQL fallback if no Hasura
 	if e.db == nil {
 		return fmt.Errorf("no hasura and no db available")
 	}

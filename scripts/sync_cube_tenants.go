@@ -232,7 +232,8 @@ func resolveDSN() string {
 	if dsn := strings.TrimSpace(os.Getenv("ALPHA_DB_URL")); dsn != "" {
 		return dsn
 	}
-	return "postgres://postgres:postgres@localhost:5432/alpha?sslmode=disable"
+	log.Fatal("DATABASE_URL or ALPHA_DB_URL environment variable must be set")
+	return ""
 }
 
 func decodeJSONMap(raw sql.NullString) map[string]any {

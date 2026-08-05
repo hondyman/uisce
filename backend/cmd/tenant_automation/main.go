@@ -77,7 +77,7 @@ func resolveDSN(override string) string {
 	if env := strings.TrimSpace(os.Getenv("DATABASE_URL")); env != "" {
 		return env
 	}
-	return "postgres://postgres:postgres@localhost:5432/alpha?sslmode=disable"
+	panic("DATABASE_URL environment variable is required")
 }
 
 func splitCSV(raw string) []string {

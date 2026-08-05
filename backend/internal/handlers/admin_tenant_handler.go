@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
-	"strconv"
 	"strings"
 
 	"github.com/go-chi/chi/v5"
@@ -47,19 +46,7 @@ func (h *AdminTenantHandler) ListTenants(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	limit := 50
-	if limitStr := r.URL.Query().Get("limit"); limitStr != "" {
-		if l, err := strconv.Atoi(limitStr); err == nil && l > 0 && l <= 1000 {
-			limit = l
-		}
-	}
-
-	offset := 0
-	if offsetStr := r.URL.Query().Get("offset"); offsetStr != "" {
-		if o, err := strconv.Atoi(offsetStr); err == nil && o >= 0 {
-			offset = o
-		}
-	}
+	limit, offset := PaginateWithMax(r, 1000)
 
 	tenants, total, err := h.tenantStore.ListTenants(r.Context(), limit, offset)
 	if err != nil {
@@ -67,8 +54,7 @@ func (h *AdminTenantHandler) ListTenants(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{
+	SendJSON(w, http.StatusOK, map[string]interface{}{
 		"tenants": tenants,
 		"total":   total,
 		"limit":   limit,

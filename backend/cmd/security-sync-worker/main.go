@@ -58,12 +58,12 @@ func main() {
 	config := SyncWorkerConfig{
 		KafkaBrokers:       getEnv("KAFKA_BROKERS", "localhost:9092"),
 		DebeziumServerName: getEnv("DEBEZIUM_SERVER_NAME", "alpha"),
-		PostgresURL:        getEnv("POSTGRES_URL", "postgres://postgres:postgres@localhost:5432/alpha"),
+		PostgresURL:        requireEnv("POSTGRES_URL"),
 		HasuraURL:          getEnv("HASURA_URL", "http://localhost:8080"),
-		HasuraAdminSecret:  getEnv("HASURA_ADMIN_SECRET", "myadminsecretkey"),
+		HasuraAdminSecret:  requireEnv("HASURA_ADMIN_SECRET"),
 		SupersetURL:        getEnv("SUPERSET_URL", "http://localhost:8088"),
 		SupersetUsername:   getEnv("SUPERSET_USERNAME", "admin"),
-		SupersetPassword:   getEnv("SUPERSET_PASSWORD", "admin"),
+		SupersetPassword:   requireEnv("SUPERSET_PASSWORD"),
 		StarRocksURL:       getEnv("STARROCKS_URL", "localhost:9030"),
 		StarRocksUser:      getEnv("STARROCKS_USER", "root"),
 		StarRocksPassword:  getEnv("STARROCKS_PASSWORD", ""),
@@ -399,6 +399,14 @@ func getEnv(key, defaultValue string) string {
 		return value
 	}
 	return defaultValue
+}
+
+func requireEnv(key string) string {
+	if value := os.Getenv(key); value != "" {
+		return value
+	}
+	log.Fatalf("required environment variable %s is not set", key)
+	return ""
 }
 
 // startBitemporalWorker tracks all entity changes in the bitemporal audit system

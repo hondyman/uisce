@@ -8,24 +8,22 @@ import (
 	"time"
 
 	"calendar-service/internal/cache"
-	"calendar-service/internal/hasura"
+	"calendar-service/internal/database"
 
 	"github.com/sirupsen/logrus"
 	"go.temporal.io/sdk/client"
 )
 
-// HealthHandlers handles health check endpoints
 type HealthHandlers struct {
-	hasuraClient   *hasura.Client
+	dbClient       *database.Client
 	redisClient    *cache.CalendarCache
 	temporalClient client.Client
 	logger         *logrus.Entry
 }
 
-// NewHealthHandlers creates a new health handlers instance
-func NewHealthHandlers(hc *hasura.Client, rc *cache.CalendarCache, tc client.Client, logger *logrus.Entry) *HealthHandlers {
+func NewHealthHandlers(dc *database.Client, rc *cache.CalendarCache, tc client.Client, logger *logrus.Entry) *HealthHandlers {
 	return &HealthHandlers{
-		hasuraClient:   hc,
+		dbClient:       dc,
 		redisClient:    rc,
 		temporalClient: tc,
 		logger:         logger.WithField("handler", "health"),
@@ -81,18 +79,18 @@ func (h *HealthHandlers) Ready(w http.ResponseWriter, r *http.Request) {
 	components := make(map[string]ComponentStatus)
 	allReady := true
 
-	// Check Hasura
-	hasuraReady := true
-	hasuraErr := ""
-	if err := h.checkHasura(ctx); err != nil {
-		hasuraReady = false
-		hasuraErr = err.Error()
+	// Check Database
+	dbReady := true
+	dbErr := ""
+	if err := h.checkDatabase(ctx); err != nil {
+		dbReady = false
+		dbErr = err.Error()
 		allReady = false
 	}
-	components["hasura"] = ComponentStatus{
-		Ready:   hasuraReady,
-		Message: "GraphQL endpoint",
-		Error:   hasuraErr,
+	components["database"] = ComponentStatus{
+		Ready:   dbReady,
+		Message: "PostgreSQL database",
+		Error:   dbErr,
 	}
 
 	// Check Redis
@@ -143,7 +141,7 @@ func (h *HealthHandlers) Ready(w http.ResponseWriter, r *http.Request) {
 
 	h.logger.WithFields(logrus.Fields{
 		"ready":    allReady,
-		"hasura":   hasuraReady,
+		"database": dbReady,
 		"redis":    redisReady,
 		"temporal": temporalReady,
 	}).Debug("Readiness check completed")
@@ -154,18 +152,18 @@ func (h *HealthHandlers) CheckReady(ctx context.Context) ReadinessResponse {
 	components := make(map[string]ComponentStatus)
 	allReady := true
 
-	// Check Hasura
-	hasuraReady := true
-	hasuraErr := ""
-	if err := h.checkHasura(ctx); err != nil {
-		hasuraReady = false
-		hasuraErr = err.Error()
+	// Check Database
+	dbReady := true
+	dbErr := ""
+	if err := h.checkDatabase(ctx); err != nil {
+		dbReady = false
+		dbErr = err.Error()
 		allReady = false
 	}
-	components["hasura"] = ComponentStatus{
-		Ready:   hasuraReady,
-		Message: "GraphQL endpoint",
-		Error:   hasuraErr,
+	components["database"] = ComponentStatus{
+		Ready:   dbReady,
+		Message: "PostgreSQL database",
+		Error:   dbErr,
 	}
 
 	// Check Redis
@@ -209,20 +207,12 @@ func (h *HealthHandlers) CheckReady(ctx context.Context) ReadinessResponse {
 	}
 }
 
-// checkHasura verifies Hasura GraphQL endpoint connectivity
-func (h *HealthHandlers) checkHasura(ctx context.Context) error {
-	if h.hasuraClient == nil {
-		return fmt.Errorf("hasura client not initialized")
+// checkDatabase verifies database connectivity
+func (h *HealthHandlers) checkDatabase(ctx context.Context) error {
+	if h.dbClient == nil {
+		return fmt.Errorf("database client not initialized")
 	}
-
-	var result struct {
-		Typename string `json:"__typename"`
-	}
-	// Simple introspection query to verify connectivity
-	if err := h.hasuraClient.QueryRaw(ctx, "query { __typename }", nil, &result); err != nil {
-		return fmt.Errorf("hasura query failed: %w", err)
-	}
-	return nil
+	return h.dbClient.Health(ctx)
 }
 
 // checkRedis verifies Redis connectivity

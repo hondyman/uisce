@@ -18,16 +18,9 @@ import (
 	"github.com/lib/pq"
 )
 
-// HasuraClient defines the interface for Hasura GraphQL operations
-type HasuraClient interface {
-	Query(query string, variables map[string]interface{}) (map[string]interface{}, error)
-	Mutate(mutation string, variables map[string]interface{}) (map[string]interface{}, error)
-}
-
 // Service coordinates webhook subscription management and delivery tracking.
 type Service struct {
 	db     *sqlx.DB
-	hasura HasuraClient
 	client *http.Client
 }
 
@@ -35,15 +28,6 @@ type Service struct {
 func NewService(db *sqlx.DB) *Service {
 	return &Service{
 		db:     db,
-		client: &http.Client{Timeout: 10 * time.Second},
-	}
-}
-
-// NewServiceWithHasura creates a webhook service with Hasura support
-func NewServiceWithHasura(db *sqlx.DB, hasura HasuraClient) *Service {
-	return &Service{
-		db:     db,
-		hasura: hasura,
 		client: &http.Client{Timeout: 10 * time.Second},
 	}
 }
@@ -366,39 +350,7 @@ func generateSecret() string {
 	return base64.StdEncoding.EncodeToString(buf)
 }
 
-// ============================================================================
-// HASURA-FIRST HELPERS
-// ============================================================================
-
-// rotateSecret updates the webhook secret key
-// TODO: Already has Hasura GraphQL mutation implemented
-// SQL fallback: UPDATE secret_key with NOW() for updated_at
 func (s *Service) rotateSecret(ctx context.Context, subscriptionID uuid.UUID, newSecret string) error {
-	if s.hasura != nil {
-		mutation := `
-			mutation RotateSecret($id: uuid!, $secret: String!) {
-				update_webhook_subscriptions_by_pk(
-					pk_columns: {subscription_id: $id}
-					_set: {secret_key: $secret, updated_at: "now()"}
-				) {
-					subscription_id
-				}
-			}
-		`
-
-		variables := map[string]interface{}{
-			"id":     subscriptionID,
-			"secret": newSecret,
-		}
-
-		_, err := s.hasura.Mutate(mutation, variables)
-		if err == nil {
-			return nil
-		}
-		// Fall through to SQL on Hasura error
-	}
-
-	// SQL fallback
 	_, err := s.db.ExecContext(ctx,
 		`UPDATE webhook_subscriptions SET secret_key = $2, updated_at = NOW() WHERE subscription_id = $1`,
 		subscriptionID, newSecret,
@@ -406,55 +358,7 @@ func (s *Service) rotateSecret(ctx context.Context, subscriptionID uuid.UUID, ne
 	return err
 }
 
-// recordDelivery inserts a new webhook delivery record
-// TODO: Already has Hasura GraphQL mutation implemented
-// SQL fallback: INSERT webhook_deliveries with status PENDING
 func (s *Service) recordDelivery(ctx context.Context, deliveryID, subscriptionID uuid.UUID, eventType string, eventID uuid.UUID, payload []byte) error {
-	if s.hasura != nil {
-		mutation := `
-			mutation RecordDelivery(
-				$deliveryID: uuid!
-				$subscriptionID: uuid!
-				$eventType: String!
-				$eventID: uuid!
-				$payload: jsonb!
-			) {
-				insert_webhook_deliveries_one(object: {
-					delivery_id: $deliveryID
-					subscription_id: $subscriptionID
-					event_type: $eventType
-					event_id: $eventID
-					payload: $payload
-					attempt_number: 1
-					status: "PENDING"
-					created_at: "now()"
-				}) {
-					delivery_id
-				}
-			}
-		`
-
-		var payloadJSON interface{}
-		if err := json.Unmarshal(payload, &payloadJSON); err != nil {
-			payloadJSON = string(payload)
-		}
-
-		variables := map[string]interface{}{
-			"deliveryID":     deliveryID,
-			"subscriptionID": subscriptionID,
-			"eventType":      eventType,
-			"eventID":        eventID,
-			"payload":        payloadJSON,
-		}
-
-		_, err := s.hasura.Mutate(mutation, variables)
-		if err == nil {
-			return nil
-		}
-		// Fall through to SQL on Hasura error
-	}
-
-	// SQL fallback
 	_, err := s.db.ExecContext(ctx, `
 		INSERT INTO webhook_deliveries (
 			delivery_id, subscription_id, event_type, event_id, payload,
@@ -464,42 +368,7 @@ func (s *Service) recordDelivery(ctx context.Context, deliveryID, subscriptionID
 	return err
 }
 
-// updateDeliverySuccessRecord marks a delivery as successful
-// TODO: Already has Hasura GraphQL mutation implemented
-// SQL fallback: UPDATE status to SUCCESS with response details
 func (s *Service) updateDeliverySuccessRecord(ctx context.Context, deliveryID uuid.UUID, status int, body string, latencyMs int) error {
-	if s.hasura != nil {
-		mutation := `
-			mutation UpdateDeliverySuccess($id: uuid!, $status: Int!, $body: String!, $latency: Int!) {
-				update_webhook_deliveries_by_pk(
-					pk_columns: {delivery_id: $id}
-					_set: {
-						status: "SUCCESS"
-						response_status: $status
-						response_body: $body
-						response_time_ms: $latency
-					}
-				) {
-					delivery_id
-				}
-			}
-		`
-
-		variables := map[string]interface{}{
-			"id":      deliveryID,
-			"status":  status,
-			"body":    body,
-			"latency": latencyMs,
-		}
-
-		_, err := s.hasura.Mutate(mutation, variables)
-		if err == nil {
-			return nil
-		}
-		// Fall through to SQL on Hasura error
-	}
-
-	// SQL fallback
 	_, err := s.db.ExecContext(ctx, `
 		UPDATE webhook_deliveries
 		SET status = 'SUCCESS', response_status = $2, response_body = $3,
@@ -509,50 +378,7 @@ func (s *Service) updateDeliverySuccessRecord(ctx context.Context, deliveryID uu
 	return err
 }
 
-// updateDeliveryFailureRecord marks a delivery as failed
-// TODO: Already has Hasura GraphQL mutation implemented
-// SQL fallback: UPDATE status to FAILED with error details and next_retry_at
 func (s *Service) updateDeliveryFailureRecord(ctx context.Context, deliveryID uuid.UUID, message string, status *int, latencyMs *int, nextRetry time.Time) error {
-	if s.hasura != nil {
-		mutation := `
-			mutation UpdateDeliveryFailure(
-				$id: uuid!
-				$message: String!
-				$status: Int
-				$latency: Int
-				$nextRetry: timestamptz!
-			) {
-				update_webhook_deliveries_by_pk(
-					pk_columns: {delivery_id: $id}
-					_set: {
-						status: "FAILED"
-						error_message: $message
-						response_status: $status
-						response_time_ms: $latency
-						next_retry_at: $nextRetry
-					}
-				) {
-					delivery_id
-				}
-			}
-		`
-
-		variables := map[string]interface{}{
-			"id":        deliveryID,
-			"message":   message,
-			"status":    status,
-			"latency":   latencyMs,
-			"nextRetry": nextRetry,
-		}
-
-		_, err := s.hasura.Mutate(mutation, variables)
-		if err == nil {
-			return nil
-		}
-		// Fall through to SQL on Hasura error
-	}
-
-	// SQL fallback
 	_, err := s.db.ExecContext(ctx, `
 		UPDATE webhook_deliveries
 		SET status = 'FAILED', error_message = $2, response_status = $3,

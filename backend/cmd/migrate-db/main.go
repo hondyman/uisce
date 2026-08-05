@@ -11,8 +11,13 @@ import (
 )
 
 func main() {
+	dbURL := os.Getenv("DATABASE_URL")
+	if dbURL == "" {
+		log.Fatal("DATABASE_URL environment variable is required")
+	}
+
 	// Connect to database
-	db, err := sql.Open("postgres", "postgres://postgres:postgres@localhost:5432/alpha?sslmode=disable")
+	db, err := sql.Open("postgres", dbURL)
 	if err != nil {
 		log.Fatal("Failed to connect to database:", err)
 	}

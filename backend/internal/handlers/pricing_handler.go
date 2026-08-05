@@ -3,7 +3,6 @@ package handlers
 import (
 	"encoding/json"
 	"net/http"
-	"strconv"
 
 	"github.com/google/uuid"
 	"github.com/hondyman/uisce/backend/internal/pricing"
@@ -22,19 +21,7 @@ func NewPricingHandlers(repo *pricing.Repository) *PricingHandlers {
 
 // paginate extracts limit/offset query params with sensible defaults.
 func paginateQuery(r *http.Request) (int, int) {
-	limit := 50
-	offset := 0
-	if l := r.URL.Query().Get("limit"); l != "" {
-		if v, err := strconv.Atoi(l); err == nil && v > 0 && v <= 500 {
-			limit = v
-		}
-	}
-	if o := r.URL.Query().Get("offset"); o != "" {
-		if v, err := strconv.Atoi(o); err == nil && v >= 0 {
-			offset = v
-		}
-	}
-	return limit, offset
+	return Paginate(r)
 }
 
 // parseTenantID extracts and parses the tenant UUID from the X-Tenant-ID header.

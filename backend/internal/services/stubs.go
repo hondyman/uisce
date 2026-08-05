@@ -327,9 +327,9 @@ func (s *ApprovalService) GetApprovalChain(ctx context.Context, bundleID string)
 
 var SeverityThresholds = map[string]int{
 	"critical": 0,
-	"high":      1,
-	"medium":    2,
-	"low":       3,
+	"high":     1,
+	"medium":   2,
+	"low":      3,
 }
 
 // SystemUserID is the sentinel user ID for platform-level operations that are

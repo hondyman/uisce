@@ -8,7 +8,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/jmoiron/sqlx"
 	"github.com/lib/pq"
 )
@@ -19,9 +18,7 @@ import (
 
 // TriggerEngine listens for business process triggers and fires Temporal workflows
 type TriggerEngine struct {
-	db *sqlx.DB
-	// Optional Hasura GraphQL client for Hasura-first execution paths
-	hasura            HasuraClient
+	db                *sqlx.DB
 	workflowInitiator WorkflowInitiator
 	tenantID          string
 	stopChan          chan bool
@@ -55,24 +52,6 @@ type TriggerEvent struct {
 func NewTriggerEngine(db *sqlx.DB, initiator WorkflowInitiator, tenantID string, logger *log.Logger) *TriggerEngine {
 	return &TriggerEngine{
 		db:                db,
-		workflowInitiator: initiator,
-		tenantID:          tenantID,
-		stopChan:          make(chan bool),
-		logger:            logger,
-	}
-}
-
-// HasuraClient defines the minimal interface used by services that can call Hasura
-type HasuraClient interface {
-	Query(query string, variables map[string]interface{}) (map[string]interface{}, error)
-	Mutate(mutation string, variables map[string]interface{}) (map[string]interface{}, error)
-}
-
-// NewTriggerEngineWithHasura creates a new trigger engine with an injected Hasura client
-func NewTriggerEngineWithHasura(db *sqlx.DB, hasura HasuraClient, initiator WorkflowInitiator, tenantID string, logger *log.Logger) *TriggerEngine {
-	return &TriggerEngine{
-		db:                db,
-		hasura:            hasura,
 		workflowInitiator: initiator,
 		tenantID:          tenantID,
 		stopChan:          make(chan bool),
@@ -251,68 +230,11 @@ func (te *TriggerEngine) evaluateEventCondition(condition string, event *Trigger
 }
 
 // loadTrigger loads trigger configuration from database
-// Hasura-first: attempt a GraphQL query via the injected Hasura client, falling
-// back to a SQL query when Hasura isn't configured or the query fails.
-// Example GraphQL query:
-//
-//	query LoadTrigger($id: uuid!, $tenantId: String!) {
-//	  bp_adaptive_triggers(where: {id: {_eq: $id}, tenant_id: {_eq: $tenantId}, is_active: {_eq: true}}) {
-//	    id tenant_id step_id trigger_name trigger_condition trigger_type action_type action_config context_variables is_active
-//	  }
-//	}
-//
-// SQL fallback:
 func (te *TriggerEngine) loadTrigger(ctx context.Context, triggerID string) (*BPAdaptiveTrigger, error) {
 	trigger := &BPAdaptiveTrigger{}
 
-	// Attempt Hasura first when available
-	if te.hasura != nil {
-		gql := `query LoadTrigger($id: uuid!, $tenantId: String!) {
-			bp_adaptive_triggers(where: {id: {_eq: $id}, tenant_id: {_eq: $tenantId}, is_active: {_eq: true}}) {
-				id tenant_id step_id trigger_name trigger_condition trigger_type action_type action_config context_variables is_active
-			}
-		}`
-
-		vars := map[string]interface{}{"id": triggerID, "tenantId": te.tenantID}
-		if res, err := te.hasura.Query(gql, vars); err == nil {
-			if arr, ok := res["bp_adaptive_triggers"].([]interface{}); ok && len(arr) > 0 {
-				if item, ok := arr[0].(map[string]interface{}); ok {
-					trigger.ID = getString(item, "id")
-					trigger.TenantID = getString(item, "tenant_id")
-					trigger.StepID = getString(item, "step_id")
-					trigger.TriggerName = getString(item, "trigger_name")
-					trigger.TriggerCondition = getString(item, "trigger_condition")
-					trigger.TriggerType = getString(item, "trigger_type")
-					trigger.ActionType = getString(item, "action_type")
-					if ac, ok := item["action_config"]; ok && ac != nil {
-						if bytes, err := json.Marshal(ac); err == nil {
-							trigger.ActionConfig = bytes
-						}
-					}
-					if ctxVars, ok := item["context_variables"].([]interface{}); ok {
-						// convert to pq.StringArray-like slice
-						var arrVars []string
-						for _, v := range ctxVars {
-							if s, ok := v.(string); ok {
-								arrVars = append(arrVars, s)
-							}
-						}
-						trigger.ContextVariables = pq.StringArray(arrVars)
-					}
-					if ia, ok := item["is_active"].(bool); ok {
-						trigger.IsActive = ia
-					}
-					return trigger, nil
-				}
-			}
-		} else {
-			te.logger.Printf("Hasura query failed for loadTrigger, falling back to SQL: %v", err)
-			IncHasuraFallback("trigger_engine")
-		}
-	}
-
 	query := `
-		SELECT id, tenant_id, step_id, trigger_name, trigger_condition, trigger_type, 
+		SELECT id, tenant_id, step_id, trigger_name, trigger_condition, trigger_type,
 		       action_type, action_config, context_variables, is_active
 		FROM bp_adaptive_triggers
 		WHERE id = $1 AND tenant_id = $2 AND is_active = TRUE
@@ -328,105 +250,8 @@ func (te *TriggerEngine) loadTrigger(ctx context.Context, triggerID string) (*BP
 }
 
 // loadBP loads business process definition and steps
-// Hasura-first: attempt a GraphQL query that pulls the business_process and
-// related bp_steps in a single request, falling back to SQL queries when
-// Hasura isn't available or the query fails.
-// Example GraphQL query:
-//
-//	query LoadBP($id: uuid!, $tenantId: String!) {
-//	  business_processes(where: {id: {_eq: $id}, tenant_id: {_eq: $tenantId}}) {
-//	    id tenant_id process_name description is_active
-//	    bp_steps(order_by: {step_order: asc}) {
-//	      id process_id step_order step_type step_name description duration_hours
-//	      assignee_role validation_rule_ids condition_json next_step_id
-//	    }
-//	  }
-//	}
-//
-// SQL fallback:
 func (te *TriggerEngine) loadBP(ctx context.Context, processID string) (*BusinessProcess, error) {
 	bp := &BusinessProcess{}
-
-	// Attempt Hasura first when available
-	if te.hasura != nil {
-		gql := `query LoadBP($id: uuid!, $tenantId: String!) {
-			business_processes(where: {id: {_eq: $id}, tenant_id: {_eq: $tenantId}}) {
-				id tenant_id process_name description is_active
-				bp_steps(order_by: {step_order: asc}) {
-					id process_id step_order step_type step_name description duration_hours assignee_role condition_json next_step_id
-				}
-			}
-		}`
-
-		vars := map[string]interface{}{"id": processID, "tenantId": te.tenantID}
-		if res, err := te.hasura.Query(gql, vars); err == nil {
-			if arr, ok := res["business_processes"].([]interface{}); ok && len(arr) > 0 {
-				if item, ok := arr[0].(map[string]interface{}); ok {
-					// Parse header
-					if idStr := getString(item, "id"); idStr != "" {
-						if parsed, err := uuid.Parse(idStr); err == nil {
-							bp.ID = parsed
-						}
-					}
-					if tStr := getString(item, "tenant_id"); tStr != "" {
-						if parsed, err := uuid.Parse(tStr); err == nil {
-							bp.TenantID = parsed
-						}
-					}
-					bp.ProcessName = getString(item, "process_name")
-					bp.Description = getString(item, "description")
-					if ia, ok := item["is_active"].(bool); ok {
-						bp.IsActive = ia
-					}
-
-					// Parse steps
-					bp.Steps = make([]BPStep, 0)
-					if stepsArr, ok := item["bp_steps"].([]interface{}); ok {
-						for _, s := range stepsArr {
-							if sm, ok := s.(map[string]interface{}); ok {
-								step := BPStep{}
-								if idStr := getString(sm, "id"); idStr != "" {
-									if parsed, err := uuid.Parse(idStr); err == nil {
-										step.ID = parsed
-									}
-								}
-								if pid := getString(sm, "process_id"); pid != "" {
-									if parsed, err := uuid.Parse(pid); err == nil {
-										step.ProcessID = parsed
-									}
-								}
-								if so, ok := sm["step_order"].(float64); ok {
-									step.StepOrder = int16(so)
-								}
-								step.StepType = getString(sm, "step_type")
-								step.StepName = getString(sm, "step_name")
-								if desc := getString(sm, "description"); desc != "" {
-									step.Description = &desc
-								}
-								if dh, ok := sm["duration_hours"].(float64); ok {
-									step.DurationHours = int16(dh)
-								}
-								if ar := getString(sm, "assignee_role"); ar != "" {
-									step.AssigneeRole = &ar
-								}
-								if cfg, ok := sm["condition_json"]; ok && cfg != nil {
-									if b, err := json.Marshal(cfg); err == nil {
-										step.Config = b
-									}
-								}
-								bp.Steps = append(bp.Steps, step)
-							}
-						}
-					}
-
-					return bp, nil
-				}
-			}
-		} else {
-			te.logger.Printf("Hasura query failed for loadBP, falling back to SQL: %v", err)
-			IncHasuraFallback("trigger_engine")
-		}
-	}
 
 	// Load BP header
 	query := `
@@ -477,38 +302,7 @@ func (te *TriggerEngine) loadBP(ctx context.Context, processID string) (*Busines
 }
 
 // recordTriggerSuccess records successful trigger execution.
-// Hasura-first: attempt a GraphQL mutation and fall back to SQL UPDATE when
-// the mutation fails or Hasura is not configured.
-// Example GraphQL mutation:
-//
-//	mutation RecordTriggerSuccess($id: uuid!, $executionId: String!) {
-//	  update_bp_trigger_events(
-//	    where: {id: {_eq: $id}}
-//	    _set: {status: "completed", execution_id: $executionId, updated_at: "now()"}
-//	  ) { affected_rows }
-//	}
-//
-// SQL fallback:
 func (te *TriggerEngine) recordTriggerSuccess(ctx context.Context, triggerEventID string, workflowID string) {
-	// Try Hasura mutation first if available
-	if te.hasura != nil {
-		mutation := `mutation RecordTriggerSuccess($id: uuid!, $executionId: String!) {
-			update_bp_trigger_events(where: {id: {_eq: $id}}, _set: {status: "completed", execution_id: $executionId, updated_at: "now()"}) {
-				affected_rows
-			}
-		}`
-
-		variables := map[string]interface{}{"id": triggerEventID, "executionId": workflowID}
-		if _, err := te.hasura.Mutate(mutation, variables); err == nil {
-			te.logger.Printf("✅ Recorded trigger success (Hasura): %s", workflowID)
-			return
-		} else {
-			te.logger.Printf("Hasura mutation failed for recordTriggerSuccess, falling back to SQL: %v", err)
-			IncHasuraFallback("trigger_engine")
-		}
-	}
-
-	// SQL fallback
 	query := `
 		UPDATE bp_trigger_events
 		SET status = 'completed', execution_id = $1, updated_at = NOW()
@@ -523,32 +317,7 @@ func (te *TriggerEngine) recordTriggerSuccess(ctx context.Context, triggerEventI
 }
 
 // recordTriggerFailure records trigger failure
-// TODO: Refactor to Hasura GraphQL
-//
-//	mutation {
-//	  update_bp_trigger_events(
-//	    where: {id: {_eq: "event-uuid"}}
-//	    _set: {status: "failed", error_message: "error text", updated_at: "now()"}
-//	  ) { affected_rows }
-//	}
 func (te *TriggerEngine) recordTriggerFailure(ctx context.Context, triggerEventID string, errorMsg string) {
-	if te.hasura != nil {
-		mutation := `mutation RecordTriggerFailure($id: uuid!, $errorMsg: String!) {
-			update_bp_trigger_events(where: {id: {_eq: $id}}, _set: {status: "failed", error_message: $errorMsg, updated_at: "now()"}) {
-				affected_rows
-			}
-		}`
-
-		variables := map[string]interface{}{"id": triggerEventID, "errorMsg": errorMsg}
-		if _, err := te.hasura.Mutate(mutation, variables); err == nil {
-			te.logger.Printf("❌ Recorded trigger failure (Hasura): %s", errorMsg)
-			return
-		} else {
-			te.logger.Printf("Hasura mutation failed for recordTriggerFailure, falling back to SQL: %v", err)
-			IncHasuraFallback("trigger_engine")
-		}
-	}
-
 	query := `
 		UPDATE bp_trigger_events
 		SET status = 'failed', error_message = $1, updated_at = NOW()
@@ -560,16 +329,6 @@ func (te *TriggerEngine) recordTriggerFailure(ctx context.Context, triggerEventI
 	} else {
 		te.logger.Printf("❌ Recorded trigger failure: %s", errorMsg)
 	}
-}
-
-// helper: safely extract string from a GraphQL result map
-func getString(m map[string]interface{}, key string) string {
-	if v, ok := m[key]; ok && v != nil {
-		if s, ok := v.(string); ok {
-			return s
-		}
-	}
-	return ""
 }
 
 // ============================================================================

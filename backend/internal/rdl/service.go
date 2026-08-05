@@ -124,18 +124,11 @@ type EvaluationResult struct {
 	EvaluationTimeMS int64                  `json:"evaluation_time_ms"`
 }
 
-// HasuraClient interface for GraphQL operations
-type HasuraClient interface {
-	Query(query string, variables map[string]interface{}) (map[string]interface{}, error)
-	Mutate(mutation string, variables map[string]interface{}) (map[string]interface{}, error)
-}
-
 // RDLService provides the Rule Definition Language evaluation engine
 type RDLService struct {
 	db       *sqlx.DB
 	celEnv   *cel.Env
 	washSale WashSaleChecker
-	hasura   HasuraClient
 }
 
 // WashSaleChecker interface for wash sale lookups
@@ -182,18 +175,7 @@ func NewRDLService(db *sqlx.DB, washSaleChecker WashSaleChecker) (*RDLService, e
 		db:       db,
 		celEnv:   env,
 		washSale: washSaleChecker,
-		hasura:   nil,
 	}, nil
-}
-
-// NewRDLServiceWithHasura creates a new Rule Definition Language service with Hasura support
-func NewRDLServiceWithHasura(db *sqlx.DB, washSaleChecker WashSaleChecker, hasura HasuraClient) (*RDLService, error) {
-	service, err := NewRDLService(db, washSaleChecker)
-	if err != nil {
-		return nil, err
-	}
-	service.hasura = hasura
-	return service, nil
 }
 
 // NewService creates a new RDL service with defaults (used by HTTP handlers)
@@ -235,17 +217,11 @@ func NewService(db *sqlx.DB) *RDLService {
 		db:       db,
 		celEnv:   env,
 		washSale: nil,
-		hasura:   nil,
 	}
 }
 
 // GetRulesByTenant retrieves all active rules for a tenant
 func (s *RDLService) GetRulesByTenant(ctx context.Context, tenantID uuid.UUID) ([]RuleDefinition, error) {
-	// Use Hasura if available, otherwise fallback to direct DB
-	if s.hasura != nil {
-		return s.getRulesByTenantWithHasura(ctx, tenantID)
-	}
-
 	query := `
 		SELECT id, tenant_id, rule_id, type, version, name, description, jurisdiction,
 		       parameters, expression, scoring_formula, wash_sale_config, substitute_asset_rules,
@@ -266,149 +242,8 @@ func (s *RDLService) GetRulesByTenant(ctx context.Context, tenantID uuid.UUID) (
 	return rules, nil
 }
 
-func (s *RDLService) getRulesByTenantWithHasura(ctx context.Context, tenantID uuid.UUID) ([]RuleDefinition, error) {
-	query := `
-		query GetRulesByTenant($tenant_id: uuid!, $current_date: date!) {
-			rule_definitions(
-				where: {
-					tenant_id: {_eq: $tenant_id},
-					active: {_eq: true},
-					_or: [
-						{effective_from: {_is_null: true}},
-						{effective_from: {_lte: $current_date}}
-					],
-					_and: [
-						{_or: [
-							{effective_to: {_is_null: true}},
-							{effective_to: {_gte: $current_date}}
-						]}
-					]
-				},
-				order_by: [{type: asc}, {rule_id: asc}]
-			) {
-				id
-				tenant_id
-				rule_id
-				type
-				version
-				name
-				description
-				jurisdiction
-				parameters
-				expression
-				scoring_formula
-				wash_sale_config
-				substitute_asset_rules
-				schedule
-				notifications
-				active
-				effective_from
-				effective_to
-				audit
-				created_at
-				updated_at
-			}
-		}
-	`
-
-	currentDate := time.Now().Format("2006-01-02")
-	result, err := s.hasura.Query(query, map[string]interface{}{
-		"tenant_id":    tenantID.String(),
-		"current_date": currentDate,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("failed to fetch rules via Hasura: %w", err)
-	}
-
-	rulesData, ok := result["rule_definitions"].([]interface{})
-	if !ok {
-		return nil, fmt.Errorf("unexpected response format from Hasura")
-	}
-
-	var rules []RuleDefinition
-	for _, item := range rulesData {
-		ruleMap, ok := item.(map[string]interface{})
-		if !ok {
-			continue
-		}
-
-		rule := RuleDefinition{}
-		if id, ok := ruleMap["id"].(string); ok {
-			rule.ID = uuid.MustParse(id)
-		}
-		if tid, ok := ruleMap["tenant_id"].(string); ok {
-			rule.TenantID = uuid.MustParse(tid)
-		}
-		if ruleID, ok := ruleMap["rule_id"].(string); ok {
-			rule.RuleID = ruleID
-		}
-		if ruleType, ok := ruleMap["type"].(string); ok {
-			rule.Type = RuleType(ruleType)
-		}
-		if version, ok := ruleMap["version"].(string); ok {
-			rule.Version = version
-		}
-		if name, ok := ruleMap["name"].(string); ok {
-			rule.Name = name
-		}
-		if desc, ok := ruleMap["description"].(string); ok {
-			rule.Description = desc
-		}
-		if jurisdiction, ok := ruleMap["jurisdiction"].(string); ok {
-			rule.Jurisdiction = jurisdiction
-		}
-		if params, ok := ruleMap["parameters"].(string); ok {
-			rule.Parameters = json.RawMessage(params)
-		}
-		if expr, ok := ruleMap["expression"].(string); ok {
-			rule.Expression = expr
-		}
-		if formula, ok := ruleMap["scoring_formula"].(string); ok {
-			rule.ScoringFormula = formula
-		}
-		if wsConfig, ok := ruleMap["wash_sale_config"].(string); ok {
-			rule.WashSaleConfig = json.RawMessage(wsConfig)
-		}
-		if subRules, ok := ruleMap["substitute_asset_rules"].(string); ok {
-			rule.SubstituteAssetRules = json.RawMessage(subRules)
-		}
-		if schedule, ok := ruleMap["schedule"].(string); ok {
-			rule.Schedule = json.RawMessage(schedule)
-		}
-		if notif, ok := ruleMap["notifications"].(string); ok {
-			rule.Notifications = json.RawMessage(notif)
-		}
-		if active, ok := ruleMap["active"].(bool); ok {
-			rule.Active = active
-		}
-		if audit, ok := ruleMap["audit"].(string); ok {
-			rule.Audit = json.RawMessage(audit)
-		}
-		// Handle timestamps and dates
-		if createdAt, ok := ruleMap["created_at"].(string); ok {
-			if t, err := time.Parse(time.RFC3339, createdAt); err == nil {
-				rule.CreatedAt = t
-			}
-		}
-		if updatedAt, ok := ruleMap["updated_at"].(string); ok {
-			if t, err := time.Parse(time.RFC3339, updatedAt); err == nil {
-				rule.UpdatedAt = t
-			}
-		}
-
-		rules = append(rules, rule)
-	}
-
-	return rules, nil
-}
-
 // GetRulesByType retrieves rules of a specific type for a tenant
 func (s *RDLService) GetRulesByType(ctx context.Context, tenantID uuid.UUID, ruleType RuleType) ([]RuleDefinition, error) {
-	// Use Hasura if available, otherwise fallback to direct DB
-	if s.hasura != nil {
-		return s.getRulesByTypeWithHasura(ctx, tenantID, ruleType)
-	}
-
 	query := `
 		SELECT id, tenant_id, rule_id, type, version, name, description, jurisdiction,
 		       parameters, expression, scoring_formula, wash_sale_config, substitute_asset_rules,
@@ -429,77 +264,8 @@ func (s *RDLService) GetRulesByType(ctx context.Context, tenantID uuid.UUID, rul
 	return rules, nil
 }
 
-func (s *RDLService) getRulesByTypeWithHasura(ctx context.Context, tenantID uuid.UUID, ruleType RuleType) ([]RuleDefinition, error) {
-	query := `
-		query GetRulesByType($tenant_id: uuid!, $type: String!, $current_date: date!) {
-			rule_definitions(
-				where: {
-					tenant_id: {_eq: $tenant_id},
-					type: {_eq: $type},
-					active: {_eq: true},
-					_or: [
-						{effective_from: {_is_null: true}},
-						{effective_from: {_lte: $current_date}}
-					],
-					_and: [
-						{_or: [
-							{effective_to: {_is_null: true}},
-							{effective_to: {_gte: $current_date}}
-						]}
-					]
-				},
-				order_by: [{rule_id: asc}]
-			) {
-				id
-				tenant_id
-				rule_id
-				type
-				version
-				name
-				description
-				jurisdiction
-				parameters
-				expression
-				scoring_formula
-				wash_sale_config
-				substitute_asset_rules
-				schedule
-				notifications
-				active
-				effective_from
-				effective_to
-				audit
-				created_at
-				updated_at
-			}
-		}
-	`
-
-	currentDate := time.Now().Format("2006-01-02")
-	result, err := s.hasura.Query(query, map[string]interface{}{
-		"tenant_id":    tenantID.String(),
-		"type":         string(ruleType),
-		"current_date": currentDate,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("failed to fetch rules by type via Hasura: %w", err)
-	}
-
-	rulesData, ok := result["rule_definitions"].([]interface{})
-	if !ok {
-		return nil, fmt.Errorf("unexpected response format from Hasura")
-	}
-
-	return s.parseRulesFromHasura(rulesData), nil
-}
-
 // GetRuleByID retrieves a specific rule
 func (s *RDLService) GetRuleByID(ctx context.Context, tenantID uuid.UUID, ruleID string) (*RuleDefinition, error) {
-	// Use Hasura if available, otherwise fallback to direct DB
-	if s.hasura != nil {
-		return s.getRuleByIDWithHasura(ctx, tenantID, ruleID)
-	}
-
 	query := `
 		SELECT id, tenant_id, rule_id, type, version, name, description, jurisdiction,
 		       parameters, expression, scoring_formula, wash_sale_config, substitute_asset_rules,
@@ -517,63 +283,6 @@ func (s *RDLService) GetRuleByID(ctx context.Context, tenantID uuid.UUID, ruleID
 	}
 
 	return &rule, nil
-}
-
-func (s *RDLService) getRuleByIDWithHasura(ctx context.Context, tenantID uuid.UUID, ruleID string) (*RuleDefinition, error) {
-	query := `
-		query GetRuleByID($tenant_id: uuid!, $rule_id: String!) {
-			rule_definitions(
-				where: {
-					tenant_id: {_eq: $tenant_id},
-					rule_id: {_eq: $rule_id}
-				},
-				order_by: [{version: desc}],
-				limit: 1
-			) {
-				id
-				tenant_id
-				rule_id
-				type
-				version
-				name
-				description
-				jurisdiction
-				parameters
-				expression
-				scoring_formula
-				wash_sale_config
-				substitute_asset_rules
-				schedule
-				notifications
-				active
-				effective_from
-				effective_to
-				audit
-				created_at
-				updated_at
-			}
-		}
-	`
-
-	result, err := s.hasura.Query(query, map[string]interface{}{
-		"tenant_id": tenantID.String(),
-		"rule_id":   ruleID,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("failed to fetch rule via Hasura: %w", err)
-	}
-
-	rulesData, ok := result["rule_definitions"].([]interface{})
-	if !ok {
-		return nil, fmt.Errorf("unexpected response format from Hasura")
-	}
-
-	if len(rulesData) == 0 {
-		return nil, fmt.Errorf("rule not found")
-	}
-
-	rules := s.parseRulesFromHasura(rulesData)
-	return &rules[0], nil
 }
 
 // Evaluate evaluates a rule against input data
@@ -692,11 +401,6 @@ func (s *RDLService) CreateRule(ctx context.Context, rule *RuleDefinition) error
 		}
 	}
 
-	// Use Hasura if available, otherwise fallback to direct DB
-	if s.hasura != nil {
-		return s.createRuleWithHasura(ctx, rule)
-	}
-
 	query := `
 		INSERT INTO rule_definitions (
 			tenant_id, rule_id, type, version, name, description, jurisdiction,
@@ -718,78 +422,12 @@ func (s *RDLService) CreateRule(ctx context.Context, rule *RuleDefinition) error
 	return row.Scan(&rule.ID, &rule.CreatedAt, &rule.UpdatedAt)
 }
 
-func (s *RDLService) createRuleWithHasura(ctx context.Context, rule *RuleDefinition) error {
-	mutation := `
-		mutation InsertRuleDefinition($object: rule_definitions_insert_input!) {
-			insert_rule_definitions_one(object: $object) {
-				id
-				created_at
-				updated_at
-			}
-		}
-	`
-
-	ruleID := uuid.New()
-	variables := map[string]interface{}{
-		"object": map[string]interface{}{
-			"id":                     ruleID.String(),
-			"tenant_id":              rule.TenantID.String(),
-			"rule_id":                rule.RuleID,
-			"type":                   string(rule.Type),
-			"version":                rule.Version,
-			"name":                   rule.Name,
-			"description":            rule.Description,
-			"jurisdiction":           rule.Jurisdiction,
-			"parameters":             rule.Parameters,
-			"expression":             rule.Expression,
-			"scoring_formula":        rule.ScoringFormula,
-			"wash_sale_config":       rule.WashSaleConfig,
-			"substitute_asset_rules": rule.SubstituteAssetRules,
-			"schedule":               rule.Schedule,
-			"notifications":          rule.Notifications,
-			"active":                 rule.Active,
-			"effective_from":         rule.EffectiveFrom,
-			"effective_to":           rule.EffectiveTo,
-			"audit":                  rule.Audit,
-		},
-	}
-
-	result, err := s.hasura.Mutate(mutation, variables)
-	if err != nil {
-		return fmt.Errorf("failed to create rule via Hasura: %w", err)
-	}
-
-	ruleData, ok := result["insert_rule_definitions_one"].(map[string]interface{})
-	if !ok || ruleData == nil {
-		return fmt.Errorf("failed to create rule")
-	}
-
-	rule.ID = ruleID
-	if createdAt, ok := ruleData["created_at"].(string); ok {
-		if t, err := time.Parse(time.RFC3339, createdAt); err == nil {
-			rule.CreatedAt = t
-		}
-	}
-	if updatedAt, ok := ruleData["updated_at"].(string); ok {
-		if t, err := time.Parse(time.RFC3339, updatedAt); err == nil {
-			rule.UpdatedAt = t
-		}
-	}
-
-	return nil
-}
-
 // UpdateRule updates an existing rule (creates new version)
 func (s *RDLService) UpdateRule(ctx context.Context, rule *RuleDefinition) error {
 	// Validate expression
 	_, issues := s.celEnv.Compile(rule.Expression)
 	if issues != nil && issues.Err() != nil {
 		return fmt.Errorf("invalid expression: %w", issues.Err())
-	}
-
-	// Use Hasura if available, otherwise fallback to direct DB
-	if s.hasura != nil {
-		return s.updateRuleWithHasura(ctx, rule)
 	}
 
 	query := `
@@ -812,77 +450,8 @@ func (s *RDLService) UpdateRule(ctx context.Context, rule *RuleDefinition) error
 	return err
 }
 
-func (s *RDLService) updateRuleWithHasura(ctx context.Context, rule *RuleDefinition) error {
-	mutation := `
-		mutation UpdateRuleDefinition(
-			$tenant_id: uuid!,
-			$rule_id: String!,
-			$version: String!,
-			$_set: rule_definitions_set_input!
-		) {
-			update_rule_definitions(
-				where: {
-					tenant_id: {_eq: $tenant_id},
-					rule_id: {_eq: $rule_id},
-					version: {_eq: $version}
-				},
-				_set: $_set
-			) {
-				affected_rows
-				returning {
-					id
-					updated_at
-				}
-			}
-		}
-	`
-
-	variables := map[string]interface{}{
-		"tenant_id": rule.TenantID.String(),
-		"rule_id":   rule.RuleID,
-		"version":   rule.Version,
-		"_set": map[string]interface{}{
-			"name":                   rule.Name,
-			"description":            rule.Description,
-			"parameters":             rule.Parameters,
-			"expression":             rule.Expression,
-			"scoring_formula":        rule.ScoringFormula,
-			"wash_sale_config":       rule.WashSaleConfig,
-			"substitute_asset_rules": rule.SubstituteAssetRules,
-			"schedule":               rule.Schedule,
-			"notifications":          rule.Notifications,
-			"active":                 rule.Active,
-			"effective_from":         rule.EffectiveFrom,
-			"effective_to":           rule.EffectiveTo,
-			"audit":                  rule.Audit,
-		},
-	}
-
-	result, err := s.hasura.Mutate(mutation, variables)
-	if err != nil {
-		return fmt.Errorf("failed to update rule via Hasura: %w", err)
-	}
-
-	updateData, ok := result["update_rule_definitions"].(map[string]interface{})
-	if !ok {
-		return fmt.Errorf("unexpected response format from Hasura")
-	}
-
-	affectedRows, _ := updateData["affected_rows"].(float64)
-	if affectedRows == 0 {
-		return fmt.Errorf("no rule found to update")
-	}
-
-	return nil
-}
-
 // DeactivateRule deactivates a rule (soft delete)
 func (s *RDLService) DeactivateRule(ctx context.Context, tenantID uuid.UUID, ruleID string) error {
-	// Use Hasura if available, otherwise fallback to direct DB
-	if s.hasura != nil {
-		return s.deactivateRuleWithHasura(ctx, tenantID, ruleID)
-	}
-
 	query := `
 		UPDATE rule_definitions
 		SET active = false, updated_at = NOW()
@@ -891,121 +460,6 @@ func (s *RDLService) DeactivateRule(ctx context.Context, tenantID uuid.UUID, rul
 
 	_, err := s.db.ExecContext(ctx, query, tenantID, ruleID)
 	return err
-}
-
-func (s *RDLService) deactivateRuleWithHasura(ctx context.Context, tenantID uuid.UUID, ruleID string) error {
-	mutation := `
-		mutation DeactivateRule($tenant_id: uuid!, $rule_id: String!) {
-			update_rule_definitions(
-				where: {
-					tenant_id: {_eq: $tenant_id},
-					rule_id: {_eq: $rule_id}
-				},
-				_set: {active: false}
-			) {
-				affected_rows
-			}
-		}
-	`
-
-	variables := map[string]interface{}{
-		"tenant_id": tenantID.String(),
-		"rule_id":   ruleID,
-	}
-
-	result, err := s.hasura.Mutate(mutation, variables)
-	if err != nil {
-		return fmt.Errorf("failed to deactivate rule via Hasura: %w", err)
-	}
-
-	updateData, ok := result["update_rule_definitions"].(map[string]interface{})
-	if !ok {
-		return fmt.Errorf("unexpected response format from Hasura")
-	}
-
-	affectedRows, _ := updateData["affected_rows"].(float64)
-	if affectedRows == 0 {
-		return fmt.Errorf("no rule found to deactivate")
-	}
-
-	return nil
-}
-
-// parseRulesFromHasura is a helper function to parse rule data from Hasura response
-func (s *RDLService) parseRulesFromHasura(rulesData []interface{}) []RuleDefinition {
-	var rules []RuleDefinition
-	for _, item := range rulesData {
-		ruleMap, ok := item.(map[string]interface{})
-		if !ok {
-			continue
-		}
-
-		rule := RuleDefinition{}
-		if id, ok := ruleMap["id"].(string); ok {
-			rule.ID = uuid.MustParse(id)
-		}
-		if tid, ok := ruleMap["tenant_id"].(string); ok {
-			rule.TenantID = uuid.MustParse(tid)
-		}
-		if ruleID, ok := ruleMap["rule_id"].(string); ok {
-			rule.RuleID = ruleID
-		}
-		if ruleType, ok := ruleMap["type"].(string); ok {
-			rule.Type = RuleType(ruleType)
-		}
-		if version, ok := ruleMap["version"].(string); ok {
-			rule.Version = version
-		}
-		if name, ok := ruleMap["name"].(string); ok {
-			rule.Name = name
-		}
-		if desc, ok := ruleMap["description"].(string); ok {
-			rule.Description = desc
-		}
-		if jurisdiction, ok := ruleMap["jurisdiction"].(string); ok {
-			rule.Jurisdiction = jurisdiction
-		}
-		if params, ok := ruleMap["parameters"].(string); ok {
-			rule.Parameters = json.RawMessage(params)
-		}
-		if expr, ok := ruleMap["expression"].(string); ok {
-			rule.Expression = expr
-		}
-		if formula, ok := ruleMap["scoring_formula"].(string); ok {
-			rule.ScoringFormula = formula
-		}
-		if wsConfig, ok := ruleMap["wash_sale_config"].(string); ok {
-			rule.WashSaleConfig = json.RawMessage(wsConfig)
-		}
-		if subRules, ok := ruleMap["substitute_asset_rules"].(string); ok {
-			rule.SubstituteAssetRules = json.RawMessage(subRules)
-		}
-		if schedule, ok := ruleMap["schedule"].(string); ok {
-			rule.Schedule = json.RawMessage(schedule)
-		}
-		if notif, ok := ruleMap["notifications"].(string); ok {
-			rule.Notifications = json.RawMessage(notif)
-		}
-		if active, ok := ruleMap["active"].(bool); ok {
-			rule.Active = active
-		}
-		if audit, ok := ruleMap["audit"].(string); ok {
-			rule.Audit = json.RawMessage(audit)
-		}
-		if createdAt, ok := ruleMap["created_at"].(string); ok {
-			if t, err := time.Parse(time.RFC3339, createdAt); err == nil {
-				rule.CreatedAt = t
-			}
-		}
-		if updatedAt, ok := ruleMap["updated_at"].(string); ok {
-			if t, err := time.Parse(time.RFC3339, updatedAt); err == nil {
-				rule.UpdatedAt = t
-			}
-		}
-
-		rules = append(rules, rule)
-	}
-	return rules
 }
 
 // Helper: Generate recommendation based on rule type and score

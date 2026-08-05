@@ -13,7 +13,6 @@ import (
 
 type ProxyHandler struct {
 	backendBase string
-	hasuraURL   string
 	whitelistCache interface {
 		Delete(key string)
 	}
@@ -25,11 +24,6 @@ func NewProxyHandler(backendBase string) *ProxyHandler {
 		backendBase: backendBase,
 		devBypass:  true,
 	}
-}
-
-func (h *ProxyHandler) WithHasuraURL(url string) *ProxyHandler {
-	h.hasuraURL = url
-	return h
 }
 
 func (h *ProxyHandler) WithWhitelistCache(cache interface {
@@ -52,13 +46,6 @@ func (h *ProxyHandler) ServeHTTP() gin.HandlerFunc {
 		}
 
 		reqURL := *c.Request.URL
-		if strings.HasPrefix(c.Request.URL.Path, "/api/views") {
-			q := reqURL.Query()
-			if strings.ToLower(strings.TrimSpace(q.Get("source"))) == "resolved" && strings.TrimSpace(h.hasuraURL) == "" {
-				q.Set("source", "runtime")
-				reqURL.RawQuery = q.Encode()
-			}
-		}
 
 		backendURL := h.backendBase + reqURL.Path
 		if reqURL.RawQuery != "" {

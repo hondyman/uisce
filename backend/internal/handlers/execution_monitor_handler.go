@@ -1,9 +1,7 @@
 package handlers
 
 import (
-	"encoding/json"
 	"net/http"
-	"strconv"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/hondyman/uisce/backend/internal/services"
@@ -27,18 +25,7 @@ func (h *ExecutionMonitorHandler) Routes() chi.Router {
 }
 
 func (h *ExecutionMonitorHandler) ListLogs(w http.ResponseWriter, r *http.Request) {
-	limitStr := r.URL.Query().Get("limit")
-	offsetStr := r.URL.Query().Get("offset")
-
-	limit := 50
-	if l, err := strconv.Atoi(limitStr); err == nil {
-		limit = l
-	}
-
-	offset := 0
-	if o, err := strconv.Atoi(offsetStr); err == nil {
-		offset = o
-	}
+	limit, offset := Paginate(r)
 
 	logs, err := h.service.QueryLogs(r.Context(), limit, offset)
 	if err != nil {
@@ -46,6 +33,5 @@ func (h *ExecutionMonitorHandler) ListLogs(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(logs)
+	SendJSON(w, http.StatusOK, logs)
 }

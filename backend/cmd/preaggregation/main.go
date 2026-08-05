@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
+	"os"
 	"time"
 
 	"github.com/hondyman/uisce/backend/internal/services"
@@ -11,8 +12,11 @@ import (
 )
 
 func main() {
-	// Database connection (replace with your actual connection string)
-	db, err := sql.Open("postgres", "postgres://user:password@localhost/semlayer?sslmode=disable")
+	dbURL := os.Getenv("DATABASE_URL")
+	if dbURL == "" {
+		log.Fatal("DATABASE_URL environment variable is not set")
+	}
+	db, err := sql.Open("postgres", dbURL)
 	if err != nil {
 		log.Fatalf("Failed to connect to database: %v", err)
 	}

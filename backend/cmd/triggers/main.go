@@ -22,7 +22,7 @@ func main() {
 	// Simple wiring: read PG and Temporal URLs from env
 	pgURL := os.Getenv("DATABASE_URL")
 	if pgURL == "" {
-		pgURL = "postgres://postgres:postgres@localhost:5432/alpha?sslmode=disable"
+		log.Fatal("DATABASE_URL environment variable is required")
 	}
 
 	db, err := sqlx.Connect("postgres", pgURL)

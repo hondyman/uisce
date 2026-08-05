@@ -37,6 +37,69 @@ enable_security: true
 jwt_secret: "your-super-secret-jwt-key-change-in-production"
 ```
 
+## Infisical Secrets Management
+
+This project uses [Infisical](https://infisical.com) for secrets management. All secrets should be stored in Infisical rather than hardcoded in configuration files or fallbacks in code.
+
+### Initial Setup
+
+1. **Install the Infisical CLI:**
+   ```bash
+   brew install infisical
+   ```
+
+2. **Login to Infisical:**
+   ```bash
+   infisical login
+   ```
+
+3. **Create a service token** in the Infisical dashboard (Project → Settings → Service Tokens):
+   - Name: `local-dev` or `ci-deploy`
+   - Scopes: read secrets for relevant environments
+
+4. **Export the token:**
+   ```bash
+   export INFISICAL_TOKEN=ifs_xxxxx
+   export INFISICAL_PROJECT=uisce
+   export INFISICAL_ENV=dev  # dev, staging, or prod
+   ```
+
+5. **Bootstrap your local `.env` files:**
+   ```bash
+   ./scripts/infisical-bootstrap.sh
+   ```
+
+### Required Secrets (per environment)
+
+| Secret Path | Description |
+|---|---|
+| `shared/JWT_SECRET` | JWT signing secret |
+| `shared/HASURA_ADMIN_SECRET` | Hasura admin secret |
+| `shared/POSTGRES_PASSWORD` | PostgreSQL password |
+| `shared/ENCRYPTION_KEY` | 32-byte AES-256 encryption key |
+| `api-keys/OPENAI_API_KEY` | OpenAI API key |
+| `api-keys/GEMINI_API_KEY` | Gemini API key |
+| `api-keys/SENDGRID_API_KEY` | SendGrid API key |
+| `api-keys/SLACK_API_TOKEN` | Slack API token |
+
+### Local Development
+
+After cloning the repo:
+```bash
+./scripts/infisical-bootstrap.sh -e dev
+docker compose up -d
+```
+
+### CI/CD
+
+In GitHub Actions, set `INFISICAL_TOKEN` as an encrypted secret, then use:
+```yaml
+- name: Pull secrets from Infisical
+  run: ./scripts/infisical-bootstrap.sh -e staging
+  env:
+    INFISICAL_TOKEN: ${{ secrets.INFISICAL_TOKEN }}
+```
+
 ## Configuration Examples
 
 ### Development Environment

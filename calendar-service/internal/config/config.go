@@ -88,14 +88,14 @@ func LoadConfig() *Config {
 		PostgresHost:     getEnv("POSTGRES_HOST", "localhost"),
 		PostgresPort:     getEnv("POSTGRES_PORT", "5432"),
 		PostgresUser:     getEnv("POSTGRES_USER", "postgres"),
-		PostgresPassword: getEnv("POSTGRES_PASSWORD", "postgres"),
+		PostgresPassword: requireEnv("POSTGRES_PASSWORD"),
 		PostgresDB:       getEnv("POSTGRES_DB", "calendar_db"),
 		PostgresSSLMode:  getEnv("POSTGRES_SSL_MODE", "disable"),
 
 		// Hasura
 		HasuraEndpoint:    getEnv("HASURA_ENDPOINT", "http://localhost:8080/v1/graphql"),
-		HasuraAdminSecret: getEnv("HASURA_ADMIN_SECRET", "myadminsecret"),
-		HasuraJWTSecret:   getEnv("HASURA_JWT_SECRET", "your-secret-key"),
+		HasuraAdminSecret: requireEnv("HASURA_ADMIN_SECRET"),
+		HasuraJWTSecret:   requireEnv("HASURA_JWT_SECRET"),
 
 		// Temporal
 		TemporalHostPort:  getEnv("TEMPORAL_HOST_PORT", "localhost:7233"),
@@ -132,8 +132,8 @@ func LoadConfig() *Config {
 		AITimeout: getEnvDuration("AI_TIMEOUT", 30),
 
 		// Security
-		JWTSigningKey: getEnv("JWT_SIGNING_KEY", "your-jwt-signing-key"),
-		EncryptionKey: getEnv("ENCRYPTION_KEY", "your-32-byte-encryption-key"),
+		JWTSigningKey: requireEnv("JWT_SIGNING_KEY"),
+		EncryptionKey: requireEnv("ENCRYPTION_KEY"),
 
 		// Monitoring
 		PrometheusPort:       getEnv("PROMETHEUS_PORT", "9090"),
@@ -156,6 +156,13 @@ func getEnv(key, fallback string) string {
 		return v
 	}
 	return fallback
+}
+
+func requireEnv(key string) string {
+	if v := os.Getenv(key); v != "" {
+		return v
+	}
+	panic("required environment variable " + key + " is not set")
 }
 
 func getEnvSlice(key string, fallback []string) []string {

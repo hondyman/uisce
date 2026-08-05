@@ -2,17 +2,18 @@ package services
 
 import (
 	"context"
+	"database/sql"
 )
 
 // OAuthAuditService handles recording of audit events
 type OAuthAuditService struct {
-	hasuraClient HasuraClient
+	db *sql.DB
 }
 
 // NewOAuthAuditService creates a new audit service
-func NewOAuthAuditService(hasuraClient HasuraClient) *OAuthAuditService {
+func NewOAuthAuditService(db *sql.DB) *OAuthAuditService {
 	return &OAuthAuditService{
-		hasuraClient: hasuraClient,
+		db: db,
 	}
 }
 
@@ -20,9 +21,9 @@ func NewOAuthAuditService(hasuraClient HasuraClient) *OAuthAuditService {
 type OAuthAuditEvent struct {
 	TenantID  string      `json:"tenant_id"`
 	UserID    string      `json:"user_id"`
-	Action    string      `json:"action"`   // "token_saved", "token_refreshed", "token_deleted"
-	Provider  string      `json:"provider"` // "google"
-	Metadata  interface{} `json:"metadata"` // JSONB with non-sensitive details
+	Action    string      `json:"action"`    // "token_saved", "token_refreshed", "token_deleted"
+	Provider  string      `json:"provider"`  // "google"
+	Metadata  interface{} `json:"metadata"`  // JSONB with non-sensitive details
 	IPAddress string      `json:"ip_address"`
 	UserAgent string      `json:"user_agent"`
 	Success   bool        `json:"success"`
@@ -31,27 +32,13 @@ type OAuthAuditEvent struct {
 
 // RecordOAuthEvent logs OAuth-related actions for compliance
 func (s *OAuthAuditService) RecordOAuthEvent(ctx context.Context, event OAuthAuditEvent) error {
-	mutation := `
-	mutation InsertOAuthAudit($object: oauth_audit_logs_insert_input!) {
-		insert_oauth_audit_logs_one(object: $object) {
-			id
-			created_at
-		}
-	}
+	query := `
+		INSERT INTO oauth_audit_logs (tenant_id, user_id, action, provider, metadata, ip_address, user_agent, success, error, created_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW())
 	`
-
-	object := map[string]interface{}{
-		"tenant_id":  event.TenantID,
-		"user_id":    event.UserID,
-		"action":     event.Action,
-		"provider":   event.Provider,
-		"metadata":   event.Metadata,
-		"ip_address": event.IPAddress,
-		"user_agent": event.UserAgent,
-		"success":    event.Success,
-		"error":      event.Error,
-	}
-
-	_, err := s.hasuraClient.Mutate(mutation, map[string]interface{}{"object": object})
+	_, err := s.db.ExecContext(ctx, query,
+		event.TenantID, event.UserID, event.Action, event.Provider,
+		event.Metadata, event.IPAddress, event.UserAgent, event.Success, event.Error,
+	)
 	return err
 }

@@ -13,7 +13,7 @@ import (
 	"calendar-service/internal/auth"
 	"calendar-service/internal/availability"
 	"calendar-service/internal/cache"
-	"calendar-service/internal/hasura"
+	"calendar-service/internal/database"
 	"calendar-service/internal/metrics"
 	"calendar-service/internal/middleware"
 	"calendar-service/internal/oauth"
@@ -39,7 +39,7 @@ type Router struct {
 	syncProcessor            *sync.GoogleSyncProcessor
 	msOAuth                  *oauth.MicrosoftOAuth2Provider
 	msSyncProcessor          *sync.MicrosoftSyncProcessor
-	hasuraClient             *hasura.Client
+	dbClient                 *database.Client
 	settingsHandler          *SettingsHandler
 	notificationPrefsHandler *NotificationPreferencesHandler
 	exportImportHandler      *ExportImportHandler
@@ -64,15 +64,12 @@ func NewRouter(
 	router := mux.NewRouter()
 	jwtSecret := os.Getenv("JWT_SECRET")
 	if jwtSecret == "" {
-		// Fallback for development, but warn
-		logger.Warn("JWT_SECRET not configured, using default (INSECURE for production)")
-		jwtSecret = "dev-jwt-secret-key-change-in-production"
+		logger.Error("JWT_SECRET environment variable is not set")
+		os.Exit(1)
 	}
 
-	// Initialize audit service
 	auditService := services.NewAuditService(logger)
 
-	// Initialize rate limiter (default: 10 req/s per tenant, burst 20)
 	rateLimitRPS := 10.0
 	rateLimitBurst := 20
 	if rpsStr := os.Getenv("RATE_LIMIT_RPS"); rpsStr != "" {
@@ -87,17 +84,14 @@ func NewRouter(
 	}
 	rateLimiter := middleware.NewTenantRateLimiter(rateLimitRPS, rateLimitBurst, logger)
 
-	// Initialize repository and service layers for calendar (in-memory default)
 	calendarRepo := repository.NewInMemoryCalendarRepository(logger)
 	calendarRepoAdapter := services.NewRepositoryAdapter(calendarRepo, logger)
 	calendarService := services.NewCalendarServiceImpl(calendarRepoAdapter, logger)
 
-	// === Redis-backed availability checker (optional, enabled via env) ===
 	var availabilityService services.AvailabilityServiceTenantAwareInterface
 	blackoutService := services.NewBlackoutServiceImpl(logger)
 	tenantService := services.NewTenantServiceImpl(logger)
 
-	// Detect Redis + Hasura configuration to wire the cached availability checker
 	cacheEnabled := true
 	if v := os.Getenv("CACHE_ENABLED"); v != "" {
 		cacheEnabled = (v == "true" || v == "1" || v == "yes")
@@ -107,7 +101,6 @@ func NewRouter(
 	if redisPrefix == "" {
 		redisPrefix = "calendar"
 	}
-	// TTL in seconds (fallback to 3600s)
 	ttlSecs := 3600
 	if s := os.Getenv("REDIS_CACHE_TTL"); s != "" {
 		if v, err := strconv.Atoi(s); err == nil && v > 0 {
@@ -115,38 +108,42 @@ func NewRouter(
 		}
 	}
 
-	// Create Hasura client unconditionally for multiple handlers
-	hasuraEndpoint := os.Getenv("HASURA_ENDPOINT")
-	hasuraAdmin := os.Getenv("HASURA_ADMIN_SECRET")
-	hClient := hasura.NewClient(hasuraEndpoint, hasuraAdmin)
+	var dbClient *database.Client
+	if dbURL := os.Getenv("DATABASE_URL"); dbURL != "" {
+		dbConfig := database.Config{
+			Host:     os.Getenv("DB_HOST"),
+			Port:     5432,
+			User:     os.Getenv("DB_USER"),
+			Password: os.Getenv("DB_PASSWORD"),
+			Database: os.Getenv("DB_NAME"),
+			SSLMode:  "disable",
+		}
+		if dbClient, err := database.NewClient(context.Background(), dbConfig, logger); err == nil {
+			logger.Info("Database client connected")
+		} else {
+			logger.WithError(err).Warn("Failed to connect to database")
+		}
+	}
 
-	// If Redis is enabled, initialize cache client + Hasura-backed availability checker
 	if cacheEnabled && redisURL != "" {
-		// lazy import usage: create cache client
 		cacheClient := cache.NewClient(redisURL, redisPrefix, time.Duration(ttlSecs)*time.Second, logger.WithField("component", "cache"))
 
-		// Subscribe to invalidation pub/sub for multi-instance sync
 		go cacheClient.SubscribeToInvalidations(context.Background(), func(tenantID, region string) {
 			logger.Infof("Received cache invalidation for %s/%s", tenantID, region)
 		})
 
-		// Initialize metrics collector
 		metricsCollector := metrics.NewMetricsCollector("calendar", "service")
 
-		// Wire availability checker that uses Hasura + Redis cache
-		checker := availability.NewChecker(hClient, cacheClient, time.Duration(ttlSecs)*time.Second, logger, metricsCollector)
+		checker := availability.NewChecker(dbClient, cacheClient, time.Duration(ttlSecs)*time.Second, logger, metricsCollector)
 		availabilityService = services.NewAvailabilityAdapter(checker, os.Getenv("DEFAULT_REGION"), "default", logger)
 	} else {
-		// Fallback to in-process stub implementation
 		availabilityService = services.NewAvailabilityServiceImpl(logger)
 	}
 
-	// Initialize external sync service (Phase 4.5)
 	externalSyncRepo := repository.NewInMemoryCalendarRepository(logger)
 	externalSyncRepoAdapter := services.NewRepositoryAdapter(externalSyncRepo, logger)
 	externalSyncService := services.NewExternalSyncService(externalSyncRepoAdapter, auditService, logger)
 
-	// Initialize notification service
 	notificationService, _ := services.NewNotificationService(services.NotificationConfig{
 		SendGridAPIKey: os.Getenv("SENDGRID_API_KEY"),
 		FromEmail:      os.Getenv("SENDGRID_FROM_EMAIL"),
@@ -154,7 +151,6 @@ func NewRouter(
 		Logger:         logger,
 	})
 
-	// SSO Providrs initialization (Enterprise Auth)
 	samlCfg := auth.SAMLConfig{
 		MetadataURL: os.Getenv("SAML_IDP_METADATA_URL"),
 		EntityID:    os.Getenv("SAML_ENTITY_ID"),
@@ -185,7 +181,6 @@ func NewRouter(
 
 	calendarHandler := NewCalendarHandler(calendarService, auditService, logger)
 
-	// Set MDM adapter on calendar handler if available
 	if mdmAdapter != nil {
 		calendarHandler.SetMDMAdapter(mdmAdapter)
 	}
@@ -199,8 +194,8 @@ func NewRouter(
 		tenantHandler:            NewTenantHandler(tenantService, auditService, logger),
 		externalSyncHandler:      NewExternalSyncHandler(externalSyncService, logger),
 		notificationHandler:      NewNotificationHandler(notificationService, auditService, logger),
-		notificationPrefsHandler: NewNotificationPreferencesHandler(hClient, auditService, logger),
-		settingsHandler:          NewSettingsHandler(hClient, auditService, logger),
+		notificationPrefsHandler: NewNotificationPreferencesHandler(dbClient, auditService, logger),
+		settingsHandler:          NewSettingsHandler(dbClient, auditService, logger),
 		jwtSecret:                jwtSecret,
 		rateLimiter:              rateLimiter,
 		auditService:             auditService,
@@ -208,13 +203,13 @@ func NewRouter(
 		syncProcessor:            syncProcessor,
 		msOAuth:                  msOAuth,
 		msSyncProcessor:          msSyncProcessor,
-		hasuraClient:             hClient,
-		exportImportHandler:      NewExportImportHandler(hClient, auditService, logger),
-		adminHandler:             NewAdminHandler(hClient, healthHandlers, auditService, logger),
+		dbClient:                 dbClient,
+		exportImportHandler:      NewExportImportHandler(dbClient, auditService, logger),
+		adminHandler:             NewAdminHandler(dbClient, healthHandlers, auditService, logger),
 		healthHandlers:           healthHandlers,
 		microsoftHandler:         NewMicrosoftHandler(msOAuth, msSyncProcessor, logger),
 		ssoHandler:               NewSSOHandler(samlProvider, oidcProvider, logger),
-		teamHandler:              NewTeamHandler(hClient, auditService, logger),
+		teamHandler:              NewTeamHandler(dbClient, auditService, logger),
 		mdmAdapter:               mdmAdapter,
 	}
 }

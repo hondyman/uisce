@@ -1,15 +1,17 @@
 -- backend/migrations/012_portfolio_seed.sql
 -- Portfolio Master Gold Copy — Seed Data
--- Gold Copy Tenant: 99e99e99-99e9-49e9-89e9-99e99e99e999
 
 -- ============================================================
 -- 1. SOURCE REGISTRY — External vendor catalog (core / gold copy)
 -- ============================================================
 DO $$
 DECLARE
-    v_gold_tenant UUID  := '99e99e99-99e9-49e9-89e9-99e99e99e999';
-    v_system_user UUID  := '99e99e99-99e9-49e9-89e9-99e99e99e999';
+    v_gold_tenant UUID;
+    v_system_user UUID;
 BEGIN
+    PERFORM set_config('app.goldcopy', (SELECT id FROM public.tenants WHERE gold_copy = true LIMIT 1)::text, true);
+    v_gold_tenant := current_setting('app.goldcopy', true)::uuid;
+    v_system_user := v_gold_tenant;
 
     -- Bloomberg
     INSERT INTO edm.source_registry (
@@ -80,8 +82,8 @@ END $$;
 -- ============================================================
 DO $$
 DECLARE
-    v_gold_tenant UUID  := '99e99e99-99e9-49e9-89e9-99e99e99e999';
-    v_system_user UUID  := '99e99e99-99e9-49e9-89e9-99e99e99e999';
+    v_gold_tenant UUID;
+    v_system_user UUID;
 
     -- Helper: insert a preference if none exists for the combination
     PROCEDURE upsert_pref(
@@ -92,6 +94,11 @@ DECLARE
         p_confidence    INT
     ) AS $$
     BEGIN
+    END;
+BEGIN
+    PERFORM set_config('app.goldcopy', (SELECT id FROM public.tenants WHERE gold_copy = true LIMIT 1)::text, true);
+    v_gold_tenant := current_setting('app.goldcopy', true)::uuid;
+    v_system_user := v_gold_tenant;
         INSERT INTO edm.source_preferences (
             tenant_id, business_object, semantic_term,
             region, account_type,

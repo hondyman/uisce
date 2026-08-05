@@ -17,9 +17,7 @@ import (
 // ============================================================================
 
 type CompleteABranchEvaluator struct {
-	db *sqlx.DB
-	// Optional Hasura GraphQL client for Hasura-first reads/writes
-	hasura   HasuraClient
+	db       *sqlx.DB
 	tenantID string
 }
 
@@ -33,7 +31,7 @@ func NewCompleteABranchEvaluator(db *sqlx.DB, tenantID string) *CompleteABranchE
 
 // NewCompleteABranchEvaluatorWithHasura creates evaluator with an injected Hasura client
 func NewCompleteABranchEvaluatorWithHasura(db *sqlx.DB, hasura HasuraClient, tenantID string) *CompleteABranchEvaluator {
-	return &CompleteABranchEvaluator{db: db, hasura: hasura, tenantID: tenantID}
+	return &CompleteABranchEvaluator{db: db, tenantID: tenantID}
 }
 
 // ============================================================================
@@ -48,50 +46,6 @@ type AIModelSelection struct {
 }
 
 func (e *CompleteABranchEvaluator) SelectAIModel(ctx context.Context, stepID string) (string, error) {
-	// Attempt Hasura-first when available
-	if e.hasura != nil {
-		gql := `query SelectBestAIModel($stepId: uuid!, $tenantId: uuid!) {
-			bp_ai_models(where: {step_id: {_eq: $stepId}, tenant_id: {_eq: $tenantId}, is_active: {_eq: true}}, order_by: [{success_rate: desc}, {last_accuracy: desc}], limit: 1) {
-				model_id last_accuracy model_endpoint
-			}
-		}`
-
-		vars := map[string]interface{}{"stepId": stepID, "tenantId": e.tenantID}
-		if res, err := e.hasura.Query(gql, vars); err == nil {
-			if arr, ok := res["bp_ai_models"].([]interface{}); ok && len(arr) > 0 {
-				if item, ok := arr[0].(map[string]interface{}); ok {
-					if mid, ok := item["model_id"].(string); ok {
-						// increment prediction counter via Hasura mutation (best-effort)
-						mut := `mutation IncPred($id: uuid!, $tenantId: uuid!) { update_bp_ai_models(where: {model_id: {_eq: $id}, tenant_id: {_eq: $tenantId}}, _inc: {total_predictions: 1}) { affected_rows } }`
-						_, _ = e.hasura.Mutate(mut, map[string]interface{}{"id": mid, "tenantId": e.tenantID})
-						return mid, nil
-					}
-				}
-			}
-		} else {
-			// log and fall back to SQL
-			IncHasuraFallback("branch_evaluator")
-			// best-effort: use db after falling back
-		}
-	}
-
-	// SQL fallback kept for environments without Hasura available
-	// Example GraphQL query:
-	// query SelectBestAIModel($stepId: uuid!, $tenantId: uuid!) {
-	//   bp_ai_models(
-	//     where: {
-	//       step_id: {_eq: $stepId},
-	//       tenant_id: {_eq: $tenantId},
-	//       is_active: {_eq: true}
-	//     },
-	//     order_by: [{success_rate: desc}, {last_accuracy: desc}],
-	//     limit: 1
-	//   ) {
-	//     model_id
-	//     last_accuracy
-	//     model_endpoint
-	//   }
-	// }
 	query := `
 		SELECT model_id, last_accuracy, model_endpoint
 		FROM bp_ai_models
@@ -111,18 +65,6 @@ func (e *CompleteABranchEvaluator) SelectAIModel(ctx context.Context, stepID str
 		return "", fmt.Errorf("failed to select AI model: %w", err)
 	}
 
-	// Log selection
-	// Best-effort: Hasura mutation attempted above; SQL update is kept as a fallback
-	// Example GraphQL mutation:
-	// mutation IncrementModelPredictions($modelId: uuid!, $tenantId: uuid!) {
-	//   update_bp_ai_models(
-	//     where: {model_id: {_eq: $modelId}, tenant_id: {_eq: $tenantId}},
-	//     _inc: {total_predictions: 1},
-	//     _set: {updated_at: "now()"}
-	//   ) {
-	//     affected_rows
-	//   }
-	// }
 	logQuery := `
 		UPDATE bp_ai_models SET total_predictions = total_predictions + 1, updated_at = NOW()
 		WHERE model_id = $1 AND tenant_id = $2
@@ -168,63 +110,25 @@ type SemanticRoute struct {
 }
 
 func (e *CompleteABranchEvaluator) EvaluateSemanticIntent(ctx context.Context, stepID string, inputText string) (*SemanticRoute, error) {
-	// Try Hasura-first when available
+	query := `
+		SELECT intent_id, intent_label, target_branch_id, similarity_threshold
+		FROM bp_semantic_intents
+		WHERE step_id = $1 AND tenant_id = $2 AND is_active = TRUE
+		ORDER BY match_count DESC
+		LIMIT 1
+	`
+
 	var intentID, label, branchID string
 	var threshold float64
 
-	if e.hasura != nil {
-		gql := `query LoadIntent($stepId: uuid!, $tenantId: uuid!) {
-			bp_semantic_intents(where: {step_id: {_eq: $stepId}, tenant_id: {_eq: $tenantId}, is_active: {_eq: true}}, order_by: {match_count: desc}, limit: 1) {
-				intent_id intent_label target_branch_id similarity_threshold
-			}
-		}`
-
-		vars := map[string]interface{}{"stepId": stepID, "tenantId": e.tenantID}
-		if res, err := e.hasura.Query(gql, vars); err == nil {
-			if arr, ok := res["bp_semantic_intents"].([]interface{}); ok && len(arr) > 0 {
-				if item, ok := arr[0].(map[string]interface{}); ok {
-					if v, _ := item["intent_id"].(string); v != "" {
-						intentID = v
-					}
-					if v, _ := item["intent_label"].(string); v != "" {
-						label = v
-					}
-					if v, _ := item["target_branch_id"].(string); v != "" {
-						branchID = v
-					}
-					if v, ok := item["similarity_threshold"].(float64); ok {
-						threshold = v
-					}
-				}
-			}
-		} else {
-			// Hasura query failed — increment metric and fall back to SQL
-			IncHasuraFallback("branch_evaluator")
-			e.db.ExecContext(ctx, "-- hasura query failed, falling back to SQL")
-		}
+	err := e.db.QueryRowContext(ctx, query, stepID, e.tenantID).Scan(&intentID, &label, &branchID, &threshold)
+	if err == sql.ErrNoRows {
+		return nil, fmt.Errorf("no semantic intents configured for step %s", stepID)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("failed to load semantic intents: %w", err)
 	}
 
-	// If Hasura didn't populate the values, use SQL fallback
-	if intentID == "" {
-		query := `
-			SELECT intent_id, intent_label, target_branch_id, similarity_threshold
-			FROM bp_semantic_intents
-			WHERE step_id = $1 AND tenant_id = $2 AND is_active = TRUE
-			ORDER BY match_count DESC
-			LIMIT 1
-		`
-
-		err := e.db.QueryRowContext(ctx, query, stepID, e.tenantID).Scan(&intentID, &label, &branchID, &threshold)
-		if err == sql.ErrNoRows {
-			return nil, fmt.Errorf("no semantic intents configured for step %s", stepID)
-		}
-		if err != nil {
-			return nil, fmt.Errorf("failed to load semantic intents: %w", err)
-		}
-	}
-
-	// Placeholder: In production, use sentence-transformers or similar
-	// For demo, use simple keyword matching
 	similarityScore := e.calculateSemanticSimilarity(inputText, label)
 
 	route := &SemanticRoute{
@@ -235,27 +139,12 @@ func (e *CompleteABranchEvaluator) EvaluateSemanticIntent(ctx context.Context, s
 		ThresholdMet:    similarityScore >= threshold,
 	}
 
-	// Record match
 	if route.ThresholdMet {
-		// Update match_count and avg_confidence, prefer Hasura mutation
-		if e.hasura != nil {
-			mut := `mutation UpdateIntentMatch($intentId: uuid!, $tenantId: uuid!, $confidence: float8!) { update_bp_semantic_intents(where: {intent_id: {_eq: $intentId}, tenant_id: {_eq: $tenantId}}, _inc: {match_count: 1}, _set: {avg_confidence: $confidence}) { affected_rows } }`
-			if _, err := e.hasura.Mutate(mut, map[string]interface{}{"intentId": intentID, "tenantId": e.tenantID, "confidence": similarityScore}); err != nil {
-				// Mutate failed — increment metric and fallback to SQL update
-				IncHasuraFallback("branch_evaluator")
-				e.db.ExecContext(ctx, `
-					UPDATE bp_semantic_intents 
-					SET match_count = match_count + 1, avg_confidence = $1
-					WHERE intent_id = $2 AND tenant_id = $3
-				`, similarityScore, intentID, e.tenantID)
-			}
-		} else {
-			e.db.ExecContext(ctx, `
-				UPDATE bp_semantic_intents 
-				SET match_count = match_count + 1, avg_confidence = $1
-				WHERE intent_id = $2 AND tenant_id = $3
-			`, similarityScore, intentID, e.tenantID)
-		}
+		e.db.ExecContext(ctx, `
+			UPDATE bp_semantic_intents
+			SET match_count = match_count + 1, avg_confidence = $1
+			WHERE intent_id = $2 AND tenant_id = $3
+		`, similarityScore, intentID, e.tenantID)
 	}
 
 	return route, nil
@@ -281,54 +170,22 @@ type ScoringResult struct {
 }
 
 func (e *CompleteABranchEvaluator) EvaluateScoringMatrix(ctx context.Context, stepID string, inputData map[string]interface{}) (*ScoringResult, error) {
-	// Try Hasura-first when available
+	query := `
+		SELECT id, dimensions, routing_thresholds
+		FROM bp_scoring_matrices
+		WHERE step_id = $1 AND tenant_id = $2 AND is_active = TRUE
+		LIMIT 1
+	`
+
 	var matrixID string
 	var dimensionsJSON, thresholdsJSON json.RawMessage
 
-	if e.hasura != nil {
-		gql := `query LoadScoringMatrix($stepId: uuid!, $tenantId: uuid!) { bp_scoring_matrices(where: {step_id: {_eq: $stepId}, tenant_id: {_eq: $tenantId}, is_active: {_eq: true}}, limit: 1) { id dimensions routing_thresholds } }`
-		vars := map[string]interface{}{"stepId": stepID, "tenantId": e.tenantID}
-		if res, err := e.hasura.Query(gql, vars); err == nil {
-			if arr, ok := res["bp_scoring_matrices"].([]interface{}); ok && len(arr) > 0 {
-				if item, ok := arr[0].(map[string]interface{}); ok {
-					if idStr, _ := item["id"].(string); idStr != "" {
-						matrixID = idStr
-					}
-					if dims, ok := item["dimensions"]; ok && dims != nil {
-						if b, err := json.Marshal(dims); err == nil {
-							dimensionsJSON = b
-						}
-					}
-					if th, ok := item["routing_thresholds"]; ok && th != nil {
-						if b, err := json.Marshal(th); err == nil {
-							thresholdsJSON = b
-						}
-					}
-				}
-			}
-		} else {
-			// Hasura failed — increment metric and fall back to SQL below
-			IncHasuraFallback("branch_evaluator")
-			e.db.ExecContext(ctx, "-- hasura query failed, falling back to SQL")
-		}
+	err := e.db.QueryRowContext(ctx, query, stepID, e.tenantID).Scan(&matrixID, &dimensionsJSON, &thresholdsJSON)
+	if err == sql.ErrNoRows {
+		return nil, fmt.Errorf("no scoring matrix configured for step %s", stepID)
 	}
-
-	// If Hasura didn't provide data, use SQL fallback
-	if matrixID == "" || len(dimensionsJSON) == 0 || len(thresholdsJSON) == 0 {
-		query := `
-			SELECT id, dimensions, routing_thresholds
-			FROM bp_scoring_matrices
-			WHERE step_id = $1 AND tenant_id = $2 AND is_active = TRUE
-			LIMIT 1
-		`
-
-		err := e.db.QueryRowContext(ctx, query, stepID, e.tenantID).Scan(&matrixID, &dimensionsJSON, &thresholdsJSON)
-		if err == sql.ErrNoRows {
-			return nil, fmt.Errorf("no scoring matrix configured for step %s", stepID)
-		}
-		if err != nil {
-			return nil, fmt.Errorf("failed to load scoring matrix: %w", err)
-		}
+	if err != nil {
+		return nil, fmt.Errorf("failed to load scoring matrix: %w", err)
 	}
 
 	var dimensions []map[string]interface{}
@@ -342,7 +199,6 @@ func (e *CompleteABranchEvaluator) EvaluateScoringMatrix(ctx context.Context, st
 		return nil, fmt.Errorf("failed to parse thresholds: %w", err)
 	}
 
-	// Calculate weighted scores across all dimensions
 	result := &ScoringResult{
 		Dimensions: make(map[string]float64),
 	}
@@ -351,7 +207,6 @@ func (e *CompleteABranchEvaluator) EvaluateScoringMatrix(ctx context.Context, st
 		dimName := dim["name"].(string)
 		weight := dim["weight"].(float64)
 
-		// Score this dimension (placeholder: use input data)
 		score := e.scoreDimension(dimName, inputData)
 		weightedScore := score * weight
 
@@ -359,7 +214,6 @@ func (e *CompleteABranchEvaluator) EvaluateScoringMatrix(ctx context.Context, st
 		result.TotalScore += weightedScore
 	}
 
-	// Find matching route based on thresholds
 	for _, threshold := range thresholds {
 		minScore := threshold["min_score"].(float64)
 		if result.TotalScore >= minScore {
@@ -369,25 +223,11 @@ func (e *CompleteABranchEvaluator) EvaluateScoringMatrix(ctx context.Context, st
 		}
 	}
 
-	// Update analytics — prefer Hasura mutation but fall back to SQL
-	if e.hasura != nil {
-		mut := `mutation UpdateScoringMatrix($id: uuid!, $tenantId: uuid!, $score: float8!) { update_bp_scoring_matrices(where: {id: {_eq: $id}, tenant_id: {_eq: $tenantId}}, _inc: {evaluations_total: 1}, _set: {avg_score: $score}) { affected_rows } }`
-		if _, err := e.hasura.Mutate(mut, map[string]interface{}{"id": matrixID, "tenantId": e.tenantID, "score": result.TotalScore}); err != nil {
-			// Hasura mutate failed — increment metric and fallback to SQL
-			IncHasuraFallback("branch_evaluator")
-			e.db.ExecContext(ctx, `
-				UPDATE bp_scoring_matrices 
-				SET evaluations_total = evaluations_total + 1, avg_score = $1
-				WHERE id = $2 AND tenant_id = $3
-			`, result.TotalScore, matrixID, e.tenantID)
-		}
-	} else {
-		e.db.ExecContext(ctx, `
-			UPDATE bp_scoring_matrices 
-			SET evaluations_total = evaluations_total + 1, avg_score = $1
-			WHERE id = $2 AND tenant_id = $3
-		`, result.TotalScore, matrixID, e.tenantID)
-	}
+	e.db.ExecContext(ctx, `
+		UPDATE bp_scoring_matrices
+		SET evaluations_total = evaluations_total + 1, avg_score = $1
+		WHERE id = $2 AND tenant_id = $3
+	`, result.TotalScore, matrixID, e.tenantID)
 
 	return result, nil
 }
@@ -423,70 +263,32 @@ type ForecastResult struct {
 }
 
 func (e *CompleteABranchEvaluator) GetTimeSeriesForecast(ctx context.Context, stepID string) (*ForecastResult, error) {
-	// Try Hasura-first when available
+	query := `
+		SELECT predicted_queue_depth, predicted_approval_time_minutes,
+			   confidence_interval_lower, confidence_interval_upper,
+			   low_load_branch_id, high_load_branch_id
+		FROM bp_time_series_forecasts
+		WHERE step_id = $1 AND tenant_id = $2 AND is_active = TRUE
+		ORDER BY forecast_timestamp DESC
+		LIMIT 1
+	`
+
 	result := &ForecastResult{}
 	var lowBranchID, highBranchID string
 
-	if e.hasura != nil {
-		gql := `query GetForecast($stepId: uuid!, $tenantId: uuid!) { bp_time_series_forecasts(where: {step_id: {_eq: $stepId}, tenant_id: {_eq: $tenantId}, is_active: {_eq: true}}, order_by: {forecast_timestamp: desc}, limit: 1) { predicted_queue_depth predicted_approval_time_minutes confidence_interval_lower confidence_interval_upper low_load_branch_id high_load_branch_id } }`
-		vars := map[string]interface{}{"stepId": stepID, "tenantId": e.tenantID}
-		if res, err := e.hasura.Query(gql, vars); err == nil {
-			if arr, ok := res["bp_time_series_forecasts"].([]interface{}); ok && len(arr) > 0 {
-				if item, ok := arr[0].(map[string]interface{}); ok {
-					if v, ok := item["predicted_queue_depth"].(float64); ok {
-						result.PredictedQueueDepth = int(v)
-					}
-					if v, ok := item["predicted_approval_time_minutes"].(float64); ok {
-						result.PredictedApprovalTime = int(v)
-					}
-					if v, ok := item["confidence_interval_lower"].(float64); ok {
-						result.ConfidenceIntervalLower = v
-					}
-					if v, ok := item["confidence_interval_upper"].(float64); ok {
-						result.ConfidenceIntervalUpper = v
-					}
-					if v, ok := item["low_load_branch_id"].(string); ok {
-						lowBranchID = v
-					}
-					if v, ok := item["high_load_branch_id"].(string); ok {
-						highBranchID = v
-					}
-				}
-			}
-		} else {
-			// Hasura query failed — count fallback and fall back to SQL
-			IncHasuraFallback("branch_evaluator")
-			e.db.ExecContext(ctx, "-- hasura query failed, falling back to SQL")
-		}
+	err := e.db.QueryRowContext(ctx, query, stepID, e.tenantID).Scan(
+		&result.PredictedQueueDepth, &result.PredictedApprovalTime,
+		&result.ConfidenceIntervalLower, &result.ConfidenceIntervalUpper,
+		&lowBranchID, &highBranchID,
+	)
+
+	if err == sql.ErrNoRows {
+		return nil, fmt.Errorf("no forecast configured for step %s", stepID)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("failed to get forecast: %w", err)
 	}
 
-	// If result not filled, use SQL fallback
-	if result.PredictedQueueDepth == 0 && result.PredictedApprovalTime == 0 {
-		query := `
-			SELECT predicted_queue_depth, predicted_approval_time_minutes, 
-				   confidence_interval_lower, confidence_interval_upper,
-				   low_load_branch_id, high_load_branch_id
-			FROM bp_time_series_forecasts
-			WHERE step_id = $1 AND tenant_id = $2 AND is_active = TRUE
-			ORDER BY forecast_timestamp DESC
-			LIMIT 1
-		`
-
-		err := e.db.QueryRowContext(ctx, query, stepID, e.tenantID).Scan(
-			&result.PredictedQueueDepth, &result.PredictedApprovalTime,
-			&result.ConfidenceIntervalLower, &result.ConfidenceIntervalUpper,
-			&lowBranchID, &highBranchID,
-		)
-
-		if err == sql.ErrNoRows {
-			return nil, fmt.Errorf("no forecast configured for step %s", stepID)
-		}
-		if err != nil {
-			return nil, fmt.Errorf("failed to get forecast: %w", err)
-		}
-	}
-
-	// Route based on predicted load
 	if result.PredictedQueueDepth > 50 {
 		result.RecommendedBranchID = highBranchID
 	} else {
@@ -513,55 +315,25 @@ type AdaptiveTriggerEval struct {
 }
 
 func (e *CompleteABranchEvaluator) EvaluateAdaptiveTriggers(ctx context.Context, stepID string, contextData map[string]interface{}) (*AdaptiveTriggerEval, error) {
-	// Try Hasura-first when available
+	query := `
+		SELECT action_type, action_config, is_active
+		FROM bp_adaptive_triggers
+		WHERE step_id = $1 AND tenant_id = $2 AND is_active = TRUE
+		LIMIT 1
+	`
+
 	var actionType string
 	var actionConfigJSON json.RawMessage
 	var isActive bool
 
-	if e.hasura != nil {
-		gql := `query LoadAdaptiveTrigger($stepId: uuid!, $tenantId: uuid!) { bp_adaptive_triggers(where: {step_id: {_eq: $stepId}, tenant_id: {_eq: $tenantId}, is_active: {_eq: true}}, limit: 1) { action_type action_config is_active } }`
-		vars := map[string]interface{}{"stepId": stepID, "tenantId": e.tenantID}
-		if res, err := e.hasura.Query(gql, vars); err == nil {
-			if arr, ok := res["bp_adaptive_triggers"].([]interface{}); ok && len(arr) > 0 {
-				if item, ok := arr[0].(map[string]interface{}); ok {
-					if v, _ := item["action_type"].(string); v != "" {
-						actionType = v
-					}
-					if cfg, ok := item["action_config"]; ok && cfg != nil {
-						if b, err := json.Marshal(cfg); err == nil {
-							actionConfigJSON = b
-						}
-					}
-					if ia, ok := item["is_active"].(bool); ok {
-						isActive = ia
-					}
-				}
-			}
-		} else {
-			// Hasura failed — increment fallback metric then fall back to SQL
-			IncHasuraFallback("branch_evaluator")
-			e.db.ExecContext(ctx, "-- hasura query failed, falling back to SQL")
-		}
+	err := e.db.QueryRowContext(ctx, query, stepID, e.tenantID).Scan(&actionType, &actionConfigJSON, &isActive)
+	if err == sql.ErrNoRows {
+		return &AdaptiveTriggerEval{TriggeredYes: false}, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("failed to load adaptive trigger: %w", err)
 	}
 
-	if actionType == "" {
-		query := `
-			SELECT action_type, action_config, is_active
-			FROM bp_adaptive_triggers
-			WHERE step_id = $1 AND tenant_id = $2 AND is_active = TRUE
-			LIMIT 1
-		`
-
-		err := e.db.QueryRowContext(ctx, query, stepID, e.tenantID).Scan(&actionType, &actionConfigJSON, &isActive)
-		if err == sql.ErrNoRows {
-			return &AdaptiveTriggerEval{TriggeredYes: false}, nil
-		}
-		if err != nil {
-			return nil, fmt.Errorf("failed to load adaptive trigger: %w", err)
-		}
-	}
-
-	// Evaluate trigger condition against context
 	triggered := e.evaluateTriggerCondition(contextData)
 
 	result := &AdaptiveTriggerEval{
@@ -572,25 +344,11 @@ func (e *CompleteABranchEvaluator) EvaluateAdaptiveTriggers(ctx context.Context,
 	if triggered {
 		json.Unmarshal(actionConfigJSON, &result.ActionConfig)
 
-		// Record trigger fire - prefer Hasura mutation, fallback to SQL
-		if e.hasura != nil {
-			mut := `mutation IncrementTriggerCount($stepId: uuid!, $tenantId: uuid!) { update_bp_adaptive_triggers(where: {step_id: {_eq: $stepId}, tenant_id: {_eq: $tenantId}}, _inc: {trigger_count: 1}) { affected_rows } }`
-			if _, err := e.hasura.Mutate(mut, map[string]interface{}{"stepId": stepID, "tenantId": e.tenantID}); err != nil {
-				// Hasura mutate failed — increment fallback metric and fallback to SQL
-				IncHasuraFallback("branch_evaluator")
-				e.db.ExecContext(ctx, `
-					UPDATE bp_adaptive_triggers
-					SET trigger_count = trigger_count + 1
-					WHERE step_id = $1 AND tenant_id = $2
-				`, stepID, e.tenantID)
-			}
-		} else {
-			e.db.ExecContext(ctx, `
-				UPDATE bp_adaptive_triggers
-				SET trigger_count = trigger_count + 1
-				WHERE step_id = $1 AND tenant_id = $2
-			`, stepID, e.tenantID)
-		}
+		e.db.ExecContext(ctx, `
+			UPDATE bp_adaptive_triggers
+			SET trigger_count = trigger_count + 1
+			WHERE step_id = $1 AND tenant_id = $2
+		`, stepID, e.tenantID)
 	}
 
 	return result, nil
@@ -702,41 +460,8 @@ type BranchAnalyticsRecord struct {
 }
 
 func (e *CompleteABranchEvaluator) RecordBranchAnalytics(ctx context.Context, branchID string, metrics map[string]interface{}) error {
-	// Try Hasura mutation first, then fallback to SQL
-	// Example GraphQL mutation:
-	// mutation RecordBranchAnalytics($object: bp_branch_analytics_extended_insert_input!) {
-	//   insert_bp_branch_analytics_extended_one(
-	//     object: $object,
-	//     on_conflict: {
-	//       constraint: bp_branch_analytics_extended_pkey,
-	//       update_columns: [branch_selection_count]
-	//     }
-	//   ) {
-	//     tenant_id
-	//     branch_id
-	//   }
-	// }
-	// Compose variables for Hasura
-	if e.hasura != nil {
-		mut := `mutation RecordBranchAnalytics($object: bp_branch_analytics_extended_insert_input!) { insert_bp_branch_analytics_extended_one(object: $object, on_conflict: {constraint: bp_branch_analytics_extended_pkey, update_columns: [branch_selection_count]}) { tenant_id branch_id } }`
-		object := map[string]interface{}{
-			"tenant_id":              e.tenantID,
-			"branch_id":              branchID,
-			"branch_selection_count": metrics["selections"],
-			"avg_duration_ms":        metrics["avg_duration"],
-			"success_rate":           metrics["success_rate"],
-			"anomaly_score":          metrics["anomaly_score"],
-		}
-		vars := map[string]interface{}{"object": object}
-		if _, err := e.hasura.Mutate(mut, vars); err == nil {
-			return nil
-		}
-		// mutate failed: increment metric and fall through to SQL
-		IncHasuraFallback("branch_evaluator")
-	}
-
 	query := `
-		INSERT INTO bp_branch_analytics_extended 
+		INSERT INTO bp_branch_analytics_extended
 		(tenant_id, branch_id, branch_selection_count, avg_duration_ms, success_rate, anomaly_score, metric_period)
 		VALUES ($1, $2, $3, $4, $5, $6, NOW())
 		ON CONFLICT (tenant_id, branch_id, metric_period) DO UPDATE SET
@@ -811,26 +536,6 @@ func (e *CompleteABranchEvaluator) GetVotingDecision(ctx context.Context, workfl
 }
 
 func (e *CompleteABranchEvaluator) CastVote(ctx context.Context, decisionID string, voterRole string, vote string) error {
-	// Prefer Hasura mutation first, fallback to SQL
-	// Example GraphQL mutation:
-	// mutation CastVote($decisionId: uuid!, $tenantId: uuid!) {
-	//   update_bp_collaborative_decisions(
-	//     where: {id: {_eq: $decisionId}, tenant_id: {_eq: $tenantId}},
-	//     _inc: {votes_received: 1},
-	//     _set: {updated_at: "now()"}
-	//   ) {
-	//     affected_rows
-	//   }
-	// }
-	if e.hasura != nil {
-		mut := `mutation CastVote($decisionId: uuid!, $tenantId: uuid!) { update_bp_collaborative_decisions(where: {id: {_eq: $decisionId}, tenant_id: {_eq: $tenantId}}, _inc: {votes_received: 1}, _set: {updated_at: "now()"}) { affected_rows } }`
-		if _, err := e.hasura.Mutate(mut, map[string]interface{}{"decisionId": decisionID, "tenantId": e.tenantID}); err == nil {
-			return nil
-		}
-		IncHasuraFallback("branch_evaluator")
-		// else fall through to SQL
-	}
-
 	query := `
 		UPDATE bp_collaborative_decisions
 		SET votes_received = votes_received + 1, updated_at = NOW()
@@ -908,27 +613,8 @@ type BlockchainAuditRecord struct {
 func (e *CompleteABranchEvaluator) LogBlockchainAudit(ctx context.Context, workflowInstanceID string, decision string) error {
 	eventHash := fmt.Sprintf("%x", sha256.Sum256([]byte(decision+time.Now().String())))
 
-	// Implemented Hasura-first insert, fallback to SQL if mutate fails
-	// Example GraphQL mutation:
-	// mutation LogBlockchainAudit($object: bp_blockchain_audit_insert_input!) {
-	//   insert_bp_blockchain_audit_one(object: $object) {
-	//     tenant_id
-	//     workflow_instance_id
-	//     event_hash
-	//   }
-	// }
-	if e.hasura != nil {
-		mut := `mutation LogBlockchainAudit($object: bp_blockchain_audit_insert_input!) { insert_bp_blockchain_audit_one(object: $object) { tenant_id workflow_instance_id event_hash } }`
-		obj := map[string]interface{}{"tenant_id": e.tenantID, "workflow_instance_id": workflowInstanceID, "event_type": "branch_decision", "event_hash": eventHash, "verification_status": "verified"}
-		if _, err := e.hasura.Mutate(mut, map[string]interface{}{"object": obj}); err == nil {
-			return nil
-		}
-		IncHasuraFallback("branch_evaluator")
-		// fall back to SQL
-	}
-
 	query := `
-		INSERT INTO bp_blockchain_audit 
+		INSERT INTO bp_blockchain_audit
 		(tenant_id, workflow_instance_id, event_type, event_hash, verification_status)
 		VALUES ($1, $2, 'branch_decision', $3, 'verified')
 	`
@@ -1058,38 +744,12 @@ func (e *CompleteABranchEvaluator) GetExplainability(ctx context.Context, execut
 func (e *CompleteABranchEvaluator) RecordExplainability(ctx context.Context, executionID string, branchID string, features map[string]float64) error {
 	featureJSON, _ := json.Marshal(features)
 
-	// Try Hasura insert first, fallback to SQL on failure
-	// Example GraphQL mutation:
-	// mutation RecordExplainability($object: bp_explainability_records_insert_input!) {
-	//   insert_bp_explainability_records_one(object: $object) {
-	//     record_id
-	//     selected_branch_id
-	//     decision_confidence
-	//   }
-	// }
-	confidence := 0.85 // Placeholder
+	confidence := 0.85
 	summary := fmt.Sprintf("Decision made based on %d factors with %.1f%% confidence", len(features), confidence*100)
 
-	if e.hasura != nil {
-		mut := `mutation RecordExplainability($object: bp_explainability_records_insert_input!) { insert_bp_explainability_records_one(object: $object) { record_id selected_branch_id decision_confidence } }`
-		obj := map[string]interface{}{
-			"tenant_id":                e.tenantID,
-			"branch_execution_id":      executionID,
-			"selected_branch_id":       branchID,
-			"feature_importance":       features,
-			"natural_language_summary": summary,
-			"decision_confidence":      confidence,
-		}
-		if _, err := e.hasura.Mutate(mut, map[string]interface{}{"object": obj}); err == nil {
-			return nil
-		}
-		// Hasura mutate failed — increment fallback metric and fall through to SQL
-		IncHasuraFallback("branch_evaluator")
-	}
-
 	query := `
-		INSERT INTO bp_explainability_records 
-		(tenant_id, branch_execution_id, selected_branch_id, feature_importance, 
+		INSERT INTO bp_explainability_records
+		(tenant_id, branch_execution_id, selected_branch_id, feature_importance,
 		 natural_language_summary, decision_confidence)
 		VALUES ($1, $2, $3, $4, $5, $6)
 	`

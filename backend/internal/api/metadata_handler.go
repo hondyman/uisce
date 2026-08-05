@@ -13,11 +13,10 @@ import (
 type MetadataHandler struct {
 	ods    *metadata.ODSService
 	layout *metadata.LayoutService
-	hasura *metadata.HasuraClient
 }
 
-func NewMetadataHandler(ods *metadata.ODSService, layout *metadata.LayoutService, hasura *metadata.HasuraClient) *MetadataHandler {
-	return &MetadataHandler{ods: ods, layout: layout, hasura: hasura}
+func NewMetadataHandler(ods *metadata.ODSService, layout *metadata.LayoutService) *MetadataHandler {
+	return &MetadataHandler{ods: ods, layout: layout}
 }
 
 func (h *MetadataHandler) RegisterRoutes(r chi.Router) {
@@ -42,12 +41,6 @@ func (h *MetadataHandler) CreateObjectDefinition(w http.ResponseWriter, r *http.
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-
-	// 2. Automate Hasura Tracking (if table existed, but here we assume ODS creates table too - simplified)
-	// In a real implementation, ODS would create the table DDL first.
-	// For this MVP, we'll assume the table creation logic is inside ODS or handled separately.
-	// We'll just trigger the track call as a demonstration.
-	// h.hasura.TrackTable(input.Slug) 
 
 	w.WriteHeader(http.StatusCreated)
 	json.NewEncoder(w).Encode(def)

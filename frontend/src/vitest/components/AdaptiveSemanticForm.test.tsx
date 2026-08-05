@@ -5,6 +5,7 @@ import type {
   ResolvedCapabilities,
   ResolvedField,
 } from '@/types/mutability';
+import { TEST_GOLD_COPY_TENANT_ID } from '@/utils/testutil';
 
 // Mock the dispatch API so the test doesn't hit the network.
 vi.mock('@/api/layoutResolver', () => ({
@@ -55,7 +56,7 @@ describe('AdaptiveSemanticForm', () => {
         schemaFields={fields}
         initialValues={{}}
         businessObjectKey="portfolio_holding"
-        tenantId="99e99e99-99e9-49e9-89e9-99e99e99e999"
+        tenantId="TEST_GOLD_COPY_TENANT_ID"
       />,
     );
     const badge = screen.getByTestId('mutability-mode-badge');
@@ -69,7 +70,7 @@ describe('AdaptiveSemanticForm', () => {
         schemaFields={fields}
         initialValues={{}}
         businessObjectKey="customers"
-        tenantId="99e99e99-99e9-49e9-89e9-99e99e99e999"
+        tenantId="TEST_GOLD_COPY_TENANT_ID"
       />,
     );
     const badge = screen.getByTestId('mutability-mode-badge');
@@ -83,7 +84,7 @@ describe('AdaptiveSemanticForm', () => {
         schemaFields={fields}
         initialValues={{}}
         businessObjectKey="portfolio_holding"
-        tenantId="99e99e99-99e9-49e9-89e9-99e99e99e999"
+        tenantId="TEST_GOLD_COPY_TENANT_ID"
       />,
     );
     expect(screen.getByText('Field Missing from Source')).toBeTruthy();
@@ -102,7 +103,7 @@ describe('AdaptiveSemanticForm', () => {
         schemaFields={fields}
         initialValues={{}}
         businessObjectKey="portfolio_holding"
-        tenantId="99e99e99-99e9-49e9-89e9-99e99e99e999"
+        tenantId="TEST_GOLD_COPY_TENANT_ID"
       />,
     );
     const inputs = screen.getAllByRole('textbox') as HTMLInputElement[];
@@ -119,7 +120,7 @@ describe('AdaptiveSemanticForm', () => {
         initialValues={{ position_quantity: '100' }}
         businessObjectKey="portfolio_holding"
         bindingId="00000000-0000-0000-0000-00000000a002"
-        tenantId="99e99e99-99e9-49e9-89e9-99e99e99e999"
+        tenantId="TEST_GOLD_COPY_TENANT_ID"
         onSuccess={onSuccess}
       />,
     );

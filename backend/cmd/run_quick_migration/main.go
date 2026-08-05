@@ -11,9 +11,12 @@ import (
 )
 
 func main() {
-	// Connect to database
-	// Using the connection string found in cmd/migrate-db/main.go
-	db, err := sql.Open("postgres", "postgres://postgres:postgres@localhost:5432/semlayer?sslmode=disable")
+	dbURL := os.Getenv("DATABASE_URL")
+	if dbURL == "" {
+		panic("DATABASE_URL environment variable is required")
+	}
+
+	db, err := sql.Open("postgres", dbURL)
 	if err != nil {
 		log.Fatal("Failed to connect to database:", err)
 	}

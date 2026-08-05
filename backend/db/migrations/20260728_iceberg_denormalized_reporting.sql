@@ -4,6 +4,8 @@
 
 BEGIN;
 
+PERFORM set_config('app.goldcopy', (SELECT id FROM public.tenants WHERE gold_copy = true LIMIT 1)::text, true);
+
 -- ============================================================================
 -- 1. REGISTER THE ICEBERG OLAP PHYSICAL TARGET TABLE
 -- ============================================================================
@@ -18,7 +20,7 @@ INSERT INTO public.catalog_node (
     updated_at
 ) VALUES (
     'a1b2c3d4-0001-4000-8000-000000000001',
-    '99e99e99-99e9-49e9-89e9-99e99e99e999',
+    current_setting('app.goldcopy', true)::uuid,
     COALESCE(
         (SELECT id FROM public.catalog_node_type WHERE catalog_type_name = 'physical_table' LIMIT 1),
         '820b942a-9c9e-4abc-acdc-84616db33098'::uuid
@@ -45,7 +47,7 @@ INSERT INTO public.catalog_node (
 ) VALUES 
 (
     'a1b2c3d4-0002-4000-8000-000000000002',
-    '99e99e99-99e9-49e9-89e9-99e99e99e999',
+    current_setting('app.goldcopy', true)::uuid,
     COALESCE(
         (SELECT id FROM public.catalog_node_type WHERE catalog_type_name = 'physical_column' LIMIT 1),
         '820b942a-9c9e-4abc-acdc-84616db33098'::uuid
@@ -58,7 +60,7 @@ INSERT INTO public.catalog_node (
 ),
 (
     'a1b2c3d4-0003-4000-8000-000000000003',
-    '99e99e99-99e9-49e9-89e9-99e99e99e999',
+    current_setting('app.goldcopy', true)::uuid,
     COALESCE(
         (SELECT id FROM public.catalog_node_type WHERE catalog_type_name = 'physical_column' LIMIT 1),
         '820b942a-9c9e-4abc-acdc-84616db33098'::uuid
@@ -71,7 +73,7 @@ INSERT INTO public.catalog_node (
 ),
 (
     'a1b2c3d4-0004-4000-8000-000000000004',
-    '99e99e99-99e9-49e9-89e9-99e99e99e999',
+    current_setting('app.goldcopy', true)::uuid,
     COALESCE(
         (SELECT id FROM public.catalog_node_type WHERE catalog_type_name = 'physical_column' LIMIT 1),
         '820b942a-9c9e-4abc-acdc-84616db33098'::uuid
@@ -98,13 +100,13 @@ INSERT INTO public.catalog_edge (
 ) VALUES 
 (
     'e1f2g3h4-0001-4000-8000-000000000001',
-    '99e99e99-99e9-49e9-89e9-99e99e99e999',
+    current_setting('app.goldcopy', true)::uuid,
     COALESCE(
         (SELECT id FROM public.catalog_edge_type WHERE catalog_edge_type_name = 'MAPS_TO' LIMIT 1),
         '710b942a-9c9e-4abc-acdc-84616db33099'::uuid
     ),
     COALESCE(
-        (SELECT id FROM public.catalog_node WHERE name = 'term.order_id' AND tenant_id = '99e99e99-99e9-49e9-89e9-99e99e99e999' LIMIT 1),
+        (SELECT id FROM public.catalog_node WHERE name = 'term.order_id' AND tenant_id = current_setting('app.goldcopy', true)::uuid LIMIT 1),
         'a1b2c3d4-0002-4000-8000-000000000002'::uuid
     ),
     'a1b2c3d4-0002-4000-8000-000000000002',
@@ -114,13 +116,13 @@ INSERT INTO public.catalog_edge (
 ),
 (
     'e1f2g3h4-0002-4000-8000-000000000002',
-    '99e99e99-99e9-49e9-89e9-99e99e99e999',
+    current_setting('app.goldcopy', true)::uuid,
     COALESCE(
         (SELECT id FROM public.catalog_edge_type WHERE catalog_edge_type_name = 'MAPS_TO' LIMIT 1),
         '710b942a-9c9e-4abc-acdc-84616db33099'::uuid
     ),
     COALESCE(
-        (SELECT id FROM public.catalog_node WHERE name = 'term.customer_company_name' AND tenant_id = '99e99e99-99e9-49e9-89e9-99e99e99e999' LIMIT 1),
+        (SELECT id FROM public.catalog_node WHERE name = 'term.customer_company_name' AND tenant_id = current_setting('app.goldcopy', true)::uuid LIMIT 1),
         'a1b2c3d4-0003-4000-8000-000000000003'::uuid
     ),
     'a1b2c3d4-0003-4000-8000-000000000003',

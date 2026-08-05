@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/hondyman/uisce/backend/internal/db"
 	"github.com/hondyman/uisce/backend/internal/goldcopy"
 	"github.com/jmoiron/sqlx"
 	"github.com/shopspring/decimal"
@@ -74,8 +75,6 @@ func applyWinningField(t *TransactionMasterRecord, results []goldcopy.Survivorsh
 				t.SettlementDate = &v
 			}
 		}
-		// SourceSystem generally wins based on the most dominant field,
-		// but typically we let it be the incoming source or track lineage via source_systems.
 	}
 }
 
@@ -86,45 +85,47 @@ type TransactionRepository interface {
 }
 
 type pgTransactionRepo struct {
-	db           *sqlx.DB
-	survivorship *goldcopy.Survivorship
+	*db.BitemporalRepository[TransactionMasterRecord]
+	sqlxDB        *sqlx.DB
+	survivorship  *goldcopy.Survivorship
 }
 
-func NewTransactionRepository(db *sqlx.DB, gc *goldcopy.Engine) TransactionRepository {
+func NewTransactionRepository(sqlxDB *sqlx.DB, gc *goldcopy.Engine) TransactionRepository {
 	return &pgTransactionRepo{
-		db:           db,
-		survivorship: goldcopy.NewSurvivorship(defaultTransactionRules),
+		BitemporalRepository: db.NewBitemporalRepository[TransactionMasterRecord](sqlxDB, "edm.transaction_master", "transaction_id"),
+		sqlxDB:              sqlxDB,
+		survivorship:        goldcopy.NewSurvivorship(defaultTransactionRules),
 	}
 }
 
 func (r *pgTransactionRepo) ListTransactions(ctx context.Context, portfolioID *uuid.UUID, startDate, endDate *string) ([]TransactionMasterRecord, error) {
-	query := `
-		SELECT * FROM edm.transaction_master 
-		WHERE valid_to = 'infinity' AND tenant_id = $1
-	`
-	args := []interface{}{ctx.Value("tenant_id").(uuid.UUID)}
-	argIdx := 2
+	tenantID, ok := ctx.Value("tenant_id").(uuid.UUID)
+	if !ok {
+		return nil, fmt.Errorf("tenant_id not found in context")
+	}
+
+	opts := []db.QueryOption{db.WithOrderBy("trade_date", "DESC")}
 
 	if portfolioID != nil {
-		query += fmt.Sprintf(" AND portfolio_id = $%d", argIdx)
-		args = append(args, *portfolioID)
-		argIdx++
+		opts = append(opts, db.WithFilter("portfolio_id", *portfolioID))
 	}
 	if startDate != nil {
-		query += fmt.Sprintf(" AND trade_date >= $%d", argIdx)
-		args = append(args, *startDate)
-		argIdx++
+		opts = append(opts, db.WithRangeFilter("trade_date", ">=", *startDate))
 	}
 	if endDate != nil {
-		query += fmt.Sprintf(" AND trade_date <= $%d", argIdx)
-		args = append(args, *endDate)
-		argIdx++
+		opts = append(opts, db.WithRangeFilter("trade_date", "<=", *endDate))
 	}
-	query += " ORDER BY trade_date DESC"
 
-	var txs []TransactionMasterRecord
-	err := r.db.SelectContext(ctx, &txs, query, args...)
-	return txs, err
+	records, err := r.BitemporalRepository.ListCurrent(ctx, tenantID, opts...)
+	if err != nil {
+		return nil, err
+	}
+
+	result := make([]TransactionMasterRecord, len(records))
+	for i, rec := range records {
+		result[i] = *rec
+	}
+	return result, nil
 }
 
 // UpsertTransaction implements survivorship: Accounting > Custodian > OMS
@@ -135,7 +136,7 @@ func (r *pgTransactionRepo) UpsertTransaction(ctx context.Context, t *Transactio
 		AND valid_to = 'infinity' AND tenant_id = $4
 	`
 	var existing []TransactionMasterRecord
-	err := r.db.SelectContext(ctx, &existing, clusterQuery,
+	err := r.sqlxDB.SelectContext(ctx, &existing, clusterQuery,
 		t.PortfolioID, t.TradeDate, t.ExternalReference, t.TenantID)
 	if err != nil && err != sql.ErrNoRows {
 		return nil, err
@@ -167,7 +168,7 @@ func (r *pgTransactionRepo) UpsertTransaction(ctx context.Context, t *Transactio
 		if len(oldIDs) > 0 {
 			// In a real app we'd use pq.Array or sqlx.In, simplified here for time
 			for _, id := range oldIDs {
-				_, _ = r.db.ExecContext(ctx, "UPDATE edm.transaction_master SET valid_to = NOW() WHERE transaction_id = $1", id)
+				_, _ = r.sqlxDB.ExecContext(ctx, "UPDATE edm.transaction_master SET valid_to = NOW() WHERE transaction_id = $1", id)
 			}
 		}
 	}
@@ -195,7 +196,7 @@ func (r *pgTransactionRepo) UpsertTransaction(ctx context.Context, t *Transactio
 		gold.ValidTo, _ = time.Parse(time.RFC3339, "9999-12-31T23:59:59Z")
 	}
 
-	rows, err := r.db.NamedQueryContext(ctx, insertQuery, gold)
+	rows, err := r.sqlxDB.NamedQueryContext(ctx, insertQuery, gold)
 	if err != nil {
 		return nil, err
 	}
@@ -221,7 +222,7 @@ func (r *pgTransactionRepo) RecordPositionImpact(ctx context.Context, txID uuid.
 		INSERT INTO edm.transaction_flow_trace (trace_id, transaction_id, position_id, impact_type, quantity_delta, tenant_id)
 		VALUES ($1, $2, $3, $4, $5, $6)
 	`
-	_, err := r.db.ExecContext(ctx, query,
+	_, err := r.sqlxDB.ExecContext(ctx, query,
 		uuid.New(), txID, impact.PositionID, impact.ImpactType, impact.QuantityDelta, impact.TenantID,
 	)
 	return err

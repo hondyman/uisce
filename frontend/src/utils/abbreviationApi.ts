@@ -1,6 +1,7 @@
 import { devError } from './devLogger';
 import { useState, useEffect, useCallback, useRef } from 'react';
 import apiClient from './apiClient';
+import { getCachedGoldCopyId } from './goldCopy';
 
 export interface AbbreviationEntry {
   id: number;
@@ -50,8 +51,6 @@ export interface SuggestionResult {
 // ============================================================================
 
 const isDevFallbackEnabled = typeof import.meta !== 'undefined' && (import.meta as any).env?.DEV === true;
-
-const GOLD_COPY_TENANT_ID = '99e99e99-99e9-49e9-89e9-99e99e99e999';
 
 const GOLD_COPY_ABBREVIATIONS: Record<string, string> = {
   // Geographic
@@ -151,12 +150,13 @@ function saveLocalAbbreviations(items: AbbreviationEntry[], tenantId?: string): 
 }
 
 function getCoreAbbreviations(): AbbreviationEntry[] {
+  const goldCopyId = getCachedGoldCopyId() ?? 'pending-resolution';
   return Object.entries(GOLD_COPY_ABBREVIATIONS).map(([abbreviation, full_word], index) => ({
     id: -1000 - index,
     abbreviation,
     full_word,
     notes: 'Core (gold copy) abbreviation',
-    tenant_id: GOLD_COPY_TENANT_ID,
+    tenant_id: goldCopyId,
     is_core: true,
     created_at: undefined,
     updated_at: undefined,

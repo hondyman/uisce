@@ -774,8 +774,11 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 	r.Use(appmid.MetadataCacheMiddlewareDefault())
 
 	// Initialize security manager with JWT secret
-	jwtSecret := []byte(getEnv("JWT_SECRET", "dev-jwt-secret-key-change-in-production"))
-	secMgr := services.NewSecurityManager(nil, nil, jwtSecret)
+	jwtSecret := os.Getenv("JWT_SECRET")
+	if jwtSecret == "" {
+		log.Fatal("JWT_SECRET environment variable is not set")
+	}
+	secMgr := services.NewSecurityManager(nil, nil, []byte(jwtSecret))
 	apiKeyStore := services.NewDBAPIKeyStore(sqlxDB)
 	secMgr.SetAPIKeyStore(apiKeyStore)
 	if err := secMgr.LoadAPIKeysFromFile(getEnv("API_KEYS_FILE", "config/api_keys.json")); err != nil {
@@ -797,6 +800,7 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 	r.Use(appmid.WithTenantContext)
 	// Enforce region header and validate tenant scoping on all semantic requests
 	// Use new TenantRegionResolver for cleaner region + Gold Copy handling
+	region.SetGoldCopyResolver(goldcopyResolver)
 	regionResolver := region.NewTenantRegionResolver(db, goldcopyResolver)
 	r.Use(region.RegionValidationMiddleware(regionResolver))
 
@@ -2621,7 +2625,11 @@ func (s *Server) startProfile(w http.ResponseWriter, r *http.Request) {
 	err := s.DB.QueryRow("SELECT connection_string FROM public.tenant_datasources WHERE tenant_id = $1 AND datasource_id = $2", req.TenantID, req.DatasourceID).Scan(&connectionString)
 	if err != nil {
 		// For development, use alpha database as the source database
-		req.DataSource = getEnv("ALPHA_DB_URL", "postgres://postgres:postgres@postgres:5432/alpha?sslmode=disable")
+		alphaDBURL := os.Getenv("ALPHA_DB_URL")
+		if alphaDBURL == "" {
+			log.Fatal("ALPHA_DB_URL environment variable is required")
+		}
+		req.DataSource = alphaDBURL
 	} else {
 		req.DataSource = connectionString
 	}
@@ -2940,7 +2948,10 @@ func (s *Server) runProfile(jobID string) {
 
 	alphaPool := (*pgxpool.Pool)(nil)
 	if getEnv("SEMLAYER_TEST_SKIP_ALPHA_POOL", "") != "1" {
-		alphaURL := getEnv("ALPHA_DB_URL", "postgres://postgres:postgres@postgres:5432/alpha?sslmode=disable")
+		alphaURL := os.Getenv("ALPHA_DB_URL")
+		if alphaURL == "" {
+			log.Fatal("ALPHA_DB_URL environment variable is required")
+		}
 		var err error
 		alphaPool, err = pgxpool.New(context.Background(), alphaURL)
 		if err != nil {
@@ -3871,7 +3882,7 @@ func (s *Server) handleListCatalogNodes(w http.ResponseWriter, r *http.Request) 
 				SELECT cn.id, cn.node_name, COALESCE(cn.description, ''), cn.tenant_id, cn.tenant_datasource_id, cn.created_at, cn.updated_at, COALESCE(cn.properties, '{}'::jsonb) as properties
 				FROM catalog_node cn
 				LEFT JOIN catalog_node_type cnt ON cn.node_type_id = cnt.id
-				WHERE (cn.tenant_id = $1::uuid OR cn.tenant_id = '99e99e99-99e9-49e9-89e9-99e99e99e999') AND cn.tenant_datasource_id = $2::uuid
+				WHERE (cn.tenant_id = $1::uuid OR cn.tenant_id = (SELECT id FROM public.tenants WHERE gold_copy = true LIMIT 1)) AND cn.tenant_datasource_id = $2::uuid
 			`
 	args := []interface{}{tenantID, tenantDatasourceID}
 	argIndex := 3

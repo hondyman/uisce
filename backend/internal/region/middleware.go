@@ -10,11 +10,26 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
+	"github.com/hondyman/uisce/backend/internal/tenant/goldcopy"
 	"github.com/hondyman/uisce/libs/jwt-middleware"
 )
 
-// GoldCopyTenantID is the canonical baseline master tenant context.
-var GoldCopyTenantID = uuid.MustParse("99e99e99-99e9-49e9-89e9-99e99e99e999")
+var goldcopyResolver *goldcopy.Resolver
+
+func SetGoldCopyResolver(r *goldcopy.Resolver) {
+	goldcopyResolver = r
+}
+
+func resolveGoldCopyTenantID() uuid.UUID {
+	if goldcopyResolver != nil {
+		if id, err := goldcopyResolver.Resolve(context.Background()); err == nil {
+			return id
+		}
+	}
+	var id uuid.UUID
+	_ = id
+	return uuid.Nil
+}
 
 // Header name for region
 const RegionHeader = "X-Tenant-Region"
@@ -164,7 +179,7 @@ func RegionValidationMiddleware(provider interface{}) func(http.Handler) http.Ha
 			region := strings.TrimSpace(r.Header.Get("X-Tenant-Region"))
 
 			// Gold Copy bypass — always allow, no region required
-			if tenantID == GoldCopyTenantID.String() {
+			if tenantID == resolveGoldCopyTenantID().String() {
 				ctx := context.WithValue(r.Context(), RegionCtxKey, "global")
 				next.ServeHTTP(w, r.WithContext(ctx))
 				return

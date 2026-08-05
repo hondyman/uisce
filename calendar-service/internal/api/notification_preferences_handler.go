@@ -5,23 +5,23 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/gorilla/mux"
-	"github.com/sirupsen/logrus"
-
-	"calendar-service/internal/hasura"
+	"calendar-service/internal/database"
 	"calendar-service/internal/middleware"
 	"calendar-service/internal/services"
+
+	"github.com/gorilla/mux"
+	"github.com/sirupsen/logrus"
 )
 
 type NotificationPreferencesHandler struct {
-	hasuraClient *hasura.Client
+	dbClient     *database.Client
 	auditService services.AuditService
 	logger       *logrus.Entry
 }
 
-func NewNotificationPreferencesHandler(client *hasura.Client, audit services.AuditService, logger *logrus.Entry) *NotificationPreferencesHandler {
+func NewNotificationPreferencesHandler(db *database.Client, audit services.AuditService, logger *logrus.Entry) *NotificationPreferencesHandler {
 	return &NotificationPreferencesHandler{
-		hasuraClient: client,
+		dbClient:     db,
 		auditService: audit,
 		logger:       logger.WithField("component", "notification_prefs_handler"),
 	}
@@ -62,36 +62,22 @@ func (h *NotificationPreferencesHandler) GetPreferences(w http.ResponseWriter, r
 	}
 
 	query := `
-	query GetNotificationPrefs($user_id: uuid!) {
-		user_notification_settings(
-			where: {user_id: {_eq: $user_id}},
-			limit: 1
-		) {
-			email_sync_complete
-			email_sync_failed
-			email_conflict_detected
-			email_token_expiring
-			push_sync_complete
-			push_sync_failed
-			push_conflict_detected
-			digest_frequency
-		}
-	}
+		SELECT email_sync_complete, email_sync_failed, email_conflict_detected, email_token_expiring,
+			push_sync_complete, push_sync_failed, push_conflict_detected, digest_frequency
+		FROM user_notification_settings
+		WHERE user_id = $1
 	`
 
-	type Result struct {
-		Settings []NotificationPreferences `json:"user_notification_settings"`
-	}
+	var prefs NotificationPreferences
+	var emailSyncComplete, emailSyncFailed, emailConflict, emailToken, pushSyncComplete, pushSyncFailed, pushConflict bool
+	var digestFreq string
 
-	var result Result
-	if err := h.hasuraClient.QueryRaw(ctx, query, map[string]interface{}{"user_id": userID}, &result); err != nil {
-		h.logger.WithError(err).Error("Failed to get notification preferences")
-		http.Error(w, "Failed to get settings", http.StatusInternalServerError)
-		return
-	}
+	err = h.dbClient.Pool().QueryRow(ctx, query, userID).Scan(
+		&emailSyncComplete, &emailSyncFailed, &emailConflict, &emailToken,
+		&pushSyncComplete, &pushSyncFailed, &pushConflict, &digestFreq,
+	)
 
-	if len(result.Settings) == 0 {
-		// Default preferences
+	if err != nil {
 		defaultPrefs := NotificationPreferences{
 			EmailSyncComplete:     true,
 			EmailSyncFailed:       true,
@@ -102,14 +88,22 @@ func (h *NotificationPreferencesHandler) GetPreferences(w http.ResponseWriter, r
 			PushConflictDetected:  true,
 			DigestFrequency:       "weekly",
 		}
-
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(defaultPrefs)
 		return
 	}
 
+	prefs.EmailSyncComplete = emailSyncComplete
+	prefs.EmailSyncFailed = emailSyncFailed
+	prefs.EmailConflictDetected = emailConflict
+	prefs.EmailTokenExpiring = emailToken
+	prefs.PushSyncComplete = pushSyncComplete
+	prefs.PushSyncFailed = pushSyncFailed
+	prefs.PushConflictDetected = pushConflict
+	prefs.DigestFrequency = digestFreq
+
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(result.Settings[0])
+	json.NewEncoder(w).Encode(prefs)
 }
 
 func (h *NotificationPreferencesHandler) UpdatePreferences(w http.ResponseWriter, r *http.Request) {
@@ -141,39 +135,31 @@ func (h *NotificationPreferencesHandler) UpdatePreferences(w http.ResponseWriter
 		return
 	}
 
-	mutation := `
-	mutation UpsertNotificationPrefs($object: user_notification_settings_insert_input!) {
-		insert_user_notification_settings_one(
-			object: $object,
-			on_conflict: {
-				constraint: user_notification_settings_user_id_key,
-				update_columns: [
-					email_sync_complete, email_sync_failed, email_conflict_detected, email_token_expiring,
-					push_sync_complete, push_sync_failed, push_conflict_detected, digest_frequency, updated_at
-				]
-			}
-		) {
-			id
-		}
-	}
+	query := `
+		INSERT INTO user_notification_settings (user_id, tenant_id, email_sync_complete, email_sync_failed,
+			email_conflict_detected, email_token_expiring, push_sync_complete, push_sync_failed,
+			push_conflict_detected, digest_frequency, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+		ON CONFLICT (user_id) DO UPDATE SET
+			email_sync_complete = EXCLUDED.email_sync_complete,
+			email_sync_failed = EXCLUDED.email_sync_failed,
+			email_conflict_detected = EXCLUDED.email_conflict_detected,
+			email_token_expiring = EXCLUDED.email_token_expiring,
+			push_sync_complete = EXCLUDED.push_sync_complete,
+			push_sync_failed = EXCLUDED.push_sync_failed,
+			push_conflict_detected = EXCLUDED.push_conflict_detected,
+			digest_frequency = EXCLUDED.digest_frequency,
+			updated_at = EXCLUDED.updated_at
 	`
 
-	object := map[string]interface{}{
-		"user_id":                 userID,
-		"tenant_id":               tenantID,
-		"email_sync_complete":     prefs.EmailSyncComplete,
-		"email_sync_failed":       prefs.EmailSyncFailed,
-		"email_conflict_detected": prefs.EmailConflictDetected,
-		"email_token_expiring":    prefs.EmailTokenExpiring,
-		"push_sync_complete":      prefs.PushSyncComplete,
-		"push_sync_failed":        prefs.PushSyncFailed,
-		"push_conflict_detected":  prefs.PushConflictDetected,
-		"digest_frequency":        prefs.DigestFrequency,
-		"updated_at":              time.Now().Format(time.RFC3339),
-	}
+	_, err = h.dbClient.Pool().Exec(ctx, query,
+		userID, tenantID, prefs.EmailSyncComplete, prefs.EmailSyncFailed,
+		prefs.EmailConflictDetected, prefs.EmailTokenExpiring,
+		prefs.PushSyncComplete, prefs.PushSyncFailed,
+		prefs.PushConflictDetected, prefs.DigestFrequency, time.Now(),
+	)
 
-	var res interface{}
-	if err := h.hasuraClient.QueryRaw(ctx, mutation, map[string]interface{}{"object": object}, &res); err != nil {
+	if err != nil {
 		h.logger.WithError(err).Error("Failed to update notification preferences")
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return

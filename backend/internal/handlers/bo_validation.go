@@ -87,9 +87,9 @@ func ValidateBusinessObject(ctx context.Context, db *sqlx.DB, req SaveWizardRequ
 		var tableExists bool
 		err := db.GetContext(ctx, &tableExists, `
 			SELECT EXISTS(
-				SELECT 1 FROM catalog_node 
-				WHERE id = $1 
-				  AND (tenant_id = $2 OR tenant_id = '99e99e99-99e9-49e9-89e9-99e99e99e999')
+				SELECT 1 FROM catalog_node
+				WHERE id = $1
+				  AND (tenant_id = $2 OR tenant_id = (SELECT id FROM public.tenants WHERE gold_copy = true LIMIT 1))
 				  AND tenant_datasource_id = $3
 			)
 		`, req.DriverTableID, tenantID, datasourceID)

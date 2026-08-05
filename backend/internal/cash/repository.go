@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/hondyman/uisce/backend/internal/db"
 	"github.com/hondyman/uisce/backend/internal/goldcopy"
 	"github.com/jmoiron/sqlx"
 	"github.com/shopspring/decimal"
@@ -76,75 +77,71 @@ type CashRepository interface {
 }
 
 type pgCashRepo struct {
-	db           *sqlx.DB
-	survivorship *goldcopy.Survivorship
+	*db.BitemporalRepository[CashBalanceRecord]
+	ledger        *db.BitemporalRepository[CashLedgerEntryRecord]
+	sqlxDB        *sqlx.DB
+	survivorship  *goldcopy.Survivorship
 }
 
-func NewCashRepository(db *sqlx.DB) CashRepository {
+func NewCashRepository(sqlxDB *sqlx.DB) CashRepository {
 	return &pgCashRepo{
-		db:           db,
-		survivorship: goldcopy.NewSurvivorship(defaultCashLedgerRules),
+		BitemporalRepository: db.NewBitemporalRepository[CashBalanceRecord](sqlxDB, "edm.cash_balance_master", "cash_balance_id"),
+		ledger:               db.NewBitemporalRepository[CashLedgerEntryRecord](sqlxDB, "edm.cash_ledger", "cash_ledger_id"),
+		sqlxDB:               sqlxDB,
+		survivorship:         goldcopy.NewSurvivorship(defaultCashLedgerRules),
 	}
 }
 
 func (r *pgCashRepo) ListCashBalances(ctx context.Context, portfolioID *uuid.UUID, startDate, endDate *string) ([]CashBalanceRecord, error) {
-	query := `
-		SELECT * FROM edm.cash_balance_master 
-		WHERE valid_to = 'infinity' AND tenant_id = $1
-	`
-	args := []interface{}{ctx.Value("tenant_id").(uuid.UUID)}
-	argIdx := 2
+	tenantID := ctx.Value("tenant_id").(uuid.UUID)
+	opts := []db.QueryOption{db.WithOrderBy("valuation_date", "DESC")}
 
 	if portfolioID != nil {
-		query += fmt.Sprintf(" AND portfolio_id = $%d", argIdx)
-		args = append(args, *portfolioID)
-		argIdx++
+		opts = append(opts, db.WithFilter("portfolio_id", *portfolioID))
 	}
 	if startDate != nil {
-		query += fmt.Sprintf(" AND valuation_date >= $%d", argIdx)
-		args = append(args, *startDate)
-		argIdx++
+		opts = append(opts, db.WithRangeFilter("valuation_date", ">=", *startDate))
 	}
 	if endDate != nil {
-		query += fmt.Sprintf(" AND valuation_date <= $%d", argIdx)
-		args = append(args, *endDate)
-		argIdx++
+		opts = append(opts, db.WithRangeFilter("valuation_date", "<=", *endDate))
 	}
-	query += " ORDER BY valuation_date DESC"
 
-	var balances []CashBalanceRecord
-	err := r.db.SelectContext(ctx, &balances, query, args...)
-	return balances, err
+	records, err := r.BitemporalRepository.ListCurrent(ctx, tenantID, opts...)
+	if err != nil {
+		return nil, err
+	}
+
+	result := make([]CashBalanceRecord, len(records))
+	for i, rec := range records {
+		result[i] = *rec
+	}
+	return result, nil
 }
 
 func (r *pgCashRepo) ListCashLedger(ctx context.Context, portfolioID *uuid.UUID, startDate, endDate *string) ([]CashLedgerEntryRecord, error) {
-	query := `
-		SELECT * FROM edm.cash_ledger 
-		WHERE valid_to = 'infinity' AND tenant_id = $1
-	`
-	args := []interface{}{ctx.Value("tenant_id").(uuid.UUID)}
-	argIdx := 2
+	tenantID := ctx.Value("tenant_id").(uuid.UUID)
+	opts := []db.QueryOption{db.WithOrderBy("value_date", "DESC")}
 
 	if portfolioID != nil {
-		query += fmt.Sprintf(" AND portfolio_id = $%d", argIdx)
-		args = append(args, *portfolioID)
-		argIdx++
+		opts = append(opts, db.WithFilter("portfolio_id", *portfolioID))
 	}
 	if startDate != nil {
-		query += fmt.Sprintf(" AND value_date >= $%d", argIdx)
-		args = append(args, *startDate)
-		argIdx++
+		opts = append(opts, db.WithRangeFilter("value_date", ">=", *startDate))
 	}
 	if endDate != nil {
-		query += fmt.Sprintf(" AND value_date <= $%d", argIdx)
-		args = append(args, *endDate)
-		argIdx++
+		opts = append(opts, db.WithRangeFilter("value_date", "<=", *endDate))
 	}
-	query += " ORDER BY value_date DESC"
 
-	var ledger []CashLedgerEntryRecord
-	err := r.db.SelectContext(ctx, &ledger, query, args...)
-	return ledger, err
+	records, err := r.ledger.ListCurrent(ctx, tenantID, opts...)
+	if err != nil {
+		return nil, err
+	}
+
+	result := make([]CashLedgerEntryRecord, len(records))
+	for i, rec := range records {
+		result[i] = *rec
+	}
+	return result, nil
 }
 
 func (r *pgCashRepo) UpsertCashLedger(ctx context.Context, l *CashLedgerEntryRecord, sourcePriority []string) (*CashLedgerEntryRecord, error) {
@@ -154,7 +151,7 @@ func (r *pgCashRepo) UpsertCashLedger(ctx context.Context, l *CashLedgerEntryRec
 		AND valid_to = 'infinity' AND tenant_id = $4
 	`
 	var existing []CashLedgerEntryRecord
-	err := r.db.SelectContext(ctx, &existing, clusterQuery,
+	err := r.sqlxDB.SelectContext(ctx, &existing, clusterQuery,
 		l.PortfolioID, l.ValueDate, l.ExternalReference, l.TenantID)
 	if err != nil && err != sql.ErrNoRows {
 		return nil, err
@@ -182,7 +179,7 @@ func (r *pgCashRepo) UpsertCashLedger(ctx context.Context, l *CashLedgerEntryRec
 		}
 		if len(oldIDs) > 0 {
 			for _, id := range oldIDs {
-				_, _ = r.db.ExecContext(ctx, "UPDATE edm.cash_ledger SET valid_to = NOW() WHERE cash_ledger_id = $1", id)
+				_, _ = r.sqlxDB.ExecContext(ctx, "UPDATE edm.cash_ledger SET valid_to = NOW() WHERE cash_ledger_id = $1", id)
 			}
 		}
 	}
@@ -206,7 +203,7 @@ func (r *pgCashRepo) UpsertCashLedger(ctx context.Context, l *CashLedgerEntryRec
 		gold.ValidTo, _ = time.Parse(time.RFC3339, "9999-12-31T23:59:59Z")
 	}
 
-	rows, err := r.db.NamedQueryContext(ctx, insertQuery, gold)
+	rows, err := r.sqlxDB.NamedQueryContext(ctx, insertQuery, gold)
 	if err != nil {
 		return nil, err
 	}
@@ -232,7 +229,7 @@ func (r *pgCashRepo) RunBalanceRollForward(ctx context.Context, portfolioID uuid
 		ORDER BY valuation_date DESC LIMIT 1
 	`
 	var openingBalance decimal.Decimal
-	err := r.db.QueryRowxContext(ctx, priorQuery,
+	err := r.sqlxDB.QueryRowxContext(ctx, priorQuery,
 		portfolioID, currency, valuationDate, ctx.Value("tenant_id").(uuid.UUID),
 	).Scan(&openingBalance)
 	if err == sql.ErrNoRows {
@@ -252,7 +249,7 @@ func (r *pgCashRepo) RunBalanceRollForward(ctx context.Context, portfolioID uuid
 		AND valid_to = 'infinity' AND tenant_id = $4
 	`
 	var inflows, outflows, interest, fx decimal.Decimal
-	err = r.db.QueryRowxContext(ctx, ledgerQuery,
+	err = r.sqlxDB.QueryRowxContext(ctx, ledgerQuery,
 		portfolioID, currency, valuationDate, ctx.Value("tenant_id").(uuid.UUID),
 	).Scan(&inflows, &outflows, &interest, &fx)
 	if err != nil {
@@ -270,7 +267,7 @@ func (r *pgCashRepo) RunBalanceRollForward(ctx context.Context, portfolioID uuid
 		RETURNING cash_balance_id
 	`
 	var oldID uuid.UUID
-	err = r.db.QueryRowxContext(ctx, invalidateQuery, portfolioID, currency, valuationDate, ctx.Value("tenant_id").(uuid.UUID)).Scan(&oldID)
+	err = r.sqlxDB.QueryRowxContext(ctx, invalidateQuery, portfolioID, currency, valuationDate, ctx.Value("tenant_id").(uuid.UUID)).Scan(&oldID)
 	// We ignore ErrNoRows, it's fine if there wasn't one
 
 	vDate, _ := time.Parse("2006-01-02", valuationDate)
@@ -305,7 +302,7 @@ func (r *pgCashRepo) RunBalanceRollForward(ctx context.Context, portfolioID uuid
 		) RETURNING *
 	`
 
-	rows, err := r.db.NamedQueryContext(ctx, insertQuery, record)
+	rows, err := r.sqlxDB.NamedQueryContext(ctx, insertQuery, record)
 	if err != nil {
 		return nil, err
 	}
@@ -328,7 +325,7 @@ func (r *pgCashRepo) RecordFlowTrace(ctx context.Context, balanceID uuid.UUID, l
 		INSERT INTO edm.cash_flow_trace (trace_id, cash_balance_id, cash_ledger_id, contribution_amount, contribution_type, tenant_id)
 		VALUES ($1, $2, $3, $4, $5, $6)
 	`
-	_, err := r.db.ExecContext(ctx, query,
+	_, err := r.sqlxDB.ExecContext(ctx, query,
 		uuid.New(), balanceID, ledgerID, amount, contributionType, ctx.Value("tenant_id").(uuid.UUID),
 	)
 	return err
@@ -339,7 +336,7 @@ func (r *pgCashRepo) CreateTransactionCashMapping(ctx context.Context, mapping *
 		INSERT INTO edm.transaction_cash_mapping (mapping_id, transaction_id, cash_ledger_id, mapping_type, amount, currency, value_date, tenant_id)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 	`
-	_, err := r.db.ExecContext(ctx, query,
+	_, err := r.sqlxDB.ExecContext(ctx, query,
 		uuid.New(), mapping.TransactionID, mapping.CashLedgerID, mapping.MappingType,
 		mapping.Amount, mapping.Currency, mapping.ValueDate, mapping.TenantID,
 	)

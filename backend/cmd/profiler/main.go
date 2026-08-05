@@ -25,7 +25,7 @@ import (
 )
 
 type Config struct {
-	AlphaDBURL string `env:"ALPHA_DB_URL" envDefault:"postgres://postgres:postgres@localhost/alpha?sslmode=disable"`
+	AlphaDBURL string `env:"ALPHA_DB_URL"`
 	ServerPort string `env:"SERVER_PORT" envDefault:"8080"`
 }
 
@@ -57,8 +57,12 @@ type Application struct {
 }
 
 func loadConfig() (*Config, error) {
+	alphaDBURL := os.Getenv("ALPHA_DB_URL")
+	if alphaDBURL == "" {
+		panic("ALPHA_DB_URL environment variable is required")
+	}
 	return &Config{
-		AlphaDBURL: getEnv("ALPHA_DB_URL", "postgres://postgres:postgres@localhost/alpha?sslmode=disable"),
+		AlphaDBURL: alphaDBURL,
 		ServerPort: getEnv("SERVER_PORT", "8080"),
 	}, nil
 }

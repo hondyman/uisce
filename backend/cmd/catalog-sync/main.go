@@ -250,13 +250,18 @@ func loadConfig() serviceConfig {
 		return v
 	}
 
+	postgresDSN := get("DATABASE_URL", "")
+	if postgresDSN == "" {
+		log.Fatal("DATABASE_URL environment variable is required")
+	}
+
 	brokers := strings.Split(get("KAFKA_BROKERS", "localhost:9092"), ",")
 	for i := range brokers {
 		brokers[i] = strings.TrimSpace(brokers[i])
 	}
 
 	return serviceConfig{
-		PostgresDSN:       get("POSTGRES_DSN", "host=localhost port=5432 user=postgres password=postgres dbname=alpha sslmode=disable"),
+		PostgresDSN:       postgresDSN,
 		KafkaBrokers:      brokers,
 		KafkaTopic:        get("KAFKA_TOPIC", "catalog-change-events"),
 		SchemaRegistryURL: get("SCHEMA_REGISTRY_URL", "http://localhost:8081"),

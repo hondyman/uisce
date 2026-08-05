@@ -45,12 +45,13 @@ print_status "Creating Docker network..."
 docker network create semlayer-network 2>/dev/null || print_warning "Network already exists"
 
 # Start Alpha database (for metadata and config)
+POSTGRES_PASSWORD="${POSTGRES_PASSWORD:-postgres}"
 print_status "Starting Alpha database container..."
 docker run --name postgres-alpha \
   --network semlayer-network \
   -e POSTGRES_DB=alpha \
   -e POSTGRES_USER=postgres \
-  -e POSTGRES_PASSWORD=postgres \
+  -e POSTGRES_PASSWORD="$POSTGRES_PASSWORD" \
   -p 5432:5432 \
   -d postgres:13
 
@@ -60,7 +61,7 @@ docker run --name postgres-northwind \
   --network semlayer-network \
   -e POSTGRES_DB=northwind \
   -e POSTGRES_USER=postgres \
-  -e POSTGRES_PASSWORD=postgres \
+  -e POSTGRES_PASSWORD="$POSTGRES_PASSWORD" \
   -p 5433:5432 \
   -d postgres:13
 
