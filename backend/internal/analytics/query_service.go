@@ -12,12 +12,11 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/hondyman/uisce/backend/internal/cube"
-	"github.com/hondyman/uisce/backend/internal/cube/dialect"
 	"github.com/hondyman/uisce/backend/internal/cubeengine"
 	"github.com/hondyman/uisce/backend/internal/logging"
 	"github.com/hondyman/uisce/backend/internal/security"
 	"github.com/hondyman/uisce/backend/internal/telemetry/optimize"
-	"github.com/hondyman/uisce/backend/models" // Adjusted for consistency
+	"github.com/hondyman/uisce/backend/models"
 	"github.com/jmoiron/sqlx"
 	"github.com/lib/pq"
 )
@@ -148,8 +147,7 @@ func (s *QueryService) CompileQuery(ctx context.Context, secCtx security.Context
 		return nil, fmt.Errorf("failed to build query from view: %w", err)
 	}
 
-	engine := cubeengine.NewEngine(catalog, s.db.DB, s.optService, dialect.Postgres{})
-	d := dialect.Postgres{}
+	engine := cubeengine.NewEngine(catalog, s.db.DB, s.optService)
 
 	// --- RLS Injection ---
 	policies := []security.RLSPolicy{security.OrdersPolicy}
@@ -165,7 +163,7 @@ func (s *QueryService) CompileQuery(ctx context.Context, secCtx security.Context
 	}
 
 	// Assuming the engine has a `Compile` method that returns EmittedSQL without execution.
-	emittedSQL, err := engine.Compile(ctx, engineReq, d)
+	emittedSQL, err := engine.Compile(ctx, engineReq)
 	if err != nil {
 		return nil, fmt.Errorf("query compilation failed: %w", err)
 	}
@@ -219,8 +217,7 @@ func (s *QueryService) ExecuteQuery(ctx context.Context, secCtx security.Context
 	limitWithProbe := limit + 1
 	engineReq.Limit = &limitWithProbe
 
-	engine := cubeengine.NewEngine(catalog, s.db.DB, s.optService, dialect.Postgres{})
-	d := dialect.Postgres{}
+	engine := cubeengine.NewEngine(catalog, s.db.DB, s.optService)
 
 	// --- RLS Injection ---
 	policies := []security.RLSPolicy{security.OrdersPolicy}
@@ -235,7 +232,7 @@ func (s *QueryService) ExecuteQuery(ctx context.Context, secCtx security.Context
 		}
 	}
 
-	emittedSQL, err := engine.Compile(ctx, engineReq, d)
+	emittedSQL, err := engine.Compile(ctx, engineReq)
 	if err != nil {
 		return nil, fmt.Errorf("query compilation failed: %w", err)
 	}
