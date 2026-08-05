@@ -16,7 +16,7 @@ type SemanticAdapter struct {
 }
 
 // NewSemanticAdapter creates a new adapter
-func NewSemanticAdapter(db *sqlx.DB) *SemanticAdapter {
+func NewSemanticAdapter(db *sqlx.DB, semanticSvc interface{}) *SemanticAdapter {
 	return &SemanticAdapter{db: db}
 }
 

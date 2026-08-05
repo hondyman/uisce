@@ -77,3 +77,5 @@ func NewError(message string) *Error {
 func (e *Error) Error() string {
 	return e.Message
 }
+
+var placeholderUserID = "00000000-0000-0000-0000-000000000000"
