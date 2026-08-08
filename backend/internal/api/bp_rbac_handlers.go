@@ -9,6 +9,8 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/jmoiron/sqlx"
+
+	"github.com/hondyman/uisce/backend/internal/handlers"
 )
 
 // ============================================================================
@@ -17,11 +19,12 @@ import (
 // ============================================================================
 
 type RBACHandlers struct {
-	db *sqlx.DB
+	db           *sqlx.DB
+	securityDeps handlers.SecurityContextDeps
 }
 
-func NewRBACHandlers(db *sqlx.DB) *RBACHandlers {
-	return &RBACHandlers{db: db}
+func NewRBACHandlers(db *sqlx.DB, securityDeps handlers.SecurityContextDeps) *RBACHandlers {
+	return &RBACHandlers{db: db, securityDeps: securityDeps}
 }
 
 func (h *RBACHandlers) RegisterRoutes(r chi.Router) {
@@ -94,16 +97,16 @@ type Role struct {
 }
 
 func (h *RBACHandlers) listRoles(w http.ResponseWriter, r *http.Request) {
-	tenantID := getSecureTenantID(r)
-	datasourceID := r.URL.Query().Get("datasource_id")
-
-	if tenantID == "" || datasourceID == "" {
-		http.Error(w, "tenant_id and datasource_id required", http.StatusBadRequest)
+	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
+	if err != nil {
+		http.Error(w, "Unauthorized: "+err.Error(), http.StatusUnauthorized)
 		return
 	}
+	tenantID := secCtx.TenantID
+	datasourceID := secCtx.DatasourceID
 
 	var roles []Role
-	err := h.db.Select(&roles, `
+	err = h.db.Select(&roles, `
 		SELECT * FROM bp_roles
 		WHERE tenant_id = $1 AND datasource_id = $2 AND is_active = true
 		ORDER BY role_level, role_name
@@ -118,13 +121,13 @@ func (h *RBACHandlers) listRoles(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *RBACHandlers) createRole(w http.ResponseWriter, r *http.Request) {
-	tenantID := getSecureTenantID(r)
-	datasourceID := r.URL.Query().Get("datasource_id")
-
-	if tenantID == "" || datasourceID == "" {
-		http.Error(w, "tenant_id and datasource_id required", http.StatusBadRequest)
+	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
+	if err != nil {
+		http.Error(w, "Unauthorized: "+err.Error(), http.StatusUnauthorized)
 		return
 	}
+	tenantID := secCtx.TenantID
+	datasourceID := secCtx.DatasourceID
 
 	var req struct {
 		RoleKey     string   `json:"role_key"`
@@ -141,7 +144,7 @@ func (h *RBACHandlers) createRole(w http.ResponseWriter, r *http.Request) {
 
 	// Create role
 	var roleID string
-	err := h.db.QueryRow(`
+	err = h.db.QueryRow(`
 		INSERT INTO bp_roles (tenant_id, datasource_id, role_key, role_name, description, role_type, role_level)
 		VALUES ($1, $2, $3, $4, $5, 'custom', $6)
 		RETURNING id
@@ -236,12 +239,12 @@ func (h *RBACHandlers) deleteRole(w http.ResponseWriter, r *http.Request) {
 // ============================================================================
 
 func (h *RBACHandlers) listPermissions(w http.ResponseWriter, r *http.Request) {
-	tenantID := getSecureTenantID(r)
-
-	if tenantID == "" {
-		http.Error(w, "tenant_id required", http.StatusBadRequest)
+	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
+	if err != nil {
+		http.Error(w, "Unauthorized: "+err.Error(), http.StatusUnauthorized)
 		return
 	}
+	tenantID := secCtx.TenantID
 
 	var permissions []map[string]interface{}
 	rows, err := h.db.Query(`
@@ -279,13 +282,13 @@ func (h *RBACHandlers) listPermissions(w http.ResponseWriter, r *http.Request) {
 
 func (h *RBACHandlers) getUserPermissions(w http.ResponseWriter, r *http.Request) {
 	userID := chi.URLParam(r, "userId")
-	tenantID := getSecureTenantID(r)
-	datasourceID := r.URL.Query().Get("datasource_id")
-
-	if tenantID == "" || datasourceID == "" {
-		http.Error(w, "tenant_id and datasource_id required", http.StatusBadRequest)
+	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
+	if err != nil {
+		http.Error(w, "Unauthorized: "+err.Error(), http.StatusUnauthorized)
 		return
 	}
+	tenantID := secCtx.TenantID
+	datasourceID := secCtx.DatasourceID
 
 	var permissions []map[string]string
 	rows, err := h.db.Query(`
@@ -358,8 +361,6 @@ func (h *RBACHandlers) assignRoleToUser(w http.ResponseWriter, r *http.Request) 
 
 	var req struct {
 		UserID       string  `json:"user_id"`
-		TenantID     string  `json:"tenant_id"`
-		DatasourceID string  `json:"datasource_id"`
 		ScopeType    *string `json:"scope_type"`
 		ScopeID      *string `json:"scope_id"`
 		ExpiresAt    *string `json:"expires_at"`
@@ -370,24 +371,19 @@ func (h *RBACHandlers) assignRoleToUser(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	// Allow tenant_id and datasource_id from query params if not in body
-	if req.TenantID == "" {
-		req.TenantID = getSecureTenantID(r)
-	}
-	if req.DatasourceID == "" {
-		req.DatasourceID = r.URL.Query().Get("datasource_id")
-	}
-
-	if req.TenantID == "" || req.DatasourceID == "" {
-		http.Error(w, "tenant_id and datasource_id required", http.StatusBadRequest)
+	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
+	if err != nil {
+		http.Error(w, "Unauthorized: "+err.Error(), http.StatusUnauthorized)
 		return
 	}
+	tenantID := secCtx.TenantID
+	datasourceID := secCtx.DatasourceID
 
-	_, err := h.db.Exec(`
+	_, err = h.db.Exec(`
 		INSERT INTO bp_user_roles (user_id, role_id, tenant_id, datasource_id, scope_type, scope_id, expires_at)
 		VALUES ($1, $2, $3, $4, $5, $6, $7)
 		ON CONFLICT (user_id, role_id, tenant_id, datasource_id, scope_type, scope_id) DO NOTHING
-	`, req.UserID, roleID, req.TenantID, req.DatasourceID, req.ScopeType, req.ScopeID, req.ExpiresAt)
+	`, req.UserID, roleID, tenantID, datasourceID, req.ScopeType, req.ScopeID, req.ExpiresAt)
 
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Failed to assign role: %v", err), http.StatusInternalServerError)
@@ -417,13 +413,13 @@ func (h *RBACHandlers) unassignRoleFromUser(w http.ResponseWriter, r *http.Reque
 
 func (h *RBACHandlers) getUserRoles(w http.ResponseWriter, r *http.Request) {
 	userID := chi.URLParam(r, "userId")
-	tenantID := getSecureTenantID(r)
-	datasourceID := r.URL.Query().Get("datasource_id")
-
-	if tenantID == "" || datasourceID == "" {
-		http.Error(w, "tenant_id and datasource_id required", http.StatusBadRequest)
+	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
+	if err != nil {
+		http.Error(w, "Unauthorized: "+err.Error(), http.StatusUnauthorized)
 		return
 	}
+	tenantID := secCtx.TenantID
+	datasourceID := secCtx.DatasourceID
 
 	var roles []map[string]interface{}
 	rows, err := h.db.Query(`
@@ -477,13 +473,13 @@ func (h *RBACHandlers) getUserRoles(w http.ResponseWriter, r *http.Request) {
 
 func (h *RBACHandlers) getRoleUsers(w http.ResponseWriter, r *http.Request) {
 	roleID := chi.URLParam(r, "roleId")
-	tenantID := getSecureTenantID(r)
-	datasourceID := r.URL.Query().Get("datasource_id")
-
-	if tenantID == "" || datasourceID == "" {
-		http.Error(w, "tenant_id and datasource_id required", http.StatusBadRequest)
+	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
+	if err != nil {
+		http.Error(w, "Unauthorized: "+err.Error(), http.StatusUnauthorized)
 		return
 	}
+	tenantID := secCtx.TenantID
+	datasourceID := secCtx.DatasourceID
 
 	var users []map[string]interface{}
 	// Join bp_user_roles with users table to get details
@@ -536,13 +532,13 @@ func (h *RBACHandlers) getRoleUsers(w http.ResponseWriter, r *http.Request) {
 // ============================================================================
 
 func (h *RBACHandlers) listFieldPermissions(w http.ResponseWriter, r *http.Request) {
-	tenantID := getSecureTenantID(r)
-	datasourceID := r.URL.Query().Get("datasource_id")
-
-	if tenantID == "" || datasourceID == "" {
-		http.Error(w, "tenant_id and datasource_id required", http.StatusBadRequest)
+	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
+	if err != nil {
+		http.Error(w, "Unauthorized: "+err.Error(), http.StatusUnauthorized)
 		return
 	}
+	tenantID := secCtx.TenantID
+	datasourceID := secCtx.DatasourceID
 
 	var fieldPerms []map[string]interface{}
 
@@ -554,7 +550,7 @@ func (h *RBACHandlers) listFieldPermissions(w http.ResponseWriter, r *http.Reque
 	`
 	args := []interface{}{tenantID, datasourceID}
 
-	// Optional role_id filter
+	// Optional role_id filter (not a security boundary)
 	roleID := r.URL.Query().Get("role_id")
 	if roleID != "" {
 		query += " AND fp.role_id = $3"
@@ -594,8 +590,6 @@ func (h *RBACHandlers) listFieldPermissions(w http.ResponseWriter, r *http.Reque
 
 func (h *RBACHandlers) createFieldPermission(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		TenantID        string  `json:"tenant_id"`
-		DatasourceID    string  `json:"datasource_id"`
 		RoleID          string  `json:"role_id"`
 		ResourceType    string  `json:"resource_type"`
 		ResourceID      *string `json:"resource_id"`
@@ -608,12 +602,20 @@ func (h *RBACHandlers) createFieldPermission(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
+	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
+	if err != nil {
+		http.Error(w, "Unauthorized: "+err.Error(), http.StatusUnauthorized)
+		return
+	}
+	tenantID := secCtx.TenantID
+	datasourceID := secCtx.DatasourceID
+
 	var id string
-	err := h.db.QueryRow(`
+	err = h.db.QueryRow(`
 		INSERT INTO bp_field_permissions (tenant_id, datasource_id, role_id, resource_type, resource_id, field_name, permission_level)
 		VALUES ($1, $2, $3, $4, $5, $6, $7)
 		RETURNING id
-	`, req.TenantID, req.DatasourceID, req.RoleID, req.ResourceType, req.ResourceID, req.FieldName, req.PermissionLevel).Scan(&id)
+	`, tenantID, datasourceID, req.RoleID, req.ResourceType, req.ResourceID, req.FieldName, req.PermissionLevel).Scan(&id)
 
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Failed to create field permission: %v", err), http.StatusInternalServerError)
@@ -627,13 +629,13 @@ func (h *RBACHandlers) getUserFieldPermissions(w http.ResponseWriter, r *http.Re
 	userID := chi.URLParam(r, "userId")
 	resourceType := chi.URLParam(r, "resourceType")
 	resourceID := chi.URLParam(r, "resourceId")
-	tenantID := getSecureTenantID(r)
-	datasourceID := r.URL.Query().Get("datasource_id")
-
-	if tenantID == "" || datasourceID == "" {
-		http.Error(w, "tenant_id and datasource_id required", http.StatusBadRequest)
+	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
+	if err != nil {
+		http.Error(w, "Unauthorized: "+err.Error(), http.StatusUnauthorized)
 		return
 	}
+	tenantID := secCtx.TenantID
+	datasourceID := secCtx.DatasourceID
 
 	var fieldPerms []map[string]string
 	rows, err := h.db.Query(`
@@ -646,8 +648,8 @@ func (h *RBACHandlers) getUserFieldPermissions(w http.ResponseWriter, r *http.Re
 		  AND fp.resource_type = $4
 		  AND (fp.resource_id IS NULL OR fp.resource_id = $5)
 		  AND ur.is_active = true
-		ORDER BY fp.field_name, 
-		  CASE fp.permission_level 
+		ORDER BY fp.field_name,
+		  CASE fp.permission_level
 		    WHEN 'write' THEN 1
 		    WHEN 'read' THEN 2
 		    WHEN 'mask' THEN 3
@@ -683,13 +685,13 @@ func (h *RBACHandlers) getUserFieldPermissions(w http.ResponseWriter, r *http.Re
 // ============================================================================
 
 func (h *RBACHandlers) listDelegations(w http.ResponseWriter, r *http.Request) {
-	tenantID := getSecureTenantID(r)
-	datasourceID := r.URL.Query().Get("datasource_id")
-
-	if tenantID == "" || datasourceID == "" {
-		http.Error(w, "tenant_id and datasource_id required", http.StatusBadRequest)
+	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
+	if err != nil {
+		http.Error(w, "Unauthorized: "+err.Error(), http.StatusUnauthorized)
 		return
 	}
+	tenantID := secCtx.TenantID
+	datasourceID := secCtx.DatasourceID
 
 	var delegations []map[string]interface{}
 	rows, err := h.db.Query(`
@@ -738,8 +740,6 @@ func (h *RBACHandlers) listDelegations(w http.ResponseWriter, r *http.Request) {
 
 func (h *RBACHandlers) createDelegation(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		TenantID       string  `json:"tenant_id"`
-		DatasourceID   string  `json:"datasource_id"`
 		DelegatorID    string  `json:"delegator_user_id"`
 		DelegateID     string  `json:"delegate_user_id"`
 		DelegationType string  `json:"delegation_type"`
@@ -755,15 +755,23 @@ func (h *RBACHandlers) createDelegation(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
+	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
+	if err != nil {
+		http.Error(w, "Unauthorized: "+err.Error(), http.StatusUnauthorized)
+		return
+	}
+	tenantID := secCtx.TenantID
+	datasourceID := secCtx.DatasourceID
+
 	var id string
-	err := h.db.QueryRow(`
+	err = h.db.QueryRow(`
 		INSERT INTO bp_approval_delegations (
 			tenant_id, datasource_id, delegator_user_id, delegate_user_id,
 			delegation_type, resource_type, resource_id, start_date, end_date, reason
 		)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 		RETURNING id
-	`, req.TenantID, req.DatasourceID, req.DelegatorID, req.DelegateID,
+	`, tenantID, datasourceID, req.DelegatorID, req.DelegateID,
 		req.DelegationType, req.ResourceType, req.ResourceID, req.StartDate, req.EndDate, req.Reason).Scan(&id)
 
 	if err != nil {
@@ -874,13 +882,13 @@ func (h *RBACHandlers) logDelegationUsage(w http.ResponseWriter, r *http.Request
 // ============================================================================
 
 func (h *RBACHandlers) listTeams(w http.ResponseWriter, r *http.Request) {
-	tenantID := getSecureTenantID(r)
-	datasourceID := r.URL.Query().Get("datasource_id")
-
-	if tenantID == "" || datasourceID == "" {
-		http.Error(w, "tenant_id and datasource_id required", http.StatusBadRequest)
+	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
+	if err != nil {
+		http.Error(w, "Unauthorized: "+err.Error(), http.StatusUnauthorized)
 		return
 	}
+	tenantID := secCtx.TenantID
+	datasourceID := secCtx.DatasourceID
 
 	rows, err := h.db.Query(`
 		SELECT id, team_key, team_name, description, team_type, is_active
@@ -920,13 +928,11 @@ func (h *RBACHandlers) listTeams(w http.ResponseWriter, r *http.Request) {
 
 func (h *RBACHandlers) createTeam(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		TenantID     string  `json:"tenant_id"`
-		DatasourceID string  `json:"datasource_id"`
-		TeamKey      string  `json:"team_key"`
-		TeamName     string  `json:"team_name"`
-		Description  string  `json:"description"`
-		TeamType     string  `json:"team_type"`
-		ManagerID    *string `json:"manager_user_id"`
+		TeamKey     string  `json:"team_key"`
+		TeamName    string  `json:"team_name"`
+		Description string  `json:"description"`
+		TeamType    string  `json:"team_type"`
+		ManagerID   *string `json:"manager_user_id"`
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -934,12 +940,20 @@ func (h *RBACHandlers) createTeam(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
+	if err != nil {
+		http.Error(w, "Unauthorized: "+err.Error(), http.StatusUnauthorized)
+		return
+	}
+	tenantID := secCtx.TenantID
+	datasourceID := secCtx.DatasourceID
+
 	var id string
-	err := h.db.QueryRow(`
+	err = h.db.QueryRow(`
 		INSERT INTO bp_teams (tenant_id, datasource_id, team_key, team_name, description, team_type, manager_user_id)
 		VALUES ($1, $2, $3, $4, $5, $6, $7)
 		RETURNING id
-	`, req.TenantID, req.DatasourceID, req.TeamKey, req.TeamName, req.Description, req.TeamType, req.ManagerID).Scan(&id)
+	`, tenantID, datasourceID, req.TeamKey, req.TeamName, req.Description, req.TeamType, req.ManagerID).Scan(&id)
 
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Failed to create team: %v", err), http.StatusInternalServerError)
@@ -1031,14 +1045,14 @@ func (h *RBACHandlers) getTeamMembers(w http.ResponseWriter, r *http.Request) {
 // ============================================================================
 
 func (h *RBACHandlers) listPermissionAudit(w http.ResponseWriter, r *http.Request) {
-	tenantID := getSecureTenantID(r)
-	datasourceID := r.URL.Query().Get("datasource_id")
-	limit := r.URL.Query().Get("limit")
-
-	if tenantID == "" || datasourceID == "" {
-		http.Error(w, "tenant_id and datasource_id required", http.StatusBadRequest)
+	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
+	if err != nil {
+		http.Error(w, "Unauthorized: "+err.Error(), http.StatusUnauthorized)
 		return
 	}
+	tenantID := secCtx.TenantID
+	datasourceID := secCtx.DatasourceID
+	limit := r.URL.Query().Get("limit")
 
 	if limit == "" {
 		limit = "100"

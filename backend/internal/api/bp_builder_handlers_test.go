@@ -12,6 +12,8 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/jmoiron/sqlx"
 	"github.com/stretchr/testify/require"
+
+	"github.com/hondyman/uisce/backend/internal/handlers"
 )
 
 func setupBPBuilderTest(t *testing.T) (*BPBuilderHandlers, sqlmock.Sqlmock, func()) {
@@ -20,7 +22,7 @@ func setupBPBuilderTest(t *testing.T) (*BPBuilderHandlers, sqlmock.Sqlmock, func
 	require.NoError(t, err)
 
 	sqlxDB := sqlx.NewDb(db, "sqlmock")
-	handler := NewBPBuilderHandlers(sqlxDB)
+	handler := NewBPBuilderHandlers(sqlxDB, handlers.SecurityContextDeps{})
 
 	cleanup := func() {
 		_ = sqlxDB.Close()

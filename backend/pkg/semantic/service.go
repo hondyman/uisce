@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"log"
 
+	"github.com/hondyman/uisce/libs/db/queries"
 	"github.com/jmoiron/sqlx"
 )
 
@@ -21,21 +22,11 @@ func NewService(db *sqlx.DB) *Service {
 
 // CreateCube creates a new cube
 func (s *Service) CreateCube(ctx context.Context, cube *Cube) error {
-	query := `
-		INSERT INTO semantic_cubes_v2 (
-			tenant_id, name, display_name, description, sql, 
-			refresh_key, pre_aggregations, joins, metadata, status, created_by,
-			source_cube_id, is_system
-		) VALUES (
-			$1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13
-		) RETURNING id, created_at, updated_at
-	`
-
 	preAggsJSON, _ := json.Marshal(cube.PreAggregations)
 	joinsJSON, _ := json.Marshal(cube.Joins)
 	metadataJSON, _ := json.Marshal(cube.Metadata)
 
-	err := s.db.QueryRowContext(ctx, query,
+	err := s.db.QueryRowContext(ctx, queries.InsertCube,
 		cube.TenantID, cube.Name, cube.DisplayName, cube.Description, cube.SQL,
 		cube.RefreshKey, preAggsJSON, joinsJSON, metadataJSON, cube.Status, cube.CreatedBy,
 		cube.SourceCubeID, cube.IsSystem,
@@ -51,20 +42,11 @@ func (s *Service) UpdateCube(ctx context.Context, cube *Cube) error {
 	//   where: {id: {_eq: $id}, tenant_id: {_eq: $tenant_id}}
 	//   _set: {display_name, description, sql, refresh_key, pre_aggregations, joins, metadata, status, updated_at, source_cube_id, is_system}
 	// ) { affected_rows }}
-	query := `
-		UPDATE semantic_cubes_v2 SET
-			display_name = $1, description = $2, sql = $3, 
-			refresh_key = $4, pre_aggregations = $5, joins = $6, 
-			metadata = $7, status = $8, updated_at = now(),
-			source_cube_id = $9, is_system = $10
-		WHERE id = $11 AND tenant_id = $12
-	`
-
 	preAggsJSON, _ := json.Marshal(cube.PreAggregations)
 	joinsJSON, _ := json.Marshal(cube.Joins)
 	metadataJSON, _ := json.Marshal(cube.Metadata)
 
-	result, err := s.db.ExecContext(ctx, query,
+	result, err := s.db.ExecContext(ctx, queries.UpdateCube,
 		cube.DisplayName, cube.Description, cube.SQL,
 		cube.RefreshKey, preAggsJSON, joinsJSON, metadataJSON, cube.Status,
 		cube.SourceCubeID, cube.IsSystem,
@@ -96,17 +78,9 @@ func (s *Service) GetCube(ctx context.Context, tenantID, name string) (*Cube, er
 
 	// Load from database
 	cube := &Cube{}
-	query := `
-		SELECT id, tenant_id, name, display_name, description, sql,
-		       refresh_key, pre_aggregations, joins, metadata, status, version,
-		       created_by, created_at, updated_at, source_cube_id, is_system
-		FROM semantic_cubes_v2
-		WHERE tenant_id = $1 AND name = $2 AND status != 'deleted'
-	`
-
 	var preAggsJSON, joinsJSON, metadataJSON []byte
 	var sourceCubeID *string
-	err = s.db.QueryRowContext(ctx, query, tenantID, name).Scan(
+	err = s.db.QueryRowContext(ctx, queries.GetCubeByName, tenantID, name).Scan(
 		&cube.ID, &cube.TenantID, &cube.Name, &cube.DisplayName, &cube.Description, &cube.SQL,
 		&cube.RefreshKey, &preAggsJSON, &joinsJSON, &metadataJSON, &cube.Status, &cube.Version,
 		&cube.CreatedBy, &cube.CreatedAt, &cube.UpdatedAt, &sourceCubeID, &cube.IsSystem,
@@ -141,17 +115,9 @@ func (s *Service) GetCube(ctx context.Context, tenantID, name string) (*Cube, er
 // GetCubeByID retrieves a cube by ID (internal helper for inheritance)
 func (s *Service) GetCubeByID(ctx context.Context, id string) (*Cube, error) {
 	cube := &Cube{}
-	query := `
-		SELECT id, tenant_id, name, display_name, description, sql,
-		       refresh_key, pre_aggregations, joins, metadata, status, version,
-		       created_by, created_at, updated_at, source_cube_id, is_system
-		FROM semantic_cubes_v2
-		WHERE id = $1
-	`
-
 	var preAggsJSON, joinsJSON, metadataJSON []byte
 	var sourceCubeID *string
-	err := s.db.QueryRowContext(ctx, query, id).Scan(
+	err := s.db.QueryRowContext(ctx, queries.GetCubeByID, id).Scan(
 		&cube.ID, &cube.TenantID, &cube.Name, &cube.DisplayName, &cube.Description, &cube.SQL,
 		&cube.RefreshKey, &preAggsJSON, &joinsJSON, &metadataJSON, &cube.Status, &cube.Version,
 		&cube.CreatedBy, &cube.CreatedAt, &cube.UpdatedAt, &sourceCubeID, &cube.IsSystem,
@@ -250,15 +216,8 @@ func (s *Service) ListCubes(ctx context.Context, tenantID string) ([]*Cube, erro
 	//   where: {tenant_id: {_eq: $tenant_id}, status: {_neq: "deleted"}}
 	//   order_by: {name: asc}
 	// ) { id tenant_id name display_name description sql refresh_key status version created_at updated_at }}
-	query := `
-		SELECT id, tenant_id, name, display_name, description, sql,
-		       refresh_key, status, version, created_at, updated_at
-		FROM semantic_cubes_v2
-		WHERE tenant_id = $1 AND status != 'deleted'
-		ORDER BY name
-	`
 
-	rows, err := s.db.QueryContext(ctx, query, tenantID)
+	rows, err := s.db.QueryContext(ctx, queries.ListCubes, tenantID)
 	if err != nil {
 		return nil, err
 	}
@@ -282,17 +241,9 @@ func (s *Service) ListCubes(ctx context.Context, tenantID string) ([]*Cube, erro
 
 // CreateDimension creates a new dimension
 func (s *Service) CreateDimension(ctx context.Context, dim *Dimension) error {
-	query := `
-		INSERT INTO semantic_dimensions_v2 (
-			cube_id, name, display_name, type, sql, format,
-			case_sensitive, primary_key, shown, metadata
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-		RETURNING id, created_at
-	`
-
 	metadataJSON, _ := json.Marshal(dim.Metadata)
 
-	return s.db.QueryRowContext(ctx, query,
+	return s.db.QueryRowContext(ctx, queries.InsertDimension,
 		dim.CubeID, dim.Name, dim.DisplayName, dim.Type, dim.SQL, dim.Format,
 		dim.CaseSensitive, dim.PrimaryKey, dim.Shown, metadataJSON,
 	).Scan(&dim.ID, &dim.CreatedAt)
@@ -305,15 +256,8 @@ func (s *Service) GetDimensions(ctx context.Context, cubeID string) ([]Dimension
 	//   where: {cube_id: {_eq: $cube_id}}
 	//   order_by: {name: asc}
 	// ) { id cube_id name display_name type sql format case_sensitive primary_key shown metadata created_at }}
-	query := `
-		SELECT id, cube_id, name, display_name, type, sql, format,
-		       case_sensitive, primary_key, shown, metadata, created_at
-		FROM semantic_dimensions_v2
-		WHERE cube_id = $1
-		ORDER BY name
-	`
 
-	rows, err := s.db.QueryContext(ctx, query, cubeID)
+	rows, err := s.db.QueryContext(ctx, queries.GetDimensions, cubeID)
 	if err != nil {
 		return nil, err
 	}
@@ -339,19 +283,11 @@ func (s *Service) GetDimensions(ctx context.Context, cubeID string) ([]Dimension
 
 // CreateMeasure creates a new measure
 func (s *Service) CreateMeasure(ctx context.Context, measure *Measure) error {
-	query := `
-		INSERT INTO semantic_measures_v2 (
-			cube_id, name, display_name, type, sql, format,
-			rolling_window, drill_members, filters, metadata
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-		RETURNING id, created_at
-	`
-
 	drillMembersJSON, _ := json.Marshal(measure.DrillMembers)
 	filtersJSON, _ := json.Marshal(measure.Filters)
 	metadataJSON, _ := json.Marshal(measure.Metadata)
 
-	return s.db.QueryRowContext(ctx, query,
+	return s.db.QueryRowContext(ctx, queries.InsertMeasure,
 		measure.CubeID, measure.Name, measure.DisplayName, measure.Type, measure.SQL, measure.Format,
 		measure.RollingWindow, drillMembersJSON, filtersJSON, metadataJSON,
 	).Scan(&measure.ID, &measure.CreatedAt)
@@ -364,15 +300,8 @@ func (s *Service) GetMeasures(ctx context.Context, cubeID string) ([]Measure, er
 	//   where: {cube_id: {_eq: $cube_id}}
 	//   order_by: {name: asc}
 	// ) { id cube_id name display_name type sql format rolling_window drill_members filters metadata created_at }}
-	query := `
-		SELECT id, cube_id, name, display_name, type, sql, format,
-		       rolling_window, drill_members, filters, metadata, created_at
-		FROM semantic_measures_v2
-		WHERE cube_id = $1
-		ORDER BY name
-	`
 
-	rows, err := s.db.QueryContext(ctx, query, cubeID)
+	rows, err := s.db.QueryContext(ctx, queries.GetMeasures, cubeID)
 	if err != nil {
 		return nil, err
 	}
@@ -434,23 +363,12 @@ func (s *Service) cacheCube(ctx context.Context, tenantID, cubeName string, cube
 	//   object: {tenant_id, cube_name, metadata, dimensions, measures, pre_aggregations}
 	//   on_conflict: {constraint: semantic_cube_cache_pkey, update_columns: [metadata, dimensions, measures, pre_aggregations, cached_at]}
 	// ) { tenant_id cube_name }}
-	query := `
-		INSERT INTO semantic_cube_cache (tenant_id, cube_name, metadata, dimensions, measures, pre_aggregations)
-		VALUES ($1, $2, $3, $4, $5, $6)
-		ON CONFLICT (tenant_id, cube_name) DO UPDATE
-		SET metadata = EXCLUDED.metadata,
-		    dimensions = EXCLUDED.dimensions,
-		    measures = EXCLUDED.measures,
-		    pre_aggregations = EXCLUDED.pre_aggregations,
-		    cached_at = now()
-	`
-
 	metadataJSON, _ := json.Marshal(cube)
 	dimensionsJSON, _ := json.Marshal(cube.Dimensions)
 	measuresJSON, _ := json.Marshal(cube.Measures)
 	preAggsJSON, _ := json.Marshal(cube.PreAggregations)
 
-	_, err := s.db.ExecContext(ctx, query, tenantID, cubeName, metadataJSON, dimensionsJSON, measuresJSON, preAggsJSON)
+	_, err := s.db.ExecContext(ctx, queries.CacheCube, tenantID, cubeName, metadataJSON, dimensionsJSON, measuresJSON, preAggsJSON)
 	if err != nil {
 		log.Printf("Failed to cache cube: %v", err)
 	}
@@ -464,8 +382,7 @@ func (s *Service) InvalidateCubeCache(ctx context.Context, tenantID, cubeName st
 	// mutation { delete_semantic_cube_cache(
 	//   where: {tenant_id: {_eq: $tenant_id}, cube_name: {_eq: $cube_name}}
 	// ) { affected_rows }}
-	query := `DELETE FROM semantic_cube_cache WHERE tenant_id = $1 AND cube_name = $2`
-	_, err := s.db.ExecContext(ctx, query, tenantID, cubeName)
+	_, err := s.db.ExecContext(ctx, queries.InvalidateCubeCache, tenantID, cubeName)
 	return err
 }
 
@@ -478,16 +395,9 @@ func (s *Service) RecordQueryHistory(ctx context.Context, history *QueryHistory)
 	// }
 	//
 	// SQL fallback (kept for backward compatibility):
-	query := `
-		INSERT INTO semantic_query_history_v2 (
-			tenant_id, user_id, cube_name, query, generated_sql,
-			execution_time_ms, result_rows, cache_hit, pre_agg_used, error
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-	`
-
 	queryJSON, _ := json.Marshal(history.Query)
 
-	_, err := s.db.ExecContext(ctx, query,
+	_, err := s.db.ExecContext(ctx, queries.InsertQueryHistory,
 		history.TenantID, history.UserID, history.CubeName, queryJSON, history.GeneratedSQL,
 		history.ExecutionTimeMs, history.ResultRows, history.CacheHit, history.PreAggUsed, history.Error,
 	)
@@ -510,16 +420,8 @@ func (s *Service) GetQueryHistory(ctx context.Context, tenantID string, limit in
 	// }
 	//
 	// SQL fallback (kept for backward compatibility):
-	query := `
-		SELECT id, tenant_id, user_id, cube_name, query, generated_sql,
-		       execution_time_ms, result_rows, cache_hit, pre_agg_used, error, created_at
-		FROM semantic_query_history_v2
-		WHERE tenant_id = $1
-		ORDER BY created_at DESC
-		LIMIT $2
-	`
 
-	rows, err := s.db.QueryContext(ctx, query, tenantID, limit)
+	rows, err := s.db.QueryContext(ctx, queries.GetQueryHistory, tenantID, limit)
 	if err != nil {
 		return nil, err
 	}

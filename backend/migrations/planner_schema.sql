@@ -9,7 +9,7 @@ CREATE SCHEMA IF NOT EXISTS planner;
 CREATE TABLE IF NOT EXISTS planner.planner_decisions (
     id BIGSERIAL PRIMARY KEY,
     plan_id VARCHAR(255) UNIQUE NOT NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMPTZ,
     tenant_id VARCHAR(255) NOT NULL,
     query_type VARCHAR(50) NOT NULL, -- feature|metric|ts|drift|importance|discovery
     semantic_target VARCHAR(255) NOT NULL,
@@ -22,7 +22,7 @@ CREATE TABLE IF NOT EXISTS planner.planner_decisions (
     raw_request JSONB, -- Original QueryRequest
     raw_plan JSONB, -- Serialized QueryPlan
     region_health_snapshot JSONB, -- Region health at decision time
-    executed_at TIMESTAMP,
+    executed_at TIMESTAMPTZ,
     actual_latency_ms FLOAT8,
     actual_cost FLOAT8,
     execution_status VARCHAR(50), -- pending|success|partial|failed
@@ -42,7 +42,7 @@ CREATE INDEX idx_planner_decisions_region ON planner.planner_decisions USING GIN
 -- planner_metrics: Tracks decision accuracy and performance
 CREATE TABLE IF NOT EXISTS planner.planner_metrics (
     id BIGSERIAL PRIMARY KEY,
-    ts TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    ts TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMPTZ,
     query_type VARCHAR(50) NOT NULL,
     plan_type VARCHAR(50) NOT NULL,
     estimated_latency_ms FLOAT8,
@@ -65,7 +65,7 @@ CREATE INDEX idx_planner_metrics_status ON planner.planner_metrics(execution_sta
 CREATE TABLE IF NOT EXISTS planner.region_performance (
     id BIGSERIAL PRIMARY KEY,
     region VARCHAR(50) UNIQUE NOT NULL,
-    last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    last_updated TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMPTZ,
     is_healthy BOOLEAN DEFAULT TRUE,
     latency_ms_p50 FLOAT8,
     latency_ms_p95 FLOAT8,
@@ -101,8 +101,8 @@ CREATE TABLE IF NOT EXISTS planner.feature_planner_config (
     batch_latency_budget_ms INT DEFAULT 30000,
     use_cache_if_stale BOOLEAN DEFAULT FALSE,
     max_cache_staleness VARCHAR(50),
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMPTZ,
+    updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMPTZ,
     
     CONSTRAINT fk_consistency CHECK (default_consistency IN ('strong', 'eventual', 'region_preferred')),
     CONSTRAINT positive_budgets CHECK (

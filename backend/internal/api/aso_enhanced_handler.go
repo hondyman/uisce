@@ -8,6 +8,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/hondyman/uisce/backend/internal/aso"
+	"github.com/hondyman/uisce/backend/internal/handlers"
 )
 
 // ASOEnhancedHandler handles Phase 7 ASO endpoints
@@ -15,6 +16,7 @@ type ASOEnhancedHandler struct {
 	costService    aso.CostAttributionService
 	anomalyService aso.AnomalyDetectionService
 	healingService aso.SelfHealingService
+	securityDeps   handlers.SecurityContextDeps
 }
 
 // NewASOEnhancedHandler creates a new enhanced handler
@@ -22,11 +24,13 @@ func NewASOEnhancedHandler(
 	costService aso.CostAttributionService,
 	anomalyService aso.AnomalyDetectionService,
 	healingService aso.SelfHealingService,
+	securityDeps handlers.SecurityContextDeps,
 ) *ASOEnhancedHandler {
 	return &ASOEnhancedHandler{
 		costService:    costService,
 		anomalyService: anomalyService,
 		healingService: healingService,
+		securityDeps:   securityDeps,
 	}
 }
 
@@ -132,7 +136,11 @@ func (h *ASOEnhancedHandler) GetOptimizationCosts(w http.ResponseWriter, r *http
 
 // GetOpenDriftSignals returns unresolved drift signals
 func (h *ASOEnhancedHandler) GetOpenDriftSignals(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
+	secCtx, ctx, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
+	if err != nil {
+		http.Error(w, "Unauthorized: "+err.Error(), http.StatusUnauthorized)
+		return
+	}
 
 	env := r.URL.Query().Get("env")
 	if env == "" {
@@ -140,8 +148,8 @@ func (h *ASOEnhancedHandler) GetOpenDriftSignals(w http.ResponseWriter, r *http.
 	}
 
 	var tenantID *uuid.UUID
-	if tid := r.URL.Query().Get("tenant_id"); tid != "" {
-		if id, err := uuid.Parse(tid); err == nil {
+	if secCtx.TenantID != "" {
+		if id, err := uuid.Parse(secCtx.TenantID); err == nil {
 			tenantID = &id
 		}
 	}

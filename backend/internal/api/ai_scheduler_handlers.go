@@ -7,6 +7,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 
+	"github.com/hondyman/uisce/backend/internal/handlers"
 	"github.com/hondyman/uisce/backend/internal/scheduler_intelligence/ai"
 )
 
@@ -17,6 +18,7 @@ type AISchedulerHandler struct {
 	predictiveEngine *ai.PredictiveTriggerEngine
 	dependencyHealer *ai.DependencyHealer
 	incidentReporter *ai.IncidentReporter
+	securityDeps     handlers.SecurityContextDeps
 }
 
 // NewAISchedulerHandler creates a new AI scheduler handler
@@ -26,6 +28,7 @@ func NewAISchedulerHandler(
 	pred *ai.PredictiveTriggerEngine,
 	healer *ai.DependencyHealer,
 	reporter *ai.IncidentReporter,
+	securityDeps handlers.SecurityContextDeps,
 ) *AISchedulerHandler {
 	return &AISchedulerHandler{
 		dagGenerator:     dagGen,
@@ -33,6 +36,7 @@ func NewAISchedulerHandler(
 		predictiveEngine: pred,
 		dependencyHealer: healer,
 		incidentReporter: reporter,
+		securityDeps:     securityDeps,
 	}
 }
 
@@ -141,7 +145,13 @@ func (h *AISchedulerHandler) PredictOptimalTrigger(w http.ResponseWriter, r *htt
 
 // GetCapacityWindows returns optimal execution windows
 func (h *AISchedulerHandler) GetCapacityWindows(w http.ResponseWriter, r *http.Request) {
-	tenantID, _ := uuid.Parse(r.URL.Query().Get("tenant_id"))
+	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
+	if err != nil {
+		http.Error(w, "security context initialization failed: "+err.Error(), http.StatusUnauthorized)
+		return
+	}
+
+	tenantID, _ := uuid.Parse(secCtx.TenantID)
 	lookahead := 24 // hours
 
 	windows, err := h.predictiveEngine.PredictCapacityWindow(r.Context(), tenantID, 0, lookahead)
@@ -212,7 +222,13 @@ func (h *AISchedulerHandler) GenerateIncidentReport(w http.ResponseWriter, r *ht
 
 // GetSuggestions returns AI-generated scheduling suggestions
 func (h *AISchedulerHandler) GetSuggestions(w http.ResponseWriter, r *http.Request) {
-	tenantID := r.URL.Query().Get("tenant_id")
+	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
+	if err != nil {
+		http.Error(w, "security context initialization failed: "+err.Error(), http.StatusUnauthorized)
+		return
+	}
+
+	tenantID := secCtx.TenantID
 
 	// In real implementation, would fetch from database
 	suggestions := []map[string]interface{}{

@@ -91,7 +91,7 @@ CREATE TABLE public.app_user (
 	id text NOT NULL,
 	email text NOT NULL,
 	display_name text NULL,
-	created_at timestamp DEFAULT now() NOT NULL,
+	created_at timestamptz DEFAULT now() NOT NULL,
 	is_active bool DEFAULT true NOT NULL,
 	CONSTRAINT app_user_email_key UNIQUE (email),
 	CONSTRAINT app_user_pkey PRIMARY KEY (id)
@@ -467,8 +467,8 @@ update
 
 CREATE TABLE public.explorer_saved_query (
 	id uuid NOT NULL,
-	created_at timestamp DEFAULT now() NOT NULL,
-	updated_at timestamp DEFAULT now() NOT NULL,
+	created_at timestamptz DEFAULT now() NOT NULL,
+	updated_at timestamptz DEFAULT now() NOT NULL,
 	owner_user_id text NOT NULL,
 	owner_tenant_id text NOT NULL,
 	"name" text NOT NULL,
@@ -477,7 +477,7 @@ CREATE TABLE public.explorer_saved_query (
 	view_name text NOT NULL,
 	query jsonb NOT NULL,
 	viz_config jsonb NULL,
-	last_run_at timestamp NULL,
+	last_run_at timestamptz NULL,
 	last_duration_ms int4 NULL,
 	CONSTRAINT explorer_saved_query_pkey PRIMARY KEY (id)
 );
@@ -596,7 +596,7 @@ CREATE TABLE public.model_upgrade_audit (
 	reviewer text NULL,
 	reason text NULL,
 	event_type text NOT NULL,
-	decided_at timestamp DEFAULT now() NOT NULL,
+	decided_at timestamptz DEFAULT now() NOT NULL,
 	CONSTRAINT model_upgrade_audit_event_type_check CHECK ((event_type = ANY (ARRAY['upgrade'::text, 'tuning'::text, 'preagg'::text]))),
 	CONSTRAINT model_upgrade_audit_pkey PRIMARY KEY (id)
 );
@@ -738,14 +738,14 @@ CREATE TABLE public.policies (
 	id uuid DEFAULT gen_random_uuid() NOT NULL,
 	"name" text NOT NULL,
 	rules jsonb NULL,
-	start_date timestamp NULL,
-	end_date timestamp NULL,
+	start_date timestamptz NULL,
+	end_date timestamptz NULL,
 	schedule jsonb NULL,
 	location_rules jsonb NULL,
 	priority int4 DEFAULT 0 NOT NULL,
 	active bool DEFAULT true NOT NULL,
-	created_at timestamp DEFAULT now() NOT NULL,
-	updated_at timestamp DEFAULT now() NOT NULL,
+	created_at timestamptz DEFAULT now() NOT NULL,
+	updated_at timestamptz DEFAULT now() NOT NULL,
 	CONSTRAINT policies_pkey PRIMARY KEY (id)
 );
 CREATE INDEX idx_policies_active_priority ON public.policies USING btree (active, priority DESC) WHERE (active = true);
@@ -1009,7 +1009,7 @@ CREATE TABLE public.rule_config_changelog (
 	"scope" text NOT NULL,
 	reason text NOT NULL,
 	triggered_by text NOT NULL,
-	triggered_at timestamp DEFAULT now() NOT NULL,
+	triggered_at timestamptz DEFAULT now() NOT NULL,
 	CONSTRAINT rule_config_changelog_pkey PRIMARY KEY (id)
 );
 
@@ -1443,7 +1443,7 @@ CREATE TABLE public.asset (
 	"domain" text NOT NULL,
 	certified bool DEFAULT false NOT NULL,
 	sensitivity text DEFAULT 'medium'::text NOT NULL,
-	created_at timestamp DEFAULT now() NOT NULL,
+	created_at timestamptz DEFAULT now() NOT NULL,
 	CONSTRAINT asset_pkey PRIMARY KEY (id),
 	CONSTRAINT asset_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.tenants(id) ON DELETE CASCADE
 );
@@ -1468,8 +1468,8 @@ CREATE TABLE public.broker_apis (
 	broker_id uuid NOT NULL,
 	broker_name varchar(255) NOT NULL,
 	status varchar(50) NOT NULL,
-	created_at timestamp NOT NULL,
-	updated_at timestamp NOT NULL,
+	created_at timestamptz NOT NULL,
+	updated_at timestamptz NOT NULL,
 	CONSTRAINT broker_apis_pkey PRIMARY KEY (id),
 	CONSTRAINT broker_apis_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.tenants(id) ON DELETE CASCADE
 );
@@ -1491,8 +1491,8 @@ CREATE TABLE public.broker_events (
 	event_name varchar(255) NOT NULL,
 	event_description text NULL,
 	"schema" jsonb NULL,
-	created_at timestamp NOT NULL,
-	updated_at timestamp NOT NULL,
+	created_at timestamptz NOT NULL,
+	updated_at timestamptz NOT NULL,
 	CONSTRAINT broker_events_pkey PRIMARY KEY (id),
 	CONSTRAINT broker_events_tenant_id_event_name_key UNIQUE (tenant_id, event_name),
 	CONSTRAINT broker_events_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.tenants(id) ON DELETE CASCADE
@@ -1516,8 +1516,8 @@ CREATE TABLE public.customers (
 	status varchar(50) DEFAULT 'active'::character varying NULL,
 	created_by uuid NOT NULL,
 	updated_by uuid NOT NULL,
-	created_at timestamp NOT NULL,
-	updated_at timestamp NOT NULL,
+	created_at timestamptz NOT NULL,
+	updated_at timestamptz NOT NULL,
 	CONSTRAINT customers_pkey PRIMARY KEY (id),
 	CONSTRAINT customers_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.tenants(id) ON DELETE CASCADE
 );
@@ -1554,8 +1554,8 @@ CREATE TABLE public.event_subscriptions (
 	event_name varchar(255) NOT NULL,
 	callback_url text NOT NULL,
 	status varchar(50) NOT NULL,
-	created_at timestamp NOT NULL,
-	updated_at timestamp NOT NULL,
+	created_at timestamptz NOT NULL,
+	updated_at timestamptz NOT NULL,
 	CONSTRAINT event_subscriptions_pkey PRIMARY KEY (id),
 	CONSTRAINT event_subscriptions_event_id_fkey FOREIGN KEY (event_id) REFERENCES public.broker_events(id) ON DELETE CASCADE,
 	CONSTRAINT event_subscriptions_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.tenants(id) ON DELETE CASCADE
@@ -1831,13 +1831,13 @@ CREATE TABLE public.orders (
 	id uuid NOT NULL,
 	tenant_id uuid NOT NULL,
 	customer_id uuid NOT NULL,
-	order_date timestamp NOT NULL,
+	order_date timestamptz NOT NULL,
 	total_amount numeric(10, 2) NOT NULL,
 	status varchar(50) DEFAULT 'pending'::character varying NULL,
 	created_by uuid NOT NULL,
 	updated_by uuid NOT NULL,
-	created_at timestamp NOT NULL,
-	updated_at timestamp NOT NULL,
+	created_at timestamptz NOT NULL,
+	updated_at timestamptz NOT NULL,
 	CONSTRAINT orders_pkey PRIMARY KEY (id),
 	CONSTRAINT orders_customer_id_fkey FOREIGN KEY (customer_id) REFERENCES public.customers(id) ON DELETE CASCADE,
 	CONSTRAINT orders_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.tenants(id) ON DELETE CASCADE
@@ -2848,8 +2848,8 @@ CREATE TABLE public.metadata_fields (
 	ui_properties jsonb NULL,
 	created_by uuid NOT NULL,
 	updated_by uuid NOT NULL,
-	created_at timestamp NOT NULL,
-	updated_at timestamp NOT NULL,
+	created_at timestamptz NOT NULL,
+	updated_at timestamptz NOT NULL,
 	CONSTRAINT metadata_fields_pkey PRIMARY KEY (id),
 	CONSTRAINT metadata_fields_table_id_name_key UNIQUE (table_id, name),
 	CONSTRAINT metadata_fields_table_id_fkey FOREIGN KEY (table_id) REFERENCES public.metadata_tables(id) ON DELETE CASCADE,
@@ -3193,8 +3193,8 @@ CREATE TABLE public.metadata_events (
 	created_by uuid NOT NULL,
 	updated_by uuid NOT NULL,
 	"version" int4 DEFAULT 1 NOT NULL,
-	created_at timestamp NOT NULL,
-	updated_at timestamp NOT NULL,
+	created_at timestamptz NOT NULL,
+	updated_at timestamptz NOT NULL,
 	CONSTRAINT metadata_events_pkey PRIMARY KEY (id),
 	CONSTRAINT metadata_events_tenant_id_table_id_field_id_event_type_name_key UNIQUE (tenant_id, table_id, field_id, event_type, name),
 	CONSTRAINT metadata_events_field_id_fkey FOREIGN KEY (field_id) REFERENCES public.metadata_fields(id) ON DELETE SET NULL,
@@ -3242,14 +3242,14 @@ CREATE TABLE public.metadata_event_logs (
 	event_id uuid NOT NULL,
 	request_id uuid NOT NULL,
 	user_id uuid NULL,
-	execution_start timestamp NOT NULL,
-	execution_end timestamp NOT NULL,
+	execution_start timestamptz NOT NULL,
+	execution_end timestamptz NOT NULL,
 	duration_ms int4 NOT NULL,
 	status varchar(50) NOT NULL,
 	error_message text NULL,
 	input_data jsonb NULL,
 	output_data jsonb NULL,
-	created_at timestamp NOT NULL,
+	created_at timestamptz NOT NULL,
 	CONSTRAINT metadata_event_logs_pkey PRIMARY KEY (id),
 	CONSTRAINT metadata_event_logs_event_id_fkey FOREIGN KEY (event_id) REFERENCES public.metadata_events(id) ON DELETE CASCADE,
 	CONSTRAINT metadata_event_logs_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.tenants(id) ON DELETE CASCADE
@@ -3269,7 +3269,7 @@ CREATE TABLE public.metadata_event_versions (
 	"version" int4 NOT NULL,
 	"comment" text NULL,
 	created_by uuid NOT NULL,
-	created_at timestamp NOT NULL,
+	created_at timestamptz NOT NULL,
 	CONSTRAINT metadata_event_versions_pkey PRIMARY KEY (id),
 	CONSTRAINT metadata_event_versions_event_id_fkey FOREIGN KEY (event_id) REFERENCES public.metadata_events(id) ON DELETE CASCADE
 );

@@ -6,12 +6,12 @@ import (
 	"fmt"
 	"log"
 	"net/http"
-	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/jmoiron/sqlx"
 
+	"github.com/hondyman/uisce/backend/internal/handlers"
 	"github.com/hondyman/uisce/backend/internal/identity"
 	"github.com/hondyman/uisce/backend/internal/middleware"
 	"github.com/hondyman/uisce/backend/internal/security"
@@ -22,12 +22,14 @@ import (
 // ============================================================================
 
 type DashboardHandler struct {
-	db *sqlx.DB
+	db           *sqlx.DB
+	securityDeps handlers.SecurityContextDeps
 }
 
-func NewDashboardHandler(db *sqlx.DB) *DashboardHandler {
+func NewDashboardHandler(db *sqlx.DB, securityDeps handlers.SecurityContextDeps) *DashboardHandler {
 	return &DashboardHandler{
-		db: db,
+		db:           db,
+		securityDeps: securityDeps,
 	}
 }
 
@@ -163,35 +165,36 @@ type TriggerETLResponse struct {
 func (h *DashboardHandler) GetComplianceMetrics(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	// 1. Verify authentication
+	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusUnauthorized)
+		return
+	}
+
+	tenantID := secCtx.TenantID
+	if tenantID == "" {
+		http.Error(w, "tenant_id required", http.StatusBadRequest)
+		return
+	}
+
 	userID, auth, err := h.verifyAuthentication(r)
 	if err != nil {
 		http.Error(w, "Unauthorized", http.StatusUnauthorized)
 		return
 	}
 
-	// 2. Verify dashboard access permission
 	if !h.hasPermission(auth, "dashboard:read") {
 		h.logSecurityEvent(ctx, userID, "", "dashboard_access_denied", "compliance", "", r.RemoteAddr)
 		http.Error(w, "Forbidden: insufficient permissions", http.StatusForbidden)
 		return
 	}
 
-	// 3. Extract tenant_id
-	tenantID := strings.TrimSpace(r.URL.Query().Get("tenant_id"))
-	if tenantID == "" {
-		http.Error(w, "tenant_id query parameter is required", http.StatusBadRequest)
-		return
-	}
-
-	// 4. Verify tenant access control
 	if !h.verifyTenantAccess(auth, tenantID) {
 		h.logSecurityEvent(ctx, userID, tenantID, "dashboard_cross_tenant_attempt", "compliance", "", r.RemoteAddr)
 		http.Error(w, "Forbidden: access denied to this tenant", http.StatusForbidden)
 		return
 	}
 
-	// 5. Log audit trail
 	h.logSecurityEvent(ctx, userID, tenantID, "dashboard_compliance_accessed", "compliance", "", r.RemoteAddr)
 
 	valuationDate := r.URL.Query().Get("valuation_date")
@@ -245,35 +248,36 @@ func (h *DashboardHandler) GetComplianceMetrics(w http.ResponseWriter, r *http.R
 func (h *DashboardHandler) GetRiskMetrics(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	// 1. Verify authentication
+	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusUnauthorized)
+		return
+	}
+
+	tenantID := secCtx.TenantID
+	if tenantID == "" {
+		http.Error(w, "tenant_id required", http.StatusBadRequest)
+		return
+	}
+
 	userID, auth, err := h.verifyAuthentication(r)
 	if err != nil {
 		http.Error(w, "Unauthorized", http.StatusUnauthorized)
 		return
 	}
 
-	// 2. Verify dashboard access permission
 	if !h.hasPermission(auth, "dashboard:read") {
 		h.logSecurityEvent(ctx, userID, "", "dashboard_access_denied", "risk", "", r.RemoteAddr)
 		http.Error(w, "Forbidden: insufficient permissions", http.StatusForbidden)
 		return
 	}
 
-	// 3. Extract tenant_id
-	tenantID := strings.TrimSpace(r.URL.Query().Get("tenant_id"))
-	if tenantID == "" {
-		http.Error(w, "tenant_id query parameter is required", http.StatusBadRequest)
-		return
-	}
-
-	// 4. Verify tenant access control
 	if !h.verifyTenantAccess(auth, tenantID) {
 		h.logSecurityEvent(ctx, userID, tenantID, "dashboard_cross_tenant_attempt", "risk", "", r.RemoteAddr)
 		http.Error(w, "Forbidden: access denied to this tenant", http.StatusForbidden)
 		return
 	}
 
-	// 5. Log audit trail
 	h.logSecurityEvent(ctx, userID, tenantID, "dashboard_risk_accessed", "risk", "", r.RemoteAddr)
 
 	valuationDate := r.URL.Query().Get("valuation_date")
@@ -330,28 +334,30 @@ func (h *DashboardHandler) GetRiskMetrics(w http.ResponseWriter, r *http.Request
 func (h *DashboardHandler) GetSparklines(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	// 1. Verify authentication
+	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusUnauthorized)
+		return
+	}
+
+	tenantID := secCtx.TenantID
+	if tenantID == "" {
+		http.Error(w, "tenant_id required", http.StatusBadRequest)
+		return
+	}
+
 	userID, auth, err := h.verifyAuthentication(r)
 	if err != nil {
 		http.Error(w, "Unauthorized", http.StatusUnauthorized)
 		return
 	}
 
-	// 2. Verify dashboard access permission
 	if !h.hasPermission(auth, "dashboard:read") {
 		h.logSecurityEvent(ctx, userID, "", "dashboard_access_denied", "sparklines", "", r.RemoteAddr)
 		http.Error(w, "Forbidden: insufficient permissions", http.StatusForbidden)
 		return
 	}
 
-	// 3. Extract and validate tenant_id
-	tenantID := strings.TrimSpace(r.URL.Query().Get("tenant_id"))
-	if tenantID == "" {
-		http.Error(w, "tenant_id query parameter is required", http.StatusBadRequest)
-		return
-	}
-
-	// 4. Extract and validate time_range parameter
 	timeRange := r.URL.Query().Get("time_range")
 	validatedTimeRange, err := h.validateTimeRange(timeRange)
 	if err != nil {
@@ -359,14 +365,12 @@ func (h *DashboardHandler) GetSparklines(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	// 5. Verify tenant access control
 	if !h.verifyTenantAccess(auth, tenantID) {
 		h.logSecurityEvent(ctx, userID, tenantID, "dashboard_cross_tenant_attempt", "sparklines", "", r.RemoteAddr)
 		http.Error(w, "Forbidden: access denied to this tenant", http.StatusForbidden)
 		return
 	}
 
-	// 6. Log audit trail
 	h.logSecurityEvent(ctx, userID, tenantID, fmt.Sprintf("dashboard_sparklines_accessed_range=%s", validatedTimeRange), "sparklines", "", r.RemoteAddr)
 
 	valuationDate := r.URL.Query().Get("valuation_date")
@@ -405,35 +409,36 @@ func (h *DashboardHandler) GetSparklines(w http.ResponseWriter, r *http.Request)
 func (h *DashboardHandler) GetETLHealth(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	// 1. Verify authentication
+	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusUnauthorized)
+		return
+	}
+
+	tenantID := secCtx.TenantID
+	if tenantID == "" {
+		http.Error(w, "tenant_id required", http.StatusBadRequest)
+		return
+	}
+
 	userID, auth, err := h.verifyAuthentication(r)
 	if err != nil {
 		http.Error(w, "Unauthorized", http.StatusUnauthorized)
 		return
 	}
 
-	// 2. Verify dashboard access permission
 	if !h.hasPermission(auth, "dashboard:read") {
 		h.logSecurityEvent(ctx, userID, "", "dashboard_access_denied", "etl-health", "", r.RemoteAddr)
 		http.Error(w, "Forbidden: insufficient permissions", http.StatusForbidden)
 		return
 	}
 
-	// 3. Extract tenant_id
-	tenantID := strings.TrimSpace(r.URL.Query().Get("tenant_id"))
-	if tenantID == "" {
-		http.Error(w, "tenant_id query parameter is required", http.StatusBadRequest)
-		return
-	}
-
-	// 4. Verify tenant access control
 	if !h.verifyTenantAccess(auth, tenantID) {
 		h.logSecurityEvent(ctx, userID, tenantID, "dashboard_cross_tenant_attempt", "etl-health", "", r.RemoteAddr)
 		http.Error(w, "Forbidden: access denied to this tenant", http.StatusForbidden)
 		return
 	}
 
-	// 5. Log audit trail
 	h.logSecurityEvent(ctx, userID, tenantID, "dashboard_etl_health_accessed", "etl-health", "", r.RemoteAddr)
 
 	endTime := time.Now().Add(-5 * time.Minute).UTC().Format(time.RFC3339)
@@ -465,28 +470,30 @@ func (h *DashboardHandler) GetETLHealth(w http.ResponseWriter, r *http.Request) 
 func (h *DashboardHandler) GetAlerts(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	// 1. Verify authentication
+	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusUnauthorized)
+		return
+	}
+
+	tenantID := secCtx.TenantID
+	if tenantID == "" {
+		http.Error(w, "tenant_id required", http.StatusBadRequest)
+		return
+	}
+
 	userID, auth, err := h.verifyAuthentication(r)
 	if err != nil {
 		http.Error(w, "Unauthorized", http.StatusUnauthorized)
 		return
 	}
 
-	// 2. Verify dashboard access permission
 	if !h.hasPermission(auth, "dashboard:read") {
 		h.logSecurityEvent(ctx, userID, "", "dashboard_access_denied", "alerts", "", r.RemoteAddr)
 		http.Error(w, "Forbidden: insufficient permissions", http.StatusForbidden)
 		return
 	}
 
-	// 3. Extract and validate tenant_id
-	tenantID := strings.TrimSpace(r.URL.Query().Get("tenant_id"))
-	if tenantID == "" {
-		http.Error(w, "tenant_id query parameter is required", http.StatusBadRequest)
-		return
-	}
-
-	// 4. Extract and validate severity parameter
 	severity := r.URL.Query().Get("severity")
 	validatedSeverity, err := h.validateSeverity(severity)
 	if err != nil {
@@ -494,14 +501,12 @@ func (h *DashboardHandler) GetAlerts(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 5. Verify tenant access control
 	if !h.verifyTenantAccess(auth, tenantID) {
 		h.logSecurityEvent(ctx, userID, tenantID, "dashboard_cross_tenant_attempt", "alerts", "", r.RemoteAddr)
 		http.Error(w, "Forbidden: access denied to this tenant", http.StatusForbidden)
 		return
 	}
 
-	// 6. Log audit trail
 	action := "dashboard_alerts_accessed"
 	if validatedSeverity != "" {
 		action = fmt.Sprintf("dashboard_alerts_accessed_severity=%s", validatedSeverity)
@@ -564,9 +569,15 @@ func (h *DashboardHandler) GetAlerts(w http.ResponseWriter, r *http.Request) {
 // TriggerETL triggers an ETL run asynchronously
 // POST /api/dashboard/etl/trigger?tenant_id=xxx
 func (h *DashboardHandler) TriggerETL(w http.ResponseWriter, r *http.Request) {
-	tenantID := r.URL.Query().Get("tenant_id")
+	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusUnauthorized)
+		return
+	}
+
+	tenantID := secCtx.TenantID
 	if tenantID == "" {
-		http.Error(w, "tenant_id query parameter is required", http.StatusBadRequest)
+		http.Error(w, "tenant_id required", http.StatusBadRequest)
 		return
 	}
 

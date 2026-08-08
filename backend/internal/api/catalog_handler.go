@@ -5,17 +5,19 @@ import (
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/hondyman/uisce/backend/internal/handlers"
 	"github.com/hondyman/uisce/backend/internal/logging"
 	"github.com/hondyman/uisce/backend/internal/metadata"
 	"github.com/hondyman/uisce/libs/jwt-middleware"
 )
 
 type CatalogHandler struct {
-	boService *metadata.BusinessObjectService
+	boService     *metadata.BusinessObjectService
+	securityDeps  handlers.SecurityContextDeps
 }
 
-func NewCatalogHandler(boService *metadata.BusinessObjectService) *CatalogHandler {
-	return &CatalogHandler{boService: boService}
+func NewCatalogHandler(boService *metadata.BusinessObjectService, securityDeps handlers.SecurityContextDeps) *CatalogHandler {
+	return &CatalogHandler{boService: boService, securityDeps: securityDeps}
 }
 
 func (h *CatalogHandler) RegisterRoutes(r chi.Router) {
@@ -36,20 +38,19 @@ func (h *CatalogHandler) handleGetNodes(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	tenantID := claims.TenantID
-	// Some clients might pass tenant_id in query
 	if tenantID == "" {
-		tenantID = r.URL.Query().Get("tenant_id")
-	}
-
-	if tenantID == "" {
-		http.Error(w, "X-Tenant-ID header or tenant_id query param is required", http.StatusBadRequest)
+		http.Error(w, "X-Tenant-ID header is required", http.StatusBadRequest)
 		return
 	}
 
-	// Datasource ID can be passed as X-Tenant-Datasource-ID or datasource_id query
 	datasourceID := r.Header.Get("X-Tenant-Datasource-ID")
 	if datasourceID == "" {
-		datasourceID = r.URL.Query().Get("datasource_id")
+		secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
+		if err != nil {
+			http.Error(w, "X-Tenant-Datasource-ID header is required", http.StatusBadRequest)
+			return
+		}
+		datasourceID = secCtx.DatasourceID
 	}
 
 	nodeType := r.URL.Query().Get("type")

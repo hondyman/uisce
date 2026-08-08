@@ -102,27 +102,62 @@ services:
     networks:
       - audit-network
 
-  # =============================================================================
-  # Iceberg REST Catalog - Metadata Service for Iceberg Tables
-  # =============================================================================
-  iceberg-rest:
-    image: tabulario/iceberg-rest:0.8.0
-    container_name: audit-iceberg-rest
+  # ===========================================================
+  # Lakekeeper — Rust-native Iceberg REST Catalog
+  # ===========================================================
+  lakekeeper-db:
+    image: postgres:17
+    container_name: audit-lakekeeper-db
     environment:
-      CATALOG_WAREHOUSE: s3a://iceberg/warehouse/
-      CATALOG_IO__IMPL: org.apache.iceberg.aws.s3.S3FileIO
-      CATALOG_S3_ENDPOINT: http://minio:9000
-      CATALOG_S3_ACCESS__KEY__ID: minioadmin
-      CATALOG_S3_SECRET__ACCESS__KEY: minioadmin
-      CATALOG_S3_PATH__STYLE__ACCESS: true
+      POSTGRES_PASSWORD: postgres
+    volumes:
+      - lakekeeper_pgdata:/var/lib/postgresql/data
+    networks:
+      - audit-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -p 5432 -d postgres"]
+      interval: 2s
+      timeout: 10s
+      retries: 10
+
+  lakekeeper-migrate:
+    image: quay.io/lakekeeper/catalog:latest-main
+    container_name: audit-lakekeeper-migrate
+    restart: "no"
+    environment:
+      - LAKEKEEPER__PG_DATABASE_URL_READ=postgresql://postgres:postgres@lakekeeper-db:5432/postgres
+      - LAKEKEEPER__PG_DATABASE_URL_WRITE=postgresql://postgres:postgres@lakekeeper-db:5432/postgres
+      - LAKEKEEPER__PG_ENCRYPTION_KEY=change-this-to-a-very-long-random-secret-string-in-here
+      - RUST_LOG=info
+    command: ["migrate"]
+    networks:
+      - audit-network
+    depends_on:
+      lakekeeper-db:
+        condition: service_healthy
+
+  lakekeeper:
+    image: quay.io/lakekeeper/catalog:latest-main
+    container_name: audit-lakekeeper
+    environment:
+      - LAKEKEEPER__PG_DATABASE_URL_READ=postgresql://postgres:postgres@lakekeeper-db:5432/postgres
+      - LAKEKEEPER__PG_DATABASE_URL_WRITE=postgresql://postgres:postgres@lakekeeper-db:5432/postgres
+      - LAKEKEEPER__PG_ENCRYPTION_KEY=change-this-to-a-very-long-random-secret-string-in-here
+      - LAKEKEEPER__BASE_URI=http://localhost:8181
+      - LAKEKEEPER__ENABLE_DEFAULT_PROJECT=true
+      - RUST_LOG=info
+    command: ["serve"]
     ports:
       - "8181:8181"
     networks:
       - audit-network
     depends_on:
-      - minio
+      lakekeeper-migrate:
+        condition: service_completed_successfully
+      lakekeeper-db:
+        condition: service_healthy
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8181/v1/config"]
+      test: ["CMD-SHELL", "curl -sf http://localhost:8181/v1/config || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -141,7 +176,7 @@ services:
     networks:
       - audit-network
     depends_on:
-      - iceberg-rest
+      - lakekeeper
       - minio
     environment:
       - TRINO_ENVIRONMENT=development
@@ -161,7 +196,7 @@ services:
     container_name: audit-sink
     environment:
       KAFKA_BROKERS: redpanda:9092
-      ICEBERG_CATALOG_URI: http://iceberg-rest:8181
+      ICEBERG_CATALOG_URI: http://lakekeeper:8181
       S3_ENDPOINT: http://minio:9000
       S3_ACCESS_KEY: minioadmin
       S3_SECRET_KEY: minioadmin
@@ -172,7 +207,7 @@ services:
     depends_on:
       redpanda:
         condition: service_healthy
-      iceberg-rest:
+      lakekeeper:
         condition: service_healthy
       minio:
         condition: service_started
@@ -184,4 +219,5 @@ networks:
 
 volumes:
   minio-data:
+  lakekeeper_pgdata:
     driver: local

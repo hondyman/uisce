@@ -5,6 +5,7 @@ import (
 	"errors"
 
 	"github.com/google/uuid"
+	"github.com/hondyman/uisce/libs/db/queries"
 )
 
 type contextKey string
@@ -26,6 +27,6 @@ func TenantFromContext(ctx context.Context) (uuid.UUID, error) {
 }
 
 func (p *Pool) SetTenantSetting(ctx context.Context, tenantID uuid.UUID) error {
-	_, err := p.Exec(ctx, "SELECT set_config('app.current_tenant', $1, false)", tenantID.String())
+	_, err := p.Exec(ctx, queries.SetTenantGUC, tenantID.String())
 	return err
 }

@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"log"
 	"time"
+
+	"github.com/hondyman/uisce/libs/db/queries"
 )
 
 // FeedbackCollector manages the feedback loop for continuous learning
@@ -77,17 +79,7 @@ func (fc *FeedbackCollector) processOutcomes(ctx context.Context) error {
 	//     state_features
 	//   }
 	// }
-	rows, err := fc.db.QueryContext(ctx, `
-		SELECT 
-			workflow_id, routing_decision_id, branch_id, success,
-			completion_time_minutes, expected_time_minutes,
-			customer_satisfaction_score, first_time_resolution,
-			cost_incurred, error_count, state_features
-		FROM workflow_outcomes
-		WHERE processed_for_training = false
-		  AND completed_at >= NOW() - INTERVAL '1 hour'
-		LIMIT $1
-	`, fc.batchSize)
+	rows, err := fc.db.QueryContext(ctx, queries.SelectUnprocessedOutcomes, fc.batchSize)
 
 	if err != nil {
 		return err
@@ -140,15 +132,9 @@ func (fc *FeedbackCollector) processOutcomes(ctx context.Context) error {
 		//     }
 		//   ) {
 		//     affected_rows
-		//   }
 		// }
-		_, err = fc.db.ExecContext(ctx, `
-			UPDATE workflow_outcomes
-			SET processed_for_training = true,
-				rl_reward = $1,
-				updated_at = NOW()
-			WHERE workflow_id = $2
-		`, reward, outcome.WorkflowID)
+		// }
+		_, err = fc.db.ExecContext(ctx, queries.UpdateOutcomeProcessed, reward, outcome.WorkflowID)
 
 		if err != nil {
 			log.Printf("Error updating outcome: %v", err)
@@ -190,15 +176,9 @@ func (fc *FeedbackCollector) StoreRoutingDecision(ctx context.Context, decision 
 	//     "model_scores": {...},
 	//     "execution_strategy": "ensemble",
 	//     "created_at": "now()"
-	//   }
 	// }
-	_, err := fc.db.ExecContext(ctx, `
-		INSERT INTO routing_decisions (
-			decision_id, workflow_id, tenant_id, datasource_id,
-			selected_branch_id, confidence, reasoning, model_scores,
-			execution_strategy, created_at
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW())
-	`,
+	// }
+	_, err := fc.db.ExecContext(ctx, queries.InsertRoutingDecision,
 		decision.DecisionID, req.WorkflowID, req.TenantID, req.DatasourceID,
 		decision.SelectedBranchID, decision.Confidence,
 		string(reasoningJSON), string(modelScoresJSON),
@@ -216,17 +196,9 @@ func (fc *FeedbackCollector) StoreWorkflowOutcome(ctx context.Context, outcome W
 	//   insert_workflow_outcomes_one(object: $object) {
 	//     workflow_id
 	//     routing_decision_id
-	//   }
 	// }
-	_, err := fc.db.ExecContext(ctx, `
-		INSERT INTO workflow_outcomes (
-			workflow_id, routing_decision_id, branch_id, success,
-			completion_time_minutes, expected_time_minutes,
-			customer_satisfaction_score, first_time_resolution,
-			cost_incurred, error_count, state_features,
-			created_at, processed_for_training
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, NOW(), false)
-	`,
+	// }
+	_, err := fc.db.ExecContext(ctx, queries.InsertWorkflowOutcome,
 		outcome.WorkflowID, outcome.RoutingDecisionID, outcome.BranchID,
 		outcome.Success, outcome.CompletionTime, outcome.ExpectedTime,
 		outcome.CustomerSatisfactionScore, outcome.FirstTimeResolution,
@@ -252,15 +224,9 @@ func (fc *FeedbackCollector) GetDecisionHistory(ctx context.Context, workflowID 
 	//     reasoning
 	//     model_scores
 	//     created_at
-	//   }
 	// }
-	rows, err := fc.db.QueryContext(ctx, `
-		SELECT decision_id, selected_branch_id, confidence, reasoning, model_scores, created_at
-		FROM routing_decisions
-		WHERE workflow_id = $1
-		ORDER BY created_at DESC
-		LIMIT $2
-	`, workflowID, limit)
+	// }
+	rows, err := fc.db.QueryContext(ctx, queries.GetDecisionHistory, workflowID, limit)
 
 	if err != nil {
 		return nil, err
@@ -299,16 +265,7 @@ func (fc *FeedbackCollector) GetOutcomeStats(ctx context.Context, tenantID strin
 	var avgSatisfaction float64
 	var avgCost float64
 
-	row := fc.db.QueryRowContext(ctx, `
-		SELECT 
-			COUNT(*) as total,
-			COUNT(CASE WHEN success THEN 1 END) as success,
-			COALESCE(AVG(customer_satisfaction_score), 0) as avg_satisfaction,
-			COALESCE(AVG(cost_incurred), 0) as avg_cost
-		FROM workflow_outcomes
-		WHERE tenant_id = $1
-		  AND created_at >= NOW() - INTERVAL '1 hour' * $2
-	`, tenantID, hoursBack)
+	row := fc.db.QueryRowContext(ctx, queries.GetOutcomeStats, tenantID, hoursBack)
 
 	err := row.Scan(&totalCount, &successCount, &avgSatisfaction, &avgCost)
 	if err != nil {

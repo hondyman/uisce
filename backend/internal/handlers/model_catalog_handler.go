@@ -23,13 +23,15 @@ var (
 
 // ModelCatalogHandler handles HTTP requests for the model catalog
 type ModelCatalogHandler struct {
-	db *sql.DB
+	db           *sql.DB
+	securityDeps SecurityContextDeps
 }
 
 // NewModelCatalogHandler creates a new model catalog handler
-func NewModelCatalogHandler(db *sql.DB) *ModelCatalogHandler {
+func NewModelCatalogHandler(db *sql.DB, securityDeps SecurityContextDeps) *ModelCatalogHandler {
 	return &ModelCatalogHandler{
-		db: db,
+		db:           db,
+		securityDeps: securityDeps,
 	}
 }
 
@@ -286,8 +288,11 @@ func (h *ModelCatalogHandler) CreateCustomModel(w http.ResponseWriter, r *http.R
 func (h *ModelCatalogHandler) CloneModel(w http.ResponseWriter, r *http.Request) {
 	logger := logging.GetLogger().Sugar()
 
-	tenantIDStr := getSecureTenantID(r)
-	datasourceIDStr := r.URL.Query().Get("datasource_id")
+	secCtx, _, err := SecurityContextFromRequest(r, "", "", h.securityDeps)
+	if err != nil {
+		h.respondJSON(w, http.StatusUnauthorized, map[string]string{"error": "Unauthorized"})
+		return
+	}
 
 	var bodyReq CloneModelRequest
 	if err := json.NewDecoder(r.Body).Decode(&bodyReq); err != nil {
@@ -296,15 +301,15 @@ func (h *ModelCatalogHandler) CloneModel(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	tenantID, err := uuid.Parse(tenantIDStr)
+	tenantID, err := uuid.Parse(secCtx.TenantID)
 	if err != nil {
-		logger.Warnf("Invalid tenant ID: %s", tenantIDStr)
+		logger.Warnf("Invalid tenant ID: %s", secCtx.TenantID)
 		h.respondJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid tenant ID"})
 		return
 	}
-	datasourceID, err := uuid.Parse(datasourceIDStr)
+	datasourceID, err := uuid.Parse(secCtx.DatasourceID)
 	if err != nil {
-		logger.Warnf("Invalid datasource ID: %s", datasourceIDStr)
+		logger.Warnf("Invalid datasource ID: %s", secCtx.DatasourceID)
 		h.respondJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid datasource ID"})
 		return
 	}
@@ -353,8 +358,11 @@ func (h *ModelCatalogHandler) CloneModel(w http.ResponseWriter, r *http.Request)
 func (h *ModelCatalogHandler) GetModel(w http.ResponseWriter, r *http.Request) {
 	logger := logging.GetLogger().Sugar()
 
-	tenantIDStr := getSecureTenantID(r)
-	datasourceIDStr := r.URL.Query().Get("datasource_id")
+	secCtx, _, err := SecurityContextFromRequest(r, "", "", h.securityDeps)
+	if err != nil {
+		h.respondJSON(w, http.StatusUnauthorized, map[string]string{"error": "Unauthorized"})
+		return
+	}
 	modelID := chi.URLParam(r, "model_id")
 
 	modelUUID, err := uuid.Parse(modelID)
@@ -364,16 +372,16 @@ func (h *ModelCatalogHandler) GetModel(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	tenantID, err := uuid.Parse(tenantIDStr)
+	tenantID, err := uuid.Parse(secCtx.TenantID)
 	if err != nil {
-		logger.Warnf("Invalid tenant ID: %s", tenantIDStr)
+		logger.Warnf("Invalid tenant ID: %s", secCtx.TenantID)
 		h.respondJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid tenant ID"})
 		return
 	}
 
-	datasourceID, err := uuid.Parse(datasourceIDStr)
+	datasourceID, err := uuid.Parse(secCtx.DatasourceID)
 	if err != nil {
-		logger.Warnf("Invalid datasource ID: %s", datasourceIDStr)
+		logger.Warnf("Invalid datasource ID: %s", secCtx.DatasourceID)
 		h.respondJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid datasource ID"})
 		return
 	}
@@ -416,8 +424,11 @@ func (h *ModelCatalogHandler) GetModel(w http.ResponseWriter, r *http.Request) {
 func (h *ModelCatalogHandler) UpdateModel(w http.ResponseWriter, r *http.Request) {
 	logger := logging.GetLogger().Sugar()
 
-	tenantIDStr := getSecureTenantID(r)
-	datasourceIDStr := r.URL.Query().Get("datasource_id")
+	secCtx, _, err := SecurityContextFromRequest(r, "", "", h.securityDeps)
+	if err != nil {
+		h.respondJSON(w, http.StatusUnauthorized, map[string]string{"error": "Unauthorized"})
+		return
+	}
 	modelIDStr := chi.URLParam(r, "model_id")
 
 	var bodyReq UpdateModelRequest
@@ -434,16 +445,16 @@ func (h *ModelCatalogHandler) UpdateModel(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	tenantID, err := uuid.Parse(tenantIDStr)
+	tenantID, err := uuid.Parse(secCtx.TenantID)
 	if err != nil {
-		logger.Warnf("Invalid tenant ID: %s", tenantIDStr)
+		logger.Warnf("Invalid tenant ID: %s", secCtx.TenantID)
 		h.respondJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid tenant ID"})
 		return
 	}
 
-	datasourceID, err := uuid.Parse(datasourceIDStr)
+	datasourceID, err := uuid.Parse(secCtx.DatasourceID)
 	if err != nil {
-		logger.Warnf("Invalid datasource ID: %s", datasourceIDStr)
+		logger.Warnf("Invalid datasource ID: %s", secCtx.DatasourceID)
 		h.respondJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid datasource ID"})
 		return
 	}
@@ -570,11 +581,14 @@ func (h *ModelCatalogHandler) UpdateModel(w http.ResponseWriter, r *http.Request
 func (h *ModelCatalogHandler) DeleteModel(w http.ResponseWriter, r *http.Request) {
 	logger := logging.GetLogger().Sugar()
 
-	tenantIDStr := getSecureTenantID(r)
-	datasourceIDStr := r.URL.Query().Get("datasource_id")
+	secCtx, _, err := SecurityContextFromRequest(r, "", "", h.securityDeps)
+	if err != nil {
+		h.respondJSON(w, http.StatusUnauthorized, map[string]string{"error": "Unauthorized"})
+		return
+	}
 	modelID := chi.URLParam(r, "model_id")
 
-	logger.Infof("DeleteModel called with tenantID=%s, datasourceID=%s, modelID=%s", tenantIDStr, datasourceIDStr, modelID)
+	logger.Infof("DeleteModel called with tenantID=%s, datasourceID=%s, modelID=%s", secCtx.TenantID, secCtx.DatasourceID, modelID)
 
 	modelUUID, err := uuid.Parse(modelID)
 	if err != nil {
@@ -583,16 +597,16 @@ func (h *ModelCatalogHandler) DeleteModel(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	tenantID, err := uuid.Parse(tenantIDStr)
+	tenantID, err := uuid.Parse(secCtx.TenantID)
 	if err != nil {
-		logger.Errorf("Invalid tenant ID: %s, error: %v", tenantIDStr, err)
+		logger.Errorf("Invalid tenant ID: %s, error: %v", secCtx.TenantID, err)
 		h.respondJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid tenant ID"})
 		return
 	}
 
-	datasourceID, err := uuid.Parse(datasourceIDStr)
+	datasourceID, err := uuid.Parse(secCtx.DatasourceID)
 	if err != nil {
-		logger.Errorf("Invalid datasource ID: %s, error: %v", datasourceIDStr, err)
+		logger.Errorf("Invalid datasource ID: %s, error: %v", secCtx.DatasourceID, err)
 		h.respondJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid datasource ID"})
 		return
 	}
@@ -784,12 +798,15 @@ func (h *ModelCatalogHandler) DeleteModel(w http.ResponseWriter, r *http.Request
 }
 
 // CreateGeneratedModel creates a new core model from generated Cube.js JSON
-// POST /api/models/generated?tenant_id=<uuid>&datasource_id=<uuid>
+// POST /api/models/generated
 func (h *ModelCatalogHandler) CreateGeneratedModel(w http.ResponseWriter, r *http.Request) {
 	logger := logging.GetLogger().Sugar()
 
-	tenantIDStr := getSecureTenantID(r)
-	datasourceIDStr := r.URL.Query().Get("datasource_id")
+	secCtx, _, err := SecurityContextFromRequest(r, "", "", h.securityDeps)
+	if err != nil {
+		h.respondJSON(w, http.StatusUnauthorized, map[string]string{"error": "Unauthorized"})
+		return
+	}
 
 	var bodyReq CreateGeneratedModelRequest
 	if err := json.NewDecoder(r.Body).Decode(&bodyReq); err != nil {
@@ -798,14 +815,14 @@ func (h *ModelCatalogHandler) CreateGeneratedModel(w http.ResponseWriter, r *htt
 		return
 	}
 
-	tenantID, err := uuid.Parse(tenantIDStr)
+	tenantID, err := uuid.Parse(secCtx.TenantID)
 	if err != nil {
 		logger.Warnf("Invalid tenant_id: %v", err)
 		h.respondJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid tenant_id"})
 		return
 	}
 
-	datasourceID, err := uuid.Parse(datasourceIDStr)
+	datasourceID, err := uuid.Parse(secCtx.DatasourceID)
 	if err != nil {
 		logger.Warnf("Invalid datasource_id: %v", err)
 		h.respondJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid datasource_id"})

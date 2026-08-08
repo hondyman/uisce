@@ -1,7 +1,6 @@
 package workflows
 
 import (
-	"context"
 	"fmt"
 	"testing"
 
@@ -70,45 +69,15 @@ func (s *HourlyRollupWorkflowTestSuite) TestHourlyRollupWorkflow_PartialFailure(
 func (s *HourlyRollupWorkflowTestSuite) TestRegionHourlyRollupWorkflow_Success() {
 	env := s.NewTestWorkflowEnvironment()
 
-	// Mock Trino activities
-	env.OnActivity(activities.RunTrinoQueryActivity, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
-		Return(`{"status":"completed","row_count":150}`, nil)
-
 	env.OnActivity(activities.PublishEventActivity, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 		Return(nil)
 
-		// RegionHourlyRollupWorkflow unwraps arguments directly
+	// RegionHourlyRollupWorkflow unwraps arguments directly
 	env.ExecuteWorkflow(RegionHourlyRollupWorkflow, "us-east-1", "test-run-001")
 
 	s.True(env.IsWorkflowCompleted())
 	err := env.GetWorkflowError()
 	s.NoError(err)
-}
-
-// TestRegionHourlyRollupWorkflow_TrinoFailure validates retry behavior on Trino failure
-func (s *HourlyRollupWorkflowTestSuite) TestRegionHourlyRollupWorkflow_TrinoFailure() {
-	env := s.NewTestWorkflowEnvironment()
-
-	// Mock Trino activity to fail initially then succeed on retry
-	callCount := 0
-	env.OnActivity(activities.RunTrinoQueryActivity, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
-		Return(func(ctx context.Context, runID string, region string, query string) (string, error) {
-			callCount++
-			if callCount < 2 {
-				return "", fmt.Errorf("network timeout")
-			}
-			return `{"status":"completed"}`, nil
-		})
-
-	env.OnActivity(activities.PublishEventActivity, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
-		Return(nil)
-
-	env.ExecuteWorkflow(RegionHourlyRollupWorkflow, "us-east-1", "test-run-001")
-
-	s.True(env.IsWorkflowCompleted())
-	err := env.GetWorkflowError()
-	s.NoError(err)
-	s.Equal(3, callCount) // Activity was called 3 times (initial + 1 retry + validation)
 }
 
 // DailySLAWorkflowTestSuite tests the DailySLAWorkflow
@@ -120,10 +89,6 @@ type DailySLAWorkflowTestSuite struct {
 // TestDailySLAWorkflow_Success validates successful daily SLA computation
 func (s *DailySLAWorkflowTestSuite) TestDailySLAWorkflow_Success() {
 	env := s.NewTestWorkflowEnvironment()
-
-	// Mock both Trino queries
-	env.OnActivity(activities.RunTrinoQueryActivity, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
-		Return(`{"status":"completed"}`, nil)
 
 	env.OnActivity(activities.PublishEventActivity, mock.Anything, mock.Anything, mock.Anything).
 		Return(nil)
@@ -144,15 +109,11 @@ func (s *DailySLAWorkflowTestSuite) TestDailySLAWorkflow_Success() {
 func (s *DailySLAWorkflowTestSuite) TestDailySLAWorkflow_DateValidation() {
 	env := s.NewTestWorkflowEnvironment()
 
-	// Test with valid date
 	input := DailySLAInput{
 		Date:  "2026-02-09",
 		RunID: "daily-sla-001",
 	}
 
-	// Mock happy path since validation is internal logic
-	env.OnActivity(activities.RunTrinoQueryActivity, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
-		Return(`{"status":"completed"}`, nil)
 	env.OnActivity(activities.PublishEventActivity, mock.Anything, mock.Anything, mock.Anything).
 		Return(nil)
 

@@ -12,30 +12,32 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
-	"github.com/hondyman/uisce/backend/internal/identity"
 	"github.com/hondyman/uisce/backend/internal/lineage"
 	"github.com/hondyman/uisce/backend/internal/models"
 	"github.com/hondyman/uisce/backend/pkg/governance"
 	"github.com/jmoiron/sqlx"
-	"github.com/hondyman/uisce/libs/jwt-middleware"
+
+	"github.com/hondyman/uisce/backend/internal/handlers"
 )
 
 // GlossaryHandler handles glossary-related API requests
 type GlossaryHandler struct {
-	db          *sql.DB
-	dbx         *sqlx.DB
-	governance  *governance.GovernanceEngine
-	lineageRepo lineage.LineageRepository
+	db           *sql.DB
+	dbx          *sqlx.DB
+	governance   *governance.GovernanceEngine
+	lineageRepo  lineage.LineageRepository
+	securityDeps handlers.SecurityContextDeps
 }
 
 // NewGlossaryHandler creates a new glossary handler
-func NewGlossaryHandler(db *sql.DB, lineageRepo lineage.LineageRepository) *GlossaryHandler {
+func NewGlossaryHandler(db *sql.DB, lineageRepo lineage.LineageRepository, securityDeps handlers.SecurityContextDeps) *GlossaryHandler {
 	dbx := sqlx.NewDb(db, "postgres")
 	return &GlossaryHandler{
-		db:          db,
-		dbx:         dbx,
-		governance:  governance.NewGovernanceEngine(dbx),
-		lineageRepo: lineageRepo,
+		db:           db,
+		dbx:          dbx,
+		governance:   governance.NewGovernanceEngine(dbx),
+		lineageRepo:  lineageRepo,
+		securityDeps: securityDeps,
 	}
 }
 
@@ -49,7 +51,9 @@ func (h *GlossaryHandler) RegisterRoutes(r chi.Router) {
 		r.Delete("/terms/{id}", h.DeleteTerm)
 		r.Post("/edges", h.CreateEdge)
 		r.Put("/edges/{id}", h.UpdateEdge)
-		r.Delete("/edges/{id}", h.DeleteEdge)
+		// Technical assets & graph endpoints for selected term detail view
+		r.Get("/technical-assets", h.ListTechnicalAssets)
+		r.Get("/node-graph", h.GetNodeGraph)
 
 		// Cube.dev properties endpoints
 		r.Get("/semantic-terms/{id}/cube-definition", h.HandleGetSemanticTermWithCubeProperties)
@@ -59,37 +63,17 @@ func (h *GlossaryHandler) RegisterRoutes(r chi.Router) {
 
 // Generic list function to handle different term types
 func (h *GlossaryHandler) listTerms(w http.ResponseWriter, r *http.Request, termType string) {
-	tenantID, _ := identity.TenantIDFromContext(r.Context())
-
-	// Use secure tenant ID from JWT claims or X-Tenant-ID header
-	if tenantID == "" {
-		tenantID = getSecureTenantID(r)
-	}
-
-	if tenantID == "" {
-		http.Error(w, "Unauthorized: tenant isolation required", http.StatusUnauthorized)
+	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
+	if err != nil {
+		http.Error(w, "security context initialization failed: "+err.Error(), http.StatusUnauthorized)
 		return
 	}
 
-	tenantDatasourceID := r.Header.Get("X-Tenant-Datasource-ID")
-	if tenantDatasourceID == "" {
-		tenantDatasourceID = r.Header.Get("X-Tenant-Instance-ID")
-	}
-	if tenantDatasourceID == "" {
-		tenantDatasourceID = r.URL.Query().Get("datasource_id")
-	}
-	if tenantDatasourceID == "" {
-		tenantDatasourceID = r.URL.Query().Get("tenant_instance_id")
-	}
-
-	// NOTE: tenantDatasourceID is now optional. If missing, we return nodes across all datasources for this tenant.
-	// This prevents 400 errors when no specific datasource is selected yet.
-
 	query := `
-		SELECT 
-			cn.id, 
+		SELECT
+			cn.id,
 			cn.node_name,
-			cn.tenant_datasource_id, 
+			cn.tenant_datasource_id,
 			cn.description,
 			cn.parent_type_id,
 			cn.config,
@@ -100,20 +84,21 @@ func (h *GlossaryHandler) listTerms(w http.ResponseWriter, r *http.Request, term
 			cn.properties,
 			cn.node_type_id,
 			cn.qualified_path,
-			cn.node_type
+			COALESCE(cn.node_type, cnt.catalog_type_name, '') as node_type
 		FROM catalog_node cn
-		WHERE cn.tenant_id = $1
+		LEFT JOIN catalog_node_type cnt ON cn.node_type_id = cnt.id
+		WHERE (cn.tenant_id = $1 OR cn.tenant_id = (SELECT id FROM public.tenants WHERE gold_copy = true LIMIT 1))
 	`
-	args := []interface{}{tenantID}
+	args := []interface{}{secCtx.TenantID}
 
-	if tenantDatasourceID != "" {
+	if secCtx.DatasourceID != "" {
 		query += " AND cn.tenant_datasource_id = $2"
-		args = append(args, tenantDatasourceID)
+		args = append(args, secCtx.DatasourceID)
 	}
 
 	if termType != "" {
 		argCount := len(args) + 1
-		query += fmt.Sprintf(" AND cn.node_type = $%d", argCount)
+		query += fmt.Sprintf(" AND (cn.node_type = $%d OR cnt.catalog_type_name = $%d)", argCount, argCount)
 		args = append(args, termType)
 	}
 
@@ -153,9 +138,7 @@ func (h *GlossaryHandler) listTerms(w http.ResponseWriter, r *http.Request, term
 			if val == nil {
 				entry[col] = nil
 			} else if b, ok := val.([]byte); ok {
-				// Try to parse as UUID or string
 				if len(b) == 16 {
-					// Likely a UUID
 					entry[col] = uuid.UUID(b).String()
 				} else {
 					entry[col] = string(b)
@@ -187,27 +170,20 @@ func (h *GlossaryHandler) ListBusinessTerms(w http.ResponseWriter, r *http.Reque
 
 // ListEdges returns all edges for a tenant/datasource
 func (h *GlossaryHandler) ListEdges(w http.ResponseWriter, r *http.Request) {
-	claims := jwtmiddleware.GetClaimsFromContext(r)
-	if claims == nil {
-		http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
-		return
-	}
-	tenantID := getSecureTenantID(r)
-	tenantDatasourceID := r.Header.Get("X-Tenant-Datasource-ID")
-
-	if tenantDatasourceID == "" {
-		tenantDatasourceID = r.URL.Query().Get("datasource_id")
-	}
-
-	if tenantID == "" || tenantDatasourceID == "" {
-		http.Error(w, "X-Tenant-ID and X-Tenant-Datasource-ID headers/params are required", http.StatusBadRequest)
+	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
+	if err != nil {
+		http.Error(w, "security context initialization failed: "+err.Error(), http.StatusUnauthorized)
 		return
 	}
 
-	// Query edges from catalog_edge table using correct column names
+	if secCtx.DatasourceID == "" {
+		http.Error(w, "datasource_id is required", http.StatusBadRequest)
+		return
+	}
+
 	query := `
-		SELECT 
-			ce.id, 
+		SELECT
+			ce.id,
 			ce.edge_type_name as predicate,
 			ce.edge_type_name,
 			ce.source_node_id,
@@ -222,7 +198,7 @@ func (h *GlossaryHandler) ListEdges(w http.ResponseWriter, r *http.Request) {
 		ORDER BY ce.created_at DESC
 	`
 
-	rows, err := h.db.Query(query, tenantID, tenantDatasourceID)
+	rows, err := h.db.Query(query, secCtx.TenantID, secCtx.DatasourceID)
 	if err != nil {
 		log.Printf("Error querying edges: %v", err)
 		http.Error(w, "Failed to fetch edges", http.StatusInternalServerError)
@@ -263,7 +239,6 @@ func (h *GlossaryHandler) ListEdges(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 
-		// Parse properties JSON
 		var properties interface{}
 		if len(row.Properties) > 0 {
 			propertiesStr := string(row.Properties)
@@ -315,20 +290,14 @@ func (h *GlossaryHandler) ListEdges(w http.ResponseWriter, r *http.Request) {
 
 // CreateTerm creates a new catalog node (semantic or business term)
 func (h *GlossaryHandler) CreateTerm(w http.ResponseWriter, r *http.Request) {
-	claims := jwtmiddleware.GetClaimsFromContext(r)
-	if claims == nil {
-		http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
+	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
+	if err != nil {
+		http.Error(w, "security context initialization failed: "+err.Error(), http.StatusUnauthorized)
 		return
 	}
-	tenantID := getSecureTenantID(r)
-	tenantDatasourceID := r.Header.Get("X-Tenant-Datasource-ID")
 
-	if tenantDatasourceID == "" {
-		tenantDatasourceID = r.URL.Query().Get("datasource_id")
-	}
-
-	if tenantID == "" || tenantDatasourceID == "" {
-		http.Error(w, "X-Tenant-ID and X-Tenant-Datasource-ID headers/params are required", http.StatusBadRequest)
+	if secCtx.DatasourceID == "" {
+		http.Error(w, "datasource_id is required", http.StatusBadRequest)
 		return
 	}
 
@@ -356,38 +325,32 @@ func (h *GlossaryHandler) CreateTerm(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Validate catalog_type
 	if termData.CatalogType != "semantic_term" && termData.CatalogType != "business_term" {
 		http.Error(w, "catalog_type must be 'semantic_term' or 'business_term'", http.StatusBadRequest)
 		return
 	}
 
-	// Use provided tenant_datasource_id or default to the one from headers
 	if termData.TenantDatasourceID == "" {
-		termData.TenantDatasourceID = tenantDatasourceID
+		termData.TenantDatasourceID = secCtx.DatasourceID
 	}
 
-	// Convert properties to JSON
 	propertiesJSON, err := json.Marshal(termData.Properties)
 	if err != nil {
 		http.Error(w, "Invalid properties format", http.StatusBadRequest)
 		return
 	}
 
-	// Resolve node_type_id from catalog_node_type by name; create if missing.
 	var nodeTypeID string
 	err = h.db.QueryRow(`SELECT id FROM catalog_node_type WHERE catalog_type_name = $1 LIMIT 1`, termData.CatalogType).Scan(&nodeTypeID)
 	if err != nil {
 		if err == sql.ErrNoRows {
-			// Create a fallback node type for this tenant
 			insertTypeQ := `INSERT INTO catalog_node_type (tenant_id, catalog_type_name, created_at, updated_at) VALUES ($1, $2, NOW(), NOW()) RETURNING id`
-			if err := h.db.QueryRow(insertTypeQ, tenantID, termData.CatalogType).Scan(&nodeTypeID); err != nil {
+			if err := h.db.QueryRow(insertTypeQ, secCtx.TenantID, termData.CatalogType).Scan(&nodeTypeID); err != nil {
 				log.Printf("Error creating fallback catalog_node_type: %v", err)
 				http.Error(w, "Failed to resolve catalog type", http.StatusInternalServerError)
 				return
 			}
 
-			// Fetch node type properties so we can validate incoming term properties
 			var nodeTypePropertiesBytes []byte
 			var nodeProps []NodeProperty
 			if err := h.db.QueryRow(`SELECT properties FROM catalog_node_type WHERE id = $1`, nodeTypeID).Scan(&nodeTypePropertiesBytes); err == nil {
@@ -396,7 +359,6 @@ func (h *GlossaryHandler) CreateTerm(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 
-			// Validate properties with node type metadata and return structured 400 errors when checks fail.
 			if validationErrors, ok := validateTermProperties(nodeProps, termData.Properties); !ok {
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(http.StatusBadRequest)
@@ -409,10 +371,7 @@ func (h *GlossaryHandler) CreateTerm(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Governance Check for Semantic Terms
 	if termData.CatalogType == "semantic_term" && h.governance != nil {
-		// Convert properties to map for validation
-		// We add top-level fields too as policy might check them
 		validationInput := map[string]interface{}{}
 		for k, v := range termData.Properties {
 			validationInput[k] = v
@@ -423,8 +382,6 @@ func (h *GlossaryHandler) CreateTerm(w http.ResponseWriter, r *http.Request) {
 		result, err := h.governance.ValidateSemanticTerm(r.Context(), validationInput)
 		if err != nil {
 			log.Printf("Governance validation error: %v", err)
-			// Decide if error should block. For now, log and proceed or block?
-			// Let's block on error for safety
 			http.Error(w, "Governance validation failed: "+err.Error(), http.StatusInternalServerError)
 			return
 		}
@@ -440,9 +397,6 @@ func (h *GlossaryHandler) CreateTerm(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Insert the new term using node_type_id. Cast properties to jsonb explicitly so Postgres accepts
-	// both empty objects and structured JSON payloads coming from the request.
-	// Generate qualified_path as: catalog_type/node_name (or node_type_id/node_name for uniqueness)
 	qualifiedPath := fmt.Sprintf("%s/%s", termData.CatalogType, termData.NodeName)
 
 	insertQ := `
@@ -453,7 +407,6 @@ func (h *GlossaryHandler) CreateTerm(w http.ResponseWriter, r *http.Request) {
 		RETURNING id
 	`
 
-	// Only include parent_id for semantic terms
 	var parentID *string
 	if termData.CatalogType == "semantic_term" && termData.ParentID != "" {
 		parentID = &termData.ParentID
@@ -466,18 +419,17 @@ func (h *GlossaryHandler) CreateTerm(w http.ResponseWriter, r *http.Request) {
 		termData.NodeName,
 		termData.Description,
 		nodeTypeID,
-		tenantID,
+		secCtx.TenantID,
 		termData.TenantDatasourceID,
 		propertiesJSON,
 		qualifiedPath,
 		parentID,
 	).Scan(&insertedID); err != nil {
-		log.Printf("Error creating term (node_name=%s, tenant=%s, datasource=%s): %v", termData.NodeName, tenantID, termData.TenantDatasourceID, err)
+		log.Printf("Error creating term (node_name=%s, tenant=%s, datasource=%s): %v", termData.NodeName, secCtx.TenantID, termData.TenantDatasourceID, err)
 		http.Error(w, "Failed to create term", http.StatusInternalServerError)
 		return
 	}
 
-	// Select back the inserted row joined with catalog_node_type for a consistent response
 	selQ := `
 		SELECT cn.id, cn.node_name, cn.tenant_datasource_id, COALESCE(cnt.catalog_type_name, '') as catalog_type_name, COALESCE(cn.description, '') as description, cn.parent_type_id, cn.parent_id, COALESCE(cn.config::text, cn.properties::text, '[]'::text) as config, cn.created_at, cn.updated_at, cn.tenant_id, cn.core_id, COALESCE(cn.properties, '[]'::jsonb) as properties
 		FROM catalog_node cn
@@ -510,39 +462,31 @@ func (h *GlossaryHandler) CreateTerm(w http.ResponseWriter, r *http.Request) {
 	log.Printf("[DEBUG CreateTerm Response] ID=%s, ParentID=%v, CatalogType=%s", term.ID, term.ParentID, term.CatalogTypeName)
 
 	if err != nil {
-		// Log the full error and the payload to help diagnose DB constraint issues.
-		log.Printf("Error creating term (node_name=%s, tenant=%s, datasource=%s): %v", termData.NodeName, tenantID, termData.TenantDatasourceID, err)
+		log.Printf("Error creating term (node_name=%s, tenant=%s, datasource=%s): %v", termData.NodeName, secCtx.TenantID, termData.TenantDatasourceID, err)
 		http.Error(w, "Failed to create term", http.StatusInternalServerError)
 		return
 	}
 
-	// Set properties JSON
 	if len(returnedPropertiesBytes) > 0 {
 		term.Properties = json.RawMessage(returnedPropertiesBytes)
 	} else {
 		term.Properties = json.RawMessage("[]")
 	}
-	// schema lacks `is_active` on catalog_node; default to true for compatibility
 	active := true
 	term.IsActive = &active
 
-	// If this is a semantic term with a parent business term, create an edge
 	if termData.CatalogType == "semantic_term" && termData.ParentID != "" {
-		// Create an edge from business term (parent) to semantic term (child)
-		// relationship_type: 'business_term_to_semantic_term'
 		edgeID := uuid.New().String()
 		edgeCreateQ := `
 			INSERT INTO catalog_edge (id, source_node_id, target_node_id, relationship_type, edge_type, tenant_id, tenant_datasource_id, created_at)
 			VALUES ($1, $2, $3, $4, $4, $5, $6, NOW())
 			ON CONFLICT (tenant_datasource_id, source_node_id, edge_type_id, target_node_id) DO NOTHING
 		`
-		if _, err := h.db.Exec(edgeCreateQ, edgeID, termData.ParentID, insertedID, "business_term_to_semantic_term", tenantID, tenantDatasourceID); err != nil {
+		if _, err := h.db.Exec(edgeCreateQ, edgeID, termData.ParentID, insertedID, "business_term_to_semantic_term", secCtx.TenantID, secCtx.DatasourceID); err != nil {
 			log.Printf("Warning: Failed to create edge from business term to semantic term: %v", err)
-			// Don't fail the response; the term was created successfully
 		}
 	}
 
-	// Sync to AGE if repo is available
 	if h.lineageRepo != nil {
 		node := lineage.LineageNode{
 			ID:       term.ID,
@@ -565,20 +509,9 @@ func (h *GlossaryHandler) CreateTerm(w http.ResponseWriter, r *http.Request) {
 // UpdateTerm updates a catalog node (semantic or business term)
 func (h *GlossaryHandler) UpdateTerm(w http.ResponseWriter, r *http.Request) {
 	termID := r.PathValue("id")
-	claims := jwtmiddleware.GetClaimsFromContext(r)
-	if claims == nil {
-		http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
-		return
-	}
-	tenantID := getSecureTenantID(r)
-	tenantDatasourceID := r.Header.Get("X-Tenant-Datasource-ID")
-
-	if tenantDatasourceID == "" {
-		tenantDatasourceID = r.URL.Query().Get("datasource_id")
-	}
-
-	if tenantID == "" || tenantDatasourceID == "" {
-		http.Error(w, "X-Tenant-ID and X-Tenant-Datasource-ID headers/params are required", http.StatusBadRequest)
+	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
+	if err != nil {
+		http.Error(w, "security context initialization failed: "+err.Error(), http.StatusUnauthorized)
 		return
 	}
 
@@ -650,7 +583,7 @@ func (h *GlossaryHandler) UpdateTerm(w http.ResponseWriter, r *http.Request) {
 	whereIndex2 := argIndex + 1
 
 	args = append(args, termID)
-	args = append(args, tenantID)
+	args = append(args, secCtx.TenantID)
 
 	query := fmt.Sprintf(`
 		UPDATE catalog_node
@@ -703,9 +636,7 @@ func (h *GlossaryHandler) UpdateTerm(w http.ResponseWriter, r *http.Request) {
 					VALUES ($1, $2, $3, $4, $4, $5, $6, NOW())
 					ON CONFLICT (tenant_datasource_id, source_node_id, edge_type_id, target_node_id) DO NOTHING
 				`
-				// We need tenantDatasourceID here. Let's assume it's available or fetch it.
-				// For now, using "" as fallback if not in closure, but better to get it.
-				if _, err := h.db.Exec(edgeCreateQ, edgeID, str, termID, "business_term_to_semantic_term", tenantID, tenantDatasourceID); err != nil {
+				if _, err := h.db.Exec(edgeCreateQ, edgeID, str, termID, "business_term_to_semantic_term", secCtx.TenantID, secCtx.DatasourceID); err != nil {
 					log.Printf("Warning: Failed to create edge from business term to semantic term during update: %v", err)
 				}
 			}
@@ -947,25 +878,14 @@ func (p *NodeProperty) LabelOrName() string {
 
 // CreateEdge creates a new edge between terms
 func (h *GlossaryHandler) CreateEdge(w http.ResponseWriter, r *http.Request) {
-	claims := jwtmiddleware.GetClaimsFromContext(r)
-	if claims == nil {
-		http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
-		return
-	}
-	tenantID := getSecureTenantID(r)
-	tenantDatasourceID := r.Header.Get("X-Tenant-Datasource-ID")
-
-	if tenantDatasourceID == "" {
-		tenantDatasourceID = r.URL.Query().Get("datasource_id")
-	}
-
-	if tenantID == "" {
-		http.Error(w, "X-Tenant-ID header/param is required", http.StatusBadRequest)
+	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
+	if err != nil {
+		http.Error(w, "security context initialization failed: "+err.Error(), http.StatusUnauthorized)
 		return
 	}
 
-	if tenantDatasourceID == "" {
-		http.Error(w, "X-Tenant-Datasource-ID header/param is required", http.StatusBadRequest)
+	if secCtx.DatasourceID == "" {
+		http.Error(w, "datasource_id is required", http.StatusBadRequest)
 		return
 	}
 
@@ -1002,7 +922,7 @@ func (h *GlossaryHandler) CreateEdge(w http.ResponseWriter, r *http.Request) {
 		query += `edge_type_name = $1`
 	}
 
-	err := h.db.QueryRow(query, req.EdgeTypeID).Scan(&resolvedEdgeTypeID, &resolvedEdgeTypeName)
+	err = h.db.QueryRow(query, req.EdgeTypeID).Scan(&resolvedEdgeTypeID, &resolvedEdgeTypeName)
 
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -1015,7 +935,7 @@ func (h *GlossaryHandler) CreateEdge(w http.ResponseWriter, r *http.Request) {
 			// Insert into catalog_edge_type (singular)
 			insertTypeQ := `INSERT INTO catalog_edge_type (tenant_id, edge_type_name, created_at, updated_at) VALUES ($1, $2, NOW(), NOW()) RETURNING id`
 			// Use tenantID for the type
-			err = h.db.QueryRow(insertTypeQ, tenantID, req.EdgeTypeID).Scan(&resolvedEdgeTypeID)
+			err = h.db.QueryRow(insertTypeQ, secCtx.TenantID, req.EdgeTypeID).Scan(&resolvedEdgeTypeID)
 			if err != nil {
 				log.Printf("[CreateEdge] Error creating fallback edge type: %v", err)
 				http.Error(w, "Failed to create edge type", http.StatusInternalServerError)
@@ -1045,7 +965,7 @@ func (h *GlossaryHandler) CreateEdge(w http.ResponseWriter, r *http.Request) {
 	// We store both the resolved ID and the current name (predicate) for redundancy/historical reasons if needed,
 	// or just as a cache. User wants reliance on UUID, so ID is critical.
 	var actualEdgeID string
-	err = h.db.QueryRow(insertQ, edgeID, tenantID, tenantDatasourceID, req.SubjectNodeID, req.ObjectNodeID, resolvedEdgeTypeName.String, resolvedEdgeTypeID).Scan(&actualEdgeID)
+	err = h.db.QueryRow(insertQ, edgeID, secCtx.TenantID, secCtx.DatasourceID, req.SubjectNodeID, req.ObjectNodeID, resolvedEdgeTypeName.String, resolvedEdgeTypeID).Scan(&actualEdgeID)
 	if err != nil {
 		log.Printf("[CreateEdge] Error inserting edge: %v", err)
 		http.Error(w, "Failed to create edge", http.StatusInternalServerError)
@@ -1102,7 +1022,7 @@ func (h *GlossaryHandler) CreateEdge(w http.ResponseWriter, r *http.Request) {
 			FromID:   req.SubjectNodeID,
 			ToID:     req.ObjectNodeID,
 			Type:     lineage.LineageEdgeType(resolvedEdgeTypeName.String),
-			TenantID: &tenantID,
+			TenantID: &secCtx.TenantID,
 			Env:      "dev",
 		}
 		if err := h.lineageRepo.UpsertEdge(r.Context(), edgeRec); err != nil {
@@ -1123,19 +1043,13 @@ func (h *GlossaryHandler) DeleteTerm(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Get tenant and datasource from secure source
-	tenantID := getSecureTenantID(r)
-
-	datasourceID := r.URL.Query().Get("datasource_id")
-	if datasourceID == "" {
-		datasourceID = r.Header.Get("X-Tenant-Datasource-ID")
-	}
-
-	if tenantID == "" || datasourceID == "" {
-		http.Error(w, "tenant_id and datasource_id are required", http.StatusBadRequest)
+	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
+	if err != nil {
+		http.Error(w, "security context initialization failed: "+err.Error(), http.StatusUnauthorized)
 		return
 	}
 
+	tenantID := secCtx.TenantID
 	if tenantID == "default" {
 		var coreID string
 		if err := h.db.QueryRowContext(r.Context(), `SELECT id FROM public.tenants WHERE gold_copy = true LIMIT 1`).Scan(&coreID); err == nil && coreID != "" {
@@ -1143,9 +1057,8 @@ func (h *GlossaryHandler) DeleteTerm(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Delete the term (cascading deletes for catalog_edge are handled at the DB level)
 	query := `
-		DELETE FROM catalog_node 
+		DELETE FROM catalog_node
 		WHERE id = $1 AND tenant_id = $2
 	`
 
@@ -1183,15 +1096,9 @@ func (h *GlossaryHandler) DeleteTerm(w http.ResponseWriter, r *http.Request) {
 // DeleteEdge deletes a semantic edge
 func (h *GlossaryHandler) DeleteEdge(w http.ResponseWriter, r *http.Request) {
 	edgeID := chi.URLParam(r, "id")
-	claims := jwtmiddleware.GetClaimsFromContext(r)
-	if claims == nil {
-		http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
-		return
-	}
-	tenantID := getSecureTenantID(r)
-
-	if tenantID == "" {
-		http.Error(w, "X-Tenant-ID header/param is required", http.StatusBadRequest)
+	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
+	if err != nil {
+		http.Error(w, "security context initialization failed: "+err.Error(), http.StatusUnauthorized)
 		return
 	}
 
@@ -1200,7 +1107,7 @@ func (h *GlossaryHandler) DeleteEdge(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	log.Printf("[DeleteEdge] Deleting edge %s for tenant %s", edgeID, tenantID)
+	log.Printf("[DeleteEdge] Deleting edge %s for tenant %s", edgeID, secCtx.TenantID)
 
 	// Delete from catalog_edge - edge ID is globally unique, no need for tenant filter
 	query := `DELETE FROM catalog_edge WHERE id = $1`
@@ -1238,20 +1145,9 @@ func (h *GlossaryHandler) DeleteEdge(w http.ResponseWriter, r *http.Request) {
 // UpdateEdge updates an existing edge's properties or description
 func (h *GlossaryHandler) UpdateEdge(w http.ResponseWriter, r *http.Request) {
 	edgeID := chi.URLParam(r, "id")
-	claims := jwtmiddleware.GetClaimsFromContext(r)
-	if claims == nil {
-		http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
-		return
-	}
-	tenantID := getSecureTenantID(r)
-	tenantDatasourceID := r.Header.Get("X-Tenant-Datasource-ID")
-
-	if tenantDatasourceID == "" {
-		tenantDatasourceID = r.URL.Query().Get("datasource_id")
-	}
-
-	if tenantID == "" {
-		http.Error(w, "X-Tenant-ID header/param is required", http.StatusBadRequest)
+	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
+	if err != nil {
+		http.Error(w, "security context initialization failed: "+err.Error(), http.StatusUnauthorized)
 		return
 	}
 
@@ -1266,7 +1162,7 @@ func (h *GlossaryHandler) UpdateEdge(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	log.Printf("[UpdateEdge] Updating edge %s for tenant %s. Updates: %v", edgeID, tenantID, updates)
+	log.Printf("[UpdateEdge] Updating edge %s for tenant %s. Updates: %v", edgeID, secCtx.TenantID, updates)
 
 	// Build dynamic update query for allowed fields
 	setClauses := []string{}
@@ -1306,7 +1202,7 @@ func (h *GlossaryHandler) UpdateEdge(w http.ResponseWriter, r *http.Request) {
 
 	whereIndex1 := argIndex
 	whereIndex2 := argIndex + 1
-	args = append(args, edgeID, tenantID)
+	args = append(args, edgeID, secCtx.TenantID)
 
 	query := fmt.Sprintf(`
 		UPDATE catalog_edge
@@ -1467,31 +1363,33 @@ type CubeYamlExportResponse struct {
 
 // HandleExportSemanticTermsAsCubeYaml exports all semantic terms as Cube.js configuration
 func (h *GlossaryHandler) HandleExportSemanticTermsAsCubeYaml(w http.ResponseWriter, r *http.Request) {
-	tenantID := getSecureTenantID(r)
-	datasourceID := r.URL.Query().Get("datasource_id")
+	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
+	if err != nil {
+		http.Error(w, "security context initialization failed: "+err.Error(), http.StatusUnauthorized)
+		return
+	}
 
-	if tenantID == "" || datasourceID == "" {
+	if secCtx.TenantID == "" || secCtx.DatasourceID == "" {
 		http.Error(w, "Missing required parameters: tenant_id, datasource_id", http.StatusBadRequest)
 		return
 	}
 
-	// Query all semantic terms for the tenant/datasource
 	query := `
-		SELECT 
+		SELECT
 			cn.id,
 			cn.node_name,
 			cn.properties::jsonb
 		FROM catalog_node cn
-		WHERE cn.tenant_id = $1 
+		WHERE cn.tenant_id = $1
 		  AND cn.tenant_datasource_id = $2
 		  AND cn.node_type_id IN (
-			SELECT id FROM catalog_node_type 
+			SELECT id FROM catalog_node_type
 			WHERE catalog_type_name LIKE 'semantic_term_%'
 		)
 		ORDER BY cn.node_name
 	`
 
-	rows, err := h.db.Query(query, tenantID, datasourceID)
+	rows, err := h.db.Query(query, secCtx.TenantID, secCtx.DatasourceID)
 	if err != nil {
 		log.Printf("Error querying semantic terms: %v", err)
 		http.Error(w, "Failed to fetch semantic terms", http.StatusInternalServerError)
@@ -1564,4 +1462,92 @@ func (h *GlossaryHandler) HandleExportSemanticTermsAsCubeYaml(w http.ResponseWri
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(response)
+}
+
+func (h *GlossaryHandler) ListTechnicalAssets(w http.ResponseWriter, r *http.Request) {
+	nodeID := r.URL.Query().Get("node_id")
+	if nodeID == "" {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode([]map[string]interface{}{})
+		return
+	}
+
+	query := `
+		SELECT cn.id, cn.node_name, cn.qualified_path, COALESCE(cn.node_type, cnt.catalog_type_name, '') as node_type, COALESCE(cn.properties, '{}'::jsonb) as properties
+		FROM catalog_edge ce
+		JOIN catalog_node cn ON ce.target_node_id = cn.id
+		LEFT JOIN catalog_node_type cnt ON cn.node_type_id = cnt.id
+		WHERE ce.source_node_id = $1
+	`
+
+	rows, err := h.db.QueryContext(r.Context(), query, nodeID)
+	if err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode([]map[string]interface{}{})
+		return
+	}
+	defer rows.Close()
+
+	assets := make([]map[string]interface{}, 0)
+	for rows.Next() {
+		var id, name, path, nType string
+		var propsJSON []byte
+		if err := rows.Scan(&id, &name, &path, &nType, &propsJSON); err != nil {
+			continue
+		}
+		var props map[string]interface{}
+		_ = json.Unmarshal(propsJSON, &props)
+		assets = append(assets, map[string]interface{}{
+			"id":             id,
+			"node_name":      name,
+			"qualified_path": path,
+			"node_type":      nType,
+			"properties":     props,
+		})
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(assets)
+}
+
+func (h *GlossaryHandler) GetNodeGraph(w http.ResponseWriter, r *http.Request) {
+	nodeID := r.URL.Query().Get("node_id")
+	if nodeID == "" {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{"nodes": []interface{}{}, "edges": []interface{}{}})
+		return
+	}
+
+	query := `
+		SELECT ce.id, ce.source_node_id, ce.target_node_id, COALESCE(ce.edge_type_name, '')
+		FROM catalog_edge ce
+		WHERE ce.source_node_id = $1 OR ce.target_node_id = $1
+	`
+	rows, err := h.db.QueryContext(r.Context(), query, nodeID)
+	if err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{"nodes": []interface{}{}, "edges": []interface{}{}})
+		return
+	}
+	defer rows.Close()
+
+	edges := make([]map[string]interface{}, 0)
+	for rows.Next() {
+		var id, sID, tID, pName string
+		if err := rows.Scan(&id, &sID, &tID, &pName); err != nil {
+			continue
+		}
+		edges = append(edges, map[string]interface{}{
+			"id":             id,
+			"source_node_id": sID,
+			"target_node_id": tID,
+			"predicate":      pName,
+		})
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"nodes": []interface{}{},
+		"edges": edges,
+	})
 }

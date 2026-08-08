@@ -10,6 +10,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	"github.com/hondyman/uisce/backend/internal/handlers"
 	"github.com/hondyman/uisce/backend/internal/logging"
 	"github.com/hondyman/uisce/libs/jwt-middleware"
 )
@@ -425,14 +426,15 @@ func handleListValidationRulesForBO(w http.ResponseWriter, r *http.Request) {
 
 // handleGetValidationRuleSchemaForBO handles GET /api/business-objects/{id}/validations/schema
 func (s *Server) handleGetValidationRuleSchemaForBO(w http.ResponseWriter, r *http.Request) {
-	claims := jwtmiddleware.GetClaimsFromContext(r)
-	if claims == nil {
-		http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
+	secCtx, ctx, err := handlers.SecurityContextFromRequest(r, "", "", handlers.SecurityContextDeps{
+		Resolver: s.DatasourceResolver,
+	})
+	if err != nil {
+		http.Error(w, "Unauthorized: "+err.Error(), http.StatusUnauthorized)
 		return
 	}
-	tenantID := claims.TenantID
+	tenantID := secCtx.TenantID
 	boID := chi.URLParam(r, "id")
-	datasourceID := r.URL.Query().Get("datasource_id")
 	locale := r.URL.Query().Get("locale")
 	if locale == "" {
 		locale = "en"
@@ -461,9 +463,7 @@ func (s *Server) handleGetValidationRuleSchemaForBO(w http.ResponseWriter, r *ht
 		return
 	}
 
-	_ = datasourceID // Keep for future use when needed for filtering
-
-	ctx := r.Context()
+	ctx = r.Context()
 
 	// Query bo_fields table for fields of this business object
 	query := `

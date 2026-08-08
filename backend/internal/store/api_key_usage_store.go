@@ -6,6 +6,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/hondyman/uisce/backend/internal/models"
+	"github.com/hondyman/uisce/libs/db/queries"
 	"github.com/jmoiron/sqlx"
 )
 
@@ -31,12 +32,7 @@ func NewAPIKeyUsageStore(db *sqlx.DB) APIKeyUsageStore {
 
 // LogUsage logs an API key usage event
 func (s *apiKeyUsageStoreImpl) LogUsage(ctx context.Context, req models.APIKeyUsageCreateRequest) error {
-	query := `
-		INSERT INTO api_key_usage (api_key_id, user_id, tenant_id, path, method, region, ip_address, user_agent)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-	`
-
-	_, err := s.db.ExecContext(ctx, query,
+	_, err := s.db.ExecContext(ctx, queries.InsertAPIKeyUsage,
 		req.APIKeyID, req.UserID, req.TenantID, req.Path, req.Method,
 		req.Region, req.IPAddress, req.UserAgent,
 	)

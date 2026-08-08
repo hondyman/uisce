@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
+	"github.com/hondyman/uisce/libs/db/queries"
 )
 
 // QueryEngine executes semantic queries and generates SQL
@@ -441,29 +443,11 @@ func (qe *QueryEngine) cacheResult(ctx context.Context, tenantID, queryHash stri
 
 	expiresAt := time.Now().Add(1 * time.Hour) // 1 hour TTL
 
-	sql := `
-		INSERT INTO semantic_query_cache_v2 (
-			tenant_id, query_hash, query, result, result_rows, execution_time_ms, expires_at
-		) VALUES ($1, $2, $3, $4, $5, $6, $7)
-		ON CONFLICT (tenant_id, query_hash) DO UPDATE
-		SET result = EXCLUDED.result,
-		    result_rows = EXCLUDED.result_rows,
-		    execution_time_ms = EXCLUDED.execution_time_ms,
-		    expires_at = EXCLUDED.expires_at,
-		    last_accessed_at = now(),
-		    access_count = semantic_query_cache_v2.access_count + 1
-	`
-
-	qe.service.db.ExecContext(ctx, sql, tenantID, queryHash, queryJSON, resultJSON, len(result), executionTimeMs, expiresAt)
+	qe.service.db.ExecContext(ctx, queries.InsertSemanticQueryCache, tenantID, queryHash, queryJSON, resultJSON, len(result), executionTimeMs, expiresAt)
 }
 
 func (qe *QueryEngine) updateCacheAccess(ctx context.Context, cacheID string) {
-	sql := `
-		UPDATE semantic_query_cache_v2
-		SET last_accessed_at = now(), access_count = access_count + 1
-		WHERE id = $1
-	`
-	qe.service.db.ExecContext(ctx, sql, cacheID)
+	qe.service.db.ExecContext(ctx, queries.UpdateSemanticQueryCacheAccess, cacheID)
 }
 
 func (qe *QueryEngine) recordQuerySuccess(ctx context.Context, tenantID string, query *Query, sql string, result []map[string]interface{}, executionTimeMs int) {

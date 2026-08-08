@@ -1,6 +1,7 @@
 package api
 
 import (
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -9,6 +10,8 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jmoiron/sqlx"
+
+	"github.com/hondyman/uisce/backend/internal/handlers"
 )
 
 // BusinessProcess represents a complete business process workflow
@@ -112,12 +115,13 @@ type BPAPIResponse struct {
 
 // BPBuilderHandlers provides HTTP handlers for BP Builder endpoints
 type BPBuilderHandlers struct {
-	db *sqlx.DB
+	db           *sqlx.DB
+	securityDeps handlers.SecurityContextDeps
 }
 
 // NewBPBuilderHandlers creates a new instance of BP Builder handlers
-func NewBPBuilderHandlers(db *sqlx.DB) *BPBuilderHandlers {
-	return &BPBuilderHandlers{db: db}
+func NewBPBuilderHandlers(db *sqlx.DB, securityDeps handlers.SecurityContextDeps) *BPBuilderHandlers {
+	return &BPBuilderHandlers{db: db, securityDeps: securityDeps}
 }
 
 // Helper to create API response
@@ -136,8 +140,13 @@ func newBPAPIResponse(success bool, data interface{}, err string) BPAPIResponse 
 
 // ListBusinessProcesses retrieves all business processes for a tenant
 func (h *BPBuilderHandlers) ListBusinessProcesses(w http.ResponseWriter, r *http.Request) {
-	tenantID := r.URL.Query().Get("tenant_id")
-	datasourceID := r.URL.Query().Get("datasource_id")
+	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
+	if err != nil {
+		respondJSON(w, http.StatusUnauthorized, newBPAPIResponse(false, nil, "Unauthorized: "+err.Error()))
+		return
+	}
+	tenantID := secCtx.TenantID
+	datasourceID := secCtx.DatasourceID
 
 	if tenantID == "" {
 		respondJSON(w, http.StatusBadRequest, newBPAPIResponse(false, nil, "tenant_id is required"))
@@ -165,7 +174,7 @@ func (h *BPBuilderHandlers) ListBusinessProcesses(w http.ResponseWriter, r *http
 		var bp BusinessProcess
 		var stepsJSON, tagsJSON string
 
-		err := rows.Scan(
+		err = rows.Scan(
 			&bp.ID, &bp.TenantID, &bp.DatasourceID, &bp.ProcessName, &bp.Entity, &bp.Description,
 			&stepsJSON, &bp.IsActive, &bp.CreatedBy, &bp.CreatedAt, &bp.UpdatedAt, &bp.Version, &tagsJSON,
 		)
@@ -189,7 +198,12 @@ func (h *BPBuilderHandlers) ListBusinessProcesses(w http.ResponseWriter, r *http
 
 // GetBusinessProcess retrieves a single business process
 func (h *BPBuilderHandlers) GetBusinessProcess(w http.ResponseWriter, r *http.Request) {
-	tenantID := r.URL.Query().Get("tenant_id")
+	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
+	if err != nil {
+		respondJSON(w, http.StatusUnauthorized, newBPAPIResponse(false, nil, "Unauthorized: "+err.Error()))
+		return
+	}
+	tenantID := secCtx.TenantID
 	processID := chi.URLParam(r, "id")
 
 	if tenantID == "" {
@@ -208,7 +222,7 @@ func (h *BPBuilderHandlers) GetBusinessProcess(w http.ResponseWriter, r *http.Re
 	var bp BusinessProcess
 	var stepsJSON, tagsJSON string
 
-	err := h.db.QueryRow(query, processID, tenantID).Scan(
+	err = h.db.QueryRow(query, processID, tenantID).Scan(
 		&bp.ID, &bp.TenantID, &bp.DatasourceID, &bp.ProcessName, &bp.Entity, &bp.Description,
 		&stepsJSON, &bp.IsActive, &bp.CreatedBy, &bp.CreatedAt, &bp.UpdatedAt, &bp.Version, &tagsJSON,
 	)
@@ -230,8 +244,13 @@ func (h *BPBuilderHandlers) GetBusinessProcess(w http.ResponseWriter, r *http.Re
 
 // CreateBusinessProcess creates a new business process
 func (h *BPBuilderHandlers) CreateBusinessProcess(w http.ResponseWriter, r *http.Request) {
-	tenantID := r.URL.Query().Get("tenant_id")
-	datasourceID := r.URL.Query().Get("datasource_id")
+	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
+	if err != nil {
+		respondJSON(w, http.StatusUnauthorized, newBPAPIResponse(false, nil, "Unauthorized: "+err.Error()))
+		return
+	}
+	tenantID := secCtx.TenantID
+	datasourceID := secCtx.DatasourceID
 
 	if tenantID == "" {
 		respondJSON(w, http.StatusBadRequest, newBPAPIResponse(false, nil, "tenant_id is required"))
@@ -264,7 +283,7 @@ func (h *BPBuilderHandlers) CreateBusinessProcess(w http.ResponseWriter, r *http
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
 	`
 
-	_, err := h.db.Exec(query, bp.ID, bp.TenantID, bp.DatasourceID, bp.ProcessName, bp.Entity, bp.Description,
+	_, err = h.db.Exec(query, bp.ID, bp.TenantID, bp.DatasourceID, bp.ProcessName, bp.Entity, bp.Description,
 		stepsJSON, bp.IsActive, bp.CreatedBy, bp.CreatedAt, bp.Version, tagsJSON)
 
 	if err != nil {
@@ -277,7 +296,12 @@ func (h *BPBuilderHandlers) CreateBusinessProcess(w http.ResponseWriter, r *http
 
 // UpdateBusinessProcess updates an existing business process
 func (h *BPBuilderHandlers) UpdateBusinessProcess(w http.ResponseWriter, r *http.Request) {
-	tenantID := r.URL.Query().Get("tenant_id")
+	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
+	if err != nil {
+		respondJSON(w, http.StatusUnauthorized, newBPAPIResponse(false, nil, "Unauthorized: "+err.Error()))
+		return
+	}
+	tenantID := secCtx.TenantID
 	processID := chi.URLParam(r, "id")
 
 	if tenantID == "" {
@@ -326,7 +350,12 @@ func (h *BPBuilderHandlers) UpdateBusinessProcess(w http.ResponseWriter, r *http
 
 // DeleteBusinessProcess deletes a business process
 func (h *BPBuilderHandlers) DeleteBusinessProcess(w http.ResponseWriter, r *http.Request) {
-	tenantID := r.URL.Query().Get("tenant_id")
+	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
+	if err != nil {
+		respondJSON(w, http.StatusUnauthorized, newBPAPIResponse(false, nil, "Unauthorized: "+err.Error()))
+		return
+	}
+	tenantID := secCtx.TenantID
 	processID := chi.URLParam(r, "id")
 
 	if tenantID == "" {
@@ -336,7 +365,8 @@ func (h *BPBuilderHandlers) DeleteBusinessProcess(w http.ResponseWriter, r *http
 
 	query := `DELETE FROM business_processes WHERE id = $1 AND tenant_id = $2`
 
-	result, err := h.db.Exec(query, processID, tenantID)
+	var result sql.Result
+	result, err = h.db.Exec(query, processID, tenantID)
 	if err != nil {
 		respondJSON(w, http.StatusInternalServerError, newBPAPIResponse(false, nil, fmt.Sprintf("Delete error: %v", err)))
 		return
@@ -353,21 +383,26 @@ func (h *BPBuilderHandlers) DeleteBusinessProcess(w http.ResponseWriter, r *http
 
 // PublishBusinessProcess activates a business process (make it live)
 func (h *BPBuilderHandlers) PublishBusinessProcess(w http.ResponseWriter, r *http.Request) {
-	tenantID := r.URL.Query().Get("tenant_id")
+	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
+	if err != nil {
+		respondJSON(w, http.StatusUnauthorized, newBPAPIResponse(false, nil, "Unauthorized: "+err.Error()))
+		return
+	}
+	tenantID := secCtx.TenantID
 	processID := chi.URLParam(r, "id")
 
 	query := `
 		UPDATE business_processes
 		SET is_active = true, updated_at = $1
 		WHERE id = $2 AND tenant_id = $3
-		RETURNING id, tenant_id, datasource_id, process_name, entity, description, 
+		RETURNING id, tenant_id, datasource_id, process_name, entity, description,
 		          steps_json, is_active, created_by, created_at, updated_at, version, tags_json
 	`
 
 	var bp BusinessProcess
 	var stepsJSON, tagsJSON string
 
-	err := h.db.QueryRow(query, time.Now().UTC().Format(time.RFC3339), processID, tenantID).Scan(
+	err = h.db.QueryRow(query, processID, tenantID).Scan(
 		&bp.ID, &bp.TenantID, &bp.DatasourceID, &bp.ProcessName, &bp.Entity, &bp.Description,
 		&stepsJSON, &bp.IsActive, &bp.CreatedBy, &bp.CreatedAt, &bp.UpdatedAt, &bp.Version, &tagsJSON,
 	)
@@ -409,7 +444,12 @@ func (h *BPBuilderHandlers) SimulateBusinessProcess(w http.ResponseWriter, r *ht
 
 // DuplicateBusinessProcess creates a copy of an existing process
 func (h *BPBuilderHandlers) DuplicateBusinessProcess(w http.ResponseWriter, r *http.Request) {
-	tenantID := r.URL.Query().Get("tenant_id")
+	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
+	if err != nil {
+		respondJSON(w, http.StatusUnauthorized, newBPAPIResponse(false, nil, "Unauthorized: "+err.Error()))
+		return
+	}
+	tenantID := secCtx.TenantID
 	processID := chi.URLParam(r, "id")
 
 	// Fetch the original process
@@ -424,7 +464,7 @@ func (h *BPBuilderHandlers) DuplicateBusinessProcess(w http.ResponseWriter, r *h
 	var bp BusinessProcess
 	var stepsJSON, tagsJSON string
 
-	err := h.db.QueryRow(query, processID, tenantID).Scan(
+	err = h.db.QueryRow(query, processID, tenantID).Scan(
 		&bp.ID, &bp.TenantID, &bp.DatasourceID, &bp.ProcessName, &bp.Entity, &bp.Description,
 		&stepsJSON, &bp.IsActive, &bp.CreatedBy, &bp.CreatedAt, &bp.UpdatedAt, &bp.Version, &tagsJSON,
 	)

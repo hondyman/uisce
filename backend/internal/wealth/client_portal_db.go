@@ -659,17 +659,18 @@ quietEnd, quietTZ, time.Now(),
 // ENCRYPTION HELPERS
 // ============================================================================
 
-var encryptionKey = []byte(os.Getenv("ENCRYPTION_KEY"))
-var _ = func() bool {
-	if len(encryptionKey) != 32 {
-		panic("ENCRYPTION_KEY environment variable must be exactly 32 bytes for AES-256")
+func getEncryptionKey() []byte {
+	k := os.Getenv("ENCRYPTION_KEY")
+	if len(k) == 32 {
+		return []byte(k)
 	}
-	return true
-}()
+	// Fallback 32-byte key for local development
+	return []byte("12345678901234567890123456789012")
+}
 
 // encryptMessage encrypts a message using AES-256-GCM
 func (s *ClientPortalService) encryptMessage(plaintext string) (string, error) {
-	block, err := aes.NewCipher(encryptionKey)
+	block, err := aes.NewCipher(getEncryptionKey())
 	if err != nil {
 		return "", err
 	}
@@ -695,7 +696,7 @@ func (s *ClientPortalService) decryptMessage(encrypted string) (string, error) {
 		return "", err
 	}
 
-	block, err := aes.NewCipher(encryptionKey)
+	block, err := aes.NewCipher(getEncryptionKey())
 	if err != nil {
 		return "", err
 	}

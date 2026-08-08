@@ -14,6 +14,7 @@ type SemanticGraphHandler struct {
 	GraphService *analytics.SemanticGraphService
 	Resolver     *analytics.BOContextResolver
 	CacheService *analytics.BOSQLCacheService
+	securityDeps SecurityContextDeps
 }
 
 // NewSemanticGraphHandler creates a new handler
@@ -21,11 +22,13 @@ func NewSemanticGraphHandler(
 	graphService *analytics.SemanticGraphService,
 	resolver *analytics.BOContextResolver,
 	cacheService *analytics.BOSQLCacheService,
+	securityDeps SecurityContextDeps,
 ) *SemanticGraphHandler {
 	return &SemanticGraphHandler{
 		GraphService: graphService,
 		Resolver:     resolver,
 		CacheService: cacheService,
+		securityDeps: securityDeps,
 	}
 }
 
@@ -90,9 +93,14 @@ func (h *SemanticGraphHandler) CreateNode(w http.ResponseWriter, r *http.Request
 func (h *SemanticGraphHandler) GetNode(w http.ResponseWriter, r *http.Request) {
 	nodeType := chi.URLParam(r, "nodeType")
 	nodeName := chi.URLParam(r, "nodeName")
-	datasourceID := r.URL.Query().Get("datasource_id")
 
-	dsID, _ := uuid.Parse(datasourceID)
+	secCtx, _, err := SecurityContextFromRequest(r, "", "", h.securityDeps)
+	if err != nil {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	dsID, _ := uuid.Parse(secCtx.DatasourceID)
 
 	node, err := h.GraphService.GetNodeByName(analytics.NodeType(nodeType), nodeName, dsID)
 	if err != nil {
@@ -267,8 +275,14 @@ func (h *SemanticGraphHandler) GenerateBOSQL(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	tenantID, _ := uuid.Parse(req.TenantID)
-	datasourceID, _ := uuid.Parse(req.DatasourceID)
+	secCtx, _, err := SecurityContextFromRequest(r, "", "", h.securityDeps)
+	if err != nil {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	tenantID, _ := uuid.Parse(secCtx.TenantID)
+	datasourceID, _ := uuid.Parse(secCtx.DatasourceID)
 
 	// Use CacheService which wraps Resolver (GetOrGenerate)
 	sql, err := h.CacheService.GetOrGenerateBOSQL(req.BOName, req.Terms, req.Calculations, tenantID, datasourceID, req.Dialect)
@@ -285,11 +299,15 @@ func (h *SemanticGraphHandler) GenerateBOSQL(w http.ResponseWriter, r *http.Requ
 // GET /api/graph/bo/{boName}/calculations
 func (h *SemanticGraphHandler) GetBOCalculations(w http.ResponseWriter, r *http.Request) {
 	boName := chi.URLParam(r, "boName")
-	datasourceID := r.URL.Query().Get("datasource_id")
-	tenantID := getSecureTenantID(r)
 
-	tID, _ := uuid.Parse(tenantID)
-	dsID, _ := uuid.Parse(datasourceID)
+	secCtx, _, err := SecurityContextFromRequest(r, "", "", h.securityDeps)
+	if err != nil {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	tID, _ := uuid.Parse(secCtx.TenantID)
+	dsID, _ := uuid.Parse(secCtx.DatasourceID)
 
 	ctx, err := h.Resolver.GetBOContext(boName, tID, dsID, "postgres")
 	if err != nil {
@@ -311,11 +329,15 @@ func (h *SemanticGraphHandler) GetBOCalculations(w http.ResponseWriter, r *http.
 // GET /api/graph/bo/{boName}/terms
 func (h *SemanticGraphHandler) GetBOTerms(w http.ResponseWriter, r *http.Request) {
 	boName := chi.URLParam(r, "boName")
-	datasourceID := r.URL.Query().Get("datasource_id")
-	tenantID := getSecureTenantID(r)
 
-	tID, _ := uuid.Parse(tenantID)
-	dsID, _ := uuid.Parse(datasourceID)
+	secCtx, _, err := SecurityContextFromRequest(r, "", "", h.securityDeps)
+	if err != nil {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	tID, _ := uuid.Parse(secCtx.TenantID)
+	dsID, _ := uuid.Parse(secCtx.DatasourceID)
 
 	ctx, err := h.Resolver.GetBOContext(boName, tID, dsID, "postgres")
 	if err != nil {

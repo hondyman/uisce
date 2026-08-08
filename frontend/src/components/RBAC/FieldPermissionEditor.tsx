@@ -103,7 +103,7 @@ export const FieldPermissionEditor: React.FC<FieldPermissionEditorProps> = ({
   const fetchRoles = async () => {
     try {
       const response = await fetch(
-        `/api/rbac/roles?tenant_id=${tenant.id}&tenant_instance_id=${datasource.id}`
+        `/api/rbac/roles`
       );
       const data = await response.json();
       setRoles(data || []);
@@ -117,7 +117,7 @@ export const FieldPermissionEditor: React.FC<FieldPermissionEditorProps> = ({
     try {
       setLoading(true);
       const response = await fetch(
-        `/api/rbac/field-permissions?tenant_id=${tenant.id}&tenant_instance_id=${datasource.id}`
+        `/api/rbac/field-permissions`
       );
       const data = await response.json();
       setFieldPermissions(data || []);
@@ -140,8 +140,6 @@ export const FieldPermissionEditor: React.FC<FieldPermissionEditorProps> = ({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          tenant_id: tenant.id,
-          tenant_instance_id: datasource.id,
           role_id: roleId,
           resource_type: selectedResource,
           field_name: fieldName,
@@ -165,8 +163,6 @@ export const FieldPermissionEditor: React.FC<FieldPermissionEditorProps> = ({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ...maskingForm,
-          tenant_id: tenant.id,
-          tenant_instance_id: datasource.id,
         }),
       });
       await fetchFieldPermissions();

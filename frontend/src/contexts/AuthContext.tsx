@@ -154,6 +154,7 @@ function mapProfileToUser(profile: Record<string, unknown>, roles: string[]): Us
     operatorRole === 'global_ops' ||
     roles.includes('global_admin') ||
     roles.includes('global_ops') ||
+    roles.includes('admin') ||
     hasGlobalAdminGroup ||
     hasGlobalOpsGroup;
 
@@ -212,10 +213,20 @@ function clearPersistedAuth(): void {
 }
 
 export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
-  const [user, setUser] = useState<User | null>(null);
-  const [token, setToken] = useState<string | null>(null);
-  const [refreshTokenValue, setRefreshTokenValue] = useState<string | null>(null);
-  const [tokenExpiresAt, setTokenExpiresAt] = useState<number | null>(null);
+  const [user, setUser] = useState<User | null>(() => {
+    try {
+      const storedUser = localStorage.getItem(AUTH_USER_KEY);
+      return storedUser ? JSON.parse(storedUser) : null;
+    } catch {
+      return null;
+    }
+  });
+  const [token, setToken] = useState<string | null>(() => localStorage.getItem(AUTH_TOKEN_KEY));
+  const [refreshTokenValue, setRefreshTokenValue] = useState<string | null>(() => localStorage.getItem(AUTH_REFRESH_TOKEN_KEY));
+  const [tokenExpiresAt, setTokenExpiresAt] = useState<number | null>(() => {
+    const storedExpiresAt = localStorage.getItem(AUTH_EXPIRES_AT_KEY);
+    return storedExpiresAt ? parseInt(storedExpiresAt, 10) : null;
+  });
   const [isLoading, setIsLoading] = useState(true);
   const oidcUserRef = useRef<OidcUser | null>(null);
   const toast = useToast();
@@ -249,7 +260,17 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       try {
         const oidcUser = await userManager.getUser();
         if (!mounted) return;
-        hydrateFromOidcUser(oidcUser);
+        if (oidcUser) {
+          hydrateFromOidcUser(oidcUser);
+        } else {
+          // If oidcUser is null but valid stored user/token exist in localStorage, retain them
+          const storedToken = localStorage.getItem(AUTH_TOKEN_KEY);
+          const storedExpiresAt = localStorage.getItem(AUTH_EXPIRES_AT_KEY);
+          const expiresAt = storedExpiresAt ? parseInt(storedExpiresAt, 10) : 0;
+          if (!storedToken || (expiresAt && Date.now() >= expiresAt)) {
+            hydrateFromOidcUser(null);
+          }
+        }
       } catch (error) {
         devError('Error loading OIDC user:', error);
       } finally {
@@ -386,7 +407,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     if (Array.isArray(u.roles) && u.roles.includes('core_admin')) {
       return true;
     }
-    if (u.email === 'admin@example.com') return true;
     return false;
   };
 
@@ -396,32 +416,14 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     if (computeIsCoreAdmin()) return true;
     if (u.is_admin) return true;
     if (Array.isArray(u.roles) && u.roles.includes('admin')) return true;
-    if (u.email === 'admin@example.com') return true;
     return false;
   };
 
   const computeIsGlobalAdmin = (): boolean => {
     const u: any = user;
     if (!u) return false;
-    // Pre-computed flags from the OIDC profile mapper.
-    if (u.is_global_admin) return true;
-    if (u.is_core_admin || u.isCoreAdmin) return true;
-    // Custom `operator_role` claim (the default source for this platform).
-    if (typeof u.operator_role === 'string' && CRUD_OPERATOR_ROLES.includes(u.operator_role)) return true;
-    // Legacy top-level `role` string.
-    if (typeof u.role === 'string' && CRUD_OPERATOR_ROLES.includes(u.role)) return true;
-    // Keycloak realm roles, with the `client:` prefix preserved.
-    if (Array.isArray(u.roles) && u.roles.some((r: unknown) => typeof r === 'string' && CRUD_OPERATOR_ROLES.includes(r))) return true;
-    // Permission grants (used by some IdP mappings).
-    if (Array.isArray(u.permissions) && (u.permissions.includes('platform:operator') || u.permissions.includes('*'))) return true;
-    // Nested Keycloak claim.
     const meta = u.uisce_metadata as Record<string, unknown> | undefined;
-    if (meta?.is_global_admin === true) return true;
     if (meta?.operator_role === 'global_admin') return true;
-    // Federated IdP group (e.g. "Uisce-Global-Admins").
-    if (Array.isArray(u.groups) && u.groups.some((g: unknown) =>
-      typeof g === 'string' && (GLOBAL_ADMIN_GROUP_RE.test(g) || GLOBAL_OPS_GROUP_RE.test(g))
-    )) return true;
     return false;
   };
 

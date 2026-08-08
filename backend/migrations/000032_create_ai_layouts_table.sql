@@ -14,9 +14,9 @@ CREATE TABLE IF NOT EXISTS ai_layouts (
   alternatives JSONB DEFAULT '[]', -- Array of alternative PageLayout options
   explanation TEXT, -- Model explanation of why this layout was suggested
   adopted BOOLEAN NOT NULL DEFAULT FALSE, -- TRUE when user applies to actual layout
-  adopted_at TIMESTAMP,
+  adopted_at TIMESTAMPTZ,
   adopted_by TEXT REFERENCES public.app_user(id) ON DELETE SET NULL,
-  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMPTZ,
   created_by TEXT, -- May be system or user email
   is_active BOOLEAN NOT NULL DEFAULT TRUE
 );
@@ -51,7 +51,7 @@ COMMENT ON COLUMN ai_layouts.confidence IS 'Confidence score (0.0-1.0) for this 
 COMMENT ON COLUMN ai_layouts.alternatives IS 'Array of alternative PageLayout options presented to user.';
 COMMENT ON COLUMN ai_layouts.explanation IS 'Human-readable explanation of the suggestion (e.g., "Matched prompt keywords and common patterns").';
 COMMENT ON COLUMN ai_layouts.adopted IS 'TRUE when user has applied this layout to the editor and published.';
-COMMENT ON COLUMN ai_layouts.adopted_at IS 'Timestamp when layout was adopted.';
+COMMENT ON COLUMN ai_layouts.adopted_at IS 'TIMESTAMPTZ when layout was adopted.';
 COMMENT ON COLUMN ai_layouts.adopted_by IS 'User ID who adopted this layout.';
 COMMENT ON COLUMN ai_layouts.created_by IS 'Email or system identifier of who triggered generation.';
 COMMENT ON COLUMN ai_layouts.is_active IS 'Soft delete flag. Unadopted layouts older than retention period should be archived.';

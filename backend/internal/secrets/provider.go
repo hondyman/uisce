@@ -59,12 +59,22 @@ type Config struct {
 	AzureVaultURL string `yaml:"azure_vault_url" json:"azure_vault_url"`
 	AzureTenantID string `yaml:"azure_tenant_id" json:"azure_tenant_id"`
 	AzureClientID string `yaml:"azure_client_id" json:"azure_client_id"`
+
+	// Infisical configuration
+	InfisicalURL          string `yaml:"infisical_url" json:"infisical_url"`
+	InfisicalClientID     string `yaml:"infisical_client_id" json:"infisical_client_id"`
+	InfisicalClientSecret string `yaml:"infisical_client_secret" json:"infisical_client_secret"`
+	InfisicalProjectID    string `yaml:"infisical_project_id" json:"infisical_project_id"`
+	InfisicalEnvironment  string `yaml:"infisical_environment" json:"infisical_environment"`
+	InfisicalServiceToken string `yaml:"infisical_service_token" json:"infisical_service_token"`
 }
 
 // NewProvider creates a new secrets provider based on configuration
 // This is the main factory function - switch providers via config, not code
 func NewProvider(cfg Config) (Provider, error) {
 	switch cfg.Type {
+	case "infisical":
+		return NewInfisicalProvider(cfg)
 	case "vault":
 		return NewVaultProvider(cfg)
 	case "aws":

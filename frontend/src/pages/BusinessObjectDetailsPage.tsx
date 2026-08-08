@@ -2,6 +2,8 @@ import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { GOLD_COPY } from '../config';
 import { getSelectedRegion } from '../lib/region';
+
+const VALIDATION_RULES_LIMIT = 100;
 import {
   Box,
   Grid,
@@ -68,7 +70,6 @@ import {
 } from '@mui/icons-material';
 import { SemanticMappingWizard } from '../components/SemanticMappingWizard';
 import { TableSortLabel } from '@mui/material';
-// import { useAccess } from '../contexts/AccessContext';
 import { useTenant } from '../contexts/TenantContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useNotification } from '../hooks/useNotification';
@@ -93,6 +94,14 @@ import { normalizeName } from '../utils/nameFormatting';
 import apiClient from '../utils/apiClient';
 import type { Entity, Field, HierarchyNode } from '../types/entity-schema';
 import { UnifiedLineageTab } from '../features/impact-analysis/components/UnifiedLineageTab';
+import {
+  FieldDeleteConfirmDialog,
+  DeleteObjectConfirmDialog,
+  SubtypeDialog,
+  DeleteSubtypeDialog,
+  EditFieldDialog,
+} from './BusinessObjectDetailsPage/components/dialogs';
+import { FieldsTab, BindingsTab, RelatedObjectsTab } from './BusinessObjectDetailsPage/components/tabs';
 
 // Redundant local interface removed in favor of shared type
 
@@ -140,11 +149,8 @@ export default function BusinessObjectDetailsPage() {
   const id = _id;
   const navigate = useNavigate();
   const { tenant, datasource } = useTenant();
-  // const { currentTenant: tenant, currentDatasource: datasource } = useAccess();
   const { token } = useAuth();
   const notification = useNotification();
-  // const theme = useTheme();
-  // const _isMobile = useMediaQuery(theme.breakpoints.down('md'));
 
   // Check if this is a new object
   const isNewObject = id === 'new';
@@ -276,7 +282,6 @@ export default function BusinessObjectDetailsPage() {
   };
 
   // Field action handlers (edit/delete)
-  // Helper to extract current config fields (semantic-term-backed)
   // Helper to extract current config fields (semantic-term-backed)
   const getConfigFields = () => {
     // Primary source: customFields from the API response (this is the actual data)
@@ -845,7 +850,7 @@ export default function BusinessObjectDetailsPage() {
           tenant_id: tenantId,
           tenant_instance_id: datasourceId,
           page: String(pageNum),
-          limit: '100',
+          limit: String(VALIDATION_RULES_LIMIT),
         });
         params.append('entities', entityIdentifier);
         
@@ -1173,29 +1178,6 @@ export default function BusinessObjectDetailsPage() {
     setDeleteConfirmOpen(true);
   };
 
-  // Transform current BO state into Entity type for shared components
-  // currentEntity is created but not used - keeping for potential future use
-  // const _currentEntity: Entity | null = useMemo(() => {
-  //   if (!businessObject) return null;
-  //   return {
-  //     key: id,
-  //     name: businessObject.displayName,
-  //     businessName: businessObject.displayName,
-  //     technicalName: businessObject.technicalName,
-  //     description: businessObject.description,
-  //     entity_fields: fields.map(f => ({
-  //       key: f.key,
-  //       name: f.name,
-  //       businessName: f.businessName || f.name,
-  //       technicalName: f.technicalName || f.name,
-  //       type: (f.type.toLowerCase() as any) || 'text',
-  //       isCore: businessObject.isCore
-  //     })),
-  //     subtypes: {},
-  //     isCore: businessObject.isCore
-  //   };
-  // }, [businessObject, id, fields]);
-
   // Memoized filtered fields (no pagination, lazy loading on demand)
   const filteredFields = useMemo(() => {
     // If root is selected or nothing selected, show root's fields (core + custom)
@@ -1381,99 +1363,22 @@ export default function BusinessObjectDetailsPage() {
         </Breadcrumbs>
 
         {/* Page Header */}
-        <Stack direction={{ xs: 'column', sm: 'row' }} justifyContent="space-between" alignItems={{ xs: 'flex-start', sm: 'center' }} spacing={2} sx={{ mb: 4 }}>
-          <Stack direction="column" spacing={1}>
-            <Stack direction="row" spacing={2} alignItems="center">
-              <Typography variant="h4" sx={{ fontWeight: 900 }}>
-                {isNewObject ? 'Create New Business Object' : businessObject?.displayName}
-              </Typography>
-              {!isNewObject && (
-                <Chip
-                  label={businessObject?.status === 'active' ? 'Active' : 'Draft'}
-                  color={businessObject?.status === 'active' ? 'success' : 'warning'}
-                  variant="filled"
-                  size="small"
-                />
-              )}
-            </Stack>
-            <Typography variant="body2" color="text.secondary">
-              {isNewObject 
-                ? 'Define a new business object and configure its fields and hierarchy.' 
-                : businessObject?.description || 'Core data model for business operations.'}
-            </Typography>
-          </Stack>
-
-            {isNewObject ? (
-              <Chip label="New" color="success" size="small" />
-            ) : (
-              <Stack direction="row" alignItems="center" spacing={1}>
-                {businessObject?.isActive ? (
-                  <Chip label="Active" color="success" size="small" />
-                ) : (
-                  <Chip label="Draft" color="default" size="small" />
-                )}
-                <Tooltip title="Delete Business Object">
-                  <IconButton 
-                    size="small" 
-                    onClick={() => setDeleteObjectConfirmOpen(true)}
-                    sx={{ color: 'text.secondary', '&:hover': { color: 'error.main' } }}
-                  >
-                    <DeleteIcon />
-                  </IconButton>
-                </Tooltip>
-
-                <Tooltip title="Edit Object">
-                  <IconButton
-                    size="medium"
-                    onClick={() => setEditModalOpen(true)}
-                    sx={{ color: 'primary.main', ml: 1 }}
-                    disabled={!businessObject}
-                  >
-                    <EditIcon sx={{ fontSize: 32 }} />
-                  </IconButton>
-                </Tooltip>
-
-                <Tooltip title="Add Subtype">
-                  <IconButton
-                    size="medium"
-                    onClick={() => {
-                        setEditingSubtypeId(null);
-                        setEditingSubtypeKey(null);
-                        setSubtypeDisplayName('');
-                        setSubtypeName('');
-                        setSubtypeDescription('');
-                        setAddSubtypeOpen(true);
-                    }}
-                    sx={{ color: 'primary.main' }}
-                    disabled={!businessObject}
-                  >
-                    <AddIcon sx={{ fontSize: 32 }} />
-                  </IconButton>
-                </Tooltip>
-
-                <Tooltip title="Add Calculated Field">
-                   <IconButton
-                      size="medium"
-                      onClick={() => setCalcFieldModalOpen(true)}
-                      sx={{ color: 'secondary.main' }}
-                      disabled={!businessObject}
-                   >
-                      <FunctionsIcon sx={{ fontSize: 32 }} />
-                   </IconButton>
-                </Tooltip>
-                
-                <Tooltip title="Export/Import">
-                   <IconButton
-                      size="medium"
-                      onClick={() => setExportImportWizardOpen(true)}
-                      sx={{ color: 'info.main' }}
-                      disabled={!businessObject}
-                   >
-                     <ImportExportIcon sx={{ fontSize: 32 }} />
-                   </IconButton>
-                </Tooltip>
-              </Stack>
-            )}
+        <PageHeader
+          isNewObject={isNewObject}
+          businessObject={businessObject}
+          onDeleteObject={() => setDeleteObjectConfirmOpen(true)}
+          onEditObject={() => setEditModalOpen(true)}
+          onAddSubtype={() => {
+            setEditingSubtypeId(null);
+            setEditingSubtypeKey(null);
+            setSubtypeDisplayName('');
+            setSubtypeName('');
+            setSubtypeDescription('');
+            setAddSubtypeOpen(true);
+          }}
+          onAddCalculatedField={() => setCalcFieldModalOpen(true)}
+          onExportImport={() => setExportImportWizardOpen(true)}
+        />
 
         {/* Show error message if business object not found */}
         {!isNewObject && !businessObject && !loading && (
@@ -1500,9 +1405,6 @@ export default function BusinessObjectDetailsPage() {
             </Box>
           </Alert>
         )}
-
-
-        </Stack>
 
         {/* Create Form for New Objects */}
         {isNewObject && (
@@ -1703,7 +1605,6 @@ export default function BusinessObjectDetailsPage() {
             }}
           >
             <Tab label="Hierarchy & Fields" icon={<FolderOpenIcon />} iconPosition="start" />
-            {/* <Tab label="Terms" icon={<CategoryOutlinedIcon />} iconPosition="start" /> REMOVED - Merged into Hierarchy & Fields */}
             <Tab
               label={
                 <Stack direction="row" spacing={1} alignItems="center">
@@ -1735,68 +1636,16 @@ export default function BusinessObjectDetailsPage() {
           {/* Main Content Area with Sidebar */}
           <Box sx={{ display: 'flex', flexDirection: { xs: 'column', lg: 'row' }, gap: 3, p: 3 }}>
             {/* Left Panel: Hierarchy Tree - Always Visible */}
-            <Paper
-              elevation={0}
-              sx={{
-                width: { xs: '100%', lg: '30%' },
-                border: '1px solid',
-                borderColor: 'divider',
-                borderRadius: 1,
-                overflow: 'hidden',
-                display: 'flex',
-                flexDirection: 'column',
-              }}
-            >
-              <Box sx={{ p: 2, borderBottom: '1px solid', borderBottomColor: 'divider' }}>
-                <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 2, textTransform: 'uppercase' }}>
-                  Object Structure
-                </Typography>
-                  <TextField
-                    fullWidth
-                    placeholder="Filter hierarchy..."
-                    variant="outlined"
-                    size="small"
-                    InputProps={{
-                      startAdornment: (
-                        <InputAdornment position="start">
-                          <SearchIcon />
-                        </InputAdornment>
-                      ),
-                    }}
-                  />
-                </Box>
-
-                <Box sx={{ flex: 1, overflow: 'auto', p: 1 }}>
-                  <HierarchyTree
-                          nodes={hierarchyNodes}
-                          expandedNodes={expandedNodes}
-                          onNodeToggle={handleNodeToggle}
-                          _businessObject={businessObject}
-                    selectedNode={selectedNode}
-                    onNodeSelect={setSelectedNode}
-                    onRenameSubtype={openRenameDialog}
-                    onDeleteSubtype={openDeleteConfirm}
-                  />
-                </Box>
-
-                <Box
-                  sx={{
-                    p: 2,
-                    borderTop: '1px solid',
-                    borderTopColor: 'divider',
-                    bgcolor: 'action.hover',
-                  }}
-                >
-                  <Stack direction="row" justifyContent="space-between" alignItems="center">
-                    <Typography variant="caption" color="text.secondary">
-                      Last modified: 2 hours ago
-                    </Typography>
-                    <Typography variant="caption" color="text.secondary">
-                      {businessObject?.version}
-                    </Typography>
-                  </Stack>
-                </Box>
-              </Paper>
+            <HierarchyTreePanel
+              hierarchyNodes={hierarchyNodes}
+              expandedNodes={expandedNodes}
+              selectedNode={selectedNode}
+              businessObject={businessObject}
+              onNodeToggle={handleNodeToggle}
+              onNodeSelect={setSelectedNode}
+              onRenameSubtype={openRenameDialog}
+              onDeleteSubtype={openDeleteConfirm}
+            />
 
               {/* Right Panel: Tab Content */}
               <Paper
@@ -1812,364 +1661,26 @@ export default function BusinessObjectDetailsPage() {
                 }}
               >
                 {activeTab === 0 && (
-                  <Box sx={{ display: 'flex', flexDirection: 'column', flex: 1 }}>
-                    <Box sx={{ p: 3, borderBottom: '1px solid', borderBottomColor: 'divider' }}>
-                      <Stack direction={{ xs: 'column', sm: 'row' }} justifyContent="space-between" alignItems={{ xs: 'flex-start', sm: 'center' }} spacing={2}>
-                        <Box>
-                          {selectedNode?.type === 'subtype' ? (
-                            <>
-                              <Typography variant="h6" sx={{ fontWeight: 700, mb: 0.5 }}>
-                                Fields for '{businessObject?.subtypes?.[selectedNode.subtypeKey!]?.displayName || selectedNode.subtypeKey}'
-                              </Typography>
-                              <Typography variant="body2" color="text.secondary">
-                                Showing {showInheritedFields ? 'inherited + subtype-specific' : 'subtype-specific only'} fields.
-                              </Typography>
-                            </>
-                          ) : (
-                            <>
-                              <Typography variant="h6" sx={{ fontWeight: 700, mb: 0.5 }}>
-                                Fields for '{businessObject?.displayName}'
-                              </Typography>
-                              <Typography variant="body2" color="text.secondary">
-                                Define data types, constraints, and display logic for this node.
-                              </Typography>
-                            </>
-                          )}
-                        </Box>
-                        <Stack direction="row" spacing={2} alignItems="center">
-                          {selectedNode?.type === 'subtype' && (
-                            <Button
-                              variant={showInheritedFields ? 'contained' : 'outlined'}
-                              color="primary"
-                              size="small"
-                              onClick={() => setShowInheritedFields(!showInheritedFields)}
-                            >
-                              {showInheritedFields ? 'Hide Inherited' : 'Show Inherited'}
-                            </Button>
-                          )}
-                          <Button
-                            variant="contained"
-                            color="primary"
-                            startIcon={<AddIcon />}
-                            size="small"
-                            onClick={() => setFieldWizardOpen(true)}
-                          >
-                            Add Field
-                          </Button>
-                        </Stack>
-                      </Stack>
-                    </Box>
-
-                    <TextField
-                      fullWidth
-                      placeholder="Search fields..."
-                      variant="standard"
-                      value={searchFilter}
-                      onChange={(e) => {
-                        setSearchFilter(e.target.value);
-                      }}
-                      InputProps={{
-                        startAdornment: (
-                          <InputAdornment position="start">
-                            <SearchIcon fontSize="small" />
-                          </InputAdornment>
-                        ),
-                      }}
-                      sx={{
-                        px: 3,
-                        py: 1,
-                        mb: 2,
-                        '& .MuiInput-underline:before': {
-                          borderBottomColor: 'divider',
-                        },
-                      }}
-                    />
-
-                    <TableContainer sx={{ flex: 1 }}>
-                      <Table stickyHeader>
-                        <TableHead>
-                          <TableRow sx={{ bgcolor: 'action.hover' }}>
-                            <TableCell sx={{ fontWeight: 700, textTransform: 'uppercase', fontSize: '0.75rem' }}>
-                              <TableSortLabel
-                                active={sortConfig.key === 'technicalName'}
-                                direction={sortConfig.key === 'technicalName' ? sortConfig.direction : 'asc'}
-                                onClick={() => handleRequestSort('technicalName')}
-                              >
-                                Technical Name
-                              </TableSortLabel>
-                            </TableCell>
-                            <TableCell sx={{ fontWeight: 700, textTransform: 'uppercase', fontSize: '0.75rem' }}>
-                              <TableSortLabel
-                                active={sortConfig.key === 'businessName'}
-                                direction={sortConfig.key === 'businessName' ? sortConfig.direction : 'asc'}
-                                onClick={() => handleRequestSort('businessName')}
-                              >
-                                Display Label
-                              </TableSortLabel>
-                            </TableCell>
-                            {selectedNode?.type === 'subtype' && (
-                              <TableCell sx={{ fontWeight: 700, textTransform: 'uppercase', fontSize: '0.75rem' }}>
-                                Type
-                              </TableCell>
-                            )}
-                            <TableCell sx={{ fontWeight: 700, textTransform: 'uppercase', fontSize: '0.75rem' }}>
-                              <TableSortLabel
-                                active={sortConfig.key === 'type'}
-                                direction={sortConfig.key === 'type' ? sortConfig.direction : 'asc'}
-                                onClick={() => handleRequestSort('type')}
-                              >
-                                Data Type
-                              </TableSortLabel>
-                            </TableCell>
-                            <TableCell sx={{ fontWeight: 700, textTransform: 'uppercase', fontSize: '0.75rem' }}>
-                              Validation
-                            </TableCell>
-                            <TableCell align="right" sx={{ fontWeight: 700, textTransform: 'uppercase', fontSize: '0.75rem' }}>
-                              Actions
-                            </TableCell>
-                          </TableRow>
-                        </TableHead>
-                        <TableBody>
-                          {sortedFilteredFields.map((field) => {
-                            // Determine if field is inherited (from parent) or assigned to subtype
-                            const isInherited = selectedNode?.type === 'subtype' && 
-                              showInheritedFields && 
-                              (businessObject?.coreFields?.some(f => f.key === field.key) ||
-                               businessObject?.customFields?.some(f => f.key === field.key));
-                            
-                            // Determine visual style based on data type
-                            const getDataTypeConfig = (type: string) => {
-                              const t = type.toLowerCase();
-                              if (t.includes('int') || t.includes('number') || t.includes('decimal') || t.includes('float') || t.includes('double')) {
-                                return { icon: <NumberIcon sx={{ fontSize: 16 }} />, color: 'success', label: type };
-                              } else if (t.includes('date') || t.includes('time')) {
-                                return { icon: <DateIcon sx={{ fontSize: 16 }} />, color: 'secondary', label: type };
-                              } else if (t.includes('bool')) {
-                                return { icon: <BooleanIcon sx={{ fontSize: 16 }} />, color: 'warning', label: type };
-                              } else if (t.includes('json') || t.includes('obj') || t.includes('arr')) {
-                                return { icon: <JsonIcon sx={{ fontSize: 16 }} />, color: 'info', label: type };
-                              } else {
-                                return { icon: <TextIcon sx={{ fontSize: 16 }} />, color: 'primary', label: type };
-                              }
-                            };
-                            
-                            const typeConfig = getDataTypeConfig(field.type);
-
-                            return (
-                            <TableRow
-                              key={field.key}
-                              hover
-                              sx={{
-                                '&:hover': {
-                                  bgcolor: 'action.hover',
-                                },
-                                opacity: isInherited ? 0.8 : 1,
-                              }}
-                            >
-                            <TableCell sx={{ fontWeight: 600, fontFamily: 'monospace', fontSize: '0.85rem' }}>
-                              {field.technicalName || field.name}
-                            </TableCell>
-                              <TableCell>
-                                <Stack direction="row" spacing={1} alignItems="center">
-                                  <Typography variant="body2" sx={{ fontWeight: 500 }}>
-                                    {field.businessName || field.name}
-                                  </Typography>
-                                  {field.description && (
-                                    <Tooltip title={field.description} arrow placement="right">
-                                      <InfoOutlinedIcon sx={{ fontSize: 16, color: 'text.secondary', cursor: 'help' }} />
-                                    </Tooltip>
-                                  )}
-                                </Stack>
-                              </TableCell>
-                              {selectedNode?.type === 'subtype' && (
-                                <TableCell>
-                                  <Chip
-                                    label={isInherited ? 'Inherited' : 'Assigned'}
-                                    size="small"
-                                    variant="filled"
-                                    color={isInherited ? 'default' : 'primary'}
-                                    sx={{
-                                      fontWeight: 600,
-                                      fontSize: '0.7rem',
-                                    }}
-                                  />
-                                </TableCell>
-                              )}
-
-                              <TableCell>
-                                <Chip
-                                  icon={typeConfig.icon}
-                                  label={typeConfig.label}
-                                  size="small"
-                                  color={typeConfig.color as any}
-                                  variant="outlined"
-                                  sx={{ fontWeight: 500, border: '1px solid' }}
-                                />
-                              </TableCell>
-                              <TableCell>
-                                <Stack direction="row" spacing={1} alignItems="center">
-                                  {getValidationIcon(field.validation)}
-                                  <Typography variant="body2" color="text.secondary">
-                                    {field.validationMessage || '-'}
-                                  </Typography>
-                                </Stack>
-                              </TableCell>
-                              <TableCell align="right">
-                                <Stack direction="row" spacing={0.5} justifyContent="flex-end">
-                                  <Tooltip title="Edit field">
-                                    <IconButton size="small" onClick={() => handleEditField(field)} sx={{ '&:hover': { color: 'primary.main' } }}>
-                                      <EditIcon fontSize="small" />
-                                    </IconButton>
-                                  </Tooltip>
-                                  <Tooltip title="Delete field">
-                                    <IconButton size="small" onClick={() => handleDeleteField(field)} sx={{ '&:hover': { color: 'error.main' } }}>
-                                      <DeleteIcon fontSize="small" />
-                                    </IconButton>
-                                  </Tooltip>
-                                  <IconButton size="small" sx={{ '&:hover': { color: 'primary.main' } }}>
-                                    <MoreVertIcon fontSize="small" />
-                                  </IconButton>
-                                </Stack>
-                              </TableCell>
-                            </TableRow>
-                            );
-                          })}
-                        </TableBody>
-                      </Table>
-                    </TableContainer>
-                  </Box>
+                  <FieldsTab
+                    selectedNode={selectedNode}
+                    businessObject={businessObject}
+                    searchFilter={searchFilter}
+                    showInheritedFields={showInheritedFields}
+                    sortedFilteredFields={sortedFilteredFields}
+                    sortConfig={sortConfig}
+                    onSearchChange={setSearchFilter}
+                    onToggleInherited={() => setShowInheritedFields(!showInheritedFields)}
+                    onAddField={() => setFieldWizardOpen(true)}
+                    onEditField={handleEditField}
+                    onDeleteField={handleDeleteField}
+                    onSort={handleRequestSort}
+                    getValidationIcon={getValidationIcon}
+                  />
                 )}
 
               {/* Bindings Tab - Binding-first canonical view */}
               {activeTab === 1 && (
-                <Box sx={{ p: 3 }}>
-                  <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 3 }}>
-                    <Box>
-                      <Typography variant="h6" sx={{ fontWeight: 700 }}>
-                        Physical Source Bindings
-                      </Typography>
-                      <Typography variant="body2" color="text.secondary">
-                        {bindings.length} binding{bindings.length !== 1 ? 's' : ''} configured for this Business Object
-                      </Typography>
-                    </Box>
-                  </Stack>
-
-                  {bindings.length === 0 ? (
-                    <Paper variant="outlined" sx={{ p: 4, textAlign: 'center' }}>
-                      <StorageIcon sx={{ fontSize: 48, color: 'text.disabled', mb: 2 }} />
-                      <Typography variant="h6" color="text.secondary" gutterBottom>
-                        No Bindings Configured
-                      </Typography>
-                      <Typography variant="body2" color="text.secondary">
-                        This Business Object does not yet have physical source bindings.
-                        Bindings define how this object maps to physical database tables.
-                      </Typography>
-                    </Paper>
-                  ) : (
-                    <Stack spacing={2}>
-                      {bindings.map((binding: any, index: number) => (
-                        <Paper key={binding.boBindingId || index} variant="outlined" sx={{ p: 2 }}>
-                          <Grid container spacing={2}>
-                            <Grid size={12}>
-                              <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1 }}>
-                                <StorageIcon color="primary" />
-                                <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
-                                  {binding.bindingName || `Binding ${index + 1}`}
-                                </Typography>
-                                {binding.isActive !== undefined && (
-                                  <Chip
-                                    label={binding.isActive ? 'Active' : 'Inactive'}
-                                    size="small"
-                                    color={binding.isActive ? 'success' : 'default'}
-                                  />
-                                )}
-                                {binding.isCore && (
-                                  <Chip label="Core" size="small" variant="outlined" />
-                                )}
-                              </Stack>
-                            </Grid>
-                            <Grid size={{ 'xs': 12, 'md': 6 }}>
-                              <Typography variant="caption" color="text.secondary">Binding ID</Typography>
-                              <Typography variant="body2" sx={{ fontFamily: 'monospace' }}>
-                                {binding.boBindingId || 'N/A'}
-                              </Typography>
-                            </Grid>
-                            <Grid size={{ 'xs': 12, 'md': 6 }}>
-                              <Typography variant="caption" color="text.secondary">Backend</Typography>
-                              <Typography variant="body2">
-                                {binding.backendName || binding.backendId || 'N/A'}
-                              </Typography>
-                            </Grid>
-                            <Grid   size={{ xs: 12, md: 6 }}>
-                              <Typography variant="caption" color="text.secondary">Driving Node</Typography>
-                              <Typography variant="body2">
-                                {binding.drivingNodeName || binding.drivingNodeId || 'N/A'}
-                              </Typography>
-                            </Grid>
-                            <Grid   size={{ xs: 12, md: 6 }}>
-                              <Typography variant="caption" color="text.secondary">Temporal Mode</Typography>
-                              <Typography variant="body2">
-                                {binding.temporalMode || 'N/A'}
-                              </Typography>
-                            </Grid>
-                            {binding.baseSql && (
-                              <Grid size={12}>
-                                <Typography variant="caption" color="text.secondary">Base SQL</Typography>
-                                <Paper variant="outlined" sx={{ p: 1, mt: 0.5, bgcolor: 'grey.50' }}>
-                                  <Typography variant="body2" sx={{ fontFamily: 'monospace', fontSize: '0.75rem' }}>
-                                    {binding.baseSql}
-                                  </Typography>
-                                </Paper>
-                              </Grid>
-                            )}
-                            {binding.Fields && binding.Fields.length > 0 && (
-                              <Grid  size={{ xs: 12 }}>
-                                <Typography variant="caption" color="text.secondary" sx={{ mb: 1, display: 'block' }}>
-                                  Field Mappings ({binding.Fields.length})
-                                </Typography>
-                                <TableContainer component={Paper} variant="outlined">
-                                  <Table size="small">
-                                    <TableHead>
-                                      <TableRow>
-                                        <TableCell>Field Name</TableCell>
-                                        <TableCell>Role</TableCell>
-                                        <TableCell>Data Type</TableCell>
-                                        <TableCell>PK</TableCell>
-                                        <TableCell>Aggregation</TableCell>
-                                      </TableRow>
-                                    </TableHead>
-                                    <TableBody>
-                                      {binding.Fields.slice(0, 10).map((field: any, fIdx: number) => (
-                                        <TableRow key={field.fieldId || fIdx}>
-                                          <TableCell>{field.fieldName}</TableCell>
-                                          <TableCell>
-                                            <Chip label={field.fieldRole || 'ATTRIBUTE'} size="small" variant="outlined" />
-                                          </TableCell>
-                                          <TableCell>{field.dataType}</TableCell>
-                                          <TableCell>{field.isPrimaryKey ? 'Yes' : 'No'}</TableCell>
-                                          <TableCell>{field.aggregationType || 'NONE'}</TableCell>
-                                        </TableRow>
-                                      ))}
-                                      {binding.Fields.length > 10 && (
-                                        <TableRow>
-                                          <TableCell colSpan={5} align="center">
-                                            <Typography variant="body2" color="text.secondary">
-                                              +{binding.Fields.length - 10} more fields
-                                            </Typography>
-                                          </TableCell>
-                                        </TableRow>
-                                      )}
-                                    </TableBody>
-                                  </Table>
-                                </TableContainer>
-                              </Grid>
-                            )}
-                          </Grid>
-                        </Paper>
-                      ))}
-                    </Stack>
-                  )}
-                </Box>
+                <BindingsTab bindings={bindings} />
               )}
 
               {/* Validations Tab */}
@@ -2190,91 +1701,11 @@ export default function BusinessObjectDetailsPage() {
               {/* Validations Tab - Moved to index 2 */}
               {/* Related Objects Tab - Now index 3 */}
               {activeTab === 3 && (
-                <Box sx={{ p: 3 }}>
-                  <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 3 }}>
-                    <Typography variant="h6">Related Objects</Typography>
-                    <Stack direction="row" spacing={2} alignItems="center">
-                      <Tooltip title="Add Relationship">
-                        <IconButton
-                          size="large"
-                          onClick={() => setRelationshipWizardOpen(true)}
-                          sx={{ color: 'primary.main' }}
-                        >
-                          <AddLinkIcon sx={{ fontSize: 32 }} />
-                        </IconButton>
-                      </Tooltip>
-                      <Tooltip title="Tile View">
-                        <IconButton
-                          size="medium"
-                          onClick={() => setRelatedObjectsView('tile')}
-                          component="button"
-                          color={relatedObjectsView === 'tile' ? 'primary' : 'default'}
-                          sx={{
-                            border: relatedObjectsView === 'tile' ? '2px solid' : '1px solid',
-                            borderColor: relatedObjectsView === 'tile' ? 'primary.main' : 'divider',
-                          }}
-                        >
-                          <AppsIcon sx={{ fontSize: 28 }} />
-                        </IconButton>
-                      </Tooltip>
-                      <Tooltip title="Table View">
-                        <IconButton
-                          size="medium"
-                          onClick={() => setRelatedObjectsView('table')}
-                          component="button"
-                          color={relatedObjectsView === 'table' ? 'primary' : 'default'}
-                          sx={{
-                            border: relatedObjectsView === 'table' ? '2px solid' : '1px solid',
-                            borderColor: relatedObjectsView === 'table' ? 'primary.main' : 'divider',
-                          }}
-                        >
-                          <TableChartIcon sx={{ fontSize: 28 }} />
-                        </IconButton>
-                      </Tooltip>
-                      <Tooltip title="Graph View">
-                        <IconButton
-                          size="medium"
-                          onClick={() => setRelatedObjectsView('graph')}
-                          component="button"
-                          color={relatedObjectsView === 'graph' ? 'primary' : 'default'}
-                          sx={{
-                            border: relatedObjectsView === 'graph' ? '2px solid' : '1px solid',
-                            borderColor: relatedObjectsView === 'graph' ? 'primary.main' : 'divider',
-                          }}
-                        >
-                          <AccountTreeIcon sx={{ fontSize: 28 }} />
-                        </IconButton>
-                      </Tooltip>
-                    </Stack>
-                  </Stack>
-
-                  {/* Tile View */}
-                  {relatedObjectsView === 'tile' && (
-                    <Box>
-                      <Typography variant="body2" color="text.secondary" sx={{ textAlign: 'center', py: 5 }}>
-                        No related objects found. Related objects will appear here once they are linked to this business object.
-                      </Typography>
-                    </Box>
-                  )}
-
-                  {/* Table View */}
-                  {relatedObjectsView === 'table' && (
-                    <Box>
-                      <Typography variant="body2" color="text.secondary" sx={{ textAlign: 'center', py: 5 }}>
-                        No related objects found. Related objects will appear here once they are linked to this business object.
-                      </Typography>
-                    </Box>
-                  )}
-
-                  {/* Graph View */}
-                  {relatedObjectsView === 'graph' && (
-                    <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', py: 5, minHeight: 300 }}>
-                      <Typography variant="body2" color="text.secondary">
-                        No related objects to display. Graph visualization will appear here once relationships are established.
-                      </Typography>
-                    </Box>
-                  )}
-                </Box>
+                <RelatedObjectsTab
+                  relatedObjectsView={relatedObjectsView}
+                  onAddRelationship={() => setRelationshipWizardOpen(true)}
+                  onViewChange={setRelatedObjectsView}
+                />
               )}
 
               {/* Graph Tab - Now index 4 */}
@@ -2358,235 +1789,57 @@ export default function BusinessObjectDetailsPage() {
     />
 
     {/* Field Delete Confirmation Dialog */}
-    <Dialog 
-      open={fieldDeleteConfirmOpen} 
+    <FieldDeleteConfirmDialog
+      open={fieldDeleteConfirmOpen}
+      fieldPendingDelete={fieldPendingDelete}
+      isDeleting={isDeleting}
       onClose={() => {
         setFieldDeleteConfirmOpen(false);
         setFieldPendingDelete(null);
-      }} 
-      maxWidth="sm" 
-      fullWidth
-    >
-      <DialogTitle sx={{ fontWeight: 700, color: 'error.main' }}>🗑️ Remove Field?</DialogTitle>
-      <DialogContent>
-        <Stack spacing={2} sx={{ mt: 2 }}>
-          <Alert severity="error">
-            This will permanently remove this field from the business object. This action cannot be undone.
-          </Alert>
-          {fieldPendingDelete && (
-            <Box sx={{ bgcolor: 'action.hover', p: 2, borderRadius: 1 }}>
-              <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>
-                Field to remove:
-              </Typography>
-              <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
-                {fieldPendingDelete.businessName || fieldPendingDelete.name}
-              </Typography>
-              <Typography variant="caption" color="text.secondary" sx={{ fontFamily: 'monospace' }}>
-                {fieldPendingDelete.technicalName || fieldPendingDelete.key}
-              </Typography>
-              {(fieldPendingDelete.semanticTermName || fieldPendingDelete.semantic_term_name) && (
-                <>
-                  <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }}>
-                    Semantic Term:
-                  </Typography>
-                  <Chip 
-                    label={fieldPendingDelete.semanticTermName || fieldPendingDelete.semantic_term_name}
-                    size="small"
-                    variant="outlined"
-                    sx={{ mt: 0.5 }}
-                  />
-                </>
-              )}
-            </Box>
-          )}
-        </Stack>
-      </DialogContent>
-      <DialogActions>
-        <Button 
-          onClick={() => {
-            setFieldDeleteConfirmOpen(false);
-            setFieldPendingDelete(null);
-          }}
-          disabled={isDeleting}
-        >
-          Cancel
-        </Button>
-        <Button 
-          variant="contained" 
-          color="error"
-          onClick={handleConfirmDeleteField}
-          disabled={isDeleting}
-        >
-          {isDeleting ? 'Removing...' : 'Remove Field'}
-        </Button>
-      </DialogActions>
-    </Dialog>
+      }}
+      onConfirm={handleConfirmDeleteField}
+    />
 
     {/* Add/Edit Subtype Dialog */}
-    <Dialog 
-      open={addSubtypeOpen} 
+    <SubtypeDialog
+      open={addSubtypeOpen}
+      mode="add"
+      businessObject={businessObject}
+      editingSubtypeKey={editingSubtypeKey}
+      subtypeDisplayName={subtypeDisplayName}
+      subtypeName={subtypeName}
+      subtypeDescription={subtypeDescription}
+      subtypeSaving={subtypeSaving}
       onClose={() => {
         setEditingSubtypeId(null);
         setEditingSubtypeKey(null);
         setAddSubtypeOpen(false);
-      }} 
-      maxWidth="sm" 
-      fullWidth
-    >
-      <DialogTitle sx={{ fontWeight: 700, fontSize: '1.25rem' }}>
-        {editingSubtypeKey ? '✏️ Edit Subtype' : '➕ Add New Subtype'}
-      </DialogTitle>
-      <DialogContent>
-        <Stack spacing={3} sx={{ mt: 2 }}>
-          <TextField
-            fullWidth
-            label="Display Name"
-            placeholder="e.g., Commercial Customer"
-            value={subtypeDisplayName}
-            onChange={(e) => setSubtypeDisplayName(e.target.value)}
-            helperText="Human-readable name for this subtype"
-            variant="outlined"
-            autoFocus
-          />
-          <TextField
-            fullWidth
-            label="Technical Name"
-            placeholder="e.g., commercial_customer"
-            value={subtypeName}
-            onChange={(e) => setSubtypeName(e.target.value)}
-            helperText="Lowercase letters, numbers, and underscores only. Leave empty to auto-generate from display name."
-            variant="outlined"
-          />
-          {!subtypeName.trim() && subtypeDisplayName.trim() && (
-            <Typography variant="body2" color="primary" sx={{ p: 1.5, bgcolor: 'action.hover', borderRadius: 1 }}>
-              <strong>Suggested technical name:</strong> <code>{subtypeDisplayName.trim().toLowerCase().replace(/\s+/g, '_')}</code>
-            </Typography>
-          )}
-          <TextField
-            fullWidth
-            label="Description"
-            placeholder="Describe what this subtype represents..."
-            value={subtypeDescription}
-            onChange={(e) => setSubtypeDescription(e.target.value)}
-            helperText="Optional. Helps other team members understand this variation"
-            multiline
-            rows={3}
-            variant="outlined"
-          />
-          <Alert severity="info" icon={<InfoIcon />}>
-            Subtypes inherit all core fields from {businessObject?.displayName} and can have their own additional fields.
-          </Alert>
-        </Stack>
-      </DialogContent>
-      <DialogActions>
-        <Button onClick={() => {
-          setEditingSubtypeId(null);
-          setEditingSubtypeKey(null);
-          setAddSubtypeOpen(false);
-        }}>Cancel</Button>
-        <Button 
-          variant="contained" 
-          onClick={handleAddSubtype} 
-          disabled={subtypeSaving || !subtypeDisplayName.trim()}
-        >
-          {subtypeSaving ? 'Saving...' : editingSubtypeKey ? 'Update Subtype' : 'Create Subtype'}
-        </Button>
-      </DialogActions>
-    </Dialog>
-
-    {/* Rename Subtype Dialog */}
-    {/* REMOVED - Edit now uses the Add dialog */}
+      }}
+      onDisplayNameChange={setSubtypeDisplayName}
+      onTechnicalNameChange={setSubtypeName}
+      onDescriptionChange={setSubtypeDescription}
+      onSave={handleAddSubtype}
+    />
 
     {/* Delete Subtype Confirmation Dialog */}
-    <Dialog 
-      open={deleteConfirmOpen} 
+    <DeleteSubtypeDialog
+      open={deleteConfirmOpen}
+      businessObject={businessObject}
+      deletingSubtypeKey={deletingSubtypeKey}
+      deleteConfirmInput={deleteConfirmInput}
       onClose={() => {
         setDeleteConfirmOpen(false);
         setDeletingSubtypeKey(null);
         setDeleteConfirmInput('');
-      }} 
-      maxWidth="sm" 
-      fullWidth
-    >
-      <DialogTitle sx={{ fontWeight: 700, color: 'error.main' }}>🗑️ Delete Subtype?</DialogTitle>
-      <DialogContent>
-        <Stack spacing={2} sx={{ mt: 2 }}>
-          <Alert severity="error">
-            This will permanently delete this subtype and cannot be undone.
-          </Alert>
-          {deletingSubtypeKey && businessObject?.subtypes && businessObject.subtypes[deletingSubtypeKey] && (
-            <>
-              <Box sx={{ bgcolor: 'action.hover', p: 2, borderRadius: 1 }}>
-                <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>
-                  Deleting:
-                </Typography>
-                <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
-                  {businessObject.subtypes[deletingSubtypeKey].displayName || businessObject.subtypes[deletingSubtypeKey].name}
-                </Typography>
-                <Typography variant="caption" color="text.secondary" sx={{ fontFamily: 'monospace' }}>
-                  {businessObject.subtypes[deletingSubtypeKey].technicalName || deletingSubtypeKey}
-                </Typography>
-              </Box>
-              
-              <Box>
-                <Typography variant="body2" sx={{ fontWeight: 600, mb: 1 }}>
-                  To confirm, type the technical name:
-                </Typography>
-                <Typography 
-                  variant="body2" 
-                  sx={{ 
-                    fontFamily: 'monospace', 
-                    bgcolor: 'background.paper',
-                    p: 1,
-                    borderRadius: 1,
-                    border: '1px solid',
-                    borderColor: 'divider',
-                    mb: 2
-                  }}
-                >
-                  {businessObject.subtypes[deletingSubtypeKey].technicalName || deletingSubtypeKey}
-                </Typography>
-                <TextField
-                  fullWidth
-                  size="small"
-                  placeholder="Enter technical name to confirm"
-                  value={deleteConfirmInput}
-                  onChange={(e) => setDeleteConfirmInput(e.target.value)}
-                  sx={{ 
-                    '& .MuiOutlinedInput-root': {
-                      '&.Mui-focused fieldset': {
-                        borderColor: 'error.main',
-                      }
-                    }
-                  }}
-                />
-              </Box>
-            </>
-          )}
-        </Stack>
-      </DialogContent>
-      <DialogActions>
-        <Button onClick={() => {
-          setDeleteConfirmOpen(false);
-          setDeletingSubtypeId(null);
-          setDeletingSubtypeKey(null);
+      }}
+      onInputChange={setDeleteConfirmInput}
+      onConfirm={() => {
+        if (deletingSubtypeId) {
+          handleDeleteSubtype(deletingSubtypeId);
           setDeleteConfirmInput('');
-        }}>Cancel</Button>
-        <Button 
-          variant="contained" 
-          color="error"
-          disabled={deleteConfirmInput !== (deletingSubtypeKey && businessObject?.subtypes?.[deletingSubtypeKey]?.technicalName || deletingSubtypeKey)}
-          onClick={() => {
-            if (deletingSubtypeId) {
-              handleDeleteSubtype(deletingSubtypeId);
-              setDeleteConfirmInput('');
-            }
-          }}
-        >
-          Delete Permanently
-        </Button>
-      </DialogActions>
-    </Dialog>
+        }
+      }}
+    />
 
     {/* Edit Business Object Modal */}
     {businessObject && (
@@ -2714,289 +1967,22 @@ export default function BusinessObjectDetailsPage() {
     </Dialog>
 
     {/* Edit Field Dialog */}
-    <Dialog 
-      open={editFieldModalOpen} 
+    <EditFieldDialog
+      open={editFieldModalOpen}
+      semanticTerms={semanticTerms}
+      editedFieldData={editedFieldData}
       onClose={() => setEditFieldModalOpen(false)}
-      maxWidth="sm"
-      fullWidth
-    >
-      <DialogTitle>Edit Field</DialogTitle>
-      <DialogContent sx={{ pt: 2, display: 'flex', flexDirection: 'column', gap: 2 }}>
-        <TextField
-          label="Display Name"
-          fullWidth
-          value={editedFieldData.displayName}
-          onChange={(e) => setEditedFieldData(prev => ({ ...prev, displayName: e.target.value }))}
-          sx={{ mt: 1 }}
-        />
-        <TextField
-          label="Description"
-          fullWidth
-          multiline
-          rows={3}
-          value={editedFieldData.description}
-          onChange={(e) => setEditedFieldData(prev => ({ ...prev, description: e.target.value }))}
-        />
-        
-        <Autocomplete
-          options={semanticTerms}
-          getOptionLabel={(option) => option.node_name}
-          value={semanticTerms.find(t => t.id === editedFieldData.semanticTermId) || null}
-          onChange={(_, newValue) => {
-              setEditedFieldData(prev => ({ 
-                  ...prev, 
-                  semanticTermId: newValue?.id || '' 
-              }));
-          }}
-          renderInput={(params) => <TextField {...params} label="Semantic Term" />}
-        />
-        
-        <TextField
-          id="role-select"
-          select
-          label="Role"
-          fullWidth
-          InputLabelProps={{ id: 'role-select-label' }}
-          value={editedFieldData.role}
-          onChange={(e) => setEditedFieldData(prev => ({ ...prev, role: e.target.value }))}
-          SelectProps={{ native: true, inputProps: { 'aria-label': 'Select field role', title: 'Select the role for this field', id: 'role-select', 'aria-labelledby': 'role-select-label' } }}
-        >
-            <option value="">None</option>
-            <option value="DIMENSION">Dimension</option>
-            <option value="MEASURE">Measure</option>
-            <option value="ATTRIBUTE">Attribute</option>
-        </TextField>
-
-      </DialogContent>
-      <DialogActions>
-        <Button onClick={() => setEditFieldModalOpen(false)}>Cancel</Button>
-        <Button variant="contained" onClick={handleSaveFieldEdit}>Save</Button>
-      </DialogActions>
-    </Dialog>
+      onFieldDataChange={setEditedFieldData}
+      onSave={handleSaveFieldEdit}
+    />
     {/* Delete Business Object Confirmation Dialog */}
-    <Dialog
+    <DeleteObjectConfirmDialog
       open={deleteObjectConfirmOpen}
+      businessObject={businessObject}
       onClose={() => setDeleteObjectConfirmOpen(false)}
-      maxWidth="sm"
-      fullWidth
-    >
-      <DialogTitle sx={{ fontWeight: 700, color: 'error.main' }}>🗑️ Delete Business Object?</DialogTitle>
-      <DialogContent>
-        <Stack spacing={2} sx={{ mt: 2 }}>
-          <Alert severity="error">
-            Are you sure you want to delete this Business Object? This action cannot be undone and will delete all associated data and configuration.
-          </Alert>
-          <Box sx={{ bgcolor: 'action.hover', p: 2, borderRadius: 1 }}>
-            <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
-              {businessObject?.displayName}
-            </Typography>
-            <Typography variant="caption" color="text.secondary" sx={{ fontFamily: 'monospace' }}>
-              {businessObject?.technicalName}
-            </Typography>
-          </Box>
-        </Stack>
-      </DialogContent>
-      <DialogActions>
-        <Button onClick={() => setDeleteObjectConfirmOpen(false)}>Cancel</Button>
-        <Button 
-          variant="contained" 
-          color="error" 
-          onClick={handleDeleteBusinessObject}
-        >
-          Delete Permanently
-        </Button>
-      </DialogActions>
-    </Dialog>
+      onConfirm={handleDeleteBusinessObject}
+    />
   </>
   );
 }
 
-// Hierarchy Tree Component
-interface HierarchyTreeProps {
-  nodes: HierarchyNode[];
-  expandedNodes: Set<string>;
-  onNodeToggle: (nodeId: string) => void;
-  _businessObject?: BusinessObject | null;
-  selectedNode: any;
-  onNodeSelect: (node: any) => void;
-  onRenameSubtype: (key: string, name: string) => void;
-  onDeleteSubtype: (key: string) => void;
-}
-
-function HierarchyTree({
-  nodes,
-  expandedNodes,
-  onNodeToggle,
-  // _businessObject,
-  selectedNode,
-  onNodeSelect,
-  onRenameSubtype,
-  onDeleteSubtype,
-}: HierarchyTreeProps) {
-  return (
-    <Box component="ul" sx={{ listStyle: 'none', p: 0, m: 0 }}>
-      {nodes.map((node) => (
-        <HierarchyTreeNode
-          key={node.id}
-          node={node}
-          expandedNodes={expandedNodes}
-          onNodeToggle={onNodeToggle}
-          selectedNode={selectedNode}
-          onNodeSelect={onNodeSelect}
-          onRenameSubtype={onRenameSubtype}
-          onDeleteSubtype={onDeleteSubtype}
-        />
-      ))}
-    </Box>
-  );
-}
-
-function HierarchyTreeNode({
-  node,
-  expandedNodes,
-  onNodeToggle,
-  selectedNode,
-  onNodeSelect,
-  onRenameSubtype,
-  onDeleteSubtype,
-}: {
-  node: HierarchyNode;
-  expandedNodes: Set<string>;
-  onNodeToggle: (nodeId: string) => void;
-  selectedNode: any;
-  onNodeSelect: (node: any) => void;
-  onRenameSubtype: (key: string, name: string) => void;
-  onDeleteSubtype: (key: string) => void;
-}) {
-  const hasChildren = node.children && node.children.length > 0;
-  const isSubtypeNode = (node as any).isSubtype;
-  const subtypeKey = (node as any).subtypeKey;
-  const technicalName = (node as any).technicalName;
-  const isRootNode = node.id === 'root';
-  const isSelected = (isRootNode && !selectedNode) || (selectedNode?.subtypeKey === subtypeKey && isSubtypeNode);
-
-  const handleNodeClick = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (isRootNode) {
-      onNodeSelect(null);
-    } else if (isSubtypeNode) {
-      onNodeSelect({ type: 'subtype', subtypeKey, key: node.id });
-    }
-  };
-
-  return (
-    <Box component="li" sx={{ listStyle: 'none', mb: 0.5 }}>
-      <Stack
-        direction="row"
-        spacing={1}
-        alignItems="center"
-        onClick={handleNodeClick}
-        sx={{
-          p: 1,
-          borderRadius: 1,
-          cursor: 'pointer',
-          bgcolor: 
-            isSelected 
-              ? 'primary.light' 
-              : node.id === 'root' ? 'primary.light' : 'transparent',
-          color: 
-            isSelected || node.id === 'root' 
-              ? 'primary.main' 
-              : 'text.primary',
-          fontWeight: node.id === 'root' || isSelected ? 700 : 400,
-          transition: 'all 0.2s ease',
-          '&:hover': {
-            bgcolor: node.id === 'root' || isSelected ? 'primary.light' : 'action.hover',
-          },
-        }}
-      >
-        <Box sx={{ width: 24, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          {isRootNode ? (
-            <BusinessObjectIcon sx={{ fontSize: '1.25rem', color: 'primary.main' }} />
-          ) : isSubtypeNode ? (
-            <SubtypeIcon sx={{ fontSize: '1.25rem', color: 'info.main' }} />
-          ) : null}
-        </Box>
-        <Stack direction="column" spacing={0} flex={1}>
-          <Typography variant="body2">{node.displayName}</Typography>
-          {technicalName && isSubtypeNode && (
-            <Typography 
-              variant="caption" 
-              color="text.secondary" 
-              sx={{ fontFamily: 'monospace', fontSize: '0.7rem' }}
-              title={`Technical name: ${technicalName}`}
-            >
-              {technicalName}
-            </Typography>
-          )}
-        </Stack>
-
-        {isSubtypeNode && (
-          <Stack direction="row" spacing={0.5} sx={{ ml: 'auto' }}>
-            <IconButton
-              size="small"
-              color="primary"
-              onClick={(e) => {
-                e.stopPropagation();
-                onRenameSubtype(subtypeKey || '', node.displayName || '');
-              }}
-              title="Edit subtype"
-              sx={{
-                '&:hover': { bgcolor: 'primary.light', color: 'primary.dark' },
-              }}
-            >
-              <EditIcon fontSize="small" />
-            </IconButton>
-            <IconButton
-              size="small"
-              color="error"
-              onClick={(e) => {
-                e.stopPropagation();
-                onDeleteSubtype(subtypeKey);
-              }}
-              title="Delete subtype"
-              sx={{
-                '&:hover': { bgcolor: 'error.light', color: 'error.dark' },
-              }}
-            >
-              <DeleteIcon fontSize="small" />
-            </IconButton>
-            <IconButton
-              size="small"
-              color="info"
-              onClick={(e) => {
-                e.stopPropagation();
-                // Clone functionality will be added later
-              }}
-              title="Clone subtype"
-              sx={{
-                '&:hover': { bgcolor: 'info.light', color: 'info.dark' },
-              }}
-            >
-              <CloneIcon fontSize="small" />
-            </IconButton>
-          </Stack>
-        )}
-      </Stack>
-
-      {hasChildren && (
-        <Box component="ul" sx={{ listStyle: 'none', p: 0, m: 0, pl: 2, borderLeft: '2px solid', borderLeftColor: 'divider', ml: 2 }}>
-          {node.children?.map((child) => (
-            <HierarchyTreeNode
-              key={child.id}
-              node={child}
-              expandedNodes={expandedNodes}
-              onNodeToggle={onNodeToggle}
-              selectedNode={selectedNode}
-              onNodeSelect={onNodeSelect}
-              onRenameSubtype={onRenameSubtype}
-              onDeleteSubtype={onDeleteSubtype}
-            />
-          ))}
-        </Box>
-      )}
-
-
-    </Box>
-  );
-}

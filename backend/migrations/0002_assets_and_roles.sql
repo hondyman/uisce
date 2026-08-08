@@ -7,7 +7,7 @@ CREATE TABLE IF NOT EXISTS asset (
   domain TEXT NOT NULL,
   certified BOOLEAN NOT NULL DEFAULT FALSE,
   sensitivity TEXT NOT NULL DEFAULT 'medium',
-  created_at TIMESTAMP NOT NULL DEFAULT now()
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS idx_asset_tenant_domain ON asset(tenant_id, domain);
 CREATE INDEX IF NOT EXISTS idx_asset_cert ON asset(tenant_id, certified);

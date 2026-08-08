@@ -8,7 +8,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-type TxFunc func(tx *pgxpool.Tx) error
+type TxFunc func(tx pgx.Tx) error
 
 func (p *Pool) WithTransaction(ctx context.Context, fn TxFunc) error {
 	tx, err := p.Begin(ctx)

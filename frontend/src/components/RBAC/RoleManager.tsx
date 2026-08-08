@@ -128,9 +128,7 @@ export const RoleManager: React.FC<RoleManagerProps> = ({ tenant, datasource }) 
   const fetchRoles = async () => {
     try {
       setLoading(true);
-      const response = await fetch(
-        `/api/rbac/roles?tenant_id=${tenant.id}&tenant_instance_id=${datasource.id}`
-      );
+      const response = await fetch('/api/rbac/roles');
       const data = await response.json();
       setRoles(data || [
         {
@@ -188,7 +186,7 @@ export const RoleManager: React.FC<RoleManagerProps> = ({ tenant, datasource }) 
   // Fetch permissions
   const fetchPermissions = async () => {
     try {
-      const response = await fetch(`/api/rbac/permissions?tenant_id=${tenant.id}`);
+      const response = await fetch('/api/rbac/permissions');
       const data = await response.json();
       setPermissions(data || [
         { id: '1', permission_key: 'view_dashboard', permission_name: 'View Dashboard', description: '', resource_type: 'dashboard', action: 'view', is_system: true },
@@ -206,8 +204,7 @@ export const RoleManager: React.FC<RoleManagerProps> = ({ tenant, datasource }) 
   const createRole = async () => {
     try {
       setSaving(true);
-      const response = await fetch(
-        `/api/rbac/roles?tenant_id=${tenant.id}&tenant_instance_id=${datasource.id}`,
+      const response = await fetch('/api/rbac/roles',
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },

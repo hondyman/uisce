@@ -9,6 +9,8 @@ import (
 	"math"
 	"sort"
 	"time"
+
+	"github.com/hondyman/uisce/libs/db/queries"
 )
 
 // ============================================================================
@@ -89,13 +91,8 @@ func (e *BranchEvaluator) EvaluateAIModels(ctx context.Context, config json.RawM
 	//     _set: {last_updated: "now()"}
 	//   ) { affected_rows }
 	// }
-	logQuery := `
-		UPDATE bp_ai_models 
-		SET predictions_count = predictions_count + 1, last_updated = NOW()
-		WHERE model_id = $1 AND tenant_id = $2
-	`
 	if e.db != nil {
-		if _, err := e.db.ExecContext(ctx, logQuery, selectedModel.ModelID, tenantID); err != nil {
+		if _, err := e.db.ExecContext(ctx, queries.IncrementAIModelPredictionsAlt, selectedModel.ModelID, tenantID); err != nil {
 			log.Printf("Failed to update model metrics: %v", err)
 		}
 	}
@@ -161,15 +158,8 @@ func (e *BranchEvaluator) EvaluateSemanticIntent(ctx context.Context, config jso
 	//   ) { intent_id }
 	// }
 	// Note: avg_confidence calculation requires _inc for match_count and custom logic for average
-	logQuery := `
-		INSERT INTO bp_semantic_intents (intent_id, match_count, avg_confidence, tenant_id)
-		VALUES ($1, 1, $2, $3)
-		ON CONFLICT (intent_id, tenant_id) DO UPDATE SET
-			match_count = match_count + 1,
-			avg_confidence = ($2 + avg_confidence) / 2
-	`
 	if e.db != nil {
-		e.db.ExecContext(ctx, logQuery, bestMatch.IntentID, bestSimilarity, tenantID)
+		e.db.ExecContext(ctx, queries.UpsertSemanticIntent, bestMatch.IntentID, bestSimilarity, tenantID)
 	}
 
 	return bestMatch.TargetBranch, nil
@@ -253,15 +243,8 @@ func (e *BranchEvaluator) EvaluateScoringMatrix(ctx context.Context, config json
 	//   ) { matrix_name }
 	// }
 	// Note: Use _inc for evaluations_total, custom average calculation for avg_score
-	logQuery := `
-		INSERT INTO bp_scoring_matrices (matrix_name, evaluations_total, avg_score, tenant_id)
-		VALUES ($1, 1, $2, $3)
-		ON CONFLICT (matrix_name, tenant_id) DO UPDATE SET
-			evaluations_total = evaluations_total + 1,
-			avg_score = ($2 + avg_score) / 2
-	`
 	if e.db != nil {
-		e.db.ExecContext(ctx, logQuery, matrixConfig.MatrixName, finalScore, tenantID)
+		e.db.ExecContext(ctx, queries.UpsertScoringMatrix, matrixConfig.MatrixName, finalScore, tenantID)
 	}
 
 	// Route based on final score
@@ -417,15 +400,8 @@ func (e *BranchEvaluator) EvaluateAdaptive(ctx context.Context, config json.RawM
 			//   ) { trigger_id }
 			// }
 			// Note: Use _inc for triggered_count
-			logQuery := `
-			INSERT INTO bp_adaptive_triggers (trigger_id, triggered_count, last_triggered_at, tenant_id)
-			VALUES ($1, 1, NOW(), $2)
-			ON CONFLICT (trigger_id, tenant_id) DO UPDATE SET
-				triggered_count = triggered_count + 1,
-				last_triggered_at = NOW()
-		`
 			if e.db != nil {
-				e.db.ExecContext(ctx, logQuery, trigger.TriggerID, tenantID)
+				e.db.ExecContext(ctx, queries.UpsertAdaptiveTrigger, trigger.TriggerID, tenantID)
 			}
 
 			if trigger.ActionType == "switch_to_branch" {
@@ -720,12 +696,7 @@ func (e *BranchEvaluator) EvaluateNL(ctx context.Context, nlQuery string, tenant
 	//     tenant_id: "tenant-uuid"
 	//   }) { config_id }
 	// }
-	query := `
-		INSERT INTO bp_nl_configurations (nl_query, intent_extraction, human_approval_status, tenant_id)
-		VALUES ($1, $2, 'pending', $3)
-		RETURNING config_id
-	`
-	err := e.db.QueryRowContext(ctx, query, nlQuery, config.IntentExtracted, tenantID).Scan(&config.ConfigID)
+	err := e.db.QueryRowContext(ctx, queries.InsertNLConfiguration, nlQuery, config.IntentExtracted, tenantID).Scan(&config.ConfigID)
 	return config, err
 }
 
@@ -810,13 +781,7 @@ func (e *BranchEvaluator) EvaluateExplainability(ctx context.Context, branchID s
 	//   }) { record_id }
 	// }
 	featuresJSON, _ := json.Marshal(record.FeatureImportance)
-	query := `
-		INSERT INTO bp_explainability_records (branch_id, feature_importance, decision_path, 
-		                                       natural_language_summary, confidence_score, tenant_id)
-		VALUES ($1, $2, $3, $4, $5, $6)
-		RETURNING record_id
-	`
-	err := e.db.QueryRowContext(ctx, query, branchID, string(featuresJSON), record.DecisionPath,
+	err := e.db.QueryRowContext(ctx, queries.InsertAdvancedExplainability, branchID, string(featuresJSON), record.DecisionPath,
 		record.NaturalLanguageSummary, record.Confidence, tenantID).Scan(&record.RecordID)
 
 	return record, err
@@ -883,10 +848,6 @@ func (e *BranchEvaluator) LogBlockchainAudit(ctx context.Context, eventID string
 	if e.db == nil {
 		return fmt.Errorf("no hasura and no db available")
 	}
-	query := `
-		INSERT INTO bp_blockchain_audit (event_id, event_type, event_hash, network, tenant_id)
-		VALUES ($1, 'branch_decision', $2, 'hyperledger_fabric', $3)
-	`
-	_, err := e.db.ExecContext(ctx, query, eventID, eventHash, tenantID)
+	_, err := e.db.ExecContext(ctx, queries.InsertBlockchainAuditAlt, eventID, eventHash, tenantID)
 	return err
 }

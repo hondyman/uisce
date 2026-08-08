@@ -102,9 +102,7 @@ export const TeamManager: React.FC<TeamManagerProps> = ({ tenant, datasource }) 
   const fetchTeams = async () => {
     try {
       setLoading(true);
-      const response = await fetch(
-        `/api/rbac/teams?tenant_id=${tenant.id}&tenant_instance_id=${datasource.id}`
-      );
+      const response = await fetch('/api/rbac/teams');
       const data = await response.json();
       setTeams(data || []);
     } catch (error) {
@@ -117,9 +115,7 @@ export const TeamManager: React.FC<TeamManagerProps> = ({ tenant, datasource }) 
   // Fetch team members
   const fetchTeamMembers = async (teamId: string) => {
     try {
-      const response = await fetch(
-        `/api/rbac/teams/${teamId}/members?tenant_id=${tenant.id}&tenant_instance_id=${datasource.id}`
-      );
+      const response = await fetch(`/api/rbac/teams/${teamId}/members`);
       const data = await response.json();
       setTeamMembers(data || []);
     } catch (error) {
@@ -130,7 +126,7 @@ export const TeamManager: React.FC<TeamManagerProps> = ({ tenant, datasource }) 
   // Fetch users
   const fetchUsers = async () => {
     try {
-      const response = await fetch(`/api/users?tenant_id=${tenant.id}`);
+      const response = await fetch('/api/users');
       const data = await response.json();
       setUsers(data || []);
     } catch (error) {
@@ -147,8 +143,6 @@ export const TeamManager: React.FC<TeamManagerProps> = ({ tenant, datasource }) 
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ...teamForm,
-          tenant_id: tenant.id,
-          tenant_instance_id: datasource.id,
         }),
       });
       await fetchTeams();
@@ -169,8 +163,6 @@ export const TeamManager: React.FC<TeamManagerProps> = ({ tenant, datasource }) 
       setSaving(true);
       await fetch(`/api/rbac/teams/${teamId}`, {
         method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ tenant_id: tenant.id, tenant_instance_id: datasource.id }),
       });
       await fetchTeams();
       if (selectedTeam?.id === teamId) {
@@ -195,8 +187,6 @@ export const TeamManager: React.FC<TeamManagerProps> = ({ tenant, datasource }) 
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ...memberForm,
-          tenant_id: tenant.id,
-          tenant_instance_id: datasource.id,
         }),
       });
       await fetchTeamMembers(selectedTeam.id);
@@ -218,8 +208,6 @@ export const TeamManager: React.FC<TeamManagerProps> = ({ tenant, datasource }) 
       setSaving(true);
       await fetch(`/api/rbac/teams/${selectedTeam.id}/members/${memberId}`, {
         method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ tenant_id: tenant.id, tenant_instance_id: datasource.id }),
       });
       await fetchTeamMembers(selectedTeam.id);
       await fetchTeams(); // Refresh member count

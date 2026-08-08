@@ -7,6 +7,7 @@ import (
 	"fmt"
 
 	"github.com/google/uuid"
+	"github.com/hondyman/uisce/libs/db/queries"
 )
 
 type Repository struct {
@@ -29,14 +30,7 @@ func (r *Repository) CreateTemplate(ctx context.Context, template *ReportTemplat
 		return fmt.Errorf("failed to marshal parameter schema: %w", err)
 	}
 
-	query := `
-		INSERT INTO report_templates (
-			id, tenant_id, template_name, description, category,
-			layout_config, parameter_schema, is_active, is_public
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-	`
-
-	_, err = r.db.ExecContext(ctx, query,
+	_, err = r.db.ExecContext(ctx, queries.InsertReportTemplate,
 		template.ID,
 		template.TenantID,
 		template.TemplateName,
@@ -66,19 +60,7 @@ func (r *Repository) UpdateTemplate(ctx context.Context, template *ReportTemplat
 		return fmt.Errorf("failed to marshal parameter schema: %w", err)
 	}
 
-	query := `
-		UPDATE report_templates
-		SET template_name = $1,
-		    description = $2,
-		    category = $3,
-		    layout_config = $4,
-		    parameter_schema = $5,
-		    is_active = $6,
-		    updated_at = NOW()
-		WHERE id = $7 AND tenant_id = $8
-	`
-
-	_, err = r.db.ExecContext(ctx, query,
+	_, err = r.db.ExecContext(ctx, queries.UpdateReportTemplate,
 		template.TemplateName,
 		template.Description,
 		template.Category,

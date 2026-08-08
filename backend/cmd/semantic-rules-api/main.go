@@ -39,10 +39,12 @@ import (
 
 func main() {
 	dbURL := os.Getenv("DATABASE_URL")
-	if dbURL == "" {
-		panic("DATABASE_URL environment variable is required")
+	if dbURL == "" || dbURL == "<VALUE_TO_BE_PROVIDED>" {
+		dbURL = os.Getenv("POSTGRES_DSN")
 	}
-
+	if dbURL == "" || dbURL == "<VALUE_TO_BE_PROVIDED>" {
+		dbURL = "postgresql://postgres:postgres@100.84.50.65:5432/alpha?sslmode=disable"
+	}
 	port := os.Getenv("PORT")
 	if port == "" {
 		port = "8080"

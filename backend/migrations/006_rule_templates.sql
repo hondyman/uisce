@@ -23,8 +23,8 @@ CREATE TABLE IF NOT EXISTS edm.rules (
     current_version INT NOT NULL DEFAULT 1,
     default_action VARCHAR(255),
     created_by UUID NOT NULL,
-    created_at TIMESTAMP NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMP NOT NULL DEFAULT NOW(),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_by UUID,
     CONSTRAINT rules_status_check CHECK (status IN ('draft', 'testing', 'staging', 'production')),
     CONSTRAINT rules_version_check CHECK (current_version > 0)
@@ -51,9 +51,9 @@ CREATE TABLE IF NOT EXISTS edm.rule_templates (
   is_public BOOLEAN DEFAULT FALSE,  -- Shared across tenants
   
   -- Audit
-  created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   created_by UUID NOT NULL,
-  updated_at TIMESTAMP DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
   updated_by UUID,
   
   -- Constraints (removed FK to tenants as RLS provides isolation)
@@ -80,7 +80,7 @@ CREATE TABLE IF NOT EXISTS edm.template_usage (
   -- Used parameters (for analytics)
   parameters_used JSONB,
   
-  created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   created_by UUID NOT NULL,
   
   CONSTRAINT fk_template FOREIGN KEY (template_id) REFERENCES edm.rule_templates(id) ON DELETE CASCADE,

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/hondyman/uisce/libs/db/queries"
 	"github.com/jmoiron/sqlx"
 )
 
@@ -24,8 +25,7 @@ func NewHierarchyServiceSQLXImpl(db *sqlx.DB) Service {
 func (s *HierarchySQLXServiceImpl) ValidateHierarchy(ctx context.Context, tenantID, parentModelType, childModelType string) (*HierarchyValidationResult, error) {
 	var r HierarchyValidationResult
 	var rules []HierarchyRule
-	query := `SELECT id, tenant_id, parent_model_type, child_model_type, allowed, ownership_types, max_children, description, notes, created_at, updated_at FROM entity_hierarchy_rules WHERE tenant_id=$1 AND parent_model_type=$2 AND child_model_type=$3`
-	if err := s.db.SelectContext(ctx, &rules, query, tenantID, parentModelType, childModelType); err != nil {
+	if err := s.db.SelectContext(ctx, &rules, queries.GetHierarchyRuleByTypes, tenantID, parentModelType, childModelType); err != nil {
 		if err == sql.ErrNoRows {
 			r.Valid = false
 			return &r, nil
@@ -41,8 +41,7 @@ func (s *HierarchySQLXServiceImpl) ValidateHierarchy(ctx context.Context, tenant
 
 func (s *HierarchySQLXServiceImpl) GetHierarchyRules(ctx context.Context, tenantID string) ([]HierarchyRule, error) {
 	var rules []HierarchyRule
-	query := `SELECT id, tenant_id, parent_model_type, child_model_type, allowed, ownership_types, max_children, description, notes, created_at, updated_at FROM entity_hierarchy_rules WHERE tenant_id=$1`
-	if err := s.db.SelectContext(ctx, &rules, query, tenantID); err != nil {
+	if err := s.db.SelectContext(ctx, &rules, queries.GetHierarchyRules, tenantID); err != nil {
 		return nil, err
 	}
 	return rules, nil
@@ -158,7 +157,7 @@ func (s *HierarchySQLXServiceImpl) GetEntityHierarchy(ctx context.Context, rootI
 func (s *HierarchySQLXServiceImpl) GetHierarchyStats(ctx context.Context, tenantID string) (*HierarchyStats, error) {
 	var stats HierarchyStats
 	var totalEntities int64
-	if err := s.db.GetContext(ctx, &totalEntities, `SELECT count(*) FROM entities WHERE tenant_id=$1`, tenantID); err != nil {
+	if err := s.db.GetContext(ctx, &totalEntities, queries.CountEntitiesByTenant, tenantID); err != nil {
 		return nil, err
 	}
 	stats.TotalEntities = totalEntities
@@ -178,8 +177,7 @@ func (s *HierarchySQLXServiceImpl) CreateHierarchyRule(ctx context.Context, rule
 		return err
 	}
 
-	query := `INSERT INTO entity_hierarchy_rules (id, tenant_id, parent_model_type, child_model_type, allowed, ownership_types, max_children, description, notes, created_at, updated_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) ON CONFLICT (id) DO UPDATE SET allowed=EXCLUDED.allowed, ownership_types=EXCLUDED.ownership_types, max_children=EXCLUDED.max_children, description=EXCLUDED.description, notes=EXCLUDED.notes, updated_at=EXCLUDED.updated_at`
-	_, err = s.db.ExecContext(ctx, query, rule.ID, rule.TenantID, rule.ParentModelType, rule.ChildModelType, rule.Allowed, string(ownershipJSON), rule.MaxChildren, rule.Description, rule.Notes, rule.CreatedAt, rule.UpdatedAt)
+	_, err = s.db.ExecContext(ctx, queries.InsertHierarchyRule, rule.ID, rule.TenantID, rule.ParentModelType, rule.ChildModelType, rule.Allowed, string(ownershipJSON), rule.MaxChildren, rule.Description, rule.Notes, rule.CreatedAt, rule.UpdatedAt)
 	return err
 }
 
@@ -189,13 +187,12 @@ func (s *HierarchySQLXServiceImpl) UpdateHierarchyRule(ctx context.Context, rule
 	if err != nil {
 		return err
 	}
-	query := `UPDATE entity_hierarchy_rules SET allowed=$1, ownership_types=$2, max_children=$3, description=$4, notes=$5, updated_at=$6 WHERE id=$7 AND tenant_id=$8`
-	_, err = s.db.ExecContext(ctx, query, rule.Allowed, string(ownershipJSON), rule.MaxChildren, rule.Description, rule.Notes, rule.UpdatedAt, rule.ID, rule.TenantID)
+	_, err = s.db.ExecContext(ctx, queries.UpdateHierarchyRule, rule.Allowed, string(ownershipJSON), rule.MaxChildren, rule.Description, rule.Notes, rule.UpdatedAt, rule.ID, rule.TenantID)
 	return err
 }
 
 func (s *HierarchySQLXServiceImpl) DeleteHierarchyRule(ctx context.Context, tenantID, parentType, childType string) error {
-	_, err := s.db.ExecContext(ctx, `DELETE FROM entity_hierarchy_rules WHERE tenant_id=$1 AND parent_model_type=$2 AND child_model_type=$3`, tenantID, parentType, childType)
+	_, err := s.db.ExecContext(ctx, queries.DeleteHierarchyRule, tenantID, parentType, childType)
 	return err
 }
 
@@ -215,7 +212,7 @@ func (s *HierarchySQLXServiceImpl) BulkCreateOperations(ctx context.Context, ten
 	resp := &HierarchyBulkResponse{Successful: 0, Failed: 0, Results: []HierarchyOperationResult{}}
 	for _, op := range req.Operations {
 		if op.Operation == "CREATE" {
-			_, err = tx.ExecContext(ctx, `INSERT INTO entity_relationships (id, tenant_id, owner_id, owned_id, ownership_percentage, ownership_type, incepting_date, created_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`, uuid.New().String(), tenantID, op.OwnerID, op.OwnedID, op.OwnershipPct, op.OwnershipType, op.InceptingDate, time.Now().UTC())
+			_, err = tx.ExecContext(ctx, queries.InsertEntityRelationship, uuid.New().String(), tenantID, op.OwnerID, op.OwnedID, op.OwnershipPct, op.OwnershipType, op.InceptingDate, time.Now().UTC())
 			if err != nil {
 				resp.Failed++
 				resp.Results = append(resp.Results, HierarchyOperationResult{Operation: op, Success: false, Message: "failed to create relationship", Error: err.Error()})
@@ -238,7 +235,7 @@ func (s *HierarchySQLXServiceImpl) LogHierarchyAudit(ctx context.Context, log *H
 	if log.CreatedAt.IsZero() {
 		log.CreatedAt = time.Now().UTC()
 	}
-	_, err := s.db.ExecContext(ctx, `INSERT INTO entity_hierarchy_audit_log (id, entity_id, tenant_id, action, created_by, parent_model_type, child_model_type, reason, created_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`, log.ID, log.EntityID, log.TenantID, log.Action, log.CreatedBy, log.ParentModelType, log.ChildModelType, log.Reason, log.CreatedAt)
+	_, err := s.db.ExecContext(ctx, queries.InsertHierarchyAuditLog, log.ID, log.EntityID, log.TenantID, log.Action, log.CreatedBy, log.ParentModelType, log.ChildModelType, log.Reason, log.CreatedAt)
 	return err
 }
 
@@ -270,7 +267,7 @@ func (s *HierarchySQLXServiceImpl) ImportHierarchyRules(ctx context.Context, ten
 	for _, r := range req.Rules {
 		ruleID := uuid.New().String()
 		ownershipJSON, _ := json.Marshal(r.OwnershipTypes)
-		res, err := tx.ExecContext(ctx, `INSERT INTO entity_hierarchy_rules (id, tenant_id, parent_model_type, child_model_type, allowed, ownership_types, description, created_at, updated_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) ON CONFLICT (id) DO NOTHING`, ruleID, tenantID, r.ParentModelType, r.ChildModelType, true, string(ownershipJSON), r.Description, time.Now().UTC(), time.Now().UTC())
+		res, err := tx.ExecContext(ctx, queries.InsertHierarchyRuleNoConflict, ruleID, tenantID, r.ParentModelType, r.ChildModelType, true, string(ownershipJSON), r.Description, time.Now().UTC(), time.Now().UTC())
 		if err != nil {
 			resp.Failed++
 			resp.Errors = append(resp.Errors, err.Error())
@@ -288,7 +285,7 @@ func (s *HierarchySQLXServiceImpl) ImportHierarchyRules(ctx context.Context, ten
 
 func (s *HierarchySQLXServiceImpl) ValidateEntityConsistency(ctx context.Context, tenantID string) error {
 	var count int
-	if err := s.db.GetContext(ctx, &count, `SELECT count(*) FROM entities WHERE tenant_id=$1`, tenantID); err != nil {
+	if err := s.db.GetContext(ctx, &count, queries.CountEntitiesByTenant, tenantID); err != nil {
 		return err
 	}
 	if count == 0 {

@@ -1,7 +1,7 @@
 /* Enhanced custom styles for the AuthPage */
 
 .auth-container {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: linear-gradient(135deg, #3D2314 0%, #1A0F08 50%, #2D1A0E 100%);
   min-height: 100vh;
   display: flex;
   align-items: center;
@@ -9,17 +9,16 @@
 }
 
 .auth-card {
-  backdrop-filter: blur(10px) saturate(0.9);
-  /* Muted, frosted glass effect that blends with the gradient background */
-  background: linear-gradient(180deg, rgba(18, 24, 38, 0.22) 0%, rgba(18,24,38,0.14) 100%);
-  box-shadow: 0 10px 30px -8px rgba(2,6,23,0.45);
-  border: 1px solid rgba(255,255,255,0.04);
+  backdrop-filter: blur(16px) saturate(1.2);
+  background: linear-gradient(180deg, rgba(61, 35, 20, 0.30) 0%, rgba(26, 15, 8, 0.20) 100%);
+  box-shadow: 0 10px 30px -8px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(212, 160, 23, 0.10);
+  border: 1px solid rgba(212, 160, 23, 0.15);
   max-width: 520px;
   width: 100%;
   margin: 0 auto;
   padding: 32px;
   border-radius: 14px;
-  color: #e6eef8; /* subtle light text hint when on darker backgrounds */
+  color: #F5F0E8;
 }
 
 .auth-card:hover {
@@ -35,12 +34,12 @@
 
 .auth-input:focus {
   transform: translateY(-1px);
-  box-shadow: 0 10px 20px rgba(102, 126, 234, 0.15), 0 0 0 3px rgba(99, 102, 241, 0.1);
-  border-color: #6366f1;
+  box-shadow: 0 10px 20px rgba(212, 160, 23, 0.15), 0 0 0 3px rgba(212, 160, 23, 0.12);
+  border-color: #D4A017;
 }
 
 .auth-button {
-  background: linear-gradient(135deg, rgba(99,102,241,0.95) 0%, rgba(139,92,246,0.92) 100%);
+  background: linear-gradient(135deg, rgba(212, 160, 23, 0.95) 0%, rgba(184, 134, 11, 0.92) 100%);
   transition: all 0.2s ease;
   padding: 16px 24px;
   font-weight: 600;
@@ -49,8 +48,8 @@
 
 .auth-button:hover:not(:disabled) {
   transform: translateY(-2px);
-  box-shadow: 0 15px 30px rgba(99, 102, 241, 0.4);
-  background: linear-gradient(135deg, #5856eb 0%, #7c3aed 100%);
+  box-shadow: 0 15px 30px rgba(212, 160, 23, 0.4);
+  background: linear-gradient(135deg, #D4A017 0%, #B8860B 100%);
 }
 
 .auth-button:active {
@@ -92,10 +91,10 @@
 
 .floating-shape {
   position: absolute;
-  opacity: 0.08;
+  opacity: 0.06;
   animation: float 8s ease-in-out infinite;
   border-radius: 50%;
-  background: linear-gradient(45deg, #6366f1, #8b5cf6, #ec4899);
+  background: linear-gradient(45deg, #D4A017, #3D2314, #00c9c8);
 }
 
 .floating-shape:nth-child(1) {
@@ -194,21 +193,21 @@
 }
 
 .auth-gradient-text {
-  background: linear-gradient(135deg, #1f2937 0%, #4b5563 50%, #6b7280 100%);
+  background: linear-gradient(135deg, #F5C518 0%, #D4A017 50%, #B8860B 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
 }
 
 .auth-link {
-  color: #6366f1;
+  color: #D4A017;
   text-decoration: none;
   font-weight: 500;
   transition: color 0.2s ease;
 }
 
 .auth-link:hover {
-  color: #5856eb;
+  color: #F5C518;
 }
 
 /* Better form spacing */
@@ -289,7 +288,7 @@
 /* Focus improvements */
 .auth-input:focus {
   outline: none;
-  box-shadow: 0 10px 20px rgba(102, 126, 234, 0.15), 0 0 0 3px rgba(99, 102, 241, 0.1);
+  box-shadow: 0 10px 20px rgba(212, 160, 23, 0.15), 0 0 0 3px rgba(212, 160, 23, 0.12);
 }
 
 /* Button disabled state */

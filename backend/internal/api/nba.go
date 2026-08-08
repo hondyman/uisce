@@ -9,26 +9,33 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/hondyman/uisce/backend/internal/handlers"
 	"github.com/hondyman/uisce/backend/internal/nba"
 	"github.com/jmoiron/sqlx"
 )
 
 type NBAHandler struct {
-	db  *sqlx.DB
-	hub *nba.WebSocketHub
+	db             *sqlx.DB
+	hub            *nba.WebSocketHub
+	securityDeps   handlers.SecurityContextDeps
 }
 
-func NewNBAHandler(db *sqlx.DB) *NBAHandler {
+func NewNBAHandler(db *sqlx.DB, securityDeps handlers.SecurityContextDeps) *NBAHandler {
 	return &NBAHandler{
-		db:  db,
-		hub: nba.GetWebSocketHub(),
+		db:           db,
+		hub:          nba.GetWebSocketHub(),
+		securityDeps: securityDeps,
 	}
 }
 
 // GetRecommendations returns pending NBA recommendations for the current advisor
 func (h *NBAHandler) GetRecommendations(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	clientID := r.URL.Query().Get("client_id") // Optional: filter by specific client
+	secCtx, ctx, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
+	if err != nil {
+		http.Error(w, "Unauthorized: "+err.Error(), http.StatusUnauthorized)
+		return
+	}
+	clientID := secCtx.DatasourceID // Use secure context value
 
 	// Try to fetch real data from database
 	actions, err := h.fetchRecommendationsFromDB(ctx, clientID)
@@ -315,8 +322,12 @@ func (h *NBAHandler) DismissAction(w http.ResponseWriter, r *http.Request) {
 
 // GetSignals returns recent detected signals
 func (h *NBAHandler) GetSignals(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	tenantID := r.URL.Query().Get("tenant_id")
+	secCtx, ctx, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
+	if err != nil {
+		http.Error(w, "Unauthorized: "+err.Error(), http.StatusUnauthorized)
+		return
+	}
+	tenantID := secCtx.TenantID
 	_ = tenantID // Reserved for multi-tenant filtering
 
 	query := `

@@ -36,12 +36,12 @@ until curl -sf http://localhost:9000/minio/health/live > /dev/null 2>&1; do
 done
 echo -e "  ${GREEN}✓ MinIO is ready${NC}"
 
-# Wait for Iceberg REST Catalog
-echo "  Waiting for Iceberg REST Catalog..."
+# Wait for Lakekeeper (Iceberg REST Catalog)
+echo "  Waiting for Lakekeeper..."
 until curl -sf http://localhost:8181/v1/config > /dev/null 2>&1; do
     sleep 2
 done
-echo -e "  ${GREEN}✓ Iceberg REST Catalog is ready${NC}"
+echo -e "  ${GREEN}✓ Lakekeeper is ready${NC}"
 
 # Wait for Trino
 echo "  Waiting for Trino..."
@@ -95,7 +95,7 @@ echo "  • Kafka (Redpanda): localhost:19092"
 echo "  • Redpanda Console: http://localhost:8080"
 echo "  • MinIO S3: http://localhost:9000"
 echo "  • MinIO Console: http://localhost:9001 (minioadmin/minioadmin)"
-echo "  • Iceberg REST: http://localhost:8181"
+echo "  • Lakekeeper (Iceberg REST): http://localhost:8181"
 echo "  • Trino: http://localhost:8090"
 echo ""
 echo "🔍 To query audit data with Trino CLI:"

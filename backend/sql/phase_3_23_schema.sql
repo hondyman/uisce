@@ -6,13 +6,13 @@ CREATE TABLE IF NOT EXISTS discovery_runs (
     id SERIAL PRIMARY KEY,
     run_id VARCHAR(255) UNIQUE NOT NULL,
     status VARCHAR(50) NOT NULL, -- pending, running, success, failed, partial
-    started_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    completed_at TIMESTAMP,
+    started_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    completed_at TIMESTAMPTZ,
     sources_scanned JSONB, -- ["postgres", "trino", "logs", "prometheus"]
     candidates_found INT DEFAULT 0,
     error_message TEXT,
-    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE INDEX idx_discovery_runs_run_id ON discovery_runs(run_id);
@@ -36,13 +36,13 @@ CREATE TABLE IF NOT EXISTS discovery_candidates (
     business_value FLOAT CHECK (business_value >= 0 AND business_value <= 1),
     technical_score FLOAT CHECK (technical_score >= 0 AND technical_score <= 1),
     status VARCHAR(50) NOT NULL DEFAULT 'candidate', -- candidate, approved, rejected
-    discovered_at TIMESTAMP NOT NULL,
+    discovered_at TIMESTAMPTZ NOT NULL,
     approved_by VARCHAR(255),
-    approved_at TIMESTAMP,
+    approved_at TIMESTAMPTZ,
     rejection_reason TEXT,
     notes TEXT,
-    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE INDEX idx_discovery_candidates_run_id ON discovery_candidates(run_id);
@@ -60,11 +60,11 @@ CREATE TABLE IF NOT EXISTS feature_catalog_mappings (
     feature_version INT DEFAULT 1,
     catalog_status VARCHAR(50) NOT NULL DEFAULT 'pending', -- pending, active, deprecated
     mapped_by VARCHAR(255),
-    mapped_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    mapped_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     deprecation_reason TEXT,
-    deprecated_at TIMESTAMP,
-    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    deprecated_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE INDEX idx_feature_catalog_mappings_feature_name ON feature_catalog_mappings(feature_name);
@@ -82,7 +82,7 @@ CREATE TABLE IF NOT EXISTS discovery_statistics (
     source_distribution JSONB, -- {"postgres": 35, "trino": 12, "logs": 18, "prometheus": 28}
     data_type_distribution JSONB,
     score_distribution JSONB, -- {"0.0-0.2": 7, "0.2-0.4": 35, "0.4-0.6": 45, "0.6-0.8": 30, "0.8-1.0": 18}
-    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE UNIQUE INDEX idx_discovery_statistics_date ON discovery_statistics(date);
@@ -91,12 +91,12 @@ CREATE UNIQUE INDEX idx_discovery_statistics_date ON discovery_statistics(date);
 CREATE TABLE IF NOT EXISTS discovery_logs (
     id SERIAL PRIMARY KEY,
     run_id VARCHAR(255) NOT NULL REFERENCES discovery_runs(run_id),
-    timestamp TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    timestamp TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     source VARCHAR(100), -- postgres_scanner, trino_scanner, log_parser, metric_extractor, ranker, generator
     action VARCHAR(100), -- scan_start, scan_complete, parse_start, parse_complete, etc
     details TEXT,
     status VARCHAR(50), -- info, warning, error
-    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE INDEX idx_discovery_logs_run_id ON discovery_logs(run_id);
@@ -112,8 +112,8 @@ CREATE TABLE IF NOT EXISTS discovery_audit (
     reason TEXT,
     previous_status VARCHAR(50),
     new_status VARCHAR(50),
-    timestamp TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    timestamp TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE INDEX idx_discovery_audit_candidate_id ON discovery_audit(candidate_id);
@@ -129,11 +129,11 @@ CREATE TABLE IF NOT EXISTS feature_metadata (
     completeness FLOAT,
     cardinality BIGINT,
     importance_score FLOAT,
-    last_computed_at TIMESTAMP,
-    last_used_at TIMESTAMP,
+    last_computed_at TIMESTAMPTZ,
+    last_used_at TIMESTAMPTZ,
     usage_count INT DEFAULT 0,
-    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE INDEX idx_feature_metadata_created_at ON feature_metadata(created_at DESC);

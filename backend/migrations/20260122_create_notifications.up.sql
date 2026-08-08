@@ -12,8 +12,8 @@ CREATE TABLE IF NOT EXISTS notification_rule (
   recipient_user_id TEXT,              -- specific user
   recipient_group_id TEXT,             -- group/team
   enabled BOOLEAN DEFAULT true,
-  created_at TIMESTAMP DEFAULT NOW(),
-  updated_at TIMESTAMP DEFAULT NOW(),
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
   UNIQUE (tenant_id, trigger_event, step_key, recipient_role)
 );
 CREATE INDEX IF NOT EXISTS idx_notif_rule_lookup ON notification_rule(tenant_id, trigger_event);
@@ -29,7 +29,7 @@ CREATE TABLE IF NOT EXISTS notification_template (
   body_html TEXT,                      -- HTML email
   slack_template JSONB,                -- Slack Block Kit JSON
   enabled BOOLEAN DEFAULT true,
-  created_at TIMESTAMP DEFAULT NOW(),
+  created_at TIMESTAMPTZ DEFAULT NOW(),
   UNIQUE (tenant_id, template_key)
 );
 CREATE INDEX IF NOT EXISTS idx_notif_tmpl_lookup ON notification_template(tenant_id, template_key);
@@ -47,7 +47,7 @@ CREATE TABLE IF NOT EXISTS notification_log (
   channels_succeeded TEXT[],
   body JSONB,
   error_message TEXT,
-  sent_at TIMESTAMP DEFAULT NOW()
+  sent_at TIMESTAMPTZ DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS idx_notif_log_instance ON notification_log(instance_id, trigger_event);
 CREATE INDEX IF NOT EXISTS idx_notif_log_user_sent ON notification_log(recipient_user_id, sent_at);
@@ -62,7 +62,7 @@ CREATE TABLE IF NOT EXISTS user_notification_preference (
   enabled BOOLEAN DEFAULT true,
   quiet_hours_start TIME,              -- don't send between 6pm-8am
   quiet_hours_end TIME,
-  created_at TIMESTAMP DEFAULT NOW(),
+  created_at TIMESTAMPTZ DEFAULT NOW(),
   UNIQUE (user_id, tenant_id, notification_type)
 );
 
@@ -75,7 +75,7 @@ CREATE TABLE IF NOT EXISTS slack_integration (
   bot_token TEXT NOT NULL,             -- encrypted
   app_id TEXT,
   signing_secret TEXT NOT NULL,        -- encrypted
-  installed_at TIMESTAMP DEFAULT NOW(),
+  installed_at TIMESTAMPTZ DEFAULT NOW(),
   UNIQUE (tenant_id, workspace_id)
 );
 
@@ -86,7 +86,7 @@ CREATE TABLE IF NOT EXISTS user_slack_mapping (
   tenant_id UUID NOT NULL,
   slack_user_id TEXT NOT NULL,
   slack_email TEXT,
-  verified_at TIMESTAMP,
+  verified_at TIMESTAMPTZ,
   UNIQUE (user_id, tenant_id),
   UNIQUE (slack_user_id, tenant_id)
 );
@@ -97,9 +97,9 @@ CREATE TABLE IF NOT EXISTS notification_schedule (
   instance_id UUID NOT NULL,
   rule_id UUID NOT NULL,
   trigger_event TEXT NOT NULL,
-  scheduled_for TIMESTAMP NOT NULL,
+  scheduled_for TIMESTAMPTZ NOT NULL,
   is_sent BOOLEAN DEFAULT false,
   attempts INT DEFAULT 0,
-  next_retry_at TIMESTAMP
+  next_retry_at TIMESTAMPTZ
 );
 CREATE INDEX IF NOT EXISTS idx_notif_sched_run ON notification_schedule(scheduled_for, is_sent);

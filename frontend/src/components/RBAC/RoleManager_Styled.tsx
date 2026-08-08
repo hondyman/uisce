@@ -124,9 +124,7 @@ export const RoleManagerStyled: React.FC<RoleManagerProps> = ({ tenant, datasour
   const fetchRoles = async () => {
     try {
       setLoading(true);
-      const response = await fetch(
-        `/api/rbac/roles?tenant_id=${tenant.id}&tenant_instance_id=${datasource.id}`
-      );
+      const response = await fetch('/api/rbac/roles');
       const data = await response.json();
       
       // Ensure we always set an array
@@ -210,7 +208,7 @@ export const RoleManagerStyled: React.FC<RoleManagerProps> = ({ tenant, datasour
   // Fetch permissions
   const fetchPermissions = async () => {
     try {
-      const response = await fetch(`/api/rbac/permissions?tenant_id=${tenant.id}`);
+      const response = await fetch('/api/rbac/permissions');
       const data = await response.json();
       setPermissions(data || []);
     } catch (error) {
@@ -222,7 +220,7 @@ export const RoleManagerStyled: React.FC<RoleManagerProps> = ({ tenant, datasour
   const _fetchRolePermissions = async (roleId: string) => {
     try {
       const response = await fetch(
-        `/api/rbac/roles/${roleId}/permissions?tenant_id=${tenant.id}&tenant_instance_id=${datasource.id}`
+        `/api/rbac/roles/${roleId}/permissions`
       );
       const data = await response.json();
       const permIds = new Set(data.map((p: Permission) => p.id) as string[]);
@@ -246,7 +244,7 @@ export const RoleManagerStyled: React.FC<RoleManagerProps> = ({ tenant, datasour
 
     // Fetch Users
     try {
-      const usersRes = await fetch(`/api/rbac/roles/${role.id}/users?tenant_id=${tenant.id}&tenant_instance_id=${datasource.id}`);
+      const usersRes = await fetch(`/api/rbac/roles/${role.id}/users`);
       if (usersRes.ok) {
         const usersData = await usersRes.json();
         setRoleUsers(usersData || []);
@@ -257,7 +255,7 @@ export const RoleManagerStyled: React.FC<RoleManagerProps> = ({ tenant, datasour
 
     // Fetch Field Permissions
     try {
-      const permsRes = await fetch(`/api/rbac/field-permissions?tenant_id=${tenant.id}&tenant_instance_id=${datasource.id}&role_id=${role.id}`);
+      const permsRes = await fetch(`/api/rbac/field-permissions?role_id=${role.id}`);
       if (permsRes.ok) {
         const permsData = await permsRes.json();
         setRoleFieldPerms(permsData || []);
@@ -274,7 +272,7 @@ export const RoleManagerStyled: React.FC<RoleManagerProps> = ({ tenant, datasour
     try {
       setSaving(true);
       const response = await fetch(
-        `/api/rbac/roles?tenant_id=${tenant.id}&tenant_instance_id=${datasource.id}`,
+        `/api/rbac/roles`,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -734,7 +732,7 @@ export const RoleManagerStyled: React.FC<RoleManagerProps> = ({ tenant, datasour
                   color={selectedRole.is_active ? "error" : "success"}
                   onClick={async () => {
                     try {
-                      await fetch(`/api/rbac/roles/${selectedRole.id}?tenant_id=${tenant.id}&tenant_instance_id=${datasource.id}`, {
+                      await fetch(`/api/rbac/roles/${selectedRole.id}`, {
                         method: 'PUT',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({

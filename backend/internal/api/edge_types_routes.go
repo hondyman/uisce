@@ -10,6 +10,8 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+
+	"github.com/hondyman/uisce/backend/internal/handlers"
 )
 
 // EdgeType represents a catalog edge type
@@ -31,41 +33,45 @@ type EdgeType struct {
 	UpdatedAt           time.Time              `json:"updated_at"`
 }
 
+type edgeTypesHandler struct {
+	securityDeps handlers.SecurityContextDeps
+	db           *sql.DB
+}
+
 // RegisterEdgeTypesRoutes registers all edge type management routes
-func RegisterEdgeTypesRoutes(r chi.Router, db *sql.DB) {
-	r.Get("/edge-types", handleListEdgeTypes(db))
-	r.Post("/edge-types", handleCreateEdgeType(db))
-	r.Get("/edge-types/{id}", handleGetEdgeType(db))
-	r.Patch("/edge-types/{id}", handleUpdateEdgeType(db))
-	r.Delete("/edge-types/{id}", handleDeleteEdgeType(db))
+func RegisterEdgeTypesRoutes(r chi.Router, db *sql.DB, securityDeps handlers.SecurityContextDeps) {
+	h := &edgeTypesHandler{
+		securityDeps: securityDeps,
+		db:           db,
+	}
+	r.Get("/edge-types", h.handleListEdgeTypes())
+	r.Post("/edge-types", h.handleCreateEdgeType())
+	r.Get("/edge-types/{id}", h.handleGetEdgeType())
+	r.Patch("/edge-types/{id}", h.handleUpdateEdgeType())
+	r.Delete("/edge-types/{id}", h.handleDeleteEdgeType())
 
 	// Property management endpoints
-	r.Get("/edge-types/{id}/properties", handleGetEdgeTypeProperties(db))
-	r.Post("/edge-types/{id}/properties", handleAddEdgeTypeProperty(db))
-	r.Patch("/edge-types/{id}/properties/{propName}", handleUpdateEdgeTypeProperty(db))
-	r.Delete("/edge-types/{id}/properties/{propName}", handleDeleteEdgeTypeProperty(db))
+	r.Get("/edge-types/{id}/properties", h.handleGetEdgeTypeProperties())
+	r.Post("/edge-types/{id}/properties", h.handleAddEdgeTypeProperty())
+	r.Patch("/edge-types/{id}/properties/{propName}", h.handleUpdateEdgeTypeProperty())
+	r.Delete("/edge-types/{id}/properties/{propName}", h.handleDeleteEdgeTypeProperty())
 }
 
 // handleListEdgeTypes retrieves all edge types for a tenant
-func handleListEdgeTypes(db *sql.DB) http.HandlerFunc {
+func (h *edgeTypesHandler) handleListEdgeTypes() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		tenantID := r.URL.Query().Get("tenant_id")
-		if tenantID == "" {
-			// Return empty list if no tenant is provided
-			w.Header().Set("Content-Type", "application/json")
-			w.Write([]byte("[]"))
+		secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
+		if err != nil {
+			http.Error(w, "security context initialization failed: "+err.Error(), http.StatusUnauthorized)
 			return
 		}
 
-		// Optional server-side search: ?q=term
 		qParam := r.URL.Query().Get("q")
 
 		var rows *sql.Rows
-		var err error
 		if qParam == "" {
-			// Include both core tenant and current tenant's types
 			query := `
-				SELECT cet.id, cet.tenant_id, cet.edge_type_name, cet.description, cet.is_active, 
+				SELECT cet.id, cet.tenant_id, cet.edge_type_name, cet.description, cet.is_active,
 					   cet.source_node_type_id, cet.target_node_type_id, cet.is_directed, cet.config, cet.created_at, cet.updated_at,
 					   COALESCE(cnt_subj.catalog_type_name, '') as subject_node_name,
 					   COALESCE(cnt_obj.catalog_type_name, '') as object_node_name,
@@ -77,12 +83,11 @@ func handleListEdgeTypes(db *sql.DB) http.HandlerFunc {
 				WHERE cet.tenant_id::text = $1
 				ORDER BY cet.edge_type_name
 			`
-			rows, err = db.Query(query, tenantID)
+			rows, err = h.db.Query(query, secCtx.TenantID)
 		} else {
-			// Use ILIKE for case-insensitive partial matches on edge_type_name or description
 			search := "%" + qParam + "%"
 			query := `
-				SELECT cet.id, cet.tenant_id, cet.edge_type_name, cet.description, cet.is_active, 
+				SELECT cet.id, cet.tenant_id, cet.edge_type_name, cet.description, cet.is_active,
 					   cet.source_node_type_id, cet.target_node_type_id, cet.is_directed, cet.config, cet.created_at, cet.updated_at,
 					   COALESCE(cnt_subj.catalog_type_name, '') as subject_node_name,
 					   COALESCE(cnt_obj.catalog_type_name, '') as object_node_name,
@@ -95,7 +100,7 @@ func handleListEdgeTypes(db *sql.DB) http.HandlerFunc {
 				  AND (cet.edge_type_name ILIKE $2 OR cet.description ILIKE $2)
 				ORDER BY cet.edge_type_name
 			`
-			rows, err = db.Query(query, tenantID, search)
+			rows, err = h.db.Query(query, secCtx.TenantID, search)
 		}
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -132,7 +137,6 @@ func handleListEdgeTypes(db *sql.DB) http.HandlerFunc {
 				et.ObjectNodeTypeID = &targetNodeTypeID.String
 			}
 
-			// Set node type names
 			if subjectNodeName != "" {
 				et.SubjectNodeTypeName = &subjectNodeName
 			}
@@ -163,41 +167,43 @@ func handleListEdgeTypes(db *sql.DB) http.HandlerFunc {
 }
 
 // handleCreateEdgeType creates a new edge type
-func handleCreateEdgeType(db *sql.DB) http.HandlerFunc {
+func (h *edgeTypesHandler) handleCreateEdgeType() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
+		if err != nil {
+			http.Error(w, "security context initialization failed: "+err.Error(), http.StatusUnauthorized)
+			return
+		}
+
 		var et EdgeType
 		if err := json.NewDecoder(r.Body).Decode(&et); err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
 
-		// Validate required fields
-		if et.TenantID == "" || et.EdgeTypeName == "" {
-			http.Error(w, "tenant_id and edge_type_name is required", http.StatusBadRequest)
+		if et.EdgeTypeName == "" {
+			http.Error(w, "edge_type_name is required", http.StatusBadRequest)
 			return
 		}
 
-		// Handle IsActive default if nil
+		et.TenantID = secCtx.TenantID
+
 		if et.IsActive == nil {
 			active := true
 			et.IsActive = &active
 		}
 
-		// Generate ID if not provided
 		if et.ID == "" {
 			et.ID = uuid.New().String()
 		}
 
-		// Set defaults
 		if et.Config == nil {
 			et.Config = make(map[string]interface{})
 		}
 
-		// Determine core vs custom: check tenant.gold_copy
 		var goldCopy bool
-		err := db.QueryRow("SELECT COALESCE(gold_copy, false) FROM tenants WHERE id::text = $1", et.TenantID).Scan(&goldCopy)
+		err = h.db.QueryRow("SELECT COALESCE(gold_copy, false) FROM tenants WHERE id::text = $1", et.TenantID).Scan(&goldCopy)
 		if err == nil {
-			// Store type classification: "core" or "custom"
 			if goldCopy {
 				core := "core"
 				et.Type = &core
@@ -207,7 +213,6 @@ func handleCreateEdgeType(db *sql.DB) http.HandlerFunc {
 			}
 		}
 
-		// Store properties in config
 		if len(et.Properties) > 0 {
 			et.Config["properties"] = et.Properties
 		}
@@ -215,14 +220,14 @@ func handleCreateEdgeType(db *sql.DB) http.HandlerFunc {
 		configJSON, _ := json.Marshal(et.Config)
 
 		query := `
-			INSERT INTO catalog_edge_type 
+			INSERT INTO catalog_edge_type
 			(id, tenant_id, edge_type_name, description, is_active, source_node_type_id, target_node_type_id, is_directed, config, created_at, updated_at)
 			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW(), NOW())
 			RETURNING id, created_at, updated_at
 		`
 
 		var createErr error
-		if createErr = db.QueryRow(query, et.ID, et.TenantID, et.EdgeTypeName, et.Description, et.IsActive,
+		if createErr = h.db.QueryRow(query, et.ID, et.TenantID, et.EdgeTypeName, et.Description, et.IsActive,
 			et.SubjectNodeTypeID, et.ObjectNodeTypeID, et.IsDirected, configJSON).Scan(&et.ID, &et.CreatedAt, &et.UpdatedAt); createErr != nil {
 			http.Error(w, createErr.Error(), http.StatusInternalServerError)
 			return
@@ -235,20 +240,18 @@ func handleCreateEdgeType(db *sql.DB) http.HandlerFunc {
 }
 
 // handleGetEdgeType retrieves a single edge type
-func handleGetEdgeType(db *sql.DB) http.HandlerFunc {
+func (h *edgeTypesHandler) handleGetEdgeType() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		id := chi.URLParam(r, "id")
-		tenantID := r.URL.Query().Get("tenant_id")
-
-		if tenantID == "" {
-			http.Error(w, "tenant_id is required", http.StatusBadRequest)
+		secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
+		if err != nil {
+			http.Error(w, "security context initialization failed: "+err.Error(), http.StatusUnauthorized)
 			return
 		}
+		id := chi.URLParam(r, "id")
 
-		// Join with node types to get names and tenant to determine core/custom
 		query := `
-			SELECT cet.id, cet.tenant_id, cet.edge_type_name, cet.description, cet.is_active, 
-				   cet.source_node_type_id, cet.target_node_type_id, cet.is_directed, cet.config, 
+			SELECT cet.id, cet.tenant_id, cet.edge_type_name, cet.description, cet.is_active,
+				   cet.source_node_type_id, cet.target_node_type_id, cet.is_directed, cet.config,
 				   cet.created_at, cet.updated_at,
 				   COALESCE(cnt_subj.catalog_type_name, '') as subject_node_name,
 				   COALESCE(cnt_obj.catalog_type_name, '') as object_node_name,
@@ -270,7 +273,7 @@ func handleGetEdgeType(db *sql.DB) http.HandlerFunc {
 		var isDirected sql.NullBool
 		var tenantIDStr sql.NullString
 		var subjectNodeName, objectNodeName, typeClassification string
-		err := db.QueryRow(query, id, tenantID).Scan(&et.ID, &tenantIDStr, &edgeTypeName,
+		err = h.db.QueryRow(query, id, secCtx.TenantID).Scan(&et.ID, &tenantIDStr, &edgeTypeName,
 			&description, &isActive, &sourceNodeTypeID, &targetNodeTypeID, &isDirected, &configJSON, &et.CreatedAt, &et.UpdatedAt,
 			&subjectNodeName, &objectNodeName, &typeClassification)
 		if err == sql.ErrNoRows {
@@ -302,7 +305,6 @@ func handleGetEdgeType(db *sql.DB) http.HandlerFunc {
 			et.IsDirected = isDirected.Bool
 		}
 
-		// Set node type names
 		if subjectNodeName != "" {
 			et.SubjectNodeTypeName = &subjectNodeName
 		}
@@ -326,7 +328,6 @@ func handleGetEdgeType(db *sql.DB) http.HandlerFunc {
 		}
 		et.Config = config
 
-		// Extract properties from database properties column or config
 		var propsArray []NodeProperty
 		if props, ok := config["properties"].([]interface{}); ok {
 			propsJSON, _ := json.Marshal(props)
@@ -341,15 +342,14 @@ func handleGetEdgeType(db *sql.DB) http.HandlerFunc {
 }
 
 // handleUpdateEdgeType updates an existing edge type (partial update)
-func handleUpdateEdgeType(db *sql.DB) http.HandlerFunc {
+func (h *edgeTypesHandler) handleUpdateEdgeType() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		id := chi.URLParam(r, "id")
-		tenantID := r.URL.Query().Get("tenant_id")
-
-		if tenantID == "" {
-			http.Error(w, "tenant_id is required", http.StatusBadRequest)
+		secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
+		if err != nil {
+			http.Error(w, "security context initialization failed: "+err.Error(), http.StatusUnauthorized)
 			return
 		}
+		id := chi.URLParam(r, "id")
 
 		var et EdgeType
 		if err := json.NewDecoder(r.Body).Decode(&et); err != nil {
@@ -361,19 +361,16 @@ func handleUpdateEdgeType(db *sql.DB) http.HandlerFunc {
 			et.Config = make(map[string]interface{})
 		}
 
-		// Update properties in config if provided
 		if len(et.Properties) > 0 {
 			et.Config["properties"] = et.Properties
 		}
 
 		configJSON, _ := json.Marshal(et.Config)
 
-		// Build dynamic UPDATE query for partial updates
 		var updates []string
 		var args []interface{}
 		argCount := 1
 
-		// Only update fields that are provided (non-empty)
 		if et.EdgeTypeName != "" {
 			updates = append(updates, fmt.Sprintf("edge_type_name = $%d", argCount))
 			args = append(args, et.EdgeTypeName)
@@ -381,13 +378,11 @@ func handleUpdateEdgeType(db *sql.DB) http.HandlerFunc {
 		}
 
 		if et.Description != nil || len(et.Properties) > 0 {
-			// Allow description update if properties are being updated
 			updates = append(updates, fmt.Sprintf("description = $%d", argCount))
 			args = append(args, et.Description)
 			argCount++
 		}
 
-		// Always update config (to persist properties)
 		updates = append(updates, fmt.Sprintf("config = $%d", argCount))
 		args = append(args, configJSON)
 		argCount++
@@ -400,12 +395,10 @@ func handleUpdateEdgeType(db *sql.DB) http.HandlerFunc {
 
 		updates = append(updates, "updated_at = NOW()")
 
-		// Add WHERE clause parameters
 		args = append(args, id)
-		args = append(args, tenantID)
+		args = append(args, secCtx.TenantID)
 
-		if len(updates) == 1 { // Only updated_at
-			// No meaningful updates
+		if len(updates) == 1 {
 			http.Error(w, "No fields to update", http.StatusBadRequest)
 			return
 		}
@@ -414,13 +407,13 @@ func handleUpdateEdgeType(db *sql.DB) http.HandlerFunc {
 			UPDATE catalog_edge_type
 			SET %s
 			WHERE id = $%d AND tenant_id::text = $%d
-			RETURNING id, edge_type_name, description, is_active, source_node_type_id, 
+			RETURNING id, edge_type_name, description, is_active, source_node_type_id,
 					  target_node_type_id, is_directed, config, created_at, updated_at, tenant_id
 		`, strings.Join(updates, ", "), argCount, argCount+1)
 
 		var configOut []byte
 		var isDirected bool
-		if err := db.QueryRow(query, args...).Scan(
+		if err := h.db.QueryRow(query, args...).Scan(
 			&et.ID, &et.EdgeTypeName, &et.Description, &et.IsActive,
 			&et.SubjectNodeTypeID, &et.ObjectNodeTypeID, &isDirected, &configOut,
 			&et.CreatedAt, &et.UpdatedAt, &et.TenantID); err == sql.ErrNoRows {
@@ -433,12 +426,10 @@ func handleUpdateEdgeType(db *sql.DB) http.HandlerFunc {
 
 		et.IsDirected = isDirected
 
-		// Parse config back
 		if err := json.Unmarshal(configOut, &et.Config); err != nil {
 			et.Config = make(map[string]interface{})
 		}
 
-		// Extract properties from config if present
 		if propsData, ok := et.Config["properties"]; ok {
 			if propsJSON, err := json.Marshal(propsData); err == nil {
 				json.Unmarshal(propsJSON, &et.Properties)
@@ -451,18 +442,17 @@ func handleUpdateEdgeType(db *sql.DB) http.HandlerFunc {
 }
 
 // handleDeleteEdgeType deletes an edge type
-func handleDeleteEdgeType(db *sql.DB) http.HandlerFunc {
+func (h *edgeTypesHandler) handleDeleteEdgeType() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		id := chi.URLParam(r, "id")
-		tenantID := r.URL.Query().Get("tenant_id")
-
-		if tenantID == "" {
-			http.Error(w, "tenant_id is required", http.StatusBadRequest)
+		secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
+		if err != nil {
+			http.Error(w, "security context initialization failed: "+err.Error(), http.StatusUnauthorized)
 			return
 		}
+		id := chi.URLParam(r, "id")
 
 		query := `DELETE FROM catalog_edge_type WHERE id = $1 AND tenant_id = $2`
-		result, err := db.Exec(query, id, tenantID)
+		result, err := h.db.Exec(query, id, secCtx.TenantID)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
@@ -479,20 +469,18 @@ func handleDeleteEdgeType(db *sql.DB) http.HandlerFunc {
 }
 
 // handleGetEdgeTypeProperties retrieves properties for an edge type
-func handleGetEdgeTypeProperties(db *sql.DB) http.HandlerFunc {
+func (h *edgeTypesHandler) handleGetEdgeTypeProperties() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		id := chi.URLParam(r, "id")
-		tenantID := r.URL.Query().Get("tenant_id")
-
-		if tenantID == "" {
-			http.Error(w, "tenant_id is required", http.StatusBadRequest)
+		secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
+		if err != nil {
+			http.Error(w, "security context initialization failed: "+err.Error(), http.StatusUnauthorized)
 			return
 		}
+		id := chi.URLParam(r, "id")
 
-		// Get properties from config
 		query := `SELECT config FROM catalog_edge_type WHERE id = $1 AND tenant_id = $2`
 		var configJSON []byte
-		err := db.QueryRow(query, id, tenantID).Scan(&configJSON)
+		err = h.db.QueryRow(query, id, secCtx.TenantID).Scan(&configJSON)
 		if err == sql.ErrNoRows {
 			http.Error(w, "Edge type not found", http.StatusNotFound)
 			return
@@ -504,7 +492,6 @@ func handleGetEdgeTypeProperties(db *sql.DB) http.HandlerFunc {
 
 		properties := []NodeProperty{}
 
-		// Try to get properties from config
 		if len(configJSON) > 0 {
 			var config map[string]interface{}
 			if err := json.Unmarshal(configJSON, &config); err == nil {
@@ -526,15 +513,14 @@ func handleGetEdgeTypeProperties(db *sql.DB) http.HandlerFunc {
 }
 
 // handleAddEdgeTypeProperty adds a property to an edge type
-func handleAddEdgeTypeProperty(db *sql.DB) http.HandlerFunc {
+func (h *edgeTypesHandler) handleAddEdgeTypeProperty() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		id := chi.URLParam(r, "id")
-		tenantID := r.URL.Query().Get("tenant_id")
-
-		if tenantID == "" {
-			http.Error(w, "tenant_id is required", http.StatusBadRequest)
+		secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
+		if err != nil {
+			http.Error(w, "security context initialization failed: "+err.Error(), http.StatusUnauthorized)
 			return
 		}
+		id := chi.URLParam(r, "id")
 
 		var prop NodeProperty
 		if err := json.NewDecoder(r.Body).Decode(&prop); err != nil {
@@ -542,16 +528,14 @@ func handleAddEdgeTypeProperty(db *sql.DB) http.HandlerFunc {
 			return
 		}
 
-		// Validate required fields
 		if prop.Name == "" || prop.DataType == "" {
 			http.Error(w, "name and data_type are required", http.StatusBadRequest)
 			return
 		}
 
-		// Get current config
 		query := `SELECT config FROM catalog_edge_type WHERE id = $1 AND tenant_id = $2`
 		var configJSON []byte
-		err := db.QueryRow(query, id, tenantID).Scan(&configJSON)
+		err = h.db.QueryRow(query, id, secCtx.TenantID).Scan(&configJSON)
 		if err == sql.ErrNoRows {
 			http.Error(w, "Edge type not found", http.StatusNotFound)
 			return
@@ -567,7 +551,6 @@ func handleAddEdgeTypeProperty(db *sql.DB) http.HandlerFunc {
 			return
 		}
 
-		// Add property to config
 		var properties []NodeProperty
 		if props, ok := config["properties"].([]interface{}); ok {
 			for _, p := range props {
@@ -581,7 +564,6 @@ func handleAddEdgeTypeProperty(db *sql.DB) http.HandlerFunc {
 		properties = append(properties, prop)
 		config["properties"] = properties
 
-		// Update config
 		newConfigJSON, err := json.Marshal(config)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -589,7 +571,7 @@ func handleAddEdgeTypeProperty(db *sql.DB) http.HandlerFunc {
 		}
 
 		updateQuery := `UPDATE catalog_edge_type SET config = $1, updated_at = NOW() WHERE id = $2 AND tenant_id = $3`
-		_, err = db.Exec(updateQuery, newConfigJSON, id, tenantID)
+		_, err = h.db.Exec(updateQuery, newConfigJSON, id, secCtx.TenantID)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
@@ -602,16 +584,15 @@ func handleAddEdgeTypeProperty(db *sql.DB) http.HandlerFunc {
 }
 
 // handleUpdateEdgeTypeProperty updates a property in an edge type
-func handleUpdateEdgeTypeProperty(db *sql.DB) http.HandlerFunc {
+func (h *edgeTypesHandler) handleUpdateEdgeTypeProperty() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		id := chi.URLParam(r, "id")
-		propName := chi.URLParam(r, "propName")
-		tenantID := r.URL.Query().Get("tenant_id")
-
-		if tenantID == "" {
-			http.Error(w, "tenant_id is required", http.StatusBadRequest)
+		secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
+		if err != nil {
+			http.Error(w, "security context initialization failed: "+err.Error(), http.StatusUnauthorized)
 			return
 		}
+		id := chi.URLParam(r, "id")
+		propName := chi.URLParam(r, "propName")
 
 		var prop NodeProperty
 		if err := json.NewDecoder(r.Body).Decode(&prop); err != nil {
@@ -619,10 +600,9 @@ func handleUpdateEdgeTypeProperty(db *sql.DB) http.HandlerFunc {
 			return
 		}
 
-		// Get current config
 		query := `SELECT config FROM catalog_edge_type WHERE id = $1 AND tenant_id = $2`
 		var configJSON []byte
-		err := db.QueryRow(query, id, tenantID).Scan(&configJSON)
+		err = h.db.QueryRow(query, id, secCtx.TenantID).Scan(&configJSON)
 		if err == sql.ErrNoRows {
 			http.Error(w, "Edge type not found", http.StatusNotFound)
 			return
@@ -638,7 +618,6 @@ func handleUpdateEdgeTypeProperty(db *sql.DB) http.HandlerFunc {
 			return
 		}
 
-		// Update property in config
 		var properties []NodeProperty
 		found := false
 		if props, ok := config["properties"].([]interface{}); ok {
@@ -663,7 +642,6 @@ func handleUpdateEdgeTypeProperty(db *sql.DB) http.HandlerFunc {
 
 		config["properties"] = properties
 
-		// Update config
 		newConfigJSON, err := json.Marshal(config)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -671,7 +649,7 @@ func handleUpdateEdgeTypeProperty(db *sql.DB) http.HandlerFunc {
 		}
 
 		updateQuery := `UPDATE catalog_edge_type SET config = $1, updated_at = NOW() WHERE id = $2 AND tenant_id = $3`
-		_, err = db.Exec(updateQuery, newConfigJSON, id, tenantID)
+		_, err = h.db.Exec(updateQuery, newConfigJSON, id, secCtx.TenantID)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
@@ -683,21 +661,19 @@ func handleUpdateEdgeTypeProperty(db *sql.DB) http.HandlerFunc {
 }
 
 // handleDeleteEdgeTypeProperty deletes a property from an edge type
-func handleDeleteEdgeTypeProperty(db *sql.DB) http.HandlerFunc {
+func (h *edgeTypesHandler) handleDeleteEdgeTypeProperty() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		id := chi.URLParam(r, "id")
-		propName := chi.URLParam(r, "propName")
-		tenantID := r.URL.Query().Get("tenant_id")
-
-		if tenantID == "" {
-			http.Error(w, "tenant_id is required", http.StatusBadRequest)
+		secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
+		if err != nil {
+			http.Error(w, "security context initialization failed: "+err.Error(), http.StatusUnauthorized)
 			return
 		}
+		id := chi.URLParam(r, "id")
+		propName := chi.URLParam(r, "propName")
 
-		// Get current config
 		query := `SELECT config FROM catalog_edge_type WHERE id = $1 AND tenant_id = $2`
 		var configJSON []byte
-		err := db.QueryRow(query, id, tenantID).Scan(&configJSON)
+		err = h.db.QueryRow(query, id, secCtx.TenantID).Scan(&configJSON)
 		if err == sql.ErrNoRows {
 			http.Error(w, "Edge type not found", http.StatusNotFound)
 			return
@@ -718,7 +694,6 @@ func handleDeleteEdgeTypeProperty(db *sql.DB) http.HandlerFunc {
 			return
 		}
 
-		// Remove property from config
 		var properties []NodeProperty
 		found := false
 		if props, ok := config["properties"].([]interface{}); ok {
@@ -742,7 +717,6 @@ func handleDeleteEdgeTypeProperty(db *sql.DB) http.HandlerFunc {
 
 		config["properties"] = properties
 
-		// Update config
 		newConfigJSON, err := json.Marshal(config)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -750,7 +724,7 @@ func handleDeleteEdgeTypeProperty(db *sql.DB) http.HandlerFunc {
 		}
 
 		updateQuery := `UPDATE catalog_edge_type SET config = $1, updated_at = NOW() WHERE id = $2 AND tenant_id = $3`
-		_, err = db.Exec(updateQuery, newConfigJSON, id, tenantID)
+		_, err = h.db.Exec(updateQuery, newConfigJSON, id, secCtx.TenantID)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return

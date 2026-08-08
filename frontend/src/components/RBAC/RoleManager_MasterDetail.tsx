@@ -139,7 +139,7 @@ export const RoleManagerMasterDetail: React.FC<RoleManagerProps> = ({ tenant, da
     try {
       setLoading(true);
       const response = await apiFetch(
-        `/api/rbac/roles?tenant_instance_id=${datasource.id}`,
+        `/api/rbac/roles`,
         {
           headers: {
             'X-Tenant-ID': tenant.id,
@@ -171,7 +171,7 @@ export const RoleManagerMasterDetail: React.FC<RoleManagerProps> = ({ tenant, da
   const fetchRoleUsers = async (roleId: string) => {
     try {
       const response = await fetch(
-        `/api/rbac/roles/${roleId}/users?tenant_instance_id=${datasource.id}`
+        `/api/rbac/roles/${roleId}/users`
       );
       const data = await response.json();
       const usersArray = Array.isArray(data)
@@ -190,7 +190,7 @@ export const RoleManagerMasterDetail: React.FC<RoleManagerProps> = ({ tenant, da
   const fetchRoleGroups = async (roleId: string) => {
     try {
       const response = await fetch(
-        `/api/rbac/roles/${roleId}/groups?tenant_instance_id=${datasource.id}`
+        `/api/rbac/roles/${roleId}/groups`
       );
       const data = await response.json();
       const groupsArray = Array.isArray(data)
@@ -308,7 +308,7 @@ export const RoleManagerMasterDetail: React.FC<RoleManagerProps> = ({ tenant, da
     try {
       setSaving(true);
       const response = await apiFetch(
-        `/api/rbac/roles?tenant_instance_id=${datasource.id}`,
+        `/api/rbac/roles`,
         {
           method: 'POST',
           headers: {

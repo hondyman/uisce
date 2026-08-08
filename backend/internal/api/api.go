@@ -868,7 +868,9 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 		CampaignSvc:            campaignSvc,
 		NotificationHandlers:   NewNotificationAPIHandlers(notificationSvc, campaignSvc),
 		DashboardHandlers:      NewDashboardAPIHandlers(db),
-		ModelCatalogHandler:    handlers.NewModelCatalogHandler(db),
+		ModelCatalogHandler:    handlers.NewModelCatalogHandler(db, handlers.SecurityContextDeps{
+			Resolver: resolver,
+		}),
 		CatalogScanHandler:     catalogScanHandler, // Set early initialized handler
 		DatasourceResolver:     resolver,
 		TestConnectionHandler:  nil, // Will be set after initialization
@@ -969,7 +971,9 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 	// Initialize semantic mapping service with fuzzy logic and abbreviation support
 	// Initialize semantic mapping service with fuzzy logic, abbreviation support, and auditing
 	srv.SemanticMappingSvc = analytics.NewSemanticMappingService(sqlxDB, analytics.NewSimpleFIBOMatcher(), analyticsAbbrevSvc, llmProvider, semanticPublisher, sqlRepo)
-	srv.SemanticMappingHandler = handlers.NewSemanticMappingHandler(srv.SemanticMappingSvc)
+	srv.SemanticMappingHandler = handlers.NewSemanticMappingHandler(srv.SemanticMappingSvc, handlers.SecurityContextDeps{
+		Resolver: srv.DatasourceResolver,
+	})
 
 	// Initialize semantic calculation service and handler
 	semanticCalculationSvc := analytics.NewSemanticCalculationService(sqlxDB)
@@ -1235,12 +1239,13 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 	// Initialize Storage Tiering (Phase 2)
 	tieringRepo := tiering.NewTieringRepository(sqlxDB)
 	tieringService := tiering.NewStorageTiering(tieringRepo, logging.GetLogger())
-	tieringHandler := NewTieringHandler(tieringService)
+	tieringHandler := NewTieringHandler(tieringService, securityDeps)
 	tieringHandler.RegisterRoutes(r)
 
 	// Initialize Scheduler Intelligence (Epic 31)
+	schedulerSecurityDeps := handlers.SecurityContextDeps{Resolver: srv.DatasourceResolver}
 	schedulerSemanticAdapter := si.NewSemanticAdapter(sqlxDB, srv.SemanticSvc)
-	schedulerHandlers := NewSchedulerHandlers(sqlxDB, schedulerSemanticAdapter, logging.GetLogger())
+	schedulerHandlers := NewSchedulerHandlers(sqlxDB, schedulerSemanticAdapter, logging.GetLogger(), schedulerSecurityDeps)
 	schedulerHandlers.RegisterRoutes(r)
 
 	// Phase 13: Subscribe scheduler to storage events
@@ -1251,7 +1256,7 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 	schedulerBlastRadius := si.NewBlastRadiusCalculator(schedulerRepo, schedulerSemanticAdapter)
 	schedulerGovSvc := si.NewGovernanceService(schedulerRepo, schedulerSemanticAdapter, schedulerBlastRadius)
 	schedulerAuditTrailSvc := si.NewAuditTrailService(schedulerRepo)
-	governanceHandler := NewGovernanceHandler(schedulerGovSvc, schedulerAuditTrailSvc)
+	governanceHandler := NewGovernanceHandler(schedulerGovSvc, schedulerAuditTrailSvc, schedulerSecurityDeps)
 	governanceHandler.RegisterRoutes(r)
 
 	// Initialize Business Components (Business Objects)
@@ -1265,11 +1270,11 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 	// boHandler.RegisterRoutes(r) - Moved below into /api group
 
 	// Initialize Catalog Handler (Phase 18)
-	catalogHandler := NewCatalogHandler(boService)
+	catalogHandler := NewCatalogHandler(boService, schedulerSecurityDeps)
 	// Registration moved to /api group below
 
 	// Initialize Semantic Terms handler for catalog_node queries
-	semanticTermsHandler := NewSemanticTermsHandler(db)
+	semanticTermsHandler := NewSemanticTermsHandler(db, schedulerSecurityDeps)
 	// Registration moved to /api group
 
 	// Initialize Folder Service and Handler
@@ -1280,8 +1285,9 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 
 	// Initialize Graph-Native Lineage Service (Phase 12)
 	// sqlRepo already created above
-	lineageSvc := lineage.NewLineageService(sqlRepo)
-	_ = lineageSvc // Suppress unused for now as it's passed around elsewhere or used for background tasks
+	_ = lineage.NewLineageService(sqlRepo)
+	lineageRepo := lineage.NewDBLineageRepository(sqlxDB)
+	srv.LineageHandler = NewLineageHandler(lineageRepo, schedulerSecurityDeps)
 
 	// Note: Registration moved to /api group below
 
@@ -1356,7 +1362,8 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 	go srv.simulateRealTimeUpdates()
 
 	// Register layout routes (saved UI layouts)
-	srv.registerLayoutRoutes(r)
+	layoutHandler := NewLayoutHandler(sqlxDB.DB, schedulerSecurityDeps)
+	layoutHandler.RegisterRoutes(r)
 
 	// API routes
 	routes := NewRoutes()
@@ -1366,6 +1373,14 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 
 		r.Post("/ai/generate-page", ai.NewPageCopilotService(sqlxDB).GeneratePageHandler)
 		r.Post("/calculation/compile", calculation.NewService().CompileExpressionHandler)
+
+		// Multi-tenant & tenant access routes
+		tenantAccessHandler.RegisterRoutes(r)
+		r.Get("/rest/datasources", tenantAccessHandler.ListAlphaDatasources)
+		r.Get("/rest/products", tenantAccessHandler.ListAlphaProducts)
+
+		// Lookups routes
+		RegisterLookupsRoutes(r, db)
 
 		customAttrSvc := metadata.NewCustomAttributeService(sqlxDB)
 		bindingSvc := metadata.NewBindingService(sqlxDB)
@@ -1426,8 +1441,8 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 		gcHandler.RegisterRoutes(r)
 
 		// Register Catalog Node/Edge Type Routes
-		RegisterNodeTypesRoutes(r, db)
-		RegisterEdgeTypesRoutes(r, db)
+		RegisterNodeTypesRoutes(r, db, handlers.SecurityContextDeps{Resolver: srv.DatasourceResolver})
+		RegisterEdgeTypesRoutes(r, db, handlers.SecurityContextDeps{Resolver: srv.DatasourceResolver})
 		RegisterLookupsRoutes(r, db)
 
 		// Auth routes must come BEFORE middleware to avoid chicken-and-egg problem
@@ -1534,6 +1549,8 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 
 		semanticMappingsHandler.RegisterRoutes(r)
 		businessTermsHandler.RegisterRoutes(r)
+		glossaryHandler := NewGlossaryHandler(db, lineage.NewDBLineageRepository(sqlxDB), handlers.SecurityContextDeps{Resolver: srv.DatasourceResolver})
+		glossaryHandler.RegisterRoutes(r)
 		RegisterValidationRulesRoutes(r, db, srv.CueEngine, srv.BusinessObjectService, srv.DatasourceResolver)
 
 		// Initialize Security Profile Service and Handler
@@ -1541,8 +1558,13 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 		secProfileHandler := handlers.NewSecurityProfileHandler(secProfileSvc)
 		secProfileHandler.RegisterRoutes(r)
 
+		bpNotificationHandler := NewBPNotificationHandlers(sqlxDB, handlers.SecurityContextDeps{
+			Resolver: srv.DatasourceResolver,
+		})
+		bpNotificationHandler.RegisterRoutes(r)
+
 		adminHandler.RegisterRoutes(r)
-// Admin Impersonation Routes
+		// Admin Impersonation Routes
 		if db != nil {
 			impersonateHandler := handlers.NewAdminImpersonateHandler(db)
 			r.Post("/admin/impersonate", impersonateHandler.AssumeContext)
@@ -1566,8 +1588,6 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 			// Session-history queries (used by the picker)
 			r.Get("/admin/impersonate/sessions/active", impersonateHandler.ListActiveSessions)
 			r.Get("/admin/impersonate/sessions/recent", impersonateHandler.ListRecentSessions)
-			r.Get("/api/admin/impersonate/sessions/active", impersonateHandler.ListActiveSessions)
-			r.Get("/api/admin/impersonate/sessions/recent", impersonateHandler.ListRecentSessions)
 
 
 			// Tenant search + scope (impersonation picker) & audit logs
@@ -3264,19 +3284,25 @@ func (s *Server) registerProcessRoutes(r chi.Router, db *sql.DB, sqlxDB *sqlx.DB
 	processAnalyticsHandler.RegisterRoutes(r)
 
 	// Process Benchmarking System
-	benchmarkingHandler := NewBenchmarkingHandler(db)
+	benchmarkingHandler := NewBenchmarkingHandler(db, handlers.SecurityContextDeps{Resolver: s.DatasourceResolver})
 	benchmarkingHandler.RegisterRoutes(r)
 
 	// Process Live Monitoring Dashboard
-	processMonitorHandler := NewProcessMonitorHandlers(sqlxDB)
+	processMonitorHandler := NewProcessMonitorHandlers(sqlxDB, handlers.SecurityContextDeps{
+		Resolver: s.DatasourceResolver,
+	})
 	processMonitorHandler.RegisterRoutes(r)
 
 	// AI-Powered Process Optimization
-	processOptimizationHandler := NewProcessOptimizationHandlers(sqlxDB)
+	processOptimizationHandler := NewProcessOptimizationHandlers(sqlxDB, handlers.SecurityContextDeps{
+		Resolver: s.DatasourceResolver,
+	})
 	processOptimizationHandler.RegisterRoutes(r)
 
 	// Integration Marketplace
-	marketplaceIntegrationHandler := NewMarketplaceIntegrationHandlers(sqlxDB)
+	marketplaceIntegrationHandler := NewMarketplaceIntegrationHandlers(sqlxDB, handlers.SecurityContextDeps{
+		Resolver: s.DatasourceResolver,
+	})
 	marketplaceIntegrationHandler.RegisterRoutes(r)
 
 	// Process Templates Library
@@ -3368,8 +3394,8 @@ func (s *Server) registerMetadataRoutes(r chi.Router, boHandler *BusinessObjectH
 // registerCatalogRoutes mounts catalog scan, connection, and marketplace endpoints
 func (s *Server) registerCatalogRoutes(r chi.Router, db *sql.DB, routes *Routes, temporalClient temporalclient.Client) {
 	// Node Types endpoints
-	RegisterNodeTypesRoutes(r, db)
-	RegisterEdgeTypesRoutes(r, db)
+	RegisterNodeTypesRoutes(r, db, handlers.SecurityContextDeps{Resolver: s.DatasourceResolver})
+	RegisterEdgeTypesRoutes(r, db, handlers.SecurityContextDeps{Resolver: s.DatasourceResolver})
 
 	// Marketplace endpoints
 	RegisterMarketplaceRoutes(r, db)
@@ -3396,12 +3422,10 @@ func (s *Server) registerWorkflowRoutes(r chi.Router, db *sql.DB, cronJob *cron.
 	// Notification Routes (Slack, Email, Jobs)
 	registerNotificationRoutes(r, db, cronJob)
 
-	// Advanced Notification Engine
-	bpNotificationHandler := NewBPNotificationHandlers(s.SQLXDB)
-	bpNotificationHandler.RegisterRoutes(r)
-
 	// Advanced RBAC & Permissions
-	rbacHandlers := NewRBACHandlers(s.SQLXDB)
+	rbacHandlers := NewRBACHandlers(s.SQLXDB, handlers.SecurityContextDeps{
+		Resolver: s.DatasourceResolver,
+	})
 	rbacHandlers.RegisterRoutes(r)
 
 	// ── Marketplace Ecosystem (secured) ─────────────────────────────────────────
@@ -3433,7 +3457,7 @@ func (s *Server) registerTriggerEngineRoutes(r chi.Router, sqlxDB *sqlx.DB) {
 // registerNBAEngineRoutes mounts next-best-action and recommendation engine endpoints
 func (s *Server) registerNBAEngineRoutes(r chi.Router, sqlxDB *sqlx.DB) {
 	// Initialize NBA Handler
-	nbaHandler := NewNBAHandler(sqlxDB)
+	nbaHandler := NewNBAHandler(sqlxDB, handlers.SecurityContextDeps{Resolver: s.DatasourceResolver})
 
 	// NBA Engine Routes
 	r.Route("/nba", func(r chi.Router) {
@@ -3776,6 +3800,9 @@ func (s *Server) handleSearchSemanticTerms(w http.ResponseWriter, r *http.Reques
 func (s *Server) registerCatalogNodeRoutes(r chi.Router) {
 	r.Get("/semantic/objects", s.handleListSemanticObjects)
 	r.Get("/catalog/nodes", s.handleListCatalogNodes)
+	r.Get("/rest/catalog-nodes", s.handleListCatalogNodes)
+	r.Get("/rest/catalog-edges", s.handleListCatalogEdges)
+	r.Get("/rest/catalog-node-types", s.handleListCatalogNodeTypes)
 }
 
 func (s *Server) handleListSemanticObjects(w http.ResponseWriter, r *http.Request) {
@@ -3802,90 +3829,54 @@ func (s *Server) handleListSemanticObjects(w http.ResponseWriter, r *http.Reques
 }
 
 func (s *Server) handleListCatalogNodes(w http.ResponseWriter, r *http.Request) {
-	claims := jwtmiddleware.GetClaimsFromContext(r)
-	if claims == nil {
-		http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
-		return
-	}
-	tenantID := claims.TenantID
+	tenantID := getSecureTenantID(r)
 	tenantDatasourceID := r.Header.Get("X-Tenant-Datasource-ID")
-
-	// For debugging, allow querying without headers
-	if tenantID == "" || tenantDatasourceID == "" {
-		// Return all nodes for debugging
-		query := `
-					SELECT id, node_name, COALESCE(description, ''), tenant_id, tenant_datasource_id, created_at, updated_at, COALESCE(properties, '{}'::jsonb) as properties
-					FROM catalog_node
-					ORDER BY tenant_id, tenant_datasource_id, node_name
-					LIMIT 100
-				`
-
-		rows, err := s.DB.QueryContext(r.Context(), query)
-		if err != nil {
-			respond(w, r, nil, err)
-			return
-		}
-		defer rows.Close()
-
-		var nodes []map[string]interface{}
-		for rows.Next() {
-			var id, nodeName, description, tenantID, datasourceID string
-			var createdAt, updatedAt time.Time
-			var propsJSON []byte
-
-			err := rows.Scan(&id, &nodeName, &description, &tenantID, &datasourceID, &createdAt, &updatedAt, &propsJSON)
-			if err != nil {
-				continue
-			}
-
-			var props map[string]interface{}
-			if err := json.Unmarshal(propsJSON, &props); err != nil {
-				props = make(map[string]interface{})
-			}
-
-			node := map[string]interface{}{
-				"id":                   id,
-				"node_id":              id,
-				"node_name":            nodeName,
-				"qualified_path":       nodeName,
-				"catalog_type":         "table",
-				"node_type":            "table",
-				"tenant_id":            tenantID,
-				"tenant_datasource_id": datasourceID,
-				"created_at":           createdAt,
-				"updated_at":           updatedAt,
-				"description":          description,
-				"properties":           props,
-			}
-
-			nodes = append(nodes, node)
-		}
-
-		respond(w, r, nodes, nil)
-		return
+	if tenantDatasourceID == "" {
+		tenantDatasourceID = r.URL.Query().Get("datasource_id")
 	}
+
+
 
 	// Parse query parameters
 	nodeType := r.URL.Query().Get("type")
 	q := r.URL.Query().Get("q")
 	limitStr := r.URL.Query().Get("limit")
 
-	limit := 50 // default limit
+	limit := 10000 // default limit
 	if limitStr != "" {
-		if parsedLimit, err := strconv.Atoi(limitStr); err == nil && parsedLimit > 0 && parsedLimit <= 1000 {
+		if parsedLimit, err := strconv.Atoi(limitStr); err == nil && parsedLimit > 0 && parsedLimit <= 50000 {
 			limit = parsedLimit
 		}
 	}
 
 	// Build query using actual schema (catalog_node with node_name column)
-	query := `
-				SELECT cn.id, cn.node_name, COALESCE(cn.description, ''), cn.tenant_id, cn.tenant_datasource_id, cn.created_at, cn.updated_at, COALESCE(cn.properties, '{}'::jsonb) as properties
-				FROM catalog_node cn
-				LEFT JOIN catalog_node_type cnt ON cn.node_type_id = cnt.id
-				WHERE (cn.tenant_id = $1::uuid OR cn.tenant_id = (SELECT id FROM public.tenants WHERE gold_copy = true LIMIT 1)) AND cn.tenant_datasource_id = $2::uuid
-			`
-	args := []interface{}{tenantID, tenantDatasourceID}
-	argIndex := 3
+	var query string
+	var args []interface{}
+	argIndex := 1
+
+	if tenantID != "" {
+		query = `
+			SELECT cn.id, cn.node_name, COALESCE(cn.description, ''), cn.tenant_id, cn.tenant_datasource_id, cn.created_at, cn.updated_at, COALESCE(cn.properties, '{}'::jsonb) as properties
+			FROM catalog_node cn
+			LEFT JOIN catalog_node_type cnt ON cn.node_type_id = cnt.id
+			WHERE (cn.tenant_id = $1::uuid OR cn.tenant_id = (SELECT id FROM public.tenants WHERE gold_copy = true LIMIT 1))
+		`
+		args = append(args, tenantID)
+		argIndex = 2
+	} else {
+		query = `
+			SELECT cn.id, cn.node_name, COALESCE(cn.description, ''), cn.tenant_id, cn.tenant_datasource_id, cn.created_at, cn.updated_at, COALESCE(cn.properties, '{}'::jsonb) as properties
+			FROM catalog_node cn
+			LEFT JOIN catalog_node_type cnt ON cn.node_type_id = cnt.id
+			WHERE (cn.tenant_id = (SELECT id FROM public.tenants WHERE gold_copy = true LIMIT 1) OR 1=1)
+		`
+	}
+
+	if tenantDatasourceID != "" {
+		query += fmt.Sprintf(" AND cn.tenant_datasource_id = $%d::uuid", argIndex)
+		args = append(args, tenantDatasourceID)
+		argIndex++
+	}
 
 	if nodeType != "" {
 		query += fmt.Sprintf(" AND cnt.catalog_type_name = $%d", argIndex)
@@ -3943,6 +3934,93 @@ func (s *Server) handleListCatalogNodes(w http.ResponseWriter, r *http.Request) 
 	}
 
 	respond(w, r, nodes, nil)
+}
+
+func (s *Server) handleListCatalogEdges(w http.ResponseWriter, r *http.Request) {
+	tenantID := getSecureTenantID(r)
+	tenantDatasourceID := r.Header.Get("X-Tenant-Datasource-ID")
+	if tenantDatasourceID == "" {
+		tenantDatasourceID = r.URL.Query().Get("datasource_id")
+	}
+
+	var query string
+	var args []interface{}
+	argIndex := 1
+
+	if tenantID != "" {
+		query = `
+			SELECT id, source_node_id, target_node_id, COALESCE(edge_type_id::text, ''), COALESCE(properties, '{}'::jsonb)
+			FROM catalog_edge
+			WHERE (tenant_id = $1::uuid OR tenant_id = (SELECT id FROM public.tenants WHERE gold_copy = true LIMIT 1))
+		`
+		args = append(args, tenantID)
+		argIndex = 2
+	} else {
+		query = `
+			SELECT id, source_node_id, target_node_id, COALESCE(edge_type_id::text, ''), COALESCE(properties, '{}'::jsonb)
+			FROM catalog_edge
+			WHERE (tenant_id = (SELECT id FROM public.tenants WHERE gold_copy = true LIMIT 1) OR 1=1)
+		`
+	}
+
+	if tenantDatasourceID != "" {
+		query += fmt.Sprintf(" AND tenant_datasource_id = $%d::uuid", argIndex)
+		args = append(args, tenantDatasourceID)
+		argIndex++
+	}
+
+	rows, err := s.DB.QueryContext(r.Context(), query, args...)
+	if err != nil {
+		respond(w, r, []map[string]interface{}{}, nil)
+		return
+	}
+	defer rows.Close()
+
+	edges := make([]map[string]interface{}, 0)
+	for rows.Next() {
+		var id, sourceID, targetID, edgeTypeID string
+		var propsJSON []byte
+		if err := rows.Scan(&id, &sourceID, &targetID, &edgeTypeID, &propsJSON); err != nil {
+			continue
+		}
+		var props map[string]interface{}
+		_ = json.Unmarshal(propsJSON, &props)
+		edges = append(edges, map[string]interface{}{
+			"id":             id,
+			"source_node_id": sourceID,
+			"target_node_id": targetID,
+			"edge_type_id":   edgeTypeID,
+			"properties":     props,
+		})
+	}
+	respond(w, r, edges, nil)
+}
+
+func (s *Server) handleListCatalogNodeTypes(w http.ResponseWriter, r *http.Request) {
+	query := `
+		SELECT id, catalog_type_name, COALESCE(description, '')
+		FROM catalog_node_type
+	`
+	rows, err := s.DB.QueryContext(r.Context(), query)
+	if err != nil {
+		respond(w, r, []map[string]interface{}{}, nil)
+		return
+	}
+	defer rows.Close()
+
+	types := make([]map[string]interface{}, 0)
+	for rows.Next() {
+		var id, name, desc string
+		if err := rows.Scan(&id, &name, &desc); err != nil {
+			continue
+		}
+		types = append(types, map[string]interface{}{
+			"id":                id,
+			"catalog_type_name": name,
+			"description":       desc,
+		})
+	}
+	respond(w, r, types, nil)
 }
 
 func (s *Server) handleRefreshCharts(w http.ResponseWriter, r *http.Request) {

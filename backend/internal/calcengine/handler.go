@@ -40,20 +40,12 @@ type TenantContext struct {
 func (h *CalcEngineHandler) withTenantContext(next func(w http.ResponseWriter, r *http.Request, tc *TenantContext)) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		claims := jwtmiddleware.GetClaimsFromContext(r)
-	if claims == nil {
-		http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
-		return
-	}
-	tenantID := claims.TenantID
+		if claims == nil {
+			http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
+			return
+		}
+		tenantID := claims.TenantID
 		datasourceID := r.Header.Get("X-Tenant-Datasource-ID")
-
-		// Also check query params (for backward compat)
-		if tenantID == "" {
-			tenantID = r.URL.Query().Get("tenant_id")
-		}
-		if datasourceID == "" {
-			datasourceID = r.URL.Query().Get("datasource_id")
-		}
 
 		if tenantID == "" || datasourceID == "" {
 			h.errorResponse(w, http.StatusBadRequest, "tenant_id and datasource_id required")

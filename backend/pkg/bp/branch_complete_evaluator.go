@@ -9,6 +9,7 @@ import (
 	"math"
 	"time"
 
+	"github.com/hondyman/uisce/libs/db/queries"
 	"github.com/jmoiron/sqlx"
 )
 
@@ -60,26 +61,16 @@ func (e *CompleteABranchEvaluator) SelectAIModel(ctx context.Context, stepID str
 		return "", fmt.Errorf("failed to select AI model: %w", err)
 	}
 
-	logQuery := `
-		UPDATE bp_ai_models SET total_predictions = total_predictions + 1, updated_at = NOW()
-		WHERE model_id = $1 AND tenant_id = $2
-	`
-	e.db.ExecContext(ctx, logQuery, modelID, e.tenantID)
+	e.db.ExecContext(ctx, queries.IncrementAIModelPredictions, modelID, e.tenantID)
 
 	return modelID, nil
 }
 
 // DetectModelDrift checks if model accuracy has degraded
 func (e *CompleteABranchEvaluator) DetectModelDrift(ctx context.Context, modelID string, threshold float64) (bool, error) {
-	query := `
-		SELECT last_accuracy, accuracy_threshold, min_accuracy_drop_threshold
-		FROM bp_ai_models
-		WHERE model_id = $1 AND tenant_id = $2
-	`
-
 	var lastAccuracy, threshold2, minDrop float64
 
-	err := e.db.QueryRowContext(ctx, query, modelID, e.tenantID).Scan(&lastAccuracy, &threshold2, &minDrop)
+	err := e.db.QueryRowContext(ctx, queries.GetAIModelAccuracy, modelID, e.tenantID).Scan(&lastAccuracy, &threshold2, &minDrop)
 	if err != nil {
 		return false, fmt.Errorf("failed to check drift: %w", err)
 	}
@@ -135,11 +126,7 @@ func (e *CompleteABranchEvaluator) EvaluateSemanticIntent(ctx context.Context, s
 	}
 
 	if route.ThresholdMet {
-		e.db.ExecContext(ctx, `
-			UPDATE bp_semantic_intents
-			SET match_count = match_count + 1, avg_confidence = $1
-			WHERE intent_id = $2 AND tenant_id = $3
-		`, similarityScore, intentID, e.tenantID)
+		e.db.ExecContext(ctx, queries.IncrementSemanticIntentMatch, similarityScore, intentID, e.tenantID)
 	}
 
 	return route, nil
@@ -218,11 +205,7 @@ func (e *CompleteABranchEvaluator) EvaluateScoringMatrix(ctx context.Context, st
 		}
 	}
 
-	e.db.ExecContext(ctx, `
-		UPDATE bp_scoring_matrices
-		SET evaluations_total = evaluations_total + 1, avg_score = $1
-		WHERE id = $2 AND tenant_id = $3
-	`, result.TotalScore, matrixID, e.tenantID)
+	e.db.ExecContext(ctx, queries.IncrementScoringMatrix, result.TotalScore, matrixID, e.tenantID)
 
 	return result, nil
 }
@@ -339,11 +322,7 @@ func (e *CompleteABranchEvaluator) EvaluateAdaptiveTriggers(ctx context.Context,
 	if triggered {
 		json.Unmarshal(actionConfigJSON, &result.ActionConfig)
 
-		e.db.ExecContext(ctx, `
-			UPDATE bp_adaptive_triggers
-			SET trigger_count = trigger_count + 1
-			WHERE step_id = $1 AND tenant_id = $2
-		`, stepID, e.tenantID)
+		e.db.ExecContext(ctx, queries.IncrementAdaptiveTrigger, stepID, e.tenantID)
 	}
 
 	return result, nil
@@ -370,17 +349,9 @@ type ResilienceConfig struct {
 }
 
 func (e *CompleteABranchEvaluator) GetResiliencePolicy(ctx context.Context, stepID string) (*ResilienceConfig, error) {
-	query := `
-		SELECT retry_max_attempts, circuit_breaker_enabled, circuit_breaker_failure_threshold,
-		       circuit_breaker_fallback_branch_id, total_retries
-		FROM bp_resilience_policies
-		WHERE step_id = $1 AND tenant_id = $2
-		LIMIT 1
-	`
-
 	config := &ResilienceConfig{}
 
-	err := e.db.QueryRowContext(ctx, query, stepID, e.tenantID).Scan(
+	err := e.db.QueryRowContext(ctx, queries.GetResiliencePolicy, stepID, e.tenantID).Scan(
 		&config.RetryCount, &config.CircuitBreakerEnabled, &config.FailureThreshold,
 		&config.FallbackBranchID, &config.CurrentStatus,
 	)
@@ -455,15 +426,7 @@ type BranchAnalyticsRecord struct {
 }
 
 func (e *CompleteABranchEvaluator) RecordBranchAnalytics(ctx context.Context, branchID string, metrics map[string]interface{}) error {
-	query := `
-		INSERT INTO bp_branch_analytics_extended
-		(tenant_id, branch_id, branch_selection_count, avg_duration_ms, success_rate, anomaly_score, metric_period)
-		VALUES ($1, $2, $3, $4, $5, $6, NOW())
-		ON CONFLICT (tenant_id, branch_id, metric_period) DO UPDATE SET
-			branch_selection_count = branch_selection_count + 1
-	`
-
-	_, err := e.db.ExecContext(ctx, query,
+	_, err := e.db.ExecContext(ctx, queries.UpsertBranchAnalytics,
 		e.tenantID, branchID,
 		metrics["selections"], metrics["avg_duration"],
 		metrics["success_rate"], metrics["anomaly_score"],
@@ -473,18 +436,9 @@ func (e *CompleteABranchEvaluator) RecordBranchAnalytics(ctx context.Context, br
 }
 
 func (e *CompleteABranchEvaluator) GetBranchAnalytics(ctx context.Context, branchID string) (*BranchAnalyticsRecord, error) {
-	query := `
-		SELECT branch_id, branch_selection_count, branch_completion_count, branch_abandonment_count,
-		       avg_duration_ms, success_rate, anomaly_detected, anomaly_score
-		FROM bp_branch_analytics_extended
-		WHERE branch_id = $1 AND tenant_id = $2
-		ORDER BY metric_period DESC
-		LIMIT 1
-	`
-
 	analytics := &BranchAnalyticsRecord{}
 
-	err := e.db.QueryRowContext(ctx, query, branchID, e.tenantID).Scan(
+	err := e.db.QueryRowContext(ctx, queries.GetBranchAnalytics, branchID, e.tenantID).Scan(
 		&analytics.BranchID, &analytics.SelectionCt, &analytics.CompletionCt,
 		&analytics.AbandonmentCt, &analytics.AvgDurationMs, &analytics.SuccessRt,
 		&analytics.AnomalyDetctd, &analytics.AnomlyScore,
@@ -531,13 +485,7 @@ func (e *CompleteABranchEvaluator) GetVotingDecision(ctx context.Context, workfl
 }
 
 func (e *CompleteABranchEvaluator) CastVote(ctx context.Context, decisionID string, voterRole string, vote string) error {
-	query := `
-		UPDATE bp_collaborative_decisions
-		SET votes_received = votes_received + 1, updated_at = NOW()
-		WHERE id = $1 AND tenant_id = $2
-	`
-
-	_, err := e.db.ExecContext(ctx, query, decisionID, e.tenantID)
+	_, err := e.db.ExecContext(ctx, queries.IncrementCollaborativeVotes, decisionID, e.tenantID)
 	return err
 }
 
@@ -553,18 +501,11 @@ type GeofenceResult struct {
 }
 
 func (e *CompleteABranchEvaluator) EvaluateGeofence(ctx context.Context, stepID string, userLat, userLng float64) (*GeofenceResult, error) {
-	query := `
-		SELECT id, region_center_lat, region_center_lng, region_radius_km, target_branch_id, geofence_type
-		FROM bp_geofence_rules
-		WHERE step_id = $1 AND tenant_id = $2 AND is_active = TRUE
-		LIMIT 1
-	`
-
 	result := &GeofenceResult{}
 	var centerLat, centerLng float64
 	var radiusKm int
 
-	err := e.db.QueryRowContext(ctx, query, stepID, e.tenantID).Scan(
+	err := e.db.QueryRowContext(ctx, queries.GetGeofenceRule, stepID, e.tenantID).Scan(
 		&result.GeofenceID, &centerLat, &centerLng, &radiusKm, &result.TargetBranchID,
 	)
 
@@ -608,13 +549,7 @@ type BlockchainAuditRecord struct {
 func (e *CompleteABranchEvaluator) LogBlockchainAudit(ctx context.Context, workflowInstanceID string, decision string) error {
 	eventHash := fmt.Sprintf("%x", sha256.Sum256([]byte(decision+time.Now().String())))
 
-	query := `
-		INSERT INTO bp_blockchain_audit
-		(tenant_id, workflow_instance_id, event_type, event_hash, verification_status)
-		VALUES ($1, $2, 'branch_decision', $3, 'verified')
-	`
-
-	_, err := e.db.ExecContext(ctx, query, e.tenantID, workflowInstanceID, eventHash)
+	_, err := e.db.ExecContext(ctx, queries.InsertBlockchainAudit, e.tenantID, workflowInstanceID, eventHash)
 	return err
 }
 
@@ -632,19 +567,10 @@ type NLConfig struct {
 }
 
 func (e *CompleteABranchEvaluator) GetNLConfig(ctx context.Context, stepID string) (*NLConfig, error) {
-	query := `
-		SELECT id, nl_query, generated_branching_config, field_validation_passed,
-		       requires_human_approval, human_approval_status
-		FROM bp_nl_configurations
-		WHERE step_id = $1 AND tenant_id = $2
-		ORDER BY created_at DESC
-		LIMIT 1
-	`
-
 	config := &NLConfig{}
 	var configJSON json.RawMessage
 
-	err := e.db.QueryRowContext(ctx, query, stepID, e.tenantID).Scan(
+	err := e.db.QueryRowContext(ctx, queries.GetNLConfiguration, stepID, e.tenantID).Scan(
 		&config.ConfigID, &config.NLQuery, &configJSON, &config.FieldsValid,
 		&config.RequiresApproval, &config.ApprovalStatus,
 	)
@@ -710,18 +636,10 @@ type Explainability struct {
 }
 
 func (e *CompleteABranchEvaluator) GetExplainability(ctx context.Context, executionID string) (*Explainability, error) {
-	query := `
-		SELECT id, selected_branch_id, feature_importance, decision_path,
-		       natural_language_summary, decision_confidence, alternative_paths
-		FROM bp_explainability_records
-		WHERE branch_execution_id = $1 AND tenant_id = $2
-		LIMIT 1
-	`
-
 	explain := &Explainability{}
 	var featureJSON, altPathsJSON json.RawMessage
 
-	err := e.db.QueryRowContext(ctx, query, executionID, e.tenantID).Scan(
+	err := e.db.QueryRowContext(ctx, queries.GetExplainability, executionID, e.tenantID).Scan(
 		&explain.RecordID, &explain.SelectedBranchID, &featureJSON, &explain.DecisionPath,
 		&explain.NaturalLanguageSummary, &explain.DecisionConfidence, &altPathsJSON,
 	)
@@ -742,14 +660,7 @@ func (e *CompleteABranchEvaluator) RecordExplainability(ctx context.Context, exe
 	confidence := 0.85
 	summary := fmt.Sprintf("Decision made based on %d factors with %.1f%% confidence", len(features), confidence*100)
 
-	query := `
-		INSERT INTO bp_explainability_records
-		(tenant_id, branch_execution_id, selected_branch_id, feature_importance,
-		 natural_language_summary, decision_confidence)
-		VALUES ($1, $2, $3, $4, $5, $6)
-	`
-
-	_, err := e.db.ExecContext(ctx, query,
+	_, err := e.db.ExecContext(ctx, queries.InsertExplainabilityRecord,
 		e.tenantID, executionID, branchID, string(featureJSON), summary, confidence,
 	)
 

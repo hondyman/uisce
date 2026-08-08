@@ -6,18 +6,21 @@ import (
 	"strconv"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/hondyman/uisce/backend/internal/handlers"
 	"github.com/hondyman/uisce/backend/internal/lineage"
 )
 
 // LineageHandler handles lineage requests
 type LineageHandler struct {
-	repo lineage.LineageRepository
+	repo         lineage.LineageRepository
+	securityDeps handlers.SecurityContextDeps
 }
 
 // NewLineageHandler creates a new handler
-func NewLineageHandler(repo lineage.LineageRepository) *LineageHandler {
+func NewLineageHandler(repo lineage.LineageRepository, securityDeps handlers.SecurityContextDeps) *LineageHandler {
 	return &LineageHandler{
-		repo: repo,
+		repo:         repo,
+		securityDeps: securityDeps,
 	}
 }
 
@@ -148,9 +151,12 @@ func (h *LineageHandler) GetImpactAnalysis(w http.ResponseWriter, r *http.Reques
 
 // GetDualLineage handles the combined technical and semantic lineage request
 func (h *LineageHandler) GetDualLineage(w http.ResponseWriter, r *http.Request) {
-	datasourceID := r.URL.Query().Get("datasourceId")
+	datasourceID := r.Header.Get("X-Tenant-Datasource-ID")
 	if datasourceID == "" {
-		datasourceID = r.URL.Query().Get("datasource_id")
+		secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
+		if err == nil {
+			datasourceID = secCtx.DatasourceID
+		}
 	}
 	assetID := r.URL.Query().Get("asset_id")
 

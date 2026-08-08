@@ -8,13 +8,15 @@ import React, { useState, useMemo } from 'react';
 import ReactDOM from 'react-dom/client';
 import { BrowserRouter } from 'react-router-dom';
 import { MantineProvider } from '@mantine/core';
-import { ThemeProvider, createTheme } from '@mui/material/styles';
+import { ThemeProvider } from '@mui/material/styles';
+import { createUisceTheme } from './theme';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import App from './App.tsx';
 import { I18nextProvider } from 'react-i18next';
 import i18n from './i18n';
 import './index.css';
 import '@mantine/core/styles.css';
+import './components/brand/navStyles.css';
 
 import { SnackbarProvider } from 'notistack';
 import { ConfirmProvider } from './components/ConfirmProvider';
@@ -50,84 +52,7 @@ function AppWithTheme() {
   }));
 
   const theme = useMemo(
-    () =>
-      createTheme({
-        palette: {
-          mode: effectiveTheme,
-          primary: {
-            main: effectiveTheme === 'dark' ? '#4f86f7' : '#1976d2',
-          },
-          background: {
-            default: effectiveTheme === 'dark' ? '#0b1118' : '#fafafa',
-            paper: effectiveTheme === 'dark' ? '#151b23' : '#ffffff',
-          },
-          text: {
-            primary: effectiveTheme === 'dark' ? '#e6edf3' : '#000000',
-            secondary: effectiveTheme === 'dark' ? '#b0b8c4' : '#666666',
-          },
-        },
-        components: {
-          MuiPaper: {
-            styleOverrides: {
-              root: {
-                backgroundImage: 'none',
-                backgroundColor: effectiveTheme === 'dark' ? '#151b23' : '#ffffff',
-                borderColor: effectiveTheme === 'dark' ? '#232f3e' : '#e0e0e0',
-              },
-            },
-          },
-          MuiCard: {
-            styleOverrides: {
-              root: {
-                backgroundImage: 'none',
-                backgroundColor: effectiveTheme === 'dark' ? '#1c2636' : '#ffffff',
-                borderColor: effectiveTheme === 'dark' ? '#232f3e' : '#e0e0e0',
-              },
-            },
-          },
-          MuiTextField: {
-            styleOverrides: {
-              root: {
-                '& .MuiOutlinedInput-root': {
-                  backgroundColor: effectiveTheme === 'dark' ? '#1c2636' : '#ffffff',
-                  '& fieldset': {
-                    borderColor: effectiveTheme === 'dark' ? '#232f3e' : '#e0e0e0',
-                  },
-                  '&:hover fieldset': {
-                    borderColor: effectiveTheme === 'dark' ? '#4f86f7' : '#1976d2',
-                  },
-                  '&.Mui-focused fieldset': {
-                    borderColor: effectiveTheme === 'dark' ? '#4f86f7' : '#1976d2',
-                  },
-                },
-                '& .MuiInputBase-input': {
-                  color: effectiveTheme === 'dark' ? '#e6edf3' : '#000000',
-                },
-                '& .MuiInputLabel-root': {
-                  color: effectiveTheme === 'dark' ? '#8b949e' : '#666666',
-                },
-              },
-            },
-          },
-          MuiCheckbox: {
-            styleOverrides: {
-              root: {
-                color: effectiveTheme === 'dark' ? '#30363d' : '#666666',
-                '&.Mui-checked': {
-                  color: effectiveTheme === 'dark' ? '#4f86f7' : '#1976d2',
-                },
-              },
-            },
-          },
-          MuiTypography: {
-            styleOverrides: {
-              root: {
-                color: effectiveTheme === 'dark' ? '#e6edf3' : '#000000',
-              },
-            },
-          },
-        },
-      }),
+    () => createUisceTheme(effectiveTheme),
     [effectiveTheme],
   );
 

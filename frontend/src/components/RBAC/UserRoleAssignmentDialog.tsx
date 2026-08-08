@@ -74,7 +74,7 @@ export const UserRoleAssignment: React.FC<UserRoleAssignmentProps> = ({
   const fetchAssignedUsers = async () => {
     try {
       const response = await fetch(
-        `/api/rbac/roles/${roleId}/users?tenant_id=${tenantId}&tenant_instance_id=${datasourceId}`
+        `/api/rbac/roles/${roleId}/users`
       );
       const data = await response.json();
       setAssignedUsers(Array.isArray(data) ? data : []);
@@ -88,7 +88,7 @@ export const UserRoleAssignment: React.FC<UserRoleAssignmentProps> = ({
   const fetchAvailableUsers = async () => {
     try {
       const response = await fetch(
-        `/api/users?tenant_id=${tenantId}&tenant_instance_id=${datasourceId}`
+        `/api/users`
       );
       const data = await response.json();
       const users = Array.isArray(data) ? data : [];
@@ -108,7 +108,7 @@ export const UserRoleAssignment: React.FC<UserRoleAssignmentProps> = ({
   const assignRole = async (userId: string) => {
     try {
       const response = await fetch(
-        `/api/rbac/roles/${roleId}/assign?tenant_id=${tenantId}&tenant_instance_id=${datasourceId}`,
+        `/api/rbac/roles/${roleId}/assign`,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -138,7 +138,7 @@ export const UserRoleAssignment: React.FC<UserRoleAssignmentProps> = ({
 
     try {
       await fetch(
-        `/api/rbac/roles/${roleId}/unassign/${userId}?tenant_id=${tenantId}&tenant_instance_id=${datasourceId}`,
+        `/api/rbac/roles/${roleId}/unassign/${userId}`,
         { method: 'DELETE' }
       );
       await fetchAssignedUsers();

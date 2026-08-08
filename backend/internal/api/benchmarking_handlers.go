@@ -7,6 +7,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	"github.com/hondyman/uisce/backend/internal/handlers"
 	"github.com/hondyman/uisce/backend/internal/models"
 	"github.com/hondyman/uisce/backend/internal/services/benchmarking"
 )
@@ -18,12 +19,14 @@ import (
 type BenchmarkingHandler struct {
 	db             *sql.DB
 	scoringService *benchmarking.ScoringService
+	securityDeps   handlers.SecurityContextDeps
 }
 
-func NewBenchmarkingHandler(db *sql.DB) *BenchmarkingHandler {
+func NewBenchmarkingHandler(db *sql.DB, securityDeps handlers.SecurityContextDeps) *BenchmarkingHandler {
 	return &BenchmarkingHandler{
 		db:             db,
 		scoringService: benchmarking.NewScoringService(db),
+		securityDeps:   securityDeps,
 	}
 }
 
@@ -35,14 +38,18 @@ func NewBenchmarkingHandler(db *sql.DB) *BenchmarkingHandler {
 func (h *BenchmarkingHandler) GetBenchmarkScore(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	// Get tenant ID from context (set by middleware)
-	tenantID, err := uuid.Parse(r.URL.Query().Get("tenant_id"))
+	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
+	if err != nil {
+		http.Error(w, "security context initialization failed: "+err.Error(), http.StatusUnauthorized)
+		return
+	}
+
+	tenantID, err := uuid.Parse(secCtx.TenantID)
 	if err != nil {
 		http.Error(w, "Invalid tenant_id", http.StatusBadRequest)
 		return
 	}
 
-	// Get query parameters
 	workflowType := r.URL.Query().Get("workflow_type")
 	if workflowType == "" {
 		http.Error(w, "workflow_type is required", http.StatusBadRequest)
@@ -165,7 +172,13 @@ func (h *BenchmarkingHandler) GetIndustryBenchmark(w http.ResponseWriter, r *htt
 func (h *BenchmarkingHandler) GetPeerComparison(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	tenantID, err := uuid.Parse(r.URL.Query().Get("tenant_id"))
+	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
+	if err != nil {
+		http.Error(w, "security context initialization failed: "+err.Error(), http.StatusUnauthorized)
+		return
+	}
+
+	tenantID, err := uuid.Parse(secCtx.TenantID)
 	if err != nil {
 		http.Error(w, "Invalid tenant_id", http.StatusBadRequest)
 		return
@@ -416,7 +429,13 @@ func (h *BenchmarkingHandler) GetBestPractices(w http.ResponseWriter, r *http.Re
 func (h *BenchmarkingHandler) GetGapAnalysis(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	tenantID, err := uuid.Parse(r.URL.Query().Get("tenant_id"))
+	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
+	if err != nil {
+		http.Error(w, "security context initialization failed: "+err.Error(), http.StatusUnauthorized)
+		return
+	}
+
+	tenantID, err := uuid.Parse(secCtx.TenantID)
 	if err != nil {
 		http.Error(w, "Invalid tenant_id", http.StatusBadRequest)
 		return

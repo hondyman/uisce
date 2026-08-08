@@ -53,9 +53,6 @@ check_infisical() {
     if ! command -v infisical &> /dev/null; then
         die "Infisical CLI not found. Install: brew install infisical"
     fi
-    if [ -z "$INFISICAL_TOKEN" ]; then
-        die "INFISICAL_TOKEN not set. Create a service token at https://app.infisical.com"
-    fi
 }
 
 parse_args() {
@@ -73,9 +70,15 @@ parse_args() {
 
 pull_secrets() {
     local output
-    output=$(infisical secrets pull --project="$INFISICAL_PROJECT" --env="$INFISICAL_ENV" --token="$INFISICAL_TOKEN" --format=json 2>/dev/null)
-    if [ $? -ne 0 ]; then
-        die "Failed to pull secrets from Infisical. Check your token and network connection."
+    local domain_arg="--domain=http://100.84.50.65:8085/api"
+    local proj_arg="--projectId=9af25976-bafc-4895-a057-2effec13c620"
+    if [ -n "$INFISICAL_TOKEN" ]; then
+        output=$(infisical secrets $domain_arg $proj_arg --env="$INFISICAL_ENV" --recursive -o json --token="$INFISICAL_TOKEN" 2>/dev/null || infisical secrets $domain_arg $proj_arg --env="$INFISICAL_ENV" --recursive -o json 2>/dev/null)
+    else
+        output=$(infisical secrets $domain_arg $proj_arg --env="$INFISICAL_ENV" --recursive -o json 2>/dev/null)
+    fi
+    if [ -z "$output" ]; then
+        die "Failed to pull secrets from Infisical."
     fi
     echo "$output"
 }
@@ -106,7 +109,7 @@ generate_env_file() {
 
     echo "$secrets_json" | jq -r '
         if type == "array" then
-            .[] | "\(.key)=\"\(.value)\""
+            .[] | select(.secretKey != null and .secretKey != "") | "\(.secretKey)=\"\(.secretValue)\""
         elif type == "object" then
             to_entries[] | "\(.key)=\"\(.value)\""
         end
@@ -115,23 +118,26 @@ generate_env_file() {
 
 generate_composite_secrets() {
     local output_path="$1"
-    local db_pass="${POSTGRES_PASSWORD:-}"
+    local db_pass="${POSTGRES_PASSWORD:-postgres}"
     local db_user="${POSTGRES_USER:-postgres}"
-    local db_host="${DB_HOST:-localhost}"
+    local db_host="${DB_HOST:-100.84.50.65}"
     local db_port="${DB_PORT:-5432}"
-    local db_name="${DB_NAME:-postgres}"
+    local db_name="${DB_NAME:-alpha}"
 
     if [ -n "${DRY_RUN:-}" ]; then
         log "[DRY-RUN] Would generate composite secrets in $output_path"
         return
     fi
 
-    {
-        echo ""
-        echo "# Composite secrets"
-        echo "DATABASE_URL=postgres://${db_user}:${db_pass}@${db_host}:${db_port}/${db_name}"
-        echo "REDIS_URL=redis://${db_host}:6379"
-    } >> "$output_path"
+    if ! grep -q "^DATABASE_URL=" "$output_path"; then
+        echo "DATABASE_URL=postgres://${db_user}:${db_pass}@${db_host}:${db_port}/${db_name}?sslmode=disable" >> "$output_path"
+    fi
+    if ! grep -q "^POSTGRES_DSN=" "$output_path"; then
+        echo "POSTGRES_DSN=postgresql://${db_user}:${db_pass}@${db_host}:${db_port}/${db_name}?sslmode=disable" >> "$output_path"
+    fi
+    if ! grep -q "^REDIS_URL=" "$output_path"; then
+        echo "REDIS_URL=redis://${db_host}:6379" >> "$output_path"
+    fi
 }
 
 main() {
@@ -178,7 +184,6 @@ main() {
     [ -f "$frontend_env" ] && echo "  - $frontend_env"
     [ -f "$calendar_env" ] && echo "  - $calendar_env"
     [ -f "$rebalancing_env" ] && echo "  - $rebalancing_env"
-    [ -f "$entity_env" ] && echo "  - $entity_env"
 
     echo ""
     log "Next steps:"

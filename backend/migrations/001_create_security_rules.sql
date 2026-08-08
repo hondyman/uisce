@@ -15,9 +15,9 @@ CREATE TABLE IF NOT EXISTS access_rule (
     applies_to_bi BOOLEAN DEFAULT true,
     applies_to_ai BOOLEAN DEFAULT true,
     created_by TEXT NOT NULL,
-    created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_by TEXT,
-    updated_at TIMESTAMP NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     version INTEGER NOT NULL DEFAULT 1,
     description TEXT
 );
@@ -51,8 +51,8 @@ CREATE TABLE IF NOT EXISTS outbox (
     event_type TEXT NOT NULL,
     payload JSONB NOT NULL,
     published BOOLEAN DEFAULT false,
-    created_at TIMESTAMP NOT NULL DEFAULT NOW(),
-    published_at TIMESTAMP
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    published_at TIMESTAMPTZ
 );
 
 -- Create index for outbox processing

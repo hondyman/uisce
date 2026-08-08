@@ -23,11 +23,11 @@ CREATE TABLE IF NOT EXISTS bp_industry_benchmarks (
     
     -- Metadata
     sample_size INTEGER NOT NULL DEFAULT 0,
-    last_updated TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    last_updated TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMPTZ,
     data_source VARCHAR(200),
     
-    -- Timestamps
-    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    -- TIMESTAMPTZs
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMPTZ,
     
     UNIQUE(industry, process_type)
 );
@@ -62,10 +62,10 @@ CREATE TABLE IF NOT EXISTS bp_performance_scores (
     sample_size INTEGER DEFAULT 0,
     confidence_level DECIMAL(5,4) DEFAULT 0.95,
     
-    -- Timestamps
-    calculated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    -- TIMESTAMPTZs
+    calculated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMPTZ,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMPTZ,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMPTZ,
     
     UNIQUE(tenant_id, workflow_type)
 );
@@ -113,9 +113,9 @@ CREATE TABLE IF NOT EXISTS bp_best_practices (
     tags TEXT[],
     external_resources JSONB, -- URLs, whitepapers, etc.
     
-    -- Timestamps
-    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    -- TIMESTAMPTZs
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMPTZ,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMPTZ
 );
 
 CREATE INDEX idx_bp_best_practices_industry ON bp_best_practices(industry);
@@ -145,9 +145,9 @@ CREATE TABLE IF NOT EXISTS bp_peer_groups (
     is_active BOOLEAN NOT NULL DEFAULT true,
     created_by UUID,
     
-    -- Timestamps
-    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    -- TIMESTAMPTZs
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMPTZ,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMPTZ
 );
 
 CREATE INDEX idx_bp_peer_groups_industry ON bp_peer_groups(industry);
@@ -164,15 +164,15 @@ CREATE TABLE IF NOT EXISTS bp_peer_group_members (
     tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
     
     -- Membership Info
-    joined_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    joined_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMPTZ,
     is_active BOOLEAN NOT NULL DEFAULT true,
     
     -- Optional Metadata
     company_size INTEGER,
     annual_revenue DECIMAL(15,2),
     
-    -- Timestamps
-    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    -- TIMESTAMPTZs
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMPTZ,
     
     UNIQUE(peer_group_id, tenant_id)
 );
@@ -211,11 +211,11 @@ CREATE TABLE IF NOT EXISTS bp_gap_analysis (
     status VARCHAR(20) DEFAULT 'identified' CHECK (status IN ('identified', 'in_progress', 'completed', 'dismissed')),
     resolution_notes TEXT,
     
-    -- Timestamps
-    identified_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    resolved_at TIMESTAMP,
-    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    -- TIMESTAMPTZs
+    identified_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMPTZ,
+    resolved_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMPTZ,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMPTZ
 );
 
 CREATE INDEX idx_bp_gap_analysis_tenant ON bp_gap_analysis(tenant_id);
@@ -225,13 +225,13 @@ CREATE INDEX idx_bp_gap_analysis_priority ON bp_gap_analysis(priority);
 CREATE INDEX idx_bp_gap_analysis_status ON bp_gap_analysis(status);
 
 -- ============================================================================
--- Trigger to update updated_at timestamps
+-- Trigger to update updated_at TIMESTAMPTZs
 -- ============================================================================
 
 CREATE OR REPLACE FUNCTION update_bp_updated_at()
 RETURNS TRIGGER AS $$
 BEGIN
-    NEW.updated_at = CURRENT_TIMESTAMP;
+    NEW.updated_at = CURRENT_TIMESTAMPTZ;
     RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;

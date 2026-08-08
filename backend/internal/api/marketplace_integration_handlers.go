@@ -11,16 +11,19 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jmoiron/sqlx"
+
+	"github.com/hondyman/uisce/backend/internal/handlers"
 )
 
 // MarketplaceIntegrationHandlers handles integration marketplace operations
 type MarketplaceIntegrationHandlers struct {
-	db *sqlx.DB
+	db           *sqlx.DB
+	securityDeps handlers.SecurityContextDeps
 }
 
 // NewMarketplaceIntegrationHandlers creates a new handler instance
-func NewMarketplaceIntegrationHandlers(db *sqlx.DB) *MarketplaceIntegrationHandlers {
-	return &MarketplaceIntegrationHandlers{db: db}
+func NewMarketplaceIntegrationHandlers(db *sqlx.DB, securityDeps handlers.SecurityContextDeps) *MarketplaceIntegrationHandlers {
+	return &MarketplaceIntegrationHandlers{db: db, securityDeps: securityDeps}
 }
 
 // Data structures
@@ -209,13 +212,13 @@ func (h *MarketplaceIntegrationHandlers) GetIntegrationsByCategory(w http.Respon
 
 // InstallIntegration installs an integration for a tenant
 func (h *MarketplaceIntegrationHandlers) InstallIntegration(w http.ResponseWriter, r *http.Request) {
-	tenantID := getSecureTenantID(r)
-	datasourceID := r.URL.Query().Get("datasource_id")
-
-	if tenantID == "" || datasourceID == "" {
-		http.Error(w, "tenant_id and datasource_id required", http.StatusBadRequest)
+	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
+	if err != nil {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
 		return
 	}
+	tenantID := secCtx.TenantID
+	datasourceID := secCtx.DatasourceID
 
 	var req struct {
 		IntegrationKey string                 `json:"integration_key"`
@@ -230,7 +233,7 @@ func (h *MarketplaceIntegrationHandlers) InstallIntegration(w http.ResponseWrite
 
 	// Get integration from marketplace
 	var integration MarketplaceIntegration
-	err := h.db.Get(&integration, `
+	err = h.db.Get(&integration, `
 		SELECT * FROM marketplace_integrations 
 		WHERE integration_key = $1 AND is_active = true
 	`, req.IntegrationKey)
@@ -306,16 +309,16 @@ func (h *MarketplaceIntegrationHandlers) InstallIntegration(w http.ResponseWrite
 
 // GetInstalledIntegrations returns all installed integrations for a tenant
 func (h *MarketplaceIntegrationHandlers) GetInstalledIntegrations(w http.ResponseWriter, r *http.Request) {
-	tenantID := getSecureTenantID(r)
-	datasourceID := r.URL.Query().Get("datasource_id")
-
-	if tenantID == "" || datasourceID == "" {
-		http.Error(w, "tenant_id and datasource_id required", http.StatusBadRequest)
+	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
+	if err != nil {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
 		return
 	}
+	tenantID := secCtx.TenantID
+	datasourceID := secCtx.DatasourceID
 
 	var installations []InstalledIntegration
-	err := h.db.Select(&installations, `
+	err = h.db.Select(&installations, `
 		SELECT ii.*, mi.name as integration_name, mi.integration_key, mi.icon_url as integration_icon_url
 		FROM installed_integrations ii
 		JOIN marketplace_integrations mi ON ii.integration_id = mi.id
@@ -335,11 +338,16 @@ func (h *MarketplaceIntegrationHandlers) GetInstalledIntegrations(w http.Respons
 // GetInstalledIntegration returns a single installed integration
 func (h *MarketplaceIntegrationHandlers) GetInstalledIntegration(w http.ResponseWriter, r *http.Request) {
 	installationID := chi.URLParam(r, "installationId")
-	tenantID := getSecureTenantID(r)
-	datasourceID := r.URL.Query().Get("datasource_id")
+	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
+	if err != nil {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+	tenantID := secCtx.TenantID
+	datasourceID := secCtx.DatasourceID
 
 	var installation InstalledIntegration
-	err := h.db.Get(&installation, `
+	err = h.db.Get(&installation, `
 		SELECT ii.*, mi.name as integration_name, mi.integration_key, mi.icon_url as integration_icon_url
 		FROM installed_integrations ii
 		JOIN marketplace_integrations mi ON ii.integration_id = mi.id
@@ -361,8 +369,13 @@ func (h *MarketplaceIntegrationHandlers) GetInstalledIntegration(w http.Response
 // UpdateIntegrationConfig updates the configuration of an installed integration
 func (h *MarketplaceIntegrationHandlers) UpdateIntegrationConfig(w http.ResponseWriter, r *http.Request) {
 	installationID := chi.URLParam(r, "installationId")
-	tenantID := getSecureTenantID(r)
-	datasourceID := r.URL.Query().Get("datasource_id")
+	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
+	if err != nil {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+	tenantID := secCtx.TenantID
+	datasourceID := secCtx.DatasourceID
 
 	var req struct {
 		Config      map[string]interface{} `json:"config"`
@@ -377,7 +390,8 @@ func (h *MarketplaceIntegrationHandlers) UpdateIntegrationConfig(w http.Response
 	configJSON, _ := json.Marshal(req.Config)
 	credentialsJSON, _ := json.Marshal(req.Credentials)
 
-	result, err := h.db.Exec(`
+	var result sql.Result
+	result, err = h.db.Exec(`
 		UPDATE installed_integrations 
 		SET config = $1, credentials = $2, updated_at = NOW()
 		WHERE id = $3 AND tenant_id = $4 AND datasource_id = $5
@@ -404,8 +418,13 @@ func (h *MarketplaceIntegrationHandlers) UpdateIntegrationConfig(w http.Response
 // ToggleIntegration enables or disables an installed integration
 func (h *MarketplaceIntegrationHandlers) ToggleIntegration(w http.ResponseWriter, r *http.Request) {
 	installationID := chi.URLParam(r, "installationId")
-	tenantID := getSecureTenantID(r)
-	datasourceID := r.URL.Query().Get("datasource_id")
+	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
+	if err != nil {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+	tenantID := secCtx.TenantID
+	datasourceID := secCtx.DatasourceID
 
 	var req struct {
 		Enabled bool `json:"enabled"`
@@ -416,7 +435,8 @@ func (h *MarketplaceIntegrationHandlers) ToggleIntegration(w http.ResponseWriter
 		return
 	}
 
-	result, err := h.db.Exec(`
+	var result sql.Result
+	result, err = h.db.Exec(`
 		UPDATE installed_integrations 
 		SET is_enabled = $1, updated_at = NOW()
 		WHERE id = $2 AND tenant_id = $3 AND datasource_id = $4
@@ -449,12 +469,17 @@ func (h *MarketplaceIntegrationHandlers) ToggleIntegration(w http.ResponseWriter
 // UninstallIntegration removes an installed integration
 func (h *MarketplaceIntegrationHandlers) UninstallIntegration(w http.ResponseWriter, r *http.Request) {
 	installationID := chi.URLParam(r, "installationId")
-	tenantID := getSecureTenantID(r)
-	datasourceID := r.URL.Query().Get("datasource_id")
+	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
+	if err != nil {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+	tenantID := secCtx.TenantID
+	datasourceID := secCtx.DatasourceID
 
 	// Get integration_id before deletion for install count update
 	var integrationID string
-	err := h.db.Get(&integrationID, `
+	err = h.db.Get(&integrationID, `
 		SELECT integration_id FROM installed_integrations 
 		WHERE id = $1 AND tenant_id = $2 AND datasource_id = $3
 	`, installationID, tenantID, datasourceID)
@@ -468,7 +493,8 @@ func (h *MarketplaceIntegrationHandlers) UninstallIntegration(w http.ResponseWri
 	}
 
 	// Delete installation (cascades to executions)
-	result, err := h.db.Exec(`
+	var result sql.Result
+	result, err = h.db.Exec(`
 		DELETE FROM installed_integrations 
 		WHERE id = $1 AND tenant_id = $2 AND datasource_id = $3
 	`, installationID, tenantID, datasourceID)
@@ -501,8 +527,13 @@ func (h *MarketplaceIntegrationHandlers) UninstallIntegration(w http.ResponseWri
 // ExecuteIntegration executes an integration action
 func (h *MarketplaceIntegrationHandlers) ExecuteIntegration(w http.ResponseWriter, r *http.Request) {
 	installationID := chi.URLParam(r, "installationId")
-	tenantID := getSecureTenantID(r)
-	datasourceID := r.URL.Query().Get("datasource_id")
+	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
+	if err != nil {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+	tenantID := secCtx.TenantID
+	datasourceID := secCtx.DatasourceID
 
 	var req struct {
 		Action       string                 `json:"action"`
@@ -519,7 +550,7 @@ func (h *MarketplaceIntegrationHandlers) ExecuteIntegration(w http.ResponseWrite
 
 	// Get installation details
 	var installation InstalledIntegration
-	err := h.db.Get(&installation, `
+	err = h.db.Get(&installation, `
 		SELECT ii.*, mi.integration_key
 		FROM installed_integrations ii
 		JOIN marketplace_integrations mi ON ii.integration_id = mi.id
@@ -611,12 +642,17 @@ func (h *MarketplaceIntegrationHandlers) ExecuteIntegration(w http.ResponseWrite
 // TestIntegration tests an integration connection without executing
 func (h *MarketplaceIntegrationHandlers) TestIntegration(w http.ResponseWriter, r *http.Request) {
 	installationID := chi.URLParam(r, "installationId")
-	tenantID := getSecureTenantID(r)
-	datasourceID := r.URL.Query().Get("datasource_id")
+	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
+	if err != nil {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+	tenantID := secCtx.TenantID
+	datasourceID := secCtx.DatasourceID
 
 	// Get installation
 	var installation InstalledIntegration
-	err := h.db.Get(&installation, `
+	err = h.db.Get(&installation, `
 		SELECT ii.*, mi.integration_key
 		FROM installed_integrations ii
 		JOIN marketplace_integrations mi ON ii.integration_id = mi.id
@@ -640,8 +676,13 @@ func (h *MarketplaceIntegrationHandlers) TestIntegration(w http.ResponseWriter, 
 
 // GetIntegrationExecutions returns execution logs
 func (h *MarketplaceIntegrationHandlers) GetIntegrationExecutions(w http.ResponseWriter, r *http.Request) {
-	tenantID := getSecureTenantID(r)
-	datasourceID := r.URL.Query().Get("datasource_id")
+	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
+	if err != nil {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+	tenantID := secCtx.TenantID
+	datasourceID := secCtx.DatasourceID
 	installationID := r.URL.Query().Get("installation_id")
 	status := r.URL.Query().Get("status")
 
@@ -664,7 +705,7 @@ func (h *MarketplaceIntegrationHandlers) GetIntegrationExecutions(w http.Respons
 	query += " ORDER BY started_at DESC LIMIT 100"
 
 	var executions []IntegrationExecution
-	err := h.db.Select(&executions, query, args...)
+	err = h.db.Select(&executions, query, args...)
 
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Failed to fetch executions: %v", err), http.StatusInternalServerError)
@@ -678,11 +719,16 @@ func (h *MarketplaceIntegrationHandlers) GetIntegrationExecutions(w http.Respons
 // GetIntegrationExecution returns a single execution
 func (h *MarketplaceIntegrationHandlers) GetIntegrationExecution(w http.ResponseWriter, r *http.Request) {
 	executionID := chi.URLParam(r, "executionId")
-	tenantID := getSecureTenantID(r)
-	datasourceID := r.URL.Query().Get("datasource_id")
+	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
+	if err != nil {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+	tenantID := secCtx.TenantID
+	datasourceID := secCtx.DatasourceID
 
 	var execution IntegrationExecution
-	err := h.db.Get(&execution, `
+	err = h.db.Get(&execution, `
 		SELECT * FROM integration_executions 
 		WHERE id = $1 AND tenant_id = $2 AND datasource_id = $3
 	`, executionID, tenantID, datasourceID)
@@ -702,8 +748,13 @@ func (h *MarketplaceIntegrationHandlers) GetIntegrationExecution(w http.Response
 // GetInstallationStats returns usage statistics for an installation
 func (h *MarketplaceIntegrationHandlers) GetInstallationStats(w http.ResponseWriter, r *http.Request) {
 	installationID := chi.URLParam(r, "installationId")
-	tenantID := getSecureTenantID(r)
-	datasourceID := r.URL.Query().Get("datasource_id")
+	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
+	if err != nil {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+	tenantID := secCtx.TenantID
+	datasourceID := secCtx.DatasourceID
 
 	var stats struct {
 		ExecutionCount int        `json:"execution_count" db:"execution_count"`
@@ -715,7 +766,7 @@ func (h *MarketplaceIntegrationHandlers) GetInstallationStats(w http.ResponseWri
 		Last24hCount   int        `json:"last_24h_count" db:"last_24h_count"`
 	}
 
-	err := h.db.Get(&stats, `
+	err = h.db.Get(&stats, `
 		SELECT 
 			ii.execution_count,
 			ii.success_count,
@@ -748,8 +799,13 @@ func (h *MarketplaceIntegrationHandlers) GetInstallationStats(w http.ResponseWri
 // InitiateOAuthFlow starts the OAuth authorization flow
 func (h *MarketplaceIntegrationHandlers) InitiateOAuthFlow(w http.ResponseWriter, r *http.Request) {
 	installationID := chi.URLParam(r, "installationId")
-	tenantID := getSecureTenantID(r)
-	datasourceID := r.URL.Query().Get("datasource_id")
+	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
+	if err != nil {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+	tenantID := secCtx.TenantID
+	datasourceID := secCtx.DatasourceID
 
 	// Get integration OAuth config
 	var oauthConfig struct {
@@ -759,7 +815,7 @@ func (h *MarketplaceIntegrationHandlers) InitiateOAuthFlow(w http.ResponseWriter
 		RedirectURI string   `json:"redirect_uri"`
 	}
 
-	err := h.db.Get(&oauthConfig, `
+	err = h.db.Get(&oauthConfig, `
 		SELECT 
 			mi.oauth_config->>'authorization_url' as auth_url,
 			mi.oauth_config->>'client_id' as client_id,

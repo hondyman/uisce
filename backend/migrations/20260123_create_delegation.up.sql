@@ -10,8 +10,8 @@ CREATE TABLE IF NOT EXISTS user_delegation (
   roles TEXT[],                        -- which roles to delegate (empty = all)
   workflows TEXT[],                    -- which workflows to delegate (empty = all)
   status TEXT DEFAULT 'active',        -- active, expired, revoked, paused
-  created_at TIMESTAMP DEFAULT NOW(),
-  revoked_at TIMESTAMP,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  revoked_at TIMESTAMPTZ,
   created_by TEXT,                     -- who created it (usually from_user_id)
   offboarding_id UUID
 );
@@ -30,8 +30,8 @@ CREATE TABLE IF NOT EXISTS user_offboarding (
   reason TEXT,                       -- "Left company", "Transferred", etc.
   status TEXT DEFAULT 'active',      -- active, completed, reversed
   pending_count INT DEFAULT 0,       -- how many approvals were reassigned
-  created_at TIMESTAMP DEFAULT NOW(),
-  completed_at TIMESTAMP,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  completed_at TIMESTAMPTZ,
   UNIQUE (user_id, tenant_id)
 );
 CREATE INDEX IF NOT EXISTS idx_offboarding_status ON user_offboarding(offboard_date, status);
@@ -46,7 +46,7 @@ CREATE TABLE IF NOT EXISTS delegation_usage (
   original_approver_id TEXT,
   delegated_approver_id TEXT,
   action TEXT,                         -- 'approved', 'rejected', 'reassigned'
-  action_at TIMESTAMP DEFAULT NOW()
+  action_at TIMESTAMPTZ DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS idx_delegation_usage_lookup ON delegation_usage(delegation_id, instance_id);
 CREATE INDEX IF NOT EXISTS idx_delegation_usage_original ON delegation_usage(instance_id, original_approver_id);
@@ -59,6 +59,6 @@ CREATE TABLE IF NOT EXISTS delegation_audit (
   instance_id UUID,                    -- which task was delegated
   actor_user_id TEXT,                  -- who performed the action
   details JSONB,                       -- extra context
-  created_at TIMESTAMP DEFAULT NOW()
+  created_at TIMESTAMPTZ DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS idx_delegation_audit_lookup ON delegation_audit(delegation_id, action);

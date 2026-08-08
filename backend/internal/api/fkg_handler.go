@@ -7,11 +7,14 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+
+	"github.com/hondyman/uisce/backend/internal/handlers"
 )
 
 // FKGHandler handles Financial Knowledge Graph API requests.
 type FKGHandler struct {
-	fkgService FKGServiceInterface
+	fkgService   FKGServiceInterface
+	securityDeps handlers.SecurityContextDeps
 }
 
 // FKGServiceInterface defines the interface for FKG operations.
@@ -28,14 +31,19 @@ type FKGServiceInterface interface {
 }
 
 // NewFKGHandler creates a new FKG handler.
-func NewFKGHandler(fkgService FKGServiceInterface) *FKGHandler {
+func NewFKGHandler(fkgService FKGServiceInterface, securityDeps handlers.SecurityContextDeps) *FKGHandler {
 	return &FKGHandler{
-		fkgService: fkgService,
+		fkgService:   fkgService,
+		securityDeps: securityDeps,
 	}
 }
 
 // RegisterFKGRoutes registers FKG routes on the router.
-func (h *FKGHandler) RegisterFKGRoutes(r chi.Router) {
+func RegisterFKGRoutes(r chi.Router, securityDeps handlers.SecurityContextDeps) {
+	h := &FKGHandler{
+		fkgService:   nil,
+		securityDeps: securityDeps,
+	}
 	r.Route("/fkg", func(r chi.Router) {
 		// Entity endpoints
 		r.Route("/entities", func(r chi.Router) {
@@ -71,9 +79,9 @@ type CreateEntityRequest struct {
 
 // CreateEntity handles POST /fkg/entities.
 func (h *FKGHandler) CreateEntity(w http.ResponseWriter, r *http.Request) {
-	tenantID := r.URL.Query().Get("tenant_id")
-	if tenantID == "" {
-		http.Error(w, "tenant_id required", http.StatusBadRequest)
+	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
+	if err != nil {
+		http.Error(w, "security context initialization failed: "+err.Error(), http.StatusUnauthorized)
 		return
 	}
 
@@ -96,7 +104,7 @@ func (h *FKGHandler) CreateEntity(w http.ResponseWriter, r *http.Request) {
 		"properties":   req.Properties,
 	}
 
-	result, err := h.fkgService.CreateEntity(r.Context(), tenantID, entity)
+	result, err := h.fkgService.CreateEntity(r.Context(), secCtx.TenantID, entity)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -109,15 +117,19 @@ func (h *FKGHandler) CreateEntity(w http.ResponseWriter, r *http.Request) {
 
 // GetEntity handles GET /fkg/entities/{entityID}.
 func (h *FKGHandler) GetEntity(w http.ResponseWriter, r *http.Request) {
-	tenantID := r.URL.Query().Get("tenant_id")
+	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
+	if err != nil {
+		http.Error(w, "security context initialization failed: "+err.Error(), http.StatusUnauthorized)
+		return
+	}
 	entityID := chi.URLParam(r, "entityID")
 
-	if tenantID == "" || entityID == "" {
-		http.Error(w, "tenant_id and entityID required", http.StatusBadRequest)
+	if entityID == "" {
+		http.Error(w, "entityID required", http.StatusBadRequest)
 		return
 	}
 
-	entity, err := h.fkgService.GetEntity(r.Context(), tenantID, entityID)
+	entity, err := h.fkgService.GetEntity(r.Context(), secCtx.TenantID, entityID)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusNotFound)
 		return
@@ -129,11 +141,15 @@ func (h *FKGHandler) GetEntity(w http.ResponseWriter, r *http.Request) {
 
 // UpdateEntity handles PUT /fkg/entities/{entityID}.
 func (h *FKGHandler) UpdateEntity(w http.ResponseWriter, r *http.Request) {
-	tenantID := r.URL.Query().Get("tenant_id")
+	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
+	if err != nil {
+		http.Error(w, "security context initialization failed: "+err.Error(), http.StatusUnauthorized)
+		return
+	}
 	entityID := chi.URLParam(r, "entityID")
 
-	if tenantID == "" || entityID == "" {
-		http.Error(w, "tenant_id and entityID required", http.StatusBadRequest)
+	if entityID == "" {
+		http.Error(w, "entityID required", http.StatusBadRequest)
 		return
 	}
 
@@ -143,7 +159,7 @@ func (h *FKGHandler) UpdateEntity(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.fkgService.UpdateEntity(r.Context(), tenantID, entityID, updates); err != nil {
+	if err := h.fkgService.UpdateEntity(r.Context(), secCtx.TenantID, entityID, updates); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -153,15 +169,19 @@ func (h *FKGHandler) UpdateEntity(w http.ResponseWriter, r *http.Request) {
 
 // DeleteEntity handles DELETE /fkg/entities/{entityID}.
 func (h *FKGHandler) DeleteEntity(w http.ResponseWriter, r *http.Request) {
-	tenantID := r.URL.Query().Get("tenant_id")
+	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
+	if err != nil {
+		http.Error(w, "security context initialization failed: "+err.Error(), http.StatusUnauthorized)
+		return
+	}
 	entityID := chi.URLParam(r, "entityID")
 
-	if tenantID == "" || entityID == "" {
-		http.Error(w, "tenant_id and entityID required", http.StatusBadRequest)
+	if entityID == "" {
+		http.Error(w, "entityID required", http.StatusBadRequest)
 		return
 	}
 
-	if err := h.fkgService.DeleteEntity(r.Context(), tenantID, entityID); err != nil {
+	if err := h.fkgService.DeleteEntity(r.Context(), secCtx.TenantID, entityID); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -171,9 +191,9 @@ func (h *FKGHandler) DeleteEntity(w http.ResponseWriter, r *http.Request) {
 
 // ListEntities handles GET /fkg/entities.
 func (h *FKGHandler) ListEntities(w http.ResponseWriter, r *http.Request) {
-	tenantID := r.URL.Query().Get("tenant_id")
-	if tenantID == "" {
-		http.Error(w, "tenant_id required", http.StatusBadRequest)
+	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
+	if err != nil {
+		http.Error(w, "security context initialization failed: "+err.Error(), http.StatusUnauthorized)
 		return
 	}
 
@@ -185,7 +205,7 @@ func (h *FKGHandler) ListEntities(w http.ResponseWriter, r *http.Request) {
 		limit = 50
 	}
 
-	entities, err := h.fkgService.ListEntities(r.Context(), tenantID, entityType, limit, offset)
+	entities, err := h.fkgService.ListEntities(r.Context(), secCtx.TenantID, entityType, limit, offset)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -201,11 +221,15 @@ func (h *FKGHandler) ListEntities(w http.ResponseWriter, r *http.Request) {
 
 // SearchSimilarEntities handles GET /fkg/entities/search.
 func (h *FKGHandler) SearchSimilarEntities(w http.ResponseWriter, r *http.Request) {
-	tenantID := r.URL.Query().Get("tenant_id")
+	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
+	if err != nil {
+		http.Error(w, "security context initialization failed: "+err.Error(), http.StatusUnauthorized)
+		return
+	}
 	name := r.URL.Query().Get("name")
 
-	if tenantID == "" || name == "" {
-		http.Error(w, "tenant_id and name required", http.StatusBadRequest)
+	if name == "" {
+		http.Error(w, "name required", http.StatusBadRequest)
 		return
 	}
 
@@ -216,7 +240,7 @@ func (h *FKGHandler) SearchSimilarEntities(w http.ResponseWriter, r *http.Reques
 		}
 	}
 
-	entities, err := h.fkgService.FindSimilarEntities(r.Context(), tenantID, name, threshold)
+	entities, err := h.fkgService.FindSimilarEntities(r.Context(), secCtx.TenantID, name, threshold)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -243,9 +267,9 @@ type CreateRelationshipRequest struct {
 
 // CreateRelationship handles POST /fkg/relationships.
 func (h *FKGHandler) CreateRelationship(w http.ResponseWriter, r *http.Request) {
-	tenantID := r.URL.Query().Get("tenant_id")
-	if tenantID == "" {
-		http.Error(w, "tenant_id required", http.StatusBadRequest)
+	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
+	if err != nil {
+		http.Error(w, "security context initialization failed: "+err.Error(), http.StatusUnauthorized)
 		return
 	}
 
@@ -271,7 +295,7 @@ func (h *FKGHandler) CreateRelationship(w http.ResponseWriter, r *http.Request) 
 		"properties":           req.Properties,
 	}
 
-	if err := h.fkgService.CreateRelationship(r.Context(), tenantID, rel); err != nil {
+	if err := h.fkgService.CreateRelationship(r.Context(), secCtx.TenantID, rel); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -290,11 +314,15 @@ func (h *FKGHandler) ListRelationships(w http.ResponseWriter, r *http.Request) {
 
 // GetUBOChain handles GET /fkg/entities/{entityID}/ubo.
 func (h *FKGHandler) GetUBOChain(w http.ResponseWriter, r *http.Request) {
-	tenantID := r.URL.Query().Get("tenant_id")
+	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
+	if err != nil {
+		http.Error(w, "security context initialization failed: "+err.Error(), http.StatusUnauthorized)
+		return
+	}
 	entityID := chi.URLParam(r, "entityID")
 
-	if tenantID == "" || entityID == "" {
-		http.Error(w, "tenant_id and entityID required", http.StatusBadRequest)
+	if entityID == "" {
+		http.Error(w, "entityID required", http.StatusBadRequest)
 		return
 	}
 
@@ -305,7 +333,7 @@ func (h *FKGHandler) GetUBOChain(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	chain, err := h.fkgService.GetUBOChain(r.Context(), tenantID, entityID, maxDepth)
+	chain, err := h.fkgService.GetUBOChain(r.Context(), secCtx.TenantID, entityID, maxDepth)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -329,9 +357,9 @@ type SearchDocumentsRequest struct {
 
 // SearchDocuments handles POST /fkg/documents/search.
 func (h *FKGHandler) SearchDocuments(w http.ResponseWriter, r *http.Request) {
-	tenantID := r.URL.Query().Get("tenant_id")
-	if tenantID == "" {
-		http.Error(w, "tenant_id required", http.StatusBadRequest)
+	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
+	if err != nil {
+		http.Error(w, "security context initialization failed: "+err.Error(), http.StatusUnauthorized)
 		return
 	}
 
@@ -350,7 +378,7 @@ func (h *FKGHandler) SearchDocuments(w http.ResponseWriter, r *http.Request) {
 		req.Limit = 10
 	}
 
-	results, err := h.fkgService.HybridSearchDocuments(r.Context(), tenantID, req.Query, req.Embedding, req.Limit)
+	results, err := h.fkgService.HybridSearchDocuments(r.Context(), secCtx.TenantID, req.Query, req.Embedding, req.Limit)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return

@@ -25,6 +25,14 @@ import (
 	"github.com/hondyman/uisce/backend/internal/services"
 )
 
+type validationRulesHandler struct {
+	securityDeps handlers.SecurityContextDeps
+	db           *sql.DB
+	cueEngine    *services.CueEngine
+	boService    interface{}
+	resolver     security.DatasourceResolver
+}
+
 // ValidationRule represents a validation rule for data quality and business logic
 type ValidationRule struct {
 	ID              string                 `json:"id"`
@@ -100,12 +108,20 @@ func errString(err error) string {
 }
 
 func RegisterValidationRulesRoutes(r chi.Router, db *sql.DB, cueEngine *services.CueEngine, boService interface{}, resolver security.DatasourceResolver) {
-	r.Get("/validation-rules", handleListValidationRules(db, resolver))
+	h := &validationRulesHandler{
+		securityDeps: handlers.SecurityContextDeps{Resolver: resolver},
+		db:           db,
+		cueEngine:    cueEngine,
+		boService:    boService,
+		resolver:     resolver,
+	}
 
-	r.Post("/validation-rules", handleCreateValidationRule(db, resolver))
-	r.Get("/validation-rules/{id}", handleGetValidationRule(db, resolver))
-	r.Patch("/validation-rules/{id}", handleUpdateValidationRule(db, resolver))
-	r.Delete("/validation-rules/{id}", handleDeleteValidationRule(db, resolver))
+	r.Get("/validation-rules", h.handleListValidationRules())
+
+	r.Post("/validation-rules", h.handleCreateValidationRule())
+	r.Get("/validation-rules/{id}", h.handleGetValidationRule())
+	r.Patch("/validation-rules/{id}", h.handleUpdateValidationRule())
+	r.Delete("/validation-rules/{id}", h.handleDeleteValidationRule())
 
 	// Core templates (tenant-agnostic)
 	r.Get("/validation-rule-cores", handleListValidationRuleCores(db))
@@ -114,24 +130,21 @@ func RegisterValidationRulesRoutes(r chi.Router, db *sql.DB, cueEngine *services
 	r.Get("/validation-rule-cores/{id}/impact", handleGetValidationRuleCoreImpact(db))
 
 	// Execution and testing endpoints
-	r.Post("/validation-rules/{id}/execute", handleExecuteValidationRule(db, cueEngine, resolver))
-	r.Post("/validation-rules/execute-binding", handleExecuteValidationRuleBinding(db, resolver))
+	r.Post("/validation-rules/{id}/execute", h.handleExecuteValidationRule())
+	r.Post("/validation-rules/execute-binding", h.handleExecuteValidationRuleBinding())
 	// r.Post("/validation-rules/execute-batch", handleExecuteValidationRulesBatch(db, cueEngine)) // Batch disabled for now if relies on Starlark logic mismatch
-	r.Get("/validation-rules/{id}/audit", handleGetValidationRuleAudit(db, resolver))
+	r.Get("/validation-rules/{id}/audit", h.handleGetValidationRuleAudit())
 
 	// Simulation with instance data
-	r.Post("/validation-rules/{id}/simulate-with-instance", handleSimulateValidationRuleWithInstance(db, boService, cueEngine, resolver))
+	r.Post("/validation-rules/{id}/simulate-with-instance", h.handleSimulateValidationRuleWithInstance())
 
 	// Schema Generation (IntelliSense)
-	r.Get("/validation-rules/schema", handleGetValidationRuleSchema(db, cueEngine, resolver))
+	r.Get("/validation-rules/schema", h.handleGetValidationRuleSchema())
 }
 
-func handleGetValidationRuleSchema(db *sql.DB, cueEngine *services.CueEngine, resolver security.DatasourceResolver) http.HandlerFunc {
+func (h *validationRulesHandler) handleGetValidationRuleSchema() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		// Use security context
-		secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", handlers.SecurityContextDeps{
-			Resolver: resolver,
-		})
+		secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
 		if err != nil {
 			writeJSONError(w, http.StatusUnauthorized, "Security context initialization failed", "auth_error", map[string]string{"error": err.Error()})
 			return
@@ -158,7 +171,7 @@ func handleGetValidationRuleSchema(db *sql.DB, cueEngine *services.CueEngine, re
 				LIMIT 1
 			`
 			var resolved sql.NullString
-			err := db.QueryRowContext(r.Context(), lookup, tenantID, nullString(datasourceID), boID).Scan(&resolved)
+			err := h.db.QueryRowContext(r.Context(), lookup, tenantID, nullString(datasourceID), boID).Scan(&resolved)
 			if err != nil || !resolved.Valid {
 				writeJSONError(w, http.StatusBadRequest, "business object not found for provided bo_id", "bo_not_found", errString(err))
 				return
@@ -167,7 +180,7 @@ func handleGetValidationRuleSchema(db *sql.DB, cueEngine *services.CueEngine, re
 		}
 
 		// Check invalid DB driver or just assume postgres? Application uses postgres.
-		sx := sqlx.NewDb(db, "postgres")
+		sx := sqlx.NewDb(h.db, "postgres")
 		gen := services.NewCueSchemaGenerator(sx)
 
 		schemaStr, err := gen.GenerateSchemaStringPublic(r.Context(), tenantID, boID, locale)
@@ -289,12 +302,9 @@ func resolveCoreRuleScript(ctx context.Context, db *sql.DB, coreRuleID string, c
 }
 
 // handleListValidationRules retrieves all validation rules for a tenant with facets and pagination
-func handleListValidationRules(db *sql.DB, resolver security.DatasourceResolver) http.HandlerFunc {
+func (h *validationRulesHandler) handleListValidationRules() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		// Use security context
-		secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", handlers.SecurityContextDeps{
-			Resolver: resolver,
-		})
+		secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
 		if err != nil {
 			writeJSONError(w, http.StatusUnauthorized, "Security context initialization failed", "auth_error", map[string]string{"error": err.Error()})
 			return
@@ -528,7 +538,7 @@ func handleListValidationRules(db *sql.DB, resolver security.DatasourceResolver)
 		countQuery := "SELECT COUNT(*) as count FROM catalog_validation_rules " + whereClause
 		var totalCount int
 		// Use all filter args for the count query
-		err = db.QueryRow(countQuery, args...).Scan(&totalCount)
+		err = h.db.QueryRow(countQuery, args...).Scan(&totalCount)
 		if err != nil {
 			// Include the query and arguments in the error details temporarily to aid debugging
 			details := fmt.Sprintf("%s | query=%s | args=%v", err.Error(), countQuery, args)
@@ -553,7 +563,7 @@ func handleListValidationRules(db *sql.DB, resolver security.DatasourceResolver)
 
 		args = append(args, limit, offset)
 
-		rows, err := db.Query(query, args...)
+		rows, err := h.db.Query(query, args...)
 		if err != nil {
 			writeJSONError(w, http.StatusInternalServerError, "Failed to query validation rules", "query_error", err.Error())
 			return
@@ -626,7 +636,7 @@ func handleListValidationRules(db *sql.DB, resolver security.DatasourceResolver)
 			GROUP BY rule_type 
 			ORDER BY count DESC
 		`
-		ruleTypeRows, err := db.Query(ruleTypeQuery, facetArgs...)
+		ruleTypeRows, err := h.db.Query(ruleTypeQuery, facetArgs...)
 		if err == nil {
 			defer ruleTypeRows.Close()
 			for ruleTypeRows.Next() {
@@ -651,7 +661,7 @@ func handleListValidationRules(db *sql.DB, resolver security.DatasourceResolver)
 			GROUP BY severity 
 			ORDER BY count DESC
 		`
-		severityRows, err := db.Query(severityQuery, facetArgs...)
+		severityRows, err := h.db.Query(severityQuery, facetArgs...)
 		if err == nil {
 			defer severityRows.Close()
 			for severityRows.Next() {
@@ -676,7 +686,7 @@ func handleListValidationRules(db *sql.DB, resolver security.DatasourceResolver)
 			GROUP BY target_entity 
 			ORDER BY count DESC
 		`
-		entityRows, err := db.Query(entityQuery, facetArgs...)
+		entityRows, err := h.db.Query(entityQuery, facetArgs...)
 		if err == nil {
 			defer entityRows.Close()
 			for entityRows.Next() {
@@ -711,13 +721,10 @@ func handleListValidationRules(db *sql.DB, resolver security.DatasourceResolver)
 }
 
 // handleGetValidationRule retrieves a single validation rule by ID
-func handleGetValidationRule(db *sql.DB, resolver security.DatasourceResolver) http.HandlerFunc {
+func (h *validationRulesHandler) handleGetValidationRule() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		id := chi.URLParam(r, "id")
-		// Use security context
-		secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", handlers.SecurityContextDeps{
-			Resolver: resolver,
-		})
+		secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
 		if err != nil {
 			writeJSONError(w, http.StatusUnauthorized, "Security context initialization failed", "auth_error", map[string]string{"error": err.Error()})
 			return
@@ -732,7 +739,7 @@ func handleGetValidationRule(db *sql.DB, resolver security.DatasourceResolver) h
 		var targetEntities pq.StringArray
 		var targetEntityIDs pq.StringArray
 
-		err = db.QueryRow(`
+		err = h.db.QueryRow(`
 			SELECT id, tenant_id, datasource_id, rule_name, rule_type, description, target_entity,
 			       target_entity_id, target_entities, target_entity_ids, condition_json, 
 			       severity, is_active, is_core, created_by, created_at, updated_at, script_content
@@ -782,12 +789,9 @@ func handleGetValidationRule(db *sql.DB, resolver security.DatasourceResolver) h
 }
 
 // handleCreateValidationRule creates a new validation rule
-func handleCreateValidationRule(db *sql.DB, resolver security.DatasourceResolver) http.HandlerFunc {
+func (h *validationRulesHandler) handleCreateValidationRule() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		// Use security context
-		secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", handlers.SecurityContextDeps{
-			Resolver: resolver,
-		})
+		secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
 		if err != nil {
 			writeJSONError(w, http.StatusUnauthorized, "Security context initialization failed", "auth_error", map[string]string{"error": err.Error()})
 			return
@@ -999,7 +1003,7 @@ func handleCreateValidationRule(db *sql.DB, resolver security.DatasourceResolver
 		// retrievedScriptContent removed
 
 		// Updated INSERT Query to include script_content
-		err = db.QueryRow(`
+		err = h.db.QueryRow(`
 			INSERT INTO catalog_validation_rules (
 				id, tenant_id, datasource_id, rule_name, rule_type, description, target_entity,
 				target_entities, condition_json, severity, is_active, is_core, created_at, updated_at, script_content
@@ -1026,7 +1030,7 @@ func handleCreateValidationRule(db *sql.DB, resolver security.DatasourceResolver
 				// Lookup the conflicting rule to provide better feedback
 				var conflictEntity string
 				var conflictID string
-				_ = db.QueryRow(`
+				_ = h.db.QueryRow(`
 					SELECT target_entity, id 
 					FROM catalog_validation_rules 
 					WHERE tenant_id = $1 AND datasource_id = $2 AND rule_name = $3
@@ -1078,13 +1082,10 @@ func handleCreateValidationRule(db *sql.DB, resolver security.DatasourceResolver
 }
 
 // handleUpdateValidationRule updates an existing validation rule
-func handleUpdateValidationRule(db *sql.DB, resolver security.DatasourceResolver) http.HandlerFunc {
+func (h *validationRulesHandler) handleUpdateValidationRule() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		id := chi.URLParam(r, "id")
-		// Use security context
-		secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", handlers.SecurityContextDeps{
-			Resolver: resolver,
-		})
+		secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
 		if err != nil {
 			writeJSONError(w, http.StatusUnauthorized, "Security context initialization failed", "auth_error", map[string]string{"error": err.Error()})
 			return
@@ -1133,7 +1134,7 @@ func handleUpdateValidationRule(db *sql.DB, resolver security.DatasourceResolver
 
 		// Get current rule for audit
 		var oldConditionJSON []byte
-		err = db.QueryRow(`
+		err = h.db.QueryRow(`
 			SELECT condition_json FROM catalog_validation_rules
 			WHERE id = $1 AND tenant_id = $2
 		`, id, secCtx.TenantID).Scan(&oldConditionJSON)
@@ -1170,7 +1171,7 @@ func handleUpdateValidationRule(db *sql.DB, resolver security.DatasourceResolver
 		var updatedRule ValidationRule
 		var createdBy sql.NullString
 		var retrievedTargetEntities pq.StringArray
-		err = db.QueryRow(`
+		err = h.db.QueryRow(`
 			UPDATE catalog_validation_rules
 			SET rule_name = $1, rule_type = $2, description = $3, target_entity = $4,
 			    target_entities = $5, condition_json = $6, severity = $7, is_active = $8, is_core = $9, updated_at = CURRENT_TIMESTAMP, script_content = $12
@@ -1205,20 +1206,17 @@ func handleUpdateValidationRule(db *sql.DB, resolver security.DatasourceResolver
 }
 
 // handleDeleteValidationRule deletes a validation rule
-func handleDeleteValidationRule(db *sql.DB, resolver security.DatasourceResolver) http.HandlerFunc {
+func (h *validationRulesHandler) handleDeleteValidationRule() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		id := chi.URLParam(r, "id")
 
-		// Use security context
-		secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", handlers.SecurityContextDeps{
-			Resolver: resolver,
-		})
+		secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
 		if err != nil {
 			writeJSONError(w, http.StatusUnauthorized, "Security context initialization failed", "auth_error", map[string]string{"error": err.Error()})
 			return
 		}
 
-		result, err := db.Exec(`
+		result, err := h.db.Exec(`
 			DELETE FROM catalog_validation_rules
 			WHERE id = $1 AND tenant_id = $2
 		`, id, secCtx.TenantID)
@@ -1251,13 +1249,10 @@ func handleDeleteValidationRule(db *sql.DB, resolver security.DatasourceResolver
 // - extend: evaluate core; if pass, evaluate extension script
 // - override/custom: evaluate tenant script_content
 // handleExecuteValidationRule executes a validation rule against a provided record.
-func handleExecuteValidationRule(db *sql.DB, cueEngine *services.CueEngine, resolver security.DatasourceResolver) http.HandlerFunc {
+func (h *validationRulesHandler) handleExecuteValidationRule() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		id := chi.URLParam(r, "id")
-		// Use security context
-		secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", handlers.SecurityContextDeps{
-			Resolver: resolver,
-		})
+		secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
 		if err != nil {
 			writeJSONError(w, http.StatusUnauthorized, "Security context initialization failed", "auth_error", map[string]string{"error": err.Error()})
 			return
@@ -1283,7 +1278,7 @@ func handleExecuteValidationRule(db *sql.DB, cueEngine *services.CueEngine, reso
 			return
 		}
 
-		row, err := fetchTenantRuleForExecution(r.Context(), db, id, tenantID, datasourceID)
+		row, err := fetchTenantRuleForExecution(r.Context(), h.db, id, tenantID, datasourceID)
 		if err == sql.ErrNoRows {
 			writeJSONError(w, http.StatusNotFound, "Validation rule not found or is inactive", "not_found", "")
 			return
@@ -1318,7 +1313,7 @@ func handleExecuteValidationRule(db *sql.DB, cueEngine *services.CueEngine, reso
 				pin = &p
 			}
 			if row.coreRuleID.Valid {
-				core, err := resolveCoreRuleScript(r.Context(), db, row.coreRuleID.String, pin)
+				core, err := resolveCoreRuleScript(r.Context(), h.db, row.coreRuleID.String, pin)
 				if err == nil {
 					script = core.Script
 					if mode == "extend" && row.extensionScript.Valid {
@@ -1338,7 +1333,7 @@ func handleExecuteValidationRule(db *sql.DB, cueEngine *services.CueEngine, reso
 
 		// ASL TODO: Use RuleEngine from somewhere? (currently this method takes cueEngine)
 		// For now simple CUE eval if script exists (only from core inheritance?)
-		res, err := cueEngine.EvaluateValidation(r.Context(), script, record)
+		res, err := h.cueEngine.EvaluateValidation(r.Context(), script, record)
 		if err != nil {
 			// System error
 			writeJSONError(w, http.StatusInternalServerError, "Evaluation failed", "eval_error", err.Error())
@@ -1371,13 +1366,10 @@ func handleExecuteValidationRule(db *sql.DB, cueEngine *services.CueEngine, reso
 // If needed, implement with CUE support.
 
 // handleGetValidationRuleAudit retrieves audit history for a validation rule
-func handleGetValidationRuleAudit(db *sql.DB, resolver security.DatasourceResolver) http.HandlerFunc {
+func (h *validationRulesHandler) handleGetValidationRuleAudit() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		id := chi.URLParam(r, "id")
-		// Use security context
-		secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", handlers.SecurityContextDeps{
-			Resolver: resolver,
-		})
+		secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
 		if err != nil {
 			writeJSONError(w, http.StatusUnauthorized, "Security context initialization failed", "auth_error", map[string]string{"error": err.Error()})
 			return
@@ -1385,7 +1377,7 @@ func handleGetValidationRuleAudit(db *sql.DB, resolver security.DatasourceResolv
 
 		tenantID := secCtx.TenantID
 
-		rows, err := db.Query(`
+		rows, err := h.db.Query(`
 			SELECT id, rule_id, tenant_id, action, old_values, new_values, changed_by, changed_at
 			FROM catalog_validation_rules_audit
 			WHERE rule_id = $1 AND tenant_id = $2
@@ -1447,13 +1439,10 @@ func handleGetValidationRuleAudit(db *sql.DB, resolver security.DatasourceResolv
 // handleSimulateValidationRule executes a script against provided data for live preview
 
 // handleSimulateValidationRuleWithInstance executes a validation rule against a business object instance
-func handleSimulateValidationRuleWithInstance(db *sql.DB, boServiceInterface interface{}, cueEngine *services.CueEngine, resolver security.DatasourceResolver) http.HandlerFunc {
+func (h *validationRulesHandler) handleSimulateValidationRuleWithInstance() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ruleID := chi.URLParam(r, "id")
-		// Use security context
-		secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", handlers.SecurityContextDeps{
-			Resolver: resolver,
-		})
+		secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
 		if err != nil {
 			writeJSONError(w, http.StatusUnauthorized, "Security context initialization failed", "auth_error", map[string]string{"error": err.Error()})
 			return
@@ -1476,7 +1465,7 @@ func handleSimulateValidationRuleWithInstance(db *sql.DB, boServiceInterface int
 		}
 
 		// Try to use the services.BusinessObjectService if available
-		if boService, ok := boServiceInterface.(*services.BusinessObjectService); ok {
+		if boService, ok := h.boService.(*services.BusinessObjectService); ok {
 			// Get instance data formatted for validation
 			record, err := boService.GetInstanceForValidation(r.Context(), tenantID, req.InstanceID)
 			if err != nil {
@@ -1489,7 +1478,7 @@ func handleSimulateValidationRuleWithInstance(db *sql.DB, boServiceInterface int
 			}
 
 			// Get the validation rule
-			row, err := fetchTenantRuleForExecution(r.Context(), db, ruleID, tenantID, datasourceID)
+			row, err := fetchTenantRuleForExecution(r.Context(), h.db, ruleID, tenantID, datasourceID)
 			if err == sql.ErrNoRows {
 				writeJSONError(w, http.StatusNotFound, "Validation rule not found or is inactive", "not_found", "")
 				return
@@ -1519,7 +1508,7 @@ func handleSimulateValidationRuleWithInstance(db *sql.DB, boServiceInterface int
 					return &services.CueValidationResult{IsValid: false, Message: "Missing script content", Severity: "error"}, nil
 				}
 				// Force CUE
-				return cueEngine.EvaluateValidation(r.Context(), script, record)
+				return h.cueEngine.EvaluateValidation(r.Context(), script, record)
 			}
 
 			var res *services.CueValidationResult
@@ -1529,7 +1518,7 @@ func handleSimulateValidationRuleWithInstance(db *sql.DB, boServiceInterface int
 					res = &services.CueValidationResult{IsValid: false, Message: "inherit_mode requires core_rule_id", Severity: "error"}
 					break
 				}
-				core, err := resolveCoreRuleScript(r.Context(), db, row.coreRuleID.String, pin)
+				core, err := resolveCoreRuleScript(r.Context(), h.db, row.coreRuleID.String, pin)
 				if err != nil {
 					res = &services.CueValidationResult{IsValid: false, Message: "Failed to resolve core rule script: " + err.Error(), Severity: "error"}
 					break
@@ -1638,11 +1627,9 @@ func (s *sqlDBBORepository) GetBOByTechnicalName(technicalName, tenantID, dataso
 	return s.GetBODefinition(boID)
 }
 
-func handleExecuteValidationRuleBinding(db *sql.DB, resolver security.DatasourceResolver) http.HandlerFunc {
+func (h *validationRulesHandler) handleExecuteValidationRuleBinding() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", handlers.SecurityContextDeps{
-			Resolver: resolver,
-		})
+		secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
 		if err != nil {
 			writeJSONError(w, http.StatusUnauthorized, "Security context initialization failed", "auth_error", map[string]string{"error": err.Error()})
 			return
@@ -1676,7 +1663,7 @@ func handleExecuteValidationRuleBinding(db *sql.DB, resolver security.Datasource
 			}
 		}
 
-		repo := &sqlDBBORepository{db: db}
+		repo := &sqlDBBORepository{db: h.db}
 		generator, err := boresolver.NewBOSQLGenerator(repo, "postgres")
 		if err != nil {
 			writeJSONError(w, http.StatusInternalServerError, "Failed to initialize SQL generator", "generator_error", err.Error())

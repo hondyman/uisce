@@ -12,11 +12,14 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jmoiron/sqlx"
+
+	"github.com/hondyman/uisce/backend/internal/handlers"
 )
 
 // ProcessOptimizationHandlers handles AI-powered process optimization
 type ProcessOptimizationHandlers struct {
-	db *sqlx.DB
+	db           *sqlx.DB
+	securityDeps handlers.SecurityContextDeps
 }
 
 // OptimizationSuggestion represents an AI-generated optimization recommendation
@@ -66,8 +69,8 @@ type OptimizationForecast struct {
 }
 
 // NewProcessOptimizationHandlers creates a new optimization handler
-func NewProcessOptimizationHandlers(db *sqlx.DB) *ProcessOptimizationHandlers {
-	return &ProcessOptimizationHandlers{db: db}
+func NewProcessOptimizationHandlers(db *sqlx.DB, securityDeps handlers.SecurityContextDeps) *ProcessOptimizationHandlers {
+	return &ProcessOptimizationHandlers{db: db, securityDeps: securityDeps}
 }
 
 // RegisterRoutes registers optimization routes
@@ -86,8 +89,13 @@ func (h *ProcessOptimizationHandlers) RegisterRoutes(r chi.Router) {
 
 // GetSuggestions returns all optimization suggestions
 func (h *ProcessOptimizationHandlers) GetSuggestions(w http.ResponseWriter, r *http.Request) {
-	tenantID := r.URL.Query().Get("tenant_id")
-	datasourceID := r.URL.Query().Get("datasource_id")
+	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
+	if err != nil {
+		http.Error(w, "Unauthorized: "+err.Error(), http.StatusUnauthorized)
+		return
+	}
+	tenantID := secCtx.TenantID
+	datasourceID := secCtx.DatasourceID
 	workflowType := r.URL.Query().Get("workflow_type")
 	status := r.URL.Query().Get("status") // pending, applied, dismissed
 
@@ -124,7 +132,7 @@ func (h *ProcessOptimizationHandlers) GetSuggestions(w http.ResponseWriter, r *h
 	query += " ORDER BY priority DESC, confidence_score DESC, created_at DESC"
 
 	var suggestions []OptimizationSuggestion
-	err := h.db.Select(&suggestions, query, args...)
+	err = h.db.Select(&suggestions, query, args...)
 	if err != nil {
 		log.Printf("Error querying suggestions: %v", err)
 		http.Error(w, "Failed to fetch suggestions", http.StatusInternalServerError)
@@ -137,8 +145,13 @@ func (h *ProcessOptimizationHandlers) GetSuggestions(w http.ResponseWriter, r *h
 
 // AnalyzeAndGenerateSuggestions analyzes workflows and generates optimization suggestions
 func (h *ProcessOptimizationHandlers) AnalyzeAndGenerateSuggestions(w http.ResponseWriter, r *http.Request) {
-	tenantID := r.URL.Query().Get("tenant_id")
-	datasourceID := r.URL.Query().Get("datasource_id")
+	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
+	if err != nil {
+		http.Error(w, "Unauthorized: "+err.Error(), http.StatusUnauthorized)
+		return
+	}
+	tenantID := secCtx.TenantID
+	datasourceID := secCtx.DatasourceID
 	workflowType := r.URL.Query().Get("workflow_type")
 
 	if tenantID == "" || datasourceID == "" {
@@ -627,8 +640,13 @@ func (h *ProcessOptimizationHandlers) calculatePriority(improvement, impact floa
 // ApplyOptimization applies a suggestion to a workflow
 func (h *ProcessOptimizationHandlers) ApplyOptimization(w http.ResponseWriter, r *http.Request) {
 	suggestionID := chi.URLParam(r, "suggestionID")
-	tenantID := r.URL.Query().Get("tenant_id")
-	datasourceID := r.URL.Query().Get("datasource_id")
+	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
+	if err != nil {
+		http.Error(w, "Unauthorized: "+err.Error(), http.StatusUnauthorized)
+		return
+	}
+	tenantID := secCtx.TenantID
+	datasourceID := secCtx.DatasourceID
 
 	if tenantID == "" || datasourceID == "" {
 		http.Error(w, "Missing tenant_id or datasource_id", http.StatusBadRequest)
@@ -637,7 +655,7 @@ func (h *ProcessOptimizationHandlers) ApplyOptimization(w http.ResponseWriter, r
 
 	// Get suggestion
 	var suggestion OptimizationSuggestion
-	err := h.db.Get(&suggestion, `
+	err = h.db.Get(&suggestion, `
 		SELECT * FROM process_optimization_suggestions
 		WHERE id = $1 AND tenant_id = $2 AND datasource_id = $3
 	`, suggestionID, tenantID, datasourceID)
@@ -694,15 +712,20 @@ func (h *ProcessOptimizationHandlers) ApplyOptimization(w http.ResponseWriter, r
 // DismissSuggestion dismisses a suggestion
 func (h *ProcessOptimizationHandlers) DismissSuggestion(w http.ResponseWriter, r *http.Request) {
 	suggestionID := chi.URLParam(r, "suggestionID")
-	tenantID := r.URL.Query().Get("tenant_id")
-	datasourceID := r.URL.Query().Get("datasource_id")
+	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
+	if err != nil {
+		http.Error(w, "Unauthorized: "+err.Error(), http.StatusUnauthorized)
+		return
+	}
+	tenantID := secCtx.TenantID
+	datasourceID := secCtx.DatasourceID
 
 	if tenantID == "" || datasourceID == "" {
 		http.Error(w, "Missing tenant_id or datasource_id", http.StatusBadRequest)
 		return
 	}
 
-	_, err := h.db.Exec(`
+	_, err = h.db.Exec(`
 		UPDATE process_optimization_suggestions
 		SET status = 'dismissed'
 		WHERE id = $1 AND tenant_id = $2 AND datasource_id = $3
@@ -723,8 +746,13 @@ func (h *ProcessOptimizationHandlers) DismissSuggestion(w http.ResponseWriter, r
 
 // GetAppliedOptimizations returns optimization history
 func (h *ProcessOptimizationHandlers) GetAppliedOptimizations(w http.ResponseWriter, r *http.Request) {
-	tenantID := r.URL.Query().Get("tenant_id")
-	datasourceID := r.URL.Query().Get("datasource_id")
+	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
+	if err != nil {
+		http.Error(w, "Unauthorized: "+err.Error(), http.StatusUnauthorized)
+		return
+	}
+	tenantID := secCtx.TenantID
+	datasourceID := secCtx.DatasourceID
 	workflowType := r.URL.Query().Get("workflow_type")
 
 	if tenantID == "" || datasourceID == "" {
@@ -746,7 +774,7 @@ func (h *ProcessOptimizationHandlers) GetAppliedOptimizations(w http.ResponseWri
 	query += " ORDER BY applied_at DESC LIMIT 50"
 
 	var applied []AppliedOptimization
-	err := h.db.Select(&applied, query, args...)
+	err = h.db.Select(&applied, query, args...)
 	if err != nil {
 		log.Printf("Error querying applied optimizations: %v", err)
 		http.Error(w, "Failed to fetch history", http.StatusInternalServerError)
@@ -760,8 +788,13 @@ func (h *ProcessOptimizationHandlers) GetAppliedOptimizations(w http.ResponseWri
 // ForecastImpact predicts the impact of applying an optimization
 func (h *ProcessOptimizationHandlers) ForecastImpact(w http.ResponseWriter, r *http.Request) {
 	suggestionID := chi.URLParam(r, "suggestionID")
-	tenantID := r.URL.Query().Get("tenant_id")
-	datasourceID := r.URL.Query().Get("datasource_id")
+	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
+	if err != nil {
+		http.Error(w, "Unauthorized: "+err.Error(), http.StatusUnauthorized)
+		return
+	}
+	tenantID := secCtx.TenantID
+	datasourceID := secCtx.DatasourceID
 
 	if tenantID == "" || datasourceID == "" {
 		http.Error(w, "Missing tenant_id or datasource_id", http.StatusBadRequest)
@@ -769,7 +802,7 @@ func (h *ProcessOptimizationHandlers) ForecastImpact(w http.ResponseWriter, r *h
 	}
 
 	var suggestion OptimizationSuggestion
-	err := h.db.Get(&suggestion, `
+	err = h.db.Get(&suggestion, `
 		SELECT * FROM process_optimization_suggestions
 		WHERE id = $1 AND tenant_id = $2 AND datasource_id = $3
 	`, suggestionID, tenantID, datasourceID)
@@ -834,8 +867,13 @@ func (h *ProcessOptimizationHandlers) assessRollbackComplexity(suggestion Optimi
 
 // EnableAutoTune enables automatic optimization
 func (h *ProcessOptimizationHandlers) EnableAutoTune(w http.ResponseWriter, r *http.Request) {
-	tenantID := r.URL.Query().Get("tenant_id")
-	datasourceID := r.URL.Query().Get("datasource_id")
+	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
+	if err != nil {
+		http.Error(w, "Unauthorized: "+err.Error(), http.StatusUnauthorized)
+		return
+	}
+	tenantID := secCtx.TenantID
+	datasourceID := secCtx.DatasourceID
 
 	if tenantID == "" || datasourceID == "" {
 		http.Error(w, "Missing tenant_id or datasource_id", http.StatusBadRequest)
@@ -866,8 +904,13 @@ func (h *ProcessOptimizationHandlers) EnableAutoTune(w http.ResponseWriter, r *h
 
 // GetAutoTuneStatus returns auto-tune configuration
 func (h *ProcessOptimizationHandlers) GetAutoTuneStatus(w http.ResponseWriter, r *http.Request) {
-	tenantID := r.URL.Query().Get("tenant_id")
-	datasourceID := r.URL.Query().Get("datasource_id")
+	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
+	if err != nil {
+		http.Error(w, "Unauthorized: "+err.Error(), http.StatusUnauthorized)
+		return
+	}
+	tenantID := secCtx.TenantID
+	datasourceID := secCtx.DatasourceID
 
 	if tenantID == "" || datasourceID == "" {
 		http.Error(w, "Missing tenant_id or datasource_id", http.StatusBadRequest)

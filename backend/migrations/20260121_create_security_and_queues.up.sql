@@ -5,8 +5,8 @@ CREATE TABLE IF NOT EXISTS user_roles (
   role TEXT NOT NULL,
   tenant_id UUID NOT NULL,
   assigned_by TEXT,
-  assigned_at TIMESTAMP DEFAULT NOW(),
-  revoked_at TIMESTAMP,
+  assigned_at TIMESTAMPTZ DEFAULT NOW(),
+  revoked_at TIMESTAMPTZ,
   UNIQUE(user_id, role, tenant_id)
 );
 CREATE INDEX IF NOT EXISTS idx_user_roles_user_tenant ON user_roles(user_id, tenant_id);
@@ -23,7 +23,7 @@ CREATE TABLE IF NOT EXISTS workflow_access (
   rate_limit_per_hour INT DEFAULT 0,
   required_fields TEXT[],
   readonly_fields_after_start TEXT[],
-  created_at TIMESTAMP DEFAULT NOW(),
+  created_at TIMESTAMPTZ DEFAULT NOW(),
   -- FOREIGN KEY (bp_def_id) REFERENCES business_process_definition(id), -- Assuming table exists, usually safer to be loose in dev
   UNIQUE (bp_def_id, initiator_role)
 );
@@ -35,7 +35,7 @@ CREATE TABLE IF NOT EXISTS instance_creation_log (
   user_id TEXT NOT NULL,
   tenant_id UUID NOT NULL,
   bp_def_id UUID NOT NULL,
-  created_at TIMESTAMP DEFAULT NOW()
+  created_at TIMESTAMPTZ DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS idx_instance_creation_log_limit ON instance_creation_log(user_id, tenant_id, created_at);
 
@@ -48,7 +48,7 @@ CREATE TABLE IF NOT EXISTS user_queue_assignment (
   queue_name TEXT,
   is_primary BOOLEAN DEFAULT true,
   enabled BOOLEAN DEFAULT true,
-  created_at TIMESTAMP DEFAULT NOW(),
+  created_at TIMESTAMPTZ DEFAULT NOW(),
   UNIQUE (user_id, role, tenant_id)
 );
 CREATE INDEX IF NOT EXISTS idx_user_queue_assignment_lookup ON user_queue_assignment(user_id, role, tenant_id);

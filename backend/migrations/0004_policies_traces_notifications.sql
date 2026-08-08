@@ -6,8 +6,8 @@ CREATE TABLE claim_conflict (
   asset_id UUID NOT NULL,
   conflict_type TEXT NOT NULL,
   details JSONB NOT NULL,
-  detected_at TIMESTAMP NOT NULL DEFAULT now(),
-  resolved_at TIMESTAMP,
+  detected_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  resolved_at TIMESTAMPTZ,
   resolution_action TEXT
 );
 
@@ -17,7 +17,7 @@ CREATE TABLE claim_usage_log (
   user_id TEXT NOT NULL,
   tenant_id TEXT NOT NULL,
   asset_id UUID NOT NULL,
-  used_at TIMESTAMP NOT NULL DEFAULT now()
+  used_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX idx_usage_claim_time ON claim_usage_log(claim_id, used_at DESC);
 
@@ -25,8 +25,8 @@ CREATE TABLE claim_drift (
   id UUID PRIMARY KEY,
   claim_id UUID REFERENCES role_claim(id) ON DELETE CASCADE,
   drift_type TEXT NOT NULL,
-  last_used_at TIMESTAMP,
-  detected_at TIMESTAMP NOT NULL DEFAULT now(),
+  last_used_at TIMESTAMPTZ,
+  detected_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   suggested_action TEXT
 );
 
@@ -38,14 +38,14 @@ CREATE TABLE policy (
   definition JSONB NOT NULL,
   active BOOLEAN NOT NULL DEFAULT TRUE,
   version INT NOT NULL DEFAULT 1,
-  created_at TIMESTAMP NOT NULL DEFAULT now()
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
 CREATE TABLE policy_simulation_result (
   id UUID PRIMARY KEY,
   policy_id UUID REFERENCES policy(id) ON DELETE CASCADE,
   simulated_by TEXT NOT NULL,
-  simulated_at TIMESTAMP NOT NULL DEFAULT now(),
+  simulated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   affected_claims JSONB,
   affected_users JSONB,
   affected_assets JSONB,
@@ -61,7 +61,7 @@ CREATE TABLE access_decision_log (
   action TEXT NOT NULL,
   decision TEXT NOT NULL,
   reason TEXT,
-  evaluated_at TIMESTAMP NOT NULL DEFAULT now()
+  evaluated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX idx_decision_recent ON access_decision_log(tenant_id, evaluated_at DESC);
 
@@ -76,7 +76,7 @@ CREATE TABLE access_decision_trace (
   matched_policies JSONB NOT NULL,
   tenant_scope TEXT NOT NULL,
   reason TEXT NOT NULL,
-  evaluated_at TIMESTAMP NOT NULL DEFAULT now()
+  evaluated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
 CREATE TABLE notification_subscription (
@@ -98,7 +98,7 @@ CREATE TABLE semantic_notification (
   affected_users TEXT[],
   message TEXT NOT NULL,
   triggered_by TEXT,
-  timestamp TIMESTAMP NOT NULL DEFAULT now(),
+  TIMESTAMPTZ TIMESTAMPTZ NOT NULL DEFAULT now(),
   delivery JSONB
 );
 

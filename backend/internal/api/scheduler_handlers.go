@@ -10,21 +10,24 @@ import (
 	"github.com/jmoiron/sqlx"
 	"go.uber.org/zap"
 
+	"github.com/hondyman/uisce/backend/internal/handlers"
 	si "github.com/hondyman/uisce/backend/internal/scheduler_intelligence"
 	"github.com/hondyman/uisce/libs/jwt-middleware"
 )
 
 // SchedulerHandlers handles scheduler intelligence API requests
 type SchedulerHandlers struct {
-	service *si.Service
-	logger  *zap.Logger
+	service      *si.Service
+	logger       *zap.Logger
+	securityDeps handlers.SecurityContextDeps
 }
 
 // NewSchedulerHandlers creates new scheduler handlers
-func NewSchedulerHandlers(db *sqlx.DB, semanticClient si.SemanticClient, logger *zap.Logger) *SchedulerHandlers {
+func NewSchedulerHandlers(db *sqlx.DB, semanticClient si.SemanticClient, logger *zap.Logger, securityDeps handlers.SecurityContextDeps) *SchedulerHandlers {
 	return &SchedulerHandlers{
-		service: si.NewService(db, semanticClient, logger),
-		logger:  logger,
+		service:      si.NewService(db, semanticClient, logger),
+		logger:       logger,
+		securityDeps: securityDeps,
 	}
 }
 
@@ -85,9 +88,17 @@ func (h *SchedulerHandlers) ListJobs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	datasourceID := r.Header.Get("X-Tenant-Datasource-ID")
+	if datasourceID == "" {
+		secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
+		if err == nil {
+			datasourceID = secCtx.DatasourceID
+		}
+	}
+
 	filters := si.JobListFilters{
 		TenantID:     tenantID,
-		DatasourceID: r.URL.Query().Get("datasource_id"),
+		DatasourceID: datasourceID,
 		Category:     r.URL.Query().Get("category"),
 	}
 

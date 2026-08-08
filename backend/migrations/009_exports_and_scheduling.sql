@@ -21,7 +21,7 @@ CREATE TABLE IF NOT EXISTS edm.job_exports (
   
   -- Download/access information
   presigned_url TEXT,
-  presigned_url_expires TIMESTAMP,
+  presigned_url_expires TIMESTAMPTZ,
   download_count INT DEFAULT 0,
   
   -- Filter and configuration
@@ -30,10 +30,10 @@ CREATE TABLE IF NOT EXISTS edm.job_exports (
   
   -- Audit trail
   created_by UUID NOT NULL,
-  created_at TIMESTAMP NOT NULL DEFAULT NOW(),
-  started_at TIMESTAMP,
-  completed_at TIMESTAMP,
-  expires_at TIMESTAMP,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  started_at TIMESTAMPTZ,
+  completed_at TIMESTAMPTZ,
+  expires_at TIMESTAMPTZ,
   
   -- Error handling
   error_message TEXT,
@@ -80,8 +80,8 @@ CREATE TABLE IF NOT EXISTS edm.scheduled_jobs (
   
   -- Schedule configuration
   schedule_type VARCHAR(20) NOT NULL,  -- once, daily, weekly, monthly, cron
-  start_time TIMESTAMP NOT NULL,
-  end_time TIMESTAMP,
+  start_time TIMESTAMPTZ NOT NULL,
+  end_time TIMESTAMPTZ,
   cron_expression VARCHAR(255),
   timezone VARCHAR(50) DEFAULT 'UTC',
   
@@ -95,10 +95,10 @@ CREATE TABLE IF NOT EXISTS edm.scheduled_jobs (
   is_active BOOLEAN DEFAULT true,
   
   -- Execution tracking
-  last_run_at TIMESTAMP,
+  last_run_at TIMESTAMPTZ,
   last_run_status VARCHAR(20),
   last_run_error TEXT,
-  next_run_at TIMESTAMP,
+  next_run_at TIMESTAMPTZ,
   run_count INT DEFAULT 0,
   success_count INT DEFAULT 0,
   failure_count INT DEFAULT 0,
@@ -108,8 +108,8 @@ CREATE TABLE IF NOT EXISTS edm.scheduled_jobs (
   description TEXT,
   priority INT DEFAULT 10,
   created_by UUID NOT NULL,
-  created_at TIMESTAMP NOT NULL DEFAULT NOW(),
-  updated_at TIMESTAMP NOT NULL DEFAULT NOW(),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   
   CONSTRAINT valid_schedule_type CHECK (schedule_type IN ('once', 'daily', 'weekly', 'monthly', 'cron')),
   CONSTRAINT valid_sched_status CHECK (status IN ('active', 'paused', 'completed', 'failed', 'disabled')),
@@ -124,9 +124,9 @@ CREATE TABLE IF NOT EXISTS edm.scheduled_job_runs (
   tenant_id UUID NOT NULL,
   
   -- Timing information
-  scheduled_time TIMESTAMP NOT NULL,
-  actual_start_time TIMESTAMP,
-  actual_end_time TIMESTAMP,
+  scheduled_time TIMESTAMPTZ NOT NULL,
+  actual_start_time TIMESTAMPTZ,
+  actual_end_time TIMESTAMPTZ,
   
   -- Status and results
   status VARCHAR(20) NOT NULL DEFAULT 'pending',
@@ -134,7 +134,7 @@ CREATE TABLE IF NOT EXISTS edm.scheduled_job_runs (
   result_summary JSONB,
   
   -- Created
-  created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   
   CONSTRAINT fk_runs_schedule FOREIGN KEY (schedule_id) 
     REFERENCES edm.scheduled_jobs(id) ON DELETE CASCADE,
@@ -232,11 +232,11 @@ ORDER BY e.created_at DESC;
 -- Function to update scheduled job's next run time
 CREATE OR REPLACE FUNCTION edm.update_next_run_time(
   p_schedule_id UUID,
-  p_current_run_time TIMESTAMP
-) RETURNS TIMESTAMP AS $$
+  p_current_run_time TIMESTAMPTZ
+) RETURNS TIMESTAMPTZ AS $$
 DECLARE
   v_schedule RECORD;
-  v_next_run TIMESTAMP;
+  v_next_run TIMESTAMPTZ;
   v_tz TEXT;
 BEGIN
   -- Get schedule details
@@ -289,7 +289,7 @@ CREATE OR REPLACE FUNCTION edm.record_scheduled_run(
 ) RETURNS UUID AS $$
 DECLARE
   v_run_id UUID;
-  v_next_run TIMESTAMP;
+  v_next_run TIMESTAMPTZ;
 BEGIN
   -- Create run record
   INSERT INTO edm.scheduled_job_runs (
