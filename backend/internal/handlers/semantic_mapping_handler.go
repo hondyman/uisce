@@ -15,13 +15,15 @@ import (
 
 // SemanticMappingHandler handles HTTP requests for semantic mapping operations
 type SemanticMappingHandler struct {
-	service *analytics.SemanticMappingService
+	service      *analytics.SemanticMappingService
+	securityDeps SecurityContextDeps
 }
 
 // NewSemanticMappingHandler creates a new semantic mapping handler
-func NewSemanticMappingHandler(service *analytics.SemanticMappingService) *SemanticMappingHandler {
+func NewSemanticMappingHandler(service *analytics.SemanticMappingService, securityDeps SecurityContextDeps) *SemanticMappingHandler {
 	return &SemanticMappingHandler{
-		service: service,
+		service:      service,
+		securityDeps: securityDeps,
 	}
 }
 
@@ -288,19 +290,17 @@ func (h *SemanticMappingHandler) HandleApplyMappingsWizard(w http.ResponseWriter
 }
 
 // HandleGetPendingApprovalsWizard retrieves pending semantic mappings for approval
-// GET /api/semantic-mapping/wizard/pending?tenant_id=X&datasource_id=Y
+// GET /api/semantic-mapping/wizard/pending
 func (h *SemanticMappingHandler) HandleGetPendingApprovalsWizard(w http.ResponseWriter, r *http.Request) {
 	logger := logging.GetLogger().Sugar()
 
-	tenantID := getSecureTenantID(r)
-	datasourceID := r.URL.Query().Get("datasource_id")
-
-	if tenantID == "" || datasourceID == "" {
-		h.respondJSON(w, http.StatusBadRequest, map[string]string{"error": "tenant_id and datasource_id are required"})
+	secCtx, _, err := SecurityContextFromRequest(r, "", "", h.securityDeps)
+	if err != nil {
+		h.respondJSON(w, http.StatusUnauthorized, map[string]string{"error": "Unauthorized"})
 		return
 	}
 
-	pending, err := h.service.GetPendingApprovals(r.Context(), tenantID, datasourceID)
+	pending, err := h.service.GetPendingApprovals(r.Context(), secCtx.TenantID, secCtx.DatasourceID)
 	if err != nil {
 		logger.Errorf("Failed to get pending approvals: %v", err)
 		h.respondJSON(w, http.StatusInternalServerError, map[string]string{"error": "Failed to get pending approvals"})
@@ -355,19 +355,17 @@ func (h *SemanticMappingHandler) HandleApprovePendingMappingWizard(w http.Respon
 }
 
 // HandleGetCreatedMappingsWizard retrieves recently created semantic mappings
-// GET /api/semantic-mapping/wizard/created?tenant_id=X&datasource_id=Y&limit=N
+// GET /api/semantic-mapping/wizard/created?limit=N
 func (h *SemanticMappingHandler) HandleGetCreatedMappingsWizard(w http.ResponseWriter, r *http.Request) {
 	logger := logging.GetLogger().Sugar()
 
-	tenantID := getSecureTenantID(r)
-	datasourceID := r.URL.Query().Get("datasource_id")
-	limit := r.URL.Query().Get("limit")
-
-	if tenantID == "" || datasourceID == "" {
-		h.respondJSON(w, http.StatusBadRequest, map[string]string{"error": "tenant_id and datasource_id are required"})
+	secCtx, _, err := SecurityContextFromRequest(r, "", "", h.securityDeps)
+	if err != nil {
+		h.respondJSON(w, http.StatusUnauthorized, map[string]string{"error": "Unauthorized"})
 		return
 	}
 
+	limit := r.URL.Query().Get("limit")
 	limitInt := 20
 	if limit != "" {
 		if parsed, err := strconv.Atoi(limit); err == nil && parsed > 0 {
@@ -401,7 +399,7 @@ func (h *SemanticMappingHandler) HandleGetCreatedMappingsWizard(w http.ResponseW
 	`
 
 	var mappings []CreatedMapping
-	err := h.service.DB().SelectContext(r.Context(), &mappings, query, tenantID, datasourceID, limitInt)
+	err = h.service.DB().SelectContext(r.Context(), &mappings, query, secCtx.TenantID, secCtx.DatasourceID, limitInt)
 	if err != nil {
 		logger.Errorf("Failed to fetch created mappings: %v", err)
 		h.respondJSON(w, http.StatusInternalServerError, map[string]string{"error": "Failed to fetch created mappings"})
@@ -451,12 +449,10 @@ func (h *SemanticMappingHandler) HandlePopulateBusinessObjectSemanticTerms(w htt
 func (h *SemanticMappingHandler) HandleBackfillSemanticTermSQLProperties(w http.ResponseWriter, r *http.Request) {
 	logger := logging.GetLogger().Sugar()
 
-	tenantID := getSecureTenantID(r)
-	datasourceID := r.URL.Query().Get("datasource_id")
 	backfillAll := r.URL.Query().Get("all") == "true"
 
 	if backfillAll {
-		// Backfill for all tenants/datasources
+		// Backfill for all tenants/datasources - requires separate admin handling
 		logger.Info("Starting SQL property backfill for all tenants")
 		results, err := h.service.BackfillAllTenantsSemanticTermSQLProperties(r.Context())
 		if err != nil {
@@ -480,13 +476,14 @@ func (h *SemanticMappingHandler) HandleBackfillSemanticTermSQLProperties(w http.
 	}
 
 	// Backfill for specific tenant/datasource
-	if tenantID == "" || datasourceID == "" {
-		h.respondJSON(w, http.StatusBadRequest, map[string]string{"error": "tenant_id and datasource_id query parameters are required, or use all=true"})
+	secCtx, _, err := SecurityContextFromRequest(r, "", "", h.securityDeps)
+	if err != nil {
+		h.respondJSON(w, http.StatusUnauthorized, map[string]string{"error": "Unauthorized"})
 		return
 	}
 
-	logger.Infof("Starting SQL property backfill for tenant %s, datasource %s", tenantID, datasourceID)
-	count, err := h.service.BackfillSemanticTermSQLProperties(r.Context(), tenantID, datasourceID)
+	logger.Infof("Starting SQL property backfill for tenant %s, datasource %s", secCtx.TenantID, secCtx.DatasourceID)
+	count, err := h.service.BackfillSemanticTermSQLProperties(r.Context(), secCtx.TenantID, secCtx.DatasourceID)
 	if err != nil {
 		logger.Errorf("Failed to backfill SQL properties: %v", err)
 		h.respondJSON(w, http.StatusInternalServerError, map[string]string{"error": "Failed to backfill SQL properties"})
@@ -505,8 +502,6 @@ func (h *SemanticMappingHandler) HandleBackfillSemanticTermSQLProperties(w http.
 func (h *SemanticMappingHandler) HandleBackfillPhysicalMappings(w http.ResponseWriter, r *http.Request) {
 	logger := logging.GetLogger().Sugar()
 
-	tenantID := getSecureTenantID(r)
-	datasourceID := r.URL.Query().Get("datasource_id")
 	backfillAll := r.URL.Query().Get("all") == "true"
 
 	if backfillAll {
@@ -534,13 +529,14 @@ func (h *SemanticMappingHandler) HandleBackfillPhysicalMappings(w http.ResponseW
 	}
 
 	// Backfill for specific tenant/datasource
-	if tenantID == "" || datasourceID == "" {
-		h.respondJSON(w, http.StatusBadRequest, map[string]string{"error": "tenant_id and datasource_id query parameters are required, or use all=true"})
+	secCtx, _, err := SecurityContextFromRequest(r, "", "", h.securityDeps)
+	if err != nil {
+		h.respondJSON(w, http.StatusUnauthorized, map[string]string{"error": "Unauthorized"})
 		return
 	}
 
-	logger.Infof("Starting physical_mapping backfill for tenant %s, datasource %s", tenantID, datasourceID)
-	count, err := h.service.BackfillPhysicalMappings(r.Context(), tenantID, datasourceID)
+	logger.Infof("Starting physical_mapping backfill for tenant %s, datasource %s", secCtx.TenantID, secCtx.DatasourceID)
+	count, err := h.service.BackfillPhysicalMappings(r.Context(), secCtx.TenantID, secCtx.DatasourceID)
 	if err != nil {
 		logger.Errorf("Failed to backfill physical_mapping: %v", err)
 		h.respondJSON(w, http.StatusInternalServerError, map[string]string{"error": "Failed to backfill physical_mapping"})

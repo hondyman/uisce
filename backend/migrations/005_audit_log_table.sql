@@ -9,7 +9,7 @@ CREATE TABLE IF NOT EXISTS edm.audit_log (
     resource_id UUID NOT NULL,
     resource_type VARCHAR(50),
     metadata JSONB,
-    created_at TIMESTAMP NOT NULL DEFAULT NOW()
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 -- Indexes for audit queries

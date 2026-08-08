@@ -227,8 +227,8 @@ BEGIN
         effective_date DATE NOT NULL DEFAULT CURRENT_DATE,
         expiration_date DATE,
         last_modified_by VARCHAR(255),
-        created_at TIMESTAMP NOT NULL DEFAULT NOW(),
-        updated_at TIMESTAMP NOT NULL DEFAULT NOW(),
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
         created_by_user_id UUID NOT NULL,
         updated_by_user_id UUID,
         tenant_id UUID NOT NULL,
@@ -258,11 +258,11 @@ BEGIN
         holiday_name VARCHAR(255),
         confidence_score INT,
         trading_impact BOOLEAN,
-        valid_from TIMESTAMP NOT NULL DEFAULT NOW(),
-        valid_to TIMESTAMP,
+        valid_from TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        valid_to TIMESTAMPTZ,
         is_current BOOLEAN NOT NULL DEFAULT TRUE,
         rule_id UUID,  -- Link to rule that modified this record
-        created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
         tenant_id UUID NOT NULL
     )';
     
@@ -364,7 +364,7 @@ FROM (
             WHEN d::DATE = '2026-12-25'::DATE THEN 'Christmas Day'
             ELSE NULL
         END AS holiday_name
-    FROM generate_series('2026-01-01'::timestamp, '2026-12-31'::timestamp, '1 day'::interval) d
+    FROM generate_series('2026-01-01'::TIMESTAMPTZ, '2026-12-31'::TIMESTAMPTZ, '1 day'::interval) d
 ) d
 WHERE NOT EXISTS (
     SELECT 1 FROM northwinds.calendar_mdm

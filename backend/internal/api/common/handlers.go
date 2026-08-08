@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 	"strconv"
+
 	"github.com/hondyman/uisce/libs/jwt-middleware"
 )
 
@@ -138,19 +139,19 @@ func ParseSortParams(r *http.Request) SortParams {
 	}
 }
 
-// GetTenantScope extracts tenant and datasource from headers or query
+// GetTenantScope extracts tenant and datasource from validated JWT claims or headers
+// SECURITY: This function intentionally does NOT fall back to URL query parameters.
+// Tenant and datasource must come from validated JWT token or X-Tenant-ID/X-Tenant-Datasource-ID headers.
 func GetTenantScope(r *http.Request) (tenantID, datasourceID string, err error) {
-	// Try headers first
-	tenantID = jwtmiddleware.GetClaimsFromContext(r).TenantID
-	datasourceID = r.Header.Get("X-Tenant-Datasource-ID")
-
-	// Fallback to query params
+	// Try JWT claims first
+	if claims := jwtmiddleware.GetClaimsFromContext(r); claims != nil {
+		tenantID = claims.TenantID
+	}
+	// Try headers
 	if tenantID == "" {
-		tenantID = r.URL.Query().Get("tenant_id")
+		tenantID = r.Header.Get("X-Tenant-ID")
 	}
-	if datasourceID == "" {
-		datasourceID = r.URL.Query().Get("datasource_id")
-	}
+	datasourceID = r.Header.Get("X-Tenant-Datasource-ID")
 
 	if tenantID == "" {
 		return "", "", fmt.Errorf("tenant_id is required")

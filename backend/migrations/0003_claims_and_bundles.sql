@@ -8,8 +8,8 @@ CREATE TABLE claim (
   scope TEXT[] NOT NULL DEFAULT '{}',
   source TEXT NOT NULL, -- role, bundle, manual, micro_bundle, jit
   granted_by TEXT,
-  granted_at TIMESTAMP NOT NULL DEFAULT now(),
-  expires_at TIMESTAMP,
+  granted_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  expires_at TIMESTAMPTZ,
   status TEXT NOT NULL DEFAULT 'active' -- active, expired, revoked
 );
 CREATE INDEX idx_claim_effective ON claim(tenant_id, user_id, asset_id) WHERE status='active';
@@ -25,7 +25,7 @@ CREATE TABLE claim_bundle (
   status TEXT NOT NULL DEFAULT 'active',
   risk_level TEXT NOT NULL DEFAULT 'medium',
   created_by TEXT,
-  created_at TIMESTAMP NOT NULL DEFAULT now(),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   UNIQUE (tenant_id, name, version)
 );
 
@@ -44,7 +44,7 @@ CREATE TABLE user_bundle_assignment (
   tenant_id uuid REFERENCES tenants(id) ON DELETE CASCADE,
   bundle_id UUID REFERENCES claim_bundle(id) ON DELETE CASCADE,
   assigned_by TEXT,
-  assigned_at TIMESTAMP NOT NULL DEFAULT now(),
+  assigned_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   UNIQUE (user_id, tenant_id, bundle_id)
 );
 
@@ -56,7 +56,7 @@ CREATE TABLE micro_bundle (
   description TEXT,
   version INT NOT NULL DEFAULT 1,
   created_by TEXT,
-  created_at TIMESTAMP NOT NULL DEFAULT now(),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   UNIQUE (tenant_id, name, version)
 );
 
@@ -66,8 +66,8 @@ CREATE TABLE jit_addon_grant (
   tenant_id uuid REFERENCES tenants(id) ON DELETE CASCADE,
   bundle_id UUID REFERENCES micro_bundle(id) ON DELETE CASCADE,
   granted_by TEXT,
-  granted_at TIMESTAMP NOT NULL DEFAULT now(),
-  expires_at TIMESTAMP NOT NULL,
+  granted_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  expires_at TIMESTAMPTZ NOT NULL,
   reason TEXT,
   status TEXT NOT NULL DEFAULT 'active'
 );

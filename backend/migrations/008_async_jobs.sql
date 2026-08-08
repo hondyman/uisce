@@ -27,9 +27,9 @@ CREATE TABLE IF NOT EXISTS edm.async_jobs (
   
   -- Audit trail
   created_by UUID NOT NULL,
-  created_at TIMESTAMP NOT NULL DEFAULT NOW(),
-  started_at TIMESTAMP,
-  completed_at TIMESTAMP,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  started_at TIMESTAMPTZ,
+  completed_at TIMESTAMPTZ,
   
   -- Retry logic
   priority INT DEFAULT 0,
@@ -75,7 +75,7 @@ CREATE TABLE IF NOT EXISTS edm.job_items (
   result_id UUID,
   
   -- Audit trail
-  processed_at TIMESTAMP,
+  processed_at TIMESTAMPTZ,
   
   CONSTRAINT fk_job_items_job FOREIGN KEY (job_id) 
     REFERENCES edm.async_jobs(id) ON DELETE CASCADE,

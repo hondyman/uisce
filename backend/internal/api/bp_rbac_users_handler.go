@@ -8,31 +8,27 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+
+	"github.com/hondyman/uisce/backend/internal/handlers"
 )
 
 // listUsers returns all users for role assignment
 func (h *RBACHandlers) listUsers(w http.ResponseWriter, r *http.Request) {
-	tenantID := r.URL.Query().Get("tenant_id")
+	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
+	if err != nil {
+		http.Error(w, "Unauthorized: "+err.Error(), http.StatusUnauthorized)
+		return
+	}
+	tenantID := secCtx.TenantID
 
 	var users []map[string]interface{}
-	var query string
-	var args []interface{}
-
-	if tenantID != "" {
-		query = `
-			SELECT id, username, email, name, first_name, last_name, status, is_active, created_at, tenant_id
-			FROM users
-			WHERE tenant_id = $1 OR tenant_id IS NULL
-			ORDER BY name, username
-		`
-		args = []interface{}{tenantID}
-	} else {
-		query = `
-			SELECT id, username, email, name, first_name, last_name, status, is_active, created_at, tenant_id
-			FROM users
-			ORDER BY name, username
-		`
-	}
+	query := `
+		SELECT id, username, email, name, first_name, last_name, status, is_active, created_at, tenant_id
+		FROM users
+		WHERE tenant_id = $1 OR tenant_id IS NULL
+		ORDER BY name, username
+	`
+	args := []interface{}{tenantID}
 
 	rows, err := h.db.Query(query, args...)
 	if err != nil {
@@ -91,7 +87,6 @@ func (h *RBACHandlers) createUser(w http.ResponseWriter, r *http.Request) {
 		Name      string `json:"name"`
 		FirstName string `json:"first_name"`
 		LastName  string `json:"last_name"`
-		TenantID  string `json:"tenant_id"`
 		Password  string `json:"password"`
 		Status    string `json:"status"`
 	}
@@ -106,15 +101,12 @@ func (h *RBACHandlers) createUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Use query param tenant_id if not in body
-	if req.TenantID == "" {
-		req.TenantID = r.URL.Query().Get("tenant_id")
-	}
-
-	if req.TenantID == "" {
-		http.Error(w, "tenant_id required", http.StatusBadRequest)
+	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
+	if err != nil {
+		http.Error(w, "Unauthorized: "+err.Error(), http.StatusUnauthorized)
 		return
 	}
+	tenantID := secCtx.TenantID
 
 	// Default status
 	if req.Status == "" {
@@ -122,11 +114,11 @@ func (h *RBACHandlers) createUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var userID string
-	err := h.db.QueryRow(`
+	err = h.db.QueryRow(`
 		INSERT INTO users (username, email, name, first_name, last_name, tenant_id, status, is_active, password_hash)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, true, $8)
 		RETURNING id
-	`, req.Username, req.Email, req.Name, req.FirstName, req.LastName, req.TenantID, req.Status, req.Password).Scan(&userID)
+	`, req.Username, req.Email, req.Name, req.FirstName, req.LastName, tenantID, req.Status, req.Password).Scan(&userID)
 
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Failed to create user: %v", err), http.StatusInternalServerError)

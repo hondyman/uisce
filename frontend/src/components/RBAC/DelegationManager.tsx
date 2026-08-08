@@ -125,7 +125,7 @@ export const DelegationManager: React.FC<DelegationManagerProps> = ({
   // Fetch users for autocomplete
   const fetchUsers = async () => {
     try {
-      const response = await fetch(`/api/rbac/users?tenant_id=${tenant.id}`);
+      const response = await fetch('/api/rbac/users');
       const data = await response.json();
       setUsers(Array.isArray(data) ? data : []);
     } catch (error) {
@@ -137,7 +137,7 @@ export const DelegationManager: React.FC<DelegationManagerProps> = ({
   // Fetch roles for resource autocomplete
   const fetchRoles = async () => {
     try {
-      const response = await fetch(`/api/rbac/roles?tenant_id=${tenant.id}&tenant_instance_id=${datasource.id}`);
+      const response = await fetch('/api/rbac/roles');
       const data = await response.json();
       setRoles(Array.isArray(data) ? data : []);
     } catch (error) {
@@ -150,9 +150,7 @@ export const DelegationManager: React.FC<DelegationManagerProps> = ({
   const fetchDelegations = async () => {
     try {
       setLoading(true);
-      const response = await fetch(
-        `/api/rbac/delegations?tenant_id=${tenant.id}&tenant_instance_id=${datasource.id}`
-      );
+      const response = await fetch('/api/rbac/delegations');
       const data = await response.json();
       setDelegations(Array.isArray(data) ? data : []);
     } catch (error) {
@@ -181,8 +179,6 @@ export const DelegationManager: React.FC<DelegationManagerProps> = ({
           ...formData,
           resource_type: finalResourceType,
           resource_id: finalResourceId,
-          tenant_id: tenant.id,
-          tenant_instance_id: datasource.id,
         }),
       });
       await fetchDelegations();

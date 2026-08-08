@@ -25,6 +25,8 @@ import (
 	"github.com/hondyman/uisce/backend/internal/rules"
 	intsemantic "github.com/hondyman/uisce/backend/internal/semantic"
 	"github.com/hondyman/uisce/backend/internal/tenant"
+	temporalactivities "github.com/hondyman/uisce/backend/internal/temporal/activities"
+	provisioningworkflows "github.com/hondyman/uisce/backend/internal/temporal/workflows"
 	"github.com/hondyman/uisce/backend/internal/tests"
 	"github.com/hondyman/uisce/backend/internal/wealth"
 	"github.com/hondyman/uisce/backend/internal/wealth/risk"
@@ -34,6 +36,7 @@ import (
 	"github.com/hondyman/uisce/backend/pkg/governance"
 	"github.com/hondyman/uisce/backend/pkg/llm"
 	pkgworkflows "github.com/hondyman/uisce/backend/pkg/workflows"
+	"go.uber.org/zap"
 	temporalclient "github.com/hondyman/uisce/libs/temporal-client"
 	"github.com/jmoiron/sqlx"
 	"go.temporal.io/sdk/worker"
@@ -294,6 +297,50 @@ func main() {
 
 	w.RegisterWorkflow(pkgworkflows.MigrationWorkflow)
 	log.Println("✅ Registered AI Migration Engine Workflow and Activities")
+
+	// 13. Tenant Provisioning Activities (for BP Designer)
+	logger, _ := zap.NewProduction()
+	provisioningActivities := temporalactivities.NewTenantProvisioningActivities(db, db, logger.Sugar())
+
+	// Register Tenant Provisioning Workflow
+	w.RegisterWorkflow(provisioningworkflows.TenantInstanceProvisioningWorkflowFn)
+	log.Println("✅ Registered Tenant Provisioning Workflow")
+
+	w.RegisterActivity(provisioningActivities.RegisterTenant)
+	w.RegisterActivity(provisioningActivities.RollbackRegisterTenant)
+	w.RegisterActivity(provisioningActivities.RegisterInstance)
+	w.RegisterActivity(provisioningActivities.RollbackRegisterInstance)
+	w.RegisterActivity(provisioningActivities.CreateTenantDatabase)
+	w.RegisterActivity(provisioningActivities.RollbackCreateTenantDatabase)
+	w.RegisterActivity(provisioningActivities.CloneSchemaFromGoldCopy)
+	w.RegisterActivity(provisioningActivities.CreateLakekeeperNamespace)
+	w.RegisterActivity(provisioningActivities.RollbackCreateLakekeeperNamespace)
+	w.RegisterActivity(provisioningActivities.CloneGoldCopyProducts)
+	w.RegisterActivity(provisioningActivities.RollbackCloneGoldCopyProducts)
+	w.RegisterActivity(provisioningActivities.EmitProvisioningEvent)
+	w.RegisterActivity(provisioningActivities.UpdateTenantStatus)
+	w.RegisterActivity(provisioningActivities.UpdateInstanceStatus)
+	w.RegisterActivity(provisioningActivities.GetGoldCopyInfo)
+	w.RegisterActivity(provisioningActivities.HealthCheck)
+
+	// Register as safe for BP Designer
+	pkgworkflows.RegisterSafeActivity("RegisterTenant", provisioningActivities.RegisterTenant)
+	pkgworkflows.RegisterSafeActivity("RollbackRegisterTenant", provisioningActivities.RollbackRegisterTenant)
+	pkgworkflows.RegisterSafeActivity("RegisterInstance", provisioningActivities.RegisterInstance)
+	pkgworkflows.RegisterSafeActivity("RollbackRegisterInstance", provisioningActivities.RollbackRegisterInstance)
+	pkgworkflows.RegisterSafeActivity("CreateTenantDatabase", provisioningActivities.CreateTenantDatabase)
+	pkgworkflows.RegisterSafeActivity("RollbackCreateTenantDatabase", provisioningActivities.RollbackCreateTenantDatabase)
+	pkgworkflows.RegisterSafeActivity("CloneSchemaFromGoldCopy", provisioningActivities.CloneSchemaFromGoldCopy)
+	pkgworkflows.RegisterSafeActivity("CreateLakekeeperNamespace", provisioningActivities.CreateLakekeeperNamespace)
+	pkgworkflows.RegisterSafeActivity("RollbackCreateLakekeeperNamespace", provisioningActivities.RollbackCreateLakekeeperNamespace)
+	pkgworkflows.RegisterSafeActivity("CloneGoldCopyProducts", provisioningActivities.CloneGoldCopyProducts)
+	pkgworkflows.RegisterSafeActivity("RollbackCloneGoldCopyProducts", provisioningActivities.RollbackCloneGoldCopyProducts)
+	pkgworkflows.RegisterSafeActivity("EmitProvisioningEvent", provisioningActivities.EmitProvisioningEvent)
+	pkgworkflows.RegisterSafeActivity("UpdateTenantStatus", provisioningActivities.UpdateTenantStatus)
+	pkgworkflows.RegisterSafeActivity("UpdateInstanceStatus", provisioningActivities.UpdateInstanceStatus)
+	pkgworkflows.RegisterSafeActivity("GetGoldCopyInfo", provisioningActivities.GetGoldCopyInfo)
+	pkgworkflows.RegisterSafeActivity("HealthCheck", provisioningActivities.HealthCheck)
+	log.Println("✅ Registered Tenant Provisioning Activities for BP Designer")
 
 	// 12. Change Review System (CRS)
 	// Services

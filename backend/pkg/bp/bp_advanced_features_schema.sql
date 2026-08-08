@@ -68,8 +68,8 @@ CREATE TABLE IF NOT EXISTS bp_ai_models (
     
     -- Status
     is_active BOOLEAN DEFAULT TRUE,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
     
     CONSTRAINT fk_aimodel_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
 );
@@ -107,8 +107,8 @@ CREATE TABLE IF NOT EXISTS bp_semantic_intents (
     avg_confidence FLOAT,
     false_positive_rate FLOAT,
     
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
     
     CONSTRAINT fk_intent_step FOREIGN KEY (step_id) REFERENCES bp_steps(id) ON DELETE CASCADE,
     CONSTRAINT fk_intent_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
@@ -145,11 +145,11 @@ CREATE TABLE IF NOT EXISTS bp_scoring_matrices (
     -- Auto-optimization
     auto_tune_enabled BOOLEAN DEFAULT FALSE,
     tuning_frequency_days INT DEFAULT 7,
-    last_tuned_at TIMESTAMP,
+    last_tuned_at TIMESTAMPTZ,
     
     is_active BOOLEAN DEFAULT TRUE,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
     
     CONSTRAINT fk_matrix_step FOREIGN KEY (step_id) REFERENCES bp_steps(id) ON DELETE CASCADE,
     CONSTRAINT fk_matrix_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
@@ -176,7 +176,7 @@ CREATE TABLE IF NOT EXISTS bp_time_series_forecasts (
     features TEXT[] NOT NULL,
     
     -- Forecast data (rolling window)
-    forecast_timestamp TIMESTAMP,
+    forecast_timestamp TIMESTAMPTZ,
     predicted_queue_depth INT,
     predicted_approval_time_minutes INT,
     confidence_interval_lower FLOAT,
@@ -192,10 +192,10 @@ CREATE TABLE IF NOT EXISTS bp_time_series_forecasts (
     rmse_root_mean_squared_error FLOAT,
     
     model_refresh_interval_hours INT DEFAULT 24,
-    last_retrained_at TIMESTAMP,
+    last_retrained_at TIMESTAMPTZ,
     
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
     
     CONSTRAINT fk_forecast_step FOREIGN KEY (step_id) REFERENCES bp_steps(id) ON DELETE CASCADE,
     CONSTRAINT fk_forecast_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
@@ -236,8 +236,8 @@ CREATE TABLE IF NOT EXISTS bp_adaptive_triggers (
     success_rate FLOAT,
     
     is_active BOOLEAN DEFAULT TRUE,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
     
     CONSTRAINT fk_trigger_step FOREIGN KEY (step_id) REFERENCES bp_steps(id) ON DELETE CASCADE,
     CONSTRAINT fk_trigger_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
@@ -280,8 +280,8 @@ CREATE TABLE IF NOT EXISTS bp_resilience_policies (
     total_circuit_breaks INT DEFAULT 0,
     total_fallbacks INT DEFAULT 0,
     
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
     
     CONSTRAINT fk_resilience_step FOREIGN KEY (step_id) REFERENCES bp_steps(id) ON DELETE CASCADE,
     CONSTRAINT fk_resilience_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
@@ -322,8 +322,8 @@ CREATE TABLE IF NOT EXISTS bp_tenant_branch_overrides (
     custom_branches JSONB, -- additional branches specific to tenant
     
     is_active BOOLEAN DEFAULT TRUE,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
     
     CONSTRAINT fk_override_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
     CONSTRAINT fk_override_base_step FOREIGN KEY (base_step_id) REFERENCES bp_steps(id) ON DELETE CASCADE
@@ -343,7 +343,7 @@ CREATE TABLE IF NOT EXISTS bp_branch_analytics_extended (
     branch_id VARCHAR(255),
     
     -- Aggregated metrics (hourly/daily)
-    metric_period TIMESTAMP, -- hourly, daily aggregation
+    metric_period TIMESTAMPTZ, -- hourly, daily aggregation
     
     -- Branch distribution
     branch_selection_count INT DEFAULT 0,
@@ -373,8 +373,8 @@ CREATE TABLE IF NOT EXISTS bp_branch_analytics_extended (
     variant_group VARCHAR(50), -- control|experiment
     conversion_rate FLOAT,
     
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
     
     CONSTRAINT fk_analytics_step FOREIGN KEY (step_id) REFERENCES bp_steps(id) ON DELETE CASCADE,
     CONSTRAINT fk_analytics_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
@@ -424,12 +424,12 @@ CREATE TABLE IF NOT EXISTS bp_collaborative_decisions (
     rejected_branch_id VARCHAR(255),
     no_consensus_branch_id VARCHAR(255),
     
-    started_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    completed_at TIMESTAMP,
-    timeout_at TIMESTAMP,
+    started_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+    completed_at TIMESTAMPTZ,
+    timeout_at TIMESTAMPTZ,
     
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
     
     CONSTRAINT fk_collab_workflow FOREIGN KEY (workflow_instance_id) REFERENCES bp_branch_executions(workflow_instance_id),
     CONSTRAINT fk_collab_step FOREIGN KEY (step_id) REFERENCES bp_steps(id) ON DELETE CASCADE,
@@ -484,8 +484,8 @@ CREATE TABLE IF NOT EXISTS bp_geofence_rules (
     avg_accuracy FLOAT,
     
     is_active BOOLEAN DEFAULT TRUE,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
     
     CONSTRAINT fk_geofence_step FOREIGN KEY (step_id) REFERENCES bp_steps(id) ON DELETE CASCADE,
     CONSTRAINT fk_geofence_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
@@ -511,7 +511,7 @@ CREATE TABLE IF NOT EXISTS bp_blockchain_audit (
     
     -- Event tracking
     event_type VARCHAR(100), -- branch_evaluation_start|branch_selection|branch_completion|condition_evaluation
-    event_timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    event_timestamp TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
     event_data JSONB,
     
     -- Cryptographic verification
@@ -523,7 +523,7 @@ CREATE TABLE IF NOT EXISTS bp_blockchain_audit (
     -- Tamper detection
     tamper_detection_enabled BOOLEAN DEFAULT TRUE,
     verification_status VARCHAR(50), -- verified|unverified|tampered
-    last_verified_at TIMESTAMP,
+    last_verified_at TIMESTAMPTZ,
     verification_interval_hours INT DEFAULT 1,
     
     -- Compliance features
@@ -534,10 +534,10 @@ CREATE TABLE IF NOT EXISTS bp_blockchain_audit (
     -- Data retention policies
     right_to_erasure_enabled BOOLEAN DEFAULT TRUE,
     anonymization_method VARCHAR(50), -- hash_with_salt|pseudonymization|differential_privacy
-    expiration_date TIMESTAMP,
+    expiration_date TIMESTAMPTZ,
     
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
     
     CONSTRAINT fk_blockchain_workflow FOREIGN KEY (workflow_instance_id) REFERENCES bp_branch_executions(workflow_instance_id),
     CONSTRAINT fk_blockchain_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
@@ -588,8 +588,8 @@ CREATE TABLE IF NOT EXISTS bp_nl_configurations (
     
     created_by UUID,
     reviewed_by UUID,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
     
     CONSTRAINT fk_nl_step FOREIGN KEY (step_id) REFERENCES bp_steps(id) ON DELETE CASCADE,
     CONSTRAINT fk_nl_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
@@ -640,12 +640,12 @@ CREATE TABLE IF NOT EXISTS bp_resource_pools (
     avg_load_percent FLOAT,
     scale_events_total INT DEFAULT 0,
     
-    last_scaled_at TIMESTAMP,
-    last_load_check_at TIMESTAMP,
+    last_scaled_at TIMESTAMPTZ,
+    last_load_check_at TIMESTAMPTZ,
     
     is_active BOOLEAN DEFAULT TRUE,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
     
     CONSTRAINT fk_resource_step FOREIGN KEY (step_id) REFERENCES bp_steps(id) ON DELETE CASCADE,
     CONSTRAINT fk_resource_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
@@ -665,7 +665,7 @@ CREATE TABLE IF NOT EXISTS bp_explainability_records (
     
     -- Decision details
     selected_branch_id VARCHAR(255),
-    decision_timestamp TIMESTAMP,
+    decision_timestamp TIMESTAMPTZ,
     
     -- Explanation configuration
     explanation_detail_level VARCHAR(50), -- summary|detailed|comprehensive
@@ -696,8 +696,8 @@ CREATE TABLE IF NOT EXISTS bp_explainability_records (
     include_in_audit_log BOOLEAN DEFAULT TRUE,
     show_in_workflow_ui BOOLEAN DEFAULT TRUE,
     
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
     
     CONSTRAINT fk_explain_execution FOREIGN KEY (branch_execution_id) REFERENCES bp_branch_executions(id) ON DELETE CASCADE,
     CONSTRAINT fk_explain_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE

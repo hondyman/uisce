@@ -8,8 +8,8 @@ CREATE TABLE IF NOT EXISTS lookup_values (
     sort_order INTEGER,
     metadata JSONB DEFAULT '{}'::jsonb,
     is_active BOOLEAN DEFAULT true,
-    created_at TIMESTAMP DEFAULT NOW(),
-    updated_at TIMESTAMP DEFAULT NOW(),
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
     UNIQUE(lookup_type, value)
 );
 
@@ -52,7 +52,7 @@ INSERT INTO lookup_values (lookup_type, value, label, description, sort_order) V
 ('db_data_type', 'FLOAT', 'FLOAT', 'Floating-point number', 5),
 ('db_data_type', 'BOOLEAN', 'BOOLEAN', 'True/false value', 6),
 ('db_data_type', 'DATE', 'DATE', 'Calendar date', 7),
-('db_data_type', 'TIMESTAMP', 'TIMESTAMP', 'Date and time', 8),
+('db_data_type', 'TIMESTAMPTZ', 'TIMESTAMPTZ', 'Date and time', 8),
 ('db_data_type', 'TEXT', 'TEXT', 'Long text', 9),
 ('db_data_type', 'JSON', 'JSON', 'JSON data', 10),
 ('db_data_type', 'JSONB', 'JSONB', 'Binary JSON data', 11)

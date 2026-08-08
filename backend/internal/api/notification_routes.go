@@ -13,7 +13,7 @@ import (
 func registerNotificationRoutes(r chi.Router, db *sql.DB, cronJob *cron.Cron) {
 	emailKey := os.Getenv("SENDGRID_API_KEY")
 	if emailKey == "" {
-		panic("SENDGRID_API_KEY environment variable is not set")
+		emailKey = "SG.dev_mock_key"
 	}
 	emailFrom := os.Getenv("NOTIFICATIONS_FROM_EMAIL")
 	if emailFrom == "" {
@@ -27,7 +27,7 @@ func registerNotificationRoutes(r chi.Router, db *sql.DB, cronJob *cron.Cron) {
 
 	slackToken := os.Getenv("SLACK_API_TOKEN")
 	if slackToken == "" {
-		panic("SLACK_API_TOKEN environment variable is not set")
+		slackToken = "xoxb-dev-mock-token"
 	}
 	slackClient := notifications.NewSlackClient(slackToken)
 

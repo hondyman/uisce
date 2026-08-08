@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/hondyman/uisce/libs/db/queries"
 	"github.com/jmoiron/sqlx"
 )
 
@@ -137,24 +138,7 @@ func (s *BPService) SaveBusinessProcess(ctx context.Context, tenantID uuid.UUID,
 	//   ) { id version_number }
 	// }
 	// Note: Include nested bp_steps insert, use _inc for version_number
-	insertBPSQL := `
-		INSERT INTO business_processes (
-			id, tenant_id, process_name, description, entity_type, status,
-			is_active, created_by, created_at, total_duration_hours, version_number
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-		ON CONFLICT (id) DO UPDATE SET
-			process_name = $3,
-			description = $4,
-			entity_type = $5,
-			status = $6,
-			is_active = $7,
-			updated_by = $8,
-			updated_at = CURRENT_TIMESTAMP,
-			total_duration_hours = $10,
-			version_number = version_number + 1
-	`
-
-	_, err = tx.ExecContext(ctx, insertBPSQL,
+	_, err = tx.ExecContext(ctx, queries.UpsertBusinessProcess,
 		bp.ID, bp.TenantID, bp.ProcessName, bp.Description, bp.EntityType,
 		bp.Status, bp.IsActive, bp.CreatedBy, bp.CreatedAt,
 		bp.TotalDurationHours, bp.VersionNumber,
@@ -164,7 +148,7 @@ func (s *BPService) SaveBusinessProcess(ctx context.Context, tenantID uuid.UUID,
 	}
 
 	// Delete existing steps for this BP
-	_, err = tx.ExecContext(ctx, "DELETE FROM bp_steps WHERE business_process_id = $1", bp.ID)
+	_, err = tx.ExecContext(ctx, queries.DeleteBPSteps, bp.ID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to delete existing steps: %w", err)
 	}
@@ -174,12 +158,7 @@ func (s *BPService) SaveBusinessProcess(ctx context.Context, tenantID uuid.UUID,
 		step.ProcessID = bp.ID
 		step.CreatedAt = time.Now()
 
-		insertStepSQL := `
-			INSERT INTO bp_steps (
-				id, business_process_id, step_order, step_type, step_name,
-				assignee_role, description, duration_hours, status, config, created_at
-			) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-		`
+		insertStepSQL := queries.InsertBPStep
 
 		configJSON, err := json.Marshal(step.Config)
 		if err != nil {
@@ -231,13 +210,7 @@ func (s *BPService) GetBusinessProcess(ctx context.Context, tenantID uuid.UUID, 
 	//     }
 	//   }
 	// }
-	err := s.db.GetContext(ctx, &bp, `
-		SELECT id, tenant_id, process_name, description, entity_type, status,
-		       is_active, created_by, created_at, updated_by, updated_at,
-		       total_duration_hours, version_number
-		FROM business_processes
-		WHERE id = $1 AND tenant_id = $2
-	`, processID, tenantID)
+	err := s.db.GetContext(ctx, &bp, queries.GetBusinessProcess, processID, tenantID)
 
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -248,13 +221,7 @@ func (s *BPService) GetBusinessProcess(ctx context.Context, tenantID uuid.UUID, 
 
 	// Query steps
 	var steps []BPStep
-	err = s.db.SelectContext(ctx, &steps, `
-		SELECT id, business_process_id, step_order, step_type, step_name,
-		       assignee_role, description, duration_hours, status, config, created_at, updated_at
-		FROM bp_steps
-		WHERE business_process_id = $1
-		ORDER BY step_order ASC
-	`, processID)
+	err = s.db.SelectContext(ctx, &steps, queries.ListBPSteps, processID)
 
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return nil, fmt.Errorf("failed to get steps: %w", err)
@@ -280,17 +247,8 @@ func (s *BPService) SaveFormData(ctx context.Context, entityID string, formData 
 	//     on_conflict: {constraint: business_process_form_data_pkey, update_columns: [form_data, status, updated_at]}
 	//   ) { entity_id }
 	// }
-	query := `
-		INSERT INTO business_process_form_data (entity_id, form_data, status, updated_at)
-		VALUES ($1, $2, $3, NOW())
-		ON CONFLICT (entity_id) 
-		DO UPDATE SET 
-			form_data = EXCLUDED.form_data,
-			status = EXCLUDED.status,
-			updated_at = NOW()
-	`
 
-	_, err = s.db.ExecContext(ctx, query, entityID, dataJSON, status)
+	_, err = s.db.ExecContext(ctx, queries.UpsertFormData, entityID, dataJSON, status)
 	if err != nil {
 		return fmt.Errorf("failed to save form data: %w", err)
 	}
@@ -320,15 +278,7 @@ func (s *BPService) ListBusinessProcesses(ctx context.Context, tenantID uuid.UUI
 	//     aggregate { count }
 	//   }
 	// }
-	err := s.db.SelectContext(ctx, &bps, `
-		SELECT id, tenant_id, process_name, description, entity_type, status,
-		       is_active, created_by, created_at, updated_by, updated_at,
-		       total_duration_hours, version_number
-		FROM business_processes
-		WHERE tenant_id = $1
-		ORDER BY created_at DESC
-		LIMIT $2 OFFSET $3
-	`, tenantID, limit, offset)
+	err := s.db.SelectContext(ctx, &bps, queries.ListBusinessProcesses, tenantID, limit, offset)
 
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return nil, 0, fmt.Errorf("failed to list business processes: %w", err)
@@ -336,9 +286,7 @@ func (s *BPService) ListBusinessProcesses(ctx context.Context, tenantID uuid.UUI
 
 	// Get total count
 	var total int64
-	err = s.db.GetContext(ctx, &total, `
-		SELECT COUNT(*) FROM business_processes WHERE tenant_id = $1
-	`, tenantID)
+	err = s.db.GetContext(ctx, &total, queries.CountBusinessProcesses, tenantID)
 
 	if err != nil {
 		return nil, 0, fmt.Errorf("failed to get business process count: %w", err)
@@ -347,13 +295,7 @@ func (s *BPService) ListBusinessProcesses(ctx context.Context, tenantID uuid.UUI
 	// Load steps for each BP
 	for i := range bps {
 		var steps []BPStep
-		err = s.db.SelectContext(ctx, &steps, `
-			SELECT id, business_process_id, step_order, step_type, step_name,
-			       assignee_role, description, duration_hours, status, config, created_at, updated_at
-			FROM bp_steps
-			WHERE business_process_id = $1
-			ORDER BY step_order ASC
-		`, bps[i].ID)
+		err = s.db.SelectContext(ctx, &steps, queries.ListBPSteps, bps[i].ID)
 
 		if err != nil && !errors.Is(err, sql.ErrNoRows) {
 			return nil, 0, fmt.Errorf("failed to load steps for BP %s: %w", bps[i].ID, err)
@@ -389,14 +331,8 @@ func (s *BPService) StartExecution(ctx context.Context, tenantID uuid.UUID, proc
 	//     initiated_at: "2024-01-15T10:00:00Z", execution_status: "running"
 	//   }) { id }
 	// }
-	insertSQL := `
-		INSERT INTO bp_executions (
-			id, tenant_id, business_process_id, entity_id, initiated_by,
-			initiated_at, execution_status
-		) VALUES ($1, $2, $3, $4, $5, $6, $7)
-	`
 
-	_, err := s.db.ExecContext(ctx, insertSQL,
+	_, err := s.db.ExecContext(ctx, queries.InsertBPExecution,
 		exec.ID, exec.TenantID, exec.BusinessProcessID, exec.EntityID,
 		exec.InitiatedBy, exec.InitiatedAt, exec.ExecutionStatus,
 	)
@@ -417,13 +353,8 @@ func (s *BPService) UpdateExecutionStatus(ctx context.Context, executionID uuid.
 	//     _set: {execution_status: "completed", workflow_id: "workflow-123", updated_at: "now()"}
 	//   ) { affected_rows }
 	// }
-	updateSQL := `
-		UPDATE bp_executions
-		SET execution_status = $1, workflow_id = $2, updated_at = CURRENT_TIMESTAMP
-		WHERE id = $3
-	`
 
-	result, err := s.db.ExecContext(ctx, updateSQL, status, workflowID, executionID)
+	result, err := s.db.ExecContext(ctx, queries.UpdateBPExecutionStatus, status, workflowID, executionID)
 	if err != nil {
 		return fmt.Errorf("failed to update execution status: %w", err)
 	}
@@ -460,14 +391,8 @@ func (s *BPService) LogAuditEntry(ctx context.Context, tenantID uuid.UUID, proce
 	//     timestamp: "now()"
 	//   }) { id }
 	// }
-	insertSQL := `
-		INSERT INTO bp_audit_trail (
-			id, tenant_id, business_process_id, action_type, actor_email,
-			action_details, timestamp
-		) VALUES ($1, $2, $3, $4, $5, $6, CURRENT_TIMESTAMP)
-	`
 
-	_, err = s.db.ExecContext(ctx, insertSQL,
+	_, err = s.db.ExecContext(ctx, queries.InsertAuditTrail,
 		uuid.New(), tenantID, processID, actionType, actor, detailsJSON,
 	)
 
@@ -492,14 +417,7 @@ func (s *BPService) GetAuditTrail(ctx context.Context, tenantID uuid.UUID, proce
 	//     action_details timestamp ip_address
 	//   }
 	// }
-	err := s.db.SelectContext(ctx, &entries, `
-		SELECT id, tenant_id, business_process_id, action_type, actor_email,
-		       actor_role, action_details, timestamp, ip_address
-		FROM bp_audit_trail
-		WHERE tenant_id = $1 AND business_process_id = $2
-		ORDER BY timestamp DESC
-		LIMIT $3
-	`, tenantID, processID, limit)
+	err := s.db.SelectContext(ctx, &entries, queries.GetAuditTrail, tenantID, processID, limit)
 
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return nil, fmt.Errorf("failed to get audit trail: %w", err)
@@ -577,13 +495,7 @@ func (s *BPService) DeleteBusinessProcess(ctx context.Context, tenantID uuid.UUI
 	//     _set: {status: "archived", is_active: false, updated_at: "now()"}
 	//   ) { affected_rows }
 	// }
-	updateSQL := `
-		UPDATE business_processes
-		SET status = 'archived', is_active = false, updated_at = CURRENT_TIMESTAMP
-		WHERE id = $1 AND tenant_id = $2
-	`
-
-	result, err := s.db.ExecContext(ctx, updateSQL, processID, tenantID)
+	result, err := s.db.ExecContext(ctx, queries.ArchiveBusinessProcess, processID, tenantID)
 	if err != nil {
 		return fmt.Errorf("failed to delete business process: %w", err)
 	}
@@ -619,15 +531,7 @@ func (s *BPService) GetExecutionHistory(ctx context.Context, tenantID uuid.UUID,
 	//     total_duration_minutes error_message metadata
 	//   }
 	// }
-	err := s.db.SelectContext(ctx, &execs, `
-		SELECT id, tenant_id, business_process_id, workflow_id, entity_id,
-		       initiated_by, initiated_at, completed_at, execution_status,
-		       current_step_order, total_duration_minutes, error_message, metadata
-		FROM bp_executions
-		WHERE tenant_id = $1 AND business_process_id = $2
-		ORDER BY initiated_at DESC
-		LIMIT $3
-	`, tenantID, processID, limit)
+	err := s.db.SelectContext(ctx, &execs, queries.GetExecutionHistory, tenantID, processID, limit)
 
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return nil, fmt.Errorf("failed to get execution history: %w", err)

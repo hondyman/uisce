@@ -6,8 +6,8 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
-	"strconv"
 	"strings"
 	"time"
 )
@@ -39,6 +39,10 @@ func NewMigrationRunner(db *sql.DB, migrationDir string) *MigrationRunner {
 
 // Init creates the migrations table if it doesn't exist
 func (mr *MigrationRunner) Init() error {
+	if _, err := mr.db.Exec("SET TIME ZONE 'UTC'"); err != nil {
+		return fmt.Errorf("failed to set timezone to UTC: %w", err)
+	}
+
 	_, err := mr.db.Exec(fmt.Sprintf(`
 		CREATE TABLE IF NOT EXISTS %s (
 			version VARCHAR(255) PRIMARY KEY,
@@ -67,47 +71,8 @@ func (mr *MigrationRunner) LoadMigrations() ([]Migration, error) {
 		migrations = append(migrations, migration)
 	}
 
-	// Sort migrations by leading numeric prefix when possible, otherwise lexicographically
+	// Sort migrations lexicographically by ID (filename prefix) to ensure proper ordering (e.g. 0001_ comes before 20250208_)
 	sort.Slice(migrations, func(i, j int) bool {
-		leadingNum := func(s string) (int, bool) {
-			var buf strings.Builder
-			for _, r := range s {
-				if r >= '0' && r <= '9' {
-					buf.WriteRune(r)
-				} else {
-					break
-				}
-			}
-			if buf.Len() == 0 {
-				return 0, false
-			}
-			n, err := strconv.Atoi(buf.String())
-			if err != nil {
-				return 0, false
-			}
-			return n, true
-		}
-
-		iNum, iOK := leadingNum(migrations[i].ID)
-		jNum, jOK := leadingNum(migrations[j].ID)
-
-		if iOK && jOK {
-			if iNum != jNum {
-				return iNum < jNum
-			}
-			// same numeric prefix, fall back to full string compare
-			return migrations[i].ID < migrations[j].ID
-		}
-
-		if iOK && !jOK {
-			// numeric-prefixed IDs come before non-numeric-prefixed
-			return true
-		}
-		if !iOK && jOK {
-			return false
-		}
-
-		// Fallback to string comparison
 		return migrations[i].ID < migrations[j].ID
 	})
 
@@ -178,6 +143,11 @@ func (mr *MigrationRunner) GetAppliedMigrations() (map[string]bool, error) {
 func (mr *MigrationRunner) ApplyMigration(migration Migration) error {
 	log.Printf("Applying migration: %s - %s", migration.ID, migration.Name)
 
+	// Validate UTC compliance before applying
+	if err := mr.validateUTCTimestamps(migration); err != nil {
+		return fmt.Errorf("UTC compliance check failed: %w", err)
+	}
+
 	// Start transaction
 	tx, err := mr.db.Begin()
 	if err != nil {
@@ -214,6 +184,39 @@ func (mr *MigrationRunner) ApplyMigration(migration Migration) error {
 	}
 
 	log.Printf("Successfully applied migration: %s", migration.ID)
+	return nil
+}
+
+// validateUTCTimestamps checks that a migration does not introduce bare TIMESTAMP columns
+func (mr *MigrationRunner) validateUTCTimestamps(migration Migration) error {
+	// Skip down migrations
+	if migration.DownSQL != "" && strings.Contains(migration.UpSQL, "-- +migrate Down") {
+		return nil
+	}
+
+	lines := strings.Split(migration.UpSQL, "\n")
+	for lineNum, line := range lines {
+		trimmed := strings.TrimSpace(line)
+
+		// Skip comments
+		if strings.HasPrefix(trimmed, "--") {
+			continue
+		}
+
+		// Check for bare TIMESTAMP column definitions (not TIMESTAMPTZ)
+		// Pattern: column_name TIMESTAMP (followed by NOT NULL, NULL, DEFAULT, comma, or end)
+		bareTimestampRegex := regexp.MustCompile(`(?i)^\s*[a-z_]+\s+timestamp\s+(NOT\s+NULL|NULL|DEFAULT|,\s*\w|\)|\s*$)`)
+		if bareTimestampRegex.MatchString(line) && !strings.Contains(strings.ToLower(line), "timestamptz") {
+			return fmt.Errorf("line %d: bare TIMESTAMP detected (use TIMESTAMPTZ for UTC compliance): %s", lineNum+1, trimmed)
+		}
+
+		// Check for ALTER TABLE ... TYPE TIMESTAMP (not timestamptz)
+		alterRegex := regexp.MustCompile(`(?i)ALTER\s+TABLE.*ALTER\s+COLUMN.*TYPE\s+TIMESTAMP[^a-z]`)
+		if alterRegex.MatchString(line) {
+			return fmt.Errorf("line %d: converting to bare TIMESTAMP (use TIMESTAMPTZ): %s", lineNum+1, trimmed)
+		}
+	}
+
 	return nil
 }
 

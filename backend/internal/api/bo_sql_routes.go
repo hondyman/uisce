@@ -10,6 +10,7 @@ import (
 
 	"github.com/hondyman/uisce/backend/internal/boresolver"
 	"github.com/hondyman/uisce/backend/internal/cache"
+	"github.com/hondyman/uisce/backend/internal/handlers"
 	"github.com/hondyman/uisce/backend/internal/logging"
 	"github.com/jmoiron/sqlx"
 	"github.com/hondyman/uisce/libs/jwt-middleware"
@@ -448,13 +449,19 @@ func (s *Server) ExecuteSQLHandler(w http.ResponseWriter, r *http.Request) {
 
 // GetChannelAuditBillingSummaryHandler returns aggregated query billing and usage telemetry by channel
 func (s *Server) GetChannelAuditBillingSummaryHandler(w http.ResponseWriter, r *http.Request) {
-	tenantID := r.URL.Query().Get("tenant_id")
-	if tenantID == "" {
-		if claims := jwtmiddleware.GetClaimsFromContext(r); claims != nil && claims.TenantID != "" {
-			tenantID = claims.TenantID
-		} else {
-			tenantID = "core"
+	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", handlers.SecurityContextDeps{
+		Resolver: s.DatasourceResolver,
+	})
+	if err != nil {
+		claims := jwtmiddleware.GetClaimsFromContext(r)
+		if claims == nil || claims.TenantID == "" {
+			http.Error(w, "security context initialization failed: "+err.Error(), http.StatusUnauthorized)
+			return
 		}
+	}
+	tenantID := secCtx.TenantID
+	if tenantID == "" {
+		tenantID = "core"
 	}
 
 	summaries, err := s.auditService.GetChannelBillingSummary(r.Context(), tenantID)
@@ -472,13 +479,19 @@ func (s *Server) GetChannelAuditBillingSummaryHandler(w http.ResponseWriter, r *
 
 // GetChannelAuditLogsHandler returns recent channel query execution audit logs
 func (s *Server) GetChannelAuditLogsHandler(w http.ResponseWriter, r *http.Request) {
-	tenantID := r.URL.Query().Get("tenant_id")
-	if tenantID == "" {
-		if claims := jwtmiddleware.GetClaimsFromContext(r); claims != nil && claims.TenantID != "" {
-			tenantID = claims.TenantID
-		} else {
-			tenantID = "core"
+	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", handlers.SecurityContextDeps{
+		Resolver: s.DatasourceResolver,
+	})
+	if err != nil {
+		claims := jwtmiddleware.GetClaimsFromContext(r)
+		if claims == nil || claims.TenantID == "" {
+			http.Error(w, "security context initialization failed: "+err.Error(), http.StatusUnauthorized)
+			return
 		}
+	}
+	tenantID := secCtx.TenantID
+	if tenantID == "" {
+		tenantID = "core"
 	}
 
 	logs, err := s.auditService.GetRecentAuditLogs(r.Context(), tenantID, 100)

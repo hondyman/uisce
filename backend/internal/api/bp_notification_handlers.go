@@ -11,7 +11,8 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jmoiron/sqlx"
-	"github.com/hondyman/uisce/libs/jwt-middleware"
+
+	"github.com/hondyman/uisce/backend/internal/handlers"
 )
 
 // ============================================================================
@@ -119,11 +120,12 @@ type BPNotificationLog struct {
 // ============================================================================
 
 type BPNotificationHandlers struct {
-	db *sqlx.DB
+	db           *sqlx.DB
+	securityDeps handlers.SecurityContextDeps
 }
 
-func NewBPNotificationHandlers(db *sqlx.DB) *BPNotificationHandlers {
-	return &BPNotificationHandlers{db: db}
+func NewBPNotificationHandlers(db *sqlx.DB, securityDeps handlers.SecurityContextDeps) *BPNotificationHandlers {
+	return &BPNotificationHandlers{db: db, securityDeps: securityDeps}
 }
 
 func (h *BPNotificationHandlers) RegisterRoutes(r chi.Router) {
@@ -166,20 +168,13 @@ func (h *BPNotificationHandlers) RegisterRoutes(r chi.Router) {
 // ============================================================================
 
 func (h *BPNotificationHandlers) GetTemplates(w http.ResponseWriter, r *http.Request) {
-	tenantID := r.URL.Query().Get("tenant_id")
-	if tenantID == "" {
-		tenantID = jwtmiddleware.GetClaimsFromContext(r).TenantID
+	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
+	if err != nil {
+		respondWithError(w, http.StatusUnauthorized, "Unauthorized: "+err.Error())
+		return
 	}
-	datasourceID := r.URL.Query().Get("datasource_id")
-	if datasourceID == "" {
-		datasourceID = r.URL.Query().Get("tenant_instance_id")
-	}
-	if datasourceID == "" {
-		datasourceID = r.Header.Get("X-Tenant-Datasource-ID")
-	}
-	if datasourceID == "" {
-		datasourceID = r.Header.Get("X-Tenant-Instance-ID")
-	}
+	tenantID := secCtx.TenantID
+	datasourceID := secCtx.DatasourceID
 
 	if tenantID == "" {
 		respondWithError(w, http.StatusBadRequest, "Missing tenant context")
@@ -221,11 +216,13 @@ func (h *BPNotificationHandlers) GetTemplate(w http.ResponseWriter, r *http.Requ
 }
 
 func (h *BPNotificationHandlers) CreateTemplate(w http.ResponseWriter, r *http.Request) {
-	tenantID := r.URL.Query().Get("tenant_id")
-	datasourceID := r.URL.Query().Get("datasource_id")
-	if datasourceID == "" {
-		datasourceID = r.URL.Query().Get("datasource_id")
+	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
+	if err != nil {
+		respondWithError(w, http.StatusUnauthorized, "Unauthorized: "+err.Error())
+		return
 	}
+	tenantID := secCtx.TenantID
+	datasourceID := secCtx.DatasourceID
 
 	var req BPNotificationTemplate
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -247,7 +244,7 @@ func (h *BPNotificationHandlers) CreateTemplate(w http.ResponseWriter, r *http.R
 	           include_attachments, include_quick_actions, quick_actions, created_by)
 	          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25)`
 
-	_, err := h.db.Exec(query, req.ID, req.TenantID, req.DatasourceID, req.TemplateKey, req.TemplateName,
+	_, err = h.db.Exec(query, req.ID, req.TenantID, req.DatasourceID, req.TemplateKey, req.TemplateName,
 		req.Description, req.Category, req.SubjectTemplate, req.BodyTemplate, req.TemplateVariables,
 		req.EnabledChannels, req.DefaultChannel, req.SendConditions, req.SendDelayMinutes, req.DigestMode,
 		req.EscalationEnabled, req.EscalationDelayMinutes, req.EscalationRecipientRoles, req.IsSystem,
@@ -339,11 +336,13 @@ func (h *BPNotificationHandlers) RenderTemplate(w http.ResponseWriter, r *http.R
 // ============================================================================
 
 func (h *BPNotificationHandlers) SendNotification(w http.ResponseWriter, r *http.Request) {
-	tenantID := r.URL.Query().Get("tenant_id")
-	datasourceID := r.URL.Query().Get("datasource_id")
-	if datasourceID == "" {
-		datasourceID = r.URL.Query().Get("datasource_id")
+	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
+	if err != nil {
+		respondWithError(w, http.StatusUnauthorized, "Unauthorized: "+err.Error())
+		return
 	}
+	tenantID := secCtx.TenantID
+	datasourceID := secCtx.DatasourceID
 
 	var req struct {
 		TemplateKey       string                 `json:"template_key"`
@@ -364,7 +363,7 @@ func (h *BPNotificationHandlers) SendNotification(w http.ResponseWriter, r *http
 
 	// Get template
 	var template BPNotificationTemplate
-	err := h.db.Get(&template,
+	err = h.db.Get(&template,
 		"SELECT * FROM notification_templates WHERE tenant_id = $1 AND datasource_id = $2 AND template_key = $3 AND is_active = true",
 		tenantID, datasourceID, req.TemplateKey)
 	if err != nil {
@@ -416,11 +415,13 @@ func (h *BPNotificationHandlers) SendNotification(w http.ResponseWriter, r *http
 }
 
 func (h *BPNotificationHandlers) SendBatchNotifications(w http.ResponseWriter, r *http.Request) {
-	tenantID := r.URL.Query().Get("tenant_id")
-	datasourceID := r.URL.Query().Get("datasource_id")
-	if datasourceID == "" {
-		datasourceID = r.URL.Query().Get("datasource_id")
+	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
+	if err != nil {
+		respondWithError(w, http.StatusUnauthorized, "Unauthorized: "+err.Error())
+		return
 	}
+	tenantID := secCtx.TenantID
+	datasourceID := secCtx.DatasourceID
 
 	var req struct {
 		Notifications []struct {
@@ -497,15 +498,17 @@ func (h *BPNotificationHandlers) SendBatchNotifications(w http.ResponseWriter, r
 // ============================================================================
 
 func (h *BPNotificationHandlers) GetUserPreferences(w http.ResponseWriter, r *http.Request) {
-	tenantID := r.URL.Query().Get("tenant_id")
-	datasourceID := r.URL.Query().Get("datasource_id")
-	if datasourceID == "" {
-		datasourceID = r.URL.Query().Get("datasource_id")
+	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
+	if err != nil {
+		respondWithError(w, http.StatusUnauthorized, "Unauthorized: "+err.Error())
+		return
 	}
+	tenantID := secCtx.TenantID
+	datasourceID := secCtx.DatasourceID
 	userID := r.URL.Query().Get("user_id")
 
 	var prefs BPUserNotificationPreferences
-	err := h.db.Get(&prefs,
+	err = h.db.Get(&prefs,
 		"SELECT * FROM user_notification_preferences WHERE tenant_id = $1 AND datasource_id = $2 AND user_id = $3",
 		tenantID, datasourceID, userID)
 
@@ -526,11 +529,13 @@ func (h *BPNotificationHandlers) GetUserPreferences(w http.ResponseWriter, r *ht
 }
 
 func (h *BPNotificationHandlers) UpdateUserPreferences(w http.ResponseWriter, r *http.Request) {
-	tenantID := r.URL.Query().Get("tenant_id")
-	datasourceID := r.URL.Query().Get("datasource_id")
-	if datasourceID == "" {
-		datasourceID = r.URL.Query().Get("datasource_id")
+	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
+	if err != nil {
+		respondWithError(w, http.StatusUnauthorized, "Unauthorized: "+err.Error())
+		return
 	}
+	tenantID := secCtx.TenantID
+	datasourceID := secCtx.DatasourceID
 
 	var req BPUserNotificationPreferences
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -576,7 +581,7 @@ func (h *BPNotificationHandlers) UpdateUserPreferences(w http.ResponseWriter, r 
 	              dnd_end_time = EXCLUDED.dnd_end_time,
 	              min_priority = EXCLUDED.min_priority`
 
-	_, err := h.db.Exec(query, req.ID, req.TenantID, req.DatasourceID, req.UserID,
+	_, err = h.db.Exec(query, req.ID, req.TenantID, req.DatasourceID, req.UserID,
 		req.EmailEnabled, req.EmailAddress, req.SmsEnabled, req.PhoneNumber,
 		req.SlackEnabled, req.SlackUserID, req.SlackWebhookURL,
 		req.TeamsEnabled, req.TeamsUserID, req.TeamsWebhookURL,
@@ -597,20 +602,13 @@ func (h *BPNotificationHandlers) UpdateUserPreferences(w http.ResponseWriter, r 
 // ============================================================================
 
 func (h *BPNotificationHandlers) GetLogs(w http.ResponseWriter, r *http.Request) {
-	tenantID := r.URL.Query().Get("tenant_id")
-	if tenantID == "" {
-		tenantID = jwtmiddleware.GetClaimsFromContext(r).TenantID
+	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
+	if err != nil {
+		respondWithError(w, http.StatusUnauthorized, "Unauthorized: "+err.Error())
+		return
 	}
-	datasourceID := r.URL.Query().Get("datasource_id")
-	if datasourceID == "" {
-		datasourceID = r.URL.Query().Get("tenant_instance_id")
-	}
-	if datasourceID == "" {
-		datasourceID = r.Header.Get("X-Tenant-Datasource-ID")
-	}
-	if datasourceID == "" {
-		datasourceID = r.Header.Get("X-Tenant-Instance-ID")
-	}
+	tenantID := secCtx.TenantID
+	datasourceID := secCtx.DatasourceID
 
 	if tenantID == "" {
 		respondWithError(w, http.StatusBadRequest, "Missing tenant context")
@@ -668,11 +666,13 @@ func (h *BPNotificationHandlers) GetLog(w http.ResponseWriter, r *http.Request) 
 }
 
 func (h *BPNotificationHandlers) GetAnalytics(w http.ResponseWriter, r *http.Request) {
-	tenantID := r.URL.Query().Get("tenant_id")
-	datasourceID := r.URL.Query().Get("datasource_id")
-	if datasourceID == "" {
-		datasourceID = r.URL.Query().Get("datasource_id")
+	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
+	if err != nil {
+		respondWithError(w, http.StatusUnauthorized, "Unauthorized: "+err.Error())
+		return
 	}
+	tenantID := secCtx.TenantID
+	datasourceID := secCtx.DatasourceID
 
 	var stats struct {
 		TotalSent      int     `db:"total_sent"`
@@ -698,7 +698,7 @@ func (h *BPNotificationHandlers) GetAnalytics(w http.ResponseWriter, r *http.Req
 	          WHERE tenant_id = $1 AND datasource_id = $2
 	            AND created_at >= NOW() - INTERVAL '30 days'`
 
-	err := h.db.Get(&stats, query, tenantID, datasourceID)
+	err = h.db.Get(&stats, query, tenantID, datasourceID)
 	if err != nil {
 		respondWithError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -712,11 +712,13 @@ func (h *BPNotificationHandlers) GetAnalytics(w http.ResponseWriter, r *http.Req
 // ============================================================================
 
 func (h *BPNotificationHandlers) GetPendingDigests(w http.ResponseWriter, r *http.Request) {
-	tenantID := r.URL.Query().Get("tenant_id")
-	datasourceID := r.URL.Query().Get("datasource_id")
-	if datasourceID == "" {
-		datasourceID = r.URL.Query().Get("datasource_id")
+	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
+	if err != nil {
+		respondWithError(w, http.StatusUnauthorized, "Unauthorized: "+err.Error())
+		return
 	}
+	tenantID := secCtx.TenantID
+	datasourceID := secCtx.DatasourceID
 
 	type Digest struct {
 		ID                string    `json:"id" db:"id"`
@@ -728,10 +730,10 @@ func (h *BPNotificationHandlers) GetPendingDigests(w http.ResponseWriter, r *htt
 	}
 
 	var digests []Digest
-	err := h.db.Select(&digests,
-		`SELECT id, recipient_user_id, digest_period, notification_count, scheduled_send_at, status 
-		 FROM notification_digests 
-		 WHERE tenant_id = $1 AND datasource_id = $2 AND status = 'pending' 
+	err = h.db.Select(&digests,
+		`SELECT id, recipient_user_id, digest_period, notification_count, scheduled_send_at, status
+		 FROM notification_digests
+		 WHERE tenant_id = $1 AND datasource_id = $2 AND status = 'pending'
 		 AND scheduled_send_at <= NOW()
 		 ORDER BY scheduled_send_at`,
 		tenantID, datasourceID)
@@ -745,16 +747,19 @@ func (h *BPNotificationHandlers) GetPendingDigests(w http.ResponseWriter, r *htt
 }
 
 func (h *BPNotificationHandlers) ProcessDigests(w http.ResponseWriter, r *http.Request) {
-	tenantID := r.URL.Query().Get("tenant_id")
-	datasourceID := r.URL.Query().Get("datasource_id")
-	if datasourceID == "" {
-		datasourceID = r.URL.Query().Get("datasource_id")
+	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
+	if err != nil {
+		respondWithError(w, http.StatusUnauthorized, "Unauthorized: "+err.Error())
+		return
 	}
+	tenantID := secCtx.TenantID
+	datasourceID := secCtx.DatasourceID
 
-	result, err := h.db.Exec(
-		`UPDATE notification_digests 
-		 SET status = 'sent', sent_at = NOW() 
-		 WHERE tenant_id = $1 AND datasource_id = $2 
+	var result sql.Result
+	result, err = h.db.Exec(
+		`UPDATE notification_digests
+		 SET status = 'sent', sent_at = NOW()
+		 WHERE tenant_id = $1 AND datasource_id = $2
 		   AND status = 'pending' AND scheduled_send_at <= NOW()`,
 		tenantID, datasourceID)
 

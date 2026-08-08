@@ -7,16 +7,18 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/hondyman/uisce/backend/internal/data_intelligence/tiering"
+	"github.com/hondyman/uisce/backend/internal/handlers"
 )
 
 // TieringHandler handles storage tiering API requests
 type TieringHandler struct {
-	service *tiering.StorageTiering
+	service      *tiering.StorageTiering
+	securityDeps handlers.SecurityContextDeps
 }
 
 // NewTieringHandler creates a new tiering handler
-func NewTieringHandler(service *tiering.StorageTiering) *TieringHandler {
-	return &TieringHandler{service: service}
+func NewTieringHandler(service *tiering.StorageTiering, securityDeps handlers.SecurityContextDeps) *TieringHandler {
+	return &TieringHandler{service: service, securityDeps: securityDeps}
 }
 
 // RegisterRoutes registers tiering routes
@@ -32,13 +34,13 @@ func (h *TieringHandler) RegisterRoutes(r chi.Router) {
 
 // ListPlans returns all plans for a tenant
 func (h *TieringHandler) ListPlans(w http.ResponseWriter, r *http.Request) {
-	tenantID := r.URL.Query().Get("tenant_id")
-	if tenantID == "" {
-		http.Error(w, "tenant_id index is required", http.StatusBadRequest)
+	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
+	if err != nil {
+		http.Error(w, "security context initialization failed: "+err.Error(), http.StatusUnauthorized)
 		return
 	}
 
-	plans, err := h.service.ListPlans(r.Context(), tenantID)
+	plans, err := h.service.ListPlans(r.Context(), secCtx.TenantID)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return

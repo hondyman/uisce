@@ -12,15 +12,18 @@ import (
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
 	"github.com/jmoiron/sqlx"
+
+	"github.com/hondyman/uisce/backend/internal/handlers"
 )
 
 // ProcessMonitorHandlers handles live process monitoring and WebSocket connections
 type ProcessMonitorHandlers struct {
-	db        *sqlx.DB
-	upgrader  websocket.Upgrader
-	clients   map[*websocket.Conn]ClientInfo
-	mu        sync.RWMutex
-	broadcast chan ProcessEvent
+	db           *sqlx.DB
+	securityDeps handlers.SecurityContextDeps
+	upgrader     websocket.Upgrader
+	clients      map[*websocket.Conn]ClientInfo
+	mu           sync.RWMutex
+	broadcast    chan ProcessEvent
 }
 
 // ClientInfo stores metadata about connected WebSocket clients
@@ -85,9 +88,10 @@ type InterventionRequest struct {
 }
 
 // NewProcessMonitorHandlers creates a new process monitor handler
-func NewProcessMonitorHandlers(db *sqlx.DB) *ProcessMonitorHandlers {
+func NewProcessMonitorHandlers(db *sqlx.DB, securityDeps handlers.SecurityContextDeps) *ProcessMonitorHandlers {
 	h := &ProcessMonitorHandlers{
-		db: db,
+		db:           db,
+		securityDeps: securityDeps,
 		upgrader: websocket.Upgrader{
 			ReadBufferSize:  1024,
 			WriteBufferSize: 1024,
@@ -123,9 +127,13 @@ func (h *ProcessMonitorHandlers) RegisterRoutes(r chi.Router) {
 
 // HandleWebSocket handles WebSocket connections for real-time updates
 func (h *ProcessMonitorHandlers) HandleWebSocket(w http.ResponseWriter, r *http.Request) {
-	// Extract tenant/datasource from query params
-	tenantID := r.URL.Query().Get("tenant_id")
-	datasourceID := r.URL.Query().Get("datasource_id")
+	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
+	if err != nil {
+		http.Error(w, "Unauthorized: "+err.Error(), http.StatusUnauthorized)
+		return
+	}
+	tenantID := secCtx.TenantID
+	datasourceID := secCtx.DatasourceID
 
 	if tenantID == "" || datasourceID == "" {
 		http.Error(w, "Missing tenant_id or datasource_id", http.StatusBadRequest)
@@ -243,8 +251,13 @@ func (h *ProcessMonitorHandlers) BroadcastEvent(event ProcessEvent) {
 
 // GetActiveInstances returns all currently running process instances
 func (h *ProcessMonitorHandlers) GetActiveInstances(w http.ResponseWriter, r *http.Request) {
-	tenantID := r.URL.Query().Get("tenant_id")
-	datasourceID := r.URL.Query().Get("datasource_id")
+	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
+	if err != nil {
+		http.Error(w, "Unauthorized: "+err.Error(), http.StatusUnauthorized)
+		return
+	}
+	tenantID := secCtx.TenantID
+	datasourceID := secCtx.DatasourceID
 	workflowType := r.URL.Query().Get("workflow_type")
 	status := r.URL.Query().Get("status")
 
@@ -333,7 +346,7 @@ func (h *ProcessMonitorHandlers) GetActiveInstances(w http.ResponseWriter, r *ht
 	query += " ORDER BY ws.last_activity_at DESC LIMIT 100"
 
 	var instances []ProcessInstance
-	err := h.db.Select(&instances, query, args...)
+	err = h.db.Select(&instances, query, args...)
 	if err != nil {
 		log.Printf("Error querying active instances: %v", err)
 		http.Error(w, "Failed to fetch active instances", http.StatusInternalServerError)
@@ -356,8 +369,13 @@ func (h *ProcessMonitorHandlers) GetActiveInstances(w http.ResponseWriter, r *ht
 // GetInstanceDetails returns detailed information about a specific process instance
 func (h *ProcessMonitorHandlers) GetInstanceDetails(w http.ResponseWriter, r *http.Request) {
 	workflowID := chi.URLParam(r, "workflowID")
-	tenantID := r.URL.Query().Get("tenant_id")
-	datasourceID := r.URL.Query().Get("datasource_id")
+	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
+	if err != nil {
+		http.Error(w, "Unauthorized: "+err.Error(), http.StatusUnauthorized)
+		return
+	}
+	tenantID := secCtx.TenantID
+	datasourceID := secCtx.DatasourceID
 
 	if tenantID == "" || datasourceID == "" {
 		http.Error(w, "Missing tenant_id or datasource_id", http.StatusBadRequest)
@@ -420,7 +438,7 @@ func (h *ProcessMonitorHandlers) GetInstanceDetails(w http.ResponseWriter, r *ht
 		LEFT JOIN latest_step ls ON ws.workflow_id = ls.workflow_id
 	`
 
-	err := h.db.Get(&instance, query, workflowID, tenantID, datasourceID)
+	err = h.db.Get(&instance, query, workflowID, tenantID, datasourceID)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			http.Error(w, "Instance not found", http.StatusNotFound)
@@ -459,8 +477,13 @@ func (h *ProcessMonitorHandlers) GetInstanceDetails(w http.ResponseWriter, r *ht
 // GetExecutionHistory returns full execution history for a workflow
 func (h *ProcessMonitorHandlers) GetExecutionHistory(w http.ResponseWriter, r *http.Request) {
 	workflowID := chi.URLParam(r, "workflowID")
-	tenantID := r.URL.Query().Get("tenant_id")
-	datasourceID := r.URL.Query().Get("datasource_id")
+	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
+	if err != nil {
+		http.Error(w, "Unauthorized: "+err.Error(), http.StatusUnauthorized)
+		return
+	}
+	tenantID := secCtx.TenantID
+	datasourceID := secCtx.DatasourceID
 
 	if tenantID == "" || datasourceID == "" {
 		http.Error(w, "Missing tenant_id or datasource_id", http.StatusBadRequest)
@@ -483,7 +506,7 @@ func (h *ProcessMonitorHandlers) GetExecutionHistory(w http.ResponseWriter, r *h
 	`
 
 	var history []StepExecution
-	err := h.db.Select(&history, query, workflowID, tenantID, datasourceID)
+	err = h.db.Select(&history, query, workflowID, tenantID, datasourceID)
 	if err != nil {
 		log.Printf("Error querying execution history: %v", err)
 		http.Error(w, "Failed to fetch execution history", http.StatusInternalServerError)
@@ -496,8 +519,13 @@ func (h *ProcessMonitorHandlers) GetExecutionHistory(w http.ResponseWriter, r *h
 
 // HandleIntervention handles manual intervention requests
 func (h *ProcessMonitorHandlers) HandleIntervention(w http.ResponseWriter, r *http.Request) {
-	tenantID := r.URL.Query().Get("tenant_id")
-	datasourceID := r.URL.Query().Get("datasource_id")
+	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
+	if err != nil {
+		http.Error(w, "Unauthorized: "+err.Error(), http.StatusUnauthorized)
+		return
+	}
+	tenantID := secCtx.TenantID
+	datasourceID := secCtx.DatasourceID
 
 	if tenantID == "" || datasourceID == "" {
 		http.Error(w, "Missing tenant_id or datasource_id", http.StatusBadRequest)
@@ -529,7 +557,7 @@ func (h *ProcessMonitorHandlers) HandleIntervention(w http.ResponseWriter, r *ht
 	interventionID := uuid.New().String()
 
 	// Log intervention to database
-	_, err := h.db.Exec(`
+	_, err = h.db.Exec(`
 		INSERT INTO process_interventions (
 			id, workflow_id, action, step_name, new_assignee, reason, metadata, tenant_id, datasource_id, created_at
 		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW())
@@ -567,8 +595,13 @@ func (h *ProcessMonitorHandlers) HandleIntervention(w http.ResponseWriter, r *ht
 
 // GetMonitoringStats returns summary statistics for the monitoring dashboard
 func (h *ProcessMonitorHandlers) GetMonitoringStats(w http.ResponseWriter, r *http.Request) {
-	tenantID := r.URL.Query().Get("tenant_id")
-	datasourceID := r.URL.Query().Get("datasource_id")
+	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
+	if err != nil {
+		http.Error(w, "Unauthorized: "+err.Error(), http.StatusUnauthorized)
+		return
+	}
+	tenantID := secCtx.TenantID
+	datasourceID := secCtx.DatasourceID
 
 	if tenantID == "" || datasourceID == "" {
 		http.Error(w, "Missing tenant_id or datasource_id", http.StatusBadRequest)
@@ -605,7 +638,7 @@ func (h *ProcessMonitorHandlers) GetMonitoringStats(w http.ResponseWriter, r *ht
 		WorkflowTypes  int `json:"workflow_types" db:"workflow_types"`
 	}
 
-	err := h.db.Get(&stats, query, tenantID, datasourceID)
+	err = h.db.Get(&stats, query, tenantID, datasourceID)
 	if err != nil {
 		log.Printf("Error querying monitoring stats: %v", err)
 		http.Error(w, "Failed to fetch stats", http.StatusInternalServerError)

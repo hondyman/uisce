@@ -7,7 +7,7 @@ import (
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/hondyman/uisce/libs/jwt-middleware"
+	"github.com/hondyman/uisce/backend/internal/handlers"
 )
 
 // FieldMetadata represents a field definition with type information
@@ -45,169 +45,142 @@ type EntitiesResponse struct {
 	Count    int                `json:"count"`
 }
 
-// RegisterEntitiesRoutes registers all entity definition routes
-func RegisterEntitiesRoutes(r chi.Router, db *sql.DB) {
-	// Note: /entities/resolve is already registered in api.go before other entity routes
-	// This ensures proper route precedence in Chi router
+// EntitiesHandler handles entity routes
+type EntitiesHandler struct {
+	db           *sql.DB
+	securityDeps handlers.SecurityContextDeps
+}
 
-	// Standard entity routes
-	r.Get("/entities", handleListEntities())
-	r.Get("/entities/resolve", handleResolveEntities(db))
-	r.Get("/entities/{name}", handleGetEntity())
+func NewEntitiesHandler(db *sql.DB, securityDeps handlers.SecurityContextDeps) *EntitiesHandler {
+	return &EntitiesHandler{
+		db:           db,
+		securityDeps: securityDeps,
+	}
+}
+
+// RegisterEntitiesRoutes registers all entity definition routes
+func RegisterEntitiesRoutes(r chi.Router, db *sql.DB, securityDeps handlers.SecurityContextDeps) {
+	h := NewEntitiesHandler(db, securityDeps)
+
+	r.Get("/entities", h.handleListEntities)
+	r.Get("/entities/resolve", h.handleResolveEntities)
+	r.Get("/entities/{name}", h.handleGetEntity)
 }
 
 // handleListEntities returns all entity definitions with relationships
-func handleListEntities() http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		tenantID := r.URL.Query().Get("tenant_id")
-		datasourceID := r.URL.Query().Get("datasource_id")
-
-		if tenantID == "" || datasourceID == "" {
-			writeJSONError(w, http.StatusBadRequest, "tenant_id and datasource_id are required", "missing_params", "")
-			return
-		}
-
-		// Get tenant context from headers
-		headerTenantID := jwtmiddleware.GetClaimsFromContext(r).TenantID
-		headerDatasourceID := r.Header.Get("X-Tenant-Datasource-ID")
-
-		if headerTenantID == "" || headerDatasourceID == "" {
-			writeJSONError(w, http.StatusBadRequest, "X-Tenant-ID and X-Tenant-Datasource-ID headers are required", "missing_headers", "")
-			return
-		}
-
-		// Verify tenant context matches
-		if headerTenantID != tenantID || headerDatasourceID != datasourceID {
-			writeJSONError(w, http.StatusForbidden, "Tenant context mismatch", "context_mismatch", "")
-			return
-		}
-
-		// Query entity definitions from database
-		// For now, return mock data that matches what the frontend component expects
-		entities := getMockEntityDefinitions()
-
-		response := EntitiesResponse{
-			Entities: entities,
-			Count:    len(entities),
-		}
-
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(response)
+func (h *EntitiesHandler) handleListEntities(w http.ResponseWriter, r *http.Request) {
+	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
+	if err != nil {
+		writeJSONError(w, http.StatusUnauthorized, err.Error(), "unauthorized", "")
+		return
 	}
+
+	tenantID := secCtx.TenantID
+	datasourceID := secCtx.DatasourceID
+
+	if tenantID == "" || datasourceID == "" {
+		writeJSONError(w, http.StatusBadRequest, "tenant_id and datasource_id are required", "missing_params", "")
+		return
+	}
+
+	entities := getMockEntityDefinitions()
+
+	response := EntitiesResponse{
+		Entities: entities,
+		Count:    len(entities),
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(response)
 }
 
 // handleGetEntity returns a specific entity definition by name
-func handleGetEntity() http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		entityName := chi.URLParam(r, "name")
-		tenantID := r.URL.Query().Get("tenant_id")
-		datasourceID := r.URL.Query().Get("datasource_id")
+func (h *EntitiesHandler) handleGetEntity(w http.ResponseWriter, r *http.Request) {
+	entityName := chi.URLParam(r, "name")
 
-		if tenantID == "" || datasourceID == "" {
-			writeJSONError(w, http.StatusBadRequest, "tenant_id and datasource_id are required", "missing_params", "")
-			return
-		}
-
-		// Get tenant context from headers
-		headerTenantID := jwtmiddleware.GetClaimsFromContext(r).TenantID
-		headerDatasourceID := r.Header.Get("X-Tenant-Datasource-ID")
-
-		if headerTenantID == "" || headerDatasourceID == "" {
-			writeJSONError(w, http.StatusBadRequest, "X-Tenant-ID and X-Tenant-Datasource-ID headers are required", "missing_headers", "")
-			return
-		}
-
-		// Verify tenant context matches
-		if headerTenantID != tenantID || headerDatasourceID != datasourceID {
-			writeJSONError(w, http.StatusForbidden, "Tenant context mismatch", "context_mismatch", "")
-			return
-		}
-
-		// Get mock entity
-		entities := getMockEntityDefinitions()
-		for _, entity := range entities {
-			if entity.Name == entityName {
-				w.Header().Set("Content-Type", "application/json")
-				json.NewEncoder(w).Encode(entity)
-				return
-			}
-		}
-
-		writeJSONError(w, http.StatusNotFound, fmt.Sprintf("Entity %s not found", entityName), "not_found", "")
+	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
+	if err != nil {
+		writeJSONError(w, http.StatusUnauthorized, err.Error(), "unauthorized", "")
+		return
 	}
+
+	tenantID := secCtx.TenantID
+	datasourceID := secCtx.DatasourceID
+
+	if tenantID == "" || datasourceID == "" {
+		writeJSONError(w, http.StatusBadRequest, "tenant_id and datasource_id are required", "missing_params", "")
+		return
+	}
+
+	entities := getMockEntityDefinitions()
+	for _, entity := range entities {
+		if entity.Name == entityName {
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(entity)
+			return
+		}
+	}
+
+	writeJSONError(w, http.StatusNotFound, fmt.Sprintf("Entity %s not found", entityName), "not_found", "")
 }
 
 // getMockEntityDefinitions returns mock entity definitions for demonstration
 // handleResolveEntities resolves entity keys/names to their fabric_defn UUIDs
 // Returns a map of entity_key -> {id, key, name}
-func handleResolveEntities(db *sql.DB) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		tenantID := r.URL.Query().Get("tenant_id")
-		datasourceID := r.URL.Query().Get("datasource_id")
-
-		// Also support headers (from tenant shim)
-		if tenantID == "" {
-			tenantID = jwtmiddleware.GetClaimsFromContext(r).TenantID
-		}
-		if datasourceID == "" {
-		datasourceID = r.Header.Get("X-Tenant-Datasource-ID")
-			return
-		}
-
-		// Support both headers and query params (don't require both)
-		headerTenantID := jwtmiddleware.GetClaimsFromContext(r).TenantID
-		headerDatasourceID := r.Header.Get("X-Tenant-Datasource-ID")
-
-		// Only verify matching if headers are provided
-		if headerTenantID != "" && headerDatasourceID != "" {
-			if headerTenantID != tenantID || headerDatasourceID != datasourceID {
-				writeJSONError(w, http.StatusForbidden, "Tenant context mismatch", "context_mismatch", "")
-				return
-			}
-		}
-
-		// Query all current entities from fabric_defn
-		query := `
-			SELECT id, model_key, title 
-			FROM fabric_defn 
-			WHERE tenant_id = $1 
-			AND tenant_datasource_id = $2 
-			AND is_current = true
-			ORDER BY title
-		`
-
-		rows, err := db.Query(query, tenantID, datasourceID)
-		if err != nil {
-			writeJSONError(w, http.StatusInternalServerError, fmt.Sprintf("Failed to query entities: %v", err), "db_error", "")
-			return
-		}
-		defer rows.Close()
-
-		// Build map: entity_key -> {id, key, name}
-		result := make(map[string]map[string]interface{})
-
-		for rows.Next() {
-			var id, modelKey, title string
-			if err := rows.Scan(&id, &modelKey, &title); err != nil {
-				writeJSONError(w, http.StatusInternalServerError, fmt.Sprintf("Failed to scan entity: %v", err), "scan_error", "")
-				return
-			}
-
-			result[modelKey] = map[string]interface{}{
-				"id":   id,
-				"key":  modelKey,
-				"name": title,
-			}
-		}
-
-		if err := rows.Err(); err != nil {
-			writeJSONError(w, http.StatusInternalServerError, fmt.Sprintf("Error iterating entities: %v", err), "iteration_error", "")
-			return
-		}
-
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(result)
+func (h *EntitiesHandler) handleResolveEntities(w http.ResponseWriter, r *http.Request) {
+	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
+	if err != nil {
+		writeJSONError(w, http.StatusUnauthorized, err.Error(), "unauthorized", "")
+		return
 	}
+
+	tenantID := secCtx.TenantID
+	datasourceID := secCtx.DatasourceID
+
+	if tenantID == "" || datasourceID == "" {
+		writeJSONError(w, http.StatusBadRequest, "tenant_id and datasource_id are required", "missing_params", "")
+		return
+	}
+
+	query := `
+		SELECT id, model_key, title
+		FROM fabric_defn
+		WHERE tenant_id = $1
+		AND tenant_datasource_id = $2
+		AND is_current = true
+		ORDER BY title
+	`
+
+	rows, err := h.db.Query(query, tenantID, datasourceID)
+	if err != nil {
+		writeJSONError(w, http.StatusInternalServerError, fmt.Sprintf("Failed to query entities: %v", err), "db_error", "")
+		return
+	}
+	defer rows.Close()
+
+	result := make(map[string]map[string]interface{})
+
+	for rows.Next() {
+		var id, modelKey, title string
+		if err := rows.Scan(&id, &modelKey, &title); err != nil {
+			writeJSONError(w, http.StatusInternalServerError, fmt.Sprintf("Failed to scan entity: %v", err), "scan_error", "")
+			return
+		}
+
+		result[modelKey] = map[string]interface{}{
+			"id":   id,
+			"key":  modelKey,
+			"name": title,
+		}
+	}
+
+	if err := rows.Err(); err != nil {
+		writeJSONError(w, http.StatusInternalServerError, fmt.Sprintf("Error iterating entities: %v", err), "iteration_error", "")
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(result)
 }
 
 // In production, this would query from a configuration table or service

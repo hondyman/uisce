@@ -35,30 +35,28 @@ fi
 
 cd "$BACKEND_DIR"
 
-# Ensure cmd/server/main.go exists
-if [ ! -f "cmd/server/main.go" ]; then
-    echo -e "${RED}❌ Missing cmd/server/main.go - creating...${NC}"
-    mkdir -p cmd/server
-    cat > cmd/server/main.go << 'EOF'
-package main
-
-import (
-	"github.com/hondyman/uisce/backend/internal/api"
-)
-
-func main() {
-	api.StartServer()
-}
-EOF
-    echo -e "${GREEN}✅ Created cmd/server/main.go${NC}"
-fi
-
-# Build the backend
+# Build the backend (cmd/server)
 echo -e "${YELLOW}Building backend...${NC}"
 go build -o server ./cmd/server/main.go
 
-# Load secrets from Infisical if available
-if [ -f "$SCRIPT_DIR/.env.infisical" ]; then
+# Bootstrap secrets from Infisical if bootstrap script exists
+if [ -f "$SCRIPT_DIR/scripts/infisical-bootstrap.sh" ] && command -v infisical &>/dev/null; then
+    echo -e "${YELLOW}Bootstrapping secrets from Infisical...${NC}"
+    INFISICAL_TOKEN="${INFISICAL_TOKEN:-}" "$SCRIPT_DIR/scripts/infisical-bootstrap.sh" -e dev || true
+fi
+
+# Load secrets from backend/.env, root .env or .env.infisical if available
+if [ -f "$BACKEND_DIR/.env" ]; then
+    echo -e "${YELLOW}Loading environment from backend/.env...${NC}"
+    set -a
+    source "$BACKEND_DIR/.env"
+    set +a
+elif [ -f "$SCRIPT_DIR/.env" ]; then
+    echo -e "${YELLOW}Loading environment from .env...${NC}"
+    set -a
+    source "$SCRIPT_DIR/.env"
+    set +a
+elif [ -f "$SCRIPT_DIR/.env.infisical" ]; then
     echo -e "${YELLOW}Loading secrets from .env.infisical...${NC}"
     set -a
     source "$SCRIPT_DIR/.env.infisical"

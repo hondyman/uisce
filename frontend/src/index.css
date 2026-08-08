@@ -3,74 +3,7 @@
 @tailwind utilities;
 
 @layer base {
-  :root {
-    /* Light Mode (Default) - HSL Format */
-    --background: 0 0% 100%;
-    --foreground: 222.2 84% 4.9%;
-    --card: 0 0% 100%;
-    --card-foreground: 222.2 84% 4.9%;
-    --popover: 0 0% 100%;
-    --popover-foreground: 222.2 84% 4.9%;
-    --primary: 211 93% 50%;
-    --primary-foreground: 210 40% 98%;
-    --secondary: 210 40% 96.1%;
-    --secondary-foreground: 222.2 47.4% 11.2%;
-    --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
-    --accent: 210 40% 96.1%;
-    --accent-foreground: 222.2 47.4% 11.2%;
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
-    --ring: 222.2 84% 4.9%;
-    --radius: 0.5rem;
-  }
-
-  .dark {
-    /* Dark Mode - HSL Format (Improved for better contrast and appearance) */
-    --background: 217.2 32.6% 11%;
-    --foreground: 210 40% 98%;
-    --card: 217.2 32.6% 15%;
-    --card-foreground: 210 40% 98%;
-    --popover: 217.2 32.6% 13%;
-    --popover-foreground: 210 40% 98%;
-    --primary: 211 93% 50%;
-    --primary-foreground: 217.2 32.6% 11%;
-    --secondary: 217.2 32.6% 20%;
-    --secondary-foreground: 210 40% 98%;
-    --muted: 217.2 32.6% 25%;
-    --muted-foreground: 215 15% 75%;
-    --accent: 210 100% 50%;
-    --accent-foreground: 217.2 32.6% 11%;
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 217.2 32.6% 20%;
-    --input: 217.2 32.6% 18%;
-    --ring: 212.7 26.8% 83.9%;
-  }
-
-  .high-contrast {
-    --background: 0 0% 0%;
-    --foreground: 0 0% 100%;
-    --card: 0 0% 0%;
-    --card-foreground: 0 0% 100%;
-    --popover: 0 0% 0%;
-    --popover-foreground: 0 0% 100%;
-    --primary: 0 0% 98%;
-    --primary-foreground: 0 0% 9%;
-    --secondary: 0 0% 14.9%;
-    --secondary-foreground: 0 0% 98%;
-    --muted: 0 0% 14.9%;
-    --muted-foreground: 0 0% 63.9%;
-    --accent: 0 0% 14.9%;
-    --accent-foreground: 0 0% 98%;
-    --destructive: 0 72.2% 50.6%;
-    --destructive-foreground: 0 0% 98%;
-    --border: 0 0% 100%;
-    --input: 0 0% 14.9%;
-    --ring: 0 0% 98%;
-  }
+  /* Tailwind CSS variables removed - UI now uses MUI theme (amber/chocolate/cream) */
 }
 
 .react-flow__minimap {
@@ -80,15 +13,10 @@
 
 
 @layer base {
-  /* Temporary: the `border-border` utility isn't available in this PostCSS/Tailwind
-     runtime (it appears to be a project-specific utility). Comment it out to
-     avoid build-time errors. If you prefer a global border, replace this with
-     a standard Tailwind utility (for example `@apply border` or
-     `@apply border-gray-200`). */
-  /* * { @apply border-border; } */
+  /* Tailwind base layer preserved for component utilities */
+  /* Body background now handled by MUI theme */
   body {
-    background-color: hsl(var(--background));
-    color: hsl(var(--foreground));
+    margin: 0;
   }
 }
 

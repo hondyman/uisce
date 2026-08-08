@@ -1,44 +1,35 @@
-import { FormControl, Select, MenuItem, SelectChangeEvent } from '@mui/material';
-import { useState, useEffect } from 'react';
-
-export interface Tenant {
-  id: string;
-  name: string;
-}
+import { FormControl, Select, MenuItem, SelectChangeEvent, CircularProgress } from '@mui/material';
+import { useAccess } from '../contexts/AccessContext';
 
 export function TenantSwitcher() {
-  const [tenants, setTenants] = useState<Tenant[]>([]);
-  const [currentTenant, setCurrentTenant] = useState<string>('');
-
-  useEffect(() => {
-    // Load from localStorage or context
-    const saved = localStorage.getItem('selectedTenant');
-    if (saved) setCurrentTenant(saved);
-
-    // Mock tenants - in real app, fetch from API
-    setTenants([
-      { id: 'tenant-1', name: 'Acme Capital' },
-      { id: 'tenant-2', name: 'BlackRock Test' },
-      { id: 'tenant-3', name: 'State Street Alpha' },
-    ]);
-
-    if (saved) setCurrentTenant(saved);
-    else setCurrentTenant('tenant-1');
-  }, []);
+  const { accessibleTenants, currentTenant, setTenantScope, isLoading } = useAccess();
 
   const handleChange = (event: SelectChangeEvent) => {
-    const value = event.target.value;
-    setCurrentTenant(value);
-    localStorage.setItem('selectedTenant', value);
-    // In a real app, this would trigger a context update or URL change
+    const tenantId = event.target.value;
+    const tenant = accessibleTenants.find(t => t.id === tenantId);
+    if (tenant) {
+      setTenantScope(tenant);
+    }
   };
+
+  if (isLoading) {
+    return (
+      <FormControl size="small" sx={{ minWidth: 200 }}>
+        <CircularProgress size={20} sx={{ mx: 2 }} />
+      </FormControl>
+    );
+  }
 
   return (
     <FormControl size="small" sx={{ minWidth: 200 }}>
-      <Select value={currentTenant} onChange={handleChange} displayEmpty>
-        {tenants.map((t) => (
+      <Select
+        value={currentTenant?.id || ''}
+        onChange={handleChange}
+        displayEmpty
+      >
+        {accessibleTenants.map((t) => (
           <MenuItem key={t.id} value={t.id}>
-            {t.name}
+            {t.display_name || t.name}
           </MenuItem>
         ))}
       </Select>

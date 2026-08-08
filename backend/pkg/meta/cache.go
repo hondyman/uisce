@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/hondyman/uisce/backend/pkg/cache"
+	"github.com/hondyman/uisce/libs/db/queries"
 	"github.com/jmoiron/sqlx"
 )
 
@@ -271,15 +272,7 @@ func (mc *MetadataCache) loadBusinessObjects(ctx context.Context, tenantID strin
 	// }
 	//
 	// SQL fallback:
-	query := `
-		SELECT id, tenant_id, name, display_name, description, icon, 
-		       metadata, created_at, updated_at
-		FROM business_objects
-		WHERE tenant_id = $1
-		ORDER BY name
-	`
-
-	rows, err := mc.db.QueryContext(ctx, query, tenantID)
+	rows, err := mc.db.QueryContext(ctx, queries.ListBusinessObjects, tenantID)
 	if err != nil {
 		return err
 	}
@@ -342,17 +335,7 @@ func (mc *MetadataCache) loadFields(ctx context.Context, tenantID string) error 
 	// }
 	//
 	// SQL fallback:
-	query := `
-		SELECT f.id, f.business_object_id, f.name, f.label, f.type,
-		       f.is_required, f.is_unique, f.enum_id, f.ref_object_id,
-		       f.default_value, f.validation_json, f.visibility_json
-		FROM bo_fields f
-		JOIN business_objects bo ON f.business_object_id = bo.id
-		WHERE bo.tenant_id = $1
-		ORDER BY f.business_object_id, f.sequence
-	`
-
-	rows, err := mc.db.QueryContext(ctx, query, tenantID)
+	rows, err := mc.db.QueryContext(ctx, queries.ListBOFieldsWithJoin, tenantID)
 	if err != nil {
 		return err
 	}

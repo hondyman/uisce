@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/hondyman/uisce/backend/internal/rules"
+	"github.com/hondyman/uisce/libs/db/queries"
 	"github.com/jmoiron/sqlx"
 	"github.com/lib/pq"
 )
@@ -317,13 +318,7 @@ func (g *UIGenerator) loadPageLayout(ctx context.Context, layoutID string) (*Pag
 	//     is_active
 	//   }
 	// }
-	query := `
-		SELECT id, tenant_id, bo_id, layout_name, layout_type, layout_description,
-		       default_columns, mobile_layout, is_default_layout, is_active
-		FROM page_layouts
-		WHERE id = $1
-	`
-	err := g.db.GetContext(ctx, layout, query, layoutID)
+	err := g.db.GetContext(ctx, layout, queries.GetLayout, layoutID)
 	if err != nil {
 		return nil, err
 	}
@@ -347,13 +342,7 @@ func (g *UIGenerator) loadBusinessObject(ctx context.Context, boID string) (*Bus
 	//     is_active
 	//   }
 	// }
-	query := `
-		SELECT id, tenant_id, bo_name, bo_description, entity_type,
-		       allow_custom_fields, allow_field_deletion, is_system_bo, is_active
-		FROM business_objects
-		WHERE id = $1
-	`
-	err := g.db.GetContext(ctx, bo, query, boID)
+	err := g.db.GetContext(ctx, bo, queries.GetBusinessObject, boID)
 	if err != nil {
 		return nil, err
 	}
@@ -396,18 +385,7 @@ func (g *UIGenerator) loadBOFields(ctx context.Context, boID string) ([]*BOField
 	//     validation_rule_ids
 	//   }
 	// }
-	query := `
-		SELECT id, bo_id, field_name, field_type, display_label, display_order,
-		       section_name, help_text, placeholder_text, is_required, is_readonly,
-		       is_searchable, is_sortable, max_length, min_value, max_value,
-		       decimal_places, date_format, reference_bo_id, reference_display_field,
-		       picklist_values, default_value, is_system_field, is_custom_field,
-		       validation_rule_ids
-		FROM bo_fields
-		WHERE bo_id = $1
-		ORDER BY display_order ASC
-	`
-	err := g.db.SelectContext(ctx, &fields, query, boID)
+	err := g.db.SelectContext(ctx, &fields, queries.ListBOFields, boID)
 	if err != nil {
 		return nil, err
 	}
@@ -445,16 +423,7 @@ func (g *UIGenerator) loadValidationRules(ctx context.Context, ruleIds pq.String
 	//     is_active
 	//   }
 	// }
-	query := `
-		SELECT id, tenant_id, rule_name, rule_description, rule_category, severity,
-		       error_message, help_message, condition_type, condition_json,
-		       execute_client_side, execute_server_side, run_on_blur, run_on_change,
-		       run_on_submit, requires_database_call, is_active
-		FROM validation_rules
-		WHERE id = ANY($1) AND is_active = true
-		ORDER BY rule_name ASC
-	`
-	err := g.db.SelectContext(ctx, &rules, query, ruleIds)
+	err := g.db.SelectContext(ctx, &rules, queries.ListValidationRules, ruleIds)
 	if err != nil {
 		return nil, err
 	}
@@ -485,15 +454,7 @@ func (g *UIGenerator) loadLayoutSections(ctx context.Context, layoutID string) (
 	//     field_ids
 	//   }
 	// }
-	query := `
-		SELECT id, layout_id, section_order, section_title, section_description,
-		       section_columns, is_collapsible, is_initially_collapsed, has_border,
-		       background_color, is_visible, help_text, field_ids
-		FROM layout_sections
-		WHERE layout_id = $1
-		ORDER BY section_order ASC
-	`
-	err := g.db.SelectContext(ctx, &sections, query, layoutID)
+	err := g.db.SelectContext(ctx, &sections, queries.ListLayoutSections, layoutID)
 	if err != nil {
 		return nil, err
 	}
@@ -528,16 +489,7 @@ func (g *UIGenerator) loadLayoutActions(ctx context.Context, layoutID string) ([
 	//     redirect_on_success
 	//   }
 	// }
-	query := `
-		SELECT id, layout_id, action_order, action_label, action_type, action_icon,
-		       requires_validation, requires_confirmation, confirmation_message,
-		       triggers_bp_id, is_visible, is_enabled, button_style, button_size,
-		       success_message, error_message, redirect_on_success
-		FROM layout_actions
-		WHERE layout_id = $1
-		ORDER BY action_order ASC
-	`
-	err := g.db.SelectContext(ctx, &actions, query, layoutID)
+	err := g.db.SelectContext(ctx, &actions, queries.ListLayoutActions, layoutID)
 	if err != nil {
 		return nil, err
 	}
@@ -660,15 +612,7 @@ func (g *UIGenerator) ValidateFormData(ctx context.Context, boID string, data ma
 
 func (g *UIGenerator) loadValidationRuleByID(ctx context.Context, ruleID string) (*ValidationRule, error) {
 	rule := &ValidationRule{}
-	query := `
-		SELECT id, tenant_id, rule_name, rule_description, rule_category, severity,
-		       error_message, help_message, condition_type, condition_json,
-		       execute_client_side, execute_server_side, run_on_blur, run_on_change,
-		       run_on_submit, requires_database_call, is_active
-		FROM validation_rules
-		WHERE id = $1
-	`
-	err := g.db.GetContext(ctx, rule, query, ruleID)
+	err := g.db.GetContext(ctx, rule, queries.GetValidationRule, ruleID)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, nil

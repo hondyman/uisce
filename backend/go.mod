@@ -320,3 +320,5 @@ replace github.com/hondyman/uisce/calc-engine => ../calc-engine
 replace github.com/hondyman/uisce/libs/shared-types => ../libs/shared-types
 
 replace github.com/hondyman/uisce/libs/jwt-middleware => ../libs/jwt-middleware
+
+replace github.com/hondyman/uisce/libs/db/queries => ../libs/db/queries

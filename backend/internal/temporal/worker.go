@@ -1,11 +1,13 @@
 package temporal
 
 import (
+	"database/sql"
 	"fmt"
 	"log"
 
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/worker"
+	"go.uber.org/zap"
 
 	"github.com/hondyman/uisce/backend/internal/temporal/activities"
 	"github.com/hondyman/uisce/backend/internal/temporal/workflows"
@@ -17,6 +19,9 @@ type WorkerConfig struct {
 	Namespace             string
 	TaskQueue             string
 	DataConverter         interface{}
+	DB                    *sql.DB
+	ControlDB             *sql.DB
+	Logger                *zap.SugaredLogger
 }
 
 // StartWorker creates and starts a Temporal worker with all workflows and activities registered
@@ -47,8 +52,8 @@ func StartWorker(cfg WorkerConfig) (worker.Worker, error) {
 	// Register all workflows
 	registerWorkflows(w)
 
-	// Register all activities
-	registerActivities(w)
+	// Register all activities with dependencies
+	registerActivities(w, cfg.DB, cfg.ControlDB, cfg.Logger)
 
 	log.Printf("Temporal worker initialized: TaskQueue=%s, Namespace=%s", cfg.TaskQueue, cfg.Namespace)
 
@@ -64,12 +69,13 @@ func registerWorkflows(w worker.Worker) {
 	w.RegisterWorkflow(TenantOnboardingWorkflow)
 	w.RegisterWorkflow(LakehouseMaintenanceWorkflow)
 	w.RegisterWorkflow(workflows.CustomizationIntelligenceWorkflow)
+	w.RegisterWorkflow(workflows.TenantInstanceProvisioningWorkflowFn)
 
-	log.Println("Workflows registered: HourlyRollupWorkflow, RegionHourlyRollupWorkflow, DailySLAWorkflow, MLTrainingWorkflow, TenantOnboardingWorkflow, LakehouseMaintenanceWorkflow, CustomizationIntelligenceWorkflow")
+	log.Println("Workflows registered: HourlyRollupWorkflow, RegionHourlyRollupWorkflow, DailySLAWorkflow, MLTrainingWorkflow, TenantOnboardingWorkflow, LakehouseMaintenanceWorkflow, CustomizationIntelligenceWorkflow, TenantInstanceProvisioningWorkflowFn")
 }
 
 // registerActivities registers all activity definitions
-func registerActivities(w worker.Worker) {
+func registerActivities(w worker.Worker, db *sql.DB, controlDB *sql.DB, logger *zap.SugaredLogger) {
 	// Register activity functions directly
 	w.RegisterActivity(activities.RunSparkJobActivity)
 	w.RegisterActivity(activities.RunPythonScriptActivity)
@@ -88,5 +94,27 @@ func registerActivities(w worker.Worker) {
 	w.RegisterActivity(act.RemoveOrphanFiles)
 	w.RegisterActivity(act.CompactManifests)
 
-	log.Println("Activities registered: RunDataFusionQueryActivity, RunSparkJobActivity, RunPythonScriptActivity, PublishEventActivity, TenantActivities")
+	// Register tenant provisioning activities
+	if db != nil && controlDB != nil && logger != nil {
+		provisioningActs := activities.NewTenantProvisioningActivities(db, controlDB, logger)
+		w.RegisterActivity(provisioningActs.RegisterTenant)
+		w.RegisterActivity(provisioningActs.RollbackRegisterTenant)
+		w.RegisterActivity(provisioningActs.RegisterInstance)
+		w.RegisterActivity(provisioningActs.RollbackRegisterInstance)
+		w.RegisterActivity(provisioningActs.CreateTenantDatabase)
+		w.RegisterActivity(provisioningActs.RollbackCreateTenantDatabase)
+		w.RegisterActivity(provisioningActs.CloneSchemaFromGoldCopy)
+		w.RegisterActivity(provisioningActs.CreateLakekeeperNamespace)
+		w.RegisterActivity(provisioningActs.RollbackCreateLakekeeperNamespace)
+		w.RegisterActivity(provisioningActs.CloneGoldCopyProducts)
+		w.RegisterActivity(provisioningActs.RollbackCloneGoldCopyProducts)
+		w.RegisterActivity(provisioningActs.EmitProvisioningEvent)
+		w.RegisterActivity(provisioningActs.UpdateTenantStatus)
+		w.RegisterActivity(provisioningActs.UpdateInstanceStatus)
+		w.RegisterActivity(provisioningActs.GetGoldCopyInfo)
+		w.RegisterActivity(provisioningActs.HealthCheck)
+		log.Println("Tenant provisioning activities registered")
+	}
+
+	log.Println("Activities registered: RunDataFusionQueryActivity, RunSparkJobActivity, RunPythonScriptActivity, PublishEventActivity, TenantActivities, TenantProvisioningActivities")
 }

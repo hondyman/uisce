@@ -5,6 +5,7 @@ import (
 	_ "embed"
 	"fmt"
 
+	"github.com/hondyman/uisce/libs/db/queries"
 	"github.com/jmoiron/sqlx"
 	"github.com/open-policy-agent/opa/rego"
 )
@@ -95,7 +96,7 @@ func (e *GovernanceEngine) ValidatePipeline(ctx context.Context, tenantID string
 	if e.db != nil && tenantID != "" {
 		var policies []string
 		start := "package tenant.rules" // Filter ensures we only load relevant scopes
-		err := e.db.SelectContext(ctx, &policies, "SELECT expression FROM core_policy WHERE tenant_id = $1 AND scope = 'workflow' AND type = 'authorization'", tenantID)
+		err := e.db.SelectContext(ctx, &policies, queries.ListWorkflowPolicies, tenantID)
 		if err == nil {
 			for i, p := range policies {
 				// Only load if it's a valid package
@@ -163,7 +164,7 @@ func (e *GovernanceEngine) ValidateTransaction(ctx context.Context, tenantID str
 		var policies []string
 		// We optimistically load all 'workflow' scope policies for now, assuming they apply to trades/transactions too
 		// In a real system we might distinguish scope='trade' vs 'pipeline'
-		err := e.db.SelectContext(ctx, &policies, "SELECT expression FROM core_policy WHERE tenant_id = $1 AND scope = 'workflow' AND type = 'authorization'", tenantID)
+		err := e.db.SelectContext(ctx, &policies, queries.ListWorkflowPolicies, tenantID)
 		if err == nil {
 			for i, p := range policies {
 				options = append(options, rego.Module(fmt.Sprintf("tenant_policy_%d.rego", i), p))

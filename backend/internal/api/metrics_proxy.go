@@ -11,6 +11,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/hondyman/uisce/backend/internal/handlers"
 )
 
 // PrometheusQueryResult represents a single Prometheus query result
@@ -117,6 +119,13 @@ func (s *Server) commitMetricsHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "missing required query parameter: plan_id", http.StatusBadRequest)
 		return
 	}
+
+	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", handlers.SecurityContextDeps{Resolver: s.DatasourceResolver})
+	if err != nil {
+		http.Error(w, "X-Tenant-ID, X-Datasource-Id, and X-Region headers are required", http.StatusBadRequest)
+		return
+	}
+	_ = secCtx
 
 	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
 	defer cancel()

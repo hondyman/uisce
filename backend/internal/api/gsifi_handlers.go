@@ -6,6 +6,8 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+
+	"github.com/hondyman/uisce/backend/internal/handlers"
 )
 
 type GSIFIEvent struct {
@@ -40,7 +42,12 @@ type SoDRule struct {
 }
 
 func (h *RBACHandlers) listGSIFIEventRegistry(w http.ResponseWriter, r *http.Request) {
-	tenantID := r.URL.Query().Get("tenant_id")
+	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
+	if err != nil {
+		http.Error(w, "Unauthorized: "+err.Error(), http.StatusUnauthorized)
+		return
+	}
+	tenantID := secCtx.TenantID
 
 	query := `SELECT id, COALESCE(tenant_id, ''), event_key, category, COALESCE(description, ''), COALESCE(schema_json, ''), is_active, created_at FROM gsifi_event_registry WHERE is_active = true`
 	args := []interface{}{}
@@ -73,7 +80,6 @@ func (h *RBACHandlers) listGSIFIEventRegistry(w http.ResponseWriter, r *http.Req
 
 func (h *RBACHandlers) createGSIFIEvent(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		TenantID    string `json:"tenant_id"`
 		EventKey    string `json:"event_key"`
 		Category    string `json:"category"`
 		Description string `json:"description"`
@@ -84,12 +90,19 @@ func (h *RBACHandlers) createGSIFIEvent(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
+	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
+	if err != nil {
+		http.Error(w, "Unauthorized: "+err.Error(), http.StatusUnauthorized)
+		return
+	}
+	tenantID := secCtx.TenantID
+
 	var id string
-	err := h.db.QueryRow(`
+	err = h.db.QueryRow(`
 		INSERT INTO gsifi_event_registry (tenant_id, event_key, category, description, schema_json)
 		VALUES ($1, $2, $3, $4, $5)
 		RETURNING id`,
-		req.TenantID, req.EventKey, req.Category, req.Description, req.SchemaJSON,
+		tenantID, req.EventKey, req.Category, req.Description, req.SchemaJSON,
 	).Scan(&id)
 	if err != nil {
 		http.Error(w, "Failed to create event: " + err.Error(), http.StatusInternalServerError)
@@ -133,7 +146,12 @@ func (h *RBACHandlers) updateGSIFIEvent(w http.ResponseWriter, r *http.Request) 
 }
 
 func (h *RBACHandlers) listTAMRules(w http.ResponseWriter, r *http.Request) {
-	tenantID := r.URL.Query().Get("tenant_id")
+	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
+	if err != nil {
+		http.Error(w, "Unauthorized: "+err.Error(), http.StatusUnauthorized)
+		return
+	}
+	tenantID := secCtx.TenantID
 
 	query := `SELECT id, COALESCE(tenant_id, ''), asset_class, currency, min_amount, COALESCE(max_amount, 0), required_approvers, requires_senior_manager, time_limit_hours FROM transaction_authorization_matrix WHERE 1=1`
 	args := []interface{}{}
@@ -165,18 +183,33 @@ func (h *RBACHandlers) listTAMRules(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *RBACHandlers) createTAMRule(w http.ResponseWriter, r *http.Request) {
-	var req TAMRule
+	var req struct {
+		AssetClass           string  `json:"asset_class"`
+		Currency             string  `json:"currency"`
+		MinAmount            float64 `json:"min_amount"`
+		MaxAmount            float64 `json:"max_amount"`
+		RequiredApprovers    int     `json:"required_approvers"`
+		RequiresSeniorManager bool   `json:"requires_senior_manager"`
+		TimeLimitHours       int     `json:"time_limit_hours"`
+	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "Invalid request: " + err.Error(), http.StatusBadRequest)
 		return
 	}
 
+	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
+	if err != nil {
+		http.Error(w, "Unauthorized: "+err.Error(), http.StatusUnauthorized)
+		return
+	}
+	tenantID := secCtx.TenantID
+
 	var id string
-	err := h.db.QueryRow(`
+	err = h.db.QueryRow(`
 		INSERT INTO transaction_authorization_matrix (tenant_id, asset_class, currency, min_amount, max_amount, required_approvers, requires_senior_manager, time_limit_hours)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 		RETURNING id`,
-		req.TenantID, req.AssetClass, req.Currency, req.MinAmount, req.MaxAmount, req.RequiredApprovers, req.RequiresSeniorManager, req.TimeLimitHours,
+		tenantID, req.AssetClass, req.Currency, req.MinAmount, req.MaxAmount, req.RequiredApprovers, req.RequiresSeniorManager, req.TimeLimitHours,
 	).Scan(&id)
 	if err != nil {
 		http.Error(w, "Failed to create TAM rule: " + err.Error(), http.StatusInternalServerError)
@@ -207,7 +240,12 @@ func (h *RBACHandlers) deleteTAMRule(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *RBACHandlers) listSoDRules(w http.ResponseWriter, r *http.Request) {
-	tenantID := r.URL.Query().Get("tenant_id")
+	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
+	if err != nil {
+		http.Error(w, "Unauthorized: "+err.Error(), http.StatusUnauthorized)
+		return
+	}
+	tenantID := secCtx.TenantID
 
 	query := `SELECT id, COALESCE(tenant_id, ''), role_key_a, role_key_b, conflict_type FROM role_conflict_rules WHERE 1=1`
 	args := []interface{}{}
@@ -239,19 +277,30 @@ func (h *RBACHandlers) listSoDRules(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *RBACHandlers) createSoDRule(w http.ResponseWriter, r *http.Request) {
-	var req SoDRule
+	var req struct {
+		RoleKeyA     string `json:"role_key_a"`
+		RoleKeyB     string `json:"role_key_b"`
+		ConflictType string `json:"conflict_type"`
+	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "Invalid request: " + err.Error(), http.StatusBadRequest)
 		return
 	}
 
+	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
+	if err != nil {
+		http.Error(w, "Unauthorized: "+err.Error(), http.StatusUnauthorized)
+		return
+	}
+	tenantID := secCtx.TenantID
+
 	var id string
-	err := h.db.QueryRow(`
+	err = h.db.QueryRow(`
 		INSERT INTO role_conflict_rules (tenant_id, role_key_a, role_key_b, conflict_type)
 		VALUES ($1, $2, $3, $4)
 		ON CONFLICT (tenant_id, role_key_a, role_key_b) DO UPDATE SET conflict_type = EXCLUDED.conflict_type
 		RETURNING id`,
-		req.TenantID, req.RoleKeyA, req.RoleKeyB, req.ConflictType,
+		tenantID, req.RoleKeyA, req.RoleKeyB, req.ConflictType,
 	).Scan(&id)
 	if err != nil {
 		http.Error(w, "Failed to create SoD rule: " + err.Error(), http.StatusInternalServerError)

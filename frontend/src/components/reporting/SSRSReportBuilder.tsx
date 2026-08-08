@@ -159,7 +159,7 @@ const SSRSReportBuilderContent: React.FC = () => {
     const token = typeof localStorage !== 'undefined' ? localStorage.getItem('auth_token') : null;
     const authHeader = token && !token.includes('demo') ? `Bearer ${token}` : '';
     
-    const tenantId = tenant?.id || getCachedGoldCopyId() ?? '';
+    const tenantId = tenant?.id ?? getCachedGoldCopyId() ?? '';
     const datasourceId = datasource?.id || 'b7879e02-7e4c-44c9-bade-2b10aab2d3c0';
 
     return {

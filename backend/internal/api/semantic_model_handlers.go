@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/hondyman/uisce/backend/internal/handlers"
 	"github.com/hondyman/uisce/backend/internal/services"
 	"go.uber.org/zap"
 )
@@ -14,15 +15,17 @@ import (
 // ============================================================================
 
 type SemanticModelHandler struct {
-	service *services.SemanticModelInheritanceService
-	logger  *zap.Logger
+	service       *services.SemanticModelInheritanceService
+	logger        *zap.Logger
+	securityDeps  handlers.SecurityContextDeps
 }
 
-func NewSemanticModelHandler(service *services.SemanticModelInheritanceService) *SemanticModelHandler {
+func NewSemanticModelHandler(service *services.SemanticModelInheritanceService, securityDeps handlers.SecurityContextDeps) *SemanticModelHandler {
 	logger, _ := zap.NewProduction()
 	return &SemanticModelHandler{
-		service: service,
-		logger:  logger,
+		service:      service,
+		logger:       logger,
+		securityDeps: securityDeps,
 	}
 }
 
@@ -53,13 +56,18 @@ func (h *SemanticModelHandler) GetCoreModels(w http.ResponseWriter, r *http.Requ
 
 // GetTenantModels returns all custom models for a tenant
 func (h *SemanticModelHandler) GetTenantModels(w http.ResponseWriter, r *http.Request) {
-	tenantID := r.URL.Query().Get("tenant_id")
+	secCtx, ctx, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
+	if err != nil {
+		http.Error(w, "Unauthorized: "+err.Error(), http.StatusUnauthorized)
+		return
+	}
+	tenantID := secCtx.TenantID
 	if tenantID == "" {
 		http.Error(w, "tenant_id required", http.StatusBadRequest)
 		return
 	}
 
-	models, err := h.service.GetTenantModels(r.Context(), tenantID)
+	models, err := h.service.GetTenantModels(ctx, tenantID)
 	if err != nil {
 		h.logger.Error("Failed to get tenant models", zap.Error(err))
 		http.Error(w, err.Error(), http.StatusInternalServerError)

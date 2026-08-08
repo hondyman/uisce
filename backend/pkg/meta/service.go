@@ -5,6 +5,8 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+
+	"github.com/hondyman/uisce/libs/db/queries"
 )
 
 type Service struct {
@@ -32,12 +34,7 @@ func (s *Service) CreateBusinessObject(ctx context.Context, bo *BusinessObjectDe
 		return fmt.Errorf("failed to marshal metadata: %w", err)
 	}
 
-	query := `
-		INSERT INTO core_bo (id, tenant_id, name, storage, version, status, fields, metadata)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-	`
-
-	_, err = s.db.ExecContext(ctx, query,
+	_, err = s.db.ExecContext(ctx, queries.InsertCoreBO,
 		bo.ID, bo.TenantID, bo.Name, bo.Storage,
 		bo.Version, bo.Status, fieldsJSON, metadataJSON,
 	)
@@ -211,13 +208,7 @@ func (s *Service) UpdateBusinessObject(ctx context.Context, bo *BusinessObjectDe
 		return fmt.Errorf("failed to marshal metadata: %w", err)
 	}
 
-	query := `
-		UPDATE core_bo
-		SET name = $1, storage = $2, version = $3, status = $4, fields = $5, metadata = $6
-		WHERE id = $7 AND tenant_id = $8
-	`
-
-	_, err = s.db.ExecContext(ctx, query,
+	_, err = s.db.ExecContext(ctx, queries.UpdateCoreBO,
 		bo.Name, bo.Storage, bo.Version, bo.Status,
 		fieldsJSON, metadataJSON, bo.ID, bo.TenantID,
 	)
@@ -227,8 +218,7 @@ func (s *Service) UpdateBusinessObject(ctx context.Context, bo *BusinessObjectDe
 
 // DeleteBusinessObject soft-deletes a business object
 func (s *Service) DeleteBusinessObject(ctx context.Context, id string) error {
-	query := `UPDATE core_bo SET status = 'deprecated' WHERE id = $1`
-	_, err := s.db.ExecContext(ctx, query, id)
+	_, err := s.db.ExecContext(ctx, queries.DeprecateCoreBO, id)
 	return err
 }
 

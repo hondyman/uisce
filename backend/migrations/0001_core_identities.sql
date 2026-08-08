@@ -2,14 +2,14 @@
 CREATE TABLE IF NOT EXISTS tenants (
   id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
   name TEXT NOT NULL,
-  created_at TIMESTAMP NOT NULL DEFAULT now()
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
 CREATE TABLE IF NOT EXISTS app_user (
   id TEXT PRIMARY KEY,
   email TEXT UNIQUE NOT NULL,
   display_name TEXT,
-  created_at TIMESTAMP NOT NULL DEFAULT now(),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   is_active BOOLEAN NOT NULL DEFAULT TRUE
 );
 

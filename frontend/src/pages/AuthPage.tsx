@@ -1,12 +1,21 @@
 import { useState } from 'react';
+import { Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { devLog } from '../utils/devLogger';
+import { UisceLogo } from '../components/brand/UisceLogo';
 import './AuthPage.css';
 
 const AuthPage: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
-  const { login } = useAuth();
+  const { login, isAuthenticated } = useAuth();
+  const location = useLocation();
+
+  const from = location.state?.from?.pathname || '/';
+
+  if (isAuthenticated) {
+    return <Navigate to={from} replace />;
+  }
 
   const handleSignIn = async () => {
     setError('');
@@ -38,12 +47,12 @@ const AuthPage: React.FC = () => {
       <div className="auth-card">
         {/* Header */}
         <div className="text-center mb-8">
-          <div className="mx-auto h-20 w-20 bg-gradient-to-br from-indigo-600 to-purple-600 rounded-3xl flex items-center justify-center mb-6 relative">
-            <div className="absolute inset-0 bg-indigo-600 rounded-3xl pulse-ring"></div>
-            <span className="auth-header-initial text-white font-bold">S</span>
+          <div className="mx-auto h-20 w-20 flex items-center justify-center mb-6 relative">
+            <div className="absolute inset-0 rounded-3xl pulse-ring" style={{ background: 'rgba(212, 160, 23, 0.15)' }}></div>
+            <UisceLogo variant="mark" size="lg" animated />
           </div>
           <h1 className="text-4xl font-bold auth-gradient-text mb-3">Welcome Back</h1>
-          <p className="text-gray-600 text-lg">Sign in to your SemLayer account</p>
+          <p className="text-lg" style={{ color: '#F5F0E8', opacity: 0.7 }}>Sign in to your Uisce account</p>
         </div>
 
         {/* Error Message */}

@@ -6,7 +6,7 @@ CREATE TABLE IF NOT EXISTS compliance_policies (
     effective_end_date DATE,
     rule_type VARCHAR(50) NOT NULL, -- 'PRE_TRADE' or 'POST_TRADE'
     cue_content TEXT NOT NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMPTZ,
     created_by VARCHAR(255),
     CONSTRAINT unique_version_type UNIQUE (version_tag, rule_type)
 );
@@ -25,7 +25,7 @@ CREATE TABLE IF NOT EXISTS compliance_events (
     rule_version VARCHAR(50) NOT NULL,
     trade_data JSONB NOT NULL,
     error_details JSONB,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMPTZ
 );
 
 CREATE INDEX idx_compliance_events_trace_id ON compliance_events(trace_id);
@@ -43,7 +43,7 @@ CREATE TABLE IF NOT EXISTS compliance_audit_log (
     entity_type VARCHAR(100),
     entity_id VARCHAR(255),
     metadata JSONB,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMPTZ
 );
 
 CREATE INDEX idx_compliance_audit_log_event_id ON compliance_audit_log(event_id);

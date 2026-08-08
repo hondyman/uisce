@@ -16,8 +16,8 @@ CREATE TABLE IF NOT EXISTS edm.rules (
     current_version INT NOT NULL DEFAULT 1,
     default_action VARCHAR(255),
     created_by UUID NOT NULL,
-    created_at TIMESTAMP NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMP NOT NULL DEFAULT NOW(),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_by UUID,
     
     -- Constraints
@@ -47,8 +47,8 @@ CREATE TABLE IF NOT EXISTS edm.rule_steps (
     value TEXT NOT NULL,
     confidence INT NOT NULL DEFAULT 100,
     description TEXT,
-    created_at TIMESTAMP NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMP NOT NULL DEFAULT NOW(),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     
     -- Constraints
     CONSTRAINT rule_steps_rule_fk FOREIGN KEY (rule_id) REFERENCES edm.rules(id) ON DELETE CASCADE,
@@ -71,11 +71,11 @@ CREATE TABLE IF NOT EXISTS edm.rule_versions (
     rule_id UUID NOT NULL,
     version INT NOT NULL,
     status VARCHAR(50) NOT NULL,
-    promoted_at TIMESTAMP,
+    promoted_at TIMESTAMPTZ,
     promoted_by UUID,
     source_version INT,
     release_notes TEXT,
-    created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     
     -- Constraints
     CONSTRAINT rule_versions_rule_fk FOREIGN KEY (rule_id) REFERENCES edm.rules(id) ON DELETE CASCADE,
@@ -96,12 +96,12 @@ CREATE TABLE IF NOT EXISTS edm.rule_approvals (
     promotion_stage VARCHAR(50), -- testing, staging, production
     role VARCHAR(100) NOT NULL, -- data_steward, compliance_officer, business_owner
     approver_id UUID,
-    approved_at TIMESTAMP,
+    approved_at TIMESTAMPTZ,
     rejection_reason TEXT,
     comments TEXT,
     required_for_promotion BOOLEAN DEFAULT TRUE,
-    created_at TIMESTAMP NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMP NOT NULL DEFAULT NOW(),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     
     -- Constraints
     CONSTRAINT rule_approvals_rule_fk FOREIGN KEY (rule_id) REFERENCES edm.rules(id) ON DELETE CASCADE,
@@ -127,7 +127,7 @@ CREATE TABLE IF NOT EXISTS edm.approval_workflows (
     promotion_stage VARCHAR(50) NOT NULL, -- testing, staging, production
     required_role VARCHAR(100) NOT NULL,
     sequence_order INT NOT NULL,
-    created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     
     -- Constraints
     CONSTRAINT approval_workflows_stage_check CHECK (promotion_stage IN ('testing', 'staging', 'production')),
@@ -152,8 +152,8 @@ BEGIN
             governance_status VARCHAR(50) DEFAULT 'approved', -- approved, draft, deprecated
             category VARCHAR(100) NOT NULL, -- identification, classification, data_quality, business_impact
             created_by UUID NOT NULL,
-            created_at TIMESTAMP NOT NULL DEFAULT NOW(),
-            updated_at TIMESTAMP NOT NULL DEFAULT NOW(),
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
             
             -- Constraints
             CONSTRAINT semantic_terms_data_type_check CHECK (data_type IN ('string', 'boolean', 'date', 'number')),
@@ -190,7 +190,7 @@ CREATE TABLE IF NOT EXISTS edm.rule_execution_history (
     status VARCHAR(50) NOT NULL DEFAULT 'success', -- success, error
     error_message TEXT,
     executed_by UUID,
-    executed_at TIMESTAMP NOT NULL DEFAULT NOW(),
+    executed_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     
     -- Constraints
     CONSTRAINT rule_exec_rule_fk FOREIGN KEY (rule_id) REFERENCES edm.rules(id) ON DELETE CASCADE,

@@ -8,6 +8,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 
+	"github.com/hondyman/uisce/backend/internal/handlers"
 	"github.com/hondyman/uisce/backend/internal/scheduler_intelligence/ai"
 )
 
@@ -19,6 +20,7 @@ type EnhancedAIHandler struct {
 	smartRetry         *ai.SmartRetryOptimizer
 	runbookGenerator   *ai.RunbookGenerator
 	nlqScheduler       *ai.NLQScheduler
+	securityDeps       handlers.SecurityContextDeps
 }
 
 // NewEnhancedAIHandler creates a new enhanced AI handler
@@ -29,6 +31,7 @@ func NewEnhancedAIHandler(
 	retry *ai.SmartRetryOptimizer,
 	runbook *ai.RunbookGenerator,
 	nlq *ai.NLQScheduler,
+	securityDeps handlers.SecurityContextDeps,
 ) *EnhancedAIHandler {
 	return &EnhancedAIHandler{
 		exceptionClusterer: clusterer,
@@ -37,6 +40,7 @@ func NewEnhancedAIHandler(
 		smartRetry:         retry,
 		runbookGenerator:   runbook,
 		nlqScheduler:       nlq,
+		securityDeps:       securityDeps,
 	}
 }
 
@@ -95,8 +99,12 @@ func (h *EnhancedAIHandler) ClusterExceptions(w http.ResponseWriter, r *http.Req
 
 // GetExceptionClusters returns current exception clusters
 func (h *EnhancedAIHandler) GetExceptionClusters(w http.ResponseWriter, r *http.Request) {
-	// Would fetch from persistent storage in production
-	tenantID := r.URL.Query().Get("tenant_id")
+	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
+	if err != nil {
+		http.Error(w, "Unauthorized: "+err.Error(), http.StatusUnauthorized)
+		return
+	}
+	tenantID := secCtx.TenantID
 
 	clusters := []map[string]interface{}{
 		{

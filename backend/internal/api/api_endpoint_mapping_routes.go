@@ -10,6 +10,8 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+
+	"github.com/hondyman/uisce/backend/internal/handlers"
 )
 
 // EndpointEntityMapping represents a relationship between an API endpoint and an entity
@@ -34,33 +36,41 @@ type EndpointDatasourceMapping struct {
 	UpdatedAt        time.Time `json:"updated_at"`
 }
 
+type endpointMappingHandler struct {
+	securityDeps handlers.SecurityContextDeps
+	db           *sql.DB
+}
+
 // RegisterEndpointMappingRoutes registers all endpoint mapping routes
-func RegisterEndpointMappingRoutes(r chi.Router, db *sql.DB) {
+func RegisterEndpointMappingRoutes(r chi.Router, db *sql.DB, securityDeps handlers.SecurityContextDeps) {
+	h := &endpointMappingHandler{
+		securityDeps: securityDeps,
+		db:           db,
+	}
 	// Entity mappings
-	r.Get("/api-endpoints/{endpoint-id}/entity-mappings", handleListEntityMappings(db))
-	r.Post("/api-endpoints/{endpoint-id}/entity-mappings", handleCreateEntityMapping(db))
-	r.Delete("/api-endpoints/{endpoint-id}/entity-mappings/{entity-id}", handleDeleteEntityMapping(db))
+	r.Get("/api-endpoints/{endpoint-id}/entity-mappings", h.handleListEntityMappings())
+	r.Post("/api-endpoints/{endpoint-id}/entity-mappings", h.handleCreateEntityMapping())
+	r.Delete("/api-endpoints/{endpoint-id}/entity-mappings/{entity-id}", h.handleDeleteEntityMapping())
 
 	// Datasource mappings
-	r.Get("/api-endpoints/{endpoint-id}/datasource-mappings", handleListDatasourceMappings(db))
-	r.Post("/api-endpoints/{endpoint-id}/datasource-mappings", handleCreateDatasourceMapping(db))
-	r.Delete("/api-endpoints/{endpoint-id}/datasource-mappings/{datasource-id}", handleDeleteDatasourceMapping(db))
+	r.Get("/api-endpoints/{endpoint-id}/datasource-mappings", h.handleListDatasourceMappings())
+	r.Post("/api-endpoints/{endpoint-id}/datasource-mappings", h.handleCreateDatasourceMapping())
+	r.Delete("/api-endpoints/{endpoint-id}/datasource-mappings/{datasource-id}", h.handleDeleteDatasourceMapping())
 
 	// Reverse lookups
-	r.Get("/entities/{entity-id}/api-endpoints", handleGetEntityEndpoints(db))
-	r.Get("/datasources/{datasource-id}/api-endpoints", handleGetDatasourceEndpoints(db))
+	r.Get("/entities/{entity-id}/api-endpoints", h.handleGetEntityEndpoints())
+	r.Get("/datasources/{datasource-id}/api-endpoints", h.handleGetDatasourceEndpoints())
 }
 
 // handleListEntityMappings lists all entity mappings for an endpoint
-func handleListEntityMappings(db *sql.DB) http.HandlerFunc {
+func (h *endpointMappingHandler) handleListEntityMappings() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		tenantID := r.URL.Query().Get("tenant_id")
-		endpointID := chi.URLParam(r, "endpoint-id")
-
-		if tenantID == "" {
-			writeJSONError(w, http.StatusBadRequest, "tenant_id is required", "missing_tenant", "")
+		secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
+		if err != nil {
+			writeJSONError(w, http.StatusUnauthorized, "security context initialization failed", "auth_error", err.Error())
 			return
 		}
+		endpointID := chi.URLParam(r, "endpoint-id")
 
 		query := `
 			SELECT id, api_endpoint_id, entity_id, tenant_id, relationship_type, created_at, updated_at
@@ -69,7 +79,7 @@ func handleListEntityMappings(db *sql.DB) http.HandlerFunc {
 			ORDER BY created_at DESC
 		`
 
-		rows, err := db.Query(query, endpointID, tenantID)
+		rows, err := h.db.Query(query, endpointID, secCtx.TenantID)
 		if err != nil {
 			writeJSONError(w, http.StatusInternalServerError, "Failed to fetch mappings", "db_error", err.Error())
 			return
@@ -94,15 +104,14 @@ func handleListEntityMappings(db *sql.DB) http.HandlerFunc {
 }
 
 // handleCreateEntityMapping creates a new entity mapping for an endpoint
-func handleCreateEntityMapping(db *sql.DB) http.HandlerFunc {
+func (h *endpointMappingHandler) handleCreateEntityMapping() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		tenantID := r.URL.Query().Get("tenant_id")
-		endpointID := chi.URLParam(r, "endpoint-id")
-
-		if tenantID == "" {
-			writeJSONError(w, http.StatusBadRequest, "tenant_id is required", "missing_tenant", "")
+		secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
+		if err != nil {
+			writeJSONError(w, http.StatusUnauthorized, "security context initialization failed", "auth_error", err.Error())
 			return
 		}
+		endpointID := chi.URLParam(r, "endpoint-id")
 
 		var req struct {
 			EntityID         string `json:"entity_id"`
@@ -129,7 +138,7 @@ func handleCreateEntityMapping(db *sql.DB) http.HandlerFunc {
 			ON CONFLICT (api_endpoint_id, entity_id, tenant_id, relationship_type) DO NOTHING
 		`
 
-		if err := db.QueryRow(query, id, endpointID, req.EntityID, tenantID, req.RelationshipType, now, now).Err(); err != nil {
+		if err := h.db.QueryRow(query, id, endpointID, req.EntityID, secCtx.TenantID, req.RelationshipType, now, now).Err(); err != nil {
 			writeJSONError(w, http.StatusInternalServerError, "Failed to create mapping", "db_error", err.Error())
 			return
 		}
@@ -138,7 +147,7 @@ func handleCreateEntityMapping(db *sql.DB) http.HandlerFunc {
 			ID:               id,
 			APIEndpointID:    endpointID,
 			EntityID:         req.EntityID,
-			TenantID:         tenantID,
+			TenantID:         secCtx.TenantID,
 			RelationshipType: req.RelationshipType,
 			CreatedAt:        now,
 			UpdatedAt:        now,
@@ -151,20 +160,19 @@ func handleCreateEntityMapping(db *sql.DB) http.HandlerFunc {
 }
 
 // handleDeleteEntityMapping deletes an entity mapping
-func handleDeleteEntityMapping(db *sql.DB) http.HandlerFunc {
+func (h *endpointMappingHandler) handleDeleteEntityMapping() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		tenantID := r.URL.Query().Get("tenant_id")
+		secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
+		if err != nil {
+			writeJSONError(w, http.StatusUnauthorized, "security context initialization failed", "auth_error", err.Error())
+			return
+		}
 		endpointID := chi.URLParam(r, "endpoint-id")
 		entityID := chi.URLParam(r, "entity-id")
 
-		if tenantID == "" {
-			writeJSONError(w, http.StatusBadRequest, "tenant_id is required", "missing_tenant", "")
-			return
-		}
-
-		result, err := db.Exec(
+		result, err := h.db.Exec(
 			"DELETE FROM api_endpoint_entity_mappings WHERE api_endpoint_id = $1 AND entity_id = $2 AND tenant_id = $3",
-			endpointID, entityID, tenantID,
+			endpointID, entityID, secCtx.TenantID,
 		)
 		if err != nil {
 			writeJSONError(w, http.StatusInternalServerError, "Failed to delete mapping", "db_error", err.Error())
@@ -182,15 +190,14 @@ func handleDeleteEntityMapping(db *sql.DB) http.HandlerFunc {
 }
 
 // handleListDatasourceMappings lists all datasource mappings for an endpoint
-func handleListDatasourceMappings(db *sql.DB) http.HandlerFunc {
+func (h *endpointMappingHandler) handleListDatasourceMappings() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		tenantID := r.URL.Query().Get("tenant_id")
-		endpointID := chi.URLParam(r, "endpoint-id")
-
-		if tenantID == "" {
-			writeJSONError(w, http.StatusBadRequest, "tenant_id is required", "missing_tenant", "")
+		secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
+		if err != nil {
+			writeJSONError(w, http.StatusUnauthorized, "security context initialization failed", "auth_error", err.Error())
 			return
 		}
+		endpointID := chi.URLParam(r, "endpoint-id")
 
 		query := `
 			SELECT id, api_endpoint_id, datasource_id, tenant_id, relationship_type, created_at, updated_at
@@ -199,7 +206,7 @@ func handleListDatasourceMappings(db *sql.DB) http.HandlerFunc {
 			ORDER BY created_at DESC
 		`
 
-		rows, err := db.Query(query, endpointID, tenantID)
+		rows, err := h.db.Query(query, endpointID, secCtx.TenantID)
 		if err != nil {
 			writeJSONError(w, http.StatusInternalServerError, "Failed to fetch mappings", "db_error", err.Error())
 			return
@@ -224,15 +231,14 @@ func handleListDatasourceMappings(db *sql.DB) http.HandlerFunc {
 }
 
 // handleCreateDatasourceMapping creates a new datasource mapping for an endpoint
-func handleCreateDatasourceMapping(db *sql.DB) http.HandlerFunc {
+func (h *endpointMappingHandler) handleCreateDatasourceMapping() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		tenantID := r.URL.Query().Get("tenant_id")
-		endpointID := chi.URLParam(r, "endpoint-id")
-
-		if tenantID == "" {
-			writeJSONError(w, http.StatusBadRequest, "tenant_id is required", "missing_tenant", "")
+		secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
+		if err != nil {
+			writeJSONError(w, http.StatusUnauthorized, "security context initialization failed", "auth_error", err.Error())
 			return
 		}
+		endpointID := chi.URLParam(r, "endpoint-id")
 
 		var req struct {
 			DatasourceID     string `json:"datasource_id"`
@@ -259,7 +265,7 @@ func handleCreateDatasourceMapping(db *sql.DB) http.HandlerFunc {
 			ON CONFLICT (api_endpoint_id, datasource_id, tenant_id, relationship_type) DO NOTHING
 		`
 
-		if err := db.QueryRow(query, id, endpointID, req.DatasourceID, tenantID, req.RelationshipType, now, now).Err(); err != nil {
+		if err := h.db.QueryRow(query, id, endpointID, req.DatasourceID, secCtx.TenantID, req.RelationshipType, now, now).Err(); err != nil {
 			writeJSONError(w, http.StatusInternalServerError, "Failed to create mapping", "db_error", err.Error())
 			return
 		}
@@ -268,7 +274,7 @@ func handleCreateDatasourceMapping(db *sql.DB) http.HandlerFunc {
 			ID:               id,
 			APIEndpointID:    endpointID,
 			DatasourceID:     req.DatasourceID,
-			TenantID:         tenantID,
+			TenantID:         secCtx.TenantID,
 			RelationshipType: req.RelationshipType,
 			CreatedAt:        now,
 			UpdatedAt:        now,
@@ -281,20 +287,19 @@ func handleCreateDatasourceMapping(db *sql.DB) http.HandlerFunc {
 }
 
 // handleDeleteDatasourceMapping deletes a datasource mapping
-func handleDeleteDatasourceMapping(db *sql.DB) http.HandlerFunc {
+func (h *endpointMappingHandler) handleDeleteDatasourceMapping() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		tenantID := r.URL.Query().Get("tenant_id")
+		secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
+		if err != nil {
+			writeJSONError(w, http.StatusUnauthorized, "security context initialization failed", "auth_error", err.Error())
+			return
+		}
 		endpointID := chi.URLParam(r, "endpoint-id")
 		datasourceID := chi.URLParam(r, "datasource-id")
 
-		if tenantID == "" {
-			writeJSONError(w, http.StatusBadRequest, "tenant_id is required", "missing_tenant", "")
-			return
-		}
-
-		result, err := db.Exec(
+		result, err := h.db.Exec(
 			"DELETE FROM api_endpoint_datasource_mappings WHERE api_endpoint_id = $1 AND datasource_id = $2 AND tenant_id = $3",
-			endpointID, datasourceID, tenantID,
+			endpointID, datasourceID, secCtx.TenantID,
 		)
 		if err != nil {
 			writeJSONError(w, http.StatusInternalServerError, "Failed to delete mapping", "db_error", err.Error())
@@ -312,17 +317,15 @@ func handleDeleteDatasourceMapping(db *sql.DB) http.HandlerFunc {
 }
 
 // handleGetEntityEndpoints retrieves all API endpoints for a specific entity
-func handleGetEntityEndpoints(db *sql.DB) http.HandlerFunc {
+func (h *endpointMappingHandler) handleGetEntityEndpoints() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		tenantID := r.URL.Query().Get("tenant_id")
-		entityID := chi.URLParam(r, "entity-id")
-
-		if tenantID == "" {
-			writeJSONError(w, http.StatusBadRequest, "tenant_id is required", "missing_tenant", "")
+		secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
+		if err != nil {
+			writeJSONError(w, http.StatusUnauthorized, "security context initialization failed", "auth_error", err.Error())
 			return
 		}
+		entityID := chi.URLParam(r, "entity-id")
 
-		// Pagination
 		page := 1
 		if p := r.URL.Query().Get("page"); p != "" {
 			if parsed, err := strconv.Atoi(p); err == nil && parsed > 0 {
@@ -348,7 +351,7 @@ func handleGetEntityEndpoints(db *sql.DB) http.HandlerFunc {
 			LIMIT $3 OFFSET $4
 		`
 
-		rows, err := db.Query(query, entityID, tenantID, limit, offset)
+		rows, err := h.db.Query(query, entityID, secCtx.TenantID, limit, offset)
 		if err != nil {
 			writeJSONError(w, http.StatusInternalServerError, "Failed to fetch endpoints", "db_error", err.Error())
 			return
@@ -381,11 +384,10 @@ func handleGetEntityEndpoints(db *sql.DB) http.HandlerFunc {
 			endpoints = append(endpoints, ep)
 		}
 
-		// Get total count
 		var total int
 		countQuery := strings.Replace(query, "SELECT aec.id, aec.endpoint_name, aec.description, aec.http_method, aec.url_path, aec.category, aec.subcategory, aec.purpose, aec.version, aem.relationship_type, aec.created_at, aec.updated_at", "SELECT COUNT(*)", 1)
 		countQuery = strings.Split(countQuery, "LIMIT")[0]
-		db.QueryRow(countQuery, entityID, tenantID).Scan(&total)
+		h.db.QueryRow(countQuery, entityID, secCtx.TenantID).Scan(&total)
 
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]interface{}{
@@ -397,15 +399,14 @@ func handleGetEntityEndpoints(db *sql.DB) http.HandlerFunc {
 }
 
 // handleGetDatasourceEndpoints retrieves all API endpoints for a specific datasource
-func handleGetDatasourceEndpoints(db *sql.DB) http.HandlerFunc {
+func (h *endpointMappingHandler) handleGetDatasourceEndpoints() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		tenantID := r.URL.Query().Get("tenant_id")
-		datasourceID := chi.URLParam(r, "datasource-id")
-
-		if tenantID == "" {
-			writeJSONError(w, http.StatusBadRequest, "tenant_id is required", "missing_tenant", "")
+		secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
+		if err != nil {
+			writeJSONError(w, http.StatusUnauthorized, "security context initialization failed", "auth_error", err.Error())
 			return
 		}
+		datasourceID := chi.URLParam(r, "datasource-id")
 
 		query := `
 			SELECT aec.id, aec.endpoint_name, aec.description, aec.http_method, aec.url_path,
@@ -417,7 +418,7 @@ func handleGetDatasourceEndpoints(db *sql.DB) http.HandlerFunc {
 			ORDER BY aec.category, aec.endpoint_name
 		`
 
-		rows, err := db.Query(query, datasourceID, tenantID)
+		rows, err := h.db.Query(query, datasourceID, secCtx.TenantID)
 		if err != nil {
 			writeJSONError(w, http.StatusInternalServerError, "Failed to fetch endpoints", "db_error", err.Error())
 			return

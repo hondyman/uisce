@@ -9,6 +9,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/hondyman/uisce/backend/internal/analytics"
+	"github.com/hondyman/uisce/backend/internal/handlers"
 	"github.com/hondyman/uisce/backend/internal/models"
 	"github.com/hondyman/uisce/backend/internal/services"
 	"github.com/hondyman/uisce/backend/pkg/llm"
@@ -17,25 +18,26 @@ import (
 
 // SemanticTermsHandler handles semantic terms API requests
 type SemanticTermsHandler struct {
-	db        *sql.DB
-	resolver  *services.SemanticResolver
-	assistant *services.SemanticAssistant
-	service   *analytics.SemanticMappingService
+	db           *sql.DB
+	resolver     *services.SemanticResolver
+	assistant    *services.SemanticAssistant
+	service      *analytics.SemanticMappingService
+	securityDeps handlers.SecurityContextDeps
 }
 
 // NewSemanticTermsHandler creates a new semantic terms handler
-func NewSemanticTermsHandler(db *sql.DB) *SemanticTermsHandler {
+func NewSemanticTermsHandler(db *sql.DB, securityDeps handlers.SecurityContextDeps) *SemanticTermsHandler {
 	repo := &services.SQLTermRepository{DB: db}
 	resolver := services.NewSemanticResolver(repo)
 
-	// Init LLM (defaults to env var)
 	llmProvider := llm.NewGeminiProvider("", "")
 	assistant := services.NewSemanticAssistant(llmProvider)
 
 	return &SemanticTermsHandler{
-		db:        db, // Assuming db is *sql.DB. If sqlx is needed, struct needs update.
-		resolver:  resolver,
-		assistant: assistant,
+		db:           db,
+		resolver:     resolver,
+		assistant:    assistant,
+		securityDeps: securityDeps,
 	}
 }
 
@@ -104,10 +106,14 @@ func (h *SemanticTermsHandler) SuggestBusinessTerms(w http.ResponseWriter, r *ht
 
 // GetSemanticTerms retrieves semantic terms
 func (h *SemanticTermsHandler) GetSemanticTerms(w http.ResponseWriter, r *http.Request) {
-	datasourceID := r.URL.Query().Get("datasource_id")
+	datasourceID := r.Header.Get("X-Tenant-Datasource-ID")
+	if datasourceID == "" {
+		secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
+		if err == nil {
+			datasourceID = secCtx.DatasourceID
+		}
+	}
 
-	// Filter by datasource if provided, but semantic terms might be global
-	// For now keeping existing logic but making it optional if needed
 	var rows *sql.Rows
 	var err error
 

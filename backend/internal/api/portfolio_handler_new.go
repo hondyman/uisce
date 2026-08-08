@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/hondyman/uisce/backend/internal/handlers"
 	"github.com/jmoiron/sqlx"
 )
 
@@ -14,12 +15,14 @@ import (
 // ============================================================================
 
 type PortfolioHandler struct {
-	db *sqlx.DB
+	db           *sqlx.DB
+	securityDeps handlers.SecurityContextDeps
 }
 
-func NewPortfolioHandler(db *sqlx.DB) *PortfolioHandler {
+func NewPortfolioHandler(db *sqlx.DB, securityDeps handlers.SecurityContextDeps) *PortfolioHandler {
 	return &PortfolioHandler{
-		db: db,
+		db:           db,
+		securityDeps: securityDeps,
 	}
 }
 
@@ -176,10 +179,16 @@ type ScenariosResponse struct {
 // GET /api/portfolios/{portfolioId}/overview?tenant_id=xxx&valuation_date=yyyy-mm-dd
 func (h *PortfolioHandler) GetPortfolioOverview(w http.ResponseWriter, r *http.Request) {
 	portfolioID := chi.URLParam(r, "portfolioId")
-	tenantID := r.URL.Query().Get("tenant_id")
 
+	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusUnauthorized)
+		return
+	}
+
+	tenantID := secCtx.TenantID
 	if tenantID == "" {
-		http.Error(w, "tenant_id query parameter is required", http.StatusBadRequest)
+		http.Error(w, "tenant_id required", http.StatusBadRequest)
 		return
 	}
 
@@ -229,10 +238,16 @@ func (h *PortfolioHandler) GetPortfolioOverview(w http.ResponseWriter, r *http.R
 // GET /api/portfolios/{portfolioId}/holdings?tenant_id=xxx&valuation_date=yyyy-mm-dd
 func (h *PortfolioHandler) GetHoldings(w http.ResponseWriter, r *http.Request) {
 	portfolioID := chi.URLParam(r, "portfolioId")
-	tenantID := r.URL.Query().Get("tenant_id")
 
+	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusUnauthorized)
+		return
+	}
+
+	tenantID := secCtx.TenantID
 	if tenantID == "" {
-		http.Error(w, "tenant_id query parameter is required", http.StatusBadRequest)
+		http.Error(w, "tenant_id required", http.StatusBadRequest)
 		return
 	}
 
@@ -320,10 +335,16 @@ func (h *PortfolioHandler) GetHoldings(w http.ResponseWriter, r *http.Request) {
 // GET /api/portfolios/{portfolioId}/risk?tenant_id=xxx&valuation_date=yyyy-mm-dd
 func (h *PortfolioHandler) GetPortfolioRisk(w http.ResponseWriter, r *http.Request) {
 	portfolioID := chi.URLParam(r, "portfolioId")
-	tenantID := r.URL.Query().Get("tenant_id")
 
+	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusUnauthorized)
+		return
+	}
+
+	tenantID := secCtx.TenantID
 	if tenantID == "" {
-		http.Error(w, "tenant_id query parameter is required", http.StatusBadRequest)
+		http.Error(w, "tenant_id required", http.StatusBadRequest)
 		return
 	}
 
@@ -383,10 +404,16 @@ func (h *PortfolioHandler) GetPortfolioRisk(w http.ResponseWriter, r *http.Reque
 // GET /api/portfolios/{portfolioId}/compliance?tenant_id=xxx&valuation_date=yyyy-mm-dd
 func (h *PortfolioHandler) GetPortfolioCompliance(w http.ResponseWriter, r *http.Request) {
 	portfolioID := chi.URLParam(r, "portfolioId")
-	tenantID := r.URL.Query().Get("tenant_id")
 
+	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusUnauthorized)
+		return
+	}
+
+	tenantID := secCtx.TenantID
 	if tenantID == "" {
-		http.Error(w, "tenant_id query parameter is required", http.StatusBadRequest)
+		http.Error(w, "tenant_id required", http.StatusBadRequest)
 		return
 	}
 
@@ -441,10 +468,16 @@ func (h *PortfolioHandler) GetPortfolioCompliance(w http.ResponseWriter, r *http
 // GET /api/portfolios/{portfolioId}/scenarios?tenant_id=xxx&valuation_date=yyyy-mm-dd
 func (h *PortfolioHandler) GetScenarios(w http.ResponseWriter, r *http.Request) {
 	portfolioID := chi.URLParam(r, "portfolioId")
-	tenantID := r.URL.Query().Get("tenant_id")
 
+	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusUnauthorized)
+		return
+	}
+
+	tenantID := secCtx.TenantID
 	if tenantID == "" {
-		http.Error(w, "tenant_id query parameter is required", http.StatusBadRequest)
+		http.Error(w, "tenant_id required", http.StatusBadRequest)
 		return
 	}
 

@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/hondyman/uisce/libs/db/queries"
 	"github.com/jmoiron/sqlx"
 )
 
@@ -559,15 +560,7 @@ func (e *BranchEvaluator) LogBranchExecution(
 	conditionEval, _ := json.Marshal(result.ConditionEval)
 	resultData, _ := json.Marshal(result.ResultData)
 
-	_, err := e.db.ExecContext(ctx, `
-		INSERT INTO bp_branch_executions (
-			tenant_id, datasource_id, workflow_instance_id, step_id,
-			branch_id, branch_label, selected_by, condition_evaluation,
-			ml_model_score, started_at, completed_at, duration_ms,
-			status, result_data, next_step_id, join_strategy,
-			is_last_in_join, nesting_level, loop_iteration
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
-	`,
+	_, err := e.db.ExecContext(ctx, queries.InsertBranchExecution,
 		tenantID, datasourceID, workflowInstanceID, stepID,
 		result.BranchID, result.BranchLabel, result.SelectedBy, conditionEval,
 		mlScore, result.StartedAt, result.CompletedAt, result.DurationMs,
@@ -600,13 +593,8 @@ func (e *BranchEvaluator) CreateJoinPoint(
 ) (string, error) {
 
 	var id string
-	err := e.db.GetContext(ctx, &id, `
-		INSERT INTO bp_join_convergences (
-			tenant_id, workflow_instance_id, step_id, join_id,
-			join_strategy, required_branches, status
-		) VALUES ($1, $2, $3, $4, $5, $6, 'waiting')
-		RETURNING id
-	`, tenantID, workflowInstanceID, stepID, joinID, strategy, requiredBranches)
+	err := e.db.GetContext(ctx, &id, queries.InsertJoinConvergence,
+		tenantID, workflowInstanceID, stepID, joinID, strategy, requiredBranches)
 
 	return id, err
 }
@@ -624,9 +612,7 @@ func (e *BranchEvaluator) CheckJoinCompletion(
 		Required  int `db:"required_branches"`
 	}
 
-	err := e.db.GetContext(ctx, &result, `
-		SELECT completed_branches, required_branches FROM bp_join_convergences WHERE id = $1
-	`, joinID)
+	err := e.db.GetContext(ctx, &result, queries.GetJoinConvergence, joinID)
 
 	if err != nil {
 		return false, err

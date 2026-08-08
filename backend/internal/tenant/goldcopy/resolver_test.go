@@ -98,7 +98,7 @@ func TestResolver_Resolve_NoRows(t *testing.T) {
 }
 
 func TestResolver_Resolve_RedisCacheHit(t *testing.T) {
-	db, mock, _ := sqlmock.New()
+	db, _, _ := sqlmock.New()
 	defer db.Close()
 
 	cachedID := uuid.New().String()

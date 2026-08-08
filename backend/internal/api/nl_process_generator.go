@@ -9,6 +9,8 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
+
+	"github.com/hondyman/uisce/backend/internal/handlers"
 )
 
 // NLProcessRequest represents the natural language input
@@ -43,7 +45,12 @@ type ClaudeProvider struct {
 
 // GenerateProcessFromNaturalLanguage generates a business process from natural language description
 func (h *BPBuilderHandlers) GenerateProcessFromNaturalLanguage(w http.ResponseWriter, r *http.Request) {
-	tenantID := r.URL.Query().Get("tenant_id")
+	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
+	if err != nil {
+		respondJSON(w, http.StatusUnauthorized, newBPAPIResponse(false, nil, "Unauthorized: "+err.Error()))
+		return
+	}
+	tenantID := secCtx.TenantID
 	if tenantID == "" {
 		respondJSON(w, http.StatusBadRequest, newBPAPIResponse(false, nil, "tenant_id is required"))
 		return

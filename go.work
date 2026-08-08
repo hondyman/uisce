@@ -12,4 +12,7 @@ use (
 	./libs/logging
 	./libs/shared-types
 	./libs/temporal-client
+	./libs/infisical
+	./portfolio-management/backend
+	./rebalancing/worker
 )

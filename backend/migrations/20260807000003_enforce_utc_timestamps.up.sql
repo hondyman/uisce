@@ -1,0 +1,28 @@
+-- +migrate Up
+-- UTC Timezone Enforcement Policy
+--
+-- IMPORTANT: UTC enforcement is handled at the CODE layer, not database triggers.
+-- Database triggers add overhead to every DDL operation and are disabled.
+--
+-- Enforcement Mechanisms (Code Layer):
+--
+-- 1. Migration Runner Validation
+--    File: migrations/migration_runner.go
+--    - Validates all migrations before applying
+--    - Blocks bare TIMESTAMP column definitions
+--
+-- 2. Pre-commit Validation Script
+--    File: scripts/check_migration_utc.go
+--    - Run: go run scripts/check_migration_utc.go migrations/*.sql
+--
+-- 3. Schema Lint Script
+--    File: scripts/check_utc_compliance.sh
+--    - Run: ./scripts/check_utc_compliance.sh
+--
+-- Policy:
+-- - All timestamp columns MUST use TIMESTAMPTZ (not bare TIMESTAMP)
+-- - Use time.Now().UTC() in Go code when inserting timestamps
+-- - DSN must include TimeZone=UTC
+
+-- +migrate Down
+-- No-op: Enforcement is code-only, no database objects to remove

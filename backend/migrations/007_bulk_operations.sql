@@ -15,9 +15,9 @@ CREATE TABLE IF NOT EXISTS edm.bulk_operations (
   success_count INT NOT NULL DEFAULT 0,
   failure_count INT NOT NULL DEFAULT 0,
   payload_size INT,
-  created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   created_by UUID NOT NULL,
-  completed_at TIMESTAMP,
+  completed_at TIMESTAMPTZ,
   error_summary TEXT,
   
   -- Constraints

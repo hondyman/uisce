@@ -146,9 +146,7 @@ export const UserRoleAssignmentStyled: React.FC<UserRoleAssignmentProps> = ({
   // Fetch roles
   const fetchRoles = async () => {
     try {
-      const response = await fetch(
-        `/api/rbac/roles?tenant_id=${tenant.id}&tenant_instance_id=${datasource.id}`
-      );
+      const response = await fetch('/api/rbac/roles');
       const data = await response.json();
       setRoles(data || []);
     } catch (error) {
@@ -159,9 +157,7 @@ export const UserRoleAssignmentStyled: React.FC<UserRoleAssignmentProps> = ({
   // Fetch user roles
   const fetchUserRoles = async (userId: string) => {
     try {
-      const response = await fetch(
-        `/api/rbac/users/${userId}/roles?tenant_id=${tenant.id}&tenant_instance_id=${datasource.id}`
-      );
+      const response = await fetch(`/api/rbac/users/${userId}/roles`);
       const data = await response.json();
       setUserRoles(data || []);
     } catch (error) {
@@ -180,8 +176,6 @@ export const UserRoleAssignmentStyled: React.FC<UserRoleAssignmentProps> = ({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           user_id: selectedUser.id,
-          tenant_id: tenant.id,
-          tenant_instance_id: datasource.id,
           scope_type: assignmentForm.scope_type,
           scope_id: assignmentForm.scope_id || null,
           expires_at: assignmentForm.expires_at || null,

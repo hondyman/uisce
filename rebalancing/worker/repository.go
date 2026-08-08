@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"github.com/google/uuid"
+	"github.com/hondyman/uisce/libs/db/queries"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -46,16 +47,13 @@ type Holding struct {
 }
 
 func (r *Repository) SetTenant(ctx context.Context, tenantID uuid.UUID) error {
-	_, err := r.pool.Exec(ctx, "SELECT set_config('app.current_tenant', $1, false)", tenantID.String())
+	_, err := r.pool.Exec(ctx, queries.SetTenantGUC, tenantID.String())
 	return err
 }
 
 func (r *Repository) GetPortfolio(ctx context.Context, id uuid.UUID) (*Portfolio, error) {
 	var p Portfolio
-	err := r.pool.QueryRow(ctx, `
-		SELECT id, tenant_id, name, aum, drift, last_rebalance::text, target_model, constraints
-		FROM portfolios WHERE id = $1
-	`, id).Scan(&p.ID, &p.TenantID, &p.Name, &p.AUM, &p.Drift, &p.LastRebalance, &p.TargetModel, &p.Constraints)
+	err := r.pool.QueryRow(ctx, queries.GetPortfolio, id).Scan(&p.ID, &p.TenantID, &p.Name, &p.AUM, &p.Drift, &p.LastRebalance, &p.TargetModel, &p.Constraints)
 	if err != nil {
 		if err == pgx.ErrNoRows {
 			return nil, fmt.Errorf("portfolio not found: %s", id)
@@ -63,10 +61,7 @@ func (r *Repository) GetPortfolio(ctx context.Context, id uuid.UUID) (*Portfolio
 		return nil, fmt.Errorf("failed to get portfolio: %w", err)
 	}
 
-	rows, err := r.pool.Query(ctx, `
-		SELECT id, symbol, shares, current_price, cost_basis, purchase_date, tax_lot_id, sector
-		FROM portfolio_holdings WHERE portfolio_id = $1
-	`, id)
+	rows, err := r.pool.Query(ctx, queries.GetPortfolioHoldings, id)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get holdings: %w", err)
 	}
@@ -84,15 +79,7 @@ func (r *Repository) GetPortfolio(ctx context.Context, id uuid.UUID) (*Portfolio
 }
 
 func (r *Repository) UpdatePortfolioState(ctx context.Context, id uuid.UUID, drift float64, taxSaved float64) error {
-	_, err := r.pool.Exec(ctx, `
-		UPDATE portfolios
-		SET drift = $2,
-			tax_saved = $3,
-			last_rebalance = NOW(),
-			rebalance_status = 'completed',
-			updated_at = NOW()
-		WHERE id = $1
-	`, id, drift, taxSaved)
+	_, err := r.pool.Exec(ctx, queries.UpdatePortfolioState, id, drift, taxSaved)
 	return err
 }
 
@@ -111,29 +98,20 @@ type RebalancePlan struct {
 }
 
 func (r *Repository) InsertRebalancePlan(ctx context.Context, plan *RebalancePlan) error {
-	_, err := r.pool.Exec(ctx, `
-		INSERT INTO rebalance_plans (
-			portfolio_id, timestamp, current_drift, expected_drift,
-			tax_savings, confidence, status, rationale, proposed_trades, tax_analysis
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-	`, plan.PortfolioID, plan.Timestamp, plan.CurrentDrift, plan.ExpectedDrift,
+	_, err := r.pool.Exec(ctx, queries.InsertRebalancePlan,
+		plan.PortfolioID, plan.Timestamp, plan.CurrentDrift, plan.ExpectedDrift,
 		plan.TaxSavings, plan.Confidence, plan.Status, plan.Rationale,
 		plan.ProposedTrades, plan.TaxAnalysis)
 	return err
 }
 
 func (r *Repository) UpdatePlanSummary(ctx context.Context, id uuid.UUID, summary string) error {
-	_, err := r.pool.Exec(ctx, `
-		UPDATE rebalance_plans SET summary = $2, updated_at = NOW() WHERE id = $1
-	`, id, summary)
+	_, err := r.pool.Exec(ctx, queries.UpdatePlanSummary, id, summary)
 	return err
 }
 
 func (r *Repository) InsertAuditLog(ctx context.Context, userID, tenantID uuid.UUID, action, resource, resourceID string, allowed bool) error {
-	_, err := r.pool.Exec(ctx, `
-		INSERT INTO audit_logs (tenant_id, user_id, action, resource, resource_id, allowed)
-		VALUES ($1, $2, $3, $4, $5, $6)
-	`, tenantID, userID, action, resource, resourceID, allowed)
+	_, err := r.pool.Exec(ctx, queries.InsertAuditLog, tenantID, userID, action, resource, resourceID, allowed)
 	return err
 }
 

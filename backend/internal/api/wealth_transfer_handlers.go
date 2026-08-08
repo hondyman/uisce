@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/hondyman/uisce/backend/internal/handlers"
 	"github.com/hondyman/uisce/backend/internal/wealth"
 
 	"github.com/go-chi/chi/v5"
@@ -17,6 +18,7 @@ type WealthTransferHandlers struct {
 	taxCalcService      *wealth.TaxCalculationService
 	giftHistoryService  *wealth.GiftHistoryService
 	trustEntityService  *wealth.TrustEntityService
+	securityDeps        handlers.SecurityContextDeps
 }
 
 // NewWealthTransferHandlers creates wealth transfer handlers
@@ -25,12 +27,14 @@ func NewWealthTransferHandlers(
 	taxCalcService *wealth.TaxCalculationService,
 	giftHistoryService *wealth.GiftHistoryService,
 	trustEntityService *wealth.TrustEntityService,
+	securityDeps handlers.SecurityContextDeps,
 ) *WealthTransferHandlers {
 	return &WealthTransferHandlers{
 		familyOfficeService: familyOfficeService,
 		taxCalcService:      taxCalcService,
 		giftHistoryService:  giftHistoryService,
 		trustEntityService:  trustEntityService,
+		securityDeps:        securityDeps,
 	}
 }
 
@@ -108,13 +112,18 @@ func (h *WealthTransferHandlers) GetFamilyOffice(w http.ResponseWriter, r *http.
 }
 
 func (h *WealthTransferHandlers) ListFamilyOffices(w http.ResponseWriter, r *http.Request) {
-	tenantID := r.URL.Query().Get("tenant_id")
+	secCtx, ctx, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
+	if err != nil {
+		http.Error(w, "Unauthorized: "+err.Error(), http.StatusUnauthorized)
+		return
+	}
+	tenantID := secCtx.TenantID
 	if tenantID == "" {
 		http.Error(w, "tenant_id required", http.StatusBadRequest)
 		return
 	}
 
-	families, err := h.familyOfficeService.ListFamilyOffices(r.Context(), tenantID)
+	families, err := h.familyOfficeService.ListFamilyOffices(ctx, tenantID)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return

@@ -8,6 +8,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 
+	"github.com/hondyman/uisce/backend/internal/handlers"
 	scheduler "github.com/hondyman/uisce/backend/internal/scheduler_intelligence"
 )
 
@@ -15,13 +16,15 @@ import (
 type GovernanceHandler struct {
 	governanceSvc *scheduler.GovernanceService
 	auditSvc      *scheduler.AuditTrailService
+	securityDeps  handlers.SecurityContextDeps
 }
 
 // NewGovernanceHandler creates a new governance handler
-func NewGovernanceHandler(govSvc *scheduler.GovernanceService, auditSvc *scheduler.AuditTrailService) *GovernanceHandler {
+func NewGovernanceHandler(govSvc *scheduler.GovernanceService, auditSvc *scheduler.AuditTrailService, securityDeps handlers.SecurityContextDeps) *GovernanceHandler {
 	return &GovernanceHandler{
 		governanceSvc: govSvc,
 		auditSvc:      auditSvc,
+		securityDeps:  securityDeps,
 	}
 }
 
@@ -53,7 +56,12 @@ func (h *GovernanceHandler) RegisterRoutes(r chi.Router) {
 
 // ListChangeSets returns change sets for a tenant
 func (h *GovernanceHandler) ListChangeSets(w http.ResponseWriter, r *http.Request) {
-	tenantID, _ := uuid.Parse(r.URL.Query().Get("tenant_id"))
+	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
+	if err != nil {
+		http.Error(w, "X-Tenant-ID header is required", http.StatusBadRequest)
+		return
+	}
+	tenantID, _ := uuid.Parse(secCtx.TenantID)
 
 	var status *scheduler.ChangeSetStatus
 	if s := r.URL.Query().Get("status"); s != "" {
@@ -228,7 +236,12 @@ func (h *GovernanceHandler) DeletePolicy(w http.ResponseWriter, r *http.Request)
 
 // GetAuditHistory returns audit records
 func (h *GovernanceHandler) GetAuditHistory(w http.ResponseWriter, r *http.Request) {
-	tenantID, _ := uuid.Parse(r.URL.Query().Get("tenant_id"))
+	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
+	if err != nil {
+		http.Error(w, "X-Tenant-ID header is required", http.StatusBadRequest)
+		return
+	}
+	tenantID, _ := uuid.Parse(secCtx.TenantID)
 	limit := 100
 
 	records, err := h.auditSvc.GetRecentActivityForTenant(r.Context(), tenantID, limit)
@@ -258,7 +271,12 @@ func (h *GovernanceHandler) GetEntityTimeline(w http.ResponseWriter, r *http.Req
 
 // GetAuditStats returns aggregate audit statistics
 func (h *GovernanceHandler) GetAuditStats(w http.ResponseWriter, r *http.Request) {
-	tenantID, _ := uuid.Parse(r.URL.Query().Get("tenant_id"))
+	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
+	if err != nil {
+		http.Error(w, "X-Tenant-ID header is required", http.StatusBadRequest)
+		return
+	}
+	tenantID, _ := uuid.Parse(secCtx.TenantID)
 
 	// Would parse from/to from query params
 	stats, err := h.auditSvc.GetAuditStats(r.Context(), tenantID, time.Time{}, time.Time{})

@@ -5,11 +5,11 @@ CREATE TABLE IF NOT EXISTS edm.wasm_module_version (
     module_name       TEXT NOT NULL,
     version           TEXT NOT NULL,
     build_hash        TEXT NOT NULL,
-    build_time        TIMESTAMP NOT NULL,
+    build_time        TIMESTAMPTZ NOT NULL,
     artifact_uri      TEXT NOT NULL,
     checksum_sha256   TEXT NOT NULL,
     is_active         BOOLEAN NOT NULL DEFAULT FALSE,
-    created_at        TIMESTAMP NOT NULL DEFAULT now()
+    created_at        TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
 CREATE UNIQUE INDEX ux_wasm_module_version_name_version

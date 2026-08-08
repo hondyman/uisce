@@ -115,6 +115,8 @@ services:
       POSTGRES_HOST: host.docker.internal
       POSTGRES_SEEDS: host.docker.internal
       DB_PORT: 5432
+      DB_DATABASE: temporal
+      TIMEZONE: UTC
     networks:
       - remote-net
     ports:
@@ -165,14 +167,17 @@ services:
     environment:
       # Database Configuration
       KC_DB: postgres
-      KC_DB_URL: jdbc:postgresql://host.docker.internal:5432/keycloak
+      KC_DB_URL: jdbc:postgresql://host.docker.internal:5432/keycloak?options=-c%20timezone=utc
       KC_DB_USERNAME: postgres
       KC_DB_PASSWORD: postgres
-      
+
       # Admin Credentials
       KC_BOOTSTRAP_ADMIN_USERNAME: admin
       KC_BOOTSTRAP_ADMIN_PASSWORD: password
-      
+
+      # JVM Timezone (UTC)
+      JAVA_OPTS: "-Duser.timezone=UTC"
+
       # SSL and Proxy Configuration
       KC_HTTPS_ENABLED: "true"
       # Point directly to the isolated certs directory
@@ -233,11 +238,12 @@ services:
       - "host.docker.internal:host-gateway"
     environment:
       - NODE_ENV=production
-      - DB_CONNECTION_URI=postgresql://postgres:postgres@host.docker.internal:5432/infisical?sslmode=disable
+      - DB_CONNECTION_URI=postgresql://postgres:postgres@host.docker.internal:5432/infisical?sslmode=disable&options=-c%20timezone=utc
       - REDIS_URL=redis://uisce-redis:6379
       - SITE_URL=http://localhost:8082
       - ENCRYPTION_KEY=1030410d3281d742b960cf2ff13705f6
       - AUTH_SECRET=389218b2d15e55b255031ed509dfa79f
+      - TZ=UTC
     networks:
       - remote-net
     healthcheck:
@@ -272,7 +278,7 @@ services:
       # Flight SQL endpoint (gRPC, optional)
       DATAFUSION_FLIGHT_URL: "${LPS_DATAFUSION_FLIGHT_URL:-grpc://uisce-datafusion:8554}"
       # Iceberg REST catalog endpoint
-      ICEBERG_CATALOG_URI: "${ICEBERG_CATALOG_URI:-http://uisce-polaris:8181}"
+      ICEBERG_CATALOG_URI: "${ICEBERG_CATALOG_URI:-http://lakekeeper:8181}"
       # Redpanda broker for real-time node.created events
       REDPANDA_BROKERS: "uisce-redpanda:9092"
       # How often to run the full reconciliation loop
@@ -284,6 +290,8 @@ services:
       # Structured JSON logging in production; set to 'console' for dev
       LOG_FORMAT: "${LOG_FORMAT:-json}"
     depends_on:
+      lakekeeper:
+        condition: service_healthy
       uisce-redpanda:
         condition: service_healthy
     healthcheck:
@@ -306,6 +314,7 @@ services:
     environment:
       MINIO_ROOT_USER: minioadmin
       MINIO_ROOT_PASSWORD: minioadmin
+      TZ: UTC
     networks:
       - remote-net
     volumes:
@@ -316,6 +325,22 @@ services:
       timeout: 5s
       retries: 5
     restart: unless-stopped
+
+  lakekeeper-minio-init:
+    image: minio/mc:latest
+    container_name: lakekeeper-minio-init
+    depends_on:
+      uisce-minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+      sleep 5;
+      /usr/bin/mc alias set myminio http://uisce-minio:9000 minioadmin minioadmin;
+      /usr/bin/mc mb myminio/iceberg-warehouse --ignore-existing;
+      echo 'Lakekeeper warehouse bucket ready';
+      "
+    networks:
+      - remote-net
 
   # ---------------------------------------------------------
   # DataFusion Arrow Flight SQL Server (Iceberg query engine)
@@ -362,14 +387,16 @@ services:
       S3_SECRET_KEY: "${DATA_FUSION_AWS_SECRET_ACCESS_KEY:-minioadmin}"
       S3_PATH_STYLE_ACCESS: "true"
       # Iceberg REST catalog endpoint & credentials for Apache Polaris
-      ICEBERG_CATALOG_URI: "${ICEBERG_CATALOG_URI:-http://uisce-polaris:8181/api/catalog}"
+      ICEBERG_CATALOG_URI: "${ICEBERG_CATALOG_URI:-http://lakekeeper:8181}"
       ICEBERG_REST_CREDENTIAL: "${ICEBERG_REST_CREDENTIAL:-root:secret}"
       ICEBERG_WAREHOUSE: "${ICEBERG_WAREHOUSE:-tenant-alpha}"
       ICEBERG_REST_SCOPE: "${ICEBERG_REST_SCOPE:-PRINCIPAL_ROLE:ALL}"
       # Warehouse bucket
       WAREHOUSE_BUCKET: "${WAREHOUSE_BUCKET:-iceberg-warehouse}"
+      # Timezone (UTC)
+      TZ: UTC
       # Logging
-      RUST_LOG: "info"
+      RUST_LOG: info
       PYTHONUNBUFFERED: "1"
     healthcheck:
       test: ["CMD-SHELL", "curl -f http://localhost:8555/health || exit 1"]
@@ -379,61 +406,69 @@ services:
       retries: 5
     restart: unless-stopped
 
-  # =========================================================
-  # Apache Polaris — Iceberg REST Catalog (PRODUCTION mode)
-  # Uses the HOST's existing Postgres 18 (via host.docker.internal)
-  # for persistent state. Talks to host MinIO (port 9000) for S3.
-  # Replaces the host Polaris (which is in test mode) and Trino.
-  #
-  # Per architecture: writes go Redpanda -> audit-sink -> Polaris REST API
-  # Reads go: DataFusion (REST) -> Polaris REST -> MinIO/S3
-  # =========================================================
-  uisce-polaris:
-    image: apache/polaris:latest
-    container_name: uisce-polaris
+  # ===========================================================
+  # Lakekeeper — Rust-native Iceberg REST Catalog
+  # Replaces Apache Polaris. Uses its own PostgreSQL 17 for
+  # catalog metadata and existing uisce-minio for S3 storage.
+  # ===========================================================
+  lakekeeper-db:
+    image: postgres:17
+    container_name: lakekeeper-db
+    environment:
+      POSTGRES_PASSWORD: postgres
+      PGTZ: UTC
+    command: postgres -c timezone=UTC
+    volumes:
+      - lakekeeper_pgdata:/var/lib/postgresql/data
     networks:
       - remote-net
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-    ports:
-      - "8185:8181"
-      - "8186:8182"
-    environment:
-      # Postgres for persistent catalog state (NOT test mode!)
-      QUARKUS_DATASOURCE_JDBC_URL: "jdbc:postgresql://host.docker.internal:5432/polaris"
-      QUARKUS_DATASOURCE_USERNAME: "postgres"
-      QUARKUS_DATASOURCE_PASSWORD: "${POLARIS_DB_PASSWORD:-postgres}"
-      # Production persistence (relational-jdbc, not test/in-memory)
-      POLARIS_PERSISTENCE_TYPE: "relational-jdbc"
-      # Bootstrap root principal (realm:POLARIS, client:root, secret:secret)
-      POLARIS_BOOTSTRAP_CREDENTIALS: "POLARIS,root,secret"
-      POLARIS_STORAGE_INTEGRATION_S3_TYPE: "aws"
-      # Default storage config (S3 via uisce-minio with path style access and manual credentials)
-      POLARIS_DEFAULT_STORAGE_CONFIG: |
-        {
-          "storage-type": "s3",
-          "allowed-storage-locations": ["s3://iceberg-warehouse/"],
-          "s3.endpoint": "http://uisce-minio:9000",
-          "s3.path-style-access": "true",
-          "s3.region": "us-east-1",
-          "s3.credentials-type": "MANUAL"
-        }
-      POLARIS_SSL_ENABLED: "false"
-      # S3 credentials & region (for accessing MinIO)
-      AWS_ACCESS_KEY_ID: "minioadmin"
-      AWS_SECRET_ACCESS_KEY: "minioadmin"
-      AWS_REGION: "us-east-1"
-      AWS_DEFAULT_REGION: "us-east-1"
-      POLARIS_STORAGE_INTEGRATION_S3_PATH_STYLE_ACCESS: "true"
-      POLARIS_STORAGE_INTEGRATION_S3_CREDENTIAL_VENDING_ALLOWED: "false"
-      # Heap size
-      JAVA_OPTS: "-Xmx2g"
-      QUARKUS_LOG_LEVEL: "INFO"
     healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:8182/q/health || exit 1"]
-      interval: 30s
+      test: ["CMD-SHELL", "pg_isready -U postgres -p 5432 -d postgres"]
+      interval: 2s
       timeout: 10s
-      start_period: 90s
+      retries: 10
+
+  lakekeeper-migrate:
+    image: quay.io/lakekeeper/catalog:latest-main
+    container_name: lakekeeper-migrate
+    restart: "no"
+    environment:
+      - LAKEKEEPER__PG_DATABASE_URL_READ=postgresql://postgres:postgres@lakekeeper-db:5432/postgres
+      - LAKEKEEPER__PG_DATABASE_URL_WRITE=postgresql://postgres:postgres@lakekeeper-db:5432/postgres
+      - LAKEKEEPER__PG_ENCRYPTION_KEY=change-this-to-a-very-long-random-secret-string
+      - RUST_LOG=info
+    command: ["migrate"]
+    networks:
+      - remote-net
+    depends_on:
+      lakekeeper-db:
+        condition: service_healthy
+
+  lakekeeper:
+    image: quay.io/lakekeeper/catalog:latest-main
+    container_name: lakekeeper
+    environment:
+      - LAKEKEEPER__PG_DATABASE_URL_READ=postgresql://postgres:postgres@lakekeeper-db:5432/postgres?options=-c%20timezone=utc
+      - LAKEKEEPER__PG_DATABASE_URL_WRITE=postgresql://postgres:postgres@lakekeeper-db:5432/postgres?options=-c%20timezone=utc
+      - LAKEKEEPER__PG_ENCRYPTION_KEY=change-this-to-a-very-long-random-secret-string
+      - LAKEKEEPER__BASE_URI=http://localhost:8181
+      - LAKEKEEPER__ENABLE_DEFAULT_PROJECT=true
+      - RUST_LOG=info
+      - TZ=UTC
+    command: ["serve"]
+    ports:
+      - "8181:8181"
+    networks:
+      - remote-net
+    depends_on:
+      lakekeeper-migrate:
+        condition: service_completed_successfully
+      lakekeeper-db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8181/v1/config || exit 1"]
+      interval: 10s
+      timeout: 5s
       retries: 5
     restart: unless-stopped
 
@@ -448,4 +483,5 @@ volumes:
   uisce_redpanda_data:
   uisce_redis_data:
   uisce_minio_data:
+  lakekeeper_pgdata:
   open-webui-data:

@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useLocation } from 'react-router-dom';
+import { apiFetch } from '../lib/apiClient';
 import BlockableLink from './RouteBlocker/BlockableLink';
 import { NotificationBell } from './Notifications/NotificationBell';
 import {
@@ -67,6 +68,8 @@ import { useAccess } from '../contexts/AccessContext';
 import { useOrganizationEntitlement } from '../contexts/useOrganizationEntitlement';
 import useBlockableNavigate from './RouteBlocker/useBlockableNavigate';
 import { useAuth } from '../contexts/AuthContext';
+import { MenuCardsPage, MenuCardItem } from './ui/MenuCardsPage';
+import { ViewModule as ViewModuleIcon, Menu as MenuListIcon } from '@mui/icons-material';
 import ScopeBadge from './ScopeBadge';
 import TenantSwitcher from './TenantSwitcher';
 import TenantTreeView from './TenantTreeView';
@@ -76,6 +79,7 @@ import DialogTitle from '@mui/material/DialogTitle';
 import DialogContent from '@mui/material/DialogContent';
 import DialogActions from '@mui/material/DialogActions';
 import { Tenant } from '../types';
+import { UisceLogo } from './brand/UisceLogo';
 
 interface NavigationItem {
   label: string;
@@ -623,6 +627,17 @@ export const MainNavigation: React.FC<MainNavigationProps> = () => {
   const [categoryMenuAnchorEl, setCategoryMenuAnchorEl] = useState<null | HTMLElement>(null);
   // Default to Tenants category on initial load
   const [selectedCategory, setSelectedCategory] = useState<'tenants' | 'catalog' | 'weave' | 'studio' | 'workflow' | 'intelligence' | 'entity' | 'calendar' | null>('tenants');
+  // Nav Mode preference: 'dropdown' or 'cards'
+  const [navMode, setNavMode] = useState<'dropdown' | 'cards'>(() => {
+    return (localStorage.getItem('app-nav-mode-preference') as 'dropdown' | 'cards') || 'dropdown';
+  });
+  const [activeCardsMenu, setActiveCardsMenu] = useState<{ title: string; items: MenuCardItem[]; icon?: React.ReactNode } | null>(null);
+
+  const toggleNavMode = () => {
+    const next = navMode === 'dropdown' ? 'cards' : 'dropdown';
+    setNavMode(next);
+    localStorage.setItem('app-nav-mode-preference', next);
+  };
   const [menuAnchorEl, setMenuAnchorEl] = useState<null | HTMLElement>(null);
   const [activeMenu, setActiveMenu] = useState<string | null>(null);
   const [settingsAnchorEl, setSettingsAnchorEl] = useState<null | HTMLElement>(null);
@@ -664,6 +679,25 @@ export const MainNavigation: React.FC<MainNavigationProps> = () => {
 
   // Handle opening menu from top nav
   const handleMenuOpen = (menuLabel: string) => {
+    if (navMode === 'cards' && currentCategory) {
+      const menuGroup = currentCategory.menus.find(m => m.label === menuLabel);
+      if (menuGroup) {
+        const cardItems: MenuCardItem[] = menuGroup.items.map(item => ({
+          id: item.path,
+          label: item.label,
+          description: item.description,
+          icon: item.icon,
+          to: item.path,
+        }));
+        setActiveCardsMenu({
+          title: `${currentCategory.label} · ${menuGroup.label}`,
+          items: cardItems,
+          icon: menuGroup.icon,
+        });
+        return;
+      }
+    }
+
     const el = buttonRefs.current[menuLabel] || null;
     setMenuAnchorEl(el);
     setActiveMenu(menuLabel);
@@ -692,9 +726,8 @@ export const MainNavigation: React.FC<MainNavigationProps> = () => {
 
   useEffect(() => {
     if (!tenantSelectorOpen) return;
-    // fetch tenants when dialog opens
     let mounted = true;
-    fetch('/api/tenants')
+    apiFetch('/api/tenants/all')
       .then(r => r.json())
       .then((data: Tenant[]) => { if (mounted) setTenants(data || []); })
       .catch(() => { if (mounted) setTenants([]); });
@@ -751,9 +784,7 @@ export const MainNavigation: React.FC<MainNavigationProps> = () => {
   <Toolbar className="app-top-nav" sx={{ flexWrap: 'wrap', gap: 1, alignItems: 'center' }}>
           {/* Logo/Brand with Category Selector */}
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            <Typography variant="h6" component="div" sx={{ fontWeight: 'bold' }}>
-              SemLayer
-            </Typography>
+            <UisceLogo variant="full" size="sm" asLink />
             <Button
               color="inherit"
               endIcon={<KeyboardArrowDownIcon />}
@@ -869,6 +900,14 @@ export const MainNavigation: React.FC<MainNavigationProps> = () => {
           {/* Quick Actions */}
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
             <LanguageSelector />
+            <IconButton
+              color="inherit"
+              onClick={toggleNavMode}
+              aria-label={`Switch to ${navMode === 'dropdown' ? 'Card' : 'Dropdown'} View`}
+              title={`Navigation View: ${navMode === 'dropdown' ? 'Dropdown Menus' : 'Cards Grid'} (click to toggle)`}
+            >
+              {navMode === 'dropdown' ? <ViewModuleIcon /> : <MenuListIcon />}
+            </IconButton>
             <ThemeToggleButton showMenu />
 
             <NotificationBell />
@@ -879,6 +918,16 @@ export const MainNavigation: React.FC<MainNavigationProps> = () => {
           </Box>
         </Toolbar>
       </AppBar>
+
+      {/* Menu Cards Page Overlay when NavMode is 'cards' */}
+      {activeCardsMenu && (
+        <MenuCardsPage
+          title={activeCardsMenu.title}
+          items={activeCardsMenu.items}
+          icon={activeCardsMenu.icon}
+          onClose={() => setActiveCardsMenu(null)}
+        />
+      )}
 
       {/* Menu Items Dropdown */}
       <Menu

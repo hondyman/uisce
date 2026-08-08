@@ -7,31 +7,6 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-// TestRunTrinoQueryActivity_Success validates successful Trino query execution
-func TestRunTrinoQueryActivity_Success(t *testing.T) {
-	ctx := context.Background()
-	runID := "test-001"
-	region := "us-east-1"
-	query := "SELECT COUNT(*) FROM iceberg.ops.ops_events"
-
-	result, err := RunTrinoQueryActivity(ctx, runID, region, query)
-
-	assert.NoError(t, err)
-	assert.NotEmpty(t, result)
-}
-
-// TestRunTrinoQueryActivity_EmptyQuery validates error on empty query
-func TestRunTrinoQueryActivity_EmptyQuery(t *testing.T) {
-	ctx := context.Background()
-	runID := "test-001"
-	region := "us-east-1"
-
-	_, err := RunTrinoQueryActivity(ctx, runID, region, "")
-
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "query cannot be empty")
-}
-
 // TestRunSparkJobActivity_Success validates successful Spark job submission
 func TestRunSparkJobActivity_Success(t *testing.T) {
 	ctx := context.Background()

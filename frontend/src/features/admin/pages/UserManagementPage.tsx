@@ -132,9 +132,7 @@ export const UserManagementPage: React.FC = () => {
     if (!tenant?.id || !datasource?.id) return;
     
     try {
-      const response = await fetch(
-        `/api/rbac/roles?tenant_id=${tenant.id}&tenant_instance_id=${datasource.id}`
-      );
+      const response = await fetch('/api/rbac/roles');
       const data = await response.json();
       setRoles(Array.isArray(data) ? data.filter((r: Role) => r.is_active) : []);
     } catch (error) {
@@ -148,9 +146,7 @@ export const UserManagementPage: React.FC = () => {
     if (!tenant?.id || !datasource?.id) return;
 
     try {
-      const response = await fetch(
-        `/api/rbac/users/${userId}/roles?tenant_id=${tenant.id}&tenant_instance_id=${datasource.id}`
-      );
+      const response = await fetch(`/api/rbac/users/${userId}/roles`);
       const data = await response.json();
       setUserRoles(Array.isArray(data) ? data : []);
       
@@ -170,7 +166,7 @@ export const UserManagementPage: React.FC = () => {
 
     try {
       const response = await fetch(
-        `/api/rbac/roles/${selectedRoleId}/assign?tenant_id=${tenant.id}&tenant_instance_id=${datasource.id}`,
+        `/api/rbac/roles/${selectedRoleId}/assign`,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -201,7 +197,7 @@ export const UserManagementPage: React.FC = () => {
 
     try {
       await fetch(
-        `/api/rbac/roles/${roleId}/unassign/${selectedUser.id}?tenant_id=${tenant.id}&tenant_instance_id=${datasource.id}`,
+        `/api/rbac/roles/${roleId}/unassign/${selectedUser.id}`,
         { method: 'DELETE' }
       );
       await fetchUserRoles(selectedUser.id);
@@ -215,12 +211,11 @@ export const UserManagementPage: React.FC = () => {
     if (!tenant?.id) return;
 
     try {
-      const response = await fetch(`/api/rbac/users?tenant_id=${tenant.id}`, {
+      const response = await fetch('/api/rbac/users', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ...newUser,
-          tenant_id: tenant.id,
           first_name: newUser.name.split(' ')[0],
           last_name: newUser.name.split(' ').slice(1).join(' '),
         }),

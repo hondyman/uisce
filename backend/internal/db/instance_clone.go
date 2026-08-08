@@ -757,6 +757,105 @@ func SyncGoldCopyInstanceDeletion(
 	return result, nil
 }
 
+// DeleteClonedProducts removes cloned products for a specific tenant instance
+func DeleteClonedProducts(ctx context.Context, db *sqlx.DB, tenantID, instanceID string) error {
+	logger := logging.GetLogger().Sugar()
+	logger.Infof("Deleting cloned products for tenant %s, instance %s", tenantID, instanceID)
+
+	_, err := db.ExecContext(ctx, `
+		DELETE FROM public.tenant_product_datasource
+		WHERE tenant_product_id IN (
+			SELECT id FROM public.tenant_product
+			WHERE tenant_id = $1 AND datasource_id = $2
+		)
+	`, tenantID, instanceID)
+	if err != nil {
+		return fmt.Errorf("failed to delete cloned datasources: %w", err)
+	}
+
+	_, err = db.ExecContext(ctx, `
+		DELETE FROM public.connections
+		WHERE tenant_id = $1 AND datasource_id = $2
+	`, tenantID, instanceID)
+	if err != nil {
+		logger.Warnf("Failed to delete cloned connections: %v", err)
+	}
+
+	_, err = db.ExecContext(ctx, `
+		DELETE FROM public.tenant_product
+		WHERE tenant_id = $1 AND datasource_id = $2
+	`, tenantID, instanceID)
+	if err != nil {
+		return fmt.Errorf("failed to delete cloned products: %w", err)
+	}
+
+	logger.Infof("Successfully deleted cloned products for tenant %s", tenantID)
+	return nil
+}
+
+// DeleteClonedProductsFull removes all cloned products, connections, and datasources for a tenant
+func DeleteClonedProductsFull(ctx context.Context, db *sqlx.DB, tenantID string) error {
+	logger := logging.GetLogger().Sugar()
+	logger.Infof("Deleting all cloned products for tenant %s", tenantID)
+
+	tx, err := db.BeginTxx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer tx.Rollback()
+
+	_, err = tx.ExecContext(ctx, `
+		DELETE FROM public.tenant_product_datasource
+		WHERE tenant_product_id IN (
+			SELECT id FROM public.tenant_product WHERE tenant_id = $1
+		)
+	`, tenantID)
+	if err != nil {
+		return fmt.Errorf("failed to delete cloned datasources: %w", err)
+	}
+
+	_, err = tx.ExecContext(ctx, `
+		DELETE FROM public.connections
+		WHERE tenant_id = $1
+	`, tenantID)
+	if err != nil {
+		logger.Warnf("Failed to delete cloned connections: %v", err)
+	}
+
+	_, err = tx.ExecContext(ctx, `
+		DELETE FROM public.tenant_product
+		WHERE tenant_id = $1
+	`, tenantID)
+	if err != nil {
+		return fmt.Errorf("failed to delete cloned products: %w", err)
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("failed to commit transaction: %w", err)
+	}
+
+	logger.Infof("Successfully deleted all cloned products for tenant %s", tenantID)
+	return nil
+}
+
+// GetGoldCopyInfo resolves the gold copy tenant, instance, and database name
+func GetGoldCopyInfo(ctx context.Context, db *sqlx.DB) (tenantID, instanceID, database string, err error) {
+	err = db.QueryRowContext(ctx, `
+		SELECT t.id, ti.id, COALESCE(t.database_name, 'alpha')
+		FROM public.tenants t
+		JOIN public.tenant_instance ti ON ti.tenant_id = t.id
+		WHERE t.gold_copy = true
+		LIMIT 1
+	`).Scan(&tenantID, &instanceID, &database)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return "", "", "", fmt.Errorf("no gold copy tenant found")
+		}
+		return "", "", "", fmt.Errorf("failed to query gold copy: %w", err)
+	}
+	return tenantID, instanceID, database, nil
+}
+
 // SyncGoldCopyProductDeletion removes cloned products across all non-Gold Copy tenants
 // when the Gold Copy product is deleted. Uses core_id to find clones.
 func SyncGoldCopyProductDeletion(

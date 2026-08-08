@@ -20,6 +20,7 @@ services:
       - AWS_ACCESS_KEY_ID=minioadmin
       - AWS_SECRET_ACCESS_KEY=minioadmin
       - AWS_REGION=us-east-1
+      - TZ=UTC
     command: >
       /opt/starrocks/fe/bin/start_fe.sh
     networks:
@@ -44,6 +45,7 @@ services:
       - AWS_ACCESS_KEY_ID=minioadmin
       - AWS_SECRET_ACCESS_KEY=minioadmin
       - AWS_REGION=us-east-1
+      - TZ=UTC
     command: >
       /opt/starrocks/be/bin/start_be.sh
     depends_on:
@@ -62,6 +64,8 @@ services:
     environment:
       - NESSIE_VERSION_STORE_TYPE=ROCKSDB
       - QUARKUS_HTTP_PORT=19120
+      - JAVA_OPTS=-Duser.timezone=UTC
+      - TZ=UTC
     volumes:
       - nessie_data:/data
     networks:
@@ -103,12 +107,13 @@ services:
   temporal:
     image: temporalio/auto-setup:latest
     environment:
-      - DB=postgresql
-      - DB_PORT=5432
-      - POSTGRES_USER=postgres
-      - POSTGRES_PWD=password
-      - POSTGRES_SEEDS=postgres
-      - DYNAMIC_CONFIG_FILE_PATH=config/dynamicconfig/development.yaml
+      DB: postgresql
+      DB_PORT: 5432
+      POSTGRES_USER: postgres
+      POSTGRES_PWD: password
+      POSTGRES_SEEDS: postgres
+      DYNAMIC_CONFIG_FILE_PATH: config/dynamicconfig/development.yaml
+      TIMEZONE: UTC
     ports:
       - "7233:7233"
     networks:

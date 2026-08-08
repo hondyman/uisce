@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/hondyman/uisce/backend/internal/models"
+	"github.com/hondyman/uisce/libs/db/queries"
 	"github.com/jmoiron/sqlx"
 	"github.com/lib/pq"
 )
@@ -169,8 +170,7 @@ func (s *tenantStoreImpl) UpdateTenant(ctx context.Context, id uuid.UUID, req mo
 
 // DeleteTenant deletes a tenant
 func (s *tenantStoreImpl) DeleteTenant(ctx context.Context, id uuid.UUID) error {
-	query := `DELETE FROM tenants WHERE id = $1`
-	result, err := s.db.ExecContext(ctx, query, id)
+	result, err := s.db.ExecContext(ctx, queries.DeleteTenant, id)
 	if err != nil {
 		return fmt.Errorf("failed to delete tenant: %w", err)
 	}
@@ -193,9 +193,8 @@ func (s *tenantStoreImpl) ValidateTenantIDs(ctx context.Context, ids []uuid.UUID
 		return fmt.Errorf("at least one tenant_id is required")
 	}
 
-	query := `SELECT COUNT(*) FROM tenants WHERE id = ANY($1)`
 	var count int
-	if err := s.db.QueryRowContext(ctx, query, pq.Array(ids)).Scan(&count); err != nil {
+	if err := s.db.QueryRowContext(ctx, queries.ValidateTenantIDs, pq.Array(ids)).Scan(&count); err != nil {
 		return fmt.Errorf("failed to validate tenant_ids: %w", err)
 	}
 
@@ -228,8 +227,7 @@ func (s *tenantStoreImpl) SuspendTenant(ctx context.Context, id uuid.UUID) error
 
 // UnsuspendTenant unsuspends a tenant
 func (s *tenantStoreImpl) UnsuspendTenant(ctx context.Context, id uuid.UUID) error {
-	query := `UPDATE tenants SET is_suspended = false, updated_at = now() WHERE id = $1`
-	result, err := s.db.ExecContext(ctx, query, id)
+	result, err := s.db.ExecContext(ctx, queries.UnsuspendTenant, id)
 	if err != nil {
 		return fmt.Errorf("failed to unsuspend tenant: %w", err)
 	}

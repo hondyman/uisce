@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/hondyman/uisce/libs/db/queries"
 	"github.com/jmoiron/sqlx"
 	"github.com/lib/pq"
 )
@@ -254,13 +255,7 @@ func (te *TriggerEngine) loadBP(ctx context.Context, processID string) (*Busines
 	bp := &BusinessProcess{}
 
 	// Load BP header
-	query := `
-		SELECT id, tenant_id, process_name, description, is_active
-		FROM business_processes
-		WHERE id = $1 AND tenant_id = $2
-	`
-
-	err := te.db.QueryRowContext(ctx, query, processID, te.tenantID).Scan(
+	err := te.db.QueryRowContext(ctx, queries.GetBusinessProcessHeader, processID, te.tenantID).Scan(
 		&bp.ID, &bp.TenantID, &bp.ProcessName, &bp.Description, &bp.IsActive,
 	)
 
@@ -269,15 +264,7 @@ func (te *TriggerEngine) loadBP(ctx context.Context, processID string) (*Busines
 	}
 
 	// Load BP steps
-	stepQuery := `
-		SELECT id, process_id, step_order, step_type, step_name, description,
-		       duration_hours, assignee_role, validation_rule_ids, condition_json, next_step_id
-		FROM bp_steps
-		WHERE process_id = $1 AND tenant_id = $2
-		ORDER BY step_order ASC
-	`
-
-	rows, err := te.db.QueryContext(ctx, stepQuery, processID, te.tenantID)
+	rows, err := te.db.QueryContext(ctx, queries.ListBPStepsForTrigger, processID, te.tenantID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load BP steps: %w", err)
 	}
@@ -303,13 +290,7 @@ func (te *TriggerEngine) loadBP(ctx context.Context, processID string) (*Busines
 
 // recordTriggerSuccess records successful trigger execution.
 func (te *TriggerEngine) recordTriggerSuccess(ctx context.Context, triggerEventID string, workflowID string) {
-	query := `
-		UPDATE bp_trigger_events
-		SET status = 'completed', execution_id = $1, updated_at = NOW()
-		WHERE id = $2
-	`
-
-	if _, err := te.db.ExecContext(ctx, query, workflowID, triggerEventID); err != nil {
+	if _, err := te.db.ExecContext(ctx, queries.UpdateTriggerEventCompleted, workflowID, triggerEventID); err != nil {
 		te.logger.Printf("❌ Failed to record trigger success: %v", err)
 	} else {
 		te.logger.Printf("✅ Recorded trigger success: %s", workflowID)
@@ -318,13 +299,7 @@ func (te *TriggerEngine) recordTriggerSuccess(ctx context.Context, triggerEventI
 
 // recordTriggerFailure records trigger failure
 func (te *TriggerEngine) recordTriggerFailure(ctx context.Context, triggerEventID string, errorMsg string) {
-	query := `
-		UPDATE bp_trigger_events
-		SET status = 'failed', error_message = $1, updated_at = NOW()
-		WHERE id = $2
-	`
-
-	if _, err := te.db.ExecContext(ctx, query, errorMsg, triggerEventID); err != nil {
+	if _, err := te.db.ExecContext(ctx, queries.UpdateTriggerEventFailed, errorMsg, triggerEventID); err != nil {
 		te.logger.Printf("❌ Failed to record trigger failure: %v", err)
 	} else {
 		te.logger.Printf("❌ Recorded trigger failure: %s", errorMsg)

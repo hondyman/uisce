@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/hondyman/uisce/libs/db/queries"
 	"github.com/jmoiron/sqlx"
 )
 
@@ -501,32 +502,14 @@ func (s *Service) saveBacktestResult(ctx context.Context, result *BacktestResult
 // GetBacktestResults retrieves historical backtest results
 func (s *Service) GetBacktestResults(ctx context.Context, portfolioID string, limit int) ([]BacktestResult, error) {
 	var results []BacktestResult
-	query := `
-		SELECT id, recommendation_id, portfolio_id, simulation_type, start_date, end_date,
-		       baseline_return, recommendation_return, alpha_generated, beta_adjusted_return,
-		       sharpe_ratio_baseline, sharpe_ratio_recommended, max_drawdown_baseline, max_drawdown_recommended,
-		       tax_savings_accumulated, transaction_costs, net_benefit, confidence, simulation_data, created_at
-		FROM backtest_results
-		WHERE portfolio_id = $1
-		ORDER BY created_at DESC
-		LIMIT $2
-	`
-	err := s.db.SelectContext(ctx, &results, query, portfolioID, limit)
+	err := s.db.SelectContext(ctx, &results, queries.GetBacktestResults, portfolioID, limit)
 	return results, err
 }
 
 // GetBacktestByID retrieves a specific backtest result
 func (s *Service) GetBacktestByID(ctx context.Context, backtestID string) (*BacktestResult, error) {
 	result := &BacktestResult{}
-	query := `
-		SELECT id, recommendation_id, portfolio_id, simulation_type, start_date, end_date,
-		       baseline_return, recommendation_return, alpha_generated, beta_adjusted_return,
-		       sharpe_ratio_baseline, sharpe_ratio_recommended, max_drawdown_baseline, max_drawdown_recommended,
-		       tax_savings_accumulated, transaction_costs, net_benefit, confidence, simulation_data, created_at
-		FROM backtest_results
-		WHERE id = $1
-	`
-	err := s.db.GetContext(ctx, result, query, backtestID)
+	err := s.db.GetContext(ctx, result, queries.GetBacktestByID, backtestID)
 	return result, err
 }
 
@@ -534,23 +517,12 @@ func (s *Service) GetBacktestByID(ctx context.Context, backtestID string) (*Back
 func (s *Service) CompareBacktests(ctx context.Context, req ComparisonRequest) (*ComparisonResult, error) {
 	var backtest1, backtest2 *BacktestResult
 
-	query := `
-		SELECT id, recommendation_id, portfolio_id, simulation_type, start_date, end_date,
-		       baseline_return, recommendation_return, alpha_generated, beta_adjusted_return,
-		       sharpe_ratio_baseline, sharpe_ratio_recommended, max_drawdown_baseline, max_drawdown_recommended,
-		       tax_savings_accumulated, transaction_costs, net_benefit, confidence, simulation_data, created_at
-		FROM backtest_results
-		WHERE recommendation_id = $1 AND portfolio_id = $2
-		ORDER BY created_at DESC
-		LIMIT 1
-	`
-
-	err := s.db.GetContext(ctx, backtest1, query, req.RecommendationID1, req.PortfolioID)
+	err := s.db.GetContext(ctx, backtest1, queries.GetBacktestByRecommendationAndPortfolio, req.RecommendationID1, req.PortfolioID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch backtest 1: %w", err)
 	}
 
-	err = s.db.GetContext(ctx, backtest2, query, req.RecommendationID2, req.PortfolioID)
+	err = s.db.GetContext(ctx, backtest2, queries.GetBacktestByRecommendationAndPortfolio, req.RecommendationID2, req.PortfolioID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch backtest 2: %w", err)
 	}

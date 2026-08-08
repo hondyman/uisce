@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/hondyman/uisce/libs/db/queries"
 	"go.temporal.io/sdk/activity"
 )
 
@@ -54,13 +55,8 @@ func (a *UIActivities) ActivityUserInteraction(ctx context.Context, config map[s
 
 	// 4. Persist Task Record
 	inputJSON, _ := json.Marshal(inputContext)
-	query := `
-		INSERT INTO human_tasks (workflow_id, run_id, task_token, view_definition_id, title, input_context, status)
-		VALUES ($1, $2, $3, $4, $5, $6, 'PENDING')
-		RETURNING id
-	`
 	var taskID string
-	err := a.DB.QueryRowContext(ctx, query,
+	err := a.DB.QueryRowContext(ctx, queries.InsertHumanTask,
 		activityInfo.WorkflowExecution.ID,
 		activityInfo.WorkflowExecution.RunID,
 		taskToken,

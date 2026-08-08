@@ -10,6 +10,8 @@ import (
 
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
+
+	"github.com/hondyman/uisce/backend/internal/handlers"
 )
 
 // TreeNode represents a node in our final JSON structure.
@@ -273,9 +275,16 @@ func generateSuggestionForTerm(semanticTerm, databaseColumn string) *BusinessTer
 }
 
 func (s *Server) generateBusinessTermSuggestions(w http.ResponseWriter, r *http.Request) {
-	// Log incoming request
-	tenantID := r.URL.Query().Get("tenant_id")
-	datasourceID := r.URL.Query().Get("datasource_id")
+	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", handlers.SecurityContextDeps{
+		Resolver: s.DatasourceResolver,
+	})
+	if err != nil {
+		http.Error(w, "security context initialization failed: "+err.Error(), http.StatusUnauthorized)
+		return
+	}
+
+	tenantID := secCtx.TenantID
+	datasourceID := secCtx.DatasourceID
 	log.Printf("generateBusinessTermSuggestions handler called: tenant_id=%s datasource_id=%s remote=%s",
 		tenantID, datasourceID, r.RemoteAddr)
 
