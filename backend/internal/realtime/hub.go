@@ -10,6 +10,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
+	"github.com/hondyman/uisce/backend/internal/handlers"
 )
 
 // Event represents a real-time analytics or operational event
@@ -41,6 +42,7 @@ type Hub struct {
 	broadcast       chan *Event
 	tenantClients   map[string][]*Client
 	tenantClientsMu sync.RWMutex
+	securityDeps    handlers.SecurityContextDeps
 }
 
 var upgrader = websocket.Upgrader{
@@ -166,9 +168,9 @@ func (h *Hub) Publish(event *Event) {
 
 // ServeWS handles WebSocket upgrades and client initialization
 func (h *Hub) ServeWS(w http.ResponseWriter, r *http.Request) {
-	tenantID := r.URL.Query().Get("tenant_id")
-	if tenantID == "" {
-		http.Error(w, "tenant_id required", http.StatusBadRequest)
+	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusUnauthorized)
 		return
 	}
 
@@ -181,7 +183,7 @@ func (h *Hub) ServeWS(w http.ResponseWriter, r *http.Request) {
 	client := &Client{
 		conn:     conn,
 		send:     make(chan []byte, 256),
-		tenantID: tenantID,
+		tenantID: secCtx.TenantID,
 		regions:  make(map[string]bool),
 	}
 

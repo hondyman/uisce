@@ -178,7 +178,6 @@ func (h *WebSocketHub) BroadcastSignalDetected(advisorID, tenantID string, signa
 
 // ServeWs handles WebSocket connection requests
 func (h *WebSocketHub) ServeWs(w http.ResponseWriter, r *http.Request) {
-	// Get advisor ID from query or header
 	advisorID := r.URL.Query().Get("advisor_id")
 	if advisorID == "" {
 		advisorID = r.Header.Get("X-Advisor-ID")
@@ -188,12 +187,8 @@ func (h *WebSocketHub) ServeWs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	tenantID := r.URL.Query().Get("tenant_id")
-	if tenantID == "" {
-		tenantID = jwtmiddleware.GetClaimsFromContext(r).TenantID
-	}
+	tenantID := jwtmiddleware.GetClaimsFromContext(r).TenantID
 
-	// Upgrade connection
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		log.Printf("NBA WebSocket: Upgrade failed: %v", err)

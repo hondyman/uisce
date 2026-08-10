@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/hondyman/uisce/libs/jwt-middleware"
+	"github.com/hondyman/uisce/backend/internal/handlers"
 )
 
 // CustomComponent represents a custom component configuration
@@ -62,20 +62,17 @@ func (s *Server) registerCustomComponentRoutes(r chi.Router) {
 
 // listCustomComponents lists all custom components for a tenant/datasource
 func (s *Server) listCustomComponents(w http.ResponseWriter, r *http.Request) {
-	tenantID := getSecureTenantID(r)
-	datasourceID := r.URL.Query().Get("datasource_id")
-
-	if tenantID == "" || datasourceID == "" {
-		writeJSONError(w, http.StatusBadRequest, "tenant_id and datasource_id are required", "missing_params", "")
+	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", handlers.SecurityContextDeps{Resolver: s.DatasourceResolver})
+	if err != nil {
+		writeJSONError(w, http.StatusUnauthorized, "Unauthorized", "unauthorized", "")
 		return
 	}
 
-	// Verify tenant context headers
-	headerTenantID := jwtmiddleware.GetClaimsFromContext(r).TenantID
-	headerDatasourceID := r.Header.Get("X-Tenant-Datasource-ID")
+	tenantID := secCtx.TenantID
+	datasourceID := secCtx.DatasourceID
 
-	if headerTenantID != tenantID || headerDatasourceID != datasourceID {
-		writeJSONError(w, http.StatusForbidden, "Tenant context mismatch", "context_mismatch", "")
+	if tenantID == "" || datasourceID == "" {
+		writeJSONError(w, http.StatusBadRequest, "tenant_id and datasource_id are required", "missing_params", "")
 		return
 	}
 
@@ -155,20 +152,17 @@ func (s *Server) listCustomComponents(w http.ResponseWriter, r *http.Request) {
 
 // createCustomComponent creates a new custom component
 func (s *Server) createCustomComponent(w http.ResponseWriter, r *http.Request) {
-	tenantID := getSecureTenantID(r)
-	datasourceID := r.URL.Query().Get("datasource_id")
-
-	if tenantID == "" || datasourceID == "" {
-		writeJSONError(w, http.StatusBadRequest, "tenant_id and datasource_id are required", "missing_params", "")
+	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", handlers.SecurityContextDeps{Resolver: s.DatasourceResolver})
+	if err != nil {
+		writeJSONError(w, http.StatusUnauthorized, "Unauthorized", "unauthorized", "")
 		return
 	}
 
-	// Verify tenant context headers
-	headerTenantID := jwtmiddleware.GetClaimsFromContext(r).TenantID
-	headerDatasourceID := r.Header.Get("X-Tenant-Datasource-ID")
+	tenantID := secCtx.TenantID
+	datasourceID := secCtx.DatasourceID
 
-	if headerTenantID != tenantID || headerDatasourceID != datasourceID {
-		writeJSONError(w, http.StatusForbidden, "Tenant context mismatch", "context_mismatch", "")
+	if tenantID == "" || datasourceID == "" {
+		writeJSONError(w, http.StatusBadRequest, "tenant_id and datasource_id are required", "missing_params", "")
 		return
 	}
 
@@ -204,7 +198,7 @@ func (s *Server) createCustomComponent(w http.ResponseWriter, r *http.Request) {
 		RETURNING id`
 
 	var id string
-	err := s.DB.QueryRowContext(r.Context(), query,
+	err = s.DB.QueryRowContext(r.Context(), query,
 		tenantID, datasourceID, component.Name, component.Type,
 		configJSON, eventsJSON, filtersJSON,
 		component.CreatedAt, component.UpdatedAt, component.IsActive, component.Description,
@@ -228,20 +222,16 @@ func (s *Server) createCustomComponent(w http.ResponseWriter, r *http.Request) {
 // getCustomComponent retrieves a single custom component
 func (s *Server) getCustomComponent(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
-	tenantID := getSecureTenantID(r)
-	datasourceID := r.URL.Query().Get("datasource_id")
+	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", handlers.SecurityContextDeps{Resolver: s.DatasourceResolver})
+	if err != nil {
+		writeJSONError(w, http.StatusUnauthorized, "Unauthorized", "unauthorized", "")
+		return
+	}
+	tenantID := secCtx.TenantID
+	datasourceID := secCtx.DatasourceID
 
 	if tenantID == "" || datasourceID == "" {
 		writeJSONError(w, http.StatusBadRequest, "tenant_id and datasource_id are required", "missing_params", "")
-		return
-	}
-
-	// Verify tenant context headers
-	headerTenantID := jwtmiddleware.GetClaimsFromContext(r).TenantID
-	headerDatasourceID := r.Header.Get("X-Tenant-Datasource-ID")
-
-	if headerTenantID != tenantID || headerDatasourceID != datasourceID {
-		writeJSONError(w, http.StatusForbidden, "Tenant context mismatch", "context_mismatch", "")
 		return
 	}
 
@@ -255,7 +245,7 @@ func (s *Server) getCustomComponent(w http.ResponseWriter, r *http.Request) {
 	var configJSON, eventsJSON, filtersJSON []byte
 
 	var createdBy, updatedBy, description sql.NullString
-	err := s.DB.QueryRowContext(r.Context(), query, id, tenantID, datasourceID).Scan(
+	err = s.DB.QueryRowContext(r.Context(), query, id, tenantID, datasourceID).Scan(
 		&component.ID, &component.TenantID, &component.DatasourceID, &component.Name, &component.Type,
 		&configJSON, &eventsJSON, &filtersJSON,
 		&component.CreatedAt, &component.UpdatedAt, &createdBy, &updatedBy,
@@ -310,20 +300,16 @@ func (s *Server) getCustomComponent(w http.ResponseWriter, r *http.Request) {
 // updateCustomComponent updates an existing custom component
 func (s *Server) updateCustomComponent(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
-	tenantID := getSecureTenantID(r)
-	datasourceID := r.URL.Query().Get("datasource_id")
+	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", handlers.SecurityContextDeps{Resolver: s.DatasourceResolver})
+	if err != nil {
+		writeJSONError(w, http.StatusUnauthorized, "Unauthorized", "unauthorized", "")
+		return
+	}
+	tenantID := secCtx.TenantID
+	datasourceID := secCtx.DatasourceID
 
 	if tenantID == "" || datasourceID == "" {
 		writeJSONError(w, http.StatusBadRequest, "tenant_id and datasource_id are required", "missing_params", "")
-		return
-	}
-
-	// Verify tenant context headers
-	headerTenantID := jwtmiddleware.GetClaimsFromContext(r).TenantID
-	headerDatasourceID := r.Header.Get("X-Tenant-Datasource-ID")
-
-	if headerTenantID != tenantID || headerDatasourceID != datasourceID {
-		writeJSONError(w, http.StatusForbidden, "Tenant context mismatch", "context_mismatch", "")
 		return
 	}
 
@@ -378,20 +364,16 @@ func (s *Server) updateCustomComponent(w http.ResponseWriter, r *http.Request) {
 // deleteCustomComponent soft-deletes a custom component
 func (s *Server) deleteCustomComponent(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
-	tenantID := getSecureTenantID(r)
-	datasourceID := r.URL.Query().Get("datasource_id")
+	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", handlers.SecurityContextDeps{Resolver: s.DatasourceResolver})
+	if err != nil {
+		writeJSONError(w, http.StatusUnauthorized, "Unauthorized", "unauthorized", "")
+		return
+	}
+	tenantID := secCtx.TenantID
+	datasourceID := secCtx.DatasourceID
 
 	if tenantID == "" || datasourceID == "" {
 		writeJSONError(w, http.StatusBadRequest, "tenant_id and datasource_id are required", "missing_params", "")
-		return
-	}
-
-	// Verify tenant context headers
-	headerTenantID := jwtmiddleware.GetClaimsFromContext(r).TenantID
-	headerDatasourceID := r.Header.Get("X-Tenant-Datasource-ID")
-
-	if headerTenantID != tenantID || headerDatasourceID != datasourceID {
-		writeJSONError(w, http.StatusForbidden, "Tenant context mismatch", "context_mismatch", "")
 		return
 	}
 
@@ -425,20 +407,16 @@ func (s *Server) deleteCustomComponent(w http.ResponseWriter, r *http.Request) {
 
 // testComponentAPI tests connectivity to an API component
 func (s *Server) testComponentAPI(w http.ResponseWriter, r *http.Request) {
-	tenantID := getSecureTenantID(r)
-	datasourceID := r.URL.Query().Get("datasource_id")
+	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", handlers.SecurityContextDeps{Resolver: s.DatasourceResolver})
+	if err != nil {
+		writeJSONError(w, http.StatusUnauthorized, "Unauthorized", "unauthorized", "")
+		return
+	}
+	tenantID := secCtx.TenantID
+	datasourceID := secCtx.DatasourceID
 
 	if tenantID == "" || datasourceID == "" {
 		writeJSONError(w, http.StatusBadRequest, "tenant_id and datasource_id are required", "missing_params", "")
-		return
-	}
-
-	// Verify tenant context headers
-	headerTenantID := jwtmiddleware.GetClaimsFromContext(r).TenantID
-	headerDatasourceID := r.Header.Get("X-Tenant-Datasource-ID")
-
-	if headerTenantID != tenantID || headerDatasourceID != datasourceID {
-		writeJSONError(w, http.StatusForbidden, "Tenant context mismatch", "context_mismatch", "")
 		return
 	}
 
@@ -512,21 +490,17 @@ func (s *Server) testComponentAPI(w http.ResponseWriter, r *http.Request) {
 
 // exportComponents exports all components as JSON or ZIP
 func (s *Server) exportComponents(w http.ResponseWriter, r *http.Request) {
-	tenantID := getSecureTenantID(r)
-	datasourceID := r.URL.Query().Get("datasource_id")
+	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", handlers.SecurityContextDeps{Resolver: s.DatasourceResolver})
+	if err != nil {
+		writeJSONError(w, http.StatusUnauthorized, "Unauthorized", "unauthorized", "")
+		return
+	}
+	tenantID := secCtx.TenantID
+	datasourceID := secCtx.DatasourceID
 	format := r.URL.Query().Get("format") // "json" or "zip"
 
 	if tenantID == "" || datasourceID == "" {
 		writeJSONError(w, http.StatusBadRequest, "tenant_id and datasource_id are required", "missing_params", "")
-		return
-	}
-
-	// Verify tenant context headers
-	headerTenantID := jwtmiddleware.GetClaimsFromContext(r).TenantID
-	headerDatasourceID := r.Header.Get("X-Tenant-Datasource-ID")
-
-	if headerTenantID != tenantID || headerDatasourceID != datasourceID {
-		writeJSONError(w, http.StatusForbidden, "Tenant context mismatch", "context_mismatch", "")
 		return
 	}
 
@@ -624,20 +598,16 @@ func (s *Server) exportComponents(w http.ResponseWriter, r *http.Request) {
 
 // importComponents imports components from JSON file
 func (s *Server) importComponents(w http.ResponseWriter, r *http.Request) {
-	tenantID := getSecureTenantID(r)
-	datasourceID := r.URL.Query().Get("datasource_id")
+	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", handlers.SecurityContextDeps{Resolver: s.DatasourceResolver})
+	if err != nil {
+		writeJSONError(w, http.StatusUnauthorized, "Unauthorized", "unauthorized", "")
+		return
+	}
+	tenantID := secCtx.TenantID
+	datasourceID := secCtx.DatasourceID
 
 	if tenantID == "" || datasourceID == "" {
 		writeJSONError(w, http.StatusBadRequest, "tenant_id and datasource_id are required", "missing_params", "")
-		return
-	}
-
-	// Verify tenant context headers
-	headerTenantID := jwtmiddleware.GetClaimsFromContext(r).TenantID
-	headerDatasourceID := r.Header.Get("X-Tenant-Datasource-ID")
-
-	if headerTenantID != tenantID || headerDatasourceID != datasourceID {
-		writeJSONError(w, http.StatusForbidden, "Tenant context mismatch", "context_mismatch", "")
 		return
 	}
 

@@ -251,11 +251,17 @@ type TenantCommitMetrics struct {
 
 // commitMetricsV1Handler implements the versioned metrics API described in the design doc
 func (s *Server) commitMetricsV1Handler(w http.ResponseWriter, r *http.Request) {
+	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", s.SecurityContextDeps)
+	if err != nil {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+
 	window := r.URL.Query().Get("window")
 	if window == "" {
 		window = "5m"
 	}
-	tenantID := r.URL.Query().Get("tenant_id")
+	tenantID := secCtx.TenantID
 	region := r.URL.Query().Get("region")
 
 	ctx, cancel := context.WithTimeout(r.Context(), 3*time.Second)

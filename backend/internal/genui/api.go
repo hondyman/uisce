@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/hondyman/uisce/backend/internal/handlers"
 )
 
 // Service provides GenUI API handlers
@@ -12,12 +13,14 @@ type Service struct {
 	classifier       *IntentClassifier
 	layoutBuilder    *LayoutBuilder
 	approvalsService *ApprovalsService
+	securityDeps     handlers.SecurityContextDeps
 }
 
-func NewService() *Service {
+func NewService(securityDeps handlers.SecurityContextDeps) *Service {
 	return &Service{
 		classifier:    NewIntentClassifier(),
 		layoutBuilder: NewLayoutBuilder(),
+		securityDeps:  securityDeps,
 		// approvalsService will be set when Temporal client is available
 	}
 }
@@ -169,12 +172,13 @@ func (s *Service) HandleGetPendingApprovals(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	tenantID := r.URL.Query().Get("tenant_id")
-	if tenantID == "" {
-		tenantID = "demo_tenant" // default for demo
+	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", s.securityDeps)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusUnauthorized)
+		return
 	}
 
-	approvals, err := s.approvalsService.GetPendingApprovals(r.Context(), tenantID)
+	approvals, err := s.approvalsService.GetPendingApprovals(r.Context(), secCtx.TenantID)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return

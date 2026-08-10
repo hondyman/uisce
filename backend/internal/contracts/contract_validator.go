@@ -56,13 +56,10 @@ func (s *Service) ValidateContractCompatibility(ctx context.Context, tenantID, b
 func (s *Service) GetContractHandler(w http.ResponseWriter, r *http.Request) {
 	boName := r.URL.Query().Get("bo_name")
 	version := r.URL.Query().Get("version")
-	tenantID := r.URL.Query().Get("tenant_id")
 
+	tenantID := "core"
 	if claims := jwtmiddleware.GetClaimsFromContext(r); claims != nil && claims.TenantID != "" {
 		tenantID = claims.TenantID
-	}
-	if tenantID == "" {
-		tenantID = "core"
 	}
 
 	if boName == "" || version == "" {

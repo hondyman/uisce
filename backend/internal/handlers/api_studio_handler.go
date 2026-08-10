@@ -11,12 +11,13 @@ import (
 
 // APIStudioHandler handles management operations for the API Studio
 type APIStudioHandler struct {
-	service *apistudio.Service
+	service      *apistudio.Service
+	securityDeps SecurityContextDeps
 }
 
 // NewAPIStudioHandler creates a new handler
-func NewAPIStudioHandler(service *apistudio.Service) *APIStudioHandler {
-	return &APIStudioHandler{service: service}
+func NewAPIStudioHandler(service *apistudio.Service, securityDeps SecurityContextDeps) *APIStudioHandler {
+	return &APIStudioHandler{service: service, securityDeps: securityDeps}
 }
 
 // Routes returns the router for API Studio management
@@ -35,10 +36,15 @@ func (h *APIStudioHandler) Routes() chi.Router {
 
 // ListEndpoints lists all API endpoints
 func (h *APIStudioHandler) ListEndpoints(w http.ResponseWriter, r *http.Request) {
+	secCtx, ctx, err := SecurityContextFromRequest(r, "", "", h.securityDeps)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
 	env := r.URL.Query().Get("env")
-	tenantID := r.URL.Query().Get("tenant_id")
+	tenantID := secCtx.TenantID
 
-	eps, err := h.service.GetRepository().ListEndpoints(r.Context(), env, tenantID)
+	eps, err := h.service.GetRepository().ListEndpoints(ctx, env, tenantID)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -84,10 +90,15 @@ func (h *APIStudioHandler) SaveEndpoint(w http.ResponseWriter, r *http.Request) 
 
 // GetOpenAPI generates the OpenAPI spec for a tenant
 func (h *APIStudioHandler) GetOpenAPI(w http.ResponseWriter, r *http.Request) {
+	secCtx, ctx, err := SecurityContextFromRequest(r, "", "", h.securityDeps)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
 	env := r.URL.Query().Get("env")
-	tenantID := r.URL.Query().Get("tenant_id")
+	tenantID := secCtx.TenantID
 
-	eps, err := h.service.GetRepository().ListEndpoints(r.Context(), env, tenantID)
+	eps, err := h.service.GetRepository().ListEndpoints(ctx, env, tenantID)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -105,11 +116,16 @@ func (h *APIStudioHandler) GetOpenAPI(w http.ResponseWriter, r *http.Request) {
 
 // DownloadSDK generates and returns a client SDK
 func (h *APIStudioHandler) DownloadSDK(w http.ResponseWriter, r *http.Request) {
+	secCtx, ctx, err := SecurityContextFromRequest(r, "", "", h.securityDeps)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
 	lang := chi.URLParam(r, "lang")
 	env := r.URL.Query().Get("env")
-	tenantID := r.URL.Query().Get("tenant_id")
+	tenantID := secCtx.TenantID
 
-	eps, err := h.service.GetRepository().ListEndpoints(r.Context(), env, tenantID)
+	eps, err := h.service.GetRepository().ListEndpoints(ctx, env, tenantID)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return

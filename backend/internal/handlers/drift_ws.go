@@ -102,11 +102,12 @@ func (h *DriftWSHub) Broadcast(drift *DriftCount) {
 }
 
 type DriftWSHandler struct {
-	hub *DriftWSHub
+	hub           *DriftWSHub
+	securityDeps  SecurityContextDeps
 }
 
-func NewDriftWSHandler(hub *DriftWSHub) *DriftWSHandler {
-	return &DriftWSHandler{hub: hub}
+func NewDriftWSHandler(hub *DriftWSHub, securityDeps SecurityContextDeps) *DriftWSHandler {
+	return &DriftWSHandler{hub: hub, securityDeps: securityDeps}
 }
 
 func (h *DriftWSHandler) RegisterMuxRoutes(r *mux.Router) {
@@ -114,9 +115,14 @@ func (h *DriftWSHandler) RegisterMuxRoutes(r *mux.Router) {
 }
 
 func (h *DriftWSHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	tenantID := r.URL.Query().Get("tenant_id")
+	secCtx, ctx, err := SecurityContextFromRequest(r, "", "", h.securityDeps)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	tenantID := secCtx.TenantID
 	if tenantID == "" {
-		http.Error(w, "Missing tenant_id parameter", http.StatusBadRequest)
+		http.Error(w, "Missing tenant_id", http.StatusBadRequest)
 		return
 	}
 
@@ -127,7 +133,7 @@ func (h *DriftWSHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	defer ws.Close()
 
-	ctx, cancel := context.WithCancel(r.Context())
+	innerCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
 	sub := h.hub.Subscribe(tenantID)
@@ -154,7 +160,7 @@ func (h *DriftWSHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 
-		case <-ctx.Done():
+		case <-innerCtx.Done():
 			ws.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""))
 			return
 		}

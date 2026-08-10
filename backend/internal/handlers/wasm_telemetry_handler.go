@@ -13,12 +13,13 @@ import (
 
 // WasmTelemetryHandler defines HTTP endpoints for the telemetry/observability domain
 type WasmTelemetryHandler struct {
-	repo observability.Repository
+	repo           observability.Repository
+	securityDeps   SecurityContextDeps
 }
 
 // NewWasmTelemetryHandler creates a new WasmTelemetryHandler
-func NewWasmTelemetryHandler(repo observability.Repository) *WasmTelemetryHandler {
-	return &WasmTelemetryHandler{repo: repo}
+func NewWasmTelemetryHandler(repo observability.Repository, securityDeps SecurityContextDeps) *WasmTelemetryHandler {
+	return &WasmTelemetryHandler{repo: repo, securityDeps: securityDeps}
 }
 
 // RegisterRoutes registers the observability endpoints on the given router
@@ -38,7 +39,12 @@ func (h *WasmTelemetryHandler) RegisterRoutes(r *mux.Router) {
 
 // ListETLRuns: GET /api/v1/telemetry/etl-runs
 func (h *WasmTelemetryHandler) ListETLRuns(w http.ResponseWriter, r *http.Request) {
-	tenantID := r.URL.Query().Get("tenant_id")
+	secCtx, ctx, err := SecurityContextFromRequest(r, "", "", h.securityDeps)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	tenantID := secCtx.TenantID
 	status := r.URL.Query().Get("status")
 	from := r.URL.Query().Get("from")
 	to := r.URL.Query().Get("to")
@@ -51,7 +57,7 @@ func (h *WasmTelemetryHandler) ListETLRuns(w http.ResponseWriter, r *http.Reques
 		}
 	}
 
-	runs, err := h.repo.ListETLRuns(r.Context(), tenantID, status, from, to, limit)
+	runs, err := h.repo.ListETLRuns(ctx, tenantID, status, from, to, limit)
 	if err != nil {
 		respondWithError(w, http.StatusInternalServerError, err.Error())
 		return

@@ -2,13 +2,12 @@ package metadata
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 
-	"encoding/json"
-
 	"github.com/google/uuid"
-	"github.com/hondyman/uisce/libs/jwt-middleware"
+	jwtmiddleware "github.com/hondyman/uisce/libs/jwt-middleware"
 	"github.com/jmoiron/sqlx"
 )
 
@@ -85,13 +84,11 @@ func (s *CustomAttributeService) RegisterAttributeHandler(w http.ResponseWriter,
 
 func (s *CustomAttributeService) GetAttributesHandler(w http.ResponseWriter, r *http.Request) {
 	boID := r.URL.Query().Get("bo_id")
-	tenantID := r.URL.Query().Get("tenant_id")
 
-	if claims := jwtmiddleware.GetClaimsFromContext(r); claims != nil && claims.TenantID != "" {
+	claims := jwtmiddleware.GetClaimsFromContext(r)
+	tenantID := "core"
+	if claims != nil && claims.TenantID != "" {
 		tenantID = claims.TenantID
-	}
-	if tenantID == "" {
-		tenantID = "core"
 	}
 
 	attrs, err := s.GetAttributesForBO(r.Context(), tenantID, boID)

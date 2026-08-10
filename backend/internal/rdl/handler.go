@@ -6,6 +6,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	"github.com/hondyman/uisce/backend/internal/identity"
 )
 
 // Handler provides HTTP handlers for the RDL service
@@ -32,13 +33,13 @@ func (h *Handler) RegisterRoutes(r chi.Router) {
 }
 
 // ListRules returns all rules for a tenant
-// GET /api/rules?tenant_id=xxx&type=tax_loss_harvesting
+// GET /api/rules?type=tax_loss_harvesting
 func (h *Handler) ListRules(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	tenantIDStr := r.URL.Query().Get("tenant_id")
-	if tenantIDStr == "" {
-		http.Error(w, "tenant_id is required", http.StatusBadRequest)
+	tenantIDStr, ok := identity.TenantIDFromContext(ctx)
+	if !ok {
+		http.Error(w, "tenant_id is required", http.StatusUnauthorized)
 		return
 	}
 
@@ -70,13 +71,13 @@ func (h *Handler) ListRules(w http.ResponseWriter, r *http.Request) {
 }
 
 // GetRule returns a specific rule
-// GET /api/rules/{ruleID}?tenant_id=xxx
+// GET /api/rules/{ruleID}
 func (h *Handler) GetRule(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	tenantIDStr := r.URL.Query().Get("tenant_id")
-	if tenantIDStr == "" {
-		http.Error(w, "tenant_id is required", http.StatusBadRequest)
+	tenantIDStr, ok := identity.TenantIDFromContext(ctx)
+	if !ok {
+		http.Error(w, "tenant_id is required", http.StatusUnauthorized)
 		return
 	}
 
@@ -219,13 +220,13 @@ func (h *Handler) UpdateRule(w http.ResponseWriter, r *http.Request) {
 }
 
 // DeleteRule deactivates a rule
-// DELETE /api/rules/{ruleID}?tenant_id=xxx
+// DELETE /api/rules/{ruleID}
 func (h *Handler) DeleteRule(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	tenantIDStr := r.URL.Query().Get("tenant_id")
-	if tenantIDStr == "" {
-		http.Error(w, "tenant_id is required", http.StatusBadRequest)
+	tenantIDStr, ok := identity.TenantIDFromContext(ctx)
+	if !ok {
+		http.Error(w, "tenant_id is required", http.StatusUnauthorized)
 		return
 	}
 

@@ -200,6 +200,7 @@ type Server struct {
 	PolicyGenerationHandler *handlers.PolicyGenerationHandler
 	CalcHandler             *handlers.CalcHandler
 	DatasourceResolver      security.DatasourceResolver
+	SecurityContextDeps     handlers.SecurityContextDeps
 	BusinessObjectService   *catalogmeta.BusinessObjectService
 	QueryHandler            *handlers.QueryHandler
 	QueryBuilderHandler     *querybuilder.QueryBuilderHandler
@@ -676,7 +677,7 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 
 	// Initialize catalog scan service and handler early for raw route registration
 	catalogScanService := catalogmeta.NewCatalogScanService(sqlxDB, sqlRepo)
-	catalogScanHandler := handlers.NewCatalogScanHandler(catalogScanService)
+	catalogScanHandler := handlers.NewCatalogScanHandler(catalogScanService, handlers.SecurityContextDeps{})
 
 	// Register SSE endpoint RAW on the router to bypass blocking middleware (caching/buffering)
 	// Moved to end of function using rootMux mounting strategy to avoid panic
@@ -990,6 +991,7 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 	securityDeps := handlers.SecurityContextDeps{
 		Resolver: srv.DatasourceResolver,
 	}
+	srv.SecurityContextDeps = securityDeps
 	optService := optimize.NewService(sqlxDB)
 	analyticsModelProvider := analytics.NewModelProvider(sqlxDB)
 	queryService := analytics.NewQueryService(sqlxDB, optService, analyticsModelProvider)
@@ -1389,7 +1391,7 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 		r.Post("/business-objects/bindings", bindingSvc.SaveBindingHandler)
 		r.Get("/business-objects/bindings", bindingSvc.GetBindingsHandler)
 
-		upgradeSvc := upgrade.NewService(sqlxDB)
+		upgradeSvc := upgrade.NewService(sqlxDB, handlers.SecurityContextDeps{})
 		impactEngine := upgrade.NewImpactEngine(sqlxDB)
 		distExecutor := upgrade.NewDistributedExecutor(sqlxDB)
 		r.Post("/admin/tenants/upgrade", upgradeSvc.UpgradeTenantHandler)
@@ -2699,22 +2701,14 @@ func (s *Server) getProfileStatus(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) getProfileResults(w http.ResponseWriter, r *http.Request) {
-	claims := jwtmiddleware.GetClaimsFromContext(r)
-	if claims == nil {
+	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", s.SecurityContextDeps)
+	if err != nil {
 		http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
 		return
 	}
-	tenantID := claims.TenantID
-	datasourceID := r.Header.Get("X-Tenant-Datasource-ID")
-	// allow fallback to query params for non-shimmed requests (helpful in dev)
-	if tenantID == "" || datasourceID == "" {
-		if qtid := r.URL.Query().Get("tenant_id"); qtid != "" {
-			tenantID = qtid
-		}
-		if qdid := r.URL.Query().Get("datasource_id"); qdid != "" {
-			datasourceID = qdid
-		}
-	}
+	tenantID := secCtx.TenantID
+	datasourceID := secCtx.DatasourceID
+
 	if tenantID == "" || datasourceID == "" {
 		http.Error(w, "tenant and datasource headers required", http.StatusBadRequest)
 		return
@@ -3306,7 +3300,9 @@ func (s *Server) registerProcessRoutes(r chi.Router, db *sql.DB, sqlxDB *sqlx.DB
 	marketplaceIntegrationHandler.RegisterRoutes(r)
 
 	// Process Templates Library
-	processTemplateHandler := NewProcessTemplateHandlers(sqlxDB)
+	processTemplateHandler := NewProcessTemplateHandlers(sqlxDB, handlers.SecurityContextDeps{
+		Resolver: s.DatasourceResolver,
+	})
 	processTemplateHandler.RegisterRoutes(r)
 
 	r.Post("/bp/start-execution", StartBPExecution)

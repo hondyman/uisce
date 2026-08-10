@@ -155,8 +155,53 @@ func (p *LakekeeperProvisioner) GetNamespace(ctx context.Context, tenantCode str
 	return &ns, nil
 }
 
+func (p *LakekeeperProvisioner) AddColumnToIcebergTable(ctx context.Context, warehouse, namespace, tableName, colName, colType string) error {
+	path := fmt.Sprintf("/catalog/v1/namespaces/%s/tables/%s", namespace, tableName)
+	
+	reqBody := map[string]interface{}{
+		"requirements": []map[string]interface{}{},
+		"updates": []map[string]interface{}{
+			{
+				"action": "add-schema",
+				"schema": map[string]interface{}{
+					"type": "struct",
+					"fields": []map[string]interface{}{
+						{
+							"name":     colName,
+							"type":     colType,
+							"required": false,
+						},
+					},
+				},
+			},
+		},
+	}
+
+	req, err := http.NewRequestWithContext(ctx, "POST", p.baseURL+path, nil)
+	if err != nil {
+		return fmt.Errorf("create update schema request: %w", err)
+	}
+	req.Header.Set("X-Iceberg-Warehouse", warehouse)
+	req.Header.Set("Content-Type", "application/json")
+
+	b, _ := json.Marshal(reqBody)
+	req.Body = io.NopCloser(bytes.NewBuffer(b))
+
+	resp, err := p.httpClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("execute schema update: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusOK || resp.StatusCode == http.StatusNoContent {
+		return nil
+	}
+	body, _ := io.ReadAll(resp.Body)
+	return fmt.Errorf("schema evolution failed with status %d: %s", resp.StatusCode, string(body))
+}
+
 func (p *LakekeeperProvisioner) HealthCheck(ctx context.Context) error {
-	resp, err := p.doRequest(ctx, http.MethodGet, "/v1/config", nil)
+	resp, err := p.doRequest(ctx, http.MethodGet, "/health", nil)
 	if err != nil {
 		return fmt.Errorf("health check request: %w", err)
 	}

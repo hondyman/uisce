@@ -9,6 +9,15 @@ import (
 	"strings"
 )
 
+type ValidationRulesHandler struct {
+	db           *sql.DB
+	securityDeps SecurityContextDeps
+}
+
+func NewValidationRulesHandler(db *sql.DB, securityDeps SecurityContextDeps) *ValidationRulesHandler {
+	return &ValidationRulesHandler{db: db, securityDeps: securityDeps}
+}
+
 // ValidationRuleResponse represents a single validation rule for API response
 type ValidationRuleResponse struct {
 	ID            string          `json:"id"`
@@ -44,15 +53,16 @@ type ListValidationRulesResponse struct {
 }
 
 // ListValidationRulesHandler handles GET /api/validation-rules with pagination and facets
-func ListValidationRulesHandler(db *sql.DB) http.HandlerFunc {
+func (h *ValidationRulesHandler) ListValidationRulesHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		// Get tenant scope
-		tenantID := r.URL.Query().Get("tenant_id")
-		datasourceID := r.URL.Query().Get("datasource_id")
-		if tenantID == "" || datasourceID == "" {
-			http.Error(w, "Missing tenant_id or datasource_id", http.StatusBadRequest)
+		secCtx, _, err := SecurityContextFromRequest(r, "", "", h.securityDeps)
+		if err != nil {
+			http.Error(w, "Security context error: "+err.Error(), http.StatusUnauthorized)
 			return
 		}
+
+		tenantID := secCtx.TenantID
+		datasourceID := secCtx.DatasourceID
 
 		// Parse pagination
 		page, _ := strconv.Atoi(r.URL.Query().Get("page"))
@@ -134,7 +144,7 @@ func ListValidationRulesHandler(db *sql.DB) http.HandlerFunc {
 		// Get total count
 		countQuery := fmt.Sprintf("SELECT COUNT(*) FROM validation_rules %s", whereClause)
 		var total int
-		if err := db.QueryRow(countQuery, args...).Scan(&total); err != nil {
+		if err := h.db.QueryRow(countQuery, args...).Scan(&total); err != nil {
 			http.Error(w, "Error counting rules", http.StatusInternalServerError)
 			return
 		}
@@ -152,7 +162,7 @@ func ListValidationRulesHandler(db *sql.DB) http.HandlerFunc {
 
 		args = append(args, limit, offset)
 
-		rows, err := db.Query(rulesQuery, args...)
+		rows, err := h.db.Query(rulesQuery, args...)
 		if err != nil {
 			http.Error(w, "Error querying rules", http.StatusInternalServerError)
 			return
@@ -196,10 +206,10 @@ func ListValidationRulesHandler(db *sql.DB) http.HandlerFunc {
 		}
 
 		// Get facets (use base where clause, not including search)
-		entityFacets := getFacets(db, tenantID, datasourceID, entities, subEntities, ruleTypes, severities, "target_entity", searchQuery)
-		subEntityFacets := getFacets(db, tenantID, datasourceID, entities, subEntities, ruleTypes, severities, "sub_entity_type", searchQuery)
-		ruleTypeFacets := getFacets(db, tenantID, datasourceID, entities, subEntities, ruleTypes, severities, "rule_type", searchQuery)
-		severityFacets := getFacets(db, tenantID, datasourceID, entities, subEntities, ruleTypes, severities, "severity", searchQuery)
+		entityFacets := getFacets(h.db, tenantID, datasourceID, entities, subEntities, ruleTypes, severities, "target_entity", searchQuery)
+		subEntityFacets := getFacets(h.db, tenantID, datasourceID, entities, subEntities, ruleTypes, severities, "sub_entity_type", searchQuery)
+		ruleTypeFacets := getFacets(h.db, tenantID, datasourceID, entities, subEntities, ruleTypes, severities, "rule_type", searchQuery)
+		severityFacets := getFacets(h.db, tenantID, datasourceID, entities, subEntities, ruleTypes, severities, "severity", searchQuery)
 
 		// Build response
 		response := ListValidationRulesResponse{

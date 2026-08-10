@@ -8,17 +8,19 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	"github.com/hondyman/uisce/backend/internal/handlers"
 	"github.com/jmoiron/sqlx"
 )
 
 // ProcessTemplateHandlers manages process template API operations
 type ProcessTemplateHandlers struct {
-	db *sqlx.DB
+	db           *sqlx.DB
+	securityDeps handlers.SecurityContextDeps
 }
 
 // NewProcessTemplateHandlers creates a new handler
-func NewProcessTemplateHandlers(db *sqlx.DB) *ProcessTemplateHandlers {
-	return &ProcessTemplateHandlers{db: db}
+func NewProcessTemplateHandlers(db *sqlx.DB, securityDeps handlers.SecurityContextDeps) *ProcessTemplateHandlers {
+	return &ProcessTemplateHandlers{db: db, securityDeps: securityDeps}
 }
 
 // ===========================================================================
@@ -298,8 +300,13 @@ func (h *ProcessTemplateHandlers) CloneTemplate(w http.ResponseWriter, r *http.R
 	ctx := r.Context()
 	templateID := chi.URLParam(r, "id")
 
-	tenantID := r.URL.Query().Get("tenant_id")
-	datasourceID := r.URL.Query().Get("datasource_id")
+	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
+	if err != nil {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+	tenantID := secCtx.TenantID
+	datasourceID := secCtx.DatasourceID
 
 	if tenantID == "" || datasourceID == "" {
 		http.Error(w, "tenant_id and datasource_id are required", http.StatusBadRequest)
@@ -319,7 +326,7 @@ func (h *ProcessTemplateHandlers) CloneTemplate(w http.ResponseWriter, r *http.R
 
 	// Get template
 	var template ProcessTemplate
-	err := h.db.GetContext(ctx, &template, "SELECT * FROM process_templates WHERE id = $1", templateID)
+	err = h.db.GetContext(ctx, &template, "SELECT * FROM process_templates WHERE id = $1", templateID)
 	if err != nil {
 		http.Error(w, "Template not found", http.StatusNotFound)
 		return
@@ -367,8 +374,13 @@ func (h *ProcessTemplateHandlers) CloneTemplate(w http.ResponseWriter, r *http.R
 func (h *ProcessTemplateHandlers) GetUserClones(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	tenantID := r.URL.Query().Get("tenant_id")
-	datasourceID := r.URL.Query().Get("datasource_id")
+	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
+	if err != nil {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+	tenantID := secCtx.TenantID
+	datasourceID := secCtx.DatasourceID
 
 	if tenantID == "" || datasourceID == "" {
 		http.Error(w, "tenant_id and datasource_id are required", http.StatusBadRequest)
@@ -376,7 +388,7 @@ func (h *ProcessTemplateHandlers) GetUserClones(w http.ResponseWriter, r *http.R
 	}
 
 	var clones []TemplateClone
-	err := h.db.SelectContext(ctx, &clones, `
+	err = h.db.SelectContext(ctx, &clones, `
 		SELECT 
 			tc.*, 
 			pt.name as template_name, 
@@ -467,8 +479,13 @@ func (h *ProcessTemplateHandlers) RateTemplate(w http.ResponseWriter, r *http.Re
 	ctx := r.Context()
 	templateID := chi.URLParam(r, "id")
 
-	tenantID := r.URL.Query().Get("tenant_id")
-	datasourceID := r.URL.Query().Get("datasource_id")
+	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
+	if err != nil {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+	tenantID := secCtx.TenantID
+	datasourceID := secCtx.DatasourceID
 
 	if tenantID == "" || datasourceID == "" {
 		http.Error(w, "tenant_id and datasource_id are required", http.StatusBadRequest)
@@ -503,7 +520,7 @@ func (h *ProcessTemplateHandlers) RateTemplate(w http.ResponseWriter, r *http.Re
 
 	// Insert or update rating
 	ratingID := uuid.New().String()
-	_, err := h.db.ExecContext(ctx, `
+	_, err = h.db.ExecContext(ctx, `
 		INSERT INTO template_ratings 
 		(id, template_id, tenant_id, datasource_id, rating, review_text, review_title, reviewer_name, reviewer_role, is_verified_user, moderation_status)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)

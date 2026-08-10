@@ -106,15 +106,11 @@ func (s *LedgerService) VerifyLedgerChain(ctx context.Context, tenantID string) 
 	return true, len(entries), nil
 }
 
-// HTTP Handler
-
 func (s *LedgerService) VerifyChainHandler(w http.ResponseWriter, r *http.Request) {
-	tenantID := r.URL.Query().Get("tenant_id")
-	if claims := jwtmiddleware.GetClaimsFromContext(r); claims != nil && claims.TenantID != "" {
-		tenantID = claims.TenantID
-	}
+	tenantID := jwtmiddleware.GetTenantIDFromContext(r)
 	if tenantID == "" {
-		tenantID = "core"
+		http.Error(w, "tenant_id required (from JWT)", http.StatusUnauthorized)
+		return
 	}
 
 	valid, count, err := s.VerifyLedgerChain(r.Context(), tenantID)
@@ -125,9 +121,9 @@ func (s *LedgerService) VerifyChainHandler(w http.ResponseWriter, r *http.Reques
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{
-		"tenantId":      tenantID,
-		"chainValid":    valid,
+		"tenantId":       tenantID,
+		"chainValid":     valid,
 		"verifiedBlocks": count,
-		"status":        "TAMPER_EVIDENT_CHAIN_VERIFIED",
+		"status":         "TAMPER_EVIDENT_CHAIN_VERIFIED",
 	})
 }

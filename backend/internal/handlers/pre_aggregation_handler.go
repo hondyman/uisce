@@ -14,10 +14,11 @@ import (
 type PreAggregationHandler struct {
 	svc           *analytics.PreAggregationService
 	suggestionSvc *analytics.PreAggSuggestionService
+	securityDeps  SecurityContextDeps
 }
 
-func NewPreAggregationHandler(svc *analytics.PreAggregationService, suggestionSvc *analytics.PreAggSuggestionService) *PreAggregationHandler {
-	return &PreAggregationHandler{svc: svc, suggestionSvc: suggestionSvc}
+func NewPreAggregationHandler(svc *analytics.PreAggregationService, suggestionSvc *analytics.PreAggSuggestionService, securityDeps SecurityContextDeps) *PreAggregationHandler {
+	return &PreAggregationHandler{svc: svc, suggestionSvc: suggestionSvc, securityDeps: securityDeps}
 }
 
 func (h *PreAggregationHandler) RegisterRoutes(r chi.Router) {
@@ -68,13 +69,14 @@ func (h *PreAggregationHandler) UpsertPreAggregation(w http.ResponseWriter, r *h
 
 // ListByBO returns pre-aggregations for a given BO and tenant.
 func (h *PreAggregationHandler) ListByBO(w http.ResponseWriter, r *http.Request) {
-	tenantID := r.URL.Query().Get("tenant_id")
-	if tenantID == "" {
-		tenantID = jwtmiddleware.GetClaimsFromContext(r).TenantID
+	secCtx, _, err := SecurityContextFromRequest(r, "", "", h.securityDeps)
+	if err != nil {
+		http.Error(w, "Security context error: "+err.Error(), http.StatusUnauthorized)
+		return
 	}
 	boName := r.URL.Query().Get("bo_name")
 
-	list, err := h.svc.ListByBO(r.Context(), tenantID, boName)
+	list, err := h.svc.ListByBO(r.Context(), secCtx.TenantID, boName)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -375,17 +377,11 @@ func (h *PreAggregationHandler) GetPreAggSQL(w http.ResponseWriter, r *http.Requ
 	json.NewEncoder(w).Encode(resp)
 }
 
-// getTenantID extracts tenant ID from request header or query param.
+// getTenantID extracts tenant ID from security context.
 func (h *PreAggregationHandler) getTenantID(r *http.Request) string {
-	tenantID := r.URL.Query().Get("tenant_id")
-	if tenantID == "" {
-		tenantID = jwtmiddleware.GetClaimsFromContext(r).TenantID
+	secCtx, _, err := SecurityContextFromRequest(r, "", "", h.securityDeps)
+	if err != nil {
+		return ""
 	}
-	if tenantID == "me" {
-		// Resolve "me" from context if available
-		if ctxTenant, ok := r.Context().Value("tenant_id").(string); ok {
-			tenantID = ctxTenant
-		}
-	}
-	return tenantID
+	return secCtx.TenantID
 }

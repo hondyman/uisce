@@ -12,12 +12,13 @@ import (
 
 // ViewHandler encapsulates the handlers for the view definition API.
 type ViewHandler struct {
-	Service services.ViewDefinitionService
+	Service      services.ViewDefinitionService
+	securityDeps SecurityContextDeps
 }
 
 // NewViewHandler creates a new view handler.
-func NewViewHandler(service services.ViewDefinitionService) *ViewHandler {
-	return &ViewHandler{Service: service}
+func NewViewHandler(service services.ViewDefinitionService, securityDeps SecurityContextDeps) *ViewHandler {
+	return &ViewHandler{Service: service, securityDeps: securityDeps}
 }
 
 // RegisterRoutes adds the view definition routes to the router.
@@ -126,8 +127,13 @@ func (h *ViewHandler) updateView(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *ViewHandler) listViews(w http.ResponseWriter, r *http.Request) {
+	secCtx, ctx, err := SecurityContextFromRequest(r, "", "", h.securityDeps)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
 	var user models.User
-	if u, ok := auth.GetUserFromContext(r.Context()); ok {
+	if u, ok := auth.GetUserFromContext(ctx); ok {
 		user = u
 	} else {
 		user = models.User{
@@ -141,14 +147,14 @@ func (h *ViewHandler) listViews(w http.ResponseWriter, r *http.Request) {
 			IsActive:     true,
 		}
 	}
-	bundleID := r.URL.Query().Get("tenant_id")
+	tenantID := secCtx.TenantID
 
-	if bundleID == "" {
-		http.Error(w, "tenant_id query parameter is required", http.StatusBadRequest)
+	if tenantID == "" {
+		http.Error(w, "tenant_id is required", http.StatusBadRequest)
 		return
 	}
 
-	views, err := h.Service.ListViewsByBundle(user, bundleID)
+	views, err := h.Service.ListViewsByBundle(user, tenantID)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return

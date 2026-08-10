@@ -21,13 +21,15 @@ type scanServiceIface interface {
 }
 
 type CatalogScanHandler struct {
-	scanService scanServiceIface
+	scanService   scanServiceIface
+	securityDeps  SecurityContextDeps
 }
 
 // NewCatalogScanHandler creates a new catalog scan handler
-func NewCatalogScanHandler(scanService scanServiceIface) *CatalogScanHandler {
+func NewCatalogScanHandler(scanService scanServiceIface, securityDeps SecurityContextDeps) *CatalogScanHandler {
 	return &CatalogScanHandler{
-		scanService: scanService,
+		scanService:  scanService,
+		securityDeps: securityDeps,
 	}
 }
 
@@ -39,6 +41,11 @@ func (h *CatalogScanHandler) RegisterRoutes(r chi.Router) {
 
 // HandleCatalogScan handles POST requests to trigger catalog scans
 func (h *CatalogScanHandler) HandleCatalogScan(w http.ResponseWriter, r *http.Request) {
+	secCtx, ctx, err := SecurityContextFromRequest(r, "", "", h.securityDeps)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
 	// Set content type
 	w.Header().Set("Content-Type", "application/json")
 
@@ -60,8 +67,8 @@ func (h *CatalogScanHandler) HandleCatalogScan(w http.ResponseWriter, r *http.Re
 		}
 	}
 
-	// Check query parameter as fallback, then body (Hasura input takes precedence, then direct body)
-	datasourceIDParam := r.URL.Query().Get("datasource_id")
+	// Use security context datasource ID, but allow body to override for backward compatibility
+	datasourceIDParam := secCtx.DatasourceID
 	if requestBody.Input.DatasourceID != nil {
 		datasourceIDParam = *requestBody.Input.DatasourceID
 	} else if requestBody.DatasourceID != nil {
@@ -80,7 +87,7 @@ func (h *CatalogScanHandler) HandleCatalogScan(w http.ResponseWriter, r *http.Re
 	}
 
 	// Start the scan process
-	results, err := h.scanService.ScanDatasources(r.Context(), tenantDatasourceID)
+	results, err := h.scanService.ScanDatasources(ctx, tenantDatasourceID)
 
 	// Ensure results is an empty array rather than nil so Hasura GraphQL (non-null list) accepts it
 	if results == nil {
@@ -133,14 +140,15 @@ func (h *CatalogScanHandler) HandleCatalogScan(w http.ResponseWriter, r *http.Re
 	json.NewEncoder(w).Encode(response)
 }
 
-// In your API handlers
+// DebugHandler handles debug requests
 type DebugHandler struct {
-	DB *sqlx.DB
+	DB           *sqlx.DB
+	securityDeps SecurityContextDeps
 }
 
 // NewDebugHandler creates a new DebugHandler
-func NewDebugHandler(db *sqlx.DB) *DebugHandler {
-	return &DebugHandler{DB: db}
+func NewDebugHandler(db *sqlx.DB, securityDeps SecurityContextDeps) *DebugHandler {
+	return &DebugHandler{DB: db, securityDeps: securityDeps}
 }
 
 // RegisterRoutes registers the routes for DebugHandler.
@@ -150,8 +158,13 @@ func (h *DebugHandler) RegisterRoutes(r chi.Router) {
 
 // debugChart handles requests to debug chart data
 func (h *DebugHandler) DebugChart(w http.ResponseWriter, r *http.Request) {
-	datasourceId := r.URL.Query().Get("datasource_id")
-	if datasourceId == "" {
+	secCtx, ctx, err := SecurityContextFromRequest(r, "", "", h.securityDeps)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	datasourceID := secCtx.DatasourceID
+	if datasourceID == "" {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]interface{}{"error": "datasource_id required"})
@@ -159,7 +172,7 @@ func (h *DebugHandler) DebugChart(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Call the DebugChartData function from the db package
-	if err := db.DebugChartData(r.Context(), h.DB.DB, datasourceId); err != nil {
+	if err := db.DebugChartData(ctx, h.DB.DB, datasourceID); err != nil {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusInternalServerError)
 		json.NewEncoder(w).Encode(map[string]interface{}{"error": err.Error()})

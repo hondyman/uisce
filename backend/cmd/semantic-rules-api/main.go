@@ -139,7 +139,7 @@ func main() {
 
 	// Phase 19: Observability Telemetry Layer
 	obsRepo := observability.NewSQLRepository(sqlxDB)
-	obsHandler := handlers.NewWasmTelemetryHandler(obsRepo)
+	obsHandler := handlers.NewWasmTelemetryHandler(obsRepo, handlers.SecurityContextDeps{})
 
 	// WASM Option C Orchestration
 	auditLogger := &audit.StdLogAudit{}
@@ -219,7 +219,7 @@ func main() {
 	go driftWatcher.Start(context.Background(), 5*time.Minute)
 
 	driftWSHub := handlers.NewDriftWSHub()
-	driftWSHandler := handlers.NewDriftWSHandler(driftWSHub)
+	driftWSHandler := handlers.NewDriftWSHandler(driftWSHub, handlers.SecurityContextDeps{})
 	// ── End Phase 8-10 ──
 
 	// Start job processor in background
