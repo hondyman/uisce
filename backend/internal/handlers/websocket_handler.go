@@ -29,24 +29,27 @@ var upgrader = websocket.Upgrader{
 
 // WebSocketEventHandler handles WebSocket connections
 type WebSocketEventHandler struct {
-	broker *events.EventStreamBroker
+	broker       *events.EventStreamBroker
+	securityDeps SecurityContextDeps
 }
 
 // NewWebSocketEventHandler creates a new WebSocket handler
-func NewWebSocketEventHandler(broker *events.EventStreamBroker) *WebSocketEventHandler {
+func NewWebSocketEventHandler(broker *events.EventStreamBroker, securityDeps SecurityContextDeps) *WebSocketEventHandler {
 	return &WebSocketEventHandler{
-		broker: broker,
+		broker:       broker,
+		securityDeps: securityDeps,
 	}
 }
 
 // ServeHTTP handles WebSocket upgrade and streaming
 func (h *WebSocketEventHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	// Extract tenant ID and regions from query parameters
-	tenantID := r.URL.Query().Get("tenant_id")
-	if tenantID == "" {
-		http.Error(w, "Missing tenant_id parameter", http.StatusBadRequest)
+	secCtx, _, err := SecurityContextFromRequest(r, "", "", h.securityDeps)
+	if err != nil {
+		http.Error(w, "Security context error: "+err.Error(), http.StatusUnauthorized)
 		return
 	}
+
+	tenantID := secCtx.TenantID
 
 	// Parse regions parameter (comma-separated)
 	regionsParam := r.URL.Query().Get("regions")

@@ -12,11 +12,12 @@ import (
 // MetricsMigrationHandler handles metrics registry migration
 type MetricsMigrationHandler struct {
 	MigrationService *analytics.MetricsMigrationService
+	securityDeps     SecurityContextDeps
 }
 
 // NewMetricsMigrationHandler creates a new migration handler
-func NewMetricsMigrationHandler(migrationService *analytics.MetricsMigrationService) *MetricsMigrationHandler {
-	return &MetricsMigrationHandler{MigrationService: migrationService}
+func NewMetricsMigrationHandler(migrationService *analytics.MetricsMigrationService, securityDeps SecurityContextDeps) *MetricsMigrationHandler {
+	return &MetricsMigrationHandler{MigrationService: migrationService, securityDeps: securityDeps}
 }
 
 // RegisterRoutes registers migration routes
@@ -122,9 +123,15 @@ func (h *MetricsMigrationHandler) ConvertDSL(w http.ResponseWriter, r *http.Requ
 }
 
 // GetAvailableCalculations returns all calculation terms for a datasource
-// GET /api/admin/calculations?datasource_id=...
+// GET /api/admin/calculations
 func (h *MetricsMigrationHandler) GetAvailableCalculations(w http.ResponseWriter, r *http.Request) {
-	datasourceID, err := uuid.Parse(r.URL.Query().Get("datasource_id"))
+	secCtx, _, err := SecurityContextFromRequest(r, "", "", h.securityDeps)
+	if err != nil {
+		http.Error(w, "Security context error: "+err.Error(), http.StatusUnauthorized)
+		return
+	}
+
+	datasourceID, err := uuid.Parse(secCtx.DatasourceID)
 	if err != nil {
 		http.Error(w, "Invalid datasource_id", http.StatusBadRequest)
 		return
@@ -181,10 +188,16 @@ func (h *MetricsMigrationHandler) AssignMetricToBO(w http.ResponseWriter, r *htt
 }
 
 // GetBOCalculations returns calculations assigned to a BO
-// GET /api/admin/bo/{boName}/calculations?datasource_id=...
+// GET /api/admin/bo/{boName}/calculations
 func (h *MetricsMigrationHandler) GetBOCalculations(w http.ResponseWriter, r *http.Request) {
 	boName := chi.URLParam(r, "boName")
-	datasourceID, err := uuid.Parse(r.URL.Query().Get("datasource_id"))
+	secCtx, _, err := SecurityContextFromRequest(r, "", "", h.securityDeps)
+	if err != nil {
+		http.Error(w, "Security context error: "+err.Error(), http.StatusUnauthorized)
+		return
+	}
+
+	datasourceID, err := uuid.Parse(secCtx.DatasourceID)
 	if err != nil {
 		http.Error(w, "Invalid datasource_id", http.StatusBadRequest)
 		return

@@ -18,11 +18,12 @@ const RegionContextKey ContextKey = "region"
 type PageStudioHandler struct {
 	service       *pagestudio.Service
 	bundleService *pagestudio.PageBundleService
+	securityDeps  SecurityContextDeps
 }
 
 // NewPageStudioHandler creates a new handler
-func NewPageStudioHandler(service *pagestudio.Service, bundleService *pagestudio.PageBundleService) *PageStudioHandler {
-	return &PageStudioHandler{service: service, bundleService: bundleService}
+func NewPageStudioHandler(service *pagestudio.Service, bundleService *pagestudio.PageBundleService, securityDeps SecurityContextDeps) *PageStudioHandler {
+	return &PageStudioHandler{service: service, bundleService: bundleService, securityDeps: securityDeps}
 }
 
 // Routes returns the router for Page Studio management
@@ -96,11 +97,16 @@ func (h *PageStudioHandler) SavePage(w http.ResponseWriter, r *http.Request) {
 
 // GetOverlay retrieves an overlay for a page and tenant
 func (h *PageStudioHandler) GetOverlay(w http.ResponseWriter, r *http.Request) {
+	secCtx, ctx, err := SecurityContextFromRequest(r, "", "", h.securityDeps)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
 	parentID, _ := uuid.Parse(chi.URLParam(r, "id"))
-	tenantID := r.URL.Query().Get("tenant_id")
+	tenantID := secCtx.TenantID
 	env := r.URL.Query().Get("env")
 
-	o, err := h.service.GetRepository().GetOverlay(r.Context(), parentID, tenantID, env)
+	o, err := h.service.GetRepository().GetOverlay(ctx, parentID, tenantID, env)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusNotFound)
 		return
@@ -146,12 +152,17 @@ func (h *PageStudioHandler) GenerateLayout(w http.ResponseWriter, r *http.Reques
 
 // GetPageBundle retrieves the data bundle for a page
 func (h *PageStudioHandler) GetPageBundle(w http.ResponseWriter, r *http.Request) {
+	secCtx, ctx, err := SecurityContextFromRequest(r, "", "", h.securityDeps)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
 	slug := chi.URLParam(r, "slug")
 	env := r.URL.Query().Get("env")
 	if env == "" {
 		env = "production"
 	}
-	tenantID := r.URL.Query().Get("tenant_id")
+	tenantID := secCtx.TenantID
 	if tenantID == "" {
 		http.Error(w, "tenant_id required", http.StatusBadRequest)
 		return
@@ -176,7 +187,7 @@ func (h *PageStudioHandler) GetPageBundle(w http.ResponseWriter, r *http.Request
 		region = rg
 	}
 
-	results, err := h.bundleService.ExecuteBundle(r.Context(), tenantID, slug, routeParams, env, actorPtr, region)
+	results, err := h.bundleService.ExecuteBundle(ctx, tenantID, slug, routeParams, env, actorPtr, region)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return

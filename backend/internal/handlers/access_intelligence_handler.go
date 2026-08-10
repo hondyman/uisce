@@ -12,12 +12,13 @@ import (
 
 // AccessIntelligenceHandler handles API requests for the unified access intelligence service.
 type AccessIntelligenceHandler struct {
-	service *services.AccessIntelligenceService
+	service      *services.AccessIntelligenceService
+	securityDeps SecurityContextDeps
 }
 
 // NewAccessIntelligenceHandler creates a new AccessIntelligenceHandler.
-func NewAccessIntelligenceHandler(service *services.AccessIntelligenceService) *AccessIntelligenceHandler {
-	return &AccessIntelligenceHandler{service: service}
+func NewAccessIntelligenceHandler(service *services.AccessIntelligenceService, securityDeps SecurityContextDeps) *AccessIntelligenceHandler {
+	return &AccessIntelligenceHandler{service: service, securityDeps: securityDeps}
 }
 
 // RegisterRoutes registers the routes for AccessIntelligenceHandler.
@@ -37,15 +38,20 @@ func (h *AccessIntelligenceHandler) RegisterRoutes(r chi.Router) {
 
 // HandleGetEffectiveClaims retrieves all effective claims for a user.
 func (h *AccessIntelligenceHandler) HandleGetEffectiveClaims(w http.ResponseWriter, r *http.Request) {
+	secCtx, ctx, err := SecurityContextFromRequest(r, "", "", h.securityDeps)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
 	userID := r.URL.Query().Get("user_id")
-	tenantID := r.URL.Query().Get("tenant_id")
+	tenantID := secCtx.TenantID
 	if userID == "" || tenantID == "" {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]interface{}{"error": "user_id and tenant_id are required"})
 		return
 	}
-	claims, err := h.service.GetEffectiveClaims(r.Context(), userID, tenantID)
+	claims, err := h.service.GetEffectiveClaims(ctx, userID, tenantID)
 	if err != nil {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusInternalServerError)
@@ -201,11 +207,16 @@ func (h *AccessIntelligenceHandler) HandleSimulateAccess(w http.ResponseWriter, 
 
 // HandleGetGovernanceCockpitSnapshot retrieves the snapshot for the governance cockpit.
 func (h *AccessIntelligenceHandler) HandleGetGovernanceCockpitSnapshot(w http.ResponseWriter, r *http.Request) {
-	tenantID := r.URL.Query().Get("tenant_id")
+	secCtx, ctx, err := SecurityContextFromRequest(r, "", "", h.securityDeps)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	tenantID := secCtx.TenantID
 	if tenantID == "" {
 		tenantID = "default_tenant" // Or get from auth context
 	}
-	snapshot, err := h.service.GetGovernanceCockpitSnapshot(r.Context(), tenantID)
+	snapshot, err := h.service.GetGovernanceCockpitSnapshot(ctx, tenantID)
 	if err != nil {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusInternalServerError)

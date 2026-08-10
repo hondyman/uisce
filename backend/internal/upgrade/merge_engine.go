@@ -7,7 +7,7 @@ import (
 	"net/http"
 
 	"github.com/google/uuid"
-	"github.com/hondyman/uisce/libs/jwt-middleware"
+	"github.com/hondyman/uisce/backend/internal/handlers"
 	"github.com/jmoiron/sqlx"
 )
 
@@ -35,11 +35,12 @@ type TenantDelta struct {
 }
 
 type Service struct {
-	db *sqlx.DB
+	db           *sqlx.DB
+	securityDeps handlers.SecurityContextDeps
 }
 
-func NewService(db *sqlx.DB) *Service {
-	return &Service{db: db}
+func NewService(db *sqlx.DB, securityDeps handlers.SecurityContextDeps) *Service {
+	return &Service{db: db, securityDeps: securityDeps}
 }
 
 // MergeLayoutSpec executes a structural 3-way merge on JSON layout specs
@@ -197,13 +198,15 @@ func (s *Service) ComputeTenantDelta(ctx context.Context, tenantID string) (*Ten
 // HTTP Handlers
 
 func (s *Service) UpgradeTenantHandler(w http.ResponseWriter, r *http.Request) {
-	tenantID := r.URL.Query().Get("tenant_id")
+	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", s.securityDeps)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Failed to get security context: %v", err), http.StatusUnauthorized)
+		return
+	}
+
+	tenantID := secCtx.TenantID
 	if tenantID == "" {
-		if claims := jwtmiddleware.GetClaimsFromContext(r); claims != nil && claims.TenantID != "" {
-			tenantID = claims.TenantID
-		} else {
-			tenantID = "core"
-		}
+		tenantID = "core"
 	}
 
 	targetVersion := r.URL.Query().Get("target_version")
@@ -227,13 +230,15 @@ func (s *Service) UpgradeTenantHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Service) GetTenantDeltaHandler(w http.ResponseWriter, r *http.Request) {
-	tenantID := r.URL.Query().Get("tenant_id")
+	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", s.securityDeps)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Failed to get security context: %v", err), http.StatusUnauthorized)
+		return
+	}
+
+	tenantID := secCtx.TenantID
 	if tenantID == "" {
-		if claims := jwtmiddleware.GetClaimsFromContext(r); claims != nil && claims.TenantID != "" {
-			tenantID = claims.TenantID
-		} else {
-			tenantID = "core"
-		}
+		tenantID = "core"
 	}
 
 	delta, err := s.ComputeTenantDelta(r.Context(), tenantID)

@@ -311,14 +311,7 @@ func (h *validationRulesHandler) handleListValidationRules() http.HandlerFunc {
 		}
 
 		tenantID := secCtx.TenantID
-		datasourceID := secCtx.DatasourceID // Initial declaration from security context
-
-		// Override datasourceID if provided in query or header
-		if qid := r.URL.Query().Get("datasource_id"); qid != "" {
-			datasourceID = qid
-		} else if hid := r.Header.Get("X-Tenant-Datasource-ID"); hid != "" {
-			datasourceID = hid
-		}
+		datasourceID := secCtx.DatasourceID
 
 		if datasourceID == "" {
 			writeJSONError(w, http.StatusBadRequest, "datasource_id is required", "missing_datasource", "")

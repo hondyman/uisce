@@ -582,16 +582,8 @@ func (h *Handler) ListPackages(w http.ResponseWriter, r *http.Request) {
 // ============================================================================
 
 func getTenantContext(r *http.Request) (uuid.UUID, uuid.UUID) {
-	// Get from query params or headers (following your agents.md pattern)
-	tenantIDStr := r.URL.Query().Get("tenant_id")
-	if tenantIDStr == "" {
-		tenantIDStr = jwtmiddleware.GetClaimsFromContext(r).TenantID
-	}
-
-	datasourceIDStr := r.URL.Query().Get("datasource_id")
-	if datasourceIDStr == "" {
-		datasourceIDStr = r.Header.Get("X-Tenant-Datasource-ID")
-	}
+	tenantIDStr := jwtmiddleware.GetClaimsFromContext(r).TenantID
+	datasourceIDStr := r.Header.Get("X-Tenant-Datasource-ID")
 
 	tenantID, _ := uuid.Parse(tenantIDStr)
 	datasourceID, _ := uuid.Parse(datasourceIDStr)

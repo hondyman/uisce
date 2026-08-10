@@ -6,17 +6,20 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/hondyman/uisce/backend/internal/audit"
+	"github.com/hondyman/uisce/backend/internal/handlers"
 )
 
 // GuardrailHandler handles HTTP requests for guardrail operations
 type GuardrailHandler struct {
-	engine *GuardrailEngine
+	engine       *GuardrailEngine
+	securityDeps handlers.SecurityContextDeps
 }
 
 // NewGuardrailHandler creates a new guardrail HTTP handler
-func NewGuardrailHandler(auditService *audit.Service) *GuardrailHandler {
+func NewGuardrailHandler(auditService *audit.Service, securityDeps handlers.SecurityContextDeps) *GuardrailHandler {
 	return &GuardrailHandler{
-		engine: NewGuardrailEngine(auditService),
+		engine:       NewGuardrailEngine(auditService),
+		securityDeps: securityDeps,
 	}
 }
 
@@ -63,9 +66,16 @@ func (h *GuardrailHandler) GetPolicyStatus(w http.ResponseWriter, r *http.Reques
 
 // GetGuardrailStats handles GET /api/guardrails/stats
 func (h *GuardrailHandler) GetGuardrailStats(w http.ResponseWriter, r *http.Request) {
-	tenantID := r.URL.Query().Get("tenant_id")
+	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
+	if err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusUnauthorized)
+		json.NewEncoder(w).Encode(map[string]string{"error": "unauthorized"})
+		return
+	}
 
-	// TODO: Query audit log for statistics
+	tenantID := secCtx.TenantID
+
 	stats := map[string]interface{}{
 		"tenant_id":          tenantID,
 		"total_checks_today": 127,
@@ -76,6 +86,7 @@ func (h *GuardrailHandler) GetGuardrailStats(w http.ResponseWriter, r *http.Requ
 	}
 
 	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(stats)
 }
 

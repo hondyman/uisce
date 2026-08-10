@@ -336,23 +336,13 @@ func getUserIDFromContext(ctx context.Context) string {
 	return userID
 }
 
-// Extract tenant ID from query string or header
+// Extract tenant ID from headers only (NOT from URL query params per security policy)
 func getTenantIDFromRequest(r *http.Request) string {
-	// Try query parameter first
-	if tenantID := r.URL.Query().Get("tenant_id"); tenantID != "" {
-		return tenantID
-	}
-	// Try header
 	return jwtmiddleware.GetClaimsFromContext(r).TenantID
 }
 
-// Extract datasource ID from query string or header
+// Extract datasource ID from headers only (NOT from URL query params per security policy)
 func getDatasourceIDFromRequest(r *http.Request) string {
-	// Try query parameter first
-	if datasourceID := r.URL.Query().Get("datasource_id"); datasourceID != "" {
-		return datasourceID
-	}
-	// Try header
 	return r.Header.Get("X-Tenant-Datasource-ID")
 }
 

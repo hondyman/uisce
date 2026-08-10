@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/hondyman/uisce/libs/jwt-middleware"
 )
 
 // API handlers for metadata management
@@ -30,7 +31,7 @@ func (api *API) RegisterRoutes(r chi.Router) {
 }
 
 func (api *API) listBusinessObjects(w http.ResponseWriter, r *http.Request) {
-	tenantID := r.URL.Query().Get("tenant_id")
+	tenantID := jwtmiddleware.GetClaimsFromContext(r).TenantID
 	if tenantID == "" {
 		http.Error(w, "tenant_id required", http.StatusBadRequest)
 		return

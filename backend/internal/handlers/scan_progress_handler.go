@@ -22,14 +22,13 @@ func (h *CatalogScanHandler) HandleScanStream(w http.ResponseWriter, r *http.Req
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.Header().Set("X-Accel-Buffering", "no")
 
-	// Get datasource ID from query
-	datasourceIDStr := r.URL.Query().Get("datasource_id")
-	if datasourceIDStr == "" {
-		http.Error(w, "datasource_id is required", http.StatusBadRequest)
+	secCtx, _, err := SecurityContextFromRequest(r, "", "", h.securityDeps)
+	if err != nil {
+		http.Error(w, "Security context error: "+err.Error(), http.StatusUnauthorized)
 		return
 	}
 
-	datasourceID, err := uuid.Parse(datasourceIDStr)
+	datasourceID, err := uuid.Parse(secCtx.DatasourceID)
 	if err != nil {
 		http.Error(w, "invalid datasource_id", http.StatusBadRequest)
 		return

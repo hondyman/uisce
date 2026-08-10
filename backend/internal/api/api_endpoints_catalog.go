@@ -11,6 +11,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	"github.com/hondyman/uisce/backend/internal/handlers"
 )
 
 // APIEndpoint represents an API endpoint in the catalog
@@ -76,268 +77,134 @@ type APIEndpointRequest struct {
 	Version        string                 `json:"version"`
 }
 
-// RegisterAPIEndpointsCatalogRoutes registers all API endpoints catalog routes
-func RegisterAPIEndpointsCatalogRoutes(r chi.Router, db *sql.DB) {
-	r.Get("/api-endpoints", handleListAPIEndpoints(db))
-	r.Post("/api-endpoints", handleCreateAPIEndpoint(db))
-	r.Get("/api-endpoints/{id}", handleGetAPIEndpoint(db))
-	r.Patch("/api-endpoints/{id}", handleUpdateAPIEndpoint(db))
-	r.Delete("/api-endpoints/{id}", handleDeleteAPIEndpoint(db))
-
-	// Search and filter endpoints
-	r.Get("/api-endpoints/category/{category}", handleListAPIEndpointsByCategory(db))
-	r.Get("/api-endpoints/search", handleSearchAPIEndpoints(db))
-
-	// Documentation endpoints
-	r.Get("/api-endpoints/openapi", handleGetOpenAPISpec(db))
-	r.Get("/api-endpoints/{id}/documentation", handleGetEndpointDocumentation(db))
+type APIEndpointsCatalogHandler struct {
+	db           *sql.DB
+	securityDeps handlers.SecurityContextDeps
 }
 
-// handleListAPIEndpoints retrieves all API endpoints with pagination and filtering
-func handleListAPIEndpoints(db *sql.DB) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		tenantID := getSecureTenantID(r)
-		datasourceID := r.URL.Query().Get("datasource_id")
-
-		if tenantID == "" {
-			writeJSONError(w, http.StatusBadRequest, "tenant_id is required", "missing_tenant", "")
-			return
-		}
-
-		// Pagination
-		page := 1
-		if p := r.URL.Query().Get("page"); p != "" {
-			if parsed, err := strconv.Atoi(p); err == nil && parsed > 0 {
-				page = parsed
-			}
-		}
-		limit := 50
-		if l := r.URL.Query().Get("limit"); l != "" {
-			if parsed, err := strconv.Atoi(l); err == nil && parsed > 0 && parsed <= 200 {
-				limit = parsed
-			}
-		}
-		offset := (page - 1) * limit
-
-		// Filters
-		category := r.URL.Query().Get("category")
-		method := r.URL.Query().Get("method")
-		searchQuery := r.URL.Query().Get("search")
-		activeOnly := r.URL.Query().Get("active_only") == "true"
-
-		query := `
-			SELECT id, tenant_id, datasource_id, endpoint_name, description,
-			       http_method, url_path, category, subcategory, purpose,
-			       request_schema, response_schema, parameters, examples, tags,
-			       requires_auth, is_active, version, created_by, created_at, updated_at
-			FROM api_endpoints_catalog
-			WHERE tenant_id = $1
-		`
-		args := []interface{}{tenantID}
-		argCount := 2
-
-		if datasourceID != "" {
-			query += fmt.Sprintf(" AND datasource_id = $%d", argCount)
-			args = append(args, datasourceID)
-			argCount++
-		}
-
-		if category != "" {
-			query += fmt.Sprintf(" AND category = $%d", argCount)
-			args = append(args, category)
-			argCount++
-		}
-
-		if method != "" {
-			query += fmt.Sprintf(" AND http_method = $%d", argCount)
-			args = append(args, method)
-			argCount++
-		}
-
-		if activeOnly {
-			query += " AND is_active = true"
-		}
-
-		if searchQuery != "" {
-			query += fmt.Sprintf(" AND (endpoint_name ILIKE $%d OR description ILIKE $%d OR url_path ILIKE $%d)", argCount, argCount, argCount)
-			args = append(args, "%"+searchQuery+"%", "%"+searchQuery+"%", "%"+searchQuery+"%")
-			argCount += 3
-		}
-
-		// Count total
-		countQuery := strings.Replace(query, "SELECT id, tenant_id, datasource_id, endpoint_name, description, http_method, url_path, category, subcategory, purpose, request_schema, response_schema, parameters, examples, tags, requires_auth, is_active, version, created_by, created_at, updated_at", "SELECT COUNT(*)", 1)
-		var total int
-		if err := db.QueryRow(countQuery, args...).Scan(&total); err != nil {
-			writeJSONError(w, http.StatusInternalServerError, "Failed to count endpoints", "db_error", err.Error())
-			return
-		}
-
-		// Get paginated results
-		query += " ORDER BY created_at DESC LIMIT $" + fmt.Sprintf("%d", argCount) + " OFFSET $" + fmt.Sprintf("%d", argCount+1)
-		args = append(args, limit, offset)
-
-		rows, err := db.Query(query, args...)
-		if err != nil {
-			writeJSONError(w, http.StatusInternalServerError, "Failed to fetch endpoints", "db_error", err.Error())
-			return
-		}
-		defer rows.Close()
-
-		endpoints := []APIEndpoint{}
-		for rows.Next() {
-			var ep APIEndpoint
-			var requestSchemaJSON, responseSchemaJSON, parametersJSON, examplesJSON []byte
-			var tagsJSON []byte
-
-			if err := rows.Scan(
-				&ep.ID, &ep.TenantID, &ep.DatasourceID, &ep.EndpointName, &ep.Description,
-				&ep.HTTPMethod, &ep.URLPath, &ep.Category, &ep.Subcategory, &ep.Purpose,
-				&requestSchemaJSON, &responseSchemaJSON, &parametersJSON, &examplesJSON, &tagsJSON,
-				&ep.RequiresAuth, &ep.IsActive, &ep.Version, &ep.CreatedBy, &ep.CreatedAt, &ep.UpdatedAt,
-			); err != nil {
-				writeJSONError(w, http.StatusInternalServerError, "Failed to scan endpoint", "scan_error", err.Error())
-				return
-			}
-
-			if requestSchemaJSON != nil {
-				json.Unmarshal(requestSchemaJSON, &ep.RequestSchema)
-			}
-			if responseSchemaJSON != nil {
-				json.Unmarshal(responseSchemaJSON, &ep.ResponseSchema)
-			}
-			if parametersJSON != nil {
-				json.Unmarshal(parametersJSON, &ep.Parameters)
-			}
-			if examplesJSON != nil {
-				json.Unmarshal(examplesJSON, &ep.Examples)
-			}
-			if tagsJSON != nil {
-				json.Unmarshal(tagsJSON, &ep.Tags)
-			}
-
-			endpoints = append(endpoints, ep)
-		}
-
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"data":       endpoints,
-			"pagination": map[string]int{"page": page, "limit": limit, "total": total},
-		})
+func NewAPIEndpointsCatalogHandler(db *sql.DB, securityDeps handlers.SecurityContextDeps) *APIEndpointsCatalogHandler {
+	return &APIEndpointsCatalogHandler{
+		db:           db,
+		securityDeps: securityDeps,
 	}
 }
 
-// handleCreateAPIEndpoint creates a new API endpoint in the catalog
-func handleCreateAPIEndpoint(db *sql.DB) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		tenantID := r.URL.Query().Get("tenant_id")
-		datasourceID := r.URL.Query().Get("datasource_id")
+func (h *APIEndpointsCatalogHandler) RegisterRoutes(r chi.Router) {
+	r.Get("/api-endpoints", h.handleListAPIEndpoints)
+	r.Post("/api-endpoints", h.handleCreateAPIEndpoint)
+	r.Get("/api-endpoints/{id}", h.handleGetAPIEndpoint)
+	r.Patch("/api-endpoints/{id}", h.handleUpdateAPIEndpoint)
+	r.Delete("/api-endpoints/{id}", h.handleDeleteAPIEndpoint)
 
-		if tenantID == "" {
-			writeJSONError(w, http.StatusBadRequest, "tenant_id is required", "missing_tenant", "")
-			return
-		}
+	r.Get("/api-endpoints/category/{category}", h.handleListAPIEndpointsByCategory)
+	r.Get("/api-endpoints/search", h.handleSearchAPIEndpoints)
 
-		var req APIEndpointRequest
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			writeJSONError(w, http.StatusBadRequest, "Invalid request body", "decode_error", err.Error())
-			return
-		}
-
-		// Validate required fields
-		if req.EndpointName == "" || req.HTTPMethod == "" || req.URLPath == "" || req.Category == "" {
-			writeJSONError(w, http.StatusBadRequest, "Missing required fields", "validation_error", "")
-			return
-		}
-
-		id := uuid.New().String()
-		now := time.Now()
-
-		requestSchemaJSON, _ := json.Marshal(req.RequestSchema)
-		responseSchemaJSON, _ := json.Marshal(req.ResponseSchema)
-		parametersJSON, _ := json.Marshal(req.Parameters)
-		examplesJSON, _ := json.Marshal(req.Examples)
-		tagsJSON, _ := json.Marshal(req.Tags)
-
-		query := `
-			INSERT INTO api_endpoints_catalog
-			(id, tenant_id, datasource_id, endpoint_name, description, http_method, url_path,
-			 category, subcategory, purpose, request_schema, response_schema, parameters,
-			 examples, tags, requires_auth, is_active, version, created_at, updated_at)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
-		`
-
-		if err := db.QueryRow(query,
-			id, tenantID, datasourceID, req.EndpointName, req.Description, req.HTTPMethod,
-			req.URLPath, req.Category, req.Subcategory, req.Purpose,
-			requestSchemaJSON, responseSchemaJSON, parametersJSON, examplesJSON, tagsJSON,
-			req.RequiresAuth, req.IsActive, req.Version, now, now,
-		).Err(); err != nil {
-			writeJSONError(w, http.StatusInternalServerError, "Failed to create endpoint", "db_error", err.Error())
-			return
-		}
-
-		ep := APIEndpoint{
-			ID:             id,
-			TenantID:       tenantID,
-			DatasourceID:   datasourceID,
-			EndpointName:   req.EndpointName,
-			Description:    req.Description,
-			HTTPMethod:     req.HTTPMethod,
-			URLPath:        req.URLPath,
-			Category:       req.Category,
-			Subcategory:    req.Subcategory,
-			Purpose:        req.Purpose,
-			RequestSchema:  req.RequestSchema,
-			ResponseSchema: req.ResponseSchema,
-			Parameters:     req.Parameters,
-			Examples:       req.Examples,
-			Tags:           req.Tags,
-			RequiresAuth:   req.RequiresAuth,
-			IsActive:       req.IsActive,
-			Version:        req.Version,
-			CreatedAt:      now,
-			UpdatedAt:      now,
-		}
-
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusCreated)
-		json.NewEncoder(w).Encode(ep)
-	}
+	r.Get("/api-endpoints/openapi", h.handleGetOpenAPISpec)
+	r.Get("/api-endpoints/{id}/documentation", h.handleGetEndpointDocumentation)
 }
 
-// handleGetAPIEndpoint retrieves a specific API endpoint
-func handleGetAPIEndpoint(db *sql.DB) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		tenantID := getSecureTenantID(r)
-		id := chi.URLParam(r, "id")
+func (h *APIEndpointsCatalogHandler) handleListAPIEndpoints(w http.ResponseWriter, r *http.Request) {
+	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
+	if err != nil {
+		writeJSONError(w, http.StatusUnauthorized, "security context initialization failed: "+err.Error(), "security_error", "")
+		return
+	}
 
-		if tenantID == "" {
-			writeJSONError(w, http.StatusBadRequest, "tenant_id is required", "missing_tenant", "")
-			return
+	if secCtx.TenantID == "" {
+		writeJSONError(w, http.StatusBadRequest, "tenant_id is required", "missing_tenant", "")
+		return
+	}
+
+	datasourceID := secCtx.DatasourceID
+
+	page := 1
+	if p := r.URL.Query().Get("page"); p != "" {
+		if parsed, err := strconv.Atoi(p); err == nil && parsed > 0 {
+			page = parsed
 		}
+	}
+	limit := 50
+	if l := r.URL.Query().Get("limit"); l != "" {
+		if parsed, err := strconv.Atoi(l); err == nil && parsed > 0 && parsed <= 200 {
+			limit = parsed
+		}
+	}
+	offset := (page - 1) * limit
 
-		query := `
-			SELECT id, tenant_id, datasource_id, endpoint_name, description,
-			       http_method, url_path, category, subcategory, purpose,
-			       request_schema, response_schema, parameters, examples, tags,
-			       requires_auth, is_active, version, created_by, created_at, updated_at
-			FROM api_endpoints_catalog
-			WHERE id = $1 AND tenant_id = $2
-		`
+	category := r.URL.Query().Get("category")
+	method := r.URL.Query().Get("method")
+	searchQuery := r.URL.Query().Get("search")
+	activeOnly := r.URL.Query().Get("active_only") == "true"
 
+	query := `
+		SELECT id, tenant_id, datasource_id, endpoint_name, description,
+		       http_method, url_path, category, subcategory, purpose,
+		       request_schema, response_schema, parameters, examples, tags,
+		       requires_auth, is_active, version, created_by, created_at, updated_at
+		FROM api_endpoints_catalog
+		WHERE tenant_id = $1
+	`
+	args := []interface{}{secCtx.TenantID}
+	argCount := 2
+
+	if datasourceID != "" {
+		query += fmt.Sprintf(" AND datasource_id = $%d", argCount)
+		args = append(args, datasourceID)
+		argCount++
+	}
+
+	if category != "" {
+		query += fmt.Sprintf(" AND category = $%d", argCount)
+		args = append(args, category)
+		argCount++
+	}
+
+	if method != "" {
+		query += fmt.Sprintf(" AND http_method = $%d", argCount)
+		args = append(args, method)
+		argCount++
+	}
+
+	if activeOnly {
+		query += " AND is_active = true"
+	}
+
+	if searchQuery != "" {
+		query += fmt.Sprintf(" AND (endpoint_name ILIKE $%d OR description ILIKE $%d OR url_path ILIKE $%d)", argCount, argCount, argCount)
+		args = append(args, "%"+searchQuery+"%", "%"+searchQuery+"%", "%"+searchQuery+"%")
+		argCount += 3
+	}
+
+	countQuery := strings.Replace(query, "SELECT id, tenant_id, datasource_id, endpoint_name, description, http_method, url_path, category, subcategory, purpose, request_schema, response_schema, parameters, examples, tags, requires_auth, is_active, version, created_by, created_at, updated_at", "SELECT COUNT(*)", 1)
+	var total int
+	if err := h.db.QueryRow(countQuery, args...).Scan(&total); err != nil {
+		writeJSONError(w, http.StatusInternalServerError, "Failed to count endpoints", "db_error", err.Error())
+		return
+	}
+
+	query += " ORDER BY created_at DESC LIMIT $" + fmt.Sprintf("%d", argCount) + " OFFSET $" + fmt.Sprintf("%d", argCount+1)
+	args = append(args, limit, offset)
+
+	rows, err := h.db.Query(query, args...)
+	if err != nil {
+		writeJSONError(w, http.StatusInternalServerError, "Failed to fetch endpoints", "db_error", err.Error())
+		return
+	}
+	defer rows.Close()
+
+	endpoints := []APIEndpoint{}
+	for rows.Next() {
 		var ep APIEndpoint
-		var requestSchemaJSON, responseSchemaJSON, parametersJSON, examplesJSON, tagsJSON []byte
+		var requestSchemaJSON, responseSchemaJSON, parametersJSON, examplesJSON []byte
+		var tagsJSON []byte
 
-		if err := db.QueryRow(query, id, tenantID).Scan(
+		if err := rows.Scan(
 			&ep.ID, &ep.TenantID, &ep.DatasourceID, &ep.EndpointName, &ep.Description,
 			&ep.HTTPMethod, &ep.URLPath, &ep.Category, &ep.Subcategory, &ep.Purpose,
 			&requestSchemaJSON, &responseSchemaJSON, &parametersJSON, &examplesJSON, &tagsJSON,
 			&ep.RequiresAuth, &ep.IsActive, &ep.Version, &ep.CreatedBy, &ep.CreatedAt, &ep.UpdatedAt,
-		); err == sql.ErrNoRows {
-			writeJSONError(w, http.StatusNotFound, "Endpoint not found", "not_found", "")
-			return
-		} else if err != nil {
-			writeJSONError(w, http.StatusInternalServerError, "Failed to fetch endpoint", "db_error", err.Error())
+		); err != nil {
+			writeJSONError(w, http.StatusInternalServerError, "Failed to scan endpoint", "scan_error", err.Error())
 			return
 		}
 
@@ -357,398 +224,551 @@ func handleGetAPIEndpoint(db *sql.DB) http.HandlerFunc {
 			json.Unmarshal(tagsJSON, &ep.Tags)
 		}
 
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(ep)
+		endpoints = append(endpoints, ep)
 	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"data":       endpoints,
+		"pagination": map[string]int{"page": page, "limit": limit, "total": total},
+	})
 }
 
-// handleUpdateAPIEndpoint updates an existing API endpoint
-func handleUpdateAPIEndpoint(db *sql.DB) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		tenantID := getSecureTenantID(r)
-		id := chi.URLParam(r, "id")
+func (h *APIEndpointsCatalogHandler) handleCreateAPIEndpoint(w http.ResponseWriter, r *http.Request) {
+	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
+	if err != nil {
+		writeJSONError(w, http.StatusUnauthorized, "security context initialization failed: "+err.Error(), "security_error", "")
+		return
+	}
 
-		if tenantID == "" {
-			writeJSONError(w, http.StatusBadRequest, "tenant_id is required", "missing_tenant", "")
-			return
-		}
+	if secCtx.TenantID == "" {
+		writeJSONError(w, http.StatusBadRequest, "tenant_id is required", "missing_tenant", "")
+		return
+	}
 
-		var req APIEndpointRequest
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			writeJSONError(w, http.StatusBadRequest, "Invalid request body", "decode_error", err.Error())
-			return
-		}
+	var req APIEndpointRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSONError(w, http.StatusBadRequest, "Invalid request body", "decode_error", err.Error())
+		return
+	}
 
-		requestSchemaJSON, _ := json.Marshal(req.RequestSchema)
-		responseSchemaJSON, _ := json.Marshal(req.ResponseSchema)
-		parametersJSON, _ := json.Marshal(req.Parameters)
-		examplesJSON, _ := json.Marshal(req.Examples)
-		tagsJSON, _ := json.Marshal(req.Tags)
+	if req.EndpointName == "" || req.HTTPMethod == "" || req.URLPath == "" || req.Category == "" {
+		writeJSONError(w, http.StatusBadRequest, "Missing required fields", "validation_error", "")
+		return
+	}
 
-		query := `
-			UPDATE api_endpoints_catalog
-			SET endpoint_name = $1, description = $2, http_method = $3, url_path = $4,
-			    category = $5, subcategory = $6, purpose = $7, request_schema = $8,
-			    response_schema = $9, parameters = $10, examples = $11, tags = $12,
-			    requires_auth = $13, is_active = $14, version = $15, updated_at = $16
-			WHERE id = $17 AND tenant_id = $18
-			RETURNING id, tenant_id, datasource_id, endpoint_name, description,
-			         http_method, url_path, category, subcategory, purpose,
-			         request_schema, response_schema, parameters, examples, tags,
-			         requires_auth, is_active, version, created_by, created_at, updated_at
-		`
+	id := uuid.New().String()
+	now := time.Now()
 
+	requestSchemaJSON, _ := json.Marshal(req.RequestSchema)
+	responseSchemaJSON, _ := json.Marshal(req.ResponseSchema)
+	parametersJSON, _ := json.Marshal(req.Parameters)
+	examplesJSON, _ := json.Marshal(req.Examples)
+	tagsJSON, _ := json.Marshal(req.Tags)
+
+	query := `
+		INSERT INTO api_endpoints_catalog
+		(id, tenant_id, datasource_id, endpoint_name, description, http_method, url_path,
+		 category, subcategory, purpose, request_schema, response_schema, parameters,
+		 examples, tags, requires_auth, is_active, version, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
+	`
+
+	if err := h.db.QueryRow(query,
+		id, secCtx.TenantID, secCtx.DatasourceID, req.EndpointName, req.Description, req.HTTPMethod,
+		req.URLPath, req.Category, req.Subcategory, req.Purpose,
+		requestSchemaJSON, responseSchemaJSON, parametersJSON, examplesJSON, tagsJSON,
+		req.RequiresAuth, req.IsActive, req.Version, now, now,
+	).Err(); err != nil {
+		writeJSONError(w, http.StatusInternalServerError, "Failed to create endpoint", "db_error", err.Error())
+		return
+	}
+
+	ep := APIEndpoint{
+		ID:             id,
+		TenantID:       secCtx.TenantID,
+		DatasourceID:   secCtx.DatasourceID,
+		EndpointName:   req.EndpointName,
+		Description:    req.Description,
+		HTTPMethod:     req.HTTPMethod,
+		URLPath:        req.URLPath,
+		Category:       req.Category,
+		Subcategory:    req.Subcategory,
+		Purpose:        req.Purpose,
+		RequestSchema:  req.RequestSchema,
+		ResponseSchema: req.ResponseSchema,
+		Parameters:     req.Parameters,
+		Examples:       req.Examples,
+		Tags:           req.Tags,
+		RequiresAuth:   req.RequiresAuth,
+		IsActive:       req.IsActive,
+		Version:        req.Version,
+		CreatedAt:      now,
+		UpdatedAt:      now,
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
+	json.NewEncoder(w).Encode(ep)
+}
+
+func (h *APIEndpointsCatalogHandler) handleGetAPIEndpoint(w http.ResponseWriter, r *http.Request) {
+	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
+	if err != nil {
+		writeJSONError(w, http.StatusUnauthorized, "security context initialization failed: "+err.Error(), "security_error", "")
+		return
+	}
+
+	if secCtx.TenantID == "" {
+		writeJSONError(w, http.StatusBadRequest, "tenant_id is required", "missing_tenant", "")
+		return
+	}
+
+	id := chi.URLParam(r, "id")
+
+	query := `
+		SELECT id, tenant_id, datasource_id, endpoint_name, description,
+		       http_method, url_path, category, subcategory, purpose,
+		       request_schema, response_schema, parameters, examples, tags,
+		       requires_auth, is_active, version, created_by, created_at, updated_at
+		FROM api_endpoints_catalog
+		WHERE id = $1 AND tenant_id = $2
+	`
+
+	var ep APIEndpoint
+	var requestSchemaJSON, responseSchemaJSON, parametersJSON, examplesJSON, tagsJSON []byte
+
+	if err := h.db.QueryRow(query, id, secCtx.TenantID).Scan(
+		&ep.ID, &ep.TenantID, &ep.DatasourceID, &ep.EndpointName, &ep.Description,
+		&ep.HTTPMethod, &ep.URLPath, &ep.Category, &ep.Subcategory, &ep.Purpose,
+		&requestSchemaJSON, &responseSchemaJSON, &parametersJSON, &examplesJSON, &tagsJSON,
+		&ep.RequiresAuth, &ep.IsActive, &ep.Version, &ep.CreatedBy, &ep.CreatedAt, &ep.UpdatedAt,
+	); err == sql.ErrNoRows {
+		writeJSONError(w, http.StatusNotFound, "Endpoint not found", "not_found", "")
+		return
+	} else if err != nil {
+		writeJSONError(w, http.StatusInternalServerError, "Failed to fetch endpoint", "db_error", err.Error())
+		return
+	}
+
+	if requestSchemaJSON != nil {
+		json.Unmarshal(requestSchemaJSON, &ep.RequestSchema)
+	}
+	if responseSchemaJSON != nil {
+		json.Unmarshal(responseSchemaJSON, &ep.ResponseSchema)
+	}
+	if parametersJSON != nil {
+		json.Unmarshal(parametersJSON, &ep.Parameters)
+	}
+	if examplesJSON != nil {
+		json.Unmarshal(examplesJSON, &ep.Examples)
+	}
+	if tagsJSON != nil {
+		json.Unmarshal(tagsJSON, &ep.Tags)
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(ep)
+}
+
+func (h *APIEndpointsCatalogHandler) handleUpdateAPIEndpoint(w http.ResponseWriter, r *http.Request) {
+	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
+	if err != nil {
+		writeJSONError(w, http.StatusUnauthorized, "security context initialization failed: "+err.Error(), "security_error", "")
+		return
+	}
+
+	if secCtx.TenantID == "" {
+		writeJSONError(w, http.StatusBadRequest, "tenant_id is required", "missing_tenant", "")
+		return
+	}
+
+	id := chi.URLParam(r, "id")
+
+	var req APIEndpointRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSONError(w, http.StatusBadRequest, "Invalid request body", "decode_error", err.Error())
+		return
+	}
+
+	requestSchemaJSON, _ := json.Marshal(req.RequestSchema)
+	responseSchemaJSON, _ := json.Marshal(req.ResponseSchema)
+	parametersJSON, _ := json.Marshal(req.Parameters)
+	examplesJSON, _ := json.Marshal(req.Examples)
+	tagsJSON, _ := json.Marshal(req.Tags)
+
+	query := `
+		UPDATE api_endpoints_catalog
+		SET endpoint_name = $1, description = $2, http_method = $3, url_path = $4,
+		    category = $5, subcategory = $6, purpose = $7, request_schema = $8,
+		    response_schema = $9, parameters = $10, examples = $11, tags = $12,
+		    requires_auth = $13, is_active = $14, version = $15, updated_at = $16
+		WHERE id = $17 AND tenant_id = $18
+		RETURNING id, tenant_id, datasource_id, endpoint_name, description,
+		         http_method, url_path, category, subcategory, purpose,
+		         request_schema, response_schema, parameters, examples, tags,
+		         requires_auth, is_active, version, created_by, created_at, updated_at
+	`
+
+	var ep APIEndpoint
+	var requestSchemaJSON2, responseSchemaJSON2, parametersJSON2, examplesJSON2, tagsJSON2 []byte
+
+	if err := h.db.QueryRow(query,
+		req.EndpointName, req.Description, req.HTTPMethod, req.URLPath,
+		req.Category, req.Subcategory, req.Purpose, requestSchemaJSON,
+		responseSchemaJSON, parametersJSON, examplesJSON, tagsJSON,
+		req.RequiresAuth, req.IsActive, req.Version, time.Now(),
+		id, secCtx.TenantID,
+	).Scan(
+		&ep.ID, &ep.TenantID, &ep.DatasourceID, &ep.EndpointName, &ep.Description,
+		&ep.HTTPMethod, &ep.URLPath, &ep.Category, &ep.Subcategory, &ep.Purpose,
+		&requestSchemaJSON2, &responseSchemaJSON2, &parametersJSON2, &examplesJSON2, &tagsJSON2,
+		&ep.RequiresAuth, &ep.IsActive, &ep.Version, &ep.CreatedBy, &ep.CreatedAt, &ep.UpdatedAt,
+	); err == sql.ErrNoRows {
+		writeJSONError(w, http.StatusNotFound, "Endpoint not found", "not_found", "")
+		return
+	} else if err != nil {
+		writeJSONError(w, http.StatusInternalServerError, "Failed to update endpoint", "db_error", err.Error())
+		return
+	}
+
+	if requestSchemaJSON2 != nil {
+		json.Unmarshal(requestSchemaJSON2, &ep.RequestSchema)
+	}
+	if responseSchemaJSON2 != nil {
+		json.Unmarshal(responseSchemaJSON2, &ep.ResponseSchema)
+	}
+	if parametersJSON2 != nil {
+		json.Unmarshal(parametersJSON2, &ep.Parameters)
+	}
+	if examplesJSON2 != nil {
+		json.Unmarshal(examplesJSON2, &ep.Examples)
+	}
+	if tagsJSON2 != nil {
+		json.Unmarshal(tagsJSON2, &ep.Tags)
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(ep)
+}
+
+func (h *APIEndpointsCatalogHandler) handleDeleteAPIEndpoint(w http.ResponseWriter, r *http.Request) {
+	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
+	if err != nil {
+		writeJSONError(w, http.StatusUnauthorized, "security context initialization failed: "+err.Error(), "security_error", "")
+		return
+	}
+
+	if secCtx.TenantID == "" {
+		writeJSONError(w, http.StatusBadRequest, "tenant_id is required", "missing_tenant", "")
+		return
+	}
+
+	id := chi.URLParam(r, "id")
+
+	result, err := h.db.Exec(
+		"DELETE FROM api_endpoints_catalog WHERE id = $1 AND tenant_id = $2",
+		id, secCtx.TenantID,
+	)
+	if err != nil {
+		writeJSONError(w, http.StatusInternalServerError, "Failed to delete endpoint", "db_error", err.Error())
+		return
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil || rowsAffected == 0 {
+		writeJSONError(w, http.StatusNotFound, "Endpoint not found", "not_found", "")
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *APIEndpointsCatalogHandler) handleListAPIEndpointsByCategory(w http.ResponseWriter, r *http.Request) {
+	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
+	if err != nil {
+		writeJSONError(w, http.StatusUnauthorized, "security context initialization failed: "+err.Error(), "security_error", "")
+		return
+	}
+
+	if secCtx.TenantID == "" {
+		writeJSONError(w, http.StatusBadRequest, "tenant_id is required", "missing_tenant", "")
+		return
+	}
+
+	category := chi.URLParam(r, "category")
+
+	query := `
+		SELECT id, tenant_id, datasource_id, endpoint_name, description,
+		       http_method, url_path, category, subcategory, purpose,
+		       request_schema, response_schema, parameters, examples, tags,
+		       requires_auth, is_active, version, created_by, created_at, updated_at
+		FROM api_endpoints_catalog
+		WHERE tenant_id = $1 AND category = $2
+		ORDER BY subcategory, endpoint_name
+	`
+
+	rows, err := h.db.Query(query, secCtx.TenantID, category)
+	if err != nil {
+		writeJSONError(w, http.StatusInternalServerError, "Failed to fetch endpoints", "db_error", err.Error())
+		return
+	}
+	defer rows.Close()
+
+	endpoints := []APIEndpoint{}
+	for rows.Next() {
 		var ep APIEndpoint
-		var requestSchemaJSON2, responseSchemaJSON2, parametersJSON2, examplesJSON2, tagsJSON2 []byte
+		var requestSchemaJSON, responseSchemaJSON, parametersJSON, examplesJSON, tagsJSON []byte
 
-		if err := db.QueryRow(query,
-			req.EndpointName, req.Description, req.HTTPMethod, req.URLPath,
-			req.Category, req.Subcategory, req.Purpose, requestSchemaJSON,
-			responseSchemaJSON, parametersJSON, examplesJSON, tagsJSON,
-			req.RequiresAuth, req.IsActive, req.Version, time.Now(),
-			id, tenantID,
-		).Scan(
+		if err := rows.Scan(
 			&ep.ID, &ep.TenantID, &ep.DatasourceID, &ep.EndpointName, &ep.Description,
 			&ep.HTTPMethod, &ep.URLPath, &ep.Category, &ep.Subcategory, &ep.Purpose,
-			&requestSchemaJSON2, &responseSchemaJSON2, &parametersJSON2, &examplesJSON2, &tagsJSON2,
+			&requestSchemaJSON, &responseSchemaJSON, &parametersJSON, &examplesJSON, &tagsJSON,
 			&ep.RequiresAuth, &ep.IsActive, &ep.Version, &ep.CreatedBy, &ep.CreatedAt, &ep.UpdatedAt,
-		); err == sql.ErrNoRows {
-			writeJSONError(w, http.StatusNotFound, "Endpoint not found", "not_found", "")
-			return
-		} else if err != nil {
-			writeJSONError(w, http.StatusInternalServerError, "Failed to update endpoint", "db_error", err.Error())
-			return
+		); err != nil {
+			continue
 		}
 
-		if requestSchemaJSON2 != nil {
-			json.Unmarshal(requestSchemaJSON2, &ep.RequestSchema)
+		if requestSchemaJSON != nil {
+			json.Unmarshal(requestSchemaJSON, &ep.RequestSchema)
 		}
-		if responseSchemaJSON2 != nil {
-			json.Unmarshal(responseSchemaJSON2, &ep.ResponseSchema)
+		if responseSchemaJSON != nil {
+			json.Unmarshal(responseSchemaJSON, &ep.ResponseSchema)
 		}
-		if parametersJSON2 != nil {
-			json.Unmarshal(parametersJSON2, &ep.Parameters)
+		if parametersJSON != nil {
+			json.Unmarshal(parametersJSON, &ep.Parameters)
 		}
-		if examplesJSON2 != nil {
-			json.Unmarshal(examplesJSON2, &ep.Examples)
+		if examplesJSON != nil {
+			json.Unmarshal(examplesJSON, &ep.Examples)
 		}
-		if tagsJSON2 != nil {
-			json.Unmarshal(tagsJSON2, &ep.Tags)
+		if tagsJSON != nil {
+			json.Unmarshal(tagsJSON, &ep.Tags)
 		}
 
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(ep)
+		endpoints = append(endpoints, ep)
 	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"category": category,
+		"data":     endpoints,
+	})
 }
 
-// handleDeleteAPIEndpoint deletes an API endpoint
-func handleDeleteAPIEndpoint(db *sql.DB) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		tenantID := getSecureTenantID(r)
-		id := chi.URLParam(r, "id")
-
-		if tenantID == "" {
-			writeJSONError(w, http.StatusBadRequest, "tenant_id is required", "missing_tenant", "")
-			return
-		}
-
-		result, err := db.Exec(
-			"DELETE FROM api_endpoints_catalog WHERE id = $1 AND tenant_id = $2",
-			id, tenantID,
-		)
-		if err != nil {
-			writeJSONError(w, http.StatusInternalServerError, "Failed to delete endpoint", "db_error", err.Error())
-			return
-		}
-
-		rowsAffected, err := result.RowsAffected()
-		if err != nil || rowsAffected == 0 {
-			writeJSONError(w, http.StatusNotFound, "Endpoint not found", "not_found", "")
-			return
-		}
-
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusNoContent)
+func (h *APIEndpointsCatalogHandler) handleSearchAPIEndpoints(w http.ResponseWriter, r *http.Request) {
+	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
+	if err != nil {
+		writeJSONError(w, http.StatusUnauthorized, "security context initialization failed: "+err.Error(), "security_error", "")
+		return
 	}
+
+	if secCtx.TenantID == "" {
+		writeJSONError(w, http.StatusBadRequest, "tenant_id is required", "missing_tenant", "")
+		return
+	}
+
+	search := r.URL.Query().Get("q")
+	method := r.URL.Query().Get("method")
+	category := r.URL.Query().Get("category")
+
+	query := `
+		SELECT id, tenant_id, datasource_id, endpoint_name, description,
+		       http_method, url_path, category, subcategory, purpose,
+		       request_schema, response_schema, parameters, examples, tags,
+		       requires_auth, is_active, version, created_by, created_at, updated_at
+		FROM api_endpoints_catalog
+		WHERE tenant_id = $1 AND is_active = true
+	`
+	args := []interface{}{secCtx.TenantID}
+	argCount := 2
+
+	if search != "" {
+		query += fmt.Sprintf(" AND (endpoint_name ILIKE $%d OR description ILIKE $%d OR url_path ILIKE $%d)", argCount, argCount, argCount)
+		args = append(args, "%"+search+"%", "%"+search+"%", "%"+search+"%")
+		argCount += 3
+	}
+
+	if method != "" {
+		query += fmt.Sprintf(" AND http_method = $%d", argCount)
+		args = append(args, method)
+		argCount++
+	}
+
+	if category != "" {
+		query += fmt.Sprintf(" AND category = $%d", argCount)
+		args = append(args, category)
+		argCount++
+	}
+
+	query += " ORDER BY endpoint_name"
+
+	rows, err := h.db.Query(query, args...)
+	if err != nil {
+		writeJSONError(w, http.StatusInternalServerError, "Failed to search endpoints", "db_error", err.Error())
+		return
+	}
+	defer rows.Close()
+
+	endpoints := []APIEndpoint{}
+	for rows.Next() {
+		var ep APIEndpoint
+		var requestSchemaJSON, responseSchemaJSON, parametersJSON, examplesJSON, tagsJSON []byte
+
+		if err := rows.Scan(
+			&ep.ID, &ep.TenantID, &ep.DatasourceID, &ep.EndpointName, &ep.Description,
+			&ep.HTTPMethod, &ep.URLPath, &ep.Category, &ep.Subcategory, &ep.Purpose,
+			&requestSchemaJSON, &responseSchemaJSON, &parametersJSON, &examplesJSON, &tagsJSON,
+			&ep.RequiresAuth, &ep.IsActive, &ep.Version, &ep.CreatedBy, &ep.CreatedAt, &ep.UpdatedAt,
+		); err != nil {
+			continue
+		}
+
+		if requestSchemaJSON != nil {
+			json.Unmarshal(requestSchemaJSON, &ep.RequestSchema)
+		}
+		if responseSchemaJSON != nil {
+			json.Unmarshal(responseSchemaJSON, &ep.ResponseSchema)
+		}
+		if parametersJSON != nil {
+			json.Unmarshal(parametersJSON, &ep.Parameters)
+		}
+		if examplesJSON != nil {
+			json.Unmarshal(examplesJSON, &ep.Examples)
+		}
+		if tagsJSON != nil {
+			json.Unmarshal(tagsJSON, &ep.Tags)
+		}
+
+		endpoints = append(endpoints, ep)
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"search": search,
+		"data":   endpoints,
+		"count":  len(endpoints),
+	})
 }
 
-// handleListAPIEndpointsByCategory retrieves endpoints by category
-func handleListAPIEndpointsByCategory(db *sql.DB) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		tenantID := getSecureTenantID(r)
-		category := chi.URLParam(r, "category")
-
-		if tenantID == "" {
-			writeJSONError(w, http.StatusBadRequest, "tenant_id is required", "missing_tenant", "")
-			return
-		}
-
-		query := `
-			SELECT id, tenant_id, datasource_id, endpoint_name, description,
-			       http_method, url_path, category, subcategory, purpose,
-			       request_schema, response_schema, parameters, examples, tags,
-			       requires_auth, is_active, version, created_by, created_at, updated_at
-			FROM api_endpoints_catalog
-			WHERE tenant_id = $1 AND category = $2
-			ORDER BY subcategory, endpoint_name
-		`
-
-		rows, err := db.Query(query, tenantID, category)
-		if err != nil {
-			writeJSONError(w, http.StatusInternalServerError, "Failed to fetch endpoints", "db_error", err.Error())
-			return
-		}
-		defer rows.Close()
-
-		endpoints := []APIEndpoint{}
-		for rows.Next() {
-			var ep APIEndpoint
-			var requestSchemaJSON, responseSchemaJSON, parametersJSON, examplesJSON, tagsJSON []byte
-
-			if err := rows.Scan(
-				&ep.ID, &ep.TenantID, &ep.DatasourceID, &ep.EndpointName, &ep.Description,
-				&ep.HTTPMethod, &ep.URLPath, &ep.Category, &ep.Subcategory, &ep.Purpose,
-				&requestSchemaJSON, &responseSchemaJSON, &parametersJSON, &examplesJSON, &tagsJSON,
-				&ep.RequiresAuth, &ep.IsActive, &ep.Version, &ep.CreatedBy, &ep.CreatedAt, &ep.UpdatedAt,
-			); err != nil {
-				continue
-			}
-
-			if requestSchemaJSON != nil {
-				json.Unmarshal(requestSchemaJSON, &ep.RequestSchema)
-			}
-			if responseSchemaJSON != nil {
-				json.Unmarshal(responseSchemaJSON, &ep.ResponseSchema)
-			}
-			if parametersJSON != nil {
-				json.Unmarshal(parametersJSON, &ep.Parameters)
-			}
-			if examplesJSON != nil {
-				json.Unmarshal(examplesJSON, &ep.Examples)
-			}
-			if tagsJSON != nil {
-				json.Unmarshal(tagsJSON, &ep.Tags)
-			}
-
-			endpoints = append(endpoints, ep)
-		}
-
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"category": category,
-			"data":     endpoints,
-		})
+func (h *APIEndpointsCatalogHandler) handleGetOpenAPISpec(w http.ResponseWriter, r *http.Request) {
+	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
+	if err != nil {
+		writeJSONError(w, http.StatusUnauthorized, "security context initialization failed: "+err.Error(), "security_error", "")
+		return
 	}
+
+	if secCtx.TenantID == "" {
+		writeJSONError(w, http.StatusBadRequest, "tenant_id is required", "missing_tenant", "")
+		return
+	}
+
+	query := `
+		SELECT category, COUNT(*) as count
+		FROM api_endpoints_catalog
+		WHERE tenant_id = $1 AND is_active = true
+		GROUP BY category
+	`
+
+	rows, err := h.db.Query(query, secCtx.TenantID)
+	if err != nil {
+		writeJSONError(w, http.StatusInternalServerError, "Failed to fetch spec", "db_error", err.Error())
+		return
+	}
+	defer rows.Close()
+
+	paths := make(map[string]interface{})
+	for rows.Next() {
+		var category string
+		var count int
+		if err := rows.Scan(&category, &count); err != nil {
+			continue
+		}
+		paths[category] = map[string]interface{}{
+			"count":   count,
+			"summary": "Endpoints for " + category,
+		}
+	}
+
+	spec := map[string]interface{}{
+		"openapi": "3.0.0",
+		"info": map[string]interface{}{
+			"title":   "API Endpoints Catalog",
+			"version": "1.0.0",
+		},
+		"paths": paths,
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(spec)
 }
 
-// handleSearchAPIEndpoints searches for endpoints by multiple criteria
-func handleSearchAPIEndpoints(db *sql.DB) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		tenantID := getSecureTenantID(r)
-		search := r.URL.Query().Get("q")
-		method := r.URL.Query().Get("method")
-		category := r.URL.Query().Get("category")
-
-		if tenantID == "" {
-			writeJSONError(w, http.StatusBadRequest, "tenant_id is required", "missing_tenant", "")
-			return
-		}
-
-		query := `
-			SELECT id, tenant_id, datasource_id, endpoint_name, description,
-			       http_method, url_path, category, subcategory, purpose,
-			       request_schema, response_schema, parameters, examples, tags,
-			       requires_auth, is_active, version, created_by, created_at, updated_at
-			FROM api_endpoints_catalog
-			WHERE tenant_id = $1 AND is_active = true
-		`
-		args := []interface{}{tenantID}
-		argCount := 2
-
-		if search != "" {
-			query += fmt.Sprintf(" AND (endpoint_name ILIKE $%d OR description ILIKE $%d OR url_path ILIKE $%d)", argCount, argCount, argCount)
-			args = append(args, "%"+search+"%", "%"+search+"%", "%"+search+"%")
-			argCount += 3
-		}
-
-		if method != "" {
-			query += fmt.Sprintf(" AND http_method = $%d", argCount)
-			args = append(args, method)
-			argCount++
-		}
-
-		if category != "" {
-			query += fmt.Sprintf(" AND category = $%d", argCount)
-			args = append(args, category)
-			argCount++
-		}
-
-		query += " ORDER BY endpoint_name"
-
-		rows, err := db.Query(query, args...)
-		if err != nil {
-			writeJSONError(w, http.StatusInternalServerError, "Failed to search endpoints", "db_error", err.Error())
-			return
-		}
-		defer rows.Close()
-
-		endpoints := []APIEndpoint{}
-		for rows.Next() {
-			var ep APIEndpoint
-			var requestSchemaJSON, responseSchemaJSON, parametersJSON, examplesJSON, tagsJSON []byte
-
-			if err := rows.Scan(
-				&ep.ID, &ep.TenantID, &ep.DatasourceID, &ep.EndpointName, &ep.Description,
-				&ep.HTTPMethod, &ep.URLPath, &ep.Category, &ep.Subcategory, &ep.Purpose,
-				&requestSchemaJSON, &responseSchemaJSON, &parametersJSON, &examplesJSON, &tagsJSON,
-				&ep.RequiresAuth, &ep.IsActive, &ep.Version, &ep.CreatedBy, &ep.CreatedAt, &ep.UpdatedAt,
-			); err != nil {
-				continue
-			}
-
-			if requestSchemaJSON != nil {
-				json.Unmarshal(requestSchemaJSON, &ep.RequestSchema)
-			}
-			if responseSchemaJSON != nil {
-				json.Unmarshal(responseSchemaJSON, &ep.ResponseSchema)
-			}
-			if parametersJSON != nil {
-				json.Unmarshal(parametersJSON, &ep.Parameters)
-			}
-			if examplesJSON != nil {
-				json.Unmarshal(examplesJSON, &ep.Examples)
-			}
-			if tagsJSON != nil {
-				json.Unmarshal(tagsJSON, &ep.Tags)
-			}
-
-			endpoints = append(endpoints, ep)
-		}
-
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"search": search,
-			"data":   endpoints,
-			"count":  len(endpoints),
-		})
+func (h *APIEndpointsCatalogHandler) handleGetEndpointDocumentation(w http.ResponseWriter, r *http.Request) {
+	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
+	if err != nil {
+		writeJSONError(w, http.StatusUnauthorized, "security context initialization failed: "+err.Error(), "security_error", "")
+		return
 	}
-}
 
-// handleGetOpenAPISpec generates an OpenAPI specification for all endpoints
-func handleGetOpenAPISpec(db *sql.DB) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		tenantID := getSecureTenantID(r)
-
-		if tenantID == "" {
-			writeJSONError(w, http.StatusBadRequest, "tenant_id is required", "missing_tenant", "")
-			return
-		}
-
-		query := `
-			SELECT category, COUNT(*) as count
-			FROM api_endpoints_catalog
-			WHERE tenant_id = $1 AND is_active = true
-			GROUP BY category
-		`
-
-		rows, err := db.Query(query, tenantID)
-		if err != nil {
-			writeJSONError(w, http.StatusInternalServerError, "Failed to fetch spec", "db_error", err.Error())
-			return
-		}
-		defer rows.Close()
-
-		paths := make(map[string]interface{})
-		for rows.Next() {
-			var category string
-			var count int
-			if err := rows.Scan(&category, &count); err != nil {
-				continue
-			}
-			paths[category] = map[string]interface{}{
-				"count":   count,
-				"summary": "Endpoints for " + category,
-			}
-		}
-
-		spec := map[string]interface{}{
-			"openapi": "3.0.0",
-			"info": map[string]interface{}{
-				"title":   "API Endpoints Catalog",
-				"version": "1.0.0",
-			},
-			"paths": paths,
-		}
-
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(spec)
+	if secCtx.TenantID == "" {
+		writeJSONError(w, http.StatusBadRequest, "tenant_id is required", "missing_tenant", "")
+		return
 	}
-}
 
-// handleGetEndpointDocumentation retrieves documentation for a specific endpoint
-func handleGetEndpointDocumentation(db *sql.DB) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		tenantID := getSecureTenantID(r)
-		id := chi.URLParam(r, "id")
+	id := chi.URLParam(r, "id")
 
-		if tenantID == "" {
-			writeJSONError(w, http.StatusBadRequest, "tenant_id is required", "missing_tenant", "")
-			return
-		}
+	query := `
+		SELECT id, endpoint_name, description, http_method, url_path,
+		       category, subcategory, purpose, request_schema, response_schema,
+		       parameters, examples, version
+		FROM api_endpoints_catalog
+		WHERE id = $1 AND tenant_id = $2
+	`
 
-		query := `
-			SELECT id, endpoint_name, description, http_method, url_path,
-			       category, subcategory, purpose, request_schema, response_schema,
-			       parameters, examples, version
-			FROM api_endpoints_catalog
-			WHERE id = $1 AND tenant_id = $2
-		`
-
-		var ep struct {
-			ID             string
-			EndpointName   string
-			Description    string
-			HTTPMethod     string
-			URLPath        string
-			Category       string
-			Subcategory    string
-			Purpose        string
-			RequestSchema  json.RawMessage
-			ResponseSchema json.RawMessage
-			Parameters     json.RawMessage
-			Examples       json.RawMessage
-			Version        string
-		}
-
-		if err := db.QueryRow(query, id, tenantID).Scan(
-			&ep.ID, &ep.EndpointName, &ep.Description, &ep.HTTPMethod, &ep.URLPath,
-			&ep.Category, &ep.Subcategory, &ep.Purpose, &ep.RequestSchema, &ep.ResponseSchema,
-			&ep.Parameters, &ep.Examples, &ep.Version,
-		); err == sql.ErrNoRows {
-			writeJSONError(w, http.StatusNotFound, "Endpoint not found", "not_found", "")
-			return
-		} else if err != nil {
-			writeJSONError(w, http.StatusInternalServerError, "Failed to fetch documentation", "db_error", err.Error())
-			return
-		}
-
-		doc := map[string]interface{}{
-			"id":              ep.ID,
-			"title":           ep.EndpointName,
-			"description":     ep.Description,
-			"method":          ep.HTTPMethod,
-			"path":            ep.URLPath,
-			"category":        ep.Category,
-			"subcategory":     ep.Subcategory,
-			"purpose":         ep.Purpose,
-			"version":         ep.Version,
-			"request_schema":  ep.RequestSchema,
-			"response_schema": ep.ResponseSchema,
-			"parameters":      ep.Parameters,
-			"examples":        ep.Examples,
-		}
-
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(doc)
+	var ep struct {
+		ID             string
+		EndpointName   string
+		Description    string
+		HTTPMethod     string
+		URLPath        string
+		Category       string
+		Subcategory    string
+		Purpose        string
+		RequestSchema  json.RawMessage
+		ResponseSchema json.RawMessage
+		Parameters     json.RawMessage
+		Examples       json.RawMessage
+		Version        string
 	}
+
+	if err := h.db.QueryRow(query, id, secCtx.TenantID).Scan(
+		&ep.ID, &ep.EndpointName, &ep.Description, &ep.HTTPMethod, &ep.URLPath,
+		&ep.Category, &ep.Subcategory, &ep.Purpose, &ep.RequestSchema, &ep.ResponseSchema,
+		&ep.Parameters, &ep.Examples, &ep.Version,
+	); err == sql.ErrNoRows {
+		writeJSONError(w, http.StatusNotFound, "Endpoint not found", "not_found", "")
+		return
+	} else if err != nil {
+		writeJSONError(w, http.StatusInternalServerError, "Failed to fetch documentation", "db_error", err.Error())
+		return
+	}
+
+	doc := map[string]interface{}{
+		"id":              ep.ID,
+		"title":           ep.EndpointName,
+		"description":     ep.Description,
+		"method":          ep.HTTPMethod,
+		"path":            ep.URLPath,
+		"category":        ep.Category,
+		"subcategory":     ep.Subcategory,
+		"purpose":         ep.Purpose,
+		"version":         ep.Version,
+		"request_schema":  ep.RequestSchema,
+		"response_schema": ep.ResponseSchema,
+		"parameters":      ep.Parameters,
+		"examples":        ep.Examples,
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(doc)
 }

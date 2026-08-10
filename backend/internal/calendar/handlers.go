@@ -8,6 +8,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	jwtmiddleware "github.com/hondyman/uisce/libs/jwt-middleware"
 )
 
 // Handler handles calendar HTTP requests
@@ -162,11 +163,10 @@ func (h *Handler) AdjustDate(w http.ResponseWriter, r *http.Request) {
 // ListCalendars returns available calendars
 // GET /api/calendar
 func (h *Handler) ListCalendars(w http.ResponseWriter, r *http.Request) {
-	tenantIDStr := r.URL.Query().Get("tenant_id")
 	var tenantID *uuid.UUID
 
-	if tenantIDStr != "" {
-		tid, err := uuid.Parse(tenantIDStr)
+	if claims := jwtmiddleware.GetClaimsFromContext(r); claims != nil && claims.TenantID != "" {
+		tid, err := uuid.Parse(claims.TenantID)
 		if err != nil {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusBadRequest)

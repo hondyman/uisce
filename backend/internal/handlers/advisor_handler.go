@@ -9,7 +9,6 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/hondyman/uisce/backend/internal/analytics"
 	"github.com/hondyman/uisce/backend/internal/models"
-	"github.com/hondyman/uisce/libs/jwt-middleware"
 )
 
 // TelemetryHandler handles telemetry ingestion.
@@ -54,17 +53,20 @@ type AdvisorHandler struct {
 	analyzer      *analytics.WorkloadAnalyzer
 	recommender   *analytics.PreAggRecommendationEngine
 	preAggService *analytics.PreAggregationService
+	securityDeps  SecurityContextDeps
 }
 
 func NewAdvisorHandler(
 	analyzer *analytics.WorkloadAnalyzer,
 	recommender *analytics.PreAggRecommendationEngine,
 	preAggService *analytics.PreAggregationService,
+	securityDeps SecurityContextDeps,
 ) *AdvisorHandler {
 	return &AdvisorHandler{
 		analyzer:      analyzer,
 		recommender:   recommender,
 		preAggService: preAggService,
+		securityDeps:  securityDeps,
 	}
 }
 
@@ -76,10 +78,12 @@ func (h *AdvisorHandler) RegisterRoutes(r chi.Router) {
 // GetBOAdvisor returns workload profile and recommendations for a BO.
 func (h *AdvisorHandler) GetBOAdvisor(w http.ResponseWriter, r *http.Request) {
 	boName := chi.URLParam(r, "boName")
-	tenantID := r.URL.Query().Get("tenant_id")
-	if tenantID == "" {
-		tenantID = jwtmiddleware.GetClaimsFromContext(r).TenantID
+	secCtx, _, err := SecurityContextFromRequest(r, "", "", h.securityDeps)
+	if err != nil {
+		http.Error(w, "Security context error: "+err.Error(), http.StatusUnauthorized)
+		return
 	}
+	tenantID := secCtx.TenantID
 	if tenantID == "" || boName == "" {
 		http.Error(w, "tenant_id and boName required", http.StatusBadRequest)
 		return

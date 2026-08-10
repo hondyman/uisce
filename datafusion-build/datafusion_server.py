@@ -114,26 +114,35 @@ class DataFusionServer:
         three_part = r'(?:(?<=[^.\w])|(?<=^))([\w-]+)\.([\w]+)\.([\w]+)(?:(?=[^.\w])|(?=$))'
         for m in re.finditer(three_part, query):
             catalog_part, ns, tbl = m.group(1), m.group(2), m.group(3)
-            catalog_norm = catalog_part.replace("-", "_")
-            if catalog_norm == warehouse_sql:
-                iceberg_ident = f"{ns}.{tbl}"
-            else:
-                iceberg_ident = f"{catalog_part}.{ns}.{tbl}"
-                logger.info(f"Multi-catalog ref {iceberg_ident} (warehouse={warehouse})")
+            tenant_warehouse = catalog_part
+            iceberg_ident = f"{ns}.{tbl}"
 
             tmp_name = f"_iceberg_tmp_{len(deregister)}"
             try:
-                iceberg_table = self.iceberg_catalog.load_table(iceberg_ident)
+                # Load catalog dynamically for the target tenant warehouse if catalog supports or PyIceberg catalog instance
+                catalog_uri = os.environ.get("ICEBERG_CATALOG_URI", "http://localhost:8181")
+                tenant_catalog = load_catalog(
+                    "rest",
+                    **{
+                        "uri": catalog_uri,
+                        "warehouse": tenant_warehouse,
+                        "token": "dummy",
+                        "s3.endpoint": os.environ.get("S3_ENDPOINT", "http://localhost:9000"),
+                        "s3.access-key-id": os.environ.get("S3_ACCESS_KEY", "minioadmin"),
+                        "s3.secret-access-key": os.environ.get("S3_SECRET_KEY", "minioadmin"),
+                    }
+                )
+                iceberg_table = tenant_catalog.load_table(iceberg_ident)
                 arrow_table = iceberg_table.scan().to_arrow()
                 tmp_path = f"/tmp/{tmp_name}.arrow"
                 with pa.ipc.new_file(tmp_path, arrow_table.schema) as writer:
                     writer.write_table(arrow_table)
                 self.ctx.register_arrow(tmp_name, tmp_path)
-                logger.info(f"Registered Iceberg table {iceberg_ident} as {tmp_name} ({arrow_table.num_rows} rows)")
+                logger.info(f"Registered Iceberg table {tenant_warehouse}.{iceberg_ident} as {tmp_name} ({arrow_table.num_rows} rows)")
                 deregister.append(tmp_name)
                 rewritten = rewritten.replace(m.group(0), tmp_name)
             except Exception as e:
-                logger.warning(f"Could not load Iceberg table {iceberg_ident}: {e}")
+                logger.warning(f"Could not load Iceberg table {tenant_warehouse}.{iceberg_ident}: {e}")
 
         return rewritten, deregister
 

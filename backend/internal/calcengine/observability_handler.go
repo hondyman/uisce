@@ -5,6 +5,8 @@ import (
 	"net/http"
 	"strconv"
 	"time"
+
+	jwtmiddleware "github.com/hondyman/uisce/libs/jwt-middleware"
 )
 
 // ============================================================================
@@ -73,11 +75,14 @@ func (h *ObservabilityHandler) handleDashboard(w http.ResponseWriter, r *http.Re
 
 // handleLatencyPercentiles returns latency percentiles for a tenant/calc type
 func (h *ObservabilityHandler) handleLatencyPercentiles(w http.ResponseWriter, r *http.Request) {
-	tenantID := r.URL.Query().Get("tenant_id")
 	calcType := r.URL.Query().Get("calc_type")
 
+	tenantID := ""
+	if claims := jwtmiddleware.GetClaimsFromContext(r); claims != nil {
+		tenantID = claims.TenantID
+	}
+
 	if tenantID == "" {
-		// Return all percentiles
 		h.observer.metrics.mu.RLock()
 		defer h.observer.metrics.mu.RUnlock()
 
@@ -86,8 +91,6 @@ func (h *ObservabilityHandler) handleLatencyPercentiles(w http.ResponseWriter, r
 
 		for key := range h.observer.metrics.latencies {
 			if !seen[key] {
-				// Parse tenant:calcType from key
-				// For now, return the raw data
 				allPercentiles = append(allPercentiles, h.observer.metrics.GetPercentiles("", key))
 				seen[key] = true
 			}
@@ -165,10 +168,14 @@ func (h *ObservabilityHandler) handleAlerts(w http.ResponseWriter, r *http.Reque
 // handleSlowQueries returns slow query analysis
 func (h *ObservabilityHandler) handleSlowQueries(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	tenantID := r.URL.Query().Get("tenant_id")
-	datasourceID := r.URL.Query().Get("datasource_id")
 
-	// Query slow queries from database
+	tenantID := ""
+	datasourceID := ""
+	if claims := jwtmiddleware.GetClaimsFromContext(r); claims != nil {
+		tenantID = claims.TenantID
+		datasourceID = r.Header.Get("X-Tenant-Datasource-ID")
+	}
+
 	query := `
 		SELECT slow_query_id, audit_id, tenant_id, datasource_id, calc_type,
 		       duration_ms, sql_query, query_plan, recommendations,
@@ -222,8 +229,12 @@ func (h *ObservabilityHandler) handleSlowQueries(w http.ResponseWriter, r *http.
 
 // handleOutliers returns detected outliers
 func (h *ObservabilityHandler) handleOutliers(w http.ResponseWriter, r *http.Request) {
-	tenantID := r.URL.Query().Get("tenant_id")
 	calcType := r.URL.Query().Get("calc_type")
+
+	tenantID := ""
+	if claims := jwtmiddleware.GetClaimsFromContext(r); claims != nil {
+		tenantID = claims.TenantID
+	}
 
 	stdDevMultiple := h.observer.config.OutlierStdDevMultiple
 	if mult := r.URL.Query().Get("std_dev_multiple"); mult != "" {
@@ -235,7 +246,6 @@ func (h *ObservabilityHandler) handleOutliers(w http.ResponseWriter, r *http.Req
 	var allOutliers []Outlier
 
 	if tenantID != "" && calcType != "" {
-		// Specific tenant/calc type
 		outliers := h.observer.metrics.DetectOutliers(tenantID, calcType, stdDevMultiple)
 		allOutliers = append(allOutliers, outliers...)
 	} else {
@@ -278,14 +288,16 @@ type AuditQueryResponse struct {
 func (h *ObservabilityHandler) handleAuditQuery(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	// Parse query parameters
-	tenantID := r.URL.Query().Get("tenant_id")
-	datasourceID := r.URL.Query().Get("datasource_id")
+	tenantID := ""
+	datasourceID := ""
+	if claims := jwtmiddleware.GetClaimsFromContext(r); claims != nil {
+		tenantID = claims.TenantID
+		datasourceID = r.Header.Get("X-Tenant-Datasource-ID")
+	}
 	calcType := r.URL.Query().Get("calc_type")
 	userID := r.URL.Query().Get("user_id")
 
-	// Time range
-	startTime := time.Now().Add(-24 * time.Hour) // Default: last 24 hours
+	startTime := time.Now().Add(-24 * time.Hour)
 	if st := r.URL.Query().Get("start_time"); st != "" {
 		if parsed, err := time.Parse(time.RFC3339, st); err == nil {
 			startTime = parsed

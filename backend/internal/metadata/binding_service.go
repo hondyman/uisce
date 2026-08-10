@@ -115,13 +115,11 @@ func (s *BindingService) SaveBindingHandler(w http.ResponseWriter, r *http.Reque
 
 func (s *BindingService) GetBindingsHandler(w http.ResponseWriter, r *http.Request) {
 	boID := r.URL.Query().Get("bo_id")
-	tenantID := r.URL.Query().Get("tenant_id")
 
-	if claims := jwtmiddleware.GetClaimsFromContext(r); claims != nil && claims.TenantID != "" {
+	claims := jwtmiddleware.GetClaimsFromContext(r)
+	tenantID := "core"
+	if claims != nil && claims.TenantID != "" {
 		tenantID = claims.TenantID
-	}
-	if tenantID == "" {
-		tenantID = "core"
 	}
 
 	bindings, err := s.GetBindingsForBO(r.Context(), tenantID, boID)
