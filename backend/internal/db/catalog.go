@@ -252,7 +252,7 @@ func MergeCatalogData(tx *sqlx.Tx, datasourceID uuid.UUID) (int64, int64, int64,
 		ON target.tenant_datasource_id = source.tenant_datasource_id 
 		   AND target.node_type_id = source.node_type_id 
 		   AND target.qualified_path = source.qualified_path
-		WHEN MATCHED AND target.properties IS DISTINCT FROM (target.properties || source.properties) THEN
+		WHEN MATCHED THEN
 			UPDATE SET
 				core_id = COALESCE(source.core_id, target.core_id),
 				tenant_id = source.tenant_id,
@@ -313,13 +313,17 @@ func MergeCatalogData(tx *sqlx.Tx, datasourceID uuid.UUID) (int64, int64, int64,
 			LEFT JOIN node_id_mapping source_map ON te.source_node_id = source_map.temp_id
 			LEFT JOIN node_id_mapping target_map ON te.target_node_id = target_map.temp_id
 			WHERE te.tenant_datasource_id = $1
+			  AND source_map.final_id IS NOT NULL
+			  AND target_map.final_id IS NOT NULL
+			  AND source_map.final_id != target_map.final_id
 		) AS source
 		ON target.tenant_datasource_id = source.tenant_datasource_id::text 
 		   AND target.source_node_id = source.final_source_id 
 		   AND target.target_node_id = source.final_target_id 
-		   AND target.edge_type_id = source.edge_type_id
 		WHEN MATCHED THEN
 			UPDATE SET
+				edge_type_id = source.edge_type_id,
+				relationship_type = source.edge_type_name,
 				properties = source.properties,
 				core_id = source.core_id,
 				updated_at = NOW()

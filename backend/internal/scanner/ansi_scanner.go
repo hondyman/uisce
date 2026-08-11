@@ -442,6 +442,13 @@ func (s *AnsiScanner) processForeignKeys() error {
 			EdgeTypeName:       "foreign_key",
 		}
 
+		// Skip self-referencing edges (same source and target table)
+		if rel.sourceTableID == rel.targetTableID {
+			logging.GetLogger().Sugar().Warnf("Skipping self-referencing edge: %s.%s -> %s.%s",
+				rel.sourceSchema, rel.sourceTable, rel.targetSchema, rel.targetTable)
+			continue
+		}
+
 		s.edges = append(s.edges, edge)
 
 		constraintNames := strings.Join(rel.constraints, ", ")
@@ -482,7 +489,7 @@ func generateID(parts ...string) uuid.UUID {
 // processSchema handles a single schema
 func (s *AnsiScanner) processSchema(schemaName string) error {
 	qualifiedPath := fmt.Sprintf("/%s", schemaName)
-	schemaID := generateID(s.tenantDatasourceId.String(), s.sourceSystem, NODE_TYPE_SCHEMA.String(), schemaName)
+	schemaID := generateID(s.tenantDatasourceId.String(), s.sourceSystem, NODE_TYPE_SCHEMA.String(), qualifiedPath)
 	coreNode, hasCore := s.getCoreNode(NODE_TYPE_SCHEMA, qualifiedPath)
 
 	isCore := s.isGoldCopy
@@ -655,6 +662,7 @@ func (s *AnsiScanner) processColumns(schemaName, tableName string, tableID uuid.
 		}
 		props["is_core"] = isCore
 		props["is_physical_column"] = true
+		props["parent_id"] = tableID.String()
 
 		// GENERATE TITLE AND TITLE_SHORT
 		// title_short: Title case of column name (abbreviations intact)

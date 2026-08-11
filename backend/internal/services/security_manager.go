@@ -3,8 +3,10 @@ package services
 import (
 	"context"
 	"crypto/rand"
+	"crypto/rsa"
 	"encoding/hex"
 	"encoding/json"
+	"encoding/pem"
 	"fmt"
 	"net"
 	"net/http"
@@ -207,8 +209,10 @@ type SecurityManager struct {
 // JWTManager handles JWT token operations
 type JWTManager struct {
 	secretKey       []byte
+	rsaPublicKey    interface{}
 	tokenDuration   time.Duration
 	refreshDuration time.Duration
+	mu              sync.RWMutex
 }
 
 // APIKeyManager manages API key authentication
@@ -272,6 +276,21 @@ func (sm *SecurityManager) SignToken(claims jwt.MapClaims) (string, error) {
 		return "", fmt.Errorf("security manager not initialized")
 	}
 	return sm.jwtManager.SignMapClaims(claims)
+}
+
+// SetRSAPublicKeyPEM sets the RSA public key for RS256 token verification from PEM-encoded data
+func (sm *SecurityManager) SetRSAPublicKeyPEM(pemBytes []byte) error {
+	if sm == nil || sm.jwtManager == nil {
+		return fmt.Errorf("security manager not initialized")
+	}
+	return sm.jwtManager.SetRSAPublicKeyPEM(pemBytes)
+}
+
+// SetRSAPublicKey sets the RSA public key for RS256 token verification
+func (sm *SecurityManager) SetRSAPublicKey(pubKey *rsa.PublicKey) {
+	if sm != nil && sm.jwtManager != nil {
+		sm.jwtManager.SetRSAPublicKey(pubKey)
+	}
 }
 
 // HasPermission checks whether a user has a given permission.
@@ -437,14 +456,43 @@ func (jm *JWTManager) ParseMapClaims(tokenString string) (jwt.MapClaims, error) 
 	return mc, nil
 }
 
+// SetRSAPublicKey sets the RSA public key for RS256 token verification
+func (jm *JWTManager) SetRSAPublicKey(pubKey *rsa.PublicKey) {
+	jm.mu.Lock()
+	defer jm.mu.Unlock()
+	jm.rsaPublicKey = pubKey
+}
+
+// SetRSAPublicKeyPEM sets the RSA public key from a PEM-encoded string or byte slice
+func (jm *JWTManager) SetRSAPublicKeyPEM(pemBytes []byte) error {
+	block, _ := pem.Decode(pemBytes)
+	if block == nil {
+		return fmt.Errorf("failed to parse PEM block containing public key")
+	}
+	pub, err := jwt.ParseRSAPublicKeyFromPEM(pemBytes)
+	if err != nil {
+		return fmt.Errorf("failed to parse RSA public key: %w", err)
+	}
+	jm.SetRSAPublicKey(pub)
+	return nil
+}
+
 // ValidateToken validates a JWT token and returns claims
 func (jm *JWTManager) ValidateToken(tokenString string) (*JWTClaims, error) {
 	mc := jwt.MapClaims{}
 	_, err := jwt.ParseWithClaims(tokenString, mc, func(token *jwt.Token) (interface{}, error) {
+		if _, ok := token.Method.(*jwt.SigningMethodRSA); ok {
+			jm.mu.RLock()
+			pubKey := jm.rsaPublicKey
+			jm.mu.RUnlock()
+			if pubKey != nil {
+				return pubKey, nil
+			}
+		}
 		return jm.secretKey, nil
 	})
 	if err != nil {
-		// Fallback for dev mode: parse unverified claims if signed with RS256/asymmetric key
+		// Fallback for dev mode if asymmetric key is unconfigured
 		parser := jwt.Parser{}
 		_, _, parseErr := parser.ParseUnverified(tokenString, mc)
 		if parseErr != nil {

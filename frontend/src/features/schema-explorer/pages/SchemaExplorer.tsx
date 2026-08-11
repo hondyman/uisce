@@ -324,17 +324,13 @@ const SchemaExplorerPage: React.FC = () => {
   const _tenantId = searchParams.get('tenantId') || scopedTenant?.id || '';
 
   // ── Data fetching ──────────────────────────
-  const { loading: nodesLoading, data: rawNodes, refetch: refetchNodes } = useApiQuery<CatalogNode[]>(
-    `api/rest/catalog-nodes?limit=10000`,
-    { skip: !datasourceId }
-  );
-  const { loading: edgesLoading, data: rawEdges, refetch: refetchEdges } = useApiQuery<CatalogEdge[]>(
-    `api/rest/catalog-edges?limit=10000`,
-    { skip: !datasourceId }
-  );
+  const nodesUrl = datasourceId ? `api/rest/catalog-nodes?limit=10000&datasource_id=${encodeURIComponent(datasourceId)}` : `api/rest/catalog-nodes?limit=10000`;
+  const edgesUrl = datasourceId ? `api/rest/catalog-edges?limit=10000&datasource_id=${encodeURIComponent(datasourceId)}` : `api/rest/catalog-edges?limit=10000`;
+
+  const { loading: nodesLoading, data: rawNodes, refetch: refetchNodes } = useApiQuery<CatalogNode[]>(nodesUrl);
+  const { loading: edgesLoading, data: rawEdges, refetch: refetchEdges } = useApiQuery<CatalogEdge[]>(edgesUrl);
   const { data: rawNodeTypes } = useApiQuery<CatalogNodeType[]>(
-    `api/rest/catalog-node-types?limit=1000`,
-    { skip: !datasourceId }
+    `api/rest/catalog-node-types?limit=1000`
   );
   const nodeTypeMap = useMemo(() => {
     const m = new Map<string, CatalogNodeType>();
@@ -347,17 +343,73 @@ const SchemaExplorerPage: React.FC = () => {
   // ── Process nodes into tables ──────────────
   const { tables, tableMap } = useMemo(() => {
     if (!rawNodes) return { tables: [] as TableNode[], tableMap: new Map<string, TableNode>() };
-    const tableNodes = rawNodes.filter(n => n.node_type_id === TABLE_TYPE);
-    const columnNodes = rawNodes.filter(n => n.node_type_id === COLUMN_TYPE);
-    const result: TableNode[] = tableNodes.map(t => {
-      const cols = columnNodes.filter(c => c.parent_id === t.id);
-      const parts = t.qualified_path?.split('.') || [];
-      const schema = parts.length > 1 ? parts[0] : 'public';
-      return { ...t, schema, columns: cols };
+
+    // 1. Deduplicate raw nodes strictly by UUID id
+    const uniqueNodeMap = new Map<string, CatalogNode>();
+    rawNodes.forEach(n => {
+      if (n.id && !uniqueNodeMap.has(n.id)) {
+        uniqueNodeMap.set(n.id, n);
+      }
     });
+    const uniqueNodes = Array.from(uniqueNodeMap.values());
+
+    // 2. Resolve table and column node_type_ids (dynamically from catalog-node-types if available, fallback to constants)
+    const tableTypeIds = new Set<string>([TABLE_TYPE]);
+    const columnTypeIds = new Set<string>([COLUMN_TYPE]);
+
+    nodeTypeMap.forEach((nt, id) => {
+      const typeName = (nt.catalog_type_name || '').toLowerCase();
+      if (typeName === 'table' || typeName === 'database_table' || typeName === 'physical_table' || typeName === 'iceberg_table') {
+        tableTypeIds.add(id);
+      } else if (typeName === 'column' || typeName === 'database_column' || typeName === 'iceberg_column') {
+        columnTypeIds.add(id);
+      }
+    });
+
+    const tableNodes = uniqueNodes.filter(n => tableTypeIds.has(n.node_type_id));
+    const columnNodes = uniqueNodes.filter(n => columnTypeIds.has(n.node_type_id));
+
+    // 3. Map columns to tables strictly by UUID references (parent_id, parent_node_id, properties.table_id, properties.parent_id)
+    const processedTables: TableNode[] = [];
+    const seenTableIds = new Set<string>();
+
+    tableNodes.forEach(t => {
+      if (seenTableIds.has(t.id)) return;
+      seenTableIds.add(t.id);
+
+      const cols = columnNodes.filter(c => {
+        if (c.parent_id === t.id) return true;
+        if (c.properties?.parent_id === t.id || c.properties?.table_id === t.id) return true;
+        if (t.qualified_path && c.qualified_path && c.qualified_path.startsWith(t.qualified_path + '/')) return true;
+        return false;
+      });
+
+      // Deduplicate columns strictly by column node UUID id
+      const uniqueCols: CatalogNode[] = [];
+      const seenColIds = new Set<string>();
+      cols.forEach(c => {
+        if (!seenColIds.has(c.id)) {
+          seenColIds.add(c.id);
+          uniqueCols.push(c);
+        }
+      });
+
+      const schema = t.properties?.schema || 
+                     (t.qualified_path?.startsWith('/') ? t.qualified_path.split('/')[1] : null) || 
+                     (t.qualified_path?.includes('.') ? t.qualified_path.split('.')[0] : null) || 
+                     'public';
+      processedTables.push({ ...t, schema, columns: uniqueCols });
+    });
+
     const mp = new Map<string, TableNode>();
-    result.forEach(t => mp.set(t.id, t));
-    return { tables: result, tableMap: mp };
+    processedTables.forEach(t => mp.set(t.id, t));
+    return { tables: processedTables, tableMap: mp };
+  }, [rawNodes, nodeTypeMap]);
+
+  const allNodeMap = useMemo(() => {
+    const m = new Map<string, CatalogNode>();
+    (rawNodes ?? []).forEach(n => { if (n.id) m.set(n.id, n); });
+    return m;
   }, [rawNodes]);
 
   const edges: CatalogEdge[] = useMemo(() => rawEdges ?? [], [rawEdges]);
@@ -460,19 +512,37 @@ const SchemaExplorerPage: React.FC = () => {
         })),
       },
     }));
-    const newEdges = localEdges.map(e => ({
-      id: e.id,
-      source: e.source_node_id,
-      target: e.target_node_id,
-      label: e.properties?.label,
-      type: 'smoothstep',
-      animated: true,
-      style: { stroke: C.accent, strokeWidth: 2 },
-      markerEnd: { type: MarkerType.ArrowClosed, color: C.accent },
-    }));
+    const resolveTableId = (id: string): string => {
+      if (tableMap.has(id)) return id;
+      const nodeObj = allNodeMap.get(id);
+      if (nodeObj?.parent_id && tableMap.has(nodeObj.parent_id)) return nodeObj.parent_id;
+      for (const t of tables) {
+        if (t.columns.some(c => c.id === id)) return t.id;
+      }
+      return id;
+    };
+
+    const newEdges = localEdges
+      .map(e => {
+        const src = resolveTableId(e.source_node_id);
+        const tgt = resolveTableId(e.target_node_id);
+        if (!tableMap.has(src) || !tableMap.has(tgt)) return null;
+        return {
+          id: e.id,
+          source: src,
+          target: tgt,
+          label: e.relationship_type || e.properties?.edge_type_name || e.properties?.label,
+          type: 'smoothstep',
+          animated: true,
+          style: { stroke: C.accent, strokeWidth: 2 },
+          markerEnd: { type: MarkerType.ArrowClosed, color: C.accent },
+        };
+      })
+      .filter(Boolean);
+
     setFlowNodes(newNodes as any);
     setFlowEdges(newEdges as any);
-  }, [tables, localEdges, selectedTableId]);
+  }, [tables, localEdges, selectedTableId, tableMap, allNodeMap]);
 
   // Update selected highlight in ERD nodes
   useEffect(() => {
@@ -519,13 +589,35 @@ const SchemaExplorerPage: React.FC = () => {
     }
   }, []);
 
+
+
   // ── Tab stats ──────────────────────────────
-  const tableRelEdges = useMemo(() =>
-    selectedTable
-      ? localEdges.filter(e => e.source_node_id === selectedTable.id || e.target_node_id === selectedTable.id)
-      : [],
-    [localEdges, selectedTable]
-  );
+  const tableRelEdges = useMemo(() => {
+    if (!selectedTable) return [];
+    const tableAndColIds = new Set<string>([
+      selectedTable.id,
+      ...selectedTable.columns.map(c => c.id)
+    ]);
+    const resolveTableId = (id: string): string => {
+      if (tableMap.has(id)) return id;
+      const nodeObj = allNodeMap.get(id);
+      if (nodeObj?.parent_id && tableMap.has(nodeObj.parent_id)) return nodeObj.parent_id;
+      for (const t of tables) {
+        if (t.columns.some(c => c.id === id)) return t.id;
+      }
+      return id;
+    };
+
+    const isMatch = (e: CatalogEdge) => {
+      if (tableAndColIds.has(e.source_node_id) || tableAndColIds.has(e.target_node_id)) return true;
+      if (resolveTableId(e.source_node_id) === selectedTable.id || resolveTableId(e.target_node_id) === selectedTable.id) return true;
+      if (e.properties?.source_table === selectedTable.node_name || e.properties?.target_table === selectedTable.node_name) return true;
+      return false;
+    };
+
+    return localEdges.filter(isMatch);
+  }, [localEdges, selectedTable, tableMap, allNodeMap, tables]);
+
   const relCount = tableRelEdges.length;
   const colCount = selectedTable?.columns.length ?? 0;
 
@@ -539,15 +631,34 @@ const SchemaExplorerPage: React.FC = () => {
       setLineageEdges([]);
       return;
     }
-    const relevant = localEdges.filter(
-      e => e.source_node_id === selectedTable.id || e.target_node_id === selectedTable.id
-    );
+    const tableAndColIds = new Set<string>([
+      selectedTable.id,
+      ...selectedTable.columns.map(c => c.id)
+    ]);
+    const relevant = tableRelEdges;
+    // Helper to resolve a node ID (column or table) to its parent table ID
+    const resolveTableId = (id: string): string => {
+      if (tableMap.has(id)) return id;
+      const nodeObj = allNodeMap.get(id);
+      if (nodeObj?.parent_id && tableMap.has(nodeObj.parent_id)) return nodeObj.parent_id;
+      // Fallback: check if any table owns this column ID
+      for (const t of tables) {
+        if (t.columns.some(c => c.id === id)) return t.id;
+      }
+      return id;
+    };
+
     const ids = new Set<string>([selectedTable.id]);
-    relevant.forEach(e => { ids.add(e.source_node_id); ids.add(e.target_node_id); });
+    relevant.forEach(e => {
+      ids.add(resolveTableId(e.source_node_id));
+      ids.add(resolveTableId(e.target_node_id));
+    });
     const nodeArr = Array.from(ids);
     const lNodes = nodeArr.map((id, i) => {
-      const t = tableMap.get(id);
+      const nodeObj = allNodeMap.get(id);
       const isSelf = id === selectedTable.id;
+      const typeObj = nodeObj ? nodeTypeMap.get(nodeObj.node_type_id) : undefined;
+      const typeLabel = typeObj?.catalog_type_name ? ` (${typeObj.catalog_type_name})` : '';
       return {
         id,
         type: 'default',
@@ -558,22 +669,22 @@ const SchemaExplorerPage: React.FC = () => {
           borderRadius: 10, color: C.text, padding: '8px 16px', fontSize: 13, fontWeight: 700,
           boxShadow: isSelf ? C.accentGlow : 'none',
         },
-        data: { label: t?.node_name ?? id },
+        data: { label: (nodeObj?.node_name ?? id) + typeLabel },
       };
     });
     const lEdges = relevant.map(e => ({
       id: e.id,
-      source: e.source_node_id,
-      target: e.target_node_id,
+      source: resolveTableId(e.source_node_id),
+      target: resolveTableId(e.target_node_id),
       type: 'smoothstep',
       animated: true,
-      label: e.properties?.label,
+      label: e.relationship_type || e.properties?.edge_type_name || e.properties?.label,
       style: { stroke: C.accent, strokeWidth: 2 },
       markerEnd: { type: MarkerType.ArrowClosed, color: C.accent },
     }));
     setLineageNodes(lNodes as any);
     setLineageEdges(lEdges as any);
-  }, [selectedTable, localEdges, tableMap]);
+  }, [selectedTable, localEdges, allNodeMap, nodeTypeMap, tableMap, tables]);
 
   // ─────────────────────────────────────────────
   // Render
@@ -933,9 +1044,9 @@ const SchemaExplorerPage: React.FC = () => {
                             colMappings: Array<{ source_column: string; target_column: string }>;
                           }>();
                           tableRelEdges.forEach(edge => {
-                            const isSrc = edge.source_node_id === selectedTable.id;
+                            const isSrc = edge.source_node_id === selectedTable.id || selectedTable.columns.some(c => c.id === edge.source_node_id);
                             const otherNodeId = isSrc ? edge.target_node_id : edge.source_node_id;
-                            const key = `${edge.source_node_id}::${edge.target_node_id}`;
+                            const key = edge.id;
                             const cols = edge.properties?.columns ?? [];
                             if (groupMap.has(key)) {
                               // Merge unique column pairs
@@ -952,15 +1063,17 @@ const SchemaExplorerPage: React.FC = () => {
                           });
 
                           return Array.from(groupMap.values()).map(({ edge, isSrc, otherNodeId, colMappings }) => {
+                            const otherNodeObj = allNodeMap.get(otherNodeId);
                             const otherTable = tableMap.get(otherNodeId);
-                            const otherNodeType = otherTable ? nodeTypeMap.get(otherTable.node_type_id) : undefined;
+                            const otherNodeType = otherNodeObj ? nodeTypeMap.get(otherNodeObj.node_type_id) : undefined;
                             const thisNodeType = nodeTypeMap.get(selectedTable.node_type_id);
                             const isDeleting = deletingEdgeId === edge.id;
                             const relType = edge.relationship_type || edge.properties?.edge_type_name || 'relationship';
                             const cardinality = edge.properties?.cardinality;
 
                             const thisQPath = selectedTable.qualified_path || `${selectedTable.schema}.${selectedTable.node_name}`;
-                            const otherQPath = otherTable?.qualified_path || (otherTable ? `${otherTable.schema}.${otherTable.node_name}` : otherNodeId.slice(0, 16));
+                            const otherQPath = otherNodeObj?.qualified_path || (otherTable ? `${otherTable.schema}.${otherTable.node_name}` : otherNodeId.slice(0, 16));
+                            const otherName = otherNodeObj?.node_name ?? otherTable?.node_name ?? otherNodeId.slice(0, 8);
 
                             const relColor = relType === 'foreign_key' ? C.blue
                               : relType === 'PRIMARY_KEY' ? C.warning
@@ -987,7 +1100,7 @@ const SchemaExplorerPage: React.FC = () => {
                                         color: isSrc ? C.accent : C.text,
                                         fontFamily: 'monospace', fontWeight: 700, fontSize: 14,
                                       }}>
-                                        📋 {isSrc ? selectedTable.node_name : (otherTable?.node_name ?? otherNodeId.slice(0, 8))}
+                                        📋 {isSrc ? selectedTable.node_name : otherName}
                                       </span>
                                       {(isSrc ? thisNodeType : otherNodeType) && (
                                         <Badge label={(isSrc ? thisNodeType : otherNodeType)!.catalog_type_name} color={C.teal} />
@@ -1019,7 +1132,7 @@ const SchemaExplorerPage: React.FC = () => {
                                         color: !isSrc ? C.accent : C.text,
                                         fontFamily: 'monospace', fontWeight: 700, fontSize: 14,
                                       }}>
-                                        📋 {isSrc ? (otherTable?.node_name ?? otherNodeId.slice(0, 8)) : selectedTable.node_name}
+                                        📋 {isSrc ? otherName : selectedTable.node_name}
                                       </span>
                                     </div>
                                     <span style={{ color: C.textMuted, fontSize: 11, fontFamily: 'monospace' }}>

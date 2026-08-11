@@ -59,9 +59,6 @@ func (s *Server) RegisterSemanticLayerRoutes(router chi.Router) {
 		r.Post("/{entityID}/traverse-graph", s.handleTraverseObjectGraph)
 	})
 
-	// Register semantic bundle routes to fix 404s
-	// MOVED TO SemanticLayerHandler.RegisterRoutes to avoid double-mount panic on /semantic path
-	// router.Route("/semantic", func(r chi.Router) { ... })
 }
 
 // ============================================================================

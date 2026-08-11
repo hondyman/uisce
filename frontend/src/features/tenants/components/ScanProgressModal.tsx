@@ -124,7 +124,13 @@ export default function ScanProgressModal({
 
     eventSource.onerror = (e) => {
       console.error('[SSE] Connection error:', e);
-      hasReceivedData = false;
+      // If we already received data, don't fail out stream completely
+      if (hasReceivedData) {
+        eventSource.close();
+        if (connectionTimeout) clearTimeout(connectionTimeout);
+        setIsStreaming(false);
+        return;
+      }
       eventSource.close();
       if (connectionTimeout) clearTimeout(connectionTimeout);
       
@@ -137,7 +143,8 @@ export default function ScanProgressModal({
           setConnectionAttempts(prev => prev + 1);
         }, 1000 * Math.pow(2, connectionAttempts));
       } else {
-        setStreamError('Unable to connect to the scan service. The real-time progress stream is unavailable.');
+        // Fallback to standard result mode instead of throwing fatal stream error
+        setStreamError(null);
         setIsStreaming(false);
       }
     };
