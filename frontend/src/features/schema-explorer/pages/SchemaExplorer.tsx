@@ -658,7 +658,7 @@ const SchemaExplorerPage: React.FC = () => {
     const nodeArr = Array.from(ids);
     const lNodes = nodeArr.map((id, i) => {
       const nodeObj = allNodeMap.get(id);
-      const tableNode = tableMap.get(id);
+      const tableNode = tableMap.get(id) || tables.find(t => t.id === id);
       const isSelf = id === selectedTable.id;
       const typeObj = nodeObj ? nodeTypeMap.get(nodeObj.node_type_id) : undefined;
       const typeLabel = typeObj?.catalog_type_name ? ` (${typeObj.catalog_type_name})` : '';
@@ -731,6 +731,8 @@ const SchemaExplorerPage: React.FC = () => {
         .hide-columns .erd-node-columns { display: none !important; }
         .hide-columns .lineage-node-columns { display: none !important; }
         .hide-columns .react-flow__node { min-height: auto !important; }
+        .hide-columns .react-flow__node .erd-node-columns { display: none !important; }
+        .hide-columns .react-flow__node .lineage-node-columns { display: none !important; }
       `}</style>
 
       {/* ── Top Bar ── */}
