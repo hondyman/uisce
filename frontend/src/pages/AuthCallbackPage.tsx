@@ -27,7 +27,21 @@ const AuthCallbackPage: React.FC = () => {
           expired: user.expired,
         });
 
-        // AuthContext listens to userManager events and will persist the token/user.
+        // CRITICAL: Persist token BEFORE navigation to prevent race condition.
+        // AuthContext's userLoaded event may not fire before API calls are made.
+        // This ensures auth_token is set deterministically.
+        const token = user.id_token || user.access_token;
+        if (token) {
+          localStorage.setItem('auth_token', token);
+        }
+        const refreshToken = user.refresh_token;
+        if (refreshToken) {
+          localStorage.setItem('auth_refresh_token', refreshToken);
+        }
+        if (typeof user.expires_at === 'number') {
+          localStorage.setItem('auth_expires_at', (user.expires_at * 1000).toString());
+        }
+
         navigate('/', { replace: true });
       } catch (err) {
         devError('[AuthCallback] OIDC callback failed', err);
