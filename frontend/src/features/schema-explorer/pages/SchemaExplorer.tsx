@@ -195,7 +195,7 @@ const ErdTableNode: React.FC<{ data: any }> = ({ data }) => (
       </div>
       <div style={{ color: C.textMuted, fontSize: 10, marginTop: 2 }}>{data.schema}</div>
     </div>
-    <div style={{ padding: '4px 0' }}>
+    <div style={{ padding: '4px 0' }} className="erd-node-columns">
       {(data.columns || []).slice(0, 8).map((col: any, i: number) => (
         <div key={i} style={{
           display: 'flex', alignItems: 'center', gap: 6, padding: '3px 12px',
@@ -436,6 +436,8 @@ const SchemaExplorerPage: React.FC = () => {
   const [localEdges, setLocalEdges] = useState<CatalogEdge[]>([]);
   const [_savingEdge, setSavingEdge] = useState(false);
   const [deletingEdgeId, setDeletingEdgeId] = useState<string | null>(null);
+  const [showErdColumns, setShowErdColumns] = useState(true);
+  const [showLineageColumns, setShowLineageColumns] = useState(true);
 
   // Sync remote edges to local
   useEffect(() => { setLocalEdges(edges); }, [edges]);
@@ -715,6 +717,8 @@ const SchemaExplorerPage: React.FC = () => {
         .tree-item.selected { background: rgba(99,102,241,0.15) !important; border-left: 2px solid #6366F1 !important; }
         .react-flow__node { transition: box-shadow 0.2s ease; }
         input, select { color-scheme: dark; }
+        .hide-columns .erd-node-columns { display: none !important; }
+        .hide-columns .react-flow__node { min-height: auto !important; }
       `}</style>
 
       {/* ── Top Bar ── */}
@@ -1149,24 +1153,39 @@ const SchemaExplorerPage: React.FC = () => {
                 {loading ? <Spinner /> : tables.length === 0 ? (
                   <Empty icon="🗺" title="No tables to display" subtitle="Load a datasource with tables to see the ERD diagram." />
                 ) : (
-                  <ReactFlow
-                    nodes={flowNodes}
-                    edges={flowEdges}
-                    onNodesChange={onFlowNodesChange}
-                    onEdgesChange={onFlowEdgesChange}
-                    onNodeClick={(_, node) => { setSelectedTableId(node.id); setActiveTab('columns'); }}
-                    nodeTypes={nodeTypes}
-                    fitView
-                    style={{ background: C.bg }}
-                    proOptions={{ hideAttribution: true }}
-                  >
-                    <Background variant={BackgroundVariant.Dots} color={C.border} gap={24} size={1} />
-                    <Controls style={{ background: C.panel, border: `1px solid ${C.border}`, borderRadius: 10 }} />
-                    <MiniMap
-                      nodeColor={() => C.accent}
-                      style={{ background: C.panel, border: `1px solid ${C.border}`, borderRadius: 10 }}
-                    />
-                  </ReactFlow>
+                  <>
+                    <div style={{ position: 'absolute', top: 12, right: 12, zIndex: 10 }}>
+                      <button
+                        onClick={() => setShowErdColumns(!showErdColumns)}
+                        style={{
+                          padding: '6px 12px', borderRadius: 8, border: `1px solid ${C.border}`,
+                          background: showErdColumns ? C.accent : C.panel, color: showErdColumns ? '#fff' : C.text,
+                          cursor: 'pointer', fontSize: 12, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6,
+                        }}
+                      >
+                        {showErdColumns ? '🙈 Hide Columns' : '👁 Show Columns'}
+                      </button>
+                    </div>
+                    <ReactFlow
+                      nodes={flowNodes}
+                      edges={flowEdges}
+                      onNodesChange={onFlowNodesChange}
+                      onEdgesChange={onFlowEdgesChange}
+                      onNodeClick={(_, node) => { setSelectedTableId(node.id); setActiveTab('columns'); }}
+                      nodeTypes={nodeTypes}
+                      fitView
+                      style={{ background: C.bg }}
+                      proOptions={{ hideAttribution: true }}
+                      className={showErdColumns ? '' : 'hide-columns'}
+                    >
+                      <Background variant={BackgroundVariant.Dots} color={C.border} gap={24} size={1} />
+                      <Controls style={{ background: C.panel, border: `1px solid ${C.border}`, borderRadius: 10 }} />
+                      <MiniMap
+                        nodeColor={() => C.accent}
+                        style={{ background: C.panel, border: `1px solid ${C.border}`, borderRadius: 10 }}
+                      />
+                    </ReactFlow>
+                  </>
                 )}
               </div>
             )}
@@ -1179,19 +1198,34 @@ const SchemaExplorerPage: React.FC = () => {
                 ) : lineageNodes.length === 0 ? (
                   <Empty icon="🌐" title="No lineage data" subtitle={`${selectedTable.node_name} has no known relationships to visualize as lineage.`} />
                 ) : (
-                  <ReactFlow
-                    nodes={lineageNodes}
-                    edges={lineageEdges}
-                    onNodesChange={onLineageNodesChange}
-                    onEdgesChange={onLineageEdgesChange}
-                    onNodeClick={(_, node) => { setSelectedTableId(node.id); }}
-                    fitView
-                    style={{ background: C.bg }}
-                    proOptions={{ hideAttribution: true }}
-                  >
-                    <Background variant={BackgroundVariant.Lines} color={C.border} gap={32} />
-                    <Controls style={{ background: C.panel, border: `1px solid ${C.border}`, borderRadius: 10 }} />
-                  </ReactFlow>
+                  <>
+                    <div style={{ position: 'absolute', top: 12, right: 12, zIndex: 10 }}>
+                      <button
+                        onClick={() => setShowLineageColumns(!showLineageColumns)}
+                        style={{
+                          padding: '6px 12px', borderRadius: 8, border: `1px solid ${C.border}`,
+                          background: showLineageColumns ? C.accent : C.panel, color: showLineageColumns ? '#fff' : C.text,
+                          cursor: 'pointer', fontSize: 12, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6,
+                        }}
+                      >
+                        {showLineageColumns ? '🙈 Hide Columns' : '👁 Show Columns'}
+                      </button>
+                    </div>
+                    <ReactFlow
+                      nodes={lineageNodes}
+                      edges={lineageEdges}
+                      onNodesChange={onLineageNodesChange}
+                      onEdgesChange={onLineageEdgesChange}
+                      onNodeClick={(_, node) => { setSelectedTableId(node.id); }}
+                      fitView
+                      style={{ background: C.bg }}
+                      proOptions={{ hideAttribution: true }}
+                      className={showLineageColumns ? '' : 'hide-columns'}
+                    >
+                      <Background variant={BackgroundVariant.Lines} color={C.border} gap={32} />
+                      <Controls style={{ background: C.panel, border: `1px solid ${C.border}`, borderRadius: 10 }} />
+                    </ReactFlow>
+                  </>
                 )}
               </div>
             )}
