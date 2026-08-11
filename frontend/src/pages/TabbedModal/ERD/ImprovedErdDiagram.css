@@ -257,29 +257,49 @@
 
 /* Enhanced Edges */
 .professional-erd-edge {
-  stroke: #94a3b8;
-  stroke-width: 2.5;
+  stroke: #94a3b8 !important;
+  stroke-width: 3 !important;
+  stroke-dasharray: none !important;
 }
 
 .professional-erd-edge.selected {
-  stroke: #3b82f6;
-  stroke-width: 3;
+  stroke: #3b82f6 !important;
+  stroke-width: 3 !important;
 }
 
 .react-flow__edge-path {
-  stroke: #94a3b8;
-  stroke-width: 2.5;
+  stroke: #94a3b8 !important;
+  stroke-width: 3 !important;
+  stroke-dasharray: none !important;
   transition: all 0.2s ease;
 }
 
 .react-flow__edge:hover .react-flow__edge-path {
-  stroke: #64748b;
-  stroke-width: 3;
+  stroke: #64748b !important;
+  stroke-width: 3 !important;
+  stroke-dasharray: none !important;
 }
 
 .react-flow__edge.selected .react-flow__edge-path {
-  stroke: #3b82f6;
-  stroke-width: 3;
+  stroke: #3b82f6 !important;
+  stroke-width: 3 !important;
+}
+
+/* Force hide any edge labels - NO PREDICATES */
+.react-flow__edge-text,
+.react-flow__edge-label,
+.professional-erd-edge .react-flow__edge-text,
+.professional-erd-edge .react-flow__edge-label {
+  display: none !important;
+  visibility: hidden !important;
+  opacity: 0 !important;
+}
+
+/* Ensure no animated dashed lines */
+.react-flow__edge.animated path,
+.react-flow__edge.animated .react-flow__edge-path {
+  stroke-dasharray: none !important;
+  animation: none !important;
 }
 
 /* Edge Labels */

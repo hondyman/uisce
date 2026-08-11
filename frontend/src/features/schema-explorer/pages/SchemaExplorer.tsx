@@ -533,7 +533,7 @@ const SchemaExplorerPage: React.FC = () => {
           target: tgt,
           label: e.relationship_type || e.properties?.edge_type_name || e.properties?.label,
           type: 'smoothstep',
-          animated: true,
+          animated: false,
           style: { stroke: C.accent, strokeWidth: 2 },
           markerEnd: { type: MarkerType.ArrowClosed, color: C.accent },
         };
@@ -677,7 +677,7 @@ const SchemaExplorerPage: React.FC = () => {
       source: resolveTableId(e.source_node_id),
       target: resolveTableId(e.target_node_id),
       type: 'smoothstep',
-      animated: true,
+      animated: false,
       label: e.relationship_type || e.properties?.edge_type_name || e.properties?.label,
       style: { stroke: C.accent, strokeWidth: 2 },
       markerEnd: { type: MarkerType.ArrowClosed, color: C.accent },
@@ -1035,172 +1035,107 @@ const SchemaExplorerPage: React.FC = () => {
                       <Empty icon="🔗" title="No relationships" subtitle={`${selectedTable.node_name} has no known foreign key or join relationships.`} />
                     ) : (
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                        {(() => {
-                          // Group edges by other-node pair, merging duplicate column mappings
-                          const groupMap = new Map<string, {
-                            edge: typeof tableRelEdges[0];
-                            isSrc: boolean;
-                            otherNodeId: string;
-                            colMappings: Array<{ source_column: string; target_column: string }>;
-                          }>();
-                          tableRelEdges.forEach(edge => {
-                            const isSrc = edge.source_node_id === selectedTable.id || selectedTable.columns.some(c => c.id === edge.source_node_id);
-                            const otherNodeId = isSrc ? edge.target_node_id : edge.source_node_id;
-                            const key = edge.id;
-                            const cols = edge.properties?.columns ?? [];
-                            if (groupMap.has(key)) {
-                              // Merge unique column pairs
-                              const existing = groupMap.get(key)!;
-                              cols.forEach(cm => {
-                                const already = existing.colMappings.some(
-                                  x => x.source_column === cm.source_column && x.target_column === cm.target_column
-                                );
-                                if (!already) existing.colMappings.push(cm);
-                              });
-                            } else {
-                              groupMap.set(key, { edge, isSrc, otherNodeId, colMappings: [...cols] });
-                            }
-                          });
+                        {tableRelEdges.map((edge) => {
+                          const isSrc = edge.source_node_id === selectedTable.id || selectedTable.columns.some(c => c.id === edge.source_node_id);
+                          const otherNodeId = isSrc ? edge.target_node_id : edge.source_node_id;
+                          const otherNodeObj = allNodeMap.get(otherNodeId);
+                          const otherTable = tableMap.get(otherNodeId);
+                          const otherNodeType = otherNodeObj ? nodeTypeMap.get(otherNodeObj.node_type_id) : undefined;
+                          const thisNodeType = nodeTypeMap.get(selectedTable.node_type_id);
+                          const isDeleting = deletingEdgeId === edge.id;
+                          const relType = edge.relationship_type || edge.properties?.edge_type_name || 'relationship';
+                          const cardinality = edge.properties?.cardinality;
 
-                          return Array.from(groupMap.values()).map(({ edge, isSrc, otherNodeId, colMappings }) => {
-                            const otherNodeObj = allNodeMap.get(otherNodeId);
-                            const otherTable = tableMap.get(otherNodeId);
-                            const otherNodeType = otherNodeObj ? nodeTypeMap.get(otherNodeObj.node_type_id) : undefined;
-                            const thisNodeType = nodeTypeMap.get(selectedTable.node_type_id);
-                            const isDeleting = deletingEdgeId === edge.id;
-                            const relType = edge.relationship_type || edge.properties?.edge_type_name || 'relationship';
-                            const cardinality = edge.properties?.cardinality;
+                          const thisQPath = selectedTable.qualified_path || `${selectedTable.schema}.${selectedTable.node_name}`;
+                          const otherQPath = otherNodeObj?.qualified_path || (otherTable ? `${otherTable.schema}.${otherTable.node_name}` : otherNodeId.slice(0, 16));
+                          const otherName = otherNodeObj?.node_name ?? otherTable?.node_name ?? otherNodeId.slice(0, 8);
 
-                            const thisQPath = selectedTable.qualified_path || `${selectedTable.schema}.${selectedTable.node_name}`;
-                            const otherQPath = otherNodeObj?.qualified_path || (otherTable ? `${otherTable.schema}.${otherTable.node_name}` : otherNodeId.slice(0, 16));
-                            const otherName = otherNodeObj?.node_name ?? otherTable?.node_name ?? otherNodeId.slice(0, 8);
+                          const relColor = relType === 'foreign_key' ? C.blue
+                            : relType === 'PRIMARY_KEY' ? C.warning
+                            : relType === 'table_relationship' ? C.purple
+                            : C.textMuted;
 
-                            const relColor = relType === 'foreign_key' ? C.blue
-                              : relType === 'PRIMARY_KEY' ? C.warning
-                              : relType === 'table_relationship' ? C.purple
-                              : C.textMuted;
-
-                            return (
-                              <div key={`${edge.source_node_id}::${edge.target_node_id}`} style={{
-                                background: C.panel, border: `1px solid ${C.border}`,
-                                borderRadius: 14, overflow: 'hidden',
-                                transition: 'all 0.2s', animation: 'fadein 0.2s ease',
-                                opacity: isDeleting ? 0.5 : 1,
-                                borderLeft: `3px solid ${relColor}`,
+                          return (
+                            <div key={edge.id} style={{
+                              background: C.panel, border: `1px solid ${C.border}`,
+                              borderRadius: 14, overflow: 'hidden',
+                              transition: 'all 0.2s', animation: 'fadein 0.2s ease',
+                              opacity: isDeleting ? 0.5 : 1,
+                              borderLeft: `3px solid ${relColor}`,
+                            }}>
+                              {/* Relationship header row */}
+                              <div style={{
+                                display: 'flex', alignItems: 'center', gap: 12,
+                                padding: '14px 20px',
                               }}>
-                                {/* Relationship header row */}
-                                <div style={{
-                                  display: 'flex', alignItems: 'center', gap: 12,
-                                  padding: '14px 20px', borderBottom: colMappings.length > 0 ? `1px solid ${C.border}33` : 'none',
-                                }}>
-                                  {/* Source table + node type */}
-                                  <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                                      <span style={{
-                                        color: isSrc ? C.accent : C.text,
-                                        fontFamily: 'monospace', fontWeight: 700, fontSize: 14,
-                                      }}>
-                                        📋 {isSrc ? selectedTable.node_name : otherName}
-                                      </span>
-                                      {(isSrc ? thisNodeType : otherNodeType) && (
-                                        <Badge label={(isSrc ? thisNodeType : otherNodeType)!.catalog_type_name} color={C.teal} />
-                                      )}
-                                    </div>
-                                    <span style={{ color: C.textMuted, fontSize: 11, fontFamily: 'monospace' }}>
-                                      {isSrc ? thisQPath : otherQPath}
+                                {/* Source table + node type */}
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                    <span style={{
+                                      color: isSrc ? C.accent : C.text,
+                                      fontFamily: 'monospace', fontWeight: 700, fontSize: 14,
+                                    }}>
+                                      📋 {isSrc ? selectedTable.node_name : otherName}
                                     </span>
+                                    {(isSrc ? thisNodeType : otherNodeType) && (
+                                      <Badge label={(isSrc ? thisNodeType : otherNodeType)!.catalog_type_name} color={C.teal} />
+                                    )}
                                   </div>
-
-                                  {/* Arrow + relationship type + cardinality */}
-                                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, flex: 1 }}>
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                                      <Badge label={relType.replace(/_/g, ' ')} color={relColor} />
-                                      {cardinality && <Badge label={cardinality} color={C.orange} />}
-                                    </div>
-                                    <span style={{ color: relColor, fontSize: 20 }}>
-                                      {isSrc ? '→' : '←'}
-                                    </span>
-                                  </div>
-
-                                  {/* Target table + node type */}
-                                  <div style={{ display: 'flex', flexDirection: 'column', gap: 4, alignItems: 'flex-end' }}>
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                                      {(isSrc ? otherNodeType : thisNodeType) && (
-                                        <Badge label={(isSrc ? otherNodeType : thisNodeType)!.catalog_type_name} color={C.teal} />
-                                      )}
-                                      <span style={{
-                                        color: !isSrc ? C.accent : C.text,
-                                        fontFamily: 'monospace', fontWeight: 700, fontSize: 14,
-                                      }}>
-                                        📋 {isSrc ? otherName : selectedTable.node_name}
-                                      </span>
-                                    </div>
-                                    <span style={{ color: C.textMuted, fontSize: 11, fontFamily: 'monospace' }}>
-                                      {isSrc ? otherQPath : thisQPath}
-                                    </span>
-                                  </div>
-
-                                  {/* Actions */}
-                                  <div style={{ display: 'flex', gap: 8, marginLeft: 8 }}>
-                                    <button
-                                      onClick={() => { setEditingEdge(edge); setDialogOpen(true); }}
-                                      style={{
-                                        padding: '5px 12px', borderRadius: 7, border: `1px solid ${C.border}`,
-                                        background: 'transparent', color: C.textMuted, cursor: 'pointer', fontSize: 12,
-                                      }}
-                                    >✏️</button>
-                                    <button
-                                      onClick={() => handleDeleteRelationship(edge.id)}
-                                      disabled={isDeleting}
-                                      style={{
-                                        padding: '5px 12px', borderRadius: 7, border: `1px solid ${C.danger}44`,
-                                        background: 'rgba(239,68,68,0.08)', color: C.danger, cursor: 'pointer', fontSize: 12,
-                                      }}
-                                    >{isDeleting ? '…' : '🗑'}</button>
-                                  </div>
+                                  <span style={{ color: C.textMuted, fontSize: 11, fontFamily: 'monospace' }}>
+                                    {isSrc ? thisQPath : otherQPath}
+                                  </span>
                                 </div>
 
-                                {/* Column-level predicates */}
-                                {colMappings.length > 0 && (
-                                  <div style={{ padding: '10px 20px', background: 'rgba(0,0,0,0.15)' }}>
-                                    <div style={{
-                                      color: C.textMuted, fontSize: 10, fontWeight: 700,
-                                      textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8,
-                                    }}>JOIN PREDICATES</div>
-                                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                                      {colMappings.map((cm, ci) => {
-                                        const leftCol = isSrc ? cm.source_column : cm.target_column;
-                                        const rightCol = isSrc ? cm.target_column : cm.source_column;
-                                        const leftPath = isSrc ? thisQPath : otherQPath;
-                                        const rightPath = isSrc ? otherQPath : thisQPath;
-                                        return (
-                                          <div key={ci} style={{
-                                            display: 'flex', alignItems: 'center', gap: 10,
-                                            fontFamily: 'monospace', fontSize: 12,
-                                          }}>
-                                            <span style={{
-                                              color: C.purple, background: `${C.purple}18`,
-                                              padding: '3px 10px', borderRadius: 6, border: `1px solid ${C.purple}33`,
-                                            }}>
-                                              <span style={{ color: C.textMuted, fontSize: 10 }}>{leftPath}.</span>{leftCol}
-                                            </span>
-                                            <span style={{ color: C.textMuted, fontSize: 11 }}>=</span>
-                                            <span style={{
-                                              color: C.blue, background: `${C.blue}18`,
-                                              padding: '3px 10px', borderRadius: 6, border: `1px solid ${C.blue}33`,
-                                            }}>
-                                              <span style={{ color: C.textMuted, fontSize: 10 }}>{rightPath}.</span>{rightCol}
-                                            </span>
-                                          </div>
-                                        );
-                                      })}
-                                    </div>
+                                {/* Arrow + cardinality */}
+                                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, flex: 1 }}>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                    {cardinality && <Badge label={cardinality} color={C.orange} />}
                                   </div>
-                                )}
+                                  <span style={{ color: relColor, fontSize: 20 }}>
+                                    {isSrc ? '→' : '←'}
+                                  </span>
+                                </div>
+
+                                {/* Target table + node type */}
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: 4, alignItems: 'flex-end' }}>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                    {(isSrc ? otherNodeType : thisNodeType) && (
+                                      <Badge label={(isSrc ? otherNodeType : thisNodeType)!.catalog_type_name} color={C.teal} />
+                                    )}
+                                    <span style={{
+                                      color: !isSrc ? C.accent : C.text,
+                                      fontFamily: 'monospace', fontWeight: 700, fontSize: 14,
+                                    }}>
+                                      📋 {isSrc ? otherName : selectedTable.node_name}
+                                    </span>
+                                  </div>
+                                  <span style={{ color: C.textMuted, fontSize: 11, fontFamily: 'monospace' }}>
+                                    {isSrc ? otherQPath : thisQPath}
+                                  </span>
+                                </div>
+
+                                {/* Actions */}
+                                <div style={{ display: 'flex', gap: 8, marginLeft: 8 }}>
+                                  <button
+                                    onClick={() => { setEditingEdge(edge); setDialogOpen(true); }}
+                                    style={{
+                                      padding: '5px 12px', borderRadius: 7, border: `1px solid ${C.border}`,
+                                      background: 'transparent', color: C.textMuted, cursor: 'pointer', fontSize: 12,
+                                    }}
+                                  >✏️</button>
+                                  <button
+                                    onClick={() => handleDeleteRelationship(edge.id)}
+                                    disabled={isDeleting}
+                                    style={{
+                                      padding: '5px 12px', borderRadius: 7, border: `1px solid ${C.danger}44`,
+                                      background: 'rgba(239,68,68,0.08)', color: C.danger, cursor: 'pointer', fontSize: 12,
+                                    }}
+                                  >{isDeleting ? '…' : '🗑'}</button>
+                                </div>
                               </div>
-                            );
-                          });
-                        })()}
+                            </div>
+                          );
+                        })}
                       </div>
                     )}
                   </>
