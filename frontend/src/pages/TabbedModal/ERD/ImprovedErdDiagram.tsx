@@ -451,15 +451,20 @@ const ImprovedErdDiagram: React.FC<ImprovedErdDiagramProps> = ({
   // Enhanced edges with professional styling
   const enhancedEdges = useMemo(() => {
     if (!initialEdges || !Array.isArray(initialEdges)) return [];
-    
+
     return initialEdges.map((edge) => ({
-      ...edge,
-      className: 'professional-erd-edge',
-      label: edge.data?.relationship,
+      id: edge.id,
+      source: edge.source,
+      target: edge.target,
+      sourceHandle: edge.sourceHandle,
+      targetHandle: edge.targetHandle,
+      data: edge.data,
+      label: edge.data?.relationship || edge.label,
       labelShowBg: true,
+      className: 'professional-erd-edge',
       style: {
+        stroke: '#94a3b8',
         strokeWidth: 3,
-        strokeDasharray: edge.data?.relationship === 'optional' ? '10,5' : undefined,
       },
       markerEnd: {
         type: MarkerType.ArrowClosed,
