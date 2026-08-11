@@ -13,26 +13,29 @@ import (
 
 // HandleScanStream handles SSE streaming of scan progress
 func (h *CatalogScanHandler) HandleScanStream(w http.ResponseWriter, r *http.Request) {
+	// Extract datasource_id from query params or secCtx
+	dsStr := r.URL.Query().Get("datasource_id")
+	if dsStr == "" {
+		secCtx, _, err := SecurityContextFromRequest(r, "", "", h.securityDeps)
+		if err == nil && secCtx != nil {
+			dsStr = secCtx.DatasourceID
+		}
+	}
+
+	datasourceID, err := uuid.Parse(dsStr)
+	if err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{"error": "invalid or missing datasource_id"})
+		return
+	}
+
 	// Set SSE headers BEFORE any writes
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
-	// Access-Control-Allow-Origin is handled by CORS middleware usually,
-	// but adding it here ensures it works for direct calls too if middleware is skipped
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.Header().Set("X-Accel-Buffering", "no")
-
-	secCtx, _, err := SecurityContextFromRequest(r, "", "", h.securityDeps)
-	if err != nil {
-		http.Error(w, "Security context error: "+err.Error(), http.StatusUnauthorized)
-		return
-	}
-
-	datasourceID, err := uuid.Parse(secCtx.DatasourceID)
-	if err != nil {
-		http.Error(w, "invalid datasource_id", http.StatusBadRequest)
-		return
-	}
 
 	// Use http.ResponseController for flushing (Go 1.20+)
 	rc := http.NewResponseController(w)

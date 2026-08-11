@@ -3,14 +3,17 @@ package api
 import (
 	"bytes"
 	"context"
+	"crypto/rsa"
 	"crypto/tls"
 	"crypto/x509"
 	"database/sql"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
 	"log"
 	"log/slog"
+	"math/big"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -81,7 +84,6 @@ import (
 	coremodels "github.com/hondyman/uisce/backend/models"
 	"github.com/hondyman/uisce/backend/pkg/ingestion"
 	"github.com/hondyman/uisce/backend/pkg/llm"
-	"github.com/hondyman/uisce/backend/pkg/semantic"
 	"github.com/robfig/cron/v3"
 
 	"regexp"
@@ -178,7 +180,7 @@ type Server struct {
 	EvidenceBundleService   *services.EvidenceBundleService
 	ApprovalService         *services.ApprovalService
 	ImpersonationSweeper    *security.Sweeper
-	SemanticLayerHandler    *SemanticLayerHandler
+
 	GeminiClient            LLMProvider
 	HouseholdService        *household.Service
 	AltInvestService        *altinvest.Service
@@ -786,6 +788,73 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 		log.Printf("[WARN] Failed to load API keys from file: %v", err)
 	}
 
+	// Initialize Keycloak RS256 public key for JWT validation if configured
+	jwksURL := os.Getenv("KEYCLOAK_JWKS_URL")
+	if jwksURL != "" {
+		log.Printf("[INFO] Fetching Keycloak JWKS from: %s", jwksURL)
+		// Use custom client to handle self-signed certs in dev
+		tr := &http.Transport{}
+		if os.Getenv("SKIP_TLS_VERIFY") == "true" {
+			tr.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
+		}
+		client := &http.Client{Transport: tr}
+		resp, err := client.Get(jwksURL)
+		if err != nil {
+			log.Printf("[WARN] Failed to fetch Keycloak JWKS: %v", err)
+		} else {
+			defer resp.Body.Close()
+			if resp.StatusCode == http.StatusOK {
+				body, err := io.ReadAll(resp.Body)
+				if err != nil {
+					log.Printf("[WARN] Failed to read Keycloak JWKS response: %v", err)
+				} else {
+					var jwks struct {
+						Keys []struct {
+							Kid string `json:"kid"`
+							Kty string `json:"kty"`
+							Alg string `json:"alg"`
+							Use string `json:"use"`
+							N   string `json:"n"`
+							E   string `json:"e"`
+						} `json:"keys"`
+					}
+					if err := json.Unmarshal(body, &jwks); err != nil {
+						log.Printf("[WARN] Failed to parse Keycloak JWKS: %v", err)
+					} else {
+						for _, key := range jwks.Keys {
+							if key.Kty == "RSA" && (key.Alg == "RS256" || key.Alg == "") {
+								nBytes, err := base64.RawURLEncoding.DecodeString(key.N)
+								if err != nil {
+									log.Printf("[WARN] Failed to decode RSA modulus: %v", err)
+									continue
+								}
+								eBytes, err := base64.RawURLEncoding.DecodeString(key.E)
+								if err != nil {
+									log.Printf("[WARN] Failed to decode RSA exponent: %v", err)
+									continue
+								}
+								n := new(big.Int).SetBytes(nBytes)
+								e := 0
+								for _, b := range eBytes {
+									e = e<<8 + int(b)
+								}
+								rsaPubKey := &rsa.PublicKey{
+									N: n,
+									E: e,
+								}
+								secMgr.SetRSAPublicKey(rsaPubKey)
+								log.Printf("[INFO] Keycloak RS256 public key loaded (kid=%s)", key.Kid)
+								break
+							}
+						}
+					}
+				}
+			} else {
+				log.Printf("[WARN] Keycloak JWKS returned status %d", resp.StatusCode)
+			}
+		}
+	}
+
 	// Development helper: optionally seed an API key for a test user so local
 	// runs can exercise authenticated endpoints. Set SEED_API_KEY_USER to a
 	// user id (e.g., tester@example.com) before starting the server. The
@@ -928,10 +997,6 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 	srv.SemanticSvc = analytics.NewSemanticService(sqlxDB)
 	// Initialize the business term matcher
 	_ = services.NewSimpleFIBOMatcher()
-
-	// Initialize Semantic Layer Handler
-	semanticLayerService := semantic.NewService(sqlxDB)
-	srv.SemanticLayerHandler = NewSemanticLayerHandler(semanticLayerService, srv.SemanticSvc, srv)
 
 	// Initialize Lineage Service
 	srv.LineageSvc = services.NewLineageService(sqlxDB)
@@ -1108,7 +1173,7 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 
 	// Initialize CatalogScanService and Handler
 	// catalogScanService initialized at top
-	srv.CatalogScanHandler = catalogScanHandler
+	srv.CatalogScanHandler = handlers.NewCatalogScanHandler(catalogScanService, handlers.SecurityContextDeps{Resolver: resolver})
 	srv.TestConnectionHandler = handlers.NewTestConnectionHandler(catalogScanService)
 
 	// Initialize relationship service
@@ -1118,9 +1183,6 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 	relationshipInferenceService := analytics.NewRelationshipInferenceService(sqlxDB)
 	relationshipHandler := NewRelationshipHandler(relationshipInferenceService)
 	srv.RelationshipHandler = relationshipHandler
-	// catalogScanService initialized at top
-	srv.CatalogScanHandler = catalogScanHandler
-	srv.TestConnectionHandler = handlers.NewTestConnectionHandler(catalogScanService)
 
 	// Upsert business term and create edge (atomic) - NOTE: moved under /api router registration below
 
@@ -1149,8 +1211,7 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 	// Initialize timeout triggers handler
 	timeoutTriggersHandler := handlers.NewTimeoutTriggersHandler(sqlxDB)
 
-	// Initialize catalog scan service and handler - already done at top
-	srv.CatalogScanHandler = catalogScanHandler
+	// Initialize catalog scan service and handler - already done at line 1106
 
 	// Initialize test connection handler
 	testConnectionHandler := handlers.NewTestConnectionHandler(catalogScanService)
@@ -1656,7 +1717,7 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 	// Wrap everything in a root Mux to allow raw SSE handling without middleware
 	// This avoids the "middleware defined after routes" panic while still bypassing cache/buffer
 	rootMux := chi.NewRouter()
-	rootMux.Get("/api/catalog/scan/stream", catalogScanHandler.HandleScanStream)
+	rootMux.Get("/api/catalog/scan/stream", srv.CatalogScanHandler.HandleScanStream)
 
 	// Add OPTIONS handler for CORS preflight for SSE
 	rootMux.Options("/api/catalog/scan/stream", func(w http.ResponseWriter, r *http.Request) {
@@ -3358,13 +3419,8 @@ func (s *Server) registerDebugRoutes(r chi.Router) {
 
 // registerMetadataRoutes mounts semantic layer and model management endpoints
 func (s *Server) registerMetadataRoutes(r chi.Router, boHandler *BusinessObjectHandler, catalogHandler *CatalogHandler, boService *catalogmeta.BusinessObjectService) {
-	// Semantic layer endpoints
+	// Semantic layer endpoints (business entities, semantic assets)
 	s.RegisterSemanticLayerRoutes(r)
-
-	// Register Semantic Layer Handler routes
-	if s.SemanticLayerHandler != nil {
-		s.SemanticLayerHandler.RegisterRoutes(r)
-	}
 
 	// Relationship discovery and model regeneration endpoints (Phase 3b)
 	r.Post("/relationships/discover", s.postDiscoverRelationships)
@@ -3835,6 +3891,8 @@ func (s *Server) handleListCatalogNodes(w http.ResponseWriter, r *http.Request) 
 
 	// Parse query parameters
 	nodeType := r.URL.Query().Get("type")
+	nodeTypeIDParam := r.URL.Query().Get("node_type_id")
+	parentIDParam := r.URL.Query().Get("parent_id")
 	q := r.URL.Query().Get("q")
 	limitStr := r.URL.Query().Get("limit")
 
@@ -3852,7 +3910,7 @@ func (s *Server) handleListCatalogNodes(w http.ResponseWriter, r *http.Request) 
 
 	if tenantID != "" {
 		query = `
-			SELECT cn.id, cn.node_name, COALESCE(cn.description, ''), cn.tenant_id, cn.tenant_datasource_id, cn.created_at, cn.updated_at, COALESCE(cn.properties, '{}'::jsonb) as properties
+			SELECT cn.id, cn.node_name, COALESCE(cn.description, ''), cn.tenant_id, cn.tenant_datasource_id, cn.created_at, cn.updated_at, COALESCE(cn.properties, '{}'::jsonb) as properties, COALESCE(cn.node_type_id::text, ''), COALESCE(cn.parent_id::text, ''), COALESCE(cn.qualified_path, cn.node_name)
 			FROM catalog_node cn
 			LEFT JOIN catalog_node_type cnt ON cn.node_type_id = cnt.id
 			WHERE (cn.tenant_id = $1::uuid OR cn.tenant_id = (SELECT id FROM public.tenants WHERE gold_copy = true LIMIT 1))
@@ -3861,7 +3919,7 @@ func (s *Server) handleListCatalogNodes(w http.ResponseWriter, r *http.Request) 
 		argIndex = 2
 	} else {
 		query = `
-			SELECT cn.id, cn.node_name, COALESCE(cn.description, ''), cn.tenant_id, cn.tenant_datasource_id, cn.created_at, cn.updated_at, COALESCE(cn.properties, '{}'::jsonb) as properties
+			SELECT cn.id, cn.node_name, COALESCE(cn.description, ''), cn.tenant_id, cn.tenant_datasource_id, cn.created_at, cn.updated_at, COALESCE(cn.properties, '{}'::jsonb) as properties, COALESCE(cn.node_type_id::text, ''), COALESCE(cn.parent_id::text, ''), COALESCE(cn.qualified_path, cn.node_name)
 			FROM catalog_node cn
 			LEFT JOIN catalog_node_type cnt ON cn.node_type_id = cnt.id
 			WHERE (cn.tenant_id = (SELECT id FROM public.tenants WHERE gold_copy = true LIMIT 1) OR 1=1)
@@ -3877,6 +3935,18 @@ func (s *Server) handleListCatalogNodes(w http.ResponseWriter, r *http.Request) 
 	if nodeType != "" {
 		query += fmt.Sprintf(" AND cnt.catalog_type_name = $%d", argIndex)
 		args = append(args, nodeType)
+		argIndex++
+	}
+
+	if nodeTypeIDParam != "" {
+		query += fmt.Sprintf(" AND cn.node_type_id = $%d::uuid", argIndex)
+		args = append(args, nodeTypeIDParam)
+		argIndex++
+	}
+
+	if parentIDParam != "" {
+		query += fmt.Sprintf(" AND cn.parent_id = $%d::uuid", argIndex)
+		args = append(args, parentIDParam)
 		argIndex++
 	}
 
@@ -3897,11 +3967,11 @@ func (s *Server) handleListCatalogNodes(w http.ResponseWriter, r *http.Request) 
 
 	nodes := make([]map[string]interface{}, 0)
 	for rows.Next() {
-		var id, nodeName, description, tID, dsID string
+		var id, nodeName, description, tID, dsID, nodeTypeID, parentID, qualifiedPath string
 		var createdAt, updatedAt time.Time
 		var propsJSON []byte
 
-		err := rows.Scan(&id, &nodeName, &description, &tID, &dsID, &createdAt, &updatedAt, &propsJSON)
+		err := rows.Scan(&id, &nodeName, &description, &tID, &dsID, &createdAt, &updatedAt, &propsJSON, &nodeTypeID, &parentID, &qualifiedPath)
 		if err != nil {
 			continue
 		}
@@ -3909,13 +3979,19 @@ func (s *Server) handleListCatalogNodes(w http.ResponseWriter, r *http.Request) 
 		var props map[string]interface{}
 		if err := json.Unmarshal(propsJSON, &props); err != nil {
 			props = make(map[string]interface{})
+		} else {
+			// Ensure parent ID is never inside JSON properties
+			delete(props, "table_id")
+			delete(props, "parent_id")
 		}
 
 		node := map[string]interface{}{
 			"id":                   id,
 			"node_id":              id,
 			"node_name":            nodeName,
-			"qualified_path":       nodeName,
+			"qualified_path":       qualifiedPath,
+			"node_type_id":         nodeTypeID,
+			"parent_id":            parentID,
 			"catalog_type":         "table",
 			"node_type":            "table",
 			"tenant_id":            tID,
@@ -3945,7 +4021,7 @@ func (s *Server) handleListCatalogEdges(w http.ResponseWriter, r *http.Request) 
 
 	if tenantID != "" {
 		query = `
-			SELECT id, source_node_id, target_node_id, COALESCE(edge_type_id::text, ''), COALESCE(properties, '{}'::jsonb)
+			SELECT id, source_node_id, target_node_id, COALESCE(edge_type_id::text, ''), COALESCE(relationship_type, ''), COALESCE(properties, '{}'::jsonb)
 			FROM catalog_edge
 			WHERE (tenant_id = $1::uuid OR tenant_id = (SELECT id FROM public.tenants WHERE gold_copy = true LIMIT 1))
 		`
@@ -3953,14 +4029,14 @@ func (s *Server) handleListCatalogEdges(w http.ResponseWriter, r *http.Request) 
 		argIndex = 2
 	} else {
 		query = `
-			SELECT id, source_node_id, target_node_id, COALESCE(edge_type_id::text, ''), COALESCE(properties, '{}'::jsonb)
+			SELECT id, source_node_id, target_node_id, COALESCE(edge_type_id::text, ''), COALESCE(relationship_type, ''), COALESCE(properties, '{}'::jsonb)
 			FROM catalog_edge
 			WHERE (tenant_id = (SELECT id FROM public.tenants WHERE gold_copy = true LIMIT 1) OR 1=1)
 		`
 	}
 
 	if tenantDatasourceID != "" {
-		query += fmt.Sprintf(" AND tenant_datasource_id = $%d::uuid", argIndex)
+		query += fmt.Sprintf(" AND tenant_datasource_id = $%d::text", argIndex)
 		args = append(args, tenantDatasourceID)
 		argIndex++
 	}
@@ -3974,19 +4050,20 @@ func (s *Server) handleListCatalogEdges(w http.ResponseWriter, r *http.Request) 
 
 	edges := make([]map[string]interface{}, 0)
 	for rows.Next() {
-		var id, sourceID, targetID, edgeTypeID string
+		var id, sourceID, targetID, edgeTypeID, relType string
 		var propsJSON []byte
-		if err := rows.Scan(&id, &sourceID, &targetID, &edgeTypeID, &propsJSON); err != nil {
+		if err := rows.Scan(&id, &sourceID, &targetID, &edgeTypeID, &relType, &propsJSON); err != nil {
 			continue
 		}
 		var props map[string]interface{}
 		_ = json.Unmarshal(propsJSON, &props)
 		edges = append(edges, map[string]interface{}{
-			"id":             id,
-			"source_node_id": sourceID,
-			"target_node_id": targetID,
-			"edge_type_id":   edgeTypeID,
-			"properties":     props,
+			"id":                id,
+			"source_node_id":    sourceID,
+			"target_node_id":    targetID,
+			"edge_type_id":      edgeTypeID,
+			"relationship_type": relType,
+			"properties":        props,
 		})
 	}
 	respond(w, r, edges, nil)
