@@ -195,7 +195,7 @@ const ErdTableNode: React.FC<{ data: any }> = ({ data }) => (
       </div>
       <div style={{ color: C.textMuted, fontSize: 10, marginTop: 2 }}>{data.schema}</div>
     </div>
-    <div style={{ padding: '4px 0' }} className="erd-node-columns">
+    <div style={{ padding: '4px 0' }} className="erd-node-columns lineage-node-columns">
       {(data.columns || []).slice(0, 8).map((col: any, i: number) => (
         <div key={i} style={{
           display: 'flex', alignItems: 'center', gap: 6, padding: '3px 12px',
@@ -218,7 +218,7 @@ const ErdTableNode: React.FC<{ data: any }> = ({ data }) => (
   </div>
 );
 
-const nodeTypes = { erdTable: ErdTableNode };
+const nodeTypes = { erdTable: ErdTableNode, lineageTable: ErdTableNode };
 
 // ─────────────────────────────────────────────
 // Tabs
@@ -658,12 +658,13 @@ const SchemaExplorerPage: React.FC = () => {
     const nodeArr = Array.from(ids);
     const lNodes = nodeArr.map((id, i) => {
       const nodeObj = allNodeMap.get(id);
+      const tableNode = tableMap.get(id);
       const isSelf = id === selectedTable.id;
       const typeObj = nodeObj ? nodeTypeMap.get(nodeObj.node_type_id) : undefined;
       const typeLabel = typeObj?.catalog_type_name ? ` (${typeObj.catalog_type_name})` : '';
       return {
         id,
-        type: 'default',
+        type: 'lineageTable',
         position: { x: isSelf ? 300 : (i % 2 === 0 ? 0 : 600), y: isSelf ? 120 : (Math.floor(i / 2) * 120) },
         style: {
           background: isSelf ? C.accent : C.panel,
@@ -671,7 +672,17 @@ const SchemaExplorerPage: React.FC = () => {
           borderRadius: 10, color: C.text, padding: '8px 16px', fontSize: 13, fontWeight: 700,
           boxShadow: isSelf ? C.accentGlow : 'none',
         },
-        data: { label: (nodeObj?.node_name ?? id) + typeLabel },
+        data: {
+          label: (nodeObj?.node_name ?? id) + typeLabel,
+          selected: isSelf,
+          schema: tableNode?.schema,
+          columns: (tableNode?.columns || []).map((c: any) => ({
+            name: c.node_name,
+            type: c.properties?.data_type || '?',
+            isPrimaryKey: c.properties?.is_primary_key,
+            isForeignKey: c.properties?.is_foreign_key,
+          })),
+        },
       };
     });
     const lEdges = relevant.map(e => ({
@@ -718,6 +729,7 @@ const SchemaExplorerPage: React.FC = () => {
         .react-flow__node { transition: box-shadow 0.2s ease; }
         input, select { color-scheme: dark; }
         .hide-columns .erd-node-columns { display: none !important; }
+        .hide-columns .lineage-node-columns { display: none !important; }
         .hide-columns .react-flow__node { min-height: auto !important; }
       `}</style>
 
