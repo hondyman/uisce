@@ -1,0 +1,82 @@
+                           Table "public.csm_currency"
+       Column        |         Type          | Collation | Nullable |   Default   
+---------------------+-----------------------+-----------+----------+-------------
+ crrncy_cd           | character varying(3)  |           | not null | 
+ crrncy_name         | character varying(60) |           | not null | 
+ calc_precision      | numeric(1,0)          |           |          | 
+ crd_lock            | character(1)          |           | not null | 'N'::bpchar
+ avgprice_round_ovrd | numeric(2,0)          |           |          | 
+ iso_crrncy_cd       | character varying(3)  |           |          | 
+ crrncy_sec_id       | numeric(18,0)         |           |          | 
+ euro_flag           | character(1)          |           | not null | 'N'::bpchar
+ trunc_flag          | character(1)          |           | not null | 'N'::bpchar
+Indexes:
+    "csm_currency_pk" PRIMARY KEY, btree (crrncy_cd)
+    "csm_currency_n1" btree (crrncy_sec_id)
+Referenced by:
+    TABLE "csm_loan_contract" CONSTRAINT "csm_loan_contract_fk2" FOREIGN KEY (loc_crrncy_cd) REFERENCES csm_currency(crrncy_cd)
+    TABLE "csm_probdef_curve" CONSTRAINT "csm_probdef_curve_fk1" FOREIGN KEY (crrncy_cd) REFERENCES csm_currency(crrncy_cd)
+    TABLE "csm_security" CONSTRAINT "csm_security_fk1" FOREIGN KEY (div_crrncy_cd) REFERENCES csm_currency(crrncy_cd)
+    TABLE "csm_security" CONSTRAINT "csm_security_fk6" FOREIGN KEY (loc_crrncy_cd) REFERENCES csm_currency(crrncy_cd)
+    TABLE "csm_security" CONSTRAINT "csm_security_fk7" FOREIGN KEY (cros_crrncy_cd) REFERENCES csm_currency(crrncy_cd)
+    TABLE "csm_security" CONSTRAINT "csm_security_fk8" FOREIGN KEY (asset_crrncy_cd) REFERENCES csm_currency(crrncy_cd)
+    TABLE "pma_bucket" CONSTRAINT "pma_bucket_fk1" FOREIGN KEY (crrncy_cd) REFERENCES csm_currency(crrncy_cd)
+    TABLE "pma_composite" CONSTRAINT "pma_composite_fk3" FOREIGN KEY (crrncy_cd) REFERENCES csm_currency(crrncy_cd)
+    TABLE "pma_export_profile" CONSTRAINT "pma_export_profile_fk1" FOREIGN KEY (crrncy_cd) REFERENCES csm_currency(crrncy_cd) ON DELETE CASCADE
+    TABLE "pma_factor" CONSTRAINT "pma_factor_fk3" FOREIGN KEY (crrncy_cd) REFERENCES csm_currency(crrncy_cd)
+    TABLE "pma_fxrate" CONSTRAINT "pma_fxrate_fk1" FOREIGN KEY (base_crrncy) REFERENCES csm_currency(crrncy_cd)
+    TABLE "pma_fxrate" CONSTRAINT "pma_fxrate_fk2" FOREIGN KEY (counter_crrncy) REFERENCES csm_currency(crrncy_cd)
+    TABLE "pma_position" CONSTRAINT "pma_position_fk3" FOREIGN KEY (crrncy_cd) REFERENCES csm_currency(crrncy_cd)
+    TABLE "pma_return" CONSTRAINT "pma_return_fk3" FOREIGN KEY (crrncy_cd) REFERENCES csm_currency(crrncy_cd) ON DELETE CASCADE
+    TABLE "pma_rf_rate" CONSTRAINT "pma_rf_rate_fk1" FOREIGN KEY (crrncy_cd) REFERENCES csm_currency(crrncy_cd)
+    TABLE "pma_security_return" CONSTRAINT "pma_security_return_fk3" FOREIGN KEY (crrncy_cd) REFERENCES csm_currency(crrncy_cd)
+    TABLE "pma_transaction" CONSTRAINT "pma_transaction_fk3" FOREIGN KEY (crrncy_cd) REFERENCES csm_currency(crrncy_cd)
+    TABLE "ps_corp_action_opt_detail" CONSTRAINT "ps_corp_action_opt_detail_fk2" FOREIGN KEY (crrncy_cd) REFERENCES csm_currency(crrncy_cd)
+    TABLE "ps_corp_action_opt_detail" CONSTRAINT "ps_corp_action_opt_detail_fk4" FOREIGN KEY (new_par_crrncy_cd) REFERENCES csm_currency(crrncy_cd)
+    TABLE "ps_corp_action_opt_detail" CONSTRAINT "ps_corp_action_opt_detail_fk5" FOREIGN KEY (old_par_crrncy_cd) REFERENCES csm_currency(crrncy_cd)
+    TABLE "ts_bond_tick_summary" CONSTRAINT "ts_bond_tick_summary_fk1" FOREIGN KEY (reference_crrncy_cd) REFERENCES csm_currency(crrncy_cd)
+    TABLE "ts_bond_tick_summary" CONSTRAINT "ts_bond_tick_summary_fk3" FOREIGN KEY (issue_crrncy_cd) REFERENCES csm_currency(crrncy_cd)
+    TABLE "ts_broker_alloc_supp_detail" CONSTRAINT "ts_broker_alloc_supp_dtl_fk2" FOREIGN KEY (crrncy_cd) REFERENCES csm_currency(crrncy_cd)
+    TABLE "ts_cash_mgmt_default" CONSTRAINT "ts_cash_mgmt_default_fk2" FOREIGN KEY (bal_crrncy_cd) REFERENCES csm_currency(crrncy_cd)
+    TABLE "ts_cash_mgmt_default" CONSTRAINT "ts_cash_mgmt_default_fk4" FOREIGN KEY (settle_crrncy_cd) REFERENCES csm_currency(crrncy_cd)
+    TABLE "ts_commission_fee" CONSTRAINT "ts_commission_fee_fk2" FOREIGN KEY (crrncy_cd) REFERENCES csm_currency(crrncy_cd)
+    TABLE "ts_commission_fee_value" CONSTRAINT "ts_commission_fee_value_fk2" FOREIGN KEY (max_min_crrncy_cd) REFERENCES csm_currency(crrncy_cd)
+    TABLE "ts_commission_fee_value" CONSTRAINT "ts_commission_fee_value_fk3" FOREIGN KEY (crrncy_cd) REFERENCES csm_currency(crrncy_cd)
+    TABLE "ts_commission_fee_value" CONSTRAINT "ts_commission_fee_value_fk5" FOREIGN KEY (range_amt_crrncy_cd) REFERENCES csm_currency(crrncy_cd)
+    TABLE "ts_commission_target" CONSTRAINT "ts_commission_target_fk1" FOREIGN KEY (crrncy_cd) REFERENCES csm_currency(crrncy_cd)
+    TABLE "ts_currency_hedge_pct" CONSTRAINT "ts_currency_hedge_pct_fk2" FOREIGN KEY (crrncy_cd) REFERENCES csm_currency(crrncy_cd)
+    TABLE "ts_fund_cash_flow_smmry" CONSTRAINT "ts_fund_cash_flow_smmry_fk2" FOREIGN KEY (crrncy_cd) REFERENCES csm_currency(crrncy_cd)
+    TABLE "ts_mdl_tree_node" CONSTRAINT "ts_mdl_tree_node_fk6" FOREIGN KEY (scenario_base_crrncy_cd) REFERENCES csm_currency(crrncy_cd)
+    TABLE "ts_model_hist" CONSTRAINT "ts_model_hist_fk1" FOREIGN KEY (crrncy_cd) REFERENCES csm_currency(crrncy_cd)
+    TABLE "ts_order_alloc_supp_detail" CONSTRAINT "ts_order_alloc_supp_detail_fk3" FOREIGN KEY (crrncy_cd) REFERENCES csm_currency(crrncy_cd)
+    TABLE "ts_order_alloc_supp_detail" CONSTRAINT "ts_order_alloc_supp_detail_fk4" FOREIGN KEY (price_crrncy_cd) REFERENCES csm_currency(crrncy_cd)
+    TABLE "ts_order_gen" CONSTRAINT "ts_order_gen_fk8" FOREIGN KEY (hedge_crrncy_cd) REFERENCES csm_currency(crrncy_cd)
+
+                         Table "public.csm_industry"
+     Column      |         Type          | Collation | Nullable |   Default   
+-----------------+-----------------------+-----------+----------+-------------
+ indust_class_cd | character varying(5)  |           | not null | 
+ indust_cd       | character varying(20) |           | not null | 
+ indust_name     | character varying(60) |           | not null | 
+ crd_lock        | character(1)          |           | not null | 'N'::bpchar
+ indust_min      | numeric(10,3)         |           |          | 
+ indust_max      | numeric(10,3)         |           |          | 
+ cpl_val         | numeric(10,3)         |           |          | 
+Indexes:
+    "csm_industry_pk" PRIMARY KEY, btree (indust_class_cd, indust_cd)
+Referenced by:
+    TABLE "csm_probdef_curve" CONSTRAINT "csm_probdef_curve_fk3" FOREIGN KEY (indust_class_cd, indust_cd) REFERENCES csm_industry(indust_class_cd, indust_cd)
+
+                         Table "public.ts_exch_calendar"
+    Column    |            Type             | Collation | Nullable |   Default   
+--------------+-----------------------------+-----------+----------+-------------
+ exch_cd      | character varying(4)        |           | not null | 
+ holiday_date | timestamp without time zone |           | not null | 
+ trade        | character(1)                |           | not null | 'N'::bpchar
+ settle       | character(1)                |           | not null | 'N'::bpchar
+ inst         | character(1)                |           | not null | 'N'::bpchar
+ holiday_name | character varying(100)      |           |          | 
+ crd_lock     | character(1)                |           | not null | 'N'::bpchar
+Indexes:
+    "ts_exch_calendar_pk" PRIMARY KEY, btree (exch_cd, holiday_date)
+

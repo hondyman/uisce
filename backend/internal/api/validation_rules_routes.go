@@ -314,8 +314,7 @@ func (h *validationRulesHandler) handleListValidationRules() http.HandlerFunc {
 		datasourceID := secCtx.DatasourceID
 
 		if datasourceID == "" {
-			writeJSONError(w, http.StatusBadRequest, "datasource_id is required", "missing_datasource", "")
-			return
+			datasourceID = "none"
 		}
 
 		// Pagination parameters
@@ -373,9 +372,15 @@ func (h *validationRulesHandler) handleListValidationRules() http.HandlerFunc {
 		conflictField := r.URL.Query().Get("field")
 
 		// Build WHERE clause
-		whereClause := "WHERE tenant_id = $1 AND datasource_id = $2"
-		args := []interface{}{tenantID, datasourceID}
-		argNum := 3
+		whereClause := "WHERE tenant_id = $1"
+		args := []interface{}{tenantID}
+		argNum := 2
+
+		if datasourceID != "" && datasourceID != "none" {
+			whereClause += fmt.Sprintf(" AND datasource_id = $%d", argNum)
+			args = append(args, datasourceID)
+			argNum++
+		}
 
 		// Handle entity and field filtering for conflict detection
 		if conflictEntity != "" && conflictField != "" {

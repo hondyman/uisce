@@ -141,7 +141,6 @@ export const FEATURE_REQUIREMENTS: Record<string, FeatureRequirement> = {
   '/core/glossary': { minScope: 'tenant', minAccess: 'tenant_user' },
   '/core/domains': { minScope: 'tenant', minAccess: 'tenant_user' },
   '/core/validation-rules': { minScope: 'instance', minAccess: 'tenant_user' },
-  '/core/catalog-setup': { minScope: 'tenant', minAccess: 'tenant_admin' },
   '/core/semantic-mapper': { minScope: 'instance', minAccess: 'tenant_user' },
   '/core/bp-builder': { minScope: 'instance', minAccess: 'tenant_admin' },
   '/core/approval-workflows': { minScope: 'instance', minAccess: 'tenant_user' },

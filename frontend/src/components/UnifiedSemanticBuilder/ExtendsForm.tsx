@@ -2,6 +2,8 @@
 import { useState, useMemo, useEffect, KeyboardEvent } from 'react';
 import './ExtendsForm.css';
 import { devLog, devError } from '../../utils/devLogger';
+import WaterDropIcon from '@mui/icons-material/WaterDrop';
+import BuildIcon from '@mui/icons-material/Build';
 
 export interface BaseModelOption {
   key: string;
@@ -130,7 +132,17 @@ const ExtendsForm: React.FC<ExtendsFormProps> = ({ currentBase, options, disable
         />
         {selectedOption && (
           <span className={`model-badge ${selectedOption.kind}`} aria-label={selectedOption.kind === 'core' ? 'Core model' : 'Custom model'}>
-            {selectedOption.kind === 'core' ? 'Core' : 'Custom'}
+            {selectedOption.kind === 'core' ? (
+              <>
+                <WaterDropIcon sx={{ fontSize: 14, verticalAlign: 'middle', mr: 0.5 }} />
+                Core
+              </>
+            ) : (
+              <>
+                <BuildIcon sx={{ fontSize: 14, verticalAlign: 'middle', mr: 0.5 }} />
+                Custom
+              </>
+            )}
           </span>
         )}
         <button type="button" className="extends-clear" onClick={handleClear} aria-label="Clear base model" disabled={disabled}>
@@ -151,7 +163,19 @@ const ExtendsForm: React.FC<ExtendsFormProps> = ({ currentBase, options, disable
           }}
               >
                 <span className="item-label">{opt.label}</span>
-                <span className={`item-badge ${opt.kind}`}>{opt.kind === 'core' ? 'Core' : 'Custom'}</span>
+                <span className={`item-badge ${opt.kind}`}>
+                  {opt.kind === 'core' ? (
+                    <>
+                      <WaterDropIcon sx={{ fontSize: 12, verticalAlign: 'middle', mr: 0.25 }} />
+                      Core
+                    </>
+                  ) : (
+                    <>
+                      <BuildIcon sx={{ fontSize: 12, verticalAlign: 'middle', mr: 0.25 }} />
+                      Custom
+                    </>
+                  )}
+                </span>
               </li>
             ))}
           </ul>

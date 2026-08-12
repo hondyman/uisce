@@ -41,7 +41,7 @@ func (r *DBDatasourceResolver) Resolve(ctx context.Context, datasourceID string)
 		       t.allowed_regions::text as allowed_regions
 		FROM tenant_product_datasource tpd
 		JOIN tenant_product tp ON tpd.tenant_product_id = tp.id
-		JOIN tenant_instance ti ON tp.tenant_instance_id = ti.id
+		JOIN tenant_instance ti ON tp.datasource_id = ti.id
 		JOIN tenants t ON ti.tenant_id = t.id
 		WHERE tpd.id = $1
 		  AND tpd.is_active = true

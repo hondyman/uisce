@@ -1,6 +1,6 @@
 import { Paper, Box, Typography, TextField, Stack, InputAdornment } from '@mui/material';
 import { Search as SearchIcon } from '@mui/icons-material';
-import { HierarchyTree } from './HierarchyTree';
+import { HierarchyTree } from './HierarchyTree/HierarchyTree';
 
 interface HierarchyTreePanelProps {
   hierarchyNodes: any[];

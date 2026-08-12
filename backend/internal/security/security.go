@@ -92,13 +92,29 @@ func BuildContext(ctx context.Context, auth AuthInfo, req BuildContextRequest, r
 	if resolver == nil {
 		return nil, fmt.Errorf("datasource resolver not configured")
 	}
+	isGlobalAdmin := containsRole(auth.Roles, "global_admin") || containsRole(auth.Roles, "global_ops")
 	if strings.TrimSpace(req.DatasourceID) == "" {
-		return nil, fmt.Errorf("datasource_id is required")
+		// Pure tenant/instance metadata scope (e.g. Business Object definitions, catalog metadata)
+		primaryTenantID := "gold_copy"
+		if len(auth.TenantIDs) > 0 {
+			primaryTenantID = auth.TenantIDs[0]
+		}
+		operatingScope := fmt.Sprintf("%s:default:default:none", primaryTenantID)
+		return &Context{
+			UserID:         auth.UserID,
+			Roles:          auth.Roles,
+			TenantID:       primaryTenantID,
+			DatasourceID:   "none",
+			InstanceID:     "default",
+			ProductID:      "default",
+			Region:         req.Region,
+			IsGlobalAdmin:  isGlobalAdmin,
+			OperatingScope: operatingScope,
+		}, nil
 	}
 	if err := ValidateRegion(req.Region); err != nil {
 		return nil, err
 	}
-	isGlobalAdmin := containsRole(auth.Roles, "global_admin") || containsRole(auth.Roles, "global_ops")
 	if len(auth.TenantIDs) == 0 && !isGlobalAdmin {
 		return nil, fmt.Errorf("no allowed tenants configured for user")
 	}

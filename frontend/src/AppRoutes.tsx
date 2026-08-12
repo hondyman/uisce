@@ -32,8 +32,7 @@ import SemanticMapperPage from "./features/core/pages/SemanticMapperPage";
 import { TenantDetailPageV2 } from "./features/tenants/pages/TenantDetailPageV2";
 import { TenantListPage } from "./features/tenants/pages/TenantListPage";
 import { SemanticCatalogPage } from "./pages/SemanticCatalogPage";
-import { CatalogSetupPage } from "./pages/catalog/CatalogSetupPage";
-import { CatalogSetupTestPage } from "./pages/catalog/CatalogSetupTestPage";
+
 import GlossaryExplorer from "./features/glossary/GlossaryExplorer";
 import { AbbreviationsPage } from "./pages/core/AbbreviationsPage";
 import { CatalogNodeTypesPage } from "./pages/catalog/CatalogNodeTypesPage";
@@ -122,7 +121,7 @@ import { DataExplorer } from './components/reporting/DataExplorer';
 import { QueryLibraryDashboard } from './components/reporting/QueryLibraryDashboard';
 import { SemanticModelManager } from './features/semantic/components/SemanticModelManager';
 import { ExpressionLibrary } from "./features/expressions/components/ExpressionLibrary";
-import MetadataExplorer from "./components/MetadataExplorer";
+
 
 
 import EntityManagerPage from "./features/admin/pages/EntityManagerPage";
@@ -136,7 +135,7 @@ import PageRuntimeRenderer from "./pages/PageRuntimeRenderer";
 import WorkflowStudioPage from "./pages/WorkflowStudioPage";
 import BusinessRuleEditorPage from "./pages/BusinessRuleEditorPage";
 import { SecurityRoutes } from "./features/security/routes";
-import AuditHistoryPage from "./features/audit/pages/AuditHistoryPage";
+
 
 // RBAC Management Pages
 import RoleManagerPage from "./features/admin/pages/RoleManagerPage";
@@ -172,7 +171,6 @@ const EntitlementMatrixRoute: React.FC = () => {
   const { profileKey } = useParams<{ profileKey: string }>();
   return <EntitlementMatrix profileKey={profileKey || ""} isCustom={!profileKey?.startsWith("platform_")} />;
 };
-import { LineageExplorerPage } from "./pages/LineageExplorerPage";
 import ObservabilityDashboard from "./pages/ObservabilityDashboard";
 import SLODashboard from "./pages/SLODashboard";
 import ChangeReviewPage from "./pages/ChangeReviewPage";
@@ -249,7 +247,7 @@ function ProtectedApp() {
         <Route path="/secrets/config" element={<ProtectedRoute><SecretsConfigPage tenantId="default" /></ProtectedRoute>} />
         <Route path="/secrets/audit" element={<ProtectedRoute><SecretsAuditPage tenantId="default" /></ProtectedRoute>} />
         <Route path="/secrets/monitoring" element={<ProtectedRoute><SecretsMonitoringPage tenantId="default" /></ProtectedRoute>} />
-        <Route path="/setup/audit" element={<ProtectedRoute><AuditHistoryPage /></ProtectedRoute>} />
+
         <Route path="/audit" element={<ProtectedRoute><AuditExplorer tenantId="default" tenantName="Default" /></ProtectedRoute>} />
         <Route path="/admin/llm" element={<ProtectedRoute><LLMConfigPage /></ProtectedRoute>} />
         <Route path="/admin/seeding" element={<ProtectedRoute><SeedingPage /></ProtectedRoute>} />
@@ -264,16 +262,14 @@ function ProtectedApp() {
         <Route path="/core/abbreviations" element={<ProtectedRoute><AbbreviationsPage /></ProtectedRoute>} />
         <Route path="/core/domains" element={<ProtectedRoute><DomainsManagementPage /></ProtectedRoute>} />
         <Route path="/schema-explorer" element={<ProtectedRoute><SchemaExplorerPage /></ProtectedRoute>} />
-        <Route path="/metadata-explorer" element={<ProtectedRoute><MetadataExplorer /></ProtectedRoute>} />
+
         <Route path="/catalog/node-types" element={<ProtectedRoute><CatalogNodeTypesPage /></ProtectedRoute>} />
         <Route path="/catalog/node-types/:id" element={<ProtectedRoute><NodeTypeDetailPage /></ProtectedRoute>} />
         <Route path="/catalog/edge-types" element={<ProtectedRoute><CatalogEdgeTypesPage /></ProtectedRoute>} />
         <Route path="/catalog/edge-types/:id" element={<ProtectedRoute><EdgeTypeDetailPage /></ProtectedRoute>} />
-        <Route path="/lineage" element={<ProtectedRoute><LineageExplorerPage /></ProtectedRoute>} />
-        <Route path="/lineage/:nodeId" element={<ProtectedRoute><LineageExplorerPage /></ProtectedRoute>} />
+
         <Route path="/core/semantic-mapper" element={<ProtectedRoute><SemanticMapperPage /></ProtectedRoute>} />
-        <Route path="/core/catalog-setup" element={<ProtectedRoute><CatalogSetupPage /></ProtectedRoute>} />
-        <Route path="/core/catalog-setup-test" element={<ProtectedRoute><CatalogSetupTestPage /></ProtectedRoute>} />
+
         <Route path="/catalog/ai-suggestions" element={<ProtectedRoute><AIBusinessTermSuggestionsPage /></ProtectedRoute>} />
         <Route path="/catalog/business-terms/:id" element={<ProtectedRoute><BusinessTermDetailPage /></ProtectedRoute>} />
 
@@ -401,7 +397,7 @@ function ProtectedApp() {
         <Route path="/core/genui-proposal" element={<ProtectedRoute><GenUIProposalDemoPage /></ProtectedRoute>} />
         <Route path="/core/genui-inbox" element={<ProtectedRoute><GenUIApprovalInboxPage /></ProtectedRoute>} />
         {/* Compatibility Redirects */}
-        <Route path="/audit" element={<Navigate to="/setup/audit" replace />} />
+
         <Route path="/rbac" element={<Navigate to="/admin/rbac/roles" replace />} />
         <Route path="/glossary" element={<Navigate to="/core/glossary" replace />} />
         <Route path="/abbreviations" element={<Navigate to="/core/abbreviations" replace />} />

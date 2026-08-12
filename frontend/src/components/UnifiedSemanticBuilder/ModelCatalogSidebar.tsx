@@ -28,6 +28,7 @@ import ModelInfoModal from './ModelInfoModal';
 import { toast } from '../ui/sonner';
 import ConfirmDeleteModal from './ConfirmDeleteModal';
 import ProfessionalSearchInput, { SearchSuggestion } from '../common/ProfessionalSearchInput';
+import { CoreIcon, CustomIcon } from '../common/CoreCustomIcons';
 
 const _RenameModal: FC<{open:boolean; initial:string; onCancel:()=>void; onSave:(v:string)=>void;}> = ({ open, initial, onCancel, onSave }) => {
   const [val,setVal]=useState(initial);
@@ -508,9 +509,10 @@ const ModelCatalogSidebar: React.FC<ModelCatalogSidebarProps> = ({
         <div className="model-content">
           <div className="model-header">
             <div className="model-icon">
-              {model.is_core || model.is_custom ? (
-                // Use cube icon for both core and custom models (same style)
-                <IconCube size={16} className="core-icon" />
+              {model.is_core ? (
+                <CoreIcon fontSize="small" />
+              ) : model.is_custom ? (
+                <CustomIcon fontSize="small" />
               ) : (
                 <IconCube size={16} className="model-icon" />
               )}
@@ -766,8 +768,8 @@ const ModelCatalogSidebar: React.FC<ModelCatalogSidebarProps> = ({
             }
           }}
           tabs={[
-            { id: 'core', label: `Core (${coreCount})` },
-            { id: 'custom', label: `Custom (${customCount})` }
+            { id: 'core', label: `Core (${coreCount})`, icon: <CoreIcon fontSize="small" /> },
+            { id: 'custom', label: `Custom (${customCount})`, icon: <CustomIcon fontSize="small" /> }
           ]}
         />
         {/* Relocate total models to a subtle summary under tabs */}

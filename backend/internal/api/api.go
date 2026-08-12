@@ -1612,6 +1612,9 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 
 		semanticMappingsHandler.RegisterRoutes(r)
 		businessTermsHandler.RegisterRoutes(r)
+		if srv.SemanticMappingHandler != nil {
+			srv.SemanticMappingHandler.RegisterRoutes(r)
+		}
 		glossaryHandler := NewGlossaryHandler(db, lineage.NewDBLineageRepository(sqlxDB), handlers.SecurityContextDeps{Resolver: srv.DatasourceResolver})
 		glossaryHandler.RegisterRoutes(r)
 		RegisterValidationRulesRoutes(r, db, srv.CueEngine, srv.BusinessObjectService, srv.DatasourceResolver)
@@ -3286,8 +3289,8 @@ func (s *Server) registerAuditTrinoRoutes(r chi.Router) {
 			auditGroup := ginRouter.Group("")
 			auditHandler.RegisterRoutes(auditGroup)
 
-			r.Mount("/audit-trino", ginRouter)
-			logging.GetLogger().Sugar().Info("Audit Trino & Snapshot Plane routes registered at /api/audit-trino/*")
+			r.Mount("/audit", ginRouter)
+			logging.GetLogger().Sugar().Info("Audit Trino & Snapshot Plane routes registered at /api/audit/*")
 		}
 	}
 }

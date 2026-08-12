@@ -17,6 +17,8 @@ import { enrichNodesWithTypes } from '../../utils/nodeTypeMapping';
 import TableNode from '../../components/TableNode';
 import ProfessionalSearchInput, { SearchSuggestion } from '../../components/common/ProfessionalSearchInput';
 import ColumnDetailsModal from '../../components/ColumnDetailsModal';
+import WaterDropIcon from '@mui/icons-material/WaterDrop';
+import BuildIcon from '@mui/icons-material/Build';
 // Lazy-load heavy subcomponents so TabbedModal doesn't pull them into the main chunk
 const ErdDiagram = lazy(() => import('./ERD/ImprovedErdDiagram')) as unknown as React.ComponentType<any>;
 const ErdControls = lazy(() => import('./ErdControls')) as unknown as React.ComponentType<any>;
@@ -1017,6 +1019,7 @@ const semanticEdgesFromGraphQL = rawEdges || [];
                 className={`filter-chip ${coreFilter === 'core' ? 'active' : ''}`}
                 onClick={() => setCoreFilter('core')}
               >
+                <WaterDropIcon sx={{ fontSize: 14, mr: 0.5 }} />
                 Core
                 <span className="filter-count">{coreStats.core}</span>
               </button>
@@ -1025,6 +1028,7 @@ const semanticEdgesFromGraphQL = rawEdges || [];
                 className={`filter-chip ${coreFilter === 'custom' ? 'active' : ''}`}
                 onClick={() => setCoreFilter('custom')}
               >
+                <BuildIcon sx={{ fontSize: 14, mr: 0.5 }} />
                 Custom
                 <span className="filter-count">{coreStats.custom}</span>
               </button>

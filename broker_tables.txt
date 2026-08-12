@@ -1,0 +1,24 @@
+                    List of relations
+ Schema |            Name             | Type  |  Owner   
+--------+-----------------------------+-------+----------
+ public | cs_broker                   | table | postgres
+ public | cs_broker_contact           | table | postgres
+ public | cs_broker_inv_class         | table | postgres
+ public | cs_broker_list              | table | postgres
+ public | cs_broker_list_group        | table | postgres
+ public | cs_broker_list_member       | table | postgres
+ public | cs_broker_security          | table | postgres
+ public | cs_fund_broker              | table | postgres
+ public | fix_broker_column_param     | table | postgres
+ public | fix_broker_condition        | table | postgres
+ public | fix_broker_param            | table | postgres
+ public | ts_broker_alloc_settinst    | table | postgres
+ public | ts_broker_alloc_supp_detail | table | postgres
+ public | ts_broker_order_settinst    | table | postgres
+ public | ts_broker_rule              | table | postgres
+ public | ts_broker_rule_value        | table | postgres
+ public | ts_broker_settle_alloc      | table | postgres
+ public | ts_order_broker             | table | postgres
+ public | ts_order_broker_ticket      | table | postgres
+(19 rows)
+

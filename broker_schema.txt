@@ -1,0 +1,56 @@
+                                       Table "public.cs_broker"
+         Column          |          Type          | Collation | Nullable |          Default           
+-------------------------+------------------------+-----------+----------+----------------------------
+ bkr_cd                  | character varying(12)  |           | not null | 
+ bkr_name                | character varying(60)  |           | not null | 
+ address1                | character varying(30)  |           |          | 
+ address2                | character varying(30)  |           |          | 
+ city                    | character varying(30)  |           |          | 
+ state_cd                | character varying(4)   |           |          | 
+ cntry_cd                | character varying(3)   |           |          | 
+ fax_num                 | character varying(18)  |           |          | 
+ phone_num               | character varying(18)  |           |          | 
+ postal_code             | character varying(12)  |           |          | 
+ bkr_typ_cd              | character varying(1)   |           |          | 
+ credit_bkr_cd           | character varying(12)  |           |          | 
+ credit_ratio            | numeric(18,9)          |           |          | 
+ execution_fins          | character varying(20)  |           |          | 
+ clearing_fins           | character varying(20)  |           |          | 
+ comments                | character varying(512) |           |          | 
+ fix_code                | character varying(255) |           |          | 
+ sales_rep               | character varying(100) |           |          | 
+ otc_as_agency           | character(1)           |           | not null | 'N'::bpchar
+ oasys_bkr_cd            | character varying(8)   |           |          | 
+ oasys_bfi_cd            | character varying(8)   |           |          | 
+ oasys_boc_cd            | character varying(8)   |           |          | 
+ bic_code                | character varying(20)  |           |          | 
+ init                    | character varying(4)   |           |          | 
+ bkr_reason_cd           | character varying(10)  |           |          | 
+ oasys_global_cd         | character varying(35)  |           |          | 
+ prog_trd_io_method      | character varying(12)  |           |          | 
+ tradematch_bkr_cd       | character varying(8)   |           |          | 
+ fix_conn_id             | numeric(18,0)          |           |          | 
+ image_path              | character varying(255) |           |          | 
+ venue_type              | character varying(10)  |           |          | 
+ quote_io_method         | character varying(10)  |           |          | 
+ bkr_locale              | character varying(10)  |           | not null | 'en_US'::character varying
+ dest_typ_cd             | character varying(1)   |           |          | 
+ dm_ind                  | character(1)           |           | not null | 'N'::bpchar
+ legal_entity_identifier | character varying(20)  |           |          | 
+ mic                     | character varying(4)   |           |          | 
+ jurisdiction_cd         | character varying(10)  |           |          | 
+Indexes:
+    "cs_broker_pk" PRIMARY KEY, btree (bkr_cd)
+    "cs_broker_n1" btree (cntry_cd)
+    "cs_broker_n2" btree (fix_conn_id)
+Referenced by:
+    TABLE "ps_tax_lot" CONSTRAINT "ps_tax_lot_fk3" FOREIGN KEY (bkr_cd) REFERENCES cs_broker(bkr_cd)
+    TABLE "ts_broker_order_settinst" CONSTRAINT "ts_broker_order_settinst_fk1" FOREIGN KEY (bkr_of_credit) REFERENCES cs_broker(bkr_cd)
+    TABLE "ts_commission_default" CONSTRAINT "ts_commission_default_fk2" FOREIGN KEY (broker) REFERENCES cs_broker(bkr_cd)
+    TABLE "ts_commission_target" CONSTRAINT "ts_commission_target_fk2" FOREIGN KEY (bkr_cd) REFERENCES cs_broker(bkr_cd)
+    TABLE "ts_dlr_invntry" CONSTRAINT "ts_dlr_invntry_fk1" FOREIGN KEY (bkr_cd) REFERENCES cs_broker(bkr_cd)
+    TABLE "ts_order_alloc" CONSTRAINT "ts_order_alloc_fk2" FOREIGN KEY (bkr_of_credit) REFERENCES cs_broker(bkr_cd)
+    TABLE "ts_order_alloc" CONSTRAINT "ts_order_alloc_fk4" FOREIGN KEY (trading_venue) REFERENCES cs_broker(bkr_cd)
+    TABLE "ts_order_exec_rule" CONSTRAINT "ts_order_exec_rule_fk1" FOREIGN KEY (bkr_cd) REFERENCES cs_broker(bkr_cd)
+    TABLE "ts_order" CONSTRAINT "ts_order_fk8" FOREIGN KEY (trading_venue) REFERENCES cs_broker(bkr_cd)
+

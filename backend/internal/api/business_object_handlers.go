@@ -237,8 +237,9 @@ func (h *BusinessObjectHandler) GetBusinessObject(w http.ResponseWriter, r *http
 	// Mark handler for debugging
 	w.Header().Set("X-BO-Handler", "api")
 
-	// Return raw BO; custom marshal handles nullable fields
-	json.NewEncoder(w).Encode(bo)
+	// Return response using toBusinessObjectResponse wrapper for camelCase JSON mapping
+	resp := toBusinessObjectResponse(bo)
+	json.NewEncoder(w).Encode(resp)
 }
 
 // toBusinessObjectResponse converts a BusinessObjectDefinition to a JSON-serializable response
@@ -291,6 +292,7 @@ func toBusinessObjectResponse(bo *models.BusinessObjectDefinition) map[string]in
 		"driverTableName":        bo.DriverTableName,
 		"tenantId":               bo.TenantID,
 		"datasourceId":           datasourceID,
+		"bindings":               bo.Bindings,
 	}
 }
 

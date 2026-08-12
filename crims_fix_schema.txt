@@ -1,0 +1,1059 @@
+                             Table "public.fix_alert"
+      Column       |            Type             | Collation | Nullable | Default 
+-------------------+-----------------------------+-----------+----------+---------
+ errnum            | numeric(10,0)               |           | not null | 
+ fix_txn_type      | character varying(10)       |           |          | 
+ fix_id            | character varying(120)      |           |          | 
+ order_id          | numeric(18,0)               |           |          | 
+ ioi_id            | numeric(18,0)               |           |          | 
+ fix_incoming_id   | numeric(18,0)               |           |          | 
+ fix_outgoing_id   | numeric(18,0)               |           |          | 
+ owner             | character varying(30)       |           |          | 
+ post_date         | timestamp without time zone |           |          | 
+ alert_id          | numeric(18,0)               |           | not null | 
+ place_id          | numeric(18,0)               |           |          | 
+ msg               | text                        |           |          | 
+ fix_conn_id       | numeric(18,0)               |           |          | 
+ severity          | numeric(5,0)                |           |          | 
+ fix_order_id      | numeric(18,0)               |           |          | 
+ fix_order_recv_id | numeric(18,0)               |           |          | 
+ fix_order_resp_id | numeric(18,0)               |           |          | 
+ fill_id           | numeric(18,0)               |           |          | 
+ alert_category_cd | character varying(10)       |           |          | 
+Indexes:
+    "fix_alert_pk" PRIMARY KEY, btree (alert_id)
+    "fix_alert_n1" btree (order_id)
+    "fix_alert_n2" btree (fix_conn_id)
+
+                          Table "public.fix_alert_hist"
+      Column       |            Type             | Collation | Nullable | Default 
+-------------------+-----------------------------+-----------+----------+---------
+ errnum            | numeric(10,0)               |           | not null | 
+ fix_txn_type      | character varying(10)       |           |          | 
+ fix_id            | character varying(120)      |           |          | 
+ order_id          | numeric(18,0)               |           |          | 
+ ioi_id            | numeric(18,0)               |           |          | 
+ fix_incoming_id   | numeric(18,0)               |           |          | 
+ fix_outgoing_id   | numeric(18,0)               |           |          | 
+ owner             | character varying(30)       |           |          | 
+ post_date         | timestamp without time zone |           |          | 
+ alert_id          | numeric(18,0)               |           | not null | 
+ place_id          | numeric(18,0)               |           |          | 
+ msg               | text                        |           |          | 
+ fix_conn_id       | numeric(18,0)               |           |          | 
+ severity          | numeric(5,0)                |           |          | 
+ fix_order_id      | numeric(18,0)               |           |          | 
+ fix_order_recv_id | numeric(18,0)               |           |          | 
+ fix_order_resp_id | numeric(18,0)               |           |          | 
+ fill_id           | numeric(18,0)               |           |          | 
+ alert_category_cd | character varying(10)       |           |          | 
+Indexes:
+    "fix_alert_hist_n1" btree (order_id)
+    "fix_alert_hist_n2" btree (post_date)
+
+       Index "public.fix_alert_hist_n1"
+  Column  |     Type      | Key? | Definition 
+----------+---------------+------+------------
+ order_id | numeric(18,0) | yes  | order_id
+btree, for table "public.fix_alert_hist"
+
+              Index "public.fix_alert_hist_n2"
+  Column   |            Type             | Key? | Definition 
+-----------+-----------------------------+------+------------
+ post_date | timestamp without time zone | yes  | post_date
+btree, for table "public.fix_alert_hist"
+
+         Index "public.fix_alert_n1"
+  Column  |     Type      | Key? | Definition 
+----------+---------------+------+------------
+ order_id | numeric(18,0) | yes  | order_id
+btree, for table "public.fix_alert"
+
+           Index "public.fix_alert_n2"
+   Column    |     Type      | Key? | Definition  
+-------------+---------------+------+-------------
+ fix_conn_id | numeric(18,0) | yes  | fix_conn_id
+btree, for table "public.fix_alert"
+
+         Index "public.fix_alert_pk"
+  Column  |     Type      | Key? | Definition 
+----------+---------------+------+------------
+ alert_id | numeric(18,0) | yes  | alert_id
+primary key, btree, for table "public.fix_alert"
+
+                Table "public.fix_broker_column_param"
+   Column   |          Type          | Collation | Nullable | Default 
+------------+------------------------+-----------+----------+---------
+ bkr_cd     | character varying(12)  |           | not null | 
+ db_col     | character varying(512) |           | not null | 
+ param_name | character varying(50)  |           | not null | 
+ param_val  | character varying(255) |           |          | 
+Indexes:
+    "fix_broker_column_param_pk" PRIMARY KEY, btree (bkr_cd, db_col, param_name)
+
+        Index "public.fix_broker_column_param_pk"
+   Column   |          Type          | Key? | Definition 
+------------+------------------------+------+------------
+ bkr_cd     | character varying(12)  | yes  | bkr_cd
+ db_col     | character varying(512) | yes  | db_col
+ param_name | character varying(50)  | yes  | param_name
+primary key, btree, for table "public.fix_broker_column_param"
+
+                          Table "public.fix_broker_condition"
+    Column     |          Type          | Collation | Nullable |        Default         
+---------------+------------------------+-----------+----------+------------------------
+ cond_id       | numeric(18,0)          |           | not null | 
+ bkr_cd        | character varying(12)  |           | not null | 
+ cond_col      | character varying(100) |           | not null | 
+ cond_val      | character varying(250) |           | not null | 
+ dependent_col | character varying(100) |           | not null | 
+ enabled_ind   | character varying(10)  |           | not null | 'Y'::character varying
+Indexes:
+    "fix_broker_condition_pk" PRIMARY KEY, btree (cond_id)
+    "fix_broker_condition_n1" btree (bkr_cd)
+
+       Index "public.fix_broker_condition_n1"
+ Column |         Type          | Key? | Definition 
+--------+-----------------------+------+------------
+ bkr_cd | character varying(12) | yes  | bkr_cd
+btree, for table "public.fix_broker_condition"
+
+   Index "public.fix_broker_condition_pk"
+ Column  |     Type      | Key? | Definition 
+---------+---------------+------+------------
+ cond_id | numeric(18,0) | yes  | cond_id
+primary key, btree, for table "public.fix_broker_condition"
+
+                   Table "public.fix_broker_param"
+   Column   |          Type          | Collation | Nullable | Default 
+------------+------------------------+-----------+----------+---------
+ bkr_cd     | character varying(12)  |           | not null | 
+ param_name | character varying(50)  |           | not null | 
+ param_val  | character varying(255) |           |          | 
+Indexes:
+    "fix_broker_param_pk" PRIMARY KEY, btree (bkr_cd, param_name)
+
+           Index "public.fix_broker_param_pk"
+   Column   |         Type          | Key? | Definition 
+------------+-----------------------+------+------------
+ bkr_cd     | character varying(12) | yes  | bkr_cd
+ param_name | character varying(50) | yes  | param_name
+primary key, btree, for table "public.fix_broker_param"
+
+                                      Table "public.fix_engine"
+          Column           |          Type          | Collation | Nullable |         Default          
+---------------------------+------------------------+-----------+----------+--------------------------
+ fix_engine_id             | numeric(18,0)          |           | not null | 
+ address_text              | character varying(255) |           | not null | 
+ template_file             | character varying(255) |           |          | 
+ fix_engine_name           | character varying(50)  |           |          | 
+ template_option_text      | text                   |           |          | 
+ engine_side               | character varying(10)  |           | not null | 'BUY'::character varying
+ acceptor_refresh_on_logon | character varying(1)   |           |          | 
+Indexes:
+    "fix_engine_pk" PRIMARY KEY, btree (fix_engine_id)
+
+             Index "public.fix_engine_pk"
+    Column     |     Type      | Key? |  Definition   
+---------------+---------------+------+---------------
+ fix_engine_id | numeric(18,0) | yes  | fix_engine_id
+primary key, btree, for table "public.fix_engine"
+
+                           Table "public.fix_incoming_hist"
+       Column       |            Type             | Collation | Nullable |   Default   
+--------------------+-----------------------------+-----------+----------+-------------
+ fix_incoming_id    | numeric(18,0)               |           | not null | 
+ recv_time          | timestamp without time zone |           | not null | 
+ last_upd_date      | timestamp without time zone |           | not null | 
+ fix_msg_type       | character varying(6)        |           | not null | 
+ fix_trans_type     | character varying(3)        |           |          | 
+ fix_ord_status     | character(1)                |           |          | 
+ tm_orig_id         | numeric(18,0)               |           |          | 
+ tm_supp_id         | numeric(18,0)               |           |          | 
+ status             | character varying(4)        |           |          | 
+ fix_id             | character varying(120)      |           |          | 
+ fix_orig_id        | character varying(120)      |           |          | 
+ fix_supp_id        | character varying(120)      |           |          | 
+ sending_time       | timestamp without time zone |           |          | 
+ fix_broker_id      | character varying(120)      |           |          | 
+ target_sub_id      | character varying(30)       |           |          | 
+ sender_id          | character varying(30)       |           |          | 
+ sender_sub_id      | character varying(30)       |           |          | 
+ orderqty           | numeric(18,4)               |           |          | 
+ cumqty             | numeric(18,4)               |           |          | 
+ lastshares         | numeric(18,4)               |           |          | 
+ lastpx             | double precision            |           |          | 
+ symbol             | character varying(100)      |           |          | 
+ side               | character varying(2)        |           |          | 
+ avgpx              | double precision            |           |          | 
+ exectype           | character(1)                |           |          | 
+ cashorderqty       | numeric(18,4)               |           |          | 
+ leavesqty          | double precision            |           |          | 
+ msgseqnum          | numeric(10,0)               |           |          | 
+ place_id           | numeric(18,0)               |           |          | 
+ user_defined       | text                        |           |          | 
+ factor             | double precision            |           |          | 
+ price_type         | character(1)                |           |          | 
+ text               | text                        |           |          | 
+ fix_conn_id        | numeric(18,0)               |           |          | 
+ raw_msg            | text                        |           |          | 
+ resubmit_status    | character(1)                |           | not null | 'N'::bpchar
+ resubmit_date      | timestamp without time zone |           |          | 
+ msg_descr          | character varying(255)      |           |          | 
+ trade_date         | timestamp without time zone |           |          | 
+ transact_time      | timestamp without time zone |           |          | 
+ session_id         | numeric(20,0)               |           |          | 
+ failure_reason     | character varying(255)      |           |          | 
+ last_mkt           | character varying(10)       |           |          | 
+ commission         | numeric(18,4)               |           |          | 
+ commission_typ     | character(1)                |           |          | 
+ processed_time     | timestamp without time zone |           |          | 
+ last_capacity      | character(1)                |           |          | 
+ last_liquidity_ind | numeric(5,0)                |           |          | 
+ enrich_sec_id      | numeric(18,0)               |           |          | 
+ enrich_time        | timestamp without time zone |           |          | 
+ secondary_order_id | character varying(120)      |           |          | 
+Indexes:
+    "fix_incoming_hist_n1" btree (tm_orig_id)
+    "fix_incoming_hist_n2" btree (last_upd_date)
+    "fix_incoming_hist_n3" btree (fix_conn_id, session_id)
+    "fix_incoming_hist_n4" btree (msgseqnum)
+    "fix_incoming_hist_n5" btree (fix_incoming_id)
+    "fix_incoming_hist_n6" btree (session_id, fix_conn_id, msgseqnum)
+
+      Index "public.fix_incoming_hist_n1"
+   Column   |     Type      | Key? | Definition 
+------------+---------------+------+------------
+ tm_orig_id | numeric(18,0) | yes  | tm_orig_id
+btree, for table "public.fix_incoming_hist"
+
+                Index "public.fix_incoming_hist_n2"
+    Column     |            Type             | Key? |  Definition   
+---------------+-----------------------------+------+---------------
+ last_upd_date | timestamp without time zone | yes  | last_upd_date
+btree, for table "public.fix_incoming_hist"
+
+       Index "public.fix_incoming_hist_n3"
+   Column    |     Type      | Key? | Definition  
+-------------+---------------+------+-------------
+ fix_conn_id | numeric(18,0) | yes  | fix_conn_id
+ session_id  | numeric(20,0) | yes  | session_id
+btree, for table "public.fix_incoming_hist"
+
+      Index "public.fix_incoming_hist_n4"
+  Column   |     Type      | Key? | Definition 
+-----------+---------------+------+------------
+ msgseqnum | numeric(10,0) | yes  | msgseqnum
+btree, for table "public.fix_incoming_hist"
+
+           Index "public.fix_incoming_hist_n5"
+     Column      |     Type      | Key? |   Definition    
+-----------------+---------------+------+-----------------
+ fix_incoming_id | numeric(18,0) | yes  | fix_incoming_id
+btree, for table "public.fix_incoming_hist"
+
+       Index "public.fix_incoming_hist_n6"
+   Column    |     Type      | Key? | Definition  
+-------------+---------------+------+-------------
+ session_id  | numeric(20,0) | yes  | session_id
+ fix_conn_id | numeric(18,0) | yes  | fix_conn_id
+ msgseqnum   | numeric(10,0) | yes  | msgseqnum
+btree, for table "public.fix_incoming_hist"
+
+                                Table "public.fix_ioi"
+      Column       |            Type             | Collation | Nullable |   Default   
+-------------------+-----------------------------+-----------+----------+-------------
+ ioi_id            | numeric(18,0)               |           | not null | 
+ last_upd_date     | timestamp without time zone |           | not null | 
+ status            | character varying(4)        |           |          | 
+ fix_ioi_id        | character varying(120)      |           |          | 
+ fix_symbol        | character varying(30)       |           |          | 
+ sec_id            | numeric(18,0)               |           |          | 
+ side              | character varying(5)        |           |          | 
+ shares            | numeric(18,4)               |           |          | 
+ price             | double precision            |           |          | 
+ currency          | character varying(4)        |           |          | 
+ valid_until_date  | timestamp without time zone |           |          | 
+ quality_indic     | character varying(4)        |           |          | 
+ other_svc         | character varying(4)        |           |          | 
+ natural_flag      | character varying(4)        |           |          | 
+ qualifier         | character varying(30)       |           |          | 
+ fix_shares        | character varying(15)       |           |          | 
+ sender_compid     | character varying(30)       |           |          | 
+ sender_subid      | character varying(30)       |           |          | 
+ target_compid     | character varying(30)       |           |          | 
+ target_subid      | character varying(30)       |           |          | 
+ fix_version       | character varying(10)       |           |          | 
+ msg_seqnum        | numeric(15,0)               |           |          | 
+ sending_time      | timestamp without time zone |           |          | 
+ orig_sending_time | timestamp without time zone |           |          | 
+ text              | text                        |           |          | 
+ onbehalfofcompid  | character varying(30)       |           |          | 
+ onbehalfofsubid   | character varying(30)       |           |          | 
+ exec_bkr          | character varying(12)       |           |          | 
+ fix_conn_id       | numeric(18,0)               |           |          | 
+ session_id        | numeric(20,0)               |           |          | 
+ url_link          | character varying(255)      |           |          | 
+ recv_time         | timestamp without time zone |           |          | 
+ processed_time    | timestamp without time zone |           |          | 
+ direction_cd      | character varying(10)       |           |          | 
+ order_id          | numeric(18,0)               |           |          | 
+ user_defined      | text                        |           |          | 
+ trader            | character varying(30)       |           |          | 
+ price_type_cd     | character(1)                |           |          | 
+ qty_type_cd       | character(1)                |           |          | 
+ actionable_ind    | character(1)                |           | not null | 'N'::bpchar
+ auto_sweep_ind    | character(1)                |           |          | 
+ peg_offset_typ    | numeric(5,0)                |           |          | 
+ peg_offset_val    | numeric(18,4)               |           |          | 
+Indexes:
+    "fix_ioi_pk" PRIMARY KEY, btree (ioi_id)
+    "fix_ioi_n1" btree (sec_id, status, side)
+    "fix_ioi_n2" btree (fix_ioi_id)
+    "fix_ioi_n3" btree (valid_until_date, status)
+    "fix_ioi_n4" btree (fix_conn_id)
+    "fix_ioi_n5" btree (exec_bkr)
+    "fix_ioi_n6" btree (session_id, fix_conn_id, msg_seqnum)
+    "fix_ioi_n7" btree (order_id, direction_cd, exec_bkr)
+
+                           Table "public.fix_ioi_hist"
+      Column       |            Type             | Collation | Nullable | Default 
+-------------------+-----------------------------+-----------+----------+---------
+ ioi_id            | numeric(18,0)               |           | not null | 
+ last_upd_date     | timestamp without time zone |           | not null | 
+ status            | character varying(4)        |           |          | 
+ fix_ioi_id        | character varying(120)      |           |          | 
+ fix_symbol        | character varying(30)       |           |          | 
+ sec_id            | numeric(18,0)               |           |          | 
+ side              | character varying(5)        |           |          | 
+ shares            | numeric(18,4)               |           |          | 
+ price             | double precision            |           |          | 
+ currency          | character varying(4)        |           |          | 
+ valid_until_date  | timestamp without time zone |           |          | 
+ quality_indic     | character varying(4)        |           |          | 
+ other_svc         | character varying(4)        |           |          | 
+ natural_flag      | character varying(4)        |           |          | 
+ qualifier         | character varying(30)       |           |          | 
+ fix_shares        | character varying(15)       |           |          | 
+ sender_compid     | character varying(30)       |           |          | 
+ sender_subid      | character varying(30)       |           |          | 
+ target_compid     | character varying(30)       |           |          | 
+ target_subid      | character varying(30)       |           |          | 
+ fix_version       | character varying(10)       |           |          | 
+ msg_seqnum        | numeric(15,0)               |           |          | 
+ sending_time      | timestamp without time zone |           |          | 
+ orig_sending_time | timestamp without time zone |           |          | 
+ text              | text                        |           |          | 
+ onbehalfofcompid  | character varying(30)       |           |          | 
+ onbehalfofsubid   | character varying(30)       |           |          | 
+ exec_bkr          | character varying(12)       |           |          | 
+ fix_conn_id       | numeric(18,0)               |           |          | 
+ session_id        | numeric(20,0)               |           |          | 
+ url_link          | character varying(255)      |           |          | 
+ recv_time         | timestamp without time zone |           |          | 
+ processed_time    | timestamp without time zone |           |          | 
+ direction_cd      | character varying(10)       |           |          | 
+ order_id          | numeric(18,0)               |           |          | 
+ user_defined      | text                        |           |          | 
+ trader            | character varying(30)       |           |          | 
+ price_type_cd     | character(1)                |           |          | 
+ qty_type_cd       | character(1)                |           |          | 
+ actionable_ind    | character(1)                |           |          | 
+ auto_sweep_ind    | character(1)                |           |          | 
+ peg_offset_typ    | numeric(5,0)                |           |          | 
+ peg_offset_val    | numeric(18,4)               |           |          | 
+Indexes:
+    "fix_ioi_hist_n1" btree (last_upd_date)
+    "fix_ioi_hist_n2" btree (fix_conn_id, session_id)
+    "fix_ioi_hist_n3" btree (msg_seqnum)
+    "fix_ioi_hist_n4" btree (session_id, fix_conn_id, msg_seqnum)
+
+                   Index "public.fix_ioi_hist_n1"
+    Column     |            Type             | Key? |  Definition   
+---------------+-----------------------------+------+---------------
+ last_upd_date | timestamp without time zone | yes  | last_upd_date
+btree, for table "public.fix_ioi_hist"
+
+          Index "public.fix_ioi_hist_n2"
+   Column    |     Type      | Key? | Definition  
+-------------+---------------+------+-------------
+ fix_conn_id | numeric(18,0) | yes  | fix_conn_id
+ session_id  | numeric(20,0) | yes  | session_id
+btree, for table "public.fix_ioi_hist"
+
+         Index "public.fix_ioi_hist_n3"
+   Column   |     Type      | Key? | Definition 
+------------+---------------+------+------------
+ msg_seqnum | numeric(15,0) | yes  | msg_seqnum
+btree, for table "public.fix_ioi_hist"
+
+          Index "public.fix_ioi_hist_n4"
+   Column    |     Type      | Key? | Definition  
+-------------+---------------+------+-------------
+ session_id  | numeric(20,0) | yes  | session_id
+ fix_conn_id | numeric(18,0) | yes  | fix_conn_id
+ msg_seqnum  | numeric(15,0) | yes  | msg_seqnum
+btree, for table "public.fix_ioi_hist"
+
+             Index "public.fix_ioi_n1"
+ Column |         Type         | Key? | Definition 
+--------+----------------------+------+------------
+ sec_id | numeric(18,0)        | yes  | sec_id
+ status | character varying(4) | yes  | status
+ side   | character varying(5) | yes  | side
+btree, for table "public.fix_ioi"
+
+                Index "public.fix_ioi_n2"
+   Column   |          Type          | Key? | Definition 
+------------+------------------------+------+------------
+ fix_ioi_id | character varying(120) | yes  | fix_ioi_id
+btree, for table "public.fix_ioi"
+
+                        Index "public.fix_ioi_n3"
+      Column      |            Type             | Key? |    Definition    
+------------------+-----------------------------+------+------------------
+ valid_until_date | timestamp without time zone | yes  | valid_until_date
+ status           | character varying(4)        | yes  | status
+btree, for table "public.fix_ioi"
+
+            Index "public.fix_ioi_n4"
+   Column    |     Type      | Key? | Definition  
+-------------+---------------+------+-------------
+ fix_conn_id | numeric(18,0) | yes  | fix_conn_id
+btree, for table "public.fix_ioi"
+
+              Index "public.fix_ioi_n5"
+  Column  |         Type          | Key? | Definition 
+----------+-----------------------+------+------------
+ exec_bkr | character varying(12) | yes  | exec_bkr
+btree, for table "public.fix_ioi"
+
+            Index "public.fix_ioi_n6"
+   Column    |     Type      | Key? | Definition  
+-------------+---------------+------+-------------
+ session_id  | numeric(20,0) | yes  | session_id
+ fix_conn_id | numeric(18,0) | yes  | fix_conn_id
+ msg_seqnum  | numeric(15,0) | yes  | msg_seqnum
+btree, for table "public.fix_ioi"
+
+                 Index "public.fix_ioi_n7"
+    Column    |         Type          | Key? |  Definition  
+--------------+-----------------------+------+--------------
+ order_id     | numeric(18,0)         | yes  | order_id
+ direction_cd | character varying(10) | yes  | direction_cd
+ exec_bkr     | character varying(12) | yes  | exec_bkr
+btree, for table "public.fix_ioi"
+
+         Index "public.fix_ioi_pk"
+ Column |     Type      | Key? | Definition 
+--------+---------------+------+------------
+ ioi_id | numeric(18,0) | yes  | ioi_id
+primary key, btree, for table "public.fix_ioi"
+
+                                Table "public.fix_msg"
+      Column       |            Type             | Collation | Nullable |   Default   
+-------------------+-----------------------------+-----------+----------+-------------
+ msg_id            | numeric(18,0)               |           | not null | 
+ crd_msg_typ_cd    | character varying(10)       |           | not null | 
+ vendor_typ_cd     | character varying(10)       |           |          | 
+ fix_sec_class     | character varying(10)       |           |          | 
+ fix_msg_type      | character varying(4)        |           | not null | 
+ description       | character varying(256)      |           |          | 
+ context_interface | character varying(256)      |           | not null | 
+ min_fix_version   | numeric(18,0)               |           |          | 
+ msg_detail_cd     | character varying(16)       |           | not null | 
+ create_user       | character varying(30)       |           |          | 
+ create_date       | timestamp without time zone |           |          | 
+ last_upd_user     | character varying(30)       |           |          | 
+ last_upd_date     | timestamp without time zone |           |          | 
+ crd_lock          | character(1)                |           | not null | 'N'::bpchar
+Indexes:
+    "fix_msg_pk" PRIMARY KEY, btree (msg_id)
+
+                              Table "public.fix_msg_detail"
+        Column        |            Type             | Collation | Nullable |   Default   
+----------------------+-----------------------------+-----------+----------+-------------
+ msg_detail_id        | numeric(18,0)               |           | not null | 
+ msg_detail_cd        | character varying(16)       |           | not null | 
+ seq                  | numeric(18,0)               |           | not null | 
+ detail_typ_cd        | character varying(10)       |           | not null | 
+ vendor_typ_cd        | character varying(10)       |           |          | 
+ tag_no               | numeric(18,0)               |           |          | 
+ required_ind         | character(1)                |           |          | 
+ value_copy_field     | character varying(64)       |           |          | 
+ name                 | character varying(64)       |           |          | 
+ description          | character varying(256)      |           |          | 
+ min_fix_ver_override | numeric(18,0)               |           |          | 
+ max_fix_ver_override | numeric(18,0)               |           |          | 
+ desc_typ_cd_override | character varying(10)       |           |          | 
+ data_typ_override    | character varying(30)       |           |          | 
+ child_msg_detail_cd  | character varying(16)       |           |          | 
+ repeating_no_tag     | numeric(18,0)               |           |          | 
+ repeating_loop_over  | character varying(64)       |           |          | 
+ repeating_loop_index | character varying(8)        |           |          | 
+ repeating_entry_req  | character(1)                |           |          | 
+ create_user          | character varying(30)       |           |          | 
+ create_date          | timestamp without time zone |           |          | 
+ last_upd_user        | character varying(30)       |           |          | 
+ last_upd_date        | timestamp without time zone |           |          | 
+ crd_lock             | character(1)                |           | not null | 'N'::bpchar
+ fix_value            | character varying(256)      |           |          | 
+Indexes:
+    "fix_msg_detail_pk" PRIMARY KEY, btree (msg_detail_id)
+
+           Index "public.fix_msg_detail_pk"
+    Column     |     Type      | Key? |  Definition   
+---------------+---------------+------+---------------
+ msg_detail_id | numeric(18,0) | yes  | msg_detail_id
+primary key, btree, for table "public.fix_msg_detail"
+
+         Index "public.fix_msg_pk"
+ Column |     Type      | Key? | Definition 
+--------+---------------+------+------------
+ msg_id | numeric(18,0) | yes  | msg_id
+primary key, btree, for table "public.fix_msg"
+
+                           Table "public.fix_order"
+     Column     |            Type             | Collation | Nullable | Default 
+----------------+-----------------------------+-----------+----------+---------
+ fix_order_id   | numeric(18,0)               |           | not null | 
+ fix_conn_id    | numeric(18,0)               |           | not null | 
+ bkr_cd         | character varying(12)       |           | not null | 
+ clordid        | character varying(120)      |           | not null | 
+ out_order_id   | character varying(120)      |           | not null | 
+ ord_status     | character varying(10)       |           | not null | 
+ side           | character varying(10)       |           |          | 
+ symbol         | character varying(100)      |           |          | 
+ symbol_sfx     | character varying(30)       |           |          | 
+ security_id    | character varying(30)       |           |          | 
+ id_source      | character varying(10)       |           |          | 
+ time_in_force  | character varying(10)       |           |          | 
+ expire_time    | timestamp without time zone |           |          | 
+ order_qty      | numeric(18,4)               |           |          | 
+ cum_qty        | numeric(18,4)               |           | not null | 0.0
+ exec_amt       | numeric(18,4)               |           | not null | 0.0
+ avg_px         | double precision            |           | not null | 0.0
+ record_version | numeric(10,0)               |           | not null | 1
+ last_upd_date  | timestamp without time zone |           |          | 
+Indexes:
+    "fix_order_pk" PRIMARY KEY, btree (fix_order_id)
+    "fix_order_n1" btree (bkr_cd, clordid)
+    "fix_order_n2" btree (fix_conn_id)
+Referenced by:
+    TABLE "fix_order_resp" CONSTRAINT "fix_order_resp_fk1" FOREIGN KEY (fix_order_id) REFERENCES fix_order(fix_order_id)
+    TABLE "fix_order_relship" CONSTRAINT "fix_order_ts_order_fk1" FOREIGN KEY (fix_order_id) REFERENCES fix_order(fix_order_id)
+
+                         Table "public.fix_order_hist"
+     Column     |            Type             | Collation | Nullable | Default 
+----------------+-----------------------------+-----------+----------+---------
+ fix_order_id   | numeric(18,0)               |           | not null | 
+ fix_conn_id    | numeric(18,0)               |           |          | 
+ bkr_cd         | character varying(12)       |           |          | 
+ clordid        | character varying(120)      |           |          | 
+ out_order_id   | character varying(120)      |           |          | 
+ ord_status     | character varying(10)       |           |          | 
+ side           | character varying(10)       |           |          | 
+ symbol         | character varying(100)      |           |          | 
+ symbol_sfx     | character varying(30)       |           |          | 
+ security_id    | character varying(30)       |           |          | 
+ id_source      | character varying(10)       |           |          | 
+ time_in_force  | character varying(10)       |           |          | 
+ expire_time    | timestamp without time zone |           |          | 
+ order_qty      | numeric(18,4)               |           |          | 
+ cum_qty        | numeric(18,4)               |           |          | 
+ exec_amt       | numeric(18,4)               |           |          | 
+ avg_px         | double precision            |           |          | 
+ record_version | numeric(10,0)               |           |          | 
+ last_upd_date  | timestamp without time zone |           |          | 
+
+             Index "public.fix_order_n1"
+ Column  |          Type          | Key? | Definition 
+---------+------------------------+------+------------
+ bkr_cd  | character varying(12)  | yes  | bkr_cd
+ clordid | character varying(120) | yes  | clordid
+btree, for table "public.fix_order"
+
+           Index "public.fix_order_n2"
+   Column    |     Type      | Key? | Definition  
+-------------+---------------+------+-------------
+ fix_conn_id | numeric(18,0) | yes  | fix_conn_id
+btree, for table "public.fix_order"
+
+            Index "public.fix_order_pk"
+    Column    |     Type      | Key? |  Definition  
+--------------+---------------+------+--------------
+ fix_order_id | numeric(18,0) | yes  | fix_order_id
+primary key, btree, for table "public.fix_order"
+
+                          Table "public.fix_order_recv"
+      Column       |            Type             | Collation | Nullable | Default 
+-------------------+-----------------------------+-----------+----------+---------
+ fix_order_recv_id | numeric(18,0)               |           | not null | 
+ fix_order_id      | numeric(18,0)               |           | not null | 
+ raw_msg           | text                        |           |          | 
+ crd_msg_typ_cd    | character varying(10)       |           |          | 
+ clordid           | character varying(120)      |           |          | 
+ orig_clordid      | character varying(120)      |           |          | 
+ status            | character varying(10)       |           | not null | 
+ notes             | character varying(255)      |           |          | 
+ send_time         | timestamp without time zone |           |          | 
+ recv_time         | timestamp without time zone |           |          | 
+ ack_time          | timestamp without time zone |           |          | 
+ processed_time    | timestamp without time zone |           |          | 
+ session_id        | numeric(20,0)               |           |          | 
+ msg_seq_num       | numeric(10,0)               |           |          | 
+Indexes:
+    "fix_order_recv_pk" PRIMARY KEY, btree (fix_order_recv_id)
+    "fix_order_recv_n1" btree (fix_order_id)
+
+                        Table "public.fix_order_recv_hist"
+      Column       |            Type             | Collation | Nullable | Default 
+-------------------+-----------------------------+-----------+----------+---------
+ fix_order_recv_id | numeric(18,0)               |           | not null | 
+ fix_order_id      | numeric(18,0)               |           |          | 
+ raw_msg           | text                        |           |          | 
+ crd_msg_typ_cd    | character varying(10)       |           |          | 
+ clordid           | character varying(120)      |           |          | 
+ orig_clordid      | character varying(120)      |           |          | 
+ status            | character varying(10)       |           |          | 
+ notes             | character varying(255)      |           |          | 
+ send_time         | timestamp without time zone |           |          | 
+ recv_time         | timestamp without time zone |           |          | 
+ ack_time          | timestamp without time zone |           |          | 
+ processed_time    | timestamp without time zone |           |          | 
+ session_id        | numeric(20,0)               |           |          | 
+ msg_seq_num       | numeric(10,0)               |           |          | 
+
+          Index "public.fix_order_recv_n1"
+    Column    |     Type      | Key? |  Definition  
+--------------+---------------+------+--------------
+ fix_order_id | numeric(18,0) | yes  | fix_order_id
+btree, for table "public.fix_order_recv"
+
+               Index "public.fix_order_recv_pk"
+      Column       |     Type      | Key? |    Definition     
+-------------------+---------------+------+-------------------
+ fix_order_recv_id | numeric(18,0) | yes  | fix_order_recv_id
+primary key, btree, for table "public.fix_order_recv"
+
+                              Table "public.fix_order_relship"
+           Column            |            Type             | Collation | Nullable | Default 
+-----------------------------+-----------------------------+-----------+----------+---------
+ fix_order_id                | numeric(18,0)               |           | not null | 
+ order_id                    | numeric(18,0)               |           | not null | 
+ order_target_qty            | numeric(18,4)               |           |          | 
+ tracked_record_version      | numeric(10,0)               |           |          | 
+ tracked_exec_record_version | numeric(10,0)               |           |          | 
+ last_upd_date               | timestamp without time zone |           |          | 
+Indexes:
+    "fix_order_relship_pk" PRIMARY KEY, btree (fix_order_id, order_id)
+    "fix_order_relship_n1" btree (order_id)
+Foreign-key constraints:
+    "fix_order_ts_order_fk1" FOREIGN KEY (fix_order_id) REFERENCES fix_order(fix_order_id)
+    "fix_order_ts_order_fk2" FOREIGN KEY (order_id) REFERENCES ts_order(order_id) ON DELETE CASCADE
+
+                           Table "public.fix_order_relship_hist"
+           Column            |            Type             | Collation | Nullable | Default 
+-----------------------------+-----------------------------+-----------+----------+---------
+ fix_order_id                | numeric(18,0)               |           |          | 
+ order_id                    | numeric(18,0)               |           |          | 
+ order_target_qty            | numeric(18,4)               |           |          | 
+ tracked_record_version      | numeric(10,0)               |           |          | 
+ tracked_exec_record_version | numeric(10,0)               |           |          | 
+ last_upd_date               | timestamp without time zone |           |          | 
+
+     Index "public.fix_order_relship_n1"
+  Column  |     Type      | Key? | Definition 
+----------+---------------+------+------------
+ order_id | numeric(18,0) | yes  | order_id
+btree, for table "public.fix_order_relship"
+
+        Index "public.fix_order_relship_pk"
+    Column    |     Type      | Key? |  Definition  
+--------------+---------------+------+--------------
+ fix_order_id | numeric(18,0) | yes  | fix_order_id
+ order_id     | numeric(18,0) | yes  | order_id
+primary key, btree, for table "public.fix_order_relship"
+
+                           Table "public.fix_order_resp"
+       Column        |            Type             | Collation | Nullable | Default 
+---------------------+-----------------------------+-----------+----------+---------
+ fix_order_resp_id   | numeric(18,0)               |           | not null | 
+ fix_order_id        | numeric(18,0)               |           | not null | 
+ fill_id             | numeric(18,0)               |           |          | 
+ status              | character varying(10)       |           | not null | 
+ queue_time          | timestamp without time zone |           |          | 
+ send_time           | timestamp without time zone |           |          | 
+ crd_msg_typ_cd      | character varying(10)       |           |          | 
+ clordid             | character varying(120)      |           |          | 
+ orig_clordid        | character varying(120)      |           |          | 
+ ord_status          | character varying(10)       |           | not null | 
+ exec_type           | character varying(10)       |           |          | 
+ exec_id             | character varying(150)      |           |          | 
+ exec_ref_id         | character varying(150)      |           |          | 
+ last_qty            | numeric(18,4)               |           |          | 
+ last_px             | double precision            |           |          | 
+ last_mkt            | character varying(10)       |           |          | 
+ text                | text                        |           |          | 
+ user_defined        | text                        |           |          | 
+ transact_time       | timestamp without time zone |           |          | 
+ cxl_rej_response_to | character varying(10)       |           |          | 
+ cxl_rej_reason      | character varying(10)       |           |          | 
+ exec_record_version | numeric(10,0)               |           |          | 
+ last_exec_amt       | numeric(18,4)               |           |          | 
+Indexes:
+    "fix_order_resp_pk" PRIMARY KEY, btree (fix_order_resp_id)
+    "fix_order_resp_n1" btree (fix_order_id)
+    "fix_order_resp_n2" btree (fill_id)
+Foreign-key constraints:
+    "fix_order_resp_fk1" FOREIGN KEY (fix_order_id) REFERENCES fix_order(fix_order_id)
+    "fix_order_resp_fk2" FOREIGN KEY (fill_id) REFERENCES ts_fill(fill_id) ON DELETE SET NULL
+
+                         Table "public.fix_order_resp_hist"
+       Column        |            Type             | Collation | Nullable | Default 
+---------------------+-----------------------------+-----------+----------+---------
+ fix_order_resp_id   | numeric(18,0)               |           | not null | 
+ fix_order_id        | numeric(18,0)               |           |          | 
+ fill_id             | numeric(18,0)               |           |          | 
+ status              | character varying(10)       |           |          | 
+ queue_time          | timestamp without time zone |           |          | 
+ send_time           | timestamp without time zone |           |          | 
+ crd_msg_typ_cd      | character varying(10)       |           |          | 
+ clordid             | character varying(120)      |           |          | 
+ orig_clordid        | character varying(120)      |           |          | 
+ ord_status          | character varying(10)       |           |          | 
+ exec_type           | character varying(10)       |           |          | 
+ exec_id             | character varying(150)      |           |          | 
+ exec_ref_id         | character varying(150)      |           |          | 
+ last_qty            | numeric(18,4)               |           |          | 
+ last_px             | double precision            |           |          | 
+ last_mkt            | character varying(10)       |           |          | 
+ text                | text                        |           |          | 
+ user_defined        | text                        |           |          | 
+ transact_time       | timestamp without time zone |           |          | 
+ cxl_rej_response_to | character varying(10)       |           |          | 
+ cxl_rej_reason      | character varying(10)       |           |          | 
+ exec_record_version | numeric(10,0)               |           |          | 
+ last_exec_amt       | numeric(18,4)               |           |          | 
+
+          Index "public.fix_order_resp_n1"
+    Column    |     Type      | Key? |  Definition  
+--------------+---------------+------+--------------
+ fix_order_id | numeric(18,0) | yes  | fix_order_id
+btree, for table "public.fix_order_resp"
+
+      Index "public.fix_order_resp_n2"
+ Column  |     Type      | Key? | Definition 
+---------+---------------+------+------------
+ fill_id | numeric(18,0) | yes  | fill_id
+btree, for table "public.fix_order_resp"
+
+               Index "public.fix_order_resp_pk"
+      Column       |     Type      | Key? |    Definition     
+-------------------+---------------+------+-------------------
+ fix_order_resp_id | numeric(18,0) | yes  | fix_order_resp_id
+primary key, btree, for table "public.fix_order_resp"
+
+                                Table "public.fix_outgoing"
+         Column          |            Type             | Collation | Nullable |   Default   
+-------------------------+-----------------------------+-----------+----------+-------------
+ fix_outgoing_id         | numeric(18,0)               |           | not null | 
+ queue_time              | timestamp without time zone |           | not null | 
+ last_upd_date           | timestamp without time zone |           | not null | 
+ fix_msg_type            | character varying(4)        |           | not null | 
+ order_id                | numeric(18,0)               |           |          | 
+ new_order_id            | numeric(18,0)               |           |          | 
+ status                  | character varying(4)        |           | not null | 
+ send_time               | timestamp without time zone |           |          | 
+ fix_id                  | numeric(18,0)               |           |          | 
+ fix_orig_id             | character varying(120)      |           |          | 
+ fix_orig_broker_id      | character varying(120)      |           |          | 
+ fix_char_id             | character varying(120)      |           |          | 
+ target_id               | character varying(30)       |           |          | 
+ target_sub_id           | character varying(30)       |           |          | 
+ sender_sub_id           | character varying(30)       |           |          | 
+ orderqty                | numeric(18,4)               |           |          | 
+ price                   | double precision            |           |          | 
+ stoppx                  | double precision            |           |          | 
+ ordtype                 | character varying(4)        |           |          | 
+ execinst                | character varying(20)       |           |          | 
+ handinst                | character varying(4)        |           |          | 
+ timeinforce             | character varying(4)        |           |          | 
+ expiretime              | timestamp without time zone |           |          | 
+ minqty                  | numeric(18,4)               |           |          | 
+ maxfloor                | numeric(18,4)               |           |          | 
+ side                    | character varying(4)        |           |          | 
+ fix_ord_status          | character varying(4)        |           |          | 
+ symbol                  | character varying(100)      |           |          | 
+ fix_exec_broker         | character varying(30)       |           |          | 
+ fix_account             | character varying(40)       |           |          | 
+ fix_version             | character varying(10)       |           |          | 
+ fix_settlmnttyp         | character varying(4)        |           |          | 
+ fix_processcode         | character varying(4)        |           |          | 
+ fix_locatereqd          | character varying(4)        |           |          | 
+ fix_clientid            | character varying(30)       |           |          | 
+ fix_exdestination       | character varying(20)       |           |          | 
+ fix_futsettdate         | timestamp without time zone |           |          | 
+ list_id                 | character varying(120)      |           |          | 
+ wave_no                 | character varying(30)       |           |          | 
+ list_seq_no             | numeric(5,0)                |           |          | 
+ list_no_ords            | numeric(5,0)                |           |          | 
+ list_totnoorders        | numeric(10,0)               |           |          | 
+ list_bidtype            | numeric(10,0)               |           |          | 
+ listexecinsttype        | character(1)                |           |          | 
+ list_progrptreqs        | numeric(10,0)               |           |          | 
+ list_progperiodinterval | numeric(10,0)               |           |          | 
+ onbehalfofcompid        | character varying(30)       |           |          | 
+ delivercompid           | character varying(30)       |           |          | 
+ onbehalfosubid          | character varying(30)       |           |          | 
+ delivertosubid          | character varying(30)       |           |          | 
+ onbehalfoflocationid    | character varying(30)       |           |          | 
+ delivertolocationid     | character varying(30)       |           |          | 
+ symbolsfx               | character varying(30)       |           |          | 
+ securityid              | character varying(30)       |           |          | 
+ idsource                | character varying(30)       |           |          | 
+ issuer                  | character varying(120)      |           |          | 
+ securityexchange        | character varying(4)        |           |          | 
+ currency                | character varying(4)        |           |          | 
+ securitydesc            | character varying(120)      |           |          | 
+ tsfill_cumqty           | numeric(18,4)               |           |          | 
+ place_id                | numeric(18,0)               |           |          | 
+ max_block_size          | numeric(10,0)               |           |          | 
+ peg_difference          | double precision            |           |          | 
+ target_location_id      | character varying(30)       |           |          | 
+ sender_location_id      | character varying(30)       |           |          | 
+ trader_id               | character varying(255)      |           |          | 
+ user_defined            | text                        |           |          | 
+ list_exec_inst          | text                        |           |          | 
+ text                    | text                        |           |          | 
+ effectivetime           | timestamp without time zone |           |          | 
+ trader                  | character varying(30)       |           |          | 
+ exch_cd                 | character varying(4)        |           |          | 
+ fix_conn_id             | numeric(18,0)               |           |          | 
+ bkr_cd                  | character varying(12)       |           |          | 
+ discretioninst          | character varying(4)        |           |          | 
+ discretionoffset        | double precision            |           |          | 
+ maxshow                 | numeric(18,4)               |           |          | 
+ raw_msg                 | text                        |           |          | 
+ fix_leg_ref_id          | character varying(120)      |           |          | 
+ quote_id                | character varying(120)      |           |          | 
+ ioi_id                  | character varying(120)      |           |          | 
+ autosent_ind            | character(1)                |           | not null | 'N'::bpchar
+ last_msg_seq_num        | numeric(10,0)               |           |          | 
+ last_session_id         | numeric(20,0)               |           |          | 
+ last_cum_qty            | numeric(18,4)               |           |          | 
+ mlo_id                  | numeric(18,0)               |           |          | 
+ cashorderqty            | numeric(18,4)               |           |          | 
+ fill_id                 | numeric(18,0)               |           |          | 
+Indexes:
+    "fix_outgoing_pk" PRIMARY KEY, btree (fix_outgoing_id)
+    "fix_outgoing_n1" btree (order_id)
+    "fix_outgoing_n2" btree (fix_conn_id)
+    "fix_outgoing_n3" btree (fix_char_id)
+    "fix_outgoing_n4" btree (bkr_cd)
+    "fix_outgoing_n5" btree (status)
+
+                              Table "public.fix_outgoing_hist"
+         Column          |            Type             | Collation | Nullable |   Default   
+-------------------------+-----------------------------+-----------+----------+-------------
+ fix_outgoing_id         | numeric(18,0)               |           | not null | 
+ queue_time              | timestamp without time zone |           | not null | 
+ last_upd_date           | timestamp without time zone |           | not null | 
+ fix_msg_type            | character varying(4)        |           | not null | 
+ order_id                | numeric(18,0)               |           |          | 
+ new_order_id            | numeric(18,0)               |           |          | 
+ status                  | character varying(4)        |           | not null | 
+ send_time               | timestamp without time zone |           |          | 
+ fix_id                  | numeric(18,0)               |           |          | 
+ fix_orig_id             | character varying(120)      |           |          | 
+ fix_orig_broker_id      | character varying(120)      |           |          | 
+ fix_char_id             | character varying(120)      |           |          | 
+ target_id               | character varying(30)       |           |          | 
+ target_sub_id           | character varying(30)       |           |          | 
+ sender_sub_id           | character varying(30)       |           |          | 
+ orderqty                | numeric(18,4)               |           |          | 
+ price                   | double precision            |           |          | 
+ stoppx                  | double precision            |           |          | 
+ ordtype                 | character varying(4)        |           |          | 
+ execinst                | character varying(20)       |           |          | 
+ handinst                | character varying(4)        |           |          | 
+ timeinforce             | character varying(4)        |           |          | 
+ expiretime              | timestamp without time zone |           |          | 
+ minqty                  | numeric(18,4)               |           |          | 
+ maxfloor                | numeric(18,4)               |           |          | 
+ side                    | character varying(4)        |           |          | 
+ fix_ord_status          | character varying(4)        |           |          | 
+ symbol                  | character varying(100)      |           |          | 
+ fix_exec_broker         | character varying(30)       |           |          | 
+ fix_account             | character varying(40)       |           |          | 
+ fix_version             | character varying(10)       |           |          | 
+ fix_settlmnttyp         | character varying(4)        |           |          | 
+ fix_processcode         | character varying(4)        |           |          | 
+ fix_locatereqd          | character varying(4)        |           |          | 
+ fix_clientid            | character varying(30)       |           |          | 
+ fix_exdestination       | character varying(20)       |           |          | 
+ fix_futsettdate         | timestamp without time zone |           |          | 
+ list_id                 | character varying(120)      |           |          | 
+ wave_no                 | character varying(30)       |           |          | 
+ list_seq_no             | numeric(5,0)                |           |          | 
+ list_no_ords            | numeric(5,0)                |           |          | 
+ list_totnoorders        | numeric(10,0)               |           |          | 
+ list_bidtype            | numeric(10,0)               |           |          | 
+ listexecinsttype        | character(1)                |           |          | 
+ list_progrptreqs        | numeric(10,0)               |           |          | 
+ list_progperiodinterval | numeric(10,0)               |           |          | 
+ onbehalfofcompid        | character varying(30)       |           |          | 
+ delivercompid           | character varying(30)       |           |          | 
+ onbehalfofsubid         | character varying(30)       |           |          | 
+ delivertosubid          | character varying(30)       |           |          | 
+ onbehalfoflocationid    | character varying(30)       |           |          | 
+ deliverto_locationid    | character varying(30)       |           |          | 
+ symbolsfx               | character varying(30)       |           |          | 
+ securityid              | character varying(30)       |           |          | 
+ idsource                | character varying(30)       |           |          | 
+ issuer                  | character varying(120)      |           |          | 
+ securityexchange        | character varying(4)        |           |          | 
+ currency                | character varying(4)        |           |          | 
+ securitydesc            | character varying(120)      |           |          | 
+ tsfill_cumqty           | numeric(18,4)               |           |          | 
+ place_id                | numeric(18,0)               |           |          | 
+ max_block_size          | numeric(10,0)               |           |          | 
+ peg_difference          | double precision            |           |          | 
+ target_location_id      | character varying(30)       |           |          | 
+ sender_location_id      | character varying(30)       |           |          | 
+ trader_id               | character varying(255)      |           |          | 
+ user_defined            | text                        |           |          | 
+ list_exec_inst          | text                        |           |          | 
+ text                    | text                        |           |          | 
+ effectivetime           | timestamp without time zone |           |          | 
+ trader                  | character varying(30)       |           |          | 
+ exch_cd                 | character varying(4)        |           |          | 
+ fix_conn_id             | numeric(18,0)               |           |          | 
+ bkr_cd                  | character varying(12)       |           |          | 
+ discretioninst          | character varying(4)        |           |          | 
+ discretionoffset        | double precision            |           |          | 
+ maxshow                 | numeric(18,4)               |           |          | 
+ raw_msg                 | text                        |           |          | 
+ fix_leg_ref_id          | character varying(120)      |           |          | 
+ quote_id                | character varying(120)      |           |          | 
+ ioi_id                  | character varying(120)      |           |          | 
+ autosent_ind            | character(1)                |           | not null | 'N'::bpchar
+ last_msg_seq_num        | numeric(10,0)               |           |          | 
+ last_session_id         | numeric(20,0)               |           |          | 
+ last_cum_qty            | numeric(18,4)               |           |          | 
+ mlo_id                  | numeric(18,0)               |           |          | 
+ cashorderqty            | numeric(18,4)               |           |          | 
+ fill_id                 | numeric(18,0)               |           |          | 
+Indexes:
+    "fix_outgoing_hist_n1" btree (order_id)
+    "fix_outgoing_hist_n2" btree (last_upd_date)
+    "fix_outgoing_hist_n3" btree (fix_char_id)
+    "fix_outgoing_hist_n4" btree (fix_outgoing_id)
+
+     Index "public.fix_outgoing_hist_n1"
+  Column  |     Type      | Key? | Definition 
+----------+---------------+------+------------
+ order_id | numeric(18,0) | yes  | order_id
+btree, for table "public.fix_outgoing_hist"
+
+                Index "public.fix_outgoing_hist_n2"
+    Column     |            Type             | Key? |  Definition   
+---------------+-----------------------------+------+---------------
+ last_upd_date | timestamp without time zone | yes  | last_upd_date
+btree, for table "public.fix_outgoing_hist"
+
+            Index "public.fix_outgoing_hist_n3"
+   Column    |          Type          | Key? | Definition  
+-------------+------------------------+------+-------------
+ fix_char_id | character varying(120) | yes  | fix_char_id
+btree, for table "public.fix_outgoing_hist"
+
+           Index "public.fix_outgoing_hist_n4"
+     Column      |     Type      | Key? |   Definition    
+-----------------+---------------+------+-----------------
+ fix_outgoing_id | numeric(18,0) | yes  | fix_outgoing_id
+btree, for table "public.fix_outgoing_hist"
+
+        Index "public.fix_outgoing_n1"
+  Column  |     Type      | Key? | Definition 
+----------+---------------+------+------------
+ order_id | numeric(18,0) | yes  | order_id
+btree, for table "public.fix_outgoing"
+
+          Index "public.fix_outgoing_n2"
+   Column    |     Type      | Key? | Definition  
+-------------+---------------+------+-------------
+ fix_conn_id | numeric(18,0) | yes  | fix_conn_id
+btree, for table "public.fix_outgoing"
+
+              Index "public.fix_outgoing_n3"
+   Column    |          Type          | Key? | Definition  
+-------------+------------------------+------+-------------
+ fix_char_id | character varying(120) | yes  | fix_char_id
+btree, for table "public.fix_outgoing"
+
+           Index "public.fix_outgoing_n4"
+ Column |         Type          | Key? | Definition 
+--------+-----------------------+------+------------
+ bkr_cd | character varying(12) | yes  | bkr_cd
+btree, for table "public.fix_outgoing"
+
+          Index "public.fix_outgoing_n5"
+ Column |         Type         | Key? | Definition 
+--------+----------------------+------+------------
+ status | character varying(4) | yes  | status
+btree, for table "public.fix_outgoing"
+
+              Index "public.fix_outgoing_pk"
+     Column      |     Type      | Key? |   Definition    
+-----------------+---------------+------+-----------------
+ fix_outgoing_id | numeric(18,0) | yes  | fix_outgoing_id
+primary key, btree, for table "public.fix_outgoing"
+
+                            Table "public.fix_server"
+      Column      |            Type             | Collation | Nullable | Default 
+------------------+-----------------------------+-----------+----------+---------
+ fix_server_id    | numeric(18,0)               |           | not null | 
+ fix_server_name  | character varying(50)       |           |          | 
+ poll_interval    | numeric(18,9)               |           |          | 
+ recovery_log     | character varying(255)      |           |          | 
+ ioi_expirer      | character(1)                |           |          | 
+ assign_to        | character varying(50)       |           |          | 
+ status           | character varying(10)       |           |          | 
+ last_active_date | timestamp without time zone |           |          | 
+Indexes:
+    "fix_server_pk" PRIMARY KEY, btree (fix_server_id)
+
+             Index "public.fix_server_pk"
+    Column     |     Type      | Key? |  Definition   
+---------------+---------------+------+---------------
+ fix_server_id | numeric(18,0) | yes  | fix_server_id
+primary key, btree, for table "public.fix_server"
+
+                               Table "public.fix_tag"
+     Column      |            Type             | Collation | Nullable |   Default   
+-----------------+-----------------------------+-----------+----------+-------------
+ tag_id          | numeric(18,0)               |           | not null | 
+ tag_no          | numeric(18,0)               |           | not null | 
+ vendor_typ_cd   | character varying(10)       |           |          | 
+ min_fix_version | numeric(18,0)               |           |          | 
+ max_fix_version | numeric(18,0)               |           |          | 
+ field_name      | character varying(64)       |           | not null | 
+ description     | character varying(256)      |           |          | 
+ data_typ_cd     | character varying(10)       |           | not null | 
+ def_desc_typ_cd | character varying(10)       |           |          | 
+ def_data_typ    | character varying(30)       |           |          | 
+ create_user     | character varying(30)       |           |          | 
+ create_date     | timestamp without time zone |           |          | 
+ last_upd_user   | character varying(30)       |           |          | 
+ last_upd_date   | timestamp without time zone |           |          | 
+ crd_lock        | character(1)                |           | not null | 'N'::bpchar
+Indexes:
+    "fix_tag_pk" PRIMARY KEY, btree (tag_id)
+
+         Index "public.fix_tag_pk"
+ Column |     Type      | Key? | Definition 
+--------+---------------+------+------------
+ tag_id | numeric(18,0) | yes  | tag_id
+primary key, btree, for table "public.fix_tag"
+

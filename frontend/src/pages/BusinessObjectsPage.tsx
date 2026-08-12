@@ -135,11 +135,6 @@ export default function BusinessObjectsPage() {
       'X-Tenant-Region': getSelectedRegion(),
       ...additionalHeaders,
     };
-    // Business Object definitions are tenant-scoped; only send datasource
-    // headers when a datasource/instance is actually selected.
-    if (datasourceId) {
-      headers['X-Tenant-Datasource-ID'] = datasourceId;
-    }
     if (authHeader) {
       headers['Authorization'] = authHeader;
     }
@@ -619,7 +614,7 @@ export default function BusinessObjectsPage() {
               /* Card Grid Layout */
               <Grid container spacing={3}>
                 {filteredBusinessObjects.map((object) => (
-                  <Grid size={{ 'xs': 12, 'sm': 6, 'md': 4, 'lg': 3 }}>
+                  <Grid key={object.id} size={{ 'xs': 12, 'sm': 6, 'md': 4, 'lg': 3 }}>
                     <Card
                       onClick={() => handleViewDetails(object)}
                       sx={{

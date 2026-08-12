@@ -4,6 +4,5 @@
   "embedding_model": "text-embedding-004",
   "params": {
     "temperature": 0.2
-  },
-  "api_key": "AIzaSyBDbX0aqJUtwTHmWUfgVOrpwPgij1oRmQI"
+  }
 }

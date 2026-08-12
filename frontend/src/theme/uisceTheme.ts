@@ -8,7 +8,10 @@ import {
   lightPalette,
   darkPalette,
   uisceAmber,
-  uisceChocolate,
+  uisceOcean,
+  uisceAbyss,
+  uisceTide,
+  uisceGold,
   uisceInk,
   categoryColors,
   semanticSuccess,
@@ -79,7 +82,7 @@ const BASE_FONT_FAMILY = [
   'sans-serif',
 ].join(', ');
 
-function amberFocusRing(hex: string) {
+function oceanFocusRing(hex: string) {
   return {
     '&:focus-visible': {
       outline: `2px solid ${hex}`,
@@ -116,12 +119,23 @@ export function createUisceTheme(mode: 'light' | 'dark'): Theme {
     categoryCalendar:    mode === 'light' ? categoryLight('calendar')    : categoryDark('calendar'),
   };
 
-  const amberMain   = mode === 'light' ? uisceAmber.main : uisceAmber.light;
-  const amberDark   = mode === 'light' ? uisceAmber.dark  : uisceAmber.main;
-  const amberGlow  = mode === 'light' ? uisceAmber.glowLight : uisceAmber.glow;
-  const surfaceBorder = mode === 'light' ? 'rgba(26,15,8,0.08)'  : 'rgba(255,255,255,0.07)';
-  const surfaceBg    = mode === 'light' ? uisceChocolate[700] : '#13161E';
-  const charcoalBg   = '#0A0C12';
+  // ── Water theme color variables ──
+  const oceanMain   = uisceOcean.main;           // #00C9C8 — teal primary
+  const oceanDark   = uisceOcean.dark;           // #00706F
+  const oceanGlow   = mode === 'light' ? uisceOcean.glowLight : uisceOcean.glow;
+  const goldMain    = uisceGold.main;            // #F5A623 — warm amber/gold
+  const goldDark    = uisceGold.dark;
+
+  // Backward compat aliases
+  const amberMain   = oceanMain;
+  const amberDark   = oceanDark;
+  const amberGlow   = oceanGlow;
+
+  // Surface backgrounds
+  const surfaceBorder = mode === 'light' ? uisceTide.border : uisceAbyss.border;
+  const surfaceBg    = mode === 'light' ? '#FFFFFF'         : uisceAbyss[800];  // #071526
+  const deepBg       = mode === 'light' ? uisceTide[50]     : uisceAbyss[900];  // #050D1A
+  const charcoalBg   = mode === 'light' ? uisceTide[100]    : uisceAbyss[950]; // #020810
 
   return createTheme({
     palette,
@@ -184,35 +198,100 @@ export function createUisceTheme(mode: 'light' | 'dark'): Theme {
         styleOverrides: {
           ':root': {
             colorScheme: mode,
+            // ── Uisce design tokens ──────────────────────────────────────
+            '--uisce-ocean':     uisceOcean.main,
+            '--uisce-ocean-glow': uisceOcean.glow,
+            '--uisce-gold':      uisceGold.main,
+            '--uisce-gold-glow': uisceGold.glow,
+            '--uisce-seafoam':   '#0AF5B0',
+            '--uisce-abyss':     uisceAbyss[900],
+            '--uisce-tide':      uisceTide[50],
+            // ── Core / Custom indicators ─────────────────────────────────
+            '--color-core':      uisceGold.main,
+            '--color-custom':    uisceOcean.main,
+            '--color-core-glow': uisceGold.glow,
+            '--color-custom-glow': uisceOcean.glow,
           },
           html: {
             scrollBehavior: 'smooth',
+          },
+          // ── Aurora wave animation (dark) / Tidal shimmer (light) ──────
+          '@keyframes uisce-aurora': {
+            '0%':   { backgroundPosition: '0% 50%' },
+            '50%':  { backgroundPosition: '100% 50%' },
+            '100%': { backgroundPosition: '0% 50%' },
+          },
+          '@keyframes uisce-ripple': {
+            '0%':   { transform: 'scale(1)', opacity: 0.4 },
+            '50%':  { transform: 'scale(1.04)', opacity: 0.6 },
+            '100%': { transform: 'scale(1)', opacity: 0.4 },
+          },
+          '@keyframes uisce-flow': {
+            '0%':   { backgroundPosition: '200% center' },
+            '100%': { backgroundPosition: '-200% center' },
+          },
+          // Body background — deep ocean aurora in dark, tidal wash in light
+          body: {
+            background: mode === 'dark'
+              ? `radial-gradient(ellipse at 20% 20%, ${alpha(uisceOcean.main, 0.06)} 0%, transparent 50%),
+                 radial-gradient(ellipse at 80% 80%, ${alpha('#0AF5B0', 0.04)} 0%, transparent 50%),
+                 radial-gradient(ellipse at 60% 40%, ${alpha(uisceGold.main, 0.03)} 0%, transparent 40%),
+                 ${uisceAbyss[900]}`
+              : `radial-gradient(ellipse at 30% 0%, ${alpha(uisceOcean.main, 0.06)} 0%, transparent 60%),
+                 radial-gradient(ellipse at 70% 100%, ${alpha(uisceOcean[300], 0.08)} 0%, transparent 50%),
+                 ${uisceTide[50]}`,
+            backgroundAttachment: 'fixed',
           },
           '::-webkit-scrollbar': {
             width: 6,
             height: 6,
           },
           '::-webkit-scrollbar-track': {
-            background: mode === 'light' ? '#f1f5f9' : charcoalBg,
+            background: mode === 'light' ? uisceTide[100] : uisceAbyss[900],
           },
           '::-webkit-scrollbar-thumb': {
             background: mode === 'light'
-              ? `${uisceAmber.main}55`
-              : `${uisceAmber.main}44`,
+              ? `${uisceOcean.main}55`
+              : `${uisceOcean.main}44`,
             borderRadius: 3,
             '&:hover': {
-              background: mode === 'light'
-                ? `${uisceAmber.main}88`
-                : `${uisceAmber.main}88`,
+              background: `${uisceOcean.main}99`,
             },
           },
           '::selection': {
-            background: amberGlow,
-            color: mode === 'light' ? uisceChocolate[900] : '#ffffff',
+            background: mode === 'light'
+              ? alpha(uisceOcean.main, 0.20)
+              : alpha(uisceOcean.main, 0.35),
+            color: mode === 'light' ? uisceAbyss[900] : '#E8F4FF',
           },
           ':focus-visible': {
-            outline: `2px solid ${amberMain}`,
+            outline: `2px solid ${oceanMain}`,
             outlineOffset: 2,
+          },
+          // ── Glassmorphism utility class ────────────────────────────────
+          '.uisce-glass': {
+            background: mode === 'dark'
+              ? `rgba(7, 21, 38, 0.75)`
+              : `rgba(255, 255, 255, 0.80)`,
+            backdropFilter: 'blur(16px) saturate(180%)',
+            WebkitBackdropFilter: 'blur(16px) saturate(180%)',
+            border: `1px solid ${mode === 'dark' ? uisceAbyss.border : uisceTide.border}`,
+          },
+          // ── Ocean glow utilities ───────────────────────────────────────
+          '.uisce-glow-ocean': {
+            boxShadow: `0 0 20px ${alpha(uisceOcean.main, 0.4)}, 0 0 40px ${alpha(uisceOcean.main, 0.2)}`,
+          },
+          '.uisce-glow-gold': {
+            boxShadow: `0 0 20px ${alpha(uisceGold.main, 0.4)}, 0 0 40px ${alpha(uisceGold.main, 0.2)}`,
+          },
+          // ── Core (gold) / Custom (teal) indicator strips ───────────────
+          '.indicator-core': {
+            borderLeft: `3px solid ${uisceGold.main}`,
+            boxShadow: `inset 3px 0 12px ${alpha(uisceGold.main, 0.15)}`,
+          },
+          '.indicator-custom': {
+            borderLeft: `3px solid ${uisceOcean.main}`,
+            boxShadow: `inset 3px 0 12px ${alpha(uisceOcean.main, 0.15)}`,
           },
         },
       },
@@ -223,24 +302,26 @@ export function createUisceTheme(mode: 'light' | 'dark'): Theme {
         styleOverrides: {
           root: {
             background: mode === 'light'
-              ? 'rgba(255,255,255,0.85)'
-              : `linear-gradient(180deg, ${charcoalBg} 0%, ${surfaceBg} 100%)`,
-            backdropFilter: mode === 'light' ? 'blur(12px) saturate(160%)' : 'blur(16px) saturate(140%)',
+              ? 'rgba(240,250,252,0.88)'
+              : `linear-gradient(180deg, ${uisceAbyss[950]} 0%, ${uisceAbyss[900]} 100%)`,
+            backdropFilter: 'blur(20px) saturate(180%)',
+            WebkitBackdropFilter: 'blur(20px) saturate(180%)',
             borderBottom: `1px solid ${surfaceBorder}`,
             boxShadow: 'none',
             color: p.text.primary,
-            ...(mode === 'dark' && {
-              '&::after': {
-                content: '""',
-                position: 'absolute',
-                bottom: 0,
-                left: 0,
-                right: 0,
-                height: '1px',
-                background: `linear-gradient(90deg, transparent 0%, ${amberMain} 40%, ${amberMain} 60%, transparent 100%)`,
-                opacity: 0.35,
-              },
-            }),
+            // Teal light seam at base — like light refracted through water
+            '&::after': {
+              content: '""',
+              position: 'absolute',
+              bottom: 0,
+              left: 0,
+              right: 0,
+              height: '1px',
+              background: mode === 'dark'
+                ? `linear-gradient(90deg, transparent 0%, ${uisceOcean.main} 30%, ${alpha('#0AF5B0', 0.8)} 70%, transparent 100%)`
+                : `linear-gradient(90deg, transparent 0%, ${uisceOcean.main} 30%, ${uisceOcean[400]} 70%, transparent 100%)`,
+              opacity: mode === 'dark' ? 0.45 : 0.30,
+            },
           },
         },
       },
@@ -270,53 +351,52 @@ export function createUisceTheme(mode: 'light' | 'dark'): Theme {
             },
           },
           contained: {
-            background: `linear-gradient(135deg, ${amberMain} 0%, ${amberDark} 100%)`,
-            color: mode === 'light' ? uisceInk.DEFAULT : '#ffffff',
-            boxShadow: `0 2px 8px ${alpha(amberMain, 0.35)}`,
+            background: `linear-gradient(135deg, ${oceanMain} 0%, ${oceanDark} 100%)`,
+            color: '#FFFFFF',
+            boxShadow: `0 2px 8px ${alpha(oceanMain, 0.35)}`,
             '&:hover': {
-              background: `linear-gradient(135deg, ${amberDark} 0%, ${amberMain} 100%)`,
-              boxShadow: `0 4px 16px ${alpha(amberMain, 0.45)}`,
+              background: `linear-gradient(135deg, ${alpha(oceanMain, 0.85)} 0%, ${oceanMain} 100%)`,
+              boxShadow: `0 4px 20px ${alpha(oceanMain, 0.50)}`,
             },
             '&:active': {
               transform: 'translateY(0)',
             },
           },
           containedSecondary: {
-            background: mode === 'light'
-              ? uisceChocolate[700]
-              : `linear-gradient(135deg, ${uisceChocolate[700]} 0%, ${uisceChocolate[600]} 100%)`,
-            color: '#ffffff',
+            background: `linear-gradient(135deg, ${goldMain} 0%, ${goldDark} 100%)`,
+            color: mode === 'light' ? '#1A0A00' : '#050D1A',
+            boxShadow: `0 2px 8px ${alpha(goldMain, 0.35)}`,
             '&:hover': {
-              background: mode === 'light' ? uisceChocolate[600] : uisceChocolate[900],
-              boxShadow: `0 4px 12px ${alpha(uisceChocolate[700], 0.4)}`,
+              boxShadow: `0 4px 20px ${alpha(goldMain, 0.50)}`,
             },
           },
           outlined: {
-            borderColor: amberMain,
-            color: amberMain,
+            borderColor: alpha(oceanMain, 0.60),
+            color: oceanMain,
             '&:hover': {
-              borderColor: amberDark,
-              background: alpha(amberMain, 0.06),
+              borderColor: oceanMain,
+              background: alpha(oceanMain, 0.06),
+              boxShadow: `0 0 12px ${alpha(oceanMain, 0.15)}`,
             },
           },
           outlinedSecondary: {
-            borderColor: surfaceBorder,
-            color: p.text.primary,
+            borderColor: alpha(goldMain, 0.50),
+            color: goldMain,
             '&:hover': {
-              borderColor: mode === 'light' ? uisceChocolate[600] : uisceChocolate[600],
-              background: alpha(surfaceBg, 0.04),
+              borderColor: goldMain,
+              background: alpha(goldMain, 0.06),
             },
           },
           text: {
-            color: amberMain,
+            color: oceanMain,
             '&:hover': {
-              background: alpha(amberMain, 0.06),
+              background: alpha(oceanMain, 0.06),
             },
           },
           textSecondary: {
             color: p.text.secondary,
             '&:hover': {
-              background: alpha(surfaceBg, 0.04),
+              background: alpha(oceanMain, 0.04),
               color: p.text.primary,
             },
           },
@@ -328,7 +408,7 @@ export function createUisceTheme(mode: 'light' | 'dark'): Theme {
             fontSize: '0.9375rem',
             padding: '10px 24px',
           },
-          ...amberFocusRing(amberMain),
+          ...oceanFocusRing(oceanMain),
         },
       },
       MuiIconButton: {
@@ -338,10 +418,10 @@ export function createUisceTheme(mode: 'light' | 'dark'): Theme {
             transition: 'all 150ms ease',
             color: p.text.secondary,
             '&:hover': {
-              background: alpha(amberMain, 0.08),
-              color: amberMain,
+              background: alpha(oceanMain, 0.08),
+              color: oceanMain,
             },
-            ...amberFocusRing(amberMain),
+            ...oceanFocusRing(oceanMain),
           },
         },
       },
@@ -359,18 +439,20 @@ export function createUisceTheme(mode: 'light' | 'dark'): Theme {
             borderRadius: 6,
           },
           filled: {
-            backgroundColor: alpha(amberMain, 0.10),
-            color: amberMain,
-            border: `1px solid ${alpha(amberMain, 0.25)}`,
+            backgroundColor: alpha(oceanMain, 0.10),
+            color: mode === 'dark' ? uisceOcean.light : oceanMain,
+            border: `1px solid ${alpha(oceanMain, 0.30)}`,
             '&:hover': {
-              backgroundColor: alpha(amberMain, 0.16),
+              backgroundColor: alpha(oceanMain, 0.18),
+              boxShadow: `0 0 8px ${alpha(oceanMain, 0.25)}`,
             },
           },
           outlined: {
-            borderColor: alpha(amberMain, 0.40),
-            color: amberMain,
+            borderColor: alpha(oceanMain, 0.45),
+            color: mode === 'dark' ? uisceOcean.light : oceanMain,
             '&:hover': {
-              backgroundColor: alpha(amberMain, 0.08),
+              backgroundColor: alpha(oceanMain, 0.08),
+              borderColor: oceanMain,
             },
           },
           sizeSmall: {
@@ -388,10 +470,15 @@ export function createUisceTheme(mode: 'light' | 'dark'): Theme {
             backgroundImage: 'none',
             border: `1px solid ${surfaceBorder}`,
             borderRadius: 12,
+            // Subtle water-glass sheen in dark mode
+            ...(mode === 'dark' && {
+              background: `linear-gradient(135deg, ${uisceAbyss[800]} 0%, ${uisceAbyss[700]} 100%)`,
+            }),
           },
           elevation1: {
-            boxShadow: 'none',
-            border: `1px solid ${surfaceBorder}`,
+            boxShadow: mode === 'dark'
+              ? `0 2px 8px rgba(0,0,0,0.3), 0 0 0 1px ${uisceAbyss.border}`
+              : `0 1px 3px ${alpha(uisceOcean.main, 0.06)}, 0 2px 8px ${alpha(uisceOcean.main, 0.04)}`,
           },
         },
       },
@@ -401,18 +488,16 @@ export function createUisceTheme(mode: 'light' | 'dark'): Theme {
           root: {
             backgroundImage: 'none',
             border: `1px solid ${surfaceBorder}`,
-            borderRadius: 12,
+            borderRadius: 14,
             boxShadow: mode === 'light'
-              ? '0 1px 3px rgba(13,27,110,0.06), 0 2px 8px rgba(13,27,110,0.04)'
-              : '0 2px 8px rgba(0,0,0,0.3), 0 4px 16px rgba(0,0,0,0.2)',
-            transition: 'box-shadow 200ms ease, border-color 200ms ease',
+              ? `0 1px 3px ${alpha(uisceOcean.main, 0.06)}, 0 2px 8px ${alpha(uisceOcean.main, 0.04)}`
+              : `0 2px 8px rgba(0,0,0,0.30), 0 4px 16px rgba(0,0,0,0.20)`,
+            transition: 'box-shadow 200ms ease, border-color 200ms ease, transform 200ms ease',
             '&:hover': {
-              borderColor: mode === 'light'
-                ? 'rgba(13,27,110,0.16)'
-                : alpha(amberMain, 0.40),
+              borderColor: alpha(oceanMain, mode === 'light' ? 0.30 : 0.40),
               boxShadow: mode === 'light'
-                ? '0 4px 12px rgba(13,27,110,0.10), 0 8px 24px rgba(13,27,110,0.06)'
-                : `0 4px 16px rgba(0,0,0,0.5), 0 8px 32px ${alpha(amberMain, 0.12)}`,
+                ? `0 4px 16px ${alpha(oceanMain, 0.12)}, 0 8px 32px ${alpha(oceanMain, 0.06)}`
+                : `0 4px 20px rgba(0,0,0,0.50), 0 8px 40px ${alpha(oceanMain, 0.15)}`,
             },
           },
         },
@@ -424,15 +509,15 @@ export function createUisceTheme(mode: 'light' | 'dark'): Theme {
         styleOverrides: {
           paper: {
             background: mode === 'light'
-              ? 'rgba(255,255,255,0.96)'
-              : surfaceBg,
-            backdropFilter: mode === 'light' ? 'blur(12px)' : 'blur(20px)',
-            WebkitBackdropFilter: mode === 'light' ? 'blur(12px)' : 'blur(20px)',
+              ? 'rgba(240,250,252,0.96)'
+              : `rgba(7, 21, 38, 0.95)`,
+            backdropFilter: 'blur(20px) saturate(180%)',
+            WebkitBackdropFilter: 'blur(20px) saturate(180%)',
             border: `1px solid ${surfaceBorder}`,
-            borderRadius: 10,
+            borderRadius: 12,
             boxShadow: mode === 'light'
-              ? '0 4px 12px rgba(13,27,110,0.08), 0 16px 40px rgba(13,27,110,0.10)'
-              : '0 8px 32px rgba(0,0,0,0.6)',
+              ? `0 4px 16px ${alpha(uisceOcean.main, 0.08)}, 0 16px 48px ${alpha(uisceOcean.main, 0.06)}`
+              : `0 8px 40px rgba(0,0,0,0.65), 0 0 0 1px ${uisceAbyss.border}`,
             padding: '4px 0',
           },
         },
@@ -449,16 +534,16 @@ export function createUisceTheme(mode: 'light' | 'dark'): Theme {
             borderLeft: `3px solid transparent`,
             transition: 'all 150ms ease',
             '&:hover': {
-              background: alpha(amberMain, 0.06),
-              color: amberMain,
+              background: alpha(oceanMain, 0.08),
+              color: mode === 'dark' ? uisceOcean.light : oceanMain,
             },
             '&.Mui-selected': {
-              background: alpha(amberMain, 0.10),
-              color: amberMain,
-              borderLeftColor: amberMain,
+              background: alpha(oceanMain, 0.12),
+              color: mode === 'dark' ? uisceOcean.light : oceanMain,
+              borderLeftColor: oceanMain,
               fontWeight: 600,
               '&:hover': {
-                background: alpha(amberMain, 0.14),
+                background: alpha(oceanMain, 0.16),
               },
             },
           },
@@ -481,15 +566,15 @@ export function createUisceTheme(mode: 'light' | 'dark'): Theme {
             transition: 'all 150ms ease',
             borderLeft: `3px solid transparent`,
             '&:hover': {
-              background: alpha(amberMain, 0.06),
-              color: amberMain,
+              background: alpha(oceanMain, 0.08),
+              color: mode === 'dark' ? uisceOcean.light : oceanMain,
             },
             '&.Mui-selected': {
-              background: alpha(amberMain, 0.10),
-              color: amberMain,
-              borderLeftColor: amberMain,
+              background: alpha(oceanMain, 0.12),
+              color: mode === 'dark' ? uisceOcean.light : oceanMain,
+              borderLeftColor: oceanMain,
               fontWeight: 600,
-              '&:hover': { background: alpha(amberMain, 0.14) },
+              '&:hover': { background: alpha(oceanMain, 0.16) },
             },
           },
         },
@@ -499,9 +584,13 @@ export function createUisceTheme(mode: 'light' | 'dark'): Theme {
       MuiDrawer: {
         styleOverrides: {
           paper: {
-            background: mode === 'light' ? '#ffffff' : charcoalBg,
+            background: mode === 'light'
+              ? `linear-gradient(180deg, ${uisceTide[50]} 0%, ${uisceTide[100]} 100%)`
+              : `linear-gradient(180deg, ${uisceAbyss[950]} 0%, ${uisceAbyss[900]} 100%)`,
             borderRight: `1px solid ${surfaceBorder}`,
-            boxShadow: mode === 'dark' ? '2px 0 8px rgba(0,0,0,0.3)' : 'none',
+            boxShadow: mode === 'dark'
+              ? `2px 0 20px rgba(0,0,0,0.4), 1px 0 0 ${uisceAbyss.border}`
+              : `2px 0 12px ${alpha(uisceOcean.main, 0.06)}`,
           },
         },
       },
@@ -512,7 +601,8 @@ export function createUisceTheme(mode: 'light' | 'dark'): Theme {
           indicator: {
             height: 3,
             borderRadius: '3px 3px 0 0',
-            background: `linear-gradient(90deg, ${amberMain} 0%, ${amberDark} 100%)`,
+            background: `linear-gradient(90deg, ${oceanMain} 0%, ${alpha('#0AF5B0', 0.9)} 100%)`,
+            boxShadow: `0 0 8px ${alpha(oceanMain, 0.5)}`,
           },
         },
       },
@@ -524,14 +614,14 @@ export function createUisceTheme(mode: 'light' | 'dark'): Theme {
             fontSize: '0.875rem',
             minHeight: 44,
             color: p.text.secondary,
-            transition: 'color 150ms ease',
+            transition: 'all 150ms ease',
             '&.Mui-selected': {
-              color: amberMain,
+              color: mode === 'dark' ? uisceOcean.light : oceanMain,
               fontWeight: 700,
             },
             '&:hover': {
-              color: amberMain,
-              background: alpha(amberMain, 0.04),
+              color: mode === 'dark' ? uisceOcean.light : oceanMain,
+              background: alpha(oceanMain, 0.05),
             },
           },
         },
@@ -543,23 +633,23 @@ export function createUisceTheme(mode: 'light' | 'dark'): Theme {
           root: { padding: 8 },
           switchBase: {
             '&.Mui-checked': {
-              color: amberMain,
+              color: oceanMain,
               '& + .MuiSwitch-track': {
-                background: amberMain,
-                opacity: 0.5,
+                background: oceanMain,
+                opacity: 0.55,
               },
             },
           },
           track: {
             borderRadius: 12,
             background: mode === 'light'
-              ? uisceChocolate[700]
-              : alpha('#ffffff', 0.20),
+              ? alpha(uisceAbyss[700], 0.20)
+              : alpha('#ffffff', 0.18),
           },
           thumb: {
             width: 18,
             height: 18,
-            boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
+            boxShadow: '0 1px 4px rgba(0,0,0,0.25)',
           },
         },
       },
@@ -568,23 +658,26 @@ export function createUisceTheme(mode: 'light' | 'dark'): Theme {
       MuiCheckbox: {
         styleOverrides: {
           root: {
-            color: surfaceBorder,
+            color: alpha(oceanMain, 0.40),
             padding: 6,
             borderRadius: 4,
             transition: 'all 150ms ease',
-            '&:hover': { background: alpha(amberMain, 0.06) },
-            '&.Mui-checked': { color: amberMain },
+            '&:hover': { background: alpha(oceanMain, 0.07) },
+            '&.Mui-checked': {
+              color: oceanMain,
+              filter: mode === 'dark' ? `drop-shadow(0 0 4px ${alpha(oceanMain, 0.5)})` : 'none',
+            },
           },
         },
       },
       MuiRadio: {
         styleOverrides: {
           root: {
-            color: surfaceBorder,
+            color: alpha(oceanMain, 0.40),
             padding: 6,
             transition: 'all 150ms ease',
-            '&:hover': { background: alpha(amberMain, 0.06) },
-            '&.Mui-checked': { color: amberMain },
+            '&:hover': { background: alpha(oceanMain, 0.07) },
+            '&.Mui-checked': { color: oceanMain },
           },
         },
       },
@@ -597,21 +690,24 @@ export function createUisceTheme(mode: 'light' | 'dark'): Theme {
         styleOverrides: {
           root: {
             borderRadius: 8,
-            background: mode === 'light' ? '#ffffff' : alpha(uisceChocolate[700], 0.4),
+            background: mode === 'light'
+              ? 'rgba(255,255,255,0.9)'
+              : alpha(uisceAbyss[700], 0.60),
             transition: 'all 150ms ease',
             '& fieldset': {
               borderColor: surfaceBorder,
               borderWidth: 1,
+              transition: 'border-color 150ms ease, box-shadow 150ms ease',
             },
             '&:hover fieldset': {
-              borderColor: alpha(amberMain, 0.5),
+              borderColor: alpha(oceanMain, 0.55),
             },
             '&.Mui-focused fieldset': {
-              borderColor: amberMain,
+              borderColor: oceanMain,
               borderWidth: 2,
             },
             '&.Mui-focused': {
-              boxShadow: `0 0 0 3px ${alpha(amberMain, 0.15)}`,
+              boxShadow: `0 0 0 3px ${alpha(oceanMain, 0.15)}, 0 0 12px ${alpha(oceanMain, 0.08)}`,
             },
           },
           input: {
@@ -642,7 +738,7 @@ export function createUisceTheme(mode: 'light' | 'dark'): Theme {
             fontSize: '0.875rem',
             fontWeight: 500,
             color: p.text.secondary,
-            '&.Mui-focused': { color: amberMain },
+            '&.Mui-focused': { color: oceanMain },
           },
         },
       },
@@ -658,22 +754,22 @@ export function createUisceTheme(mode: 'light' | 'dark'): Theme {
           root: {
             height: 4,
             '& .MuiSlider-track': {
-              background: amberMain,
+              background: `linear-gradient(90deg, ${oceanMain} 0%, ${alpha('#0AF5B0', 0.9)} 100%)`,
               border: 'none',
             },
             '& .MuiSlider-rail': {
               background: mode === 'light'
-                ? uisceChocolate[700]
+                ? alpha(uisceAbyss[700], 0.12)
                 : alpha('#ffffff', 0.15),
               opacity: 1,
             },
             '& .MuiSlider-thumb': {
               width: 16,
               height: 16,
-              background: amberMain,
-              boxShadow: `0 1px 4px ${alpha(amberMain, 0.4)}`,
+              background: oceanMain,
+              boxShadow: `0 1px 4px ${alpha(oceanMain, 0.5)}, 0 0 0 3px ${alpha(oceanMain, 0.15)}`,
               '&:hover, &.Mui-focusVisible': {
-                boxShadow: `0 2px 8px ${alpha(amberMain, 0.5)}`,
+                boxShadow: `0 2px 10px ${alpha(oceanMain, 0.6)}, 0 0 0 5px ${alpha(oceanMain, 0.15)}`,
               },
             },
           },
@@ -686,19 +782,21 @@ export function createUisceTheme(mode: 'light' | 'dark'): Theme {
           root: {
             borderRadius: 4,
             background: mode === 'light'
-              ? alpha(uisceChocolate[700], 0.08)
-              : alpha('#ffffff', 0.10),
+              ? alpha(uisceOcean.main, 0.10)
+              : alpha(uisceOcean.main, 0.12),
           },
           bar: {
             borderRadius: 4,
-            background: `linear-gradient(90deg, ${amberMain} 0%, ${amberDark} 100%)`,
+            background: `linear-gradient(90deg, ${oceanMain} 0%, ${alpha('#0AF5B0', 0.9)} 100%)`,
+            boxShadow: mode === 'dark' ? `0 0 8px ${alpha(oceanMain, 0.5)}` : 'none',
           },
         },
       },
       MuiCircularProgress: {
         styleOverrides: {
           root: {
-            color: amberMain,
+            color: oceanMain,
+            filter: mode === 'dark' ? `drop-shadow(0 0 6px ${alpha(oceanMain, 0.5)})` : 'none',
           },
         },
       },
@@ -749,18 +847,19 @@ export function createUisceTheme(mode: 'light' | 'dark'): Theme {
         styleOverrides: {
           tooltip: {
             background: mode === 'light'
-              ? `linear-gradient(135deg, ${uisceChocolate[700]} 0%, ${uisceChocolate[900]} 100%)`
-              : `linear-gradient(135deg, ${alpha(surfaceBg, 0.98)} 0%, ${alpha(charcoalBg, 0.95)} 100%)`,
-            color: '#ffffff',
+              ? `linear-gradient(135deg, ${uisceAbyss[800]} 0%, ${uisceAbyss[900]} 100%)`
+              : `linear-gradient(135deg, ${alpha(uisceAbyss[700], 0.98)} 0%, ${alpha(uisceAbyss[800], 0.95)} 100%)`,
+            color: '#E8F4FF',
             fontSize: '0.75rem',
             fontWeight: 500,
-            borderRadius: 6,
-            padding: '5px 10px',
-            boxShadow: `0 4px 12px rgba(0,0,0,0.4)`,
-            border: `1px solid ${alpha(amberMain, 0.15)}`,
+            borderRadius: 8,
+            padding: '6px 10px',
+            boxShadow: `0 4px 16px rgba(0,0,0,0.4), 0 0 0 1px ${alpha(oceanMain, 0.20)}`,
+            border: `1px solid ${alpha(oceanMain, 0.25)}`,
+            backdropFilter: 'blur(8px)',
           },
           arrow: {
-            color: mode === 'light' ? uisceChocolate[700] : surfaceBg,
+            color: uisceAbyss[800],
           },
         },
       },
@@ -769,12 +868,16 @@ export function createUisceTheme(mode: 'light' | 'dark'): Theme {
       MuiDialog: {
         styleOverrides: {
           paper: {
-            background: mode === 'light' ? '#ffffff' : surfaceBg,
+            background: mode === 'light'
+              ? 'rgba(250,253,254,0.98)'
+              : `linear-gradient(145deg, ${uisceAbyss[800]} 0%, ${uisceAbyss[700]} 100%)`,
             border: `1px solid ${surfaceBorder}`,
-            borderRadius: 14,
+            borderRadius: 16,
             boxShadow: mode === 'light'
-              ? '0 20px 60px rgba(13,27,110,0.15), 0 8px 24px rgba(13,27,110,0.08)'
-              : `0 24px 80px rgba(0,0,0,0.7), 0 8px 32px ${alpha(amberMain, 0.10)}`,
+              ? `0 20px 60px ${alpha(uisceOcean.main, 0.12)}, 0 8px 24px ${alpha(uisceOcean.main, 0.08)}`
+              : `0 24px 80px rgba(0,0,0,0.75), 0 8px 40px ${alpha(oceanMain, 0.15)}, 0 0 0 1px ${uisceAbyss.border}`,
+            backdropFilter: 'blur(20px)',
+            WebkitBackdropFilter: 'blur(20px)',
           },
         },
       },
@@ -852,9 +955,15 @@ export function createUisceTheme(mode: 'light' | 'dark'): Theme {
       MuiStepIcon: {
         styleOverrides: {
           root: {
-            color: surfaceBorder,
-            '&.Mui-completed': { color: amberMain },
-            '&.Mui-active': { color: amberMain },
+            color: alpha(oceanMain, 0.25),
+            '&.Mui-completed': {
+              color: oceanMain,
+              filter: mode === 'dark' ? `drop-shadow(0 0 4px ${alpha(oceanMain, 0.5)})` : 'none',
+            },
+            '&.Mui-active': {
+              color: oceanMain,
+              filter: mode === 'dark' ? `drop-shadow(0 0 6px ${alpha(oceanMain, 0.6)})` : 'none',
+            },
           },
         },
       },
@@ -863,8 +972,8 @@ export function createUisceTheme(mode: 'light' | 'dark'): Theme {
           label: {
             fontWeight: 500,
             fontSize: '0.875rem',
-            '&.Mui-completed': { fontWeight: 600, color: amberMain },
-            '&.Mui-active': { fontWeight: 700 },
+            '&.Mui-completed': { fontWeight: 600, color: mode === 'dark' ? uisceOcean.light : oceanMain },
+            '&.Mui-active': { fontWeight: 700, color: mode === 'dark' ? uisceOcean.light : oceanMain },
           },
         },
       },
@@ -873,14 +982,16 @@ export function createUisceTheme(mode: 'light' | 'dark'): Theme {
       MuiTableHead: {
         styleOverrides: {
           root: {
-            background: mode === 'light' ? uisceChocolate[900] : surfaceBg,
+            background: mode === 'light'
+              ? uisceAbyss[800]   // deep ocean header in light too
+              : uisceAbyss[950],  // hadal zone in dark
             '& .MuiTableCell-root': {
-              color: '#ffffff',
+              color: mode === 'dark' ? uisceOcean.light : '#E8F4FF',
               fontWeight: 700,
               fontSize: '0.8125rem',
-              letterSpacing: '0.04em',
+              letterSpacing: '0.06em',
               textTransform: 'uppercase',
-              borderBottom: `1px solid ${alpha(amberMain, 0.20)}`,
+              borderBottom: `1px solid ${alpha(oceanMain, 0.25)}`,
               padding: '10px 16px',
             },
           },
@@ -903,10 +1014,12 @@ export function createUisceTheme(mode: 'light' | 'dark'): Theme {
         styleOverrides: {
           root: {
             transition: 'background 120ms ease',
-            '&:hover': { background: alpha(amberMain, 0.04) },
+            '&:hover': {
+              background: alpha(oceanMain, 0.05),
+            },
             '&.Mui-selected': {
-              background: alpha(amberMain, 0.08),
-              '&:hover': { background: alpha(amberMain, 0.12) },
+              background: alpha(oceanMain, 0.09),
+              '&:hover': { background: alpha(oceanMain, 0.13) },
             },
           },
         },
@@ -976,7 +1089,7 @@ export function createUisceTheme(mode: 'light' | 'dark'): Theme {
         styleOverrides: {
           root: {
             background: mode === 'light'
-              ? alpha(uisceChocolate[700], 0.06)
+              ? alpha(uisceOcean.main, 0.08)
               : alpha('#ffffff', 0.06),
           },
         },
@@ -987,7 +1100,7 @@ export function createUisceTheme(mode: 'light' | 'dark'): Theme {
         styleOverrides: {
           root: {
             background: mode === 'light'
-              ? alpha(uisceChocolate[900], 0.40)
+              ? alpha(uisceAbyss[900], 0.35)
               : alpha(charcoalBg, 0.80),
             backdropFilter: 'blur(4px)',
           },

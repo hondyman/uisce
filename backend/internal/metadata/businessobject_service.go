@@ -1775,8 +1775,10 @@ func (s *BusinessObjectService) loadBOSubtypesAndFields(
 	`
 
 	var legacySubtypes []models.SubtypeDefinition
-	if err := s.db.SelectContext(ctx, &legacySubtypes, subtypeQuery, bo.ID); err != nil {
-		logging.GetLogger().Sugar().Warnf("Warning: failed to load bo_subtypes: %v", err)
+	if _, err := uuid.Parse(bo.ID); err == nil {
+		if err := s.db.SelectContext(ctx, &legacySubtypes, subtypeQuery, bo.ID); err != nil {
+			logging.GetLogger().Sugar().Warnf("Warning: failed to load bo_subtypes: %v", err)
+		}
 	}
 
 	// Load fields for legacy subtypes
@@ -1851,37 +1853,34 @@ func (s *BusinessObjectService) loadBOSubtypesAndFields(
 	// Load entity-level fields (non-subtype fields)
 	var entityFields []models.FieldDefinition
 
-	// MIGRATION STRATEGY: Prefer loading fields from Config JSONB if available
-	// This ensures we get the latest state even if the normalized tables (bo_fields) are out of sync or missing
-	if len(bo.Config) > 0 {
+	fieldQuery := `
+		SELECT id, key, name, COALESCE(display_name, name) AS display_name, COALESCE(technical_name, '') AS technical_name, type AS type,
+		       COALESCE(is_core, false) AS is_core, COALESCE(is_required, false) AS is_required,
+		       COALESCE(is_system, false) AS is_system, COALESCE(description, '') AS description,
+		       COALESCE(reference_entity, '') AS reference_entity, COALESCE(sequence, 0) AS sequence,
+		       created_at, '' AS created_by, created_at AS last_modified_at, 
+		       '' AS last_modified_by
+		FROM bo_fields
+		WHERE business_object_id::text = $1 AND tenant_id::text = $2 AND subtype_id IS NULL
+		ORDER BY sequence
+	`
+
+	// Query bo_fields table for viewTenantID (user tenant context) or bo.TenantID (master BO tenant context)
+	if err := s.db.SelectContext(ctx, &entityFields, fieldQuery, bo.ID, viewTenantID); err != nil || len(entityFields) == 0 {
+		if err := s.db.SelectContext(ctx, &entityFields, fieldQuery, bo.ID, bo.TenantID); err != nil {
+			logging.GetLogger().Sugar().Warnf("Warning: failed to load entity fields (new schema): %v", err)
+		}
+	}
+
+	// MIGRATION STRATEGY: Load fields from Config JSONB if bo_fields returned nothing
+	if len(entityFields) == 0 && len(bo.Config) > 0 {
 		var configMap map[string]interface{}
 		if err := json.Unmarshal(bo.Config, &configMap); err == nil {
 			if fieldsRaw, ok := configMap["fields"]; ok {
-				// Marshal/Unmarshal to convert map structures to FieldDefinition slice
 				if fieldsJSON, err := json.Marshal(fieldsRaw); err == nil {
 					_ = json.Unmarshal(fieldsJSON, &entityFields)
 				}
 			}
-		}
-	}
-
-	fieldQuery := `
-		SELECT id, key, name, display_label AS display_name, COALESCE(technical_name, '') AS technical_name, field_type AS type,
-		       COALESCE(is_core, false) AS is_core, COALESCE(is_required, false) AS is_required,
-		       COALESCE(is_system_field, false) AS is_system, COALESCE(description, '') AS description,
-		       COALESCE(reference_bo_id::text, '') AS reference_entity, COALESCE(display_order, 0) AS sequence,
-		       created_at, '' AS created_by, created_at AS last_modified_at, 
-		       '' AS last_modified_by,
-		       COALESCE(CAST(semantic_term_id AS text), '') AS semantic_term_id
-		FROM bo_fields
-		WHERE business_object_id::text = $1 AND tenant_id::text = $2 AND subtype_id IS NULL
-		ORDER BY display_order
-	`
-
-	// If config didn't yield fields, try the DB tables
-	if len(entityFields) == 0 {
-		if err := s.db.SelectContext(ctx, &entityFields, fieldQuery, bo.ID, bo.TenantID); err != nil {
-			logging.GetLogger().Sugar().Warnf("Warning: failed to load entity fields (new schema): %v", err)
 		}
 	}
 
@@ -1939,6 +1938,56 @@ func (s *BusinessObjectService) loadBOSubtypesAndFields(
 			bo.CustomFields = append(bo.CustomFields, field)
 		}
 	}
+
+	// Load physical source bindings for this Business Object
+	bo.Bindings = []map[string]interface{}{}
+	type bindingRow struct {
+		BoBindingId   string `db:"bo_binding_id"`
+		BindingName   string `db:"binding_name"`
+		BackendId     string `db:"backend_id"`
+		NodeName      string `db:"node_name"`
+		QualifiedPath string `db:"qualified_path"`
+		IsCore        bool   `db:"is_core"`
+		IsActive      bool   `db:"is_active"`
+		TemporalMode  string `db:"temporal_mode"`
+	}
+	var bRows []bindingRow
+	bindingQuery := `
+		SELECT bob.bo_binding_id, bob.binding_name, COALESCE(bob.backend_id::text, '') AS backend_id,
+		       COALESCE(cn.node_name, '') AS node_name, COALESCE(cn.qualified_path, '') AS qualified_path,
+		       COALESCE(bob.is_core, false) AS is_core, COALESCE(bob.is_active, true) AS is_active,
+		       COALESCE(bob.temporal_mode, 'NONE') AS temporal_mode
+		FROM business_object_binding bob
+		LEFT JOIN catalog_node cn ON bob.driving_node_id = cn.id
+		WHERE bob.bo_id::text = $1 AND (bob.tenant_id::text = $2 OR bob.tenant_id::text = $3)
+	`
+	if err := s.db.SelectContext(ctx, &bRows, bindingQuery, bo.ID, viewTenantID, bo.TenantID); err != nil {
+		logging.GetLogger().Sugar().Warnf("Warning: failed to load bindings for BO %s: %v", bo.ID, err)
+	}
+	if len(bRows) == 0 {
+		fallbackBindingQuery := `
+			SELECT bob.bo_binding_id, bob.binding_name, COALESCE(bob.backend_id::text, '') AS backend_id,
+			       COALESCE(cn.node_name, '') AS node_name, COALESCE(cn.qualified_path, '') AS qualified_path,
+			       COALESCE(bob.is_core, false) AS is_core, COALESCE(bob.is_active, true) AS is_active,
+			       COALESCE(bob.temporal_mode, 'NONE') AS temporal_mode
+			FROM business_object_binding bob
+			LEFT JOIN catalog_node cn ON bob.driving_node_id = cn.id
+			WHERE bob.bo_id::text = $1
+		`
+		_ = s.db.SelectContext(ctx, &bRows, fallbackBindingQuery, bo.ID)
+	}
+		for _, b := range bRows {
+			bo.Bindings = append(bo.Bindings, map[string]interface{}{
+				"boBindingId":     b.BoBindingId,
+				"bindingName":     b.BindingName,
+				"backendId":       b.BackendId,
+				"drivingNodeName": b.QualifiedPath,
+				"nodeName":        b.NodeName,
+				"isCore":          b.IsCore,
+				"isActive":        b.IsActive,
+				"temporalMode":    b.TemporalMode,
+			})
+		}
 
 	return nil
 }
@@ -2476,22 +2525,20 @@ func (s *BusinessObjectService) GetBusinessObjectRelationships(ctx context.Conte
 	relatedQuery := `
 		SELECT 
 			CASE 
-				WHEN e.source_node_id = $1::uuid THEN t.name 
-				ELSE src.name 
+				WHEN e.source_node_id = $1::uuid THEN COALESCE(t.node_name, t.qualified_path)
+				ELSE COALESCE(src.node_name, src.qualified_path)
 			END as related_object_name,
-			e.edge_type_name as relationship_type,
-			COALESCE(e.fk_column, '') || ' ' || COALESCE(e.cardinality, '') as description
+			COALESCE(e.relationship_type, 'RELATED_TO') as relationship_type,
+			COALESCE(t.qualified_path, src.qualified_path, '') as description
 		FROM catalog_edge e
 		JOIN catalog_node src ON e.source_node_id = src.id
 		JOIN catalog_node t ON e.target_node_id = t.id
 		WHERE (e.source_node_id = $1::uuid OR e.target_node_id = $1::uuid)
 	`
-	// Note: We might want to filter out edges to columns, but for now assuming table-to-table edges are direct
 
 	err = s.db.SelectContext(ctx, &response.RelatedObjects, relatedQuery, driverTableID.String)
 	if err != nil {
 		logging.GetLogger().Sugar().Warnf("Failed to fetch related objects for BO %s: %v", boID, err)
-		// Don't fail the whole request
 	}
 
 	// 3. Find semantic field mappings

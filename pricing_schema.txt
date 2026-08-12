@@ -1,0 +1,92 @@
+                                     Table "public.csm_yield_curve"
+        Column        |            Type             | Collation | Nullable |          Default           
+----------------------+-----------------------------+-----------+----------+----------------------------
+ curve_id             | numeric(18,0)               |           | not null | 
+ curve_name           | character varying(100)      |           | not null | 
+ short_name           | character varying(50)       |           | not null | 
+ crrncy_cd            | character varying(3)        |           | not null | 
+ cntry_cd             | character varying(3)        |           |          | 
+ curve_calc_type      | character varying(10)       |           | not null | 
+ indust_class_cd      | character varying(5)        |           |          | 
+ indust_cd            | character varying(20)       |           |          | 
+ rater_cd             | character varying(15)       |           |          | 
+ rating_cd            | character varying(25)       |           |          | 
+ fill_type            | character varying(10)       |           |          | 
+ curve_categ          | character varying(10)       |           | not null | 'SWAP'::character varying
+ source               | character varying(10)       |           | not null | 
+ source_curve_id      | numeric(18,0)               |           |          | 
+ default_curve_ind    | character(1)                |           | not null | 'Y'::bpchar
+ shock_base_ind       | character(1)                |           | not null | 'N'::bpchar
+ exch_cd              | character varying(4)        |           |          | 
+ spread_cd            | character varying(10)       |           |          | 
+ tod_cd               | character varying(10)       |           |          | 
+ poll_freq            | numeric(10,0)               |           |          | 
+ start_poll_time      | timestamp without time zone |           |          | 
+ end_poll_time        | timestamp without time zone |           |          | 
+ last_poll_time       | timestamp without time zone |           |          | 
+ issuer_cd            | character varying(20)       |           |          | 
+ cmpd_freq            | character varying(10)       |           | not null | 'S'::character varying
+ day_basis            | character varying(10)       |           | not null | '4'::character varying
+ smooth_freq          | character varying(10)       |           | not null | 'Q'::character varying
+ cpn_bus_day_adjmt    | character varying(10)       |           | not null | 'NOADJ'::character varying
+ btstrp_method        | character varying(10)       |           | not null | '1'::character varying
+ pymnt_freq           | character varying(10)       |           | not null | 'S'::character varying
+ cash_curve_id        | numeric(18,0)               |           |          | 
+ ftr_curve_id         | numeric(18,0)               |           |          | 
+ curve_sub_type       | character varying(10)       |           |          | 
+ ext_curve_id         | character varying(50)       |           |          | 
+ import_ind           | character(1)                |           | not null | 'N'::bpchar
+ rtapi_ind            | character(1)                |           | not null | 'N'::bpchar
+ rtapi_live_data_ind  | character(1)                |           |          | 
+ rtapi_hist_avail_ind | character(1)                |           |          | 
+ rtapi_bid_avail_ind  | character(1)                |           |          | 
+ rtapi_ask_avail_ind  | character(1)                |           |          | 
+ crd_lock             | character(1)                |           | not null | 'N'::bpchar
+ rate_type_cd         | character varying(10)       |           |          | 
+ to_crrncy            | character varying(3)        |           |          | 
+ apply_convexity_ind  | character(1)                |           | not null | 'N'::bpchar
+ vltlty               | numeric(18,9)               |           |          | 
+ mean_reversion_const | double precision            |           |          | 
+ last_upd_date        | timestamp without time zone |           |          | 
+ last_upd_user        | character varying(30)       |           |          | 
+ swap_curve_id        | numeric(18,0)               |           |          | 
+ cash_rate_intvl_cd   | character varying(10)       |           |          | 
+ ftr_rate_intvl_cd    | character varying(10)       |           |          | 
+ swap_rate_intvl_cd   | character varying(10)       |           |          | 
+ optn_typ_cd          | character varying(10)       |           |          | 
+ data_format_cd       | character varying(10)       |           |          | 
+ min_liquid_vol       | numeric(18,0)               |           |          | 
+ max_ask_bid_spread   | numeric(18,6)               |           |          | 
+ ref_sec_id           | numeric(18,0)               |           |          | 
+ min_open_interest    | numeric(18,6)               |           |          | 
+Indexes:
+    "csm_yield_curve_pk" PRIMARY KEY, btree (curve_id)
+    "csm_yield_curve_n1" btree (curve_name)
+    "csm_yield_curve_n10" btree (to_crrncy)
+    "csm_yield_curve_n11" btree (ref_sec_id)
+    "csm_yield_curve_n2" btree (source_curve_id)
+    "csm_yield_curve_n3" btree (crrncy_cd)
+    "csm_yield_curve_n4" UNIQUE, btree (short_name)
+    "csm_yield_curve_n5" btree (ext_curve_id)
+    "csm_yield_curve_n6" btree (cntry_cd)
+    "csm_yield_curve_n7" btree (indust_class_cd, indust_cd)
+    "csm_yield_curve_n8" btree (rater_cd, rating_cd)
+    "csm_yield_curve_n9" btree (exch_cd)
+Referenced by:
+    TABLE "ts_determ_yield_curve" CONSTRAINT "ts_determ_yield_curve_fk2" FOREIGN KEY (disc_curve_id) REFERENCES csm_yield_curve(curve_id)
+    TABLE "ts_determ_yield_curve" CONSTRAINT "ts_determ_yield_curve_fk3" FOREIGN KEY (bench_curve_id) REFERENCES csm_yield_curve(curve_id)
+
+                           Table "public.pma_fxrate"
+     Column     |            Type             | Collation | Nullable | Default 
+----------------+-----------------------------+-----------+----------+---------
+ base_crrncy    | character varying(3)        |           | not null | 
+ counter_crrncy | character varying(3)        |           | not null | 
+ eff_date       | timestamp without time zone |           | not null | 
+ fx_rate        | numeric(18,9)               |           | not null | 
+Indexes:
+    "pma_fxrate_pk" PRIMARY KEY, btree (base_crrncy, counter_crrncy, eff_date)
+    "pma_fxrate_n1" btree (counter_crrncy)
+Foreign-key constraints:
+    "pma_fxrate_fk1" FOREIGN KEY (base_crrncy) REFERENCES csm_currency(crrncy_cd)
+    "pma_fxrate_fk2" FOREIGN KEY (counter_crrncy) REFERENCES csm_currency(crrncy_cd)
+

@@ -429,11 +429,53 @@ export const BusinessObjectWizard: React.FC<BusinessObjectWizardProps> = ({
   // Render Steps
   // ============================================================================
 
-  const renderStep1 = () => (
+  const renderStep1 = () => {
+    const topTables = [...tables]
+      .sort((a, b) => ((b as any).termCount || 0) - ((a as any).termCount || 0))
+      .slice(0, 3);
+
+    return (
     <Box sx={{ p: 2 }}>
       <Typography variant="subtitle1" gutterBottom sx={{ fontWeight: 500 }}>
         Select the primary table that drives this business object
       </Typography>
+
+      {topTables.length > 0 && (
+        <Paper 
+          variant="outlined" 
+          sx={{ 
+            p: 2, 
+            mb: 3, 
+            borderColor: 'warning.main',
+            bgcolor: '#fffbf0',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 1
+          }}
+        >
+          <Typography variant="subtitle2" color="warning.main" sx={{ display: 'flex', alignItems: 'center', gap: 1, fontWeight: 700 }}>
+            <span>⬡</span> AI Centrality Recommendations
+          </Typography>
+          <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+            {topTables.map(t => (
+              <Chip 
+                key={t.id} 
+                label={t.node_name} 
+                onClick={() => { setSelectedTable(t); loadWizardContext(t.id); }}
+                sx={{ 
+                  borderColor: 'warning.main', 
+                  color: 'warning.dark',
+                  fontWeight: 600,
+                  bgcolor: 'transparent',
+                  '&:hover': { bgcolor: '#fef7e1' }
+                }}
+                variant="outlined"
+                clickable
+              />
+            ))}
+          </Box>
+        </Paper>
+      )}
 
       <Autocomplete
         options={tables}
@@ -468,33 +510,47 @@ export const BusinessObjectWizard: React.FC<BusinessObjectWizardProps> = ({
         )}
       />
 
+      {loading && !wizardContext && (
+        <Box sx={{ mt: 3, display: 'flex', justifyContent: 'center' }}>
+          <CircularProgress />
+        </Box>
+      )}
+
       {selectedTable && wizardContext && (
-        <Card sx={{ mt: 3 }} variant="outlined">
+        <Card sx={{ mt: 3, bgcolor: '#1e1e1e', color: '#fff', borderColor: 'warning.main', borderWidth: 2 }} variant="outlined">
           <CardContent>
-            <Typography variant="h6" gutterBottom>
-              <StorageIcon sx={{ mr: 1, verticalAlign: 'middle' }} />
+            <Typography variant="h6" gutterBottom sx={{ color: 'warning.main', display: 'flex', alignItems: 'center' }}>
+              <StorageIcon sx={{ mr: 1 }} />
               {wizardContext.drivingTable.name}
             </Typography>
             <Grid container spacing={2}>
-              <Grid size={4}>
-                <Typography variant="body2" color="text.secondary">
+              <Grid size={3}>
+                <Typography variant="body2" sx={{ color: '#aaa' }}>
                   Columns
                 </Typography>
                 <Typography variant="h5">{wizardContext.drivingTable.columnCount}</Typography>
               </Grid>
-              <Grid size={4}>
-                <Typography variant="body2" color="text.secondary">
+              <Grid size={3}>
+                <Typography variant="body2" sx={{ color: '#aaa' }}>
                   Semantic Terms
                 </Typography>
-                <Typography variant="h5" color="primary">
+                <Typography variant="h5" sx={{ color: 'warning.main' }}>
                   {wizardContext.drivingTable.termCount}
                 </Typography>
               </Grid>
-              <Grid  size={{ xs: 4 }}>
-                <Typography variant="body2" color="text.secondary">
+              <Grid size={3}>
+                <Typography variant="body2" sx={{ color: '#aaa' }}>
                   Related Tables
                 </Typography>
-                <Typography variant="h5" color="secondary">
+                <Typography variant="h5" sx={{ color: '#64b5f6' }}>
+                  {wizardContext.drivingTable.relatedCount}
+                </Typography>
+              </Grid>
+              <Grid size={3}>
+                <Typography variant="body2" sx={{ color: '#aaa' }}>
+                  FK Relationships
+                </Typography>
+                <Typography variant="h5" sx={{ color: '#ce93d8' }}>
                   {wizardContext.drivingTable.relatedCount}
                 </Typography>
               </Grid>
@@ -503,7 +559,7 @@ export const BusinessObjectWizard: React.FC<BusinessObjectWizardProps> = ({
         </Card>
       )}
     </Box>
-  );
+  )};
 
   // Filter semantic terms based on search query
   const filteredTerms = useMemo(() => {

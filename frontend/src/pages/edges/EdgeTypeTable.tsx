@@ -19,6 +19,8 @@ import DeleteIcon from '@mui/icons-material/Delete';
 import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import CancelIcon from '@mui/icons-material/Cancel';
+import WaterDropIcon from '@mui/icons-material/WaterDrop';
+import BuildIcon from '@mui/icons-material/Build';
 import PropertiesModal from '../../components/properties/PropertiesModal';
 import type { EdgeType, EdgeProperty } from '../../types/edgeTypes';
 import type { NodeType } from '../../types/nodeTypes';
@@ -252,6 +254,7 @@ export const EdgeTypeTable: React.FC<EdgeTypeTableProps> = ({
                   />
                   {edgeType.type && (
                     <Chip
+                      icon={edgeType.type === 'core' ? <WaterDropIcon sx={{ fontSize: 14 }} /> : <BuildIcon sx={{ fontSize: 14 }} />}
                       label={edgeType.type === 'core' ? 'Core' : 'Custom'}
                       size="small"
                       color={edgeType.type === 'core' ? 'primary' : 'warning'}

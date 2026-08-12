@@ -1,0 +1,56 @@
+                                 Table "public.ts_model_rule"
+       Column        |            Type             | Collation | Nullable |      Default      
+---------------------+-----------------------------+-----------+----------+-------------------
+ model_rule_id       | numeric(18,0)               |           | not null | 
+ acct_cd             | character varying(20)       |           | not null | 
+ create_date         | timestamp without time zone |           | not null | CURRENT_TIMESTAMP
+ last_upd_date       | timestamp without time zone |           |          | 
+ last_upd_user       | character varying(30)       |           |          | 
+ rule_type_cd        | character varying(10)       |           | not null | 
+ sec_id              | numeric(18,0)               |           |          | 
+ long_sht_cd         | character(1)                |           |          | 
+ expire_date         | timestamp without time zone |           |          | 
+ special_instruction | text                        |           |          | 
+ ext_model_rule_id   | character varying(50)       |           |          | 
+Indexes:
+    "ts_model_rule_pk" PRIMARY KEY, btree (model_rule_id)
+    "ts_model_rule_n1" btree (acct_cd)
+    "ts_model_rule_n2" btree (sec_id)
+Foreign-key constraints:
+    "ts_model_rule_fk1" FOREIGN KEY (acct_cd) REFERENCES cs_fund(acct_cd)
+    "ts_model_rule_fk2" FOREIGN KEY (sec_id) REFERENCES csm_security(sec_id)
+Referenced by:
+    TABLE "ts_model_rule_security" CONSTRAINT "ts_model_rule_security_fk1" FOREIGN KEY (model_rule_id) REFERENCES ts_model_rule(model_rule_id) ON DELETE CASCADE
+
+                             Table "public.wf_rule"
+      Column      |          Type          | Collation | Nullable |   Default   
+------------------+------------------------+-----------+----------+-------------
+ rule_id          | numeric(18,0)          |           | not null | 
+ rule_name        | character varying(64)  |           | not null | 
+ descr            | text                   |           |          | 
+ categ_cd         | character varying(10)  |           |          | 
+ action_type      | character varying(10)  |           | not null | 
+ event_cd         | character varying(10)  |           | not null | 
+ crd_lock         | character(1)           |           | not null | 'N'::bpchar
+ enable_ind       | character(1)           |           | not null | 'N'::bpchar
+ criteria         | text                   |           |          | 
+ action_cd        | character varying(10)  |           |          | 
+ display_win      | character varying(60)  |           |          | 
+ display_qry_id   | numeric(18,0)          |           |          | 
+ display_msg_cd   | character varying(255) |           |          | 
+ priority         | numeric(8,0)           |           |          | 
+ error_ind        | character(1)           |           | not null | 'N'::bpchar
+ refresh_freq     | numeric(5,0)           |           |          | 
+ max_runtime_ovrd | numeric(5,0)           |           |          | 
+ record_version   | numeric(10,0)          |           | not null | 0
+ display_param_cd | character varying(10)  |           |          | 
+ dm_ind           | character(1)           |           | not null | 'N'::bpchar
+ engine_version   | character(1)           |           | not null | '1'::bpchar
+ subcateg_cd      | character varying(10)  |           |          | 
+Indexes:
+    "wf_rule_pk" PRIMARY KEY, btree (rule_id)
+    "wf_rule_n1" UNIQUE, btree (rule_name)
+    "wf_rule_n2" btree (action_cd)
+    "wf_rule_n3" btree (event_cd)
+    "wf_rule_n4" btree (display_qry_id)
+

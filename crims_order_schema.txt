@@ -1,0 +1,272 @@
+                                     Table "public.ts_order"
+            Column            |            Type             | Collation | Nullable |   Default   
+------------------------------+-----------------------------+-----------+----------+-------------
+ order_id                     | numeric(18,0)               |           | not null | 
+ order_type                   | character varying(3)        |           |          | 
+ sec_id                       | numeric(18,0)               |           | not null | 
+ scenario_id                  | numeric(18,0)               |           |          | 
+ trans_type                   | character varying(10)       |           |          | 
+ instruction                  | character varying(10)       |           |          | 
+ order_duration               | character varying(10)       |           |          | 
+ manager                      | character varying(30)       |           |          | 
+ trader                       | character varying(30)       |           |          | 
+ pref_broker                  | character varying(12)       |           |          | 
+ status                       | character varying(10)       |           | not null | 
+ ref_id                       | character varying(50)       |           |          | 
+ ref_id2                      | character varying(32)       |           |          | 
+ target_crrncy                | character varying(3)        |           |          | 
+ target_qty                   | numeric(18,4)               |           |          | 
+ target_amt                   | numeric(18,4)               |           |          | 
+ target_inc_amt               | numeric(18,4)               |           |          | 
+ target_original_face         | numeric(18,4)               |           |          | 
+ limit_price                  | double precision            |           |          | 
+ limit_yield                  | numeric(18,9)               |           |          | 
+ limit_discount               | numeric(18,9)               |           |          | 
+ trade_date                   | timestamp without time zone |           | not null | 
+ to_trader_date               | timestamp without time zone |           |          | 
+ create_date                  | timestamp without time zone |           |          | 
+ create_user                  | character varying(30)       |           |          | 
+ last_upd_date                | timestamp without time zone |           |          | 
+ last_upd_user                | character varying(30)       |           |          | 
+ reason_cd                    | character varying(10)       |           |          | 
+ cancel_reason_cd             | character varying(10)       |           |          | 
+ order_gen_id                 | numeric(18,0)               |           |          | 
+ place_qty                    | numeric(18,4)               |           |          | 
+ place_date                   | timestamp without time zone |           |          | 
+ exec_broker                  | character varying(12)       |           |          | 
+ broker_reason                | character varying(10)       |           |          | 
+ sales_rep                    | character varying(100)      |           |          | 
+ exch_cd                      | character varying(4)        |           |          | 
+ exec_price                   | double precision            |           |          | 
+ exec_yield                   | numeric(18,9)               |           |          | 
+ exec_discount                | numeric(18,9)               |           |          | 
+ exec_qty                     | numeric(18,4)               |           |          | 
+ exec_amt                     | numeric(18,4)               |           |          | 
+ exec_original_face           | numeric(18,4)               |           |          | 
+ oid_adjusted_price           | numeric(18,9)               |           |          | 
+ oid_yield                    | numeric(18,9)               |           |          | 
+ commision_rate               | numeric(18,9)               |           |          | 
+ commision_ind                | character varying(10)       |           |          | 
+ commision_amt                | numeric(18,4)               |           |          | 
+ net_trade_ind                | character varying(1)        |           |          | 
+ fee_1                        | numeric(18,4)               |           |          | 
+ fee_2                        | numeric(18,4)               |           |          | 
+ fee_3                        | numeric(18,4)               |           |          | 
+ fee_4                        | numeric(18,4)               |           |          | 
+ fee_5                        | numeric(18,4)               |           |          | 
+ fee_6                        | numeric(18,4)               |           |          | 
+ fee_1_cd                     | character varying(10)       |           |          | 
+ fee_2_cd                     | character varying(10)       |           |          | 
+ fee_3_cd                     | character varying(10)       |           |          | 
+ fee_4_cd                     | character varying(10)       |           |          | 
+ fee_5_cd                     | character varying(10)       |           |          | 
+ fee_6_cd                     | character varying(10)       |           |          | 
+ net_prin_amt                 | numeric(18,4)               |           |          | 
+ prin_local_crrncy            | character varying(3)        |           |          | 
+ prin_local_crrncy_sec_id     | numeric(18,0)               |           |          | 
+ clear_broker                 | character varying(12)       |           |          | 
+ settle_date                  | timestamp without time zone |           |          | 
+ inc_amt                      | numeric(18,4)               |           |          | 
+ inc_local_crrncy             | character varying(3)        |           |          | 
+ inc_local_crrncy_sec_id      | numeric(18,0)               |           |          | 
+ delivery_type                | character varying(10)       |           |          | 
+ auth_user                    | character varying(30)       |           |          | 
+ auth_date                    | timestamp without time zone |           |          | 
+ futr_contract_price          | double precision            |           |          | 
+ futr_contract_amt            | numeric(18,4)               |           |          | 
+ done_deal                    | character(1)                |           | not null | 'N'::bpchar
+ include_in_cash              | character(1)                |           | not null | 'N'::bpchar
+ from_crrncy                  | character varying(3)        |           |          | 
+ to_crrncy                    | character varying(3)        |           |          | 
+ reference_price              | double precision            |           |          | 
+ inv_class_cd                 | character varying(5)        |           | not null | 
+ counterparty                 | character varying(20)       |           |          | 
+ order_cat                    | character varying(3)        |           |          | 
+ acct_send_status             | character varying(10)       |           |          | 
+ related_order_id             | numeric(18,0)               |           |          | 
+ relship_typ_cd               | character varying(1)        |           |          | 
+ lot_size                     | numeric(18,4)               |           |          | 
+ exp_ref_id                   | character varying(11)       |           |          | 
+ exp_status                   | character varying(6)        |           |          | 
+ bkr_status                   | character varying(6)        |           |          | 
+ user_status                  | character varying(10)       |           |          | 
+ ops_assign                   | character varying(30)       |           |          | 
+ target_yield                 | numeric(18,9)               |           |          | 
+ ipo                          | character(1)                |           | not null | 'N'::bpchar
+ target_disc_rate             | numeric(18,9)               |           |          | 
+ exec_disc_rate               | numeric(18,9)               |           |          | 
+ orig_target_qty              | numeric(18,4)               |           |          | 
+ cntrct_size                  | numeric(18,8)               |           | not null | 1
+ exp_run_id                   | numeric(18,0)               |           |          | 
+ fee_1_mult                   | numeric(18,7)               |           |          | 
+ fee_2_mult                   | numeric(18,7)               |           |          | 
+ fee_3_mult                   | numeric(18,7)               |           |          | 
+ fee_1_max                    | numeric(18,4)               |           |          | 
+ fee_2_max                    | numeric(18,4)               |           |          | 
+ fee_3_max                    | numeric(18,4)               |           |          | 
+ fee_1_type                   | character varying(10)       |           |          | 
+ fee_2_type                   | character varying(10)       |           |          | 
+ fee_3_type                   | character varying(10)       |           |          | 
+ fix_msg_status               | character varying(6)        |           |          | 
+ fix_order_status             | character varying(4)        |           |          | 
+ fix_order_id                 | character varying(120)      |           |          | 
+ fix_cxl_status               | character varying(10)       |           |          | 
+ fix_clordid                  | numeric(18,0)               |           |          | 
+ fix_origclordid              | numeric(18,0)               |           |          | 
+ fix_buy_ioi                  | character varying(4)        |           |          | 
+ fix_sell_ioi                 | character varying(4)        |           |          | 
+ fix_handlinst                | character varying(4)        |           |          | 
+ fix_settlmnttyp              | character varying(4)        |           |          | 
+ fix_execinst                 | character varying(20)       |           |          | 
+ fix_minqty                   | numeric(18,4)               |           |          | 
+ fix_maxfloor                 | numeric(18,4)               |           |          | 
+ fix_exdestination            | character varying(4)        |           |          | 
+ fix_processcode              | character varying(4)        |           |          | 
+ fix_locatereqd               | character varying(4)        |           |          | 
+ fix_stoppx                   | numeric(18,9)               |           |          | 
+ fix_expiretime               | timestamp without time zone |           |          | 
+ fix_execbroker               | character varying(30)       |           |          | 
+ fix_account                  | character varying(30)       |           |          | 
+ fix_clientid                 | character varying(30)       |           |          | 
+ fix_futsettdate              | timestamp without time zone |           |          | 
+ ordgrp_run_id                | numeric(18,0)               |           |          | 
+ tdr_limit_price              | double precision            |           |          | 
+ prcyld_src_flag              | character varying(1)        |           |          | 
+ settle_inst_id               | numeric(18,0)               |           |          | 
+ basket_id                    | numeric(18,0)               |           |          | 
+ freeze_target                | character(1)                |           | not null | 'N'::bpchar
+ order_acct_cd                | character varying(20)       |           |          | 
+ sent_acct_date               | timestamp without time zone |           |          | 
+ factor                       | double precision            |           |          | 
+ order_seq                    | numeric(7,0)                |           |          | 
+ fee_5_mult                   | numeric(18,7)               |           |          | 
+ fee_6_mult                   | numeric(18,7)               |           |          | 
+ fee_5_max                    | numeric(18,4)               |           |          | 
+ fee_6_max                    | numeric(18,4)               |           |          | 
+ fee_5_type                   | character varying(10)       |           |          | 
+ fee_6_type                   | character varying(10)       |           |          | 
+ auth_user2                   | character varying(30)       |           |          | 
+ num_auth_req                 | numeric(1,0)                |           |          | 
+ target_yield_type            | character varying(4)        |           |          | 
+ target_yld_prc_link          | character varying(1)        |           |          | 
+ exec_yield_type              | character varying(4)        |           |          | 
+ exec_yld_prc_link            | character varying(1)        |           |          | 
+ usr_class_cd_1               | character varying(10)       |           |          | 
+ usr_class_cd_2               | character varying(10)       |           |          | 
+ usr_class_cd_3               | character varying(10)       |           |          | 
+ usr_class_cd_4               | character varying(10)       |           |          | 
+ target_dirty_price           | double precision            |           |          | 
+ target_dirty_flag            | character varying(1)        |           |          | 
+ exec_dirty_price             | double precision            |           |          | 
+ exec_dirty_flag              | character varying(1)        |           |          | 
+ prime_bkr_fee_amt            | numeric(18,4)               |           |          | 
+ special_inst                 | text                        |           |          | 
+ comments                     | text                        |           |          | 
+ record_version               | numeric(10,0)               |           | not null | 1
+ alloc_match_venue_cd         | character varying(10)       |           |          | 
+ si_enrich_venue_cd           | character varying(10)       |           |          | 
+ sttlmnt_prep_ind             | character(1)                |           | not null | 'N'::bpchar
+ trading_venue                | character varying(12)       |           |          | 
+ sttlmnt_route_determ_id      | numeric(18,0)               |           |          | 
+ auto_sts_ind                 | character(1)                |           | not null | 'N'::bpchar
+ swap_id                      | numeric(18,0)               |           |          | 
+ ext_vmu_id                   | character varying(32)       |           |          | 
+ cross_ops                    | character varying(4)        |           |          | 
+ block_ind                    | character(1)                |           |          | 
+ auto_sta_ind                 | character(1)                |           | not null | 'N'::bpchar
+ exp_comment                  | text                        |           |          | 
+ bkr_comment                  | text                        |           |          | 
+ fix_alert_ind                | character(1)                |           | not null | 'N'::bpchar
+ fix_alert_view_date          | timestamp without time zone |           |          | 
+ when_issued_ind              | character(1)                |           | not null | 'N'::bpchar
+ allocd_exec_qty              | numeric(18,4)               |           |          | 
+ exec_record_version          | numeric(10,0)               |           | not null | 1
+ fix_create_ind               | character(1)                |           | not null | 'N'::bpchar
+ cpl_refresh_id               | numeric(18,0)               |           |          | 
+ target_notnl_amt             | numeric(18,4)               |           |          | 
+ rule_cd                      | character varying(15)       |           |          | 
+ strat_cd                     | character varying(10)       |           |          | 
+ strat_qty                    | numeric(18,4)               |           |          | 
+ strat_orig_face              | numeric(18,4)               |           |          | 
+ strat_alert_ind              | character(1)                |           | not null | 'N'::bpchar
+ strat_ok                     | numeric(10,0)               |           |          | 
+ strat_warn                   | numeric(10,0)               |           |          | 
+ strat_err                    | numeric(10,0)               |           |          | 
+ strat_active_ind             | character(1)                |           | not null | 'N'::bpchar
+ place_original_face          | numeric(18,4)               |           |          | 
+ cpl_status                   | character varying(10)       |           |          | 
+ cpl_run_id                   | numeric(18,0)               |           |          | 
+ notes                        | text                        |           |          | 
+ fix_reserved                 | numeric(18,4)               |           |          | 
+ num_allocs                   | numeric(7,0)                |           | not null | 0
+ fill_broker                  | character varying(12)       |           |          | 
+ pair_id                      | numeric(18,0)               |           |          | 
+ accrd_int_src_cd             | character varying(10)       |           |          | 
+ target_interest_pct          | numeric(18,9)               |           |          | 
+ fwd_reference_price          | double precision            |           |          | 
+ located_ind                  | character(1)                |           |          | 
+ locate_bkr_cd                | character varying(10)       |           |          | 
+ settle_method_cd             | character varying(10)       |           |          | 
+ market_cd                    | character varying(10)       |           |          | 
+ loan_settle_status_cd        | character varying(10)       |           |          | 
+ loan_settle_status_date      | timestamp without time zone |           |          | 
+ mlo_id                       | numeric(18,0)               |           |          | 
+ collat_pct                   | numeric(12,8)               |           |          | 
+ collat_amt                   | numeric(18,4)               |           |          | 
+ order_gen_run_id             | numeric(18,0)               |           |          | 
+ clear_venue_cd               | character varying(10)       |           |          | 
+ init_block_uti               | character varying(120)      |           |          | 
+ sef_eligible_cd              | character varying(10)       |           |          | 
+ sef_traded_ind               | character(1)                |           |          | 
+ orig_ops_assign              | character varying(30)       |           |          | 
+ val_place_amt                | numeric(18,4)               |           |          | 
+ exec_method_cd               | character varying(10)       |           |          | 
+ mtf_eligible_cd              | character varying(10)       |           |          | 
+ mlo_weight                   | numeric(18,4)               |           |          | 
+ wh_order_typ_cd              | character varying(10)       |           |          | 
+ algo_strategy                | character varying(30)       |           |          | 
+ esma_seller                  | character(1)                |           |          | 
+ esma_otc_posttrade_cd        | character varying(100)      |           |          | 
+ implied_comm_amt             | numeric(18,4)               |           |          | 
+ esma_reportable_override_ind | character(1)                |           |          | 
+ fulfill_ind                  | character(1)                |           | not null | 'N'::bpchar
+ net_money                    | numeric(18,4)               |           |          | 
+ net_money_src_cd             | character varying(10)       |           |          | 
+Indexes:
+    "ts_order_pk" PRIMARY KEY, btree (order_id)
+    "ts_order_n1" btree (scenario_id)
+    "ts_order_n10" btree (trader)
+    "ts_order_n11" btree (swap_id)
+    "ts_order_n12" btree (manager)
+    "ts_order_n13" btree (ops_assign)
+    "ts_order_n14" btree (cpl_refresh_id)
+    "ts_order_n15" btree (mlo_id)
+    "ts_order_n16" btree (ext_vmu_id)
+    "ts_order_n17" btree (inc_local_crrncy_sec_id)
+    "ts_order_n18" btree (inv_class_cd)
+    "ts_order_n19" btree (prin_local_crrncy_sec_id)
+    "ts_order_n2" btree (sec_id)
+    "ts_order_n20" btree (trading_venue)
+    "ts_order_n21" btree (rule_cd)
+    "ts_order_n3" btree (settle_date)
+    "ts_order_n4" btree (status)
+    "ts_order_n5" btree (basket_id)
+    "ts_order_n6" btree (ordgrp_run_id)
+    "ts_order_n7" btree (trade_date)
+    "ts_order_n8" btree (sent_acct_date)
+    "ts_order_n9" btree (ref_id)
+Foreign-key constraints:
+    "ts_order_fk1" FOREIGN KEY (inc_local_crrncy_sec_id) REFERENCES csm_security(sec_id)
+    "ts_order_fk4" FOREIGN KEY (prin_local_crrncy_sec_id) REFERENCES csm_security(sec_id)
+    "ts_order_fk5" FOREIGN KEY (scenario_id) REFERENCES ts_scenario(scenario_id)
+    "ts_order_fk6" FOREIGN KEY (sec_id) REFERENCES csm_security(sec_id)
+    "ts_order_fk7" FOREIGN KEY (trader) REFERENCES pdf_user(user_cd)
+    "ts_order_fk8" FOREIGN KEY (trading_venue) REFERENCES cs_broker(bkr_cd)
+    "ts_order_fk9" FOREIGN KEY (rule_cd) REFERENCES ts_order_exec_rule(rule_cd)
+Referenced by:
+    TABLE "cs_violation_order" CONSTRAINT "cs_violation_order_fk2" FOREIGN KEY (order_id) REFERENCES ts_order(order_id) ON DELETE CASCADE
+    TABLE "fix_order_relship" CONSTRAINT "fix_order_ts_order_fk2" FOREIGN KEY (order_id) REFERENCES ts_order(order_id) ON DELETE CASCADE
+    TABLE "pdf_alert_order" CONSTRAINT "pdf_alert_order_fk1" FOREIGN KEY (order_id) REFERENCES ts_order(order_id) ON DELETE CASCADE
+    TABLE "swift_outgoing" CONSTRAINT "swift_outgoing_fk1" FOREIGN KEY (order_id) REFERENCES ts_order(order_id)
+    TABLE "ts_exec_analysis_result" CONSTRAINT "ts_exec_analysis_result_fk3" FOREIGN KEY (order_id) REFERENCES ts_order(order_id) ON DELETE CASCADE
+

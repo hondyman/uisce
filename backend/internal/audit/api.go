@@ -46,6 +46,7 @@ func (h *AuditAPIHandler) RegisterRoutes(r *gin.RouterGroup) {
 
 		// AI narrative endpoints
 		audit.GET("/ai-narratives", h.GetAINarratives)
+		audit.POST("/ai-narratives", h.GenerateAINarrative)
 
 		// Dashboard endpoints (materialized views)
 		audit.GET("/dashboard/slo", h.GetSLODashboard)
@@ -479,6 +480,35 @@ func (h *AuditAPIHandler) GetAINarratives(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"data":  results,
 		"count": len(results),
+	})
+}
+
+// GenerateAINarrative generates AI narrative for a specific audit record
+func (h *AuditAPIHandler) GenerateAINarrative(c *gin.Context) {
+	claims := jwtmiddleware.GetGinClaimsFromContext(c)
+	if claims == nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+	tenantID := claims.TenantID
+	if tenantID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "X-Tenant-ID header required"})
+		return
+	}
+
+	var req struct {
+		RecordType string `json:"record_type" binding:"required"`
+		RecordID   string `json:"record_id" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"narrative":   "AI narrative generation not yet implemented",
+		"record_type": req.RecordType,
+		"record_id":   req.RecordID,
 	})
 }
 

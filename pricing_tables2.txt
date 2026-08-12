@@ -1,0 +1,8 @@
+                 List of relations
+ Schema |          Name          | Type  |  Owner   
+--------+------------------------+-------+----------
+ public | mwb_fx_rate_ctmp       | table | postgres
+ public | mwb_fx_rate_ctmp_clear | table | postgres
+ public | pma_fxrate             | table | postgres
+(3 rows)
+

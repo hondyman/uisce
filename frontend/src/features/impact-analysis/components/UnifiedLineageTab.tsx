@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Box, IconButton, Tooltip, Typography, ToggleButtonGroup, ToggleButton, Chip } from '@mui/material';
+import { ReactFlowProvider } from 'reactflow';
 import { NodeType } from '../types';
 import { ImpactGraph } from './ImpactGraph';
 import { ImpactExplanation } from './ImpactExplanation';
@@ -194,14 +195,16 @@ export const UnifiedLineageTab: React.FC<UnifiedLineageTabProps> = ({
             )}
           </Box>
 
-          <ImpactGraph 
-            nodeType={nodeType} 
-            nodeId={nodeId} 
-            highlightedNodeIds={highlightedNodeIds}
-            directionMode={directionMode}
-            onStatsUpdate={handleGraphStats}
-            useLineageAPI={true}
-          />
+          <ReactFlowProvider>
+            <ImpactGraph 
+              nodeType={nodeType} 
+              nodeId={nodeId} 
+              highlightedNodeIds={highlightedNodeIds}
+              directionMode={directionMode}
+              onStatsUpdate={handleGraphStats}
+              useLineageAPI={true}
+            />
+          </ReactFlowProvider>
         </div>
 
         {/* Dynamic Sidebar */}

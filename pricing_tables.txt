@@ -1,0 +1,30 @@
+                    List of relations
+ Schema |             Name             | Type  |  Owner   
+--------+------------------------------+-------+----------
+ public | csm_yield_curve              | table | postgres
+ public | csm_yield_curve_detail       | table | postgres
+ public | csm_yield_curve_rtapi_det    | table | postgres
+ public | csm_yield_curve_shift        | table | postgres
+ public | csm_yield_curve_shift_detail | table | postgres
+ public | ts_determ_yield_curve        | table | postgres
+(6 rows)
+
+                   List of relations
+ Schema |            Name            | Type  |  Owner   
+--------+----------------------------+-------+----------
+ public | asof_snapshot_strategy     | table | postgres
+ public | csm_rater_rating           | table | postgres
+ public | csm_short_rate_model       | table | postgres
+ public | csm_short_rate_model_param | table | postgres
+ public | csm_short_rate_sim         | table | postgres
+ public | csm_short_rate_sim_path    | table | postgres
+ public | mwb_fx_rate_ctmp           | table | postgres
+ public | mwb_fx_rate_ctmp_clear     | table | postgres
+ public | pma_fxrate                 | table | postgres
+ public | pma_monthly_return_rate    | table | postgres
+ public | pma_rf_rate                | table | postgres
+ public | ts_strategy                | table | postgres
+ public | ts_strategy_server         | table | postgres
+ public | ts_strategy_version        | table | postgres
+(14 rows)
+
