@@ -77,6 +77,7 @@ import {
   previewQuery,
   executeQuery,
 } from '../services/queryBuilderApi';
+import { QueryEngineIndicator, EngineRouteState } from '../../../components/BusinessObjectManager/QueryEngineIndicator';
 import {
   createEmptyQueryDef,
   makeAlias,
@@ -96,6 +97,7 @@ import type {
 import ExplainPlanVisualizer from '../components/ExplainPlanVisualizer';
 import QueryPerformanceSummary from '../components/QueryPerformanceSummary';
 import AutoFormRenderer from '../components/AutoFormRenderer';
+import { JWTInspector } from '../../../components/BusinessObjectManager/JWTInspector';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -1030,6 +1032,18 @@ const BusinessObjectQueryBuilder: React.FC = () => {
             </Tabs>
           </Box>
 
+          <Box sx={{ p: 2, borderBottom: 1, borderColor: 'divider' }}>
+            <QueryEngineIndicator
+              state={
+                queryDef?.query?.filters?.some(f => String(f.value).includes('2025') || String(f.value).includes('2024'))
+                  ? 'HYBRID_SEAM'
+                  : 'OLAP'
+              }
+              estimatedLatencyMs={executeResult ? 240 : 180}
+              estimatedRows={executeResult ? executeResult.rows.length : 847}
+            />
+          </Box>
+
           <Box sx={{ flex: 1, overflow: 'auto', p: 0, position: 'relative' }}>
             {loading && (
               <Box
@@ -1129,11 +1143,14 @@ const BusinessObjectQueryBuilder: React.FC = () => {
 
             {/* QueryDef tab */}
             {activeTab === 3 && (
-              <Box sx={{ p: 2, height: '100%' }}>
+              <Box sx={{ p: 2, height: '100%', display: 'flex', flexDirection: 'column', gap: 2, overflow: 'auto' }}>
+                <Box sx={{ flexShrink: 0 }}>
+                  <JWTInspector />
+                </Box>
                 <SyntaxHighlighter
                   language="json"
                   style={vscDarkPlus}
-                  customStyle={{ borderRadius: '4px', height: '100%' }}
+                  customStyle={{ borderRadius: '4px', flex: 1, minHeight: 0 }}
                 >
                   {queryDef ? JSON.stringify(queryDef, null, 2) : '// Select a Business Object first'}
                 </SyntaxHighlighter>

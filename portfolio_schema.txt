@@ -1,0 +1,457 @@
+                                            Table "public.cs_fund"
+            Column             |            Type             | Collation | Nullable |         Default          
+-------------------------------+-----------------------------+-----------+----------+--------------------------
+ acct_cd                       | character varying(20)       |           | not null | 
+ acct_name                     | character varying(60)       |           | not null | 
+ acct_sht_name                 | character varying(20)       |           |          | 
+ acct_typ_cd                   | character(1)                |           | not null | 
+ parent_child_flag             | character varying(1)        |           |          | 
+ crrncy_cd                     | character varying(3)        |           | not null | 
+ state_cd                      | character varying(4)        |           |          | 
+ cntry_cd                      | character varying(3)        |           |          | 
+ mkt_val                       | numeric(25,4)               |           |          | 
+ net_assets                    | numeric(25,4)               |           |          | 
+ tot_assets                    | numeric(25,4)               |           |          | 
+ fund_shrs_outst               | numeric(18,3)               |           |          | 
+ tot_cost                      | numeric(25,4)               |           |          | 
+ net_cash                      | numeric(17,2)               |           |          | 
+ tot_invstmnts                 | numeric(17,2)               |           |          | 
+ net_funds_avail               | numeric(17,2)               |           |          | 
+ liabilities                   | numeric(17,2)               |           |          | 
+ amrtzd_cost                   | numeric(17,2)               |           |          | 
+ avg_cost                      | numeric(18,4)               |           |          | 
+ oth_asset                     | numeric(17,2)               |           |          | 
+ div_received                  | numeric(17,2)               |           |          | 
+ int_received                  | numeric(17,2)               |           |          | 
+ cntrbs                        | numeric(17,2)               |           |          | 
+ pmnts                         | numeric(17,2)               |           |          | 
+ transfers                     | numeric(17,2)               |           |          | 
+ cash_bal_sod                  | numeric(17,2)               |           |          | 
+ recvb_sec_sold                | numeric(17,2)               |           |          | 
+ paybl_sec_purch               | numeric(17,2)               |           |          | 
+ recvb_fund_shrs_sold          | numeric(17,2)               |           |          | 
+ paybl_fund_shrs_liqd          | numeric(17,2)               |           |          | 
+ div_rcvble                    | numeric(17,2)               |           |          | 
+ accrued_int_incm              | numeric(17,2)               |           |          | 
+ accrued_exp_incm              | numeric(17,2)               |           |          | 
+ div_paybl                     | numeric(17,2)               |           |          | 
+ oth_liab                      | numeric(17,2)               |           |          | 
+ eqty_acct                     | character varying(1)        |           |          | 
+ syst_of_reference             | character varying(20)       |           |          | 
+ nexpert_inst                  | numeric(4,0)                |           |          | 
+ theme_1                       | character varying(30)       |           |          | 
+ theme_2                       | character varying(30)       |           |          | 
+ theme_3                       | character varying(30)       |           |          | 
+ lot_size                      | numeric(18,4)               |           |          | 
+ allow_buy                     | character(1)                |           | not null | 'Y'::bpchar
+ allow_sell                    | character(1)                |           | not null | 'Y'::bpchar
+ allow_neg_cash                | character(1)                |           | not null | 'Y'::bpchar
+ manager                       | character varying(30)       |           |          | 
+ model_priv                    | character varying(10)       |           |          | 
+ default_model_cd              | character varying(20)       |           |          | 
+ start_batch_viol              | numeric(18,0)               |           |          | 
+ shaw_manager_cd               | character varying(6)        |           |          | 
+ shaw_class_cd                 | character varying(6)        |           |          | 
+ crd_lock                      | character(1)                |           | not null | 'N'::bpchar
+ erisa_eligible                | character(1)                |           | not null | 'N'::bpchar
+ index_sec_id                  | numeric(18,0)               |           |          | 
+ compliance_tolerance          | numeric(5,2)                |           |          | 
+ apply_guidelines              | character varying(1)        |           |          | 
+ gain_loss_sensitive           | character(1)                |           | not null | 'N'::bpchar
+ short_short_gains             | numeric(18,4)               |           |          | 
+ gross_income                  | numeric(18,4)               |           |          | 
+ tax_lot_sell_cnvtn            | character varying(10)       |           |          | 
+ bank_acct_num                 | character varying(40)       |           |          | 
+ custodian_cd                  | character varying(20)       |           |          | 
+ default_grp_cd                | character varying(20)       |           |          | 
+ incl_accrd_interest           | character varying(1)        |           |          | 
+ cur_mkt_val                   | numeric(25,4)               |           |          | 
+ cur_invested                  | numeric(18,4)               |           |          | 
+ last_reprice_date             | timestamp without time zone |           |          | 
+ disc_accrual_cnvtn            | numeric(5,0)                |           |          | 
+ active                        | character varying(1)        |           |          | 
+ interested_party1_cd          | character varying(20)       |           |          | 
+ interested_party2_cd          | character varying(20)       |           |          | 
+ interested_party3_cd          | character varying(20)       |           |          | 
+ default_tmp_acct              | character varying(1)        |           |          | 
+ inactive                      | character(1)                |           | not null | 'N'::bpchar
+ usr_class_cd_1                | character varying(10)       |           |          | 
+ usr_class_cd_2                | character varying(10)       |           |          | 
+ usr_class_cd_3                | character varying(10)       |           |          | 
+ usr_class_cd_4                | character varying(10)       |           |          | 
+ mkt_val_sod                   | numeric(25,4)               |           |          | 
+ oasys_acct_cd                 | character varying(12)       |           |          | 
+ fund_acct                     | character varying(20)       |           |          | 
+ omnibus_acct_cd               | character varying(20)       |           |          | 
+ allow_autofx                  | character varying(1)        |           |          | 
+ rotation_cd                   | character varying(2)        |           |          | 
+ rotation_seq                  | numeric(7,0)                |           |          | 
+ auth_group                    | character varying(30)       |           |          | 
+ auth_num                      | numeric(7,0)                |           | not null | 0
+ default_special_inst          | character varying(150)      |           |          | 
+ comp_bid_req                  | character(1)                |           | not null | 'N'::bpchar
+ max_issuer_holding            | numeric(18,4)               |           |          | 
+ inc_tax_rate                  | numeric(18,4)               |           |          | 
+ cg_tax_rate                   | numeric(18,4)               |           |          | 
+ udf_float1                    | double precision            |           |          | 
+ udf_float2                    | double precision            |           |          | 
+ udf_float3                    | double precision            |           |          | 
+ udf_float4                    | double precision            |           |          | 
+ udf_date1                     | timestamp without time zone |           |          | 
+ udf_date2                     | timestamp without time zone |           |          | 
+ udf_char1                     | character varying(100)      |           |          | 
+ udf_char2                     | character varying(100)      |           |          | 
+ udf_char3                     | character varying(100)      |           |          | 
+ udf_char4                     | character varying(100)      |           |          | 
+ ytd_gl_short_term             | numeric(18,4)               |           |          | 
+ ytd_gl_long_term              | numeric(18,4)               |           |          | 
+ intraday_gl_short_term        | numeric(18,4)               |           |          | 
+ intraday_gl_long_term         | numeric(18,4)               |           |          | 
+ update_in_progress            | numeric(5,0)                |           |          | 
+ update_seqno                  | numeric(10,0)               |           |          | 
+ udf_float5                    | double precision            |           |          | 
+ udf_float6                    | double precision            |           |          | 
+ udf_float7                    | double precision            |           |          | 
+ udf_float8                    | double precision            |           |          | 
+ udf_float9                    | double precision            |           |          | 
+ udf_float10                   | double precision            |           |          | 
+ udf_float11                   | double precision            |           |          | 
+ udf_float12                   | double precision            |           |          | 
+ udf_float13                   | double precision            |           |          | 
+ udf_float14                   | double precision            |           |          | 
+ udf_float15                   | double precision            |           |          | 
+ udf_float16                   | double precision            |           |          | 
+ udf_float17                   | double precision            |           |          | 
+ udf_float18                   | double precision            |           |          | 
+ udf_float19                   | double precision            |           |          | 
+ mkt_val_prev                  | numeric(25,4)               |           |          | 
+ net_assets_prev               | numeric(25,4)               |           |          | 
+ tot_assets_prev               | numeric(25,4)               |           |          | 
+ tot_cost_prev                 | numeric(25,4)               |           |          | 
+ gross_income_prev             | numeric(18,4)               |           |          | 
+ category1                     | character varying(10)       |           |          | 
+ category2                     | character varying(10)       |           |          | 
+ category3                     | character varying(10)       |           |          | 
+ cpl_batch_runtime             | double precision            |           |          | 
+ mdl_typ_ind                   | character(1)                |           |          | 
+ mdl_bench_acct_cd             | character varying(20)       |           |          | 
+ def_bench_cd                  | character varying(20)       |           |          | 
+ def_hedge_mdl_cd              | character varying(20)       |           |          | 
+ def_hedge_bench_cd            | character varying(20)       |           |          | 
+ def_mdl_id                    | numeric(18,0)               |           |          | 
+ def_bench_id                  | numeric(18,0)               |           |          | 
+ def_hedge_mdl_id              | numeric(18,0)               |           |          | 
+ def_hedge_bench_id            | numeric(18,0)               |           |          | 
+ mag_ind                       | character(1)                |           | not null | 'N'::bpchar
+ cfwd_close_cparty_ind         | character(1)                |           | not null | 'N'::bpchar
+ cfwd_new_cparty_ind           | character(1)                |           | not null | 'N'::bpchar
+ auto_cfwd_ind                 | character(1)                |           | not null | 'N'::bpchar
+ use_settle_date_bal_ind       | character(1)                |           | not null | 'N'::bpchar
+ def_mdl_type                  | character(1)                |           |          | 
+ def_bench_type                | character(1)                |           |          | 
+ def_hedge_mdl_type            | character(1)                |           |          | 
+ def_hedge_bench_type          | character(1)                |           |          | 
+ dm_ind                        | character(1)                |           | not null | 'N'::bpchar
+ def_fwd_days_ind              | character(1)                |           |          | 
+ def_fwd_date                  | timestamp without time zone |           |          | 
+ def_fwd_days                  | numeric(5,0)                |           |          | 
+ def_mdl_rem_ind               | character(1)                |           | not null | 'P'::bpchar
+ view_id                       | numeric(18,0)               |           |          | 
+ sleeve_type                   | character varying(10)       |           |          | 
+ cross_ext_acct_cd             | character varying(20)       |           |          | 
+ cross_grp_acct_cd             | character varying(20)       |           |          | 
+ cross_int_acct_cd             | character varying(20)       |           |          | 
+ cross_mag_acct_cd             | character varying(20)       |           |          | 
+ mdl_qty_based_ind             | character(1)                |           | not null | 'N'::bpchar
+ mult_mdl_ind                  | character(1)                |           | not null | 'N'::bpchar
+ mult_mdl_norm_ind             | character(1)                |           | not null | 'N'::bpchar
+ exch_list_cd                  | character varying(20)       |           |          | 
+ inv_class_cd                  | character varying(5)        |           |          | 
+ block_order_ind               | character(1)                |           | not null | 'Y'::bpchar
+ ten_min_check_ind             | character(1)                |           | not null | 'P'::bpchar
+ grp_type_cd                   | character varying(10)       |           |          | 
+ tax_lot_proc_ind              | character(1)                |           | not null | 'N'::bpchar
+ record_version                | numeric(10,0)               |           | not null | 1
+ fee_paymt_ind                 | character(1)                |           | not null | 'Y'::bpchar
+ bundled_fee_ind               | character(1)                |           | not null | 'N'::bpchar
+ pma_footnote                  | text                        |           |          | 
+ pma_incptn_date               | timestamp without time zone |           |          | 
+ pma_acct_tot_ret_approx       | character varying(25)       |           |          | 
+ mdl_analytic_type             | character varying(3)        |           | not null | 'N'::character varying
+ reprice_ind                   | character varying(1)        |           | not null | 'N'::character varying
+ pma_comment                   | character varying(255)      |           |          | 
+ pma_attr_method_equity        | character varying(10)       |           |          | 
+ pma_data_freq                 | character(1)                |           | not null | 'D'::bpchar
+ pma_mgmt_fee_basis            | character(1)                |           | not null | 'G'::bpchar
+ rebal_freq_cd                 | character varying(10)       |           |          | 
+ next_rebal_date               | timestamp without time zone |           |          | 
+ last_upd_date                 | timestamp without time zone |           |          | 
+ last_upd_user                 | character varying(30)       |           |          | 
+ comments                      | character varying(500)      |           |          | 
+ basket_typ_cd                 | character varying(10)       |           |          | 
+ notnl_freeze_ind              | character(1)                |           | not null | 'N'::bpchar
+ create_date                   | timestamp without time zone |           |          | CURRENT_TIMESTAMP
+ close_date                    | timestamp without time zone |           |          | 
+ fut_broker_ind                | character(1)                |           | not null | 'N'::bpchar
+ pma_attr_method_fi            | character varying(10)       |           |          | 
+ pma_tax_basis                 | character(1)                |           | not null | 'G'::bpchar
+ acct_id                       | numeric(18,0)               |           | not null | 
+ factor_model                  | character varying(50)       |           |          | 
+ cash_rsrv_typ                 | character(1)                |           | not null | 'N'::bpchar
+ cash_rsrv_amt                 | numeric(18,4)               |           |          | 
+ cash_rsrv_pct                 | numeric(18,4)               |           |          | 
+ service_id                    | numeric(18,0)               |           |          | 
+ house_acct_ind                | character(1)                |           | not null | 'N'::bpchar
+ uma_type_cd                   | character varying(10)       |           |          | 
+ years_to_use_in_var_calcs     | numeric(3,0)                |           |          | 
+ udf_char20                    | character varying(100)      |           |          | 
+ udf_char21                    | character varying(100)      |           |          | 
+ udf_char22                    | character varying(100)      |           |          | 
+ udf_char23                    | character varying(100)      |           |          | 
+ udf_char24                    | character varying(100)      |           |          | 
+ udf_char25                    | character varying(100)      |           |          | 
+ udf_char26                    | character varying(100)      |           |          | 
+ risk_var_confidence_level     | numeric(3,1)                |           |          | 
+ mdl_cat_weight_only_ind       | character(1)                |           | not null | 'N'::bpchar
+ mdl_tree_id                   | numeric(18,0)               |           |          | 
+ exclude_from_rebal_ind        | character(1)                |           | not null | 'N'::bpchar
+ pma_threshold_days            | numeric(4,0)                |           |          | 
+ prin_inc_cash_ind             | character(1)                |           | not null | 'N'::bpchar
+ ps_incptn_date                | timestamp without time zone |           |          | 
+ ps_enabled_ind                | character(1)                |           | not null | 'N'::bpchar
+ household_type_cd             | character varying(10)       |           |          | 
+ bod_duration                  | numeric(18,9)               |           |          | 
+ ibor_tax_lot_enabled_ind      | character(1)                |           | not null | 'Y'::bpchar
+ ytd_gl_short_term_prev        | numeric(18,4)               |           |          | 
+ ytd_gl_long_term_prev         | numeric(18,4)               |           |          | 
+ exclude_drift_date            | timestamp without time zone |           |          | 
+ model_status_cd               | character varying(10)       |           |          | 
+ orig_model_acct_cd            | character varying(20)       |           |          | 
+ sma_type_cd                   | character varying(10)       |           |          | 
+ order_gen_stagger_ind         | character(1)                |           |          | 
+ reg_dfa_us_entity_ind         | character varying(1)        |           |          | 
+ enforce_wash_sale_ind         | character(1)                |           | not null | 'N'::bpchar
+ wash_sale_buy_behavior_cd     | character varying(10)       |           |          | 
+ excl_wash_sale_from_drift_ind | character(1)                |           | not null | 'N'::bpchar
+ def_mdl_type2                 | character(1)                |           |          | 
+ def_bench_type2               | character(1)                |           |          | 
+ default_model_cd2             | character varying(20)       |           |          | 
+ def_bench_cd2                 | character varying(20)       |           |          | 
+ def_mdl_id2                   | numeric(18,0)               |           |          | 
+ def_bench_id2                 | numeric(18,0)               |           |          | 
+ exclude_from_drift_ind        | character(1)                |           | not null | 'N'::bpchar
+ tot_gl_tax_budget             | numeric(18,4)               |           |          | 
+ st_gl_tax_budget              | numeric(18,4)               |           |          | 
+ lt_gl_tax_budget              | numeric(18,4)               |           |          | 
+ gl_tax_budget_cd              | character varying(10)       |           |          | 'N'::character varying
+ st_unreal_gain_bod            | numeric(18,4)               |           |          | 
+ st_unreal_loss_bod            | numeric(18,4)               |           |          | 
+ lt_unreal_gain_bod            | numeric(18,4)               |           |          | 
+ lt_unreal_loss_bod            | numeric(18,4)               |           |          | 
+ aimfd_regulated_ind           | character(1)                |           | not null | 'N'::bpchar
+ pma_ibor_transition_date      | timestamp without time zone |           |          | 
+ mdl_transition_ind            | character(1)                |           | not null | 'N'::bpchar
+ fx_mgmt_method_cd             | character varying(10)       |           |          | 
+ amrtzd_cost_enabled_ind       | character(1)                |           | not null | 'N'::bpchar
+ txn_recon_mode_cd             | character varying(10)       |           | not null | 'OFF'::character varying
+ pma_freeze_ind                | character(1)                |           | not null | 'N'::bpchar
+ pma_comp_incl_date            | timestamp without time zone |           |          | 
+ pma_comp_excl_date            | timestamp without time zone |           |          | 
+ pma_close_date                | timestamp without time zone |           |          | 
+ voting_rights_cd              | character varying(10)       |           |          | 
+ inv_rights_cd                 | character varying(10)       |           |          | 
+ uma_holding_acct_cd           | character varying(20)       |           |          | 
+ wh_acct_cd                    | character varying(50)       |           |          | 
+ udf_char30                    | character varying(100)      |           |          | 
+ udf_char31                    | character varying(100)      |           |          | 
+ udf_char32                    | character varying(100)      |           |          | 
+ udf_char33                    | character varying(100)      |           |          | 
+ udf_char34                    | character varying(100)      |           |          | 
+ udf_char35                    | character varying(100)      |           |          | 
+ udf_char36                    | character varying(100)      |           |          | 
+ udf_char37                    | character varying(100)      |           |          | 
+ udf_char38                    | character varying(100)      |           |          | 
+ udf_char39                    | character varying(100)      |           |          | 
+ udf_char40                    | character varying(100)      |           |          | 
+ udf_char41                    | character varying(100)      |           |          | 
+ udf_char42                    | character varying(100)      |           |          | 
+ udf_char43                    | character varying(100)      |           |          | 
+ udf_char44                    | character varying(100)      |           |          | 
+ udf_char45                    | character varying(100)      |           |          | 
+ udf_char46                    | character varying(100)      |           |          | 
+ udf_char47                    | character varying(100)      |           |          | 
+ udf_char48                    | character varying(100)      |           |          | 
+ udf_char49                    | character varying(100)      |           |          | 
+ udf_char50                    | character varying(100)      |           |          | 
+ udf_char51                    | character varying(100)      |           |          | 
+ udf_char52                    | character varying(100)      |           |          | 
+ udf_char53                    | character varying(100)      |           |          | 
+ udf_char54                    | character varying(100)      |           |          | 
+ udf_char55                    | character varying(100)      |           |          | 
+ udf_char56                    | character varying(100)      |           |          | 
+ udf_char57                    | character varying(100)      |           |          | 
+ udf_char58                    | character varying(100)      |           |          | 
+ udf_char59                    | character varying(100)      |           |          | 
+ udf_char60                    | character varying(100)      |           |          | 
+ inv_objective_cd              | character varying(10)       |           |          | 
+ acct_desc_cd                  | character varying(10)       |           |          | 
+ taxability_cd                 | character varying(10)       |           |          | 
+ business_line_cd              | character varying(10)       |           |          | 
+ discretion_cd                 | character varying(10)       |           |          | 
+ product_cd                    | character varying(10)       |           |          | 
+ strategy_cd                   | character varying(10)       |           |          | 
+ sub_strategy_cd               | character varying(10)       |           |          | 
+ socially_resp_ind             | character(1)                |           | not null | 'N'::bpchar
+ pma_hold_reporting_date       | timestamp without time zone |           |          | 
+ pma_transactions_required_ind | character(1)                |           |          | 
+ ibor_recon_status_cd          | character varying(10)       |           |          | 
+ ibor_recon_date               | timestamp without time zone |           |          | 
+ ibor_promotion_timestamp      | timestamp without time zone |           |          | 
+ wh_manager_cd                 | character varying(30)       |           |          | 
+ settle_crrncy                 | character varying(3)        |           |          | 
+ aam_overlay_type_cd           | character varying(10)       |           |          | 
+ allow_fx_net_ind              | character(1)                |           | not null | 'Y'::bpchar
+ in_tol_pos_eval_cd            | character varying(10)       |           |          | 
+ sleeve_status_cd              | character varying(10)       |           |          | 
+ jurisdiction_cd               | character varying(10)       |           |          | 
+ branch_cd                     | character varying(20)       |           |          | 
+ owner_institution_cd          | character varying(20)       |           |          | 
+ last_harvest_date             | timestamp without time zone |           |          | 
+ direct_voting_rights_ind      | character(1)                |           | not null | 'N'::bpchar
+ last_rebal_date               | timestamp without time zone |           |          | 
+ median_drift_pct              | numeric(18,4)               |           |          | 
+ max_drift_pct                 | numeric(18,4)               |           |          | 
+ last_drift_calc_date          | timestamp without time zone |           |          | 
+ hedge_crrncy_cd               | character varying(3)        |           |          | 
+ start_batch_viol_prev         | numeric(18,0)               |           |          | 
+ cpl_last_run_time             | timestamp without time zone |           |          | 
+ model_availability_cd         | character varying(10)       |           |          | 
+ schedule_id                   | numeric(18,0)               |           |          | 
+ rebal_once_daily_ind          | character(1)                |           | not null | 'N'::bpchar
+ tax_lot_acct_cd               | character varying(20)       |           |          | 
+ external_shell_model_cd       | character varying(20)       |           |          | 
+ mdl_tol_value                 | numeric(18,9)               |           |          | 
+ mdl_tol_multi_ind             | character(1)                |           | not null | 'N'::bpchar
+ order_gen_sequence_cd         | character varying(10)       |           |          | 
+ udf_fund_assign_char1         | character varying(100)      |           |          | 
+ udf_fund_assign_char2         | character varying(100)      |           |          | 
+ udf_fund_assign_char3         | character varying(100)      |           |          | 
+ model_flex_cash_tier_ind      | character(1)                |           |          | 
+ mdl_minor_change_ind          | character(1)                |           | not null | 'N'::bpchar
+ last_order_gen_date           | timestamp without time zone |           |          | 
+ mdl_qty_lock_ind              | character(1)                |           |          | 'N'::bpchar
+ excl_seg_qty_order_gen_ind    | character(1)                |           |          | 
+ index_type_cd                 | character varying(10)       |           |          | 
+ def_liability_bench_cd        | character varying(20)       |           |          | 
+Indexes:
+    "cs_fund_pk" PRIMARY KEY, btree (acct_cd)
+    "cs_fund_n1" btree (start_batch_viol)
+    "cs_fund_n10" UNIQUE, btree (acct_id)
+    "cs_fund_n11" btree (view_id)
+    "cs_fund_n12" btree (exch_list_cd)
+    "cs_fund_n13" btree (inv_class_cd)
+    "cs_fund_n14" btree (service_id)
+    "cs_fund_n15" btree (default_model_cd)
+    "cs_fund_n16" btree (basket_typ_cd)
+    "cs_fund_n17" btree (syst_of_reference)
+    "cs_fund_n18" btree (ps_enabled_ind, ps_incptn_date)
+    "cs_fund_n19" btree (orig_model_acct_cd)
+    "cs_fund_n2" btree (nexpert_inst)
+    "cs_fund_n21" btree (wh_manager_cd)
+    "cs_fund_n22" btree (settle_crrncy)
+    "cs_fund_n23" btree (branch_cd)
+    "cs_fund_n24" btree (owner_institution_cd)
+    "cs_fund_n25" btree (grp_type_cd)
+    "cs_fund_n26" btree (schedule_id)
+    "cs_fund_n27" btree (tax_lot_acct_cd)
+    "cs_fund_n28" btree (uma_holding_acct_cd)
+    "cs_fund_n3" btree (acct_typ_cd, uma_type_cd)
+    "cs_fund_n4" btree (omnibus_acct_cd)
+    "cs_fund_n5" btree (crrncy_cd)
+    "cs_fund_n6" btree (cntry_cd)
+    "cs_fund_n7" btree (custodian_cd)
+    "cs_fund_n8" btree (manager)
+    "cs_fund_n9" btree (acct_name)
+Referenced by:
+    TABLE "pdf_scheduled_rpt_acct" CONSTRAINT "pdf_scheduled_rpt_acct_fk2" FOREIGN KEY (acct_cd) REFERENCES cs_fund(acct_cd)
+    TABLE "pma_blended_benchmark" CONSTRAINT "pma_blended_benchmark_fk1" FOREIGN KEY (acct_cd) REFERENCES cs_fund(acct_cd)
+    TABLE "pma_categ_benchmark_detail" CONSTRAINT "pma_categ_benchmark_detail_fk1" FOREIGN KEY (acct_cd) REFERENCES cs_fund(acct_cd)
+    TABLE "pma_composite_member" CONSTRAINT "pma_composite_member_fk1" FOREIGN KEY (acct_cd) REFERENCES cs_fund(acct_cd)
+    TABLE "pma_position" CONSTRAINT "pma_position_fk1" FOREIGN KEY (acct_cd) REFERENCES cs_fund(acct_cd)
+    TABLE "pma_return" CONSTRAINT "pma_return_fk2" FOREIGN KEY (acct_cd) REFERENCES cs_fund(acct_cd) ON DELETE CASCADE
+    TABLE "pma_rf_rate" CONSTRAINT "pma_rf_rate_fk3" FOREIGN KEY (acct_cd) REFERENCES cs_fund(acct_cd)
+    TABLE "pma_risk_measure_fund" CONSTRAINT "pma_risk_measure_fund_fk2" FOREIGN KEY (acct_cd) REFERENCES cs_fund(acct_cd) ON DELETE CASCADE
+    TABLE "pma_risk_measure_fund_value" CONSTRAINT "pma_risk_measure_fund_val_fk2" FOREIGN KEY (acct_cd) REFERENCES cs_fund(acct_cd) ON DELETE CASCADE
+    TABLE "pma_security_return" CONSTRAINT "pma_security_return_fk1" FOREIGN KEY (acct_cd) REFERENCES cs_fund(acct_cd) ON DELETE CASCADE
+    TABLE "pma_transaction" CONSTRAINT "pma_transaction_fk1" FOREIGN KEY (acct_cd) REFERENCES cs_fund(acct_cd)
+    TABLE "ps_corp_action_acct" CONSTRAINT "ps_corp_action_acct_fk2" FOREIGN KEY (acct_cd) REFERENCES cs_fund(acct_cd)
+    TABLE "ps_corp_action_opt_election" CONSTRAINT "ps_corp_action_opt_elect_fk2" FOREIGN KEY (acct_cd) REFERENCES cs_fund(acct_cd)
+    TABLE "ps_corp_action_stnd_election" CONSTRAINT "ps_corp_action_stnd_elect_fk1" FOREIGN KEY (acct_cd) REFERENCES cs_fund(acct_cd) ON DELETE CASCADE
+    TABLE "ps_position" CONSTRAINT "ps_position_fk1" FOREIGN KEY (acct_cd) REFERENCES cs_fund(acct_cd)
+    TABLE "ps_position_snapshot" CONSTRAINT "ps_position_snapshot_fk1" FOREIGN KEY (acct_cd) REFERENCES cs_fund(acct_cd)
+    TABLE "ps_proc_action" CONSTRAINT "ps_proc_action_fk1" FOREIGN KEY (acct_group) REFERENCES cs_fund(acct_cd)
+    TABLE "ps_recon_acct" CONSTRAINT "ps_recon_acct_fk2" FOREIGN KEY (acct_cd) REFERENCES cs_fund(acct_cd)
+    TABLE "ps_recon_position" CONSTRAINT "ps_recon_position_fk1" FOREIGN KEY (acct_cd) REFERENCES cs_fund(acct_cd) ON DELETE CASCADE
+    TABLE "ps_recon_record" CONSTRAINT "ps_recon_record_fk2" FOREIGN KEY (acct_cd) REFERENCES cs_fund(acct_cd)
+    TABLE "ps_recon_run" CONSTRAINT "ps_recon_run_fk1" FOREIGN KEY (acct_group) REFERENCES cs_fund(acct_cd)
+    TABLE "ps_recon_tax_lot" CONSTRAINT "ps_recon_tax_lot_fk1" FOREIGN KEY (acct_cd) REFERENCES cs_fund(acct_cd) ON DELETE CASCADE
+    TABLE "ps_recon_transaction" CONSTRAINT "ps_recon_transaction_fk1" FOREIGN KEY (acct_cd) REFERENCES cs_fund(acct_cd)
+    TABLE "ps_transaction" CONSTRAINT "ps_transaction_fk2" FOREIGN KEY (acct_cd) REFERENCES cs_fund(acct_cd)
+    TABLE "sa_eod_scenario_config_fund" CONSTRAINT "sa_eod_scenario_config_fnd_fk2" FOREIGN KEY (acct_cd) REFERENCES cs_fund(acct_cd)
+    TABLE "ts_cash_mgmt_default" CONSTRAINT "ts_cash_mgmt_default_fk1" FOREIGN KEY (acct_cd) REFERENCES cs_fund(acct_cd)
+    TABLE "ts_commission_default" CONSTRAINT "ts_commission_default_fk1" FOREIGN KEY (acct_cd) REFERENCES cs_fund(acct_cd)
+    TABLE "ts_commission_target" CONSTRAINT "ts_commission_target_fk4" FOREIGN KEY (acct_cd) REFERENCES cs_fund(acct_cd)
+    TABLE "ts_currency_hedge_pct" CONSTRAINT "ts_currency_hedge_pct_fk1" FOREIGN KEY (acct_cd) REFERENCES cs_fund(acct_cd)
+    TABLE "ts_def_trader" CONSTRAINT "ts_def_trader_fk4" FOREIGN KEY (acct_cd) REFERENCES cs_fund(acct_cd)
+    TABLE "ts_fund_cash_flow_smmry" CONSTRAINT "ts_fund_cash_flow_smmry_fk1" FOREIGN KEY (acct_cd) REFERENCES cs_fund(acct_cd) ON DELETE CASCADE
+    TABLE "ts_mdl_node_fund" CONSTRAINT "ts_mdl_node_fund_fk2" FOREIGN KEY (acct_cd) REFERENCES cs_fund(acct_cd)
+    TABLE "ts_mdl_node_fund_history" CONSTRAINT "ts_mdl_node_fund_history_fk2" FOREIGN KEY (acct_cd) REFERENCES cs_fund(acct_cd)
+    TABLE "ts_mdl_tree_node" CONSTRAINT "ts_mdl_tree_node_fk2" FOREIGN KEY (acct_cd) REFERENCES cs_fund(acct_cd)
+    TABLE "ts_mdl_tree_node" CONSTRAINT "ts_mdl_tree_node_fk4" FOREIGN KEY (ref_acct_cd) REFERENCES cs_fund(acct_cd)
+    TABLE "ts_model_hist" CONSTRAINT "ts_model_hist_fk2" FOREIGN KEY (acct_cd) REFERENCES cs_fund(acct_cd) ON DELETE CASCADE
+    TABLE "ts_model_history" CONSTRAINT "ts_model_history_fk1" FOREIGN KEY (acct_cd) REFERENCES cs_fund(acct_cd) ON DELETE CASCADE
+    TABLE "ts_model_node" CONSTRAINT "ts_model_node_fk2" FOREIGN KEY (ref_acct_cd) REFERENCES cs_fund(acct_cd)
+    TABLE "ts_model_node" CONSTRAINT "ts_model_node_fk8" FOREIGN KEY (acct_cd) REFERENCES cs_fund(acct_cd) ON DELETE CASCADE
+    TABLE "ts_model_rule" CONSTRAINT "ts_model_rule_fk1" FOREIGN KEY (acct_cd) REFERENCES cs_fund(acct_cd)
+    TABLE "ts_model_tag" CONSTRAINT "ts_model_tag_fk1" FOREIGN KEY (acct_cd) REFERENCES cs_fund(acct_cd)
+    TABLE "ts_order_alloc" CONSTRAINT "ts_order_alloc_fk1" FOREIGN KEY (acct_cd) REFERENCES cs_fund(acct_cd)
+    TABLE "ts_order_gen" CONSTRAINT "ts_order_gen_fk1" FOREIGN KEY (acct_cd) REFERENCES cs_fund(acct_cd)
+
+                              Table "public.ps_position"
+        Column         |            Type             | Collation | Nullable | Default 
+-----------------------+-----------------------------+-----------+----------+---------
+ ps_position_id        | numeric(18,0)               |           | not null | 
+ acct_cd               | character varying(20)       |           | not null | 
+ sec_id                | numeric(18,0)               |           | not null | 
+ long_sht_cd           | character(1)                |           | not null | 
+ qty                   | numeric(18,4)               |           |          | 
+ base_avg_unit_cost    | double precision            |           |          | 
+ original_face         | numeric(18,4)               |           |          | 
+ record_version        | numeric(10,0)               |           | not null | 
+ create_date           | timestamp without time zone |           | not null | 
+ create_user           | character varying(30)       |           | not null | 
+ last_upd_date         | timestamp without time zone |           |          | 
+ last_upd_user         | character varying(30)       |           |          | 
+ base_orig_cost        | numeric(18,4)               |           |          | 
+ lot_enabled_ind       | character(1)                |           | not null | 
+ replay_status_cd      | character varying(10)       |           |          | 
+ replay_date           | timestamp without time zone |           |          | 
+ replay_failure_reason | character varying(255)      |           |          | 
+ replay_stage_cd       | character varying(10)       |           |          | 
+ replay_step_cd        | character varying(10)       |           |          | 
+ replay_corp_action_id | numeric(18,0)               |           |          | 
+ avg_acq_ytm           | numeric(17,8)               |           |          | 
+ seg_qty               | numeric(18,4)               |           |          | 
+ pledged_qty           | numeric(18,4)               |           |          | 
+Indexes:
+    "ps_position_pk" PRIMARY KEY, btree (ps_position_id)
+    "ps_position_n1" UNIQUE, btree (acct_cd, sec_id, long_sht_cd)
+    "ps_position_n2" btree (sec_id)
+    "ps_position_n3" btree (replay_corp_action_id)
+Foreign-key constraints:
+    "ps_position_fk1" FOREIGN KEY (acct_cd) REFERENCES cs_fund(acct_cd)
+    "ps_position_fk2" FOREIGN KEY (sec_id) REFERENCES csm_security(sec_id)
+    "ps_position_fk3" FOREIGN KEY (replay_corp_action_id) REFERENCES ps_corp_action_def(corp_action_id)
+Referenced by:
+    TABLE "ps_position_history" CONSTRAINT "ps_position_history_fk1" FOREIGN KEY (ps_position_id) REFERENCES ps_position(ps_position_id) ON DELETE CASCADE
+

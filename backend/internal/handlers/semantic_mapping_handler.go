@@ -247,7 +247,7 @@ func (h *SemanticMappingHandler) HandleApplyMappingsWizard(w http.ResponseWriter
 	var request struct {
 		TenantID            string                       `json:"tenant_id"`
 		DatasourceID        string                       `json:"datasource_id"`
-		TenantInstanceID    string                       `json:"datasource_id"`
+		TenantInstanceID    string                       `json:"tenant_instance_id"`
 		AutoCreateThreshold float64                      `json:"auto_create_threshold"`
 		ApprovalThreshold   float64                      `json:"approval_threshold"`
 		Mappings            []analytics.GeneratedMapping `json:"mappings"`

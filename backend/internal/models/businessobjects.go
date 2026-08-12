@@ -94,6 +94,7 @@ type BusinessObjectDefinition struct {
 	TenantID               string                       `db:"tenant_id" json:"tenantId"`
 	DatasourceID           sql.NullString               `db:"datasource_id" json:"datasourceId,omitempty"` // Nullable for global BOs
 	CoreID                 sql.NullString               `db:"core_id" json:"coreId,omitempty"`             // Links to gold copy source BO (Workday-style extension)
+	Bindings               []map[string]interface{}     `json:"bindings"`
 }
 
 // MarshalJSON handles custom JSON marshaling for BusinessObjectDefinition to properly serialize sql.NullString fields

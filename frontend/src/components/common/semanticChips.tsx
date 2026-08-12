@@ -1,10 +1,10 @@
 import type { ReactNode } from 'react';
 import { Chip, Stack } from '@mui/material';
+import WaterDropIcon from '@mui/icons-material/WaterDrop';
+import BuildIcon from '@mui/icons-material/Build';
+import { CORE_COLOR, CUSTOM_COLOR } from './CoreCustomIcons';
 
-// Centralized colors for Core and Custom chips. Use MUI palette names so
-// colors remain theme-aware and consistent across the app.
-const CORE_COLOR = 'success.main';
-const CUSTOM_COLOR = 'secondary.main';
+export { CORE_COLOR, CUSTOM_COLOR };
 
 export function renderCoreCustomChips(option?: any) {
   if (!option) return null;
@@ -15,6 +15,7 @@ export function renderCoreCustomChips(option?: any) {
     chips.push(
       <Chip
         key="core"
+        icon={<WaterDropIcon sx={{ fontSize: 16, color: CORE_COLOR }} />}
         label="Core"
         size="small"
         variant="outlined"
@@ -30,6 +31,7 @@ export function renderCoreCustomChips(option?: any) {
     chips.push(
       <Chip
         key="custom"
+        icon={<BuildIcon sx={{ fontSize: 16, color: CUSTOM_COLOR }} />}
         label="Custom"
         size="small"
         variant="outlined"

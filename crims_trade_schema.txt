@@ -1,0 +1,335 @@
+                                         Table "public.ts_order_alloc"
+            Column             |            Type             | Collation | Nullable |          Default          
+-------------------------------+-----------------------------+-----------+----------+---------------------------
+ trade_id                      | numeric(18,0)               |           | not null | 
+ acct_cd                       | character varying(20)       |           | not null | 
+ order_id                      | numeric(18,0)               |           | not null | 
+ target_qty                    | numeric(18,4)               |           |          | 
+ target_amt                    | numeric(18,4)               |           |          | 
+ target_base_amt               | numeric(18,4)               |           |          | 
+ target_inc_amt                | numeric(18,4)               |           |          | 
+ target_inc_base_amt           | numeric(18,4)               |           |          | 
+ target_original_face          | numeric(18,4)               |           |          | 
+ exec_qty                      | numeric(18,4)               |           |          | 
+ exec_amt                      | numeric(18,4)               |           |          | 
+ exec_original_face            | numeric(18,4)               |           |          | 
+ futr_contract_amt             | numeric(18,4)               |           |          | 
+ commision_rate                | numeric(18,9)               |           |          | 
+ commision_ind                 | character varying(10)       |           |          | 
+ commision_amt                 | numeric(18,4)               |           |          | 
+ inc_amt                       | numeric(18,4)               |           |          | 
+ fee_1_amt                     | numeric(18,4)               |           |          | 
+ fee_2_amt                     | numeric(18,4)               |           |          | 
+ fee_3_amt                     | numeric(18,4)               |           |          | 
+ fee_4_amt                     | numeric(18,4)               |           |          | 
+ fee_5_amt                     | numeric(18,4)               |           |          | 
+ fee_6_amt                     | numeric(18,4)               |           |          | 
+ net_prin_amt                  | numeric(18,4)               |           |          | 
+ exec_settle_price             | double precision            |           |          | 
+ ext_status                    | character varying(25)       |           |          | 
+ commision_settle_amt          | numeric(18,4)               |           |          | 
+ fee_1_settle_amt              | numeric(18,4)               |           |          | 
+ fee_2_settle_amt              | numeric(18,4)               |           |          | 
+ fee_3_settle_amt              | numeric(18,4)               |           |          | 
+ fee_4_settle_amt              | numeric(18,4)               |           |          | 
+ fee_5_settle_amt              | numeric(18,4)               |           |          | 
+ fee_6_settle_amt              | numeric(18,4)               |           |          | 
+ exec_settle_amt               | numeric(18,4)               |           |          | 
+ net_prin_settle_amt           | numeric(18,4)               |           |          | 
+ prin_settle_crrncy            | character varying(3)        |           |          | 
+ prin_settle_fx_rate           | double precision            |           |          | 
+ prin_settle_loc               | character varying(30)       |           |          | 
+ inc_settle_amt                | numeric(18,4)               |           |          | 
+ inc_settle_crrncy             | character varying(3)        |           |          | 
+ inc_settle_fx_rate            | double precision            |           |          | 
+ inc_settle_loc                | character varying(30)       |           |          | 
+ exec_base_price               | double precision            |           |          | 
+ commision_base_amt            | numeric(18,4)               |           |          | 
+ fee_1_base_amt                | numeric(18,4)               |           |          | 
+ fee_2_base_amt                | numeric(18,4)               |           |          | 
+ fee_3_base_amt                | numeric(18,4)               |           |          | 
+ fee_4_base_amt                | numeric(18,4)               |           |          | 
+ fee_5_base_amt                | numeric(18,4)               |           |          | 
+ fee_6_base_amt                | numeric(18,4)               |           |          | 
+ exec_base_amt                 | numeric(18,4)               |           |          | 
+ net_prin_base_amt             | numeric(18,4)               |           |          | 
+ prin_base_fx_rate             | double precision            |           |          | 
+ ref_prin_base_fx_rate         | double precision            |           |          | 
+ inc_base_amt                  | numeric(18,4)               |           |          | 
+ inc_base_fx_rate              | double precision            |           |          | 
+ ref_inc_base_fx_rate          | double precision            |           |          | 
+ from_crrncy_base_amt          | numeric(18,4)               |           |          | 
+ from_crrncy_base_fx_rate      | double precision            |           |          | 
+ to_crrncy_base_amt            | numeric(18,4)               |           |          | 
+ to_crrncy_base_fx_rate        | double precision            |           |          | 
+ from_crrncy_loc               | character varying(30)       |           |          | 
+ to_crrncy_loc                 | character varying(30)       |           |          | 
+ custodian                     | character varying(30)       |           |          | 
+ freeze                        | character(1)                |           | not null | 'N'::bpchar
+ delivery_type                 | character varying(10)       |           |          | 
+ auth_user                     | character varying(30)       |           |          | 
+ auth_date                     | timestamp without time zone |           |          | 
+ ref_id                        | character varying(50)       |           |          | 
+ ref_id2                       | character varying(32)       |           |          | 
+ directed_broker               | character varying(12)       |           |          | 
+ broker_reason                 | character varying(10)       |           |          | 
+ fill_seq                      | numeric(5,0)                |           |          | 
+ status                        | character varying(10)       |           |          | 
+ trade_ack_status              | character varying(10)       |           |          | 
+ create_date                   | timestamp without time zone |           |          | 
+ create_user                   | character varying(30)       |           |          | 
+ last_upd_date                 | timestamp without time zone |           |          | 
+ last_upd_user                 | character varying(30)       |           |          | 
+ original_face                 | numeric(18,4)               |           |          | 
+ soft_dollar_cd                | character varying(10)       |           |          | 
+ soft_dollar_amt               | numeric(18,4)               |           |          | 
+ soft_dollar_pct               | numeric(5,2)                |           |          | 
+ comm_fixed_fee                | numeric(18,4)               |           |          | 
+ comm_eff_rate                 | numeric(18,9)               |           |          | 
+ exp_seq                       | character varying(5)        |           |          | 
+ step_out                      | character varying(12)       |           |          | 
+ step_out_broker               | character varying(12)       |           |          | 
+ dir_exec_broker               | character varying(12)       |           |          | 
+ trd_label                     | character varying(10)       |           |          | 
+ lot_size                      | numeric(18,4)               |           |          | 
+ min_size                      | numeric(18,4)               |           |          | 
+ max_size                      | numeric(18,4)               |           |          | 
+ qty_amt                       | character(1)                |           |          | 
+ tax_lot_user_cd_1             | character varying(30)       |           |          | 
+ prin_autofx_order_id          | numeric(18,0)               |           |          | 
+ inc_autofx_order_id           | numeric(18,0)               |           |          | 
+ ordgrp_run_id                 | numeric(18,0)               |           |          | 
+ ordgrp_modified               | character(1)                |           |          | 
+ fax_id                        | numeric(18,0)               |           |          | 
+ fax_status                    | character varying(10)       |           |          | 
+ cur_base_mkt_val              | numeric(18,4)               |           |          | 
+ cur_base_mkt_val_open         | numeric(18,4)               |           |          | 
+ cur_local_amt_open            | numeric(18,4)               |           |          | 
+ ticket_print_tracking         | character(1)                |           |          | 
+ print_time                    | timestamp without time zone |           |          | 
+ clear_broker                  | character varying(12)       |           |          | 
+ deliv_loc_num                 | character varying(35)       |           |          | 
+ usr_class_cd_1                | character varying(10)       |           |          | 
+ usr_class_cd_2                | character varying(10)       |           |          | 
+ usr_class_cd_3                | character varying(10)       |           |          | 
+ usr_class_cd_4                | character varying(10)       |           |          | 
+ usr_class_cd_5                | character varying(10)       |           |          | 
+ usr_class_cd_6                | character varying(10)       |           |          | 
+ freeze_exec                   | character(1)                |           | not null | 'N'::bpchar
+ rotation_order                | numeric(7,0)                |           |          | 
+ rotation_seq                  | numeric(7,0)                |           |          | 
+ orig_rotation_seq             | numeric(7,0)                |           |          | 
+ commision_minimum             | numeric(18,4)               |           |          | 
+ dir_exec_broker_type          | character(1)                |           |          | 
+ cur_prin_fx_rate              | double precision            |           |          | 
+ cur_inc_fx_rate               | double precision            |           |          | 
+ benchmark_sec_id              | numeric(18,0)               |           |          | 
+ benchmark_price               | double precision            |           |          | 
+ benchmark_yield               | double precision            |           |          | 
+ spread                        | numeric(17,2)               |           |          | 
+ fee_1_cd                      | character varying(10)       |           |          | 
+ fee_2_cd                      | character varying(10)       |           |          | 
+ fee_3_cd                      | character varying(10)       |           |          | 
+ fee_5_cd                      | character varying(10)       |           |          | 
+ fee_6_cd                      | character varying(10)       |           |          | 
+ mkt_acct_cd                   | character varying(40)       |           |          | 
+ omnibus_mkt_acct_cd           | character varying(40)       |           |          | 
+ fee_4_cd                      | character varying(10)       |           |          | 
+ prime_bkr_fee_amt             | numeric(18,4)               |           |          | 
+ prime_bkr_fee_base_amt        | numeric(18,4)               |           |          | 
+ prime_bkr_fee_settle_amt      | numeric(18,4)               |           |          | 
+ designated_broker_type        | character(1)                |           |          | 
+ incl_in_bod_qty               | character(1)                |           | not null | 'N'::bpchar
+ ctm_status                    | character varying(10)       |           | not null | 'NEWD'::character varying
+ exec_broker                   | character varying(12)       |           |          | 
+ vmu_excep_cd                  | character varying(10)       |           | not null | 'NONE'::character varying
+ invest_divest_node_id         | numeric(18,0)               |           |          | 
+ invest_divest_instr_date      | timestamp without time zone |           |          | 
+ special_inst                  | text                        |           |          | 
+ allocd_orig_face              | numeric(18,4)               |           | not null | 0
+ pledged_orig_face             | numeric(18,4)               |           | not null | 0
+ oasys_comm_ind                | character(1)                |           | not null | 'H'::bpchar
+ pairoff_orig_face             | numeric(18,4)               |           | not null | 0
+ turn_orig_face                | numeric(18,4)               |           | not null | 0
+ exec_price                    | double precision            |           |          | 
+ child_row_type                | character(1)                |           | not null | '0'::bpchar
+ order_manager                 | character varying(30)       |           |          | 
+ limit_price                   | double precision            |           |          | 
+ instruction                   | character varying(10)       |           |          | 
+ comments                      | text                        |           |          | 
+ orig_order_id                 | numeric(18,0)               |           | not null | 0
+ prog_mgr_id                   | numeric(18,0)               |           |          | 
+ omnibus_trade_id              | numeric(18,0)               |           |          | 
+ exec_crrncy_pair_rate         | double precision            |           |          | 
+ recv_deliv_free_ind           | character(1)                |           | not null | 'N'::bpchar
+ match_determ_id               | numeric(18,0)               |           |          | 
+ analyst                       | character varying(30)       |           |          | 
+ strategy_cd_1                 | character varying(20)       |           |          | 
+ strategy_cd_2                 | character varying(20)       |           |          | 
+ tax_lot_udf_char1             | character varying(100)      |           |          | 
+ tax_lot_udf_char2             | character varying(100)      |           |          | 
+ tax_lot_udf_char3             | character varying(100)      |           |          | 
+ tax_lot_udf_char4             | character varying(100)      |           |          | 
+ tax_lot_udf_char5             | character varying(100)      |           |          | 
+ tax_lot_udf_char6             | character varying(100)      |           |          | 
+ pairs_id                      | numeric(18,0)               |           |          | 
+ bkr_of_credit                 | character varying(12)       |           |          | 
+ trading_venue                 | character varying(12)       |           |          | 
+ ext_vmu_id                    | character varying(32)       |           |          | 
+ cross_ops                     | character varying(4)        |           |          | 
+ comm_freeze_ind               | character(1)                |           | not null | 'N'::bpchar
+ exec_broker_reason            | character varying(12)       |           |          | 
+ assign_orig_face              | numeric(18,4)               |           | not null | 0
+ cntrprty_oper                 | character varying(10)       |           |          | 
+ tax_lot_udf_float1            | double precision            |           |          | 
+ tax_lot_udf_float2            | double precision            |           |          | 
+ tax_lot_udf_float3            | double precision            |           |          | 
+ tax_lot_udf_float4            | double precision            |           |          | 
+ udf_float1                    | double precision            |           |          | 
+ udf_float2                    | double precision            |           |          | 
+ udf_float3                    | double precision            |           |          | 
+ udf_float4                    | double precision            |           |          | 
+ udf_float5                    | double precision            |           |          | 
+ udf_float6                    | double precision            |           |          | 
+ udf_float7                    | double precision            |           |          | 
+ udf_float8                    | double precision            |           |          | 
+ udf_float9                    | double precision            |           |          | 
+ udf_float10                   | double precision            |           |          | 
+ udf_float11                   | double precision            |           |          | 
+ udf_float12                   | double precision            |           |          | 
+ udf_float13                   | double precision            |           |          | 
+ udf_float14                   | double precision            |           |          | 
+ udf_float15                   | double precision            |           |          | 
+ udf_float16                   | double precision            |           |          | 
+ udf_float17                   | double precision            |           |          | 
+ udf_float18                   | double precision            |           |          | 
+ udf_float19                   | double precision            |           |          | 
+ parent_trade_id               | numeric(18,0)               |           |          | 
+ cross_acct_cd                 | character varying(30)       |           |          | 
+ pair_determ_id                | numeric(18,0)               |           |          | 
+ ca_pair_determ_id             | numeric(18,0)               |           |          | 
+ ca_match_determ_id            | numeric(18,0)               |           |          | 
+ ca_venue_cd                   | character varying(10)       |           |          | 
+ ca_ext_vmu_id                 | character varying(32)       |           |          | 
+ ca_vmu_status                 | character varying(20)       |           |          | 
+ ca_vmu_excep_cd               | character varying(10)       |           |          | 
+ target_notnl_base_amt         | numeric(18,4)               |           |          | 
+ target_notnl_amt              | numeric(18,4)               |           |          | 
+ alloc_grp_cd                  | character varying(20)       |           |          | 
+ alloc_target_pct              | numeric(6,3)                |           |          | 
+ record_version                | numeric(10,0)               |           | not null | 1
+ tax_lot_udf_date1             | timestamp without time zone |           |          | 
+ tax_lot_udf_date2             | timestamp without time zone |           |          | 
+ tax_lot_udf_date3             | timestamp without time zone |           |          | 
+ tax_lot_udf_date4             | timestamp without time zone |           |          | 
+ tax_lot_udf_date5             | timestamp without time zone |           |          | 
+ tax_lot_udf_float5            | double precision            |           |          | 
+ tax_lot_udf_float6            | double precision            |           |          | 
+ tax_lot_udf_float7            | double precision            |           |          | 
+ tax_lot_udf_float8            | double precision            |           |          | 
+ tax_lot_udf_float9            | double precision            |           |          | 
+ tax_lot_udf_float10           | double precision            |           |          | 
+ tax_lot_sell_cnvtn            | character varying(10)       |           |          | 
+ net_prin_notnl_amt            | numeric(18,4)               |           |          | 
+ collat_pct                    | numeric(12,8)               |           |          | 
+ designated_trade_id           | numeric(18,0)               |           |          | 
+ prin_exch_amt                 | numeric(18,4)               |           |          | 
+ adj_prin_exch_amt             | numeric(18,4)               |           |          | 
+ adj_tgt_notnl_amt             | numeric(18,4)               |           |          | 
+ place_id                      | numeric(18,0)               |           |          | 
+ fill_id                       | numeric(18,0)               |           |          | 
+ alloc_cont_to_dur             | numeric(18,9)               |           |          | 
+ alloc_cont_to_convexity       | double precision            |           |          | 
+ acct_exposure_pct_before      | numeric(18,9)               |           |          | 
+ acct_exposure_pct_after       | numeric(18,9)               |           |          | 
+ acct_dur_before               | numeric(18,9)               |           |          | 
+ acct_dur_after                | numeric(18,9)               |           |          | 
+ acct_convexity_before         | double precision            |           |          | 
+ acct_convexity_after          | double precision            |           |          | 
+ bench_dur                     | numeric(18,9)               |           |          | 
+ bench_convexity               | double precision            |           |          | 
+ comm_determ_id                | numeric(18,0)               |           |          | 
+ fee_determ_id                 | numeric(18,0)               |           |          | 
+ bkr_determ_id                 | numeric(18,0)               |           |          | 
+ mlo_trade_num                 | numeric(5,0)                |           |          | 
+ collat_amt                    | numeric(18,4)               |           |          | 
+ order_gen_run_id              | numeric(18,0)               |           |          | 
+ clear_venue_cd                | character varying(10)       |           |          | 
+ sec_min_qty                   | numeric(18,4)               |           |          | 
+ estimated_client_yield        | numeric(18,9)               |           |          | 
+ comm_discount_pct             | numeric(18,9)               |           |          | 
+ orig_trade_id                 | numeric(18,0)               |           |          | 
+ alloc_uti                     | character varying(120)      |           |          | 
+ clear_uti                     | character varying(120)      |           |          | 
+ pset                          | character varying(20)       |           |          | 
+ udf_char1                     | character varying(100)      |           |          | 
+ udf_char2                     | character varying(100)      |           |          | 
+ udf_char3                     | character varying(100)      |           |          | 
+ udf_char4                     | character varying(100)      |           |          | 
+ udf_char5                     | character varying(100)      |           |          | 
+ udf_char6                     | character varying(100)      |           |          | 
+ udf_char7                     | character varying(100)      |           |          | 
+ udf_char8                     | character varying(100)      |           |          | 
+ udf_char9                     | character varying(100)      |           |          | 
+ udf_char10                    | character varying(100)      |           |          | 
+ udf_char11                    | character varying(100)      |           |          | 
+ udf_char12                    | character varying(100)      |           |          | 
+ udf_char13                    | character varying(100)      |           |          | 
+ udf_char14                    | character varying(100)      |           |          | 
+ udf_char15                    | character varying(100)      |           |          | 
+ place_broker_reason           | character varying(12)       |           |          | 
+ collat_determ_id              | numeric(18,0)               |           |          | 
+ collat_determ_ovrd_ind        | character(1)                |           | not null | 'N'::bpchar
+ risk_reduction_ind            | character(1)                |           | not null | 'N'::bpchar
+ reg_mgr_exec_priority_cd      | character varying(10)       |           |          | 
+ notnl_change_cd               | character varying(10)       |           |          | 
+ csannex_determ_id             | numeric(18,0)               |           |          | 
+ exclude_from_autofx_ind       | character(1)                |           | not null | 'N'::bpchar
+ exclude_from_autofx_reason_cd | character varying(10)       |           |          | 
+ circuit_breaker_id            | numeric(18,0)               |           |          | 
+ fulfill_ind                   | character(1)                |           | not null | 'N'::bpchar
+ inv_dec_maker_id              | character varying(255)      |           |          | 
+ inv_dec_maker_determ_id       | numeric(18,0)               |           |          | 
+ exclude_from_fx_net_ind       | character(1)                |           | not null | 'N'::bpchar
+ implied_comm_determ_id        | numeric(18,0)               |           |          | 
+ implied_comm_amt              | numeric(18,4)               |           |          | 
+ reg_trade_id                  | numeric(18,0)               |           |          | 
+ privilege_create_operation_cd | character varying(10)       |           |          | 
+ net_money                     | numeric(18,4)               |           |          | 
+ net_money_src_cd              | character varying(10)       |           |          | 
+ cross_determ_id               | numeric(18,0)               |           |          | 
+ cross_restrict_type           | character varying(4)        |           |          | 
+ cross_restrict_ind            | character(1)                |           |          | 
+ cash_mgmt_category_cd         | character varying(10)       |           |          | 
+Indexes:
+    "ts_order_alloc_pk" PRIMARY KEY, btree (trade_id)
+    "ts_order_alloc_n1" btree (order_id, acct_cd)
+    "ts_order_alloc_n10" btree (analyst)
+    "ts_order_alloc_n11" btree (directed_broker)
+    "ts_order_alloc_n12" btree (ca_ext_vmu_id)
+    "ts_order_alloc_n13" btree (ext_vmu_id)
+    "ts_order_alloc_n14" btree (bkr_of_credit)
+    "ts_order_alloc_n15" btree (trading_venue)
+    "ts_order_alloc_n16" btree (bkr_determ_id)
+    "ts_order_alloc_n17" btree (orig_order_id)
+    "ts_order_alloc_n18" btree (orig_trade_id)
+    "ts_order_alloc_n2" btree (ref_id2)
+    "ts_order_alloc_n20" btree (circuit_breaker_id)
+    "ts_order_alloc_n21" btree (order_gen_run_id, order_id, acct_cd)
+    "ts_order_alloc_n3" btree (ordgrp_run_id)
+    "ts_order_alloc_n4" btree (acct_cd)
+    "ts_order_alloc_n7" btree (omnibus_trade_id)
+    "ts_order_alloc_n8" btree (benchmark_sec_id)
+    "ts_order_alloc_n9" btree (prog_mgr_id)
+Foreign-key constraints:
+    "ts_order_alloc_fk1" FOREIGN KEY (acct_cd) REFERENCES cs_fund(acct_cd)
+    "ts_order_alloc_fk2" FOREIGN KEY (bkr_of_credit) REFERENCES cs_broker(bkr_cd)
+    "ts_order_alloc_fk4" FOREIGN KEY (trading_venue) REFERENCES cs_broker(bkr_cd)
+Referenced by:
+    TABLE "epn_detail_omnibus" CONSTRAINT "epn_detail_omnibus_fk1" FOREIGN KEY (trade_id) REFERENCES ts_order_alloc(trade_id) ON DELETE CASCADE
+    TABLE "swift_outgoing" CONSTRAINT "swift_outgoing_fk2" FOREIGN KEY (trade_id) REFERENCES ts_order_alloc(trade_id)
+    TABLE "ts_order_alloc_config" CONSTRAINT "ts_order_alloc_config_fk1" FOREIGN KEY (source_trade_id) REFERENCES ts_order_alloc(trade_id) ON DELETE CASCADE
+    TABLE "ts_order_alloc_param" CONSTRAINT "ts_order_alloc_param_fk1" FOREIGN KEY (trade_id) REFERENCES ts_order_alloc(trade_id) ON DELETE CASCADE
+    TABLE "ts_order_alloc_settinst" CONSTRAINT "ts_order_alloc_settinst_fk1" FOREIGN KEY (trade_id) REFERENCES ts_order_alloc(trade_id) ON DELETE CASCADE
+    TABLE "ts_order_alloc_supp_detail" CONSTRAINT "ts_order_alloc_supp_detail_fk2" FOREIGN KEY (trade_id) REFERENCES ts_order_alloc(trade_id) ON DELETE CASCADE
+

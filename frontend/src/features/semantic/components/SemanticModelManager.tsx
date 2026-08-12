@@ -34,6 +34,8 @@ import {
   ContentCopy as CopyIcon,
   CheckCircle as CheckIcon,
   Warning as WarningIcon,
+  WaterDrop as WaterDropIcon,
+  Build as BuildIcon,
 } from '@mui/icons-material';
 import { FieldTypeBadge } from '../../../components/FieldTypeBadges';
 
@@ -223,6 +225,7 @@ export const SemanticModelManager: React.FC = () => {
                       </TableCell>
                       <TableCell>
                         <Chip
+                          icon={model.model_type === 'core' ? <WaterDropIcon sx={{ fontSize: 14 }} /> : <BuildIcon sx={{ fontSize: 14 }} />}
                           label={model.model_type}
                           size="small"
                           color={model.model_type === 'custom' ? 'primary' : 'warning'}

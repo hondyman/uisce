@@ -1,0 +1,27 @@
+                    List of relations
+ Schema |            Name             | Type  |  Owner   
+--------+-----------------------------+-------+----------
+ public | cs_collat_elect_rule_param  | table | postgres
+ public | cs_fund_assignment_rule     | table | postgres
+ public | cs_fund_rule                | table | postgres
+ public | cs_fund_rule_template       | table | postgres
+ public | cs_inv_dec_maker_rule       | table | postgres
+ public | cs_schedule_rule            | table | postgres
+ public | cs_test_due_date_rule       | table | postgres
+ public | csm_fut_exch_spot_rule      | table | postgres
+ public | csm_sdm_rule                | table | postgres
+ public | csm_sdm_rule_detail         | table | postgres
+ public | csm_sdm_rule_service        | table | postgres
+ public | ts_broker_rule              | table | postgres
+ public | ts_broker_rule_value        | table | postgres
+ public | ts_exec_rule_list_member    | table | postgres
+ public | ts_model_rule               | table | postgres
+ public | ts_model_rule_hist          | table | postgres
+ public | ts_model_rule_security      | table | postgres
+ public | ts_model_rule_security_hist | table | postgres
+ public | ts_order_exec_rule          | table | postgres
+ public | ts_order_exec_rule_group    | table | postgres
+ public | wf_rule                     | table | postgres
+ public | wf_rule_action_value        | table | postgres
+(22 rows)
+

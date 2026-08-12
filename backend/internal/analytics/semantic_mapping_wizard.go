@@ -40,7 +40,7 @@ type PendingSemanticMapping struct {
 type GenerateMappingsRequest struct {
 	TenantID         string `json:"tenant_id"`
 	DatasourceID     string `json:"datasource_id"`
-	TenantInstanceID string `json:"datasource_id"`
+	TenantInstanceID string `json:"tenant_instance_id"`
 }
 
 // GenerateMappingsResponse represents the response with generated mappings
@@ -79,7 +79,7 @@ type GeneratedMapping struct {
 type ApplyMappingsRequest struct {
 	TenantID            string  `json:"tenant_id"`
 	DatasourceID        string  `json:"datasource_id"`
-	TenantInstanceID    string  `json:"datasource_id"`
+	TenantInstanceID    string  `json:"tenant_instance_id"`
 	AutoCreateThreshold float64 `json:"auto_create_threshold"` // Default 0.85
 	ApprovalThreshold   float64 `json:"approval_threshold"`    // Default 0.60
 }

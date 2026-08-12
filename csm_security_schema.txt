@@ -1,0 +1,829 @@
+                                      Table "public.csm_security"
+            Column             |            Type             | Collation | Nullable |      Default      
+-------------------------------+-----------------------------+-----------+----------+-------------------
+ sec_id                        | numeric(18,0)               |           | not null | 
+ sec_name                      | character varying(150)      |           | not null | 
+ sec_typ_cd                    | character varying(8)        |           | not null | 
+ cusip                         | character varying(9)        |           |          | 
+ issuer_cd                     | character varying(20)       |           |          | 
+ issue_state_cd                | character varying(4)        |           |          | 
+ issue_cntry_cd                | character varying(3)        |           |          | 
+ issue_date                    | timestamp without time zone |           |          | 
+ ultmt_issuer_cd               | character varying(20)       |           |          | 
+ list_exch_cd                  | character varying(4)        |           |          | 
+ loc_crrncy_cd                 | character varying(3)        |           |          | 
+ cros_crrncy_cd                | character varying(3)        |           |          | 
+ asset_crrncy_cd               | character varying(3)        |           |          | 
+ ticker                        | character varying(26)       |           |          | 
+ avg_life                      | double precision            |           |          | 
+ mature_date                   | timestamp without time zone |           |          | 
+ call_date                     | timestamp without time zone |           |          | 
+ put_date                      | timestamp without time zone |           |          | 
+ coupon_rate                   | numeric(18,9)               |           |          | 
+ next_coupon_date              | timestamp without time zone |           |          | 
+ strike_price                  | double precision            |           |          | 
+ duration                      | double precision            |           |          | 
+ expire_date                   | timestamp without time zone |           |          | 
+ alntv_minm_tax                | character varying(1)        |           |          | 
+ restr_resale                  | character varying(1)        |           |          | 
+ fed_txbl                      | character varying(1)        |           |          | 
+ priv_plcmnt                   | character varying(1)        |           |          | 
+ vrdn_freq_cd                  | character varying(1)        |           |          | 
+ restr_144a                    | character varying(1)        |           |          | 
+ non_mktbl                     | character varying(1)        |           |          | 
+ new_sec_cd                    | character varying(1)        |           |          | 
+ mkt_price                     | double precision            |           |          | 
+ ext_sec_id                    | character varying(50)       |           |          | 
+ sedol                         | character varying(15)       |           |          | 
+ isin_no                       | character varying(15)       |           |          | 
+ valoran                       | character varying(15)       |           |          | 
+ bench_mark                    | numeric(17,8)               |           |          | 
+ yield                         | numeric(17,8)               |           |          | 
+ spread                        | numeric(17,8)               |           |          | 
+ speed                         | numeric(17,8)               |           |          | 
+ wghtd_avg                     | numeric(17,8)               |           |          | 
+ short_nm                      | character varying(36)       |           |          | 
+ preferred_rate                | numeric(7,3)                |           |          | 
+ amt_issued                    | numeric(25,4)               |           |          | 
+ amt_outst                     | numeric(25,4)               |           |          | 
+ frst_exercise_date            | timestamp without time zone |           |          | 
+ last_mdfy_by                  | character varying(30)       |           |          | 
+ last_mdfy_date                | timestamp without time zone |           | not null | CURRENT_TIMESTAMP
+ guarantor_cd                  | character varying(20)       |           |          | 
+ cnvrt_ratio                   | numeric(18,9)               |           |          | 
+ delay_del_sttlmnt_date        | timestamp without time zone |           |          | 
+ auto_manual_calc_flag         | character varying(1)        |           |          | 
+ comments                      | character varying(250)      |           |          | 
+ benchmark_sec_id              | numeric(18,0)               |           |          | 
+ benchmark_flag                | character varying(1)        |           |          | 
+ day_basis                     | character varying(10)       |           |          | 
+ put_notice_months             | numeric(6,2)                |           |          | 
+ put_freq                      | character varying(1)        |           |          | 
+ coupon_payment_day            | numeric(2,0)                |           |          | 
+ coupon_payment_amt            | numeric(18,9)               |           |          | 
+ price_val_basis               | double precision            |           |          | 
+ yield_val_basis               | double precision            |           |          | 
+ gvt_bond_eq_yield             | numeric(17,8)               |           |          | 
+ corp_bond_eq_yield            | numeric(17,8)               |           |          | 
+ first_payment_date            | timestamp without time zone |           |          | 
+ last_payment_date             | timestamp without time zone |           |          | 
+ prev_payment_date             | timestamp without time zone |           |          | 
+ payment_freq                  | character varying(1)        |           |          | 
+ option_adj_spread             | numeric(17,8)               |           |          | 
+ mod_duration                  | double precision            |           |          | 
+ accrual_typ_cd                | character varying(6)        |           |          | 
+ default_date                  | timestamp without time zone |           |          | 
+ out_of_default_date           | timestamp without time zone |           |          | 
+ convexity                     | double precision            |           |          | 
+ interest_typ_cd               | character varying(6)        |           |          | 
+ yield_to_mature               | numeric(17,8)               |           |          | 
+ yield_to_worst_call           | numeric(17,8)               |           |          | 
+ yield_to_worst_put            | numeric(17,8)               |           |          | 
+ calc_model                    | character varying(10)       |           |          | 
+ percent_psa                   | numeric(6,2)                |           |          | 
+ wac                           | numeric(12,8)               |           |          | 
+ wam                           | numeric(12,8)               |           |          | 
+ prepay_rate                   | numeric(6,2)                |           |          | 
+ delay_days                    | numeric(3,0)                |           |          | 
+ service_fee                   | numeric(7,3)                |           |          | 
+ factor                        | double precision            |           |          | 
+ factor_date                   | timestamp without time zone |           |          | 
+ mortgage_yield                | numeric(17,8)               |           |          | 
+ avg_life_date                 | timestamp without time zone |           |          | 
+ pool_number                   | character varying(10)       |           |          | 
+ prepay_floor                  | numeric(12,8)               |           |          | 
+ prepay_cap                    | numeric(12,8)               |           |          | 
+ prepay_collar_upper           | numeric(12,8)               |           |          | 
+ prepay_collar_lower           | numeric(12,8)               |           |          | 
+ collat_pool_typ               | character varying(10)       |           |          | 
+ collat_ltv                    | numeric(18,3)               |           |          | 
+ tranche                       | character varying(10)       |           |          | 
+ amrtzd_typ_cd                 | character varying(6)        |           |          | 
+ amrtzd_start_date             | timestamp without time zone |           |          | 
+ amrtzd_end_date               | timestamp without time zone |           |          | 
+ collat_wam                    | numeric(12,8)               |           |          | 
+ collat_wac                    | numeric(12,8)               |           |          | 
+ periodic_cap                  | numeric(12,8)               |           |          | 
+ lifetime_cap                  | numeric(12,8)               |           |          | 
+ next_reset_date               | timestamp without time zone |           |          | 
+ reset_margin                  | numeric(12,8)               |           |          | 
+ next_sink_date                | timestamp without time zone |           |          | 
+ sink_percent                  | numeric(6,2)                |           |          | 
+ cnvrt_price                   | numeric(19,8)               |           |          | 
+ cnvrt_start_date              | timestamp without time zone |           |          | 
+ cnvrt_end_date                | timestamp without time zone |           |          | 
+ reset_benchmark_sec_id        | numeric(18,0)               |           |          | 
+ reset_day                     | numeric(2,0)                |           |          | 
+ earns_per_share               | numeric(17,8)               |           |          | 
+ beta                          | numeric(17,8)               |           |          | 
+ price_earns_ratio             | numeric(17,8)               |           |          | 
+ annual_div                    | numeric(17,8)               |           |          | 
+ div_crrncy_cd                 | character varying(3)        |           |          | 
+ cntrct_size                   | numeric(18,8)               |           |          | 
+ insurer_cd                    | character varying(20)       |           |          | 
+ lot_size                      | numeric(18,4)               |           |          | 
+ demand_feature                | character varying(3)        |           |          | 
+ ctm_new                       | character(1)                |           |          | 
+ erisa                         | character(1)                |           |          | 
+ fifec                         | character(1)                |           |          | 
+ voting_rights_mult            | numeric(12,5)               |           |          | 
+ paper_42                      | character(1)                |           |          | 
+ yankee_euro                   | character varying(1)        |           |          | 
+ sinking_fund                  | character varying(1)        |           |          | 
+ cash_equiv                    | character varying(1)        |           |          | 
+ embedded_option_type          | character varying(6)        |           |          | 
+ remic                         | character varying(1)        |           |          | 
+ future_type                   | character varying(10)       |           |          | 
+ rate_basis_sec_id             | numeric(18,0)               |           |          | 
+ supra_national                | character varying(1)        |           |          | 
+ prepay_sensitive              | character varying(1)        |           |          | 
+ credit_enhanced               | character varying(1)        |           |          | 
+ delivery_type                 | character varying(10)       |           |          | 
+ delta                         | numeric(12,8)               |           |          | 
+ structured_note               | character varying(1)        |           |          | 
+ private_registration_rights   | character varying(1)        |           |          | 
+ collateral_date               | timestamp without time zone |           |          | 
+ ratings_downgrade             | character varying(1)        |           |          | 
+ convertible                   | character varying(1)        |           |          | 
+ prerefunded                   | character varying(1)        |           |          | 
+ downgraded                    | character varying(1)        |           |          | 
+ calc_euro_type                | character varying(10)       |           |          | 
+ calc_type                     | character varying(10)       |           |          | 
+ original_life                 | numeric(18,4)               |           |          | 
+ prepaid_life                  | numeric(18,4)               |           |          | 
+ lifetime_floor                | numeric(12,8)               |           |          | 
+ reset_cap                     | numeric(12,8)               |           |          | 
+ reset_floor                   | numeric(12,8)               |           |          | 
+ exdiv_date                    | timestamp without time zone |           |          | 
+ exdiv_flag                    | character(1)                |           | not null | 'N'::bpchar
+ ric                           | character varying(50)       |           |          | 
+ market_cap                    | numeric(18,0)               |           |          | 
+ effective_duration            | double precision            |           |          | 
+ effective_date                | timestamp without time zone |           |          | 
+ effective_yield               | numeric(18,9)               |           |          | 
+ effective_mod_duration        | double precision            |           |          | 
+ effective_convexity           | double precision            |           |          | 
+ interest_pct                  | numeric(18,9)               |           |          | 
+ fix_ioi_indic                 | character varying(4)        |           |          | 
+ prcyld_src_flag               | character varying(1)        |           |          | 
+ yld_curve_flag                | character varying(1)        |           |          | 
+ muni_not_conduit              | character varying(1)        |           |          | 
+ crrncy_fx_use                 | numeric(18,0)               |           | not null | 
+ qty_outstanding_upd           | timestamp without time zone |           |          | 
+ cntry_of_risk                 | character varying(3)        |           |          | 
+ reset_dow                     | numeric(2,0)                |           |          | 
+ reset_dom                     | numeric(2,0)                |           |          | 
+ reset_wom                     | numeric(2,0)                |           |          | 
+ reset_bd_adj                  | character varying(12)       |           |          | 
+ reset_eom_flag                | character varying(6)        |           |          | 
+ reset_lag_days                | numeric(5,0)                |           |          | 
+ reset_lag_bd                  | character varying(6)        |           |          | 
+ reset_lockout_days            | numeric(5,0)                |           |          | 
+ reset_lockout_bd              | character varying(6)        |           |          | 
+ coupon_dow                    | numeric(2,0)                |           |          | 
+ coupon_dom                    | numeric(2,0)                |           |          | 
+ coupon_wom                    | numeric(2,0)                |           |          | 
+ coupon_bd_adj                 | character varying(12)       |           |          | 
+ coupon_eom_flag               | character varying(6)        |           |          | 
+ reset_date_freeze             | character varying(1)        |           |          | 
+ coupon_date_freeze            | character varying(1)        |           |          | 
+ cpn_pay_cnvtn                 | character varying(10)       |           |          | 
+ reset_inverse_flag            | character varying(1)        |           |          | 
+ reset_marg_mult_flag          | character varying(1)        |           |          | 
+ three_a_3_flag                | character varying(1)        |           |          | 
+ reg_d_flag                    | character varying(1)        |           |          | 
+ reg_s_flag                    | character varying(1)        |           |          | 
+ analyst_id                    | character varying(30)       |           |          | 
+ last_review_date              | timestamp without time zone |           |          | 
+ next_review_date              | timestamp without time zone |           |          | 
+ example_sec_cusip             | character varying(9)        |           |          | 
+ cap_date                      | timestamp without time zone |           |          | 
+ floor_date                    | timestamp without time zone |           |          | 
+ cpi_reference                 | double precision            |           |          | 
+ cpi_sec_id                    | numeric(18,0)               |           |          | 
+ redemption_val                | double precision            |           |          | 
+ tier                          | numeric(5,0)                |           |          | 
+ udf_float1                    | double precision            |           |          | 
+ udf_float2                    | double precision            |           |          | 
+ udf_float3                    | double precision            |           |          | 
+ udf_float4                    | double precision            |           |          | 
+ udf_float5                    | double precision            |           |          | 
+ udf_float6                    | double precision            |           |          | 
+ udf_float7                    | double precision            |           |          | 
+ udf_float8                    | double precision            |           |          | 
+ udf_float9                    | double precision            |           |          | 
+ udf_float10                   | double precision            |           |          | 
+ udf_date1                     | timestamp without time zone |           |          | 
+ udf_date2                     | timestamp without time zone |           |          | 
+ udf_date3                     | timestamp without time zone |           |          | 
+ udf_date4                     | timestamp without time zone |           |          | 
+ udf_date5                     | timestamp without time zone |           |          | 
+ udf_char1                     | character varying(100)      |           |          | 
+ udf_char2                     | character varying(100)      |           |          | 
+ udf_char3                     | character varying(100)      |           |          | 
+ udf_char4                     | character varying(100)      |           |          | 
+ udf_char5                     | character varying(100)      |           |          | 
+ udf_char6                     | character varying(100)      |           |          | 
+ udf_char7                     | character varying(100)      |           |          | 
+ udf_char8                     | character varying(100)      |           |          | 
+ udf_char9                     | character varying(100)      |           |          | 
+ udf_char10                    | character varying(100)      |           |          | 
+ udf_char11                    | character varying(100)      |           |          | 
+ udf_char12                    | character varying(100)      |           |          | 
+ udf_char13                    | character varying(100)      |           |          | 
+ udf_char14                    | character varying(100)      |           |          | 
+ udf_char15                    | character varying(100)      |           |          | 
+ udf_char16                    | character varying(100)      |           |          | 
+ udf_char17                    | character varying(100)      |           |          | 
+ udf_char18                    | character varying(100)      |           |          | 
+ udf_char19                    | character varying(100)      |           |          | 
+ udf_char20                    | character varying(100)      |           |          | 
+ udf_char21                    | character varying(100)      |           |          | 
+ udf_char22                    | character varying(100)      |           |          | 
+ udf_char23                    | character varying(100)      |           |          | 
+ udf_char24                    | character varying(100)      |           |          | 
+ udf_char25                    | character varying(100)      |           |          | 
+ udf_char26                    | character varying(100)      |           |          | 
+ product_cd                    | character varying(10)       |           |          | 
+ mort_term                     | numeric(3,0)                |           |          | 
+ mort_original_face            | numeric(18,4)               |           |          | 
+ mort_current_face             | numeric(18,4)               |           |          | 
+ free_original_face            | numeric(18,4)               |           |          | 
+ free_current_face             | numeric(18,4)               |           |          | 
+ production_year               | numeric(4,0)                |           |          | 
+ wala                          | numeric(18,3)               |           |          | 
+ udf_duration1                 | numeric(18,9)               |           |          | 
+ udf_duration2                 | numeric(18,9)               |           |          | 
+ udf_duration3                 | numeric(18,9)               |           |          | 
+ udf_duration4                 | numeric(18,9)               |           |          | 
+ udf_duration5                 | numeric(18,9)               |           |          | 
+ udf_duration6                 | numeric(18,9)               |           |          | 
+ udf_duration7                 | numeric(18,9)               |           |          | 
+ udf_duration8                 | numeric(18,9)               |           |          | 
+ udf_duration9                 | numeric(18,9)               |           |          | 
+ yield_curve_margin            | numeric(18,9)               |           |          | 
+ shift                         | numeric(18,9)               |           |          | 
+ twist                         | numeric(18,9)               |           |          | 
+ butterfly                     | numeric(18,9)               |           |          | 
+ season                        | character varying(10)       |           |          | 
+ avg_loan_size                 | numeric(18,4)               |           |          | 
+ risk_amt                      | numeric(18,9)               |           |          | 
+ conversion_factor             | double precision            |           | not null | 1
+ udf_duration10                | numeric(18,9)               |           |          | 
+ udf_duration11                | numeric(18,9)               |           |          | 
+ udf_duration12                | numeric(18,9)               |           |          | 
+ udf_duration13                | numeric(18,9)               |           |          | 
+ udf_duration14                | numeric(18,9)               |           |          | 
+ udf_duration15                | numeric(18,9)               |           |          | 
+ udf_duration16                | numeric(18,9)               |           |          | 
+ udf_duration17                | numeric(18,9)               |           |          | 
+ udf_duration18                | numeric(18,9)               |           |          | 
+ udf_duration19                | numeric(18,9)               |           |          | 
+ udf_duration20                | numeric(18,9)               |           |          | 
+ udf_duration21                | numeric(18,9)               |           |          | 
+ udf_duration22                | numeric(18,9)               |           |          | 
+ udf_duration23                | numeric(18,9)               |           |          | 
+ udf_duration24                | numeric(18,9)               |           |          | 
+ udf_duration25                | numeric(18,9)               |           |          | 
+ servicer_cd                   | character varying(20)       |           |          | 
+ cpr1                          | numeric(17,8)               |           |          | 
+ cpr3                          | numeric(17,8)               |           |          | 
+ cpr6                          | numeric(17,8)               |           |          | 
+ cpr12                         | numeric(17,8)               |           |          | 
+ vega                          | double precision            |           |          | 
+ gamma                         | double precision            |           |          | 
+ theta                         | double precision            |           |          | 
+ sec_issue_date                | timestamp without time zone |           |          | 
+ eod_mkt_price                 | double precision            |           |          | 
+ fair_val                      | numeric(18,9)               |           |          | 
+ payoff_val                    | numeric(18,9)               |           |          | 
+ premium_val                   | numeric(18,9)               |           |          | 
+ par_spread                    | numeric(18,9)               |           |          | 
+ par_swap_rate                 | numeric(18,9)               |           |          | 
+ dv01                          | double precision            |           |          | 
+ probdef                       | numeric(18,9)               |           |          | 
+ probdef_determ_id             | numeric(18,0)               |           |          | 
+ probdef_curve_id              | numeric(18,0)               |           |          | 
+ cpn_rcvry_rate                | numeric(18,9)               |           |          | 
+ prin_rcvry_rate               | numeric(18,9)               |           |          | 
+ vltlty                        | numeric(18,9)               |           |          | 
+ orig_sec_id                   | numeric(18,0)               |           |          | 
+ rho                           | double precision            |           |          | 
+ notnl_ratio                   | numeric(18,9)               |           |          | 
+ rating_tier                   | character varying(10)       |           |          | 
+ pfd_clip_ind                  | character(1)                |           |          | 
+ clip                          | character varying(9)        |           |          | 
+ markit_valid_from             | timestamp without time zone |           |          | 
+ markit_valid_to               | timestamp without time zone |           |          | 
+ fiex_sec_ind                  | character(1)                |           | not null | 'N'::bpchar
+ cds_payoff_type               | character varying(10)       |           |          | 
+ accrual_days                  | numeric(6,0)                |           |          | 
+ upfront_pct                   | numeric(18,9)               |           |          | 
+ integral_calc_method          | character varying(10)       |           |          | 
+ date_gen_method               | character varying(10)       |           |          | 
+ maturity_method               | character varying(10)       |           |          | 
+ default_pays_accrued_ind      | character(1)                |           | not null | 'N'::bpchar
+ notnl_adjmt_spread            | numeric(18,9)               |           |          | 
+ par_swap_adjmt_spread         | numeric(18,9)               |           |          | 
+ rval_adjmt_spread             | numeric(18,9)               |           |          | 
+ notnl_adjmt                   | numeric(18,9)               |           |          | 
+ par_swap_adjmt                | numeric(18,9)               |           |          | 
+ rval_adjmt                    | numeric(18,9)               |           |          | 
+ prin_exch_cd                  | character varying(10)       |           |          | 
+ doc_clause                    | character varying(10)       |           |          | 
+ attach_pt                     | numeric(17,8)               |           |          | 
+ detach_pt                     | numeric(17,8)               |           |          | 
+ correlation                   | numeric(17,8)               |           |          | 
+ z_spread                      | numeric(17,8)               |           |          | 
+ impld_spread                  | numeric(17,8)               |           |          | 
+ probdef_spread                | numeric(17,8)               |           |          | 
+ on_the_run_ind                | character(1)                |           | not null | 'N'::bpchar
+ idx_series                    | numeric(3,0)                |           |          | 
+ idx_version                   | numeric(3,0)                |           |          | 
+ idx_term                      | numeric(6,2)                |           |          | 
+ asset_swap_spread             | numeric(17,8)               |           |          | 
+ curr_notnl                    | numeric(18,4)               |           |          | 
+ orig_cmp_cnt                  | numeric(5,0)                |           |          | 
+ curr_cmp_cnt                  | numeric(5,0)                |           |          | 
+ implied_vltlty                | double precision            |           |          | 
+ optn_expire_type              | character varying(4)        |           |          | 
+ rho_hold_cost                 | double precision            |           |          | 
+ prob_exercise                 | double precision            |           |          | 
+ cmptd_risk_free_rate          | double precision            |           |          | 
+ inv_matches                   | numeric(5,0)                |           |          | 
+ bond_impld_price              | double precision            |           |          | 
+ bond_impld_val                | double precision            |           |          | 
+ short_rate_vltlty             | numeric(18,9)               |           |          | 
+ swap_sub_type                 | character varying(10)       |           |          | 
+ index_type                    | character varying(10)       |           |          | 
+ cv_parity                     | numeric(16,4)               |           |          | 
+ cv_pct_premium                | numeric(16,6)               |           |          | 
+ curve_conv                    | character varying(10)       |           |          | 
+ price_conv                    | character varying(10)       |           |          | 
+ compounding_method            | character(1)                |           | not null | '3'::bpchar
+ default_term_id               | numeric(18,0)               |           |          | 
+ reset_rate_conv               | character varying(10)       |           |          | 
+ avg_daily_vol                 | numeric(21,5)               |           |          | 
+ crrncy_pair                   | character varying(7)        |           |          | 
+ fixing_date                   | timestamp without time zone |           |          | 
+ settle_crrncy_cd              | character varying(3)        |           |          | 
+ mkt_src                       | character varying(60)       |           |          | 
+ eff_spread_dur                | numeric(18,9)               |           |          | 
+ oas_swap                      | numeric(18,9)               |           |          | 
+ spread_convexity              | numeric(18,9)               |           |          | 
+ spread_dur                    | numeric(18,9)               |           |          | 
+ yield_implied_vltlty          | numeric(18,9)               |           |          | 
+ mean_reversion_const          | double precision            |           |          | 
+ expctd_exercise_time          | double precision            |           |          | 
+ cmpd_freq_cd                  | character varying(10)       |           |          | 
+ crrncy_delta                  | numeric(17,8)               |           |          | 
+ crrncy_theta                  | double precision            |           |          | 
+ crrncy_gamma                  | double precision            |           |          | 
+ crrncy_vega                   | double precision            |           |          | 
+ contract_period               | numeric(5,0)                |           |          | 
+ waiting_period                | numeric(5,0)                |           |          | 
+ repo_type                     | character(1)                |           |          | 
+ rate_fair_val                 | numeric(18,9)               |           |          | 
+ intrinsic_fair_val            | numeric(18,9)               |           |          | 
+ repo_haircut_type             | character(1)                |           |          | 
+ repo_haircut                  | numeric(10,4)               |           |          | 
+ allow_exer_date_cd            | character varying(10)       |           |          | 
+ calc_src_cd                   | character varying(10)       |           |          | 
+ inflation_dv01                | double precision            |           |          | 
+ repo_cnvtn_cd                 | character varying(10)       |           |          | 
+ pay_in_arrears                | character(1)                |           |          | 
+ mat_date_adj                  | character varying(10)       |           |          | 
+ issue_date_adj                | character varying(10)       |           |          | 
+ inflation_factor              | numeric(15,9)               |           |          | 
+ xcrncy_spread_curve_id        | numeric(18,0)               |           |          | 
+ tenor_spread_curve_id         | numeric(18,0)               |           |          | 
+ default_pays_cpn_ind          | character(1)                |           |          | 
+ cancelable_ind                | character(1)                |           | not null | 'N'::bpchar
+ extendible_ind                | character(1)                |           | not null | 'N'::bpchar
+ option_holder_cd              | character varying(10)       |           |          | 
+ n_day_period                  | numeric(5,0)                |           |          | 
+ yield_as_spread_ind           | character(1)                |           | not null | 'N'::bpchar
+ cpn_calc_type_cd              | character varying(10)       |           |          | 
+ knockout_provision_cd         | character varying(10)       |           |          | 
+ vltlty_curve_id               | numeric(18,0)               |           |          | 
+ vltlty_curve_determ_id        | numeric(18,0)               |           |          | 
+ xcrncy_spread_curve_determ_id | numeric(18,0)               |           |          | 
+ tenor_spread_curve_determ_id  | numeric(18,0)               |           |          | 
+ eod_fair_val                  | numeric(18,9)               |           |          | 
+ cashflow_particip_rate        | numeric(18,9)               |           | not null | 100
+ reuse_ind                     | character(1)                |           | not null | 'N'::bpchar
+ swap_tenor                    | character varying(16)       |           |          | 
+ swaption_term                 | character varying(16)       |           |          | 
+ curr_ref_idx_level            | numeric(18,9)               |           |          | 
+ wpk_no                        | character varying(9)        |           |          | 
+ internal_type_cd              | character varying(10)       |           |          | 
+ internal_subtype_cd           | character varying(10)       |           |          | 
+ min_trade_qty                 | numeric(18,4)               |           |          | 
+ fwd_mkt_price                 | double precision            |           |          | 
+ notnl_unit_cd                 | character varying(10)       |           |          | 
+ notnl_chg                     | numeric(18,9)               |           |          | 
+ vltlty_vltlty                 | numeric(18,9)               |           |          | 
+ embed_option_fv               | numeric(18,9)               |           |          | 
+ i_spread                      | numeric(18,9)               |           |          | 
+ pay_dt_hol_exch_cd            | character varying(20)       |           |          | 
+ reset_dt_hol_exch_cd          | character varying(20)       |           |          | 
+ spread_dv01                   | numeric(18,9)               |           |          | 
+ spread_to_yield               | numeric(18,9)               |           |          | 
+ z_spread_dur                  | numeric(18,9)               |           |          | 
+ index_duration                | numeric(18,9)               |           |          | 
+ index_dv01                    | numeric(18,9)               |           |          | 
+ real_yield                    | numeric(18,9)               |           |          | 
+ strip_yield                   | numeric(18,9)               |           |          | 
+ prepay_duration               | numeric(18,9)               |           |          | 
+ vltlty_duration               | numeric(18,9)               |           |          | 
+ inflation_duration            | numeric(18,9)               |           |          | 
+ spread_src_cd                 | character varying(10)       |           |          | 
+ disc_margin                   | numeric(18,9)               |           |          | 
+ fixing_rate                   | numeric(18,4)               |           |          | 
+ min_init_invest_amt           | numeric(18,4)               |           |          | 
+ min_increment_invest_amt      | numeric(18,4)               |           |          | 
+ non_deliv_ind                 | character(1)                |           | not null | 'N'::bpchar
+ use_flat_disc_rate_ind        | character(1)                |           | not null | 'N'::bpchar
+ use_flat_vol_ind              | character(1)                |           | not null | 'N'::bpchar
+ pik_toggle_ind                | character(1)                |           | not null | 'N'::bpchar
+ liquidity_cd                  | character varying(10)       |           |          | 
+ scndry_risk_free_rate         | double precision            |           |          | 
+ fut_notice_first_date         | timestamp without time zone |           |          | 
+ tick_size                     | numeric(18,9)               |           |          | 
+ tick_val                      | numeric(18,9)               |           |          | 
+ list_date                     | timestamp without time zone |           |          | 
+ is_perpetual_ind              | character(1)                |           | not null | 'N'::bpchar
+ diversified_ind               | character(1)                |           | not null | 'N'::bpchar
+ dirty_price_ind               | character(1)                |           | not null | 'N'::bpchar
+ moneyness_pct                 | numeric(12,8)               |           |          | 
+ otc_clear_elig_ind            | character(1)                |           | not null | 'N'::bpchar
+ interp_last_stub_rate_cd      | character varying(10)       |           |          | 
+ par_swap_rate_next_cpn        | numeric(18,9)               |           |          | 
+ mgmt_fee_pct                  | numeric(12,8)               |           |          | 
+ mgmt_fee_day_basis_cd         | character varying(10)       |           |          | 
+ mgmt_fee_accrued              | numeric(18,9)               |           |          | 
+ fund_family_cd                | character varying(10)       |           |          | 
+ fund_status_cd                | character varying(10)       |           |          | 
+ share_class_cd                | character varying(10)       |           |          | 
+ dividend_factor_pct           | numeric(18,9)               |           |          | 
+ dividend_period_cd            | character varying(10)       |           |          | 
+ par_unit                      | numeric(26,12)              |           |          | 
+ otc_contract_date             | timestamp without time zone |           |          | 
+ credit_spread_dur             | numeric(18,9)               |           |          | 
+ eff_credit_spread_dur         | numeric(18,9)               |           |          | 
+ curve_disc_margin             | numeric(18,9)               |           |          | 
+ fut_exch_prod_cd              | character varying(30)       |           |          | 
+ option_root_symbol            | character varying(10)       |           |          | 
+ udf_char27                    | character varying(100)      |           |          | 
+ udf_char28                    | character varying(100)      |           |          | 
+ udf_char29                    | character varying(100)      |           |          | 
+ udf_char30                    | character varying(100)      |           |          | 
+ udf_char31                    | character varying(100)      |           |          | 
+ udf_char32                    | character varying(100)      |           |          | 
+ udf_char33                    | character varying(100)      |           |          | 
+ udf_char34                    | character varying(100)      |           |          | 
+ udf_char35                    | character varying(100)      |           |          | 
+ udf_char36                    | character varying(100)      |           |          | 
+ udf_char37                    | character varying(100)      |           |          | 
+ udf_char38                    | character varying(100)      |           |          | 
+ udf_char39                    | character varying(100)      |           |          | 
+ udf_char40                    | character varying(100)      |           |          | 
+ udf_char41                    | character varying(100)      |           |          | 
+ udf_char42                    | character varying(100)      |           |          | 
+ udf_char43                    | character varying(100)      |           |          | 
+ udf_char44                    | character varying(100)      |           |          | 
+ udf_char45                    | character varying(100)      |           |          | 
+ udf_char46                    | character varying(100)      |           |          | 
+ udf_char47                    | character varying(100)      |           |          | 
+ udf_char48                    | character varying(100)      |           |          | 
+ udf_char49                    | character varying(100)      |           |          | 
+ udf_char50                    | character varying(100)      |           |          | 
+ udf_char51                    | character varying(100)      |           |          | 
+ udf_char52                    | character varying(100)      |           |          | 
+ udf_char53                    | character varying(100)      |           |          | 
+ udf_char54                    | character varying(100)      |           |          | 
+ udf_char55                    | character varying(100)      |           |          | 
+ udf_char56                    | character varying(100)      |           |          | 
+ udf_char57                    | character varying(100)      |           |          | 
+ udf_char58                    | character varying(100)      |           |          | 
+ udf_char59                    | character varying(100)      |           |          | 
+ udf_char60                    | character varying(100)      |           |          | 
+ udf_char61                    | character varying(100)      |           |          | 
+ udf_char62                    | character varying(100)      |           |          | 
+ udf_char63                    | character varying(100)      |           |          | 
+ udf_char64                    | character varying(100)      |           |          | 
+ udf_char65                    | character varying(100)      |           |          | 
+ udf_char66                    | character varying(100)      |           |          | 
+ udf_char67                    | character varying(100)      |           |          | 
+ udf_char68                    | character varying(100)      |           |          | 
+ udf_char69                    | character varying(100)      |           |          | 
+ udf_char70                    | character varying(100)      |           |          | 
+ udf_char71                    | character varying(100)      |           |          | 
+ udf_char72                    | character varying(100)      |           |          | 
+ udf_char73                    | character varying(100)      |           |          | 
+ udf_char74                    | character varying(100)      |           |          | 
+ udf_char75                    | character varying(100)      |           |          | 
+ udf_char76                    | character varying(100)      |           |          | 
+ udf_char77                    | character varying(100)      |           |          | 
+ udf_char78                    | character varying(100)      |           |          | 
+ udf_char79                    | character varying(100)      |           |          | 
+ udf_char80                    | character varying(100)      |           |          | 
+ udf_char81                    | character varying(100)      |           |          | 
+ udf_char82                    | character varying(100)      |           |          | 
+ udf_char83                    | character varying(100)      |           |          | 
+ udf_char84                    | character varying(100)      |           |          | 
+ udf_char85                    | character varying(100)      |           |          | 
+ udf_char86                    | character varying(100)      |           |          | 
+ udf_char87                    | character varying(100)      |           |          | 
+ udf_char88                    | character varying(100)      |           |          | 
+ udf_char89                    | character varying(100)      |           |          | 
+ udf_char90                    | character varying(100)      |           |          | 
+ udf_char91                    | character varying(100)      |           |          | 
+ udf_char92                    | character varying(100)      |           |          | 
+ udf_char93                    | character varying(100)      |           |          | 
+ udf_char94                    | character varying(100)      |           |          | 
+ udf_char95                    | character varying(100)      |           |          | 
+ udf_char96                    | character varying(100)      |           |          | 
+ udf_char97                    | character varying(100)      |           |          | 
+ udf_char98                    | character varying(100)      |           |          | 
+ udf_char99                    | character varying(100)      |           |          | 
+ udf_char100                   | character varying(100)      |           |          | 
+ udf_date15                    | timestamp without time zone |           |          | 
+ udf_date16                    | timestamp without time zone |           |          | 
+ udf_date17                    | timestamp without time zone |           |          | 
+ udf_date18                    | timestamp without time zone |           |          | 
+ udf_date19                    | timestamp without time zone |           |          | 
+ udf_date20                    | timestamp without time zone |           |          | 
+ udf_date21                    | timestamp without time zone |           |          | 
+ udf_date22                    | timestamp without time zone |           |          | 
+ udf_date23                    | timestamp without time zone |           |          | 
+ udf_date24                    | timestamp without time zone |           |          | 
+ udf_date25                    | timestamp without time zone |           |          | 
+ udf_date26                    | timestamp without time zone |           |          | 
+ udf_date27                    | timestamp without time zone |           |          | 
+ udf_date28                    | timestamp without time zone |           |          | 
+ udf_date29                    | timestamp without time zone |           |          | 
+ udf_date30                    | timestamp without time zone |           |          | 
+ udf_date31                    | timestamp without time zone |           |          | 
+ udf_date32                    | timestamp without time zone |           |          | 
+ udf_date33                    | timestamp without time zone |           |          | 
+ udf_date34                    | timestamp without time zone |           |          | 
+ udf_date35                    | timestamp without time zone |           |          | 
+ udf_date36                    | timestamp without time zone |           |          | 
+ udf_date37                    | timestamp without time zone |           |          | 
+ udf_date38                    | timestamp without time zone |           |          | 
+ udf_date39                    | timestamp without time zone |           |          | 
+ udf_date40                    | timestamp without time zone |           |          | 
+ udf_float31                   | double precision            |           |          | 
+ udf_float32                   | double precision            |           |          | 
+ udf_float33                   | double precision            |           |          | 
+ udf_float34                   | double precision            |           |          | 
+ udf_float35                   | double precision            |           |          | 
+ udf_float36                   | double precision            |           |          | 
+ udf_float37                   | double precision            |           |          | 
+ udf_float38                   | double precision            |           |          | 
+ udf_float39                   | double precision            |           |          | 
+ udf_float40                   | double precision            |           |          | 
+ udf_float41                   | double precision            |           |          | 
+ udf_float42                   | double precision            |           |          | 
+ udf_float43                   | double precision            |           |          | 
+ udf_float44                   | double precision            |           |          | 
+ udf_float45                   | double precision            |           |          | 
+ udf_float46                   | double precision            |           |          | 
+ udf_float47                   | double precision            |           |          | 
+ udf_float48                   | double precision            |           |          | 
+ udf_float49                   | double precision            |           |          | 
+ udf_float50                   | double precision            |           |          | 
+ udf_float51                   | double precision            |           |          | 
+ udf_float52                   | double precision            |           |          | 
+ udf_float53                   | double precision            |           |          | 
+ udf_float54                   | double precision            |           |          | 
+ udf_float55                   | double precision            |           |          | 
+ udf_float56                   | double precision            |           |          | 
+ udf_float57                   | double precision            |           |          | 
+ udf_float58                   | double precision            |           |          | 
+ udf_float59                   | double precision            |           |          | 
+ udf_float60                   | double precision            |           |          | 
+ udf_float61                   | double precision            |           |          | 
+ udf_float62                   | double precision            |           |          | 
+ udf_float63                   | double precision            |           |          | 
+ udf_float64                   | double precision            |           |          | 
+ udf_float65                   | double precision            |           |          | 
+ udf_float66                   | double precision            |           |          | 
+ udf_float67                   | double precision            |           |          | 
+ udf_float68                   | double precision            |           |          | 
+ udf_float69                   | double precision            |           |          | 
+ udf_float70                   | double precision            |           |          | 
+ udf_float71                   | double precision            |           |          | 
+ udf_float72                   | double precision            |           |          | 
+ udf_float73                   | double precision            |           |          | 
+ udf_float74                   | double precision            |           |          | 
+ udf_float75                   | double precision            |           |          | 
+ udf_float76                   | double precision            |           |          | 
+ udf_float77                   | double precision            |           |          | 
+ udf_float78                   | double precision            |           |          | 
+ udf_float79                   | double precision            |           |          | 
+ udf_float80                   | double precision            |           |          | 
+ udf_float81                   | double precision            |           |          | 
+ udf_float82                   | double precision            |           |          | 
+ udf_float83                   | double precision            |           |          | 
+ udf_float84                   | double precision            |           |          | 
+ udf_float85                   | double precision            |           |          | 
+ udf_float86                   | double precision            |           |          | 
+ udf_float87                   | double precision            |           |          | 
+ udf_float88                   | double precision            |           |          | 
+ udf_float89                   | double precision            |           |          | 
+ udf_float90                   | double precision            |           |          | 
+ udf_float91                   | double precision            |           |          | 
+ udf_float92                   | double precision            |           |          | 
+ udf_float93                   | double precision            |           |          | 
+ udf_float94                   | double precision            |           |          | 
+ udf_float95                   | double precision            |           |          | 
+ udf_float96                   | double precision            |           |          | 
+ udf_float97                   | double precision            |           |          | 
+ udf_float98                   | double precision            |           |          | 
+ udf_float99                   | double precision            |           |          | 
+ udf_float100                  | double precision            |           |          | 
+ key_rate_duration_udf_1       | numeric(18,9)               |           |          | 
+ key_rate_duration_udf_2       | numeric(18,9)               |           |          | 
+ key_rate_duration_udf_3       | numeric(18,9)               |           |          | 
+ key_rate_duration_udf_4       | numeric(18,9)               |           |          | 
+ key_rate_duration_udf_5       | numeric(18,9)               |           |          | 
+ sef_eligible_cd               | character varying(10)       |           |          | 
+ option_val_div_type_cd        | character varying(10)       |           |          | 
+ option_model_cd               | character varying(10)       |           |          | 
+ sink_sched_type_cd            | character varying(10)       |           |          | 
+ last_coupon_period_typ_cd     | character varying(10)       |           |          | 
+ key_rate_duration_udf_6       | numeric(18,9)               |           |          | 
+ key_rate_duration_udf_7       | numeric(18,9)               |           |          | 
+ key_rate_duration_udf_8       | numeric(18,9)               |           |          | 
+ key_rate_duration_udf_9       | numeric(18,9)               |           |          | 
+ key_rate_duration_udf_10      | numeric(18,9)               |           |          | 
+ key_rate_duration_udf_11      | numeric(18,9)               |           |          | 
+ key_rate_duration_udf_12      | numeric(18,9)               |           |          | 
+ key_rate_duration_udf_13      | numeric(18,9)               |           |          | 
+ key_rate_duration_udf_14      | numeric(18,9)               |           |          | 
+ key_rate_duration_udf_15      | numeric(18,9)               |           |          | 
+ key_rate_duration_udf_16      | numeric(18,9)               |           |          | 
+ key_rate_duration_udf_17      | numeric(18,9)               |           |          | 
+ key_rate_duration_udf_18      | numeric(18,9)               |           |          | 
+ key_rate_duration_udf_19      | numeric(18,9)               |           |          | 
+ key_rate_duration_udf_20      | numeric(18,9)               |           |          | 
+ key_rate_duration_udf_21      | numeric(18,9)               |           |          | 
+ key_rate_duration_udf_22      | numeric(18,9)               |           |          | 
+ key_rate_duration_udf_23      | numeric(18,9)               |           |          | 
+ key_rate_duration_udf_24      | numeric(18,9)               |           |          | 
+ key_rate_duration_udf_25      | numeric(18,9)               |           |          | 
+ dual_curve_stripping_ind      | character(1)                |           | not null | 'N'::bpchar
+ sec_record_version            | numeric(10,0)               |           | not null | 1
+ interp_type_cd                | character varying(10)       |           |          | 
+ mtf_eligible_cd               | character varying(10)       |           |          | 
+ loanx_id                      | character varying(20)       |           |          | 
+ spm_id                        | character varying(20)       |           |          | 
+ ma_id                         | character varying(20)       |           |          | 
+ loan_series                   | character varying(10)       |           |          | 
+ loan_status_cd                | character varying(10)       |           |          | 
+ issue_price                   | numeric(18,9)               |           |          | 
+ implied_base_rate             | numeric(18,9)               |           |          | 
+ letters_of_credit_amt         | numeric(18,4)               |           |          | 
+ trade_accrued_ind             | character(1)                |           | not null | 'N'::bpchar
+ covenant_type_lsta_cd         | character varying(10)       |           |          | 
+ covenant_type_lma_cd          | character varying(10)       |           |          | 
+ lien_type_cd                  | character varying(10)       |           |          | 
+ cap_interest_amt              | numeric(18,4)               |           |          | 
+ cfi_code                      | character varying(6)        |           |          | 
+ esma_liquid_ind               | character(1)                |           |          | 
+ esma_lis_threshold_amt        | numeric(18,4)               |           |          | 
+ esma_ssti_threshold_amt       | numeric(18,4)               |           |          | 
+ bb_global_id                  | character varying(12)       |           |          | 
+ dilution_ind                  | character varying(1)        |           |          | 
+ voting_rights_cd              | character varying(10)       |           |          | 
+ notice_period_days            | numeric(5,0)                |           |          | 
+ ftf_transition_date           | timestamp without time zone |           |          | 
+ esma_admitted_to_trading_ind  | character(1)                |           | not null | 'X'::bpchar
+ yield_to_next_call            | numeric(17,8)               |           |          | 
+ yield_to_next_put             | numeric(17,8)               |           |          | 
+ notice_period_reset_margin    | numeric(12,8)               |           |          | 
+ yield_to_next_reset           | numeric(17,8)               |           |          | 
+ mature_date_freeze            | character(1)                |           | not null | 'N'::bpchar
+ curve_calc_src_cd             | character varying(10)       |           |          | 
+ esma_lis_posttrd_thrshld_amt  | numeric(18,4)               |           |          | 
+ esma_ssti_posttrd_thrshld_amt | numeric(18,4)               |           |          | 
+ alpha                         | numeric(18,9)               |           |          | 
+ init_marg_amt                 | numeric(18,4)               |           |          | 
+ varn_marg_amt                 | numeric(18,4)               |           |          | 
+ yield_beta                    | numeric(17,8)               |           |          | 
+ int_adjustment_date           | timestamp without time zone |           |          | 
+ base_annuity                  | numeric(18,9)               |           |          | 
+ cpr1_proj                     | numeric(17,8)               |           |          | 
+ cpr3_proj                     | numeric(17,8)               |           |          | 
+ cpr6_proj                     | numeric(17,8)               |           |          | 
+ cpr12_proj                    | numeric(17,8)               |           |          | 
+ cprlt_proj                    | numeric(17,8)               |           |          | 
+ cnvrt_spread                  | numeric(17,8)               |           |          | 
+ cnvrt_mandatory_ind           | character(1)                |           |          | 
+ chi                           | double precision            |           |          | 
+ repo_term                     | character varying(16)       |           |          | 
+ ytw_ispread                   | numeric(18,9)               |           |          | 
+ ytw_mature_ispread            | numeric(18,9)               |           |          | 
+ fut_deliv_first_date          | timestamp without time zone |           |          | 
+ fut_last_trade_date           | timestamp without time zone |           |          | 
+ deliverable_supply_qty        | numeric(25,4)               |           |          | 
+ contract_year                 | numeric(4,0)                |           |          | 
+ avg_daily_vol_6m              | numeric(21,5)               |           |          | 
+ back_contract_year            | numeric(4,0)                |           |          | 
+ open_interest                 | numeric(18,4)               |           |          | 
+ free_float                    | numeric(25,4)               |           |          | 
+ contract_month                | numeric(2,0)                |           |          | 
+ back_contract_month           | numeric(2,0)                |           |          | 
+ total_open_interest           | numeric(18,4)               |           |          | 
+Indexes:
+    "csm_security_pk" PRIMARY KEY, btree (sec_id)
+    "csm_security_n1" btree (sec_typ_cd)
+    "csm_security_n10" btree (asset_crrncy_cd)
+    "csm_security_n11" btree (issuer_cd)
+    "csm_security_n13" btree (list_exch_cd)
+    "csm_security_n15" btree (valoran)
+    "csm_security_n16" btree (isin_no)
+    "csm_security_n17" btree (ric)
+    "csm_security_n18" btree (crrncy_fx_use, loc_crrncy_cd, asset_crrncy_cd)
+    "csm_security_n19" btree (analyst_id)
+    "csm_security_n2" btree (cusip)
+    "csm_security_n20" btree (mature_date)
+    "csm_security_n22" btree (sec_name)
+    "csm_security_n24" btree (div_crrncy_cd)
+    "csm_security_n25" btree (guarantor_cd)
+    "csm_security_n26" btree (insurer_cd)
+    "csm_security_n29" btree (cros_crrncy_cd)
+    "csm_security_n3" btree (ext_sec_id)
+    "csm_security_n32" btree (new_sec_cd)
+    "csm_security_n33" btree (benchmark_sec_id)
+    "csm_security_n34" btree (rate_basis_sec_id)
+    "csm_security_n37" btree (exdiv_date)
+    "csm_security_n4" btree (sedol)
+    "csm_security_n5" btree (ticker)
+    "csm_security_n6" btree (issue_state_cd)
+    "csm_security_n7" btree (issue_cntry_cd)
+    "csm_security_n8" btree (ultmt_issuer_cd)
+    "csm_security_n9" btree (loc_crrncy_cd)
+Foreign-key constraints:
+    "csm_security_fk1" FOREIGN KEY (div_crrncy_cd) REFERENCES csm_currency(crrncy_cd)
+    "csm_security_fk10" FOREIGN KEY (list_exch_cd) REFERENCES csm_exchange(exch_cd)
+    "csm_security_fk11" FOREIGN KEY (guarantor_cd) REFERENCES csm_issuer(issuer_cd)
+    "csm_security_fk13" FOREIGN KEY (insurer_cd) REFERENCES csm_issuer(issuer_cd)
+    "csm_security_fk14" FOREIGN KEY (analyst_id) REFERENCES pdf_user(user_cd)
+    "csm_security_fk18" FOREIGN KEY (benchmark_sec_id) REFERENCES csm_security(sec_id)
+    "csm_security_fk19" FOREIGN KEY (rate_basis_sec_id) REFERENCES csm_security(sec_id)
+    "csm_security_fk2" FOREIGN KEY (issuer_cd) REFERENCES csm_issuer(issuer_cd)
+    "csm_security_fk3" FOREIGN KEY (sec_typ_cd) REFERENCES csm_security_type(sec_typ_cd)
+    "csm_security_fk4" FOREIGN KEY (issue_cntry_cd) REFERENCES csm_country(cntry_cd)
+    "csm_security_fk5" FOREIGN KEY (ultmt_issuer_cd) REFERENCES csm_issuer(issuer_cd)
+    "csm_security_fk6" FOREIGN KEY (loc_crrncy_cd) REFERENCES csm_currency(crrncy_cd)
+    "csm_security_fk7" FOREIGN KEY (cros_crrncy_cd) REFERENCES csm_currency(crrncy_cd)
+    "csm_security_fk8" FOREIGN KEY (asset_crrncy_cd) REFERENCES csm_currency(crrncy_cd)
+    "csm_security_fk9" FOREIGN KEY (issue_state_cd) REFERENCES csm_state(state_cd)
+Referenced by:
+    TABLE "csm_loan_contract" CONSTRAINT "csm_loan_contract_fk1" FOREIGN KEY (sec_id) REFERENCES csm_security(sec_id) ON DELETE CASCADE
+    TABLE "csm_loan_contract" CONSTRAINT "csm_loan_contract_fk3" FOREIGN KEY (rate_basis_sec_id) REFERENCES csm_security(sec_id)
+    TABLE "csm_loan_contract" CONSTRAINT "csm_loan_contract_fk4" FOREIGN KEY (pik_rate_basis_sec_id) REFERENCES csm_security(sec_id)
+    TABLE "csm_margin_history" CONSTRAINT "csm_margin_history_fk1" FOREIGN KEY (sec_id) REFERENCES csm_security(sec_id) ON DELETE CASCADE
+    TABLE "csm_margin_history" CONSTRAINT "csm_margin_history_fk2" FOREIGN KEY (rate_basis_sec_id) REFERENCES csm_security(sec_id)
+    TABLE "csm_put_call" CONSTRAINT "csm_put_call_fk1" FOREIGN KEY (sec_id) REFERENCES csm_security(sec_id) ON DELETE CASCADE
+    TABLE "csm_sdm_validation_result" CONSTRAINT "csm_sdm_validation_result_fk1" FOREIGN KEY (sec_id) REFERENCES csm_security(sec_id) ON DELETE CASCADE
+    TABLE "csm_security" CONSTRAINT "csm_security_fk18" FOREIGN KEY (benchmark_sec_id) REFERENCES csm_security(sec_id)
+    TABLE "csm_security" CONSTRAINT "csm_security_fk19" FOREIGN KEY (rate_basis_sec_id) REFERENCES csm_security(sec_id)
+    TABLE "epn_detail" CONSTRAINT "epn_detail_fk1" FOREIGN KEY (sec_id) REFERENCES csm_security(sec_id)
+    TABLE "pdf_alert_security" CONSTRAINT "pdf_alert_security_fk1" FOREIGN KEY (sec_id) REFERENCES csm_security(sec_id) ON DELETE CASCADE
+    TABLE "pma_factor_loading" CONSTRAINT "pma_factor_loading_fk2" FOREIGN KEY (sec_id) REFERENCES csm_security(sec_id)
+    TABLE "pma_factor_model_coeff" CONSTRAINT "pma_factor_model_coeff_fk2" FOREIGN KEY (sec_id) REFERENCES csm_security(sec_id) ON DELETE CASCADE
+    TABLE "pma_hist_security_return" CONSTRAINT "pma_hist_security_return_fk1" FOREIGN KEY (sec_id) REFERENCES csm_security(sec_id) ON DELETE CASCADE
+    TABLE "pma_position" CONSTRAINT "pma_position_fk2" FOREIGN KEY (sec_id) REFERENCES csm_security(sec_id)
+    TABLE "pma_security_return" CONSTRAINT "pma_security_return_fk2" FOREIGN KEY (sec_id) REFERENCES csm_security(sec_id) ON DELETE CASCADE
+    TABLE "pma_transaction" CONSTRAINT "pma_transaction_fk2" FOREIGN KEY (sec_id) REFERENCES csm_security(sec_id)
+    TABLE "ps_corp_action_def" CONSTRAINT "ps_corp_action_def_fk1" FOREIGN KEY (sec_id) REFERENCES csm_security(sec_id)
+    TABLE "ps_corp_action_opt_detail" CONSTRAINT "ps_corp_action_opt_detail_fk3" FOREIGN KEY (sec_id) REFERENCES csm_security(sec_id)
+    TABLE "ps_position" CONSTRAINT "ps_position_fk2" FOREIGN KEY (sec_id) REFERENCES csm_security(sec_id)
+    TABLE "ps_position_snapshot" CONSTRAINT "ps_position_snapshot_fk2" FOREIGN KEY (sec_id) REFERENCES csm_security(sec_id)
+    TABLE "ps_recon_position" CONSTRAINT "ps_recon_position_fk2" FOREIGN KEY (sec_id) REFERENCES csm_security(sec_id) ON DELETE CASCADE
+    TABLE "ps_recon_record" CONSTRAINT "ps_recon_record_fk6" FOREIGN KEY (sec_id) REFERENCES csm_security(sec_id)
+    TABLE "ps_recon_tax_lot" CONSTRAINT "ps_recon_tax_lot_fk2" FOREIGN KEY (sec_id) REFERENCES csm_security(sec_id) ON DELETE CASCADE
+    TABLE "ps_recon_transaction" CONSTRAINT "ps_recon_transaction_fk2" FOREIGN KEY (sec_id) REFERENCES csm_security(sec_id)
+    TABLE "ps_transaction" CONSTRAINT "ps_transaction_fk3" FOREIGN KEY (sec_id) REFERENCES csm_security(sec_id)
+    TABLE "ps_transaction" CONSTRAINT "ps_transaction_fk5" FOREIGN KEY (related_sec_id) REFERENCES csm_security(sec_id)
+    TABLE "sa_eod_scenario_result" CONSTRAINT "sa_eod_scenario_result_fk1" FOREIGN KEY (sec_id) REFERENCES csm_security(sec_id)
+    TABLE "ts_aam_node_hist" CONSTRAINT "ts_aam_node_hist_fk2" FOREIGN KEY (ref_sec_id) REFERENCES csm_security(sec_id)
+    TABLE "ts_bond_tick" CONSTRAINT "ts_bond_tick_fk1" FOREIGN KEY (sec_id) REFERENCES csm_security(sec_id)
+    TABLE "ts_bond_tick" CONSTRAINT "ts_bond_tick_fk2" FOREIGN KEY (benchmark_sec_id) REFERENCES csm_security(sec_id)
+    TABLE "ts_bond_tick_summary" CONSTRAINT "ts_bond_tick_summary_fk2" FOREIGN KEY (sec_id) REFERENCES csm_security(sec_id)
+    TABLE "ts_cash_mgmt_default" CONSTRAINT "ts_cash_mgmt_default_fk3" FOREIGN KEY (trade_sec_id) REFERENCES csm_security(sec_id)
+    TABLE "ts_dlr_invntry" CONSTRAINT "ts_dlr_invntry_fk2" FOREIGN KEY (sec_id) REFERENCES csm_security(sec_id)
+    TABLE "ts_locate" CONSTRAINT "ts_locate_fk1" FOREIGN KEY (sec_id) REFERENCES csm_security(sec_id)
+    TABLE "ts_mdl_tree_node" CONSTRAINT "ts_mdl_tree_node_fk5" FOREIGN KEY (ref_sec_id) REFERENCES csm_security(sec_id)
+    TABLE "ts_model_node" CONSTRAINT "ts_model_node_fk4" FOREIGN KEY (ref_sec_id) REFERENCES csm_security(sec_id)
+    TABLE "ts_model_rule" CONSTRAINT "ts_model_rule_fk2" FOREIGN KEY (sec_id) REFERENCES csm_security(sec_id)
+    TABLE "ts_model_rule_security" CONSTRAINT "ts_model_rule_security_fk2" FOREIGN KEY (sec_id) REFERENCES csm_security(sec_id)
+    TABLE "ts_order" CONSTRAINT "ts_order_fk1" FOREIGN KEY (inc_local_crrncy_sec_id) REFERENCES csm_security(sec_id)
+    TABLE "ts_order" CONSTRAINT "ts_order_fk4" FOREIGN KEY (prin_local_crrncy_sec_id) REFERENCES csm_security(sec_id)
+    TABLE "ts_order" CONSTRAINT "ts_order_fk6" FOREIGN KEY (sec_id) REFERENCES csm_security(sec_id)
+    TABLE "ts_order_gen" CONSTRAINT "ts_order_gen_fk3" FOREIGN KEY (sec_id) REFERENCES csm_security(sec_id)
+

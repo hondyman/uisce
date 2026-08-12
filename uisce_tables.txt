@@ -1,0 +1,17 @@
+                     List of relations
+ Schema |             Name              | Type  |  Owner   
+--------+-------------------------------+-------+----------
+ public | alpha_datasource              | table | postgres
+ public | alpha_product                 | table | postgres
+ public | connections                   | table | postgres
+ public | data_classification_templates | table | postgres
+ public | datasource_health_checks      | table | postgres
+ public | datasource_integrity_checks   | table | postgres
+ public | datasource_schema_snapshots   | table | postgres
+ public | schema_migrations             | table | postgres
+ public | tenant_instance               | table | postgres
+ public | tenant_product                | table | postgres
+ public | tenant_product_datasource     | table | postgres
+ public | tenants                       | table | postgres
+(12 rows)
+

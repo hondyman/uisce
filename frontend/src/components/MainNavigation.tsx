@@ -170,7 +170,7 @@ const categoryConfigs: CategoryConfig[] = [
         icon: <SystemUpdateAltIcon />,
         requiredCapability: 'menu:system',
         items: [
-          { label: 'Audit History', path: '/setup/audit', icon: <TimelineIcon />, description: 'Bitemporal audit trail', badge: { label: 'New', color: 'success' } },
+
           { label: 'Audit Plane', path: '/audit', icon: <TimelineIcon />, description: 'Immutable audit & snapshots', badge: { label: 'New', color: 'success' } },
           { label: 'Audit Explorer', path: '/core/audit-explorer', icon: <TimelineIcon />, description: 'Explore audit records' },
           { label: 'Fabric Audit', path: '/fabric/audit-logs', icon: <TimelineIcon />, description: 'Platform audit logs' },
@@ -212,11 +212,10 @@ const categoryConfigs: CategoryConfig[] = [
         icon: <StorageIcon />,
         items: [
           { label: 'Schema Explorer', path: '/schema-explorer', icon: <StorageIcon />, description: 'Database tables & columns' },
-          { label: 'Metadata Explorer', path: '/metadata-explorer', icon: <LayersIcon />, description: 'Unified BOs & Views' },
+
           { label: 'Node Types', path: '/catalog/node-types', icon: <SchemaIcon />, description: 'Metadata structures' },
           { label: 'Edge Types', path: '/catalog/edge-types', icon: <AccountTreeIcon />, description: 'Relationship types' },
-          { label: 'Catalog Setup', path: '/core/catalog-setup', icon: <SettingsIcon />, description: 'Configure catalog' },
-          { label: 'Catalog Test', path: '/core/catalog-setup-test', icon: <SettingsIcon />, description: 'Test catalog setup' },
+
           { label: 'AI Term Suggestions', path: '/catalog/ai-suggestions', icon: <AutoFixHighIcon />, description: 'Suggested terms' },
           { label: 'Bundle Explorer', path: '/bundle-explorer', icon: <SchemaIcon />, description: 'Explore semantic bundles' },
           { label: 'BO Explorer', path: '/business-objects', icon: <BusinessIcon />, description: 'Business Objects setup' },
@@ -226,9 +225,9 @@ const categoryConfigs: CategoryConfig[] = [
         label: 'Lineage',
         icon: <TimelineIcon />,
         items: [
-          { label: 'Lineage Explorer', path: '/lineage', icon: <TimelineIcon />, description: 'Data flow visualization', badge: { label: 'New', color: 'success' } },
+
           { label: 'Semantic Mapper', path: '/core/semantic-mapper', icon: <AutoFixHighIcon />, description: 'Column-to-term mapping' },
-          { label: 'Impact Analysis', path: '/lineage/impact', icon: <WarningIcon />, description: 'Change impact' },
+
         ]
       }
     ]

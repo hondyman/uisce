@@ -29,6 +29,8 @@ import {
   CheckCircle,
   PlusCircle,
 } from 'lucide-react';
+import WaterDropIcon from '@mui/icons-material/WaterDrop';
+import BuildIcon from '@mui/icons-material/Build';
 
 import type { Entities, Entity, Field } from '../types/entity-schema';
 import { useEnhancedSemanticTerms, semanticTermToField, searchSemanticTerms } from '../hooks/useEnhancedSemanticTerms';
@@ -110,9 +112,10 @@ export default function EntityDrawerTreeView({
                 <strong>{subtype.businessName || subtype.name}</strong>
                 <div style={{ display: 'flex', alignItems: 'center' }}>
                   <Chip
-                    label={subtype.isCore ? 'core' : 'custom'} 
-                    color={subtype.isCore ? 'primary' : 'success'} 
-                    size="small" 
+                    icon={subtype.isCore ? <WaterDropIcon sx={{ fontSize: 14 }} /> : <BuildIcon sx={{ fontSize: 14 }} />}
+                    label={subtype.isCore ? 'core' : 'custom'}
+                    color={subtype.isCore ? 'primary' : 'success'}
+                    size="small"
                     style={{ marginLeft: '8px' }}
                   />
                   {!subtype.isCore && (

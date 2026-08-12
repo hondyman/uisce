@@ -3,20 +3,80 @@
 @tailwind utilities;
 
 @layer base {
-  /* Tailwind CSS variables removed - UI now uses MUI theme (amber/chocolate/cream) */
-}
+  :root {
+    /* Surfaces */
+    --color-canvas:          #0A0C10;
+    --color-surface:         #0F1117;
+    --color-elevated:        #161B25;
+    --color-overlay:         #1C2333;
+    --color-border:          #252D3D;
 
-.react-flow__minimap {
-  z-index: 100 !important;
-  pointer-events: auto !important;
-}
+    /* Core / Gold Copy System */
+    --color-core:            #F5A623;
+    --color-core-glow:       rgba(245, 166, 35, 0.15);
+    --color-core-dim:        rgba(245, 166, 35, 0.5);
+    --color-core-text:       #0A0C10;
 
+    /* Custom / Delta System */
+    --color-custom:          #00D4FF;
+    --color-custom-glow:     rgba(0, 212, 255, 0.12);
+    --color-custom-dim:      rgba(0, 212, 255, 0.4);
 
-@layer base {
-  /* Tailwind base layer preserved for component utilities */
-  /* Body background now handled by MUI theme */
+    /* Delta / Computed */
+    --color-delta:           #8B5CF6;
+    --color-delta-glow:      rgba(139, 92, 246, 0.15);
+
+    /* Status */
+    --color-success:         #10B981;
+    --color-warning:         #F59E0B;
+    --color-error:           #EF4444;
+    --color-info:            #3B82F6;
+
+    /* Typography */
+    --color-text-primary:    #F0F4FF;
+    --color-text-secondary:  #94A3B8;
+    --color-text-tertiary:   #4B5563;
+
+    /* Spacing (8pt grid) */
+    --space-1:  4px;
+    --space-2:  8px;
+    --space-3:  12px;
+    --space-4:  16px;
+    --space-6:  24px;
+    --space-8:  32px;
+    --space-12: 48px;
+    --space-16: 64px;
+
+    /* Radius */
+    --radius-sm:   4px;
+    --radius-md:   8px;
+    --radius-lg:   12px;
+    --radius-xl:   16px;
+    --radius-full: 9999px;
+
+    /* Shadows */
+    --shadow-core:   0 0 20px rgba(245, 166, 35, 0.25);
+    --shadow-custom: 0 0 20px rgba(0, 212, 255, 0.2);
+    --shadow-card:   0 4px 24px rgba(0, 0, 0, 0.4);
+    --shadow-modal:  0 24px 64px rgba(0, 0, 0, 0.8);
+
+    /* Transitions */
+    --transition-fast:   150ms ease-out;
+    --transition-base:   200ms ease-out;
+    --transition-slow:   300ms ease-out;
+    --transition-spring: 400ms cubic-bezier(0.34, 1.56, 0.64, 1);
+
+    /* Typography */
+    --font-display: "Geist", "Inter", sans-serif;
+    --font-ui:      "Inter", sans-serif;
+    --font-mono:    "JetBrains Mono", monospace;
+  }
+
   body {
     margin: 0;
+    background-color: var(--color-canvas);
+    color: var(--color-text-primary);
+    font-family: var(--font-ui);
   }
 }
 

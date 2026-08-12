@@ -4,6 +4,7 @@ import './BuilderTabs.css';
 interface Tab {
   id: string;
   label: string;
+  icon?: React.ReactNode;
 }
 
 interface BuilderTabsProps {
@@ -47,6 +48,7 @@ const BuilderTabs: React.FC<BuilderTabsProps> = ({ activeTab, setActiveTab, tabs
           title={tab.label}
           aria-label={tab.label}
         >
+          {tab.icon && <span style={{ marginRight: 4, display: 'inline-flex', alignItems: 'center' }}>{tab.icon}</span>}
           {tab.label}
         </button>
       ))}

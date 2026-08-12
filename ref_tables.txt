@@ -1,0 +1,33 @@
+                   List of relations
+ Schema |            Name            | Type  |  Owner   
+--------+----------------------------+-------+----------
+ public | cs_fund_override_currency  | table | postgres
+ public | csm_country_currency       | table | postgres
+ public | csm_currency               | table | postgres
+ public | csm_currency_cash_security | table | postgres
+ public | csm_currency_list          | table | postgres
+ public | csm_currency_list_group    | table | postgres
+ public | csm_sec_type_currency      | table | postgres
+ public | ts_currency_hedge_pct      | table | postgres
+(8 rows)
+
+              List of relations
+ Schema |       Name       | Type  |  Owner   
+--------+------------------+-------+----------
+ public | ts_exch_calendar | table | postgres
+(1 row)
+
+                   List of relations
+ Schema |            Name            | Type  |  Owner   
+--------+----------------------------+-------+----------
+ public | csm_industry               | table | postgres
+ public | csm_industry_class         | table | postgres
+ public | csm_industry_list          | table | postgres
+ public | csm_industry_list_group    | table | postgres
+ public | csm_industry_list_member   | table | postgres
+ public | csm_issuer_industry        | table | postgres
+ public | ts_order_industry          | table | postgres
+ public | ts_order_industry_class    | table | postgres
+ public | ts_order_security_industry | table | postgres
+(9 rows)
+

@@ -37,11 +37,7 @@ func SecurityContextFromRequest(r *http.Request, bodyDatasourceID string, bodyRe
 	}
 
 	// Validate required parameters with helpful error messages
-	if datasourceID == "" {
-		err := fmt.Errorf("datasource_id is required: provide via X-Datasource-Id, X-Tenant-Datasource-ID, or X-Tenant-Instance-ID header")
-		logging.GetLogger().Sugar().Warnf("[SecurityContextFromRequest] %v", err)
-		return nil, r.Context(), err
-	}
+	// Note: datasourceID is optional for pure tenant/instance metadata routes (like BO definitions)
 	if region == "" {
 		err := fmt.Errorf("region is required: provide via X-Region or X-Tenant-Region header")
 		logging.GetLogger().Sugar().Warnf("[SecurityContextFromRequest] %v", err)

@@ -1,0 +1,125 @@
+                              Table "public.tenant_product"
+      Column      |           Type           | Collation | Nullable |      Default       
+------------------+--------------------------+-----------+----------+--------------------
+ id               | uuid                     |           | not null | uuid_generate_v4()
+ datasource_id    | uuid                     |           | not null | 
+ alpha_product_id | uuid                     |           | not null | 
+ created_at       | timestamp with time zone |           | not null | now()
+ updated_at       | timestamp with time zone |           | not null | now()
+ version          | real                     |           | not null | 
+ is_active        | boolean                  |           | not null | false
+ tenant_id        | uuid                     |           | not null | 
+ product_id       | uuid                     |           |          | 
+ core_id          | uuid                     |           |          | 
+Indexes:
+    "tenant_product_pkey" PRIMARY KEY, btree (id)
+    "idx_tenant_product_core_id" btree (core_id) WHERE core_id IS NOT NULL
+    "idx_tenant_product_tenant_id" btree (tenant_id)
+    "tenant_product_tenant_product_uniq" UNIQUE CONSTRAINT, btree (tenant_id, product_id)
+    "uq_tenant_product_tenant_id_id" UNIQUE CONSTRAINT, btree (tenant_id, id)
+Foreign-key constraints:
+    "tenant_product_core_id_fkey" FOREIGN KEY (core_id) REFERENCES tenant_product(id) ON DELETE SET NULL
+    "tenant_product_product_fk" FOREIGN KEY (alpha_product_id) REFERENCES alpha_product(id) ON UPDATE CASCADE ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED
+    "tenant_product_tenant_id_fk" FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+    "tenant_product_tenant_instance_fk" FOREIGN KEY (datasource_id) REFERENCES tenant_instance(id) ON UPDATE CASCADE ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED
+Referenced by:
+    TABLE "connections" CONSTRAINT "connections_tenant_product_id_fkey" FOREIGN KEY (tenant_product_id) REFERENCES tenant_product(id) ON UPDATE RESTRICT ON DELETE SET NULL
+    TABLE "tenant_product_datasource" CONSTRAINT "fk_tpd_tenant_product" FOREIGN KEY (tenant_id, tenant_product_id) REFERENCES tenant_product(tenant_id, id) ON DELETE CASCADE
+    TABLE "tenant_product" CONSTRAINT "tenant_product_core_id_fkey" FOREIGN KEY (core_id) REFERENCES tenant_product(id) ON DELETE SET NULL
+    TABLE "tenant_product_datasource" CONSTRAINT "tenant_product_datasource_tenant_product_fk" FOREIGN KEY (tenant_product_id) REFERENCES tenant_product(id) ON UPDATE CASCADE ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED
+Policies (forced row security enabled):
+    POLICY "tenant_product_isolation_policy"
+      USING (((NULLIF(current_setting('uisce.current_tenant'::text, true), ''::text) IS NULL) OR (tenant_id = (NULLIF(current_setting('uisce.current_tenant'::text, true), ''::text))::uuid)))
+      WITH CHECK (((NULLIF(current_setting('uisce.current_tenant'::text, true), ''::text) IS NULL) OR (tenant_id = (NULLIF(current_setting('uisce.current_tenant'::text, true), ''::text))::uuid)))
+Publications:
+    "dbz_publication_alpha"
+
+                                                                                                                    Table "public.tenant_product_datasource"
+          Column          |           Type           | Collation | Nullable |                                                                                              Default                                                                                              
+--------------------------+--------------------------+-----------+----------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ id                       | uuid                     |           | not null | uuid_generate_v4()
+ tenant_product_id        | uuid                     |           | not null | 
+ alpha_tenant_instance_id | uuid                     |           |          | 
+ is_active                | boolean                  |           | not null | true
+ config                   | jsonb                    |           |          | 
+ created_at               | timestamp with time zone |           | not null | now()
+ updated_at               | timestamp with time zone |           | not null | now()
+ source_name              | character varying        |           |          | 
+ chart                    | bytea                    |           |          | 
+ connection_id            | uuid                     |           |          | 
+ last_scan_at             | timestamp with time zone |           |          | 
+ last_scan_status         | character varying(50)    |           |          | 'pending'::character varying
+ last_scan_message        | text                     |           |          | 
+ environment              | text                     |           |          | 'development'::text
+ tags                     | text[]                   |           |          | '{}'::text[]
+ description              | text                     |           |          | 
+ read_only                | boolean                  |           |          | false
+ pool_config              | jsonb                    |           |          | '{"ssl_mode": "require", "idle_timeout_ms": 600000, "max_connections": 10, "max_lifetime_ms": 3600000, "min_connections": 2, "statement_cache_size": 100, "connection_timeout_ms": 30000}'::jsonb
+ scan_schedule            | jsonb                    |           |          | '{"cron": null, "enabled": false, "timezone": "UTC", "notify_on_failure": true, "notify_on_complete": true}'::jsonb
+ health_config            | jsonb                    |           |          | '{"auto_reconnect": true, "escalation_policy": "default", "heartbeat_enabled": false, "max_reconnect_attempts": 3, "alert_threshold_minutes": 5, "heartbeat_interval_seconds": 60}'::jsonb
+ last_heartbeat_at        | timestamp with time zone |           |          | 
+ health_status            | text                     |           |          | 'unknown'::text
+ health_message           | text                     |           |          | 
+ integrity_checks         | jsonb                    |           |          | '{"tolerance_percent": 1.0, "null_check_columns": [], "row_count_validation": false, "checksum_verification": false, "referential_integrity": true, "schema_drift_detection": true}'::jsonb
+ last_integrity_check_at  | timestamp with time zone |           |          | 
+ integrity_status         | text                     |           |          | 'unknown'::text
+ integrity_message        | text                     |           |          | 
+ sla_config               | jsonb                    |           |          | '{"tier": "standard", "rate_limit": 100, "max_query_time_ms": 30000, "max_rows_per_query": 100000, "rate_limit_window_seconds": 60}'::jsonb
+ data_classification      | jsonb                    |           |          | '{"contains_pii": false, "audit_enabled": true, "retention_days": null, "sensitivity_level": "internal", "contains_financial": false, "encryption_required": false}'::jsonb
+ created_by               | text                     |           |          | 
+ updated_by               | text                     |           |          | 
+ scan_error_message       | text                     |           |          | 
+ tenant_instance_id       | uuid                     |           |          | 
+ core_id                  | uuid                     |           |          | 
+ datasource_id            | uuid                     |           |          | 
+ alpha_datasource_id      | uuid                     |           |          | 
+ tenant_id                | uuid                     |           | not null | 
+Indexes:
+    "tenant_product_datasource_pkey" PRIMARY KEY, btree (id)
+    "idx_tenant_product_datasource_core_id" btree (core_id) WHERE core_id IS NOT NULL
+    "idx_tenant_product_datasource_instance_id" btree (tenant_instance_id)
+    "idx_tpd_active_env" btree (is_active, environment)
+    "idx_tpd_connection_id" btree (connection_id)
+    "idx_tpd_environment" btree (environment)
+    "idx_tpd_health_status" btree (health_status)
+    "idx_tpd_integrity_status" btree (integrity_status)
+    "idx_tpd_tags" gin (tags)
+    "idx_tpd_tenant_datasource" btree (tenant_id, alpha_datasource_id)
+    "idx_tpd_tenant_product" btree (tenant_id, tenant_product_id)
+    "tenant_product_datasource_instance_source_uniq" UNIQUE CONSTRAINT, btree (tenant_product_id, datasource_id, source_name)
+    "tenant_product_datasource_unique" UNIQUE CONSTRAINT, btree (tenant_instance_id, tenant_product_id, alpha_tenant_instance_id)
+Foreign-key constraints:
+    "fk_tpd_tenant_product" FOREIGN KEY (tenant_id, tenant_product_id) REFERENCES tenant_product(tenant_id, id) ON DELETE CASCADE
+    "tenant_product_datasource_connection_id_fkey" FOREIGN KEY (connection_id) REFERENCES connections(id) ON DELETE SET NULL
+    "tenant_product_datasource_core_id_fkey" FOREIGN KEY (core_id) REFERENCES tenant_product_datasource(id) ON DELETE SET NULL
+    "tenant_product_datasource_instance_fk" FOREIGN KEY (tenant_instance_id) REFERENCES tenant_instance(id) ON UPDATE CASCADE ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED
+    "tenant_product_datasource_tenant_product_fk" FOREIGN KEY (tenant_product_id) REFERENCES tenant_product(id) ON UPDATE CASCADE ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED
+Referenced by:
+    TABLE "bo_instances" CONSTRAINT "bo_instances_datasource_fk" FOREIGN KEY (datasource_id) REFERENCES tenant_product_datasource(id) ON DELETE CASCADE
+    TABLE "business_objects" CONSTRAINT "business_objects_datasource_fk" FOREIGN KEY (tenant_datasource_id) REFERENCES tenant_product_datasource(id) ON DELETE CASCADE
+    TABLE "business_objects" CONSTRAINT "business_objects_datasource_id_fkey" FOREIGN KEY (datasource_id) REFERENCES tenant_product_datasource(id) ON DELETE CASCADE
+    TABLE "cube_core_models" CONSTRAINT "cube_core_models_datasource_id_fkey" FOREIGN KEY (datasource_id) REFERENCES tenant_product_datasource(id) ON DELETE CASCADE
+    TABLE "cube_custom_models" CONSTRAINT "cube_custom_models_datasource_id_fkey" FOREIGN KEY (datasource_id) REFERENCES tenant_product_datasource(id) ON DELETE CASCADE
+    TABLE "cube_model_builder_sessions" CONSTRAINT "cube_model_builder_sessions_datasource_id_fkey" FOREIGN KEY (datasource_id) REFERENCES tenant_product_datasource(id) ON DELETE CASCADE
+    TABLE "cube_preaggregation_configs" CONSTRAINT "cube_preaggregation_configs_datasource_id_fkey" FOREIGN KEY (datasource_id) REFERENCES tenant_product_datasource(id) ON DELETE CASCADE
+    TABLE "custom_components" CONSTRAINT "custom_components_datasource_id_fkey" FOREIGN KEY (datasource_id) REFERENCES tenant_product_datasource(id) ON DELETE CASCADE
+    TABLE "datasource_health_checks" CONSTRAINT "datasource_health_checks_datasource_id_fkey" FOREIGN KEY (datasource_id) REFERENCES tenant_product_datasource(id) ON DELETE CASCADE
+    TABLE "datasource_integrity_checks" CONSTRAINT "datasource_integrity_checks_datasource_id_fkey" FOREIGN KEY (datasource_id) REFERENCES tenant_product_datasource(id) ON DELETE CASCADE
+    TABLE "datasource_lookups" CONSTRAINT "datasource_lookups_datasource_fk" FOREIGN KEY (datasource_id) REFERENCES tenant_product_datasource(id) ON DELETE CASCADE
+    TABLE "datasource_schema_snapshots" CONSTRAINT "datasource_schema_snapshots_datasource_id_fkey" FOREIGN KEY (datasource_id) REFERENCES tenant_product_datasource(id) ON DELETE CASCADE
+    TABLE "entity_attribute" CONSTRAINT "entity_attribute_tenant_datasource_fk" FOREIGN KEY (tenant_datasource_id) REFERENCES tenant_product_datasource(id) ON UPDATE CASCADE ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED
+    TABLE "fabric_defn" CONSTRAINT "fk_fabric_defn_tenant_datasource" FOREIGN KEY (tenant_datasource_id) REFERENCES tenant_product_datasource(id) ON DELETE CASCADE
+    TABLE "reports" CONSTRAINT "reports_data_source_id_fkey" FOREIGN KEY (data_source_id) REFERENCES tenant_product_datasource(id) ON DELETE RESTRICT
+    TABLE "tenant_chart" CONSTRAINT "tenant_chart_tenant_product_datasource_uuid_fk" FOREIGN KEY (tenant_datasource_id) REFERENCES tenant_product_datasource(id) ON UPDATE CASCADE ON DELETE CASCADE
+    TABLE "tenant_product_datasource" CONSTRAINT "tenant_product_datasource_core_id_fkey" FOREIGN KEY (core_id) REFERENCES tenant_product_datasource(id) ON DELETE SET NULL
+Policies (forced row security enabled):
+    POLICY "tenant_isolation_policy"
+      USING ((tenant_id = (current_setting('uisce.current_tenant'::text, true))::uuid))
+    POLICY "tenant_product_datasource_isolation_policy"
+      USING (((NULLIF(current_setting('uisce.current_tenant'::text, true), ''::text) IS NULL) OR (tenant_id = (NULLIF(current_setting('uisce.current_tenant'::text, true), ''::text))::uuid)))
+      WITH CHECK (((NULLIF(current_setting('uisce.current_tenant'::text, true), ''::text) IS NULL) OR (tenant_id = (NULLIF(current_setting('uisce.current_tenant'::text, true), ''::text))::uuid)))
+Publications:
+    "dbz_publication_alpha"
+Triggers:
+    trg_datasource_updated BEFORE UPDATE ON tenant_product_datasource FOR EACH ROW EXECUTE FUNCTION update_datasource_timestamp()
+

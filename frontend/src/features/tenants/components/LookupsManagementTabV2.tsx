@@ -43,6 +43,8 @@ import {
   ControlPoint as ControlPointIcon,
   ViewAgenda as TableViewIcon,
   ViewWeek as CardViewIcon,
+  WaterDrop as WaterDropIcon,
+  Build as BuildIcon,
 } from '@mui/icons-material';
 import { useLookups, useLookupValues, useInfiniteLookupValues, createLookup, deleteLookup, createLookupValue, deleteLookupValue, updateLookup, updateLookupValue } from '../../../api/lookups';
 import { useNotification } from '../../../hooks/useNotification';
@@ -507,23 +509,24 @@ export default function LookupsManagementTab({ tenantId, instanceFilter }: { ten
           </Typography>
           <Stack spacing={1}>
             {[
-              { key: 'all', label: 'All', count: facetCounts.all },
-              { key: 'core', label: 'Core', count: facetCounts.core },
-              { key: 'custom', label: 'Custom', count: facetCounts.custom },
+              { key: 'all', label: 'All', count: facetCounts.all, icon: null },
+              { key: 'core', label: 'Core', count: facetCounts.core, icon: <WaterDropIcon sx={{ fontSize: 16, mr: 0.5 }} /> },
+              { key: 'custom', label: 'Custom', count: facetCounts.custom, icon: <BuildIcon sx={{ fontSize: 16, mr: 0.5 }} /> },
             ].map((facet) => (
               <Button
                 key={facet.key}
                 variant={filterType === facet.key ? 'contained' : 'text'}
                 fullWidth
                 onClick={() => setFilterType(facet.key as FilterType)}
+                startIcon={facet.icon}
                 sx={{
-                  justifyContent: 'space-between',
+                  justifyContent: 'flex-start',
                   textTransform: 'none',
                   fontWeight: filterType === facet.key ? 600 : 400,
                 }}
               >
                 <span>{facet.label}</span>
-                <Chip label={facet.count} size="small" variant="outlined" sx={{ ml: 1 }} />
+                <Chip label={facet.count} size="small" variant="outlined" sx={{ ml: 'auto' }} />
               </Button>
             ))}
           </Stack>

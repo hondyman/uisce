@@ -644,7 +644,7 @@ func (s *SemanticMappingService) autoCreateMapping(ctx context.Context, tenantID
 			id, node_name, node_type_id, tenant_id, tenant_datasource_id, 
 			qualified_path, properties, parent_id
 		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-		ON CONFLICT (tenant_datasource_id, node_type_id, qualified_path) DO UPDATE SET
+		ON CONFLICT (tenant_id, node_type_id, qualified_path) DO UPDATE SET
 			node_name = EXCLUDED.node_name,
 			properties = catalog_node.properties || EXCLUDED.properties
 		RETURNING id
@@ -697,16 +697,16 @@ func (s *SemanticMappingService) autoCreateMapping(ctx context.Context, tenantID
 
 	edgeQuery := `
 		INSERT INTO catalog_edge (
-			id, source_node_id, target_node_id, edge_type, edge_type_id,
+			id, source_node_id, target_node_id, edge_type_id,
 			tenant_id, tenant_datasource_id, properties, relationship_type
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-		ON CONFLICT (tenant_datasource_id, source_node_id, edge_type_id, target_node_id) DO UPDATE SET
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+		ON CONFLICT (id, created_at) DO UPDATE SET
 			properties = catalog_edge.properties || EXCLUDED.properties,
 			updated_at = NOW()
 	`
 	edgeID := uuid.New().String()
 	_, err = s.db.ExecContext(ctx, edgeQuery,
-		edgeID, mapping.ColumnID, termID, "has_context", HasContextEdgeTypeID,
+		edgeID, mapping.ColumnID, termID, HasContextEdgeTypeID,
 		tenantID, datasourceID, edgePropsJSON, "has_context")
 
 	if err != nil {

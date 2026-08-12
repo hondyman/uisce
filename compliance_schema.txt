@@ -1,0 +1,30 @@
+                         Table "public.cs_fund_rule"
+       Column       |         Type          | Collation | Nullable | Default 
+--------------------+-----------------------+-----------+----------+---------
+ acct_cd            | character varying(20) |           | not null | 
+ inv_class_cd       | character varying(5)  |           | not null | 
+ lot_size           | numeric(18,4)         |           |          | 
+ min_order_size     | numeric(18,4)         |           |          | 
+ max_order_size     | numeric(18,4)         |           |          | 
+ qty_amt            | character varying(1)  |           |          | 
+ tax_default_sec_id | numeric(18,0)         |           |          | 
+ template_determ_id | numeric(18,0)         |           |          | 
+Indexes:
+    "cs_fund_rule_pk" PRIMARY KEY, btree (acct_cd, inv_class_cd)
+    "cs_fund_rule_n1" btree (inv_class_cd)
+    "cs_fund_rule_n2" btree (tax_default_sec_id)
+
+                          Table "public.ts_broker_rule"
+      Column       |          Type          | Collation | Nullable |   Default   
+-------------------+------------------------+-----------+----------+-------------
+ bkr_rule_id       | numeric(18,0)          |           | not null | 
+ determ_id         | numeric(18,0)          |           | not null | 
+ target_precedence | character varying(10)  |           |          | 
+ auto_apply_ind    | character(1)           |           | not null | 'N'::bpchar
+ rule_type_cd      | character varying(10)  |           |          | 
+ exceed_target_ind | character(1)           |           | not null | 'N'::bpchar
+ comments          | character varying(250) |           |          | 
+Indexes:
+    "ts_broker_rule_pk" PRIMARY KEY, btree (bkr_rule_id)
+    "ts_broker_rule_n1" btree (determ_id)
+

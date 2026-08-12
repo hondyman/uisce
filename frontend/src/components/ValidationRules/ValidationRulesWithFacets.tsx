@@ -8,6 +8,8 @@ import InvestmentValidationEngine from '../../services/validationEngine';
 import { ValidationRuleCreator } from './ValidationRuleCreator';
 import { RuleJsonViewer } from './RuleJsonViewer';
 import { devError, devLog, devWarn } from '../../utils/devLogger';
+import WaterDropIcon from '@mui/icons-material/WaterDrop';
+import BuildIcon from '@mui/icons-material/Build';
 import type { ValidationRule as SharedValidationRule } from '../../components/validation/types';
 
 interface FacetOption {
@@ -867,7 +869,17 @@ export const ValidationRulesWithFacets: React.FC<ValidationRulesProps> = ({
                     }
                   />
                   <span className="facet-label">
-                    {typeItem.type === 'core' ? '🔒 Core' : '✏️ Custom'}
+                    {typeItem.type === 'core' ? (
+                      <>
+                        <WaterDropIcon sx={{ fontSize: 14, verticalAlign: 'middle', mr: 0.25 }} />
+                        Core
+                      </>
+                    ) : (
+                      <>
+                        <BuildIcon sx={{ fontSize: 14, verticalAlign: 'middle', mr: 0.25 }} />
+                        Custom
+                      </>
+                    )}
                   </span>
                   <span className="facet-count">({typeItem.count})</span>
                 </label>
