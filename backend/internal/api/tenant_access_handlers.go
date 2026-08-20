@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/hondyman/uisce/backend/internal/db"
@@ -33,7 +34,9 @@ func (h *TenantAccessHandlers) RegisterRoutes(r chi.Router) {
 	r.Get("/tenants/{tenantId}", h.getTenantByID)
 
 	r.Get("/rest/datasources", h.ListAlphaDatasources)
+	r.Patch("/rest/datasources/{datasourceId}", h.UpdateAlphaDatasource)
 	r.Get("/rest/products", h.ListAlphaProducts)
+	r.Patch("/rest/products/{productId}", h.UpdateAlphaProduct)
 
 	r.Get("/v1/admin/tenants/{tenantId}/configuration", h.getTenantConfiguration)
 	r.Put("/v1/admin/tenants/{tenantId}/configuration", h.updateTenantConfiguration)
@@ -258,9 +261,76 @@ func (h *TenantAccessHandlers) ListAlphaDatasources(w http.ResponseWriter, r *ht
 	})
 }
 
+func (h *TenantAccessHandlers) UpdateAlphaDatasource(w http.ResponseWriter, r *http.Request) {
+	datasourceID := chi.URLParam(r, "datasourceId")
+	if datasourceID == "" {
+		http.Error(w, "Missing datasource ID", http.StatusBadRequest)
+		return
+	}
+
+	var updates map[string]interface{}
+	if err := json.NewDecoder(r.Body).Decode(&updates); err != nil {
+		http.Error(w, "Invalid request body: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	if len(updates) == 0 {
+		http.Error(w, "No fields to update", http.StatusBadRequest)
+		return
+	}
+
+	setClauses := []string{}
+	args := []interface{}{}
+	argIndex := 1
+
+	if name, ok := updates["datasource_name"].(string); ok {
+		setClauses = append(setClauses, fmt.Sprintf("datasource_name = $%d", argIndex))
+		args = append(args, name)
+		argIndex++
+	}
+
+	if isActive, ok := updates["is_active"].(bool); ok {
+		setClauses = append(setClauses, fmt.Sprintf("is_active = $%d", argIndex))
+		args = append(args, isActive)
+		argIndex++
+	}
+
+	if len(setClauses) == 0 {
+		http.Error(w, "No valid fields to update (allowed: datasource_name, is_active)", http.StatusBadRequest)
+		return
+	}
+
+	setClauses = append(setClauses, "updated_at = NOW()")
+	args = append(args, datasourceID)
+
+	query := fmt.Sprintf(`
+		UPDATE alpha_datasource 
+		SET %s 
+		WHERE id = $%d
+	`, strings.Join(setClauses, ", "), argIndex)
+
+	result, err := h.DB.ExecContext(r.Context(), query, args...)
+	if err != nil {
+		http.Error(w, "Failed to update datasource: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	rowsAffected, _ := result.RowsAffected()
+	if rowsAffected == 0 {
+		http.Error(w, "Datasource not found", http.StatusNotFound)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"success": true,
+		"id":      datasourceID,
+	})
+}
+
 func (h *TenantAccessHandlers) ListAlphaProducts(w http.ResponseWriter, r *http.Request) {
 	rows, err := h.DB.QueryContext(r.Context(), `
-		SELECT id, product_name, product_code, is_active
+		SELECT id, product_name, is_active
 		FROM alpha_product
 		WHERE is_active = true
 	`)
@@ -272,15 +342,14 @@ func (h *TenantAccessHandlers) ListAlphaProducts(w http.ResponseWriter, r *http.
 
 	var results []map[string]interface{}
 	for rows.Next() {
-		var id, name, code string
+		var id, name string
 		var isActive bool
-		if err := rows.Scan(&id, &name, &code, &isActive); err != nil {
+		if err := rows.Scan(&id, &name, &isActive); err != nil {
 			continue
 		}
 		results = append(results, map[string]interface{}{
 			"id":           id,
 			"product_name": name,
-			"product_code": code,
 			"is_active":    isActive,
 		})
 	}
@@ -288,6 +357,73 @@ func (h *TenantAccessHandlers) ListAlphaProducts(w http.ResponseWriter, r *http.
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{
 		"alpha_product": results,
+	})
+}
+
+func (h *TenantAccessHandlers) UpdateAlphaProduct(w http.ResponseWriter, r *http.Request) {
+	productID := chi.URLParam(r, "productId")
+	if productID == "" {
+		http.Error(w, "Missing product ID", http.StatusBadRequest)
+		return
+	}
+
+	var updates map[string]interface{}
+	if err := json.NewDecoder(r.Body).Decode(&updates); err != nil {
+		http.Error(w, "Invalid request body: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	if len(updates) == 0 {
+		http.Error(w, "No fields to update", http.StatusBadRequest)
+		return
+	}
+
+	setClauses := []string{}
+	args := []interface{}{}
+	argIndex := 1
+
+	if name, ok := updates["product_name"].(string); ok {
+		setClauses = append(setClauses, fmt.Sprintf("product_name = $%d", argIndex))
+		args = append(args, name)
+		argIndex++
+	}
+
+	if isActive, ok := updates["is_active"].(bool); ok {
+		setClauses = append(setClauses, fmt.Sprintf("is_active = $%d", argIndex))
+		args = append(args, isActive)
+		argIndex++
+	}
+
+	if len(setClauses) == 0 {
+		http.Error(w, "No valid fields to update (allowed: product_name, is_active)", http.StatusBadRequest)
+		return
+	}
+
+	setClauses = append(setClauses, fmt.Sprintf("updated_at = NOW()"))
+	args = append(args, productID)
+
+	query := fmt.Sprintf(`
+		UPDATE alpha_product 
+		SET %s 
+		WHERE id = $%d
+	`, strings.Join(setClauses, ", "), argIndex)
+
+	result, err := h.DB.ExecContext(r.Context(), query, args...)
+	if err != nil {
+		http.Error(w, "Failed to update product: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	rowsAffected, _ := result.RowsAffected()
+	if rowsAffected == 0 {
+		http.Error(w, "Product not found", http.StatusNotFound)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"success": true,
+		"id":      productID,
 	})
 }
 

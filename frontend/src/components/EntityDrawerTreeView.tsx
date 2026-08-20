@@ -29,8 +29,7 @@ import {
   CheckCircle,
   PlusCircle,
 } from 'lucide-react';
-import WaterDropIcon from '@mui/icons-material/WaterDrop';
-import BuildIcon from '@mui/icons-material/Build';
+import { CoreIcon, CustomIcon } from './common/CoreCustomIcons';
 
 import type { Entities, Entity, Field } from '../types/entity-schema';
 import { useEnhancedSemanticTerms, semanticTermToField, searchSemanticTerms } from '../hooks/useEnhancedSemanticTerms';
@@ -101,7 +100,7 @@ export default function EntityDrawerTreeView({
       title: (
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
           <strong>{editingEntity.businessName || editingEntity.name}</strong>
-          <Chip label="core" color="primary" size="small" style={{ marginLeft: '8px' }} />
+          <CoreIcon fontSize="small" style={{ marginLeft: '8px' }} />
         </div>
       ),
       key: 'entity',
@@ -111,13 +110,7 @@ export default function EntityDrawerTreeView({
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
                 <strong>{subtype.businessName || subtype.name}</strong>
                 <div style={{ display: 'flex', alignItems: 'center' }}>
-                  <Chip
-                    icon={subtype.isCore ? <WaterDropIcon sx={{ fontSize: 14 }} /> : <BuildIcon sx={{ fontSize: 14 }} />}
-                    label={subtype.isCore ? 'core' : 'custom'}
-                    color={subtype.isCore ? 'primary' : 'success'}
-                    size="small"
-                    style={{ marginLeft: '8px' }}
-                  />
+                  {subtype.isCore ? <CoreIcon fontSize="small" style={{ marginLeft: '8px' }} /> : <CustomIcon fontSize="small" style={{ marginLeft: '8px' }} />}
                   {!subtype.isCore && (
                   <Button
                     type="text"

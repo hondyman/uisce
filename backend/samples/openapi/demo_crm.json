@@ -1,0 +1,155 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Demo CRM API",
+    "version": "1.0.0",
+    "description": "A simple customer management API used to exercise the OpenAPI ingester."
+  },
+  "servers": [
+    { "url": "https://api.demo-crm.example.com/v1" }
+  ],
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer"
+      }
+    },
+    "schemas": {
+      "Customer": {
+        "type": "object",
+        "required": ["id", "email"],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Customer identifier",
+            "x-primary-key": true,
+            "x-semantic-term": "Customer ID"
+          },
+          "email": {
+            "type": "string",
+            "description": "Primary email address",
+            "x-semantic-term": "Email Address"
+          },
+          "name": {
+            "type": "string",
+            "description": "Full name",
+            "x-semantic-term": "Customer Name"
+          },
+          "balance": {
+            "type": "number",
+            "description": "Outstanding balance",
+            "x-semantic-term": "Account Balance"
+          },
+          "is_active": {
+            "type": "boolean",
+            "description": "Whether the customer is currently active"
+          }
+        }
+      }
+    }
+  },
+  "paths": {
+    "/customers": {
+      "get": {
+        "summary": "List customers",
+        "tags": ["Customers"],
+        "operationId": "listCustomers",
+        "responses": {
+          "200": {
+            "description": "A page of customers",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": { "$ref": "#/components/schemas/Customer" }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Create a customer",
+        "tags": ["Customers"],
+        "operationId": "createCustomer",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/Customer" }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Customer created",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Customer" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/customers/{id}": {
+      "get": {
+        "summary": "Get a customer",
+        "tags": ["Customers"],
+        "operationId": "getCustomer",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string", "format": "uuid" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Single customer",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Customer" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/orders": {
+      "get": {
+        "summary": "List orders",
+        "tags": ["Orders"],
+        "operationId": "listOrders",
+        "responses": {
+          "200": {
+            "description": "Orders list",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "order_id": {
+                      "type": "string",
+                      "x-semantic-term": "Order ID"
+                    },
+                    "total": {
+                      "type": "number"
+                    },
+                    "placed_at": {
+                      "type": "string",
+                      "format": "date-time"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

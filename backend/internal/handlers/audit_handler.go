@@ -10,6 +10,7 @@ import (
 
 	"github.com/hondyman/uisce/backend/internal/boresolver"
 	"github.com/hondyman/uisce/backend/internal/logging"
+	"github.com/hondyman/uisce/libs/jwt-middleware"
 )
 
 // AuditLogEntry represents an audit log record
@@ -23,6 +24,7 @@ type AuditLogEntry struct {
 	Resource     string                 `json:"resource"`
 	ResourceType string                 `json:"resourceType"`
 	Details      map[string]interface{} `json:"details"`
+	Core         bool                   `json:"core"`
 }
 
 // AuditLogResponse is the API response structure
@@ -38,7 +40,8 @@ func HandleGetAuditLogs(w http.ResponseWriter, r *http.Request) {
 	offsetStr := r.URL.Query().Get("offset")
 	startDateStr := r.URL.Query().Get("startDate")
 	endDateStr := r.URL.Query().Get("endDate")
-	tenantID := r.URL.Query().Get("tenantId")
+	claims := jwtmiddleware.GetClaimsFromContext(r)
+	tenantID := claims.TenantID
 
 	limit := 10
 	offset := 0
@@ -88,7 +91,7 @@ func HandleGetAuditLogs(w http.ResponseWriter, r *http.Request) {
 	}
 
 	sqlQuery := fmt.Sprintf(
-		"SELECT id, tenant_id, timestamp, user_name, user_email, action, resource, resource_type, details FROM iceberg.audit.audit_logs%s ORDER BY %s %s LIMIT %d OFFSET %d",
+		"SELECT id, tenant_id, timestamp, user_name, user_email, action, resource, resource_type, details, core FROM audit_logs%s ORDER BY %s %s LIMIT %d OFFSET %d",
 		whereClause, sortBy, sortOrder, limit, offset,
 	)
 
@@ -102,30 +105,36 @@ func HandleGetAuditLogs(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var entries []AuditLogEntry
-	for _, record := range resp.Records {
-		if len(record) < 9 {
+	for rowIdx := 0; rowIdx < resp.RowCount; rowIdx++ {
+		colCount := len(resp.Records)
+		if colCount < 9 {
 			continue
 		}
 		e := AuditLogEntry{
-			ID:           fmt.Sprintf("%v", record[0]),
-			TenantID:     fmt.Sprintf("%v", record[1]),
-			UserName:     fmt.Sprintf("%v", record[3]),
-			UserEmail:    fmt.Sprintf("%v", record[4]),
-			Action:       fmt.Sprintf("%v", record[5]),
-			Resource:     fmt.Sprintf("%v", record[6]),
-			ResourceType: fmt.Sprintf("%v", record[7]),
+			ID:           fmt.Sprintf("%v", resp.Records[0][rowIdx]),
+			TenantID:     fmt.Sprintf("%v", resp.Records[1][rowIdx]),
+			UserName:     fmt.Sprintf("%v", resp.Records[3][rowIdx]),
+			UserEmail:    fmt.Sprintf("%v", resp.Records[4][rowIdx]),
+			Action:       fmt.Sprintf("%v", resp.Records[5][rowIdx]),
+			Resource:     fmt.Sprintf("%v", resp.Records[6][rowIdx]),
+			ResourceType: fmt.Sprintf("%v", resp.Records[7][rowIdx]),
 		}
-		if tsStr := fmt.Sprintf("%v", record[2]); tsStr != "" {
+		if tsStr := fmt.Sprintf("%v", resp.Records[2][rowIdx]); tsStr != "" {
 			if parsedTs, err := time.Parse(time.RFC3339, tsStr); err == nil {
 				e.Timestamp = parsedTs
 			}
 		}
-		if detailsStr := fmt.Sprintf("%v", record[8]); detailsStr != "" {
+		if detailsStr := fmt.Sprintf("%v", resp.Records[8][rowIdx]); detailsStr != "" {
 			var detailsMap map[string]interface{}
 			if err := json.Unmarshal([]byte(detailsStr), &detailsMap); err == nil {
 				e.Details = detailsMap
 			} else {
 				e.Details = map[string]interface{}{"raw": detailsStr}
+			}
+		}
+		if colCount > 9 {
+			if coreStr := fmt.Sprintf("%v", resp.Records[9][rowIdx]); coreStr != "" && coreStr != "nil" {
+				e.Core = coreStr == "true" || coreStr == "True"
 			}
 		}
 		entries = append(entries, e)

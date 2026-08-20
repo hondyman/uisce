@@ -35,8 +35,14 @@ func (h *SecurityRulesHandler) RegisterRoutes(r chi.Router) {
 func (h *SecurityRulesHandler) ListRules(w http.ResponseWriter, r *http.Request) {
 	logger := logging.GetLogger()
 	ctx := r.Context()
+
+	tenantID, ok := security.RequireTenant(w, r)
+	if !ok {
+		return
+	}
+
 	filters := security.AccessRuleFilters{
-		TenantID:         r.URL.Query().Get("tenantId"),
+		TenantID:         tenantID,
 		BusinessObjectID: r.URL.Query().Get("businessObjectId"),
 		Status:           r.URL.Query().Get("status"),
 	}

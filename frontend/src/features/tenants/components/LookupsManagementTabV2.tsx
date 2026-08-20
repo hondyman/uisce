@@ -378,7 +378,7 @@ export default function LookupsManagementTab({ tenantId, instanceFilter }: { ten
   const renderTableView = () => (
     <Box sx={{ overflowX: 'auto' }}>
       <Table size="small">
-        <TableHead sx={{ backgroundColor: '#fafafa' }}>
+        <TableHead>
           <TableRow>
             <TableCell>
               <TableSortLabel active={sortField === 'name'} direction={sortField === 'name' ? sortOrder : 'asc'} onClick={() => handleSort('name')}>
@@ -500,7 +500,7 @@ export default function LookupsManagementTab({ tenantId, instanceFilter }: { ten
   );
 
   return (
-    <Box sx={{ display: 'flex', height: '100%', bgcolor: '#fafafa' }}>
+    <Box sx={{ display: 'flex', height: '100%' }}>
       {/* Sidebar with Facets */}
       <Drawer variant="permanent" sx={{ width: sidebarOpen ? 280 : 0, transition: 'all 0.3s', overflow: 'hidden' }} PaperProps={{ sx: { position: 'relative', width: 280, pt: 2 } }}>
         <Box sx={{ px: 2 }}>

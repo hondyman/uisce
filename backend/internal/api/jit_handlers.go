@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/hondyman/uisce/backend/internal/audit"
 	"github.com/hondyman/uisce/backend/internal/auth"
+	"github.com/hondyman/uisce/backend/internal/security"
 	"github.com/hondyman/uisce/backend/internal/services"
 	coremodels "github.com/hondyman/uisce/backend/models"
 )
@@ -201,10 +202,13 @@ func HandleCreateJITGrant(db *sql.DB) http.HandlerFunc {
 	}
 }
 
-// GET /jit-grants?user_id=...
+// GET /jit-grants
 func HandleListJITGrants(db *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		userID := r.URL.Query().Get("user_id")
+		userID, ok := security.RequireUser(w, r)
+		if !ok {
+			return
+		}
 		grants, err := services.ListJITAddonGrants(r.Context(), db, userID)
 		if err != nil {
 			http.Error(w, err.Error(), 500)

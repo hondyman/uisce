@@ -16,58 +16,57 @@ export type { EdgeType } from '../types/edgeTypes';
 export const edgeTypesKeys = {
   all: ['edge-types'] as const,
   lists: () => [...edgeTypesKeys.all, 'list'] as const,
-  list: (tenantId: string) => [...edgeTypesKeys.lists(), tenantId] as const,
+  list: () => [...edgeTypesKeys.lists()] as const,
   details: () => [...edgeTypesKeys.all, 'detail'] as const,
-  detail: (id: string, tenantId: string) => [...edgeTypesKeys.details(), id, tenantId] as const,
-  properties: (id: string, tenantId: string) => [...edgeTypesKeys.all, 'properties', id, tenantId] as const,
-  search: (tenantId: string, q: string) => [...edgeTypesKeys.all, 'search', tenantId, q] as const,
+  detail: (id: string) => [...edgeTypesKeys.details(), id] as const,
+  properties: (id: string) => [...edgeTypesKeys.all, 'properties', id] as const,
+  search: (q: string) => [...edgeTypesKeys.all, 'search', q] as const,
 };
 
 // List all edge types for a tenant
-export function useEdgeTypes(tenantId: string) {
+export function useEdgeTypes() {
   return useQuery({
-    queryKey: edgeTypesKeys.list(tenantId),
+    queryKey: edgeTypesKeys.list(),
     queryFn: async () => {
-      const res = await apiFetch(`/api/edge-types?tenant_id=${tenantId}`);
+      const res = await apiFetch('/api/edge-types');
       if (!res.ok) {
         const error = await res.text();
         throw new Error(error || 'Failed to fetch edge types');
       }
       return res.json() as Promise<EdgeType[]>;
     },
-    enabled: !!tenantId,
   });
 }
 
 // Search edge types server-side for a tenant with a query string
-export function useSearchEdgeTypes(tenantId: string, q: string) {
+export function useSearchEdgeTypes(q: string) {
   return useQuery({
-    queryKey: edgeTypesKeys.search(tenantId, q),
+    queryKey: edgeTypesKeys.search(q),
     queryFn: async () => {
-      const res = await apiFetch(`/api/edge-types?tenant_id=${tenantId}&q=${encodeURIComponent(q)}`);
+      const res = await apiFetch(`/api/edge-types?q=${encodeURIComponent(q)}`);
       if (!res.ok) {
         const err = await res.text();
         throw new Error(err || 'Failed to search edge types');
       }
       return res.json() as Promise<EdgeType[]>;
     },
-    enabled: !!tenantId && !!q && q.trim() !== '',
+    enabled: !!q && q.trim() !== '',
   });
 }
 
 // Get a single edge type by ID
-export function useEdgeType(id: string, tenantId: string) {
+export function useEdgeType(id: string) {
   return useQuery({
-    queryKey: edgeTypesKeys.detail(id, tenantId),
+    queryKey: edgeTypesKeys.detail(id),
     queryFn: async () => {
-      const res = await apiFetch(`/api/edge-types/${id}?tenant_id=${tenantId}`);
+      const res = await apiFetch(`/api/edge-types/${id}`);
       if (!res.ok) {
         const error = await res.text();
         throw new Error(error || 'Failed to fetch edge type');
       }
       return res.json() as Promise<EdgeType>;
     },
-    enabled: !!id && !!tenantId,
+    enabled: !!id,
   });
 }
 
@@ -89,8 +88,8 @@ export function useCreateEdgeType() {
       }
       return res.json() as Promise<EdgeType>;
     },
-    onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: edgeTypesKeys.list(data.tenant_id) });
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: edgeTypesKeys.list() });
     },
   });
 }
@@ -100,8 +99,8 @@ export function useUpdateEdgeType() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async ({ id, tenantId, data }: { id: string; tenantId: string; data: UpdateEdgeTypeRequest }) => {
-      const res = await apiFetch(`/api/edge-types/${id}?tenant_id=${tenantId}`, {
+    mutationFn: async ({ id, data }: { id: string; data: UpdateEdgeTypeRequest }) => {
+      const res = await apiFetch(`/api/edge-types/${id}`, {
         method: 'PATCH',
         body: JSON.stringify(data),
       });
@@ -114,8 +113,8 @@ export function useUpdateEdgeType() {
       return res.json() as Promise<EdgeType>;
     },
     onSuccess: (_, variables) => {
-      queryClient.invalidateQueries({ queryKey: edgeTypesKeys.list(variables.tenantId) });
-      queryClient.invalidateQueries({ queryKey: edgeTypesKeys.detail(variables.id, variables.tenantId) });
+      queryClient.invalidateQueries({ queryKey: edgeTypesKeys.list() });
+      queryClient.invalidateQueries({ queryKey: edgeTypesKeys.detail(variables.id) });
     },
   });
 }
@@ -125,8 +124,8 @@ export function useDeleteEdgeType() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async ({ id, tenantId }: { id: string; tenantId: string }) => {
-      const res = await apiFetch(`/api/edge-types/${id}?tenant_id=${tenantId}`, {
+    mutationFn: async ({ id }: { id: string }) => {
+      const res = await apiFetch(`/api/edge-types/${id}`, {
         method: 'DELETE',
       });
       if (!res.ok) {
@@ -135,8 +134,8 @@ export function useDeleteEdgeType() {
       }
       return;
     },
-    onSuccess: (_, variables) => {
-      queryClient.invalidateQueries({ queryKey: edgeTypesKeys.list(variables.tenantId) });
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: edgeTypesKeys.list() });
     },
   });
 }
@@ -146,10 +145,10 @@ export function useCreateEdgeProperty() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async ({ edge_type_id, tenant_id, property }: CreatePropertyRequest) => {
+    mutationFn: async ({ edge_type_id, property }: CreatePropertyRequest) => {
       const res = await apiFetch(`/api/edge-types/${edge_type_id}/properties`, {
         method: 'POST',
-        body: JSON.stringify({ tenant_id, property }),
+        body: JSON.stringify({ property }),
       });
       if (!res.ok) {
         const error = await res.text();
@@ -158,8 +157,8 @@ export function useCreateEdgeProperty() {
       return res.json() as Promise<EdgeType>;
     },
     onSuccess: (_data, variables) => {
-      queryClient.invalidateQueries({ queryKey: edgeTypesKeys.detail(variables.edge_type_id, variables.tenant_id) });
-      queryClient.invalidateQueries({ queryKey: edgeTypesKeys.list(variables.tenant_id) });
+      queryClient.invalidateQueries({ queryKey: edgeTypesKeys.detail(variables.edge_type_id) });
+      queryClient.invalidateQueries({ queryKey: edgeTypesKeys.list() });
     },
   });
 }
@@ -168,10 +167,10 @@ export function useUpdateEdgeProperty() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async ({ edge_type_id, tenant_id, property_name, property }: UpdatePropertyRequest) => {
+    mutationFn: async ({ edge_type_id, property_name, property }: UpdatePropertyRequest) => {
       const res = await apiFetch(`/api/edge-types/${edge_type_id}/properties/${property_name}`, {
         method: 'PATCH',
-        body: JSON.stringify({ tenant_id, property }),
+        body: JSON.stringify({ property }),
       });
       if (!res.ok) {
         const error = await res.text();
@@ -180,8 +179,8 @@ export function useUpdateEdgeProperty() {
       return res.json() as Promise<EdgeType>;
     },
     onSuccess: (_data, variables) => {
-      queryClient.invalidateQueries({ queryKey: edgeTypesKeys.detail(variables.edge_type_id, variables.tenant_id) });
-      queryClient.invalidateQueries({ queryKey: edgeTypesKeys.list(variables.tenant_id) });
+      queryClient.invalidateQueries({ queryKey: edgeTypesKeys.detail(variables.edge_type_id) });
+      queryClient.invalidateQueries({ queryKey: edgeTypesKeys.list() });
     },
   });
 }
@@ -190,8 +189,8 @@ export function useDeleteEdgeProperty() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async ({ edge_type_id, tenant_id, property_name }: DeletePropertyRequest) => {
-      const res = await apiFetch(`/api/edge-types/${edge_type_id}/properties/${property_name}?tenant_id=${tenant_id}`, {
+    mutationFn: async ({ edge_type_id, property_name }: DeletePropertyRequest) => {
+      const res = await apiFetch(`/api/edge-types/${edge_type_id}/properties/${property_name}`, {
         method: 'DELETE',
       });
       if (!res.ok) {
@@ -200,8 +199,8 @@ export function useDeleteEdgeProperty() {
       }
     },
     onSuccess: (_data, variables) => {
-      queryClient.invalidateQueries({ queryKey: edgeTypesKeys.detail(variables.edge_type_id, variables.tenant_id) });
-      queryClient.invalidateQueries({ queryKey: edgeTypesKeys.list(variables.tenant_id) });
+      queryClient.invalidateQueries({ queryKey: edgeTypesKeys.detail(variables.edge_type_id) });
+      queryClient.invalidateQueries({ queryKey: edgeTypesKeys.list() });
     },
   });
 }

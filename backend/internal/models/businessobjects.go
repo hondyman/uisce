@@ -95,16 +95,32 @@ type BusinessObjectDefinition struct {
 	DatasourceID           sql.NullString               `db:"datasource_id" json:"datasourceId,omitempty"` // Nullable for global BOs
 	CoreID                 sql.NullString               `db:"core_id" json:"coreId,omitempty"`             // Links to gold copy source BO (Workday-style extension)
 	Bindings               []map[string]interface{}     `json:"bindings"`
+
+	// Core Identity Triple & Semantic Governance (Feature 1)
+	BOTypeID             sql.NullString `db:"bo_type_id" json:"boTypeId,omitempty"`
+	ModelID              string         `db:"model_id" json:"modelId,omitempty"`
+	ClassificationNodeID sql.NullString `db:"classification_node_id" json:"classificationNodeId,omitempty"` // Level 3 taxonomy node
+	BusinessKeyNodeID    sql.NullString `db:"business_key_node_id" json:"businessKeyNodeId,omitempty"`       // Natural identifier (e.g. customer_bk)
+	SemanticIDNodeID     sql.NullString `db:"semantic_id_node_id" json:"semanticIdNodeId,omitempty"`         // Universal semantic identifier (e.g. customer_sid)
+	GrainNodeID          sql.NullString `db:"grain_node_id" json:"grainNodeId,omitempty"`                   // Dimensional granularity anchor
+	CoreReferenceBOID    sql.NullString `db:"core_reference_bo_id" json:"coreReferenceBoId,omitempty"`       // Reference to master gold copy BO
+	Status               string         `db:"status" json:"status,omitempty"`                               // DRAFT, IN_REVIEW, APPROVED, PUBLISHED, DEPRECATED
 }
 
 // MarshalJSON handles custom JSON marshaling for BusinessObjectDefinition to properly serialize sql.NullString fields
 func (b *BusinessObjectDefinition) MarshalJSON() ([]byte, error) {
 	type Alias BusinessObjectDefinition
 	aux := struct {
-		ParentID      *string `json:"parentId,omitempty"`
-		DriverTableID *string `json:"driverTableId,omitempty"`
-		DatasourceID  *string `json:"datasourceId,omitempty"`
-		CoreID        *string `json:"coreId,omitempty"`
+		ParentID             *string `json:"parentId,omitempty"`
+		DriverTableID        *string `json:"driverTableId,omitempty"`
+		DatasourceID         *string `json:"datasourceId,omitempty"`
+		CoreID               *string `json:"coreId,omitempty"`
+		BOTypeID             *string `json:"boTypeId,omitempty"`
+		ClassificationNodeID *string `json:"classificationNodeId,omitempty"`
+		BusinessKeyNodeID    *string `json:"businessKeyNodeId,omitempty"`
+		SemanticIDNodeID     *string `json:"semanticIdNodeId,omitempty"`
+		GrainNodeID          *string `json:"grainNodeId,omitempty"`
+		CoreReferenceBOID    *string `json:"coreReferenceBoId,omitempty"`
 		*Alias
 	}{
 		Alias: (*Alias)(b),
@@ -123,9 +139,115 @@ func (b *BusinessObjectDefinition) MarshalJSON() ([]byte, error) {
 	if b.CoreID.Valid && b.CoreID.String != "" {
 		aux.CoreID = &b.CoreID.String
 	}
+	if b.BOTypeID.Valid && b.BOTypeID.String != "" {
+		aux.BOTypeID = &b.BOTypeID.String
+	}
+	if b.ClassificationNodeID.Valid && b.ClassificationNodeID.String != "" {
+		aux.ClassificationNodeID = &b.ClassificationNodeID.String
+	}
+	if b.BusinessKeyNodeID.Valid && b.BusinessKeyNodeID.String != "" {
+		aux.BusinessKeyNodeID = &b.BusinessKeyNodeID.String
+	}
+	if b.SemanticIDNodeID.Valid && b.SemanticIDNodeID.String != "" {
+		aux.SemanticIDNodeID = &b.SemanticIDNodeID.String
+	}
+	if b.GrainNodeID.Valid && b.GrainNodeID.String != "" {
+		aux.GrainNodeID = &b.GrainNodeID.String
+	}
+	if b.CoreReferenceBOID.Valid && b.CoreReferenceBOID.String != "" {
+		aux.CoreReferenceBOID = &b.CoreReferenceBOID.String
+	}
 
 	return json.Marshal(aux)
 }
+
+// UnmarshalJSON handles custom JSON unmarshaling for BusinessObjectDefinition to properly deserialize sql.NullString fields
+func (b *BusinessObjectDefinition) UnmarshalJSON(data []byte) error {
+	type Alias BusinessObjectDefinition
+	aux := struct {
+		ParentID             *string `json:"parentId,omitempty"`
+		DriverTableID        *string `json:"driverTableId,omitempty"`
+		DatasourceID         *string `json:"datasourceId,omitempty"`
+		CoreID               *string `json:"coreId,omitempty"`
+		BOTypeID             *string `json:"boTypeId,omitempty"`
+		ClassificationNodeID *string `json:"classificationNodeId,omitempty"`
+		BusinessKeyNodeID    *string `json:"businessKeyNodeId,omitempty"`
+		SemanticIDNodeID     *string `json:"semanticIdNodeId,omitempty"`
+		GrainNodeID          *string `json:"grainNodeId,omitempty"`
+		CoreReferenceBOID    *string `json:"coreReferenceBoId,omitempty"`
+		*Alias
+	}{
+		Alias: (*Alias)(b),
+	}
+
+	if err := json.Unmarshal(data, &aux); err != nil {
+		return err
+	}
+
+	if aux.ParentID != nil && *aux.ParentID != "" {
+		b.ParentID = sql.NullString{String: *aux.ParentID, Valid: true}
+	} else {
+		b.ParentID = sql.NullString{Valid: false}
+	}
+
+	if aux.DriverTableID != nil && *aux.DriverTableID != "" {
+		b.DriverTableID = sql.NullString{String: *aux.DriverTableID, Valid: true}
+	} else {
+		b.DriverTableID = sql.NullString{Valid: false}
+	}
+
+	if aux.DatasourceID != nil && *aux.DatasourceID != "" {
+		b.DatasourceID = sql.NullString{String: *aux.DatasourceID, Valid: true}
+	} else {
+		b.DatasourceID = sql.NullString{Valid: false}
+	}
+
+	if aux.CoreID != nil && *aux.CoreID != "" {
+		b.CoreID = sql.NullString{String: *aux.CoreID, Valid: true}
+	} else {
+		b.CoreID = sql.NullString{Valid: false}
+	}
+
+	if aux.BOTypeID != nil && *aux.BOTypeID != "" {
+		b.BOTypeID = sql.NullString{String: *aux.BOTypeID, Valid: true}
+	} else {
+		b.BOTypeID = sql.NullString{Valid: false}
+	}
+
+	if aux.ClassificationNodeID != nil && *aux.ClassificationNodeID != "" {
+		b.ClassificationNodeID = sql.NullString{String: *aux.ClassificationNodeID, Valid: true}
+	} else {
+		b.ClassificationNodeID = sql.NullString{Valid: false}
+	}
+
+	if aux.BusinessKeyNodeID != nil && *aux.BusinessKeyNodeID != "" {
+		b.BusinessKeyNodeID = sql.NullString{String: *aux.BusinessKeyNodeID, Valid: true}
+	} else {
+		b.BusinessKeyNodeID = sql.NullString{Valid: false}
+	}
+
+	if aux.SemanticIDNodeID != nil && *aux.SemanticIDNodeID != "" {
+		b.SemanticIDNodeID = sql.NullString{String: *aux.SemanticIDNodeID, Valid: true}
+	} else {
+		b.SemanticIDNodeID = sql.NullString{Valid: false}
+	}
+
+	if aux.GrainNodeID != nil && *aux.GrainNodeID != "" {
+		b.GrainNodeID = sql.NullString{String: *aux.GrainNodeID, Valid: true}
+	} else {
+		b.GrainNodeID = sql.NullString{Valid: false}
+	}
+
+	if aux.CoreReferenceBOID != nil && *aux.CoreReferenceBOID != "" {
+		b.CoreReferenceBOID = sql.NullString{String: *aux.CoreReferenceBOID, Valid: true}
+	} else {
+		b.CoreReferenceBOID = sql.NullString{Valid: false}
+	}
+
+	return nil
+}
+
+
 
 // ============================================================================
 // BO INSTANCES
@@ -286,3 +408,530 @@ type BusinessObjectListItem struct {
 	Icon        string                    `json:"icon,omitempty" db:"icon"`
 	Config      map[string]interface{}    `json:"config,omitempty" db:"-"`
 }
+
+// ============================================================================
+// ORM DATASOURCE & RUNTIME DATA MODELS
+// ============================================================================
+
+// BORecordFilter represents a filter applied to physical records
+type BORecordFilter struct {
+	Field    string      `json:"field"`
+	Operator string      `json:"operator"` // eq, neq, gt, gte, lt, lte, like, in, is_null, is_not_null
+	Value    interface{} `json:"value"`
+}
+
+// BORecordQueryRequest represents a request to query physical records through a Business Object
+type BORecordQueryRequest struct {
+	Page                int              `json:"page"`
+	Limit               int              `json:"limit"`
+	Search              string           `json:"search,omitempty"`
+	Filters             []BORecordFilter `json:"filters,omitempty"`
+	SortBy              string           `json:"sortBy,omitempty"`
+	SortDir             string           `json:"sortDir,omitempty"` // ASC or DESC
+	SubtypeKey          string           `json:"subtypeKey,omitempty"`
+	AsOfValidTime       *time.Time       `json:"asOfValidTime,omitempty"`
+	AsOfTransactionTime *time.Time       `json:"asOfTransactionTime,omitempty"`
+}
+
+// BORecordQueryResponse represents the paginated result of querying physical records
+type BORecordQueryResponse struct {
+	Total           int                      `json:"total"`
+	Page            int                      `json:"page"`
+	Limit           int                      `json:"limit"`
+	Columns         []string                 `json:"columns"`
+	Rows            []map[string]interface{} `json:"rows"`
+	ExecutionTimeMs int64                    `json:"executionTimeMs"`
+	DriverTable     string                   `json:"driverTable"`
+	DatasourceID    string                   `json:"datasourceId"`
+}
+
+// BOCrudRecordRequest represents a request to create or update a physical record via BO
+type BOCrudRecordRequest struct {
+	Record     map[string]interface{} `json:"record"`
+	SubtypeKey string                 `json:"subtypeKey,omitempty"`
+}
+
+// TableColumnIntrospection represents an introspected database column
+type TableColumnIntrospection struct {
+	Name         string `json:"name"`
+	DataType     string `json:"dataType"`
+	IsNullable   bool   `json:"isNullable"`
+	IsPrimaryKey bool   `json:"isPrimaryKey"`
+	IsForeignKey bool   `json:"isForeignKey"`
+	ForeignTable string `json:"foreignTable,omitempty"`
+	DefaultValue string `json:"defaultValue,omitempty"`
+}
+
+// TableIntrospectionResponse represents the result of introspecting a table for BO creation
+type TableIntrospectionResponse struct {
+	TableID         string                     `json:"tableId"`
+	TableName       string                     `json:"tableName"`
+	QualifiedPath   string                     `json:"qualifiedPath"`
+	Columns         []TableColumnIntrospection `json:"columns"`
+	SuggestedFields []FieldDefinition          `json:"suggestedFields"`
+	SuggestedName   string                     `json:"suggestedName"`
+	SuggestedKey    string                     `json:"suggestedKey"`
+}
+
+// BODeltaFieldDiff represents the diff of a field between Core and Custom
+type BODeltaFieldDiff struct {
+	FieldKey    string                 `json:"fieldKey"`
+	FieldName   string                 `json:"fieldName"`
+	Status      string                 `json:"status"` // INHERITED, OVERRIDDEN, CUSTOM_ADDED, CUSTOM_REMOVED
+	CoreField   *FieldDefinition       `json:"coreField,omitempty"`
+	CustomField *FieldDefinition       `json:"customField,omitempty"`
+	Overrides   map[string]interface{} `json:"overrides,omitempty"`
+}
+
+// BODeltaResponse represents the Workday-style delta comparison between tenant BO and gold copy Core BO
+type BODeltaResponse struct {
+	BOID            string              `json:"boId"`
+	Key             string              `json:"key"`
+	Name            string              `json:"name"`
+	DisplayName     string              `json:"displayName"`
+	IsCore          bool                `json:"isCore"`
+	CoreID          string              `json:"coreId,omitempty"`
+	FieldsDelta     []BODeltaFieldDiff  `json:"fieldsDelta"`
+	InheritedCount  int                 `json:"inheritedCount"`
+	OverriddenCount int                 `json:"overriddenCount"`
+	CustomCount     int                 `json:"customCount"`
+}
+
+// -----------------------------------------------------------------------------
+// AI Assistant & Copilot Models
+// -----------------------------------------------------------------------------
+
+type SynthesizedCalculatedField struct {
+	Name        string `json:"name"`
+	DisplayName string `json:"displayName"`
+	Type        string `json:"type"`
+	Formula     string `json:"formula"`
+	Description string `json:"description"`
+}
+
+type SynthesizedRule struct {
+	RuleName    string `json:"ruleName"`
+	Description string `json:"description"`
+	Severity    string `json:"severity"` // ERROR, WARNING, INFO
+	Field       string `json:"field,omitempty"`
+	Script      string `json:"script"` // Starlark or expression
+}
+
+type BOAISynthesizeRequest struct {
+	Prompt       string `json:"prompt"` // Natural language domain description or requirements
+	TableID      string `json:"tableId,omitempty"`
+	TableName    string `json:"tableName,omitempty"`
+	Category     string `json:"category,omitempty"`
+	IncludeRules bool   `json:"includeRules"`
+	IncludeCalc  bool   `json:"includeCalculatedFields"`
+}
+
+type BOAISynthesizeResponse struct {
+	SuggestedKey              string                       `json:"suggestedKey"`
+	SuggestedName             string                       `json:"suggestedName"`
+	SuggestedDisplayName      string                       `json:"suggestedDisplayName"`
+	Description               string                       `json:"description"`
+	Category                  string                       `json:"category"`
+	PrimaryKey                string                       `json:"primaryKey"`
+	SuggestedDriverTable      string                       `json:"suggestedDriverTable,omitempty"`
+	SuggestedFields           []FieldDefinition            `json:"suggestedFields"`
+	SuggestedCalculatedFields []SynthesizedCalculatedField `json:"suggestedCalculatedFields,omitempty"`
+	SuggestedRules            []SynthesizedRule            `json:"suggestedRules,omitempty"`
+	Reasoning                 string                       `json:"reasoning"`
+}
+
+type BOAINLQRequest struct {
+	BOIDOrKey string `json:"boIdOrKey"`
+	Query     string `json:"query"` // Natural language query prompt
+}
+
+type NLQFilterItem struct {
+	Field    string      `json:"field"`
+	Operator string      `json:"operator"`
+	Value    interface{} `json:"value"`
+}
+
+type BOAINLQResponse struct {
+	QueryDef     map[string]interface{} `json:"queryDef"` // Compatible with boresolver.QueryDef
+	Dimensions   []string               `json:"dimensions"`
+	Measures     []string               `json:"measures"`
+	Filters      []NLQFilterItem        `json:"filters"`
+	SortBy       string                 `json:"sortBy,omitempty"`
+	SortOrder    string                 `json:"sortOrder,omitempty"`
+	Limit        int                    `json:"limit,omitempty"`
+	GeneratedSQL string                 `json:"generatedSql"`
+	Explanation  string                 `json:"explanation"`
+}
+
+type BOAIExplainDeltaRequest struct {
+	BOIDOrKey string `json:"boIdOrKey"`
+}
+
+type BOAIExplainDeltaResponse struct {
+	Summary           string   `json:"summary"`
+	BreakingChanges   []string `json:"breakingChanges"`
+	GovernanceRisks   []string `json:"governanceRisks"`
+	SuggestedActions  []string `json:"suggestedActions"`
+	ImpactScore       string   `json:"impactScore"` // LOW, MEDIUM, HIGH, CRITICAL
+	MarkdownNarrative string   `json:"markdownNarrative"`
+}
+
+type BODataAnomaly struct {
+	Field       string `json:"field"`
+	AnomalyType string `json:"anomalyType"` // NULL_SPIKE, OUTLIER, FORMAT_DRIFT, DUPLICATE_KEY
+	Severity    string `json:"severity"`    // LOW, MEDIUM, HIGH
+	Description string `json:"description"`
+	SampleCount int    `json:"sampleCount"`
+}
+
+type BOAIAnomalyDetectRequest struct {
+	BOIDOrKey  string `json:"boIdOrKey"`
+	SampleSize int    `json:"sampleSize,omitempty"`
+}
+
+type BOAIAnomalyDetectResponse struct {
+	Anomalies        []BODataAnomaly `json:"anomalies"`
+	DataQualityScore float64         `json:"dataQualityScore"` // 0 - 100
+	Summary          string          `json:"summary"`
+	Recommendations  []string        `json:"recommendations"`
+}
+
+// -----------------------------------------------------------------------------
+// Workflow & Lifecycle Models
+// -----------------------------------------------------------------------------
+
+type BOWorkflowLifecycleStatus string
+
+const (
+	BOWorkflowStatusDraft      BOWorkflowLifecycleStatus = "DRAFT"
+	BOWorkflowStatusInReview   BOWorkflowLifecycleStatus = "IN_REVIEW"
+	BOWorkflowStatusApproved   BOWorkflowLifecycleStatus = "APPROVED"
+	BOWorkflowStatusPublished  BOWorkflowLifecycleStatus = "PUBLISHED"
+	BOWorkflowStatusDeprecated BOWorkflowLifecycleStatus = "DEPRECATED"
+)
+
+type BOEventTrigger struct {
+	ID          string `json:"id"`
+	Event       string `json:"event"`      // ON_CREATE, ON_UPDATE, ON_DELETE, ON_VALIDATION_FAILURE, ON_PUBLISH
+	ActionType  string `json:"actionType"` // WORKFLOW, WEBHOOK, NOTIFICATION, RECALCULATE
+	Target      string `json:"target"`     // Workflow ID or Webhook URL
+	Enabled     bool   `json:"enabled"`
+	Description string `json:"description,omitempty"`
+}
+
+type BOPromotionProposal struct {
+	ID              string                 `json:"id"`
+	SourceTenantID  string                 `json:"sourceTenantId"`
+	BOKey           string                 `json:"boKey"`
+	ProposedChanges map[string]interface{} `json:"proposedChanges"`
+	Status          string                 `json:"status"` // PENDING, APPROVED, REJECTED
+	ReviewerNote    string                 `json:"reviewerNote,omitempty"`
+	CreatedAt       string                 `json:"createdAt"`
+	CreatedBy       string                 `json:"createdBy"`
+}
+
+type BOWorkflowActionRequest struct {
+	Action       string               `json:"action"` // SUBMIT_REVIEW, APPROVE, PUBLISH, DEPRECATE, PROPOSE_PROMOTION, ADD_TRIGGER, DELETE_TRIGGER
+	ReviewerNote string               `json:"reviewerNote,omitempty"`
+	Trigger      *BOEventTrigger      `json:"trigger,omitempty"`
+	Proposal     *BOPromotionProposal `json:"proposal,omitempty"`
+}
+
+type BOWorkflowExecution struct {
+	ID          string `json:"id"`
+	Workflow    string `json:"workflow"`
+	TriggeredBy string `json:"triggeredBy"`
+	Status      string `json:"status"` // RUNNING, COMPLETED, FAILED
+	StartTime   string `json:"startTime"`
+	EndTime     string `json:"endTime,omitempty"`
+	Error       string `json:"error,omitempty"`
+}
+
+type BOWorkflowStatusResponse struct {
+	BOID             string                    `json:"boId"`
+	Key              string                    `json:"key"`
+	LifecycleStatus  BOWorkflowLifecycleStatus `json:"lifecycleStatus"`
+	IsCore           bool                      `json:"isCore"`
+	PendingProposals []BOPromotionProposal     `json:"pendingProposals"`
+	EventTriggers    []BOEventTrigger          `json:"eventTriggers"`
+	RecentExecutions []BOWorkflowExecution     `json:"recentExecutions"`
+}
+
+// ============================================================================
+// FEATURE 2: BINDING-AWARE DYNAMIC SCOPE & AUTO-DISCOVERY MODELS
+// ============================================================================
+
+type BOFieldEligibilityLevel string
+
+const (
+	EligibilityDirect     BOFieldEligibilityLevel = "DIRECT"
+	EligibilityRelated    BOFieldEligibilityLevel = "RELATED"
+	EligibilityCalculated BOFieldEligibilityLevel = "CALCULATED"
+	EligibilityManual     BOFieldEligibilityLevel = "MANUAL"
+)
+
+type BOFieldResolutionStatus string
+
+const (
+	ResolutionResolved   BOFieldResolutionStatus = "RESOLVED"
+	ResolutionUnresolved BOFieldResolutionStatus = "UNRESOLVED"
+	ResolutionBlocked    BOFieldResolutionStatus = "BLOCKED"
+)
+
+type BOFieldEligibilityItem struct {
+	FieldKey         string                  `json:"fieldKey"`
+	FieldName        string                  `json:"fieldName"`
+	DisplayName      string                  `json:"displayName"`
+	DataType         string                  `json:"dataType"`
+	Role             FieldRole               `json:"role"`
+	EligibilityLevel BOFieldEligibilityLevel `json:"eligibilityLevel"`
+	ResolutionStatus BOFieldResolutionStatus `json:"resolutionStatus"`
+	ResolutionPath   string                  `json:"resolutionPath"` // e.g. "driving_node -> columns -> MAPS_TO"
+	PhysicalTable    string                  `json:"physicalTable"`
+	PhysicalColumn   string                  `json:"physicalColumn"`
+	MissingInputs    []string                `json:"missingInputs,omitempty"`
+	GateReason       string                  `json:"gateReason,omitempty"`
+}
+
+type BOScopeDiscoveryResponse struct {
+	BOID             string                   `json:"boId"`
+	DrivingNodeID    string                   `json:"drivingNodeId"`
+	DrivingTableName string                   `json:"drivingTableName"`
+	TotalDiscovered  int                      `json:"totalDiscovered"`
+	DirectCount      int                      `json:"directCount"`
+	RelatedCount     int                      `json:"relatedCount"`
+	CalculatedCount  int                      `json:"calculatedCount"`
+	ManualCount      int                      `json:"manualCount"`
+	EligibleFields   []BOFieldEligibilityItem `json:"eligibleFields"`
+	IsPublishReady   bool                     `json:"isPublishReady"`
+	BlockingIssues   []string                 `json:"blockingIssues,omitempty"`
+}
+
+type BOPublishGateValidationResponse struct {
+	BOID               string                   `json:"boId"`
+	CanPublish         bool                     `json:"canPublish"`
+	UnresolvedFields   []BOFieldEligibilityItem `json:"unresolvedFields"`
+	MissingDependencies []string                `json:"missingDependencies"`
+	GateSummary        string                   `json:"gateSummary"`
+}
+
+// ============================================================================
+// FEATURE 3: POLYMORPHIC MULTI-BACKEND BINDINGS & STORAGE TIERING
+// ============================================================================
+
+type StorageTier string
+
+const (
+	StorageTier1Postgres     StorageTier = "TIER_1_POSTGRES"     // Control Plane / OLTP
+	StorageTier2StarRocks    StorageTier = "TIER_2_STARROCKS"    // Hot Data Plane
+	StorageTier3Iceberg      StorageTier = "TIER_3_ICEBERG"      // Cold Historical Data Plane
+	StorageTierAPIFederation StorageTier = "API_FEDERATION"      // Parameterized REST/OpenAPI
+)
+
+type BindingRequirement string
+
+const (
+	BindingRequirementRequired        BindingRequirement = "REQUIRED"
+	BindingRequirementOptional        BindingRequirement = "OPTIONAL"
+	BindingRequirementBackendSpecific BindingRequirement = "BACKEND_SPECIFIC"
+)
+
+type MultiBackendBinding struct {
+	ID                 string             `json:"id"`
+	StorageTier        StorageTier        `json:"storageTier"`
+	BackendName        string             `json:"backendName"` // postgres, starrocks, iceberg, salesforce, etc.
+	DatasourceID       string             `json:"datasourceId"`
+	PhysicalTarget     string             `json:"physicalTarget"` // schema.table or endpoint
+	Requirement        BindingRequirement `json:"requirement"`
+	IsActive           bool               `json:"isActive"`
+	CoveragePercentage float64            `json:"coveragePercentage"` // % of BO fields mapped in this tier
+}
+
+type BOMultiBackendConfiguration struct {
+	BOID          string                `json:"boId"`
+	ActiveTier    StorageTier           `json:"activeTier"`
+	Bindings      []MultiBackendBinding `json:"bindings"`
+	WatermarkDate *time.Time            `json:"watermarkDate,omitempty"` // Seam date separating Hot vs Cold tier
+}
+
+// ============================================================================
+// FEATURE 6: AI COGNITIVE FABRIC & GRAPHRAG MODELS
+// ============================================================================
+
+type GraphRAGContextRequest struct {
+	BOIDOrKey    string `json:"boIdOrKey"`
+	UserQuery    string `json:"userQuery"`
+	IncludeEdges bool   `json:"includeEdges"`
+	MaxDepth     int    `json:"maxDepth"`
+}
+
+type GraphRAGNode struct {
+	ID          string                 `json:"id"`
+	NodeType    string                 `json:"nodeType"` // BUSINESS_OBJECT, SEMANTIC_TERM, CLASSIFICATION, SYNONYM
+	Name        string                 `json:"name"`
+	DisplayName string                 `json:"displayName"`
+	Description string                 `json:"description"`
+	Similarity  float64                `json:"similarity,omitempty"`
+	Properties  map[string]interface{} `json:"properties,omitempty"`
+}
+
+type GraphRAGContextResponse struct {
+	BOKey          string         `json:"boKey"`
+	ResolvedIntent string         `json:"resolvedIntent"`
+	MatchedNodes   []GraphRAGNode `json:"matchedNodes"`
+	TenantScoped   bool           `json:"tenantScoped"`
+	PromptContext  string         `json:"promptContext"`
+}
+
+type UisceASTNode struct {
+	NodeType   string                 `json:"nodeType"` // SELECT, FILTER, JOIN, AGGREGATE, WATERMARK_UNION
+	Attributes map[string]interface{} `json:"attributes"`
+	Children   []UisceASTNode         `json:"children,omitempty"`
+}
+
+type UisceSemanticAST struct {
+	Version      string         `json:"version"`
+	RootNode     UisceASTNode   `json:"rootNode"`
+	TenantID     string         `json:"tenantId"`
+	Dialects     []string       `json:"dialects"`
+	GeneratedSQL map[string]string `json:"generatedSql,omitempty"` // dialect -> sql
+}
+
+type SchemaDriftProposal struct {
+	ProposalID       string    `json:"proposalId"`
+	BOID             string    `json:"boId"`
+	DriftType        string    `json:"driftType"` // COLUMN_RENAME, TYPE_CHANGE, COLUMN_DROPPED
+	SourceColumn     string    `json:"sourceColumn"`
+	TargetColumn     string    `json:"targetColumn"`
+	ConfidenceScore  float64   `json:"confidenceScore"` // > 0.95
+	AutoRepairScript string    `json:"autoRepairScript"`
+	Status           string    `json:"status"` // PENDING, APPLIED, REJECTED
+	DetectedAt       time.Time `json:"detectedAt"`
+}
+
+// ============================================================================
+// FEATURE 7: AUTOMATED LIFECYCLE, CI/CD GATEWAYS, & ARTIFACTS
+// ============================================================================
+
+type ImpactedAsset struct {
+	AssetID      string `json:"assetId"`
+	AssetName    string `json:"assetName"`
+	AssetType    string `json:"assetType"` // BUSINESS_OBJECT, SEMANTIC_VIEW, VALIDATION_RULE, DASHBOARD, CUBE_MODEL
+	ImpactLevel  string `json:"impactLevel"` // CRITICAL, HIGH, MEDIUM, LOW
+	Relationship string `json:"relationship"` // USES_INPUT, MAPS_TO, FEEDS_INTO, BO_RELATIONSHIP
+	Details      string `json:"details"`
+}
+
+type BOLineageImpactSimulationRequest struct {
+	BOIDOrKey       string                 `json:"boIdOrKey"`
+	ProposedChanges map[string]interface{} `json:"proposedChanges"`
+}
+
+type BOLineageImpactSimulationResponse struct {
+	BOID             string          `json:"boId"`
+	TotalImpacted    int             `json:"totalImpacted"`
+	HighestSeverity  string          `json:"highestSeverity"` // CRITICAL, HIGH, MEDIUM, LOW
+	IsBreakingChange bool            `json:"isBreakingChange"`
+	ImpactedAssets   []ImpactedAsset `json:"impactedAssets"`
+	BlastRadiusScore float64         `json:"blastRadiusScore"` // 0 - 100
+	SimulationReport string          `json:"simulationReport"`
+}
+
+type BOArtifactGenerationResponse struct {
+	BOID           string `json:"boId"`
+	BOKey          string `json:"boKey"`
+	OpenAPISpecJSON string `json:"openApiSpecJson"`
+	CubeJSSchemaJS  string `json:"cubeJsSchemaJs"`
+	StarRocksMVDDL  string `json:"starRocksMvDdl"`
+	RESTEndpointURL string `json:"restEndpointUrl"`
+}
+
+// ============================================================================
+// PILLAR 3: PREDICTIVE COST EVALUATION & GATEKEEPER MODELS
+// ============================================================================
+
+type QueryCostBand string
+
+const (
+	CostBandLow       QueryCostBand = "LOW"
+	CostBandModerate  QueryCostBand = "MODERATE"
+	CostBandExpensive QueryCostBand = "EXPENSIVE"
+	CostBandForbidden QueryCostBand = "FORBIDDEN"
+)
+
+type BOQueryCostEvaluationRequest struct {
+	BOIDOrKey       string            `json:"boIdOrKey"`
+	SelectedFields  []string          `json:"selectedFields"`
+	Filters         []BORecordFilter  `json:"filters,omitempty"`
+	EstimatedLimit  int               `json:"estimatedLimit,omitempty"`
+	TargetDialect   string            `json:"targetDialect,omitempty"`
+}
+
+
+type BOQueryCostEvaluationResponse struct {
+	ComplexityScore       float64       `json:"complexityScore"` // 0 - 100
+	CostBand              QueryCostBand `json:"costBand"`        // LOW, MODERATE, EXPENSIVE, FORBIDDEN
+	IsForbidden           bool          `json:"isForbidden"`
+	EstimatedRowsScanned  int64         `json:"estimatedRowsScanned"`
+	EstimatedDurationMs   int64         `json:"estimatedDurationMs"`
+	RequiresPartitionScan bool          `json:"requiresPartitionScan"`
+	Violations            []string      `json:"violations,omitempty"`
+	PreAggregationTips    []string      `json:"preAggregationTips,omitempty"`
+	SuggestedMaterializedView string    `json:"suggestedMaterializedView,omitempty"`
+}
+
+// ============================================================================
+// PILLARS 1 & 5: DRIFT REPAIR INBOX & FINANCIAL DATA QUALITY SENTINEL
+// ============================================================================
+
+type BODriftRepairPatchRequest struct {
+	BOIDOrKey  string `json:"boIdOrKey"`
+	ProposalID string `json:"proposalId"`
+	Action     string `json:"action"` // APPROVE, REJECT
+	Note       string `json:"note,omitempty"`
+}
+
+type BODriftRepairPatchResponse struct {
+	ProposalID string `json:"proposalId"`
+	Status     string `json:"status"` // APPLIED, REJECTED
+	Message    string `json:"message"`
+}
+
+type FinancialPatternResult struct {
+	FieldName    string  `json:"fieldName"`
+	PatternType  string  `json:"patternType"` // ISO_6166_ISIN, CUSIP_MOD10, SEDOL_MOD10, ISO_17442_LEI
+	SampleCount  int     `json:"sampleCount"`
+	ValidCount   int     `json:"validCount"`
+	InvalidCount int     `json:"invalidCount"`
+	PassRate     float64 `json:"passRate"` // 0 - 100%
+	SampleErrors []string `json:"sampleErrors,omitempty"`
+}
+
+type BODataQualitySentinelResponse struct {
+	BOID                 string                   `json:"boId"`
+	SampleStrategy       string                   `json:"sampleStrategy"` // TABLESAMPLE SYSTEM (0.1) LIMIT 500
+	TotalSampledRows     int                      `json:"totalSampledRows"`
+	OverallQualityScore  float64                  `json:"overallQualityScore"` // 0 - 100
+	DistinctRatios       map[string]float64       `json:"distinctRatios"`
+	NullDrift            map[string]float64       `json:"nullDrift"`
+	FinancialVerifications []FinancialPatternResult `json:"financialVerifications"`
+	DriftProposals       []SchemaDriftProposal    `json:"driftProposals"`
+	SentinelSummary      string                   `json:"sentinelSummary"`
+}
+
+type LakehouseMaintenanceReport struct {
+	TenantID            string    `json:"tenantId"`
+	Table               string    `json:"table"`
+	CompactedFilesCount int       `json:"compactedFilesCount"`
+	BytesCompacted      int64     `json:"bytesCompacted"`
+	ManifestsRewritten  int       `json:"manifestsRewritten"`
+	SnapshotsExpired    int       `json:"snapshotsExpired"`
+	DurationMs          int64     `json:"durationMs"`
+	Status              string    `json:"status"` // COMPLETED, SKIPPED, FAILED
+	ExecutedAt          time.Time `json:"executedAt"`
+}
+
+
+
+
+

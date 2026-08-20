@@ -28,6 +28,7 @@ import {
   Tab,
   Badge,
 } from '@mui/material';
+import { CoreIcon } from '../components/common/CoreCustomIcons';
 import {
   AutoFixHigh,
   CheckCircle,
@@ -457,7 +458,7 @@ const PolicyTable: React.FC<PolicyTableProps> = ({ policies }) => {
                 {policy.tenant_id ? (
                   <Chip label="Tenant Override" size="small" variant="outlined" />
                 ) : (
-                  <Chip label="Core" size="small" color="primary" />
+                  <CoreIcon fontSize="small" />
                 )}
               </TableCell>
               <TableCell>

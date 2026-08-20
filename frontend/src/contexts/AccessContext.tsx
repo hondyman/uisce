@@ -94,11 +94,16 @@ export const AccessProvider: React.FC<AccessProviderProps> = ({ children }) => {
       typeof g === 'string' && /(^|\/)uisce[-_ ]?global[-_ ]?admins?$/i.test(g)
     );
 
+    const hasGlobalRole = Array.isArray(user.roles) && user.roles.some((r: string) =>
+      typeof r === 'string' && ['global_admin', 'global_ops', 'platform_operator', 'admin', 'core_admin', 'realm-admin'].includes(r.toLowerCase())
+    );
+
     const isPlatformOp = 
       user.is_core_admin === true ||
       user.isCoreAdmin === true ||
       user.is_global_admin === true ||
       hasGlobalGroup ||
+      hasGlobalRole ||
       user.role === 'platform_operator' ||
       user.role === 'global_ops' ||
       user.role === 'admin' ||
@@ -154,6 +159,11 @@ export const AccessProvider: React.FC<AccessProviderProps> = ({ children }) => {
     setCurrentInstance(null);
     setCurrentProduct(null);
     setCurrentDatasource(null);
+    try {
+      localStorage.removeItem('selected_tenant');
+      localStorage.removeItem('selected_product');
+      localStorage.removeItem('selected_datasource');
+    } catch (_) {}
     devLog('Scope set to global');
   }, [accessLevel]);
 
@@ -168,6 +178,11 @@ export const AccessProvider: React.FC<AccessProviderProps> = ({ children }) => {
     setCurrentInstance(null);
     setCurrentProduct(null);
     setCurrentDatasource(null);
+    try {
+      localStorage.setItem('selected_tenant', JSON.stringify(tenant));
+      localStorage.removeItem('selected_product');
+      localStorage.removeItem('selected_datasource');
+    } catch (_) {}
     devLog('Scope set to tenant:', tenant.display_name);
   }, []);
 
@@ -202,6 +217,11 @@ export const AccessProvider: React.FC<AccessProviderProps> = ({ children }) => {
     setCurrentInstance(instance);
     setCurrentProduct(product);
     setCurrentDatasource(null);
+    try {
+      localStorage.setItem('selected_tenant', JSON.stringify(tenant));
+      localStorage.setItem('selected_product', JSON.stringify(product));
+      localStorage.removeItem('selected_datasource');
+    } catch (_) {}
     devLog('Scope set to product:', product.alpha_product?.product_name);
   }, []);
 
@@ -227,6 +247,12 @@ export const AccessProvider: React.FC<AccessProviderProps> = ({ children }) => {
     setCurrentInstance(instance);
     setCurrentProduct(product);
     setCurrentDatasource(datasource);
+    
+    try {
+      localStorage.setItem('selected_tenant', JSON.stringify(tenant));
+      localStorage.setItem('selected_product', JSON.stringify(product));
+      localStorage.setItem('selected_datasource', JSON.stringify(datasource));
+    } catch (_) {}
     
     // Set region from tenant
     if (tenant.region) {
@@ -286,9 +312,42 @@ export const AccessProvider: React.FC<AccessProviderProps> = ({ children }) => {
     fetchTenants();
   }, [isAuthenticated, accessLevel]);
 
-  // Auto-select first accessible tenant when none is selected or when current scope is global/invalid
+  // Auto-select or restore scope from accessibleTenants
   useEffect(() => {
-    if (accessibleTenants.length > 0 && (!currentTenant || !accessibleTenants.some(t => t.id === currentTenant.id))) {
+    if (accessibleTenants.length === 0) return;
+
+    // Check if we have a persisted scope tenantId
+    const targetTenantId = scope.tenantId || currentTenant?.id;
+    const matchedTenant = accessibleTenants.find(t => t.id === targetTenantId);
+
+    if (matchedTenant) {
+      // Find instance
+      const targetInstanceId = scope.instanceId || currentInstance?.id;
+      const matchedInstance = matchedTenant.tenant_instances?.find(
+        i => i.id === targetInstanceId
+      ) || matchedTenant.tenant_instances?.[0];
+
+      if (matchedInstance) {
+        // Find product
+        const targetProductId = scope.productId || currentProduct?.id;
+        const products = matchedInstance.tenant_products || matchedInstance.products || [];
+        const matchedProduct = products.find(p => p.id === targetProductId) || products[0];
+
+        if (matchedProduct) {
+          // Find datasource
+          const targetDsId = scope.datasourceId || currentDatasource?.id;
+          const datasources = matchedProduct.tenant_product_datasources || [];
+          const matchedDs = datasources.find(d => d.id === targetDsId) || datasources[0];
+
+          if (matchedDs) {
+            setDatasourceScope(matchedTenant, matchedInstance, matchedProduct, matchedDs);
+            return;
+          }
+        }
+      }
+      setTenantScope(matchedTenant);
+    } else if (!currentTenant) {
+      // Default to first accessible tenant
       const firstTenant = accessibleTenants[0];
       const firstInstance = firstTenant.tenant_instances?.[0];
       const firstProduct = firstInstance ? (firstInstance.tenant_products?.[0] || firstInstance.products?.[0]) : undefined;
@@ -300,7 +359,7 @@ export const AccessProvider: React.FC<AccessProviderProps> = ({ children }) => {
         setTenantScope(firstTenant);
       }
     }
-  }, [accessibleTenants, currentTenant, setDatasourceScope, setTenantScope]);
+  }, [accessibleTenants, scope.tenantId, scope.instanceId, scope.productId, scope.datasourceId, currentTenant, currentInstance, currentProduct, currentDatasource, setDatasourceScope, setTenantScope]);
 
   // Persist scope changes
   useEffect(() => {
@@ -323,6 +382,11 @@ export const AccessProvider: React.FC<AccessProviderProps> = ({ children }) => {
       setCurrentInstance(null);
       setCurrentProduct(null);
       setCurrentDatasource(null);
+      try {
+        localStorage.removeItem('selected_tenant');
+        localStorage.removeItem('selected_product');
+        localStorage.removeItem('selected_datasource');
+      } catch (_) {}
     }
     devLog('Scope cleared');
   }, [accessLevel, setGlobalScope]);

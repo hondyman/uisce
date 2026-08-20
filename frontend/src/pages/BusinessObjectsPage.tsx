@@ -40,12 +40,18 @@ import {
   Delete as DeleteIcon,
   ViewWeek as ViewWeekIcon,
   ViewAgenda as ViewAgendaIcon,
+  Storage as StorageIcon,
+  PlayArrow as RunIcon,
+  AutoAwesome as AIIcon,
 } from '@mui/icons-material';
+
 import ValidationRuleScriptEditor from '../components/ValidationRules/ValidationRuleScriptEditor';
 import { ValidationRuleCreator } from '../components/ValidationRules/ValidationRuleCreator';
 import { EditBusinessObjectModal } from '../components/BusinessObjectManager/EditBusinessObjectModal';
 import BusinessObjectBindingWizard from '../components/BusinessObjectManager/BusinessObjectBindingWizard';
+import BOAIAssistantModal from '../components/BusinessObjectManager/BOAIAssistantModal';
 import { GlobalBOSearch } from '../components/Search/GlobalBOSearch';
+
 import { useTenant } from '../contexts/TenantContext';
 import { useConfirm } from '../components/ConfirmProvider';
 import { useNotification } from '../hooks/useNotification';
@@ -58,6 +64,10 @@ interface BusinessObject {
   name: string;
   display_name: string;
   description?: string;
+  is_core?: boolean;
+  driver_table_name?: string;
+  category?: string;
+  history_mode?: string;
   config?: {
     is_active?: boolean;
     fields?: Array<{
@@ -106,6 +116,7 @@ export default function BusinessObjectsPage() {
   const [viewMode, setViewMode] = useState<'card' | 'table'>('card');
   const [businessObjectsSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'draft'>('all');
+  const [scopeFilter, setScopeFilter] = useState<'all' | 'core' | 'custom'>('all');
 
   // Validation Rules State
   const [selectedFieldForValidation, _setSelectedFieldForValidation] = useState<any>(null);
@@ -113,6 +124,7 @@ export default function BusinessObjectsPage() {
   const [validationRuleCreatorOpen, setValidationRuleCreatorOpen] = useState(false);
   const [editingRule, setEditingRule] = useState<any>(null);
   const [viewingRule, setViewingRule] = useState<any>(null);
+
   const [availableEntitiesMemo, _setAvailableEntitiesMemo] = useState<any[]>([]);
   const [entitySchemaMemo, _setEntitySchemaMemo] = useState<any>(null);
   const [selectedObject, _setSelectedObject] = useState<BusinessObject | null>(null);
@@ -123,6 +135,8 @@ export default function BusinessObjectsPage() {
   
   // Wizard State
   const [wizardOpen, setWizardOpen] = useState(false);
+  const [aiModalOpen, setAiModalOpen] = useState(false);
+
 
   // Helper to build headers with authentication
   const getAuthHeaders = (additionalHeaders: Record<string, string> = {}): Record<string, string> => {
@@ -156,7 +170,7 @@ export default function BusinessObjectsPage() {
       setValidationRuleCreatorOpen(true);
   };
 
-  // Filtered business objects based on search and status
+  // Filtered business objects based on search, status, and scope
   const filteredBusinessObjects = useMemo(() => {
     let filtered = businessObjects;
     
@@ -166,7 +180,16 @@ export default function BusinessObjectsPage() {
       filtered = filtered.filter(obj => 
         obj.name.toLowerCase().includes(searchTerm) ||
         obj.display_name.toLowerCase().includes(searchTerm) ||
-        obj.description?.toLowerCase().includes(searchTerm)
+        obj.description?.toLowerCase().includes(searchTerm) ||
+        obj.driver_table_name?.toLowerCase().includes(searchTerm) ||
+        obj.category?.toLowerCase().includes(searchTerm)
+      );
+    }
+
+    // Scope Filter (Core vs Custom)
+    if (scopeFilter !== 'all') {
+      filtered = filtered.filter(obj => 
+        scopeFilter === 'core' ? !!obj.is_core : !obj.is_core
       );
     }
 
@@ -179,7 +202,17 @@ export default function BusinessObjectsPage() {
     
     // Sort by name
     return filtered.sort((a, b) => a.display_name.localeCompare(b.display_name));
-  }, [businessObjects, businessObjectsSearch, statusFilter]);
+  }, [businessObjects, businessObjectsSearch, statusFilter, scopeFilter]);
+
+  // Executive KPI summary metrics
+  const metrics = useMemo(() => {
+    const total = businessObjects.length;
+    const coreCount = businessObjects.filter(b => b.is_core).length;
+    const customCount = total - coreCount;
+    const activeCount = businessObjects.filter(b => b.is_active).length;
+    const boundTables = businessObjects.filter(b => !!b.driver_table_name).length;
+    return { total, coreCount, customCount, activeCount, boundTables };
+  }, [businessObjects]);
 
   const fetchBusinessObjects = async () => {
     if (!tenantId) {
@@ -235,7 +268,11 @@ export default function BusinessObjectsPage() {
           config: normalizedConfig,
           subtypes: processedSubtypes,
           is_active: normalizedConfig.is_active !== false,
-          enable_history: obj.enableHistory || false,
+          is_core: obj.is_core ?? obj.isCore ?? false,
+          driver_table_name: obj.driver_table_name || obj.driverTableName || '',
+          category: obj.category || 'General',
+          history_mode: obj.history_mode || obj.historyMode || '',
+          enable_history: obj.enableHistory || obj.enable_history || false,
           updated_at: obj.updated_at,
           parent_id: (obj.parentId && typeof obj.parentId === 'object' && 'Valid' in obj.parentId) 
             ? (obj.parentId.Valid ? obj.parentId.String : null)
@@ -251,6 +288,7 @@ export default function BusinessObjectsPage() {
       setLoading(false);
     }
   };
+
 
   useEffect(() => {
     if (tenantId) {
@@ -452,25 +490,158 @@ export default function BusinessObjectsPage() {
         <Container maxWidth="xl">
           
           {/* Action Bar */}
-          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={3} justifyContent="flex-end" alignItems={{ xs: 'stretch', sm: 'center' }} sx={{ mb: 4 }}>
-            <Button 
-              variant="contained" 
-              color="primary"
-              startIcon={<AddIcon />}
-              onClick={handleCreateObject}
-              size="large"
-              sx={{ fontWeight: 600, textTransform: 'none' }}
-            >
-              Create Object
-            </Button>
+          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={3} justifyContent="space-between" alignItems={{ xs: 'stretch', sm: 'center' }} sx={{ mb: 3 }}>
+            <Box>
+              <Typography variant="h5" sx={{ fontWeight: 800 }}>
+                Business Object Studio
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                The semantic centerpiece bridging physical ORM schemas, multi-tenant Workday delta models, and real-time query engines.
+              </Typography>
+            </Box>
+            <Stack direction="row" spacing={1.5}>
+              <Button
+                variant="outlined"
+                color="secondary"
+                startIcon={<AIIcon />}
+                onClick={() => setAiModalOpen(true)}
+                sx={{ fontWeight: 700, textTransform: 'none' }}
+              >
+                AI Blueprint
+              </Button>
+              <Button
+                variant="outlined"
+                startIcon={<RunIcon />}
+                onClick={() => navigate('/query-builder')}
+                sx={{ fontWeight: 600, textTransform: 'none' }}
+              >
+                Global Query Builder
+              </Button>
+              <Button 
+                variant="contained" 
+                color="primary"
+                startIcon={<AddIcon />}
+                onClick={handleCreateObject}
+                sx={{ fontWeight: 600, textTransform: 'none' }}
+              >
+                Create Business Object
+              </Button>
+            </Stack>
+
           </Stack>
+
+          {/* Executive Metrics Bar */}
+          <Grid container spacing={2} sx={{ mb: 3 }}>
+            <Grid size={{ xs: 6, sm: 4, md: 2.4 }}>
+              <Paper
+                variant="outlined"
+                sx={{
+                  p: 1.75,
+                  textAlign: 'center',
+                  cursor: 'pointer',
+                  borderColor: scopeFilter === 'all' ? 'primary.main' : 'divider',
+                  bgcolor: scopeFilter === 'all' ? 'action.selected' : 'background.paper',
+                  transition: 'all 0.2s ease',
+                }}
+                onClick={() => setScopeFilter('all')}
+              >
+                <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 700, textTransform: 'uppercase' }}>
+                  Total Entities
+                </Typography>
+                <Typography variant="h5" sx={{ fontWeight: 800, my: 0.5 }}>
+                  {metrics.total}
+                </Typography>
+                <Typography variant="caption" color="text.secondary">
+                  Across all scopes
+                </Typography>
+              </Paper>
+            </Grid>
+
+            <Grid size={{ xs: 6, sm: 4, md: 2.4 }}>
+              <Paper
+                variant="outlined"
+                sx={{
+                  p: 1.75,
+                  textAlign: 'center',
+                  cursor: 'pointer',
+                  borderColor: scopeFilter === 'core' ? 'primary.main' : 'divider',
+                  bgcolor: scopeFilter === 'core' ? 'action.selected' : 'background.paper',
+                  transition: 'all 0.2s ease',
+                }}
+                onClick={() => setScopeFilter('core')}
+              >
+                <Typography variant="caption" color="primary.main" sx={{ fontWeight: 700, textTransform: 'uppercase' }}>
+                  Core Master (Gold)
+                </Typography>
+                <Typography variant="h5" sx={{ fontWeight: 800, my: 0.5, color: 'primary.main' }}>
+                  {metrics.coreCount}
+                </Typography>
+                <Typography variant="caption" color="text.secondary">
+                  Gold Copy Standard
+                </Typography>
+              </Paper>
+            </Grid>
+
+            <Grid size={{ xs: 6, sm: 4, md: 2.4 }}>
+              <Paper
+                variant="outlined"
+                sx={{
+                  p: 1.75,
+                  textAlign: 'center',
+                  cursor: 'pointer',
+                  borderColor: scopeFilter === 'custom' ? 'secondary.main' : 'divider',
+                  bgcolor: scopeFilter === 'custom' ? 'action.selected' : 'background.paper',
+                  transition: 'all 0.2s ease',
+                }}
+                onClick={() => setScopeFilter('custom')}
+              >
+                <Typography variant="caption" color="secondary.main" sx={{ fontWeight: 700, textTransform: 'uppercase' }}>
+                  Tenant Custom
+                </Typography>
+                <Typography variant="h5" sx={{ fontWeight: 800, my: 0.5, color: 'secondary.main' }}>
+                  {metrics.customCount}
+                </Typography>
+                <Typography variant="caption" color="text.secondary">
+                  Client Delta Extensions
+                </Typography>
+              </Paper>
+            </Grid>
+
+            <Grid size={{ xs: 6, sm: 4, md: 2.4 }}>
+              <Paper variant="outlined" sx={{ p: 1.75, textAlign: 'center' }}>
+                <Typography variant="caption" color="success.main" sx={{ fontWeight: 700, textTransform: 'uppercase' }}>
+                  Active & Published
+                </Typography>
+                <Typography variant="h5" sx={{ fontWeight: 800, my: 0.5, color: 'success.main' }}>
+                  {metrics.activeCount}
+                </Typography>
+                <Typography variant="caption" color="text.secondary">
+                  Production ready
+                </Typography>
+              </Paper>
+            </Grid>
+
+            <Grid size={{ xs: 6, sm: 4, md: 2.4 }}>
+              <Paper variant="outlined" sx={{ p: 1.75, textAlign: 'center' }}>
+                <Typography variant="caption" color="info.main" sx={{ fontWeight: 700, textTransform: 'uppercase' }}>
+                  ORM Driver Tables
+                </Typography>
+                <Typography variant="h5" sx={{ fontWeight: 800, my: 0.5, color: 'info.main' }}>
+                  {metrics.boundTables}
+                </Typography>
+                <Typography variant="caption" color="text.secondary">
+                  Physical source links
+                </Typography>
+              </Paper>
+            </Grid>
+          </Grid>
 
           {/* Controls Toolbar */}
           <Paper 
             elevation={0}
             sx={{ 
-              p: 2.5, 
-              mb: 4,
+              p: 2, 
+              mb: 3,
               border: '1px solid',
               borderColor: 'divider',
               borderRadius: 2,
@@ -480,15 +651,41 @@ export default function BusinessObjectsPage() {
               
               {/* Semantic Search */}
               <Box sx={{ flex: 1 }}>
-                <GlobalBOSearch onResultClick={(boId) => navigate(`/bo/${boId}`)} />
+                <GlobalBOSearch onResultClick={(boId) => navigate(`/business-objects/${boId}`)} />
               </Box>
 
               {/* Filters */}
               <Stack direction="row" spacing={1} alignItems="center" sx={{ overflow: 'auto', pb: { xs: 1, lg: 0 }, minWidth: 'fit-content' }}>
-                <Typography variant="caption" sx={{ fontWeight: 600, whiteSpace: 'nowrap', color: 'text.secondary' }}>
+                <Typography variant="caption" sx={{ fontWeight: 700, whiteSpace: 'nowrap', color: 'text.secondary' }}>
+                  Scope:
+                </Typography>
+                <Chip
+                  label="All"
+                  variant={scopeFilter === 'all' ? 'filled' : 'outlined'}
+                  color={scopeFilter === 'all' ? 'primary' : 'default'}
+                  onClick={() => setScopeFilter('all')}
+                  size="small"
+                />
+                <Chip
+                  label="Core Master"
+                  variant={scopeFilter === 'core' ? 'filled' : 'outlined'}
+                  color={scopeFilter === 'core' ? 'primary' : 'default'}
+                  onClick={() => setScopeFilter('core')}
+                  size="small"
+                />
+                <Chip
+                  label="Custom Tenant"
+                  variant={scopeFilter === 'custom' ? 'filled' : 'outlined'}
+                  color={scopeFilter === 'custom' ? 'secondary' : 'default'}
+                  onClick={() => setScopeFilter('custom')}
+                  size="small"
+                />
+
+                <Divider orientation="vertical" flexItem sx={{ mx: 0.5 }} />
+
+                <Typography variant="caption" sx={{ fontWeight: 700, whiteSpace: 'nowrap', color: 'text.secondary' }}>
                   Status:
                 </Typography>
-                
                 <Chip
                   label="All"
                   variant={statusFilter === 'all' ? 'filled' : 'outlined'}
@@ -496,19 +693,17 @@ export default function BusinessObjectsPage() {
                   onClick={() => setStatusFilter('all')}
                   size="small"
                 />
-                
                 <Chip
                   label="Active"
                   variant={statusFilter === 'active' ? 'filled' : 'outlined'}
-                  color={statusFilter === 'active' ? 'primary' : 'default'}
+                  color={statusFilter === 'active' ? 'success' : 'default'}
                   onClick={() => setStatusFilter('active')}
                   size="small"
                 />
-                
                 <Chip
                   label="Draft"
                   variant={statusFilter === 'draft' ? 'filled' : 'outlined'}
-                  color={statusFilter === 'draft' ? 'primary' : 'default'}
+                  color={statusFilter === 'draft' ? 'warning' : 'default'}
                   onClick={() => setStatusFilter('draft')}
                   size="small"
                 />
@@ -596,7 +791,7 @@ export default function BusinessObjectsPage() {
               <Typography variant="body2" color="text.secondary" sx={{ mb: 3, maxWidth: 400, mx: 'auto' }}>
                 {businessObjectsSearch 
                   ? `No matches for "${businessObjectsSearch}"` 
-                  : 'Get started by creating your first business object.'}
+                  : 'Get started by creating your first business object or selecting a driving table.'}
               </Typography>
               {!businessObjectsSearch && (
                 <Button 
@@ -624,7 +819,7 @@ export default function BusinessObjectsPage() {
                         flexDirection: 'column',
                         transition: 'all 0.3s ease',
                         border: '1px solid',
-                        borderColor: 'divider',
+                        borderColor: object.is_core ? 'primary.light' : 'divider',
                         '&:hover': {
                           transform: 'translateY(-4px)',
                           boxShadow: theme.shadows[6],
@@ -633,29 +828,49 @@ export default function BusinessObjectsPage() {
                       }}
                     >
                       <CardContent sx={{ flex: 1 }}>
-                        <Stack direction="row" justifyContent="space-between" alignItems="flex-start" spacing={1} sx={{ mb: 2 }}>
-                          <Stack direction="column" spacing={1} sx={{ flex: 1 }}>
-                            <Typography variant="h6" sx={{ fontWeight: 700 }}>
+                        <Stack direction="row" justifyContent="space-between" alignItems="flex-start" spacing={1} sx={{ mb: 1.5 }}>
+                          <Stack direction="column" spacing={0.75} sx={{ flex: 1 }}>
+                            <Typography variant="h6" sx={{ fontWeight: 700, fontSize: '1.05rem', lineHeight: 1.3 }}>
                               {object.display_name}
                             </Typography>
-                            <Chip 
-                              label={object.is_active ? 'Active' : 'Draft'}
-                              size="small"
-                              color={object.is_active ? 'success' : 'warning'}
-                              variant="filled"
-                              sx={{ width: 'fit-content' }}
-                            />
-                            {object.enable_history && (
+                            <Stack direction="row" spacing={0.5} flexWrap="wrap" gap={0.5}>
                               <Chip 
-                                label="Historical"
+                                label={object.is_core ? 'Core Master' : 'Tenant Custom'}
                                 size="small"
-                                color="info"
+                                color={object.is_core ? 'primary' : 'secondary'}
                                 variant="outlined"
-                                sx={{ width: 'fit-content' }}
+                                sx={{ height: 20, fontSize: '0.65rem', fontWeight: 600 }}
                               />
-                            )}
+                              <Chip 
+                                label={object.is_active ? 'Active' : 'Draft'}
+                                size="small"
+                                color={object.is_active ? 'success' : 'warning'}
+                                variant="filled"
+                                sx={{ height: 20, fontSize: '0.65rem' }}
+                              />
+                              {object.enable_history && (
+                                <Chip 
+                                  label="Historical"
+                                  size="small"
+                                  color="info"
+                                  variant="outlined"
+                                  sx={{ height: 20, fontSize: '0.65rem' }}
+                                />
+                              )}
+                            </Stack>
                           </Stack>
                         </Stack>
+
+                        {/* Driver Table pill */}
+                        {object.driver_table_name && (
+                          <Chip
+                            icon={<StorageIcon sx={{ fontSize: '0.85rem !important' }} />}
+                            label={object.driver_table_name}
+                            size="small"
+                            variant="outlined"
+                            sx={{ mb: 1.5, height: 22, fontSize: '0.7rem', maxWidth: '100%' }}
+                          />
+                        )}
 
                         <Typography 
                           variant="body2" 
@@ -667,7 +882,8 @@ export default function BusinessObjectsPage() {
                             display: '-webkit-box',
                             WebkitLineClamp: 2,
                             WebkitBoxOrient: 'vertical',
-                            minHeight: 40,
+                            minHeight: 38,
+                            fontSize: '0.825rem',
                           }}
                         >
                           {object.description || 'No description provided.'}
@@ -676,28 +892,16 @@ export default function BusinessObjectsPage() {
 
                       <Divider />
 
-                      <CardActions sx={{ justifyContent: 'space-between', py: 1.5 }}>
-                        <Stack direction="row" spacing={3} sx={{ fontSize: '0.75rem' }}>
+                      <CardActions sx={{ justifyContent: 'space-between', py: 1, px: 2 }}>
+                        <Stack direction="row" spacing={2} sx={{ fontSize: '0.75rem' }}>
                           <Stack 
                             direction="row" 
                             spacing={0.5} 
                             alignItems="center"
-                            sx={{
-                              cursor: 'default',
-                              padding: '4px 8px',
-                              borderRadius: 1,
-                              transition: 'all 0.2s ease',
-                              '&:hover': { 
-                                bgcolor: 'action.hover',
-                                '& .MuiSvgIcon-root': {
-                                  color: 'primary.main',
-                                }
-                              }
-                            }}
                             title="Number of Fields"
                           >
-                            <SchemaIcon sx={{ fontSize: '1rem', transition: 'color 0.2s ease' }} />
-                            <Typography variant="caption">
+                            <SchemaIcon sx={{ fontSize: '0.95rem', color: 'text.secondary' }} />
+                            <Typography variant="caption" sx={{ fontWeight: 600 }}>
                               {object.config?.fields?.length || 0}
                             </Typography>
                           </Stack>
@@ -705,39 +909,31 @@ export default function BusinessObjectsPage() {
                             direction="row" 
                             spacing={0.5} 
                             alignItems="center"
-                            sx={{
-                              cursor: 'default',
-                              padding: '4px 8px',
-                              borderRadius: 1,
-                              transition: 'all 0.2s ease',
-                              '&:hover': { 
-                                bgcolor: 'action.hover',
-                                '& .MuiSvgIcon-root': {
-                                  color: 'primary.main',
-                                }
-                              }
-                            }}
                             title="Number of Subtypes"
                           >
-                            <CategoryIcon sx={{ fontSize: '1rem', transition: 'color 0.2s ease' }} />
-                            <Typography variant="caption">
+                            <CategoryIcon sx={{ fontSize: '0.95rem', color: 'text.secondary' }} />
+                            <Typography variant="caption" sx={{ fontWeight: 600 }}>
                               {Object.keys(object.subtypes || {}).length}
                             </Typography>
                           </Stack>
                         </Stack>
-                        <Stack direction="row" spacing={1} sx={{ ml: 'auto', alignItems: 'center' }}>
-                          <Switch
-                            size="small"
-                            checked={object.is_active}
-                            onChange={(e) => handleToggleStatus(object, e.target.checked)}
-                            onClick={(e) => e.stopPropagation()}
-                          />
+                        <Stack direction="row" spacing={0.5} sx={{ ml: 'auto', alignItems: 'center' }}>
+                          <Tooltip title="Live Query Explorer">
+                            <IconButton
+                              size="small"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleViewDetails(object);
+                              }}
+                              color="primary"
+                            >
+                              <RunIcon fontSize="small" />
+                            </IconButton>
+                          </Tooltip>
                           <Tooltip title="Edit">
                             <IconButton
                               size="small"
                               onClick={(e) => handleEditObject(object, e)}
-                              sx={{ '&:hover': { color: 'primary.main' } }}
-                              className="card-action-btn"
                             >
                               <EditIcon fontSize="small" />
                             </IconButton>
@@ -746,8 +942,7 @@ export default function BusinessObjectsPage() {
                             <IconButton
                               size="small"
                               onClick={(e) => handleDeleteObject(object, e)}
-                              sx={{ '&:hover': { color: 'error.main' } }}
-                              className="card-action-btn"
+                              color="error"
                             >
                               <DeleteIcon fontSize="small" />
                             </IconButton>
@@ -766,6 +961,7 @@ export default function BusinessObjectsPage() {
                     sx={{
                       cursor: 'pointer',
                       height: '100%',
+                      minHeight: 220,
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
@@ -775,9 +971,7 @@ export default function BusinessObjectsPage() {
                       transition: 'all 0.3s ease',
                       '&:hover': {
                         borderColor: 'primary.main',
-                        bgcolor: 'primary.main',
-                        '& svg': { color: 'primary.contrastText' },
-                        '& .MuiTypography-root': { color: 'primary.contrastText' },
+                        bgcolor: 'primary.50',
                       },
                     }}
                   >
@@ -785,13 +979,17 @@ export default function BusinessObjectsPage() {
                       <Avatar 
                         sx={{ 
                           bgcolor: 'transparent',
-                          color: 'text.secondary',
+                          color: 'primary.main',
+                          border: '2px dashed',
+                          borderColor: 'primary.main',
+                          width: 48,
+                          height: 48,
                         }}
                       >
-                        <AddIcon sx={{ fontSize: 32 }} />
+                        <AddIcon sx={{ fontSize: 28 }} />
                       </Avatar>
-                      <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                        New Object
+                      <Typography variant="body2" sx={{ fontWeight: 700 }}>
+                        Create Business Object
                       </Typography>
                     </Stack>
                   </Card>
@@ -804,12 +1002,14 @@ export default function BusinessObjectsPage() {
                   <Box component="table" sx={{ width: '100%', borderCollapse: 'collapse' }}>
                     <Box component="thead">
                       <Box component="tr" sx={{ backgroundColor: theme.palette.action.hover, borderBottom: `1px solid ${theme.palette.divider}` }}>
-                        <Box component="th" sx={{ padding: '16px', textAlign: 'left', fontWeight: 600, color: theme.palette.text.secondary }}>Name</Box>
-                        <Box component="th" sx={{ padding: '16px', textAlign: 'left', fontWeight: 600, color: theme.palette.text.secondary }}>Description</Box>
-                        <Box component="th" sx={{ padding: '16px', textAlign: 'center', fontWeight: 600, color: theme.palette.text.secondary }}>Status</Box>
-                        <Box component="th" sx={{ padding: '16px', textAlign: 'center', fontWeight: 600, color: theme.palette.text.secondary }}>Fields</Box>
-                        <Box component="th" sx={{ padding: '16px', textAlign: 'center', fontWeight: 600, color: theme.palette.text.secondary }}>Subtypes</Box>
-                        <Box component="th" sx={{ padding: '16px', textAlign: 'right', fontWeight: 600, color: theme.palette.text.secondary }}>Actions</Box>
+                        <Box component="th" sx={{ padding: '16px', textAlign: 'left', fontWeight: 700, color: theme.palette.text.secondary }}>Name</Box>
+                        <Box component="th" sx={{ padding: '16px', textAlign: 'left', fontWeight: 700, color: theme.palette.text.secondary }}>Scope</Box>
+                        <Box component="th" sx={{ padding: '16px', textAlign: 'left', fontWeight: 700, color: theme.palette.text.secondary }}>Driver Table</Box>
+                        <Box component="th" sx={{ padding: '16px', textAlign: 'left', fontWeight: 700, color: theme.palette.text.secondary }}>Description</Box>
+                        <Box component="th" sx={{ padding: '16px', textAlign: 'center', fontWeight: 700, color: theme.palette.text.secondary }}>Status</Box>
+                        <Box component="th" sx={{ padding: '16px', textAlign: 'center', fontWeight: 700, color: theme.palette.text.secondary }}>Fields</Box>
+                        <Box component="th" sx={{ padding: '16px', textAlign: 'center', fontWeight: 700, color: theme.palette.text.secondary }}>Subtypes</Box>
+                        <Box component="th" sx={{ padding: '16px', textAlign: 'right', fontWeight: 700, color: theme.palette.text.secondary }}>Actions</Box>
                       </Box>
                     </Box>
                     <Box component="tbody">
@@ -841,7 +1041,19 @@ export default function BusinessObjectsPage() {
                               )}
                             </Box>
                           </Box>
-                          <Box component="td" sx={{ padding: '16px', color: theme.palette.text.secondary, maxWidth: '300px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          <Box component="td" sx={{ padding: '16px' }}>
+                            <Chip 
+                              label={object.is_core ? 'Core Master' : 'Tenant Custom'}
+                              size="small"
+                              color={object.is_core ? 'primary' : 'secondary'}
+                              variant="outlined"
+                              sx={{ height: 22, fontSize: '0.65rem' }}
+                            />
+                          </Box>
+                          <Box component="td" sx={{ padding: '16px', color: theme.palette.text.secondary, fontFamily: 'monospace', fontSize: '0.8rem' }}>
+                            {object.driver_table_name || '—'}
+                          </Box>
+                          <Box component="td" sx={{ padding: '16px', color: theme.palette.text.secondary, maxWidth: '280px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                             {object.description || '—'}
                           </Box>
                           <Box component="td" sx={{ padding: '16px', textAlign: 'center' }}>
@@ -852,64 +1064,30 @@ export default function BusinessObjectsPage() {
                               variant="filled"
                             />
                           </Box>
-                          <Box component="td" sx={{ padding: '16px', textAlign: 'center', color: theme.palette.text.secondary }}>
-                            <Stack 
-                              direction="row" 
-                              spacing={0.5} 
-                              alignItems="center"
-                              justifyContent="center"
-                              sx={{
-                                padding: '4px 8px',
-                                borderRadius: 1,
-                                transition: 'all 0.2s ease',
-                                cursor: 'default',
-                                '&:hover': { 
-                                  bgcolor: 'action.hover',
-                                  '& .MuiSvgIcon-root': {
-                                    color: 'primary.main',
-                                  }
-                                }
-                              }}
-                            >
-                              <SchemaIcon sx={{ fontSize: '1rem', transition: 'color 0.2s ease' }} />
-                              <span>{object.config?.fields?.length || 0}</span>
-                            </Stack>
+                          <Box component="td" sx={{ padding: '16px', textAlign: 'center', fontWeight: 600 }}>
+                            {object.config?.fields?.length || 0}
                           </Box>
-                          <Box component="td" sx={{ padding: '16px', textAlign: 'center', color: theme.palette.text.secondary }}>
-                            <Stack 
-                              direction="row" 
-                              spacing={0.5} 
-                              alignItems="center"
-                              justifyContent="center"
-                              sx={{
-                                padding: '4px 8px',
-                                borderRadius: 1,
-                                transition: 'all 0.2s ease',
-                                cursor: 'default',
-                                '&:hover': { 
-                                  bgcolor: 'action.hover',
-                                  '& .MuiSvgIcon-root': {
-                                    color: 'primary.main',
-                                  }
-                                }
-                              }}
-                            >
-                              <CategoryIcon sx={{ fontSize: '1rem', transition: 'color 0.2s ease' }} />
-                              <span>{Object.keys(object.subtypes || {}).length}</span>
-                            </Stack>
+                          <Box component="td" sx={{ padding: '16px', textAlign: 'center', fontWeight: 600 }}>
+                            {Object.keys(object.subtypes || {}).length}
                           </Box>
                           <Box component="td" sx={{ padding: '16px', textAlign: 'right' }}>
-                            <Stack 
-                              direction="row" 
-                              spacing={1} 
-                              justifyContent="flex-end"
-                              onClick={(e) => e.stopPropagation()}
-                            >
+                            <Stack direction="row" spacing={0.5} justifyContent="flex-end">
+                              <Tooltip title="Live Query Explorer">
+                                <IconButton
+                                  size="small"
+                                  color="primary"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleViewDetails(object);
+                                  }}
+                                >
+                                  <RunIcon fontSize="small" />
+                                </IconButton>
+                              </Tooltip>
                               <Tooltip title="Edit">
                                 <IconButton
                                   size="small"
                                   onClick={(e) => handleEditObject(object, e)}
-                                  sx={{ '&:hover': { color: 'primary.main' } }}
                                 >
                                   <EditIcon fontSize="small" />
                                 </IconButton>
@@ -917,8 +1095,8 @@ export default function BusinessObjectsPage() {
                               <Tooltip title="Delete">
                                 <IconButton
                                   size="small"
+                                  color="error"
                                   onClick={(e) => handleDeleteObject(object, e)}
-                                  sx={{ '&:hover': { color: 'error.main' } }}
                                 >
                                   <DeleteIcon fontSize="small" />
                                 </IconButton>
@@ -930,19 +1108,12 @@ export default function BusinessObjectsPage() {
                     </Box>
                   </Box>
                 </Box>
-                {filteredBusinessObjects.length === 0 && (
-                  <Box sx={{ textAlign: 'center', py: 4 }}>
-                    <Typography variant="body2" color="text.secondary">
-                      No business objects to display
-                    </Typography>
-                  </Box>
-                )}
               </Paper>
             )
           )}
-          
         </Container>
       </Box>
+
 
       {/* Validation Rule Creator Modal */}
       {validationRuleCreatorOpen && (
@@ -1059,6 +1230,14 @@ export default function BusinessObjectsPage() {
         onClose={() => setWizardOpen(false)}
         onSave={handleWizardSave}
       />
+
+      {/* AI Semantic Blueprint Modal */}
+      <BOAIAssistantModal
+        open={aiModalOpen}
+        onClose={() => setAiModalOpen(false)}
+        onCreated={fetchBusinessObjects}
+      />
     </Box>
   );
 }
+

@@ -7,6 +7,7 @@ export interface IPWhitelistEntry {
   createdAt?: string;
   updatedAt?: string;
   isActive?: boolean;
+  allTenants?: boolean;
 }
 
 export interface Tenant {

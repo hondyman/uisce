@@ -67,8 +67,46 @@ export async function fetchSemanticTermsByTable(
   datasourceId: string,
   tableName?: string
 ): Promise<WizardSemanticTerm[]> {
-  const terms = await catalogApi.getSemanticTermsByTable(tableId, datasourceId);
-  const rawTerms = Array.isArray(terms) ? terms : [];
+  let rawTerms: any[] = [];
+  try {
+    const terms = await catalogApi.getSemanticTermsByTable(tableId, datasourceId);
+    rawTerms = Array.isArray(terms) ? terms : [];
+  } catch {
+    rawTerms = [];
+  }
+
+  // If no terms in catalog edge, fallback to live ORM table introspection
+  if (rawTerms.length === 0) {
+    try {
+      const introspectRes = await fetchAPI<any>('/business-objects/introspect-table', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tableId, tableName }),
+      });
+      if (introspectRes && Array.isArray(introspectRes.suggestedFields) && introspectRes.suggestedFields.length > 0) {
+        return introspectRes.suggestedFields.map((f: any, idx: number) => ({
+          termNodeId: f.id || `field-${idx}`,
+          termKey: f.key || f.name,
+          termName: f.displayName || f.name,
+          description: f.description || `Column ${f.name}`,
+          dataType: f.type || 'text',
+          role: f.role || 'DIMENSION',
+          eligibilitySource: 'DIRECT' as EligibilitySource,
+          mappings: [
+            {
+              columnNodeId: f.id || `col-${idx}`,
+              columnName: f.name || f.technicalName,
+              tableNodeId: tableId,
+              tableName: tableName || introspectRes.tableName || '',
+              isPrimarySource: true,
+            },
+          ],
+        }));
+      }
+    } catch {
+      // Continue to empty list
+    }
+  }
 
   return rawTerms.map((term: any, idx: number): WizardSemanticTerm => {
     const termId = term.id || term.node_id || `term-${idx}`;
@@ -95,6 +133,7 @@ export async function fetchSemanticTermsByTable(
     };
   });
 }
+
 
 function safeJsonParse<T>(value: string, fallback: T): T {
   try {

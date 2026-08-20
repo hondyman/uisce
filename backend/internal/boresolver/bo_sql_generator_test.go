@@ -165,6 +165,21 @@ func TestBuildUnionSafeQuery(t *testing.T) {
 	assert.Contains(t, unionSQL, "LIMIT 50")
 }
 
+func TestBuildAsymmetricCorrectionQuery(t *testing.T) {
+	generator, _ := NewBOSQLGenerator(&MockBORepository{}, "postgres")
+
+	baseSQL := "SELECT id, order_total, effective_date FROM iceberg.t_99e99e99.orders_archive WHERE tenant_id = $1 AND effective_date < '2025-01-01'"
+	lateSQL := "SELECT id, order_total, effective_date FROM orm.historical_corrections_journal WHERE tenant_id = $1 AND knowledge_timestamp >= '2025-01-01'"
+
+	asymSQL := generator.BuildAsymmetricCorrectionQuery(baseSQL, lateSQL, "id", []string{"id", "order_total", "effective_date"}, 100)
+	assert.Contains(t, asymSQL, "WITH base_historical AS")
+	assert.Contains(t, asymSQL, "late_corrections AS")
+	assert.Contains(t, asymSQL, "COALESCE(c.order_total, b.order_total) AS order_total")
+	assert.Contains(t, asymSQL, "LEFT JOIN late_corrections c ON b.id = c.id")
+	assert.Contains(t, asymSQL, "LIMIT 100")
+}
+
+
 func TestResolvePolymorphicField(t *testing.T) {
 	pgDialect := PostgresDialect{}
 	coldDialect := DataFusionIcebergDialect{}

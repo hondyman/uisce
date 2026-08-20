@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"net/http"
 	"time"
+
+	"github.com/hondyman/uisce/backend/internal/security"
 )
 
 // ResourceGroup represents a StarRocks resource group
@@ -207,20 +209,18 @@ type AuditEvent struct {
 // ListAuditEventsHandler returns audit trail
 func ListAuditEventsHandler(db *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		tenantID := r.URL.Query().Get("tenantId")
+		tenantID, ok := security.RequireTenant(w, r)
+		if !ok {
+			return
+		}
 		limit := 20 // default limit
 
 		query := `
 			SELECT id, actor, action, scope, timestamp, result
 			FROM semantic_layer.audit_log
-			WHERE 1=1
+			WHERE scope LIKE ?
 		`
-		args := []interface{}{}
-
-		if tenantID != "" {
-			query += " AND scope LIKE ?"
-			args = append(args, tenantID+"%")
-		}
+		args := []interface{}{tenantID + "%"}
 
 		query += " ORDER BY timestamp DESC LIMIT ?"
 		args = append(args, limit)

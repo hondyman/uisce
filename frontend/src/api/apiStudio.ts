@@ -5,8 +5,8 @@ const API_BASE = '/api-studio';
 
 export const ApiStudioApi = {
     // Endpoints
-    listEndpoints: async (env: string, tenantId: string): Promise<APIEndpoint[]> => {
-        return apiClient<APIEndpoint[]>(`${API_BASE}/endpoints?env=${env}&tenant_id=${tenantId}`);
+    listEndpoints: async (env: string): Promise<APIEndpoint[]> => {
+        return apiClient<APIEndpoint[]>(`${API_BASE}/endpoints?env=${env}`);
     },
     getEndpoint: async (id: string): Promise<APIEndpoint> => {
         return apiClient<APIEndpoint>(`${API_BASE}/endpoints/${id}`);
@@ -24,21 +24,21 @@ export const ApiStudioApi = {
     retireEndpoint: async (id: string): Promise<APIEndpoint> => {
         return apiClient<APIEndpoint>(`${API_BASE}/endpoints/${id}/retire`, { method: 'POST' });
     },
-    generateEndpointWithAI: async (prompt: string, tenantId: string): Promise<APIEndpoint> => {
+    generateEndpointWithAI: async (prompt: string): Promise<APIEndpoint> => {
         return apiClient<APIEndpoint>(`${API_BASE}/endpoints/ai`, {
             method: 'POST',
-            body: JSON.stringify({ prompt, tenant_id: tenantId }),
+            body: JSON.stringify({ prompt }),
             headers: { 'Content-Type': 'application/json' }
         });
     },
 
     // OpenAPI
-    getOpenApiSpec: async (env: string, tenantId: string): Promise<any> => {
-        return apiClient<any>(`${API_BASE}/openapi?env=${env}&tenant_id=${tenantId}`);
+    getOpenApiSpec: async (env: string): Promise<any> => {
+        return apiClient<any>(`${API_BASE}/openapi?env=${env}`);
     },
 
     // Runtime Preview (calling the actual runtime)
-    previewEndpoint: async (path: string, method: string, env: string, tenantId: string, params: any): Promise<any> => {
+    previewEndpoint: async (path: string, method: string, env: string, params: any): Promise<any> => {
         const url = `/runtime${path}`;
         // ApiClient handles API prefixing
 
@@ -46,7 +46,6 @@ export const ApiStudioApi = {
         const headers = {
             'Content-Type': 'application/json',
             'X-Env': env,
-            'X-Tenant-ID': tenantId
         };
 
         const config: RequestInit = {
@@ -64,14 +63,8 @@ export const ApiStudioApi = {
     },
 
     // Performance & DX
-    getSdkURL: (lang: string, env: string, tenantId: string) => {
-        // This is a direct URL for valid hrefs, so we keep using the API base directly regarding path
-        // but removing the /api prefix from the constant if apiClient adds it? 
-        // Actually apiClient adds /api if missing. Here we return a string URL.
-        // Let's assume the component consuming this knows to prepend host or use relative path.
-        // Since API_BASE is now just /api-studio (apiClient handles /api prefix for requests),
-        // but for a link href we need the full path.
-        return `/api/api-studio/sdk/${lang}?env=${env}&tenant_id=${tenantId}`;
+    getSdkURL: (lang: string, env: string) => {
+        return `/api/api-studio/sdk/${lang}?env=${env}`;
     },
     getEndpointMetrics: async (id: string): Promise<any> => {
         // In a real system, this would call obs_metrics

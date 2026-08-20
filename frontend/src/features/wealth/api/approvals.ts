@@ -22,8 +22,8 @@ export interface ApproveRequest {
     comment: string;
 }
 
-export const fetchPendingApprovals = async (tenantId: string = 'default'): Promise<ApprovalRequest[]> => {
-    return await apiGet(`wealth/approvals/pending?tenant_id=${tenantId}`);
+export const fetchPendingApprovals = async (): Promise<ApprovalRequest[]> => {
+    return await apiGet('wealth/approvals/pending');
 };
 
 export const approveRequest = async (id: string, data: ApproveRequest): Promise<ApprovalRequest> => {
@@ -34,20 +34,19 @@ export const rejectRequest = async (id: string, data: ApproveRequest): Promise<A
     return await apiPost(`wealth/approvals/${id}/reject`, data);
 };
 
-export const executeFeedAction = async (cardId: string, clientId: string, tenantId: string, actionDetails: Record<string, any> = {}) => {
+export const executeFeedAction = async (cardId: string, clientId: string, actionDetails: Record<string, any> = {}) => {
     return await apiPost('wealth/actions/execute', {
         card_id: cardId,
         client_id: clientId,
-        tenant_id: tenantId,
         action_details: actionDetails,
     });
 };
 
-export const usePendingApprovals = (tenantId: string = 'default') => {
+export const usePendingApprovals = () => {
     return useQuery({
-        queryKey: ['wealth-approvals', tenantId],
-        queryFn: () => fetchPendingApprovals(tenantId),
-        refetchInterval: 10000, // Poll every 10 seconds
+        queryKey: ['wealth-approvals'],
+        queryFn: () => fetchPendingApprovals(),
+        refetchInterval: 10000,
     });
 };
 
@@ -75,11 +74,10 @@ export const useRejectRequest = () => {
 
 export const useExecuteFeedAction = () => {
     return useMutation({
-        mutationFn: ({ cardId, clientId, tenantId, actionDetails }: {
+        mutationFn: ({ cardId, clientId, actionDetails }: {
             cardId: string;
             clientId: string;
-            tenantId: string;
             actionDetails?: Record<string, any>;
-        }) => executeFeedAction(cardId, clientId, tenantId, actionDetails),
+        }) => executeFeedAction(cardId, clientId, actionDetails),
     });
 };

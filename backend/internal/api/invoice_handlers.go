@@ -8,6 +8,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/hondyman/uisce/backend/internal/billing"
+	"github.com/hondyman/uisce/backend/internal/security"
 )
 
 // InvoiceHandlers provides HTTP handlers for the tenant invoice API.
@@ -90,14 +91,13 @@ func (h *InvoiceHandlers) GenerateInvoice(w http.ResponseWriter, r *http.Request
 // ─── List Invoices ──────────────────────────────────────────────
 
 func (h *InvoiceHandlers) ListInvoices(w http.ResponseWriter, r *http.Request) {
-	tenantID := r.URL.Query().Get("tenantId")
+	tenantID, ok := security.RequireTenant(w, r)
+	if !ok {
+		return
+	}
 
 	var summaries []billing.InvoiceSummary
-	if tenantID != "" {
-		summaries = h.svc.ListTenantInvoices(tenantID)
-	} else {
-		summaries = h.svc.ListAllInvoices()
-	}
+	summaries = h.svc.ListTenantInvoices(tenantID)
 
 	jsonOK(w, summaries)
 }

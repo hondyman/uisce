@@ -154,9 +154,9 @@ const IPAddEditDialog: React.FC<IPAddEditDialogProps> = ({
         ipAddress: editingEntry.ipAddress,
         label: editingEntry.label || '',
         description: editingEntry.description || '',
-        tenantIds: editingEntry.tenantIds
+        tenantIds: editingEntry.tenantIds || []
       });
-  setAllTenants(((editingEntry as any).allTenants === true) || editingEntry.tenantIds.length === 0);
+      setAllTenants(((editingEntry as any).allTenants === true) || editingEntry.tenantIds?.length === 0);
     }
   }, [open, editingEntry]);
 

@@ -207,4 +207,38 @@
   }
 
   /* If Material Symbols fail to render, we can add a JS fallback later. */
+
+/* ── Force ALL table headers to dark Abyssal theme ── */
+.dark-mode .MuiTableHead-root,
+:root[data-theme="dark"] .MuiTableHead-root,
+.MuiTableHead-root {
+  background-color: #071526 !important;
+}
+
+.dark-mode .MuiTableHead-root .MuiTableCell-root,
+:root[data-theme="dark"] .MuiTableHead-root .MuiTableCell-root,
+.MuiTableHead-root .MuiTableCell-root {
+  background-color: #071526 !important;
+  color: #E8F4FF !important;
+  border-bottom: 1px solid rgba(0, 201, 200, 0.30) !important;
+}
+
+.dark-mode .MuiTableHead-root .MuiTableSortLabel-root,
+:root[data-theme="dark"] .MuiTableHead-root .MuiTableSortLabel-root,
+.MuiTableHead-root .MuiTableSortLabel-root {
+  color: #E8F4FF !important;
+}
+
+.dark-mode .MuiTableHead-root .MuiTableSortLabel-icon,
+:root[data-theme="dark"] .MuiTableHead-root .MuiTableSortLabel-icon,
+.MuiTableHead-root .MuiTableSortLabel-icon {
+  color: #E8F4FF !important;
+}
+
+.dark-mode .MuiTableCell-head,
+:root[data-theme="dark"] .MuiTableCell-head,
+.MuiTableCell-head {
+  background-color: #071526 !important;
+  color: #E8F4FF !important;
+}
 }

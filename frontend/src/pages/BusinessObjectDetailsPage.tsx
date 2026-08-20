@@ -103,10 +103,23 @@ import {
   DeleteSubtypeDialog,
   EditFieldDialog,
 } from './BusinessObjectDetailsPage/components/dialogs';
-import { FieldsTab, BindingsTab, RelatedObjectsTab } from './BusinessObjectDetailsPage/components/tabs';
+
+
+import {
+  FieldsTab,
+  BindingsTab,
+  RelatedObjectsTab,
+  RecordsCrudTab,
+  BODeltaTab,
+  LiveQueryTab,
+  WorkflowTab,
+} from './BusinessObjectDetailsPage/components/tabs';
 import { PageHeader } from './BusinessObjectDetailsPage/components/PageHeader';
 import { HierarchyTreePanel } from './BusinessObjectDetailsPage/components/HierarchyTreePanel';
 import { ValidationPublishRail, ValidationSummaryItem } from '../components/BusinessObjectManager/ValidationPublishRail';
+import { PlayArrow as RunIcon, CompareArrows as CompareIcon, AccountTree as WorkflowIcon } from '@mui/icons-material';
+
+
 
 // Redundant local interface removed in favor of shared type
 
@@ -254,6 +267,40 @@ export default function BusinessObjectDetailsPage() {
   
   // Sorting state
   const [sortConfig, setSortConfig] = useState<{ key: string; direction: 'asc' | 'desc' }>({ key: 'sequence', direction: 'asc' });
+
+  // Object Structure Resizable Sidebar State
+  const [sidebarWidth, setSidebarWidth] = useState<number>(() => {
+    const saved = typeof localStorage !== 'undefined' ? localStorage.getItem('bo_sidebar_width') : null;
+    return saved ? Math.max(180, Math.min(600, parseInt(saved, 10))) : 280;
+  });
+  const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(false);
+  const isResizingRef = useRef(false);
+
+  const handleMouseDownResize = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    isResizingRef.current = true;
+    const startX = e.clientX;
+    const startWidth = sidebarWidth;
+
+    const handleMouseMove = (moveEvent: MouseEvent) => {
+      if (!isResizingRef.current) return;
+      const deltaX = moveEvent.clientX - startX;
+      const newWidth = Math.max(180, Math.min(600, startWidth + deltaX));
+      setSidebarWidth(newWidth);
+      if (typeof localStorage !== 'undefined') {
+        localStorage.setItem('bo_sidebar_width', newWidth.toString());
+      }
+    };
+
+    const handleMouseUp = () => {
+      isResizingRef.current = false;
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+  }, [sidebarWidth]);
 
   // Field addition wizard state
   const [fieldWizardOpen, setFieldWizardOpen] = useState(false);
@@ -1609,7 +1656,7 @@ export default function BusinessObjectDetailsPage() {
               borderBottomColor: 'divider',
               '& .MuiTab-root': {
                 textTransform: 'none',
-                fontWeight: 500,
+                fontWeight: 600,
               },
             }}
           >
@@ -1626,6 +1673,10 @@ export default function BusinessObjectDetailsPage() {
               icon={<StorageIcon />}
               iconPosition="start"
             />
+            <Tab label="Live Query Explorer" icon={<RunIcon />} iconPosition="start" />
+            <Tab label="Records & ORM CRUD" icon={<TableChartIcon />} iconPosition="start" />
+            <Tab label="Workday Delta" icon={<CompareIcon />} iconPosition="start" />
+            <Tab label="Governance & Workflows" icon={<WorkflowIcon />} iconPosition="start" />
             <Tab
               label={
                 <Stack direction="row" spacing={1} alignItems="center">
@@ -1643,32 +1694,71 @@ export default function BusinessObjectDetailsPage() {
           </Tabs>
 
           {/* Main Content Area with Sidebar */}
-          <Box sx={{ display: 'flex', flexDirection: { xs: 'column', lg: 'row' }, gap: 3, p: 3 }}>
+          <Box sx={{ display: 'flex', flexDirection: { xs: 'column', lg: 'row' }, gap: 0, p: 3, position: 'relative' }}>
             {/* Left Panel: Hierarchy Tree - Always Visible */}
             <HierarchyTreePanel
               hierarchyNodes={hierarchyNodes}
               expandedNodes={expandedNodes}
               selectedNode={selectedNode}
               businessObject={businessObject}
+              width={sidebarWidth}
+              isCollapsed={sidebarCollapsed}
+              onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
               onNodeToggle={handleNodeToggle}
               onNodeSelect={setSelectedNode}
               onRenameSubtype={openRenameDialog}
               onDeleteSubtype={openDeleteConfirm}
             />
 
-              {/* Right Panel: Tab Content */}
-              <Paper
-                elevation={0}
+            {/* Draggable Vertical Divider */}
+            {!sidebarCollapsed && (
+              <Box
+                onMouseDown={handleMouseDownResize}
                 sx={{
-                  width: { xs: '100%', lg: '70%' },
-                  border: '1px solid',
-                  borderColor: 'divider',
-                  borderRadius: 1,
-                  overflow: 'hidden',
-                  display: 'flex',
-                  flexDirection: 'column',
+                  display: { xs: 'none', lg: 'flex' },
+                  width: '12px',
+                  cursor: 'col-resize',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  mx: 0.5,
+                  userSelect: 'none',
+                  zIndex: 2,
+                  '&:hover .divider-handle, &:active .divider-handle': {
+                    bgcolor: 'primary.main',
+                    height: '48px',
+                    width: '4px',
+                  },
                 }}
               >
+                <Box
+                  className="divider-handle"
+                  sx={{
+                    width: '2px',
+                    height: '24px',
+                    bgcolor: 'divider',
+                    borderRadius: '2px',
+                    transition: 'all 0.15s ease',
+                  }}
+                />
+              </Box>
+            )}
+
+            {/* Right Panel: Tab Content */}
+            <Paper
+              elevation={0}
+              sx={{
+                flex: 1,
+                width: 0,
+                minWidth: 0,
+                ml: { xs: 0, lg: sidebarCollapsed ? 2 : 0 },
+                border: '1px solid',
+                borderColor: 'divider',
+                borderRadius: 1,
+                overflow: 'hidden',
+                display: 'flex',
+                flexDirection: 'column',
+              }}
+            >
                 {activeTab === 0 && (
                   <FieldsTab
                     selectedNode={selectedNode}
@@ -1687,13 +1777,34 @@ export default function BusinessObjectDetailsPage() {
                   />
                 )}
 
-              {/* Bindings Tab - Binding-first canonical view */}
+              {/* Bindings Tab */}
               {activeTab === 1 && (
-                <BindingsTab bindings={bindings} />
+                <BindingsTab bindings={bindings} businessObject={businessObject} />
+              )}
+
+
+              {/* Live Query Explorer Tab */}
+              {activeTab === 2 && (
+                <LiveQueryTab businessObject={businessObject} />
+              )}
+
+              {/* Records & ORM CRUD Tab */}
+              {activeTab === 3 && (
+                <RecordsCrudTab businessObject={businessObject} />
+              )}
+
+              {/* Workday Delta Tab */}
+              {activeTab === 4 && (
+                <BODeltaTab businessObject={businessObject} />
+              )}
+
+              {/* Governance & Workflows Tab */}
+              {activeTab === 5 && (
+                <WorkflowTab businessObject={businessObject} />
               )}
 
               {/* Validations Tab */}
-              {activeTab === 2 && (
+              {activeTab === 6 && (
                 <ValidationRulesPage 
                   businessObjectId={id}
                   businessObjectName={businessObject?.name}
@@ -1707,9 +1818,8 @@ export default function BusinessObjectDetailsPage() {
                 />
               )}
 
-              {/* Validations Tab - Moved to index 2 */}
-              {/* Related Objects Tab - Now index 3 */}
-              {activeTab === 3 && (
+              {/* Related Objects Tab */}
+              {activeTab === 7 && (
                 <RelatedObjectsTab
                   relatedObjectsView={relatedObjectsView}
                   onAddRelationship={() => setRelationshipWizardOpen(true)}
@@ -1717,15 +1827,15 @@ export default function BusinessObjectDetailsPage() {
                 />
               )}
 
-              {/* Graph Tab - Now index 4 */}
-              {activeTab === 4 && (
+              {/* Graph Tab */}
+              {activeTab === 8 && (
                 <Box sx={{ height: '70vh', p: 2 }}>
                   <BOLineageGraphTab boId={id || ''} />
                 </Box>
               )}
 
-              {/* Semantic Model Tab - Now index 5 */}
-              {activeTab === 5 && (
+              {/* Semantic Model Tab */}
+              {activeTab === 9 && (
                 <Box sx={{ p: 3 }}>
                   <SemanticAssetsTab
                     boId={id}
@@ -1737,15 +1847,16 @@ export default function BusinessObjectDetailsPage() {
                     onGenerateCoreView={async () => { await semanticLayer.generateCoreView(); }}
                     onCreateCustomView={async (name) => { await semanticLayer.createCustomView(name); }}
                     businessEntityName={selectedNode?.type === 'subtype' ? (businessObject?.subtypes?.[selectedNode.subtypeKey!]?.displayName || selectedNode.subtypeKey || '') : (businessObject?.displayName || 'Business Object')}
-                  selectedNodeType={selectedNode?.type}
+                    selectedNodeType={selectedNode?.type}
                     selectedNodeName={selectedNode?.type === 'subtype' ? selectedNode.subtypeKey : businessObject?.key}
                     hierarchyNodes={[]}
                   />
                 </Box>
               )}
 
-              {/* Lineage & Impact Tab - Now index 6 */}
-              {activeTab === 6 && (
+              {/* Lineage & Impact Tab */}
+              {activeTab === 10 && (
+
                 <Box sx={{ p: 3 }}>
                    <Typography variant="h6" sx={{ fontWeight: 700, mb: 1 }}>
                      Lineage
@@ -1764,6 +1875,7 @@ export default function BusinessObjectDetailsPage() {
             </Paper>
             </Box>
           </Paper>
+
           </> // Close the fragment opened for BOPendingBanner
         )}
       </Container>

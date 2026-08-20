@@ -486,6 +486,7 @@ export function createUisceTheme(mode: 'light' | 'dark'): Theme {
         defaultProps: { elevation: 0 },
         styleOverrides: {
           root: {
+            background: surfaceBg,
             backgroundImage: 'none',
             border: `1px solid ${surfaceBorder}`,
             borderRadius: 14,
@@ -500,6 +501,51 @@ export function createUisceTheme(mode: 'light' | 'dark'): Theme {
                 : `0 4px 20px rgba(0,0,0,0.50), 0 8px 40px ${alpha(oceanMain, 0.15)}`,
             },
           },
+        },
+      },
+      MuiCardHeader: {
+        styleOverrides: {
+          root: {
+            background: mode === 'dark' ? uisceAbyss[800] : '#f9fafb',
+            borderBottom: `1px solid ${mode === 'dark' ? alpha(oceanMain, 0.20) : '#e5e7eb'}`,
+            '& .MuiTypography-root': {
+              color: mode === 'dark' ? '#E8F4FF' : '#111827',
+            },
+          },
+          title: {
+            fontWeight: 600,
+            color: mode === 'dark' ? '#E8F4FF' : '#111827',
+          },
+          subheader: {
+            color: mode === 'dark' ? '#7BA8C4' : '#6b7280',
+          },
+        },
+      },
+      MuiCardContent: {
+        styleOverrides: {
+          root: {
+            background: mode === 'dark' ? uisceAbyss[800] : '#ffffff',
+            '&:last-child': {
+              paddingBottom: 16,
+            },
+          },
+        },
+      },
+      MuiTypography: {
+        styleOverrides: {
+          root: {
+            color: mode === 'dark' ? '#E8F4FF' : '#111827',
+          },
+          h1: { color: mode === 'dark' ? '#E8F4FF' : '#111827' },
+          h2: { color: mode === 'dark' ? '#E8F4FF' : '#111827' },
+          h3: { color: mode === 'dark' ? '#E8F4FF' : '#111827' },
+          h4: { color: mode === 'dark' ? '#E8F4FF' : '#111827' },
+          h5: { color: mode === 'dark' ? '#E8F4FF' : '#111827' },
+          h6: { color: mode === 'dark' ? '#E8F4FF' : '#111827' },
+          subtitle1: { color: mode === 'dark' ? '#E8F4FF' : '#111827' },
+          subtitle2: { color: mode === 'dark' ? '#7BA8C4' : '#6b7280' },
+          body1: { color: mode === 'dark' ? '#E8F4FF' : '#374151' },
+          body2: { color: mode === 'dark' ? '#7BA8C4' : '#6b7280' },
         },
       },
 
@@ -983,15 +1029,15 @@ export function createUisceTheme(mode: 'light' | 'dark'): Theme {
         styleOverrides: {
           root: {
             background: mode === 'light'
-              ? uisceAbyss[800]   // deep ocean header in light too
-              : uisceAbyss[950],  // hadal zone in dark
+              ? uisceAbyss[800]
+              : uisceAbyss[800],  // #071526 midnight surface in dark
             '& .MuiTableCell-root': {
-              color: mode === 'dark' ? uisceOcean.light : '#E8F4FF',
+              color: mode === 'dark' ? '#E8F4FF' : uisceTide[50],  // moonlit text in dark
               fontWeight: 700,
               fontSize: '0.8125rem',
               letterSpacing: '0.06em',
               textTransform: 'uppercase',
-              borderBottom: `1px solid ${alpha(oceanMain, 0.25)}`,
+              borderBottom: `1px solid ${alpha(oceanMain, 0.30)}`,
               padding: '10px 16px',
             },
           },
@@ -1021,6 +1067,22 @@ export function createUisceTheme(mode: 'light' | 'dark'): Theme {
               background: alpha(oceanMain, 0.09),
               '&:hover': { background: alpha(oceanMain, 0.13) },
             },
+          },
+        },
+      },
+      MuiTableSortLabel: {
+        styleOverrides: {
+          root: {
+            color: mode === 'dark' ? uisceOcean.light : uisceTide[50],
+            '&:hover': {
+              color: mode === 'dark' ? uisceOcean.main : uisceOcean.dark,
+            },
+            '&.Mui-active': {
+              color: mode === 'dark' ? uisceOcean.main : uisceOcean.dark,
+            },
+          },
+          icon: {
+            color: mode === 'dark' ? uisceOcean.light : uisceTide[50],
           },
         },
       },

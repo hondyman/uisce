@@ -20,6 +20,7 @@ import { useEdgeTypes } from '../../api/edgeTypes';
 import { useTenant } from '../../contexts/TenantContext';
 import { ProfessionalColorPicker } from '../../components/ProfessionalColorPicker';
 import { PropertyEditor, PropertyDefinition } from '../../components/PropertyEditor';
+import { CoreIcon, CustomIcon } from '../../components/common/CoreCustomIcons';
 
 export const NodeTypeDetailPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -150,145 +151,209 @@ export const NodeTypeDetailPage: React.FC = () => {
 
   // Removed - addProperty and removeProperty are no longer used, using PropertyEditor component instead
 
+  const isDark = theme.palette.mode === 'dark';
+  const C = useMemo(() => ({
+    bg: isDark ? '#0A0C12' : '#F8FAFC',
+    sidebar: isDark ? '#0F1117' : '#F1F5F9',
+    panel: isDark ? '#13161E' : '#FFFFFF',
+    panelHover: isDark ? '#1A1E2A' : '#F1F5F9',
+    border: isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.08)',
+    borderStrong: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.14)',
+    accent: '#6366F1',
+    accentDim: isDark ? 'rgba(99,102,241,0.15)' : 'rgba(99,102,241,0.08)',
+    accentGlow: '0 0 20px rgba(99,102,241,0.4)',
+    text: isDark ? '#E2E8F0' : '#0F172A',
+    textMuted: isDark ? '#8892A4' : '#64748B',
+    success: '#10B981',
+    warning: '#F59E0B',
+    danger: '#EF4444',
+    purple: '#A78BFA',
+    teal: '#2DD4BF',
+    blue: '#60A5FA',
+    orange: '#FB923C',
+  }), [isDark]);
+
   if (typeLoading) {
-    return <Box sx={{ p: 4 }}><Skeleton variant="rectangular" height={200} /></Box>;
+    return (
+      <Box sx={{ p: 4, maxWidth: 1600, mx: 'auto' }}>
+        <Skeleton variant="rectangular" height={260} sx={{ borderRadius: 3, bgcolor: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.04)' }} />
+      </Box>
+    );
   }
 
   if (!nodeType) {
-    return <Box sx={{ p: 4 }}><Typography>Node Type not found</Typography></Box>;
+    return (
+      <Box sx={{ p: 4, maxWidth: 1600, mx: 'auto', color: C.text }}>
+        <Typography>Node Type not found</Typography>
+      </Box>
+    );
   }
 
   const nodeColor = nodeType.config?.color;
+  const isCore = nodeType.type === 'core' || nodeType.core;
 
   return (
-    <Box sx={{ p: 4, maxWidth: 1600, mx: 'auto' }}>
+    <Box sx={{ p: 4, maxWidth: 1600, mx: 'auto', minHeight: '100vh', color: C.text, bgcolor: C.bg }}>
       {/* Breadcrumbs */}
-      <Breadcrumbs sx={{ mb: 3 }}>
+      <Breadcrumbs sx={{ mb: 3, '& .MuiBreadcrumbs-separator': { color: C.textMuted } }}>
         <Link 
           color="inherit" 
           component="button" 
           onClick={() => navigate('/catalog/node-types')}
           underline="hover"
+          sx={{ color: C.textMuted, '&:hover': { color: C.accent }, cursor: 'pointer', fontSize: '0.9rem' }}
         >
           Node Types
         </Link>
-        <Typography color="text.primary">{nodeType.catalog_type_name}</Typography>
+        <Typography sx={{ color: C.text, fontSize: '0.9rem', fontWeight: 600 }}>{nodeType.catalog_type_name}</Typography>
       </Breadcrumbs>
 
       {/* Header Card */}
       <Paper 
         elevation={0}
         sx={{ 
-          p: 4, 
+          p: 3.5, 
           mb: 4, 
-          borderRadius: 4, 
-          background: `linear-gradient(135deg, ${alpha(theme.palette.primary.main, 0.05)} 0%, ${theme.palette.background.paper} 100%)`,
-          border: `1px solid ${theme.palette.divider}`,
-          borderTop: nodeColor ? `4px solid ${nodeColor}` : 'none'
+          borderRadius: 3, 
+          bgcolor: C.panel,
+          border: `1px solid ${C.border}`,
+          borderTop: nodeColor ? `3px solid ${nodeColor}` : `1px solid ${C.border}`,
         }}
       >
-        <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+        <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: 2 }}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-            <IconButton onClick={() => navigate('/catalog/node-types')} sx={{ bgcolor: 'background.paper', border: `1px solid ${theme.palette.divider}` }}>
-              <ArrowBackIcon />
+            <IconButton 
+              onClick={() => navigate('/catalog/node-types')} 
+              sx={{ 
+                bgcolor: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.04)', 
+                border: `1px solid ${C.border}`,
+                color: C.textMuted,
+                '&:hover': { color: C.text, bgcolor: C.accentDim }
+              }}
+            >
+              <ArrowBackIcon fontSize="small" />
             </IconButton>
             <Box>
-              <Typography variant="h3" fontWeight="bold" gutterBottom>
+              <Typography variant="h4" fontWeight="bold" sx={{ color: C.text, letterSpacing: '-0.02em', mb: 1 }}>
                 {nodeType.catalog_type_name}
               </Typography>
-              <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+              <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', flexWrap: 'wrap' }}>
                 {nodeColor && (
-                  <Box sx={{ width: 18, height: 18, borderRadius: '50%', bgcolor: nodeColor, border: '1px solid rgba(0,0,0,0.12)' }} title={`Color: ${nodeColor}`} />
+                  <Box sx={{ width: 14, height: 14, borderRadius: '50%', bgcolor: nodeColor, border: `1px solid ${C.border}` }} title={`Color: ${nodeColor}`} />
                 )}
-                <Chip label={nodeType.is_active ? 'Active' : 'Inactive'} color={nodeType.is_active ? 'success' : 'default'} size="small" />
-                <Chip
-                  label={nodeType.type === 'core' || nodeType.core ? 'Core' : 'Custom'}
-                  color={nodeType.type === 'core' || nodeType.core ? 'primary' : 'secondary'}
-                  size="small"
-                />
-                <Typography variant="body2" color="text.secondary">
+                <span style={{
+                  display: 'inline-flex', alignItems: 'center', padding: '2px 8px',
+                  borderRadius: 9999, fontSize: 11, fontWeight: 700, letterSpacing: '0.04em',
+                  color: nodeType.is_active ? C.success : C.textMuted,
+                  background: nodeType.is_active ? (isDark ? `${C.success}18` : `${C.success}12`) : 'transparent',
+                  border: `1px solid ${nodeType.is_active ? C.success : C.border}44`,
+                  fontFamily: 'monospace', textTransform: 'uppercase',
+                }}>
+                  {nodeType.is_active ? 'Active' : 'Inactive'}
+                </span>
+                {isCore ? <CoreIcon fontSize="small" /> : <CustomIcon fontSize="small" />}
+                <Typography variant="caption" sx={{ color: C.textMuted, fontFamily: 'monospace', ml: 0.5 }}>
                   ID: {nodeType.id}
                 </Typography>
               </Box>
             </Box>
           </Box>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
             <Button 
               variant="contained" 
               startIcon={<EditIcon />}
               onClick={handleEditOpen}
-              sx={{ textTransform: 'none' }}
+              sx={{ 
+                borderRadius: 2, px: 2.5, py: 0.8,
+                bgcolor: C.accent,
+                color: '#FFFFFF',
+                boxShadow: isDark ? C.accentGlow : 'none',
+                '&:hover': { bgcolor: '#4F46E5' }
+              }}
             >
-              Edit
+              Edit Type
             </Button>
           </Box>
         </Box>
         
-        <Grid container spacing={4} sx={{ mt: 2 }}>
-            <Grid size={{ 'xs': 12, 'md': 8 }}>
-                 <Typography variant="subtitle1" fontWeight="bold" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+        <Grid container spacing={3} sx={{ mt: 2 }}>
+            <Grid size={{ xs: 12, md: 7 }}>
+                 <Typography variant="subtitle2" fontWeight="bold" sx={{ display: 'flex', alignItems: 'center', gap: 0.8, color: C.textMuted, mb: 1, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
                     <DescriptionOutlinedIcon fontSize="small"/> Description
                  </Typography>
-                 <Typography variant="body1" color="text.secondary" paragraph>
+                 <Typography variant="body1" sx={{ color: C.text, lineHeight: 1.6 }}>
                     {nodeType.description || 'No description provided for this node type.'}
                  </Typography>
             </Grid>
             
-            <Grid size={{ 'xs': 12, 'md': 4 }}>
+            <Grid size={{ xs: 12, md: 5 }}>
                 {/* Properties Card */}
-                <Card variant="outlined" sx={{ borderRadius: 3, height: '100%', minHeight: 450 }}>
+                <Card 
+                  elevation={0} 
+                  sx={{ 
+                    borderRadius: 2.5, 
+                    height: '100%', 
+                    minHeight: 280,
+                    bgcolor: isDark ? '#0F1117' : '#F8FAFC',
+                    border: `1px solid ${C.border}`,
+                  }}
+                >
                   <Box sx={{ 
                     p: 2, 
-                    borderBottom: `1px solid ${theme.palette.divider}`, 
-                    bgcolor: alpha(theme.palette.primary.main, 0.05),
+                    borderBottom: `1px solid ${C.border}`, 
                     display: 'flex',
                     justifyContent: 'space-between',
                     alignItems: 'center'
                   }}>
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                      <SettingsInputComponentIcon fontSize="small" color="primary" />
-                      <Typography variant="subtitle1" fontWeight="bold">Properties</Typography>
+                      <SettingsInputComponentIcon fontSize="small" sx={{ color: C.accent }} />
+                      <Typography variant="subtitle2" fontWeight="bold" sx={{ color: C.text }}>Properties</Typography>
                     </Box>
-                    <IconButton size="small" color="primary" onClick={handleEditPropsOpen}>
+                    <IconButton size="small" sx={{ color: C.accent, bgcolor: C.accentDim }} onClick={handleEditPropsOpen}>
                       <EditIcon fontSize="small" />
                     </IconButton>
                   </Box>
                   <Box sx={{ p: 0 }}>
                     {nodeType.config?.properties && (Array.isArray(nodeType.config.properties) ? nodeType.config.properties.length > 0 : Object.keys(nodeType.config.properties).length > 0) ? (
-                      <Stack divider={<Divider />}>
+                      <Stack divider={<Divider sx={{ borderColor: C.border }} />}>
                         {(Array.isArray(nodeType.config.properties) ? nodeType.config.properties : Object.entries(nodeType.config.properties).map(([key, val]: [string, any]) => ({ name: key, ...val }))).map((prop: any) => (
-                          <Box key={prop.name} sx={{ p: 2, '&:hover': { bgcolor: alpha(theme.palette.action.hover, 0.5) } }}>
+                          <Box key={prop.name} sx={{ p: 1.5, '&:hover': { bgcolor: isDark ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.02)' } }}>
                             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                              <Typography variant="body2" fontWeight="bold">{prop.label || prop.name}</Typography>
+                              <Typography variant="body2" fontWeight="bold" sx={{ color: C.text }}>{prop.label || prop.name}</Typography>
                               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                                <Chip label={prop.data_type || 'string'} size="small" variant="outlined" sx={{ height: 20, fontSize: '0.65rem' }} />
-                                <IconButton size="small" color="error" onClick={() => handleDeleteProperty(prop.name)}>
+                                <span style={{
+                                  display: 'inline-flex', alignItems: 'center', padding: '1px 6px',
+                                  borderRadius: 4, fontSize: 10, fontWeight: 700,
+                                  color: C.blue, background: isDark ? 'rgba(96,165,250,0.12)' : 'rgba(96,165,250,0.08)',
+                                  border: `1px solid rgba(96,165,250,0.3)`, fontFamily: 'monospace'
+                                }}>
+                                  {prop.data_type || 'string'}
+                                </span>
+                                <IconButton size="small" sx={{ color: C.textMuted, '&:hover': { color: C.danger } }} onClick={() => handleDeleteProperty(prop.name)}>
                                   <DeleteIcon fontSize="small" />
                                 </IconButton>
                               </Box>
                             </Box>
                             {prop.description && (
-                              <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
+                              <Typography variant="caption" sx={{ color: C.textMuted, display: 'block', mt: 0.5 }}>
                                 {prop.description}
                               </Typography>
                             )}
                             {prop.properties && prop.properties.length > 0 && (
-                              <Box sx={{ mt: 1, pl: 2, borderLeft: `2px solid ${theme.palette.divider}` }}>
-                                <Typography variant="caption" color="text.secondary">
+                              <Box sx={{ mt: 1, pl: 2, borderLeft: `2px solid ${C.border}` }}>
+                                <Typography variant="caption" sx={{ color: C.textMuted }}>
                                   {prop.properties.length} nested fields
                                 </Typography>
                               </Box>
                             )}
                           </Box>
-
-
                         ))}
                       </Stack>
                     ) : (
-                      <Box sx={{ p: 4, textAlign: 'center' }}>
-                        <InfoOutlinedIcon sx={{ fontSize: 40, color: 'text.disabled', mb: 1 }} />
-                        <Typography variant="body2" color="text.secondary">No properties defined.</Typography>
-                        <Button size="small" sx={{ mt: 2 }} onClick={handleEditPropsOpen}>Add Property</Button>
+                      <Box sx={{ p: 3, textAlign: 'center' }}>
+                        <InfoOutlinedIcon sx={{ fontSize: 32, color: C.textMuted, mb: 1, opacity: 0.5 }} />
+                        <Typography variant="body2" sx={{ color: C.textMuted }}>No properties defined.</Typography>
+                        <Button size="small" sx={{ mt: 1.5, color: C.accent }} onClick={handleEditPropsOpen}>Add Property</Button>
                       </Box>
                     )}
                   </Box>
@@ -298,55 +363,67 @@ export const NodeTypeDetailPage: React.FC = () => {
       </Paper>
 
       {/* Associated Edge Types Section */}
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
-        <Typography variant="h5" fontWeight="bold">
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+        <Typography variant="h6" fontWeight="bold" sx={{ color: C.text }}>
           Associated Edge Types ({associatedEdgeTypes?.length || 0})
         </Typography>
       </Box>
 
       {associatedEdgeTypes && associatedEdgeTypes.length > 0 ? (
-        <TableContainer component={Paper} elevation={0} sx={{ border: `1px solid ${theme.palette.divider}`, borderRadius: 2 }}>
+        <TableContainer 
+          component={Paper} 
+          elevation={0} 
+          sx={{ 
+            border: `1px solid ${C.border}`, 
+            borderRadius: 3, 
+            bgcolor: C.panel,
+            overflow: 'hidden' 
+          }}
+        >
           <Table>
             <TableHead>
-              <TableRow sx={{ bgcolor: alpha(theme.palette.primary.main, 0.05) }}>
-                <TableCell sx={{ fontWeight: 'bold' }}>Subject</TableCell>
-                <TableCell sx={{ fontWeight: 'bold' }}>Predicate</TableCell>
-                <TableCell sx={{ fontWeight: 'bold' }}>Object</TableCell>
-                <TableCell sx={{ fontWeight: 'bold' }}>Type</TableCell>
+              <TableRow sx={{ bgcolor: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)', borderBottom: `1px solid ${C.border}` }}>
+                <TableCell sx={{ fontWeight: 700, color: C.textMuted, fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Subject</TableCell>
+                <TableCell sx={{ fontWeight: 700, color: C.textMuted, fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Predicate</TableCell>
+                <TableCell sx={{ fontWeight: 700, color: C.textMuted, fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Object</TableCell>
+                <TableCell sx={{ fontWeight: 700, color: C.textMuted, fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Type</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
               {associatedEdgeTypes.map((edgeType) => (
-                <TableRow key={edgeType.id} sx={{ '&:hover': { bgcolor: 'grey.100' } }}>
+                <TableRow 
+                  key={edgeType.id} 
+                  hover
+                  sx={{ 
+                    '&:hover': { bgcolor: isDark ? 'rgba(255,255,255,0.02) !important' : 'rgba(0,0,0,0.01) !important' },
+                    borderBottom: `1px solid ${C.border}`,
+                  }}
+                >
                   <TableCell>
-                    <Chip
-                      label={edgeType.subject_node_type_name || 'Unknown'}
-                      size="small"
-                      color="primary"
-                      variant="outlined"
-                      sx={{ fontWeight: 600, fontSize: '0.75rem' }}
-                    />
+                    <span style={{
+                      display: 'inline-flex', alignItems: 'center', padding: '2px 7px',
+                      borderRadius: 6, fontSize: 11, fontWeight: 600,
+                      color: C.blue, background: isDark ? 'rgba(96,165,250,0.12)' : 'rgba(96,165,250,0.08)',
+                      border: `1px solid rgba(96,165,250,0.3)`,
+                    }}>
+                      {edgeType.subject_node_type_name || 'Unknown'}
+                    </span>
                   </TableCell>
-                  <TableCell sx={{ fontWeight: 500 }}>
+                  <TableCell sx={{ fontWeight: 600, color: C.text }}>
                     {edgeType.edge_type_name}
                   </TableCell>
                   <TableCell>
-                    <Chip
-                      label={edgeType.object_node_type_name || 'Unknown'}
-                      size="small"
-                      color="secondary"
-                      variant="outlined"
-                      sx={{ fontWeight: 600, fontSize: '0.75rem' }}
-                    />
+                    <span style={{
+                      display: 'inline-flex', alignItems: 'center', padding: '2px 7px',
+                      borderRadius: 6, fontSize: 11, fontWeight: 600,
+                      color: C.purple, background: isDark ? 'rgba(167,139,250,0.12)' : 'rgba(167,139,250,0.08)',
+                      border: `1px solid rgba(167,139,250,0.3)`,
+                    }}>
+                      {edgeType.object_node_type_name || 'Unknown'}
+                    </span>
                   </TableCell>
                   <TableCell>
-                    <Chip
-                      label={edgeType.type === 'core' ? 'Core' : 'Custom'}
-                      size="small"
-                      color={edgeType.type === 'core' ? 'primary' : 'warning'}
-                      variant={edgeType.type === 'core' ? 'filled' : 'outlined'}
-                      sx={{ fontWeight: 600 }}
-                    />
+                    {edgeType.type === 'core' ? <CoreIcon fontSize="small" /> : <CustomIcon fontSize="small" />}
                   </TableCell>
                 </TableRow>
               ))}
@@ -358,12 +435,13 @@ export const NodeTypeDetailPage: React.FC = () => {
           elevation={0}
           sx={{ 
             p: 4, 
-            borderRadius: 2, 
-            border: `1px solid ${theme.palette.divider}`,
+            borderRadius: 3, 
+            border: `1px solid ${C.border}`,
+            bgcolor: C.panel,
             textAlign: 'center'
           }}
         >
-          <Typography color="text.secondary">No edge types associated with this node type.</Typography>
+          <Typography sx={{ color: C.textMuted }}>No edge types associated with this node type.</Typography>
         </Paper>
       )}
 
@@ -374,8 +452,16 @@ export const NodeTypeDetailPage: React.FC = () => {
           onClose={() => setSelectedNode(null)}
           maxWidth="md"
           fullWidth
+          PaperProps={{
+            sx: {
+              bgcolor: C.panel,
+              color: C.text,
+              border: `1px solid ${C.border}`,
+              borderRadius: 3,
+            }
+          }}
         >
-          <DialogTitle>
+          <DialogTitle sx={{ borderBottom: `1px solid ${C.border}`, fontWeight: 700 }}>
             {selectedNode.node_name}
             <IconButton
               aria-label="close"
@@ -384,34 +470,34 @@ export const NodeTypeDetailPage: React.FC = () => {
                 position: 'absolute',
                 right: 8,
                 top: 8,
-                color: (theme) => theme.palette.grey[500],
+                color: C.textMuted,
               }}
             >
               <CloseIcon />
             </IconButton>
           </DialogTitle>
-          <DialogContent dividers>
-             <Typography variant="subtitle2" gutterBottom>Qualified Path</Typography>
-             <Paper variant="outlined" sx={{ p: 1, bgcolor: 'grey.50', mb: 2, fontFamily: 'monospace' }}>
+          <DialogContent dividers sx={{ borderColor: C.border }}>
+             <Typography variant="subtitle2" sx={{ color: C.textMuted, mb: 0.5 }}>Qualified Path</Typography>
+             <Paper variant="outlined" sx={{ p: 1.5, bgcolor: isDark ? '#0A0C12' : '#F8FAFC', border: `1px solid ${C.border}`, mb: 2, fontFamily: 'monospace', color: C.text }}>
                 {selectedNode.qualified_path}
              </Paper>
 
              {selectedNode.description && (
                <>
-                 <Typography variant="subtitle2" gutterBottom>Description</Typography>
-                 <Typography variant="body2" paragraph>{selectedNode.description}</Typography>
+                 <Typography variant="subtitle2" sx={{ color: C.textMuted, mb: 0.5 }}>Description</Typography>
+                 <Typography variant="body2" sx={{ color: C.text, mb: 2 }}>{selectedNode.description}</Typography>
                </>
              )}
 
-             <Typography variant="subtitle2" gutterBottom>Properties</Typography>
-             <Paper variant="outlined" sx={{ p: 2, bgcolor: 'grey.50', maxHeight: 400, overflow: 'auto' }}>
-                <Box component="pre" sx={{ margin: 0, fontSize: '0.875rem', whiteSpace: 'pre-wrap', wordWrap: 'break-word' }}>
+             <Typography variant="subtitle2" sx={{ color: C.textMuted, mb: 0.5 }}>Properties</Typography>
+             <Paper variant="outlined" sx={{ p: 2, bgcolor: isDark ? '#0A0C12' : '#F8FAFC', border: `1px solid ${C.border}`, maxHeight: 400, overflow: 'auto' }}>
+                <Box component="pre" sx={{ margin: 0, fontSize: '0.85rem', fontFamily: 'monospace', color: C.text, whiteSpace: 'pre-wrap', wordWrap: 'break-word' }}>
                   {JSON.stringify(selectedNode.properties, null, 2)}
                 </Box>
              </Paper>
           </DialogContent>
-          <DialogActions>
-            <Button onClick={() => setSelectedNode(null)}>Close</Button>
+          <DialogActions sx={{ p: 2, borderTop: `1px solid ${C.border}` }}>
+            <Button onClick={() => setSelectedNode(null)} sx={{ color: C.textMuted }}>Close</Button>
           </DialogActions>
         </Dialog>
       )}
@@ -422,8 +508,16 @@ export const NodeTypeDetailPage: React.FC = () => {
         onClose={() => setEditOpen(false)}
         maxWidth="md"
         fullWidth
+        PaperProps={{
+          sx: {
+            bgcolor: C.panel,
+            color: C.text,
+            border: `1px solid ${C.border}`,
+            borderRadius: 3,
+          }
+        }}
       >
-        <DialogTitle>
+        <DialogTitle sx={{ borderBottom: `1px solid ${C.border}`, fontWeight: 700 }}>
           Edit Node Type: {nodeType?.catalog_type_name}
           <IconButton
             aria-label="close"
@@ -432,31 +526,41 @@ export const NodeTypeDetailPage: React.FC = () => {
               position: 'absolute',
               right: 8,
               top: 8,
-              color: (theme) => theme.palette.grey[500],
+              color: C.textMuted,
             }}
           >
             <CloseIcon />
           </IconButton>
         </DialogTitle>
-        <DialogContent dividers>
-          <Stack spacing={3} sx={{ mt: 2 }}>
+        <DialogContent dividers sx={{ borderColor: C.border, pt: 3 }}>
+          <Stack spacing={3} sx={{ mt: 1 }}>
             {/* Active Status */}
             <FormControl fullWidth>
-              <FormLabel>Status</FormLabel>
+              <FormLabel sx={{ color: C.textMuted, fontWeight: 600, fontSize: '0.85rem' }}>Status</FormLabel>
               <Box sx={{ display: 'flex', gap: 2, mt: 1 }}>
                 <Button
                   variant={editIsActive ? 'contained' : 'outlined'}
-                  color="success"
                   onClick={() => setEditIsActive(true)}
-                  sx={{ flex: 1, textTransform: 'none' }}
+                  sx={{ 
+                    flex: 1, 
+                    bgcolor: editIsActive ? C.success : 'transparent',
+                    color: editIsActive ? '#fff' : C.textMuted,
+                    borderColor: editIsActive ? C.success : C.border,
+                    '&:hover': { bgcolor: editIsActive ? '#059669' : `${C.success}18` }
+                  }}
                 >
                   Active
                 </Button>
                 <Button
                   variant={!editIsActive ? 'contained' : 'outlined'}
-                  color="error"
                   onClick={() => setEditIsActive(false)}
-                  sx={{ flex: 1, textTransform: 'none' }}
+                  sx={{ 
+                    flex: 1, 
+                    bgcolor: !editIsActive ? C.danger : 'transparent',
+                    color: !editIsActive ? '#fff' : C.textMuted,
+                    borderColor: !editIsActive ? C.danger : C.border,
+                    '&:hover': { bgcolor: !editIsActive ? '#DC2626' : `${C.danger}18` }
+                  }}
                 >
                   Inactive
                 </Button>
@@ -472,6 +576,13 @@ export const NodeTypeDetailPage: React.FC = () => {
               multiline
               rows={3}
               placeholder="Enter node type description..."
+              InputProps={{
+                sx: {
+                  bgcolor: isDark ? '#0A0C12' : '#F8FAFC',
+                  color: C.text,
+                  '& fieldset': { borderColor: C.border },
+                }
+              }}
             />
 
             {/* Color Picker */}
@@ -485,12 +596,13 @@ export const NodeTypeDetailPage: React.FC = () => {
             </Box>
           </Stack>
         </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setEditOpen(false)}>Cancel</Button>
+        <DialogActions sx={{ p: 2, borderTop: `1px solid ${C.border}` }}>
+          <Button onClick={() => setEditOpen(false)} sx={{ color: C.textMuted }}>Cancel</Button>
           <Button 
             onClick={handleEditSave} 
             variant="contained" 
             disabled={editIsSaving}
+            sx={{ bgcolor: C.accent, color: '#fff', '&:hover': { bgcolor: '#4F46E5' } }}
           >
             {editIsSaving ? 'Saving...' : 'Save Changes'}
           </Button>
@@ -498,11 +610,24 @@ export const NodeTypeDetailPage: React.FC = () => {
       </Dialog>
 
       {/* Properties Editor Dialog */}
-      <Dialog open={editPropsOpen} onClose={() => setEditPropsOpen(false)} maxWidth="md" fullWidth>
-        <DialogTitle>
+      <Dialog 
+        open={editPropsOpen} 
+        onClose={() => setEditPropsOpen(false)} 
+        maxWidth="md" 
+        fullWidth
+        PaperProps={{
+          sx: {
+            bgcolor: C.panel,
+            color: C.text,
+            border: `1px solid ${C.border}`,
+            borderRadius: 3,
+          }
+        }}
+      >
+        <DialogTitle sx={{ borderBottom: `1px solid ${C.border}` }}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            <SettingsInputComponentIcon color="primary" />
-            <Typography variant="h6">Manage Node Type Properties</Typography>
+            <SettingsInputComponentIcon sx={{ color: C.accent }} />
+            <Typography variant="h6" fontWeight="bold">Manage Node Type Properties</Typography>
           </Box>
           <IconButton
             aria-label="close"
@@ -511,13 +636,13 @@ export const NodeTypeDetailPage: React.FC = () => {
               position: 'absolute',
               right: 8,
               top: 8,
-              color: (theme) => theme.palette.grey[500],
+              color: C.textMuted,
             }}
           >
             <CloseIcon />
           </IconButton>
         </DialogTitle>
-        <DialogContent dividers sx={{ bgcolor: alpha(theme.palette.grey[500], 0.02) }}>
+        <DialogContent dividers sx={{ borderColor: C.border, bgcolor: isDark ? '#0F1117' : '#F8FAFC' }}>
           <Box sx={{ py: 2 }}>
             <PropertyEditor 
               properties={editProps} 
@@ -525,12 +650,13 @@ export const NodeTypeDetailPage: React.FC = () => {
             />
           </Box>
         </DialogContent>
-        <DialogActions sx={{ p: 2 }}>
-          <Button onClick={() => setEditPropsOpen(false)}>Cancel</Button>
+        <DialogActions sx={{ p: 2, borderTop: `1px solid ${C.border}` }}>
+          <Button onClick={() => setEditPropsOpen(false)} sx={{ color: C.textMuted }}>Cancel</Button>
           <Button 
             onClick={handleSaveProperties} 
             variant="contained" 
             disabled={editPropsSaving}
+            sx={{ bgcolor: C.accent, color: '#fff', '&:hover': { bgcolor: '#4F46E5' } }}
           >
             {editPropsSaving ? 'Saving...' : 'Save All Properties'}
           </Button>

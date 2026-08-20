@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/hondyman/uisce/backend/internal/security"
 	"github.com/hondyman/uisce/backend/internal/services"
 )
 
@@ -28,7 +29,10 @@ func (h *TourHandler) RegisterRoutes(r chi.Router) {
 
 // HandleListTours lists available tours.
 func (h *TourHandler) HandleListTours(w http.ResponseWriter, r *http.Request) {
-	userID := r.URL.Query().Get("user_id") // In a real app, get this from auth context.
+	userID, ok := security.RequireUser(w, r)
+	if !ok {
+		return
+	}
 	tours, err := h.service.ListTours(r.Context(), userID)
 	if err != nil {
 		w.Header().Set("Content-Type", "application/json")

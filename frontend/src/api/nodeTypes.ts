@@ -159,8 +159,7 @@ export function useNodesByType(typeId: string, search?: string) {
       const res = await apiFetch(`/api/node-types/${typeId}/nodes?${params.toString()}`);
 
       if (res.status === 404) {
-        // If the specific endpoint doesn't exist, try fetching all nodes and filtering (fallback)
-        const fallbackRes = await apiFetch(`/api/glossary/semantic-terms?tenant_id=${tenant.id}`);
+        const fallbackRes = await apiFetch('/api/glossary/semantic-terms');
         if (!fallbackRes.ok) return [];
         const allNodes: CatalogNode[] = await fallbackRes.json();
         return allNodes.filter(n => n.node_type_id === typeId);

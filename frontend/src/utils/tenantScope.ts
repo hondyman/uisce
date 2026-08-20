@@ -27,8 +27,71 @@ function safeParse<T>(value: string | null): T | null {
 }
 
 export function readCachedSelection(): CachedSelection {
-  const tenant = safeParse<Tenant>(localStorage.getItem(TENANT_STORAGE_KEYS.TENANT));
-  const datasource = safeParse<DataSource>(localStorage.getItem(TENANT_STORAGE_KEYS.DATASOURCE));
+  let tenant = safeParse<Tenant>(localStorage.getItem(TENANT_STORAGE_KEYS.TENANT));
+  let datasource = safeParse<DataSource>(localStorage.getItem(TENANT_STORAGE_KEYS.DATASOURCE));
+
+  // Fallback 1: check operating_scope if legacy keys are missing
+  if (!tenant?.id || !datasource?.id) {
+    const scope = safeParse<any>(localStorage.getItem('operating_scope'));
+    if (scope) {
+      if (!tenant?.id && scope.tenantId) {
+        tenant = {
+          id: scope.tenantId,
+          name: scope.tenantName || scope.tenantId,
+          display_name: scope.tenantName || scope.tenantId,
+        } as Tenant;
+      }
+      if (!datasource?.id && scope.datasourceId) {
+        datasource = {
+          id: scope.datasourceId,
+          source_name: scope.datasourceName || scope.datasourceId,
+        } as DataSource;
+      }
+    }
+  }
+
+  // Fallback 2: check auth_user / JWT token if tenant is still missing
+  if (!tenant?.id) {
+    try {
+      const authUser = safeParse<any>(localStorage.getItem('auth_user'));
+      const token = localStorage.getItem('auth_token');
+      let jwtPayload: any = null;
+      if (token && token.split('.').length === 3) {
+        try {
+          const base64Url = token.split('.')[1];
+          const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+          const jsonPayload = decodeURIComponent(
+            atob(base64)
+              .split('')
+              .map(c => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
+              .join('')
+          );
+          jwtPayload = JSON.parse(jsonPayload);
+        } catch (_) {}
+      }
+
+      const candidateTenantId =
+        jwtPayload?.scoped_tenant ||
+        jwtPayload?.tenant_id ||
+        authUser?.tenant_id ||
+        authUser?.tenant_assignments?.[0]?.tenantId;
+
+      const candidateTenantName =
+        jwtPayload?.scoped_tenant_name ||
+        authUser?.tenant_name ||
+        authUser?.tenant_assignments?.[0]?.tenantName ||
+        candidateTenantId;
+
+      if (candidateTenantId) {
+        tenant = {
+          id: candidateTenantId,
+          name: candidateTenantName,
+          display_name: candidateTenantName,
+        } as Tenant;
+      }
+    } catch (_) {}
+  }
+
   return { tenant, datasource };
 }
 
@@ -66,3 +129,4 @@ export function logTenantScope(): void {
   const scope = getRequiredTenantScope();
   devLog('Tenant scope in use', scope);
 }
+

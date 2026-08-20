@@ -747,23 +747,35 @@ export function useDeleteTerm(opts?: GlossaryMutationOpts) {
 // Create a new edge between terms
 export function useCreateTermEdge() {
   const queryClient = useQueryClient();
-  const { tenant } = useTenant();
+  const { tenant, datasource } = useTenant();
 
   return useMutation({
     mutationFn: async (data: {
       subject_node_id: string;
       object_node_id: string;
       edge_type_id: string;
+      tenant_datasource_id?: string;
+      datasource_id?: string;
       properties?: Record<string, any>; // Custom edge properties
     }) => {
       const params = new URLSearchParams();
       if (tenant?.id) {
         params.append('tenant_id', tenant.id);
       }
+      const dsId = data.tenant_datasource_id || data.datasource_id || datasource?.id;
+      if (dsId) {
+        params.append('tenant_datasource_id', dsId);
+        params.append('datasource_id', dsId);
+      }
 
       const res = await glossaryFetch(`/api/glossary/edges?${params.toString()}`, tenant?.id, {
         method: 'POST',
-        body: JSON.stringify(data),
+        headers: dsId ? { 'X-Tenant-Datasource-ID': dsId, 'X-Tenant-Instance-ID': dsId } : undefined,
+        body: JSON.stringify({
+          ...data,
+          tenant_datasource_id: dsId,
+          datasource_id: dsId,
+        }),
       });
 
       if (!res.ok) {
@@ -774,6 +786,7 @@ export function useCreateTermEdge() {
     },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: glossaryKeys.edges() });
+      void queryClient.invalidateQueries({ queryKey: glossaryKeys.all() });
     },
   });
 }
@@ -834,7 +847,7 @@ export function useDeleteTermEdge() {
       return res.json();
     },
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: glossaryKeys.edges() });
+      void queryClient.invalidateQueries({ queryKey: glossaryKeys.all });
     },
   });
 }

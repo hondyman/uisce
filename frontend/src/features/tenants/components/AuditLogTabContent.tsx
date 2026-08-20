@@ -21,10 +21,11 @@ import {
   Alert,
   CircularProgress,
   TableSortLabel,
+  ToggleButtonGroup,
+  ToggleButton,
 } from '@mui/material';
 import {
   Download,
-  FilterList,
   Search,
   Info,
   Refresh,
@@ -47,6 +48,7 @@ export interface AuditLogEntry {
   resource: string;
   resourceType: string;
   details: string;
+  core?: boolean;
 }
 
 interface AuditLogTabContentProps {
@@ -129,6 +131,7 @@ export const AuditLogTabContent: React.FC<AuditLogTabContentProps> = ({
   const [hasMore, setHasMore] = useState(true);
   const [sortBy, setSortBy] = useState('timestamp');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
+  const [coreFilter, setCoreFilter] = useState<'all' | 'core' | 'custom'>('all');
   const LIMIT = 20;
 
   // Ref for observer
@@ -152,7 +155,7 @@ export const AuditLogTabContent: React.FC<AuditLogTabContentProps> = ({
     setLoading(true);
     setError(null);
     try {
-      let url = `/api/v1/admin/tenants/${encodeURIComponent(tenantId)}/audit-logs?datasourceId=${encodeURIComponent(datasourceId)}&limit=${LIMIT}&offset=${currentOffset}&sortBy=${sortBy}&sortOrder=${sortOrder ? sortOrder.toUpperCase() : 'DESC'}`;
+      let url = `/api/v1/admin/tenants/audit-logs?datasourceId=${encodeURIComponent(datasourceId)}&limit=${LIMIT}&offset=${currentOffset}&sortBy=${sortBy}&sortOrder=${sortOrder ? sortOrder.toUpperCase() : 'DESC'}`;
       
       if (startDate) {
           url += `&startDate=${encodeURIComponent(startDate.toISOString())}`;
@@ -237,9 +240,10 @@ export const AuditLogTabContent: React.FC<AuditLogTabContentProps> = ({
 
   const filteredEntries = entries.filter(
     (entry: AuditLogEntry) =>
-      entry.user.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (coreFilter === 'all' || (coreFilter === 'core' && entry.core) || (coreFilter === 'custom' && !entry.core)) &&
+      (entry.user.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       entry.resource.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (entry.details || '').toLowerCase().includes(searchQuery.toLowerCase())
+      (entry.details || '').toLowerCase().includes(searchQuery.toLowerCase()))
   );
 
   const handleViewDetails = (entry: AuditLogEntry) => {
@@ -311,13 +315,16 @@ export const AuditLogTabContent: React.FC<AuditLogTabContentProps> = ({
             />
         </LocalizationProvider>
 
-        <Button
-          variant="outlined"
-          startIcon={<FilterList />}
+        <ToggleButtonGroup
+          value={coreFilter}
+          exclusive
+          onChange={(_, v) => { if (v !== null) { setCoreFilter(v); } }}
           size="small"
         >
-          Filter
-        </Button>
+          <ToggleButton value="all">All</ToggleButton>
+          <ToggleButton value="core">Core</ToggleButton>
+          <ToggleButton value="custom">Custom</ToggleButton>
+        </ToggleButtonGroup>
         <Button
           variant="outlined"
           startIcon={<Download />}
@@ -332,7 +339,7 @@ export const AuditLogTabContent: React.FC<AuditLogTabContentProps> = ({
       {/* Audit Log Table - Lazy Loading Container */}
       <TableContainer component={Paper} variant="outlined" sx={{ maxHeight: 'calc(100vh - 300px)', overflowY: 'auto' }}>
         <Table stickyHeader>
-          <TableHead sx={{ backgroundColor: '#f5f5f5' }}>
+          <TableHead>
             <TableRow>
               <TableCell sx={{ fontWeight: 'bold' }}>
                 <TableSortLabel
@@ -434,6 +441,14 @@ export const AuditLogTabContent: React.FC<AuditLogTabContentProps> = ({
                       <Typography variant="caption" sx={{ color: '#999' }}>
                         ({entry.resourceType})
                       </Typography>
+                      {entry.core !== undefined && (
+                        <Chip
+                          label={entry.core ? 'CORE' : 'CUSTOM'}
+                          color={entry.core ? 'primary' : 'default'}
+                          size="small"
+                          variant={entry.core ? 'filled' : 'outlined'}
+                        />
+                      )}
                     </Box>
                   </TableCell>
                   <TableCell>

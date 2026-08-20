@@ -69,16 +69,20 @@ parse_args() {
 }
 
 pull_secrets() {
-    local output
+    local output=""
     local domain_arg="--domain=http://100.84.50.65:8085/api"
     local proj_arg="--projectId=9af25976-bafc-4895-a057-2effec13c620"
+    
+    # Run non-interactively with /dev/null stdin so infisical will not prompt
     if [ -n "$INFISICAL_TOKEN" ]; then
-        output=$(infisical secrets $domain_arg $proj_arg --env="$INFISICAL_ENV" --recursive -o json --token="$INFISICAL_TOKEN" 2>/dev/null || infisical secrets $domain_arg $proj_arg --env="$INFISICAL_ENV" --recursive -o json 2>/dev/null)
+        output=$(infisical secrets $domain_arg $proj_arg --env="$INFISICAL_ENV" --recursive -o json --token="$INFISICAL_TOKEN" --silent </dev/null 2>/dev/null || true)
     else
-        output=$(infisical secrets $domain_arg $proj_arg --env="$INFISICAL_ENV" --recursive -o json 2>/dev/null)
+        output=$(infisical secrets $domain_arg $proj_arg --env="$INFISICAL_ENV" --recursive -o json --silent </dev/null 2>/dev/null || true)
     fi
-    if [ -z "$output" ]; then
-        die "Failed to pull secrets from Infisical."
+    
+    if [ -z "$output" ] || ! echo "$output" | jq . >/dev/null 2>&1; then
+        warn "Could not fetch valid JSON secrets from Infisical (not logged in or server unreachable). Using default/existing environment settings."
+        output="{}"
     fi
     echo "$output"
 }
@@ -135,8 +139,14 @@ generate_composite_secrets() {
     if ! grep -q "^POSTGRES_DSN=" "$output_path"; then
         echo "POSTGRES_DSN=postgresql://${db_user}:${db_pass}@${db_host}:${db_port}/${db_name}?sslmode=disable" >> "$output_path"
     fi
-    if ! grep -q "^REDIS_URL=" "$output_path"; then
+    if !grep -q "^REDIS_URL=" "$output_path"; then
         echo "REDIS_URL=redis://${db_host}:6379" >> "$output_path"
+    fi
+    if ! grep -q "^API_TOKEN_ENCRYPTION_KEY_DEV_FALLBACK=" "$output_path"; then
+        echo "API_TOKEN_ENCRYPTION_KEY_DEV_FALLBACK=true" >> "$output_path"
+    fi
+    if ! grep -q "^API_TOKEN_ENCRYPTION_KEY=" "$output_path"; then
+        echo "API_TOKEN_ENCRYPTION_KEY=D+1O956T8t9zZ+w/FqK1lS9b8jJ2vR7mX4kY0uP3oN8=" >> "$output_path"
     fi
 }
 
@@ -156,14 +166,18 @@ main() {
     local rebalancing_env="$ROOT_DIR/rebalancing/.env"
 
 
-    export $(echo "$all_secrets" | jq -r 'if type == "array" then .[] | "\(.key)=\(.value)" else to_entries[] | "\(.key)=\(.value)" end' 2>/dev/null | xargs) 2>/dev/null || true
+    local env_vars
+    env_vars=$(echo "$all_secrets" | jq -r 'if type == "array" then .[] | "\(.key)=\(.value)" elif type == "object" and length > 0 then to_entries[] | "\(.key)=\(.value)" else empty end' 2>/dev/null) || true
+    if [ -n "$env_vars" ]; then
+        eval "$(echo "$env_vars" | while read -r line; do [ -n "$line" ] && echo "export $line"; done)"
+    fi
 
     generate_env_file "$all_secrets" "$root_env" "root"
-
     generate_composite_secrets "$root_env"
 
     if [ -d "$ROOT_DIR/backend" ]; then
         generate_env_file "$all_secrets" "$backend_env" "backend"
+        generate_composite_secrets "$backend_env"
     fi
 
     if [ -d "$ROOT_DIR/frontend" ]; then
@@ -172,10 +186,12 @@ main() {
 
     if [ -d "$ROOT_DIR/calendar-service" ]; then
         generate_env_file "$all_secrets" "$calendar_env" "calendar-service"
+        generate_composite_secrets "$calendar_env"
     fi
 
     if [ -d "$ROOT_DIR/rebalancing" ]; then
         generate_env_file "$all_secrets" "$rebalancing_env" "rebalancing"
+        generate_composite_secrets "$rebalancing_env"
     fi
 
     log "Done. Generated .env files:"

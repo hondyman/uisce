@@ -191,11 +191,14 @@ const AddEdgeDialog: React.FC<AddEdgeDialogProps> = ({
   const handleCreate = () => {
     if (!selectedEdgeTypeId || !selectedTargetNode) return;
     const isReversed = isReversedEdge;
+    const targetDatasourceId = selectedTargetNode.tenant_datasource_id || selectedTargetNode.datasource_id || datasource?.id;
     
     createEdgeMutation.mutate({
       subject_node_id: isReversed ? selectedTargetNode.id : sourceNodeId,
       object_node_id: isReversed ? sourceNodeId : selectedTargetNode.id,
       edge_type_id: selectedEdgeTypeId,
+      tenant_datasource_id: targetDatasourceId,
+      datasource_id: targetDatasourceId,
       properties: propertyValues
     }, {
       onSuccess: () => {

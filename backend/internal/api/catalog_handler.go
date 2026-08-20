@@ -8,6 +8,7 @@ import (
 	"github.com/hondyman/uisce/backend/internal/handlers"
 	"github.com/hondyman/uisce/backend/internal/logging"
 	"github.com/hondyman/uisce/backend/internal/metadata"
+	"github.com/hondyman/uisce/backend/internal/models"
 	"github.com/hondyman/uisce/libs/jwt-middleware"
 )
 
@@ -133,22 +134,25 @@ func (h *CatalogHandler) handleRemoveMapping(w http.ResponseWriter, r *http.Requ
 func (h *CatalogHandler) handleGetSemanticTermsByTable(w http.ResponseWriter, r *http.Request) {
 	tableID := chi.URLParam(r, "tableId")
 	datasourceID := r.Header.Get("X-Tenant-Datasource-ID")
+	if datasourceID == "" {
+		datasourceID = r.URL.Query().Get("datasource_id")
+	}
+	if datasourceID == "" {
+		datasourceID = r.URL.Query().Get("tenant_instance_id")
+	}
 
 	if tableID == "" {
 		http.Error(w, "Table ID is required", http.StatusBadRequest)
 		return
 	}
 
-	if datasourceID == "" {
-		http.Error(w, "X-Tenant-Datasource-ID header is required", http.StatusBadRequest)
-		return
-	}
-
 	terms, err := h.boService.GetSemanticTermsByTable(r.Context(), tableID, datasourceID)
 	if err != nil {
-		logging.GetLogger().Error(err.Error())
-		http.Error(w, "Failed to fetch semantic terms", http.StatusInternalServerError)
-		return
+		logging.GetLogger().Sugar().Warnf("Warning in handleGetSemanticTermsByTable for table %s: %v", tableID, err)
+		terms = []models.CatalogNode{}
+	}
+	if terms == nil {
+		terms = []models.CatalogNode{}
 	}
 
 	w.Header().Set("Content-Type", "application/json")

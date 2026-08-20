@@ -5,9 +5,9 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/hondyman/uisce/backend/internal/wealth"
-
 	"github.com/go-chi/chi/v5"
+	"github.com/hondyman/uisce/backend/internal/security"
+	"github.com/hondyman/uisce/backend/internal/wealth"
 )
 
 // ClientPortalHandlers contains handlers for client portal features
@@ -89,7 +89,10 @@ func (h *ClientPortalHandlers) SendMessage(w http.ResponseWriter, r *http.Reques
 
 func (h *ClientPortalHandlers) GetMessageThread(w http.ResponseWriter, r *http.Request) {
 	threadID := chi.URLParam(r, "threadID")
-	userID := r.URL.Query().Get("user_id")
+	userID, ok := security.RequireUser(w, r)
+	if !ok {
+		return
+	}
 
 	messages, err := h.portalService.GetMessageThread(r.Context(), threadID, userID)
 	if err != nil {

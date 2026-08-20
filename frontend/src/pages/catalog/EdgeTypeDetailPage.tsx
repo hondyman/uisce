@@ -21,6 +21,7 @@ import { useNodeType } from '../../api/nodeTypes';
 import { useTenant } from '../../contexts/TenantContext';
 import { ProfessionalColorPicker } from '../../components/ProfessionalColorPicker';
 import { PropertyEditor, PropertyDefinition } from '../../components/PropertyEditor';
+import { CoreIcon, CustomIcon } from '../../components/common/CoreCustomIcons';
 import SettingsInputComponentIcon from '@mui/icons-material/SettingsInputComponent';
 import LayersIcon from '@mui/icons-material/Layers';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
@@ -210,133 +211,195 @@ export const EdgeTypeDetailPage: React.FC = () => {
     }
   };
 
+  const isDark = theme.palette.mode === 'dark';
+  const C = useMemo(() => ({
+    bg: isDark ? '#0A0C12' : '#F8FAFC',
+    sidebar: isDark ? '#0F1117' : '#F1F5F9',
+    panel: isDark ? '#13161E' : '#FFFFFF',
+    panelHover: isDark ? '#1A1E2A' : '#F1F5F9',
+    border: isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.08)',
+    borderStrong: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.14)',
+    accent: '#6366F1',
+    accentDim: isDark ? 'rgba(99,102,241,0.15)' : 'rgba(99,102,241,0.08)',
+    accentGlow: '0 0 20px rgba(99,102,241,0.4)',
+    text: isDark ? '#E2E8F0' : '#0F172A',
+    textMuted: isDark ? '#8892A4' : '#64748B',
+    success: '#10B981',
+    warning: '#F59E0B',
+    danger: '#EF4444',
+    purple: '#A78BFA',
+    teal: '#2DD4BF',
+    blue: '#60A5FA',
+    orange: '#FB923C',
+  }), [isDark]);
+
   if (typeLoading || subjectLoading || objectLoading) {
-    return <Box sx={{ p: 4 }}><Skeleton variant="rectangular" height={400} /></Box>;
+    return (
+      <Box sx={{ p: 4, maxWidth: 1600, mx: 'auto' }}>
+        <Skeleton variant="rectangular" height={260} sx={{ borderRadius: 3, bgcolor: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.04)' }} />
+      </Box>
+    );
   }
 
   if (!edgeType) {
-    return <Box sx={{ p: 4 }}><Typography>Edge Type not found</Typography></Box>;
+    return (
+      <Box sx={{ p: 4, maxWidth: 1600, mx: 'auto', color: C.text }}>
+        <Typography>Edge Type not found</Typography>
+      </Box>
+    );
   }
 
   if (!subjectNodeType || !objectNodeType) {
-    return <Box sx={{ p: 4 }}><Typography>Node type information not found</Typography></Box>;
+    return (
+      <Box sx={{ p: 4, maxWidth: 1600, mx: 'auto', color: C.text }}>
+        <Typography>Node type information not found</Typography>
+      </Box>
+    );
   }
 
   const edgeColor = edgeType.config?.color;
+  const isCore = edgeType.type === 'core';
 
   return (
-    <Box sx={{ p: 4, maxWidth: 1600, mx: 'auto' }}>
+    <Box sx={{ p: 4, maxWidth: 1600, mx: 'auto', minHeight: '100vh', color: C.text, bgcolor: C.bg }}>
       {/* Breadcrumbs */}
-      <Breadcrumbs sx={{ mb: 3 }}>
+      <Breadcrumbs sx={{ mb: 3, '& .MuiBreadcrumbs-separator': { color: C.textMuted } }}>
         <Link 
           color="inherit" 
           component="button" 
           onClick={() => navigate('/catalog/edge-types')}
           underline="hover"
+          sx={{ color: C.textMuted, '&:hover': { color: C.accent }, cursor: 'pointer', fontSize: '0.9rem' }}
         >
           Edge Types
         </Link>
-        <Typography color="text.primary">{edgeType.edge_type_name}</Typography>
+        <Typography sx={{ color: C.text, fontSize: '0.9rem', fontWeight: 600 }}>{edgeType.edge_type_name}</Typography>
       </Breadcrumbs>
 
       {/* Header Card */}
       <Paper 
         elevation={0}
         sx={{ 
-          p: 4, 
+          p: 3.5, 
           mb: 4, 
-          borderRadius: 4, 
-          background: `linear-gradient(135deg, ${alpha(theme.palette.primary.main, 0.05)} 0%, ${theme.palette.background.paper} 100%)`,
-          border: `1px solid ${theme.palette.divider}`,
-          borderTop: edgeColor ? `4px solid ${edgeColor}` : 'none'
+          borderRadius: 3, 
+          bgcolor: C.panel,
+          border: `1px solid ${C.border}`,
+          borderTop: edgeColor ? `3px solid ${edgeColor}` : `1px solid ${C.border}`,
         }}
       >
-        <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+        <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: 2 }}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-            <IconButton onClick={() => navigate('/catalog/edge-types')} sx={{ bgcolor: 'background.paper', border: `1px solid ${theme.palette.divider}` }}>
-              <ArrowBackIcon />
+            <IconButton 
+              onClick={() => navigate('/catalog/edge-types')} 
+              sx={{ 
+                bgcolor: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.04)', 
+                border: `1px solid ${C.border}`,
+                color: C.textMuted,
+                '&:hover': { color: C.text, bgcolor: C.accentDim }
+              }}
+            >
+              <ArrowBackIcon fontSize="small" />
             </IconButton>
             <Box>
-              <Typography variant="h3" fontWeight="bold" gutterBottom>
+              <Typography variant="h4" fontWeight="bold" sx={{ color: C.text, letterSpacing: '-0.02em', mb: 1 }}>
                 {edgeType.edge_type_name}
               </Typography>
-              <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
-                <Chip label={edgeType.is_active ? 'Active' : 'Inactive'} color={edgeType.is_active ? 'success' : 'default'} size="small" />
-                {edgeType.type && (
-                  <Chip 
-                    label={edgeType.type === 'core' ? 'Core' : 'Custom'} 
-                    color={edgeType.type === 'core' ? 'primary' : 'warning'} 
-                    size="small" 
-                  />
-                )}
-                <Typography variant="body2" color="text.secondary">
+              <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', flexWrap: 'wrap' }}>
+                <span style={{
+                  display: 'inline-flex', alignItems: 'center', padding: '2px 8px',
+                  borderRadius: 9999, fontSize: 11, fontWeight: 700, letterSpacing: '0.04em',
+                  color: edgeType.is_active ? C.success : C.textMuted,
+                  background: edgeType.is_active ? (isDark ? `${C.success}18` : `${C.success}12`) : 'transparent',
+                  border: `1px solid ${edgeType.is_active ? C.success : C.border}44`,
+                  fontFamily: 'monospace', textTransform: 'uppercase',
+                }}>
+                  {edgeType.is_active ? 'Active' : 'Inactive'}
+                </span>
+                {edgeType.type && (isCore ? <CoreIcon fontSize="small" /> : <CustomIcon fontSize="small" />)}
+                <Typography variant="caption" sx={{ color: C.textMuted, fontFamily: 'monospace', ml: 0.5 }}>
                   ID: {edgeType.id}
                 </Typography>
               </Box>
             </Box>
           </Box>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+            {edgeColor && (
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, px: 1.5, py: 0.5, borderRadius: 2, bgcolor: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.03)', border: `1px solid ${C.border}` }}>
+                <Box sx={{ width: 14, height: 14, borderRadius: '50%', bgcolor: edgeColor }} />
+                <Typography variant="caption" sx={{ color: C.textMuted, fontFamily: 'monospace' }}>{edgeColor}</Typography>
+              </Box>
+            )}
             <Button 
               variant="contained" 
               startIcon={<EditIcon />}
               onClick={handleEditOpen}
-              sx={{ textTransform: 'none' }}
+              sx={{ 
+                borderRadius: 2, px: 2.5, py: 0.8,
+                bgcolor: C.accent,
+                color: '#FFFFFF',
+                boxShadow: isDark ? C.accentGlow : 'none',
+                '&:hover': { bgcolor: '#4F46E5' }
+              }}
             >
-              Edit
+              Edit Type
             </Button>
-            {edgeColor && (
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                <Box sx={{ width: 20, height: 20, borderRadius: 1, bgcolor: edgeColor, border: `1px solid ${theme.palette.divider}` }} />
-                <Typography variant="caption" color="text.secondary">{edgeColor}</Typography>
-              </Box>
-            )}
           </Box>
         </Box>
         
-        <Grid container spacing={4} sx={{ mt: 2 }}>
-          <Grid size={{ 'xs': 12, 'lg': 8 }}>
-            <Typography variant="subtitle1" fontWeight="bold" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+        <Grid container spacing={3} sx={{ mt: 2 }}>
+          <Grid size={{ xs: 12, lg: 7 }}>
+            <Typography variant="subtitle2" fontWeight="bold" sx={{ display: 'flex', alignItems: 'center', gap: 0.8, color: C.textMuted, mb: 1, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
               <DescriptionOutlinedIcon fontSize="small"/> Description
             </Typography>
-            <Typography variant="body1" color="text.secondary" paragraph>
+            <Typography variant="body1" sx={{ color: C.text, lineHeight: 1.6 }} paragraph>
               {edgeType.description || 'No description provided for this edge type.'}
             </Typography>
             
             {/* Subject/Object Node Types */}
-            <Box sx={{ mt: 3 }}>
-              <Typography variant="subtitle2" gutterBottom fontWeight="bold">Relationship Definition</Typography>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
-                <Chip 
-                  label={edgeType.subject_node_type_name || subjectNodeType.catalog_type_name} 
-                  variant="filled"
-                  color="primary"
-                  sx={{ fontWeight: 'bold' }}
-                />
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                  <Typography variant="body2" fontWeight="bold" sx={{ color: edgeType.config?.color || theme.palette.grey[700] }}>
+            <Box sx={{ mt: 2.5 }}>
+              <Typography variant="subtitle2" sx={{ color: C.textMuted, mb: 1, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', fontSize: '0.75rem' }}>
+                Relationship Definition
+              </Typography>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+                <span style={{
+                  display: 'inline-flex', alignItems: 'center', padding: '4px 12px',
+                  borderRadius: 8, fontSize: 12, fontWeight: 700,
+                  color: C.blue, background: isDark ? 'rgba(96,165,250,0.12)' : 'rgba(96,165,250,0.08)',
+                  border: `1px solid rgba(96,165,250,0.3)`,
+                }}>
+                  {edgeType.subject_node_type_name || subjectNodeType.catalog_type_name}
+                </span>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.8, px: 1 }}>
+                  <Typography variant="body2" fontWeight="bold" sx={{ color: edgeType.config?.color || C.accent, fontFamily: 'monospace' }}>
                     {edgeType.edge_type_name}
                   </Typography>
-                  <Typography variant="body2">→</Typography>
+                  <ArrowForwardIcon sx={{ fontSize: 14, color: C.textMuted }} />
                 </Box>
-                <Chip 
-                  label={edgeType.object_node_type_name || objectNodeType.catalog_type_name} 
-                  variant="filled"
-                  color="success"
-                  sx={{ fontWeight: 'bold' }}
-                />
+                <span style={{
+                  display: 'inline-flex', alignItems: 'center', padding: '4px 12px',
+                  borderRadius: 8, fontSize: 12, fontWeight: 700,
+                  color: C.purple, background: isDark ? 'rgba(167,139,250,0.12)' : 'rgba(167,139,250,0.08)',
+                  border: `1px solid rgba(167,139,250,0.3)`,
+                }}>
+                  {edgeType.object_node_type_name || objectNodeType.catalog_type_name}
+                </span>
               </Box>
             </Box>
 
             {/* React Flow Diagram */}
-            <Box sx={{ mt: 4, mb: 3 }}>
-              <Typography variant="subtitle2" gutterBottom fontWeight="bold">Relationship Flow</Typography>
+            <Box sx={{ mt: 3 }}>
+              <Typography variant="subtitle2" sx={{ color: C.textMuted, mb: 1, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', fontSize: '0.75rem' }}>
+                Relationship Flow
+              </Typography>
               <Paper 
+                elevation={0}
                 sx={{ 
-                  height: 450, 
-                  borderRadius: 2, 
+                  height: 380, 
+                  borderRadius: 2.5, 
                   overflow: 'hidden', 
-                  border: `1px solid ${theme.palette.divider}`,
-                  backgroundColor: alpha(theme.palette.background.default, 0.5)
+                  border: `1px solid ${C.border}`,
+                  bgcolor: isDark ? '#0A0C12' : '#F8FAFC'
                 }}
               >
                 <ReactFlow 
@@ -346,50 +409,64 @@ export const EdgeTypeDetailPage: React.FC = () => {
                   onEdgesChange={onEdgesChange}
                   fitView
                 >
-                  <Background color={theme.palette.divider} gap={16} />
+                  <Background color={isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.08)'} gap={20} />
                   <Controls />
                 </ReactFlow>
               </Paper>
             </Box>
           </Grid>
           
-          <Grid size={{ 'xs': 12, 'lg': 4 }}>
-            <Stack spacing={3}>
+          <Grid size={{ xs: 12, lg: 5 }}>
+            <Stack spacing={2.5}>
               {/* Properties Sidebar */}
-              <Card variant="outlined" sx={{ borderRadius: 3, height: '100%', minHeight: 450 }}>
+              <Card 
+                elevation={0} 
+                sx={{ 
+                  borderRadius: 2.5, 
+                  bgcolor: isDark ? '#0F1117' : '#F8FAFC',
+                  border: `1px solid ${C.border}`,
+                  minHeight: 280
+                }}
+              >
                 <Box sx={{ 
                   p: 2, 
-                  borderBottom: `1px solid ${theme.palette.divider}`, 
-                  bgcolor: alpha(theme.palette.primary.main, 0.05),
+                  borderBottom: `1px solid ${C.border}`, 
                   display: 'flex',
                   justifyContent: 'space-between',
                   alignItems: 'center'
                 }}>
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                    <SettingsInputComponentIcon fontSize="small" color="primary" />
-                    <Typography variant="subtitle1" fontWeight="bold">Properties</Typography>
+                    <SettingsInputComponentIcon fontSize="small" sx={{ color: C.accent }} />
+                    <Typography variant="subtitle2" fontWeight="bold" sx={{ color: C.text }}>Properties</Typography>
                   </Box>
-                  <IconButton size="small" color="primary" onClick={handleEditPropsOpen}>
+                  <IconButton size="small" sx={{ color: C.accent, bgcolor: C.accentDim }} onClick={handleEditPropsOpen}>
                     <EditIcon fontSize="small" />
                   </IconButton>
                 </Box>
                 <Box sx={{ p: 0 }}>
                   {edgeType.properties && edgeType.properties.length > 0 ? (
-                    <Stack divider={<Divider />}>
+                    <Stack divider={<Divider sx={{ borderColor: C.border }} />}>
                       {edgeType.properties.map((prop: any) => (
-                        <Box key={prop.name} sx={{ p: 2, '&:hover': { bgcolor: alpha(theme.palette.action.hover, 0.5) } }}>
+                        <Box key={prop.name} sx={{ p: 1.5, '&:hover': { bgcolor: isDark ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.02)' } }}>
                           <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                            <Typography variant="body2" fontWeight="bold">{prop.label || prop.name}</Typography>
-                            <Chip label={prop.data_type || 'string'} size="small" variant="outlined" sx={{ height: 20, fontSize: '0.65rem' }} />
+                            <Typography variant="body2" fontWeight="bold" sx={{ color: C.text }}>{prop.label || prop.name}</Typography>
+                            <span style={{
+                              display: 'inline-flex', alignItems: 'center', padding: '1px 6px',
+                              borderRadius: 4, fontSize: 10, fontWeight: 700,
+                              color: C.blue, background: isDark ? 'rgba(96,165,250,0.12)' : 'rgba(96,165,250,0.08)',
+                              border: `1px solid rgba(96,165,250,0.3)`, fontFamily: 'monospace'
+                            }}>
+                              {prop.data_type || 'string'}
+                            </span>
                           </Box>
                           {prop.description && (
-                            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
+                            <Typography variant="caption" sx={{ color: C.textMuted, display: 'block', mt: 0.5 }}>
                               {prop.description}
                             </Typography>
                           )}
                           {prop.properties && prop.properties.length > 0 && (
-                            <Box sx={{ mt: 1, pl: 2, borderLeft: `2px solid ${theme.palette.divider}` }}>
-                              <Typography variant="caption" color="text.secondary">
+                            <Box sx={{ mt: 1, pl: 2, borderLeft: `2px solid ${C.border}` }}>
+                              <Typography variant="caption" sx={{ color: C.textMuted }}>
                                 {prop.properties.length} nested fields
                               </Typography>
                             </Box>
@@ -398,33 +475,53 @@ export const EdgeTypeDetailPage: React.FC = () => {
                       ))}
                     </Stack>
                   ) : (
-                    <Box sx={{ p: 4, textAlign: 'center' }}>
-                      <InfoOutlinedIcon sx={{ fontSize: 40, color: 'text.disabled', mb: 1 }} />
-                      <Typography variant="body2" color="text.secondary">No properties defined.</Typography>
-                      <Button size="small" sx={{ mt: 2 }} onClick={handleEditPropsOpen}>Add Property</Button>
+                    <Box sx={{ p: 3, textAlign: 'center' }}>
+                      <InfoOutlinedIcon sx={{ fontSize: 32, color: C.textMuted, mb: 1, opacity: 0.5 }} />
+                      <Typography variant="body2" sx={{ color: C.textMuted }}>No properties defined.</Typography>
+                      <Button size="small" sx={{ mt: 1.5, color: C.accent }} onClick={handleEditPropsOpen}>Add Property</Button>
                     </Box>
                   )}
                 </Box>
               </Card>
 
               {/* Info Card */}
-              <Card variant="outlined" sx={{ borderRadius: 3 }}>
-                <Box sx={{ p: 2, borderBottom: `1px solid ${theme.palette.divider}`, bgcolor: alpha(theme.palette.grey[500], 0.05) }}>
-                  <Typography variant="subtitle2">System Metadata</Typography>
+              <Card 
+                elevation={0} 
+                sx={{ 
+                  borderRadius: 2.5,
+                  bgcolor: isDark ? '#0F1117' : '#F8FAFC',
+                  border: `1px solid ${C.border}`,
+                }}
+              >
+                <Box sx={{ p: 1.5, px: 2, borderBottom: `1px solid ${C.border}` }}>
+                  <Typography variant="subtitle2" sx={{ color: C.textMuted, fontWeight: 700, fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                    System Metadata
+                  </Typography>
                 </Box>
                 <Box sx={{ p: 2 }}>
-                  <Stack spacing={1}>
-                    <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-                      <Typography variant="body2" color="text.secondary">ID</Typography>
-                      <Typography variant="caption" fontFamily="monospace">{edgeType.id}</Typography>
+                  <Stack spacing={1.5}>
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <Typography variant="body2" sx={{ color: C.textMuted }}>ID</Typography>
+                      <Typography variant="caption" sx={{ color: C.text, fontFamily: 'monospace' }}>{edgeType.id}</Typography>
                     </Box>
-                    <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-                      <Typography variant="body2" color="text.secondary">Status</Typography>
-                      <Chip label={edgeType.is_active ? 'Active' : 'Inactive'} size="small" color={edgeType.is_active ? 'success' : 'default'} />
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <Typography variant="body2" sx={{ color: C.textMuted }}>Status</Typography>
+                      <span style={{
+                        display: 'inline-flex', alignItems: 'center', padding: '1px 6px',
+                        borderRadius: 4, fontSize: 10, fontWeight: 700,
+                        color: edgeType.is_active ? C.success : C.textMuted,
+                        background: edgeType.is_active ? (isDark ? `${C.success}18` : `${C.success}12`) : 'transparent',
+                        border: `1px solid ${edgeType.is_active ? C.success : C.border}44`,
+                        fontFamily: 'monospace', textTransform: 'uppercase',
+                      }}>
+                        {edgeType.is_active ? 'Active' : 'Inactive'}
+                      </span>
                     </Box>
-                    <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-                      <Typography variant="body2" color="text.secondary">Last Updated</Typography>
-                      <Typography variant="caption">{new Date(edgeType.updated_at).toLocaleDateString()}</Typography>
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <Typography variant="body2" sx={{ color: C.textMuted }}>Last Updated</Typography>
+                      <Typography variant="caption" sx={{ color: C.textMuted, fontFamily: 'monospace' }}>
+                        {new Date(edgeType.updated_at).toLocaleDateString()}
+                      </Typography>
                     </Box>
                   </Stack>
                 </Box>
@@ -440,8 +537,16 @@ export const EdgeTypeDetailPage: React.FC = () => {
         onClose={() => setEditOpen(false)}
         maxWidth="md"
         fullWidth
+        PaperProps={{
+          sx: {
+            bgcolor: C.panel,
+            color: C.text,
+            border: `1px solid ${C.border}`,
+            borderRadius: 3,
+          }
+        }}
       >
-        <DialogTitle>
+        <DialogTitle sx={{ borderBottom: `1px solid ${C.border}`, fontWeight: 700 }}>
           Edit Edge Type: {edgeType?.edge_type_name}
           <IconButton
             aria-label="close"
@@ -450,31 +555,41 @@ export const EdgeTypeDetailPage: React.FC = () => {
               position: 'absolute',
               right: 8,
               top: 8,
-              color: (theme) => theme.palette.grey[500],
+              color: C.textMuted,
             }}
           >
             <CloseIcon />
           </IconButton>
         </DialogTitle>
-        <DialogContent dividers>
-          <Stack spacing={3} sx={{ mt: 2 }}>
+        <DialogContent dividers sx={{ borderColor: C.border, pt: 3 }}>
+          <Stack spacing={3} sx={{ mt: 1 }}>
             {/* Active Status */}
             <FormControl fullWidth>
-              <FormLabel>Status</FormLabel>
+              <FormLabel sx={{ color: C.textMuted, fontWeight: 600, fontSize: '0.85rem' }}>Status</FormLabel>
               <Box sx={{ display: 'flex', gap: 2, mt: 1 }}>
                 <Button
                   variant={editIsActive ? 'contained' : 'outlined'}
-                  color="success"
                   onClick={() => setEditIsActive(true)}
-                  sx={{ flex: 1, textTransform: 'none' }}
+                  sx={{ 
+                    flex: 1, 
+                    bgcolor: editIsActive ? C.success : 'transparent',
+                    color: editIsActive ? '#fff' : C.textMuted,
+                    borderColor: editIsActive ? C.success : C.border,
+                    '&:hover': { bgcolor: editIsActive ? '#059669' : `${C.success}18` }
+                  }}
                 >
                   Active
                 </Button>
                 <Button
                   variant={!editIsActive ? 'contained' : 'outlined'}
-                  color="error"
                   onClick={() => setEditIsActive(false)}
-                  sx={{ flex: 1, textTransform: 'none' }}
+                  sx={{ 
+                    flex: 1, 
+                    bgcolor: !editIsActive ? C.danger : 'transparent',
+                    color: !editIsActive ? '#fff' : C.textMuted,
+                    borderColor: !editIsActive ? C.danger : C.border,
+                    '&:hover': { bgcolor: !editIsActive ? '#DC2626' : `${C.danger}18` }
+                  }}
                 >
                   Inactive
                 </Button>
@@ -490,6 +605,13 @@ export const EdgeTypeDetailPage: React.FC = () => {
               multiline
               rows={3}
               placeholder="Enter edge type description..."
+              InputProps={{
+                sx: {
+                  bgcolor: isDark ? '#0A0C12' : '#F8FAFC',
+                  color: C.text,
+                  '& fieldset': { borderColor: C.border },
+                }
+              }}
             />
 
             {/* Color Picker */}
@@ -503,12 +625,13 @@ export const EdgeTypeDetailPage: React.FC = () => {
             </Box>
           </Stack>
         </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setEditOpen(false)}>Cancel</Button>
+        <DialogActions sx={{ p: 2, borderTop: `1px solid ${C.border}` }}>
+          <Button onClick={() => setEditOpen(false)} sx={{ color: C.textMuted }}>Cancel</Button>
           <Button 
             onClick={handleEditSave} 
             variant="contained" 
             disabled={editIsSaving}
+            sx={{ bgcolor: C.accent, color: '#fff', '&:hover': { bgcolor: '#4F46E5' } }}
           >
             {editIsSaving ? 'Saving...' : 'Save Changes'}
           </Button>
@@ -521,11 +644,19 @@ export const EdgeTypeDetailPage: React.FC = () => {
         onClose={() => setEditPropsOpen(false)}
         maxWidth="lg"
         fullWidth
+        PaperProps={{
+          sx: {
+            bgcolor: C.panel,
+            color: C.text,
+            border: `1px solid ${C.border}`,
+            borderRadius: 3,
+          }
+        }}
       >
-        <DialogTitle>
+        <DialogTitle sx={{ borderBottom: `1px solid ${C.border}` }}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            <SettingsInputComponentIcon color="primary" />
-            <Typography variant="h6">Manage Edge Type Properties</Typography>
+            <SettingsInputComponentIcon sx={{ color: C.accent }} />
+            <Typography variant="h6" fontWeight="bold">Manage Edge Type Properties</Typography>
           </Box>
           <IconButton
             aria-label="close"
@@ -534,13 +665,13 @@ export const EdgeTypeDetailPage: React.FC = () => {
               position: 'absolute',
               right: 8,
               top: 8,
-              color: (theme) => theme.palette.grey[500],
+              color: C.textMuted,
             }}
           >
             <CloseIcon />
           </IconButton>
         </DialogTitle>
-        <DialogContent dividers sx={{ bgcolor: alpha(theme.palette.grey[500], 0.02) }}>
+        <DialogContent dividers sx={{ borderColor: C.border, bgcolor: isDark ? '#0F1117' : '#F8FAFC' }}>
           <Box sx={{ py: 2 }}>
             <PropertyEditor 
               properties={editProps} 
@@ -548,12 +679,13 @@ export const EdgeTypeDetailPage: React.FC = () => {
             />
           </Box>
         </DialogContent>
-        <DialogActions sx={{ p: 2 }}>
-          <Button onClick={() => setEditPropsOpen(false)}>Cancel</Button>
+        <DialogActions sx={{ p: 2, borderTop: `1px solid ${C.border}` }}>
+          <Button onClick={() => setEditPropsOpen(false)} sx={{ color: C.textMuted }}>Cancel</Button>
           <Button 
             onClick={handleSaveProperties} 
             variant="contained" 
             disabled={editPropsSaving}
+            sx={{ bgcolor: C.accent, color: '#fff', '&:hover': { bgcolor: '#4F46E5' } }}
             startIcon={editPropsSaving ? <Skeleton variant="circular" width={20} height={20} /> : null}
           >
             {editPropsSaving ? 'Saving...' : 'Save All Properties'}

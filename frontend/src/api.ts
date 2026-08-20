@@ -129,8 +129,8 @@ export function getFolderDiff(folderId: string, from: string, to: string): Promi
   return fetchAPI(`/folders/${folderId}/diff?${params.toString()}`);
 }
 
-export function getSuggestions(userId: string, datasourceId: string): Promise<SemanticSearchResult[]> {
-  const params = new URLSearchParams({ user_id: userId, tenant_instance_id: datasourceId });
+export function getSuggestions(datasourceId: string): Promise<SemanticSearchResult[]> {
+  const params = new URLSearchParams({ tenant_instance_id: datasourceId });
   return fetchAPI(`/search/suggestions?${params.toString()}`);
 }
 
@@ -152,23 +152,20 @@ export function semanticSearch(req: SemanticSearchRequest): Promise<SemanticSear
   });
 }
 
-export function listGoals(userId: string): Promise<Goal[]> {
-  const params = new URLSearchParams({ user_id: userId });
-  return fetchAPI(`/goals?${params.toString()}`);
+export function listGoals(): Promise<Goal[]> {
+  return fetchAPI('/goals');
 }
 
-export function listTours(userId: string): Promise<Tour[]> {
-  const params = new URLSearchParams({ user_id: userId });
-  return fetchAPI(`/tours?${params.toString()}`);
+export function listTours(): Promise<Tour[]> {
+  return fetchAPI('/tours');
 }
 
 export function getTour(tourId: string): Promise<{ steps: Array<{ id: string; title: string; content: string; target?: string; placement?: string }> }> {
   return fetchAPI(`/tours/${tourId}`);
 }
 
-export function listSemanticViews(datasourceId: string): Promise<SemanticViewMeta[]> {
-  const params = new URLSearchParams({ tenant_instance_id: datasourceId });
-  return fetchAPI(`/semantic-views?${params.toString()}`);
+export function listSemanticViews(): Promise<SemanticViewMeta[]> {
+  return fetchAPI('/semantic-views');
 }
 
 // Natural language translation (NLQ) helper - stubbed to match imports used in the UI.
@@ -193,9 +190,8 @@ export function getImpactAnalysis(assetId: string): Promise<ImpactAnalysis> {
   return fetchAPI(`/lineage/${assetId}/impact`);
 }
 
-export function listQueryTemplates(datasourceId: string): Promise<QueryTemplateMeta[]> {
-  const params = new URLSearchParams({ tenant_instance_id: datasourceId });
-  return fetchAPI(`/query-templates?${params.toString()}`);
+export function listQueryTemplates(): Promise<QueryTemplateMeta[]> {
+  return fetchAPI('/query-templates');
 }
 
 export function getQueryTemplate(templateId: string): Promise<QueryTemplate> {
@@ -219,9 +215,8 @@ export function getApprovalStatus(assetId: string): Promise<Approval> {
   return fetchAPI(`/approval/${assetId}`);
 }
 
-export function listAlerts(userId: string): Promise<ExplorerAlert[]> {
-  const params = new URLSearchParams({ user_id: userId });
-  return fetchAPI(`/alerts?${params.toString()}`);
+export function listAlerts(): Promise<ExplorerAlert[]> {
+  return fetchAPI('/alerts');
 }
 
 export function markAlertAsRead(alertId: string): Promise<void> {
@@ -264,11 +259,8 @@ export function requestAccess(modelId: string, permission: string, reason: strin
   });
 }
 
-export function listAccessRequests(params: { userId?: string; reviewerId?: string }): Promise<SemanticModelAccessRequest[]> {
-  const query = new URLSearchParams();
-  if (params.userId) query.set('user_id', params.userId);
-  if (params.reviewerId) query.set('reviewer_id', params.reviewerId);
-  return fetchAPI(`/access-request?${query.toString()}`);
+export function listAccessRequests(): Promise<SemanticModelAccessRequest[]> {
+  return fetchAPI('/access-request');
 }
 
 export function approveAccessRequest(requestId: string): Promise<void> {
@@ -315,9 +307,8 @@ export function simulatePolicyChange(policy: AccessControlPolicy): Promise<Polic
   });
 }
 
-export function getClaimAwareLineage(assetId: string, userId: string): Promise<ClaimAwareLineageGraphData> {
-  const params = new URLSearchParams({ user_id: userId });
-  return fetchAPI(`/lineage/${assetId}/claim-aware?${params.toString()}`);
+export function getClaimAwareLineage(assetId: string): Promise<ClaimAwareLineageGraphData> {
+  return fetchAPI(`/lineage/${assetId}/claim-aware`);
 }
 
 export function listNotifications(): Promise<SemanticNotification[]> {
@@ -381,9 +372,8 @@ export function detectClaimDrift(): Promise<SemanticModelClaim[]> {
   return fetchAPI('/claims/drift');
 }
 
-export function listClaimConflicts(userId: string): Promise<ClaimConflict[]> {
-  const params = new URLSearchParams({ user_id: userId });
-  return fetchAPI(`/claims/conflicts?${params.toString()}`);
+export function listClaimConflicts(): Promise<ClaimConflict[]> {
+  return fetchAPI('/claims/conflicts');
 }
 
 export function resolveClaimConflict(conflictId: string, action: string): Promise<void> {
@@ -396,9 +386,8 @@ export function getGovernanceHeatmap(): Promise<GovernanceHeatmapDataPoint[]> {
 
 // --- Unified Access Intelligence API ---
 
-export function getEffectiveClaims(userId: string, tenantId: string): Promise<SemanticModelClaim[]> {
-  const params = new URLSearchParams({ user_id: userId, tenant_id: tenantId });
-  return fetchAPI(`/intelligence/claims/effective?${params.toString()}`);
+export function getEffectiveClaims(): Promise<SemanticModelClaim[]> {
+  return fetchAPI('/intelligence/claims/effective');
 }
 
 export function grantClaim(req: GrantClaimRequest): Promise<SemanticModelClaim> {
@@ -409,11 +398,11 @@ export function grantClaim(req: GrantClaimRequest): Promise<SemanticModelClaim> 
   });
 }
 
-export function assignBundle(userId: string, bundleId: string): Promise<void> {
+export function assignBundle(bundleId: string): Promise<void> {
   return fetchAPI('/intelligence/bundles/assign', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ user_id: userId, bundle_id: bundleId }),
+    body: JSON.stringify({ bundle_id: bundleId }),
   });
 }
 
@@ -425,11 +414,9 @@ export function evaluateAccess(req: EvaluateAccessRequest): Promise<EvaluateAcce
   });
 }
 
-export function refreshClaimsCache(userId: string, tenantId: string): Promise<void> {
+export function refreshClaimsCache(): Promise<void> {
   return fetchAPI('/intelligence/claims/refresh', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ user_id: userId, tenant_id: tenantId }),
   });
 }
 
@@ -449,9 +436,8 @@ export function simulateAccess(req: SimulateAccessRequest): Promise<EvaluateAcce
   });
 }
 
-export function getGovernanceCockpitSnapshot(tenantId: string): Promise<GovernanceCockpitSnapshot> {
-  const params = new URLSearchParams({ tenant_id: tenantId });
-  return fetchAPI(`/intelligence/governance/cockpit?${params.toString()}`);
+export function getGovernanceCockpitSnapshot(): Promise<GovernanceCockpitSnapshot> {
+  return fetchAPI('/intelligence/governance/cockpit');
 }
 
 // --- Governance Automation API ---
@@ -476,9 +462,8 @@ export function resumeAutomation(): Promise<{ status: string }> {
   return fetchAPI('/automation/resume', { method: 'POST' });
 }
 
-export function getStewardDomains(userId: string): Promise<string[]> {
-  const params = new URLSearchParams({ user_id: userId });
-  return fetchAPI(`/steward/domains?${params.toString()}`);
+export function getStewardDomains(): Promise<string[]> {
+  return fetchAPI('/steward/domains');
 }
 
 export function listAllRoles(): Promise<string[]> {
@@ -566,32 +551,20 @@ export type ViewChangePlan = {
   [k: string]: unknown;
 };
 
-export function compareViews(tenantId?: string, datasourceId?: string): Promise<{ message: string; change_plans: ViewChangePlan[] }> {
-  const qs = new URLSearchParams();
-  if (tenantId) qs.set('tenant_id', tenantId);
-  if (datasourceId) qs.set('tenant_instance_id', datasourceId);
-  const path = qs.toString() ? `/views/compare?${qs.toString()}` : '/views/compare';
-  return fetchAPI(path);
+export function compareViews(): Promise<{ message: string; change_plans: ViewChangePlan[] }> {
+  return fetchAPI('/views/compare');
 }
 
-export function applyViewChanges(plans: ViewChangePlan[], tenantId?: string, datasourceId?: string): Promise<{ status: string; message: string }> {
-  const qs = new URLSearchParams();
-  if (tenantId) qs.set('tenant_id', tenantId);
-  if (datasourceId) qs.set('tenant_instance_id', datasourceId);
-  const path = qs.toString() ? `/views/apply?${qs.toString()}` : '/views/apply';
-  return fetchAPI(path, {
+export function applyViewChanges(plans: ViewChangePlan[]): Promise<{ status: string; message: string }> {
+  return fetchAPI('/views/apply', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ views: plans }),
   });
 }
 
-export function rejectViewChanges(plans: ViewChangePlan[], reason: string, tenantId?: string, datasourceId?: string): Promise<{ status: string; message: string }> {
-  const qs = new URLSearchParams();
-  if (tenantId) qs.set('tenant_id', tenantId);
-  if (datasourceId) qs.set('tenant_instance_id', datasourceId);
-  const path = qs.toString() ? `/views/reject?${qs.toString()}` : '/views/reject';
-  return fetchAPI(path, {
+export function rejectViewChanges(plans: ViewChangePlan[], reason: string): Promise<{ status: string; message: string }> {
+  return fetchAPI('/views/reject', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ views: plans, reason }),
@@ -626,12 +599,10 @@ export function getNLQuerySuggestions(): Promise<NLQuerySuggestion[]> {
 
 // ---- Conversation API Functions ----
 
-export function startConversation(userId: string, tenantId: string, datasource: string): Promise<ConversationContext> {
+export function startConversation(datasource: string): Promise<ConversationContext> {
   return fetchAPI('/conversation/start', {
     method: 'POST',
     body: JSON.stringify({
-      user_id: userId,
-      tenant_id: tenantId,
       datasource: datasource,
     }),
   });

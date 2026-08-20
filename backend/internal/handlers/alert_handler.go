@@ -6,6 +6,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	"github.com/hondyman/uisce/backend/internal/security"
 	"github.com/hondyman/uisce/backend/internal/services"
 )
 
@@ -29,11 +30,8 @@ func (h *AlertsHandler) RegisterRoutes(r chi.Router) {
 
 // HandleList retrieves alerts for a user.
 func (h *AlertsHandler) HandleList(w http.ResponseWriter, r *http.Request) {
-	userID := r.URL.Query().Get("user_id")
-	if userID == "" {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]interface{}{"error": "user_id is required"})
+	userID, ok := security.RequireUser(w, r)
+	if !ok {
 		return
 	}
 	alerts, err := h.service.List(r.Context(), userID)
@@ -56,8 +54,10 @@ func (h *AlertsHandler) HandleMarkRead(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(map[string]interface{}{"error": "Invalid alert ID"})
 		return
 	}
-	// In a real app, userID would come from auth context.
-	userID := "current_user"
+	userID, ok := security.RequireUser(w, r)
+	if !ok {
+		return
+	}
 	err = h.service.MarkRead(r.Context(), alertID, userID)
 	if err != nil {
 		w.Header().Set("Content-Type", "application/json")

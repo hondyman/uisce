@@ -3,6 +3,7 @@ package api
 import (
 	"database/sql"
 	"encoding/json"
+	"log"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -99,15 +100,20 @@ func (h *IpWhitelistAPIHandlers) listTenants(w http.ResponseWriter, r *http.Requ
 
 func (h *IpWhitelistAPIHandlers) getIpWhitelist(w http.ResponseWriter, r *http.Request) {
 	tenantId := chi.URLParam(r, "tenantId")
+	log.Printf("[DEBUG] getIpWhitelist called for tenant: %s", tenantId)
 
 	var whitelist []map[string]interface{}
 	// Return entries assigned to this tenant, plus any entries with no assignments (global/unassigned)
 	rows, err := h.DB.QueryContext(r.Context(), `
-		SELECT e.ip_address, e.label
+		SELECT e.ip_address, e.label,
+			   COALESCE(array_agg(a.tenant_id::text) FILTER (WHERE a.tenant_id IS NOT NULL), ARRAY[]::text[]) as tenant_ids,
+			   NOT EXISTS (SELECT 1 FROM tenant_ip_whitelist_assignments a2 WHERE a2.whitelist_id = e.id) as is_global
 		FROM tenant_ip_whitelist_entries e
+		LEFT JOIN tenant_ip_whitelist_assignments a ON a.whitelist_id = e.id
 		LEFT JOIN tenant_ip_whitelist_assignments a_self ON a_self.whitelist_id = e.id AND a_self.tenant_id = $1
 		WHERE a_self.tenant_id IS NOT NULL
 		   OR NOT EXISTS (SELECT 1 FROM tenant_ip_whitelist_assignments a2 WHERE a2.whitelist_id = e.id)
+		GROUP BY e.ip_address, e.label
 		ORDER BY e.ip_address
 	`, tenantId)
 	if err != nil {
@@ -119,11 +125,17 @@ func (h *IpWhitelistAPIHandlers) getIpWhitelist(w http.ResponseWriter, r *http.R
 	for rows.Next() {
 		var ipAddress string
 		var label sql.NullString
-		if err := rows.Scan(&ipAddress, &label); err != nil {
+		var tenantIds pq.StringArray
+		var isGlobal bool
+		if err := rows.Scan(&ipAddress, &label, &tenantIds, &isGlobal); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		item := map[string]interface{}{"ipAddress": ipAddress}
+		item := map[string]interface{}{
+			"ipAddress":  ipAddress,
+			"tenantIds":  []string(tenantIds),
+			"allTenants": isGlobal,
+		}
 		if label.Valid {
 			item["label"] = label.String
 		} else {
@@ -132,6 +144,7 @@ func (h *IpWhitelistAPIHandlers) getIpWhitelist(w http.ResponseWriter, r *http.R
 		whitelist = append(whitelist, item)
 	}
 
+	log.Printf("[DEBUG] getIpWhitelist returning %d entries for tenant %s", len(whitelist), tenantId)
 	respond(w, r, map[string]interface{}{"whitelist": whitelist}, nil)
 }
 
@@ -190,10 +203,11 @@ func (h *IpWhitelistAPIHandlers) addIpWhitelist(w http.ResponseWriter, r *http.R
 				JOIN tenant_ip_whitelist_entries e ON e.id = a.whitelist_id
 				WHERE e.ip_address = $1
 			`, existing)
-			if err != nil {
-				http.Error(w, err.Error(), http.StatusInternalServerError)
-				return
-			}
+if err != nil {
+		log.Printf("[ERROR] getIpWhitelist query failed: %v", err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
 			defer rows2.Close()
 			var tenantIds []string
 			for rows2.Next() {

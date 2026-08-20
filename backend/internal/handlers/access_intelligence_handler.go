@@ -6,6 +6,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	"github.com/hondyman/uisce/backend/internal/security"
 	"github.com/hondyman/uisce/backend/internal/services"
 	"github.com/hondyman/uisce/backend/models"
 )
@@ -43,12 +44,15 @@ func (h *AccessIntelligenceHandler) HandleGetEffectiveClaims(w http.ResponseWrit
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	userID := r.URL.Query().Get("user_id")
+	userID, ok := security.RequireUser(w, r)
+	if !ok {
+		return
+	}
 	tenantID := secCtx.TenantID
-	if userID == "" || tenantID == "" {
+	if tenantID == "" {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]interface{}{"error": "user_id and tenant_id are required"})
+		json.NewEncoder(w).Encode(map[string]interface{}{"error": "tenant_id is required"})
 		return
 	}
 	claims, err := h.service.GetEffectiveClaims(ctx, userID, tenantID)

@@ -1,4 +1,4 @@
-import { getRequiredTenantScope, hasTenantScope } from './tenantScope';
+import { getRequiredTenantScope, hasTenantScope, readCachedSelection } from './tenantScope';
 import resolveApiUrl from './resolveApiUrl';
 import { getSelectedRegion } from '../lib/region';
 
@@ -30,15 +30,16 @@ export async function apiClient<T = Response>(input: RequestInfo | URL, init?: R
             if (region) headers.set('X-Tenant-Region', region);
         }
 
-        if (hasTenantScope()) {
-            const { tenantId, datasourceId } = getRequiredTenantScope();
-            if (!headers.has('X-Tenant-ID')) {
-                headers.set('X-Tenant-ID', tenantId);
+        try {
+            const { tenant, datasource } = readCachedSelection();
+            if (tenant?.id && !headers.has('X-Tenant-ID')) {
+                headers.set('X-Tenant-ID', tenant.id);
             }
-            if (!headers.has('X-Tenant-Datasource-ID')) {
+            const datasourceId = datasource?.id || datasource?.alpha_tenant_instance_id;
+            if (datasourceId && !headers.has('X-Tenant-Datasource-ID')) {
                 headers.set('X-Tenant-Datasource-ID', datasourceId);
             }
-        }
+        } catch (_) {}
     }
 
     // Inject Authorization Token - check multiple storage locations for OIDC tokens
@@ -89,7 +90,12 @@ export async function apiClient<T = Response>(input: RequestInfo | URL, init?: R
     });
 
     if (!response.ok) {
-        throw new Error(`API Error: ${response.status} ${response.statusText}`);
+        let errDetails = '';
+        try {
+            errDetails = await response.text();
+        } catch (_) {}
+        console.error(`[apiClient] Request to ${url} failed with ${response.status} ${response.statusText}:`, errDetails);
+        throw new Error(`API Error: ${response.status} ${response.statusText}${errDetails ? ` - ${errDetails}` : ''}`);
     }
 
     const contentType = response.headers.get('content-type');

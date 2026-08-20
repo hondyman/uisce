@@ -33,8 +33,8 @@ deny[msg] {
     msg := sprintf("Access to restricted column '%s' denied", [col])
 }
 
-# Deny dangerous characters in NodeName
+# Deny dangerous characters in NodeName (allows letters, numbers, underscores, spaces, hyphens, parentheses, and dots)
 deny[msg] {
-    not regex.match("^[a-zA-Z0-9_]+$", input.node_name)
-    msg := "Node name must contain only alphanumeric characters and underscores"
+    not regex.match("^[a-zA-Z0-9_ \\-\\(\\)\\.]+$", input.node_name)
+    msg := "Node name contains invalid characters"
 }

@@ -12,6 +12,7 @@
  */
 
 import { getSelectedRegion } from './region';
+import { readCachedSelection } from '../utils/tenantScope';
 
 /**
  * Helper to get all required headers from localStorage / AccessContext
@@ -46,40 +47,18 @@ function getTenantHeadersInternal(): Record<string, string> {
     // Silently fail
   }
 
-  // Try to get tenant/datasource from legacy storage keys
+  // Resolve tenant and datasource from unified scope helper
   try {
-    const tenantData = localStorage.getItem('selected_tenant');
-    const datasourceData = localStorage.getItem('selected_datasource');
-
-    if (tenantData) {
-      const tenant = JSON.parse(tenantData);
-      if (tenant?.id) headers['X-Tenant-ID'] = tenant.id;
+    const { tenant, datasource } = readCachedSelection();
+    if (tenant?.id) {
+      headers['X-Tenant-ID'] = tenant.id;
     }
-
-    if (datasourceData) {
-      const datasource = JSON.parse(datasourceData);
-      if (datasource?.id) headers['X-Tenant-Datasource-ID'] = datasource.id;
+    const datasourceId = datasource?.id || datasource?.alpha_tenant_instance_id;
+    if (datasourceId) {
+      headers['X-Tenant-Datasource-ID'] = datasourceId;
     }
   } catch (_) {
-    // Silently fail if localStorage parsing fails
-  }
-
-  // Fallback: read from AccessContext's operating_scope storage
-  if (!headers['X-Tenant-ID'] || !headers['X-Tenant-Datasource-ID']) {
-    try {
-      const scopeData = localStorage.getItem('operating_scope');
-      if (scopeData) {
-        const scope = JSON.parse(scopeData);
-        if (!headers['X-Tenant-ID'] && scope?.tenantId) {
-          headers['X-Tenant-ID'] = scope.tenantId;
-        }
-        if (!headers['X-Tenant-Datasource-ID'] && scope?.datasourceId) {
-          headers['X-Tenant-Datasource-ID'] = scope.datasourceId;
-        }
-      }
-    } catch (_) {
-      // Silently fail
-    }
+    // Silently fail
   }
 
   const region = getSelectedRegion();

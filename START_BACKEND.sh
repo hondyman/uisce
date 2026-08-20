@@ -45,18 +45,20 @@ if [ -f "$SCRIPT_DIR/scripts/infisical-bootstrap.sh" ] && command -v infisical &
     INFISICAL_TOKEN="${INFISICAL_TOKEN:-}" "$SCRIPT_DIR/scripts/infisical-bootstrap.sh" -e dev || true
 fi
 
-# Load secrets from backend/.env, root .env or .env.infisical if available
+# Load secrets from root .env, backend/.env, or .env.infisical if available
+if [ -f "$SCRIPT_DIR/.env" ]; then
+    echo -e "${YELLOW}Loading environment from .env...${NC}"
+    set -a
+    source "$SCRIPT_DIR/.env"
+    set +a
+fi
 if [ -f "$BACKEND_DIR/.env" ]; then
     echo -e "${YELLOW}Loading environment from backend/.env...${NC}"
     set -a
     source "$BACKEND_DIR/.env"
     set +a
-elif [ -f "$SCRIPT_DIR/.env" ]; then
-    echo -e "${YELLOW}Loading environment from .env...${NC}"
-    set -a
-    source "$SCRIPT_DIR/.env"
-    set +a
-elif [ -f "$SCRIPT_DIR/.env.infisical" ]; then
+fi
+if [ -f "$SCRIPT_DIR/.env.infisical" ]; then
     echo -e "${YELLOW}Loading secrets from .env.infisical...${NC}"
     set -a
     source "$SCRIPT_DIR/.env.infisical"
@@ -64,17 +66,14 @@ elif [ -f "$SCRIPT_DIR/.env.infisical" ]; then
 fi
 
 # Set defaults if not loaded
-# POSTGRES_DSN is used by internal/api/server.go
-if [[ -z "${POSTGRES_DSN:-}" ]]; then
-  echo "ERROR: POSTGRES_DSN environment variable is not set" >&2
-  exit 1
-fi
-if [[ -z "${JWT_SECRET:-}" ]]; then
-  echo "ERROR: JWT_SECRET environment variable is not set" >&2
-  exit 1
-fi
+export POSTGRES_DSN="${POSTGRES_DSN:-${DATABASE_URL:-postgresql://postgres:postgres@100.84.50.65:5432/alpha?sslmode=disable}}"
+export DATABASE_URL="${DATABASE_URL:-$POSTGRES_DSN}"
+export JWT_SECRET="${JWT_SECRET:-test-secret}"
+export PORT="${PORT:-8080}"
 export TEMPORAL_HOST="${TEMPORAL_HOST:-100.84.50.65:7233}"
 export TEMPORAL_RETRY_ATTEMPTS="${TEMPORAL_RETRY_ATTEMPTS:-2}"
+export API_TOKEN_ENCRYPTION_KEY_DEV_FALLBACK="${API_TOKEN_ENCRYPTION_KEY_DEV_FALLBACK:-true}"
+export API_TOKEN_ENCRYPTION_KEY="${API_TOKEN_ENCRYPTION_KEY:-D+1O956T8t9zZ+w/FqK1lS9b8jJ2vR7mX4kY0uP3oN8=}"
 
 echo -e "${YELLOW}Starting server...${NC}"
 echo -e "${YELLOW}   POSTGRES_DSN: ${POSTGRES_DSN:0:50}...${NC}"
