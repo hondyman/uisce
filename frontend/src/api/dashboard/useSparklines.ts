@@ -13,15 +13,14 @@ export interface Sparklines {
   etl_duration: SparklineData[];
 }
 
-export function useSparklines(tenantId: string) {
+export function useSparklines() {
   return useQuery({
-    queryKey: ['dashboard-sparklines', tenantId],
+    queryKey: ['dashboard-sparklines'],
     queryFn: async () => {
-      const res = await fetch(`/api/dashboard/sparklines?tenant_id=${tenantId}`);
+      const res = await fetch('/api/dashboard/sparklines');
       if (!res.ok) throw new Error('Failed to load sparklines');
       const data = await res.json();
       return data as Sparklines;
     },
-    enabled: !!tenantId,
   });
 }

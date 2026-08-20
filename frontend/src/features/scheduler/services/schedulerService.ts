@@ -50,18 +50,7 @@ function getTenantHeaders(): TenantHeaders {
 }
 
 function getTenantQueryParams(): string {
-  try {
-    const t = window.localStorage.getItem('selected_tenant');
-    const d = window.localStorage.getItem('selected_datasource');
-    const tenant = t ? JSON.parse(t) : null;
-    const datasource = d ? JSON.parse(d) : null;
-    const params = new URLSearchParams();
-    if (tenant?.id) params.set('tenant_id', tenant.id);
-    if (datasource?.id) params.set('tenant_instance_id', datasource.id);
-    return params.toString();
-  } catch {
-    return '';
-  }
+  return '';
 }
 
 async function handleResponse<T>(response: Response): Promise<T> {

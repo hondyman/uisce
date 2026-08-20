@@ -42,7 +42,7 @@ func NewGovernanceEngine(db *sqlx.DB) *GovernanceEngine {
 
 func (e *GovernanceEngine) ValidateSemanticTerm(ctx context.Context, term map[string]interface{}) (*ValidationResult, error) {
 	options := []func(*rego.Rego){
-		rego.Query("data.semlayer.governance.semantic.allow; data.semlayer.governance.semantic.deny"),
+		rego.Query("data.semlayer.governance.semantic"),
 		rego.Module("semantic_validation.rego", e.semanticPolicy),
 		// Mock data for restricted columns
 		rego.Module("restricted_data.rego", "package restricted_columns\nlist = [\"salary\", \"ssn\"]"),
@@ -62,24 +62,32 @@ func (e *GovernanceEngine) ValidateSemanticTerm(ctx context.Context, term map[st
 		return nil, fmt.Errorf("no results for input: %+v", term)
 	}
 
-	// Parse Allow/Deny similar to other methods
-	allowed := false
+	isAllowed := true
 	var reasons []string
 
-	if len(results[0].Expressions) >= 1 {
-		if b, ok := results[0].Expressions[0].Value.(bool); ok {
-			allowed = b
-		}
-	}
-	if len(results[0].Expressions) >= 2 {
-		if r, ok := results[0].Expressions[1].Value.([]interface{}); ok {
-			for _, v := range r {
-				reasons = append(reasons, fmt.Sprintf("%v", v))
+	for _, expr := range results[0].Expressions {
+		val := expr.Value
+		if valMap, ok := val.(map[string]interface{}); ok {
+			if allowVal, exists := valMap["allow"]; exists {
+				if b, ok := allowVal.(bool); ok && !b {
+					isAllowed = false
+				}
+			}
+			if denyVal, exists := valMap["deny"]; exists {
+				if denials, ok := denyVal.([]interface{}); ok {
+					for _, d := range denials {
+						reasons = append(reasons, fmt.Sprintf("%v", d))
+					}
+				}
 			}
 		}
 	}
 
-	return &ValidationResult{Allowed: allowed, Reasons: reasons}, nil
+	if len(reasons) > 0 {
+		isAllowed = false
+	}
+
+	return &ValidationResult{Allowed: isAllowed, Reasons: reasons}, nil
 }
 
 // ValidatePipeline executes the OPA policy against the provided pipeline definition

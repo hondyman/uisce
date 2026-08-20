@@ -17,20 +17,17 @@ export interface RiskSummary {
   };
 }
 
-export function useRiskSummary(
-  tenantId: string,
-  valuationDate: string
-) {
+export function useRiskSummary(valuationDate: string) {
   return useQuery({
-    queryKey: ['dashboard-risk', tenantId, valuationDate],
+    queryKey: ['dashboard-risk', valuationDate],
     queryFn: async () => {
       const res = await fetch(
-        `/api/dashboard/risk?tenant_id=${tenantId}&valuation_date=${valuationDate}`
+        `/api/dashboard/risk?valuation_date=${valuationDate}`
       );
       if (!res.ok) throw new Error('Failed to load risk summary');
       const data = await res.json();
       return data as RiskSummary;
     },
-    enabled: !!tenantId && !!valuationDate,
+    enabled: !!valuationDate,
   });
 }

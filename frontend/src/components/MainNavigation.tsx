@@ -202,32 +202,24 @@ const categoryConfigs: CategoryConfig[] = [
         label: 'Glossary',
         icon: <CategoryIcon />,
         items: [
-          { label: 'Business Glossary', path: '/core/glossary', icon: <CategoryIcon />, description: 'Terms & definitions' },
+          { label: 'Business Terms', path: '/core/business-terms', icon: <BusinessIcon />, description: 'Business taxonomy & glossary terms' },
+          { label: 'Semantic Terms', path: '/core/glossary', icon: <AIIcon />, description: 'Semantic terms & physical column mappings' },
+          { label: 'Datasource Explorer', path: '/schema-explorer', icon: <StorageIcon />, description: 'Database tables & columns' },
           { label: 'Abbreviations', path: '/core/abbreviations', icon: <CategoryIcon />, description: 'Standard abbreviations' },
           { label: 'Data Domains', path: '/core/domains', icon: <CategoryIcon />, description: 'Domain ownership' },
-        ]
-      },
-      {
-        label: 'Discovery',
-        icon: <StorageIcon />,
-        items: [
-          { label: 'Schema Explorer', path: '/schema-explorer', icon: <StorageIcon />, description: 'Database tables & columns' },
-
-          { label: 'Node Types', path: '/catalog/node-types', icon: <SchemaIcon />, description: 'Metadata structures' },
-          { label: 'Edge Types', path: '/catalog/edge-types', icon: <AccountTreeIcon />, description: 'Relationship types' },
-
-          { label: 'AI Term Suggestions', path: '/catalog/ai-suggestions', icon: <AutoFixHighIcon />, description: 'Suggested terms' },
-          { label: 'Bundle Explorer', path: '/bundle-explorer', icon: <SchemaIcon />, description: 'Explore semantic bundles' },
+          { label: 'API Inventory', path: '/catalog/api-inventory', icon: <ApiIcon />, description: 'API Services, Endpoints & Fields' },
           { label: 'BO Explorer', path: '/business-objects', icon: <BusinessIcon />, description: 'Business Objects setup' },
         ]
       },
       {
-        label: 'Lineage',
-        icon: <TimelineIcon />,
+        label: 'Config',
+        icon: <StorageIcon />,
         items: [
-
-          { label: 'Semantic Mapper', path: '/core/semantic-mapper', icon: <AutoFixHighIcon />, description: 'Column-to-term mapping' },
-
+          { label: 'Semantic Mapper', path: '/core/semantic-mapper', icon: <AutoFixHighIcon />, description: 'Intelligent graph & semantic mapper' },
+          { label: 'Node Types', path: '/catalog/node-types', icon: <SchemaIcon />, description: 'Metadata structures' },
+          { label: 'Edge Types', path: '/catalog/edge-types', icon: <AccountTreeIcon />, description: 'Relationship types' },
+          { label: 'AI Term Suggestions', path: '/catalog/ai-suggestions', icon: <AutoFixHighIcon />, description: 'Suggested terms' },
+          { label: 'Bundle Explorer', path: '/bundle-explorer', icon: <SchemaIcon />, description: 'Explore semantic bundles' },
         ]
       }
     ]

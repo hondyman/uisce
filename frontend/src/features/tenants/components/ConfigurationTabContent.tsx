@@ -210,10 +210,6 @@ export const ConfigurationTabContent: React.FC<ConfigurationTabContentProps> = (
           avatar={<Schedule sx={{ color: '#3b82f6' }} />}
           title="Data Retention Policy"
           subheader="Define how long historical data is preserved for this tenant."
-          sx={{
-            backgroundColor: '#f9fafb',
-            borderBottom: '1px solid #e5e7eb',
-          }}
           action={
             <FormControlLabel
               control={
@@ -309,10 +305,6 @@ export const ConfigurationTabContent: React.FC<ConfigurationTabContentProps> = (
           avatar={<Security sx={{ color: '#10b981' }} />}
           title="Security & Access Control"
           subheader="Manage authentication and IP restriction settings."
-          sx={{
-            backgroundColor: '#f9fafb',
-            borderBottom: '1px solid #e5e7eb',
-          }}
         />
         <CardContent sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
           {/* MFA */}
@@ -387,10 +379,6 @@ export const ConfigurationTabContent: React.FC<ConfigurationTabContentProps> = (
           avatar={<Api sx={{ color: '#a855f7' }} />}
           title="API Integration Preferences"
           subheader="Configure rate limits and webhook endpoints."
-          sx={{
-            backgroundColor: '#f9fafb',
-            borderBottom: '1px solid #e5e7eb',
-          }}
         />
         <CardContent>
           <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' }, gap: 3 }}>

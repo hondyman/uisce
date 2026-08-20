@@ -32,8 +32,141 @@ type LibraryItem struct {
 	FinancialCalc map[string]interface{}
 }
 
-// Full library ported from financialCalculations.ts
+// Full library ported from financialCalculations.ts + Investment ORM & Northwind Domains
 var library = []LibraryItem{
+	// --- INVESTMENT ORM DOMAIN CALCULATIONS ---
+	{
+		Name:        "net_fund_yield",
+		Title:       "Net Fund Yield",
+		SQL:         "${gross_return} - ${management_fee}",
+		Description: "Net annual yield of a fund after deducting annual management fees.",
+		Category:    "Investment ORM",
+		Subcategory: "Fund Performance",
+		ReturnType:  "percent",
+		FinancialCalc: map[string]interface{}{
+			"term_type":              "calculated",
+			"execution_strategy":     "sql",
+			"formula":                 "${gross_return} - ${management_fee}",
+			"aggregation_function":   "AVG",
+			"drill_down_dimensions":  "fund_id, fund_type, region, portfolio_manager",
+		},
+	},
+	{
+		Name:        "gross_return",
+		Title:       "Gross Fund Return",
+		SQL:         "(${total_revenue} / NULLIF(${total_aum}, 0)) * 100",
+		Description: "Gross percentage return generated relative to total assets under management.",
+		Category:    "Investment ORM",
+		Subcategory: "Fund Performance",
+		ReturnType:  "percent",
+		FinancialCalc: map[string]interface{}{
+			"term_type":              "calculated",
+			"execution_strategy":     "sql",
+			"formula":                 "(${total_revenue} / NULLIF(${total_aum}, 0)) * 100",
+			"aggregation_function":   "AVG",
+			"drill_down_dimensions":  "fund_id, asset_class",
+		},
+	},
+	{
+		Name:        "total_portfolio_exposure",
+		Title:       "Total Portfolio Exposure",
+		SQL:         "SUM(${position_market_value}) + SUM(${derivative_notional})",
+		Description: "Aggregate aggregate economic exposure across cash securities and derivative contracts.",
+		Category:    "Investment ORM",
+		Subcategory: "Risk & Exposure",
+		ReturnType:  "currency",
+		FinancialCalc: map[string]interface{}{
+			"term_type":              "preaggregated",
+			"execution_strategy":     "preaggregated",
+			"formula":                 "SUM(${position_market_value}) + SUM(${derivative_notional})",
+			"aggregation_function":   "SUM",
+			"drill_down_dimensions":  "portfolio_id, asset_class, counterparty, sector",
+		},
+	},
+	{
+		Name:        "equity_risk_weight",
+		Title:       "Equity Risk Weight",
+		SQL:         "(${position_market_value} / NULLIF(${total_portfolio_value}, 0)) * ${beta_coefficient}",
+		Description: "Weighted systematic equity risk contribution per asset position.",
+		Category:    "Investment ORM",
+		Subcategory: "Risk Analytics",
+		ReturnType:  "number",
+		FinancialCalc: map[string]interface{}{
+			"term_type":              "calculated",
+			"execution_strategy":     "on_the_fly",
+			"formula":                 "(${position_market_value} / NULLIF(${total_portfolio_value}, 0)) * ${beta_coefficient}",
+			"aggregation_function":   "SUM",
+			"drill_down_dimensions":  "security_id, sector, country",
+		},
+	},
+
+	// --- NORTHWIND COMMERCE DOMAIN CALCULATIONS ---
+	{
+		Name:        "line_item_net_total",
+		Title:       "Line Item Net Total",
+		SQL:         "(${unit_price} * ${quantity}) * (1.0 - ${discount})",
+		Description: "Total billed amount for an order line item after applying unit discounts.",
+		Category:    "Northwind",
+		Subcategory: "Order Fulfillment",
+		ReturnType:  "currency",
+		FinancialCalc: map[string]interface{}{
+			"term_type":              "calculated",
+			"execution_strategy":     "sql",
+			"formula":                 "(${unit_price} * ${quantity}) * (1.0 - ${discount})",
+			"aggregation_function":   "SUM",
+			"drill_down_dimensions":  "order_id, product_id, customer_id, employee_id",
+		},
+	},
+	{
+		Name:        "order_discount_amount",
+		Title:       "Order Discount Amount",
+		SQL:         "(${unit_price} * ${quantity}) * ${discount}",
+		Description: "Total value subtracted from gross price via promotional discounts.",
+		Category:    "Northwind",
+		Subcategory: "Pricing & Promotions",
+		ReturnType:  "currency",
+		FinancialCalc: map[string]interface{}{
+			"term_type":              "calculated",
+			"execution_strategy":     "sql",
+			"formula":                 "(${unit_price} * ${quantity}) * ${discount}",
+			"aggregation_function":   "SUM",
+			"drill_down_dimensions":  "order_id, product_id, customer_id",
+		},
+	},
+	{
+		Name:        "gross_profit_margin",
+		Title:       "Gross Profit Margin %",
+		SQL:         "((${revenue} - ${cogs}) / NULLIF(${revenue}, 0)) * 100",
+		Description: "Percentage of revenue retained after deducting cost of goods sold.",
+		Category:    "Northwind",
+		Subcategory: "Financial Metrics",
+		ReturnType:  "percent",
+		FinancialCalc: map[string]interface{}{
+			"term_type":              "calculated",
+			"execution_strategy":     "sql",
+			"formula":                 "((${revenue} - ${cogs}) / NULLIF(${revenue}, 0)) * 100",
+			"aggregation_function":   "AVG",
+			"drill_down_dimensions":  "category_id, supplier_id, product_id, region",
+		},
+	},
+	{
+		Name:        "monthly_order_velocity",
+		Title:       "Monthly Order Velocity",
+		SQL:         "COUNT(${order_id}) / NULLIF(COUNT(DISTINCT ${customer_id}), 0)",
+		Description: "Pre-aggregated average orders placed per customer per monthly cycle.",
+		Category:    "Northwind",
+		Subcategory: "Customer Analytics",
+		ReturnType:  "number",
+		FinancialCalc: map[string]interface{}{
+			"term_type":              "preaggregated",
+			"execution_strategy":     "preaggregated",
+			"formula":                 "COUNT(${order_id}) / NULLIF(COUNT(DISTINCT ${customer_id}), 0)",
+			"aggregation_function":   "AVG",
+			"drill_down_dimensions":  "customer_id, country, territory, year_month",
+		},
+	},
+
+	// --- STANDARD QUANT & FINANCIAL LIBRARY ---
 	{Name: "investment_xirr", Title: "Investment XIRR", SQL: "{{ xirr(ARRAY_AGG(${pre_agg_name}.cash_flow), ARRAY_AGG(${pre_agg_name}.transaction_date)) }}", Description: "Calculate the internal rate of return for a series of cash flows that is not necessarily periodic.", Category: "Private Markets", Subcategory: "IRR", ReturnType: "percent"},
 	{Name: "net_present_value", Title: "Net Present Value", SQL: "NPV(discount_rate, value1, value2)", Description: "Calculate the net present value of an investment using a discount rate and a series of future payments", Category: "Performance", Subcategory: "Valuation", ReturnType: "currency"},
 	{Name: "sharpe_ratio", Title: "Sharpe Ratio", SQL: "(AVG(returns) - risk_free_rate) / STDDEV(returns)", Description: "Measure risk-adjusted return by calculating excess return per unit of risk", Category: "Risk", Subcategory: "Volatility", ReturnType: "number"},
@@ -90,25 +223,24 @@ func main() {
 
 	log.Println("Connected to DB successfully.")
 
-	// 2. Get System Tenant ID
+	// 2. Get Master / Gold Copy Tenant ID
 	var tenantID string
-	err = db.QueryRow("SELECT id FROM tenants WHERE name = 'System Tenant'").Scan(&tenantID)
+	err = db.QueryRow("SELECT id FROM tenants WHERE gold_copy = true OR is_core = true OR name = 'core' LIMIT 1").Scan(&tenantID)
 	if err != nil {
-		// Fallback: use the hardcoded ID from seed_wealth_domain.sql if select fails (e.g. if I need to run seed first)
-		// But better to fail if tenant missing.
-		// Or assume '00000000-0000-0000-0000-000000000001'
-		tenantID = "00000000-0000-0000-0000-000000000001"
-		log.Printf("Warning: Could not find System Tenant, using default ID: %s", tenantID)
+		err = db.QueryRow("SELECT id FROM tenants ORDER BY created_at ASC LIMIT 1").Scan(&tenantID)
+		if err != nil {
+			log.Fatalf("Fatal: No tenant found: %v", err)
+		}
 	}
+	log.Printf("Using Master Tenant ID: %s", tenantID)
 
 	// 3. Get Node Type ID for 'semantic_term'
 	var nodeTypeID string
-	err = db.QueryRow("SELECT id FROM catalog_node_type WHERE catalog_type_name = 'semantic_term' AND tenant_id = $1", tenantID).Scan(&nodeTypeID)
+	err = db.QueryRow("SELECT id FROM catalog_node_type WHERE catalog_type_name = 'semantic_term' LIMIT 1").Scan(&nodeTypeID)
 	if err != nil {
-		// Fallback or error
-		log.Printf("Warning: Could not find node type 'semantic_term', using default ID: 820b942a-9c9e-4abc-acdc-84616db33098")
-		nodeTypeID = "820b942a-9c9e-4abc-acdc-84616db33098"
+		log.Fatalf("Fatal: Could not find node type 'semantic_term': %v", err)
 	}
+	log.Printf("Using Node Type ID (semantic_term): %s", nodeTypeID)
 
 	// 4. Iterate and Upsert
 	log.Println("Seeding Semantic Terms...")
@@ -122,15 +254,21 @@ func main() {
 			dataType = "boolean"
 		}
 
-		props := SemanticTermProperties{
-			Type:        "calculated",
-			DataType:    dataType,
-			Expression:  item.SQL,
-			DisplayName: item.Title,
-			Tags:        []string{item.Category, item.Subcategory},
-			Attributes: map[string]interface{}{
-				"return_type": item.ReturnType,
-			},
+		props := map[string]interface{}{
+			"type":         "calculated",
+			"term_type":    "calculated",
+			"data_type":    dataType,
+			"expression":   item.SQL,
+			"formula":      item.SQL,
+			"display_name": item.Title,
+			"tags":         []string{item.Category, item.Subcategory},
+			"return_type":  item.ReturnType,
+		}
+
+		if item.FinancialCalc != nil {
+			for k, v := range item.FinancialCalc {
+				props[k] = v
+			}
 		}
 
 		propsJson, _ := json.Marshal(props)
@@ -138,28 +276,9 @@ func main() {
 		// Generate ID
 		namespace := uuid.NameSpaceURL
 		nodeID := uuid.NewSHA1(namespace, []byte("node:"+item.Name)).String()
-		qualifiedPath := "semantic_term/financial." + item.Name
+		qualifiedPath := "semantic_term/" + item.Category + "." + item.Name
 
 		query := `
-			INSERT INTO catalog_node (
-				id, tenant_id, node_name, description, node_type_id, properties, qualified_path, created_at, updated_at
-			) VALUES (
-				$1, $2, $3, $4, $5, $6, $7, NOW(), NOW()
-			)
-			ON CONFLICT (tenant_id, node_name, node_type_id) 
-            DO UPDATE SET
-				description = EXCLUDED.description,
-				properties = EXCLUDED.properties,
-				qualified_path = EXCLUDED.qualified_path,
-				updated_at = NOW()
-		`
-		// Use ON CONFLICT on ID if unique? Or strictly use tenant+name?
-		// catalog_node might not have a unique constraint on (tenant,name,type) but usually does.
-		// Let's check if there's a unique constraint. If not, ON CONFLICT will fail.
-		// Wait, seed_wealth_domain.sql used `WHERE NOT EXISTS`.
-		// I'll use `ON CONFLICT (id)` since my ID is deterministic.
-
-		query = `
 			INSERT INTO catalog_node (
 				id, tenant_id, node_name, description, node_type_id, properties, qualified_path, created_at, updated_at
 			) VALUES (
@@ -175,13 +294,13 @@ func main() {
 		`
 
 		_, err := db.Exec(query,
-			nodeID, tenantID, "financial."+item.Name, item.Description, nodeTypeID, propsJson, qualifiedPath,
+			nodeID, tenantID, item.Title, item.Description, nodeTypeID, propsJson, qualifiedPath,
 		)
 
 		if err != nil {
 			log.Printf("Error inserting %s: %v", item.Name, err)
 		} else {
-			log.Printf("Upserted %s [financial.%s]", item.Title, item.Name)
+			log.Printf("Upserted %s [%s]", item.Title, item.Name)
 		}
 	}
 	log.Println("Seeding complete.")

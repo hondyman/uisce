@@ -13,6 +13,7 @@ import (
 	"github.com/jmoiron/sqlx"
 
 	"github.com/hondyman/uisce/backend/internal/handlers"
+	"github.com/hondyman/uisce/backend/internal/security"
 )
 
 // ============================================================================
@@ -505,7 +506,10 @@ func (h *BPNotificationHandlers) GetUserPreferences(w http.ResponseWriter, r *ht
 	}
 	tenantID := secCtx.TenantID
 	datasourceID := secCtx.DatasourceID
-	userID := r.URL.Query().Get("user_id")
+	userID, ok := security.RequireUser(w, r)
+	if !ok {
+		return
+	}
 
 	var prefs BPUserNotificationPreferences
 	err = h.db.Get(&prefs,
@@ -614,7 +618,8 @@ func (h *BPNotificationHandlers) GetLogs(w http.ResponseWriter, r *http.Request)
 		respondWithError(w, http.StatusBadRequest, "Missing tenant context")
 		return
 	}
-	userID := r.URL.Query().Get("user_id")
+	// userID is optional filter - get from JWT if available
+	userID, _ := security.GetRequiredUserID(r.Context())
 	status := r.URL.Query().Get("status")
 	processID := r.URL.Query().Get("process_id")
 

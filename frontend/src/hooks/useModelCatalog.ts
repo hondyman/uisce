@@ -20,7 +20,7 @@ interface UseModelCatalogResult {
   deleteModel: (modelId: string, isCore?: boolean, modelKey?: string) => Promise<{ success: boolean; error?: Error }>;
 }
 
-export const useModelCatalog = (tenantId: string, datasourceId: string): UseModelCatalogResult => {
+export const useModelCatalog = (): UseModelCatalogResult => {
   const [models, setModels] = useState<ModelCatalogNode[]>([]);
   const [selectedModel, setSelectedModel] = useState<ModelCatalogNode | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
@@ -33,8 +33,6 @@ export const useModelCatalog = (tenantId: string, datasourceId: string): UseMode
   const DEV_ALLOW_UNAUTH_MODELS = ((import.meta.env.VITE_DEV_ALLOW_UNAUTH_MODELS as string) ?? 'true') === 'true';
 
   const fetchModels = useCallback(async () => {
-    // Skip until we have real IDs
-    if (!tenantId || tenantId === 'skip' || !datasourceId || datasourceId === 'skip') return;
     if (authLoading) return; // wait until auth state is known
   setLoading(true);
   setError(null);
@@ -48,7 +46,7 @@ export const useModelCatalog = (tenantId: string, datasourceId: string): UseMode
       }
 
       const resp = await authFetch<{ models: ModelCatalogNode[] }>(
-        resolveApiUrl(`/api/models?tenant_id=${tenantId}&tenant_instance_id=${datasourceId}`)
+        resolveApiUrl('/api/models')
       );
 
   if (!resp.ok) {
@@ -69,9 +67,8 @@ export const useModelCatalog = (tenantId: string, datasourceId: string): UseMode
     } finally {
       setLoading(false);
     }
-    // tenantId/datasourceId intentionally included; authFetch/getValidToken/logout are stable hooks
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tenantId, datasourceId, authLoading]);
+  }, [authLoading]);
 
   useEffect(() => {
     fetchModels();
@@ -86,7 +83,7 @@ export const useModelCatalog = (tenantId: string, datasourceId: string): UseMode
 
       const resp = await authFetch(
         resolveApiUrl('/api/models/custom'),
-        { method: 'POST', json: { tenant_id: tenantId, tenant_instance_id: datasourceId, base_model_key: baseModelKey } }
+        { method: 'POST', json: { base_model_key: baseModelKey } }
       );
 
       if (!resp.ok) {
@@ -107,7 +104,7 @@ export const useModelCatalog = (tenantId: string, datasourceId: string): UseMode
       setLoading(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tenantId, datasourceId]);
+  }, []);
 
   const cloneModel = useCallback(async (baseModelKey: string) => {
     setLoading(true);
@@ -140,7 +137,7 @@ export const useModelCatalog = (tenantId: string, datasourceId: string): UseMode
       }
 
       const resp = await authFetch(
-        resolveApiUrl(`/api/models/clone?tenant_id=${tenantId}&tenant_instance_id=${datasourceId}`),
+        resolveApiUrl('/api/models/clone'),
         { method: 'POST', json: { model_id: resolvedModelId } }
       );
 
@@ -163,7 +160,7 @@ export const useModelCatalog = (tenantId: string, datasourceId: string): UseMode
       setLoading(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tenantId, datasourceId, models]);
+  }, [models]);
 
   const updateModel = useCallback(async (modelId: string, updates: Partial<ModelCatalogNode>) => {
     setLoading(true);

@@ -7,6 +7,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	"github.com/hondyman/uisce/backend/internal/security"
 )
 
 // WealthManagementHandler handles API requests for wealth management metrics.
@@ -44,15 +45,13 @@ type MetricCalculation struct {
 
 // HandleListMetrics lists all wealth management metrics for a tenant.
 func (h *WealthManagementHandler) HandleListMetrics(w http.ResponseWriter, r *http.Request) {
-	tenantID := r.URL.Query().Get("tenantId")
-	if tenantID == "" {
-		http.Error(w, "tenantId query parameter is required", http.StatusBadRequest)
+	tenantID, ok := security.RequireTenant(w, r)
+	if !ok {
 		return
 	}
 
-	// Parse tenant ID
-	_, err := uuid.Parse(tenantID)
-	if err != nil {
+	// Validate tenant ID format
+	if _, err := uuid.Parse(tenantID); err != nil {
 		http.Error(w, "Invalid tenantId format", http.StatusBadRequest)
 		return
 	}
@@ -142,17 +141,18 @@ func (h *WealthManagementHandler) HandleListMetrics(w http.ResponseWriter, r *ht
 // HandleGetMetric retrieves a specific metric by ID.
 func (h *WealthManagementHandler) HandleGetMetric(w http.ResponseWriter, r *http.Request) {
 	metricID := chi.URLParam(r, "metricId")
-	tenantID := r.URL.Query().Get("tenantId")
+	tenantID, ok := security.RequireTenant(w, r)
+	if !ok {
+		return
+	}
 
 	if metricID == "" {
 		http.Error(w, "metricId parameter is required", http.StatusBadRequest)
 		return
 	}
 
-	if tenantID == "" {
-		http.Error(w, "tenantId query parameter is required", http.StatusBadRequest)
-		return
-	}
+	// Tenant ID required for authentication; metric filtering is by metricID only
+	_ = tenantID
 
 	query := `
 		SELECT
@@ -224,19 +224,20 @@ func (h *WealthManagementHandler) HandleGetMetric(w http.ResponseWriter, r *http
 
 // HandleGetMetricCalculations retrieves calculation results for specific metrics.
 func (h *WealthManagementHandler) HandleGetMetricCalculations(w http.ResponseWriter, r *http.Request) {
-	tenantID := r.URL.Query().Get("tenantId")
-	metricIDs := r.URL.Query()["metricIds"]
-	clientID := r.URL.Query().Get("clientId")
-
-	if tenantID == "" {
-		http.Error(w, "tenantId query parameter is required", http.StatusBadRequest)
+	tenantID, ok := security.RequireTenant(w, r)
+	if !ok {
 		return
 	}
+	metricIDs := r.URL.Query()["metricIds"]
+	clientID := r.URL.Query().Get("clientId")
 
 	if len(metricIDs) == 0 {
 		http.Error(w, "metricIds query parameter is required", http.StatusBadRequest)
 		return
 	}
+
+	// Suppress unused variable warning
+	_ = tenantID
 
 	// For now, return mock calculation data
 	// In a real implementation, this would query the preaggregated results

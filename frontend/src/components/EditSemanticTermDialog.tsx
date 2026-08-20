@@ -69,6 +69,57 @@ const EditSemanticTermDialog: React.FC<EditSemanticTermDialogProps> = ({
     const existingNames = new Set(base.map(p => p.name));
 
     const coreProperties: PropertyMetadata[] = [
+        { 
+          name: 'term_type', 
+          label: 'Term Classification', 
+          data_type: 'string', 
+          input_type: 'select', 
+          order: 4, 
+          description: 'Standard attribute or derived calculation',
+          options: [
+            { label: 'Standard Attribute', value: 'standard' },
+            { label: 'Calculated Field (Derived)', value: 'calculated' },
+            { label: 'Pre-Aggregated Metric', value: 'preaggregated' }
+          ]
+        },
+        { 
+          name: 'execution_strategy', 
+          label: 'Execution Strategy', 
+          data_type: 'string', 
+          input_type: 'select', 
+          order: 4.5, 
+          description: 'How this calculation is executed by the engine',
+          options: [
+            { label: 'SQL (Deep CTE / Database Pushdown)', value: 'sql' },
+            { label: 'On-The-Fly (In-Memory / Calc Engine)', value: 'on_the_fly' },
+            { label: 'Pre-Aggregated (Rollup Cube / Materialized)', value: 'preaggregated' }
+          ]
+        },
+        { 
+          name: 'formula', 
+          label: 'Calculation Formula', 
+          data_type: 'string', 
+          input_type: 'textarea', 
+          order: 4.8, 
+          placeholder: '${field_a} - ${field_b} or SUM(${field_a})',
+          description: 'Formula referencing terms using ${term_name} syntax' 
+        },
+        { 
+          name: 'aggregation_function', 
+          label: 'Default Aggregation', 
+          data_type: 'string', 
+          input_type: 'select', 
+          order: 4.9, 
+          options: [
+            { label: 'None', value: '' },
+            { label: 'SUM', value: 'SUM' },
+            { label: 'AVG (Average)', value: 'AVG' },
+            { label: 'COUNT', value: 'COUNT' },
+            { label: 'MIN', value: 'MIN' },
+            { label: 'MAX', value: 'MAX' }
+          ]
+        },
+        { name: 'drill_down_dimensions', label: 'Drill-Down Dimensions', data_type: 'string', input_type: 'text', order: 4.95, placeholder: 'region, fund_type, category', description: 'Comma-separated dimensions available for aggregate drill-down' },
         { name: 'semantic_type', label: 'Semantic Type', data_type: 'string', input_type: 'text', order: 5, description: 'dimension, measure, or time_dimension' },
         { 
           name: 'role', 

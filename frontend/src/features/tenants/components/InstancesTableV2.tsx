@@ -198,7 +198,7 @@ export const InstancesTable: React.FC<InstancesTableProps> = ({
         {/* Table */}
         <TableContainer>
           <Table>
-            <TableHead sx={{ backgroundColor: '#fafafa' }}>
+            <TableHead>
               <TableRow>
                 <TableCell sx={{ fontWeight: 'bold', fontSize: '0.75rem', textTransform: 'uppercase' }}>
                   <TableSortLabel

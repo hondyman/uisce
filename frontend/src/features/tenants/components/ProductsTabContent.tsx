@@ -32,6 +32,7 @@ import RemoveIcon from '@mui/icons-material/Remove';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import CancelIcon from '@mui/icons-material/Cancel';
 import InfoIcon from '@mui/icons-material/Info';
+import EditIcon from '@mui/icons-material/Edit';
 import { useNotification } from '../../../hooks/useNotification';
 import { apiClient } from '../../../utils/apiClient';
 import { useApiQuery } from '../../../hooks/useApiQuery';
@@ -68,6 +69,9 @@ export const ProductsTabContent: React.FC<ProductsTabContentProps> = ({
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
   const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
   const [selectedForAction, setSelectedForAction] = useState<{ product: any; action: 'register' | 'unregister' } | null>(null);
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [editProduct, setEditProduct] = useState<{ id: string; product_name: string; is_active: boolean } | null>(null);
+  const [editLoading, setEditLoading] = useState(false);
 
   // Fetch tenant data for gold_copy status and registered products
   const { data: tenantData, refetch: refetchTenant } = useApiQuery<{ tenant: any }>(
@@ -75,7 +79,7 @@ export const ProductsTabContent: React.FC<ProductsTabContentProps> = ({
   );
 
   // Fetch available products from alpha_product table
-  const { data: productsData, loading: productsLoading, error: productsError } = useApiQuery<{ alpha_product: AlphaProduct[] }>(
+  const { data: productsData, loading: productsLoading, error: productsError, refetch: refetchProducts } = useApiQuery<{ alpha_product: AlphaProduct[] }>(
     tenantId ? `/api/rest/products?tenant_id=${tenantId}` : '/api/rest/products'
   );
 
@@ -221,6 +225,34 @@ export const ProductsTabContent: React.FC<ProductsTabContentProps> = ({
     }
   };
 
+  const handleOpenEditDialog = (product: AlphaProduct) => {
+    setEditProduct({ id: product.id, product_name: product.product_name, is_active: product.is_active });
+    setEditDialogOpen(true);
+  };
+
+  const handleEditSave = async () => {
+    if (!editProduct) return;
+    try {
+      setEditLoading(true);
+      await apiClient(`/api/rest/products/${editProduct.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          product_name: editProduct.product_name,
+          is_active: editProduct.is_active,
+        }),
+      });
+      notification.success('Product updated successfully');
+      setEditDialogOpen(false);
+      setEditProduct(null);
+      refetchTenant();
+      refetchProducts();
+    } catch (error: any) {
+      notification.error(error.message || 'Failed to update product');
+    } finally {
+      setEditLoading(false);
+    }
+  };
+
   const isRegistered = (productId: string) => registeredProductIds.has(productId);
 
   const handleSort = (property: string) => {
@@ -300,9 +332,25 @@ export const ProductsTabContent: React.FC<ProductsTabContentProps> = ({
             <Typography variant="body2">Registered</Typography>
           </CardContent>
         </Card>
-        <Card sx={{ flex: 1, bgcolor: 'grey.200' }}>
+        <Card
+          sx={{
+            flex: 1,
+            background: (theme) =>
+              theme.palette.mode === 'dark'
+                ? `rgba(7, 21, 38, 0.6)`
+                : 'rgba(255, 255, 255, 0.8)',
+            backdropFilter: 'blur(12px)',
+            border: (theme) =>
+              theme.palette.mode === 'dark'
+                ? '1px solid rgba(0, 201, 200, 0.3)'
+                : '1px solid rgba(0, 201, 200, 0.2)',
+          }}
+        >
           <CardContent sx={{ py: 1.5 }}>
-            <Typography variant="h4" sx={{ fontWeight: 700, color: 'text.primary' }}>
+            <Typography
+              variant="h4"
+              sx={{ fontWeight: 700, color: 'text.primary' }}
+            >
               {availableProducts.length - registeredProductIds.size}
             </Typography>
             <Typography variant="body2" color="text.secondary">Available to Register</Typography>
@@ -355,9 +403,14 @@ export const ProductsTabContent: React.FC<ProductsTabContentProps> = ({
               return (
                 <TableRow key={product.id} hover>
                   <TableCell>
-                    <Typography variant="body2" sx={{ fontWeight: 500 }}>
-                      {product.product_name}
-                    </Typography>
+                    <Box
+                      onClick={() => handleOpenEditDialog(product)}
+                      sx={{ cursor: 'pointer', '&:hover': { color: 'primary.main' } }}
+                    >
+                      <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                        {product.product_name}
+                      </Typography>
+                    </Box>
                   </TableCell>
                   <TableCell>
                     <Chip
@@ -426,36 +479,47 @@ export const ProductsTabContent: React.FC<ProductsTabContentProps> = ({
                     </Box>
                   </TableCell>
                   <TableCell align="right">
-                    {isGoldCopy ? (
-                      <Tooltip title="Products cannot be registered at Gold Copy level - they are inherited from master">
-                        <span>
-                          <IconButton size="small" disabled>
-                            <AddIcon />
-                          </IconButton>
-                        </span>
-                      </Tooltip>
-                    ) : registered ? (
-                      <Tooltip title="Products cannot be unregistered - contact administrator">
-                        <IconButton
-                          size="small"
-                          color="error"
-                          disabled
-                        >
-                          <RemoveIcon />
-                        </IconButton>
-                      </Tooltip>
-                    ) : (
-                      <Tooltip title="Register this product for the tenant">
+                    <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 0.5 }}>
+                      <Tooltip title="Edit product">
                         <IconButton
                           size="small"
                           color="primary"
-                          onClick={() => openConfirmDialog(product, 'register')}
-                          disabled={registerLoading}
+                          onClick={() => handleOpenEditDialog(product)}
                         >
-                          <AddIcon />
+                          <EditIcon fontSize="small" />
                         </IconButton>
                       </Tooltip>
-                    )}
+                      {isGoldCopy ? (
+                        <Tooltip title="Products cannot be registered at Gold Copy level - they are inherited from master">
+                          <span>
+                            <IconButton size="small" disabled>
+                              <AddIcon />
+                            </IconButton>
+                          </span>
+                        </Tooltip>
+                      ) : registered ? (
+                        <Tooltip title="Products cannot be unregistered - contact administrator">
+                          <IconButton
+                            size="small"
+                            color="error"
+                            disabled
+                          >
+                            <RemoveIcon />
+                          </IconButton>
+                        </Tooltip>
+                      ) : (
+                        <Tooltip title="Register this product for the tenant">
+                          <IconButton
+                            size="small"
+                            color="primary"
+                            onClick={() => openConfirmDialog(product, 'register')}
+                            disabled={registerLoading}
+                          >
+                            <AddIcon />
+                          </IconButton>
+                        </Tooltip>
+                      )}
+                    </Box>
                   </TableCell>
                 </TableRow>
               );
@@ -500,6 +564,36 @@ export const ProductsTabContent: React.FC<ProductsTabContentProps> = ({
             disabled={registerLoading || unregisterLoading}
           >
             {selectedForAction?.action === 'register' ? 'Register' : 'Unregister'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Edit Product Dialog */}
+      <Dialog open={editDialogOpen} onClose={() => setEditDialogOpen(false)} maxWidth="sm" fullWidth>
+        <DialogTitle>Edit Product</DialogTitle>
+        <DialogContent>
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 1 }}>
+            <TextField
+              label="Product Name"
+              value={editProduct?.product_name || ''}
+              onChange={(e) => setEditProduct((prev) => prev ? { ...prev, product_name: e.target.value } : null)}
+              fullWidth
+            />
+            <FormControlLabel
+              control={
+                <Switch
+                  checked={editProduct?.is_active ?? false}
+                  onChange={(e) => setEditProduct((prev) => prev ? { ...prev, is_active: e.target.checked } : null)}
+                />
+              }
+              label="Active"
+            />
+          </Box>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setEditDialogOpen(false)}>Cancel</Button>
+          <Button variant="contained" onClick={handleEditSave} disabled={editLoading}>
+            Save
           </Button>
         </DialogActions>
       </Dialog>

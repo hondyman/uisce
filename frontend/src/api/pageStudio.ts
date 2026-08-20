@@ -22,8 +22,8 @@ export const PageStudioApi = {
         const resp = await axios.post(`${API_BASE}/pages`, page);
         return resp.data;
     },
-    getOverlay: async (pageId: string, tenantId: string, env: string): Promise<PageOverlay> => {
-        const resp = await axios.get(`${API_BASE}/pages/${pageId}/overlay?tenant_id=${tenantId}&env=${env}`);
+    getOverlay: async (pageId: string, env: string): Promise<PageOverlay> => {
+        const resp = await axios.get(`${API_BASE}/pages/${pageId}/overlay?env=${env}`);
         return resp.data;
     },
     saveOverlay: async (overlay: Partial<PageOverlay>): Promise<PageOverlay> => {
@@ -32,14 +32,14 @@ export const PageStudioApi = {
     },
 
     // AI Features
-    generateLayout: async (boName: string, intent: string, tenantId: string): Promise<any> => {
-        const resp = await axios.post(`${API_BASE}/ai/generate-layout`, { bo_name: boName, intent, tenant_id: tenantId });
+    generateLayout: async (boName: string, intent: string): Promise<any> => {
+        const resp = await axios.post(`${API_BASE}/ai/generate-layout`, { bo_name: boName, intent });
         return resp.data;
     },
 
     // Epic 3: Multi-tenant Runtime Resolution
-    resolveEffectivePage: async (slug: string, tenantId: string, env: string): Promise<EffectivePageDefinition> => {
-        const cacheKey = `${tenantId}:${slug}:${env}`;
+    resolveEffectivePage: async (slug: string, env: string): Promise<EffectivePageDefinition> => {
+        const cacheKey = `${slug}:${env}`;
         if (effectivePageCache.has(cacheKey)) {
             return effectivePageCache.get(cacheKey)!;
         }
@@ -47,10 +47,10 @@ export const PageStudioApi = {
         const core = await PageStudioApi.getPageBySlug(slug, env);
         let overlay: PageOverlay | null = null;
         try {
-            overlay = await PageStudioApi.getOverlay(core.id, tenantId, env);
+            overlay = await PageStudioApi.getOverlay(core.id, env);
         } catch (e) {
             // Overlay might not exist, which is fine
-            console.log(`No overlay found for ${slug} / ${tenantId}`);
+            console.log(`No overlay found for ${slug}`);
         }
 
         const effective = mergePage(core, overlay || undefined);
@@ -58,25 +58,23 @@ export const PageStudioApi = {
         return effective;
     },
 
-    getPageBundle: async (slug: string, tenantId: string, env: string, params: Record<string, any>): Promise<Record<string, any>> => {
-        const query = new URLSearchParams({ env, tenant_id: tenantId, ...params }).toString();
+    getPageBundle: async (slug: string, env: string, params: Record<string, any>): Promise<Record<string, any>> => {
+        const query = new URLSearchParams({ env, ...params }).toString();
         const resp = await axios.get(`/api/page-studio/runtime/page-bundle/${slug}?${query}`);
-        // Response format: { pageSlug, tenantID, data }
         return resp.data.data;
     },
 
-    invalidateCache: (slug?: string, tenantId?: string, env?: string) => {
+    invalidateCache: (slug?: string) => {
         if (!slug) {
             effectivePageCache.clear();
         } else {
-            const cacheKey = `${tenantId}:${slug}:${env}`;
-            effectivePageCache.delete(cacheKey);
+            effectivePageCache.delete(slug);
         }
     },
 
     // Epic 3: Tenant Upgrades
-    getUpgradeImpacts: async (tenantId: string): Promise<UpgradeImpact[]> => {
-        const resp = await axios.get(`${API_BASE}/upgrades?tenant_id=${tenantId}`);
+    getUpgradeImpacts: async (): Promise<UpgradeImpact[]> => {
+        const resp = await axios.get(`${API_BASE}/upgrades`);
         return resp.data;
     },
     applyUpgradeDecision: async (impactId: string, decisions: any): Promise<void> => {

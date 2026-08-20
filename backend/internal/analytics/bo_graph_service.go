@@ -2,7 +2,6 @@ package analytics
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -270,53 +269,84 @@ func (s *BOGraphService) buildBONode(boID string) (GraphNode, error) {
 }
 
 func (s *BOGraphService) fetchTerms(boID string) ([]Term, error) {
-	// Try business_objects bo_fields first
+	// 1. Try business_objects bo_fields joined with catalog_node/catalog_edge
 	rows, err := s.db.Query(`
 		SELECT 
-			f.id,
+			f.id::text,
 			COALESCE(f.display_label, f.name) as node_name,
-			CASE WHEN f.field_type = 'semantic_term' THEN 'dimension' ELSE 'dimension' END as term_type,
+			'dimension' as term_type,
 			'string' as data_type,
 			false as is_key,
 			false as is_foreign_key,
 			'' as aggregation,
-			NULL::jsonb as physical_mapping
+			NULLIF(col.qualified_path, '') as col_path,
+			col.node_name as col_name
 		FROM bo_fields f
+		LEFT JOIN catalog_node st ON (
+			st.id::text = f.field_ref 
+			OR LOWER(st.node_name) = LOWER(f.name) 
+			OR LOWER(st.node_name) = LOWER(f.display_label)
+		)
+		LEFT JOIN catalog_edge ce ON (
+			(ce.source_node_id = st.id OR ce.target_node_id = st.id)
+			AND (
+				ce.edge_type_id = '0434ca1a-6543-42d3-9fce-f0b58b5fba34' 
+				OR LOWER(ce.relationship_type) IN ('has_context', 'maps_to', 'mapped_to', 'column_mapping')
+			)
+		)
+		LEFT JOIN catalog_node col ON (
+			(col.id = ce.source_node_id OR col.id = ce.target_node_id)
+			AND col.id != st.id
+			AND col.qualified_path LIKE '/%'
+		)
 		WHERE f.bo_id = $1::uuid 
 		  AND f.subtype_id IS NULL
 	`, boID)
 
 	if err != nil {
-		// Fallback to catalog_node/catalog_edge
+		// 2. Fallback to catalog_node/catalog_edge
 		rows, err = s.db.Query(`
 			SELECT 
-				st.id,
+				st.id::text,
 				st.node_name,
 				COALESCE(st.properties->>'term_type', 'dimension') as term_type,
 				COALESCE(st.properties->>'data_type', 'string') as data_type,
 				COALESCE((st.properties->>'is_key')::boolean, false) as is_key,
 				COALESCE((st.properties->>'is_foreign_key')::boolean, false) as is_foreign_key,
 				COALESCE(st.properties->>'aggregation', '') as aggregation,
-				st.properties->'physical_mapping' as physical_mapping
-			FROM catalog_edge ce
-			JOIN catalog_node st ON ce.target_node_id = st.id
-			WHERE ce.source_node_id = $1 
-			  AND ce.edge_type_name = 'HAS_ATTRIBUTE'
+				NULLIF(col.qualified_path, '') as col_path,
+				col.node_name as col_name
+			FROM catalog_edge bo_edge
+			JOIN catalog_node st ON (bo_edge.target_node_id = st.id OR bo_edge.source_node_id = st.id)
+			LEFT JOIN catalog_edge ce ON (
+				(ce.source_node_id = st.id OR ce.target_node_id = st.id)
+				AND (
+					ce.edge_type_id = '0434ca1a-6543-42d3-9fce-f0b58b5fba34' 
+					OR LOWER(ce.relationship_type) IN ('has_context', 'maps_to', 'mapped_to', 'column_mapping')
+				)
+			)
+			LEFT JOIN catalog_node col ON (
+				(col.id = ce.source_node_id OR col.id = ce.target_node_id)
+				AND col.id != st.id
+				AND col.qualified_path LIKE '/%'
+			)
+			WHERE (bo_edge.source_node_id = $1 OR bo_edge.target_node_id = $1)
+			  AND LOWER(bo_edge.relationship_type) IN ('has_attribute', 'member_of', 'contains', 'specializes')
+			  AND st.id != $1
 		`, boID)
 		if err != nil {
 			return nil, err
 		}
 	}
 
-	if err != nil {
-		return nil, err
-	}
 	defer rows.Close()
 
 	var terms []Term
+	seenTerms := make(map[string]bool)
+
 	for rows.Next() {
 		var term Term
-		var mappingJSON []byte
+		var colPath, colName *string
 
 		err := rows.Scan(
 			&term.ID,
@@ -326,29 +356,43 @@ func (s *BOGraphService) fetchTerms(boID string) ([]Term, error) {
 			&term.IsKey,
 			&term.IsForeignKey,
 			&term.Aggregation,
-			&mappingJSON,
+			&colPath,
+			&colName,
 		)
 		if err != nil {
 			continue
 		}
 
-		// Parse physical mapping if exists
-		if len(mappingJSON) > 0 && string(mappingJSON) != "null" {
-			var mapping struct {
-				Schema string `json:"schema"`
-				Table  string `json:"table"`
-				Column string `json:"column"`
+		if colPath != nil && *colPath != "" {
+			clean := strings.Trim(*colPath, "/")
+			parts := strings.Split(clean, "/")
+			schema := "public"
+			table := "default_table"
+			column := *colPath
+			if colName != nil && *colName != "" {
+				column = *colName
 			}
-			if err := json.Unmarshal(mappingJSON, &mapping); err == nil && mapping.Column != "" {
-				term.PhysicalMapping = &PhysicalMapping{
-					Schema: mapping.Schema,
-					Table:  mapping.Table,
-					Column: mapping.Column,
-				}
+
+			if len(parts) >= 3 {
+				schema = parts[0]
+				table = parts[1]
+				column = parts[2]
+			} else if len(parts) == 2 {
+				table = parts[0]
+				column = parts[1]
+			}
+
+			term.PhysicalMapping = &PhysicalMapping{
+				Schema: schema,
+				Table:  table,
+				Column: column,
 			}
 		}
 
-		terms = append(terms, term)
+		if !seenTerms[term.ID] {
+			seenTerms[term.ID] = true
+			terms = append(terms, term)
+		}
 	}
 
 	return terms, nil

@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { getRequiredTenantScope, hasTenantScope } from './tenantScope';
+import { getRequiredTenantScope, hasTenantScope, readCachedSelection } from './tenantScope';
 import resolveApiUrl from './resolveApiUrl';
 
 const axiosClient = axios.create();
@@ -11,11 +11,16 @@ axiosClient.interceptors.request.use((config) => {
     }
 
     // Inject Tenant Scope
-    if (hasTenantScope()) {
-        const { tenantId, datasourceId } = getRequiredTenantScope();
-        config.headers['X-Tenant-ID'] = tenantId;
-        config.headers['X-Tenant-Datasource-ID'] = datasourceId;
-    }
+    try {
+        const { tenant, datasource } = readCachedSelection();
+        if (tenant?.id) {
+            config.headers['X-Tenant-ID'] = tenant.id;
+        }
+        const datasourceId = datasource?.id || datasource?.alpha_tenant_instance_id;
+        if (datasourceId) {
+            config.headers['X-Tenant-Datasource-ID'] = datasourceId;
+        }
+    } catch (_) {}
 
     // Inject Authorization Token
     const token = typeof localStorage !== 'undefined' ? localStorage.getItem('auth_token') : null;

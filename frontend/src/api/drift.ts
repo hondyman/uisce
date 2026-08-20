@@ -24,22 +24,21 @@ export interface DriftComparison {
 
 export const driftKeys = {
   all: ['drift'] as const,
-  runs: (tenantId: string) => [...driftKeys.all, 'runs', tenantId] as const,
+  runs: () => [...driftKeys.all, 'runs'] as const,
   run: (id: string) => [...driftKeys.all, 'run', id] as const,
-  comparisons: (tenantId: string) => [...driftKeys.all, 'comparisons', tenantId] as const,
+  comparisons: () => [...driftKeys.all, 'comparisons'] as const,
 };
 
-export function useDriftRuns(tenantId: string) {
+export function useDriftRuns() {
   return useQuery({
-    queryKey: driftKeys.runs(tenantId),
+    queryKey: driftKeys.runs(),
     queryFn: async () => {
-      const res = await apiFetch(`/api/rest/drift-runs?tenant_id=${encodeURIComponent(tenantId)}`);
+      const res = await apiFetch('/api/rest/drift-runs');
       if (!res.ok) {
         throw new Error(await res.text());
       }
       return res.json() as Promise<DriftRun[]>;
     },
-    enabled: !!tenantId,
   });
 }
 
@@ -58,16 +57,15 @@ export function useDriftRun(id: string) {
   });
 }
 
-export function useDriftComparisons(tenantId: string) {
+export function useDriftComparisons() {
   return useQuery({
-    queryKey: driftKeys.comparisons(tenantId),
+    queryKey: driftKeys.comparisons(),
     queryFn: async () => {
-      const res = await apiFetch(`/api/rest/drift-comparisons?tenant_id=${encodeURIComponent(tenantId)}`);
+      const res = await apiFetch('/api/rest/drift-comparisons');
       if (!res.ok) {
         throw new Error(await res.text());
       }
       return res.json() as Promise<DriftComparison[]>;
     },
-    enabled: !!tenantId,
   });
 }

@@ -55,9 +55,9 @@ export function useInfiniteLookups(tenantId?: string, q?: string, limit = 50) {
     queryKey: ['lookups/infinite', tenantId, q, limit],
     queryFn: async ({ pageParam }) => {
       if (!tenantId) return { items: [], next_cursor: undefined };
-      const params = new URLSearchParams({ tenant_id: tenantId, limit: String(limit), cursor: String(pageParam) });
+      const params = new URLSearchParams({ limit: String(limit), cursor: String(pageParam) });
       if (q) params.set('q', q);
-      const res = await fetch(`/api/lookups?${params.toString()}`, { credentials: 'include' });
+      const res = await apiClient(`/api/lookups?${params.toString()}`);
       if (!res.ok) {
         const err = await res.text();
         throw new Error(err || 'Failed to fetch lookups');
@@ -76,21 +76,21 @@ export function useLookupValues(tenantId?: string, lookupId?: string, parentId?:
     queryKey: ['lookup-values', tenantId, lookupId, parentId, parentValue],
     queryFn: async () => {
       if (!tenantId || !lookupId) return [] as LookupValue[];
-      let url = `/api/lookups/${lookupId}/values?tenant_id=${tenantId}`;
+      const params = new URLSearchParams();
       if (parentId) {
-        url += `&parent_id=${encodeURIComponent(parentId)}`;
+        params.set('parent_id', parentId);
       } else if (parentValue) {
-        url += `&parent_value=${encodeURIComponent(parentValue)}`;
+        params.set('parent_value', parentValue);
       }
-      const res = await fetch(url, { credentials: 'include' });
+      const query = params.toString() ? `?${params.toString()}` : '';
+      const res = await apiClient(`/api/lookups/${lookupId}/values${query}`);
       if (!res.ok) {
         const err = await res.text();
         throw new Error(err || 'Failed to fetch lookup values');
       }
       const raw = await res.json();
       // Debug: log response and URL for troubleshooting cascading behavior
-      // eslint-disable-next-line no-console
-      devDebug('[useLookupValues] fetched', { url, parentId, items: raw.items || [], raw });
+      devDebug('[useLookupValues] fetched', { lookupId, parentId, items: raw.items || [], raw });
       // API returns { items: [...], next_cursor: ... }, so extract items array
       const items = raw.items || [];
       // Normalize server-side field names (label/value into a `name` field) and return lightweight objects
@@ -105,16 +105,16 @@ export function useInfiniteLookupValues(tenantId?: string, lookupId?: string, pa
     queryKey: ['lookup-values/infinite', tenantId, lookupId, parentId, parentValue, limit],
     queryFn: async ({ pageParam }) => {
       if (!tenantId || !lookupId) return { items: [], next_cursor: undefined };
-      let url = `/api/lookups/${lookupId}/values?tenant_id=${tenantId}&limit=${limit}`;
+      const params = new URLSearchParams({ limit: String(limit) });
       if (pageParam) {
-        url += `&cursor=${encodeURIComponent(String(pageParam))}`;
+        params.set('cursor', String(pageParam));
       }
       if (parentId) {
-        url += `&parent_id=${encodeURIComponent(parentId)}`;
+        params.set('parent_id', parentId);
       } else if (parentValue) {
-        url += `&parent_value=${encodeURIComponent(parentValue)}`;
+        params.set('parent_value', parentValue);
       }
-      const res = await fetch(url, { credentials: 'include' });
+      const res = await apiClient(`/api/lookups/${lookupId}/values?${params.toString()}`);
       if (!res.ok) {
         const err = await res.text();
         throw new Error(err || 'Failed to fetch lookup values');
@@ -133,7 +133,7 @@ export function useInfiniteLookupValues(tenantId?: string, lookupId?: string, pa
 export async function createLookup(tenantId: string, payload: { name: string, description?: string }) {
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
   if (tenantId) headers['X-Tenant-ID'] = tenantId;
-  const res = await fetch(`/api/lookups?tenant_id=${tenantId}`, { method: 'POST', credentials: 'include', headers, body: JSON.stringify(payload) });
+  const res = await apiClient(`/api/lookups`, { method: 'POST', headers, body: JSON.stringify(payload) });
   if (!res.ok) throw new Error(await res.text());
   return res.json();
 }
@@ -141,7 +141,7 @@ export async function createLookup(tenantId: string, payload: { name: string, de
 export async function updateLookup(tenantId: string, id: string, payload: { name?: string, description?: string }) {
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
   if (tenantId) headers['X-Tenant-ID'] = tenantId;
-  const res = await fetch(`/api/lookups/${id}?tenant_id=${tenantId}`, { method: 'PUT', credentials: 'include', headers, body: JSON.stringify(payload) });
+  const res = await apiClient(`/api/lookups/${id}`, { method: 'PUT', headers, body: JSON.stringify(payload) });
   if (!res.ok) throw new Error(await res.text());
   return res;
 }
@@ -149,7 +149,7 @@ export async function updateLookup(tenantId: string, id: string, payload: { name
 export async function deleteLookup(tenantId: string, id: string) {
   const headers: Record<string, string> = {};
   if (tenantId) headers['X-Tenant-ID'] = tenantId;
-  const res = await fetch(`/api/lookups/${id}?tenant_id=${tenantId}`, { method: 'DELETE', credentials: 'include', headers });
+  const res = await apiClient(`/api/lookups/${id}`, { method: 'DELETE', headers });
   if (!res.ok) throw new Error(await res.text());
   return res;
 }
@@ -157,7 +157,7 @@ export async function deleteLookup(tenantId: string, id: string) {
 export async function createLookupValue(tenantId: string, lookupId: string, payload: { value: string, label: string, parent_id?: string | null, metadata?: any }) {
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
   if (tenantId) headers['X-Tenant-ID'] = tenantId;
-  const res = await fetch(`/api/lookups/${lookupId}/values?tenant_id=${tenantId}`, { method: 'POST', credentials: 'include', headers, body: JSON.stringify(payload) });
+  const res = await apiClient(`/api/lookups/${lookupId}/values`, { method: 'POST', headers, body: JSON.stringify(payload) });
   if (!res.ok) throw new Error(await res.text());
   return res.json();
 }
@@ -165,7 +165,7 @@ export async function createLookupValue(tenantId: string, lookupId: string, payl
 export async function updateLookupValue(tenantId: string, lookupId: string, valueId: string, payload: { value?: string, label?: string, parent_id?: string | null, metadata?: any }) {
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
   if (tenantId) headers['X-Tenant-ID'] = tenantId;
-  const res = await fetch(`/api/lookups/${lookupId}/values/${valueId}?tenant_id=${tenantId}`, { method: 'PUT', credentials: 'include', headers, body: JSON.stringify(payload) });
+  const res = await apiClient(`/api/lookups/${lookupId}/values/${valueId}`, { method: 'PUT', headers, body: JSON.stringify(payload) });
   if (!res.ok) throw new Error(await res.text());
   return res;
 }
@@ -173,23 +173,25 @@ export async function updateLookupValue(tenantId: string, lookupId: string, valu
 export async function deleteLookupValue(tenantId: string, lookupId: string, valueId: string) {
   const headers: Record<string, string> = {};
   if (tenantId) headers['X-Tenant-ID'] = tenantId;
-  const res = await fetch(`/api/lookups/${lookupId}/values/${valueId}?tenant_id=${tenantId}`, { method: 'DELETE', credentials: 'include', headers });
+  const res = await apiClient(`/api/lookups/${lookupId}/values/${valueId}`, { method: 'DELETE', headers });
   if (!res.ok) throw new Error(await res.text());
   return res;
 }
 export async function propagateLookup(tenantId: string, id: string) {
-  const res = await fetch(`/api/lookups/${id}/propagate?tenant_id=${tenantId}`, { method: 'POST', credentials: 'include' });
+  const headers: Record<string, string> = {};
+  if (tenantId) headers['X-Tenant-ID'] = tenantId;
+  const res = await apiClient(`/api/lookups/${id}/propagate`, { method: 'POST', headers });
   if (!res.ok) throw new Error(await res.text());
   return res.json();
 }
 
 export async function exportLookupValues(tenantId: string, lookupId: string, lookupName: string, datasourceId?: string) {
-  let url = `/api/lookups/${lookupId}/export?tenant_id=${tenantId}`;
+  const params = new URLSearchParams();
   if (datasourceId) {
-    url += `&tenant_instance_id=${datasourceId}`;
+    params.set('tenant_instance_id', datasourceId);
   }
-
-  const res = await fetch(url, { credentials: 'include' });
+  const query = params.toString() ? `?${params.toString()}` : '';
+  const res = await apiClient(`/api/lookups/${lookupId}/export${query}`);
   if (!res.ok) {
     throw new Error(await res.text() || 'Failed to export lookup values');
   }

@@ -3,6 +3,7 @@ package api
 import (
 	"crypto/rand"
 	"database/sql"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -13,6 +14,7 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
+	"github.com/hondyman/uisce/backend/internal/security"
 	"github.com/hondyman/uisce/libs/jwt-middleware"
 )
 
@@ -63,6 +65,70 @@ func getEnv(key, defaultValue string) string {
 		return v
 	}
 	return defaultValue
+}
+
+// buildApiDispatcherEncryptor constructs the AES-GCM TokenEncryptor used by the
+// API dispatcher to encrypt/decrypt per-tenant API credentials at rest.
+//
+// Behavior:
+//   - If API_TOKEN_ENCRYPTION_KEY is set and decodes to exactly 32 bytes (raw
+//     or base64), that key is used.
+//   - If API_TOKEN_ENCRYPTION_KEY_DEV_FALLBACK=true is set (or the server is
+//     running in a non-prod mode), a process-lifetime random key is generated
+//     and a warning is logged. THIS IS INSECURE — restarting the server will
+//     invalidate every saved credential. Never enable in production.
+//   - Otherwise the function returns an error and the server refuses to start.
+func buildApiDispatcherEncryptor() (*security.TokenEncryptor, error) {
+	keyEnv := os.Getenv("API_TOKEN_ENCRYPTION_KEY")
+	allowDevFallback := getEnv("API_TOKEN_ENCRYPTION_KEY_DEV_FALLBACK", "false") == "true"
+
+	if keyEnv != "" {
+		key, err := decodeEncryptionKey(keyEnv)
+		if err != nil {
+			return nil, fmt.Errorf("API_TOKEN_ENCRYPTION_KEY is set but invalid: %w", err)
+		}
+		return security.NewTokenEncryptor(key)
+	}
+
+	if allowDevFallback {
+		key := make([]byte, 32)
+		if _, err := rand.Read(key); err != nil {
+			return nil, fmt.Errorf("generate dev fallback key: %w", err)
+		}
+		fmt.Fprintf(os.Stderr, "[WARN] API_TOKEN_ENCRYPTION_KEY is unset; using process-lifetime random key. Saved credentials will be unreadable after restart. Set API_TOKEN_ENCRYPTION_KEY before deploying.\n")
+		return security.NewTokenEncryptor(key)
+	}
+
+	return nil, fmt.Errorf("API_TOKEN_ENCRYPTION_KEY is required; generate one with `openssl rand -base64 32` or set API_TOKEN_ENCRYPTION_KEY_DEV_FALLBACK=true for local development")
+}
+
+// decodeEncryptionKey accepts a 32-byte raw key, a 32-byte hex-encoded key,
+// or a base64 (standard or URL-safe) encoding of a 32-byte key. Returns the
+// raw 32 bytes that AES-256-GCM requires.
+func decodeEncryptionKey(s string) ([]byte, error) {
+	s = strings.TrimSpace(s)
+	if len(s) == 32 {
+		return []byte(s), nil
+	}
+	if len(s) == 64 {
+		raw, err := hex.DecodeString(s)
+		if err == nil && len(raw) == 32 {
+			return raw, nil
+		}
+	}
+	if raw, err := base64.StdEncoding.DecodeString(s); err == nil && len(raw) == 32 {
+		return raw, nil
+	}
+	if raw, err := base64.RawStdEncoding.DecodeString(s); err == nil && len(raw) == 32 {
+		return raw, nil
+	}
+	if raw, err := base64.URLEncoding.DecodeString(s); err == nil && len(raw) == 32 {
+		return raw, nil
+	}
+	if raw, err := base64.RawURLEncoding.DecodeString(s); err == nil && len(raw) == 32 {
+		return raw, nil
+	}
+	return nil, fmt.Errorf("expected 32 raw bytes, 64 hex chars, or base64 of 32 bytes; got %d chars", len(s))
 }
 
 // respond is a small helper used across handlers to write JSON responses.

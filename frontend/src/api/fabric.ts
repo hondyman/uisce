@@ -30,26 +30,21 @@ export interface CreateFabricDefnRequest {
 export const fabricKeys = {
   all: ['fabric-defns'] as const,
   lists: () => [...fabricKeys.all, 'list'] as const,
-  list: (tenantId: string, datasourceId?: string) => [...fabricKeys.lists(), tenantId, datasourceId ?? 'all'] as const,
+  list: () => [...fabricKeys.lists()] as const,
   details: () => [...fabricKeys.all, 'detail'] as const,
   detail: (id: string) => [...fabricKeys.details(), id] as const,
 };
 
-export function useFabricDefns(tenantId: string, datasourceId?: string) {
+export function useFabricDefns() {
   return useQuery({
-    queryKey: fabricKeys.list(tenantId, datasourceId),
+    queryKey: fabricKeys.list(),
     queryFn: async () => {
-      let url = `/api/rest/fabric-defns?tenant_id=${encodeURIComponent(tenantId)}`;
-      if (datasourceId) {
-        url += `&datasource_id=${encodeURIComponent(datasourceId)}`;
-      }
-      const res = await apiFetch(url);
+      const res = await apiFetch('/api/rest/fabric-defns');
       if (!res.ok) {
         throw new Error(await res.text());
       }
       return res.json() as Promise<FabricDefn[]>;
     },
-    enabled: !!tenantId,
   });
 }
 

@@ -18,15 +18,14 @@ export interface ETLHealth {
   total_runs: number;
 }
 
-export function useETLHealth(tenantId: string) {
+export function useETLHealth() {
   return useQuery({
-    queryKey: ['dashboard-etl-health', tenantId],
+    queryKey: ['dashboard-etl-health'],
     queryFn: async () => {
-      const res = await fetch(`/api/dashboard/etl-health?tenant_id=${tenantId}`);
+      const res = await fetch('/api/dashboard/etl-health');
       if (!res.ok) throw new Error('Failed to load ETL health');
       const data = await res.json();
       return data as ETLHealth;
     },
-    enabled: !!tenantId,
   });
 }

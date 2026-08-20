@@ -31,24 +31,23 @@ export interface UpdatePolicyRequest {
 export const policyKeys = {
   all: ['policies'] as const,
   lists: () => [...policyKeys.all, 'list'] as const,
-  list: (tenantId: string) => [...policyKeys.lists(), tenantId] as const,
+  list: () => [...policyKeys.lists()] as const,
   details: () => [...policyKeys.all, 'detail'] as const,
   detail: (id: string) => [...policyKeys.details(), id] as const,
-  simulations: (tenantId: string) => [...policyKeys.all, 'simulations', tenantId] as const,
-  driftRuns: (tenantId: string) => [...policyKeys.all, 'drift-runs', tenantId] as const,
+  simulations: () => [...policyKeys.all, 'simulations'] as const,
+  driftRuns: () => [...policyKeys.all, 'drift-runs'] as const,
 };
 
-export function usePolicies(tenantId: string) {
+export function usePolicies() {
   return useQuery({
-    queryKey: policyKeys.list(tenantId),
+    queryKey: policyKeys.list(),
     queryFn: async () => {
-      const res = await apiFetch(`/api/rest/policies?tenant_id=${encodeURIComponent(tenantId)}`);
+      const res = await apiFetch('/api/rest/policies');
       if (!res.ok) {
         throw new Error(await res.text());
       }
       return res.json() as Promise<Policy[]>;
     },
-    enabled: !!tenantId,
   });
 }
 
@@ -124,30 +123,28 @@ export function useDeletePolicy() {
   });
 }
 
-export function usePolicySimulations(tenantId: string) {
+export function usePolicySimulations() {
   return useQuery({
-    queryKey: policyKeys.simulations(tenantId),
+    queryKey: policyKeys.simulations(),
     queryFn: async () => {
-      const res = await apiFetch(`/api/rest/policy-simulations?tenant_id=${encodeURIComponent(tenantId)}`);
+      const res = await apiFetch('/api/rest/policy-simulations');
       if (!res.ok) {
         throw new Error(await res.text());
       }
       return res.json();
     },
-    enabled: !!tenantId,
   });
 }
 
-export function useDriftRuns(tenantId: string) {
+export function useDriftRuns() {
   return useQuery({
-    queryKey: policyKeys.driftRuns(tenantId),
+    queryKey: policyKeys.driftRuns(),
     queryFn: async () => {
-      const res = await apiFetch(`/api/rest/drift-runs?tenant_id=${encodeURIComponent(tenantId)}`);
+      const res = await apiFetch('/api/rest/drift-runs');
       if (!res.ok) {
         throw new Error(await res.text());
       }
       return res.json();
     },
-    enabled: !!tenantId,
   });
 }

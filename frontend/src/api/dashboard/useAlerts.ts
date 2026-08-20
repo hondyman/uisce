@@ -29,17 +29,17 @@ export interface AlertsSummary {
   total_alerts: number;
 }
 
-export function useAlerts(tenantId: string, valuationDate: string) {
+export function useAlerts(valuationDate: string) {
   return useQuery({
-    queryKey: ['dashboard-alerts', tenantId, valuationDate],
+    queryKey: ['dashboard-alerts', valuationDate],
     queryFn: async () => {
       const res = await fetch(
-        `/api/dashboard/alerts?tenant_id=${tenantId}&valuation_date=${valuationDate}`
+        `/api/dashboard/alerts?valuation_date=${valuationDate}`
       );
       if (!res.ok) throw new Error('Failed to load alerts');
       const data = await res.json();
       return data as AlertsSummary;
     },
-    enabled: !!tenantId && !!valuationDate,
+    enabled: !!valuationDate,
   });
 }

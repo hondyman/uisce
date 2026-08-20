@@ -14,42 +14,39 @@ function getHeaders(): Record<string, string> {
 }
 
 export const calendarApi = {
-  getAuthUrl: async (tenantId: string, userId: string, provider: CalendarProvider = 'google') => {
-    const res = await fetch(`${API_BASE}/sync/${provider}/auth-url-pkce?user_id=${userId}`, {
-      headers: { ...getHeaders(), 'X-User-ID': userId }
+  getAuthUrl: async (provider: CalendarProvider = 'google') => {
+    const res = await fetch(`${API_BASE}/sync/${provider}/auth-url-pkce`, {
+      headers: getHeaders()
     });
     if (!res.ok) throw new Error('Failed to get auth URL');
     return res.json();
   },
 
-  getMicrosoftAuthUrl: async (tenantId: string, userId: string) => {
-    return calendarApi.getAuthUrl(tenantId, userId, 'microsoft');
+  getMicrosoftAuthUrl: async () => {
+    return calendarApi.getAuthUrl('microsoft');
   },
 
-  getCalendars: async (tenantId: string, userId: string, provider: CalendarProvider = 'google') => {
+  getCalendars: async (provider: CalendarProvider = 'google') => {
     const res = await fetch(`${API_BASE}/v1/sync/calendars/calendars?provider=${provider}`, {
-      headers: { ...getHeaders(), 'X-User-ID': userId }
+      headers: getHeaders()
     });
     if (!res.ok) throw new Error(`Failed to get ${provider} calendars`);
     return res.json();
   },
 
-  getMicrosoftCalendars: async (tenantId: string, userId: string) => {
-    return calendarApi.getCalendars(tenantId, userId, 'microsoft');
+  getMicrosoftCalendars: async () => {
+    return calendarApi.getCalendars('microsoft');
   },
 
   triggerSync: async (
-    tenantId: string,
-    userId: string,
     provider: CalendarProvider,
     externalCalendarId: string,
     internalCalendarId?: string
   ) => {
     const res = await fetch(`${API_BASE}/v1/sync/calendars/sync`, {
       method: 'POST',
-      headers: { ...getHeaders(), 'X-User-ID': userId },
+      headers: getHeaders(),
       body: JSON.stringify({
-        user_id: userId,
         provider,
         external_calendar_id: externalCalendarId,
         internal_calendar_id: internalCalendarId,
@@ -59,8 +56,8 @@ export const calendarApi = {
     return res.json();
   },
 
-  triggerMicrosoftSync: async (tenantId: string, userId: string, calendarId: string = 'primary') => {
-    return calendarApi.triggerSync(tenantId, userId, 'microsoft', calendarId);
+  triggerMicrosoftSync: async (calendarId: string = 'primary') => {
+    return calendarApi.triggerSync('microsoft', calendarId);
   },
 
   getSyncStatus: async (syncId: string) => {
@@ -71,22 +68,22 @@ export const calendarApi = {
     return res.json();
   },
 
-  getSyncedEvents: async (tenantId: string, userId: string, provider?: CalendarProvider) => {
+  getSyncedEvents: async (provider?: CalendarProvider) => {
     const url = new URL(`${API_BASE}/v1/sync/calendars/events`);
     if (provider) url.searchParams.set('provider', provider);
     const res = await fetch(url.toString(), {
-      headers: { ...getHeaders(), 'X-User-ID': userId }
+      headers: getHeaders()
     });
     if (!res.ok) throw new Error('Failed to fetch events');
     return res.json();
   },
 
-  getSyncedMicrosoftEvents: async (tenantId: string, userId: string) => {
-    return calendarApi.getSyncedEvents(tenantId, userId, 'microsoft');
+  getSyncedMicrosoftEvents: async () => {
+    return calendarApi.getSyncedEvents('microsoft');
   },
 
-  listActiveSyncs: async (userId: string) => {
-    const res = await fetch(`${API_BASE}/v1/sync/calendars/active?user_id=${userId}`, {
+  listActiveSyncs: async () => {
+    const res = await fetch(`${API_BASE}/v1/sync/calendars/active`, {
       headers: getHeaders()
     });
     if (!res.ok) throw new Error('Failed to fetch active syncs');

@@ -289,6 +289,55 @@ func (g *BOSQLGenerator) BuildUnionSafeQuery(hotSQL string, coldSQL string, limi
 	return unionQuery
 }
 
+// BuildAsymmetricCorrectionQuery reconciles late-arriving bitemporal mutations arriving at (Tk >= Wt)
+// against base historical states stored in immutable cold Lakehouse storage (Te < Wt) via a coalesced LEFT JOIN.
+func (g *BOSQLGenerator) BuildAsymmetricCorrectionQuery(baseHistoricalSQL string, lateCorrectionsSQL string, joinKey string, columns []string, limit int) string {
+	var selectCols []string
+	if len(columns) == 0 {
+		selectCols = append(selectCols, "b.*")
+	} else {
+		for _, col := range columns {
+			if strings.EqualFold(col, joinKey) {
+				selectCols = append(selectCols, fmt.Sprintf("b.%s", col))
+			} else {
+				selectCols = append(selectCols, fmt.Sprintf("COALESCE(c.%s, b.%s) AS %s", col, col, col))
+			}
+		}
+	}
+
+	query := fmt.Sprintf(`WITH base_historical AS (
+%s
+),
+late_corrections AS (
+%s
+)
+SELECT
+    %s
+FROM base_historical b
+LEFT JOIN late_corrections c ON b.%s = c.%s`,
+		indentSQL(baseHistoricalSQL, "    "),
+		indentSQL(lateCorrectionsSQL, "    "),
+		strings.Join(selectCols, ",\n    "),
+		joinKey,
+		joinKey,
+	)
+
+	if limit > 0 {
+		query += fmt.Sprintf("\nLIMIT %d", limit)
+	}
+
+	return query
+}
+
+func indentSQL(sqlText string, indent string) string {
+	lines := strings.Split(strings.TrimSpace(sqlText), "\n")
+	for i, l := range lines {
+		lines[i] = indent + l
+	}
+	return strings.Join(lines, "\n")
+}
+
+
 // ResolvePolymorphicField physically translates a semantic term based on its binding source type (COLUMN, JSON_PATH, EXPRESSION).
 func ResolvePolymorphicField(field BOField, tableAlias string, dialect Dialect) string {
 	switch field.SourceType {
@@ -663,8 +712,28 @@ func (g *BOSQLGenerator) ResolvePath(ctx *GenerationContext, path string) (strin
 	return sqlExpr, err
 }
 
+func sanitizeTableName(tableName string) string {
+	tableName = strings.TrimSpace(tableName)
+	tableName = strings.TrimPrefix(tableName, "/")
+	if strings.Contains(tableName, "/") {
+		parts := strings.Split(tableName, "/")
+		if len(parts) == 2 {
+			return fmt.Sprintf("\"%s\".\"%s\"", parts[0], parts[1])
+		}
+		tableName = strings.ReplaceAll(tableName, "/", "_")
+	}
+	if strings.Contains(tableName, ".") {
+		parts := strings.Split(tableName, ".")
+		if len(parts) == 2 {
+			return fmt.Sprintf("\"%s\".\"%s\"", strings.Trim(parts[0], "\""), strings.Trim(parts[1], "\""))
+		}
+	}
+	return tableName
+}
+
 func (g *BOSQLGenerator) BuildFROMClause(ctx *GenerationContext) string {
-	return fmt.Sprintf("%s AS t0", ctx.RootBODef.DrivingTable)
+	table := sanitizeTableName(ctx.RootBODef.DrivingTable)
+	return fmt.Sprintf("%s AS t0", table)
 }
 
 func (g *BOSQLGenerator) BuildJoinClause(ctx *GenerationContext) string {
@@ -679,43 +748,109 @@ func (g *BOSQLGenerator) ConvertFilters(ctx *GenerationContext) (string, error) 
 	var whereParts []string
 
 	for _, filter := range ctx.Request.Filters {
-		// Resolve field ID to physical column
-		// We need to find the field definition.
-		// Since we don't have a map of all fields easily accessible in Context by ID (only referenced BOs),
-		// we might need to search or preload field metadata.
-
-		// Optimization: For MVP, assumption is fieldID IS the path or name if simple.
-		// Detailed lookup: Scan RootBO + LoadedBOs.
-
-		// Helper to find field across loaded BOs?
-		// Actually, the FieldID in frontend is the Name or Key.
-		// Let's try to resolve it using ResolvePath logic but for just finding the column.
-
 		fieldPath := filter.FieldID
-
-		// Re-use logic or call ResolvePath just for the column reference
-		// We need to call ResolvePath which adds joins if missing.
-		// This side-effect is desirable (filtering on a field implies joining its table).
 
 		sqlExpr, err := g.ResolvePath(ctx, fieldPath)
 		if err != nil {
 			return "", fmt.Errorf("failed to resolve filter field %s: %w", fieldPath, err)
 		}
 
+		op := strings.ToUpper(strings.TrimSpace(filter.Operator))
+		if op == "" || op == "EQ" {
+			op = "="
+		} else if op == "NEQ" {
+			op = "!="
+		} else if op == "GT" {
+			op = ">"
+		} else if op == "LT" {
+			op = "<"
+		} else if op == "GTE" {
+			op = ">="
+		} else if op == "LTE" {
+			op = "<="
+		}
+
+		// Handle IS NULL / IS NOT NULL / Boolean
+		if op == "IS NULL" || op == "NULL" || op == "IS_NULL" {
+			whereParts = append(whereParts, fmt.Sprintf("%s IS NULL", sqlExpr))
+			continue
+		}
+		if op == "IS NOT NULL" || op == "NOT_NULL" || op == "NOT NULL" || op == "IS_NOT_NULL" {
+			whereParts = append(whereParts, fmt.Sprintf("%s IS NOT NULL", sqlExpr))
+			continue
+		}
+		if op == "IS TRUE" || op == "IS_TRUE" {
+			whereParts = append(whereParts, fmt.Sprintf("%s IS TRUE", sqlExpr))
+			continue
+		}
+		if op == "IS FALSE" || op == "IS_FALSE" {
+			whereParts = append(whereParts, fmt.Sprintf("%s IS FALSE", sqlExpr))
+			continue
+		}
+
 		// Format value
 		valStr := ""
 		switch v := filter.Value.(type) {
 		case string:
-			valStr = fmt.Sprintf("'%s'", strings.ReplaceAll(v, "'", "''"))
+			cleanV := strings.ReplaceAll(v, "'", "''")
+			switch op {
+			case "CONTAINS", "CONTAIN":
+				op = "ILIKE"
+				valStr = fmt.Sprintf("'%%%s%%'", cleanV)
+			case "STARTS WITH", "STARTS_WITH", "START_WITH":
+				op = "ILIKE"
+				valStr = fmt.Sprintf("'%s%%'", cleanV)
+			case "ENDS WITH", "ENDS_WITH", "END_WITH":
+				op = "ILIKE"
+				valStr = fmt.Sprintf("'%%%s'", cleanV)
+			case "IN", "NOT IN":
+				items := strings.Split(cleanV, ",")
+				var formattedItems []string
+				for _, item := range items {
+					trimmed := strings.TrimSpace(item)
+					if trimmed != "" {
+						formattedItems = append(formattedItems, fmt.Sprintf("'%s'", trimmed))
+					}
+				}
+				if len(formattedItems) == 0 {
+					valStr = "('')"
+				} else {
+					valStr = fmt.Sprintf("(%s)", strings.Join(formattedItems, ", "))
+				}
+			default:
+				valStr = fmt.Sprintf("'%s'", cleanV)
+			}
+		case []interface{}:
+			var formattedItems []string
+			for _, item := range v {
+				switch iv := item.(type) {
+				case string:
+					formattedItems = append(formattedItems, fmt.Sprintf("'%s'", strings.ReplaceAll(iv, "'", "''")))
+				case int, int64, float64:
+					formattedItems = append(formattedItems, fmt.Sprintf("%v", iv))
+				default:
+					formattedItems = append(formattedItems, fmt.Sprintf("'%v'", iv))
+				}
+			}
+			if len(formattedItems) == 0 {
+				valStr = "('')"
+			} else {
+				valStr = fmt.Sprintf("(%s)", strings.Join(formattedItems, ", "))
+			}
+		case []string:
+			var formattedItems []string
+			for _, item := range v {
+				formattedItems = append(formattedItems, fmt.Sprintf("'%s'", strings.ReplaceAll(item, "'", "''")))
+			}
+			if len(formattedItems) == 0 {
+				valStr = "('')"
+			} else {
+				valStr = fmt.Sprintf("(%s)", strings.Join(formattedItems, ", "))
+			}
 		case int, int64, float64:
 			valStr = fmt.Sprintf("%v", v)
 		default:
 			valStr = fmt.Sprintf("'%v'", v)
-		}
-
-		op := filter.Operator
-		if op == "" {
-			op = "="
 		}
 
 		clause := fmt.Sprintf("%s %s %s", sqlExpr, op, valStr)

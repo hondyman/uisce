@@ -229,9 +229,8 @@ schedulerAxios.interceptors.request.use((config) => {
 });
 
 // Jobs
-export async function listJobs(tenantId: string, filters?: JobListFilters): Promise<{ jobs: Job[]; total: number }> {
+export async function listJobs(filters?: JobListFilters): Promise<{ jobs: Job[]; total: number }> {
     const params = new URLSearchParams();
-    if (tenantId) params.set('tenant_id', tenantId);
     if (filters?.category) params.set('category', filters.category);
     if (filters?.is_active !== undefined) params.set('is_active', String(filters.is_active));
     if (filters?.slo_critical !== undefined) params.set('slo_critical', String(filters.slo_critical));
@@ -247,8 +246,8 @@ export async function getJob(jobId: string): Promise<Job> {
     return response.data;
 }
 
-export async function createJob(tenantId: string, request: CreateJobRequest): Promise<Job> {
-    const response = await schedulerAxios.post(`/jobs?tenant_id=${tenantId}`, request);
+export async function createJob(request: CreateJobRequest): Promise<Job> {
+    const response = await schedulerAxios.post('/jobs', request);
     return response.data;
 }
 
@@ -274,9 +273,8 @@ export async function getJobRuns(jobId: string, limit?: number): Promise<JobRun[
 }
 
 // DAGs
-export async function listDAGs(tenantId: string, activeOnly?: boolean): Promise<DAG[]> {
+export async function listDAGs(activeOnly?: boolean): Promise<DAG[]> {
     const params = new URLSearchParams();
-    if (tenantId) params.set('tenant_id', tenantId);
     if (activeOnly) params.set('active_only', 'true');
     const response = await schedulerAxios.get(`/dags?${params}`);
     return response.data;
@@ -287,8 +285,8 @@ export async function getDAG(dagId: string): Promise<DAG> {
     return response.data;
 }
 
-export async function createDAG(tenantId: string, dag: Partial<DAG>): Promise<DAG> {
-    const response = await schedulerAxios.post(`/dags?tenant_id=${tenantId}`, dag);
+export async function createDAG(dag: Partial<DAG>): Promise<DAG> {
+    const response = await schedulerAxios.post('/dags', dag);
     return response.data;
 }
 
@@ -325,8 +323,8 @@ export async function getDAGRun(runId: string): Promise<DAGRun> {
 }
 
 // AI Suggestions
-export async function getAISuggestions(tenantId: string): Promise<AISuggestion[]> {
-    const response = await schedulerAxios.get(`/ai/suggestions?tenant_id=${tenantId}`);
+export async function getAISuggestions(): Promise<AISuggestion[]> {
+    const response = await schedulerAxios.get('/ai/suggestions');
     return response.data;
 }
 
@@ -339,8 +337,8 @@ export async function dismissAISuggestion(suggestionId: string, reason?: string)
 }
 
 // Stats
-export async function getSchedulerStats(tenantId: string): Promise<JobStats> {
-    const response = await schedulerAxios.get(`/stats?tenant_id=${tenantId}`);
+export async function getSchedulerStats(): Promise<JobStats> {
+    const response = await schedulerAxios.get('/stats');
     return response.data;
 }
 
@@ -348,17 +346,16 @@ export async function getSchedulerStats(tenantId: string): Promise<JobStats> {
 // Hooks
 // ============================================================================
 
-export function useJobs(tenantId: string, filters?: JobListFilters) {
+export function useJobs(filters?: JobListFilters) {
     const [jobs, setJobs] = useState<Job[]>([]);
     const [total, setTotal] = useState(0);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<Error | null>(null);
 
     const refetch = useCallback(async () => {
-        if (!tenantId) return;
         setLoading(true);
         try {
-            const result = await listJobs(tenantId, filters);
+            const result = await listJobs(filters);
             setJobs(result.jobs);
             setTotal(result.total);
             setError(null);
@@ -367,7 +364,7 @@ export function useJobs(tenantId: string, filters?: JobListFilters) {
         } finally {
             setLoading(false);
         }
-    }, [tenantId, filters?.category, filters?.is_active, filters?.limit, filters?.offset]);
+    }, [filters?.category, filters?.is_active, filters?.limit, filters?.offset]);
 
     useEffect(() => {
         refetch();
@@ -376,16 +373,15 @@ export function useJobs(tenantId: string, filters?: JobListFilters) {
     return { jobs, total, loading, error, refetch };
 }
 
-export function useDAGs(tenantId: string, activeOnly?: boolean) {
+export function useDAGs(activeOnly?: boolean) {
     const [dags, setDAGs] = useState<DAG[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<Error | null>(null);
 
     const refetch = useCallback(async () => {
-        if (!tenantId) return;
         setLoading(true);
         try {
-            const result = await listDAGs(tenantId, activeOnly);
+            const result = await listDAGs(activeOnly);
             setDAGs(result);
             setError(null);
         } catch (err) {
@@ -393,7 +389,7 @@ export function useDAGs(tenantId: string, activeOnly?: boolean) {
         } finally {
             setLoading(false);
         }
-    }, [tenantId, activeOnly]);
+    }, [activeOnly]);
 
     useEffect(() => {
         refetch();
@@ -402,16 +398,15 @@ export function useDAGs(tenantId: string, activeOnly?: boolean) {
     return { dags, loading, error, refetch };
 }
 
-export function useSchedulerStats(tenantId: string) {
+export function useSchedulerStats() {
     const [stats, setStats] = useState<JobStats | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<Error | null>(null);
 
     const refetch = useCallback(async () => {
-        if (!tenantId) return;
         setLoading(true);
         try {
-            const result = await getSchedulerStats(tenantId);
+            const result = await getSchedulerStats();
             setStats(result);
             setError(null);
         } catch (err) {
@@ -419,7 +414,7 @@ export function useSchedulerStats(tenantId: string) {
         } finally {
             setLoading(false);
         }
-    }, [tenantId]);
+    }, []);
 
     useEffect(() => {
         refetch();
@@ -428,16 +423,15 @@ export function useSchedulerStats(tenantId: string) {
     return { stats, loading, error, refetch };
 }
 
-export function useAISuggestions(tenantId: string) {
+export function useAISuggestions() {
     const [suggestions, setSuggestions] = useState<AISuggestion[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<Error | null>(null);
 
     const refetch = useCallback(async () => {
-        if (!tenantId) return;
         setLoading(true);
         try {
-            const result = await getAISuggestions(tenantId);
+            const result = await getAISuggestions();
             setSuggestions(result);
             setError(null);
         } catch (err) {
@@ -445,7 +439,7 @@ export function useAISuggestions(tenantId: string) {
         } finally {
             setLoading(false);
         }
-    }, [tenantId]);
+    }, []);
 
     useEffect(() => {
         refetch();

@@ -47,68 +47,64 @@ export interface Scenario {
 
 export const riskKeys = {
   all: ['risk'] as const,
-  events: (tenantId: string) => [...riskKeys.all, 'events', tenantId] as const,
-  portfolios: (tenantId: string) => [...riskKeys.all, 'portfolios', tenantId] as const,
-  rebalanceSuggestions: (tenantId: string) => [...riskKeys.all, 'rebalance', tenantId] as const,
-  scenarios: (tenantId: string) => [...riskKeys.all, 'scenarios', tenantId] as const,
+  events: () => [...riskKeys.all, 'events'] as const,
+  portfolios: () => [...riskKeys.all, 'portfolios'] as const,
+  rebalanceSuggestions: () => [...riskKeys.all, 'rebalance'] as const,
+  scenarios: () => [...riskKeys.all, 'scenarios'] as const,
 };
 
-export function useRiskEvents(tenantId: string, refetchInterval = 2000) {
+export function useRiskEvents(refetchInterval = 2000) {
   return useQuery({
-    queryKey: riskKeys.events(tenantId),
+    queryKey: riskKeys.events(),
     queryFn: async () => {
-      const res = await apiFetch(`/api/rest/risk-events?tenant_id=${encodeURIComponent(tenantId)}`);
+      const res = await apiFetch('/api/rest/risk-events');
       if (!res.ok) {
         throw new Error(await res.text());
       }
       return res.json() as Promise<RiskEvent[]>;
     },
-    enabled: !!tenantId,
     refetchInterval,
   });
 }
 
-export function usePortfolios(tenantId: string, refetchInterval = 2000) {
+export function usePortfolios(refetchInterval = 2000) {
   return useQuery({
-    queryKey: riskKeys.portfolios(tenantId),
+    queryKey: riskKeys.portfolios(),
     queryFn: async () => {
-      const res = await apiFetch(`/api/rest/portfolios?tenant_id=${encodeURIComponent(tenantId)}`);
+      const res = await apiFetch('/api/rest/portfolios');
       if (!res.ok) {
         throw new Error(await res.text());
       }
       return res.json() as Promise<Portfolio[]>;
     },
-    enabled: !!tenantId,
     refetchInterval,
   });
 }
 
-export function useRebalanceSuggestions(tenantId: string, refetchInterval = 2000) {
+export function useRebalanceSuggestions(refetchInterval = 2000) {
   return useQuery({
-    queryKey: riskKeys.rebalanceSuggestions(tenantId),
+    queryKey: riskKeys.rebalanceSuggestions(),
     queryFn: async () => {
-      const res = await apiFetch(`/api/rest/rebalance-suggestions?tenant_id=${encodeURIComponent(tenantId)}`);
+      const res = await apiFetch('/api/rest/rebalance-suggestions');
       if (!res.ok) {
         throw new Error(await res.text());
       }
       return res.json() as Promise<RebalanceSuggestion[]>;
     },
-    enabled: !!tenantId,
     refetchInterval,
   });
 }
 
-export function useScenarios(tenantId: string, refetchInterval = 2000) {
+export function useScenarios(refetchInterval = 2000) {
   return useQuery({
-    queryKey: riskKeys.scenarios(tenantId),
+    queryKey: riskKeys.scenarios(),
     queryFn: async () => {
-      const res = await apiFetch(`/api/rest/scenarios?tenant_id=${encodeURIComponent(tenantId)}`);
+      const res = await apiFetch('/api/rest/scenarios');
       if (!res.ok) {
         throw new Error(await res.text());
       }
       return res.json() as Promise<Scenario[]>;
     },
-    enabled: !!tenantId,
     refetchInterval,
   });
 }

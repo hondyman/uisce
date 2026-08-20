@@ -36,9 +36,9 @@ const DATA_FABRIC_MENU: MenuGroup = {
   items: [
     { id: 'bundle-explorer', label: 'Bundle Explorer', description: 'Visual explorer for data bundles.', to: '/bundle-explorer' },
     { id: 'bundles', label: 'Data Bundles', description: 'Create and publish semantic data bundles.', to: '/fabric/bundles' },
-    { id: 'glossary', label: 'Business Glossary', description: 'Manage semantic and business terms.', to: '/core/glossary' },
+    { id: 'business-terms', label: 'Business Terms', description: 'Explore business glossary terms.', to: '/core/business-terms' },
+    { id: 'glossary', label: 'Semantic Terms', description: 'Manage semantic terms and physical mappings.', to: '/core/glossary' },
     { id: 'semantic-mapper', label: 'Semantic Mapper', description: 'Map database columns to semantic terms.', to: '/core/semantic-mapper' },
-
     { id: 'domains', label: 'Domains', description: 'Manage data domain hierarchy.', to: '/core/domains' },
     { id: 'preaggs', label: 'Pre-Aggregations', description: 'Manage pre-aggregation definitions.', to: '/fabric/preaggregations' },
     { id: 'calc', label: 'Calculations Library', description: 'Reusable calculation templates.', to: '/fabric/calculations' },

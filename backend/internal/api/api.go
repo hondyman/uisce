@@ -58,6 +58,7 @@ import (
 	"github.com/hondyman/uisce/backend/internal/metadata"
 	appmid "github.com/hondyman/uisce/backend/internal/middleware"
 	models "github.com/hondyman/uisce/backend/internal/models"
+	uisceoauth "github.com/hondyman/uisce/backend/internal/oauth"
 	"github.com/hondyman/uisce/backend/internal/platform"
 	"github.com/hondyman/uisce/backend/internal/portfoliomaster"
 	"github.com/hondyman/uisce/backend/internal/querybuilder"
@@ -206,6 +207,7 @@ type Server struct {
 	BusinessObjectService   *catalogmeta.BusinessObjectService
 	QueryHandler            *handlers.QueryHandler
 	QueryBuilderHandler     *querybuilder.QueryBuilderHandler
+	BOStatusHandler         *handlers.BOStatusHandler
 	SavedQueryHandler       *handlers.SavedQueryHandler
 	SearchHandler           *handlers.SearchHandler
 	NLQHandler              *handlers.NLQHandler
@@ -472,7 +474,7 @@ func (s *Server) getSemanticBundle(w http.ResponseWriter, r *http.Request) {
 		boID = chi.URLParam(r, "bo_id")
 	}
 
-	// Read tenant_id from header or query parameter
+	// Read tenant_id from JWT claims
 	claims := jwtmiddleware.GetClaimsFromContext(r)
 	if claims == nil {
 		http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
@@ -480,11 +482,7 @@ func (s *Server) getSemanticBundle(w http.ResponseWriter, r *http.Request) {
 	}
 	tenantID := claims.TenantID
 	if tenantID == "" {
-		tenantID = r.URL.Query().Get("tenant_id")
-	}
-
-	if tenantID == "" {
-		http.Error(w, "X-Tenant-ID header or tenant_id query parameter is required", http.StatusBadRequest)
+		http.Error(w, "No tenant in JWT claims", http.StatusUnauthorized)
 		return
 	}
 
@@ -1085,6 +1083,9 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 		srv.QueryBuilderHandler = querybuilder.NewQueryBuilderHandler(qbService, qbExecutor, securityDeps)
 	}
 
+	boStatusService := analytics.NewBOStatusService(srv.SQLXDB)
+	srv.BOStatusHandler = handlers.NewBOStatusHandler(boStatusService)
+
 	// Phase 11: CBO-backed UnifiedCalcEngine
 	if cboEnabled := os.Getenv("CBO_ENABLED"); cboEnabled == "true" {
 		if tr := newCBOTelemetryRouter(sqlxDB); tr != nil {
@@ -1329,7 +1330,7 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 
 	boService := catalogmeta.NewBusinessObjectService(sqlxDB, tenantManager, auditPublisher, sqlRepo)
 	srv.BusinessObjectService = boService
-	boHandler := NewBusinessObjectHandler(boService, srv.DatasourceResolver)
+	boHandler := NewBusinessObjectHandler(boService, srv.DatasourceResolver, sqlxDB)
 	// boHandler.RegisterRoutes(r) - Moved below into /api group
 
 	// Initialize Catalog Handler (Phase 18)
@@ -1617,6 +1618,22 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 		}
 		glossaryHandler := NewGlossaryHandler(db, lineage.NewDBLineageRepository(sqlxDB), handlers.SecurityContextDeps{Resolver: srv.DatasourceResolver})
 		glossaryHandler.RegisterRoutes(r)
+		apiDispatcherEncryptor, encryptorErr := buildApiDispatcherEncryptor()
+		if encryptorErr != nil {
+			log.Fatalf("Failed to construct API dispatcher encryptor: %v", encryptorErr)
+		}
+		apiOAuthProvider := uisceoauth.NewApiOAuthProvider(redisClient, apiDispatcherEncryptor)
+		apiDispatcherHandler := NewApiDispatcherHandler(db, handlers.SecurityContextDeps{Resolver: srv.DatasourceResolver}, apiDispatcherEncryptor, apiOAuthProvider)
+		apiDispatcherHandler.RegisterRoutes(r)
+		// Fire-and-forget audit writer. The worker drains a 1024-entry
+		// buffered channel so dispatch latency is independent of DB latency;
+		// entries beyond the buffer are dropped (counted in
+		// auditDrops) rather than blocking the user response. The worker
+		// terminates when the process exits; pending entries are flushed
+		// by the deferred drain on graceful shutdown.
+		auditCtx, auditCancel := context.WithCancel(context.Background())
+		_ = auditCancel
+		apiDispatcherHandler.StartAuditWorker(auditCtx)
 		RegisterValidationRulesRoutes(r, db, srv.CueEngine, srv.BusinessObjectService, srv.DatasourceResolver)
 
 		// Initialize Security Profile Service and Handler
@@ -1659,8 +1676,8 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 			// Tenant search + scope (impersonation picker) & audit logs
 			r.Get("/api/v1/audit/channel-billing", srv.GetChannelAuditBillingSummaryHandler)
 			r.Get("/api/v1/audit/channel-logs", srv.GetChannelAuditLogsHandler)
-			r.Get("/admin/tenants/{tenantID}/audit-logs", handlers.HandleGetAuditLogs)
-			r.Get("/v1/admin/tenants/{tenantID}/audit-logs", handlers.HandleGetAuditLogs)
+			r.Get("/admin/tenants/audit-logs", handlers.HandleGetAuditLogs)
+			r.Get("/v1/admin/tenants/audit-logs", handlers.HandleGetAuditLogs)
 			tenantSearchHandler := handlers.NewAdminTenantSearchHandler(db)
 			r.Get("/admin/tenants/{tenantID}/scope", tenantSearchHandler.GetTenantScope)
 
@@ -3170,7 +3187,12 @@ func (s *Server) registerExplorerRoutes(r chi.Router) {
 
 	// Legacy compatibility aliases for explorer
 	r.Route("/query", func(r chi.Router) {
-		r.Post("/execute", s.QueryHandler.HandleExecuteQuery)
+		if s.QueryBuilderHandler != nil {
+			r.Post("/preview", s.QueryBuilderHandler.Preview)
+			r.Post("/execute", s.QueryBuilderHandler.Execute)
+		} else {
+			r.Post("/execute", s.QueryHandler.HandleExecuteQuery)
+		}
 		r.Post("/compile", s.QueryHandler.HandleCompileQuery)
 		r.Post("/export", s.QueryHandler.HandleExportQuery)
 		r.Get("/history", s.QueryHandler.HandleListHistory)
@@ -3438,6 +3460,12 @@ func (s *Server) registerMetadataRoutes(r chi.Router, boHandler *BusinessObjectH
 	boHandler.RegisterRoutes(r)
 	if s.QueryBuilderHandler != nil {
 		r.Get("/business-objects/{boId}/terms", s.QueryBuilderHandler.ListBOTerms)
+		r.Post("/query/preview", s.QueryBuilderHandler.Preview)
+		r.Post("/query/execute", s.QueryBuilderHandler.Execute)
+	}
+	if s.BOStatusHandler != nil {
+		r.Get("/bo/{boId}/status", s.BOStatusHandler.GetBOStatus)
+		r.Get("/business-objects/{boId}/status", s.BOStatusHandler.GetBOStatus)
 	}
 	catalogHandler.RegisterRoutes(r)
 

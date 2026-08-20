@@ -6,6 +6,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	"github.com/hondyman/uisce/backend/internal/security"
 	"github.com/hondyman/uisce/backend/internal/services"
 	"github.com/hondyman/uisce/backend/models"
 )
@@ -194,7 +195,10 @@ func (h *CollaborationHandler) HandleRequestSemanticModelAccess(w http.ResponseW
 
 // HandleListAccessRequests lists access requests for a user or reviewer.
 func (h *CollaborationHandler) HandleListAccessRequests(w http.ResponseWriter, r *http.Request) {
-	userID := r.URL.Query().Get("user_id")
+	userID, ok := security.RequireUser(w, r)
+	if !ok {
+		return
+	}
 	reviewerID := r.URL.Query().Get("reviewer_id")
 
 	requests, err := h.service.ListAccessRequests(r.Context(), userID, reviewerID)
@@ -263,11 +267,8 @@ func (h *CollaborationHandler) HandleRejectAccessRequest(w http.ResponseWriter, 
 
 // HandleGetEffectiveClaims retrieves all effective claims for a user.
 func (h *CollaborationHandler) HandleGetEffectiveClaims(w http.ResponseWriter, r *http.Request) {
-	userID := r.URL.Query().Get("user_id")
-	if userID == "" {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]string{"error": "user_id is required"})
+	userID, ok := security.RequireUser(w, r)
+	if !ok {
 		return
 	}
 	claims, err := h.service.GetEffectiveClaimsForUser(r.Context(), userID)
@@ -306,12 +307,8 @@ func (h *CollaborationHandler) HandleSimulateClaims(w http.ResponseWriter, r *ht
 
 // HandleGetStewardDomains retrieves the domains a user is a steward for.
 func (h *CollaborationHandler) HandleGetStewardDomains(w http.ResponseWriter, r *http.Request) {
-	// In a real app, UserID would come from auth context.
-	userID := r.URL.Query().Get("user_id")
-	if userID == "" {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]string{"error": "user_id is required"})
+	userID, ok := security.RequireUser(w, r)
+	if !ok {
 		return
 	}
 
@@ -746,11 +743,8 @@ func (h *CollaborationHandler) HandleGetGovernanceHeatmap(w http.ResponseWriter,
 
 // HandleListClaimConflicts lists conflicting effective permissions.
 func (h *CollaborationHandler) HandleListClaimConflicts(w http.ResponseWriter, r *http.Request) {
-	userID := r.URL.Query().Get("user_id")
-	if userID == "" {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]string{"error": "user_id is required"})
+	userID, ok := security.RequireUser(w, r)
+	if !ok {
 		return
 	}
 	conflicts, err := h.service.DetectClaimConflicts(r.Context(), userID)

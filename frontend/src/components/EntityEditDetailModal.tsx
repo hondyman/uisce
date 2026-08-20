@@ -7,7 +7,6 @@ import {
   Button,
   Table,
   Space,
-  Tag,
   message,
   Popconfirm,
   Tooltip,
@@ -15,9 +14,7 @@ import {
   Tabs,
   Spin,
 } from 'antd';
-import { Chip } from '@mui/material';
-import WaterDropIcon from '@mui/icons-material/WaterDrop';
-import BuildIcon from '@mui/icons-material/Build';
+import { CoreIcon, CustomIcon } from './common/CoreCustomIcons';
 import {
   PlusOutlined,
   DeleteOutlined,
@@ -113,7 +110,7 @@ export default function EntityEditDetailModal({
     {
       title: (
         <span>
-          <Tag color="blue">core</Tag>
+          <CoreIcon fontSize="small" style={{ marginRight: '6px' }} />
           <strong>{entity.businessName || entity.name}</strong>
         </span>
       ),
@@ -122,13 +119,7 @@ export default function EntityEditDetailModal({
         ? Object.entries(entity.subtypes).map(([subtypeKey, subtype]) => ({
               title: (
               <span>
-                <Chip
-                  icon={subtype.isCore ? <WaterDropIcon sx={{ fontSize: 14 }} /> : <BuildIcon sx={{ fontSize: 14 }} />}
-                  label={subtype.isCore ? 'core' : 'custom'}
-                  size="small"
-                  color={subtype.isCore ? 'primary' : 'success'}
-                  variant="outlined"
-                />
+                {subtype.isCore ? <CoreIcon fontSize="small" style={{ marginRight: '6px' }} /> : <CustomIcon fontSize="small" style={{ marginRight: '6px' }} />}
                 {subtype.businessName || subtype.name}
               </span>
             ),

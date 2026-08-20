@@ -21,7 +21,13 @@ export interface CatalogEdge {
   core_id?: string | null;
   source_node_id?: string;
   target_node_id?: string;
+  source_name?: string;
+  target_name?: string;
   relationship_type?: string;
+  source_node_type?: string;
+  target_node_type?: string;
+  source_path?: string;
+  target_path?: string;
 }
 
 interface RelationshipListProps {
@@ -138,32 +144,105 @@ export const RelationshipList: React.FC<RelationshipListProps> = ({
     return Object.keys(edge.properties).length > 0;
   };
 
-  if (!edges || edges.length === 0) {
+  // Deduplicate edges by key (source, target, predicate)
+  const uniqueEdges = React.useMemo(() => {
+    if (!edges) return [];
+    const seen = new Set<string>();
+    const result: CatalogEdge[] = [];
+    for (const edge of edges) {
+      const sId = edge.subject_node_id || edge.source_node_id || '';
+      const tId = edge.object_node_id || edge.target_node_id || '';
+      const pred = edge.edge_type_name || edge.relationship_type || edge.predicate || '';
+      const key = `${sId}->${tId}:${pred}`;
+      if (!seen.has(key)) {
+        seen.add(key);
+        result.push(edge);
+      }
+    }
+    return result;
+  }, [edges]);
+
+  if (!uniqueEdges || uniqueEdges.length === 0) {
     return (
       <div style={{
-        padding: 24, textAlign: 'center', color: C.textMuted,
+        padding: 48, textAlign: 'center', color: C.textMuted,
         fontFamily: 'system-ui, sans-serif', fontSize: 14,
+        background: C.panel, borderRadius: 12, border: `1px solid ${C.border}`,
       }}>
-        No relationships found
+        <div style={{ fontSize: 32, marginBottom: 8, opacity: 0.5 }}>🔗</div>
+        <div style={{ fontWeight: 600, color: C.text }}>No Relationships Found</div>
+        <div style={{ fontSize: 12, marginTop: 4 }}>This entity has no direct ontology links or relationship edges.</div>
       </div>
     );
   }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 16, padding: 24 }}>
-      {edges.map((edge) => {
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 12, padding: '16px 24px' }}>
+      <div style={{ fontSize: 12, color: C.textMuted, marginBottom: 4 }}>
+        Showing {uniqueEdges.length} connected relationship{uniqueEdges.length !== 1 ? 's' : ''}
+      </div>
+
+      {uniqueEdges.map((edge) => {
         const sourceId = edge.subject_node_id || edge.source_node_id;
         const targetId = edge.object_node_id || edge.target_node_id;
-        const source = sourceId ? resolveNode(sourceId) : undefined;
-        const target = targetId ? resolveNode(targetId) : undefined;
         const isOutbound = sourceId === selectedNodeId;
+        const relatedNodeId = isOutbound ? targetId : sourceId;
+        const relatedNode = relatedNodeId ? resolveNode(relatedNodeId) : undefined;
 
-        const sourceName = (sourceId ? getNodeName?.(sourceId) : undefined) || source?.node_name || source?.name || sourceId?.substring(0, 8);
-        const targetName = (targetId ? getNodeName?.(targetId) : undefined) || target?.node_name || target?.name || targetId?.substring(0, 8);
-        const sourcePath = (sourceId ? getNodePath?.(sourceId) : undefined) || source?.qualified_path;
-        const targetPath = (targetId ? getNodePath?.(targetId) : undefined) || target?.qualified_path;
-        const sourceType = source?.catalog_type_name || source?.node_type || 'Node';
-        const targetType = target?.catalog_type_name || target?.node_type || 'Node';
+        let rawName = (isOutbound ? edge.target_name : edge.source_name) 
+          || (relatedNodeId ? getNodeName?.(relatedNodeId) : undefined) 
+          || relatedNode?.node_name 
+          || relatedNode?.name 
+          || relatedNodeId?.substring(0, 8) 
+          || '';
+
+        let parsedType = (isOutbound ? edge.target_node_type : edge.source_node_type) 
+          || relatedNode?.catalog_type_name 
+          || relatedNode?.node_type 
+          || relatedNode?.type;
+
+        let cleanName = rawName;
+        if (rawName.startsWith('business_object/') || rawName.startsWith('/business_object/')) {
+          parsedType = 'business_object';
+          cleanName = rawName.split('/').filter(Boolean).pop() || rawName;
+        } else if (rawName.startsWith('semantic_term/')) {
+          parsedType = 'semantic_term';
+          cleanName = rawName.replace('semantic_term/', '');
+        } else if (rawName.startsWith('business_term/')) {
+          parsedType = 'business_term';
+          cleanName = rawName.replace('business_term/', '');
+        } else if (rawName.startsWith('api_endpoint/') || rawName.startsWith('/api_endpoint/')) {
+          parsedType = 'api_endpoint';
+          cleanName = rawName.split('/').filter(Boolean).pop() || rawName;
+        } else if (rawName.startsWith('/orm/') || rawName.startsWith('/public/')) {
+          const parts = rawName.split('/').filter(Boolean);
+          if (parts.length >= 3) {
+            parsedType = 'column';
+            cleanName = parts[parts.length - 1];
+          } else if (parts.length === 2) {
+            parsedType = 'table';
+            cleanName = parts[1];
+          }
+        }
+
+        const relatedPath = (isOutbound ? edge.target_path : edge.source_path) 
+          || (relatedNodeId ? getNodePath?.(relatedNodeId) : undefined) 
+          || relatedNode?.qualified_path 
+          || (rawName.startsWith('/') ? rawName : undefined);
+
+        const nodeTypeLower = (parsedType || 'node').toLowerCase();
+        const isBO = nodeTypeLower.includes('business_object') || nodeTypeLower.includes('bo');
+        const isApi = nodeTypeLower.includes('api_endpoint') || nodeTypeLower.includes('endpoint') || nodeTypeLower.includes('api');
+        const isColumn = nodeTypeLower.includes('column');
+        const isTable = nodeTypeLower.includes('table');
+        const isSemTerm = nodeTypeLower.includes('semantic');
+        const isBusTerm = nodeTypeLower.includes('business_term') || nodeTypeLower.includes('businessterm');
+
+        const typeColor = isBO ? '#A855F7' : isApi ? '#38BDF8' : isColumn ? C.teal : isTable ? C.blue : isSemTerm ? C.accent : isBusTerm ? '#10B981' : C.textMuted;
+        const typeIcon = isBO ? '🏢' : isApi ? '🌐' : isColumn ? '🏷️' : isTable ? '📊' : isSemTerm ? '🧠' : isBusTerm ? '💼' : '📄';
+        const typeLabel = isBO ? 'Business Object' : isApi ? 'API Endpoint' : isColumn ? 'Database Column' : isTable ? 'Database Table' : isSemTerm ? 'Semantic Term' : isBusTerm ? 'Business Term' : (parsedType || 'Entity');
+
+        const relationshipLabel = edge.edge_type_name || edge.relationship_type || edge.predicate || 'RELATION';
         const edgeHasProps = hasProperties(edge);
 
         return (
@@ -172,47 +251,60 @@ export const RelationshipList: React.FC<RelationshipListProps> = ({
             style={{
               background: C.panel,
               border: `1px solid ${C.border}`,
-              borderRadius: 8,
-              overflow: 'hidden',
+              borderRadius: 10,
+              padding: '14px 18px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: 16,
+              transition: 'all 0.15s ease',
+              boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
             }}
           >
-            <div style={{ display: 'flex', alignItems: 'stretch' }}>
-              <div style={{ flex: 1, padding: 16 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-                  <Badge label={sourceType} color={C.blue} />
-                  <span style={{ fontWeight: 600, color: C.text }}>{sourceName}</span>
-                </div>
-                {sourcePath && (
-                  <div style={{ fontSize: 12, color: C.textMuted, fontFamily: 'monospace' }}>{sourcePath}</div>
-                )}
-              </div>
+            {/* Left: Direction & Predicate Badge */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 200 }}>
               <div style={{
-                display: 'flex', flexDirection: 'column', alignItems: 'center',
-                justifyContent: 'center', padding: '0 24px',
-                background: darkMode ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.02)',
-                borderLeft: `1px solid ${C.border}`, borderRight: `1px solid ${C.border}`,
+                width: 32, height: 32, borderRadius: 8,
+                background: isOutbound ? 'rgba(99,102,241,0.12)' : 'rgba(16,185,129,0.12)',
+                color: isOutbound ? C.accent : '#10B981',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontWeight: 800, fontSize: 16,
               }}>
-                <Badge label={edge.edge_type_name || edge.relationship_type || 'RELATION'} color={C.accent} />
-                <div style={{ color: C.textMuted, marginTop: 4 }}>{isOutbound ? '→' : '←'}</div>
+                {isOutbound ? '➔' : '⬅'}
               </div>
-              <div style={{ flex: 1, padding: 16, textAlign: 'right' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4, justifyContent: 'flex-end' }}>
-                  <span style={{ fontWeight: 600, color: C.text }}>{targetName}</span>
-                  <Badge label={targetType} color={C.teal} />
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.05em', textTransform: 'uppercase', color: C.textMuted }}>
+                    {isOutbound ? 'Outgoing' : 'Incoming'}
+                  </span>
                 </div>
-                {targetPath && (
-                  <div style={{ fontSize: 12, color: C.textMuted, fontFamily: 'monospace' }}>{targetPath}</div>
-                )}
+                <Badge label={relationshipLabel} color={C.accent} />
               </div>
             </div>
-            <div style={{
-              padding: '8px 16px',
-              background: darkMode ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.02)',
-              borderTop: `1px solid ${C.border}`,
-              display: 'flex',
-              justifyContent: 'flex-end',
-              gap: 4,
-            }}>
+
+            {/* Middle: Connected Target Entity Details */}
+            <div style={{ flex: 1, minWidth: 0, paddingLeft: 12, borderLeft: `1px solid ${C.border}` }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 3 }}>
+                <span style={{ fontSize: 14 }}>{typeIcon}</span>
+                <span style={{ fontWeight: 700, fontSize: 14, color: C.text, wordBreak: 'break-word' }}>
+                  {cleanName}
+                </span>
+                <Badge label={typeLabel} color={typeColor} />
+              </div>
+              {relatedPath && (
+                <div style={{
+                  fontSize: 11, color: C.textMuted, fontFamily: 'monospace',
+                  background: 'rgba(255,255,255,0.03)', padding: '2px 6px',
+                  borderRadius: 4, display: 'inline-block', maxWidth: '100%',
+                  overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                }}>
+                  {relatedPath}
+                </div>
+              )}
+            </div>
+
+            {/* Right: Actions */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
               <Tooltip title={edgeHasProps ? 'View/Edit Properties' : 'No properties'}>
                 <span>
                   <IconButton
@@ -229,7 +321,7 @@ export const RelationshipList: React.FC<RelationshipListProps> = ({
                   <IconButton
                     size="small"
                     onClick={() => setEditingEdge(edge)}
-                    sx={{ color: C.accent }}
+                    sx={{ color: C.textMuted, '&:hover': { color: C.accent } }}
                   >
                     <EditIcon fontSize="small" />
                   </IconButton>
@@ -241,13 +333,9 @@ export const RelationshipList: React.FC<RelationshipListProps> = ({
                     size="small"
                     onClick={() => handleDelete(edge.id)}
                     disabled={deletingId === edge.id}
-                    sx={{ color: C.danger }}
+                    sx={{ color: C.danger, '&:hover': { color: '#FF6B6B' } }}
                   >
-                    {deletingId === edge.id ? (
-                      <CircularProgress size={16} sx={{ color: C.danger }} />
-                    ) : (
-                      <DeleteIcon fontSize="small" />
-                    )}
+                    {deletingId === edge.id ? <CircularProgress size={16} /> : <DeleteIcon fontSize="small" />}
                   </IconButton>
                 </span>
               </Tooltip>

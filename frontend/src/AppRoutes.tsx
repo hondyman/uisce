@@ -34,6 +34,8 @@ import { TenantListPage } from "./features/tenants/pages/TenantListPage";
 import { SemanticCatalogPage } from "./pages/SemanticCatalogPage";
 
 import GlossaryExplorer from "./features/glossary/GlossaryExplorer";
+import BusinessTermsExplorer from "./features/glossary/BusinessTermsExplorer";
+import ApiInventoryPage from "./features/catalog/pages/ApiInventoryPage";
 import { AbbreviationsPage } from "./pages/core/AbbreviationsPage";
 import { CatalogNodeTypesPage } from "./pages/catalog/CatalogNodeTypesPage";
 import { CatalogEdgeTypesPage } from "./pages/catalog/CatalogEdgeTypesPage";
@@ -259,9 +261,14 @@ function ProtectedApp() {
             CATALOG - Discovery and lineage
             ═══════════════════════════════════════════════════════════════════ */}
         <Route path="/core/glossary" element={<ProtectedRoute><GlossaryExplorer /></ProtectedRoute>} />
+        <Route path="/core/semantic-terms" element={<ProtectedRoute><GlossaryExplorer /></ProtectedRoute>} />
+        <Route path="/catalog/semantic-terms" element={<ProtectedRoute><GlossaryExplorer /></ProtectedRoute>} />
+        <Route path="/core/business-terms" element={<ProtectedRoute><BusinessTermsExplorer /></ProtectedRoute>} />
+        <Route path="/catalog/business-terms" element={<ProtectedRoute><BusinessTermsExplorer /></ProtectedRoute>} />
         <Route path="/core/abbreviations" element={<ProtectedRoute><AbbreviationsPage /></ProtectedRoute>} />
         <Route path="/core/domains" element={<ProtectedRoute><DomainsManagementPage /></ProtectedRoute>} />
         <Route path="/schema-explorer" element={<ProtectedRoute><SchemaExplorerPage /></ProtectedRoute>} />
+        <Route path="/catalog/api-inventory" element={<ProtectedRoute><ApiInventoryPage /></ProtectedRoute>} />
 
         <Route path="/catalog/node-types" element={<ProtectedRoute><CatalogNodeTypesPage /></ProtectedRoute>} />
         <Route path="/catalog/node-types/:id" element={<ProtectedRoute><NodeTypeDetailPage /></ProtectedRoute>} />

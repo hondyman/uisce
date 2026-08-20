@@ -261,10 +261,15 @@ export const ConnectionsTabContent: React.FC<ConnectionsTabContentProps> = ({
             console.log(`    Found datasource with connection_id: ${ds.connection_id}`);
             // Use connection_id as the key to avoid duplicates
             if (!connectionsMap.has(ds.connection_id)) {
+              const displayName =
+                ds.alpha_datasource?.datasource_name ||
+                ds.connection_name ||
+                ds.source_name ||
+                'Unknown Connection';
               connectionsMap.set(ds.connection_id, {
                 id: ds.connection_id,
-                name: ds.source_name || ds.connection_name || 'Unknown Connection',
-                type: 'Datasource',
+                name: displayName,
+                type: ds.alpha_datasource?.datasource_type || 'Datasource',
                 host: ds.host || '',
                 port: ds.port || 0,
                 database: ds.database || '',
@@ -281,7 +286,7 @@ export const ConnectionsTabContent: React.FC<ConnectionsTabContentProps> = ({
                 linkedProduct: productInfo.name,
                 linkedProductId: productInfo.id,
                 linkedDatasourceId: ds.id,
-                linkedAlphaDatasourceId: undefined,
+                linkedAlphaDatasourceId: ds.alpha_datasource_id || ds.alpha_datasource?.id,
                 lastSync: ds.updated_at ? new Date(ds.updated_at).toLocaleString() : '-',
                 status: (ds.is_active ?? true) ? 'connected' : 'warning',
               });
@@ -448,7 +453,7 @@ export const ConnectionsTabContent: React.FC<ConnectionsTabContentProps> = ({
       {/* Connections Table */}
       <TableContainer component={Paper} variant="outlined">
         <Table>
-          <TableHead sx={{ backgroundColor: '#f5f5f5' }}>
+          <TableHead>
             <TableRow>
               <TableCell sx={{ fontWeight: 'bold' }}>
                 <TableSortLabel

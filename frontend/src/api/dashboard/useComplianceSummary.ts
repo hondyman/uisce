@@ -13,20 +13,17 @@ export interface ComplianceSummary {
   };
 }
 
-export function useComplianceSummary(
-  tenantId: string,
-  valuationDate: string
-) {
+export function useComplianceSummary(valuationDate: string) {
   return useQuery({
-    queryKey: ['dashboard-compliance', tenantId, valuationDate],
+    queryKey: ['dashboard-compliance', valuationDate],
     queryFn: async () => {
       const res = await fetch(
-        `/api/dashboard/compliance?tenant_id=${tenantId}&valuation_date=${valuationDate}`
+        `/api/dashboard/compliance?valuation_date=${valuationDate}`
       );
       if (!res.ok) throw new Error('Failed to load compliance summary');
       const data = await res.json();
       return data as ComplianceSummary;
     },
-    enabled: !!tenantId && !!valuationDate,
+    enabled: !!valuationDate,
   });
 }

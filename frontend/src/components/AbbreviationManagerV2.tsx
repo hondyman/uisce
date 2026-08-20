@@ -9,6 +9,7 @@ import { devDebug, devError } from '../utils/devLogger';
 import { useConfirm } from './ConfirmProvider';
 import { useNotification } from '../hooks/useNotification';
 import { useTenant } from '../contexts/TenantContext';
+import { CoreIcon, CustomIcon } from './common/CoreCustomIcons';
 import {
   Box,
   Button,
@@ -285,7 +286,7 @@ export const AbbreviationManager: React.FC<AbbreviationManagerProps> = ({
   const renderTableView = () => (
     <Box sx={{ overflowX: 'auto' }}>
       <Table size="small">
-        <TableHead sx={{ backgroundColor: '#fafafa' }}>
+        <TableHead>
           <TableRow>
             <TableCell>
               <TableSortLabel
@@ -316,7 +317,7 @@ export const AbbreviationManager: React.FC<AbbreviationManagerProps> = ({
               </TableCell>
               <TableCell sx={{ color: 'text.secondary' }}>{abbrev.full_word}</TableCell>
               <TableCell>
-                <Chip label={abbrev.is_core ? 'CORE' : 'CUSTOM'} size="small" color={abbrev.is_core ? 'primary' : 'default'} variant={abbrev.is_core ? 'filled' : 'outlined'} />
+                {abbrev.is_core ? <CoreIcon fontSize="small" /> : <CustomIcon fontSize="small" />}
               </TableCell>
               <TableCell sx={{ maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis' }}>{abbrev.notes || '—'}</TableCell>
               <TableCell align="right">
@@ -363,7 +364,7 @@ export const AbbreviationManager: React.FC<AbbreviationManagerProps> = ({
                 <Typography variant="h6" sx={{ fontWeight: 600, fontFamily: 'monospace', fontSize: '1.1rem' }}>
                   {abbrev.abbreviation}
                 </Typography>
-                <Chip label={abbrev.is_core ? 'CORE' : 'CUSTOM'} size="small" color={abbrev.is_core ? 'primary' : 'default'} variant={abbrev.is_core ? 'filled' : 'outlined'} />
+                {abbrev.is_core ? <CoreIcon fontSize="small" /> : <CustomIcon fontSize="small" />}
               </Box>
               <Typography variant="body2" sx={{ color: 'text.secondary', mb: 1 }}>
                 {abbrev.full_word}
@@ -404,7 +405,7 @@ export const AbbreviationManager: React.FC<AbbreviationManagerProps> = ({
   );
 
   return (
-    <Box sx={{ display: 'flex', height: '100%', bgcolor: '#fafafa' }}>
+    <Box sx={{ display: 'flex', height: '100%' }}>
       {/* Sidebar with Facets */}
       <Drawer variant="permanent" sx={{ width: sidebarOpen ? 280 : 0, transition: 'all 0.3s', overflow: 'hidden' }} PaperProps={{ sx: { position: 'relative', width: 280, pt: 2 } }}>
         <Box sx={{ px: 2 }}>

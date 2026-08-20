@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/hondyman/uisce/backend/internal/security"
 )
 
 // GlobalMetrics represents system-wide observability KPIs
@@ -229,9 +230,8 @@ func (s *Server) tenantMetricsHandler(w http.ResponseWriter, r *http.Request) {
 
 // tenantPlansHandler returns recent plans for a specific tenant queried from Prometheus/database
 func (s *Server) tenantPlansHandler(w http.ResponseWriter, r *http.Request) {
-	tenantID := r.URL.Query().Get("tenant")
-	if tenantID == "" {
-		http.Error(w, "missing tenant query parameter", http.StatusBadRequest)
+	tenantID, ok := security.RequireTenant(w, r)
+	if !ok {
 		return
 	}
 
