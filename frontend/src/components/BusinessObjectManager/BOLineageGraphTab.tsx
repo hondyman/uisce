@@ -61,8 +61,46 @@ export const BOLineageGraphTab: React.FC<BOLineageGraphTabProps> = ({ boId }) =>
       }
       const data: GraphData = await response.json();
 
+      // Collect terms by BO
+      const boTerms: any[] = [];
+      (data.nodes || []).forEach(n => {
+        if (n.type === 'term') {
+          boTerms.push({
+            id: n.id,
+            nodeName: n.data?.termName || n.label,
+            termType: n.data?.termType,
+            dataType: n.data?.dataType,
+            isKey: n.data?.isKey,
+            subtypeId: n.data?.subtypeId,
+            subtypeName: n.data?.subtypeName,
+          });
+        }
+      });
+
+      // Filter nodes to condensed BO view (BO and Related BOs)
+      const condensedNodes = (data.nodes || []).filter(
+        n => n.type === 'bo' || n.type === 'related_bo'
+      ).map(n => ({
+        ...n,
+        data: {
+          ...n.data,
+          terms: n.type === 'bo' ? boTerms : [],
+          termCount: n.type === 'bo' ? boTerms.length : (n.data?.termCount || 0),
+        }
+      }));
+
+      // Filter edges between BO and Related BOs
+      const condensedEdges = (data.edges || []).filter(e => {
+        const srcIsBO = e.source.startsWith('BO:');
+        const tgtIsBO = e.target.startsWith('BO:');
+        return srcIsBO && tgtIsBO;
+      });
+
       // Apply auto-layout
-      const layouted = applyDagreLayout(data.nodes, data.edges);
+      const layouted = applyDagreLayout(
+        condensedNodes.length > 0 ? condensedNodes : data.nodes,
+        condensedEdges.length > 0 ? condensedEdges : data.edges
+      );
 
       setNodes(layouted.nodes);
       setEdges(layouted.edges);
@@ -84,7 +122,7 @@ export const BOLineageGraphTab: React.FC<BOLineageGraphTabProps> = ({ boId }) =>
       switch (type) {
         case 'bo':
         case 'related_bo':
-          return { width: 250, height: 120 };
+          return { width: 320, height: 160 };
         case 'calculation':
           return { width: 220, height: 100 };
         case 'term':
@@ -94,7 +132,7 @@ export const BOLineageGraphTab: React.FC<BOLineageGraphTabProps> = ({ boId }) =>
         case 'column':
           return { width: 160, height: 70 };
         default:
-          return { width: 200, height: 100 };
+          return { width: 250, height: 120 };
       }
     };
 
@@ -116,8 +154,8 @@ export const BOLineageGraphTab: React.FC<BOLineageGraphTabProps> = ({ boId }) =>
       return {
         ...node,
         position: {
-          x: nodeWithPosition.x - dims.width / 2,
-          y: nodeWithPosition.y - dims.height / 2,
+          x: (nodeWithPosition?.x || 150) - dims.width / 2,
+          y: (nodeWithPosition?.y || 100) - dims.height / 2,
         },
         // Add styling based on type
         style: node.type === 'bo' ? { zIndex: 10 } : {},

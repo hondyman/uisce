@@ -12,12 +12,11 @@ type SemanticReportingHandler struct {
 }
 
 // NewSemanticReportingHandler creates a new semantic reporting handler
-func NewSemanticReportingHandler(db *sqlx.DB, cubeURL string) *SemanticReportingHandler {
+func NewSemanticReportingHandler(db *sqlx.DB) *SemanticReportingHandler {
 	// Build dependencies
-	cubeClient := reporting.NewCubeClient(cubeURL)
-	renderer := reporting.NewRenderer(cubeClient)
+	renderer := reporting.NewRenderer()
 	repo := reporting.NewRepository(db)
-	svc := reporting.NewService(repo, cubeClient, renderer)
+	svc := reporting.NewService(repo, renderer)
 	handler := reporting.NewHandler(svc)
 
 	return &SemanticReportingHandler{

@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/hondyman/uisce/backend/internal/audit"
 )
 
 // Tenant represents a client or household in the system
@@ -25,15 +24,13 @@ type Tenant struct {
 
 // TenantManager handles tenant lifecycle and database isolation
 type TenantManager struct {
-	controlDB    *sql.DB
-	auditService *audit.TrinoAuditService
+	controlDB *sql.DB
 }
 
 // NewTenantManager creates a new TenantManager instance
-func NewTenantManager(controlDB *sql.DB, auditService *audit.TrinoAuditService) *TenantManager {
+func NewTenantManager(controlDB *sql.DB) *TenantManager {
 	return &TenantManager{
-		controlDB:    controlDB,
-		auditService: auditService,
+		controlDB: controlDB,
 	}
 }
 
@@ -143,17 +140,6 @@ func (tm *TenantManager) CreateTenant(ctx context.Context, tenantCode, tenantNam
 	}
 
 	log.Printf("Successfully created tenant: %s (ID: %s, Schema: %s)", tenant.TenantName, tenant.TenantID, tenant.SchemaName)
-
-	// Audit Log
-	if tm.auditService != nil {
-		err := tm.auditService.LogEvent(ctx, tenant.TenantID.String(), "system", "", "System", "create", "tenant", tenant.TenantID.String(), map[string]interface{}{
-			"code": tenantCode,
-			"name": tenantName,
-		})
-		if err != nil {
-			log.Printf("Failed to log audit event: %v", err)
-		}
-	}
 
 	return tenant, nil
 }

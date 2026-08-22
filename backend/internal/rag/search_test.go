@@ -49,7 +49,7 @@ func TestHybridSearch_Integration(t *testing.T) {
 	}
 
 	// Setup dependencies
-	tm := tenant.NewTenantManager(db, nil)
+	tm := tenant.NewTenantManager(db)
 	is := NewIngestionService()
 	es := NewOpenAIEmbedder("dummy-key", "text-embedding-ada-002")
 	ss := NewSearchService(es)

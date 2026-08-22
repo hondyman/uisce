@@ -3,7 +3,6 @@ package reporting
 import (
 	"context"
 	"sync"
-	"time"
 
 	"github.com/google/uuid"
 )
@@ -14,7 +13,6 @@ type EnhancedReportingService struct {
 	// Core services
 	baseService *Service
 	repository  *Repository
-	cubeClient  *CubeClient
 	renderer    *Renderer
 
 	// Enhancement services
@@ -36,9 +34,6 @@ type EnhancedReportingService struct {
 	commentService *CommentService
 	sharingService *SharingService
 	versionService *VersionService
-
-	// Circuit breakers for external services
-	cubeBreaker *CircuitBreaker
 
 	mu sync.RWMutex
 }
@@ -62,9 +57,7 @@ type EnhancedServiceConfig struct {
 	AnalyticsEnabled bool
 
 	// External services
-	CubeBaseURL string
-	CubeAPIKey  string
-	RedisURL    string
+	RedisURL string
 }
 
 // DefaultEnhancedServiceConfig returns production defaults
@@ -85,18 +78,16 @@ func DefaultEnhancedServiceConfig() *EnhancedServiceConfig {
 func NewEnhancedReportingService(
 	config *EnhancedServiceConfig,
 	repository *Repository,
-	cubeClient *CubeClient,
 	renderer *Renderer,
 ) *EnhancedReportingService {
 
 	svc := &EnhancedReportingService{
 		repository: repository,
-		cubeClient: cubeClient,
 		renderer:   renderer,
 	}
 
 	// Initialize base service
-	svc.baseService = NewService(repository, cubeClient, renderer)
+	svc.baseService = NewService(repository, renderer)
 
 	// Initialize caches
 	if config.CacheEnabled && config.CacheConfig != nil {
@@ -148,9 +139,6 @@ func NewEnhancedReportingService(
 		svc.sharingService = NewSharingService()
 		svc.versionService = NewVersionService()
 	}
-
-	// Initialize circuit breaker for Cube.dev
-	svc.cubeBreaker = NewCircuitBreaker("cube.dev", 5, 3, 30*time.Second)
 
 	return svc
 }

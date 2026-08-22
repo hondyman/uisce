@@ -139,7 +139,7 @@ generate_composite_secrets() {
     if ! grep -q "^POSTGRES_DSN=" "$output_path"; then
         echo "POSTGRES_DSN=postgresql://${db_user}:${db_pass}@${db_host}:${db_port}/${db_name}?sslmode=disable" >> "$output_path"
     fi
-    if !grep -q "^REDIS_URL=" "$output_path"; then
+    if ! grep -q "^REDIS_URL=" "$output_path"; then
         echo "REDIS_URL=redis://${db_host}:6379" >> "$output_path"
     fi
     if ! grep -q "^API_TOKEN_ENCRYPTION_KEY_DEV_FALLBACK=" "$output_path"; then

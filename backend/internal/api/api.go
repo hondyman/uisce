@@ -22,7 +22,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/gin-gonic/gin"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-playground/validator/v10"
 	"github.com/go-redis/redis/v8"
@@ -30,12 +29,14 @@ import (
 	"github.com/hondyman/uisce/backend/internal/agentic"
 	"github.com/hondyman/uisce/backend/internal/ai"
 	"github.com/hondyman/uisce/backend/internal/altinvest"
+	"github.com/hondyman/uisce/backend/internal/altinvest/alternative_investment"
 	"github.com/hondyman/uisce/backend/internal/analytics"
 	"github.com/hondyman/uisce/backend/internal/audit"
 	"github.com/hondyman/uisce/backend/internal/billing"
 	"github.com/hondyman/uisce/backend/internal/boresolver"
 	"github.com/hondyman/uisce/backend/internal/bp"
 	"github.com/hondyman/uisce/backend/internal/cache"
+	"github.com/hondyman/uisce/backend/internal/cashflow/settlement"
 	"github.com/hondyman/uisce/backend/internal/calculation"
 	"github.com/hondyman/uisce/backend/internal/cbo"
 	"github.com/hondyman/uisce/backend/internal/calcengine"
@@ -55,10 +56,20 @@ import (
 	"github.com/hondyman/uisce/backend/internal/lineage"
 	"github.com/hondyman/uisce/backend/internal/logging"
 	"github.com/hondyman/uisce/backend/internal/mdm"
+	"github.com/hondyman/uisce/backend/internal/master/customer"
+	"github.com/hondyman/uisce/backend/internal/master/personnel"
+	"github.com/hondyman/uisce/backend/internal/master/sales_ledger"
+	"github.com/hondyman/uisce/backend/internal/master/vendor"
+	"github.com/hondyman/uisce/backend/internal/migrations"
 	"github.com/hondyman/uisce/backend/internal/metadata"
 	appmid "github.com/hondyman/uisce/backend/internal/middleware"
 	models "github.com/hondyman/uisce/backend/internal/models"
 	uisceoauth "github.com/hondyman/uisce/backend/internal/oauth"
+	"github.com/hondyman/uisce/backend/internal/oms/account"
+	"github.com/hondyman/uisce/backend/internal/oms/position"
+	omssecurity "github.com/hondyman/uisce/backend/internal/oms/security"
+	"github.com/hondyman/uisce/backend/internal/oms/trade_order"
+	"github.com/hondyman/uisce/backend/internal/optimizer"
 	"github.com/hondyman/uisce/backend/internal/platform"
 	"github.com/hondyman/uisce/backend/internal/portfoliomaster"
 	"github.com/hondyman/uisce/backend/internal/querybuilder"
@@ -80,7 +91,6 @@ import (
 	temporal "github.com/hondyman/uisce/backend/internal/temporal"
 	"github.com/hondyman/uisce/backend/internal/tenant"
 	tenantgoldcopy "github.com/hondyman/uisce/backend/internal/tenant/goldcopy"
-	"github.com/hondyman/uisce/backend/internal/trino"
 	"github.com/hondyman/uisce/backend/internal/upgrade"
 	coremodels "github.com/hondyman/uisce/backend/models"
 	"github.com/hondyman/uisce/backend/pkg/ingestion"
@@ -208,6 +218,7 @@ type Server struct {
 	QueryHandler            *handlers.QueryHandler
 	QueryBuilderHandler     *querybuilder.QueryBuilderHandler
 	BOStatusHandler         *handlers.BOStatusHandler
+	DrillDownResolver       *optimizer.DrillDownResolver
 	SavedQueryHandler       *handlers.SavedQueryHandler
 	SearchHandler           *handlers.SearchHandler
 	NLQHandler              *handlers.NLQHandler
@@ -648,7 +659,7 @@ func (a *redisClientAdapter) Ping(ctx context.Context) error {
 	return a.client.Ping(ctx).Err()
 }
 
-func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService, temporalClient temporalclient.Client, qosManager *services.QoSManager, trinoAuditService *audit.TrinoAuditService, geminiClient *GeminiClient, resolver security.DatasourceResolver, redisClient *redis.Client, complianceDeps *ComplianceDeps) *chi.Mux {
+func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService, temporalClient temporalclient.Client, qosManager *services.QoSManager, geminiClient *GeminiClient, resolver security.DatasourceResolver, redisClient *redis.Client, complianceDeps *ComplianceDeps) *chi.Mux {
 
 	// Create chi router and helper services required for setup
 	fmt.Println("DEBUG: SetupRouter INVOKED! [Version 3]")
@@ -656,6 +667,16 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 
 	// Initialize sqlxDB early for services that need it
 	sqlxDB := sqlx.NewDb(db, "postgres")
+
+	// Run OMS subtype / single-table-inheritance migrations on every boot.
+	// Skips already-applied files (hash-checked against oms.migration_log).
+	// Safe to call with nil (e.g. in test setups that pass nil db).
+	if db != nil {
+		if err := migrations.ApplyMigrations(db); err != nil {
+			log.Printf("❌ automatic migration execution failed: %v", err)
+			return nil
+		}
+	}
 
 	// Initialize goldcopy tenant resolver (Redis-backed, long TTL)
 	var goldcopyResolver *tenantgoldcopy.Resolver
@@ -1085,6 +1106,7 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 
 	boStatusService := analytics.NewBOStatusService(srv.SQLXDB)
 	srv.BOStatusHandler = handlers.NewBOStatusHandler(boStatusService)
+	srv.DrillDownResolver = optimizer.NewDrillDownResolver(srv.SQLXDB)
 
 	// Phase 11: CBO-backed UnifiedCalcEngine
 	if cboEnabled := os.Getenv("CBO_ENABLED"); cboEnabled == "true" {
@@ -1140,33 +1162,8 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 	srv.CubeSyncService = nil // Stub: NewCubeSyncService returns interface{}
 
 	// --- Audit & History Wiring ---
-	// initialize Trino Client for Bitemporal Tracker (Iceberg)
-	trinoDSN := getEnv("TRINO_DSN", "http://admin@trino:8080?catalog=iceberg&schema=audit")
-	trinoClient, err := trino.NewClient(trinoDSN)
+	// Trino audit chain removed - auditHistoryHandler remains nil
 	var auditHistoryHandler *handlers.AuditHistoryHandler
-
-	if err != nil {
-		logging.GetLogger().Sugar().Warnf("Failed to initialize Trino client for audit history: %v", err)
-		// We still create the handler but maybe it should handle nil tracker gracefully?
-		// For now we skip registration if trino fails, or register a dummy?
-		// User expects 404 if not found? No, they want it to work.
-		// If trino fails, we can't search history.
-	} else {
-		// Initialize Bitemporal Tracker
-		bitemporalTracker := audit.NewBitemporalTracker(trinoClient)
-
-		// Initialize Async Audit Service (Queue -> Worker -> Trino)
-		// Buffer size 1000, 5 workers
-		asyncAuditService := audit.NewAsyncAuditService(bitemporalTracker, 1000)
-		asyncAuditService.Start(5)
-		// Note: We should stop it on shutdown, but SetupRouter doesn't support shutdown hooks easily.
-		// We rely on process termination or context cancellation propagated from main if we passed it.
-		// For now, let it run until server exit.
-
-		// Initialize Audit History Handler
-		auditHistoryHandler = handlers.NewAuditHistoryHandler(bitemporalTracker, asyncAuditService)
-		srv.AuditHistoryHandler = auditHistoryHandler
-	}
 
 	srv.CalculationHandler = handlers.NewCalculationHandler(semanticCalculationSvc)
 	srv.ChartHandler = handlers.NewChartHandler(db)
@@ -1263,6 +1260,34 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 	pmHandler := handlers.NewPortfolioMasterHandler(pmSvc)
 	pmHandler.RegisterRoutes(r)
 
+	// Initialize OMS / Investment & Trading handlers
+	omsAccountHandler := account.NewHandler(db)
+	omsPositionHandler := position.NewHandler(db)
+	omsSecurityHandler := omssecurity.NewHandler(db)
+	omsTradeOrderHandler := trade_order.NewHandler(db)
+	omsAccountHandler.RegisterRoutes(r)
+	omsPositionHandler.RegisterRoutes(r)
+	omsSecurityHandler.RegisterRoutes(r)
+	omsTradeOrderHandler.RegisterRoutes(r)
+
+	// Initialize Alternative Investments handler
+	altInvHandler := alternative_investment.NewHandler(db)
+	altInvHandler.RegisterRoutes(r)
+
+	// Initialize Cash Flow Settlement handler
+	cashFlowHandler := settlement.NewHandler(db)
+	cashFlowHandler.RegisterRoutes(r)
+
+	// Initialize Master Directory handlers
+	masterCustomerHandler := customer.NewHandler(db)
+	masterVendorHandler := vendor.NewHandler(db)
+	masterPersonnelHandler := personnel.NewHandler(db)
+	masterSalesLedgerHandler := sales_ledger.NewHandler(db)
+	masterCustomerHandler.RegisterRoutes(r)
+	masterVendorHandler.RegisterRoutes(r)
+	masterPersonnelHandler.RegisterRoutes(r)
+	masterSalesLedgerHandler.RegisterRoutes(r)
+
 	// Initialize Gold Copy Engine (full entity suite)
 	// NOTE: GoldCopy routes will be registered inside the main /api Route block below
 	gcPublisher, _ := services.NewGoldCopyPublisher(os.Getenv("KAFKA_BROKERS"))
@@ -1299,6 +1324,10 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 	reportService := reports.NewReportService(db)
 	reportHandler := NewReportHandler(reportService)
 	reportHandler.RegisterRoutes(r)
+
+	// Initialize report schedule & bursting handler
+	reportScheduleHandler := NewReportScheduleHandler(sqlxDB)
+	reportScheduleHandler.RegisterRoutes(r)
 
 	// Initialize Storage Tiering (Phase 2)
 	tieringRepo := tiering.NewTieringRepository(sqlxDB)
@@ -1355,9 +1384,8 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 
 	// Note: Registration moved to /api group below
 
-	// Initialize Semantic Reporting handler (SSRS-style reporting on Cube.dev)
-	cubeURL := getEnv("CUBE_API_URL", "http://cube:4000/cubejs-api/v1")
-	semanticReportingHandler := NewSemanticReportingHandler(sqlxDB, cubeURL)
+	// Initialize Semantic Reporting handler (SSRS-style reporting)
+	semanticReportingHandler := NewSemanticReportingHandler(sqlxDB)
 	semanticReportingHandler.RegisterRoutes(r)
 
 	// Initialize Page Layouts and Pipelines
@@ -1383,7 +1411,7 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 
 	// Initialize RAG Services
 	ragConfigService := rag.NewConfigService(db)
-	ragTenantManager := tenant.NewTenantManager(db, trinoAuditService)
+	ragTenantManager := tenant.NewTenantManager(db)
 	// Use dummy key or load from env
 	ragEmbedder := rag.NewOpenAIEmbedder("dummy-key", "text-embedding-ada-002")
 	ragSearchService := rag.NewSearchService(ragEmbedder)
@@ -1538,7 +1566,6 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 		// --- Modular Service Registrations ---
 		srv.registerTemplateRoutes(r)
 		srv.registerCalculationRoutes(r)
-		srv.registerAuditTrinoRoutes(r)
 		srv.registerAIRoutes(r)
 		srv.registerExplorerRoutes(r)
 		srv.registerEventRoutes(r)
@@ -3295,28 +3322,6 @@ func (s *Server) registerCalculationRoutes(r chi.Router) {
 	r.Mount("/execution-logs", s.ExecutionMonitorHandler.Routes())
 }
 
-// registerAuditTrinoRoutes mounts the Trino-backed audit and snapshot routes
-func (s *Server) registerAuditTrinoRoutes(r chi.Router) {
-	auditTrinoHost := getEnv("AUDIT_TRINO_HOST", "localhost")
-	auditTrinoPortStr := getEnv("AUDIT_TRINO_PORT", "8090")
-	if auditTrinoPort, err := strconv.Atoi(auditTrinoPortStr); err == nil {
-		auditTrinoQuerier, err := audit.NewTrinoAuditQuerier(auditTrinoHost, auditTrinoPort, "iceberg", "audit")
-		if err != nil {
-			logging.GetLogger().Sugar().Warnf("Failed to initialize audit Trino querier: %v", err)
-		} else {
-			ginRouter := gin.New()
-			ginRouter.Use(gin.Recovery())
-
-			auditHandler := audit.NewAuditAPIHandler(auditTrinoQuerier)
-			auditGroup := ginRouter.Group("")
-			auditHandler.RegisterRoutes(auditGroup)
-
-			r.Mount("/audit", ginRouter)
-			logging.GetLogger().Sugar().Info("Audit Trino & Snapshot Plane routes registered at /api/audit/*")
-		}
-	}
-}
-
 // registerSemanticRoutes mounts semantic model management endpoints
 func (s *Server) registerSemanticRoutes(r chi.Router) {
 	// Dedicated route for LLM-friendly semantic bundle by business object ID
@@ -3463,9 +3468,63 @@ func (s *Server) registerMetadataRoutes(r chi.Router, boHandler *BusinessObjectH
 		r.Post("/query/preview", s.QueryBuilderHandler.Preview)
 		r.Post("/query/execute", s.QueryBuilderHandler.Execute)
 	}
+	r.Post("/v1/query/drill-down", func(w http.ResponseWriter, req *http.Request) {
+		var drillReq optimizer.DrillDownRequest
+		if err := json.NewDecoder(req.Body).Decode(&drillReq); err != nil {
+			http.Error(w, "invalid drill-down request: "+err.Error(), http.StatusBadRequest)
+			return
+		}
+		if drillReq.TenantID == uuid.Nil {
+			tenantHeader := req.Header.Get("X-Tenant-ID")
+			if tenantHeader != "" {
+				if parsed, err := uuid.Parse(tenantHeader); err == nil {
+					drillReq.TenantID = parsed
+				}
+			}
+		}
+		if drillReq.TenantID == uuid.Nil {
+			drillReq.TenantID = uuid.MustParse("00000000-0000-0000-0000-000000000001")
+		}
+
+		res, err := s.DrillDownResolver.ResolveDrillDown(req.Context(), drillReq)
+		if err != nil {
+			http.Error(w, "drill-down resolution failed: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(res)
+	})
+	r.Post("/query/drill-down", func(w http.ResponseWriter, req *http.Request) {
+		var drillReq optimizer.DrillDownRequest
+		if err := json.NewDecoder(req.Body).Decode(&drillReq); err != nil {
+			http.Error(w, "invalid drill-down request: "+err.Error(), http.StatusBadRequest)
+			return
+		}
+		if drillReq.TenantID == uuid.Nil {
+			tenantHeader := req.Header.Get("X-Tenant-ID")
+			if tenantHeader != "" {
+				if parsed, err := uuid.Parse(tenantHeader); err == nil {
+					drillReq.TenantID = parsed
+				}
+			}
+		}
+		if drillReq.TenantID == uuid.Nil {
+			drillReq.TenantID = uuid.MustParse("00000000-0000-0000-0000-000000000001")
+		}
+
+		res, err := s.DrillDownResolver.ResolveDrillDown(req.Context(), drillReq)
+		if err != nil {
+			http.Error(w, "drill-down resolution failed: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(res)
+	})
 	if s.BOStatusHandler != nil {
 		r.Get("/bo/{boId}/status", s.BOStatusHandler.GetBOStatus)
 		r.Get("/business-objects/{boId}/status", s.BOStatusHandler.GetBOStatus)
+		r.Get("/v1/business-objects/{boId}/status", s.BOStatusHandler.GetBOStatus)
+		r.Get("/v1/bo/{boId}/status", s.BOStatusHandler.GetBOStatus)
 	}
 	catalogHandler.RegisterRoutes(r)
 

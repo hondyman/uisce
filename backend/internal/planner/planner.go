@@ -222,10 +222,9 @@ func (p *Planner) buildEngineRoutes(req *QueryRequest, regions []string, planTyp
 
 		switch req.QueryType {
 		case "feature", "metric":
-			engineType = "trino"
-			endpoint = fmt.Sprintf("https://trino.%s.internal", region)
-			catalog = fmt.Sprintf("iceberg_%s", region)
-			notes = "Feature/metric query via Trino"
+			engineType = "starrocks"
+			endpoint = fmt.Sprintf("https://starrocks.%s.internal", region)
+			notes = "Feature/metric query via StarRocks"
 
 		case "ts":
 			engineType = "ts_service"
@@ -237,10 +236,9 @@ func (p *Planner) buildEngineRoutes(req *QueryRequest, regions []string, planTyp
 			endpoint = fmt.Sprintf("https://drift-service.%s.internal", region)
 			notes = "Drift detection service"
 		case "importance", "discovery":
-			engineType = "trino"
-			endpoint = fmt.Sprintf("https://trino.%s.internal", region)
-			catalog = fmt.Sprintf("iceberg_%s", region)
-			notes = fmt.Sprintf("Global %s view via Trino", req.QueryType)
+			engineType = "starrocks"
+			endpoint = fmt.Sprintf("https://starrocks.%s.internal", region)
+			notes = fmt.Sprintf("Global %s view via StarRocks", req.QueryType)
 
 		default:
 			continue

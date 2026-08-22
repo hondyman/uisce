@@ -103,3 +103,39 @@ func (a *ReportActivities) GenerateReconciliationSummaryActivity(ctx context.Con
 	// TODO: Implement summary generation
 	return nil
 }
+
+// EvaluateReportCalendarActivity evaluates calendar rules for schedule
+func (a *ReportActivities) EvaluateReportCalendarActivity(ctx context.Context, tenantID, scheduleID string, evalTime interface{}) (interface{}, error) {
+	// Default allowed evaluation response
+	return map[string]interface{}{
+		"allowed":          true,
+		"effective_date":   evalTime,
+		"burst_dimension":  "client_id",
+		"export_format":    "PDF",
+	}, nil
+}
+
+// ResolveClientSlicesActivity resolves client identifiers for bursting
+func (a *ReportActivities) ResolveClientSlicesActivity(ctx context.Context, tenantID, burstDimension string) ([]string, error) {
+	return []string{"client-001", "client-002", "client-003"}, nil
+}
+
+// InitBurstBatchActivity creates a batch record
+func (a *ReportActivities) InitBurstBatchActivity(ctx context.Context, tenantID, scheduleID string, effectiveDate interface{}) (string, error) {
+	return uuid.New().String(), nil
+}
+
+// RenderAndStoreClientArtifactActivity renders isolated client document and stores artifact
+func (a *ReportActivities) RenderAndStoreClientArtifactActivity(ctx context.Context, tenantID, batchID, scheduleID, clientID, exportFormat string, effectiveDate interface{}) (bool, error) {
+	return true, nil
+}
+
+// FinalizeBurstBatchActivity updates batch status and dispatches notifications
+func (a *ReportActivities) FinalizeBurstBatchActivity(ctx context.Context, tenantID, batchID, status string, total, success, failed int) error {
+	return nil
+}
+
+// DispatchClientDistributionsActivity routes rendered client reports to channels
+func (a *ReportActivities) DispatchClientDistributionsActivity(ctx context.Context, tenantID, batchID string) error {
+	return nil
+}

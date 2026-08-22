@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { NotificationDetailModal } from './NotificationDetailModal';
+import { apiClient } from '../../utils/apiClient';
 import {
   Box,
   Typography,
@@ -104,11 +105,7 @@ export const NotificationCenter: React.FC = () => {
       setLoading(true);
       const url = `/api/bp-notifications/logs?tenant_id=${effectiveTenantId}&tenant_instance_id=${effectiveDatasourceId}&user_id=${effectiveUserId}`;
       
-      const response = await fetch(url);
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-      const data = await response.json();
+      const data = await apiClient<any[]>(url);
       setNotifications(Array.isArray(data) ? data : []);
     } catch (error) {
       console.error('Failed to fetch notifications:', error);

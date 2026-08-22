@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/hondyman/uisce/backend/internal/calc-engine/trino"
 	"github.com/hondyman/uisce/backend/internal/pricing"
 	"github.com/hondyman/uisce/backend/internal/wealth/risk"
 	"github.com/jmoiron/sqlx"
@@ -18,7 +17,7 @@ type DataTier string
 const (
 	// HotTier uses StarRocks for real-time analytics (< 90 days default)
 	HotTier DataTier = "hot"
-	// ColdTier uses Trino/Iceberg for historical data
+	// ColdTier is deprecated - Trino/Iceberg removed
 	ColdTier DataTier = "cold"
 	// AutoTier automatically routes based on date range
 	AutoTier DataTier = "auto"
@@ -29,29 +28,18 @@ type MultiSourceConfig struct {
 	// StarRocks configuration for hot tier
 	StarRocks *StarRocksConfig `yaml:"starrocks" json:"starrocks"`
 
-	// Trino configuration for cold tier
-	Trino *trino.ClientConfig `yaml:"trino" json:"trino"`
-
 	// PostgreSQL for metadata/catalog (existing)
 	PostgresDSN string `yaml:"postgres_dsn" json:"postgres_dsn"`
 
 	// Hot/Cold boundary in days (default: 90)
 	HotColdBoundaryDays int `yaml:"hot_cold_boundary_days" json:"hot_cold_boundary_days"`
-
-	// Whether to enable Cube.js bridge
-	EnableCubeBridge bool `yaml:"enable_cube_bridge" json:"enable_cube_bridge"`
-
-	// Cube API URL for semantic layer queries
-	CubeAPIURL string `yaml:"cube_api_url" json:"cube_api_url"`
 }
 
-// MultiSourceCalcEngine routes queries to StarRocks (hot) or Trino (cold)
+// MultiSourceCalcEngine routes queries to StarRocks (hot) or cold tier
+// Deprecated: Cold tier (Trino/Iceberg) has been removed
 type MultiSourceCalcEngine struct {
 	// Hot tier: StarRocks for real-time analytics
 	starrocks *StarRocksClient
-
-	// Cold tier: Trino for historical Iceberg/Parquet
-	trino *trino.Client
 
 	// Metadata tier: PostgreSQL for catalog, DAG, config
 	postgres        *sqlx.DB
@@ -61,9 +49,6 @@ type MultiSourceCalcEngine struct {
 
 	// Configuration
 	config *MultiSourceConfig
-
-	// Cube bridge for semantic layer
-	cubeBridge *CubeBridge
 }
 
 // NewMultiSourceCalcEngine creates a new multi-source calculation engine
@@ -82,14 +67,7 @@ func NewMultiSourceCalcEngine(cfg *MultiSourceConfig, pricingProvider pricing.Pr
 		engine.starrocks = sr
 	}
 
-	// Initialize cold tier (Trino)
-	if cfg.Trino != nil {
-		tr, err := trino.NewClient(cfg.Trino)
-		if err != nil {
-			return nil, fmt.Errorf("failed to initialize Trino: %w", err)
-		}
-		engine.trino = tr
-	}
+	// Cold tier (Trino) has been removed
 
 	// Initialize metadata tier (PostgreSQL)
 	if cfg.PostgresDSN != "" {
@@ -100,11 +78,6 @@ func NewMultiSourceCalcEngine(cfg *MultiSourceConfig, pricingProvider pricing.Pr
 		engine.postgres = db
 		engine.postgresRaw = db.DB
 		engine.riskEngine = risk.NewRiskAnalyticsEngine(db.DB)
-	}
-
-	// Initialize Cube bridge
-	if cfg.EnableCubeBridge && cfg.CubeAPIURL != "" {
-		engine.cubeBridge = NewCubeBridge(cfg.CubeAPIURL)
 	}
 
 	// Set defaults
@@ -132,10 +105,6 @@ func (e *MultiSourceCalcEngine) Run(ctx context.Context, metric string, inputs m
 	case "TimeSeries":
 		return e.queryTimeSeries(ctx, inputs, tier)
 	default:
-		// Route to Cube semantic layer for custom metrics
-		if e.cubeBridge != nil {
-			return e.cubeBridge.QueryMetric(ctx, metric, inputs)
-		}
 		return nil, fmt.Errorf("unsupported metric: %s", metric)
 	}
 }
@@ -151,13 +120,9 @@ func (e *MultiSourceCalcEngine) RunFast(ctx context.Context, metric string, inpu
 }
 
 // RunHistorical executes a query against cold tier for historical analysis
+// Deprecated: Trino/Iceberg has been removed
 func (e *MultiSourceCalcEngine) RunHistorical(ctx context.Context, metric string, inputs map[string]interface{}) (*CalcResult, error) {
-	if e.trino == nil {
-		return nil, fmt.Errorf("Trino not configured for historical queries")
-	}
-
-	// Force cold tier for history
-	return e.Run(ctx, metric, withTier(inputs, ColdTier))
+	return nil, fmt.Errorf("historical queries disabled: Trino/Iceberg audit chain removed")
 }
 
 // determineTier decides which data tier to query based on inputs
@@ -227,13 +192,10 @@ func (e *MultiSourceCalcEngine) calculateNAV(ctx context.Context, inputs map[str
 	case HotTier:
 		holdings, err = e.fetchHoldingsFromStarRocks(ctx, tenantID, datasourceID, portfolioID, asOfDate)
 	case ColdTier:
-		holdings, err = e.fetchHoldingsFromTrino(ctx, tenantID, datasourceID, portfolioID, asOfDate)
+		return nil, fmt.Errorf("cold tier disabled: Trino/Iceberg removed")
 	default:
-		// Auto: try StarRocks first, fall back to Trino
+		// Auto: use StarRocks only
 		holdings, err = e.fetchHoldingsFromStarRocks(ctx, tenantID, datasourceID, portfolioID, asOfDate)
-		if err != nil && e.trino != nil {
-			holdings, err = e.fetchHoldingsFromTrino(ctx, tenantID, datasourceID, portfolioID, asOfDate)
-		}
 	}
 
 	if err != nil {
@@ -301,45 +263,10 @@ func (e *MultiSourceCalcEngine) fetchHoldingsFromStarRocks(ctx context.Context,
 }
 
 // fetchHoldingsFromTrino queries cold tier for historical holdings
+// Deprecated: Trino/Iceberg has been removed
 func (e *MultiSourceCalcEngine) fetchHoldingsFromTrino(ctx context.Context,
 	tenantID, datasourceID, portfolioID string, asOfDate time.Time) ([]HoldingData, error) {
-
-	if e.trino == nil {
-		return nil, fmt.Errorf("Trino not configured")
-	}
-
-	query := fmt.Sprintf(`
-		SELECT 
-			holding_id,
-			ticker,
-			quantity,
-			currency,
-			cost_basis,
-			as_of_date
-		FROM iceberg.wealth.holdings
-		WHERE tenant_id = '%s'
-		  AND datasource_id = '%s'
-		  AND portfolio_id = '%s'
-		  AND as_of_date <= timestamp '%s'
-		ORDER BY as_of_date DESC
-	`, tenantID, datasourceID, portfolioID, asOfDate.Format("2006-01-02 15:04:05"))
-
-	rows, err := e.trino.ExecuteQuery(ctx, query)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var holdings []HoldingData
-	for rows.Next() {
-		var h HoldingData
-		if err := rows.Scan(&h.HoldingID, &h.Ticker, &h.Quantity, &h.Currency, &h.CostBasis, &h.AsOfDate); err != nil {
-			return nil, err
-		}
-		holdings = append(holdings, h)
-	}
-
-	return holdings, rows.Err()
+	return nil, fmt.Errorf("Trino queries disabled: Trino/Iceberg audit chain removed")
 }
 
 // computeNAVFromHoldings calculates NAV from holding data
@@ -519,24 +446,7 @@ func (e *MultiSourceCalcEngine) calculatePoP(ctx context.Context, inputs map[str
 		query = popQuery
 		rows, err = e.starrocks.Query(ctx, query, tenantID, datasourceID, metricID, periodLabel)
 	case ColdTier:
-		if e.trino == nil {
-			return nil, fmt.Errorf("Trino not configured")
-		}
-		query = fmt.Sprintf(`
-			SELECT 
-				metric_id,
-				current_value,
-				previous_value,
-				delta,
-				percent_change,
-				period_label
-			FROM iceberg.metrics_pop
-			WHERE tenant_id = '%s'
-			  AND datasource_id = '%s'
-			  AND metric_id = '%s'
-			  AND period_label = '%s'
-		`, tenantID, datasourceID, metricID, periodLabel)
-		rows, err = e.trino.ExecuteQuery(ctx, query)
+		return nil, fmt.Errorf("cold tier disabled: Trino/Iceberg removed")
 	default:
 		return nil, fmt.Errorf("invalid tier")
 	}
@@ -611,31 +521,6 @@ func (e *MultiSourceCalcEngine) detectAnomalies(ctx context.Context, inputs map[
 		`, tenantID, datasourceID, metricID, threshold)
 
 		rows, err := e.starrocks.Query(ctx, query)
-		if err != nil {
-			return nil, err
-		}
-		defer rows.Close()
-
-		return e.scanAnomalies(rows, metricID)
-	}
-
-	if e.trino != nil {
-		query = fmt.Sprintf(`
-			SELECT 
-				as_of_date,
-				metric_value,
-				z_score,
-				is_anomaly
-			FROM iceberg.metrics_anomalies
-			WHERE tenant_id = '%s'
-			  AND datasource_id = '%s'
-			  AND metric_id = '%s'
-			  AND ABS(z_score) >= %f
-			ORDER BY as_of_date DESC
-			LIMIT 100
-		`, tenantID, datasourceID, metricID, threshold)
-
-		rows, err := e.trino.ExecuteQuery(ctx, query)
 		if err != nil {
 			return nil, err
 		}
@@ -741,15 +626,6 @@ func (e *MultiSourceCalcEngine) queryTimeSeries(ctx context.Context, inputs map[
 	return nil, fmt.Errorf("time series query requires StarRocks for optimal performance")
 }
 
-// QueryCube queries the Cube semantic layer directly
-func (e *MultiSourceCalcEngine) QueryCube(ctx context.Context, query *CubeQuery) (*CalcResult, error) {
-	if e.cubeBridge == nil {
-		return nil, fmt.Errorf("Cube bridge not configured")
-	}
-
-	return e.cubeBridge.Query(ctx, query)
-}
-
 // Close closes all data tier connections
 func (e *MultiSourceCalcEngine) Close() error {
 	var errs []error
@@ -757,12 +633,6 @@ func (e *MultiSourceCalcEngine) Close() error {
 	if e.starrocks != nil {
 		if err := e.starrocks.Close(); err != nil {
 			errs = append(errs, fmt.Errorf("StarRocks close error: %w", err))
-		}
-	}
-
-	if e.trino != nil {
-		if err := e.trino.Close(); err != nil {
-			errs = append(errs, fmt.Errorf("Trino close error: %w", err))
 		}
 	}
 

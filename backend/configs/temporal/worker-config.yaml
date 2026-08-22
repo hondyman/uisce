@@ -22,19 +22,6 @@ temporal:
   default_workflow_timeout: duration: "30m" # Timeout for entire workflow execution
   default_workflow_run_timeout: duration: "24h" # Max duration for a single workflow run
 
-trino:
-  # Trino cluster configuration for analytics queries
-  server_url: "${TRINO_URL:-http://trino:8080}"
-  catalog: "iceberg"
-  schema: "ops"
-  user: "${TRINO_USER:-temporal-worker}"
-  password: "${TRINO_PASSWORD:---}"  # Optional; use secrets manager in production
-  
-  # Query execution settings
-  request_timeout_seconds: 300
-  max_result_rows: 100000
-  enable_native_queries: true
-
 spark:
   # Spark cluster configuration for heavy computations
   cluster_type: "${SPARK_CLUSTER_TYPE:-yarn}" # Options: yarn, kubernetes, standalone
@@ -118,8 +105,6 @@ monitoring:
     - name: "workflow_duration_seconds"
       type: "histogram"
     - name: "activity_duration_seconds"
-      type: "histogram"
-    - name: "trino_query_duration_seconds"
       type: "histogram"
     - name: "spark_job_duration_seconds"
       type: "histogram"

@@ -50,7 +50,7 @@ func TestSetupRouter_WithSessionAuthAndWsToken(t *testing.T) {
 		WillReturnRows(sqlmock.NewRows([]string{"role_id", "tenant_id", "role_name", "description", "is_global_admin", "created_at"}).
 			AddRow("role1", "tenant1", "Admin", "Admin Role", true, time.Now().Format(time.RFC3339)))
 
-	router := api.SetupRouter(db, nil, nil, nil, nil, nil, nil, &mockResolver{}, nil, nil)
+	router := api.SetupRouter(db, nil, nil, nil, nil, nil, &mockResolver{}, nil, nil)
 
 	// Start httptest server
 	ts := httptest.NewServer(router)

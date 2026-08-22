@@ -5,7 +5,7 @@
  * Each PlanNode becomes a node; parent/child relationships become edges.
  * The component is dialect-agnostic: it simply visualizes whatever
  * metadata the backend's explain planner returns (Postgres indexes,
- * Trino/Iceberg splits, partition pruning ratios, etc.).
+ * StarRocks/partition pruning ratios, etc.).
  */
 
 import React, { useMemo } from 'react';

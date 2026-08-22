@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -87,6 +88,9 @@ func (h *BusinessObjectHandler) RegisterRoutes(r chi.Router) {
 		r.Get("/{id}", h.GetBusinessObject)
 		r.Get("/{id}/fields", h.GetBusinessObjectFields)
 		r.Get("/{id}/relationships", h.GetBusinessObjectRelationships)
+		r.Post("/{id}/relationships", h.CreateBusinessObjectRelationship)
+		r.Put("/{id}/relationships/{relationshipId}", h.UpdateBusinessObjectRelationship)
+		r.Delete("/{id}/relationships/{relationshipId}", h.DeleteBusinessObjectRelationship)
 		r.Get("/{id}/delta", h.GetBODelta)
 		r.Get("/{id}/scope", h.DiscoverBindingScope)
 		r.Get("/{id}/publish-gate", h.ValidatePublishGate)
@@ -187,17 +191,16 @@ func (h *BusinessObjectHandler) ListBusinessObjects(w http.ResponseWriter, r *ht
 		}
 	}
 
-	// Map to map[string]BO for frontend if needed, or return array.
-	// Frontend expects: objects: Record<string, BusinessObject>
-	// or array?
-	// Based on BusinessObjectsPage.tsx:
-	// const objectsArray = Object.entries(data).map... implies object/map response?
-	// Wait, if API returns array, Object.entries(array) gives indices.
-	// Let's check what frontend expects.
-	// Frontend: const { data: objects, ... } = useQuery('/api/business-objects')
-	// If objects is array, Object.entries works but keys are '0', '1'.
-	// If the frontend code has: const objectsArray = Object.entries(data || {}).map(([id, obj]: [string, any]) => ...
-	// It suggests data is a map like { "id1": obj1, "id2": obj2 }.
+	format := r.URL.Query().Get("format")
+	if format == "array" {
+		arr := make([]map[string]interface{}, 0, len(filtered))
+		for _, bo := range filtered {
+			arr = append(arr, toBusinessObjectResponse(bo))
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(arr)
+		return
+	}
 
 	result := make(map[string]interface{})
 	for _, bo := range filtered {
@@ -528,6 +531,188 @@ func (h *BusinessObjectHandler) GetBusinessObjectRelationships(w http.ResponseWr
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(relationships)
+}
+
+// CreateBusinessObjectRelationship creates a link between business objects
+func (h *BusinessObjectHandler) CreateBusinessObjectRelationship(w http.ResponseWriter, r *http.Request) {
+	secCtx, ctx, err := handlers.SecurityContextFromRequest(r, "", "", handlers.SecurityContextDeps{
+		Resolver: h.datasourceResolver,
+	})
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	sourceBOID := chi.URLParam(r, "id")
+	if sourceBOID == "" {
+		http.Error(w, "source business object id is required", http.StatusBadRequest)
+		return
+	}
+
+	var req struct {
+		TargetObjectID   string `json:"targetObjectId"`
+		TargetObjectIDSnake string `json:"target_object_id"`
+		RelationshipType string `json:"relationshipType"`
+		RelationshipTypeSnake string `json:"relationship_type"`
+		Cardinality      string `json:"cardinality"`
+		Description      string `json:"description"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "invalid request body: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	targetBOID := req.TargetObjectID
+	if targetBOID == "" {
+		targetBOID = req.TargetObjectIDSnake
+	}
+	if targetBOID == "" {
+		http.Error(w, "targetObjectId is required", http.StatusBadRequest)
+		return
+	}
+
+	relType := req.RelationshipType
+	if relType == "" {
+		relType = req.RelationshipTypeSnake
+	}
+	if relType == "" {
+		relType = "association"
+	}
+
+	// 1. Resolve source and target BOs to find driver tables or catalog nodes
+	var sourceDriverTable, targetDriverTable sql.NullString
+	if h.db != nil {
+		_ = h.db.QueryRowContext(ctx, `SELECT driver_table_id FROM public.business_objects WHERE id = $1::uuid`, sourceBOID).Scan(&sourceDriverTable)
+		_ = h.db.QueryRowContext(ctx, `SELECT driver_table_id FROM public.business_objects WHERE id = $1::uuid`, targetBOID).Scan(&targetDriverTable)
+
+		sourceNodeID := sourceBOID
+		if sourceDriverTable.Valid && sourceDriverTable.String != "" {
+			sourceNodeID = sourceDriverTable.String
+		}
+
+		targetNodeID := targetBOID
+		if targetDriverTable.Valid && targetDriverTable.String != "" {
+			targetNodeID = targetDriverTable.String
+		}
+
+		// Insert or update catalog_edge
+		propsJSON, _ := json.Marshal(map[string]interface{}{
+			"source_bo_id": sourceBOID,
+			"target_bo_id": targetBOID,
+			"cardinality":  req.Cardinality,
+			"description":  req.Description,
+		})
+
+		edgeQuery := `
+			INSERT INTO public.catalog_edge (
+				id, tenant_id, source_node_id, target_node_id, relationship_type, edge_type, properties, created_at, updated_at
+			) VALUES (
+				gen_random_uuid(), $1::uuid, $2::uuid, $3::uuid, $4, $4, $5::jsonb, NOW(), NOW()
+			)
+		`
+		_, err = h.db.ExecContext(ctx, edgeQuery, secCtx.TenantID, sourceNodeID, targetNodeID, relType, string(propsJSON))
+		if err != nil {
+			logging.GetLogger().Sugar().Warnf("Warning: catalog_edge insertion failed: %v", err)
+		}
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"success":          true,
+		"sourceObjectId":   sourceBOID,
+		"targetObjectId":   targetBOID,
+		"relationshipType": relType,
+		"cardinality":      req.Cardinality,
+		"description":      req.Description,
+	})
+}
+
+// UpdateBusinessObjectRelationship updates an existing relationship link
+func (h *BusinessObjectHandler) UpdateBusinessObjectRelationship(w http.ResponseWriter, r *http.Request) {
+	secCtx, ctx, err := handlers.SecurityContextFromRequest(r, "", "", handlers.SecurityContextDeps{
+		Resolver: h.datasourceResolver,
+	})
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	relID := chi.URLParam(r, "relationshipId")
+	sourceBOID := chi.URLParam(r, "id")
+
+	var req struct {
+		RelationshipType string `json:"relationshipType"`
+		Cardinality      string `json:"cardinality"`
+		Description      string `json:"description"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "invalid request body: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	if h.db != nil {
+		propsJSON, _ := json.Marshal(map[string]interface{}{
+			"source_bo_id": sourceBOID,
+			"cardinality":  req.Cardinality,
+			"description":  req.Description,
+		})
+
+		updateQuery := `
+			UPDATE public.catalog_edge
+			SET relationship_type = COALESCE(NULLIF($1, ''), relationship_type),
+			    edge_type = COALESCE(NULLIF($1, ''), edge_type),
+			    properties = properties || $2::jsonb,
+			    updated_at = NOW()
+			WHERE (id = $3::uuid OR (properties->>'edge_id') = $3)
+			  AND tenant_id = $4::uuid
+		`
+		_, _ = h.db.ExecContext(ctx, updateQuery, req.RelationshipType, string(propsJSON), relID, secCtx.TenantID)
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"success":        true,
+		"relationshipId": relID,
+	})
+}
+
+// DeleteBusinessObjectRelationship deletes a relationship link
+func (h *BusinessObjectHandler) DeleteBusinessObjectRelationship(w http.ResponseWriter, r *http.Request) {
+	secCtx, ctx, err := handlers.SecurityContextFromRequest(r, "", "", handlers.SecurityContextDeps{
+		Resolver: h.datasourceResolver,
+	})
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	relID := chi.URLParam(r, "relationshipId")
+	sourceBOID := chi.URLParam(r, "id")
+
+	if h.db != nil {
+		delQuery := `
+			DELETE FROM public.catalog_edge
+			WHERE tenant_id = $1::uuid
+			  AND (
+				id = $2::uuid 
+				OR (properties->>'edge_id') = $2
+				OR (
+					(properties->>'source_bo_id' = $3 OR source_node_id = $3::uuid) 
+					AND (properties->>'target_bo_id' = $2 OR target_node_id = $2::uuid)
+				)
+			  )
+		`
+		_, _ = h.db.ExecContext(ctx, delQuery, secCtx.TenantID, relID, sourceBOID)
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"success": true,
+		"deleted": relID,
+	})
 }
 
 // GetBusinessObjectWithBindings returns the full BO view:

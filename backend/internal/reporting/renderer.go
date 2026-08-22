@@ -12,12 +12,11 @@ import (
 
 // Renderer handles report rendering to various output formats
 type Renderer struct {
-	cubeClient *CubeClient
 }
 
 // NewRenderer creates a new renderer
-func NewRenderer(cubeClient *CubeClient) *Renderer {
-	return &Renderer{cubeClient: cubeClient}
+func NewRenderer() *Renderer {
+	return &Renderer{}
 }
 
 // RenderResult contains the rendered report output
@@ -28,6 +27,7 @@ type RenderResult struct {
 }
 
 // Render generates a report in the specified format
+// Note: Cube.js data fetching has been removed. Returns empty results.
 func (r *Renderer) Render(ctx context.Context, tenantID, datasourceID uuid.UUID, layout *ReportLayout, parameters json.RawMessage, format string) (*RenderResult, error) {
 	// Parse parameters
 	var params map[string]interface{}
@@ -37,30 +37,8 @@ func (r *Renderer) Render(ctx context.Context, tenantID, datasourceID uuid.UUID,
 		}
 	}
 
-	// Fetch data for all data bindings
+	// Cube.js has been removed - dataResults is now empty
 	dataResults := make(map[string]*CubeResult)
-	for name, binding := range layout.DataBindings {
-		// Check conditional binding
-		if binding.Conditional != nil {
-			paramVal, ok := params[binding.Conditional.Parameter]
-			if !ok || paramVal != binding.Conditional.Equals {
-				continue // Skip this binding
-			}
-		}
-
-		// Build and execute query
-		query, err := BuildQueryFromBinding(&binding, params)
-		if err != nil {
-			return nil, fmt.Errorf("failed to build query for %s: %w", name, err)
-		}
-
-		result, err := r.cubeClient.ExecuteQuery(ctx, query, tenantID, datasourceID)
-		if err != nil {
-			return nil, fmt.Errorf("failed to execute query for %s: %w", name, err)
-		}
-
-		dataResults[name] = result
-	}
 
 	// Render based on format
 	var data []byte
@@ -87,6 +65,7 @@ func (r *Renderer) Render(ctx context.Context, tenantID, datasourceID uuid.UUID,
 		"rendered_at": time.Now().Format(time.RFC3339),
 		"page_count":  1, // Would be calculated properly
 		"data_rows":   countTotalRows(dataResults),
+		"note":        "Cube.js removed - data fetching disabled",
 	}
 	metadataJSON, _ := json.Marshal(metadata)
 

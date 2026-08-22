@@ -32,7 +32,7 @@ export const PreAggSQLModal: React.FC<PreAggSQLModalProps> = ({
   preAggId,
   preAggName,
 }) => {
-  const [tab, setTab] = useState<'iceberg' | 'starrocks'>('iceberg');
+  const [tab, setTab] = useState<'iceberg' | 'starrocks'>('starrocks');
   const [sql, setSql] = useState<PreAggSQL | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -96,7 +96,6 @@ export const PreAggSQLModal: React.FC<PreAggSQLModalProps> = ({
           onChange={(_, v) => setTab(v)}
           aria-label="SQL type tabs"
         >
-          <Tab label="Iceberg Rollup" value="iceberg" />
           <Tab label="StarRocks MV" value="starrocks" />
         </Tabs>
       </Box>

@@ -79,17 +79,6 @@ spec:
             configMapKeyRef:
               name: drift-config
               key: postgres_db
-        # Iceberg/Trino
-        - name: TRINO_HOST
-          valueFrom:
-            configMapKeyRef:
-              name: drift-config
-              key: trino_host
-        - name: TRINO_PORT
-          valueFrom:
-            configMapKeyRef:
-              name: drift-config
-              key: trino_port
         # Alerting
         - name: ALERT_WEBHOOK_URL
           valueFrom:

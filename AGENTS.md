@@ -42,3 +42,70 @@ This project is indexed by GitNexus as **uisce** (387442 symbols, 534754 relatio
 | Index, status, clean, wiki CLI commands | `.claude/skills/gitnexus/gitnexus-cli/SKILL.md` |
 
 <!-- gitnexus:end -->
+
+---
+
+# STI Implementation — Single-Table Inheritance
+
+This project uses Single-Table Inheritance (STI) with `subtype_code TEXT NOT NULL` as the discriminator column.
+
+## Architecture
+
+```
+Handler → Service → Repository → PostgreSQL (STI table)
+```
+
+Each entity lives in its own package under `internal/`:
+
+| Entity | Package | Table | Subtypes |
+|--------|---------|-------|----------|
+| Account | `internal/oms/account` | `oms.account` | institutional, retail_wealth, sma, trust_estate, qualified_retirement, corporate_treasury |
+| Position | `internal/oms/position` | `oms.position` | settled_long, short_borrowed, derivative_exposure, pledged_collateral, unsettled_pipeline |
+| Security | `internal/oms/security` | `oms.security` | equity, sovereign_debt, corporate_debt, structured_abs_mbs, etd_derivative, otc_derivative |
+| TradeOrder | `internal/oms/trade_order` | `oms.trade_order` | block_parent, dma_execution, otc_bilateral, fx_spot_forward, primary_auction |
+| AlternativeInvestment | `internal/altinv/alternative_investment` | `altinv.alternative_investment` | private_equity, venture_capital, hedge_fund, real_estate, direct_investment, infrastructure, private_debt |
+| Settlement | `internal/cashflow/settlement` | `cash_flow.settlement` | dividend, coupon_fixed_income, capital_call, lp_distribution, corporate_action, expense_fee |
+| Customer | `internal/master/customer` | `master.customer` | institutional_client, private_wealth, broker_dealer, corporate_treasury |
+| Vendor | `internal/master/vendor` | `master.vendor` | custodian_prime_broker, market_data, fund_admin, cloud_tech |
+| Personnel | `internal/master/personnel` | `master.personnel` | portfolio_manager, trade_execution, compliance_officer, client_advisor |
+| SalesLedger | `internal/master/sales_ledger` | `master.sales_ledger` | aum_management_fee, trading_commission, performance_fee, platform_subscription |
+
+## Package Structure (per entity)
+
+```
+internal/<domain>/<entity>/
+  model.go          — Record struct + Validate() + subtype constants
+  errors.go         — Sentinel errors (ErrInvalidSubtype, ErrNotFound, etc.)
+  repository.go      — List, Get, Create, SoftDelete (bitemporal, soft-delete)
+  service.go        — Thin layer: validates, sets TenantID, delegates to repo
+  handler.go        — HTTP handlers (List/Get/Create/SoftDelete + RegisterRoutes)
+  handler_test.go   — httptest tests with in-memory mock service
+  validate_test.go  — Unit tests for Validate() method
+```
+
+## Key Patterns
+
+- **Bitemporal soft-delete**: `valid_to IS NULL` filter on all queries; soft-delete sets `valid_to = NOW()`
+- **Tenant isolation**: All queries filter by `tenant_id`; handlers extract from JWT via `jwtmiddleware.GetClaimsFromContext`
+- **Handler interfaces**: Each handler's `Service` field is an interface (e.g., `AccountServiceInterface`) enabling unit testing with in-memory mocks
+- **Route prefixes**: `/api/oms/*`, `/api/altinv/*`, `/api/cash-flow/*`, `/api/master/*`
+- **Subtype validation**: `Validate()` checks `subtype_code` against the registry; subtype-specific rules enforced (e.g., `institutional` requires `sponsor_id`, `short_borrowed` requires `prime_broker_id`)
+
+## Migration Files
+
+All migrations are in `backend/db/migrations/`:
+
+- `20260823_001_oms_subtype_registry.up.sql` — registry table + JSON schemas
+- `20260823_010_oms_investment_trading_subtypes.up.sql` — oms.account, oms.position, oms.security, oms.trade_order
+- `20260823_011_oms_alternatives_and_cash_flow_subtypes.up.sql` — altinv.alternative_investment, cash_flow.settlement
+- `20260823_012_master_directory_subtypes.up.sql` — master.customer, master.vendor, master.personnel, master.sales_ledger
+
+Seeds: `backend/db/seeds/20260823_oms_subtype_registry.sql` (22 rows in `oms.subtype_registry`).
+
+## Migration Runner
+
+`backend/internal/migrations/runner.go` — SHA-256 hash-checked idempotent runner wired into `internal/api/api.go:SetupRouter`.
+
+## JWT Middleware
+
+JWT middleware lives at `github.com/hondyman/uisce/libs/jwt-middleware` (NOT `internal/middleware/jwtmiddleware`).

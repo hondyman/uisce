@@ -16,11 +16,6 @@ spec:
                 - secretRef: { name: resolver-secrets }
                 - configMapRef: { name: resolver-config }
               env:
-                - name: TRINO_HOST
-                  valueFrom:
-                    secretKeyRef:
-                      name: resolver-secrets
-                      key: trino_host
                 # Map other specific keys if envFrom isn't sufficient or keys differ
                 - name: DRYRUN_BASELINE_STORE
                   valueFrom:

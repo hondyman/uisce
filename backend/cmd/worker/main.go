@@ -158,7 +158,7 @@ func main() {
 	log.Println("✅ Registered SLO workflows and activities")
 
 	// Initialize RAG Services
-	ragTenantManager := tenant.NewTenantManager(db, nil)
+	ragTenantManager := tenant.NewTenantManager(db)
 	ingestionService := rag.NewIngestionService()
 	// Use dummy key for now, or load from env
 	embeddingService := rag.NewOpenAIEmbedder("dummy-key", "text-embedding-ada-002")

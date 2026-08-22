@@ -40,24 +40,9 @@ func RefreshPreAggWorkflow(ctx workflow.Context, input RefreshPreAggInput) (*Ref
 		return nil, err
 	}
 
-	// Step 2: Refresh Iceberg rollup table via Trino
-	var icebergResult RefreshLayerResult
-	err = workflow.ExecuteActivity(ctx, "RefreshIcebergRollupActivity", RefreshLayerInput{
-		PreAggID:   input.PreAggID,
-		TenantID:   input.TenantID,
-		TargetName: input.IcebergTable,
-	}).Get(ctx, &icebergResult)
-	if err != nil {
-		// Mark as failed and return
-		_ = workflow.ExecuteActivity(ctx, "MarkPreAggFailedActivity", MarkPreAggFailedInput{
-			PreAggID:     input.PreAggID,
-			ErrorMessage: err.Error(),
-			Layer:        "iceberg",
-		}).Get(ctx, nil)
-		return nil, err
-	}
-	result.IcebergRefreshed = true
-	result.IcebergRowCount = icebergResult.RowCount
+	// Step 2: Iceberg/Trino refresh disabled - Trino has been removed
+	result.IcebergRefreshed = false
+	result.IcebergRowCount = 0
 
 	// Step 3: Refresh StarRocks materialized view
 	var starrocksResult RefreshLayerResult

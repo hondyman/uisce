@@ -50,7 +50,7 @@ func TestDocumentIngestion_Integration(t *testing.T) {
 	}
 
 	// Setup dependencies
-	tm := tenant.NewTenantManager(db, nil)
+	tm := tenant.NewTenantManager(db)
 	is := rag.NewIngestionService()
 	es := rag.NewOpenAIEmbedder("dummy-key", "text-embedding-ada-002")
 	activities := NewDocumentActivities(tm, is, es, nil)

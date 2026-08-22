@@ -7,7 +7,7 @@ CREATE SCHEMA IF NOT EXISTS security;
 DO $$ 
 BEGIN
     IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'execution_engine_enum') THEN
-        CREATE TYPE execution_engine_enum AS ENUM ('POSTGRES_HOT', 'STARROCKS_FEDERATED', 'TRINO_COLD');
+        CREATE TYPE execution_engine_enum AS ENUM ('POSTGRES_HOT', 'STARROCKS_FEDERATED', 'STARROCKS_COLD');
     END IF;
 END $$;
 

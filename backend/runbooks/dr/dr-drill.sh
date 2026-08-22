@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# dr-drill.sh — quarterly DR drill script for Phase 10 migration
+# dr-drill.sh — quarterly DR drill script
 # Restores pre-aggregation metadata, primes caches, and validates semantic endpoints.
 #
 set -euo pipefail
@@ -9,16 +9,14 @@ set -euo pipefail
 # Defaults (override with env vars)
 ###############################################################################
 NAMESPACE="${NAMESPACE:-default}"
-CUBE_DEPLOYMENT="${CUBE_DEPLOYMENT:-cube-semantic}"
 STARROCKS_HOST="${STARROCKS_HOST:-starrocks.default.svc.cluster.local}"
 STARROCKS_PORT="${STARROCKS_PORT:-9030}"
 STARROCKS_USER="${STARROCKS_USER:-root}"
-STARROCKS_DB="${STARROCKS_DB:-cube_preagg}"
-BACKUP_BUCKET="${BACKUP_BUCKET:-s3://semlayer-backups/cube-preagg}"
+STARROCKS_DB="${STARROCKS_DB:-semantic_layer}"
+BACKUP_BUCKET="${BACKUP_BUCKET:-s3://semlayer-backups/preagg}"
 REDIS_HOST="${REDIS_HOST:-redis.default.svc.cluster.local}"
 REDIS_PORT="${REDIS_PORT:-6379}"
-PARITY_ENDPOINT="${PARITY_ENDPOINT:-http://cube-parity.default.svc.cluster.local:8090}"
-SEMANTIC_ENDPOINT="${SEMANTIC_ENDPOINT:-http://cube-semantic.default.svc.cluster.local:8080}"
+SEMANTIC_ENDPOINT="${SEMANTIC_ENDPOINT:-http://backend.default.svc.cluster.local:8080}"
 LOAD_TEST_DURATION="${LOAD_TEST_DURATION:-60s}"
 VUS="${VUS:-10}"
 
@@ -82,28 +80,13 @@ EOF
 }
 
 ###############################################################################
-# 4. Validate parity endpoint
-###############################################################################
-validate_parity() {
-  log "Validating parity service health..."
-  status=$(curl -sf "${PARITY_ENDPOINT}/healthz" || true)
-  if [[ "$status" == "ok" ]]; then
-    log "Parity service healthy."
-  else
-    log "ERROR: Parity service health check failed!"
-    exit 1
-  fi
-}
-
-###############################################################################
-# 5. Report
+# 4. Report
 ###############################################################################
 report() {
   log "DR Drill Summary"
   log "  Pre-agg restore: OK"
   log "  Cache prime:     OK"
   log "  Load test:       OK"
-  log "  Parity health:   OK"
   log "Drill completed successfully. RTO target met."
 }
 
@@ -114,7 +97,6 @@ main() {
   log "Starting DR drill..."
   restore_preagg_metadata
   prime_cache
-  validate_parity
   run_load_test
   report
 }

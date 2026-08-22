@@ -15,12 +15,8 @@ import (
 
 	_ "github.com/lib/pq"
 
-	"github.com/hondyman/uisce/backend/internal/audit"
 	"github.com/hondyman/uisce/backend/internal/sync"
-	"github.com/hondyman/uisce/backend/internal/trino"
-	_ "github.com/lib/pq"
 	kafka "github.com/segmentio/kafka-go"
-	_ "github.com/trinodb/trino-go-client/trino"
 )
 
 // DebeziumEvent represents a CDC event from Debezium
@@ -91,37 +87,11 @@ func main() {
 		defer starrocksWorker.Close()
 	}
 
-	// Initialize Trino connection for Audit
-	var trinoAuditService *audit.TrinoAuditService
-	if config.TrinoDSN != "" {
-		trinoDB, err := sql.Open("trino", config.TrinoDSN)
-		if err != nil {
-			log.Printf("Warning: Failed to create Trino DB handle: %v", err)
-		} else {
-			if err := trinoDB.Ping(); err != nil {
-				log.Printf("Warning: Failed to connect to Trino: %v", err)
-			} else {
-				log.Println("✅ Connected to Trino for Auditing")
-				trinoAuditService = audit.NewTrinoAuditService(trinoDB)
-			}
-		}
-	}
-
-	// Initialize Bitemporal CDC Worker
+	// Bitemporal CDC Worker - Trino removed, worker disabled
 	var bitemporalWorker *sync.BitemporalCDCWorker
-	if config.TrinoDSN != "" {
-		trinoClient, err := trino.NewClient(config.TrinoDSN)
-		if err != nil {
-			log.Printf("Warning: Failed to create Trino client for bitemporal tracking: %v", err)
-		} else {
-			log.Println("✅ Connected to Trino for Bitemporal Tracking")
-			bitemporalTracker := audit.NewBitemporalTracker(trinoClient)
-			bitemporalWorker = sync.NewBitemporalCDCWorker(bitemporalTracker)
-		}
-	}
 
 	// Initialize Tenant Worker
-	tenantWorker := sync.NewTenantWorker(db, trinoAuditService)
+	tenantWorker := sync.NewTenantWorker(db)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

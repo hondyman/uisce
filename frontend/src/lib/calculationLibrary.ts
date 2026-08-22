@@ -44,7 +44,7 @@ export interface Metric {
   oracle: string;
   postgres: string;
   snowflake: string;
-  iceberg: string;
+  starrocks: string;
   preaggregation: {
     enabled: boolean;
     grain: string;
@@ -65,7 +65,7 @@ export interface FunctionMapping {
   oracle: string;
   postgres: string;
   snowflake: string;
-  iceberg: string;
+  starrocks: string;
   notes: string;
 }
 
@@ -147,8 +147,8 @@ export async function getSqlForMetric(metricId: string, engine: string): Promise
       return metric.postgres;
     case 'snowflake':
       return metric.snowflake;
-    case 'iceberg':
-      return metric.iceberg;
+    case 'starrocks':
+      return metric.starrocks;
     default:
       return undefined;
   }

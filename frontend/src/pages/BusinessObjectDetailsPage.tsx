@@ -236,7 +236,8 @@ export default function BusinessObjectDetailsPage() {
     description: string;
     semanticTermId: string;
     role: string;
-  }>({ displayName: '', description: '', semanticTermId: '', role: '' });
+    targetScope?: string;
+  }>({ displayName: '', description: '', semanticTermId: '', role: '', targetScope: 'root' });
 
 
   
@@ -246,8 +247,8 @@ export default function BusinessObjectDetailsPage() {
   const [subtypeDescription, setSubtypeDescription] = useState('');
   const [subtypeSaving, setSubtypeSaving] = useState(false);
   
-  // Show/hide inherited fields toggle
-  const [showInheritedFields, setShowInheritedFields] = useState(true);
+  // Show/hide inherited fields toggle (defaults to false so selecting subtype shows assigned fields only)
+  const [showInheritedFields, setShowInheritedFields] = useState(false);
 
   // Driver Table Selection State
   const [driverTableId, setDriverTableId] = useState<string | null>(null);
@@ -395,6 +396,160 @@ export default function BusinessObjectDetailsPage() {
     })));
   };
 
+  const getFieldCurrentScope = (field: any): string => {
+    const fieldKey = (field.technicalName || field.key || field.name || '').toLowerCase();
+    if (businessObject?.subtypes) {
+      for (const [stKey, st] of Object.entries(businessObject.subtypes)) {
+        if (st.subtypeFields?.some((f: any) => (f.technicalName || f.key || f.name || '').toLowerCase() === fieldKey)) {
+          return stKey;
+        }
+      }
+    }
+    return 'root';
+  };
+
+  const handleMoveField = async (field: any, targetScope: string) => {
+    if (!businessObject || !field) return;
+    const sourceScope = getFieldCurrentScope(field);
+    if (sourceScope === targetScope) return;
+
+    try {
+      setAddingFields(true);
+      const targetKey = (field.technicalName || field.key || field.name || '').toLowerCase();
+      const rootFields = getConfigFields();
+
+      const selectedTerm = semanticTerms.find(t => t.id === field.semanticTermId);
+      const updatedFieldItem = {
+        ...field,
+        name: field.displayName || field.businessName || field.name,
+        businessName: field.displayName || field.businessName || field.name,
+        displayName: field.displayName || field.businessName || field.name,
+        technicalName: field.technicalName || field.key || field.name,
+        key: field.technicalName || field.key || field.name,
+        semanticTermId: field.semanticTermId || (selectedTerm ? selectedTerm.id : ''),
+        semanticTermName: selectedTerm?.node_name || field.semanticTermName,
+      };
+
+      // 1. If moving FROM Root:
+      if (sourceScope === 'root') {
+        const remainingRootFields = rootFields.filter((f: any) =>
+          (f.technicalName || f.key || f.name || '').toLowerCase() !== targetKey
+        );
+        const rootPayload = {
+          displayName: businessObject.displayName,
+          description: businessObject.description,
+          icon: businessObject.icon,
+          category: businessObject.category,
+          isActive: businessObject.isActive,
+          driverTableId: businessObject.driverTableId || undefined,
+          driverTableName: businessObject.driverTableName || undefined,
+          config: {
+            ...((businessObject as any)?.config || {}),
+            fields: remainingRootFields,
+          },
+          customFields: remainingRootFields,
+        };
+        await apiClient<any>(`/api/business-objects/${businessObject.id}`, {
+          method: 'PUT',
+          headers: getAuthHeaders(),
+          body: JSON.stringify(rootPayload),
+        });
+
+        // Add to Target Subtype
+        const targetSubtype = businessObject.subtypes?.[targetScope];
+        if (targetSubtype) {
+          const currentSubtypeFields = targetSubtype.subtypeFields || [];
+          const updatedSubtypeFields = dedupeFields([...currentSubtypeFields, updatedFieldItem]);
+          await apiClient<any>(`/api/business-objects/${targetSubtype.id}`, {
+            method: 'PUT',
+            headers: getAuthHeaders(),
+            body: JSON.stringify({
+              config: { fields: updatedSubtypeFields },
+              customFields: updatedSubtypeFields,
+            }),
+          });
+        }
+      } 
+      // 2. If moving TO Root:
+      else if (targetScope === 'root') {
+        const sourceSubtype = businessObject.subtypes?.[sourceScope];
+        if (sourceSubtype) {
+          const remainingSubtypeFields = (sourceSubtype.subtypeFields || []).filter((f: any) =>
+            (f.technicalName || f.key || f.name || '').toLowerCase() !== targetKey
+          );
+          await apiClient<any>(`/api/business-objects/${sourceSubtype.id}`, {
+            method: 'PUT',
+            headers: getAuthHeaders(),
+            body: JSON.stringify({
+              config: { fields: remainingSubtypeFields },
+              customFields: remainingSubtypeFields,
+            }),
+          });
+        }
+
+        // Add to Root
+        const updatedRootFields = dedupeFields([...rootFields, updatedFieldItem]);
+        const rootPayload = {
+          displayName: businessObject.displayName,
+          description: businessObject.description,
+          icon: businessObject.icon,
+          category: businessObject.category,
+          isActive: businessObject.isActive,
+          driverTableId: businessObject.driverTableId || undefined,
+          driverTableName: businessObject.driverTableName || undefined,
+          config: {
+            ...((businessObject as any)?.config || {}),
+            fields: updatedRootFields,
+          },
+          customFields: updatedRootFields,
+        };
+        await apiClient<any>(`/api/business-objects/${businessObject.id}`, {
+          method: 'PUT',
+          headers: getAuthHeaders(),
+          body: JSON.stringify(rootPayload),
+        });
+      } 
+      // 3. If moving between two Subtypes:
+      else {
+        const sourceSubtype = businessObject.subtypes?.[sourceScope];
+        const targetSubtype = businessObject.subtypes?.[targetScope];
+        if (sourceSubtype) {
+          const remainingSubtypeFields = (sourceSubtype.subtypeFields || []).filter((f: any) =>
+            (f.technicalName || f.key || f.name || '').toLowerCase() !== targetKey
+          );
+          await apiClient<any>(`/api/business-objects/${sourceSubtype.id}`, {
+            method: 'PUT',
+            headers: getAuthHeaders(),
+            body: JSON.stringify({
+              config: { fields: remainingSubtypeFields },
+              customFields: remainingSubtypeFields,
+            }),
+          });
+        }
+        if (targetSubtype) {
+          const updatedSubtypeFields = dedupeFields([...(targetSubtype.subtypeFields || []), updatedFieldItem]);
+          await apiClient<any>(`/api/business-objects/${targetSubtype.id}`, {
+            method: 'PUT',
+            headers: getAuthHeaders(),
+            body: JSON.stringify({
+              config: { fields: updatedSubtypeFields },
+              customFields: updatedSubtypeFields,
+            }),
+          });
+        }
+      }
+
+      await fetchBusinessObject();
+      const targetLabel = targetScope === 'root' ? businessObject.displayName : (businessObject.subtypes?.[targetScope]?.displayName || targetScope);
+      notification.success(`Moved field "${field.businessName || field.displayName || field.name}" to ${targetLabel}`);
+    } catch (error) {
+      devError('Failed to move field:', error);
+      notification.error('Failed to move field');
+    } finally {
+      setAddingFields(false);
+    }
+  };
+
   const handleAddFields = async (newTerms: EnhancedSemanticTerm[]) => {
       try {
         if (!tenantId || !datasourceId) {
@@ -408,24 +563,46 @@ export default function BusinessObjectDetailsPage() {
 
         setAddingFields(true);
 
-        // Use getConfigFields() as the base to ensure we include fields from bo_fields (source of truth)
-        // instead of relying on potentially stale/empty config.fields
+        // Check if adding to a selected subtype
+        if (selectedNode?.type === 'subtype' && selectedNode.subtypeKey && businessObject?.subtypes?.[selectedNode.subtypeKey]) {
+          const targetSubtype = businessObject.subtypes[selectedNode.subtypeKey];
+          const currentSubtypeFields = targetSubtype.subtypeFields || [];
+          const maxSeq = currentSubtypeFields.reduce((max: number, f: any) => Math.max(max, f.sequence || 0), 0);
+
+          const newFields = newTerms.map((term, idx) => ({
+            ...semanticTermToField(term, maxSeq + idx + 1),
+            semanticTermId: term.id,
+          }));
+
+          const updatedSubtypeFields = dedupeFields([...currentSubtypeFields, ...newFields]);
+
+          await apiClient<any>(`/api/business-objects/${targetSubtype.id}`, {
+            method: 'PUT',
+            headers: getAuthHeaders(),
+            body: JSON.stringify({
+              config: { fields: updatedSubtypeFields },
+              customFields: updatedSubtypeFields,
+            }),
+          });
+
+          await fetchBusinessObject();
+          notification.success(`Successfully added ${newFields.length} fields to ${targetSubtype.displayName || targetSubtype.name}`);
+          setFieldWizardOpen(false);
+          return;
+        }
+
+        // Default: Add to Root Business Object
         const currentFields = getConfigFields();
-        
-        // Convert new terms to fields
-        // We calculate max sequence to append at end
         const maxSeq = currentFields.reduce((max: number, f: any) => Math.max(max, f.sequence || 0), 0);
         
         const newFields = newTerms.map((term, idx) => ({
           ...semanticTermToField(term, maxSeq + idx + 1),
-          // Ensure we store the semanticTermId which is crucial for mapping
           semanticTermId: term.id, 
         }));
 
         const updatedFields = dedupeFields([...currentFields, ...newFields]);
 
         const payload = {
-          // Preserve driver table context
           driverTableId: businessObject.driverTableId || undefined,
           driverTableName: businessObject.driverTableName || undefined,
           config: {
@@ -434,8 +611,6 @@ export default function BusinessObjectDetailsPage() {
           },
         };
 
-        // apiClient: parses JSON, throws on non-OK, and respects VITE_USE_PROXY
-        // so the request routes through the Vite dev-server proxy to the backend.
         const updated = await apiClient<any>(
           `/api/business-objects/${businessObject.id}`,
           {
@@ -446,9 +621,7 @@ export default function BusinessObjectDetailsPage() {
         );
         setBusinessObject(prev => prev ? {
           ...prev,
-          // Use payload.config if backend response is missing it (optimistic/robust update)
           config: updated.config || payload.config,
-          // If updated fields returned, use them. Otherwise unset customFields so getConfigFields uses config.fields fallback.
           customFields: (updated.customFields && updated.customFields.length > 0)
             ? updated.customFields
             : undefined,
@@ -467,11 +640,13 @@ export default function BusinessObjectDetailsPage() {
 
   const handleEditField = (field: any) => {
     setEditingField(field);
+    const currentScope = getFieldCurrentScope(field);
     setEditedFieldData({
-      displayName: field.businessName || field.name,
+      displayName: field.businessName || field.displayName || field.name,
       description: field.description || '',
       semanticTermId: field.semanticTermId || '',
       role: field.role || '',
+      targetScope: currentScope,
     });
     setEditFieldModalOpen(true);
   };
@@ -480,62 +655,95 @@ export default function BusinessObjectDetailsPage() {
       if (!editingField || !businessObject) return;
       
       try {
-          // Update the specific field in the list
-          const currentFields = getConfigFields();
-          const updatedFields = currentFields.map((f: any) => {
+          const currentScope = getFieldCurrentScope(editingField);
+          const targetScope = editedFieldData.targetScope || 'root';
+          const selectedTerm = semanticTerms.find(t => t.id === editedFieldData.semanticTermId);
+
+          const updatedFieldItem = {
+            ...editingField,
+            name: editedFieldData.displayName,
+            businessName: editedFieldData.displayName,
+            displayName: editedFieldData.displayName,
+            description: editedFieldData.description,
+            role: editedFieldData.role,
+            semanticTermId: editedFieldData.semanticTermId,
+            semanticTermName: selectedTerm?.node_name || editingField.semanticTermName,
+          };
+
+          // If scope changed, handle cross-scope move
+          if (currentScope !== targetScope) {
+            await handleMoveField(updatedFieldItem, targetScope);
+            setEditFieldModalOpen(false);
+            setEditingField(null);
+            return;
+          }
+
+          // Same scope update:
+          if (currentScope === 'root') {
+            const currentFields = getConfigFields();
+            const targetKey = (editingField.technicalName || editingField.key || '').toLowerCase();
+            const updatedFields = currentFields.map((f: any) => {
               const currentKey = (f.technicalName || f.key || '').toLowerCase();
-              const targetKey = (editingField.technicalName || editingField.key || '').toLowerCase();
-              
               if (currentKey === targetKey) {
-                  // Find selected semantic term to enrich data
-                  const selectedTerm = semanticTerms.find(t => t.id === editedFieldData.semanticTermId);
-                  
-                  return {
-                      ...f,
-                      name: editedFieldData.displayName,
-                      businessName: editedFieldData.displayName,
-                      description: editedFieldData.description,
-                      role: editedFieldData.role,
-                      semanticTermId: editedFieldData.semanticTermId,
-                      semanticTermName: selectedTerm?.node_name,
-                  };
+                return updatedFieldItem;
               }
               return f;
-          });
+            });
 
-          const savedFields = dedupeFields(updatedFields);
-
-          // Send update to backend
-          const payload = {
-            displayName: businessObject.displayName,
-            description: businessObject.description,
-            icon: businessObject.icon,
-            category: businessObject.category,
-            isActive: businessObject.isActive,
-            driverTableId: businessObject.driverTableId || undefined,
-            driverTableName: businessObject.driverTableName || undefined,
-            config: {
+            const savedFields = dedupeFields(updatedFields);
+            const payload = {
+              displayName: businessObject.displayName,
+              description: businessObject.description,
+              icon: businessObject.icon,
+              category: businessObject.category,
+              isActive: businessObject.isActive,
+              driverTableId: businessObject.driverTableId || undefined,
+              driverTableName: businessObject.driverTableName || undefined,
+              config: {
                 ...((businessObject as any)?.config || {}),
                 fields: savedFields,
-            },
-            customFields: savedFields
-          };
-          
-          // apiClient parses JSON and throws on non-OK, so we don't need
-          // the resp.ok / resp.json() boilerplate.
-          const updated = await apiClient<any>(
-            `/api/business-objects/${businessObject.id}`,
-            {
-              method: 'PUT',
-              headers: getAuthHeaders(),
-              body: JSON.stringify(payload),
+              },
+              customFields: savedFields
+            };
+            
+            const updated = await apiClient<any>(
+              `/api/business-objects/${businessObject.id}`,
+              {
+                method: 'PUT',
+                headers: getAuthHeaders(),
+                body: JSON.stringify(payload),
+              }
+            );
+            setBusinessObject(prev => prev ? {
+              ...prev,
+              config: updated.config || updatedFields,
+              customFields: updated.customFields || updatedFields
+            } : null);
+          } else {
+            // Update inside subtype
+            const targetSubtype = businessObject.subtypes?.[currentScope];
+            if (targetSubtype) {
+              const currentSubtypeFields = targetSubtype.subtypeFields || [];
+              const targetKey = (editingField.technicalName || editingField.key || '').toLowerCase();
+              const updatedSubtypeFields = currentSubtypeFields.map((f: any) => {
+                const currentKey = (f.technicalName || f.key || '').toLowerCase();
+                if (currentKey === targetKey) {
+                  return updatedFieldItem;
+                }
+                return f;
+              });
+
+              await apiClient<any>(`/api/business-objects/${targetSubtype.id}`, {
+                method: 'PUT',
+                headers: getAuthHeaders(),
+                body: JSON.stringify({
+                  config: { fields: updatedSubtypeFields },
+                  customFields: updatedSubtypeFields,
+                }),
+              });
+              await fetchBusinessObject();
             }
-          );
-          setBusinessObject(prev => prev ? {
-            ...prev,
-            config: updated.config || updatedFields,
-            customFields: updated.customFields || updatedFields
-          } : null);
+          }
           
           notification.success('Field updated successfully');
           setEditFieldModalOpen(false);
@@ -565,50 +773,64 @@ export default function BusinessObjectDetailsPage() {
       }
 
       setIsDeleting(true);
-
-      // Build updated fields array without the target field
-      const currentFields = getConfigFields();
-      // Match on key (technical name) - this is the unique identifier for the field
       const toDeleteKey = (fieldPendingDelete.technicalName || fieldPendingDelete.key || '').toLowerCase();
-      
-      const updatedFields = currentFields.filter((f: any) => {
-        const fk = (f.technicalName || f.key || '').toLowerCase();
-        // Only keep fields that don't match the key we're deleting
-        return fk !== toDeleteKey;
-      });
+      const scope = getFieldCurrentScope(fieldPendingDelete);
 
-      const payload = {
-        // Preserve driver table context to keep semantic edges consistent for remaining fields
-        driverTableId: businessObject.driverTableId || undefined,
-        driverTableName: businessObject.driverTableName || undefined,
-        config: {
-          ...((businessObject as any)?.config || {}),
-          fields: updatedFields,
-        },
-      };
+      if (scope !== 'root' && businessObject.subtypes?.[scope]) {
+        const subtype = businessObject.subtypes[scope];
+        const remainingSubtypeFields = (subtype.subtypeFields || []).filter((f: any) => {
+          const fk = (f.technicalName || f.key || '').toLowerCase();
+          return fk !== toDeleteKey;
+        });
 
-      // apiClient: parses JSON, throws on non-OK, routes via Vite proxy.
-      const updated = await apiClient<any>(
-        `/api/business-objects/${businessObject.id}`,
-        {
+        await apiClient<any>(`/api/business-objects/${subtype.id}`, {
           method: 'PUT',
           headers: getAuthHeaders(),
-          body: JSON.stringify(payload),
-        }
-      );
-      setBusinessObject(prev => prev ? {
-        ...prev,
-        displayName: updated.displayName || prev.displayName,
-        description: updated.description || prev.description,
-        icon: updated.icon || prev.icon,
-        isActive: updated.isActive ?? prev.isActive,
-        driverTableId: updated.driverTableId || updated.driver_table_id || prev.driverTableId,
-        driverTableName: updated.driverTableName || updated.driver_table_name || prev.driverTableName,
-        config: updated.config || prev.config,
-        coreFields: updated.coreFields || prev.coreFields,
-        customFields: updated.customFields || prev.customFields,
-        subtypes: updated.subtypes || prev.subtypes,
-      } : null);
+          body: JSON.stringify({
+            config: { fields: remainingSubtypeFields },
+            customFields: remainingSubtypeFields,
+          }),
+        });
+        await fetchBusinessObject();
+      } else {
+        // Build updated fields array without the target field
+        const currentFields = getConfigFields();
+        const updatedFields = currentFields.filter((f: any) => {
+          const fk = (f.technicalName || f.key || '').toLowerCase();
+          return fk !== toDeleteKey;
+        });
+
+        const payload = {
+          driverTableId: businessObject.driverTableId || undefined,
+          driverTableName: businessObject.driverTableName || undefined,
+          config: {
+            ...((businessObject as any)?.config || {}),
+            fields: updatedFields,
+          },
+        };
+
+        const updated = await apiClient<any>(
+          `/api/business-objects/${businessObject.id}`,
+          {
+            method: 'PUT',
+            headers: getAuthHeaders(),
+            body: JSON.stringify(payload),
+          }
+        );
+        setBusinessObject(prev => prev ? {
+          ...prev,
+          displayName: updated.displayName || prev.displayName,
+          description: updated.description || prev.description,
+          icon: updated.icon || prev.icon,
+          isActive: updated.isActive ?? prev.isActive,
+          driverTableId: updated.driverTableId || updated.driver_table_id || prev.driverTableId,
+          driverTableName: updated.driverTableName || updated.driver_table_name || prev.driverTableName,
+          config: updated.config || prev.config,
+          coreFields: updated.coreFields || prev.coreFields,
+          customFields: updated.customFields || prev.customFields,
+          subtypes: updated.subtypes || prev.subtypes,
+        } : null);
+      }
       notification.success(`Field removed: ${fieldPendingDelete.businessName || fieldPendingDelete.name}`);
       setFieldDeleteConfirmOpen(false);
       setFieldPendingDelete(null);
@@ -1251,21 +1473,15 @@ export default function BusinessObjectDetailsPage() {
 
   // Memoized filtered fields (no pagination, lazy loading on demand)
   const filteredFields = useMemo(() => {
+    let fieldsToFilter: any[] = [];
     // If root is selected or nothing selected, show root's fields (core + custom)
     // If a subtype is selected, show inherited + subtype-specific fields
-    let fieldsToFilter: any[] = []
-
-    // Use getConfigFields() which resolves selected_terms if needed
-    const configFields = getConfigFields();
-
-    if (Array.isArray(configFields) && configFields.length > 0) {
-      // Use config fields which include semantic term data and resolved selected_terms
-      fieldsToFilter = dedupeFields(configFields);
-    } else if (selectedNode?.type === 'subtype' && selectedNode.subtypeKey && businessObject?.subtypes?.[selectedNode.subtypeKey]) {
+    if (selectedNode?.type === 'subtype' && selectedNode.subtypeKey && businessObject?.subtypes?.[selectedNode.subtypeKey]) {
       const subtypeFields = businessObject.subtypes[selectedNode.subtypeKey].subtypeFields || [];
       if (showInheritedFields) {
         // Show inherited fields (core + custom) plus subtype-specific fields
-        const inheritedFields = [
+        const rootConfigFields = getConfigFields();
+        const inheritedFields = rootConfigFields.length > 0 ? rootConfigFields : [
           ...(businessObject.coreFields || []),
           ...(businessObject.customFields || [])
         ];
@@ -1276,10 +1492,15 @@ export default function BusinessObjectDetailsPage() {
       }
     } else {
       // For root business object, show core + custom fields
-      fieldsToFilter = dedupeFields([
-        ...(businessObject?.coreFields || []),
-        ...(businessObject?.customFields || [])
-      ]);
+      const configFields = getConfigFields();
+      if (Array.isArray(configFields) && configFields.length > 0) {
+        fieldsToFilter = dedupeFields(configFields);
+      } else {
+        fieldsToFilter = dedupeFields([
+          ...(businessObject?.coreFields || []),
+          ...(businessObject?.customFields || [])
+        ]);
+      }
     }
 
     return fieldsToFilter.filter(
@@ -1787,6 +2008,7 @@ export default function BusinessObjectDetailsPage() {
                     onAddField={() => setFieldWizardOpen(true)}
                     onEditField={handleEditField}
                     onDeleteField={handleDeleteField}
+                    onMoveField={handleMoveField}
                     onSort={handleRequestSort}
                     getValidationIcon={getValidationIcon}
                   />
@@ -2111,6 +2333,8 @@ export default function BusinessObjectDetailsPage() {
       open={editFieldModalOpen}
       semanticTerms={semanticTerms}
       editedFieldData={editedFieldData}
+      subtypes={businessObject?.subtypes}
+      businessObjectName={businessObject?.displayName}
       onClose={() => setEditFieldModalOpen(false)}
       onFieldDataChange={setEditedFieldData}
       onSave={handleSaveFieldEdit}

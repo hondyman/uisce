@@ -83,9 +83,18 @@ type OrderBySpec struct {
 type GovernanceDiff struct {
 	BlockedMetrics    []string        `json:"blocked_metrics,omitempty"`
 	BlockedDimensions []string        `json:"blocked_dimensions,omitempty"`
+	BlockedTerms      []BlockedTerm   `json:"blocked_terms,omitempty"`
 	AddedFilters      []QueryFilter   `json:"added_filters,omitempty"`
 	RemovedFilters    []QueryFilter   `json:"removed_filters,omitempty"`
 	AppliedPolicies   []AppliedPolicy `json:"applied_policies,omitempty"`
+}
+
+// BlockedTerm represents a term that was blocked due to insufficient permissions
+type BlockedTerm struct {
+	TermID    string `json:"term_id"`
+	TermName  string `json:"term_name"`
+	Reason    string `json:"reason"`
+	Permission string `json:"permission"` // The user's permission level
 }
 
 // AppliedPolicy shows which policy was applied and why
@@ -216,29 +225,48 @@ func (nle *NLQueryEngine) applyGovernanceCompliance(query *QuerySkeleton, govCtx
 	govDiff := &GovernanceDiff{
 		BlockedMetrics:    []string{},
 		BlockedDimensions: []string{},
+		BlockedTerms:      []BlockedTerm{},
 		AddedFilters:      []QueryFilter{},
 		RemovedFilters:    []QueryFilter{},
 		AppliedPolicies:   []AppliedPolicy{},
 	}
 
-	// Filter out blocked metrics
+	// Filter out blocked metrics based on both allowedMetrics whitelist and term permissions
 	allowedMetrics := []string{}
 	for _, metric := range query.Measures {
 		if nle.isMetricAllowed(metric, govCtx) {
 			allowedMetrics = append(allowedMetrics, metric)
 		} else {
 			govDiff.BlockedMetrics = append(govDiff.BlockedMetrics, metric)
+			// Check if blocked due to term permissions
+			if termPerm := nle.getTermPermission(metric, govCtx); termPerm != nil {
+				govDiff.BlockedTerms = append(govDiff.BlockedTerms, BlockedTerm{
+					TermID:     termPerm.TermNodeID,
+					TermName:   metric,
+					Reason:     fmt.Sprintf("Permission level '%s' is insufficient for metric access", termPerm.PermissionLevel),
+					Permission: termPerm.PermissionLevel,
+				})
+			}
 		}
 	}
 	query.Measures = allowedMetrics
 
-	// Filter out blocked dimensions
+	// Filter out blocked dimensions based on both allowedDimensions whitelist and term permissions
 	allowedDimensions := []string{}
 	for _, dim := range query.Dimensions {
 		if nle.isDimensionAllowed(dim, govCtx) {
 			allowedDimensions = append(allowedDimensions, dim)
 		} else {
 			govDiff.BlockedDimensions = append(govDiff.BlockedDimensions, dim)
+			// Check if blocked due to term permissions
+			if termPerm := nle.getTermPermission(dim, govCtx); termPerm != nil {
+				govDiff.BlockedTerms = append(govDiff.BlockedTerms, BlockedTerm{
+					TermID:     termPerm.TermNodeID,
+					TermName:   dim,
+					Reason:     fmt.Sprintf("Permission level '%s' is insufficient for dimension access", termPerm.PermissionLevel),
+					Permission: termPerm.PermissionLevel,
+				})
+			}
 		}
 	}
 	query.Dimensions = allowedDimensions
@@ -279,7 +307,22 @@ func (nle *NLQueryEngine) isDimensionAllowed(dimension string, govCtx *Governanc
 			return true
 		}
 	}
+	// Also check term-level permissions - 'none' means no access, 'read'/'write'/'mask' mean access
+	if termPerm := nle.getTermPermission(dimension, govCtx); termPerm != nil {
+		return termPerm.PermissionLevel != "none"
+	}
 	return false
+}
+
+// getTermPermission finds the term permission for a given term name/node_id
+func (nle *NLQueryEngine) getTermPermission(termName string, govCtx *GovernanceContext) *TermPermission {
+	for _, tp := range govCtx.AllowedTerms {
+		// Match by TermNodeID or TermName
+		if tp.TermNodeID == termName || tp.TermName == termName {
+			return &tp
+		}
+	}
+	return nil
 }
 
 // generateComplianceNotes generates human-readable compliance notes
@@ -294,6 +337,15 @@ func (nle *NLQueryEngine) generateComplianceNotes(govDiff *GovernanceDiff) []str
 	if len(govDiff.BlockedDimensions) > 0 {
 		notes = append(notes, fmt.Sprintf("Blocked %d dimension(s) due to access restrictions: %s",
 			len(govDiff.BlockedDimensions), strings.Join(govDiff.BlockedDimensions, ", ")))
+	}
+
+	if len(govDiff.BlockedTerms) > 0 {
+		termNames := make([]string, len(govDiff.BlockedTerms))
+		for i, bt := range govDiff.BlockedTerms {
+			termNames[i] = bt.TermName
+		}
+		notes = append(notes, fmt.Sprintf("Blocked %d semantic term(s) due to insufficient permissions: %s",
+			len(govDiff.BlockedTerms), strings.Join(termNames, ", ")))
 	}
 
 	if len(govDiff.AddedFilters) > 0 {

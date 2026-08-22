@@ -11,12 +11,6 @@ data:
   postgres_port: "5432"
   postgres_db: "semlayer"
 
-  # Iceberg/Trino
-  trino_host: "trino.default.svc.cluster.local"
-  trino_port: "8080"
-  trino_catalog: "iceberg"
-  trino_schema: "features"
-
   # Alerting
   alert_email_recipients: "mlops-team@example.com,data-team@example.com"
 ---

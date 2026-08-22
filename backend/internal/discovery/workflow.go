@@ -41,20 +41,8 @@ func DiscoveryWorkflow(ctx workflow.Context, config models.DiscoveryConfig) (*mo
 		result.SourcesScanned = append(result.SourcesScanned, "postgres")
 	}
 
-	// Step 2: Scan Trino warehouses (parallel with postgres)
+	// Step 2: Trino scan disabled - Trino has been removed
 	var trinoFields []FieldMetadata
-	err = workflow.ExecuteActivity(
-		ctx,
-		ScanTrinoActivity,
-		config,
-	).Get(ctx, &trinoFields)
-
-	if err != nil {
-		logger.Error("Trino scan failed", "error", err)
-	} else {
-		logger.Info("Trino scan complete", "fields_found", len(trinoFields))
-		result.SourcesScanned = append(result.SourcesScanned, "trino")
-	}
 
 	// Step 3: Parse application logs
 	var logFields []ParsedLogField

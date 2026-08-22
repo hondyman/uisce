@@ -6,13 +6,15 @@ import (
 	"strings"
 
 	"github.com/hondyman/uisce/backend/internal/domain"
+	"github.com/hondyman/uisce/backend/internal/security"
 )
 
 // GovernanceContextProvider provides governance context for NL queries
 type GovernanceContextProvider struct {
-	evaluator     domain.Evaluator
-	policyChecker domain.PolicyChecker
-	schemaRepo    domain.SchemaProvider
+	evaluator       domain.Evaluator
+	policyChecker   domain.PolicyChecker
+	schemaRepo      domain.SchemaProvider
+	fieldPermRepo   *security.FieldPermissionRepository
 }
 
 // GovernanceContext contains governance information for query generation
@@ -22,9 +24,18 @@ type GovernanceContext struct {
 	Datasource        string
 	AllowedMetrics    []string
 	AllowedDimensions []string
+	AllowedTerms      []TermPermission // Semantic term-level permissions
 	RequiredFilters   []QueryFilter
 	AppliedPolicies   []AppliedGovernancePolicy
 	AssetMappings     map[string]string // Maps semantic names to asset IDs
+}
+
+// TermPermission represents a semantic term-level permission
+type TermPermission struct {
+	TermNodeID       string // UUID of the semantic term
+	TermName         string // Human-readable term name
+	PermissionLevel  string // 'none' | 'read' | 'write' | 'mask'
+	PermissionType   string // 'semantic' or 'field' (deprecated)
 }
 
 // AppliedGovernancePolicy represents a policy that was applied
@@ -45,11 +56,17 @@ type QuerySkeleton struct {
 }
 
 // NewGovernanceContextProvider creates a new governance context provider
-func NewGovernanceContextProvider(evaluator domain.Evaluator, policyChecker domain.PolicyChecker, schemaRepo domain.SchemaProvider) *GovernanceContextProvider {
+func NewGovernanceContextProvider(
+	evaluator domain.Evaluator,
+	policyChecker domain.PolicyChecker,
+	schemaRepo domain.SchemaProvider,
+	fieldPermRepo *security.FieldPermissionRepository,
+) *GovernanceContextProvider {
 	return &GovernanceContextProvider{
 		evaluator:     evaluator,
 		policyChecker: policyChecker,
 		schemaRepo:    schemaRepo,
+		fieldPermRepo: fieldPermRepo,
 	}
 }
 
@@ -93,6 +110,32 @@ func (gcp *GovernanceContextProvider) GetContext(ctx context.Context, userID, te
 			} else if strings.HasPrefix(scope, "dimension:") {
 				dimension := strings.TrimPrefix(scope, "dimension:")
 				govCtx.AllowedDimensions = append(govCtx.AllowedDimensions, dimension)
+			}
+		}
+	}
+
+	// Query semantic term-level permissions from bp_field_permissions
+	if gcp.fieldPermRepo != nil {
+		termPerms, err := gcp.fieldPermRepo.GetTermPermissionsForUser(ctx, userID, tenantID, datasource)
+		if err != nil {
+			// Log error but don't fail - field permissions are supplementary
+			fmt.Printf("Warning: failed to query term permissions: %v\n", err)
+		} else {
+			for _, fp := range termPerms {
+				permType := "semantic"
+				if fp.TermNodeID == nil {
+					permType = "field"
+				}
+				permLevel := fp.PermissionLevel
+				if permLevel == "" {
+					permLevel = "none"
+				}
+				govCtx.AllowedTerms = append(govCtx.AllowedTerms, TermPermission{
+					TermNodeID:       stringOrEmpty(fp.TermNodeID),
+					TermName:         stringOrEmpty(fp.TermNodeID), // Could be enriched with term name lookup
+					PermissionLevel:  permLevel,
+					PermissionType:   permType,
+				})
 			}
 		}
 	}
@@ -160,4 +203,12 @@ func (gcp *GovernanceContextProvider) buildAssetMappings(govCtx *GovernanceConte
 	}
 
 	return nil
+}
+
+// stringOrEmpty returns the value of a string pointer or empty string
+func stringOrEmpty(s *string) string {
+	if s == nil {
+		return ""
+	}
+	return *s
 }

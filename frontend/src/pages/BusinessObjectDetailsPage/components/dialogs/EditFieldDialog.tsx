@@ -9,17 +9,20 @@ import {
 } from '@mui/material';
 import type { EnhancedSemanticTerm } from '../../hooks/useEnhancedSemanticTerms';
 
-interface EditedFieldData {
+export interface EditedFieldData {
   displayName: string;
   description: string;
   semanticTermId: string;
   role: string;
+  targetScope?: string; // 'root' or subtypeKey
 }
 
 interface EditFieldDialogProps {
   open: boolean;
   semanticTerms: EnhancedSemanticTerm[];
   editedFieldData: EditedFieldData;
+  subtypes?: Record<string, any>;
+  businessObjectName?: string;
   onClose: () => void;
   onFieldDataChange: (data: EditedFieldData) => void;
   onSave: () => void;
@@ -29,6 +32,8 @@ export function EditFieldDialog({
   open,
   semanticTerms,
   editedFieldData,
+  subtypes,
+  businessObjectName,
   onClose,
   onFieldDataChange,
   onSave,
@@ -52,6 +57,22 @@ export function EditFieldDialog({
           value={editedFieldData.description}
           onChange={(e) => onFieldDataChange({ ...editedFieldData, description: e.target.value })}
         />
+
+        <TextField
+          id="target-scope-select"
+          select
+          label="Belongs To (Scope)"
+          fullWidth
+          value={editedFieldData.targetScope || 'root'}
+          onChange={(e) => onFieldDataChange({ ...editedFieldData, targetScope: e.target.value })}
+          SelectProps={{ native: true, inputProps: { 'aria-label': 'Select field scope target', id: 'target-scope-select' } }}
+          helperText="Move or assign this field to the root business object or a specific subtype"
+        >
+          <option value="root">Root Business Object ({businessObjectName || 'Main'})</option>
+          {subtypes && Object.entries(subtypes).map(([key, st]: [string, any]) => (
+            <option key={key} value={key}>Subtype: {st.displayName || st.name || key}</option>
+          ))}
+        </TextField>
 
         <Autocomplete
           options={semanticTerms}

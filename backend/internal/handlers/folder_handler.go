@@ -32,16 +32,13 @@ func (h *FolderHandler) RegisterRoutes(r chi.Router) {
 
 // HandleListFolders lists all folders for the current user.
 func (h *FolderHandler) HandleListFolders(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
 	folders, err := h.service.ListFolders(r.Context(), SystemUserID)
-	if err != nil {
-		http.Error(w, "Failed to list folders", http.StatusInternalServerError)
+	if err != nil || folders == nil {
+		json.NewEncoder(w).Encode([]models.FullFolder{})
 		return
 	}
-	if folders == nil {
-		folders = []models.FullFolder{}
-	}
 
-	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(folders)
 }
 

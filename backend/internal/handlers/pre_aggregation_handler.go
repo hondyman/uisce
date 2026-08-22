@@ -313,9 +313,10 @@ func (h *PreAggregationHandler) ListSuggestions(w http.ResponseWriter, r *http.R
 	json.NewEncoder(w).Encode(suggestions)
 }
 
-// PreAggSQLResponse contains the generated SQL for both Iceberg and StarRocks.
+// PreAggSQLResponse contains the generated SQL for pre-aggregation.
+// IcebergSQL is deprecated - Trino/Iceberg has been removed.
 type PreAggSQLResponse struct {
-	IcebergSQL     string `json:"iceberg_sql"`
+	IcebergSQL     string `json:"iceberg_sql,omitempty"`
 	StarRocksMVSQL string `json:"starrocks_mv_sql"`
 }
 
@@ -358,18 +359,12 @@ func (h *PreAggregationHandler) GetPreAggSQL(w http.ResponseWriter, r *http.Requ
 		Measures:   measures,
 	}
 
-	icebergSQL, err := renderer.RenderTrinoIcebergRollup(data)
-	if err != nil {
-		icebergSQL = "-- Error rendering Iceberg SQL: " + err.Error()
-	}
-
 	starrocksSQL, err := renderer.RenderStarRocksMV(data)
 	if err != nil {
 		starrocksSQL = "-- Error rendering StarRocks SQL: " + err.Error()
 	}
 
 	resp := PreAggSQLResponse{
-		IcebergSQL:     icebergSQL,
 		StarRocksMVSQL: starrocksSQL,
 	}
 

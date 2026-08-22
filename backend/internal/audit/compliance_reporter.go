@@ -8,15 +8,15 @@ import (
 )
 
 // ComplianceReporter generates regulator-ready compliance reports
+// Deprecated: Trino audit chain has been removed
 type ComplianceReporter struct {
-	querier   *TrinoAuditQuerier
 	aiService *AIAuditNarrativeService
 }
 
 // NewComplianceReporter creates a new compliance reporter
-func NewComplianceReporter(querier *TrinoAuditQuerier, aiService *AIAuditNarrativeService) *ComplianceReporter {
+// Deprecated: Returns a stub reporter
+func NewComplianceReporter(aiService *AIAuditNarrativeService) *ComplianceReporter {
 	return &ComplianceReporter{
-		querier:   querier,
 		aiService: aiService,
 	}
 }
@@ -100,69 +100,9 @@ type AuditTrailSummary struct {
 }
 
 // GenerateComplianceReport generates a comprehensive compliance report for a tenant
+// Deprecated: Trino audit chain has been removed
 func (r *ComplianceReporter) GenerateComplianceReport(ctx context.Context, tenantID string, startDate, endDate time.Time) (*ComplianceReport, error) {
-	report := &ComplianceReport{
-		TenantID:     tenantID,
-		TenantName:   r.getTenantName(ctx, tenantID),
-		ReportPeriod: ReportPeriod{StartDate: startDate, EndDate: endDate},
-		GeneratedAt:  time.Now().UTC(),
-	}
-
-	// Gather violation data
-	violations, err := r.querier.QueryComplianceViolations(ctx, ComplianceViolationQueryParams{
-		TenantID:  tenantID,
-		StartDate: startDate,
-		EndDate:   endDate,
-		Limit:     10000,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("failed to query violations: %w", err)
-	}
-
-	report.ViolationSummary = r.buildViolationSummary(violations)
-	report.PIIExposureSummary = r.buildPIIExposureSummary(violations)
-	report.RemediationMetrics = r.buildRemediationMetrics(violations)
-
-	// Gather governance data
-	changeSets, err := r.querier.QueryChangeSets(ctx, ChangeSetQueryParams{
-		TenantID:  tenantID,
-		StartDate: startDate,
-		EndDate:   endDate,
-		Limit:     10000,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("failed to query changesets: %w", err)
-	}
-
-	report.GovernanceActivity = r.buildGovernanceSummary(changeSets)
-
-	// Gather job run data
-	jobRuns, err := r.querier.QueryJobRuns(ctx, JobRunQueryParams{
-		TenantID:  tenantID,
-		StartDate: startDate,
-		EndDate:   endDate,
-		Limit:     10000,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("failed to query job runs: %w", err)
-	}
-
-	report.SLOCompliance = r.buildSLOSummary(jobRuns)
-	report.AuditTrail = r.buildAuditTrailSummary(ctx, tenantID, startDate, endDate)
-
-	// Generate AI narrative for regulators
-	if r.aiService != nil {
-		narrative, err := r.aiService.GenerateComplianceStory(ctx, tenantID, startDate.Format("2006-01-02"), endDate.Format("2006-01-02"))
-		if err == nil {
-			report.RegulatorNarrative = narrative
-		}
-	}
-
-	// Generate executive summary
-	report.ExecutiveSummary = r.buildExecutiveSummary(report)
-	report.Recommendations = r.buildRecommendations(report)
-
-	return report, nil
+	return nil, fmt.Errorf("compliance reporting is disabled: Trino audit chain removed")
 }
 
 // buildViolationSummary constructs violation summary from raw data
@@ -448,27 +388,6 @@ func (r *ComplianceReporter) determineOverallStatus(report *ComplianceReport) st
 
 // getTenantName retrieves tenant name by querying the database
 func (r *ComplianceReporter) getTenantName(ctx context.Context, tenantID string) string {
-	// Use the querier's direct DB connection to query tenant table
-	query := fmt.Sprintf(`
-		SELECT display_name 
-		FROM alpha.alpha_tenant 
-		WHERE id = '%s' 
-		LIMIT 1
-	`, tenantID)
-
-	rows, err := r.querier.db.QueryContext(ctx, query)
-	if err != nil {
-		return tenantID
-	}
-	defer rows.Close()
-
-	if rows.Next() {
-		var displayName string
-		if err := rows.Scan(&displayName); err == nil {
-			return displayName
-		}
-	}
-
 	return tenantID
 }
 

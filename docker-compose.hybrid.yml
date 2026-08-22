@@ -246,91 +246,6 @@ services:
     networks:
       - semlayer-net
 
-  # --- Cube.js Universal Semantic Layer ---
-  cube:
-    image: cubejs/cube:latest
-    container_name: cube-semantic-layer
-    ports:
-      - "4000:4000"    # REST API
-      - "15432:15432"  # SQL API (PostgreSQL wire protocol)
-    environment:
-      # Multiple data sources
-      - CUBEJS_DATASOURCES=starrocks,trino
-      
-      # StarRocks (Hot/Real-time tier) - MySQL protocol
-      - CUBEJS_DS_STARROCKS_DB_TYPE=mysql
-      - CUBEJS_DS_STARROCKS_DB_HOST=starrocks-fe
-      - CUBEJS_DS_STARROCKS_DB_PORT=9030
-      - CUBEJS_DS_STARROCKS_DB_NAME=iceberg_catalog.wealth
-      - CUBEJS_DS_STARROCKS_DB_USER=root
-      - CUBEJS_DS_STARROCKS_DB_PASS=
-      
-      # Trino (Cold tier - Parquet/Iceberg lake)
-      - CUBEJS_DS_TRINO_DB_TYPE=trino
-      - CUBEJS_DS_TRINO_DB_HOST=trino
-      - CUBEJS_DS_TRINO_DB_PORT=8080
-      - CUBEJS_DS_TRINO_DB_CATALOG=iceberg
-      - CUBEJS_DS_TRINO_DB_SCHEMA=wealth
-      - CUBEJS_DS_TRINO_DB_USER=admin
-      
-      # StarRocks as HA Pre-aggregation Storage (instead of Cube Store)
-      - CUBEJS_EXT_DB_TYPE=mysql
-      - CUBEJS_EXT_DB_HOST=starrocks-fe
-      - CUBEJS_EXT_DB_PORT=9030
-      - CUBEJS_EXT_DB_NAME=cube_preaggs
-      - CUBEJS_EXT_DB_USER=root
-      - CUBEJS_EXT_DB_PASS=
-      
-      # Governance: Enforce rollup-only mode (protect Trino lake)
-      - CUBEJS_ROLLUP_ONLY=true
-      - CUBE_TENANT_CONFIG_PATH=/cube/conf/generated/tenant-scopes.json
-      - CUBE_SLO_LATENCY_THRESHOLD_SECONDS=${CUBE_SLO_LATENCY_THRESHOLD_SECONDS:-1}
-      - CUBE_SLO_ROLLUP_TARGET_PERCENT=${CUBE_SLO_ROLLUP_TARGET_PERCENT:-85}
-      
-      # Multi-tenancy & security
-      - CUBEJS_DEV_MODE=false
-      - CUBEJS_API_SECRET=${CUBE_API_SECRET}
-      - CUBEJS_SCHEDULED_REFRESH_TIMER=true
-      
-      # Performance
-      - CUBEJS_CACHE_AND_QUEUE_DRIVER=memory
-      - CUBEJS_REFRESH_WORKER=true
-      - CUBEJS_CONCURRENCY=4
-      
-      # SQL API for BI tools
-      - CUBEJS_SQL_PORT=15432
-      - CUBEJS_PG_SQL_PORT=15432
-      
-      # Logging
-      - CUBEJS_LOG_LEVEL=info
-      - DEBUG=cube*
-
-      # Postgres connection for Cube (metadata/caching if configured to use PG, though usually it uses internal or Redis)
-      # Adding host.docker.internal just in case it needs to talk to the main DB
-      - CUBEJS_DB_HOST=host.docker.internal
-      
-    volumes:
-      - ./cube/schema:/cube/conf/schema
-      - ./cube/cube.js:/cube/conf/cube.js
-      - ./cube/generated:/cube/conf/generated
-    depends_on:
-      starrocks-fe:
-        condition: service_healthy
-      minio:
-        condition: service_started
-      nessie:
-        condition: service_started
-    networks:
-      - semlayer-net
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:4000/readyz"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
-      start_period: 60s
-
 networks:
   semlayer-net:
     driver: bridge
@@ -341,4 +256,3 @@ volumes:
   nessie_data:
   minio_data:
   nba_models:
-  cube_schema:

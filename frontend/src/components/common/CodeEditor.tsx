@@ -133,78 +133,6 @@ const CodeEditor: React.FC<CodeEditorProps> = ({
               // swallow
             }
           }
-          // Configure JSON schema validation for Cube.js models
-          if (language === 'json') {
-            monaco.languages.json.jsonDefaults.setDiagnosticsOptions({
-              validate: true,
-              allowComments: false,
-              schemas: [
-                {
-                  uri: 'http://cube.js/cube-schema.json',
-                  fileMatch: ['*'],
-                  schema: {
-                    type: 'object',
-                    properties: {
-                      sql: { type: 'string' },
-                      measures: {
-                        type: 'object',
-                        additionalProperties: {
-                          type: 'object',
-                          properties: {
-                            type: { type: 'string', enum: ['count', 'sum', 'avg', 'min', 'max', 'countDistinct'] },
-                            sql: { type: 'string' },
-                            title: { type: 'string' },
-                            description: { type: 'string' },
-                          }
-                        }
-                      },
-                      dimensions: {
-                        type: 'object',
-                        additionalProperties: {
-                          type: 'object',
-                          properties: {
-                            sql: { type: 'string' },
-                            type: { type: 'string', enum: ['string', 'number', 'boolean', 'time', 'geo'] },
-                            title: { type: 'string' },
-                            description: { type: 'string' },
-                            primaryKey: { type: 'boolean' },
-                          }
-                        }
-                      },
-                      hierarchies: {
-                        type: 'object',
-                        additionalProperties: {
-                          type: 'object',
-                          properties: {
-                            title: { type: 'string' },
-                            levels: {
-                              type: 'array',
-                              items: { type: 'string' }
-                            }
-                          }
-                        }
-                      },
-                      drillMembers: {
-                        type: 'array',
-                        items: { type: 'string' }
-                      },
-                      joins: {
-                        type: 'object',
-                        additionalProperties: {
-                          type: 'object',
-                          properties: {
-                            relationship: { type: 'string', enum: ['belongsTo', 'hasMany', 'hasOne'] },
-                            sql: { type: 'string' }
-                          }
-                        }
-                      }
-                    }
-                  }
-                }
-              ]
-            });
-          }
-
           // Configure YAML diagnostics/completion using monaco-yaml when editing YAML.
           if (language === 'yaml') {
             (async () => {
@@ -216,76 +144,12 @@ const CodeEditor: React.FC<CodeEditorProps> = ({
                   monacoYaml = null;
                 }
                 if (!monacoYaml) return; // silently skip YAML diagnostics when not available
-                // Reuse the same schema shape as JSON; monaco-yaml expects a YAML schema array
-                const yamlSchema = {
-                  uri: 'http://cube.js/cube-schema.json',
-                  fileMatch: ['*'],
-                  schema: {
-                    type: 'object',
-                    properties: {
-                      sql: { type: 'string' },
-                      measures: {
-                        type: 'object',
-                        additionalProperties: {
-                          type: 'object',
-                          properties: {
-                            type: { type: 'string', enum: ['count', 'sum', 'avg', 'min', 'max', 'countDistinct'] },
-                            sql: { type: 'string' },
-                            title: { type: 'string' },
-                            description: { type: 'string' },
-                          }
-                        }
-                      },
-                      dimensions: {
-                        type: 'object',
-                        additionalProperties: {
-                          type: 'object',
-                          properties: {
-                            sql: { type: 'string' },
-                            type: { type: 'string', enum: ['string', 'number', 'boolean', 'time', 'geo'] },
-                            title: { type: 'string' },
-                            description: { type: 'string' },
-                            primaryKey: { type: 'boolean' },
-                          }
-                        }
-                      },
-                      hierarchies: {
-                        type: 'object',
-                        additionalProperties: {
-                          type: 'object',
-                          properties: {
-                            title: { type: 'string' },
-                            levels: {
-                              type: 'array',
-                              items: { type: 'string' }
-                            }
-                          }
-                        }
-                      },
-                      drillMembers: {
-                        type: 'array',
-                        items: { type: 'string' }
-                      },
-                      joins: {
-                        type: 'object',
-                        additionalProperties: {
-                          type: 'object',
-                          properties: {
-                            relationship: { type: 'string', enum: ['belongsTo', 'hasMany', 'hasOne'] },
-                            sql: { type: 'string' }
-                          }
-                        }
-                      }
-                    }
-                  }
-                };
-
                 monacoYaml.setDiagnosticsOptions(monaco, {
                   enableSchemaRequest: false,
                   hover: true,
                   completion: true,
                   validate: true,
-                  schemas: [yamlSchema]
+                  schemas: []
                 });
               } catch (e) {
                 // ignore if monaco-yaml can't be loaded

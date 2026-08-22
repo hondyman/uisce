@@ -178,10 +178,10 @@ semantic-engine:
     cacheTTL: 1h
 
 # =============================================================================
-# Cube.js API Configuration
+# Cube.js API Configuration (DISABLED - Cube.js removed)
 # =============================================================================
 cube-api:
-  enabled: true
+  enabled: false
 
   replicaCount: 5
 

@@ -9,7 +9,7 @@ import { HierarchyTree } from './HierarchyTree/HierarchyTree';
 
 interface HierarchyTreePanelProps {
   hierarchyNodes: any[];
-  expandedNodes: Record<string, boolean>;
+  expandedNodes: Set<string> | any;
   selectedNode: any;
   businessObject?: {
     version?: string;

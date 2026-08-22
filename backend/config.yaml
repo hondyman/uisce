@@ -15,11 +15,11 @@ temporal_port: "7233"
 # =============================================================================
 # Multi-Source Calc Engine Configuration
 # =============================================================================
-# Enable this for StarRocks (hot) + Trino (cold) tiered architecture
+# Enable this for StarRocks (hot) + StarRocks (cold) tiered architecture
 # When disabled, uses PostgreSQL-only engine (default)
 
 calc_engine:
-  enable_multi_source: false # Set to true to enable StarRocks/Trino routing
+  enable_multi_source: false # Set to true to enable multi-source routing
   hot_cold_boundary_days: 90 # Queries older than this go to cold tier
   force_hot_tier: false # Set to true to always use StarRocks
 
@@ -34,26 +34,10 @@ calc_engine:
     timeout: "30s"
     max_conns: 20
 
-  # Trino - Cold Tier (Historical Iceberg/Parquet)
-  trino:
-    host: "trino" # or localhost for local dev
-    port: 8090
-    user: "admin"
-    password: ""
-    catalog: "iceberg"
-    schema: "wealth"
-    timeout: "5m"
-
-  # Cube.js Semantic Layer Bridge
-  cube:
-    api_url: "http://cube:4000" # or localhost:4000 for local dev
-    enabled: true
-    rollup_only: true # Enforce pre-aggregation governance
-
 # =============================================================================
 # Audit & Snapshot Plane Configuration
 # =============================================================================
-# Immutable audit trail using Kafka + Iceberg + Trino architecture
+# Immutable audit trail using Kafka + Iceberg architecture
 # Captures all scheduler jobs, governance changes, compliance violations
 
 audit:
@@ -62,13 +46,6 @@ audit:
     brokers:
     - "localhost:19092"
     consumer_group: "audit-sink-group"
-
-  # Trino Query Engine (Iceberg connector)
-  trino:
-    host: "localhost"
-    port: 8090
-    catalog: "iceberg"
-    schema: "audit"
 
   # Iceberg REST Catalog
   iceberg:

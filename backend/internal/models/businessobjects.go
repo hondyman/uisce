@@ -296,19 +296,26 @@ type BOAuditLog struct {
 type CreateBusinessObjectRequest struct {
 	Name            string                 `json:"name" validate:"required"`
 	BOKey           string                 `json:"bo_key"`
-	DisplayName     string                 `json:"display_name"`
+	DisplayName     string                 `json:"displayName"`
+	DisplayNameSnake string                `json:"display_name"`
 	Description     string                 `json:"description"`
 	Icon            string                 `json:"icon"`
 	Category        string                 `json:"category"`
-	TechnicalName   string                 `json:"technical_name"`
-	DriverTableID   string                 `json:"driver_table_id"`
-	DriverTableName string                 `json:"driver_table_name"`
+	TechnicalName   string                 `json:"technicalName"`
+	TechnicalNameSnake string              `json:"technical_name"`
+	DriverTableID   string                 `json:"driverTableId"`
+	DriverTableIDSnake string              `json:"driver_table_id"`
+	DriverTableName string                 `json:"driverTableName"`
+	DriverTableNameSnake string             `json:"driver_table_name"`
 	Status          string                 `json:"status"`
-	CloneFromKey    string                 `json:"clone_from_key"` // if cloning an existing BO
-	ParentID        string                 `json:"parent_id"`      // if creating a subtype
-	DatasourceID    string                 `json:"datasource_id"`  // Optional: link to specific datasource
-	EnableHistory   bool                   `json:"enable_history"`
-	HistoryMode     string                 `json:"history_mode"`
+	CloneFromKey    string                 `json:"cloneFromKey"` // if cloning an existing BO
+	CloneFromKeySnake string               `json:"clone_from_key"`
+	ParentID        string                 `json:"parentId"`      // if creating a subtype
+	ParentIDSnake   string                 `json:"parent_id"`
+	DatasourceID    string                 `json:"datasourceId"`  // Optional: link to specific datasource
+	DatasourceIDSnake string               `json:"datasource_id"`
+	EnableHistory   bool                   `json:"enableHistory"`
+	HistoryMode     string                 `json:"historyMode"`
 	Config          map[string]interface{} `json:"config"`
 }
 

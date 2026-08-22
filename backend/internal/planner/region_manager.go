@@ -92,13 +92,13 @@ type CostModel struct {
 func NewCostModel() *CostModel {
 	return &CostModel{
 		baseCosts: map[string]float64{
-			"trino":             1.0,
+			"starrocks":         1.0,
 			"ts_service":        1.5,
 			"drift_service":     2.0,
 			"discovery_service": 2.5,
 		},
 		latencyOverheads: map[string]float64{
-			"trino":             100.0,
+			"starrocks":         100.0,
 			"ts_service":        150.0,
 			"drift_service":     200.0,
 			"discovery_service": 250.0,
@@ -116,14 +116,14 @@ func (cm *CostModel) EstimateCostAndLatency(
 	selectedRegions []string,
 ) (cost float64, latency float64) {
 	// Base cost depends on query type
-	baseCost := cm.baseCosts["trino"]
+	baseCost := cm.baseCosts["starrocks"]
 	switch queryType {
 	case "ts":
 		baseCost = cm.baseCosts["ts_service"]
 	case "drift":
 		baseCost = cm.baseCosts["drift_service"]
 	case "importance", "discovery":
-		baseCost = cm.baseCosts["trino"]
+		baseCost = cm.baseCosts["starrocks"]
 	}
 
 	// Multiply by region count
@@ -143,7 +143,7 @@ func (cm *CostModel) EstimateCostAndLatency(
 	latency = cm.estimateLatencyForRegions(regionHealth, selectedRegions)
 
 	// Add engine overhead
-	engineOverhead := cm.latencyOverheads["trino"]
+	engineOverhead := cm.latencyOverheads["starrocks"]
 	switch queryType {
 	case "ts":
 		engineOverhead = cm.latencyOverheads["ts_service"]
