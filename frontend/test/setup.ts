@@ -1,6 +1,16 @@
 import '@testing-library/jest-dom'
 import { vi } from 'vitest'
 
+// Polyfill ResizeObserver for jsdom — required by reactflow which measures the
+// viewport. Without this, mounting <ReactFlow /> throws "ResizeObserver is not defined".
+if (typeof (globalThis as any).ResizeObserver === 'undefined') {
+  (globalThis as any).ResizeObserver = class ResizeObserver {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  }
+}
+
 // Ensure a jsdom-like location is present so code using `new URL('/path', location.origin)` or
 // `location.origin` resolves correctly during tests.
 ;(globalThis as any).location = (globalThis as any).location || {

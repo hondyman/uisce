@@ -74,16 +74,19 @@ export const ValidationRuleScopeSelector: React.FC<ValidationRuleScopeSelectorPr
   }));
 
   return (
-    <Dialog 
-      open={isOpen} 
+    <Dialog
+      open={isOpen}
       onClose={handleClose}
       maxWidth="sm"
       fullWidth
+      PaperProps={{
+        sx: { bgcolor: 'background.paper', backgroundImage: 'none' }
+      }}
     >
-      <DialogTitle>
+      <DialogTitle sx={{ borderBottom: '1px solid rgba(255,255,255,0.1)', bgcolor: 'rgba(15,17,23,0.8)' }}>
         Create Validation Rule - Select Scope
       </DialogTitle>
-      <DialogContent>
+      <DialogContent sx={{ bgcolor: 'background.paper', backgroundImage: 'none' }}>
         <Stack spacing={3} sx={{ mt: 2 }}>
           <Alert severity="info">
             You're creating a validation rule for <strong>{businessObjectName}</strong>. 
@@ -121,10 +124,10 @@ export const ValidationRuleScopeSelector: React.FC<ValidationRuleScopeSelectorPr
             </FormControl>
           </Box>
 
-          <Box sx={{ bgcolor: '#f5f5f5', p: 2, borderRadius: 1 }}>
+          <Box sx={{ bgcolor: 'rgba(99,102,241,0.08)', border: '1px solid rgba(99,102,241,0.2)', p: 2, borderRadius: 1 }}>
             <Typography variant="caption" sx={{ color: 'text.secondary' }}>
               <strong>Summary:</strong><br/>
-              {selectedSubtype 
+              {selectedSubtype
                 ? `Rule will be applied to ${subtypes[selectedSubtype]?.displayName || selectedSubtype}`
                 : `Rule will be applied to the entire ${businessObjectName}`
               }
@@ -132,7 +135,7 @@ export const ValidationRuleScopeSelector: React.FC<ValidationRuleScopeSelectorPr
           </Box>
         </Stack>
       </DialogContent>
-      <DialogActions>
+      <DialogActions sx={{ borderTop: '1px solid rgba(255,255,255,0.1)', bgcolor: 'rgba(15,17,23,0.8)' }}>
         <Button onClick={handleClose} color="inherit">
           Cancel
         </Button>

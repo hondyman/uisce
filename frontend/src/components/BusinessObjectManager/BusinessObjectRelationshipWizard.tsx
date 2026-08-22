@@ -29,6 +29,8 @@ import {
 } from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
 import AddIcon from '@mui/icons-material/Add';
+import DeleteIcon from '@mui/icons-material/Delete';
+import EditIcon from '@mui/icons-material/Edit';
 import { getSelectedRegion } from '../../lib/region';
 
 interface RelationshipResult {
@@ -46,6 +48,7 @@ interface SemanticFieldResult {
 interface BusinessObjectRelationshipWizardProps {
   open: boolean;
   onClose: () => void;
+  onRelationshipSaved?: () => void;
   businessObject: any;
   tenantId: string;
   datasourceId: string;
@@ -80,6 +83,7 @@ function TabPanel(props: TabPanelProps) {
 export const BusinessObjectRelationshipWizard: React.FC<BusinessObjectRelationshipWizardProps> = ({
   open,
   onClose,
+  onRelationshipSaved,
   businessObject,
   tenantId,
   datasourceId
@@ -196,6 +200,7 @@ export const BusinessObjectRelationshipWizard: React.FC<BusinessObjectRelationsh
       setSelectedTargetBO(null);
       setDescription('');
       fetchRelationships();
+      onRelationshipSaved?.();
       setActiveTab(0);
     } catch (err: any) {
       setError(err.message || 'An error occurred while saving the relationship.');
@@ -248,19 +253,56 @@ export const BusinessObjectRelationshipWizard: React.FC<BusinessObjectRelationsh
               {relatedObjects.length > 0 ? (
                 <TableContainer component={Paper} variant="outlined">
                   <Table size="small">
-                    <TableHead>
+                    <TableHead sx={{ bgcolor: 'action.hover' }}>
                       <TableRow>
-                        <TableCell>Related Object</TableCell>
-                        <TableCell>Relationship Type</TableCell>
-                        <TableCell>Description / Cardinality</TableCell>
+                        <TableCell sx={{ fontWeight: 600 }}>Related Object</TableCell>
+                        <TableCell sx={{ fontWeight: 600 }}>Type</TableCell>
+                        <TableCell sx={{ fontWeight: 600 }}>Cardinality</TableCell>
+                        <TableCell sx={{ fontWeight: 600 }}>Driver Table Join Keys / Binding</TableCell>
+                        <TableCell sx={{ fontWeight: 600 }} align="right">Actions</TableCell>
                       </TableRow>
                     </TableHead>
                     <TableBody>
-                      {relatedObjects.map((row, index) => (
-                        <TableRow key={index}>
-                          <TableCell sx={{ fontWeight: 'bold' }}>{row.relatedObjectName}</TableCell>
-                          <TableCell>{row.relationshipType}</TableCell>
-                          <TableCell>{row.description}</TableCell>
+                      {relatedObjects.map((row: any, index: number) => (
+                        <TableRow key={index} hover>
+                          <TableCell sx={{ fontWeight: 600 }}>
+                            {row.relatedObjectName || 'Target BO'}
+                          </TableCell>
+                          <TableCell>
+                            <Chip label={row.relationshipType || 'association'} size="small" variant="outlined" color="primary" />
+                          </TableCell>
+                          <TableCell>
+                            <Chip label={row.cardinality || '1:N'} size="small" variant="filled" />
+                          </TableCell>
+                          <TableCell>
+                            <Typography variant="caption" sx={{ fontFamily: 'monospace', color: 'primary.dark' }}>
+                              {row.joinCondition || row.description || `${businessObject?.driverTableName || 'source_table'} -> ${row.targetDriverTable || 'target_table'}`}
+                            </Typography>
+                          </TableCell>
+                          <TableCell align="right">
+                            <IconButton
+                              size="small"
+                              color="error"
+                              title="Remove Relationship"
+                              onClick={async () => {
+                                if (window.confirm(`Are you sure you want to remove relationship with ${row.relatedObjectName || 'this object'}?`)) {
+                                  try {
+                                    const relId = row.id || row.targetObjectId;
+                                    await fetch(`/api/business-objects/${businessObject.id}/relationships/${relId}`, {
+                                      method: 'DELETE',
+                                      headers: getAuthHeaders(),
+                                    });
+                                    fetchRelationships();
+                                    onRelationshipSaved?.();
+                                  } catch (e) {
+                                    console.error(e);
+                                  }
+                                }
+                              }}
+                            >
+                              <DeleteIcon fontSize="small" />
+                            </IconButton>
+                          </TableCell>
                         </TableRow>
                       ))}
                     </TableBody>

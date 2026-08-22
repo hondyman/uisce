@@ -13,10 +13,9 @@ import (
 // STORED CALCULATIONS: API → Compute → Store → Access
 // ============================================================================
 // Pattern: Client calls API → Engine computes → Result stored in StarRocks
-//          → Client (or Cube) reads from stored results
+//          → Client reads from stored results
 // Benefits:
 //   - Complex calcs (XIRR, TWR) computed once, served many times
-//   - Cube can access pre-computed results for BI
 //   - No recalculation on every request
 // ============================================================================
 

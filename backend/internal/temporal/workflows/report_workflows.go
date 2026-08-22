@@ -181,11 +181,121 @@ func BatchReconciliationWorkflow(ctx workflow.Context, params BatchReconciliatio
 	}
 
 	// Generate reconciliation summary report
-	err := workflow.ExecuteActivity(ctx, "GenerateRecon cilationSummaryActivity", params.TenantID, params.ReportDate).Get(ctx, nil)
+	err := workflow.ExecuteActivity(ctx, "GenerateReconciliationSummaryActivity", params.TenantID, params.ReportDate).Get(ctx, nil)
 	if err != nil {
 		logger.Warn("Failed to generate summary", "error", err)
 	}
 
 	logger.Info("Batch reconciliation workflow completed")
 	return nil
+}
+
+// ClientBurstReportWorkflowParams contains parameters for client bursting report execution
+type ClientBurstReportWorkflowParams struct {
+	TenantID   string    `json:"tenant_id"`
+	ScheduleID string    `json:"schedule_id"`
+	EvalTime   time.Time `json:"eval_time"`
+}
+
+// ClientBurstReportWorkflowResult contains the execution summary of a burst run
+type ClientBurstReportWorkflowResult struct {
+	BatchID           string `json:"batch_id"`
+	TotalClients      int    `json:"total_clients"`
+	SuccessfulRenders int    `json:"successful_renders"`
+	FailedRenders     int    `json:"failed_renders"`
+	Status            string `json:"status"`
+}
+
+// ClientBurstReportWorkflow orchestrates calendar evaluation and parallel client slice document generation
+func ClientBurstReportWorkflow(ctx workflow.Context, params ClientBurstReportWorkflowParams) (*ClientBurstReportWorkflowResult, error) {
+	logger := workflow.GetLogger(ctx)
+	logger.Info("Starting ClientBurstReportWorkflow", "tenant_id", params.TenantID, "schedule_id", params.ScheduleID)
+
+	ao := workflow.ActivityOptions{
+		StartToCloseTimeout: 15 * time.Minute,
+		RetryPolicy: &temporal.RetryPolicy{
+			InitialInterval:    time.Second * 2,
+			BackoffCoefficient: 2.0,
+			MaximumInterval:    time.Minute * 2,
+			MaximumAttempts:    3,
+		},
+	}
+	ctx = workflow.WithActivityOptions(ctx, ao)
+
+	// Step 1: Calendar validation & schedule evaluation
+	var evalResult struct {
+		Allowed       bool      `json:"allowed"`
+		EffectiveDate time.Time `json:"effective_date"`
+		BurstDim      string    `json:"burst_dimension"`
+		ExportFormat  string    `json:"export_format"`
+	}
+	err := workflow.ExecuteActivity(ctx, "EvaluateReportCalendarActivity", params.TenantID, params.ScheduleID, params.EvalTime).Get(ctx, &evalResult)
+	if err != nil {
+		return nil, fmt.Errorf("failed evaluating schedule calendar: %w", err)
+	}
+	if !evalResult.Allowed {
+		logger.Info("Execution skipped due to calendar/holiday rules", "schedule_id", params.ScheduleID)
+		return &ClientBurstReportWorkflowResult{
+			Status: "SKIPPED_CALENDAR",
+		}, nil
+	}
+
+	// Step 2: Resolve client slices
+	var clientIDs []string
+	err = workflow.ExecuteActivity(ctx, "ResolveClientSlicesActivity", params.TenantID, evalResult.BurstDim).Get(ctx, &clientIDs)
+	if err != nil {
+		return nil, fmt.Errorf("failed resolving client slices: %w", err)
+	}
+
+	// Step 3: Initialize burst batch in ledger
+	var batchID string
+	err = workflow.ExecuteActivity(ctx, "InitBurstBatchActivity", params.TenantID, params.ScheduleID, evalResult.EffectiveDate).Get(ctx, &batchID)
+	if err != nil {
+		return nil, fmt.Errorf("failed initializing burst batch: %w", err)
+	}
+
+	// Step 4: Fan-out parallel rendering child activities
+	var futures []workflow.Future
+	for _, clientID := range clientIDs {
+		future := workflow.ExecuteActivity(ctx, "RenderAndStoreClientArtifactActivity", params.TenantID, batchID, params.ScheduleID, clientID, evalResult.ExportFormat, evalResult.EffectiveDate)
+		futures = append(futures, future)
+	}
+
+	successCount := 0
+	failCount := 0
+	for _, f := range futures {
+		var renderOk bool
+		if err := f.Get(ctx, &renderOk); err != nil || !renderOk {
+			failCount++
+		} else {
+			successCount++
+		}
+	}
+
+	// Step 5: Finalize batch status & emit outbox notifications
+	finalStatus := "COMPLETED"
+	if failCount > 0 {
+		if successCount == 0 {
+			finalStatus = "FAILED"
+		} else {
+			finalStatus = "PARTIAL"
+		}
+	}
+
+	_ = workflow.ExecuteActivity(ctx, "FinalizeBurstBatchActivity", params.TenantID, batchID, finalStatus, len(clientIDs), successCount, failCount).Get(ctx, nil)
+
+	// Step 6: Dispatch client distributions (Email, SFTP, Webhooks)
+	if successCount > 0 {
+		_ = workflow.ExecuteActivity(ctx, "DispatchClientDistributionsActivity", params.TenantID, batchID).Get(ctx, nil)
+	}
+
+	logger.Info("ClientBurstReportWorkflow completed", "batch_id", batchID, "status", finalStatus, "total", len(clientIDs), "success", successCount, "failed", failCount)
+
+	return &ClientBurstReportWorkflowResult{
+		BatchID:           batchID,
+		TotalClients:      len(clientIDs),
+		SuccessfulRenders: successCount,
+		FailedRenders:     failCount,
+		Status:            finalStatus,
+	}, nil
 }

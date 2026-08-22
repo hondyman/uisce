@@ -31,7 +31,7 @@ export const QueryEngineIndicator: React.FC<QueryEngineIndicatorProps> = ({
           {state === 'OLAP' && <span>⚡ StarRocks (OLAP)</span>}
           {state === 'OLTP' && <span>🐘 PostgreSQL (OLTP)</span>}
           {state === 'HYBRID_SEAM' && <span className="animate-pulse">⚡🐘 Hybrid OLTP + Iceberg Seam</span>}
-          {state === 'FEDERATED' && <span>🔀 Federated (Trino)</span>}
+          {state === 'FEDERATED' && <span>🔀 Federated (StarRocks)</span>}
         </div>
         <span>~{estimatedLatencyMs}ms • {estimatedRows.toLocaleString()} rows</span>
       </div>

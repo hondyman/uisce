@@ -188,6 +188,8 @@ type Term struct {
 	IsKey           bool
 	IsForeignKey    bool
 	Aggregation     string
+	SubtypeID       string
+	SubtypeName     string
 	PhysicalMapping *PhysicalMapping
 }
 
@@ -279,9 +281,12 @@ func (s *BOGraphService) fetchTerms(boID string) ([]Term, error) {
 			false as is_key,
 			false as is_foreign_key,
 			'' as aggregation,
+			COALESCE(f.subtype_id::text, '') as subtype_id,
+			COALESCE(sub.name, sub.display_name, '') as subtype_name,
 			NULLIF(col.qualified_path, '') as col_path,
 			col.node_name as col_name
 		FROM bo_fields f
+		LEFT JOIN business_objects sub ON f.subtype_id = sub.id
 		LEFT JOIN catalog_node st ON (
 			st.id::text = f.field_ref 
 			OR LOWER(st.node_name) = LOWER(f.name) 
@@ -300,7 +305,7 @@ func (s *BOGraphService) fetchTerms(boID string) ([]Term, error) {
 			AND col.qualified_path LIKE '/%'
 		)
 		WHERE f.bo_id = $1::uuid 
-		  AND f.subtype_id IS NULL
+		   OR f.bo_id IN (SELECT id FROM business_objects WHERE parent_id = $1::uuid)
 	`, boID)
 
 	if err != nil {
@@ -314,6 +319,8 @@ func (s *BOGraphService) fetchTerms(boID string) ([]Term, error) {
 				COALESCE((st.properties->>'is_key')::boolean, false) as is_key,
 				COALESCE((st.properties->>'is_foreign_key')::boolean, false) as is_foreign_key,
 				COALESCE(st.properties->>'aggregation', '') as aggregation,
+				'' as subtype_id,
+				'' as subtype_name,
 				NULLIF(col.qualified_path, '') as col_path,
 				col.node_name as col_name
 			FROM catalog_edge bo_edge
@@ -356,6 +363,8 @@ func (s *BOGraphService) fetchTerms(boID string) ([]Term, error) {
 			&term.IsKey,
 			&term.IsForeignKey,
 			&term.Aggregation,
+			&term.SubtypeID,
+			&term.SubtypeName,
 			&colPath,
 			&colName,
 		)
@@ -406,6 +415,8 @@ func (s *BOGraphService) buildTermNode(term Term) GraphNode {
 		"dataType":     term.DataType,
 		"isKey":        term.IsKey,
 		"isForeignKey": term.IsForeignKey,
+		"subtypeId":    term.SubtypeID,
+		"subtypeName":  term.SubtypeName,
 	}
 
 	if term.Aggregation != "" {
@@ -506,13 +517,21 @@ func (s *BOGraphService) extractDependencies(formula string, terms []Term) []str
 func (s *BOGraphService) fetchRelatedBOs(boID string) ([]RelatedBO, error) {
 	rows, err := s.db.Query(`
 		SELECT DISTINCT
-			target_bo.id,
-			target_bo.node_name,
-			COALESCE(fk.properties->>'relationship_type', 'related') as relationship_type
+			COALESCE(target_bo.id::text, fk.properties->>'target_bo_id', fk.target_node_id::text) as id,
+			COALESCE(target_bo.name, target_bo.display_name, target_bo.bo_name, cn.node_name, cn.qualified_path, 'Related Object') as name,
+			COALESCE(fk.properties->>'relationship_type', fk.relationship_type, 'related') as relationship_type
 		FROM catalog_edge fk
-		JOIN catalog_node target_bo ON fk.target_node_id = target_bo.id
-		WHERE fk.source_node_id = $1
-		  AND fk.edge_type_name IN ('FOREIGN_KEY', 'RELATES_TO')
+		LEFT JOIN business_objects target_bo ON (
+			target_bo.id::text = (fk.properties->>'target_bo_id') 
+			OR target_bo.id = fk.target_node_id 
+			OR target_bo.driver_table_id = fk.target_node_id
+		)
+		LEFT JOIN catalog_node cn ON cn.id = fk.target_node_id
+		WHERE (
+			fk.source_node_id = $1::uuid 
+			OR (fk.properties->>'source_bo_id') = $1
+			OR fk.source_node_id IN (SELECT driver_table_id FROM business_objects WHERE id = $1::uuid)
+		)
 	`, boID)
 
 	if err != nil {
@@ -526,7 +545,9 @@ func (s *BOGraphService) fetchRelatedBOs(boID string) ([]RelatedBO, error) {
 		if err := rows.Scan(&relBO.ID, &relBO.Name, &relBO.RelationshipType); err != nil {
 			continue
 		}
-		relatedBOs = append(relatedBOs, relBO)
+		if relBO.ID != boID {
+			relatedBOs = append(relatedBOs, relBO)
+		}
 	}
 
 	return relatedBOs, nil

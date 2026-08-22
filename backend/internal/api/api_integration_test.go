@@ -57,7 +57,7 @@ func TestViewsPaginationHandler_DBOnly(t *testing.T) {
 	os.Setenv("SEMLAYER_RUNTIME_DIR", tmp)
 	defer os.Unsetenv("SEMLAYER_RUNTIME_DIR")
 
-	router := SetupRouter(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	router := SetupRouter(nil, nil, nil, nil, nil, nil, nil, nil, nil)
 
 	// Issue request to /api/views?source=resolved&page=1&page_size=10
 	req := httptest.NewRequest(http.MethodGet, "/api/views?source=resolved&page=1&page_size=10", nil)

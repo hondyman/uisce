@@ -255,6 +255,27 @@ type InvestmentPerformance struct {
 	PctUnfunded        float64  `json:"pct_unfunded" db:"pct_unfunded"`
 }
 
+// XIRRFlow represents a cash flow event for XIRR calculation
+type XIRRFlow struct {
+	Date   time.Time `json:"date" db:"date"`
+	Amount float64   `json:"amount" db:"amount"`
+	Type   string    `json:"type" db:"type"`
+}
+
+// InvestmentMetricsResult holds the result of CalculateInvestmentMetrics
+type InvestmentMetricsResult struct {
+	InvestmentID       uuid.UUID `json:"investment_id" db:"investment_id"`
+	TotalCapitalCalled float64  `json:"total_capital_called" db:"total_capital_called"`
+	TotalDistributions float64  `json:"total_distributions" db:"total_distributions"`
+	CurrentNAV        float64   `json:"current_nav" db:"current_nav"`
+	TVPI              float64   `json:"tvpi" db:"tvpi"`
+	DPI               float64   `json:"dpi" db:"dpi"`
+	RVPI              float64   `json:"rvpi" db:"rvpi"`
+	XIRR              float64   `json:"xirr" db:"xirr"`
+	CashFlowCount     int       `json:"cash_flow_count" db:"cash_flow_count"`
+	CashFlows         []XIRRFlow `json:"cash_flows" db:"cash_flows"`
+}
+
 // UpcomingCapitalCall represents upcoming capital call information
 type UpcomingCapitalCall struct {
 	CallID               uuid.UUID         `json:"call_id" db:"call_id"`

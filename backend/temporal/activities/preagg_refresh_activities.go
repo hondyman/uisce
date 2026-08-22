@@ -92,30 +92,9 @@ func (a *PreAggRefreshActivities) MarkPreAggRefreshingActivity(ctx context.Conte
 }
 
 // RefreshIcebergRollupActivity refreshes the Iceberg rollup table via Trino.
+// Deprecated: Trino/Iceberg has been removed
 func (a *PreAggRefreshActivities) RefreshIcebergRollupActivity(ctx context.Context, input RefreshLayerInput) (*RefreshLayerResult, error) {
-	if a.trinoConn == nil {
-		// No Trino connection, skip Iceberg refresh
-		return &RefreshLayerResult{Success: true, RowCount: 0}, nil
-	}
-
-	// For Iceberg, we typically do INSERT OVERWRITE or DELETE+INSERT
-	// This is a simplified version - production would need proper incremental logic
-	refreshSQL := fmt.Sprintf(`
-		INSERT OVERWRITE iceberg.%s_analytics.%s
-		SELECT * FROM iceberg.%s_analytics.%s
-	`, input.TenantID, input.TargetName, input.TenantID, input.TargetName)
-
-	_, err := a.trinoConn.ExecContext(ctx, refreshSQL)
-	if err != nil {
-		return nil, fmt.Errorf("failed to refresh Iceberg rollup: %w", err)
-	}
-
-	// Get row count
-	var rowCount int64
-	countSQL := fmt.Sprintf(`SELECT COUNT(*) FROM iceberg.%s_analytics.%s`, input.TenantID, input.TargetName)
-	_ = a.trinoConn.GetContext(ctx, &rowCount, countSQL)
-
-	return &RefreshLayerResult{Success: true, RowCount: rowCount}, nil
+	return nil, fmt.Errorf("Iceberg/Trino refresh is disabled: Trino audit chain removed")
 }
 
 // RefreshStarRocksMVActivity refreshes the StarRocks materialized view.

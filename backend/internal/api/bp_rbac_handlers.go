@@ -11,6 +11,7 @@ import (
 	"github.com/jmoiron/sqlx"
 
 	"github.com/hondyman/uisce/backend/internal/handlers"
+	"github.com/hondyman/uisce/backend/internal/security"
 )
 
 // ============================================================================
@@ -19,12 +20,17 @@ import (
 // ============================================================================
 
 type RBACHandlers struct {
-	db           *sqlx.DB
-	securityDeps handlers.SecurityContextDeps
+	db             *sqlx.DB
+	securityDeps   handlers.SecurityContextDeps
+	fieldPermRepo  *security.FieldPermissionRepository
 }
 
 func NewRBACHandlers(db *sqlx.DB, securityDeps handlers.SecurityContextDeps) *RBACHandlers {
-	return &RBACHandlers{db: db, securityDeps: securityDeps}
+	return &RBACHandlers{
+		db:            db,
+		securityDeps:  securityDeps,
+		fieldPermRepo: security.NewFieldPermissionRepository(db),
+	}
 }
 
 func (h *RBACHandlers) RegisterRoutes(r chi.Router) {
@@ -543,9 +549,12 @@ func (h *RBACHandlers) listFieldPermissions(w http.ResponseWriter, r *http.Reque
 	var fieldPerms []map[string]interface{}
 
 	query := `
-		SELECT fp.id, r.role_key, r.role_name, fp.resource_type, fp.field_name, fp.permission_level
+		SELECT DISTINCT ON (fp.role_id, fp.term_node_id, fp.resource_type, fp.resource_id)
+			fp.id, r.role_key, r.role_name, fp.term_node_id, fp.resource_type, fp.resource_id, fp.permission_level, fp.masking_pattern,
+			cn.node_name as term_name, cn.display_name as term_display_name
 		FROM bp_field_permissions fp
 		JOIN bp_roles r ON fp.role_id = r.id
+		LEFT JOIN catalog_node cn ON fp.term_node_id = cn.id
 		WHERE fp.tenant_id = $1 AND fp.datasource_id = $2
 	`
 	args := []interface{}{tenantID, datasourceID}
@@ -557,7 +566,14 @@ func (h *RBACHandlers) listFieldPermissions(w http.ResponseWriter, r *http.Reque
 		args = append(args, roleID)
 	}
 
-	query += " ORDER BY r.role_name, fp.resource_type, fp.field_name"
+	// Optional term_node_id filter
+	termNodeIDParam := r.URL.Query().Get("term_node_id")
+	if termNodeIDParam != "" {
+		query += " AND fp.term_node_id = $4"
+		args = append(args, termNodeIDParam)
+	}
+
+	query += " ORDER BY fp.role_id, fp.term_node_id, fp.resource_type, fp.resource_id, r.role_name"
 
 	rows, err := h.db.Query(query, args...)
 
@@ -569,18 +585,23 @@ func (h *RBACHandlers) listFieldPermissions(w http.ResponseWriter, r *http.Reque
 
 	for rows.Next() {
 		var fp map[string]interface{} = make(map[string]interface{})
-		var id, roleKey, roleName, resType, fieldName, permLevel string
+		var id, roleKey, roleName, permLevel string
+		var termNodeID, resType, resourceID, termName, termDisplayName, maskingPattern *string
 
-		if err := rows.Scan(&id, &roleKey, &roleName, &resType, &fieldName, &permLevel); err != nil {
+		if err := rows.Scan(&id, &roleKey, &roleName, &termNodeID, &resType, &resourceID, &permLevel, &maskingPattern, &termName, &termDisplayName); err != nil {
 			continue
 		}
 
 		fp["id"] = id
 		fp["role_key"] = roleKey
 		fp["role_name"] = roleName
+		fp["term_node_id"] = termNodeID
 		fp["resource_type"] = resType
-		fp["field_name"] = fieldName
+		fp["resource_id"] = resourceID
 		fp["permission_level"] = permLevel
+		fp["masking_pattern"] = maskingPattern
+		fp["term_name"] = termName
+		fp["term_display_name"] = termDisplayName
 
 		fieldPerms = append(fieldPerms, fp)
 	}
@@ -591,14 +612,21 @@ func (h *RBACHandlers) listFieldPermissions(w http.ResponseWriter, r *http.Reque
 func (h *RBACHandlers) createFieldPermission(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		RoleID          string  `json:"role_id"`
-		ResourceType    string  `json:"resource_type"`
-		ResourceID      *string `json:"resource_id"`
-		FieldName       string  `json:"field_name"`
+		TermNodeID      string  `json:"term_node_id"`      // Semantic term ID - required
+		ResourceType    *string `json:"resource_type"`    // Optional: for resource-specific overrides
+		ResourceID      *string `json:"resource_id"`      // Optional: for instance-specific overrides
 		PermissionLevel string  `json:"permission_level"`
+		MaskingPattern *string `json:"masking_pattern"`   // For 'mask' permission level
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	// Validation: term_node_id is required (field_name path is deprecated)
+	if req.TermNodeID == "" {
+		http.Error(w, "term_node_id is required", http.StatusBadRequest)
 		return
 	}
 
@@ -612,10 +640,12 @@ func (h *RBACHandlers) createFieldPermission(w http.ResponseWriter, r *http.Requ
 
 	var id string
 	err = h.db.QueryRow(`
-		INSERT INTO bp_field_permissions (tenant_id, datasource_id, role_id, resource_type, resource_id, field_name, permission_level)
-		VALUES ($1, $2, $3, $4, $5, $6, $7)
+		INSERT INTO bp_field_permissions (tenant_id, datasource_id, role_id, term_node_id, resource_type, resource_id, permission_level, masking_pattern)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+		ON CONFLICT (role_id, term_node_id, resource_type, resource_id)
+		DO UPDATE SET permission_level = EXCLUDED.permission_level, masking_pattern = EXCLUDED.masking_pattern, updated_at = CURRENT_TIMESTAMP
 		RETURNING id
-	`, tenantID, datasourceID, req.RoleID, req.ResourceType, req.ResourceID, req.FieldName, req.PermissionLevel).Scan(&id)
+	`, tenantID, datasourceID, req.RoleID, req.TermNodeID, req.ResourceType, req.ResourceID, req.PermissionLevel, req.MaskingPattern).Scan(&id)
 
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Failed to create field permission: %v", err), http.StatusInternalServerError)
@@ -637,47 +667,45 @@ func (h *RBACHandlers) getUserFieldPermissions(w http.ResponseWriter, r *http.Re
 	tenantID := secCtx.TenantID
 	datasourceID := secCtx.DatasourceID
 
-	var fieldPerms []map[string]string
-	rows, err := h.db.Query(`
-		SELECT DISTINCT fp.field_name, fp.permission_level
-		FROM bp_user_roles ur
-		JOIN bp_field_permissions fp ON ur.role_id = fp.role_id
-		WHERE ur.user_id = $1
-		  AND fp.tenant_id = $2
-		  AND fp.datasource_id = $3
-		  AND fp.resource_type = $4
-		  AND (fp.resource_id IS NULL OR fp.resource_id = $5)
-		  AND ur.is_active = true
-		ORDER BY fp.field_name,
-		  CASE fp.permission_level
-		    WHEN 'write' THEN 1
-		    WHEN 'read' THEN 2
-		    WHEN 'mask' THEN 3
-		    WHEN 'none' THEN 4
-		  END
-	`, userID, tenantID, datasourceID, resourceType, resourceID)
-
+	// Use FieldPermissionRepository for canonical field permission lookup
+	permissions, err := h.fieldPermRepo.GetTermPermissionsForUser(r.Context(), userID, tenantID, datasourceID)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Failed to fetch user field permissions: %v", err), http.StatusInternalServerError)
 		return
 	}
-	defer rows.Close()
 
-	for rows.Next() {
-		var fp map[string]string = make(map[string]string)
-		var fieldName, permLevel string
-
-		if err := rows.Scan(&fieldName, &permLevel); err != nil {
+	// Enrich with term metadata and filter by resource type/id
+	var fieldPerms []map[string]interface{}
+	for _, perm := range permissions {
+		// Skip if resource_type/resource_id doesn't match filters
+		if resourceType != "" && perm.ResourceType != nil && *perm.ResourceType != resourceType {
+			continue
+		}
+		if resourceID != "" && perm.ResourceID != nil && *perm.ResourceID != resourceID {
 			continue
 		}
 
-		fp["field_name"] = fieldName
-		fp["permission_level"] = permLevel
+		fp := map[string]interface{}{}
+		permType := "semantic"
+		if perm.TermNodeID == nil {
+			permType = "field"
+		}
+		fp["permission_type"] = permType
+		fp["permission_level"] = perm.PermissionLevel
+		fp["term_node_id"] = stringOrEmptyPtr(perm.TermNodeID)
 
 		fieldPerms = append(fieldPerms, fp)
 	}
 
 	respondJSONRBAC(w, r, fieldPerms, http.StatusOK)
+}
+
+// stringOrEmptyPtr returns the value of a string pointer or empty string
+func stringOrEmptyPtr(s *string) string {
+	if s == nil {
+		return ""
+	}
+	return *s
 }
 
 // ============================================================================

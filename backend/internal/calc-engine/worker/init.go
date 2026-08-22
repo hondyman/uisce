@@ -6,7 +6,6 @@ import (
 	"log"
 	"strings"
 
-	"github.com/hondyman/uisce/backend/internal/audit"
 	"github.com/hondyman/uisce/backend/internal/calc-engine/activities"
 	"github.com/hondyman/uisce/backend/internal/calc-engine/workflows"
 	"github.com/hondyman/uisce/backend/internal/logging"
@@ -24,7 +23,6 @@ type TemporalWorkerConfig struct {
 	DB               *sql.DB
 	KafkaBrokers     string // e.g. "redpanda:9092"
 	RabbitURL        string // Deprecated: Kept for compatibility if caller hasn't updated
-	AuditService     *audit.TrinoAuditService
 }
 
 // InitializeTemporalWorker sets up Temporal client, registers workflows/activities, and starts worker
@@ -75,15 +73,8 @@ func InitializeTemporalWorker(cfg TemporalWorkerConfig) (client.Client, worker.W
 	w.RegisterActivity(activities.RefreshCubePartitions)
 
 	// Register Gold Copy Activities
+	// Audit service disabled - Trino audit chain removed
 	var auditSvc local_activities.AuditService
-	// Use injected audit service if available, otherwise try to init legacy or skip
-	if cfg.AuditService != nil {
-		auditSvc = cfg.AuditService
-	} else {
-		// Fallback or skip
-		// auditSvc, err := audit.NewIcebergAuditService()
-		logging.GetLogger().Sugar().Warn("⚠️ No Audit Service provided to Temporal Worker. Audit logging disabled.")
-	}
 
 	goldCopyActs := local_activities.NewGoldCopyActivities(cfg.DB, logging.GetLogger().Sugar(), auditSvc)
 	w.RegisterActivity(goldCopyActs.PropagateConnectionActivity)

@@ -73,10 +73,10 @@ func (p *Planner) buildSQLPlan(ctx context.Context, entities []Entity, filters F
 
 	return &QueryPlan{
 		Type:       "SQL",
-		Engine:     "TRINO", // Defaulting to Trino for operational broad queries
-		SQL:        p.dialects.FormatSQL(sql, "trino"),
+		Engine:     "POSTGRES",
+		SQL:        p.dialects.FormatSQL(sql, "postgres"),
 		Parameters: map[string]any{"tenantScope": tenantScope},
-		Dialect:    "trino",
+		Dialect:    "postgres",
 	}, nil
 }
 

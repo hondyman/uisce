@@ -521,3 +521,8 @@ type ProvisionReportsResponse struct {
 	Errors           []string    `json:"errors,omitempty"`
 	CreatedReportIDs []uuid.UUID `json:"created_report_ids"`
 }
+
+// CubeResult represents the result from a data query (formerly Cube.js)
+type CubeResult struct {
+	Data []map[string]interface{} `json:"data"`
+}

@@ -8,20 +8,18 @@ import (
 )
 
 // ============================================================================
-// DATA LIFECYCLE: Hot → Cold Migration with Cube Coordination
+// DATA LIFECYCLE: Hot → Cold Migration
 // ============================================================================
 // Runs on schedule (e.g., nightly at 2 AM)
-// Coordinates with Cube to avoid query collisions during migration
 // ============================================================================
 
 // LifecycleScheduler manages hot-to-cold data migration
 type LifecycleScheduler struct {
-	engine    *UnifiedCalcEngine
-	config    *LifecycleConfig
-	cubeCoord *CubeCoordinator
-	running   bool
-	stopCh    chan struct{}
-	mu        sync.Mutex
+	engine  *UnifiedCalcEngine
+	config  *LifecycleConfig
+	running bool
+	stopCh  chan struct{}
+	mu      sync.Mutex
 }
 
 // LifecycleConfig configures the data lifecycle scheduler
@@ -40,19 +38,9 @@ type LifecycleConfig struct {
 	BatchSize   int    `yaml:"batch_size"`   // Rows per batch
 	ParquetPath string `yaml:"parquet_path"` // S3/HDFS path
 
-	// Cube coordination
-	CubeAPIURL    string        `yaml:"cube_api_url"`
-	CubeDrainTime time.Duration `yaml:"cube_drain_time"` // Wait for Cube queries to complete
-
 	// Notifications
 	SlackWebhook   string `yaml:"slack_webhook"`
 	EmailRecipient string `yaml:"email_recipient"`
-}
-
-// CubeCoordinator manages coordination with Cube during migrations
-type CubeCoordinator struct {
-	apiURL    string
-	drainTime time.Duration
 }
 
 // NewLifecycleScheduler creates a new lifecycle scheduler
@@ -62,9 +50,6 @@ func NewLifecycleScheduler(engine *UnifiedCalcEngine, config *LifecycleConfig) *
 	}
 	if config.BatchSize == 0 {
 		config.BatchSize = 100000
-	}
-	if config.CubeDrainTime == 0 {
-		config.CubeDrainTime = 30 * time.Second
 	}
 	if len(config.Tables) == 0 {
 		config.Tables = []string{
@@ -78,10 +63,6 @@ func NewLifecycleScheduler(engine *UnifiedCalcEngine, config *LifecycleConfig) *
 	return &LifecycleScheduler{
 		engine: engine,
 		config: config,
-		cubeCoord: &CubeCoordinator{
-			apiURL:    config.CubeAPIURL,
-			drainTime: config.CubeDrainTime,
-		},
 		stopCh: make(chan struct{}),
 	}
 }
@@ -141,25 +122,15 @@ func (s *LifecycleScheduler) runScheduler() {
 	}
 }
 
-// runMigration executes the hot-to-cold migration with coordination
+// runMigration executes the hot-to-cold migration
+// Note: Cube.js coordination has been removed
 func (s *LifecycleScheduler) runMigration(ctx context.Context) (*MigrationResult, error) {
 	result := &MigrationResult{
 		StartedAt: time.Now(),
 		Tables:    make(map[string]TableMigrationResult),
 	}
 
-	// Step 1: Pause Cube pre-aggregation refreshes
-	if err := s.cubeCoord.PauseRefreshes(ctx); err != nil {
-		return nil, fmt.Errorf("failed to pause Cube refreshes: %w", err)
-	}
-	defer s.cubeCoord.ResumeRefreshes(ctx)
-
-	// Step 2: Wait for in-flight Cube queries to complete
-	if err := s.cubeCoord.WaitForDrain(ctx); err != nil {
-		return nil, fmt.Errorf("failed to drain Cube queries: %w", err)
-	}
-
-	// Step 3: Run migration for each table
+	// Step 1: Run migration for each table
 	cutoffDate := time.Now().Add(-s.config.HotRetention)
 
 	for _, table := range s.config.Tables {
@@ -169,12 +140,6 @@ func (s *LifecycleScheduler) runMigration(ctx context.Context) (*MigrationResult
 		}
 		result.Tables[table] = tableResult
 		result.TotalRowsMigrated += tableResult.RowsMigrated
-	}
-
-	// Step 4: Refresh Cube's external table catalog
-	if err := s.cubeCoord.RefreshCatalog(ctx); err != nil {
-		// Log but don't fail
-		fmt.Printf("Warning: failed to refresh Cube catalog: %v\n", err)
 	}
 
 	result.CompletedAt = time.Now()
@@ -276,52 +241,10 @@ func (s *LifecycleScheduler) notifyError(err error) {
 }
 
 func (s *LifecycleScheduler) notifySuccess(result *MigrationResult) {
-	msg := fmt.Sprintf("✅ Data lifecycle migration completed: %d rows migrated in %v",
+	msg := fmt.Sprintf("Data lifecycle migration completed: %d rows migrated in %v",
 		result.TotalRowsMigrated, result.Duration)
 	fmt.Println(msg)
 	// TODO: Send to Slack/Email
-}
-
-// ============================================================================
-// CUBE COORDINATOR
-// ============================================================================
-
-// PauseRefreshes pauses Cube pre-aggregation refreshes during migration
-func (c *CubeCoordinator) PauseRefreshes(ctx context.Context) error {
-	// Cube doesn't have a direct API for this, but we can:
-	// 1. Set CUBEJS_SCHEDULED_REFRESH=false via config
-	// 2. Call /readyz to ensure Cube is healthy
-	// 3. Use Redis to set a migration flag that cube.js checks
-
-	// For now, we rely on the drain time approach
-	fmt.Println("Pausing Cube refreshes (using drain time approach)")
-	return nil
-}
-
-// ResumeRefreshes resumes Cube pre-aggregation refreshes
-func (c *CubeCoordinator) ResumeRefreshes(ctx context.Context) error {
-	fmt.Println("Resuming Cube refreshes")
-	return nil
-}
-
-// WaitForDrain waits for in-flight queries to complete
-func (c *CubeCoordinator) WaitForDrain(ctx context.Context) error {
-	fmt.Printf("Waiting %v for Cube queries to drain...\n", c.drainTime)
-
-	select {
-	case <-ctx.Done():
-		return ctx.Err()
-	case <-time.After(c.drainTime):
-		return nil
-	}
-}
-
-// RefreshCatalog refreshes Cube's view of external tables
-func (c *CubeCoordinator) RefreshCatalog(ctx context.Context) error {
-	// Cube.js automatically picks up schema changes on next query
-	// For explicit refresh, restart Cube or call schema reload API
-	fmt.Println("Cube catalog will refresh on next query")
-	return nil
 }
 
 // ============================================================================

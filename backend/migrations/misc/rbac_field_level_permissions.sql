@@ -86,15 +86,19 @@ CREATE INDEX idx_bp_user_roles_active ON bp_user_roles(is_active);
 -- ============================================================================
 
 -- Field-Level Access Control
+-- Semantic-level RBAC: permissions bound to term_node_id (Semantic Term) propagate to all BOs/reports using them
+-- Canonical store for all field-level permissions. Use term_node_id for new permissions.
 CREATE TABLE IF NOT EXISTS bp_field_permissions (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     tenant_id UUID NOT NULL,
     datasource_id UUID NOT NULL,
     role_id UUID NOT NULL REFERENCES bp_roles(id) ON DELETE CASCADE,
-    resource_type VARCHAR(100) NOT NULL, -- 'process' | 'step' | 'form' | 'document'
-    resource_id UUID, -- NULL for all resources of type
-    field_name VARCHAR(200) NOT NULL,
+    term_node_id UUID NOT NULL, -- FK to catalog_node (semantic term) - permissions at semantic level permeate to all BOs
+    resource_type VARCHAR(100), -- Optional: 'process' | 'step' | 'form' | 'document' - NULL means semantic-level permission applies globally
+    resource_id UUID, -- Optional: specific resource instance - NULL means all resources of type
+    -- field_name column DEPRECATED: use term_node_id instead. Will be removed after migration.
     permission_level VARCHAR(50) NOT NULL, -- 'none' | 'read' | 'write' | 'mask'
+    masking_pattern VARCHAR(200), -- For 'mask' permission: e.g., 'XXX-XX-####' for SSN pattern
     field_condition JSONB, -- Optional conditions: {"when": {"status": "draft"}}
     created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
@@ -103,9 +107,14 @@ CREATE TABLE IF NOT EXISTS bp_field_permissions (
 CREATE INDEX idx_bp_field_permissions_tenant_datasource ON bp_field_permissions(tenant_id, datasource_id);
 CREATE INDEX idx_bp_field_permissions_role ON bp_field_permissions(role_id);
 CREATE INDEX idx_bp_field_permissions_resource ON bp_field_permissions(resource_type, resource_id);
-CREATE INDEX idx_bp_field_permissions_field ON bp_field_permissions(field_name);
+CREATE INDEX idx_bp_field_permissions_term ON bp_field_permissions(term_node_id);
+
+-- Unique constraint: one permission per role + term + resource scope
+ALTER TABLE bp_field_permissions ADD CONSTRAINT uq_bp_field_permissions_unique UNIQUE (role_id, term_node_id, resource_type, resource_id);
 
 -- Field Masking Rules (PII/Sensitive Data)
+-- DEPRECATED: Use bp_field_permissions with permission_level='mask' instead.
+-- This table is retained for backward compatibility during migration period only.
 CREATE TABLE IF NOT EXISTS bp_field_masking_rules (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     tenant_id UUID NOT NULL,
@@ -119,6 +128,10 @@ CREATE TABLE IF NOT EXISTS bp_field_masking_rules (
     created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
     UNIQUE(tenant_id, datasource_id, resource_type, field_name)
 );
+
+COMMENT ON TABLE bp_field_masking_rules IS
+    'DEPRECATED: Use bp_field_permissions with permission_level = ''mask'' instead. '
+    'Will be removed in v3.0 after all data is migrated.';
 
 CREATE INDEX idx_bp_field_masking_tenant_datasource ON bp_field_masking_rules(tenant_id, datasource_id);
 CREATE INDEX idx_bp_field_masking_resource ON bp_field_masking_rules(resource_type);

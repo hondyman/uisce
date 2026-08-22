@@ -1108,24 +1108,44 @@ func (s *BusinessObjectService) UpdateBusinessObject(
 
 						insertQuery := `
 							INSERT INTO bo_fields (
-								id, tenant_id, business_object_id, key, name, field_name, display_label, technical_name, field_type, is_core, display_order, description
+								id, tenant_id, business_object_id, key, name, display_name, technical_name, type, is_core, sequence, description
 							) VALUES (
-								$1::uuid, $2::uuid, $3::uuid, $4, $5, $6, $7, $8, $9, $10, $11, $12
+								$1::uuid, $2::uuid, $3::uuid, $4, $5, $6, $7, $8, $9, $10, $11
 							)
 							`
 						for _, f := range newFields {
 							id := uuid.New().String()
-							name := toString(f["name"]) // using 'name' from JSON as the internal name
-							displayName := toString(f["name"])
+							name := toString(f["name"])
+							if name == "" {
+								name = toString(f["displayName"])
+							}
+							displayName := toString(f["displayName"])
+							if displayName == "" {
+								displayName = name
+							}
+							key := toString(f["key"])
+							if key == "" {
+								key = toString(f["technicalName"])
+							}
+							if key == "" {
+								key = name
+							}
+							technicalName := toString(f["technicalName"])
+							if technicalName == "" {
+								technicalName = key
+							}
 							typeName := toString(f["type"])
+							if typeName == "" {
+								typeName = "text"
+							}
 							seq := toInt(f["sequence"])
 							desc := toString(f["description"])
 							if _, err := tx.ExecContext(ctx, insertQuery,
-								id, tenantID, current.ID, toString(f["key"]), name, name, displayName, toString(f["key"]), typeName, false, seq, desc,
+								id, tenantID, current.ID, key, name, displayName, technicalName, typeName, false, seq, desc,
 							); err != nil {
-								logging.GetLogger().Sugar().Errorf("[FIELD_UPDATE] FAILED to insert bo_field for bo_id=%s key=%s: %v", current.ID, toString(f["key"]), err)
+								logging.GetLogger().Sugar().Errorf("[FIELD_UPDATE] FAILED to insert bo_field for bo_id=%s key=%s: %v", current.ID, key, err)
 							} else {
-								logging.GetLogger().Sugar().Infof("[FIELD_UPDATE] Successfully inserted bo_field for bo_id=%s key=%s, name=%s", current.ID, toString(f["key"]), name)
+								logging.GetLogger().Sugar().Infof("[FIELD_UPDATE] Successfully inserted bo_field for bo_id=%s key=%s, name=%s", current.ID, key, name)
 							}
 						}
 
@@ -1705,21 +1725,22 @@ func (s *BusinessObjectService) loadBOSubtypesAndFields(
 	// We look for subtypes in EITHER the BO's tenant (e.g. gold copy) OR the viewer's tenant (custom extensions)
 	childBOQuery := `
 		SELECT id, key, name, display_name, COALESCE(technical_name, '') AS technical_name, 
-		       COALESCE(description, '') AS description, is_core, tenant_id
+		       COALESCE(description, '') AS description, is_core, tenant_id, config
 		FROM business_objects
 		WHERE parent_id = $1::uuid AND (tenant_id = $2::uuid OR tenant_id = $3::uuid)
 		ORDER BY name
 	`
 
 	type ChildBO struct {
-		ID            string `db:"id"`
-		Key           string `db:"key"`
-		Name          string `db:"name"`
-		DisplayName   string `db:"display_name"`
-		TechnicalName string `db:"technical_name"`
-		Description   string `db:"description"`
-		IsCore        bool   `db:"is_core"`
-		TenantID      string `db:"tenant_id"`
+		ID            string          `db:"id"`
+		Key           string          `db:"key"`
+		Name          string          `db:"name"`
+		DisplayName   string          `db:"display_name"`
+		TechnicalName string          `db:"technical_name"`
+		Description   string          `db:"description"`
+		IsCore        bool            `db:"is_core"`
+		TenantID      string          `db:"tenant_id"`
+		Config        json.RawMessage `db:"config"`
 	}
 
 	var childBOs []ChildBO
@@ -1727,71 +1748,40 @@ func (s *BusinessObjectService) loadBOSubtypesAndFields(
 		logging.GetLogger().Sugar().Warnf("Warning: failed to load child business objects (with tenant filter): %v", err)
 	}
 
-	// Fallback query removed for security - we must strictly respect tenant boundaries
-
 	logging.GetLogger().Sugar().Infof("DEBUG: loading %d child BO(s) for parent %s (tenant %s)", len(childBOs), bo.ID, bo.TenantID)
 
 	// For each child BO, load its fields and add as subtype
 	for _, child := range childBOs {
 		// Load fields for this child BO
 		fieldQuery := `
-			SELECT id, key, name, display_label AS display_name, COALESCE(technical_name, '') AS technical_name, field_type AS type,
+			SELECT id, key, name, COALESCE(display_name, name) AS display_name, COALESCE(technical_name, '') AS technical_name, type AS type,
 			       COALESCE(is_core, false) AS is_core, COALESCE(is_required, false) AS is_required,
-			       COALESCE(is_system_field, false) AS is_system, COALESCE(description, '') AS description,
-			       COALESCE(reference_bo_id::text, '') AS reference_entity, COALESCE(display_order, 0) AS sequence,
+			       COALESCE(is_system, false) AS is_system, COALESCE(description, '') AS description,
+			       COALESCE(reference_entity, '') AS reference_entity, COALESCE(sequence, 0) AS sequence,
 			       created_at, '' AS created_by,
 			       created_at AS last_modified_at, '' AS last_modified_by
 			FROM bo_fields
-			WHERE business_object_id::text = $1 AND tenant_id::text = $2 AND subtype_id IS NULL
-			ORDER BY display_order
+			WHERE business_object_id::text = $1 AND (tenant_id::text = $2 OR tenant_id::text = $3) AND subtype_id IS NULL
+			ORDER BY sequence
 		`
 
 		var fields []models.FieldDefinition
-		if err := s.db.SelectContext(ctx, &fields, fieldQuery, child.ID, child.TenantID); err != nil {
-			logging.GetLogger().Sugar().Warnf("Warning: failed to load fields for child BO %s: %v", child.Key, err)
-
-			// Try old schema fallback for bo_fields (legacy deployments)
-			oldFieldQuery := `
-				SELECT id, business_object_id, field_name, display_label, field_type, is_required, is_readonly, is_searchable, is_sortable, display_order
-				FROM bo_fields
-				WHERE business_object_id = $1
-				ORDER BY display_order
-			`
-			type OldField struct {
-				ID           string `db:"id"`
-				BoID         string `db:"business_object_id"`
-				FieldName    string `db:"field_name"`
-				DisplayLabel string `db:"display_label"`
-				FieldType    string `db:"field_type"`
-				IsRequired   bool   `db:"is_required"`
-				IsReadOnly   bool   `db:"is_readonly"`
-				IsSearchable bool   `db:"is_searchable"`
-				IsSortable   bool   `db:"is_sortable"`
-				Sequence     int    `db:"display_order"`
-			}
-
-			var oldFields []OldField
-			if err2 := s.db.SelectContext(ctx, &oldFields, oldFieldQuery, child.ID); err2 != nil {
-				logging.GetLogger().Sugar().Warnf("Warning: failed to load fields for child BO %s (old schema): %v", child.Key, err2)
-				continue
-			}
-
-			// Map old fields to models.FieldDefinition
-			fields = make([]models.FieldDefinition, 0, len(oldFields))
-			for _, of := range oldFields {
-				f := models.FieldDefinition{
-					ID:          of.ID,
-					Key:         of.FieldName,
-					Name:        of.FieldName,
-					DisplayName: of.DisplayLabel,
-					Type:        of.FieldType,
-					IsCore:      false,
-					IsRequired:  of.IsRequired,
-					IsSystem:    of.IsReadOnly,
-					Sequence:    of.Sequence,
+		if err := s.db.SelectContext(ctx, &fields, fieldQuery, child.ID, child.TenantID, viewTenantID); err != nil || len(fields) == 0 {
+			// Fallback: check config JSON
+			if len(child.Config) > 0 {
+				var configMap map[string]interface{}
+				if err := json.Unmarshal(child.Config, &configMap); err == nil {
+					if fieldsRaw, ok := configMap["fields"]; ok {
+						if fieldsJSON, err := json.Marshal(fieldsRaw); err == nil {
+							_ = json.Unmarshal(fieldsJSON, &fields)
+						}
+					}
 				}
-				fields = append(fields, f)
 			}
+		}
+
+		if fields == nil {
+			fields = []models.FieldDefinition{}
 		}
 
 		// Create subtype definition from child BO
@@ -1820,12 +1810,12 @@ func (s *BusinessObjectService) loadBOSubtypesAndFields(
 		       COALESCE(clone_parent_key, '') AS clone_parent_key, sequence, created_at, 
 		       COALESCE(created_by, '') AS created_by, last_modified_at, COALESCE(last_modified_by, '') AS last_modified_by
 		FROM bo_subtypes
-		WHERE business_object_id = $1::uuid
+		WHERE business_object_id::text = $1
 		ORDER BY sequence
 	`
 
 	var legacySubtypes []models.SubtypeDefinition
-	if _, err := uuid.Parse(bo.ID); err == nil {
+	if bo.ID != "" {
 		if err := s.db.SelectContext(ctx, &legacySubtypes, subtypeQuery, bo.ID); err != nil {
 			logging.GetLogger().Sugar().Warnf("Warning: failed to load bo_subtypes: %v", err)
 		}

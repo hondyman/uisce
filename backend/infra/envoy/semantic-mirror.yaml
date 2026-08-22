@@ -22,16 +22,6 @@ static_resources:
                 route:
                   cluster: legacy-semantic
                   timeout: 10s
-                  request_mirror_policies:
-                  - cluster: cube-semantic-mirror
-                    runtime_fraction:
-                      default_value:
-                        numerator: 100
-                        denominator: HUNDRED
-              - match:
-                  prefix: "/cube-parity"
-                route:
-                  cluster: cube-parity
               - match:
                   prefix: "/healthz"
                 route:
@@ -52,35 +42,6 @@ static_resources:
               socket_address:
                 address: semantic-legacy.default.svc.cluster.local
                 port_value: 8080
-  - name: cube-semantic-mirror
-    connect_timeout: 1s
-    type: STRICT_DNS
-    lb_policy: ROUND_ROBIN
-    load_assignment:
-      cluster_name: cube-semantic-mirror
-      endpoints:
-      - lb_endpoints:
-        - endpoint:
-            address:
-              socket_address:
-                address: cube-semantic.default.svc.cluster.local
-                port_value: 8080
-    retry_policy:
-      retry_on: 5xx
-      num_retries: 1
-  - name: cube-parity
-    connect_timeout: 1s
-    type: STRICT_DNS
-    lb_policy: ROUND_ROBIN
-    load_assignment:
-      cluster_name: cube-parity
-      endpoints:
-      - lb_endpoints:
-        - endpoint:
-            address:
-              socket_address:
-                address: cube-parity.default.svc.cluster.local
-                port_value: 8090
 layered_runtime:
   layers:
   - name: static-layer

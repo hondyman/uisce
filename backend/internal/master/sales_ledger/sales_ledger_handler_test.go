@@ -1,0 +1,162 @@
+package sales_ledger
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"testing"
+	"time"
+
+	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
+	"github.com/hondyman/uisce/libs/jwt-middleware"
+)
+
+type testSalesLedgerService struct {
+	records map[uuid.UUID]SalesLedgerRecord
+}
+
+func (s *testSalesLedgerService) List(ctx context.Context, tenantID uuid.UUID, subtypeCode string) ([]SalesLedgerRecord, error) {
+	var result []SalesLedgerRecord
+	for _, rec := range s.records {
+		if rec.TenantID == tenantID && (subtypeCode == "" || rec.SubtypeCode == subtypeCode) {
+			result = append(result, rec)
+		}
+	}
+	return result, nil
+}
+
+func (s *testSalesLedgerService) Get(ctx context.Context, tenantID, id uuid.UUID) (*SalesLedgerRecord, error) {
+	rec, ok := s.records[id]
+	if !ok || rec.TenantID != tenantID {
+		return nil, nil
+	}
+	return &rec, nil
+}
+
+func (s *testSalesLedgerService) Create(ctx context.Context, tenantID uuid.UUID, rec *SalesLedgerRecord) error {
+	rec.TenantID = tenantID
+	s.records[rec.ID] = *rec
+	return nil
+}
+
+func (s *testSalesLedgerService) SoftDelete(ctx context.Context, tenantID, id uuid.UUID) error {
+	rec, ok := s.records[id]
+	if !ok || rec.TenantID != tenantID {
+		return ErrNotFound
+	}
+	delete(s.records, id)
+	return nil
+}
+
+func setupTestSalesLedgerRouter(svc *testSalesLedgerService) http.Handler {
+	r := chi.NewRouter()
+	h := NewHandlerWithService(svc)
+	h.RegisterRoutes(r)
+	return r
+}
+
+func withAuthContext(r *http.Request, tenantID uuid.UUID) *http.Request {
+	claims := &jwtmiddleware.JWTClaims{
+		TenantID: tenantID.String(),
+		UserID:   "test-user",
+		Email:    "test@example.com",
+		IsActive: true,
+	}
+	ctx := context.WithValue(r.Context(), jwtmiddleware.ClaimsContextKey, claims)
+	return r.WithContext(ctx)
+}
+
+func TestSalesLedgerHandler_List_Unauthorized(t *testing.T) {
+	svc := &testSalesLedgerService{records: make(map[uuid.UUID]SalesLedgerRecord)}
+	r := setupTestSalesLedgerRouter(svc)
+
+	req := httptest.NewRequest("GET", "/api/master/sales-ledgers", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusUnauthorized {
+		t.Errorf("expected status 401, got %d", w.Code)
+	}
+}
+
+func TestSalesLedgerHandler_List_WithAuth(t *testing.T) {
+	tenantID := uuid.New()
+	svc := &testSalesLedgerService{records: make(map[uuid.UUID]SalesLedgerRecord)}
+	r := setupTestSalesLedgerRouter(svc)
+
+	rec := SalesLedgerRecord{
+		ID:               uuid.New(),
+		TenantID:         tenantID,
+		InvoiceNumber:    "INV-001",
+		ClientID:         uuid.New(),
+		SubtypeCode:      "aum_management_fee",
+		BillingPeriodEnd: time.Now(),
+		InvoiceStatus:    "pending",
+	}
+	svc.records[rec.ID] = rec
+
+	req := httptest.NewRequest("GET", "/api/master/sales-ledgers", nil)
+	req = withAuthContext(req, tenantID)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("expected status 200, got %d", w.Code)
+	}
+
+	var result []SalesLedgerRecord
+	if err := json.NewDecoder(w.Body).Decode(&result); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+	if len(result) != 1 {
+		t.Errorf("expected 1 record, got %d", len(result))
+	}
+}
+
+func TestSalesLedgerHandler_Get_NotFound(t *testing.T) {
+	tenantID := uuid.New()
+	svc := &testSalesLedgerService{records: make(map[uuid.UUID]SalesLedgerRecord)}
+	r := setupTestSalesLedgerRouter(svc)
+
+	req := httptest.NewRequest("GET", "/api/master/sales-ledgers/"+uuid.New().String(), nil)
+	req = withAuthContext(req, tenantID)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusNotFound {
+		t.Errorf("expected status 404, got %d", w.Code)
+	}
+}
+
+func TestSalesLedgerHandler_Create_InvalidJSON(t *testing.T) {
+	tenantID := uuid.New()
+	svc := &testSalesLedgerService{records: make(map[uuid.UUID]SalesLedgerRecord)}
+	r := setupTestSalesLedgerRouter(svc)
+
+	req := httptest.NewRequest("POST", "/api/master/sales-ledgers", bytes.NewBufferString("invalid json"))
+	req = withAuthContext(req, tenantID)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected status 400, got %d", w.Code)
+	}
+}
+
+func TestSalesLedgerHandler_Delete_NotFound(t *testing.T) {
+	tenantID := uuid.New()
+	svc := &testSalesLedgerService{records: make(map[uuid.UUID]SalesLedgerRecord)}
+	r := setupTestSalesLedgerRouter(svc)
+
+	req := httptest.NewRequest("DELETE", "/api/master/sales-ledgers/"+uuid.New().String(), nil)
+	req = withAuthContext(req, tenantID)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusNotFound {
+		t.Errorf("expected status 404, got %d", w.Code)
+	}
+}

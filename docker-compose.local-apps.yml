@@ -19,7 +19,6 @@ services:
       - REDIS_ADDR=100.84.126.19:6379
       - TEMPORAL_HOSTPORT=100.84.126.19:7233
       - KAFKA_BROKERS=100.84.126.19:9092
-      - TRINO_DSN=http://admin@100.84.126.19:8084?catalog=iceberg&schema=audit
     depends_on: []  # No local dependencies - all remote
     restart: unless-stopped
 

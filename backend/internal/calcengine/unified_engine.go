@@ -18,8 +18,8 @@ import (
 // ============================================================================
 // Architecture:
 //   App Real-time:  Go CalcEngine → StarRocks Native Tables (sub-second)
-//   Hot Analytics:  Cube.js → StarRocks Native (pre-aggregated, <90 days)
-//   Cold Analytics: Cube.js → StarRocks External Tables on Parquet/Iceberg
+//   Hot Analytics:  StarRocks Native (pre-aggregated, <90 days)
+//   Cold Analytics: StarRocks External Tables on Parquet/Iceberg
 //   Data Lifecycle: Hot → Cold push via scheduled jobs
 // ============================================================================
 

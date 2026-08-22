@@ -85,14 +85,48 @@ export const BOPendingBanner: React.FC<BOPendingBannerProps> = ({
   const fetchStatus = () => {
     if (!boId) return;
 
-    apiClient(`/api/bo/${boId}/status`)
-      .then(res => res.json())
+    apiClient<any>(`/api/bo/${boId}/status`)
       .then(data => {
-        setStatus(data);
+        if (data && typeof data.json === 'function') {
+          return data.json();
+        }
+        return data;
+      })
+      .then(data => {
+        setStatus(data || {
+          status: 'draft',
+          reason: '',
+          pending_terms: [],
+          pending_calculations: [],
+          pending_dependencies: [],
+          validation_errors: [],
+          diff_required: false,
+          import_pending: false,
+          last_modified: '',
+          modified_by: '',
+          version: 'v1',
+          is_published: false,
+          can_publish: true,
+        });
         setLoading(false);
       })
       .catch(err => {
         console.error('Failed to fetch BO status:', err);
+        setStatus({
+          status: 'draft',
+          reason: '',
+          pending_terms: [],
+          pending_calculations: [],
+          pending_dependencies: [],
+          validation_errors: [],
+          diff_required: false,
+          import_pending: false,
+          last_modified: '',
+          modified_by: '',
+          version: 'v1',
+          is_published: false,
+          can_publish: true,
+        });
         setLoading(false);
       });
   };

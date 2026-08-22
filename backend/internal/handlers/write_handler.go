@@ -178,18 +178,7 @@ func (h *WriteHandler) HandleGenericWrite(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	// 7. Invalidate/Refresh Cube Cache
-	go func() {
-		cubeURL := "http://cube:4000/cubejs-api/v1/pre-aggregations/refresh"
-		req, _ := http.NewRequest("POST", cubeURL, nil)
-		client := &http.Client{Timeout: 5 * time.Second}
-		resp, err := client.Do(req)
-		if err != nil {
-			fmt.Printf("Warning: Failed to refresh Cube cache: %v\n", err)
-			return
-		}
-		defer resp.Body.Close()
-	}()
+	// Note: Cube.js cache refresh removed (Cube.js service removed)
 
 	w.WriteHeader(http.StatusCreated)
 	w.Write([]byte(`{"status":"success"}`))

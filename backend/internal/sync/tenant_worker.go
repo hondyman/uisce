@@ -5,21 +5,17 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
-
-	"github.com/hondyman/uisce/backend/internal/audit"
 )
 
 // TenantWorker handles cascading operations for tenants
 type TenantWorker struct {
-	db           *sql.DB
-	auditService *audit.TrinoAuditService
+	db *sql.DB
 }
 
 // NewTenantWorker creates a new TenantWorker
-func NewTenantWorker(db *sql.DB, auditService *audit.TrinoAuditService) *TenantWorker {
+func NewTenantWorker(db *sql.DB) *TenantWorker {
 	return &TenantWorker{
-		db:           db,
-		auditService: auditService,
+		db: db,
 	}
 }
 
@@ -89,20 +85,6 @@ func (w *TenantWorker) DeleteTenantResources(ctx context.Context, tenantID strin
 
 	log.Printf("[TenantWorker] Deleted %d connections, %d products, %d instances for tenant %s", connCount, prodCount, instCount, tenantID)
 
-	// 5. Audit
-	if w.auditService != nil {
-		// We use a background context for audit to not fail if main context cancels?
-		// Or just use same context.
-		err := w.auditService.LogEvent(ctx, tenantID, "system", "", "System", "delete_cascade", "tenant", tenantID, map[string]interface{}{
-			"connections_deleted": connCount,
-			"products_deleted":    prodCount,
-			"instances_deleted":   instCount,
-		})
-		if err != nil {
-			log.Printf("[TenantWorker] Failed to log audit event: %v", err)
-		}
-	}
-
 	return nil
 }
 
@@ -143,18 +125,6 @@ func (w *TenantWorker) InactivateTenantResources(ctx context.Context, tenantID s
 	}
 
 	log.Printf("[TenantWorker] Inactivated %d connections, %d products, %d instances for tenant %s", connCount, prodCount, instCount, tenantID)
-
-	// 4. Audit
-	if w.auditService != nil {
-		err := w.auditService.LogEvent(ctx, tenantID, "system", "", "System", "inactivate_cascade", "tenant", tenantID, map[string]interface{}{
-			"connections_inactivated": connCount,
-			"products_inactivated":    prodCount,
-			"instances_inactivated":   instCount,
-		})
-		if err != nil {
-			log.Printf("[TenantWorker] Failed to log audit event: %v", err)
-		}
-	}
 
 	return nil
 }

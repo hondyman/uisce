@@ -37,7 +37,7 @@ type NLResponse struct {
 // QueryPlan defines how a query should be executed
 type QueryPlan struct {
 	Type       string         `json:"type"`   // "SQL" or "CYPHER" or "HYBRID"
-	Engine     string         `json:"engine"` // "TRINO", "POSTGRES", "AGE", etc.
+	Engine     string         `json:"engine"` // "POSTGRES", "STARROCKS", "AGE", etc.
 	SQL        string         `json:"sql,omitempty"`
 	Cypher     string         `json:"cypher,omitempty"`
 	GraphName  string         `json:"graphName,omitempty"`

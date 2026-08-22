@@ -13,6 +13,7 @@ import NotificationsIcon from '@mui/icons-material/Notifications';
 import { useTenant } from '../../contexts/TenantContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
+import { apiClient } from '../../utils/apiClient';
 
 export const NotificationBell: React.FC = () => {
   const { tenant, datasource } = useTenant();
@@ -29,15 +30,12 @@ export const NotificationBell: React.FC = () => {
 
     try {
       setLoading(true);
-      const response = await fetch(
+      const data = await apiClient<any[]>(
         `/api/bp-notifications/logs?tenant_id=${tenant.id}&tenant_instance_id=${datasource.id}&user_id=${user.id}`
       );
       
-      if (response.ok) {
-        const data = await response.json();
-        const unread = (data || []).filter((n: any) => !n.opened_at).length;
-        setUnreadCount(unread);
-      }
+      const unread = (Array.isArray(data) ? data : []).filter((n: any) => !n.opened_at).length;
+      setUnreadCount(unread);
     } catch (error) {
       console.error('Failed to fetch notification count:', error);
     } finally {

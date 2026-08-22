@@ -17,8 +17,8 @@ import (
 func main() {
 	var (
 		dsn              = flag.String("dsn", "", "Postgres DSN (defaults to ALPHA_DB_URL or DATABASE_URL)")
-		schemaRoot       = flag.String("schema-root", "", "Path to cube tenant schemas root")
-		generatedDir     = flag.String("generated-dir", "", "Directory for generated Cube artifacts")
+		schemaRoot       = flag.String("schema-root", "", "Path to tenant schemas root")
+		generatedDir     = flag.String("generated-dir", "", "Directory for generated artifacts")
 		tenantFilter     = flag.String("tenants", "", "Comma-separated tenant IDs to include")
 		datasourceFilter = flag.String("datasources", "", "Comma-separated datasource IDs to include")
 		dryRun           = flag.Bool("dry-run", false, "Preview changes without touching DB or filesystem")

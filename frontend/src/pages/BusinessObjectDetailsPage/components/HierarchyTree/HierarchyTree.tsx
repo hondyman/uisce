@@ -68,7 +68,7 @@ function HierarchyTreeNode({
   const subtypeKey = (node as any).subtypeKey;
   const technicalName = (node as any).technicalName;
   const isRootNode = node.id === 'root';
-  const isSelected = (isRootNode && !selectedNode) || (selectedNode?.subtypeKey === subtypeKey && isSubtypeNode);
+  const isSelected = (isRootNode && !selectedNode) || (selectedNode?.type === 'subtype' && selectedNode.subtypeKey === subtypeKey && isSubtypeNode);
 
   const handleNodeClick = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -90,18 +90,12 @@ function HierarchyTreeNode({
           p: 1,
           borderRadius: 1,
           cursor: 'pointer',
-          bgcolor: 
-            isSelected 
-              ? 'primary.light' 
-              : node.id === 'root' ? 'primary.light' : 'transparent',
-          color: 
-            isSelected || node.id === 'root' 
-              ? 'primary.main' 
-              : 'text.primary',
-          fontWeight: node.id === 'root' || isSelected ? 700 : 400,
+          bgcolor: isSelected ? 'primary.light' : 'transparent',
+          color: isSelected ? 'primary.main' : 'text.primary',
+          fontWeight: isSelected ? 700 : 400,
           transition: 'all 0.2s ease',
           '&:hover': {
-            bgcolor: node.id === 'root' || isSelected ? 'primary.light' : 'action.hover',
+            bgcolor: isSelected ? 'primary.light' : 'action.hover',
           },
         }}
       >

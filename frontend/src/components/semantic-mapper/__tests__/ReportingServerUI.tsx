@@ -295,16 +295,6 @@ const ReportingServerUI = (): JSX.Element | null => {
 
   const [dataSources] = useState<DataSource[]>([
     {
-      id: 'cube-1',
-      name: 'cube-analytics',
-      type: 'cube',
-      connectionString: 'http://localhost:4000/cubejs-api/v1',
-      cubeConfig: {
-        apiUrl: 'http://localhost:4000/cubejs-api/v1',
-        apiToken: 'your-api-token'
-      }
-    },
-    {
       id: 'pg-1',
       name: 'postgres-main',
       type: 'postgres',

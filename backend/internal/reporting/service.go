@@ -11,19 +11,17 @@ import (
 
 // Service handles business logic for reporting
 type Service struct {
-	repo       *Repository
-	cubeClient *CubeClient
-	merger     *DefinitionMerger
-	renderer   *Renderer
+	repo     *Repository
+	merger   *DefinitionMerger
+	renderer *Renderer
 }
 
 // NewService creates a new reporting service
-func NewService(repo *Repository, cubeClient *CubeClient, renderer *Renderer) *Service {
+func NewService(repo *Repository, renderer *Renderer) *Service {
 	return &Service{
-		repo:       repo,
-		cubeClient: cubeClient,
-		merger:     NewDefinitionMerger(),
-		renderer:   renderer,
+		repo:     repo,
+		merger:   NewDefinitionMerger(),
+		renderer: renderer,
 	}
 }
 

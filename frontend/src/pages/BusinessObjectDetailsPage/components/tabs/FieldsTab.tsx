@@ -28,7 +28,10 @@ import {
   Code as JsonIcon,
   ToggleOn as BooleanIcon,
   ShortText as TextIcon,
+  DriveFileMove as MoveIcon,
 } from '@mui/icons-material';
+import { Menu, MenuItem, ListItemIcon, ListItemText } from '@mui/material';
+import { useState } from 'react';
 import type { Field } from '../../../types/entity-schema';
 
 type SortConfig = { key: string; direction: 'asc' | 'desc' };
@@ -45,6 +48,7 @@ interface FieldsTabProps {
   onAddField: () => void;
   onEditField: (field: Field) => void;
   onDeleteField: (field: Field) => void;
+  onMoveField?: (field: Field, targetScope: string) => void;
   onSort: (key: string) => void;
   getValidationIcon: (validation: any) => React.ReactNode;
 }
@@ -61,9 +65,29 @@ export function FieldsTab({
   onAddField,
   onEditField,
   onDeleteField,
+  onMoveField,
   onSort,
   getValidationIcon,
 }: FieldsTabProps) {
+  const [moveMenuAnchor, setMoveMenuAnchor] = useState<null | HTMLElement>(null);
+  const [fieldForMove, setFieldForMove] = useState<Field | null>(null);
+
+  const handleOpenMoveMenu = (e: React.MouseEvent<HTMLElement>, field: Field) => {
+    setMoveMenuAnchor(e.currentTarget);
+    setFieldForMove(field);
+  };
+
+  const handleCloseMoveMenu = () => {
+    setMoveMenuAnchor(null);
+    setFieldForMove(null);
+  };
+
+  const handleSelectMoveTarget = (targetScope: string) => {
+    if (fieldForMove && onMoveField) {
+      onMoveField(fieldForMove, targetScope);
+    }
+    handleCloseMoveMenu();
+  };
   const getDataTypeConfig = (type: string) => {
     const t = type.toLowerCase();
     if (t.includes('int') || t.includes('number') || t.includes('decimal') || t.includes('float') || t.includes('double')) {
@@ -80,10 +104,13 @@ export function FieldsTab({
   };
 
   const isInheritedField = (field: Field) => {
-    return selectedNode?.type === 'subtype' &&
-      showInheritedFields &&
-      (businessObject?.coreFields?.some((f: Field) => f.key === field.key) ||
-        businessObject?.customFields?.some((f: Field) => f.key === field.key));
+    if (selectedNode?.type !== 'subtype' || !selectedNode?.subtypeKey) return false;
+    const subtypeFields = businessObject?.subtypes?.[selectedNode.subtypeKey]?.subtypeFields || [];
+    const fieldIdent = (field.key || field.technicalName || field.id || field.name || '').toLowerCase();
+    const isAssigned = subtypeFields.some((f: any) =>
+      (f.key || f.technicalName || f.id || f.name || '').toLowerCase() === fieldIdent
+    );
+    return !isAssigned;
   };
 
   return (
@@ -94,10 +121,12 @@ export function FieldsTab({
             {selectedNode?.type === 'subtype' ? (
               <>
                 <Typography variant="h6" sx={{ fontWeight: 700, mb: 0.5 }}>
-                  Fields for '{businessObject?.subtypes?.[selectedNode.subtypeKey!]?.displayName || selectedNode.subtypeKey}'
+                  Subtype: {businessObject?.subtypes?.[selectedNode.subtypeKey!]?.displayName || selectedNode.subtypeKey}
                 </Typography>
                 <Typography variant="body2" color="text.secondary">
-                  Showing {showInheritedFields ? 'inherited + subtype-specific' : 'subtype-specific only'} fields.
+                  {showInheritedFields
+                    ? 'Showing full union (subtype-assigned fields + baseline inherited fields).'
+                    : 'Showing subtype-assigned fields only.'}
                 </Typography>
               </>
             ) : (
@@ -115,11 +144,11 @@ export function FieldsTab({
             {selectedNode?.type === 'subtype' && (
               <Button
                 variant={showInheritedFields ? 'contained' : 'outlined'}
-                color="primary"
+                color={showInheritedFields ? 'info' : 'primary'}
                 size="small"
                 onClick={onToggleInherited}
               >
-                {showInheritedFields ? 'Hide Inherited' : 'Show Inherited'}
+                {showInheritedFields ? 'Hide Baseline (Showing Union)' : 'Include Baseline Core Fields'}
               </Button>
             )}
             <Button
@@ -203,13 +232,13 @@ export function FieldsTab({
             </TableRow>
           </TableHead>
           <TableBody>
-            {sortedFilteredFields.map((field) => {
+            {sortedFilteredFields.map((field, idx) => {
               const isInherited = isInheritedField(field);
               const typeConfig = getDataTypeConfig(field.type);
 
               return (
                 <TableRow
-                  key={field.key}
+                  key={field.id || field.fieldId || field.field_id || field.key || `${field.technicalName || field.name || idx}-${idx}`}
                   hover
                   sx={{
                     '&:hover': { bgcolor: 'action.hover' },
@@ -262,6 +291,17 @@ export function FieldsTab({
                   </TableCell>
                   <TableCell align="right">
                     <Stack direction="row" spacing={0.5} justifyContent="flex-end">
+                      {businessObject?.subtypes && Object.keys(businessObject.subtypes).length > 0 && onMoveField && (
+                        <Tooltip title="Move to Subtype / Root">
+                          <IconButton
+                            size="small"
+                            onClick={(e) => handleOpenMoveMenu(e, field)}
+                            sx={{ color: 'info.main', '&:hover': { bgcolor: 'info.light', color: 'info.dark' } }}
+                          >
+                            <MoveIcon fontSize="small" />
+                          </IconButton>
+                        </Tooltip>
+                      )}
                       <Tooltip title="Edit field">
                         <IconButton size="small" onClick={() => onEditField(field)} sx={{ '&:hover': { color: 'primary.main' } }}>
                           <EditIcon fontSize="small" />
@@ -280,9 +320,60 @@ export function FieldsTab({
                 </TableRow>
               );
             })}
+
+            {sortedFilteredFields.length === 0 && (
+              <TableRow>
+                <TableCell colSpan={selectedNode?.type === 'subtype' ? 6 : 5} align="center" sx={{ py: 6 }}>
+                  <Typography variant="body1" color="text.secondary" sx={{ mb: 1, fontWeight: 500 }}>
+                    {selectedNode?.type === 'subtype'
+                      ? !showInheritedFields
+                        ? `No fields specifically assigned to subtype '${businessObject?.subtypes?.[selectedNode.subtypeKey]?.displayName || selectedNode.subtypeKey}' yet.`
+                        : 'No fields found.'
+                      : 'No fields defined for this business object.'}
+                  </Typography>
+                  {selectedNode?.type === 'subtype' && !showInheritedFields && (
+                    <Stack direction="row" spacing={2} justifyContent="center" sx={{ mt: 2 }}>
+                      <Button variant="outlined" size="small" onClick={onToggleInherited}>
+                        Include Baseline Core Fields
+                      </Button>
+                      <Button variant="contained" size="small" onClick={onAddField}>
+                        Add Field to Subtype
+                      </Button>
+                    </Stack>
+                  )}
+                </TableCell>
+              </TableRow>
+            )}
           </TableBody>
         </Table>
       </TableContainer>
+
+      {/* Move Target Menu */}
+      <Menu
+        anchorEl={moveMenuAnchor}
+        open={Boolean(moveMenuAnchor)}
+        onClose={handleCloseMoveMenu}
+        transformOrigin={{ horizontal: 'right', vertical: 'top' }}
+        anchorOrigin={{ horizontal: 'right', vertical: 'bottom' }}
+      >
+        <MenuItem disabled sx={{ fontSize: '0.75rem', fontWeight: 700, opacity: 1, textTransform: 'uppercase' }}>
+          Move Field To
+        </MenuItem>
+        <MenuItem onClick={() => handleSelectMoveTarget('root')}>
+          <ListItemIcon>
+            <MoveIcon fontSize="small" color="primary" />
+          </ListItemIcon>
+          <ListItemText primary={`Root Object (${businessObject?.displayName || 'Main'})`} />
+        </MenuItem>
+        {businessObject?.subtypes && Object.entries(businessObject.subtypes).map(([key, st]: [string, any]) => (
+          <MenuItem key={key} onClick={() => handleSelectMoveTarget(key)}>
+            <ListItemIcon>
+              <MoveIcon fontSize="small" color="info" />
+            </ListItemIcon>
+            <ListItemText primary={`Subtype: ${st.displayName || st.name || key}`} />
+          </MenuItem>
+        ))}
+      </Menu>
     </Box>
   );
 }

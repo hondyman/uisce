@@ -41,7 +41,7 @@ func main() {
 	sqlxDB := sqlx.NewDb(db, "postgres")
 	_ = sqlxDB
 
-	router := api.SetupRouter(db, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	router := api.SetupRouter(db, nil, nil, nil, nil, nil, nil, nil, nil)
 
 	addr := fmt.Sprintf(":%s", port)
 	log.Printf("Starting main Uisce Unified API server on %s...\n", addr)

@@ -18,15 +18,11 @@ const CubeQuery: React.FC<CubeQueryProps> = ({ query }) => {
   useEffect(() => {
     if (query) {
       setLoading(true);
-      axios.post('/api/cube/query', query)
-        .then(response => {
-          setData(response.data);
-          setLoading(false);
-        })
-        .catch(error => {
-          devError('Cube query error:', error);
-          setLoading(false);
-        });
+      // Cube.js API removed - show placeholder message
+      setTimeout(() => {
+        setData({ error: 'Cube.js service removed - query preview disabled' });
+        setLoading(false);
+      }, 500);
     }
   }, [query]);
 
@@ -255,7 +251,7 @@ export const DynamicMeasurePreview: React.FC = () => {
         <ul className="text-sm text-blue-800 space-y-1">
           <li>• Dynamic measures are auto-generated from database enums</li>
           <li>• Each measure counts records matching the selected value</li>
-          <li>• Measures are synced to both Cube schema and catalog</li>
+          <li>• Measures are synced to semantic model catalog</li>
           <li>• Steward review required before measures become active</li>
         </ul>
       </div>

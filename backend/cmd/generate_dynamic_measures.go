@@ -209,10 +209,10 @@ measures:
 %s
 `, table, time.Now().UTC().Format(time.RFC3339), "generate_dynamic_measures.go", strings.Join(yamlMeasures, "\n"))
 
-		filename := fmt.Sprintf("cube/schema/%s_dynamic_measures.yml", table)
-		err := os.MkdirAll("cube/schema", 0755)
+		filename := fmt.Sprintf("models/schema/%s_dynamic_measures.yml", table)
+		err := os.MkdirAll("models/schema", 0755)
 		if err != nil {
-			return fmt.Errorf("failed to create cube/schema directory: %w", err)
+			return fmt.Errorf("failed to create models/schema directory: %w", err)
 		}
 
 		err = os.WriteFile(filename, []byte(yamlContent), 0644)

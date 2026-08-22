@@ -15,13 +15,12 @@ import (
 // SchemaScannerConfig holds configuration for schema scanning
 type SchemaScannerConfig struct {
 	PostgresDBs []string
-	TrinoDBs    []string
 	S3Buckets   []string
 }
 
 // FieldMetadata represents a field discovered in schema
 type FieldMetadata struct {
-	DatabaseType        string // "postgres", "trino", "s3"
+	DatabaseType        string // "postgres", "starrocks", "s3"
 	DatabaseName        string
 	TableName           string
 	FieldName           string
@@ -36,16 +35,14 @@ type FieldMetadata struct {
 // SchemaScanner discovers fields from databases and data stores
 type SchemaScanner struct {
 	postgresConn *sql.DB
-	trinoConn    *sql.DB
 	config       SchemaScannerConfig
 	logger       *log.Logger
 }
 
 // NewSchemaScanner creates a new schema scanner
-func NewSchemaScanner(postgresConn *sql.DB, trinoConn *sql.DB, cfg SchemaScannerConfig, logger *log.Logger) *SchemaScanner {
+func NewSchemaScanner(postgresConn *sql.DB, cfg SchemaScannerConfig, logger *log.Logger) *SchemaScanner {
 	return &SchemaScanner{
 		postgresConn: postgresConn,
-		trinoConn:    trinoConn,
 		config:       cfg,
 		logger:       logger,
 	}
@@ -121,58 +118,9 @@ func (ss *SchemaScanner) ScanPostgresSchemas(ctx context.Context) ([]FieldMetada
 }
 
 // ScanTrinoSchemas discovers all fields in Trino data warehouses
+// Deprecated: Trino has been removed
 func (ss *SchemaScanner) ScanTrinoSchemas(ctx context.Context) ([]FieldMetadata, error) {
-	var fields []FieldMetadata
-
-	query := `
-	SELECT 
-		table_schema,
-		table_name,
-		column_name,
-		data_type
-	FROM information_schema.columns
-	WHERE table_schema NOT IN ('information_schema', 'sys')
-	ORDER BY table_schema, table_name, column_name
-	`
-
-	rows, err := ss.trinoConn.QueryContext(ctx, query)
-	if err != nil {
-		ss.logger.Printf("Error querying Trino schema: %v", err)
-		return nil, err
-	}
-	defer rows.Close()
-
-	for rows.Next() {
-		var (
-			schema     string
-			tableName  string
-			columnName string
-			dataType   string
-		)
-
-		if err := rows.Scan(&schema, &tableName, &columnName, &dataType); err != nil {
-			ss.logger.Printf("Error scanning Trino row: %v", err)
-			continue
-		}
-
-		if shouldSkipField(columnName, dataType) {
-			continue
-		}
-
-		fm := FieldMetadata{
-			DatabaseType:        "trino",
-			DatabaseName:        schema,
-			TableName:           tableName,
-			FieldName:           columnName,
-			FieldType:           dataType,
-			CardinalityEstimate: -1, // Unknown for Trino
-			LastScannedAt:       time.Now(),
-		}
-
-		fields = append(fields, fm)
-	}
-
-	return fields, rows.Err()
+	return nil, fmt.Errorf("Trino schema scanning is disabled: Trino audit chain removed")
 }
 
 // samplePostgresField gets sample values and frequency for a field

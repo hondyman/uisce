@@ -28,27 +28,6 @@ type FilterDef struct {
 	Value string
 }
 
-// TrinoIcebergRollupTemplate is the Go template for creating Iceberg rollup tables via Trino.
-const TrinoIcebergRollupTemplate = `CREATE TABLE iceberg.{{.Tenant}}_analytics.agg_{{.Datasource}}__{{.PreAggID}} AS
-SELECT
-{{- range $i, $col := .GroupBy }}
-  {{ $col }}{{ if lt $i (sub (len $.GroupBy) 1) }},{{ end }}
-{{- end }}{{ if .Measures }},{{ end }}
-{{- range $i, $m := .Measures }}
-  {{ $m.Expression }} AS {{ $m.Alias }}{{ if lt $i (sub (len $.Measures) 1) }},{{ end }}
-{{- end }}
-FROM iceberg.{{.Tenant}}_analytics.fact_{{.Datasource}}
-{{- if .Filters }}
-WHERE
-{{- range $i, $f := .Filters }}
-  {{ $f.Field }} {{ $f.Op }} {{ $f.Value }}{{ if lt $i (sub (len $.Filters) 1) }} AND{{ end }}
-{{- end }}
-{{- end }}
-GROUP BY
-{{- range $i, $col := .GroupBy }}
-  {{ $col }}{{ if lt $i (sub (len $.GroupBy) 1) }},{{ end }}
-{{- end }}`
-
 // StarRocksMVTemplate is the Go template for creating StarRocks Materialized Views.
 const StarRocksMVTemplate = `CREATE MATERIALIZED VIEW mv_{{.Datasource}}__{{.PreAggID}}
 BUILD IMMEDIATE
@@ -79,16 +58,11 @@ const StarRocksRefreshTemplate = `REFRESH MATERIALIZED VIEW mv_{{.Datasource}}__
 // StarRocksDropMVTemplate is the Go template for dropping a StarRocks MV.
 const StarRocksDropMVTemplate = `DROP MATERIALIZED VIEW IF EXISTS mv_{{.Datasource}}__{{.PreAggID}}`
 
-// TrinoDropRollupTemplate is the Go template for dropping an Iceberg rollup table.
-const TrinoDropRollupTemplate = `DROP TABLE IF EXISTS iceberg.{{.Tenant}}_analytics.agg_{{.Datasource}}__{{.PreAggID}}`
-
 // PreAggTemplateRenderer provides methods for rendering pre-aggregation SQL templates.
 type PreAggTemplateRenderer struct {
-	trinoRollup   *template.Template
 	starRocksMV   *template.Template
 	starRocksRefr *template.Template
 	starRocksDrop *template.Template
-	trinoDropRoll *template.Template
 }
 
 // templateFuncs provides helper functions for templates.
@@ -98,11 +72,6 @@ var templateFuncs = template.FuncMap{
 
 // NewPreAggTemplateRenderer creates a new template renderer with all templates parsed.
 func NewPreAggTemplateRenderer() (*PreAggTemplateRenderer, error) {
-	trinoRollup, err := template.New("trino_rollup").Funcs(templateFuncs).Parse(TrinoIcebergRollupTemplate)
-	if err != nil {
-		return nil, err
-	}
-
 	starRocksMV, err := template.New("starrocks_mv").Funcs(templateFuncs).Parse(StarRocksMVTemplate)
 	if err != nil {
 		return nil, err
@@ -118,27 +87,11 @@ func NewPreAggTemplateRenderer() (*PreAggTemplateRenderer, error) {
 		return nil, err
 	}
 
-	trinoDropRoll, err := template.New("trino_drop").Funcs(templateFuncs).Parse(TrinoDropRollupTemplate)
-	if err != nil {
-		return nil, err
-	}
-
 	return &PreAggTemplateRenderer{
-		trinoRollup:   trinoRollup,
 		starRocksMV:   starRocksMV,
 		starRocksRefr: starRocksRefr,
 		starRocksDrop: starRocksDrop,
-		trinoDropRoll: trinoDropRoll,
 	}, nil
-}
-
-// RenderTrinoIcebergRollup renders the Trino CREATE TABLE statement for an Iceberg rollup.
-func (r *PreAggTemplateRenderer) RenderTrinoIcebergRollup(data PreAggTemplateData) (string, error) {
-	var buf bytes.Buffer
-	if err := r.trinoRollup.Execute(&buf, data); err != nil {
-		return "", err
-	}
-	return buf.String(), nil
 }
 
 // RenderStarRocksMV renders the CREATE MATERIALIZED VIEW statement for StarRocks.
@@ -163,15 +116,6 @@ func (r *PreAggTemplateRenderer) RenderStarRocksRefresh(data PreAggTemplateData)
 func (r *PreAggTemplateRenderer) RenderStarRocksDrop(data PreAggTemplateData) (string, error) {
 	var buf bytes.Buffer
 	if err := r.starRocksDrop.Execute(&buf, data); err != nil {
-		return "", err
-	}
-	return buf.String(), nil
-}
-
-// RenderTrinoDropRollup renders the DROP TABLE statement for an Iceberg rollup.
-func (r *PreAggTemplateRenderer) RenderTrinoDropRollup(data PreAggTemplateData) (string, error) {
-	var buf bytes.Buffer
-	if err := r.trinoDropRoll.Execute(&buf, data); err != nil {
 		return "", err
 	}
 	return buf.String(), nil

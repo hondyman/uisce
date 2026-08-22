@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/hondyman/uisce/backend/internal/vectorized"
 	"github.com/jmoiron/sqlx"
 )
 
@@ -23,6 +24,7 @@ type Service interface {
 	// Performance
 	GetInvestmentPerformance(ctx context.Context, investmentID uuid.UUID) (*InvestmentPerformance, error)
 	ListInvestmentPerformances(ctx context.Context, clientID uuid.UUID) ([]*InvestmentPerformance, error)
+	CalculateInvestmentMetrics(ctx context.Context, investmentID uuid.UUID) (*InvestmentMetricsResult, error)
 
 	// Capital Calls
 	CreateCapitalCall(ctx context.Context, input CreateCapitalCallInput) (*CapitalCall, error)
@@ -640,4 +642,80 @@ func (s *service) UpdateDocumentExtraction(ctx context.Context, documentID uuid.
 		return fmt.Errorf("failed to update document extraction: %w", err)
 	}
 	return nil
+}
+
+func ComputeXIRRFromFlows(flows []XIRRFlow) (float64, error) {
+	if len(flows) < 2 {
+		return 0, fmt.Errorf("insufficient cashflows for XIRR calculation")
+	}
+
+	dates := make([]int64, len(flows))
+	amounts := make([]float64, len(flows))
+	for i, f := range flows {
+		dates[i] = f.Date.Unix()
+		amounts[i] = f.Amount
+	}
+
+	kernels := vectorized.NewVectorizedFinancialKernels()
+	return kernels.CalculateXIRR(dates, amounts, 100, 1e-7)
+}
+
+func (s *service) CalculateInvestmentMetrics(ctx context.Context, investmentID uuid.UUID) (*InvestmentMetricsResult, error) {
+	inv, err := s.GetInvestment(ctx, investmentID)
+	if err != nil {
+		return nil, err
+	}
+
+	calls, err := s.ListCapitalCallsByInvestment(ctx, investmentID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get capital calls: %w", err)
+	}
+
+	dists, err := s.ListDistributionsByInvestment(ctx, investmentID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get distributions: %w", err)
+	}
+
+	var flows []XIRRFlow
+	for _, c := range calls {
+		flows = append(flows, XIRRFlow{
+			Date:   c.NoticeDate,
+			Amount: -c.AmountRequested,
+			Type:   "CAPITAL_CALL",
+		})
+	}
+	for _, d := range dists {
+		flows = append(flows, XIRRFlow{
+			Date:   d.DistributionDate,
+			Amount: d.Amount,
+			Type:   string(d.DistributionType),
+		})
+	}
+
+	xirr, _ := ComputeXIRRFromFlows(flows)
+
+	currentNAV := 0.0
+	if inv.CurrentNAV != nil {
+		currentNAV = *inv.CurrentNAV
+	}
+
+	var tvpi, dpi, rvpi float64
+	if inv.TotalCapitalCalled > 0 {
+		tvpi = (currentNAV + inv.TotalDistributions) / inv.TotalCapitalCalled
+		dpi = inv.TotalDistributions / inv.TotalCapitalCalled
+		rvpi = currentNAV / inv.TotalCapitalCalled
+	}
+
+	return &InvestmentMetricsResult{
+		InvestmentID:       inv.InvestmentID,
+		TotalCapitalCalled: inv.TotalCapitalCalled,
+		TotalDistributions: inv.TotalDistributions,
+		CurrentNAV:        currentNAV,
+		TVPI:              tvpi,
+		DPI:               dpi,
+		RVPI:              rvpi,
+		XIRR:              xirr,
+		CashFlowCount:     len(flows),
+		CashFlows:         flows,
+	}, nil
 }

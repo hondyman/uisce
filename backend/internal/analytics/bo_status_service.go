@@ -54,10 +54,23 @@ type ValidationError struct {
 // GetBOStatus determines the current status of a BO
 func (s *BOStatusService) GetBOStatus(boID string) (*BOStatus, error) {
 	status := &BOStatus{
+		Status:              "draft",
+		Reason:              "",
 		PendingTerms:        []string{},
 		PendingCalculations: []string{},
 		PendingDependencies: []DependencyIssue{},
 		ValidationErrors:    []ValidationError{},
+		DiffRequired:        false,
+		ImportPending:       false,
+		LastModified:        time.Now(),
+		ModifiedBy:          "system",
+		Version:             "v1",
+		IsPublished:         false,
+		CanPublish:          true,
+	}
+
+	if s.db == nil || boID == "" {
+		return status, nil
 	}
 
 	// 1. Check if BO exists and get metadata
@@ -69,11 +82,11 @@ func (s *BOStatusService) GetBOStatus(boID string) (*BOStatus, error) {
 	// Try business_objects table first (wizard-created BOs)
 	err := s.db.QueryRow(`
 		SELECT 
-			is_active as is_published,
-			last_modified_at,
-			COALESCE(CAST(last_modified_by AS text), '') as modified_by,
+			COALESCE(is_active, false) as is_published,
+			updated_at as last_modified_at,
+			'system' as modified_by,
 			'v1' as version
-		FROM business_objects
+		FROM public.business_objects
 		WHERE id = $1::uuid
 	`, boID).Scan(&isPublished, &lastModified, &modifiedBy, &version)
 
@@ -85,46 +98,44 @@ func (s *BOStatusService) GetBOStatus(boID string) (*BOStatus, error) {
 				updated_at,
 				COALESCE(properties->>'modified_by', '') as modified_by,
 				COALESCE(properties->>'version', 'v1') as version
-			FROM catalog_node
-			WHERE id = $1
+			FROM public.catalog_node
+			WHERE id = $1::uuid
 		`, boID).Scan(&isPublished, &lastModified, &modifiedBy, &version)
-		if err != nil {
-			return nil, fmt.Errorf("failed to fetch BO: %w", err)
+	}
+
+	if err == nil {
+		status.IsPublished = isPublished.Bool
+		if lastModified.Valid {
+			status.LastModified = lastModified.Time
+		}
+		if modifiedBy.Valid && modifiedBy.String != "" {
+			status.ModifiedBy = modifiedBy.String
+		}
+		if version.Valid && version.String != "" {
+			status.Version = version.String
 		}
 	}
 
-	status.IsPublished = isPublished.Bool
-	if lastModified.Valid {
-		status.LastModified = lastModified.Time
-	}
-	if modifiedBy.Valid {
-		status.ModifiedBy = modifiedBy.String
-	}
-	if version.Valid {
-		status.Version = version.String
-	}
-
 	// 2. Check for pending terms (unapproved)
-	pendingTerms, err := s.getPendingTerms(boID)
-	if err == nil {
+	if pendingTerms, err := s.getPendingTerms(boID); err == nil && pendingTerms != nil {
 		status.PendingTerms = pendingTerms
 	}
 
 	// 3. Check for pending calculations (unapproved)
-	pendingCalcs, err := s.getPendingCalculations(boID)
-	if err == nil {
+	if pendingCalcs, err := s.getPendingCalculations(boID); err == nil && pendingCalcs != nil {
 		status.PendingCalculations = pendingCalcs
 	}
 
 	// 4. Check for dependency issues
-	deps, err := s.checkDependencies(boID)
-	if err == nil {
+	if deps, err := s.checkDependencies(boID); err == nil && deps != nil {
 		status.PendingDependencies = deps
 	}
 
 	// 5. Run validation
 	errors := s.validateBO(boID)
-	status.ValidationErrors = errors
+	if errors != nil {
+		status.ValidationErrors = errors
+	}
 
 	// 6. Check for pending import (stored in properties)
 	status.ImportPending = s.hasImportPending(boID)
@@ -233,9 +244,9 @@ func (s *BOStatusService) validateBO(boID string) []ValidationError {
 	// Try business_objects table first (wizard-created BOs)
 	err := s.db.QueryRow(`
 		SELECT 
-			COALESCE(display_name, name) as name,
-			driver_table_id as driving_table
-		FROM business_objects
+			COALESCE(bo_name, '') as name,
+			COALESCE(classification_node_id::text, '') as driving_table
+		FROM public.business_objects
 		WHERE id = $1::uuid
 	`, boID).Scan(&name, &drivingTable)
 
@@ -244,9 +255,9 @@ func (s *BOStatusService) validateBO(boID string) []ValidationError {
 		err = s.db.QueryRow(`
 			SELECT 
 				node_name,
-				properties->>'driving_table'
-			FROM catalog_node
-			WHERE id = $1
+				COALESCE(properties->>'driving_table', '')
+			FROM public.catalog_node
+			WHERE id = $1::uuid
 		`, boID).Scan(&name, &drivingTable)
 
 		if err != nil {

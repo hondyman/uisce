@@ -13,8 +13,6 @@ func (e *DialectEngine) FormatSQL(sql string, dialect string) string {
 	sql = strings.TrimSpace(sql)
 
 	switch strings.ToLower(dialect) {
-	case "trino":
-		return e.formatTrino(sql)
 	case "postgres":
 		return e.formatPostgres(sql)
 	case "snowflake":
@@ -22,15 +20,6 @@ func (e *DialectEngine) FormatSQL(sql string, dialect string) string {
 	default:
 		return sql
 	}
-}
-
-func (e *DialectEngine) formatTrino(sql string) string {
-	// Trino uses double quotes for identifiers, single for strings
-	// Ensure LIMIT is present or adjusted
-	if !strings.Contains(strings.ToUpper(sql), "LIMIT") {
-		sql = sql + " LIMIT 100"
-	}
-	return sql
 }
 
 func (e *DialectEngine) formatPostgres(sql string) string {

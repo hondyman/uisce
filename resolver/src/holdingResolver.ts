@@ -1,11 +1,13 @@
 import { v4 as uuidv4 } from 'uuid';
-import { Trino } from 'trino-client';
+import { Pool } from 'pg';
 import { Kafka } from 'kafkajs';
 
-const trino = Trino.create({
-    server: `http://${process.env.TRINO_HOST || 'localhost'}:${process.env.TRINO_PORT || 8080}`,
-    catalog: process.env.TRINO_CATALOG || 'iceberg',
-    schema: process.env.TRINO_SCHEMA || 'default'
+const pgPool = new Pool({
+    host: process.env.POSTGRES_HOST || 'localhost',
+    port: parseInt(process.env.POSTGRES_PORT || '5432'),
+    user: process.env.POSTGRES_USER || 'postgres',
+    password: process.env.POSTGRES_PASSWORD || 'postgres',
+    database: process.env.POSTGRES_DB || 'semlayer'
 });
 
 const kafka = new Kafka({ brokers: [process.env.KAFKA_BROKER || 'localhost:9092'] });
@@ -38,40 +40,30 @@ export async function resolveHoldingMarketValue(req: {
           ELSE market_value
         END AS market_value_resolved,
         valuation_date, settlement_date, currency, as_of_timestamp
-      FROM iceberg.default.raw_holdings
+      FROM raw_holdings
       WHERE ${filterSql}
       LIMIT 200
     `;
-        const rows = await runTrinoQuery(sql);
+        const rows = await runPostgresQuery(sql);
         const value = rows.reduce((s: number, r: any) => s + Number(r.market_value_resolved || 0), 0);
         await emitEvaluation({ termId: req.termId, entity: req.entityType, value, sql, rows_sample: rows.slice(0, 10), traceId });
         return { value, rows_sample: rows.slice(0, 10), sql, traceId };
     } else {
         const sql = `
       SELECT SUM(market_value_resolved) AS total_market_value
-      FROM iceberg.default.holdings_preagg
+      FROM holdings_preagg
       WHERE ${filterSql}
     `;
-        const rows = await runTrinoQuery(sql);
+        const rows = await runPostgresQuery(sql);
         const value = rows.length ? Number(rows[0].total_market_value || 0) : 0;
         await emitEvaluation({ termId: req.termId, entity: req.entityType, value, sql, rows_sample: rows.slice(0, 10), traceId });
         return { value, sql, traceId };
     }
 }
 
-async function runTrinoQuery(sql: string): Promise<any[]> {
-    const iter = await trino.query({
-        query: sql,
-        catalog: process.env.TRINO_CATALOG || 'iceberg',
-        schema: process.env.TRINO_SCHEMA || 'default'
-    });
-    const rows: any[] = [];
-    for await (const result of iter) {
-        if (result.data) {
-            rows.push(...result.data);
-        }
-    }
-    return rows;
+async function runPostgresQuery(sql: string): Promise<any[]> {
+    const result = await pgPool.query(sql);
+    return result.rows;
 }
 
 async function emitEvaluation(payload: any) {

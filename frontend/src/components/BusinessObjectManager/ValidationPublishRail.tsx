@@ -34,8 +34,8 @@ export const ValidationPublishRail: React.FC<ValidationPublishRailProps> = ({
         {/* Validation Summary List */}
         <div className="flex items-center gap-4 flex-wrap text-xs font-mono">
           <span className="font-semibold text-slate-300 tracking-wider">VALIDATION SUMMARY:</span>
-          {summaryItems.map((item) => (
-            <div key={item.id} className="flex items-center gap-1.5 bg-slate-900/80 px-2.5 py-1 rounded border border-slate-800">
+          {summaryItems.map((item, idx) => (
+            <div key={item.id || `${item.label}-${idx}`} className="flex items-center gap-1.5 bg-slate-900/80 px-2.5 py-1 rounded border border-slate-800">
               <span
                 className={
                   item.status === 'PASS'

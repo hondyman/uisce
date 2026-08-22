@@ -107,6 +107,10 @@ func (h *AuditHistoryHandler) HandleGetEntityHistory(w http.ResponseWriter, r *h
 	}
 
 	// Get history
+	if h.tracker == nil {
+		http.Error(w, "Bitemporal tracking is disabled", http.StatusServiceUnavailable)
+		return
+	}
 	snapshots, err := h.tracker.GetEntityHistory(r.Context(), entityType, entityID, filters)
 	if err != nil {
 		log.Printf("Failed to get entity history: %v", err)
@@ -138,6 +142,10 @@ func (h *AuditHistoryHandler) HandleGetEntityAtTime(w http.ResponseWriter, r *ht
 	}
 
 	// Get entity at time
+	if h.tracker == nil {
+		http.Error(w, "Bitemporal tracking is disabled", http.StatusServiceUnavailable)
+		return
+	}
 	snapshot, err := h.tracker.GetEntityAtTime(r.Context(), entityType, entityID, asOf)
 	if err != nil {
 		log.Printf("Failed to get entity at time: %v", err)
@@ -180,6 +188,10 @@ func (h *AuditHistoryHandler) HandleRestoreEntity(w http.ResponseWriter, r *http
 	}
 
 	// Perform restore
+	if h.tracker == nil {
+		http.Error(w, "Bitemporal tracking is disabled", http.StatusServiceUnavailable)
+		return
+	}
 	err = h.tracker.RestoreEntityToTime(r.Context(), entityType, entityID, restoreToTime, req.Reason)
 	if err != nil {
 		log.Printf("Failed to restore entity: %v", err)
@@ -225,6 +237,10 @@ func (h *AuditHistoryHandler) HandleGetAuditChanges(w http.ResponseWriter, r *ht
 		}
 	}
 
+	if h.tracker == nil {
+		http.Error(w, "Bitemporal tracking is disabled", http.StatusServiceUnavailable)
+		return
+	}
 	changes, err := h.tracker.GetRecentChanges(r.Context(), from, to, entityType, limit)
 	if err != nil {
 		log.Printf("Failed to get recent changes: %v", err)

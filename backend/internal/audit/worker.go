@@ -29,7 +29,12 @@ func NewAsyncAuditService(tracker *BitemporalTracker, bufferSize int) *AsyncAudi
 }
 
 // Start starts the worker goroutines
+// If tracker is nil, workers are not started (audit disabled)
 func (s *AsyncAuditService) Start(workerCount int) {
+	if s.tracker == nil {
+		logging.GetLogger().Sugar().Warn("AsyncAuditService not started: tracker is nil (audit disabled)")
+		return
+	}
 	for i := 0; i < workerCount; i++ {
 		s.workerWg.Add(1)
 		go s.workerLoop(i)

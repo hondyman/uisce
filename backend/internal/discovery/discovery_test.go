@@ -12,11 +12,10 @@ var testLogger = log.New(os.Stdout, "DISCOVERY_TEST: ", log.LstdFlags)
 func TestNewSchemaScanner(t *testing.T) {
 	config := SchemaScannerConfig{
 		PostgresDBs: []string{"semlayer", "analytics"},
-		TrinoDBs:    []string{"warehouse"},
 		S3Buckets:   []string{"data-lake"},
 	}
 
-	scanner := NewSchemaScanner(nil, nil, config, testLogger)
+	scanner := NewSchemaScanner(nil, config, testLogger)
 
 	if scanner == nil {
 		t.Fatal("SchemaScanner should not be nil")

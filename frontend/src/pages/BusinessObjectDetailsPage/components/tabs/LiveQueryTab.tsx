@@ -359,7 +359,7 @@ export function LiveQueryTab({ businessObject }: LiveQueryTabProps) {
       return { tier: 'STARROCKS', reason: 'Explicit User Selection: Vectorized StarRocks MPP Engine', label: 'StarRocks (Hot OLAP)', dialect: 'StarRocks SQL' };
     }
     if (engineRouting === 'ICEBERG') {
-      return { tier: 'ICEBERG', reason: 'Explicit User Selection: Trino + Apache Iceberg Cold Tier', label: 'Trino / Iceberg (Cold Analytics)', dialect: 'Trino SQL' };
+      return { tier: 'STARROCKS', reason: 'Explicit User Selection: StarRocks for all analytics (Trino/Iceberg removed)', label: 'StarRocks (Analytics)', dialect: 'StarRocks SQL' };
     }
     if (engineRouting === 'POSTGRES') {
       return { tier: 'POSTGRES', reason: 'Explicit User Selection: Primary PostgreSQL 16 OLTP', label: 'PostgreSQL 16 (Hot OLTP)', dialect: 'PostgreSQL 16' };
@@ -369,10 +369,10 @@ export function LiveQueryTab({ businessObject }: LiveQueryTabProps) {
     const hasHistoricalDateFilter = filters.some(f => f.fieldName.includes('date') && f.val && f.val < '2023-01-01');
     if (hasHistoricalDateFilter) {
       return {
-        tier: 'ICEBERG',
-        reason: 'CBO Seam Routing: Filter spans historical time before Hot/Cold Watermark (2023-01-01). Routed to Cold Lakehouse.',
-        label: 'Trino / Apache Iceberg (Cold Tier)',
-        dialect: 'Trino SQL',
+        tier: 'STARROCKS',
+        reason: 'CBO Seam Routing: Historical query routed to StarRocks for analytics.',
+        label: 'StarRocks (Analytics)',
+        dialect: 'StarRocks SQL',
       };
     }
 
@@ -1022,7 +1022,7 @@ export function LiveQueryTab({ businessObject }: LiveQueryTabProps) {
             <MenuItem value="AUTO">🤖 CBO Auto-Route</MenuItem>
             <MenuItem value="POSTGRES">🐘 PostgreSQL 16</MenuItem>
             <MenuItem value="STARROCKS">⚡ StarRocks OLAP</MenuItem>
-            <MenuItem value="ICEBERG">❄️ Trino / Iceberg</MenuItem>
+            <MenuItem value="ICEBERG">❄️ StarRocks (Iceberg)</MenuItem>
           </TextField>
 
           <TextField

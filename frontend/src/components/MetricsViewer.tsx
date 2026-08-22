@@ -158,7 +158,7 @@ const MetricsViewer: React.FC = () => {
       <TableCell><code>{mapping.oracle}</code></TableCell>
       <TableCell><code>{mapping.postgres}</code></TableCell>
       <TableCell><code>{mapping.snowflake}</code></TableCell>
-      <TableCell><code>{mapping.iceberg}</code></TableCell>
+      <TableCell><code>{mapping.starrocks}</code></TableCell>
       <TableCell>{mapping.notes}</TableCell>
     </TableRow>
   );
@@ -253,11 +253,11 @@ const MetricsViewer: React.FC = () => {
           </Accordion>
           <Accordion>
             <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-              <Typography>Iceberg/Trino/Spark SQL</Typography>
+              <Typography>StarRocks SQL</Typography>
             </AccordionSummary>
             <AccordionDetails>
               <Paper sx={{ p: 1, bgcolor: 'grey.100', fontFamily: 'monospace', width: '100%' }}>
-                {selectedMetric.iceberg}
+                {selectedMetric.starrocks}
               </Paper>
             </AccordionDetails>
           </Accordion>
@@ -393,7 +393,7 @@ const MetricsViewer: React.FC = () => {
                 <TableCell><strong>Oracle</strong></TableCell>
                 <TableCell><strong>PostgreSQL</strong></TableCell>
                 <TableCell><strong>Snowflake</strong></TableCell>
-                <TableCell><strong>Iceberg/Trino/Spark</strong></TableCell>
+                <TableCell><strong>StarRocks</strong></TableCell>
                 <TableCell><strong>Notes</strong></TableCell>
               </TableRow>
             </TableHead>

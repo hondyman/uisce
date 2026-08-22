@@ -334,30 +334,6 @@ const MonacoCodeEditor: React.FC<MonacoCodeEditorProps> = ({ value, language, re
   monacoRef.current = monaco;
         if (cancelled) return;
         if (!containerRef.current) return;
-        // Try to register local JSON schema for cube semantic models
-        try {
-          const schemaUrl = '/src/schema/cube-semantic.json';
-          // reference schemaUrl to avoid unused-local errors in some bundlers
-          void schemaUrl;
-          // fetch schema content via import (static file in repo)
-          // When running in tests we can require it directly
-          // eslint-disable-next-line @typescript-eslint/no-var-requires
-          const schema = require('../../schema/cube-semantic.json');
-          if ((monaco as any).languages && (monaco as any).languages.json && (monaco as any).languages.json.jsonDefaults) {
-            (monaco as any).languages.json.jsonDefaults.setDiagnosticsOptions({
-              validate: true,
-              schemas: [
-                {
-                  uri: 'inmemory://schema/cube-semantic.json',
-                  fileMatch: ['*'],
-                  schema: schema,
-                },
-              ],
-            });
-          }
-          // YAML validation via monaco-yaml is not required for syntax highlighting;
-          // we rely on basic-languages for highlighting in this setup.
-        } catch (_) {}
         const el = containerRef.current;
         const mode = language === 'json' ? 'json' : language === 'yaml' ? 'yaml' : 'python';
         modelRef.current = monaco.editor.createModel(value || '', mode);

@@ -33,8 +33,23 @@ func TestProfileService_Integration(t *testing.T) {
 		return
 	}
 
-	svc := NewProfileService(db)
+	// Verify required tables exist with correct schema before running integration test
+	// Migration 000062_abac_security_profiles.sql creates security.identity_profile_mappings with mapping_id column
 	ctx := context.Background()
+	var columnExists bool
+	err = db.QueryRowContext(ctx, `
+		SELECT EXISTS (
+			SELECT 1 FROM information_schema.columns
+			WHERE table_schema = 'security'
+			AND table_name = 'identity_profile_mappings'
+			AND column_name = 'mapping_id'
+		)
+	`).Scan(&columnExists)
+	if err != nil || !columnExists {
+		t.Skip("Required column security.identity_profile_mappings.mapping_id not migrated; run migration 000062_abac_security_profiles.sql first")
+	}
+
+	svc := NewProfileService(db)
 
 	// Use a transaction for all test operations to keep the DB clean
 	tx, err := svc.db.BeginTxx(ctx, nil)

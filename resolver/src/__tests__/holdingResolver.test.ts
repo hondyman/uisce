@@ -1,24 +1,14 @@
 import { resolveHoldingMarketValue } from '../holdingResolver';
 
-// Mock trino-client
-jest.mock('trino-client', () => {
+// Mock pg
+jest.mock('pg', () => {
+    const mockQuery = jest.fn();
     return {
-        Trino: {
-            create: jest.fn().mockReturnValue({
-                query: jest.fn().mockImplementation(async ({ query }) => {
-                    // Mock async iterator return
-                    return {
-                        [Symbol.asyncIterator]: async function* () {
-                            if (query.includes('holdings_preagg')) {
-                                yield { data: [{ total_market_value: 123456 }] };
-                            } else {
-                                yield { data: [{ id: 'row1', market_value: 100, market_value_resolved: 100 }] };
-                            }
-                        }
-                    };
-                })
+        Pool: jest.fn().mockImplementation(() => ({
+            query: mockQuery.mockResolvedValue({
+                rows: [{ total_market_value: 123456 }]
             })
-        }
+        }))
     };
 });
 
