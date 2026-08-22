@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
 import { IconButton, Tooltip, CircularProgress } from '@mui/material';
 import { Delete as DeleteIcon, Edit as EditIcon, Settings as PropertiesIcon } from '@mui/icons-material';
-import { useDeleteTermEdge } from '../../api/glossary';
-import EditEdgeDialog from '../EditEdgeDialog';
+import { useDeleteTermEdge } from '../../../api/glossary';
+import EditEdgeDialog from '../../../components/EditEdgeDialog';
+import { getPredicate } from '../constants/predicates';
 
 export interface CatalogEdge {
   id: string;
@@ -28,6 +29,7 @@ export interface CatalogEdge {
   target_node_type?: string;
   source_path?: string;
   target_path?: string;
+  predicate?: string;
 }
 
 interface RelationshipListProps {
@@ -55,7 +57,7 @@ interface ThemeColors {
 }
 
 const DARK_COLORS: ThemeColors = {
-  bg: '#0A0C12',
+  bg: '#0A0C10',
   panel: '#13161E',
   border: 'rgba(255,255,255,0.07)',
   accent: '#6366F1',
@@ -144,6 +146,11 @@ export const RelationshipList: React.FC<RelationshipListProps> = ({
     return Object.keys(edge.properties).length > 0;
   };
 
+  // Resolve the canonical predicate key from whichever alias the backend carries
+  const resolvePredicateKey = React.useCallback((edge: CatalogEdge): string => {
+    return edge.predicate || edge.edge_type_name || edge.relationship_type || 'RELATED_TO';
+  }, []);
+
   // Deduplicate edges by key (source, target, predicate)
   const uniqueEdges = React.useMemo(() => {
     if (!edges) return [];
@@ -152,15 +159,14 @@ export const RelationshipList: React.FC<RelationshipListProps> = ({
     for (const edge of edges) {
       const sId = edge.subject_node_id || edge.source_node_id || '';
       const tId = edge.object_node_id || edge.target_node_id || '';
-      const pred = edge.edge_type_name || edge.relationship_type || edge.predicate || '';
-      const key = `${sId}->${tId}:${pred}`;
+      const key = `${sId}->${tId}:${resolvePredicateKey(edge)}`;
       if (!seen.has(key)) {
         seen.add(key);
         result.push(edge);
       }
     }
     return result;
-  }, [edges]);
+  }, [edges, resolvePredicateKey]);
 
   if (!uniqueEdges || uniqueEdges.length === 0) {
     return (
@@ -242,7 +248,8 @@ export const RelationshipList: React.FC<RelationshipListProps> = ({
         const typeIcon = isBO ? '🏢' : isApi ? '🌐' : isColumn ? '🏷️' : isTable ? '📊' : isSemTerm ? '🧠' : isBusTerm ? '💼' : '📄';
         const typeLabel = isBO ? 'Business Object' : isApi ? 'API Endpoint' : isColumn ? 'Database Column' : isTable ? 'Database Table' : isSemTerm ? 'Semantic Term' : isBusTerm ? 'Business Term' : (parsedType || 'Entity');
 
-        const relationshipLabel = edge.edge_type_name || edge.relationship_type || edge.predicate || 'RELATION';
+        const predicateMeta = getPredicate(resolvePredicateKey(edge));
+        const relationshipLabel = predicateMeta.label;
         const edgeHasProps = hasProperties(edge);
 
         return (
@@ -278,7 +285,10 @@ export const RelationshipList: React.FC<RelationshipListProps> = ({
                     {isOutbound ? 'Outgoing' : 'Incoming'}
                   </span>
                 </div>
-                <Badge label={relationshipLabel} color={C.accent} />
+                <Badge
+                  label={`${predicateMeta.icon} ${relationshipLabel}`}
+                  color={predicateMeta.color}
+                />
               </div>
             </div>
 

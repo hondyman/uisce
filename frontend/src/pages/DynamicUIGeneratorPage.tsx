@@ -3,6 +3,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { devDebug, devWarn, devError } from '../utils/devLogger';
+import { dedupeFields } from '../utils/dedupeFields';
 import { ToastProvider, useToast } from '../components/Toast';
 import ErrorSummary from '../components/ui/ErrorSummary';
 import ConfirmModal from '../components/ui/ConfirmModal';
@@ -129,7 +130,7 @@ function mapFieldDefinitionToUI(f: FieldDefinition): BOField {
 }
 
 function mapBODefinitionToUI(b: BusinessObjectDefinition): BusinessObject {
-  const fields = [...(b.coreFields || []), ...(b.customFields || [])].map(mapFieldDefinitionToUI);
+  const fields = dedupeFields([...(b.coreFields || []), ...(b.customFields || [])]).map(mapFieldDefinitionToUI);
   return {
     id: `bo_${b.key}`,
     name: b.displayName || b.name,
@@ -239,7 +240,7 @@ const SectionConfigurator: React.FC<{
     opacity: isDragging ? 0.5 : 1,
   };
 
-  const allBoFields = primaryBO ? [...(primaryBO.coreFields || []), ...(primaryBO.customFields || [])] : [];
+  const allBoFields = primaryBO ? dedupeFields([...(primaryBO.coreFields || []), ...(primaryBO.customFields || [])]) : [];
   const getFieldById = (fieldId: string) => allBoFields.find((f: BOField) => f.id === fieldId);
 
   const localRef = React.useRef<HTMLDivElement | null>(null);
@@ -886,7 +887,7 @@ const LayoutManager: React.FC = () => {
               <div className={styles.bold600}>{section.title}</div>
               <div className={styles.previewFieldWrapper}>
                 {(section.fieldIds || []).map(fid => {
-                  const boAllFields = [...(bo.coreFields || []), ...(bo.customFields || bo.fields || [])];
+                  const boAllFields = dedupeFields([...(bo.coreFields || []), ...(bo.customFields || bo.fields || [])]);
                   const f = boAllFields.find(x => x.id === fid);
                   return f ? <div key={fid} className={styles.previewFieldTag}>{f.label}</div> : null;
                 })}
@@ -899,7 +900,7 @@ const LayoutManager: React.FC = () => {
   };
 
   // Calculate all fields for display
-  const displayAllBoFields = primaryBO ? [...(primaryBO.coreFields || []), ...(primaryBO.customFields || primaryBO.fields || [])] : [];
+  const displayAllBoFields = primaryBO ? dedupeFields([...(primaryBO.coreFields || []), ...(primaryBO.customFields || primaryBO.fields || [])]) : [];
 
   return (
     <DndContext

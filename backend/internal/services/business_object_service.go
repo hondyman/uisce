@@ -1296,7 +1296,10 @@ func (s *BusinessObjectService) mergeCustomOntoCore(coreBO, customBO *models.Bus
 
 	// Merge fields: core fields + custom fields
 	composed.CoreFields = coreBO.CoreFields
-	composed.CustomFields = append(coreBO.CustomFields, customBO.CustomFields...)
+	// PR duplicate-fix: customFields holds only the custom (tenant-extension) fields.
+	// Do NOT prepend coreBO.CoreFields here — they already live in composed.CoreFields.
+	composed.CustomFields = customBO.CustomFields
+
 
 	// If custom BO has a config, use it (allows tenant overrides)
 	if len(customBO.Config) > 0 {

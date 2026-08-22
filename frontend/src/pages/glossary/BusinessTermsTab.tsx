@@ -3,7 +3,6 @@ import { useTenant } from '../../contexts/TenantContext';
 import { useAccess } from '../../contexts/AccessContext';
 import BusinessTermsTree from '../../components/BusinessTermsTree';
 import { EnhancedSelectedAsset } from '../../types/SemanticTypes';
-import { useEdgeTypes } from '../../api/edgeTypes';
 import SemanticFlow from '../../components/SemanticFlow';
 import { CatalogNode, useBusinessTerms, useSemanticTerms, useGlossaryEdges } from '../../api/glossary';
 import { useNodeTypes } from '../../api/nodeTypes';
@@ -12,7 +11,7 @@ import { enrichNodesWithTypes } from '../../utils/nodeTypeMapping';
 import { Tabs, Tab, Box, IconButton, Tooltip, Chip } from '@mui/material';
 import { Add as AddIcon, ArrowBack as ArrowBackIcon, AutoAwesome } from '@mui/icons-material';
 import { SemanticEnrichmentWizard } from '../../components/SemanticEnrichmentWizard';
-import { RelationshipList } from '../../components/glossary/RelationshipList';
+import { RelationshipExplorer } from '../../features/glossary/components/RelationshipExplorer';
 import { Button } from '@mui/material';
 import './BusinessTermsTab.css';
 import { useTranslation } from 'react-i18next';
@@ -52,8 +51,6 @@ export const BusinessTermsTab: React.FC<{
   const { data: rqSemanticTerms, isLoading: rqSemanticLoading, error: rqSemanticError } = useSemanticTerms({ tenantOverride: scopeTenantId });
   const { data: rqEdges, isLoading: rqEdgesLoading, refetch: refetchEdges } = useGlossaryEdges({ tenantOverride: scopeTenantId });
 
-  // Fetch edge types and node types for the operational-scope tenant
-  const { data: _edgeTypesData, isLoading: _edgeTypesLoading } = useEdgeTypes(scopeTenantId || '');
   const { data: nodeTypes } = useNodeTypes({ tenantId: scopeTenantId });
 
   const selectedNodeType = useMemo(() => {
@@ -556,17 +553,15 @@ export const BusinessTermsTab: React.FC<{
                     </div>
                   </div>
 
-                  {/* Relationships Section */}
+                  {/* Relationships Section — PR 4: migrated to RelationshipExplorer */}
                   <div className="business-term-relationships">
                     <h3>Relationships</h3>
-                    {relatedEdges.length > 0 ? (
-                      <RelationshipList
-                        edges={relatedEdges}
-                        selectedNodeId={selectedAsset?.nodeId}
-                        darkMode={false}
-                        getNodeName={(id) => nodeNameMap[id] || id.substring(0, 8)}
-                        getNodePath={(id) => nodePathMap[id]}
-                        onDeleted={() => { refetchEdges(); }}
+                    {selectedAsset?.node ? (
+                      <RelationshipExplorer
+                        entityType="business_term"
+                        entityId={selectedAsset.nodeId}
+                        focalNode={selectedAsset.node}
+                        onMutated={refetchEdges}
                       />
                     ) : (
                       <div className="no-relationships">{t('relationships_table.none_found', 'No relationships found for this term')}</div>

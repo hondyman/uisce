@@ -135,6 +135,7 @@ export interface CatalogEdge {
   source_node_id?: string;
   target_node_id?: string;
   relationship_type?: string;
+  predicate?: string;
 }
 
 export interface EdgeProperty {

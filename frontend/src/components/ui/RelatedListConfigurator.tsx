@@ -1,4 +1,5 @@
 import type { FC } from 'react';
+import { dedupeFields } from '../../utils/dedupeFields';
 import './RelatedListConfigurator.css';
 
 export const RelatedListConfigurator: FC<{
@@ -37,7 +38,7 @@ export const RelatedListConfigurator: FC<{
             <label style={{ display: 'block', fontWeight: 600, marginBottom: 8 }}>Columns</label>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8 }}>
               {(() => {
-                const allFields = [...(primaryBO.coreFields || []), ...(primaryBO.customFields || primaryBO.fields || [])];
+                const allFields = dedupeFields([...(primaryBO.coreFields || []), ...(primaryBO.customFields || primaryBO.fields || [])]);
                 return allFields.slice(0, 8).map((f: any) => (
                   <label key={f.id} style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                     <input

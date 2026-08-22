@@ -14,7 +14,7 @@ import ReactFlow, {
 import 'reactflow/dist/style.css';
 import { useAccess } from '../../contexts/AccessContext';
 import { readCachedSelection } from '../../utils/tenantScope';
-import { useApiQuery } from '../../hooks/useApiQuery';
+import { useQuery } from '@tanstack/react-query';
 import apiClient from '../../utils/apiClient';
 import { IconButton, Tooltip, useTheme } from '@mui/material';
 import { 
@@ -27,10 +27,12 @@ import {
   Search as SearchIcon,
   AccountTree as AccountTreeIcon
 } from '@mui/icons-material';
-import { useDeleteTerm } from '../../api/glossary';
+import { useDeleteTerm, useUpdateTerm, useCreateTerm } from '../../api/glossary';
 import { useNodeTypes } from '../../api/nodeTypes';
 import { usePropertyLookupMaps } from '../../hooks/usePropertyLookupMaps';
 import { CoreIcon, CustomIcon } from '../../components/common/CoreCustomIcons';
+import { LineageGraph } from './components/LineageGraph';
+import { RelationshipExplorer } from './components/RelationshipExplorer';
 
 // ─────────────────────────────────────────────
 // Sub-components
@@ -239,7 +241,7 @@ export default function BusinessTermsExplorer() {
   const isDark = theme.palette.mode === 'dark';
 
   const C = useMemo(() => ({
-    bg: isDark ? '#0A0C12' : '#F8FAFC',
+    bg: isDark ? '#0A0C10' : '#F8FAFC',
     sidebar: isDark ? '#0F1117' : '#F1F5F9',
     panel: isDark ? '#13161E' : '#FFFFFF',
     panelHover: isDark ? '#1A1E2A' : '#F1F5F9',
@@ -272,7 +274,16 @@ export default function BusinessTermsExplorer() {
   const selectedId = searchParams.get('id');
 
   const [searchTerm, setSearchTerm] = useState('');
-  const [activeTab, setActiveTab] = useState<'lineage' | 'details' | 'properties' | 'relationships'>('lineage');
+  const [activeTab, setActiveTab] = useState<'details' | 'relationships' | 'lineage'>('details');
+
+  const handleTabChange = (tab: 'details' | 'relationships' | 'lineage') => {
+    setActiveTab(tab);
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.set('tab', tab);
+      return next;
+    });
+  };
 
   // Modals
   const [isCreateBusModalOpen, setIsCreateBusModalOpen] = useState(false);
@@ -288,56 +299,39 @@ export default function BusinessTermsExplorer() {
     data: busTermsRaw,
     isLoading: busLoading,
     refetch: refetchBus,
-  } = useApiQuery<any[]>(
-    ['business-terms-explorer', tenantId],
-    async () => {
+  } = useQuery<any[]>({
+    queryKey: ['business-terms-explorer', tenantId],
+    queryFn: async () => {
       if (!tenantId) return [];
       const res = await apiClient<any[]>(`/api/catalog/nodes?catalog_type=business_term&tenant_id=${tenantId}`);
       return Array.isArray(res) ? res : ((res as any)?.data ?? []);
     },
-    { enabled: !!tenantId }
-  );
+    enabled: !!tenantId,
+  });
 
   // 2. Fetch Semantic Terms (for linking & relationships)
   const {
     data: semTermsRaw,
     isLoading: _semLoading,
-  } = useApiQuery<any[]>(
-    ['semantic-terms-for-bus-explorer', tenantId],
-    async () => {
+  } = useQuery<any[]>({
+    queryKey: ['semantic-terms-for-bus-explorer', tenantId],
+    queryFn: async () => {
       if (!tenantId) return [];
       const res = await apiClient<any[]>(`/api/glossary/semantic-terms?tenant_id=${tenantId}`);
       return Array.isArray(res) ? res : ((res as any)?.data ?? []);
     },
-    { enabled: !!tenantId }
-  );
+    enabled: !!tenantId,
+  });
 
-  // 3. Fetch Edges
-  const {
-    data: edgesRaw,
-    refetch: refetchEdges,
-  } = useApiQuery<any[]>(
-    ['glossary-edges-for-bus-explorer', tenantId],
-    async () => {
-      if (!tenantId) return [];
-      const res = await apiClient<any[]>(`/api/glossary/edges?tenant_id=${tenantId}`);
-      return Array.isArray(res) ? res : ((res as any)?.data ?? []);
-    },
-    { enabled: !!tenantId }
-  );
+  // 3. (Inline glossary-edges fetch removed in PR 4 — the new
+  //    <RelationshipExplorer /> centralizes both the data fetch and the
+  //    rendering. Edges are re-fetched on-demand by RelationshipExplorer
+  //    via useEntityRelationships(), and the relationship list auto-refreshes
+  //    via its onMutated callback.)
 
-  // 4. Fetch Technical Assets for physical lineage
-  const {
-    data: technicalAssetsRaw,
-  } = useApiQuery<any[]>(
-    ['technical-assets-for-bus-explorer', tenantId],
-    async () => {
-      if (!tenantId) return [];
-      const res = await apiClient<any[]>(`/api/glossary/technical-assets?tenant_id=${tenantId}`);
-      return Array.isArray(res) ? res : ((res as any)?.data ?? []);
-    },
-    { enabled: !!tenantId }
-  );
+  // 4. (Technical assets fetch removed in PR 4 — the Cognitive Studio tab
+  //    and the relationships tab now own their own data needs via the
+  //    shared hooks in useEntityRelationships.)
 
   const busTerms = useMemo(() => {
     const list = Array.isArray(busTermsRaw) ? busTermsRaw : [];
@@ -351,10 +345,6 @@ export default function BusinessTermsExplorer() {
   const semTerms = useMemo(() => {
     return Array.isArray(semTermsRaw) ? semTermsRaw : [];
   }, [semTermsRaw]);
-
-  const glossaryEdges = useMemo(() => {
-    return Array.isArray(edgesRaw) ? edgesRaw : [];
-  }, [edgesRaw]);
 
   // Selected term object
   const selectedTerm = useMemo(() => {
@@ -429,7 +419,7 @@ export default function BusinessTermsExplorer() {
       setBusName('');
       setBusDesc('');
       setBusLinkSem('');
-      await Promise.all([refetchBus(), refetchEdges()]);
+      await refetchBus();
       if (res?.id) setSearchParams({ id: res.id });
     } catch (e) {
       console.error(e);
@@ -465,142 +455,24 @@ export default function BusinessTermsExplorer() {
   };
 
   // Connected Semantic Terms for Selected Business Term
-  const connectedSemanticTerms = useMemo(() => {
-    if (!selectedTerm) return [];
-    const termId = selectedTerm.id;
-    const connectedIds = new Set<string>();
+  // PR 4: connectedSemanticTerms + connectedCount useMemos removed —
+  // the new <RelationshipExplorer /> shell owns its own edge filtering
+  // via useEntityRelationships() and renders the unified relationship
+  // grid (semantic terms + technical assets) inside the Relationships tab.
 
-    glossaryEdges.forEach((e: any) => {
-      if (e.subject_node_id === termId || e.source_node_id === termId) {
-        const targetId = e.object_node_id || e.target_node_id;
-        if (targetId) connectedIds.add(targetId);
-      }
-      if (e.object_node_id === termId || e.target_node_id === termId) {
-        const sourceId = e.subject_node_id || e.source_node_id;
-        if (sourceId) connectedIds.add(sourceId);
-      }
-    });
-
-    return semTerms.filter((st: any) => connectedIds.has(st.id));
-  }, [selectedTerm, glossaryEdges, semTerms]);
-
-  // Statistics
+  // Statistics (topbar summary — total + active)
   const totalCount = busTerms.length;
-  const connectedCount = useMemo(() => {
-    const connectedSet = new Set<string>();
-    glossaryEdges.forEach((e: any) => {
-      if (e.subject_node_id) connectedSet.add(e.subject_node_id);
-      if (e.object_node_id) connectedSet.add(e.object_node_id);
-    });
-    return busTerms.filter((t: any) => connectedSet.has(t.id)).length;
-  }, [busTerms, glossaryEdges]);
   const activeCount = busTerms.filter((t: any) => t.is_active !== false).length;
 
-  // ReactFlow Nodes & Edges
-  const [nodes, setNodes, onNodesChange] = useNodesState([]);
-  const [edges, setEdges, onEdgesChange] = useEdgesState([]);
-
-  useEffect(() => {
-    if (!selectedTerm) {
-      setNodes([]);
-      setEdges([]);
-      return;
-    }
-
-    const flowNodes: any[] = [];
-    const flowEdges: any[] = [];
-
-    // Center Business Term Node
-    flowNodes.push({
-      id: selectedTerm.id,
-      type: 'mainBusinessTerm',
-      position: { x: 50, y: 150 },
-      data: {
-        label: selectedTerm.node_name,
-        description: selectedTerm.description,
-        isCore: selectedTerm.type === 'core' || selectedTerm.core,
-        panelBg: C.panel,
-        border: C.border,
-        textColor: C.text,
-        textMuted: C.textMuted,
-      }
-    });
-
-    // Downstream Semantic Terms (Right Column)
-    const semList = connectedSemanticTerms;
-    const techRaw = Array.isArray(technicalAssetsRaw) ? technicalAssetsRaw : [];
-
-    semList.forEach((st: any, idx: number) => {
-      const stNodeId = `sem-${st.id}`;
-      const yPos = 50 + idx * 140;
-
-      flowNodes.push({
-        id: stNodeId,
-        type: 'downstreamSemanticTerm',
-        position: { x: 450, y: yPos },
-        data: {
-          label: st.node_name,
-          description: st.description,
-          mapped: true,
-          panelBg: C.panel,
-          border: C.border,
-          textColor: C.text,
-          textMuted: C.textMuted,
-        }
-      });
-
-      flowEdges.push({
-        id: `edge-${selectedTerm.id}-${stNodeId}`,
-        source: selectedTerm.id,
-        target: stNodeId,
-        type: 'smoothstep',
-        animated: true,
-        label: 'maps to',
-        labelStyle: { fill: C.teal, fontWeight: 700, fontSize: 10 },
-        labelBgStyle: { fill: C.panel, fillOpacity: 0.95 },
-        labelBgPadding: [4, 2],
-        labelBgBorderRadius: 4,
-        style: { stroke: C.teal, strokeWidth: 2 },
-        markerEnd: { type: MarkerType.ArrowClosed, color: C.teal }
-      });
-
-      // Find any mapped physical columns for this semantic term
-      const mappedCols = techRaw.filter((ta: any) => ta.semantic_term_id === st.id || ta.parent_id === st.id).slice(0, 3);
-      mappedCols.forEach((col: any, colIdx: number) => {
-        const colNodeId = `col-${col.id || colIdx}-${st.id}`;
-        flowNodes.push({
-          id: colNodeId,
-          type: 'datasource',
-          position: { x: 820, y: yPos + colIdx * 90 },
-          data: {
-            label: col.node_name || 'Column',
-            path: col.qualified_path,
-            panelBg: C.panel,
-            border: C.border,
-            textColor: C.text,
-            textMuted: C.textMuted,
-          }
-        });
-
-        flowEdges.push({
-          id: `edge-${stNodeId}-${colNodeId}`,
-          source: stNodeId,
-          target: colNodeId,
-          type: 'smoothstep',
-          animated: true,
-          style: { stroke: C.blue, strokeWidth: 1.5 },
-          markerEnd: { type: MarkerType.ArrowClosed, color: C.blue }
-        });
-      });
-    });
-
-    setNodes(flowNodes);
-    setEdges(flowEdges);
-  }, [selectedTerm, connectedSemanticTerms, technicalAssetsRaw, C, setNodes, setEdges]);
+  // PR 4: the ReactFlow node/edge state + the giant useEffect that
+  // built the upstream/downstream graph are removed. The shared
+  // <RelationshipExplorer /> shell handles its own graph state via
+  // useEntityRelationships, and the LineageGraph in the lineage tab
+  // manages the ReactFlow lifecycle.
 
   const inputStyle: React.CSSProperties = {
     width: '100%',
-    background: isDark ? '#0A0C12' : '#F8FAFC',
+    background: isDark ? '#0A0C10' : '#F8FAFC',
     border: `1px solid ${C.border}`,
     borderRadius: 6,
     padding: '8px 12px',
@@ -612,7 +484,7 @@ export default function BusinessTermsExplorer() {
   };
 
   return (
-    <div style={{ display: 'flex', height: 'calc(100vh - 64px)', background: C.bg, color: C.text, overflow: 'hidden' }}>
+    <div style={{ display: 'flex', minHeight: 'calc(100vh - 64px)', background: C.bg, color: C.text, overflow: 'hidden' }}>
       
       {/* Create Modal */}
       {isCreateBusModalOpen && (
@@ -797,14 +669,6 @@ export default function BusinessTermsExplorer() {
               <span style={{
                 display: 'inline-flex', alignItems: 'center', padding: '3px 9px',
                 borderRadius: 9999, fontSize: 11, fontWeight: 700, letterSpacing: '0.04em',
-                color: C.purple, background: isDark ? 'rgba(167,139,250,0.12)' : 'rgba(167,139,250,0.08)',
-                border: `1px solid ${C.purple}44`, fontFamily: 'monospace', textTransform: 'uppercase',
-              }}>
-                {connectedCount} Connected
-              </span>
-              <span style={{
-                display: 'inline-flex', alignItems: 'center', padding: '3px 9px',
-                borderRadius: 9999, fontSize: 11, fontWeight: 700, letterSpacing: '0.04em',
                 color: C.success, background: isDark ? 'rgba(16,185,129,0.12)' : 'rgba(16,185,129,0.08)',
                 border: `1px solid ${C.success}44`, fontFamily: 'monospace', textTransform: 'uppercase',
               }}>
@@ -878,44 +742,31 @@ export default function BusinessTermsExplorer() {
             </div>
 
             {/* Navigation Tabs */}
-            <div style={{ display: 'flex', gap: 8, padding: '10px 24px', borderBottom: `1px solid ${C.border}`, background: isDark ? '#0A0C12' : '#F1F5F9' }}>
-              <Pill active={activeTab === 'lineage'} onClick={() => setActiveTab('lineage')} accentColor={C.teal} border={C.border} textMuted={C.textMuted}>
-                <TimelineIcon sx={{ fontSize: 16 }} /> Lineage &amp; Mapping
+            <div style={{ display: 'flex', gap: 8, padding: '10px 24px', borderBottom: `1px solid ${C.border}`, background: isDark ? '#0A0C10' : '#F1F5F9' }}>
+              <Pill active={activeTab === 'details'} onClick={() => handleTabChange('details')} accentColor={C.teal} border={C.border} textMuted={C.textMuted}>
+                <SchemaIcon sx={{ fontSize: 16 }} /> Details
               </Pill>
-              <Pill active={activeTab === 'details'} onClick={() => setActiveTab('details')} accentColor={C.teal} border={C.border} textMuted={C.textMuted}>
-                <SchemaIcon sx={{ fontSize: 16 }} /> Details &amp; Overview
+              <Pill active={activeTab === 'relationships'} onClick={() => handleTabChange('relationships')} accentColor={C.teal} border={C.border} textMuted={C.textMuted}>
+                <AccountTreeIcon sx={{ fontSize: 16 }} /> Relationships
               </Pill>
-              <Pill active={activeTab === 'properties'} onClick={() => setActiveTab('properties')} accentColor={C.teal} border={C.border} textMuted={C.textMuted}>
-                <StorageIcon sx={{ fontSize: 16 }} /> Properties
-              </Pill>
-              <Pill active={activeTab === 'relationships'} onClick={() => setActiveTab('relationships')} accentColor={C.teal} border={C.border} textMuted={C.textMuted}>
-                <AccountTreeIcon sx={{ fontSize: 16 }} /> Connected Semantic Terms ({connectedSemanticTerms.length})
+              <Pill active={activeTab === 'lineage'} onClick={() => handleTabChange('lineage')} accentColor={C.teal} border={C.border} textMuted={C.textMuted}>
+                <TimelineIcon sx={{ fontSize: 16 }} /> Lineage
               </Pill>
             </div>
 
             {/* Tab Body */}
             <div style={{ flex: 1, overflow: 'auto', position: 'relative' }}>
-              {activeTab === 'lineage' && (
-                <div style={{ width: '100%', height: '100%', minHeight: 480 }}>
-                  <ReactFlow
-                    nodes={nodes}
-                    edges={edges}
-                    nodeTypes={nodeTypes}
-                    onNodesChange={onNodesChange}
-                    onEdgesChange={onEdgesChange}
-                    fitView
-                    minZoom={0.2}
-                    maxZoom={1.5}
-                  >
-                    <Background color={isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)'} gap={20} />
-                    <Controls />
-                    <MiniMap 
-                      nodeColor={(n: any) => n.type === 'mainBusinessTerm' ? C.teal : n.type === 'downstreamSemanticTerm' ? '#6366F1' : C.blue} 
-                      maskColor={isDark ? 'rgba(10,12,18,0.7)' : 'rgba(240,242,245,0.7)'}
-                      style={{ background: C.panel, border: `1px solid ${C.border}` }}
-                    />
-                  </ReactFlow>
-                </div>
+              {activeTab === 'lineage' && selectedTerm && (
+                <LineageGraph
+                  focalTerm={selectedTerm}
+                  focalLabel="Business Term (Focal)"
+                  upstreamNodes={[]}
+                  downstreamNodes={[]}
+                  edges={[]}
+                  showDatasourceLayer={false}
+                  height={480}
+                  emptyMessage="No lineage data available."
+                />
               )}
 
               {activeTab === 'details' && (
@@ -951,65 +802,18 @@ export default function BusinessTermsExplorer() {
                 </div>
               )}
 
-              {activeTab === 'properties' && (
-                <div style={{ padding: 24, maxWidth: 900 }}>
-                  <div style={{ background: C.panel, border: `1px solid ${C.border}`, borderRadius: 10, padding: 20 }}>
-                    <h3 style={{ margin: '0 0 16px 0', fontSize: 15, fontWeight: 700, color: C.text }}>Custom Properties</h3>
-                    {selectedTerm.properties && Object.keys(selectedTerm.properties).length > 0 ? (
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                        {Object.entries(selectedTerm.properties).map(([key, val]) => (
-                          <div key={key} style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 12px', background: isDark ? '#0A0C12' : '#F8FAFC', borderRadius: 6, border: `1px solid ${C.border}`, fontSize: 13 }}>
-                            <span style={{ fontWeight: 600, color: C.textMuted }}>{key}</span>
-                            <span style={{ fontFamily: 'monospace', color: C.text }}>{String(val)}</span>
-                          </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <div style={{ color: C.textMuted, fontSize: 13 }}>No custom properties assigned to this term.</div>
-                    )}
-                  </div>
-                </div>
-              )}
 
-              {activeTab === 'relationships' && (
-                <div style={{ padding: 24, maxWidth: 1100 }}>
-                  <div style={{ background: C.panel, border: `1px solid ${C.border}`, borderRadius: 10, padding: 20 }}>
-                    <h3 style={{ margin: '0 0 16px 0', fontSize: 15, fontWeight: 700, color: C.text }}>Connected Semantic Terms</h3>
-                    {connectedSemanticTerms.length > 0 ? (
-                      <table style={{ width: '100%', textAlign: 'left', borderCollapse: 'collapse', fontSize: 13 }}>
-                        <thead>
-                          <tr style={{ borderBottom: `1px solid ${C.border}`, color: C.textMuted }}>
-                            <th style={{ padding: '8px 12px' }}>Semantic Term</th>
-                            <th style={{ padding: '8px 12px' }}>Description</th>
-                            <th style={{ padding: '8px 12px' }}>Data Type</th>
-                            <th style={{ padding: '8px 12px' }}>Status</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {connectedSemanticTerms.map((st: any) => (
-                            <tr key={st.id} style={{ borderBottom: `1px solid ${C.border}` }}>
-                              <td style={{ padding: '10px 12px', fontWeight: 600, color: '#818CF8' }}>
-                                🧠 {st.node_name}
-                              </td>
-                              <td style={{ padding: '10px 12px', color: C.textMuted, maxWidth: 300 }}>
-                                {st.description || '-'}
-                              </td>
-                              <td style={{ padding: '10px 12px', fontFamily: 'monospace' }}>
-                                {st.properties?.data_type || 'string'}
-                              </td>
-                              <td style={{ padding: '10px 12px' }}>
-                                <Badge label={st.is_active !== false ? 'Active' : 'Inactive'} color={st.is_active !== false ? C.success : C.textMuted} />
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    ) : (
-                      <div style={{ color: C.textMuted, fontSize: 13 }}>
-                        No semantic terms mapped to this business term yet. You can link terms during creation or via the Semantic Mapper.
-                      </div>
-                    )}
-                  </div>
+              {activeTab === 'relationships' && selectedTerm && (
+                <div style={{ flex: 1, overflowY: 'auto', background: C.bg }}>
+                  <RelationshipExplorer
+                    entityType="business_term"
+                    entityId={selectedTerm.id}
+                    focalNode={selectedTerm}
+                    onNavigate={(id) => setSearchParams({ id })}
+                    onMutated={() => {
+                      void refetchBus();
+                    }}
+                  />
                 </div>
               )}
             </div>
