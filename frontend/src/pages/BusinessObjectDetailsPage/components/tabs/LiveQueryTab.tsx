@@ -75,9 +75,10 @@ import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { CoreIcon } from '../../../../components/common/CoreCustomIcons';
 import { useTenant } from '../../../../contexts/TenantContext';
 import { useNotification } from '../../../../hooks/useNotification';
-import { fetchAPI } from '../../../../api';
 import { previewQuery, executeQuery } from '../../../../features/query-builder/services/queryBuilderApi';
 import type { QueryDef, PreviewResult, QueryExecuteResult } from '../../../../features/query-builder/types/queryDef';
+import { DrillDownGridModal } from '../../../../components/LiveQuery/DrillDownGridModal';
+import { dedupeFields } from '../../../../utils/dedupeFields';
 
 interface LiveQueryTabProps {
   businessObject: any;
@@ -224,6 +225,11 @@ export function LiveQueryTab({ businessObject }: LiveQueryTabProps) {
   // Selected DAG Node in Explain Visualizer
   const [selectedDAGNodeId, setSelectedDAGNodeId] = useState<string>('node_scan');
 
+  // Drill-down State
+  const [drillModalOpen, setDrillModalOpen] = useState(false);
+  const [drillField, setDrillField] = useState('');
+  const [drillFilterContext, setDrillFilterContext] = useState<Record<string, any>>({});
+
   // Execution & SQL state
   const [previewSql, setPreviewSql] = useState<string>('-- Select dimensions or measures to generate SQL');
   const [executing, setExecuting] = useState(false);
@@ -314,21 +320,11 @@ export function LiveQueryTab({ businessObject }: LiveQueryTabProps) {
 
   // Extract all fields from the Business Object
   const fields = useMemo(() => {
-    const rawList = [
+    return dedupeFields([
       ...(businessObject?.coreFields || []),
       ...(businessObject?.customFields || []),
       ...(businessObject?.config?.fields || []),
-    ];
-    const seen = new Set<string>();
-    const uniqueFields: any[] = [];
-    for (const f of rawList) {
-      const key = f.key || f.technicalName || f.name || f.id;
-      if (!seen.has(key)) {
-        seen.add(key);
-        uniqueFields.push(f);
-      }
-    }
-    return uniqueFields;
+    ]);
   }, [businessObject]);
 
   // Helper to determine field data type category
@@ -1672,7 +1668,20 @@ export function LiveQueryTab({ businessObject }: LiveQueryTabProps) {
                               {(executeResult.columns || []).map((col: any, cIdx: number) => {
                                 const colName = typeof col === 'string' ? col : col?.name || '';
                                 return (
-                                  <TableCell key={cIdx} sx={{ fontSize: '0.8rem' }}>
+                                  <TableCell
+                                    key={cIdx}
+                                    sx={{
+                                      fontSize: '0.8rem',
+                                      cursor: 'pointer',
+                                      '&:hover': { bgcolor: 'action.hover', color: 'primary.main', textDecoration: 'underline' }
+                                    }}
+                                    onDoubleClick={() => {
+                                      setDrillField(colName);
+                                      setDrillFilterContext(row);
+                                      setDrillModalOpen(true);
+                                    }}
+                                    title="Double-click to drill down into constituent records"
+                                  >
                                     {String(row[colName] !== undefined ? row[colName] : '')}
                                   </TableCell>
                                 );
@@ -1801,7 +1810,16 @@ export function LiveQueryTab({ businessObject }: LiveQueryTabProps) {
                         const label = String(r[dimensions[0]?.alias || firstColName] || `Item ${i + 1}`);
 
                         return (
-                          <g key={i}>
+                          <g
+                            key={i}
+                            style={{ cursor: 'pointer' }}
+                            onDoubleClick={() => {
+                              setDrillField(firstMeas);
+                              setDrillFilterContext(r);
+                              setDrillModalOpen(true);
+                            }}
+                          >
+                            <title>Double-click to drill down into constituent records for {label}</title>
                             <rect x={x} y={y} width={barWidth} height={height} fill="#1976d2" rx="3" />
                             <text x={x + barWidth / 2} y={y - 6} textAnchor="middle" fontSize="10" fontWeight="bold" fill="#333">
                               {rawVal > 1000 ? `${(rawVal / 1000).toFixed(0)}k` : rawVal.toFixed(0)}
@@ -1838,7 +1856,23 @@ export function LiveQueryTab({ businessObject }: LiveQueryTabProps) {
                             const rawVal = parseFloat(String(r[firstMeas] ?? ((i + 1) * 30)));
                             const height = Math.min(200, Math.max(10, (rawVal / 2000000) * 180 || (i + 1) * 20));
                             const y = 240 - height;
-                            return <circle key={i} cx={x} cy={y} r="4" fill="#9c27b0" stroke="#fff" strokeWidth="2" />;
+                            return (
+                              <circle
+                                key={i}
+                                cx={x}
+                                cy={y}
+                                r="5"
+                                fill="#9c27b0"
+                                stroke="#fff"
+                                strokeWidth="2"
+                                style={{ cursor: 'pointer' }}
+                                onDoubleClick={() => {
+                                  setDrillField(firstMeas);
+                                  setDrillFilterContext(r);
+                                  setDrillModalOpen(true);
+                                }}
+                              />
+                            );
                           })}
                         </>
                       )}
@@ -1864,8 +1898,15 @@ export function LiveQueryTab({ businessObject }: LiveQueryTabProps) {
                       )}
 
                       {chartType === 'pie' && (
-                        <g transform="translate(300, 130)">
-                          <circle cx="0" cy="0" r="90" fill="#1976d2" />
+                        <g transform="translate(300, 130)" style={{ cursor: 'pointer' }}>
+                          <circle cx="0" cy="0" r="90" fill="#1976d2" onDoubleClick={() => {
+                            const lastCol = executeResult.columns?.[executeResult.columns.length - 1];
+                            const lastColName = typeof lastCol === 'string' ? lastCol : lastCol?.name || '';
+                            const firstMeas = measures[0]?.alias || lastColName;
+                            setDrillField(firstMeas);
+                            setDrillFilterContext(displayRows[0] || {});
+                            setDrillModalOpen(true);
+                          }} />
                           <path d="M 0 0 L 0 -90 A 90 90 0 0 1 85 -30 Z" fill="#9c27b0" />
                           <path d="M 0 0 L 85 -30 A 90 90 0 0 1 60 70 Z" fill="#ff9800" />
                           <path d="M 0 0 L 60 70 A 90 90 0 0 1 -75 50 Z" fill="#4caf50" />
@@ -2152,6 +2193,19 @@ export function LiveQueryTab({ businessObject }: LiveQueryTabProps) {
           </MenuItem>
         ))}
       </Menu>
+
+      {/* Drill-Down Slide-Out Drawer / Modal */}
+      <DrillDownGridModal
+        isOpen={drillModalOpen}
+        tenantId={tenantId || ''}
+        aggregatedField={drillField}
+        filterContext={drillFilterContext}
+        onClose={() => {
+          setDrillModalOpen(false);
+          setDrillField('');
+          setDrillFilterContext({});
+        }}
+      />
     </Box>
   );
 }

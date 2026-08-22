@@ -48,6 +48,7 @@ import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import type { ValidationRule as SharedValidationRule } from '../../components/validation/types';
 import { ValidationRuleScriptEditor } from './ValidationRuleScriptEditor';
 import ValidationRuleSimulator from './ValidationRuleSimulator';
+import { dedupeFields } from '../../utils/dedupeFields';
 
 export interface FieldTypeInfo {
   type: string;
@@ -267,7 +268,7 @@ record: {
     }
     
     // Otherwise, use the business object's core and custom fields
-    const allFields = [...(coreFields || []), ...(customFields || [])];
+    const allFields = dedupeFields([...(coreFields || []), ...(customFields || [])]);
     return allFields.map((f: any) => ({
       key: f.key || f.name || '',
       name: f.name || '',

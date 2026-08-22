@@ -93,6 +93,7 @@ import { filterValidationRulesForEntity, type AnnotatedValidationRule } from '..
 import ValidationRulesPage from '../features/fabric/pages/ValidationRulesPage';
 import { devError, devDebug, devWarn } from '../utils/devLogger';
 import { normalizeName } from '../utils/nameFormatting';
+import { dedupeFields } from '../utils/dedupeFields';
 import apiClient from '../utils/apiClient';
 import type { Entity, Field, HierarchyNode } from '../types/entity-schema';
 import { UnifiedLineageTab } from '../features/impact-analysis/components/UnifiedLineageTab';
@@ -259,6 +260,7 @@ export default function BusinessObjectDetailsPage() {
 
   // Related Objects view mode
   const [relatedObjectsView, setRelatedObjectsView] = useState<'tile' | 'table' | 'graph'>('table');
+  const [relatedObjects, setRelatedObjects] = useState<any[]>([]);
 
   // Field deletion confirmation state
   const [fieldDeleteConfirmOpen, setFieldDeleteConfirmOpen] = useState(false);
@@ -338,16 +340,16 @@ export default function BusinessObjectDetailsPage() {
   const getConfigFields = () => {
     // Primary source: customFields from the API response (this is the actual data)
     if (businessObject?.customFields && businessObject.customFields.length > 0) {
-      return businessObject.customFields
-        // Remove strict filter, as fields often come back as 'string'/'int' etc. 
+      return dedupeFields(businessObject.customFields
+        // Remove strict filter, as fields often come back as 'string'/'int' etc.
         // We rely on the presence of semanticTermId to identify them.
         .map((f: any) => {
            // Try to find the semantic term ID from the field itself
            let sId = f.semanticTermId || f.semantic_term_id || (f.properties?.semantic_term_id);
-           
+
            // If not found in the field object, try to look it up in config.fields by key
            if (!sId && businessObject.config?.fields) {
-              const configField = businessObject.config.fields.find((cf: any) => 
+              const configField = businessObject.config.fields.find((cf: any) =>
                 (cf.key === f.key) || (cf.technicalName === f.technicalName)
               );
               if (configField) {
@@ -359,14 +361,14 @@ export default function BusinessObjectDetailsPage() {
              ...f,
              semanticTermId: sId || f.key || f.technicalName,
            };
-        });
+         }));
     }
 
     // Fallback: try to resolve selected_terms from config as fields
     if (!businessObject?.customFields || businessObject.customFields.length === 0) {
       const selectedTerms = (businessObject?.config?.selected_terms as string[] | undefined) || [];
       if (selectedTerms.length > 0) {
-        return selectedTerms.map((termId: string, idx: number) => {
+        return dedupeFields(selectedTerms.map((termId: string, idx: number) => {
           // Find the semantic term to get its details
           const semanticTerm = semanticTerms.find(t => t.id === termId);
           return {
@@ -382,15 +384,15 @@ export default function BusinessObjectDetailsPage() {
             isCore: false,
             description: '',
           };
-        });
+        }));
       }
     }
 
     // Fallback: use config.fields (source of truth for saving)
-    return (businessObject?.config?.fields || []).map((f: any) => ({
+    return dedupeFields((businessObject?.config?.fields || []).map((f: any) => ({
       ...f,
       semanticTermId: f.semanticTermId || f.semantic_term_id
-    }));
+    })));
   };
 
   const handleAddFields = async (newTerms: EnhancedSemanticTerm[]) => {
@@ -420,7 +422,7 @@ export default function BusinessObjectDetailsPage() {
           semanticTermId: term.id, 
         }));
 
-        const updatedFields = [...currentFields, ...newFields];
+        const updatedFields = dedupeFields([...currentFields, ...newFields]);
 
         const payload = {
           // Preserve driver table context
@@ -501,6 +503,8 @@ export default function BusinessObjectDetailsPage() {
               return f;
           });
 
+          const savedFields = dedupeFields(updatedFields);
+
           // Send update to backend
           const payload = {
             displayName: businessObject.displayName,
@@ -512,9 +516,9 @@ export default function BusinessObjectDetailsPage() {
             driverTableName: businessObject.driverTableName || undefined,
             config: {
                 ...((businessObject as any)?.config || {}),
-                fields: updatedFields,
+                fields: savedFields,
             },
-            customFields: updatedFields
+            customFields: savedFields
           };
           
           // apiClient parses JSON and throws on non-OK, so we don't need
@@ -769,6 +773,19 @@ export default function BusinessObjectDetailsPage() {
         setBindings(data.bindings);
       }
 
+      if (data.related_bos && Array.isArray(data.related_bos)) {
+        setRelatedObjects(data.related_bos);
+      } else if (cleanId) {
+        fetch(`/api/business-objects/${cleanId}/relationships`, { headers })
+          .then(r => r.ok ? r.json() : null)
+          .then(relData => {
+            if (relData && relData.relatedObjects) {
+              setRelatedObjects(relData.relatedObjects);
+            }
+          })
+          .catch(() => {});
+      }
+
       setBusinessObject(mappedObject);
       
       devDebug('[BusinessObjectDetailsPage] Mapped object driverTableId:', mappedObject.driverTableId, 'driverTableName:', mappedObject.driverTableName);
@@ -782,7 +799,7 @@ export default function BusinessObjectDetailsPage() {
       if (mappedObject.driverTableName) setDriverTableName(mappedObject.driverTableName);
       
       // Collect all fields for legacy state
-      const allFields: Field[] = [
+      const allFields: Field[] = dedupeFields([
         ...(mappedObject.coreFields || []),
         ...(mappedObject.customFields || []),
         ...Object.values(mappedObject.subtypes || {}).flatMap(s => s.subtypeFields || [])
@@ -791,10 +808,8 @@ export default function BusinessObjectDetailsPage() {
         businessName: field.businessName || field.displayName || field.name,
         technicalName: field.technicalName || field.name,
         type: field.type || 'text',
-      }));
-
-      const uniqueFields = Array.from(new Map(allFields.map(f => [f.key, f])).values());
-      setFields(uniqueFields);
+      })));
+      setFields(allFields);
 
       // Extract hierarchy nodes
       const hierarchy: HierarchyNode[] = [];
@@ -1238,14 +1253,14 @@ export default function BusinessObjectDetailsPage() {
   const filteredFields = useMemo(() => {
     // If root is selected or nothing selected, show root's fields (core + custom)
     // If a subtype is selected, show inherited + subtype-specific fields
-    let fieldsToFilter = []
-    
+    let fieldsToFilter: any[] = []
+
     // Use getConfigFields() which resolves selected_terms if needed
     const configFields = getConfigFields();
-    
+
     if (Array.isArray(configFields) && configFields.length > 0) {
       // Use config fields which include semantic term data and resolved selected_terms
-      fieldsToFilter = configFields;
+      fieldsToFilter = dedupeFields(configFields);
     } else if (selectedNode?.type === 'subtype' && selectedNode.subtypeKey && businessObject?.subtypes?.[selectedNode.subtypeKey]) {
       const subtypeFields = businessObject.subtypes[selectedNode.subtypeKey].subtypeFields || [];
       if (showInheritedFields) {
@@ -1254,21 +1269,21 @@ export default function BusinessObjectDetailsPage() {
           ...(businessObject.coreFields || []),
           ...(businessObject.customFields || [])
         ];
-        fieldsToFilter = [...inheritedFields, ...subtypeFields];
+        fieldsToFilter = dedupeFields([...inheritedFields, ...subtypeFields]);
       } else {
         // Show only subtype-specific fields
-        fieldsToFilter = subtypeFields;
+        fieldsToFilter = dedupeFields(subtypeFields);
       }
     } else {
       // For root business object, show core + custom fields
-      fieldsToFilter = [
+      fieldsToFilter = dedupeFields([
         ...(businessObject?.coreFields || []),
         ...(businessObject?.customFields || [])
-      ];
+      ]);
     }
 
     return fieldsToFilter.filter(
-      (field) =>
+      (field: any) =>
         field.name.toLowerCase().includes(searchFilter.toLowerCase()) ||
         field.businessName?.toLowerCase().includes(searchFilter.toLowerCase()) ||
         field.type.toLowerCase().includes(searchFilter.toLowerCase())
@@ -1822,6 +1837,7 @@ export default function BusinessObjectDetailsPage() {
               {activeTab === 7 && (
                 <RelatedObjectsTab
                   relatedObjectsView={relatedObjectsView}
+                  relatedObjects={relatedObjects}
                   onAddRelationship={() => setRelationshipWizardOpen(true)}
                   onViewChange={setRelatedObjectsView}
                 />
@@ -1969,6 +1985,9 @@ export default function BusinessObjectDetailsPage() {
         <BusinessObjectRelationshipWizard
           open={relationshipWizardOpen}
           onClose={() => setRelationshipWizardOpen(false)}
+          onRelationshipSaved={() => {
+            fetchBusinessObject();
+          }}
           businessObject={businessObject}
           tenantId={tenantId}
           datasourceId={datasourceId}

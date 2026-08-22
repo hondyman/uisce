@@ -46,9 +46,15 @@ type AccessDecision struct {
 
 // RelationshipResult represents a related entity found via catalog edges
 type RelationshipResult struct {
+	ID                string `json:"id" db:"id"`
 	RelatedObjectName string `json:"relatedObjectName" db:"related_object_name"`
+	TargetObjectID    string `json:"targetObjectId" db:"target_object_id"`
 	RelationshipType  string `json:"relationshipType" db:"relationship_type"`
+	Cardinality       string `json:"cardinality" db:"cardinality"`
 	Description       string `json:"description" db:"description"`
+	JoinCondition     string `json:"joinCondition" db:"join_condition"`
+	SourceDriverTable string `json:"sourceDriverTable" db:"source_driver_table"`
+	TargetDriverTable string `json:"targetDriverTable" db:"target_driver_table"`
 }
 
 // SemanticFieldResult represents a field mapped to a semantic term
@@ -237,31 +243,70 @@ func (s *BusinessObjectService) CreateBusinessObject(
 	tenantID := secCtx.TenantID
 	// Generate key from name
 	key := slugify(req.Name)
+	displayName := req.DisplayName
+	if displayName == "" {
+		displayName = req.DisplayNameSnake
+	}
+	if displayName == "" {
+		displayName = req.Name
+	}
+
 	technicalName := req.TechnicalName
 	if technicalName == "" {
+		technicalName = req.TechnicalNameSnake
+	}
+	if technicalName == "" {
 		technicalName = key
+	}
+
+	parentIDStr := req.ParentID
+	if parentIDStr == "" {
+		parentIDStr = req.ParentIDSnake
+	}
+
+	datasourceIDStr := req.DatasourceID
+	if datasourceIDStr == "" {
+		datasourceIDStr = req.DatasourceIDSnake
+	}
+	if datasourceIDStr == "" && secCtx.DatasourceID != "" {
+		datasourceIDStr = secCtx.DatasourceID
+	}
+
+	driverTableIDStr := req.DriverTableID
+	if driverTableIDStr == "" {
+		driverTableIDStr = req.DriverTableIDSnake
+	}
+
+	driverTableNameStr := req.DriverTableName
+	if driverTableNameStr == "" {
+		driverTableNameStr = req.DriverTableNameSnake
+	}
+
+	cloneFromKeyStr := req.CloneFromKey
+	if cloneFromKeyStr == "" {
+		cloneFromKeyStr = req.CloneFromKeySnake
 	}
 
 	id := uuid.New().String()
 	now := time.Now()
 
-	logging.GetLogger().Sugar().Errorf("[META-SERVICE] CreateBusinessObject START: req.DatasourceID=%q req.ParentID=%q req.Name=%q", req.DatasourceID, req.ParentID, req.Name)
+	logging.GetLogger().Sugar().Errorf("[META-SERVICE] CreateBusinessObject START: datasourceID=%q parentID=%q req.Name=%q", datasourceIDStr, parentIDStr, req.Name)
 
 	bo := &models.BusinessObjectDefinition{
 		ID:              id,
 		TenantID:        tenantID,
 		Key:             key,
 		Name:            req.Name,
-		DisplayName:     req.DisplayName,
+		DisplayName:     displayName,
 		TechnicalName:   technicalName,
 		Description:     req.Description,
 		Icon:            req.Icon,
 		IsCore:          false,
 		Category:        req.Category,
-		ParentID:        sql.NullString{String: req.ParentID, Valid: req.ParentID != ""},
-		DatasourceID:    sql.NullString{String: req.DatasourceID, Valid: req.DatasourceID != ""},
-		DriverTableID:   sql.NullString{String: req.DriverTableID, Valid: req.DriverTableID != ""},
-		DriverTableName: req.DriverTableName,
+		ParentID:        sql.NullString{String: parentIDStr, Valid: parentIDStr != ""},
+		DatasourceID:    sql.NullString{String: datasourceIDStr, Valid: datasourceIDStr != ""},
+		DriverTableID:   sql.NullString{String: driverTableIDStr, Valid: driverTableIDStr != ""},
+		DriverTableName: driverTableNameStr,
 		CoreFields:      []models.FieldDefinition{},
 		CustomFields:    []models.FieldDefinition{},
 		Subtypes:        make(map[string]models.SubtypeDefinition),
@@ -702,7 +747,10 @@ func (s *BusinessObjectService) mergeCustomOntoCore(coreBO, customBO *models.Bus
 
 	// Merge fields: core fields + custom fields
 	composed.CoreFields = coreBO.CoreFields
-	composed.CustomFields = append(coreBO.CustomFields, customBO.CustomFields...)
+	// PR duplicate-fix: customFields holds only the custom (tenant-extension) fields.
+	// Do NOT prepend coreBO.CoreFields here — they already live in composed.CoreFields.
+	composed.CustomFields = customBO.CustomFields
+
 
 	// If custom BO has a config, use it (allows tenant overrides)
 	if len(customBO.Config) > 0 {
@@ -2523,22 +2571,40 @@ func (s *BusinessObjectService) GetBusinessObjectRelationships(ctx context.Conte
 	}
 
 	// 2. Find related objects via catalog edges
-	// Query edges where the driver table is source or target
+	// Query edges where the driver table OR the BO itself is source or target
 	relatedQuery := `
-		SELECT 
+		SELECT DISTINCT
+			e.id::text as id,
 			CASE 
-				WHEN e.source_node_id = $1::uuid THEN COALESCE(t.node_name, t.qualified_path)
-				ELSE COALESCE(src.node_name, src.qualified_path)
+				WHEN e.source_node_id = $1::uuid OR (e.properties->>'source_bo_id') = $2 THEN COALESCE(t.node_name, t.qualified_path, e.properties->>'target_bo_id', 'Related BO')
+				ELSE COALESCE(src.node_name, src.qualified_path, e.properties->>'source_bo_id', 'Related BO')
 			END as related_object_name,
+			CASE
+				WHEN e.source_node_id = $1::uuid OR (e.properties->>'source_bo_id') = $2 THEN COALESCE(e.properties->>'target_bo_id', e.target_node_id::text, '')
+				ELSE COALESCE(e.properties->>'source_bo_id', e.source_node_id::text, '')
+			END as target_object_id,
 			COALESCE(e.relationship_type, 'RELATED_TO') as relationship_type,
-			COALESCE(t.qualified_path, src.qualified_path, '') as description
+			COALESCE(e.properties->>'cardinality', '1:N') as cardinality,
+			COALESCE(e.properties->>'description', t.qualified_path, src.qualified_path, '') as description,
+			COALESCE(e.properties->>'join_condition', e.properties->>'description', '') as join_condition,
+			COALESCE(src.node_name, '') as source_driver_table,
+			COALESCE(t.node_name, '') as target_driver_table
 		FROM catalog_edge e
-		JOIN catalog_node src ON e.source_node_id = src.id
-		JOIN catalog_node t ON e.target_node_id = t.id
-		WHERE (e.source_node_id = $1::uuid OR e.target_node_id = $1::uuid)
+		LEFT JOIN catalog_node src ON e.source_node_id = src.id
+		LEFT JOIN catalog_node t ON e.target_node_id = t.id
+		WHERE (
+			e.source_node_id = $1::uuid OR e.target_node_id = $1::uuid
+			OR e.source_node_id = $2::uuid OR e.target_node_id = $2::uuid
+			OR (e.properties->>'source_bo_id') = $2 OR (e.properties->>'target_bo_id') = $2
+		)
 	`
 
-	err = s.db.SelectContext(ctx, &response.RelatedObjects, relatedQuery, driverTableID.String)
+	driverTableIDVal := boID
+	if driverTableID.Valid && driverTableID.String != "" {
+		driverTableIDVal = driverTableID.String
+	}
+
+	err = s.db.SelectContext(ctx, &response.RelatedObjects, relatedQuery, driverTableIDVal, boID)
 	if err != nil {
 		logging.GetLogger().Sugar().Warnf("Failed to fetch related objects for BO %s: %v", boID, err)
 	}
