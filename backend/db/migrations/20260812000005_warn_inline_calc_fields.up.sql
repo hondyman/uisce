@@ -3,11 +3,8 @@
 -- inline in the business_objects.fields JSONB column.
 -- This is a soft enforcement — it warns but does not block.
 
-BEGIN;
-
 DO $$
 BEGIN
-    -- Create the trigger function if it doesn't exist
     CREATE OR REPLACE FUNCTION warn_inline_calc_fields()
     RETURNS TRIGGER
     LANGUAGE plpgsql
@@ -44,10 +41,8 @@ BEGIN
     END;
     $$;
 
-    -- Drop existing trigger if present (allows re-run)
     DROP TRIGGER IF EXISTS trg_warn_inline_calc_fields ON public.business_objects;
 
-    -- Create the trigger
     CREATE TRIGGER trg_warn_inline_calc_fields
     BEFORE INSERT OR UPDATE OF fields ON public.business_objects
     FOR EACH ROW
@@ -55,5 +50,3 @@ BEGIN
 
     RAISE NOTICE 'Trigger trg_warn_inline_calc_fields created on business_objects.fields';
 END $$;
-
-COMMIT;

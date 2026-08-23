@@ -8,11 +8,18 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
+	"strings"
 )
 
 func ApplyMigrations(db *sql.DB) error {
-	_, err := db.Exec(`
+	_, err := db.Exec(`CREATE SCHEMA IF NOT EXISTS oms`)
+	if err != nil {
+		return fmt.Errorf("failed to create oms schema: %w", err)
+	}
+
+	_, err = db.Exec(`
 		CREATE TABLE IF NOT EXISTS oms.migration_log (
 			filename TEXT PRIMARY KEY,
 			sha256   TEXT NOT NULL,
@@ -63,12 +70,16 @@ func ApplyMigrations(db *sql.DB) error {
 			return fmt.Errorf("failed checking migration log for %s: %w", filename, err)
 		}
 
+		content := string(contentBytes)
+
+		content = stripTransactionStatements(content)
+
 		tx, err := db.Begin()
 		if err != nil {
 			return fmt.Errorf("failed to begin tx for migration %s: %w", filename, err)
 		}
 
-		if _, err := tx.Exec(string(contentBytes)); err != nil {
+		if _, err := tx.Exec(content); err != nil {
 			tx.Rollback()
 			return fmt.Errorf("failed executing migration %s: %w", filename, err)
 		}
@@ -79,6 +90,14 @@ func ApplyMigrations(db *sql.DB) error {
 		}
 
 		if err := tx.Commit(); err != nil {
+			tx.Rollback()
+			if isUnexpectedTxStatusIdle(err) {
+				log.Printf("⚠️  Migration %s committed internally (contains BEGIN/COMMIT), recording as applied", filename)
+				if _, logErr := db.Exec(`INSERT INTO oms.migration_log (filename, sha256) VALUES ($1, $2)`, filename, fileHash); logErr != nil {
+					log.Printf("⚠️  Failed to record migration %s: %v", filename, logErr)
+				}
+				continue
+			}
 			return fmt.Errorf("failed committing migration %s: %w", filename, err)
 		}
 
@@ -86,4 +105,14 @@ func ApplyMigrations(db *sql.DB) error {
 	}
 
 	return nil
+}
+
+func stripTransactionStatements(content string) string {
+	content = regexp.MustCompile(`(?i)^\s*BEGIN\s*;?\s*$`).ReplaceAllString(content, "")
+	content = regexp.MustCompile(`(?i)^\s*COMMIT\s*;?\s*$`).ReplaceAllString(content, "")
+	return strings.TrimSpace(content)
+}
+
+func isUnexpectedTxStatusIdle(err error) bool {
+	return err != nil && strings.Contains(err.Error(), "unexpected transaction status")
 }
