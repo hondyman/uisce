@@ -196,6 +196,14 @@ func UpdateTenantConcurrencyHandler(db *sql.DB) http.HandlerFunc {
 	}
 }
 
+// logAuditEvent inserts an audit log entry into semantic_layer.audit_log
+func logAuditEvent(db *sql.DB, actor, action, scope, result string) {
+	_, _ = db.Exec(`
+		INSERT INTO semantic_layer.audit_log (actor, action, scope, timestamp, result)
+		VALUES ($1, $2, $3, NOW(), $4)
+	`, actor, action, scope, result)
+}
+
 // AuditEvent represents an audit log entry
 type AuditEvent struct {
 	ID        int       `json:"id"`

@@ -109,3 +109,91 @@ Seeds: `backend/db/seeds/20260823_oms_subtype_registry.sql` (22 rows in `oms.sub
 ## JWT Middleware
 
 JWT middleware lives at `github.com/hondyman/uisce/libs/jwt-middleware` (NOT `internal/middleware/jwtmiddleware`).
+
+---
+
+## STI → Semantic → Catalog → Tenant OLTP Pipeline
+
+Wires `oms.subtype_registry` (JSONB `field_allowlist`) → catalog graph nodes → tenant OLTP column introspection → semantic term linking into a cohesive end-to-end pipeline.
+
+### Source
+
+- `oms.subtype_registry` — 22 seeded rows, each with `field_allowlist JSONB` listing allowed columns per subtype
+
+### Stage 1: Subtype Registry Loader
+
+**File:** `backend/internal/catalog/subtype_registry.go`
+
+- Loads `oms.subtype_registry` rows per tenant
+- 5-minute TTL in-memory cache keyed by `tenant_id`
+- JSONB `field_allowlist` decoded into `[]string`
+
+### Stage 2: Subtype BO Builder
+
+**File:** `backend/internal/catalog/subtype_bo_builder.go`
+
+- Creates `BUSINESS_OBJECT` catalog nodes for each `(root_object, subtype_code)` pair
+- Creates `ATTRIBUTE` child nodes for each entry in `field_allowlist`
+- Links attribute → BO via `ATTRIBUTE_OF` edges
+- Upserts using `ON CONFLICT (tenant_id, qualified_path)` — requires `catalog_node_tenant_path_uniq` constraint
+
+### Stage 3: STI Column Scanner
+
+**File:** `backend/internal/catalog/sti_column_scanner.go`
+
+- Introspects `information_schema.columns` for schemas: `oms`, `altinv`, `cash_flow`, `master`
+- Emits `TABLE` nodes per STI table (10 total)
+- Emits `ATTRIBUTE` nodes per physical column
+- Links column → table via `COLUMN_OF` edges
+- Tenant isolation via `tenant_id` binding
+
+### Stage 4: Subtype Semantic Linker
+
+**File:** `backend/internal/catalog/subtype_semantic_linker.go`
+
+- Matches `ATTRIBUTE` nodes to existing `SEMANTIC_TERM` nodes by name (`node_key` or `node_name`)
+- Creates `IS_CLASSIFIED_AS` edges with `{"confidence": 1.0, "source": "exact_name_match"}` properties
+- `NOT EXISTS` guard prevents duplicate edges
+
+### Admin API Endpoint
+
+**File:** `backend/cmd/catalog-admin/main.go` (standalone HTTP server)
+
+- `POST /api/catalog/admin/sync-subtypes`
+- Requires `X-Tenant-ID` header (returns 400 if missing/invalid)
+- Orchestrates Stages 1 → 2 → 3 → 4 in sequence
+- Runs on port 8082 (or `PORT` env var)
+
+### Migration
+
+**File:** `backend/db/migrations/20260824_001_catalog_sti_unique_constraints.up.sql`
+
+```sql
+ALTER TABLE catalog_node ADD CONSTRAINT catalog_node_tenant_path_uniq UNIQUE (tenant_id, qualified_path);
+```
+
+### Qualified Path Conventions
+
+| Source | Path Pattern | Node Type |
+|--------|-------------|------------|
+| `oms.subtype_registry` row | `oms.{root_object}/{subtype_code}` | `BUSINESS_OBJECT` |
+| `field_allowlist` field | `oms.{root_object}/{subtype_code}/{field}` | `ATTRIBUTE` |
+| STI table | `{schema}.{table}` (e.g., `oms.account`) | `TABLE` |
+| Physical column | `{schema}.{table}/{column}` | `ATTRIBUTE` |
+
+### Key Files
+
+```
+backend/internal/catalog/subtype_registry.go         — Stage 1
+backend/internal/catalog/subtype_bo_builder.go       — Stage 2
+backend/internal/catalog/sti_column_scanner.go       — Stage 3
+backend/internal/catalog/subtype_semantic_linker.go  — Stage 4
+backend/internal/api/catalog_admin_handlers.go        — HTTP handler
+backend/cmd/catalog-admin/main.go                    — Standalone server
+backend/db/migrations/20260824_001_catalog_sti_unique_constraints.up.sql
+backend/internal/catalog/subtype_registry_test.go
+backend/internal/catalog/subtype_bo_builder_test.go
+backend/internal/catalog/sti_column_scanner_test.go
+backend/internal/catalog/subtype_semantic_linker_test.go
+backend/internal/catalog/sti_e2e_test.go
+```
