@@ -7,7 +7,7 @@ import (
 	"os"
 
 	"github.com/google/uuid"
-	"github.com/hondyman/uisce/backend/internal/altinvest"
+	"github.com/hondyman/uisce/backend/internal/altinv"
 	"github.com/jmoiron/sqlx"
 	_ "github.com/lib/pq"
 )
@@ -29,13 +29,13 @@ func main() {
 	}
 
 	invID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
-	var svc altinvest.Service = altinvest.NewService(db)
+	var svc altinv.Service = altinv.NewService(db)
 	_ = svc
 
 	ctx := context.Background()
 	log.Printf("Executing on-the-fly XIRR calculation for Investment %s...", invID)
 
-	res, err := service.CalculateInvestmentMetrics(ctx, invID)
+	res, err := svc.CalculateInvestmentMetrics(ctx, invID)
 	if err != nil {
 		log.Fatalf("Calculation failed: %v", err)
 	}

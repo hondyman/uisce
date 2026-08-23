@@ -39,6 +39,20 @@ const (
 	NoRedemption RedemptionFrequency = "NONE"
 )
 
+// AssetClass represents the asset classification
+type AssetClass string
+
+const (
+	AssetPrivateEquity  AssetClass = "PRIVATE_EQUITY"
+	AssetVentureCapital AssetClass = "VENTURE_CAPITAL"
+	AssetHedgeFund     AssetClass = "HEDGE_FUND"
+	AssetRealEstate    AssetClass = "REAL_ESTATE"
+	AssetPrivateCredit AssetClass = "PRIVATE_CREDIT"
+	AssetInfrastructure AssetClass = "INFRASTRUCTURE"
+	AssetCollectibles  AssetClass = "COLLECTIBLES"
+	AssetCommodities   AssetClass = "COMMODITIES"
+)
+
 // AlternativeInvestment represents an alternative investment holding
 type AlternativeInvestment struct {
 	InvestmentID   uuid.UUID      `json:"investment_id" db:"investment_id"`
@@ -47,6 +61,12 @@ type AlternativeInvestment struct {
 	FundName       string         `json:"fund_name" db:"fund_name"`
 	GeneralPartner *string        `json:"general_partner" db:"general_partner"`
 	VintageYear    *int           `json:"vintage_year" db:"vintage_year"`
+
+	// Fund characteristics
+	AssetClass      *AssetClass      `json:"asset_class" db:"asset_class"`
+	FundStrategy    *string          `json:"fund_strategy" db:"fund_strategy"`
+	Geography       *string          `json:"geography" db:"geography"`
+	IndustryFocus   *string          `json:"industry_focus" db:"industry_focus"`
 
 	// Capital commitments and cash flows
 	TotalCommitmentAmount float64 `json:"total_commitment_amount" db:"total_commitment_amount"`
@@ -77,7 +97,9 @@ type AlternativeInvestment struct {
 	LastK1ReceivedDate   *time.Time `json:"last_k1_received_date" db:"last_k1_received_date"`
 
 	// Metadata
-	Metadata json.RawMessage `json:"metadata" db:"metadata"`
+	Metadata            json.RawMessage `json:"metadata" db:"metadata"`
+	PerformanceMetrics  json.RawMessage `json:"performance_metrics" db:"performance_metrics"`
+	IndustryKPIs       json.RawMessage `json:"industry_kpis" db:"industry_kpis"`
 
 	// Audit fields
 	CreatedAt time.Time  `json:"created_at" db:"created_at"`
@@ -119,6 +141,10 @@ type CapitalCall struct {
 
 	// Notes
 	AdvisorNotes *string `json:"advisor_notes" db:"advisor_notes"`
+
+	// Additional fields
+	RecommendedAction *string `json:"recommended_action" db:"recommended_action"`
+	DaysAdvanceNotice *int    `json:"days_advance_notice" db:"days_advance_notice"`
 
 	// Audit fields
 	CreatedAt time.Time  `json:"created_at" db:"created_at"`
