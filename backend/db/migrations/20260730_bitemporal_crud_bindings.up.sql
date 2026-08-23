@@ -31,4 +31,7 @@ CREATE TABLE IF NOT EXISTS public.business_object_bindings (
     CONSTRAINT uk_bo_binding_name UNIQUE (tenant_id, bo_id, binding_name)
 );
 
+-- Handle case where table already exists but is missing binding_mode column (e.g. from a previous partial migration run)
+ALTER TABLE public.business_object_bindings ADD COLUMN IF NOT EXISTS binding_mode binding_mode_enum NOT NULL DEFAULT 'OLTP_CRUD';
+
 CREATE INDEX IF NOT EXISTS idx_bo_bindings_lookup ON public.business_object_bindings(tenant_id, bo_id, binding_mode);

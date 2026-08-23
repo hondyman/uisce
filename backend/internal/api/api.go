@@ -674,7 +674,9 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 	if db != nil {
 		if err := migrations.ApplyMigrations(db); err != nil {
 			log.Printf("❌ automatic migration execution failed: %v", err)
-			return nil
+			// Do NOT return nil - that would create a nil router causing panics on every request
+			// Instead log fatal to properly terminate the server
+			log.Fatal("Server cannot start with failed migrations")
 		}
 	}
 
