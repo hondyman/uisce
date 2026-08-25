@@ -365,13 +365,15 @@ const SSRSReportBuilderContent: React.FC = () => {
           message: 'Report upgraded to v2 format',
           severity: 'info',
         });
-        // Persist v2 layout back
+        // Persist v2 layout back — preserve any existing sectionConfig/layoutSettings from metadata
+        const existingSectionConfig = (loadedTemplate as any)?.metadata?.sectionConfig || {};
+        const existingLayoutSettings = (loadedTemplate as any)?.metadata?.layoutSettings;
         const v2Payload = buildSavePayload(
           {
             elements: migrated.elements,
             reportTitle: migrated.reportTitle || loadedTemplate.name || 'Untitled Report',
-            sectionConfig: (migrated as any).sectionConfig || {},
-            layoutSettings: (migrated as any).layoutSettings,
+            sectionConfig: { ...existingSectionConfig, ...((migrated as any).sectionConfig || {}) },
+            layoutSettings: existingLayoutSettings || (migrated as any).layoutSettings,
             parameters: reportParameters,
           },
           null,
