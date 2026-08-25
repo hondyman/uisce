@@ -222,6 +222,9 @@ export function deserializeFromBackend(raw: Record<string, unknown>): BuilderDef
     const elements: BuilderElement[] = [];
     reportLayoutSections.forEach((section: any, sIdx: number) => {
       const cols = Array.isArray(section.columns) ? section.columns : [];
+      // Always use 'body' as the section so ReportSection renders them (REPORT_SECTIONS.BODY === 'body')
+      const bodySection = 'body';
+
       if (cols.length > 0) {
         const newColumns: ColumnConfig[] = cols.map((c: any) => ({
           id: uid(),
@@ -245,11 +248,13 @@ export function deserializeFromBackend(raw: Record<string, unknown>): BuilderDef
         elements.push({
           id: section.id || `table_${sIdx}`,
           type: section.type === 'matrix' ? 'matrix' : section.type === 'list' ? 'list' : 'table',
-          section: section.id || 'body',
+          section: bodySection,
           position: { x: 20, y: 20 + sIdx * 240 },
           size: { width: 760, height: 220 },
           properties: {
             name: section.title || `Section ${sIdx + 1}`,
+            _layoutSectionId: section.id,   // preserve original section id
+            _layoutDataBinding: section.dataBinding,   // preserve original data binding
             columns: newColumns,
             totals: createDefaultTotalsConfig(),
             banding: (() => {
@@ -273,7 +278,7 @@ export function deserializeFromBackend(raw: Record<string, unknown>): BuilderDef
         elements.push({
           id: `${section.id || `section_${sIdx}`}_title`,
           type: 'textbox',
-          section: section.id || 'header',
+          section: bodySection,
           position: { x: 20, y: 10 + sIdx * 240 },
           size: { width: 600, height: 28 },
           properties: {
