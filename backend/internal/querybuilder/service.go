@@ -117,21 +117,16 @@ func (s *QueryService) GetBOTerms(ctx context.Context, secCtx *security.Context,
 	return terms, nil
 }
 
-// validateScope ensures the authenticated tenant/datasource matches the QueryDef context.
+// validateScope ensures the authenticated tenant/datasource from JWT is valid.
 func (s *QueryService) validateScope(secCtx *security.Context, qd *boresolver.QueryDef) error {
 	if secCtx == nil {
 		return fmt.Errorf("security context required")
 	}
 	if secCtx.TenantID == "" {
-		return fmt.Errorf("tenant id missing from security context")
+		return fmt.Errorf("tenant id missing from JWT")
 	}
-	// The QueryDef carries a tenantId but the authoritative source is the
-	// security context derived from the JWT. Reject mismatches.
-	if !strings.EqualFold(secCtx.TenantID, qd.Context.TenantID) {
-		return fmt.Errorf("tenant scope mismatch")
-	}
-	if secCtx.DatasourceID == "" {
-		return fmt.Errorf("datasource id missing from security context")
+	if secCtx.DatasourceID == "" || secCtx.DatasourceID == "none" {
+		return fmt.Errorf("datasource id missing from JWT")
 	}
 	return nil
 }

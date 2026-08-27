@@ -356,6 +356,14 @@ type ReportSection struct {
 	PageBreakBefore bool          `json:"pageBreakBefore,omitempty"`
 	PageBreakAfter  bool          `json:"pageBreakAfter,omitempty"`
 	InsertAfter     string        `json:"insertAfter,omitempty"` // For extensions
+	// v2 table wizard fields
+	Totals          json.RawMessage `json:"totals,omitempty"`
+	Banding         json.RawMessage `json:"banding,omitempty"`
+	FreezePane      json.RawMessage `json:"freezePane,omitempty"`
+	Pagination      json.RawMessage `json:"pagination,omitempty"`
+	ConditionalRules json.RawMessage `json:"conditionalRules,omitempty"`
+	NamedStyles     json.RawMessage `json:"namedStyles,omitempty"`
+	Sparklines      json.RawMessage `json:"sparklines,omitempty"`
 }
 
 // Element is a visual component in a section
@@ -393,13 +401,21 @@ type Size struct {
 
 // TableColumn defines a table column
 type TableColumn struct {
-	Dimension        string `json:"dimension,omitempty"`
-	Measure          string `json:"measure,omitempty"`
-	Label            string `json:"label"`
-	Width            int    `json:"width,omitempty"`
-	Format           string `json:"format,omitempty"`
-	Alignment        string `json:"alignment,omitempty"` // left, center, right
-	ConditionalStyle string `json:"conditionalStyle,omitempty"`
+	Dimension        string          `json:"dimension,omitempty"`
+	Measure         string          `json:"measure,omitempty"`
+	Label           string          `json:"label"`
+	Width           int             `json:"width,omitempty"`
+	Format          string          `json:"format,omitempty"`
+	FormatMask      string          `json:"formatMask,omitempty"`
+	Alignment       string          `json:"alignment,omitempty"`        // left, center, right
+	VerticalAlign   string          `json:"verticalAlign,omitempty"`   // top, middle, bottom
+	Wrap            bool            `json:"wrap,omitempty"`
+	Visible         *bool           `json:"visible,omitempty"`
+	HeaderStyle     json.RawMessage `json:"headerStyle,omitempty"`
+	BodyStyle       json.RawMessage `json:"bodyStyle,omitempty"`
+	Aggregate       json.RawMessage `json:"aggregate,omitempty"`
+	Sparkline       json.RawMessage `json:"sparkline,omitempty"`
+	ConditionalStyle string        `json:"conditionalStyle,omitempty"`
 }
 
 // ChartConfig for chart sections

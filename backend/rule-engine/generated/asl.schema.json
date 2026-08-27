@@ -363,8 +363,7 @@
     },
     "AlertsService": {
       "properties": {
-        "db": {},
-        "modelProvider": {}
+        "db": {}
       },
       "type": "object"
     },
@@ -860,6 +859,169 @@
       },
       "type": "object"
     },
+    "BOAIAnomalyDetectRequest": {
+      "properties": {
+        "BOIDOrKey": {
+          "type": "string"
+        },
+        "SampleSize": {
+          "type": "number"
+        }
+      },
+      "type": "object"
+    },
+    "BOAIAnomalyDetectResponse": {
+      "properties": {
+        "Anomalies": {
+          "$ref": "#/definitions/BODataAnomaly[]"
+        },
+        "DataQualityScore": {
+          "type": "number"
+        },
+        "Recommendations": {
+          "$ref": "#/definitions/string[]"
+        },
+        "Summary": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "BOAIExplainDeltaRequest": {
+      "properties": {
+        "BOIDOrKey": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "BOAIExplainDeltaResponse": {
+      "properties": {
+        "BreakingChanges": {
+          "$ref": "#/definitions/string[]"
+        },
+        "GovernanceRisks": {
+          "$ref": "#/definitions/string[]"
+        },
+        "ImpactScore": {
+          "type": "string"
+        },
+        "MarkdownNarrative": {
+          "type": "string"
+        },
+        "SuggestedActions": {
+          "$ref": "#/definitions/string[]"
+        },
+        "Summary": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "BOAINLQRequest": {
+      "properties": {
+        "BOIDOrKey": {
+          "type": "string"
+        },
+        "Query": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "BOAINLQResponse": {
+      "properties": {
+        "Dimensions": {
+          "$ref": "#/definitions/string[]"
+        },
+        "Explanation": {
+          "type": "string"
+        },
+        "Filters": {
+          "$ref": "#/definitions/NLQFilterItem[]"
+        },
+        "GeneratedSQL": {
+          "type": "string"
+        },
+        "Limit": {
+          "type": "number"
+        },
+        "Measures": {
+          "$ref": "#/definitions/string[]"
+        },
+        "QueryDef": {
+          "$ref": "#/definitions/Record\u003cstring, any\u003e"
+        },
+        "SortBy": {
+          "type": "string"
+        },
+        "SortOrder": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "BOAISynthesizeRequest": {
+      "properties": {
+        "Category": {
+          "type": "string"
+        },
+        "IncludeCalc": {
+          "type": "boolean"
+        },
+        "IncludeRules": {
+          "type": "boolean"
+        },
+        "Prompt": {
+          "type": "string"
+        },
+        "TableID": {
+          "type": "string"
+        },
+        "TableName": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "BOAISynthesizeResponse": {
+      "properties": {
+        "Category": {
+          "type": "string"
+        },
+        "Description": {
+          "type": "string"
+        },
+        "PrimaryKey": {
+          "type": "string"
+        },
+        "Reasoning": {
+          "type": "string"
+        },
+        "SuggestedCalculatedFields": {
+          "$ref": "#/definitions/SynthesizedCalculatedField[]"
+        },
+        "SuggestedDisplayName": {
+          "type": "string"
+        },
+        "SuggestedDriverTable": {
+          "type": "string"
+        },
+        "SuggestedFields": {
+          "$ref": "#/definitions/FieldDefinition[]"
+        },
+        "SuggestedKey": {
+          "type": "string"
+        },
+        "SuggestedName": {
+          "type": "string"
+        },
+        "SuggestedRules": {
+          "$ref": "#/definitions/SynthesizedRule[]"
+        }
+      },
+      "type": "object"
+    },
     "BOAdvisorResponse": {
       "properties": {
         "ExistingPreAggregations": {
@@ -870,6 +1032,29 @@
         },
         "Workload": {
           "$ref": "#/definitions/BOWorkloadProfile"
+        }
+      },
+      "type": "object"
+    },
+    "BOArtifactGenerationResponse": {
+      "properties": {
+        "BOID": {
+          "type": "string"
+        },
+        "BOKey": {
+          "type": "string"
+        },
+        "CubeJSSchemaJS": {
+          "type": "string"
+        },
+        "OpenAPISpecJSON": {
+          "type": "string"
+        },
+        "RESTEndpointURL": {
+          "type": "string"
+        },
+        "StarRocksMVDDL": {
+          "type": "string"
         }
       },
       "type": "object"
@@ -906,6 +1091,551 @@
         "boService": {},
         "eventPublisher": {
           "$ref": "#/definitions/EventPublisher"
+        }
+      },
+      "type": "object"
+    },
+    "BOCrudRecordRequest": {
+      "properties": {
+        "Record": {
+          "$ref": "#/definitions/Record\u003cstring, any\u003e"
+        },
+        "SubtypeKey": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "BODataAnomaly": {
+      "properties": {
+        "AnomalyType": {
+          "type": "string"
+        },
+        "Description": {
+          "type": "string"
+        },
+        "Field": {
+          "type": "string"
+        },
+        "SampleCount": {
+          "type": "number"
+        },
+        "Severity": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "BODataQualitySentinelResponse": {
+      "properties": {
+        "BOID": {
+          "type": "string"
+        },
+        "DistinctRatios": {
+          "$ref": "#/definitions/Record\u003cstring, float64\u003e"
+        },
+        "DriftProposals": {
+          "$ref": "#/definitions/SchemaDriftProposal[]"
+        },
+        "FinancialVerifications": {
+          "$ref": "#/definitions/FinancialPatternResult[]"
+        },
+        "NullDrift": {
+          "$ref": "#/definitions/Record\u003cstring, float64\u003e"
+        },
+        "OverallQualityScore": {
+          "type": "number"
+        },
+        "SampleStrategy": {
+          "type": "string"
+        },
+        "SentinelSummary": {
+          "type": "string"
+        },
+        "TotalSampledRows": {
+          "type": "number"
+        }
+      },
+      "type": "object"
+    },
+    "BODeltaFieldDiff": {
+      "properties": {
+        "CoreField": {
+          "$ref": "#/definitions/FieldDefinition"
+        },
+        "CustomField": {
+          "$ref": "#/definitions/FieldDefinition"
+        },
+        "FieldKey": {
+          "type": "string"
+        },
+        "FieldName": {
+          "type": "string"
+        },
+        "Overrides": {
+          "$ref": "#/definitions/Record\u003cstring, any\u003e"
+        },
+        "Status": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "BODeltaResponse": {
+      "properties": {
+        "BOID": {
+          "type": "string"
+        },
+        "CoreID": {
+          "type": "string"
+        },
+        "CustomCount": {
+          "type": "number"
+        },
+        "DisplayName": {
+          "type": "string"
+        },
+        "FieldsDelta": {
+          "$ref": "#/definitions/BODeltaFieldDiff[]"
+        },
+        "InheritedCount": {
+          "type": "number"
+        },
+        "IsCore": {
+          "type": "boolean"
+        },
+        "Key": {
+          "type": "string"
+        },
+        "Name": {
+          "type": "string"
+        },
+        "OverriddenCount": {
+          "type": "number"
+        }
+      },
+      "type": "object"
+    },
+    "BODriftRepairPatchRequest": {
+      "properties": {
+        "Action": {
+          "type": "string"
+        },
+        "BOIDOrKey": {
+          "type": "string"
+        },
+        "Note": {
+          "type": "string"
+        },
+        "ProposalID": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "BODriftRepairPatchResponse": {
+      "properties": {
+        "Message": {
+          "type": "string"
+        },
+        "ProposalID": {
+          "type": "string"
+        },
+        "Status": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "BOEventTrigger": {
+      "properties": {
+        "ActionType": {
+          "type": "string"
+        },
+        "Description": {
+          "type": "string"
+        },
+        "Enabled": {
+          "type": "boolean"
+        },
+        "Event": {
+          "type": "string"
+        },
+        "ID": {
+          "type": "string"
+        },
+        "Target": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "BOFieldEligibilityItem": {
+      "properties": {
+        "DataType": {
+          "type": "string"
+        },
+        "DisplayName": {
+          "type": "string"
+        },
+        "EligibilityLevel": {
+          "$ref": "#/definitions/BOFieldEligibilityLevel"
+        },
+        "FieldKey": {
+          "type": "string"
+        },
+        "FieldName": {
+          "type": "string"
+        },
+        "GateReason": {
+          "type": "string"
+        },
+        "MissingInputs": {
+          "$ref": "#/definitions/string[]"
+        },
+        "PhysicalColumn": {
+          "type": "string"
+        },
+        "PhysicalTable": {
+          "type": "string"
+        },
+        "ResolutionPath": {
+          "type": "string"
+        },
+        "ResolutionStatus": {
+          "$ref": "#/definitions/BOFieldResolutionStatus"
+        },
+        "Role": {
+          "$ref": "#/definitions/FieldRole"
+        }
+      },
+      "type": "object"
+    },
+    "BOLineageImpactSimulationRequest": {
+      "properties": {
+        "BOIDOrKey": {
+          "type": "string"
+        },
+        "ProposedChanges": {
+          "$ref": "#/definitions/Record\u003cstring, any\u003e"
+        }
+      },
+      "type": "object"
+    },
+    "BOLineageImpactSimulationResponse": {
+      "properties": {
+        "BOID": {
+          "type": "string"
+        },
+        "BlastRadiusScore": {
+          "type": "number"
+        },
+        "HighestSeverity": {
+          "type": "string"
+        },
+        "ImpactedAssets": {
+          "$ref": "#/definitions/ImpactedAsset[]"
+        },
+        "IsBreakingChange": {
+          "type": "boolean"
+        },
+        "SimulationReport": {
+          "type": "string"
+        },
+        "TotalImpacted": {
+          "type": "number"
+        }
+      },
+      "type": "object"
+    },
+    "BOMultiBackendConfiguration": {
+      "properties": {
+        "ActiveTier": {
+          "$ref": "#/definitions/StorageTier"
+        },
+        "BOID": {
+          "type": "string"
+        },
+        "Bindings": {
+          "$ref": "#/definitions/MultiBackendBinding[]"
+        },
+        "WatermarkDate": {}
+      },
+      "type": "object"
+    },
+    "BOPromotionProposal": {
+      "properties": {
+        "BOKey": {
+          "type": "string"
+        },
+        "CreatedAt": {
+          "type": "string"
+        },
+        "CreatedBy": {
+          "type": "string"
+        },
+        "ID": {
+          "type": "string"
+        },
+        "ProposedChanges": {
+          "$ref": "#/definitions/Record\u003cstring, any\u003e"
+        },
+        "ReviewerNote": {
+          "type": "string"
+        },
+        "SourceTenantID": {
+          "type": "string"
+        },
+        "Status": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "BOPublishGateValidationResponse": {
+      "properties": {
+        "BOID": {
+          "type": "string"
+        },
+        "CanPublish": {
+          "type": "boolean"
+        },
+        "GateSummary": {
+          "type": "string"
+        },
+        "MissingDependencies": {
+          "$ref": "#/definitions/string[]"
+        },
+        "UnresolvedFields": {
+          "$ref": "#/definitions/BOFieldEligibilityItem[]"
+        }
+      },
+      "type": "object"
+    },
+    "BOQueryCostEvaluationRequest": {
+      "properties": {
+        "BOIDOrKey": {
+          "type": "string"
+        },
+        "EstimatedLimit": {
+          "type": "number"
+        },
+        "Filters": {
+          "$ref": "#/definitions/BORecordFilter[]"
+        },
+        "SelectedFields": {
+          "$ref": "#/definitions/string[]"
+        },
+        "TargetDialect": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "BOQueryCostEvaluationResponse": {
+      "properties": {
+        "ComplexityScore": {
+          "type": "number"
+        },
+        "CostBand": {
+          "$ref": "#/definitions/QueryCostBand"
+        },
+        "EstimatedDurationMs": {
+          "type": "number"
+        },
+        "EstimatedRowsScanned": {
+          "type": "number"
+        },
+        "IsForbidden": {
+          "type": "boolean"
+        },
+        "PreAggregationTips": {
+          "$ref": "#/definitions/string[]"
+        },
+        "RequiresPartitionScan": {
+          "type": "boolean"
+        },
+        "SuggestedMaterializedView": {
+          "type": "string"
+        },
+        "Violations": {
+          "$ref": "#/definitions/string[]"
+        }
+      },
+      "type": "object"
+    },
+    "BORecordFilter": {
+      "properties": {
+        "Field": {
+          "type": "string"
+        },
+        "Operator": {
+          "type": "string"
+        },
+        "Value": {}
+      },
+      "type": "object"
+    },
+    "BORecordQueryRequest": {
+      "properties": {
+        "AsOfTransactionTime": {},
+        "AsOfValidTime": {},
+        "Filters": {
+          "$ref": "#/definitions/BORecordFilter[]"
+        },
+        "Limit": {
+          "type": "number"
+        },
+        "Page": {
+          "type": "number"
+        },
+        "Search": {
+          "type": "string"
+        },
+        "SortBy": {
+          "type": "string"
+        },
+        "SortDir": {
+          "type": "string"
+        },
+        "SubtypeKey": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "BORecordQueryResponse": {
+      "properties": {
+        "Columns": {
+          "$ref": "#/definitions/string[]"
+        },
+        "DatasourceID": {
+          "type": "string"
+        },
+        "DriverTable": {
+          "type": "string"
+        },
+        "ExecutionTimeMs": {
+          "type": "number"
+        },
+        "Limit": {
+          "type": "number"
+        },
+        "Page": {
+          "type": "number"
+        },
+        "Rows": {
+          "$ref": "#/definitions/Record\u003cstring, any\u003e[]"
+        },
+        "Total": {
+          "type": "number"
+        }
+      },
+      "type": "object"
+    },
+    "BOScopeDiscoveryResponse": {
+      "properties": {
+        "BOID": {
+          "type": "string"
+        },
+        "BlockingIssues": {
+          "$ref": "#/definitions/string[]"
+        },
+        "CalculatedCount": {
+          "type": "number"
+        },
+        "DirectCount": {
+          "type": "number"
+        },
+        "DrivingNodeID": {
+          "type": "string"
+        },
+        "DrivingTableName": {
+          "type": "string"
+        },
+        "EligibleFields": {
+          "$ref": "#/definitions/BOFieldEligibilityItem[]"
+        },
+        "IsPublishReady": {
+          "type": "boolean"
+        },
+        "ManualCount": {
+          "type": "number"
+        },
+        "RelatedCount": {
+          "type": "number"
+        },
+        "TotalDiscovered": {
+          "type": "number"
+        }
+      },
+      "type": "object"
+    },
+    "BOWorkflowActionRequest": {
+      "properties": {
+        "Action": {
+          "type": "string"
+        },
+        "Proposal": {
+          "$ref": "#/definitions/BOPromotionProposal"
+        },
+        "ReviewerNote": {
+          "type": "string"
+        },
+        "Trigger": {
+          "$ref": "#/definitions/BOEventTrigger"
+        }
+      },
+      "type": "object"
+    },
+    "BOWorkflowExecution": {
+      "properties": {
+        "EndTime": {
+          "type": "string"
+        },
+        "Error": {
+          "type": "string"
+        },
+        "ID": {
+          "type": "string"
+        },
+        "StartTime": {
+          "type": "string"
+        },
+        "Status": {
+          "type": "string"
+        },
+        "TriggeredBy": {
+          "type": "string"
+        },
+        "Workflow": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "BOWorkflowStatusResponse": {
+      "properties": {
+        "BOID": {
+          "type": "string"
+        },
+        "EventTriggers": {
+          "$ref": "#/definitions/BOEventTrigger[]"
+        },
+        "IsCore": {
+          "type": "boolean"
+        },
+        "Key": {
+          "type": "string"
+        },
+        "LifecycleStatus": {
+          "$ref": "#/definitions/BOWorkflowLifecycleStatus"
+        },
+        "PendingProposals": {
+          "$ref": "#/definitions/BOPromotionProposal[]"
+        },
+        "RecentExecutions": {
+          "$ref": "#/definitions/BOWorkflowExecution[]"
         }
       },
       "type": "object"
@@ -1131,6 +1861,14 @@
         "UpdatedAt": {}
       },
       "type": "object"
+    },
+    "BindingRequirement": {
+      "enum": [
+        "BACKEND_SPECIFIC",
+        "OPTIONAL",
+        "REQUIRED"
+      ],
+      "type": "string"
     },
     "BrokenReference": {
       "properties": {
@@ -1607,9 +2345,17 @@
     },
     "BusinessObjectDefinition": {
       "properties": {
+        "BOTypeID": {
+          "description": "Core Identity Triple \u0026 Semantic Governance (Feature 1)"
+        },
+        "Bindings": {
+          "$ref": "#/definitions/Record\u003cstring, any\u003e[]"
+        },
+        "BusinessKeyNodeID": {},
         "Category": {
           "type": "string"
         },
+        "ClassificationNodeID": {},
         "CloneParentDisplayName": {
           "type": "string"
         },
@@ -1624,6 +2370,7 @@
           "$ref": "#/definitions/FieldDefinition[]"
         },
         "CoreID": {},
+        "CoreReferenceBOID": {},
         "CreatedAt": {},
         "CreatedBy": {
           "type": "string"
@@ -1645,6 +2392,7 @@
         "EnableHistory": {
           "type": "boolean"
         },
+        "GrainNodeID": {},
         "HistoryMode": {
           "$ref": "#/definitions/HistoryMode"
         },
@@ -1670,10 +2418,17 @@
         "LastModifiedBy": {
           "type": "string"
         },
+        "ModelID": {
+          "type": "string"
+        },
         "Name": {
           "type": "string"
         },
         "ParentID": {},
+        "SemanticIDNodeID": {},
+        "Status": {
+          "type": "string"
+        },
         "Subtypes": {
           "$ref": "#/definitions/Record\u003cstring, SubtypeDefinition\u003e"
         },
@@ -1838,9 +2593,6 @@
     "BusinessObjectService": {
       "properties": {
         "db": {},
-        "hasura": {
-          "$ref": "#/definitions/HasuraClient"
-        },
         "rules": {
           "$ref": "#/definitions/AccessRuleRepository"
         }
@@ -2529,50 +3281,23 @@
     },
     "Connection": {
       "properties": {
-        "APIKey": {
-          "type": "string"
-        },
-        "BaseURL": {
-          "type": "string"
-        },
         "CreatedAt": {},
-        "Database": {
+        "DSN": {
           "type": "string"
         },
-        "Host": {
+        "DatabaseType": {
           "type": "string"
         },
         "ID": {
           "type": "string"
         },
-        "IsActive": {
-          "type": "boolean"
-        },
-        "Metadata": {
-          "$ref": "#/definitions/Record\u003cstring, any\u003e"
-        },
         "Name": {
-          "type": "string"
-        },
-        "Password": {
-          "type": "string"
-        },
-        "Port": {
-          "type": "number"
-        },
-        "Schema": {
           "type": "string"
         },
         "TenantID": {
           "type": "string"
         },
-        "Type": {
-          "type": "string"
-        },
-        "UpdatedAt": {},
-        "Username": {
-          "type": "string"
-        }
+        "UpdatedAt": {}
       },
       "type": "object"
     },
@@ -2870,10 +3595,16 @@
         "CloneFromKey": {
           "type": "string"
         },
+        "CloneFromKeySnake": {
+          "type": "string"
+        },
         "Config": {
           "$ref": "#/definitions/Record\u003cstring, any\u003e"
         },
         "DatasourceID": {
+          "type": "string"
+        },
+        "DatasourceIDSnake": {
           "type": "string"
         },
         "Description": {
@@ -2882,10 +3613,19 @@
         "DisplayName": {
           "type": "string"
         },
+        "DisplayNameSnake": {
+          "type": "string"
+        },
         "DriverTableID": {
           "type": "string"
         },
+        "DriverTableIDSnake": {
+          "type": "string"
+        },
         "DriverTableName": {
+          "type": "string"
+        },
+        "DriverTableNameSnake": {
           "type": "string"
         },
         "EnableHistory": {
@@ -2903,10 +3643,16 @@
         "ParentID": {
           "type": "string"
         },
+        "ParentIDSnake": {
+          "type": "string"
+        },
         "Status": {
           "type": "string"
         },
         "TechnicalName": {
+          "type": "string"
+        },
+        "TechnicalNameSnake": {
           "type": "string"
         }
       },
@@ -3001,9 +3747,6 @@
           "type": "string"
         },
         "db": {},
-        "hasuraClient": {
-          "$ref": "#/definitions/HasuraClient"
-        },
         "httpClient": {}
       },
       "type": "object"
@@ -4666,10 +5409,7 @@
     },
     "FeedbackService": {
       "properties": {
-        "db": {},
-        "hasura": {
-          "$ref": "#/definitions/HasuraClient"
-        }
+        "db": {}
       },
       "type": "object"
     },
@@ -4787,6 +5527,32 @@
         },
         "Term": {
           "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "FinancialPatternResult": {
+      "properties": {
+        "FieldName": {
+          "type": "string"
+        },
+        "InvalidCount": {
+          "type": "number"
+        },
+        "PassRate": {
+          "type": "number"
+        },
+        "PatternType": {
+          "type": "string"
+        },
+        "SampleCount": {
+          "type": "number"
+        },
+        "SampleErrors": {
+          "$ref": "#/definitions/string[]"
+        },
+        "ValidCount": {
+          "type": "number"
         }
       },
       "type": "object"
@@ -5135,6 +5901,69 @@
       },
       "type": "object"
     },
+    "GraphRAGContextRequest": {
+      "properties": {
+        "BOIDOrKey": {
+          "type": "string"
+        },
+        "IncludeEdges": {
+          "type": "boolean"
+        },
+        "MaxDepth": {
+          "type": "number"
+        },
+        "UserQuery": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "GraphRAGContextResponse": {
+      "properties": {
+        "BOKey": {
+          "type": "string"
+        },
+        "MatchedNodes": {
+          "$ref": "#/definitions/GraphRAGNode[]"
+        },
+        "PromptContext": {
+          "type": "string"
+        },
+        "ResolvedIntent": {
+          "type": "string"
+        },
+        "TenantScoped": {
+          "type": "boolean"
+        }
+      },
+      "type": "object"
+    },
+    "GraphRAGNode": {
+      "properties": {
+        "Description": {
+          "type": "string"
+        },
+        "DisplayName": {
+          "type": "string"
+        },
+        "ID": {
+          "type": "string"
+        },
+        "Name": {
+          "type": "string"
+        },
+        "NodeType": {
+          "type": "string"
+        },
+        "Properties": {
+          "$ref": "#/definitions/Record\u003cstring, any\u003e"
+        },
+        "Similarity": {
+          "type": "number"
+        }
+      },
+      "type": "object"
+    },
     "GroupByProfile": {
       "properties": {
         "AvgDurationMs": {
@@ -5157,10 +5986,7 @@
     },
     "GuardrailService": {
       "properties": {
-        "db": {},
-        "semanticService": {
-          "description": "Dependency on SemanticModelService to get asset metadata like certification status."
-        }
+        "db": {}
       },
       "type": "object"
     },
@@ -5340,6 +6166,29 @@
           "type": "string"
         },
         "ScriptVersion": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "ImpactedAsset": {
+      "properties": {
+        "AssetID": {
+          "type": "string"
+        },
+        "AssetName": {
+          "type": "string"
+        },
+        "AssetType": {
+          "type": "string"
+        },
+        "Details": {
+          "type": "string"
+        },
+        "ImpactLevel": {
+          "type": "string"
+        },
+        "Relationship": {
           "type": "string"
         }
       },
@@ -5692,6 +6541,12 @@
     },
     "JWTClaims": {
       "properties": {
+        "AllowedBindings": {
+          "$ref": "#/definitions/any[]"
+        },
+        "AllowedDatasources": {
+          "$ref": "#/definitions/string[]"
+        },
         "IssuedAt": {},
         "Roles": {
           "$ref": "#/definitions/string[]"
@@ -5710,7 +6565,9 @@
     },
     "JWTManager": {
       "properties": {
+        "mu": {},
         "refreshDuration": {},
+        "rsaPublicKey": {},
         "secretKey": {
           "$ref": "#/definitions/byte[]"
         },
@@ -6078,6 +6935,36 @@
           "type": "string"
         },
         "PromptTemplate": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "LakehouseMaintenanceReport": {
+      "properties": {
+        "BytesCompacted": {
+          "type": "number"
+        },
+        "CompactedFilesCount": {
+          "type": "number"
+        },
+        "DurationMs": {
+          "type": "number"
+        },
+        "ExecutedAt": {},
+        "ManifestsRewritten": {
+          "type": "number"
+        },
+        "SnapshotsExpired": {
+          "type": "number"
+        },
+        "Status": {
+          "type": "string"
+        },
+        "Table": {
+          "type": "string"
+        },
+        "TenantID": {
           "type": "string"
         }
       },
@@ -6597,11 +7484,52 @@
       },
       "type": "object"
     },
+    "MultiBackendBinding": {
+      "properties": {
+        "BackendName": {
+          "type": "string"
+        },
+        "CoveragePercentage": {
+          "type": "number"
+        },
+        "DatasourceID": {
+          "type": "string"
+        },
+        "ID": {
+          "type": "string"
+        },
+        "IsActive": {
+          "type": "boolean"
+        },
+        "PhysicalTarget": {
+          "type": "string"
+        },
+        "Requirement": {
+          "$ref": "#/definitions/BindingRequirement"
+        },
+        "StorageTier": {
+          "$ref": "#/definitions/StorageTier"
+        }
+      },
+      "type": "object"
+    },
     "MultiUpgradeOverviewResponse": {
       "properties": {
         "Versions": {
           "$ref": "#/definitions/UpgradeOverviewResponse[]"
         }
+      },
+      "type": "object"
+    },
+    "NLQFilterItem": {
+      "properties": {
+        "Field": {
+          "type": "string"
+        },
+        "Operator": {
+          "type": "string"
+        },
+        "Value": {}
       },
       "type": "object"
     },
@@ -6995,9 +7923,7 @@
     },
     "OAuthAuditService": {
       "properties": {
-        "hasuraClient": {
-          "$ref": "#/definitions/HasuraClient"
-        }
+        "db": {}
       },
       "type": "object"
     },
@@ -7619,10 +8545,7 @@
     },
     "PoPService": {
       "properties": {
-        "db": {},
-        "hasuraClient": {
-          "$ref": "#/definitions/HasuraClient"
-        }
+        "db": {}
       },
       "type": "object"
     },
@@ -9543,10 +10466,7 @@
     },
     "SQLRuleRepository": {
       "properties": {
-        "db": {},
-        "hasuraClient": {
-          "$ref": "#/definitions/HasuraClient"
-        }
+        "db": {}
       },
       "type": "object"
     },
@@ -9726,6 +10646,36 @@
           "type": "string"
         },
         "Table": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "SchemaDriftProposal": {
+      "properties": {
+        "AutoRepairScript": {
+          "type": "string"
+        },
+        "BOID": {
+          "type": "string"
+        },
+        "ConfidenceScore": {
+          "type": "number"
+        },
+        "DetectedAt": {},
+        "DriftType": {
+          "type": "string"
+        },
+        "ProposalID": {
+          "type": "string"
+        },
+        "SourceColumn": {
+          "type": "string"
+        },
+        "Status": {
+          "type": "string"
+        },
+        "TargetColumn": {
           "type": "string"
         }
       },
@@ -10421,6 +11371,15 @@
       },
       "type": "object"
     },
+    "StorageTier": {
+      "enum": [
+        "API_FEDERATION",
+        "TIER_1_POSTGRES",
+        "TIER_2_STARROCKS",
+        "TIER_3_ICEBERG"
+      ],
+      "type": "string"
+    },
     "SubtypeDefinition": {
       "properties": {
         "BasedOnEntity": {
@@ -10470,12 +11429,104 @@
       },
       "type": "object"
     },
+    "SynthesizedCalculatedField": {
+      "properties": {
+        "Description": {
+          "type": "string"
+        },
+        "DisplayName": {
+          "type": "string"
+        },
+        "Formula": {
+          "type": "string"
+        },
+        "Name": {
+          "type": "string"
+        },
+        "Type": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "SynthesizedRule": {
+      "properties": {
+        "Description": {
+          "type": "string"
+        },
+        "Field": {
+          "type": "string"
+        },
+        "RuleName": {
+          "type": "string"
+        },
+        "Script": {
+          "type": "string"
+        },
+        "Severity": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
     "Table": {
       "properties": {
         "Columns": {
           "$ref": "#/definitions/Column[]"
         },
         "Name": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "TableColumnIntrospection": {
+      "properties": {
+        "DataType": {
+          "type": "string"
+        },
+        "DefaultValue": {
+          "type": "string"
+        },
+        "ForeignTable": {
+          "type": "string"
+        },
+        "IsForeignKey": {
+          "type": "boolean"
+        },
+        "IsNullable": {
+          "type": "boolean"
+        },
+        "IsPrimaryKey": {
+          "type": "boolean"
+        },
+        "Name": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "TableIntrospectionResponse": {
+      "properties": {
+        "Columns": {
+          "$ref": "#/definitions/TableColumnIntrospection[]"
+        },
+        "QualifiedPath": {
+          "type": "string"
+        },
+        "SuggestedFields": {
+          "$ref": "#/definitions/FieldDefinition[]"
+        },
+        "SuggestedKey": {
+          "type": "string"
+        },
+        "SuggestedName": {
+          "type": "string"
+        },
+        "TableID": {
+          "type": "string"
+        },
+        "TableName": {
           "type": "string"
         }
       },
@@ -11525,6 +12576,40 @@
       },
       "type": "object"
     },
+    "UisceASTNode": {
+      "properties": {
+        "Attributes": {
+          "$ref": "#/definitions/Record\u003cstring, any\u003e"
+        },
+        "Children": {
+          "$ref": "#/definitions/UisceASTNode[]"
+        },
+        "NodeType": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "UisceSemanticAST": {
+      "properties": {
+        "Dialects": {
+          "$ref": "#/definitions/string[]"
+        },
+        "GeneratedSQL": {
+          "$ref": "#/definitions/Record\u003cstring, string\u003e"
+        },
+        "RootNode": {
+          "$ref": "#/definitions/UisceASTNode"
+        },
+        "TenantID": {
+          "type": "string"
+        },
+        "Version": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
     "UpdateBusinessObjectRequest": {
       "properties": {
         "Category": {
@@ -11735,6 +12820,23 @@
     "UpgradeService": {
       "properties": {
         "DB": {}
+      },
+      "type": "object"
+    },
+    "UpgradeSimulation": {
+      "properties": {
+        "Diff": {
+          "$ref": "#/definitions/patchDiff"
+        },
+        "FromVersion": {
+          "type": "string"
+        },
+        "ToVersion": {
+          "type": "string"
+        },
+        "Warnings": {
+          "$ref": "#/definitions/string[]"
+        }
       },
       "type": "object"
     },
@@ -12261,7 +13363,8 @@
         "catalogService": {
           "$ref": "#/definitions/CatalogService"
         },
-        "db": {}
+        "db": {},
+        "goldcopyResolver": {}
       },
       "type": "object"
     },

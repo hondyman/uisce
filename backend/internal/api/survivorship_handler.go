@@ -3,9 +3,9 @@ package api
 import (
 	"encoding/json"
 	"net/http"
-	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
 	"github.com/hondyman/uisce/backend/internal/mdm"
 )
 
@@ -19,39 +19,67 @@ func NewSurvivorshipHandler(e *mdm.SurvivorshipEngine) *SurvivorshipHandler {
 
 func (h *SurvivorshipHandler) RegisterRoutes(r chi.Router) {
 	r.Route("/api/v1/mdm/survivorship", func(r chi.Router) {
-		r.Post("/merge", h.HandleMergeToGoldenRecord)
+		r.Post("/resolve-field", h.HandleResolveField)
 	})
 }
 
-type MergeSourcesRequest struct {
-	EntityType string                  `json:"entity_type"`
-	Sources    []mdm.SourcePayload     `json:"sources"`
-	Rules      map[string]mdm.FieldRule `json:"rules"`
+type ResolveFieldRequest struct {
+	TenantID    string                      `json:"tenant_id"`
+	EntityType  string                      `json:"entity_type"`
+	FieldName   string                      `json:"field_name"`
+	FieldSources []mdm.FieldSourceRecord    `json:"field_sources"`
 }
 
-type MergeSourcesResponse struct {
-	GoldenRecord map[string]any `json:"golden_record"`
+type ResolveFieldResponse struct {
+	FieldName      string      `json:"field_name"`
+	ResolvedValue  interface{} `json:"resolved_value"`
+	WinningSource  string      `json:"winning_source"`
+	StrategyUsed   string      `json:"strategy_used"`
+	EvaluationNote string      `json:"evaluation_note"`
 }
 
-func (h *SurvivorshipHandler) HandleMergeToGoldenRecord(w http.ResponseWriter, r *http.Request) {
-	var req MergeSourcesRequest
+func (h *SurvivorshipHandler) HandleResolveField(w http.ResponseWriter, r *http.Request) {
+	var req ResolveFieldRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "invalid JSON: "+err.Error(), http.StatusBadRequest)
 		return
 	}
-	if len(req.Sources) == 0 {
-		http.Error(w, "sources cannot be empty", http.StatusBadRequest)
+	if req.TenantID == "" {
+		http.Error(w, "tenant_id is required", http.StatusBadRequest)
 		return
 	}
-	if req.Rules == nil {
-		req.Rules = make(map[string]mdm.FieldRule)
+	if req.EntityType == "" {
+		http.Error(w, "entity_type is required", http.StatusBadRequest)
+		return
 	}
-	ctx := r.Context()
-	golden, err := h.engine.MergeToGoldenRecord(ctx, req.Sources, req.Rules, time.Now())
+	if req.FieldName == "" {
+		http.Error(w, "field_name is required", http.StatusBadRequest)
+		return
+	}
+	if len(req.FieldSources) == 0 {
+		http.Error(w, "field_sources cannot be empty", http.StatusBadRequest)
+		return
+	}
+
+	tenantUUID, err := uuid.Parse(req.TenantID)
 	if err != nil {
-		http.Error(w, "merge failed: "+err.Error(), http.StatusInternalServerError)
+		http.Error(w, "invalid tenant_id format", http.StatusBadRequest)
 		return
 	}
+
+	ctx := r.Context()
+	result, err := h.engine.ResolveField(ctx, tenantUUID, req.EntityType, req.FieldName, req.FieldSources)
+	if err != nil {
+		http.Error(w, "resolve failed: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(MergeSourcesResponse{GoldenRecord: golden})
+	json.NewEncoder(w).Encode(ResolveFieldResponse{
+		FieldName:      result.FieldName,
+		ResolvedValue:  result.ResolvedValue,
+		WinningSource:  result.WinningSource,
+		StrategyUsed:   result.StrategyUsed,
+		EvaluationNote: result.EvaluationNote,
+	})
 }

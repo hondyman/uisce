@@ -37,8 +37,16 @@ func isUUIDLike(s string) bool {
 }
 
 func (r *PostgresBORepository) getTableColumns(table string) (map[string]struct{}, error) {
+	var schema, tbl string
+	if idx := strings.Index(table, "."); idx >= 0 {
+		schema = table[:idx]
+		tbl = table[idx+1:]
+	} else {
+		schema = "public"
+		tbl = table
+	}
 	cols := []string{}
-	if err := r.DB.Select(&cols, `SELECT column_name FROM information_schema.columns WHERE table_schema='public' AND table_name=$1`, table); err != nil {
+	if err := r.DB.Select(&cols, `SELECT column_name FROM information_schema.columns WHERE table_schema=$1 AND table_name=$2`, schema, tbl); err != nil {
 		return nil, err
 	}
 	set := make(map[string]struct{}, len(cols))
@@ -46,6 +54,46 @@ func (r *PostgresBORepository) getTableColumns(table string) (map[string]struct{
 		set[c] = struct{}{}
 	}
 	return set, nil
+}
+
+// fetchFieldsFromBusinessObjectFields reads fields from the master business_object_fields table,
+// joining with catalog_node to get semantic term information.
+// This is the fallback when bo_fields returns no results for STI parent BOs.
+func (r *PostgresBORepository) fetchFieldsFromBusinessObjectFields(boID string) ([]bo.BOField, error) {
+	query := `
+		SELECT
+			bof.id,
+			bof.tenant_id,
+			bof.bo_id AS business_object_id,
+			bof.field_name,
+			COALESCE(bof.display_name, cn.node_name, bof.field_name) AS display_name,
+			COALESCE(bof.technical_name, bof.field_name) AS technical_name,
+			COALESCE(bof.data_type, 'string') AS type,
+			bof.inherits_defaults AS is_core,
+			bof.is_required,
+			false AS is_readonly,
+			false AS is_searchable,
+			COALESCE(bof.description, '') AS description,
+			COALESCE(bof.display_order, 0) AS sequence,
+			COALESCE(bof.section_name, '') AS section,
+			COALESCE(bof.default_value, '') AS default_value,
+			COALESCE(bof.validation_rules, '{}') AS validation_rules,
+			COALESCE(bof.reference_entity, '') AS reference_bo,
+			COALESCE(bof.picklist_values, '{}') AS picklist_values,
+			bof.created_at,
+			bof.updated_at
+		FROM public.business_object_fields bof
+		LEFT JOIN catalog_node cn ON cn.id = bof.term_node_id
+		WHERE bof.bo_id = $1
+		ORDER BY bof.display_order
+	`
+
+	var fields []bo.BOField
+	err := r.DB.Select(&fields, query, boID)
+	if err != nil {
+		return nil, err
+	}
+	return fields, nil
 }
 
 func resolvePhysicalColumn(field bo.BOField, columns map[string]struct{}) string {
@@ -129,16 +177,18 @@ func NewPostgresBORepository(db *sqlx.DB) *PostgresBORepository {
 
 // GetBODefinition fetches the BO definition from the database
 func (r *PostgresBORepository) GetBODefinition(boID string) (*BODefinition, error) {
-	// 1. Fetch Fields (with explicit column mapping to avoid struct scan mismatches like "field_name")
-	// Note: Some deployments have `sequence`, others use `display_order`, and older ones may have neither.
-	// Try queries in order of preference and fall back to plain select if the ordered queries fail.
+	// 1. Fetch Fields
+	// Try bo_fields first (legacy table), then fall back to business_object_fields
+	// (the master table for STI BOs where subtype fields are attached to child BOs,
+	// and semantic-term-based fields are populated via catalog sync).
 	var boFields []bo.BOField
 
-	queries := []string{
+	// Legacy bo_fields queries
+	bofQueries := []string{
 		`SELECT id, tenant_id, business_object_id,
 		        COALESCE(key, name, technical_name, field_name) AS key,
 		        COALESCE(name, key, technical_name, field_name) AS name,
-		        display_label AS display_name, 
+		        display_label AS display_name,
 		        technical_name,
 		        field_type AS type,
 		        is_core, is_required, is_readonly, is_searchable, COALESCE(description, '') AS description, display_order AS sequence, COALESCE(section_name, '') AS section,
@@ -149,7 +199,7 @@ func (r *PostgresBORepository) GetBODefinition(boID string) (*BODefinition, erro
 		`SELECT id, tenant_id, business_object_id,
 		        COALESCE(key, name, technical_name, field_name) AS key,
 		        COALESCE(name, key, technical_name, field_name) AS name,
-		        display_label AS display_name, 
+		        display_label AS display_name,
 		        technical_name,
 		        field_type AS type,
 		        is_core, is_required, is_readonly, is_searchable, COALESCE(description, '') AS description, display_order AS sequence, COALESCE(section_name, '') AS section,
@@ -158,46 +208,25 @@ func (r *PostgresBORepository) GetBODefinition(boID string) (*BODefinition, erro
 		 WHERE business_object_id = $1`,
 	}
 
-	var lastErr error
-	for _, q := range queries {
-		lastErr = r.DB.Select(&boFields, q, boID)
-		if lastErr == nil {
+	var bofErr error
+	for _, q := range bofQueries {
+		bofErr = r.DB.Select(&boFields, q, boID)
+		if bofErr == nil {
 			break
 		}
 	}
-	if lastErr != nil {
-		return nil, fmt.Errorf("failed to fetch bo fields: %w", lastErr)
+
+	// If bo_fields returned no results, fall back to business_object_fields (master table)
+	if len(boFields) == 0 {
+		bofErr = nil // clear the error if we're going to try the fallback
+		boFields, bofErr = r.fetchFieldsFromBusinessObjectFields(boID)
 	}
 
-	// 3. Construct BODefinition
-	// Note: We are assuming 'TechnicalName' or 'Name' maps to the physical table for now.
-	// If there is a separate mapping to the driving table, it should be in the BO definition.
-	// The user request says "Driving table" is part of BO.
-	// Looking at `listBusinessObjects` in `api.go`, it references `driver_table_name` column in query (lines 228-235),
-	// but the `BusinessObject` struct in `bo/types.go` DOES NOT have `DrivingTable`.
-	// Wait, the query in `api.go` (line 218) selects `display_name`, `description`, etc.
-	// But `listBusinessObjects` logic (lines 228-236) CONDITIONALLY checks `driver_table_id` or `driver_table_name`.
-	// It seems `public.business_objects` table HAS `driver_table_name` but `bo.BusinessObject` struct missed it?
-	// Let's assume `TechnicalName` is the table name for now, or check if I should update the struct.
-	// Or I can query it directly into a struct that has it.
-
-	// Let's check if `driver_table_name` is in the DB schema by trying to select it.
-	// I will use a struct distinct from `bo.BusinessObject` to be safe/complete.
-
-	type BOMetadata struct {
-		bo.BusinessObject
-		DriverTableName *string `db:"driver_table_name"`
+	if bofErr != nil {
+		return nil, fmt.Errorf("failed to fetch bo fields: %w", bofErr)
 	}
 
-	// var boMeta BOMetadata
-	// Use a custom query for flexibility
-	query := `
-        SELECT id, name, technical_name, 
-               driver_table_name 
-        FROM public.business_objects 
-        WHERE id = $1
-    `
-	// We only need a few fields for SQL generation
+	// 2. Query BO Metadata with support for both legacy and STI schema (bo_key, bo_name vs name, technical_name)
 	type BOQueryResult struct {
 		ID              string  `db:"id"`
 		Name            string  `db:"name"`
@@ -205,11 +234,35 @@ func (r *PostgresBORepository) GetBODefinition(boID string) (*BODefinition, erro
 		DriverTableName *string `db:"driver_table_name"`
 	}
 	var res BOQueryResult
-	if err := r.DB.Get(&res, query, boID); err != nil {
-		// Fallback: maybe driver_table_name doesn't exist? Try without it?
-		// But user said "Load BO Definition: driving_table".
-		// Let's assume TechnicalName is the table if DriverTableName is missing.
-		return nil, fmt.Errorf("failed to fetch BO metadata: %w", err)
+	boMetaQueries := []string{
+		`SELECT id,
+		        COALESCE(bo_name, name, bo_key, '') AS name,
+		        COALESCE(bo_key, technical_name, name, '') AS technical_name,
+		        COALESCE(driver_table_name, bo_key, technical_name, name, '') AS driver_table_name
+		 FROM public.business_objects
+		 WHERE id = $1`,
+		`SELECT id,
+		        COALESCE(name, technical_name, '') AS name,
+		        COALESCE(technical_name, name, '') AS technical_name,
+		        COALESCE(driver_table_name, technical_name, name, '') AS driver_table_name
+		 FROM public.business_objects
+		 WHERE id = $1`,
+		`SELECT id,
+		        COALESCE(bo_name, bo_key, '') AS name,
+		        COALESCE(bo_key, bo_name, '') AS technical_name,
+		        COALESCE(bo_key, bo_name, '') AS driver_table_name
+		 FROM public.business_objects
+		 WHERE id = $1`,
+	}
+	var boErr error
+	for _, bq := range boMetaQueries {
+		boErr = r.DB.Get(&res, bq, boID)
+		if boErr == nil {
+			break
+		}
+	}
+	if boErr != nil {
+		return nil, fmt.Errorf("failed to fetch BO metadata: %w", boErr)
 	}
 
 	drivingTable := res.TechnicalName
@@ -219,7 +272,7 @@ func (r *PostgresBORepository) GetBODefinition(boID string) (*BODefinition, erro
 
 	def := &BODefinition{
 		ID:            res.ID,
-		DrivingTable:  drivingTable, // Use determined table
+		DrivingTable:  drivingTable,
 		Fields:        make([]BOField, 0, len(boFields)),
 		Relationships: make([]BORelationship, 0),
 	}
@@ -230,11 +283,6 @@ func (r *PostgresBORepository) GetBODefinition(boID string) (*BODefinition, erro
 	}
 
 	for _, field := range boFields {
-		// Map BOField to our internal BOField
-		// Physical Column: user request says `physical_column` is in BO field.
-		// `bo.BOField` doesn't have `PhysicalColumn` explicitly, but has `Name` and `TechnicalName`.
-		// Usually `TechnicalName` is the column name in the driving table if it's a direct field.
-
 		physicalColumnName := resolvePhysicalColumn(field, columns)
 		physicalColumn := ""
 		if physicalColumnName != "" {
@@ -249,10 +297,7 @@ func (r *PostgresBORepository) GetBODefinition(boID string) (*BODefinition, erro
 			}
 			def.Relationships = append(def.Relationships, BORelationship{
 				TargetBOID: field.ReferenceBO,
-				JoinType:   "LEFT", // Default to Left Join
-				// Condition: t0.field_id = t1.id (assuming t1 is the target BO's driving table)
-				// We can't fully resolve the condition string here without knowing the target BO's table.
-				// So we store the field info to resolve later.
+				JoinType:   "LEFT",
 				Conditions: []string{
 					fmt.Sprintf("${SOURCE}.%s = ${TARGET}.id", joinColumn),
 				},
@@ -262,12 +307,8 @@ func (r *PostgresBORepository) GetBODefinition(boID string) (*BODefinition, erro
 		def.Fields = append(def.Fields, BOField{
 			ID:             field.ID,
 			Name:           field.Name,
-			Path:           field.Name, // Using Name as path for now
+			Path:           field.Name,
 			PhysicalColumn: physicalColumn,
-			// SemanticTermID: we need to link to semantic term. `bo.BOField` doesn't have it explicitly?
-			// `api.go` mentions `catalog_node_id` in `BusinessEntity`.
-			// User request says "Fields (each mapped to a semantic term)".
-			// I'll leave SemanticTermID empty for now, relying on direct physical mapping.
 		})
 	}
 
@@ -275,11 +316,6 @@ func (r *PostgresBORepository) GetBODefinition(boID string) (*BODefinition, erro
 }
 
 // GetBusinessObjectBinding resolves the binding context for a BO.
-//
-// In the current schema there is no dedicated business_object_bindings table,
-// so the binding is derived from the BO row (datasource_id + driver_table_name).
-// When the explicit binding table lands, this method should be updated to query
-// it using boID + bindingID.
 func (r *PostgresBORepository) GetBusinessObjectBinding(boID, bindingID string) (*BOBinding, error) {
 	query := `
 		SELECT id, datasource_id, COALESCE(driver_table_name, technical_name, name) AS driving_table
@@ -293,11 +329,11 @@ func (r *PostgresBORepository) GetBusinessObjectBinding(boID, bindingID string) 
 	}
 
 	binding.BOID = boID
-	// Until the explicit binding table exists, treat bindingID as the datasource ID.
 	if bindingID != "" {
 		binding.BindingID = bindingID
 		binding.DatasourceID = bindingID
 	}
+
 	return &binding, nil
 }
 

@@ -980,6 +980,13 @@ func (h *validationRulesHandler) handleCreateValidationRule() http.HandlerFunc {
 		conditionJSON := []byte("{}")
 		if len(req.ConditionJSON) > 0 {
 			conditionJSON, _ = json.Marshal(req.ConditionJSON)
+		} else if rt == "cue" {
+			conditionJSON, _ = json.Marshal(map[string]interface{}{
+				"type":    "cue",
+				"source":  "manual",
+				"field":   "_cue_script",
+				"operator": "cue_eval",
+			})
 		}
 
 		// Set up target_entities array

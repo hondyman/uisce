@@ -316,23 +316,30 @@ func (lo *LayoutOptimizer) OptimizeLayout(visuals []DashboardVisual, currentLayo
 	return currentLayout
 }
 
+// GovernanceProvider interface for getting governance context
+type GovernanceProvider interface {
+	GetContext(ctx context.Context, userID, tenantID, datasource string) (*GovernanceContext, error)
+}
+
 // DashboardConversationManager manages multi-turn dashboard conversations
 type DashboardConversationManager struct {
-	conversations   map[string]*DashboardConversation
-	nlEngine        *NLQueryEngine
-	visualComposer  *VisualComposer
-	governanceGate  *DashboardGovernanceGate
-	layoutOptimizer *LayoutOptimizer
+	conversations      map[string]*DashboardConversation
+	governanceProvider GovernanceProvider
+	parser             *IntentParser
+	visualComposer     *VisualComposer
+	governanceGate     *DashboardGovernanceGate
+	layoutOptimizer    *LayoutOptimizer
 }
 
 // NewDashboardConversationManager creates a new dashboard conversation manager
-func NewDashboardConversationManager(nlEngine *NLQueryEngine) *DashboardConversationManager {
+func NewDashboardConversationManager(govProvider GovernanceProvider) *DashboardConversationManager {
 	return &DashboardConversationManager{
-		conversations:   make(map[string]*DashboardConversation),
-		nlEngine:        nlEngine,
-		visualComposer:  NewVisualComposer(),
-		governanceGate:  NewDashboardGovernanceGate(),
-		layoutOptimizer: NewLayoutOptimizer(),
+		conversations:      make(map[string]*DashboardConversation),
+		governanceProvider: govProvider,
+		parser:             NewIntentParser(),
+		visualComposer:     NewVisualComposer(),
+		governanceGate:     NewDashboardGovernanceGate(),
+		layoutOptimizer:    NewLayoutOptimizer(),
 	}
 }
 
@@ -341,13 +348,13 @@ func (dcm *DashboardConversationManager) StartConversation(ctx context.Context, 
 	conversationID := generateDashboardConversationID()
 
 	// Get governance context
-	govCtx, err := dcm.nlEngine.governanceProvider.GetContext(ctx, userID, tenantID, datasource)
+	govCtx, err := dcm.governanceProvider.GetContext(ctx, userID, tenantID, datasource)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get governance context: %w", err)
 	}
 
 	// Parse initial intent
-	intent, err := dcm.nlEngine.parser.ParseIntent(initialMessage)
+	intent, err := dcm.parser.ParseIntent(initialMessage)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse initial intent: %w", err)
 	}
@@ -423,7 +430,7 @@ func (dcm *DashboardConversationManager) ProcessMessage(ctx context.Context, con
 	})
 
 	// Parse intent from message
-	intent, err := dcm.nlEngine.parser.ParseIntent(message)
+	intent, err := dcm.parser.ParseIntent(message)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse message intent: %w", err)
 	}
@@ -475,6 +482,15 @@ func (dcm *DashboardConversationManager) CommitConversation(conversationID, titl
 	// For now, just mark as completed
 
 	return conversation, nil
+}
+
+// DeleteConversation removes a conversation from memory
+func (dcm *DashboardConversationManager) DeleteConversation(conversationID string) error {
+	if _, exists := dcm.conversations[conversationID]; !exists {
+		return fmt.Errorf("conversation not found: %s", conversationID)
+	}
+	delete(dcm.conversations, conversationID)
+	return nil
 }
 
 // Helper methods

@@ -2,6 +2,8 @@
 
 export type AccessLevel = NONE | READ | WRITE;
 
+export type BindingRequirement = BACKEND_SPECIFIC | OPTIONAL | REQUIRED;
+
 export type CommandStatus = failed | pending | success;
 
 export type DataSource = ignite | postgres | starrocks;
@@ -37,6 +39,8 @@ export type ScheduleType = daily | monthly | once | weekly;
 export type ScriptState = certified | deprecated | draft | published;
 
 export type Severity = BLOCK | INFO | WARNING | error | hard_block | info | quarantine | warning;
+
+export type StorageTier = API_FEDERATION | TIER_1_POSTGRES | TIER_2_STARROCKS | TIER_3_ICEBERG;
 
 /** ABACPolicy contains the fine-grained access control rules for a view. */
 export interface ABACPolicy {
@@ -231,7 +235,6 @@ export interface AdvisorWorker {
 /** AlertsService handles business logic for alerts. */
 export interface AlertsService {
   db: any;
-  modelProvider: any;
 }
 
 export interface AliasEntry {
@@ -473,11 +476,85 @@ export interface AutoscalingConfig {
   TargetP99Latency: any;
 }
 
+export interface BOAIAnomalyDetectRequest {
+  BOIDOrKey: string;
+  SampleSize: number;
+}
+
+export interface BOAIAnomalyDetectResponse {
+  Anomalies: BODataAnomaly[];
+  DataQualityScore: number;
+  Recommendations: string[];
+  Summary: string;
+}
+
+export interface BOAIExplainDeltaRequest {
+  BOIDOrKey: string;
+}
+
+export interface BOAIExplainDeltaResponse {
+  BreakingChanges: string[];
+  GovernanceRisks: string[];
+  ImpactScore: string;
+  MarkdownNarrative: string;
+  SuggestedActions: string[];
+  Summary: string;
+}
+
+export interface BOAINLQRequest {
+  BOIDOrKey: string;
+  Query: string;
+}
+
+export interface BOAINLQResponse {
+  Dimensions: string[];
+  Explanation: string;
+  Filters: NLQFilterItem[];
+  GeneratedSQL: string;
+  Limit: number;
+  Measures: string[];
+  QueryDef: Record<string, any>;
+  SortBy: string;
+  SortOrder: string;
+}
+
+export interface BOAISynthesizeRequest {
+  Category: string;
+  IncludeCalc: boolean;
+  IncludeRules: boolean;
+  Prompt: string;
+  TableID: string;
+  TableName: string;
+}
+
+export interface BOAISynthesizeResponse {
+  Category: string;
+  Description: string;
+  PrimaryKey: string;
+  Reasoning: string;
+  SuggestedCalculatedFields: SynthesizedCalculatedField[];
+  SuggestedDisplayName: string;
+  SuggestedDriverTable: string;
+  SuggestedFields: FieldDefinition[];
+  SuggestedKey: string;
+  SuggestedName: string;
+  SuggestedRules: SynthesizedRule[];
+}
+
 /** BOAdvisorResponse is the API response for BO-level advisor. */
 export interface BOAdvisorResponse {
   ExistingPreAggregations: PreAggDescriptor[];
   Recommendations: PreAggRecommendation[];
   Workload: BOWorkloadProfile;
+}
+
+export interface BOArtifactGenerationResponse {
+  BOID: string;
+  BOKey: string;
+  CubeJSSchemaJS: string;
+  OpenAPISpecJSON: string;
+  RESTEndpointURL: string;
+  StarRocksMVDDL: string;
 }
 
 /** BOAuditLog tracks changes to BOs, subtypes, and fields */
@@ -496,6 +573,227 @@ export interface BOAuditLog {
 export interface BOCommandHandler {
   boService: any;
   eventPublisher: EventPublisher;
+}
+
+/** BOCrudRecordRequest represents a request to create or update a physical record via BO */
+export interface BOCrudRecordRequest {
+  Record: Record<string, any>;
+  SubtypeKey: string;
+}
+
+export interface BODataAnomaly {
+  AnomalyType: string;
+  Description: string;
+  Field: string;
+  SampleCount: number;
+  Severity: string;
+}
+
+export interface BODataQualitySentinelResponse {
+  BOID: string;
+  DistinctRatios: Record<string, float64>;
+  DriftProposals: SchemaDriftProposal[];
+  FinancialVerifications: FinancialPatternResult[];
+  NullDrift: Record<string, float64>;
+  OverallQualityScore: number;
+  SampleStrategy: string;
+  SentinelSummary: string;
+  TotalSampledRows: number;
+}
+
+/** BODeltaFieldDiff represents the diff of a field between Core and Custom */
+export interface BODeltaFieldDiff {
+  CoreField: FieldDefinition;
+  CustomField: FieldDefinition;
+  FieldKey: string;
+  FieldName: string;
+  Overrides: Record<string, any>;
+  Status: string;
+}
+
+/** BODeltaResponse represents the Workday-style delta comparison between tenant BO and gold copy Core BO */
+export interface BODeltaResponse {
+  BOID: string;
+  CoreID: string;
+  CustomCount: number;
+  DisplayName: string;
+  FieldsDelta: BODeltaFieldDiff[];
+  InheritedCount: number;
+  IsCore: boolean;
+  Key: string;
+  Name: string;
+  OverriddenCount: number;
+}
+
+export interface BODriftRepairPatchRequest {
+  Action: string;
+  BOIDOrKey: string;
+  Note: string;
+  ProposalID: string;
+}
+
+export interface BODriftRepairPatchResponse {
+  Message: string;
+  ProposalID: string;
+  Status: string;
+}
+
+export interface BOEventTrigger {
+  ActionType: string;
+  Description: string;
+  Enabled: boolean;
+  Event: string;
+  ID: string;
+  Target: string;
+}
+
+export interface BOFieldEligibilityItem {
+  DataType: string;
+  DisplayName: string;
+  EligibilityLevel: BOFieldEligibilityLevel;
+  FieldKey: string;
+  FieldName: string;
+  GateReason: string;
+  MissingInputs: string[];
+  PhysicalColumn: string;
+  PhysicalTable: string;
+  ResolutionPath: string;
+  ResolutionStatus: BOFieldResolutionStatus;
+  Role: FieldRole;
+}
+
+export interface BOLineageImpactSimulationRequest {
+  BOIDOrKey: string;
+  ProposedChanges: Record<string, any>;
+}
+
+export interface BOLineageImpactSimulationResponse {
+  BOID: string;
+  BlastRadiusScore: number;
+  HighestSeverity: string;
+  ImpactedAssets: ImpactedAsset[];
+  IsBreakingChange: boolean;
+  SimulationReport: string;
+  TotalImpacted: number;
+}
+
+export interface BOMultiBackendConfiguration {
+  ActiveTier: StorageTier;
+  BOID: string;
+  Bindings: MultiBackendBinding[];
+  WatermarkDate: any;
+}
+
+export interface BOPromotionProposal {
+  BOKey: string;
+  CreatedAt: string;
+  CreatedBy: string;
+  ID: string;
+  ProposedChanges: Record<string, any>;
+  ReviewerNote: string;
+  SourceTenantID: string;
+  Status: string;
+}
+
+export interface BOPublishGateValidationResponse {
+  BOID: string;
+  CanPublish: boolean;
+  GateSummary: string;
+  MissingDependencies: string[];
+  UnresolvedFields: BOFieldEligibilityItem[];
+}
+
+export interface BOQueryCostEvaluationRequest {
+  BOIDOrKey: string;
+  EstimatedLimit: number;
+  Filters: BORecordFilter[];
+  SelectedFields: string[];
+  TargetDialect: string;
+}
+
+export interface BOQueryCostEvaluationResponse {
+  ComplexityScore: number;
+  CostBand: QueryCostBand;
+  EstimatedDurationMs: number;
+  EstimatedRowsScanned: number;
+  IsForbidden: boolean;
+  PreAggregationTips: string[];
+  RequiresPartitionScan: boolean;
+  SuggestedMaterializedView: string;
+  Violations: string[];
+}
+
+/** BORecordFilter represents a filter applied to physical records */
+export interface BORecordFilter {
+  Field: string;
+  Operator: string;
+  Value: any;
+}
+
+/** BORecordQueryRequest represents a request to query physical records through a Business Object */
+export interface BORecordQueryRequest {
+  AsOfTransactionTime: any;
+  AsOfValidTime: any;
+  Filters: BORecordFilter[];
+  Limit: number;
+  Page: number;
+  Search: string;
+  SortBy: string;
+  SortDir: string;
+  SubtypeKey: string;
+}
+
+/** BORecordQueryResponse represents the paginated result of querying physical records */
+export interface BORecordQueryResponse {
+  Columns: string[];
+  DatasourceID: string;
+  DriverTable: string;
+  ExecutionTimeMs: number;
+  Limit: number;
+  Page: number;
+  Rows: Record<string, any>[];
+  Total: number;
+}
+
+export interface BOScopeDiscoveryResponse {
+  BOID: string;
+  BlockingIssues: string[];
+  CalculatedCount: number;
+  DirectCount: number;
+  DrivingNodeID: string;
+  DrivingTableName: string;
+  EligibleFields: BOFieldEligibilityItem[];
+  IsPublishReady: boolean;
+  ManualCount: number;
+  RelatedCount: number;
+  TotalDiscovered: number;
+}
+
+export interface BOWorkflowActionRequest {
+  Action: string;
+  Proposal: BOPromotionProposal;
+  ReviewerNote: string;
+  Trigger: BOEventTrigger;
+}
+
+export interface BOWorkflowExecution {
+  EndTime: string;
+  Error: string;
+  ID: string;
+  StartTime: string;
+  Status: string;
+  TriggeredBy: string;
+  Workflow: string;
+}
+
+export interface BOWorkflowStatusResponse {
+  BOID: string;
+  EventTriggers: BOEventTrigger[];
+  IsCore: boolean;
+  Key: string;
+  LifecycleStatus: BOWorkflowLifecycleStatus;
+  PendingProposals: BOPromotionProposal[];
+  RecentExecutions: BOWorkflowExecution[];
 }
 
 /** BOWorkloadProfile represents aggregated workload metrics for a BO. */
@@ -815,13 +1113,19 @@ export interface BundleViewRef {
 
 /** BusinessObjectDefinition represents a complete Business Object */
 export interface BusinessObjectDefinition {
+  /** Core Identity Triple & Semantic Governance (Feature 1) */
+  BOTypeID: any;
+  Bindings: Record<string, any>[];
+  BusinessKeyNodeID: any;
   Category: string;
+  ClassificationNodeID: any;
   CloneParentDisplayName: string;
   CloneParentKey: string;
   ClonesFrom: string;
   Config: any;
   CoreFields: FieldDefinition[];
   CoreID: any;
+  CoreReferenceBOID: any;
   CreatedAt: any;
   CreatedBy: string;
   CustomFields: FieldDefinition[];
@@ -831,6 +1135,7 @@ export interface BusinessObjectDefinition {
   DriverTableID: any;
   DriverTableName: string;
   EnableHistory: boolean;
+  GrainNodeID: any;
   HistoryMode: HistoryMode;
   ID: string;
   Icon: string;
@@ -840,8 +1145,11 @@ export interface BusinessObjectDefinition {
   Key: string;
   LastModifiedAt: any;
   LastModifiedBy: string;
+  ModelID: string;
   Name: string;
   ParentID: any;
+  SemanticIDNodeID: any;
+  Status: string;
   Subtypes: Record<string, SubtypeDefinition>;
   TechnicalName: string;
   TenantID: string;
@@ -916,7 +1224,6 @@ export interface BusinessObjectProjection {
 /** BusinessObjectService handles business object operations with real database queries */
 export interface BusinessObjectService {
   db: any;
-  hasura: HasuraClient;
   rules: AccessRuleRepository;
 }
 
@@ -1268,24 +1575,15 @@ export interface ConflictDetail {
   Postgres: any;
 }
 
-/** Connection represents a unified datasource connection */
+/** Connection represents a datasource connection from tenant_connections table */
 export interface Connection {
-  APIKey: string;
-  BaseURL: string;
   CreatedAt: any;
-  Database: string;
-  Host: string;
+  DSN: string;
+  DatabaseType: string;
   ID: string;
-  IsActive: boolean;
-  Metadata: Record<string, any>;
   Name: string;
-  Password: string;
-  Port: number;
-  Schema: string;
   TenantID: string;
-  Type: string;
   UpdatedAt: any;
-  Username: string;
 }
 
 /** ConnectionsService handles unified connection management */
@@ -1434,19 +1732,26 @@ export interface CreateBusinessObjectRequest {
   BOKey: string;
   Category: string;
   CloneFromKey: string;
+  CloneFromKeySnake: string;
   Config: Record<string, any>;
   DatasourceID: string;
+  DatasourceIDSnake: string;
   Description: string;
   DisplayName: string;
+  DisplayNameSnake: string;
   DriverTableID: string;
+  DriverTableIDSnake: string;
   DriverTableName: string;
+  DriverTableNameSnake: string;
   EnableHistory: boolean;
   HistoryMode: string;
   Icon: string;
   Name: string;
   ParentID: string;
+  ParentIDSnake: string;
   Status: string;
   TechnicalName: string;
+  TechnicalNameSnake: string;
 }
 
 /** CreateExportRequest is the request to create an export */
@@ -1494,7 +1799,6 @@ export interface CryptoCustodyService {
 export interface CryptoPricingService {
   apiKey: string;
   db: any;
-  hasuraClient: HasuraClient;
   httpClient: any;
 }
 
@@ -2308,7 +2612,6 @@ export interface FeedbackRequest {
 /** FeedbackService handles user feedback for NLQ responses. */
 export interface FeedbackService {
   db: any;
-  hasura: HasuraClient;
 }
 
 export interface FieldChange {
@@ -2358,6 +2661,16 @@ export interface FilterProfile {
   Operator: string;
   QueryCount: number;
   Term: string;
+}
+
+export interface FinancialPatternResult {
+  FieldName: string;
+  InvalidCount: number;
+  PassRate: number;
+  PatternType: string;
+  SampleCount: number;
+  SampleErrors: string[];
+  ValidCount: number;
 }
 
 /** FinancialPlugin implementation for Financial Calculations (IRR, XIRR, Black-Scholes, etc.) */
@@ -2523,6 +2836,31 @@ export interface GovernanceDiff {
   Scope: string;
 }
 
+export interface GraphRAGContextRequest {
+  BOIDOrKey: string;
+  IncludeEdges: boolean;
+  MaxDepth: number;
+  UserQuery: string;
+}
+
+export interface GraphRAGContextResponse {
+  BOKey: string;
+  MatchedNodes: GraphRAGNode[];
+  PromptContext: string;
+  ResolvedIntent: string;
+  TenantScoped: boolean;
+}
+
+export interface GraphRAGNode {
+  Description: string;
+  DisplayName: string;
+  ID: string;
+  Name: string;
+  NodeType: string;
+  Properties: Record<string, any>;
+  Similarity: number;
+}
+
 /** GroupByProfile represents usage stats for a specific grain. */
 export interface GroupByProfile {
   AvgDurationMs: number;
@@ -2535,8 +2873,6 @@ export interface GroupByProfile {
 /** GuardrailService handles the logic for proactive access guardrails. */
 export interface GuardrailService {
   db: any;
-  /** Dependency on SemanticModelService to get asset metadata like certification status. */
-  semanticService: any;
 }
 
 /** HTTPWebhookNotifier sends job completion notifications via HTTP */
@@ -2628,6 +2964,15 @@ export interface ImpactReport {
   ImpactedViews: ImpactedView[];
   ScriptID: string;
   ScriptVersion: string;
+}
+
+export interface ImpactedAsset {
+  AssetID: string;
+  AssetName: string;
+  AssetType: string;
+  Details: string;
+  ImpactLevel: string;
+  Relationship: string;
 }
 
 /** ImpactedBundle represents a bundle affected by a script change. */
@@ -2802,6 +3147,8 @@ export interface JSONFieldDiff {
 
 /** JWTClaims represents JWT token claims */
 export interface JWTClaims {
+  AllowedBindings: any[];
+  AllowedDatasources: string[];
   IssuedAt: any;
   Roles: string[];
   TenantID: string;
@@ -2811,7 +3158,9 @@ export interface JWTClaims {
 
 /** JWTManager handles JWT token operations */
 export interface JWTManager {
+  mu: any;
   refreshDuration: any;
+  rsaPublicKey: any;
   secretKey: byte[];
   tokenDuration: any;
 }
@@ -2985,6 +3334,18 @@ export interface LLMProfile {
   ContextTerms: string[];
   Model: string;
   PromptTemplate: string;
+}
+
+export interface LakehouseMaintenanceReport {
+  BytesCompacted: number;
+  CompactedFilesCount: number;
+  DurationMs: number;
+  ExecutedAt: any;
+  ManifestsRewritten: number;
+  SnapshotsExpired: number;
+  Status: string;
+  Table: string;
+  TenantID: string;
 }
 
 /** LatencyHistogram tracks latency distributions for percentile calculations */
@@ -3254,8 +3615,25 @@ export interface MonteCarloSnapshot {
   Seed: number;
 }
 
+export interface MultiBackendBinding {
+  BackendName: string;
+  CoveragePercentage: number;
+  DatasourceID: string;
+  ID: string;
+  IsActive: boolean;
+  PhysicalTarget: string;
+  Requirement: BindingRequirement;
+  StorageTier: StorageTier;
+}
+
 export interface MultiUpgradeOverviewResponse {
   Versions: UpgradeOverviewResponse[];
+}
+
+export interface NLQFilterItem {
+  Field: string;
+  Operator: string;
+  Value: any;
 }
 
 /** NLQService provides natural language Q&A over the catalog. */
@@ -3437,7 +3815,7 @@ export interface OAuthAuditEvent {
 
 /** OAuthAuditService handles recording of audit events */
 export interface OAuthAuditService {
-  hasuraClient: HasuraClient;
+  db: any;
 }
 
 /** OkRule represents an ok-style Starlark rule.
@@ -3725,7 +4103,6 @@ export interface PoPMetricWithLatest {
 /** PoPService handles Period-over-Period analysis and anomaly detection */
 export interface PoPService {
   db: any;
-  hasuraClient: HasuraClient;
 }
 
 /** Policy defines a single access control rule for administrative actions on bundles. */
@@ -4650,7 +5027,6 @@ export interface SMSService {
 /** SQLRuleRepository implements RuleRepository using a SQL database. */
 export interface SQLRuleRepository {
   db: any;
-  hasuraClient: HasuraClient;
 }
 
 /** SQLTermRepository implements SemanticTermRepository using DB */
@@ -4731,6 +5107,18 @@ export interface SchemaChange {
   Change: string;
   Details: string;
   Table: string;
+}
+
+export interface SchemaDriftProposal {
+  AutoRepairScript: string;
+  BOID: string;
+  ConfidenceScore: number;
+  DetectedAt: any;
+  DriftType: string;
+  ProposalID: string;
+  SourceColumn: string;
+  Status: string;
+  TargetColumn: string;
 }
 
 /** SchemaSnapshot represents a point-in-time schema snapshot */
@@ -5071,10 +5459,48 @@ export interface SubtypeDefinition {
   TechnicalName: string;
 }
 
+export interface SynthesizedCalculatedField {
+  Description: string;
+  DisplayName: string;
+  Formula: string;
+  Name: string;
+  Type: string;
+}
+
+export interface SynthesizedRule {
+  Description: string;
+  Field: string;
+  RuleName: string;
+  Script: string;
+  Severity: string;
+}
+
 /** Table represents a table within a schema. */
 export interface Table {
   Columns: Column[];
   Name: string;
+}
+
+/** TableColumnIntrospection represents an introspected database column */
+export interface TableColumnIntrospection {
+  DataType: string;
+  DefaultValue: string;
+  ForeignTable: string;
+  IsForeignKey: boolean;
+  IsNullable: boolean;
+  IsPrimaryKey: boolean;
+  Name: string;
+}
+
+/** TableIntrospectionResponse represents the result of introspecting a table for BO creation */
+export interface TableIntrospectionResponse {
+  Columns: TableColumnIntrospection[];
+  QualifiedPath: string;
+  SuggestedFields: FieldDefinition[];
+  SuggestedKey: string;
+  SuggestedName: string;
+  TableID: string;
+  TableName: string;
 }
 
 /** TableSchema represents the schema of a single table */
@@ -5552,6 +5978,20 @@ export interface UMASleeve {
   UpdatedAt: any;
 }
 
+export interface UisceASTNode {
+  Attributes: Record<string, any>;
+  Children: UisceASTNode[];
+  NodeType: string;
+}
+
+export interface UisceSemanticAST {
+  Dialects: string[];
+  GeneratedSQL: Record<string, string>;
+  RootNode: UisceASTNode;
+  TenantID: string;
+  Version: string;
+}
+
 /** UpdateBusinessObjectRequest represents a request to update a BO */
 export interface UpdateBusinessObjectRequest {
   Category: string;
@@ -5638,9 +6078,15 @@ export interface UpgradeRuntimeService {
   wsHub: WebSocketHub;
 }
 
-/** UpgradeService provides methods for upgrading semantic models. */
 export interface UpgradeService {
   DB: any;
+}
+
+export interface UpgradeSimulation {
+  Diff: patchDiff;
+  FromVersion: string;
+  ToVersion: string;
+  Warnings: string[];
 }
 
 export interface UpgradeStatus {
@@ -5887,6 +6333,7 @@ export interface ValidationRuleRecord {
 export interface ValidationRuleRepository {
   catalogService: CatalogService;
   db: any;
+  goldcopyResolver: any;
 }
 
 /** ValidationTask represents a single validation job */

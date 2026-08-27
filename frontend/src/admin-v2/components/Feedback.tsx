@@ -1,6 +1,6 @@
 // Spinner component
 import React from "react";
-import "./Spinner.css";
+import "./Feedback.css";
 
 export function Spinner({ size = "md" }: { size?: "sm" | "md" | "lg" }) {
   return (

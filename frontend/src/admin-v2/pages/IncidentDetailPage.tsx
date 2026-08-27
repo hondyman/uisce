@@ -1,5 +1,11 @@
 import React, { useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
+import { useTheme } from "@mui/material/styles";
+import Box from "@mui/material/Box";
+import Typography from "@mui/material/Typography";
+import Button from "@mui/material/Button";
+import Paper from "@mui/material/Paper";
+import CircularProgress from "@mui/material/CircularProgress";
 import { useIncident } from "../hooks/useIncident";
 import { useRCA } from "../hooks/useRCA";
 import { useIncidentPattern, useSimilarIncidents } from "../hooks/usePatterns";
@@ -11,147 +17,15 @@ import { IntelligentRCAPanel } from "../components/IntelligentRCAPanel";
 import { PatternMatchPanel } from "../components/PatternMatchPanel";
 import { SmartRCASuggestions } from "../components/SmartRCASuggestions";
 import { ExecuteActionModal } from "../components/ExecuteActionModal";
-import { OpsTimeline } from "../components/OpsTimeline";
 import { Spinner } from "../components/Feedback";
 import { Card } from "../components/Card";
 
-export function IncidentDetailPage() {
-  const { incidentId } = useParams();
-  const navigate = useNavigate();
-  const [selectedSmartAction, setSelectedSmartAction] = useState<string | null>(null);
-  const incidentQuery = useIncident(incidentId || null);
-  const rcaQuery = useRCA(incidentId || "");
-  const patternQuery = useIncidentPattern(incidentId || "");
-  const similarQuery = useSimilarIncidents(incidentId || "");
-
-  if (!incidentId) {
-    return (
-      <div className="page">
-        <h1>Incident Not Found</h1>
-        <p>No incident ID provided. Please select an incident from the timeline.</p>
-      </div>
-    );
-  }
-
-  if (incidentQuery.isLoading) {
-    return (
-      <div className="page loading-page">
-        <Spinner size="lg" />
-        <h2>Loading incident details...</h2>
-      </div>
-    );
-  }
-
-  if (incidentQuery.isError || !incidentQuery.data) {
-    return (
-      <div className="page error-page">
-        <h1>Error Loading Incident</h1>
-        <p>Failed to load incident details. Please try again.</p>
-        <button onClick={() => navigate("/admin/operations")} className="back-button">
-          ← Back to Timeline
-        </button>
-      </div>
-    );
-  }
-
-  const { incident, events } = incidentQuery.data;
-
-  return (
-    <div className="page">
-      <div className="incident-header-nav">
-        <button onClick={() => navigate(-1)} className="back-button">
-          ← Back
-        </button>
-        <h1>{incident.title}</h1>
-      </div>
-
-      <div className="incident-grid">
-        {/* Main sections */}
-        <div className="incident-main">
-          <IncidentHeader incident={incident} />
-          <IncidentActions incident={incident} />
-          <IncidentRCA incident={incident} events={events} />
-          
-          {/* Intelligent RCA - Correlation Scoring Analysis */}
-          {rcaQuery.data && (
-            <IntelligentRCAPanel 
-              rca={rcaQuery.data} 
-              isLoading={rcaQuery.isLoading}
-            />
-          )}
-          
-          {/* Smart RCA Suggestions - Combines RCA + Pattern Matching */}
-          {rcaQuery.data && (
-            <SmartRCASuggestions
-              rca={rcaQuery.data}
-              pattern={patternQuery.data}
-              similarities={similarQuery.data?.similarities || []}
-              onSuggestedActionClick={setSelectedSmartAction}
-              isLoading={rcaQuery.isLoading || patternQuery.isLoading}
-            />
-          )}
-          
-          {/* Pattern Matching - Recurring Incident Detection */}
-          {patternQuery.data && (
-            <PatternMatchPanel
-              pattern={patternQuery.data}
-              similarities={similarQuery.data?.similarities || []}
-              isLoading={patternQuery.isLoading}
-            />
-          )}
-          
-          <IncidentActionsPanel incidentId={incident.id} incidentStatus={incident.status} />
-          
-          {/* Modal for executing smart-suggested actions */}
-          {selectedSmartAction && (
-            <ExecuteActionModal
-              incidentId={incident.id}
-              actionType={selectedSmartAction}
-              isOpen={!!selectedSmartAction}
-              onClose={() => setSelectedSmartAction(null)}
-              onSuccess={() => {
-                setSelectedSmartAction(null);
-                incidentQuery.refetch();
-              }}
-            />
-          )}
-        </div>
-
-        {/* Event timeline sidebar */}
-        <div className="incident-sidebar">
-          <Card title={`Timeline (${events.length} events)`} className="timeline-card">
-            <IncidentEventList events={events} />
-          </Card>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function IncidentEventList({ events }: { events: any[] }) {
-  if (events.length === 0) {
-    return <p className="no-events">No events in this incident</p>;
-  }
-
-  return (
-    <div className="event-list">
-      {events.map((event) => (
-        <div key={event.id} className={`event-item severity-${event.severity}`}>
-          <div className="event-marker">{getEventIcon(event.event_type)}</div>
-          <div className="event-content">
-            <div className="event-title">{event.title}</div>
-            <div className="event-meta">
-              <span className="event-type">{event.event_type.replace(/_/g, " ")}</span>
-              <span className="event-time">
-                {new Date(event.occurred_at).toLocaleTimeString()}
-              </span>
-            </div>
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-}
+const severityColors: Record<string, string> = {
+  critical: "#ef4444",
+  error: "#f87171",
+  warning: "#eab308",
+  info: "#3b82f6",
+};
 
 function getEventIcon(eventType: string): string {
   const icons: Record<string, string> = {
@@ -166,165 +40,201 @@ function getEventIcon(eventType: string): string {
   return icons[eventType] || "📍";
 }
 
-const styles = `
-.incident-header-nav {
-  display: flex;
-  align-items: center;
-  gap: 1rem;
-  margin-bottom: 2rem;
-}
+function IncidentEventList({ events }: { events: any[] }) {
+  const theme = useTheme();
 
-.back-button {
-  padding: 0.5rem 1rem;
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: 4px;
-  cursor: pointer;
-  font-weight: 600;
-  transition: all 150ms ease;
-}
-
-.back-button:hover {
-  background: var(--color-accent);
-  color: white;
-  border-color: var(--color-accent);
-}
-
-.incident-header-nav h1 {
-  margin: 0;
-  flex: 1;
-}
-
-.incident-grid {
-  display: grid;
-  grid-template-columns: 1fr 300px;
-  gap: 2rem;
-}
-
-.incident-main {
-  display: flex;
-  flex-direction: column;
-  gap: 2rem;
-}
-
-.incident-sidebar {
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-}
-
-.timeline-card {
-  position: sticky;
-  top: 1rem;
-}
-
-.no-events {
-  text-align: center;
-  padding: 1rem;
-  color: var(--color-text-secondary);
-  font-size: 0.9rem;
-  margin: 0;
-}
-
-.event-list {
-  display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
-  max-height: 600px;
-  overflow-y: auto;
-}
-
-.event-item {
-  display: flex;
-  gap: 0.75rem;
-  padding: 0.75rem;
-  border-left: 3px solid;
-  border-radius: 4px;
-  background: var(--color-surface);
-  transition: all 150ms ease;
-}
-
-.event-item:hover {
-  background: var(--color-bg);
-  transform: translateX(4px);
-}
-
-.event-item.severity-critical {
-  border-left-color: #ef4444;
-}
-
-.event-item.severity-error {
-  border-left-color: #f87171;
-}
-
-.event-item.severity-warning {
-  border-left-color: #eab308;
-}
-
-.event-item.severity-info {
-  border-left-color: #3b82f6;
-}
-
-.event-marker {
-  font-size: 1.25rem;
-  flex-shrink: 0;
-}
-
-.event-content {
-  flex: 1;
-}
-
-.event-title {
-  font-size: 0.85rem;
-  font-weight: 600;
-  color: var(--color-text-primary);
-  margin-bottom: 0.25rem;
-  word-break: break-word;
-}
-
-.event-meta {
-  display: flex;
-  gap: 0.5rem;
-  flex-wrap: wrap;
-}
-
-.event-type,
-.event-time {
-  font-size: 0.75rem;
-  color: var(--color-text-secondary);
-  padding: 2px 6px;
-  background: var(--color-bg);
-  border-radius: 2px;
-}
-
-.loading-page {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  min-height: 60vh;
-  gap: 1rem;
-}
-
-.error-page {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  min-height: 60vh;
-  text-align: center;
-}
-
-@media (max-width: 1024px) {
-  .incident-grid {
-    grid-template-columns: 1fr;
+  if (events.length === 0) {
+    return (
+      <Typography variant="body2" color="text.secondary" sx={{ textAlign: "center", p: 2 }}>
+        No events in this incident
+      </Typography>
+    );
   }
 
-  .timeline-card {
-    position: relative;
-    top: auto;
-  }
+  return (
+    <Box sx={{ display: "flex", flexDirection: "column", gap: 1.5, maxHeight: 600, overflowY: "auto" }}>
+      {events.map((event) => (
+        <Paper
+          key={event.id}
+          sx={{
+            display: "flex",
+            gap: 1.5,
+            p: 1.5,
+            borderLeft: 3,
+            borderLeftColor: severityColors[event.severity] || theme.palette.grey[400],
+            borderRadius: 1,
+            backgroundColor: "background.paper",
+            transition: "all 150ms ease",
+            "&:hover": {
+              backgroundColor: "action.hover",
+              transform: "translateX(4px)",
+            },
+          }}
+        >
+          <Box sx={{ fontSize: "1.25rem", flexShrink: 0 }}>{getEventIcon(event.event_type)}</Box>
+          <Box sx={{ flex: 1 }}>
+            <Typography variant="body2" sx={{ fontWeight: 600, mb: 0.25, wordBreak: "break-word" }}>
+              {event.title}
+            </Typography>
+            <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap" }}>
+              <Typography
+                variant="caption"
+                sx={{
+                  color: "text.secondary",
+                  px: 0.75,
+                  py: 0.25,
+                  bgcolor: "action.hover",
+                  borderRadius: 0.5,
+                }}
+              >
+                {event.event_type.replace(/_/g, " ")}
+              </Typography>
+              <Typography
+                variant="caption"
+                sx={{
+                  color: "text.secondary",
+                  px: 0.75,
+                  py: 0.25,
+                  bgcolor: "action.hover",
+                  borderRadius: 0.5,
+                }}
+              >
+                {new Date(event.occurred_at).toLocaleTimeString()}
+              </Typography>
+            </Box>
+          </Box>
+        </Paper>
+      ))}
+    </Box>
+  );
 }
-`;
 
-export default styles;
+export function IncidentDetailPage() {
+  const theme = useTheme();
+  const { incidentId } = useParams();
+  const navigate = useNavigate();
+  const [selectedSmartAction, setSelectedSmartAction] = useState<string | null>(null);
+  const incidentQuery = useIncident(incidentId || null);
+  const rcaQuery = useRCA(incidentId || "");
+  const patternQuery = useIncidentPattern(incidentId || "");
+  const similarQuery = useSimilarIncidents(incidentId || "");
+
+  if (!incidentId) {
+    return (
+      <Box sx={{ p: 3, textAlign: "center" }}>
+        <Typography variant="h5" sx={{ mb: 2 }}>Incident Not Found</Typography>
+        <Typography variant="body2" color="text.secondary">
+          No incident ID provided. Please select an incident from the timeline.
+        </Typography>
+      </Box>
+    );
+  }
+
+  if (incidentQuery.isLoading) {
+    return (
+      <Box
+        sx={{
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          justifyContent: "center",
+          minHeight: "60vh",
+          gap: 2,
+        }}
+      >
+        <CircularProgress size="large" />
+        <Typography variant="h6" color="text.secondary">Loading incident details...</Typography>
+      </Box>
+    );
+  }
+
+  if (incidentQuery.isError || !incidentQuery.data) {
+    return (
+      <Box
+        sx={{
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          justifyContent: "center",
+          minHeight: "60vh",
+          gap: 2,
+          textAlign: "center",
+        }}
+      >
+        <Typography variant="h5">Error Loading Incident</Typography>
+        <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+          Failed to load incident details. Please try again.
+        </Typography>
+        <Button variant="outlined" onClick={() => navigate("/admin/operations")}>
+          ← Back to Timeline
+        </Button>
+      </Box>
+    );
+  }
+
+  const { incident, events } = incidentQuery.data;
+
+  return (
+    <Box sx={{ p: 3 }}>
+      <Box sx={{ display: "flex", alignItems: "center", gap: 2, mb: 3 }}>
+        <Button variant="outlined" onClick={() => navigate(-1)} size="small">
+          ← Back
+        </Button>
+        <Typography variant="h5" sx={{ flex: 1, fontWeight: 600, m: 0 }}>
+          {incident.title}
+        </Typography>
+      </Box>
+
+      <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", lg: "1fr 300px" }, gap: 3 }}>
+        <Box sx={{ display: "flex", flexDirection: "column", gap: 3 }}>
+          <IncidentHeader incident={incident} />
+          <IncidentActions incident={incident} />
+          <IncidentRCA incident={incident} events={events} />
+
+          {rcaQuery.data && (
+            <IntelligentRCAPanel rca={rcaQuery.data} isLoading={rcaQuery.isLoading} />
+          )}
+
+          {rcaQuery.data && (
+            <SmartRCASuggestions
+              rca={rcaQuery.data}
+              pattern={patternQuery.data}
+              similarities={similarQuery.data?.similarities || []}
+              onSuggestedActionClick={setSelectedSmartAction}
+              isLoading={rcaQuery.isLoading || patternQuery.isLoading}
+            />
+          )}
+
+          {patternQuery.data && (
+            <PatternMatchPanel
+              pattern={patternQuery.data}
+              similarities={similarQuery.data?.similarities || []}
+              isLoading={patternQuery.isLoading}
+            />
+          )}
+
+          <IncidentActionsPanel incidentId={incident.id} incidentStatus={incident.status} />
+
+          {selectedSmartAction && (
+            <ExecuteActionModal
+              incidentId={incident.id}
+              actionType={selectedSmartAction}
+              isOpen={!!selectedSmartAction}
+              onClose={() => setSelectedSmartAction(null)}
+              onSuccess={() => {
+                setSelectedSmartAction(null);
+                incidentQuery.refetch();
+              }}
+            />
+          )}
+        </Box>
+
+        <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
+          <Card title={`Timeline (${events.length} events)`}>
+            <IncidentEventList events={events} />
+          </Card>
+        </Box>
+      </Box>
+    </Box>
+  );
+}

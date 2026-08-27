@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useMemo, useEffect } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, useLocation } from 'react-router-dom';
 import { DndContext, DragOverlay, useDraggable as _useDraggable, useDroppable as _useDroppable } from '@dnd-kit/core';
 import {
   Box,
@@ -83,6 +83,7 @@ import SettingsIcon from '@mui/icons-material/Settings';
 import DashboardIcon from '@mui/icons-material/Dashboard';
 import LayersIcon from '@mui/icons-material/Layers';
 import EditIcon from '@mui/icons-material/Edit';
+import DynamicFormIcon from '@mui/icons-material/DynamicForm';
 import FirstPageIcon from '@mui/icons-material/FirstPage';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import NavigateBeforeIcon from '@mui/icons-material/NavigateBefore';
@@ -100,6 +101,14 @@ import { dedupeFields } from '../../utils/dedupeFields';
 import { useCreateReportTemplate, useUpdateReportTemplate, useReportTemplate } from '../../api/reporting';
 import { buildSavePayload, BOBinding } from './builderSerialization';
 import { deserializeFromBackend, needsMigration, migrateV1ToV2 } from './tableSerialization';
+import { UnifiedBOPickerModal } from '../common/UnifiedBOPickerModal';
+import { FormTemplateSpec } from './form/FormManagerTypes';
+import { useFormSpec } from './form/useFormSpec';
+import { ReportFormManager } from './form/ReportFormManager';
+import { ReportFormRenderer } from './form/ReportFormRenderer';
+import { FormFieldPalette } from './form/FormFieldPalette';
+import { ToolboxFormBlock } from './ToolboxFormBlock';
+import { AdvancedReportSection, defaultSectionLayout } from './sectionLayoutModel';
 
 type ReportParameter = {
   id: string;
@@ -171,7 +180,9 @@ const SSRSReportBuilderContent: React.FC = () => {
   const [sidebarTab, setSidebarTab] = useState<'fields' | 'toolbox'>('fields');
   const [drawerOpen, setDrawerOpen] = useState(true);
   const [paletteWidth, setPaletteWidth] = useState<number>(380);
+  const { formSpec, setFormSpec, formRegistry } = useFormSpec();
 
+  const [focusedFormSectionId, setFocusedFormSectionId] = useState<string | null>(null);
 
   const startPaletteResize = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
@@ -223,6 +234,19 @@ const SSRSReportBuilderContent: React.FC = () => {
       [section]: { ...(prev[section] || {}), ...update },
     }));
   };
+
+  // Advanced section layout state (ReportSectionContainer wrappers)
+  const [layoutSections, setLayoutSections] = useState<AdvancedReportSection[]>(() =>
+    Object.values(REPORT_SECTIONS).map((sec) => defaultSectionLayout(sec as any))
+  );
+
+  const handleUpdateSectionLayout = useCallback((id: string, patch: Partial<AdvancedReportSection>) => {
+    setLayoutSections((prev) => prev.map((sec) => (sec.id === id ? { ...sec, ...patch } : sec)));
+  }, []);
+
+  const handleAddSubSection = useCallback((_parentId: string) => {
+    // Phase 2: create CUSTOM_CONTAINER split. No-op for Phase 1.
+  }, []);
 
   // Groups, calculated fields, expressions, event scripts, export options
   const [groupDefinitions, setGroupDefinitions] = useState<any[]>([]);
@@ -302,6 +326,9 @@ const SSRSReportBuilderContent: React.FC = () => {
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' as 'success' | 'info' | 'warning' | 'error' });
   const handleCloseSnackbar = () => setSnackbar(prev => ({ ...prev, open: false }));
 
+  const location = useLocation();
+  const [boPickerOpen, setBoPickerOpen] = useState(false);
+
   // Business Object states
   const [businessObjects, setBusinessObjects] = useState<any[]>([]);
   const [selectedBOId, setSelectedBOId] = useState<string>('');
@@ -310,6 +337,7 @@ const SSRSReportBuilderContent: React.FC = () => {
   const [selectedBindingId, setSelectedBindingId] = useState<string>('');
   const [relatedBOs, setRelatedBOs] = useState<any[]>([]);
   const [activeDatasets, setActiveDatasets] = useState<any[]>([...datasets]);
+  const [selectedSubtypeKey, setSelectedSubtypeKey] = useState<string | null>(null);
 
   // Preview state
   const [previewData, setPreviewData] = useState<any[] | null>(null);
@@ -319,6 +347,11 @@ const SSRSReportBuilderContent: React.FC = () => {
   const [reportFilterGroups, setReportFilterGroups] = useState<FilterGroup[]>([]);
   const [previewPage, setPreviewPage] = useState(1);
   const previewPageSize = 10;
+
+  const previewDataRecord: Record<string, any> = useMemo(() => {
+    if (!previewData || previewData.length === 0) return {};
+    return previewData[0] as Record<string, any>;
+  }, [previewData]);
 
   // Render state
   const [renderResult, setRenderResult] = useState<any | null>(null);
@@ -333,11 +366,14 @@ const SSRSReportBuilderContent: React.FC = () => {
 
   // Load + auto-migrate v1 → v2 on mount
   useEffect(() => {
-    if (!loadedTemplate?.definition) return;
+    if (!loadedTemplate?.definition) {
+      return;
+    }
 
     try {
       const def = deserializeFromBackend(loadedTemplate.definition as Record<string, unknown>);
       const needsMigrate = needsMigration(def);
+      console.log('[DEBUG] elements after deserialize:', def.elements.map(e => ({ id: e.id, section: e.section, type: e.type })));
 
       // Load parameters from definition or metadata
       const loadedParams = (loadedTemplate as any)?.definition?.parameters || (loadedTemplate as any)?.metadata?.parameters;
@@ -368,6 +404,13 @@ const SSRSReportBuilderContent: React.FC = () => {
         // Persist v2 layout back — preserve any existing sectionConfig/layoutSettings from metadata
         const existingSectionConfig = (loadedTemplate as any)?.metadata?.sectionConfig || {};
         const existingLayoutSettings = (loadedTemplate as any)?.metadata?.layoutSettings;
+        const loadedFormSpecMigrated = (migrated as any)?.formSpec
+          ?? (loadedTemplate as any)?.metadata?.formSpec
+          ?? null;
+        setFormSpec(loadedFormSpecMigrated);
+        const loadedFormRegistryMigrated = (migrated as any)?.formRegistry
+          ?? (loadedTemplate as any)?.metadata?.formRegistry
+          ?? {};
         const v2Payload = buildSavePayload(
           {
             elements: migrated.elements,
@@ -375,6 +418,9 @@ const SSRSReportBuilderContent: React.FC = () => {
             sectionConfig: { ...existingSectionConfig, ...((migrated as any).sectionConfig || {}) },
             layoutSettings: existingLayoutSettings || (migrated as any).layoutSettings,
             parameters: reportParameters,
+            formSpec: loadedFormSpecMigrated,
+            formRegistry: loadedFormRegistryMigrated,
+            layoutSections: Object.values(REPORT_SECTIONS).map((sec) => defaultSectionLayout(sec as any)),
           },
           null,
           urlReportId
@@ -387,12 +433,27 @@ const SSRSReportBuilderContent: React.FC = () => {
         if ((def as any).layoutSettings) {
           setLayoutSettingsState((def as any).layoutSettings);
         }
+        const loadedFormSpecV2 = (def as any)?.formSpec
+          ?? (loadedTemplate as any)?.metadata?.formSpec
+          ?? null;
+        setFormSpec(loadedFormSpecV2);
+        const loadedLayoutSections = (def as any)?.layoutSections
+          ?? (loadedTemplate as any)?.metadata?.layoutSections
+          ?? null;
+        if (Array.isArray(loadedLayoutSections) && loadedLayoutSections.length > 0) {
+          setLayoutSections(loadedLayoutSections);
+        }
       }
     } catch (err) {
       console.error('[SSRSReportBuilder] Failed to load report:', err);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loadedTemplate]);
+
+  // Guardrail: clear form section focus when switching away from Form tab
+  useEffect(() => {
+    if (activeTab !== 'form') setFocusedFormSectionId(null);
+  }, [activeTab]);
 
   // Phase 2d: Auto-select BO when report is loaded with a bo_path binding
   useEffect(() => {
@@ -594,8 +655,19 @@ const SSRSReportBuilderContent: React.FC = () => {
         }));
 
         setBusinessObjects(normalizedList);
+        // Check if BO ID was provided in URL query string / location state
+        const searchParams = new URLSearchParams(window.location.search);
+        const urlBO = searchParams.get('bo');
+        const urlBinding = searchParams.get('binding');
+        if (urlBinding) {
+          setSelectedBindingId(urlBinding);
+        }
+
         if (normalizedList.length > 0) {
           setSelectedBOId(prev => {
+            if (urlBO && normalizedList.some((b: any) => b.id === urlBO || b.key === urlBO)) {
+              return urlBO;
+            }
             if (!prev || !normalizedList.some((b: any) => b.id === prev || b.key === prev)) {
               return normalizedList[0].id;
             }
@@ -817,7 +889,7 @@ const SSRSReportBuilderContent: React.FC = () => {
     setSnackbar({ open: true, message: `Created Table with ${fields.length} columns from ${selectedBO?.displayName || 'BO'}`, severity: 'success' });
   };
 
-  const handleAddToolboxItem = (type: string, targetSection: string = REPORT_SECTIONS.BODY) => {
+  const handleAddToolboxItem = (type: string, targetSection: string = REPORT_SECTIONS.BODY, payload?: Record<string, unknown>) => {
     const defaultSizes: Record<string, { width: number; height: number }> = {
       [ELEMENT_TYPES.TEXTBOX]: { width: 180, height: 40 },
       [ELEMENT_TYPES.TABLE]: { width: 560, height: 180 },
@@ -842,14 +914,13 @@ const SSRSReportBuilderContent: React.FC = () => {
         name: `${type.charAt(0).toUpperCase() + type.slice(1)} 1`,
         fontSize: 12,
         textColor: isDark ? '#E2E8F0' : '#1E293B',
-        // Empty container scaffolding: tables/matrixes initialize with NO pre-populated columns
         columns: type === ELEMENT_TYPES.TABLE || type === ELEMENT_TYPES.MATRIX || type === ELEMENT_TYPES.LIST ? [] : undefined,
       },
     };
 
     setElements([...elements, newElement]);
     setSelectedElement(newElement.id);
-    setSnackbar({ open: true, message: `Added ${type} empty container to ${targetSection}`, severity: 'success' });
+    setSnackbar({ open: true, message: `Added ${type} to ${targetSection}`, severity: 'success' });
   };
 
   const handleDragStart = (event: any) => {
@@ -868,14 +939,45 @@ const SSRSReportBuilderContent: React.FC = () => {
 
     if (active.data.current?.isToolboxItem || active.id?.toString().startsWith('toolbox-')) {
       const type = active.data.current?.type || active.id.toString().replace('toolbox-', '');
-      handleAddToolboxItem(type, targetSection);
+      const payload = active.data.current?.payload as Record<string, unknown> | undefined;
+
+      // form-block / formReference: create formReference element directly
+      if (type === 'formReference' || type === 'form-block') {
+        const templateId = payload?.templateId as string | undefined;
+        const newElement = {
+          id: `formref_${Date.now()}`,
+          type: 'formReference',
+          section: targetSection,
+          position: { x: 30, y: 30 },
+          size: { width: 600, height: 300 },
+          properties: {
+            templateId: templateId
+              ? { isExpression: false, value: templateId }
+              : { isExpression: false, value: '' },
+            containerStyle: {},
+          },
+        };
+        setElements([...elements, newElement]);
+        setSelectedElement(newElement.id);
+        setSnackbar({ open: true, message: `Added Form Block to ${targetSection}`, severity: 'success' });
+        return;
+      }
+
+      // form-block-multi: delegate to ReportSection's onFormBlockAdd (picker dialog)
+      if (type === 'form-block-multi') {
+        // onFormBlockAdd will be called by ReportSection's native onDrop handler
+        // which reads dataTransfer and calls onFormBlockAdd(section, { mode, templateId })
+        handleAddToolboxItem(type, targetSection, payload);
+        return;
+      }
+
+      handleAddToolboxItem(type, targetSection, payload);
       return;
     }
 
-    if (active.data.current?.isBOField) {
+    if (active.data.current?.isBOField && active.data.current?.field) {
       const bundle: BOField[] = active.data.current.selectedFields || [active.data.current.field];
       if (bundle.length > 1) {
-        // Multi-select bundle dropped onto section creates a table with the selected columns
         handleAddAllAsTable(bundle);
       } else if (bundle.length === 1) {
         handleAddFieldToCanvas(bundle[0]);
@@ -913,6 +1015,64 @@ const SSRSReportBuilderContent: React.FC = () => {
     setSelectedSection(sectionId);
     setSelectedElement(null);
   }, []);
+
+  const handleNavigateToFormTab = useCallback(
+    (_templateId: string) => {
+      setActiveTab('form');
+    },
+    []
+  );
+
+  const handleAddFormBlock = useCallback(
+    (section: string, payload: { mode: string; templateId: string }) => {
+      const newElement = {
+        id: `formref_${Date.now()}`,
+        type: 'formReference',
+        section,
+        position: { x: 30, y: 30 },
+        size: { width: 600, height: 300 },
+        properties: {
+          templateId: { isExpression: false, value: payload.templateId },
+          containerStyle: {},
+        },
+      };
+      setElements([...elements, newElement]);
+      setSelectedElement(newElement.id);
+      setSelectedSection(null);
+      setSnackbar({
+        open: true,
+        message: `Added Form Block to ${section}`,
+        severity: 'success',
+      });
+    },
+    [elements, setElements]
+  );
+
+  const handleSectionDeleted = useCallback(
+    (snapshot: any) => {
+      let undoRan = false;
+      const undo = () => {
+        if (undoRan) return;
+        undoRan = true;
+        if (formSpec) {
+          setFormSpec({
+            ...formSpec,
+            sections: [...formSpec.sections, snapshot],
+          });
+        }
+      };
+      setSnackbar({
+        open: true,
+        message: `Section "${snapshot.title}" deleted`,
+        severity: 'warning',
+        action: {
+          label: 'Undo',
+          onClick: undo,
+        },
+      });
+    },
+    [formSpec, setFormSpec]
+  );
 
   const selectedElementData = useMemo(() => elements.find((el: any) => el.id === selectedElement), [elements, selectedElement]);
 
@@ -1193,34 +1353,42 @@ const SSRSReportBuilderContent: React.FC = () => {
               )}
             </Box>
 
-            {/* Right: BO switcher */}
+            {/* Right: Immutable Business Object & Binding Badge */}
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flex: '0 0 auto' }}>
-              <Typography variant="caption" sx={{ color: 'rgba(255,255,255,0.55)', fontWeight: 600, whiteSpace: 'nowrap', fontSize: '0.72rem' }}>
-                {urlReportId ? 'Business Object' : 'Business Object'}
-              </Typography>
-              {urlReportId && <LockOutlinedIcon sx={{ fontSize: 12, color: 'rgba(255,255,255,0.4)' }} />}
-              <FormControl size="small" sx={{ minWidth: 200 }}>
-                <Select
-                  value={selectedBOId}
-                  displayEmpty
-                  onChange={(e) => setSelectedBOId(e.target.value as string)}
-                  disabled={!!urlReportId || isReadOnlyCore}
+              {selectedBO ? (
+                <Tooltip title="Business Object and Datasource Binding are immutable for this report">
+                  <Chip
+                    icon={<LockOutlinedIcon sx={{ fontSize: '13px !important', color: '#FFF !important' }} />}
+                    label={`${selectedBO.displayName || selectedBO.name} • ${selectedBindingId || 'Default Binding'}`}
+                    size="small"
+                    sx={{
+                      height: 28,
+                      color: '#FFF',
+                      bgcolor: 'rgba(255,255,255,0.12)',
+                      fontSize: '0.75rem',
+                      fontWeight: 700,
+                      borderRadius: 1.5,
+                      border: '1px solid rgba(255,255,255,0.2)',
+                    }}
+                  />
+                </Tooltip>
+              ) : (
+                <Button
+                  size="small"
+                  variant="outlined"
+                  onClick={() => setBoPickerOpen(true)}
                   sx={{
-                    height: 28, color: '#FFF', bgcolor: 'rgba(255,255,255,0.09)', fontSize: '0.75rem', fontWeight: 600,
-                    borderRadius: 1.5, '& .MuiSvgIcon-root': { color: '#FFF' },
-                    '& fieldset': { borderColor: 'rgba(255,255,255,0.18)' },
-                    '&:hover fieldset': { borderColor: 'rgba(255,255,255,0.35)' },
-                    '&.Mui-disabled': { opacity: 0.6, bgcolor: 'rgba(255,255,255,0.05)' },
+                    height: 28,
+                    color: '#FFF',
+                    borderColor: 'rgba(255,255,255,0.3)',
+                    fontSize: '0.75rem',
+                    textTransform: 'none',
+                    fontWeight: 600,
                   }}
                 >
-                  <MenuItem value=""><em>Select Business Object...</em></MenuItem>
-                  {businessObjects.map((bo: any) => (
-                    <MenuItem key={bo.id} value={bo.id}>
-                      {bo.displayName || bo.name} ({bo.key || bo.technicalName || bo.name})
-                    </MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
+                  Select Business Object
+                </Button>
+              )}
             </Box>
           </Box>
         </TopAppBar>
@@ -1256,10 +1424,22 @@ const SSRSReportBuilderContent: React.FC = () => {
             </Box>
             <Box sx={{ flex: 1, p: sidebarTab === 'fields' ? 0 : 2, overflowY: 'auto' }}>
               {sidebarTab === 'fields' ? (
-                <BOFieldsPalette selectedBO={selectedBO} relatedBOs={relatedBOs} onAddFieldToCanvas={handleAddFieldToCanvas} onAddAllAsTable={handleAddAllAsTable} onResize={startPaletteResize} />
+                <BOFieldsPalette
+                  selectedBO={selectedBO}
+                  relatedBOs={relatedBOs}
+                  onAddFieldToCanvas={handleAddFieldToCanvas}
+                  onAddAllAsTable={handleAddAllAsTable}
+                  onResize={startPaletteResize}
+                  mode={activeTab === 'form' ? 'form' : 'design'}
+                />
               ) : (
                 <>
-                  <Typography variant="subtitle2" fontWeight="700" sx={{ mb: 1.5, color: colors.text }}>Report Items</Typography>
+                  {activeTab === 'form' && (
+                    <FormFieldPalette />
+                  )}
+                  <Typography variant="subtitle2" fontWeight="700" sx={{ mb: 1.5, color: colors.text }}>
+                    {activeTab === 'form' ? 'Form Blocks' : 'Report Items'}
+                  </Typography>
                   {toolboxItems.map(item => (
                     <ToolboxItem
                       key={item.type}
@@ -1269,6 +1449,10 @@ const SSRSReportBuilderContent: React.FC = () => {
                       onAdd={handleAddToolboxItem}
                     />
                   ))}
+                  <ToolboxFormBlock
+                    formRegistry={formRegistry}
+                    onAddItem={handleAddToolboxItem}
+                  />
                 </>
               )}
             </Box>
@@ -1320,8 +1504,8 @@ const SSRSReportBuilderContent: React.FC = () => {
                 sx={{ minHeight: 38, '& .MuiTab-root': { minHeight: 38, py: 0.75, fontWeight: 600, fontSize: '0.78rem', textTransform: 'none' } }}
               >
                 <Tab label="Design" value="design" />
+                <Tab label="Form" value="form" icon={<DynamicFormIcon sx={{ fontSize: 15 }} />} iconPosition="start" />
                 <Tab label="Preview" value="preview" />
-                <Tab label="Data" value="data" />
                 <Tab label="Filters" value="filters" />
                 <Tab label="Schedule & Bursting" value="schedule" />
                 <Tab label="Settings" value="settings" />
@@ -1447,6 +1631,11 @@ const SSRSReportBuilderContent: React.FC = () => {
                       orientation={orientation}
                       isLivePreview={false}
                       availableFieldDefs={availableFieldDefs}
+                      formRegistry={formRegistry}
+                      onFormBlockAdd={handleAddFormBlock}
+                      layoutSections={layoutSections}
+                      onUpdateSectionLayout={handleUpdateSectionLayout}
+                      onAddSubSection={handleAddSubSection}
                     />
                   </Box>
 
@@ -1465,9 +1654,29 @@ const SSRSReportBuilderContent: React.FC = () => {
                       onSectionConfigChange={handleSectionConfigChange}
                       layoutSettings={layoutSettingsState}
                       onLayoutSettingsChange={handleLayoutSettingChangeFromCanvas}
+                      formRegistry={formRegistry}
                     />
                   </Paper>
                 </Box>
+              </Box>
+            )}
+
+            {/* ════ FORM TAB ════ */}
+            {activeTab === 'form' && (
+              <Box sx={{ flex: 1, overflow: 'hidden' }}>
+                <ReportFormManager
+                  formSpec={formSpec}
+                  onFormSpecChange={setFormSpec}
+                  availableFields={availableFieldDefs.map((f: any) => ({
+                    key: f.technicalName || f.name,
+                    name: f.displayName || f.name,
+                    type: f.dataType || 'string',
+                  }))}
+                  previewData={previewDataRecord}
+                  focusedSectionId={focusedFormSectionId}
+                  onFocusSection={setFocusedFormSectionId}
+                  onSectionDeleted={handleSectionDeleted}
+                />
               </Box>
             )}
 
@@ -1598,6 +1807,17 @@ const SSRSReportBuilderContent: React.FC = () => {
                   </Paper>
                 )}
 
+                {/* Form Layout Manager Render (when form spec is defined) */}
+                {formSpec && (
+                  <Box sx={{ p: 3, overflowY: 'auto', bgcolor: '#050D1A' }}>
+                    <Typography variant="caption" sx={{ color: '#94A3B8', mb: 2, textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 700, display: 'block' }}>
+                      Form Render
+                    </Typography>
+                    <ReportFormRenderer formSpec={formSpec} previewData={previewDataRecord} />
+                    <Box sx={{ my: 3, borderTop: `1px solid ${colors.border}` }} />
+                  </Box>
+                )}
+
                 {/* Centered document */}
                 <Box sx={{ flex: 1, p: 3, overflowY: 'auto', display: 'flex', justifyContent: 'center' }}>
                   <ReportCanvas
@@ -1616,93 +1836,15 @@ const SSRSReportBuilderContent: React.FC = () => {
                       return previewData.slice(start, start + previewPageSize);
                     })()}
                     availableFieldDefs={availableFieldDefs}
+                    layoutSections={layoutSections}
+                    onUpdateSectionLayout={handleUpdateSectionLayout}
+                    onAddSubSection={handleAddSubSection}
                   />
                 </Box>
               </Box>
             )}
 
             {/* ════ DATA TAB ════ */}
-            {activeTab === 'data' && (
-              <Box sx={{ p: 3, overflowY: 'auto', bgcolor: colors.bg }}>
-                <Typography variant="subtitle1" fontWeight="700" sx={{ mb: 2.5, color: colors.text }}>Business Object Data Source</Typography>
-                <Grid container spacing={3}>
-                  <Grid size={{ xs: 12, md: 7 }}>
-                    <Paper sx={{ p: 3, display: 'flex', flexDirection: 'column', gap: 2.5, bgcolor: colors.cardBg, border: `1px solid ${colors.border}` }}>
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                        <Typography variant="subtitle2" fontWeight="700" sx={{ color: colors.text }}>Primary Business Object</Typography>
-                        {urlReportId && <LockOutlinedIcon sx={{ fontSize: 14, color: colors.textMuted }} />}
-                      </Box>
-                      <FormControl fullWidth size="small">
-                        <InputLabel id="bo-select-label">Business Object</InputLabel>
-                        <Select
-                          labelId="bo-select-label"
-                          value={selectedBOId}
-                          label="Business Object"
-                          onChange={(e) => setSelectedBOId(e.target.value as string)}
-                          disabled={!!urlReportId || isReadOnlyCore}
-                        >
-                          <MenuItem value=""><em>Select Business Object...</em></MenuItem>
-                          {businessObjects.map((bo: any) => (
-                            <MenuItem key={bo.id} value={bo.id}>
-                              {bo.displayName || bo.name} ({bo.key || bo.technicalName || bo.name})
-                            </MenuItem>
-                          ))}
-                        </Select>
-                      </FormControl>
-                      {urlReportId && (
-                        <Typography variant="caption" sx={{ color: colors.textMuted, fontSize: '0.68rem' }}>
-                          Business Object cannot be changed after a report is created. Clone the report to use a different BO.
-                        </Typography>
-                      )}
-
-                      {selectedBOId && (
-                        <FormControl fullWidth size="small">
-                          <InputLabel id="binding-select-label">Active Binding</InputLabel>
-                          <Select labelId="binding-select-label" value={selectedBindingId} label="Active Binding" onChange={(e) => setSelectedBindingId(e.target.value as string)}>
-                            {bindings.length > 0
-                              ? bindings.map((b: any) => <MenuItem key={b.id} value={b.id}>{b.name || `Binding: ${b.datasource_id || b.datasourceId}`} ({b.binding_type || b.bindingType || 'physical'})</MenuItem>)
-                              : <MenuItem value="" disabled>No bindings defined</MenuItem>}
-                          </Select>
-                        </FormControl>
-                      )}
-                    </Paper>
-                  </Grid>
-
-                  <Grid size={{ xs: 12, md: 5 }}>
-                    <Paper sx={{ p: 3, height: '100%', bgcolor: colors.cardBg, border: `1px solid ${colors.border}` }}>
-                      <Typography variant="subtitle2" fontWeight="700" sx={{ color: colors.text }} gutterBottom>Related Business Objects</Typography>
-                      {relatedBOs.length > 0 ? (
-                        <Stack spacing={1} sx={{ mt: 1 }}>
-                          {relatedBOs.map((rel: any, i: number) => (
-                            <Box key={i} sx={{ p: 1.5, border: `1px solid ${colors.border}`, borderRadius: 1.5, bgcolor: colors.sidebarBg }}>
-                              <Typography variant="subtitle2" sx={{ fontWeight: 700, color: colors.text }}>{rel.relatedObjectName}</Typography>
-                              <Typography variant="caption" sx={{ color: colors.textMuted }}>{rel.relationshipType} · {rel.description}</Typography>
-                            </Box>
-                          ))}
-                        </Stack>
-                      ) : (
-                        <Typography variant="body2" sx={{ color: colors.textMuted, mt: 1 }}>
-                          {selectedBOId ? 'No related objects defined.' : 'Select a Business Object above.'}
-                        </Typography>
-                      )}
-                    </Paper>
-                  </Grid>
-
-                  <Grid size={12}>
-                    <Paper sx={{ p: 3, bgcolor: colors.cardBg, border: `1px solid ${colors.border}` }}>
-                      <Typography variant="subtitle2" fontWeight="700" sx={{ color: colors.text }} gutterBottom>Available Fields</Typography>
-                      <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75, mt: 1 }}>
-                        {activeDatasets.flatMap(ds => ds.fields || []).map((f: any, idx: number) => (
-                          <Chip key={`${f.name}_${idx}`} label={`${f.name} (${f.type})`} size="small"
-                            sx={{ bgcolor: isDark ? 'rgba(99,102,241,0.12)' : 'rgba(99,102,241,0.07)', color: colors.primary, borderColor: colors.border, fontSize: '0.7rem' }} variant="outlined" />
-                        ))}
-                      </Box>
-                    </Paper>
-                  </Grid>
-                </Grid>
-              </Box>
-            )}
-
             {/* ════ SCHEDULE & BURSTING TAB ════ */}
             {activeTab === 'schedule' && (
               <Box sx={{ p: 3, overflowY: 'auto', bgcolor: colors.bg }}>
@@ -1859,6 +2001,18 @@ const SSRSReportBuilderContent: React.FC = () => {
           onDelete={handleRemoveParameter}
           isReadOnly={isReadOnlyCore}
           onClone={handleCloneReport}
+        />
+        <UnifiedBOPickerModal
+          open={boPickerOpen}
+          context="report"
+          businessObjects={businessObjects}
+          onClose={() => setBoPickerOpen(false)}
+          onPick={(bo, bindingId, _selectedRelatedBOs, _bindingDetails, selectedSubtypeKey) => {
+            setSelectedBOId(bo.id);
+            if (bindingId) setSelectedBindingId(bindingId);
+            setSelectedSubtypeKey(selectedSubtypeKey ?? null);
+            setBoPickerOpen(false);
+          }}
         />
         <Snackbar open={snackbar.open} autoHideDuration={4000} onClose={handleCloseSnackbar} anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}>
           <Alert onClose={handleCloseSnackbar} severity={snackbar.severity} sx={{ width: '100%' }}>{snackbar.message}</Alert>

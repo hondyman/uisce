@@ -141,7 +141,7 @@ export const ReportBurstTelemetryHUD: React.FC<{ batchId: string; tenantId?: str
 
       {/* Telemetry Metrics Grid */}
       <Grid container spacing={2}>
-        <Grid item xs={6} sm={3}>
+        <Grid size={{ xs: 6, sm: 3 }}>
           <Paper sx={{ p: 1.5, bgcolor: 'rgba(15, 23, 42, 0.7)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 1.5 }}>
             <Typography variant="caption" sx={{ color: '#94A3B8', display: 'flex', alignItems: 'center', gap: 0.5, fontWeight: 700, textTransform: 'uppercase', fontSize: '0.65rem' }}>
               <Zap size={13} color="#FBBF24" /> Throughput
@@ -151,7 +151,7 @@ export const ReportBurstTelemetryHUD: React.FC<{ batchId: string; tenantId?: str
             </Typography>
           </Paper>
         </Grid>
-        <Grid item xs={6} sm={3}>
+        <Grid size={{ xs: 6, sm: 3 }}>
           <Paper sx={{ p: 1.5, bgcolor: 'rgba(15, 23, 42, 0.7)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 1.5 }}>
             <Typography variant="caption" sx={{ color: '#94A3B8', display: 'flex', alignItems: 'center', gap: 0.5, fontWeight: 700, textTransform: 'uppercase', fontSize: '0.65rem' }}>
               <Clock size={13} color="#38BDF8" /> p50 Latency
@@ -161,7 +161,7 @@ export const ReportBurstTelemetryHUD: React.FC<{ batchId: string; tenantId?: str
             </Typography>
           </Paper>
         </Grid>
-        <Grid item xs={6} sm={3}>
+        <Grid size={{ xs: 6, sm: 3 }}>
           <Paper sx={{ p: 1.5, bgcolor: 'rgba(15, 23, 42, 0.7)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 1.5 }}>
             <Typography variant="caption" sx={{ color: '#94A3B8', display: 'flex', alignItems: 'center', gap: 0.5, fontWeight: 700, textTransform: 'uppercase', fontSize: '0.65rem' }}>
               <Clock size={13} color="#C084FC" /> p95 Latency
@@ -171,7 +171,7 @@ export const ReportBurstTelemetryHUD: React.FC<{ batchId: string; tenantId?: str
             </Typography>
           </Paper>
         </Grid>
-        <Grid item xs={6} sm={3}>
+        <Grid size={{ xs: 6, sm: 3 }}>
           <Paper sx={{ p: 1.5, bgcolor: 'rgba(15, 23, 42, 0.7)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 1.5 }}>
             <Typography variant="caption" sx={{ color: '#94A3B8', display: 'flex', alignItems: 'center', gap: 0.5, fontWeight: 700, textTransform: 'uppercase', fontSize: '0.65rem' }}>
               <Clock size={13} color="#F87171" /> p99 Latency

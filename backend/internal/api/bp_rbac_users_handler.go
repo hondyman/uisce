@@ -131,7 +131,7 @@ func (h *RBACHandlers) createUser(w http.ResponseWriter, r *http.Request) {
 // updateUserTenant updates the tenant_id for a user
 func (h *RBACHandlers) updateUserTenant(w http.ResponseWriter, r *http.Request) {
 	userID := chi.URLParam(r, "userId")
-	
+
 	var req struct {
 		TenantID *string `json:"tenant_id"`
 	}
@@ -141,15 +141,24 @@ func (h *RBACHandlers) updateUserTenant(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	var tenantVal any
-	if req.TenantID == nil || *req.TenantID == "" {
-		tenantVal = nil
-	} else {
-		tenantVal = *req.TenantID
+	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
+	if err != nil {
+		http.Error(w, "Unauthorized: "+err.Error(), http.StatusUnauthorized)
+		return
 	}
 
-	_, err := h.db.Exec(`
-		UPDATE users 
+	var tenantVal any
+	var affectedTenantID string
+	if req.TenantID == nil || *req.TenantID == "" {
+		tenantVal = nil
+		affectedTenantID = secCtx.TenantID
+	} else {
+		tenantVal = *req.TenantID
+		affectedTenantID = *req.TenantID
+	}
+
+	_, err = h.db.Exec(`
+		UPDATE users
 		SET tenant_id = $1, updated_at = now()
 		WHERE id = $2
 	`, tenantVal, userID)
@@ -157,6 +166,10 @@ func (h *RBACHandlers) updateUserTenant(w http.ResponseWriter, r *http.Request) 
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Failed to update user tenant assignment: %v", err), http.StatusInternalServerError)
 		return
+	}
+
+	if h.entitlements != nil {
+		h.entitlements.Invalidate(affectedTenantID, userID)
 	}
 
 	respondJSONRBAC(w, r, map[string]string{"status": "updated"}, http.StatusOK)

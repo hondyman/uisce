@@ -1,6 +1,26 @@
-// Tenants Page - Main tenant management interface
-
 import React, { useCallback, useEffect, useState } from "react";
+import { useTheme } from "@mui/material/styles";
+import Box from "@mui/material/Box";
+import Typography from "@mui/material/Typography";
+import Button from "@mui/material/Button";
+import Paper from "@mui/material/Paper";
+import TextField from "@mui/material/TextField";
+import Table from "@mui/material/Table";
+import TableBody from "@mui/material/TableBody";
+import TableCell from "@mui/material/TableCell";
+import TableContainer from "@mui/material/TableContainer";
+import TableHead from "@mui/material/TableHead";
+import TableRow from "@mui/material/TableRow";
+import FormControl from "@mui/material/FormControl";
+import InputLabel from "@mui/material/InputLabel";
+import Select from "@mui/material/Select";
+import MenuItem from "@mui/material/MenuItem";
+import Chip from "@mui/material/Chip";
+import Dialog from "@mui/material/Dialog";
+import DialogTitle from "@mui/material/DialogTitle";
+import DialogContent from "@mui/material/DialogContent";
+import DialogActions from "@mui/material/DialogActions";
+import IconButton from "@mui/material/IconButton";
 import { useTenants } from "../hooks/useAdmin";
 import { Tenant } from "../types";
 import { useAuth } from "../../contexts/AuthContext";
@@ -9,7 +29,6 @@ import { ImpersonationTenantPicker } from "../../components/admin/ImpersonationT
 import { useImpersonation } from "../../contexts/ImpersonationContext";
 import type { ImpersonationScope } from "../../contexts/ImpersonationContext";
 import type { ActiveImpersonationSession } from "../../contexts/ImpersonationContext";
-import "./TenantsPage.css";
 
 interface TenantFormData {
   name: string;
@@ -19,6 +38,7 @@ interface TenantFormData {
 }
 
 export const TenantsPage: React.FC = () => {
+  const theme = useTheme();
   const [limit] = useState(50);
   const [offset, setOffset] = useState(0);
   const [showCreateForm, setShowCreateForm] = useState(false);
@@ -36,7 +56,6 @@ export const TenantsPage: React.FC = () => {
   const { token: adminToken } = useAuth();
   const { recentSessions, clearRecentSessions, listActiveSessions } = useImpersonation();
 
-  // Fetch active sessions when the picker opens so the duplicate-session warning is current.
   const refreshActiveSessions = useCallback(async () => {
     try {
       const sessions = await listActiveSessions();
@@ -117,218 +136,210 @@ export const TenantsPage: React.FC = () => {
   const currentPage = Math.floor(offset / limit) + 1;
 
   return (
-    <div className="tenants-page">
-      <div className="page-header">
-        <h1>Tenants</h1>
-        <div style={{ display: 'flex', gap: 8 }}>
+    <Box sx={{ p: 3 }}>
+      <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 3 }}>
+        <Typography variant="h4" sx={{ fontWeight: 600 }}>
+          Tenants
+        </Typography>
+        <Box sx={{ display: "flex", gap: 1 }}>
           {isGlobalAdmin() && (
-            <button
-              className="btn"
-              style={{ background: '#d97706', color: 'white', fontWeight: 600 }}
+            <Button
+              variant="contained"
               onClick={() => {
                 setImpersonateTenant(null);
                 setPendingScope(null);
                 setPickerOpen(true);
                 void refreshActiveSessions();
               }}
+              sx={{ bgcolor: "warning.main", color: "white", fontWeight: 600, "&:hover": { bgcolor: "warning.dark" } }}
             >
               Assume Context (Pick Tenant)
-            </button>
+            </Button>
           )}
-          <button className="btn btn-primary" onClick={handleCreateClick}>
+          <Button variant="contained" onClick={handleCreateClick}>
             + New Tenant
-          </button>
-        </div>
-      </div>
+          </Button>
+        </Box>
+      </Box>
 
-      {error && <div className="alert alert-error">{error}</div>}
+      {error && (
+        <Paper sx={{ mb: 3, p: 2, bgcolor: "error.light", color: "error.dark" }}>
+          {error}
+        </Paper>
+      )}
 
-      {/* Create Form Modal */}
-      {showCreateForm && (
-        <div className="modal-overlay">
-          <div className="modal">
-            <div className="modal-header">
-              <h2>Create New Tenant</h2>
-              <button
-                className="modal-close"
-                onClick={() => setShowCreateForm(false)}
-              >
-                ✕
-              </button>
-            </div>
-            <form onSubmit={handleCreateTenant} className="tenant-form">
-              <div className="form-group">
-                <label htmlFor="name">Tenant Name *</label>
-                <input
-                  id="name"
-                  type="text"
-                  name="name"
-                  value={formData.name}
-                  onChange={handleFormChange}
-                  placeholder="e.g., Acme Corp"
-                  required
-                />
-              </div>
+      <Dialog open={showCreateForm} onClose={() => setShowCreateForm(false)} maxWidth="sm" fullWidth>
+        <DialogTitle>Create New Tenant</DialogTitle>
+        <form onSubmit={handleCreateTenant}>
+          <DialogContent>
+            <Box sx={{ display: "flex", flexDirection: "column", gap: 2, pt: 1 }}>
+              <TextField
+                label="Tenant Name *"
+                id="name"
+                name="name"
+                value={formData.name}
+                onChange={handleFormChange}
+                placeholder="e.g., Acme Corp"
+                fullWidth
+                required
+              />
 
-              <div className="form-group">
-                <label htmlFor="code">Tenant Code *</label>
-                <input
-                  id="code"
-                  type="text"
-                  name="code"
-                  value={formData.code}
-                  onChange={handleFormChange}
-                  placeholder="e.g., acme-corp"
-                  required
-                />
-              </div>
+              <TextField
+                label="Tenant Code *"
+                id="code"
+                name="code"
+                value={formData.code}
+                onChange={handleFormChange}
+                placeholder="e.g., acme-corp"
+                fullWidth
+                required
+              />
 
-              <div className="form-row">
-                <div className="form-group">
-                  <label htmlFor="region">Region</label>
-                  <select
+              <Box sx={{ display: "flex", gap: 2 }}>
+                <FormControl fullWidth>
+                  <InputLabel id="region-label">Region</InputLabel>
+                  <Select
+                    labelId="region-label"
                     id="region"
                     name="region"
                     value={formData.region}
-                    onChange={handleFormChange}
+                    label="Region"
+                    onChange={handleFormChange as any}
                   >
-                    <option value="us-east-1">US East 1</option>
-                    <option value="us-west-2">US West 2</option>
-                    <option value="eu-west-1">EU West 1</option>
-                    <option value="eu-central-1">EU Central 1</option>
-                    <option value="ap-southeast-1">AP Southeast 1</option>
-                    <option value="ap-northeast-1">AP Northeast 1</option>
-                  </select>
-                </div>
+                    <MenuItem value="us-east-1">US East 1</MenuItem>
+                    <MenuItem value="us-west-2">US West 2</MenuItem>
+                    <MenuItem value="eu-west-1">EU West 1</MenuItem>
+                    <MenuItem value="eu-central-1">EU Central 1</MenuItem>
+                    <MenuItem value="ap-southeast-1">AP Southeast 1</MenuItem>
+                    <MenuItem value="ap-northeast-1">AP Northeast 1</MenuItem>
+                  </Select>
+                </FormControl>
 
-                <div className="form-group">
-                  <label htmlFor="plan">Plan</label>
-                  <select
+                <FormControl fullWidth>
+                  <InputLabel id="plan-label">Plan</InputLabel>
+                  <Select
+                    labelId="plan-label"
                     id="plan"
                     name="plan"
                     value={formData.plan}
+                    label="Plan"
                     onChange={handleFormChange as any}
                   >
-                    <option value="free">Free (100 req/day)</option>
-                    <option value="pro">Pro (10k req/day)</option>
-                    <option value="enterprise">Enterprise (Unlimited)</option>
-                  </select>
-                </div>
-              </div>
+                    <MenuItem value="free">Free (100 req/day)</MenuItem>
+                    <MenuItem value="pro">Pro (10k req/day)</MenuItem>
+                    <MenuItem value="enterprise">Enterprise (Unlimited)</MenuItem>
+                  </Select>
+                </FormControl>
+              </Box>
+            </Box>
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={() => setShowCreateForm(false)}>Cancel</Button>
+            <Button type="submit" variant="contained">Create Tenant</Button>
+          </DialogActions>
+        </form>
+      </Dialog>
 
-              <div className="form-actions">
-                <button
-                  type="button"
-                  className="btn btn-secondary"
-                  onClick={() => setShowCreateForm(false)}
-                >
-                  Cancel
-                </button>
-                <button type="submit" className="btn btn-primary">
-                  Create Tenant
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* Tenants Table */}
-      <div className="tenants-table-container">
-        {loading && <div className="loading">Loading tenants...</div>}
+      <TableContainer component={Paper}>
+        {loading && (
+          <Box sx={{ p: 4, textAlign: "center" }}>Loading tenants...</Box>
+        )}
 
         {!loading && tenants.length === 0 && (
-          <div className="empty-state">
-            <p>No tenants found. Create one to get started.</p>
-          </div>
+          <Box sx={{ p: 4, textAlign: "center", color: "text.secondary" }}>
+            No tenants found. Create one to get started.
+          </Box>
         )}
 
         {!loading && tenants.length > 0 && (
-          <table className="tenants-table">
-            <thead>
-              <tr>
-                <th>Name</th>
-                <th>Code</th>
-                <th>Region</th>
-                <th>Plan</th>
-                <th>Status</th>
-                <th>Rate Limit</th>
-                <th>Created</th>
-                <th>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
+          <Table>
+            <TableHead>
+              <TableRow>
+                <TableCell sx={{ fontWeight: 600 }}>Name</TableCell>
+                <TableCell sx={{ fontWeight: 600 }}>Code</TableCell>
+                <TableCell sx={{ fontWeight: 600 }}>Region</TableCell>
+                <TableCell sx={{ fontWeight: 600 }}>Plan</TableCell>
+                <TableCell sx={{ fontWeight: 600 }}>Status</TableCell>
+                <TableCell sx={{ fontWeight: 600 }}>Rate Limit</TableCell>
+                <TableCell sx={{ fontWeight: 600 }}>Created</TableCell>
+                <TableCell sx={{ fontWeight: 600 }}>Actions</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
               {tenants.map((tenant) => (
-                <tr
-                  key={tenant.id}
-                  className={tenant.is_suspended ? "suspended" : ""}
-                >
-                  <td className="name-col">
-                    <strong>{tenant.name}</strong>
-                  </td>
-                  <td className="code-col">{tenant.code}</td>
-                  <td className="region-col">{tenant.region}</td>
-                  <td className="plan-col">
-                    <span className={`badge badge-${tenant.plan}`}>
-                      {tenant.plan.charAt(0).toUpperCase() +
-                        tenant.plan.slice(1)}
-                    </span>
-                  </td>
-                  <td className="status-col">
+                <TableRow key={tenant.id} sx={tenant.is_suspended ? { opacity: 0.6 } : {}}>
+                  <TableCell>
+                    <Typography sx={{ fontWeight: 600 }}>{tenant.name}</Typography>
+                  </TableCell>
+                  <TableCell>{tenant.code}</TableCell>
+                  <TableCell>{tenant.region}</TableCell>
+                  <TableCell>
+                    <Chip 
+                      label={tenant.plan.charAt(0).toUpperCase() + tenant.plan.slice(1)} 
+                      size="small"
+                      sx={{ 
+                        bgcolor: tenant.plan === 'enterprise' ? 'primary.light' : tenant.plan === 'pro' ? 'info.light' : 'default',
+                        color: tenant.plan === 'enterprise' || tenant.plan === 'pro' ? 'white' : 'text.primary'
+                      }} 
+                    />
+                  </TableCell>
+                  <TableCell>
                     {tenant.is_suspended ? (
-                      <span className="badge badge-suspended">Suspended</span>
+                      <Chip label="Suspended" size="small" color="error" />
                     ) : (
-                      <span className="badge badge-active">Active</span>
+                      <Chip label="Active" size="small" color="success" />
                     )}
-                  </td>
-                  <td className="limit-col">
+                  </TableCell>
+                  <TableCell>
                     {tenant.max_requests} / {tenant.window_seconds}s
-                  </td>
-                  <td className="created-col">
+                  </TableCell>
+                  <TableCell>
                     {new Date(tenant.created_at).toLocaleDateString()}
-                  </td>
-                  <td className="actions-col">
-                    <button className="link-btn">Details</button>
-                    <button className="link-btn">Edit</button>
+                  </TableCell>
+                  <TableCell>
+                    <Button size="small">Details</Button>
+                    <Button size="small">Edit</Button>
                     {isGlobalAdmin() && (
-                      <button 
-                        className="link-btn"
+                      <Button 
+                        size="small"
                         onClick={() => openPickerFor(tenant)}
-                        style={{ color: '#d97706', fontWeight: 600 }}
+                        sx={{ color: "warning.main", fontWeight: 600 }}
                       >
                         Assume Context
-                      </button>
+                      </Button>
                     )}
-                  </td>
-                </tr>
+                  </TableCell>
+                </TableRow>
               ))}
-            </tbody>
-          </table>
+            </TableBody>
+          </Table>
         )}
-      </div>
+      </TableContainer>
 
-      {/* Pagination */}
       {pageCount > 1 && (
-        <div className="pagination">
-          <button
+        <Box sx={{ display: "flex", justifyContent: "center", alignItems: "center", mt: 2, gap: 2 }}>
+          <Button
             disabled={offset === 0}
             onClick={() => setOffset(Math.max(0, offset - limit))}
+            variant="outlined"
+            size="small"
           >
             Previous
-          </button>
-          <span className="page-info">
+          </Button>
+          <Typography variant="body2">
             Page {currentPage} of {pageCount} ({total} total)
-          </span>
-          <button
+          </Typography>
+          <Button
             disabled={offset + limit >= total}
             onClick={() => setOffset(offset + limit)}
+            variant="outlined"
+            size="small"
           >
             Next
-          </button>
-        </div>
+          </Button>
+        </Box>
       )}
 
-      {/* Tenant picker — opens when admin clicks any "Assume Context" button or the page-level action. */}
       {adminToken && (
         <ImpersonationTenantPicker
           open={pickerOpen}
@@ -354,7 +365,7 @@ export const TenantsPage: React.FC = () => {
           initialScope={pendingScope ?? undefined}
         />
       )}
-    </div>
+    </Box>
   );
 };
 

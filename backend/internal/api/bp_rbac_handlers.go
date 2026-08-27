@@ -23,13 +23,15 @@ type RBACHandlers struct {
 	db             *sqlx.DB
 	securityDeps   handlers.SecurityContextDeps
 	fieldPermRepo  *security.FieldPermissionRepository
+	entitlements   *security.EntitlementsService
 }
 
-func NewRBACHandlers(db *sqlx.DB, securityDeps handlers.SecurityContextDeps) *RBACHandlers {
+func NewRBACHandlers(db *sqlx.DB, securityDeps handlers.SecurityContextDeps, entSvc *security.EntitlementsService) *RBACHandlers {
 	return &RBACHandlers{
 		db:            db,
 		securityDeps:  securityDeps,
 		fieldPermRepo: security.NewFieldPermissionRepository(db),
+		entitlements:  entSvc,
 	}
 }
 
@@ -109,14 +111,14 @@ func (h *RBACHandlers) listRoles(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	tenantID := secCtx.TenantID
-	datasourceID := secCtx.DatasourceID
 
 	var roles []Role
 	err = h.db.Select(&roles, `
-		SELECT * FROM bp_roles
-		WHERE tenant_id = $1 AND datasource_id = $2 AND is_active = true
+		SELECT id, tenant_id, role_key, role_name, description, role_type, role_level, is_active, created_by, created_at, updated_at
+		FROM bp_roles
+		WHERE tenant_id = $1 AND is_active = true
 		ORDER BY role_level, role_name
-	`, tenantID, datasourceID)
+	`, tenantID)
 
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Failed to fetch roles: %v", err), http.StatusInternalServerError)
@@ -133,7 +135,6 @@ func (h *RBACHandlers) createRole(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	tenantID := secCtx.TenantID
-	datasourceID := secCtx.DatasourceID
 
 	var req struct {
 		RoleKey     string   `json:"role_key"`
@@ -148,20 +149,18 @@ func (h *RBACHandlers) createRole(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Create role
 	var roleID string
 	err = h.db.QueryRow(`
-		INSERT INTO bp_roles (tenant_id, datasource_id, role_key, role_name, description, role_type, role_level)
-		VALUES ($1, $2, $3, $4, $5, 'custom', $6)
+		INSERT INTO bp_roles (tenant_id, role_key, role_name, description, role_type, role_level)
+		VALUES ($1, $2, $3, $4, 'custom', $5)
 		RETURNING id
-	`, tenantID, datasourceID, req.RoleKey, req.RoleName, req.Description, req.RoleLevel).Scan(&roleID)
+	`, tenantID, req.RoleKey, req.RoleName, req.Description, req.RoleLevel).Scan(&roleID)
 
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Failed to create role: %v", err), http.StatusInternalServerError)
 		return
 	}
 
-	// Assign permissions
 	for _, permID := range req.Permissions {
 		_, err := h.db.Exec(`
 			INSERT INTO bp_role_permissions (role_id, permission_id)
@@ -169,9 +168,12 @@ func (h *RBACHandlers) createRole(w http.ResponseWriter, r *http.Request) {
 			ON CONFLICT DO NOTHING
 		`, roleID, permID)
 		if err != nil {
-			// Log error but continue
 			fmt.Printf("Failed to assign permission %s: %v\n", permID, err)
 		}
+	}
+
+	if h.entitlements != nil {
+		h.entitlements.InvalidateAll(tenantID)
 	}
 
 	respondJSONRBAC(w, r, map[string]string{"id": roleID, "status": "created"}, http.StatusCreated)
@@ -229,12 +231,22 @@ func (h *RBACHandlers) updateRole(w http.ResponseWriter, r *http.Request) {
 func (h *RBACHandlers) deleteRole(w http.ResponseWriter, r *http.Request) {
 	roleID := chi.URLParam(r, "roleId")
 
-	// Soft delete
-	_, err := h.db.Exec("UPDATE bp_roles SET is_active = false WHERE id = $1", roleID)
+	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
+	if err != nil {
+		http.Error(w, "Unauthorized: "+err.Error(), http.StatusUnauthorized)
+		return
+	}
+	tenantID := secCtx.TenantID
+
+	_, err = h.db.Exec("UPDATE bp_roles SET is_active = false WHERE id = $1", roleID)
 
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Failed to delete role: %v", err), http.StatusInternalServerError)
 		return
+	}
+
+	if h.entitlements != nil {
+		h.entitlements.InvalidateAll(tenantID)
 	}
 
 	respondJSONRBAC(w, r, map[string]string{"status": "deleted"}, http.StatusOK)
@@ -294,7 +306,6 @@ func (h *RBACHandlers) getUserPermissions(w http.ResponseWriter, r *http.Request
 		return
 	}
 	tenantID := secCtx.TenantID
-	datasourceID := secCtx.DatasourceID
 
 	var permissions []map[string]string
 	rows, err := h.db.Query(`
@@ -304,11 +315,10 @@ func (h *RBACHandlers) getUserPermissions(w http.ResponseWriter, r *http.Request
 		JOIN bp_permissions p ON rp.permission_id = p.id
 		WHERE ur.user_id = $1
 		  AND ur.tenant_id = $2
-		  AND ur.datasource_id = $3
 		  AND ur.is_active = true
 		  AND (ur.expires_at IS NULL OR ur.expires_at > CURRENT_TIMESTAMP)
 		ORDER BY p.resource_type, p.action
-	`, userID, tenantID, datasourceID)
+	`, userID, tenantID)
 
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Failed to fetch user permissions: %v", err), http.StatusInternalServerError)
@@ -367,9 +377,9 @@ func (h *RBACHandlers) assignRoleToUser(w http.ResponseWriter, r *http.Request) 
 
 	var req struct {
 		UserID       string  `json:"user_id"`
-		ScopeType    *string `json:"scope_type"`
-		ScopeID      *string `json:"scope_id"`
-		ExpiresAt    *string `json:"expires_at"`
+		ScopeType   *string `json:"scope_type"`
+		ScopeID     *string `json:"scope_id"`
+		ExpiresAt   *string `json:"expires_at"`
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -383,17 +393,20 @@ func (h *RBACHandlers) assignRoleToUser(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	tenantID := secCtx.TenantID
-	datasourceID := secCtx.DatasourceID
 
 	_, err = h.db.Exec(`
-		INSERT INTO bp_user_roles (user_id, role_id, tenant_id, datasource_id, scope_type, scope_id, expires_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7)
-		ON CONFLICT (user_id, role_id, tenant_id, datasource_id, scope_type, scope_id) DO NOTHING
-	`, req.UserID, roleID, tenantID, datasourceID, req.ScopeType, req.ScopeID, req.ExpiresAt)
+		INSERT INTO bp_user_roles (user_id, role_id, tenant_id, scope_type, scope_id, expires_at)
+		VALUES ($1, $2, $3, $4, $5, $6)
+		ON CONFLICT (user_id, role_id, tenant_id, scope_type, scope_id) DO NOTHING
+	`, req.UserID, roleID, tenantID, req.ScopeType, req.ScopeID, req.ExpiresAt)
 
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Failed to assign role: %v", err), http.StatusInternalServerError)
 		return
+	}
+
+	if h.entitlements != nil {
+		h.entitlements.Invalidate(tenantID, req.UserID)
 	}
 
 	respondJSONRBAC(w, r, map[string]string{"status": "assigned"}, http.StatusCreated)
@@ -403,7 +416,14 @@ func (h *RBACHandlers) unassignRoleFromUser(w http.ResponseWriter, r *http.Reque
 	roleID := chi.URLParam(r, "roleId")
 	userID := chi.URLParam(r, "userId")
 
-	_, err := h.db.Exec(`
+	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
+	if err != nil {
+		http.Error(w, "Unauthorized: "+err.Error(), http.StatusUnauthorized)
+		return
+	}
+	tenantID := secCtx.TenantID
+
+	_, err = h.db.Exec(`
 		UPDATE bp_user_roles
 		SET is_active = false
 		WHERE role_id = $1 AND user_id = $2
@@ -412,6 +432,10 @@ func (h *RBACHandlers) unassignRoleFromUser(w http.ResponseWriter, r *http.Reque
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Failed to unassign role: %v", err), http.StatusInternalServerError)
 		return
+	}
+
+	if h.entitlements != nil {
+		h.entitlements.Invalidate(tenantID, userID)
 	}
 
 	respondJSONRBAC(w, r, map[string]string{"status": "unassigned"}, http.StatusOK)
@@ -425,7 +449,6 @@ func (h *RBACHandlers) getUserRoles(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	tenantID := secCtx.TenantID
-	datasourceID := secCtx.DatasourceID
 
 	var roles []map[string]interface{}
 	rows, err := h.db.Query(`
@@ -434,10 +457,9 @@ func (h *RBACHandlers) getUserRoles(w http.ResponseWriter, r *http.Request) {
 		JOIN bp_roles r ON ur.role_id = r.id
 		WHERE ur.user_id = $1
 		  AND ur.tenant_id = $2
-		  AND ur.datasource_id = $3
 		  AND ur.is_active = true
 		ORDER BY r.role_level DESC, r.role_name
-	`, userID, tenantID, datasourceID)
+	`, userID, tenantID)
 
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Failed to fetch user roles: %v", err), http.StatusInternalServerError)
@@ -485,21 +507,17 @@ func (h *RBACHandlers) getRoleUsers(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	tenantID := secCtx.TenantID
-	datasourceID := secCtx.DatasourceID
 
 	var users []map[string]interface{}
-	// Join bp_user_roles with users table to get details
-	// Assuming a 'users' table exists with id, username, name, email
 	rows, err := h.db.Query(`
 		SELECT u.id, u.username, u.name, u.email, ur.assigned_at
 		FROM bp_user_roles ur
 		JOIN users u ON ur.user_id = u.id
 		WHERE ur.role_id = $1
 		  AND ur.tenant_id = $2
-		  AND ur.datasource_id = $3
 		  AND ur.is_active = true
 		ORDER BY u.name, u.username
-	`, roleID, tenantID, datasourceID)
+	`, roleID, tenantID)
 
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Failed to fetch role users: %v", err), http.StatusInternalServerError)
@@ -544,36 +562,32 @@ func (h *RBACHandlers) listFieldPermissions(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	tenantID := secCtx.TenantID
-	datasourceID := secCtx.DatasourceID
 
 	var fieldPerms []map[string]interface{}
 
 	query := `
-		SELECT DISTINCT ON (fp.role_id, fp.term_node_id, fp.resource_type, fp.resource_id)
-			fp.id, r.role_key, r.role_name, fp.term_node_id, fp.resource_type, fp.resource_id, fp.permission_level, fp.masking_pattern,
-			cn.node_name as term_name, cn.display_name as term_display_name
+		SELECT DISTINCT ON (fp.role_id, fp.field_name, fp.resource_type, fp.resource_id)
+			fp.id, r.role_key, r.role_name, fp.field_name, fp.resource_type, fp.resource_id, fp.permission_level, fp.field_condition
 		FROM bp_field_permissions fp
 		JOIN bp_roles r ON fp.role_id = r.id
-		LEFT JOIN catalog_node cn ON fp.term_node_id = cn.id
-		WHERE fp.tenant_id = $1 AND fp.datasource_id = $2
+		WHERE fp.tenant_id = $1
 	`
-	args := []interface{}{tenantID, datasourceID}
+	args := []interface{}{tenantID}
 
-	// Optional role_id filter (not a security boundary)
 	roleID := r.URL.Query().Get("role_id")
 	if roleID != "" {
-		query += " AND fp.role_id = $3"
+		query += " AND fp.role_id = $2"
 		args = append(args, roleID)
 	}
 
-	// Optional term_node_id filter
-	termNodeIDParam := r.URL.Query().Get("term_node_id")
-	if termNodeIDParam != "" {
-		query += " AND fp.term_node_id = $4"
-		args = append(args, termNodeIDParam)
+	fieldNameParam := r.URL.Query().Get("field_name")
+	if fieldNameParam != "" {
+		paramIdx := len(args) + 1
+		query += fmt.Sprintf(" AND fp.field_name = $%d", paramIdx)
+		args = append(args, fieldNameParam)
 	}
 
-	query += " ORDER BY fp.role_id, fp.term_node_id, fp.resource_type, fp.resource_id, r.role_name"
+	query += " ORDER BY fp.role_id, fp.field_name, fp.resource_type, fp.resource_id, r.role_name"
 
 	rows, err := h.db.Query(query, args...)
 
@@ -585,23 +599,23 @@ func (h *RBACHandlers) listFieldPermissions(w http.ResponseWriter, r *http.Reque
 
 	for rows.Next() {
 		var fp map[string]interface{} = make(map[string]interface{})
-		var id, roleKey, roleName, permLevel string
-		var termNodeID, resType, resourceID, termName, termDisplayName, maskingPattern *string
+		var id, roleKey, roleName, fieldName, resType, resourceID, permLevel string
+		var fieldCondition sql.NullString
 
-		if err := rows.Scan(&id, &roleKey, &roleName, &termNodeID, &resType, &resourceID, &permLevel, &maskingPattern, &termName, &termDisplayName); err != nil {
+		if err := rows.Scan(&id, &roleKey, &roleName, &fieldName, &resType, &resourceID, &permLevel, &fieldCondition); err != nil {
 			continue
 		}
 
 		fp["id"] = id
 		fp["role_key"] = roleKey
 		fp["role_name"] = roleName
-		fp["term_node_id"] = termNodeID
+		fp["field_name"] = fieldName
 		fp["resource_type"] = resType
 		fp["resource_id"] = resourceID
 		fp["permission_level"] = permLevel
-		fp["masking_pattern"] = maskingPattern
-		fp["term_name"] = termName
-		fp["term_display_name"] = termDisplayName
+		if fieldCondition.Valid {
+			fp["field_condition"] = fieldCondition.String
+		}
 
 		fieldPerms = append(fieldPerms, fp)
 	}
@@ -612,11 +626,12 @@ func (h *RBACHandlers) listFieldPermissions(w http.ResponseWriter, r *http.Reque
 func (h *RBACHandlers) createFieldPermission(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		RoleID          string  `json:"role_id"`
-		TermNodeID      string  `json:"term_node_id"`      // Semantic term ID - required
-		ResourceType    *string `json:"resource_type"`    // Optional: for resource-specific overrides
-		ResourceID      *string `json:"resource_id"`      // Optional: for instance-specific overrides
+		FieldName       string  `json:"field_name"`
+		ResourceType    *string `json:"resource_type"`
+		ResourceID      *string `json:"resource_id"`
 		PermissionLevel string  `json:"permission_level"`
-		MaskingPattern *string `json:"masking_pattern"`   // For 'mask' permission level
+		FieldCondition  *string `json:"field_condition"`
+		MaskingPattern  *string `json:"masking_pattern"`
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -624,9 +639,8 @@ func (h *RBACHandlers) createFieldPermission(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	// Validation: term_node_id is required (field_name path is deprecated)
-	if req.TermNodeID == "" {
-		http.Error(w, "term_node_id is required", http.StatusBadRequest)
+	if req.FieldName == "" {
+		http.Error(w, "field_name is required", http.StatusBadRequest)
 		return
 	}
 
@@ -636,20 +650,23 @@ func (h *RBACHandlers) createFieldPermission(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	tenantID := secCtx.TenantID
-	datasourceID := secCtx.DatasourceID
 
 	var id string
 	err = h.db.QueryRow(`
-		INSERT INTO bp_field_permissions (tenant_id, datasource_id, role_id, term_node_id, resource_type, resource_id, permission_level, masking_pattern)
+		INSERT INTO bp_field_permissions (tenant_id, role_id, field_name, resource_type, resource_id, permission_level, field_condition, masking_pattern)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-		ON CONFLICT (role_id, term_node_id, resource_type, resource_id)
-		DO UPDATE SET permission_level = EXCLUDED.permission_level, masking_pattern = EXCLUDED.masking_pattern, updated_at = CURRENT_TIMESTAMP
+		ON CONFLICT (role_id, field_name, resource_type, resource_id)
+		DO UPDATE SET permission_level = EXCLUDED.permission_level, field_condition = EXCLUDED.field_condition, masking_pattern = EXCLUDED.masking_pattern, updated_at = CURRENT_TIMESTAMP
 		RETURNING id
-	`, tenantID, datasourceID, req.RoleID, req.TermNodeID, req.ResourceType, req.ResourceID, req.PermissionLevel, req.MaskingPattern).Scan(&id)
+	`, tenantID, req.RoleID, req.FieldName, req.ResourceType, req.ResourceID, req.PermissionLevel, req.FieldCondition, req.MaskingPattern).Scan(&id)
 
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Failed to create field permission: %v", err), http.StatusInternalServerError)
 		return
+	}
+
+	if h.entitlements != nil {
+		h.entitlements.InvalidateAll(tenantID)
 	}
 
 	respondJSONRBAC(w, r, map[string]string{"id": id, "status": "created"}, http.StatusCreated)
@@ -665,35 +682,47 @@ func (h *RBACHandlers) getUserFieldPermissions(w http.ResponseWriter, r *http.Re
 		return
 	}
 	tenantID := secCtx.TenantID
-	datasourceID := secCtx.DatasourceID
 
-	// Use FieldPermissionRepository for canonical field permission lookup
-	permissions, err := h.fieldPermRepo.GetTermPermissionsForUser(r.Context(), userID, tenantID, datasourceID)
+	var fieldPerms []map[string]interface{}
+	query := `
+		SELECT fp.field_name, fp.resource_type, fp.resource_id, fp.permission_level, fp.field_condition
+		FROM bp_field_permissions fp
+		JOIN bp_user_roles ur ON fp.role_id = ur.role_id
+		WHERE ur.user_id = $1 AND ur.tenant_id = $2 AND ur.is_active = true
+	`
+	args := []interface{}{userID, tenantID}
+
+	if resourceType != "" {
+		query += " AND fp.resource_type = $3"
+		args = append(args, resourceType)
+		if resourceID != "" {
+			query += " AND fp.resource_id = $4"
+			args = append(args, resourceID)
+		}
+	}
+
+	rows, err := h.db.Query(query, args...)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Failed to fetch user field permissions: %v", err), http.StatusInternalServerError)
 		return
 	}
+	defer rows.Close()
 
-	// Enrich with term metadata and filter by resource type/id
-	var fieldPerms []map[string]interface{}
-	for _, perm := range permissions {
-		// Skip if resource_type/resource_id doesn't match filters
-		if resourceType != "" && perm.ResourceType != nil && *perm.ResourceType != resourceType {
+	for rows.Next() {
+		var fieldName, resType, resourceIDVal, permLevel string
+		var fieldCondition sql.NullString
+		if err := rows.Scan(&fieldName, &resType, &resourceIDVal, &permLevel, &fieldCondition); err != nil {
 			continue
 		}
-		if resourceID != "" && perm.ResourceID != nil && *perm.ResourceID != resourceID {
-			continue
+		fp := map[string]interface{}{
+			"field_name":        fieldName,
+			"resource_type":    resType,
+			"resource_id":      resourceIDVal,
+			"permission_level": permLevel,
 		}
-
-		fp := map[string]interface{}{}
-		permType := "semantic"
-		if perm.TermNodeID == nil {
-			permType = "field"
+		if fieldCondition.Valid {
+			fp["field_condition"] = fieldCondition.String
 		}
-		fp["permission_type"] = permType
-		fp["permission_level"] = perm.PermissionLevel
-		fp["term_node_id"] = stringOrEmptyPtr(perm.TermNodeID)
-
 		fieldPerms = append(fieldPerms, fp)
 	}
 
@@ -1004,7 +1033,14 @@ func (h *RBACHandlers) addTeamMember(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	_, err := h.db.Exec(`
+	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
+	if err != nil {
+		http.Error(w, "Unauthorized: "+err.Error(), http.StatusUnauthorized)
+		return
+	}
+	tenantID := secCtx.TenantID
+
+	_, err = h.db.Exec(`
 		INSERT INTO bp_team_members (team_id, user_id, role_in_team)
 		VALUES ($1, $2, $3)
 		ON CONFLICT (team_id, user_id) DO NOTHING
@@ -1015,6 +1051,10 @@ func (h *RBACHandlers) addTeamMember(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if h.entitlements != nil {
+		h.entitlements.Invalidate(tenantID, req.UserID)
+	}
+
 	respondJSONRBAC(w, r, map[string]string{"status": "added"}, http.StatusCreated)
 }
 
@@ -1022,11 +1062,22 @@ func (h *RBACHandlers) removeTeamMember(w http.ResponseWriter, r *http.Request) 
 	teamID := chi.URLParam(r, "teamId")
 	userID := chi.URLParam(r, "userId")
 
-	_, err := h.db.Exec("UPDATE bp_team_members SET is_active = false WHERE team_id = $1 AND user_id = $2", teamID, userID)
+	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
+	if err != nil {
+		http.Error(w, "Unauthorized: "+err.Error(), http.StatusUnauthorized)
+		return
+	}
+	tenantID := secCtx.TenantID
+
+	_, err = h.db.Exec("UPDATE bp_team_members SET is_active = false WHERE team_id = $1 AND user_id = $2", teamID, userID)
 
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Failed to remove team member: %v", err), http.StatusInternalServerError)
 		return
+	}
+
+	if h.entitlements != nil {
+		h.entitlements.Invalidate(tenantID, userID)
 	}
 
 	respondJSONRBAC(w, r, map[string]string{"status": "removed"}, http.StatusOK)

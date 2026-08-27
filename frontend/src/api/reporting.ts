@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { apiFetch } from '@/lib/apiClient';
 
 type JsonRecord = Record<string, unknown>;
 
@@ -260,6 +261,7 @@ export const useDatasets = () =>
 
 export interface ReportTemplate {
   id: string;
+  report_key?: string;
   name: string;
   description?: string;
   definition?: JsonRecord | null;
@@ -309,10 +311,25 @@ const toReportTemplate = (raw: JsonRecord | null | undefined): ReportTemplate | 
   }
 
   const definition = tryParseDefinition(raw.definition ?? raw.template ?? raw.payload ?? raw.report_definition);
-  const metadata = tryParseDefinition(raw.metadata ?? raw.meta);
+
+  // Build metadata: prefer explicit metadata, else construct from semantic_query
+  let metadata = tryParseDefinition(raw.metadata ?? raw.meta);
+  if (!metadata) {
+    metadata = {};
+  }
+
+  // If semantic_query is present, extract data_bindings into metadata
+  const semQuery = tryParseDefinition(raw.semantic_query);
+  if (semQuery && Array.isArray((semQuery as any).data_bindings)) {
+    metadata = {
+      ...metadata,
+      data_bindings: (semQuery as any).data_bindings,
+    };
+  }
 
   return {
     id,
+    report_key: (raw.report_key as string) ?? (metadata as any)?.report_key ?? undefined,
     name,
     description: (raw.description as string) ?? undefined,
     definition,
@@ -334,6 +351,29 @@ export const useReportTemplates = () =>
   useQuery({
     queryKey: ['reporting', 'reports'],
     queryFn: fetchReportTemplates,
+    staleTime: 30_000,
+  });
+
+const fetchReportTemplate = async (id: string): Promise<ReportTemplate> => {
+  // Slug detection: UUIDs are 36 chars with 4 hyphens; slugs like rep-core-001 contain '-'
+  const isSlug = !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+  const path = isSlug
+    ? `${API_PREFIX}/reports/by-key/${encodeURIComponent(id)}`
+    : `${API_PREFIX}/reports/${id}`;
+  const response = await apiFetch(path);
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(`[${response.status}] ${text || response.statusText}`);
+  }
+  const raw = await response.json();
+  return raw as ReportTemplate;
+};
+
+export const useReportTemplate = (id: string | undefined) =>
+  useQuery({
+    queryKey: ['reporting', 'reports', id],
+    queryFn: () => fetchReportTemplate(id!),
+    enabled: !!id,
     staleTime: 30_000,
   });
 

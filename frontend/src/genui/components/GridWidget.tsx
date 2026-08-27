@@ -1,4 +1,5 @@
 import React from "react";
+import { useTheme, Box, Typography, Skeleton } from "@mui/material";
 import { useQuery } from "@tanstack/react-query";
 import { apiFetch } from "../../lib/apiClient";
 import { AgGridReact } from "ag-grid-react";
@@ -13,6 +14,7 @@ interface GridWidgetProps {
 }
 
 export function GridWidget({ def }: GridWidgetProps) {
+  const theme = useTheme();
   const binding = def.binding as any;
   const { data: queryData, isLoading } = useQuery({
     queryKey: ['genui-grid', binding?.endpoint, binding?.variables],
@@ -34,7 +36,6 @@ export function GridWidget({ def }: GridWidgetProps) {
     ? extractDataFromPath(queryData, binding.dataPath)
     : queryData || [];
 
-  // Convert schema columns to AG-Grid column definitions
   const columnDefs: ColDef[] = (def.columns || []).map((col: any) => ({
     field: col.field,
     headerName: col.headerName,
@@ -44,22 +45,31 @@ export function GridWidget({ def }: GridWidgetProps) {
     valueFormatter: getValueFormatter(col.type),
   }));
 
-  // Add action column if actions are defined
   if (def.actions && def.actions.length > 0) {
     columnDefs.push({
       headerName: "Actions",
       cellRenderer: (params: any) => (
-        <div className="flex gap-2">
+        <Box sx={{ display: 'flex', gap: 1 }}>
           {def.actions!.map((action) => (
-            <button
+            <Box
+              component="button"
               key={action.id}
               onClick={() => handleAction(action.action, params.data)}
-              className="text-blue-600 hover:underline text-sm"
+              sx={{
+                color: 'primary.main',
+                textDecoration: 'underline',
+                fontSize: '0.875rem',
+                cursor: 'pointer',
+                background: 'none',
+                border: 'none',
+                p: 0,
+                '&:hover': { color: 'primary.dark' }
+              }}
             >
               {action.label}
-            </button>
+            </Box>
           ))}
-        </div>
+        </Box>
       ),
       pinned: "right",
       width: 120,
@@ -67,9 +77,17 @@ export function GridWidget({ def }: GridWidgetProps) {
   }
 
   return (
-    <div className="bg-white rounded-lg shadow p-4">
-      {def.title && <h3 className="text-lg font-semibold mb-4">{def.title}</h3>}
-      {def.subtitle && <p className="text-sm text-gray-600 mb-2">{def.subtitle}</p>}
+    <Box sx={{ bgcolor: 'background.paper', borderRadius: 2, boxShadow: 1, p: 2 }}>
+      {def.title && (
+        <Typography variant="h6" sx={{ mb: 2 }}>
+          {def.title}
+        </Typography>
+      )}
+      {def.subtitle && (
+        <Typography variant="body2" sx={{ color: 'grey.600', mb: 1 }}>
+          {def.subtitle}
+        </Typography>
+      )}
 
       <div className="ag-theme-alpine" style={{ height: 400, width: "100%" }}>
         <AgGridReact
@@ -80,7 +98,7 @@ export function GridWidget({ def }: GridWidgetProps) {
           domLayout="autoHeight"
         />
       </div>
-    </div>
+    </Box>
   );
 }
 
@@ -112,7 +130,6 @@ function getValueFormatter(type?: string) {
 
 function handleAction(actionType: string, rowData: any) {
   devDebug(`Action ${actionType} triggered for:`, rowData);
-  // TODO: Dispatch action to parent or emit event
 }
 
 function extractDataFromPath(obj: any, path: string): any[] {
@@ -130,13 +147,13 @@ function extractDataFromPath(obj: any, path: string): any[] {
 
 function GridSkeleton({ title }: { title?: string }) {
   return (
-    <div className="bg-white rounded-lg shadow p-4 animate-pulse">
-      {title && <div className="h-6 bg-gray-200 rounded w-1/3 mb-4"></div>}
-      <div className="space-y-3">
+    <Box sx={{ bgcolor: 'background.paper', borderRadius: 2, boxShadow: 1, p: 2 }}>
+      {title && <Skeleton variant="text" width="30%" height={28} sx={{ mb: 2 }} />}
+      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
         {[...Array(5)].map((_, i) => (
-          <div key={i} className="h-12 bg-gray-100 rounded"></div>
+          <Skeleton key={i} variant="rectangular" height={48} sx={{ borderRadius: 1 }} />
         ))}
-      </div>
-    </div>
+      </Box>
+    </Box>
   );
 }

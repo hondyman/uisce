@@ -46,6 +46,8 @@ export interface QueryContext {
   bindingId: string;
   /** Tenant that owns the binding and the data. */
   tenantId: string;
+  /** Optional STI subtype discriminator. Drives WHERE t0.subtype_code = ... pushdown. */
+  selectedSubtypeKey?: string | null;
 }
 
 export interface DimensionDef {

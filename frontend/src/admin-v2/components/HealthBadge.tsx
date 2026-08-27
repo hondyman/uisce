@@ -1,5 +1,5 @@
 import React from "react";
-import type { HealthStatus } from "../types";
+import type { HealthStatus } from "@/admin-v2/types";
 import "./HealthBadge.css";
 
 export interface HealthBadgeProps {

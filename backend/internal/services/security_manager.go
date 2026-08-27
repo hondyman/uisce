@@ -17,6 +17,7 @@ import (
 
 	jwt "github.com/golang-jwt/jwt/v5"
 	"github.com/hondyman/uisce/backend/internal/analytics"
+	"github.com/hondyman/uisce/backend/internal/security"
 )
 
 // RateLimiter provides advanced rate limiting capabilities
@@ -549,22 +550,45 @@ func (jm *JWTManager) ValidateToken(tokenString string) (*JWTClaims, error) {
 		}
 	}
 
+	allowedDatasources := parseStringListClaim(mc["allowed_datasources"])
+
+	var allowedBindings []security.BindingScope
+	if ab, ok := mc["allowed_bindings"].([]interface{}); ok {
+		for _, item := range ab {
+			if m, ok := item.(map[string]interface{}); ok {
+				bs := security.BindingScope{
+					TenantID:  getStringClaim(m, "tenant_id"),
+					BOID:      getStringClaim(m, "bo_id"),
+					BindingID: getStringClaim(m, "binding_id"),
+					BackendID: getStringClaim(m, "backend_id"),
+				}
+				if bs.BOID != "" {
+					allowedBindings = append(allowedBindings, bs)
+				}
+			}
+		}
+	}
+
 	return &JWTClaims{
-		UserID:    userID,
-		TenantID:  tenantID,
-		TenantIDs: tenantIDs,
-		Roles:     roles,
-		IssuedAt:  time.Now(),
+		UserID:             userID,
+		TenantID:          tenantID,
+		TenantIDs:         tenantIDs,
+		Roles:             roles,
+		AllowedDatasources: allowedDatasources,
+		AllowedBindings:   allowedBindings,
+		IssuedAt:          time.Now(),
 	}, nil
 }
 
 // JWTClaims represents JWT token claims
 type JWTClaims struct {
-	UserID    string
-	TenantID  string
-	TenantIDs []string
-	Roles     []string
-	IssuedAt  time.Time
+	UserID             string
+	TenantID          string
+	TenantIDs         []string
+	Roles             []string
+	AllowedDatasources []string
+	AllowedBindings   []security.BindingScope
+	IssuedAt          time.Time
 }
 
 func parseStringListClaim(value interface{}) []string {

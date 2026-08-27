@@ -1,0 +1,33 @@
+version: '3.8'
+
+services:
+  reporting-service:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.reporting
+    container_name: uisce-reporting-compiler
+    environment:
+      - PORT=8082
+      - DB_HOST=100.84.50.65
+      - DB_PORT=5432
+      - DB_USER=postgres
+      - DB_PASSWORD=postgres
+      - DB_NAME=alpha
+      - DB_SSLMODE=disable
+      - HMAC_SECRET=uisce-sec-17a4-default-hmac-key-production
+    ports:
+      - "8082:8082"
+    restart: unless-stopped
+
+  frontend-studio:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: uisce-frontend-studio
+    environment:
+      - VITE_BACKEND_HOST=http://reporting-service:8082
+    ports:
+      - "5173:5173"
+    depends_on:
+      - reporting-service
+    restart: unless-stopped

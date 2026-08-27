@@ -2,6 +2,7 @@ package optimizer
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -11,14 +12,15 @@ import (
 
 type DrillDownRequest struct {
 	TenantID        uuid.UUID              `json:"tenantId"`
-	AggregatedField string                 `json:"aggregatedField"` // e.g. "portfolio_xirr" or "total_nav"
-	FilterContext   map[string]interface{} `json:"filterContext"`   // e.g. {"account_id": "ACC_9912", "effective_date": "2026-08-21"}
+	AggregatedField string                 `json:"aggregatedField"` // e.g. "portfolio_xirr"
+	FilterContext   map[string]interface{} `json:"filterContext"`   // e.g. {"account_id": "ACC-901"}
 	PageSize        int                    `json:"pageSize"`
 	Offset          int                    `json:"offset"`
 }
 
 type DrillDownResponse struct {
-	GranularBOKey string                   `json:"granularBoKey"`
+	TargetBOKey   string                   `json:"targetBoKey"`
+	TargetPageKey *string                  `json:"targetPageKey,omitempty"`
 	Columns       []string                 `json:"columns"`
 	Rows          []map[string]interface{} `json:"rows"`
 	TotalCount    int64                    `json:"totalCount"`
@@ -32,89 +34,98 @@ func NewDrillDownResolver(db *sqlx.DB) *DrillDownResolver {
 	return &DrillDownResolver{db: db}
 }
 
-// ResolveDrillDown translates an aggregate click into transaction/tax-lot detail queries
-func (r *DrillDownResolver) ResolveDrillDown(
-	ctx context.Context,
-	req DrillDownRequest,
-) (*DrillDownResponse, error) {
+func (r *DrillDownResolver) ResolveDrillDown(ctx context.Context, req DrillDownRequest) (*DrillDownResponse, error) {
 	if req.TenantID == uuid.Nil {
-		return nil, fmt.Errorf("Rule 7 violation: tenant_id cannot be nil")
+		return nil, fmt.Errorf("tenant_id is required (Rule 7 Violation)")
 	}
 
-	// 1. Determine Granular Drill Path based on Aggregated Metric
-	granularBOKey := "TransactionMaster"
-	columns := []string{"transaction_id", "trade_date", "settle_date", "quantity", "price", "gross_amount"}
-	
-	if req.AggregatedField == "portfolio_xirr" || req.AggregatedField == "irr" {
-		granularBOKey = "TaxLotCashFlows"
-		columns = []string{"lot_id", "cash_flow_date", "inflow_amount", "outflow_amount", "irr_weight"}
-	} else if req.AggregatedField == "total_nav" || req.AggregatedField == "market_value" {
-		granularBOKey = "PositionMaster"
-		columns = []string{"position_id", "security_name", "isin", "shares_held", "px_last", "market_value"}
+	// 1. Resolve Target BO and Table Mapping from Catalog (Rule 1: Config-Before-Code)
+	var pathConfig struct {
+		TargetBOKey   string  `db:"target_bo_key"`
+		TargetPageKey *string `db:"target_page_key"`
+		TargetTable   string  `db:"target_table"`
+		ColumnsRaw    []byte  `db:"default_columns"`
 	}
 
-	// 2. Build Dynamic Parameterized Filter Predicates from Context
+	var hasCustomConfig bool
+	if r.db != nil {
+		metaQuery := `
+			SELECT target_bo_key, target_page_key, target_table, default_columns
+			FROM semantic_drill.calculation_drill_paths
+			WHERE tenant_id = $1 AND aggregated_metric_key = $2 AND is_active = TRUE
+			LIMIT 1;
+		`
+		err := r.db.GetContext(ctx, &pathConfig, metaQuery, req.TenantID, req.AggregatedField)
+		if err == nil {
+			hasCustomConfig = true
+		}
+	}
+
+	// Fallback to static resolution defaults if not explicitly configured in database
+	if !hasCustomConfig {
+		if req.AggregatedField == "portfolio_xirr" || req.AggregatedField == "irr" {
+			pathConfig.TargetBOKey = "TaxLotCashFlows"
+			pathConfig.TargetTable = "mdm.tax_lot_cash_flows"
+			pathConfig.ColumnsRaw = []byte(`["lot_id", "cash_flow_date", "inflow_amount", "outflow_amount", "irr_weight"]`)
+		} else {
+			pathConfig.TargetBOKey = "PositionMaster"
+			pathConfig.TargetTable = "mdm.positions"
+			pathConfig.ColumnsRaw = []byte(`["position_id", "security_name", "isin", "shares_held", "market_value"]`)
+		}
+	}
+
+	var columns []string
+	_ = json.Unmarshal(pathConfig.ColumnsRaw, &columns)
+
+	// 2. Build Dynamic Parameterized Predicates (Rule 7: Tenant Fencing)
 	whereClauses := []string{"tenant_id = $1"}
 	args := []interface{}{req.TenantID}
 	argIdx := 2
 
 	for k, v := range req.FilterContext {
-		whereClauses = append(whereClauses, fmt.Sprintf("%s = $%d", k, argIdx))
-		args = append(args, v)
-		argIdx++
+		if v != nil && v != "" {
+			whereClauses = append(whereClauses, fmt.Sprintf("%s = $%d", k, argIdx))
+			args = append(args, v)
+			argIdx++
+		}
 	}
 
-	// 3. Construct Granular Drill-Through Query (Rule 4: Union-Safe Lakehouse Pushdown)
-	query := fmt.Sprintf(`
+	limit := req.PageSize
+	if limit <= 0 {
+		limit = 50
+	}
+	offset := req.Offset
+
+	querySQL := fmt.Sprintf(`
 		SELECT %s 
-		FROM mdm.%s 
+		FROM %s 
 		WHERE %s 
 		ORDER BY 1 DESC 
 		LIMIT $%d OFFSET $%d;
-	`, strings.Join(columns, ", "), strings.ToLower(granularBOKey), strings.Join(whereClauses, " AND "), argIdx, argIdx+1)
+	`, strings.Join(columns, ", "), pathConfig.TargetTable, strings.Join(whereClauses, " AND "), argIdx, argIdx+1)
 
-	if req.PageSize <= 0 {
-		req.PageSize = 50
-	}
-	args = append(args, req.PageSize, req.Offset)
+	args = append(args, limit, offset)
 
-	var rows []map[string]interface{}
+	// 3. Execute Pushdown Query
+	rows := make([]map[string]interface{}, 0)
 	if r.db != nil {
-		stmt, err := r.db.QueryxContext(ctx, query, args...)
-		if err == nil {
+		stmt, qErr := r.db.QueryxContext(ctx, querySQL, args...)
+		if qErr == nil {
 			defer stmt.Close()
 			for stmt.Next() {
-				item := make(map[string]interface{})
-				if err := stmt.MapScan(item); err == nil {
-					rows = append(rows, item)
+				row := make(map[string]interface{})
+				if scanErr := stmt.MapScan(row); scanErr == nil {
+					rows = append(rows, row)
 				}
 			}
 		}
 	}
 
-	// Fallback mock rows if database table is unpopulated in test environments
-	if len(rows) == 0 {
-		rows = generateMockDrillRows(granularBOKey, req.AggregatedField)
-	}
-
 	return &DrillDownResponse{
-		GranularBOKey: granularBOKey,
+		TargetBOKey:   pathConfig.TargetBOKey,
+		TargetPageKey: pathConfig.TargetPageKey,
 		Columns:       columns,
 		Rows:          rows,
 		TotalCount:    int64(len(rows)),
 	}, nil
-}
-
-func generateMockDrillRows(boKey, field string) []map[string]interface{} {
-	if boKey == "TaxLotCashFlows" {
-		return []map[string]interface{}{
-			{"lot_id": "LOT_88192", "cash_flow_date": "2026-01-15", "inflow_amount": 100000.00, "outflow_amount": 0.00, "irr_weight": 1.0},
-			{"lot_id": "LOT_88193", "cash_flow_date": "2026-04-20", "inflow_amount": 25000.00, "outflow_amount": 0.00, "irr_weight": 0.75},
-			{"lot_id": "LOT_88192", "cash_flow_date": "2026-08-20", "inflow_amount": 0.00, "outflow_amount": 142500.50, "irr_weight": 0.1},
-		}
-	}
-	return []map[string]interface{}{
-		{"position_id": "POS_1102", "security_name": "Apple Inc.", "isin": "US0378331005", "shares_held": 5000.0, "px_last": 185.50, "market_value": 927500.00},
-		{"position_id": "POS_1103", "security_name": "Microsoft Corp.", "isin": "US5949181045", "shares_held": 2500.0, "px_last": 410.20, "market_value": 1025500.00},
-	}
 }

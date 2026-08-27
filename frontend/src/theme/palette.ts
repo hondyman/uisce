@@ -182,13 +182,6 @@ export const categoryColors = {
     bg:      'rgba(79, 70, 229, 0.08)',
     bgLight: 'rgba(79, 70, 229, 0.12)',
   },
-  consume: {
-    light:   '#FEF9C3',
-    main:    '#D97706',
-    dark:    '#FBBF24',
-    bg:      'rgba(217, 119, 6, 0.08)',
-    bgLight: 'rgba(217, 119, 6, 0.12)',
-  },
   calendar: {
     light:   '#DBEAFE',
     main:    '#2563EB',

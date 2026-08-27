@@ -16,12 +16,15 @@ export const ELEMENT_TYPES = {
   PARAMETER: 'parameter',
   GAUGE: 'gauge',
   SPARKLINE: 'sparkline',
+  FORM_REFERENCE: 'formReference',
 } as const;
 
 export const REPORT_SECTIONS = {
   REPORT_HEADER: 'reportHeader',
   PAGE_HEADER: 'pageHeader',
+  GROUP_HEADER: 'groupHeader',
   BODY: 'body',
+  GROUP_FOOTER: 'groupFooter',
   PAGE_FOOTER: 'pageFooter',
   REPORT_FOOTER: 'reportFooter',
 } as const;
@@ -185,13 +188,116 @@ export const aggregateHandlers: Record<string, (values: number[]) => number> = {
   COUNT: (values) => values.length,
   MIN: (values) => (values.length ? Math.min(...values) : 0),
   MAX: (values) => (values.length ? Math.max(...values) : 0),
+  MEDIAN: (values) => {
+    if (!values.length) return 0;
+    const sorted = [...values].sort((a, b) => a - b);
+    const mid = Math.floor(sorted.length / 2);
+    return sorted.length % 2 !== 0
+      ? sorted[mid]
+      : (sorted[mid - 1] + sorted[mid]) / 2;
+  },
 };
 
-export const computeAggregate = (rows: Record<string, unknown>[], field: string, fn: keyof typeof aggregateHandlers) => {
+export const computeAggregate = (
+  rows: Record<string, unknown>[],
+  field: string,
+  fn: keyof typeof aggregateHandlers | { customExpression: string }
+) => {
   const numericValues = rows
     .map((row) => Number(row[field as keyof typeof row]))
     .filter((value) => Number.isFinite(value));
+
+  if (typeof fn === 'object' && 'customExpression' in fn) {
+    const { evaluateCustomAggregate } = require('./evaluateDynamicProperty');
+    return evaluateCustomAggregate(rows, fn.customExpression, { _field: field });
+  }
+
   return aggregateHandlers[fn]?.(numericValues) ?? 0;
+};
+
+export const formatReportValue = (value: unknown, formatType?: string, prefix?: string, suffix?: string): string => {
+  if (value === null || value === undefined) {
+    return '';
+  }
+  let formatted = '';
+  if (typeof value === 'number') {
+    switch (formatType) {
+      case 'Currency':
+        formatted = currencyFormatter.format(value);
+        break;
+      case 'Percent':
+        formatted = percentFormatter.format(value / (Math.abs(value) > 1 ? 100 : 1));
+        break;
+      case 'Decimal':
+        formatted = value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        break;
+      case 'Integer':
+        formatted = Math.round(value).toLocaleString('en-US');
+        break;
+      default:
+        formatted = value.toLocaleString('en-US');
+    }
+  } else if (formatType === 'Date' && typeof value === 'string') {
+    try {
+      formatted = new Date(value).toLocaleDateString();
+    } catch {
+      formatted = String(value);
+    }
+  } else {
+    formatted = String(value);
+  }
+
+  if (prefix) formatted = `${prefix}${formatted}`;
+  if (suffix) formatted = `${formatted}${suffix}`;
+  return formatted;
+};
+
+export const evaluateReportExpression = (
+  expr: string | undefined,
+  dataRecord?: Record<string, any>,
+  fallbackText?: string
+): string => {
+  if (!expr) return fallbackText ?? '';
+
+  let result = expr;
+
+  // Replace standard tokens
+  result = result.replace(/\{PageNumber\}/g, '1');
+  result = result.replace(/\{TotalPages\}/g, '1');
+  result = result.replace(/\{ExecutionTime\}/g, new Date().toLocaleTimeString());
+  result = result.replace(/\{UserName\}/g, 'Current User');
+
+  // If we have row data record
+  if (dataRecord && typeof dataRecord === 'object') {
+    // Replace [Entity.field] or [field]
+    result = result.replace(/\[(?:[a-zA-Z0-9_]+\.)?([a-zA-Z0-9_]+)\]/g, (_, fieldName) => {
+      const val = dataRecord[fieldName] ?? dataRecord[fieldName.toLowerCase()];
+      return val !== undefined && val !== null ? String(val) : `[${fieldName}]`;
+    });
+
+    // Replace =Fields!fieldName.Value
+    result = result.replace(/=Fields!([a-zA-Z0-9_]+)\.Value/g, (_, fieldName) => {
+      const val = dataRecord[fieldName] ?? dataRecord[fieldName.toLowerCase()];
+      return val !== undefined && val !== null ? String(val) : `[${fieldName}]`;
+    });
+
+    // Evaluate basic math if starts with '=' and contains no unresolved tokens
+    if (result.startsWith('=')) {
+      const cleanMath = result.slice(1).trim();
+      if (/^[\d\s+\-*/().]+$/.test(cleanMath)) {
+        try {
+          // eslint-disable-next-line no-eval
+          const mathVal = Function(`"use strict"; return (${cleanMath})`)();
+          return String(mathVal);
+        } catch {
+          // ignore error and return cleanMath
+        }
+      }
+      return cleanMath;
+    }
+  }
+
+  return result;
 };
 
 export const formatValue = (fieldKey: string, value: unknown) => {

@@ -30,6 +30,11 @@ type Context struct {
 	ImpersonationSessionID string // Links to platform_admin_audit.session_id
 	ImpersonationMode      string // "read_only" | "break_glass"
 	ImpersonationAdminRole string // "global_admin" | "helpdesk" | "professional_services"
+
+	// AllowedDatasources lists datasource IDs the user is authorized to access.
+	AllowedDatasources []string
+	// AllowedBindings lists authorized (tenant, BO, binding) triples.
+	AllowedBindings []BindingScope
 }
 
 type AuthInfo struct {
@@ -56,6 +61,19 @@ type AuthInfo struct {
 	// RawClaims holds the validated JWT claims for downstream enrichment.
 	// Nil when authentication used API keys or impersonation tokens.
 	RawClaims interface{}
+
+	// AllowedDatasources lists datasource IDs the user is authorized to access.
+	AllowedDatasources []string
+	// AllowedBindings lists authorized (tenant, BO, binding) triples.
+	AllowedBindings []BindingScope
+}
+
+// BindingScope represents an authorized BO + binding pair for a tenant.
+type BindingScope struct {
+	TenantID  string `json:"tenant_id"`
+	BOID      string `json:"bo_id"`
+	BindingID string `json:"binding_id"`
+	BackendID string `json:"backend_id"`
 }
 
 type BuildContextRequest struct {
@@ -110,6 +128,8 @@ func BuildContext(ctx context.Context, auth AuthInfo, req BuildContextRequest, r
 			Region:         req.Region,
 			IsGlobalAdmin:  isGlobalAdmin,
 			OperatingScope: operatingScope,
+			AllowedDatasources: auth.AllowedDatasources,
+			AllowedBindings:   auth.AllowedBindings,
 		}, nil
 	}
 	if err := ValidateRegion(req.Region); err != nil {
@@ -161,6 +181,10 @@ func BuildContext(ctx context.Context, auth AuthInfo, req BuildContextRequest, r
 		ImpersonationSessionID: auth.ImpersonationSessionID,
 		ImpersonationMode:      auth.ImpersonationMode,
 		ImpersonationAdminRole: auth.ImpersonationAdminRole,
+
+		// Propagate JWT-issued authorization scopes.
+		AllowedDatasources: auth.AllowedDatasources,
+		AllowedBindings:   auth.AllowedBindings,
 	}
 	secCtx.Attributes["operating_scope"] = secCtx.OperatingScope
 	secCtx.Attributes["region"] = secCtx.Region

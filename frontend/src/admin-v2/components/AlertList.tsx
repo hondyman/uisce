@@ -3,7 +3,7 @@ import { Card } from "./Card";
 import { Table } from "./Table";
 import { Spinner, ErrorBanner } from "./Feedback";
 import { useAlerts, useEvaluateAlerts } from "../hooks/useOps";
-import type { Alert } from "../types";
+import type { Alert } from "@/admin-v2/types";
 import "./AlertList.css";
 
 export function AlertList() {

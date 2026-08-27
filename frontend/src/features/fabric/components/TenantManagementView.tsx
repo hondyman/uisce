@@ -43,12 +43,11 @@ import IPAddEditDialog from './IPAddEditDialog';
 import { exportTenantReport } from '../utils/exportUtils';
 import TenantTypeahead from './TenantTypeahead';
 import AddIPForm from './AddIPForm';
-import DashboardPage from '../pages/DashboardPage';
 import TenantsManagementPage from '../pages/TenantsManagementPage';
 import AuditLogsPage from '../pages/AuditLogsPage';
 import SettingsPage from '../pages/SettingsPage';
 
-type SidebarView = 'ip-whitelist' | 'dashboard' | 'tenants' | 'audit-logs' | 'settings';
+type SidebarView = 'ip-whitelist' | 'tenants' | 'audit-logs' | 'settings';
 
 const TenantManagementView: React.FC = () => {
   const theme = useTheme();
@@ -634,11 +633,6 @@ new Date(entry.createdAt || '').toLocaleDateString()
         </Paper>
           </>
         </Box>
-      )}
-
-      {/* Dashboard View */}
-      {currentView === 'dashboard' && (
-        <DashboardPage />
       )}
 
       {/* Tenants View */}

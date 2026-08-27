@@ -10,6 +10,7 @@ import { ETLRunDashboardPage } from "./pages/Observability/ETLRunDashboardPage";
 import { WasmVersionRegistryPage } from "./pages/Observability/WasmVersionRegistryPage";
 import { RuleLineageExplorerPage } from "./pages/Observability/RuleLineageExplorerPage";
 import { ScenarioLineageExplorerPage } from "./pages/Observability/ScenarioLineageExplorerPage";
+import { ChatHistoryPage } from "./pages/ChatHistory/ChatHistoryPage";
 
 export function AdminRoutes() {
   return (
@@ -83,6 +84,14 @@ export function AdminRoutes() {
         element={
           <AdminLayout>
             <ScenarioLineageExplorerPage />
+          </AdminLayout>
+        }
+      />
+      <Route
+        path="/chat-history"
+        element={
+          <AdminLayout>
+            <ChatHistoryPage />
           </AdminLayout>
         }
       />

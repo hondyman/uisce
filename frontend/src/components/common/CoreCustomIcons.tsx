@@ -1,11 +1,52 @@
 import React from 'react';
-import { Tooltip, useTheme, Chip, Stack } from '@mui/material';
+import { Tooltip, useTheme, Chip, Stack, Box } from '@mui/material';
 import WaterDropIcon from '@mui/icons-material/WaterDrop';
 import BuildIcon from '@mui/icons-material/Build';
+import CategoryOutlinedIcon from '@mui/icons-material/CategoryOutlined';
+import AccountTreeOutlinedIcon from '@mui/icons-material/AccountTreeOutlined';
 import { deriveViewFlags } from '../../utils/viewFlags';
 
 export const CORE_COLOR = 'success.main';
 export const CUSTOM_COLOR = 'secondary.main';
+
+export interface SubtypeIconProps {
+  fontSize?: number | 'small' | 'medium' | 'large' | 'inherit';
+  sx?: object;
+}
+
+export const SubtypeAssignedIcon: React.FC<SubtypeIconProps> = ({ fontSize = 16, sx = {} }) => {
+  return (
+    <Tooltip title="Assigned: Specialized field declared specifically for this subtype" arrow placement="top">
+      <Box component="span" sx={{ display: 'inline-flex', alignItems: 'center', verticalAlign: 'middle', cursor: 'help', ...sx }}>
+        <CategoryOutlinedIcon sx={{ fontSize, color: 'primary.main' }} />
+      </Box>
+    </Tooltip>
+  );
+};
+
+export const SubtypeInheritedIcon: React.FC<SubtypeIconProps> = ({ fontSize = 16, sx = {} }) => {
+  return (
+    <Tooltip title="Inherited: Baseline field inherited from Core Business Object" arrow placement="top">
+      <Box component="span" sx={{ display: 'inline-flex', alignItems: 'center', verticalAlign: 'middle', cursor: 'help', ...sx }}>
+        <AccountTreeOutlinedIcon sx={{ fontSize, color: 'text.secondary' }} />
+      </Box>
+    </Tooltip>
+  );
+};
+
+export interface SubtypeScopeIconProps {
+  isAssigned?: boolean;
+  isInherited?: boolean;
+  fontSize?: number | 'small' | 'medium' | 'large' | 'inherit';
+  sx?: object;
+}
+
+export const SubtypeScopeIcon: React.FC<SubtypeScopeIconProps> = ({ isAssigned, isInherited, fontSize = 16, sx = {} }) => {
+  if (isAssigned || !isInherited) {
+    return <SubtypeAssignedIcon fontSize={fontSize} sx={sx} />;
+  }
+  return <SubtypeInheritedIcon fontSize={fontSize} sx={sx} />;
+};
 
 interface CoreIconProps {
   sx?: object;

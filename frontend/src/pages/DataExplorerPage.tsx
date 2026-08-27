@@ -19,6 +19,8 @@ import {
   ToggleButton,
   Menu,
   MenuItem,
+  Drawer,
+  useTheme,
 } from '@mui/material';
 import {
   PlayArrow as PlayIcon,
@@ -40,11 +42,9 @@ import {
 } from '@mui/icons-material';
 import { useLocation, useNavigate } from 'react-router-dom';
 import {
-  EXPLORER_BG,
-  EXPLORER_BORDER,
-  EXPLORER_MUTED,
-  EXPLORER_TEXT,
+  createNewQueryTab,
 } from '../features/data-explorer/types/dataExplorerTypes';
+import { useExplorerTheme } from '../features/data-explorer/hooks/useExplorerTheme';
 import type {
   BusinessObjectSummary,
   ExplorerQueryState,
@@ -53,6 +53,11 @@ import type {
   SavedExplorerQuery,
   SortSelection,
   ViewMode,
+  QueryTabState,
+  CalculationDefinition,
+  QueryParameter,
+  ScheduleConfig,
+  ShareConfig,
 } from '../features/data-explorer/types/dataExplorerTypes';
 import { emptyExplorerState } from '../features/data-explorer/types/dataExplorerTypes';
 import {
@@ -68,6 +73,7 @@ import { FilterModal } from '../features/data-explorer/components/FilterModal';
 import { FilterPillBar } from '../features/data-explorer/components/FilterPillBar';
 import { ResultsTablePane } from '../features/data-explorer/components/ResultsTablePane';
 import { ModelPickerDialog } from '../features/data-explorer/components/ModelPickerDialog';
+import { UnifiedBOPickerModal } from '../components/common/UnifiedBOPickerModal';
 import { VisualizationPane } from '../features/data-explorer/components/VisualizationPane';
 import { SqlPreviewDialog } from '../features/data-explorer/components/SqlPreviewDialog';
 import { ExplainPlanPane } from '../features/data-explorer/components/ExplainPlanPane';
@@ -77,6 +83,11 @@ import { AIInsightBadge } from '../features/data-explorer/components/AIInsightBa
 import { DisambiguationBanner } from '../features/data-explorer/components/DisambiguationBanner';
 import { ConversationRail } from '../features/data-explorer/components/ConversationRail';
 import { ExplorerLandingHero } from '../features/data-explorer/components/ExplorerLandingHero';
+import { QueryTabManager } from '../features/data-explorer/components/QueryTabManager';
+import { CalculationModal } from '../features/data-explorer/components/CalculationModal';
+import { ParametersToolbar } from '../features/data-explorer/components/ParametersToolbar';
+import { ScheduleQueryModal } from '../features/data-explorer/components/ScheduleQueryModal';
+import { ShareQueryModal } from '../features/data-explorer/components/ShareQueryModal';
 import { useExplorerAI } from '../features/data-explorer/hooks/useExplorerAI';
 import { useQueryTelemetry } from '../features/data-explorer/hooks/useQueryTelemetry';
 import { SmartVisualizerPane } from '../features/data-explorer/components/SmartVisualizerPane';
@@ -85,6 +96,7 @@ import { SemanticReviewQueue } from '../features/data-explorer/components/Semant
 import { RCAInsightPanel } from '../features/data-explorer/components/RCAInsightPanel';
 import { QueryMutationTimeline } from '../features/data-explorer/components/QueryMutationTimeline';
 import { ForecastAuditPanel } from '../features/data-explorer/components/ForecastAuditPanel';
+import { Schedule as ScheduleIcon, Share as ShareIcon } from '@mui/icons-material';
 import type {
   ExplorerQueryDefinition,
   SemanticField,
@@ -113,20 +125,78 @@ function inferConfidence(message: ExplorerChatMessage): number | undefined {
 export const DataExplorerPage: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const [queryName, setQueryName] = useState(QUERY_NAME_DEFAULT);
+  const theme = useTheme();
+  const isDark = theme.palette.mode === 'dark';
+  const explorerTheme = useExplorerTheme();
+
+  // Multi-Tab Query Workspace
+  const [tabs, setTabs] = useState<QueryTabState[]>([
+    createNewQueryTab('tab-1', 'Query 1', null),
+  ]);
+  const [activeTabId, setActiveTabId] = useState<string>('tab-1');
+
+  const activeTab = useMemo(
+    () => tabs.find((t) => t.id === activeTabId) || tabs[0],
+    [tabs, activeTabId]
+  );
+
+  const queryName = activeTab.name;
+  const setQueryName = useCallback(
+    (name: string) => {
+      setTabs((prev) =>
+        prev.map((t) => (t.id === activeTabId ? { ...t, name } : t))
+      );
+    },
+    [activeTabId]
+  );
+
+  const source = activeTab.source;
+  const setSource = useCallback(
+    (src: ExplorerSource | null) => {
+      setTabs((prev) =>
+        prev.map((t) => (t.id === activeTabId ? { ...t, source: src } : t))
+      );
+    },
+    [activeTabId]
+  );
+
+  const state = activeTab.queryState;
+  const setState = useCallback(
+    (updater: ExplorerQueryState | ((prev: ExplorerQueryState) => ExplorerQueryState)) => {
+      setTabs((prevTabs) =>
+        prevTabs.map((t) => {
+          if (t.id === activeTabId) {
+            const nextState = typeof updater === 'function' ? updater(t.queryState) : updater;
+            return { ...t, queryState: nextState };
+          }
+          return t;
+        })
+      );
+    },
+    [activeTabId]
+  );
+
+  const viewMode = activeTab.viewMode;
+  const setViewMode = useCallback(
+    (mode: ViewMode) => {
+      setTabs((prev) =>
+        prev.map((t) => (t.id === activeTabId ? { ...t, viewMode: mode } : t))
+      );
+    },
+    [activeTabId]
+  );
+
   const [isEditingName, setIsEditingName] = useState(false);
-  const [source, setSource] = useState<ExplorerSource | null>(null);
   const [sourceLoadError, setSourceLoadError] = useState<string | null>(null);
   const [allBusinessObjects, setAllBusinessObjects] = useState<BusinessObjectSummary[]>([]);
-  const [state, setState] = useState<ExplorerQueryState>(() =>
-    emptyExplorerState('', '')
-  );
   const [showModelPicker, setShowModelPicker] = useState(false);
   const [filterModalOpen, setFilterModalOpen] = useState(false);
   const [editingFilterIndex, setEditingFilterIndex] = useState<number | null>(null);
+  const [calculationModalOpen, setCalculationModalOpen] = useState(false);
+  const [scheduleModalOpen, setScheduleModalOpen] = useState(false);
+  const [shareModalOpen, setShareModalOpen] = useState(false);
   const [saveDialogOpen, setSaveDialogOpen] = useState(false);
   const [saveName, setSaveName] = useState('');
-  const [viewMode, setViewMode] = useState<ViewMode>('table');
   const [tab, setTab] = useState<'results' | 'sql' | 'plan' | 'json'>('results');
   const [sqlDialogOpen, setSqlDialogOpen] = useState(false);
   const [exportAnchor, setExportAnchor] = useState<null | HTMLElement>(null);
@@ -134,6 +204,47 @@ export const DataExplorerPage: React.FC = () => {
   const [timelineDrawerOpen, setTimelineDrawerOpen] = useState(false);
   const [queryHistory, setQueryHistory] = useState<ExplorerQueryDefinition[]>([]);
   const { logInteraction } = useQueryTelemetry();
+
+  // Multi-Tab actions
+  const handleAddTab = useCallback(() => {
+    const nextNum = tabs.length + 1;
+    const newTab = createNewQueryTab(undefined, `Query ${nextNum}`, source);
+    setTabs((prev) => [...prev, newTab]);
+    setActiveTabId(newTab.id);
+  }, [tabs.length, source]);
+
+  const handleCloseTab = useCallback(
+    (tabId: string) => {
+      if (tabs.length <= 1) return;
+      const nextTabs = tabs.filter((t) => t.id !== tabId);
+      setTabs(nextTabs);
+      if (activeTabId === tabId) {
+        setActiveTabId(nextTabs[0].id);
+      }
+    },
+    [tabs, activeTabId]
+  );
+
+  const handleRenameTab = useCallback((tabId: string, newName: string) => {
+    setTabs((prev) =>
+      prev.map((t) => (t.id === tabId ? { ...t, name: newName } : t))
+    );
+  }, []);
+
+  const handleDuplicateTab = useCallback(
+    (tabId: string) => {
+      const target = tabs.find((t) => t.id === tabId);
+      if (!target) return;
+      const dup = {
+        ...target,
+        id: `tab-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`,
+        name: `${target.name} (Copy)`,
+      };
+      setTabs((prev) => [...prev, dup]);
+      setActiveTabId(dup.id);
+    },
+    [tabs]
+  );
 
   const { records: savedRecords, isLoading: savedLoading, save: saveQuery, remove: removeQuery } =
     useSavedExplorerQueries();
@@ -529,6 +640,33 @@ export const DataExplorerPage: React.FC = () => {
     }));
   };
 
+  const handleUpdateDimensionExpression = useCallback(
+    (fieldId: string, expression?: string) => {
+      setState((prev) => ({
+        ...prev,
+        dimensions: prev.dimensions.map((d) =>
+          d.fieldId === fieldId ? { ...d, expression } : d
+        ),
+        timeDimensions: prev.timeDimensions.map((t) =>
+          t.fieldId === fieldId ? { ...t, expression } : t
+        ),
+      }));
+    },
+    [setState]
+  );
+
+  const handleUpdateMeasureExpression = useCallback(
+    (fieldId: string, expression?: string) => {
+      setState((prev) => ({
+        ...prev,
+        measures: prev.measures.map((m) =>
+          m.fieldId === fieldId ? { ...m, expression } : m
+        ),
+      }));
+    },
+    [setState]
+  );
+
   const handleUpdateMeasureAgg = (fieldId: string, agg: import('../features/data-explorer/types/dataExplorerTypes').AggFn) => {
     setState((prev) => ({
       ...prev,
@@ -558,6 +696,58 @@ export const DataExplorerPage: React.FC = () => {
         sorts: prev.sorts.filter((s) => s.fieldId !== fieldId),
       };
     });
+  };
+
+  // Calculation Handlers
+  const handleSaveCalculation = (calculation: CalculationDefinition) => {
+    setState((prev) => {
+      const existsIdx = prev.calculations.findIndex((c) => c.id === calculation.id);
+      const next = [...prev.calculations];
+      if (existsIdx >= 0) {
+        next[existsIdx] = calculation;
+      } else {
+        next.push(calculation);
+      }
+      return { ...prev, calculations: next };
+    });
+  };
+
+  const handleRemoveCalculation = (calcId: string) => {
+    setState((prev) => ({
+      ...prev,
+      calculations: prev.calculations.filter((c) => c.id !== calcId),
+    }));
+  };
+
+  // Parameter Handlers
+  const handleAddParameter = (param: QueryParameter) => {
+    setState((prev) => ({
+      ...prev,
+      parameters: [...(prev.parameters || []), param],
+    }));
+  };
+
+  const handleUpdateParameter = (param: QueryParameter) => {
+    setState((prev) => ({
+      ...prev,
+      parameters: (prev.parameters || []).map((p) => (p.id === param.id ? param : p)),
+    }));
+  };
+
+  const handleRemoveParameter = (paramId: string) => {
+    setState((prev) => ({
+      ...prev,
+      parameters: (prev.parameters || []).filter((p) => p.id !== paramId),
+    }));
+  };
+
+  const handleChangeParamValue = (paramId: string, value: any) => {
+    setState((prev) => ({
+      ...prev,
+      parameters: (prev.parameters || []).map((p) =>
+        p.id === paramId ? { ...p, currentValue: value } : p
+      ),
+    }));
   };
 
   const handleLimitChange = (limit: number) => {
@@ -650,6 +840,45 @@ export const DataExplorerPage: React.FC = () => {
     });
   };
 
+  const handleExportJSON = () => {
+    if (!result || !result.rows || result.rows.length === 0) return;
+    const blob = new Blob([JSON.stringify(result.rows, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${queryName.replace(/[^a-zA-Z0-9_]/g, '_')}_export_${Date.now()}.json`;
+    a.click();
+    setExportAnchor(null);
+
+    void logInteraction({
+      prompt: queryName,
+      generatedQuery: unifiedQueryDef,
+      executedQuery: unifiedQueryDef,
+      wasEdited: false,
+      wasExported: true,
+    });
+  };
+
+  const handleSaveSchedule = (config: ScheduleConfig) => {
+    void logInteraction({
+      prompt: `Schedule: ${config.scheduleName}`,
+      generatedQuery: unifiedQueryDef,
+      executedQuery: unifiedQueryDef,
+      wasEdited: false,
+      rating: 1,
+    });
+  };
+
+  const handleShareQuery = (config: ShareConfig) => {
+    void logInteraction({
+      prompt: `Share: ${queryName}`,
+      generatedQuery: unifiedQueryDef,
+      executedQuery: unifiedQueryDef,
+      wasEdited: false,
+      rating: 1,
+    });
+  };
+
   const handleCloneToReport = () => {
     if (!source) return;
     const reportState = convertExplorerToReportBuilder(unifiedQueryDef, source.id, source.bindingId);
@@ -676,7 +905,7 @@ export const DataExplorerPage: React.FC = () => {
         display: 'flex',
         flexDirection: 'column',
         height: 'calc(100vh - 64px)',
-        bgcolor: EXPLORER_BG,
+        bgcolor: explorerTheme.background,
       }}
     >
       {/* Top Header */}
@@ -686,7 +915,7 @@ export const DataExplorerPage: React.FC = () => {
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
-          borderBottom: `1px solid ${EXPLORER_BORDER}`,
+          borderBottom: `1px solid ${explorerTheme.border}`,
           px: 3,
           py: 1.2,
           bgcolor: 'white',
@@ -699,7 +928,7 @@ export const DataExplorerPage: React.FC = () => {
               sx={{
                 width: 32,
                 height: 32,
-                bgcolor: '#0D9488',
+                bgcolor: explorerTheme.accent,
                 borderRadius: 1.5,
                 display: 'flex',
                 alignItems: 'center',
@@ -713,11 +942,11 @@ export const DataExplorerPage: React.FC = () => {
             </Typography>
           </Stack>
 
-          <Box sx={{ width: 1, height: 24, bgcolor: EXPLORER_BORDER }} />
+          <Box sx={{ width: 1, height: 24, bgcolor: explorerTheme.border }} />
 
           {source ? (
             <Stack direction="row" spacing={2} alignItems="center">
-              <Typography variant="body2" sx={{ color: EXPLORER_MUTED, fontWeight: 500 }}>
+              <Typography variant="body2" sx={{ color: explorerTheme.textMuted, fontWeight: 500 }}>
                 Query:
               </Typography>
               {isEditingName ? (
@@ -737,10 +966,10 @@ export const DataExplorerPage: React.FC = () => {
                   sx={{ cursor: 'pointer' }}
                   onClick={() => setIsEditingName(true)}
                 >
-                  <Typography variant="body1" fontWeight={700} sx={{ color: EXPLORER_TEXT }}>
+                   <Typography variant="body1" fontWeight={700} sx={{ color: explorerTheme.text }}>
                     {queryName}
                   </Typography>
-                  <EditIcon sx={{ fontSize: 15, color: EXPLORER_MUTED }} />
+                  <EditIcon sx={{ fontSize: 15, color: explorerTheme.textMuted }} />
                 </Stack>
               )}
               <Button
@@ -749,17 +978,17 @@ export const DataExplorerPage: React.FC = () => {
                 sx={{
                   textTransform: 'none',
                   fontSize: '0.72rem',
-                  color: '#0D9488',
+                  color: explorerTheme.accent,
                   fontWeight: 700,
-                  bgcolor: 'rgba(13, 148, 136, 0.08)',
-                  '&:hover': { bgcolor: 'rgba(13, 148, 136, 0.15)' },
+                  bgcolor: explorerTheme.accentMuted,
+                  '&:hover': { bgcolor: explorerTheme.accentHover },
                 }}
               >
                 Change Model
               </Button>
             </Stack>
           ) : (
-            <Typography variant="body2" sx={{ color: EXPLORER_MUTED }}>
+              <Typography variant="body2" sx={{ color: explorerTheme.textMuted }}>
               Select a semantic Business Object to explore
             </Typography>
           )}
@@ -783,7 +1012,7 @@ export const DataExplorerPage: React.FC = () => {
                 textTransform: 'none',
                 fontSize: '0.75rem',
                 fontWeight: 700,
-                borderColor: EXPLORER_BORDER,
+                borderColor: explorerTheme.border,
                 color: isDark ? '#A78BFA' : '#7C3AED',
                 bgcolor: isDark ? 'rgba(167, 139, 250, 0.08)' : '#F5F3FF',
                 '&:hover': { bgcolor: isDark ? 'rgba(167, 139, 250, 0.15)' : '#EDE9FE' },
@@ -802,7 +1031,7 @@ export const DataExplorerPage: React.FC = () => {
                 textTransform: 'none',
                 fontSize: '0.75rem',
                 fontWeight: 700,
-                borderColor: EXPLORER_BORDER,
+                borderColor: explorerTheme.border,
                 color: isDark ? '#2DD4BF' : '#0D9488',
                 bgcolor: isDark ? 'rgba(45, 212, 191, 0.08)' : '#F0FDFA',
                 '&:hover': { bgcolor: 'rgba(45, 212, 191, 0.15)', borderColor: '#2DD4BF' },
@@ -815,6 +1044,40 @@ export const DataExplorerPage: React.FC = () => {
           <Button
             size="small"
             variant="outlined"
+            startIcon={<ShareIcon fontSize="small" />}
+            disabled={!source}
+            onClick={() => setShareModalOpen(true)}
+            sx={{
+              textTransform: 'none',
+              fontSize: '0.75rem',
+              fontWeight: 700,
+              borderColor: explorerTheme.border,
+                color: explorerTheme.accent,
+            }}
+          >
+            Share
+          </Button>
+
+          <Button
+            size="small"
+            variant="outlined"
+            startIcon={<ScheduleIcon fontSize="small" />}
+            disabled={!source}
+            onClick={() => setScheduleModalOpen(true)}
+            sx={{
+              textTransform: 'none',
+              fontSize: '0.75rem',
+              fontWeight: 700,
+              borderColor: explorerTheme.border,
+                color: explorerTheme.accent,
+            }}
+          >
+            Schedule
+          </Button>
+
+          <Button
+            size="small"
+            variant="outlined"
             startIcon={<DownloadIcon fontSize="small" />}
             disabled={!result || result.rows.length === 0}
             onClick={(e) => setExportAnchor(e.currentTarget)}
@@ -822,8 +1085,8 @@ export const DataExplorerPage: React.FC = () => {
               textTransform: 'none',
               fontSize: '0.75rem',
               fontWeight: 700,
-              borderColor: EXPLORER_BORDER,
-              color: EXPLORER_TEXT,
+              borderColor: explorerTheme.border,
+              color: explorerTheme.text,
             }}
           >
             Export / Promote
@@ -832,8 +1095,11 @@ export const DataExplorerPage: React.FC = () => {
             <MenuItem onClick={handleExportCSV} sx={{ fontSize: '0.78rem', gap: 1 }}>
               <FileDownloadIcon fontSize="small" /> Export as CSV
             </MenuItem>
+            <MenuItem onClick={handleExportJSON} sx={{ fontSize: '0.78rem', gap: 1 }}>
+              <JsonIcon fontSize="small" /> Export as JSON
+            </MenuItem>
             <MenuItem onClick={handleCloneToReport} sx={{ fontSize: '0.78rem', gap: 1 }}>
-              <PromoteIcon fontSize="small" sx={{ color: '#0D9488' }} /> Save as Report Dataset (SSRS)
+              <PromoteIcon fontSize="small" sx={{ color: explorerTheme.accent }} /> Save as Report Dataset (SSRS)
             </MenuItem>
           </Menu>
 
@@ -843,22 +1109,35 @@ export const DataExplorerPage: React.FC = () => {
             onClick={handleRun}
             disabled={!source || isLoading || aiLoading}
             sx={{
-              bgcolor: '#0D9488',
+              bgcolor: explorerTheme.accent,
               color: '#FFF',
               borderRadius: 2,
               px: 2.5,
               fontWeight: 700,
               fontSize: 13,
               textTransform: 'none',
-              boxShadow: '0 2px 8px rgba(13, 148, 136, 0.25)',
-              '&:hover': { bgcolor: '#0F766E' },
+              boxShadow: `0 2px 8px ${explorerTheme.accentMuted}`,
+              '&:hover': { bgcolor: explorerTheme.accentDark },
             }}
           >
             Run Query
           </Button>
-          <Avatar sx={{ width: 34, height: 34, border: `1px solid ${EXPLORER_BORDER}`, bgcolor: '#F1F5F9' }} />
+          <Avatar sx={{ width: 34, height: 34, border: `1px solid ${explorerTheme.border}`, bgcolor: explorerTheme.backgroundElevated }} />
         </Stack>
       </Paper>
+
+      {/* Multi-Tab Workspace Bar */}
+      {source && (
+        <QueryTabManager
+          tabs={tabs}
+          activeTabId={activeTabId}
+          onSelectTab={(id) => setActiveTabId(id)}
+          onAddTab={handleAddTab}
+          onCloseTab={handleCloseTab}
+          onRenameTab={handleRenameTab}
+          onDuplicateTab={handleDuplicateTab}
+        />
+      )}
 
       {sourceLoadError && (
         <Alert severity="error" sx={{ m: 2 }}>
@@ -884,6 +1163,8 @@ export const DataExplorerPage: React.FC = () => {
               onToggleMeasure={handleToggleMeasure}
               onAddTimeDimension={handleAddTimeDimension}
               onOpenFilterModal={handleOpenFilterModal}
+              onOpenCalculationModal={() => setCalculationModalOpen(true)}
+              onRemoveCalculation={handleRemoveCalculation}
             />
 
             <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
@@ -894,6 +1175,15 @@ export const DataExplorerPage: React.FC = () => {
                 suggestedFollowUps={suggestedFollowUps}
                 error={aiError}
                 onResetChat={clearConversation}
+              />
+
+              {/* Parameters Bar */}
+              <ParametersToolbar
+                parameters={state.parameters || []}
+                onAddParameter={handleAddParameter}
+                onUpdateParameter={handleUpdateParameter}
+                onRemoveParameter={handleRemoveParameter}
+                onChangeParamValue={handleChangeParamValue}
               />
 
               {/* Ambiguity Disambiguation Banner if present */}
@@ -924,6 +1214,8 @@ export const DataExplorerPage: React.FC = () => {
                 onRemoveMeasure={handleRemoveMeasure}
                 onRemoveTimeDimension={handleRemoveTimeDimension}
                 onUpdateMeasureAgg={handleUpdateMeasureAgg}
+                onUpdateDimensionExpression={handleUpdateDimensionExpression}
+                onUpdateMeasureExpression={handleUpdateMeasureExpression}
                 onToggleSort={handleToggleSort}
                 onLimitChange={handleLimitChange}
               />
@@ -941,17 +1233,17 @@ export const DataExplorerPage: React.FC = () => {
                   sx={{
                     px: 3,
                     py: 0.5,
-                    bgcolor: 'white',
-                    borderBottom: `1px solid ${EXPLORER_BORDER}`,
+                    bgcolor: explorerTheme.backgroundElevated,
+          borderBottom: `1px solid ${explorerTheme.border}`,
                     display: 'flex',
                     justifyContent: 'space-between',
                   }}
                 >
-                  <Typography variant="caption" sx={{ color: EXPLORER_MUTED, fontWeight: 600 }}>
+                  <Typography variant="caption" sx={{ color: explorerTheme.textMuted, fontWeight: 600 }}>
                     {result.rowCount.toLocaleString()} rows · {result.executionTimeMs} ms
                   </Typography>
                   {result.warnings && result.warnings.length > 0 && (
-                    <Typography variant="caption" sx={{ color: '#b45309', fontWeight: 600 }}>
+                      <Typography variant="caption" sx={{ color: explorerTheme.warning, fontWeight: 600 }}>
                       {result.warnings[0]}
                     </Typography>
                   )}
@@ -967,8 +1259,8 @@ export const DataExplorerPage: React.FC = () => {
                   justifyContent: 'space-between',
                   px: 2,
                   py: 0.8,
-                  bgcolor: 'white',
-                  borderBottom: `1px solid ${EXPLORER_BORDER}`,
+                  bgcolor: explorerTheme.backgroundElevated,
+                  borderBottom: `1px solid ${explorerTheme.border}`,
                   borderRadius: 0,
                 }}
               >
@@ -978,8 +1270,8 @@ export const DataExplorerPage: React.FC = () => {
                       size="small"
                       onClick={() => setTab('results')}
                       sx={{
-                        color: tab === 'results' ? '#0D9488' : EXPLORER_MUTED,
-                        bgcolor: tab === 'results' ? 'rgba(13, 148, 136, 0.08)' : 'transparent',
+                        color: tab === 'results' ? explorerTheme.accent : explorerTheme.textMuted,
+                        bgcolor: tab === 'results' ? explorerTheme.accentMuted : 'transparent',
                       }}
                     >
                       <TableIcon fontSize="small" />
@@ -990,8 +1282,8 @@ export const DataExplorerPage: React.FC = () => {
                       size="small"
                       onClick={() => setTab('sql')}
                       sx={{
-                        color: tab === 'sql' ? '#0D9488' : EXPLORER_MUTED,
-                        bgcolor: tab === 'sql' ? 'rgba(13, 148, 136, 0.08)' : 'transparent',
+                        color: tab === 'sql' ? explorerTheme.accent : explorerTheme.textMuted,
+                        bgcolor: tab === 'sql' ? explorerTheme.accentMuted : 'transparent',
                       }}
                     >
                       <CodeIcon fontSize="small" />
@@ -1002,8 +1294,8 @@ export const DataExplorerPage: React.FC = () => {
                       size="small"
                       onClick={() => setTab('plan')}
                       sx={{
-                        color: tab === 'plan' ? '#0D9488' : EXPLORER_MUTED,
-                        bgcolor: tab === 'plan' ? 'rgba(13, 148, 136, 0.08)' : 'transparent',
+                        color: tab === 'plan' ? explorerTheme.accent : explorerTheme.textMuted,
+                        bgcolor: tab === 'plan' ? explorerTheme.accentMuted : 'transparent',
                       }}
                     >
                       <PlanIcon fontSize="small" />
@@ -1014,8 +1306,8 @@ export const DataExplorerPage: React.FC = () => {
                       size="small"
                       onClick={() => setTab('json')}
                       sx={{
-                        color: tab === 'json' ? '#0D9488' : EXPLORER_MUTED,
-                        bgcolor: tab === 'json' ? 'rgba(13, 148, 136, 0.08)' : 'transparent',
+                        color: tab === 'json' ? explorerTheme.accent : explorerTheme.textMuted,
+                        bgcolor: tab === 'json' ? explorerTheme.accentMuted : 'transparent',
                       }}
                     >
                       <JsonIcon fontSize="small" />
@@ -1027,7 +1319,7 @@ export const DataExplorerPage: React.FC = () => {
                     <>
                       <Typography
                         variant="caption"
-                        sx={{ color: EXPLORER_MUTED, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.8 }}
+                        sx={{ color: explorerTheme.textMuted, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.8 }}
                       >
                         View
                       </Typography>
@@ -1038,15 +1330,15 @@ export const DataExplorerPage: React.FC = () => {
                         onChange={(_, v) => v && setViewMode(v)}
                         sx={{
                           '& .MuiToggleButton-root': {
-                            border: `1px solid ${EXPLORER_BORDER}`,
-                            color: EXPLORER_MUTED,
+                            border: `1px solid ${explorerTheme.border}`,
+                            color: explorerTheme.textMuted,
                             px: 1,
                             py: 0.25,
                             '&.Mui-selected': {
-                              bgcolor: 'rgba(13, 148, 136, 0.12)',
-                              color: '#0D9488',
+                              bgcolor: explorerTheme.accentMuted,
+                              color: explorerTheme.accent,
                               fontWeight: 700,
-                              '&:hover': { bgcolor: 'rgba(13, 148, 136, 0.18)' },
+                              '&:hover': { bgcolor: explorerTheme.accentHover },
                             },
                           },
                         }}
@@ -1064,7 +1356,7 @@ export const DataExplorerPage: React.FC = () => {
                   <Button
                     size="small"
                     onClick={() => setSqlDialogOpen(true)}
-                    sx={{ textTransform: 'none', color: '#0D9488', fontWeight: 600, fontSize: '0.75rem' }}
+                    sx={{ textTransform: 'none', color: explorerTheme.accent, fontWeight: 600, fontSize: '0.75rem' }}
                   >
                     View SQL
                   </Button>
@@ -1141,7 +1433,7 @@ export const DataExplorerPage: React.FC = () => {
                   />
                 )}
                 {tab === 'sql' && (
-                  <Box sx={{ flex: 1, overflow: 'auto', bgcolor: '#0F172A', color: '#38BDF8', p: 3 }}>
+                  <Box sx={{ flex: 1, overflow: 'auto', bgcolor: explorerTheme.backgroundElevated, color: explorerTheme.info, p: 3 }}>
                     <Box
                       component="pre"
                       sx={{ m: 0, fontFamily: 'monospace', fontSize: 13, whiteSpace: 'pre-wrap' }}
@@ -1184,10 +1476,33 @@ export const DataExplorerPage: React.FC = () => {
       )}
 
       {showModelPicker && (
-        <ModelPickerDialog
+        <UnifiedBOPickerModal
           open
+          context="query"
           onClose={handleClosePicker}
-          onPick={handlePickBo}
+          onPick={(bo, bindingId, selectedRelatedBOs, _bindingDetails, selectedSubtypeKey) => {
+            void (async () => {
+              setSourceLoadError(null);
+              try {
+                const loaded = await loadExplorerSource(bo.id, bindingId || bo.defaultBindingId, selectedSubtypeKey);
+                if (selectedRelatedBOs && selectedRelatedBOs.length > 0 && loaded.relatedBOs) {
+                  loaded.relatedBOs = loaded.relatedBOs.filter((r) => selectedRelatedBOs.includes(r.boName));
+                }
+                loaded.selectedSubtypeKey = selectedSubtypeKey ?? null;
+                const displayNameWithSubtype = selectedSubtypeKey && loaded.subtypes && loaded.subtypes[selectedSubtypeKey]
+                  ? `${loaded.displayName} (${loaded.subtypes[selectedSubtypeKey].displayName})`
+                  : loaded.displayName;
+                setSource(loaded);
+                setState(emptyExplorerState(loaded.id, loaded.bindingId));
+                setQueryName(`${displayNameWithSubtype} Exploration`);
+                setShowModelPicker(false);
+              } catch (err) {
+                const message = err instanceof Error ? err.message : 'Failed to load BO.';
+                setSourceLoadError(message);
+                devError('loadExplorerSource failed', err);
+              }
+            })();
+          }}
           savedQueries={savedRecords}
           savedLoading={savedLoading}
           onOpenSaved={handleOpenSaved}
@@ -1215,7 +1530,7 @@ export const DataExplorerPage: React.FC = () => {
           />
         </DialogContent>
         <DialogActions sx={{ p: 2 }}>
-          <Button onClick={() => setSaveDialogOpen(false)} sx={{ textTransform: 'none', color: EXPLORER_MUTED }}>
+          <Button onClick={() => setSaveDialogOpen(false)} sx={{ textTransform: 'none', color: explorerTheme.textMuted }}>
             Cancel
           </Button>
           <Button
@@ -1223,11 +1538,11 @@ export const DataExplorerPage: React.FC = () => {
             variant="contained"
             disabled={!saveName.trim()}
             sx={{
-              bgcolor: '#0D9488',
+              bgcolor: explorerTheme.accent,
               color: '#FFF',
               textTransform: 'none',
               fontWeight: 700,
-              '&:hover': { bgcolor: '#0F766E' },
+              '&:hover': { bgcolor: explorerTheme.accentDark },
             }}
           >
             Save
@@ -1248,14 +1563,14 @@ export const DataExplorerPage: React.FC = () => {
         maxWidth="md"
         fullWidth
         PaperProps={{
-          sx: { bgcolor: '#080E21', borderRadius: 3, border: '1px solid rgba(255,255,255,0.1)' },
+          sx: { bgcolor: explorerTheme.backgroundElevated, borderRadius: 3, border: `1px solid ${explorerTheme.border}` },
         }}
       >
-        <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', color: '#F8FAFC', pb: 1 }}>
-          <Typography variant="h6" fontWeight={800} sx={{ color: '#F8FAFC' }}>
+        <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', color: explorerTheme.text, pb: 1 }}>
+          <Typography variant="h6" fontWeight={800} sx={{ color: explorerTheme.text }}>
             Semantic OS Knowledge Review Desk
           </Typography>
-          <Button onClick={() => setReviewQueueOpen(false)} sx={{ color: '#94A3B8', textTransform: 'none' }}>
+          <Button onClick={() => setReviewQueueOpen(false)} sx={{ color: explorerTheme.textMuted, textTransform: 'none' }}>
             Close
           </Button>
         </DialogTitle>
@@ -1264,6 +1579,29 @@ export const DataExplorerPage: React.FC = () => {
         </DialogContent>
       </Dialog>
 
+      {source && (
+        <CalculationModal
+          open={calculationModalOpen}
+          onClose={() => setCalculationModalOpen(false)}
+          availableFields={source.fields}
+          onSave={handleSaveCalculation}
+        />
+      )}
+
+      <ScheduleQueryModal
+        open={scheduleModalOpen}
+        onClose={() => setScheduleModalOpen(false)}
+        queryName={queryName}
+        onSaveSchedule={handleSaveSchedule}
+      />
+
+      <ShareQueryModal
+        open={shareModalOpen}
+        onClose={() => setShareModalOpen(false)}
+        queryName={queryName}
+        onShare={handleShareQuery}
+      />
+
       <Drawer
         anchor="right"
         open={timelineDrawerOpen}
@@ -1271,8 +1609,8 @@ export const DataExplorerPage: React.FC = () => {
         PaperProps={{
           sx: {
             width: 380,
-            bgcolor: isDark ? '#080E21' : '#FFFFFF',
-            borderLeft: `1px solid ${EXPLORER_BORDER}`,
+            bgcolor: explorerTheme.backgroundElevated,
+            borderLeft: `1px solid ${explorerTheme.border}`,
           },
         }}
       >
@@ -1282,16 +1620,16 @@ export const DataExplorerPage: React.FC = () => {
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
-            borderBottom: `1px solid ${EXPLORER_BORDER}`,
+            borderBottom: `1px solid ${explorerTheme.border}`,
           }}
         >
-          <Typography variant="subtitle2" sx={{ color: EXPLORER_TEXT, fontWeight: 800 }}>
+          <Typography variant="subtitle2" sx={{ color: explorerTheme.text, fontWeight: 800 }}>
             Query Event Log & Mutations
           </Typography>
           <Button
             size="small"
             onClick={() => setTimelineDrawerOpen(false)}
-            sx={{ color: EXPLORER_MUTED, textTransform: 'none', fontSize: '0.75rem' }}
+            sx={{ color: explorerTheme.textMuted, textTransform: 'none', fontSize: '0.75rem' }}
           >
             Close
           </Button>

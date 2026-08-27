@@ -10,6 +10,7 @@ import (
 
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/go-chi/chi/v5"
+	"github.com/jmoiron/sqlx"
 	httpapi "github.com/hondyman/uisce/backend/internal/api"
 	"github.com/hondyman/uisce/backend/internal/reports"
 	"github.com/stretchr/testify/assert"
@@ -22,7 +23,8 @@ func TestReportAPI(t *testing.T) {
 	defer db.Close()
 
 	service := reports.NewReportService(db)
-	handler := httpapi.NewReportHandler(service)
+	sqlxDB := sqlx.NewDb(db, "postgres")
+	handler := httpapi.NewReportHandler(service, sqlxDB)
 	r := chi.NewRouter()
 	handler.RegisterRoutes(r)
 

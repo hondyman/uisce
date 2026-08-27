@@ -1,0 +1,70 @@
+name: GitOps Metadata Gatekeeper
+
+on:
+  pull_request:
+    paths:
+      - 'backend/db/migrations/**'
+      - 'backend/migrations/**'
+      - 'backend/internal/boresolver/**'
+      - 'backend/internal/catalog/**'
+      - 'backend/internal/compliance/**'
+      - 'backend/internal/cbo/**'
+      - 'backend/internal/datacontract/**'
+      - 'backend/internal/privacy/**'
+      - 'backend/internal/nexthorizon/**'
+  push:
+    branches:
+      - main
+    paths:
+      - 'backend/db/migrations/**'
+      - 'backend/migrations/**'
+      - 'backend/internal/boresolver/**'
+      - 'backend/internal/catalog/**'
+      - 'backend/internal/compliance/**'
+      - 'backend/internal/cbo/**'
+      - 'backend/internal/datacontract/**'
+      - 'backend/internal/privacy/**'
+
+jobs:
+  metadata-gatekeeper:
+    name: Formal Invariant & Multi-Tenant Gatekeeper
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+          cache-dependency-path: backend/go.sum
+
+      - name: Run Metadata Gatekeeper Pre-Flight Verification
+        working-directory: backend
+        run: |
+          go run cmd/metadata-gatekeeper/main.go --output-md=../gatekeeper-report.md --fail-on-block=true
+
+      - name: Publish Gatekeeper Report to Job Summary
+        if: always()
+        run: |
+          if [ -f gatekeeper-report.md ]; then
+            cat gatekeeper-report.md >> $GITHUB_STEP_SUMMARY
+          fi
+
+      - name: Comment Gatekeeper Report on PR
+        if: github.event_name == 'pull_request' && always()
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const fs = require('fs');
+            if (fs.existsSync('gatekeeper-report.md')) {
+              const report = fs.readFileSync('gatekeeper-report.md', 'utf8');
+              github.rest.issues.createComment({
+                issue_number: context.issue.number,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                body: report
+              });
+            }

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/hondyman/uisce/backend/pkg/meta"
 	"github.com/hondyman/uisce/libs/jwt-middleware"
 )
@@ -96,6 +97,43 @@ func (h *MetadataCacheHandler) InvalidateCache(w http.ResponseWriter, r *http.Re
 		"status":  "success",
 		"message": "Cache invalidated successfully",
 	})
+}
+
+// GetBusinessObjectByID retrieves a business object by its UUID (boId) from the URL path.
+// This is the /api/metadata/bo/{boId} endpoint consumed by the data explorer's query builder.
+// It returns the BO's driving table and fields in a BOSchema-compatible shape.
+// GET /api/metadata/bo/{boId}
+func (h *MetadataCacheHandler) GetBusinessObjectByID(w http.ResponseWriter, r *http.Request) {
+	claims := jwtmiddleware.GetClaimsFromContext(r)
+	if claims == nil {
+		http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
+		return
+	}
+	tenantID := claims.TenantID
+	if tenantID == "" {
+		http.Error(w, "tenant_id missing from JWT", http.StatusBadRequest)
+		return
+	}
+
+	// chi.URLParam extracts path params registered with {boId}
+	boID := chi.URLParam(r, "boId")
+	if boID == "" {
+		boID = chi.URLParam(r, "id")
+	}
+	if boID == "" {
+		http.Error(w, "boId path parameter required", http.StatusBadRequest)
+		return
+	}
+
+	bo, err := h.service.GetBusinessObject(r.Context(), boID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusNotFound)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("X-Cache-Hit", "false")
+	json.NewEncoder(w).Encode(bo)
 }
 
 // GetBusinessObjectWithCache retrieves a business object using cache

@@ -96,6 +96,23 @@ func (s *Server) GenerateSQLHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Fail-closed STI subtype validation: if a subtype_code is provided, verify it exists
+	// in oms.subtype_registry for this tenant. Unknown codes return 400.
+	if req.SelectedSubtypeKey != nil && *req.SelectedSubtypeKey != "" {
+		var exists bool
+		row := s.DB.QueryRowContext(r.Context(),
+			`SELECT EXISTS(
+				SELECT 1 FROM oms.subtype_registry
+				WHERE tenant_id = $1 AND subtype_code = $2 AND is_active = true
+			)`,
+			req.TenantID, *req.SelectedSubtypeKey)
+		if err := row.Scan(&exists); err != nil || !exists {
+			logging.GetLogger().Sugar().Warnf("GenerateSQLHandler: invalid SelectedSubtypeKey %q for tenant %s", *req.SelectedSubtypeKey, req.TenantID)
+			http.Error(w, fmt.Sprintf("Invalid subtype %q: not found in registry or inactive", *req.SelectedSubtypeKey), http.StatusBadRequest)
+			return
+		}
+	}
+
 	generator, err := boresolver.NewBOSQLGenerator(repo, "postgres")
 	if err != nil {
 		logging.GetLogger().Sugar().Errorf("Failed to create SQL generator: %v", err)

@@ -12,11 +12,14 @@ type PhysicalMapping struct {
 
 // JoinStep represents a join required to reach a table
 type JoinStep struct {
-	FromTable string
-	ToTable   string
-	Condition string // e.g. "t1.id = t2.ref_id"
-	Type      string // "LEFT", "INNER"
-	Alias     string // Target alias (e.g. "t1") used for tenant scoping
+	FromTable          string
+	ToTable            string
+	Condition          string // e.g. "t1.id = t2.ref_id"
+	Type               string // "LEFT", "INNER"
+	Alias              string // Target alias (e.g. "t1") used for tenant scoping
+	ScopedSubtypeKey  *string // Non-nil: reject this join unless the query subtype matches
+	TargetSubtypeKey  *string // Non-nil: append AND target.subtype_code = '...' to the join condition
+	SatelliteJoinCond *string // Non-nil: emit a chained LEFT JOIN to this satellite table first
 }
 
 // Resolver maintains the context for resolving a calculation against a BO

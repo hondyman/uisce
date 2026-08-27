@@ -141,6 +141,7 @@ func (r *Repository) GetTemplate(ctx context.Context, id uuid.UUID) (*ReportTemp
 func (r *Repository) ListTemplates(ctx context.Context) ([]ReportTemplate, error) {
 	query := `
 		SELECT id, tenant_id, template_name, description, category,
+		       layout_config,
 		       is_active, is_public, created_at, updated_at, version
 		FROM report_templates
 		ORDER BY template_name
@@ -155,12 +156,14 @@ func (r *Repository) ListTemplates(ctx context.Context) ([]ReportTemplate, error
 	var templates []ReportTemplate
 	for rows.Next() {
 		var tmpl ReportTemplate
+		var layoutJSON []byte
 		if err := rows.Scan(
 			&tmpl.ID,
 			&tmpl.TenantID,
 			&tmpl.TemplateName,
 			&tmpl.Description,
 			&tmpl.Category,
+			&layoutJSON,
 			&tmpl.IsActive,
 			&tmpl.IsPublic,
 			&tmpl.CreatedAt,
@@ -168,6 +171,9 @@ func (r *Repository) ListTemplates(ctx context.Context) ([]ReportTemplate, error
 			&tmpl.Version,
 		); err != nil {
 			return nil, fmt.Errorf("failed to scan template: %w", err)
+		}
+		if len(layoutJSON) > 0 {
+			_ = json.Unmarshal(layoutJSON, &tmpl.LayoutConfig)
 		}
 		templates = append(templates, tmpl)
 	}

@@ -40,6 +40,21 @@ export async function apiClient<T = Response>(input: RequestInfo | URL, init?: R
                 headers.set('X-Tenant-Datasource-ID', datasourceId);
             }
         } catch (_) {}
+
+        // Inject chat metadata headers so the backend ChatEngine can persist
+        // every message with the correct view_type / embedded / surface flags.
+        if (path.includes('/chat') || path.includes('/genui') || path.includes('/ai/chat')) {
+            try {
+                if (typeof localStorage !== 'undefined') {
+                    const viewType = localStorage.getItem('chat_view_type') || 'admin';
+                    if (!headers.has('X-Chat-View-Type')) headers.set('X-Chat-View-Type', viewType);
+                    const embedded = localStorage.getItem('chat_embedded') || 'false';
+                    if (!headers.has('X-Chat-Embedded')) headers.set('X-Chat-Embedded', embedded);
+                    const surface = localStorage.getItem('chat_embed_surface') || 'studio';
+                    if (!headers.has('X-Chat-Embed-Surface')) headers.set('X-Chat-Embed-Surface', surface);
+                }
+            } catch (_) {}
+        }
     }
 
     // Inject Authorization Token - check multiple storage locations for OIDC tokens

@@ -1,10 +1,17 @@
 import React, { useState } from "react";
+import { useTheme } from "@mui/material/styles";
+import Box from "@mui/material/Box";
+import Typography from "@mui/material/Typography";
+import TextField from "@mui/material/TextField";
+import Button from "@mui/material/Button";
+import FormControlLabel from "@mui/material/FormControlLabel";
+import Checkbox from "@mui/material/Checkbox";
+import Paper from "@mui/material/Paper";
 import { Modal } from "./Modal";
 import { ErrorBanner, SuccessBanner } from "./Feedback";
 import { useCreateAPIKey, useAPIKeys } from "../hooks/useAPIKeys";
 import { useTenants } from "../hooks/useTenants";
-import type { CreateAPIKeyRequest } from "../types";
-import "./CreateAPIKeyModal.css";
+import type { CreateAPIKeyRequest } from "@/admin-v2/types";
 
 export interface CreateAPIKeyModalProps {
   open: boolean;
@@ -17,6 +24,8 @@ export function CreateAPIKeyModal({
   onClose,
   onSuccess,
 }: CreateAPIKeyModalProps) {
+  const theme = useTheme();
+  const isDark = theme.palette.mode === 'dark';
   const [formData, setFormData] = useState<CreateAPIKeyRequest>({
     name: "",
     tenantIds: [],
@@ -52,7 +61,6 @@ export function CreateAPIKeyModal({
 
     createMutation.mutate(formData, {
       onSuccess: (response) => {
-        // Show the plaintext key for user to copy
         if (response.data?.key) {
           setGeneratedKey(response.data.key);
         }
@@ -81,45 +89,55 @@ export function CreateAPIKeyModal({
   const isLoading = createMutation.isPending;
   const isFormValid = formData.name.trim().length > 0;
 
-  // If key was generated, show the display-only view
   if (generatedKey) {
     return (
       <Modal open={open} onClose={onClose} title="API Key Created" size="md">
-        <div className="key-display">
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
           <SuccessBanner message="API key created successfully. Copy it now as you won't see it again." />
 
-          <div className="key-box">
-            <code className="key-value">{generatedKey}</code>
-            <button
-              type="button"
-              onClick={handleCopyKey}
-              className="btn btn-small"
-            >
-              {copied ? "✓ Copied" : "Copy Key"}
-            </button>
-          </div>
+          <Paper
+            variant="outlined"
+            sx={{ p: 2, bgcolor: isDark ? '#1f2937' : '#f9fafb' }}
+          >
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <Box
+                component="code"
+                sx={{
+                  flex: 1,
+                  fontFamily: 'monospace',
+                  fontSize: '0.875rem',
+                  wordBreak: 'break-all',
+                }}
+              >
+                {generatedKey}
+              </Box>
+              <Button
+                variant={copied ? "outlined" : "contained"}
+                size="small"
+                onClick={handleCopyKey}
+              >
+                {copied ? "✓ Copied" : "Copy Key"}
+              </Button>
+            </Box>
+          </Paper>
 
-          <div className="key-info">
-            <p>
+          <Box>
+            <Typography variant="body2">
               <strong>Name:</strong> {formData.name}
-            </p>
+            </Typography>
             {formData.tenantIds.length > 0 && (
-              <p>
+              <Typography variant="body2">
                 <strong>Tenants:</strong> {formData.tenantIds.length} selected
-              </p>
+              </Typography>
             )}
-          </div>
+          </Box>
 
-          <div className="modal-actions">
-            <button
-              type="button"
-              onClick={onClose}
-              className="btn btn-primary"
-            >
+          <Box sx={{ display: 'flex', justifyContent: 'flex-end', pt: 1 }}>
+            <Button variant="contained" onClick={onClose}>
               Done
-            </button>
-          </div>
-        </div>
+            </Button>
+          </Box>
+        </Box>
       </Modal>
     );
   }
@@ -136,10 +154,11 @@ export function CreateAPIKeyModal({
         />
       )}
 
-      <form onSubmit={handleSubmit} className="form">
-        <div className="form-group">
-          <label htmlFor="name">Key Name *</label>
-          <input
+      <Box component="form" onSubmit={handleSubmit} sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
+        <Box>
+          <Typography variant="body2" sx={{ fontWeight: 600, mb: 1 }}>Key Name *</Typography>
+          <TextField
+            fullWidth
             id="name"
             name="name"
             type="text"
@@ -148,53 +167,65 @@ export function CreateAPIKeyModal({
             placeholder="e.g., Production API Key"
             disabled={isLoading}
             required
+            size="small"
           />
-        </div>
+        </Box>
 
-        <div className="form-group">
-          <label>Tenant Access</label>
-          <div className="tenant-list">
+        <Box>
+          <Typography variant="body2" sx={{ fontWeight: 600, mb: 1 }}>Tenant Access</Typography>
+          <Paper
+            variant="outlined"
+            sx={{
+              p: 1.5,
+              maxHeight: 150,
+              overflow: 'auto',
+              bgcolor: isDark ? '#1f2937' : '#f9fafb'
+            }}
+          >
             {tenantsQuery.isLoading ? (
-              <p className="placeholder">Loading tenants...</p>
+              <Typography variant="body2" color="text.secondary">Loading tenants...</Typography>
             ) : tenantsQuery.data?.data?.length === 0 ? (
-              <p className="placeholder">No tenants available</p>
+              <Typography variant="body2" color="text.secondary">No tenants available</Typography>
             ) : (
               tenantsQuery.data?.data?.map((tenant) => (
-                <label key={tenant.id} className="checkbox-label">
-                  <input
-                    type="checkbox"
-                    checked={formData.tenantIds.includes(tenant.id)}
-                    onChange={() => handleTenantToggle(tenant.id)}
-                    disabled={isLoading}
-                  />
-                  <span>{tenant.name}</span>
-                </label>
+                <FormControlLabel
+                  key={tenant.id}
+                  control={
+                    <Checkbox
+                      checked={formData.tenantIds.includes(tenant.id)}
+                      onChange={() => handleTenantToggle(tenant.id)}
+                      disabled={isLoading}
+                      size="small"
+                    />
+                  }
+                  label={tenant.name}
+                />
               ))
             )}
-          </div>
-          <small className="hint">
+          </Paper>
+          <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5, display: 'block' }}>
             Leave empty for access to all tenants (admin key)
-          </small>
-        </div>
+          </Typography>
+        </Box>
 
-        <div className="form-actions">
-          <button
+        <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 1, pt: 1 }}>
+          <Button
             type="button"
+            variant="outlined"
             onClick={onClose}
             disabled={isLoading}
-            className="btn btn-secondary"
           >
             Cancel
-          </button>
-          <button
+          </Button>
+          <Button
             type="submit"
+            variant="contained"
             disabled={!isFormValid || isLoading}
-            className="btn btn-primary"
           >
             {isLoading ? "Creating..." : "Create API Key"}
-          </button>
-        </div>
-      </form>
+          </Button>
+        </Box>
+      </Box>
     </Modal>
   );
 }

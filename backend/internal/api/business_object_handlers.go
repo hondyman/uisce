@@ -9,6 +9,8 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
+	boPkg "github.com/hondyman/uisce/backend/internal/bo"
 	"github.com/hondyman/uisce/backend/internal/handlers"
 	"github.com/hondyman/uisce/backend/internal/logging"
 	catalogmeta "github.com/hondyman/uisce/backend/internal/metadata"
@@ -59,13 +61,15 @@ type BusinessObjectHandler struct {
 	service            BOService
 	datasourceResolver security.DatasourceResolver
 	db                 *sqlx.DB
+	entitlements       *security.EntitlementsService
 }
 
-func NewBusinessObjectHandler(service BOService, datasourceResolver security.DatasourceResolver, sqlxDB *sqlx.DB) *BusinessObjectHandler {
+func NewBusinessObjectHandler(service BOService, datasourceResolver security.DatasourceResolver, sqlxDB *sqlx.DB, entSvc *security.EntitlementsService) *BusinessObjectHandler {
 	return &BusinessObjectHandler{
 		service:            service,
 		datasourceResolver: datasourceResolver,
 		db:                 sqlxDB,
+		entitlements:       entSvc,
 	}
 }
 
@@ -162,7 +166,6 @@ func (h *BusinessObjectHandler) GetBusinessObjectFields(w http.ResponseWriter, r
 }
 
 func (h *BusinessObjectHandler) ListBusinessObjects(w http.ResponseWriter, r *http.Request) {
-	// Build security context with datasource + region validation
 	secCtx, ctx, err := handlers.SecurityContextFromRequest(r, "", "", handlers.SecurityContextDeps{
 		Resolver: h.datasourceResolver,
 	})
@@ -171,10 +174,8 @@ func (h *BusinessObjectHandler) ListBusinessObjects(w http.ResponseWriter, r *ht
 		return
 	}
 
-	// Use Workday-style composed listing (Core + Custom merged)
 	bos, err := h.service.ListBusinessObjectsComposed(ctx, secCtx)
 	if err != nil {
-		// Fallback to regular listing if composition fails
 		logging.GetLogger().Sugar().Warnf("ListBusinessObjectsComposed failed, falling back: %v", err)
 		bos, err = h.service.ListBusinessObjects(ctx, secCtx)
 		if err != nil {
@@ -183,31 +184,55 @@ func (h *BusinessObjectHandler) ListBusinessObjects(w http.ResponseWriter, r *ht
 		}
 	}
 
-	// Exclude subtypes from list view (only top-level business objects)
-	filtered := make([]*models.BusinessObjectDefinition, 0, len(bos))
+	parentBOs := make([]*models.BusinessObjectDefinition, 0, len(bos))
 	for _, bo := range bos {
-		if !bo.ParentID.Valid || bo.ParentID.String == "" {
-			filtered = append(filtered, bo)
+		isParent := !bo.ActiveSubtypeFilter.Valid ||
+			(bo.ActiveSubtypeFilter.Valid && bo.ActiveSubtypeFilter.String == bo.Key)
+		if isParent {
+			parentBOs = append(parentBOs, bo)
+		}
+	}
+
+	var filteredBOs []*models.BusinessObjectDefinition
+	var summary *security.EntitlementsSummary
+
+	if h.entitlements == nil {
+		filteredBOs = parentBOs
+		summary = &security.EntitlementsSummary{TotalBO: len(filteredBOs), VisibleBO: len(filteredBOs)}
+	} else {
+		filtered, entSummary, err := h.entitlements.ListVisibleBOs(ctx, secCtx, parentBOs, nil)
+		if err != nil {
+			logging.GetLogger().Sugar().Warnf("Failed to get BO entitlements, showing all: %v", err)
+			filteredBOs = parentBOs
+			summary = &security.EntitlementsSummary{TotalBO: len(filteredBOs), VisibleBO: len(filteredBOs)}
+		} else {
+			summary = entSummary
+			filteredBOs = make([]*models.BusinessObjectDefinition, 0, len(filtered))
+			for _, fbo := range filtered {
+				filteredBOs = append(filteredBOs, fbo.BO)
+			}
 		}
 	}
 
 	format := r.URL.Query().Get("format")
 	if format == "array" {
-		arr := make([]map[string]interface{}, 0, len(filtered))
-		for _, bo := range filtered {
+		arr := make([]map[string]interface{}, 0, len(filteredBOs))
+		for _, bo := range filteredBOs {
 			arr = append(arr, toBusinessObjectResponse(bo))
 		}
 		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("X-BO-Entitlements", security.EntitlementsSummaryHeader(summary))
 		json.NewEncoder(w).Encode(arr)
 		return
 	}
 
 	result := make(map[string]interface{})
-	for _, bo := range filtered {
+	for _, bo := range filteredBOs {
 		result[bo.ID] = toBusinessObjectResponse(bo)
 	}
 
 	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("X-BO-Entitlements", security.EntitlementsSummaryHeader(summary))
 	json.NewEncoder(w).Encode(result)
 }
 
@@ -233,6 +258,19 @@ func (h *BusinessObjectHandler) CreateBusinessObject(w http.ResponseWriter, r *h
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
+	}
+
+	boID := req.ParentID
+	if boID == "" {
+		boID = "_create"
+	}
+
+	if !secCtx.IsGlobalAdmin && h.entitlements != nil {
+		canWrite, err := h.entitlements.CanWrite(ctx, secCtx, boID)
+		if err == nil && !canWrite {
+			http.Error(w, "Forbidden: insufficient permissions to create this business object", http.StatusForbidden)
+			return
+		}
 	}
 
 	// Debug trace to verify scope propagation
@@ -269,6 +307,16 @@ func (h *BusinessObjectHandler) GetBusinessObject(w http.ResponseWriter, r *http
 		logging.GetLogger().Sugar().Errorf("[HANDLER-ERROR] GetBusinessObject service error: tenant=%s id=%s err=%v", secCtx.TenantID, id, err)
 		http.Error(w, err.Error(), http.StatusNotFound)
 		return
+	}
+
+	if !secCtx.IsGlobalAdmin && h.entitlements != nil {
+		ents, err := h.entitlements.ForUser(ctx, secCtx)
+		if err == nil && ents != nil {
+			if _, denied := ents.HiddenBOs[bo.ID]; denied {
+				http.Error(w, "Business object not found", http.StatusNotFound)
+				return
+			}
+		}
 	}
 
 	logging.GetLogger().Sugar().Infof("DEBUG: API GetBusinessObject called - tenant=%s id=%s boID=%s hasSubtypes=%v", secCtx.TenantID, id, bo.ID, len(bo.Subtypes) > 0)
@@ -455,6 +503,14 @@ func (h *BusinessObjectHandler) RenameSubtype(w http.ResponseWriter, r *http.Req
 	id := chi.URLParam(r, "id")
 	subtypeId := chi.URLParam(r, "subtypeId")
 
+	if !secCtx.IsGlobalAdmin && h.entitlements != nil {
+		canWrite, err := h.entitlements.CanWrite(ctx, secCtx, id)
+		if err == nil && !canWrite {
+			http.Error(w, "Forbidden: insufficient permissions for this business object", http.StatusForbidden)
+			return
+		}
+	}
+
 	var req struct {
 		NewName string `json:"newName"`
 	}
@@ -498,6 +554,14 @@ func (h *BusinessObjectHandler) DeleteSubtype(w http.ResponseWriter, r *http.Req
 
 	id := chi.URLParam(r, "id")
 	subtypeId := chi.URLParam(r, "subtypeId")
+
+	if !secCtx.IsGlobalAdmin && h.entitlements != nil {
+		canWrite, err := h.entitlements.CanWrite(ctx, secCtx, id)
+		if err == nil && !canWrite {
+			http.Error(w, "Forbidden: insufficient permissions for this business object", http.StatusForbidden)
+			return
+		}
+	}
 
 	bo, err := h.service.DeleteSubtype(ctx, secCtx, id, subtypeId, authInfo.UserID)
 	if err != nil {
@@ -547,6 +611,14 @@ func (h *BusinessObjectHandler) CreateBusinessObjectRelationship(w http.Response
 	if sourceBOID == "" {
 		http.Error(w, "source business object id is required", http.StatusBadRequest)
 		return
+	}
+
+	if !secCtx.IsGlobalAdmin && h.entitlements != nil {
+		canWrite, err := h.entitlements.CanWrite(ctx, secCtx, sourceBOID)
+		if err == nil && !canWrite {
+			http.Error(w, "Forbidden: insufficient permissions for this business object", http.StatusForbidden)
+			return
+		}
 	}
 
 	var req struct {
@@ -642,6 +714,14 @@ func (h *BusinessObjectHandler) UpdateBusinessObjectRelationship(w http.Response
 	relID := chi.URLParam(r, "relationshipId")
 	sourceBOID := chi.URLParam(r, "id")
 
+	if !secCtx.IsGlobalAdmin && h.entitlements != nil {
+		canWrite, err := h.entitlements.CanWrite(ctx, secCtx, sourceBOID)
+		if err == nil && !canWrite {
+			http.Error(w, "Forbidden: insufficient permissions for this business object", http.StatusForbidden)
+			return
+		}
+	}
+
 	var req struct {
 		RelationshipType string `json:"relationshipType"`
 		Cardinality      string `json:"cardinality"`
@@ -692,6 +772,14 @@ func (h *BusinessObjectHandler) DeleteBusinessObjectRelationship(w http.Response
 	relID := chi.URLParam(r, "relationshipId")
 	sourceBOID := chi.URLParam(r, "id")
 
+	if !secCtx.IsGlobalAdmin && h.entitlements != nil {
+		canWrite, err := h.entitlements.CanWrite(ctx, secCtx, sourceBOID)
+		if err == nil && !canWrite {
+			http.Error(w, "Forbidden: insufficient permissions for this business object", http.StatusForbidden)
+			return
+		}
+	}
+
 	if h.db != nil {
 		delQuery := `
 			DELETE FROM public.catalog_edge
@@ -733,6 +821,42 @@ func (h *BusinessObjectHandler) GetBusinessObjectWithBindings(w http.ResponseWri
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusNotFound)
 		return
+	}
+
+	// For STI parent BOs with no CoreFields, populate from semantic terms mapped to the driving table.
+	// This provides the "base fields" for the parent BO that users expect to see.
+	if len(bo.CoreFields) == 0 && bo.ActiveSubtypeFilter.Valid && bo.DriverTableID.Valid && bo.DriverTableID.String != "" {
+		discoverySvc := boPkg.NewBindingDiscoveryService(h.db)
+		if discoverySvc != nil {
+			tenantUUID, err := uuid.Parse(secCtx.TenantID)
+			if err == nil {
+				driverTableUUID, err := uuid.Parse(bo.DriverTableID.String)
+				if err == nil {
+					terms, err := discoverySvc.DiscoverEligibleTermsForBinding(ctx, tenantUUID, driverTableUUID)
+					if err == nil && len(terms) > 0 {
+						coreFields := make([]models.FieldDefinition, 0, len(terms))
+						for _, term := range terms {
+							field := models.FieldDefinition{
+								ID:             term.TermNodeID.String(),
+								Name:           term.TermKey,
+								DisplayName:    term.TermName,
+								TechnicalName:  term.TermKey,
+								Type:           term.TermType,
+								IsCore:         true,
+								SemanticTermID: term.TermNodeID.String(),
+							}
+							coreFields = append(coreFields, field)
+						}
+						bo.CoreFields = coreFields
+
+						// Persist to business_object_fields so the boresolver can find them later
+						if h.db != nil {
+							persistCoreFieldsToBOF(ctx, h.db, bo.ID, secCtx.TenantID, coreFields)
+						}
+					}
+				}
+			}
+		}
 	}
 
 	// Get relationships (related BOs)
@@ -1014,6 +1138,14 @@ func (h *BusinessObjectHandler) CreateBORecord(w http.ResponseWriter, r *http.Re
 
 	id := chi.URLParam(r, "id")
 
+	if !secCtx.IsGlobalAdmin && h.entitlements != nil {
+		canWrite, err := h.entitlements.CanWrite(ctx, secCtx, id)
+		if err == nil && !canWrite {
+			http.Error(w, "Forbidden: insufficient permissions for this business object", http.StatusForbidden)
+			return
+		}
+	}
+
 	var req models.BOCrudRecordRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "Invalid record payload: "+err.Error(), http.StatusBadRequest)
@@ -1051,6 +1183,14 @@ func (h *BusinessObjectHandler) UpdateBORecord(w http.ResponseWriter, r *http.Re
 	id := chi.URLParam(r, "id")
 	recordId := chi.URLParam(r, "recordId")
 
+	if !secCtx.IsGlobalAdmin && h.entitlements != nil {
+		canWrite, err := h.entitlements.CanWrite(ctx, secCtx, id)
+		if err == nil && !canWrite {
+			http.Error(w, "Forbidden: insufficient permissions for this business object", http.StatusForbidden)
+			return
+		}
+	}
+
 	var req models.BOCrudRecordRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "Invalid record payload: "+err.Error(), http.StatusBadRequest)
@@ -1087,6 +1227,14 @@ func (h *BusinessObjectHandler) DeleteBORecord(w http.ResponseWriter, r *http.Re
 	id := chi.URLParam(r, "id")
 	recordId := chi.URLParam(r, "recordId")
 
+	if !secCtx.IsGlobalAdmin && h.entitlements != nil {
+		canWrite, err := h.entitlements.CanWrite(ctx, secCtx, id)
+		if err == nil && !canWrite {
+			http.Error(w, "Forbidden: insufficient permissions for this business object", http.StatusForbidden)
+			return
+		}
+	}
+
 	if err := h.service.DeleteBORecord(ctx, secCtx, id, recordId, userID); err != nil {
 		logging.GetLogger().Sugar().Errorf("Failed to delete BO record %s for %s: %v", recordId, id, err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -1110,6 +1258,22 @@ func (h *BusinessObjectHandler) SynthesizeBOWithAI(w http.ResponseWriter, r *htt
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "invalid request body", http.StatusBadRequest)
 		return
+	}
+
+	boID := req.TableID
+	if boID == "" {
+		boID = req.TableName
+	}
+	if boID == "" {
+		boID = "_synthesize"
+	}
+
+	if !secCtx.IsGlobalAdmin && h.entitlements != nil {
+		canRun, err := h.entitlements.CanRunAI(ctx, secCtx, boID)
+		if err == nil && !canRun {
+			http.Error(w, "Forbidden: AI access denied", http.StatusForbidden)
+			return
+		}
 	}
 
 	resp, err := h.service.SynthesizeBOWithAI(ctx, secCtx, req)
@@ -1139,6 +1303,19 @@ func (h *BusinessObjectHandler) TranslateNLToQueryDef(w http.ResponseWriter, r *
 		return
 	}
 
+	boID := req.BOIDOrKey
+	if boID == "" {
+		boID = "_nlq"
+	}
+
+	if !secCtx.IsGlobalAdmin && h.entitlements != nil {
+		canRun, err := h.entitlements.CanRunAI(ctx, secCtx, boID)
+		if err == nil && !canRun {
+			http.Error(w, "Forbidden: AI access denied", http.StatusForbidden)
+			return
+		}
+	}
+
 	resp, err := h.service.TranslateNLToQueryDef(ctx, secCtx, req)
 	if err != nil {
 		logging.GetLogger().Sugar().Errorf("Failed to translate NLQ: %v", err)
@@ -1165,6 +1342,14 @@ func (h *BusinessObjectHandler) ExplainDeltaWithAI(w http.ResponseWriter, r *htt
 	_ = json.NewDecoder(r.Body).Decode(&req)
 	req.BOIDOrKey = id
 
+	if !secCtx.IsGlobalAdmin && h.entitlements != nil {
+		canRun, err := h.entitlements.CanRunAI(ctx, secCtx, id)
+		if err == nil && !canRun {
+			http.Error(w, "Forbidden: AI access denied", http.StatusForbidden)
+			return
+		}
+	}
+
 	resp, err := h.service.ExplainDeltaWithAI(ctx, secCtx, req)
 	if err != nil {
 		logging.GetLogger().Sugar().Errorf("Failed to explain delta for %s: %v", id, err)
@@ -1190,6 +1375,14 @@ func (h *BusinessObjectHandler) DetectAnomaliesWithAI(w http.ResponseWriter, r *
 	var req models.BOAIAnomalyDetectRequest
 	_ = json.NewDecoder(r.Body).Decode(&req)
 	req.BOIDOrKey = id
+
+	if !secCtx.IsGlobalAdmin && h.entitlements != nil {
+		canRun, err := h.entitlements.CanRunAI(ctx, secCtx, id)
+		if err == nil && !canRun {
+			http.Error(w, "Forbidden: AI access denied", http.StatusForbidden)
+			return
+		}
+	}
 
 	resp, err := h.service.DetectAnomaliesWithAI(ctx, secCtx, req)
 	if err != nil {
@@ -1509,7 +1702,66 @@ func (h *BusinessObjectHandler) RunLakehouseCompaction(w http.ResponseWriter, r 
 	json.NewEncoder(w).Encode(resp)
 }
 
+// persistCoreFieldsToBOF persists discovered semantic terms as core fields in business_object_fields.
+// This ensures the boresolver can find them when building SQL queries.
+func persistCoreFieldsToBOF(ctx context.Context, db *sqlx.DB, boID, tenantID string, fields []models.FieldDefinition) {
+	if len(fields) == 0 {
+		return
+	}
 
+	query := `
+		INSERT INTO public.business_object_fields
+			(id, tenant_id, bo_id, term_node_id, field_name, field_role,
+			 aggregation_type, binding_requirement, eligibility_source,
+			 subtype_scope, is_exposed, inherits_defaults,
+			 display_name, technical_name, data_type,
+			 created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, 'DIMENSION',
+		        'NONE', 'REQUIRED', 'DIRECT',
+		        'ALL', true, true,
+		        $6, $7, 'string',
+		        NOW(), NOW())
+		ON CONFLICT (tenant_id, bo_id, field_name) DO UPDATE
+			SET term_node_id   = EXCLUDED.term_node_id,
+			    display_name   = EXCLUDED.display_name,
+			    technical_name = EXCLUDED.technical_name,
+			    inherits_defaults = true,
+			    updated_at    = NOW()
+	`
+
+	for _, f := range fields {
+		var termNodeID *string
+		if f.SemanticTermID != "" {
+			tnid := f.SemanticTermID
+			termNodeID = &tnid
+		}
+		if termNodeID == nil {
+			continue // skip fields without semantic term ID
+		}
+
+		displayName := f.DisplayName
+		if displayName == "" {
+			displayName = f.Name
+		}
+		techName := f.TechnicalName
+		if techName == "" {
+			techName = f.Name
+		}
+
+		_, err := db.ExecContext(ctx, query,
+			uuid.New().String(),
+			tenantID,
+			boID,
+			*termNodeID,
+			f.Name,
+			displayName,
+			techName,
+		)
+		if err != nil {
+			logging.GetLogger().Sugar().Warnf("Failed to persist core field %s for BO %s: %v", f.Name, boID, err)
+		}
+	}
+}
 
 
 

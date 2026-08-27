@@ -1,9 +1,23 @@
 import React, { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useTheme } from "@mui/material/styles";
+import Box from "@mui/material/Box";
+import Typography from "@mui/material/Typography";
+import TextField from "@mui/material/TextField";
+import Paper from "@mui/material/Paper";
+import Table from "@mui/material/Table";
+import TableBody from "@mui/material/TableBody";
+import TableCell from "@mui/material/TableCell";
+import TableContainer from "@mui/material/TableContainer";
+import TableHead from "@mui/material/TableHead";
+import TableRow from "@mui/material/TableRow";
+import Button from "@mui/material/Button";
+import Chip from "@mui/material/Chip";
 import { observabilityApi, WasmModuleVersion } from "../../api/observabilityApi";
 import { format } from "date-fns";
 
 export function WasmVersionRegistryPage() {
+  const theme = useTheme();
   const [moduleName, setModuleName] = useState("risk-compliance-engine");
   const queryClient = useQueryClient();
 
@@ -28,96 +42,109 @@ export function WasmVersionRegistryPage() {
   };
 
   return (
-    <div className="p-6">
-      <div className="flex justify-between items-center mb-6">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">WASM Registry</h1>
-          <p className="text-sm text-gray-500 mt-1">Manage and activate WASM execution artifacts for the SemLayer compute engine.</p>
-        </div>
-      </div>
+    <Box sx={{ p: 3 }}>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+        <Box>
+          <Typography variant="h5" sx={{ fontWeight: 700, color: 'grey.900' }}>
+            WASM Registry
+          </Typography>
+          <Typography variant="body2" sx={{ color: 'grey.500', mt: 0.5 }}>
+            Manage and activate WASM execution artifacts for the SemLayer compute engine.
+          </Typography>
+        </Box>
+      </Box>
 
-      <div className="mb-6 flex gap-4 p-4 bg-white rounded-lg shadow-sm border border-gray-200">
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Module Namespace</label>
-          <input
-            type="text"
-            className="border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm px-3 py-2 border w-64"
-            placeholder="e.g. risk-compliance-engine"
-            value={moduleName}
-            onChange={(e) => setModuleName(e.target.value)}
-          />
-        </div>
-      </div>
+      <Paper sx={{ mb: 3, p: 2, display: 'flex', gap: 2, alignItems: 'flex-start' }}>
+        <TextField
+          label="Module Namespace"
+          placeholder="e.g. risk-compliance-engine"
+          value={moduleName}
+          onChange={(e) => setModuleName(e.target.value)}
+          size="small"
+          sx={{ width: 256 }}
+        />
+      </Paper>
 
-      <div className="bg-white shadow-sm rounded-lg border border-gray-200 overflow-hidden">
+      <Paper sx={{ overflow: 'hidden' }}>
         {isLoading ? (
-          <div className="p-8 text-center text-gray-500">Loading registry data...</div>
+          <Box sx={{ p: 4, textAlign: 'center', color: 'grey.500' }}>Loading registry data...</Box>
         ) : error ? (
-          <div className="p-8 text-center text-red-500">Error loading WASM versions.</div>
+          <Box sx={{ p: 4, textAlign: 'center', color: 'error.main' }}>Error loading WASM versions.</Box>
         ) : (
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Version ID</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tag</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Hash (SHA-256)</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Size</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Uploaded By</th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
-              {data?.versions?.length === 0 ? (
-                <tr>
-                  <td colSpan={7} className="px-6 py-8 text-center text-sm text-gray-500">
-                    No WASM bundles found for this module.
-                  </td>
-                </tr>
-              ) : (
-                data?.versions?.map((v: WasmModuleVersion) => (
-                  <tr key={v.id} className="hover:bg-gray-50">
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 font-mono">
-                      {v.id.split('-')[0]}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span className="px-2 py-1 text-xs font-mono bg-gray-100 text-gray-800 rounded">{v.version_tag}</span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 font-mono text-xs">
-                      {v.wasm_hash.substring(0, 16)}...
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {formatBytes(v.size_bytes)}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      {v.is_active ? (
-                        <span className="px-2 py-1 text-xs font-bold rounded-full bg-green-100 text-green-800 border border-green-200">ACTIVE</span>
-                      ) : (
-                        <span className="px-2 py-1 text-xs rounded-full bg-gray-100 text-gray-500">INACTIVE</span>
-                      )}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      <div>{v.uploaded_by}</div>
-                      <div className="text-xs text-gray-400">{format(new Date(v.created_at), "MMM d, yyyy HH:mm")}</div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                      {!v.is_active && (
-                        <button
-                          onClick={() => activateMutation.mutate(v.id)}
-                          disabled={activateMutation.isPending}
-                          className="text-blue-600 hover:text-blue-900 disabled:opacity-50 border border-blue-600 rounded px-3 py-1 text-xs font-semibold"
-                        >
-                          {activateMutation.isPending ? "Activating..." : "Activate Now"}
-                        </button>
-                      )}
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
+          <TableContainer>
+            <Table>
+              <TableHead>
+                <TableRow sx={{ bgcolor: 'grey.50' }}>
+                  <TableCell sx={{ fontWeight: 600, color: 'grey.500', fontSize: '0.75rem' }}>Version ID</TableCell>
+                  <TableCell sx={{ fontWeight: 600, color: 'grey.500', fontSize: '0.75rem' }}>Tag</TableCell>
+                  <TableCell sx={{ fontWeight: 600, color: 'grey.500', fontSize: '0.75rem' }}>Hash (SHA-256)</TableCell>
+                  <TableCell sx={{ fontWeight: 600, color: 'grey.500', fontSize: '0.75rem' }}>Size</TableCell>
+                  <TableCell sx={{ fontWeight: 600, color: 'grey.500', fontSize: '0.75rem' }}>Status</TableCell>
+                  <TableCell sx={{ fontWeight: 600, color: 'grey.500', fontSize: '0.75rem' }}>Uploaded By</TableCell>
+                  <TableCell align="right" sx={{ fontWeight: 600, color: 'grey.500', fontSize: '0.75rem' }}>Actions</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {data?.versions?.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={7} sx={{ p: 4, textAlign: 'center', color: 'grey.500', fontSize: '0.875rem' }}>
+                      No WASM bundles found for this module.
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  data?.versions?.map((v: WasmModuleVersion) => (
+                    <TableRow key={v.id} hover sx={{ '&:hover': { bgcolor: 'grey.50' } }}>
+                      <TableCell sx={{ fontWeight: 500, color: 'grey.900', fontSize: '0.875rem', fontFamily: 'monospace' }}>
+                        {v.id.split('-')[0]}
+                      </TableCell>
+                      <TableCell>
+                        <Chip label={v.version_tag} size="small" sx={{ fontFamily: 'monospace', bgcolor: 'grey.100', color: 'grey.800' }} />
+                      </TableCell>
+                      <TableCell sx={{ fontFamily: 'monospace', fontSize: '0.75rem', color: 'grey.500' }}>
+                        {v.wasm_hash.substring(0, 16)}...
+                      </TableCell>
+                      <TableCell sx={{ color: 'grey.500', fontSize: '0.875rem' }}>
+                        {formatBytes(v.size_bytes)}
+                      </TableCell>
+                      <TableCell>
+                        {v.is_active ? (
+                          <Chip label="ACTIVE" size="small" sx={{ fontWeight: 700, bgcolor: 'success.light', color: 'success.dark', border: '1px solid', borderColor: 'success.200' }} />
+                        ) : (
+                          <Chip label="INACTIVE" size="small" sx={{ bgcolor: 'grey.100', color: 'grey.500' }} />
+                        )}
+                      </TableCell>
+                      <TableCell sx={{ color: 'grey.500', fontSize: '0.875rem' }}>
+                        <Box>{v.uploaded_by}</Box>
+                        <Box sx={{ fontSize: '0.75rem', color: 'grey.400' }}>{format(new Date(v.created_at), "MMM d, yyyy HH:mm")}</Box>
+                      </TableCell>
+                      <TableCell align="right" sx={{ fontWeight: 500, fontSize: '0.875rem' }}>
+                        {!v.is_active && (
+                          <Button
+                            onClick={() => activateMutation.mutate(v.id)}
+                            disabled={activateMutation.isPending}
+                            variant="outlined"
+                            size="small"
+                            sx={{ 
+                              color: 'primary.main', 
+                              borderColor: 'primary.main',
+                              fontSize: '0.75rem',
+                              fontWeight: 600,
+                              '&:hover': { color: 'primary.dark', borderColor: 'primary.dark' },
+                              '&:disabled': { opacity: 0.5 }
+                            }}
+                          >
+                            {activateMutation.isPending ? "Activating..." : "Activate Now"}
+                          </Button>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          </TableContainer>
         )}
-      </div>
-    </div>
+      </Paper>
+    </Box>
   );
 }

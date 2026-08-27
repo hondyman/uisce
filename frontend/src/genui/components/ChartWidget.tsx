@@ -1,4 +1,8 @@
 import React from "react";
+import { useTheme } from "@mui/material";
+import Box from "@mui/material/Box";
+import Typography from "@mui/material/Typography";
+import Skeleton from "@mui/material/Skeleton";
 import { useQuery } from "@tanstack/react-query";
 import { apiFetch } from "../../lib/apiClient";
 import {
@@ -22,6 +26,7 @@ interface ChartWidgetProps {
 }
 
 export function ChartWidget({ def }: ChartWidgetProps) {
+  const theme = useTheme();
   const { data: queryData, isLoading } = useQuery({
     queryKey: ['genui-chart', def.binding?.endpoint, def.binding?.variables],
     queryFn: async () => {
@@ -43,14 +48,22 @@ export function ChartWidget({ def }: ChartWidgetProps) {
     : queryData || [];
 
   return (
-    <div className="bg-white rounded-lg shadow p-4">
-      {def.title && <h3 className="text-lg font-semibold mb-4">{def.title}</h3>}
-      {def.subtitle && <p className="text-sm text-gray-600 mb-2">{def.subtitle}</p>}
+    <Box sx={{ bgcolor: 'background.paper', borderRadius: 2, boxShadow: 1, p: 2 }}>
+      {def.title && (
+        <Typography variant="h6" sx={{ mb: 2 }}>
+          {def.title}
+        </Typography>
+      )}
+      {def.subtitle && (
+        <Typography variant="body2" sx={{ color: 'grey.600', mb: 1 }}>
+          {def.subtitle}
+        </Typography>
+      )}
 
       <ResponsiveContainer width="100%" height={300}>
         {renderChart(def, chartData)}
       </ResponsiveContainer>
-    </div>
+    </Box>
   );
 }
 
@@ -113,7 +126,7 @@ function renderChart(def: ChartComponent, data: any[]) {
       );
 
     default:
-      return <div>Unsupported chart type: {def.chartType}</div>;
+      return <Box>Unsupported chart type: {def.chartType}</Box>;
   }
 }
 
@@ -132,9 +145,9 @@ function extractDataFromPath(obj: any, path: string): any[] {
 
 function ChartSkeleton({ title }: { title?: string }) {
   return (
-    <div className="bg-white rounded-lg shadow p-4 animate-pulse">
-      {title && <div className="h-6 bg-gray-200 rounded w-1/3 mb-4"></div>}
-      <div className="h-64 bg-gray-100 rounded"></div>
-    </div>
+    <Box sx={{ bgcolor: 'background.paper', borderRadius: 2, boxShadow: 1, p: 2 }}>
+      {title && <Skeleton variant="text" width="30%" height={28} sx={{ mb: 2 }} />}
+      <Skeleton variant="rectangular" height={256} sx={{ borderRadius: 1 }} />
+    </Box>
   );
 }

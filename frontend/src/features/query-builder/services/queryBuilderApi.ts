@@ -7,6 +7,7 @@
  */
 
 import { apiFetch } from '../../../lib/apiClient';
+import { devError } from '../../../utils/devLogger';
 import type {
   QueryDef,
   SemanticTermView,
@@ -31,9 +32,10 @@ async function fetchJSON<T>(path: string, init?: RequestInit): Promise<T> {
 
   if (!response.ok) {
     let detail = '';
+    let errorBody: unknown = null;
     try {
-      const body = await response.json();
-      detail = body.error || body.message || JSON.stringify(body);
+      errorBody = await response.json();
+      detail = (errorBody as any)?.error || (errorBody as any)?.message || JSON.stringify(errorBody);
     } catch {
       try {
         detail = await response.text();
@@ -41,6 +43,7 @@ async function fetchJSON<T>(path: string, init?: RequestInit): Promise<T> {
         detail = '';
       }
     }
+    devError('[QueryBuilder]', response.url || response.status, response.status, response.statusText, errorBody || detail);
     throw new Error(`${response.status} ${response.statusText}${detail ? `: ${detail}` : ''}`);
   }
 
@@ -108,9 +111,8 @@ function normalizeRole(role: unknown): SemanticTermView['role'] {
 /**
  * Fetch the self-describing BO schema from the Meta-API.
  */
-export async function fetchBOSchema(boId: string, tenantId: string): Promise<BOSchema> {
-  const params = new URLSearchParams({ tenant_id: tenantId });
-  const data = await fetchJSON<unknown>(`/api/metadata/bo/${encodeURIComponent(boId)}?${params.toString()}`);
+export async function fetchBOSchema(boId: string): Promise<BOSchema> {
+  const data = await fetchJSON<unknown>(`/api/metadata/bo/${encodeURIComponent(boId)}`);
   return data as BOSchema;
 }
 

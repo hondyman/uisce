@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   Box,
   Typography,
@@ -44,6 +44,7 @@ import { useNotification } from '../../../../hooks/useNotification';
 
 interface BODeltaTabProps {
   businessObject: any;
+  selectedSubtypeKey?: string | null;
 }
 
 interface DeltaField {
@@ -68,7 +69,7 @@ interface DeltaResponse {
   customCount: number;
 }
 
-export function BODeltaTab({ businessObject }: BODeltaTabProps) {
+export function BODeltaTab({ businessObject, selectedSubtypeKey }: BODeltaTabProps) {
   const { tenant } = useTenant();
   const tenantId = tenant?.id || '';
   const notification = useNotification();
@@ -78,6 +79,31 @@ export function BODeltaTab({ businessObject }: BODeltaTabProps) {
   const [delta, setDelta] = useState<DeltaResponse | null>(null);
   const [filterStatus, setFilterStatus] = useState<string>('ALL');
   const [search, setSearch] = useState('');
+
+  // Subtype Scope
+  const [activeDeltaSubtype, setActiveDeltaSubtype] = useState<string>(selectedSubtypeKey || 'all');
+
+  useEffect(() => {
+    setActiveDeltaSubtype(selectedSubtypeKey || 'all');
+  }, [selectedSubtypeKey]);
+
+  // Scoped Counts for Summary KPIs
+  const scopedCounts = useMemo(() => {
+    if (!delta) return { total: 0, inherited: 0, overridden: 0, custom: 0 };
+    const fields = activeDeltaSubtype === 'all'
+      ? delta.fieldsDelta
+      : delta.fieldsDelta.filter(f => {
+          const stFields = businessObject?.subtypes?.[activeDeltaSubtype]?.subtypeFields || [];
+          const stKeys = stFields.map((sf: any) => sf.key || sf.technicalName || sf.name);
+          return stKeys.includes(f.fieldKey) || stKeys.includes(f.fieldName);
+        });
+    return {
+      total: fields.length,
+      inherited: fields.filter(f => f.status === 'INHERITED').length,
+      overridden: fields.filter(f => f.status === 'OVERRIDDEN').length,
+      custom: fields.filter(f => f.status === 'CUSTOM_ADDED').length,
+    };
+  }, [delta, activeDeltaSubtype, businessObject]);
 
   // AI Delta Explainer State
   const [aiLoading, setAiLoading] = useState(false);
@@ -196,6 +222,13 @@ export function BODeltaTab({ businessObject }: BODeltaTabProps) {
 
   const filteredFields = (delta?.fieldsDelta || []).filter(f => {
     if (filterStatus !== 'ALL' && f.status !== filterStatus) return false;
+    if (activeDeltaSubtype !== 'all') {
+      const subtypeFields = businessObject?.subtypes?.[activeDeltaSubtype]?.subtypeFields || [];
+      const subtypeFieldKeys = subtypeFields.map((sf: any) => sf.key || sf.technicalName || sf.name);
+      if (!subtypeFieldKeys.includes(f.fieldKey) && !subtypeFieldKeys.includes(f.fieldName)) {
+        return false;
+      }
+    }
     if (search.trim()) {
       const q = search.toLowerCase();
       return f.fieldName.toLowerCase().includes(q) || f.fieldKey.toLowerCase().includes(q);
@@ -242,6 +275,32 @@ export function BODeltaTab({ businessObject }: BODeltaTabProps) {
           </Button>
         </Stack>
       </Stack>
+
+      {/* Subtype Scope Selector */}
+      {Object.keys(businessObject?.subtypes || {}).length > 0 && (
+        <Stack direction="row" spacing={1} flexWrap="wrap" alignItems="center" sx={{ mb: 2.5 }}>
+          <Typography variant="caption" sx={{ fontWeight: 700, mr: 1, color: 'text.secondary', textTransform: 'uppercase' }}>
+            Subtype Lens:
+          </Typography>
+          <Chip
+            label="All Fields"
+            size="small"
+            variant={activeDeltaSubtype === 'all' ? 'filled' : 'outlined'}
+            color={activeDeltaSubtype === 'all' ? 'primary' : 'default'}
+            onClick={() => setActiveDeltaSubtype('all')}
+          />
+          {Object.entries(businessObject.subtypes).map(([key, st]: any) => (
+            <Chip
+              key={key}
+              label={st.displayName || key}
+              size="small"
+              variant={activeDeltaSubtype === key ? 'filled' : 'outlined'}
+              color={activeDeltaSubtype === key ? 'primary' : 'default'}
+              onClick={() => setActiveDeltaSubtype(key)}
+            />
+          ))}
+        </Stack>
+      )}
 
       {/* PILLAR 1: Schema Drift Maker-Checker Inbox Card */}
       {sentinelData?.driftProposals && sentinelData.driftProposals.length > 0 && (
@@ -395,32 +454,44 @@ export function BODeltaTab({ businessObject }: BODeltaTabProps) {
         <Grid size={{ xs: 6, sm: 3 }}>
           <Paper variant="outlined" sx={{ p: 1.5, textAlign: 'center', bgcolor: filterStatus === 'ALL' ? 'action.selected' : 'background.paper', cursor: 'pointer' }} onClick={() => setFilterStatus('ALL')}>
             <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 700 }}>TOTAL FIELDS</Typography>
-            <Typography variant="h5" sx={{ fontWeight: 800, my: 0.5 }}>{delta?.fieldsDelta.length || 0}</Typography>
-            <Typography variant="caption" color="text.secondary">All field definitions</Typography>
+            <Typography variant="h5" sx={{ fontWeight: 800, my: 0.5 }}>{scopedCounts.total}</Typography>
+            <Typography variant="caption" color="text.secondary">{activeDeltaSubtype === 'all' ? 'All field definitions' : `${activeDeltaSubtype} scoped`}</Typography>
           </Paper>
         </Grid>
         <Grid size={{ xs: 6, sm: 3 }}>
           <Paper variant="outlined" sx={{ p: 1.5, textAlign: 'center', bgcolor: filterStatus === 'INHERITED' ? 'primary.50' : 'background.paper', cursor: 'pointer' }} onClick={() => setFilterStatus('INHERITED')}>
             <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 700 }}>INHERITED FROM CORE</Typography>
-            <Typography variant="h5" sx={{ fontWeight: 800, color: 'primary.main', my: 0.5 }}>{delta?.inheritedCount || 0}</Typography>
+            <Typography variant="h5" sx={{ fontWeight: 800, color: 'primary.main', my: 0.5 }}>{scopedCounts.inherited}</Typography>
             <Typography variant="caption" color="text.secondary">Unmodified Gold Copy</Typography>
           </Paper>
         </Grid>
         <Grid size={{ xs: 6, sm: 3 }}>
           <Paper variant="outlined" sx={{ p: 1.5, textAlign: 'center', bgcolor: filterStatus === 'OVERRIDDEN' ? 'warning.50' : 'background.paper', cursor: 'pointer' }} onClick={() => setFilterStatus('OVERRIDDEN')}>
             <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 700 }}>OVERRIDDEN FIELDS</Typography>
-            <Typography variant="h5" sx={{ fontWeight: 800, color: 'warning.main', my: 0.5 }}>{delta?.overriddenCount || 0}</Typography>
+            <Typography variant="h5" sx={{ fontWeight: 800, color: 'warning.main', my: 0.5 }}>{scopedCounts.overridden}</Typography>
             <Typography variant="caption" color="text.secondary">Customized properties</Typography>
           </Paper>
         </Grid>
         <Grid size={{ xs: 6, sm: 3 }}>
           <Paper variant="outlined" sx={{ p: 1.5, textAlign: 'center', bgcolor: filterStatus === 'CUSTOM_ADDED' ? 'success.50' : 'background.paper', cursor: 'pointer' }} onClick={() => setFilterStatus('CUSTOM_ADDED')}>
             <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 700 }}>CUSTOM EXTENSIONS</Typography>
-            <Typography variant="h5" sx={{ fontWeight: 800, color: 'success.main', my: 0.5 }}>{delta?.customCount || 0}</Typography>
+            <Typography variant="h5" sx={{ fontWeight: 800, color: 'success.main', my: 0.5 }}>{scopedCounts.custom}</Typography>
             <Typography variant="caption" color="text.secondary">Tenant specific additions</Typography>
           </Paper>
         </Grid>
       </Grid>
+
+      {/* STI Partial Index Callout */}
+      {activeDeltaSubtype !== 'all' && (
+        <Box sx={{ mb: 3, p: 2, bgcolor: 'grey.900', borderRadius: 1.5, fontFamily: 'monospace', fontSize: '0.8rem', color: 'primary.light', border: '1px solid', borderColor: 'primary.dark' }}>
+          <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 0.5, fontFamily: 'inherit', fontWeight: 700, letterSpacing: 0.5 }}>
+            STI PARTIAL DISCRIMINATOR INDEX
+          </Typography>
+          {`CREATE INDEX CONCURRENTLY idx_${businessObject?.key || 'bo'}_${activeDeltaSubtype}_subtype`}<br />
+          {`  ON public.${businessObject?.driverTableName || businessObject?.technicalName || 'data_table'} (subtype_code)`}<br />
+          {`  WHERE subtype_code = '${activeDeltaSubtype}';`}
+        </Box>
+      )}
 
       {/* Filter and Search Bar */}
       <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} sx={{ mb: 2 }} alignItems="center" justifyContent="space-between">

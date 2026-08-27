@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { Card, Table, Spinner } from "../";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { api } from "../../api";
+import { api } from "@/admin-v2/api";
 
 export function SSOConfig() {
   const queryClient = useQueryClient();

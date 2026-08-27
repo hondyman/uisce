@@ -30,6 +30,9 @@ type SQLGenerationRequest struct {
 	KnowledgeDate time.Time `json:"knowledgeDate,omitempty"`
 	// DialectOverride explicitly selects a dialect, bypassing watermark routing.
 	DialectOverride string `json:"dialectOverride,omitempty"`
+	// SelectedSubtypeKey activates STI discriminator pushdown and subtype-scoped joins.
+	// Nil means root-level query (no subtype filter). Non-nil triggers WHERE t0.subtype_code = ...
+	SelectedSubtypeKey *string `json:"selectedSubtypeKey,omitempty"`
 }
 
 // SemanticSQLGenerationRequest defines a human-friendly semantic query format
@@ -58,17 +61,19 @@ type SemanticFilter struct {
 // UnmarshalJSON supports both camelCase and snake_case field names.
 func (r *SQLGenerationRequest) UnmarshalJSON(data []byte) error {
 	type payload struct {
-		TenantID             string         `json:"tenantId"`
-		BusinessObjectID     string         `json:"businessObjectId"`
-		BusinessObjectIDSnek string         `json:"business_object_id"`
-		SelectedFields       []string       `json:"selectedFields"`
-		SelectedFieldsSnek   []string       `json:"selected_fields"`
-		Filters              []FilterClause `json:"filters"`
-		WhereClause          string         `json:"whereClause"`
-		Limit                int            `json:"limit"`
-		AsOfDate             time.Time      `json:"asOfDate"`
-		KnowledgeDate        time.Time      `json:"knowledgeDate"`
-		DialectOverride      string         `json:"dialectOverride"`
+		TenantID              string         `json:"tenantId"`
+		BusinessObjectID      string         `json:"businessObjectId"`
+		BusinessObjectIDSnek  string         `json:"business_object_id"`
+		SelectedFields        []string       `json:"selectedFields"`
+		SelectedFieldsSnek    []string       `json:"selected_fields"`
+		Filters               []FilterClause `json:"filters"`
+		WhereClause           string         `json:"whereClause"`
+		Limit                 int            `json:"limit"`
+		AsOfDate              time.Time      `json:"asOfDate"`
+		KnowledgeDate         time.Time      `json:"knowledgeDate"`
+		DialectOverride       string         `json:"dialectOverride"`
+		SelectedSubtypeKey   *string        `json:"selectedSubtypeKey"`
+		SelectedSubtypeKeySnek *string       `json:"selected_subtype_key"`
 	}
 
 	var p payload
@@ -91,6 +96,11 @@ func (r *SQLGenerationRequest) UnmarshalJSON(data []byte) error {
 	r.AsOfDate = p.AsOfDate
 	r.KnowledgeDate = p.KnowledgeDate
 	r.DialectOverride = p.DialectOverride
+	if p.SelectedSubtypeKey != nil {
+		r.SelectedSubtypeKey = p.SelectedSubtypeKey
+	} else if p.SelectedSubtypeKeySnek != nil {
+		r.SelectedSubtypeKey = p.SelectedSubtypeKeySnek
+	}
 	return nil
 }
 
@@ -153,9 +163,12 @@ type BOField struct {
 
 
 type BORelationship struct {
-	TargetBOID string
-	JoinType   string   // "LEFT", "INNER"
-	Conditions []string // e.g. "${SOURCE}.customer_id = ${TARGET}.id"
+	TargetBOID          string
+	JoinType           string   // "LEFT", "INNER"
+	Conditions         []string // e.g. "${SOURCE}.customer_id = ${TARGET}.id"
+	ScopedSubtypeKey   *string  // Non-nil: this join is only valid when this subtype is active
+	TargetSubtypeKey   *string  // Non-nil: join target is narrowed to this subtype (e.g. benchmark/institutional)
+	SatelliteJoinCond  *string  // Non-nil: required to chain through a 1:1 satellite table before reaching target
 }
 
 
@@ -392,6 +405,10 @@ type GenerationContext struct {
 
 	// RootTenantPredicate is the pre-built root table tenant boundary condition.
 	RootTenantPredicate string
+
+	// JoinedSatellites tracks satellite table joins already emitted (satellite alias -> true)
+	// to prevent duplicate satellite joins when the same satellite is referenced multiple times.
+	JoinedSatellites map[string]bool
 }
 
 // GenerateSQL is the main entry point. It returns the generated SQL, the
@@ -405,12 +422,13 @@ func (g *BOSQLGenerator) GenerateSQL(req SQLGenerationRequest) (string, []interf
 
 	// 2. Initialize Context
 	ctx := &GenerationContext{
-		Request:      req,
-		RootBODef:    rootBO,
-		LoadedBOs:    make(map[string]*BODefinition),
-		Aliases:      make(map[string]string),
-		Joins:        make([]JoinStep, 0),
-		NextAliasIdx: 1, // t0 is reserved for root
+		Request:           req,
+		RootBODef:        rootBO,
+		LoadedBOs:        make(map[string]*BODefinition),
+		Aliases:          make(map[string]string),
+		Joins:            make([]JoinStep, 0),
+		NextAliasIdx:     1, // t0 is reserved for root
+		JoinedSatellites:  make(map[string]bool),
 	}
 	ctx.LoadedBOs[rootBO.ID] = rootBO
 	ctx.Aliases[""] = "t0" // Root alias (empty path)
@@ -456,6 +474,12 @@ func (g *BOSQLGenerator) GenerateSQL(req SQLGenerationRequest) (string, []interf
 		g.InjectBitemporalScoping(ctx, req.KnowledgeDate)
 	}
 
+	// 6b. STI Subtype Discriminator Pushdown — injects WHERE t0.subtype_code = $N
+	// when a specific subtype is active, routing the query through the subtype's
+	// dedicated partial index (e.g. idx_account_inst, idx_cash_div).
+	if req.SelectedSubtypeKey != nil && *req.SelectedSubtypeKey != "" {
+		g.InjectSTIDiscriminator(ctx, *req.SelectedSubtypeKey)
+	}
 
 	// 7. Build Join Clause (conditions may have been mutated by tenant scoping)
 	joinClause := g.BuildJoinClause(ctx)
@@ -560,6 +584,28 @@ func (g *BOSQLGenerator) InjectBitemporalScoping(ctx *GenerationContext, knowled
 		ctx.RootTenantPredicate = ctx.RootTenantPredicate + " AND " + bitemporalPredicate
 	} else {
 		ctx.RootTenantPredicate = bitemporalPredicate
+	}
+}
+
+// InjectSTIDiscriminator adds the Single-Table Inheritance discriminator predicate
+// (e.g. t0.subtype_code = 'institutional') into the root WHERE clause, targeting
+// the dedicated PostgreSQL partial index for that subtype (e.g. idx_account_inst).
+// Silently skips if subtypeCode is empty (root-level query).
+func (g *BOSQLGenerator) InjectSTIDiscriminator(ctx *GenerationContext, subtypeCode string) {
+	if subtypeCode == "" {
+		return
+	}
+	if ctx.Args == nil {
+		ctx.Args = make([]interface{}, 0)
+	}
+	ctx.ParamCounter++
+	pTok := paramToken(g.Dialect, ctx.ParamCounter)
+	ctx.Args = append(ctx.Args, subtypeCode)
+	stiPredicate := fmt.Sprintf("t0.subtype_code = %s", pTok)
+	if ctx.RootTenantPredicate != "" {
+		ctx.RootTenantPredicate = ctx.RootTenantPredicate + " AND " + stiPredicate
+	} else {
+		ctx.RootTenantPredicate = stiPredicate
 	}
 }
 
@@ -672,6 +718,41 @@ func (g *BOSQLGenerator) ResolvePathWithLabel(ctx *GenerationContext, path strin
 			ctx.LoadedBOs[targetBOID] = targetBO
 		}
 
+		// Look up BORelationship metadata for this reference to check subtype restrictions
+		var matchedRel *BORelationship
+		for i := range currentBO.Relationships {
+			rel := &currentBO.Relationships[i]
+			if rel.TargetBOID == targetBOID {
+				matchedRel = rel
+				break
+			}
+		}
+
+		// Scoped Subtype Guard: reject joins that are restricted to a different subtype
+		if matchedRel != nil && matchedRel.ScopedSubtypeKey != nil {
+			reqSubtype := ctx.Request.SelectedSubtypeKey
+			if reqSubtype == nil || *reqSubtype == "" {
+				return "", "", fmt.Errorf(
+					"relationship to '%s' requires subtype '%s' but query is in root scope",
+					targetBOID, *matchedRel.ScopedSubtypeKey,
+				)
+			}
+			if *reqSubtype != *matchedRel.ScopedSubtypeKey {
+				return "", "", fmt.Errorf(
+					"relationship '%s' is restricted to subtype '%s'; query targets '%s'",
+					targetBOID, *matchedRel.ScopedSubtypeKey, *reqSubtype,
+				)
+			}
+		}
+
+		// Satellite Join: for subtype-restricted polymorphic relationships, the satellite
+		// condition (e.g. "sat0.position_id = t1.id AND sat0.subtype_code = 'cash_div'")
+		// is chained as an AND on the primary join so the satellite is joined inline.
+		satelliteExtraCond := ""
+		if matchedRel != nil && matchedRel.SatelliteJoinCond != nil && *matchedRel.SatelliteJoinCond != "" {
+			satelliteExtraCond = *matchedRel.SatelliteJoinCond
+		}
+
 		// Create new alias
 		newAlias := fmt.Sprintf("t%d", ctx.NextAliasIdx)
 		ctx.NextAliasIdx++
@@ -688,12 +769,26 @@ func (g *BOSQLGenerator) ResolvePathWithLabel(ctx *GenerationContext, path strin
 
 		// Target is "id" for now (implicit)
 		condition := fmt.Sprintf("%s.%s = %s.id", currentAlias, sourceCol, newAlias)
+		if satelliteExtraCond != "" {
+			condition = fmt.Sprintf("(%s) AND %s", condition, satelliteExtraCond)
+		}
+
+		joinType := "LEFT"
+		if matchedRel != nil && matchedRel.JoinType != "" {
+			joinType = matchedRel.JoinType
+		}
+
+		var targetSubtypeKey *string
+		if matchedRel != nil {
+			targetSubtypeKey = matchedRel.TargetSubtypeKey
+		}
 
 		joinStep := JoinStep{
-			Type:      "LEFT", // Default to LEFT JOIN for safety
-			ToTable:   fmt.Sprintf("%s AS %s", targetBO.DrivingTable, newAlias),
-			Condition: condition,
-			Alias:     newAlias,
+			Type:             joinType,
+			ToTable:          fmt.Sprintf("%s AS %s", targetBO.DrivingTable, newAlias),
+			Condition:        condition,
+			Alias:            newAlias,
+			TargetSubtypeKey: targetSubtypeKey,
 		}
 		ctx.Joins = append(ctx.Joins, joinStep)
 
@@ -739,7 +834,13 @@ func (g *BOSQLGenerator) BuildFROMClause(ctx *GenerationContext) string {
 func (g *BOSQLGenerator) BuildJoinClause(ctx *GenerationContext) string {
 	var sb strings.Builder
 	for _, join := range ctx.Joins {
-		sb.WriteString(fmt.Sprintf("%s JOIN %s ON %s\n", join.Type, join.ToTable, join.Condition))
+		cond := join.Condition
+		if join.TargetSubtypeKey != nil && *join.TargetSubtypeKey != "" {
+			// Append STI discriminator to the join condition so satellite/polymorphic joins
+			// only reach rows of the matching subtype (e.g. position.cash_div for dividends).
+			cond = fmt.Sprintf("%s AND %s.subtype_code = '%s'", cond, join.Alias, *join.TargetSubtypeKey)
+		}
+		sb.WriteString(fmt.Sprintf("%s JOIN %s ON %s\n", join.Type, join.ToTable, cond))
 	}
 	return sb.String()
 }
@@ -1208,5 +1309,255 @@ func (g *BOSQLGenerator) CompileValidationRuleSQL(compReq ValidationRuleCompilat
 		SQL:            sqlStr,
 		Args:           args,
 		PhysicalColumn: physicalCol,
+	}, nil
+}
+
+// ----------------------------------------------------------------------------
+// Multi-Phase Cardinality-Aware Execution Engine
+// ----------------------------------------------------------------------------
+
+type FieldSelection struct {
+	FieldKey     string `json:"fieldKey"`
+	SourceType   string `json:"sourceType"`   // "DIRECT", "RELATED", "CALCULATED"
+	RelatedBOKey string `json:"relatedBoKey"` // Empty if DIRECT
+	Cardinality  string `json:"cardinality"`  // "1:1", "M:1", "1:N", "M:N"
+	Aggregation  string `json:"aggregation"`  // "NONE", "SUM", "AVG", "COUNT", "MIN", "MAX"
+	TechnicalCol string `json:"technicalCol"` // e.g. "credit_limit", "freight_amount"
+	Alias        string `json:"alias"`
+}
+
+type JoinDefinition struct {
+	RelatedBOKey     string `json:"relatedBoKey"`
+	TableName        string `json:"tableName"`
+	Cardinality      string `json:"cardinality"`
+	JoinType         string `json:"joinType"`      // "LEFT", "INNER"
+	ParentJoinKey    string `json:"parentJoinKey"` // e.g. "customer_id"
+	ChildJoinKey     string `json:"childJoinKey"`  // e.g. "customer_id"
+	JoinConditionSQL string `json:"joinConditionSql"`
+}
+
+type MultiPhaseSQLRequest struct {
+	TenantID        uuid.UUID        `json:"tenantId"`
+	RootBOKey       string           `json:"rootBoKey"`
+	RootTableName   string           `json:"rootTableName"`
+	SelectedFields  []FieldSelection `json:"selectedFields"`
+	Relationships   []JoinDefinition `json:"relationships"`
+	FilterClauseSQL string           `json:"filterClauseSql,omitempty"`
+	Dialect         string           `json:"dialect"` // "POSTGRES", "STARROCKS", "TRINO"
+}
+
+type CompiledSQLResponse struct {
+	SQLQuery        string   `json:"sqlQuery"`
+	IsMultiPhase    bool     `json:"isMultiPhase"`
+	CTENames        []string `json:"cteNames"`
+	PlanDescription string   `json:"planDescription"`
+}
+
+// GenerateOptimalSQL inspects relationship cardinalities and compiles single-phase or multi-phase CTE SQL
+func (g *BOSQLGenerator) GenerateOptimalSQL(ctx context.Context, req MultiPhaseSQLRequest) (*CompiledSQLResponse, error) {
+	if req.TenantID == uuid.Nil {
+		return nil, fmt.Errorf("Rule 7 violation: tenant_id cannot be nil")
+	}
+
+	// 1. Analyze Cardinalities & Detect Fan-Out Risk
+	hasOneToManyWithAgg := false
+	for _, f := range req.SelectedFields {
+		if (f.Cardinality == "1:N" || f.Cardinality == "M:N") && f.Aggregation != "" && f.Aggregation != "NONE" {
+			hasOneToManyWithAgg = true
+			break
+		}
+	}
+
+	if hasOneToManyWithAgg {
+		return g.compileMultiPhaseCTESQL(req)
+	}
+
+	return g.compileSinglePhaseSQL(req)
+}
+
+// compileMultiPhaseCTESQL builds isolated pre-aggregation CTEs for 1:N relations to eliminate Cartesian fan-out
+func (g *BOSQLGenerator) compileMultiPhaseCTESQL(req MultiPhaseSQLRequest) (*CompiledSQLResponse, error) {
+	var ctes []string
+	cteNames := make([]string, 0)
+	joinClauses := make([]string, 0)
+	finalSelectCols := make([]string, 0)
+	finalGroupByCols := make([]string, 0)
+
+	// Partition fields by target table / relationship
+	directFields := make([]FieldSelection, 0)
+	relatedFieldsByBO := make(map[string][]FieldSelection)
+
+	for _, f := range req.SelectedFields {
+		if f.SourceType == "DIRECT" || f.RelatedBOKey == "" {
+			directFields = append(directFields, f)
+		} else {
+			relatedFieldsByBO[f.RelatedBOKey] = append(relatedFieldsByBO[f.RelatedBOKey], f)
+		}
+	}
+
+	// 1. Generate CTE for Root Entity (Phase 1)
+	rootCTEName := fmt.Sprintf("cte_%s_root", req.RootBOKey)
+	cteNames = append(cteNames, rootCTEName)
+
+	rootSelectCols := make([]string, 0)
+	for _, df := range directFields {
+		colExpr := fmt.Sprintf("t0.%s", df.TechnicalCol)
+		rootSelectCols = append(rootSelectCols, fmt.Sprintf("%s AS %s", colExpr, df.Alias))
+		finalSelectCols = append(finalSelectCols, fmt.Sprintf("%s.%s", rootCTEName, df.Alias))
+		if df.Aggregation == "NONE" || df.Aggregation == "" {
+			finalGroupByCols = append(finalGroupByCols, fmt.Sprintf("%s.%s", rootCTEName, df.Alias))
+		}
+	}
+
+	// Ensure join keys exist in root CTE
+	for _, rel := range req.Relationships {
+		rootSelectCols = append(rootSelectCols, fmt.Sprintf("t0.%s", rel.ParentJoinKey))
+	}
+
+	filterSQL := ""
+	if req.FilterClauseSQL != "" {
+		filterSQL = fmt.Sprintf("AND (%s)", req.FilterClauseSQL)
+	}
+
+	rootCTESQL := fmt.Sprintf(`%s AS (
+    SELECT DISTINCT
+        %s
+    FROM %s t0
+    WHERE t0.tenant_id = '%s' %s
+)`, rootCTEName, strings.Join(rootSelectCols, ",\n        "), req.RootTableName, req.TenantID, filterSQL)
+	ctes = append(ctes, rootCTESQL)
+
+	// 2. Generate Isolated Aggregation CTEs for 1:N and M:1 Relations (Phase 2)
+	relIndex := 1
+	for _, rel := range req.Relationships {
+		fields, hasFields := relatedFieldsByBO[rel.RelatedBOKey]
+		if !hasFields {
+			continue
+		}
+
+		cteName := fmt.Sprintf("cte_%s_agg", rel.RelatedBOKey)
+		cteNames = append(cteNames, cteName)
+
+		if rel.Cardinality == "1:N" || rel.Cardinality == "M:N" {
+			// Pre-aggregate child table at the foreign key level
+			childAggCols := []string{fmt.Sprintf("r%d.%s", relIndex, rel.ChildJoinKey)}
+			for _, rf := range fields {
+				aggFunc := rf.Aggregation
+				if aggFunc == "NONE" || aggFunc == "" {
+					aggFunc = "MAX" // Default fallback if no aggregation provided
+				}
+				aggExpr := fmt.Sprintf("%s(r%d.%s) AS %s", aggFunc, relIndex, rf.TechnicalCol, rf.Alias)
+				childAggCols = append(childAggCols, aggExpr)
+				finalSelectCols = append(finalSelectCols, fmt.Sprintf("%s.%s", cteName, rf.Alias))
+			}
+
+			childCTESQL := fmt.Sprintf(`%s AS (
+    SELECT
+        %s
+    FROM %s r%d
+    WHERE r%d.tenant_id = '%s'
+    GROUP BY r%d.%s
+)`, cteName, strings.Join(childAggCols, ",\n        "), rel.TableName, relIndex, relIndex, req.TenantID, relIndex, rel.ChildJoinKey)
+			ctes = append(ctes, childCTESQL)
+
+		} else {
+			// 1:1 or M:1 Lookup CTE
+			lookupCols := []string{fmt.Sprintf("r%d.%s", relIndex, rel.ChildJoinKey)}
+			for _, rf := range fields {
+				lookupCols = append(lookupCols, fmt.Sprintf("r%d.%s AS %s", relIndex, rf.TechnicalCol, rf.Alias))
+				finalSelectCols = append(finalSelectCols, fmt.Sprintf("%s.%s", cteName, rf.Alias))
+				finalGroupByCols = append(finalGroupByCols, fmt.Sprintf("%s.%s", cteName, rf.Alias))
+			}
+
+			childCTESQL := fmt.Sprintf(`%s AS (
+    SELECT DISTINCT
+        %s
+    FROM %s r%d
+    WHERE r%d.tenant_id = '%s'
+)`, cteName, strings.Join(lookupCols, ",\n        "), rel.TableName, relIndex, relIndex, req.TenantID)
+			ctes = append(ctes, childCTESQL)
+		}
+
+		// Join back to root on the join key
+		joinClauses = append(joinClauses, fmt.Sprintf("LEFT JOIN %s ON %s.%s = %s.%s",
+			cteName, rootCTEName, rel.ParentJoinKey, cteName, rel.ChildJoinKey))
+		relIndex++
+	}
+
+	// 3. Assemble Final Unified Projection (Phase 3)
+	fullSQL := fmt.Sprintf(`WITH
+%s
+SELECT
+    %s
+FROM %s
+%s`,
+		strings.Join(ctes, ",\n"),
+		strings.Join(finalSelectCols, ",\n    "),
+		rootCTEName,
+		strings.Join(joinClauses, "\n"))
+
+	return &CompiledSQLResponse{
+		SQLQuery:        fullSQL,
+		IsMultiPhase:    true,
+		CTENames:        cteNames,
+		PlanDescription: "Two-Phase Pre-Aggregated CTE Plan (Grain Protected against Cartesian Fan-Out)",
+	}, nil
+}
+
+// compileSinglePhaseSQL generates an ANSI SQL flat join when only 1:1 / M:1 relations are referenced
+func (g *BOSQLGenerator) compileSinglePhaseSQL(req MultiPhaseSQLRequest) (*CompiledSQLResponse, error) {
+	selectCols := make([]string, 0)
+	joinClauses := make([]string, 0)
+
+	// Direct Fields
+	for _, df := range req.SelectedFields {
+		if df.SourceType == "DIRECT" || df.RelatedBOKey == "" {
+			selectCols = append(selectCols, fmt.Sprintf("t0.%s AS %s", df.TechnicalCol, df.Alias))
+		}
+	}
+
+	// M:1 / 1:1 Related Fields
+	relTableAliases := make(map[string]string)
+	for i, rel := range req.Relationships {
+		alias := fmt.Sprintf("t%d", i+1)
+		relTableAliases[rel.RelatedBOKey] = alias
+
+		joinCond := rel.JoinConditionSQL
+		if joinCond == "" {
+			joinCond = fmt.Sprintf("t0.%s = %s.%s", rel.ParentJoinKey, alias, rel.ChildJoinKey)
+		}
+
+		joinClauses = append(joinClauses, fmt.Sprintf("LEFT JOIN %s %s ON %s AND %s.tenant_id = '%s'",
+			rel.TableName, alias, joinCond, alias, req.TenantID))
+	}
+
+	for _, rf := range req.SelectedFields {
+		if rf.SourceType == "RELATED" && rf.RelatedBOKey != "" {
+			alias := relTableAliases[rf.RelatedBOKey]
+			selectCols = append(selectCols, fmt.Sprintf("%s.%s AS %s", alias, rf.TechnicalCol, rf.Alias))
+		}
+	}
+
+	filterSQL := ""
+	if req.FilterClauseSQL != "" {
+		filterSQL = fmt.Sprintf("AND (%s)", req.FilterClauseSQL)
+	}
+
+	fullSQL := fmt.Sprintf(`SELECT
+    %s
+FROM %s t0
+%s
+WHERE t0.tenant_id = '%s' %s`,
+		strings.Join(selectCols, ",\n    "),
+		req.RootTableName,
+		strings.Join(joinClauses, "\n"),
+		req.TenantID,
+		filterSQL)
+
+	return &CompiledSQLResponse{
+		SQLQuery:        fullSQL,
+		IsMultiPhase:    false,
+		CTENames:        nil,
+		PlanDescription: "Single-Phase Flat Join (All relations are 1:1 or M:1 Lookups)",
 	}, nil
 }

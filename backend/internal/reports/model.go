@@ -1,6 +1,7 @@
 package reports
 
 import (
+	"encoding/json"
 	"time"
 
 	"github.com/google/uuid"
@@ -11,17 +12,35 @@ type ReportTemplate struct {
 	ID              uuid.UUID              `json:"id"`
 	TenantID        uuid.UUID              `json:"tenant_id"`
 	TemplateName    string                 `json:"template_name"`
+	ReportKey       string                 `json:"report_key,omitempty"`
 	Description     string                 `json:"description"`
 	Category        string                 `json:"category"`
 	SemanticViewIDs []uuid.UUID            `json:"semantic_view_ids"`
-	LayoutConfig    map[string]interface{} `json:"layout_config"`
+	LayoutConfig    map[string]interface{} `json:"layout_config,omitempty"`
+	Definition      map[string]interface{} `json:"definition,omitempty"`
 	ParameterSchema map[string]interface{} `json:"parameter_schema"`
 	IsActive        bool                   `json:"is_active"`
 	IsPublic        bool                   `json:"is_public"`
 	CreatedAt       time.Time              `json:"created_at"`
 	UpdatedAt       time.Time              `json:"updated_at"`
-	CreatedBy       string                 `json:"created_by,omitempty"`
+	CreatedBy       *string                `json:"created_by,omitempty"`
 	Version         int                    `json:"version"`
+}
+
+// MarshalJSON computes `definition` from `layout_config` for API responses.
+func (r ReportTemplate) MarshalJSON() ([]byte, error) {
+	type alias ReportTemplate
+	merged := struct {
+		alias
+		Definition json.RawMessage `json:"definition,omitempty"`
+	}{
+		alias: alias(r),
+	}
+	if r.LayoutConfig != nil {
+		data, _ := json.Marshal(r.LayoutConfig)
+		merged.Definition = data
+	}
+	return json.Marshal(merged)
 }
 
 // ReportExecution represents a report generation job

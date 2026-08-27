@@ -37,6 +37,7 @@ import (
 	"github.com/hondyman/uisce/backend/internal/bp"
 	"github.com/hondyman/uisce/backend/internal/cache"
 	"github.com/hondyman/uisce/backend/internal/cashflow/settlement"
+	"github.com/hondyman/uisce/backend/internal/chat_history"
 	"github.com/hondyman/uisce/backend/internal/calculation"
 	"github.com/hondyman/uisce/backend/internal/cbo"
 	"github.com/hondyman/uisce/backend/internal/calcengine"
@@ -72,12 +73,14 @@ import (
 	"github.com/hondyman/uisce/backend/internal/optimizer"
 	"github.com/hondyman/uisce/backend/internal/platform"
 	"github.com/hondyman/uisce/backend/internal/portfoliomaster"
+	"github.com/hondyman/uisce/backend/internal/query"
 	"github.com/hondyman/uisce/backend/internal/querybuilder"
 	"github.com/hondyman/uisce/backend/internal/preference"
 	"github.com/hondyman/uisce/backend/internal/profiler"
 	"github.com/hondyman/uisce/backend/internal/rag"
 	"github.com/hondyman/uisce/backend/internal/region"
 	"github.com/hondyman/uisce/backend/internal/reports"
+	"github.com/hondyman/uisce/backend/internal/reporting"
 	"github.com/hondyman/uisce/backend/internal/simulation"
 	"github.com/hondyman/uisce/backend/internal/rules"
 	si "github.com/hondyman/uisce/backend/internal/scheduler_intelligence"
@@ -220,6 +223,7 @@ type Server struct {
 	BOStatusHandler         *handlers.BOStatusHandler
 	DrillDownResolver       *optimizer.DrillDownResolver
 	SavedQueryHandler       *handlers.SavedQueryHandler
+	DataExplorerSavedHandler *DataExplorerSavedHandler
 	SearchHandler           *handlers.SearchHandler
 	NLQHandler              *handlers.NLQHandler
 	AuditHistoryHandler     *handlers.AuditHistoryHandler
@@ -251,7 +255,7 @@ type queryBuilderExecutor struct {
 }
 
 func (e *queryBuilderExecutor) QueryDB(datasourceID string) *sqlx.DB {
-	if e == nil || e.defaultDB == nil {
+	if e == nil {
 		return nil
 	}
 	if e.aggregatesDB != nil && e.aggregatesDB.DB != nil {
@@ -425,6 +429,50 @@ func (s *Server) listBusinessObjects(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(items); err != nil {
+		logging.GetLogger().Sugar().Errorf("Failed to encode response: %v", err)
+	}
+}
+
+// getMetadataBO handles GET /api/metadata/bo/{boId}.
+// It returns a BOSchema-compatible response: { id, driverTableName, datasourceId, fields, subtypes }
+// Fields are loaded from business_object_fields, subtypes from oms.subtype_registry.
+func (s *Server) getMetadataBO(w http.ResponseWriter, r *http.Request) {
+	secCtx, ctx, err := handlers.SecurityContextFromRequest(r, "", "", handlers.SecurityContextDeps{
+		Resolver: s.DatasourceResolver,
+	})
+	if err != nil {
+		claims := jwtmiddleware.GetClaimsFromContext(r)
+		if claims == nil {
+			http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
+			return
+		}
+		tenantID := claims.TenantID
+		if tenantID == "" {
+			http.Error(w, "tenant_id missing from JWT", http.StatusBadRequest)
+			return
+		}
+		secCtx = &security.Context{TenantID: tenantID}
+		ctx = r.Context()
+	}
+
+	boID := chi.URLParam(r, "boId")
+	if boID == "" {
+		http.Error(w, "boId path parameter required", http.StatusBadRequest)
+		return
+	}
+
+	bo, err := s.BusinessObjectService.GetBusinessObject(ctx, secCtx, boID)
+	if err != nil {
+		if strings.Contains(err.Error(), "not found") {
+			http.Error(w, "Business object not found", http.StatusNotFound)
+		} else {
+			http.Error(w, fmt.Sprintf("Failed to fetch business object: %v", err), http.StatusInternalServerError)
+		}
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(bo); err != nil {
 		logging.GetLogger().Sugar().Errorf("Failed to encode response: %v", err)
 	}
 }
@@ -1085,6 +1133,7 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 	srv.QueryHandler = queryHandler
 	savedQueryHandler := handlers.NewSavedQueryHandler(queryService, securityDeps)
 	srv.SavedQueryHandler = savedQueryHandler
+	srv.DataExplorerSavedHandler = NewDataExplorerSavedHandler(sqlxDB.DB)
 
 	// Initialize Query Builder (QueryDef compiler gateway)
 	boResolver := boresolver.NewPostgresBORepository(sqlxDB)
@@ -1100,7 +1149,7 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 		}
 		qbService := querybuilder.NewQueryService(boGenerator, boResolver)
 		qbExecutor := &queryBuilderExecutor{
-			defaultDB:    srv.SQLXDB,
+			defaultDB:    sqlxDB,
 			aggregatesDB: sqlx.NewDb(srv.AggregatesDB, "postgres"),
 		}
 		srv.QueryBuilderHandler = querybuilder.NewQueryBuilderHandler(qbService, qbExecutor, securityDeps)
@@ -1153,6 +1202,11 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 	srv.NLQHandler = nlqHandler
 	adminAPIKeyHandler := handlers.NewAdminAPIKeyHandler(apiKeyStore)
 	srv.AdminAPIKeyHandler = adminAPIKeyHandler
+
+	// Initialize NL Dashboard Conversation Handler
+	stubGovProvider := query.NewStubGovernanceProvider()
+	dashboardConvManager := query.NewDashboardConversationManager(stubGovProvider)
+	dashboardConvHandler := handlers.NewDashboardConversationHandler(db, dashboardConvManager)
 
 	// Initialize Quality Services
 	srv.FeedbackService = services.NewFeedbackService(sqlxDB)
@@ -1245,7 +1299,16 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 	// Initialize AI Service (Gemini Integration)
 	aiRuleRepo := rules.NewSQLRuleRepository(db)
 	aiScenarioSvc := rules.NewScenarioService(aiRuleRepo)
-	aiService := ai.NewAIService(db, llmProvider, aiScenarioSvc)
+
+	// Initialize Chat History telemetry ledger (ai_telemetry.chat_session +
+	// ai_telemetry.chat_message). Wired into the AI ChatEngine so every
+	// ProcessQuery persists its session + messages with trace context.
+	chatHistoryRepo := chat_history.NewRepository(db)
+	chatHistorySvc := chat_history.NewService(chatHistoryRepo)
+	chatHistoryHandler := chat_history.NewHandler(chatHistorySvc)
+	chatHistoryHandler.RegisterRoutes(r)
+
+	aiService := ai.NewAIService(db, llmProvider, aiScenarioSvc, chatHistorySvc)
 	aiHandler := handlers.NewAIHandler(aiService)
 	srv.AIHandler = aiHandler
 	aiHandler.RegisterRoutes(r)
@@ -1324,8 +1387,17 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 
 	// Initialize report service and handler
 	reportService := reports.NewReportService(db)
-	reportHandler := NewReportHandler(reportService)
+	reportHandler := NewReportHandler(reportService, sqlxDB)
 	reportHandler.RegisterRoutes(r)
+
+	// Initialize report share handler
+	reportShareHandler := NewReportShareHandler(db)
+	reportShareHandler.RegisterRoutes(r)
+
+	// Initialize render handler
+	renderService := reporting.NewReportRenderService(sqlxDB, boResolver)
+	renderHandler := NewRenderHandler(sqlxDB, renderService, handlers.SecurityContextDeps{Resolver: resolver})
+	renderHandler.RegisterRoutes(r)
 
 	// Initialize report schedule & bursting handler
 	reportScheduleHandler := NewReportScheduleHandler(sqlxDB)
@@ -1361,8 +1433,14 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 
 	boService := catalogmeta.NewBusinessObjectService(sqlxDB, tenantManager, auditPublisher, sqlRepo)
 	srv.BusinessObjectService = boService
-	boHandler := NewBusinessObjectHandler(boService, srv.DatasourceResolver, sqlxDB)
+	entitlementsSvc := security.NewEntitlementsService(sqlxDB, 1000, 5*time.Minute)
+	boHandler := NewBusinessObjectHandler(boService, srv.DatasourceResolver, sqlxDB, entitlementsSvc)
 	// boHandler.RegisterRoutes(r) - Moved below into /api group
+
+	// Catalog admin routes — sync pipeline that converts oms.subtype_registry → business_object_fields.
+	// Previously only available in cmd/catalog-admin binary on port 8082; now wired into the main server.
+	catalogTenantMgr := tenant.NewTenantManager(db)
+	RegisterCatalogAdminRoutes(r, db, catalogTenantMgr)
 
 	// Initialize Catalog Handler (Phase 18)
 	catalogHandler := NewCatalogHandler(boService, schedulerSecurityDeps)
@@ -1510,6 +1588,14 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 			mcpRouter.SetGoldCopyResolver(goldcopyResolver)
 		}
 		r.Get("/agentic/tickets", mcSvc.ListTicketsHandler)
+
+		// NL Dashboard Conversation routes (natural language dashboard building)
+		r.Post("/nl/conversations/start", dashboardConvHandler.HandleStartConversation)
+		r.Get("/nl/conversations/{id}", dashboardConvHandler.HandleGetConversation)
+		r.Post("/nl/conversations/{id}/message", dashboardConvHandler.HandleProcessMessage)
+		r.Post("/nl/conversations/{id}/commit", dashboardConvHandler.HandleCommitConversation)
+		r.Post("/nl/conversations/{id}/visuals/{visualId}/create-dashboard", dashboardConvHandler.HandleCreateDashboardFromVisual)
+		r.Delete("/nl/conversations/{id}", dashboardConvHandler.HandleDeleteConversation)
 		r.Post("/agentic/tickets/review", mcSvc.ReviewTicketHandler)
 		r.Post("/mcp/tools/call", mcpRouter.HandleToolCall)
 
@@ -1586,7 +1672,7 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 		srv.registerLLMGatewayRoutes(r)
 		srv.registerMetadataRoutes(r, boHandler, catalogHandler, boService)
 		srv.registerCatalogRoutes(r, db, routes, temporalClient)
-		srv.registerWorkflowRoutes(r, db, cron.New())
+		srv.registerWorkflowRoutes(r, db, cron.New(), entitlementsSvc)
 		srv.registerProcessRoutes(r, db, sqlxDB)
 		srv.registerTriggerEngineRoutes(r, sqlxDB)
 		srv.registerNBAEngineRoutes(r, sqlxDB)
@@ -1634,6 +1720,20 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 		timeoutTriggersHandler.RegisterRoutes(r)
 
 		// Initialize refactored handlers
+		pageDesignerHandler := NewPageDesignerLayoutHandler(sqlxDB)
+		pageDesignerHandler.RegisterRoutes(r)
+		boCrudGatewayHandler := NewBOCRUDHandler(sqlxDB)
+		boCrudGatewayHandler.RegisterRoutes(r)
+		autoPageCompilerHandler := NewAutoPageHandler(sqlxDB)
+		autoPageCompilerHandler.RegisterRoutes(r)
+
+		// Register on v1 prefix as well
+		r.Route("/v1", func(v1 chi.Router) {
+			pageDesignerHandler.RegisterRoutes(v1)
+			boCrudGatewayHandler.RegisterRoutes(v1)
+			autoPageCompilerHandler.RegisterRoutes(v1)
+		})
+
 		semanticMappingsHandler := NewSemanticMappingsHandler(srv.SemanticMappingSvc, srv.SemanticSvc, sqlxDB)
 		businessTermsHandler := NewBusinessTermsHandler(srv.SemanticMappingSvc, sqlxDB)
 		if semanticTermsHandler != nil {
@@ -1722,7 +1822,7 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 				)
 				externalHandler.RegisterRoutes(r)
 
-				survivorshipHandler := NewSurvivorshipHandler(mdm.NewSurvivorshipEngine())
+				survivorshipHandler := NewSurvivorshipHandler(mdm.NewSurvivorshipEngine(sqlxDB))
 				survivorshipHandler.RegisterRoutes(r)
 
 				lookthroughHandler := NewLookThroughSQLHandler()
@@ -3174,6 +3274,80 @@ type Event struct {
 
 // registerAIRoutes mounts AI-related endpoints
 func (s *Server) registerAIRoutes(r chi.Router) {
+	// AI Query Completion for Data Explorer
+	aiService := NewAIExplorerService(s.DB)
+	r.Post("/api/v1/ai/query-completion", HandleAIQueryCompletion(aiService))
+
+	// Closed-loop telemetry & Knowledge Mining
+	miner := NewKnowledgeMiner(s.DB)
+	r.Post("/api/v1/ai/telemetry", func(w http.ResponseWriter, r *http.Request) {
+		var payload TelemetryPayload
+		if err := json.NewDecoder(r.Body).Decode(&payload); err == nil {
+			_ = miner.IngestTelemetryAndHarvest(r.Context(), payload)
+		}
+		w.WriteHeader(http.StatusAccepted)
+	})
+
+	r.Get("/api/v1/semantic/knowledge/candidates", func(w http.ResponseWriter, r *http.Request) {
+		tenantID := r.Header.Get("X-Tenant-ID")
+		if tenantID == "" {
+			tenantID = "default"
+		}
+		list, err := miner.ListCandidates(r.Context(), tenantID)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(list)
+	})
+
+	r.Post("/api/v1/semantic/knowledge/approve/{id}", func(w http.ResponseWriter, r *http.Request) {
+		id := chi.URLParam(r, "id")
+		if err := miner.ApproveCandidate(r.Context(), id); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+	})
+
+	// Blast Radius Impact Analysis
+	impactAnalyzer := NewImpactAnalyzer(s.DB)
+	r.Get("/api/v1/semantic/knowledge/{id}/impact", HandleBlastRadius(impactAnalyzer))
+
+	// Root Cause Analysis (RCA) Engine
+	sqlComp := NewSQLCompiler(s.DB)
+	embedSvc := NewEmbeddingService()
+	rcaEngine := NewRCAEngine(s.DB, sqlComp, embedSvc)
+	r.Post("/api/v1/explorer/rca", HandleRCARequest(rcaEngine))
+
+	// Multi-Dimensional Seasonal Forecasting Engine with Model Attribution
+	projService := NewAdvancedProjectionService()
+	forecastHandler := NewForecastAPIHandler(projService)
+	r.Post("/api/v1/explorer/forecast", forecastHandler.HandleForecast())
+
+	// Quantitative Forecast Model Validation & AI Audit Explainer
+	forecastExplainer := NewForecastExplainer(embedSvc)
+	r.Post("/api/v1/explorer/forecast/explain", func(w http.ResponseWriter, r *http.Request) {
+		var req struct {
+			Dimension string         `json:"dimension"`
+			Measure   string         `json:"measure"`
+			Rows      []ProjectedRow `json:"rows"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, "Invalid JSON payload: "+err.Error(), http.StatusBadRequest)
+			return
+		}
+
+		explanation, err := forecastExplainer.ExplainForecast(r.Context(), req.Dimension, req.Measure, req.Rows)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(explanation)
+	})
+
 	// AI Logic-to-Config (Natural Language to DAG)
 	r.Post("/ai/generate-dag", s.GenerateDAGFromNL)
 
@@ -3333,6 +3507,9 @@ func (s *Server) registerSemanticRoutes(r chi.Router) {
 	r.Post("/metadata/versions", s.createMetadataVersion)
 	r.Get("/metadata/versions/{bo_id}", s.getMetadataVersionHistory)
 
+	// Business Object metadata — consumed by data explorer's query builder
+	r.Get("/metadata/bo/{boId}", s.getMetadataBO)
+
 	// Field alias endpoints
 	r.Post("/field-aliases", s.createFieldAlias)
 	r.Get("/field-aliases/{field_id}", s.getFieldAliases)
@@ -3470,6 +3647,12 @@ func (s *Server) registerMetadataRoutes(r chi.Router, boHandler *BusinessObjectH
 		r.Post("/query/preview", s.QueryBuilderHandler.Preview)
 		r.Post("/query/execute", s.QueryBuilderHandler.Execute)
 	}
+	if s.DataExplorerSavedHandler != nil {
+		r.Get("/data-explorer/saved", s.DataExplorerSavedHandler.ListSavedQueries)
+		r.Post("/data-explorer/saved", s.DataExplorerSavedHandler.CreateSavedQuery)
+		r.Delete("/data-explorer/saved/{id}", s.DataExplorerSavedHandler.DeleteSavedQuery)
+	}
+	r.Post("/v1/query/preview", s.HandleQueryPreview)
 	r.Post("/v1/query/drill-down", func(w http.ResponseWriter, req *http.Request) {
 		var drillReq optimizer.DrillDownRequest
 		if err := json.NewDecoder(req.Body).Decode(&drillReq); err != nil {
@@ -3559,7 +3742,7 @@ func (s *Server) registerCatalogRoutes(r chi.Router, db *sql.DB, routes *Routes,
 }
 
 // registerWorkflowRoutes mounts workflow, notification, and background job endpoints
-func (s *Server) registerWorkflowRoutes(r chi.Router, db *sql.DB, cronJob *cron.Cron) {
+func (s *Server) registerWorkflowRoutes(r chi.Router, db *sql.DB, cronJob *cron.Cron, entSvc *security.EntitlementsService) {
 	// Workflow Routes (Access, Queues, Jobs)
 	registerWorkflowRoutes(r, db, cronJob)
 
@@ -3569,7 +3752,7 @@ func (s *Server) registerWorkflowRoutes(r chi.Router, db *sql.DB, cronJob *cron.
 	// Advanced RBAC & Permissions
 	rbacHandlers := NewRBACHandlers(s.SQLXDB, handlers.SecurityContextDeps{
 		Resolver: s.DatasourceResolver,
-	})
+	}, entSvc)
 	rbacHandlers.RegisterRoutes(r)
 
 	// ── Marketplace Ecosystem (secured) ─────────────────────────────────────────

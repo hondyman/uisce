@@ -797,7 +797,7 @@ export const ApiInventoryPage: React.FC = () => {
         {/* TAB 0: OVERVIEW & CONTRACT */}
         {activeTab === 0 && (
           <Grid container spacing={3}>
-            <Grid item xs={12} md={7}>
+            <Grid   size={{ xs: 12, md: 7 }}>
               <Paper sx={{ p: 2.5, bgcolor: '#13161E', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 2, display: 'flex', flexDirection: 'column', gap: 2 }}>
                 <Typography variant="subtitle1" sx={{ fontWeight: 700, color: '#fff' }}>
                   API Contract & Specifications
@@ -822,7 +822,7 @@ export const ApiInventoryPage: React.FC = () => {
               </Paper>
             </Grid>
 
-            <Grid item xs={12} md={5}>
+            <Grid   size={{ xs: 12, md: 5 }}>
               <Paper sx={{ p: 2.5, bgcolor: '#13161E', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 2, display: 'flex', flexDirection: 'column', gap: 2 }}>
                 <Typography variant="subtitle1" sx={{ fontWeight: 700, color: '#fff' }}>
                   Datasource & Connection
@@ -1086,7 +1086,7 @@ export const ApiInventoryPage: React.FC = () => {
         {/* TAB 3: LIVE TEST RUNNER & RESPONSE */}
         {activeTab === 3 && (
           <Grid container spacing={3}>
-            <Grid item xs={12} md={6}>
+            <Grid   size={{ xs: 12, md: 6 }}>
               <Paper sx={{ p: 2.5, bgcolor: '#13161E', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 2, display: 'flex', flexDirection: 'column', gap: 2 }}>
                 <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                   <Typography variant="subtitle1" sx={{ fontWeight: 700, color: '#fff' }}>
@@ -1137,7 +1137,7 @@ export const ApiInventoryPage: React.FC = () => {
               </Paper>
             </Grid>
 
-            <Grid item xs={12} md={6}>
+            <Grid   size={{ xs: 12, md: 6 }}>
               <Paper sx={{ p: 2.5, bgcolor: '#13161E', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 2, display: 'flex', flexDirection: 'column', gap: 2 }}>
                 <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                   <Typography variant="subtitle1" sx={{ fontWeight: 700, color: '#fff' }}>
@@ -1678,7 +1678,7 @@ export const ApiInventoryPage: React.FC = () => {
 
       {/* Summary KPI Cards */}
       <Grid container spacing={2}>
-        <Grid item xs={12} sm={6} md={3}>
+        <Grid    size={{ xs: 12, sm: 6, md: 3 }}>
           <Paper sx={{ p: 2, bgcolor: '#13161E', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 2 }}>
             <Typography variant="caption" sx={{ color: '#9CA3AF', textTransform: 'uppercase', letterSpacing: 1 }}>
               🌐 API Services
@@ -1689,7 +1689,7 @@ export const ApiInventoryPage: React.FC = () => {
           </Paper>
         </Grid>
 
-        <Grid item xs={12} sm={6} md={3}>
+        <Grid    size={{ xs: 12, sm: 6, md: 3 }}>
           <Paper sx={{ p: 2, bgcolor: '#13161E', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 2 }}>
             <Typography variant="caption" sx={{ color: '#9CA3AF', textTransform: 'uppercase', letterSpacing: 1 }}>
               ⚡ Total Endpoints
@@ -1700,7 +1700,7 @@ export const ApiInventoryPage: React.FC = () => {
           </Paper>
         </Grid>
 
-        <Grid item xs={12} sm={6} md={3}>
+        <Grid    size={{ xs: 12, sm: 6, md: 3 }}>
           <Paper sx={{ p: 2, bgcolor: '#13161E', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 2 }}>
             <Typography variant="caption" sx={{ color: '#9CA3AF', textTransform: 'uppercase', letterSpacing: 1 }}>
               🧠 Mapped Semantic Concepts
@@ -1711,7 +1711,7 @@ export const ApiInventoryPage: React.FC = () => {
           </Paper>
         </Grid>
 
-        <Grid item xs={12} sm={6} md={3}>
+        <Grid    size={{ xs: 12, sm: 6, md: 3 }}>
           <Paper sx={{ p: 2, bgcolor: '#13161E', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 2 }}>
             <Typography variant="caption" sx={{ color: '#9CA3AF', textTransform: 'uppercase', letterSpacing: 1 }}>
               🔒 Configured Connections
@@ -1722,7 +1722,7 @@ export const ApiInventoryPage: React.FC = () => {
           </Paper>
         </Grid>
 
-        <Grid item xs={12} sm={6} md={3}>
+        <Grid    size={{ xs: 12, sm: 6, md: 3 }}>
           <Button
             variant="contained"
             startIcon={<AddIcon />}
@@ -1851,7 +1851,7 @@ export const ApiInventoryPage: React.FC = () => {
             const methodColor = getMethodColor(method);
 
             return (
-              <Grid item xs={12} sm={6} md={4} key={ep.id}>
+              <Grid    key={ep.id} size={{ xs: 12, sm: 6, md: 4 }}>
                 <Card
                   onClick={() => setSearchParams({ id: ep.id })}
                   sx={{

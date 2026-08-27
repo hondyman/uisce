@@ -178,6 +178,11 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) {
 		"iat":                          time.Now().Unix(),
 		"exp":                          time.Now().Add(time.Hour).Unix(),
 		"https://hasura.io/jwt/claims": hasuraClaims,
+		// GSIFI: allowed_datasources and allowed_bindings are populated by
+		// querying user_tenant + business_object_bindings. For now, empty
+		// means no per-binding restrictions (future: populate from DB).
+		"allowed_datasources": []string{},
+		"allowed_bindings":    []interface{}{},
 	}
 
 	jwtToken, jwtErr := s.SecMgr.SignToken(jwtClaims)

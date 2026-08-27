@@ -875,27 +875,27 @@ export const UserManagerMasterDetail: React.FC<UserManagerProps> = ({ tenant, da
                       <Typography variant="subtitle1" fontWeight={600}>Profile Information</Typography>
                     </Stack>
                     <Grid container spacing={3}>
-                      <Grid item xs={6}>
+                      <Grid  size={{ xs: 6 }}>
                         <Typography variant="overline" color="text.secondary" display="block">Full Name</Typography>
                         <Typography variant="body2">{selectedUser.full_name}</Typography>
                       </Grid>
-                      <Grid item xs={6}>
+                      <Grid  size={{ xs: 6 }}>
                         <Typography variant="overline" color="text.secondary" display="block">Username</Typography>
                         <Typography variant="body2">{selectedUser.username}</Typography>
                       </Grid>
-                      <Grid item xs={6}>
+                      <Grid  size={{ xs: 6 }}>
                         <Typography variant="overline" color="text.secondary" display="block">Email Address</Typography>
                         <Typography variant="body2">{selectedUser.email}</Typography>
                       </Grid>
-                      <Grid item xs={6}>
+                      <Grid  size={{ xs: 6 }}>
                         <Typography variant="overline" color="text.secondary" display="block">Department</Typography>
                         <Typography variant="body2">{selectedUser.department || 'Not set'}</Typography>
                       </Grid>
-                      <Grid item xs={6}>
+                      <Grid  size={{ xs: 6 }}>
                         <Typography variant="overline" color="text.secondary" display="block">Title</Typography>
                         <Typography variant="body2">{selectedUser.title || 'Not set'}</Typography>
                       </Grid>
-                      <Grid item xs={6}>
+                      <Grid  size={{ xs: 6 }}>
                         <Typography variant="overline" color="text.secondary" display="block">Status</Typography>
                         <Chip
                           label={selectedUser.is_active ? 'Active' : 'Inactive'}
@@ -904,11 +904,11 @@ export const UserManagerMasterDetail: React.FC<UserManagerProps> = ({ tenant, da
                           sx={{ textTransform: 'capitalize', borderRadius: 1, mt: 0.5 }}
                         />
                       </Grid>
-                      <Grid item xs={6}>
+                      <Grid  size={{ xs: 6 }}>
                         <Typography variant="overline" color="text.secondary" display="block">Last Login</Typography>
                         <Typography variant="body2">{selectedUser.last_login || 'Never'}</Typography>
                       </Grid>
-                      <Grid item xs={6}>
+                      <Grid  size={{ xs: 6 }}>
                         <Typography variant="overline" color="text.secondary" display="block">Member Since</Typography>
                         <Typography variant="body2">{new Date(selectedUser.created_at).toLocaleDateString()}</Typography>
                       </Grid>

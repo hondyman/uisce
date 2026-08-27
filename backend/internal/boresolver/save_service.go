@@ -106,7 +106,7 @@ func (s *BOSaveService) SaveBusinessObjectAtomic(
 			// Upsert business_object_fields
 			fieldUpsertSQL := `
 				INSERT INTO public.business_object_fields (
-					field_id, tenant_id, bo_id, term_node_id, field_name,
+					id, tenant_id, bo_id, term_node_id, field_name,
 					field_role, binding_requirement, binding_status, is_active
 				) VALUES ($1, $2, $3, $4, $5, $6, $7, 'RESOLVED', true)
 				ON CONFLICT (tenant_id, bo_id, term_node_id) DO UPDATE SET

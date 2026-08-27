@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/hondyman/uisce/backend/internal/chat_history"
 	"github.com/hondyman/uisce/backend/internal/rules"
 	"github.com/hondyman/uisce/backend/pkg/llm"
 )
@@ -30,13 +31,13 @@ type AIService struct {
 }
 
 // NewAIService creates a new unified AI service hub
-func NewAIService(db *sql.DB, llmProvider llm.LLMProvider, scenarioSvc *rules.ScenarioService) *AIService {
+func NewAIService(db *sql.DB, llmProvider llm.LLMProvider, scenarioSvc *rules.ScenarioService, historySvc *chat_history.Service) *AIService {
 	return &AIService{
 		db:                 db,
 		llmProvider:        llmProvider,
 		ruleAnalyzer:       NewRuleAnalyzer(db, llmProvider, scenarioSvc),
 		driftPredictor:     NewDriftPredictor(db, llmProvider),
-		chatEngine:         NewChatEngine(db, llmProvider),
+		chatEngine:         NewChatEngine(db, llmProvider, historySvc),
 		dqAnalyzer:         NewDataQualityAnalyzer(db),
 		trainingData:       NewTrainingDataStore(db),
 		feedbackLoop:       NewFeedbackProcessor(db),

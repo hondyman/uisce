@@ -1,4 +1,11 @@
 import { useState, useMemo, useEffect } from 'react';
+import { useTheme } from '@mui/material/styles';
+import Box from '@mui/material/Box';
+import Typography from '@mui/material/Typography';
+import TextField from '@mui/material/TextField';
+import FormControlLabel from '@mui/material/FormControlLabel';
+import Checkbox from '@mui/material/Checkbox';
+import CircularProgress from '@mui/material/CircularProgress';
 import { useNotification } from './hooks/useNotification';
 import { devError } from './utils/devLogger';
 import { semanticSearch, getSavedQuery, logSearchFeedback } from './api';
@@ -11,10 +18,10 @@ import SearchResultCard from './SearchResultCard';
 
 interface SemanticSearchProps {
   onOpenQuery: (q: FullSavedQuery) => void;
-  // onOpenWorkbook: (id: string) => void;
 }
 
 export default function SemanticSearchContainer({ onOpenQuery }: SemanticSearchProps) {
+  const theme = useTheme();
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<SemanticSearchResult[]>([]);
   const [loading, setLoading] = useState(false);
@@ -53,15 +60,12 @@ export default function SemanticSearchContainer({ onOpenQuery }: SemanticSearchP
       action: 'clicked',
     });
     if (result.type === 'query') {
-      // The search result is a summary. We need to fetch the full query to open it.
       const fullQuery = await getSavedQuery(result.id);
       onOpenQuery(fullQuery);
     } else {
-      // onOpenWorkbook(result.id);
-      const notification = useNotification();
       notification.info(`Opening workbook ${result.name} is not implemented yet.`);
     }
-    setQuery(''); // Clear search after opening
+    setQuery('');
     setResults([]);
   };
 
@@ -69,35 +73,53 @@ export default function SemanticSearchContainer({ onOpenQuery }: SemanticSearchP
     return showOnlyAccessible ? results.filter(r => r.has_access) : results;
   }, [results, showOnlyAccessible]);
 
+  const isDark = theme.palette.mode === 'dark';
+
   return (
-    <div className="semantic-search-container">
-      <div className="semantic-search-bar">
-        <input
-          type="search"
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+      <Box sx={{ p: 2, borderRadius: 1, border: 1, borderColor: 'divider', bgcolor: isDark ? '#1f2937' : '#fff' }}>
+        <TextField
+          fullWidth
+          variant="outlined"
           placeholder="🔍 Search by meaning… e.g. 'churn trends in APAC'"
           value={query}
           onChange={e => setQuery(e.target.value)}
+          size="small"
+          InputProps={{
+            startAdornment: <Typography sx={{ mr: 1 }}>🔍</Typography>,
+          }}
         />
-      </div>
-      <div className="search-controls">
+      </Box>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
         <SearchFiltersPanel filters={filters} onChange={setFilters} />
-        <label className="access-toggle">
-          <input type="checkbox" checked={showOnlyAccessible} onChange={e => setShowOnlyAccessible(e.target.checked)} />
-          Show only assets I can access
-        </label>
-      </div>
+        <FormControlLabel
+          control={
+            <Checkbox
+              checked={showOnlyAccessible}
+              onChange={e => setShowOnlyAccessible(e.target.checked)}
+              size="small"
+            />
+          }
+          label="Show only assets I can access"
+        />
+      </Box>
 
-      {loading && <div className="search-results-popup loading">Loading...</div>}
+      {loading && (
+        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', p: 2 }}>
+          <CircularProgress size="small" sx={{ mr: 1 }} />
+          <Typography variant="body2">Loading...</Typography>
+        </Box>
+      )}
       {!loading && displayedResults.length > 0 && (
-        <div className="search-results-grid">
+        <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 2 }}>
           {displayedResults.map(res => (
             <SearchResultCard key={res.id} result={res} onOpen={handleOpen} onExplain={setExplainResult} onFeedback={handleFeedback} />
           ))}
-        </div>
+        </Box>
       )}
       {explainResult && (
         <ExplainMatchPanel result={explainResult} onClose={() => setExplainResult(null)} />
       )}
-    </div>
+    </Box>
   );
 }

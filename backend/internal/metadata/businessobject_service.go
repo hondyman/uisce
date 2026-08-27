@@ -46,15 +46,18 @@ type AccessDecision struct {
 
 // RelationshipResult represents a related entity found via catalog edges
 type RelationshipResult struct {
-	ID                string `json:"id" db:"id"`
-	RelatedObjectName string `json:"relatedObjectName" db:"related_object_name"`
-	TargetObjectID    string `json:"targetObjectId" db:"target_object_id"`
-	RelationshipType  string `json:"relationshipType" db:"relationship_type"`
-	Cardinality       string `json:"cardinality" db:"cardinality"`
-	Description       string `json:"description" db:"description"`
-	JoinCondition     string `json:"joinCondition" db:"join_condition"`
-	SourceDriverTable string `json:"sourceDriverTable" db:"source_driver_table"`
-	TargetDriverTable string `json:"targetDriverTable" db:"target_driver_table"`
+	ID                   string `json:"id" db:"id"`
+	RelatedObjectName    string `json:"relatedObjectName" db:"related_object_name"`
+	TargetObjectID       string `json:"targetObjectId" db:"target_object_id"`
+	RelationshipType     string `json:"relationshipType" db:"relationship_type"`
+	Cardinality          string `json:"cardinality" db:"cardinality"`
+	Description          string `json:"description" db:"description"`
+	JoinCondition        string `json:"joinCondition" db:"join_condition"`
+	SourceDriverTable    string `json:"sourceDriverTable" db:"source_driver_table"`
+	TargetDriverTable    string `json:"targetDriverTable" db:"target_driver_table"`
+	ScopedSubtypeKey     string `json:"scopedSubtypeKey" db:"scoped_subtype_key"`
+	TargetSubtypeKey     string `json:"targetSubtypeKey" db:"target_subtype_key"`
+	SatelliteJoinCondition string `json:"satelliteJoinCondition" db:"satellite_join_condition"`
 }
 
 // SemanticFieldResult represents a field mapped to a semantic term
@@ -442,72 +445,244 @@ func (s *BusinessObjectService) GetBusinessObject(
 	boKey string,
 ) (*models.BusinessObjectDefinition, error) {
 	tenantID := secCtx.TenantID
-	// Check if boKey is a UUID
+
 	isUUID := false
 	if _, err := uuid.Parse(boKey); err == nil {
 		isUUID = true
 	}
 
-	logging.GetLogger().Sugar().Infof("DEBUG: GetBusinessObject - tenantID: %s, boKey: %s, isUUID: %v", tenantID, boKey, isUUID)
-
-	// Enforce Read Access
 	if _, err := s.requireAccess(ctx, tenantID, boKey, AccessLevelRead); err != nil {
 		return nil, err
 	}
 
-	bo := &models.BusinessObjectDefinition{}
-
-	// Try old schema first (business_objects table)
-	oldQuery := `
-		SELECT id, tenant_id, key, name, display_name, COALESCE(technical_name, '') AS technical_name,
-		       COALESCE(description, '') AS description, COALESCE(icon, '') AS icon, is_core, 
-		       COALESCE(clones_from, '') AS clones_from, COALESCE(clone_parent_key, '') AS clone_parent_key,
-		       COALESCE(clone_parent_display_name, '') AS clone_parent_display_name, COALESCE(category, '') AS category, 
-		       parent_id,
-		       driver_table_id, COALESCE(driver_table_name, '') AS driver_table_name,
-		       CAST(0 AS int) AS instance_count, created_at, COALESCE(CAST(created_by AS text), '') AS created_by, 
-		       last_modified_at, COALESCE(CAST(last_modified_by AS text), '') AS last_modified_by, 
-		       is_active,
-		       config, datasource_id
+	query := `
+		SELECT id, tenant_id, bo_key, bo_name, bo_type, model_id,
+			   classification_node_id, business_key_node_id, semantic_id_node_id, grain_node_id,
+			   sti_discriminator_column, active_subtype_filter,
+			   is_active, is_core, description,
+			   created_at, updated_at
 		FROM business_objects
-		WHERE tenant_id = $1::uuid AND (key = $2 OR ($3 = true AND id = CAST($2 AS uuid)))
+		WHERE tenant_id = $1 AND (bo_key = $2 OR ($3 = true AND id = CAST($2 AS uuid)))
 	`
 
-	err := s.db.GetContext(ctx, bo, oldQuery, tenantID, boKey, isUUID)
-	if err == nil {
-		// Found in old schema (User Tenant)
-		logging.GetLogger().Sugar().Infof("DEBUG: GetBusinessObject found in old schema (User Tenant) - id=%s", bo.ID)
-		s.populateDriverTableInfo(ctx, bo)
+	bo := &models.BusinessObjectDefinition{}
+	var (
+		clsNodeID, bkNodeID, semNodeID, grainNodeID sql.NullString
+		stiDiscCol, activeSubtypeFilter sql.NullString
+		description sql.NullString
+		createdAt, updatedAt sql.NullTime
+	)
 
-		// Load subtypes and fields
-		if err := s.loadBOSubtypesAndFields(ctx, bo, tenantID); err != nil {
-			logging.GetLogger().Sugar().Warnf("Warning: failed to load subtypes and fields: %v", err)
+	err := s.db.QueryRowxContext(ctx, query, tenantID, boKey, isUUID).Scan(
+		&bo.ID, &bo.TenantID, &bo.Key, &bo.Name, &bo.Category, &bo.ModelID,
+		&clsNodeID, &bkNodeID, &semNodeID, &grainNodeID,
+		&stiDiscCol, &activeSubtypeFilter,
+		&bo.IsActive, &bo.IsCore, &description,
+		&createdAt, &updatedAt,
+	)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, fmt.Errorf("business object not found")
 		}
-		return bo, nil
+		return nil, fmt.Errorf("failed to get business object: %w", err)
 	}
 
-	// Fallback: Check Gold Copy Tenant if not found in User Tenant
-	var goldCopyTenantID string
-	gcErr := s.db.QueryRowContext(ctx, `SELECT id FROM public.tenants WHERE gold_copy = true LIMIT 1`).Scan(&goldCopyTenantID)
+	bo.DisplayName = bo.Name
 
-	if gcErr == nil && goldCopyTenantID != "" && goldCopyTenantID != tenantID {
-		err = s.db.GetContext(ctx, bo, oldQuery, goldCopyTenantID, boKey, isUUID)
+	if clsNodeID.Valid {
+		bo.ClassificationNodeID = sql.NullString{String: clsNodeID.String, Valid: true}
+	}
+	if bkNodeID.Valid {
+		bo.BusinessKeyNodeID = sql.NullString{String: bkNodeID.String, Valid: true}
+	}
+	if semNodeID.Valid {
+		bo.SemanticIDNodeID = sql.NullString{String: semNodeID.String, Valid: true}
+	}
+	if grainNodeID.Valid {
+		bo.GrainNodeID = sql.NullString{String: grainNodeID.String, Valid: true}
+	}
+	if stiDiscCol.Valid {
+		bo.StiDiscriminatorColumn = sql.NullString{String: stiDiscCol.String, Valid: true}
+	}
+	if activeSubtypeFilter.Valid {
+		bo.ActiveSubtypeFilter = sql.NullString{String: activeSubtypeFilter.String, Valid: true}
+	}
+	if description.Valid {
+		bo.Description = description.String
+	}
+	if createdAt.Valid {
+		bo.CreatedAt = createdAt.Time
+	}
+	if updatedAt.Valid {
+		bo.LastModifiedAt = updatedAt.Time
+	}
+
+	bo.Subtypes = make(map[string]models.SubtypeDefinition)
+	if activeSubtypeFilter.Valid {
+		subQuery := `
+			SELECT sr.subtype_code, sr.display_name, sr.is_active
+			FROM oms.subtype_registry sr
+			WHERE (sr.tenant_id = $1 OR sr.tenant_id = '00000000-0000-0000-0000-000000000001'::uuid)
+			  AND sr.root_object = $2 AND sr.is_active = true
+			ORDER BY sr.subtype_code
+		`
+		regKey := strings.TrimPrefix(activeSubtypeFilter.String, "oms.")
+		regKey = strings.TrimPrefix(regKey, "altinv.")
+		regKey = strings.TrimPrefix(regKey, "cash_flow.")
+		regKey = strings.TrimPrefix(regKey, "master.")
+
+		subRows, err := s.db.QueryxContext(ctx, subQuery, tenantID, regKey)
 		if err == nil {
-			// Found in Gold Copy
-			logging.GetLogger().Sugar().Infof("DEBUG: GetBusinessObject found in Gold Copy - id=%s", bo.ID)
-			s.populateDriverTableInfo(ctx, bo)
-
-			// Load subtypes and fields - PASSING USER TENANT ID to find custom extensions
-			if err := s.loadBOSubtypesAndFields(ctx, bo, tenantID); err != nil {
-				logging.GetLogger().Sugar().Warnf("Warning: failed to load subtypes and fields for Gold Copy BO: %v", err)
+			defer subRows.Close()
+			for subRows.Next() {
+				var subCode, displayName string
+				var isActive bool
+				if err := subRows.Scan(&subCode, &displayName, &isActive); err == nil {
+					bo.Subtypes[subCode] = models.SubtypeDefinition{
+						Key:           subCode,
+						Name:          subCode,
+						DisplayName:   displayName,
+						IsCore:        false,
+						BasedOnEntity: regKey,
+						SubtypeFields: []models.FieldDefinition{},
+					}
+				}
 			}
-			return bo, nil
 		}
 	}
 
-	// If not found in old schema, return error immediately
-	logging.GetLogger().Sugar().Errorf("ERROR: GetBusinessObject not found in old schema (User or Gold Copy): %v", err)
-	return nil, fmt.Errorf("business object not found")
+	s.loadBOFields(ctx, bo, tenantID)
+
+	return bo, nil
+}
+
+func (s *BusinessObjectService) loadBOFields(ctx context.Context, bo *models.BusinessObjectDefinition, tenantID string) {
+	fieldQuery := `
+		SELECT
+			bof.id, bof.field_name, bof.field_role, bof.aggregation_type,
+			bof.binding_requirement, bof.eligibility_source, bof.is_exposed,
+			bof.subtype_scope, bof.inherits_defaults,
+			cn.node_name
+		FROM business_object_fields bof
+		LEFT JOIN catalog_node cn ON cn.id = bof.term_node_id
+		WHERE bof.tenant_id = $1 AND bof.bo_id = $2
+		ORDER BY bof.field_name
+	`
+
+	rows, err := s.db.QueryxContext(ctx, fieldQuery, tenantID, bo.ID)
+	if err != nil {
+		logging.GetLogger().Sugar().Warnf("Failed to fetch business_object_fields for BO %s (tenant %s): %v", bo.ID, tenantID, err)
+		return
+	}
+	defer rows.Close()
+
+	var coreFields, customFields []models.FieldDefinition
+	for rows.Next() {
+		var field models.FieldDefinition
+		var fieldRole, aggType, bindingReq, eligSrc, subtypeScope sql.NullString
+		var isExposed, inheritsDefaults sql.NullBool
+		var nodeName sql.NullString
+
+		err := rows.Scan(
+			&field.ID, &field.Name, &fieldRole, &aggType,
+			&bindingReq, &eligSrc, &isExposed, &subtypeScope, &inheritsDefaults,
+			&nodeName,
+		)
+		if err != nil {
+			logging.GetLogger().Sugar().Warnf("Failed to scan field row: %v", err)
+			continue
+		}
+
+		field.Key = field.Name
+		if nodeName.Valid {
+			field.DisplayName = nodeName.String
+		} else {
+			field.DisplayName = field.Name
+		}
+		if fieldRole.Valid {
+			field.Role = models.FieldRole(fieldRole.String)
+		}
+
+		if inheritsDefaults.Valid && inheritsDefaults.Bool {
+			coreFields = append(coreFields, field)
+		} else {
+			customFields = append(customFields, field)
+		}
+	}
+
+	if len(coreFields) > 0 {
+		bo.CoreFields = coreFields
+	}
+	if len(customFields) > 0 {
+		bo.CustomFields = customFields
+	}
+
+	// Also load subtype fields attached to child business objects
+	if len(bo.Subtypes) > 0 {
+		childFieldsQuery := `
+			SELECT
+				bof.id, bof.field_name, bof.field_role, bof.aggregation_type,
+				bof.binding_requirement, bof.eligibility_source, bof.is_exposed,
+				bof.subtype_scope, bof.inherits_defaults,
+				cn.node_name,
+				bo_child.bo_key
+			FROM business_objects bo_child
+			JOIN business_object_fields bof ON bof.bo_id = bo_child.id AND bof.tenant_id = bo_child.tenant_id
+			LEFT JOIN catalog_node cn ON cn.id = bof.term_node_id
+			WHERE bo_child.tenant_id = $1
+			  AND bo_child.bo_key LIKE $2 || '/%'
+			ORDER BY bo_child.bo_key, bof.field_name
+		`
+		childRows, err := s.db.QueryxContext(ctx, childFieldsQuery, tenantID, bo.Key)
+		if err == nil {
+			defer childRows.Close()
+			subtypeFieldsMap := make(map[string][]models.FieldDefinition)
+			for childRows.Next() {
+				var field models.FieldDefinition
+				var fieldRole, aggType, bindingReq, eligSrc, subtypeScope sql.NullString
+				var isExposed, inheritsDefaults sql.NullBool
+				var nodeName, childBoKey sql.NullString
+
+				err := childRows.Scan(
+					&field.ID, &field.Name, &fieldRole, &aggType,
+					&bindingReq, &eligSrc, &isExposed, &subtypeScope, &inheritsDefaults,
+					&nodeName, &childBoKey,
+				)
+				if err != nil {
+					continue
+				}
+
+				field.Key = field.Name
+				if nodeName.Valid {
+					field.DisplayName = nodeName.String
+				} else {
+					field.DisplayName = field.Name
+				}
+				if fieldRole.Valid {
+					field.Role = models.FieldRole(fieldRole.String)
+				}
+
+				subCode := ""
+				if childBoKey.Valid && strings.Contains(childBoKey.String, "/") {
+					parts := strings.Split(childBoKey.String, "/")
+					subCode = parts[len(parts)-1]
+				} else if subtypeScope.Valid {
+					subCode = strings.ToLower(subtypeScope.String)
+				}
+
+				if subCode != "" {
+					subtypeFieldsMap[subCode] = append(subtypeFieldsMap[subCode], field)
+				}
+			}
+
+			for subCode, stDef := range bo.Subtypes {
+				if fields, ok := subtypeFieldsMap[subCode]; ok {
+					stDef.SubtypeFields = fields
+					bo.Subtypes[subCode] = stDef
+				}
+			}
+		}
+	}
 }
 
 func (s *BusinessObjectService) populateDriverTableInfo(ctx context.Context, bo *models.BusinessObjectDefinition) {
@@ -538,43 +713,234 @@ func (s *BusinessObjectService) populateDriverTableInfo(ctx context.Context, bo 
 	}
 }
 
-// ListBusinessObjects retrieves all BOs for a tenant from both old and new schema
+// ListBusinessObjects retrieves all parent BOs for a tenant using the new schema.
+// Parent BOs are identified by bo_key = active_subtype_filter.
+// Subtypes are synthesized from oms.subtype_registry at read time.
 func (s *BusinessObjectService) ListBusinessObjects(
 	ctx context.Context,
 	secCtx *security.Context,
 ) ([]*models.BusinessObjectDefinition, error) {
 	tenantID := secCtx.TenantID
-	datasourceID := secCtx.DatasourceID
-	oldQuery := `
-		SELECT id, tenant_id, key, name, display_name, COALESCE(technical_name, '') AS technical_name, 
-		       COALESCE(description, '') AS description, COALESCE(icon, '') AS icon, is_core, 
-		       COALESCE(clones_from, '') AS clones_from, COALESCE(clone_parent_key, '') AS clone_parent_key,
-		       COALESCE(clone_parent_display_name, '') AS clone_parent_display_name, COALESCE(category, '') AS category, 
-		       parent_id,
-		       driver_table_id, COALESCE(driver_table_name, '') AS driver_table_name,
-		       CAST(0 AS int) AS instance_count, created_at, COALESCE(CAST(created_by AS text), '') AS created_by, 
-		       last_modified_at, COALESCE(CAST(last_modified_by AS text), '') AS last_modified_by, 
-		       is_active,
-		       config, datasource_id
+
+	query := `
+		SELECT id, tenant_id, bo_key, bo_name, bo_type, model_id,
+			   classification_node_id, business_key_node_id, semantic_id_node_id, grain_node_id,
+			   sti_discriminator_column, active_subtype_filter,
+			   is_active, is_core, description,
+			   created_at, updated_at
 		FROM business_objects
-		WHERE tenant_id = $1::uuid AND parent_id IS NULL
+		WHERE tenant_id = $1 AND is_active = true
+		  AND bo_key = COALESCE(active_subtype_filter, bo_key)
+		ORDER BY bo_key
 	`
 
-	oldArgs := []interface{}{tenantID}
-	if datasourceID != "" {
-		oldQuery += " AND (datasource_id = $2::uuid OR datasource_id IS NULL)"
-		oldArgs = append(oldArgs, datasourceID)
+	rows, err := s.db.QueryxContext(ctx, query, tenantID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list business objects: %w", err)
 	}
-	oldQuery += " ORDER BY name"
+	defer rows.Close()
 
-	var bos []*models.BusinessObjectDefinition
-	oldSchemaErr := s.db.SelectContext(ctx, &bos, oldQuery, oldArgs...)
-	if oldSchemaErr != nil {
-		logging.GetLogger().Sugar().Warnf("Warning: failed to list from old schema: %v", oldSchemaErr)
-		// Continue to new schema
+	type scanRow struct {
+		ID                   string
+		TenantID             string
+		BoKey                string
+		BoName               string
+		BoType               string
+		ModelID              string
+		ClassificationNodeID sql.NullString
+		BusinessKeyNodeID    sql.NullString
+		SemanticIDNodeID     sql.NullString
+		GrainNodeID          sql.NullString
+		StiDiscColumn        sql.NullString
+		ActiveSubtypeFilter  sql.NullString
+		IsActive             bool
+		IsCore               bool
+		Description          sql.NullString
+		CreatedAt            sql.NullTime
+		UpdatedAt            sql.NullTime
 	}
 
-	// Only use old schema for now as business_object_def does not exist
+	bos := []*models.BusinessObjectDefinition{}
+	parentKeys := []string{}
+
+	for rows.Next() {
+		var row scanRow
+		err := rows.Scan(
+			&row.ID, &row.TenantID, &row.BoKey, &row.BoName, &row.BoType, &row.ModelID,
+			&row.ClassificationNodeID, &row.BusinessKeyNodeID, &row.SemanticIDNodeID, &row.GrainNodeID,
+			&row.StiDiscColumn, &row.ActiveSubtypeFilter,
+			&row.IsActive, &row.IsCore, &row.Description,
+			&row.CreatedAt, &row.UpdatedAt,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan business object: %w", err)
+		}
+
+		bo := &models.BusinessObjectDefinition{
+			ID:        row.ID,
+			TenantID:  row.TenantID,
+			Key:       row.BoKey,
+			Name:      row.BoName,
+			IsCore:    row.IsCore,
+			IsActive:  row.IsActive,
+			ModelID:   row.ModelID,
+			Category:  row.BoType,
+		}
+		bo.DisplayName = row.BoName
+
+		if row.ClassificationNodeID.Valid {
+			bo.ClassificationNodeID = sql.NullString{String: row.ClassificationNodeID.String, Valid: true}
+		}
+		if row.BusinessKeyNodeID.Valid {
+			bo.BusinessKeyNodeID = sql.NullString{String: row.BusinessKeyNodeID.String, Valid: true}
+		}
+		if row.SemanticIDNodeID.Valid {
+			bo.SemanticIDNodeID = sql.NullString{String: row.SemanticIDNodeID.String, Valid: true}
+		}
+		if row.GrainNodeID.Valid {
+			bo.GrainNodeID = sql.NullString{String: row.GrainNodeID.String, Valid: true}
+		}
+		if row.StiDiscColumn.Valid {
+			bo.StiDiscriminatorColumn = sql.NullString{String: row.StiDiscColumn.String, Valid: true}
+		}
+		if row.ActiveSubtypeFilter.Valid {
+			bo.ActiveSubtypeFilter = sql.NullString{String: row.ActiveSubtypeFilter.String, Valid: true}
+		}
+		if row.Description.Valid {
+			bo.Description = row.Description.String
+		}
+		if row.CreatedAt.Valid {
+			bo.CreatedAt = row.CreatedAt.Time
+		}
+		if row.UpdatedAt.Valid {
+			bo.LastModifiedAt = row.UpdatedAt.Time
+		}
+
+		bos = append(bos, bo)
+		if row.ActiveSubtypeFilter.Valid {
+			parentKeys = append(parentKeys, row.BoKey)
+		}
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	subtypesMap := make(map[string]map[string]models.SubtypeDefinition)
+	if len(parentKeys) > 0 {
+		regKeyMap := make(map[string]string)
+		for _, pk := range parentKeys {
+			regKey := strings.TrimPrefix(pk, "oms.")
+			regKey = strings.TrimPrefix(regKey, "altinv.")
+			regKey = strings.TrimPrefix(regKey, "cash_flow.")
+			regKey = strings.TrimPrefix(regKey, "master.")
+			regKeyMap[regKey] = pk
+		}
+		regKeys := make([]string, 0, len(regKeyMap))
+		for k := range regKeyMap {
+			regKeys = append(regKeys, k)
+		}
+
+		subQuery := `
+			SELECT sr.root_object, sr.subtype_code, sr.display_name, sr.is_active
+			FROM oms.subtype_registry sr
+			WHERE (sr.tenant_id = $1 OR sr.tenant_id = '00000000-0000-0000-0000-000000000001'::uuid)
+			  AND sr.root_object = ANY($2) AND sr.is_active = true
+			ORDER BY sr.root_object, sr.subtype_code
+		`
+		subRows, err := s.db.QueryxContext(ctx, subQuery, tenantID, regKeys)
+		if err == nil {
+			defer subRows.Close()
+			for subRows.Next() {
+				var rootObj, subCode, displayName string
+				var isActive bool
+				if err := subRows.Scan(&rootObj, &subCode, &displayName, &isActive); err == nil {
+					parentBOKey := regKeyMap[rootObj]
+					if subtypesMap[parentBOKey] == nil {
+						subtypesMap[parentBOKey] = make(map[string]models.SubtypeDefinition)
+					}
+					if _, exists := subtypesMap[parentBOKey][subCode]; !exists {
+						subtypesMap[parentBOKey][subCode] = models.SubtypeDefinition{
+							Key:           subCode,
+							Name:          subCode,
+							DisplayName:   displayName,
+							IsCore:        false,
+							BasedOnEntity: rootObj,
+							SubtypeFields: []models.FieldDefinition{},
+						}
+					}
+				}
+			}
+		}
+
+		// Also populate SubtypeFields for each subtype across all parent BOs
+		childFieldsQuery := `
+			SELECT
+				bof.id, bof.field_name, bof.field_role, bof.aggregation_type,
+				bof.binding_requirement, bof.eligibility_source, bof.is_exposed,
+				bof.subtype_scope, bof.inherits_defaults,
+				cn.node_name,
+				bo_child.bo_key
+			FROM business_objects bo_child
+			JOIN business_object_fields bof ON bof.bo_id = bo_child.id AND bof.tenant_id = bo_child.tenant_id
+			LEFT JOIN catalog_node cn ON cn.id = bof.term_node_id
+			WHERE bo_child.tenant_id = $1
+			  AND bo_child.bo_key LIKE ANY($2)
+			ORDER BY bo_child.bo_key, bof.field_name
+		`
+		childPatterns := make([]string, 0, len(parentKeys))
+		for _, pk := range parentKeys {
+			childPatterns = append(childPatterns, pk+"/%")
+		}
+		if childRows, err := s.db.QueryxContext(ctx, childFieldsQuery, tenantID, pq.Array(childPatterns)); err == nil {
+			defer childRows.Close()
+			for childRows.Next() {
+				var field models.FieldDefinition
+				var fieldRole, aggType, bindingReq, eligSrc, subtypeScope sql.NullString
+				var isExposed, inheritsDefaults sql.NullBool
+				var nodeName, childBoKey sql.NullString
+
+				if err := childRows.Scan(
+					&field.ID, &field.Name, &fieldRole, &aggType,
+					&bindingReq, &eligSrc, &isExposed, &subtypeScope, &inheritsDefaults,
+					&nodeName, &childBoKey,
+				); err != nil {
+					continue
+				}
+
+				field.Key = field.Name
+				if nodeName.Valid {
+					field.DisplayName = nodeName.String
+				} else {
+					field.DisplayName = field.Name
+				}
+				if fieldRole.Valid {
+					field.Role = models.FieldRole(fieldRole.String)
+				}
+
+				if childBoKey.Valid && strings.Contains(childBoKey.String, "/") {
+					parts := strings.Split(childBoKey.String, "/")
+					parentKey := parts[0]
+					subCode := parts[len(parts)-1]
+					if stMap, ok := subtypesMap[parentKey]; ok {
+						if stDef, exists := stMap[subCode]; exists {
+							stDef.SubtypeFields = append(stDef.SubtypeFields, field)
+							stMap[subCode] = stDef
+						}
+					}
+				}
+			}
+		}
+	}
+
+	for _, bo := range bos {
+		if sm, ok := subtypesMap[bo.Key]; ok {
+			bo.Subtypes = sm
+		} else {
+			bo.Subtypes = make(map[string]models.SubtypeDefinition)
+		}
+	}
+
 	return bos, nil
 }
 
@@ -586,92 +952,475 @@ func (s *BusinessObjectService) ListBusinessObjectsComposed(
 	secCtx *security.Context,
 ) ([]*models.BusinessObjectDefinition, error) {
 	tenantID := secCtx.TenantID
-	datasourceID := secCtx.DatasourceID
-	// 1. Get gold copy tenant ID
 	var goldCopyTenantID string
 	err := s.db.QueryRowContext(ctx, `SELECT id FROM public.tenants WHERE gold_copy = true LIMIT 1`).Scan(&goldCopyTenantID)
 	if err != nil {
-		// If no gold copy tenant, fall back to regular listing
 		logging.GetLogger().Sugar().Warnf("No gold copy tenant found, falling back to regular listing: %v", err)
 		return s.ListBusinessObjects(ctx, secCtx)
 	}
 
-	// 2. If requesting tenant IS the gold copy, return only core BOs
 	if tenantID == goldCopyTenantID {
 		return s.listCoreBusinessObjects(ctx, goldCopyTenantID)
 	}
 
-	// 3. Load core BOs from gold copy tenant
 	coreBOs, err := s.listCoreBusinessObjects(ctx, goldCopyTenantID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load core business objects: %w", err)
 	}
 
-	// 4. Load custom BOs for requesting tenant
-	customBOs, err := s.listTenantCustomBusinessObjects(ctx, tenantID, datasourceID)
+	customBOs, err := s.listTenantCustomBusinessObjects(ctx, tenantID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load tenant custom business objects: %w", err)
 	}
 
-	// 5. Compose: merge custom onto core
 	return s.composeBusinessObjects(coreBOs, customBOs), nil
 }
 
-// listCoreBusinessObjects lists BOs from the gold copy tenant marked as core
+// listCoreBusinessObjects lists parent BOs from the gold copy tenant marked as is_core=true.
 func (s *BusinessObjectService) listCoreBusinessObjects(ctx context.Context, goldCopyTenantID string) ([]*models.BusinessObjectDefinition, error) {
 	query := `
-		SELECT id, tenant_id, key, name, display_name, COALESCE(technical_name, '') AS technical_name, 
-		       COALESCE(description, '') AS description, COALESCE(icon, '') AS icon, is_core, 
-		       COALESCE(clones_from, '') AS clones_from, COALESCE(clone_parent_key, '') AS clone_parent_key,
-		       COALESCE(clone_parent_display_name, '') AS clone_parent_display_name, COALESCE(category, '') AS category, 
-		       parent_id,
-		       driver_table_id, COALESCE(driver_table_name, '') AS driver_table_name,
-		       CAST(0 AS int) AS instance_count, created_at, COALESCE(CAST(created_by AS text), '') AS created_by, 
-		       last_modified_at, COALESCE(CAST(last_modified_by AS text), '') AS last_modified_by, 
-		       is_active,
-		       config, datasource_id, core_id
+		SELECT id, tenant_id, bo_key, bo_name, bo_type, model_id,
+			   classification_node_id, business_key_node_id, semantic_id_node_id, grain_node_id,
+			   sti_discriminator_column, active_subtype_filter,
+			   is_active, is_core, description,
+			   created_at, updated_at
 		FROM business_objects
-		WHERE tenant_id = $1::uuid AND is_core = true AND parent_id IS NULL
-		ORDER BY name
+		WHERE tenant_id = $1 AND is_core = true AND is_active = true
+		  AND bo_key = COALESCE(active_subtype_filter, bo_key)
+		ORDER BY bo_key
 	`
-	var bos []*models.BusinessObjectDefinition
-	err := s.db.SelectContext(ctx, &bos, query, goldCopyTenantID)
+
+	rows, err := s.db.QueryxContext(ctx, query, goldCopyTenantID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list core business objects: %w", err)
 	}
+	defer rows.Close()
+
+	type scanRow struct {
+		ID                   string
+		TenantID             string
+		BoKey                string
+		BoName               string
+		BoType               string
+		ModelID              string
+		ClassificationNodeID sql.NullString
+		BusinessKeyNodeID    sql.NullString
+		SemanticIDNodeID     sql.NullString
+		GrainNodeID          sql.NullString
+		StiDiscColumn        sql.NullString
+		ActiveSubtypeFilter  sql.NullString
+		IsActive             bool
+		IsCore               bool
+		Description          sql.NullString
+		CreatedAt            sql.NullTime
+		UpdatedAt            sql.NullTime
+	}
+
+	bos := []*models.BusinessObjectDefinition{}
+	parentKeys := []string{}
+
+	for rows.Next() {
+		var row scanRow
+		err := rows.Scan(
+			&row.ID, &row.TenantID, &row.BoKey, &row.BoName, &row.BoType, &row.ModelID,
+			&row.ClassificationNodeID, &row.BusinessKeyNodeID, &row.SemanticIDNodeID, &row.GrainNodeID,
+			&row.StiDiscColumn, &row.ActiveSubtypeFilter,
+			&row.IsActive, &row.IsCore, &row.Description,
+			&row.CreatedAt, &row.UpdatedAt,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan core business object: %w", err)
+		}
+
+		bo := &models.BusinessObjectDefinition{
+			ID:        row.ID,
+			TenantID:  row.TenantID,
+			Key:       row.BoKey,
+			Name:      row.BoName,
+			IsCore:    row.IsCore,
+			IsActive:  row.IsActive,
+			ModelID:   row.ModelID,
+			Category:  row.BoType,
+		}
+		bo.DisplayName = row.BoName
+
+		if row.ClassificationNodeID.Valid {
+			bo.ClassificationNodeID = sql.NullString{String: row.ClassificationNodeID.String, Valid: true}
+		}
+		if row.BusinessKeyNodeID.Valid {
+			bo.BusinessKeyNodeID = sql.NullString{String: row.BusinessKeyNodeID.String, Valid: true}
+		}
+		if row.SemanticIDNodeID.Valid {
+			bo.SemanticIDNodeID = sql.NullString{String: row.SemanticIDNodeID.String, Valid: true}
+		}
+		if row.GrainNodeID.Valid {
+			bo.GrainNodeID = sql.NullString{String: row.GrainNodeID.String, Valid: true}
+		}
+		if row.StiDiscColumn.Valid {
+			bo.StiDiscriminatorColumn = sql.NullString{String: row.StiDiscColumn.String, Valid: true}
+		}
+		if row.ActiveSubtypeFilter.Valid {
+			bo.ActiveSubtypeFilter = sql.NullString{String: row.ActiveSubtypeFilter.String, Valid: true}
+		}
+		if row.Description.Valid {
+			bo.Description = row.Description.String
+		}
+		if row.CreatedAt.Valid {
+			bo.CreatedAt = row.CreatedAt.Time
+		}
+		if row.UpdatedAt.Valid {
+			bo.LastModifiedAt = row.UpdatedAt.Time
+		}
+
+		bos = append(bos, bo)
+		if row.ActiveSubtypeFilter.Valid {
+			parentKeys = append(parentKeys, row.BoKey)
+		}
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	subtypesMap := make(map[string]map[string]models.SubtypeDefinition)
+	if len(parentKeys) > 0 {
+		regKeyMap := make(map[string]string)
+		for _, pk := range parentKeys {
+			regKey := strings.TrimPrefix(pk, "oms.")
+			regKey = strings.TrimPrefix(regKey, "altinv.")
+			regKey = strings.TrimPrefix(regKey, "cash_flow.")
+			regKey = strings.TrimPrefix(regKey, "master.")
+			regKeyMap[regKey] = pk
+		}
+		regKeys := make([]string, 0, len(regKeyMap))
+		for k := range regKeyMap {
+			regKeys = append(regKeys, k)
+		}
+
+		subQuery := `
+			SELECT sr.root_object, sr.subtype_code, sr.display_name, sr.is_active
+			FROM oms.subtype_registry sr
+			WHERE (sr.tenant_id = $1 OR sr.tenant_id = '00000000-0000-0000-0000-000000000001'::uuid)
+			  AND sr.root_object = ANY($2) AND sr.is_active = true
+			ORDER BY sr.root_object, sr.subtype_code
+		`
+		subRows, err := s.db.QueryxContext(ctx, subQuery, goldCopyTenantID, regKeys)
+		if err == nil {
+			defer subRows.Close()
+			for subRows.Next() {
+				var rootObj, subCode, displayName string
+				var isActive bool
+				if err := subRows.Scan(&rootObj, &subCode, &displayName, &isActive); err == nil {
+					parentBOKey := regKeyMap[rootObj]
+					if subtypesMap[parentBOKey] == nil {
+						subtypesMap[parentBOKey] = make(map[string]models.SubtypeDefinition)
+					}
+					if _, exists := subtypesMap[parentBOKey][subCode]; !exists {
+						subtypesMap[parentBOKey][subCode] = models.SubtypeDefinition{
+							Key:           subCode,
+							Name:          subCode,
+							DisplayName:   displayName,
+							IsCore:        false,
+							BasedOnEntity: rootObj,
+							SubtypeFields: []models.FieldDefinition{},
+						}
+					}
+				}
+			}
+		}
+
+		// Also populate SubtypeFields for each subtype across all core parent BOs
+		childFieldsQuery := `
+			SELECT
+				bof.id, bof.field_name, bof.field_role, bof.aggregation_type,
+				bof.binding_requirement, bof.eligibility_source, bof.is_exposed,
+				bof.subtype_scope, bof.inherits_defaults,
+				cn.node_name,
+				bo_child.bo_key
+			FROM business_objects bo_child
+			JOIN business_object_fields bof ON bof.bo_id = bo_child.id AND bof.tenant_id = bo_child.tenant_id
+			LEFT JOIN catalog_node cn ON cn.id = bof.term_node_id
+			WHERE bo_child.tenant_id = $1
+			  AND bo_child.bo_key LIKE ANY($2)
+			ORDER BY bo_child.bo_key, bof.field_name
+		`
+		childPatterns := make([]string, 0, len(parentKeys))
+		for _, pk := range parentKeys {
+			childPatterns = append(childPatterns, pk+"/%")
+		}
+		if childRows, err := s.db.QueryxContext(ctx, childFieldsQuery, goldCopyTenantID, pq.Array(childPatterns)); err == nil {
+			defer childRows.Close()
+			for childRows.Next() {
+				var field models.FieldDefinition
+				var fieldRole, aggType, bindingReq, eligSrc, subtypeScope sql.NullString
+				var isExposed, inheritsDefaults sql.NullBool
+				var nodeName, childBoKey sql.NullString
+
+				if err := childRows.Scan(
+					&field.ID, &field.Name, &fieldRole, &aggType,
+					&bindingReq, &eligSrc, &isExposed, &subtypeScope, &inheritsDefaults,
+					&nodeName, &childBoKey,
+				); err != nil {
+					continue
+				}
+
+				field.Key = field.Name
+				if nodeName.Valid {
+					field.DisplayName = nodeName.String
+				} else {
+					field.DisplayName = field.Name
+				}
+				if fieldRole.Valid {
+					field.Role = models.FieldRole(fieldRole.String)
+				}
+
+				if childBoKey.Valid && strings.Contains(childBoKey.String, "/") {
+					parts := strings.Split(childBoKey.String, "/")
+					parentKey := parts[0]
+					subCode := parts[len(parts)-1]
+					if stMap, ok := subtypesMap[parentKey]; ok {
+						if stDef, exists := stMap[subCode]; exists {
+							stDef.SubtypeFields = append(stDef.SubtypeFields, field)
+							stMap[subCode] = stDef
+						}
+					}
+				}
+			}
+		}
+	}
+
+	for _, bo := range bos {
+		if sm, ok := subtypesMap[bo.Key]; ok {
+			bo.Subtypes = sm
+		} else {
+			bo.Subtypes = make(map[string]models.SubtypeDefinition)
+		}
+	}
+
 	return bos, nil
 }
 
-// listTenantCustomBusinessObjects lists only tenant-specific (non-core) BOs
-func (s *BusinessObjectService) listTenantCustomBusinessObjects(ctx context.Context, tenantID, datasourceID string) ([]*models.BusinessObjectDefinition, error) {
+// listTenantCustomBusinessObjects lists tenant-specific (non-core) parent BOs.
+func (s *BusinessObjectService) listTenantCustomBusinessObjects(ctx context.Context, tenantID string) ([]*models.BusinessObjectDefinition, error) {
 	query := `
-		SELECT id, tenant_id, key, name, display_name, COALESCE(technical_name, '') AS technical_name, 
-		       COALESCE(description, '') AS description, COALESCE(icon, '') AS icon, is_core, 
-		       COALESCE(clones_from, '') AS clones_from, COALESCE(clone_parent_key, '') AS clone_parent_key,
-		       COALESCE(clone_parent_display_name, '') AS clone_parent_display_name, COALESCE(category, '') AS category, 
-		       parent_id,
-		       driver_table_id, COALESCE(driver_table_name, '') AS driver_table_name,
-		       CAST(0 AS int) AS instance_count, created_at, COALESCE(CAST(created_by AS text), '') AS created_by, 
-		       last_modified_at, COALESCE(CAST(last_modified_by AS text), '') AS last_modified_by, 
-		       is_active,
-		       config, datasource_id, core_id
+		SELECT id, tenant_id, bo_key, bo_name, bo_type, model_id,
+			   classification_node_id, business_key_node_id, semantic_id_node_id, grain_node_id,
+			   sti_discriminator_column, active_subtype_filter,
+			   is_active, is_core, description,
+			   created_at, updated_at
 		FROM business_objects
-		WHERE tenant_id = $1::uuid AND (is_core = false OR is_core IS NULL) AND parent_id IS NULL
+		WHERE tenant_id = $1 AND (is_core = false OR is_core IS NULL) AND is_active = true
+		  AND bo_key = COALESCE(active_subtype_filter, bo_key)
+		ORDER BY bo_key
 	`
-	args := []interface{}{tenantID}
 
-	if datasourceID != "" {
-		query += " AND (datasource_id = $2::uuid OR datasource_id IS NULL)"
-		args = append(args, datasourceID)
-	}
-
-	query += " ORDER BY name"
-
-	var bos []*models.BusinessObjectDefinition
-	err := s.db.SelectContext(ctx, &bos, query, args...)
+	rows, err := s.db.QueryxContext(ctx, query, tenantID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list tenant custom business objects: %w", err)
 	}
+	defer rows.Close()
+
+	type scanRow struct {
+		ID                   string
+		TenantID             string
+		BoKey                string
+		BoName               string
+		BoType               string
+		ModelID              string
+		ClassificationNodeID sql.NullString
+		BusinessKeyNodeID    sql.NullString
+		SemanticIDNodeID     sql.NullString
+		GrainNodeID          sql.NullString
+		StiDiscColumn        sql.NullString
+		ActiveSubtypeFilter  sql.NullString
+		IsActive             bool
+		IsCore               bool
+		Description          sql.NullString
+		CreatedAt            sql.NullTime
+		UpdatedAt            sql.NullTime
+	}
+
+	bos := []*models.BusinessObjectDefinition{}
+	parentKeys := []string{}
+
+	for rows.Next() {
+		var row scanRow
+		err := rows.Scan(
+			&row.ID, &row.TenantID, &row.BoKey, &row.BoName, &row.BoType, &row.ModelID,
+			&row.ClassificationNodeID, &row.BusinessKeyNodeID, &row.SemanticIDNodeID, &row.GrainNodeID,
+			&row.StiDiscColumn, &row.ActiveSubtypeFilter,
+			&row.IsActive, &row.IsCore, &row.Description,
+			&row.CreatedAt, &row.UpdatedAt,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan tenant custom business object: %w", err)
+		}
+
+		bo := &models.BusinessObjectDefinition{
+			ID:        row.ID,
+			TenantID:  row.TenantID,
+			Key:       row.BoKey,
+			Name:      row.BoName,
+			IsCore:    row.IsCore,
+			IsActive:  row.IsActive,
+			ModelID:   row.ModelID,
+			Category:  row.BoType,
+		}
+		bo.DisplayName = row.BoName
+
+		if row.ClassificationNodeID.Valid {
+			bo.ClassificationNodeID = sql.NullString{String: row.ClassificationNodeID.String, Valid: true}
+		}
+		if row.BusinessKeyNodeID.Valid {
+			bo.BusinessKeyNodeID = sql.NullString{String: row.BusinessKeyNodeID.String, Valid: true}
+		}
+		if row.SemanticIDNodeID.Valid {
+			bo.SemanticIDNodeID = sql.NullString{String: row.SemanticIDNodeID.String, Valid: true}
+		}
+		if row.GrainNodeID.Valid {
+			bo.GrainNodeID = sql.NullString{String: row.GrainNodeID.String, Valid: true}
+		}
+		if row.StiDiscColumn.Valid {
+			bo.StiDiscriminatorColumn = sql.NullString{String: row.StiDiscColumn.String, Valid: true}
+		}
+		if row.ActiveSubtypeFilter.Valid {
+			bo.ActiveSubtypeFilter = sql.NullString{String: row.ActiveSubtypeFilter.String, Valid: true}
+		}
+		if row.Description.Valid {
+			bo.Description = row.Description.String
+		}
+		if row.CreatedAt.Valid {
+			bo.CreatedAt = row.CreatedAt.Time
+		}
+		if row.UpdatedAt.Valid {
+			bo.LastModifiedAt = row.UpdatedAt.Time
+		}
+
+		bos = append(bos, bo)
+		if row.ActiveSubtypeFilter.Valid {
+			parentKeys = append(parentKeys, row.BoKey)
+		}
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	subtypesMap := make(map[string]map[string]models.SubtypeDefinition)
+	if len(parentKeys) > 0 {
+		regKeyMap := make(map[string]string)
+		for _, pk := range parentKeys {
+			regKey := strings.TrimPrefix(pk, "oms.")
+			regKey = strings.TrimPrefix(regKey, "altinv.")
+			regKey = strings.TrimPrefix(regKey, "cash_flow.")
+			regKey = strings.TrimPrefix(regKey, "master.")
+			regKeyMap[regKey] = pk
+		}
+		regKeys := make([]string, 0, len(regKeyMap))
+		for k := range regKeyMap {
+			regKeys = append(regKeys, k)
+		}
+
+		subQuery := `
+			SELECT sr.root_object, sr.subtype_code, sr.display_name, sr.is_active
+			FROM oms.subtype_registry sr
+			WHERE (sr.tenant_id = $1 OR sr.tenant_id = '00000000-0000-0000-0000-000000000001'::uuid)
+			  AND sr.root_object = ANY($2) AND sr.is_active = true
+			ORDER BY sr.root_object, sr.subtype_code
+		`
+		subRows, err := s.db.QueryxContext(ctx, subQuery, tenantID, regKeys)
+		if err == nil {
+			defer subRows.Close()
+			for subRows.Next() {
+				var rootObj, subCode, displayName string
+				var isActive bool
+				if err := subRows.Scan(&rootObj, &subCode, &displayName, &isActive); err == nil {
+					parentBOKey := regKeyMap[rootObj]
+					if subtypesMap[parentBOKey] == nil {
+						subtypesMap[parentBOKey] = make(map[string]models.SubtypeDefinition)
+					}
+					if _, exists := subtypesMap[parentBOKey][subCode]; !exists {
+						subtypesMap[parentBOKey][subCode] = models.SubtypeDefinition{
+							Key:           subCode,
+							Name:          subCode,
+							DisplayName:   displayName,
+							IsCore:        false,
+							BasedOnEntity: rootObj,
+							SubtypeFields: []models.FieldDefinition{},
+						}
+					}
+				}
+			}
+		}
+
+		// Also populate SubtypeFields for each subtype across all custom parent BOs
+		childFieldsQuery := `
+			SELECT
+				bof.id, bof.field_name, bof.field_role, bof.aggregation_type,
+				bof.binding_requirement, bof.eligibility_source, bof.is_exposed,
+				bof.subtype_scope, bof.inherits_defaults,
+				cn.node_name,
+				bo_child.bo_key
+			FROM business_objects bo_child
+			JOIN business_object_fields bof ON bof.bo_id = bo_child.id AND bof.tenant_id = bo_child.tenant_id
+			LEFT JOIN catalog_node cn ON cn.id = bof.term_node_id
+			WHERE bo_child.tenant_id = $1
+			  AND bo_child.bo_key LIKE ANY($2)
+			ORDER BY bo_child.bo_key, bof.field_name
+		`
+		childPatterns := make([]string, 0, len(parentKeys))
+		for _, pk := range parentKeys {
+			childPatterns = append(childPatterns, pk+"/%")
+		}
+		if childRows, err := s.db.QueryxContext(ctx, childFieldsQuery, tenantID, pq.Array(childPatterns)); err == nil {
+			defer childRows.Close()
+			for childRows.Next() {
+				var field models.FieldDefinition
+				var fieldRole, aggType, bindingReq, eligSrc, subtypeScope sql.NullString
+				var isExposed, inheritsDefaults sql.NullBool
+				var nodeName, childBoKey sql.NullString
+
+				if err := childRows.Scan(
+					&field.ID, &field.Name, &fieldRole, &aggType,
+					&bindingReq, &eligSrc, &isExposed, &subtypeScope, &inheritsDefaults,
+					&nodeName, &childBoKey,
+				); err != nil {
+					continue
+				}
+
+				field.Key = field.Name
+				if nodeName.Valid {
+					field.DisplayName = nodeName.String
+				} else {
+					field.DisplayName = field.Name
+				}
+				if fieldRole.Valid {
+					field.Role = models.FieldRole(fieldRole.String)
+				}
+
+				if childBoKey.Valid && strings.Contains(childBoKey.String, "/") {
+					parts := strings.Split(childBoKey.String, "/")
+					parentKey := parts[0]
+					subCode := parts[len(parts)-1]
+					if stMap, ok := subtypesMap[parentKey]; ok {
+						if stDef, exists := stMap[subCode]; exists {
+							stDef.SubtypeFields = append(stDef.SubtypeFields, field)
+							stMap[subCode] = stDef
+						}
+					}
+				}
+			}
+		}
+	}
+
+	for _, bo := range bos {
+		if sm, ok := subtypesMap[bo.Key]; ok {
+			bo.Subtypes = sm
+		} else {
+			bo.Subtypes = make(map[string]models.SubtypeDefinition)
+		}
+	}
+
 	return bos, nil
 }
 
@@ -1890,8 +2639,106 @@ func (s *BusinessObjectService) loadBOSubtypesAndFields(
 		}
 	}
 
+	// STRATEGY 3: Load subtype fields from business_object_fields joined to child BO.
+	// For each subtype in the registry, find the child BO by bo_key and read its fields.
+	// This replaces the old approach of synthesising FieldDefinition stubs from JSONB field_allowlist.
+	registryQuery := `
+		SELECT DISTINCT ON (root_object, subtype_code)
+		       sr.id, sr.tenant_id, sr.root_object, sr.subtype_code, sr.display_name, sr.field_allowlist, sr.is_active
+		FROM oms.subtype_registry sr
+		WHERE (sr.tenant_id::text = $1 OR sr.tenant_id::text = $2 OR sr.tenant_id = '00000000-0000-0000-0000-000000000001'::uuid)
+		  AND (LOWER(sr.root_object) = $3 OR LOWER(sr.root_object) = $4)
+		  AND sr.is_active = true
+		ORDER BY root_object, subtype_code
+	`
+	type RegistryRow struct {
+		ID             string          `db:"id"`
+		TenantID       string          `db:"tenant_id"`
+		RootObject     string          `db:"root_object"`
+		SubtypeCode    string          `db:"subtype_code"`
+		DisplayName    string          `db:"display_name"`
+		FieldAllowlist json.RawMessage `db:"field_allowlist"`
+		IsActive       bool            `db:"is_active"`
+	}
+
+	var regRows []RegistryRow
+	rootObjKey := strings.ToLower(bo.Key)
+	rootObjName := strings.ToLower(bo.Name)
+	if err := s.db.SelectContext(ctx, &regRows, registryQuery, viewTenantID, bo.TenantID, rootObjKey, rootObjName); err == nil {
+		for _, r := range regRows {
+			if _, exists := bo.Subtypes[r.SubtypeCode]; !exists {
+				// Find the child BO on the same tenant as the parent (or the gold-copy tenant)
+				childBOKey := "oms." + r.RootObject + "/" + r.SubtypeCode
+				var childBOID *string
+				_ = s.db.QueryRowContext(ctx, `
+					SELECT id::text FROM business_objects
+					 WHERE tenant_id = $1 AND bo_key = $2
+					 LIMIT 1
+				`, bo.TenantID, childBOKey).Scan(&childBOID)
+
+				var stFields []models.FieldDefinition
+				if childBOID != nil {
+					err := s.db.SelectContext(ctx, &stFields, `
+						SELECT id::text AS field_id,
+						       field_name  AS key,
+						       field_name  AS name,
+						       field_name  AS display_name,
+						       field_name  AS technical_name,
+						       'string'    AS type,
+						       COALESCE(is_exposed, true) AS is_exposed,
+						       COALESCE(subtype_scope, 'ALL') = UPPER($3) AS is_core,
+						       0           AS sequence
+						FROM business_object_fields
+						WHERE bo_id = $1::uuid
+						  AND tenant_id = $2::uuid
+						  AND (subtype_scope = UPPER($3) OR subtype_scope = 'ALL')
+						ORDER BY field_name
+					`, *childBOID, bo.TenantID, r.SubtypeCode)
+					if err != nil {
+						logging.GetLogger().Sugar().Warnf("Failed to load subtype fields for %s: %v", childBOKey, err)
+						stFields = nil
+					}
+				}
+
+				if len(stFields) == 0 {
+					// Fallback: build stubs from the field_allowlist JSONB
+					var allowedFields []string
+					if len(r.FieldAllowlist) > 0 {
+						_ = json.Unmarshal(r.FieldAllowlist, &allowedFields)
+					}
+					stFields = make([]models.FieldDefinition, 0, len(allowedFields))
+					for idx, fieldName := range allowedFields {
+						stFields = append(stFields, models.FieldDefinition{
+							ID:            uuid.New().String(),
+							Key:           fieldName,
+							Name:          fieldName,
+							DisplayName:   strings.Title(strings.ReplaceAll(fieldName, "_", " ")),
+							TechnicalName: fieldName,
+							Type:          "string",
+							IsCore:        false,
+							Sequence:      idx + 1,
+						})
+					}
+				}
+
+				bo.Subtypes[r.SubtypeCode] = models.SubtypeDefinition{
+					ID:            r.ID,
+					Key:           r.SubtypeCode,
+					Name:          r.DisplayName,
+					DisplayName:   r.DisplayName,
+					TechnicalName: r.SubtypeCode,
+					Description:   fmt.Sprintf("%s subtype for %s", r.DisplayName, bo.DisplayName),
+					IsCore:        true,
+					BasedOnEntity: bo.Key,
+					SubtypeFields: stFields,
+				}
+			}
+		}
+	}
+
 	// Load entity-level fields (non-subtype fields)
 	var entityFields []models.FieldDefinition
+
 
 	fieldQuery := `
 		SELECT id, key, name, COALESCE(display_name, name) AS display_name, COALESCE(technical_name, '') AS technical_name, type AS type,
@@ -2578,7 +3425,10 @@ func (s *BusinessObjectService) GetBusinessObjectRelationships(ctx context.Conte
 			COALESCE(e.properties->>'description', t.qualified_path, src.qualified_path, '') as description,
 			COALESCE(e.properties->>'join_condition', e.properties->>'description', '') as join_condition,
 			COALESCE(src.node_name, '') as source_driver_table,
-			COALESCE(t.node_name, '') as target_driver_table
+			COALESCE(t.node_name, '') as target_driver_table,
+			COALESCE(e.properties->>'scoped_subtype_key', '') as scoped_subtype_key,
+			COALESCE(e.properties->>'target_subtype_key', '') as target_subtype_key,
+			COALESCE(e.properties->>'satellite_join_condition', '') as satellite_join_condition
 		FROM catalog_edge e
 		LEFT JOIN catalog_node src ON e.source_node_id = src.id
 		LEFT JOIN catalog_node t ON e.target_node_id = t.id
@@ -3361,6 +4211,7 @@ func (s *BusinessObjectService) QueryBORecords(
 
 	// Clean table name
 	rawTable := drivingTable
+	rawTable = strings.TrimPrefix(rawTable, "/")
 	if idx := strings.LastIndex(rawTable, "."); idx >= 0 {
 		rawTable = rawTable[idx+1:]
 	}
@@ -3383,6 +4234,21 @@ func (s *BusinessObjectService) QueryBORecords(
 		}
 		if col != "" {
 			columnNames = append(columnNames, col)
+		}
+	}
+
+	// Include subtype-specific fields in projection when subtype filter is active
+	if req.SubtypeKey != "" {
+		if st, ok := bo.Subtypes[req.SubtypeKey]; ok {
+			for _, f := range st.SubtypeFields {
+				col := f.TechnicalName
+				if col == "" {
+					col = f.Name
+				}
+				if col != "" {
+					columnNames = append(columnNames, col)
+				}
+			}
 		}
 	}
 
@@ -3464,6 +4330,13 @@ func (s *BusinessObjectService) QueryBORecords(
 			args = append(args, fmt.Sprintf("%%%s%%", req.Search))
 			argIdx++
 		}
+	}
+
+	// Subtype key filter — supports STI subtype partitioned records
+	if req.SubtypeKey != "" {
+		whereClauses = append(whereClauses, fmt.Sprintf("subtype_code = $%d", argIdx))
+		args = append(args, req.SubtypeKey)
+		argIdx++
 	}
 
 	whereSQL := strings.Join(whereClauses, " AND ")

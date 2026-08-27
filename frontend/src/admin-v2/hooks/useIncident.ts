@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { api } from "../api";
+import { api } from "@/admin-v2/api";
 import { OpsEvent, OpsIncident, IncidentResponse } from "./useOpsTimeline";
 
 /**

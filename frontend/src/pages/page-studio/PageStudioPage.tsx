@@ -1,38 +1,24 @@
 import React, { useState, useEffect } from 'react';
-import { Box, Button, Chip, Divider, IconButton, List, ListItem, ListItemButton, ListItemIcon, ListItemText, Paper, Typography } from '@mui/material';
+import { Box, Button, Divider, IconButton, List, ListItemButton, ListItemIcon, ListItemText, Paper, Typography } from '@mui/material';
 import { 
     Dashboard as PageIcon, 
     Add as AddIcon, 
-    Layers as OverlayIcon, 
-    Speed as PerformanceIcon, 
-    History as HistoryIcon,
     ArrowForwardIos as ChevronIcon,
-    Save as SaveIcon, 
-    PlayArrow as PreviewIcon, 
-    AccountTree as LineageIcon, 
-    Rule as ReviewIcon,
-    Palette as PaletteIcon,
-    Settings as SettingsIcon,
-    Delete as DeleteIcon,
-    LinkOff as UnbindIcon,
-    Api as ApiIcon,
-    Storage as GqlIcon,
-    AutoAwesome as AiIcon
 } from '@mui/icons-material';
-import { CorePageDefinition, ComponentDefinition, DataSourceDefinition } from '../../types/pageStudio';
+import { CorePageDefinition } from '../../types/pageStudio';
 import { PageStudioApi } from '../../api/pageStudio';
 import PageEditor from './PageEditor';
-import { AIGeneratorWizard } from './AIGeneratorWizard';
-import { TenantUpgradeAssistant } from './TenantUpgradeAssistant';
-import { TenantBrandingEditor } from './TenantBrandingEditor';
-import { Upgrade as UpgradeIcon } from '@mui/icons-material';
+import { UnifiedBOPickerModal } from '../../components/common/UnifiedBOPickerModal';
+import { extractAllBOFields } from '../../components/reporting/BOFieldsPalette';
+import type { BusinessObjectSummary } from '../../features/data-explorer/types/dataExplorerTypes';
 
 const PageStudioPage: React.FC = () => {
     const [pages, setPages] = useState<CorePageDefinition[]>([]);
     const [selectedPage, setSelectedPage] = useState<CorePageDefinition | null>(null);
+    const [selectedBO, setSelectedBO] = useState<any>(null);
+    const [selectedSubtypeKey, setSelectedSubtypeKey] = useState<string | null>(null);
     const [loading, setLoading] = useState(true);
-    const [wizardOpen, setWizardOpen] = useState(false);
-    const [view, setView] = useState<'editor' | 'upgrades' | 'branding'>('editor');
+    const [boPickerOpen, setBoPickerOpen] = useState(false);
 
     const env = 'production'; // Mock
 
@@ -51,28 +37,64 @@ const PageStudioPage: React.FC = () => {
         }
     };
 
-    const handleCreatePage = () => {
-        const newPage: Partial<CorePageDefinition> = {
-            name: 'New Page',
-            slug: 'new-page',
-            env,
-            layout: { root: 'root', nodes: { 'root': { id: 'root', type: 'Row', children: [] } } },
-            components: {},
-            dataBindings: { sources: {}, bindings: [] },
-            visibility: { roles: ['advisor'] },
-            version: 1,
-        };
-        setSelectedPage(newPage as CorePageDefinition);
+    const handleOpenBOPicker = () => {
+        setBoPickerOpen(true);
     };
 
-    const handleAIGenerated = (result: any) => {
+    const handleBOPicked = async (
+        bo: BusinessObjectSummary,
+        bindingId?: string,
+        selectedRelatedBOs?: string[],
+        bindingDetails?: any,
+        subtypeKey?: string | null
+    ) => {
+        setBoPickerOpen(false);
+        setSelectedSubtypeKey(subtypeKey || null);
+
+        let initialBOObj: any = { ...bo, selectedSubtypeKey: subtypeKey || null };
+        try {
+            const res = await fetch(`/api/business-objects/${encodeURIComponent(bo.id)}/with_bindings`);
+            if (res.ok) {
+                const fullBO = await res.json();
+                initialBOObj = {
+                    ...bo,
+                    ...fullBO,
+                    selectedSubtypeKey: subtypeKey || null,
+                };
+            }
+        } catch {}
+
+        setSelectedBO(initialBOObj);
+
+        const boKey = (bo.name || bo.id).toLowerCase();
+        const initialFields = extractAllBOFields(initialBOObj, subtypeKey || 'all');
+
         const newPage: Partial<CorePageDefinition> = {
-            name: 'Generated Page',
-            slug: 'generated-' + Math.random().toString(36).substring(7),
+            name: `${bo.displayName || bo.name} Workspace`,
+            slug: `${boKey}-workspace-${Date.now().toString(36).slice(-4)}`,
             env,
-            layout: result.layout,
-            components: result.components,
-            dataBindings: result.dataBindings,
+            layout: { 
+                root: 'root', 
+                nodes: { 
+                    'root': { id: 'root', type: 'Row', children: [`form_${boKey}`] } 
+                } 
+            },
+            components: {
+                [`form_${boKey}`]: {
+                    id: `form_${boKey}`,
+                    type: 'BO_FORM',
+                    props: {
+                        boKey: boKey,
+                        subtypeKey: subtypeKey || undefined,
+                        bindingId: bindingId,
+                        relatedBOs: selectedRelatedBOs || [],
+                        fields: initialFields,
+                        title: `${bo.displayName || bo.name} ${subtypeKey ? `(${subtypeKey})` : ''} Form`,
+                    }
+                }
+            },
+            dataBindings: { sources: {}, bindings: [] },
+            visibility: { roles: ['advisor'] },
             version: 1,
         };
         setSelectedPage(newPage as CorePageDefinition);
@@ -84,7 +106,7 @@ const PageStudioPage: React.FC = () => {
             <Paper elevation={0} sx={{ width: 300, borderRight: '1px solid rgba(0,0,0,0.05)', display: 'flex', flexDirection: 'column' }}>
                 <Box sx={{ p: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <Typography variant="h6" fontWeight="bold">Page Studio</Typography>
-                    <IconButton onClick={handleCreatePage} color="primary" size="small">
+                    <IconButton onClick={handleOpenBOPicker} color="primary" size="small" title="Create New Page">
                         <AddIcon />
                     </IconButton>
                 </Box>
@@ -94,7 +116,17 @@ const PageStudioPage: React.FC = () => {
                         <ListItemButton  
                             key={page.id} 
                             selected={selectedPage?.id === page.id}
-                            onClick={() => setSelectedPage(page)}
+                            onClick={() => {
+                                setSelectedPage(page);
+                                // If page has a BO component, attempt to load its BO definition
+                                const firstBOComp = Object.values(page.components || {}).find((c) => c.props?.boKey);
+                                if (firstBOComp?.props?.boKey) {
+                                    fetch(`/api/business-objects/${encodeURIComponent(firstBOComp.props.boKey)}/with_bindings`)
+                                        .then(r => r.ok ? r.json() : null)
+                                        .then(fullBO => { if (fullBO) setSelectedBO(fullBO); })
+                                        .catch(() => {});
+                                }
+                            }}
                             sx={{ 
                                 mb: 0.5, 
                                 mx: 1, 
@@ -115,80 +147,38 @@ const PageStudioPage: React.FC = () => {
                         </ListItemButton>
                     ))}
                 </List>
-                <Box sx={{ p: 2 }}>
-                    <Button 
-                        fullWidth 
-                        variant="contained" 
-                        color="primary"
-                        startIcon={<AiIcon />} 
-                        size="small" 
-                        sx={{ mb: 1, background: 'linear-gradient(45deg, #3b82f6 30%, #6366f1 90%)' }}
-                        onClick={() => setWizardOpen(true)}
-                    >
-                        Generate with AI
-                    </Button>
-                    <Button 
-                        fullWidth 
-                        variant="outlined" 
-                        startIcon={<UpgradeIcon />} 
-                        size="small"
-                        onClick={() => setView('upgrades')}
-                        sx={{ mb: 1, textTransform: 'none', borderStyle: 'dashed' }}
-                    >
-                        Upgrade Assistant
-                    </Button>
-                    <Button 
-                        fullWidth 
-                        variant="outlined" 
-                        startIcon={<PaletteIcon />} 
-                        size="small"
-                        onClick={() => setView('branding')}
-                        sx={{ mb: 1 }}
-                    >
-                        Tenant Branding
-                    </Button>
-                    <Button 
-                        fullWidth 
-                        variant="outlined" 
-                        startIcon={<OverlayIcon />} 
-                        size="small"
-                        onClick={() => setView('editor')}
-                    >
-                        Page Editor
-                    </Button>
-                </Box>
             </Paper>
 
             {/* Main Area */}
             <Box sx={{ flex: 1, overflow: 'hidden', position: 'relative' }}>
-                {view === 'upgrades' ? (
-                    <TenantUpgradeAssistant />
-                ) : view === 'branding' ? (
-                    <TenantBrandingEditor />
-                ) : selectedPage ? (
+                {selectedPage ? (
                     <PageEditor 
                         page={selectedPage} 
+                        selectedBO={selectedBO}
+                        selectedSubtypeKey={selectedSubtypeKey}
                         onSave={(updated: CorePageDefinition) => {
                             setSelectedPage(updated);
                             loadPages();
                         }}
                     />
                 ) : (
-                    <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', opacity: 0.5 }}>
-                        <PageIcon sx={{ fontSize: 64, mb: 2 }} />
-                        <Typography variant="h6">Select a page to start building</Typography>
-                        <Button startIcon={<AddIcon />} variant="contained" sx={{ mt: 2 }} onClick={handleCreatePage}>
+                    <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', opacity: 0.7 }}>
+                        <PageIcon sx={{ fontSize: 64, mb: 2, color: '#94A3B8' }} />
+                        <Typography variant="h6" fontWeight={600} color="#334155">Select a page or create a new one</Typography>
+                        <Typography variant="body2" color="#64748B" sx={{ mb: 2 }}>Choose a Business Object to generate your layout with fields palette</Typography>
+                        <Button startIcon={<AddIcon />} variant="contained" onClick={handleOpenBOPicker} sx={{ fontWeight: 700, textTransform: 'none' }}>
                             Create New Page
                         </Button>
                     </Box>
                 )}
             </Box>
 
-            <AIGeneratorWizard 
-                open={wizardOpen} 
-                onClose={() => setWizardOpen(false)} 
-                onGenerated={handleAIGenerated}
-                tenantId="default"
+            <UnifiedBOPickerModal
+                open={boPickerOpen}
+                context="page"
+                onClose={() => setBoPickerOpen(false)}
+                onPick={handleBOPicked}
+                onSelect={handleBOPicked}
             />
         </Box>
     );

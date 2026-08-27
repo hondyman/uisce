@@ -229,7 +229,7 @@ export const UisceMarketplacePage: React.FC = () => {
       ) : (
         <Grid container spacing={3}>
           {filteredItems.map((item) => (
-            <Grid item xs={12} sm={6} md={4} key={item.id}>
+            <Grid    key={item.id} size={{ xs: 12, sm: 6, md: 4 }}>
               <Card
                 sx={{
                   height: '100%',

@@ -140,11 +140,13 @@ func AuthContextMiddleware(secMgr *services.SecurityManager) func(http.Handler) 
 
 						ctx := identity.WithActorTenant(r.Context(), uid, tenantID)
 						ctx = security.WithAuthInfo(ctx, security.AuthInfo{
-							UserID:        uid,
-							Roles:         normalizeStringList(jclaims.Roles),
-							TenantIDs:     tenantIDs,
-							IsGlobalAdmin: isGlobalAdmin,
-							RawClaims:     jclaims,
+							UserID:              uid,
+							Roles:               normalizeStringList(jclaims.Roles),
+							TenantIDs:           tenantIDs,
+							IsGlobalAdmin:       isGlobalAdmin,
+							RawClaims:           jclaims,
+							AllowedDatasources:  jclaims.AllowedDatasources,
+							AllowedBindings:     jclaims.AllowedBindings,
 						})
 							r = r.WithContext(ctx)
 						}

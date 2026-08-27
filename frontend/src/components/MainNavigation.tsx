@@ -422,13 +422,13 @@ const categoryConfigs: CategoryConfig[] = [
   },
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // CONSUME - Reporting, analytics, and dashboards
+  // CONSUME - Database exploration and querying
   // ═══════════════════════════════════════════════════════════════════════════
   {
     label: 'Consume',
     key: 'entity',
     icon: <AssessmentIcon />,
-    defaultPath: '/reports/library',
+    defaultPath: '/data-explorer',
     color: {
       primary: '#FF9800',
       light: '#FFF3E0',
@@ -437,34 +437,12 @@ const categoryConfigs: CategoryConfig[] = [
     },
     menus: [
       {
-        label: 'Reports',
-        icon: <AssessmentIcon />,
+        label: 'Explorer',
+        icon: <StorageIcon />,
         items: [
-          { label: 'Report Library', path: '/reports/library', icon: <AssessmentIcon />, description: 'Saved reports' },
-          { label: 'Report Builder', path: '/reports/builder', icon: <BuildIcon />, description: 'Create reports' },
-          { label: 'Data Explorer', path: '/reports/queries', icon: <StorageIcon />, description: 'Query builder', badge: { label: 'New', color: 'success' } },
-          { label: 'Semantic Models', path: '/reports/models', icon: <CategoryIcon />, description: 'Data models' },
-        ]
-      },
-      {
-        label: 'Analytics',
-        icon: <TimelineIcon />,
-        items: [
-          { label: 'Factor Analytics', path: '/analytics/factors', icon: <AssessmentIcon />, description: 'Factor exposure' },
-          { label: 'Fixed Income', path: '/fixed-income', icon: <TimelineIcon />, description: 'Bond analytics' },
-          { label: 'Private Markets', path: '/private-markets', icon: <BusinessIcon />, description: 'PE/VC analytics' },
-        ]
-      },
-      {
-        label: 'Dashboards',
-        icon: <AssessmentIcon />,
-        items: [
-          { label: 'Advisor Dashboard', path: '/analytics/advisor-dashboard', icon: <SupervisorAccountIcon />, description: 'Advisor view' },
-          { label: 'Portfolio Master', path: '/analytics/portfolio-master', icon: <PortfolioIcon />, description: 'Gold copy & performance' },
-          { label: 'Security Master', path: '/analytics/security-master', icon: <AssessmentIcon />, description: 'Instrument MDM & lineage' },
-          { label: 'Crypto Portfolio', path: '/crypto/portfolio', icon: <TimelineIcon />, description: 'Digital assets' },
-          { label: 'Wealth Feed', path: '/wealth/feed', icon: <NotificationsIcon />, description: 'Activity feed' },
-          { label: 'Fabric Dashboard', path: '/fabric/dashboard', icon: <AssessmentIcon />, description: 'General dashboard view' },
+          { label: 'Query Explorer', path: '/data-explorer', icon: <StorageIcon />, description: 'Self-service query playground' },
+          { label: 'Report Explorer Builder', path: '/reports/builder', icon: <BuildIcon />, description: 'Create reports' },
+          { label: 'AI Explorer', path: '/ai-explorer', icon: <AIIcon />, description: 'AI-powered data explorer', badge: { label: 'AI', color: 'info' } },
         ]
       }
     ]

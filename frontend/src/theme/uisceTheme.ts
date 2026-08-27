@@ -31,7 +31,6 @@ declare module '@mui/material/styles' {
     categoryStudio:     Palette['primary'];
     categoryOperations: Palette['primary'];
     categoryIntelligence: Palette['primary'];
-    categoryConsume:   Palette['primary'];
     categoryCalendar:   Palette['primary'];
   }
   interface PaletteOptions {
@@ -42,7 +41,6 @@ declare module '@mui/material/styles' {
     categoryStudio?:    PaletteOptions['primary'];
     categoryOperations?: PaletteOptions['primary'];
     categoryIntelligence?: PaletteOptions['primary'];
-    categoryConsume?:   PaletteOptions['primary'];
     categoryCalendar?:  PaletteOptions['primary'];
   }
 }
@@ -115,7 +113,6 @@ export function createUisceTheme(mode: 'light' | 'dark'): Theme {
     categoryStudio:      mode === 'light' ? categoryLight('studio')     : categoryDark('studio'),
     categoryOperations:  mode === 'light' ? categoryLight('operations') : categoryDark('operations'),
     categoryIntelligence:mode === 'light' ? categoryLight('intelligence'): categoryDark('intelligence'),
-    categoryConsume:     mode === 'light' ? categoryLight('consume')     : categoryDark('consume'),
     categoryCalendar:    mode === 'light' ? categoryLight('calendar')    : categoryDark('calendar'),
   };
 

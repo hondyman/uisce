@@ -24,8 +24,13 @@ type JWTClaims struct {
 	jwt.RegisteredClaims
 }
 
-// ExtractToken extracts the JWT token from the Authorization header
+// ExtractToken extracts the JWT token strictly from the Authorization header (GSIFI compliance)
 func ExtractToken(r *http.Request) (string, error) {
+	// GSIFI Mandate: Reject any authentication credentials attempted via URL query strings or cookies in cleartext
+	if r.URL.Query().Get("token") != "" || r.URL.Query().Get("access_token") != "" || r.URL.Query().Get("jwt") != "" {
+		return "", errors.New("GSIFI compliance violation: transmitting authentication tokens via URL query parameters is prohibited")
+	}
+
 	authHeader := r.Header.Get("Authorization")
 	if authHeader == "" {
 		return "", errors.New("missing authorization header")
@@ -36,7 +41,7 @@ func ExtractToken(r *http.Request) (string, error) {
 		return "", errors.New("invalid authorization header format")
 	}
 
-	token := parts[1]
+	token := strings.TrimSpace(parts[1])
 	if token == "" {
 		return "", errors.New("empty token")
 	}
@@ -44,16 +49,21 @@ func ExtractToken(r *http.Request) (string, error) {
 	return token, nil
 }
 
-// ValidateToken validates a JWT token and returns the claims
+// ValidateToken validates a JWT token and returns the claims with strict signature checks
 func ValidateToken(tokenString string) (*JWTClaims, error) {
 	secret := os.Getenv("JWT_SECRET")
 	if secret == "" {
 		return nil, errors.New("JWT_SECRET not configured")
 	}
 
+	// GSIFI Minimum Entropy Rule: Secret must be at least 32 characters (256 bits) in production
+	if os.Getenv("ENV") == "production" && len(secret) < 32 {
+		return nil, errors.New("GSIFI compliance violation: JWT_SECRET must have at least 256 bits of entropy in production")
+	}
+
 	claims := &JWTClaims{}
 	token, err := jwt.ParseWithClaims(tokenString, claims, func(token *jwt.Token) (interface{}, error) {
-		// Verify signing method
+		// Strict signing method enforcement: prevent 'none' or asymmetric mismatch attacks
 		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
 			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
 		}
@@ -67,6 +77,11 @@ func ValidateToken(tokenString string) (*JWTClaims, error) {
 
 	if !token.Valid {
 		return nil, errors.New("invalid token")
+	}
+
+	// GSIFI Inactive User Check
+	if !claims.IsActive && claims.UserID != "" {
+		return nil, errors.New("user account is inactive or disabled")
 	}
 
 	return claims, nil
@@ -84,13 +99,17 @@ func ValidateTokenFromRequest(r *http.Request) (*JWTClaims, error) {
 
 // ValidateTenantAccess checks if the user has access to the requested tenant
 func ValidateTenantAccess(claims *JWTClaims, requestedTenantID string) error {
+	if requestedTenantID == "" {
+		return errors.New("requested tenant_id cannot be empty")
+	}
+
 	// Admin users can access any tenant
 	if claims.IsCoreAdmin {
 		return nil
 	}
 
 	// Check if user's tenant IDs include the requested tenant
-	if requestedTenantID != "" && requestedTenantID == claims.TenantID {
+	if requestedTenantID == claims.TenantID {
 		return nil
 	}
 
@@ -106,12 +125,10 @@ func ValidateTenantAccess(claims *JWTClaims, requestedTenantID string) error {
 
 // HasRole checks if the user has a specific role
 func HasRole(claims *JWTClaims, role string) bool {
-	// Admin users have all roles
 	if claims.IsCoreAdmin {
 		return true
 	}
 
-	// Check roles array
 	for _, r := range claims.Roles {
 		if r == role {
 			return true

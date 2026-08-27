@@ -1,4 +1,21 @@
 import React, { useState } from 'react';
+import { useTheme } from '@mui/material/styles';
+import Box from '@mui/material/Box';
+import Typography from '@mui/material/Typography';
+import Button from '@mui/material/Button';
+import TextField from '@mui/material/TextField';
+import Paper from '@mui/material/Paper';
+import Table from '@mui/material/Table';
+import TableBody from '@mui/material/TableBody';
+import TableCell from '@mui/material/TableCell';
+import TableContainer from '@mui/material/TableContainer';
+import TableHead from '@mui/material/TableHead';
+import TableRow from '@mui/material/TableRow';
+import Radio from '@mui/material/Radio';
+import RadioGroup from '@mui/material/RadioGroup';
+import FormControlLabel from '@mui/material/FormControlLabel';
+import FormControl from '@mui/material/FormControl';
+import FormLabel from '@mui/material/FormLabel';
 import { devDebug } from '../../../utils/devLogger';
 
 interface AggregateDefinition {
@@ -11,6 +28,7 @@ interface AggregateDefinition {
 }
 
 export const AggregateDesignerPage: React.FC = () => {
+  const theme = useTheme();
   const [definition, setDefinition] = useState<AggregateDefinition>({
     name: '',
     sourceTable: 'trades',
@@ -44,7 +62,6 @@ export const AggregateDesignerPage: React.FC = () => {
 
       const result = await response.json();
       
-      // Update UI with generated artifacts returned from backend
       if (result.starrocks_sql) setGeneratedSQL(result.starrocks_sql);
       if (result.cube_schema) setGeneratedCube(result.cube_schema);
 
@@ -76,7 +93,6 @@ export const AggregateDesignerPage: React.FC = () => {
     } catch (err: any) {
       setError(err.message);
       console.error('Preview failed:', err);
-      // Fallback for demo if API is not yet live
       setPreviewData([
           { desk_id: 'DESK-A', total_pnl: 1234.56, note: 'Mock Data (API Failed)' },
           { desk_id: 'DESK-B', total_pnl: 987.65, note: 'Mock Data (API Failed)' },
@@ -87,150 +103,161 @@ export const AggregateDesignerPage: React.FC = () => {
   };
 
   return (
-    <div className="p-6 bg-gray-50 min-h-screen">
-      <h1 className="text-2xl font-bold mb-6 text-gray-800">Aggregate Designer (Dual-Mode)</h1>
+    <Box sx={{ p: 3, bgcolor: theme.palette.background.default, minHeight: '100vh' }}>
+      <Typography variant="h5" sx={{ fontWeight: 600, mb: 3, color: theme.palette.text.primary }}>
+        Aggregate Designer (Dual-Mode)
+      </Typography>
       
       {error && (
-        <div className="mb-4 p-4 bg-red-100 text-red-700 rounded-md">
+        <Paper sx={{ mb: 3, p: 2, bgcolor: theme.palette.error.light, color: theme.palette.error.dark }}>
           Error: {error}
-        </div>
+        </Paper>
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Designer Panel */}
-        <div className="bg-white p-6 rounded-lg shadow-md">
-          <h2 className="text-xl font-semibold mb-4">Definition</h2>
+      <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', lg: '1fr 1fr' }, gap: 3, bgcolor: theme.palette.background.paper }}>
+        <Paper sx={{ p: 3 }}>
+          <Typography variant="h6" sx={{ fontWeight: 600, mb: 2 }}>
+            Definition
+          </Typography>
           
-          <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700">Aggregate Name</label>
-              <input 
-                type="text" 
-                className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
-                value={definition.name}
-                onChange={(e) => setDefinition({...definition, name: e.target.value})}
-                placeholder="e.g., daily_pnl_by_desk"
-              />
-            </div>
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+            <TextField
+              label="Aggregate Name"
+              value={definition.name}
+              onChange={(e) => setDefinition({...definition, name: e.target.value})}
+              placeholder="e.g., daily_pnl_by_desk"
+              fullWidth
+              size="small"
+            />
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700">Source Table</label>
+            <FormControl fullWidth size="small">
+              <FormLabel>Source Table</FormLabel>
               <select 
-                className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
                 value={definition.sourceTable}
                 onChange={(e) => setDefinition({...definition, sourceTable: e.target.value})}
+                sx={{ 
+                  padding: '8px', 
+                  borderRadius: 4, 
+                  border: `1px solid ${theme.palette.divider}`,
+                  width: '100%'
+                }}
               >
                 <option value="trades">trades</option>
                 <option value="compliance_events">compliance_events</option>
               </select>
-            </div>
+            </FormControl>
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700">Dimensions (Comma separated)</label>
-              <input 
-                type="text" 
-                className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
-                placeholder="desk_id, trade_date"
-                onChange={(e) => setDefinition({...definition, dimensions: e.target.value.split(',').map(s => s.trim())})}
-              />
-            </div>
+            <TextField
+              label="Dimensions (Comma separated)"
+              placeholder="desk_id, trade_date"
+              onChange={(e) => setDefinition({...definition, dimensions: e.target.value.split(',').map(s => s.trim())})}
+              fullWidth
+              size="small"
+            />
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700">Measures (Comma separated)</label>
-              <input 
-                type="text" 
-                className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
-                placeholder="SUM(pnl), AVG(price)"
-                onChange={(e) => setDefinition({...definition, measures: e.target.value.split(',').map(s => s.trim())})}
-              />
-            </div>
+            <TextField
+              label="Measures (Comma separated)"
+              placeholder="SUM(pnl), AVG(price)"
+              onChange={(e) => setDefinition({...definition, measures: e.target.value.split(',').map(s => s.trim())})}
+              fullWidth
+              size="small"
+            />
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700">Deployment Target</label>
-              <div className="mt-2 space-x-4">
-                <label className="inline-flex items-center">
-                  <input type="radio" className="form-radio" name="target" value="StarRocks" checked={definition.target === 'StarRocks'} onChange={() => setDefinition({...definition, target: 'StarRocks'})} />
-                  <span className="ml-2">StarRocks (Lakehouse)</span>
-                </label>
-                <label className="inline-flex items-center">
-                  <input type="radio" className="form-radio" name="target" value="Cube" checked={definition.target === 'Cube'} onChange={() => setDefinition({...definition, target: 'Cube'})} />
-                  <span className="ml-2">Cube (Semantic)</span>
-                </label>
-                <label className="inline-flex items-center">
-                  <input type="radio" className="form-radio" name="target" value="Both" checked={definition.target === 'Both'} onChange={() => setDefinition({...definition, target: 'Both'})} />
-                  <span className="ml-2">Both</span>
-                </label>
-              </div>
-            </div>
+            <FormControl>
+              <FormLabel>Deployment Target</FormLabel>
+              <RadioGroup
+                row
+                value={definition.target}
+                onChange={(e) => setDefinition({...definition, target: e.target.value as any})}
+              >
+                <FormControlLabel value="StarRocks" control={<Radio size="small" />} label="StarRocks (Lakehouse)" />
+                <FormControlLabel value="Cube" control={<Radio size="small" />} label="Cube (Semantic)" />
+                <FormControlLabel value="Both" control={<Radio size="small" />} label="Both" />
+              </RadioGroup>
+            </FormControl>
 
-            <div className="flex space-x-3 pt-4">
-                <button 
+            <Box sx={{ display: 'flex', gap: 2, pt: 2 }}>
+                <Button 
+                  variant="outlined"
                   onClick={handlePreview} 
                   disabled={loading}
-                  className={`px-4 py-2 rounded ${loading ? 'bg-gray-300' : 'bg-blue-100 text-blue-700 hover:bg-blue-200'}`}
+                  sx={{ 
+                    bgcolor: loading ? theme.palette.action.hover : theme.palette.primary.light,
+                    color: loading ? theme.palette.action.disabled : theme.palette.primary.main,
+                    '&:hover': { bgcolor: theme.palette.primary.main }
+                  }}
                 >
                   {loading ? 'Loading...' : 'Preview Results'}
-                </button>
-                <button 
+                </Button>
+                <Button 
+                  variant="contained"
                   onClick={handleSave} 
                   disabled={loading}
-                  className={`px-4 py-2 rounded ${loading ? 'bg-gray-300' : 'bg-blue-600 text-white hover:bg-blue-700'}`}
+                  sx={{ 
+                    bgcolor: loading ? theme.palette.action.hover : theme.palette.primary.main,
+                    '&:hover': { bgcolor: theme.palette.primary.dark }
+                  }}
                 >
                   {loading ? 'Saving...' : 'Save Aggregate'}
-                </button>
-            </div>
-          </div>
-        </div>
+                </Button>
+            </Box>
+          </Box>
+        </Paper>
 
-        {/* Preview & Output Panel */}
-        <div className="space-y-6">
-            {/* Preview */}
-            <div className="bg-white p-6 rounded-lg shadow-md">
-                <h2 className="text-xl font-semibold mb-4">Preview</h2>
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+            <Paper sx={{ p: 3 }}>
+                <Typography variant="h6" sx={{ fontWeight: 600, mb: 2 }}>
+                    Preview
+                </Typography>
                 {previewData.length > 0 ? (
-                    <table className="min-w-full divide-y divide-gray-200">
-                        <thead className="bg-gray-50">
-                            <tr>
-                                {Object.keys(previewData[0]).map(k => (
-                                    <th key={k} className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{k}</th>
-                                ))}
-                            </tr>
-                        </thead>
-                        <tbody className="bg-white divide-y divide-gray-200">
-                            {previewData.map((row, i) => (
-                                <tr key={i}>
-                                    {Object.values(row).map((v: any, j) => (
-                                        <td key={j} className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{v}</td>
+                    <TableContainer>
+                        <Table size="small">
+                            <TableHead>
+                                <TableRow sx={{ bgcolor: theme.palette.action.hover }}>
+                                    {Object.keys(previewData[0]).map(k => (
+                                        <TableCell key={k} sx={{ fontWeight: 600, color: theme.palette.text.secondary, fontSize: '0.75rem' }}>{k}</TableCell>
                                     ))}
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
+                                </TableRow>
+                            </TableHead>
+                            <TableBody>
+                                {previewData.map((row, i) => (
+                                    <TableRow key={i}>
+                                        {Object.values(row).map((v: any, j) => (
+                                            <TableCell key={j} sx={{ fontSize: '0.875rem', color: theme.palette.text.secondary }}>{v}</TableCell>
+                                        ))}
+                                    </TableRow>
+                                ))}
+                            </TableBody>
+                        </Table>
+                    </TableContainer>
                 ) : (
-                    <p className="text-gray-500 italic">Run preview to see sample data.</p>
+                    <Typography sx={{ color: theme.palette.text.secondary, fontStyle: 'italic' }}>
+                        Run preview to see sample data.
+                    </Typography>
                 )}
-            </div>
+            </Paper>
 
-            {/* Generated Artifacts */}
             {(generatedSQL || generatedCube) && (
-                <div className="bg-gray-800 text-gray-100 p-6 rounded-lg shadow-md font-mono text-sm overflow-auto">
-                    <h2 className="text-xl font-semibold mb-4 text-white">Generated Artifacts</h2>
+                <Paper sx={{ p: 3, bgcolor: theme.palette.background.paper, color: theme.palette.text.primary, fontFamily: 'monospace', fontSize: '0.875rem', overflow: 'auto' }}>
+                    <Typography variant="h6" sx={{ fontWeight: 600, mb: 2, color: theme.palette.text.primary }}>
+                        Generated Artifacts
+                    </Typography>
                     {generatedSQL && (
-                        <div className="mb-4">
-                            <h3 className="text-green-400 mb-2">StarRocks SQL (Iceberg)</h3>
+                        <Box sx={{ mb: 2 }}>
+                            <Typography sx={{ color: theme.palette.success.main, mb: 1 }}>StarRocks SQL (Iceberg)</Typography>
                             <pre>{generatedSQL}</pre>
-                        </div>
+                        </Box>
                     )}
                     {generatedCube && (
-                        <div>
-                            <h3 className="text-purple-400 mb-2">Cube Schema</h3>
+                        <Box>
+                            <Typography sx={{ color: theme.palette.error.main, mb: 1 }}>Cube Schema</Typography>
                             <pre>{generatedCube}</pre>
-                        </div>
+                        </Box>
                     )}
-                </div>
+                </Paper>
             )}
-        </div>
-      </div>
-    </div>
+        </Box>
+      </Box>
+    </Box>
   );
 };

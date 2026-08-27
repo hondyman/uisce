@@ -1,4 +1,4 @@
-import { api } from "../api";
+import { api } from "@/admin-v2/api";
 
 export interface ETLRun {
     id: string;

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   Box,
   Typography,
@@ -25,6 +25,8 @@ import {
   Chip,
   FormControlLabel,
   Switch,
+  MenuItem,
+  Divider,
 } from '@mui/material';
 import {
   Search as SearchIcon,
@@ -42,9 +44,10 @@ import apiClient from '../../../../utils/apiClient';
 
 interface RecordsCrudTabProps {
   businessObject: any;
+  selectedSubtypeKey?: string | null;
 }
 
-export function RecordsCrudTab({ businessObject }: RecordsCrudTabProps) {
+export function RecordsCrudTab({ businessObject, selectedSubtypeKey }: RecordsCrudTabProps) {
   const notification = useNotification();
   const { tenant } = useTenant();
   const tenantId = tenant?.id || '';
@@ -60,6 +63,14 @@ export function RecordsCrudTab({ businessObject }: RecordsCrudTabProps) {
   const [execTimeMs, setExecTimeMs] = useState<number | null>(null);
   const [driverTable, setDriverTable] = useState('');
 
+  // Subtype filter
+  const [activeSubtype, setActiveSubtype] = useState<string>(selectedSubtypeKey || 'all');
+
+  // Sync activeSubtype when selectedSubtypeKey prop changes
+  useEffect(() => {
+    setActiveSubtype(selectedSubtypeKey || 'all');
+  }, [selectedSubtypeKey]);
+
   // Time Travel
   const [isTimeTravelEnabled, setIsTimeTravelEnabled] = useState(false);
   const [asOfDate, setAsOfDate] = useState<string>('');
@@ -72,12 +83,21 @@ export function RecordsCrudTab({ businessObject }: RecordsCrudTabProps) {
   const [formData, setFormData] = useState<Record<string, any>>({});
   const [submitting, setSubmitting] = useState(false);
 
-  // Available Fields
-  const fields = [
-    ...(businessObject?.coreFields || []),
-    ...(businessObject?.customFields || []),
-    ...(businessObject?.config?.fields || []),
-  ];
+  // Merged field list — includes subtype-specific fields when a subtype is active
+  const allSubtypeFields = useMemo(() => {
+    const base = [
+      ...(businessObject?.coreFields || []),
+      ...(businessObject?.customFields || []),
+      ...(businessObject?.config?.fields || []),
+    ];
+    if (activeSubtype && activeSubtype !== 'all' && businessObject?.subtypes?.[activeSubtype]) {
+      const stFields = businessObject.subtypes[activeSubtype].subtypeFields || [];
+      return [...base, ...stFields];
+    }
+    return base;
+  }, [businessObject, activeSubtype]);
+
+  const fields = allSubtypeFields;
 
   const fetchRecords = useCallback(async () => {
     if (!businessObject?.id) return;
@@ -91,6 +111,9 @@ export function RecordsCrudTab({ businessObject }: RecordsCrudTabProps) {
       if (search.trim()) params.append('search', search.trim());
       if (isTimeTravelEnabled && asOfDate) {
         params.append('asOfValidTime', new Date(asOfDate).toISOString());
+      }
+      if (activeSubtype && activeSubtype !== 'all') {
+        params.append('subtypeKey', activeSubtype);
       }
 
       const res = await apiClient<any>(
@@ -112,7 +135,7 @@ export function RecordsCrudTab({ businessObject }: RecordsCrudTabProps) {
     } finally {
       setLoading(false);
     }
-  }, [businessObject?.id, tenantId, page, rowsPerPage, search, isTimeTravelEnabled, asOfDate]);
+  }, [businessObject?.id, tenantId, page, rowsPerPage, search, isTimeTravelEnabled, asOfDate, activeSubtype]);
 
   useEffect(() => {
     fetchRecords();
@@ -120,6 +143,10 @@ export function RecordsCrudTab({ businessObject }: RecordsCrudTabProps) {
 
   const handleOpenCreate = () => {
     const initial: Record<string, any> = {};
+    // Pre-fill subtype_code with the active subtype if one is selected
+    if (activeSubtype && activeSubtype !== 'all') {
+      initial['subtype_code'] = activeSubtype;
+    }
     fields.forEach((f: any) => {
       const name = f.technicalName || f.name;
       if (name) initial[name] = '';
@@ -210,6 +237,9 @@ export function RecordsCrudTab({ businessObject }: RecordsCrudTabProps) {
     }
   };
 
+  const hasSubtypes = Object.keys(businessObject?.subtypes || {}).length > 0;
+  const hasSubtypeColumn = columns.includes('subtype_code');
+
   return (
     <Box sx={{ p: 3 }}>
       {/* Header Bar */}
@@ -217,7 +247,7 @@ export function RecordsCrudTab({ businessObject }: RecordsCrudTabProps) {
         <Box>
           <Stack direction="row" spacing={1} alignItems="center">
             <Typography variant="h6" sx={{ fontWeight: 700 }}>
-              Physical Records & ORM Data
+              Physical Records &amp; ORM Data
             </Typography>
             {driverTable && (
               <Chip
@@ -257,23 +287,45 @@ export function RecordsCrudTab({ businessObject }: RecordsCrudTabProps) {
       {/* Filter & Time Travel Toolbar */}
       <Paper variant="outlined" sx={{ p: 1.5, mb: 2 }}>
         <Stack direction={{ xs: 'column', md: 'row' }} spacing={2} alignItems="center" justifyContent="space-between">
-          <TextField
-            size="small"
-            placeholder="Search records..."
-            value={search}
-            onChange={(e) => {
-              setSearch(e.target.value);
-              setPage(0);
-            }}
-            InputProps={{
-              startAdornment: (
-                <InputAdornment position="start">
-                  <SearchIcon fontSize="small" />
-                </InputAdornment>
-              ),
-            }}
-            sx={{ width: { xs: '100%', md: 320 } }}
-          />
+          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} alignItems="center" sx={{ flex: 1 }}>
+            <TextField
+              size="small"
+              placeholder="Search records..."
+              value={search}
+              onChange={(e) => {
+                setSearch(e.target.value);
+                setPage(0);
+              }}
+              InputProps={{
+                startAdornment: (
+                  <InputAdornment position="start">
+                    <SearchIcon fontSize="small" />
+                  </InputAdornment>
+                ),
+              }}
+              sx={{ width: { xs: '100%', md: 320 } }}
+            />
+
+            {/* Subtype Selector */}
+            {hasSubtypes && (
+              <TextField
+                select
+                size="small"
+                label="Subtype Filter"
+                value={activeSubtype}
+                onChange={(e) => {
+                  setActiveSubtype(e.target.value);
+                  setPage(0);
+                }}
+                sx={{ minWidth: 200 }}
+              >
+                <MenuItem value="all">All Subtypes</MenuItem>
+                {Object.entries(businessObject?.subtypes || {}).map(([key, st]: any) => (
+                  <MenuItem key={key} value={key}>{st.displayName || key}</MenuItem>
+                ))}
+              </TextField>
+            )}
+          </Stack>
 
           <Stack direction="row" spacing={2} alignItems="center">
             {businessObject?.enableHistory && (
@@ -354,11 +406,19 @@ export function RecordsCrudTab({ businessObject }: RecordsCrudTabProps) {
               <Table size="small" stickyHeader>
                 <TableHead>
                   <TableRow>
-                    {columns.map((col) => (
-                      <TableCell key={col} sx={{ fontWeight: 700, bgcolor: 'background.paper' }}>
-                        {col}
+                    {/* Subtype column — shown first when present in result set */}
+                    {hasSubtypeColumn && (
+                      <TableCell sx={{ fontWeight: 700, bgcolor: 'background.paper' }}>
+                        Subtype
                       </TableCell>
-                    ))}
+                    )}
+                    {columns
+                      .filter((col) => col !== 'subtype_code')
+                      .map((col) => (
+                        <TableCell key={col} sx={{ fontWeight: 700, bgcolor: 'background.paper' }}>
+                          {col}
+                        </TableCell>
+                      ))}
                     <TableCell align="right" sx={{ fontWeight: 700, bgcolor: 'background.paper', width: 100 }}>
                       Actions
                     </TableCell>
@@ -367,17 +427,29 @@ export function RecordsCrudTab({ businessObject }: RecordsCrudTabProps) {
                 <TableBody>
                   {rows.map((row, rIdx) => (
                     <TableRow key={row.id || rIdx} hover>
-                      {columns.map((col) => (
-                        <TableCell key={col} sx={{ maxWidth: 240, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                          {row[col] === null || row[col] === undefined ? (
-                            <Typography variant="caption" color="text.disabled">null</Typography>
-                          ) : typeof row[col] === 'boolean' ? (
-                            <Chip label={row[col] ? 'true' : 'false'} size="small" variant="outlined" color={row[col] ? 'success' : 'default'} />
+                      {/* Subtype chip cell */}
+                      {hasSubtypeColumn && (
+                        <TableCell>
+                          {row.subtype_code ? (
+                            <Chip label={row.subtype_code} size="small" color="secondary" variant="outlined" />
                           ) : (
-                            String(row[col])
+                            <Typography variant="caption" color="text.disabled">—</Typography>
                           )}
                         </TableCell>
-                      ))}
+                      )}
+                      {columns
+                        .filter((col) => col !== 'subtype_code')
+                        .map((col) => (
+                          <TableCell key={col} sx={{ maxWidth: 240, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {row[col] === null || row[col] === undefined ? (
+                              <Typography variant="caption" color="text.disabled">null</Typography>
+                            ) : typeof row[col] === 'boolean' ? (
+                              <Chip label={row[col] ? 'true' : 'false'} size="small" variant="outlined" color={row[col] ? 'success' : 'default'} />
+                            ) : (
+                              String(row[col])
+                            )}
+                          </TableCell>
+                        ))}
                       <TableCell align="right">
                         <Stack direction="row" spacing={0.5} justifyContent="flex-end">
                           <Tooltip title="Edit Record">
@@ -418,16 +490,62 @@ export function RecordsCrudTab({ businessObject }: RecordsCrudTabProps) {
         <DialogTitle sx={{ fontWeight: 700 }}>Add New {businessObject?.displayName || 'Record'}</DialogTitle>
         <DialogContent dividers>
           <Stack spacing={2} sx={{ mt: 1 }}>
-            {columns.filter(col => !['created_at', 'updated_at', 'last_modified_at'].includes(col)).map((col) => (
+            {/* Subtype selector — required, always at the top */}
+            {hasSubtypes && (
               <TextField
-                key={col}
-                label={col}
-                size="small"
+                select
+                required
+                label="Subtype"
                 fullWidth
-                value={formData[col] ?? ''}
-                onChange={(e) => setFormData({ ...formData, [col]: e.target.value })}
-              />
-            ))}
+                value={formData.subtype_code || activeSubtype || ''}
+                onChange={(e) => setFormData((prev) => ({ ...prev, subtype_code: e.target.value }))}
+                sx={{ mb: 2 }}
+              >
+                {Object.entries(businessObject?.subtypes || {}).map(([key, st]: any) => (
+                  <MenuItem key={key} value={key}>{st.displayName || key}</MenuItem>
+                ))}
+              </TextField>
+            )}
+
+            {/* Core / custom columns */}
+            {columns
+              .filter((col) => !['created_at', 'updated_at', 'last_modified_at', 'subtype_code'].includes(col))
+              .map((col) => (
+                <TextField
+                  key={col}
+                  label={col}
+                  size="small"
+                  fullWidth
+                  value={formData[col] ?? ''}
+                  onChange={(e) => setFormData({ ...formData, [col]: e.target.value })}
+                />
+              ))}
+
+            {/* Subtype-specific fields section */}
+            {formData.subtype_code && businessObject?.subtypes?.[formData.subtype_code] && (
+              <>
+                <Divider sx={{ my: 2 }}>
+                  <Chip
+                    label={`${businessObject.subtypes[formData.subtype_code].displayName} — Subtype Fields`}
+                    size="small"
+                    color="primary"
+                  />
+                </Divider>
+                {(businessObject.subtypes[formData.subtype_code].subtypeFields || []).map((f: any) => (
+                  <TextField
+                    key={f.key || f.technicalName}
+                    label={f.displayName || f.key}
+                    fullWidth
+                    size="small"
+                    sx={{ mb: 1.5 }}
+                    value={formData[f.key || f.technicalName] || ''}
+                    onChange={(e) =>
+                      setFormData((prev) => ({ ...prev, [f.key || f.technicalName]: e.target.value }))
+                    }
+                  />
+                ))}
+              </>
+            )}
           </Stack>
         </DialogContent>
         <DialogActions>
@@ -443,7 +561,7 @@ export function RecordsCrudTab({ businessObject }: RecordsCrudTabProps) {
         <DialogTitle sx={{ fontWeight: 700 }}>Edit Record</DialogTitle>
         <DialogContent dividers>
           <Stack spacing={2} sx={{ mt: 1 }}>
-            {columns.filter(col => !['id', 'created_at', 'updated_at'].includes(col)).map((col) => (
+            {columns.filter((col) => !['id', 'created_at', 'updated_at'].includes(col)).map((col) => (
               <TextField
                 key={col}
                 label={col}

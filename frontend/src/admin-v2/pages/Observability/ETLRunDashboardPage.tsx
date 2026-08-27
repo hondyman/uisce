@@ -1,9 +1,27 @@
 import React, { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { useTheme } from "@mui/material/styles";
+import Box from "@mui/material/Box";
+import Typography from "@mui/material/Typography";
+import Paper from "@mui/material/Paper";
+import TextField from "@mui/material/TextField";
+import Select from "@mui/material/Select";
+import MenuItem from "@mui/material/MenuItem";
+import FormControl from "@mui/material/FormControl";
+import InputLabel from "@mui/material/InputLabel";
+import Table from "@mui/material/Table";
+import TableBody from "@mui/material/TableBody";
+import TableCell from "@mui/material/TableCell";
+import TableContainer from "@mui/material/TableContainer";
+import TableHead from "@mui/material/TableHead";
+import TableRow from "@mui/material/TableRow";
+import Chip from "@mui/material/Chip";
+import CircularProgress from "@mui/material/CircularProgress";
 import { observabilityApi, ETLRun } from "../../api/observabilityApi";
 import { format } from "date-fns";
 
 export function ETLRunDashboardPage() {
+  const theme = useTheme();
   const [tenantId, setTenantId] = useState("");
   const [status, setStatus] = useState("");
 
@@ -13,107 +31,118 @@ export function ETLRunDashboardPage() {
   });
 
   const getStatusBadge = (runStatus: string) => {
-    switch (runStatus) {
-      case "SUCCESS":
-        return <span className="px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800">Success</span>;
-      case "FAILED":
-        return <span className="px-2 py-1 text-xs font-semibold rounded-full bg-red-100 text-red-800">Failed</span>;
-      case "STARTED":
-        return <span className="px-2 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-800">Running</span>;
-      default:
-        return <span className="px-2 py-1 text-xs font-semibold rounded-full bg-gray-100 text-gray-800">{runStatus}</span>;
-    }
+    const config: Record<string, { color: "success" | "error" | "info" | "default"; label: string }> = {
+      SUCCESS: { color: "success", label: "Success" },
+      FAILED: { color: "error", label: "Failed" },
+      STARTED: { color: "info", label: "Running" },
+    };
+    const { color, label } = config[runStatus] || { color: "default", label: runStatus };
+    return <Chip label={label} color={color} size="small" sx={{ fontWeight: 600 }} />;
   };
 
   return (
-    <div className="p-6">
-      <div className="flex justify-between items-center mb-6">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">ETL Telemetry Dashboard</h1>
-          <p className="text-sm text-gray-500 mt-1">Monitor the semantic execution fabric runs across all tenants.</p>
-        </div>
-      </div>
+    <Box sx={{ p: 3 }}>
+      <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 3 }}>
+        <Box>
+          <Typography variant="h5" sx={{ fontWeight: 700, mb: 0.5 }}>
+            ETL Telemetry Dashboard
+          </Typography>
+          <Typography variant="body2" color="text.secondary">
+            Monitor the semantic execution fabric runs across all tenants.
+          </Typography>
+        </Box>
+      </Box>
 
-      <div className="mb-6 flex gap-4 p-4 bg-white rounded-lg shadow-sm border border-gray-200">
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Tenant ID</label>
-          <input
-            type="text"
-            className="border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm px-3 py-2 border w-64"
-            placeholder="Filter by Tenant..."
-            value={tenantId}
-            onChange={(e) => setTenantId(e.target.value)}
-          />
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
-          <select
-            className="border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm px-3 py-2 border w-40"
+      <Paper sx={{ mb: 3, p: 2, display: "flex", gap: 3, flexWrap: "wrap" }}>
+        <TextField
+          label="Tenant ID"
+          variant="outlined"
+          size="small"
+          placeholder="Filter by Tenant..."
+          value={tenantId}
+          onChange={(e) => setTenantId(e.target.value)}
+          sx={{ minWidth: 250 }}
+        />
+        <FormControl size="small" sx={{ minWidth: 150 }}>
+          <InputLabel>Status</InputLabel>
+          <Select
             value={status}
+            label="Status"
             onChange={(e) => setStatus(e.target.value)}
           >
-            <option value="">All Statuses</option>
-            <option value="SUCCESS">Success</option>
-            <option value="FAILED">Failed</option>
-            <option value="STARTED">Started</option>
-          </select>
-        </div>
-      </div>
+            <MenuItem value="">All Statuses</MenuItem>
+            <MenuItem value="SUCCESS">Success</MenuItem>
+            <MenuItem value="FAILED">Failed</MenuItem>
+            <MenuItem value="STARTED">Started</MenuItem>
+          </Select>
+        </FormControl>
+      </Paper>
 
-      <div className="bg-white shadow-sm rounded-lg border border-gray-200 overflow-hidden">
+      <Paper sx={{ overflow: "hidden" }}>
         {isLoading ? (
-          <div className="p-8 text-center text-gray-500">Loading telemetry data...</div>
+          <Box sx={{ p: 4, textAlign: "center", color: "text.secondary" }}>
+            <CircularProgress size={24} sx={{ mr: 1 }} />
+            Loading telemetry data...
+          </Box>
         ) : error ? (
-          <div className="p-8 text-center text-red-500">Error loading ETL runs.</div>
+          <Box sx={{ p: 4, textAlign: "center", color: "error.main" }}>
+            Error loading ETL runs.
+          </Box>
         ) : (
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Run ID</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Valuation Date</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Duration</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Evaluations</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Version</th>
-              </tr>
-            </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
-              {data?.runs?.length === 0 ? (
-                <tr>
-                  <td colSpan={6} className="px-6 py-8 text-center text-sm text-gray-500">
-                    No ETL telemetry found matching criteria.
-                  </td>
-                </tr>
-              ) : (
-                data?.runs?.map((run: ETLRun) => (
-                  <tr key={run.id} className="hover:bg-gray-50 cursor-pointer">
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm font-medium text-blue-600 font-mono">{run.id.split('-')[0]}</div>
-                      <div className="text-xs text-gray-500 mt-1">Tenant: {run.tenant_id.split('-')[0]}</div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      {format(new Date(run.valuation_date), "MMM d, yyyy")}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      {getStatusBadge(run.status)}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {run.duration_ms ? `${run.duration_ms} ms` : "-"}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm text-gray-900">{run.rules_evaluated} rules</div>
-                      <div className="text-xs text-gray-500">{run.scenarios_evaluated} scen.</div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 font-mono">
-                      {run.wasm_orchestrator_version ? run.wasm_orchestrator_version.split('-')[0] : "-"}
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
+          <TableContainer>
+            <Table>
+              <TableHead>
+                <TableRow sx={{ bgcolor: "action.hover" }}>
+                  <TableCell sx={{ fontWeight: 600 }}>Run ID</TableCell>
+                  <TableCell sx={{ fontWeight: 600 }}>Valuation Date</TableCell>
+                  <TableCell sx={{ fontWeight: 600 }}>Status</TableCell>
+                  <TableCell sx={{ fontWeight: 600 }}>Duration</TableCell>
+                  <TableCell sx={{ fontWeight: 600 }}>Evaluations</TableCell>
+                  <TableCell sx={{ fontWeight: 600 }}>Version</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {data?.runs?.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={6} align="center" sx={{ py: 4, color: "text.secondary" }}>
+                      No ETL telemetry found matching criteria.
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  data?.runs?.map((run: ETLRun) => (
+                    <TableRow key={run.id} hover sx={{ cursor: "pointer" }}>
+                      <TableCell>
+                        <Box sx={{ fontWeight: 500, color: "primary.main", fontFamily: "monospace" }}>
+                          {run.id.split('-')[0]}
+                        </Box>
+                        <Box sx={{ fontSize: "0.75rem", color: "text.secondary", mt: 0.5 }}>
+                          Tenant: {run.tenant_id.split('-')[0]}
+                        </Box>
+                      </TableCell>
+                      <TableCell>
+                        {format(new Date(run.valuation_date), "MMM d, yyyy")}
+                      </TableCell>
+                      <TableCell>
+                        {getStatusBadge(run.status)}
+                      </TableCell>
+                      <TableCell sx={{ color: "text.secondary" }}>
+                        {run.duration_ms ? `${run.duration_ms} ms` : "-"}
+                      </TableCell>
+                      <TableCell>
+                        <Box sx={{ fontSize: "0.875rem" }}>{run.rules_evaluated} rules</Box>
+                        <Box sx={{ fontSize: "0.75rem", color: "text.secondary" }}>{run.scenarios_evaluated} scen.</Box>
+                      </TableCell>
+                      <TableCell sx={{ fontFamily: "monospace", color: "text.secondary" }}>
+                        {run.wasm_orchestrator_version ? run.wasm_orchestrator_version.split('-')[0] : "-"}
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          </TableContainer>
         )}
-      </div>
-    </div>
+      </Paper>
+    </Box>
   );
 }

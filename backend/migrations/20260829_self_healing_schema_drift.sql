@@ -8,7 +8,7 @@ CREATE TABLE IF NOT EXISTS catalog_drift.schema_drift_events (
     event_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     tenant_id UUID NOT NULL REFERENCES public.tenants(id) ON DELETE CASCADE,
     backend_id UUID NOT NULL,
-    table_node_id UUID NOT NULL REFERENCES public.catalog_node(node_id) ON DELETE CASCADE,
+    table_node_id UUID NOT NULL REFERENCES public.catalog_node(id) ON DELETE CASCADE,
     change_type VARCHAR(50) NOT NULL, -- COLUMN_DROPPED, COLUMN_RENAMED, TYPE_MUTATED, TABLE_DROPPED, NEW_COLUMN
     column_name VARCHAR(100) NOT NULL,
     old_data_type VARCHAR(50),
@@ -29,7 +29,7 @@ CREATE TABLE IF NOT EXISTS catalog_drift.schema_drift_proposals (
     field_id UUID NOT NULL,
     field_name VARCHAR(100) NOT NULL,
     current_source_node_id UUID,
-    proposed_source_node_id UUID NOT NULL REFERENCES public.catalog_node(node_id) ON DELETE CASCADE,
+    proposed_source_node_id UUID NOT NULL REFERENCES public.catalog_node(id) ON DELETE CASCADE,
     proposed_column_name VARCHAR(100) NOT NULL,
     confidence_score NUMERIC(5, 4) NOT NULL, -- 0.0000 to 1.0000
     matching_strategy VARCHAR(50) NOT NULL,  -- SUBSTRING_SIMILARITY, FINANCIAL_SYNONYM_DICTIONARY, EXACT_PREFIX

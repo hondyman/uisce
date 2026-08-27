@@ -318,6 +318,9 @@ export const ScopeSelectorDialog: React.FC<ScopeSelectorDialogProps> = ({ open, 
           {selectedTenant && !selectedInstance && (
             <Button variant="contained" onClick={handleApplyTenantScope}>Use Tenant Scope</Button>
           )}
+          {selectedTenant && selectedInstance && !selectedProduct && (
+            <Button variant="contained" onClick={() => { setInstanceScope(selectedTenant, selectedInstance); onClose(); }}>Use Instance Scope</Button>
+          )}
         </Box>
       </DialogActions>
     </Dialog>

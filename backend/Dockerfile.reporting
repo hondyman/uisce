@@ -1,0 +1,31 @@
+# Multi-stage containerized booklet & reporting compiler
+FROM golang:1.22-alpine AS builder
+
+WORKDIR /app
+
+# Install build dependencies
+RUN apk add --no-cache git gcc musl-dev
+
+# Copy Go module manifests and source
+COPY go.mod go.sum ./
+RUN go mod download
+
+COPY . .
+
+# Build the reporting and booklet admin server
+RUN CGO_ENABLED=0 GOOS=linux go build -o /app/bin/reporting-service ./cmd/reporting-service/main.go || \
+    CGO_ENABLED=0 GOOS=linux go build -o /app/bin/reporting-service ./cmd/api/main.go
+
+# Production Minimal Runtime Stage
+FROM alpine:3.19
+
+RUN apk add --no-cache ca-certificates tzdata
+
+WORKDIR /root/
+
+COPY --from=builder /app/bin/reporting-service .
+COPY db/migrations ./db/migrations
+
+EXPOSE 8080 8082
+
+CMD ["./reporting-service"]

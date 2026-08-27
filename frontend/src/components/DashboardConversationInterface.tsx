@@ -1,13 +1,27 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { devError } from '../utils/devLogger';
-import { Send, BarChart3, LineChart, PieChart, Table, CheckCircle, AlertTriangle, XCircle } from 'lucide-react';
+import { Send, BarChart3, LineChart, PieChart, Table, CheckCircle, AlertTriangle, XCircle, Save } from 'lucide-react';
 import { useAuthFetch } from '../utils/authFetch';
+import { Box, Button, Paper, Typography, TextField, IconButton, useTheme, alpha } from '@mui/material';
 
 interface DashboardVisual {
   id: string;
   type: string;
   title: string;
   description: string;
+  querySpec?: {
+    metrics: string[];
+    dimensions: string[];
+    sql?: string;
+  };
+  config?: {
+    chartType: string;
+    xAxis?: string;
+    yAxis?: string;
+    colorBy?: string;
+    showLegend?: boolean;
+    showGrid?: boolean;
+  };
   compliance: {
     isCompliant: boolean;
     riskLevel: string;
@@ -53,10 +67,25 @@ interface DashboardConversation {
   messages: ConversationMessage[];
 }
 
+interface CommitResponse {
+  conversation_id: string;
+  state: string;
+  title: string;
+  description: string;
+  dashboard_id: string;
+  visual_count: number;
+}
+
+interface CreateDashboardResponse {
+  dashboard_id: string;
+  visual_id: string;
+  dashboard_name: string;
+}
+
 interface DashboardConversationInterfaceProps {
   tenantId: string;
   datasource: string;
-  onDashboardCreated?: (dashboard: DashboardConversation) => void;
+  onDashboardCreated?: (dashboard: { id: string; title: string; dashboard_id: string }) => void;
 }
 
 export const DashboardConversationInterface: React.FC<DashboardConversationInterfaceProps> = ({
@@ -64,11 +93,14 @@ export const DashboardConversationInterface: React.FC<DashboardConversationInter
   datasource,
   onDashboardCreated
 }) => {
+  const theme = useTheme();
   const { authFetch } = useAuthFetch();
   const [conversation, setConversation] = useState<DashboardConversation | null>(null);
   const [message, setMessage] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [isStarting, setIsStarting] = useState(false);
+  const [savingVisualId, setSavingVisualId] = useState<string | null>(null);
+  const [savedVisuals, setSavedVisuals] = useState<Set<string>>(new Set());
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const scrollToBottom = () => {
@@ -84,13 +116,13 @@ export const DashboardConversationInterface: React.FC<DashboardConversationInter
 
     setIsStarting(true);
     try {
-  const response = await authFetch('/api/dashboards/conversation/start', {
+      const response = await authFetch('/api/nl/conversations/start', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          user_id: 'current-user', // This should come from auth context
+          user_id: 'current-user',
           tenant_id: tenantId,
           datasource: datasource,
           message: message.trim(),
@@ -101,8 +133,8 @@ export const DashboardConversationInterface: React.FC<DashboardConversationInter
         throw new Error('Failed to start conversation');
       }
 
-  const newConversation = (response && (response as any).data !== undefined) ? (response as any).data : await (response as any).json?.();
-      setConversation(newConversation);
+      const data = await response.json();
+      setConversation(data);
       setMessage('');
     } catch (error) {
       devError('Error starting conversation:', error);
@@ -116,7 +148,7 @@ export const DashboardConversationInterface: React.FC<DashboardConversationInter
 
     setIsLoading(true);
     try {
-  const response = await authFetch(`/api/dashboards/conversation/${conversation.id}/message`, {
+      const response = await authFetch(`/api/nl/conversations/${conversation.id}/message`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -130,12 +162,11 @@ export const DashboardConversationInterface: React.FC<DashboardConversationInter
         throw new Error('Failed to send message');
       }
 
-  const updatedConversation = (response && (response as any).data !== undefined) ? (response as any).data : await (response as any).json?.();
-      setConversation(updatedConversation);
+      const data = await response.json();
+      setConversation(data);
       setMessage('');
     } catch (error) {
       devError('Error sending message:', error);
-      // Handle error (show toast, etc.)
     } finally {
       setIsLoading(false);
     }
@@ -145,7 +176,7 @@ export const DashboardConversationInterface: React.FC<DashboardConversationInter
     if (!conversation) return;
 
     try {
-  const response = await authFetch(`/api/dashboards/conversation/${conversation.id}/commit`, {
+      const response = await authFetch(`/api/nl/conversations/${conversation.id}/commit`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -160,139 +191,226 @@ export const DashboardConversationInterface: React.FC<DashboardConversationInter
         throw new Error('Failed to commit dashboard');
       }
 
-  const committedDashboard = (response && (response as any).data !== undefined) ? (response as any).data : await (response as any).json?.();
-      onDashboardCreated?.(committedDashboard);
+      const data: CommitResponse = await response.json();
+      onDashboardCreated?.({
+        id: conversation.id,
+        title: data.title,
+        dashboard_id: data.dashboard_id,
+      });
     } catch (error) {
       devError('Error committing dashboard:', error);
-      // Handle error (show toast, etc.)
+    }
+  };
+
+  const saveVisualAsDashboard = async (visualId: string) => {
+    if (!conversation) return;
+
+    setSavingVisualId(visualId);
+    try {
+      const response = await authFetch(
+        `/api/nl/conversations/${conversation.id}/visuals/${visualId}/create-dashboard`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({}),
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error('Failed to save visual');
+      }
+
+      const data: CreateDashboardResponse = await response.json();
+      setSavedVisuals(prev => new Set(prev).add(visualId));
+      onDashboardCreated?.({
+        id: visualId,
+        title: data.dashboard_name,
+        dashboard_id: data.dashboard_id,
+      });
+    } catch (error) {
+      devError('Error saving visual:', error);
+    } finally {
+      setSavingVisualId(null);
     }
   };
 
   const getComplianceIcon = (compliance: DashboardVisual['compliance']) => {
     if (compliance.isCompliant) {
-      return <CheckCircle className="w-4 h-4 text-green-500" />;
+      return <CheckCircle sx={{ width: 16, height: 16, color: 'success.main' }} />;
     }
     if (compliance.riskLevel === 'high') {
-      return <XCircle className="w-4 h-4 text-red-500" />;
+      return <XCircle sx={{ width: 16, height: 16, color: 'error.main' }} />;
     }
-    return <AlertTriangle className="w-4 h-4 text-yellow-500" />;
+    return <AlertTriangle sx={{ width: 16, height: 16, color: 'warning.main' }} />;
   };
 
   const getChartIcon = (type: string) => {
     switch (type) {
       case 'line':
-        return <LineChart className="w-4 h-4" />;
+        return <LineChart sx={{ width: 16, height: 16 }} />;
       case 'bar':
-        return <BarChart3 className="w-4 h-4" />;
+        return <BarChart3 sx={{ width: 16, height: 16 }} />;
       case 'pie':
-        return <PieChart className="w-4 h-4" />;
+        return <PieChart sx={{ width: 16, height: 16 }} />;
       case 'table':
-        return <Table className="w-4 h-4" />;
+        return <Table sx={{ width: 16, height: 16 }} />;
       default:
-        return <BarChart3 className="w-4 h-4" />;
+        return <BarChart3 sx={{ width: 16, height: 16 }} />;
     }
   };
 
+  const isDark = theme.palette.mode === 'dark';
+
   return (
-    <div className="flex flex-col h-full bg-white rounded-lg shadow-lg">
-      {/* Header */}
-      <div className="flex items-center justify-between p-4 border-b">
-        <div className="flex items-center space-x-2">
-          <BarChart3 className="w-6 h-6 text-blue-600" />
-          <h2 className="text-lg font-semibold text-gray-900">
+    <Paper sx={{ 
+      display: 'flex', 
+      flexDirection: 'column', 
+      height: '100%', 
+      bgcolor: 'background.paper',
+      borderRadius: 2,
+      overflow: 'hidden'
+    }}>
+      <Box sx={{ 
+        display: 'flex', 
+        alignItems: 'center', 
+        justifyContent: 'space-between', 
+        p: 2, 
+        borderBottom: 1, 
+        borderColor: 'divider',
+        bgcolor: isDark ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.02)'
+      }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <BarChart3 sx={{ color: 'primary.main', fontSize: 24 }} />
+          <Typography variant="h6" sx={{ fontWeight: 600 }}>
             {conversation ? conversation.title : 'Dashboard Builder'}
-          </h2>
-        </div>
+          </Typography>
+        </Box>
         {conversation && (
-          <div className="flex items-center space-x-2">
-            <div className="flex items-center space-x-1">
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
               {getComplianceIcon({
                 isCompliant: conversation.compliance.overallCompliant,
                 riskLevel: conversation.compliance.highRiskCount > 0 ? 'high' : 'low',
                 violations: [],
               })}
-              <span className="text-sm text-gray-600">
+              <Typography variant="body2" color="text.secondary">
                 {conversation.compliance.compliantCount}/{conversation.compliance.visualCount} compliant
-              </span>
-            </div>
-            <button
+              </Typography>
+            </Box>
+            <Button 
+              variant="contained" 
               onClick={commitDashboard}
-              className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+              sx={{ textTransform: 'none' }}
             >
               Save Dashboard
-            </button>
-          </div>
+            </Button>
+          </Box>
         )}
-      </div>
+      </Box>
 
-      {/* Conversation Area */}
-      <div className="flex-1 flex flex-col min-h-0">
-        {/* Messages */}
-        <div className="flex-1 overflow-y-auto p-4 space-y-4">
+      <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+        <Box sx={{ flex: 1, overflowY: 'auto', p: 2, display: 'flex', flexDirection: 'column', gap: 2 }}>
           {conversation?.messages.map((msg) => (
-            <div
-              key={msg.id}
-              className={`flex ${msg.type === 'user' ? 'justify-end' : 'justify-start'}`}
+            <Box 
+              key={msg.id} 
+              sx={{ 
+                display: 'flex', 
+                justifyContent: msg.type === 'user' ? 'flex-end' : 'flex-start' 
+              }}
             >
-              <div
-                className={`max-w-xs lg:max-w-md px-4 py-2 rounded-lg ${
-                  msg.type === 'user'
-                    ? 'bg-blue-600 text-white'
-                    : 'bg-gray-100 text-gray-900'
-                }`}
+              <Box
+                sx={{
+                  maxWidth: { xs: '100%', lg: 400 },
+                  px: 2,
+                  py: 1,
+                  borderRadius: 2,
+                  bgcolor: msg.type === 'user' ? 'primary.main' : isDark ? 'grey.900' : 'grey.100',
+                  color: msg.type === 'user' ? 'white' : 'text.primary',
+                }}
               >
-                <p className="text-sm">{msg.content}</p>
-                <p className="text-xs opacity-70 mt-1">
+                <Typography variant="body2">{msg.content}</Typography>
+                <Typography variant="caption" sx={{ opacity: 0.7, display: 'block', mt: 0.5 }}>
                   {new Date(msg.timestamp).toLocaleTimeString()}
-                </p>
-              </div>
-            </div>
+                </Typography>
+              </Box>
+            </Box>
           ))}
           <div ref={messagesEndRef} />
-        </div>
+        </Box>
 
-        {/* Visual Preview */}
         {conversation && conversation.visuals.length > 0 && (
-          <div className="border-t p-4 bg-gray-50">
-            <h3 className="text-sm font-medium text-gray-900 mb-3">Current Visualizations</h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+          <Box sx={{ borderTop: 1, borderColor: 'divider', p: 2, bgcolor: isDark ? 'rgba(255,255,255,0.02)' : 'grey.50' }}>
+            <Typography variant="subtitle2" sx={{ mb: 1.5, fontWeight: 600 }}>
+              Current Visualizations
+            </Typography>
+            <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: 'repeat(2, 1fr)', lg: 'repeat(3, 1fr)' }, gap: 2 }}>
               {conversation.visuals.map((visual) => (
-                <div
-                  key={visual.id}
-                  className="bg-white p-3 rounded-md border shadow-sm"
+                <Paper 
+                  key={visual.id} 
+                  sx={{ p: 1.5, border: 1, borderColor: 'divider' }}
                 >
-                  <div className="flex items-center justify-between mb-2">
-                    <div className="flex items-center space-x-2">
+                  <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                       {getChartIcon(visual.type)}
-                      <span className="text-sm font-medium text-gray-900">
+                      <Typography variant="body2" sx={{ fontWeight: 500 }}>
                         {visual.title}
-                      </span>
-                    </div>
+                      </Typography>
+                    </Box>
                     {getComplianceIcon(visual.compliance)}
-                  </div>
+                  </Box>
                   {visual.compliance.violations.length > 0 && (
-                    <div className="mt-2">
-                      <p className="text-xs text-red-600">
+                    <Box sx={{ mt: 1 }}>
+                      <Typography variant="caption" color="error.main">
                         {visual.compliance.violations[0].message}
-                      </p>
+                      </Typography>
                       {visual.compliance.violations[0].suggestion && (
-                        <p className="text-xs text-blue-600 mt-1">
-                          💡 {visual.compliance.violations[0].suggestion}
-                        </p>
+                        <Typography variant="caption" color="info.main" sx={{ display: 'block', mt: 0.5 }}>
+                          {visual.compliance.violations[0].suggestion}
+                        </Typography>
                       )}
-                    </div>
+                    </Box>
                   )}
-                </div>
+                  <Button
+                    size="small"
+                    variant={savedVisuals.has(visual.id) ? "outlined" : "contained"}
+                    color="success"
+                    disabled={savingVisualId === visual.id || savedVisuals.has(visual.id)}
+                    onClick={() => saveVisualAsDashboard(visual.id)}
+                    startIcon={<Save sx={{ fontSize: 14 }} />}
+                    sx={{ 
+                      mt: 1.5, 
+                      width: '100%',
+                      textTransform: 'none',
+                      bgcolor: savedVisuals.has(visual.id) ? 'transparent' : undefined,
+                      '&:hover': savedVisuals.has(visual.id) ? {
+                        bgcolor: alpha(theme.palette.success.main, 0.1)
+                      } : undefined
+                    }}
+                  >
+                    {savingVisualId === visual.id
+                      ? 'Saving...'
+                      : savedVisuals.has(visual.id)
+                      ? 'Saved'
+                      : 'Save as Dashboard'}
+                  </Button>
+                </Paper>
               ))}
-            </div>
-          </div>
+            </Box>
+          </Box>
         )}
 
-        {/* Input Area */}
-        <div className="border-t p-4">
-          <div className="flex space-x-2">
-            <input
-              type="text"
+        <Box sx={{ borderTop: 1, borderColor: 'divider', p: 2 }}>
+          <Box sx={{ display: 'flex', gap: 1 }}>
+            <TextField
+              fullWidth
+              size="small"
+              placeholder={
+                conversation
+                  ? "Describe what you'd like to add or modify..."
+                  : "Describe the dashboard you want to create..."
+              }
               value={message}
               onChange={(e) => setMessage(e.target.value)}
               onKeyPress={(e) => {
@@ -300,33 +418,49 @@ export const DashboardConversationInterface: React.FC<DashboardConversationInter
                   conversation ? sendMessage() : startConversation();
                 }
               }}
-              placeholder={
-                conversation
-                  ? "Describe what you'd like to add or modify..."
-                  : "Describe the dashboard you want to create..."
-              }
-              className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
               disabled={isLoading || isStarting}
+              sx={{
+                '& .MuiOutlinedInput-root': {
+                  bgcolor: isDark ? 'rgba(255,255,255,0.05)' : 'white',
+                }
+              }}
             />
-            <button
+            <IconButton
+              color="primary"
               onClick={conversation ? sendMessage : startConversation}
               disabled={!message.trim() || isLoading || isStarting}
-              className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
+              sx={{
+                bgcolor: 'primary.main',
+                color: 'white',
+                '&:hover': { bgcolor: 'primary.dark' },
+                '&:disabled': { bgcolor: 'grey.400' }
+              }}
             >
               {isLoading || isStarting ? (
-                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                <Box sx={{ 
+                  width: 20, 
+                  height: 20, 
+                  border: '2px solid white', 
+                  borderTopColor: 'transparent', 
+                  borderRadius: '50%', 
+                  animation: 'spin 1s linear infinite',
+                  '@keyframes spin': {
+                    '0%': { transform: 'rotate(0deg)' },
+                    '100%': { transform: 'rotate(360deg)' }
+                  }
+                }} />
               ) : (
-                <Send className="w-4 h-4" />
+                <Send sx={{ fontSize: 18 }} />
               )}
-            </button>
-          </div>
+            </IconButton>
+          </Box>
           {!conversation && (
-            <p className="text-xs text-gray-500 mt-2">
+            <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
               Start by describing what kind of dashboard you want to create, e.g., "Show me sales performance by region over time"
-            </p>
+            </Typography>
           )}
-        </div>
-      </div>
-    </div>
+        </Box>
+      </Box>
+    </Paper>
   );
 };

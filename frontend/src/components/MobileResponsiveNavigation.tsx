@@ -75,7 +75,8 @@ export const MainNavigation: React.FC<MainNavigationProps> = ({ onToggleTheme })
       items: [
         { label: 'Connections', path: '/connections', icon: <StorageIcon />, description: 'Manage data connections' },
         { label: 'Schema Browser', path: '/schema', icon: <SchemaIcon />, description: 'Browse database schemas' },
-        { label: 'Query Builder', path: '/query-builder', icon: <QueryStatsIcon />, description: 'Build and execute queries' },
+        { label: 'Data Explorer', path: '/data-explorer', icon: <QueryStatsIcon />, description: 'Build and execute queries' },
+        { label: 'AI Explorer', path: '/ai-explorer', icon: <AutoAwesomeIcon />, description: 'Co-Pilot conversation explorer' },
       ],
     },
     {

@@ -17,7 +17,6 @@ import CalendarPage from "./pages/CalendarPage";
 import ConflictsPage from "./pages/ConflictsPage";
 import CalculatedFieldBuilderPage from "./pages/CalculatedFieldBuilderPage";
 import IPWhitelistManagementPage from "./features/fabric/pages/IPWhitelistManagementPage";
-import DashboardPage from "./features/fabric/pages/DashboardPage";
 import AuditLogsPage from "./features/fabric/pages/AuditLogsPage";
 import SettingsPage from "./features/fabric/pages/SettingsPage";
 import TenantsManagementPage from "./features/fabric/pages/TenantsManagementPage";
@@ -65,7 +64,10 @@ import { AuditExplorerPage } from "./features/workflow/pages/AuditExplorerPage";
 import AuditExplorer from "./components/audit/AuditExplorer";
 import TemporalOpsPage from "./features/admin/pages/TemporalOpsPage";
 import SeedingPage from "./features/admin/pages/SeedingPage";
-import BusinessObjectQueryBuilder from "./features/query-builder/pages/BusinessObjectQueryBuilder";
+import DataExplorerHubPage from "./pages/DataExplorerHubPage";
+import DataQueryBuilderPage from "./pages/DataQueryBuilderPage";
+import AIExplorerPage from "./pages/AIExplorerPage";
+import DataExplorerPage from "./pages/DataExplorerPage";
 import ScenarioAnalysisPro from "./components/ScenarioAnalysisPro";
 import AIPortfolioRebalancer from "./components/AIPortfolioRebalancer";
 // Metrics Console imports
@@ -119,8 +121,7 @@ import { WorldClassReportBuilder } from "./features/reporting/components/SelfSer
 import BPConsolePage from "./features/bp-console/pages/BPConsolePage";
 import { ReportLibrary } from "./features/reporting/components/ReportLibrary";
 import ReportBuilderPage from "./pages/ReportBuilderPage";
-import { DataExplorer } from './components/reporting/DataExplorer';
-import { QueryLibraryDashboard } from './components/reporting/QueryLibraryDashboard';
+import { ReportMarketplaceStudio } from "./features/reporting/components/ReportMarketplaceStudio";
 import { SemanticModelManager } from './features/semantic/components/SemanticModelManager';
 import { ExpressionLibrary } from "./features/expressions/components/ExpressionLibrary";
 
@@ -129,6 +130,7 @@ import { ExpressionLibrary } from "./features/expressions/components/ExpressionL
 import EntityManagerPage from "./features/admin/pages/EntityManagerPage";
 import EntityDetailsPage from "./pages/EntityDetailsPage";
 import BusinessObjectsPage from "./pages/BusinessObjectsPage";
+import BusinessObjectStudio from "./features/business-objects/BusinessObjectStudio";
 import BusinessObjectDetailsPage from "./pages/BusinessObjectDetailsPage";
 import BusinessObjectWizardPage from "./pages/BusinessObjectWizardPage";
 import SemanticHealthDashboard from "./pages/SemanticHealthDashboard";
@@ -152,6 +154,7 @@ import {
   ProfilesDashboard,
   ProfileCustomizer,
   EntitlementMatrix,
+  AdminRoutes,
 } from "./admin-v2";
 
 import TeamManagerPage from "./features/admin/pages/TeamManagerPage";
@@ -179,6 +182,7 @@ import ChangeReviewPage from "./pages/ChangeReviewPage";
 import IncidentPage from "./pages/scheduler/IncidentPage";
 import APIStudioPage from './pages/api-studio/APIStudioPage';
 import PageStudioPage from './pages/page-studio/PageStudioPage';
+import PageDesignerPage from './pages/PageDesignerPage';
 import RuntimePage from './pages/page-studio/RuntimePage';
 
 // Intelligence & Governance (New)
@@ -200,6 +204,8 @@ export function AppRoutes() {
       <Routes>
         <Route path="/api-studio" element={<APIStudioPage />} />
         <Route path="/page-studio" element={<PageStudioPage />} />
+        <Route path="/page-designer" element={<PageDesignerPage />} />
+        <Route path="/page-designer/:pageKey" element={<PageDesignerPage />} />
         <Route path="/app/:slug" element={<RuntimePage />} />
         <Route path="/change-review" element={<ChangeReviewPage />} />
         <Route path="/login" element={<LoginPage />} />
@@ -284,6 +290,7 @@ function ProtectedApp() {
             BUILD - Semantic layer
             ═══════════════════════════════════════════════════════════════════ */}
         <Route path="/business-objects" element={<ProtectedRoute><BusinessObjectsPage /></ProtectedRoute>} />
+        <Route path="/business-objects/studio" element={<ProtectedRoute><BusinessObjectStudio /></ProtectedRoute>} />
         <Route path="/business-objects/new" element={<ProtectedRoute><BusinessObjectWizardPage /></ProtectedRoute>} />
         <Route path="/business-objects/:id" element={<ProtectedRoute><BusinessObjectDetailsPage /></ProtectedRoute>} />
         <Route path="/semantic-health" element={<ProtectedRoute><SemanticHealthDashboard /></ProtectedRoute>} />
@@ -298,7 +305,7 @@ function ProtectedApp() {
         <Route path="/core/flow-builder" element={<ProtectedRoute><UisceBuilder /></ProtectedRoute>} />
         <Route path="/core/uisce-builder" element={<ProtectedRoute><UisceBuilderPage /></ProtectedRoute>} />
         <Route path="/core/validation" element={<ProtectedRoute><InvestmentValidationPage /></ProtectedRoute>} />
-        <Route path="/query-builder" element={<ProtectedRoute><BusinessObjectQueryBuilder /></ProtectedRoute>} />
+        <Route path="/query-builder" element={<ProtectedRoute><DataExplorerPage /></ProtectedRoute>} />
         <Route path="/marketplace" element={<ProtectedRoute><Marketplace /></ProtectedRoute>} />
         <Route path="/marketplace/components" element={<ProtectedRoute><ComponentMarketplacePage /></ProtectedRoute>} />
 
@@ -370,8 +377,13 @@ function ProtectedApp() {
             CONSUME - Reports and analytics
             ═══════════════════════════════════════════════════════════════════ */}
         <Route path="/reports/library" element={<ProtectedRoute><ReportLibrary /></ProtectedRoute>} />
+        <Route path="/reports/marketplace" element={<ProtectedRoute><ReportMarketplaceStudio /></ProtectedRoute>} />
         <Route path="/reports/builder" element={<ProtectedRoute><ReportBuilderPage /></ProtectedRoute>} />
-        <Route path="/reports/queries" element={<ProtectedRoute><QueryLibraryDashboard /></ProtectedRoute>} />
+        <Route path="/reports/queries" element={<ProtectedRoute><DataExplorerHubPage /></ProtectedRoute>} />
+        <Route path="/data-explorer" element={<ProtectedRoute><DataExplorerHubPage /></ProtectedRoute>} />
+        <Route path="/data-explorer/builder" element={<ProtectedRoute><DataQueryBuilderPage /></ProtectedRoute>} />
+        <Route path="/data-explorer/:queryId/edit" element={<ProtectedRoute><DataQueryBuilderPage /></ProtectedRoute>} />
+        <Route path="/ai-explorer" element={<ProtectedRoute><AIExplorerPage /></ProtectedRoute>} />
         <Route path="/reports/:reportId/edit" element={<ProtectedRoute><ReportBuilderPage /></ProtectedRoute>} />
         <Route path="/reports/models" element={<ProtectedRoute><SemanticModelManager /></ProtectedRoute>} />
         
@@ -392,7 +404,6 @@ function ProtectedApp() {
         <Route path="/access-explanation" element={<ProtectedRoute><AccessExplanationExample /></ProtectedRoute>} />
         <Route path="/fabric/preaggregations" element={<ProtectedRoute><ManagementPage tenantId="default" datasourceId="default" /></ProtectedRoute>} />
         <Route path="/fabric/calculations" element={<ProtectedRoute><CalculationsLibraryPage tenantId="default" datasourceId="default" /></ProtectedRoute>} />
-        <Route path="/fabric/dashboard" element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />
         <Route path="/fabric/audit-logs" element={<ProtectedRoute><AuditLogsPage /></ProtectedRoute>} />
         <Route path="/fabric/settings" element={<ProtectedRoute><SettingsPage /></ProtectedRoute>} />
         <Route path="/core/audit-explorer" element={<ProtectedRoute><AuditExplorerPage /></ProtectedRoute>} />
@@ -425,6 +436,9 @@ function ProtectedApp() {
         <Route path="/admin/entitlements" element={<ProtectedRoute><ProfilesDashboard /></ProtectedRoute>} />
         <Route path="/admin/entitlements/profiles/:profileKey" element={<ProtectedRoute><ProfileCustomizerRoute /></ProtectedRoute>} />
         <Route path="/admin/entitlements/profiles/:profileKey/components" element={<ProtectedRoute><EntitlementMatrixRoute /></ProtectedRoute>} />
+
+        {/* admin-v2 surface (chat history, telemetry, ops cockpit, etc.) */}
+        <Route path="/admin/*" element={<ProtectedRoute><AdminRoutes /></ProtectedRoute>} />
       </Routes>
     </>
   );

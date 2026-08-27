@@ -1,24 +1,23 @@
 import { useState, useEffect } from 'react';
-// Import the Tenant type
 import { Tenant } from '../types';
-// TenantGrid may not be used in this simplified page; prefix to avoid unused import lint
-// TenantGrid intentionally not imported here to keep HomePage minimal
 import { JSX } from 'react';
-
 import apiClient from '../utils/apiClient';
+import { useTheme } from '@mui/material/styles';
+import Box from '@mui/material/Box';
+import Typography from '@mui/material/Typography';
+import TextField from '@mui/material/TextField';
+import Button from '@mui/material/Button';
+import Paper from '@mui/material/Paper';
 
 export default function HomePage(): JSX.Element {
-  // Explicitly define the type for the state array
+  const theme = useTheme();
   const [tenants, setTenants] = useState<Tenant[]>([]);
-  // tenants fetched and stored for future use
   const [newTenantName, setNewTenantName] = useState('');
   const [newTenantInstance, setNewTenantInstance] = useState('');
 
   useEffect(() => {
-    // Fetch tenants from your backend API
     apiClient('tenants')
       .then((res) => res.json())
-      // Ensure the fetched data is treated as an array of Tenants
       .then((data: Tenant[]) => setTenants(data));
   }, []);
 
@@ -32,66 +31,193 @@ export default function HomePage(): JSX.Element {
     })
       .then((res) => res.json())
       .then((newTenant: Tenant) => {
-        // Now TypeScript knows that newTenant is a Tenant and can be added to the array
         setTenants((prevTenants) => [...prevTenants, newTenant]);
         setNewTenantName('');
         setNewTenantInstance('');
       });
   };
 
+  const isDark = theme.palette.mode === 'dark';
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-slate-100 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950 p-8">
-      <div className="max-w-4xl mx-auto">
-        <div className="bg-white dark:bg-surface-dark rounded-xl border border-slate-200 dark:border-border-dark p-8 shadow-lg">
-          <h1 className="text-3xl font-bold text-slate-900 dark:text-text-light mb-2">Tenants and Instances</h1>
-          <p className="text-slate-600 dark:text-text-dim mb-8">Manage your tenant configurations and instances</p>
+    <Box
+      sx={{
+        minHeight: '100vh',
+        background: isDark
+          ? 'linear-gradient(to bottom right, #020617, #0f172a, #020617)'
+          : 'linear-gradient(to bottom right, #f8fafc, #eff6ff, #f1f5f9)',
+        p: 4,
+      }}
+    >
+      <Box sx={{ maxWidth: 900, mx: 'auto' }}>
+        <Paper
+          sx={{
+            p: 4,
+            borderRadius: '12px',
+            border: '1px solid',
+            borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgb(226, 232, 240)',
+            boxShadow: isDark ? 'none' : '0 10px 15px -3px rgba(0, 0, 0, 0.1)',
+            backgroundColor: isDark ? '#1e293b' : 'white',
+          }}
+        >
+          <Typography
+            variant="h4"
+            sx={{
+              fontWeight: 700,
+              color: isDark ? '#f1f5f9' : '#0f172a',
+              mb: 1,
+            }}
+          >
+            Tenants and Instances
+          </Typography>
+          <Typography
+            sx={{
+              color: isDark ? '#94a3b8' : '#475569',
+              mb: 4,
+            }}
+          >
+            Manage your tenant configurations and instances
+          </Typography>
 
-          <div className="mb-6">
-            <div className="text-sm text-slate-500 dark:text-text-dim mb-2">
-              Loaded tenants: <span className="font-semibold text-slate-900 dark:text-text-light">{tenants.length}</span>
-            </div>
-          </div>
+          <Box sx={{ mb: 3 }}>
+            <Typography
+              variant="body2"
+              sx={{
+                color: isDark ? '#94a3b8' : '#64748b',
+                mb: 1,
+              }}
+            >
+              Loaded tenants:{' '}
+              <Typography
+                component="span"
+                sx={{
+                  fontWeight: 600,
+                  color: isDark ? '#f1f5f9' : '#0f172a',
+                }}
+              >
+                {tenants.length}
+              </Typography>
+            </Typography>
+          </Box>
 
-          <div className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-slate-700 dark:text-text-light mb-2">
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+            <Box
+              sx={{
+                display: 'grid',
+                gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' },
+                gap: 2,
+              }}
+            >
+              <Box>
+                <Typography
+                  component="label"
+                  variant="body2"
+                  sx={{
+                    display: 'block',
+                    fontWeight: 500,
+                    color: isDark ? '#f1f5f9' : '#334155',
+                    mb: 1,
+                  }}
+                >
                   New Tenant Name
-                </label>
-                <input
-                  type="text"
+                </Typography>
+                <TextField
+                  fullWidth
+                  size="small"
                   value={newTenantName}
                   onChange={(e) => setNewTenantName(e.target.value)}
-                  className="w-full rounded-lg border border-slate-300 dark:border-border-dark px-4 py-2 bg-white dark:bg-surface-dark text-slate-900 dark:text-text-light placeholder-slate-400 dark:placeholder-text-dim focus:border-blue-500 dark:focus:border-blue-400 focus:ring-2 focus:ring-blue-500/20 dark:focus:ring-blue-400/20 transition-colors"
                   placeholder="Enter tenant name"
+                  sx={{
+                    '& .MuiOutlinedInput-root': {
+                      borderRadius: '8px',
+                      backgroundColor: isDark ? '#1e293b' : 'white',
+                      color: isDark ? '#f1f5f9' : '#0f172a',
+                      '& fieldset': {
+                        borderColor: isDark ? 'rgba(255,255,255,0.1)' : '#cbd5e1',
+                      },
+                      '&:hover fieldset': {
+                        borderColor: isDark ? 'rgba(255,255,255,0.2)' : '#94a3b8',
+                      },
+                      '&.Mui-focused fieldset': {
+                        borderColor: '#3b82f6',
+                      },
+                    },
+                    '& input::placeholder': {
+                      color: isDark ? '#64748b' : '#94a3b8',
+                      opacity: 1,
+                    },
+                  }}
                 />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-slate-700 dark:text-text-light mb-2">
+              </Box>
+              <Box>
+                <Typography
+                  component="label"
+                  variant="body2"
+                  sx={{
+                    display: 'block',
+                    fontWeight: 500,
+                    color: isDark ? '#f1f5f9' : '#334155',
+                    mb: 1,
+                  }}
+                >
                   New Instance Name
-                </label>
-                <input
-                  type="text"
+                </Typography>
+                <TextField
+                  fullWidth
+                  size="small"
                   value={newTenantInstance}
                   onChange={(e) => setNewTenantInstance(e.target.value)}
-                  className="w-full rounded-lg border border-slate-300 dark:border-border-dark px-4 py-2 bg-white dark:bg-surface-dark text-slate-900 dark:text-text-light placeholder-slate-400 dark:placeholder-text-dim focus:border-blue-500 dark:focus:border-blue-400 focus:ring-2 focus:ring-blue-500/20 dark:focus:ring-blue-400/20 transition-colors"
                   placeholder="Enter instance name"
+                  sx={{
+                    '& .MuiOutlinedInput-root': {
+                      borderRadius: '8px',
+                      backgroundColor: isDark ? '#1e293b' : 'white',
+                      color: isDark ? '#f1f5f9' : '#0f172a',
+                      '& fieldset': {
+                        borderColor: isDark ? 'rgba(255,255,255,0.1)' : '#cbd5e1',
+                      },
+                      '&:hover fieldset': {
+                        borderColor: isDark ? 'rgba(255,255,255,0.2)' : '#94a3b8',
+                      },
+                      '&.Mui-focused fieldset': {
+                        borderColor: '#3b82f6',
+                      },
+                    },
+                    '& input::placeholder': {
+                      color: isDark ? '#64748b' : '#94a3b8',
+                      opacity: 1,
+                    },
+                  }}
                 />
-              </div>
-            </div>
+              </Box>
+            </Box>
 
-            <button
+            <Button
+              variant="contained"
               onClick={handleCreateTenant}
-              className="inline-flex items-center px-6 py-3 bg-blue-600 hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600 text-white font-medium rounded-lg transition-colors shadow-sm hover:shadow-md"
+              sx={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                px: 3,
+                py: 1.5,
+                backgroundColor: isDark ? '#3b82f6' : '#2563eb',
+                '&:hover': {
+                  backgroundColor: isDark ? '#2563eb' : '#1d4ed8',
+                },
+                fontWeight: 500,
+                borderRadius: '8px',
+                boxShadow: isDark ? 'none' : '0 1px 2px 0 rgba(0, 0, 0, 0.05)',
+                '&:hover': {
+                  boxShadow: isDark ? 'none' : '0 4px 6px -1px rgba(0, 0, 0, 0.1)',
+                },
+                alignSelf: 'flex-start',
+              }}
             >
               Create Tenant
-            </button>
-          </div>
-
-          {/* Assuming you have a TenantGrid component that can display the tenants */}
-          {/* <TenantGrid tenants={tenants} /> */}
-        </div>
-      </div>
-    </div>
+            </Button>
+          </Box>
+        </Paper>
+      </Box>
+    </Box>
   );
 }
