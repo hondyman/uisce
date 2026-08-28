@@ -484,4 +484,3 @@ volumes:
   uisce_redis_data:
   uisce_minio_data:
   lakekeeper_pgdata:
-  open-webui-data:
