@@ -228,6 +228,14 @@ env:
     value: "info"
   - name: ENVIRONMENT
     value: "production"
+  - name: KEYCLOAK_JWKS_URL
+    value: "https://100.84.50.65:8443/realms/uisce/protocol/openid-connect/certs"
+  # Never "true" outside a developer's local machine — see
+  # backend/internal/api/helpers.go and backend/internal/middleware/auth_context.go.
+  # Trusting a client-supplied X-Tenant-ID header when the JWT carries no
+  # tenant claim lets any caller assert an arbitrary tenant identity.
+  - name: ALLOW_CLIENT_TENANT_HEADER_FALLBACK
+    value: "false"
 
 # --------------------------------------------------------------------------
 # Liveness and readiness probes
