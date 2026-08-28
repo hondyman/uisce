@@ -268,6 +268,17 @@ func JWTMiddleware() gin.HandlerFunc {
 
 			c.Set("semlayer_user_id", claims["user_id"])
 			c.Set("semlayer_tenant_id", claims["tenant_id"])
+
+			// Re-set X-Tenant-ID from the verified claim (it was stripped of any
+			// client-supplied value above) so downstream handlers that read the
+			// header directly — or the proxied request to the backend — see the
+			// caller's actual tenant, not nothing and not whatever they sent.
+			if tid, ok := claims["tenant_id"].(string); ok && tid != "" {
+				c.Request.Header.Set("X-Tenant-ID", tid)
+			}
+			if uid, ok := claims["user_id"].(string); ok && uid != "" {
+				c.Request.Header.Set("X-User-ID", uid)
+			}
 		}
 
 		c.Next()
