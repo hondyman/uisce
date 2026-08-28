@@ -116,7 +116,7 @@ func JWTMiddleware() gin.HandlerFunc {
 		// Allow unauthenticated frontend dev calls to /api/fabric/* when
 		// DEV_ALLOW_UNAUTH_FABRIC is set to "true" (default for local development).
 		if strings.HasPrefix(c.Request.URL.Path, "/api/fabric/") {
-			if strings.ToLower(getEnv("DEV_ALLOW_UNAUTH_FABRIC", "true")) == "true" {
+			if strings.ToLower(getEnv("DEV_ALLOW_UNAUTH_FABRIC", "false")) == "true" {
 				c.Next()
 				return
 			}
@@ -124,7 +124,7 @@ func JWTMiddleware() gin.HandlerFunc {
 
 		// Allow unauthenticated access to model catalog endpoints in development
 		if strings.HasPrefix(c.Request.URL.Path, "/api/models") {
-			if strings.ToLower(getEnv("DEV_ALLOW_UNAUTH_MODELS", "true")) == "true" {
+			if strings.ToLower(getEnv("DEV_ALLOW_UNAUTH_MODELS", "false")) == "true" {
 				c.Next()
 				return
 			}
@@ -132,7 +132,7 @@ func JWTMiddleware() gin.HandlerFunc {
 
 		// Allow unauthenticated access to catalog endpoints in development
 		if strings.HasPrefix(c.Request.URL.Path, "/api/catalog") {
-			if strings.ToLower(getEnv("DEV_ALLOW_UNAUTH_CATALOG", "true")) == "true" {
+			if strings.ToLower(getEnv("DEV_ALLOW_UNAUTH_CATALOG", "false")) == "true" {
 				c.Next()
 				return
 			}
@@ -143,7 +143,7 @@ func JWTMiddleware() gin.HandlerFunc {
 		// DEV_ALLOW_UNAUTH_BUSINESS_TERM (default: true) to avoid accidental
 		// exposure in production.
 		if c.Request.Method == http.MethodGet && c.Request.URL.Path == "/api/business-term" {
-			if strings.ToLower(getEnv("DEV_ALLOW_UNAUTH_BUSINESS_TERM", "true")) == "true" {
+			if strings.ToLower(getEnv("DEV_ALLOW_UNAUTH_BUSINESS_TERM", "false")) == "true" {
 				c.Next()
 				return
 			}
@@ -153,7 +153,7 @@ func JWTMiddleware() gin.HandlerFunc {
 		// This makes Vite+gateway development smoother; disable in production by setting
 		// DEV_ALLOW_UNAUTH_VIEWS=false
 		if strings.HasPrefix(c.Request.URL.Path, "/api/views") {
-			if strings.ToLower(getEnv("DEV_ALLOW_UNAUTH_VIEWS", "true")) == "true" {
+			if strings.ToLower(getEnv("DEV_ALLOW_UNAUTH_VIEWS", "false")) == "true" {
 				c.Next()
 				return
 			}
@@ -170,14 +170,14 @@ func JWTMiddleware() gin.HandlerFunc {
 
 		// Allow unauthenticated GETs to tenant endpoints in development so the frontend
 		// dev server (vite) can fetch tenants and tenant-scoped resources when auth isn't available.
-		if strings.ToLower(getEnv("DEV_ALLOW_UNAUTH_FABRIC", "true")) == "true" &&
+		if strings.ToLower(getEnv("DEV_ALLOW_UNAUTH_FABRIC", "false")) == "true" &&
 			(c.Request.URL.Path == "/api/tenants" || strings.HasPrefix(c.Request.URL.Path, "/api/tenants/")) {
 			c.Next()
 			return
 		}
 
 		// Allow unauthenticated access to the system-wide IP whitelist list in development
-		if strings.ToLower(getEnv("DEV_ALLOW_UNAUTH_FABRIC", "true")) == "true" &&
+		if strings.ToLower(getEnv("DEV_ALLOW_UNAUTH_FABRIC", "false")) == "true" &&
 			(c.Request.URL.Path == "/api/ip-whitelist" || strings.HasPrefix(c.Request.URL.Path, "/api/ip-whitelist")) {
 			c.Next()
 			return
@@ -185,7 +185,7 @@ func JWTMiddleware() gin.HandlerFunc {
 
 		// Allow unauthenticated access to certain dev-only endpoints like policies and bundles
 		// so the frontend can work without a JWT during local development.
-		if strings.ToLower(getEnv("DEV_ALLOW_UNAUTH_FABRIC", "true")) == "true" {
+		if strings.ToLower(getEnv("DEV_ALLOW_UNAUTH_FABRIC", "false")) == "true" {
 			p := c.Request.URL.Path
 			// Allow both list and item routes for policies during local development
 			if strings.HasPrefix(p, "/api/policies") || strings.HasPrefix(p, "/api/bundles") || strings.HasPrefix(p, "/api/semantic") || strings.HasPrefix(p, "/api/business") || strings.HasPrefix(p, "/api/data-domains") || strings.HasPrefix(p, "/api/profiler") || strings.HasPrefix(p, "/api/entity-schema") || strings.HasPrefix(p, "/api/validation-rules") || strings.HasPrefix(p, "/api/relationships") || strings.HasPrefix(p, "/api/lineage") || strings.HasPrefix(p, "/api/node-types") || strings.HasPrefix(p, "/api/edge-types") || strings.HasPrefix(p, "/api/bp-notifications") || strings.HasPrefix(p, "/api/impact") {
@@ -197,7 +197,7 @@ func JWTMiddleware() gin.HandlerFunc {
 		authHeader := c.GetHeader("Authorization")
 		if authHeader == "" {
 			// In development, allow requests that provide X-User-ID even without JWT
-			if strings.ToLower(getEnv("DEV_ALLOW_UNAUTH_XUSER", "true")) == "true" && c.GetHeader("X-User-ID") != "" {
+			if strings.ToLower(getEnv("DEV_ALLOW_UNAUTH_XUSER", "false")) == "true" && c.GetHeader("X-User-ID") != "" {
 				c.Next()
 				return
 			}
@@ -534,14 +534,14 @@ func PolicyEnforcementMiddleware() gin.HandlerFunc {
 		// DEV_ALLOW_UNAUTH_FABRIC=true (this project already uses that flag for
 		// other dev-only relaxations).
 		if strings.HasPrefix(c.Request.URL.Path, "/api/semantic-mappings") {
-			if strings.ToLower(getEnv("DEV_ALLOW_UNAUTH_FABRIC", "true")) == "true" {
+			if strings.ToLower(getEnv("DEV_ALLOW_UNAUTH_FABRIC", "false")) == "true" {
 				c.Next()
 				return
 			}
 		}
 		// Allow skipping policy enforcement for /api/views in local development
 		if strings.HasPrefix(c.Request.URL.Path, "/api/views") {
-			if strings.ToLower(getEnv("DEV_ALLOW_UNAUTH_VIEWS", "true")) == "true" {
+			if strings.ToLower(getEnv("DEV_ALLOW_UNAUTH_VIEWS", "false")) == "true" {
 				c.Next()
 				return
 			}
@@ -646,26 +646,46 @@ func main() {
 
 	r := gin.Default()
 	logger.Info("Router created")
-	// Debug endpoint: echo tenant headers for frontend debugging
-	r.GET("/api/_debug/headers", func(c *gin.Context) {
-		tenantID := c.GetHeader("X-Tenant-ID")
-		dsID := c.GetHeader("X-Tenant-Datasource-ID")
-		// Also echo query params for convenience
-		q := map[string]string{}
-		for k, v := range c.Request.URL.Query() {
-			if len(v) > 0 {
-				q[k] = v[0]
+
+	// Debug endpoint: echoes back whatever tenant header the caller sent, with
+	// no auth. Only meaningful as a local dev aid, and only ever safe as one —
+	// gate it behind explicit opt-in like every other dev-only relaxation in
+	// this file, never on by default.
+	if strings.ToLower(getEnv("DEV_ENABLE_DEBUG_HEADERS_ENDPOINT", "false")) == "true" {
+		r.GET("/api/_debug/headers", func(c *gin.Context) {
+			tenantID := c.GetHeader("X-Tenant-ID")
+			dsID := c.GetHeader("X-Tenant-Datasource-ID")
+			q := map[string]string{}
+			for k, v := range c.Request.URL.Query() {
+				if len(v) > 0 {
+					q[k] = v[0]
+				}
 			}
-		}
-		c.JSON(200, gin.H{
-			"received_tenant_id":     tenantID,
-			"received_datasource_id": dsID,
-			"query_params":           q,
+			c.JSON(200, gin.H{
+				"received_tenant_id":     tenantID,
+				"received_datasource_id": dsID,
+				"query_params":           q,
+			})
 		})
-	})
+	}
 
 	// Add panic recovery middleware
 	r.Use(gin.Recovery())
+
+	// Strip any client-supplied tenant/identity headers before anything else
+	// runs. Tenant scope must come exclusively from a verified JWT (set by
+	// JWTMiddleware below via semlayer_tenant_id), never from a header the
+	// caller controls — a caller who sets X-Tenant-ID to another tenant's ID
+	// must never have that value reach a handler or get proxied upstream.
+	r.Use(func(c *gin.Context) {
+		c.Request.Header.Del("X-Tenant-ID")
+		c.Request.Header.Del("X-Client-ID")
+		c.Request.Header.Del("X-Org-Id")
+		c.Request.Header.Del("X-Roles")
+		c.Request.Header.Del("X-Scopes")
+		c.Request.Header.Del("X-Tenant-Scope")
+		c.Next()
+	})
 
 	// Configure trusted proxies to avoid trusting arbitrary X-Forwarded-For headers.
 	// Use environment variable TRUSTED_PROXIES (comma-separated CIDRs/IPs) in dev/real deployments.
