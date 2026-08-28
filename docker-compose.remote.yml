@@ -259,48 +259,48 @@ services:
   # Credentials are injected by Infisical at runtime.
   # Start the lakehouse stack first: lakehouse-start
   # ---------------------------------------------------------
-  uisce-lakehouse-provisioner:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile.lakehouse-provisioner
-    container_name: uisce-lakehouse-provisioner
-    networks:
-      - remote-net
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-    ports:
-      - "9091:9091"
-    environment:
+  # uisce-lakehouse-provisioner:  # DISABLED - build directive broken
+  #     build:
+  #       context: ./backend
+  #       dockerfile: Dockerfile.lakehouse-provisioner
+  #     container_name: uisce-lakehouse-provisioner
+  #     networks:
+  #       - remote-net
+  #     extra_hosts:
+  #       - "host.docker.internal:host-gateway"
+  #     ports:
+  #       - "9091:9091"
+  #     environment:
       # PostgreSQL — the semantic metadata graph
-      POSTGRES_DSN: "${LPS_POSTGRES_DSN:-postgresql://postgres:postgres@host.docker.internal:5432/alpha?sslmode=disable}"
+  #       POSTGRES_DSN: "${LPS_POSTGRES_DSN:-postgresql://postgres:postgres@host.docker.internal:5432/alpha?sslmode=disable}"
       # DataFusion REST SQL endpoint (Arrow Flight + REST) — replaces Trino in this stack
-      DATAFUSION_URL: "${LPS_DATAFUSION_URL:-http://uisce-datafusion:8555}"
+  #       DATAFUSION_URL: "${LPS_DATAFUSION_URL:-http://uisce-datafusion:8555}"
       # Flight SQL endpoint (gRPC, optional)
-      DATAFUSION_FLIGHT_URL: "${LPS_DATAFUSION_FLIGHT_URL:-grpc://uisce-datafusion:8554}"
+  #       DATAFUSION_FLIGHT_URL: "${LPS_DATAFUSION_FLIGHT_URL:-grpc://uisce-datafusion:8554}"
       # Iceberg REST catalog endpoint
-      ICEBERG_CATALOG_URI: "${ICEBERG_CATALOG_URI:-http://lakekeeper:8181}"
+  #       ICEBERG_CATALOG_URI: "${ICEBERG_CATALOG_URI:-http://lakekeeper:8181}"
       # Redpanda broker for real-time node.created events
-      REDPANDA_BROKERS: "uisce-redpanda:9092"
+  #       REDPANDA_BROKERS: "uisce-redpanda:9092"
       # How often to run the full reconciliation loop
-      RECONCILE_INTERVAL: "${LPS_RECONCILE_INTERVAL:-5m}"
+  #       RECONCILE_INTERVAL: "${LPS_RECONCILE_INTERVAL:-5m}"
       # Core (gold_copy) tenant UUID — used to scope node type lookups
-      CORE_TENANT_ID: "${CORE_TENANT_ID:-}"
+  #       CORE_TENANT_ID: "${CORE_TENANT_ID:-}"
       # Health server port
-      HEALTH_PORT: "9091"
+  #       HEALTH_PORT: "9091"
       # Structured JSON logging in production; set to 'console' for dev
-      LOG_FORMAT: "${LOG_FORMAT:-json}"
-    depends_on:
-      lakekeeper:
-        condition: service_healthy
-      uisce-redpanda:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9091/health"]
-      interval: 20s
-      retries: 5
-      start_period: 30s
-    restart: unless-stopped
-
+  #       LOG_FORMAT: "${LOG_FORMAT:-json}"
+  #     depends_on:
+  #       lakekeeper:
+  #         condition: service_healthy
+  #       uisce-redpanda:
+  #         condition: service_healthy
+  #     healthcheck:
+  #       test: ["CMD", "curl", "-f", "http://localhost:9091/health"]
+  #       interval: 20s
+  #       retries: 5
+  #       start_period: 30s
+  #     restart: unless-stopped
+  # 
   # ---------------------------------------------------------
   # MinIO Object Storage (Iceberg Warehouse)
   # ---------------------------------------------------------
@@ -354,58 +354,58 @@ services:
   #   context: ./backend
   #   dockerfile: Dockerfile.datafusion-flight-sql
   # ---------------------------------------------------------
-  uisce-datafusion:
-    build:
-      context: ./datafusion-build
-      dockerfile: Dockerfile
-    image: uisce-datafusion:local
-    container_name: uisce-datafusion
-    user: root
-    networks:
-      - remote-net
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-    ports:
-      - "8554:8554"
-      - "8555:8555"
-    environment:
+  # uisce-datafusion:  # DISABLED - build directive broken
+  #     build:
+  #       context: ./datafusion-build
+  #       dockerfile: Dockerfile
+  #     image: uisce-datafusion:local
+  #     container_name: uisce-datafusion
+  #     user: root
+  #     networks:
+  #       - remote-net
+  #     extra_hosts:
+  #       - "host.docker.internal:host-gateway"
+  #     ports:
+  #       - "8554:8554"
+  #       - "8555:8555"
+  #     environment:
       # REST SQL port (using 8555 since 8554 is reserved for Flight SQL gRPC)
-      FLIGHT_SQL_PORT: "8555"
+  #       FLIGHT_SQL_PORT: "8555"
       # S3 / MinIO Path-Style Access (mandatory for MinIO — prevents subdomain DNS lookup)
-      AWS_ENDPOINT_URL: "${AWS_ENDPOINT_URL:-http://host.docker.internal:9000}"
-      AWS_S3_FORCE_PATH_STYLE: "true"
-      AWS_ALLOW_HTTP: "true"
-      AWS_S3_ALLOW_HTTP: "true"
+  #       AWS_ENDPOINT_URL: "${AWS_ENDPOINT_URL:-http://host.docker.internal:9000}"
+  #       AWS_S3_FORCE_PATH_STYLE: "true"
+  #       AWS_ALLOW_HTTP: "true"
+  #       AWS_S3_ALLOW_HTTP: "true"
       # Legacy S3 vars retained for older clients (PyIceberg uses AWS_ENDPOINT_URL)
-      AWS_ACCESS_KEY_ID: "${DATA_FUSION_AWS_ACCESS_KEY_ID:-minioadmin}"
-      AWS_SECRET_ACCESS_KEY: "${DATA_FUSION_AWS_SECRET_ACCESS_KEY:-minioadmin}"
-      AWS_REGION: "${DATA_FUSION_AWS_REGION:-us-east-1}"
-      AWS_DEFAULT_REGION: "${DATA_FUSION_AWS_REGION:-us-east-1}"
-      AWS_S3_ENDPOINT: "${DATA_FUSION_S3_ENDPOINT:-http://uisce-minio:9000}"
-      S3_ENDPOINT: "${DATA_FUSION_S3_ENDPOINT:-http://uisce-minio:9000}"
-      S3_ACCESS_KEY: "${DATA_FUSION_AWS_ACCESS_KEY_ID:-minioadmin}"
-      S3_SECRET_KEY: "${DATA_FUSION_AWS_SECRET_ACCESS_KEY:-minioadmin}"
-      S3_PATH_STYLE_ACCESS: "true"
+  #       AWS_ACCESS_KEY_ID: "${DATA_FUSION_AWS_ACCESS_KEY_ID:-minioadmin}"
+  #       AWS_SECRET_ACCESS_KEY: "${DATA_FUSION_AWS_SECRET_ACCESS_KEY:-minioadmin}"
+  #       AWS_REGION: "${DATA_FUSION_AWS_REGION:-us-east-1}"
+  #       AWS_DEFAULT_REGION: "${DATA_FUSION_AWS_REGION:-us-east-1}"
+  #       AWS_S3_ENDPOINT: "${DATA_FUSION_S3_ENDPOINT:-http://uisce-minio:9000}"
+  #       S3_ENDPOINT: "${DATA_FUSION_S3_ENDPOINT:-http://uisce-minio:9000}"
+  #       S3_ACCESS_KEY: "${DATA_FUSION_AWS_ACCESS_KEY_ID:-minioadmin}"
+  #       S3_SECRET_KEY: "${DATA_FUSION_AWS_SECRET_ACCESS_KEY:-minioadmin}"
+  #       S3_PATH_STYLE_ACCESS: "true"
       # Iceberg REST catalog endpoint & credentials for Apache Polaris
-      ICEBERG_CATALOG_URI: "${ICEBERG_CATALOG_URI:-http://lakekeeper:8181}"
-      ICEBERG_REST_CREDENTIAL: "${ICEBERG_REST_CREDENTIAL:-root:secret}"
-      ICEBERG_WAREHOUSE: "${ICEBERG_WAREHOUSE:-tenant-alpha}"
-      ICEBERG_REST_SCOPE: "${ICEBERG_REST_SCOPE:-PRINCIPAL_ROLE:ALL}"
+  #       ICEBERG_CATALOG_URI: "${ICEBERG_CATALOG_URI:-http://lakekeeper:8181}"
+  #       ICEBERG_REST_CREDENTIAL: "${ICEBERG_REST_CREDENTIAL:-root:secret}"
+  #       ICEBERG_WAREHOUSE: "${ICEBERG_WAREHOUSE:-tenant-alpha}"
+  #       ICEBERG_REST_SCOPE: "${ICEBERG_REST_SCOPE:-PRINCIPAL_ROLE:ALL}"
       # Warehouse bucket
-      WAREHOUSE_BUCKET: "${WAREHOUSE_BUCKET:-iceberg-warehouse}"
+  #       WAREHOUSE_BUCKET: "${WAREHOUSE_BUCKET:-iceberg-warehouse}"
       # Timezone (UTC)
-      TZ: UTC
+  #       TZ: UTC
       # Logging
-      RUST_LOG: info
-      PYTHONUNBUFFERED: "1"
-    healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:8555/health || exit 1"]
-      interval: 30s
-      timeout: 10s
-      start_period: 90s
-      retries: 5
-    restart: unless-stopped
-
+  #       RUST_LOG: info
+  #       PYTHONUNBUFFERED: "1"
+  #     healthcheck:
+  #       test: ["CMD-SHELL", "curl -f http://localhost:8555/health || exit 1"]
+  #       interval: 30s
+  #       timeout: 10s
+  #       start_period: 90s
+  #       retries: 5
+  #     restart: unless-stopped
+  # 
   # ===========================================================
   # Lakekeeper — Rust-native Iceberg REST Catalog
   # Replaces Apache Polaris. Uses its own PostgreSQL 17 for
