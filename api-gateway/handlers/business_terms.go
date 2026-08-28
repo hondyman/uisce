@@ -35,12 +35,17 @@ func HandleBusinessTermSearch(c *gin.Context) {
 	if req.Limit == 0 {
 		req.Limit = 20
 	}
-	tenantID := req.TenantID
-	if tenantID == "" {
-		tenantID = c.GetHeader("X-Tenant-ID")
-		if tenantID == "" {
-			tenantID = "default"
-		}
+
+	// SECURITY: tenant scope must come only from the caller's verified JWT
+	// (set by JWTMiddleware into gin context + the X-Tenant-ID header it
+	// re-signs after stripping any client-supplied value) — never from the
+	// request body, and never a "default" fallback tenant. A request-body
+	// tenant_id is fully attacker-controlled.
+	tenantID, _ := c.Get("semlayer_tenant_id")
+	tenantIDStr, _ := tenantID.(string)
+	if tenantIDStr == "" {
+		c.JSON(401, gin.H{"error": "missing or invalid tenant context"})
+		return
 	}
 
 	datasourceID := c.GetHeader("X-Tenant-Datasource-ID")
@@ -70,8 +75,14 @@ func HandleBusinessTermSearch(c *gin.Context) {
 	}
 
 	httpReq.Header.Set("Content-Type", "application/json")
-	httpReq.Header.Set("X-Tenant-ID", tenantID)
+	httpReq.Header.Set("X-Tenant-ID", tenantIDStr)
 	httpReq.Header.Set("X-Tenant-Datasource-ID", datasourceID)
+	// Forward the caller's bearer token so the backend independently
+	// re-validates auth and re-derives tenant from its own JWT check —
+	// this proxied request previously carried no Authorization at all.
+	if auth := c.GetHeader("Authorization"); auth != "" {
+		httpReq.Header.Set("Authorization", auth)
+	}
 
 	client := &http.Client{Timeout: 10 * time.Second}
 	resp, err := client.Do(httpReq)
