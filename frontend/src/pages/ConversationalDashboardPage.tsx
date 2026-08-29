@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Split } from 'lucide-react';
+import ViewColumnIcon from '@mui/icons-material/ViewColumn';
 import { devLog } from '../utils/devLogger';
 import { DashboardConversationInterface } from './DashboardConversationInterface';
 import { DashboardPreview } from './DashboardPreview';
@@ -100,7 +100,7 @@ export const ConversationalDashboardPage: React.FC<ConversationalDashboardPagePr
                     : 'text-gray-500 hover:text-gray-700'
                 }`}
               >
-                <Split className="w-4 h-4 inline mr-1" />
+                <ViewColumnIcon sx={{ width: 16, height: 16 }} className="inline mr-1" />
                 Split
               </button>
               <button
@@ -152,7 +152,7 @@ export const ConversationalDashboardPage: React.FC<ConversationalDashboardPagePr
               ) : (
                 <div className="h-full bg-white rounded-lg shadow-lg flex items-center justify-center">
                   <div className="text-center text-gray-500">
-                    <Split className="w-16 h-16 mx-auto mb-4" />
+<ViewColumnIcon sx={{ width: 64, height: 64 }} className="mx-auto mb-4" />
                     <h3 className="text-lg font-medium mb-2">Dashboard Preview</h3>
                     <p className="text-sm">
                       Start a conversation to see your dashboard preview here

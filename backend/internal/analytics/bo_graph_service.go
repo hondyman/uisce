@@ -53,22 +53,25 @@ func (s *BOGraphService) SetGoldCopyResolver(r *goldcopy.Resolver) {
 	s.goldcopyResolve = r
 }
 
-// GenerateGraph creates a complete lineage graph for a Business Object
-func (s *BOGraphService) GenerateGraph(boID string) (*BOGraph, error) {
+// GenerateGraph creates a complete lineage graph for a Business Object.
+// tenantID scopes every underlying query — callers MUST pass the requesting
+// user's own tenant (never a client-supplied value) so a caller can never
+// retrieve another tenant's BO graph by guessing/enumerating boID.
+func (s *BOGraphService) GenerateGraph(boID, tenantID string) (*BOGraph, error) {
 	graph := &BOGraph{
 		Nodes: []GraphNode{},
 		Edges: []GraphEdge{},
 	}
 
 	// 1. Add BO Node (centerpiece)
-	boNode, err := s.buildBONode(boID)
+	boNode, err := s.buildBONode(boID, tenantID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to build BO node: %w", err)
 	}
 	graph.Nodes = append(graph.Nodes, boNode)
 
 	// 2. Add Term Nodes + BO→Term edges
-	terms, err := s.fetchTerms(boID)
+	terms, err := s.fetchTerms(boID, tenantID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch terms: %w", err)
 	}
@@ -132,6 +135,7 @@ func (s *BOGraphService) GenerateGraph(boID string) (*BOGraph, error) {
 	}
 
 	// 4. Add Calculation Nodes + Dependencies
+	// NOTE: fetchCalculations is not yet tenant-scoped — see its doc comment.
 	calcs, err := s.fetchCalculations(boID)
 	if err != nil {
 		// Non-fatal, just log
@@ -155,7 +159,7 @@ func (s *BOGraphService) GenerateGraph(boID string) (*BOGraph, error) {
 	}
 
 	// 5. Add Related BOs (via FK paths)
-	relatedBOs, err := s.fetchRelatedBOs(boID)
+	relatedBOs, err := s.fetchRelatedBOs(boID, tenantID)
 	if err != nil {
 		// Non-fatal
 		fmt.Printf("Warning: failed to fetch related BOs: %v\n", err)
@@ -215,28 +219,30 @@ type RelatedBO struct {
 	RelationshipType string
 }
 
-func (s *BOGraphService) buildBONode(boID string) (GraphNode, error) {
+func (s *BOGraphService) buildBONode(boID, tenantID string) (GraphNode, error) {
 	var nodeName, description string
 	var termCount int
 
-	// Try business_objects table first (wizard-created BOs)
+	// Try business_objects table first (wizard-created BOs). tenant_id IS NULL
+	// admits gold-copy blueprint BOs, matching the overlay pattern used
+	// elsewhere (e.g. internal/security/profile_service.go).
 	err := s.db.QueryRow(`
-		SELECT 
+		SELECT
 			COALESCE(display_name, name) as node_name,
 			COALESCE(description, '') as description
 		FROM business_objects
-		WHERE id = $1::uuid
-	`, boID).Scan(&nodeName, &description)
+		WHERE id = $1::uuid AND (tenant_id = $2::uuid OR tenant_id IS NULL)
+	`, boID, tenantID).Scan(&nodeName, &description)
 
 	if err != nil {
 		// Fallback to catalog_node (legacy BOs)
 		err = s.db.QueryRow(`
-			SELECT 
+			SELECT
 				node_name,
 				COALESCE(description, '') as description
 			FROM catalog_node
-			WHERE id = $1
-		`, boID).Scan(&nodeName, &description)
+			WHERE id = $1 AND tenant_id = $2
+		`, boID, tenantID).Scan(&nodeName, &description)
 		if err != nil {
 			return GraphNode{}, err
 		}
@@ -253,8 +259,8 @@ func (s *BOGraphService) buildBONode(boID string) (GraphNode, error) {
 		s.db.QueryRow(`
 			SELECT COUNT(*)
 			FROM catalog_edge
-			WHERE source_node_id = $1 AND edge_type_name = 'HAS_ATTRIBUTE'
-		`, boID).Scan(&termCount)
+			WHERE source_node_id = $1 AND edge_type_name = 'HAS_ATTRIBUTE' AND tenant_id = $2
+		`, boID, tenantID).Scan(&termCount)
 	}
 
 	return GraphNode{
@@ -270,7 +276,7 @@ func (s *BOGraphService) buildBONode(boID string) (GraphNode, error) {
 	}, nil
 }
 
-func (s *BOGraphService) fetchTerms(boID string) ([]Term, error) {
+func (s *BOGraphService) fetchTerms(boID, tenantID string) ([]Term, error) {
 	// 1. Try business_objects bo_fields joined with catalog_node/catalog_edge
 	rows, err := s.db.Query(`
 		SELECT 
@@ -288,25 +294,29 @@ func (s *BOGraphService) fetchTerms(boID string) ([]Term, error) {
 		FROM bo_fields f
 		LEFT JOIN business_objects sub ON f.subtype_id = sub.id
 		LEFT JOIN catalog_node st ON (
-			st.id::text = f.field_ref 
-			OR LOWER(st.node_name) = LOWER(f.name) 
-			OR LOWER(st.node_name) = LOWER(f.display_label)
+			(st.id::text = f.field_ref
+			OR LOWER(st.node_name) = LOWER(f.name)
+			OR LOWER(st.node_name) = LOWER(f.display_label))
+			AND st.tenant_id = $2
 		)
 		LEFT JOIN catalog_edge ce ON (
 			(ce.source_node_id = st.id OR ce.target_node_id = st.id)
+			AND ce.tenant_id = $2
 			AND (
-				ce.edge_type_id = '0434ca1a-6543-42d3-9fce-f0b58b5fba34' 
+				ce.edge_type_id = '0434ca1a-6543-42d3-9fce-f0b58b5fba34'
 				OR LOWER(ce.relationship_type) IN ('has_context', 'maps_to', 'mapped_to', 'column_mapping')
 			)
 		)
 		LEFT JOIN catalog_node col ON (
 			(col.id = ce.source_node_id OR col.id = ce.target_node_id)
 			AND col.id != st.id
+			AND col.tenant_id = $2
 			AND col.qualified_path LIKE '/%'
 		)
-		WHERE f.bo_id = $1::uuid 
-		   OR f.bo_id IN (SELECT id FROM business_objects WHERE parent_id = $1::uuid)
-	`, boID)
+		WHERE (f.bo_id = $1::uuid
+		   OR f.bo_id IN (SELECT id FROM business_objects WHERE parent_id = $1::uuid))
+		   AND f.bo_id IN (SELECT id FROM business_objects WHERE tenant_id = $2::uuid OR tenant_id IS NULL)
+	`, boID, tenantID)
 
 	if err != nil {
 		// 2. Fallback to catalog_node/catalog_edge
@@ -324,23 +334,26 @@ func (s *BOGraphService) fetchTerms(boID string) ([]Term, error) {
 				NULLIF(col.qualified_path, '') as col_path,
 				col.node_name as col_name
 			FROM catalog_edge bo_edge
-			JOIN catalog_node st ON (bo_edge.target_node_id = st.id OR bo_edge.source_node_id = st.id)
+			JOIN catalog_node st ON (bo_edge.target_node_id = st.id OR bo_edge.source_node_id = st.id) AND st.tenant_id = $2
 			LEFT JOIN catalog_edge ce ON (
 				(ce.source_node_id = st.id OR ce.target_node_id = st.id)
+				AND ce.tenant_id = $2
 				AND (
-					ce.edge_type_id = '0434ca1a-6543-42d3-9fce-f0b58b5fba34' 
+					ce.edge_type_id = '0434ca1a-6543-42d3-9fce-f0b58b5fba34'
 					OR LOWER(ce.relationship_type) IN ('has_context', 'maps_to', 'mapped_to', 'column_mapping')
 				)
 			)
 			LEFT JOIN catalog_node col ON (
 				(col.id = ce.source_node_id OR col.id = ce.target_node_id)
 				AND col.id != st.id
+				AND col.tenant_id = $2
 				AND col.qualified_path LIKE '/%'
 			)
 			WHERE (bo_edge.source_node_id = $1 OR bo_edge.target_node_id = $1)
+			  AND bo_edge.tenant_id = $2
 			  AND LOWER(bo_edge.relationship_type) IN ('has_attribute', 'member_of', 'contains', 'specializes')
 			  AND st.id != $1
-		`, boID)
+		`, boID, tenantID)
 		if err != nil {
 			return nil, err
 		}
@@ -514,7 +527,7 @@ func (s *BOGraphService) extractDependencies(formula string, terms []Term) []str
 	return deps
 }
 
-func (s *BOGraphService) fetchRelatedBOs(boID string) ([]RelatedBO, error) {
+func (s *BOGraphService) fetchRelatedBOs(boID, tenantID string) ([]RelatedBO, error) {
 	rows, err := s.db.Query(`
 		SELECT DISTINCT
 			COALESCE(target_bo.id::text, fk.properties->>'target_bo_id', fk.target_node_id::text) as id,
@@ -522,17 +535,19 @@ func (s *BOGraphService) fetchRelatedBOs(boID string) ([]RelatedBO, error) {
 			COALESCE(fk.properties->>'relationship_type', fk.relationship_type, 'related') as relationship_type
 		FROM catalog_edge fk
 		LEFT JOIN business_objects target_bo ON (
-			target_bo.id::text = (fk.properties->>'target_bo_id') 
-			OR target_bo.id = fk.target_node_id 
-			OR target_bo.driver_table_id = fk.target_node_id
+			(target_bo.id::text = (fk.properties->>'target_bo_id')
+			OR target_bo.id = fk.target_node_id
+			OR target_bo.driver_table_id = fk.target_node_id)
+			AND (target_bo.tenant_id = $2::uuid OR target_bo.tenant_id IS NULL)
 		)
-		LEFT JOIN catalog_node cn ON cn.id = fk.target_node_id
+		LEFT JOIN catalog_node cn ON cn.id = fk.target_node_id AND cn.tenant_id = $2
 		WHERE (
-			fk.source_node_id = $1::uuid 
+			fk.source_node_id = $1::uuid
 			OR (fk.properties->>'source_bo_id') = $1
-			OR fk.source_node_id IN (SELECT driver_table_id FROM business_objects WHERE id = $1::uuid)
+			OR fk.source_node_id IN (SELECT driver_table_id FROM business_objects WHERE id = $1::uuid AND (tenant_id = $2::uuid OR tenant_id IS NULL))
 		)
-	`, boID)
+		AND fk.tenant_id = $2
+	`, boID, tenantID)
 
 	if err != nil {
 		return nil, err

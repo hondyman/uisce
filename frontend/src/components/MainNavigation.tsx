@@ -298,10 +298,10 @@ const categoryConfigs: CategoryConfig[] = [
         ]
       },
       {
-        label: 'Page Studio',
+        label: 'Page Designer',
         icon: <BuildIcon />,
         items: [
-          { label: 'Page Designer', path: '/page-studio', icon: <BuildIcon />, description: 'Visual UI builder', badge: { label: 'New', color: 'success' } },
+          { label: 'Page Designer', path: '/page-designer', icon: <BuildIcon />, description: 'Visual UI builder', badge: { label: 'New', color: 'success' } },
           { label: 'Dynamic UI', path: '/dynamic-ui', icon: <BuildIcon />, description: 'Form generator' },
           { label: 'Custom Components', path: '/fabric/custom-components', icon: <BuildIcon />, description: 'Reusable components' },
         ]

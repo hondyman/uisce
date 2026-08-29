@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Activity, Gauge, BarChart3, CloudLightning, Filter, Download, ArrowUpRight, ArrowDownRight } from 'lucide-react';
+import { Timeline as ActivityIcon, Speed as GaugeIcon, BarChart as BarChart3Icon, FlashOn as CloudLightningIcon, FilterList as FilterIcon, Download as DownloadIcon, NorthEast as ArrowUpRightIcon, SouthEast as ArrowDownRightIcon } from '@mui/icons-material';
 
 const RiskMasterDashboard: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'factors' | 'exposures' | 'portfolio' | 'scenarios'>('portfolio');

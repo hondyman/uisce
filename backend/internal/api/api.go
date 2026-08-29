@@ -3,17 +3,14 @@ package api
 import (
 	"bytes"
 	"context"
-	"crypto/rsa"
 	"crypto/tls"
 	"crypto/x509"
 	"database/sql"
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
 	"log"
 	"log/slog"
-	"math/big"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -809,71 +806,30 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 		log.Printf("[WARN] Failed to load API keys from file: %v", err)
 	}
 
-	// Initialize Keycloak RS256 public key for JWT validation if configured
+	// Initialize Keycloak RS256 public keys for JWT validation if configured,
+	// and keep them refreshed so a Keycloak key rotation doesn't require a
+	// backend restart (or worse, silently start rejecting/never-verifying
+	// tokens signed with the new key).
 	jwksURL := os.Getenv("KEYCLOAK_JWKS_URL")
 	if jwksURL != "" {
-		log.Printf("[INFO] Fetching Keycloak JWKS from: %s", jwksURL)
-		// Use custom client to handle self-signed certs in dev
-		tr := &http.Transport{}
-		if os.Getenv("SKIP_TLS_VERIFY") == "true" {
-			tr.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
+		if err := refreshKeycloakJWKS(secMgr, jwksURL); err != nil {
+			log.Printf("[WARN] Initial Keycloak JWKS fetch failed: %v", err)
 		}
-		client := &http.Client{Transport: tr}
-		resp, err := client.Get(jwksURL)
-		if err != nil {
-			log.Printf("[WARN] Failed to fetch Keycloak JWKS: %v", err)
-		} else {
-			defer resp.Body.Close()
-			if resp.StatusCode == http.StatusOK {
-				body, err := io.ReadAll(resp.Body)
-				if err != nil {
-					log.Printf("[WARN] Failed to read Keycloak JWKS response: %v", err)
-				} else {
-					var jwks struct {
-						Keys []struct {
-							Kid string `json:"kid"`
-							Kty string `json:"kty"`
-							Alg string `json:"alg"`
-							Use string `json:"use"`
-							N   string `json:"n"`
-							E   string `json:"e"`
-						} `json:"keys"`
-					}
-					if err := json.Unmarshal(body, &jwks); err != nil {
-						log.Printf("[WARN] Failed to parse Keycloak JWKS: %v", err)
-					} else {
-						for _, key := range jwks.Keys {
-							if key.Kty == "RSA" && (key.Alg == "RS256" || key.Alg == "") {
-								nBytes, err := base64.RawURLEncoding.DecodeString(key.N)
-								if err != nil {
-									log.Printf("[WARN] Failed to decode RSA modulus: %v", err)
-									continue
-								}
-								eBytes, err := base64.RawURLEncoding.DecodeString(key.E)
-								if err != nil {
-									log.Printf("[WARN] Failed to decode RSA exponent: %v", err)
-									continue
-								}
-								n := new(big.Int).SetBytes(nBytes)
-								e := 0
-								for _, b := range eBytes {
-									e = e<<8 + int(b)
-								}
-								rsaPubKey := &rsa.PublicKey{
-									N: n,
-									E: e,
-								}
-								secMgr.SetRSAPublicKey(rsaPubKey)
-								log.Printf("[INFO] Keycloak RS256 public key loaded (kid=%s)", key.Kid)
-								break
-							}
-						}
-					}
-				}
-			} else {
-				log.Printf("[WARN] Keycloak JWKS returned status %d", resp.StatusCode)
+		refreshInterval := 10 * time.Minute
+		if v := os.Getenv("KEYCLOAK_JWKS_REFRESH_INTERVAL"); v != "" {
+			if d, err := time.ParseDuration(v); err == nil && d > 0 {
+				refreshInterval = d
 			}
 		}
+		go func() {
+			ticker := time.NewTicker(refreshInterval)
+			defer ticker.Stop()
+			for range ticker.C {
+				if err := refreshKeycloakJWKS(secMgr, jwksURL); err != nil {
+					log.Printf("[WARN] Keycloak JWKS refresh failed: %v", err)
+				}
+			}
+		}()
 	}
 
 	// Development helper: optionally seed an API key for a test user so local
@@ -887,6 +843,23 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 
 	// Apply Auth Context Middleware globally (does not block, but populates context)
 	r.Use(appmid.AuthContextMiddleware(secMgr))
+	// Resolve each request's IdP groups to a functional role / clearance level
+	// via security.identity_profile_mappings. Was defined but never wired up —
+	// EnrichSubjectAttributes returns "unassigned_operator"/"L1" when a user's
+	// groups have no mapping row yet, so this is a safe no-op until the
+	// mapping table is populated (see roadmap phase 3).
+	r.Use(appmid.IdentityEnrichmentMiddleware(appmid.IdentityEnrichmentConfig{
+		DB: security.NewProfileService(db),
+	}))
+	// First-login auto-provisioning: a client user with no tenant claim and no
+	// existing user_tenant row gets assigned by verified email domain
+	// (security.tenant_domains). Rejects with 403 if the domain isn't
+	// registered or the email isn't verified — never a default tenant. Must
+	// run before WithTenantContext so the resolved tenant is visible to it.
+	r.Use(appmid.TenantProvisioningMiddleware(appmid.TenantProvisioningConfig{
+		DB:             db,
+		DomainResolver: security.NewTenantDomainService(db),
+	}))
 	// Derive verified tenant ID from AuthContext and store in request context
 	r.Use(appmid.WithTenantContext)
 	// Enforce region header and validate tenant scoping on all semantic requests
@@ -1002,6 +975,9 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 
 	// Initialize Tenant Access handler for multi-tenant access control
 	tenantAccessHandler := NewTenantAccessHandlers(db)
+
+	// Initialize Admin Tenant Access handler for user<->tenant mapping CRUD
+	adminTenantAccessHandler := handlers.NewAdminTenantAccessHandler(db)
 
 	// Initialize Onboarding handler for tenant provisioning (OLTP + Iceberg)
 	onboardingHandler := NewOnboardingHandler(db, iceberg.PolarisFromEnv())
@@ -1473,6 +1449,9 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 		r.Get("/rest/datasources", tenantAccessHandler.ListAlphaDatasources)
 		r.Get("/rest/products", tenantAccessHandler.ListAlphaProducts)
 
+		// Admin tenant access management (user<->tenant assignments)
+		adminTenantAccessHandler.RegisterRoutes(r)
+
 		// Lookups routes
 		RegisterLookupsRoutes(r, db)
 
@@ -1622,9 +1601,6 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 		routes.RegisterMCP(r, srv.MCPHandler)
 
 		// Register handlers that were previously orphaned
-		tenantAccessHandler.RegisterRoutes(r)
-		r.Get("/rest/datasources", tenantAccessHandler.ListAlphaDatasources)
-		r.Get("/rest/products", tenantAccessHandler.ListAlphaProducts)
 		ipWhitelistHandler.RegisterRoutes(r)
 		onboardingHandler.RegisterRoutes(r)
 		abbreviationHandler.RegisterRoutes(r)
@@ -1669,6 +1645,10 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 		secProfileSvc := security.NewProfileService(db)
 		secProfileHandler := handlers.NewSecurityProfileHandler(secProfileSvc)
 		secProfileHandler.RegisterRoutes(r)
+
+		// Initialize Tenant Studio Handler (Phase D self-service studio endpoints)
+		tenantStudioHandler := NewTenantStudioHandler(db, secProfileSvc)
+		tenantStudioHandler.RegisterRoutes(r)
 
 		bpNotificationHandler := NewBPNotificationHandlers(sqlxDB, handlers.SecurityContextDeps{
 			Resolver: srv.DatasourceResolver,

@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  Users, Building, FileText, ChevronRight, ChevronDown, 
-  Plus, ArrowRight, DollarSign, Briefcase, Home
-} from 'lucide-react';
+import {
+  Group as UsersIcon, Business as BuildingIcon, Description as FileTextIcon, NavigateNext as ChevronRightIcon, ExpandMore as ChevronDownIcon,
+  Add as PlusIcon, ArrowForward as ArrowRightIcon, AttachMoney as DollarSignIcon, Work as BriefcaseIcon, Home as HomeIcon
+} from '@mui/icons-material';
 import { fetchAPI } from '../../../api';
 
 // Types

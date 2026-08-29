@@ -342,20 +342,21 @@ func setupTestDB(t *testing.T) *sql.DB {
 		updated_at DATETIME
 	);
 
+	-- Mirrors the live Postgres business_object_relationships schema (migration
+	-- 20261002_business_object_studio_engine.up.sql): from_bo_id/to_bo_id/rel_key/rel_name/
+	-- cardinality/join_type, NOT the older source_object_id/target_object_id/confidence shape.
 	CREATE TABLE IF NOT EXISTS business_object_relationships (
-		id TEXT PRIMARY KEY,
+		id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),
 		tenant_id TEXT NOT NULL,
-		tenant_datasource_id TEXT NOT NULL,
-		source_object_id TEXT NOT NULL,
-		target_object_id TEXT NOT NULL,
-		relationship_type TEXT NOT NULL,
-		cardinality TEXT,
-		confidence REAL,
-		is_user_applied BOOLEAN NOT NULL DEFAULT 0,
-		user_applied_at DATETIME,
+		from_bo_id TEXT NOT NULL,
+		to_bo_id TEXT NOT NULL,
+		rel_key TEXT NOT NULL,
+		rel_name TEXT NOT NULL,
+		cardinality TEXT NOT NULL DEFAULT '1:M',
+		join_type TEXT NOT NULL DEFAULT 'LEFT',
+		is_active BOOLEAN NOT NULL DEFAULT 1,
 		created_at DATETIME,
-		updated_at DATETIME,
-		UNIQUE(tenant_id, source_object_id, target_object_id, relationship_type)
+		UNIQUE(tenant_id, from_bo_id, rel_key)
 	);
 
 	CREATE TABLE IF NOT EXISTS entity_relationship (

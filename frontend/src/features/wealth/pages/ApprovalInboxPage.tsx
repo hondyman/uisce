@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { usePendingApprovals, useApproveRequest, useRejectRequest, ApprovalRequest } from '../api/approvals';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Loader2, CheckCircle, XCircle, Clock } from 'lucide-react';
+import { CircularProgress as Loader2Icon, CheckCircle as CheckCircleIcon, Cancel as XCircleIcon, Schedule as ClockIcon } from '@mui/icons-material';
 import { useNotification } from '../../../hooks/useNotification';
 
 export const ApprovalInboxPage: React.FC = () => {

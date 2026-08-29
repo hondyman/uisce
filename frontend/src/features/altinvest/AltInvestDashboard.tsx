@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  PieChart, TrendingUp, DollarSign, Calendar, AlertCircle, 
-  ArrowUpRight, ArrowDownRight, FileText
-} from 'lucide-react';
+import {
+  PieChart as PieChartIcon, TrendingUp as TrendingUpIcon, AttachMoney as DollarSignIcon, CalendarToday as CalendarIcon, Warning as AlertCircleIcon,
+  NorthEast as ArrowUpRightIcon, SouthEast as ArrowDownRightIcon, Description as FileTextIcon
+} from '@mui/icons-material';
 import { fetchAPI } from '../../../api';
 
 // Types

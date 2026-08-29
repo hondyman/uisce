@@ -21,12 +21,23 @@ func ExtractTenantFromContext(ctx context.Context) (uuid.UUID, error) {
 	return uuid.Parse(tenantStr)
 }
 
-// SetRLSContext sets the RLS context variable for a database connection or transaction
-func SetRLSContext(ctx context.Context, db interface {
+// SetRLSContext sets the RLS context GUC for the given transaction.
+//
+// SECURITY: this must be called with an open *sql.Tx, never a bare *sql.DB.
+// It previously used `set_config(..., false)` (session-scoped) under the GUC
+// name `app.current_tenant_id` — no RLS policy in this codebase reads that
+// name (the real policies, in backend/migrations/20260727000020_enable_tenant_rls.sql
+// and .../20260727000030_strict_tenant_rls.sql, all check
+// `uisce.current_tenant`), so every caller believed it was scoping RLS and
+// wasn't. `set_config(..., false)` is also unsafe with a connection pool: it
+// persists on the pooled connection past the end of the transaction/request,
+// potentially leaking one tenant's session variable into whatever request
+// reuses that connection next. `SET LOCAL` is transaction-scoped and reverts
+// automatically at COMMIT/ROLLBACK, which is what a pooled connection needs.
+func SetRLSContext(ctx context.Context, tx interface {
 	ExecContext(ctx context.Context, query string, args ...interface{}) (sql.Result, error)
 }, tenantID string) error {
-	// Note: We ignore the result of ExecContext as it's a SET command
-	_, err := db.ExecContext(ctx, "SELECT set_config('app.current_tenant_id', $1, false)", tenantID)
+	_, err := tx.ExecContext(ctx, "SET LOCAL uisce.current_tenant = $1", tenantID)
 	return err
 }
 

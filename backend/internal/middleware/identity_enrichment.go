@@ -5,8 +5,9 @@ import (
 	"net/http"
 
 	"github.com/google/uuid"
+	"github.com/hondyman/uisce/backend/internal/logging"
 	"github.com/hondyman/uisce/backend/internal/security"
-	"github.com/hondyman/uisce/libs/jwt-middleware"
+	"github.com/hondyman/uisce/backend/internal/services"
 )
 
 type IdentityEnrichmentConfig struct {
@@ -44,8 +45,13 @@ func IdentityEnrichmentMiddleware(cfg IdentityEnrichmentConfig) func(http.Handle
 				return
 			}
 
+			// RawClaims is populated by AuthContextMiddleware from
+			// services.SecurityManager.ValidateToken, which returns
+			// *services.JWTClaims — not the libs/jwt-middleware type. Using the
+			// wrong type here silently no-ops the whole enrichment step, since
+			// the assertion always fails.
 			var idpGroups []string
-			if claims, ok := authInfo.RawClaims.(*jwtmiddleware.JWTClaims); ok && claims != nil {
+			if claims, ok := authInfo.RawClaims.(*services.JWTClaims); ok && claims != nil {
 				idpGroups = claims.IdpGroups
 			}
 
@@ -53,11 +59,21 @@ func IdentityEnrichmentMiddleware(cfg IdentityEnrichmentConfig) func(http.Handle
 				idpGroups = []string{}
 			}
 
+			// Enrichment is a best-effort lookup, not an authorization decision:
+			// nothing in the codebase currently gates access on FunctionalRole/
+			// ClearanceLevel (they're used for persona-aware rendering). A DB
+			// error here leaves them unset, which is the more restrictive
+			// direction, not less — so this must not fail the request. Hard-
+			// failing every authenticated request on a lookup-table hiccup
+			// would turn an enrichment miss into a full outage, which is a
+			// worse security posture than an unenriched request, not a better
+			// one.
 			functionalRole, clearanceLevel, err := cfg.DB.EnrichSubjectAttributes(
 				ctx, tenantID, authInfo.UserID, idpGroups,
 			)
 			if err != nil {
-				http.Error(w, "identity enrichment failed", http.StatusInternalServerError)
+				logging.GetLogger().Sugar().Warnf("[IdentityEnrichmentMiddleware] enrichment lookup failed for user=%s tenant=%s: %v", authInfo.UserID, tenantIDStr, err)
+				next.ServeHTTP(w, r)
 				return
 			}
 

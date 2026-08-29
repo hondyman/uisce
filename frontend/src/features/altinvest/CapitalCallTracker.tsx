@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Calendar, AlertTriangle, CheckCircle2, Clock, DollarSign, TrendingUp } from 'lucide-react';
+import { CalendarToday as CalendarIcon, WarningAmber as AlertTriangleIcon, CheckCircle as CheckCircle2Icon, Schedule as ClockIcon, AttachMoney as DollarSignIcon, TrendingUp as TrendingUpIcon } from '@mui/icons-material';
 import { fetchAPI } from '../../api';
 
 // Types

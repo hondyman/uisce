@@ -4,19 +4,19 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { 
-  Calendar, 
-  GitBranch, 
-  PlayCircle, 
-  BarChart3, 
-  Sparkles,
-  AlertTriangle,
-  Clock,
-  Zap,
+import {
+  AccountTree as GitBranchIcon,
+  PlayCircle as PlayCircleIcon,
+  BarChart as BarChartIcon,
+  AutoAwesome as SparklesIcon,
+  Warning as AlertTriangleIcon,
+  Schedule as ClockIcon,
+  Bolt as ZapIcon,
   Shield,
-  Users,
+  People as UsersIcon,
   Settings
-} from 'lucide-react';
+} from '@mui/icons-material';
+import { Calendar } from 'lucide-react';
 import { useTenantContext } from '../../hooks/useTenantContext';
 import { useSchedulerStats, useAISuggestions } from '../../api/schedulerApi';
 import { ActorProvider, useActor, ActorSwitcher, ForActor } from '../../contexts/ActorContext';
@@ -47,22 +47,22 @@ const SchedulerConsoleContent: React.FC = () => {
   const [activeTab, setActiveTab] = useState<TabId>('overview');
   const [changeSetModalOpen, setChangeSetModalOpen] = useState(false);
   const [selectedChangeSet, setSelectedChangeSet] = useState<any>(null);
-  
+
   const { selectedTenant } = useTenantContext();
   const tenantId = selectedTenant?.id;
   const { role, permissions, tenantName } = useActor();
-  
+
   const { stats, loading: statsLoading } = useSchedulerStats(tenantId || '');
   const { suggestions } = useAISuggestions(tenantId || '');
 
   // Build tabs based on actor role
   const tabs: Tab[] = [
-    { id: 'overview', label: 'Overview', icon: BarChart3 },
+    { id: 'overview', label: 'Overview', icon: BarChartIcon },
     { id: 'jobs', label: 'Jobs', icon: Calendar, badge: stats?.active_jobs },
-    { id: 'dags', label: 'DAGs', icon: GitBranch },
-    { id: 'runs', label: 'Runs & Exceptions', icon: PlayCircle, badge: stats?.running_jobs },
-    { id: 'calendars', label: 'Calendars', icon: Clock },
-    { id: 'ai', label: 'AI Suggestions', icon: Sparkles, badge: suggestions?.length },
+    { id: 'dags', label: 'DAGs', icon: GitBranchIcon },
+    { id: 'runs', label: 'Runs & Exceptions', icon: PlayCircleIcon, badge: stats?.running_jobs },
+    { id: 'calendars', label: 'Calendars', icon: ClockIcon },
+    { id: 'ai', label: 'AI Suggestions', icon: SparklesIcon, badge: suggestions?.length },
     { id: 'governance', label: 'Governance', icon: Shield }
   ];
 
@@ -79,7 +79,7 @@ const SchedulerConsoleContent: React.FC = () => {
         return (
           <div className="runs-with-clusters">
             <RunsExceptionsView />
-            <ExceptionClusterView 
+            <ExceptionClusterView
               onApplyFix={(clusterId) => {
                 // Would open ChangeSet modal
                 setSelectedChangeSet({ id: clusterId, type: 'exception_fix' });
@@ -92,7 +92,7 @@ const SchedulerConsoleContent: React.FC = () => {
         return <CalendarsView />;
       case 'ai':
         return (
-          <AISuggestionsPanel 
+          <AISuggestionsPanel
             maxItems={20}
             showAllLink={false}
             onApplyFix={(suggestionId) => {
@@ -116,22 +116,22 @@ const SchedulerConsoleContent: React.FC = () => {
       <header className="scheduler-header">
         <div className="header-content">
           <div className="header-title">
-            <Clock className="header-icon" />
+            <ClockIcon className="header-icon" />
             <div>
               <h1>Scheduler Intelligence Console</h1>
               <p className="subtitle">
-                {role === 'GLOBAL_OPS' 
+                {role === 'GLOBAL_OPS'
                   ? 'Global Operations — Cross-Tenant Management'
                   : `Tenant Operations — ${tenantName || 'Single Tenant'}`}
               </p>
             </div>
           </div>
-          
+
           {/* Actor Switcher (for dev/testing) */}
           <div className="header-controls">
             <ActorSwitcher />
           </div>
-          
+
           {stats && !statsLoading && (
             <div className="header-stats">
               <div className="stat-item">
@@ -143,18 +143,18 @@ const SchedulerConsoleContent: React.FC = () => {
                 </span>
               </div>
               <div className="stat-item">
-                <Zap className="stat-icon running" />
+                <ZapIcon className="stat-icon running" />
                 <span className="stat-value">{stats.running_jobs}</span>
                 <span className="stat-label">Running</span>
               </div>
               <div className="stat-item">
-                <AlertTriangle className="stat-icon warning" />
+                <AlertTriangleIcon className="stat-icon warning" />
                 <span className="stat-value">{stats.failed_last_24h}</span>
                 <span className="stat-label">Failed (24h)</span>
               </div>
               <ForActor role="GLOBAL_OPS">
                 <div className="stat-item">
-                  <Users className="stat-icon tenants" />
+                  <UsersIcon className="stat-icon tenants" />
                   <span className="stat-value">{stats.active_tenants || 24}</span>
                   <span className="stat-label">Tenants</span>
                 </div>
@@ -170,7 +170,7 @@ const SchedulerConsoleContent: React.FC = () => {
           if (tab.globalOpsOnly && role !== 'GLOBAL_OPS') {
             return null;
           }
-          
+
           const Icon = tab.icon;
           return (
             <button
@@ -214,13 +214,13 @@ const SchedulerConsoleContent: React.FC = () => {
 // Calendars placeholder view
 const CalendarsView: React.FC = () => {
   const { role, permissions } = useActor();
-  
+
   return (
     <div className="calendars-view">
       <h2>
         {permissions.canViewGlobalCalendars ? 'Calendar Hierarchy' : 'Tenant Calendar'}
       </h2>
-      
+
       <ForActor role="GLOBAL_OPS">
         <div className="calendar-hierarchy">
           <div className="calendar-level">
@@ -237,7 +237,7 @@ const CalendarsView: React.FC = () => {
           </div>
         </div>
       </ForActor>
-      
+
       <div className="calendar-cards">
         <div className="calendar-card">
           <h4>EU Market Calendar</h4>
@@ -252,22 +252,22 @@ const CalendarsView: React.FC = () => {
 // Governance placeholder view
 const GovernanceView: React.FC<{ onOpenChangeSet: (cs: any) => void }> = ({ onOpenChangeSet }) => {
   const { permissions } = useActor();
-  
+
   const changeSets = [
     { id: 'cs-001', title: 'Update Pre-Agg timeout', status: 'pending_review', riskScore: 0.3, createdAt: '2026-01-17T08:00:00Z' },
     { id: 'cs-002', title: 'Add new Data Quality job', status: 'pending_review', riskScore: 0.1, createdAt: '2026-01-17T07:30:00Z' },
     { id: 'cs-003', title: 'Restructure Risk DAG', status: 'approved', riskScore: 0.5, createdAt: '2026-01-17T06:00:00Z' },
   ];
-  
+
   return (
     <div className="governance-view">
       <h2>Governance</h2>
       <p>Review and approve scheduler changes</p>
-      
+
       <div className="changeset-list">
         {changeSets.map(cs => (
-          <div 
-            key={cs.id} 
+          <div
+            key={cs.id}
             className={`changeset-row status-${cs.status}`}
             onClick={() => onOpenChangeSet(cs)}
           >
@@ -277,8 +277,8 @@ const GovernanceView: React.FC<{ onOpenChangeSet: (cs: any) => void }> = ({ onOp
             </div>
             <div className="cs-status">
               <span className={`status-badge ${cs.status}`}>{cs.status.replace('_', ' ')}</span>
-              <span className="risk-score" style={{ 
-                color: cs.riskScore > 0.4 ? '#ea580c' : '#16a34a' 
+              <span className="risk-score" style={{
+                color: cs.riskScore > 0.4 ? '#ea580c' : '#16a34a'
               }}>
                 {Math.round(cs.riskScore * 100)}% risk
               </span>

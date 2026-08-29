@@ -10,6 +10,7 @@
  */
 
 import React, { useState, useEffect, useMemo } from 'react';
+import apiClient from '../../utils/apiClient';
 import {
   Box,
   Button,
@@ -125,8 +126,7 @@ export const DelegationManager: React.FC<DelegationManagerProps> = ({
   // Fetch users for autocomplete
   const fetchUsers = async () => {
     try {
-      const response = await fetch('/api/rbac/users');
-      const data = await response.json();
+      const data = await apiClient<any[]>('/api/rbac/users');
       setUsers(Array.isArray(data) ? data : []);
     } catch (error) {
       console.error('Failed to fetch users:', error);
@@ -137,8 +137,7 @@ export const DelegationManager: React.FC<DelegationManagerProps> = ({
   // Fetch roles for resource autocomplete
   const fetchRoles = async () => {
     try {
-      const response = await fetch('/api/rbac/roles');
-      const data = await response.json();
+      const data = await apiClient<Role[]>('/api/rbac/roles');
       setRoles(Array.isArray(data) ? data : []);
     } catch (error) {
         console.error('Failed to fetch roles:', error);
@@ -150,8 +149,7 @@ export const DelegationManager: React.FC<DelegationManagerProps> = ({
   const fetchDelegations = async () => {
     try {
       setLoading(true);
-      const response = await fetch('/api/rbac/delegations');
-      const data = await response.json();
+      const data = await apiClient<Delegation[]>('/api/rbac/delegations');
       setDelegations(Array.isArray(data) ? data : []);
     } catch (error) {
       console.error('Failed to fetch delegations:', error);
@@ -172,9 +170,8 @@ export const DelegationManager: React.FC<DelegationManagerProps> = ({
         
       const finalResourceId = formData.delegation_type === 'partial' ? formData.resource_id : '';
 
-      await fetch(`/api/rbac/delegations`, {
+      await apiClient(`/api/rbac/delegations`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ...formData,
           resource_type: finalResourceType,
@@ -196,7 +193,7 @@ export const DelegationManager: React.FC<DelegationManagerProps> = ({
     if (!confirm('Are you sure you want to revoke this delegation?')) return;
 
     try {
-      await fetch(`/api/rbac/delegations/${delegationId}`, { method: 'DELETE' });
+      await apiClient(`/api/rbac/delegations/${delegationId}`, { method: 'DELETE' });
       await fetchDelegations();
     } catch (error) {
       console.error('Failed to delete delegation:', error);

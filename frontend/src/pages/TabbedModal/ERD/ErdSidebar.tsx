@@ -1,5 +1,16 @@
 import { useState, useEffect } from 'react';
-import { ChevronLeft, ChevronRight, Columns, Map, Target, Info, ZoomIn, ZoomOut, Sparkles, Search } from 'lucide-react';
+import {
+  NavigateNext as ChevronRightIcon,
+  NavigateBefore as ChevronLeftIcon,
+  ViewColumn as ColumnsIcon,
+  Map as MapIcon,
+  TrackChanges as TargetIcon,
+  Info as InfoIcon,
+  ZoomIn as ZoomInIcon,
+  ZoomOut as ZoomOutIcon,
+  AutoAwesome as SparklesIcon,
+  Search as SearchIcon
+} from '@mui/icons-material';
 import './ErdSidebar.css';
 
 interface ErdSidebarProps {
@@ -57,7 +68,7 @@ const ErdSidebar: React.FC<ErdSidebarProps> = ({
           title={isCollapsed ? 'Expand Sidebar' : 'Collapse Sidebar'}
           aria-label={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
         >
-          {isCollapsed ? <ChevronRight size={20} /> : <ChevronLeft size={20} />}
+          {isCollapsed ? <ChevronRightIcon sx={{ fontSize: 20 }} /> : <ChevronLeftIcon sx={{ fontSize: 20 }} />}
         </button>
       </div>
 
@@ -83,7 +94,7 @@ const ErdSidebar: React.FC<ErdSidebarProps> = ({
                 title="Search"
                 aria-label="Open search"
               >
-                <Search size={18} />
+                <SearchIcon sx={{ fontSize: 18 }} />
               </button>
             </div>
           </div>
@@ -99,7 +110,7 @@ const ErdSidebar: React.FC<ErdSidebarProps> = ({
               title="Zoom In"
               aria-label="Zoom in"
             >
-              <ZoomIn size={18} />
+              <ZoomInIcon sx={{ fontSize: 18 }} />
               {!isCollapsed && <span>Zoom In</span>}
             </button>
             <button
@@ -108,7 +119,7 @@ const ErdSidebar: React.FC<ErdSidebarProps> = ({
               title="Zoom Out"
               aria-label="Zoom out"
             >
-              <ZoomOut size={18} />
+              <ZoomOutIcon sx={{ fontSize: 18 }} />
               {!isCollapsed && <span>Zoom Out</span>}
             </button>
             {!isCollapsed && (
@@ -129,7 +140,7 @@ const ErdSidebar: React.FC<ErdSidebarProps> = ({
               title="Toggle Columns"
               aria-label="Toggle columns"
             >
-              <Columns size={18} />
+              <ColumnsIcon sx={{ fontSize: 18 }} />
               {!isCollapsed && <span>Columns</span>}
             </button>
             <button
@@ -138,7 +149,7 @@ const ErdSidebar: React.FC<ErdSidebarProps> = ({
               title="Toggle Navigator"
               aria-label="Toggle navigator"
             >
-              <Map size={18} />
+              <MapIcon sx={{ fontSize: 18 }} />
               {!isCollapsed && <span>Navigator</span>}
             </button>
             <button
@@ -147,7 +158,7 @@ const ErdSidebar: React.FC<ErdSidebarProps> = ({
               title="Fit View"
               aria-label="Fit view"
             >
-              <Target size={18} />
+              <TargetIcon sx={{ fontSize: 18 }} />
               {!isCollapsed && <span>Fit View</span>}
             </button>
           </div>
@@ -163,7 +174,7 @@ const ErdSidebar: React.FC<ErdSidebarProps> = ({
               title="Toggle Info Mode"
               aria-label="Toggle info mode"
             >
-              <Info size={18} />
+              <InfoIcon sx={{ fontSize: 18 }} />
               {!isCollapsed && <span>Info Mode</span>}
             </button>
           </div>
@@ -179,7 +190,7 @@ const ErdSidebar: React.FC<ErdSidebarProps> = ({
                 title="Auto-Map Terms"
                 aria-label="Auto-map semantic terms"
               >
-                <Sparkles size={18} />
+                <SparklesIcon sx={{ fontSize: 18 }} />
                 {!isCollapsed && <span>Auto-Map</span>}
               </button>
             </div>

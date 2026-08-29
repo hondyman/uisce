@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { FileText, Upload, Download, Eye, CheckCircle, AlertCircle, Clock } from 'lucide-react';
+import { Description as FileTextIcon, CloudUpload as UploadIcon, Download as DownloadIcon, Visibility as EyeIcon, CheckCircle as CheckCircleIcon, Warning as AlertCircleIcon, Schedule as ClockIcon } from '@mui/icons-material';
 import { fetchAPI } from '../../api';
 
 // Types

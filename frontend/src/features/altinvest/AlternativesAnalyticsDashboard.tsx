@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { TrendingUp, Target, DollarSign, LineChart as LineChartIcon, Award, AlertTriangle } from 'lucide-react';
+import { TrendingUp as TrendingUpIcon, TrackChanges as TargetIcon, AttachMoney as DollarSignIcon, ShowChart as LineChartIcon, EmojiEvents as AwardIcon, WarningAmber as AlertTriangleIcon } from '@mui/icons-material';
 import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ScatterChart, Scatter } from 'recharts';
 
 interface AlternativeInvestment {

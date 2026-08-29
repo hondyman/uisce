@@ -3,20 +3,21 @@
  */
 
 import React, { useState, useMemo } from 'react';
-import { 
-  Plus, 
-  Search, 
-  Filter, 
-  Play, 
-  Pause, 
-  Trash2, 
-  Edit2,
-  Clock,
-  CheckCircle,
-  XCircle,
-  AlertTriangle,
-  ExternalLink
-} from 'lucide-react';
+import { ExternalLink } from 'lucide-react';
+import {
+  Add as PlusIcon,
+  Search as SearchIcon,
+  FilterList as FilterIcon,
+  PlayArrow as PlayIcon,
+  Pause as PauseIcon,
+  Delete as Trash2Icon,
+  Edit as Edit2,
+  Schedule as ClockIcon,
+  CheckCircle as CheckCircleIcon,
+  Cancel as XCircleIcon,
+  Warning as AlertTriangleIcon,
+  OpenInNew as ExternalLinkIcon,
+} from '@mui/icons-material';
 import { useTenantContext } from '../../hooks/useTenantContext';
 import { useJobs, Job, triggerJob, deleteJob, updateJob, getJobRuns, JobRun } from '../../api/schedulerApi';
 import JobRunTimeline from '../../components/scheduler/JobRunTimeline';
@@ -29,7 +30,7 @@ const JobsView: React.FC = () => {
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [selectedJob, setSelectedJob] = useState<Job | null>(null);
-  
+
   const { jobs, loading, error, refetch } = useJobs(tenantId || '', { limit: 100 });
 
   const categories = useMemo(() => {
@@ -44,7 +45,7 @@ const JobsView: React.FC = () => {
       const matchesSearch = job.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
         job.description?.toLowerCase().includes(searchQuery.toLowerCase());
       const matchesCategory = categoryFilter === 'all' || job.category === categoryFilter;
-      const matchesStatus = statusFilter === 'all' || 
+      const matchesStatus = statusFilter === 'all' ||
         (statusFilter === 'active' && job.is_active) ||
         (statusFilter === 'inactive' && !job.is_active);
       return matchesSearch && matchesCategory && matchesStatus;
@@ -93,7 +94,7 @@ const JobsView: React.FC = () => {
       <div className="toolbar">
         <div className="toolbar-left">
           <div className="search-box">
-            <Search className="search-icon" />
+            <SearchIcon className="search-icon" />
             <input
               type="text"
               placeholder="Search jobs..."
@@ -101,11 +102,11 @@ const JobsView: React.FC = () => {
               onChange={(e) => setSearchQuery(e.target.value)}
             />
           </div>
-          
-          <select 
+
+          <select
             aria-label="Filter by category"
             title="Filter by category"
-            value={categoryFilter} 
+            value={categoryFilter}
             onChange={(e) => setCategoryFilter(e.target.value)}
             className="filter-select"
           >
@@ -114,11 +115,11 @@ const JobsView: React.FC = () => {
               <option key={cat} value={cat}>{cat}</option>
             ))}
           </select>
-          
-          <select 
+
+          <select
             aria-label="Filter by status"
             title="Filter by status"
-            value={statusFilter} 
+            value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
             className="filter-select"
           >
@@ -127,10 +128,10 @@ const JobsView: React.FC = () => {
             <option value="inactive">Inactive</option>
           </select>
         </div>
-        
+
         <div className="toolbar-right">
           <button className="btn-primary">
-            <Plus /> New Job
+            <PlusIcon /> New Job
           </button>
         </div>
       </div>
@@ -182,7 +183,7 @@ const JobsView: React.FC = () => {
                   <td>
                     {job.next_run_at ? (
                       <span className="time-cell">
-                        <Clock className="time-icon" />
+                        <ClockIcon className="time-icon" />
                         {formatDateTime(job.next_run_at)}
                       </span>
                     ) : '-'}
@@ -204,32 +205,32 @@ const JobsView: React.FC = () => {
                   </td>
                   <td>
                     <div className="action-buttons">
-                      <button 
-                        className="action-btn" 
+                      <button
+                        className="action-btn"
                         title="Run Now"
                         onClick={() => handleTrigger(job)}
                       >
-                        <Play />
+                        <PlayIcon />
                       </button>
-                      <button 
+                      <button
                         className="action-btn"
                         title={job.is_active ? 'Pause' : 'Resume'}
                         onClick={() => handleToggleActive(job)}
                       >
-                        <Pause />
+                        <PauseIcon />
                       </button>
-                      <button 
+                      <button
                         className="action-btn"
                         title="Edit"
                       >
                         <Edit2 />
                       </button>
-                      <button 
+                      <button
                         className="action-btn danger"
                         title="Delete"
                         onClick={() => handleDelete(job)}
                       >
-                        <Trash2 />
+                        <Trash2Icon />
                       </button>
                     </div>
                   </td>
@@ -242,9 +243,9 @@ const JobsView: React.FC = () => {
 
       {/* Job Detail Sidebar */}
       {selectedJob && (
-        <JobDetailSidebar 
-          job={selectedJob} 
-          onClose={() => setSelectedJob(null)} 
+        <JobDetailSidebar
+          job={selectedJob}
+          onClose={() => setSelectedJob(null)}
         />
       )}
     </div>
@@ -283,7 +284,7 @@ const JobDetailSidebar: React.FC<JobDetailSidebarProps> = ({ job, onClose }) => 
         <h3>{job.name}</h3>
         <button className="close-btn" onClick={onClose}>&times;</button>
       </div>
-      
+
       <div className="sidebar-content">
         <div className="detail-section">
           <h4>Details</h4>
@@ -306,7 +307,7 @@ const JobDetailSidebar: React.FC<JobDetailSidebarProps> = ({ job, onClose }) => 
         <div className="detail-section">
           <JobRunTimeline runs={runs} loading={loadingRuns} />
         </div>
-        
+
         <div className="detail-section">
           {job.slo_critical && (
             <div className="slo-alert">
@@ -324,7 +325,7 @@ const JobDetailSidebar: React.FC<JobDetailSidebarProps> = ({ job, onClose }) => 
             return <SemanticBindingsList bindings={job.semantic_bindings} coldBOs={coldBOs} />;
           })()}
         </div>
-        
+
         {/* Compliance Section */}
         {job.compliance && (
           <div className="detail-section">
@@ -347,7 +348,7 @@ const JobDetailSidebar: React.FC<JobDetailSidebarProps> = ({ job, onClose }) => 
             </div>
           </div>
         )}
-        
+
         {job.compliance_tags && job.compliance_tags.length > 0 && (
           <div className="detail-section">
             <h4>Compliance Tags</h4>

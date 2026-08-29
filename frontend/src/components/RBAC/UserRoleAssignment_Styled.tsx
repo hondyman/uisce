@@ -9,6 +9,7 @@
  */
 
 import React, { useState, useEffect, useMemo } from 'react';
+import apiClient from '../../utils/apiClient';
 import {
   Box,
   Button,
@@ -86,54 +87,28 @@ export const UserRoleAssignmentStyled: React.FC<UserRoleAssignmentProps> = ({
   tenant,
   datasource,
 }) => {
-  const [users, _setUsers] = useState<User[]>([
-    {
-      id: '1',
-      email: 'sophia.clark@example.com',
-      full_name: 'Sophia Clark',
-      department: 'Engineering',
-      title: 'Senior Engineer',
-      is_active: true,
-    },
-    {
-      id: '2',
-      email: 'liam.walker@example.com',
-      full_name: 'Liam Walker',
-      department: 'Sales',
-      title: 'Sales Manager',
-      is_active: true,
-    },
-    {
-      id: '3',
-      email: 'olivia.davis@example.com',
-      full_name: 'Olivia Davis',
-      department: 'Marketing',
-      title: 'Marketing Lead',
-      is_active: true,
-    },
-    {
-      id: '4',
-      email: 'noah.rodriguez@example.com',
-      full_name: 'Noah Rodriguez',
-      department: 'Product',
-      title: 'Product Manager',
-      is_active: true,
-    },
-    {
-      id: '5',
-      email: 'emma.wilson@example.com',
-      full_name: 'Emma Wilson',
-      department: 'Operations',
-      title: 'Operations Manager',
-      is_active: true,
-    },
-  ]);
+  const [users, setUsers] = useState<User[]>([]);
   const [_roles, setRoles] = useState<Role[]>([]);
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [userRoles, setUserRoles] = useState<UserRole[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
-  const [_loading, _setLoading] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [activeTab, setActiveTab] = useState(0);
   const [_saving, setSaving] = useState(false);
+
+  // Fetch users from API
+  const fetchUsers = async () => {
+    try {
+      setLoading(true);
+      const data = await apiClient<User[]>(`/api/rbac/users?tenant_id=${tenant.id}`);
+      setUsers(Array.isArray(data) ? data : []);
+    } catch (error) {
+      console.error('Failed to fetch users:', error);
+      setUsers([]);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   // Assignment form state
   const [assignmentForm, setAssignmentForm] = useState({
@@ -146,8 +121,7 @@ export const UserRoleAssignmentStyled: React.FC<UserRoleAssignmentProps> = ({
   // Fetch roles
   const fetchRoles = async () => {
     try {
-      const response = await fetch('/api/rbac/roles');
-      const data = await response.json();
+      const data = await apiClient<Role[]>(`/api/rbac/roles?tenant_id=${tenant.id}`);
       setRoles(data || []);
     } catch (error) {
       console.error('Failed to fetch roles:', error);
@@ -157,8 +131,7 @@ export const UserRoleAssignmentStyled: React.FC<UserRoleAssignmentProps> = ({
   // Fetch user roles
   const fetchUserRoles = async (userId: string) => {
     try {
-      const response = await fetch(`/api/rbac/users/${userId}/roles`);
-      const data = await response.json();
+      const data = await apiClient<UserRole[]>(`/api/rbac/users/${userId}/roles`);
       setUserRoles(data || []);
     } catch (error) {
       console.error('Failed to fetch user roles:', error);
@@ -171,9 +144,8 @@ export const UserRoleAssignmentStyled: React.FC<UserRoleAssignmentProps> = ({
 
     try {
       setSaving(true);
-      await fetch(`/api/rbac/roles/${assignmentForm.role_id}/assign`, {
+      await apiClient(`/api/rbac/roles/${assignmentForm.role_id}/assign`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           user_id: selectedUser.id,
           scope_type: assignmentForm.scope_type,
@@ -197,7 +169,7 @@ export const UserRoleAssignmentStyled: React.FC<UserRoleAssignmentProps> = ({
     if (!confirm('Are you sure you want to remove this role assignment?')) return;
 
     try {
-      await fetch(`/api/rbac/roles/${roleId}/unassign/${selectedUser.id}`, {
+      await apiClient(`/api/rbac/roles/${roleId}/unassign/${selectedUser.id}`, {
         method: 'DELETE',
       });
       await fetchUserRoles(selectedUser.id);
@@ -219,16 +191,22 @@ export const UserRoleAssignmentStyled: React.FC<UserRoleAssignmentProps> = ({
   // Filter users
   const filteredUsers = useMemo(() => {
     return users.filter(user => {
+      // Filter by tab
+      if (activeTab === 1 && !user.is_active) return false; // Active
+      if (activeTab === 2 && user.is_active) return false; // Inactive
+
+      // Filter by search
       const matchesSearch =
         user.full_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
         user.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
         (user.department?.toLowerCase().includes(searchTerm.toLowerCase()) ?? false);
       return matchesSearch;
     });
-  }, [users, searchTerm]);
+  }, [users, searchTerm, activeTab]);
 
   useEffect(() => {
     fetchRoles();
+    fetchUsers();
   }, [tenant.id]);
 
   useEffect(() => {
@@ -296,13 +274,23 @@ export const UserRoleAssignmentStyled: React.FC<UserRoleAssignmentProps> = ({
             />
 
             {/* Tabs */}
-            <Tabs value={0} sx={{ mb: 2, minHeight: 40 }}>
+            <Tabs value={activeTab} onChange={(_, v) => setActiveTab(v)} sx={{ mb: 2, minHeight: 40 }}>
               <Tab label="All" sx={{ minHeight: 40, textTransform: 'none', fontSize: '0.875rem' }} />
               <Tab label="Active" sx={{ minHeight: 40, textTransform: 'none', fontSize: '0.875rem' }} />
               <Tab label="Inactive" sx={{ minHeight: 40, textTransform: 'none', fontSize: '0.875rem' }} />
             </Tabs>
 
-            {/* Users List */}
+            {/* Loading/Empty State */}
+            {loading ? (
+              <Box sx={{ p: 3, textAlign: 'center' }}>
+                <Typography color="text.secondary">Loading users...</Typography>
+              </Box>
+            ) : filteredUsers.length === 0 ? (
+              <Box sx={{ p: 3, textAlign: 'center' }}>
+                <Typography color="text.secondary">No users found</Typography>
+              </Box>
+            ) : (
+            /* Users List */
             <List sx={{ p: 0 }}>
               {filteredUsers.map((user) => (
                 <ListItem 
@@ -324,9 +312,14 @@ export const UserRoleAssignmentStyled: React.FC<UserRoleAssignmentProps> = ({
                   >
                     <ListItemText
                       primary={
-                        <Typography variant="body2" fontWeight={500}>
-                          {user.full_name}
-                        </Typography>
+                        <Box display="flex" alignItems="center" gap={1}>
+                          <Typography variant="body2" fontWeight={500}>
+                            {user.full_name}
+                          </Typography>
+                          {!user.is_active && (
+                            <Chip label="Inactive" size="small" color="default" sx={{ height: 18, fontSize: '0.65rem' }} />
+                          )}
+                        </Box>
                       }
                       secondary={
                         <Typography variant="caption" color="text.secondary">
@@ -338,6 +331,7 @@ export const UserRoleAssignmentStyled: React.FC<UserRoleAssignmentProps> = ({
                 </ListItem>
               ))}
             </List>
+            )}
           </Box>
         </Paper>
 

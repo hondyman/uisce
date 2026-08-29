@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { TrendingUp, TrendingDown, DollarSign, AlertCircle, Shield, Zap, Activity } from 'lucide-react';
+import { TrendingUp as TrendingUpIcon, TrendingDown as TrendingDownIcon, AttachMoney as DollarSignIcon, Warning as AlertCircleIcon, Security as ShieldIcon, Bolt as ZapIcon, Timeline as ActivityIcon } from '@mui/icons-material';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 
 interface CryptoHolding {

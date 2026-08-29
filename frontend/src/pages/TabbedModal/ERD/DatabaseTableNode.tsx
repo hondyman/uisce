@@ -1,7 +1,7 @@
 
 import { useMemo, memo } from 'react';
 import { Handle, Position, NodeProps } from 'reactflow';
-import { Key, Table } from 'lucide-react';
+import { Key as KeyIcon, TableChart as TableIcon } from '@mui/icons-material';
 
 interface Column {
   name: string;
@@ -29,10 +29,10 @@ const DatabaseTableNode: React.FC<NodeProps<TableNodeData>> = ({ data, id, selec
     const maxColumnNameWidth = Math.max(...(columns.map(c => c.name.length) || [0]));
     const maxColumnTypeWidth = Math.max(...(columns.map(c => c.type.length) || [0]));
     const columnsWidth = maxColumnNameWidth * 7 + maxColumnTypeWidth * 6 + 80;
-    
+
     const width = showColumns ? Math.max(baseWidth, titleWidth, columnsWidth) : Math.max(220, titleWidth);
     const height = showColumns && columns.length > 0 ? 60 + (columns.length * 38) : 60;
-    
+
     return { width, height };
   }, [label, columns, showColumns]);
 
@@ -47,7 +47,7 @@ const DatabaseTableNode: React.FC<NodeProps<TableNodeData>> = ({ data, id, selec
       <Handle type="source" position={Position.Right} className="connection-handle" />
 
       <div className="table-header">
-        <div className="table-icon"><Table size={16} /></div>
+        <div className="table-icon"><TableIcon sx={{ fontSize: 16 }} /></div>
         <div className="table-info">
           <div className="table-name">{label}</div>
           {showColumns && <div className="column-count">{columns.length} columns</div>}
@@ -60,9 +60,9 @@ const DatabaseTableNode: React.FC<NodeProps<TableNodeData>> = ({ data, id, selec
             const isColumnHighlighted = highlightedItem === `column-${id}-${index}`;
             const isPK = col.isPrimaryKey;
             const isFK = col.isForeignKey;
-            const columnClasses = `table-column 
-              ${isPK ? 'primary-key' : ''} 
-              ${isFK ? 'foreign-key' : ''} 
+            const columnClasses = `table-column
+              ${isPK ? 'primary-key' : ''}
+              ${isFK ? 'foreign-key' : ''}
               ${isColumnHighlighted ? 'highlighted' : ''}
               ${col.nullable === false ? '' : 'nullable'}`;
 
@@ -70,7 +70,7 @@ const DatabaseTableNode: React.FC<NodeProps<TableNodeData>> = ({ data, id, selec
               <div key={index} className={columnClasses} title={`${col.name}: ${col.type}${col.nullable === false ? ' NOT NULL' : ''}`}>
                 <div className="column-left">
                   <div className="key-indicator">
-                    {(isPK || isFK) && <Key size={12} />}
+                    {(isPK || isFK) && <KeyIcon sx={{ fontSize: 12 }} />}
                   </div>
                   <div className="column-name">{col.name}</div>
                 </div>

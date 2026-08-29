@@ -1,4 +1,4 @@
-CREATE TABLE IF NOT EXISTS analytics_assets (
+CREATE TABLE IF NOT EXISTS public.analytics_assets (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     tenant_id VARCHAR(255) NOT NULL,
     core_asset_id VARCHAR(255) NOT NULL, -- Logical ID of the template (e.g. 'core-trade')
@@ -7,8 +7,8 @@ CREATE TABLE IF NOT EXISTS analytics_assets (
     is_customized BOOLEAN DEFAULT FALSE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    
+
     UNIQUE(tenant_id, core_asset_id)
 );
 
-CREATE INDEX idx_analytics_assets_tenant ON analytics_assets(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_analytics_assets_tenant ON public.analytics_assets(tenant_id);

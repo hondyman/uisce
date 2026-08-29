@@ -1,4 +1,4 @@
-import { X } from 'lucide-react';
+import { Close as CloseIcon } from '@mui/icons-material';
 import { Edge } from 'reactflow';
 import './ErdInfoPanel.css';
 
@@ -37,7 +37,7 @@ const ErdInfoPanel: React.FC<ErdInfoPanelProps> = ({
           onClick={onClose}
           aria-label="Close info panel"
         >
-          <X size={18} />
+          <CloseIcon sx={{ fontSize: 18 }} />
         </button>
       </div>
 

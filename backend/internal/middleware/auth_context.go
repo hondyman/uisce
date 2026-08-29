@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"net/http"
+	"os"
 	"strings"
 
 	"github.com/google/uuid"
@@ -10,6 +11,15 @@ import (
 	"github.com/hondyman/uisce/backend/internal/security"
 	"github.com/hondyman/uisce/backend/internal/services"
 )
+
+// allowClientTenantHeaderFallback reports whether a JWT lacking a tenant
+// claim may fall back to the client-supplied X-Tenant-ID header. The header
+// is fully client-controlled, so trusting it without this explicit opt-in
+// would let any caller with a validly-signed-but-tenantless token assert an
+// arbitrary tenant identity. Must never be enabled in production.
+func allowClientTenantHeaderFallback() bool {
+	return os.Getenv("ALLOW_CLIENT_TENANT_HEADER_FALLBACK") == "true"
+}
 
 // AuthContextMiddleware returns a chi-compatible middleware that validates
 // an Authorization Bearer token using SecurityManager and injects actor/tenant
@@ -106,12 +116,13 @@ func AuthContextMiddleware(secMgr *services.SecurityManager) func(http.Handler) 
 							} else if len(tenantIDs) == 1 {
 								tenantID = tenantIDs[0]
 								r.Header.Set("X-Tenant-ID", tenantID)
-							} else if len(tenantIDs) == 0 {
-								// Dev fallback: some local tokens don't carry a tenant claim, but the
-								// UI always sends the active tenant in the X-Tenant-ID header. Because
-								// the JWT has already been validated at this point, using the header is
-								// safe for development/legacy tokens. Parse it as a UUID to reject
-								// malicious/injected values.
+							} else if len(tenantIDs) == 0 && allowClientTenantHeaderFallback() {
+								// Dev-only fallback (ALLOW_CLIENT_TENANT_HEADER_FALLBACK=true): some
+								// local tokens don't carry a tenant claim, but the UI always sends the
+								// active tenant in the X-Tenant-ID header. This must stay disabled in
+								// production — the header is client-controlled and trusting it here
+								// would let any tenantless-but-validly-signed token assert an arbitrary
+								// tenant identity. Parse it as a UUID to reject malicious/injected values.
 								headerTenant := strings.TrimSpace(r.Header.Get("X-Tenant-ID"))
 								if parsed, err := uuid.Parse(headerTenant); err == nil {
 									tenantID = parsed.String()
@@ -121,6 +132,8 @@ func AuthContextMiddleware(secMgr *services.SecurityManager) func(http.Handler) 
 								} else {
 									logging.GetLogger().Sugar().Warnf("[AuthContextMiddleware] JWT lacks tenant claim and X-Tenant-ID header is missing or not a valid UUID: header=%q user=%s", headerTenant, uid)
 								}
+							} else if len(tenantIDs) == 0 {
+								r.Header.Del("X-Tenant-ID")
 							}
 
 							// isGlobalAdmin is true for global_admin, global_ops, or the legacy is_core_admin flag.

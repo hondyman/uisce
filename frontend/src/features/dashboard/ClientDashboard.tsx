@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { TrendingUp, TrendingDown, Target, MessageSquare, Calendar, Bell, Settings, DollarSign, PieChart } from 'lucide-react';
+import { TrendingUp as TrendingUpIcon, TrendingDown as TrendingDownIcon, TrackChanges as TargetIcon, Chat as MessageSquareIcon, CalendarToday as CalendarIcon, Notifications as BellIcon, Settings as SettingsIcon, AttachMoney as DollarSignIcon, PieChart as PieChartIcon } from '@mui/icons-material';
 import { Responsive, WidthProvider, Layout } from 'react-grid-layout';
 import 'react-grid-layout/css/styles.css';
 import 'react-resizable/css/styles.css';
@@ -173,7 +173,7 @@ export const ClientDashboard: React.FC = () => {
                   : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
               }`}
             >
-              <Settings className="w-5 h-5" />
+              <SettingsIcon sx={{ width: 20, height: 20 }} />
               {isCustomizing ? 'Done Customizing' : 'Customize Dashboard'}
             </button>
           </div>
@@ -185,25 +185,25 @@ export const ClientDashboard: React.FC = () => {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <QuickStatCard
-              icon={<MessageSquare className="w-6 h-6" />}
+              icon={<MessageSquareIcon sx={{ width: 24, height: 24 }} />}
               label="Unread Messages"
               value={summary.unreadMessages}
               color="blue"
             />
             <QuickStatCard
-              icon={<Bell className="w-6 h-6" />}
+              icon={<BellIcon sx={{ width: 24, height: 24 }} />}
               label="Notifications"
               value={summary.unreadNotifications}
               color="purple"
             />
             <QuickStatCard
-              icon={<Target className="w-6 h-6" />}
+              icon={<TargetIcon sx={{ width: 24, height: 24 }} />}
               label="Active Goals"
               value={summary.activeGoals}
               color="green"
             />
             <QuickStatCard
-              icon={<TrendingUp className="w-6 h-6" />}
+              icon={<TrendingUpIcon sx={{ width: 24, height: 24 }} />}
               label="Action Items"
               value={summary.pendingActions}
               color="orange"
@@ -285,15 +285,15 @@ const PortfolioSummaryWidget: React.FC<any> = ({ portfolioSummary, formatCurrenc
           <p className="text-indigo-100 text-sm font-medium">Total Portfolio Value</p>
           <h2 className="text-4xl font-bold mt-2">{formatCurrency(portfolioSummary.totalValue)}</h2>
         </div>
-        <DollarSign className="w-10 h-10 text-indigo-200 opacity-50" />
+        <DollarSignIcon sx={{ width: 40, height: 40, color: 'indigo.200', opacity: 0.5 }} />
       </div>
 
       <div className="flex items-center gap-4 mt-4">
         <div className="flex items-center gap-2">
           {isPositive ? (
-            <TrendingUp className="w-5 h-5 text-green-300" />
+            <TrendingUpIcon sx={{ width: 20, height: 20, color: 'green.300' }} />
           ) : (
-            <TrendingDown className="w-5 h-5 text-red-300" />
+            <TrendingDownIcon sx={{ width: 20, height: 20, color: 'red.300' }} />
           )}
           <span className={`text-lg font-semibold ${isPositive ? 'text-green-300' : 'text-red-300'}`}>
             {formatCurrency(Math.abs(portfolioSummary.dayChange))}
@@ -318,7 +318,7 @@ const GoalsProgressWidget: React.FC<{ goals: Goal[]; formatCurrency: (v: number)
     <div className="widget-card">
       <div className="flex justify-between items-center mb-4">
         <h3 className="text-lg font-semibold text-gray-900">Financial Goals</h3>
-        <Target className="w-6 h-6 text-indigo-600" />
+        <TargetIcon sx={{ width: 24, height: 24, color: 'indigo.600' }} />
       </div>
 
       <div className="space-y-4">
@@ -375,7 +375,7 @@ const MessagesInboxWidget: React.FC = () => {
     <div className="widget-card">
       <div className="flex justify-between items-center mb-4">
         <h3 className="text-lg font-semibold text-gray-900">Messages</h3>
-        <MessageSquare className="w-6 h-6 text-indigo-600" />
+        <MessageSquareIcon sx={{ width: 24, height: 24, color: 'indigo.600' }} />
       </div>
       <p className="text-sm text-gray-500">No unread messages</p>
     </div>
@@ -387,7 +387,7 @@ const UpcomingMeetingsWidget: React.FC = () => {
     <div className="widget-card">
       <div className="flex justify-between items-center mb-4">
         <h3 className="text-lg font-semibold text-gray-900">Upcoming Meetings</h3>
-        <Calendar className="w-6 h-6 text-indigo-600" />
+        <CalendarIcon sx={{ width: 24, height: 24, color: 'indigo.600' }} />
       </div>
       <p className="text-sm text-gray-500">No upcoming meetings</p>
     </div>
@@ -419,7 +419,7 @@ const AssetAllocationWidget: React.FC<{ summary: PortfolioSummary | null }> = ({
     <div className="widget-card">
       <div className="flex justify-between items-center mb-4">
         <h3 className="text-lg font-semibold text-gray-900">Asset Allocation</h3>
-        <PieChart className="w-6 h-6 text-indigo-600" />
+        <PieChartIcon sx={{ width: 24, height: 24, color: 'indigo.600' }} />
       </div>
 
       {summary?.allocation && (

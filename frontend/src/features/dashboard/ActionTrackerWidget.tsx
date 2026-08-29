@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { TrendingUp, AlertCircle, Calendar, DollarSign, Target, ChevronRight, Check, X } from 'lucide-react';
+import { TrendingUp as TrendingUpIcon, Warning as AlertCircleIcon, CalendarToday as CalendarIcon, AttachMoney as DollarSignIcon, TrackChanges as TargetIcon, NavigateNext as ChevronRightIcon, CheckCircle as CheckIcon, Close as CloseIcon } from '@mui/icons-material';
 
 interface RecommendedAction {
   actionId: string;
@@ -16,16 +16,16 @@ interface RecommendedAction {
 }
 
 const ACTION_TYPE_CONFIG: Record<string, { icon: any; label: string; color: string }> = {
-  REBALANCE_PORTFOLIO: { icon: TrendingUp, label: 'Rebalance Portfolio', color: 'blue' },
-  TAX_LOSS_HARVEST: { icon: DollarSign, label: 'Tax-Loss Harvesting', color: 'green' },
-  INCREASE_CONTRIBUTION: { icon: Target, label: 'Increase Contributions', color: 'purple' },
-  REDUCE_EXPENSES: { icon: AlertCircle, label: 'Reduce Expenses', color: 'orange' },
-  SCHEDULE_REVIEW: { icon: Calendar, label: 'Schedule Review', color: 'indigo' },
-  UPDATE_BENEFICIARIES: { icon: AlertCircle, label: 'Update Beneficiaries', color: 'red' },
-  REVIEW_INSURANCE: { icon: AlertCircle, label: 'Review Insurance', color: 'yellow' },
-  ROTH_CONVERSION: { icon: DollarSign, label: 'Roth Conversion', color: 'emerald' },
-  ESTATE_PLANNING: { icon: AlertCircle, label: 'Estate Planning', color: 'violet' },
-  CHARITABLE_GIVING: { icon: Target, label: 'Charitable Giving', color: 'pink' },
+  REBALANCE_PORTFOLIO: { icon: TrendingUpIcon, label: 'Rebalance Portfolio', color: 'blue' },
+  TAX_LOSS_HARVEST: { icon: DollarSignIcon, label: 'Tax-Loss Harvesting', color: 'green' },
+  INCREASE_CONTRIBUTION: { icon: TargetIcon, label: 'Increase Contributions', color: 'purple' },
+  REDUCE_EXPENSES: { icon: AlertCircleIcon, label: 'Reduce Expenses', color: 'orange' },
+  SCHEDULE_REVIEW: { icon: CalendarIcon, label: 'Schedule Review', color: 'indigo' },
+  UPDATE_BENEFICIARIES: { icon: AlertCircleIcon, label: 'Update Beneficiaries', color: 'red' },
+  REVIEW_INSURANCE: { icon: AlertCircleIcon, label: 'Review Insurance', color: 'yellow' },
+  ROTH_CONVERSION: { icon: DollarSignIcon, label: 'Roth Conversion', color: 'emerald' },
+  ESTATE_PLANNING: { icon: AlertCircleIcon, label: 'Estate Planning', color: 'violet' },
+  CHARITABLE_GIVING: { icon: TargetIcon, label: 'Charitable Giving', color: 'pink' },
 };
 
 const URGENCY_CONFIG: Record<string, { label: string; color: string; bgColor: string }> = {
@@ -109,7 +109,7 @@ export const ActionTrackerWidget: React.FC = () => {
       {sortedActions.length === 0 ? (
         <div className="text-center py-8 bg-gradient-to-br from-green-50 to-emerald-50 rounded-xl">
           <div className="w-16 h-16 bg-green-500 rounded-full flex items-center justify-center mx-auto mb-3">
-            <Check className="w-8 h-8 text-white" />
+            <CheckIcon sx={{ width: 32, height: 32, color: 'white' }} />
           </div>
           <p className="text-gray-700 font-medium">You're all caught up!</p>
           <p className="text-sm text-gray-600 mt-1">No pending actions at this time</p>
@@ -118,7 +118,7 @@ export const ActionTrackerWidget: React.FC = () => {
         <div className="space-y-3">
           {sortedActions.slice(0, 5).map((action) => {
             const config = ACTION_TYPE_CONFIG[action.actionType] || {
-              icon: AlertCircle,
+              icon: AlertCircleIcon,
               label: action.actionType,
               color: 'gray',
             };
@@ -137,7 +137,7 @@ export const ActionTrackerWidget: React.FC = () => {
                 >
                   <div className="flex items-start gap-3">
                     <div className={`p-2 rounded-lg bg-${config.color}-100`}>
-                      <Icon className={`w-5 h-5 text-${config.color}-600`} />
+                      <Icon sx={{ width: 20, height: 20, color: `${config.color}.600` }} />
                     </div>
 
                     <div className="flex-1 min-w-0">
@@ -170,10 +170,8 @@ export const ActionTrackerWidget: React.FC = () => {
                       </div>
                     </div>
 
-                    <ChevronRight
-                      className={`w-5 h-5 text-gray-400 transition-transform ${
-                        isExpanded ? 'rotate-90' : ''
-                      }`}
+                    <ChevronRightIcon
+                      sx={{ width: 20, height: 20, color: 'gray.400', transition: 'transform 0.2s', transform: isExpanded ? 'rotate(90deg)' : 'none' }}
                     />
                   </div>
                 </button>

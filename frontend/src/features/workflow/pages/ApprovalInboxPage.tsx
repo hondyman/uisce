@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { delegationApi, Delegation } from '../../../api/delegationApi';
 import { DelegationModal } from '../components/DelegationModal';
-import { Plus, Trash2 } from 'lucide-react';
+import AddIcon from '@mui/icons-material/Add';
+import DeleteIcon from '@mui/icons-material/Delete';
 
 export const ApprovalInboxPage: React.FC = () => {
   const [selectedApprovalId, setSelectedApprovalId] = useState<string>('Expense-Report-Q3');
@@ -146,7 +147,7 @@ export const ApprovalInboxPage: React.FC = () => {
                 onClick={() => setIsDelegationModalOpen(true)}
                 className="flex items-center gap-2 px-3 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors"
               >
-                <Plus className="w-4 h-4" />
+                <AddIcon sx={{ width: 16, height: 16 }} />
                 <span>New Delegation</span>
               </button>
             )}
@@ -338,7 +339,7 @@ export const ApprovalInboxPage: React.FC = () => {
                               onClick={() => handleRevokeDelegation(d.id)}
                               className="text-red-600 hover:text-red-800"
                             >
-                              <Trash2 className="w-4 h-4" />
+                              <DeleteIcon sx={{ width: 16, height: 16 }} />
                             </button>
                           </td>
                         </tr>

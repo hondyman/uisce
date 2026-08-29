@@ -128,7 +128,7 @@ export const TenantDetailPageV2: React.FC = () => {
     { onCompleted: () => refetchTenant() }
   );
   const testConnection = useApiMutation<any, any>(
-    `/api/tenant-ops/connections/test`,
+    `/api/connections/test`,
     'POST',
     {
       onCompleted: (data) => {
@@ -282,7 +282,9 @@ export const TenantDetailPageV2: React.FC = () => {
 
         (product.tenant_product_datasources || product.datasources || []).forEach((ds: any) => {
           counts.instances.add(instance.id);
-          counts.connections++;
+          if (ds.connection_id) {
+            counts.connections++;
+          }
         });
       });
     });
@@ -425,7 +427,7 @@ export const TenantDetailPageV2: React.FC = () => {
   const handleAddConnection = () => {
     setEditingConnection(null);
     setSelectedConnectionProduct(scopedProduct?.id || '');
-    setSelectedConnectionInstance(scopedDatasource?.id || '');
+    setSelectedConnectionInstance(scopedDatasource?.id || instances[0]?.id || '');
     setConnectionForm({
       name: '',
       type: 'postgres',
@@ -447,6 +449,16 @@ export const TenantDetailPageV2: React.FC = () => {
   };
 
   const handleEditConnection = (connection: any) => {
+    console.log('[DEBUG] handleEditConnection called:', {
+      name: connection.name,
+      type: connection.type,
+      host: connection.host,
+      port: connection.port,
+      database: connection.database,
+      username: connection.username,
+      secret_path: connection.secret_path,
+      metadata: connection.metadata,
+    });
     setEditingConnection(connection);
     setSelectedConnectionProduct(connection.linkedProductId || '');
     setSelectedConnectionInstance(connection.linkedInstanceId || '');
@@ -454,11 +466,12 @@ export const TenantDetailPageV2: React.FC = () => {
     setConnectionForm({
       name: connection.name || '',
       type: connection.type || 'postgres',
-      host: connection.host || '',
-      port: connection.port?.toString() || '5432',
-      database: connection.database || '',
-      schema: connection.schema || '',
-      username: connection.username || '',
+      host: connection.host || connection.metadata?.host || '',
+      port: connection.port ? connection.port.toString() : connection.metadata?.port ? connection.metadata.port.toString() : '5432',
+      database: connection.database || connection.metadata?.database || '',
+      schema: connection.schema || connection.metadata?.schema || '',
+      username: connection.username || connection.metadata?.auth?.basic?.username || '',
+      password: connection.password || connection.metadata?.auth?.basic?.password || '',
       secret_path: connection.secret_path || '',
       base_url: connection.base_url || connection.metadata?.base_url || '',
       api_key: connection.api_key || connection.metadata?.api_key || '',
@@ -476,25 +489,24 @@ export const TenantDetailPageV2: React.FC = () => {
       setTestConnectionLoading(true);
       setTestConnectionResult(null);
 
-      const connectionConfig = {
-        type: connectionForm.type,
+      const connectionDetails = {
+        type: connectionForm.type || 'postgres',
         host: connectionForm.host,
-        port: connectionForm.port ? parseInt(connectionForm.port) : undefined,
+        port: connectionForm.port ? parseInt(connectionForm.port) : 5432,
         database: connectionForm.database,
-        schema: connectionForm.schema,
+        schema: connectionForm.schema || 'public',
         username: connectionForm.username,
-        secret_path: connectionForm.secret_path,
-        base_url: connectionForm.base_url,
-        api_key: connectionForm.api_key,
-        auth_type: connectionForm.auth_type,
-        ...connectionForm.metadata,
+        password: connectionForm.password || connectionForm.metadata?.password || '',
+        sslmode: connectionForm.metadata?.sslmode || 'disable',
+        auth: connectionForm.username ? {
+          basic: {
+            username: connectionForm.username,
+            password: connectionForm.password || connectionForm.metadata?.password || '',
+          },
+        } : undefined,
       };
 
-      Object.keys(connectionConfig).forEach(
-        key => connectionConfig[key as keyof typeof connectionConfig] === undefined && delete connectionConfig[key as keyof typeof connectionConfig]
-      );
-
-      await testConnection.mutate(connectionConfig);
+      await testConnection.mutate({ connection_details: JSON.stringify(connectionDetails) });
     } catch (err: any) {
       console.error('Error testing connection:', err);
       setTestConnectionResult({

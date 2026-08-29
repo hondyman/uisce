@@ -1,5 +1,40 @@
 import React, { useState, useEffect } from 'react';
-import { AlertCircle, TrendingUp, Database, CheckCircle } from 'lucide-react';
+import {
+  Box,
+  Typography,
+  Card,
+  CardContent,
+  Tabs,
+  Tab,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
+  Select,
+  MenuItem,
+  FormControl,
+  InputLabel,
+  Button,
+  Chip,
+  CircularProgress,
+  Alert,
+  Paper,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  IconButton,
+  Grid,
+} from '@mui/material';
+import {
+  Warning,
+  TrendingUp,
+  Storage,
+  CheckCircle,
+  Refresh,
+  Close,
+} from '@mui/icons-material';
 
 interface AuditExplorerProps {
   tenantId: string;
@@ -126,123 +161,99 @@ export const AuditExplorer: React.FC<AuditExplorerProps> = ({ tenantId, tenantNa
     }
   };
 
-  const getStatusColor = (status: string) => {
+  const getStatusColor = (status: string): 'success' | 'error' | 'warning' | 'info' | 'default' => {
     switch (status.toUpperCase()) {
-      case 'SUCCESS': return 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200';
-      case 'FAILED': return 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200';
-      case 'COMPLIANCE_BLOCK': return 'bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200';
-      case 'RUNNING': return 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200';
-      default: return 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200';
+      case 'SUCCESS': return 'success';
+      case 'FAILED': return 'error';
+      case 'COMPLIANCE_BLOCK': return 'warning';
+      case 'RUNNING': return 'info';
+      default: return 'default';
     }
   };
 
-  const getSeverityColor = (severity: string) => {
+  const getSeverityColor = (severity: string): 'error' | 'warning' | 'info' | 'success' | 'default' => {
     switch (severity.toUpperCase()) {
-      case 'CRITICAL': return 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200';
-      case 'HIGH': return 'bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200';
-      case 'MEDIUM': return 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200';
-      case 'LOW': return 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200';
-      default: return 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200';
+      case 'CRITICAL': return 'error';
+      case 'HIGH': return 'warning';
+      case 'MEDIUM': return 'info';
+      case 'LOW': return 'success';
+      default: return 'default';
     }
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
-      {/* Header */}
-      <div className="bg-white dark:bg-gray-800 shadow">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Audit Explorer</h1>
-              <p className="text-sm text-gray-500 dark:text-gray-400">
+    <Box sx={{ minHeight: '100vh', bgcolor: 'background.default', p: 3 }}>
+      <Card sx={{ mb: 3 }}>
+        <CardContent>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+            <Box>
+              <Typography variant="h5" fontWeight="bold">
+                Audit Explorer
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
                 Tenant: {tenantName} ({tenantId})
-              </p>
-            </div>
-            <div className="flex gap-2">
-              <button
-                onClick={loadData}
-                className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
-              >
-                Refresh
-              </button>
-            </div>
-          </div>
+              </Typography>
+            </Box>
+            <Button variant="contained" startIcon={<Refresh />} onClick={loadData}>
+              Refresh
+            </Button>
+          </Box>
 
-          {/* Tabs */}
-          <div className="mt-4 border-b border-gray-200 dark:border-gray-700">
-            <nav className="-mb-px flex space-x-8">
-              {[
-                { id: 'jobs', label: 'Job Runs', icon: Database },
-                { id: 'violations', label: 'Compliance', icon: AlertCircle },
-                { id: 'changesets', label: 'Governance', icon: TrendingUp },
-                { id: 'dashboards', label: 'Dashboards', icon: CheckCircle },
-              ].map(({ id, label, icon: Icon }) => (
-                <button
-                  key={id}
-                  onClick={() => setActiveTab(id as TabType)}
-                  className={`
-                    flex items-center gap-2 py-4 px-1 border-b-2 font-medium text-sm
-                    ${activeTab === id
-                      ? 'border-blue-500 text-blue-600 dark:text-blue-400'
-                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300'
-                    }
-                  `}
+          <Tabs
+            value={activeTab}
+            onChange={(_, newValue) => setActiveTab(newValue)}
+            sx={{ borderBottom: 1, borderColor: 'divider' }}
+          >
+            <Tab icon={<Storage />} iconPosition="start" label="Job Runs" value="jobs" />
+            <Tab icon={<Warning />} iconPosition="start" label="Compliance" value="violations" />
+            <Tab icon={<TrendingUp />} iconPosition="start" label="Governance" value="changesets" />
+            <Tab icon={<CheckCircle />} iconPosition="start" label="Dashboards" value="dashboards" />
+          </Tabs>
+        </CardContent>
+      </Card>
+
+      <Box sx={{ maxWidth: 1400, mx: 'auto' }}>
+        <Card sx={{ mb: 2 }}>
+          <CardContent>
+            <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
+              {activeTab === 'jobs' && (
+                <FormControl size="small" sx={{ minWidth: 150 }}>
+                  <InputLabel>Status</InputLabel>
+                  <Select
+                    value={statusFilter}
+                    label="Status"
+                    onChange={(e) => setStatusFilter(e.target.value)}
+                  >
+                    <MenuItem value="">All Statuses</MenuItem>
+                    <MenuItem value="SUCCESS">Success</MenuItem>
+                    <MenuItem value="FAILED">Failed</MenuItem>
+                    <MenuItem value="COMPLIANCE_BLOCK">Compliance Block</MenuItem>
+                  </Select>
+                </FormControl>
+              )}
+              <FormControl size="small" sx={{ minWidth: 150 }}>
+                <InputLabel>Date Range</InputLabel>
+                <Select
+                  value={dateFilter}
+                  label="Date Range"
+                  onChange={(e) => setDateFilter(e.target.value)}
                 >
-                  <Icon className="w-5 h-5" />
-                  {label}
-                </button>
-              ))}
-            </nav>
-          </div>
-        </div>
-      </div>
+                  <MenuItem value="1d">Last 24 Hours</MenuItem>
+                  <MenuItem value="7d">Last 7 Days</MenuItem>
+                  <MenuItem value="30d">Last 30 Days</MenuItem>
+                  <MenuItem value="90d">Last 90 Days</MenuItem>
+                </Select>
+              </FormControl>
+            </Box>
+          </CardContent>
+        </Card>
 
-      {/* Filters */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4 mb-4">
-          <div className="flex gap-4">
-            {activeTab === 'jobs' && (
-              <>
-                <label htmlFor="status-filter" className="sr-only">Filter by Status</label>
-                <select
-                  id="status-filter"
-                  value={statusFilter}
-                  onChange={(e) => setStatusFilter(e.target.value)}
-                  className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-                  aria-label="Filter by Status"
-                >
-                  <option value="">All Statuses</option>
-                  <option value="SUCCESS">Success</option>
-                  <option value="FAILED">Failed</option>
-                  <option value="COMPLIANCE_BLOCK">Compliance Block</option>
-                </select>
-              </>
-            )}
-            <label htmlFor="date-filter" className="sr-only">Filter by Date</label>
-            <select
-              id="date-filter"
-              value={dateFilter}
-              onChange={(e) => setDateFilter(e.target.value)}
-              className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-              aria-label="Filter by Date Range"
-            >
-              <option value="1d">Last 24 Hours</option>
-              <option value="7d">Last 7 Days</option>
-              <option value="30d">Last 30 Days</option>
-              <option value="90d">Last 90 Days</option>
-            </select>
-          </div>
-        </div>
-
-        {/* Content Area */}
         {loading ? (
-          <div className="flex justify-center items-center h-64">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
-          </div>
+          <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: 256 }}>
+            <CircularProgress />
+          </Box>
         ) : error ? (
-          <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4">
-            <p className="text-red-800 dark:text-red-200">{error}</p>
-          </div>
+          <Alert severity="error">{error}</Alert>
         ) : (
           <>
             {activeTab === 'jobs' && (
@@ -276,230 +287,157 @@ export const AuditExplorer: React.FC<AuditExplorerProps> = ({ tenantId, tenantNa
             )}
           </>
         )}
-      </div>
+      </Box>
 
-      {/* Detail Panel */}
-      {selectedRecord && (
-        <DetailPanel
-          record={selectedRecord}
-          onClose={() => setSelectedRecord(null)}
-        />
-      )}
-    </div>
+      <DetailPanel
+        open={!!selectedRecord}
+        record={selectedRecord}
+        onClose={() => setSelectedRecord(null)}
+      />
+    </Box>
   );
 };
 
-// Job Runs Table Component
 const JobRunsTable: React.FC<{
   jobRuns: JobRun[];
   onExplain: (runId: string) => void;
   onSelect: (record: any) => void;
-  getStatusColor: (status: string) => string;
+  getStatusColor: (status: string) => 'success' | 'error' | 'warning' | 'info' | 'default';
 }> = ({ jobRuns, onExplain, onSelect, getStatusColor }) => {
   return (
-    <div className="bg-white dark:bg-gray-800 shadow rounded-lg overflow-hidden">
-      <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-        <thead className="bg-gray-50 dark:bg-gray-700">
-          <tr>
-            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
-              Job ID
-            </th>
-            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
-              Status
-            </th>
-            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
-              Duration
-            </th>
-            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
-              Start Time
-            </th>
-            <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
-              Actions
-            </th>
-          </tr>
-        </thead>
-        <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
+    <TableContainer component={Paper}>
+      <Table>
+        <TableHead>
+          <TableRow>
+            <TableCell>Job ID</TableCell>
+            <TableCell>Status</TableCell>
+            <TableCell>Duration</TableCell>
+            <TableCell>Start Time</TableCell>
+            <TableCell align="right">Actions</TableCell>
+          </TableRow>
+        </TableHead>
+        <TableBody>
           {jobRuns.map((run) => (
-            <tr key={run.run_id} className="hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer">
-              <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-white">
-                {run.job_id}
-              </td>
-              <td className="px-6 py-4 whitespace-nowrap">
-                <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${getStatusColor(run.status)}`}>
-                  {run.status}
-                </span>
-              </td>
-              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
-                {calculateDuration(run.start_ts, run.end_ts)}
-              </td>
-              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
-                {formatTimestamp(run.start_ts)}
-              </td>
-              <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                <button
-                  onClick={() => onExplain(run.run_id)}
-                  className="text-blue-600 hover:text-blue-900 dark:text-blue-400 dark:hover:text-blue-300 mr-4"
-                >
+            <TableRow key={run.run_id} hover onClick={() => onSelect(run)} sx={{ cursor: 'pointer' }}>
+              <TableCell>{run.job_id}</TableCell>
+              <TableCell>
+                <Chip label={run.status} color={getStatusColor(run.status)} size="small" />
+              </TableCell>
+              <TableCell>{calculateDuration(run.start_ts, run.end_ts)}</TableCell>
+              <TableCell>{formatTimestamp(run.start_ts)}</TableCell>
+              <TableCell align="right">
+                <Button size="small" onClick={() => onExplain(run.run_id)} sx={{ mr: 1 }}>
                   Explain with AI
-                </button>
-                <button
-                  onClick={() => onSelect(run)}
-                  className="text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-300"
-                >
+                </Button>
+                <Button size="small" onClick={() => onSelect(run)}>
                   View Details
-                </button>
-              </td>
-            </tr>
+                </Button>
+              </TableCell>
+            </TableRow>
           ))}
-        </tbody>
-      </table>
-    </div>
+        </TableBody>
+      </Table>
+    </TableContainer>
   );
 };
 
-// Violations Table Component
 const ViolationsTable: React.FC<{
   violations: ComplianceViolation[];
   onSelect: (record: any) => void;
-  getSeverityColor: (severity: string) => string;
+  getSeverityColor: (severity: string) => 'error' | 'warning' | 'info' | 'success' | 'default';
 }> = ({ violations, onSelect, getSeverityColor }) => {
   return (
-    <div className="bg-white dark:bg-gray-800 shadow rounded-lg overflow-hidden">
-      <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-        <thead className="bg-gray-50 dark:bg-gray-700">
-          <tr>
-            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
-              Type
-            </th>
-            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
-              Severity
-            </th>
-            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
-              PII Exposed
-            </th>
-            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
-              Records Affected
-            </th>
-            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
-              Status
-            </th>
-            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
-              Violated At
-            </th>
-          </tr>
-        </thead>
-        <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
+    <TableContainer component={Paper}>
+      <Table>
+        <TableHead>
+          <TableRow>
+            <TableCell>Type</TableCell>
+            <TableCell>Severity</TableCell>
+            <TableCell>PII Exposed</TableCell>
+            <TableCell>Records Affected</TableCell>
+            <TableCell>Status</TableCell>
+            <TableCell>Violated At</TableCell>
+          </TableRow>
+        </TableHead>
+        <TableBody>
           {violations.map((violation) => (
-            <tr
+            <TableRow
               key={violation.violation_id}
+              hover
               onClick={() => onSelect(violation)}
-              className="hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer"
+              sx={{ cursor: 'pointer' }}
             >
-              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white">
-                {violation.violation_type}
-              </td>
-              <td className="px-6 py-4 whitespace-nowrap">
-                <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${getSeverityColor(violation.severity)}`}>
-                  {violation.severity}
-                </span>
-              </td>
-              <td className="px-6 py-4 whitespace-nowrap text-sm">
+              <TableCell>{violation.violation_type}</TableCell>
+              <TableCell>
+                <Chip label={violation.severity} color={getSeverityColor(violation.severity)} size="small" />
+              </TableCell>
+              <TableCell>
                 {violation.pii_exposed ? (
-                  <span className="text-red-600 dark:text-red-400 font-semibold">YES</span>
+                  <Typography color="error" fontWeight="bold">YES</Typography>
                 ) : (
-                  <span className="text-green-600 dark:text-green-400">No</span>
+                  <Typography color="success.main">No</Typography>
                 )}
-              </td>
-              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
-                {violation.affected_records.toLocaleString()}
-              </td>
-              <td className="px-6 py-4 whitespace-nowrap text-sm">
+              </TableCell>
+              <TableCell>{violation.affected_records.toLocaleString()}</TableCell>
+              <TableCell>
                 {violation.remediated_at ? (
-                  <span className="text-green-600 dark:text-green-400">Remediated</span>
+                  <Typography color="success.main">Remediated</Typography>
                 ) : (
-                  <span className="text-orange-600 dark:text-orange-400 font-semibold">Open</span>
+                  <Typography color="warning.main" fontWeight="bold">Open</Typography>
                 )}
-              </td>
-              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
-                {formatTimestamp(violation.violated_at)}
-              </td>
-            </tr>
+              </TableCell>
+              <TableCell>{formatTimestamp(violation.violated_at)}</TableCell>
+            </TableRow>
           ))}
-        </tbody>
-      </table>
-    </div>
+        </TableBody>
+      </Table>
+    </TableContainer>
   );
 };
 
-// ChangeSets Table Component
 const ChangeSetsTable: React.FC<{
   changeSets: ChangeSet[];
   onExplain: (csId: string) => void;
   onSelect: (record: any) => void;
-  getStatusColor: (status: string) => string;
+  getStatusColor: (status: string) => 'success' | 'error' | 'warning' | 'info' | 'default';
 }> = ({ changeSets, onExplain, onSelect, getStatusColor }) => {
   return (
-    <div className="bg-white dark:bg-gray-800 shadow rounded-lg overflow-hidden">
-      <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-        <thead className="bg-gray-50 dark:bg-gray-700">
-          <tr>
-            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
-              Type
-            </th>
-            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
-              Actor
-            </th>
-            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
-              Status
-            </th>
-            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
-              Created
-            </th>
-            <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
-              Actions
-            </th>
-          </tr>
-        </thead>
-        <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
+    <TableContainer component={Paper}>
+      <Table>
+        <TableHead>
+          <TableRow>
+            <TableCell>Type</TableCell>
+            <TableCell>Actor</TableCell>
+            <TableCell>Status</TableCell>
+            <TableCell>Created</TableCell>
+            <TableCell align="right">Actions</TableCell>
+          </TableRow>
+        </TableHead>
+        <TableBody>
           {changeSets.map((cs) => (
-            <tr key={cs.changeset_id} className="hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer">
-              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white">
-                {cs.type}
-              </td>
-              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
-                {cs.actor}
-              </td>
-              <td className="px-6 py-4 whitespace-nowrap">
-                <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${getStatusColor(cs.status)}`}>
-                  {cs.status}
-                </span>
-              </td>
-              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
-                {formatTimestamp(cs.created_at)}
-              </td>
-              <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                <button
-                  onClick={() => onExplain(cs.changeset_id)}
-                  className="text-blue-600 hover:text-blue-900 dark:text-blue-400 dark:hover:text-blue-300 mr-4"
-                >
+            <TableRow key={cs.changeset_id} hover onClick={() => onSelect(cs)} sx={{ cursor: 'pointer' }}>
+              <TableCell>{cs.type}</TableCell>
+              <TableCell>{cs.actor}</TableCell>
+              <TableCell>
+                <Chip label={cs.status} color={getStatusColor(cs.status)} size="small" />
+              </TableCell>
+              <TableCell>{formatTimestamp(cs.created_at)}</TableCell>
+              <TableCell align="right">
+                <Button size="small" onClick={() => onExplain(cs.changeset_id)} sx={{ mr: 1 }}>
                   Explain with AI
-                </button>
-                <button
-                  onClick={() => onSelect(cs)}
-                  className="text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-300"
-                >
+                </Button>
+                <Button size="small" onClick={() => onSelect(cs)}>
                   View Details
-                </button>
-              </td>
-            </tr>
+                </Button>
+              </TableCell>
+            </TableRow>
           ))}
-        </tbody>
-      </table>
-    </div>
+        </TableBody>
+      </Table>
+    </TableContainer>
   );
 };
 
-// Dashboards View Component
 const DashboardsView: React.FC<{ tenantId: string }> = ({ tenantId }) => {
   const [sloData, setSloData] = useState<any[]>([]);
   const [complianceData, setComplianceData] = useState<any[]>([]);
@@ -531,85 +469,91 @@ const DashboardsView: React.FC<{ tenantId: string }> = ({ tenantId }) => {
   };
 
   if (loading) {
-    return <div className="text-center py-8">Loading dashboards...</div>;
+    return <Typography textAlign="center" py={4}>Loading dashboards...</Typography>;
   }
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-      {/* SLO Dashboard */}
-      <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
-        <h3 className="text-lg font-semibold mb-4 text-gray-900 dark:text-white">SLO Performance</h3>
-        <div className="space-y-4">
-          {sloData.slice(0, 7).map((day, idx) => (
-            <div key={idx} className="flex items-center justify-between">
-              <span className="text-sm text-gray-600 dark:text-gray-400">
-                {new Date(day.run_date).toLocaleDateString()}
-              </span>
-              <div className="flex items-center gap-4">
-                <span className="text-sm text-gray-900 dark:text-white">
-                  {((day.successful_runs / day.total_runs) * 100).toFixed(1)}% success
-                </span>
-                <span className="text-xs text-gray-500 dark:text-gray-400">
-                  {day.total_runs} runs
-                </span>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
+    <Grid container spacing={3}>
+      <Grid size={{ xs: 12, md: 6 }}>
+        <Card>
+          <CardContent>
+            <Typography variant="h6" gutterBottom>SLO Performance</Typography>
+            <Box>
+              {sloData.slice(0, 7).map((day, idx) => (
+                <Box key={idx} sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
+                  <Typography variant="body2" color="text.secondary">
+                    {new Date(day.run_date).toLocaleDateString()}
+                  </Typography>
+                  <Box sx={{ display: 'flex', gap: 2 }}>
+                    <Typography variant="body2">
+                      {((day.successful_runs / day.total_runs) * 100).toFixed(1)}% success
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      {day.total_runs} runs
+                    </Typography>
+                  </Box>
+                </Box>
+              ))}
+            </Box>
+          </CardContent>
+        </Card>
+      </Grid>
 
-      {/* Compliance Dashboard */}
-      <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
-        <h3 className="text-lg font-semibold mb-4 text-gray-900 dark:text-white">Compliance Status</h3>
-        <div className="space-y-4">
-          {complianceData.slice(0, 7).map((day, idx) => (
-            <div key={idx} className="flex items-center justify-between">
-              <span className="text-sm text-gray-600 dark:text-gray-400">
-                {new Date(day.violation_date).toLocaleDateString()}
-              </span>
-              <div className="flex items-center gap-4">
-                <span className={`text-sm font-semibold ${day.violation_count > 0 ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'}`}>
-                  {day.violation_count} violations
-                </span>
-                {day.pii_exposure_count > 0 && (
-                  <span className="text-xs text-red-600 dark:text-red-400 font-semibold">
-                    {day.pii_exposure_count} PII
-                  </span>
-                )}
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-    </div>
+      <Grid size={{ xs: 12, md: 6 }}>
+        <Card>
+          <CardContent>
+            <Typography variant="h6" gutterBottom>Compliance Status</Typography>
+            <Box>
+              {complianceData.slice(0, 7).map((day, idx) => (
+                <Box key={idx} sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
+                  <Typography variant="body2" color="text.secondary">
+                    {new Date(day.violation_date).toLocaleDateString()}
+                  </Typography>
+                  <Box sx={{ display: 'flex', gap: 2 }}>
+                    <Typography
+                      variant="body2"
+                      fontWeight="bold"
+                      color={day.violation_count > 0 ? 'error' : 'success.main'}
+                    >
+                      {day.violation_count} violations
+                    </Typography>
+                    {day.pii_exposure_count > 0 && (
+                      <Typography variant="body2" color="error" fontWeight="bold">
+                        {day.pii_exposure_count} PII
+                      </Typography>
+                    )}
+                  </Box>
+                </Box>
+              ))}
+            </Box>
+          </CardContent>
+        </Card>
+      </Grid>
+    </Grid>
   );
 };
 
-// Detail Panel Component
 const DetailPanel: React.FC<{
+  open: boolean;
   record: any;
   onClose: () => void;
-}> = ({ record, onClose }) => {
+}> = ({ open, record, onClose }) => {
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
-        <div className="sticky top-0 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-6 py-4 flex items-center justify-between">
-          <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Record Details</h2>
-          <button
-            onClick={onClose}
-            className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
-          >
-            ✕
-          </button>
-        </div>
-        
-        <div className="p-6">
-          <pre className="bg-gray-50 dark:bg-gray-900 p-4 rounded-lg overflow-x-auto text-sm">
+    <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
+      <DialogTitle sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <Typography variant="h6">Record Details</Typography>
+        <IconButton onClick={onClose}>
+          <Close />
+        </IconButton>
+      </DialogTitle>
+      <DialogContent>
+        <Paper sx={{ p: 2, bgcolor: 'background.default' }}>
+          <pre style={{ margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
             {JSON.stringify(record, null, 2)}
           </pre>
-        </div>
-      </div>
-    </div>
+        </Paper>
+      </DialogContent>
+    </Dialog>
   );
 };
 

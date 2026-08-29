@@ -1,6 +1,11 @@
 import React, { useState } from 'react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Legend } from 'recharts';
-import { TrendingUp, AlertCircle, DollarSign, Activity, CheckCircle, XCircle, HelpCircle } from 'lucide-react';
+import TrendingUpIcon from '@mui/icons-material/TrendingUp';
+import AttachMoneyIcon from '@mui/icons-material/AttachMoney';
+import CheckCircleIcon from '@mui/icons-material/CheckCircle';
+import CancelIcon from '@mui/icons-material/Cancel';
+import HelpIcon from '@mui/icons-material/Help';
+import ShowChartIcon from '@mui/icons-material/ShowChart';
 import { GenerativeTradeExplanation } from '../components/GenerativeTradeExplanation';
 
 // --- Mock Data for Monte Carlo & Factors ---
@@ -46,10 +51,10 @@ export const AdvisorDashboard: React.FC = () => {
         </div>
         <div className="flex gap-2">
             <button className="px-4 py-2 bg-green-600 text-white rounded-lg font-medium hover:bg-green-700 flex items-center gap-2">
-                <CheckCircle className="w-4 h-4" /> Approve Proposal
+                <CheckCircleIcon sx={{ width: 16, height: 16 }} /> Approve Proposal
             </button>
             <button className="px-4 py-2 bg-red-100 text-red-700 rounded-lg font-medium hover:bg-red-200 flex items-center gap-2">
-                <XCircle className="w-4 h-4" /> Reject
+                <CancelIcon sx={{ width: 16, height: 16 }} /> Reject
             </button>
         </div>
       </header>
@@ -63,7 +68,7 @@ export const AdvisorDashboard: React.FC = () => {
               <h3 className="text-2xl font-bold text-slate-900">$2,450,000</h3>
             </div>
             <div className="p-2 bg-green-100 rounded-lg">
-              <DollarSign className="w-5 h-5 text-green-600" />
+              <AttachMoneyIcon sx={{ width: 20, height: 20 }} className="text-green-600" />
             </div>
           </div>
         </div>
@@ -75,7 +80,7 @@ export const AdvisorDashboard: React.FC = () => {
               <h3 className="text-2xl font-bold text-green-600">$1,800</h3>
             </div>
             <div className="p-2 bg-blue-100 rounded-lg">
-              <TrendingUp className="w-5 h-5 text-blue-600" />
+              <TrendingUpIcon sx={{ width: 20, height: 20 }} className="text-blue-600" />
             </div>
           </div>
           <p className="text-xs text-slate-400 mt-2">Median from Monte Carlo</p>
@@ -88,7 +93,7 @@ export const AdvisorDashboard: React.FC = () => {
               <h3 className="text-2xl font-bold text-slate-900">1.30%</h3>
             </div>
             <div className="p-2 bg-purple-100 rounded-lg">
-              <Activity className="w-5 h-5 text-purple-600" />
+              <ShowChartIcon sx={{ width: 20, height: 20 }} className="text-purple-600" />
             </div>
           </div>
           <p className="text-xs text-slate-400 mt-2">Reduced from 2.0%</p>
@@ -101,7 +106,7 @@ export const AdvisorDashboard: React.FC = () => {
               <h3 className="text-2xl font-bold text-slate-900">95%</h3>
             </div>
             <div className="p-2 bg-orange-100 rounded-lg">
-              <CheckCircle className="w-5 h-5 text-orange-600" />
+              <CheckCircleIcon sx={{ width: 20, height: 20 }} className="text-orange-600" />
             </div>
           </div>
           <p className="text-xs text-slate-400 mt-2">Based on 1000 runs</p>
@@ -178,20 +183,20 @@ export const AdvisorDashboard: React.FC = () => {
                     <h4 className="text-sm font-medium text-slate-700 mb-2">Active Screens</h4>
                     <div className="flex flex-wrap gap-2">
                         <span className="px-2 py-1 bg-red-50 text-red-700 text-xs rounded-md border border-red-100 flex items-center gap-1">
-                            <XCircle className="w-3 h-3" /> No Tobacco
+                            <CancelIcon sx={{ width: 12, height: 12 }} /> No Tobacco
                         </span>
                         <span className="px-2 py-1 bg-red-50 text-red-700 text-xs rounded-md border border-red-100 flex items-center gap-1">
-                            <XCircle className="w-3 h-3" /> No Weapons
+                            <CancelIcon sx={{ width: 12, height: 12 }} /> No Weapons
                         </span>
                         <span className="px-2 py-1 bg-green-50 text-green-700 text-xs rounded-md border border-green-100 flex items-center gap-1">
-                            <CheckCircle className="w-3 h-3" /> Low Carbon
+                            <CheckCircleIcon sx={{ width: 12, height: 12 }} /> Low Carbon
                         </span>
                     </div>
                 </div>
 
                 <div className="pt-4 border-t border-slate-100">
                     <div className="flex items-start gap-2">
-                        <HelpCircle className="w-4 h-4 text-slate-400 mt-0.5" />
+                        <HelpIcon sx={{ width: 16, height: 16 }} className="text-slate-400 mt-0.5" />
                         <p className="text-xs text-slate-500">
                             Constraints are applied before optimization. Tax budget limits realized gains across all tax lots.
                         </p>

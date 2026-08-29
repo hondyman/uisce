@@ -3,12 +3,64 @@ package activities
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 
 	"github.com/hondyman/uisce/backend/internal/events"
 	"github.com/jmoiron/sqlx"
 	"go.uber.org/zap"
 )
+
+// connectionTemplateFields are the non-credential columns propagated from a
+// gold-copy connections row. Deliberately excludes password, api_key, and
+// secret_path — see syncConnectionToTenant's doc comment.
+type connectionTemplateFields struct {
+	Name     string
+	Type     string
+	Host     sql.NullString
+	Port     sql.NullInt32
+	Database sql.NullString
+	Schema   sql.NullString
+	BaseURL  sql.NullString
+	Metadata []byte // raw JSON, for the jsonb column
+}
+
+func connectionTemplateFieldsFromData(data map[string]interface{}) (connectionTemplateFields, error) {
+	name, _ := data["name"].(string)
+	connType, _ := data["type"].(string)
+	if name == "" || connType == "" {
+		return connectionTemplateFields{}, fmt.Errorf("connection_data missing required name/type")
+	}
+
+	f := connectionTemplateFields{Name: name, Type: connType}
+	if v, ok := data["host"].(string); ok && v != "" {
+		f.Host = sql.NullString{String: v, Valid: true}
+	}
+	if v, ok := data["port"].(float64); ok { // JSON numbers decode as float64
+		f.Port = sql.NullInt32{Int32: int32(v), Valid: true}
+	}
+	if v, ok := data["database"].(string); ok && v != "" {
+		f.Database = sql.NullString{String: v, Valid: true}
+	}
+	if v, ok := data["schema"].(string); ok && v != "" {
+		f.Schema = sql.NullString{String: v, Valid: true}
+	}
+	if v, ok := data["base_url"].(string); ok && v != "" {
+		f.BaseURL = sql.NullString{String: v, Valid: true}
+	}
+
+	metadata := map[string]interface{}{}
+	if m, ok := data["metadata"].(map[string]interface{}); ok {
+		metadata = m
+	}
+	raw, err := json.Marshal(metadata)
+	if err != nil {
+		return connectionTemplateFields{}, fmt.Errorf("marshal metadata: %w", err)
+	}
+	f.Metadata = raw
+
+	return f, nil
+}
 
 type AuditService interface {
 	WriteEvent(ctx context.Context, event events.GoldCopyConnectionEvent) error
@@ -52,13 +104,21 @@ func (a *GoldCopyActivities) PropagateConnectionActivity(ctx context.Context, ev
 	return nil
 }
 
+// syncConnectionToTenant propagates a gold-copy connections row to one
+// tenant's copy, linked by core_id = the gold-copy connection's own id.
+//
+// DELIBERATE SCOPE: this propagates the connection's shape/template fields
+// only — name, type, host, port, database, schema, base_url, metadata. It
+// NEVER copies credentials (password, api_key, secret_path) and always
+// creates the tenant's row with is_active = false. Each tenant configures
+// its own real database credentials — a tenant's actual data connection is
+// never inherited, only the template describing what kind of connection it
+// should be. An UPDATE from gold-copy likewise only touches template fields,
+// never a tenant's already-configured credentials or activation state, so a
+// gold-copy edit can never silently disable or reconfigure a live connection.
 func (a *GoldCopyActivities) syncConnectionToTenant(ctx context.Context, tenantID string, event events.GoldCopyConnectionEvent) error {
-	// Logic to Insert/Update/Delete connection in tenant
-	// Linked via core_id = event.ConnectionID
-
 	switch event.Action {
 	case "INSERT":
-		// Check if already exists
 		var exists bool
 		err := a.DB.GetContext(ctx, &exists, `SELECT EXISTS(SELECT 1 FROM connections WHERE tenant_id = $1 AND core_id = $2)`, tenantID, event.ConnectionID)
 		if err != nil {
@@ -68,31 +128,44 @@ func (a *GoldCopyActivities) syncConnectionToTenant(ctx context.Context, tenantI
 			return nil
 		}
 
-		// Insert
-		data := event.ConnectionData
-		// We need to map data to columns.
-		// Ideally use a helper that handles dynamic columns or specific struct.
-		// For now, simplified SQL.
-		// Assuming data contains: name, type, config, etc.
-		// Note: ID should be new UUID, core_id = event.ConnectionID.
+		fields, err := connectionTemplateFieldsFromData(event.ConnectionData)
+		if err != nil {
+			return fmt.Errorf("gold copy connection %s: %w", event.ConnectionID, err)
+		}
 
-		name, _ := data["name"].(string)
-		connType, _ := data["type"].(string)
-		config, _ := data["config"].(map[string]interface{})
-		// json marshal config
-		// ... implementation needed ...
-
-		// Detailed implementation would require parsing data map.
-		// I'll leave placeholder for brevity.
-		a.Logger.Infof("Would INSERT connection %s (type: %s, config items: %d) into tenant %s", name, connType, len(config), tenantID)
+		_, err = a.DB.ExecContext(ctx, `
+			INSERT INTO connections (
+				tenant_id, core_id, name, type, host, port, database, schema, base_url, metadata, is_active
+			) VALUES (
+				$1, $2, $3, $4, $5, $6, $7, $8, $9, $10, false
+			)
+		`, tenantID, event.ConnectionID, fields.Name, fields.Type, fields.Host, fields.Port,
+			fields.Database, fields.Schema, fields.BaseURL, fields.Metadata)
+		if err != nil {
+			return fmt.Errorf("insert connection for tenant %s: %w", tenantID, err)
+		}
+		a.Logger.Infof("Propagated new connection template %q (core_id=%s) to tenant %s, inactive pending credentials", fields.Name, event.ConnectionID, tenantID)
 
 	case "UPDATE":
-		// Update by core_id
-		a.Logger.Infof("Would UPDATE connection %s in tenant %s", event.ConnectionID, tenantID)
+		fields, err := connectionTemplateFieldsFromData(event.ConnectionData)
+		if err != nil {
+			return fmt.Errorf("gold copy connection %s: %w", event.ConnectionID, err)
+		}
+
+		res, err := a.DB.ExecContext(ctx, `
+			UPDATE connections
+			SET name = $3, type = $4, host = $5, port = $6, database = $7, schema = $8, base_url = $9, metadata = $10, updated_at = now()
+			WHERE tenant_id = $1 AND core_id = $2
+		`, tenantID, event.ConnectionID, fields.Name, fields.Type, fields.Host, fields.Port,
+			fields.Database, fields.Schema, fields.BaseURL, fields.Metadata)
+		if err != nil {
+			return fmt.Errorf("update connection for tenant %s: %w", tenantID, err)
+		}
+		if rows, _ := res.RowsAffected(); rows == 0 {
+			a.Logger.Warnf("Gold copy connection %s updated but tenant %s has no linked row (core_id) to update", event.ConnectionID, tenantID)
+		}
 
 	case "DELETE":
-		// Delete by core_id
-		a.Logger.Infof("Would DELETE connection %s from tenant %s", event.ConnectionID, tenantID)
 		_, err := a.DB.ExecContext(ctx, `DELETE FROM connections WHERE tenant_id = $1 AND core_id = $2`, tenantID, event.ConnectionID)
 		if err != nil {
 			return err

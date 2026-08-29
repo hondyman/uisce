@@ -34,13 +34,8 @@ func RunPull(args []string) {
 
 	// Create directories
 	apiDir := filepath.Join(*outFlag, "apis")
-	pageDir := filepath.Join(*outFlag, "pages")
 	if err := os.MkdirAll(apiDir, 0755); err != nil {
 		fmt.Printf("Error creating directory %s: %v\n", apiDir, err)
-		os.Exit(1)
-	}
-	if err := os.MkdirAll(pageDir, 0755); err != nil {
-		fmt.Printf("Error creating directory %s: %v\n", pageDir, err)
 		os.Exit(1)
 	}
 
@@ -48,12 +43,6 @@ func RunPull(args []string) {
 	fmt.Printf("Pulling APIs from %s...\n", *envFlag)
 	if err := fetchAndSave(baseURL+"/api/api-studio/endpoints?env="+*envFlag, filepath.Join(apiDir, "endpoints.json")); err != nil {
 		fmt.Printf("Error pulling APIs: %v\n", err)
-	}
-
-	// Pull Pages
-	fmt.Printf("Pulling Pages from %s...\n", *envFlag)
-	if err := fetchAndSave(baseURL+"/api/page-studio/pages?env="+*envFlag, filepath.Join(pageDir, "pages.json")); err != nil {
-		fmt.Printf("Error pulling Pages: %v\n", err)
 	}
 
 	fmt.Println("Pull complete.")

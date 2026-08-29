@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Shield, ShieldAlert, FileSearch, Filter, Play, CheckCircle2, XCircle } from 'lucide-react';
+import { Security as ShieldIcon, Security as ShieldAlertIcon, Search as FileSearchIcon, FilterList as FilterIcon, PlayArrow as PlayIcon, CheckCircle as CheckCircle2Icon, Cancel as XCircleIcon } from '@mui/icons-material';
 
 const ComplianceMasterDashboard: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'rules' | 'evaluations' | 'breaches'>('rules');

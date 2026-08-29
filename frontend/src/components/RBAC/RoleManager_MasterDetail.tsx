@@ -170,9 +170,7 @@ export const RoleManagerMasterDetail: React.FC<RoleManagerProps> = ({ tenant, da
   // Fetch role users
   const fetchRoleUsers = async (roleId: string) => {
     try {
-      const response = await fetch(
-        `/api/rbac/roles/${roleId}/users`
-      );
+      const response = await apiFetch(`/api/rbac/roles/${roleId}/users`);
       const data = await response.json();
       const usersArray = Array.isArray(data)
         ? data
@@ -189,9 +187,7 @@ export const RoleManagerMasterDetail: React.FC<RoleManagerProps> = ({ tenant, da
   // Fetch role groups
   const fetchRoleGroups = async (roleId: string) => {
     try {
-      const response = await fetch(
-        `/api/rbac/roles/${roleId}/groups`
-      );
+      const response = await apiFetch(`/api/rbac/roles/${roleId}/groups`);
       const data = await response.json();
       const groupsArray = Array.isArray(data)
         ? data
@@ -208,7 +204,7 @@ export const RoleManagerMasterDetail: React.FC<RoleManagerProps> = ({ tenant, da
   // Fetch pages assigned to role
   const fetchPages = async (roleId: string) => {
     try {
-      const response = await fetch(`/api/rbac/roles/${roleId}/pages`);
+      const response = await apiFetch(`/api/rbac/roles/${roleId}/pages`);
       if (response.ok) {
         const data: Array<{ page_id: string; page_name: string; page_path: string; category: string }> = await response.json();
         setPages(data.map(p => ({

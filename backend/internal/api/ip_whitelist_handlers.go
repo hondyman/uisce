@@ -5,11 +5,80 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/hondyman/uisce/backend/internal/security"
 	"github.com/hondyman/uisce/backend/internal/utils/ip"
 	"github.com/lib/pq"
 )
+
+// requireIpWhitelistAdmin authenticates the caller and ensures they hold an
+// admin role. If tenantID is non-empty, non-global admins must also match
+// that tenant. Writes an error response and returns false when the check fails.
+func requireIpWhitelistAdmin(w http.ResponseWriter, r *http.Request, tenantID string) bool {
+	auth, ok := security.RequireAuth(w, r)
+	if !ok {
+		return false
+	}
+	if !isTenantOrGlobalAdmin(auth.Roles) {
+		http.Error(w, "Forbidden: admin role required", http.StatusForbidden)
+		return false
+	}
+	isGlobal := false
+	for _, role := range auth.Roles {
+		if strings.ToUpper(strings.TrimSpace(role)) == "GLOBAL_OPS" {
+			isGlobal = true
+			break
+		}
+	}
+	if !isGlobal && tenantID != "" {
+		matches := false
+		for _, t := range auth.TenantIDs {
+			if t == tenantID {
+				matches = true
+				break
+			}
+		}
+		if !matches {
+			http.Error(w, "Forbidden: not authorized for this tenant", http.StatusForbidden)
+			return false
+		}
+	}
+	return true
+}
+
+// requireGlobalAdmin authenticates the caller and ensures they hold the
+// global admin role, for endpoints that return data across all tenants.
+func requireGlobalAdmin(w http.ResponseWriter, r *http.Request) bool {
+	auth, ok := security.RequireAuth(w, r)
+	if !ok {
+		return false
+	}
+	for _, role := range auth.Roles {
+		if strings.ToUpper(strings.TrimSpace(role)) == "GLOBAL_OPS" {
+			return true
+		}
+	}
+	http.Error(w, "Forbidden: global admin role required", http.StatusForbidden)
+	return false
+}
+
+// isGlobalAdminRequest reports whether the (already-authenticated) caller
+// holds the global admin role. Callers must have already gated the request
+// with requireIpWhitelistAdmin or requireGlobalAdmin.
+func isGlobalAdminRequest(r *http.Request) bool {
+	auth, ok := security.AuthInfoFromContext(r.Context())
+	if !ok {
+		return false
+	}
+	for _, role := range auth.Roles {
+		if strings.ToUpper(strings.TrimSpace(role)) == "GLOBAL_OPS" {
+			return true
+		}
+	}
+	return false
+}
 
 type IpWhitelistAPIHandlers struct {
 	DB *sql.DB
@@ -31,6 +100,9 @@ func (h *IpWhitelistAPIHandlers) RegisterRoutes(r chi.Router) {
 
 // listAllIpWhitelist returns every whitelist entry with its label and the list of owning tenant IDs
 func (h *IpWhitelistAPIHandlers) listAllIpWhitelist(w http.ResponseWriter, r *http.Request) {
+	if !requireGlobalAdmin(w, r) {
+		return
+	}
 	rows, err := h.DB.QueryContext(r.Context(), `
 		SELECT e.ip_address,
 			   e.label,
@@ -77,6 +149,9 @@ func (h *IpWhitelistAPIHandlers) listAllIpWhitelist(w http.ResponseWriter, r *ht
 }
 
 func (h *IpWhitelistAPIHandlers) listTenants(w http.ResponseWriter, r *http.Request) {
+	if !requireGlobalAdmin(w, r) {
+		return
+	}
 	rows, err := h.DB.QueryContext(r.Context(), `SELECT id, COALESCE(display_name, name, tenant_code, id::text) as display_name FROM tenants ORDER BY display_name`)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -100,9 +175,12 @@ func (h *IpWhitelistAPIHandlers) listTenants(w http.ResponseWriter, r *http.Requ
 
 func (h *IpWhitelistAPIHandlers) getIpWhitelist(w http.ResponseWriter, r *http.Request) {
 	tenantId := chi.URLParam(r, "tenantId")
+	if !requireIpWhitelistAdmin(w, r, tenantId) {
+		return
+	}
 	log.Printf("[DEBUG] getIpWhitelist called for tenant: %s", tenantId)
 
-	var whitelist []map[string]interface{}
+	whitelist := []map[string]interface{}{}
 	// Return entries assigned to this tenant, plus any entries with no assignments (global/unassigned)
 	rows, err := h.DB.QueryContext(r.Context(), `
 		SELECT e.ip_address, e.label,
@@ -113,7 +191,7 @@ func (h *IpWhitelistAPIHandlers) getIpWhitelist(w http.ResponseWriter, r *http.R
 		LEFT JOIN tenant_ip_whitelist_assignments a_self ON a_self.whitelist_id = e.id AND a_self.tenant_id = $1
 		WHERE a_self.tenant_id IS NOT NULL
 		   OR NOT EXISTS (SELECT 1 FROM tenant_ip_whitelist_assignments a2 WHERE a2.whitelist_id = e.id)
-		GROUP BY e.ip_address, e.label
+		GROUP BY e.id, e.ip_address, e.label
 		ORDER BY e.ip_address
 	`, tenantId)
 	if err != nil {
@@ -150,6 +228,9 @@ func (h *IpWhitelistAPIHandlers) getIpWhitelist(w http.ResponseWriter, r *http.R
 
 func (h *IpWhitelistAPIHandlers) addIpWhitelist(w http.ResponseWriter, r *http.Request) {
 	tenantId := chi.URLParam(r, "tenantId")
+	if !requireIpWhitelistAdmin(w, r, tenantId) {
+		return
+	}
 
 	var req struct {
 		IpAddress  string   `json:"ipAddress"`
@@ -161,6 +242,21 @@ func (h *IpWhitelistAPIHandlers) addIpWhitelist(w http.ResponseWriter, r *http.R
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "Invalid request body", http.StatusBadRequest)
 		return
+	}
+
+	if !isGlobalAdminRequest(r) {
+		// Tenant-scoped admins may only manage the whitelist for their own
+		// tenant — never mark an entry global or assign it to other tenants.
+		if req.AllTenants {
+			http.Error(w, "Forbidden: only global admins may create a global whitelist entry", http.StatusForbidden)
+			return
+		}
+		for _, t := range req.TenantIds {
+			if t != tenantId {
+				http.Error(w, "Forbidden: cannot assign whitelist entry to another tenant", http.StatusForbidden)
+				return
+			}
+		}
 	}
 
 	// Validate IP: support IPv4, wildcard '*', or CIDR a.b.c.d/nn
@@ -283,6 +379,9 @@ if err != nil {
 
 func (h *IpWhitelistAPIHandlers) deleteIpWhitelist(w http.ResponseWriter, r *http.Request) {
 	tenantId := chi.URLParam(r, "tenantId")
+	if !requireIpWhitelistAdmin(w, r, tenantId) {
+		return
+	}
 
 	var req struct {
 		IpAddress string `json:"ipAddress"`
@@ -293,6 +392,15 @@ func (h *IpWhitelistAPIHandlers) deleteIpWhitelist(w http.ResponseWriter, r *htt
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "Invalid request body", http.StatusBadRequest)
 		return
+	}
+
+	if !isGlobalAdminRequest(r) {
+		for _, t := range req.TenantIds {
+			if t != tenantId {
+				http.Error(w, "Forbidden: cannot remove whitelist assignment for another tenant", http.StatusForbidden)
+				return
+			}
+		}
 	}
 
 	tx, err := h.DB.BeginTx(r.Context(), nil)

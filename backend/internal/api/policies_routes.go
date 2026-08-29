@@ -9,7 +9,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
-	"github.com/hondyman/uisce/backend/internal/auth"
+	"github.com/hondyman/uisce/backend/internal/security"
 	coremodels "github.com/hondyman/uisce/backend/models"
 )
 
@@ -55,10 +55,8 @@ func RegisterPolicyRoutes(r chi.Router, srv *Server, collabService Collaboration
 
 		if srv.AuditSvc != nil {
 			actorID := ""
-			if u, ok := auth.GetUserFromContext(r.Context()); ok {
-				actorID = u.ID
-			} else if strings.ToLower(getEnv("DEV_ALLOW_UNAUTH_POLICIES", "true")) == "true" {
-				actorID = auth.FallbackUser().ID
+			if auth, ok := security.AuthInfoFromContext(r.Context()); ok {
+				actorID = auth.UserID
 			}
 			_ = srv.AuditSvc.LogDataAccess(r.Context(), actorID, "", "", "access_policy", policy.ID.String(), "read", map[string]any{
 				"policy_id": policy.PolicyID,
@@ -93,14 +91,13 @@ func RegisterPolicyRoutes(r chi.Router, srv *Server, collabService Collaboration
 			return
 		}
 
-		user, ok := auth.GetUserFromContext(ctx)
+		auth, ok := security.RequireAuth(w, r)
 		if !ok {
-			if strings.ToLower(getEnv("DEV_ALLOW_UNAUTH_POLICIES", "false")) == "true" {
-				user = auth.FallbackUser()
-			} else {
-				http.Error(w, "authentication required", http.StatusUnauthorized)
-				return
-			}
+			return
+		}
+		if !isTenantOrGlobalAdmin(auth.Roles) {
+			http.Error(w, "Forbidden: admin role required to delete an access policy", http.StatusForbidden)
+			return
 		}
 
 		if err := collabService.DeleteAccessPolicy(ctx, targetPolicy.ID); err != nil {
@@ -109,12 +106,12 @@ func RegisterPolicyRoutes(r chi.Router, srv *Server, collabService Collaboration
 		}
 
 		if srv.AuditSvc != nil {
-			_ = srv.AuditSvc.LogDataModification(ctx, user.ID, "", "", "access_policy", targetPolicy.ID.String(), "delete", map[string]any{
+			_ = srv.AuditSvc.LogDataModification(ctx, auth.UserID, "", "", "access_policy", targetPolicy.ID.String(), "delete", map[string]any{
 				"policy_id": targetPolicy.PolicyID,
 			}, nil)
 		}
 
-		respond(w, r, map[string]any{"status": "deleted", "deleted_by": user.ID}, nil)
+		respond(w, r, map[string]any{"status": "deleted", "deleted_by": auth.UserID}, nil)
 	})
 
 	r.Post("/policies", func(w http.ResponseWriter, r *http.Request) {
@@ -146,14 +143,13 @@ func RegisterPolicyRoutes(r chi.Router, srv *Server, collabService Collaboration
 		}
 
 		ctx := r.Context()
-		user, ok := auth.GetUserFromContext(ctx)
+		auth, ok := security.RequireAuth(w, r)
 		if !ok {
-			if strings.ToLower(getEnv("DEV_ALLOW_UNAUTH_POLICIES", "false")) == "true" {
-				user = auth.FallbackUser()
-			} else {
-				http.Error(w, "authentication required", http.StatusUnauthorized)
-				return
-			}
+			return
+		}
+		if !isTenantOrGlobalAdmin(auth.Roles) {
+			http.Error(w, "Forbidden: admin role required to create or update an access policy", http.StatusForbidden)
+			return
 		}
 
 		var (
@@ -198,13 +194,13 @@ func RegisterPolicyRoutes(r chi.Router, srv *Server, collabService Collaboration
 			var auditNew map[string]any
 			b, _ := json.Marshal(result)
 			_ = json.Unmarshal(b, &auditNew)
-			_ = srv.AuditSvc.LogDataModification(ctx, user.ID, "", "", "access_policy", result.ID.String(), action, auditOld, auditNew)
+			_ = srv.AuditSvc.LogDataModification(ctx, auth.UserID, "", "", "access_policy", result.ID.String(), action, auditOld, auditNew)
 		}
 
 		resp := map[string]any{
 			"policy":       result,
 			"status":       action,
-			"performed_by": user.ID,
+			"performed_by": auth.UserID,
 		}
 		respond(w, r, resp, nil)
 	})

@@ -1,16 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import {
-  Plus,
-  Trash2,
-  TrendingUp,
-  TrendingDown,
-  PieChart as PieChartIcon,
-  AlertCircle,
-  CheckCircle,
-  Download,
-  RefreshCw,
-  X,
-} from 'lucide-react';
+import AddIcon from '@mui/icons-material/Add';
+import DeleteIcon from '@mui/icons-material/Delete';
+import TrendingUpIcon from '@mui/icons-material/TrendingUp';
+import TrendingDownIcon from '@mui/icons-material/TrendingDown';
+import PieChartIcon from '@mui/icons-material/PieChart';
+import WarningIcon from '@mui/icons-material/Warning';
+import CheckCircleIcon from '@mui/icons-material/CheckCircle';
+import DownloadIcon from '@mui/icons-material/Download';
+import RefreshIcon from '@mui/icons-material/Refresh';
+import CloseIcon from '@mui/icons-material/Close';
 import { useTenant } from '../contexts/TenantContext';
 import { useConfirm } from '../components/ConfirmProvider';
 import { devLog } from '../utils/devLogger';
@@ -232,7 +230,7 @@ export const PortfolioDashboardPage: React.FC = () => {
   if (!tenant || !datasource) {
     return (
       <div className={`${getCardClasses()} p-8 bg-gradient-to-br from-blue-50 to-blue-50/50 dark:from-blue-950/20 dark:to-blue-950/10`}>
-        <AlertCircle className="w-6 h-6 text-yellow-600 dark:text-yellow-400 mb-2" />
+        <WarningIcon sx={{ width: 24, height: 24 }} className="text-yellow-600 dark:text-yellow-400 mb-2" />
         <p className={getTextClasses('primary')}>Please select a tenant and datasource to manage portfolios.</p>
       </div>
     );
@@ -256,7 +254,7 @@ export const PortfolioDashboardPage: React.FC = () => {
             title="Refresh portfolio data"
             aria-label="Refresh portfolio data"
           >
-            <RefreshCw className="w-5 h-5" />
+            <RefreshIcon sx={{ width: 20, height: 20 }} />
             Refresh
           </button>
           <button
@@ -273,9 +271,9 @@ export const PortfolioDashboardPage: React.FC = () => {
       {toast && (
         <div className={`p-4 rounded-lg flex items-center gap-3 ${toast.type === 'success' ? getAlertClasses('success') : getAlertClasses('error')}`}>
           {toast.type === 'success' ? (
-            <CheckCircle className="w-5 h-5 text-green-600 dark:text-green-400" />
+            <CheckCircleIcon sx={{ width: 20, height: 20 }} className="text-green-600 dark:text-green-400" />
           ) : (
-            <AlertCircle className="w-5 h-5 text-red-600 dark:text-red-400" />
+            <WarningIcon sx={{ width: 20, height: 20 }} className="text-red-600 dark:text-red-400" />
           )}
           <span className={toast.type === 'success' ? 'text-green-800 dark:text-green-200' : 'text-red-800 dark:text-red-200'}>
             {toast.message}
@@ -291,7 +289,7 @@ export const PortfolioDashboardPage: React.FC = () => {
         </div>
       ) : portfolios.length === 0 ? (
         <div className="text-center py-12 border-2 border-dashed border-slate-300 dark:border-slate-600 rounded-lg">
-          <PieChartIcon className="w-12 h-12 text-slate-400 dark:text-slate-500 mx-auto mb-4" />
+          <PieChartIcon sx={{ width: 48, height: 48 }} className="text-slate-400 dark:text-slate-500 mx-auto mb-4" />
           <p className={`${getTextClasses('secondary')} mb-4`}>No portfolios yet</p>
           <button onClick={() => setShowCreateForm(true)} className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors">
             Create First Portfolio
@@ -325,7 +323,7 @@ export const PortfolioDashboardPage: React.FC = () => {
                     title="Delete portfolio"
                     aria-label="Delete portfolio"
                   >
-                    <Trash2 className="w-4 h-4 text-red-600 dark:text-red-400" />
+                    <DeleteIcon sx={{ width: 16, height: 16 }} className="text-red-600 dark:text-red-400" />
                   </button>
                 </div>
                 <div className="space-y-2">
@@ -339,7 +337,7 @@ export const PortfolioDashboardPage: React.FC = () => {
                         portfolio.metrics.dayChange >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'
                       }`}
                     >
-                      {portfolio.metrics.dayChange >= 0 ? <TrendingUp className="w-4 h-4" /> : <TrendingDown className="w-4 h-4" />}
+                      {portfolio.metrics.dayChange >= 0 ? <TrendingUpIcon sx={{ width: 16, height: 16 }} /> : <TrendingDownIcon sx={{ width: 16, height: 16 }} />}
                       {portfolio.metrics.dayChangePercent.toFixed(2)}%
                     </span>
                   </div>
@@ -526,7 +524,7 @@ export const PortfolioDashboardPage: React.FC = () => {
                   className={`${getButtonClasses('secondary')} w-full flex items-center justify-center gap-2`}
                   title="Export portfolio data"
                 >
-                  <Download className="w-4 h-4" />
+                  <DownloadIcon sx={{ width: 16, height: 16 }} />
                   Export
                 </button>
               </div>
@@ -547,7 +545,7 @@ export const PortfolioDashboardPage: React.FC = () => {
                 title="Close form"
                 aria-label="Close form"
               >
-                <X className="w-6 h-6 text-slate-600 dark:text-slate-400" />
+                <CloseIcon sx={{ width: 24, height: 24 }} className="text-slate-600 dark:text-slate-400" />
               </button>
             </div>
 
@@ -594,7 +592,7 @@ export const PortfolioDashboardPage: React.FC = () => {
                 disabled={refreshing}
                 className={`${getButtonClasses('primary')} flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed`}
               >
-                <Plus className="w-5 h-5" />
+<AddIcon sx={{ width: 20, height: 20 }} />
                 {refreshing ? 'Creating...' : 'Create'}
               </button>
             </div>

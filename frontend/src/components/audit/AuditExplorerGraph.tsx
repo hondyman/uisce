@@ -12,7 +12,8 @@ import {
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, AlertCircle, CheckCircle, Zap } from 'lucide-react';
+import { CircularProgress } from '@mui/material';
+import { Bolt as ZapIcon, CheckCircle as CheckCircleIcon, Warning as WarningIcon } from '@mui/icons-material';
 
 interface AuditExplorerGraphProps {
   scope: 'global' | 'multi-tenant-assigned' | 'tenant' | 'tenant-ops';
@@ -43,7 +44,7 @@ export const AuditExplorerGraph: React.FC<AuditExplorerGraphProps> = ({ scope, r
             <div className="space-y-4">
               {eventsLoading ? (
                 <div className="flex items-center justify-center py-8">
-                  <Loader2 className="h-6 w-6 animate-spin" />
+                  <CircularProgress />
                 </div>
               ) : events && events.length > 0 ? (
                 <TimelineViewGraph events={events} onSelect={setSelectedEvent} selectedId={selectedEvent?.id} />
@@ -141,7 +142,7 @@ const TimelineRowGraph: React.FC<{
             <p className="text-sm text-red-600 mt-1">{event.metadata.error_message}</p>
           )}
         </div>
-        {isSelected && <Zap className="h-5 w-5 text-blue-500" />}
+        {isSelected && <ZapIcon sx={{ width: 20, height: 20, color: 'primary.main' }} />}
       </div>
     </div>
   );
@@ -209,12 +210,12 @@ const AIPanelWithChangeSetProposal: React.FC<{ event: AuditEvent }> = ({ event }
             <Button onClick={handleExplain} disabled={explainFlow.explain.isPending} className="w-full" size="sm">
               {explainFlow.explain.isPending ? (
                 <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  <CircularProgress size={16} sx={{ mr: 1 }} />
                   Analyzing...
                 </>
               ) : (
                 <>
-                  <Zap className="mr-2 h-4 w-4" />
+                  <ZapIcon sx={{ mr: 1, width: 16, height: 16 }} />
                   Explain with AI
                 </>
               )}
@@ -285,7 +286,7 @@ const ChangeSetProposalModalGraph: React.FC<{
         </div>
         <div className="flex gap-2">
           <Button onClick={handleCreateChangeSet} disabled={createChangeSetMutation.isPending} className="flex-1" size="sm">
-            {createChangeSetMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+            {createChangeSetMutation.isPending ? <CircularProgress size={16} sx={{ mr: 1 }} /> : null}
             Create ChangeSet
           </Button>
           <Button onClick={onClose} variant="outline" className="flex-1" size="sm">

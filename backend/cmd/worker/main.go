@@ -16,7 +16,6 @@ import (
 	"github.com/hondyman/uisce/backend/internal/nba"
 	obsActivities "github.com/hondyman/uisce/backend/internal/observability/activities"
 	obsWorkflows "github.com/hondyman/uisce/backend/internal/observability/workflows"
-	"github.com/hondyman/uisce/backend/internal/pagestudio"
 	"github.com/hondyman/uisce/backend/internal/platform"
 	"github.com/hondyman/uisce/backend/internal/rag"
 	rebalanceractivities "github.com/hondyman/uisce/backend/internal/rebalancer/activities"
@@ -75,8 +74,6 @@ func main() {
 	w.RegisterWorkflow(workflows.DynamicBPWorkflow)
 	w.RegisterWorkflow(wealthworkflows.RebalanceWorkflow)
 	w.RegisterWorkflow(rebalancerworkflow.PortfolioLifecycleWorkflow)
-	w.RegisterWorkflow(pagestudio.PageUpgradeReconciliationWorkflow)
-
 	// Register New Interpreter Workflow (Strategy Pillar 1)
 	w.RegisterWorkflow(pkgworkflows.InterpreterWorkflow)
 	w.RegisterWorkflow(pkgworkflows.RunStoredWorkflow)
@@ -383,13 +380,6 @@ func main() {
 	w.RegisterActivity(crsActivities.RebuildLineageForChangeSetActivity)
 	w.RegisterActivity(crsActivities.InvalidateASOActivity)
 	log.Println("✅ Registered Change Review System Workflows and Activities")
-
-	// 13. Page Studio
-	psRepo := pagestudio.NewRepository(dbx)
-	reconService := &pagestudio.ReconciliationService{}
-	psActivities := pagestudio.NewActivities(psRepo, reconService)
-	w.RegisterActivity(psActivities.AnalyzeCoreUpgradeImpact)
-	log.Println("✅ Registered Page Studio Reconciliation Activities")
 
 	// Start the worker
 	log.Println("🚀 Starting Temporal worker...")
