@@ -34,6 +34,7 @@ import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
 import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 import dayjs, { Dayjs } from 'dayjs';
+import { apiClient } from '../../../utils/apiClient';
 
 export interface AuditLogEntry {
   id: string;
@@ -53,7 +54,7 @@ export interface AuditLogEntry {
 
 interface AuditLogTabContentProps {
   tenantId: string;
-  datasourceId: string;
+  datasourceId?: string;
   onViewDetails?: (entry: AuditLogEntry) => void;
   onExport?: () => void;
 }
@@ -150,13 +151,16 @@ export const AuditLogTabContent: React.FC<AuditLogTabContentProps> = ({
 
   // Fetch audit log entries
   const fetchAuditLogs = React.useCallback(async (currentOffset: number, isRefresh: boolean = false) => {
-    if (!tenantId || !datasourceId) return;
+    if (!tenantId) return;
 
     setLoading(true);
     setError(null);
     try {
-      let url = `/api/v1/admin/tenants/audit-logs?datasourceId=${encodeURIComponent(datasourceId)}&limit=${LIMIT}&offset=${currentOffset}&sortBy=${sortBy}&sortOrder=${sortOrder ? sortOrder.toUpperCase() : 'DESC'}`;
-      
+      let url = `/api/v1/admin/tenants/audit-logs?tenantId=${encodeURIComponent(tenantId)}&limit=${LIMIT}&offset=${currentOffset}&sortBy=${sortBy}&sortOrder=${sortOrder ? sortOrder.toUpperCase() : 'DESC'}`;
+      if (datasourceId) {
+          url += `&datasourceId=${encodeURIComponent(datasourceId)}`;
+      }
+
       if (startDate) {
           url += `&startDate=${encodeURIComponent(startDate.toISOString())}`;
       }
@@ -164,11 +168,7 @@ export const AuditLogTabContent: React.FC<AuditLogTabContentProps> = ({
           url += `&endDate=${encodeURIComponent(endDate.toISOString())}`;
       }
 
-      const response = await fetch(url);
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-      const data = await response.json();
+      const data = await apiClient<any>(url);
       
       // Transform API response
       const transformedEntries: AuditLogEntry[] = (data.entries || []).map((entry: any) => ({
@@ -253,10 +253,10 @@ export const AuditLogTabContent: React.FC<AuditLogTabContentProps> = ({
     }
   };
 
-  if (!tenantId || !datasourceId) {
+  if (!tenantId) {
     return (
       <Alert severity="warning">
-        Please select a tenant and datasource to view audit logs
+        Please select a tenant to view audit logs
       </Alert>
     );
   }

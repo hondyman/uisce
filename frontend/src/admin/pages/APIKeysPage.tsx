@@ -5,6 +5,13 @@ import { useAPIKeys } from "../hooks/useAdmin";
 import { APIKey } from "../types";
 import "./APIKeysPage.css";
 
+const getAdminHeaders = () => {
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  const token = localStorage.getItem("auth_token");
+  if (token) headers["Authorization"] = `Bearer ${token}`;
+  return headers;
+};
+
 export const APIKeysPage: React.FC = () => {
   const [limit, setLimit] = useState(50);
   const [offset, setOffset] = useState(0);
@@ -51,7 +58,7 @@ export const APIKeysPage: React.FC = () => {
 
       const response = await fetch("/api/admin/api-keys", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: getAdminHeaders(),
         body: JSON.stringify({
           name: formData.name,
           tenant_ids: tenantIds,

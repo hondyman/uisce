@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"sort"
 	"strings"
 	"time"
 
@@ -21,8 +20,13 @@ type SQLGenerationRequest struct {
 	BusinessObjectID string         `json:"businessObjectId"`
 	SelectedFields   []string       `json:"selectedFields"` // Field UUIDs (NOT names or semantic term codes)
 	Filters          []FilterClause `json:"filters"`
-	WhereClause      string         `json:"whereClause"` // Optional pre-built WHERE clause from frontend
-	Limit            int            `json:"limit"`
+	// FilterTree is an optional nested AND/OR predicate tree. When present it
+	// is compiled instead of (not in addition to) Filters, so a caller that
+	// needs boolean grouping ("A AND (B OR C)") isn't limited to a flat
+	// AND-only list. See expression_builder.go's CompileFilterGroup.
+	FilterTree  *FilterGroup `json:"filterTree,omitempty"`
+	WhereClause string       `json:"whereClause"` // Optional pre-built WHERE clause from frontend
+	Limit       int          `json:"limit"`
 	// AsOfDate triggers Hot/Cold Watermark Routing: if set and before the
 	// hot/cold watermark, routes to DataFusionIcebergDialect (cold tier).
 	AsOfDate time.Time `json:"asOfDate,omitempty"`
@@ -96,10 +100,24 @@ func (r *SQLGenerationRequest) UnmarshalJSON(data []byte) error {
 
 
 type FilterClause struct {
-	FieldID     string      `json:"fieldId"` // Field UUID (NOT field name or semantic term code)
-	Operator    string      `json:"operator"`
-	Value       interface{} `json:"value"`
-	Conjunction string      `json:"conjunction"`
+	FieldID  string      `json:"fieldId"` // Field UUID (NOT field name or semantic term code)
+	Operator string      `json:"operator"`
+	Value    interface{} `json:"value"`
+	// ValueFieldID, when set, compares against another resolved field's SQL
+	// expression instead of Value (e.g. "shipped_date >= order_date"). Value
+	// is ignored when this is set.
+	ValueFieldID string `json:"valueFieldId,omitempty"`
+	Conjunction  string `json:"conjunction"`
+}
+
+// FilterGroup is a nested boolean predicate: Conditions and Groups at the
+// same level are joined by Conjunction (default AND), and the whole group is
+// wrapped in parentheses when compiled, so arbitrary "A AND (B OR (C AND D))"
+// trees are expressible - not just a flat AND list.
+type FilterGroup struct {
+	Conjunction string         `json:"conjunction,omitempty"` // AND | OR, default AND
+	Conditions  []FilterClause `json:"conditions,omitempty"`
+	Groups      []FilterGroup  `json:"groups,omitempty"`
 }
 
 // SQLGenerationResponse defines the output of the SQL generation
@@ -430,20 +448,15 @@ func (g *BOSQLGenerator) GenerateSQL(req SQLGenerationRequest) (string, []interf
 		return "", nil, fmt.Errorf("failed to convert filters: %w", err)
 	}
 
-	// 5b. Include user-provided WHERE clause if present
+	// 5b. Raw client-supplied WhereClause text is rejected outright, not
+	// best-effort-substituted. ConvertWhereClauseFieldNames (removed) did
+	// simple find/replace field-name substitution with no way to verify
+	// every reference was actually mapped, and on any gap it returned the
+	// leftover raw text unmodified — a direct SQL injection vector. Callers
+	// must express predicates through the structured, parameterized
+	// req.Filters instead (see ConvertFilters / CompileFilterPredicate).
 	if req.WhereClause != "" {
-		// Convert field names in the WHERE clause to database columns with table aliases
-		convertedWhereClause, err := g.ConvertWhereClauseFieldNames(ctx, req.WhereClause)
-		if err != nil {
-			// If conversion fails, try using it as-is (it might already be in database format)
-			convertedWhereClause = req.WhereClause
-		}
-
-		if whereClause != "" {
-			whereClause += " AND " + convertedWhereClause
-		} else {
-			whereClause = convertedWhereClause
-		}
+		return "", nil, fmt.Errorf("whereClause is not supported: express predicates via the structured 'filters' field instead")
 	}
 
 	// 6. Enforce ABAC tenant isolation at the AST level once the full join graph
@@ -745,6 +758,12 @@ func (g *BOSQLGenerator) BuildJoinClause(ctx *GenerationContext) string {
 }
 
 func (g *BOSQLGenerator) ConvertFilters(ctx *GenerationContext) (string, error) {
+	// A FilterTree, when present, takes precedence — it can express boolean
+	// grouping a flat Filters list cannot ("A AND (B OR C)").
+	if ctx.Request.FilterTree != nil {
+		return CompileFilterGroup(g, ctx, *ctx.Request.FilterTree)
+	}
+
 	var whereParts []string
 
 	for _, filter := range ctx.Request.Filters {
@@ -755,213 +774,14 @@ func (g *BOSQLGenerator) ConvertFilters(ctx *GenerationContext) (string, error) 
 			return "", fmt.Errorf("failed to resolve filter field %s: %w", fieldPath, err)
 		}
 
-		op := strings.ToUpper(strings.TrimSpace(filter.Operator))
-		if op == "" || op == "EQ" {
-			op = "="
-		} else if op == "NEQ" {
-			op = "!="
-		} else if op == "GT" {
-			op = ">"
-		} else if op == "LT" {
-			op = "<"
-		} else if op == "GTE" {
-			op = ">="
-		} else if op == "LTE" {
-			op = "<="
+		clause, err := CompileFilterPredicate(g, ctx, sqlExpr, filter)
+		if err != nil {
+			return "", fmt.Errorf("failed to compile filter for field %s: %w", fieldPath, err)
 		}
-
-		// Handle IS NULL / IS NOT NULL / Boolean
-		if op == "IS NULL" || op == "NULL" || op == "IS_NULL" {
-			whereParts = append(whereParts, fmt.Sprintf("%s IS NULL", sqlExpr))
-			continue
-		}
-		if op == "IS NOT NULL" || op == "NOT_NULL" || op == "NOT NULL" || op == "IS_NOT_NULL" {
-			whereParts = append(whereParts, fmt.Sprintf("%s IS NOT NULL", sqlExpr))
-			continue
-		}
-		if op == "IS TRUE" || op == "IS_TRUE" {
-			whereParts = append(whereParts, fmt.Sprintf("%s IS TRUE", sqlExpr))
-			continue
-		}
-		if op == "IS FALSE" || op == "IS_FALSE" {
-			whereParts = append(whereParts, fmt.Sprintf("%s IS FALSE", sqlExpr))
-			continue
-		}
-
-		// Format value
-		valStr := ""
-		switch v := filter.Value.(type) {
-		case string:
-			cleanV := strings.ReplaceAll(v, "'", "''")
-			switch op {
-			case "CONTAINS", "CONTAIN":
-				op = "ILIKE"
-				valStr = fmt.Sprintf("'%%%s%%'", cleanV)
-			case "STARTS WITH", "STARTS_WITH", "START_WITH":
-				op = "ILIKE"
-				valStr = fmt.Sprintf("'%s%%'", cleanV)
-			case "ENDS WITH", "ENDS_WITH", "END_WITH":
-				op = "ILIKE"
-				valStr = fmt.Sprintf("'%%%s'", cleanV)
-			case "IN", "NOT IN":
-				items := strings.Split(cleanV, ",")
-				var formattedItems []string
-				for _, item := range items {
-					trimmed := strings.TrimSpace(item)
-					if trimmed != "" {
-						formattedItems = append(formattedItems, fmt.Sprintf("'%s'", trimmed))
-					}
-				}
-				if len(formattedItems) == 0 {
-					valStr = "('')"
-				} else {
-					valStr = fmt.Sprintf("(%s)", strings.Join(formattedItems, ", "))
-				}
-			default:
-				valStr = fmt.Sprintf("'%s'", cleanV)
-			}
-		case []interface{}:
-			var formattedItems []string
-			for _, item := range v {
-				switch iv := item.(type) {
-				case string:
-					formattedItems = append(formattedItems, fmt.Sprintf("'%s'", strings.ReplaceAll(iv, "'", "''")))
-				case int, int64, float64:
-					formattedItems = append(formattedItems, fmt.Sprintf("%v", iv))
-				default:
-					formattedItems = append(formattedItems, fmt.Sprintf("'%v'", iv))
-				}
-			}
-			if len(formattedItems) == 0 {
-				valStr = "('')"
-			} else {
-				valStr = fmt.Sprintf("(%s)", strings.Join(formattedItems, ", "))
-			}
-		case []string:
-			var formattedItems []string
-			for _, item := range v {
-				formattedItems = append(formattedItems, fmt.Sprintf("'%s'", strings.ReplaceAll(item, "'", "''")))
-			}
-			if len(formattedItems) == 0 {
-				valStr = "('')"
-			} else {
-				valStr = fmt.Sprintf("(%s)", strings.Join(formattedItems, ", "))
-			}
-		case int, int64, float64:
-			valStr = fmt.Sprintf("%v", v)
-		default:
-			valStr = fmt.Sprintf("'%v'", v)
-		}
-
-		clause := fmt.Sprintf("%s %s %s", sqlExpr, op, valStr)
 		whereParts = append(whereParts, clause)
 	}
 
 	return strings.Join(whereParts, " AND "), nil
-}
-
-// ConvertWhereClauseFieldNames converts field names in a WHERE clause string to database column references with table aliases
-// For example: "CUSTOMER_ADDRESS != 'value'" becomes "t0.address != 'value'"
-// Handles multiple formats: field names, display names, uppercase variants, semantic terms
-func (g *BOSQLGenerator) ConvertWhereClauseFieldNames(ctx *GenerationContext, whereClause string) (string, error) {
-	if whereClause == "" {
-		return "", nil
-	}
-
-	// Defensive check for nil context or BO definition
-	if ctx == nil || ctx.RootBODef == nil {
-		// If we don't have context/BO info, return the clause as-is
-		return whereClause, nil
-	}
-
-	if len(ctx.RootBODef.Fields) == 0 {
-		// No fields to map, return as-is
-		return whereClause, nil
-	}
-
-	// Build a comprehensive mapping of possible field references to database columns
-	// Each field can be referenced in multiple ways
-	fieldReferences := make(map[string]string) // Maps any form of field name to "t0.columnname"
-
-	for _, field := range ctx.RootBODef.Fields {
-		// Extract just the column name from PhysicalColumn (e.g., "customers.address" -> "address")
-		columnName := field.PhysicalColumn
-		if idx := strings.LastIndex(columnName, "."); idx >= 0 {
-			columnName = columnName[idx+1:]
-		}
-
-		replacement := "t0." + columnName
-
-		// Add mappings for various forms of the field name
-		if field.Name != "" {
-			// Exact name
-			fieldReferences[field.Name] = replacement
-			// Uppercase name
-			fieldReferences[strings.ToUpper(field.Name)] = replacement
-			// lowercase name
-			fieldReferences[strings.ToLower(field.Name)] = replacement
-			// With underscores for spaces
-			withUnderscores := strings.ReplaceAll(field.Name, " ", "_")
-			fieldReferences[withUnderscores] = replacement
-			fieldReferences[strings.ToUpper(withUnderscores)] = replacement
-		}
-
-		if field.DisplayName != "" {
-			// Display name as-is
-			fieldReferences[field.DisplayName] = replacement
-			// Display name uppercase
-			fieldReferences[strings.ToUpper(field.DisplayName)] = replacement
-			// Display name with spaces replaced by underscores
-			withUnderscores := strings.ReplaceAll(field.DisplayName, " ", "_")
-			fieldReferences[withUnderscores] = replacement
-			fieldReferences[strings.ToUpper(withUnderscores)] = replacement
-			// Display name with spaces replaced by nothing
-			noSpaces := strings.ReplaceAll(field.DisplayName, " ", "")
-			fieldReferences[noSpaces] = replacement
-			fieldReferences[strings.ToUpper(noSpaces)] = replacement
-		}
-	}
-
-	// Common operators to detect field references
-	operators := []string{" = ", " != ", " <> ", " > ", " < ", " >= ", " <= ", " LIKE ", " IN ", " AND ", " OR ", " IS NULL", " IS NOT NULL"}
-
-	result := whereClause
-
-	// Try to replace field references
-	// Sort by length (longest first) to avoid partial matches
-	var fieldNames []string
-	for fieldRef := range fieldReferences {
-		fieldNames = append(fieldNames, fieldRef)
-	}
-	// Sort by length in descending order
-	sort.Slice(fieldNames, func(i, j int) bool {
-		return len(fieldNames[i]) > len(fieldNames[j])
-	})
-
-	for _, fieldRef := range fieldNames {
-		replacement := fieldReferences[fieldRef]
-
-		// Try with operators
-		for _, op := range operators {
-			pattern := fieldRef + op
-			if strings.Contains(result, pattern) {
-				newPattern := replacement + op
-				result = strings.ReplaceAll(result, pattern, newPattern)
-			}
-		}
-
-		// Try at the end of the clause (after it might have been modified)
-		if strings.HasSuffix(result, fieldRef) {
-			result = result[:len(result)-len(fieldRef)] + replacement
-		}
-	}
-
-	return result, nil
-}
-
-// isIdentifierChar checks if a character is valid in an SQL identifier
-func isIdentifierChar(ch rune) bool {
-	return (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || (ch >= '0' && ch <= '9') || ch == '_'
 }
 
 // ResolveSemanticRequest converts a semantic query request to the internal UUID-based format

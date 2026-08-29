@@ -79,15 +79,19 @@ type SemanticTermView struct {
 }
 
 // BOBinding captures the physical binding context for a Business Object.
+// db tags are required: sqlx's default column mapper only lowercases field
+// names (DrivingTable -> "drivingtable"), it doesn't insert underscores, so
+// without these tags a snake_case query alias like "driving_table" never
+// matches its destination field and struct-scans silently fail to populate it.
 type BOBinding struct {
-	ID               string
-	Name             string
-	DialectName      string
-	ConnectionString string
-	BindingID        string
-	BOID             string
-	DatasourceID     string
-	DrivingTable     string
-	DrivingTableID   string
+	ID               string `db:"id"`
+	Name             string `db:"name"`
+	DialectName      string `db:"dialect_name"`
+	ConnectionString string `db:"connection_string"`
+	BindingID        string `db:"binding_id"`
+	BOID             string `db:"bo_id"`
+	DatasourceID     string `db:"datasource_id"`
+	DrivingTable     string `db:"driving_table"`
+	DrivingTableID   string `db:"driving_table_id"`
 }
 

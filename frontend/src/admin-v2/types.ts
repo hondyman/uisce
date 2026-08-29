@@ -126,6 +126,17 @@ export interface ComponentEntitlement {
   updatedAt: string;
 }
 
+// Result of walking security.security_profiles.parent_profile_id to resolve
+// what a profile actually ends up with (own overrides + inherited baseline).
+export interface EffectiveEntitlement {
+  node_path: string;
+  entitlement_type: EntitlementType;
+  override_state: OverrideState;
+  condition_dsl?: string;
+  resolved_tenant?: string; // absent/empty means resolved from the gold-copy baseline
+  inherited: boolean;
+}
+
 export interface UpsertEntitlementRequest {
   targetProfileKey: ProfileKey;
   entitlementType: EntitlementType;

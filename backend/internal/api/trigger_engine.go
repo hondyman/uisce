@@ -8,6 +8,8 @@ import (
 	"log"
 	"time"
 
+	"github.com/google/uuid"
+	"github.com/hondyman/uisce/backend/internal/rulefabric"
 	"github.com/jmoiron/sqlx"
 )
 
@@ -372,6 +374,24 @@ func (e *TriggerEngine) executeActions(ctx context.Context, actionConfig json.Ra
 				actionResult["status"] = "success"
 			}
 
+		case "compliance_rules":
+			blockingResults, err := e.evaluateComplianceRules(ctx, tc)
+			if err != nil {
+				actionResult["status"] = "failed"
+				actionResult["error"] = err.Error()
+			} else if len(blockingResults) > 0 {
+				actionResult["status"] = "blocked"
+				actionResult["blocking_rules"] = blockingResults
+				err = fmt.Errorf("%d compliance rule(s) blocked this write", len(blockingResults))
+			} else {
+				actionResult["status"] = "success"
+			}
+			if err != nil {
+				actionResults = append(actionResults, actionResult)
+				result["actions"] = actionResults
+				return result, err
+			}
+
 		default:
 			actionResult["status"] = "unknown"
 			actionResult["error"] = fmt.Sprintf("unknown action type: %s", action.Type)
@@ -387,6 +407,44 @@ func (e *TriggerEngine) executeActions(ctx context.Context, actionConfig json.Ra
 // ============================================================================
 // ACTION HANDLERS
 // ============================================================================
+
+// evaluateComplianceRules runs rulefabric's per-record rule evaluation (Rule/ConditionGroup,
+// severity, enforcement mode) against the BO row event data, returning the results that
+// should block the write (hard/soft block, error/hard-block severity).
+func (e *TriggerEngine) evaluateComplianceRules(ctx context.Context, tc *TriggerContext) ([]rulefabric.EvaluationResult, error) {
+	tenantID, err := uuid.Parse(tc.TenantID)
+	if err != nil {
+		return nil, fmt.Errorf("invalid tenant id %q: %w", tc.TenantID, err)
+	}
+
+	evaluator, err := rulefabric.NewRuleEvaluator(e.db)
+	if err != nil {
+		return nil, fmt.Errorf("failed constructing rule evaluator: %w", err)
+	}
+
+	rules, err := evaluator.GetRulesForEvaluation(ctx, tenantID, rulefabric.GetRulesOptions{
+		Channel: tc.TriggerKey,
+		Entity:  tc.TargetEntity,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed fetching compliance rules: %w", err)
+	}
+	if len(rules) == 0 {
+		return nil, nil
+	}
+
+	batch, err := evaluator.EvaluateBatch(ctx, rules, &rulefabric.EvaluationContext{
+		TenantID:       tenantID,
+		Channel:        tc.TriggerKey,
+		Data:           tc.EventData,
+		EvaluationTime: tc.RequestedAt,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("compliance rule batch evaluation failed: %w", err)
+	}
+
+	return batch.BlockingResults, nil
+}
 
 func (e *TriggerEngine) sendNotification(ctx context.Context, notificationID string, tc *TriggerContext, _ map[string]interface{}) error {
 	// Fetch template from DB

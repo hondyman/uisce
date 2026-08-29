@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/hondyman/uisce/backend/internal/boresolver"
 	"github.com/hondyman/uisce/backend/internal/logging"
+	"github.com/hondyman/uisce/backend/internal/security"
 	"github.com/hondyman/uisce/libs/jwt-middleware"
 )
 
@@ -41,12 +42,50 @@ func HandleGetAuditLogs(w http.ResponseWriter, r *http.Request) {
 	startDateStr := r.URL.Query().Get("startDate")
 	endDateStr := r.URL.Query().Get("endDate")
 	datasourceId := r.URL.Query().Get("datasourceId")
-	claims := jwtmiddleware.GetClaimsFromContext(r)
-	if claims == nil || claims.TenantID == "" {
+
+	var tenantID string
+	var isGlobalAdmin bool
+	var userTenantIDs []string
+
+	if authInfo, ok := security.AuthInfoFromContext(r.Context()); ok && authInfo.UserID != "" {
+		if len(authInfo.TenantIDs) > 0 {
+			tenantID = authInfo.TenantIDs[0]
+		}
+		isGlobalAdmin = authInfo.IsGlobalAdmin
+		userTenantIDs = authInfo.TenantIDs
+	} else if claims := jwtmiddleware.GetClaimsFromContext(r); claims != nil && claims.UserID != "" {
+		tenantID = claims.TenantID
+		isGlobalAdmin = claims.IsCoreAdmin
+		userTenantIDs = append([]string{claims.TenantID}, claims.TenantIDs...)
+	} else {
 		http.Error(w, "Unauthorized", http.StatusUnauthorized)
 		return
 	}
-	tenantID := claims.TenantID
+
+	// Allow the caller to request audit logs for a specific tenant (e.g. an
+	// admin viewing a tenant detail page that isn't their own default tenant),
+	// but only if the JWT/Auth context proves they actually have access to it.
+	if requestedTenantID := r.URL.Query().Get("tenantId"); requestedTenantID != "" {
+		if !isGlobalAdmin {
+			allowed := false
+			for _, tid := range userTenantIDs {
+				if tid == requestedTenantID {
+					allowed = true
+					break
+				}
+			}
+			if !allowed {
+				http.Error(w, "Forbidden: not authorized for this tenant", http.StatusForbidden)
+				return
+			}
+		}
+		tenantID = requestedTenantID
+	}
+
+	if tenantID == "" {
+		http.Error(w, "Unauthorized: missing tenant context", http.StatusUnauthorized)
+		return
+	}
 
 	// startDateStr/endDateStr/datasourceId are interpolated directly into a raw
 	// SQL string below (DataFusion has no parameterized query support), so they

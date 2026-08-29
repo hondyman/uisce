@@ -17,10 +17,10 @@ import (
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
-	temporalclient "github.com/hondyman/uisce/libs/temporal-client"
-	"github.com/hondyman/uisce/libs/logging"
-	"github.com/hondyman/uisce/api-gateway/internal/config"
 	"github.com/hondyman/uisce/api-gateway/handlers"
+	"github.com/hondyman/uisce/api-gateway/internal/config"
+	"github.com/hondyman/uisce/libs/logging"
+	temporalclient "github.com/hondyman/uisce/libs/temporal-client"
 	"go.uber.org/zap"
 	"golang.org/x/time/rate"
 
@@ -92,8 +92,8 @@ func (rl *RateLimiter) GetLimiter(key string, rps float64) *rate.Limiter {
 }
 
 var (
-	rateLimiter = NewRateLimiter()
-	apiKeys     = make(map[string]APIKey) // In production, use Redis/database
+	rateLimiter   = NewRateLimiter()
+	apiKeys       = make(map[string]APIKey) // In production, use Redis/database
 	gatewayConfig *config.GatewayConfig
 )
 
@@ -815,13 +815,23 @@ func main() {
 	api.POST("/keys", func(c *gin.Context) {
 		var req struct {
 			Name        string   `json:"name"`
-			TenantID    string   `json:"tenant_id"`
 			Permissions []string `json:"permissions"`
 			RateLimit   int      `json:"rate_limit"`
 		}
 
 		if err := c.ShouldBindJSON(&req); err != nil {
 			c.JSON(400, gin.H{"error": err.Error()})
+			return
+		}
+
+		// SECURITY: the key's tenant is always the caller's own verified tenant
+		// (from the JWT, via JWTMiddleware) — never a client-supplied value. A
+		// request body tenant_id previously let any authenticated caller mint
+		// an API key scoped to an arbitrary tenant, not just their own.
+		tenantVal, ok := c.Get("semlayer_tenant_id")
+		tenantID, _ := tenantVal.(string)
+		if !ok || tenantID == "" {
+			c.JSON(403, gin.H{"error": "missing or invalid tenant context"})
 			return
 		}
 
@@ -832,7 +842,7 @@ func main() {
 			ID:          generateID(),
 			Key:         key,
 			Name:        req.Name,
-			TenantID:    req.TenantID,
+			TenantID:    tenantID,
 			Permissions: req.Permissions,
 			RateLimit:   req.RateLimit,
 			CreatedAt:   time.Now(),
@@ -1086,7 +1096,7 @@ func main() {
 		apipkg.RegisterRebalancerRoutes(r, tc)
 	}
 
-		logger.Info("API Gateway starting", zap.String("port", gatewayConfig.Port))
+	logger.Info("API Gateway starting", zap.String("port", gatewayConfig.Port))
 
 	tlsEnabled := os.Getenv("TLS_ENABLED") == "true"
 	if tlsEnabled {

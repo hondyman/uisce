@@ -13,7 +13,7 @@ import type {
   UpsertEntitlementResponse,
 } from "./types";
 
-const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:8080/api";
+import { apiFetch } from "../lib/apiClient";
 
 class StudioApiError extends Error {
   status: number;
@@ -26,11 +26,11 @@ class StudioApiError extends Error {
 }
 
 async function post<T>(path: string, body: unknown): Promise<T> {
-  const res = await fetch(`${API_BASE}${path}`, {
+  const url = path.startsWith("/api") ? path : `/api${path}`;
+  const res = await apiFetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
-    credentials: "include",
   });
   if (!res.ok) {
     const text = await res.text();
@@ -47,9 +47,9 @@ async function post<T>(path: string, body: unknown): Promise<T> {
 }
 
 async function get<T>(path: string): Promise<T> {
-  const res = await fetch(`${API_BASE}${path}`, {
+  const url = path.startsWith("/api") ? path : `/api${path}`;
+  const res = await apiFetch(url, {
     method: "GET",
-    credentials: "include",
   });
   if (!res.ok) {
     throw new StudioApiError(res.status, `GET ${path} failed`, await res.text());
@@ -58,9 +58,9 @@ async function get<T>(path: string): Promise<T> {
 }
 
 async function del(path: string): Promise<void> {
-  const res = await fetch(`${API_BASE}${path}`, {
+  const url = path.startsWith("/api") ? path : `/api${path}`;
+  const res = await apiFetch(url, {
     method: "DELETE",
-    credentials: "include",
   });
   if (!res.ok && res.status !== 404) {
     throw new StudioApiError(res.status, `DELETE ${path} failed`, await res.text());
@@ -104,6 +104,14 @@ export const studioApi = {
 
   deleteEntitlement: (entitlementId: string) =>
     del(`/v1/tenant/entitlements/${entitlementId}`),
+
+  // Resolves entitlements through the profile's parent_profile_id chain, so
+  // the UI can show what a tenant actually ends up with (own overrides +
+  // inherited gold-copy baseline), not just the rows physically stored here.
+  effectiveEntitlements: (targetProfileKey: string) =>
+    get<{ target_profile_key: string; entitlements: import("./types").EffectiveEntitlement[]; count: number }>(
+      `/v1/tenant/entitlements/effective?target_profile_key=${encodeURIComponent(targetProfileKey)}`
+    ),
 
   // -------------------------------------------------------------------------
   // Phase C — IdP broker lifecycle (consumed by Screen 1)

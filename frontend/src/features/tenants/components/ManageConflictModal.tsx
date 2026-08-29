@@ -6,6 +6,13 @@ import DialogContent from '@mui/material/DialogContent';
 import DialogActions from '@mui/material/DialogActions';
 import { Button, Typography, FormControl, InputLabel, Select, MenuItem, Checkbox, FormControlLabel, CircularProgress, Alert } from '@mui/material';
 
+const getAuthHeaders = () => {
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  const token = localStorage.getItem('auth_token');
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+  return headers;
+};
+
 interface TenantRef { id: string; displayName: string }
 
 interface Props {
@@ -46,7 +53,7 @@ const ManageConflictModal: React.FC<Props> = ({ open, ownerTenantId, onClose, co
     try {
       // Remove assignment from ownerTenantId
       const del = await fetch(`/api/tenants/${ownerTenantId}/ip-whitelist`, {
-        method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ipAddress: conflictingIp, tenantIds: [ownerTenantId] })
+        method: 'DELETE', headers: getAuthHeaders(), body: JSON.stringify({ ipAddress: conflictingIp, tenantIds: [ownerTenantId] })
       });
       if (!del.ok) {
         const body = await del.text();
@@ -54,7 +61,7 @@ const ManageConflictModal: React.FC<Props> = ({ open, ownerTenantId, onClose, co
       }
 
       if (includeAssign) {
-        const add = await fetch(`/api/tenants/${transferTo}/ip-whitelist`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ipAddress: conflictingIp, tenantIds: [transferTo] }) });
+        const add = await fetch(`/api/tenants/${transferTo}/ip-whitelist`, { method: 'POST', headers: getAuthHeaders(), body: JSON.stringify({ ipAddress: conflictingIp, tenantIds: [transferTo] }) });
         if (!add.ok) {
           const body = await add.text();
           throw new Error(`Failed to add assignment to target tenant: ${body}`);
@@ -84,7 +91,7 @@ const ManageConflictModal: React.FC<Props> = ({ open, ownerTenantId, onClose, co
     setError(null);
     try {
       // Re-assign to owner (best-effort)
-      const add = await fetch(`/api/tenants/${lastOperation.owner}/ip-whitelist`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ipAddress: lastOperation.ip, tenantIds: [lastOperation.owner] }) });
+      const add = await fetch(`/api/tenants/${lastOperation.owner}/ip-whitelist`, { method: 'POST', headers: getAuthHeaders(), body: JSON.stringify({ ipAddress: lastOperation.ip, tenantIds: [lastOperation.owner] }) });
       if (!add.ok) {
         const body = await add.text();
         throw new Error(`Undo failed: ${body}`);

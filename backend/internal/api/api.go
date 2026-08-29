@@ -1568,6 +1568,7 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 		srv.registerWorkflowRoutes(r, db, cron.New())
 		srv.registerProcessRoutes(r, db, sqlxDB)
 		srv.registerTriggerEngineRoutes(r, sqlxDB)
+		srv.registerBOCRUDRoutes(r, sqlxDB)
 		srv.registerNBAEngineRoutes(r, sqlxDB)
 		srv.registerBillingRoutes(r)
 		srv.registerFeedbackRoutes(r)
@@ -3576,6 +3577,21 @@ func (s *Server) registerTriggerEngineRoutes(r chi.Router, sqlxDB *sqlx.DB) {
 	triggerEngine := NewTriggerEngine(sqlxDB, abacEngine, s.EventBus, notifAdapter)
 	// Register chi-based trigger routes directly on the chi router
 	RegisterTriggerRoutesChi(r, sqlxDB, triggerEngine)
+}
+
+// registerBOCRUDRoutes mounts the live Business Object record CRUD endpoints
+// (/bo/{boKey}/records/...), wired to fire row_insert/row_update/row_delete
+// trigger evaluations on every committed write.
+func (s *Server) registerBOCRUDRoutes(r chi.Router, sqlxDB *sqlx.DB) {
+	abacEngine := &ABACEngine{db: sqlxDB}
+	if s.EventBus == nil {
+		s.EventBus = &noopEventBus{}
+	}
+	notifAdapter := &notificationAdapter{svc: s.NotificationSvc}
+	triggerEngine := NewTriggerEngine(sqlxDB, abacEngine, s.EventBus, notifAdapter)
+
+	boCRUDHandler := NewBOCRUDHandler(sqlxDB, triggerEngine)
+	boCRUDHandler.RegisterRoutes(r)
 }
 
 // registerNBAEngineRoutes mounts next-best-action and recommendation engine endpoints

@@ -212,3 +212,52 @@ export const BOFieldsPalette: React.FC<BOFieldsPaletteProps> = ({
 };
 
 export default BOFieldsPalette;
+
+export function extractAllBOFields(
+  boData: any,
+  scope: 'all' | 'core' | 'custom',
+  extraFields: any[] = []
+): BOField[] {
+  if (!boData) return [];
+
+  const fields: BOField[] = [];
+  const seen = new Set<string>();
+
+  const addField = (f: any) => {
+    const name = f.name || f.technicalName || f.field;
+    if (name && !seen.has(name)) {
+      seen.add(name);
+      fields.push({
+        name,
+        technicalName: f.technicalName || f.name,
+        label: f.label || f.displayName || name,
+        dataType: f.dataType || f.type || 'string',
+        type: f.type || f.dataType || 'string',
+        description: f.description,
+        isCore: f.isCore ?? true,
+      });
+    }
+  };
+
+  if (boData.fields) {
+    (Array.isArray(boData.fields) ? boData.fields : Object.values(boData.fields)).forEach((f: any) => addField(f));
+  }
+  if (boData.coreFields) {
+    (Array.isArray(boData.coreFields) ? boData.coreFields : Object.values(boData.coreFields)).forEach((f: any) => addField(f));
+  }
+  if (boData.customFields) {
+    (Array.isArray(boData.customFields) ? boData.customFields : Object.values(boData.customFields)).forEach((f: any) => {
+      const field = { ...f, isCore: false };
+      addField(field);
+    });
+  }
+  if (boData.attributes) {
+    Object.values(boData.attributes).forEach((f: any) => addField(f));
+  }
+
+  extraFields.forEach((f: any) => addField(f));
+
+  if (scope === 'core') return fields.filter(f => f.isCore);
+  if (scope === 'custom') return fields.filter(f => !f.isCore);
+  return fields;
+}

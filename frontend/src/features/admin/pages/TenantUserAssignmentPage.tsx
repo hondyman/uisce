@@ -38,7 +38,7 @@ import {
   Add as AddIcon,
   Edit as EditIcon
 } from '@mui/icons-material';
-import { useAuthFetch } from '../../../utils/authFetch';
+import { apiClient } from '../../../utils/apiClient';
 import { useAccess } from '../../../contexts/AccessContext';
 
 interface Tenant {
@@ -78,84 +78,69 @@ const isTenantAvailable = (tenant: Tenant): boolean =>
 
 const TenantUserAssignmentPage: React.FC = () => {
   const theme = useTheme();
-  const { authFetch } = useAuthFetch();
-  const { isPlatformOperator, accessLevel, accessibleTenants } = useAccess();
+  const { isPlatformOperator, accessLevel, accessibleTenants, currentTenant } = useAccess();
   const isTenantManager = isPlatformOperator || accessLevel === 'tenant_admin';
 
+  const [loading, setLoading] = useState(true);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
-  const [selectedTenantFilter, setSelectedTenantFilter] = useState<string>('all');
-  
+  const [mappings, setMappings] = useState<TenantAccessMapping[]>([]);
+  const [users, setUsers] = useState<User[]>([]);
+
   // Dialog state
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
-  
+  const [actionLoading, setActionLoading] = useState(false);
+
   // Selected items state
   const [selectedMapping, setSelectedMapping] = useState<TenantAccessMapping | null>(null);
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
-  const [selectedTenantId, setSelectedTenantId] = useState<string>('');
+  const [selectedTenantId, setSelectedTenantId] = useState<string>(currentTenant?.id || accessibleTenants[0]?.id || '');
   const [selectedRole, setSelectedRole] = useState<string>('viewer');
 
-  // Messages
-  const [successMsg, setSuccessMsg] = useState<string | null>(null);
-  const [errorMsg, setErrorMsg] = useState<string | null>(null);
-  
-  // Data list states
-  const [mappings, setMappings] = useState<TenantAccessMapping[]>([]);
-  const [users, setUsers] = useState<User[]>([]);
-  
-  const [loading, setLoading] = useState(true);
-  const [actionLoading, setActionLoading] = useState(false);
-
+  // Fetch access mappings
   const fetchData = async () => {
-    setLoading(true);
-    setErrorMsg(null);
     try {
-      // 1. Fetch current access mappings
-      const mappingsRes = await authFetch('/api/admin/tenant-access');
-      if (!mappingsRes.ok) throw new Error(mappingsRes.error || 'Failed to fetch tenant access mappings');
-      
-      // 2. Fetch all system users (for assignment dropdown)
-      const usersRes = await authFetch('/api/rbac/users');
-      if (!usersRes.ok) throw new Error(usersRes.error || 'Failed to fetch system users');
-
-      // Build a set of active tenant IDs for filtering mappings
-      const activeTenantIds = new Set(accessibleTenants.map((t) => t.id));
-      
-      // Filter mappings to only show those for active tenants
-      const allMappings = mappingsRes.data?.success ? mappingsRes.data.data : (mappingsRes.data || []);
-      const activeMappings = allMappings.filter((m: any) => activeTenantIds.has(m.tenant_id));
-      setMappings(activeMappings);
-      setUsers(Array.isArray(usersRes.data) ? usersRes.data : []);
+      setLoading(true);
+      setErrorMsg(null);
+      const res = await apiClient<any>('/api/admin/tenant-access');
+      const list = Array.isArray(res) ? res : Array.isArray(res?.data) ? res.data : [];
+      setMappings(list);
     } catch (err: any) {
-      console.error(err);
-      setErrorMsg(err.message || 'Failed to sync with tenant access microservice.');
+      console.error('Failed to fetch tenant access mappings:', err);
+      setErrorMsg(err.message || 'Failed to fetch tenant access mappings.');
+      setMappings([]);
     } finally {
       setLoading(false);
     }
   };
 
-  useEffect(() => {
-    fetchData();
-  }, []);
+  // Fetch users
+  const fetchUsers = async () => {
+    try {
+      const data = await apiClient<User[]>('/api/rbac/users');
+      setUsers(Array.isArray(data) ? data : []);
+    } catch (err: any) {
+      console.error('Failed to fetch users:', err);
+      setUsers([]);
+    }
+  };
 
-  if (!isTenantManager) {
-    return (
-      <Box sx={{ p: 3 }}>
-        <Alert severity="error">
-          You do not have permission to manage tenant access. Please contact a platform administrator.
-        </Alert>
-      </Box>
-    );
-  }
-
-  // For tenant managers that are not platform operators, scope the view to their
-  // single assigned tenant.
+  // Sync selectedTenantId when currentTenant or accessibleTenants changes
   useEffect(() => {
-    if (!isPlatformOperator && accessibleTenants.length === 1) {
-      setSelectedTenantFilter(accessibleTenants[0].id);
+    if (currentTenant?.id) {
+      setSelectedTenantId(currentTenant.id);
+    } else if (accessibleTenants.length > 0 && !selectedTenantId) {
       setSelectedTenantId(accessibleTenants[0].id);
     }
-  }, [isPlatformOperator, accessibleTenants]);
+  }, [currentTenant?.id, accessibleTenants]);
+
+  // Fetch data on mount
+  useEffect(() => {
+    fetchData();
+    fetchUsers();
+  }, []);
 
   // Map tenant details by ID
   const tenantMap = useMemo(() => {
@@ -164,24 +149,21 @@ const TenantUserAssignmentPage: React.FC = () => {
     return map;
   }, [accessibleTenants]);
 
-  // Filtered mappings list
+  // Filtered mappings list - always scoped to current tenant
   const filteredMappings = useMemo(() => {
+    const effectiveTenantFilter = currentTenant?.id || accessibleTenants[0]?.id || 'all';
     return mappings.filter(m => {
-      const tenant = tenantMap.get(m.tenant_id);
-      const tenantName = tenant ? (tenant.display_name || tenant.name) : '';
-      
       const matchesSearch =
         m.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        m.user_id.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        tenantName.toLowerCase().includes(searchTerm.toLowerCase());
+        m.user_id.toLowerCase().includes(searchTerm.toLowerCase());
 
       const matchesTenant =
-        selectedTenantFilter === 'all' ||
-        m.tenant_id === selectedTenantFilter;
+        effectiveTenantFilter === 'all' ||
+        m.tenant_id === effectiveTenantFilter;
 
       return matchesSearch && matchesTenant;
     });
-  }, [mappings, searchTerm, selectedTenantFilter, tenantMap]);
+  }, [mappings, searchTerm, currentTenant, accessibleTenants]);
 
   // Grant access (Create mapping)
   const handleCreateAccess = async () => {
@@ -196,16 +178,14 @@ const TenantUserAssignmentPage: React.FC = () => {
     setActionLoading(true);
     try {
       setErrorMsg(null);
-      const res = await authFetch('/api/admin/tenant-access', {
+      await apiClient('/api/admin/tenant-access', {
         method: 'POST',
-        json: {
+        body: JSON.stringify({
           user_id: selectedUser.id,
           tenant_id: selectedTenantId,
           access_role: selectedRole
-        }
+        })
       });
-      
-      if (!res.ok) throw new Error(res.error || 'Failed to grant tenant access');
       
       setSuccessMsg(`Successfully granted access to tenant.`);
       setCreateDialogOpen(false);
@@ -232,12 +212,10 @@ const TenantUserAssignmentPage: React.FC = () => {
     setActionLoading(true);
     try {
       setErrorMsg(null);
-      const res = await authFetch(`/api/admin/tenant-access/${selectedMapping.user_id}/${selectedMapping.tenant_id}`, {
+      await apiClient(`/api/admin/tenant-access/${selectedMapping.user_id}/${selectedMapping.tenant_id}`, {
         method: 'PUT',
-        json: { access_role: selectedRole }
+        body: JSON.stringify({ access_role: selectedRole })
       });
-      
-      if (!res.ok) throw new Error(res.error || 'Failed to update access role');
       
       setSuccessMsg(`Successfully updated role mapping.`);
       setEditDialogOpen(false);
@@ -265,11 +243,9 @@ const TenantUserAssignmentPage: React.FC = () => {
     setActionLoading(true);
     try {
       setErrorMsg(null);
-      const res = await authFetch(`/api/admin/tenant-access/${mapping.user_id}/${mapping.tenant_id}`, {
+      await apiClient(`/api/admin/tenant-access/${mapping.user_id}/${mapping.tenant_id}`, {
         method: 'DELETE'
       });
-      
-      if (!res.ok) throw new Error(res.error || 'Failed to revoke access');
       
       setSuccessMsg(`Successfully revoked tenant access mapping.`);
       fetchData();
@@ -326,38 +302,20 @@ const TenantUserAssignmentPage: React.FC = () => {
 
       {/* Filter and Search Bar */}
       <Paper elevation={0} sx={{ p: 3, border: '1px solid', borderColor: 'divider', borderRadius: 2 }}>
-        <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
-          <TextField
-            size="small"
-            placeholder="Search mappings by email or tenant name..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            InputProps={{
-              startAdornment: (
-                <InputAdornment position="start">
-                  <SearchIcon sx={{ color: 'text.secondary' }} />
-                </InputAdornment>
-              )
-            }}
-            sx={{ flex: 2 }}
-          />
-
-          <FormControl size="small" sx={{ flex: 1, minWidth: 200 }}>
-            <InputLabel>Filter by Tenant</InputLabel>
-            <Select
-              value={selectedTenantFilter}
-              label="Filter by Tenant"
-              onChange={(e) => setSelectedTenantFilter(e.target.value)}
-            >
-              <MenuItem value="all">All Tenants</MenuItem>
-              {accessibleTenants.map((t) => (
-                <MenuItem key={t.id} value={t.id}>
-                  {t.display_name || t.name}
-                </MenuItem>
-              ))}
-            </Select>
-          </FormControl>
-        </Stack>
+        <TextField
+          size="small"
+          placeholder="Search by email or user ID..."
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+          InputProps={{
+            startAdornment: (
+              <InputAdornment position="start">
+                <SearchIcon sx={{ color: 'text.secondary' }} />
+              </InputAdornment>
+            )
+          }}
+          sx={{ width: { xs: '100%', sm: 400 } }}
+        />
       </Paper>
 
       {/* Access Mappings Table */}
@@ -495,12 +453,12 @@ const TenantUserAssignmentPage: React.FC = () => {
               fullWidth
             />
 
-            {/* Tenant Selection */}
-            <FormControl fullWidth size="small" disabled={!isPlatformOperator && accessibleTenants.length <= 1}>
-              <InputLabel>Select Tenant</InputLabel>
+            {/* Tenant Selection (Read-only / Defaulted to scoped tenant) */}
+            <FormControl fullWidth size="small" disabled={Boolean(currentTenant?.id) || (!isPlatformOperator && accessibleTenants.length <= 1)}>
+              <InputLabel>Tenant</InputLabel>
               <Select
                 value={selectedTenantId}
-                label="Select Tenant"
+                label="Tenant"
                 onChange={(e) => setSelectedTenantId(e.target.value)}
               >
               {accessibleTenants.map((t) => (

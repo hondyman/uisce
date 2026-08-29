@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/hondyman/uisce/backend/internal/events"
 	"github.com/hondyman/uisce/backend/internal/services"
 	jwtmiddleware "github.com/hondyman/uisce/libs/jwt-middleware"
 	"github.com/jmoiron/sqlx"
@@ -14,7 +15,12 @@ import (
 
 // RegisterConnectionsRoutes registers connection management endpoints
 func RegisterConnectionsRoutes(r chi.Router, db *sqlx.DB) {
-	connService := services.NewConnectionsService(db)
+	// KafkaPublisher connects lazily, so constructing it unconditionally is
+	// safe even if Kafka isn't reachable in this environment — publishing a
+	// gold-copy connection change is best-effort (see
+	// ConnectionsService.publishGoldCopyChange).
+	kafkaBrokers := getEnv("KAFKA_BROKERS", "redpanda:9092")
+	connService := services.NewConnectionsServiceWithEvents(db, events.NewKafkaPublisher(kafkaBrokers))
 
 	r.Route("/connections", func(r chi.Router) {
 		// List connections for a tenant
@@ -25,6 +31,7 @@ func RegisterConnectionsRoutes(r chi.Router, db *sqlx.DB) {
 		r.Get("/{id}", handleGetConnection(connService))
 		// Update a connection
 		r.Put("/{id}", handleUpdateConnection(connService))
+		r.Patch("/{id}", handleUpdateConnection(connService))
 		// Delete a connection
 		r.Delete("/{id}", handleDeleteConnection(connService))
 		// Link connection to datasource
@@ -343,107 +350,59 @@ type testConnectionResult struct {
 	Details interface{} `json:"details,omitempty"`
 }
 
-// testConnectionByType tests a connection based on its type
+// testConnectionByType does a shallow "is this connection populated enough
+// to attempt a real connect" check. The actual network test (including
+// mTLS/key_pair auth) is performed by POST /api/connections/test via
+// CatalogScanService.TestConnection; this endpoint predates that and is kept
+// for callers hitting /tenant-ops/connections/{id}/test directly.
 func testConnectionByType(conn *services.Connection) testConnectionResult {
-	switch strings.ToLower(conn.DatabaseType) {
-	case "postgres", "postgresql":
-		return testPostgresConnection(conn)
-	case "mysql":
-		return testMySQLConnection(conn)
-	case "snowflake":
-		return testSnowflakeConnection(conn)
+	switch strings.ToLower(conn.Type) {
+	case "postgres", "postgresql", "mysql", "snowflake":
+		return testDatabaseConnection(conn)
 	case "s3":
-		return testS3Connection(conn)
+		return testFieldConfigured(conn, conn.BaseURL != nil && *conn.BaseURL != "", "base_url")
 	case "api", "rest":
-		return testAPIConnection(conn)
+		return testFieldConfigured(conn, conn.BaseURL != nil && *conn.BaseURL != "", "base_url")
 	default:
 		return testConnectionResult{
 			Success: false,
-			Message: fmt.Sprintf("connection type '%s' not supported for testing", conn.DatabaseType),
-			Type:    conn.DatabaseType,
+			Message: fmt.Sprintf("connection type '%s' not supported for testing", conn.Type),
+			Type:    conn.Type,
 		}
 	}
 }
 
-func testPostgresConnection(conn *services.Connection) testConnectionResult {
-	if conn.DSN == "" {
+func testDatabaseConnection(conn *services.Connection) testConnectionResult {
+	if conn.Host == nil || *conn.Host == "" {
 		return testConnectionResult{
 			Success: false,
-			Message: "dsn is required for postgres connections",
-			Type:    "postgres",
+			Message: fmt.Sprintf("host is required for %s connections", conn.Type),
+			Type:    conn.Type,
 		}
 	}
 
 	return testConnectionResult{
 		Success: true,
-		Message: "postgres connection DSN is configured",
-		Type:    "postgres",
+		Message: fmt.Sprintf("%s connection is configured", conn.Type),
+		Type:    conn.Type,
 		Details: map[string]interface{}{
-			"dsn": conn.DSN,
+			"host": *conn.Host,
 		},
 	}
 }
 
-func testMySQLConnection(conn *services.Connection) testConnectionResult {
-	if conn.DSN == "" {
+func testFieldConfigured(conn *services.Connection, ok bool, field string) testConnectionResult {
+	if !ok {
 		return testConnectionResult{
 			Success: false,
-			Message: "dsn is required for mysql connections",
-			Type:    "mysql",
+			Message: fmt.Sprintf("%s is required for %s connections", field, conn.Type),
+			Type:    conn.Type,
 		}
 	}
 
 	return testConnectionResult{
 		Success: true,
-		Message: "mysql connection DSN is configured",
-		Type:    "mysql",
-	}
-}
-
-func testSnowflakeConnection(conn *services.Connection) testConnectionResult {
-	if conn.DSN == "" {
-		return testConnectionResult{
-			Success: false,
-			Message: "dsn is required for snowflake connections",
-			Type:    "snowflake",
-		}
-	}
-
-	return testConnectionResult{
-		Success: true,
-		Message: "snowflake connection DSN is configured",
-		Type:    "snowflake",
-	}
-}
-
-func testS3Connection(conn *services.Connection) testConnectionResult {
-	if conn.DSN == "" {
-		return testConnectionResult{
-			Success: false,
-			Message: "dsn is required for s3 connections",
-			Type:    "s3",
-		}
-	}
-
-	return testConnectionResult{
-		Success: true,
-		Message: "s3 connection DSN is configured",
-		Type:    "s3",
-	}
-}
-
-func testAPIConnection(conn *services.Connection) testConnectionResult {
-	if conn.DSN == "" {
-		return testConnectionResult{
-			Success: false,
-			Message: "dsn is required for api connections",
-			Type:    "api",
-		}
-	}
-
-	return testConnectionResult{
-		Success: true,
-		Message: "api connection DSN is configured",
-		Type:    "api",
+		Message: fmt.Sprintf("%s connection is configured", conn.Type),
+		Type:    conn.Type,
 	}
 }

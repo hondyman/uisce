@@ -3,7 +3,9 @@ package region
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -42,8 +44,11 @@ func (r *TenantRegionResolver) InferRegionForTenant(tenantID string) (string, bo
 	}
 
 	var region sql.NullString
+	// public.tenants has no home_region/metadata columns (that was a stale
+	// assumption from an earlier schema draft); default_region/region are
+	// the real columns.
 	query := `
-		SELECT COALESCE(home_region, metadata->>'region')
+		SELECT COALESCE(default_region, region)
 		FROM public.tenants
 		WHERE id = $1
 		LIMIT 1
@@ -83,19 +88,18 @@ func (r *TenantRegionResolver) IsRegionAllowedForTenant(tenantID, region string)
 		return true
 	}
 
-	// Query tenant's allowed regions
-	var allowedRegions sql.NullString
+	// Query tenant's allowed regions. allowed_regions is a JSONB array
+	// (e.g. ["us-west"]); default_region/region are plain strings.
+	var allowedRegionsJSON sql.NullString
+	var defaultRegion, homeRegion sql.NullString
 	query := `
-		SELECT COALESCE(allowed_regions::text, 
-		        metadata->>'allowed_regions',
-		        home_region,
-		        metadata->>'region')
+		SELECT allowed_regions::text, default_region, region
 		FROM public.tenants
 		WHERE id = $1
 		LIMIT 1
 	`
 
-	err := r.db.QueryRow(query, tenantID).Scan(&allowedRegions)
+	err := r.db.QueryRow(query, tenantID).Scan(&allowedRegionsJSON, &defaultRegion, &homeRegion)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return false
@@ -105,25 +109,23 @@ func (r *TenantRegionResolver) IsRegionAllowedForTenant(tenantID, region string)
 		return false
 	}
 
-	if !allowedRegions.Valid || allowedRegions.String == "" {
-		return false
+	if allowedRegionsJSON.Valid && allowedRegionsJSON.String != "" {
+		var allowed []string
+		if err := json.Unmarshal([]byte(allowedRegionsJSON.String), &allowed); err == nil {
+			for _, a := range allowed {
+				if strings.EqualFold(strings.TrimSpace(a), region) {
+					return true
+				}
+			}
+		}
 	}
 
-	// Parse allowed regions (could be JSON array or comma-separated)
-	// For now, simple exact match with the home region
-	homeRegion := allowedRegions.String
-	if homeRegion == region {
+	if defaultRegion.Valid && strings.EqualFold(defaultRegion.String, region) {
 		return true
 	}
-
-	// TODO: In future, parse allowed_regions JSONB array for multi-region tenants:
-	// var allowed []string
-	// if strings.HasPrefix(homeRegion, "[") {
-	//     json.Unmarshal([]byte(homeRegion), &allowed)
-	//     for _, r := range allowed {
-	//         if r == region { return true }
-	//     }
-	// }
+	if homeRegion.Valid && strings.EqualFold(homeRegion.String, region) {
+		return true
+	}
 
 	return false
 }
@@ -139,15 +141,16 @@ func (r *TenantRegionResolver) GetAllowedRegions(tenantID string) ([]string, err
 		return nil, fmt.Errorf("tenant_id cannot be empty")
 	}
 
-	var homeRegion sql.NullString
+	var allowedRegionsJSON sql.NullString
+	var defaultRegion, homeRegion sql.NullString
 	query := `
-		SELECT COALESCE(home_region, metadata->>'region')
+		SELECT allowed_regions::text, default_region, region
 		FROM public.tenants
 		WHERE id = $1
 		LIMIT 1
 	`
 
-	err := r.db.QueryRow(query, tenantID).Scan(&homeRegion)
+	err := r.db.QueryRow(query, tenantID).Scan(&allowedRegionsJSON, &defaultRegion, &homeRegion)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, fmt.Errorf("tenant not found: %s", tenantID)
@@ -155,12 +158,21 @@ func (r *TenantRegionResolver) GetAllowedRegions(tenantID string) ([]string, err
 		return nil, fmt.Errorf("failed to query tenant regions: %w", err)
 	}
 
-	if !homeRegion.Valid || homeRegion.String == "" {
-		return []string{}, nil
+	if allowedRegionsJSON.Valid && allowedRegionsJSON.String != "" {
+		var allowed []string
+		if err := json.Unmarshal([]byte(allowedRegionsJSON.String), &allowed); err == nil && len(allowed) > 0 {
+			return allowed, nil
+		}
 	}
 
-	// Return single home region (multi-region support coming soon)
-	return []string{homeRegion.String}, nil
+	if defaultRegion.Valid && defaultRegion.String != "" {
+		return []string{defaultRegion.String}, nil
+	}
+	if homeRegion.Valid && homeRegion.String != "" {
+		return []string{homeRegion.String}, nil
+	}
+
+	return []string{}, nil
 }
 
 // isGoldCopyTenant returns true if the given tenant ID matches the gold copy tenant.

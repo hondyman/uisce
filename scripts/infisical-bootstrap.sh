@@ -68,23 +68,54 @@ parse_args() {
     done
 }
 
-pull_secrets() {
-    local output=""
+pull_secrets_at_path() {
+    local path="$1"
     local domain_arg="--domain=http://100.84.50.65:8085/api"
     local proj_arg="--projectId=9af25976-bafc-4895-a057-2effec13c620"
-    
+    local output=""
+
     # Run non-interactively with /dev/null stdin so infisical will not prompt
     if [ -n "$INFISICAL_TOKEN" ]; then
-        output=$(infisical secrets $domain_arg $proj_arg --env="$INFISICAL_ENV" --recursive -o json --token="$INFISICAL_TOKEN" --silent </dev/null 2>/dev/null || true)
+        output=$(infisical secrets $domain_arg $proj_arg --env="$INFISICAL_ENV" --path="$path" --recursive -o json --token="$INFISICAL_TOKEN" --silent </dev/null 2>/dev/null || true)
     else
-        output=$(infisical secrets $domain_arg $proj_arg --env="$INFISICAL_ENV" --recursive -o json --silent </dev/null 2>/dev/null || true)
+        output=$(infisical secrets $domain_arg $proj_arg --env="$INFISICAL_ENV" --path="$path" --recursive -o json --silent </dev/null 2>/dev/null || true)
     fi
-    
+
     if [ -z "$output" ] || ! echo "$output" | jq . >/dev/null 2>&1; then
-        warn "Could not fetch valid JSON secrets from Infisical (not logged in or server unreachable). Using default/existing environment settings."
         output="{}"
     fi
     echo "$output"
+}
+
+# Merges two Infisical JSON secret payloads (each may be an array of
+# {secretKey, secretValue} or an object) into a single deduped array,
+# with entries from $2 winning over $1 on key collisions.
+merge_secrets_json() {
+    local a b
+    a=$(echo "$1" | jq 'if type=="array" then . elif type=="object" and length>0 then (to_entries | map({secretKey:.key, secretValue:.value})) else [] end' 2>/dev/null) || a='[]'
+    b=$(echo "$2" | jq 'if type=="array" then . elif type=="object" and length>0 then (to_entries | map({secretKey:.key, secretValue:.value})) else [] end' 2>/dev/null) || b='[]'
+    jq -n --argjson a "$a" --argjson b "$b" '
+        ($a + $b) as $all
+        | reduce $all[] as $item ({}; if $item.secretKey != null and $item.secretKey != "" then .[$item.secretKey] = $item.secretValue else . end)
+        | to_entries | map({secretKey: .key, secretValue: .value})
+    '
+}
+
+pull_secrets() {
+    # Secrets live both at the project root and inside a "core" folder
+    # (e.g. KEYCLOAK_JWKS_URL, DATABASE_URL). --recursive from "/" is
+    # supposed to cover both, but fetch /core explicitly too so a
+    # folder-scoped token or a CLI version that doesn't honor --recursive
+    # for nested folders still picks these up.
+    local root_output core_output
+    root_output=$(pull_secrets_at_path "/")
+    core_output=$(pull_secrets_at_path "/core")
+
+    if [ "$root_output" = "{}" ] && [ "$core_output" = "{}" ]; then
+        warn "Could not fetch valid JSON secrets from Infisical (not logged in or server unreachable). Using default/existing environment settings."
+    fi
+
+    merge_secrets_json "$root_output" "$core_output"
 }
 
 generate_env_file() {
@@ -147,6 +178,34 @@ generate_composite_secrets() {
     fi
     if ! grep -q "^API_TOKEN_ENCRYPTION_KEY=" "$output_path"; then
         echo "API_TOKEN_ENCRYPTION_KEY=D+1O956T8t9zZ+w/FqK1lS9b8jJ2vR7mX4kY0uP3oN8=" >> "$output_path"
+    fi
+
+    # Keycloak JWKS/issuer defaults. These are not currently stored as
+    # Infisical secrets, so without this fallback the backend silently
+    # ends up with no RSA public key configured and rejects every
+    # user-issued JWT with "missing or invalid JWT token" (401s across
+    # the app). Prefer real Infisical secrets when present; only fill in
+    # gaps here.
+    local kc_host="${KEYCLOAK_HOST:-100.84.50.65}"
+    local kc_port="${KEYCLOAK_PORT:-8443}"
+    local kc_realm="${KEYCLOAK_REALM:-uisce}"
+    if ! grep -q "^KEYCLOAK_HOST=" "$output_path"; then
+        echo "KEYCLOAK_HOST=${kc_host}" >> "$output_path"
+    fi
+    if ! grep -q "^KEYCLOAK_PORT=" "$output_path"; then
+        echo "KEYCLOAK_PORT=${kc_port}" >> "$output_path"
+    fi
+    if ! grep -q "^KEYCLOAK_REALM=" "$output_path"; then
+        echo "KEYCLOAK_REALM=${kc_realm}" >> "$output_path"
+    fi
+    if ! grep -q "^KEYCLOAK_JWKS_URL=" "$output_path"; then
+        echo "KEYCLOAK_JWKS_URL=https://${kc_host}:${kc_port}/realms/${kc_realm}/protocol/openid-connect/certs" >> "$output_path"
+    fi
+    if ! grep -q "^KEYCLOAK_ISSUER=" "$output_path"; then
+        echo "KEYCLOAK_ISSUER=https://${kc_host}:${kc_port}/realms/${kc_realm}" >> "$output_path"
+    fi
+    if ! grep -q "^KEYCLOAK_INSECURE_SKIP_VERIFY=" "$output_path"; then
+        echo "KEYCLOAK_INSECURE_SKIP_VERIFY=true" >> "$output_path"
     fi
 }
 

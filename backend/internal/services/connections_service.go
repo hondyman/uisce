@@ -3,28 +3,50 @@ package services
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
+	"log"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/hondyman/uisce/backend/internal/db"
+	"github.com/hondyman/uisce/backend/internal/events"
 	"github.com/jmoiron/sqlx"
 )
 
-// Connection represents a datasource connection from tenant_connections table
+// Connection represents a datasource connection from the `connections` table
+// (the table tenant_product_datasource.connection_id actually references).
 type Connection struct {
-	ID           string    `json:"id" db:"id"`
-	TenantID     string    `json:"tenant_id" db:"tenant_id"`
-	Name         string    `json:"name" db:"connection_name"`
-	DatabaseType string    `json:"database_type" db:"database_type"`
-	DSN          string    `json:"dsn" db:"dsn"`
-	CreatedAt    time.Time `json:"created_at" db:"created_at"`
-	UpdatedAt    time.Time `json:"updated_at" db:"updated_at"`
+	ID         string          `json:"id" db:"id"`
+	TenantID   string          `json:"tenant_id" db:"tenant_id"`
+	Name       string          `json:"name" db:"name"`
+	Type       string          `json:"type" db:"type"`
+	Host       *string         `json:"host,omitempty" db:"host"`
+	Port       *int            `json:"port,omitempty" db:"port"`
+	Database   *string         `json:"database,omitempty" db:"database"`
+	Schema     *string         `json:"schema,omitempty" db:"schema"`
+	Username   *string         `json:"username,omitempty" db:"username"`
+	Password   *string         `json:"password,omitempty" db:"password"`
+	SecretPath *string         `json:"secret_path,omitempty" db:"secret_path"`
+	BaseURL    *string         `json:"base_url,omitempty" db:"base_url"`
+	APIKey     *string         `json:"api_key,omitempty" db:"api_key"`
+	Metadata   json.RawMessage `json:"metadata,omitempty" db:"metadata"`
+	IsActive   bool            `json:"is_active" db:"is_active"`
+	// CoreID is set when this row was propagated from a gold-copy connection
+	// (see internal/temporal/activities/gold_copy_activities.go). A tenant's
+	// own credentials/is_active are never touched by that propagation.
+	CoreID    *string   `json:"core_id,omitempty" db:"core_id"`
+	CreatedAt time.Time `json:"created_at" db:"created_at"`
+	UpdatedAt time.Time `json:"updated_at" db:"updated_at"`
+	// Origin is derived, not stored: "gold_copy" for the gold-copy tenant's
+	// own row, "inherited" when CoreID is set, "custom" otherwise.
+	Origin string `json:"origin,omitempty" db:"-"`
 }
 
 // ConnectionsService handles unified connection management
 type ConnectionsService struct {
-	db *sqlx.DB
+	db             *sqlx.DB
+	goldCopyEvents *events.KafkaPublisher // nil is fine: publishing becomes a no-op
 }
 
 // NewConnectionsService creates a new connections service
@@ -32,30 +54,114 @@ func NewConnectionsService(db *sqlx.DB) *ConnectionsService {
 	return &ConnectionsService{db: db}
 }
 
+// NewConnectionsServiceWithEvents creates a connections service that publishes
+// a GoldCopyConnectionChanged event (see internal/events/kafka_publisher.go)
+// whenever the gold-copy tenant creates/updates/deletes a connection, so the
+// already-registered Temporal pipeline (GoldCopyConnectionPropagation ->
+// GoldCopyActivities.syncConnectionToTenant) propagates the connection
+// template to every other tenant.
+func NewConnectionsServiceWithEvents(db *sqlx.DB, publisher *events.KafkaPublisher) *ConnectionsService {
+	return &ConnectionsService{db: db, goldCopyEvents: publisher}
+}
+
+// isGoldCopyTenant reports whether tenantID is the tenant flagged gold_copy = true.
+func (s *ConnectionsService) isGoldCopyTenant(ctx context.Context, tenantID string) bool {
+	var goldCopyID sql.NullString
+	if err := s.db.QueryRowContext(ctx, `SELECT id::text FROM public.tenants WHERE gold_copy = true LIMIT 1`).Scan(&goldCopyID); err != nil {
+		return false
+	}
+	return goldCopyID.Valid && goldCopyID.String == tenantID
+}
+
+// publishGoldCopyChange is best-effort: a Kafka/worker outage must never
+// block connection CRUD, so failures are logged, not returned.
+func (s *ConnectionsService) publishGoldCopyChange(ctx context.Context, action string, conn *Connection) {
+	if s.goldCopyEvents == nil || conn == nil {
+		return
+	}
+	if !s.isGoldCopyTenant(ctx, conn.TenantID) {
+		return
+	}
+
+	data := map[string]interface{}{
+		"name": conn.Name,
+		"type": conn.Type,
+	}
+	if conn.Host != nil {
+		data["host"] = *conn.Host
+	}
+	if conn.Port != nil {
+		data["port"] = float64(*conn.Port)
+	}
+	if conn.Database != nil {
+		data["database"] = *conn.Database
+	}
+	if conn.Schema != nil {
+		data["schema"] = *conn.Schema
+	}
+	if conn.BaseURL != nil {
+		data["base_url"] = *conn.BaseURL
+	}
+	if len(conn.Metadata) > 0 {
+		var meta map[string]interface{}
+		if err := json.Unmarshal(conn.Metadata, &meta); err == nil {
+			data["metadata"] = meta
+		}
+	}
+
+	event := &events.GoldCopyConnectionEvent{
+		EventType:      events.GoldCopyConnectionChanged,
+		TenantID:       conn.TenantID,
+		ConnectionID:   conn.ID,
+		Action:         action,
+		ConnectionData: data,
+		Timestamp:      time.Now(),
+	}
+	if err := s.goldCopyEvents.PublishGoldCopyConnectionEvent(ctx, event); err != nil {
+		log.Printf("[ConnectionsService] failed to publish gold copy connection event (connection=%s action=%s): %v", conn.ID, action, err)
+	}
+}
+
+func normalizedMetadata(raw json.RawMessage) json.RawMessage {
+	if len(raw) == 0 {
+		return json.RawMessage("{}")
+	}
+	return raw
+}
+
 // CreateConnection creates a new connection
 func (s *ConnectionsService) CreateConnection(ctx context.Context, tenantID string, conn *Connection) (*Connection, error) {
 	if conn == nil {
 		return nil, fmt.Errorf("connection cannot be nil")
 	}
+	if conn.Name == "" {
+		return nil, fmt.Errorf("connection name is required")
+	}
+	if conn.Type == "" {
+		return nil, fmt.Errorf("connection type is required")
+	}
 
 	conn.ID = uuid.NewString()
 	conn.TenantID = tenantID
-	conn.CreatedAt = time.Now()
-	conn.UpdatedAt = time.Now()
+	conn.Metadata = normalizedMetadata(conn.Metadata)
 
 	query := `
-		INSERT INTO tenant_connections 
-		(id, tenant_id, connection_name, database_type, dsn, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7)
+		INSERT INTO connections
+		(id, tenant_id, name, type, host, port, database, schema, username, password,
+		 secret_path, base_url, api_key, metadata, is_active, core_id, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, NOW(), NOW())
+		RETURNING created_at, updated_at
 	`
 
-	_, err := s.db.ExecContext(ctx, query,
-		conn.ID, conn.TenantID, conn.Name, conn.DatabaseType, conn.DSN,
-		conn.CreatedAt, conn.UpdatedAt,
-	)
+	err := s.db.QueryRowContext(ctx, query,
+		conn.ID, conn.TenantID, conn.Name, conn.Type, conn.Host, conn.Port, conn.Database, conn.Schema,
+		conn.Username, conn.Password, conn.SecretPath, conn.BaseURL, conn.APIKey, conn.Metadata, conn.IsActive, conn.CoreID,
+	).Scan(&conn.CreatedAt, &conn.UpdatedAt)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create connection: %w", err)
 	}
+
+	s.publishGoldCopyChange(ctx, "INSERT", conn)
 
 	return conn, nil
 }
@@ -65,14 +171,17 @@ func (s *ConnectionsService) GetConnection(ctx context.Context, tenantID, connec
 	conn := &Connection{}
 
 	query := `
-		SELECT id, tenant_id, connection_name, database_type, dsn, created_at, updated_at
-		FROM tenant_connections
+		SELECT id, tenant_id, name, type, host, port, database, schema, username, password,
+		       secret_path, base_url, api_key, COALESCE(metadata, '{}'::jsonb) AS metadata,
+		       COALESCE(is_active, true) AS is_active, core_id, created_at, updated_at
+		FROM connections
 		WHERE id = $1 AND tenant_id = $2
 	`
 
 	err := s.db.QueryRowContext(ctx, query, connectionID, tenantID).Scan(
-		&conn.ID, &conn.TenantID, &conn.Name, &conn.DatabaseType, &conn.DSN,
-		&conn.CreatedAt, &conn.UpdatedAt,
+		&conn.ID, &conn.TenantID, &conn.Name, &conn.Type, &conn.Host, &conn.Port, &conn.Database, &conn.Schema,
+		&conn.Username, &conn.Password, &conn.SecretPath, &conn.BaseURL, &conn.APIKey, &conn.Metadata,
+		&conn.IsActive, &conn.CoreID, &conn.CreatedAt, &conn.UpdatedAt,
 	)
 
 	if err != nil {
@@ -82,14 +191,36 @@ func (s *ConnectionsService) GetConnection(ctx context.Context, tenantID, connec
 		return nil, fmt.Errorf("failed to get connection: %w", err)
 	}
 
+	s.setOrigin(ctx, conn)
 	return conn, nil
+}
+
+// setOrigin derives Connection.Origin: "gold_copy" for the gold-copy
+// tenant's own row, "inherited" when propagated from one (CoreID set),
+// "custom" otherwise. Not persisted — computed for API responses so the
+// frontend doesn't need to know the gold-copy tenant ID itself.
+func (s *ConnectionsService) setOrigin(ctx context.Context, conn *Connection) {
+	if conn == nil {
+		return
+	}
+	if conn.CoreID != nil {
+		conn.Origin = "inherited"
+		return
+	}
+	if s.isGoldCopyTenant(ctx, conn.TenantID) {
+		conn.Origin = "gold_copy"
+		return
+	}
+	conn.Origin = "custom"
 }
 
 // ListConnections retrieves all connections for a tenant
 func (s *ConnectionsService) ListConnections(ctx context.Context, tenantID string) ([]*Connection, error) {
 	query := `
-		SELECT id, tenant_id, connection_name, database_type, dsn, created_at, updated_at
-		FROM tenant_connections
+		SELECT id, tenant_id, name, type, host, port, database, schema, username, password,
+		       secret_path, base_url, api_key, COALESCE(metadata, '{}'::jsonb) AS metadata,
+		       COALESCE(is_active, true) AS is_active, core_id, created_at, updated_at
+		FROM connections
 		WHERE tenant_id = $1
 		ORDER BY created_at DESC
 	`
@@ -100,16 +231,27 @@ func (s *ConnectionsService) ListConnections(ctx context.Context, tenantID strin
 	}
 	defer rows.Close()
 
+	isGoldCopy := s.isGoldCopyTenant(ctx, tenantID)
+
 	var connections []*Connection
 	for rows.Next() {
 		conn := &Connection{}
 
 		err := rows.Scan(
-			&conn.ID, &conn.TenantID, &conn.Name, &conn.DatabaseType, &conn.DSN,
-			&conn.CreatedAt, &conn.UpdatedAt,
+			&conn.ID, &conn.TenantID, &conn.Name, &conn.Type, &conn.Host, &conn.Port, &conn.Database, &conn.Schema,
+			&conn.Username, &conn.Password, &conn.SecretPath, &conn.BaseURL, &conn.APIKey, &conn.Metadata,
+			&conn.IsActive, &conn.CoreID, &conn.CreatedAt, &conn.UpdatedAt,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan connection: %w", err)
+		}
+
+		if conn.CoreID != nil {
+			conn.Origin = "inherited"
+		} else if isGoldCopy {
+			conn.Origin = "gold_copy"
+		} else {
+			conn.Origin = "custom"
 		}
 
 		connections = append(connections, conn)
@@ -122,44 +264,45 @@ func (s *ConnectionsService) ListConnections(ctx context.Context, tenantID strin
 	return connections, nil
 }
 
-// UpdateConnection updates an existing connection
+// UpdateConnection updates an existing connection. Only fields set on conn
+// (i.e. Name/Type, and any non-nil pointer field) are written — callers
+// currently resend the full form on every save, matching PUT/PATCH-as-replace
+// semantics for the whole editable field set.
 func (s *ConnectionsService) UpdateConnection(ctx context.Context, tenantID string, conn *Connection) (*Connection, error) {
 	if conn == nil || conn.ID == "" {
 		return nil, fmt.Errorf("connection and ID cannot be nil/empty")
 	}
 
-	conn.UpdatedAt = time.Now()
-
 	query := `
-		UPDATE tenant_connections
-		SET connection_name = $1, database_type = $2, dsn = $3, updated_at = $4
-		WHERE id = $5 AND tenant_id = $6
+		UPDATE connections
+		SET name = $1, type = $2, host = $3, port = $4, database = $5, schema = $6,
+		    username = $7, password = COALESCE($8, password), secret_path = $9,
+		    base_url = $10, api_key = $11, metadata = $12, is_active = $13, updated_at = NOW()
+		WHERE id = $14 AND tenant_id = $15
+		RETURNING created_at, updated_at
 	`
 
-	result, err := s.db.ExecContext(ctx, query,
-		conn.Name, conn.DatabaseType, conn.DSN,
-		conn.UpdatedAt,
+	err := s.db.QueryRowContext(ctx, query,
+		conn.Name, conn.Type, conn.Host, conn.Port, conn.Database, conn.Schema,
+		conn.Username, conn.Password, conn.SecretPath, conn.BaseURL, conn.APIKey,
+		normalizedMetadata(conn.Metadata), conn.IsActive,
 		conn.ID, tenantID,
-	)
+	).Scan(&conn.CreatedAt, &conn.UpdatedAt)
 	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, fmt.Errorf("connection not found")
+		}
 		return nil, fmt.Errorf("failed to update connection: %w", err)
 	}
 
-	rows, err := result.RowsAffected()
-	if err != nil {
-		return nil, fmt.Errorf("failed to get rows affected: %w", err)
-	}
-
-	if rows == 0 {
-		return nil, fmt.Errorf("connection not found")
-	}
-
+	conn.TenantID = tenantID
+	s.publishGoldCopyChange(ctx, "UPDATE", conn)
 	return conn, nil
 }
 
 // DeleteConnection deletes a connection
 func (s *ConnectionsService) DeleteConnection(ctx context.Context, tenantID, connectionID string) error {
-	query := `DELETE FROM tenant_connections WHERE id = $1 AND tenant_id = $2`
+	query := `DELETE FROM connections WHERE id = $1 AND tenant_id = $2`
 
 	result, err := s.db.ExecContext(ctx, query, connectionID, tenantID)
 	if err != nil {
@@ -174,6 +317,8 @@ func (s *ConnectionsService) DeleteConnection(ctx context.Context, tenantID, con
 	if rows == 0 {
 		return fmt.Errorf("connection not found")
 	}
+
+	s.publishGoldCopyChange(ctx, "DELETE", &Connection{ID: connectionID, TenantID: tenantID})
 
 	return nil
 }
@@ -194,7 +339,7 @@ func (s *ConnectionsService) LinkConnectionToDatasource(ctx context.Context, ten
 				)
 			  )
 			  AND EXISTS (
-				SELECT 1 FROM tenant_connections
+				SELECT 1 FROM connections
 				WHERE id = $1 AND tenant_id = $3
 			  )
 		`

@@ -97,6 +97,7 @@ type DatasourceResponse struct {
 	ConnectionID      string               `json:"connection_id,omitempty"`
 	IsActive          bool                 `json:"is_active"`
 	SourceName        string               `json:"source_name"`
+	Config            json.RawMessage      `json:"config,omitempty"`
 	AlphaDatasource   *AlphaDatasourceInfo `json:"alpha_datasource,omitempty"`
 }
 
@@ -651,12 +652,25 @@ func (h *TenantAccessHandlers) getAllTenantsInternal(ctx context.Context, target
 		SELECT tpd.id, COALESCE(tpd.is_active, true) AS is_active,
 		       COALESCE(tpd.source_name, '') AS source_name, tpd.tenant_product_id,
 		       tpd.connection_id,
+		       COALESCE(
+		           CASE WHEN c.id IS NOT NULL THEN
+		               COALESCE(c.metadata, '{}'::jsonb) || jsonb_build_object(
+		                   'host', c.host, 'port', c.port, 'database', c.database,
+		                   'schema', c.schema, 'base_url', c.base_url, 'api_key', c.api_key,
+		                   'auth', jsonb_build_object('basic', jsonb_build_object(
+		                       'username', c.username, 'password', c.password
+		                   ))
+		               )
+		           END,
+		           tpd.config, '{}'::jsonb
+		       ) AS config,
 		       ads.id AS ads_id,
 		       COALESCE(ads.datasource_name, '') AS ds_name,
 		       COALESCE(ads.datasource_type, '') AS ds_type,
 		       COALESCE(ads.datasource_code, '') AS ds_code
 		FROM tenant_product_datasource tpd
 		LEFT JOIN alpha_datasource ads ON ads.id = COALESCE(tpd.alpha_datasource_id, tpd.datasource_id)
+		LEFT JOIN connections c ON c.id = tpd.connection_id
 		WHERE 1=1
 	`
 	var dArgs []interface{}
@@ -686,7 +700,7 @@ func (h *TenantAccessHandlers) getAllTenantsInternal(ctx context.Context, target
 		var adsID sql.NullString
 		var connectionID sql.NullString
 		if err := dsRows.Scan(&ds.ID, &ds.IsActive, &ds.SourceName, &productID,
-			&connectionID,
+			&connectionID, &ds.Config,
 			&adsID, &ads.DatasourceName, &ads.DatasourceType, &ads.DatasourceCode); err != nil {
 			return nil, fmt.Errorf("failed to scan datasource row: %w", err)
 		}

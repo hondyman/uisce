@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
 	"github.com/jmoiron/sqlx"
 
 	"github.com/hondyman/uisce/backend/internal/handlers"
@@ -41,6 +42,8 @@ func (h *RBACHandlers) RegisterRoutes(r chi.Router) {
 		r.Get("/roles/{roleId}", h.getRole)
 		r.Put("/roles/{roleId}", h.updateRole)
 		r.Delete("/roles/{roleId}", h.deleteRole)
+		r.Post("/roles/{roleId}/clone", h.cloneRole)
+		r.Get("/roles/{roleId}/effective-permissions", h.effectiveRolePermissions)
 
 		// Permissions
 		r.Get("/permissions", h.listPermissions)
@@ -88,20 +91,31 @@ func (h *RBACHandlers) RegisterRoutes(r chi.Router) {
 // ============================================================================
 
 type Role struct {
-	ID           string    `json:"id" db:"id"`
-	TenantID     string    `json:"tenant_id" db:"tenant_id"`
-	DatasourceID string    `json:"datasource_id" db:"datasource_id"`
-	RoleKey      string    `json:"role_key" db:"role_key"`
-	RoleName     string    `json:"role_name" db:"role_name"`
-	Description  string    `json:"description" db:"description"`
-	RoleType     string    `json:"role_type" db:"role_type"`
-	RoleLevel    string    `json:"role_level" db:"role_level"`
-	IsActive     bool      `json:"is_active" db:"is_active"`
-	CreatedBy    *string   `json:"created_by" db:"created_by"`
-	CreatedAt    time.Time `json:"created_at" db:"created_at"`
-	UpdatedAt    time.Time `json:"updated_at" db:"updated_at"`
+	ID                 string    `json:"id" db:"id"`
+	TenantID           string    `json:"tenant_id" db:"tenant_id"`
+	RoleKey            string    `json:"role_key" db:"role_key"`
+	RoleName           string    `json:"role_name" db:"role_name"`
+	Description        string    `json:"description" db:"description"`
+	RoleType           string    `json:"role_type" db:"role_type"`
+	RoleLevel          string    `json:"role_level" db:"role_level"`
+	IsActive           bool      `json:"is_active" db:"is_active"`
+	IsTemplate         bool      `json:"is_template" db:"is_template"`
+	ParentRoleID       *string   `json:"parent_role_id" db:"parent_role_id"`
+	SecurityProfileID  *string   `json:"security_profile_id" db:"security_profile_id"`
+	TenantInstanceID   *string   `json:"tenant_instance_id,omitempty" db:"tenant_instance_id"`
+	CreatedBy          *string   `json:"created_by" db:"created_by"`
+	CreatedAt          time.Time `json:"created_at" db:"created_at"`
+	UpdatedAt          time.Time `json:"updated_at" db:"updated_at"`
+	// Origin is derived, not stored: "gold_copy" for template roles living
+	// under the gold-copy tenant, "tenant" for everything else.
+	Origin string `json:"origin" db:"-"`
 }
 
+// listRoles returns the caller's own tenant roles UNIONed with every
+// gold-copy template role, mirroring the business_objects read pattern
+// (`tenant_id = $1 OR tenant_id = gold_copy_tenant()`). Without the union,
+// a role authored once in the gold-copy tenant would never be visible to
+// any other tenant, which defeats the inheritance model entirely.
 func (h *RBACHandlers) listRoles(w http.ResponseWriter, r *http.Request) {
 	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
 	if err != nil {
@@ -109,21 +123,127 @@ func (h *RBACHandlers) listRoles(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	tenantID := secCtx.TenantID
-	datasourceID := secCtx.DatasourceID
 
 	var roles []Role
 	err = h.db.Select(&roles, `
 		SELECT * FROM bp_roles
-		WHERE tenant_id = $1 AND datasource_id = $2 AND is_active = true
+		WHERE is_active = true
+		  AND (tenant_id = $1 OR tenant_id = (SELECT id FROM public.tenants WHERE gold_copy = true LIMIT 1))
 		ORDER BY role_level, role_name
-	`, tenantID, datasourceID)
+	`, tenantID)
 
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Failed to fetch roles: %v", err), http.StatusInternalServerError)
 		return
 	}
 
+	for i := range roles {
+		if roles[i].IsTemplate {
+			roles[i].Origin = "gold_copy"
+		} else if roles[i].ParentRoleID != nil {
+			roles[i].Origin = "extended"
+		} else {
+			roles[i].Origin = "tenant"
+		}
+	}
+
 	respondJSONRBAC(w, r, roles, http.StatusOK)
+}
+
+// cloneRole creates a tenant-scoped copy of a gold-copy template role, linked
+// via parent_role_id so ResolveEffectivePermissions can union the two without
+// ever duplicating bp_role_permissions rows, and without ever mutating the
+// source template row.
+func (h *RBACHandlers) cloneRole(w http.ResponseWriter, r *http.Request) {
+	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
+	if err != nil {
+		http.Error(w, "Unauthorized: "+err.Error(), http.StatusUnauthorized)
+		return
+	}
+	tenantID := secCtx.TenantID
+	sourceRoleID := chi.URLParam(r, "roleId")
+
+	var req struct {
+		RoleKey  string `json:"role_key"`
+		RoleName string `json:"role_name"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	var source Role
+	if err := h.db.Get(&source, "SELECT * FROM bp_roles WHERE id = $1", sourceRoleID); err != nil {
+		if err == sql.ErrNoRows {
+			http.Error(w, "Source role not found", http.StatusNotFound)
+			return
+		}
+		http.Error(w, fmt.Sprintf("Failed to load source role: %v", err), http.StatusInternalServerError)
+		return
+	}
+	if !source.IsTemplate {
+		http.Error(w, "Only gold-copy template roles can be cloned", http.StatusBadRequest)
+		return
+	}
+
+	roleKey := req.RoleKey
+	if roleKey == "" {
+		roleKey = source.RoleKey
+	}
+	roleName := req.RoleName
+	if roleName == "" {
+		roleName = source.RoleName
+	}
+
+	var newProfileID *string
+	if source.SecurityProfileID != nil {
+		var sourceProfile security.SecurityProfile
+		if err := h.db.Get(&sourceProfile, `
+			SELECT profile_id, tenant_id, profile_key, profile_name, parent_profile_id, created_at, updated_at
+			FROM security.security_profiles WHERE profile_id = $1
+		`, *source.SecurityProfileID); err == nil {
+			profileSvc := security.NewProfileService(h.db.DB)
+			tid, parseErr := uuid.Parse(tenantID)
+			if parseErr == nil {
+				created, cErr := profileSvc.CreateProfile(r.Context(), &security.SecurityProfile{
+					TenantID:        &tid,
+					ProfileKey:      roleKey,
+					ProfileName:     roleName,
+					ParentProfileID: &sourceProfile.ProfileID,
+				})
+				if cErr == nil {
+					pid := created.ProfileID.String()
+					newProfileID = &pid
+				}
+			}
+		}
+	}
+
+	var newRoleID string
+	err = h.db.QueryRow(`
+		INSERT INTO bp_roles (tenant_id, role_key, role_name, description, role_type, role_level, parent_role_id, security_profile_id, is_template)
+		VALUES ($1, $2, $3, $4, 'custom', $5, $6, $7, false)
+		RETURNING id
+	`, tenantID, roleKey, roleName, source.Description, source.RoleLevel, source.ID, newProfileID).Scan(&newRoleID)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Failed to clone role: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	respondJSONRBAC(w, r, map[string]string{"id": newRoleID, "parent_role_id": source.ID, "status": "cloned"}, http.StatusCreated)
+}
+
+// effectiveRolePermissions returns the union of this role's own
+// bp_role_permissions plus everything inherited from its parent_role_id
+// chain (the gold-copy ancestor's grants).
+func (h *RBACHandlers) effectiveRolePermissions(w http.ResponseWriter, r *http.Request) {
+	roleID := chi.URLParam(r, "roleId")
+	perms, err := security.ResolveEffectivePermissions(r.Context(), h.db.DB, roleID)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Failed to resolve effective permissions: %v", err), http.StatusInternalServerError)
+		return
+	}
+	respondJSONRBAC(w, r, map[string]interface{}{"role_id": roleID, "permissions": perms}, http.StatusOK)
 }
 
 func (h *RBACHandlers) createRole(w http.ResponseWriter, r *http.Request) {
@@ -133,13 +253,13 @@ func (h *RBACHandlers) createRole(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	tenantID := secCtx.TenantID
-	datasourceID := secCtx.DatasourceID
 
 	var req struct {
 		RoleKey     string   `json:"role_key"`
 		RoleName    string   `json:"role_name"`
 		Description string   `json:"description"`
 		RoleLevel   string   `json:"role_level"`
+		IsTemplate  bool     `json:"is_template"` // only takes effect when the caller is scoped to the gold-copy tenant
 		Permissions []string `json:"permissions"` // Permission IDs to assign
 	}
 
@@ -148,13 +268,21 @@ func (h *RBACHandlers) createRole(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	isTemplate := false
+	if req.IsTemplate {
+		var goldCopyTenantID sql.NullString
+		if err := h.db.QueryRow(`SELECT id::text FROM public.tenants WHERE gold_copy = true LIMIT 1`).Scan(&goldCopyTenantID); err == nil {
+			isTemplate = goldCopyTenantID.Valid && goldCopyTenantID.String == tenantID
+		}
+	}
+
 	// Create role
 	var roleID string
 	err = h.db.QueryRow(`
-		INSERT INTO bp_roles (tenant_id, datasource_id, role_key, role_name, description, role_type, role_level)
-		VALUES ($1, $2, $3, $4, $5, 'custom', $6)
+		INSERT INTO bp_roles (tenant_id, role_key, role_name, description, role_type, role_level, is_template)
+		VALUES ($1, $2, $3, $4, 'custom', $5, $6)
 		RETURNING id
-	`, tenantID, datasourceID, req.RoleKey, req.RoleName, req.Description, req.RoleLevel).Scan(&roleID)
+	`, tenantID, req.RoleKey, req.RoleName, req.Description, req.RoleLevel, isTemplate).Scan(&roleID)
 
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Failed to create role: %v", err), http.StatusInternalServerError)
@@ -918,12 +1046,27 @@ func (h *RBACHandlers) listTeams(w http.ResponseWriter, r *http.Request) {
 	tenantID := secCtx.TenantID
 	datasourceID := secCtx.DatasourceID
 
-	rows, err := h.db.Query(`
-		SELECT id, team_key, team_name, description, team_type, is_active
-		FROM bp_teams
-		WHERE tenant_id = $1 AND datasource_id = $2 AND is_active = true
-		ORDER BY team_name
-	`, tenantID, datasourceID)
+	var query string
+	var args []interface{}
+	if datasourceID != "" && datasourceID != "none" {
+		query = `
+			SELECT id, team_key, team_name, description, team_type, is_active
+			FROM bp_teams
+			WHERE tenant_id = $1 AND (datasource_id = $2 OR datasource_id IS NULL OR datasource_id = '') AND is_active = true
+			ORDER BY team_name
+		`
+		args = []interface{}{tenantID, datasourceID}
+	} else {
+		query = `
+			SELECT id, team_key, team_name, description, team_type, is_active
+			FROM bp_teams
+			WHERE tenant_id = $1 AND is_active = true
+			ORDER BY team_name
+		`
+		args = []interface{}{tenantID}
+	}
+
+	rows, err := h.db.Query(query, args...)
 
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Failed to fetch teams: %v", err), http.StatusInternalServerError)

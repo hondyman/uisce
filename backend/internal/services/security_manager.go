@@ -210,6 +210,7 @@ type SecurityManager struct {
 type JWTManager struct {
 	secretKey       []byte
 	rsaPublicKey    interface{}
+	rsaPublicKeys   map[string]*rsa.PublicKey // keyed by JWKS "kid", for rotation support
 	tokenDuration   time.Duration
 	refreshDuration time.Duration
 	mu              sync.RWMutex
@@ -290,6 +291,14 @@ func (sm *SecurityManager) SetRSAPublicKeyPEM(pemBytes []byte) error {
 func (sm *SecurityManager) SetRSAPublicKey(pubKey *rsa.PublicKey) {
 	if sm != nil && sm.jwtManager != nil {
 		sm.jwtManager.SetRSAPublicKey(pubKey)
+	}
+}
+
+// SetRSAPublicKeys replaces the full set of known JWKS signing keys, keyed by
+// "kid" — see JWTManager.SetRSAPublicKeys for rotation semantics.
+func (sm *SecurityManager) SetRSAPublicKeys(keys map[string]*rsa.PublicKey) {
+	if sm != nil && sm.jwtManager != nil {
+		sm.jwtManager.SetRSAPublicKeys(keys)
 	}
 }
 
@@ -463,6 +472,21 @@ func (jm *JWTManager) SetRSAPublicKey(pubKey *rsa.PublicKey) {
 	jm.rsaPublicKey = pubKey
 }
 
+// SetRSAPublicKeys replaces the full set of known JWKS signing keys, keyed by
+// "kid". Safe to call repeatedly (e.g. from a periodic JWKS refresh) — this
+// is how the server picks up Keycloak key rotation without a restart. The
+// first key in the set (if any) also becomes the fallback used for tokens
+// that carry no "kid" header.
+func (jm *JWTManager) SetRSAPublicKeys(keys map[string]*rsa.PublicKey) {
+	jm.mu.Lock()
+	defer jm.mu.Unlock()
+	jm.rsaPublicKeys = keys
+	for _, k := range keys {
+		jm.rsaPublicKey = k
+		break
+	}
+}
+
 // SetRSAPublicKeyPEM sets the RSA public key from a PEM-encoded string or byte slice
 func (jm *JWTManager) SetRSAPublicKeyPEM(pemBytes []byte) error {
 	block, _ := pem.Decode(pemBytes)
@@ -478,26 +502,36 @@ func (jm *JWTManager) SetRSAPublicKeyPEM(pemBytes []byte) error {
 }
 
 // ValidateToken validates a JWT token and returns claims
+// ValidateToken validates a JWT token and returns claims.
+//
+// SECURITY: this must always cryptographically verify the signature. There is
+// intentionally no "fall back to unverified claims" path — a previous version
+// of this function accepted ANY token whose signature failed to verify (wrong
+// key, expired JWKS cache, malformed alg) by silently re-parsing it without
+// verification. That accepted attacker-forged claims (arbitrary user_id,
+// tenant_id, roles, including global-admin) on every signature failure and is
+// never reintroduced, including for local development — use a real HS256
+// JWT_SECRET or a real Keycloak JWKS endpoint instead.
 func (jm *JWTManager) ValidateToken(tokenString string) (*JWTClaims, error) {
 	mc := jwt.MapClaims{}
 	_, err := jwt.ParseWithClaims(tokenString, mc, func(token *jwt.Token) (interface{}, error) {
 		if _, ok := token.Method.(*jwt.SigningMethodRSA); ok {
 			jm.mu.RLock()
-			pubKey := jm.rsaPublicKey
-			jm.mu.RUnlock()
-			if pubKey != nil {
-				return pubKey, nil
+			defer jm.mu.RUnlock()
+			if kid, _ := token.Header["kid"].(string); kid != "" {
+				if key, ok := jm.rsaPublicKeys[kid]; ok {
+					return key, nil
+				}
 			}
+			if jm.rsaPublicKey != nil {
+				return jm.rsaPublicKey, nil
+			}
+			return nil, fmt.Errorf("no RSA public key configured for RS256 token verification")
 		}
 		return jm.secretKey, nil
 	})
 	if err != nil {
-		// Fallback for dev mode if asymmetric key is unconfigured
-		parser := jwt.Parser{}
-		_, _, parseErr := parser.ParseUnverified(tokenString, mc)
-		if parseErr != nil {
-			return nil, err
-		}
+		return nil, err
 	}
 	userID := getStringClaim(mc, "user_id")
 	if userID == "" {
@@ -512,6 +546,8 @@ func (jm *JWTManager) ValidateToken(tokenString string) (*JWTClaims, error) {
 	if userID == "" {
 		return nil, fmt.Errorf("token missing user identifier")
 	}
+	email := getStringClaim(mc, "email")
+	emailVerified, _ := mc["email_verified"].(bool)
 	tenantID := getStringClaim(mc, "tenant_id")
 	var tenantIDs []string
 	if tids, ok := mc["tenant_ids"].([]interface{}); ok {
@@ -549,22 +585,35 @@ func (jm *JWTManager) ValidateToken(tokenString string) (*JWTClaims, error) {
 		}
 	}
 
+	// idpGroups preserves the raw Keycloak group paths (e.g. "/clients/acme/admin")
+	// separately from roles, so downstream code can resolve them through the
+	// group->role mapping table (security.identity_profile_mappings) instead of
+	// treating a literal group name as a role string.
+	idpGroups := parseStringListClaim(mc["groups"])
+	idpGroups = append(idpGroups, parseStringListClaim(mc["idp_groups"])...)
+
 	return &JWTClaims{
-		UserID:    userID,
-		TenantID:  tenantID,
-		TenantIDs: tenantIDs,
-		Roles:     roles,
-		IssuedAt:  time.Now(),
+		UserID:        userID,
+		Email:         email,
+		EmailVerified: emailVerified,
+		TenantID:      tenantID,
+		TenantIDs:     tenantIDs,
+		Roles:         roles,
+		IdpGroups:     idpGroups,
+		IssuedAt:      time.Now(),
 	}, nil
 }
 
 // JWTClaims represents JWT token claims
 type JWTClaims struct {
-	UserID    string
-	TenantID  string
-	TenantIDs []string
-	Roles     []string
-	IssuedAt  time.Time
+	UserID        string
+	Email         string
+	EmailVerified bool
+	TenantID      string
+	TenantIDs     []string
+	Roles         []string
+	IdpGroups     []string
+	IssuedAt      time.Time
 }
 
 func parseStringListClaim(value interface{}) []string {

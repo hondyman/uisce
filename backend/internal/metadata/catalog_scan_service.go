@@ -2,6 +2,8 @@ package metadata
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"database/sql"
 	"encoding/json"
 	"fmt"
@@ -17,7 +19,8 @@ import (
 	"github.com/hondyman/uisce/backend/internal/logging"
 	"github.com/hondyman/uisce/backend/internal/scanner"
 	"github.com/hondyman/uisce/backend/models"
-	_ "github.com/jackc/pgx/v5/stdlib"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/stdlib"
 	"github.com/jmoiron/sqlx"
 )
 
@@ -372,17 +375,17 @@ func (s *CatalogScanService) getDatasourcesToScan(tenantDatasourceID *uuid.UUID)
 			ti.tenant_id,
 			tpd.source_name AS name,
 			ad.datasource_code AS source_system,
-			CASE 
-				WHEN c.id IS NOT NULL THEN 
-					json_build_object(
+			CASE
+				WHEN c.id IS NOT NULL THEN
+					(COALESCE(c.metadata, '{}'::jsonb) || json_build_object(
 						'host', c.host,
 						'port', c.port,
 						'database', c.database,
 						'username', c.username,
 						'password', c.password,
 						'schema', c.schema
-					)::jsonb
-				ELSE tpd.config 
+					)::jsonb)
+				ELSE tpd.config
 			END AS connection_details,
 			t.is_gold_copy AS is_gold_copy
 		FROM
@@ -724,6 +727,16 @@ func (s *CatalogScanService) connectToTargetDatabase(ctx context.Context, connec
 		Username string `json:"username,omitempty"`
 		Type     string `json:"type"`
 		DSN      string `json:"dsn,omitempty"` // Support direct DSN
+
+		// mTLS client-certificate auth ("Key Pair (SSH/TLS)" in the connection
+		// form). ClientCert/ClientKey are PEM content, not file paths — they
+		// are parsed and handed to pgx as an in-memory tls.Config so the
+		// private key never touches disk. CACert (also PEM) verifies the
+		// server cert; without it a self-signed server cert is rejected.
+		AuthType   string `json:"auth_type,omitempty"`
+		ClientCert string `json:"client_cert,omitempty"`
+		PrivateKey string `json:"private_key,omitempty"`
+		CACert     string `json:"ca_cert,omitempty"`
 	}
 
 	var config ConnectionConfig
@@ -785,6 +798,47 @@ func (s *CatalogScanService) connectToTargetDatabase(ctx context.Context, connec
 		u.RawQuery = q.Encode()
 
 		dsn = u.String()
+	}
+
+	// mTLS client-certificate auth: build the TLS config in memory (the
+	// private key is never written to disk) and register it with pgx's
+	// stdlib driver rather than passing sslcert/sslkey file paths in the DSN.
+	if config.AuthType == "key_pair" && config.ClientCert != "" && config.PrivateKey != "" {
+		cert, certErr := tls.X509KeyPair([]byte(config.ClientCert), []byte(config.PrivateKey))
+		if certErr != nil {
+			return nil, fmt.Errorf("invalid client certificate/key for key_pair auth: %w", certErr)
+		}
+
+		tlsConfig := &tls.Config{
+			Certificates: []tls.Certificate{cert},
+			ServerName:   config.Host,
+			MinVersion:   tls.VersionTLS12,
+		}
+		if config.CACert != "" {
+			pool := x509.NewCertPool()
+			if !pool.AppendCertsFromPEM([]byte(config.CACert)) {
+				return nil, fmt.Errorf("invalid ca_cert for key_pair auth: no certificates parsed")
+			}
+			tlsConfig.RootCAs = pool
+		} else {
+			// No CA supplied to verify the server's (likely self-signed)
+			// certificate against. Still requires the client cert/key above,
+			// so this is client-authenticated but does not verify the server
+			// identity — acceptable for local/dev, not for production.
+			logging.GetLogger().Sugar().Warnf("key_pair auth for %s has no ca_cert; server certificate will not be verified", config.Host)
+			tlsConfig.InsecureSkipVerify = true
+		}
+
+		connConfig, parseErr := pgx.ParseConfig(dsn)
+		if parseErr != nil {
+			return nil, fmt.Errorf("failed to parse connection string for key_pair auth: %w", parseErr)
+		}
+		connConfig.TLSConfig = tlsConfig
+
+		// RegisterConnConfig hands back an opaque name that resolves to this
+		// exact *pgx.ConnConfig (including the in-memory TLS material) for
+		// the lifetime of the process; use that in place of the string DSN.
+		dsn = stdlib.RegisterConnConfig(connConfig)
 	}
 
 	targetDB, err := sql.Open("pgx", dsn)
