@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Video, VideoOff, Mic, MicOff, PhoneOff, Monitor, Settings } from 'lucide-react';
+import { Videocam as VideoIcon, VideocamOff as VideoOffIcon, Mic as MicIcon, MicOff as MicOffIcon, CallEnd as PhoneOffIcon, Computer as MonitorIcon, Settings as SettingsIcon } from '@mui/icons-material';
 import { Device } from 'twilio-video';
 
 interface VideoConferenceProps {

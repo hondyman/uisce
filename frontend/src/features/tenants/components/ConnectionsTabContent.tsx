@@ -162,6 +162,8 @@ export const ConnectionsTabContent: React.FC<ConnectionsTabContentProps> = ({
   const [viewConfigConnection, setViewConfigConnection] = useState<Connection | null>(null);
   const [syncing, setSyncing] = useState(false);
   const [syncResult, setSyncResult] = useState<{ success: boolean; message: string } | null>(null);
+  const [page, setPage] = useState(0);
+  const [rowsPerPage, setRowsPerPage] = useState(10);
 
 
 
@@ -261,26 +263,34 @@ export const ConnectionsTabContent: React.FC<ConnectionsTabContentProps> = ({
             console.log(`    Found datasource with connection_id: ${ds.connection_id}`);
             // Use connection_id as the key to avoid duplicates
             if (!connectionsMap.has(ds.connection_id)) {
+              console.log(`[DEBUG] Building connection for ds.connection_id: ${ds.connection_id}, ds.config:`, JSON.stringify(ds.config, null, 2));
               const displayName =
                 ds.alpha_datasource?.datasource_name ||
                 ds.connection_name ||
                 ds.source_name ||
                 'Unknown Connection';
+              const configHost = ds.config?.host || ds.host || '';
+              const configPort = ds.config?.port || ds.port || 0;
+              const configDatabase = ds.config?.database || ds.database || '';
+              const configSchema = ds.config?.schema || ds.schema || '';
+              const configUsername = ds.config?.auth?.basic?.username || ds.username || '';
+              const configPassword = ds.config?.auth?.basic?.password || ds.password || '';
+              console.log(`[DEBUG] configHost=${configHost}, configPort=${configPort}, configDatabase=${configDatabase}`);
               connectionsMap.set(ds.connection_id, {
                 id: ds.connection_id,
                 name: displayName,
                 type: ds.alpha_datasource?.datasource_type || 'Datasource',
-                host: ds.host || '',
-                port: ds.port || 0,
-                database: ds.database || '',
-                schema: ds.schema || '',
-                username: '',
-                password: '',
-                base_url: '',
-                api_key: '',
-                metadata: {},
+                host: configHost,
+                port: configPort,
+                database: configDatabase,
+                schema: configSchema,
+                username: configUsername,
+                password: configPassword,
+                base_url: ds.config?.base_url || ds.base_url || '',
+                api_key: ds.config?.api_key || ds.api_key || '',
+                metadata: ds.config || {},
                 is_active: ds.is_active ?? true,
-                endpoint: ds.host ? `${ds.host}:${ds.port || ''}` : '-',
+                endpoint: configHost ? `${configHost}:${configPort || ''}` : '-',
                 linkedInstance: instanceInfo.name,
                 linkedInstanceId: instanceInfo.id,
                 linkedProduct: productInfo.name,
@@ -302,15 +312,15 @@ export const ConnectionsTabContent: React.FC<ConnectionsTabContentProps> = ({
 
   const filteredConnections: Connection[] = connections.filter((conn: Connection) => {
     const matchesType = filterType === 'all' || conn.type?.toLowerCase() === filterType;
-    
+
     // Filter by instance (array of IDs)
-    const matchesInstance = !instanceFilter || instanceFilter.length === 0 || 
+    const matchesInstance = !instanceFilter || instanceFilter.length === 0 ||
       (conn.linkedInstanceId && instanceFilter.includes(conn.linkedInstanceId));
-    
+
     // Filter by product (array of IDs)
     const matchesProduct = !productFilter || productFilter.length === 0 ||
       (conn.linkedProductId && productFilter.includes(conn.linkedProductId));
-    
+
     return matchesType && matchesInstance && matchesProduct;
   }).sort((a, b) => {
     let aValue: any = '';
@@ -346,6 +356,15 @@ export const ConnectionsTabContent: React.FC<ConnectionsTabContentProps> = ({
     if (aValue > bValue) return sortOrder === 'asc' ? 1 : -1;
     return 0;
   });
+
+  const paginatedConnections = filteredConnections.slice(
+    page * rowsPerPage,
+    page * rowsPerPage + rowsPerPage
+  );
+
+  const totalPages = Math.ceil(filteredConnections.length / rowsPerPage);
+  const startIndex = page * rowsPerPage + 1;
+  const endIndex = Math.min((page + 1) * rowsPerPage, filteredConnections.length);
 
   const handleSort = (property: string) => {
     const isAsc = sortBy === property && sortOrder === 'asc';
@@ -519,7 +538,7 @@ export const ConnectionsTabContent: React.FC<ConnectionsTabContentProps> = ({
                 </TableCell>
               </TableRow>
             ) : (
-              filteredConnections.map((conn) => (
+              paginatedConnections.map((conn) => (
                 <TableRow key={conn.id} hover>
                   <TableCell>
                     <Box>
@@ -638,23 +657,33 @@ export const ConnectionsTabContent: React.FC<ConnectionsTabContentProps> = ({
         <Typography variant="caption" color="textSecondary">
           Showing{' '}
           <Typography component="span" variant="caption" sx={{ fontWeight: 'bold' }}>
-            1
+            {filteredConnections.length > 0 ? startIndex : 0}
           </Typography>{' '}
           to{' '}
           <Typography component="span" variant="caption" sx={{ fontWeight: 'bold' }}>
-            {Math.min(4, filteredConnections.length)}
+            {endIndex}
           </Typography>{' '}
           of{' '}
           <Typography component="span" variant="caption" sx={{ fontWeight: 'bold' }}>
-            {connections.length}
+            {filteredConnections.length}
           </Typography>{' '}
           connections
         </Typography>
         <Box sx={{ display: 'flex', gap: 1 }}>
-          <Button variant="outlined" size="small" disabled>
+          <Button
+            variant="outlined"
+            size="small"
+            onClick={() => setPage((p) => Math.max(0, p - 1))}
+            disabled={page === 0}
+          >
             Previous
           </Button>
-          <Button variant="outlined" size="small">
+          <Button
+            variant="outlined"
+            size="small"
+            onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
+            disabled={page >= totalPages - 1}
+          >
             Next
           </Button>
         </Box>

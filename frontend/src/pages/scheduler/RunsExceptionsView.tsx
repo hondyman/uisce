@@ -3,19 +3,19 @@
  */
 
 import React, { useState, useMemo, useEffect } from 'react';
-import { 
-  Search, 
-  Filter, 
-  RefreshCw,
-  Clock,
-  CheckCircle,
-  XCircle,
-  AlertTriangle,
-  Pause,
-  PlayCircle,
-  Eye,
-  RotateCcw
-} from 'lucide-react';
+import {
+  Search as SearchIcon,
+  FilterList as FilterIcon,
+  Refresh as RefreshIcon,
+  Schedule as ClockIcon,
+  CheckCircle as CheckCircleIcon,
+  Cancel as XCircleIcon,
+  Warning as AlertTriangleIcon,
+  Pause as PauseIcon,
+  PlayCircle as PlayCircleIcon,
+  Visibility as EyeIcon,
+  Refresh as RotateCcwIcon
+} from '@mui/icons-material';
 import { useTenantContext } from '../../hooks/useTenantContext';
 import { getJobRuns, getDAGRuns, JobRun, DAGRun } from '../../api/schedulerApi';
 
@@ -85,7 +85,7 @@ const RunsExceptionsView: React.FC = () => {
         created_at: new Date(Date.now() - 1800000).toISOString()
       }
     ];
-    
+
     setRuns(mockRuns);
     setLoading(false);
   }, [tenantId]);
@@ -101,7 +101,7 @@ const RunsExceptionsView: React.FC = () => {
 
   const filteredRuns = useMemo(() => {
     let filtered = runs;
-    
+
     // Apply status filter
     if (filter === 'running') {
       filtered = filtered.filter(r => r.status === 'running' || r.status === 'paused');
@@ -112,15 +112,15 @@ const RunsExceptionsView: React.FC = () => {
     } else if (filter === 'exceptions') {
       filtered = filtered.filter(r => r.slo_breached || r.status === 'failed');
     }
-    
+
     // Apply search
     if (searchQuery) {
-      filtered = filtered.filter(r => 
+      filtered = filtered.filter(r =>
         r.job_id.toLowerCase().includes(searchQuery.toLowerCase()) ||
         r.id.toLowerCase().includes(searchQuery.toLowerCase())
       );
     }
-    
+
     return filtered;
   }, [runs, filter, searchQuery]);
 
@@ -134,12 +134,12 @@ const RunsExceptionsView: React.FC = () => {
 
   const getStatusIcon = (status: string) => {
     switch (status) {
-      case 'running': return <PlayCircle className="status-icon running" />;
-      case 'completed': return <CheckCircle className="status-icon success" />;
-      case 'failed': return <XCircle className="status-icon danger" />;
-      case 'cancelled': return <XCircle className="status-icon warning" />;
-      case 'paused': return <Pause className="status-icon warning" />;
-      default: return <Clock className="status-icon" />;
+      case 'running': return <PlayCircleIcon className="status-icon running" />;
+      case 'completed': return <CheckCircleIcon className="status-icon success" />;
+      case 'failed': return <XCircleIcon className="status-icon danger" />;
+      case 'cancelled': return <XCircleIcon className="status-icon warning" />;
+      case 'paused': return <PauseIcon className="status-icon warning" />;
+      default: return <ClockIcon className="status-icon" />;
     }
   };
 
@@ -151,39 +151,39 @@ const RunsExceptionsView: React.FC = () => {
     <div className="runs-view">
       {/* Stats Bar */}
       <div className="runs-stats-bar">
-        <button 
+        <button
           className={`stat-button ${filter === 'all' ? 'active' : ''}`}
           onClick={() => setFilter('all')}
         >
           <span className="stat-count">{stats.total}</span>
           <span className="stat-label">Total</span>
         </button>
-        <button 
+        <button
           className={`stat-button running ${filter === 'running' ? 'active' : ''}`}
           onClick={() => setFilter('running')}
         >
           <span className="stat-count">{stats.running}</span>
           <span className="stat-label">Running</span>
         </button>
-        <button 
+        <button
           className={`stat-button success ${filter === 'completed' ? 'active' : ''}`}
           onClick={() => setFilter('completed')}
         >
           <span className="stat-count">{stats.completed}</span>
           <span className="stat-label">Completed</span>
         </button>
-        <button 
+        <button
           className={`stat-button danger ${filter === 'failed' ? 'active' : ''}`}
           onClick={() => setFilter('failed')}
         >
           <span className="stat-count">{stats.failed}</span>
           <span className="stat-label">Failed</span>
         </button>
-        <button 
+        <button
           className={`stat-button warning ${filter === 'exceptions' ? 'active' : ''}`}
           onClick={() => setFilter('exceptions')}
         >
-          <AlertTriangle className="stat-icon" />
+          <AlertTriangleIcon className="stat-icon" />
           <span className="stat-count">{stats.sloBreaches}</span>
           <span className="stat-label">SLO Breaches</span>
         </button>
@@ -193,7 +193,7 @@ const RunsExceptionsView: React.FC = () => {
       <div className="toolbar">
         <div className="toolbar-left">
           <div className="search-box">
-            <Search className="search-icon" />
+            <SearchIcon className="search-icon" />
             <input
               type="text"
               placeholder="Search by job ID..."
@@ -202,18 +202,18 @@ const RunsExceptionsView: React.FC = () => {
             />
           </div>
         </div>
-        
+
         <div className="toolbar-right">
           <label className="checkbox-filter">
-            <input 
-              type="checkbox" 
+            <input
+              type="checkbox"
               checked={autoRefresh}
               onChange={(e) => setAutoRefresh(e.target.checked)}
             />
             Auto-refresh
           </label>
           <button className="btn-secondary">
-            <RefreshCw /> Refresh
+            <RefreshIcon /> Refresh
           </button>
         </div>
       </div>
@@ -222,21 +222,21 @@ const RunsExceptionsView: React.FC = () => {
       <div className="runs-list">
         {filteredRuns.length === 0 ? (
           <div className="empty-state">
-            <Clock className="empty-icon" />
+            <ClockIcon className="empty-icon" />
             <h3>No Runs Found</h3>
             <p>No job runs match your current filters</p>
           </div>
         ) : (
           filteredRuns.map((run) => (
-            <div 
-              key={run.id} 
+            <div
+              key={run.id}
               className={`run-card ${run.status} ${run.slo_breached ? 'slo-breached' : ''}`}
               onClick={() => setSelectedRun(run)}
             >
               <div className="run-status">
                 {getStatusIcon(run.status)}
               </div>
-              
+
               <div className="run-info">
                 <div className="run-header">
                   <span className="run-id">Run {run.id.slice(0, 8)}</span>
@@ -253,12 +253,12 @@ const RunsExceptionsView: React.FC = () => {
                 </div>
                 {run.error_message && (
                   <div className="error-message">
-                    <AlertTriangle className="error-icon" />
+                    <AlertTriangleIcon className="error-icon" />
                     {run.error_message}
                   </div>
                 )}
               </div>
-              
+
               <div className="run-metrics">
                 {run.duration_ms && (
                   <span className="duration">{formatDuration(run.duration_ms)}</span>
@@ -267,14 +267,14 @@ const RunsExceptionsView: React.FC = () => {
                   <span className="slo-breach-badge">SLO Breached</span>
                 )}
               </div>
-              
+
               <div className="run-actions">
                 <button className="action-btn" title="View Details">
-                  <Eye />
+                  <EyeIcon />
                 </button>
                 {run.status === 'failed' && (
                   <button className="action-btn" title="Retry">
-                    <RotateCcw />
+                    <RotateCcwIcon />
                   </button>
                 )}
               </div>
@@ -285,9 +285,9 @@ const RunsExceptionsView: React.FC = () => {
 
       {/* Run Detail Modal */}
       {selectedRun && (
-        <RunDetailModal 
-          run={selectedRun} 
-          onClose={() => setSelectedRun(null)} 
+        <RunDetailModal
+          run={selectedRun}
+          onClose={() => setSelectedRun(null)}
         />
       )}
     </div>
@@ -307,7 +307,7 @@ const RunDetailModal: React.FC<RunDetailModalProps> = ({ run, onClose }) => {
           <h2>Run Details</h2>
           <button className="close-btn" onClick={onClose}>&times;</button>
         </div>
-        
+
         <div className="modal-content">
           <div className="detail-grid">
             <div className="detail-item">
@@ -375,14 +375,14 @@ const RunDetailModal: React.FC<RunDetailModalProps> = ({ run, onClose }) => {
             </div>
           )}
           </div>
-          
+
           {run.error_message && (
             <div className="error-section">
               <h4>Error</h4>
               <div className="error-content">{run.error_message}</div>
             </div>
           )}
-          
+
           {run.slo_breached && (
             <div className="slo-section">
               <h4>SLO Information</h4>
@@ -401,13 +401,13 @@ function formatRelativeTime(date: Date): string {
   const now = new Date();
   const diffMs = now.getTime() - date.getTime();
   const diffMins = Math.round(diffMs / 60000);
-  
+
   if (diffMins < 1) return 'just now';
   if (diffMins < 60) return `${diffMins}m ago`;
-  
+
   const diffHours = Math.round(diffMins / 60);
   if (diffHours < 24) return `${diffHours}h ago`;
-  
+
   const diffDays = Math.round(diffHours / 24);
   return `${diffDays}d ago`;
 }

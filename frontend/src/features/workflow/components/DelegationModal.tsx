@@ -1,6 +1,6 @@
 import React from 'react';
 import { useForm } from 'react-hook-form';
-import { X } from 'lucide-react';
+import CloseIcon from '@mui/icons-material/Close';
 import { delegationApi, DelegationRequest } from '../../../api/delegationApi';
 
 interface DelegationModalProps {
@@ -39,7 +39,7 @@ export const DelegationModal: React.FC<DelegationModalProps> = ({ isOpen, onClos
         <div className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700">
           <h2 className="text-lg font-bold text-gray-900 dark:text-white">New Delegation</h2>
           <button onClick={onClose} className="p-1 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-500 dark:text-gray-400">
-            <X className="w-5 h-5" />
+            <CloseIcon sx={{ width: 20, height: 20 }} />
           </button>
         </div>
 

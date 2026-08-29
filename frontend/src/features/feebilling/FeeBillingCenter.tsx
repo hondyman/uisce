@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { DollarSign, TrendingUp, Users, Calendar, CheckCircle, AlertCircle, Settings } from 'lucide-react';
+import { AttachMoney as DollarSignIcon, TrendingUp as TrendingUpIcon, Group as UsersIcon, CalendarToday as CalendarIcon, CheckCircle as CheckCircleIcon, Warning as AlertCircleIcon, Settings as SettingsIcon } from '@mui/icons-material';
 
 interface FeeSchedule {
   scheduleId: string;

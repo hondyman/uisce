@@ -134,25 +134,25 @@ func (s *Server) postGetExistingRelationships(w http.ResponseWriter, r *http.Req
 	}
 
 	// Query existing relationships for this entity
-	// These are relationships where the entity is the source
+	// These are relationships where the entity is the source (from_bo_id)
 	query := `
-		SELECT 
-			CAST(bor.target_object_id AS TEXT) as entity_id,
-			bo.name as entity_name,
-			bo.display_name,
+		SELECT
+			CAST(bor.to_bo_id AS TEXT) as entity_id,
+			bo.bo_name as entity_name,
+			bo.bo_name as display_name,
 			'DIRECT_FK' as link_type,
 			bor.cardinality,
-			COALESCE(bor.confidence, 1.0) as confidence,
+			1.0 as confidence,
 			'Established relationship' as confidence_reason,
 			'' as foreign_key_path,
 			NULL as semantic_term_name,
-			CURRENT_TIMESTAMP as discovered_at
+			bor.created_at as discovered_at
 		FROM business_object_relationships bor
-		JOIN business_objects bo ON bo.id = bor.target_object_id
+		JOIN business_objects bo ON bo.id = bor.to_bo_id
 		WHERE bor.tenant_id = $1
-		  AND bor.source_object_id = $2
-		  AND bor.is_user_applied = true
-		ORDER BY bo.name
+		  AND bor.from_bo_id = $2
+		  AND bor.is_active = true
+		ORDER BY bo.bo_name
 	`
 
 	rows, err := s.DB.QueryContext(ctx, query, tenantContext.TenantID, req.EntityAttributeID)

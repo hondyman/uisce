@@ -4,17 +4,8 @@ import useBlockableNavigate from '../components/RouteBlocker/useBlockableNavigat
 import { useAuth } from '../contexts/AuthContext';
 import { devLog } from '../utils/devLogger';
 import './AuthPage.css';
-import { 
-  
-  Lock as _Lock, 
-  User as _User, 
-  Building2 as _Building2, 
-  ArrowLeft as _ArrowLeft,
-  CheckCircle as _CheckCircle,
-  AlertCircle as _AlertCircle,
-  Shield,
-  Sparkles
-} from 'lucide-react';
+import SecurityIcon from '@mui/icons-material/Security';
+import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
 
 type AuthMode = 'login' | 'register' | 'forgot' | 'reset';
 
@@ -206,8 +197,8 @@ const AuthPage: React.FC = () => {
         <div className="text-center mb-8">
           <div className="mx-auto h-16 w-16 bg-gradient-to-br from-indigo-600 to-purple-600 rounded-2xl flex items-center justify-center mb-4 relative">
             <div className="absolute inset-0 bg-indigo-600 rounded-2xl pulse-ring"></div>
-            <Shield className="h-8 w-8 text-white relative z-10" />
-            <Sparkles className="h-4 w-4 text-indigo-200 absolute top-1 right-1" />
+            <SecurityIcon sx={{ height: 32, width: 32 }} className="text-white relative z-10" />
+            <AutoAwesomeIcon sx={{ height: 16, width: 16 }} className="text-indigo-200 absolute top-1 right-1" />
           </div>
           <h2 className="text-4xl font-bold bg-gradient-to-r from-gray-900 to-gray-600 bg-clip-text text-transparent mb-2">
             {getTitle()}

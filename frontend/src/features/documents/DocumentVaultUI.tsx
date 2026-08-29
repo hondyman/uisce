@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useEffect } from 'react';
-import { Upload, FileText, CheckCircle, AlertCircle, Download, Eye, Trash2, Shield } from 'lucide-react';
+import { CloudUpload as UploadIcon, Description as FileTextIcon, CheckCircle as CheckCircleIcon, Warning as AlertCircleIcon, Download as DownloadIcon, Visibility as EyeIcon, Delete as Trash2Icon, Security as ShieldIcon } from '@mui/icons-material';
 import { useDropzone } from 'react-dropzone';
 
 interface Document {

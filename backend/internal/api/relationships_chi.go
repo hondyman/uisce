@@ -8,10 +8,10 @@ import (
 	"log"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/google/uuid"
 )
 
 // ============================================================================
@@ -416,7 +416,7 @@ func (s *Server) postRemoveRelationship(w http.ResponseWriter, r *http.Request) 
 	// Delete from business_object_relationships table (this is the persistent metadata table)
 	deleteRelQuery := `
 		DELETE FROM business_object_relationships
-		WHERE tenant_id = $1 AND source_object_id = $2 AND target_object_id = $3
+		WHERE tenant_id = $1 AND from_bo_id = $2 AND to_bo_id = $3
 	`
 
 	relResult, err := db.ExecContext(ctx, deleteRelQuery, tenantContext.TenantID, req.SourceEntity, req.TargetEntity)
@@ -784,40 +784,48 @@ func (s *Server) postRecommendTableMappings(w http.ResponseWriter, r *http.Reque
 // Helpers
 // ============================================================================
 
+// createRelationshipEdge upserts a row in business_object_relationships (the live relationship
+// model — from_bo_id/to_bo_id/rel_key/rel_name/cardinality/join_type; this table has no
+// source_object_id/confidence/is_user_applied/tenant_datasource_id columns). rel_key is derived
+// since callers of this endpoint don't supply one; it only needs to be unique per (tenant, from_bo_id).
 func createRelationshipEdge(ctx context.Context, db *sql.DB, tenantID, datasourceID, sourceEntityID, targetEntityID, cardinality, edgeType string) (string, error) {
-	relID := uuid.New().String()
+	relKey := strings.ToLower(edgeType)
+	if relKey == "" {
+		relKey = "related_to"
+	}
+	if len(targetEntityID) >= 8 {
+		relKey = fmt.Sprintf("%s_%s", relKey, strings.ToLower(targetEntityID[:8]))
+	}
+	relName := edgeType
+	if relName == "" {
+		relName = "Related To"
+	}
+	dbCardinality := cardinality
+	if dbCardinality == "" {
+		dbCardinality = "1:M"
+	}
 
 	query := `
 		INSERT INTO business_object_relationships (
-			id, tenant_id, tenant_datasource_id, source_object_id, target_object_id,
-			relationship_type, cardinality, confidence, is_user_applied, user_applied_at, created_at, updated_at
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
-		ON CONFLICT (tenant_id, source_object_id, target_object_id, relationship_type)
+			tenant_id, from_bo_id, to_bo_id, rel_key, rel_name, cardinality, join_type, is_active
+		) VALUES ($1, $2, $3, $4, $5, $6, 'LEFT', true)
+		ON CONFLICT (tenant_id, from_bo_id, rel_key)
 		DO UPDATE SET
+			to_bo_id = EXCLUDED.to_bo_id,
 			cardinality = EXCLUDED.cardinality,
-			confidence = EXCLUDED.confidence,
-			is_user_applied = EXCLUDED.is_user_applied,
-			user_applied_at = EXCLUDED.user_applied_at,
-			updated_at = EXCLUDED.updated_at
+			is_active = true
 		RETURNING id;
 	`
 
-	now := time.Now()
 	var returnedID string
 	err := db.QueryRowContext(
 		ctx, query,
-		relID,
 		tenantID,
-		datasourceID,
 		sourceEntityID,
 		targetEntityID,
-		edgeType,
-		cardinality,
-		1.0, // confidence for user-applied relationships
-		true,
-		now,
-		now,
-		now,
+		relKey,
+		relName,
+		dbCardinality,
 	).Scan(&returnedID)
 
 	if err != nil {

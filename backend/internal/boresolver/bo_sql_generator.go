@@ -369,8 +369,8 @@ func ResolvePolymorphicField(field BOField, tableAlias string, dialect Dialect) 
 
 func extractColumnName(physicalCol string) string {
 	colParts := strings.Split(physicalCol, ".")
-	if len(colParts) == 2 {
-		return colParts[1]
+	if len(colParts) >= 2 {
+		return colParts[len(colParts)-1]
 	}
 	return physicalCol
 }

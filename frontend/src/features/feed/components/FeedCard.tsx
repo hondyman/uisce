@@ -2,7 +2,7 @@ import React from 'react';
 import { FeedItem } from '../api/feed';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Lightbulb, Zap, Newspaper } from 'lucide-react';
+import { Lightbulb as LightbulbIcon, Bolt as ZapIcon, Newspaper as NewspaperIcon } from '@mui/icons-material';
 import { useExecuteFeedAction } from '../../wealth/api/approvals';
 import { useNotification } from '../../../hooks/useNotification';
 

@@ -10,20 +10,22 @@
  */
 
 import React, { useState, useEffect, useMemo } from 'react';
+import { Box, Typography } from '@mui/material';
+import apiClient from '../../utils/apiClient';
 import {
-  Lock,
-  Eye,
-  EyeOff,
-  Edit2,
-  Shield,
-  Save,
-  X,
-  Plus,
-  Trash2,
-  AlertTriangle,
-  CheckCircle2,
-  Search,
-} from 'lucide-react';
+  Lock as LockIcon,
+  Visibility as VisibilityIcon,
+  VisibilityOff as VisibilityOffIcon,
+  Edit as EditIcon,
+  Security as SecurityIcon,
+  Save as SaveIcon,
+  Close as CloseIcon,
+  Add as AddIcon,
+  Delete as DeleteIcon,
+  Warning as WarningIcon,
+  CheckCircle as CheckCircleIcon,
+  Search as SearchIcon,
+} from '@mui/icons-material';
 
 // ============================================================================
 // TYPE DEFINITIONS
@@ -102,10 +104,7 @@ export const FieldPermissionEditor: React.FC<FieldPermissionEditorProps> = ({
   // Fetch roles
   const fetchRoles = async () => {
     try {
-      const response = await fetch(
-        `/api/rbac/roles`
-      );
-      const data = await response.json();
+      const data = await apiClient<Role[]>('/api/rbac/roles');
       setRoles(data || []);
     } catch (error) {
       console.error('Failed to fetch roles:', error);
@@ -116,10 +115,7 @@ export const FieldPermissionEditor: React.FC<FieldPermissionEditorProps> = ({
   const fetchFieldPermissions = async () => {
     try {
       setLoading(true);
-      const response = await fetch(
-        `/api/rbac/field-permissions`
-      );
-      const data = await response.json();
+      const data = await apiClient<FieldPermission[]>('/api/rbac/field-permissions');
       setFieldPermissions(data || []);
     } catch (error) {
       console.error('Failed to fetch field permissions:', error);
@@ -136,9 +132,8 @@ export const FieldPermissionEditor: React.FC<FieldPermissionEditorProps> = ({
   ) => {
     try {
       setSaving(true);
-      await fetch(`/api/rbac/field-permissions`, {
+      await apiClient(`/api/rbac/field-permissions`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           role_id: roleId,
           resource_type: selectedResource,
@@ -158,9 +153,8 @@ export const FieldPermissionEditor: React.FC<FieldPermissionEditorProps> = ({
   const createMaskingRule = async () => {
     try {
       setSaving(true);
-      await fetch(`/api/rbac/field-masking-rules`, {
+      await apiClient(`/api/rbac/field-masking-rules`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ...maskingForm,
         }),
@@ -219,13 +213,13 @@ export const FieldPermissionEditor: React.FC<FieldPermissionEditorProps> = ({
   };
 
   const getPermissionIcon = (level: string) => {
-    const icons = {
-      none: <EyeOff className="w-4 h-4" />,
-      read: <Eye className="w-4 h-4" />,
-      write: <Edit2 className="w-4 h-4" />,
-      mask: <Lock className="w-4 h-4" />,
+    const icons: Record<string, React.ReactNode> = {
+      none: <VisibilityOffIcon sx={{ width: 16, height: 16 }} />,
+      read: <VisibilityIcon sx={{ width: 16, height: 16 }} />,
+      write: <EditIcon sx={{ width: 16, height: 16 }} />,
+      mask: <LockIcon sx={{ width: 16, height: 16 }} />,
     };
-    return icons[level as keyof typeof icons] || <EyeOff className="w-4 h-4" />;
+    return icons[level] || <VisibilityOffIcon sx={{ width: 16, height: 16 }} />;
   };
 
   const maskingPatterns = {
@@ -251,12 +245,12 @@ export const FieldPermissionEditor: React.FC<FieldPermissionEditorProps> = ({
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="flex flex-col items-center gap-4">
-          <Shield className="w-12 h-12 animate-pulse text-blue-500" />
-          <p className="text-gray-600">Loading field permissions...</p>
-        </div>
-      </div>
+      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh' }}>
+        <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
+          <SecurityIcon sx={{ width: 48, height: 48, color: 'primary.main', animation: 'pulse 2s infinite' }} />
+          <Typography color="text.secondary">Loading field permissions...</Typography>
+        </Box>
+      </Box>
     );
   }
 
@@ -267,7 +261,7 @@ export const FieldPermissionEditor: React.FC<FieldPermissionEditorProps> = ({
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-3xl font-bold text-gray-900 flex items-center gap-3">
-              <Lock className="w-8 h-8 text-blue-600" />
+              <LockIcon sx={{ width: 32, height: 32, color: 'primary.main' }} />
               Field Permission Editor
             </h1>
             <p className="text-gray-600 mt-2">
@@ -281,7 +275,7 @@ export const FieldPermissionEditor: React.FC<FieldPermissionEditorProps> = ({
             }}
             className="px-6 py-3 bg-purple-600 text-white rounded-lg font-medium hover:bg-purple-700 transition-all flex items-center gap-2 shadow-lg"
           >
-            <Plus className="w-5 h-5" />
+            <AddIcon sx={{ width: 20, height: 20 }} />
             Add Masking Rule
           </button>
         </div>
@@ -298,7 +292,7 @@ export const FieldPermissionEditor: React.FC<FieldPermissionEditorProps> = ({
             <option value="document">Document</option>
           </select>
           <div className="flex-1 relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+            <SearchIcon sx={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: 'text.secondary', width: 20, height: 20 }} />
             <input
               type="text"
               placeholder="Search fields..."
@@ -433,7 +427,7 @@ export const FieldPermissionEditor: React.FC<FieldPermissionEditorProps> = ({
                   onClick={() => setShowMaskingModal(false)}
                   className="p-2 hover:bg-gray-100 rounded-lg transition-all"
                 >
-                  <X className="w-6 h-6 text-gray-600" />
+                  <CloseIcon sx={{ width: 24, height: 24, color: 'text.secondary' }} />
                 </button>
               </div>
             </div>
@@ -570,7 +564,7 @@ export const FieldPermissionEditor: React.FC<FieldPermissionEditorProps> = ({
                 disabled={!maskingForm.field_name || !maskingForm.masking_pattern || saving}
                 className="px-6 py-3 bg-purple-600 text-white rounded-lg font-medium hover:bg-purple-700 transition-all flex items-center gap-2 disabled:opacity-50"
               >
-                <Save className="w-5 h-5" />
+                <SaveIcon sx={{ width: 20, height: 20 }} />
                 {saving ? 'Saving...' : 'Save Rule'}
               </button>
             </div>

@@ -961,7 +961,7 @@ const ConditionGroupComponent: React.FC<ConditionGroupComponentProps> = ({
 // Main Component
 // ============================================================================
 
-const AdvancedConditionBuilder: React.FC<AdvancedConditionBuilderProps> = ({
+export const AdvancedConditionBuilder: React.FC<AdvancedConditionBuilderProps> = ({
   value,
   onChange,
   // New props

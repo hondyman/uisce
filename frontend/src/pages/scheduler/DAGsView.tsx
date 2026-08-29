@@ -3,19 +3,19 @@
  */
 
 import React, { useState, useMemo } from 'react';
-import { 
-  Plus, 
-  Search, 
-  Play, 
-  Pause, 
-  Trash2, 
-  Edit2,
-  GitBranch,
-  Clock,
-  CheckCircle,
-  XCircle,
-  Eye
-} from 'lucide-react';
+import {
+  Add as PlusIcon,
+  Search as SearchIcon,
+  PlayArrow as PlayIcon,
+  Pause as PauseIcon,
+  Delete as Trash2Icon,
+  Edit as Edit2,
+  Schedule as ClockIcon,
+  CheckCircle as CheckCircleIcon,
+  Cancel as XCircleIcon,
+  Visibility as EyeIcon
+} from '@mui/icons-material';
+import { GitBranch } from 'lucide-react';
 import { useTenantContext } from '../../hooks/useTenantContext';
 import { useDAGs, DAG, triggerDAG, deleteDAG, updateDAG } from '../../api/schedulerApi';
 import SemanticBindingsList from '../../components/scheduler/SemanticBindingsList';
@@ -26,7 +26,7 @@ const DAGsView: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedDAG, setSelectedDAG] = useState<DAG | null>(null);
   const [activeOnly, setActiveOnly] = useState(false);
-  
+
   const { dags, loading, error, refetch } = useDAGs(tenantId || '', activeOnly);
 
   const filteredDAGs = useMemo(() => {
@@ -79,7 +79,7 @@ const DAGsView: React.FC = () => {
       <div className="toolbar">
         <div className="toolbar-left">
           <div className="search-box">
-            <Search className="search-icon" />
+            <SearchIcon className="search-icon" />
             <input
               type="text"
               placeholder="Search DAGs..."
@@ -87,20 +87,20 @@ const DAGsView: React.FC = () => {
               onChange={(e) => setSearchQuery(e.target.value)}
             />
           </div>
-          
+
           <label className="checkbox-filter">
-            <input 
-              type="checkbox" 
+            <input
+              type="checkbox"
               checked={activeOnly}
               onChange={(e) => setActiveOnly(e.target.checked)}
             />
             Active Only
           </label>
         </div>
-        
+
         <div className="toolbar-right">
           <button className="btn-primary">
-            <Plus /> New DAG
+            <PlusIcon /> New DAG
           </button>
         </div>
       </div>
@@ -115,8 +115,8 @@ const DAGsView: React.FC = () => {
           </div>
         ) : (
           filteredDAGs.map((dag: DAG) => (
-            <div 
-              key={dag.id} 
+            <div
+              key={dag.id}
               className={`dag-card ${!dag.is_active ? 'inactive' : ''}`}
             >
               <div className="dag-card-header">
@@ -128,11 +128,11 @@ const DAGsView: React.FC = () => {
                 </div>
                 <span className={`status-indicator ${dag.is_active ? 'active' : 'inactive'}`} />
               </div>
-              
+
               {dag.description && (
                 <p className="dag-description">{dag.description}</p>
               )}
-              
+
               <div className="dag-stats">
                 <div className="stat">
                   <span className="stat-value">{dag.nodes?.length || 0}</span>
@@ -147,30 +147,30 @@ const DAGsView: React.FC = () => {
                   <span className="stat-label">Max Parallel</span>
                 </div>
               </div>
-              
+
               {dag.next_run_at && (
                 <div className="dag-next-run">
-                  <Clock className="icon" />
+                  <ClockIcon className="icon" />
                   <span>Next: {formatDateTime(dag.next_run_at)}</span>
                 </div>
               )}
-              
+
               <div className="dag-card-actions">
-                <button 
+                <button
                   className="action-btn"
                   title="View Graph"
                   onClick={() => setSelectedDAG(dag)}
                 >
-                  <Eye />
+                  <EyeIcon />
                 </button>
-                <button 
+                <button
                   className="action-btn"
                   title="Run Now"
                   onClick={() => handleTrigger(dag)}
                 >
-                  <Play />
+                  <PlayIcon />
                 </button>
-                <button 
+                <button
                   className="action-btn secondary"
                   title="Dry Run"
                   onClick={() => handleTrigger(dag, 'DRY_RUN')}
@@ -178,25 +178,25 @@ const DAGsView: React.FC = () => {
                 >
                   Dry
                 </button>
-                <button 
+                <button
                   className="action-btn"
                   title={dag.is_active ? 'Pause' : 'Resume'}
                   onClick={() => handleToggleActive(dag)}
                 >
-                  <Pause />
+                  <PauseIcon />
                 </button>
-                <button 
+                <button
                   className="action-btn"
                   title="Edit"
                 >
                   <Edit2 />
                 </button>
-                <button 
+                <button
                   className="action-btn danger"
                   title="Delete"
                   onClick={() => handleDelete(dag)}
                 >
-                  <Trash2 />
+                  <Trash2Icon />
                 </button>
               </div>
             </div>
@@ -206,9 +206,9 @@ const DAGsView: React.FC = () => {
 
       {/* DAG Graph Modal */}
       {selectedDAG && (
-        <DAGGraphModal 
-          dag={selectedDAG} 
-          onClose={() => setSelectedDAG(null)} 
+        <DAGGraphModal
+          dag={selectedDAG}
+          onClose={() => setSelectedDAG(null)}
         />
       )}
     </div>
@@ -237,7 +237,7 @@ const DAGGraphModal: React.FC<DAGGraphModalProps> = ({ dag, onClose }) => {
           <h2>{dag.name}</h2>
           <button className="close-btn" onClick={onClose}>&times;</button>
         </div>
-        
+
         <div className="modal-content">
           <div className="dag-info-section">
             <h3>Configuration</h3>
@@ -262,7 +262,7 @@ const DAGGraphModal: React.FC<DAGGraphModalProps> = ({ dag, onClose }) => {
             )}
             <SemanticBindingsList bindings={dag.semantic_bindings} />
           </div>
-          
+
           <div className="dag-structure-section">
             <h3>Structure</h3>
             <div className="nodes-list">
@@ -274,7 +274,7 @@ const DAGGraphModal: React.FC<DAGGraphModalProps> = ({ dag, onClose }) => {
                 </div>
               ))}
             </div>
-            
+
             <div className="edges-list">
               <h4>Edges ({dag.edges?.length || 0})</h4>
               {dag.edges?.map((edge, idx) => (

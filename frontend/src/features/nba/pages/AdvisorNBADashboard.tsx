@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  Phone, Mail, Calendar, ArrowRight, CheckCircle, XCircle, 
-  AlertTriangle, TrendingUp, DollarSign, Clock, Filter, 
-  ChevronDown, MoreHorizontal, Play, BarChart2
-} from 'lucide-react';
+import {
+  Phone as PhoneIcon, Email as MailIcon, CalendarToday as CalendarIcon, ArrowForward as ArrowRightIcon, CheckCircle as CheckCircleIcon, Cancel as XCircleIcon,
+  WarningAmber as AlertTriangleIcon, TrendingUp as TrendingUpIcon, AttachMoney as DollarSignIcon, Schedule as ClockIcon, FilterList as FilterIcon,
+  ExpandMore as ChevronDownIcon, MoreHoriz as MoreHorizontalIcon, PlayArrow as PlayIcon, BarChart as BarChart2Icon
+} from '@mui/icons-material';
 import { fetchAPI } from '../../../api';
 
 // Types

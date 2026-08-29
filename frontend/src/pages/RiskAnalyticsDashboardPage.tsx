@@ -1,19 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import {
-  AlertTriangle,
-  TrendingDown,
-  Activity,
-  BarChart3,
-  LineChart,
-  PieChart as PieChartIcon,
-  RefreshCw,
-  AlertCircle,
-  CheckCircle,
-  Eye,
-  EyeOff,
-  Download,
-  Filter,
-} from 'lucide-react';
+import WarningAmberIcon from '@mui/icons-material/WarningAmber';
+import TrendingDownIcon from '@mui/icons-material/TrendingDown';
+import ShowChartIcon from '@mui/icons-material/ShowChart';
+import BarChartIcon from '@mui/icons-material/BarChart';
+import FilterListIcon from '@mui/icons-material/FilterList';
+import RefreshIcon from '@mui/icons-material/Refresh';
+import WarningIcon from '@mui/icons-material/Warning';
+import CheckCircleIcon from '@mui/icons-material/CheckCircle';
+import DownloadIcon from '@mui/icons-material/Download';
 import { useTenant } from '../contexts/TenantContext';
 import { getSelectedRegion } from '../lib/region';
 import { devLog } from '../utils/devLogger';
@@ -168,7 +162,7 @@ export const RiskAnalyticsDashboardPage: React.FC = () => {
   if (!tenant || !datasource) {
     return (
       <div className={`${getCardClasses()} p-8 bg-gradient-to-br from-blue-50 to-blue-50/50 dark:from-blue-950/20 dark:to-blue-950/10`}>
-        <AlertCircle className="w-6 h-6 text-yellow-600 dark:text-yellow-400 mb-2" />
+        <WarningIcon sx={{ width: 24, height: 24 }} className="text-yellow-600 dark:text-yellow-400 mb-2" />
         <p className={getTextClasses('primary')}>Please select a tenant and datasource to view risk analytics.</p>
       </div>
     );
@@ -194,7 +188,7 @@ export const RiskAnalyticsDashboardPage: React.FC = () => {
             title="Refresh risk metrics"
             aria-label="Refresh risk metrics"
           >
-            <RefreshCw className={`w-5 h-5 ${refreshing ? 'animate-spin' : ''}`} />
+            <RefreshIcon sx={{ width: 20, height: 20 }} className={refreshing ? 'animate-spin' : ''} />
             Refresh
           </button>
           <button
@@ -202,7 +196,7 @@ export const RiskAnalyticsDashboardPage: React.FC = () => {
             title="Export risk report"
             aria-label="Export risk report"
           >
-            <Download className="w-5 h-5" />
+            <DownloadIcon sx={{ width: 20, height: 20 }} />
             Export
           </button>
         </div>
@@ -212,9 +206,9 @@ export const RiskAnalyticsDashboardPage: React.FC = () => {
       {toast && (
         <div className={`p-4 rounded-lg flex items-center gap-3 ${toast.type === 'success' ? getAlertClasses('success') : getAlertClasses('error')}`}>
           {toast.type === 'success' ? (
-            <CheckCircle className="w-5 h-5 text-green-600 dark:text-green-400" />
+            <CheckCircleIcon sx={{ width: 20, height: 20 }} className="text-green-600 dark:text-green-400" />
           ) : (
-            <AlertCircle className="w-5 h-5 text-red-600 dark:text-red-400" />
+            <WarningIcon sx={{ width: 20, height: 20 }} className="text-red-600 dark:text-red-400" />
           )}
           <span className={toast.type === 'success' ? 'text-green-800 dark:text-green-200' : 'text-red-800 dark:text-red-200'}>
             {toast.message}
@@ -229,7 +223,7 @@ export const RiskAnalyticsDashboardPage: React.FC = () => {
         </div>
       ) : portfolios.length === 0 ? (
         <div className="text-center py-12 border-2 border-dashed border-slate-300 dark:border-slate-600 rounded-lg">
-          <AlertTriangle className="w-12 h-12 text-slate-400 dark:text-slate-500 mx-auto mb-4" />
+          <WarningAmberIcon sx={{ width: 48, height: 48 }} className="text-slate-400 dark:text-slate-500 mx-auto mb-4" />
           <p className={getTextClasses('secondary')}>No portfolios with risk metrics available</p>
         </div>
       ) : (
@@ -274,7 +268,7 @@ export const RiskAnalyticsDashboardPage: React.FC = () => {
               title="Toggle advanced metrics"
               aria-label="Toggle advanced metrics"
             >
-              <BarChart3 className="w-4 h-4" />
+              <BarChartIcon sx={{ width: 16, height: 16 }} />
               Advanced
             </button>
           </div>
@@ -287,7 +281,7 @@ export const RiskAnalyticsDashboardPage: React.FC = () => {
                 <div className={`${getCardClasses()} p-4`}>
                   <div className="flex items-center justify-between mb-2">
                     <p className={`text-sm font-medium ${getTextClasses('secondary')}`}>Expected Return</p>
-                    <TrendingDown className="w-4 h-4 text-slate-400 dark:text-slate-500" />
+                    <TrendingDownIcon sx={{ width: 16, height: 16 }} className="text-slate-400 dark:text-slate-500" />
                   </div>
                   <p className={`text-2xl font-bold ${getTextClasses('primary')}`}>
                     {selectedPortfolio.expectedReturn.toFixed(2)}%
@@ -310,7 +304,7 @@ export const RiskAnalyticsDashboardPage: React.FC = () => {
                 <div className={`${getCardClasses()} p-4`}>
                   <div className="flex items-center justify-between mb-2">
                     <p className={`text-sm font-medium ${getTextClasses('secondary')}`}>Volatility (Annual)</p>
-                    <Activity className="w-4 h-4 text-slate-400 dark:text-slate-500" />
+                    <ShowChartIcon sx={{ width: 16, height: 16 }} className="text-slate-400 dark:text-slate-500" />
                   </div>
                   <p className={`text-2xl font-bold ${getTextClasses('primary')}`}>
                     {selectedPortfolio.volatility.toFixed(2)}%
@@ -342,7 +336,7 @@ export const RiskAnalyticsDashboardPage: React.FC = () => {
                 <div className={`${getCardClasses()} p-4`}>
                   <div className="flex items-center justify-between mb-2">
                     <p className={`text-sm font-medium ${getTextClasses('secondary')}`}>Max Drawdown</p>
-                    <AlertTriangle className="w-4 h-4 text-red-400" />
+                    <WarningAmberIcon sx={{ width: 16, height: 16 }} className="text-red-400" />
                   </div>
                   <p className="text-2xl font-bold text-red-600 dark:text-red-400">
                     {selectedPortfolio.maxDrawdown.toFixed(2)}%
@@ -517,7 +511,7 @@ export const RiskAnalyticsDashboardPage: React.FC = () => {
               {/* Recommendations */}
               <div className={`${getCardClasses()} p-6 bg-blue-50 dark:bg-blue-900/10`}>
                 <h3 className={`font-semibold ${getTextClasses('primary')} mb-3 flex items-center gap-2`}>
-                  <AlertCircle className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+                  <WarningIcon sx={{ width: 20, height: 20 }} className="text-blue-600 dark:text-blue-400" />
                   Risk Recommendations
                 </h3>
                 <ul className={`space-y-2 text-sm ${getTextClasses('secondary')}`}>

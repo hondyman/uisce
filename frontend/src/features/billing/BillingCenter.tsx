@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
-import { 
-  DollarSign, TrendingUp, Receipt, Clock, 
-  CheckCircle, AlertCircle, Download
-} from 'lucide-react';
+import {
+  AttachMoney as DollarSignIcon, TrendingUp as TrendingUpIcon, Receipt as ReceiptIcon, Schedule as ClockIcon,
+  CheckCircle as CheckCircleIcon, Warning as AlertCircleIcon, Download as DownloadIcon
+} from '@mui/icons-material';
 
 // Types
 interface FeeCalculation {

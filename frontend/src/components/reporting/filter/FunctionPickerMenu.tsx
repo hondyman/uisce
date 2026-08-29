@@ -14,62 +14,95 @@ export interface FnMeta {
 }
 
 export const FILTER_FUNCTIONS: FnMeta[] = [
+  // SQL Aggregates
+  { label: 'SUM',        signature: 'SUM(field)',                             category: 'Aggregate', description: 'Sum total of numeric values',        returnType: 'number' },
+  { label: 'AVG',        signature: 'AVG(field)',                             category: 'Aggregate', description: 'Arithmetic mean average',            returnType: 'number' },
+  { label: 'COUNT',      signature: 'COUNT(field)',                           category: 'Aggregate', description: 'Count of non-null entries',          returnType: 'number' },
+  { label: 'COUNT_DISTINCT', signature: 'COUNT(DISTINCT field)',              category: 'Aggregate', description: 'Count of unique non-null values',     returnType: 'number' },
+  { label: 'MIN',        signature: 'MIN(field)',                             category: 'Aggregate', description: 'Minimum value in group',             returnType: 'number' },
+  { label: 'MAX',        signature: 'MAX(field)',                             category: 'Aggregate', description: 'Maximum value in group',             returnType: 'number' },
+  { label: 'STDDEV',     signature: 'STDDEV(field)',                          category: 'Aggregate', description: 'Statistical standard deviation',     returnType: 'number' },
+  { label: 'VARIANCE',   signature: 'VARIANCE(field)',                        category: 'Aggregate', description: 'Statistical variance',               returnType: 'number' },
+  { label: 'PERCENTILE_CONT', signature: 'PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY field)', category: 'Aggregate', description: 'Continuous percentile / Median', returnType: 'number' },
+
+  // Window Functions
+  { label: 'ROW_NUMBER', signature: 'ROW_NUMBER() OVER (ORDER BY field)',    category: 'Window',    description: 'Unique sequential row number in partition', returnType: 'number' },
+  { label: 'RANK',       signature: 'RANK() OVER (ORDER BY field DESC)',      category: 'Window',    description: 'Rank with gaps for identical values', returnType: 'number' },
+  { label: 'DENSE_RANK', signature: 'DENSE_RANK() OVER (ORDER BY field DESC)',category: 'Window',    description: 'Rank without gaps',                  returnType: 'number' },
+  { label: 'RUNNING_TOTAL', signature: 'SUM(field) OVER (ORDER BY field ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)', category: 'Window', description: 'Cumulative rolling sum', returnType: 'number' },
+  { label: 'LEAD',       signature: 'LEAD(field, 1) OVER (ORDER BY field)',   category: 'Window',    description: 'Value from subsequent row',          returnType: 'any'    },
+  { label: 'LAG',        signature: 'LAG(field, 1) OVER (ORDER BY field)',    category: 'Window',    description: 'Value from preceding row',           returnType: 'any'    },
+  { label: 'PERCENT_OF_TOTAL', signature: '100.0 * field / NULLIF(SUM(field) OVER (), 0)', category: 'Window', description: 'Percentage contribution to partition sum', returnType: 'number' },
+
+  // PostgreSQL JSON & JSONB Functions & Operators
+  { label: 'JSON_KEY_TEXT',    signature: "field->>'key'",                    category: 'JSON / JSONB', description: 'Postgres: Extract JSON field as text (->>)', returnType: 'string'  },
+  { label: 'JSON_PATH_TEXT',   signature: "field#>>'{path,key}'",             category: 'JSON / JSONB', description: 'Postgres: Extract nested JSON path as text (#>>)', returnType: 'string' },
+  { label: 'JSON_EXTRACT_PATH', signature: "jsonb_extract_path_text(field, 'key')", category: 'JSON / JSONB', description: 'Postgres: Extract path as text', returnType: 'string' },
+  { label: 'JSON_HAS_KEY',     signature: "field ? 'key'",                    category: 'JSON / JSONB', description: 'Postgres: Check if top-level key exists (?)', returnType: 'boolean' },
+  { label: 'JSONB_CONTAINS',   signature: "field @> '{\"key\": \"val\"}'::jsonb", category: 'JSON / JSONB', description: 'Postgres: JSONB containment match (@>)', returnType: 'boolean' },
+  { label: 'JSON_ARRAY_LENGTH', signature: 'jsonb_array_length(field)',       category: 'JSON / JSONB', description: 'Postgres: Number of elements in JSON array', returnType: 'number' },
+  { label: 'JSON_TYPEOF',      signature: 'jsonb_typeof(field)',              category: 'JSON / JSONB', description: 'Postgres: JSON type (string, number, object, array)', returnType: 'string' },
+
   // Date / Time — extract / truncate
-  { label: 'YEAR',       signature: 'YEAR(field)',                          category: 'Date',    description: 'Extract year as integer',           returnType: 'number' },
-  { label: 'MONTH',      signature: 'MONTH(field)',                         category: 'Date',    description: 'Extract month (1–12)',              returnType: 'number' },
-  { label: 'DAY',        signature: 'DAY(field)',                            category: 'Date',    description: 'Extract day of month (1–31)',        returnType: 'number' },
+  { label: 'YEAR',       signature: 'EXTRACT(YEAR FROM field)',               category: 'Date',    description: 'Extract year as integer',           returnType: 'number' },
+  { label: 'MONTH',      signature: 'EXTRACT(MONTH FROM field)',              category: 'Date',    description: 'Extract month (1–12)',              returnType: 'number' },
+  { label: 'DAY',        signature: 'EXTRACT(DAY FROM field)',                category: 'Date',    description: 'Extract day of month (1–31)',        returnType: 'number' },
   { label: 'DATE_TRUNC', signature: "DATE_TRUNC('month', field)",            category: 'Date',    description: 'Truncate to start of period',        returnType: 'date'   },
   { label: 'EXTRACT',    signature: "EXTRACT('year' FROM field)",            category: 'Date',    description: 'Extract date part (SQL standard)',   returnType: 'number' },
-  { label: 'DATE_ADD',   signature: "DATE_ADD(field, n, 'day')",            category: 'Date',    description: 'Add N days to date',                 returnType: 'date'   },
-  { label: 'DATESINPERIOD', signature: "DATESINPERIOD('date_col', START, -30, DAY)", category: 'Date', description: 'Dates in a rolling period',       returnType: 'date'   },
+  { label: 'DATE_ADD',   signature: "field + INTERVAL '30 days'",             category: 'Date',    description: 'Add interval days to date',          returnType: 'date'   },
+  { label: 'DATESINPERIOD', signature: "DATESINPERIOD(field, CURRENT_DATE, -30, 'DAY')", category: 'Date', description: 'Dates in a rolling period', returnType: 'date'   },
+
   // Date Macro
-  { label: 'TODAY',              signature: 'TODAY()',                                category: 'Date Macro', description: 'Current date (UTC)',            returnType: 'date'   },
-  { label: 'YESTERDAY',          signature: 'YESTERDAY()',                            category: 'Date Macro', description: 'Yesterday (UTC)',                returnType: 'date'   },
-  { label: 'MTD',                signature: 'MTD()',                                  category: 'Date Macro', description: 'Month-to-date start',          returnType: 'date'   },
-  { label: 'QTD',                signature: 'QTD()',                                  category: 'Date Macro', description: 'Quarter-to-date start',         returnType: 'date'   },
-  { label: 'YTD',                signature: 'YTD()',                                  category: 'Date Macro', description: 'Year-to-date start',           returnType: 'date'   },
-  { label: 'LAST_N_DAYS',        signature: 'LAST_N_DAYS(30)',                        category: 'Date Macro', description: 'Last N days including today',   returnType: 'date'   },
-  { label: 'T_MINUS',            signature: 'T_MINUS(2)',                            category: 'Date Macro', description: 'T-N settlement days ago',      returnType: 'date'   },
-  { label: 'BUSINESS_DAYS_AGO',  signature: 'BUSINESS_DAYS_AGO(5)',                  category: 'Date Macro', description: 'N business days ago (BD+)',    returnType: 'date'   },
-  { label: 'PREVIOUS_BUSINESS_DAY', signature: 'PREVIOUS_BUSINESS_DAY(field)',        category: 'Date Macro', description: 'Prior business day',             returnType: 'date'   },
+  { label: 'CURRENT_DATE',       signature: 'CURRENT_DATE',                           category: 'Date Macro', description: 'Current date (UTC)',            returnType: 'date'   },
+  { label: 'CURRENT_TIMESTAMP',  signature: 'CURRENT_TIMESTAMP',                      category: 'Date Macro', description: 'Current timestamp (UTC)',       returnType: 'date'   },
+  { label: 'TODAY',              signature: 'CURRENT_DATE',                           category: 'Date Macro', description: 'Current date (UTC)',            returnType: 'date'   },
+  { label: 'YESTERDAY',          signature: "CURRENT_DATE - INTERVAL '1 day'",        category: 'Date Macro', description: 'Yesterday (UTC)',                returnType: 'date'   },
+  { label: 'MTD',                signature: "DATE_TRUNC('month', CURRENT_DATE)",      category: 'Date Macro', description: 'Month-to-date start',          returnType: 'date'   },
+  { label: 'QTD',                signature: "DATE_TRUNC('quarter', CURRENT_DATE)",    category: 'Date Macro', description: 'Quarter-to-date start',         returnType: 'date'   },
+  { label: 'YTD',                signature: "DATE_TRUNC('year', CURRENT_DATE)",       category: 'Date Macro', description: 'Year-to-date start',           returnType: 'date'   },
+  { label: 'LAST_N_DAYS',        signature: "field >= CURRENT_DATE - INTERVAL '30 days'", category: 'Date Macro', description: 'Last N days including today', returnType: 'boolean' },
+
   // String
   { label: 'UPPER',      signature: 'UPPER(field)',                           category: 'String',  description: 'Convert to upper case',           returnType: 'string' },
   { label: 'LOWER',      signature: 'LOWER(field)',                           category: 'String',  description: 'Convert to lower case',           returnType: 'string' },
   { label: 'TRIM',       signature: 'TRIM(field)',                            category: 'String',  description: 'Remove leading / trailing spaces', returnType: 'string' },
   { label: 'LENGTH',    signature: 'LENGTH(field)',                          category: 'String',  description: 'Character count',                 returnType: 'number' },
-  { label: 'SUBSTR',     signature: 'SUBSTR(field, start, length)',           category: 'String',  description: 'Extract substring',               returnType: 'string' },
-  { label: 'REPLACE',    signature: 'REPLACE(field, old, new)',              category: 'String',  description: 'Replace occurrences',             returnType: 'string' },
-  { label: 'CONCAT',     signature: 'CONCAT(field1, field2)',                category: 'String',  description: 'Concatenate strings',            returnType: 'string' },
-  { label: 'REGEXP_LIKE',signature: 'REGEXP_LIKE(field, pattern)',            category: 'String',  description: 'POSIX regex match',               returnType: 'boolean'},
+  { label: 'SUBSTR',     signature: 'SUBSTR(field, 1, 5)',                    category: 'String',  description: 'Extract substring: SUBSTR(field, start, length)', returnType: 'string' },
+  { label: 'REPLACE',    signature: "REPLACE(field, 'old', 'new')",          category: 'String',  description: 'Replace occurrences',             returnType: 'string' },
+  { label: 'CONCAT',     signature: "CONCAT(field, ' - suffix')",             category: 'String',  description: 'Concatenate strings',            returnType: 'string' },
+  { label: 'REGEXP_LIKE',signature: "field ~ '^[A-Z0-9]'",                    category: 'String',  description: 'POSIX regex match (~)',            returnType: 'boolean'},
+
   // Null / conditional
-  { label: 'COALESCE',   signature: 'COALESCE(field, default)',              category: 'Null',    description: 'First non-null argument',          returnType: 'any'    },
-  { label: 'NULLIF',     signature: 'NULLIF(field, value)',                   category: 'Null',    description: 'Return NULL if equal',             returnType: 'any'    },
+  { label: 'COALESCE',   signature: "COALESCE(field, 'N/A')",                 category: 'Null',    description: 'First non-null argument',          returnType: 'any'    },
+  { label: 'NULLIF',     signature: 'NULLIF(field, 0)',                       category: 'Null',    description: 'Return NULL if equal',             returnType: 'any'    },
+
   // Numeric
-  { label: 'ROUND',      signature: 'ROUND(field, decimals)',                 category: 'Numeric', description: 'Round to N decimal places',      returnType: 'number' },
+  { label: 'ROUND',      signature: 'ROUND(field, 2)',                        category: 'Numeric', description: 'Round to 2 decimal places',        returnType: 'number' },
   { label: 'ABS',        signature: 'ABS(field)',                             category: 'Numeric', description: 'Absolute value',                 returnType: 'number' },
   { label: 'FLOOR',      signature: 'FLOOR(field)',                           category: 'Numeric', description: 'Round down to integer',          returnType: 'number' },
   { label: 'CEIL',       signature: 'CEIL(field)',                            category: 'Numeric', description: 'Round up to integer',            returnType: 'number' },
-  { label: 'MOD',        signature: 'MOD(field, divisor)',                     category: 'Numeric', description: 'Modulo remainder',               returnType: 'number' },
+  { label: 'MOD',        signature: 'MOD(field, 2)',                          category: 'Numeric', description: 'Modulo remainder',               returnType: 'number' },
+
   // Cast
-  { label: 'CAST',       signature: 'CAST(field AS TEXT)',                    category: 'Cast',    description: 'Convert to another type',          returnType: 'any'    },
+  { label: 'CAST_TEXT',   signature: 'CAST(field AS TEXT)',                    category: 'Cast',    description: 'Convert to Postgres text',        returnType: 'string' },
+  { label: 'CAST_NUMERIC',signature: 'CAST(field AS NUMERIC(18,2))',           category: 'Cast',    description: 'Convert to numeric decimal',      returnType: 'number' },
   { label: 'TO_DATE',    signature: "TO_DATE(field, 'YYYY-MM-DD')",           category: 'Cast',    description: 'Parse string as date',            returnType: 'date'   },
-  { label: 'TO_NUMBER',  signature: 'TO_NUMBER(field)',                       category: 'Cast',    description: 'Convert string to number',        returnType: 'number' },
-  // Array / JSON
-  { label: 'ARRAY_CONTAINS',     signature: 'ARRAY_CONTAINS(field, value)',            category: 'Array/JSON', description: 'Array membership test',   returnType: 'boolean' },
-  { label: 'JSON_EXTRACT_SCALAR',signature: "JSON_EXTRACT_SCALAR(field, '$.key')",    category: 'Array/JSON', description: 'Extract JSON scalar',   returnType: 'string'  },
+  { label: 'TO_TIMESTAMP', signature: "TO_TIMESTAMP(field, 'YYYY-MM-DD HH24:MI:SS')", category: 'Cast', description: 'Parse string as timestamp', returnType: 'date' },
 ];
 
 const CATEGORY_COLORS: Record<string, string> = {
+  'Aggregate':   '#10B981',
+  'Window':      '#8B5CF6',
+  'JSON / JSONB':'#06B6D4',
   'Date':        '#F59E0B',
   'Date Macro':  '#FB923C',
-  'String':      '#10B981',
+  'String':      '#3B82F6',
   'Null':        '#64748B',
-  'Numeric':     '#3B82F6',
-  'Cast':        '#8B5CF6',
-  'Array/JSON':  '#06B6D4',
+  'Numeric':     '#EC4899',
+  'Cast':        '#A855F7',
 };
 
-const CATEGORY_ORDER = ['Date', 'Date Macro', 'String', 'Null', 'Numeric', 'Cast', 'Array/JSON'];
+const CATEGORY_ORDER = ['Aggregate', 'Window', 'JSON / JSONB', 'Date', 'Date Macro', 'String', 'Null', 'Numeric', 'Cast'];
 
 function categorize(fns: FnMeta[]): Record<string, FnMeta[]> {
   const out: Record<string, FnMeta[]> = {};
@@ -111,8 +144,8 @@ const FunctionPickerMenu: React.FC<Props> = ({ anchorEl, onClose, fieldName, onS
             bgcolor: '#071526',
             border: '1px solid #1E293B',
             borderRadius: 2,
-            width: 340,
-            maxHeight: 420,
+            width: 360,
+            maxHeight: 460,
             display: 'flex',
             flexDirection: 'column',
             overflow: 'hidden',
@@ -124,7 +157,7 @@ const FunctionPickerMenu: React.FC<Props> = ({ anchorEl, onClose, fieldName, onS
         <TextField
           size="small"
           autoFocus
-          placeholder="Search functions…"
+          placeholder="Search SQL functions, aggregates, JSON, windows…"
           value={search}
           onChange={e => setSearch(e.target.value)}
           fullWidth
@@ -149,6 +182,39 @@ const FunctionPickerMenu: React.FC<Props> = ({ anchorEl, onClose, fieldName, onS
       </Box>
 
       <Box sx={{ flex: 1, overflowY: 'auto' }}>
+        <ListItem disablePadding>
+          <ListItemButton
+            dense
+            onClick={() => { onSelect('', undefined); onClose(); }}
+            sx={{
+              py: 0.8, px: 2,
+              borderBottom: '1px solid #1E293B',
+              '&:hover': { bgcolor: '#0B1E36' },
+            }}
+          >
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.2, width: '100%' }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <Typography sx={{ fontSize: '0.72rem', fontWeight: 700, color: '#94A3B8', fontFamily: 'monospace' }}>
+                  None (Raw column)
+                </Typography>
+                <Chip
+                  label="Clear"
+                  size="small"
+                  sx={{
+                    height: 14, fontSize: '0.55rem', fontWeight: 700,
+                    bgcolor: 'rgba(148, 163, 184, 0.1)',
+                    color: '#94A3B8',
+                    border: '1px solid rgba(148, 163, 184, 0.3)',
+                  }}
+                />
+              </Box>
+              <Typography sx={{ fontSize: '0.65rem', color: '#64748B', fontFamily: 'monospace' }}>
+                {fieldName}
+              </Typography>
+            </Box>
+          </ListItemButton>
+        </ListItem>
+
         {CATEGORY_ORDER.map(cat => {
           const fns = grouped[cat];
           if (!fns?.length) return null;
@@ -172,7 +238,7 @@ const FunctionPickerMenu: React.FC<Props> = ({ anchorEl, onClose, fieldName, onS
               </Box>
               {fns.map(fn => {
                 const label = fn.label;
-                const sig = fn.signature.replace('field', fieldName);
+                const sig = fn.signature.replace(/\bfield\b/g, fieldName || 'field');
                 return (
                   <ListItem disablePadding key={label}>
                     <ListItemButton
@@ -196,15 +262,15 @@ const FunctionPickerMenu: React.FC<Props> = ({ anchorEl, onClose, fieldName, onS
                                 height: 14, fontSize: '0.55rem', fontWeight: 700,
                                 bgcolor: CATEGORY_COLORS[cat] ? `${CATEGORY_COLORS[cat]}20` : '#64748B20',
                                 color: CATEGORY_COLORS[cat] || '#64748B',
-                                border: `1px solid ${CATEGORY_COLORS[cat] || '#64748B'}40`,
+                                border: `1px solid ${CATEGORY_COLORS[cat] ? `${CATEGORY_COLORS[cat]}40` : '#64748B40'}`,
                               }}
                             />
                           )}
                         </Box>
-                        <Typography sx={{ fontSize: '0.65rem', color: '#00D4FF', fontFamily: 'monospace' }}>
+                        <Typography sx={{ fontSize: '0.68rem', color: '#00D4FF', fontFamily: 'monospace' }}>
                           {sig}
                         </Typography>
-                        <Typography sx={{ fontSize: '0.6rem', color: '#64748B' }}>
+                        <Typography sx={{ fontSize: '0.62rem', color: '#64748B' }}>
                           {fn.description}
                         </Typography>
                       </Box>

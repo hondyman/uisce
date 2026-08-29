@@ -6,45 +6,34 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
-	"github.com/hondyman/uisce/backend/internal/pagestudio"
-	pagetests "github.com/hondyman/uisce/backend/internal/testing/page_tests"
 	"github.com/hondyman/uisce/backend/internal/testing/performance"
 	"github.com/hondyman/uisce/backend/internal/testing/semantic"
 	"github.com/hondyman/uisce/backend/internal/testing/visual"
 )
 
 type TestingHandler struct {
-	testGenerator      *pagetests.TestGenerator
 	snapshotCapture    *visual.SnapshotCapture
-	diffEngine         *visual.DiffEngine
+	diffEngine        *visual.DiffEngine
 	regressionDetector *semantic.RegressionDetector
-	syntheticRunner    *performance.SyntheticRunner
-	pageRepo           *pagestudio.Repository
+	syntheticRunner   *performance.SyntheticRunner
 }
 
 func NewTestingHandler(
-	gen *pagetests.TestGenerator,
 	snap *visual.SnapshotCapture,
 	diff *visual.DiffEngine,
 	reg *semantic.RegressionDetector,
 	perf *performance.SyntheticRunner,
-	repo *pagestudio.Repository,
 ) *TestingHandler {
 	return &TestingHandler{
-		testGenerator:      gen,
 		snapshotCapture:    snap,
-		diffEngine:         diff,
+		diffEngine:        diff,
 		regressionDetector: reg,
-		syntheticRunner:    perf,
-		pageRepo:           repo,
+		syntheticRunner:   perf,
 	}
 }
 
 func (h *TestingHandler) Routes() chi.Router {
 	r := chi.NewRouter()
-
-	// Page Tests
-	r.Post("/generate/{pageId}", h.GenerateTests)
 
 	// Visual
 	r.Post("/visual/capture/{pageId}", h.CaptureSnapshot)
@@ -57,21 +46,6 @@ func (h *TestingHandler) Routes() chi.Router {
 	r.Post("/performance/run/{pageId}", h.RunPerformanceTest)
 
 	return r
-}
-
-func (h *TestingHandler) GenerateTests(w http.ResponseWriter, r *http.Request) {
-	pageID, err := uuid.Parse(chi.URLParam(r, "pageId"))
-	if err != nil {
-		http.Error(w, "invalid page id", http.StatusBadRequest)
-		return
-	}
-	page, err := h.pageRepo.GetPage(r.Context(), pageID)
-	if err != nil {
-		http.Error(w, "page not found", http.StatusNotFound)
-		return
-	}
-	suite, _ := h.testGenerator.Generate(r.Context(), page)
-	json.NewEncoder(w).Encode(suite)
 }
 
 func (h *TestingHandler) CaptureSnapshot(w http.ResponseWriter, r *http.Request) {

@@ -4,6 +4,7 @@
  */
 
 import React, { useState, useEffect, useMemo } from 'react';
+import apiClient from '../../utils/apiClient';
 import {
   Box,
   Container,
@@ -128,8 +129,7 @@ export const RoleManager: React.FC<RoleManagerProps> = ({ tenant, datasource }) 
   const fetchRoles = async () => {
     try {
       setLoading(true);
-      const response = await fetch('/api/rbac/roles');
-      const data = await response.json();
+      const data = await apiClient<Role[]>('/api/rbac/roles');
       setRoles(data || [
         {
           id: '1',
@@ -186,8 +186,7 @@ export const RoleManager: React.FC<RoleManagerProps> = ({ tenant, datasource }) 
   // Fetch permissions
   const fetchPermissions = async () => {
     try {
-      const response = await fetch('/api/rbac/permissions');
-      const data = await response.json();
+      const data = await apiClient<Permission[]>('/api/rbac/permissions');
       setPermissions(data || [
         { id: '1', permission_key: 'view_dashboard', permission_name: 'View Dashboard', description: '', resource_type: 'dashboard', action: 'view', is_system: true },
         { id: '2', permission_key: 'manage_users', permission_name: 'Manage Users', description: '', resource_type: 'users', action: 'manage', is_system: true },
@@ -204,21 +203,16 @@ export const RoleManager: React.FC<RoleManagerProps> = ({ tenant, datasource }) 
   const createRole = async () => {
     try {
       setSaving(true);
-      const response = await fetch('/api/rbac/roles',
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            ...formData,
-            permissions: Array.from(rolePermissions),
-          }),
-        }
-      );
+      await apiClient('/api/rbac/roles', {
+        method: 'POST',
+        body: JSON.stringify({
+          ...formData,
+          permissions: Array.from(rolePermissions),
+        }),
+      });
       
-      if (response.ok) {
-        await fetchRoles();
-        resetForm();
-      }
+      await fetchRoles();
+      resetForm();
     } catch (error) {
       console.error('Failed to create role:', error);
     } finally {
@@ -231,7 +225,7 @@ export const RoleManager: React.FC<RoleManagerProps> = ({ tenant, datasource }) 
     if (!confirm('Are you sure you want to delete this role?')) return;
 
     try {
-      await fetch(`/api/rbac/roles/${roleId}`, { method: 'DELETE' });
+      await apiClient(`/api/rbac/roles/${roleId}`, { method: 'DELETE' });
       await fetchRoles();
     } catch (error) {
       console.error('Failed to delete role:', error);

@@ -114,10 +114,19 @@ func TestProfileService_Integration(t *testing.T) {
 		ClearanceLevel: "L2",
 	}
 
+	// Alpha requires NOT NULL columns added by 20260709_rename_identity_profile_columns:
+	// idp_client_id (client-scoped namespace), idp_group_id (mirrors idp_group_claim),
+	// profile_key (mirrors functional_role). Provide stable test values.
+	idpClientID := "test-idp-client"
 	_, err = tx.ExecContext(ctx, `
-		INSERT INTO security.identity_profile_mappings (mapping_id, tenant_id, idp_group_claim, functional_role, clearance_level)
-		VALUES ($1, $2, $3, $4, $5)
-	`, mapping.MappingID, mapping.TenantID, mapping.IDPGroupClaim, mapping.FunctionalRole, mapping.ClearanceLevel)
+		INSERT INTO security.identity_profile_mappings
+			(mapping_id, tenant_id, idp_client_id, idp_group_id, idp_group_claim,
+			 functional_role, clearance_level, profile_key)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+	`, mapping.MappingID, mapping.TenantID, idpClientID,
+		mapping.IDPGroupClaim, mapping.IDPGroupClaim,
+		mapping.FunctionalRole, mapping.ClearanceLevel,
+		mapping.FunctionalRole)
 	require.NoError(t, err)
 
 	// Test EnrichSubjectAttributes using a query in the transaction

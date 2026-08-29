@@ -101,7 +101,6 @@ const TenantUserAssignmentPage: React.FC = () => {
   
   // Data list states
   const [mappings, setMappings] = useState<TenantAccessMapping[]>([]);
-  const [tenants, setTenants] = useState<Tenant[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   
   const [loading, setLoading] = useState(true);
@@ -115,21 +114,12 @@ const TenantUserAssignmentPage: React.FC = () => {
       const mappingsRes = await authFetch('/api/admin/tenant-access');
       if (!mappingsRes.ok) throw new Error(mappingsRes.error || 'Failed to fetch tenant access mappings');
       
-      // 2. Fetch eligible tenants
-      const tenantsRes = await authFetch('/api/admin/tenant-access/tenants');
-      if (!tenantsRes.ok) throw new Error(tenantsRes.error || 'Failed to fetch eligible tenants');
-      
-      // 3. Fetch all system users (for assignment dropdown)
+      // 2. Fetch all system users (for assignment dropdown)
       const usersRes = await authFetch('/api/rbac/users');
       if (!usersRes.ok) throw new Error(usersRes.error || 'Failed to fetch system users');
 
-      // Fetch tenants first to build the active tenant map
-      const fetchedTenants = tenantsRes.data?.success ? tenantsRes.data.data : (tenantsRes.data || []);
-      const activeTenants = fetchedTenants.filter(isTenantAvailable);
-      setTenants(activeTenants);
-      
       // Build a set of active tenant IDs for filtering mappings
-      const activeTenantIds = new Set(activeTenants.map((t: any) => t.id));
+      const activeTenantIds = new Set(accessibleTenants.map((t) => t.id));
       
       // Filter mappings to only show those for active tenants
       const allMappings = mappingsRes.data?.success ? mappingsRes.data.data : (mappingsRes.data || []);
@@ -170,9 +160,9 @@ const TenantUserAssignmentPage: React.FC = () => {
   // Map tenant details by ID
   const tenantMap = useMemo(() => {
     const map = new Map<string, Tenant>();
-    tenants.forEach(t => map.set(t.id, t));
+    accessibleTenants.forEach(t => map.set(t.id, t));
     return map;
-  }, [tenants]);
+  }, [accessibleTenants]);
 
   // Filtered mappings list
   const filteredMappings = useMemo(() => {
@@ -242,7 +232,7 @@ const TenantUserAssignmentPage: React.FC = () => {
     setActionLoading(true);
     try {
       setErrorMsg(null);
-      const res = await authFetch(`/api/admin/tenant-access/${selectedMapping.id}`, {
+      const res = await authFetch(`/api/admin/tenant-access/${selectedMapping.user_id}/${selectedMapping.tenant_id}`, {
         method: 'PUT',
         json: { access_role: selectedRole }
       });
@@ -275,7 +265,7 @@ const TenantUserAssignmentPage: React.FC = () => {
     setActionLoading(true);
     try {
       setErrorMsg(null);
-      const res = await authFetch(`/api/admin/tenant-access/${mapping.id}`, {
+      const res = await authFetch(`/api/admin/tenant-access/${mapping.user_id}/${mapping.tenant_id}`, {
         method: 'DELETE'
       });
       
@@ -360,7 +350,7 @@ const TenantUserAssignmentPage: React.FC = () => {
               onChange={(e) => setSelectedTenantFilter(e.target.value)}
             >
               <MenuItem value="all">All Tenants</MenuItem>
-              {tenants.map((t) => (
+              {accessibleTenants.map((t) => (
                 <MenuItem key={t.id} value={t.id}>
                   {t.display_name || t.name}
                 </MenuItem>
@@ -506,14 +496,14 @@ const TenantUserAssignmentPage: React.FC = () => {
             />
 
             {/* Tenant Selection */}
-            <FormControl fullWidth size="small" disabled={!isPlatformOperator && tenants.length <= 1}>
+            <FormControl fullWidth size="small" disabled={!isPlatformOperator && accessibleTenants.length <= 1}>
               <InputLabel>Select Tenant</InputLabel>
               <Select
                 value={selectedTenantId}
                 label="Select Tenant"
                 onChange={(e) => setSelectedTenantId(e.target.value)}
               >
-                {tenants.map((t) => (
+              {accessibleTenants.map((t) => (
                   <MenuItem key={t.id} value={t.id}>
                     {t.display_name || t.name}
                   </MenuItem>

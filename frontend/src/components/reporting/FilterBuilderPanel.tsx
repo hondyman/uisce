@@ -590,11 +590,12 @@ const ConditionRow: React.FC<{
               (f.technicalName || '').toLowerCase().includes(q)
             );
           }}
+          sx={{ minWidth: 200, flex: '1 1 35%' }}
           renderInput={params => (
             <TextField
               {...params}
               placeholder="Select field…"
-              sx={{ ...fieldInputSx, minWidth: 130, flex: '1 1 26%' }}
+              sx={fieldInputSx}
               InputProps={{
                 ...params.InputProps,
                 startAdornment: condition.fieldExpr ? (
@@ -603,12 +604,11 @@ const ConditionRow: React.FC<{
                       size="small"
                       label={condition.fieldExpr}
                       sx={{
-                        height: 16, fontSize: '0.6rem', fontWeight: 700,
+                        height: 18, fontSize: '0.65rem', fontWeight: 700,
                         fontFamily: 'monospace', color: '#00D4FF',
                         bgcolor: 'rgba(0, 212, 255, 0.08)',
                         border: '1px solid rgba(0, 212, 255, 0.3)',
-                        maxWidth: 160,
-                        '& .MuiChip-label': { px: 0.75, overflow: 'hidden', textOverflow: 'ellipsis' },
+                        '& .MuiChip-label': { px: 0.75 },
                       }}
                     />
                   </Box>

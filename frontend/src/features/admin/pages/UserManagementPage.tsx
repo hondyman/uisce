@@ -46,6 +46,7 @@ import {
   ViewModule as ViewModuleIcon,
 } from '@mui/icons-material';
 import { useTenant } from '../../../contexts/TenantContext';
+import { apiClient } from '../../../utils/apiClient';
 
 interface User {
   id: string;
@@ -110,13 +111,7 @@ export const UserManagementPage: React.FC = () => {
     try {
       setLoading(true);
       setError(null);
-      const response = await fetch(`/api/rbac/users?tenant_id=${tenant.id}`);
-      
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-      }
-      
-      const data = await response.json();
+      const data = await apiClient<any[]>(`/api/rbac/users?tenant_id=${tenant.id}`);
       setUsers(Array.isArray(data) ? data : []);
     } catch (error) {
       console.error('Failed to fetch users:', error);
@@ -132,8 +127,7 @@ export const UserManagementPage: React.FC = () => {
     if (!tenant?.id || !datasource?.id) return;
     
     try {
-      const response = await fetch('/api/rbac/roles');
-      const data = await response.json();
+      const data = await apiClient<any[]>('/api/rbac/roles');
       setRoles(Array.isArray(data) ? data.filter((r: Role) => r.is_active) : []);
     } catch (error) {
       console.error('Failed to fetch roles:', error);
@@ -146,8 +140,7 @@ export const UserManagementPage: React.FC = () => {
     if (!tenant?.id || !datasource?.id) return;
 
     try {
-      const response = await fetch(`/api/rbac/users/${userId}/roles`);
-      const data = await response.json();
+      const data = await apiClient<any[]>(`/api/rbac/users/${userId}/roles`);
       setUserRoles(Array.isArray(data) ? data : []);
       
       // Calculate available roles (not yet assigned)
@@ -165,23 +158,17 @@ export const UserManagementPage: React.FC = () => {
     if (!selectedUser || !selectedRoleId || !tenant?.id || !datasource?.id) return;
 
     try {
-      const response = await fetch(
-        `/api/rbac/roles/${selectedRoleId}/assign`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            user_id: selectedUser.id,
-            scope_type: 'global',
-          }),
-        }
-      );
+      await apiClient(`/api/rbac/roles/${selectedRoleId}/assign`, {
+        method: 'POST',
+        body: JSON.stringify({
+          user_id: selectedUser.id,
+          scope_type: 'global',
+        }),
+      });
 
-      if (response.ok) {
-        await fetchUserRoles(selectedUser.id);
-        setIsAssigning(false);
-        setSelectedRoleId('');
-      }
+      await fetchUserRoles(selectedUser.id);
+      setIsAssigning(false);
+      setSelectedRoleId('');
     } catch (error) {
       console.error('Failed to assign role:', error);
     }
@@ -196,10 +183,7 @@ export const UserManagementPage: React.FC = () => {
     }
 
     try {
-      await fetch(
-        `/api/rbac/roles/${roleId}/unassign/${selectedUser.id}`,
-        { method: 'DELETE' }
-      );
+      await apiClient(`/api/rbac/roles/${roleId}/unassign/${selectedUser.id}`, { method: 'DELETE' });
       await fetchUserRoles(selectedUser.id);
     } catch (error) {
       console.error('Failed to unassign role:', error);
@@ -211,9 +195,8 @@ export const UserManagementPage: React.FC = () => {
     if (!tenant?.id) return;
 
     try {
-      const response = await fetch('/api/rbac/users', {
+      await apiClient('/api/rbac/users', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ...newUser,
           first_name: newUser.name.split(' ')[0],
@@ -221,14 +204,9 @@ export const UserManagementPage: React.FC = () => {
         }),
       });
 
-      if (response.ok) {
-        setIsCreating(false);
-        setNewUser({ username: '', email: '', name: '', password: 'password123' });
-        fetchUsers();
-      } else {
-        const err = await response.text();
-        alert(`Failed to create user: ${err}`);
-      }
+      setIsCreating(false);
+      setNewUser({ username: '', email: '', name: '', password: 'password123' });
+      fetchUsers();
     } catch (error) {
       console.error('Failed to create user:', error);
       alert('Failed to create user');

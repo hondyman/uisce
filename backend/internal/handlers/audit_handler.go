@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/hondyman/uisce/backend/internal/boresolver"
 	"github.com/hondyman/uisce/backend/internal/logging"
 	"github.com/hondyman/uisce/libs/jwt-middleware"
@@ -24,7 +25,6 @@ type AuditLogEntry struct {
 	Resource     string                 `json:"resource"`
 	ResourceType string                 `json:"resourceType"`
 	Details      map[string]interface{} `json:"details"`
-	Core         bool                   `json:"core"`
 }
 
 // AuditLogResponse is the API response structure
@@ -40,8 +40,39 @@ func HandleGetAuditLogs(w http.ResponseWriter, r *http.Request) {
 	offsetStr := r.URL.Query().Get("offset")
 	startDateStr := r.URL.Query().Get("startDate")
 	endDateStr := r.URL.Query().Get("endDate")
+	datasourceId := r.URL.Query().Get("datasourceId")
 	claims := jwtmiddleware.GetClaimsFromContext(r)
+	if claims == nil || claims.TenantID == "" {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
 	tenantID := claims.TenantID
+
+	// startDateStr/endDateStr/datasourceId are interpolated directly into a raw
+	// SQL string below (DataFusion has no parameterized query support), so they
+	// must be strictly validated first to prevent SQL injection.
+	if startDateStr != "" {
+		if _, err := time.Parse(time.RFC3339, startDateStr); err != nil {
+			http.Error(w, "Invalid startDate: must be RFC3339", http.StatusBadRequest)
+			return
+		}
+	}
+	if endDateStr != "" {
+		if _, err := time.Parse(time.RFC3339, endDateStr); err != nil {
+			http.Error(w, "Invalid endDate: must be RFC3339", http.StatusBadRequest)
+			return
+		}
+	}
+	if datasourceId != "" {
+		if _, err := uuid.Parse(datasourceId); err != nil {
+			http.Error(w, "Invalid datasourceId: must be a UUID", http.StatusBadRequest)
+			return
+		}
+	}
+	if _, err := uuid.Parse(tenantID); err != nil {
+		http.Error(w, "Invalid tenant context", http.StatusBadRequest)
+		return
+	}
 
 	limit := 10
 	offset := 0
@@ -73,6 +104,9 @@ func HandleGetAuditLogs(w http.ResponseWriter, r *http.Request) {
 	if tenantID != "" {
 		whereClause += fmt.Sprintf(" AND tenant_id = '%s'", tenantID)
 	}
+	if datasourceId != "" {
+		whereClause += fmt.Sprintf(" AND datasource_id = '%s'", datasourceId)
+	}
 
 	sortBy := r.URL.Query().Get("sortBy")
 	sortOrder := r.URL.Query().Get("sortOrder")
@@ -91,7 +125,7 @@ func HandleGetAuditLogs(w http.ResponseWriter, r *http.Request) {
 	}
 
 	sqlQuery := fmt.Sprintf(
-		"SELECT id, tenant_id, timestamp, user_name, user_email, action, resource, resource_type, details, core FROM audit_logs%s ORDER BY %s %s LIMIT %d OFFSET %d",
+		"SELECT id, tenant_id, timestamp, user_name, user_email, action, resource, resource_type, details FROM audit_logs%s ORDER BY %s %s LIMIT %d OFFSET %d",
 		whereClause, sortBy, sortOrder, limit, offset,
 	)
 
@@ -130,11 +164,6 @@ func HandleGetAuditLogs(w http.ResponseWriter, r *http.Request) {
 				e.Details = detailsMap
 			} else {
 				e.Details = map[string]interface{}{"raw": detailsStr}
-			}
-		}
-		if colCount > 9 {
-			if coreStr := fmt.Sprintf("%v", resp.Records[9][rowIdx]); coreStr != "" && coreStr != "nil" {
-				e.Core = coreStr == "true" || coreStr == "True"
 			}
 		}
 		entries = append(entries, e)

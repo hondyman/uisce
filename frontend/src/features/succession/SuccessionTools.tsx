@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
-import { 
-  TrendingUp, Users, DollarSign, Target, 
-  Award, AlertTriangle, CheckCircle
-} from 'lucide-react';
+import {
+  TrendingUp as TrendingUpIcon, Group as UsersIcon, AttachMoney as DollarSignIcon, TrackChanges as TargetIcon,
+  EmojiEvents as AwardIcon, WarningAmber as AlertTriangleIcon, CheckCircle as CheckCircleIcon
+} from '@mui/icons-material';
 
 // Types
 interface PracticeMetrics {

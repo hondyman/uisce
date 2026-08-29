@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  Sparkles, DollarSign, TrendingDown, Repeat, 
-  CheckCircle, Clock, X, ChevronRight
-} from 'lucide-react';
+import {
+  AutoAwesome as SparklesIcon, AttachMoney as DollarSignIcon, TrendingDown as TrendingDownIcon, Repeat as RepeatIcon,
+  CheckCircle as CheckCircleIcon, Schedule as ClockIcon, Close as CloseIcon, NavigateNext as ChevronRightIcon
+} from '@mui/icons-material';
 import { fetchAPI } from '../../../api';
 
 // Types

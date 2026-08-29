@@ -4,6 +4,7 @@
  */
 
 import React, { useState, useEffect, useMemo } from 'react';
+import apiClient from '../../utils/apiClient';
 import {
   Box,
   Container,
@@ -106,10 +107,7 @@ export const UserRoleAssignment: React.FC<UserRoleAssignmentProps> = ({
   const fetchUsers = async () => {
     try {
       setLoading(true);
-      const response = await fetch(
-        `/api/users`
-      );
-      const data = await response.json();
+      const data = await apiClient<User[]>(`/api/users`);
       setUsers(data || [
         {
           id: '1',
@@ -157,10 +155,7 @@ export const UserRoleAssignment: React.FC<UserRoleAssignmentProps> = ({
   // Fetch roles
   const fetchRoles = async () => {
     try {
-      const response = await fetch(
-        `/api/rbac/roles`
-      );
-      const data = await response.json();
+      const data = await apiClient<Role[]>(`/api/rbac/roles`);
       setRoles(data || [
         { id: '1', role_key: 'editor', role_name: 'Editor', role_level: 'editor' },
         { id: '2', role_key: 'viewer', role_name: 'Viewer', role_level: 'viewer' },
@@ -173,10 +168,7 @@ export const UserRoleAssignment: React.FC<UserRoleAssignmentProps> = ({
   // Fetch user roles
   const fetchUserRoles = async (userId: string) => {
     try {
-      const response = await fetch(
-        `/api/rbac/users/${userId}/roles`
-      );
-      const data = await response.json();
+      const data = await apiClient<UserRole[]>(`/api/rbac/users/${userId}/roles`);
       setUserRoles(data || []);
     } catch (error) {
       console.error('Failed to fetch user roles:', error);
@@ -189,9 +181,8 @@ export const UserRoleAssignment: React.FC<UserRoleAssignmentProps> = ({
 
     try {
       setSaving(true);
-      await fetch(`/api/rbac/roles/${assignmentForm.role_id}/assign`, {
+      await apiClient(`/api/rbac/roles/${assignmentForm.role_id}/assign`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           user_id: selectedUser.id,
           scope_type: assignmentForm.scope_type,
@@ -216,7 +207,7 @@ export const UserRoleAssignment: React.FC<UserRoleAssignmentProps> = ({
     if (!confirm('Are you sure you want to remove the \'Editor\' role from \'' + selectedUser.full_name + '\'?')) return;
 
     try {
-      await fetch(`/api/rbac/roles/${roleId}/unassign/${selectedUser.id}`, {
+      await apiClient(`/api/rbac/roles/${roleId}/unassign/${selectedUser.id}`, {
         method: 'DELETE',
       });
       await fetchUserRoles(selectedUser.id);

@@ -92,7 +92,7 @@ export const ConfigurationTabContent: React.FC<ConfigurationTabContentProps> = (
     return defaultConfig;
   }, [data]);
 
-  const [formData, setFormData] = useState<TenantConfiguration>(initialConfig);
+  const [formData, setFormData] = useState<TenantConfiguration>(initialConfig ?? defaultConfig);
   const [hasChanges, setHasChanges] = useState(false);
   const [saving, setSaving] = useState(false);
 
@@ -109,13 +109,16 @@ export const ConfigurationTabContent: React.FC<ConfigurationTabContentProps> = (
     field: string,
     value: any
   ) => {
-    setFormData((prev) => ({
-      ...prev,
-      [section]: {
-        ...prev[section],
-        [field]: value,
-      },
-    }));
+    setFormData((prev) => {
+      const safePrev = prev ?? defaultConfig;
+      return {
+        ...safePrev,
+        [section]: {
+          ...(safePrev[section] ?? {}),
+          [field]: value,
+        },
+      };
+    });
     setHasChanges(true);
   };
 
@@ -214,7 +217,7 @@ export const ConfigurationTabContent: React.FC<ConfigurationTabContentProps> = (
             <FormControlLabel
               control={
                 <Switch
-                  checked={formData.retention.enabled}
+                  checked={formData?.retention?.enabled ?? false}
                   onChange={(e) =>
                     handleConfigChange('retention', 'enabled', e.target.checked)
                   }
@@ -311,7 +314,7 @@ export const ConfigurationTabContent: React.FC<ConfigurationTabContentProps> = (
           <FormControlLabel
             control={
               <Checkbox
-                checked={formData.security.mfaRequired}
+                checked={formData?.security?.mfaRequired ?? false}
                 onChange={(e) =>
                   handleConfigChange('security', 'mfaRequired', e.target.checked)
                 }
@@ -333,7 +336,7 @@ export const ConfigurationTabContent: React.FC<ConfigurationTabContentProps> = (
           <FormControlLabel
             control={
               <Checkbox
-                checked={formData.security.ssoEnabled}
+                checked={formData?.security?.ssoEnabled ?? false}
                 onChange={(e) =>
                   handleConfigChange('security', 'ssoEnabled', e.target.checked)
                 }
@@ -361,7 +364,7 @@ export const ConfigurationTabContent: React.FC<ConfigurationTabContentProps> = (
               <TextField
                 multiline
                 rows={3}
-                value={formData.security.ipWhitelist.join('\n')}
+                value={formData?.security?.ipWhitelist?.join('\n') ?? ''}
                 onChange={(e) => handleIpWhitelistChange(e.target.value)}
                 placeholder="192.168.1.1&#10;10.0.0.0/24"
                 variant="outlined"

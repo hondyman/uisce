@@ -6,9 +6,29 @@ import (
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/hondyman/uisce/backend/internal/auth"
 	"github.com/hondyman/uisce/backend/internal/offboarding"
+	"github.com/hondyman/uisce/backend/internal/security"
 )
+
+// requireOffboardingAdmin authenticates the caller, requires an admin role
+// (offboarding a user — including reassigning their work and deactivating
+// access — is a highly sensitive admin action, never a self-service one),
+// and returns the caller's tenant ID (empty for global admins acting
+// tenant-agnostically).
+func requireOffboardingAdmin(w http.ResponseWriter, r *http.Request) (auth security.AuthInfo, tenantID string, ok bool) {
+	auth, ok = security.RequireAuth(w, r)
+	if !ok {
+		return security.AuthInfo{}, "", false
+	}
+	if !isTenantOrGlobalAdmin(auth.Roles) {
+		http.Error(w, "Forbidden: admin role required", http.StatusForbidden)
+		return security.AuthInfo{}, "", false
+	}
+	if len(auth.TenantIDs) > 0 {
+		tenantID = auth.TenantIDs[0]
+	}
+	return auth, tenantID, true
+}
 
 type OffboardingHandler struct {
 	offboardingService *offboarding.OffboardingService
@@ -20,11 +40,8 @@ func NewOffboardingHandler(os *offboarding.OffboardingService) *OffboardingHandl
 
 // POST /api/admin/offboard
 func (h *OffboardingHandler) OffboardUser(w http.ResponseWriter, r *http.Request) {
-	user, ok := auth.GetUserFromContext(r.Context())
-	// For MVP, assume everyone can call this or rely on basic auth checks somewhere.
-	// Ideally check if user.IsAdmin
+	auth, tenantID, ok := requireOffboardingAdmin(w, r)
 	if !ok {
-		http.Error(w, "Unauthorized", 401)
 		return
 	}
 
@@ -36,7 +53,7 @@ func (h *OffboardingHandler) OffboardUser(w http.ResponseWriter, r *http.Request
 	json.NewDecoder(r.Body).Decode(&req)
 
 	id, err := h.offboardingService.InitiateOffboarding(
-		r.Context(), user.TenantID, req.UserID, req.ReassignToUserID, user.ID, req.Reason,
+		r.Context(), tenantID, req.UserID, req.ReassignToUserID, auth.UserID, req.Reason,
 	)
 	if err != nil {
 		http.Error(w, err.Error(), 400)
@@ -49,9 +66,8 @@ func (h *OffboardingHandler) OffboardUser(w http.ResponseWriter, r *http.Request
 
 // GET /api/admin/offboarding
 func (h *OffboardingHandler) ListOffboardings(w http.ResponseWriter, r *http.Request) {
-	user, ok := auth.GetUserFromContext(r.Context())
+	_, tenantID, ok := requireOffboardingAdmin(w, r)
 	if !ok {
-		http.Error(w, "Unauthorized", 401)
 		return
 	}
 
@@ -63,7 +79,7 @@ func (h *OffboardingHandler) ListOffboardings(w http.ResponseWriter, r *http.Req
 		fmt.Sscanf(oStr, "%d", &offset)
 	}
 
-	obs, total, err := h.offboardingService.ListAllOffboardings(r.Context(), user.TenantID, limit, offset)
+	obs, total, err := h.offboardingService.ListAllOffboardings(r.Context(), tenantID, limit, offset)
 	if err != nil {
 		http.Error(w, err.Error(), 500)
 		return
@@ -77,14 +93,13 @@ func (h *OffboardingHandler) ListOffboardings(w http.ResponseWriter, r *http.Req
 }
 
 func (h *OffboardingHandler) ReverseOffboarding(w http.ResponseWriter, r *http.Request) {
-	user, ok := auth.GetUserFromContext(r.Context())
+	auth, _, ok := requireOffboardingAdmin(w, r)
 	if !ok {
-		http.Error(w, "Unauthorized", 401)
 		return
 	}
 
 	id := chi.URLParam(r, "offboardingId")
-	if err := h.offboardingService.ReverseOffboarding(r.Context(), id, user.ID); err != nil {
+	if err := h.offboardingService.ReverseOffboarding(r.Context(), id, auth.UserID); err != nil {
 		http.Error(w, err.Error(), 400)
 		return
 	}

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { TrendingDown, AlertTriangle, DollarSign, Calendar, CheckCircle, X, TrendingUp } from 'lucide-react';
+import { TrendingDown as TrendingDownIcon, WarningAmber as AlertTriangleIcon, AttachMoney as DollarSignIcon, CalendarToday as CalendarIcon, CheckCircle as CheckCircleIcon, Close as CloseIcon, TrendingUp as TrendingUpIcon } from '@mui/icons-material';
 
 interface TaxOpportunity {
   opportunityId: string;

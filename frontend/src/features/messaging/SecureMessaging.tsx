@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Send, Paperclip, Search, Check, CheckCheck, Shield, Lock } from 'lucide-react';
+import { Send as SendIcon, AttachFile as PaperclipIcon, Search as SearchIcon, Check as CheckIcon, CheckCircle as CheckCheckIcon, Security as ShieldIcon, Lock as LockIcon } from '@mui/icons-material';
 
 interface Message {
   messageId: string;

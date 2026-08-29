@@ -4,16 +4,16 @@
  */
 
 import React, { useMemo } from 'react';
-import { 
-  CheckCircle, 
-  XCircle, 
-  Clock, 
-  AlertTriangle,
+import {
+  CheckCircle as CheckCircleIcon,
+  Cancel as XCircleIcon,
+  Schedule as ClockIcon,
+  Warning as AlertTriangleIcon,
   TrendingUp,
   Calendar,
-  Zap,
+  Bolt as ZapIcon,
   Shield
-} from 'lucide-react';
+} from '@mui/icons-material';
 import { useTenantContext } from '../../hooks/useTenantContext';
 import { useSchedulerStats, useJobs, Job } from '../../api/schedulerApi';
 
@@ -63,7 +63,7 @@ const SchedulerOverview: React.FC = () => {
 
         <div className="stat-card success">
           <div className="stat-icon-wrapper">
-            <CheckCircle />
+            <CheckCircleIcon />
           </div>
           <div className="stat-content">
             <span className="stat-number">{stats?.succeeded_last_24h || 0}</span>
@@ -73,7 +73,7 @@ const SchedulerOverview: React.FC = () => {
 
         <div className="stat-card danger">
           <div className="stat-icon-wrapper">
-            <XCircle />
+            <XCircleIcon />
           </div>
           <div className="stat-content">
             <span className="stat-number">{stats?.failed_last_24h || 0}</span>
@@ -94,7 +94,7 @@ const SchedulerOverview: React.FC = () => {
 
         <div className={`stat-card ${stats?.slo_breached_jobs ? 'danger' : 'success'}`}>
           <div className="stat-icon-wrapper">
-            <AlertTriangle />
+            <AlertTriangleIcon />
           </div>
           <div className="stat-content">
             <span className="stat-number">{stats?.slo_breached_jobs || 0}</span>
@@ -104,11 +104,11 @@ const SchedulerOverview: React.FC = () => {
 
         <div className="stat-card primary">
           <div className="stat-icon-wrapper">
-            <Zap />
+            <ZapIcon />
           </div>
           <div className="stat-content">
              {/* Show remaining budget roughly */}
-            <span className="stat-number">{100 - (stats?.error_budget_consumed || 0)}%</span> 
+            <span className="stat-number">{100 - (stats?.error_budget_consumed || 0)}%</span>
             <span className="stat-title">Error Budget</span>
           </div>
         </div>
@@ -119,7 +119,7 @@ const SchedulerOverview: React.FC = () => {
         {/* Upcoming Jobs */}
         <section className="overview-section">
           <div className="section-header">
-            <h3><Clock className="section-icon" /> Upcoming Jobs</h3>
+            <h3><ClockIcon className="section-icon" /> Upcoming Jobs</h3>
           </div>
           <div className="jobs-list">
             {upcomingJobs.length === 0 ? (
@@ -159,8 +159,8 @@ const SchedulerOverview: React.FC = () => {
                     <span className="category-count">{count}</span>
                   </div>
                   <div className="bar-container">
-                    <div 
-                      className="bar-fill" 
+                    <div
+                      className="bar-fill"
                       style={{ width: `${(count / (stats?.total_jobs || 1)) * 100}%` }}
                     />
                   </div>
@@ -173,7 +173,7 @@ const SchedulerOverview: React.FC = () => {
         {/* Running Jobs */}
         <section className="overview-section wide">
           <div className="section-header">
-            <h3><Zap className="section-icon" /> Currently Running</h3>
+            <h3><ZapIcon className="section-icon" /> Currently Running</h3>
             <span className="running-count">{stats?.running_jobs || 0} active</span>
           </div>
           {stats?.running_jobs === 0 ? (
@@ -195,14 +195,14 @@ function formatRelativeTime(date: Date): string {
   const now = new Date();
   const diffMs = date.getTime() - now.getTime();
   const diffMins = Math.round(diffMs / 60000);
-  
+
   if (diffMins < 0) return 'Overdue';
   if (diffMins < 1) return 'Now';
   if (diffMins < 60) return `in ${diffMins}m`;
-  
+
   const diffHours = Math.round(diffMins / 60);
   if (diffHours < 24) return `in ${diffHours}h`;
-  
+
   const diffDays = Math.round(diffHours / 24);
   return `in ${diffDays}d`;
 }

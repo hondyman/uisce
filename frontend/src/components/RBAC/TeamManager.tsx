@@ -10,23 +10,23 @@
  */
 
 import React, { useState, useEffect, useMemo } from 'react';
+import { Box, Typography } from '@mui/material';
 import {
-  Users,
-  Plus,
-  X,
-  Save,
-  Trash2,
-  UserPlus,
-  UserMinus,
-  Search,
-  Filter,
-  Shield,
-  Building2,
-  Target,
-  Network,
-  Crown,
-  CheckCircle2,
-} from 'lucide-react';
+  Group as GroupIcon,
+  Add as AddIcon,
+  Close as CloseIcon,
+  Save as SaveIcon,
+  Delete as DeleteIcon,
+  PersonAdd as PersonAddIcon,
+  Search as SearchIcon,
+  FilterList as FilterIcon,
+  Security as SecurityIcon,
+  TrackChanges as TargetIcon,
+  Hub as NetworkIcon,
+  WorkspacePremium as CrownIcon,
+  CheckCircle as CheckCircleIcon,
+} from '@mui/icons-material';
+import apiClient from '../../utils/apiClient';
 
 // ============================================================================
 // TYPE DEFINITIONS
@@ -102,8 +102,7 @@ export const TeamManager: React.FC<TeamManagerProps> = ({ tenant, datasource }) 
   const fetchTeams = async () => {
     try {
       setLoading(true);
-      const response = await fetch('/api/rbac/teams');
-      const data = await response.json();
+      const data = await apiClient<Team[]>('/api/rbac/teams');
       setTeams(data || []);
     } catch (error) {
       console.error('Failed to fetch teams:', error);
@@ -115,8 +114,7 @@ export const TeamManager: React.FC<TeamManagerProps> = ({ tenant, datasource }) 
   // Fetch team members
   const fetchTeamMembers = async (teamId: string) => {
     try {
-      const response = await fetch(`/api/rbac/teams/${teamId}/members`);
-      const data = await response.json();
+      const data = await apiClient<TeamMember[]>(`/api/rbac/teams/${teamId}/members`);
       setTeamMembers(data || []);
     } catch (error) {
       console.error('Failed to fetch team members:', error);
@@ -126,8 +124,7 @@ export const TeamManager: React.FC<TeamManagerProps> = ({ tenant, datasource }) 
   // Fetch users
   const fetchUsers = async () => {
     try {
-      const response = await fetch('/api/users');
-      const data = await response.json();
+      const data = await apiClient<User[]>('/api/users');
       setUsers(data || []);
     } catch (error) {
       console.error('Failed to fetch users:', error);
@@ -138,9 +135,8 @@ export const TeamManager: React.FC<TeamManagerProps> = ({ tenant, datasource }) 
   const createTeam = async () => {
     try {
       setSaving(true);
-      const response = await fetch(`/api/rbac/teams`, {
+      await apiClient(`/api/rbac/teams`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ...teamForm,
         }),
@@ -161,7 +157,7 @@ export const TeamManager: React.FC<TeamManagerProps> = ({ tenant, datasource }) 
 
     try {
       setSaving(true);
-      await fetch(`/api/rbac/teams/${teamId}`, {
+      await apiClient(`/api/rbac/teams/${teamId}`, {
         method: 'DELETE',
       });
       await fetchTeams();
@@ -182,9 +178,8 @@ export const TeamManager: React.FC<TeamManagerProps> = ({ tenant, datasource }) 
 
     try {
       setSaving(true);
-      await fetch(`/api/rbac/teams/${selectedTeam.id}/members`, {
+      await apiClient(`/api/rbac/teams/${selectedTeam.id}/members`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ...memberForm,
         }),
@@ -206,7 +201,7 @@ export const TeamManager: React.FC<TeamManagerProps> = ({ tenant, datasource }) 
 
     try {
       setSaving(true);
-      await fetch(`/api/rbac/teams/${selectedTeam.id}/members/${memberId}`, {
+      await apiClient(`/api/rbac/teams/${selectedTeam.id}/members/${memberId}`, {
         method: 'DELETE',
       });
       await fetchTeamMembers(selectedTeam.id);
@@ -261,12 +256,12 @@ export const TeamManager: React.FC<TeamManagerProps> = ({ tenant, datasource }) 
   }, [selectedTeam]);
 
   const getTeamTypeIcon = (type: string) => {
-    const icons = {
-      functional: <Building2 className="w-5 h-5" />,
-      project: <Target className="w-5 h-5" />,
-      cross_functional: <Network className="w-5 h-5" />,
+    const icons: Record<string, React.ReactNode> = {
+      functional: <GroupIcon sx={{ width: 20, height: 20 }} />,
+      project: <TargetIcon sx={{ width: 20, height: 20 }} />,
+      cross_functional: <NetworkIcon sx={{ width: 20, height: 20 }} />,
     };
-    return icons[type as keyof typeof icons] || <Users className="w-5 h-5" />;
+    return icons[type] || <GroupIcon sx={{ width: 20, height: 20 }} />;
   };
 
   const getTeamTypeColor = (type: string) => {
@@ -279,12 +274,12 @@ export const TeamManager: React.FC<TeamManagerProps> = ({ tenant, datasource }) 
   };
 
   const getRoleIcon = (role: string) => {
-    const icons = {
-      admin: <Crown className="w-4 h-4" />,
-      lead: <Shield className="w-4 h-4" />,
-      member: <CheckCircle2 className="w-4 h-4" />,
+    const icons: Record<string, React.ReactNode> = {
+      admin: <CrownIcon sx={{ width: 16, height: 16 }} />,
+      lead: <SecurityIcon sx={{ width: 16, height: 16 }} />,
+      member: <CheckCircleIcon sx={{ width: 16, height: 16 }} />,
     };
-    return icons[role as keyof typeof icons] || <CheckCircle2 className="w-4 h-4" />;
+    return icons[role] || <CheckCircleIcon sx={{ width: 16, height: 16 }} />;
   };
 
   const getRoleColor = (role: string) => {
@@ -298,12 +293,12 @@ export const TeamManager: React.FC<TeamManagerProps> = ({ tenant, datasource }) 
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="flex flex-col items-center gap-4">
-          <Users className="w-12 h-12 animate-pulse text-blue-500" />
-          <p className="text-gray-600">Loading teams...</p>
-        </div>
-      </div>
+      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh' }}>
+        <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
+          <GroupIcon sx={{ width: 48, height: 48, color: 'primary.main', animation: 'pulse 2s infinite' }} />
+          <Typography color="text.secondary">Loading teams...</Typography>
+        </Box>
+      </Box>
     );
   }
 
@@ -314,7 +309,7 @@ export const TeamManager: React.FC<TeamManagerProps> = ({ tenant, datasource }) 
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-3xl font-bold text-gray-900 flex items-center gap-3">
-              <Users className="w-8 h-8 text-blue-600" />
+              <GroupIcon sx={{ width: 32, height: 32, color: 'primary.main' }} />
               Team Manager
             </h1>
             <p className="text-gray-600 mt-2">
@@ -328,7 +323,7 @@ export const TeamManager: React.FC<TeamManagerProps> = ({ tenant, datasource }) 
             }}
             className="px-6 py-3 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-all flex items-center gap-2 shadow-lg"
           >
-            <Plus className="w-5 h-5" />
+            <AddIcon sx={{ width: 20, height: 20 }} />
             Create Team
           </button>
         </div>
@@ -336,7 +331,7 @@ export const TeamManager: React.FC<TeamManagerProps> = ({ tenant, datasource }) 
         {/* Search and Filters */}
         <div className="flex gap-4 mt-6">
           <div className="flex-1 relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+            <SearchIcon sx={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: 'text.secondary', width: 20, height: 20 }} />
             <input
               type="text"
               placeholder="Search teams..."
@@ -404,7 +399,7 @@ export const TeamManager: React.FC<TeamManagerProps> = ({ tenant, datasource }) 
                     }}
                     className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-all"
                   >
-                    <Trash2 className="w-5 h-5" />
+                    <DeleteIcon sx={{ width: 20, height: 20 }} />
                   </button>
                 </div>
               </div>
@@ -470,7 +465,7 @@ export const TeamManager: React.FC<TeamManagerProps> = ({ tenant, datasource }) 
             </>
           ) : (
             <div className="flex flex-col items-center justify-center h-full text-center">
-              <Users className="w-16 h-16 text-gray-300 mb-4" />
+              <GroupIcon sx={{ width: 64, height: 64, color: 'text.disabled', mb: 2 }} />
               <p className="text-gray-500 text-lg font-medium mb-2">
                 No Team Selected
               </p>
@@ -493,7 +488,7 @@ export const TeamManager: React.FC<TeamManagerProps> = ({ tenant, datasource }) 
                   onClick={() => setShowCreateModal(false)}
                   className="p-2 hover:bg-gray-100 rounded-lg transition-all"
                 >
-                  <X className="w-6 h-6 text-gray-600" />
+                  <CloseIcon sx={{ width: 24, height: 24, color: 'text.secondary' }} />
                 </button>
               </div>
             </div>
@@ -591,7 +586,7 @@ export const TeamManager: React.FC<TeamManagerProps> = ({ tenant, datasource }) 
                 disabled={!teamForm.team_key || !teamForm.team_name || !teamForm.manager_user_id || saving}
                 className="px-6 py-3 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-all flex items-center gap-2 disabled:opacity-50"
               >
-                <Save className="w-5 h-5" />
+                <SaveIcon sx={{ width: 20, height: 20 }} />
                 {saving ? 'Creating...' : 'Create Team'}
               </button>
             </div>
@@ -610,7 +605,7 @@ export const TeamManager: React.FC<TeamManagerProps> = ({ tenant, datasource }) 
                   onClick={() => setShowAddMemberModal(false)}
                   className="p-2 hover:bg-gray-100 rounded-lg transition-all"
                 >
-                  <X className="w-6 h-6 text-gray-600" />
+                  <CloseIcon sx={{ width: 24, height: 24, color: 'text.secondary' }} />
                 </button>
               </div>
             </div>
@@ -667,7 +662,7 @@ export const TeamManager: React.FC<TeamManagerProps> = ({ tenant, datasource }) 
                 disabled={!memberForm.user_id || saving}
                 className="px-6 py-3 bg-green-600 text-white rounded-lg font-medium hover:bg-green-700 transition-all flex items-center gap-2 disabled:opacity-50"
               >
-                <UserPlus className="w-5 h-5" />
+                <PersonAddIcon sx={{ width: 20, height: 20 }} />
                 {saving ? 'Adding...' : 'Add Member'}
               </button>
             </div>

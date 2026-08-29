@@ -18,10 +18,19 @@ type SecurityProfile struct {
 }
 
 // IdentityProfileMapping translates external Identity Provider group/role claims to abstract traits.
+//
+// IDPClientID / IDPGroupID / ProfileKey are NOT NULL columns on the live
+// table (added by alpha's 20260709_rename_identity_profile_columns, which
+// doesn't exist in this repo's migration history — see 000063's header
+// comment). Omitting them here previously made CreateMapping/UpdateMapping
+// fail against the real schema.
 type IdentityProfileMapping struct {
 	MappingID      uuid.UUID `db:"mapping_id" json:"mapping_id"`
 	TenantID       uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	IDPClientID    string    `db:"idp_client_id" json:"idp_client_id"`
+	IDPGroupID     string    `db:"idp_group_id" json:"idp_group_id"`
 	IDPGroupClaim  string    `db:"idp_group_claim" json:"idp_group_claim"`
+	ProfileKey     string    `db:"profile_key" json:"profile_key"`
 	FunctionalRole string    `db:"functional_role" json:"functional_role"`
 	ClearanceLevel string    `db:"clearance_level" json:"clearance_level"`
 	CreatedAt      time.Time `db:"created_at" json:"created_at"`

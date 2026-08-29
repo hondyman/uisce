@@ -34,11 +34,6 @@ func RunDiff(args []string) {
 	fmt.Println("Diffing APIs...")
 	localAPIPath := filepath.Join(*dirFlag, "apis", "endpoints.json")
 	diffFile(localAPIPath, envCfg.URL+"/api/api-studio/endpoints?env="+*envFlag)
-
-	// Diff Pages
-	fmt.Println("Diffing Pages...")
-	localPagePath := filepath.Join(*dirFlag, "pages", "pages.json")
-	diffFile(localPagePath, envCfg.URL+"/api/page-studio/pages?env="+*envFlag)
 }
 
 func diffFile(localPath, remoteURL string) {

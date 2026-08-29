@@ -1,7 +1,7 @@
 import React from 'react';
 import { useFeed, FeedItem } from '../api/feed';
 import { FeedCard } from './FeedCard';
-import { Loader2 } from 'lucide-react';
+import { CircularProgress as Loader2Icon } from '@mui/icons-material';
 
 export const Feed: React.FC = () => {
   const { data: feedItems, isLoading, error } = useFeed();

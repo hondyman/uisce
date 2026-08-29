@@ -2,12 +2,17 @@ package api
 
 import (
 	"crypto/rand"
+	"crypto/rsa"
+	"crypto/tls"
 	"database/sql"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
+	"log"
+	"math/big"
 	"net/http"
 	"os"
 	"strconv"
@@ -15,8 +20,79 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/hondyman/uisce/backend/internal/security"
+	"github.com/hondyman/uisce/backend/internal/services"
 	"github.com/hondyman/uisce/libs/jwt-middleware"
 )
+
+// refreshKeycloakJWKS fetches the current Keycloak JWKS document and loads
+// every RSA signing key into secMgr, keyed by "kid". Called at startup and on
+// a periodic timer so a Keycloak key rotation is picked up without a
+// backend restart — see security_manager.go's ValidateToken, which now
+// selects the key by the token's own "kid" header rather than trusting
+// whichever key happened to be fetched first.
+func refreshKeycloakJWKS(secMgr *services.SecurityManager, jwksURL string) error {
+	tr := &http.Transport{}
+	if os.Getenv("SKIP_TLS_VERIFY") == "true" {
+		tr.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
+	}
+	client := &http.Client{Transport: tr, Timeout: 10 * 1e9}
+	resp, err := client.Get(jwksURL)
+	if err != nil {
+		return fmt.Errorf("fetch JWKS: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("JWKS endpoint returned status %d", resp.StatusCode)
+	}
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return fmt.Errorf("read JWKS response: %w", err)
+	}
+
+	var jwks struct {
+		Keys []struct {
+			Kid string `json:"kid"`
+			Kty string `json:"kty"`
+			Alg string `json:"alg"`
+			N   string `json:"n"`
+			E   string `json:"e"`
+		} `json:"keys"`
+	}
+	if err := json.Unmarshal(body, &jwks); err != nil {
+		return fmt.Errorf("parse JWKS: %w", err)
+	}
+
+	keys := make(map[string]*rsa.PublicKey)
+	for _, key := range jwks.Keys {
+		if key.Kty != "RSA" || (key.Alg != "" && key.Alg != "RS256") {
+			continue
+		}
+		nBytes, err := base64.RawURLEncoding.DecodeString(key.N)
+		if err != nil {
+			log.Printf("[WARN] Failed to decode RSA modulus for kid=%s: %v", key.Kid, err)
+			continue
+		}
+		eBytes, err := base64.RawURLEncoding.DecodeString(key.E)
+		if err != nil {
+			log.Printf("[WARN] Failed to decode RSA exponent for kid=%s: %v", key.Kid, err)
+			continue
+		}
+		n := new(big.Int).SetBytes(nBytes)
+		e := 0
+		for _, b := range eBytes {
+			e = e<<8 + int(b)
+		}
+		keys[key.Kid] = &rsa.PublicKey{N: n, E: e}
+	}
+
+	if len(keys) == 0 {
+		return fmt.Errorf("JWKS response contained no usable RSA keys")
+	}
+
+	secMgr.SetRSAPublicKeys(keys)
+	log.Printf("[INFO] Loaded %d Keycloak RS256 key(s) from JWKS", len(keys))
+	return nil
+}
 
 // TenantContext represents extracted tenant context
 type TenantContext struct {
@@ -24,15 +100,24 @@ type TenantContext struct {
 	DatasourceID string
 }
 
+// allowClientTenantHeaderFallback reports whether the X-Tenant-ID header may
+// be trusted when the JWT carries no tenant claim. This must never be enabled
+// in production: the header is fully client-controlled, so trusting it lets
+// any caller assert an arbitrary tenant identity.
+func allowClientTenantHeaderFallback() bool {
+	return getEnv("ALLOW_CLIENT_TENANT_HEADER_FALLBACK", "false") == "true"
+}
+
 // extractTenantContext extracts tenant context from request headers (JWT-validated)
 // WARNING: This function intentionally does NOT fall back to URL query params for security.
-// Tenant ID must come from validated JWT claims or X-Tenant-ID header set by auth middleware.
+// Tenant ID must come from validated JWT claims; the X-Tenant-ID header is only
+// trusted when ALLOW_CLIENT_TENANT_HEADER_FALLBACK=true (local/dev use only).
 func extractTenantContext(r *http.Request) (*TenantContext, error) {
 	var tenantID string
 	if claims := jwtmiddleware.GetClaimsFromContext(r); claims != nil && claims.TenantID != "" {
 		tenantID = claims.TenantID
 	}
-	if tenantID == "" {
+	if tenantID == "" && allowClientTenantHeaderFallback() {
 		tenantID = r.Header.Get("X-Tenant-ID")
 	}
 	datasourceID := r.Header.Get("X-Tenant-Datasource-ID")
@@ -243,15 +328,18 @@ func nilIfNullFloat64(n sql.NullFloat64) *float64 {
 	return &v
 }
 
-// getSecureTenantID extracts tenant ID from validated JWT claims or X-Tenant-ID header.
-// SECURITY: This function intentionally does NOT fall back to URL query parameters.
-// Tenant ID must come from a validated JWT token or the X-Tenant-ID header set by auth middleware.
+// getSecureTenantID extracts tenant ID from validated JWT claims.
+// SECURITY: This function intentionally does NOT fall back to URL query parameters,
+// and only trusts the client-supplied X-Tenant-ID header when
+// ALLOW_CLIENT_TENANT_HEADER_FALLBACK=true (local/dev use only).
 func getSecureTenantID(r *http.Request) string {
 	if claims := jwtmiddleware.GetClaimsFromContext(r); claims != nil && claims.TenantID != "" {
 		return claims.TenantID
 	}
-	if tid := r.Header.Get("X-Tenant-ID"); tid != "" {
-		return tid
+	if allowClientTenantHeaderFallback() {
+		if tid := r.Header.Get("X-Tenant-ID"); tid != "" {
+			return tid
+		}
 	}
 	return ""
 }

@@ -4,6 +4,7 @@
  */
 
 import React, { useState, useEffect } from 'react';
+import apiClient from '../../utils/apiClient';
 import {
   Box,
   Button,
@@ -73,10 +74,7 @@ export const UserRoleAssignment: React.FC<UserRoleAssignmentProps> = ({
   // Fetch assigned users
   const fetchAssignedUsers = async () => {
     try {
-      const response = await fetch(
-        `/api/rbac/roles/${roleId}/users`
-      );
-      const data = await response.json();
+      const data = await apiClient<UserRole[]>(`/api/rbac/roles/${roleId}/users`);
       setAssignedUsers(Array.isArray(data) ? data : []);
     } catch (error) {
       console.error('Failed to fetch assigned users:', error);
@@ -87,10 +85,7 @@ export const UserRoleAssignment: React.FC<UserRoleAssignmentProps> = ({
   // Fetch available users (not yet assigned)
   const fetchAvailableUsers = async () => {
     try {
-      const response = await fetch(
-        `/api/users`
-      );
-      const data = await response.json();
+      const data = await apiClient<User[]>(`/api/users`);
       const users = Array.isArray(data) ? data : [];
       
       // Filter out already assigned users
@@ -107,24 +102,18 @@ export const UserRoleAssignment: React.FC<UserRoleAssignmentProps> = ({
   // Assign role to user
   const assignRole = async (userId: string) => {
     try {
-      const response = await fetch(
-        `/api/rbac/roles/${roleId}/assign`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            user_id: userId,
-            scope_type: 'global',
-          }),
-        }
-      );
+      await apiClient(`/api/rbac/roles/${roleId}/assign`, {
+        method: 'POST',
+        body: JSON.stringify({
+          user_id: userId,
+          scope_type: 'global',
+        }),
+      });
 
-      if (response.ok) {
-        await fetchAssignedUsers();
-        await fetchAvailableUsers();
-        setIsAssigning(false);
-        setSelectedUserId('');
-      }
+      await fetchAssignedUsers();
+      await fetchAvailableUsers();
+      setIsAssigning(false);
+      setSelectedUserId('');
     } catch (error) {
       console.error('Failed to assign role:', error);
     }
@@ -137,10 +126,7 @@ export const UserRoleAssignment: React.FC<UserRoleAssignmentProps> = ({
     }
 
     try {
-      await fetch(
-        `/api/rbac/roles/${roleId}/unassign/${userId}`,
-        { method: 'DELETE' }
-      );
+      await apiClient(`/api/rbac/roles/${roleId}/unassign/${userId}`, { method: 'DELETE' });
       await fetchAssignedUsers();
       await fetchAvailableUsers();
     } catch (error) {

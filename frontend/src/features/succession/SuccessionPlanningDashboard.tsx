@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Users, TrendingUp, Calendar, AlertCircle, DollarSign, ArrowRight } from 'lucide-react';
+import { Group as UsersIcon, TrendingUp as TrendingUpIcon, CalendarToday as CalendarIcon, Warning as AlertCircleIcon, AttachMoney as DollarSignIcon, ArrowForward as ArrowRightIcon } from '@mui/icons-material';
 
 interface SuccessionPlan {
   planId: string;
