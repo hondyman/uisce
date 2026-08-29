@@ -141,13 +141,13 @@ func HandleCreateBusinessTerm(c *gin.Context) {
 	log.Printf("Creating business term: %+v", termData)
 
 	term := gin.H{
-		"id":         generateID(),
-		"name":       termData["name"],
+		"id":          generateID(),
+		"name":        termData["name"],
 		"description": termData["description"],
-		"category":   termData["category"],
-		"owner":      termData["owner"],
-		"status":     "pending",
-		"created_at": time.Now(),
+		"category":    termData["category"],
+		"owner":       termData["owner"],
+		"status":      "pending",
+		"created_at":  time.Now(),
 	}
 
 	c.JSON(201, term)

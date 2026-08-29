@@ -4,9 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -15,11 +17,62 @@ import (
 )
 
 type BOCRUDHandler struct {
-	db *sqlx.DB
+	db      *sqlx.DB
+	trigger *TriggerEngine
 }
 
-func NewBOCRUDHandler(db *sqlx.DB) *BOCRUDHandler {
-	return &BOCRUDHandler{db: db}
+func NewBOCRUDHandler(db *sqlx.DB, trigger *TriggerEngine) *BOCRUDHandler {
+	return &BOCRUDHandler{db: db, trigger: trigger}
+}
+
+// resolveWritableColumns returns the set of real column names for drivingTable,
+// used to allowlist client-supplied JSON keys before they are interpolated into
+// SQL as identifiers (column names can't be bind-parameterized).
+func (h *BOCRUDHandler) resolveWritableColumns(ctx context.Context, drivingTable string) (map[string]bool, error) {
+	schema := "public"
+	table := drivingTable
+	if idx := strings.Index(drivingTable, "."); idx >= 0 {
+		schema = drivingTable[:idx]
+		table = drivingTable[idx+1:]
+	}
+	var cols []string
+	err := h.db.SelectContext(ctx, &cols, `
+		SELECT column_name FROM information_schema.columns
+		WHERE table_schema = $1 AND table_name = $2;
+	`, schema, table)
+	if err != nil {
+		return nil, err
+	}
+	if len(cols) == 0 {
+		return nil, fmt.Errorf("no columns found for table '%s'", drivingTable)
+	}
+	set := make(map[string]bool, len(cols))
+	for _, c := range cols {
+		set[c] = true
+	}
+	return set, nil
+}
+
+// emitBORowEvent fires a best-effort trigger evaluation after a committed write.
+// Failures are logged, never surfaced to the caller — trigger evaluation must not
+// roll back or fail an otherwise-successful BO mutation.
+func (h *BOCRUDHandler) emitBORowEvent(triggerKey string, tenantID uuid.UUID, boKey, recordID string, eventData map[string]interface{}) {
+	if h.trigger == nil {
+		return
+	}
+	go func() {
+		_, err := h.trigger.EvaluateTriggers(context.Background(), &TriggerContext{
+			TenantID:     tenantID.String(),
+			TriggerKey:   triggerKey,
+			TargetEntity: boKey,
+			EntityID:     recordID,
+			EventData:    eventData,
+			RequestedAt:  time.Now(),
+		})
+		if err != nil {
+			log.Printf("[WARN] BO row event %q for %s/%s failed: %v", triggerKey, boKey, recordID, err)
+		}
+	}()
 }
 
 func (h *BOCRUDHandler) RegisterRoutes(r chi.Router) {
@@ -169,6 +222,12 @@ func (h *BOCRUDHandler) HandleUpdateBORecord(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
+	writableCols, err := h.resolveWritableColumns(r.Context(), boMeta.DrivingTable)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("failed resolving table schema: %v", err), http.StatusInternalServerError)
+		return
+	}
+
 	setClauses := make([]string, 0)
 	args := []interface{}{tenantID, recordID}
 	argIdx := 3
@@ -178,6 +237,10 @@ func (h *BOCRUDHandler) HandleUpdateBORecord(w http.ResponseWriter, r *http.Requ
 		lower := strings.ToLower(fieldKey)
 		if lower == "id" || lower == "tenant_id" || lower == "created_at" || lower == "created_by" {
 			continue
+		}
+		if !writableCols[fieldKey] {
+			http.Error(w, fmt.Sprintf("unknown attribute '%s'", fieldKey), http.StatusBadRequest)
+			return
 		}
 		setClauses = append(setClauses, fmt.Sprintf("%s = $%d", fieldKey, argIdx))
 		args = append(args, val)
@@ -227,6 +290,8 @@ func (h *BOCRUDHandler) HandleUpdateBORecord(w http.ResponseWriter, r *http.Requ
 	// Clean byte arrays or UUIDs for JSON serialization
 	cleanScanResult(result)
 
+	h.emitBORowEvent("row_update", tenantID, boKey, recordID, result)
+
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(result)
 }
@@ -256,6 +321,12 @@ func (h *BOCRUDHandler) HandleCreateBORecord(w http.ResponseWriter, r *http.Requ
 		}
 	}
 
+	writableCols, err := h.resolveWritableColumns(r.Context(), boMeta.DrivingTable)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("failed resolving table schema: %v", err), http.StatusInternalServerError)
+		return
+	}
+
 	columns := []string{"tenant_id"}
 	placeholders := []string{"$1"}
 	args := []interface{}{tenantID}
@@ -265,6 +336,10 @@ func (h *BOCRUDHandler) HandleCreateBORecord(w http.ResponseWriter, r *http.Requ
 		lower := strings.ToLower(fieldKey)
 		if lower == "tenant_id" || lower == "created_at" || lower == "updated_at" {
 			continue
+		}
+		if !writableCols[fieldKey] {
+			http.Error(w, fmt.Sprintf("unknown attribute '%s'", fieldKey), http.StatusBadRequest)
+			return
 		}
 		columns = append(columns, fieldKey)
 		placeholders = append(placeholders, fmt.Sprintf("$%d", argIdx))
@@ -294,6 +369,9 @@ func (h *BOCRUDHandler) HandleCreateBORecord(w http.ResponseWriter, r *http.Requ
 	}
 
 	cleanScanResult(result)
+
+	newRecordID := fmt.Sprintf("%v", result[boMeta.KeyColumn])
+	h.emitBORowEvent("row_insert", tenantID, boKey, newRecordID, result)
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
@@ -452,6 +530,8 @@ func (h *BOCRUDHandler) HandleDeleteBORecord(w http.ResponseWriter, r *http.Requ
 		http.Error(w, "record not found or unauthorized", http.StatusNotFound)
 		return
 	}
+
+	h.emitBORowEvent("row_delete", tenantID, boKey, recordID, nil)
 
 	w.WriteHeader(http.StatusNoContent)
 }

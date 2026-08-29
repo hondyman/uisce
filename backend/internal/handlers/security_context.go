@@ -60,6 +60,19 @@ func SecurityContextFromRequest(r *http.Request, bodyDatasourceID string, bodyRe
 		}
 	}
 
+	targetTenantID := strings.TrimSpace(r.Header.Get("X-Tenant-ID"))
+	if targetTenantID == "" {
+		targetTenantID = strings.TrimSpace(r.URL.Query().Get("tenant_id"))
+	}
+	if targetTenantID != "" {
+		if len(auth.TenantIDs) == 0 {
+			auth.TenantIDs = []string{targetTenantID}
+		} else {
+			// Prepend targetTenantID so BuildContext treats it as the primary scoped tenant
+			auth.TenantIDs = append([]string{targetTenantID}, auth.TenantIDs...)
+		}
+	}
+
 	if len(auth.TenantIDs) == 0 && !isGlobalAdmin {
 		err := fmt.Errorf("no tenants assigned to user: JWT token must include tenant_id or tenant_ids claim")
 		logging.GetLogger().Sugar().Warnf("[SecurityContextFromRequest] user=%s roles=%v tenantIDs=%v isGlobalAdmin=%v: %v", auth.UserID, auth.Roles, auth.TenantIDs, isGlobalAdmin, err)

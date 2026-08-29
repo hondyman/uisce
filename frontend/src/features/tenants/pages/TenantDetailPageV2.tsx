@@ -68,7 +68,7 @@ function TabPanel(props: TabPanelProps) {
 }
 
 export const TenantDetailPageV2: React.FC = () => {
-  const { tenantId } = useParams<{ tenantId: string }>();
+  const { tenantId: tenantIdParam } = useParams<{ tenantId: string }>();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const {
@@ -76,7 +76,13 @@ export const TenantDetailPageV2: React.FC = () => {
     product: scopedProduct,
     datasource: scopedDatasource,
   } = useTenant();
-  const { scope } = useAccess();
+  const { scope, isLoading: scopeLoading } = useAccess();
+
+  // The globally-selected scope is the source of truth for which tenant's
+  // resources are being managed. A URL param (e.g. an admin deep-linking from
+  // the tenant list) is only used as a fallback while the scope is loading
+  // or for a user with no scoped tenant yet.
+  const tenantId = scopedTenant?.id || tenantIdParam;
 
   const { data: tenantData, loading, error, refetch: refetchTenant } = useApiQuery<{ tenant: any }>(
     tenantId ? `/api/tenants/${tenantId}` : '',
@@ -179,6 +185,7 @@ export const TenantDetailPageV2: React.FC = () => {
     database: '',
     schema: '',
     username: '',
+    password: '',
     secret_path: '',
     base_url: '',
     api_key: '',
@@ -293,17 +300,22 @@ export const TenantDetailPageV2: React.FC = () => {
   }, [tenant]);
 
   const urlInstanceId = searchParams.get('instanceId');
-  const activeInstanceId = urlInstanceId || (scopedDatasource as any)?.alpha_tenant_instance_id || (scopedDatasource as any)?.tenant_instance_id || scopedDatasource?.id || scope?.instanceId || scopedProduct?.tenant_instance_id;
+  const scopeInstanceId = urlInstanceId || (scopedDatasource as any)?.alpha_tenant_instance_id || (scopedDatasource as any)?.tenant_instance_id || scopedDatasource?.id || scope?.instanceId || scopedProduct?.tenant_instance_id;
   const activeInstanceName = (scopedDatasource as any)?.instance_name || (scopedDatasource as any)?.display_name || (scopedDatasource as any)?.source_name || (scopedDatasource as any)?.name;
 
+  // Resolve which instance the "Products", "Connections", "Audit Log" and
+  // "IP Whitelist" tabs operate on. The scope switcher may only select down
+  // to the tenant level (no instance/datasource picked), so once we have the
+  // tenant's own instance list we always fall back to its first instance
+  // rather than leaving these tabs without an instance to work from.
   const activeInstance = useMemo(() => {
     if (!enrichedInstances.length) return null;
-    if (activeInstanceId) {
-      const found = enrichedInstances.find((i: any) => i.id === activeInstanceId);
+    if (scopeInstanceId) {
+      const found = enrichedInstances.find((i: any) => i.id === scopeInstanceId);
       if (found) return found;
     }
     if (activeInstanceName) {
-      const foundByName = enrichedInstances.find((i: any) => 
+      const foundByName = enrichedInstances.find((i: any) =>
         (i.instance_name && i.instance_name.toLowerCase() === activeInstanceName.toLowerCase()) ||
         (i.display_name && i.display_name.toLowerCase() === activeInstanceName.toLowerCase())
       );
@@ -311,19 +323,19 @@ export const TenantDetailPageV2: React.FC = () => {
     }
     // Check if any instance contains the scopedDatasource in its nested product datasources
     if (scopedDatasource?.id) {
-      const foundByDs = enrichedInstances.find((i: any) => 
+      const foundByDs = enrichedInstances.find((i: any) =>
         (i.tenant_products || (i as any).products || []).some((p: any) =>
           (p.tenant_product_datasources || p.datasources || []).some((ds: any) => ds.id === scopedDatasource.id)
         )
       );
       if (foundByDs) return foundByDs;
     }
-    // Fallback: if only 1 instance exists for the tenant, use it
-    if (enrichedInstances.length === 1) {
-      return enrichedInstances[0];
-    }
-    return null;
-  }, [enrichedInstances, activeInstanceId, activeInstanceName, scopedDatasource]);
+    // Fallback: default to the tenant's first instance so tabs that need an
+    // instance/datasource still work off just the scoped tenant.
+    return enrichedInstances[0];
+  }, [enrichedInstances, scopeInstanceId, activeInstanceName, scopedDatasource]);
+
+  const activeInstanceId = scopeInstanceId || activeInstance?.id;
 
   // Initialize edit form when tenant loads
   React.useEffect(() => {
@@ -335,6 +347,14 @@ export const TenantDetailPageV2: React.FC = () => {
       });
     }
   }, [tenant, editMode]);
+
+  if (scopeLoading) {
+    return (
+      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '400px' }}>
+        <CircularProgress />
+      </Box>
+    );
+  }
 
   if (!scopedTenant) {
     return <Alert severity="warning">Select a tenant to view its details.</Alert>;
@@ -436,6 +456,7 @@ export const TenantDetailPageV2: React.FC = () => {
       database: '',
       schema: '',
       username: '',
+      password: '',
       secret_path: '',
       base_url: '',
       api_key: '',
@@ -489,6 +510,8 @@ export const TenantDetailPageV2: React.FC = () => {
       setTestConnectionLoading(true);
       setTestConnectionResult(null);
 
+      const isKeyPair = connectionForm.auth_type === 'key_pair';
+
       const connectionDetails = {
         type: connectionForm.type || 'postgres',
         host: connectionForm.host,
@@ -497,13 +520,19 @@ export const TenantDetailPageV2: React.FC = () => {
         schema: connectionForm.schema || 'public',
         username: connectionForm.username,
         password: connectionForm.password || connectionForm.metadata?.password || '',
-        sslmode: connectionForm.metadata?.sslmode || 'disable',
+        sslMode: isKeyPair ? 'verify-full' : (connectionForm.metadata?.sslmode || 'disable'),
         auth: connectionForm.username ? {
           basic: {
             username: connectionForm.username,
             password: connectionForm.password || connectionForm.metadata?.password || '',
           },
         } : undefined,
+        ...(isKeyPair ? {
+          auth_type: 'key_pair',
+          client_cert: connectionForm.metadata?.client_cert || '',
+          private_key: connectionForm.metadata?.private_key || '',
+          ca_cert: connectionForm.metadata?.ca_cert || '',
+        } : {}),
       };
 
       await testConnection.mutate({ connection_details: JSON.stringify(connectionDetails) });
@@ -771,6 +800,7 @@ export const TenantDetailPageV2: React.FC = () => {
           database: '',
           schema: '',
           username: '',
+          password: '',
           secret_path: '',
           base_url: '',
           api_key: '',
@@ -1096,9 +1126,9 @@ export const TenantDetailPageV2: React.FC = () => {
         {/* Audit Log Tab */}
         <TabPanel value={activeTab} index={5}>
           <Box sx={{ p: 3 }}>
-            <AuditLogTabContent 
-              tenantId={scopedTenant?.id || ''}
-              datasourceId={scopedDatasource?.id || ''}
+            <AuditLogTabContent
+              tenantId={tenant?.id || tenantId || ''}
+              datasourceId={activeInstanceId || ''}
             />
           </Box>
         </TabPanel>
@@ -1505,6 +1535,24 @@ export const TenantDetailPageV2: React.FC = () => {
 
             {connectionForm.auth_type === 'key_pair' && (
               <>
+                <Alert severity="info" sx={{ mb: 1 }}>
+                  Mutual TLS: the server verifies this client certificate instead of a password,
+                  and (with a CA certificate below) the client verifies the server's identity too.
+                </Alert>
+                <TextField
+                  label="Client Certificate"
+                  value={connectionForm.metadata?.client_cert || ''}
+                  onChange={(e) =>
+                    setConnectionForm({
+                      ...connectionForm,
+                      metadata: { ...connectionForm.metadata, client_cert: e.target.value }
+                    })
+                  }
+                  fullWidth
+                  multiline
+                  rows={4}
+                  placeholder="Paste the client certificate (PEM format)"
+                />
                 <TextField
                   label="Private Key"
                   type="password"
@@ -1518,19 +1566,22 @@ export const TenantDetailPageV2: React.FC = () => {
                   fullWidth
                   multiline
                   rows={4}
-                  placeholder="Paste your private key (PEM format)"
+                  placeholder="Paste the client private key (PEM format)"
                 />
                 <TextField
-                  label="Key Passphrase (Optional)"
-                  type="password"
-                  value={connectionForm.metadata?.key_passphrase || ''}
+                  label="CA Certificate (Optional, recommended)"
+                  value={connectionForm.metadata?.ca_cert || ''}
                   onChange={(e) =>
                     setConnectionForm({
                       ...connectionForm,
-                      metadata: { ...connectionForm.metadata, key_passphrase: e.target.value }
+                      metadata: { ...connectionForm.metadata, ca_cert: e.target.value }
                     })
                   }
                   fullWidth
+                  multiline
+                  rows={4}
+                  placeholder="Paste the CA certificate used to verify the server (PEM format)"
+                  helperText="Without this, the server's certificate is not verified — only safe for local/dev."
                 />
               </>
             )}

@@ -425,117 +425,119 @@ func (s *SemanticMappingService) generateSingleMapping(ctx context.Context, col 
 	// 2. Start with the expanded column name as the base semantic term
 	semanticTerm := expandedName
 
-	// 3. Smart Contextualization: Check if column is a generic attribute needing table context
-	if isGenericAttribute(cleanColumnName) {
-		// Redundancy protection: avoid CUSTOMER_CUSTOMER_ID
-		if !hasRedundantPrefix(cleanTableName, expandedName) {
-			// Prepend cleaned and singularized table name for context
-			semanticTerm = cleanTableName + "_" + expandedName
-		}
-		// 4. Use LLM to improve the suggestion if available
-		var suggestion SemanticSuggestion
-		if s.llmProvider != nil {
-			improvedSuggestion, err := s.suggestSemanticTermWithLLM(ctx, col, expandedName, semanticTerm)
-			if err == nil && improvedSuggestion.TermName != "" {
-				semanticTerm = improvedSuggestion.TermName
-				suggestion = improvedSuggestion
-			}
-		}
-
-		// 5. Format the semantic term (uppercase with underscores)
-		semanticTerm = formatSemanticTermName(semanticTerm)
-
-		// 6. Generate and format business term (title case with spaces)
-		businessTerm := s.generateBusinessTermName(expandedName, col.Table)
-		businessTerm = formatBusinessTermName(businessTerm)
-
-		// 7. Calculate confidence
-		confidence, reasoning := s.calculateMappingConfidence(ctx, col, expandedName, semanticTerm, tenantID, datasourceID)
-
-		// Boost confidence if LLM was used and returned a result
-		if suggestion.TermName != "" {
-			confidence += 0.15
-			if confidence > 1.0 {
-				confidence = 1.0
-			}
-			reasoning = fmt.Sprintf("%s; Enhanced by AI analysis. ", reasoning)
-		}
-
-		// 8. Apply feedback adjustments
-		patternKey := fmt.Sprintf("%s:%s", strings.ToLower(col.Column), strings.ToLower(semanticTerm))
-
-		// Heuristic: If rejected >= 3 times, heavily penalize or skip
-		rejectionCount := feedbackStats.RejectedPatterns[patternKey]
-		if rejectionCount >= 3 {
-			// Penalize confidence significantly instead of skipping entirely
-			confidence -= 0.5
-			reasoning = fmt.Sprintf("%s; Penalized due to multiple rejections (%d times)", reasoning, rejectionCount)
-			if confidence < 0 {
-				confidence = 0.1 // Minimum confidence
-			}
-		} else if rejectionCount > 0 {
-			// Slight penalty for 1-2 rejections
-			confidence -= 0.1 * float64(rejectionCount)
-			reasoning = fmt.Sprintf("%s; Penalized due to prior rejection", reasoning)
-		}
-
-		// Heuristic: If approved >= 3 times, boost
-		// If approved < 3 times, still boost but less?
-		approvalCount := feedbackStats.ApprovedPatterns[patternKey]
-		if approvalCount > 0 {
-			boost := 0.1 // Base boost
-			if approvalCount >= 3 {
-				boost = 0.2 // Higher boost for frequent approvals
-			}
-			confidence = confidence + boost
-			if confidence > 1.0 {
-				confidence = 1.0
-			}
-			reasoning = fmt.Sprintf("%s; Boosted by approval history (%d times)", reasoning, approvalCount)
-		}
-
-		var metaRaw models.JSONB
-		if len(suggestion.Meta) > 0 {
-			b, _ := json.Marshal(suggestion.Meta)
-			metaRaw = models.JSONB(b)
-		}
-
-		// Determine semantic type - from LLM suggestion or infer from data type and column name
-		semanticType := suggestion.SemanticType
-		if semanticType == "" {
-			semanticType = inferSemanticType(col.DataType, col.Column)
-		}
-
-		// Generate enrichment using the semantic enricher
-		enricher := NewSemanticEnricher(s.db, s.llmProvider)
-		enrichment := enricher.EnrichFromColumnData(
-			col.Column,
-			col.Table,
-			col.DataType,
-			true,  // isNullable - will be overridden by actual validation rules
-			false, // isForeignKey - inferred from column name in enricher
-			false, // isPrimaryKey - inferred from column name in enricher
-		)
-
-		return &GeneratedMapping{
-			ColumnID:                 col.NodeID,
-			ColumnName:               col.Column,
-			TableName:                col.Table,
-			ExpandedColumnName:       expandedName,
-			SuggestedSemanticTerm:    semanticTerm,
-			SuggestedBusinessTerm:    businessTerm,
-			SuggestedTitle:           suggestion.Title,
-			SuggestedDescription:     suggestion.Description,
-			SuggestedMeta:            metaRaw,
-			SuggestedFormat:          suggestion.Format,
-			SemanticType:             semanticType,
-			SuggestedValidationRules: col.SuggestedValidationRules,
-			SuggestedEnrichment:      enrichment,
-			Confidence:               confidence,
-			Reasoning:                reasoning,
-			WillAutoCreate:           false,
-			NeedsApproval:            false,
-		}, nil
+	// 3. Smart Contextualization: a generic attribute name (ID, STATUS, NAME...)
+	// is ambiguous on its own, so prepend the table name for context. A
+	// specific, already-descriptive column name (e.g. "lei_code",
+	// "kyc_status") does NOT need this - and, critically, still needs a
+	// suggestion generated: every column should produce a mapping candidate,
+	// not just the generic-named ones.
+	if isGenericAttribute(cleanColumnName) && !hasRedundantPrefix(cleanTableName, expandedName) {
+		// Prepend cleaned and singularized table name for context
+		semanticTerm = cleanTableName + "_" + expandedName
 	}
-	return nil, fmt.Errorf("unexpected")
+
+	// 4. Use LLM to improve the suggestion if available
+	var suggestion SemanticSuggestion
+	if s.llmProvider != nil {
+		improvedSuggestion, err := s.suggestSemanticTermWithLLM(ctx, col, expandedName, semanticTerm)
+		if err == nil && improvedSuggestion.TermName != "" {
+			semanticTerm = improvedSuggestion.TermName
+			suggestion = improvedSuggestion
+		}
+	}
+
+	// 5. Format the semantic term (uppercase with underscores)
+	semanticTerm = formatSemanticTermName(semanticTerm)
+
+	// 6. Generate and format business term (title case with spaces)
+	businessTerm := s.generateBusinessTermName(expandedName, col.Table)
+	businessTerm = formatBusinessTermName(businessTerm)
+
+	// 7. Calculate confidence
+	confidence, reasoning := s.calculateMappingConfidence(ctx, col, expandedName, semanticTerm, tenantID, datasourceID)
+
+	// Boost confidence if LLM was used and returned a result
+	if suggestion.TermName != "" {
+		confidence += 0.15
+		if confidence > 1.0 {
+			confidence = 1.0
+		}
+		reasoning = fmt.Sprintf("%s; Enhanced by AI analysis. ", reasoning)
+	}
+
+	// 8. Apply feedback adjustments
+	patternKey := fmt.Sprintf("%s:%s", strings.ToLower(col.Column), strings.ToLower(semanticTerm))
+
+	// Heuristic: If rejected >= 3 times, heavily penalize or skip
+	rejectionCount := feedbackStats.RejectedPatterns[patternKey]
+	if rejectionCount >= 3 {
+		// Penalize confidence significantly instead of skipping entirely
+		confidence -= 0.5
+		reasoning = fmt.Sprintf("%s; Penalized due to multiple rejections (%d times)", reasoning, rejectionCount)
+		if confidence < 0 {
+			confidence = 0.1 // Minimum confidence
+		}
+	} else if rejectionCount > 0 {
+		// Slight penalty for 1-2 rejections
+		confidence -= 0.1 * float64(rejectionCount)
+		reasoning = fmt.Sprintf("%s; Penalized due to prior rejection", reasoning)
+	}
+
+	// Heuristic: If approved >= 3 times, boost
+	// If approved < 3 times, still boost but less?
+	approvalCount := feedbackStats.ApprovedPatterns[patternKey]
+	if approvalCount > 0 {
+		boost := 0.1 // Base boost
+		if approvalCount >= 3 {
+			boost = 0.2 // Higher boost for frequent approvals
+		}
+		confidence = confidence + boost
+		if confidence > 1.0 {
+			confidence = 1.0
+		}
+		reasoning = fmt.Sprintf("%s; Boosted by approval history (%d times)", reasoning, approvalCount)
+	}
+
+	var metaRaw models.JSONB
+	if len(suggestion.Meta) > 0 {
+		b, _ := json.Marshal(suggestion.Meta)
+		metaRaw = models.JSONB(b)
+	}
+
+	// Determine semantic type - from LLM suggestion or infer from data type and column name
+	semanticType := suggestion.SemanticType
+	if semanticType == "" {
+		semanticType = inferSemanticType(col.DataType, col.Column)
+	}
+
+	// Generate enrichment using the semantic enricher
+	enricher := NewSemanticEnricher(s.db, s.llmProvider)
+	enrichment := enricher.EnrichFromColumnData(
+		col.Column,
+		col.Table,
+		col.DataType,
+		true,  // isNullable - will be overridden by actual validation rules
+		false, // isForeignKey - inferred from column name in enricher
+		false, // isPrimaryKey - inferred from column name in enricher
+	)
+
+	return &GeneratedMapping{
+		ColumnID:                 col.NodeID,
+		ColumnName:               col.Column,
+		TableName:                col.Table,
+		ExpandedColumnName:       expandedName,
+		SuggestedSemanticTerm:    semanticTerm,
+		SuggestedBusinessTerm:    businessTerm,
+		SuggestedTitle:           suggestion.Title,
+		SuggestedDescription:     suggestion.Description,
+		SuggestedMeta:            metaRaw,
+		SuggestedFormat:          suggestion.Format,
+		SemanticType:             semanticType,
+		SuggestedValidationRules: col.SuggestedValidationRules,
+		SuggestedEnrichment:      enrichment,
+		Confidence:               confidence,
+		Reasoning:                reasoning,
+		WillAutoCreate:           false,
+		NeedsApproval:            false,
+	}, nil
 }

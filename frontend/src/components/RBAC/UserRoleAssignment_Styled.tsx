@@ -195,11 +195,11 @@ export const UserRoleAssignmentStyled: React.FC<UserRoleAssignmentProps> = ({
       if (activeTab === 1 && !user.is_active) return false; // Active
       if (activeTab === 2 && user.is_active) return false; // Inactive
 
-      // Filter by search
+      const searchLower = searchTerm.toLowerCase();
       const matchesSearch =
-        user.full_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        user.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (user.department?.toLowerCase().includes(searchTerm.toLowerCase()) ?? false);
+        (user.full_name ?? '').toLowerCase().includes(searchLower) ||
+        (user.email ?? '').toLowerCase().includes(searchLower) ||
+        ((user.department ?? '').toLowerCase().includes(searchLower) && user.department);
       return matchesSearch;
     });
   }, [users, searchTerm, activeTab]);

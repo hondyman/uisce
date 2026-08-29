@@ -207,12 +207,19 @@ func (s *Server) GenerateSQLFromSemanticHandler(w http.ResponseWriter, r *http.R
 }
 
 // ExecuteSQLRequest wraps SQL execution request
+// ExecuteSQLRequest identifies a query to run by the AST hash returned from a
+// prior GenerateSQLHandler/GenerateSQLFromSemanticHandler call, NOT by raw
+// SQL text. Accepting client-supplied SQL directly (the old "sql"/"args"
+// fields) let any caller run arbitrary queries against the database with
+// only tenant/auth checks in the way, since nothing verified the SQL had
+// actually come from this generator. Executing by hash means only SQL this
+// backend itself produced (and cached in Redis, see GenerateSQLHandler) can
+// ever run here.
 type ExecuteSQLRequest struct {
-	SQL              string        `json:"sql"`
-	Args             []interface{} `json:"args,omitempty"`               // Optional parameters for parameterized SQL
-	Limit            int           `json:"limit"`
-	BusinessObjectID string        `json:"business_object_id,omitempty"` // Optional: if provided, will auto-route based on BO's datasource
-	DatasourceID     string        `json:"datasource_id,omitempty"`      // Optional: manual override; if provided, takes precedence over BO lookup
+	ASTHash          string `json:"astHash"`
+	Limit            int    `json:"limit"`
+	BusinessObjectID string `json:"business_object_id,omitempty"` // Optional: if provided, will auto-route based on BO's datasource
+	DatasourceID     string `json:"datasource_id,omitempty"`      // Optional: manual override; if provided, takes precedence over BO lookup
 }
 
 // ExecuteResult represents the result of executing generated SQL
@@ -259,8 +266,20 @@ func (s *Server) ExecuteSQLHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if req.SQL == "" {
-		http.Error(w, "SQL query is required", http.StatusBadRequest)
+	if req.ASTHash == "" {
+		http.Error(w, "astHash is required: call /bo-sql/generate first and pass its response's cache hash here", http.StatusBadRequest)
+		return
+	}
+
+	if s.semanticCache == nil {
+		http.Error(w, "SQL execution cache is unavailable", http.StatusServiceUnavailable)
+		return
+	}
+
+	var cached boresolver.SQLGenerationResponse
+	found, err := s.semanticCache.Get(r.Context(), req.ASTHash, &cached)
+	if err != nil || !found {
+		http.Error(w, "Unknown or expired astHash: call /bo-sql/generate first", http.StatusBadRequest)
 		return
 	}
 
@@ -332,8 +351,8 @@ func (s *Server) ExecuteSQLHandler(w http.ResponseWriter, r *http.Request) {
 
 	logging.GetLogger().Sugar().Infof("ExecuteSQLHandler: Routing query to %s for tenant %s", datasourceTarget, tenantID)
 
-	// Execute the SQL query, binding any parameterized args supplied by the generator.
-	rows, err := db.QueryContext(r.Context(), req.SQL, req.Args...)
+	// Execute the cached SQL this backend generated, binding its parameters.
+	rows, err := db.QueryContext(r.Context(), cached.SQL, cached.Args...)
 	if err != nil {
 		logging.GetLogger().Sugar().Errorf("SQL execution failed for tenant %s: %v", tenantID, err)
 		errResp := ExecuteResult{Error: fmt.Sprintf("Query execution failed: %v", err)}

@@ -15,6 +15,18 @@ import {
 
 const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:8082/api";
 
+function getAdminAuthHeaders(extraHeaders?: Record<string, string>): RequestInit {
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    ...extraHeaders,
+  };
+  const token = localStorage.getItem("auth_token");
+  if (token) {
+    headers["Authorization"] = `Bearer ${token}`;
+  }
+  return { headers };
+}
+
 // ============================================================================
 // Tenant Hooks
 // ============================================================================
@@ -30,7 +42,8 @@ export function useTenants(limit = 50, offset = 0) {
     setError(null);
     try {
       const response = await fetch(
-        `${API_BASE}/admin/tenants?limit=${limit}&offset=${offset}`
+        `${API_BASE}/admin/tenants?limit=${limit}&offset=${offset}`,
+        getAdminAuthHeaders()
       );
       if (!response.ok) throw new Error("Failed to fetch tenants");
       const data: ListTenantsResponse = await response.json();
@@ -59,7 +72,7 @@ export function useTenant(tenantId: string) {
     setLoading(true);
     setError(null);
     try {
-      const response = await fetch(`${API_BASE}/admin/tenants/${tenantId}`);
+      const response = await fetch(`${API_BASE}/admin/tenants/${tenantId}`, getAdminAuthHeaders());
       if (!response.ok) throw new Error("Failed to fetch tenant");
       const data = await response.json();
       setTenant(data.tenant);
@@ -88,8 +101,8 @@ export function useCreateTenant() {
     setError(null);
     try {
       const response = await fetch(`${API_BASE}/admin/tenants`, {
+        ...getAdminAuthHeaders(),
         method: "POST",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(req),
       });
       if (!response.ok) throw new Error("Failed to create tenant");
@@ -117,8 +130,8 @@ export function useUpdateTenant(tenantId: string) {
       setError(null);
       try {
         const response = await fetch(`${API_BASE}/admin/tenants/${tenantId}`, {
+          ...getAdminAuthHeaders(),
           method: "PATCH",
-          headers: { "Content-Type": "application/json" },
           body: JSON.stringify(req),
         });
         if (!response.ok) throw new Error("Failed to update tenant");
@@ -148,7 +161,7 @@ export function useSuspendTenant(tenantId: string) {
     try {
       const response = await fetch(
         `${API_BASE}/admin/tenants/${tenantId}/suspend`,
-        { method: "POST" }
+        { ...getAdminAuthHeaders(), method: "POST" }
       );
       if (!response.ok) throw new Error("Failed to suspend tenant");
     } catch (err) {
@@ -166,7 +179,7 @@ export function useSuspendTenant(tenantId: string) {
     try {
       const response = await fetch(
         `${API_BASE}/admin/tenants/${tenantId}/unsuspend`,
-        { method: "POST" }
+        { ...getAdminAuthHeaders(), method: "POST" }
       );
       if (!response.ok) throw new Error("Failed to unsuspend tenant");
     } catch (err) {
@@ -196,7 +209,8 @@ export function useAPIKeys(limit = 50, offset = 0) {
     setError(null);
     try {
       const response = await fetch(
-        `${API_BASE}/admin/api-keys?limit=${limit}&offset=${offset}`
+        `${API_BASE}/admin/api-keys?limit=${limit}&offset=${offset}`,
+        getAdminAuthHeaders()
       );
       if (!response.ok) throw new Error("Failed to fetch API keys");
       const data: ListAPIKeysResponse = await response.json();
@@ -226,7 +240,8 @@ export function useAPIKeyUsage(apiKeyId: string, limit = 100) {
     setError(null);
     try {
       const response = await fetch(
-        `${API_BASE}/admin/api-keys/${apiKeyId}/usage?limit=${limit}`
+        `${API_BASE}/admin/api-keys/${apiKeyId}/usage?limit=${limit}`,
+        getAdminAuthHeaders()
       );
       if (!response.ok) throw new Error("Failed to fetch API key usage");
       const data = await response.json();
@@ -261,7 +276,8 @@ export function useTenantDailyUsage(tenantId: string, days = 30) {
     setError(null);
     try {
       const response = await fetch(
-        `${API_BASE}/admin/tenants/${tenantId}/usage/daily?days=${days}`
+        `${API_BASE}/admin/tenants/${tenantId}/usage/daily?days=${days}`,
+        getAdminAuthHeaders()
       );
       if (!response.ok) throw new Error("Failed to fetch daily usage");
       const data = await response.json();
@@ -292,7 +308,8 @@ export function useTenantEndpointUsage(tenantId: string, limit = 20) {
     setError(null);
     try {
       const response = await fetch(
-        `${API_BASE}/admin/tenants/${tenantId}/usage/endpoints?limit=${limit}`
+        `${API_BASE}/admin/tenants/${tenantId}/usage/endpoints?limit=${limit}`,
+        getAdminAuthHeaders()
       );
       if (!response.ok) throw new Error("Failed to fetch endpoint usage");
       const data = await response.json();

@@ -51,6 +51,7 @@ import {
   Lock as LockIcon,
   PersonOutline as PersonOutlineIcon,
   Refresh as RefreshIcon,
+  RestartAlt as RestartAltIcon,
   Save as SaveIcon,
   Security as SecurityIcon,
   Verified as VerifiedIcon,
@@ -58,6 +59,7 @@ import {
 import { studioApi, StudioApiError } from "./studioApi";
 import type {
   ComponentEntitlement,
+  EffectiveEntitlement,
   EntitlementType,
   OverrideState,
 } from "./types";
@@ -106,8 +108,10 @@ export const EntitlementMatrix: React.FC<EntitlementMatrixProps> = ({ profileKey
   const theme = useTheme();
   const [tab, setTab] = useState<EntitlementType>("MENU_PAGE");
   const [entitlements, setEntitlements] = useState<ComponentEntitlement[]>([]);
+  const [effective, setEffective] = useState<EffectiveEntitlement[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [resetting, setResetting] = useState<string | null>(null);
   const [editingNode, setEditingNode] = useState<string | null>(null);
   const [editState, setEditState] = useState<OverrideState>("INHERIT_BASELINE");
   const [editCondition, setEditCondition] = useState<string>("");
@@ -121,12 +125,17 @@ export const EntitlementMatrix: React.FC<EntitlementMatrixProps> = ({ profileKey
     setLoading(true);
     setError(null);
     try {
-      const res = await studioApi.listEntitlements(profileKey, tab);
-      setEntitlements(res.entitlements);
+      const [stored, resolved] = await Promise.all([
+        studioApi.listEntitlements(profileKey, tab),
+        studioApi.effectiveEntitlements(profileKey),
+      ]);
+      setEntitlements(stored.entitlements);
+      setEffective(resolved.entitlements.filter((e) => e.entitlement_type === tab));
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       setError(msg);
       setEntitlements([]);
+      setEffective([]);
     } finally {
       setLoading(false);
     }
@@ -136,14 +145,42 @@ export const EntitlementMatrix: React.FC<EntitlementMatrixProps> = ({ profileKey
     refresh();
   }, [refresh]);
 
+  const ownOverrideFor = (nodePath: string): ComponentEntitlement | undefined =>
+    entitlements.find((x) => x.nodePath === nodePath);
+
   const stateFor = (nodePath: string): OverrideState => {
-    const e = entitlements.find((x) => x.nodePath === nodePath);
+    const e = ownOverrideFor(nodePath);
     return e ? e.overrideState : "INHERIT_BASELINE";
   };
 
   const conditionFor = (nodePath: string): string => {
-    const e = entitlements.find((x) => x.nodePath === nodePath);
+    const e = ownOverrideFor(nodePath);
     return e?.conditionalDsl || "";
+  };
+
+  // What this node actually resolves to (own override, or walked up through
+  // parent_profile_id to the nearest ancestor rule, or the gold-copy
+  // baseline) — this is the real "ambient baseline" the fake hardcoded list
+  // used to fake as always-ALLOW.
+  const effectiveFor = (nodePath: string): EffectiveEntitlement | undefined =>
+    effective.find((x) => x.node_path === nodePath);
+
+  const handleReset = async (nodePath: string) => {
+    const own = ownOverrideFor(nodePath);
+    if (!own) return;
+    setResetting(nodePath);
+    setError(null);
+    try {
+      await studioApi.deleteEntitlement(own.entitlementId);
+      setSnack({ open: true, severity: "success", message: `Reset ${nodePath} to inherited value` });
+      await refresh();
+    } catch (e) {
+      const msg = e instanceof StudioApiError ? `${e.message}: ${e.detail || ""}` : String(e);
+      setError(msg);
+      setSnack({ open: true, severity: "error", message: msg });
+    } finally {
+      setResetting(null);
+    }
   };
 
   const handleSave = async (nodePath: string) => {
@@ -199,24 +236,19 @@ export const EntitlementMatrix: React.FC<EntitlementMatrixProps> = ({ profileKey
     }
   };
 
-  const baselineChip = (state: OverrideState) => {
-    if (state === "FORCE_DENY") {
-      return (
-        <Chip
-          size="small"
-          color="error"
-          icon={<BlockIcon style={{ fontSize: 14 }} />}
-          label="DENY"
-        />
-      );
+  const baselineChip = (resolved: EffectiveEntitlement | undefined) => {
+    if (!resolved) {
+      return <Chip size="small" variant="outlined" label="No rule (denied)" />;
     }
+    const label = resolved.override_state === "FORCE_DENY" ? "DENY" : "ALLOW";
+    const source = resolved.resolved_tenant ? "tenant rule" : "gold copy";
     return (
       <Chip
         size="small"
-        color="success"
+        color={resolved.override_state === "FORCE_DENY" ? "error" : "success"}
         variant="outlined"
-        icon={<CheckCircleIcon style={{ fontSize: 14 }} />}
-        label="ALLOW"
+        icon={resolved.override_state === "FORCE_DENY" ? <BlockIcon style={{ fontSize: 14 }} /> : <CheckCircleIcon style={{ fontSize: 14 }} />}
+        label={`${label} (${source})`}
       />
     );
   };
@@ -493,7 +525,7 @@ export const EntitlementMatrix: React.FC<EntitlementMatrixProps> = ({ profileKey
                           </Box>
                         </Stack>
                       </TableCell>
-                      <TableCell>{baselineChip(n.baseline)}</TableCell>
+                      <TableCell>{baselineChip(effectiveFor(n.path))}</TableCell>
                       <TableCell>
                         <Stack direction="row" spacing={1} alignItems="center">
                           {stateChip(state)}
@@ -509,6 +541,19 @@ export const EntitlementMatrix: React.FC<EntitlementMatrixProps> = ({ profileKey
                               >
                                 <EditIcon fontSize="small" />
                               </IconButton>
+                            </Tooltip>
+                          )}
+                          {isOverridden && (
+                            <Tooltip title="Reset to inherited value (removes this tenant's override)">
+                              <span>
+                                <IconButton
+                                  size="small"
+                                  disabled={resetting === n.path}
+                                  onClick={() => handleReset(n.path)}
+                                >
+                                  <RestartAltIcon fontSize="small" />
+                                </IconButton>
+                              </span>
                             </Tooltip>
                           )}
                         </Stack>

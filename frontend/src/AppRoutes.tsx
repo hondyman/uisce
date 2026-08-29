@@ -30,7 +30,6 @@ import RoleEditorPage from "./pages/roles/RoleEditorPage";
 import DomainsManagementPage from "./features/core/pages/DomainsManagementPage";
 import SemanticMapperPage from "./features/core/pages/SemanticMapperPage";
 import { TenantDetailPageV2 } from "./features/tenants/pages/TenantDetailPageV2";
-import { TenantListPage } from "./features/tenants/pages/TenantListPage";
 import { SemanticCatalogPage } from "./pages/SemanticCatalogPage";
 
 import GlossaryExplorer from "./features/glossary/GlossaryExplorer";
@@ -179,7 +178,7 @@ import ChangeReviewPage from "./pages/ChangeReviewPage";
 import IncidentPage from "./pages/scheduler/IncidentPage";
 import APIStudioPage from './pages/api-studio/APIStudioPage';
 import PageStudioPage from './pages/page-studio/PageStudioPage';
-import RuntimePage from './pages/page-studio/RuntimePage';
+import RuntimePage from './pages/PageRuntimeRenderer';
 
 // Intelligence & Governance (New)
 import IntelligenceDashboard from "./pages/intelligence/IntelligenceDashboard";
@@ -236,7 +235,7 @@ function ProtectedApp() {
         {/* ═══════════════════════════════════════════════════════════════════
             PLATFORM - Organization, security, and setup
             ═══════════════════════════════════════════════════════════════════ */}
-        <Route path="/tenants" element={<ProtectedRoute><TenantListPage /></ProtectedRoute>} />
+        <Route path="/tenants" element={<ProtectedRoute><TenantDetailPageV2 /></ProtectedRoute>} />
         <Route path="/tenants/:tenantId" element={<ProtectedRoute><TenantDetailPageV2 /></ProtectedRoute>} />
         <Route path="/admin/rbac/roles" element={<ProtectedRoute><RoleManagerPage /></ProtectedRoute>} />
         <Route path="/admin/rbac/users" element={<ProtectedRoute><UserManagementPage /></ProtectedRoute>} />

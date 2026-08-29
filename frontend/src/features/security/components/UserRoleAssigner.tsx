@@ -78,7 +78,7 @@ export const UserRoleAssigner: React.FC<UserRoleAssignerProps> = ({ open, user, 
 
   // Filter out roles already assigned
   const availableRoles = allRoles.filter(
-    (role) => !userRoles.find((ur) => ur.role_id === role.role_id)
+    (role) => !userRoles.find((ur) => ur.id === role.id)
   );
 
   return (
@@ -91,13 +91,13 @@ export const UserRoleAssigner: React.FC<UserRoleAssignerProps> = ({ open, user, 
             <>
                 <List dense>
                     {userRoles.map((role) => (
-                        <ListItem key={role.role_id}>
+                        <ListItem key={role.id}>
                             <ListItemText
                                 primary={role.role_name}
-                                secondary={role.is_global_admin ? 'Global Admin' : 'Tenant Role'}
+                                secondary={role.origin === 'gold_copy' ? 'Gold Copy' : 'Tenant Role'}
                             />
                             <ListItemSecondaryAction>
-                                <IconButton edge="end" aria-label="delete" onClick={() => handleRevoke(role.role_id)} disabled={processing}>
+                                <IconButton edge="end" aria-label="delete" onClick={() => handleRevoke(role.id)} disabled={processing}>
                                     <DeleteIcon />
                                 </IconButton>
                             </ListItemSecondaryAction>
@@ -120,7 +120,7 @@ export const UserRoleAssigner: React.FC<UserRoleAssignerProps> = ({ open, user, 
                             disabled={processing}
                         >
                             {availableRoles.map((role) => (
-                                <MenuItem key={role.role_id} value={role.role_id}>
+                                <MenuItem key={role.id} value={role.id}>
                                     {role.role_name}
                                 </MenuItem>
                             ))}

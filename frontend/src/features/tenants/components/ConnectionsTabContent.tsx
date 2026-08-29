@@ -36,7 +36,6 @@ import {
 import { ConnectionTestDialog } from '../../connections/components/ConnectionTestDialog';
 import ScanProgressModal from './ScanProgressModal';
 import { apiClient } from '../../../utils/apiClient';
-import { useApiQuery } from '../../../hooks/useApiQuery';
 
 export interface Connection {
   id: string;
@@ -184,18 +183,13 @@ export const ConnectionsTabContent: React.FC<ConnectionsTabContentProps> = ({
     return null;
   }, [instanceFilter, tenantData]);
 
-  // Fetch connections from backend
-  const { data, loading, error, refetch } = useApiQuery<{ connections: Connection[] }>(
-    tenantId ? `/api/tenant-ops/connections?tenant_id=${tenantId}` : ''
-  );
-
   const handleDeleteConnection = async (id: string) => {
     if (confirm('Are you sure you want to delete this connection? This action cannot be undone.')) {
       try {
         await apiClient(`/api/tenant-ops/connections/${id}`, {
           method: 'DELETE',
         });
-        refetch();
+        window.location.reload();
       } catch (err) {
         console.error(err);
       }
@@ -229,8 +223,8 @@ export const ConnectionsTabContent: React.FC<ConnectionsTabContentProps> = ({
         message: `Successfully synced ${result.connections_created || 0} new and ${result.connections_updated || 0} updated connections`,
       });
       
-      // Refetch connections after sync
-      setTimeout(() => refetch(), 1000);
+      // Refresh connections after sync
+      setTimeout(() => window.location.reload(), 1000);
     } catch (err: any) {
       console.error('Error syncing connections:', err);
       setSyncResult({
@@ -398,22 +392,6 @@ export const ConnectionsTabContent: React.FC<ConnectionsTabContentProps> = ({
     return (
       <Alert severity="warning">
         Please select a tenant to view connections
-      </Alert>
-    );
-  }
-
-  if (loading) {
-    return (
-      <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
-        <CircularProgress />
-      </Box>
-    );
-  }
-
-  if (error) {
-    return (
-      <Alert severity="error">
-        Error loading connections: {error.message}
       </Alert>
     );
   }

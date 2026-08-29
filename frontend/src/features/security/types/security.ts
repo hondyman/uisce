@@ -7,11 +7,22 @@ export interface Permission {
 }
 
 export interface Role {
-    role_id: string;
+    id: string;
+    tenant_id: string;
+    role_key: string;
     role_name: string;
     description?: string;
-    is_global_admin: boolean;
-    tenant_id: string;
+    role_type: 'system' | 'custom';
+    role_level: 'viewer' | 'editor' | 'admin' | 'super_admin';
+    is_active: boolean;
+    // is_template marks a gold-copy role authored in the gold-copy tenant and
+    // inheritable by every other tenant (see backend bp_roles.is_template).
+    is_template: boolean;
+    parent_role_id?: string | null;
+    security_profile_id?: string | null;
+    // Derived by the backend, not stored: "gold_copy" (a template role),
+    // "extended" (a local clone of a template role), or "tenant" (fully custom).
+    origin: 'gold_copy' | 'extended' | 'tenant';
     created_at: string;
     updated_at: string;
     permissions?: Permission[];

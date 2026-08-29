@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -12,25 +13,39 @@ import (
 	"github.com/hondyman/uisce/backend/internal/handlers"
 )
 
+// isTenantOrGlobalAdmin reports whether the caller holds a role authorized to
+// manage RBAC/tenant assignments. Mirrors handlers.hasAdminRole.
+func isTenantOrGlobalAdmin(roles []string) bool {
+	for _, role := range roles {
+		switch strings.ToUpper(strings.TrimSpace(role)) {
+		case "GLOBAL_OPS", "TENANT_ADMIN", "ADMIN":
+			return true
+		}
+	}
+	return false
+}
+
 // listUsers returns all users for role assignment
 func (h *RBACHandlers) listUsers(w http.ResponseWriter, r *http.Request) {
-	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
+	_, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
 	if err != nil {
 		http.Error(w, "Unauthorized: "+err.Error(), http.StatusUnauthorized)
 		return
 	}
-	tenantID := secCtx.TenantID
 
+	// Tenant scoping for user-to-tenant access is handled via the user_tenant
+	// mapping table, not app_user.tenant_id (a legacy single-tenant field).
+	// This endpoint feeds the tenant assignment picker, so it must list every
+	// active user regardless of their home tenant_id.
 	var users []map[string]interface{}
 	query := `
 		SELECT id, username, email, name, first_name, last_name, status, is_active, created_at, tenant_id
 		FROM users
-		WHERE tenant_id = $1 OR tenant_id IS NULL
+		WHERE is_active = true
 		ORDER BY name, username
 	`
-	args := []interface{}{tenantID}
 
-	rows, err := h.db.Query(query, args...)
+	rows, err := h.db.Query(query)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Failed to fetch users: %v", err), http.StatusInternalServerError)
 		return
@@ -141,6 +156,26 @@ func (h *RBACHandlers) updateUserTenant(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
+	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
+	if err != nil {
+		http.Error(w, "Unauthorized: "+err.Error(), http.StatusUnauthorized)
+		return
+	}
+
+	// Only global admins may move a user to an arbitrary tenant. Tenant-scoped
+	// admins may only assign users into their own tenant (or clear the
+	// assignment), never into a tenant they don't administer.
+	if !secCtx.IsGlobalAdmin {
+		if !isTenantOrGlobalAdmin(secCtx.Roles) {
+			http.Error(w, "Forbidden: admin role required", http.StatusForbidden)
+			return
+		}
+		if req.TenantID != nil && *req.TenantID != "" && *req.TenantID != secCtx.TenantID {
+			http.Error(w, "Forbidden: cannot assign user to a different tenant", http.StatusForbidden)
+			return
+		}
+	}
+
 	var tenantVal any
 	if req.TenantID == nil || *req.TenantID == "" {
 		tenantVal = nil
@@ -148,8 +183,8 @@ func (h *RBACHandlers) updateUserTenant(w http.ResponseWriter, r *http.Request) 
 		tenantVal = *req.TenantID
 	}
 
-	_, err := h.db.Exec(`
-		UPDATE users 
+	_, err = h.db.Exec(`
+		UPDATE users
 		SET tenant_id = $1, updated_at = now()
 		WHERE id = $2
 	`, tenantVal, userID)

@@ -24,6 +24,13 @@ import {
 import ExtensionIcon from '@mui/icons-material/Extension';
 import AddIcon from '@mui/icons-material/Add';
 
+const getAuthHeaders = () => {
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  const token = localStorage.getItem('auth_token');
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+  return headers;
+};
+
 interface CustomAttributeModalProps {
   open: boolean;
   onClose: () => void;
@@ -63,7 +70,7 @@ export const CustomAttributeModal: React.FC<CustomAttributeModalProps> = ({
 
   const fetchAttributes = () => {
     setLoading(true);
-    fetch(`/api/tenants/custom-attributes?tenant_id=${tenantId}&bo_id=${boId}`)
+    fetch(`/api/tenants/custom-attributes?tenant_id=${tenantId}&bo_id=${boId}`, { headers: getAuthHeaders() })
       .then((res) => res.json())
       .then((data) => {
         setAttributes(data.attributes || []);
@@ -92,7 +99,7 @@ export const CustomAttributeModal: React.FC<CustomAttributeModalProps> = ({
 
       const res = await fetch('/api/tenants/custom-attributes', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getAuthHeaders(),
         body: JSON.stringify(payload),
       });
 

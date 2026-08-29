@@ -1,7 +1,7 @@
 // Tenants Page - Main tenant management interface
 
 import React, { useCallback, useEffect, useState } from "react";
-import { useTenants } from "../hooks/useAdmin";
+import { useTenants, useCreateTenant } from "../hooks/useAdmin";
 import { Tenant } from "../types";
 import { useAuth } from "../../contexts/AuthContext";
 import { ImpersonationModal } from "../../components/admin/ImpersonationModal";
@@ -70,6 +70,7 @@ export const TenantsPage: React.FC = () => {
 
   const { isGlobalAdmin } = useAuth();
   const { tenants, total, loading, error, refetch } = useTenants(limit, offset);
+  const { create: createTenant, loading: creatingTenant } = useCreateTenant();
 
   const handleCreateClick = () => {
     setShowCreateForm(true);
@@ -88,16 +89,7 @@ export const TenantsPage: React.FC = () => {
   const handleCreateTenant = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const response = await fetch("/api/admin/tenants", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(formData),
-      });
-      if (!response.ok) {
-        const error = await response.json();
-        alert(`Error: ${error.error || "Failed to create tenant"}`);
-        return;
-      }
+      await createTenant(formData);
       refetch();
       setShowCreateForm(false);
       setFormData({

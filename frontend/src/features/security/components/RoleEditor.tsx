@@ -8,6 +8,7 @@ import {
   TextField,
   FormControlLabel,
   Checkbox,
+  MenuItem,
   Box,
   Alert,
 } from '@mui/material';
@@ -20,23 +21,31 @@ interface RoleEditorProps {
   onSave: (role: Partial<Role>) => Promise<void>;
 }
 
+const ROLE_LEVELS: Role['role_level'][] = ['viewer', 'editor', 'admin', 'super_admin'];
+
 export const RoleEditor: React.FC<RoleEditorProps> = ({ open, role, onClose, onSave }) => {
+  const [roleKey, setRoleKey] = useState('');
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
-  const [isGlobalAdmin, setIsGlobalAdmin] = useState(false);
+  const [roleLevel, setRoleLevel] = useState<Role['role_level']>('viewer');
+  const [isTemplate, setIsTemplate] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     if (open) {
       if (role) {
+        setRoleKey(role.role_key);
         setName(role.role_name);
         setDescription(role.description || '');
-        setIsGlobalAdmin(role.is_global_admin);
+        setRoleLevel(role.role_level);
+        setIsTemplate(role.is_template);
       } else {
+        setRoleKey('');
         setName('');
         setDescription('');
-        setIsGlobalAdmin(false);
+        setRoleLevel('viewer');
+        setIsTemplate(false);
       }
       setError(null);
     }
@@ -47,15 +56,21 @@ export const RoleEditor: React.FC<RoleEditorProps> = ({ open, role, onClose, onS
       setError('Role name is required');
       return;
     }
+    if (!role && !roleKey.trim()) {
+      setError('Role key is required');
+      return;
+    }
 
     setSaving(true);
     setError(null);
 
     try {
       await onSave({
+        role_key: roleKey,
         role_name: name,
         description,
-        is_global_admin: isGlobalAdmin,
+        role_level: roleLevel,
+        is_template: isTemplate,
       });
       onClose();
     } catch (err: any) {
@@ -71,14 +86,19 @@ export const RoleEditor: React.FC<RoleEditorProps> = ({ open, role, onClose, onS
       <DialogContent>
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 1 }}>
           {error && <Alert severity="error">{error}</Alert>}
+          {!role && (
+            <TextField
+              label="Role Key"
+              value={roleKey}
+              onChange={(e) => setRoleKey(e.target.value)}
+              helperText="Stable identifier, e.g. 'billing_specialist'"
+              required
+            />
+          )}
           <TextField
             label="Role Name"
             value={name}
             onChange={(e) => setName(e.target.value)}
-            disabled={!!role} // Prevent renaming existing roles if desired, or allow it. Usually IDs are immutable but names might be changeable. Let's allow generic edit unless backend blocks it.
-            // Backend API might use name as ID, so be careful. 
-            // The current backend uses ID as PK but checks name uniqueness.
-            // Requirement from previous error: "role name is required".
             required
           />
           <TextField
@@ -88,15 +108,27 @@ export const RoleEditor: React.FC<RoleEditorProps> = ({ open, role, onClose, onS
             multiline
             rows={3}
           />
-          <FormControlLabel
-            control={
-              <Checkbox
-                checked={isGlobalAdmin}
-                onChange={(e) => setIsGlobalAdmin(e.target.checked)}
-              />
-            }
-            label="Is Global Admin"
-          />
+          <TextField
+            select
+            label="Role Level"
+            value={roleLevel}
+            onChange={(e) => setRoleLevel(e.target.value as Role['role_level'])}
+          >
+            {ROLE_LEVELS.map((level) => (
+              <MenuItem key={level} value={level}>{level}</MenuItem>
+            ))}
+          </TextField>
+          {!role && (
+            <FormControlLabel
+              control={
+                <Checkbox
+                  checked={isTemplate}
+                  onChange={(e) => setIsTemplate(e.target.checked)}
+                />
+              }
+              label="Gold Copy Template (inheritable by every tenant — only takes effect when you're scoped to the gold-copy tenant)"
+            />
+          )}
         </Box>
       </DialogContent>
       <DialogActions>

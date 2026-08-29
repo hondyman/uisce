@@ -103,7 +103,6 @@ export const UserManagementPage: React.FC = () => {
   // Fetch users
   const fetchUsers = async () => {
     if (!tenant?.id) {
-      setError('No tenant context available');
       setLoading(false);
       return;
     }
@@ -124,7 +123,7 @@ export const UserManagementPage: React.FC = () => {
 
   // Fetch all roles
   const fetchRoles = async () => {
-    if (!tenant?.id || !datasource?.id) return;
+    if (!tenant?.id) return;
     
     try {
       const data = await apiClient<any[]>('/api/rbac/roles');
@@ -137,7 +136,7 @@ export const UserManagementPage: React.FC = () => {
 
   // Fetch user's assigned roles
   const fetchUserRoles = async (userId: string) => {
-    if (!tenant?.id || !datasource?.id) return;
+    if (!tenant?.id) return;
 
     try {
       const data = await apiClient<any[]>(`/api/rbac/users/${userId}/roles`);
@@ -155,7 +154,7 @@ export const UserManagementPage: React.FC = () => {
 
   // Assign role to user
   const assignRole = async () => {
-    if (!selectedUser || !selectedRoleId || !tenant?.id || !datasource?.id) return;
+    if (!selectedUser || !selectedRoleId || !tenant?.id) return;
 
     try {
       await apiClient(`/api/rbac/roles/${selectedRoleId}/assign`, {
@@ -176,7 +175,7 @@ export const UserManagementPage: React.FC = () => {
 
   // Unassign role from user
   const unassignRole = async (roleId: string) => {
-    if (!selectedUser || !tenant?.id || !datasource?.id) return;
+    if (!selectedUser || !tenant?.id) return;
 
     if (!confirm('Are you sure you want to remove this role from the user?')) {
       return;
@@ -214,9 +213,11 @@ export const UserManagementPage: React.FC = () => {
   };
 
   useEffect(() => {
-    if (tenant?.id && datasource?.id) {
+    if (tenant?.id) {
       fetchUsers();
       fetchRoles();
+    } else {
+      setLoading(false);
     }
   }, [tenant?.id, datasource?.id]);
 
@@ -247,7 +248,7 @@ export const UserManagementPage: React.FC = () => {
     );
   }
 
-  if (!tenant || !datasource) {
+  if (!tenant) {
     return (
       <Box display="flex" flexDirection="column" alignItems="center" justifyContent="center" minHeight="100vh" gap={2}>
         <SecurityIcon sx={{ fontSize: 64, color: 'text.disabled' }} />

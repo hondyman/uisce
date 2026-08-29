@@ -1,6 +1,7 @@
 package boresolver
 
 import (
+	"database/sql"
 	"fmt"
 	"regexp"
 	"strings"
@@ -127,8 +128,154 @@ func NewPostgresBORepository(db *sqlx.DB) *PostgresBORepository {
 	return &PostgresBORepository{DB: db}
 }
 
+// semanticField is one row of business_object_fields, the table that is
+// actually FK'd to business_objects.id (verified: 100% of its rows join;
+// bo_fields.business_object_id matches ZERO real business_objects rows in
+// this environment - bo_fields is an orphaned table from an earlier BO
+// metadata system and is kept below only as a legacy fallback).
+type semanticField struct {
+	ID            string `db:"id"`
+	FieldName     string `db:"field_name"`
+	TechnicalName string `db:"technical_name"`
+	DisplayName   string `db:"display_name"`
+	DataType      string `db:"data_type"`
+	TermNodeID    string `db:"term_node_id"`
+}
+
+// resolveCatalogPhysicalColumn looks up a physical column for fieldName
+// under drivingTable (e.g. "oms.customer" or "customers") via field_bindings
+// (when a RESOLVED binding exists for fieldID) or, failing that, by matching
+// against catalog_node rows scanned from the real schema
+// (properties->>'is_physical_column' = 'true', qualified_path
+// "/<schema>/<table>/<column>" - see 20260112-era catalog scan output).
+// Returns ("", "") when nothing resolves; callers must treat that as
+// "unbound", not guess.
+func (r *PostgresBORepository) resolveCatalogPhysicalColumn(fieldID, drivingTable, fieldName, technicalName string) (physicalColumn string, sourceNodeID string) {
+	// 1. A real, explicitly authored binding always wins.
+	var boundCol, boundNode sql.NullString
+	err := r.DB.QueryRow(`
+		SELECT cn.node_name, cn.id::text
+		FROM field_bindings fb
+		JOIN catalog_node cn ON cn.id = fb.source_node_id
+		WHERE fb.field_id = $1::uuid AND fb.binding_status = 'RESOLVED' AND fb.source_type = 'COLUMN'
+		LIMIT 1
+	`, fieldID).Scan(&boundCol, &boundNode)
+	if err == nil && boundCol.Valid && boundCol.String != "" {
+		return fmt.Sprintf("%s.%s", drivingTable, boundCol.String), boundNode.String
+	}
+
+	// 2. No explicit binding yet: try to match a scanned catalog_node physical
+	// column under the driving table by name. drivingTable may be
+	// "schema.table" or a bare table name (implicit "public" schema).
+	schema := "public"
+	table := drivingTable
+	if idx := strings.LastIndex(drivingTable, "."); idx >= 0 {
+		schema = drivingTable[:idx]
+		table = drivingTable[idx+1:]
+	}
+
+	for _, candidate := range []string{technicalName, fieldName} {
+		norm := normalizeIdentifier(candidate)
+		if norm == "" || isUUIDLike(norm) {
+			continue
+		}
+		var nodeName, nodeID sql.NullString
+		err := r.DB.QueryRow(`
+			SELECT node_name, id::text
+			FROM catalog_node
+			WHERE qualified_path = '/' || $1 || '/' || $2 || '/' || $3
+			  AND COALESCE(properties->>'is_physical_column', 'false') = 'true'
+			LIMIT 1
+		`, schema, table, norm).Scan(&nodeName, &nodeID)
+		if err == nil && nodeName.Valid && nodeName.String != "" {
+			return fmt.Sprintf("%s.%s", drivingTable, nodeName.String), nodeID.String
+		}
+	}
+
+	return "", ""
+}
+
 // GetBODefinition fetches the BO definition from the database
 func (r *PostgresBORepository) GetBODefinition(boID string) (*BODefinition, error) {
+	if def, err := r.getBODefinitionFromSemanticFields(boID); err == nil && def != nil {
+		return def, nil
+	}
+	return r.getBODefinitionLegacy(boID)
+}
+
+// getBODefinitionFromSemanticFields loads fields from business_object_fields
+// (the table correctly FK'd to business_objects) and resolves each one's
+// physical column via resolveCatalogPhysicalColumn. Returns (nil, nil) - not
+// an error - when the BO has no business_object_fields rows, so callers fall
+// through to the legacy path.
+func (r *PostgresBORepository) getBODefinitionFromSemanticFields(boID string) (*BODefinition, error) {
+	var fields []semanticField
+	err := r.DB.Select(&fields, `
+		SELECT id, field_name, COALESCE(technical_name, '') AS technical_name,
+		       COALESCE(display_name, field_name) AS display_name,
+		       COALESCE(data_type, '') AS data_type,
+		       term_node_id::text
+		FROM public.business_object_fields
+		WHERE bo_id = $1::uuid
+		ORDER BY display_order, field_name
+	`, boID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch business_object_fields: %w", err)
+	}
+	if len(fields) == 0 {
+		return nil, nil
+	}
+
+	var res struct {
+		ID              string  `db:"id"`
+		BOKey           string  `db:"bo_key"`
+		DriverTableName *string `db:"driver_table_name"`
+	}
+	if err := r.DB.Get(&res, `
+		SELECT id, bo_key, driver_table_name
+		FROM public.business_objects WHERE id = $1
+	`, boID); err != nil {
+		return nil, fmt.Errorf("failed to fetch BO metadata: %w", err)
+	}
+
+	drivingTable := res.BOKey
+	if res.DriverTableName != nil && *res.DriverTableName != "" {
+		drivingTable = *res.DriverTableName
+	}
+
+	def := &BODefinition{
+		ID:            res.ID,
+		DrivingTable:  drivingTable,
+		Fields:        make([]BOField, 0, len(fields)),
+		Relationships: make([]BORelationship, 0),
+	}
+
+	for _, f := range fields {
+		physicalColumn, _ := r.resolveCatalogPhysicalColumn(f.ID, drivingTable, f.FieldName, f.TechnicalName)
+		def.Fields = append(def.Fields, BOField{
+			ID:             f.ID,
+			Name:           f.FieldName,
+			DisplayName:    f.DisplayName,
+			Path:           f.FieldName,
+			SemanticTermID: f.TermNodeID,
+			PhysicalColumn: physicalColumn,
+			Type:           f.DataType,
+		})
+	}
+
+	// Relationship/join inference isn't available from business_object_fields
+	// today (no reference-BO FK column on this table, unlike legacy bo_fields'
+	// reference_bo_id) - a BO loaded via this path has no auto-inferred joins
+	// yet. Selecting a field whose PhysicalColumn is "" will surface a clear
+	// resolution error rather than silently guessing.
+	return def, nil
+}
+
+// getBODefinitionLegacy is the original bo_fields-based path, kept as a
+// fallback for any BO that still only has legacy bo_fields rows (today, that
+// matches zero real business_objects.id values in this environment, but the
+// path is kept for forward/backward compatibility rather than deleted).
+func (r *PostgresBORepository) getBODefinitionLegacy(boID string) (*BODefinition, error) {
 	// 1. Fetch Fields (with explicit column mapping to avoid struct scan mismatches like "field_name")
 	// Note: Some deployments have `sequence`, others use `display_order`, and older ones may have neither.
 	// Try queries in order of preference and fall back to plain select if the ordered queries fail.
@@ -274,27 +421,42 @@ func (r *PostgresBORepository) GetBODefinition(boID string) (*BODefinition, erro
 	return def, nil
 }
 
-// GetBusinessObjectBinding resolves the binding context for a BO.
-//
-// In the current schema there is no dedicated business_object_bindings table,
-// so the binding is derived from the BO row (datasource_id + driver_table_name).
-// When the explicit binding table lands, this method should be updated to query
-// it using boID + bindingID.
+// GetBusinessObjectBinding resolves the binding context for a BO. It prefers
+// a real business_object_bindings row (bindingID if given, else the
+// tenant's is_default row) and falls back to driver_table_name/bo_key on the
+// business_objects row itself when no binding has been authored yet (true
+// for every BO today - business_object_bindings has zero rows in this
+// environment; see the backfill note in the SQL generator plan).
 func (r *PostgresBORepository) GetBusinessObjectBinding(boID, bindingID string) (*BOBinding, error) {
-	query := `
-		SELECT id, datasource_id, COALESCE(driver_table_name, technical_name, name) AS driving_table
-		FROM public.business_objects
-		WHERE id = $1::uuid
+	var binding BOBinding
+	bindingQuery := `
+		SELECT id::text AS binding_id, backend_type AS dialect_name
+		FROM public.business_object_bindings
+		WHERE bo_id = $1::uuid AND ($2 = '' OR id::text = $2)
+		ORDER BY is_default DESC
 		LIMIT 1
 	`
-	var binding BOBinding
-	if err := r.DB.Get(&binding, query, boID); err != nil {
+	if err := r.DB.Get(&binding, bindingQuery, boID, bindingID); err == nil {
+		binding.BOID = boID
+	}
+
+	var res struct {
+		ID              string  `db:"id"`
+		BOKey           string  `db:"bo_key"`
+		DriverTableName *string `db:"driver_table_name"`
+	}
+	if err := r.DB.Get(&res, `
+		SELECT id, bo_key, driver_table_name FROM public.business_objects WHERE id = $1::uuid LIMIT 1
+	`, boID); err != nil {
 		return nil, fmt.Errorf("failed to resolve binding for BO %s: %w", boID, err)
 	}
 
 	binding.BOID = boID
-	// Until the explicit binding table exists, treat bindingID as the datasource ID.
-	if bindingID != "" {
+	binding.DrivingTable = res.BOKey
+	if res.DriverTableName != nil && *res.DriverTableName != "" {
+		binding.DrivingTable = *res.DriverTableName
+	}
+	if binding.BindingID == "" && bindingID != "" {
 		binding.BindingID = bindingID
 		binding.DatasourceID = bindingID
 	}
@@ -359,18 +521,23 @@ func (r *PostgresBORepository) GetBOTerms(boID, bindingID string) ([]SemanticTer
 
 // GetBOByTechnicalName fetches a BO definition by its technical name
 func (r *PostgresBORepository) GetBOByTechnicalName(technicalName, tenantID, datasourceID string) (*BODefinition, error) {
-	// First find the BO ID by technical name
+	// business_objects has no name/datasource_id columns on this schema;
+	// bo_key (e.g. "oms.customer") plus tenant_id (and the gold-copy tenant,
+	// same read pattern used elsewhere for core/custom BOs) is what actually
+	// identifies a BO. datasourceID is accepted for interface compatibility
+	// but unused here - business_objects.driver_table_name/driver_table_id,
+	// not a datasource_id column, carries binding info on this schema.
 	var boID string
 	query := `
 		SELECT id FROM business_objects
-		WHERE tenant_id = $1::uuid
-		AND datasource_id = $2::uuid
-		AND name = $3
+		WHERE bo_key = $1
+		  AND (tenant_id = $2::uuid OR tenant_id = (SELECT id FROM public.tenants WHERE gold_copy = true LIMIT 1))
+		ORDER BY (tenant_id = $2::uuid) DESC
 		LIMIT 1
 	`
-	err := r.DB.Get(&boID, query, tenantID, datasourceID, technicalName)
+	err := r.DB.Get(&boID, query, technicalName, tenantID)
 	if err != nil {
-		return nil, fmt.Errorf("failed to find business object with name '%s': %w", technicalName, err)
+		return nil, fmt.Errorf("failed to find business object with key '%s': %w", technicalName, err)
 	}
 
 	// Then get the full definition

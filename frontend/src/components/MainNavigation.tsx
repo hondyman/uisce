@@ -140,7 +140,7 @@ const categoryConfigs: CategoryConfig[] = [
         icon: <BusinessIcon />,
         requiredCapability: 'menu:organization',
         items: [
-          { label: 'Manage Resources', path: '/fabric/tenants', icon: <CorporateFareIcon />, description: 'Manage current tenant resources' },
+          { label: 'Manage Resources', path: '/tenants', icon: <CorporateFareIcon />, description: 'Manage current tenant resources' },
           { label: 'Entitlement Management', path: '/admin/entitlements', icon: <ExtensionIcon />, description: 'Tenant profiles and component entitlements', requiredCapability: 'menu:entitlements' },
           { label: 'Users', path: '/admin/rbac/users', icon: <PersonAddIcon />, description: 'User management' },
           { label: 'Teams', path: '/admin/rbac/teams', icon: <GroupsIcon />, description: 'Team structure' },

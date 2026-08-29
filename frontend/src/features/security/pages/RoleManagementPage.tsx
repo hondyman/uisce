@@ -1,14 +1,20 @@
 import React, { useEffect, useState } from 'react';
 import { Box, Typography, Button, IconButton, Tooltip, Chip } from '@mui/material';
 import { DataGrid, GridColDef, GridRenderCellParams } from '@mui/x-data-grid';
-import { Add as AddIcon, Edit as EditIcon, Delete as DeleteIcon, Refresh as RefreshIcon } from '@mui/icons-material';
+import { Add as AddIcon, Edit as EditIcon, Delete as DeleteIcon, Refresh as RefreshIcon, ContentCopy as CloneIcon } from '@mui/icons-material';
 import { useRoles } from '../hooks/useRoles';
 import { Role } from '../types/security';
 import { RoleEditor } from '../components/RoleEditor';
 import { format } from 'date-fns';
 
+const ORIGIN_LABEL: Record<Role['origin'], { label: string; color: 'secondary' | 'info' | 'default' }> = {
+  gold_copy: { label: 'Gold Copy', color: 'secondary' },
+  extended: { label: 'Extended', color: 'info' },
+  tenant: { label: 'Custom', color: 'default' },
+};
+
 export const RoleManagementPage: React.FC = () => {
-  const { roles, loading, error, fetchRoles, createRole, updateRole, deleteRole } = useRoles();
+  const { roles, loading, error, fetchRoles, createRole, updateRole, deleteRole, cloneRole } = useRoles();
   const [editorOpen, setEditorOpen] = useState(false);
   const [editingRole, setEditingRole] = useState<Role | null>(null);
 
@@ -32,9 +38,16 @@ export const RoleManagementPage: React.FC = () => {
     }
   };
 
+  const handleClone = async (role: Role) => {
+    const roleKey = window.prompt('Role key for the cloned role:', `${role.role_key}_custom`);
+    if (!roleKey) return;
+    const roleName = window.prompt('Role name for the cloned role:', `${role.role_name} (My Tenant)`) || role.role_name;
+    await cloneRole(role.id, roleKey, roleName);
+  };
+
   const handleSave = async (roleData: Partial<Role>) => {
     if (editingRole) {
-      await updateRole(editingRole.role_id, roleData);
+      await updateRole(editingRole.id, roleData);
     } else {
       await createRole(roleData);
     }
@@ -42,18 +55,17 @@ export const RoleManagementPage: React.FC = () => {
 
   const columns: GridColDef[] = [
     { field: 'role_name', headerName: 'Role Name', flex: 1 },
+    { field: 'role_key', headerName: 'Key', flex: 0.7 },
     { field: 'description', headerName: 'Description', flex: 1.5 },
+    { field: 'role_level', headerName: 'Level', width: 120 },
     {
-      field: 'is_global_admin',
-      headerName: 'Type',
-      width: 150,
-      renderCell: (params: GridRenderCellParams) => (
-        params.value ? (
-          <Chip label="Global Admin" color="secondary" size="small" />
-        ) : (
-          <Chip label="Tenant Role" size="small" />
-        )
-      ),
+      field: 'origin',
+      headerName: 'Origin',
+      width: 130,
+      renderCell: (params: GridRenderCellParams) => {
+        const meta = ORIGIN_LABEL[params.value as Role['origin']] || ORIGIN_LABEL.tenant;
+        return <Chip label={meta.label} color={meta.color} size="small" />;
+      },
     },
     {
       field: 'created_at',
@@ -67,22 +79,34 @@ export const RoleManagementPage: React.FC = () => {
     {
       field: 'actions',
       headerName: 'Actions',
-      width: 120,
+      width: 150,
       sortable: false,
-      renderCell: (params: GridRenderCellParams) => (
-        <Box>
-          <Tooltip title="Edit">
-            <IconButton onClick={() => handleEdit(params.row as Role)} size="small">
-              <EditIcon fontSize="small" />
-            </IconButton>
-          </Tooltip>
-          <Tooltip title="Delete">
-            <IconButton onClick={() => handleDelete(params.row.role_id)} size="small" color="error">
-              <DeleteIcon fontSize="small" />
-            </IconButton>
-          </Tooltip>
-        </Box>
-      ),
+      renderCell: (params: GridRenderCellParams) => {
+        const role = params.row as Role;
+        if (role.origin === 'gold_copy') {
+          return (
+            <Tooltip title="Clone to my tenant">
+              <IconButton onClick={() => handleClone(role)} size="small">
+                <CloneIcon fontSize="small" />
+              </IconButton>
+            </Tooltip>
+          );
+        }
+        return (
+          <Box>
+            <Tooltip title="Edit">
+              <IconButton onClick={() => handleEdit(role)} size="small">
+                <EditIcon fontSize="small" />
+              </IconButton>
+            </Tooltip>
+            <Tooltip title="Delete">
+              <IconButton onClick={() => handleDelete(role.id)} size="small" color="error">
+                <DeleteIcon fontSize="small" />
+              </IconButton>
+            </Tooltip>
+          </Box>
+        );
+      },
     },
   ];
 
@@ -110,7 +134,7 @@ export const RoleManagementPage: React.FC = () => {
         <DataGrid
           rows={roles}
           columns={columns}
-          getRowId={(row) => row.role_id}
+          getRowId={(row) => row.id}
           loading={loading}
           disableRowSelectionOnClick
           initialState={{

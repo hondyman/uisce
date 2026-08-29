@@ -57,33 +57,26 @@ export const useIPWhitelistAPI = () => {
   }, []);
 
   const fetchTenants = useCallback(async (): Promise<Tenant[]> => {
-  const backendBase = (import.meta.env.VITE_API_BASE_URL as string) || 'http://localhost:29080';
-  const candidates = ['/api/tenants', `${backendBase}/api/tenants`, 'http://localhost:3000/api/tenants'];
-
-    for (const url of candidates) {
-      try {
-        const response = await fetch(url);
-        if (response.ok) {
-          const data = await response.json();
-          const raw = data.tenants || [];
-          return raw
-            .filter((t: any) => !t.is_deleted && (t.is_active ?? t.isActive ?? t.status === 'active') === true)
-            .map((t: any) => ({
-              id: t.id,
-              displayName: t.display_name || t.displayName || t.name || t.id,
-              name: t.name,
-              tenant_code: t.tenant_code,
-              gold_copy: t.gold_copy ?? false,
-              is_active: t.is_active ?? t.isActive ?? t.status === 'active',
-              status: 'active'
-            }));
-        }
-      } catch {
-        continue;
+    try {
+      const response = await apiFetch('/api/tenants/all');
+      if (response.ok) {
+        const data = await response.json();
+        const raw = Array.isArray(data) ? data : data.data || data.tenants || [];
+        return raw
+          .filter((t: any) => !t.is_deleted && (t.is_active ?? t.isActive ?? t.status === 'active') === true)
+          .map((t: any) => ({
+            id: t.id,
+            displayName: t.display_name || t.displayName || t.name || t.id,
+            name: t.name,
+            tenant_code: t.tenant_code,
+            gold_copy: t.gold_copy ?? false,
+            is_active: t.is_active ?? t.isActive ?? t.status === 'active',
+            status: 'active'
+          }));
       }
+    } catch (err: any) {
+      setError(err?.message || 'Failed to fetch tenants');
     }
-
-    setError('Failed to fetch tenants from any endpoint');
     return [];
   }, []);
 
@@ -114,7 +107,7 @@ export const useIPWhitelistAPI = () => {
 
   const fetchAllIPWhitelist = useCallback(async (): Promise<IPWhitelistEntry[]> => {
     const data = await handleRequest<{ whitelist: any[] }>(
-      () => fetch('/api/ip-whitelist'),
+      () => apiFetch('/api/ip-whitelist'),
       'Failed to fetch IP whitelist'
     );
     
@@ -131,7 +124,7 @@ export const useIPWhitelistAPI = () => {
 
   const fetchTenantIPWhitelist = useCallback(async (tenantId: string): Promise<IPWhitelistEntry[]> => {
     const data = await handleRequest<{ whitelist: IPWhitelistEntry[] }>(
-      () => fetch(`/api/tenants/${tenantId}/ip-whitelist`),
+      () => apiFetch(`/api/tenants/${tenantId}/ip-whitelist`),
       `Failed to fetch IP whitelist for tenant ${tenantId}`
     );
     
@@ -147,7 +140,7 @@ export const useIPWhitelistAPI = () => {
     opts?: { allTenants?: boolean }
   ): Promise<boolean> => {
     // If ALL_TENANTS, send allTenants: true and avoid assignments
-  const isAll = opts?.allTenants === true || tenantId === ALL_TENANTS_ID || (additionalTenantIds || []).includes(ALL_TENANTS_ID);
+    const isAll = opts?.allTenants === true || tenantId === ALL_TENANTS_ID || (additionalTenantIds || []).includes(ALL_TENANTS_ID);
     let primary = tenantId;
     let extras = additionalTenantIds || [];
     if (isAll) {
@@ -158,19 +151,18 @@ export const useIPWhitelistAPI = () => {
     } else if (primary === ALL_TENANTS_ID) {
       // fallback safety: if somehow primary is ALL, pick first extra
       primary = extras[0] || '';
-      extras = extras.filter(id => id !== primary);
     }
 
-  const payload: any = {
+    const payload: any = {
       ipAddress,
-      label: label || null,
-      description: description || null,
-      tenantIds: (extras || []).filter(id => id && id !== ALL_TENANTS_ID)
+      label,
+      description,
+      tenantIds: isAll ? [] : [primary, ...extras]
     };
-  if (isAll) payload.allTenants = true;
+    if (isAll) payload.allTenants = true;
 
     const success = await handleRequest(
-      () => fetch(`/api/tenants/${primary}/ip-whitelist`, {
+      () => apiFetch(`/api/tenants/${primary}/ip-whitelist`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
@@ -192,7 +184,7 @@ export const useIPWhitelistAPI = () => {
     };
 
     const success = await handleRequest(
-      () => fetch(`/api/tenants/${tenantId}/ip-whitelist`, {
+      () => apiFetch(`/api/tenants/${tenantId}/ip-whitelist`, {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
