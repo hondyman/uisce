@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"strconv"
 
+	"calendar-service/internal/middleware"
 	"calendar-service/internal/services"
 
 	"github.com/gorilla/mux"
@@ -72,14 +73,14 @@ func (h *ProfileHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Get tenant and actor from headers
-	tenantID := r.Header.Get("X-Hasura-Tenant-Id")
+	// Get tenant and actor from the verified JWT context (set by JWTMiddleware)
+	tenantID := middleware.ExtractTenantIDFromContext(r.Context())
 	if tenantID == "" {
-		writeJSONError(w, http.StatusBadRequest, "tenant_id required (X-Hasura-Tenant-Id header)")
+		writeJSONError(w, http.StatusBadRequest, "tenant_id missing from authenticated context")
 		return
 	}
 
-	actorID := r.Header.Get("X-Hasura-User-Id")
+	actorID := middleware.ExtractUserIDFromContext(r.Context())
 	if actorID == "" {
 		actorID = "system"
 	}
@@ -128,14 +129,14 @@ func (h *ProfileHandler) Update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Get tenant and actor from headers
-	tenantID := r.Header.Get("X-Hasura-Tenant-Id")
+	// Get tenant and actor from the verified JWT context (set by JWTMiddleware)
+	tenantID := middleware.ExtractTenantIDFromContext(r.Context())
 	if tenantID == "" {
 		writeJSONError(w, http.StatusBadRequest, "tenant_id required")
 		return
 	}
 
-	actorID := r.Header.Get("X-Hasura-User-Id")
+	actorID := middleware.ExtractUserIDFromContext(r.Context())
 	if actorID == "" {
 		actorID = "system"
 	}
@@ -177,7 +178,7 @@ func (h *ProfileHandler) Update(w http.ResponseWriter, r *http.Request) {
 // @Failure 400 {object} ErrorResponse
 // @Router /api/v1/profiles [get]
 func (h *ProfileHandler) List(w http.ResponseWriter, r *http.Request) {
-	tenantID := r.Header.Get("X-Hasura-Tenant-Id")
+	tenantID := middleware.ExtractTenantIDFromContext(r.Context())
 	if tenantID == "" {
 		writeJSONError(w, http.StatusBadRequest, "tenant_id required")
 		return
@@ -228,7 +229,7 @@ func (h *ProfileHandler) Get(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	profileID := vars["id"]
 
-	tenantID := r.Header.Get("X-Hasura-Tenant-Id")
+	tenantID := middleware.ExtractTenantIDFromContext(r.Context())
 	if tenantID == "" {
 		writeJSONError(w, http.StatusBadRequest, "tenant_id required")
 		return
@@ -257,13 +258,13 @@ func (h *ProfileHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	profileID := vars["id"]
 
-	tenantID := r.Header.Get("X-Hasura-Tenant-Id")
+	tenantID := middleware.ExtractTenantIDFromContext(r.Context())
 	if tenantID == "" {
 		writeJSONError(w, http.StatusBadRequest, "tenant_id required")
 		return
 	}
 
-	actorID := r.Header.Get("X-Hasura-User-Id")
+	actorID := middleware.ExtractUserIDFromContext(r.Context())
 	if actorID == "" {
 		actorID = "system"
 	}
@@ -293,7 +294,7 @@ func (h *ProfileHandler) ListVersions(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	profileID := vars["id"]
 
-	tenantID := r.Header.Get("X-Hasura-Tenant-Id")
+	tenantID := middleware.ExtractTenantIDFromContext(r.Context())
 	if tenantID == "" {
 		writeJSONError(w, http.StatusBadRequest, "tenant_id required")
 		return

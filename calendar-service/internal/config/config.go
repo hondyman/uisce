@@ -22,11 +22,6 @@ type Config struct {
 	PostgresDB       string
 	PostgresSSLMode  string
 
-	// Hasura
-	HasuraEndpoint    string
-	HasuraAdminSecret string
-	HasuraJWTSecret   string
-
 	// Temporal
 	TemporalHostPort  string
 	TemporalNamespace string
@@ -91,11 +86,6 @@ func LoadConfig() *Config {
 		PostgresPassword: requireEnv("POSTGRES_PASSWORD"),
 		PostgresDB:       getEnv("POSTGRES_DB", "calendar_db"),
 		PostgresSSLMode:  getEnv("POSTGRES_SSL_MODE", "disable"),
-
-		// Hasura
-		HasuraEndpoint:    getEnv("HASURA_ENDPOINT", "http://localhost:8080/v1/graphql"),
-		HasuraAdminSecret: requireEnv("HASURA_ADMIN_SECRET"),
-		HasuraJWTSecret:   requireEnv("HASURA_JWT_SECRET"),
 
 		// Temporal
 		TemporalHostPort:  getEnv("TEMPORAL_HOST_PORT", "localhost:7233"),

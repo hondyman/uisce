@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strconv"
 
+	"calendar-service/internal/middleware"
 	"calendar-service/internal/services"
 
 	"github.com/google/uuid"
@@ -60,9 +61,9 @@ func (h *ExternalSyncHandler) CreateSyncConfig(w http.ResponseWriter, r *http.Re
 	}
 
 	// Get tenant from header
-	tenantIDStr := r.Header.Get("X-Hasura-Tenant-Id")
+	tenantIDStr := middleware.ExtractTenantIDFromContext(r.Context())
 	if tenantIDStr == "" {
-		writeJSONError(w, http.StatusBadRequest, "tenant_id required (X-Hasura-Tenant-Id header)")
+		writeJSONError(w, http.StatusBadRequest, "tenant_id missing from authenticated context")
 		return
 	}
 
@@ -112,9 +113,9 @@ func (h *ExternalSyncHandler) GetSyncConfig(w http.ResponseWriter, r *http.Reque
 	}
 
 	// Get tenant from header
-	tenantIDStr := r.Header.Get("X-Hasura-Tenant-Id")
+	tenantIDStr := middleware.ExtractTenantIDFromContext(r.Context())
 	if tenantIDStr == "" {
-		writeJSONError(w, http.StatusBadRequest, "tenant_id required (X-Hasura-Tenant-Id header)")
+		writeJSONError(w, http.StatusBadRequest, "tenant_id missing from authenticated context")
 		return
 	}
 
@@ -141,9 +142,9 @@ func (h *ExternalSyncHandler) GetSyncConfig(w http.ResponseWriter, r *http.Reque
 // Lists all sync configurations for a tenant
 func (h *ExternalSyncHandler) ListSyncConfigs(w http.ResponseWriter, r *http.Request) {
 	// Get tenant from header
-	tenantIDStr := r.Header.Get("X-Hasura-Tenant-Id")
+	tenantIDStr := middleware.ExtractTenantIDFromContext(r.Context())
 	if tenantIDStr == "" {
-		writeJSONError(w, http.StatusBadRequest, "tenant_id required (X-Hasura-Tenant-Id header)")
+		writeJSONError(w, http.StatusBadRequest, "tenant_id missing from authenticated context")
 		return
 	}
 
@@ -177,9 +178,9 @@ func (h *ExternalSyncHandler) ListSyncConfigsByProfile(w http.ResponseWriter, r 
 	}
 
 	// Get tenant from header
-	tenantIDStr := r.Header.Get("X-Hasura-Tenant-Id")
+	tenantIDStr := middleware.ExtractTenantIDFromContext(r.Context())
 	if tenantIDStr == "" {
-		writeJSONError(w, http.StatusBadRequest, "tenant_id required (X-Hasura-Tenant-Id header)")
+		writeJSONError(w, http.StatusBadRequest, "tenant_id missing from authenticated context")
 		return
 	}
 
@@ -220,9 +221,9 @@ func (h *ExternalSyncHandler) UpdateSyncConfig(w http.ResponseWriter, r *http.Re
 	}
 
 	// Get tenant from header
-	tenantIDStr := r.Header.Get("X-Hasura-Tenant-Id")
+	tenantIDStr := middleware.ExtractTenantIDFromContext(r.Context())
 	if tenantIDStr == "" {
-		writeJSONError(w, http.StatusBadRequest, "tenant_id required (X-Hasura-Tenant-Id header)")
+		writeJSONError(w, http.StatusBadRequest, "tenant_id missing from authenticated context")
 		return
 	}
 
@@ -268,9 +269,9 @@ func (h *ExternalSyncHandler) DeleteSyncConfig(w http.ResponseWriter, r *http.Re
 	}
 
 	// Get tenant from header
-	tenantIDStr := r.Header.Get("X-Hasura-Tenant-Id")
+	tenantIDStr := middleware.ExtractTenantIDFromContext(r.Context())
 	if tenantIDStr == "" {
-		writeJSONError(w, http.StatusBadRequest, "tenant_id required (X-Hasura-Tenant-Id header)")
+		writeJSONError(w, http.StatusBadRequest, "tenant_id missing from authenticated context")
 		return
 	}
 
@@ -302,9 +303,9 @@ func (h *ExternalSyncHandler) TriggerSync(w http.ResponseWriter, r *http.Request
 	}
 
 	// Get tenant from header
-	tenantIDStr := r.Header.Get("X-Hasura-Tenant-Id")
+	tenantIDStr := middleware.ExtractTenantIDFromContext(r.Context())
 	if tenantIDStr == "" {
-		writeJSONError(w, http.StatusBadRequest, "tenant_id required (X-Hasura-Tenant-Id header)")
+		writeJSONError(w, http.StatusBadRequest, "tenant_id missing from authenticated context")
 		return
 	}
 
@@ -354,9 +355,9 @@ func (h *ExternalSyncHandler) GetSyncLogs(w http.ResponseWriter, r *http.Request
 	}
 
 	// Get tenant from header
-	tenantIDStr := r.Header.Get("X-Hasura-Tenant-Id")
+	tenantIDStr := middleware.ExtractTenantIDFromContext(r.Context())
 	if tenantIDStr == "" {
-		writeJSONError(w, http.StatusBadRequest, "tenant_id required (X-Hasura-Tenant-Id header)")
+		writeJSONError(w, http.StatusBadRequest, "tenant_id missing from authenticated context")
 		return
 	}
 
@@ -398,9 +399,9 @@ func (h *ExternalSyncHandler) GetLastSyncLog(w http.ResponseWriter, r *http.Requ
 	}
 
 	// Get tenant from header
-	tenantIDStr := r.Header.Get("X-Hasura-Tenant-Id")
+	tenantIDStr := middleware.ExtractTenantIDFromContext(r.Context())
 	if tenantIDStr == "" {
-		writeJSONError(w, http.StatusBadRequest, "tenant_id required (X-Hasura-Tenant-Id header)")
+		writeJSONError(w, http.StatusBadRequest, "tenant_id missing from authenticated context")
 		return
 	}
 
@@ -446,9 +447,9 @@ func (h *ExternalSyncHandler) ValidateProvider(w http.ResponseWriter, r *http.Re
 	}
 
 	// Get tenant from header (just for logging/context)
-	tenantIDStr := r.Header.Get("X-Hasura-Tenant-Id")
+	tenantIDStr := middleware.ExtractTenantIDFromContext(r.Context())
 	if tenantIDStr == "" {
-		writeJSONError(w, http.StatusBadRequest, "tenant_id required (X-Hasura-Tenant-Id header)")
+		writeJSONError(w, http.StatusBadRequest, "tenant_id missing from authenticated context")
 		return
 	}
 

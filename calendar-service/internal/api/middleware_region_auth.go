@@ -9,18 +9,21 @@ import (
 	"strings"
 
 	"calendar-service/internal/database"
+	"calendar-service/internal/middleware"
 
 	"github.com/sirupsen/logrus"
 )
 
+// RegionAuthMiddleware must run after JWTMiddleware so it reads the verified
+// tenant ID from context rather than trusting a client-supplied header.
 func RegionAuthMiddleware(dbClient *database.Client, logger *logrus.Entry) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			ctx := r.Context()
 
-			tenantID := r.Header.Get("X-Hasura-Tenant-Id")
+			tenantID := middleware.ExtractTenantIDFromContext(ctx)
 			if tenantID == "" {
-				http.Error(w, "Missing X-Hasura-Tenant-Id header", http.StatusUnauthorized)
+				http.Error(w, "Missing authenticated tenant", http.StatusUnauthorized)
 				return
 			}
 
