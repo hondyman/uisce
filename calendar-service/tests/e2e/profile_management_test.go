@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"calendar-service/internal/api"
+	"calendar-service/internal/middleware"
 	"calendar-service/internal/repository"
 	"calendar-service/internal/services"
 
@@ -41,9 +42,8 @@ func TestProfileManagement_E2E(t *testing.T) {
 
 	t.Run("CreateProfile", func(t *testing.T) {
 		req := httptest.NewRequest(http.MethodPost, "/api/v1/profiles", nil)
-		req.Header.Set("X-Hasura-Tenant-Id", tenantID)
-		req.Header.Set("X-Hasura-User-Id", userID)
-
+		req = req.WithContext(middleware.WithClaims(req.Context(), map[string]interface{}{"tenant_id": tenantID}))
+		req = req.WithContext(middleware.WithClaims(req.Context(), map[string]interface{}{"user_id": userID}))
 		reqBody, err := json.Marshal(map[string]interface{}{
 			"profile_name":        "US-Core",
 			"description":         "US Core Operations Calendar",
@@ -76,8 +76,7 @@ func TestProfileManagement_E2E(t *testing.T) {
 
 	t.Run("ListProfiles", func(t *testing.T) {
 		req := httptest.NewRequest(http.MethodGet, "/api/v1/profiles?limit=10&offset=0", nil)
-		req.Header.Set("X-Hasura-Tenant-Id", tenantID)
-
+		req = req.WithContext(middleware.WithClaims(req.Context(), map[string]interface{}{"tenant_id": tenantID}))
 		w := httptest.NewRecorder()
 		profileHandler.List(w, req)
 
@@ -93,9 +92,8 @@ func TestProfileManagement_E2E(t *testing.T) {
 	t.Run("GetProfile", func(t *testing.T) {
 		// First create a profile to get its ID
 		reqCreate := httptest.NewRequest(http.MethodPost, "/api/v1/profiles", nil)
-		reqCreate.Header.Set("X-Hasura-Tenant-Id", tenantID)
-		reqCreate.Header.Set("X-Hasura-User-Id", userID)
-
+		reqCreate = reqCreate.WithContext(middleware.WithClaims(reqCreate.Context(), map[string]interface{}{"tenant_id": tenantID}))
+		reqCreate = reqCreate.WithContext(middleware.WithClaims(reqCreate.Context(), map[string]interface{}{"user_id": userID}))
 		reqBody, _ := json.Marshal(map[string]interface{}{
 			"profile_name":        "EU-Finance",
 			"calendars":           []string{"cal-1"},
@@ -114,8 +112,7 @@ func TestProfileManagement_E2E(t *testing.T) {
 
 		// Now get the profile
 		req := httptest.NewRequest(http.MethodGet, "/api/v1/profiles/"+createdProfile.ID, nil)
-		req.Header.Set("X-Hasura-Tenant-Id", tenantID)
-
+		req = req.WithContext(middleware.WithClaims(req.Context(), map[string]interface{}{"tenant_id": tenantID}))
 		w := httptest.NewRecorder()
 		profileHandler.Get(w, req)
 
@@ -132,9 +129,8 @@ func TestProfileManagement_E2E(t *testing.T) {
 	t.Run("UpdateProfile_BitemporalVersioning", func(t *testing.T) {
 		// Create profile
 		reqCreate := httptest.NewRequest(http.MethodPost, "/api/v1/profiles", nil)
-		reqCreate.Header.Set("X-Hasura-Tenant-Id", tenantID)
-		reqCreate.Header.Set("X-Hasura-User-Id", userID)
-
+		reqCreate = reqCreate.WithContext(middleware.WithClaims(reqCreate.Context(), map[string]interface{}{"tenant_id": tenantID}))
+		reqCreate = reqCreate.WithContext(middleware.WithClaims(reqCreate.Context(), map[string]interface{}{"user_id": userID}))
 		reqBody, _ := json.Marshal(map[string]interface{}{
 			"profile_name":        "APAC-Operations",
 			"calendars":           []string{"cal-1"},
@@ -156,9 +152,8 @@ func TestProfileManagement_E2E(t *testing.T) {
 
 		// Update profile
 		reqUpdate := httptest.NewRequest(http.MethodPut, "/api/v1/profiles/"+oldID, nil)
-		reqUpdate.Header.Set("X-Hasura-Tenant-Id", tenantID)
-		reqUpdate.Header.Set("X-Hasura-User-Id", userID)
-
+		reqUpdate = reqUpdate.WithContext(middleware.WithClaims(reqUpdate.Context(), map[string]interface{}{"tenant_id": tenantID}))
+		reqUpdate = reqUpdate.WithContext(middleware.WithClaims(reqUpdate.Context(), map[string]interface{}{"user_id": userID}))
 		updateBody, _ := json.Marshal(map[string]interface{}{
 			"timezone": "Asia/Singapore",
 		})
@@ -184,9 +179,8 @@ func TestProfileManagement_E2E(t *testing.T) {
 	t.Run("DeleteProfile_SoftDelete", func(t *testing.T) {
 		// Create profile
 		reqCreate := httptest.NewRequest(http.MethodPost, "/api/v1/profiles", nil)
-		reqCreate.Header.Set("X-Hasura-Tenant-Id", tenantID)
-		reqCreate.Header.Set("X-Hasura-User-Id", userID)
-
+		reqCreate = reqCreate.WithContext(middleware.WithClaims(reqCreate.Context(), map[string]interface{}{"tenant_id": tenantID}))
+		reqCreate = reqCreate.WithContext(middleware.WithClaims(reqCreate.Context(), map[string]interface{}{"user_id": userID}))
 		reqBody, _ := json.Marshal(map[string]interface{}{
 			"profile_name":        "Temp-Profile",
 			"calendars":           []string{"cal-1"},
@@ -205,9 +199,8 @@ func TestProfileManagement_E2E(t *testing.T) {
 
 		// Delete profile
 		reqDelete := httptest.NewRequest(http.MethodDelete, "/api/v1/profiles/"+createdProfile.ID, nil)
-		reqDelete.Header.Set("X-Hasura-Tenant-Id", tenantID)
-		reqDelete.Header.Set("X-Hasura-User-Id", userID)
-
+		reqDelete = reqDelete.WithContext(middleware.WithClaims(reqDelete.Context(), map[string]interface{}{"tenant_id": tenantID}))
+		reqDelete = reqDelete.WithContext(middleware.WithClaims(reqDelete.Context(), map[string]interface{}{"user_id": userID}))
 		wDelete := httptest.NewRecorder()
 		profileHandler.Delete(wDelete, reqDelete)
 
@@ -215,8 +208,7 @@ func TestProfileManagement_E2E(t *testing.T) {
 
 		// Verify deletion
 		reqGet := httptest.NewRequest(http.MethodGet, "/api/v1/profiles/"+createdProfile.ID, nil)
-		reqGet.Header.Set("X-Hasura-Tenant-Id", tenantID)
-
+		reqGet = reqGet.WithContext(middleware.WithClaims(reqGet.Context(), map[string]interface{}{"tenant_id": tenantID}))
 		wGet := httptest.NewRecorder()
 		profileHandler.Get(wGet, reqGet)
 
@@ -227,9 +219,8 @@ func TestProfileManagement_E2E(t *testing.T) {
 	t.Run("ListVersions", func(t *testing.T) {
 		// Create and update profile multiple times
 		reqCreate := httptest.NewRequest(http.MethodPost, "/api/v1/profiles", nil)
-		reqCreate.Header.Set("X-Hasura-Tenant-Id", tenantID)
-		reqCreate.Header.Set("X-Hasura-User-Id", userID)
-
+		reqCreate = reqCreate.WithContext(middleware.WithClaims(reqCreate.Context(), map[string]interface{}{"tenant_id": tenantID}))
+		reqCreate = reqCreate.WithContext(middleware.WithClaims(reqCreate.Context(), map[string]interface{}{"user_id": userID}))
 		reqBody, _ := json.Marshal(map[string]interface{}{
 			"profile_name":        "Multi-Version",
 			"calendars":           []string{"cal-1"},
@@ -251,9 +242,8 @@ func TestProfileManagement_E2E(t *testing.T) {
 		// Update twice
 		for i := 0; i < 2; i++ {
 			reqUpdate := httptest.NewRequest(http.MethodPut, "/api/v1/profiles/"+profileID, nil)
-			reqUpdate.Header.Set("X-Hasura-Tenant-Id", tenantID)
-			reqUpdate.Header.Set("X-Hasura-User-Id", userID)
-
+			reqUpdate = reqUpdate.WithContext(middleware.WithClaims(reqUpdate.Context(), map[string]interface{}{"tenant_id": tenantID}))
+			reqUpdate = reqUpdate.WithContext(middleware.WithClaims(reqUpdate.Context(), map[string]interface{}{"user_id": userID}))
 			updateBody, _ := json.Marshal(map[string]interface{}{
 				"description": "Update " + string(rune(i)),
 			})
@@ -271,8 +261,7 @@ func TestProfileManagement_E2E(t *testing.T) {
 
 		// List versions
 		reqVersions := httptest.NewRequest(http.MethodGet, "/api/v1/profiles/Multi-Version/versions", nil)
-		reqVersions.Header.Set("X-Hasura-Tenant-Id", tenantID)
-
+		reqVersions = reqVersions.WithContext(middleware.WithClaims(reqVersions.Context(), map[string]interface{}{"tenant_id": tenantID}))
 		wVersions := httptest.NewRecorder()
 		profileHandler.ListVersions(wVersions, reqVersions)
 
@@ -288,9 +277,8 @@ func TestProfileManagement_E2E(t *testing.T) {
 	t.Run("TenantIsolation", func(t *testing.T) {
 		// Create profile in tenant 1
 		reqCreate := httptest.NewRequest(http.MethodPost, "/api/v1/profiles", nil)
-		reqCreate.Header.Set("X-Hasura-Tenant-Id", "tenant-1")
-		reqCreate.Header.Set("X-Hasura-User-Id", userID)
-
+		reqCreate = reqCreate.WithContext(middleware.WithClaims(reqCreate.Context(), map[string]interface{}{"tenant_id": "tenant-1"}))
+		reqCreate = reqCreate.WithContext(middleware.WithClaims(reqCreate.Context(), map[string]interface{}{"user_id": userID}))
 		reqBody, _ := json.Marshal(map[string]interface{}{
 			"profile_name":        "Tenant1-Profile",
 			"calendars":           []string{"cal-1"},
@@ -309,8 +297,7 @@ func TestProfileManagement_E2E(t *testing.T) {
 
 		// Try to access with different tenant
 		reqGet := httptest.NewRequest(http.MethodGet, "/api/v1/profiles/"+profile.ID, nil)
-		reqGet.Header.Set("X-Hasura-Tenant-Id", "tenant-2")
-
+		reqGet = reqGet.WithContext(middleware.WithClaims(reqGet.Context(), map[string]interface{}{"tenant_id": "tenant-2"}))
 		wGet := httptest.NewRecorder()
 		profileHandler.Get(wGet, reqGet)
 

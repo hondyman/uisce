@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"calendar-service/internal/api"
+	"calendar-service/internal/middleware"
 	"calendar-service/internal/services"
 
 	"github.com/google/uuid"
@@ -43,8 +44,7 @@ func TestExternalSyncCreateConfig(t *testing.T) {
 	body, _ := json.Marshal(reqBody)
 	req := httptest.NewRequest("POST", "/api/v1/external-sync", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-Hasura-Tenant-Id", tenantID.String())
-
+	req = req.WithContext(middleware.WithClaims(req.Context(), map[string]interface{}{"tenant_id": tenantID.String()}))
 	// Execute
 	w := httptest.NewRecorder()
 	handler.CreateSyncConfig(w, req)
@@ -89,8 +89,7 @@ func TestExternalSyncGetConfig(t *testing.T) {
 	// Get request
 	req := httptest.NewRequest("GET", fmt.Sprintf("/api/v1/external-sync/%s", config.ID.String()), nil)
 	req.SetPathValue("id", config.ID.String())
-	req.Header.Set("X-Hasura-Tenant-Id", tenantID.String())
-
+	req = req.WithContext(middleware.WithClaims(req.Context(), map[string]interface{}{"tenant_id": tenantID.String()}))
 	// Execute
 	w := httptest.NewRecorder()
 	handler.GetSyncConfig(w, req)
@@ -135,8 +134,7 @@ func TestExternalSyncListConfigs(t *testing.T) {
 
 	// List request
 	req := httptest.NewRequest("GET", "/api/v1/external-sync", nil)
-	req.Header.Set("X-Hasura-Tenant-Id", tenantID.String())
-
+	req = req.WithContext(middleware.WithClaims(req.Context(), map[string]interface{}{"tenant_id": tenantID.String()}))
 	// Execute
 	w := httptest.NewRecorder()
 	handler.ListSyncConfigs(w, req)
@@ -185,8 +183,7 @@ func TestExternalSyncUpdateConfig(t *testing.T) {
 	req := httptest.NewRequest("PUT", fmt.Sprintf("/api/v1/external-sync/%s", config.ID.String()), bytes.NewReader(body))
 	req.SetPathValue("id", config.ID.String())
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-Hasura-Tenant-Id", tenantID.String())
-
+	req = req.WithContext(middleware.WithClaims(req.Context(), map[string]interface{}{"tenant_id": tenantID.String()}))
 	// Execute
 	w := httptest.NewRecorder()
 	handler.UpdateSyncConfig(w, req)
@@ -229,8 +226,7 @@ func TestExternalSyncDeleteConfig(t *testing.T) {
 	// Delete request
 	req := httptest.NewRequest("DELETE", fmt.Sprintf("/api/v1/external-sync/%s", config.ID.String()), nil)
 	req.SetPathValue("id", config.ID.String())
-	req.Header.Set("X-Hasura-Tenant-Id", tenantID.String())
-
+	req = req.WithContext(middleware.WithClaims(req.Context(), map[string]interface{}{"tenant_id": tenantID.String()}))
 	// Execute
 	w := httptest.NewRecorder()
 	handler.DeleteSyncConfig(w, req)
@@ -241,7 +237,7 @@ func TestExternalSyncDeleteConfig(t *testing.T) {
 	// Verify deletion
 	req2 := httptest.NewRequest("GET", fmt.Sprintf("/api/v1/external-sync/%s", config.ID.String()), nil)
 	req2.SetPathValue("id", config.ID.String())
-	req2.Header.Set("X-Hasura-Tenant-Id", tenantID.String())
+	req2 = req2.WithContext(middleware.WithClaims(req2.Context(), map[string]interface{}{"tenant_id": tenantID.String()}))
 	w2 := httptest.NewRecorder()
 	handler.GetSyncConfig(w2, req2)
 	assert.Equal(t, http.StatusNotFound, w2.Code)
@@ -276,8 +272,7 @@ func TestExternalSyncTriggerSync(t *testing.T) {
 	// Trigger sync request
 	req := httptest.NewRequest("POST", fmt.Sprintf("/api/v1/external-sync/%s/trigger", config.ID.String()), nil)
 	req.SetPathValue("id", config.ID.String())
-	req.Header.Set("X-Hasura-Tenant-Id", tenantID.String())
-
+	req = req.WithContext(middleware.WithClaims(req.Context(), map[string]interface{}{"tenant_id": tenantID.String()}))
 	// Execute
 	w := httptest.NewRecorder()
 	handler.TriggerSync(w, req)
@@ -336,8 +331,7 @@ func TestExternalSyncGetLogs(t *testing.T) {
 	// Get logs request
 	req := httptest.NewRequest("GET", fmt.Sprintf("/api/v1/external-sync/%s/logs?limit=10&offset=0", configID.String()), nil)
 	req.SetPathValue("id", configID.String())
-	req.Header.Set("X-Hasura-Tenant-Id", tenantID.String())
-
+	req = req.WithContext(middleware.WithClaims(req.Context(), map[string]interface{}{"tenant_id": tenantID.String()}))
 	// Execute
 	w := httptest.NewRecorder()
 	handler.GetSyncLogs(w, req)
@@ -396,8 +390,7 @@ func TestExternalSyncTenantIsolation(t *testing.T) {
 	// Try to access config1 with tenantID2
 	req := httptest.NewRequest("GET", fmt.Sprintf("/api/v1/external-sync/%s", config1.ID.String()), nil)
 	req.SetPathValue("id", config1.ID.String())
-	req.Header.Set("X-Hasura-Tenant-Id", tenantID2.String())
-
+	req = req.WithContext(middleware.WithClaims(req.Context(), map[string]interface{}{"tenant_id": tenantID2.String()}))
 	// Execute
 	w := httptest.NewRecorder()
 	handler.GetSyncConfig(w, req)
@@ -425,8 +418,7 @@ func TestExternalSyncValidateProvider(t *testing.T) {
 	body, _ := json.Marshal(reqBody)
 	req := httptest.NewRequest("POST", "/api/v1/external-sync/validate-provider", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-Hasura-Tenant-Id", tenantID.String())
-
+	req = req.WithContext(middleware.WithClaims(req.Context(), map[string]interface{}{"tenant_id": tenantID.String()}))
 	// Execute
 	w := httptest.NewRecorder()
 	handler.ValidateProvider(w, req)

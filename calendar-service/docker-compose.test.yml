@@ -11,7 +11,6 @@ services:
       - ./k6/results:/scripts/results
     environment:
       - BACKEND_URL=http://host.docker.internal:8081
-      - HASURA_URL=http://host.docker.internal:8080
       - TENANT_COUNT=10
     command: run /scripts/api-load-test.js --duration 5m --vus-max 100
     networks:
