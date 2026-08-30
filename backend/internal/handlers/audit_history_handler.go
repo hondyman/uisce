@@ -26,9 +26,9 @@ func NewAuditHistoryHandler(tracker *audit.BitemporalTracker, asyncService *audi
 	}
 }
 
-// AuditHasuraEventPayload represents the Hasura event trigger payload
+// AuditEventPayload represents a generic DB change event payload for auditing.
 // Renamed to avoid conflict with instance_clone_handler.go
-type AuditHasuraEventPayload struct {
+type AuditEventPayload struct {
 	Event struct {
 		SessionVariables map[string]string `json:"session_variables"`
 		Op               string            `json:"op"`
@@ -50,8 +50,8 @@ func (h *AuditHistoryHandler) RegisterRoutes(r chi.Router) {
 		r.Get("/history/{entityType}/{entityId}/at/{timestamp}", h.HandleGetEntityAtTime)
 		r.Post("/restore/{entityType}/{entityId}", h.HandleRestoreEntity)
 		r.Get("/changes", h.HandleGetAuditChanges)
-		// Hasura Event Trigger Endpoint
-		// Hasura needs to be configured to send POST requests to this endpoint
+		// Generic DB change event endpoint
+		// A CDC consumer (e.g. Debezium) needs to be configured to POST events here
 		r.Post("/events/tenant-update", h.HandleTenantUpdateEvent)
 	})
 }
@@ -255,10 +255,10 @@ func (h *AuditHistoryHandler) HandleGetAuditChanges(w http.ResponseWriter, r *ht
 	})
 }
 
-// HandleTenantUpdateEvent handles Hasura event trigger for tenants updates
+// HandleTenantUpdateEvent handles a tenant row-change event
 // POST /api/audit/events/tenant-update
 func (h *AuditHistoryHandler) HandleTenantUpdateEvent(w http.ResponseWriter, r *http.Request) {
-	var payload AuditHasuraEventPayload
+	var payload AuditEventPayload
 	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
 		http.Error(w, "Invalid payload", http.StatusBadRequest)
 		return
@@ -266,7 +266,7 @@ func (h *AuditHistoryHandler) HandleTenantUpdateEvent(w http.ResponseWriter, r *
 
 	// Verify table
 	if payload.Table.Name != "tenants" {
-		w.WriteHeader(http.StatusOK) // Ack to Hasura
+		w.WriteHeader(http.StatusOK) // Ack the event
 		return
 	}
 
@@ -285,7 +285,7 @@ func (h *AuditHistoryHandler) HandleTenantUpdateEvent(w http.ResponseWriter, r *
 
 	// Determine User
 	userID := "system"
-	if val, ok := payload.Event.SessionVariables["x-hasura-user-id"]; ok && val != "" {
+	if val, ok := payload.Event.SessionVariables["user_id"]; ok && val != "" {
 		userID = val
 	}
 
@@ -296,7 +296,7 @@ func (h *AuditHistoryHandler) HandleTenantUpdateEvent(w http.ResponseWriter, r *
 		ValidFrom:    time.Now(),
 		EntityData:   data,
 		ChangedBy:    userID,
-		ChangeReason: fmt.Sprintf("Hasura Event Trigger: %s", op),
+		ChangeReason: fmt.Sprintf("DB Change Event: %s", op),
 	}
 
 	// Use generic unique id if id is not UUID (though tenant id usually is)

@@ -44,7 +44,7 @@ func ScenarioAnalysisWorkflow(ctx workflow.Context, portfolioID string, scenario
 		"scenarioType": scenarioType,
 	}
 
-	err = workflow.ExecuteActivity(ctx, activities.HasuraUpdate, result).Get(ctx, nil)
+	err = workflow.ExecuteActivity(ctx, activities.RecordWorkflowResult, result).Get(ctx, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to store result: %w", err)
 	}
@@ -89,7 +89,7 @@ func UMAAlpha(ctx workflow.Context, umaID string) (map[string]interface{}, error
 		return nil, fmt.Errorf("failed to execute trades: %w", err)
 	}
 
-	// 5. Update Hasura
+	// 5. Record workflow result
 	result := map[string]interface{}{
 		"umaID":       umaID,
 		"status":      "alpha_rebalanced",
@@ -99,9 +99,9 @@ func UMAAlpha(ctx workflow.Context, umaID string) (map[string]interface{}, error
 		"executedAt":  time.Now(),
 	}
 
-	err = workflow.ExecuteActivity(ctx, activities.HasuraUpdate, result).Get(ctx, nil)
+	err = workflow.ExecuteActivity(ctx, activities.RecordWorkflowResult, result).Get(ctx, nil)
 	if err != nil {
-		return nil, fmt.Errorf("failed to update Hasura: %w", err)
+		return nil, fmt.Errorf("failed to record workflow result: %w", err)
 	}
 
 	return result, nil
@@ -144,7 +144,7 @@ func TaxHarvest(ctx workflow.Context, umaID string) (map[string]interface{}, err
 		return nil, fmt.Errorf("tax harvest execution failed: %w", err)
 	}
 
-	// 5. Update Hasura
+	// 5. Record workflow result
 	result := map[string]interface{}{
 		"umaID":        umaID,
 		"status":       "tax_optimized",
@@ -153,9 +153,9 @@ func TaxHarvest(ctx workflow.Context, umaID string) (map[string]interface{}, err
 		"executedAt":   time.Now(),
 	}
 
-	err = workflow.ExecuteActivity(ctx, activities.HasuraUpdate, result).Get(ctx, nil)
+	err = workflow.ExecuteActivity(ctx, activities.RecordWorkflowResult, result).Get(ctx, nil)
 	if err != nil {
-		return nil, fmt.Errorf("Hasura update failed: %w", err)
+		return nil, fmt.Errorf("workflow result recording failed: %w", err)
 	}
 
 	return result, nil
@@ -198,7 +198,7 @@ func IndexAlpha(ctx workflow.Context, indexID string) (map[string]interface{}, e
 		return nil, fmt.Errorf("index optimization execution failed: %w", err)
 	}
 
-	// 5. Update Hasura
+	// 5. Record workflow result
 	result := map[string]interface{}{
 		"indexID":    indexID,
 		"status":     "alpha_optimized",
@@ -209,9 +209,9 @@ func IndexAlpha(ctx workflow.Context, indexID string) (map[string]interface{}, e
 		"executedAt": time.Now(),
 	}
 
-	err = workflow.ExecuteActivity(ctx, activities.HasuraUpdate, result).Get(ctx, nil)
+	err = workflow.ExecuteActivity(ctx, activities.RecordWorkflowResult, result).Get(ctx, nil)
 	if err != nil {
-		return nil, fmt.Errorf("Hasura update failed: %w", err)
+		return nil, fmt.Errorf("workflow result recording failed: %w", err)
 	}
 
 	return result, nil
@@ -256,7 +256,7 @@ func AttributionAlpha(ctx workflow.Context, portfolioID string) (map[string]inte
 		"executedAt":  time.Now(),
 	}
 
-	err = workflow.ExecuteActivity(ctx, activities.HasuraUpdate, result).Get(ctx, nil)
+	err = workflow.ExecuteActivity(ctx, activities.RecordWorkflowResult, result).Get(ctx, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to store result: %w", err)
 	}

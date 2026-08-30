@@ -40,7 +40,7 @@ func OptimizeAlpha(ctx workflow.Context, portfolioID string) error {
 	}
 
 	// 4. Update
-	err = workflow.ExecuteActivity(ctx, activities.HasuraUpdate, map[string]any{
+	err = workflow.ExecuteActivity(ctx, activities.RecordWorkflowResult, map[string]any{
 		"portfolio_id": portfolioID,
 		"status":       "alpha_optimized",
 		"sharpe":       opt["sharpe"],

@@ -8,25 +8,25 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-// MockHasuraClient implements repository.HasuraClient
-type MockHasuraClient struct {
+// mockSyncClient is an unused placeholder client (CalendarSyncRepo ignores its constructor argument)
+type mockSyncClient struct {
 	QueryResult  map[string]interface{}
 	MutateResult map[string]interface{}
 	QueryErr     error
 	MutateErr    error
 }
 
-func (m *MockHasuraClient) Query(q string, v map[string]interface{}) (map[string]interface{}, error) {
+func (m *mockSyncClient) Query(q string, v map[string]interface{}) (map[string]interface{}, error) {
 	return m.QueryResult, m.QueryErr
 }
 
-func (m *MockHasuraClient) Mutate(q string, v map[string]interface{}) (map[string]interface{}, error) {
+func (m *mockSyncClient) Mutate(q string, v map[string]interface{}) (map[string]interface{}, error) {
 	return m.MutateResult, m.MutateErr
 }
 
 func TestResolveConflict(t *testing.T) {
 	// Setup
-	mockClient := &MockHasuraClient{
+	mockClient := &mockSyncClient{
 		QueryResult: map[string]interface{}{
 			"sync_conflicts_by_pk": map[string]interface{}{
 				"id":                "conflict-1",

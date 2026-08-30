@@ -775,7 +775,7 @@ func (s *BusinessObjectService) ListBusinessObjectsLegacy(
 	}
 	defer tx.Rollback()
 
-	if _, err := tx.ExecContext(ctx, "SELECT set_config('hasura.tenant_id', $1, true)", tenantID); err != nil {
+	if _, err := tx.ExecContext(ctx, "SELECT set_config('app.tenant_id', $1, true)", tenantID); err != nil {
 		return nil, fmt.Errorf("failed to set tenant context: %w", err)
 	}
 

@@ -78,7 +78,7 @@ func TestHandleCatalogScan_PartialFailure(t *testing.T) {
 	req, _ := http.NewRequest(http.MethodPost, "/api/catalog/scan", nil)
 	h.HandleCatalogScan(w, req)
 
-	assert.Equal(t, http.StatusOK, w.Code) // Updated to expect 200 for Hasura compatibility
+	assert.Equal(t, http.StatusOK, w.Code) // Updated to expect 200
 	var body map[string]interface{}
 	e := json.Unmarshal(w.Body.Bytes(), &body)
 	assert.NoError(t, e)
@@ -95,7 +95,7 @@ func TestHandleCatalogScan_AllFailure(t *testing.T) {
 		},
 	}
 	// handler should respond 200 (not 500) because service indicates all failed via returned error
-	// But it returns 200 for Hasura compatibility even if all failed.
+	// But it returns 200 even if all failed.
 	fake2 := &fakeScanService{results: fake.results, err: assert.AnError}
 	h2 := NewCatalogScanHandler(fake2)
 
@@ -103,7 +103,7 @@ func TestHandleCatalogScan_AllFailure(t *testing.T) {
 	req2, _ := http.NewRequest(http.MethodPost, "/api/catalog/scan", nil)
 	h2.HandleCatalogScan(w2, req2)
 
-	assert.Equal(t, http.StatusOK, w2.Code) // Updated to expect 200 for Hasura compatibility
+	assert.Equal(t, http.StatusOK, w2.Code) // Updated to expect 200
 	var body map[string]interface{}
 	e := json.Unmarshal(w2.Body.Bytes(), &body)
 	assert.NoError(t, e)

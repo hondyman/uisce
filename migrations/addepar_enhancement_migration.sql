@@ -543,7 +543,7 @@ END;
 $$ LANGUAGE plpgsql;
 
 -- ============================================================================
--- PART 12: ENABLE ROW-LEVEL SECURITY (Hasura Compatible)
+-- PART 12: ENABLE ROW-LEVEL SECURITY
 -- ============================================================================
 
 ALTER TABLE entities ENABLE ROW LEVEL SECURITY;
@@ -557,24 +557,24 @@ DROP POLICY IF EXISTS entities_tenant_isolation ON entities;
 CREATE POLICY entities_tenant_isolation ON entities
     FOR SELECT
     USING (
-        tenant_id = current_setting('hasura.user.x-hasura-tenant-id', TRUE)::UUID
-        OR current_setting('hasura.user.x-hasura-admin-secret', TRUE) IS NOT NULL
+        tenant_id = current_setting('app.user.tenant_id', TRUE)::UUID
+        OR current_setting('app.user.is_admin', TRUE) = 'true'
     );
 
 DROP POLICY IF EXISTS positions_tenant_isolation ON positions;
 CREATE POLICY positions_tenant_isolation ON positions
     FOR SELECT
     USING (
-        tenant_id = current_setting('hasura.user.x-hasura-tenant-id', TRUE)::UUID
-        OR current_setting('hasura.user.x-hasura-admin-secret', TRUE) IS NOT NULL
+        tenant_id = current_setting('app.user.tenant_id', TRUE)::UUID
+        OR current_setting('app.user.is_admin', TRUE) = 'true'
     );
 
 DROP POLICY IF EXISTS position_transactions_tenant_isolation ON position_transactions;
 CREATE POLICY position_transactions_tenant_isolation ON position_transactions
     FOR SELECT
     USING (
-        tenant_id = current_setting('hasura.user.x-hasura-tenant-id', TRUE)::UUID
-        OR current_setting('hasura.user.x-hasura-admin-secret', TRUE) IS NOT NULL
+        tenant_id = current_setting('app.user.tenant_id', TRUE)::UUID
+        OR current_setting('app.user.is_admin', TRUE) = 'true'
     );
 
 -- ============================================================================

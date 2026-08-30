@@ -1,7 +1,6 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"os"
@@ -15,22 +14,13 @@ func TestTaxHarvestE2E(t *testing.T) {
 	if os.Getenv("SEMLAYER_E2E") != "1" {
 		t.Skip("Skipping E2E tests. Set SEMLAYER_E2E=1 to run")
 	}
-	// Query Hasura for UMA accounts before tax harvest
-	resp, err := http.Post("http://hasura:8080/v1/graphql", "application/json",
-		strings.NewReader(`{"query":"{uma_accounts{tax_saved}}"}`))
+	db, err := e2eDB()
 	assert.NoError(t, err)
-	defer resp.Body.Close()
+	defer db.Close()
 
-	var result struct {
-		Data struct {
-			UMA []struct {
-				Saved float64 `json:"tax_saved"`
-			} `json:"uma_accounts"`
-		}
-	}
-	assert.NoError(t, json.NewDecoder(resp.Body).Decode(&result))
-
-	initialTaxSaved := result.Data.UMA[0].Saved
+	// Read UMA accounts before tax harvest
+	initialTaxSaved, err := queryUMATaxSaved(db)
+	assert.NoError(t, err)
 	fmt.Printf("Initial tax saved: $%.2f\n", initialTaxSaved)
 
 	// Trigger AI Tax Harvest optimization
@@ -41,13 +31,8 @@ func TestTaxHarvestE2E(t *testing.T) {
 
 	// Wait for workflow completion (in real test, use proper waiting)
 	// For demo, assume it completes and check tax_saved increased
-	resp3, err := http.Post("http://hasura:8080/v1/graphql", "application/json",
-		strings.NewReader(`{"query":"{uma_accounts{tax_saved}}"}`))
+	finalTaxSaved, err := queryUMATaxSaved(db)
 	assert.NoError(t, err)
-	defer resp3.Body.Close()
-
-	assert.NoError(t, json.NewDecoder(resp3.Body).Decode(&result))
-	finalTaxSaved := result.Data.UMA[0].Saved
 	fmt.Printf("Final tax saved: $%.2f\n", finalTaxSaved)
 
 	// Assert tax savings increased by at least $100K

@@ -95,7 +95,6 @@ func (a *UMAActivities) LoadUMADataActivity(ctx context.Context, umaAccountID st
 	}
 
 	// Load sleeves
-	// TODO: Replace SQL with Hasura GraphQL query:
 	// query GetUMASleeves($accountId: uuid!) {
 	//   uma_sleeves(where: {uma_account_id: {_eq: $accountId}}) {
 	//     id
@@ -112,7 +111,6 @@ func (a *UMAActivities) LoadUMADataActivity(ctx context.Context, umaAccountID st
 	//     metadata
 	//   }
 	// }
-	// Use: http://localhost:8080/v1/graphql with header X-Hasura-Admin-Secret: newadminsecretkey
 	sleeveQuery := `
 		SELECT id, uma_account_id, model, sleeve_type, target_allocation, current_allocation, drift, min_drift_threshold, status, created_at, updated_at, metadata
 		FROM uma_sleeves
@@ -146,7 +144,6 @@ func (a *UMAActivities) LoadUMADataActivity(ctx context.Context, umaAccountID st
 	}
 
 	// Load holdings
-	// TODO: Replace SQL with Hasura GraphQL query:
 	// query GetUMAHoldings($accountId: uuid!) {
 	//   uma_holdings(where: {sleeve: {uma_account_id: {_eq: $accountId}}}) {
 	//     id
@@ -166,7 +163,6 @@ func (a *UMAActivities) LoadUMADataActivity(ctx context.Context, umaAccountID st
 	//   }
 	// }
 	// Use nested relationship: uma_holdings -> sleeve -> uma_account
-	// Use: http://localhost:8080/v1/graphql with header X-Hasura-Admin-Secret: newadminsecretkey
 	holdingQuery := `
 		SELECT id, sleeve_id, cusip, security_id, security_name, quantity, unit_cost, market_price, market_value, unrealized_gain, cost_basis, created_at, updated_at, metadata
 		FROM uma_holdings
@@ -311,7 +307,6 @@ func (a *UMAActivities) GenerateRebalancePlanActivity(ctx context.Context, umaAc
 	}
 
 	// Save plan to database
-	// TODO: Replace SQL with Hasura GraphQL mutation:
 	// mutation InsertRebalancePlan($object: uma_rebalance_plans_insert_input!) {
 	//   insert_uma_rebalance_plans_one(object: $object) {
 	//     id
@@ -321,7 +316,6 @@ func (a *UMAActivities) GenerateRebalancePlanActivity(ctx context.Context, umaAc
 	// Variables: {"object": {"id": "...", "request_id": "", "uma_account_id": "...",
 	//   "total_tax_impact": 0, "total_cost": 12345.67, "trades": {...}, "status": "draft",
 	//   "created_at": "...", "updated_at": "..."}}
-	// Use: http://localhost:8080/v1/graphql with header X-Hasura-Admin-Secret: newadminsecretkey
 	planJSON, _ := json.Marshal(plan)
 	saveQuery := `
 		INSERT INTO uma_rebalance_plans (id, request_id, uma_account_id, total_tax_impact, total_cost, trades, status, created_at, updated_at)
@@ -442,23 +436,16 @@ func (a *UMAActivities) ExecuteTradesActivity(ctx context.Context, plan *models.
 }
 
 // ============================================================================
-// PHASE 8: UPDATE HASURA
+// PHASE 8: RECORD REBALANCE PLAN
 // ============================================================================
 
-// UpdateHasuraActivity updates Hasura GraphQL with rebalance results
-func (a *UMAActivities) UpdateHasuraActivity(ctx context.Context, tenantID string, plan *models.UMARebalancePlan, executionResult map[string]interface{}) error {
-	log.Printf("🔗 Updating Hasura for plan: %s", plan.ID)
+// RecordRebalancePlanActivity persists the finished rebalance plan and its execution result.
+func (a *UMAActivities) RecordRebalancePlanActivity(ctx context.Context, tenantID string, plan *models.UMARebalancePlan, executionResult map[string]interface{}) error {
+	log.Printf("🔗 Recording rebalance plan: %s", plan.ID)
 
-	// TODO: Integrate with Hasura GraphQL endpoint
-	// Example mutation:
-	// mutation InsertRebalancePlan($plan: uma_rebalance_plans_insert_input!) {
-	//   insert_uma_rebalance_plans_one(object: $plan) {
-	//     id
-	//     status
-	//   }
-	// }
+	// TODO: Persist to uma_rebalance_plans via direct Postgres insert
 
-	log.Printf("✅ Hasura updated")
+	log.Printf("✅ Rebalance plan recorded")
 	return nil
 }
 

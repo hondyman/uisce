@@ -1,30 +1,36 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
-	"net/http"
-	"strings"
 )
 
 func main() {
-	resp, err := http.Post("http://hasura:8080/v1/graphql", "application/json", strings.NewReader(`{"query":"{temporal_workflows{workflow_id}}"}`))
+	db, err := e2eDB()
 	if err != nil {
-		fmt.Println("error querying hasura:", err)
+		fmt.Println("error connecting to database:", err)
 		return
 	}
-	defer resp.Body.Close()
-	var r struct {
-		Data map[string][]map[string]string `json:"data"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&r); err != nil {
-		fmt.Println("decode error:", err)
+	defer db.Close()
+
+	rows, err := db.Query("SELECT workflow_id FROM temporal_workflows")
+	if err != nil {
+		fmt.Println("error querying temporal_workflows:", err)
 		return
 	}
-	items := r.Data["temporal_workflows"]
-	if len(items) == 0 {
+	defer rows.Close()
+
+	count := 0
+	for rows.Next() {
+		var workflowID string
+		if err := rows.Scan(&workflowID); err != nil {
+			fmt.Println("scan error:", err)
+			return
+		}
+		count++
+	}
+	if count == 0 {
 		fmt.Println("no workflows found")
 		return
 	}
-	fmt.Println("found workflows:", len(items))
+	fmt.Println("found workflows:", count)
 }

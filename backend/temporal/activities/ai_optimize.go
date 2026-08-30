@@ -43,10 +43,10 @@ func ExecuteMitigation(ctx context.Context, riskData map[string]any) error {
 	return nil
 }
 
-// HasuraUpdate updates data in Hasura
-func HasuraUpdate(ctx context.Context, updateData map[string]any) error {
-	// TODO: Implement actual Hasura update
+// RecordWorkflowResult records the result of a workflow step
+func RecordWorkflowResult(ctx context.Context, updateData map[string]any) error {
+	// TODO: Implement actual persistence
 	// For now, just log the update data
-	fmt.Printf("Updating Hasura with data: %+v\n", updateData)
+	fmt.Printf("Recording workflow result: %+v\n", updateData)
 	return nil
 }
