@@ -18,11 +18,7 @@ services:
       
       # Auth Service
       - AUTH_SERVICE_URL=http://host.docker.internal:8001
-      
-      # GraphQL (External Hasura)
-      - HASURA_ENDPOINT=http://100.84.126.19:8080
-      - HASURA_ADMIN_SECRET=myadminsecret
-      
+
       # JWT
       - JWT_SECRET=dev-jwt-secret-key-change-in-production
       

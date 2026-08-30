@@ -1,16 +1,6 @@
 version: '3.8'
 
 services:
-  hasura:
-    image: hasura/graphql-engine:v2.37.0.cli-migrations-v3
-    environment:
-      HASURA_GRAPHQL_DATABASE_URL: "postgresql://postgres:postgres@host.docker.internal:5432/alpha"
-      HASURA_GRAPHQL_ADMIN_SECRET: ${HASURA_ADMIN_SECRET:-adminsecret}
-      HASURA_GRAPHQL_DEV_MODE: "true"
-      HASURA_GRAPHQL_CORS_DOMAIN: "*"
-    ports:
-      - "8080:8080"
-
   redpanda:
     image: docker.redpanda.com/redpandadata/redpanda:latest
     container_name: redpanda
@@ -65,7 +55,6 @@ services:
     ports:
       - "3000:3000"
     depends_on:
-      - hasura
       - redpanda
       - temporal
 
@@ -74,14 +63,11 @@ services:
       context: .
       dockerfile: backend/cmd/workflow-service/Dockerfile
     environment:
-      HASURA_URL: http://hasura:8080
-      HASURA_ADMIN_SECRET: ${HASURA_ADMIN_SECRET:-adminsecret}
       KAFKA_BROKERS: redpanda:9092
       WORKFLOW_SERVICE_PORT: 8082
     ports:
       - "8082:8082"
     depends_on:
-      - hasura
       - redpanda
       - temporal
 
@@ -90,13 +76,9 @@ services:
       context: .
       dockerfile: backend/cmd/screen-builder-service/Dockerfile
     environment:
-      HASURA_URL: http://hasura:8080
-      HASURA_ADMIN_SECRET: ${HASURA_ADMIN_SECRET:-adminsecret}
       SCREEN_BUILDER_SERVICE_PORT: 8083
     ports:
       - "8083:8083"
-    depends_on:
-      - hasura
 
   rule-engine:
     build:
@@ -108,8 +90,6 @@ services:
       KAFKA_BROKERS: "redpanda:9092"
     ports:
       - "8083:8083"
-    depends_on:
-      - hasura
 
   # Proxy removed: local module path issues. Use api-gateway (8001) instead.
 

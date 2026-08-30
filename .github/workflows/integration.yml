@@ -78,7 +78,6 @@ jobs:
         PORT: 8001
         BACKEND_URL: http://localhost:8080
         JWT_SECRET: test-secret
-        HASURA_URL: ''
       run: |
         ./bin/api-gateway > logs/gateway.log 2>&1 & echo $! > gateway.pid
         for i in {1..30}; do

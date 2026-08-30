@@ -1,14 +1,4 @@
 services:
-  hasura:
-    image: hasura/graphql-engine:v2.37.0.cli-migrations-v3
-    environment:
-      HASURA_GRAPHQL_DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD}@host.docker.internal:5432/alpha
-      HASURA_GRAPHQL_ADMIN_SECRET: ${HASURA_ADMIN_SECRET}
-      HASURA_GRAPHQL_DEV_MODE: "true"
-      HASURA_GRAPHQL_CORS_DOMAIN: "*"
-    ports:
-      - "8080:8080"
-
   rabbitmq:
     image: rabbitmq:3.12-management-alpine
     environment:
@@ -62,7 +52,6 @@ services:
     ports:
       - "3000:3000"
     depends_on:
-      - hasura
       - rabbitmq
       - temporal
 
@@ -71,14 +60,11 @@ services:
       context: .
       dockerfile: backend/cmd/workflow-service/Dockerfile
     environment:
-      HASURA_URL: http://hasura:8080
-      HASURA_ADMIN_SECRET: ${HASURA_ADMIN_SECRET}
       RABBITMQ_URL: amqp://${RABBITMQ_DEFAULT_USER:-guest}:${RABBITMQ_DEFAULT_PASS:-guest}@rabbitmq:5672/
       WORKFLOW_SERVICE_PORT: 8082
     ports:
       - "8082:8082"
     depends_on:
-      - hasura
       - rabbitmq
       - temporal
 
@@ -87,13 +73,9 @@ services:
       context: .
       dockerfile: backend/cmd/screen-builder-service/Dockerfile
     environment:
-      HASURA_URL: http://hasura:8080
-      HASURA_ADMIN_SECRET: ${HASURA_ADMIN_SECRET}
       SCREEN_BUILDER_SERVICE_PORT: 8083
     ports:
       - "8083:8083"
-    depends_on:
-      - hasura
 
   runner:
     build:
