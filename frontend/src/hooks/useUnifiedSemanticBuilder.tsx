@@ -320,8 +320,6 @@ export const useUnifiedSemanticBuilder = (datasourceId: string) => {
     return text.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
   };
 
-  // Business term fetching remains powered by the Hasura GraphQL endpoint for now.
-
   // Helper functions
   const isNumericType = (type: string) => {
     return type.includes('int') || type.includes('float') || type.includes('decimal') || type.includes('numeric');

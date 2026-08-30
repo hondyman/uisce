@@ -8,7 +8,6 @@ export function SSOConfig() {
   const [isAdding, setIsAdding] = useState(false);
 
   // In a real app, this would fetch from /api/v1/admin/sso-providers
-  // For now we'll query Hasura directly or use our new handlers
   const { data: providers, isLoading } = useQuery({
     queryKey: ["sso-providers"],
     queryFn: () => api<{ data: any[] }>("/admin/sso-providers"), // Need to ensure this endpoint exists

@@ -533,7 +533,6 @@ func (e *BranchEvaluator) extractNestedValue(data map[string]interface{}, path s
 // ============================================
 
 // LogBranchExecution logs branch execution for analytics
-// TODO: Refactor to Hasura GraphQL
 //
 //	mutation {
 //	  insert_bp_branch_executions_one(object: {
@@ -576,7 +575,6 @@ func (e *BranchEvaluator) LogBranchExecution(
 // ============================================
 
 // CreateJoinPoint creates a join convergence point for parallel/inclusive branches
-// TODO: Refactor to Hasura GraphQL
 //
 //	mutation {
 //	  insert_bp_join_convergences_one(object: {

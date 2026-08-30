@@ -111,7 +111,6 @@ func (s *UnifiedMetadataService) GetBOToViewMappings(
 	ctx context.Context,
 	tenantID, boKey string,
 ) ([]*BOToViewMapping, error) {
-	// TODO(hasura-migration): Replace SQL query with Hasura GraphQL query
 	// Example GraphQL query:
 	// query GetBOToViewMappings($tenantId: String!, $boKey: String!) {
 	//   bo_to_view_mappings(

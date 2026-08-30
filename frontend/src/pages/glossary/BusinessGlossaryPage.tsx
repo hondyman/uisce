@@ -26,12 +26,6 @@ import { useQueryClient } from '@tanstack/react-query';
   import CategoryIcon from '@mui/icons-material/Category';
   import ProfessionalSearchInput from '../../components/ProfessionalSearchInput';
   import './BusinessGlossaryPage.css';
-  // NOTE: Hasura/GraphQL was previously used here to fetch a precomputed
-  // semantic lineage chart (GET_SEMANTIC_LINEAGE_CHART) and pass it down to
-  // <SemanticTermsTab /> as `semanticData`. With Hasura removed permanently,
-  // we no longer fetch that chart; SemanticTermsTab falls back to its own
-  // REST-only data path (useAllSemanticData from src/api/glossary.ts).
-
   interface TabPanelProps {
     children?: React.ReactNode;
     index: number;

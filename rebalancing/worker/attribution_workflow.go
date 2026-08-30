@@ -31,7 +31,7 @@ func AttributionAlphaWorkflow(ctx workflow.Context, portfolioID string) error {
 		return fmt.Errorf("failed to execute attribution: %w", err)
 	}
 
-	// 4. Update Status in Hasura
+	// 4. Update Status
 	if err := workflow.ExecuteActivity(ctx, "UpdateAttributionStatus", portfolioID, attrResult).Get(ctx, nil); err != nil {
 		return fmt.Errorf("failed to update attribution status: %w", err)
 	}

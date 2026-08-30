@@ -391,7 +391,7 @@ export const ApprovalWorkflowDashboard: React.FC = () => {
           <div className="space-y-6">
             <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-6">
               <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-4">Database Seeding</h2>
-              <p className="text-gray-600 dark:text-gray-400 mb-6">Seed validation rules, approval rules, and approver assignments into your Hasura instance.</p>
+              <p className="text-gray-600 dark:text-gray-400 mb-6">Seed validation rules, approval rules, and approver assignments into your database.</p>
 
               <div className="space-y-3">
                 <button onClick={handleSeedAll} disabled={seeding || !tenantId || !datasourceId} className="w-full px-6 py-3 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2">
@@ -433,9 +433,7 @@ export const ApprovalWorkflowDashboard: React.FC = () => {
               <div className="space-y-4">
                 <div className="p-4 bg-gray-50 dark:bg-gray-700 rounded-lg font-mono text-sm">
                   <p className="text-gray-600 dark:text-gray-400">Required environment variables:</p>
-                  <pre className="text-gray-900 dark:text-gray-100 mt-2 whitespace-pre-wrap break-words">{`HASURA_GRAPHQL_ENDPOINT=http://localhost:8080/v1/graphql
-HASURA_ADMIN_SECRET=dev-secret
-TEMPORAL_SERVER_HOST=localhost:7233
+                  <pre className="text-gray-900 dark:text-gray-100 mt-2 whitespace-pre-wrap break-words">{`TEMPORAL_SERVER_HOST=localhost:7233
 RABBITMQ_URL=amqp://guest:guest@localhost:5672
 DATABASE_URL=postgresql://user:pass@localhost:5432/wealth_db`}</pre>
                 </div>
@@ -443,7 +441,6 @@ DATABASE_URL=postgresql://user:pass@localhost:5432/wealth_db`}</pre>
                 <div className="p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
                   <h3 className="font-semibold text-blue-900 dark:text-blue-100 mb-2">Quick Start</h3>
                   <ol className="text-sm text-blue-800 dark:text-blue-200 space-y-2 list-decimal list-inside">
-                    <li>Ensure Hasura is running at the configured endpoint</li>
                     <li>Fill in Tenant ID and Datasource ID above</li>
                     <li>Click "Seed All Rules" to populate database</li>
                     <li>Rules will appear in Validation Rules Builder</li>

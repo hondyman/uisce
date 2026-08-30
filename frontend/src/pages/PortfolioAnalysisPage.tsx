@@ -101,7 +101,7 @@ export const PortfolioAnalysisPage: React.FC = () => {
           <li>✓ Instant drill-down from asset class → sector → security</li>
           <li>✓ Real-time performance calculations (time-weighted & total returns)</li>
           <li>✓ Concentration risk analysis with automatic thresholds</li>
-          <li>✓ 10x faster than Addepar - powered by PostgreSQL + Hasura</li>
+          <li>✓ 10x faster than Addepar - powered by PostgreSQL</li>
           <li>✓ What-if scenario modeling with instant results</li>
         </ul>
       </div>

@@ -450,7 +450,7 @@ const TabbedModal: React.FC<TabbedModalProps> = ({ datasourceId, tenantId = 'def
     return false;
   };
 
-  // When Hasura was not configured to expose tenant_chart, surface a friendly call-to-action
+  // When the backend was not configured to expose tenant_chart, surface a friendly call-to-action
   const shouldShowMissingChartWarning = false;
 
   

@@ -143,7 +143,7 @@ export const HouseholdReportsPage: React.FC = () => {
 
   const loadSemanticViews = async () => {
     try {
-      // In real app: fetch from GraphQL/Hasura
+      // In real app: fetch from the backend API
       // Mock data
       setSemanticViews([
         { id: '1', name: 'Holdings View', entity_count: 152 },

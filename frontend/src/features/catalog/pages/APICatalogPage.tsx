@@ -86,7 +86,7 @@ const APICatalogPage: React.FC = () => {
           status: 'active',
           lastUpdated: '2024-01-15',
           businessTerms: ['customer_id', 'order_value'],
-          dependencies: ['hasura', 'postgres']
+          dependencies: ['postgres']
         },
         {
           id: '2',
@@ -99,7 +99,7 @@ const APICatalogPage: React.FC = () => {
           status: 'active',
           lastUpdated: '2024-01-15',
           businessTerms: ['customer_id'],
-          dependencies: ['hasura']
+          dependencies: ['postgres']
         }
       ]);
     } finally {

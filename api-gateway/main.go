@@ -214,7 +214,7 @@ func JWTMiddleware() gin.HandlerFunc {
 			return
 		}
 
-		// Check if this is an internal action token (e.g., from Hasura calling webhooks).
+		// Check if this is an internal action token (e.g., a trusted internal service calling a webhook).
 		// If API_GATEWAY_AUTH_TOKEN matches the Bearer token, allow it and skip JWT validation.
 		// Note: expectedToken from env has the full "Bearer <token>" form, but tokenString is already stripped of "Bearer ".
 		expectedTokenFull := getEnv("API_GATEWAY_AUTH_TOKEN", "")

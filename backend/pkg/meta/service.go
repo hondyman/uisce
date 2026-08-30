@@ -84,7 +84,6 @@ func (s *Service) GetBusinessObjectByName(ctx context.Context, tenantID, name st
 		// Cache miss, fall through to database
 	}
 
-	// TODO(hasura-migration): Replace SQL query with Hasura GraphQL query
 	// Example GraphQL query:
 	// query GetBusinessObjectByName($tenantId: String!, $name: String!) {
 	//   core_bo(where: {tenant_id: {_eq: $tenantId}, name: {_eq: $name}, status: {_eq: "active"}}) {

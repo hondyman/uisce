@@ -31,7 +31,7 @@ func RiskAlphaWorkflow(ctx workflow.Context, portfolioID string) error {
 		return fmt.Errorf("failed to execute mitigation: %w", err)
 	}
 
-	// 4. Update Status in Hasura
+	// 4. Update Status
 	if err := workflow.ExecuteActivity(ctx, "UpdateRiskStatus", portfolioID, riskResult).Get(ctx, nil); err != nil {
 		return fmt.Errorf("failed to update risk status: %w", err)
 	}
