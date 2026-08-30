@@ -35,7 +35,6 @@ services:
       traefik.enable: "false"
     depends_on:
       - backend
-      - hasura
       - validation-service
       - rule-engine-service
       - notifications-service
