@@ -45,11 +45,10 @@ DEV_PROXY_PORT=5175
 BACKEND_DOCKER_PORT=8080
 BACKEND_DEV_PORT=9090
 API_GATEWAY_PORT=8001
-HASURA_PORT=8081
 SWAGGER_PORT=8082
 
 # Kill processes on required ports
-PORTS=($FRONTEND_PORT $DEV_PROXY_PORT $BACKEND_DOCKER_PORT $BACKEND_DEV_PORT $API_GATEWAY_PORT $HASURA_PORT $SWAGGER_PORT)
+PORTS=($FRONTEND_PORT $DEV_PROXY_PORT $BACKEND_DOCKER_PORT $BACKEND_DEV_PORT $API_GATEWAY_PORT $SWAGGER_PORT)
 
 for port in "${PORTS[@]}"; do
     echo "🔍 Checking port $port..."
@@ -87,13 +86,13 @@ sleep 3
 
 echo "🚀 Starting services..."
 
-echo "📦 Starting Docker services (Hasura, API Gateway, Backend, Swagger)..."
+echo "📦 Starting Docker services (API Gateway, Backend, Swagger)..."
 echo "📦 Building backend & gateway images (to reflect local Go changes)..."
 # Try a compose build with pull; fall back to simple build if the first fails
 docker compose build --pull backend api-gateway || docker compose build backend api-gateway || true
 
-echo "📦 Starting Docker services (Hasura, API Gateway, Backend, Swagger)..."
-docker compose up -d graphql-engine api-gateway backend swagger-ui
+echo "📦 Starting Docker services (API Gateway, Backend, Swagger)..."
+docker compose up -d api-gateway backend swagger-ui
 
 # Wait for Docker services to be ready
 echo "⏱️  Waiting for Docker services to initialize..."
@@ -129,7 +128,6 @@ echo "🌐 Frontend:      http://localhost:$FRONTEND_PORT"
 echo "🔄 Dev Proxy:     http://localhost:$DEV_PROXY_PORT"
 echo "🔧 API Gateway:   http://localhost:$API_GATEWAY_PORT"
 echo "🏗️  Backend:       http://localhost:$BACKEND_DOCKER_PORT"
-echo "📊 Hasura:        http://localhost:$HASURA_PORT"
 echo "📚 Swagger:       http://localhost:$SWAGGER_PORT"
 echo ""
 echo "🎯 Main Application: http://localhost:$FRONTEND_PORT"
