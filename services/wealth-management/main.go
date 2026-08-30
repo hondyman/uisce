@@ -31,7 +31,7 @@ func main() {
 	// Register activities
 	w.RegisterActivity(activities.ABACCheck)
 	w.RegisterActivity(activities.ExecuteTrades)
-	w.RegisterActivity(activities.HasuraUpdate)
+	w.RegisterActivity(activities.UpdateRebalanceRecord)
 	w.RegisterActivity(activities.AITaxHarvest)
 	w.RegisterActivity(activities.AIAttribution)
 	w.RegisterActivity(activities.AIIndexOptimize)

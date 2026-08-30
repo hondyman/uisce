@@ -126,8 +126,8 @@ func getPool() *pgxpool.Pool {
 	return dbPool
 }
 
-// HasuraUpdate updates the database with rebalance results
-func HasuraUpdate(ctx context.Context, update map[string]any) error {
+// UpdateRebalanceRecord updates the database with rebalance results
+func UpdateRebalanceRecord(ctx context.Context, update map[string]any) error {
 	pool := getPool()
 	if pool == nil {
 		return fmt.Errorf("database not initialized")

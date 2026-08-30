@@ -45,7 +45,7 @@ func IndexAlpha(ctx workflow.Context, indexID string) error {
 		"esg_score": opt["esg_score"],
 		"holdings":  opt["holdings"],
 	}
-	if err := workflow.ExecuteActivity(ctx, activities.HasuraUpdate, update).Get(ctx, nil); err != nil {
+	if err := workflow.ExecuteActivity(ctx, activities.UpdateRebalanceRecord, update).Get(ctx, nil); err != nil {
 		return fmt.Errorf("Hasura update failed: %w", err)
 	}
 
