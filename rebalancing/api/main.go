@@ -4,15 +4,18 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"os"
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 	temporalclient "github.com/hondyman/uisce/libs/temporal-client"
 	"go.temporal.io/sdk/client"
 )
 
 type RebalanceAPI struct {
 	temporal client.Client
+	db       *Repository
 }
 
 type SimulationParameters struct {
@@ -36,13 +39,27 @@ func main() {
 	}
 	defer temporalClient.Close()
 
+	// Initialize database connection (replaces client-side Hasura GraphQL
+	// access previously used by the frontend dashboards).
+	dbURL := os.Getenv("DATABASE_URL")
+	if dbURL == "" {
+		log.Fatal("DATABASE_URL must be set")
+	}
+	pool, err := NewPool(context.Background(), dbURL)
+	if err != nil {
+		log.Fatalf("Failed to connect to database: %v", err)
+	}
+	defer pool.Close()
+
 	api := &RebalanceAPI{
 		temporal: temporalClient,
+		db:       NewRepository(pool),
 	}
 
 	r := gin.Default()
 	r.Use(authMiddleware())
 
+	r.GET("/api/portfolios", api.ListPortfolios)
 	r.POST("/api/portfolio/:id/rebalance", api.TriggerRebalance)
 	r.GET("/api/portfolio/:id/rebalance-plans", api.GetRebalancePlans)
 	r.GET("/api/rebalance/status/:workflow_id", api.GetWorkflowStatus)
@@ -52,6 +69,28 @@ func main() {
 	r.POST("/api/portfolio/:id/attribute", api.TriggerAttributionWorkflow)
 
 	r.Run(":8080")
+}
+
+// GET /api/portfolios
+// Replaces the client-side `PORTFOLIOS_SUB` / `Portfolios` / `PortfoliosRisk` /
+// `PortfoliosAttribution` Hasura GraphQL subscriptions used by
+// AIRebalancingDashboard, AISimulationDashboard, RiskAlphaDashboard, and
+// AttributionAlphaDashboard.
+func (api *RebalanceAPI) ListPortfolios(c *gin.Context) {
+	tenantID := c.GetString("tenant_id")
+	tid, err := uuid.Parse(tenantID)
+	if err != nil {
+		c.JSON(400, gin.H{"error": "invalid tenant"})
+		return
+	}
+
+	portfolios, err := api.db.ListPortfolios(c.Request.Context(), tid)
+	if err != nil {
+		c.JSON(500, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(200, gin.H{"portfolios": portfolios})
 }
 
 // POST /api/portfolio/:id/simulate
@@ -168,14 +207,24 @@ func (api *RebalanceAPI) TriggerRebalance(c *gin.Context) {
 }
 
 // GET /api/portfolio/:id/rebalance-plans
+// Replaces the client-side `REBALANCE_PLANS_SUB` / `Plans` Hasura GraphQL
+// subscription used by AIRebalancingDashboard. The frontend now polls this
+// endpoint instead of holding a live subscription.
 func (api *RebalanceAPI) GetRebalancePlans(c *gin.Context) {
 	portfolioID := c.Param("id")
+	pid, err := uuid.Parse(portfolioID)
+	if err != nil {
+		c.JSON(400, gin.H{"error": "invalid portfolio id"})
+		return
+	}
 
-	// Query handled by Hasura GraphQL subscription
-	c.JSON(200, gin.H{
-		"message": "Use Hasura GraphQL subscription for real-time plans",
-		"query":   fmt.Sprintf("subscription { rebalance_plans(where: {portfolio_id: {_eq: \"%s\"}}) { ... } }", portfolioID),
-	})
+	plans, err := api.db.ListRebalancePlans(c.Request.Context(), pid, 10)
+	if err != nil {
+		c.JSON(500, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(200, gin.H{"rebalance_plans": plans})
 }
 
 // GET /api/rebalance/status/:workflow_id

@@ -1,20 +1,21 @@
 import React, { useState, useCallback } from 'react';
-import { useSubscription } from '@apollo/client';
-import { gql } from '@apollo/client';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { PlayCircle, Loader, BarChart2 } from 'lucide-react';
+import { usePolling } from '../hooks/usePolling';
 
-const PORTFOLIOS_SUB = gql`
-  subscription Portfolios {
-    portfolios(order_by: {aum: desc}) {
-      id
-      name
-    }
-  }
-`;
+interface PortfolioOption {
+  id: string;
+  name: string;
+}
+
+const fetchPortfolios = async (): Promise<{ portfolios: PortfolioOption[] }> => {
+  const res = await fetch('/api/portfolios');
+  if (!res.ok) throw new Error('Failed to fetch portfolios');
+  return res.json();
+};
 
 const AISimulationDashboard = () => {
-  const { data: portfoliosData } = useSubscription(PORTFOLIOS_SUB);
+  const { data: portfoliosData } = usePolling(fetchPortfolios, 10000);
   const [selectedPortfolio, setSelectedPortfolio] = useState('');
   const [startDate, setStartDate] = useState('2022-01-01');
   const [endDate, setEndDate] = useState('2022-12-31');
