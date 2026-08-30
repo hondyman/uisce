@@ -44,7 +44,7 @@ func TaxHarvest(ctx workflow.Context, umaID string) error {
 		"lots_selected": harvest["lots"],
 		"esg_score":     harvest["esg_score"],
 	}
-	if err := workflow.ExecuteActivity(ctx, activities.HasuraUpdate, update).Get(ctx, nil); err != nil {
+	if err := workflow.ExecuteActivity(ctx, activities.UpdateRebalanceRecord, update).Get(ctx, nil); err != nil {
 		return fmt.Errorf("Hasura update failed: %w", err)
 	}
 

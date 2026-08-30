@@ -43,7 +43,7 @@ func AttributionAlpha(ctx workflow.Context, portfolioID string) error {
 		"alpha":        attr["alpha"],
 		"sector":       attr["sector"],
 	}
-	if err := workflow.ExecuteActivity(ctx, activities.HasuraUpdate, update).Get(ctx, nil); err != nil {
+	if err := workflow.ExecuteActivity(ctx, activities.UpdateRebalanceRecord, update).Get(ctx, nil); err != nil {
 		return fmt.Errorf("Hasura update failed: %w", err)
 	}
 
