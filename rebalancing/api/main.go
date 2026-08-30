@@ -39,7 +39,7 @@ func main() {
 	}
 	defer temporalClient.Close()
 
-	// Initialize database connection (replaces client-side Hasura GraphQL
+	// Initialize database connection (replaces client-side GraphQL
 	// access previously used by the frontend dashboards).
 	dbURL := os.Getenv("DATABASE_URL")
 	if dbURL == "" {
@@ -73,7 +73,7 @@ func main() {
 
 // GET /api/portfolios
 // Replaces the client-side `PORTFOLIOS_SUB` / `Portfolios` / `PortfoliosRisk` /
-// `PortfoliosAttribution` Hasura GraphQL subscriptions used by
+// `PortfoliosAttribution` GraphQL subscriptions used by
 // AIRebalancingDashboard, AISimulationDashboard, RiskAlphaDashboard, and
 // AttributionAlphaDashboard.
 func (api *RebalanceAPI) ListPortfolios(c *gin.Context) {
@@ -207,7 +207,7 @@ func (api *RebalanceAPI) TriggerRebalance(c *gin.Context) {
 }
 
 // GET /api/portfolio/:id/rebalance-plans
-// Replaces the client-side `REBALANCE_PLANS_SUB` / `Plans` Hasura GraphQL
+// Replaces the client-side `REBALANCE_PLANS_SUB` / `Plans` GraphQL
 // subscription used by AIRebalancingDashboard. The frontend now polls this
 // endpoint instead of holding a live subscription.
 func (api *RebalanceAPI) GetRebalancePlans(c *gin.Context) {

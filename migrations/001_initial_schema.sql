@@ -1,6 +1,6 @@
 -- Migration: 001_initial_schema.sql
 -- Core tenant and product schema with RLS (Row Level Security)
--- This replaces the Hasura-managed schema
+-- This replaces the previously auto-managed schema
 
 -- ============================================================================
 -- Enable UUID generation

@@ -11,7 +11,7 @@ import (
 )
 
 // Repository provides direct DB access for the rebalancing REST API,
-// replacing the client-side Hasura GraphQL queries/subscriptions that
+// replacing the client-side GraphQL queries/subscriptions that
 // used to serve the frontend dashboards directly.
 type Repository struct {
 	pool *pgxpool.Pool

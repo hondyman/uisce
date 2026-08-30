@@ -338,7 +338,7 @@ func MarshalRebalanceEvent(trades []RebalanceTradeSpec, impact RebalanceTaxImpac
 }
 
 // ============================================================================
-// MOCK DATA (for testing without Hasura)
+// MOCK DATA (for testing without a live database)
 // ============================================================================
 
 // MockGetPortfolioHoldings returns sample portfolio
@@ -411,7 +411,7 @@ func EstimateCommission(trades []RebalanceTradeSpec, commissionPerTrade float64)
 
 // FetchPortfolioHoldingsActivity queries the Postgres portfolios/
 // portfolio_holdings tables (via the shared Repository) for current
-// holdings. Previously this queried Hasura's GraphQL endpoint directly;
+// holdings. Previously this queried a remote GraphQL endpoint directly;
 // now it reuses the same DB-backed Repository as the other activities in
 // this file (see activities.go: RebalanceActivities.db, backed by
 // rebalancing/worker/repository.go).
@@ -482,8 +482,8 @@ func (a *RebalanceActivities) FetchPortfolioHoldingsActivity(
 // ACTIVITY: Get Target Allocation Model
 // ============================================================================
 
-// GetAllocationModelActivity previously queried Hasura for the semantic
-// allocation model. There is no real, non-Hasura data source for this: the
+// GetAllocationModelActivity previously queried a remote GraphQL endpoint for the semantic
+// allocation model. There is no real data source for this: the
 // `portfolios.target_model` column only stores a flat asset-class->percent
 // map (see rebalancing/worker/domain.go Portfolio.TargetModel), with no
 // min/max band or benchmark per asset class, and there is no separate

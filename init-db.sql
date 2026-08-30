@@ -182,7 +182,7 @@ INSERT INTO public.catalog_edge_types (id, tenant_id, edge_type_name, descriptio
 ('semantic_model_links_to_edge', 'default', 'semantic_model_links_to', 'Semantic Model Links To Semantic Term', 'semantic_model_type', 'semantic_term_type')
 ON CONFLICT (tenant_id, edge_type_name) DO NOTHING;
 
--- Create views for Hasura
+-- Create views used by the catalog/semantic layer
 CREATE OR REPLACE VIEW public.business_terms AS
 SELECT
     cn.id,
@@ -245,7 +245,7 @@ FROM public.catalog_node cn
 JOIN public.catalog_node_type cnt ON cn.node_type_id = cnt.id
 WHERE cnt.catalog_type_name = 'semantic_column';
 
--- Grant permissions for Hasura
+-- Grant read permissions to the application database role
 GRANT SELECT ON ALL TABLES IN SCHEMA public TO semlayer_user;
 GRANT USAGE ON SCHEMA public TO semlayer_user;
 

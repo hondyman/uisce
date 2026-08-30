@@ -2,9 +2,9 @@ import React, { useState } from 'react';
 import { Zap, TrendingUp, DollarSign, AlertTriangle, CheckCircle, Clock, Activity } from 'lucide-react';
 import { usePolling } from '../hooks/usePolling';
 
-// REST fetchers, replacing the client-side Hasura GraphQL subscriptions
+// REST fetchers, replacing the client-side GraphQL subscriptions
 // (PORTFOLIOS_SUB, REBALANCE_PLANS_SUB) and mutation (TRIGGER_REBALANCE)
-// that used to talk directly to Hasura from the browser.
+// that used to talk directly to a GraphQL endpoint from the browser.
 const fetchPortfolios = async () => {
   const res = await fetch('/api/portfolios');
   if (!res.ok) throw new Error('Failed to fetch portfolios');
