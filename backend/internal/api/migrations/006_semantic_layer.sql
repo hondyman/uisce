@@ -65,22 +65,19 @@ ALTER TABLE portfolios ENABLE ROW LEVEL SECURITY;
 CREATE POLICY manager_access ON portfolios
     FOR SELECT
     USING (
-        manager_id::text = current_setting('hasura.user.id', true)
+        manager_id::text = current_setting('app.user.id', true)
     );
 
 -- Policy: Region-based access (Dynamic Attribute)
 -- Users can see portfolios if the portfolio's region is in the user's allowed regions.
--- We assume 'hasura.user.allowed_regions' is a JSON array or CSV string passed in session variables.
+-- We assume 'app.user.allowed_regions' is a JSON array or CSV string set via set_config.
 -- Example: '{"EU", "US"}'
 CREATE POLICY region_access ON portfolios
     FOR SELECT
     USING (
         region = ANY(
-            string_to_array(current_setting('hasura.user.allowed_regions', true), ',')
+            string_to_array(current_setting('app.user.allowed_regions', true), ',')
         )
         OR
-        current_setting('hasura.user.role', true) = 'admin'
+        current_setting('app.user.role', true) = 'admin'
     );
-
--- Grant access to Hasura role (postgres role used by Hasura)
--- GRANT SELECT ON portfolios TO hasura_user; -- Uncomment if specific role needed

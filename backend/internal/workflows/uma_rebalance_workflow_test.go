@@ -68,7 +68,7 @@ func (m *MockUMAActivities) ExecuteTradesActivity(ctx context.Context, plan *mod
 	return args.Get(0).(map[string]interface{}), args.Error(1)
 }
 
-func (m *MockUMAActivities) UpdateHasuraActivity(ctx context.Context, tenantID string, plan *models.UMARebalancePlan, executionResult map[string]interface{}) error {
+func (m *MockUMAActivities) RecordRebalancePlanActivity(ctx context.Context, tenantID string, plan *models.UMARebalancePlan, executionResult map[string]interface{}) error {
 	args := m.Called(ctx, tenantID, plan, executionResult)
 	return args.Error(0)
 }
@@ -152,7 +152,7 @@ func TestUMARebalanceWorkflow(t *testing.T) {
 
 	mockActivities.On("ExecuteTradesActivity", mock.Anything, mock.Anything).Return(map[string]interface{}{"executed": true}, nil)
 
-	mockActivities.On("UpdateHasuraActivity", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil)
+	mockActivities.On("RecordRebalancePlanActivity", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil)
 
 	mockActivities.On("EmitRebalanceCompletedEventActivity", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil)
 
@@ -164,7 +164,7 @@ func TestUMARebalanceWorkflow(t *testing.T) {
 	env.RegisterActivity(mockActivities.TaxHarvestSimulationActivity)
 	env.RegisterActivity(mockActivities.CheckApprovalRequiredActivity)
 	env.RegisterActivity(mockActivities.ExecuteTradesActivity)
-	env.RegisterActivity(mockActivities.UpdateHasuraActivity)
+	env.RegisterActivity(mockActivities.RecordRebalancePlanActivity)
 	env.RegisterActivity(mockActivities.EmitRebalanceCompletedEventActivity)
 
 	// Execute workflow
@@ -275,7 +275,7 @@ func TestUMARebalanceWorkflowApprovalSignal(t *testing.T) {
 	// Auto-approve in the test to avoid needing to coordinate signals in the test harness
 	mockActivities.On("CheckApprovalRequiredActivity", mock.Anything, mock.Anything, mock.Anything).Return(false, nil)
 	mockActivities.On("ExecuteTradesActivity", mock.Anything, mock.Anything).Return(map[string]interface{}{}, nil)
-	mockActivities.On("UpdateHasuraActivity", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil)
+	mockActivities.On("RecordRebalancePlanActivity", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil)
 	mockActivities.On("EmitRebalanceCompletedEventActivity", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil)
 
 	env.RegisterActivity(mockActivities.ABACCheckActivity)
@@ -285,7 +285,7 @@ func TestUMARebalanceWorkflowApprovalSignal(t *testing.T) {
 	env.RegisterActivity(mockActivities.TaxHarvestSimulationActivity)
 	env.RegisterActivity(mockActivities.CheckApprovalRequiredActivity)
 	env.RegisterActivity(mockActivities.ExecuteTradesActivity)
-	env.RegisterActivity(mockActivities.UpdateHasuraActivity)
+	env.RegisterActivity(mockActivities.RecordRebalancePlanActivity)
 	env.RegisterActivity(mockActivities.EmitRebalanceCompletedEventActivity)
 
 	// Schedule the approval signal shortly after the workflow starts so the workflow

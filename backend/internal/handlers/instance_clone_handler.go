@@ -28,8 +28,8 @@ func (h *InstanceCloneHandler) RegisterRoutes(r chi.Router) {
 	r.Post("/api/events/tenant-instance-created", h.HandleInstanceCreatedEvent)
 }
 
-// HasuraEventPayload represents the Hasura event trigger payload
-type HasuraEventPayload struct {
+// InstanceEventPayload represents a DB row-change event payload
+type InstanceEventPayload struct {
 	Event struct {
 		Data struct {
 			New map[string]interface{} `json:"new"`
@@ -43,11 +43,11 @@ type HasuraEventPayload struct {
 	} `json:"table"`
 }
 
-// HandleInstanceCreatedEvent handles Hasura event trigger for tenant_instance INSERT
+// HandleInstanceCreatedEvent handles a tenant_instance row-insert event
 func (h *InstanceCloneHandler) HandleInstanceCreatedEvent(w http.ResponseWriter, r *http.Request) {
 	logger := logging.GetLogger().Sugar()
 
-	var payload HasuraEventPayload
+	var payload InstanceEventPayload
 	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
 		logger.Errorf("Failed to decode event payload: %v", err)
 		http.Error(w, "Invalid payload", http.StatusBadRequest)

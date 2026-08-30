@@ -109,6 +109,7 @@ services:
       dockerfile: backend/cmd/workflow-service/Dockerfile
     restart: on-failure
     environment:
+      POSTGRES_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD}@host.docker.internal:5432/alpha?sslmode=disable
       WORKFLOW_SERVICE_PORT: 8084
       KAFKA_BROKERS: redpanda:9092
       # Note: messaging now uses Redpanda (Kafka-compatible)

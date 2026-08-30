@@ -60,7 +60,7 @@ func main() {
 		db,
 		calcEngine,
 		metaService,
-		hasuraGenerator,
+		metaGenerator,
 	)
 
 	// Initialize wealth transfer with core integration

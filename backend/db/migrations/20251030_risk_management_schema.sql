@@ -432,18 +432,18 @@ CREATE TRIGGER risk_events_updated_at
 -- ============================================================================
 -- ROW-LEVEL SECURITY (if enabled in your Hasura)
 -- ============================================================================
--- Uncomment if using Hasura RLS:
+-- Uncomment to enable RLS (set via SELECT set_config('app.tenant_id', ..., true) per request):
 -- ALTER TABLE risk_events ENABLE ROW LEVEL SECURITY;
 -- ALTER TABLE risk_thresholds ENABLE ROW LEVEL SECURITY;
 -- ALTER TABLE risk_mitigation_actions ENABLE ROW LEVEL SECURITY;
--- 
+--
 -- CREATE POLICY risk_events_tenant_isolation ON risk_events
 --     FOR SELECT
---     USING (tenant_id = current_setting('hasura.user.x-hasura-tenant-id', TRUE)::UUID);
--- 
+--     USING (tenant_id = current_setting('app.tenant_id', TRUE)::UUID);
+--
 -- CREATE POLICY risk_thresholds_tenant_isolation ON risk_thresholds
 --     FOR SELECT
---     USING (tenant_id = current_setting('hasura.user.x-hasura-tenant-id', TRUE)::UUID);
+--     USING (tenant_id = current_setting('app.tenant_id', TRUE)::UUID);
 
 -- ============================================================================
 -- COMMENTS FOR DOCUMENTATION

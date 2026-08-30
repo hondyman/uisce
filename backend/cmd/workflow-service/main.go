@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -12,6 +13,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	_ "github.com/lib/pq"
 	kafka "github.com/segmentio/kafka-go"
 )
 
@@ -80,8 +82,7 @@ type ConditionEvaluator struct {
 // ============================================================================
 
 var (
-	hasuraURL   string
-	hasuraToken string
+	db          *sql.DB
 	kafkaWriter *kafka.Writer
 )
 
@@ -90,11 +91,15 @@ var (
 // ============================================================================
 
 func init() {
-	hasuraURL = os.Getenv("HASURA_URL")
-	if hasuraURL == "" {
-		hasuraURL = "http://localhost:8080"
+	postgresURL := os.Getenv("POSTGRES_URL")
+	if postgresURL == "" {
+		log.Fatal("POSTGRES_URL environment variable is required")
 	}
-	hasuraToken = os.Getenv("HASURA_ADMIN_SECRET")
+	var err error
+	db, err = sql.Open("postgres", postgresURL)
+	if err != nil {
+		log.Fatalf("Failed to connect to PostgreSQL: %v", err)
+	}
 
 	kafkaBrokers := os.Getenv("KAFKA_BROKERS")
 	if kafkaBrokers == "" {
@@ -108,7 +113,6 @@ func init() {
 	}
 
 	log.Println("✓ Workflow Service initialized")
-	log.Printf("  Hasura: %s\n", hasuraURL)
 	log.Printf("  Kafka brokers: %s\n", kafkaBrokers)
 }
 
@@ -120,6 +124,9 @@ func main() {
 	defer func() {
 		if kafkaWriter != nil {
 			kafkaWriter.Close()
+		}
+		if db != nil {
+			db.Close()
 		}
 	}()
 
@@ -250,95 +257,83 @@ func getWorkflowHistory(c *gin.Context) {
 	boType := c.Param("bo_type")
 	boID := c.Param("bo_id")
 
-	query := `
-		query GetWorkflowHistory($tenantID: uuid!, $boType: String!, $boID: uuid!) {
-			workflow_history(
-				where: {tenant_id: {_eq: $tenantID}, bo_type: {_eq: $boType}, bo_id: {_eq: $boID}}
-				order_by: {created_at: desc}
-				limit: 50
-			) {
-				id
-				workflow_name
-				step_name
-				status
-				details
-				created_at
-				user_id
-			}
-		}
-	`
-
-	variables := map[string]interface{}{
-		"tenantID": tenantID,
-		"boType":   boType,
-		"boID":     boID,
-	}
-
-	data, err := hasuraGraphQLQuery(c.Request.Context(), query, variables)
+	rows, err := db.QueryContext(c.Request.Context(), `
+		SELECT id, workflow_name, step_name, status, details, created_at, user_id
+		FROM workflow_history
+		WHERE tenant_id = $1 AND bo_type = $2 AND bo_id = $3
+		ORDER BY created_at DESC
+		LIMIT 50
+	`, tenantID, boType, boID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error": fmt.Sprintf("Failed to fetch history: %v", err),
 		})
 		return
 	}
+	defer rows.Close()
 
-	var resp struct {
-		WorkflowHistory []map[string]interface{} `json:"workflow_history"`
-	}
-
-	if err := json.Unmarshal(data, &resp); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": fmt.Sprintf("Failed to parse history: %v", err),
+	history := []map[string]interface{}{}
+	for rows.Next() {
+		var id, workflowName, stepName, status, userID string
+		var details json.RawMessage
+		var createdAt time.Time
+		if err := rows.Scan(&id, &workflowName, &stepName, &status, &details, &createdAt, &userID); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error": fmt.Sprintf("Failed to scan history row: %v", err),
+			})
+			return
+		}
+		history = append(history, map[string]interface{}{
+			"id":            id,
+			"workflow_name": workflowName,
+			"step_name":     stepName,
+			"status":        status,
+			"details":       details,
+			"created_at":    createdAt,
+			"user_id":       userID,
 		})
-		return
 	}
 
-	c.JSON(http.StatusOK, resp.WorkflowHistory)
+	c.JSON(http.StatusOK, history)
 }
 
 // getAvailableWorkflows fetches workflow templates for a tenant
 func getAvailableWorkflows(c *gin.Context) {
 	tenantID := c.Param("tenant_id")
 
-	query := `
-		query GetWorkflowTemplates($tenantID: uuid!) {
-			workflow_templates(
-				where: {_or: [{tenant_id: {_is_null: true}}, {tenant_id: {_eq: $tenantID}}]}
-				order_by: {workflow_name: asc}
-			) {
-				id
-				workflow_name
-				description
-				bo_type
-				trigger_event
-			}
-		}
-	`
-
-	variables := map[string]interface{}{
-		"tenantID": tenantID,
-	}
-
-	data, err := hasuraGraphQLQuery(c.Request.Context(), query, variables)
+	rows, err := db.QueryContext(c.Request.Context(), `
+		SELECT id, workflow_name, description, bo_type, trigger_event
+		FROM workflow_templates
+		WHERE tenant_id IS NULL OR tenant_id = $1
+		ORDER BY workflow_name ASC
+	`, tenantID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error": fmt.Sprintf("Failed to fetch templates: %v", err),
 		})
 		return
 	}
+	defer rows.Close()
 
-	var resp struct {
-		WorkflowTemplates []map[string]interface{} `json:"workflow_templates"`
-	}
-
-	if err := json.Unmarshal(data, &resp); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": fmt.Sprintf("Failed to parse templates: %v", err),
+	templates := []map[string]interface{}{}
+	for rows.Next() {
+		var id, workflowName, description, boType, triggerEvent string
+		if err := rows.Scan(&id, &workflowName, &description, &boType, &triggerEvent); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error": fmt.Sprintf("Failed to scan template row: %v", err),
+			})
+			return
+		}
+		templates = append(templates, map[string]interface{}{
+			"id":            id,
+			"workflow_name": workflowName,
+			"description":   description,
+			"bo_type":       boType,
+			"trigger_event": triggerEvent,
 		})
-		return
 	}
 
-	c.JSON(http.StatusOK, resp.WorkflowTemplates)
+	c.JSON(http.StatusOK, templates)
 }
 
 // ============================================================================
@@ -346,105 +341,34 @@ func getAvailableWorkflows(c *gin.Context) {
 // ============================================================================
 
 // hasuraGraphQLQuery makes a GraphQL query to Hasura and returns the result
-func hasuraGraphQLQuery(ctx context.Context, query string, variables map[string]interface{}) (json.RawMessage, error) {
-	payload := map[string]interface{}{
-		"query":     query,
-		"variables": variables,
-	}
-
-	body, err := json.Marshal(payload)
-	if err != nil {
-		return nil, err
-	}
-
-	req, err := http.NewRequestWithContext(ctx, "POST", hasuraURL+"/v1/graphql", strings.NewReader(string(body)))
-	if err != nil {
-		return nil, err
-	}
-
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("x-hasura-admin-secret", hasuraToken)
-
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	var result struct {
-		Data   json.RawMessage `json:"data"`
-		Errors []interface{}   `json:"errors"`
-	}
-
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return nil, err
-	}
-
-	if len(result.Errors) > 0 {
-		return nil, fmt.Errorf("GraphQL error: %v", result.Errors[0])
-	}
-
-	return result.Data, nil
-}
-
-// fetchWorkflowRules retrieves rules from Hasura
+// fetchWorkflowRules retrieves active workflow rules for a tenant/workflow/step
 func fetchWorkflowRules(ctx context.Context, tenantID uuid.UUID, workflowName, stepName string) ([]WorkflowRule, error) {
-	query := `
-		query FetchWorkflowRules($tenantID: uuid!, $workflowName: String!, $stepName: String!) {
-			workflow_rules(
-				where: {
-					tenant_id: {_eq: $tenantID}
-					workflow_name: {_eq: $workflowName}
-					step_name: {_eq: $stepName}
-					is_active: {_eq: true}
-				}
-			) {
-				id
-				workflow_name
-				step_name
-				step_order
-				condition_json
-				action_on_success
-				action_on_failure
-				error_message
-				timeout_seconds
-				retry_count
-			}
-		}
-	`
-
-	variables := map[string]interface{}{
-		"tenantID":     tenantID.String(),
-		"workflowName": workflowName,
-		"stepName":     stepName,
-	}
-
-	data, err := hasuraGraphQLQuery(ctx, query, variables)
+	rows, err := db.QueryContext(ctx, `
+		SELECT id, workflow_name, step_name, step_order, condition_json,
+		       action_on_success, action_on_failure, error_message, timeout_seconds, retry_count
+		FROM workflow_rules
+		WHERE tenant_id = $1 AND workflow_name = $2 AND step_name = $3 AND is_active = true
+	`, tenantID, workflowName, stepName)
 	if err != nil {
 		return nil, err
 	}
+	defer rows.Close()
 
-	var resp struct {
-		WorkflowRules []WorkflowRule `json:"workflow_rules"`
+	var rules []WorkflowRule
+	for rows.Next() {
+		var rule WorkflowRule
+		if err := rows.Scan(&rule.ID, &rule.WorkflowName, &rule.StepName, &rule.StepOrder, &rule.ConditionJSON,
+			&rule.ActionOnSuccess, &rule.ActionOnFailure, &rule.ErrorMessage, &rule.TimeoutSeconds, &rule.RetryCount); err != nil {
+			return nil, err
+		}
+		rules = append(rules, rule)
 	}
 
-	if err := json.Unmarshal(data, &resp); err != nil {
-		return nil, err
-	}
-
-	return resp.WorkflowRules, nil
+	return rules, rows.Err()
 }
 
-// recordWorkflowHistory inserts a history record in Hasura
+// recordWorkflowHistory inserts a history record
 func recordWorkflowHistory(ctx context.Context, tenantID uuid.UUID, req WorkflowRequest, stepName, status, message string, historyID uuid.UUID) error {
-	query := `
-		mutation RecordWorkflowHistory($object: workflow_history_insert_input!) {
-			insert_workflow_history_one(object: $object) {
-				id
-			}
-		}
-	`
-
 	details := map[string]interface{}{
 		"form_data": req.FormData,
 	}
@@ -452,25 +376,15 @@ func recordWorkflowHistory(ctx context.Context, tenantID uuid.UUID, req Workflow
 		details["error"] = message
 	}
 
-	detailsJSON, _ := json.Marshal(details)
-
-	object := map[string]interface{}{
-		"id":            historyID.String(),
-		"tenant_id":     tenantID.String(),
-		"workflow_name": req.WorkflowName,
-		"step_name":     stepName,
-		"bo_type":       req.BOType,
-		"bo_id":         req.BOID.String(),
-		"status":        status,
-		"details":       json.RawMessage(detailsJSON),
-		"user_id":       req.UserID.String(),
+	detailsJSON, err := json.Marshal(details)
+	if err != nil {
+		return err
 	}
 
-	variables := map[string]interface{}{
-		"object": object,
-	}
-
-	_, err := hasuraGraphQLQuery(ctx, query, variables)
+	_, err = db.ExecContext(ctx, `
+		INSERT INTO workflow_history (id, tenant_id, workflow_name, step_name, bo_type, bo_id, status, details, user_id)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+	`, historyID, tenantID, req.WorkflowName, stepName, req.BOType, req.BOID, status, detailsJSON, req.UserID)
 	return err
 }
 

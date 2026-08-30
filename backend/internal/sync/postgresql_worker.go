@@ -83,6 +83,16 @@ func (w *PostgreSQLSyncWorker) grantPermissions(ctx context.Context, roleName st
 	return nil
 }
 
+// InvalidateUserSessions marks a user's sessions as invalid, forcing re-login
+// after a role change so stale permissions aren't carried in an existing session.
+func (w *PostgreSQLSyncWorker) InvalidateUserSessions(ctx context.Context, userID string) error {
+	_, err := w.db.ExecContext(ctx,
+		"UPDATE user_sessions SET is_active = false WHERE user_id = $1",
+		userID,
+	)
+	return err
+}
+
 // AssignUserToRole assigns a user to a PostgreSQL role
 func (w *PostgreSQLSyncWorker) AssignUserToRole(ctx context.Context, userID, roleID string) error {
 	// Get role name

@@ -46,7 +46,7 @@ CREATE INDEX IF NOT EXISTS idx_ledger_basis ON ledger_entries (basis_id);
 ALTER TABLE ledger_entries ENABLE ROW LEVEL SECURITY;
 
 -- Policy: Users can only see rows for bases they are allowed to see.
--- We assume 'hasura.user.allowed_bases' is a session variable (e.g., "{IBOR,ABOR}")
+-- We assume 'app.user.allowed_bases' is a session variable set via set_config (e.g., "{IBOR,ABOR}")
 -- If not present, default to IBOR only or deny all depending on security posture.
 -- Here we allow IBOR by default if variable is missing for backward compatibility/safety.
 CREATE POLICY basis_access_policy ON ledger_entries
@@ -54,10 +54,10 @@ CREATE POLICY basis_access_policy ON ledger_entries
     USING (
         basis_id = ANY(
             string_to_array(
-                COALESCE(current_setting('hasura.user.allowed_bases', true), 'IBOR'), 
+                COALESCE(current_setting('app.user.allowed_bases', true), 'IBOR'),
                 ','
             )
         )
         OR
-        current_setting('hasura.user.role', true) = 'admin'
+        current_setting('app.user.role', true) = 'admin'
     );

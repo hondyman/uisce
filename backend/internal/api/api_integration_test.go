@@ -10,48 +10,13 @@ import (
 	"testing"
 )
 
-// Test DB-backed views pagination via Hasura
+// Test DB-backed views pagination
 func TestViewsPaginationHandler_DBOnly(t *testing.T) {
 	tmp := t.TempDir()
 	runtimeResolved := filepath.Join(tmp, "runtime", "views_resolved")
 	if err := os.MkdirAll(runtimeResolved, 0o755); err != nil {
 		t.Fatal(err)
 	}
-
-	gqlResp := map[string]interface{}{
-		"data": map[string]interface{}{
-			"views": []map[string]interface{}{
-				{
-					"name": "d1",
-					"view": map[string]interface{}{
-						"name":        "d1",
-						"title":       "Demo View",
-						"description": "Example view from Hasura",
-						"cubes":       []map[string]interface{}{},
-						"folders":     []map[string]interface{}{},
-					},
-					"updated_at": "2025-01-01T00:00:00Z",
-				},
-			},
-			"views_aggregate": map[string]interface{}{
-				"aggregate": map[string]interface{}{
-					"count": 1,
-				},
-			},
-		},
-	}
-
-	// Start an httptest server to act as Hasura
-	hs := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		b, _ := json.Marshal(gqlResp)
-		w.Header().Set("Content-Type", "application/json")
-		w.Write(b)
-	}))
-	defer hs.Close()
-
-	// Patch HASURA_URL env for the handler
-	os.Setenv("HASURA_URL", hs.URL)
-	defer os.Unsetenv("HASURA_URL")
 
 	// Set SEMLAYER_RUNTIME_DIR to our tmp so handler reads runtime files from there
 	os.Setenv("SEMLAYER_RUNTIME_DIR", tmp)

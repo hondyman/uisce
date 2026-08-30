@@ -39,8 +39,6 @@ type SyncWorkerConfig struct {
 	KafkaBrokers       string
 	DebeziumServerName string
 	PostgresURL        string
-	HasuraURL          string
-	HasuraAdminSecret  string
 	SupersetURL        string
 	SupersetUsername   string
 	SupersetPassword   string
@@ -55,8 +53,6 @@ func main() {
 		KafkaBrokers:       getEnv("KAFKA_BROKERS", "localhost:9092"),
 		DebeziumServerName: getEnv("DEBEZIUM_SERVER_NAME", "alpha"),
 		PostgresURL:        requireEnv("POSTGRES_URL"),
-		HasuraURL:          getEnv("HASURA_URL", "http://localhost:8080"),
-		HasuraAdminSecret:  requireEnv("HASURA_ADMIN_SECRET"),
 		SupersetURL:        getEnv("SUPERSET_URL", "http://localhost:8088"),
 		SupersetUsername:   getEnv("SUPERSET_USERNAME", "admin"),
 		SupersetPassword:   requireEnv("SUPERSET_PASSWORD"),
@@ -78,7 +74,6 @@ func main() {
 
 	// Initialize sync workers
 	pgWorker := sync.NewPostgreSQLSyncWorker(db)
-	hasuraWorker := sync.NewHasuraSyncWorker(config.HasuraURL, config.HasuraAdminSecret, db)
 	supersetWorker := sync.NewSupersetSyncWorker(config.SupersetURL, config.SupersetUsername, config.SupersetPassword, db)
 	starrocksWorker, err := sync.NewStarRocksSyncWorker(config.StarRocksURL, config.StarRocksUser, config.StarRocksPassword)
 	if err != nil {
@@ -111,10 +106,6 @@ func main() {
 
 	go func() {
 		errChan <- startPostgreSQLWorker(ctx, config, pgWorker)
-	}()
-
-	go func() {
-		errChan <- startHasuraWorker(ctx, config, hasuraWorker)
 	}()
 
 	go func() {
@@ -162,36 +153,17 @@ func startPostgreSQLWorker(ctx context.Context, config SyncWorkerConfig, worker 
 			if event.Payload.Op == "c" || event.Payload.Op == "r" {
 				userID := event.Payload.After["user_id"].(string)
 				roleID := event.Payload.After["role_id"].(string)
-				return worker.AssignUserToRole(ctx, userID, roleID)
+				if err := worker.AssignUserToRole(ctx, userID, roleID); err != nil {
+					return err
+				}
+				return worker.InvalidateUserSessions(ctx, userID)
 			} else if event.Payload.Op == "d" {
 				userID := event.Payload.Before["user_id"].(string)
 				roleID := event.Payload.Before["role_id"].(string)
-				return worker.RevokeUserFromRole(ctx, userID, roleID)
-			}
-		}
-
-		return nil
-	})
-}
-
-// startHasuraWorker syncs role changes to Hasura permissions
-func startHasuraWorker(ctx context.Context, config SyncWorkerConfig, worker *sync.HasuraSyncWorker) error {
-	topics := []string{
-		fmt.Sprintf("%s.public.roles", config.DebeziumServerName),
-		fmt.Sprintf("%s.public.user_roles", config.DebeziumServerName),
-	}
-	return consumeTopics(ctx, config.KafkaBrokers, "sync-worker-hasura", topics, func(event DebeziumEvent) error {
-		log.Printf("[Hasura] Processing %s event for table %s", event.Payload.Op, event.Payload.Source.Table)
-
-		switch event.Payload.Source.Table {
-		case "roles":
-			if event.Payload.Op == "c" || event.Payload.Op == "u" || event.Payload.Op == "r" {
-				return worker.SyncRole(ctx, event.Payload.After)
-			}
-		case "user_roles":
-			if event.Payload.Op == "c" || event.Payload.Op == "d" {
-				userID := event.Payload.After["user_id"].(string)
-				return worker.InvalidateUserJWT(ctx, userID)
+				if err := worker.RevokeUserFromRole(ctx, userID, roleID); err != nil {
+					return err
+				}
+				return worker.InvalidateUserSessions(ctx, userID)
 			}
 		}
 

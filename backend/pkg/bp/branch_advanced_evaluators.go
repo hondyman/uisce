@@ -63,7 +63,7 @@ func (e *BranchEvaluator) EvaluateAIModels(ctx context.Context, config json.RawM
 		FROM bp_ai_models
 		WHERE model_id = $1 AND tenant_id = $2
 	`
-	// Only run SQL fallback if Hasura did not return a result and a DB is available
+	// Run SQL if a DB is available
 	if e.db != nil {
 		row := e.db.QueryRowContext(ctx, query, selectedModel.ModelID, tenantID)
 		var lastAccuracy float64
@@ -311,7 +311,7 @@ func (e *BranchEvaluator) EvaluateTimeSeries(ctx context.Context, config json.Ra
 		return "", fmt.Errorf("invalid time-series config: %w", err)
 	}
 
-	// Prefer Hasura query for forecast when available, fall back to SQL
+	// Query forecast via SQL
 	// query {
 	//   bp_time_series_forecasts(
 	//     where: {forecast_model: {_eq: "arima"}, tenant_id: {_eq: "tenant-uuid"}}
@@ -323,7 +323,7 @@ func (e *BranchEvaluator) EvaluateTimeSeries(ctx context.Context, config json.Ra
 	var accuracy float64
 
 	if e.db == nil {
-		return "", fmt.Errorf("no forecast available: hasura missing result and db unavailable")
+		return "", fmt.Errorf("no forecast available: db unavailable")
 	}
 	query := `
 		SELECT predicted_queue_depth, predicted_approval_time_minutes, forecast_accuracy
@@ -505,7 +505,7 @@ func (e *BranchEvaluator) EvaluateAnalytics(ctx context.Context, branchID string
 	var analytics BranchAnalytics
 
 	if e.db == nil {
-		return nil, fmt.Errorf("failed to fetch analytics: no hasura result and db unavailable")
+		return nil, fmt.Errorf("failed to fetch analytics: db unavailable")
 	}
 	query := `
 		SELECT selection_count, completion_count, abandonment_count,
@@ -553,7 +553,7 @@ func (e *BranchEvaluator) EvaluateVoting(ctx context.Context, decisionID string,
 	var outcome string
 
 	if e.db == nil {
-		return "", fmt.Errorf("decision not found: no hasura result and db unavailable")
+		return "", fmt.Errorf("decision not found: db unavailable")
 	}
 	query := `
 		SELECT decision_id, stakeholders, votes_received, total_weight, outcome
@@ -836,7 +836,7 @@ func (e *BranchEvaluator) LogBlockchainAudit(ctx context.Context, eventID string
 	eventHash := fmt.Sprintf("sha256_%s_%d", decision, time.Now().Unix())
 
 	if e.db == nil {
-		return fmt.Errorf("no hasura and no db available")
+		return fmt.Errorf("no db available")
 	}
 	_, err := e.db.ExecContext(ctx, queries.InsertBlockchainAuditAlt, eventID, eventHash, tenantID)
 	return err

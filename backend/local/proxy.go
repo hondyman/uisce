@@ -38,24 +38,18 @@ func main() {
 	listen := flag.String("listen", getEnv("PROXY_LISTEN", ":29080"), "listen address")
 	ruleEngine := flag.String("rule", getEnv("RULE_ENGINE_URL", "http://localhost:8083"), "rule-engine base URL")
 	backend := flag.String("backend", getEnv("BACKEND_URL", "http://localhost:8080"), "backend/api gateway URL")
-	hasura := flag.String("hasura", getEnv("HASURA_URL", "http://100.84.126.19:8085"), "hasura base URL (REMOTE ONLY)")
 	flag.Parse()
 
-	log.Printf("proxy starting on %s; rule=%s backend=%s hasura=%s", *listen, *ruleEngine, *backend, *hasura)
+	log.Printf("proxy starting on %s; rule=%s backend=%s", *listen, *ruleEngine, *backend)
 
 	ruleProxy := newProxy(*ruleEngine)
 	backendProxy := newProxy(*backend)
-	hasuraProxy := newProxy(*hasura)
 
 	mux := http.NewServeMux()
 
 	// route /api/validation-rules (and variants) -> rule-engine
 	mux.HandleFunc("/api/validation-rules", func(w http.ResponseWriter, r *http.Request) { ruleProxy.ServeHTTP(w, r) })
 	mux.HandleFunc("/api/validation-rules/", func(w http.ResponseWriter, r *http.Request) { ruleProxy.ServeHTTP(w, r) })
-
-	// GraphQL -> Hasura
-	mux.HandleFunc("/v1/graphql", func(w http.ResponseWriter, r *http.Request) { hasuraProxy.ServeHTTP(w, r) })
-	mux.HandleFunc("/v1/graphql/", func(w http.ResponseWriter, r *http.Request) { hasuraProxy.ServeHTTP(w, r) })
 
 	// fallback for /api -> backend
 	mux.HandleFunc("/api/", func(w http.ResponseWriter, r *http.Request) {

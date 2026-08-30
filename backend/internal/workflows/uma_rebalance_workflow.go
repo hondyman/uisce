@@ -233,15 +233,15 @@ func UMARebalanceWorkflow(ctx workflow.Context, input models.UMARebalanceWorkflo
 	result["execution_status"] = "completed"
 
 	// ========================================================================
-	// PHASE 8: UPDATE HASURA
+	// PHASE 8: RECORD REBALANCE PLAN
 	// ========================================================================
-	logger.Info("▶️  Phase 8: Update Hasura")
-	err = workflow.ExecuteActivity(ctx, (*UMAActivities).UpdateHasuraActivity, input.TenantID, plan, executionResult).Get(ctx, nil)
+	logger.Info("▶️  Phase 8: Record rebalance plan")
+	err = workflow.ExecuteActivity(ctx, (*UMAActivities).RecordRebalancePlanActivity, input.TenantID, plan, executionResult).Get(ctx, nil)
 	if err != nil {
-		logger.Warn("⚠️  Hasura update failed (non-blocking)", "Error", err)
+		logger.Warn("⚠️  Rebalance plan recording failed (non-blocking)", "Error", err)
 	}
 
-	logger.Info("✅ Hasura updated")
+	logger.Info("✅ Rebalance plan recorded")
 
 	// ========================================================================
 	// PHASE 9: EMIT COMPLETION EVENT
