@@ -58,11 +58,11 @@ echo -e "${BLUE}STEP 2: Starting Docker Services${NC}"
 echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 
 echo "Pulling latest images..."
-docker compose pull temporal temporal-ui postgresql-temporal graphql-engine rabbitmq 2>&1 | grep -E "^Pulling|^Digest|Status:|Downloaded" || true
+docker compose pull temporal temporal-ui postgresql-temporal rabbitmq 2>&1 | grep -E "^Pulling|^Digest|Status:|Downloaded" || true
 
 echo ""
 echo "Starting Docker services..."
-docker compose up -d temporal postgresql-temporal temporal-ui graphql-engine rabbitmq
+docker compose up -d temporal postgresql-temporal temporal-ui rabbitmq
 
 echo "⏳ Waiting for services to be healthy (30 seconds)..."
 sleep 30
@@ -76,13 +76,6 @@ if docker exec semlayer-temporal temporal workflow list --address localhost:7233
     echo -e "${GREEN}✅ Temporal is running${NC}"
 else
     echo -e "${YELLOW}⚠️  Temporal may still be initializing...${NC}"
-fi
-
-# Check Hasura
-if curl -s http://localhost:8083 > /dev/null; then
-    echo -e "${GREEN}✅ Hasura is running at http://localhost:8083${NC}"
-else
-    echo -e "${RED}❌ Hasura is not responding${NC}"
 fi
 
 # Check RabbitMQ
@@ -167,7 +160,6 @@ echo ""
 echo "📊 SERVICE URLS:"
 echo "   • Temporal UI:      http://localhost:8080"
 echo "   • Temporal gRPC:    localhost:7233"
-echo "   • Hasura GraphQL:   http://localhost:8083"
 echo "   • RabbitMQ Admin:   http://localhost:15672 (guest/guest)"
 echo "   • PostgreSQL:       postgresql://postgres:postgres@localhost:5432/alpha"
 echo ""

@@ -27,7 +27,6 @@ check_service() {
 }
 
 echo -e "${YELLOW}Infrastructure Services:${NC}"
-check_service "hasura" "8888" "Hasura GraphQL"
 check_service "rabbitmq" "5672" "RabbitMQ AMQP"
 check_service "rabbitmq-mgmt" "15672" "RabbitMQ Management"
 check_service "temporal" "7233" "Temporal Workflow"
@@ -43,7 +42,6 @@ check_service "frontend" "5173" "Frontend Dev Server"
 
 echo -e "\n${BLUE}═══════════════════════════════════════════════════════════════${NC}"
 echo -e "${BLUE}Web Interfaces:${NC}"
-echo -e "  • Hasura Console       : ${GREEN}http://localhost:8888${NC}"
 echo -e "  • RabbitMQ Management  : ${GREEN}http://localhost:15672${NC} (guest/guest)"
 echo -e "  • Temporal UI          : ${GREEN}http://localhost:8088${NC}"
 echo -e "  • Frontend App         : ${GREEN}http://localhost:5173${NC}"

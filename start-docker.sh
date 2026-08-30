@@ -47,9 +47,6 @@ BACKEND_HOST_PORT=8080
 # Fabric Builder
 FABRIC_HOST_PORT=8081
 
-# Hasura
-HASURA_ADMIN_SECRET=newadminsecretkey
-
 # JWT
 JWT_SECRET=your-jwt-secret-key
 
@@ -107,7 +104,6 @@ docker compose ps
 echo ""
 echo -e "${BLUE}Access Points:${NC}"
 echo -e "  API Gateway:        ${GREEN}http://localhost:8001${NC}"
-echo -e "  Hasura Console:     ${GREEN}http://localhost:8080${NC}"
 echo -e "  Backend API:        ${GREEN}http://localhost:8080${NC}"
 echo -e "  Fabric Builder:     ${GREEN}http://localhost:8081${NC}"
 echo -e "  Temporal UI:        ${GREEN}http://localhost:8088${NC}"

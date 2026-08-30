@@ -54,41 +54,10 @@ echo "      Found $TABLE_COUNT Navigator tables"
 echo -e "${GREEN}✓${NC} Database ready"
 
 # ============================================================================
-# 3. TRACK TABLES IN HASURA
+# 3. DEPLOY BUSINESS PROCESS
 # ============================================================================
 
-echo -e "${BLUE}[3/6]${NC} Tracking tables in Hasura GraphQL engine..."
-echo "      This enables subscriptions and automatic GraphQL generation"
-
-# Option A: Via Hasura CLI (requires hasura CLI installed)
-if command -v hasura &> /dev/null; then
-  cd config/hasura
-  hasura metadata apply --endpoint "${HASURA_ENDPOINT:-http://localhost:8080}" \
-                       --admin-secret "${HASURA_ADMIN_SECRET:-}"
-  cd ../..
-  echo -e "${GREEN}✓${NC} Tables tracked via Hasura CLI"
-else
-  # Option B: Manual via curl
-  echo "      (hasura CLI not found, using manual tracking)"
-  
-  TABLES="fund_commitments capital_events fund_position_snapshots cash_flow_forecasts reconciliation_records document_repository yale_model_calibration"
-  
-  for TABLE in $TABLES; do
-    curl -X POST "${HASURA_ENDPOINT:-http://localhost:8080}/v1/metadata" \
-      -H "Content-Type: application/json" \
-      -H "X-Hasura-Admin-Secret: ${HASURA_ADMIN_SECRET:-}" \
-      -d "{\"type\": \"track_table\", \"args\": {\"schema\": \"public\", \"name\": \"$TABLE\"}}" \
-      2>/dev/null || echo "      Could not track $TABLE (may already exist)"
-  done
-  
-  echo -e "${GREEN}✓${NC} Tables tracked in Hasura"
-fi
-
-# ============================================================================
-# 4. DEPLOY BUSINESS PROCESS
-# ============================================================================
-
-echo -e "${BLUE}[4/6]${NC} Registering Navigator business process..."
+echo -e "${BLUE}[3/5]${NC} Registering Navigator business process..."
 echo "      BP: navigator_v1 (17 steps, Yale model + reconciliation)"
 
 # Copy BP to registry (adjust path as needed)
@@ -101,10 +70,10 @@ echo "      (Will be loaded when Temporal worker starts)"
 echo -e "${GREEN}✓${NC} Business process deployed"
 
 # ============================================================================
-# 5. REBUILD & RESTART WORKER
+# 4. REBUILD & RESTART WORKER
 # ============================================================================
 
-echo -e "${BLUE}[5/6]${NC} Rebuilding Temporal worker with Navigator activities..."
+echo -e "${BLUE}[4/5]${NC} Rebuilding Temporal worker with Navigator activities..."
 echo "      Activities: CalibrateYaleModel, GenerateCashFlowForecast, MonteCarloSimulation,"
 echo "                  ReconcileCapitalActivity, ApplyBenchmarkRefinement, ProjectDealJCurve"
 
@@ -143,23 +112,16 @@ cd ../..
 echo -e "${GREEN}✓${NC} Worker updated"
 
 # ============================================================================
-# 6. VERIFICATION
+# 5. VERIFICATION
 # ============================================================================
 
-echo -e "${BLUE}[6/6]${NC} Verification checks..."
+echo -e "${BLUE}[5/5]${NC} Verification checks..."
 
 # Check 1: PostgreSQL connectivity
 echo -n "      PG connectivity... "
 psql -h "${POSTGRES_HOST:-localhost}" -U "${POSTGRES_USER:-postgres}" -d "${POSTGRES_DB:-alpha}" -c "SELECT 1" > /dev/null 2>&1 && echo -e "${GREEN}✓${NC}" || echo -e "${YELLOW}✗${NC}"
 
-# Check 2: Hasura connectivity
-echo -n "      Hasura connectivity... "
-curl -s -X POST "${HASURA_ENDPOINT:-http://localhost:8080}/v1/graphql" \
-  -H "Content-Type: application/json" \
-  -H "X-Hasura-Admin-Secret: ${HASURA_ADMIN_SECRET:-}" \
-  -d '{"query":"{ __typename }"}' | grep -q "__typename" && echo -e "${GREEN}✓${NC}" || echo -e "${YELLOW}✗${NC}"
-
-# Check 3: Temporal connectivity (optional)
+# Check 2: Temporal connectivity (optional)
 if command -v tctl &> /dev/null; then
   echo -n "      Temporal connectivity... "
   tctl namespace list > /dev/null 2>&1 && echo -e "${GREEN}✓${NC}" || echo -e "${YELLOW}✗${NC}"

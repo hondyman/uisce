@@ -3,7 +3,7 @@
 # DISTRIBUTED PLATFORM STARTUP - MacBook Pro
 # =============================================================================
 # This script sets up and starts the full platform:
-# - Remote: PostgreSQL + Hasura + Redpanda + Temporal (on 100.84.126.19)
+# - Remote: PostgreSQL + Redpanda + Temporal (on 100.84.126.19)
 # - MacBook: Backend (Docker) + Frontend (Native)
 #
 # Usage: ./start-distributed-platform.sh
@@ -44,7 +44,7 @@ check_remote_service() {
     else
         # For HTTP services, try with curl
         case ${port} in
-            8085|8088|8094|8096|9011)
+            8088|8094|8096|9011)
                 if timeout 3 curl -s -o /dev/null -w "%{http_code}" "http://${REMOTE_HOST}:${port}/" 2>/dev/null | grep -q "[2345]"; then
                     echo -e "${GREEN}✓ OK${NC}"
                     return 0
@@ -63,7 +63,6 @@ echo ""
 SERVICES_OK=true
 
 check_remote_service "PostgreSQL" 5432 || SERVICES_OK=false
-check_remote_service "Hasura GraphQL" 8085 || SERVICES_OK=false
 check_remote_service "Redpanda Kafka" 19092 || SERVICES_OK=false
 check_remote_service "Temporal" 7233 || SERVICES_OK=false
 
@@ -73,9 +72,8 @@ if [ "$SERVICES_OK" = false ]; then
     echo -e "${RED}WARNING: Some remote services are not responding${NC}"
     echo -e "${YELLOW}Make sure the following are running on ${REMOTE_HOST}:${NC}"
     echo "  1. PostgreSQL (port 5432)"
-    echo "  2. Hasura GraphQL Engine (port 8085)"
-    echo "  3. Redpanda Kafka (port 19092 for external access)"
-    echo "  4. Temporal (port 7233)"
+    echo "  2. Redpanda Kafka (port 19092 for external access)"
+    echo "  3. Temporal (port 7233)"
     echo ""
     read -p "Continue anyway? (y/n) " -n 1 -r
     echo
@@ -181,7 +179,6 @@ echo -e "${BLUE}SERVICE ENDPOINTS:${NC}"
 echo ""
 echo "  Backend API:           http://localhost:8080"
 echo "  Frontend:              http://localhost:5173"
-echo "  Hasura GraphQL:        http://${REMOTE_HOST}:8085"
 echo "  Redpanda Console:      http://${REMOTE_HOST}:8096"
 echo "  Temporal UI:           http://${REMOTE_HOST}:8088"
 echo ""

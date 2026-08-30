@@ -17,9 +17,8 @@ cat << 'EOF'
 │                                                                           │
 │  MACBOOK PRO                          REMOTE (100.84.126.19)             │
 │  ├─ Frontend (npm dev) :5173          ├─ PostgreSQL :5432                │
-│  └─ Backend (Docker) :8080    ◄───────┤─ Hasura :8085                    │
-│                               TCP/IP  ├─ Redpanda :19092                 │
-│                                       ├─ Temporal :7233                  │
+│  └─ Backend (Docker) :8080    ◄───────┤─ Redpanda :19092                 │
+│                               TCP/IP  ├─ Temporal :7233                  │
 │                                       ├─ Debezium :8083                  │
 │                                       ├─ Trino :8094                     │
 │                                       └─ MinIO :9010/9011                │
@@ -56,7 +55,6 @@ cat << 'EOF'
 │  └─ Backend API              http://localhost:8080                       │
 │                                                                           │
 │  REMOTE (100.84.126.19)                                                  │
-│  ├─ Hasura GraphQL           http://100.84.126.19:8085                   │
 │  ├─ Redpanda Console         http://100.84.126.19:8096                   │
 │  ├─ Temporal UI              http://100.84.126.19:8088                   │
 │  ├─ Trino                    http://100.84.126.19:8094                   │
@@ -99,10 +97,6 @@ cat << 'EOF'
 │  Database                                                                │
 │  DB_HOST=100.84.126.19                                                   │
 │  DATABASE_URL=postgresql://postgres:postgres@100.84.126.19:5432/alpha   │
-│                                                                           │
-│  Hasura                                                                  │
-│  HASURA_URL=http://100.84.126.19:8085                                    │
-│  HASURA_ADMIN_SECRET=myadminsecret                                       │
 │                                                                           │
 │  Kafka/Redpanda                                                          │
 │  KAFKA_BROKERS=100.84.126.19:19092                                       │
@@ -157,7 +151,6 @@ cat << 'EOF'
 │                                                                           │
 │  Individual Tests                                                        │
 │  nc -zv 100.84.126.19 5432        (PostgreSQL)                           │
-│  nc -zv 100.84.126.19 8085        (Hasura)                               │
 │  nc -zv 100.84.126.19 19092       (Kafka)                                │
 │  nc -zv 100.84.126.19 7233        (Temporal)                             │
 │                                                                           │

@@ -16,5 +16,5 @@ alias dcstatus="./scripts/check-services.sh"
 # dcdown        - Stop all services  
 # dcps          - Show container status
 # dclogs        - Follow all logs
-# dclogs hasura - Follow hasura logs only
+# dclogs backend - Follow backend logs only
 # dcstatus      - Check which services are responding

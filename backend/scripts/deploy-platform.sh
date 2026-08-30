@@ -18,7 +18,6 @@ NC='\033[0m' # No Color
 PROJECT_ROOT="/Users/eganpj/GitHub/semlayer"
 BACKEND_PORT=8080
 FRONTEND_PORT=3000
-HASURA_PORT=8081
 TEMPORAL_PORT=7233
 RABBITMQ_PORT=5672
 
@@ -70,10 +69,10 @@ start_infrastructure() {
 
     cd "$PROJECT_ROOT"
 
-    # Start Docker Compose services (Temporal, RabbitMQ, Hasura, Postgres)
+    # Start Docker Compose services (Temporal, RabbitMQ, Postgres)
     if [ -f "docker-compose.yml" ]; then
         print_status "Starting Docker services..."
-        docker-compose up -d temporal rabbitmq hasura postgres
+        docker-compose up -d temporal rabbitmq postgres
         print_success "Infrastructure services started"
     else
         print_warning "docker-compose.yml not found. Please ensure infrastructure is running."
@@ -173,12 +172,6 @@ health_check() {
         print_warning "Frontend health check failed"
     fi
 
-    # Check Hasura health
-    if curl -f http://localhost:$HASURA_PORT/healthz > /dev/null 2>&1; then
-        print_success "Hasura health check passed"
-    else
-        print_warning "Hasura health check failed"
-    fi
 }
 
 # Display deployment summary
@@ -189,7 +182,6 @@ deployment_summary() {
     echo "📊 Services Status:"
     echo "   • Backend API:     http://localhost:$BACKEND_PORT"
     echo "   • Frontend UI:     http://localhost:$FRONTEND_PORT"
-    echo "   • Hasura GraphQL:  http://localhost:$HASURA_PORT"
     echo "   • Temporal UI:     http://localhost:$TEMPORAL_PORT"
     echo "   • RabbitMQ:        http://localhost:$RABBITMQ_PORT"
     echo

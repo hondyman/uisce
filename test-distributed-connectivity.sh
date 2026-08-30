@@ -50,7 +50,6 @@ PASS=0
 FAIL=0
 
 test_port "PostgreSQL" "${REMOTE_HOST}" 5432 && ((PASS++)) || ((FAIL++))
-test_port "Hasura GraphQL" "${REMOTE_HOST}" 8085 && ((PASS++)) || ((FAIL++))
 test_port "Redpanda Kafka (external)" "${REMOTE_HOST}" 19092 && ((PASS++)) || ((FAIL++))
 test_port "Redpanda Admin" "${REMOTE_HOST}" 9644 && ((PASS++)) || ((FAIL++))
 test_port "Schema Registry" "${REMOTE_HOST}" 8081 && ((PASS++)) || ((FAIL++))
@@ -148,15 +147,6 @@ if curl -sf http://localhost:8080/health > /dev/null 2>&1; then
     ((PASS++))
 else
     echo -e "${YELLOW}⚠ Backend not responding${NC}"
-fi
-
-# Test Hasura
-echo -n "  Hasura GraphQL: "
-if curl -sf -H "X-Hasura-Admin-Secret: myadminsecret" http://${REMOTE_HOST}:8085/v1/version > /dev/null 2>&1; then
-    echo -e "${GREEN}✓ Responding${NC}"
-    ((PASS++))
-else
-    echo -e "${YELLOW}⚠ Hasura not responding${NC}"
 fi
 
 # Test Redpanda
