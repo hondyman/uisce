@@ -72,6 +72,15 @@ func RegisterRoutes(router chi.Router, db *sqlx.DB) error {
 			r.Delete("/{policyID}", handler.DeletePolicy)
 		})
 
+		// BO governance policies (WHEN/THEN policy rules, PolicyRuleBuilder.tsx)
+		r.Route("/bo/{boKey}/policies", func(r chi.Router) {
+			r.Get("/", handler.ListPoliciesForBO)
+			r.Post("/", handler.CreatePolicyForBO)
+			r.Post("/simulate", handler.SimulatePolicyExpr)
+			r.Put("/{policyID}", handler.UpdatePolicyForBO)
+			r.Delete("/{policyID}", handler.DeletePolicyForBO)
+		})
+
 		// Action types (reference data)
 		r.Get("/action-types", handler.ListActionTypes)
 		r.Get("/action-types/{category}", handler.GetActionTypesByCategory)
@@ -1256,6 +1265,9 @@ func (h *Handler) GetRuleStats(w http.ResponseWriter, r *http.Request) {
 
 func getTenantID(r *http.Request) (uuid.UUID, error) {
 	tenantIDStr := jwtmiddleware.GetClaimsFromContext(r).TenantID
+	if tenantIDStr == "" {
+		tenantIDStr = r.Header.Get("X-Tenant-ID")
+	}
 	if tenantIDStr == "" {
 		tenantIDStr = r.URL.Query().Get("tenant_id")
 	}

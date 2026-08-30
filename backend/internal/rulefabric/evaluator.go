@@ -629,12 +629,19 @@ type RuleEvaluator struct {
 
 // NewRuleEvaluator creates a new evaluator service
 func NewRuleEvaluator(db *sqlx.DB) (*RuleEvaluator, error) {
-	// Create CEL environment for scoring formulas
+	// Create CEL environment for scoring formulas and CEL-based conditions.
+	// record/actor/changes are aliases for data/context["actor"]/context["changes"]
+	// kept for compatibility with policy-style rules authored as raw CEL text
+	// (e.g. `record.status == "PENDING" && actor.roles.exists(r, r == "ANALYST")`)
+	// rather than an AdvancedConditionBuilder condition tree.
 	env, err := cel.NewEnv(
 		cel.Declarations(
 			decls.NewVar("data", decls.NewMapType(decls.String, decls.Dyn)),
 			decls.NewVar("related", decls.NewMapType(decls.String, decls.Dyn)),
 			decls.NewVar("context", decls.NewMapType(decls.String, decls.Dyn)),
+			decls.NewVar("record", decls.NewMapType(decls.String, decls.Dyn)),
+			decls.NewVar("actor", decls.NewMapType(decls.String, decls.Dyn)),
+			decls.NewVar("changes", decls.NewMapType(decls.String, decls.Dyn)),
 		),
 	)
 	if err != nil {
@@ -680,6 +687,40 @@ func (e *RuleEvaluator) Evaluate(ctx context.Context, rule *RuleWithLogic, evalC
 		Enforcement: rule.Enforcement,
 		EvaluatedAt: startTime,
 		Details:     EvaluationDetails{},
+	}
+
+	// A condition may be a raw CEL expression (`{"type":"cel","expression":"..."}`)
+	// instead of an AdvancedConditionBuilder tree - policy-style rules authored
+	// as free-form CEL text (see PolicyRuleBuilder.tsx) are stored this way so
+	// they share this same rules/rule_logic table and evaluator rather than a
+	// separate engine.
+	var celProbe struct {
+		Type       string `json:"type"`
+		Expression string `json:"expression"`
+	}
+	if err := json.Unmarshal(rule.Logic.ConditionJSON, &celProbe); err == nil && celProbe.Type == "cel" {
+		fired, err := e.EvaluateCELBoolean(celProbe.Expression, evalCtx.Data, evalCtx.Extras["actor"], evalCtx.Extras["changes"])
+		if err != nil {
+			result.Status = EvalError
+			result.Details.FailureReasons = []string{fmt.Sprintf("CEL evaluation error: %v", err)}
+			result.EvaluationTimeMs = time.Since(startTime).Milliseconds()
+			return result, nil
+		}
+		// Policy-style WHEN/THEN semantics: the CEL expression describes when
+		// the rule *fires* (action required), the inverse of a tree-based
+		// compliance condition where "passed" means the condition held true.
+		passed := !fired
+		if passed {
+			result.Status = EvalPassed
+		} else {
+			result.Status = EvalFailed
+			var actions []RuleAction
+			if err := json.Unmarshal(rule.Logic.ActionsJSON, &actions); err == nil {
+				result.SuggestedActions = actions
+			}
+		}
+		result.EvaluationTimeMs = time.Since(startTime).Milliseconds()
+		return result, nil
 	}
 
 	// Parse condition JSON
@@ -998,6 +1039,54 @@ func (e *RuleEvaluator) evaluateCondition(cond *Condition, data, related map[str
 	}
 
 	return passed, result
+}
+
+// calculateScore evaluates a CEL scoring formula
+// EvaluateCELBoolean compiles and evaluates a CEL expression that must
+// return a boolean, exposing it as `record` (primary data), `actor`, and
+// `changes` - the variable names policy-style rules (PolicyRuleBuilder.tsx)
+// are authored against - as well as `data`/`related`/`context` for parity
+// with the tree/scoring-formula evaluators. Exported so callers with no
+// Rule/RuleLogic row yet (e.g. an ad-hoc "simulate this expression" request)
+// can reuse the same CEL environment and variable contract.
+func (e *RuleEvaluator) EvaluateCELBoolean(expression string, record interface{}, actor interface{}, changes interface{}) (bool, error) {
+	ast, issues := e.celEnv.Compile(expression)
+	if issues != nil && issues.Err() != nil {
+		return false, issues.Err()
+	}
+
+	prg, err := e.celEnv.Program(ast)
+	if err != nil {
+		return false, err
+	}
+
+	asMap := func(v interface{}) map[string]interface{} {
+		if m, ok := v.(map[string]interface{}); ok {
+			return m
+		}
+		return map[string]interface{}{}
+	}
+	recordMap := asMap(record)
+	actorMap := asMap(actor)
+	changesMap := asMap(changes)
+
+	out, _, err := prg.Eval(map[string]interface{}{
+		"record":  recordMap,
+		"actor":   actorMap,
+		"changes": changesMap,
+		"data":    recordMap,
+		"related": map[string]interface{}{},
+		"context": map[string]interface{}{"actor": actorMap, "changes": changesMap},
+	})
+	if err != nil {
+		return false, err
+	}
+
+	b, ok := out.Value().(bool)
+	if !ok {
+		return false, fmt.Errorf("CEL expression must return a boolean")
+	}
+	return b, nil
 }
 
 // calculateScore evaluates a CEL scoring formula
