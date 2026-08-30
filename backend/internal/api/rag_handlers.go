@@ -8,6 +8,7 @@ import (
 	"github.com/hondyman/uisce/backend/internal/rag"
 	"github.com/hondyman/uisce/backend/internal/tenant"
 	"github.com/hondyman/uisce/backend/internal/workflows"
+	jwtmiddleware "github.com/hondyman/uisce/libs/jwt-middleware"
 	"go.temporal.io/sdk/client"
 )
 
@@ -40,25 +41,24 @@ type SearchResponse struct {
 	Results []rag.SearchResult `json:"results"`
 }
 
-// HandleSearch is the HTTP handler for the Hasura 'searchRAG' action
+// HandleSearch is the HTTP handler for the RAG search action
 func (h *RAGHandler) HandleSearch(w http.ResponseWriter, r *http.Request) {
 	// 1. Parse Request
 	var req struct {
-		SessionVariables map[string]interface{} `json:"session_variables"`
-		Input            SearchArgs             `json:"input"`
+		Input SearchArgs `json:"input"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "Invalid request body", http.StatusBadRequest)
 		return
 	}
 
-	// 2. Extract Tenant ID from Session Variables (X-Hasura-Tenant-Id)
-	tenantIDStr, ok := req.SessionVariables["x-hasura-tenant-id"].(string)
-	if !ok {
-		http.Error(w, "Missing tenant ID in session variables", http.StatusUnauthorized)
+	// 2. Extract Tenant ID from the verified JWT (not the request body)
+	claims := jwtmiddleware.GetClaimsFromContext(r)
+	if claims == nil || claims.TenantID == "" {
+		http.Error(w, "Missing tenant ID in JWT claims", http.StatusUnauthorized)
 		return
 	}
-	tenantID, err := uuid.Parse(tenantIDStr)
+	tenantID, err := uuid.Parse(claims.TenantID)
 	if err != nil {
 		http.Error(w, "Invalid tenant ID format", http.StatusBadRequest)
 		return
@@ -109,25 +109,24 @@ type UploadResponse struct {
 	Status     string `json:"status"`
 }
 
-// HandleUpload is the HTTP handler for the Hasura 'uploadDocument' action
+// HandleUpload is the HTTP handler for the RAG document upload action
 func (h *RAGHandler) HandleUpload(w http.ResponseWriter, r *http.Request) {
 	// 1. Parse Request
 	var req struct {
-		SessionVariables map[string]interface{} `json:"session_variables"`
-		Input            UploadArgs             `json:"input"`
+		Input UploadArgs `json:"input"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "Invalid request body", http.StatusBadRequest)
 		return
 	}
 
-	// 2. Extract Tenant ID
-	tenantIDStr, ok := req.SessionVariables["x-hasura-tenant-id"].(string)
-	if !ok {
+	// 2. Extract Tenant ID from the verified JWT (not the request body)
+	claims := jwtmiddleware.GetClaimsFromContext(r)
+	if claims == nil || claims.TenantID == "" {
 		http.Error(w, "Missing tenant ID", http.StatusUnauthorized)
 		return
 	}
-	tenantID, err := uuid.Parse(tenantIDStr)
+	tenantID, err := uuid.Parse(claims.TenantID)
 	if err != nil {
 		http.Error(w, "Invalid tenant ID", http.StatusBadRequest)
 		return
