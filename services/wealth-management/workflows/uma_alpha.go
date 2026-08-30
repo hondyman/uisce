@@ -42,7 +42,7 @@ func UMAAlpha(ctx workflow.Context, umaID string) error {
 		"status":    "alpha_rebalanced",
 		"tax_saved": harvest["saved"],
 	}
-	if err := workflow.ExecuteActivity(ctx, activities.HasuraUpdate, update).Get(ctx, nil); err != nil {
+	if err := workflow.ExecuteActivity(ctx, activities.UpdateRebalanceRecord, update).Get(ctx, nil); err != nil {
 		return fmt.Errorf("Hasura update failed: %w", err)
 	}
 

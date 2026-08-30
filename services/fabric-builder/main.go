@@ -35,7 +35,7 @@ func main() {
 			if origin == "http://localhost:5173" || origin == "http://localhost:5174" || strings.HasPrefix(origin, "http://127.0.0.1:517") {
 				w.Header().Set("Access-Control-Allow-Origin", origin)
 				w.Header().Set("Access-Control-Allow-Credentials", "true")
-				w.Header().Set("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept, Authorization, X-Request-ID, X-Tenant-Datasource-ID, X-Tenant-ID, X-User-ID, X-Hasura-Admin-Secret")
+				w.Header().Set("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept, Authorization, X-Request-ID, X-Tenant-Datasource-ID, X-Tenant-ID, X-User-ID")
 				w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
 			}
 			if req.Method == http.MethodOptions {
