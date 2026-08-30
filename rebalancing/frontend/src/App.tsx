@@ -1,6 +1,4 @@
 import React from 'react';
-import { ApolloProvider } from '@apollo/client';
-import { client } from './apollo';
 import AIRebalancingDashboard from './components/AIRebalancingDashboard';
 import AISimulationDashboard from './components/AISimulationDashboard';
 import RiskAlphaDashboard from './components/RiskAlphaDashboard';
@@ -9,7 +7,7 @@ import { BrowserRouter as Router, Routes, Route, Link, NavLink } from 'react-rou
 
 function App() {
   return (
-    <ApolloProvider client={client}>
+    <>
       <Router>
         <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-white">
           <nav className="bg-slate-900/50 border-b border-slate-700 px-8 py-4 flex items-center justify-between">
@@ -33,7 +31,7 @@ function App() {
           </main>
         </div>
       </Router>
-    </ApolloProvider>
+    </>
   );
 }
 

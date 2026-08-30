@@ -14,5 +14,6 @@ use (
 	./libs/temporal-client
 	./libs/infisical
 	./portfolio-management/backend
+	./rebalancing/api
 	./rebalancing/worker
 )
