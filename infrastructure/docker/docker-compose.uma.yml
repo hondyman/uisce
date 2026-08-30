@@ -63,25 +63,6 @@ services:
       - semlayer
 
   # =========================================================================
-  # Hasura GraphQL (for real-time queries)
-  # =========================================================================
-  hasura:
-    image: hasura/graphql-engine:latest
-    container_name: semlayer-hasura
-    environment:
-      HASURA_GRAPHQL_DATABASE_URL: postgres://postgres:postgres@postgres:5432/alpha
-      HASURA_GRAPHQL_ENABLE_CONSOLE: "true"
-      HASURA_GRAPHQL_ADMIN_SECRET: admin-secret
-      HASURA_GRAPHQL_LOG_LEVEL: debug
-    ports:
-      - "8080:8080"  # Hasura GraphQL API
-    depends_on:
-      postgres:
-        condition: service_healthy
-    networks:
-      - semlayer
-
-  # =========================================================================
   # UMA Rebalance Microservice
   # =========================================================================
   uma-rebalance:
@@ -165,7 +146,6 @@ services:
     container_name: semlayer-frontend
     environment:
       VITE_API_URL: http://localhost:8080
-      VITE_HASURA_URL: http://localhost:8080/graphql
       VITE_UMA_REBALANCE_API: http://localhost:8087
     ports:
       - "5173:5173"  # React dev server

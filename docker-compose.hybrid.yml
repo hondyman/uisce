@@ -120,27 +120,6 @@ services:
     networks:
       - semlayer-net
 
-  # --- Hasura GraphQL Engine ---
-  hasura:
-    image: hasura/graphql-engine:v2.37.0.cli-migrations-v3
-    hostname: hasura
-    container_name: semlayer-hasura
-    environment:
-      - HASURA_GRAPHQL_DATABASE_URL=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD}@host.docker.internal:5432/alpha
-      - HASURA_GRAPHQL_ADMIN_SECRET=${HASURA_ADMIN_SECRET}
-      - HASURA_GRAPHQL_DEV_MODE=true
-      - HASURA_GRAPHQL_ENABLE_CONSOLE=true
-      - HASURA_GRAPHQL_CORS_DOMAIN=*
-      - HASURA_GRAPHQL_ENABLED_LOG_TYPES=startup,http-log,webhook-log,websocket-log
-      - HASURA_GRAPHQL_UNAUTHORIZED_ROLE=anonymous
-    ports:
-      - "8081:8080"
-    networks:
-      - semlayer-net
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-    restart: unless-stopped
-
   # --- Application Services ---
   backend:
     build:
@@ -148,7 +127,6 @@ services:
       dockerfile: backend/Dockerfile
     command: ["./server"]
     environment:
-      - HASURA_GRAPHQL_ADMIN_SECRET=${HASURA_ADMIN_SECRET}
       - DATABASE_URL=postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD}@host.docker.internal:5432/alpha?sslmode=disable
       - TEMPORAL_HOST_PORT=temporal:7233
       # NBA ML Service

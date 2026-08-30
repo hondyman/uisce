@@ -1,11 +1,6 @@
 version: '3.9'
 
 services:
-  # Minimal override to reuse host Postgres with the backend infra compose
-  graphql-engine:
-    environment:
-      - HASURA_GRAPHQL_DATABASE_URL=postgres://postgres:postgres@host.docker.internal:5432/alpha
-
   backend:
     environment:
       - POSTGRES_HOST=host.docker.internal

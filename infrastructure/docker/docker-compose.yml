@@ -1,38 +1,5 @@
 ---
 services:
-  # graphql-engine:  # Moved to remote server at 100.84.126.19:8083
-  #   image: hasura/graphql-engine:v2.46.0
-  #   container_name: semlayer-graphql-engine-1
-  #   restart: always
-  #   env_file:
-  #   - .env
-  #   environment:
-  #   - HASURA_GRAPHQL_DATABASE_URL=postgresql://postgres:postgres@100.84.126.19:5432/alpha?sslmode=disable
-  #   - HASURA_GRAPHQL_ENABLE_CONSOLE=true
-  #   - HASURA_GRAPHQL_DEV_MODE=true
-  #   - HASURA_GRAPHQL_ENABLED_LOG_TYPES=startup,http-log,webhook-log,websocket-log,query-log
-  #   - HASURA_GRAPHQL_ADMIN_SECRET=${HASURA_ADMIN_SECRET}
-  #   - HASURA_GRAPHQL_JWT_SECRET={"type":"HS256","key":"${JWT_SECRET}"}
-  #   - HASURA_GRAPHQL_UNAUTHORIZED_ROLE=anonymous
-  #   - HASURA_GRAPHQL_ENABLE_REMOTE_SCHEMA_PERMISSIONS=true
-  #   - HASURA_GRAPHQL_METADATA_DIR=/hasura-metadata
-  #   - API_GATEWAY_AUTH_TOKEN=Bearer test-token-12345
-  #   ports:
-  #   # Host port 8083 is used throughout the repo/docs/health checks
-  #   # and should forward to Hasura container's 8080.
-  #   # (Host 8080 was previously used which caused health checks to fail.)
-  #   - 8083:8080
-  #   volumes:
-  #   - ./hasura/metadata:/hasura-metadata
-  #   - ./hasura/migrations:/hasura-migrations
-  #   healthcheck:
-  #     test:
-  #       - CMD-SHELL
-  #       - curl -f http://localhost:8080/healthz || curl -f http://localhost:8080/v1/version || exit 1
-  #     interval: 10s
-  #     timeout: 5s
-  #     retries: 5
-  #     start_period: 10s
   api-gateway:
     build:
       # build context is the repo root api-gateway directory (compose file lives under infrastructure/docker)
@@ -47,10 +14,8 @@ services:
     - DRIVER=postgres
     - DSN=${DATABASE_URL_DOCKER}
     - PORT=8000
-    - HASURA_URL=http://100.84.126.19:8083/v1/graphql
     - BACKEND_URL=http://backend:8080
     - AUTH_SERVICE_URL=http://auth-service:8001
-    - HASURA_ADMIN_SECRET=${HASURA_ADMIN_SECRET}
     - JWT_SECRET=${JWT_SECRET}
     - DEV_ALLOW_UNAUTH_FABRIC=true
     - DEV_ALLOW_UNAUTH_MODELS=true
@@ -81,8 +46,6 @@ services:
     - DATABASE_URL=${DATABASE_URL_DOCKER}
     - DSN=${DSN_DOCKER}
     - PORT=8080
-    - HASURA_URL=http://100.84.126.19:8083/v1/graphql
-    - HASURA_ADMIN_SECRET=${HASURA_ADMIN_SECRET}
     - EVENT_ROUTER_URL=http://event-router:8081
     ports:
     - 29080:8080
@@ -106,8 +69,6 @@ services:
       PORT: '8088'
     ports:
     - 8088:8088
-    depends_on:
-    - graphql-engine
     healthcheck:
       test:
       - CMD
@@ -178,12 +139,9 @@ services:
     - KAFKA_BROKERS=redpanda:9092
     - EVENT_ROUTER_URL=http://localhost:8081
     - PORT=8081
-    - HASURA_URL=http://graphql-engine:8080/v1/graphql
-    - HASURA_ADMIN_SECRET=${HASURA_ADMIN_SECRET}
     ports:
     - 8081:8081
     depends_on:
-    - graphql-engine
     - redpanda
     healthcheck:
       test:
@@ -208,7 +166,6 @@ services:
     ports:
     - 8082:8082
     depends_on:
-    - graphql-engine
     - redpanda
     - backend
     healthcheck:
@@ -234,7 +191,6 @@ services:
     ports:
     - 8083:8083
     depends_on:
-    - graphql-engine
     - redpanda
     - backend
     healthcheck:
@@ -263,7 +219,6 @@ services:
     ports:
     - 29084:8084
     depends_on:
-    - graphql-engine
     - redpanda
     - backend
     healthcheck:
@@ -289,7 +244,6 @@ services:
     ports:
     - 29085:8085
     depends_on:
-    - graphql-engine
     - redpanda
     - backend
     healthcheck:
@@ -316,7 +270,6 @@ services:
     ports:
     - 29086:8086
     depends_on:
-    - graphql-engine
     - redpanda
     - backend
     healthcheck:
@@ -352,7 +305,6 @@ services:
     ports:
     - "8081:8081"
     depends_on:
-    - graphql-engine
     - rabbitmq
     - temporal
     healthcheck:
@@ -388,7 +340,6 @@ services:
     ports:
     - "8082:8082"
     depends_on:
-    - graphql-engine
     - rabbitmq
     - temporal
     healthcheck:

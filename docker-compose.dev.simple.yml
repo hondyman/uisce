@@ -11,30 +11,6 @@ services:
   # INFRASTRUCTURE SERVICES
   # ==========================================
 
-  # GraphQL API
-  hasura:
-    image: hasura/graphql-engine:v2.46.0
-    container_name: semlayer-hasura
-    restart: unless-stopped
-    environment:
-      - HASURA_GRAPHQL_DATABASE_URL=postgres://postgres:postgres@host.docker.internal:${PORT_POSTGRES_HOST}/alpha?sslmode=disable
-      - HASURA_GRAPHQL_ENABLE_CONSOLE=true
-      - HASURA_GRAPHQL_DEV_MODE=true
-      - HASURA_GRAPHQL_ADMIN_SECRET=${HASURA_ADMIN_SECRET}
-      - HASURA_GRAPHQL_JWT_SECRET={"type":"HS256","key":"${JWT_SECRET}"}
-      - HASURA_GRAPHQL_UNAUTHORIZED_ROLE=anonymous
-      - HASURA_GRAPHQL_ENABLE_CORS=true
-      - HASURA_GRAPHQL_CORS_DOMAIN=http://localhost:${PORT_VITE_DEV_SERVER},http://localhost:${PORT_BACKEND_API},http://localhost:${PORT_LEGACY_GATEWAY}
-    ports:
-      - "${PORT_HASURA_GRAPHQL}:8080"
-    networks:
-      - semlayer
-    healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:8080/healthz || exit 1"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
   # Message Queue
   rabbitmq:
     image: rabbitmq:3-management-alpine
@@ -98,7 +74,6 @@ services:
     container_name: semlayer-backend
     restart: unless-stopped
     environment:
-      - HASURA_ENDPOINT=http://hasura:8080
       - TEMPORAL_HOSTPORT=temporal:${PORT_TEMPORAL_SERVER}
       - POSTGRES_HOST=host.docker.internal
       - POSTGRES_PORT=${PORT_POSTGRES_HOST}
@@ -110,8 +85,6 @@ services:
     ports:
       - "${PORT_BACKEND_API}:8080"
     depends_on:
-      hasura:
-        condition: service_healthy
       temporal:
         condition: service_started
       rabbitmq:
@@ -134,7 +107,6 @@ services:
     container_name: semlayer-fabric-builder
     restart: unless-stopped
     environment:
-      - HASURA_ENDPOINT=http://hasura:8080
       - TEMPORAL_HOSTPORT=temporal:${PORT_TEMPORAL_SERVER}
       - POSTGRES_HOST=host.docker.internal
       - POSTGRES_PORT=${PORT_POSTGRES_HOST}
@@ -148,7 +120,6 @@ services:
       - "${PORT_FABRIC_BUILDER}:${PORT_FABRIC_BUILDER}"
     depends_on:
       - backend
-      - hasura
       - temporal
     networks:
       - semlayer
