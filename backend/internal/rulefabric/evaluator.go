@@ -11,6 +11,7 @@ import (
 
 	"github.com/google/cel-go/cel"
 	"github.com/google/cel-go/checker/decls"
+	"github.com/google/cel-go/ext"
 	"github.com/google/uuid"
 	"github.com/jmoiron/sqlx"
 )
@@ -635,6 +636,7 @@ func NewRuleEvaluator(db *sqlx.DB) (*RuleEvaluator, error) {
 	// (e.g. `record.status == "PENDING" && actor.roles.exists(r, r == "ANALYST")`)
 	// rather than an AdvancedConditionBuilder condition tree.
 	env, err := cel.NewEnv(
+		ext.Strings(), // .contains()/.startsWith()/.endsWith() on strings, used by compiled condition trees
 		cel.Declarations(
 			decls.NewVar("data", decls.NewMapType(decls.String, decls.Dyn)),
 			decls.NewVar("related", decls.NewMapType(decls.String, decls.Dyn)),
@@ -642,6 +644,7 @@ func NewRuleEvaluator(db *sqlx.DB) (*RuleEvaluator, error) {
 			decls.NewVar("record", decls.NewMapType(decls.String, decls.Dyn)),
 			decls.NewVar("actor", decls.NewMapType(decls.String, decls.Dyn)),
 			decls.NewVar("changes", decls.NewMapType(decls.String, decls.Dyn)),
+			decls.NewVar("now", decls.Timestamp), // evaluation-time clock, for compiled date_before/date_after/days_ago_less_than conditions
 		),
 	)
 	if err != nil {
@@ -1077,6 +1080,7 @@ func (e *RuleEvaluator) EvaluateCELBoolean(expression string, record interface{}
 		"data":    recordMap,
 		"related": map[string]interface{}{},
 		"context": map[string]interface{}{"actor": actorMap, "changes": changesMap},
+		"now":     time.Now(),
 	})
 	if err != nil {
 		return false, err
@@ -1105,6 +1109,7 @@ func (e *RuleEvaluator) calculateScore(formula string, evalCtx *EvaluationContex
 		"data":    evalCtx.Data,
 		"related": evalCtx.RelatedData,
 		"context": evalCtx.Extras,
+		"now":     time.Now(),
 	})
 	if err != nil {
 		return 0, err
