@@ -38,8 +38,7 @@ export const BusinessTermsTab: React.FC<{
   const { t } = useTranslation();
 
   // REST-only data flow (GraphQL removed per user request — it was returning
-  // empty data because the remote Hasura either doesn't have the right
-  // datasource_id mapping or wasn't being reached with the correct JWT).
+  // empty data due to datasource_id mapping and auth issues on the old endpoint).
   // useBusinessTerms() hits /api/catalog/nodes (the local semlayer-backend,
   // proxied via Vite) and filters client-side for catalog_type='business_term'.
   // useSemanticTerms() hits /api/glossary/semantic-terms.

@@ -124,7 +124,6 @@ func (s *BPService) SaveBusinessProcess(ctx context.Context, tenantID uuid.UUID,
 	defer tx.Rollback()
 
 	// Insert or update business_processes
-	// TODO: Refactor to Hasura GraphQL
 	// mutation {
 	//   insert_business_processes_one(
 	//     object: {
@@ -197,7 +196,6 @@ func (s *BPService) GetBusinessProcess(ctx context.Context, tenantID uuid.UUID, 
 	var bp BusinessProcess
 
 	// Query business_processes
-	// TODO: Refactor to Hasura GraphQL
 	// query {
 	//   business_processes(
 	//     where: {id: {_eq: "process-uuid"}, tenant_id: {_eq: "tenant-uuid"}}
@@ -240,7 +238,6 @@ func (s *BPService) SaveFormData(ctx context.Context, entityID string, formData 
 	}
 
 	// Update or insert form data
-	// TODO: Refactor to Hasura GraphQL
 	// mutation {
 	//   insert_business_process_form_data_one(
 	//     object: {entity_id: "entity-uuid", form_data: {field1: "value1"}, status: "draft", updated_at: "now()"}
@@ -265,7 +262,6 @@ func (s *BPService) ListBusinessProcesses(ctx context.Context, tenantID uuid.UUI
 	var bps []BusinessProcess
 
 	// Get processes
-	// TODO: Refactor to Hasura GraphQL
 	// query {
 	//   business_processes(
 	//     where: {tenant_id: {_eq: "tenant-uuid"}}
@@ -323,7 +319,6 @@ func (s *BPService) StartExecution(ctx context.Context, tenantID uuid.UUID, proc
 		ExecutionStatus:   "running",
 	}
 
-	// TODO: Refactor to Hasura GraphQL
 	// mutation {
 	//   insert_bp_executions_one(object: {
 	//     id: "exec-uuid", tenant_id: "tenant-uuid", business_process_id: "process-uuid"
@@ -346,7 +341,6 @@ func (s *BPService) StartExecution(ctx context.Context, tenantID uuid.UUID, proc
 
 // UpdateExecutionStatus updates execution status
 func (s *BPService) UpdateExecutionStatus(ctx context.Context, executionID uuid.UUID, status string, workflowID *string) error {
-	// TODO: Refactor to Hasura GraphQL
 	// mutation {
 	//   update_bp_executions(
 	//     where: {id: {_eq: "exec-uuid"}}
@@ -382,7 +376,6 @@ func (s *BPService) LogAuditEntry(ctx context.Context, tenantID uuid.UUID, proce
 		return fmt.Errorf("failed to marshal audit details: %w", err)
 	}
 
-	// TODO: Refactor to Hasura GraphQL
 	// mutation {
 	//   insert_bp_audit_trail_one(object: {
 	//     id: "audit-uuid", tenant_id: "tenant-uuid", business_process_id: "process-uuid"
@@ -407,7 +400,6 @@ func (s *BPService) GetAuditTrail(ctx context.Context, tenantID uuid.UUID, proce
 
 	var entries []AuditEntry
 
-	// TODO: Refactor to Hasura GraphQL
 	// query {
 	//   bp_audit_trail(
 	//     where: {tenant_id: {_eq: "tenant-uuid"}, business_process_id: {_eq: "process-uuid"}}
@@ -488,7 +480,6 @@ func (s *BPService) ValidateBusinessProcess(bp *BusinessProcess) []string {
 
 // DeleteBusinessProcess soft-deletes a BP (archive)
 func (s *BPService) DeleteBusinessProcess(ctx context.Context, tenantID uuid.UUID, processID uuid.UUID) error {
-	// TODO: Refactor to Hasura GraphQL
 	// mutation {
 	//   update_business_processes(
 	//     where: {id: {_eq: "process-uuid"}, tenant_id: {_eq: "tenant-uuid"}}
@@ -520,7 +511,6 @@ func (s *BPService) GetExecutionHistory(ctx context.Context, tenantID uuid.UUID,
 
 	var execs []BPExecution
 
-	// TODO: Refactor to Hasura GraphQL
 	// query {
 	//   bp_executions(
 	//     where: {tenant_id: {_eq: "tenant-uuid"}, business_process_id: {_eq: "process-uuid"}}

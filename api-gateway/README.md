@@ -1,12 +1,12 @@
 # SemLayer API Gateway
 
-A REST API gateway that provides OpenAPI-compliant endpoints for the SemLayer semantic catalog system. This service converts REST/OpenAPI requests to GraphQL queries that are executed against Hasura.
+A REST API gateway that provides OpenAPI-compliant endpoints for the SemLayer semantic catalog system. This service authenticates and proxies REST/OpenAPI requests to the backend service.
 
 ## Features
 
 - **REST API Endpoints**: Clean REST endpoints for business term operations
 - **OpenAPI Documentation**: Auto-generated Swagger UI documentation
-- **GraphQL Integration**: Seamless conversion to Hasura GraphQL queries
+- **Backend Proxying**: Authenticated request forwarding to the backend service
 - **Multi-tenant Support**: Tenant isolation via headers
 - **Health Checks**: Service monitoring endpoints
 
@@ -61,8 +61,7 @@ curl "http://localhost:8080/api/lineage/semantic?node_id=bt_123&depth=3"
 ## Environment Variables
 
 - `PORT`: Service port (default: 8080)
-- `HASURA_URL`: Hasura GraphQL endpoint URL
-- `HASURA_ADMIN_SECRET`: Hasura admin secret
+- `BACKEND_URL`: Backend service URL to proxy requests to
 - `DATABASE_URL`: PostgreSQL connection string
 - `TENANT_ID`: Default tenant ID
 
@@ -111,7 +110,7 @@ This repository provides two ways to run the API Gateway compose depending on yo
 
 - Standalone mode (host-exposed)
   - File: `docker-compose.override.yml`
-  - This override binds host ports to the gateway/hasura/backend so you can run the api-gateway compose by itself and access services on `http://localhost:8000`, `http://localhost:8081`, and `http://localhost:3000`.
+  - This override binds host ports to the gateway/backend so you can run the api-gateway compose by itself and access services on `http://localhost:8000`, `http://localhost:8081`, and `http://localhost:3000`.
   - To start in standalone mode:
 
 ```bash
@@ -127,13 +126,13 @@ Notes:
 ## Architecture
 
 ```
-REST/OpenAPI Request → API Gateway → GraphQL Query → Hasura → PostgreSQL
+REST/OpenAPI Request → API Gateway → Backend Service → PostgreSQL
 ```
 
 The API gateway:
 1. Receives REST requests with JSON payloads
-2. Converts them to GraphQL queries
-3. Forwards to Hasura GraphQL engine
+2. Authenticates and authorizes the request
+3. Proxies to the backend service
 4. Returns formatted JSON responses
 5. Provides OpenAPI documentation via Swagger UI
 
@@ -142,7 +141,7 @@ The API gateway:
 Tenant isolation is handled via:
 - `X-Tenant-ID` header in requests
 - Database-level tenant separation
-- Hasura role-based permissions
+- JWT-derived tenant/role claims enforced by the backend
 
 ## Error Handling
 

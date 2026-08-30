@@ -252,7 +252,6 @@ func (mc *MetadataCache) GetMetrics() CacheMetrics {
 // Private helper methods
 
 func (mc *MetadataCache) loadBusinessObjects(ctx context.Context, tenantID string) error {
-	// TODO(hasura-migration): Replace SQL query with Hasura GraphQL query
 	// Example GraphQL query:
 	// query LoadBusinessObjects($tenantId: String!) {
 	//   business_objects(
@@ -312,7 +311,6 @@ func (mc *MetadataCache) loadBusinessObjects(ctx context.Context, tenantID strin
 }
 
 func (mc *MetadataCache) loadFields(ctx context.Context, tenantID string) error {
-	// TODO(hasura-migration): Replace SQL JOIN query with Hasura GraphQL query with relationship
 	// Example GraphQL query:
 	// query LoadFields($tenantId: String!) {
 	//   bo_fields(

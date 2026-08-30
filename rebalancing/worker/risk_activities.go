@@ -262,7 +262,7 @@ func (a *RebalanceActivities) ExecuteRiskMitigation(ctx context.Context, portfol
 		result["executed_trades"] = append(result["executed_trades"].([]string), executed)
 	}
 
-	// Insert risk_mitigation_actions into Hasura
+	// Insert risk_mitigation_actions
 	if err := a.recordMitigationActions(ctx, portfolioID, strategy); err != nil {
 		logger.Error("Failed to record mitigation actions", "error", err)
 		// Don't fail—trades already executed

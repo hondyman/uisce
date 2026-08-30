@@ -66,8 +66,8 @@ function buildHeaders(tenantId: string, datasourceId?: string): Record<string, s
 
 /**
  * Hook to fetch semantic terms with metadata via REST.
- * GraphQL-free: reads from /api/catalog/nodes so it works against the local
- * platform backend without requiring a running Hasura/GraphQL endpoint.
+ * GraphQL-free: reads from /api/catalog/nodes so it works directly against
+ * the local platform backend.
  */
 export const useEnhancedSemanticTerms = (datasourceId: string | undefined) => {
   const { tenant } = useTenant();

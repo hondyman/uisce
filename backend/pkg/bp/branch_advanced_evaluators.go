@@ -83,7 +83,6 @@ func (e *BranchEvaluator) EvaluateAIModels(ctx context.Context, config json.RawM
 	}
 
 	// Log AI model usage
-	// TODO: Refactor to Hasura GraphQL
 	// mutation {
 	//   update_bp_ai_models(
 	//     where: {model_id: {_eq: "model-1"}, tenant_id: {_eq: "tenant-uuid"}}
@@ -150,7 +149,6 @@ func (e *BranchEvaluator) EvaluateSemanticIntent(ctx context.Context, config jso
 	}
 
 	// Log semantic routing decision
-	// TODO: Refactor to Hasura GraphQL
 	// mutation {
 	//   insert_bp_semantic_intents_one(
 	//     object: {intent_id: "intent-1", match_count: 1, avg_confidence: 0.92, tenant_id: "tenant-uuid"}
@@ -235,7 +233,6 @@ func (e *BranchEvaluator) EvaluateScoringMatrix(ctx context.Context, config json
 	finalScore := totalScore / totalWeight
 
 	// Log matrix evaluation
-	// TODO: Refactor to Hasura GraphQL
 	// mutation {
 	//   insert_bp_scoring_matrices_one(
 	//     object: {matrix_name: "risk_score", evaluations_total: 1, avg_score: 7.5, tenant_id: "tenant-uuid"}
@@ -315,7 +312,6 @@ func (e *BranchEvaluator) EvaluateTimeSeries(ctx context.Context, config json.Ra
 	}
 
 	// Prefer Hasura query for forecast when available, fall back to SQL
-	// TODO: Refactor to Hasura GraphQL
 	// query {
 	//   bp_time_series_forecasts(
 	//     where: {forecast_model: {_eq: "arima"}, tenant_id: {_eq: "tenant-uuid"}}
@@ -392,7 +388,6 @@ func (e *BranchEvaluator) EvaluateAdaptive(ctx context.Context, config json.RawM
 	for _, trigger := range adaptiveConfig.Triggers {
 		if checkAdaptiveTrigger(trigger, executionHistory) {
 			// Log adaptive decision
-			// TODO: Refactor to Hasura GraphQL
 			// mutation {
 			//   insert_bp_adaptive_triggers_one(
 			//     object: {trigger_id: "trigger-1", triggered_count: 1, last_triggered_at: "now()", tenant_id: "tenant-uuid"}
@@ -450,7 +445,6 @@ type ResiliencePolicy struct {
 
 // EvaluateResilience checks resilience policies and manages circuit breakers
 func (e *BranchEvaluator) EvaluateResilience(ctx context.Context, policyID string, targetBranch string, tenantID string) (string, error) {
-	// TODO: Refactor to Hasura GraphQL
 	// query {
 	//   bp_resilience_policies(
 	//     where: {policy_id: {_eq: "policy-1"}, tenant_id: {_eq: "tenant-uuid"}}
@@ -614,7 +608,6 @@ type GeofenceRule struct {
 
 // EvaluateGeofence routes based on location
 func (e *BranchEvaluator) EvaluateGeofence(ctx context.Context, userLat, userLng float64, tenantID string) (string, error) {
-	// TODO: Refactor to Hasura GraphQL
 	// query {
 	//   bp_geofence_rules(where: {tenant_id: {_eq: "tenant-uuid"}}) {
 	//     rule_id geofence_type center_lat center_lng radius_km branch_id
@@ -687,7 +680,6 @@ func (e *BranchEvaluator) EvaluateNL(ctx context.Context, nlQuery string, tenant
 	}
 
 	// Insert into database
-	// TODO: Refactor to Hasura GraphQL
 	// mutation {
 	//   insert_bp_nl_configurations_one(object: {
 	//     nl_query: "Route high value clients to senior advisor"
@@ -771,7 +763,6 @@ func (e *BranchEvaluator) EvaluateExplainability(ctx context.Context, branchID s
 	record.NaturalLanguageSummary = fmt.Sprintf("This decision was made primarily because: %v", topFeatures)
 
 	// Log to database
-	// TODO: Refactor to Hasura GraphQL
 	// mutation {
 	//   insert_bp_explainability_records_one(object: {
 	//     branch_id: "branch-1", feature_importance: {salary: 0.45, age: 0.30, tenure: 0.25}
@@ -801,7 +792,6 @@ type TenantOverride struct {
 
 // EvaluateTenantOverride applies tenant-specific customizations
 func (e *BranchEvaluator) EvaluateTenantOverride(ctx context.Context, branchID string, tenantID string) (json.RawMessage, error) {
-	// TODO: Refactor to Hasura GraphQL
 	// query {
 	//   bp_tenant_branch_overrides(
 	//     where: {
