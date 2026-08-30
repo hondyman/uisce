@@ -74,17 +74,6 @@ export function MetadataAdminPage() {
     },
   });
 
-  // Generate Hasura metadata
-  const generateHasuraMutation = useMutation({
-    mutationFn: async (id: string) => {
-      const res = await fetch(`${API_BASE_URL}/meta/business-objects/${id}/hasura`, {
-        method: "POST",
-      });
-      if (!res.ok) throw new Error("Failed to generate");
-      return res.json();
-    },
-  });
-
   return (
     <div className="min-h-screen bg-gray-50 p-6">
       <div className="max-w-7xl mx-auto">
@@ -214,16 +203,6 @@ export function MetadataAdminPage() {
 
                     {!isCreating && (
                       <>
-                        <button
-                          onClick={() => generateHasuraMutation.mutate(selectedObject.id)}
-                          disabled={generateHasuraMutation.isPending}
-                          className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50"
-                        >
-                          {generateHasuraMutation.isPending
-                            ? "Generating..."
-                            : "Generate Hasura Metadata"}
-                        </button>
-
                         <button
                           onClick={() => deleteMutation.mutate(selectedObject.id)}
                           disabled={deleteMutation.isPending}

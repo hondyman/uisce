@@ -2,9 +2,9 @@ import { useEffect, useRef, useState } from 'react';
 
 /**
  * Polls a REST endpoint on an interval, replacing what used to be a live
- * GraphQL subscription over Apollo/Hasura. This is the simplest safe
+ * GraphQL subscription over Apollo. This is the simplest safe
  * substitute for real-time updates now that the frontend no longer talks
- * to Hasura directly.
+ * directly to a GraphQL endpoint from the browser.
  */
 export function usePolling<T>(fetcher: () => Promise<T>, intervalMs = 5000, deps: unknown[] = []) {
   const [data, setData] = useState<T | null>(null);
