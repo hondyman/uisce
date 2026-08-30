@@ -10,7 +10,6 @@ import (
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/sirupsen/logrus"
-	"github.com/hondyman/uisce/libs/jwt-middleware"
 )
 
 // Context key constants for JWT claims
@@ -25,18 +24,17 @@ const (
 
 // JWTClaims represents the standard JWT claims used across the platform
 type JWTClaims struct {
-	UserID       string                 `json:"user_id"`
-	Email        string                 `json:"email"`
-	Name         string                 `json:"name"`
-	Role         string                 `json:"role"`
-	Roles        []string               `json:"roles"`
-	Organization string                 `json:"organization"`
-	TenantID     string                 `json:"tenant_id"`
-	TenantIDs    []string               `json:"tenant_ids"`
-	Permissions  []string               `json:"permissions"`
-	IsCoreAdmin  bool                   `json:"is_core_admin"`
-	JTI          string                 `json:"jti"` // JWT ID for revocation
-	HasuraClaims map[string]interface{} `json:"https://hasura.io/jwt/claims"`
+	UserID       string   `json:"user_id"`
+	Email        string   `json:"email"`
+	Name         string   `json:"name"`
+	Role         string   `json:"role"`
+	Roles        []string `json:"roles"`
+	Organization string   `json:"organization"`
+	TenantID     string   `json:"tenant_id"`
+	TenantIDs    []string `json:"tenant_ids"`
+	Permissions  []string `json:"permissions"`
+	IsCoreAdmin  bool     `json:"is_core_admin"`
+	JTI          string   `json:"jti"` // JWT ID for revocation
 	jwt.RegisteredClaims
 }
 
@@ -48,10 +46,10 @@ func JWTMiddleware(jwtSecret string, logger *logrus.Entry) func(http.Handler) ht
 			// Extract token from Authorization header
 			authHeader := r.Header.Get("Authorization")
 			if authHeader == "" {
-				// In development, allow requests with X-User-ID header for testing
+				// In development, allow requests with X-User-ID/X-Tenant-ID headers for testing
 				if strings.ToLower(os.Getenv("DEV_ALLOW_UNAUTH_XUSER")) == "true" && r.Header.Get("X-User-ID") != "" {
 					ctx := context.WithValue(r.Context(), ContextKeyUserID, r.Header.Get("X-User-ID"))
-					ctx = context.WithValue(ctx, ContextKeyTenantID, jwtmiddleware.GetClaimsFromContext(r).TenantID)
+					ctx = context.WithValue(ctx, ContextKeyTenantID, r.Header.Get("X-Tenant-ID"))
 					next.ServeHTTP(w, r.WithContext(ctx))
 					return
 				}
@@ -133,8 +131,9 @@ func TenantGuardMiddleware(logger *logrus.Entry) func(http.Handler) http.Handler
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			ctx := r.Context()
 
-			// Get requested tenant from header
-			requestedTenant := jwtmiddleware.GetClaimsFromContext(r).TenantID
+			// Get requested tenant from header (used to select among multiple tenants
+			// the caller has access to; validated below against the verified JWT claims)
+			requestedTenant := r.Header.Get("X-Tenant-ID")
 			if requestedTenant == "" {
 				// Fall back to tenant from JWT claims
 				if tenant, ok := ctx.Value(ContextKeyTenantID).(string); ok && tenant != "" {
