@@ -56,8 +56,6 @@ services:
     environment:
       - DATABASE_URL=postgres://postgres:${POSTGRES_PASSWORD}@${REMOTE_HOST:-100.84.126.19}:5432/alpha?sslmode=disable
       - PORT=8080
-      - HASURA_URL=http://${REMOTE_HOST:-100.84.126.19}:8085/v1/graphql
-      - HASURA_ADMIN_SECRET=${HASURA_ADMIN_SECRET}
       - TEMPORAL_HOSTPORT=${REMOTE_HOST:-100.84.126.19}:7233
       - KAFKA_BROKERS=${REMOTE_HOST:-100.84.126.19}:19092
       - JWT_SECRET=${JWT_SECRET}
@@ -80,8 +78,6 @@ services:
     environment:
       - DATABASE_URL=postgres://postgres:${POSTGRES_PASSWORD}@${REMOTE_HOST:-100.84.126.19}:5432/alpha?sslmode=disable
       - BACKEND_URL=http://backend:8080
-      - HASURA_URL=http://${REMOTE_HOST:-100.84.126.19}:8085/v1/graphql
-      - HASURA_ADMIN_SECRET=${HASURA_ADMIN_SECRET}
       - JWT_SECRET=${JWT_SECRET}
       - TEMPORAL_HOSTPORT=${REMOTE_HOST:-100.84.126.19}:7233
       - KAFKA_BROKERS=${REMOTE_HOST:-100.84.126.19}:19092

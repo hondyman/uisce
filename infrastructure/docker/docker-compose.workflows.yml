@@ -17,18 +17,6 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
 
-  hasura:
-    image: hasura/graphql-engine:v2.37.0.cli-migrations-v3
-    environment:
-      HASURA_GRAPHQL_DATABASE_URL: "postgresql://postgres:postgres@postgres:5432/alpha"
-      HASURA_GRAPHQL_ADMIN_SECRET: ${HASURA_ADMIN_SECRET}
-      HASURA_GRAPHQL_DEV_MODE: "true"
-      HASURA_GRAPHQL_CORS_DOMAIN: "*"
-    ports:
-      - "8080:8080"
-    depends_on:
-      - postgres
-
   # ============================================================================
   # NEW WORKFLOW & SCREEN BUILDER SERVICES
   # ============================================================================
@@ -38,14 +26,11 @@ services:
       context: .
       dockerfile: backend/cmd/workflow-service/Dockerfile
     environment:
-      HASURA_URL: http://hasura:8080
-      HASURA_ADMIN_SECRET: ${HASURA_ADMIN_SECRET}
       KAFKA_BROKERS: redpanda:9092
       WORKFLOW_SERVICE_PORT: 8082
     ports:
       - "8082:8082"
     depends_on:
-      - hasura
       - redpanda
     networks:
       - backend
@@ -55,13 +40,9 @@ services:
       context: .
       dockerfile: backend/cmd/screen-builder-service/Dockerfile
     environment:
-      HASURA_URL: http://hasura:8080
-      HASURA_ADMIN_SECRET: ${HASURA_ADMIN_SECRET}
       SCREEN_BUILDER_SERVICE_PORT: 8083
     ports:
       - "8083:8083"
-    depends_on:
-      - hasura
     networks:
       - backend
 
@@ -146,13 +127,11 @@ services:
       context: ./frontend
       dockerfile: Dockerfile
     environment:
-      VITE_HASURA_URL: http://localhost:8080/v1/graphql
       VITE_WORKFLOW_SERVICE: http://localhost:8082
       VITE_SCREEN_BUILDER_SERVICE: http://localhost:8083
     ports:
       - "3000:3000"
     depends_on:
-      - hasura
       - workflow-service
       - screen-builder-service
     networks:
@@ -211,7 +190,6 @@ networks:
 # 3. Apply migrations: psql -f db/migrations/005_workflows_screens.sql
 # 4. Access:
 #    - Frontend: http://localhost:3000
-#    - Hasura: http://localhost:8080/console
 #    - Workflow Service: http://localhost:8082/health
 #    - Screen Builder: http://localhost:8083/health
 #    - RabbitMQ: http://localhost:15672 (guest:guest)

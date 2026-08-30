@@ -17,11 +17,6 @@ services:
       retries: 1
       start_period: 1s
 
-  # Point Hasura at the host Postgres for local development
-  hasura:
-    environment:
-      HASURA_GRAPHQL_DATABASE_URL: "postgres://postgres:postgres@host.docker.internal:5432/alpha?sslmode=disable"
-
   # Ensure services use the host Postgres instead of the compose 'postgres' service
   backend:
     environment:
