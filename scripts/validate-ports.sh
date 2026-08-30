@@ -66,7 +66,6 @@ echo "----------------------------"
 validate_port "PORT_BACKEND_API" "$PORT_BACKEND_API"
 validate_port "PORT_FABRIC_BUILDER" "$PORT_FABRIC_BUILDER"
 validate_port "PORT_LEGACY_GATEWAY" "$PORT_LEGACY_GATEWAY"
-validate_port "PORT_HASURA_GRAPHQL" "$PORT_HASURA_GRAPHQL"
 validate_port "PORT_RABBITMQ_AMQP" "$PORT_RABBITMQ_AMQP"
 validate_port "PORT_RABBITMQ_MANAGEMENT" "$PORT_RABBITMQ_MANAGEMENT"
 validate_port "PORT_TEMPORAL_SERVER" "$PORT_TEMPORAL_SERVER"
@@ -112,13 +111,6 @@ else
   echo -e "${GREEN}✓ VITE_API_BASE_URL: $VITE_API_BASE_URL${NC}"
 fi
 
-if [ -z "$VITE_GRAPHQL_ADMIN_SECRET" ]; then
-  echo -e "${RED}❌ VITE_GRAPHQL_ADMIN_SECRET: NOT SET (required)${NC}"
-  exit 1
-else
-  echo -e "${GREEN}✓ VITE_GRAPHQL_ADMIN_SECRET: [SET]${NC}"
-fi
-
 echo ""
 echo "4. PORT SUMMARY"
 echo "---------------"
@@ -129,9 +121,6 @@ echo "  Backend Services (8000-8099):"
 echo "    - Backend API: $PORT_BACKEND_API"
 echo "    - Fabric Builder: $PORT_FABRIC_BUILDER"
 echo "    - Legacy Gateway: $PORT_LEGACY_GATEWAY"
-echo ""
-echo "  GraphQL & Data (8200-8299):"
-echo "    - Hasura GraphQL: $PORT_HASURA_GRAPHQL"
 echo ""
 echo "  Message Queue (5600-5700):"
 echo "    - RabbitMQ AMQP: $PORT_RABBITMQ_AMQP"

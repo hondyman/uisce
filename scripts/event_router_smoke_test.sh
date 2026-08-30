@@ -16,29 +16,27 @@ echo "Smoke test: topic=${TOPIC}, event-router=${EVENT_ROUTER_URL}, redpanda con
 echo "Creating topic ${TOPIC}..."
 docker exec ${REDPANDA_CONTAINER} rpk topic create "${TOPIC}" >/dev/null
 
-# Insert a temporary config in Hasura so the Event Router will route to our topic
-HASURA_URL=${HASURA_URL:-http://localhost:8080/v1/graphql}
-HASURA_ADMIN_SECRET=${HASURA_ADMIN_SECRET:-}
+# Insert a temporary config directly in the database so the Event Router will route to our topic
+DB_URL=${DB_URL:-postgres://postgres:postgres@localhost:5432/alpha?sslmode=disable}
 
-echo "Inserting temporary event_config in Hasura pointing to topic ${TOPIC}..."
-GRAPHQL_PAYLOAD=$(cat <<JSON
-{"query":"mutation InsertConfig($objects: [event_configs_insert_input!]!) { insert_event_configs(objects: $objects) { returning { id } } }","variables":{"objects":[{"tenant_id":"00000000-0000-0000-0000-000000000000","bo_type":"test","event_type":"fieldchange","filter_json":"{}","route_queue":"${TOPIC}"}]}}
-JSON
-)
+echo "Inserting temporary event_config pointing to topic ${TOPIC}..."
+CONFIG_ID=$(psql "$DB_URL" -t -A -c "
+INSERT INTO event_configs (tenant_id, bo_type, event_type, filter_json, route_queue)
+VALUES ('00000000-0000-0000-0000-000000000000', 'test', 'fieldchange', '{}', '${TOPIC}')
+RETURNING id;
+")
 
-if [ -n "$HASURA_ADMIN_SECRET" ]; then
-  resp=$(curl -s -X POST -H "Content-Type: application/json" -H "x-hasura-admin-secret: $HASURA_ADMIN_SECRET" -d "$GRAPHQL_PAYLOAD" "$HASURA_URL")
-else
-  resp=$(curl -s -X POST -H "Content-Type: application/json" -d "$GRAPHQL_PAYLOAD" "$HASURA_URL")
-fi
-
-HASURA_ID=$(echo "$resp" | jq -r '.data.insert_event_configs.returning[0].id // empty')
-if [ -z "$HASURA_ID" ]; then
-  echo "Failed to insert Hasura config. Response: $resp" >&2
+if [ -z "$CONFIG_ID" ]; then
+  echo "Failed to insert event_config." >&2
   exit 1
 fi
 
-echo "Inserted config id: $HASURA_ID"
+echo "Inserted config id: $CONFIG_ID"
+
+cleanup_config() {
+  echo "Cleaning up event_config $CONFIG_ID"
+  psql "$DB_URL" -c "DELETE FROM event_configs WHERE id = '${CONFIG_ID}';" >/dev/null || true
+}
 
 # Post event to event-router
 payload=$(cat <<EOF
@@ -73,26 +71,12 @@ else
     # Check exit code from wget inside container
     if [ $? -ne 0 ]; then
       echo "Container POST failed" >&2
-      # Cleanup Hasura config
-      echo "Cleaning up Hasura config $HASURA_ID"
-      DELETE_PAYLOAD=$(jq -n --arg id "$HASURA_ID" '{"query":"mutation DeleteConfig($id: uuid!){delete_event_configs_by_pk(id: $id){id}}","variables":{"id":$id}}')
-      if [ -n "$HASURA_ADMIN_SECRET" ]; then
-        curl -s -X POST -H "Content-Type: application/json" -H "x-hasura-admin-secret: $HASURA_ADMIN_SECRET" -d "$DELETE_PAYLOAD" "$HASURA_URL" >/dev/null || true
-      else
-        curl -s -X POST -H "Content-Type: application/json" -d "$DELETE_PAYLOAD" "$HASURA_URL" >/dev/null || true
-      fi
+      cleanup_config
       exit 1
     fi
   else
     echo "No event-router container found and host POST failed ($http_code)." >&2
-    # Cleanup Hasura config
-    echo "Cleaning up Hasura config $HASURA_ID"
-    DELETE_PAYLOAD=$(jq -n --arg id "$HASURA_ID" '{"query":"mutation DeleteConfig($id: uuid!){delete_event_configs_by_pk(id: $id){id}}","variables":{"id":$id}}')
-    if [ -n "$HASURA_ADMIN_SECRET" ]; then
-      curl -s -X POST -H "Content-Type: application/json" -H "x-hasura-admin-secret: $HASURA_ADMIN_SECRET" -d "$DELETE_PAYLOAD" "$HASURA_URL" >/dev/null || true
-    else
-      curl -s -X POST -H "Content-Type: application/json" -d "$DELETE_PAYLOAD" "$HASURA_URL" >/dev/null || true
-    fi
+    cleanup_config
     exit 1
   fi
 fi
@@ -104,15 +88,8 @@ for i in $(seq 1 12); do
   if [ -n "${out}" ]; then
     echo "Received: ${out}"
     echo "Event Router smoke test PASSED"
-    # Cleanup Hasura config
-    if [ -n "$HASURA_ID" ]; then
-      echo "Cleaning up Hasura config $HASURA_ID"
-      DELETE_PAYLOAD=$(jq -n --arg id "$HASURA_ID" '{"query":"mutation DeleteConfig($id: uuid!){delete_event_configs_by_pk(id: $id){id}}","variables":{"id":$id}}')
-      if [ -n "$HASURA_ADMIN_SECRET" ]; then
-        curl -s -X POST -H "Content-Type: application/json" -H "x-hasura-admin-secret: $HASURA_ADMIN_SECRET" -d "$DELETE_PAYLOAD" "$HASURA_URL" >/dev/null || true
-      else
-        curl -s -X POST -H "Content-Type: application/json" -d "$DELETE_PAYLOAD" "$HASURA_URL" >/dev/null || true
-      fi
+    if [ -n "$CONFIG_ID" ]; then
+      cleanup_config
     fi
     exit 0
   fi
@@ -121,14 +98,8 @@ for i in $(seq 1 12); do
 done
 
 echo "Event Router smoke test FAILED: no message consumed from ${TOPIC}" >&2
-# Cleanup Hasura config on failure
-if [ -n "$HASURA_ID" ]; then
-  echo "Cleaning up Hasura config $HASURA_ID"
-  DELETE_PAYLOAD=$(jq -n --arg id "$HASURA_ID" '{"query":"mutation DeleteConfig($id: uuid!){delete_event_configs_by_pk(id: $id){id}}","variables":{"id":$id}}')
-  if [ -n "$HASURA_ADMIN_SECRET" ]; then
-    curl -s -X POST -H "Content-Type: application/json" -H "x-hasura-admin-secret: $HASURA_ADMIN_SECRET" -d "$DELETE_PAYLOAD" "$HASURA_URL" >/dev/null || true
-  else
-    curl -s -X POST -H "Content-Type: application/json" -d "$DELETE_PAYLOAD" "$HASURA_URL" >/dev/null || true
-  fi
+# Cleanup config on failure
+if [ -n "$CONFIG_ID" ]; then
+  cleanup_config
 fi
 exit 1

@@ -170,7 +170,6 @@ echo ""
 
 echo "Remote Services:"
 check_service "PostgreSQL" "${REMOTE_HOST}" "5432" || true
-check_service "Hasura GraphQL" "${REMOTE_HOST}" "8085" || true
 check_service "Redpanda Kafka" "${REMOTE_HOST}" "19092" || true
 check_service "Temporal" "${REMOTE_HOST}" "7233" || true
 check_service "Redpanda Console" "${REMOTE_HOST}" "8096" || true
@@ -181,13 +180,6 @@ echo ""
 echo "Cross-Platform Connectivity:"
 echo -n "  Backend → PostgreSQL: "
 if docker exec semlayer-backend pg_isready -h ${REMOTE_HOST} -p 5432 >/dev/null 2>&1; then
-    echo -e "${GREEN}✓ OK${NC}"
-else
-    echo -e "${YELLOW}⚠️  Unable to verify${NC}"
-fi
-
-echo -n "  Backend → Hasura: "
-if docker exec semlayer-backend curl -s -o /dev/null "http://${REMOTE_HOST}:8085/" 2>/dev/null; then
     echo -e "${GREEN}✓ OK${NC}"
 else
     echo -e "${YELLOW}⚠️  Unable to verify${NC}"
@@ -216,7 +208,6 @@ echo ""
 
 echo -e "${BLUE}Remote Services (100.84.126.19):${NC}"
 echo "  PostgreSQL:         ${REMOTE_HOST}:5432"
-echo "  Hasura GraphQL:     http://${REMOTE_HOST}:8085"
 echo "  Redpanda Kafka:     ${REMOTE_HOST}:19092"
 echo "  Temporal:           ${REMOTE_HOST}:7233"
 echo "  Redpanda Console:   http://${REMOTE_HOST}:8096"

@@ -1,10 +1,10 @@
 #!/bin/bash
 
 # ============================================================================
-# REBALANCE_DEPLOY.sh - Automated 6-Step Deployment
+# REBALANCE_DEPLOY.sh - Automated 5-Step Deployment
 # ============================================================================
 # Deploys complete portfolio rebalancing system in 15 minutes
-# Prerequisites: PostgreSQL, Hasura, Temporal, Go toolchain
+# Prerequisites: PostgreSQL, Temporal, Go toolchain
 # ============================================================================
 
 set -e
@@ -29,15 +29,11 @@ POSTGRES_PORT=${POSTGRES_PORT:-"5432"}
 POSTGRES_USER=${POSTGRES_USER:-"postgres"}
 POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-"postgres"}
 POSTGRES_DB=${POSTGRES_DB:-"alpha"}
-HASURA_ENDPOINT=${HASURA_ENDPOINT:-"http://localhost:8080"}
-HASURA_ADMIN_SECRET=${HASURA_ADMIN_SECRET:-"your-secret-key"}
-HASURA_METADATA_DIR=${HASURA_METADATA_DIR:-"./hasura/metadata"}
 TEMPORAL_ENDPOINT=${TEMPORAL_ENDPOINT:-"http://localhost:7233"}
 GO_WORKER_DIR=${GO_WORKER_DIR:-"./rebalancing/worker"}
 
 echo -e "${YELLOW}Configuration:${NC}"
 echo "  PostgreSQL: $POSTGRES_HOST:$POSTGRES_PORT/$POSTGRES_DB"
-echo "  Hasura: $HASURA_ENDPOINT"
 echo "  Temporal: $TEMPORAL_ENDPOINT"
 echo "  Worker: $GO_WORKER_DIR"
 echo ""
@@ -46,7 +42,7 @@ echo ""
 # STEP 1: Database Migration (2 minutes)
 # ============================================================================
 
-echo -e "${BLUE}[Step 1/6] Running database migration...${NC}"
+echo -e "${BLUE}[Step 1/5] Running database migration...${NC}"
 
 MIGRATION_FILE="backend/db/migrations/20251030_rebalancing_schema.sql"
 
@@ -84,54 +80,10 @@ fi
 sleep 1
 
 # ============================================================================
-# STEP 2: Track Tables in Hasura (2 minutes)
+# STEP 2: Verify Temporal (2 minutes)
 # ============================================================================
 
-echo -e "${BLUE}[Step 2/6] Configuring Hasura GraphQL...${NC}"
-
-TABLES=("proposed_trades" "rebalance_audit" "trade_execution_log" "allocation_models" "rebalance_executions")
-
-for table in "${TABLES[@]}"; do
-  echo "  Tracking $table..."
-  
-  curl -s -X POST "$HASURA_ENDPOINT/v1/metadata" \
-    -H "Content-Type: application/json" \
-    -H "X-Hasura-Admin-Secret: $HASURA_ADMIN_SECRET" \
-    -d "{
-      \"type\": \"track_table\",
-      \"args\": {
-        \"schema\": \"public\",
-        \"name\": \"$table\"
-      }
-    }" > /dev/null 2>&1
-  
-  echo -e "    ${GREEN}✓${NC} $table tracked"
-done
-
-# Create materialized view tracking
-echo "  Tracking v_rebalance_summary..."
-curl -s -X POST "$HASURA_ENDPOINT/v1/metadata" \
-  -H "Content-Type: application/json" \
-  -H "X-Hasura-Admin-Secret: $HASURA_ADMIN_SECRET" \
-  -d "{
-    \"type\": \"track_table\",
-    \"args\": {
-      \"schema\": \"public\",
-      \"name\": \"v_rebalance_summary\",
-      \"is_enum\": false
-    }
-  }" > /dev/null 2>&1
-
-echo -e "    ${GREEN}✓${NC} v_rebalance_summary tracked"
-
-echo -e "${GREEN}✓ Hasura GraphQL configured${NC}"
-sleep 1
-
-# ============================================================================
-# STEP 3: Verify Temporal (2 minutes)
-# ============================================================================
-
-echo -e "${BLUE}[Step 3/6] Verifying Temporal setup...${NC}"
+echo -e "${BLUE}[Step 2/5] Verifying Temporal setup...${NC}"
 
 # Check if Temporal is running
 TEMPORAL_STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$TEMPORAL_ENDPOINT/api/namespaces")
@@ -146,10 +98,10 @@ fi
 sleep 1
 
 # ============================================================================
-# STEP 4: Build Go Worker (5 minutes)
+# STEP 3: Build Go Worker (5 minutes)
 # ============================================================================
 
-echo -e "${BLUE}[Step 4/6] Building Go worker...${NC}"
+echo -e "${BLUE}[Step 3/5] Building Go worker...${NC}"
 
 if [ ! -d "$GO_WORKER_DIR" ]; then
   echo -e "${RED}✗ Worker directory not found: $GO_WORKER_DIR${NC}"
@@ -179,10 +131,10 @@ cd - > /dev/null
 sleep 1
 
 # ============================================================================
-# STEP 5: Deploy ABAC Policies (1 minute)
+# STEP 4: Deploy ABAC Policies (1 minute)
 # ============================================================================
 
-echo -e "${BLUE}[Step 5/6] Deploying ABAC policies...${NC}"
+echo -e "${BLUE}[Step 4/5] Deploying ABAC policies...${NC}"
 
 POLICY_FILE="policies/rebalance_abac.json"
 
@@ -197,13 +149,13 @@ fi
 sleep 1
 
 # ============================================================================
-# STEP 6: Verification & Health Checks (1 minute)
+# STEP 5: Verification & Health Checks (1 minute)
 # ============================================================================
 
-echo -e "${BLUE}[Step 6/6] Running verification checks...${NC}"
+echo -e "${BLUE}[Step 5/5] Running verification checks...${NC}"
 
 CHECKS_PASSED=0
-CHECKS_TOTAL=5
+CHECKS_TOTAL=4
 
 # Check 1: PostgreSQL connectivity
 echo -n "  PostgreSQL connectivity... "
@@ -227,16 +179,7 @@ else
   echo -e "${RED}✗${NC}"
 fi
 
-# Check 3: Hasura accessibility
-echo -n "  Hasura GraphQL... "
-if curl -s -o /dev/null -w "%{http_code}" "$HASURA_ENDPOINT" | grep -q "200\|301\|302"; then
-  echo -e "${GREEN}✓${NC}"
-  ((CHECKS_PASSED++))
-else
-  echo -e "${RED}✗${NC}"
-fi
-
-# Check 4: Temporal accessibility
+# Check 3: Temporal accessibility
 echo -n "  Temporal server... "
 if curl -s -o /dev/null -w "%{http_code}" "$TEMPORAL_ENDPOINT/api/namespaces" | grep -q "200"; then
   echo -e "${GREEN}✓${NC}"
@@ -245,7 +188,7 @@ else
   echo -e "${YELLOW}⚠${NC}"
 fi
 
-# Check 5: Worker binary
+# Check 4: Worker binary
 echo -n "  Worker binary... "
 if [ -f "$GO_WORKER_DIR/rebalancer-worker" ]; then
   echo -e "${GREEN}✓${NC}"
@@ -275,15 +218,12 @@ echo ""
 echo "2. View Temporal UI:"
 echo -e "   ${YELLOW}http://localhost:8081${NC}"
 echo ""
-echo "3. Access Hasura GraphQL:"
-echo -e "   ${YELLOW}$HASURA_ENDPOINT${NC}"
-echo ""
-echo "4. Trigger a rebalance:"
+echo "3. Trigger a rebalance:"
 echo -e "   ${YELLOW}curl -X POST http://localhost:3000/api/rebalance/start \\${NC}"
 echo -e "   ${YELLOW}  -H 'Content-Type: application/json' \\${NC}"
 echo -e "   ${YELLOW}  -d '{\"portfolio_id\":\"port-123\",\"model_id\":\"model-60-40\"}'${NC}"
 echo ""
-echo "5. Check React dashboard:"
+echo "4. Check React dashboard:"
 echo -e "   ${YELLOW}http://localhost:3000/rebalance${NC}"
 echo ""
 echo -e "${BLUE}Documentation:${NC}"

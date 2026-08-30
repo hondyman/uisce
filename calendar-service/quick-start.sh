@@ -20,8 +20,6 @@ CALENDAR_SERVICE_PORT=8081
 LOG_LEVEL=debug
 ENVIRONMENT=dev
 
-HASURA_ENDPOINT=http://localhost:8080/v1/graphql
-HASURA_ADMIN_SECRET=  # Set via Infisical or manually
 POSTGRES_PASSWORD=    # Set via Infisical or manually
 
 REDIS_URL=redis://localhost:6379
@@ -31,7 +29,7 @@ ENABLE_CDC=true
 TEMPORAL_HOST_PORT=localhost:7233
 CACHE_TTL_MINUTES=60
 EOF
-  echo "✓ Created .env.local (set HASURA_ADMIN_SECRET and POSTGRES_PASSWORD)"
+  echo "✓ Created .env.local (set POSTGRES_PASSWORD)"
 fi
 
 # Download dependencies

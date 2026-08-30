@@ -127,11 +127,6 @@ while [ $ELAPSED -lt $TIMEOUT ]; do
         ALL_HEALTHY=false
     fi
     
-    # Check Hasura
-    if ! docker-compose exec -T hasura curl -s http://localhost:8080/v1/metadata > /dev/null 2>&1; then
-        ALL_HEALTHY=false
-    fi
-    
     if [ "$ALL_HEALTHY" = true ]; then
         echo ""
         print_success "All services are healthy"
@@ -157,7 +152,7 @@ docker-compose ps
 echo ""
 echo "Health Checks:"
 
-SERVICES=("postgres" "temporal" "redpanda" "hasura" "redis" "rebalance-api" "rebalance-frontend")
+SERVICES=("postgres" "temporal" "redpanda" "redis" "rebalance-api" "rebalance-frontend")
 
 for service in "${SERVICES[@]}"; do
     if docker-compose ps "$service" | grep -q "healthy\|Up"; then
@@ -174,16 +169,13 @@ echo ""
 echo "Access your services at:"
 echo ""
 echo -e "  ${GREEN}React Dashboard:${NC}        http://localhost:3000"
-echo -e "  ${GREEN}Hasura Console:${NC}         http://localhost:8080"
 echo -e "  ${GREEN}Temporal UI:${NC}            http://localhost:8081"
 echo -e "  ${GREEN}Redpanda (Pandaproxy):${NC}  http://localhost:8082"
 echo -e "  ${GREEN}API Server:${NC}             http://localhost:8090"
-echo -e "  ${GREEN}GraphQL Endpoint:${NC}       http://localhost:8080/v1/graphql"
 echo ""
 
 echo "Credentials:"
 echo ""
-echo -e "  ${GREEN}Hasura Admin Secret:${NC}    $(grep HASURA_SECRET "$ENV_FILE" | cut -d= -f2)"
 echo -e "  ${GREEN}Redpanda (Kafka):${NC}        brokers at localhost:9092 (Pandaproxy: http://localhost:8082)"
 echo -e "  ${GREEN}PostgreSQL:${NC}              postgres / postgres"
 echo ""

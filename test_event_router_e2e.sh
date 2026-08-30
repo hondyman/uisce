@@ -11,8 +11,6 @@ set -e
 TENANT_ID="910638ba-a459-4a3f-bb2d-78391b0595f6"
 DATASOURCE_ID="982aef38-418f-46dc-acd0-35fe8f3b97b0"
 DB_URL="postgres://postgres:postgres@localhost:5432/alpha?sslmode=disable"
-HASURA_URL="http://localhost:8081"
-HASURA_ADMIN_SECRET="${HASURA_ADMIN_SECRET:-your-admin-secret}"
 CORE_APP_URL="http://localhost:29080"
 EVENT_ROUTER_URL="http://localhost:8081"
 RABBITMQ_MGMT_URL="http://localhost:15672"
@@ -69,7 +67,6 @@ section_1() {
   log_info "Checking all services are running..."
   
   check_service "PostgreSQL" "localhost:5432" || return 1
-  check_service "Hasura GraphQL" "$HASURA_URL" || return 1
   check_service "Event-Router" "$EVENT_ROUTER_URL/health" || return 1
   check_service "RabbitMQ Management" "$RABBITMQ_MGMT_URL" || return 1
   check_service "Core App" "$CORE_APP_URL" || return 1
@@ -293,43 +290,12 @@ section_7() {
 }
 
 # ============================================================================
-# SECTION 8: VERIFY HASURA CONFIG SYNC
+# SECTION 8: TEST FILTER LOGIC (Numeric)
 # ============================================================================
 
 section_8() {
   echo -e "\n${BLUE}========================================${NC}"
-  echo -e "${BLUE}SECTION 8: VERIFY HASURA CONFIG SYNC${NC}"
-  echo -e "${BLUE}========================================${NC}\n"
-
-  log_info "Querying event_configs via Hasura GraphQL..."
-
-  GRAPHQL_RESPONSE=$(curl -s -X POST "$HASURA_URL/v1/graphql" \
-    -H "Content-Type: application/json" \
-    -H "X-Hasura-Admin-Secret: $HASURA_ADMIN_SECRET" \
-    -d '{
-      "query": "query { event_configs(where: {tenant_id: {_eq: \"'$TENANT_ID'\"}}) { id, event_type, bo_type, route_queue } }"
-    }')
-
-  CONFIG_COUNT=$(echo "$GRAPHQL_RESPONSE" | jq '.data.event_configs | length' 2>/dev/null || echo 0)
-
-  log_info "Configs found via Hasura: $CONFIG_COUNT"
-
-  if [ "$CONFIG_COUNT" -gt 0 ]; then
-    log_success "Event-router can see configs via Hasura!"
-    log_info "Configs:"
-    echo "$GRAPHQL_RESPONSE" | jq '.data.event_configs'
-  else
-    log_warn "No configs found via Hasura. Check Hasura permissions and table tracking."
-  fi
-}
-
-# ============================================================================
-# SECTION 9: TEST FILTER LOGIC (Numeric)
-# ============================================================================
-
-section_9() {
-  echo -e "\n${BLUE}========================================${NC}"
-  echo -e "${BLUE}SECTION 9: TEST FILTER LOGIC (NUMERIC)${NC}"
+  echo -e "${BLUE}SECTION 8: TEST FILTER LOGIC (NUMERIC)${NC}"
   echo -e "${BLUE}========================================${NC}\n"
 
   local config_id=$(uuidgen | tr '[:upper:]' '[:lower:]')
@@ -403,12 +369,12 @@ EOF
 }
 
 # ============================================================================
-# SECTION 10: FINAL REPORT
+# SECTION 9: FINAL REPORT
 # ============================================================================
 
-section_10() {
+section_9() {
   echo -e "\n${BLUE}========================================${NC}"
-  echo -e "${BLUE}SECTION 10: FINAL REPORT${NC}"
+  echo -e "${BLUE}SECTION 9: FINAL REPORT${NC}"
   echo -e "${BLUE}========================================${NC}\n"
 
   log_success "End-to-end test completed!"
@@ -444,8 +410,7 @@ main() {
   section_6 || return 1
   section_7 || return 1
   section_8 || return 1
-  section_9 || return 1
-  section_10
+  section_9
 
   echo -e "\n${GREEN}════════════════════════════════════════${NC}"
   echo -e "${GREEN}         ✅ TEST COMPLETED             ${NC}"

@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Local Services Startup Script
-# Starts local Golang applications with PostgreSQL and Hasura
+# Starts local Golang applications with PostgreSQL
 
 set -e
 
@@ -10,11 +10,11 @@ echo "==================================="
 echo ""
 
 # Start services
-echo "🐳 Starting local services (PostgreSQL, Hasura, and Golang apps)..."
+echo "🐳 Starting local services (PostgreSQL and Golang apps)..."
 docker-compose -f docker-compose.local-apps.yml up -d
 
 # Wait for services to initialize
-echo "⏳ Waiting for PostgreSQL and Hasura to initialize..."
+echo "⏳ Waiting for PostgreSQL to initialize..."
 sleep 30
 
 # Check service status
@@ -25,8 +25,6 @@ echo ""
 echo "✅ Local services deployment complete!"
 echo ""
 echo "🌐 Local Service Endpoints:"
-echo "   - Hasura Console: http://localhost:8085"
-echo "   - Hasura Admin Secret: myadminsecret"
 echo "   - PostgreSQL: localhost:5432"
 echo "   - Backend API: http://localhost:8082"
 echo "   - API Gateway: http://localhost:8001"
