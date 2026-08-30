@@ -13,6 +13,27 @@ const (
 		FROM portfolio_holdings WHERE portfolio_id = $1
 	`
 
+	ListPortfolios = `
+		SELECT p.id, p.tenant_id, p.name, p.aum, p.drift, p.last_rebalance::text,
+		       p.target_model, p.constraints, p.rebalance_status,
+		       COALESCE(p.risk_score, 0), COALESCE(p.alpha, 0),
+		       COALESCE(p.sector_attribution, '{}'::jsonb), COALESCE(p.tax_saved, 0),
+		       p.policy_document,
+		       (SELECT COUNT(*) FROM portfolio_holdings h WHERE h.portfolio_id = p.id)
+		FROM portfolios p
+		WHERE p.tenant_id = $1
+		ORDER BY p.aum DESC
+	`
+
+	ListRebalancePlans = `
+		SELECT id, portfolio_id, timestamp::text, current_drift, expected_drift,
+		       tax_savings, confidence, status, rationale, COALESCE(summary, ''), proposed_trades
+		FROM rebalance_plans
+		WHERE portfolio_id = $1
+		ORDER BY timestamp DESC
+		LIMIT $2
+	`
+
 	UpdatePortfolioState = `
 		UPDATE portfolios
 		SET drift = $2,

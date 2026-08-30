@@ -1,21 +1,23 @@
 import React, { useState } from 'react';
-import { useSubscription, gql } from '@apollo/client';
 import { Shield, Zap } from 'lucide-react';
+import { usePolling } from '../hooks/usePolling';
 
-const PORTFOLIOS_RISK_SUB = gql`
-  subscription PortfoliosRisk {
-    portfolios(order_by: {aum: desc}) {
-      id
-      name
-      aum
-      risk_score
-      rebalance_status
-    }
-  }
-`;
+interface PortfolioRisk {
+  id: string;
+  name: string;
+  aum: number;
+  risk_score: number;
+  rebalance_status: string;
+}
+
+const fetchPortfolios = async (): Promise<{ portfolios: PortfolioRisk[] }> => {
+  const res = await fetch('/api/portfolios');
+  if (!res.ok) throw new Error('Failed to fetch portfolios');
+  return res.json();
+};
 
 const RiskAlphaDashboard = () => {
-  const { data, loading } = useSubscription(PORTFOLIOS_RISK_SUB);
+  const { data, loading } = usePolling(fetchPortfolios, 5000);
   const [triggered, setTriggered] = useState({});
 
   const handleManageRisk = async (portfolioId) => {

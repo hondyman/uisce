@@ -7,6 +7,7 @@ import (
 	"math"
 	"time"
 
+	"github.com/google/uuid"
 	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/client"
 	temporal "go.temporal.io/sdk/temporal"
@@ -114,15 +115,13 @@ type RebalanceAuditRecord struct {
 
 type RebalanceService struct {
 	temporalClient client.Client
-	hasuraURL      string
 	kafkaBrokers   string
 }
 
 // NewRebalanceService creates a new rebalance service
-func NewRebalanceService(temporalClient client.Client, hasuraURL, kafkaBrokers string) *RebalanceService {
+func NewRebalanceService(temporalClient client.Client, kafkaBrokers string) *RebalanceService {
 	return &RebalanceService{
 		temporalClient: temporalClient,
-		hasuraURL:      hasuraURL,
 		kafkaBrokers:   kafkaBrokers,
 	}
 }
@@ -410,7 +409,19 @@ func EstimateCommission(trades []RebalanceTradeSpec, commissionPerTrade float64)
 // ACTIVITY: Fetch Portfolio Holdings
 // ============================================================================
 
-// FetchPortfolioHoldingsActivity queries Hasura for current holdings
+// FetchPortfolioHoldingsActivity queries the Postgres portfolios/
+// portfolio_holdings tables (via the shared Repository) for current
+// holdings. Previously this queried Hasura's GraphQL endpoint directly;
+// now it reuses the same DB-backed Repository as the other activities in
+// this file (see activities.go: RebalanceActivities.db, backed by
+// rebalancing/worker/repository.go).
+//
+// NOTE: the portfolio_holdings table has no asset_class column, only
+// sector. AssetClass (needed by CalculatePortfolioDrift/OptimizeRebalanceTrades
+// to compare against SemanticAllocationModel.Allocations) is approximated
+// here by reusing Sector. This is a real limitation of the current schema,
+// not a fabricated integration — flagged so a future schema migration can
+// add a proper asset_class column if precise asset-class drift is required.
 func (a *RebalanceActivities) FetchPortfolioHoldingsActivity(
 	ctx context.Context,
 	portfolioID string,
@@ -418,7 +429,50 @@ func (a *RebalanceActivities) FetchPortfolioHoldingsActivity(
 	logger := activity.GetLogger(ctx)
 	logger.Info("Fetching portfolio holdings", "portfolioID", portfolioID)
 
-	holdings := MockGetPortfolioHoldings()
+	if a.db == nil {
+		logger.Warn("No DB repository configured, falling back to mock holdings")
+		return MockGetPortfolioHoldings(), nil
+	}
+
+	id, err := uuid.Parse(portfolioID)
+	if err != nil {
+		return nil, fmt.Errorf("invalid portfolio id %q: %w", portfolioID, err)
+	}
+
+	portfolio, err := a.db.GetPortfolio(ctx, id)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch portfolio holdings from db: %w", err)
+	}
+
+	totalValue := 0.0
+	for _, h := range portfolio.Holdings {
+		totalValue += h.Shares * h.CurrentPrice
+	}
+
+	holdings := make([]PortfolioHolding, 0, len(portfolio.Holdings))
+	for _, h := range portfolio.Holdings {
+		marketValue := h.Shares * h.CurrentPrice
+		daysHeld := 0
+		if purchaseDate, err := time.Parse("2006-01-02", h.PurchaseDate); err == nil {
+			daysHeld = int(time.Since(purchaseDate).Hours() / 24)
+		}
+		currentWeight := 0.0
+		if totalValue > 0 {
+			currentWeight = marketValue / totalValue
+		}
+
+		holdings = append(holdings, PortfolioHolding{
+			Symbol:         h.Symbol,
+			CurrentShares:  h.Shares,
+			CostBasis:      h.CostBasis,
+			MarketValue:    marketValue,
+			UnrealizedGain: marketValue - h.CostBasis,
+			DaysHeld:       daysHeld,
+			CurrentWeight:  currentWeight,
+			AssetClass:     h.Sector, // approximation, see doc comment above
+			Sector:         h.Sector,
+		})
+	}
 
 	logger.Info("Holdings fetched", "count", len(holdings))
 	return holdings, nil
@@ -428,13 +482,24 @@ func (a *RebalanceActivities) FetchPortfolioHoldingsActivity(
 // ACTIVITY: Get Target Allocation Model
 // ============================================================================
 
-// GetAllocationModelActivity queries Hasura for semantic model
+// GetAllocationModelActivity previously queried Hasura for the semantic
+// allocation model. There is no real, non-Hasura data source for this: the
+// `portfolios.target_model` column only stores a flat asset-class->percent
+// map (see rebalancing/worker/domain.go Portfolio.TargetModel), with no
+// min/max band or benchmark per asset class, and there is no separate
+// allocation-model table anywhere in this repo. Building a
+// SemanticAllocationModel (which requires MinPercent/MaxPercent/Benchmark
+// per allocation) from that data would mean fabricating values that don't
+// exist in the schema. Per the migration plan, this activity is kept on
+// mock data rather than faking a DB integration; a real replacement needs
+// a schema addition (e.g. an allocation_models table) before this can be
+// wired to Postgres.
 func (a *RebalanceActivities) GetAllocationModelActivity(
 	ctx context.Context,
 	modelID string,
 ) (SemanticAllocationModel, error) {
 	logger := activity.GetLogger(ctx)
-	logger.Info("Fetching allocation model", "modelID", modelID)
+	logger.Info("Fetching allocation model (mock data - no real data source available)", "modelID", modelID)
 
 	model := MockGetAllocationModel()
 	logger.Info("Model fetched", "name", model.Name)

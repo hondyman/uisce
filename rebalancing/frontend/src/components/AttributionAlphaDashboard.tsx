@@ -1,22 +1,24 @@
 import React, { useState } from 'react';
-import { useSubscription, gql } from '@apollo/client';
 import { BarChart, Zap } from 'lucide-react';
+import { usePolling } from '../hooks/usePolling';
 
-const PORTFOLIOS_ATTR_SUB = gql`
-  subscription PortfoliosAttribution {
-    portfolios(order_by: {aum: desc}) {
-      id
-      name
-      aum
-      alpha
-      sector_attribution
-      rebalance_status
-    }
-  }
-`;
+interface PortfolioAttribution {
+  id: string;
+  name: string;
+  aum: number;
+  alpha: number;
+  sector_attribution: Record<string, unknown>;
+  rebalance_status: string;
+}
+
+const fetchPortfolios = async (): Promise<{ portfolios: PortfolioAttribution[] }> => {
+  const res = await fetch('/api/portfolios');
+  if (!res.ok) throw new Error('Failed to fetch portfolios');
+  return res.json();
+};
 
 const AttributionAlphaDashboard = () => {
-  const { data, loading } = useSubscription(PORTFOLIOS_ATTR_SUB);
+  const { data, loading } = usePolling(fetchPortfolios, 5000);
   const [triggered, setTriggered] = useState({});
 
   const handleAttribute = async (portfolioId) => {

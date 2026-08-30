@@ -1,59 +1,36 @@
 import React, { useState } from 'react';
-import { useSubscription, useMutation, gql } from '@apollo/client';
 import { Zap, TrendingUp, DollarSign, AlertTriangle, CheckCircle, Clock, Activity } from 'lucide-react';
+import { usePolling } from '../hooks/usePolling';
 
-// GraphQL Subscriptions
-const PORTFOLIOS_SUB = gql`
-  subscription Portfolios {
-    portfolios(order_by: {aum: desc}) {
-      id name aum drift last_rebalance tax_saved rebalance_status
-      target_model constraints policy_document
-      holdings_aggregate { aggregate { count } }
-    }
-  }
-`;
+// REST fetchers, replacing the client-side Hasura GraphQL subscriptions
+// (PORTFOLIOS_SUB, REBALANCE_PLANS_SUB) and mutation (TRIGGER_REBALANCE)
+// that used to talk directly to Hasura from the browser.
+const fetchPortfolios = async () => {
+  const res = await fetch('/api/portfolios');
+  if (!res.ok) throw new Error('Failed to fetch portfolios');
+  return res.json();
+};
 
-const REBALANCE_PLANS_SUB = gql`
-  subscription Plans($portfolio_id: uuid!) {
-    rebalance_plans(
-      where: {portfolio_id: {_eq: $portfolio_id}}
-      order_by: {timestamp: desc}
-      limit: 10
-    ) {
-      id timestamp current_drift expected_drift tax_savings confidence status rationale summary
-      proposed_trades
-    }
-  }
-`;
-
-const TRIGGER_REBALANCE = gql`
-  mutation Trigger($portfolio_id: String!) {
-    triggerRebalance(portfolioId: $portfolio_id) {
-      workflow_id
-      status
-    }
-  }
-`;
+const fetchRebalancePlans = async (portfolioId) => {
+  const res = await fetch(`/api/portfolio/${portfolioId}/rebalance-plans`);
+  if (!res.ok) throw new Error('Failed to fetch rebalance plans');
+  return res.json();
+};
 
 const AIRebalancingDashboard = () => {
   const [selected, setSelected] = useState(null);
-  const { data, loading } = useSubscription(PORTFOLIOS_SUB);
-  const { data: plans } = useSubscription(REBALANCE_PLANS_SUB, {
-    variables: { portfolio_id: selected?.id },
-    skip: !selected
-  });
-
-  const [triggerRebalance] = useMutation(TRIGGER_REBALANCE, {
-    onCompleted: (data) => {
-      console.log('Rebalance initiated:', data.triggerRebalance.workflow_id);
-    }
-  });
+  const { data, loading } = usePolling(fetchPortfolios, 5000);
+  const { data: plans } = usePolling(
+    () => (selected ? fetchRebalancePlans(selected.id) : Promise.resolve(null)),
+    5000,
+    [selected?.id]
+  );
 
   const portfolios = data?.portfolios || [];
 
   const handleRebalance = async (id) => {
     try {
-      await triggerRebalance({ variables: { portfolio_id: id } });
+      await fetch(`/api/portfolio/${id}/rebalance`, { method: 'POST' });
     } catch (err) {
       console.error('Rebalance failed:', err);
     }
@@ -150,7 +127,7 @@ const PortfolioCard = ({ portfolio: p, onSelect, onRebalance, selected }) => {
       <div className="flex items-start justify-between mb-4">
         <div>
           <h3 className="font-bold text-lg">{p.name}</h3>
-          <p className="text-sm text-slate-400">{p.holdings_aggregate.aggregate.count} holdings</p>
+          <p className="text-sm text-slate-400">{p.holdings_count} holdings</p>
         </div>
         <div className="text-right">
           {p.rebalance_status === 'in_progress' ? (
