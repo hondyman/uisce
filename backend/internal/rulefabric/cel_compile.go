@@ -27,6 +27,34 @@ import (
 // non-empty unsupported list as "this rule needs manual attention", not
 // discard it.
 
+// NormalizeConditionJSONToCEL inspects a condition_json blob and, if it's an
+// AdvancedConditionBuilder tree, compiles it to the {"type":"cel","expression":...}
+// shape RuleEvaluator.Evaluate treats as CEL. Already-CEL input passes
+// through unchanged. This is the single place new/updated rule_logic rows
+// get normalized so nothing is ever written to the database as a tree going
+// forward, regardless of which handler received it.
+func NormalizeConditionJSONToCEL(raw json.RawMessage) (json.RawMessage, []string, error) {
+	var probe struct {
+		Type string `json:"type"`
+	}
+	if err := json.Unmarshal(raw, &probe); err != nil {
+		return nil, nil, fmt.Errorf("failed to parse condition_json: %w", err)
+	}
+	if probe.Type == "cel" {
+		return raw, nil, nil
+	}
+
+	expr, unsupported, err := CompileConditionTreeToCEL(raw)
+	if err != nil {
+		return nil, unsupported, err
+	}
+	out, err := json.Marshal(map[string]interface{}{"type": "cel", "expression": expr})
+	if err != nil {
+		return nil, unsupported, err
+	}
+	return out, unsupported, nil
+}
+
 // CompileConditionTreeToCEL compiles a ConditionGroup (or a raw condition_json
 // blob containing one) into a CEL boolean expression. Returns the compiled
 // expression, a list of human-readable notes about anything it could not

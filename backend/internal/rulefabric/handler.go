@@ -498,6 +498,20 @@ func (h *Handler) CreateRuleVersion(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Normalize condition_json to CEL - RuleFabric no longer stores
+	// AdvancedConditionBuilder trees; any tree submitted here is compiled
+	// to an equivalent CEL expression before it's persisted.
+	var unsupported []string
+	if len(req.ConditionJSON) > 0 {
+		normalized, notes, err := NormalizeConditionJSONToCEL(req.ConditionJSON)
+		if err != nil {
+			http.Error(w, fmt.Sprintf("failed to compile condition to CEL: %v", err), http.StatusBadRequest)
+			return
+		}
+		req.ConditionJSON = normalized
+		unsupported = notes
+	}
+
 	// Get next version number
 	var maxVersion int
 	h.db.GetContext(ctx, &maxVersion, "SELECT COALESCE(MAX(version), 0) FROM rule_logic WHERE rule_id = $1", ruleID)
@@ -517,9 +531,10 @@ func (h *Handler) CreateRuleVersion(w http.ResponseWriter, r *http.Request) {
 	}
 
 	respondJSON(w, http.StatusCreated, map[string]interface{}{
-		"logic_id": logicID,
-		"version":  maxVersion + 1,
-		"message":  "Version created successfully",
+		"logic_id":    logicID,
+		"version":     maxVersion + 1,
+		"message":     "Version created successfully",
+		"unsupported": unsupported, // non-empty means part of the condition tree couldn't be compiled to CEL and was treated as always-true; needs manual review
 	})
 }
 

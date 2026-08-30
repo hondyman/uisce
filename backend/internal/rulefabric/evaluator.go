@@ -2,6 +2,7 @@ package rulefabric
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"regexp"
@@ -14,6 +15,7 @@ import (
 	"github.com/google/cel-go/ext"
 	"github.com/google/uuid"
 	"github.com/jmoiron/sqlx"
+	"github.com/lib/pq"
 )
 
 // =============================================================================
@@ -700,6 +702,18 @@ func (e *RuleEvaluator) Evaluate(ctx context.Context, rule *RuleWithLogic, evalC
 	var celProbe struct {
 		Type       string `json:"type"`
 		Expression string `json:"expression"`
+		// Semantics distinguishes two authoring styles sharing this same
+		// {"type":"cel",...} shape:
+		//   "compliance" (default, and always for a tree migrated to CEL by
+		//     CompileConditionTreeToCEL) - the expression IS the compliance
+		//     check; true means compliant (Passed), matching every
+		//     pre-existing AdvancedConditionBuilder tree's semantics.
+		//   "policy" - a WHEN/THEN guard (PolicyRuleBuilder.tsx); true means
+		//     the guard fired and the action is required (Failed).
+		// Getting this wrong silently inverts every rule's pass/fail
+		// result, so it is set explicitly at every write site rather than
+		// inferred.
+		Semantics string `json:"semantics"`
 	}
 	if err := json.Unmarshal(rule.Logic.ConditionJSON, &celProbe); err == nil && celProbe.Type == "cel" {
 		fired, err := e.EvaluateCELBoolean(celProbe.Expression, evalCtx.Data, evalCtx.Extras["actor"], evalCtx.Extras["changes"])
@@ -709,10 +723,15 @@ func (e *RuleEvaluator) Evaluate(ctx context.Context, rule *RuleWithLogic, evalC
 			result.EvaluationTimeMs = time.Since(startTime).Milliseconds()
 			return result, nil
 		}
-		// Policy-style WHEN/THEN semantics: the CEL expression describes when
-		// the rule *fires* (action required), the inverse of a tree-based
-		// compliance condition where "passed" means the condition held true.
-		passed := !fired
+		var passed bool
+		if celProbe.Semantics == "policy" {
+			// WHEN/THEN semantics: the expression describes when the rule
+			// *fires* (action required) - the inverse of a compliance
+			// condition where "passed" means the condition held true.
+			passed = !fired
+		} else {
+			passed = fired
+		}
 		if passed {
 			result.Status = EvalPassed
 		} else {
@@ -846,15 +865,15 @@ func (e *RuleEvaluator) GetRulesForEvaluation(ctx context.Context, tenantID uuid
 			AND ep.environment = r.environment
 			AND ep.is_active = TRUE
 			AND (ep.category IS NULL OR ep.category = r.category)
-			AND ($5::text IS NULL OR ep.channel = $5)
+			AND ($5 = '' OR ep.channel = $5)
 		)
 		WHERE r.tenant_id = $1
 		  AND r.status = 'active'
-		  AND r.environment = $2
+		  AND ($2 = '' OR r.environment = $2)
 		  AND rl.is_approved = TRUE
-		  AND ($3::text IS NULL OR r.category = $3)
-		  AND ($4::text IS NULL OR r.primary_context = $4)
-		  AND ($6::text IS NULL OR r.scope_entity = $6)
+		  AND ($3::text IS NULL OR r.category = $3::rule_category)
+		  AND ($4::text IS NULL OR r.primary_context = $4::rule_context_type)
+		  AND ($6 = '' OR r.scope_entity = $6)
 		  AND (r.effective_from IS NULL OR r.effective_from <= NOW())
 		  AND (r.effective_to IS NULL OR r.effective_to >= NOW())
 		ORDER BY r.category, r.rule_code
@@ -877,20 +896,36 @@ func (e *RuleEvaluator) GetRulesForEvaluation(ctx context.Context, tenantID uuid
 	for rows.Next() {
 		var r RuleWithLogic
 		var logicID uuid.UUID
+		// description, scope_entity, version_label, and scoring_formula are
+		// all nullable columns; scanning NULL directly into a plain string
+		// errors ("converting NULL to string is unsupported"), which meant
+		// this - RuleFabric's core evaluation query, the one trigger_engine.go
+		// actually calls - failed outright for any rule missing one of these
+		// optional fields. Scan through sql.NullString and unwrap after.
+		var description, scopeEntity, versionLabel, scoringFormula sql.NullString
+		var scopeFields, tags, regulationIDs, controlIDs pq.StringArray
 
 		err := rows.Scan(
-			&r.ID, &r.TenantID, &r.DatasourceID, &r.RuleCode, &r.Name, &r.Description,
-			&r.Category, &r.PrimaryContext, &r.Severity, &r.ScopeEntity, &r.ScopeFields,
+			&r.ID, &r.TenantID, &r.DatasourceID, &r.RuleCode, &r.Name, &description,
+			&r.Category, &r.PrimaryContext, &r.Severity, &scopeEntity, &scopeFields,
 			&r.Status, &r.Environment, &r.EffectiveFrom, &r.EffectiveTo, &r.OwnerUserID,
-			&r.Tags, &r.RegulationIDs, &r.ControlIDs, &r.CreatedAt, &r.UpdatedAt,
-			&logicID, &r.Logic.Version, &r.Logic.VersionLabel, &r.Logic.ConditionJSON,
-			&r.Logic.ActionsJSON, &r.Logic.ScoringFormula, &r.Logic.IsApproved,
+			&tags, &regulationIDs, &controlIDs, &r.CreatedAt, &r.UpdatedAt,
+			&logicID, &r.Logic.Version, &versionLabel, &r.Logic.ConditionJSON,
+			&r.Logic.ActionsJSON, &scoringFormula, &r.Logic.IsApproved,
 			&r.Enforcement, &r.TimeoutMs,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan rule: %w", err)
 		}
 
+		r.Description = description.String
+		r.ScopeEntity = scopeEntity.String
+		r.ScopeFields = []string(scopeFields)
+		r.Tags = []string(tags)
+		r.RegulationIDs = []string(regulationIDs)
+		r.ControlIDs = []string(controlIDs)
+		r.Logic.VersionLabel = versionLabel.String
+		r.Logic.ScoringFormula = scoringFormula.String
 		r.Logic.ID = logicID
 		r.Logic.RuleID = r.ID
 		rules = append(rules, &r)

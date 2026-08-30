@@ -294,6 +294,11 @@ func insertPolicyLogic(ctx context.Context, tx *sqlx.Tx, ruleID uuid.UUID, versi
 	conditionJSON, err := json.Marshal(map[string]interface{}{
 		"type":       "cel",
 		"expression": req.ConditionExpr,
+		// "policy": WHEN/THEN semantics - the expression describes when the
+		// rule fires (action required), the inverse of RuleEvaluator's
+		// default "compliance" semantics where true means compliant. See
+		// the Semantics field doc on evaluator.go's celProbe.
+		"semantics": "policy",
 	})
 	if err != nil {
 		return err

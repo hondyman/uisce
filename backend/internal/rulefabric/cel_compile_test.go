@@ -114,6 +114,53 @@ func TestCompileConditionTreeToCEL_EndToEnd(t *testing.T) {
 	}
 }
 
+// TestEvaluate_CELSemantics locks in the pass/fail inversion between a
+// compliance-style CEL condition (migrated from a tree, or authored with no
+// explicit "semantics") and a policy-style WHEN/THEN CEL condition
+// (PolicyRuleBuilder.tsx, which always writes "semantics":"policy"). Getting
+// this backwards silently flips every rule's pass/fail result - this exact
+// bug was caught by testing the tree->CEL migration end to end against a
+// real Postgres instance before it shipped.
+func TestEvaluate_CELSemantics(t *testing.T) {
+	evaluator, err := NewRuleEvaluator(nil)
+	if err != nil {
+		t.Fatalf("NewRuleEvaluator: %v", err)
+	}
+
+	data := map[string]interface{}{"amount": 15000.0}
+	evalCtx := &EvaluationContext{Data: data, Extras: map[string]interface{}{}}
+
+	cases := []struct {
+		name       string
+		conditionJ string
+		wantStatus EvaluationStatus
+	}{
+		{
+			name:       "compliance semantics (default): condition true -> Passed",
+			conditionJ: `{"type":"cel","expression":"data.amount > 10000.0"}`,
+			wantStatus: EvalPassed,
+		},
+		{
+			name:       "policy semantics: condition true -> Failed (guard fired)",
+			conditionJ: `{"type":"cel","expression":"data.amount > 10000.0","semantics":"policy"}`,
+			wantStatus: EvalFailed,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			rule := minimalRuleWithLogic("semantics-test", "semantics-test", tc.conditionJ)
+			result, err := evaluator.Evaluate(nil, rule, evalCtx)
+			if err != nil {
+				t.Fatalf("Evaluate error: %v", err)
+			}
+			if result.Status != tc.wantStatus {
+				t.Errorf("got status %v, want %v", result.Status, tc.wantStatus)
+			}
+		})
+	}
+}
+
 // TestCompileConditionTreeToCEL_EntityPathFlagged verifies a cross-entity
 // condition is reported as unsupported rather than silently mistranslated.
 func TestCompileConditionTreeToCEL_EntityPathFlagged(t *testing.T) {

@@ -129,13 +129,21 @@ const ExpressionBuilder: React.FC<ExpressionBuilderProps> = ({
         if (effectiveId) {
           // Rule already exists: RuleLogic is versioned, so every save
           // creates a new rule_logic version rather than mutating one in
-          // place.
-          await createRuleVersion.mutateAsync({
+          // place. The backend compiles this tree to CEL before storing it
+          // (RuleFabric no longer stores condition trees); `unsupported`
+          // lists anything it couldn't translate (e.g. a cross-entity
+          // condition), which fell back to always-true rather than being
+          // silently dropped.
+          const res = await createRuleVersion.mutateAsync({
             id: effectiveId,
             conditionJson: conditionJson || { id: 'root', type: 'group', operator: 'AND', conditions: [] },
             changeReason: opts?.force ? 'manual save' : 'autosave',
           });
-          notification.success(opts?.force ? 'Rule saved' : 'Rule autosaved');
+          if (Array.isArray(res?.unsupported) && res.unsupported.length > 0) {
+            notification.warning(`Saved, but some conditions need manual review: ${res.unsupported.join('; ')}`);
+          } else {
+            notification.success(opts?.force ? 'Rule saved' : 'Rule autosaved');
+          }
         } else {
           // No rule yet: create it, then save the condition tree as its
           // first version.
@@ -157,7 +165,7 @@ const ExpressionBuilder: React.FC<ExpressionBuilderProps> = ({
             throw new Error('No id returned from rule creation');
           }
 
-          await createRuleVersion.mutateAsync({
+          const res = await createRuleVersion.mutateAsync({
             id: newId,
             conditionJson: conditionJson || { id: 'root', type: 'group', operator: 'AND', conditions: [] },
             changeReason: 'initial version',
@@ -165,7 +173,11 @@ const ExpressionBuilder: React.FC<ExpressionBuilderProps> = ({
 
           setDraftId(newId);
           onDraftCreated && onDraftCreated(newId, name);
-          notification.success('Rule created');
+          if (Array.isArray(res?.unsupported) && res.unsupported.length > 0) {
+            notification.warning(`Rule created, but some conditions need manual review: ${res.unsupported.join('; ')}`);
+          } else {
+            notification.success('Rule created');
+          }
         }
       } catch (err: any) {
         devError('Persist attempt failed', attempt, err);
