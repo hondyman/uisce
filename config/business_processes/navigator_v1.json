@@ -159,10 +159,10 @@
 
     {
       "step_id": "step_7_store_forecast_result",
-      "name": "Store Forecast in Hasura",
+      "name": "Store Forecast",
       "type": "integrate",
       "description": "Insert cash_flow_forecasts records for base case and stochastic scenarios",
-      "activity": "HasuraInsertCashFlowForecasts",
+      "activity": "InsertCashFlowForecasts",
       "input_mapping": {
         "commitment_id": "$.commitment_id",
         "calibration_id": "$.calibration_id",
@@ -178,7 +178,7 @@
       "name": "Update Position Snapshot",
       "type": "integrate",
       "description": "Record latest PICC, DCC, NAV, TVPI in fund_position_snapshots",
-      "activity": "HasuraInsertPositionSnapshot",
+      "activity": "InsertPositionSnapshot",
       "input_mapping": {
         "commitment_id": "$.commitment_id",
         "paid_in_capital": "$.paid_in_capital",
@@ -302,7 +302,7 @@
       "name": "Store Reconciliation Results",
       "type": "integrate",
       "description": "Insert reconciliation_records with matching status and exceptions",
-      "activity": "HasuraInsertReconciliation",
+      "activity": "InsertReconciliation",
       "input_mapping": {
         "commitment_id": "$.commitment_id",
         "reconciliation_result": "$.reconciliation_result"

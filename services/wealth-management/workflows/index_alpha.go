@@ -36,7 +36,7 @@ func IndexAlpha(ctx workflow.Context, indexID string) error {
 		return fmt.Errorf("index optimization execution failed: %w", err)
 	}
 
-	// 4. Update Hasura with optimization results
+	// 4. Record optimization results
 	update := map[string]any{
 		"index_id":  indexID,
 		"status":    "alpha_optimized",
@@ -46,7 +46,7 @@ func IndexAlpha(ctx workflow.Context, indexID string) error {
 		"holdings":  opt["holdings"],
 	}
 	if err := workflow.ExecuteActivity(ctx, activities.UpdateRebalanceRecord, update).Get(ctx, nil); err != nil {
-		return fmt.Errorf("Hasura update failed: %w", err)
+		return fmt.Errorf("failed to record rebalance result: %w", err)
 	}
 
 	return nil

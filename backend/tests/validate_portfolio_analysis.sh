@@ -174,25 +174,6 @@ fi
 
 echo ""
 
-# ============================================================================
-# Test 8: GraphQL Schema
-# ============================================================================
-echo "✓ Test 8: GraphQL Schema"
-
-schema_file="backend/hasura/portfolio_analysis_metadata.graphql"
-
-if [ -f "$schema_file" ]; then
-    query_count=$(grep -c "query" "$schema_file" || echo "0")
-    type_count=$(grep -c "type" "$schema_file" || echo "0")
-    
-    echo "  ✅ Schema file exists"
-    echo "  📊 GraphQL queries: $query_count"
-    echo "  📊 Type definitions: $type_count"
-else
-    echo "  ❌ Missing schema file: $schema_file"
-fi
-
-echo ""
 
 # ============================================================================
 # Summary

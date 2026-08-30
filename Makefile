@@ -20,7 +20,7 @@ start-proxy:
 
 .PHONY: local-up
 local-up:
-	@echo "Starting local minimal stack (hasura + rule-engine + proxy) via docker-compose.local.yml"
+	@echo "Starting local minimal stack (rule-engine + proxy) via docker-compose.local.yml"
 	@docker compose -f docker-compose.local.yml up -d --build
 
 .PHONY: local-down
@@ -63,7 +63,7 @@ up:
 	@docker compose -f $(COMPOSE_FILE) up -d
 
 up-minimal:
-	@echo "Starting minimal backend services (hasura, rabbitmq, backend)"
+	@echo "Starting minimal backend services (rabbitmq, backend)"
 	@./scripts/docker-start.sh up-minimal
 
 .PHONY: dev server down logs

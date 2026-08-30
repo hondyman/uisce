@@ -1,6 +1,6 @@
 -- Migration: calc_fields table for UI-based calculated fields
 -- Date: 2026-07-31
--- Purpose: Table for storing calculated fields created via the UI, replacing the Hasura-backed calc_fields.
+-- Purpose: Table for storing calculated fields created via the UI, replacing the previously auto-managed calc_fields.
 
 CREATE TABLE IF NOT EXISTS public.calc_fields (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

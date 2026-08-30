@@ -430,7 +430,7 @@ CREATE TRIGGER risk_events_updated_at
     FOR EACH ROW EXECUTE FUNCTION update_risk_event_timestamp();
 
 -- ============================================================================
--- ROW-LEVEL SECURITY (if enabled in your Hasura)
+-- ROW-LEVEL SECURITY (if enabled)
 -- ============================================================================
 -- Uncomment to enable RLS (set via SELECT set_config('app.tenant_id', ..., true) per request):
 -- ALTER TABLE risk_events ENABLE ROW LEVEL SECURITY;

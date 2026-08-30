@@ -4,7 +4,7 @@
 -- Author: System Architect
 -- Date: October 29, 2025
 -- Description: Completes Addepar model integration with computed views,
---              functions, and Hasura-ready configuration
+--              functions, and RLS-ready configuration
 -- ============================================================================
 
 -- ============================================================================
@@ -341,7 +341,7 @@ ON CONFLICT (code) DO UPDATE SET
     updated_at = CURRENT_TIMESTAMP;
 
 -- ============================================================================
--- PART 10: CREATE COMPUTED VIEWS (Hasura-Ready)
+-- PART 10: CREATE COMPUTED VIEWS
 -- ============================================================================
 
 -- Portfolio holdings view
@@ -657,7 +657,7 @@ COMMENT ON COLUMN entities.ownership_type IS 'How ownership is measured: PERCENT
 COMMENT ON COLUMN positions.owner_id IS 'Entity that owns this position (e.g., Portfolio, Account, Household)';
 COMMENT ON COLUMN positions.owned_id IS 'Entity that is owned (e.g., Stock, Bond, ETF, Cash Account)';
 
-COMMENT ON VIEW v_entity_holdings IS 'Portfolio holdings with real-time market values and unrealized gains/losses (Hasura-compatible)';
+COMMENT ON VIEW v_entity_holdings IS 'Portfolio holdings with real-time market values and unrealized gains/losses';
 COMMENT ON VIEW v_entity_portfolio_summary IS 'Portfolio summary aggregations by entity, optimized for dashboards';
 COMMENT ON VIEW v_entity_positions_hierarchy IS 'Complete position ownership hierarchy with all metadata';
 

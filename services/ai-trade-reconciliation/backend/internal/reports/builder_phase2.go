@@ -69,13 +69,6 @@ func (rb *ReportBuilder) saveTemplateInTx(tx *sql.Tx, template *ReportTemplate) 
 		return fmt.Errorf("failed to marshal rules: %w", err)
 	}
 
-	// TODO: Refactor to Hasura GraphQL with transaction support
-	// mutation { update_report_templates_by_pk(
-	//   pk_columns: {id: $id}
-	//   _set: {sections: $sections, filters: $filters, rules: $rules, updated_at: $updated_at}
-	// ) { id }}
-	// JSONB fields: sections, filters, rules
-	// Note: Ensure Hasura transaction support or use optimistic locking pattern
 	_, err = tx.ExecContext(context.Background(), `
 		UPDATE report_templates 
 		SET sections = $1, filters = $2, rules = $3, updated_at = $4
@@ -242,12 +235,6 @@ func (al *AuditLogger) LogSync(ctx context.Context, entry *AuditLog) error {
 		entry.Timestamp = time.Now()
 	}
 
-	// TODO: Refactor to Hasura GraphQL
-	// mutation { insert_audit_logs_one(object: {
-	//   id, tenant_id, user_id, action, entity_type, entity_id,
-	//   old_value, new_value, reason, timestamp, ip_address, user_agent
-	// }) { id }}
-	// JSONB fields: old_value, new_value (nullable)
 	_, err := al.db.ExecContext(ctx, `
 		INSERT INTO audit_logs (id, tenant_id, user_id, action, entity_type, entity_id, 
 		                         old_value, new_value, reason, timestamp, ip_address, user_agent)

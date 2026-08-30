@@ -288,12 +288,6 @@ func (re *ReportEngine) executeSectionQuery(ctx context.Context, section ReportS
 
 // GetEntityRelationships retrieves relationships between entities in semantic views
 func (re *ReportEngine) GetEntityRelationships(ctx context.Context, viewID string) ([]EntityRelationship, error) {
-	// TODO: Refactor to Hasura GraphQL
-	// query { entity_relationships(
-	//   where: {_or: [{source_entity_id: {_cast: {String: {_like: $pattern}}}},
-	//                  {target_entity_id: {_cast: {String: {_like: $pattern}}}}]}
-	// ) { id source_entity_id target_entity_id relation_type relationship_key cardinality created_at }}
-	// Note: Complex CAST + LIKE pattern may need custom SQL function or view
 	rows, err := re.db.QueryContext(ctx, `
 		SELECT id, source_entity_id, target_entity_id, relation_type, relationship_key, cardinality, created_at
 		FROM entity_relationships

@@ -36,7 +36,7 @@ func TaxHarvest(ctx workflow.Context, umaID string) error {
 		return fmt.Errorf("tax harvest execution failed: %w", err)
 	}
 
-	// 4. Update Hasura with tax optimization results
+	// 4. Record tax optimization results
 	update := map[string]any{
 		"uma_id":        umaID,
 		"status":        "tax_optimized",
@@ -45,7 +45,7 @@ func TaxHarvest(ctx workflow.Context, umaID string) error {
 		"esg_score":     harvest["esg_score"],
 	}
 	if err := workflow.ExecuteActivity(ctx, activities.UpdateRebalanceRecord, update).Get(ctx, nil); err != nil {
-		return fmt.Errorf("Hasura update failed: %w", err)
+		return fmt.Errorf("failed to record rebalance result: %w", err)
 	}
 
 	return nil

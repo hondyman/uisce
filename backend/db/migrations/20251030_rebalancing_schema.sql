@@ -72,7 +72,7 @@ CREATE TABLE trade_execution_log (
   CONSTRAINT fk_proposed_trade FOREIGN KEY (proposed_trade_id) REFERENCES proposed_trades(id) ON DELETE CASCADE
 );
 
--- 4. Allocation Models Table (for Hasura GraphQL auto-gen)
+-- 4. Allocation Models Table
 CREATE TABLE allocation_models (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   tenant_id UUID NOT NULL,
@@ -88,7 +88,7 @@ CREATE TABLE allocation_models (
   CONSTRAINT fk_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
 );
 
--- 5. Rebalance Execution History (for Hasura subscriptions)
+-- 5. Rebalance Execution History
 CREATE TABLE rebalance_executions (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   tenant_id UUID NOT NULL,
@@ -132,7 +132,7 @@ CREATE INDEX idx_rebalance_executions_workflow ON rebalance_executions(workflow_
 CREATE INDEX idx_rebalance_executions_status ON rebalance_executions(status);
 
 -- ============================================================================
--- MATERIALIZED VIEW: Rebalance Summary (for Hasura subscriptions + real-time dashboard)
+-- MATERIALIZED VIEW: Rebalance Summary (for real-time dashboard polling)
 -- ============================================================================
 
 CREATE MATERIALIZED VIEW v_rebalance_summary AS

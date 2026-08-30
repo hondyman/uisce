@@ -1,12 +1,6 @@
 // Wealth Management Service
 // Unified entry point for all wealth management functionality
 
-// Frontend Components
-export { default as UMAAlpha } from './frontend/UMAAlpha';
-export { default as AttributionAlpha } from './frontend/AttributionAlpha';
-export { default as TaxHarvest } from './frontend/TaxHarvest';
-export { default as IndexAlpha } from './frontend/IndexAlpha';
-
 // Workflows
 export { UMAAlpha as UMAAlphaWorkflow } from './workflows/uma_alpha';
 export { IndexAlpha as IndexAlphaWorkflow } from './workflows/index_alpha';

@@ -368,11 +368,11 @@
       "stepOrder": 7,
       "stepType": "integrate",
       "stepName": "Update Risk Event Status",
-      "description": "Record mitigation completion in Hasura risk_events table",
+      "description": "Record mitigation completion in the risk_events table",
       "durationHours": 0.1,
       "config": {
-        "activityName": "HasuraUpdateRiskEvent",
-        "service": "hasura",
+        "activityName": "UpdateRiskEvent",
+        "service": "postgres",
         "parameters": {
           "table": "risk_events",
           "fields": {
@@ -424,7 +424,7 @@
       "description": "Record low-risk portfolio check and close risk event",
       "durationHours": 0.1,
       "config": {
-        "activityName": "HasuraUpdateRiskEvent",
+        "activityName": "UpdateRiskEvent",
         "parameters": {
           "table": "risk_events",
           "fields": {

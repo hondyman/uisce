@@ -69,7 +69,7 @@ interface AvailabilityTesterProps {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'X-Hasura-Tenant-Id': 'default-tenant',
+          'Authorization': `Bearer ${localStorage.getItem('auth_token') || ''}`,
         },
         body: JSON.stringify({
           profile_name: profileName,
@@ -109,7 +109,7 @@ interface AvailabilityTesterProps {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'X-Hasura-Tenant-Id': 'default-tenant',
+          'Authorization': `Bearer ${localStorage.getItem('auth_token') || ''}`,
         },
         body: JSON.stringify({
           profile_name: profileName,

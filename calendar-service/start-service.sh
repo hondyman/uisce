@@ -36,7 +36,6 @@ echo "🎬 Starting service on port 9081..."
   -db-user postgres \
   -db-password postgres \
   -redis-dsn redis://localhost:6379/0 \
-  -hasura-endpoint http://localhost:8080/v1/graphql \
   -loglevel debug > /tmp/calendar-service.log 2>&1 &
 
 SERVICE_PID=$!

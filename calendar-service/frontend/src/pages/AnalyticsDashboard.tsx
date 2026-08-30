@@ -63,7 +63,7 @@ const AnalyticsDashboard: React.FC = () => {
   const fetchAnalytics = async (type: string) => {
     const response = await fetch(`/api/v1/analytics/${type}`, {
       headers: {
-        'X-Hasura-Tenant-Id': localStorage.getItem('tenant_id') || '',
+        'Authorization': `Bearer ${localStorage.getItem('auth_token') || ''}`,
       },
     });
     const data = await response.json();
@@ -76,7 +76,7 @@ const AnalyticsDashboard: React.FC = () => {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'X-Hasura-Tenant-Id': localStorage.getItem('tenant_id') || '',
+          'Authorization': `Bearer ${localStorage.getItem('auth_token') || ''}`,
         },
         body: JSON.stringify({
           format,

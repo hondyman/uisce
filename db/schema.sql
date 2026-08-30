@@ -159,7 +159,7 @@ CREATE TRIGGER update_entity_registry_ts
 BEFORE UPDATE ON entity_registry
 FOR EACH ROW EXECUTE FUNCTION update_timestamp();
 
--- View for unified querying across entities (for Hasura)
+-- View for unified querying across entities
 CREATE OR REPLACE VIEW all_entities AS
 SELECT 
     'client_investors' AS entity_type, 
@@ -192,23 +192,23 @@ SELECT
 FROM trades t2;
 
 -- SECURITY: Enable Row Level Security (RLS) to enforce tenant isolation at the DB level.
--- Hasura will set session variables from JWT claims like 'hasura.jwt.claims.X-Hasura-Tenant-Id'
+-- The application sets 'app.tenant_id' via set_config before RLS-gated queries
 ALTER TABLE client_investors ENABLE ROW LEVEL SECURITY;
 ALTER TABLE portfolios ENABLE ROW LEVEL SECURITY;
 
 -- Policy: only allow access to rows that belong to the tenant from JWT claims
 CREATE POLICY IF NOT EXISTS tenant_isolation_policy_client_investors ON client_investors
   FOR ALL
-  USING (tenant_id = current_setting('hasura.jwt.claims.X-Hasura-Tenant-Id')::uuid);
+  USING (tenant_id = current_setting('app.tenant_id')::uuid);
 
 CREATE POLICY IF NOT EXISTS tenant_isolation_policy_portfolios ON portfolios
   FOR ALL
-  USING (tenant_id = current_setting('hasura.jwt.claims.X-Hasura-Tenant-Id')::uuid);
+  USING (tenant_id = current_setting('app.tenant_id')::uuid);
 
 ALTER TABLE trades ENABLE ROW LEVEL SECURITY;
 CREATE POLICY IF NOT EXISTS tenant_isolation_policy_trades ON trades
   FOR ALL
-  USING (tenant_id = current_setting('hasura.jwt.claims.X-Hasura-Tenant-Id')::uuid);
+  USING (tenant_id = current_setting('app.tenant_id')::uuid);
 
 -- JSONB validation helpers
 -- Example: ensure contact_details JSONB contains an 'email' key
@@ -223,7 +223,7 @@ ALTER TABLE client_investors
   ADD CONSTRAINT IF NOT EXISTS check_contact_has_email
   CHECK (contact_details IS NULL OR has_email(contact_details));
 
--- Computed field: display label for client_investors (used by Hasura as a computed field)
+-- Computed field: display label for client_investors
 CREATE OR REPLACE FUNCTION client_investor_display_label(investor_row client_investors)
 RETURNS TEXT AS $
 BEGIN
@@ -260,7 +260,7 @@ DECLARE
     user_id UUID;
 BEGIN
     BEGIN
-        user_id := current_setting('hasura.jwt.claims.X-Hasura-User-Id')::uuid;
+        user_id := current_setting('app.user.id')::uuid;
     EXCEPTION WHEN OTHERS THEN
         user_id := '00000000-0000-0000-0000-000000000000'; -- System user
     END;
