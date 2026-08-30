@@ -13,7 +13,6 @@ DEV_PROXY_PORT=5175
 BACKEND_DOCKER_PORT=8080
 BACKEND_DEV_PORT=9090
 API_GATEWAY_PORT=8001
-HASURA_PORT=8081
 SWAGGER_PORT=8082
 
 # Stop Docker services
@@ -21,7 +20,7 @@ echo "🐳 Stopping Docker containers..."
 docker-compose down --remove-orphans 2>/dev/null || true
 
 # Kill any remaining processes on our ports
-PORTS=($FRONTEND_PORT $DEV_PROXY_PORT $BACKEND_DOCKER_PORT $BACKEND_DEV_PORT $API_GATEWAY_PORT $HASURA_PORT $SWAGGER_PORT)
+PORTS=($FRONTEND_PORT $DEV_PROXY_PORT $BACKEND_DOCKER_PORT $BACKEND_DEV_PORT $API_GATEWAY_PORT $SWAGGER_PORT)
 
 for port in "${PORTS[@]}"; do
     if lsof -Pi :$port -sTCP:LISTEN -t >/dev/null 2>&1; then

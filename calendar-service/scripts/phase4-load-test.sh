@@ -64,7 +64,7 @@ echo ""
 if [ $CACHED_CALL_MS -gt 0 ]; then
     IMPROVEMENT=$(( (FIRST_CALL_MS - CACHED_CALL_MS) * 100 / FIRST_CALL_MS ))
     echo -e "${GREEN}⚡ Performance Improvement: ${IMPROVEMENT}%${NC}"
-    echo "  First call:  ${FIRST_CALL_MS}ms (DB + Hasura query)"
+    echo "  First call:  ${FIRST_CALL_MS}ms (DB query)"
     echo "  Cached call: ${CACHED_CALL_MS}ms (Redis hit)"
 fi
 echo ""

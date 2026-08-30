@@ -268,7 +268,7 @@ start_backend() {
 # Function to start only infrastructure services
 start_infra() {
     print_info "Starting infrastructure services..."
-    INFRA_SERVICES=(postgres hasura temporal temporal-ui rabbitmq ai-service api-gateway)
+    INFRA_SERVICES=(postgres temporal temporal-ui rabbitmq ai-service api-gateway)
     # When USE_LOCAL_POSTGRES=true the local-db override file will ensure a dummy postgres
     # service is used that doesn't bind host ports. We can safely start infra services.
     if [ "${USE_LOCAL_POSTGRES:-false}" = "true" ]; then

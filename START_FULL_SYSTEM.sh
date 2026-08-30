@@ -175,10 +175,10 @@ fi
 print_success "Port 5173 (Frontend) is available"
 
 ###############################################################################
-#                         DOCKER / HASURA SETUP
+#                         DOCKER SETUP
 ###############################################################################
 
-print_header "Docker & Hasura"
+print_header "Docker"
 
 # Check Docker
 if ! command -v docker &> /dev/null; then
@@ -193,42 +193,11 @@ if ! docker info >/dev/null 2>&1; then
 fi
 print_success "Docker daemon running"
 
-print_info "Starting required Docker services: graphql-engine, rabbitmq, api-gateway (event-router optional)"
-docker compose up -d graphql-engine rabbitmq api-gateway || true
+print_info "Starting required Docker services: rabbitmq, api-gateway (event-router optional)"
+docker compose up -d rabbitmq api-gateway || true
 # event-router is optional; it may fail if port 8081 is already in use (e.g., by temporal-ui)
 docker compose up -d event-router 2>&1 | grep -i "failed\|error" || print_info "event-router started or skipped (port conflict)"
 
-print_info "Waiting for Hasura (http://localhost:8083/healthz) to be healthy..."
-HASURA_HEALTH_URL="http://localhost:8083/healthz"
-HASURA_WAIT_TIMEOUT=${HASURA_WAIT_TIMEOUT:-60}
-end=$((SECONDS + HASURA_WAIT_TIMEOUT))
-while :; do
-    if curl -fsS "$HASURA_HEALTH_URL" >/dev/null 2>&1; then
-        print_success "Hasura is healthy"
-        break
-    fi
-    if [ $SECONDS -ge $end ]; then
-        print_error "Timed out waiting for Hasura after ${HASURA_WAIT_TIMEOUT}s"
-        break
-    fi
-    sleep 1
-done
-
-# Apply Hasura metadata/migrations if hasura CLI is available and hasura folder exists
-# This is optional; if it fails, the system will still work but Hasura may not have tracked tables
-if command -v hasura >/dev/null 2>&1 && [ -d "$SCRIPT_DIR/hasura" ]; then
-  print_info "Attempting to apply Hasura metadata and migrations using hasura CLI (optional step)"
-  (cd "$SCRIPT_DIR/hasura" && \
-    HASURA_GRAPHQL_ENDPOINT=http://localhost:8083 \
-    HASURA_GRAPHQL_ADMIN_SECRET=${HASURA_ADMIN_SECRET:-newadminsecretkey} \
-    hasura metadata apply --endpoint http://localhost:8083 --admin-secret ${HASURA_ADMIN_SECRET:-newadminsecretkey} 2>&1 | tail -5) || print_info "Hasura metadata apply skipped or failed (optional; system will continue)"
-  (cd "$SCRIPT_DIR/hasura" && \
-    HASURA_GRAPHQL_ENDPOINT=http://localhost:8083 \
-    HASURA_GRAPHQL_ADMIN_SECRET=${HASURA_ADMIN_SECRET:-newadminsecretkey} \
-    hasura migrate apply --all-databases --endpoint http://localhost:8083 --admin-secret ${HASURA_ADMIN_SECRET:-newadminsecretkey} 2>&1 | tail -5) || print_info "Hasura migrations skipped or failed (optional; system will continue)"
-else
-  print_info "hasura CLI not found or hasura dir missing; skipping metadata/migrations (optional step). Run install_hasura_cli.sh if needed."
-fi
 ###############################################################################
 #                         BUILD BACKEND
 ###############################################################################
