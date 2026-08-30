@@ -21,16 +21,18 @@ import (
 
 	"github.com/hondyman/uisce/backend/internal/boresolver"
 	"github.com/hondyman/uisce/backend/internal/handlers"
+	"github.com/hondyman/uisce/backend/internal/rulefabric"
 	"github.com/hondyman/uisce/backend/internal/security"
 	"github.com/hondyman/uisce/backend/internal/services"
 )
 
 type validationRulesHandler struct {
-	securityDeps handlers.SecurityContextDeps
-	db           *sql.DB
-	cueEngine    *services.CueEngine
-	boService    interface{}
-	resolver     security.DatasourceResolver
+	securityDeps  handlers.SecurityContextDeps
+	db            *sql.DB
+	cueEngine     *services.CueEngine // retained on the struct for signature compatibility; no longer invoked - see evaluateValidationRuleCEL
+	ruleEvaluator *rulefabric.RuleEvaluator
+	boService     interface{}
+	resolver      security.DatasourceResolver
 }
 
 // ValidationRule represents a validation rule for data quality and business logic
@@ -108,12 +110,21 @@ func errString(err error) string {
 }
 
 func RegisterValidationRulesRoutes(r chi.Router, db *sql.DB, cueEngine *services.CueEngine, boService interface{}, resolver security.DatasourceResolver) {
+	// Validation rule execution has moved off CUE/Starlark onto RuleFabric's
+	// CEL evaluator (see evaluateValidationRuleCEL). NewRuleEvaluator only
+	// needs *sqlx.DB for its own rules/rule_logic query methods, none of
+	// which this package calls - only EvaluateCELBoolean is used here.
+	ruleEvaluator, err := rulefabric.NewRuleEvaluator(sqlx.NewDb(db, "postgres"))
+	if err != nil {
+		panic(fmt.Sprintf("failed to initialize RuleFabric evaluator for validation rules: %v", err))
+	}
 	h := &validationRulesHandler{
-		securityDeps: handlers.SecurityContextDeps{Resolver: resolver},
-		db:           db,
-		cueEngine:    cueEngine,
-		boService:    boService,
-		resolver:     resolver,
+		securityDeps:  handlers.SecurityContextDeps{Resolver: resolver},
+		db:            db,
+		cueEngine:     cueEngine,
+		ruleEvaluator: ruleEvaluator,
+		boService:     boService,
+		resolver:      resolver,
 	}
 
 	r.Get("/validation-rules", h.handleListValidationRules())
@@ -198,20 +209,23 @@ func (h *validationRulesHandler) handleGetValidationRuleSchema() http.HandlerFun
 }
 
 type tenantRuleExecRow struct {
-	rule            ValidationRule
-	coreRuleID      sql.NullString
-	inheritMode     sql.NullString
-	coreVersionPin  sql.NullInt32
-	extensionScript sql.NullString
+	rule               ValidationRule
+	coreRuleID         sql.NullString
+	inheritMode        sql.NullString
+	coreVersionPin     sql.NullInt32
+	extensionScript    sql.NullString // legacy CUE/Starlark extension script, no longer executed
+	extensionCondition []byte         // extension_condition_json: the "extend" mode's additional condition, ANDed with the core rule
 }
 
 func fetchTenantRuleForExecution(ctx context.Context, db *sql.DB, id string, tenantID string, datasourceID string) (*tenantRuleExecRow, error) {
 	var out tenantRuleExecRow
 	var conditionJSON []byte
-	var scriptContent sql.NullString
+	// script_content no longer exists on catalog_validation_rules (dropped by
+	// migrations/20260206_120100_drop_starlark_column.sql) - condition_json
+	// is the only condition source now, evaluated via RuleFabric/CEL.
 	q := `
-		SELECT id, tenant_id, rule_name, rule_type, condition_json, script_content, severity,
-		       core_rule_id, inherit_mode, core_version_pin, extension_script_content
+		SELECT id, tenant_id, rule_name, rule_type, condition_json, severity,
+		       core_rule_id, inherit_mode, core_version_pin, extension_script_content, extension_condition_json
 		FROM catalog_validation_rules
 		WHERE id = $1 AND tenant_id = $2 AND datasource_id = $3 AND is_active = true
 	`
@@ -221,12 +235,12 @@ func fetchTenantRuleForExecution(ctx context.Context, db *sql.DB, id string, ten
 		&out.rule.RuleName,
 		&out.rule.RuleType,
 		&conditionJSON,
-		&scriptContent,
 		&out.rule.Severity,
 		&out.coreRuleID,
 		&out.inheritMode,
 		&out.coreVersionPin,
 		&out.extensionScript,
+		&out.extensionCondition,
 	)
 	if err != nil {
 		return nil, err
@@ -236,18 +250,20 @@ func fetchTenantRuleForExecution(ctx context.Context, db *sql.DB, id string, ten
 			return nil, fmt.Errorf("invalid condition json: %w", err)
 		}
 	}
-	if scriptContent.Valid {
-		out.rule.ScriptContent = scriptContent.String
-	}
 	return &out, nil
 }
 
 type coreRuleResolved struct {
-	RuleKey string
-	Version int
-	Script  string
+	RuleKey       string
+	Version       int
+	ConditionJSON json.RawMessage
 }
 
+// resolveCoreRuleScript resolves a core rule template's condition_json for a
+// given (pinned or latest-active) version. Despite the name (kept to avoid
+// touching its two call sites' signatures), it no longer resolves a
+// script_content - CUE/Starlark execution has been retired in favor of
+// evaluating condition_json (a tree or CEL expression) via RuleFabric.
 func resolveCoreRuleScript(ctx context.Context, db *sql.DB, coreRuleID string, coreVersionPin *int) (*coreRuleResolved, error) {
 	var ruleKey string
 	var baseVersion int
@@ -257,48 +273,165 @@ func resolveCoreRuleScript(ctx context.Context, db *sql.DB, coreRuleID string, c
 	}
 
 	if coreVersionPin != nil {
-		var script sql.NullString
+		var condition []byte
 		var version int
 		err := db.QueryRowContext(ctx, `
-			SELECT version, script_content
+			SELECT version, condition_json
 			FROM public.catalog_validation_rule_cores
 			WHERE rule_key = $1 AND version = $2
-		`, ruleKey, *coreVersionPin).Scan(&version, &script)
+		`, ruleKey, *coreVersionPin).Scan(&version, &condition)
 		if err != nil {
 			return nil, err
 		}
-		if !script.Valid {
-			return nil, errors.New("core rule has no script_content")
+		if len(condition) == 0 {
+			return nil, errors.New("core rule has no condition_json")
 		}
-		return &coreRuleResolved{RuleKey: ruleKey, Version: version, Script: script.String}, nil
+		return &coreRuleResolved{RuleKey: ruleKey, Version: version, ConditionJSON: condition}, nil
 	}
 
-	var script sql.NullString
+	var condition []byte
 	var version int
 	err = db.QueryRowContext(ctx, `
-		SELECT version, script_content
+		SELECT version, condition_json
 		FROM public.catalog_validation_rule_cores
 		WHERE rule_key = $1 AND status = 'active'
 		ORDER BY version DESC
 		LIMIT 1
-	`, ruleKey).Scan(&version, &script)
+	`, ruleKey).Scan(&version, &condition)
 	if err != nil {
 		// Fall back to the referenced version if no active exists.
-		var s2 sql.NullString
+		var c2 []byte
 		var v2 int
-		err2 := db.QueryRowContext(ctx, `SELECT version, script_content FROM public.catalog_validation_rule_cores WHERE id = $1`, coreRuleID).Scan(&v2, &s2)
+		err2 := db.QueryRowContext(ctx, `SELECT version, condition_json FROM public.catalog_validation_rule_cores WHERE id = $1`, coreRuleID).Scan(&v2, &c2)
 		if err2 != nil {
 			return nil, err
 		}
-		if !s2.Valid {
-			return nil, errors.New("core rule has no script_content")
+		if len(c2) == 0 {
+			return nil, errors.New("core rule has no condition_json")
 		}
-		return &coreRuleResolved{RuleKey: ruleKey, Version: v2, Script: s2.String}, nil
+		return &coreRuleResolved{RuleKey: ruleKey, Version: v2, ConditionJSON: c2}, nil
 	}
-	if !script.Valid {
-		return nil, errors.New("core rule has no script_content")
+	if len(condition) == 0 {
+		return nil, errors.New("core rule has no condition_json")
 	}
-	return &coreRuleResolved{RuleKey: ruleKey, Version: version, Script: script.String}, nil
+	return &coreRuleResolved{RuleKey: ruleKey, Version: version, ConditionJSON: condition}, nil
+}
+
+// evaluateValidationRuleCEL resolves the condition for a tenant validation
+// rule (custom condition_json, or inherited/extended from a core template)
+// and evaluates it via RuleFabric's CEL evaluator - the replacement for the
+// retired CUE/Starlark execution path. Returns (isValid, message, err) where
+// err is a system error (a compile/eval failure); isValid=false with a nil
+// err is an ordinary rule failure, including "no condition configured".
+func (h *validationRulesHandler) evaluateValidationRuleCEL(ctx context.Context, row *tenantRuleExecRow, record map[string]interface{}) (bool, string, error) {
+	mode := "custom"
+	if row.inheritMode.Valid {
+		if m := strings.ToLower(strings.TrimSpace(row.inheritMode.String)); m != "" {
+			mode = m
+		}
+	}
+
+	tenantCondition, err := json.Marshal(row.rule.ConditionJSON)
+	if err != nil {
+		return false, "", fmt.Errorf("failed to marshal tenant condition: %w", err)
+	}
+
+	var conditionSrc json.RawMessage
+	switch mode {
+	case "inherit", "extend":
+		if !row.coreRuleID.Valid {
+			return false, "inherit_mode requires core_rule_id", nil
+		}
+		var pin *int
+		if row.coreVersionPin.Valid {
+			p := int(row.coreVersionPin.Int32)
+			pin = &p
+		}
+		core, err := resolveCoreRuleScript(ctx, h.db, row.coreRuleID.String, pin)
+		if err != nil {
+			return false, fmt.Sprintf("failed to resolve core rule: %v", err), nil
+		}
+		if mode == "extend" && !isEmptyConditionJSON(row.extensionCondition) {
+			combined, err := combineConditionsAND(core.ConditionJSON, row.extensionCondition)
+			if err != nil {
+				return false, fmt.Sprintf("failed to combine core and extension conditions: %v", err), nil
+			}
+			conditionSrc = combined
+		} else {
+			conditionSrc = core.ConditionJSON
+		}
+	default:
+		conditionSrc = tenantCondition
+	}
+
+	if isEmptyConditionJSON(conditionSrc) {
+		return false, "No condition configured for this rule (CUE/Starlark removed - author a condition in the visual rule builder)", nil
+	}
+
+	normalized, unsupported, err := rulefabric.NormalizeConditionJSONToCEL(conditionSrc)
+	if err != nil {
+		return false, "", fmt.Errorf("failed to compile condition: %w", err)
+	}
+
+	var celShape struct {
+		Expression string `json:"expression"`
+	}
+	if err := json.Unmarshal(normalized, &celShape); err != nil {
+		return false, "", fmt.Errorf("failed to parse compiled condition: %w", err)
+	}
+
+	valid, err := h.ruleEvaluator.EvaluateCELBoolean(celShape.Expression, record, nil, nil)
+	if err != nil {
+		return false, "", fmt.Errorf("CEL evaluation error: %w", err)
+	}
+
+	message := ""
+	if !valid {
+		message = "Condition not satisfied"
+	}
+	if len(unsupported) > 0 {
+		message += " (warning: some conditions could not be fully translated - " + strings.Join(unsupported, "; ") + ")"
+	}
+	return valid, message, nil
+}
+
+func isEmptyConditionJSON(raw json.RawMessage) bool {
+	if len(raw) == 0 {
+		return true
+	}
+	var m map[string]interface{}
+	if err := json.Unmarshal(raw, &m); err != nil {
+		return true
+	}
+	return len(m) == 0
+}
+
+// combineConditionsAND normalizes two condition_json blobs (each may be a
+// tree or already {"type":"cel",...}) to CEL and ANDs the resulting
+// expressions - used for "extend" mode, where a tenant's own condition_json
+// is an additional check layered on top of an inherited core rule.
+func combineConditionsAND(a, b json.RawMessage) (json.RawMessage, error) {
+	na, _, err := rulefabric.NormalizeConditionJSONToCEL(a)
+	if err != nil {
+		return nil, err
+	}
+	nb, _, err := rulefabric.NormalizeConditionJSONToCEL(b)
+	if err != nil {
+		return nil, err
+	}
+	var ea, eb struct {
+		Expression string `json:"expression"`
+	}
+	if err := json.Unmarshal(na, &ea); err != nil {
+		return nil, err
+	}
+	if err := json.Unmarshal(nb, &eb); err != nil {
+		return nil, err
+	}
+	return json.Marshal(map[string]interface{}{
+		"type":       "cel",
+		"expression": fmt.Sprintf("(%s) && (%s)", ea.Expression, eb.Expression),
+	})
 }
 
 // handleListValidationRules retrieves all validation rules for a tenant with facets and pagination
@@ -549,11 +682,10 @@ func (h *validationRulesHandler) handleListValidationRules() http.HandlerFunc {
 		copy(filterArgs, args)
 
 		// Get paginated rules
-		// Updated to include script_content to satisfy tests and provide complete data
 		query := `
-			SELECT id, tenant_id, datasource_id, rule_name, rule_type, description, target_entity, 
-			       target_entity_id, target_entities, target_entity_ids, condition_json, 
-			       severity, COALESCE(is_active, true), COALESCE(is_core, false), created_by, created_at, updated_at, script_content
+			SELECT id, tenant_id, datasource_id, rule_name, rule_type, description, target_entity,
+			       target_entity_id, target_entities, target_entity_ids, condition_json,
+			       severity, COALESCE(is_active, true), COALESCE(is_core, false), created_by, created_at, updated_at
 			FROM catalog_validation_rules
 			` + whereClause + `
 			ORDER BY rule_name
@@ -577,12 +709,10 @@ func (h *validationRulesHandler) handleListValidationRules() http.HandlerFunc {
 			var createdBy sql.NullString
 			var datasourceID sql.NullString
 			var targetEntityID sql.NullString
-			// scriptContent removed
-			var scriptContent sql.NullString
 			err := rows.Scan(
 				&rule.ID, &rule.TenantID, &datasourceID, &rule.RuleName, &rule.RuleType,
 				&rule.Description, &rule.TargetEntity, &targetEntityID, &targetEntities, &targetEntityIDs,
-				&conditionJSON, &rule.Severity, &rule.IsActive, &rule.IsCore, &createdBy, &rule.CreatedAt, &rule.UpdatedAt, &scriptContent,
+				&conditionJSON, &rule.Severity, &rule.IsActive, &rule.IsCore, &createdBy, &rule.CreatedAt, &rule.UpdatedAt,
 			)
 			if err != nil {
 				writeJSONError(w, http.StatusInternalServerError, "Failed to scan rule", "scan_error", err.Error())
@@ -608,9 +738,6 @@ func (h *validationRulesHandler) handleListValidationRules() http.HandlerFunc {
 				rule.TargetEntityID = targetEntityID.String
 			}
 
-			if scriptContent.Valid {
-				rule.ScriptContent = scriptContent.String
-			}
 			rules = append(rules, rule)
 		}
 
@@ -731,7 +858,6 @@ func (h *validationRulesHandler) handleGetValidationRule() http.HandlerFunc {
 		var rule ValidationRule
 		var conditionJSON []byte
 		var createdBy sql.NullString
-		var scriptContent sql.NullString
 		var datasourceID sql.NullString
 		var targetEntityID sql.NullString
 		var targetEntities pq.StringArray
@@ -739,19 +865,15 @@ func (h *validationRulesHandler) handleGetValidationRule() http.HandlerFunc {
 
 		err = h.db.QueryRow(`
 			SELECT id, tenant_id, datasource_id, rule_name, rule_type, description, target_entity,
-			       target_entity_id, target_entities, target_entity_ids, condition_json, 
-			       severity, is_active, is_core, created_by, created_at, updated_at, script_content
+			       target_entity_id, target_entities, target_entity_ids, condition_json,
+			       severity, is_active, is_core, created_by, created_at, updated_at
 			FROM catalog_validation_rules
 			WHERE id = $1 AND tenant_id = $2
 		`, id, secCtx.TenantID).Scan(
 			&rule.ID, &rule.TenantID, &datasourceID, &rule.RuleName, &rule.RuleType, &rule.Description, &rule.TargetEntity,
 			&targetEntityID, &targetEntities, &targetEntityIDs, &conditionJSON,
-			&rule.Severity, &rule.IsActive, &rule.IsCore, &createdBy, &rule.CreatedAt, &rule.UpdatedAt, &scriptContent,
+			&rule.Severity, &rule.IsActive, &rule.IsCore, &createdBy, &rule.CreatedAt, &rule.UpdatedAt,
 		)
-
-		if scriptContent.Valid {
-			rule.ScriptContent = scriptContent.String
-		}
 
 		if err == sql.ErrNoRows {
 			writeJSONError(w, http.StatusNotFound, "Validation rule not found", "not_found", "")
@@ -769,17 +891,6 @@ func (h *validationRulesHandler) handleGetValidationRule() http.HandlerFunc {
 		if createdBy.Valid {
 			rule.CreatedBy = &createdBy.String
 		}
-
-		// Fetch script_content explicitly since it wasn't in list query?
-		// Note: The handleGetValidationRule query (lines 704-706) excluded script_content in previous version.
-		// We should add it back.
-		// BUT: line 704 query:
-		// SELECT id, tenant_id, rule_name, rule_type, description, target_entity,
-		//        condition_json, severity, is_active, is_core, created_by, created_at, updated_at
-		// It is MISSING script_content.
-		// Since I cannot modify lines far apart in one chunk easily without context, I will do a separate replacement for the query.
-		// Here I just fix the assignment.
-		// rule.ScriptContent = ... (wait, I need to fetch it first)
 
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(rule)
@@ -998,20 +1109,18 @@ func (h *validationRulesHandler) handleCreateValidationRule() http.HandlerFunc {
 
 		var retrievedTargetEntities pq.StringArray
 		var createdAt, updatedAt time.Time
-		// retrievedScriptContent removed
 
-		// Updated INSERT Query to include script_content
 		err = h.db.QueryRow(`
 			INSERT INTO catalog_validation_rules (
 				id, tenant_id, datasource_id, rule_name, rule_type, description, target_entity,
-				target_entities, condition_json, severity, is_active, is_core, created_at, updated_at, script_content
-			) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+				target_entities, condition_json, severity, is_active, is_core, created_at, updated_at
+			) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
 			RETURNING id, tenant_id, datasource_id, rule_name, rule_type, description, target_entity,
-			          target_entities, condition_json, severity, is_active, is_core, created_by, created_at, updated_at, script_content
+			          target_entities, condition_json, severity, is_active, is_core, created_by, created_at, updated_at
 		`, id, tenantID, datasourceID, req.RuleName, req.RuleType, req.Description, req.TargetEntity,
-			targetEntities, conditionJSON, req.Severity, isActive, isCore, now, now, req.ScriptContent).Scan(
+			targetEntities, conditionJSON, req.Severity, isActive, isCore, now, now).Scan(
 			&id, &tenantID, &datasourceID, &req.RuleName, &req.RuleType, &req.Description, &req.TargetEntity,
-			&retrievedTargetEntities, &conditionJSON, &req.Severity, &isActive, &isCore, &createdBy, &createdAt, &updatedAt, &req.ScriptContent,
+			&retrievedTargetEntities, &conditionJSON, &req.Severity, &isActive, &isCore, &createdBy, &createdAt, &updatedAt,
 		)
 
 		if err != nil {
@@ -1172,15 +1281,15 @@ func (h *validationRulesHandler) handleUpdateValidationRule() http.HandlerFunc {
 		err = h.db.QueryRow(`
 			UPDATE catalog_validation_rules
 			SET rule_name = $1, rule_type = $2, description = $3, target_entity = $4,
-			    target_entities = $5, condition_json = $6, severity = $7, is_active = $8, is_core = $9, updated_at = CURRENT_TIMESTAMP, script_content = $12
+			    target_entities = $5, condition_json = $6, severity = $7, is_active = $8, is_core = $9, updated_at = CURRENT_TIMESTAMP
 			WHERE id = $10 AND tenant_id = $11
 			RETURNING id, tenant_id, rule_name, rule_type, description, target_entity,
-			          target_entities, condition_json, severity, is_active, is_core, created_by, created_at, updated_at, script_content
+			          target_entities, condition_json, severity, is_active, is_core, created_by, created_at, updated_at
 		`, req.RuleName, req.RuleType, req.Description, req.TargetEntity,
-			targetEntities, conditionJSON, req.Severity, isActive, isCore, id, secCtx.TenantID, req.ScriptContent).Scan(
+			targetEntities, conditionJSON, req.Severity, isActive, isCore, id, secCtx.TenantID).Scan(
 			&updatedRule.ID, &updatedRule.TenantID, &updatedRule.RuleName, &updatedRule.RuleType,
 			&updatedRule.Description, &updatedRule.TargetEntity, &retrievedTargetEntities, &conditionJSON,
-			&updatedRule.Severity, &updatedRule.IsActive, &updatedRule.IsCore, &createdBy, &updatedRule.CreatedAt, &updatedRule.UpdatedAt, &updatedRule.ScriptContent,
+			&updatedRule.Severity, &updatedRule.IsActive, &updatedRule.IsCore, &createdBy, &updatedRule.CreatedAt, &updatedRule.UpdatedAt,
 		)
 
 		if err != nil {
@@ -1286,54 +1395,16 @@ func (h *validationRulesHandler) handleExecuteValidationRule() http.HandlerFunc 
 			return
 		}
 
-		// Enforce CUE or Business Logic
+		// Enforce CUE or Business Logic (rule_type naming kept for backward
+		// compatibility; both now evaluate condition_json via RuleFabric/CEL,
+		// not a CUE script)
 		if row.rule.RuleType != "cue" && row.rule.RuleType != "business_logic" {
-			writeJSONError(w, http.StatusBadRequest, "Only CUE validation rules are supported", "unsupported_type", "")
+			writeJSONError(w, http.StatusBadRequest, "Unsupported rule type", "unsupported_type", "")
 			return
 		}
 
-		// Simple CUE execution (inheritance not fully adapted for CUE yet in this refactor, usage of ScriptContent directly)
-		// TODO: Handle inheritance by merging CUE scripts if needed.
-
-		var script string
-		// Logic to resolve script based on inheritance (simplified for now)
-		mode := "custom"
-		if row.inheritMode.Valid {
-			mode = strings.ToLower(strings.TrimSpace(row.inheritMode.String))
-		}
-
-		switch mode {
-		case "inherit", "extend":
-			// Resolve core
-			var pin *int
-			if row.coreVersionPin.Valid {
-				p := int(row.coreVersionPin.Int32)
-				pin = &p
-			}
-			if row.coreRuleID.Valid {
-				core, err := resolveCoreRuleScript(r.Context(), h.db, row.coreRuleID.String, pin)
-				if err == nil {
-					script = core.Script
-					if mode == "extend" && row.extensionScript.Valid {
-						script += "\n" + row.extensionScript.String
-					}
-				}
-			}
-		default:
-			// script = row.rule.ScriptContent -- Removed
-			script = ""
-		}
-
-		if script == "" {
-			writeJSONError(w, http.StatusInternalServerError, "No script content found (Starlark/CUE removed)", "empty_script", "")
-			return
-		}
-
-		// ASL TODO: Use RuleEngine from somewhere? (currently this method takes cueEngine)
-		// For now simple CUE eval if script exists (only from core inheritance?)
-		res, err := h.cueEngine.EvaluateValidation(r.Context(), script, record)
+		valid, message, err := h.evaluateValidationRuleCEL(r.Context(), row, record)
 		if err != nil {
-			// System error
 			writeJSONError(w, http.StatusInternalServerError, "Evaluation failed", "eval_error", err.Error())
 			return
 		}
@@ -1344,15 +1415,11 @@ func (h *validationRulesHandler) handleExecuteValidationRule() http.HandlerFunc 
 			RuleType:  row.rule.RuleType,
 			Severity:  row.rule.Severity,
 			Status:    "fail",
-			Message:   "",
+			Message:   message,
 			Timestamp: time.Now(),
 		}
-
-		if res.IsValid {
+		if valid {
 			result.Status = "pass"
-		} else {
-			result.Status = "fail"
-			result.Message = res.Message
 		}
 
 		w.Header().Set("Content-Type", "application/json")
@@ -1486,68 +1553,10 @@ func (h *validationRulesHandler) handleSimulateValidationRuleWithInstance() http
 				return
 			}
 
-			mode := "custom"
-			if row.inheritMode.Valid {
-				mode = strings.ToLower(strings.TrimSpace(row.inheritMode.String))
-				if mode == "" {
-					mode = "custom"
-				}
-			}
-
-			var pin *int
-			if row.coreVersionPin.Valid {
-				p := int(row.coreVersionPin.Int32)
-				pin = &p
-			}
-
-			evalScript := func(script string) (*services.CueValidationResult, error) {
-				script = strings.TrimSpace(script)
-				if script == "" {
-					return &services.CueValidationResult{IsValid: false, Message: "Missing script content", Severity: "error"}, nil
-				}
-				// Force CUE
-				return h.cueEngine.EvaluateValidation(r.Context(), script, record)
-			}
-
-			var res *services.CueValidationResult
-			switch mode {
-			case "inherit", "extend":
-				if !row.coreRuleID.Valid {
-					res = &services.CueValidationResult{IsValid: false, Message: "inherit_mode requires core_rule_id", Severity: "error"}
-					break
-				}
-				core, err := resolveCoreRuleScript(r.Context(), h.db, row.coreRuleID.String, pin)
-				if err != nil {
-					res = &services.CueValidationResult{IsValid: false, Message: "Failed to resolve core rule script: " + err.Error(), Severity: "error"}
-					break
-				}
-				coreRes, execErr := evalScript(core.Script)
-				if execErr != nil {
-					res = &services.CueValidationResult{IsValid: false, Message: execErr.Error(), Severity: "error"}
-					break
-				}
-				if mode == "inherit" || !coreRes.IsValid {
-					res = coreRes
-					break
-				}
-				if row.extensionScript.Valid && strings.TrimSpace(row.extensionScript.String) != "" {
-					extRes, execErr := evalScript(row.extensionScript.String)
-					if execErr != nil {
-						res = &services.CueValidationResult{IsValid: false, Message: execErr.Error(), Severity: "error"}
-						break
-					}
-					res = extRes
-				} else {
-					res = coreRes
-				}
-			default:
-				// Script content removed.
-				// For now, fail or skip if not extended from core.
-				if row.coreRuleID.Valid {
-					// resolve core
-					// omitted for brevity, logic similar to above
-				}
-				res = &services.CueValidationResult{IsValid: false, Message: "No script content available (Starlark/CUE removed)", Severity: "error"}
+			valid, message, evalErr := h.evaluateValidationRuleCEL(r.Context(), row, record)
+			res := &services.CueValidationResult{IsValid: valid, Message: message, Severity: "error"}
+			if evalErr != nil {
+				res = &services.CueValidationResult{IsValid: false, Message: evalErr.Error(), Severity: "error"}
 			}
 
 			result := map[string]interface{}{
