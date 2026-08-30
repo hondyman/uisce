@@ -47,20 +47,27 @@ const ExpressionBuilder: React.FC<ExpressionBuilderProps> = ({
     conditions: []
   });
 
-  const insertDraftRule = useMutation({
+  // Persists to RuleFabric (backend/internal/rulefabric), whose ConditionGroup/
+  // Condition types are defined to match AdvancedConditionBuilder's schema
+  // directly - see backend/internal/rulefabric/evaluator.go. Rules and their
+  // condition logic are separate, versioned resources there: creating a rule
+  // creates metadata only, and the condition tree is saved as rule_logic
+  // version 1 via a follow-up call; every subsequent save creates a new
+  // version rather than mutating one in place.
+  const createRule = useMutation({
     mutationFn: async (object: Record<string, unknown>) => {
-      const res = await apiFetch('/api/rest/validation-rules', {
+      const res = await apiFetch('/api/rule-fabric/rules', {
         method: 'POST',
         body: JSON.stringify(object),
       });
       return res.json();
     },
   });
-  const updateRuleByPk = useMutation({
-    mutationFn: async ({ id, changes }: { id: string; changes: Record<string, unknown> }) => {
-      const res = await apiFetch(`/api/rest/validation-rules/${id}`, {
-        method: 'PUT',
-        body: JSON.stringify(changes),
+  const createRuleVersion = useMutation({
+    mutationFn: async ({ id, conditionJson, changeReason }: { id: string; conditionJson: ConditionGroup; changeReason: string }) => {
+      const res = await apiFetch(`/api/rule-fabric/rules/${id}/versions`, {
+        method: 'POST',
+        body: JSON.stringify({ condition_json: conditionJson, change_reason: changeReason }),
       });
       return res.json();
     },
@@ -91,68 +98,83 @@ const ExpressionBuilder: React.FC<ExpressionBuilderProps> = ({
     schedulePersist(newTree);
   };
 
-  // Persist helper (non-debounced) - called by the debounced scheduler when enabled
-  const persistNow = async (conditionJson: ConditionGroup | null) => {
-    // If autosave is not enabled, do nothing
-    if (!autosave) return;
+  // Slugify a rule name into a rule_code (RuleFabric requires one at creation).
+  const toRuleCode = (name: string): string =>
+    name
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '_')
+      .replace(/^_+|_+$/g, '') || `rule_${Date.now()}`;
+
+  // Persist helper (non-debounced). Called by the debounced autosave
+  // scheduler, and directly by the explicit Save button regardless of the
+  // autosave flag.
+  const persistNow = async (conditionJson: ConditionGroup | null, opts?: { force?: boolean }) => {
+    if (!autosave && !opts?.force) return;
 
     const tenant = localStorage.getItem('selected_tenant') ? JSON.parse(localStorage.getItem('selected_tenant') || '{}').id : null;
-    const datasource = localStorage.getItem('selected_datasource') ? JSON.parse(localStorage.getItem('selected_datasource') || '{}').id : null;
 
-    if (!tenant || !datasource) {
-      notification.warning('Select a tenant & datasource to persist visual rule');
+    if (!tenant) {
+      notification.warning('Select a tenant to persist this rule');
       return;
     }
 
-    const object: Record<string, unknown> = {
-      tenant_id: tenant,
-      rule_name: ruleName || 'Visual Rule',
-      rule_type: 'business_logic',
-      condition_json: conditionJson || {},
-      target_entity: targetEntity || undefined,
-    };
-
     const maxRetries = 3;
     let attempt = 0;
-    
+
     const doPersist = async (): Promise<void> => {
       attempt += 1;
       try {
         const effectiveId = ruleId || draftId;
         if (effectiveId) {
-          // If we have an id (existing rule or draft), update-by-pk
-          const changes: any = { condition_json: conditionJson };
-          if (targetEntity) changes.target_entity = targetEntity;
-          await updateRuleByPk.mutateAsync({ id: effectiveId, changes });
-          notification.success('Rule autosaved');
+          // Rule already exists: RuleLogic is versioned, so every save
+          // creates a new rule_logic version rather than mutating one in
+          // place.
+          await createRuleVersion.mutateAsync({
+            id: effectiveId,
+            conditionJson: conditionJson || { id: 'root', type: 'group', operator: 'AND', conditions: [] },
+            changeReason: opts?.force ? 'manual save' : 'autosave',
+          });
+          notification.success(opts?.force ? 'Rule saved' : 'Rule autosaved');
         } else {
-          // No id yet: create a draft row
+          // No rule yet: create it, then save the condition tree as its
+          // first version.
+          const name = ruleName || `Draft Rule ${Date.now()}`;
           const draftObject: Record<string, unknown> = {
-            ...object,
-            rule_name: ruleName || `Draft Rule ${Date.now()}`,
-            is_active: false,
+            tenant_id: tenant,
+            rule_code: toRuleCode(name),
+            name,
+            category: 'custom',
+            primary_context: targetEntity ? 'data_record' : 'data_record',
+            severity: 'warning',
+            environment: 'production',
+            scope_entity: targetEntity || undefined,
           };
 
-          const res = await insertDraftRule.mutateAsync(draftObject);
-
-          const newId = res?.[0]?.id || res?.id;
-          if (newId) {
-            setDraftId(newId);
-            const draftName = typeof draftObject.rule_name === 'string' ? draftObject.rule_name : undefined;
-            onDraftCreated && onDraftCreated(newId, draftName);
-            notification.success('Draft created');
-          } else {
-            throw new Error('No id returned from draft insert');
+          const created = await createRule.mutateAsync(draftObject);
+          const newId = created?.id || created?.[0]?.id;
+          if (!newId) {
+            throw new Error('No id returned from rule creation');
           }
+
+          await createRuleVersion.mutateAsync({
+            id: newId,
+            conditionJson: conditionJson || { id: 'root', type: 'group', operator: 'AND', conditions: [] },
+            changeReason: 'initial version',
+          });
+
+          setDraftId(newId);
+          onDraftCreated && onDraftCreated(newId, name);
+          notification.success('Rule created');
         }
       } catch (err: any) {
-    devError('Autosave attempt failed', attempt, err);
+        devError('Persist attempt failed', attempt, err);
         if (attempt < maxRetries) {
           const backoffMs = 200 * Math.pow(2, attempt - 1);
           await new Promise(resolve => setTimeout(resolve, backoffMs));
           return doPersist();
         }
-        notification.error('Failed to persist rule (autosave). Please check your tenant selection and network.');
+        notification.error('Failed to persist rule. Please check your tenant selection and network.');
       }
     };
 
@@ -185,8 +207,8 @@ const ExpressionBuilder: React.FC<ExpressionBuilderProps> = ({
 
   const handleSave = async () => {
     try {
+      await persistNow(conditionTree, { force: true });
       onSave && onSave(conditionTree);
-      notification.success('Rule saved successfully!');
     } catch (e) {
       devError('onSave callback threw', e);
       notification.error('Failed to save rule');

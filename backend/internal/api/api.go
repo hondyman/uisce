@@ -47,6 +47,7 @@ import (
 	"github.com/hondyman/uisce/backend/internal/governance"
 	"github.com/hondyman/uisce/backend/internal/governance/contracts"
 	"github.com/hondyman/uisce/backend/internal/handlers"
+	"github.com/hondyman/uisce/backend/internal/rulefabric"
 	"github.com/hondyman/uisce/backend/internal/household"
 	"github.com/hondyman/uisce/backend/internal/iceberg"
 	"github.com/hondyman/uisce/backend/internal/infrastructure"
@@ -1196,6 +1197,12 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 	// Initialize Instance Clone Handler (event-trigger webhook)
 	instanceCloneHandler := handlers.NewInstanceCloneHandler(sqlxDB)
 	instanceCloneHandler.RegisterRoutes(r)
+
+	// Initialize RuleFabric (rules/policies CRUD + evaluation, backs the
+	// visual ExpressionBuilder/AdvancedConditionBuilder frontend)
+	if err := rulefabric.RegisterRoutes(r, sqlxDB); err != nil {
+		log.Printf("failed to register rulefabric routes: %v", err)
+	}
 
 	// Initialize Admin Handler
 	adminHandler := NewAdminHandler(qosManager)
