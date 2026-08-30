@@ -1,4 +1,3 @@
-
 package services
 
 import (
@@ -12,14 +11,14 @@ import (
 )
 
 type AvailabilityAdapter struct {
-	checker               *availability.Checker
-	logger                *logrus.Entry
-	region                string
-	profile               string
-	lastResolvedProfile   string
-	lastResolutionSource  string // "db", "fallback", "error"
+	checker                  *availability.Checker
+	logger                   *logrus.Entry
+	region                   string
+	profile                  string
+	lastResolvedProfile      string
+	lastResolutionSource     string // "db", "fallback", "error"
 	profileResolutionEnabled bool
-	cacheEnabled          bool
+	cacheEnabled             bool
 }
 
 func NewAvailabilityAdapter(checker *availability.Checker, regionDefault, profileDefault string, logger *logrus.Entry) *AvailabilityAdapter {
@@ -36,17 +35,17 @@ func NewAvailabilityAdapter(checker *availability.Checker, regionDefault, profil
 		profileDefault = "default"
 	}
 
-	profileResolutionEnabled := os.Getenv("HASURA_ENDPOINT") != ""
+	profileResolutionEnabled := os.Getenv("PROFILE_RESOLUTION_ENABLED") != "false"
 	cacheEnabled := os.Getenv("CACHE_ENABLED") == "true" || os.Getenv("CACHE_ENABLED") == "1"
 
 	return &AvailabilityAdapter{
-		checker:               checker,
-		logger:                logger.WithField("service", "availability_adapter"),
-		region:                regionDefault,
-		profile:               profileDefault,
+		checker:                  checker,
+		logger:                   logger.WithField("service", "availability_adapter"),
+		region:                   regionDefault,
+		profile:                  profileDefault,
 		profileResolutionEnabled: profileResolutionEnabled,
-		cacheEnabled:          cacheEnabled,
-		lastResolutionSource:  "not_initialized",
+		cacheEnabled:             cacheEnabled,
+		lastResolutionSource:     "not_initialized",
 	}
 }
 
@@ -107,14 +106,14 @@ func (a *AvailabilityAdapter) CheckAvailability(ctx context.Context, tenantID, c
 // GetMetrics returns availability metrics including cache and resolution stats
 func (a *AvailabilityAdapter) GetMetrics(ctx context.Context, tenantID, calendarID string) (map[string]interface{}, error) {
 	metrics := map[string]interface{}{
-		"tenant_id":                 tenantID,
-		"calendar_id":               calendarID,
-		"cache_enabled":             a.cacheEnabled,
+		"tenant_id":                  tenantID,
+		"calendar_id":                calendarID,
+		"cache_enabled":              a.cacheEnabled,
 		"profile_resolution_enabled": a.profileResolutionEnabled,
-		"default_profile":           a.profile,
-		"default_region":            a.region,
-		"last_resolved_profile":     a.lastResolvedProfile,
-		"last_resolution_source":    a.lastResolutionSource,
+		"default_profile":            a.profile,
+		"default_region":             a.region,
+		"last_resolved_profile":      a.lastResolvedProfile,
+		"last_resolution_source":     a.lastResolutionSource,
 		"checker_initialized":        a.checker != nil,
 	}
 

@@ -2,7 +2,6 @@ version: '3.8'
 
 # REMOTE DEPLOYMENT - All services except PostgreSQL (which is native/remote)
 # PostgreSQL: REMOTE (native infrastructure)
-# Hasura: REMOTE (native infrastructure)
 # All other services: Deployed via docker-compose
 
 services:
@@ -134,10 +133,6 @@ services:
       # Local Services (in this compose)
       REDPANDA_BROKERS: "${REDPANDA_BROKERS:-redpanda:9092}"
       REDIS_URL: "${REDIS_URL:-redis://redis:6379/0}"
-      
-      # Remote Services (REMOTE - Hasura, native infrastructure)
-      HASURA_ENDPOINT: "${HASURA_ENDPOINT}"
-      HASURA_ADMIN_SECRET: "${HASURA_ADMIN_SECRET}"
       
       # Temporal (in this compose)
       TEMPORAL_HOST: "temporal"

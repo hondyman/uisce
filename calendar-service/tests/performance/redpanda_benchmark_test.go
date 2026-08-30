@@ -24,7 +24,7 @@ func BenchmarkCDCProcessing(b *testing.B) {
 		[]string{"cdc_calendar.public.internal_events"},
 		nil, // temporal
 		nil, // cache
-		nil, // hasura
+		nil, // dbClient
 		nil, // availability
 		mockListener,
 		nil, // metrics

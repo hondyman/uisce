@@ -71,15 +71,6 @@ spec:
     - protocol: TCP
       port: 7233
 
-  # Allow to Hasura
-  - to:
-    - podSelector:
-        matchLabels:
-          app: hasura
-    ports:
-    - protocol: TCP
-      port: 8080
-
   # Allow to external HTTPS
   - to:
     - namespaceSelector: {}

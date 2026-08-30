@@ -265,7 +265,7 @@ func (p *CDCProcessor) handleProfileCalendarsChange(ctx context.Context, event C
 	})
 
 	// Invalidate the profile name cache for this calendar
-	// When the mapping changes, future lookups will hit Hasura to refresh
+	// When the mapping changes, future lookups will re-resolve from the database
 	if p.availabilityChecker != nil {
 		p.availabilityChecker.InvalidateProfileNameCache(ctx, tenantID, calendarID)
 		logger.Debug("Invalidated profile name cache for calendar")
@@ -513,7 +513,7 @@ func (p *CDCProcessor) processCalendarChange(ctx context.Context, event *Calenda
 
 // InvalidateProfileNameCacheForChange handles CDC events on profile_calendars table
 // When the mapping between a profile and calendar changes, invalidate the profile name
-// cache for that calendar so the next lookup queries Hasura
+// cache for that calendar so the next lookup re-resolves from the database
 func (p *CDCProcessor) InvalidateProfileNameCacheForChange(ctx context.Context, tenantID, profileID, calendarID string, operation string) error {
 	logger := p.logger.WithFields(logrus.Fields{
 		"tenant_id":   tenantID,

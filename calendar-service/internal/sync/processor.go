@@ -279,7 +279,7 @@ func (p *GoogleSyncProcessor) sendSyncFailedNotification(ctx context.Context, us
 	})
 }
 
-// getUserEmail gets user email from database (stub implementation without Hasura client access in processor)
+// getUserEmail gets user email from database (stub implementation, direct DB access not yet wired in processor)
 func (p *GoogleSyncProcessor) getUserEmail(ctx context.Context, userID string) (string, string, error) {
 	return "user@example.com", "User Example", nil
 }
@@ -292,7 +292,7 @@ type NotificationPreferences struct {
 	EmailNotifications       bool
 }
 
-// getUserNotificationPreferences gets user notification preferences (stub without Hasura client)
+// getUserNotificationPreferences gets user notification preferences (stub, direct DB access not yet wired)
 func (p *GoogleSyncProcessor) getUserNotificationPreferences(ctx context.Context, userID string) (*NotificationPreferences, error) {
 	return &NotificationPreferences{
 		SyncCompleteNotification: true,

@@ -39,11 +39,8 @@ data:
   REDIS_PREFIX: "calendar"
   REDIS_CACHE_TTL: "3600"
 
-  # Hasura Configuration
-  HASURA_GRAPHQL_ADMIN_SECRET: "set-via-secret"
-  HASURA_ENDPOINT: "http://hasura:8080/v1/graphql"
-
   # Feature Flags
+  PROFILE_RESOLUTION_ENABLED: "true"
   ENABLE_RECURRING_EVENTS: "true"
   ENABLE_CONFLICT_DETECTION: "true"
   ENABLE_TIMEZONE_CONVERSION: "true"

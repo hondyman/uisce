@@ -95,10 +95,8 @@ services:
       POSTGRES_PASSWORD: "calendar_password"
       POSTGRES_DB: "calendar_service"
       
-      # Remote Services (Redpanda, Redis, Hasura - configure with actual remote endpoints)
+      # Remote Services (Redpanda, Redis - configure with actual remote endpoints)
       REDPANDA_BROKERS: "redpanda:9092"
-      HASURA_ENDPOINT: "http://YOUR_REMOTE_HOST:8080/v1/graphql"
-      HASURA_ADMIN_SECRET: "your_hasura_admin_secret"
       REDIS_URL: "redis://redis:6379/0"
       
       # Optional: Temporal Workflow Orchestration

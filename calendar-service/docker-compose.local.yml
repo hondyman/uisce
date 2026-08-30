@@ -134,10 +134,6 @@ services:
       REDPANDA_BROKERS: "redpanda:9092"
       REDIS_URL: "redis://redis:6379/0"
       
-      # Remote Services (configured externally)
-      HASURA_ENDPOINT: "${HASURA_ENDPOINT:-http://localhost:8080/v1/graphql}"
-      HASURA_ADMIN_SECRET: "${HASURA_ADMIN_SECRET:-}"
-      
       # Temporal (local)
       TEMPORAL_HOST: "temporal"
       TEMPORAL_PORT: "7233"
