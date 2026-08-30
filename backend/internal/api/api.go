@@ -508,7 +508,7 @@ func (s *Server) getSemanticBundle(w http.ResponseWriter, r *http.Request) {
 	defer tx.Rollback()
 
 	// Set RLS context for this request
-	if _, err := tx.ExecContext(r.Context(), "SELECT set_config('hasura.tenant_id', $1, true)", tenantID); err != nil {
+	if _, err := tx.ExecContext(r.Context(), "SELECT set_config('app.tenant_id', $1, true)", tenantID); err != nil {
 		http.Error(w, fmt.Sprintf("Failed to set tenant context: %v", err), http.StatusInternalServerError)
 		return
 	}
@@ -763,7 +763,7 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 			}
 
 			// Centralize allowed headers so we can extend them safely
-			allowedHeaders := "Origin, X-Requested-With, Content-Type, Accept, Authorization, X-Request-ID, X-API-Key, X-Datasource-Id, X-Region, X-Tenant-Datasource-ID, X-Tenant-ID, X-User-ID, X-Tenant-Region, X-Hasura-Admin-Secret"
+			allowedHeaders := "Origin, X-Requested-With, Content-Type, Accept, Authorization, X-Request-ID, X-API-Key, X-Datasource-Id, X-Region, X-Tenant-Datasource-ID, X-Tenant-ID, X-User-ID, X-Tenant-Region"
 
 			if isAllowed {
 				w.Header().Set("Access-Control-Allow-Origin", origin)
@@ -1193,7 +1193,7 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 	testConnectionHandler := handlers.NewTestConnectionHandler(catalogScanService)
 	srv.TestConnectionHandler = testConnectionHandler
 
-	// Initialize Instance Clone Handler (Hasura Event Trigger)
+	// Initialize Instance Clone Handler (event-trigger webhook)
 	instanceCloneHandler := handlers.NewInstanceCloneHandler(sqlxDB)
 	instanceCloneHandler.RegisterRoutes(r)
 
@@ -1425,8 +1425,7 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 	// Start the WebSocket hub
 	go srv.WsHub.run()
 
-	// DISABLED: Internal GraphQL engine - now using Hasura exclusively
-	// RegisterGraphQLPlayground(r)
+	// DISABLED: Internal GraphQL engine
 
 	// Start real-time updates simulation
 	go srv.simulateRealTimeUpdates()
@@ -1541,8 +1540,7 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 		// r.Use(appmid.SessionAuthMiddleware(appmid.SessionAuthConfig{DB: db, SessionCookie: "session_token", AllowBearerFallback: true}))
 		// r.Use(srv.auditMiddleware())
 
-		// DISABLED: Internal GraphQL API endpoint - now using Hasura exclusively
-		// RegisterGraphQLAPI(r, db)
+		// DISABLED: Internal GraphQL API endpoint
 
 		// --- Modular Service Registrations ---
 		srv.registerTemplateRoutes(r)
@@ -3715,13 +3713,13 @@ func (s *Server) handleBusinessTermFeedback(w http.ResponseWriter, r *http.Reque
 	json.NewEncoder(w).Encode(result)
 }
 
-// registerTemporalWebhookRoute mounts the Hasura event trigger webhook for Temporal
+// registerTemporalWebhookRoute mounts a generic internal event webhook for Temporal
 func (s *Server) registerTemporalWebhookRoute(r chi.Router) {
 	r.Post("/temporal", s.handleTemporalWebhook)
 }
 
 func (s *Server) handleTemporalWebhook(w http.ResponseWriter, r *http.Request) {
-	// Generic Hasura webhook adapter: decode the incoming payload and forward to the EventBus if available.
+	// Generic webhook adapter: decode the incoming payload and forward to the EventBus if available.
 	var payload map[string]interface{}
 	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
 		logging.GetLogger().Sugar().Warnf("temporal webhook: failed to decode payload: %v", err)
@@ -3730,7 +3728,7 @@ func (s *Server) handleTemporalWebhook(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Determine a routing key / event name from common fields if present.
-	eventName := "hasura.event"
+	eventName := "webhook.event"
 	if e, ok := payload["event"].(string); ok && e != "" {
 		eventName = e
 	} else if e, ok := payload["type"].(string); ok && e != "" {

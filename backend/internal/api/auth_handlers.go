@@ -139,7 +139,7 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) {
 
 	fmt.Fprintf(os.Stderr, "[AUTH] Login successful for user %s (%s)\n", user.ID, user.Email)
 
-	// Generate JWT token for Hasura with tenant context
+	// Generate JWT token with tenant context
 	allowedRoles := []string{"user"}
 	defaultRole := "user"
 
@@ -154,15 +154,15 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) {
 		allowedRoles = append(allowedRoles, user.Role)
 	}
 
-	hasuraClaims := map[string]interface{}{
-		"x-hasura-allowed-roles": allowedRoles,
-		"x-hasura-default-role":  defaultRole,
-		"x-hasura-user-id":       user.ID,
+	appClaims := map[string]interface{}{
+		"x-app-allowed-roles": allowedRoles,
+		"x-app-default-role":  defaultRole,
+		"x-app-user-id":       user.ID,
 	}
 
-	// Add tenant_id to Hasura claims for RLS filtering
+	// Add tenant_id to app claims for RLS filtering
 	if tenantID.Valid {
-		hasuraClaims["x-hasura-tenant-id"] = tenantID.String
+		appClaims["x-app-tenant-id"] = tenantID.String
 		user.TenantID = tenantID.String
 	}
 
@@ -177,7 +177,7 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) {
 		"is_core_admin":                user.IsCoreAdmin,
 		"iat":                          time.Now().Unix(),
 		"exp":                          time.Now().Add(time.Hour).Unix(),
-		"https://hasura.io/jwt/claims": hasuraClaims,
+		"https://uisce.io/jwt/claims": appClaims,
 	}
 
 	jwtToken, jwtErr := s.SecMgr.SignToken(jwtClaims)
