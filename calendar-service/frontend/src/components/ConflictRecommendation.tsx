@@ -54,7 +54,7 @@ const ConflictRecommendation: React.FC<ConflictRecommendationProps> = ({
       setLoadingML(true);
       const response = await fetch(`/api/v1/ml/conflicts/${conflictId}/recommend`, {
         headers: {
-          'X-Hasura-Tenant-Id': localStorage.getItem('tenant_id') || '',
+          'Authorization': `Bearer ${localStorage.getItem('auth_token') || ''}`,
         },
       });
       

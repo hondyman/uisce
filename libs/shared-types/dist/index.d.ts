@@ -190,10 +190,6 @@ export interface ServiceConfig {
         host: string;
         namespace: string;
     };
-    hasura?: {
-        endpoint: string;
-        adminSecret: string;
-    };
     ai?: {
         apiKey: string;
         baseURL: string;

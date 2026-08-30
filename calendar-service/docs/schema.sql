@@ -75,12 +75,12 @@ CREATE INDEX idx_calendars_holidays ON calendars USING GIN (holidays);
 CREATE INDEX idx_calendars_tags ON calendars USING GIN (tags); 
     -- Tag-based filtering
 
--- Row-Level Security (enforced via Hasura session variable)
+-- Row-Level Security (enforced via app-set session variable)
 ALTER TABLE calendars ENABLE ROW LEVEL SECURITY;
 CREATE POLICY calendars_tenant_isolation ON calendars
     USING (tenant_id = current_setting('request.tenant_id')::uuid);
 COMMENT ON POLICY calendars_tenant_isolation ON calendars IS 
-    'Enforced via Hasura X-Hasura-Tenant-Id session variable';
+    'Enforced via the app-set request.tenant_id session variable';
 
 -- Schedule Profiles: Combine multiple calendars with conflict resolution rules
 CREATE TABLE IF NOT EXISTS schedule_profiles (

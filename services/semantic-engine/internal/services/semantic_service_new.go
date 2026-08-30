@@ -75,14 +75,12 @@ func (s *SemanticService) CalculateSemanticModel(ctx context.Context, request sh
 		return nil, fmt.Errorf("AI processing failed: %w", err)
 	}
 
-	// Store result in Hasura
+	// Build result
 	result := &sharedtypes.SemanticCalculationResponse{
 		ModelID:     request.ModelID,
 		Result:      s.extractAIResponse(aiResponse),
 		ProcessedAt: time.Now(),
 	}
-
-	// TODO: Store in Hasura GraphQL
 
 	return result, nil
 }

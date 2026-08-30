@@ -36,14 +36,14 @@ func UMAAlpha(ctx workflow.Context, umaID string) error {
 		return fmt.Errorf("trade execution failed: %w", err)
 	}
 
-	// 4. Update Hasura
+	// 4. Record rebalance result
 	update := map[string]any{
 		"uma_id":    umaID,
 		"status":    "alpha_rebalanced",
 		"tax_saved": harvest["saved"],
 	}
 	if err := workflow.ExecuteActivity(ctx, activities.UpdateRebalanceRecord, update).Get(ctx, nil); err != nil {
-		return fmt.Errorf("Hasura update failed: %w", err)
+		return fmt.Errorf("failed to record rebalance result: %w", err)
 	}
 
 	return nil

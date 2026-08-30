@@ -9,7 +9,7 @@
 # - Workday-style business object relationships
 #
 # Compatible with:
-# - Hasura (auto-tracked from PostgreSQL)
+# - Auto-tracked from PostgreSQL by the catalog service
 # - gqlgen + Go resolvers
 # - Apollo Server with custom resolvers
 # ============================================================================

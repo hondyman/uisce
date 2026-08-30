@@ -26,11 +26,6 @@ func NewActivityContext(db *sql.DB) *ActivityContext {
 
 // FetchYesterdaysTrades fetches all trades from yesterday
 func FetchYesterdaysTrades(ctx context.Context, db *sql.DB) ([]models.Trade, error) {
-	// TODO: Refactor to Hasura GraphQL
-	// query { trades(
-	//   where: {trade_date: {_gte: $start_date, _lt: $end_date}}
-	//   order_by: {trade_date: desc}
-	// ) { id portfolio_id symbol action shares price trade_date settle_date custodian status metadata }}
 	yesterday := time.Now().AddDate(0, 0, -1)
 	startOfDay := time.Date(yesterday.Year(), yesterday.Month(), yesterday.Day(), 0, 0, 0, 0, yesterday.Location())
 	endOfDay := startOfDay.AddDate(0, 0, 1)
@@ -65,12 +60,6 @@ func FetchYesterdaysTrades(ctx context.Context, db *sql.DB) ([]models.Trade, err
 
 // FetchTradeConfirms fetches unprocessed trade confirmations
 func FetchTradeConfirms(ctx context.Context, db *sql.DB) ([]models.TradeConfirm, error) {
-	// TODO: Refactor to Hasura GraphQL
-	// query { trade_confirms(
-	//   where: {received_at: {_gt: $since}}
-	//   order_by: {received_at: desc}
-	// ) { id source raw_data parsed received_at created_at }}
-	// Fetch confirms received in last 48 hours
 	since := time.Now().Add(-48 * time.Hour)
 
 	rows, err := db.QueryContext(ctx, `
@@ -168,11 +157,6 @@ func NotifyDiscrepancy(ctx context.Context, discrepancy models.Discrepancy) erro
 
 // AutoResolveDiscrepancy marks low-severity discrepancies as resolved
 func AutoResolveDiscrepancy(ctx context.Context, db *sql.DB, discrepancy models.Discrepancy) error {
-	// TODO: Refactor to Hasura GraphQL
-	// mutation { update_reconciliation_tasks(
-	//   where: {discrepancy_id: {_eq: $discrepancy_id}}
-	//   _set: {status: "resolved", resolved_at: $now, updated_at: $now}
-	// ) { affected_rows }}
 	now := time.Now()
 	_, err := db.ExecContext(ctx, `
 		UPDATE reconciliation_tasks 

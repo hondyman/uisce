@@ -52,12 +52,6 @@ func (rb *ReportBuilder) GetSemanticViewsForReporting(ctx context.Context, tenan
 		return nil, fmt.Errorf("invalid tenant ID: %w", err)
 	}
 
-	// TODO: Refactor to Hasura GraphQL
-	// query { semantic_views(
-	//   where: {tenant_id: {_eq: $tenantId}, is_published: {_eq: true}}
-	//   order_by: {name: asc}
-	// ) { id name description tenant_id entity_type semantic_content created_at updated_at }}
-	// JSONB field: semantic_content
 	rows, err := rb.db.QueryContext(ctx, `
 		SELECT id, name, description, tenant_id, entity_type, semantic_content, created_at, updated_at
 		FROM semantic_views
@@ -376,12 +370,6 @@ func (rb *ReportBuilder) SaveReportTemplate(ctx context.Context, template *Repor
 		return fmt.Errorf("failed to marshal rules: %w", err)
 	}
 
-	// TODO: Refactor to Hasura GraphQL
-	// mutation { update_report_templates_by_pk(
-	//   pk_columns: {id: $id}
-	//   _set: {sections: $sections, filters: $filters, rules: $rules, updated_at: $updated_at}
-	// ) { id }}
-	// JSONB fields: sections, filters, rules
 	_, err = rb.db.ExecContext(ctx, `
 		UPDATE report_templates 
 		SET sections = $1, filters = $2, rules = $3, updated_at = $4

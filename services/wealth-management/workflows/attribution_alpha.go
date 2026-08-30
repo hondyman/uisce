@@ -36,7 +36,7 @@ func AttributionAlpha(ctx workflow.Context, portfolioID string) error {
 		return fmt.Errorf("attribution execution failed: %w", err)
 	}
 
-	// 4. Update Hasura
+	// 4. Record rebalance result
 	update := map[string]any{
 		"portfolio_id": portfolioID,
 		"status":       "alpha_attributed",
@@ -44,7 +44,7 @@ func AttributionAlpha(ctx workflow.Context, portfolioID string) error {
 		"sector":       attr["sector"],
 	}
 	if err := workflow.ExecuteActivity(ctx, activities.UpdateRebalanceRecord, update).Get(ctx, nil); err != nil {
-		return fmt.Errorf("Hasura update failed: %w", err)
+		return fmt.Errorf("failed to record rebalance result: %w", err)
 	}
 
 	return nil

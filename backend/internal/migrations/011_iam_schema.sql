@@ -89,7 +89,7 @@ CREATE INDEX idx_iam_security_events_processed ON iam.security_events(processed)
 -- Sync status tracking (which systems have processed each event)
 CREATE TABLE IF NOT EXISTS iam.sync_status (
     event_id UUID REFERENCES iam.security_events(event_id) ON DELETE CASCADE,
-    system VARCHAR(50) NOT NULL, -- 'postgresql', 'hasura', 'superset', 'starrocks'
+    system VARCHAR(50) NOT NULL, -- 'postgresql', 'superset', 'starrocks'
     status VARCHAR(20) NOT NULL CHECK (status IN ('pending', 'processing', 'success', 'failed')),
     error_message TEXT,
     synced_at TIMESTAMPTZ,
@@ -122,9 +122,8 @@ BEGIN
     
     -- Initialize sync status for all systems
     INSERT INTO iam.sync_status (event_id, system, status)
-    VALUES 
+    VALUES
         (v_event_id, 'postgresql', 'pending'),
-        (v_event_id, 'hasura', 'pending'),
         (v_event_id, 'superset', 'pending'),
         (v_event_id, 'starrocks', 'pending');
     

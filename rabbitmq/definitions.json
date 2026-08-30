@@ -44,16 +44,6 @@
             }
         },
         {
-            "name": "security_sync.hasura",
-            "vhost": "/",
-            "durable": true,
-            "auto_delete": false,
-            "arguments": {
-                "x-message-ttl": 86400000,
-                "x-max-length": 100000
-            }
-        },
-        {
             "name": "security_sync.superset",
             "vhost": "/",
             "durable": true,
@@ -79,14 +69,6 @@
             "source": "security_sync_exchange",
             "vhost": "/",
             "destination": "security_sync.postgresql",
-            "destination_type": "queue",
-            "routing_key": "security_sync.iam.#",
-            "arguments": {}
-        },
-        {
-            "source": "security_sync_exchange",
-            "vhost": "/",
-            "destination": "security_sync.hasura",
             "destination_type": "queue",
             "routing_key": "security_sync.iam.#",
             "arguments": {}

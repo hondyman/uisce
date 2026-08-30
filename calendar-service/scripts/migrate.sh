@@ -159,7 +159,7 @@ echo ""
 echo "Next steps:"
 echo "  1. Start services: make dev"
 echo "  2. Test health: curl http://localhost:8081/health"
-echo "  3. List calendars: curl http://localhost:8081/api/v1/calendars -H 'X-Hasura-Tenant-Id: 550e8400-e29b-41d4-a716-446655440000'"
+echo "  3. List calendars: curl http://localhost:8081/api/v1/calendars -H 'Authorization: Bearer <jwt>'"
 echo ""
 
 unset PGPASSWORD

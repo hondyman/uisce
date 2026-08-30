@@ -10,7 +10,6 @@ const successCounter = new Counter('successes');
 // Configuration
 const BASE_URL = __ENV.BASE_URL || 'http://localhost:8080';
 const JWT_TOKEN = __ENV.JWT_TOKEN || 'test-jwt-token';
-const TENANT_ID = __ENV.TENANT_ID || '550e8400-e29b-41d4-a716-446655440000';
 
 export const options = {
   // Ramp up to 50 virtual users over 5 minutes, stay for 10 minutes, ramp down over 5 minutes
@@ -44,7 +43,6 @@ export function setup() {
     headers: {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${JWT_TOKEN}`,
-      'X-Hasura-Tenant-Id': TENANT_ID,
     },
   });
 
@@ -78,7 +76,6 @@ export default function (data) {
     let listRes = http.get(`${BASE_URL}/api/v1/calendars?limit=10&offset=0`, {
       headers: {
         'Authorization': `Bearer ${JWT_TOKEN}`,
-        'X-Hasura-Tenant-Id': TENANT_ID,
       },
     });
 
@@ -93,7 +90,6 @@ export default function (data) {
       let getRes = http.get(`${BASE_URL}/api/v1/calendars/${calendarId}`, {
         headers: {
           'Authorization': `Bearer ${JWT_TOKEN}`,
-          'X-Hasura-Tenant-Id': TENANT_ID,
         },
       });
 
@@ -116,7 +112,6 @@ export default function (data) {
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${JWT_TOKEN}`,
-        'X-Hasura-Tenant-Id': TENANT_ID,
       },
     });
 
@@ -139,7 +134,6 @@ export default function (data) {
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${JWT_TOKEN}`,
-        'X-Hasura-Tenant-Id': TENANT_ID,
       },
     });
 
@@ -156,7 +150,6 @@ export default function (data) {
       let listProfileRes = http.get(`${BASE_URL}/api/v1/profiles?limit=10&offset=0`, {
         headers: {
           'Authorization': `Bearer ${JWT_TOKEN}`,
-          'X-Hasura-Tenant-Id': TENANT_ID,
         },
       });
 
@@ -170,7 +163,6 @@ export default function (data) {
       let getProfileRes = http.get(`${BASE_URL}/api/v1/profiles/${profileId}`, {
         headers: {
           'Authorization': `Bearer ${JWT_TOKEN}`,
-          'X-Hasura-Tenant-Id': TENANT_ID,
         },
       });
 
@@ -188,7 +180,6 @@ export default function (data) {
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${JWT_TOKEN}`,
-          'X-Hasura-Tenant-Id': TENANT_ID,
         },
       });
 
@@ -211,7 +202,6 @@ export default function (data) {
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${JWT_TOKEN}`,
-        'X-Hasura-Tenant-Id': TENANT_ID,
       },
     });
 
@@ -228,7 +218,6 @@ export default function (data) {
       let listSyncRes = http.get(`${BASE_URL}/api/v1/external-sync`, {
         headers: {
           'Authorization': `Bearer ${JWT_TOKEN}`,
-          'X-Hasura-Tenant-Id': TENANT_ID,
         },
       });
 
@@ -242,7 +231,6 @@ export default function (data) {
       let logsRes = http.get(`${BASE_URL}/api/v1/external-sync/${syncId}/logs?limit=10&offset=0`, {
         headers: {
           'Authorization': `Bearer ${JWT_TOKEN}`,
-          'X-Hasura-Tenant-Id': TENANT_ID,
         },
       });
 
@@ -258,7 +246,6 @@ export default function (data) {
     const notFoundRes = http.get(`${BASE_URL}/api/v1/calendars/00000000-0000-0000-0000-000000000000`, {
       headers: {
         'Authorization': `Bearer ${JWT_TOKEN}`,
-        'X-Hasura-Tenant-Id': TENANT_ID,
       },
     });
 
@@ -276,7 +263,6 @@ export default function (data) {
     const crossTenantRes = http.get(`${BASE_URL}/api/v1/calendars`, {
       headers: {
         'Authorization': `Bearer ${JWT_TOKEN}`,
-        'X-Hasura-Tenant-Id': '00000000-0000-0000-0000-000000000000',
       },
     });
 

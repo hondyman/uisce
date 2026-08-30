@@ -4,7 +4,7 @@ setup:
 	docker-compose up -d postgres redpanda
 	sleep 5
 	psql -U postgres -h localhost -f schema.sql
-	docker-compose up -d temporal hasura
+	docker-compose up -d temporal
 
 start:
 	docker-compose up -d
