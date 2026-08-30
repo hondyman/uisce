@@ -17,12 +17,6 @@ import (
 	twilioApi "github.com/twilio/twilio-go/rest/api/v2010"
 )
 
-// HasuraClient interface for GraphQL operations
-type HasuraClient interface {
-	Query(query string, variables map[string]interface{}) (map[string]interface{}, error)
-	Mutate(mutation string, variables map[string]interface{}) (map[string]interface{}, error)
-}
-
 // Notification types
 type Notification struct {
 	ID          string          `json:"id"`
@@ -54,7 +48,6 @@ type NotificationDelivery struct {
 // Notification service
 type NotificationService struct {
 	db             *sql.DB
-	hasuraClient   HasuraClient
 	mailFrom       string
 	smtpHost       string
 	smtpPort       string
@@ -96,37 +89,6 @@ func NewNotificationService(db *sql.DB) (*NotificationService, error) {
 	}
 
 	// Start worker goroutines
-	for i := 0; i < 5; i++ {
-		service.wg.Add(1)
-		go service.processQueue()
-	}
-
-	return service, nil
-}
-
-// NewNotificationServiceWithHasura creates a service with Hasura support
-func NewNotificationServiceWithHasura(db *sql.DB, hasuraClient HasuraClient) (*NotificationService, error) {
-	twilioClient := twilio.NewRestClient()
-	ctx, cancel := context.WithCancel(context.Background())
-
-	service := &NotificationService{
-		db:             db,
-		hasuraClient:   hasuraClient,
-		mailFrom:       os.Getenv("SMTP_FROM_EMAIL"),
-		smtpHost:       os.Getenv("SMTP_HOST"),
-		smtpPort:       os.Getenv("SMTP_PORT"),
-		smtpPassword:   os.Getenv("SMTP_PASSWORD"),
-		twilioClient:   twilioClient,
-		twilioPhoneNum: os.Getenv("TWILIO_PHONE_NUMBER"),
-		pusherAppID:    os.Getenv("PUSHER_APP_ID"),
-		pusherKey:      os.Getenv("PUSHER_KEY"),
-		pusherSecret:   os.Getenv("PUSHER_SECRET"),
-		pusherCluster:  os.Getenv("PUSHER_CLUSTER"),
-		queue:          make(chan *Notification, 1000),
-		ctx:            ctx,
-		cancel:         cancel,
-	}
-
 	for i := 0; i < 5; i++ {
 		service.wg.Add(1)
 		go service.processQueue()
@@ -418,7 +380,7 @@ func (ns *NotificationService) HealthCheck() map[string]interface{} {
 	}
 }
 
-// Helper methods for Hasura/SQL operations
+// Helper methods for direct SQL operations
 
 func (ns *NotificationService) getUserEmailRecord(userID string) (string, error) {
 	// Note: Using SQL fallback for simple SELECT

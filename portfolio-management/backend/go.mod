@@ -28,6 +28,4 @@ require (
 	golang.org/x/text v0.24.0 // indirect
 )
 
-replace github.com/hondyman/uisce/libs/hasura-client => ../../libs/hasura-client
-
 replace github.com/hondyman/uisce/libs/db/queries => ../../libs/db/queries
