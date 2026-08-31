@@ -5,6 +5,9 @@ import { APIEndpoint } from '../../types/apiStudio';
 import APIPreview from './APIPreview';
 import UsageDashboard from './UsageDashboard';
 import { ApiStudioApi } from '../../api/apiStudio';
+import ExpressionBuilder from '../../components/ExpressionBuilder/ExpressionBuilder';
+import { ConditionGroup } from '../../components/ExpressionBuilder/AdvancedConditionBuilder';
+import { Rule as RuleIcon } from '@mui/icons-material';
 
 interface APIEndpointEditorProps {
     endpoint: Partial<APIEndpoint>;
@@ -92,6 +95,7 @@ const APIEndpointEditor: React.FC<APIEndpointEditorProps> = ({ endpoint, bo, onS
             <Tabs value={activeTab} onChange={(_, v) => setActiveTab(v)} sx={{ mb: 2 }}>
                 <Tab label="Configuration" />
                 <Tab label="Data Preview & Spec" />
+                <Tab label="Rules" icon={<RuleIcon fontSize="small" />} iconPosition="start" />
                 <Tab label="Usage & Governance" icon={<AnalyticsIcon fontSize="small" />} iconPosition="start" />
             </Tabs>
 
@@ -156,6 +160,28 @@ const APIEndpointEditor: React.FC<APIEndpointEditorProps> = ({ endpoint, bo, onS
                 )}
 
                 {activeTab === 2 && (
+                    <Box>
+                        <Typography variant="subtitle2" gutterBottom>
+                            Request/Response Rule
+                        </Typography>
+                        <Typography variant="body2" color="textSecondary" sx={{ mb: 2 }}>
+                            Runs against api_request/api_response trigger events for this endpoint
+                            (evaluated the same way BO row-event and Page Studio rules are).
+                        </Typography>
+                        <ExpressionBuilder
+                            ruleName={`api-endpoint-${form.path || 'new'}`}
+                            targetEntity={form.bo_name}
+                            availableFields={(bo?.fields || []).map((f: any) => ({
+                                name: f.key,
+                                label: f.displayName || f.name,
+                                type: f.type || 'string',
+                            }))}
+                            onChange={(cj: ConditionGroup) => setForm({ ...form, filters: cj })}
+                        />
+                    </Box>
+                )}
+
+                {activeTab === 3 && (
                     <Box>
                         <UsageDashboard endpoint={form} />
                         <Divider sx={{ my: 4 }} />
