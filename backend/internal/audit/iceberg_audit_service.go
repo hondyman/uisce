@@ -100,19 +100,14 @@ func (s *IcebergAuditService) WriteEvent(ctx context.Context, event events.GoldC
 	objectPath := fmt.Sprintf("year=%d/month=%02d/day=%02d/%s.parquet",
 		t.Year(), t.Month(), t.Day(), event.EventID)
 
-	// Upload to MinIO
-	// Ensure bucket exists first? (Optimization: assume exists or check once)
-	exists, err := s.client.BucketExists(ctx, s.bucketName)
-	if err != nil {
-		return fmt.Errorf("failed to check bucket existence: %w", err)
-	}
-	if !exists {
-		if err := s.client.MakeBucket(ctx, s.bucketName, minio.MakeBucketOptions{}); err != nil {
-			return fmt.Errorf("failed to create bucket: %w", err)
-		}
+	// Each tenant's audit records live in their own bucket so no tenant's
+	// data physically shares storage with another tenant's audit log.
+	bucket := fmt.Sprintf("%s-%s", s.bucketName, sanitizeBucketSegment(event.TenantID))
+	if err := ensureBucket(ctx, s.client, bucket); err != nil {
+		return err
 	}
 
-	_, err = s.client.PutObject(ctx, s.bucketName, objectPath, &buf, int64(buf.Len()), minio.PutObjectOptions{
+	_, err := s.client.PutObject(ctx, bucket, objectPath, &buf, int64(buf.Len()), minio.PutObjectOptions{
 		ContentType: "application/octet-stream",
 	})
 	if err != nil {

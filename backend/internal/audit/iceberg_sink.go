@@ -33,6 +33,50 @@ type IcebergWriter struct {
 	CatalogURI string
 }
 
+// tenantBucket returns the per-tenant Iceberg bucket name, isolating each
+// tenant's audit data in a separate bucket rather than a shared bucket
+// filtered by a tenant_id column/prefix. GSIFI-tenant data must not share
+// physical storage with any other tenant's audit records.
+func (w *IcebergWriter) tenantBucket(tenantID string) string {
+	return fmt.Sprintf("%s-%s", w.BucketName, sanitizeBucketSegment(tenantID))
+}
+
+// ensureBucket creates the given bucket if it does not already exist.
+func ensureBucket(ctx context.Context, client *minio.Client, bucket string) error {
+	exists, err := client.BucketExists(ctx, bucket)
+	if err != nil {
+		return fmt.Errorf("check bucket %s: %w", bucket, err)
+	}
+	if !exists {
+		if err := client.MakeBucket(ctx, bucket, minio.MakeBucketOptions{}); err != nil {
+			return fmt.Errorf("create bucket %s: %w", bucket, err)
+		}
+	}
+	return nil
+}
+
+// sanitizeBucketSegment lower-cases and strips characters that are not
+// valid in an S3 bucket name segment (only lowercase alphanumerics and
+// hyphens are kept).
+func sanitizeBucketSegment(s string) string {
+	if s == "" {
+		return "global"
+	}
+	var b strings.Builder
+	for _, r := range strings.ToLower(s) {
+		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || r == '-' {
+			b.WriteRune(r)
+		} else {
+			b.WriteRune('-')
+		}
+	}
+	out := strings.Trim(b.String(), "-")
+	if out == "" {
+		return "global"
+	}
+	return out
+}
+
 type auditEventParquet struct {
 	EventID    string `parquet:"name=event_id"`
 	EventType  string `parquet:"name=event_type"`
@@ -83,7 +127,7 @@ func NewIcebergSinkConsumer(bootstrapServers, groupID string, topics []string, w
 		readers:       readers,
 		icebergWriter: writer,
 		eventBuffer:   make([]KafkaEventEnvelope, 0, 1000),
-		batchSize:    1000,
+		batchSize:     1000,
 		flushInterval: 30 * time.Second,
 		stopChan:      make(chan struct{}),
 		running:       false,
@@ -261,21 +305,25 @@ func (c *IcebergSinkConsumer) writeParquetBatch(ctx context.Context, tenantID, t
 		return fmt.Errorf("parquet close: %w", err)
 	}
 
-	objectKey := fmt.Sprintf("%s/audit/%s/data/%s-%s.parquet",
-		tenantID,
+	bucket := c.icebergWriter.tenantBucket(tenantID)
+	if err := ensureBucket(ctx, c.icebergWriter.S3Client, bucket); err != nil {
+		return err
+	}
+
+	objectKey := fmt.Sprintf("audit/%s/data/%s-%s.parquet",
 		topic,
 		time.Now().Format("20060102-150405"),
 		shortUUID(),
 	)
 
-	_, err := c.icebergWriter.S3Client.PutObject(ctx, c.icebergWriter.BucketName, objectKey, bytes.NewReader(buf.Bytes()), int64(buf.Len()), minio.PutObjectOptions{
+	_, err := c.icebergWriter.S3Client.PutObject(ctx, bucket, objectKey, bytes.NewReader(buf.Bytes()), int64(buf.Len()), minio.PutObjectOptions{
 		ContentType: "application/octet-stream",
 	})
 	if err != nil {
-		return fmt.Errorf("S3 put %s: %w", objectKey, err)
+		return fmt.Errorf("S3 put %s/%s: %w", bucket, objectKey, err)
 	}
 
-	log.Printf("[Audit-Sink] Uploaded s3://%s/%s (%d bytes)", c.icebergWriter.BucketName, objectKey, buf.Len())
+	log.Printf("[Audit-Sink] Uploaded s3://%s/%s (%d bytes)", bucket, objectKey, buf.Len())
 	return nil
 }
 
