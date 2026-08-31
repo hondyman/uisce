@@ -8,17 +8,24 @@ import {
   getRemediationLabel,
   getPriorityColor,
 } from "../hooks/useRCA";
+import { useExceptionAISuggestion } from "../hooks/useExceptions";
 import "./IntelligentRCAPanel.css";
 
 interface IntelligentRCAPanelProps {
   rca: RCAResult;
   isLoading?: boolean;
+  /** When set, fetches a real AI-generated root-cause/fix suggestion for this platform exception. */
+  exceptionId?: string | null;
 }
 
 export const IntelligentRCAPanel: React.FC<IntelligentRCAPanelProps> = ({
   rca,
   isLoading = false,
+  exceptionId = null,
 }) => {
+  const { data: aiSuggestion, isLoading: isAILoading } =
+    useExceptionAISuggestion(exceptionId);
+
   if (isLoading) {
     return (
       <div className="intelligent-rca-panel loading">
@@ -126,6 +133,20 @@ export const IntelligentRCAPanel: React.FC<IntelligentRCAPanelProps> = ({
           </div>
         </div>
       </div>
+
+      {/* AI Suggestion Section */}
+      {exceptionId && (
+        <div className="rca-section">
+          <h3 className="section-title">🤖 AI Root-Cause &amp; Fix Suggestion</h3>
+          <div className="root-cause-card">
+            {isAILoading ? (
+              <p className="no-data">Generating AI suggestion...</p>
+            ) : (
+              <p>{aiSuggestion?.suggestion ?? "No AI suggestion available for this exception."}</p>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Causality Chain Section */}
       {chain.length > 0 && (

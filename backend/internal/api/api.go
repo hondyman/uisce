@@ -54,6 +54,10 @@ import (
 	"github.com/hondyman/uisce/backend/internal/lineage"
 	"github.com/hondyman/uisce/backend/internal/logging"
 	"github.com/hondyman/uisce/backend/internal/mdm"
+	"github.com/hondyman/uisce/backend/internal/platform_intelligence/exceptions"
+	"github.com/hondyman/uisce/backend/internal/platform_intelligence/health"
+	"github.com/hondyman/uisce/backend/internal/platform_intelligence/optimization"
+	"github.com/hondyman/uisce/backend/internal/platform_intelligence/roadmap"
 	"github.com/hondyman/uisce/backend/internal/master/customer"
 	"github.com/hondyman/uisce/backend/internal/master/personnel"
 	"github.com/hondyman/uisce/backend/internal/master/sales_ledger"
@@ -1577,6 +1581,7 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 		srv.registerBOCRUDRoutes(r, sqlxDB)
 		srv.registerNBAEngineRoutes(r, sqlxDB)
 		srv.registerBillingRoutes(r)
+		srv.registerPlatformIntelligenceRoutes(r, sqlxDB)
 		srv.registerFeedbackRoutes(r)
 		srv.registerTemporalAdminRoutes(r, db)
 		srv.registerAlphaTemporalRoutes(r, temporalClient)
@@ -3647,6 +3652,31 @@ func (s *Server) registerBillingRoutes(r chi.Router) {
 	invoiceSvc := billing.NewInvoiceService(platformBillingSvc, invoiceStore)
 	invoiceHandlers := NewInvoiceHandlers(invoiceSvc)
 	invoiceHandlers.RegisterRoutes(r)
+}
+
+// registerPlatformIntelligenceRoutes mounts the platform intelligence console:
+// global optimization proposals, the centralized exceptions hub (with
+// per-tenant autofix policy, rerun/close, and AI-assist endpoints), platform
+// health score, and the AI-generated roadmap.
+func (s *Server) registerPlatformIntelligenceRoutes(r chi.Router, sqlxDB *sqlx.DB) {
+	globalOptimizer := optimization.NewGlobalOptimizer()
+	exceptionAggregator := exceptions.NewExceptionAggregator(sqlxDB)
+	healthScorer := health.NewHealthScorer()
+	roadmapGenerator := roadmap.NewRoadmapGenerator()
+
+	piHandler := handlers.NewPlatformIntelligenceHandler(globalOptimizer, exceptionAggregator, healthScorer, roadmapGenerator)
+
+	// AI assist is optional: only wire it when an Anthropic key is
+	// configured (platform default or BYOK-only tenants still work via
+	// ProviderDispatcher; endpoints degrade gracefully if nothing is wired).
+	anthropicKey := os.Getenv("ANTHROPIC_API_KEY")
+	dispatcher := ai.NewProviderDispatcher(sqlxDB)
+	anthropicClient := ai.NewAnthropicClient(dispatcher, anthropicKey)
+	piHandler.WithExceptionAI(ai.NewExceptionAIService(anthropicClient))
+
+	r.Route("/platform-intelligence", func(r chi.Router) {
+		r.Mount("/", piHandler.Routes())
+	})
 }
 
 // registerFeedbackRoutes mounts the business term suggestion feedback endpoint

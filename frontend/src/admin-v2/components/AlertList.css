@@ -48,3 +48,48 @@
   background: rgba(107, 114, 128, 0.2);
   color: #d1d5db;
 }
+
+.alert-list-tabs {
+  display: flex;
+  gap: var(--spacing-sm, 8px);
+  margin-bottom: var(--spacing-md);
+}
+
+.btn-active {
+  background: var(--color-accent);
+  color: #fff;
+}
+
+.exception-row-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.occurrence-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.alert-severity-critical {
+  background: rgba(239, 68, 68, 0.2);
+  color: #fca5a5;
+}
+
+.alert-severity-high {
+  background: rgba(249, 115, 22, 0.2);
+  color: #fdba74;
+}
+
+.alert-severity-medium {
+  background: rgba(234, 179, 8, 0.2);
+  color: #fde68a;
+}
+
+.alert-severity-low {
+  background: rgba(107, 114, 128, 0.2);
+  color: #d1d5db;
+}

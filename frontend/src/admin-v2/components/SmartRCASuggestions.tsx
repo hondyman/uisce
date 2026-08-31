@@ -1,6 +1,7 @@
 import React, { useMemo } from "react";
 import { RCAResult } from "../hooks/useRCA";
 import { IncidentPattern, IncidentSimilarity } from "../hooks/usePatterns";
+import { useExceptionAISuggestion } from "../hooks/useExceptions";
 import "./SmartRCASuggestions.css";
 
 interface SmartRCASuggestionsProps {
@@ -9,6 +10,8 @@ interface SmartRCASuggestionsProps {
   similarities: IncidentSimilarity[];
   onSuggestedActionClick?: (actionType: string) => void;
   isLoading?: boolean;
+  /** When set, fetches a real AI-generated suggestion for this platform exception. */
+  exceptionId?: string | null;
 }
 
 interface SmartSuggestion {
@@ -28,10 +31,16 @@ export const SmartRCASuggestions: React.FC<SmartRCASuggestionsProps> = ({
   similarities,
   onSuggestedActionClick,
   isLoading = false,
+  exceptionId = null,
 }) => {
   const suggestions = useMemo(() => {
     return generateSmartSuggestions(rca, pattern, similarities);
   }, [rca, pattern, similarities]);
+
+  const {
+    data: aiSuggestion,
+    isLoading: isAILoading,
+  } = useExceptionAISuggestion(exceptionId);
 
   if (isLoading) {
     return (
@@ -63,6 +72,19 @@ export const SmartRCASuggestions: React.FC<SmartRCASuggestionsProps> = ({
         <h3>💡 Smart Recommendations</h3>
         <span className="suggestion-count">{suggestions.length} actions</span>
       </div>
+
+      {exceptionId && (
+        <div className="ai-suggestion-block">
+          <div className="evidence-title">AI Root-Cause &amp; Fix Suggestion</div>
+          {isAILoading ? (
+            <p className="no-suggestions">Generating AI suggestion...</p>
+          ) : (
+            <p className="description">
+              {aiSuggestion?.suggestion ?? "No AI suggestion available for this exception."}
+            </p>
+          )}
+        </div>
+      )}
 
       <div className="suggestions-list">
         {sortedSuggestions.map((suggestion, idx) => (

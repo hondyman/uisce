@@ -1,0 +1,66 @@
+/* ExceptionAutofixPolicyPanel component styles */
+
+.autofix-policy-panel {
+  margin-top: var(--spacing-md);
+  padding: var(--spacing-md);
+  background: rgba(255, 255, 255, 0.02);
+  border-radius: var(--radius-md);
+}
+
+.autofix-policy-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: var(--spacing-sm, 8px);
+}
+
+.autofix-policy-header h4 {
+  margin: 0;
+  font-size: 0.9375rem;
+}
+
+.autofix-policy-hint {
+  font-size: 0.75rem;
+  color: var(--color-text-secondary, #9ca3af);
+}
+
+.autofix-policy-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.autofix-policy-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 8px;
+  border-radius: var(--radius-sm, 4px);
+}
+
+.autofix-policy-row:nth-child(odd) {
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.autofix-policy-type {
+  font-size: 0.8125rem;
+  font-family: var(--font-mono, monospace);
+}
+
+.autofix-policy-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  font-size: 0.8125rem;
+}
+
+.autofix-policy-toggle input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+  accent-color: var(--color-accent);
+}
