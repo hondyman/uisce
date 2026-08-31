@@ -95,6 +95,7 @@ import type {
   BOSchemaField,
 } from '../types/queryDef';
 import ExplainPlanVisualizer from '../components/ExplainPlanVisualizer';
+import ScrollAreaResultView from '../components/ScrollAreaResultView';
 import QueryPerformanceSummary from '../components/QueryPerformanceSummary';
 import AutoFormRenderer from '../components/AutoFormRenderer';
 import { JWTInspector } from '../../../components/BusinessObjectManager/JWTInspector';
@@ -105,6 +106,17 @@ interface BusinessObject {
   id: string;
   name: string;
   display_name: string;
+}
+
+// Shape returned by GET /api/business-objects/{id}/relationships
+// (backend/internal/metadata/businessobject_service.go RelationshipResult)
+interface RelatedBusinessObject {
+  id: string;
+  relatedObjectName: string;
+  targetObjectId: string;
+  relationshipType: string;
+  cardinality: string;
+  joinCondition: string;
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -200,6 +212,14 @@ const BusinessObjectQueryBuilder: React.FC = () => {
   const [terms, setTerms] = useState<SemanticTermView[]>([]);
   const [boSchema, setBoSchema] = useState<BOSchema | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
+  const [relatedBOs, setRelatedBOs] = useState<RelatedBusinessObject[]>([]);
+  // BOs the user has added to this query as joins, keyed by their catalog
+  // node id. Their terms are merged into the term browser tagged with boId,
+  // and queryDef.context.relatedBoIds is derived from these keys.
+  const [includedRelatedBOs, setIncludedRelatedBOs] = useState<
+    Record<string, { name: string; cardinalityHint: 'one' | 'many'; terms: SemanticTermView[] }>
+  >({});
+  const [relatedTermsLoading, setRelatedTermsLoading] = useState<string | null>(null);
 
   // Query state
   const [queryDef, setQueryDef] = useState<QueryDef | null>(null);
@@ -279,6 +299,7 @@ const BusinessObjectQueryBuilder: React.FC = () => {
 
   // Fetch bindings when BO changes
   useEffect(() => {
+    setIncludedRelatedBOs({});
     if (!selectedBO || !tenantId) {
       setBindings([]);
       setSelectedBindingId('');
@@ -310,6 +331,33 @@ const BusinessObjectQueryBuilder: React.FC = () => {
 
     load();
   }, [selectedBO, tenantId]);
+
+  // Fetch related business objects when the subject area changes, so the
+  // user can see (and jump to) BOs reachable from this one via its driving
+  // table's relationship graph.
+  useEffect(() => {
+    if (!selectedBO || !tenantId) {
+      setRelatedBOs([]);
+      return;
+    }
+
+    let cancelled = false;
+    apiClient<{ relatedObjects?: RelatedBusinessObject[] }>(
+      `/business-objects/${selectedBO.id}/relationships`,
+      { headers: { 'X-Tenant-ID': tenantId, ...(datasource?.id ? { 'X-Tenant-Datasource-ID': datasource.id } : {}) } }
+    )
+      .then((data) => {
+        if (!cancelled) setRelatedBOs(data?.relatedObjects || []);
+      })
+      .catch((err) => {
+        devError('Failed to load related business objects', err);
+        if (!cancelled) setRelatedBOs([]);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedBO, tenantId, datasource?.id]);
 
   // Fetch terms when binding changes
   useEffect(() => {
@@ -377,7 +425,76 @@ const BusinessObjectQueryBuilder: React.FC = () => {
     setSelectedBO(bo);
   };
 
-  const handleAddTerm = (term: SemanticTermView) => {
+  const cardinalityHintFromString = (c: string): 'one' | 'many' => {
+    const norm = (c || '').toUpperCase().replace(/\s/g, '');
+    return norm === '1:M' || norm === '1:N' || norm === 'M:M' || norm === 'N:N' ? 'many' : 'one';
+  };
+
+  // Joins a related BO into the query (or removes it): fetches its terms so
+  // they appear in the field browser tagged with boId, and keeps
+  // queryDef.context.relatedBoIds in sync so the backend resolves the join.
+  // Server-computed cardinality (from the actual resolved join path) always
+  // wins at render time — this hint only badges fields before a query runs.
+  const handleToggleRelatedBO = async (rel: RelatedBusinessObject) => {
+    if (!rel.targetObjectId || !tenantId) return;
+
+    if (includedRelatedBOs[rel.targetObjectId]) {
+      setIncludedRelatedBOs((prev) => {
+        const next = { ...prev };
+        delete next[rel.targetObjectId];
+        return next;
+      });
+      setQueryDef((prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          context: {
+            ...prev.context,
+            relatedBoIds: (prev.context.relatedBoIds || []).filter((id) => id !== rel.targetObjectId),
+          },
+          query: {
+            ...prev.query,
+            dimensions: prev.query.dimensions.filter((d) => d.boId !== rel.targetObjectId),
+            measures: prev.query.measures.filter((m) => m.boId !== rel.targetObjectId),
+            filters: prev.query.filters.filter((f) => f.boId !== rel.targetObjectId),
+          },
+        };
+      });
+      return;
+    }
+
+    setRelatedTermsLoading(rel.targetObjectId);
+    try {
+      const relBindings = await fetchBusinessObjectBindings(rel.targetObjectId);
+      const defaultBinding = relBindings.find((b) => b.isDefault) || relBindings[0];
+      if (!defaultBinding) {
+        devError('No binding found for related BO', rel.targetObjectId);
+        return;
+      }
+      const relTerms = await fetchBOTerms(rel.targetObjectId, defaultBinding.bindingId);
+
+      setIncludedRelatedBOs((prev) => ({
+        ...prev,
+        [rel.targetObjectId]: {
+          name: rel.relatedObjectName,
+          cardinalityHint: cardinalityHintFromString(rel.cardinality),
+          terms: relTerms,
+        },
+      }));
+      setQueryDef((prev) => {
+        if (!prev) return prev;
+        const existing = prev.context.relatedBoIds || [];
+        if (existing.includes(rel.targetObjectId)) return prev;
+        return { ...prev, context: { ...prev.context, relatedBoIds: [...existing, rel.targetObjectId] } };
+      });
+    } catch (err) {
+      devError('Failed to load related BO terms', err);
+    } finally {
+      setRelatedTermsLoading(null);
+    }
+  };
+
+  const handleAddTerm = (term: SemanticTermView, boId?: string) => {
     if (!queryDef) return;
 
     setQueryDef((prev) => {
@@ -386,7 +503,7 @@ const BusinessObjectQueryBuilder: React.FC = () => {
       const alias = makeAlias(term.displayName || term.termName, used);
 
       if (term.role === 'MEASURE' || term.role === 'CALCULATED') {
-        const exists = prev.query.measures.some((m) => m.termNodeId === term.termNodeId);
+        const exists = prev.query.measures.some((m) => m.termNodeId === term.termNodeId && m.boId === boId);
         if (exists) return prev;
         return {
           ...prev,
@@ -398,19 +515,20 @@ const BusinessObjectQueryBuilder: React.FC = () => {
                 termNodeId: term.termNodeId,
                 alias,
                 agg: term.defaultAggregation || 'SUM',
+                ...(boId ? { boId } : {}),
               },
             ],
           },
         };
       }
 
-      const exists = prev.query.dimensions.some((d) => d.termNodeId === term.termNodeId);
+      const exists = prev.query.dimensions.some((d) => d.termNodeId === term.termNodeId && d.boId === boId);
       if (exists) return prev;
       return {
         ...prev,
         query: {
           ...prev.query,
-          dimensions: [...prev.query.dimensions, { termNodeId: term.termNodeId, alias }],
+          dimensions: [...prev.query.dimensions, { termNodeId: term.termNodeId, alias, ...(boId ? { boId } : {}) }],
         },
       };
     });
@@ -676,6 +794,84 @@ const BusinessObjectQueryBuilder: React.FC = () => {
             </TextField>
           </Box>
         )}
+
+        {/* Related Business Objects */}
+        {selectedBO && relatedBOs.length > 0 && (
+          <Box sx={{ p: 2, borderBottom: '1px solid #eee' }}>
+            <Typography variant="overline" color="text.secondary">
+              Related Business Objects
+            </Typography>
+            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
+              Click to join into this query and browse its fields
+            </Typography>
+            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+              {relatedBOs.map((rel) => {
+                const included = !!includedRelatedBOs[rel.targetObjectId];
+                const isMany = cardinalityHintFromString(rel.cardinality) === 'many';
+                return (
+                  <Tooltip
+                    key={rel.id}
+                    title={`${rel.relationshipType} (${rel.cardinality})${rel.joinCondition ? ` — ${rel.joinCondition}` : ''}${
+                      isMany ? ' — one-to-many: fields will render as a child scroll area' : ''
+                    }`}
+                  >
+                    <Chip
+                      size="small"
+                      icon={isMany ? <PlanIcon fontSize="small" /> : undefined}
+                      label={rel.relatedObjectName}
+                      onClick={() => handleToggleRelatedBO(rel)}
+                      color={included ? 'primary' : 'default'}
+                      variant={included ? 'filled' : 'outlined'}
+                      disabled={relatedTermsLoading === rel.targetObjectId}
+                    />
+                  </Tooltip>
+                );
+              })}
+            </Box>
+          </Box>
+        )}
+
+        {/* Fields from joined related Business Objects */}
+        {Object.entries(includedRelatedBOs).map(([boId, rel]) => (
+          <Box key={boId} sx={{ p: 2, borderBottom: '1px solid #eee' }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+              <Typography variant="overline" color="text.secondary">
+                {rel.name} fields
+              </Typography>
+              {rel.cardinalityHint === 'many' && (
+                <Tooltip title="One-to-many: added fields render as a child scroll area under each row">
+                  <Chip size="small" label="many" color="warning" sx={{ height: 18, fontSize: '0.6rem' }} />
+                </Tooltip>
+              )}
+            </Box>
+            <List dense disablePadding sx={{ mt: 0.5 }}>
+              {rel.terms.map((term) => {
+                const selected = [...(queryDef?.query.dimensions || []), ...(queryDef?.query.measures || [])].some(
+                  (f) => f.termNodeId === term.termNodeId && f.boId === boId
+                );
+                return (
+                  <ListItemButton
+                    key={term.termNodeId}
+                    selected={selected}
+                    sx={{ borderRadius: 1, py: 0.25 }}
+                    onClick={() => handleAddTerm(term, boId)}
+                    disabled={selected}
+                  >
+                    <ListItemIcon sx={{ minWidth: 28 }}>
+                      <FieldIcon type={term.dataType} />
+                    </ListItemIcon>
+                    <ListItemText
+                      primary={term.displayName}
+                      secondary={term.termKey}
+                      primaryTypographyProps={{ variant: 'body2' }}
+                      secondaryTypographyProps={{ variant: 'caption', sx: { fontSize: '0.65rem' } }}
+                    />
+                  </ListItemButton>
+                );
+              })}
+            </List>
+          </Box>
+        ))}
 
         {/* Search */}
         {selectedBO && (
@@ -1071,32 +1267,7 @@ const BusinessObjectQueryBuilder: React.FC = () => {
             {activeTab === 0 && (
               <Box sx={{ p: 0, height: '100%' }}>
                 {executeResult && executeResult.rows.length > 0 ? (
-                  <TableContainer sx={{ height: '100%' }}>
-                    <Table stickyHeader size="small">
-                      <TableHead>
-                        <TableRow>
-                          {executeResult.columns.map((col) => (
-                            <TableCell key={col.name} sx={{ fontWeight: 'bold', bgcolor: '#f9f9f9' }}>
-                              {col.name}
-                            </TableCell>
-                          ))}
-                        </TableRow>
-                      </TableHead>
-                      <TableBody>
-                        {executeResult.rows.map((row, i) => (
-                          <TableRow key={i} hover>
-                            {executeResult.columns.map((col) => (
-                              <TableCell key={col.name}>
-                                {typeof row[col.name] === 'object'
-                                  ? JSON.stringify(row[col.name])
-                                  : String(row[col.name] ?? '-')}
-                              </TableCell>
-                            ))}
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  </TableContainer>
+                  <ScrollAreaResultView columns={executeResult.columns} rows={executeResult.rows} />
                 ) : (
                   <Box sx={{ p: 4, textAlign: 'center', color: 'text.secondary' }}>
                     <Typography>No results to display. Build a query and run it.</Typography>

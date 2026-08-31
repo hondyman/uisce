@@ -1075,7 +1075,8 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 				log.Println("[NewServer] CBO TelemetryRouter injected into BOSQLGenerator")
 			}
 		}
-		qbService := querybuilder.NewQueryService(boGenerator, boResolver)
+		qbRelationships := analytics.NewRelationshipInferenceService(sqlxDB)
+		qbService := querybuilder.NewQueryService(boGenerator, boResolver, qbRelationships)
 		qbExecutor := &queryBuilderExecutor{
 			defaultDB:    srv.SQLXDB,
 			aggregatesDB: sqlx.NewDb(srv.AggregatesDB, "postgres"),

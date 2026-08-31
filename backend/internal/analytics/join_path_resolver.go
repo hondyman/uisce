@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"sync"
 
 	"github.com/google/uuid"
 	"github.com/jmoiron/sqlx"
@@ -14,11 +15,23 @@ import (
 // using TABLE_RELATES_TO_TABLE edges from the catalog graph.
 type JoinPathResolver struct {
 	db *sqlx.DB
+
+	edgeCacheMu sync.RWMutex
+	edgeCache   map[uuid.UUID][]TableEdge // datasourceID -> all TABLE_RELATES_TO_TABLE edges
 }
 
 // NewJoinPathResolver creates a new join path resolver
 func NewJoinPathResolver(db *sqlx.DB) *JoinPathResolver {
-	return &JoinPathResolver{db: db}
+	return &JoinPathResolver{db: db, edgeCache: make(map[uuid.UUID][]TableEdge)}
+}
+
+// InvalidateDatasource drops the cached edge list for a datasource. Must be
+// called whenever a TABLE_RELATES_TO_TABLE edge is created/updated, otherwise
+// ResolveJoinPath keeps serving a stale graph.
+func (r *JoinPathResolver) InvalidateDatasource(datasourceID uuid.UUID) {
+	r.edgeCacheMu.Lock()
+	defer r.edgeCacheMu.Unlock()
+	delete(r.edgeCache, datasourceID)
 }
 
 // JoinPath represents a complete path of joins between tables
@@ -160,6 +173,26 @@ func (r *JoinPathResolver) ResolveJoinPath(
 	return nil, fmt.Errorf("no join path found between %s and %s within %d hops", fromTableName, toTableName, maxDepth)
 }
 
+// TraversalCardinality classifies a join path relative to its FROM table:
+// "one" means every hop is 1:1 or M:1, so following the path from a single
+// FROM row lands on at most one row — a lookup, safe to flatten into the
+// same result row. "many" means at least one hop is 1:M or M:M, so a single
+// FROM row can fan out into multiple joined rows — a detail/child collection
+// (PeopleSoft calls this a "scroll level") that callers must not silently
+// flatten without either aggregating or nesting the result.
+func (p *JoinPath) TraversalCardinality() string {
+	if p == nil {
+		return "one"
+	}
+	for _, step := range p.Steps {
+		switch step.Cardinality {
+		case "1:M", "M:M":
+			return "many"
+		}
+	}
+	return "one"
+}
+
 func (r *JoinPathResolver) buildJoinPath(edges []TableEdge) *JoinPath {
 	steps := make([]JoinPathStep, len(edges))
 	totalConfidence := 1.0
@@ -188,6 +221,26 @@ func (r *JoinPathResolver) buildJoinPath(edges []TableEdge) *JoinPath {
 }
 
 func (r *JoinPathResolver) getTableEdges(ctx context.Context, datasourceID uuid.UUID) ([]TableEdge, error) {
+	r.edgeCacheMu.RLock()
+	if cached, ok := r.edgeCache[datasourceID]; ok {
+		r.edgeCacheMu.RUnlock()
+		return cached, nil
+	}
+	r.edgeCacheMu.RUnlock()
+
+	edges, err := r.loadTableEdges(ctx, datasourceID)
+	if err != nil {
+		return nil, err
+	}
+
+	r.edgeCacheMu.Lock()
+	r.edgeCache[datasourceID] = edges
+	r.edgeCacheMu.Unlock()
+
+	return edges, nil
+}
+
+func (r *JoinPathResolver) loadTableEdges(ctx context.Context, datasourceID uuid.UUID) ([]TableEdge, error) {
 	query := `
 		SELECT 
 			ce.source_node_id,
@@ -245,6 +298,46 @@ func (r *JoinPathResolver) GenerateJoinSQL(path *JoinPath, baseTable string) str
 	}
 
 	return builder.String()
+}
+
+// ResolveJoinPathBetweenBOs resolves a join path between two Business Objects
+// by their catalog_node IDs, looking up each BO's driving table name before
+// delegating to ResolveJoinPath. This is what Report Builder, Query Builder,
+// and Page Studio should call once a user picks a related BO — they deal in
+// BO IDs, not physical table names.
+func (r *JoinPathResolver) ResolveJoinPathBetweenBOs(
+	ctx context.Context,
+	datasourceID, fromBONodeID, toBONodeID uuid.UUID,
+	maxDepth int,
+) (*JoinPath, error) {
+	fromTable, err := r.boDrivingTableName(ctx, datasourceID, fromBONodeID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to resolve driving table for BO %s: %w", fromBONodeID, err)
+	}
+	toTable, err := r.boDrivingTableName(ctx, datasourceID, toBONodeID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to resolve driving table for BO %s: %w", toBONodeID, err)
+	}
+
+	return r.ResolveJoinPath(ctx, datasourceID, fromTable, toTable, maxDepth)
+}
+
+func (r *JoinPathResolver) boDrivingTableName(ctx context.Context, datasourceID, boNodeID uuid.UUID) (string, error) {
+	var driverTableID uuid.UUID
+	err := r.db.GetContext(ctx, &driverTableID, `
+		SELECT (properties->>'driver_table_id')::uuid FROM catalog_node
+		WHERE tenant_datasource_id = $1 AND id = $2
+	`, datasourceID, boNodeID)
+	if err != nil {
+		return "", err
+	}
+
+	var tableName string
+	err = r.db.GetContext(ctx, &tableName, `SELECT node_name FROM catalog_node WHERE id = $1`, driverTableID)
+	if err != nil {
+		return "", err
+	}
+	return tableName, nil
 }
 
 // GenerateMultiTableBOSQL generates SQL for a BO that spans multiple tables

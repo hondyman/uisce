@@ -7,6 +7,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
+	"github.com/hondyman/uisce/backend/internal/analytics"
 	"github.com/hondyman/uisce/backend/internal/boresolver"
 	"github.com/hondyman/uisce/backend/internal/security"
 	"github.com/jmoiron/sqlx"
@@ -21,18 +23,31 @@ type BOResolver interface {
 	GetBOTerms(boID, bindingID string) ([]boresolver.SemanticTermView, error)
 }
 
+// RelationshipResolver abstracts join-path resolution across Business
+// Objects, satisfied by *analytics.RelationshipInferenceService. It is what
+// lets a QueryDef with QueryContext.RelatedBOIDs be compiled into an actual
+// multi-table join instead of just the single-table semantic path.
+type RelationshipResolver interface {
+	ResolveJoinPathBetweenBOs(ctx context.Context, datasourceID, fromBONodeID, toBONodeID uuid.UUID) (*analytics.JoinPath, error)
+}
+
 // QueryService is the compiler gateway between the frontend QueryDef contract
 // and the existing BOSQLGenerator.
 type QueryService struct {
-	generator *boresolver.BOSQLGenerator
-	resolver  BOResolver
+	generator     *boresolver.BOSQLGenerator
+	resolver      BOResolver
+	relationships RelationshipResolver
 }
 
-// NewQueryService creates a QueryService for the given generator and resolver.
-func NewQueryService(generator *boresolver.BOSQLGenerator, resolver BOResolver) *QueryService {
+// NewQueryService creates a QueryService for the given generator, resolver,
+// and relationship resolver. relationships may be nil, in which case
+// QueryDefs with RelatedBOIDs are rejected rather than silently ignoring
+// the requested joins.
+func NewQueryService(generator *boresolver.BOSQLGenerator, resolver BOResolver, relationships RelationshipResolver) *QueryService {
 	return &QueryService{
-		generator: generator,
-		resolver:  resolver,
+		generator:     generator,
+		resolver:      resolver,
+		relationships: relationships,
 	}
 }
 
@@ -40,6 +55,10 @@ func NewQueryService(generator *boresolver.BOSQLGenerator, resolver BOResolver) 
 func (s *QueryService) Preview(ctx context.Context, secCtx *security.Context, qd *boresolver.QueryDef) (*boresolver.QueryPreviewResponse, error) {
 	if err := s.validateScope(secCtx, qd); err != nil {
 		return nil, err
+	}
+
+	if len(qd.Context.RelatedBOIDs) > 0 {
+		return s.previewMultiBO(ctx, secCtx, qd)
 	}
 
 	semanticReq, err := s.buildSemanticRequest(qd)
@@ -63,6 +82,67 @@ func (s *QueryService) Preview(ctx context.Context, secCtx *security.Context, qd
 	}, nil
 }
 
+// previewMultiBO compiles a QueryDef whose Dimensions/Measures/Filters span
+// the primary BO plus QueryContext.RelatedBOIDs. Each related BO's join is
+// resolved server-side via s.relationships (never trusting client-supplied
+// join SQL), and the resulting JoinPath's cardinality is echoed back per
+// selected column so the caller knows which fields fan out to multiple rows.
+func (s *QueryService) previewMultiBO(ctx context.Context, secCtx *security.Context, qd *boresolver.QueryDef) (*boresolver.QueryPreviewResponse, error) {
+	if s.relationships == nil {
+		return nil, fmt.Errorf("related business objects requested but no relationship resolver is configured")
+	}
+
+	primaryDef, err := s.resolver.GetBODefinition(qd.Context.BOID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load BO %s: %w", qd.Context.BOID, err)
+	}
+
+	datasourceUUID, err := uuid.Parse(secCtx.DatasourceID)
+	if err != nil {
+		return nil, fmt.Errorf("invalid datasource id: %w", err)
+	}
+	fromBOUUID, err := uuid.Parse(qd.Context.BOID)
+	if err != nil {
+		return nil, fmt.Errorf("invalid boId: %w", err)
+	}
+
+	var related []joinedBO
+	for _, relID := range qd.Context.RelatedBOIDs {
+		relDef, err := s.resolver.GetBODefinition(relID)
+		if err != nil {
+			return nil, fmt.Errorf("failed to load related BO %s: %w", relID, err)
+		}
+
+		toBOUUID, err := uuid.Parse(relID)
+		if err != nil {
+			return nil, fmt.Errorf("invalid relatedBoId %q: %w", relID, err)
+		}
+		path, err := s.relationships.ResolveJoinPathBetweenBOs(ctx, datasourceUUID, fromBOUUID, toBOUUID)
+		if err != nil {
+			return nil, fmt.Errorf("no relationship path from %s to %s: %w", qd.Context.BOID, relID, err)
+		}
+
+		related = append(related, joinedBO{
+			BOID:        relID,
+			BODef:       relDef,
+			Path:        path,
+			Cardinality: path.TraversalCardinality(),
+		})
+	}
+
+	sql, args, columns, err := buildMultiBOSQL(s.generator, primaryDef, related, qd, secCtx.TenantID)
+	if err != nil {
+		return nil, fmt.Errorf("multi-BO sql generation failed: %w", err)
+	}
+
+	return &boresolver.QueryPreviewResponse{
+		SQL:        sql,
+		Dialect:    dialectName(s.generator.Dialect),
+		Parameters: args,
+		Columns:    columns,
+	}, nil
+}
+
 // Execute compiles a QueryDef and runs the generated SQL against db.
 func (s *QueryService) Execute(ctx context.Context, secCtx *security.Context, qd *boresolver.QueryDef, db *sqlx.DB) (*boresolver.QueryExecuteResponse, error) {
 	preview, err := s.Preview(ctx, secCtx, qd)
@@ -81,6 +161,7 @@ func (s *QueryService) Execute(ctx context.Context, secCtx *security.Context, qd
 	if err != nil {
 		return nil, fmt.Errorf("failed to read columns: %w", err)
 	}
+	applyColumnMetadata(columns, preview.Columns)
 
 	data, err := scanRows(rows, columns)
 	if err != nil {
@@ -166,6 +247,26 @@ func dialectName(d boresolver.Dialect) string {
 		return "sqlserver"
 	default:
 		return "postgres"
+	}
+}
+
+// applyColumnMetadata copies BOID/Cardinality from the columns the SQL
+// generator produced (by name) onto the columns the driver reports back,
+// since the driver only knows names/DB types, not which BO or join a column
+// came from.
+func applyColumnMetadata(dbColumns []boresolver.QueryResultColumn, generated []boresolver.QueryResultColumn) {
+	if len(generated) == 0 {
+		return
+	}
+	byName := make(map[string]boresolver.QueryResultColumn, len(generated))
+	for _, c := range generated {
+		byName[c.Name] = c
+	}
+	for i := range dbColumns {
+		if meta, ok := byName[dbColumns[i].Name]; ok {
+			dbColumns[i].BOID = meta.BOID
+			dbColumns[i].Cardinality = meta.Cardinality
+		}
 	}
 }
 

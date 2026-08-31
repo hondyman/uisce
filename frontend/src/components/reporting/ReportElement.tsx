@@ -3,6 +3,10 @@ import { motion } from 'framer-motion';
 import { Rnd } from 'react-rnd';
 import { Box, Typography, IconButton } from '@mui/material';
 import DeleteIcon from '@mui/icons-material/Delete';
+import ReportWidgetRenderer from './ReportWidgetRenderer';
+import BOFormWidget from './BOFormWidget';
+
+const DATA_BOUND_TYPES = new Set(['table', 'matrix', 'list', 'chart', 'sparkline', 'gauge', 'slicer']);
 
 interface ReportElementProps {
   id: string;
@@ -27,7 +31,30 @@ const ReportElement: FC<ReportElementProps> = ({
   onSelect,
   isSelected,
 }) => {
-  const renderContent = () => (
+  const renderContent = () => {
+    if (type === 'form' && properties.boId) {
+      return <BOFormWidget boId={properties.boId} tenantId={properties.tenantId} recordId={properties.recordId} />;
+    }
+    if (DATA_BOUND_TYPES.has(type) && properties.boId) {
+      return (
+        <ReportWidgetRenderer
+          type={type}
+          binding={{
+            boId: properties.boId,
+            bindingId: properties.bindingId,
+            tenantId: properties.tenantId,
+            dimensions: properties.dimensions || [],
+            measures: properties.measures || [],
+            chartType: properties.chartType,
+            limit: properties.limit,
+          }}
+        />
+      );
+    }
+    return renderTextContent();
+  };
+
+  const renderTextContent = () => (
     <motion.div initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.2 }}>
       <Typography
         variant="body2"

@@ -32,6 +32,8 @@ func RegisterRelationshipRoutes(r chi.Router, handler *RelationshipHandler) {
 	// BO relationship inheritance
 	r.Post("/bo/inherit", handler.InheritBORelationships)
 	r.Get("/bo/{boId}", handler.GetBORelationships)
+	r.Get("/bo/{boId}/join-path/{toBoId}", handler.GetJoinPathBetweenBOs)
+	r.Get("/bo/{boId}/drill-target/{termId}", handler.GetDrillTarget)
 
 }
 
@@ -331,4 +333,101 @@ func (h *RelationshipHandler) GetBORelationships(w http.ResponseWriter, r *http.
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(edges)
+}
+
+// GetJoinPathBetweenBOs resolves the join path needed to combine two BOs in
+// a single query. Report Builder, Query Builder, and Page Studio call this
+// once a user has picked a related BO (from GET /bo/{boId}) to add to a
+// query/report/page data source.
+// GET /api/relationships/bo/{boId}/join-path/{toBoId}
+func (h *RelationshipHandler) GetJoinPathBetweenBOs(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	datasourceID := r.Header.Get("X-Tenant-Datasource-ID")
+	if datasourceID == "" {
+		http.Error(w, "Missing datasource ID", http.StatusBadRequest)
+		return
+	}
+	datasourceUUID, err := uuid.Parse(datasourceID)
+	if err != nil {
+		http.Error(w, "Invalid datasource ID", http.StatusBadRequest)
+		return
+	}
+
+	fromBOUUID, err := uuid.Parse(chi.URLParam(r, "boId"))
+	if err != nil {
+		http.Error(w, "Invalid from BO ID", http.StatusBadRequest)
+		return
+	}
+	toBOUUID, err := uuid.Parse(chi.URLParam(r, "toBoId"))
+	if err != nil {
+		http.Error(w, "Invalid to BO ID", http.StatusBadRequest)
+		return
+	}
+
+	path, err := h.inferenceService.ResolveJoinPathBetweenBOs(ctx, datasourceUUID, fromBOUUID, toBOUUID)
+	if err != nil {
+		http.Error(w, "Failed to resolve join path: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"steps":       path.Steps,
+		"totalHops":   path.TotalHops,
+		"confidence":  path.Confidence,
+		"cardinality": path.TraversalCardinality(),
+	})
+}
+
+// GetDrillTarget answers whether a drill-path term (from a field's
+// SemanticTermView.drillPath) is actually reachable from a given BO — bound
+// on the BO itself, or on a BO related to it — so the UI knows whether to
+// offer drilling into it, without ever mutating the BO's own field list.
+// GET /api/relationships/bo/{boId}/drill-target/{termId}
+func (h *RelationshipHandler) GetDrillTarget(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	claims := jwtmiddleware.GetClaimsFromContext(r)
+	if claims == nil {
+		http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
+		return
+	}
+	tenantUUID, err := uuid.Parse(claims.TenantID)
+	if err != nil {
+		http.Error(w, "Invalid tenant ID", http.StatusBadRequest)
+		return
+	}
+
+	datasourceID := r.Header.Get("X-Tenant-Datasource-ID")
+	datasourceUUID, err := uuid.Parse(datasourceID)
+	if err != nil {
+		http.Error(w, "Invalid datasource ID", http.StatusBadRequest)
+		return
+	}
+
+	fromBOUUID, err := uuid.Parse(chi.URLParam(r, "boId"))
+	if err != nil {
+		http.Error(w, "Invalid BO ID", http.StatusBadRequest)
+		return
+	}
+	termID := chi.URLParam(r, "termId")
+
+	target, err := h.inferenceService.ResolveDrillTarget(ctx, tenantUUID, datasourceUUID, fromBOUUID, termID)
+	if err != nil {
+		http.Error(w, "Failed to resolve drill target: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	if target == nil {
+		json.NewEncoder(w).Encode(map[string]interface{}{"available": false})
+		return
+	}
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"available":  true,
+		"boId":       target.BOID,
+		"termNodeId": target.TermNodeID,
+		"isSameBO":   target.IsSameBO,
+	})
 }

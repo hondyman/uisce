@@ -2,6 +2,7 @@ import React from 'react';
 import { Box, Paper, Typography, IconButton, Grid } from '@mui/material';
 import { Delete as DeleteIcon, DragIndicator as DragIcon } from '@mui/icons-material';
 import { CorePageDefinition, LayoutNode, ComponentDefinition } from '../../types/pageStudio';
+import PageComponentRenderer from './PageComponentRenderer';
 
 interface LayoutCanvasProps {
     draft: CorePageDefinition;
@@ -77,8 +78,8 @@ const LayoutCanvas: React.FC<LayoutCanvasProps> = ({ draft, setDraft, selectedId
                     </IconButton>
                 </Box>
             </Box>
-            <Box sx={{ height: 60, bgcolor: 'rgba(0,0,0,0.02)', borderRadius: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <Typography variant="caption" color="textSecondary">Component Preview: {comp.type}</Typography>
+            <Box sx={{ minHeight: 60, bgcolor: 'rgba(0,0,0,0.02)', borderRadius: 1, overflow: 'hidden' }}>
+                <PageComponentRenderer component={comp} dataSources={draft.dataSources || []} tenantId={draft.tenantId || 'default'} />
             </Box>
         </Paper>
     );
