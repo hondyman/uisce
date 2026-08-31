@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -63,14 +64,28 @@ type AITermDefinition struct {
 	PeerIdentifiers      []string          `json:"peer_identifiers,omitempty"`
 	SpecializedSubTerms  []string          `json:"specialized_sub_terms,omitempty"`
 	DisambiguationGuidance string          `json:"disambiguation_guidance"`
+
+	// Aliases are the physical column names (across tables/datasources) that
+	// resolve to this term, so an MCP client can map a raw column back to the
+	// concept it represents without a separate lookup.
+	Aliases []string `json:"aliases,omitempty"`
+	// Synonyms are alternate business names for the same concept: curated via
+	// catalog_node.properties["synonyms"], plus any RELATES_TO peer whose edge
+	// is tagged properties.relationship_subtype = "synonym".
+	Synonyms []string `json:"synonyms,omitempty"`
+	// RelatedTerms is the full relationship graph for this term (role,
+	// relationship type, confidence, differentiation notes) — richer than the
+	// flattened ParentTerm/PeerIdentifiers/SpecializedSubTerms fields above,
+	// which stay for prompt-block/backward-compat use.
+	RelatedTerms []RelatedTermInfo `json:"related_terms,omitempty"`
 }
 
 // AIGraphEdge represents an associative or hierarchical connection in the AI context.
 type AIGraphEdge struct {
-	SourceTerm   string `json:"source_term"`
-	Predicate    string `json:"predicate"`
-	TargetTerm   string `json:"target_term"`
-	Explanation  string `json:"explanation,omitempty"`
+	SourceTerm  string `json:"source_term" db:"source_term"`
+	Predicate   string `json:"predicate" db:"predicate"`
+	TargetTerm  string `json:"target_term" db:"target_term"`
+	Explanation string `json:"explanation,omitempty" db:"explanation"`
 }
 
 // AIContextPayload is the complete package sent to downstream AI agents / LLM prompt generators.
@@ -90,6 +105,29 @@ type AIContextPayload struct {
 // TermRelationshipService manages term associations, graph reasoning, and AI context export.
 type TermRelationshipService struct {
 	db *sqlx.DB
+
+	rejectionStoreOnce   sync.Once
+	rejectionStoreExists bool
+}
+
+// hasRejectionStore reports whether catalog_edge_rejection_store exists in
+// this database. It's optional infrastructure (backend/db/migrations/20260821_
+// cognitive_graph_edge_taxonomy.sql, a directory this deployment's migration
+// runner may not scan — confirmed absent against the dev instance), so
+// queries that filter against it must check first rather than assume it's
+// there: referencing a missing table fails the whole query at parse time,
+// not just the subquery, even inside a conditional.
+func (s *TermRelationshipService) hasRejectionStore(ctx context.Context) bool {
+	s.rejectionStoreOnce.Do(func() {
+		if s.db == nil {
+			return
+		}
+		var regclass sql.NullString
+		if err := s.db.GetContext(ctx, &regclass, `SELECT to_regclass('public.catalog_edge_rejection_store')::text`); err == nil {
+			s.rejectionStoreExists = regclass.Valid && regclass.String != ""
+		}
+	})
+	return s.rejectionStoreExists
 }
 
 // NewTermRelationshipService creates a new TermRelationshipService instance.
@@ -135,7 +173,7 @@ func (s *TermRelationshipService) GetRelatedTerms(ctx context.Context, tenantID,
 			SELECT id, tenant_id, node_name, qualified_path, description, properties
 			FROM catalog_node
 			WHERE id = $1
-			  AND (tenant_id = $2 OR tenant_id = $3 OR tenant_id = '00000000-0000-0000-0000-000000000000' OR $2 = '')
+			  AND (tenant_id = $2 OR tenant_id = $3 OR tenant_id = '00000000-0000-0000-0000-000000000000' OR $2::text = '')
 			ORDER BY (tenant_id = $2) DESC, (tenant_id = $3) DESC, created_at DESC
 			LIMIT 1
 		`
@@ -149,7 +187,7 @@ func (s *TermRelationshipService) GetRelatedTerms(ctx context.Context, tenantID,
 			SELECT id, tenant_id, node_name, qualified_path, description, properties
 			FROM catalog_node
 			WHERE (UPPER(node_name) = UPPER($1) OR UPPER(qualified_path) LIKE '%' || UPPER($1))
-			  AND (tenant_id = $2 OR tenant_id = $3 OR tenant_id = '00000000-0000-0000-0000-000000000000' OR $2 = '')
+			  AND (tenant_id = $2 OR tenant_id = $3 OR tenant_id = '00000000-0000-0000-0000-000000000000' OR $2::text = '')
 			ORDER BY (tenant_id = $2) DESC, (tenant_id = $3) DESC, created_at DESC
 			LIMIT 1
 		`
@@ -198,38 +236,48 @@ func (s *TermRelationshipService) GetRelatedTerms(ctx context.Context, tenantID,
 		IsOutgoing   bool           `db:"is_outgoing"`
 	}
 
+	// NOTE: catalog_edge stores relationships via source_node_id/target_node_id
+	// and a UUID edge_type_id (FK into catalog_edge_types); it has no
+	// edge_type_name or source_id/target_id columns of its own. edge_type_name
+	// is resolved by joining catalog_edge_type, the back-compat view over
+	// catalog_edge_types (see resolveOrCreateEdgeType below for the same join).
+	rejectionFilter := ""
+	if s.hasRejectionStore(ctx) {
+		rejectionFilter = `
+			  AND NOT EXISTS (
+				  SELECT 1 FROM catalog_edge_rejection_store r
+				  WHERE ($2::text != '' AND r.tenant_id = CAST($2 AS UUID))
+				    AND ( (r.source_node_id = ce.source_node_id AND r.rejected_target_id = ce.target_node_id) OR (r.source_node_id = ce.target_node_id AND r.rejected_target_id = ce.source_node_id) )
+			  )`
+	}
 	edgeQuery := `
 		WITH combined_edges AS (
-			SELECT 
-				ce.id, ce.source_id, ce.target_id, ce.edge_type_name, ce.properties, ce.tenant_id,
+			SELECT
+				ce.id, ce.source_node_id, ce.target_node_id, cet.edge_type_name, ce.properties, ce.tenant_id,
 				ROW_NUMBER() OVER (
-					PARTITION BY ce.source_id, ce.target_id, ce.edge_type_name 
+					PARTITION BY ce.source_node_id, ce.target_node_id, ce.edge_type_id
 					ORDER BY CASE WHEN ce.tenant_id = $2 THEN 1 ELSE 2 END
 				) AS precedence_rank
 			FROM catalog_edge ce
-			WHERE (ce.source_id = $1 OR ce.target_id = $1)
-			  AND (ce.tenant_id = $2 OR ce.tenant_id = $3 OR ce.tenant_id = '00000000-0000-0000-0000-000000000000' OR $2 = '')
-			  AND ce.is_active = true
-			  AND NOT EXISTS (
-				  SELECT 1 FROM catalog_edge_rejection_store r
-				  WHERE ($2 != '' AND r.tenant_id = CAST($2 AS UUID))
-				    AND ( (r.source_node_id = ce.source_id AND r.rejected_target_id = ce.target_id) OR (r.source_node_id = ce.target_id AND r.rejected_target_id = ce.source_id) )
-			  )
+			JOIN catalog_edge_type cet ON cet.id = ce.edge_type_id
+			WHERE (ce.source_node_id = $1 OR ce.target_node_id = $1)
+			  AND (ce.tenant_id = $2 OR ce.tenant_id = $3 OR ce.tenant_id = '00000000-0000-0000-0000-000000000000' OR $2::text = '')
+			  AND ce.is_active = true` + rejectionFilter + `
 		)
-		SELECT 
-			ce.id, ce.source_id, ce.target_id, ce.edge_type_name, ce.properties,
+		SELECT
+			ce.id, ce.source_node_id AS source_id, ce.target_node_id AS target_id, ce.edge_type_name, ce.properties,
 			cn.id as other_node_id, cn.node_name as other_name, cn.qualified_path as other_path,
 			cn.description as other_desc, cn.properties as other_props, cn.tenant_id as other_tenant,
-			(ce.source_id = $1) as is_outgoing
+			(ce.source_node_id = $1) as is_outgoing
 		FROM combined_edges ce
 		JOIN catalog_node cn ON (
-			CASE 
-				WHEN ce.source_id = $1 THEN ce.target_id = cn.id
-				ELSE ce.source_id = cn.id
+			CASE
+				WHEN ce.source_node_id = $1 THEN ce.target_node_id = cn.id
+				ELSE ce.source_node_id = cn.id
 			END
 		)
 		WHERE ce.precedence_rank = 1
-		  AND (cn.tenant_id = $2 OR cn.tenant_id = $3 OR cn.tenant_id = '00000000-0000-0000-0000-000000000000' OR $2 = '')
+		  AND (cn.tenant_id = $2 OR cn.tenant_id = $3 OR cn.tenant_id = '00000000-0000-0000-0000-000000000000' OR $2::text = '')
 		ORDER BY ce.edge_type_name ASC
 	`
 
@@ -405,11 +453,14 @@ func (s *TermRelationshipService) BuildAIContext(ctx context.Context, tenantID, 
 			Standard:             getRelStringProp(props, "standard", ""),
 			FormatPattern:        getRelStringProp(props, "format_pattern", ""),
 			DifferentiatorNotes:  getRelStringProp(props, "differentiator_notes", ""),
+			Synonyms:             getRelStringSliceProp(props, "synonyms"),
+			Aliases:              s.fetchTermAliases(ctx, tenantID, goldTenantID, node.ID),
 		}
 
 		// Query relationship context for this node
 		disambig, _ := s.GetRelatedTerms(ctx, tenantID, datasourceID, node.ID)
 		if disambig != nil {
+			termDef.RelatedTerms = disambig.RelatedTerms
 			for _, r := range disambig.RelatedTerms {
 				if r.Role == "Parent (Generalization)" {
 					termDef.ParentTerm = r.TermName
@@ -417,6 +468,13 @@ func (s *TermRelationshipService) BuildAIContext(ctx context.Context, tenantID, 
 					termDef.PeerIdentifiers = append(termDef.PeerIdentifiers, r.TermName)
 				} else if strings.Contains(r.Role, "Specialization") {
 					termDef.SpecializedSubTerms = append(termDef.SpecializedSubTerms, r.TermName)
+				}
+				// A RELATES_TO edge explicitly tagged as a synonym relationship
+				// contributes the peer's name to Synonyms, not just RelatedTerms.
+				if r.RelationshipType == EdgeTypeRelatesTo {
+					if sub, ok := r.Properties["relationship_subtype"].(string); ok && strings.EqualFold(sub, "synonym") {
+						termDef.Synonyms = append(termDef.Synonyms, r.TermName)
+					}
 				}
 			}
 			termDef.DisambiguationGuidance = disambig.DifferentiatorSummary
@@ -430,6 +488,12 @@ func (s *TermRelationshipService) BuildAIContext(ctx context.Context, tenantID, 
 		promptBuilder.WriteString(fmt.Sprintf("- **Domain/Category**: %s / %s (Data Type: %s)\n", termDef.Domain, termDef.Category, termDef.DataType))
 		if termDef.Standard != "" {
 			promptBuilder.WriteString(fmt.Sprintf("- **Standard / Format**: %s (`%s`)\n", termDef.Standard, termDef.FormatPattern))
+		}
+		if len(termDef.Aliases) > 0 {
+			promptBuilder.WriteString(fmt.Sprintf("- **Physical Column Aliases**: %s\n", strings.Join(termDef.Aliases, ", ")))
+		}
+		if len(termDef.Synonyms) > 0 {
+			promptBuilder.WriteString(fmt.Sprintf("- **Synonyms**: %s\n", strings.Join(termDef.Synonyms, ", ")))
 		}
 		if termDef.ParentTerm != "" {
 			promptBuilder.WriteString(fmt.Sprintf("- **Parent Concept**: `%s`\n", termDef.ParentTerm))
@@ -449,17 +513,21 @@ func (s *TermRelationshipService) BuildAIContext(ctx context.Context, tenantID, 
 	// Fetch taxonomy edges
 	var edges []AIGraphEdge
 	edgeQuery := `
-		SELECT 
-			c1.node_name as source_term, 
-			ce.edge_type_name as predicate, 
+		SELECT
+			c1.node_name as source_term,
+			cet.edge_type_name as predicate,
 			c2.node_name as target_term,
 			COALESCE(ce.properties->>'differentiation', ce.properties->>'key_distinction', '') as explanation
 		FROM catalog_edge ce
-		JOIN catalog_node c1 ON ce.source_id = c1.id
-		JOIN catalog_node c2 ON ce.target_id = c2.id
+		JOIN catalog_edge_type cet ON cet.id = ce.edge_type_id
+		JOIN catalog_node c1 ON ce.source_node_id = c1.id
+		JOIN catalog_node c2 ON ce.target_node_id = c2.id
 		WHERE (ce.tenant_id = $1 OR ce.tenant_id = $2)
+		  AND ce.is_active = true
 	`
-	_ = s.db.SelectContext(ctx, &edges, edgeQuery, tenantID, goldTenantID)
+	if err := s.db.SelectContext(ctx, &edges, edgeQuery, tenantID, goldTenantID); err != nil {
+		logging.GetLogger().Sugar().Warnf("Failed to fetch taxonomy edges for AI context: %v", err)
+	}
 
 	// Construct JSON-LD Schema
 	jsonLD := map[string]interface{}{
@@ -639,52 +707,55 @@ func (s *TermRelationshipService) CreateTermRelationship(ctx context.Context, te
 		nullDsID = &datasourceID
 	}
 
-	query := `
+	// NOTE: catalog_edge has no edge_type_name column of its own — edge_type_id
+	// (resolved above) is the only source of truth; edge_type_name is a
+	// property of catalog_edge_type/catalog_edge_types, not of the edge row.
+	//
+	// catalog_edge is partitioned with PRIMARY KEY (id, created_at) only — there
+	// is no unique constraint on (tenant_id, source_node_id, target_node_id,
+	// edge_type_id), so ON CONFLICT against that tuple errors at runtime
+	// ("no unique or exclusion constraint matching the ON CONFLICT
+	// specification"), confirmed against the live instance. Do the
+	// find-then-insert-or-update explicitly instead.
+	var existingID string
+	err = s.db.GetContext(ctx, &existingID, `
+		SELECT id FROM catalog_edge
+		WHERE tenant_id = $1 AND source_node_id = $2 AND target_node_id = $3 AND edge_type_id = $4
+		LIMIT 1
+	`, tenantID, sourceTermID, targetTermID, edgeTypeID)
+	if err != nil && err != sql.ErrNoRows {
+		return "", fmt.Errorf("failed to look up existing relationship edge: %w", err)
+	}
+
+	if existingID != "" {
+		_, err = s.db.ExecContext(ctx, `
+			UPDATE catalog_edge
+			SET properties = $2::jsonb, is_active = true, updated_at = NOW()
+			WHERE id = $1
+		`, existingID, string(propsJSON))
+		if err != nil {
+			return "", fmt.Errorf("failed to update existing relationship edge: %w", err)
+		}
+		return existingID, nil
+	}
+
+	_, err = s.db.ExecContext(ctx, `
 		INSERT INTO catalog_edge (
 			id, tenant_id, tenant_datasource_id,
 			source_node_id, target_node_id,
-			edge_type_id, edge_type_name,
+			edge_type_id,
 			properties, is_active, created_at, updated_at
 		) VALUES (
-			$1, $2::uuid, $3,
-			$4::uuid, $5::uuid,
-			$6::uuid, $7,
-			$8::jsonb, true, NOW(), NOW()
+			$1, $2, $3,
+			$4, $5,
+			$6,
+			$7::jsonb, true, NOW(), NOW()
 		)
-		ON CONFLICT (tenant_id, source_node_id, target_node_id, edge_type_id)
-		DO UPDATE SET
-			edge_type_name = EXCLUDED.edge_type_name,
-			properties = EXCLUDED.properties,
-			is_active = true,
-			updated_at = NOW()
-		RETURNING id
-	`
-
-	var returnedID string
-	err = s.db.QueryRowContext(ctx, query, edgeID, tenantID, nullDsID, sourceTermID, targetTermID, edgeTypeID, edgeTypeName, string(propsJSON)).Scan(&returnedID)
+	`, edgeID, tenantID, nullDsID, sourceTermID, targetTermID, edgeTypeID, string(propsJSON))
 	if err != nil {
-		// Fallback for simple UUID string types without ::uuid cast
-		fallbackQuery := `
-			INSERT INTO catalog_edge (
-				id, tenant_id, tenant_datasource_id,
-				source_node_id, target_node_id,
-				edge_type_id, edge_type_name,
-				properties, is_active, created_at, updated_at
-			) VALUES (
-				$1, $2, $3,
-				$4, $5,
-				$6, $7,
-				$8::jsonb, true, NOW(), NOW()
-			)
-			ON CONFLICT DO NOTHING
-			RETURNING id
-		`
-		_ = s.db.QueryRowContext(ctx, fallbackQuery, edgeID, tenantID, nullDsID, sourceTermID, targetTermID, edgeTypeID, edgeTypeName, string(propsJSON)).Scan(&returnedID)
-		if returnedID == "" {
-			returnedID = edgeID
-		}
+		return "", fmt.Errorf("failed to create relationship edge: %w", err)
 	}
-	return returnedID, nil
+	return edgeID, nil
 }
 
 // resolveOrCreateEdgeType returns the UUID of a catalog_edge_type row for the
@@ -698,9 +769,22 @@ func (s *TermRelationshipService) resolveOrCreateEdgeType(ctx context.Context, t
 	if edgeTypeName == "" {
 		edgeTypeName = EdgeTypeIsSpecializationOf
 	}
+	return resolveOrCreateEdgeTypeID(ctx, s.db, tenantID, edgeTypeName)
+}
+
+// resolveOrCreateEdgeTypeID looks up the UUID of a catalog_edge_type row by
+// name (preferring a tenant-scoped row, falling back to any tenant's, e.g. a
+// shared/gold-copy definition), creating a tenant-scoped row if the name is
+// unknown anywhere. Shared by TermRelationshipService and
+// SemanticMappingService so both write through the same edge-type vocabulary
+// instead of each maintaining their own resolution logic.
+func resolveOrCreateEdgeTypeID(ctx context.Context, db *sqlx.DB, tenantID, edgeTypeName string) (string, error) {
+	if db == nil {
+		return uuid.Nil.String(), nil
+	}
 
 	var edgeTypeID string
-	if err := s.db.GetContext(ctx, &edgeTypeID, `
+	if err := db.GetContext(ctx, &edgeTypeID, `
 		SELECT id FROM catalog_edge_type
 		WHERE edge_type_name = $1
 		ORDER BY (tenant_id = $2) DESC
@@ -712,7 +796,7 @@ func (s *TermRelationshipService) resolveOrCreateEdgeType(ctx context.Context, t
 		return edgeTypeID, nil
 	}
 
-	if err := s.db.GetContext(ctx, &edgeTypeID, `
+	if err := db.GetContext(ctx, &edgeTypeID, `
 		INSERT INTO catalog_edge_type (tenant_id, edge_type_name, created_at, updated_at)
 		VALUES ($1, $2, NOW(), NOW())
 		ON CONFLICT (tenant_id, edge_type_name) DO UPDATE SET edge_type_name = EXCLUDED.edge_type_name
@@ -1191,6 +1275,68 @@ func getRelStringProp(m map[string]interface{}, key, defaultVal string) string {
 	return defaultVal
 }
 
+// getRelStringSliceProp reads a curated string-array property (e.g.
+// properties["synonyms"] or properties["aliases"]), tolerating both a real
+// JSON array and, defensively, a single comma-separated string.
+func getRelStringSliceProp(m map[string]interface{}, key string) []string {
+	if m == nil {
+		return nil
+	}
+	switch v := m[key].(type) {
+	case []interface{}:
+		out := make([]string, 0, len(v))
+		for _, item := range v {
+			if s, ok := item.(string); ok && strings.TrimSpace(s) != "" {
+				out = append(out, strings.TrimSpace(s))
+			}
+		}
+		return out
+	case string:
+		if strings.TrimSpace(v) == "" {
+			return nil
+		}
+		var out []string
+		for _, s := range strings.Split(v, ",") {
+			if s = strings.TrimSpace(s); s != "" {
+				out = append(out, s)
+			}
+		}
+		return out
+	default:
+		return nil
+	}
+}
+
+// fetchTermAliases returns the distinct physical column/node names linked to
+// termNodeID via a column-mapping edge (has_semantic, provides_context_to, or
+// the STI exact-name IS_CLASSIFIED_AS link), in either direction. These are
+// the raw names an MCP client or column scanner would actually see, so a
+// lookup from a physical column name can resolve straight back to this term.
+func (s *TermRelationshipService) fetchTermAliases(ctx context.Context, tenantID, goldTenantID, termNodeID string) []string {
+	if s.db == nil {
+		return nil
+	}
+	var names []string
+	query := `
+		SELECT DISTINCT cn.node_name
+		FROM catalog_edge ce
+		JOIN catalog_edge_type cet ON cet.id = ce.edge_type_id
+		JOIN catalog_node cn ON cn.id = (CASE WHEN ce.source_node_id = $1 THEN ce.target_node_id ELSE ce.source_node_id END)
+		WHERE (ce.source_node_id = $1 OR ce.target_node_id = $1)
+		  AND ce.is_active = true
+		  AND (ce.tenant_id = $2 OR ce.tenant_id = $3 OR ce.tenant_id = '00000000-0000-0000-0000-000000000000' OR $2::text = '')
+		  AND cet.edge_type_name IN ('has_semantic', 'provides_context_to', 'IS_CLASSIFIED_AS')
+		  AND cn.node_name IS NOT NULL AND cn.node_name != ''
+		ORDER BY cn.node_name
+		LIMIT 50
+	`
+	if err := s.db.SelectContext(ctx, &names, query, termNodeID, tenantID, goldTenantID); err != nil {
+		logging.GetLogger().Sugar().Warnf("Failed to fetch aliases for term %s: %v", termNodeID, err)
+		return nil
+	}
+	return names
+}
+
 // L3ClassificationInfo represents a Tier-3 taxonomy node with its full breadcrumb path.
 type L3ClassificationInfo struct {
 	ID            string `json:"id" db:"id"`
@@ -1336,23 +1482,56 @@ func (s *TermRelationshipService) SuggestL3Classification(termName, columnName s
 	return &all[0]
 }
 
-// ClassifyTerm links a business term or semantic term to an L3 classification node via CLASSIFIED_BY.
+// classifiedByEdgeType is the edge type actually seeded in the live catalog
+// for linking a business term to its classification node. The literal UUID
+// '66666666-6666-6666-6666-666666660001' this function used to hardcode
+// (from backend/migrations/20260821_3tier_taxonomy_and_classified_by.sql,
+// named 'CLASSIFIED_BY', targeting a Tier-3 node) does not exist in the live
+// instance — that migration's tenant/node-type lookups evidently missed and
+// it no-op'd. The edge type that IS actually seeded and bound to
+// business_term as its source is 'classified_by_l4', targeting Classification_L4
+// (confirmed against the running instance), so despite this function's
+// original "L3" naming, it links to a Tier-4 classification node in practice.
+const classifiedByEdgeType = "classified_by_l4"
+
+// ClassifyTerm links a business term (or semantic term) to a classification
+// node via the tenant's classifiedByEdgeType.
 func (s *TermRelationshipService) ClassifyTerm(ctx context.Context, tenantID, termID, l3NodeID string) error {
 	if s.db == nil {
 		return nil
 	}
 
-	query := `
+	edgeTypeID, err := resolveOrCreateEdgeTypeID(ctx, s.db, tenantID, classifiedByEdgeType)
+	if err != nil {
+		return fmt.Errorf("failed to resolve %s edge type: %w", classifiedByEdgeType, err)
+	}
+
+	// `id` has no default and is NOT NULL (confirmed against the live
+	// instance), and there is no unique constraint on (tenant_id,
+	// source_node_id, target_node_id, edge_type_id) to ON CONFLICT against —
+	// catalog_edge is partitioned with PRIMARY KEY (id, created_at) only. Do
+	// an explicit find-then-insert-or-touch instead.
+	var existingID string
+	err = s.db.GetContext(ctx, &existingID, `
+		SELECT id FROM catalog_edge
+		WHERE tenant_id = $1 AND source_node_id = $2 AND target_node_id = $3 AND edge_type_id = $4
+		LIMIT 1
+	`, tenantID, termID, l3NodeID, edgeTypeID)
+	if err != nil && err != sql.ErrNoRows {
+		return fmt.Errorf("failed to look up existing %s edge: %w", classifiedByEdgeType, err)
+	}
+	if existingID != "" {
+		_, err = s.db.ExecContext(ctx, `UPDATE catalog_edge SET updated_at = NOW() WHERE id = $1`, existingID)
+		return err
+	}
+
+	_, err = s.db.ExecContext(ctx, `
 		INSERT INTO catalog_edge (
-			tenant_id, source_id, target_id, edge_type_name, edge_type_id, properties, created_at, updated_at
+			id, tenant_id, source_node_id, target_node_id, edge_type_id, properties, is_active, created_at, updated_at
 		) VALUES (
-			$1, $2, $3, 'CLASSIFIED_BY', '66666666-6666-6666-6666-666666660001', '{"tier": "L3"}'::jsonb, NOW(), NOW()
+			$1, $2, $3, $4, $5, '{"tier": "L4"}'::jsonb, true, NOW(), NOW()
 		)
-		ON CONFLICT (tenant_id, source_id, target_id, edge_type_name)
-		DO UPDATE SET
-			updated_at = NOW()
-	`
-	_, err := s.db.ExecContext(ctx, query, tenantID, termID, l3NodeID)
+	`, uuid.New().String(), tenantID, termID, l3NodeID, edgeTypeID)
 	return err
 }
 
@@ -1721,22 +1900,28 @@ func (s *TermRelationshipService) VisualizeLens(ctx context.Context, tenantID, n
 
 		var dbEdges []DBEdgeRow
 		if s.db != nil {
+			// See GetRelatedTerms above: catalog_edge has no edge_type_name /
+			// source_id / target_id columns; resolve the name via the
+			// catalog_edge_type view joined on the real edge_type_id FK.
 			edgeQuery := `
-				SELECT ce.id, ce.source_id, ce.target_id, ce.edge_type_name, ce.properties,
-				       cn.id as other_node_id, 
-				       COALESCE(NULLIF(cn.node_name, ''), NULLIF(cn.name, ''), '') as other_name, 
+				SELECT ce.id, ce.source_node_id AS source_id, ce.target_node_id AS target_id, cet.edge_type_name, ce.properties,
+				       cn.id as other_node_id,
+				       COALESCE(NULLIF(cn.node_name, ''), NULLIF(cn.name, ''), '') as other_name,
 				       COALESCE(cnt.type_name, 'business_term') as other_type,
 				       cn.qualified_path as other_path, cn.description as other_desc, cn.properties as other_props,
-				       (ce.source_id::text = $1) as is_outgoing
+				       (ce.source_node_id::text = $1) as is_outgoing
 				FROM catalog_edge ce
-				JOIN catalog_node cn ON (CASE WHEN ce.source_id::text = $1 THEN ce.target_id = cn.id ELSE ce.source_id = cn.id END)
+				JOIN catalog_edge_type cet ON cet.id = ce.edge_type_id
+				JOIN catalog_node cn ON (CASE WHEN ce.source_node_id::text = $1 THEN ce.target_node_id = cn.id ELSE ce.source_node_id = cn.id END)
 				LEFT JOIN catalog_node_type cnt ON cn.node_type_id = cnt.id
-				WHERE (ce.source_id::text = $1 OR ce.target_id::text = $1)
-				  AND (ce.edge_type_name IN ('IS_SPECIALIZATION_OF', 'IS_GENERALIZATION_OF', 'IS_PEER_IDENTIFIER_OF', 'DIFFERENTIATED_FROM', 'RELATES_TO'))
-				  AND (ce.tenant_id::text = $2 OR ce.tenant_id::text = '00000000-0000-0000-0000-000000000000' OR $2 = '')
+				WHERE (ce.source_node_id::text = $1 OR ce.target_node_id::text = $1)
+				  AND (cet.edge_type_name IN ('IS_SPECIALIZATION_OF', 'IS_GENERALIZATION_OF', 'IS_PEER_IDENTIFIER_OF', 'DIFFERENTIATED_FROM', 'RELATES_TO'))
+				  AND (ce.tenant_id::text = $2 OR ce.tenant_id::text = '00000000-0000-0000-0000-000000000000' OR $2::text = '')
 				  AND ce.is_active = true
 			`
-			_ = s.db.SelectContext(ctx, &dbEdges, edgeQuery, focalID, tenantID)
+			if err := s.db.SelectContext(ctx, &dbEdges, edgeQuery, focalID, tenantID); err != nil {
+				logging.GetLogger().Sugar().Warnf("Failed to fetch subtype/peer edges for %s: %v", focalID, err)
+			}
 		}
 
 		if len(dbEdges) > 0 {

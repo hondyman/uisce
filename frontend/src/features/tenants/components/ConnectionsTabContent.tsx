@@ -269,11 +269,14 @@ export const ConnectionsTabContent: React.FC<ConnectionsTabContentProps> = ({
               const configSchema = ds.config?.schema || ds.schema || '';
               const configUsername = ds.config?.auth?.basic?.username || ds.username || '';
               const configPassword = ds.config?.auth?.basic?.password || ds.password || '';
-              console.log(`[DEBUG] configHost=${configHost}, configPort=${configPort}, configDatabase=${configDatabase}`);
+              let normalizedType = (ds.alpha_datasource?.datasource_type || 'postgres').toLowerCase();
+              if (normalizedType === 'database' || !['postgres', 'mysql', 'snowflake', 'api', 's3', 'azure', 'gcs'].includes(normalizedType)) {
+                normalizedType = 'postgres';
+              }
               connectionsMap.set(ds.connection_id, {
                 id: ds.connection_id,
                 name: displayName,
-                type: ds.alpha_datasource?.datasource_type || 'Datasource',
+                type: normalizedType,
                 host: configHost,
                 port: configPort,
                 database: configDatabase,

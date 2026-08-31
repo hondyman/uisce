@@ -38,6 +38,62 @@ func (h *BusinessTermsHandler) RegisterRoutes(r chi.Router) {
 	r.Post("/business-term-edges", h.CreateEdge)
 	r.Delete("/business-term-edges/{id}", h.DeleteEdge)
 	r.Delete("/business-term-edges", h.DeleteEdgeByNodes)
+
+	r.Post("/business-terms/generate", h.GenerateBusinessTerm)
+}
+
+// GenerateBusinessTerm proposes (or reuses) a business term for a scanned
+// column/semantic term using Gemini, deduplicating against existing business
+// terms before ever creating a new catalog_node.
+func (h *BusinessTermsHandler) GenerateBusinessTerm(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	claims := jwtmiddleware.GetClaimsFromContext(r)
+	if claims == nil {
+		http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
+		return
+	}
+	tenantID := claims.TenantID
+	tenantDatasourceID := r.Header.Get("X-Tenant-Datasource-ID")
+
+	if tenantID == "" || tenantDatasourceID == "" {
+		http.Error(w, "X-Tenant-ID and X-Tenant-Datasource-ID headers are required", http.StatusBadRequest)
+		return
+	}
+
+	var req struct {
+		SemanticTermID   string   `json:"semantic_term_id"`
+		SemanticTermName string   `json:"semantic_term_name"`
+		Definition       string   `json:"definition"`
+		TableName        string   `json:"table_name"`
+		ColumnName       string   `json:"column_name"`
+		DataType         string   `json:"data_type"`
+		SampleValues     []string `json:"sample_values"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+	if req.SemanticTermName == "" {
+		http.Error(w, "semantic_term_name is required", http.StatusBadRequest)
+		return
+	}
+
+	result, err := h.service.GenerateBusinessTermForColumn(r.Context(), tenantID, tenantDatasourceID, analytics.GeneratedBusinessTermInput{
+		SemanticTermID:   req.SemanticTermID,
+		SemanticTermName: req.SemanticTermName,
+		Definition:       req.Definition,
+		TableName:        req.TableName,
+		ColumnName:       req.ColumnName,
+		DataType:         req.DataType,
+		SampleValues:     req.SampleValues,
+	})
+	if err != nil {
+		logging.GetLogger().Sugar().Errorf("Failed to generate business term: %v", err)
+		http.Error(w, fmt.Sprintf("Failed to generate business term: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	json.NewEncoder(w).Encode(result)
 }
 
 func (h *BusinessTermsHandler) FetchBusinessTerms(w http.ResponseWriter, r *http.Request) {

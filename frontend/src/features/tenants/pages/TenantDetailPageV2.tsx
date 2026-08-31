@@ -615,6 +615,7 @@ export const TenantDetailPageV2: React.FC = () => {
 
         const updateResult = await apiClient(`/api/tenant-ops/connections/${editingConnection.id}`, {
           method: 'PATCH',
+          headers: { ...(tenantId && { 'X-Tenant-ID': tenantId }) },
           body: JSON.stringify(updateObject),
         });
         connectionId = (updateResult as any).id;
@@ -638,7 +639,11 @@ export const TenantDetailPageV2: React.FC = () => {
             is_active: connectionForm.is_active,
         };
 
-        const createResult = await createConnection.mutate(createObject);
+        const createResult = await apiClient(`/api/tenant-ops/connections`, {
+          method: 'POST',
+          headers: { ...(tenantId && { 'X-Tenant-ID': tenantId }) },
+          body: JSON.stringify(createObject),
+        });
         connectionId = (createResult as any).id;
       }
 
@@ -648,10 +653,14 @@ export const TenantDetailPageV2: React.FC = () => {
             for (const product of ((instance.products || instance.tenant_products) || [])) {
               for (const ds of (product.tenant_product_datasources || product.datasources || [])) {
                 if (ds.connection_id === connectionId) {
-                  await apiClient(`/api/tenant-ops/product-datasources/${ds.id}/connection`, {
-                    method: 'PATCH',
-                    body: JSON.stringify({ connection_id: null }),
-                  });
+                  try {
+                    await apiClient(`/api/tenant-ops/connections/${connectionId}/unlink/${ds.id}`, {
+                      method: 'DELETE',
+                      headers: { ...(tenantId && { 'X-Tenant-ID': tenantId }) },
+                    });
+                  } catch (e) {
+                    console.warn('Failed to unlink previous connection datasource:', e);
+                  }
                 }
               }
             }
@@ -718,7 +727,7 @@ export const TenantDetailPageV2: React.FC = () => {
           if (freshTenant?.tenant_instances) {
             for (const instance of freshTenant.tenant_instances) {
               const targetProduct = ((instance.products || instance.tenant_products) || []).find((p: any) => p.id === tenantProductId);
-              const dsList = targetProduct.tenant_product_datasources || targetProduct.datasources;
+              const dsList = targetProduct?.tenant_product_datasources || targetProduct?.datasources;
               if (dsList) {
                 existingDatasource = dsList.find(
                     (ds: any) => {
@@ -743,26 +752,20 @@ export const TenantDetailPageV2: React.FC = () => {
                 return;
             }
 
-            const verifyConn = await apiClient(`/api/tenant-ops/connections/${connectionId}`, { method: 'GET' });
+            const verifyConn = await apiClient(`/api/tenant-ops/connections/${connectionId}`, {
+              method: 'GET',
+              headers: { ...(tenantId && { 'X-Tenant-ID': tenantId }) },
+            });
             if (!verifyConn) {
                 console.error("Critical: Connection created/updated but not found in subsequent query.", connectionId);
                 alert("Warning: Connection saved, but not visible yet. Linking to product skipped to prevent errors.");
                 return;
             }
 
-            const updateVars = {
-              tenant_instance_id: selectedConnectionInstance || null,
-              alpha_datasource_id: resolvedAlphaDatasourceId || null,
-              connection_id: connectionId,
-              is_active: existingDatasource.is_active,
-              source_name: connectionForm.name,
-              config: existingDatasource.config,
-            };
-
             try {
-                await apiClient(`/api/tenant-ops/product-datasources/${existingDatasource.id}/linking`, {
-                  method: 'PATCH',
-                  body: JSON.stringify(updateVars),
+                await apiClient(`/api/tenant-ops/connections/${connectionId}/link/${existingDatasource.id}`, {
+                  method: 'POST',
+                  headers: { ...(tenantId && { 'X-Tenant-ID': tenantId }) },
                 });
             } catch (innerErr) {
                 console.error("Failed to update TPD link:", innerErr);

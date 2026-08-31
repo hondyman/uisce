@@ -23,16 +23,9 @@ export const NotificationBell: React.FC = () => {
   const [loading, setLoading] = useState(false);
 
   const fetchUnreadCount = async () => {
-    if (!tenant?.id || !datasource?.id || !user?.id) {
-      setUnreadCount(0);
-      return;
-    }
-
     try {
       setLoading(true);
-      const data = await apiClient<any[]>(
-        `/api/bp-notifications/logs?tenant_id=${tenant.id}&tenant_instance_id=${datasource.id}&user_id=${user.id}`
-      );
+      const data = await apiClient<any[]>(`/api/bp-notifications/logs`);
       
       const unread = (Array.isArray(data) ? data : []).filter((n: any) => !n.opened_at).length;
       setUnreadCount(unread);

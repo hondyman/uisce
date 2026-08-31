@@ -36,7 +36,7 @@ func WithTenantTransaction(
 		}
 	}()
 
-	if _, err := tx.ExecContext(ctx, "SET LOCAL uisce.current_tenant = $1", tenantID); err != nil {
+	if _, err := tx.ExecContext(ctx, "SELECT set_config('uisce.current_tenant', $1, true)", tenantID); err != nil {
 		_ = tx.Rollback()
 		return fmt.Errorf("WithTenantTransaction: SET LOCAL uisce.current_tenant failed: %w", err)
 	}
