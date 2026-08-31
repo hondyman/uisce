@@ -111,3 +111,18 @@ Mapping back to the original request: "semantic layer audit datalake" = tier 1 (
 8. ⏳ StarRocks fan-out on calculation impact
 9. ⏳ Make exceptions/aggregator.go real
 10. ⏳ GSIFI completeness pass against compliance_reporter.go
+6. ✅ watermark_router (was already DataIntegrityManager, not missing) — hardened for tenant isolation + SQL injection (024ce65f7)
+7. ✅ Audit interceptor for Studio expression execution — already fires via auditTriggerExecution; fixed the real gap (UserID never populated) (21fb3422f)
+8. ⏳ StarRocks fan-out on calc impact — PARTIAL: RefreshPreAggWorkflow registered/callable for the first time (18c32f2f2). Remaining: extend Debezium beyond iam.* tables, build table/column→calculation reverse index, write CDC consumer to call the now-working workflow. User confirmed: no Postgres/app-level triggers for this (Debezium/CDC only), StarRocks stays one shared cluster with row-level tenant_id isolation (not per-tenant like Iceberg audit).
+9. ⏳ Make exceptions/aggregator.go real
+10. ⏳ GSIFI completeness pass against compliance_reporter.go
+
+## Deferred: non-trivial Postgres triggers on financial write paths
+
+User asked to also transition any other DB triggers off Postgres (Debezium/CDC only, triggers don't scale). Audit found 35 migration files with CREATE TRIGGER; ~50+ instances are harmless updated_at bookkeeping (leave alone). 8 do real cross-table business logic on hot financial tables and are the real concern:
+- check_capital_call_liquidity() — SUM() over accounts table inside every capital_calls write
+- update_capital_called_on_funding(), update_capital_distributed_on_distribution() — cascade UPDATEs to alternative_investments
+- update_holdings_on_transaction(), trigger_refresh_prices — crypto holdings/valuation cascades
+- trg_screen_investment_opportunity, trigger_refresh_rebalance_summary_after_audit
+
+User decision: finish item 8 first, then migrate these 8 as a distinct, carefully-tested pass (correctness-sensitive, money-moving logic).
