@@ -26,20 +26,33 @@ GRANT USAGE ON SCHEMA iam TO debezium_user;
 GRANT SELECT ON ALL TABLES IN SCHEMA iam TO debezium_user;
 ALTER DEFAULT PRIVILEGES IN SCHEMA iam GRANT SELECT ON TABLES TO debezium_user;
 
+-- Also grant on semantic.objects/semantic.heads (calculation-definition-change
+-- CDC — see PLAN_STUDIO_EVENTS_AUDIT.md item 8).
+GRANT USAGE ON SCHEMA semantic TO debezium_user;
+GRANT SELECT ON semantic.objects, semantic.heads TO debezium_user;
+
 -- Grant replication permissions
 ALTER USER debezium_user WITH REPLICATION;
 
 -- ============================================================================
--- STEP 3: Create Publication for IAM Tables
+-- STEP 3: Create Publication for IAM Tables + calculation-definition tables
 -- ============================================================================
 
--- Create publication that Debezium will subscribe to
-CREATE PUBLICATION iam_security_publication FOR TABLE 
+-- Create publication that Debezium will subscribe to. Deliberately scoped to
+-- specific tables, not schema-wide: semantic.objects/semantic.heads are the
+-- calculation-definition-change source; BO source-data tables (oms.*,
+-- master.*, etc.) are NOT included here, since they are dynamic per-tenant
+-- and should be added individually as calcs are registered against them
+-- (ALTER PUBLICATION iam_security_publication ADD TABLE <schema.table>),
+-- not captured as a blind wildcard on a GSIFI platform.
+CREATE PUBLICATION iam_security_publication FOR TABLE
     iam.roles,
     iam.permissions,
     iam.role_permissions,
     iam.user_roles,
-    iam.security_events;
+    iam.security_events,
+    semantic.objects,
+    semantic.heads;
 
 -- Verify publication
 SELECT * FROM pg_publication WHERE pubname = 'iam_security_publication';

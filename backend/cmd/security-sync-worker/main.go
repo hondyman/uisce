@@ -16,7 +16,9 @@ import (
 	_ "github.com/lib/pq"
 
 	"github.com/hondyman/uisce/backend/internal/sync"
+	preaggworkflows "github.com/hondyman/uisce/backend/temporal/workflows"
 	kafka "github.com/segmentio/kafka-go"
+	temporalclient "go.temporal.io/sdk/client"
 )
 
 // DebeziumEvent represents a CDC event from Debezium
@@ -46,6 +48,8 @@ type SyncWorkerConfig struct {
 	StarRocksUser      string
 	StarRocksPassword  string
 	TrinoDSN           string
+	TemporalAddress    string
+	TemporalNamespace  string
 }
 
 func main() {
@@ -60,6 +64,8 @@ func main() {
 		StarRocksUser:      getEnv("STARROCKS_USER", "root"),
 		StarRocksPassword:  getEnv("STARROCKS_PASSWORD", ""),
 		TrinoDSN:           getEnv("TRINO_DSN", "http://user@trino:8080?catalog=iceberg&schema=audit"),
+		TemporalAddress:    getEnv("TEMPORAL_ADDRESS", "localhost:7233"),
+		TemporalNamespace:  getEnv("TEMPORAL_NAMESPACE", "default"),
 	}
 
 	log.Println("🚀 Starting Security Sync Worker")
@@ -88,6 +94,20 @@ func main() {
 	// Initialize Tenant Worker
 	tenantWorker := sync.NewTenantWorker(db)
 
+	// Temporal client for the calc-refresh worker (starts RefreshPreAggWorkflow
+	// on calculation-definition changes). Non-fatal if unavailable: the calc
+	// refresh consumer simply won't start, same treatment as the StarRocks
+	// worker above.
+	temporalClient, err := temporalclient.Dial(temporalclient.Options{
+		HostPort:  config.TemporalAddress,
+		Namespace: config.TemporalNamespace,
+	})
+	if err != nil {
+		log.Printf("Warning: Failed to connect to Temporal: %v", err)
+	} else {
+		defer temporalClient.Close()
+	}
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -102,7 +122,7 @@ func main() {
 	}()
 
 	// Start sync workers
-	errChan := make(chan error, 4)
+	errChan := make(chan error, 6)
 
 	go func() {
 		errChan <- startPostgreSQLWorker(ctx, config, pgWorker)
@@ -119,6 +139,12 @@ func main() {
 	go func() {
 		errChan <- startTenantWorker(ctx, config, tenantWorker)
 	}()
+
+	if temporalClient != nil {
+		go func() {
+			errChan <- startCalcRefreshWorker(ctx, config, db, temporalClient)
+		}()
+	}
 
 	if bitemporalWorker != nil {
 		go func() {
@@ -265,6 +291,70 @@ func startTenantWorker(ctx context.Context, config SyncWorkerConfig, worker *syn
 		}
 
 		return nil
+	})
+}
+
+// startCalcRefreshWorker consumes CDC events for semantic.objects (calculation
+// definitions) and starts RefreshPreAggWorkflow for every StarRocks pre-agg
+// registered against the changed calculation, via calculation_preagg_map.
+// This is the CDC-driven replacement for a Postgres/app-level trigger on
+// calc changes, per PLAN_STUDIO_EVENTS_AUDIT.md item 8: Debezium already
+// captures semantic.objects (see debezium/application.properties), so this
+// worker reacts to that stream instead of firing synchronous DB logic
+// inline with the write.
+func startCalcRefreshWorker(ctx context.Context, config SyncWorkerConfig, db *sql.DB, temporalClient temporalclient.Client) error {
+	topics := []string{
+		fmt.Sprintf("%s.semantic.objects", config.DebeziumServerName),
+	}
+	return consumeTopics(ctx, config.KafkaBrokers, "sync-worker-calc-refresh", topics, func(event DebeziumEvent) error {
+		if event.Payload.Source.Table != "objects" || event.Payload.Op == "d" {
+			return nil
+		}
+		after := event.Payload.After
+		if after == nil {
+			return nil
+		}
+		objType, _ := after["type"].(string)
+		if objType != "calculation" {
+			return nil
+		}
+		calcID, _ := after["id"].(string)
+		tenantIDRaw := after["tenant_id"]
+		tenantID, _ := tenantIDRaw.(string)
+		if calcID == "" || tenantID == "" {
+			return nil
+		}
+
+		rows, err := db.QueryContext(ctx,
+			`SELECT preagg_id, starrocks_mv FROM calculation_preagg_map WHERE tenant_id = $1 AND calculation_id = $2`,
+			tenantID, calcID)
+		if err != nil {
+			return fmt.Errorf("failed looking up calculation_preagg_map for calc %s: %w", calcID, err)
+		}
+		defer rows.Close()
+
+		for rows.Next() {
+			var preAggID, starrocksMV string
+			if err := rows.Scan(&preAggID, &starrocksMV); err != nil {
+				log.Printf("[CalcRefresh] scan error for calc %s: %v", calcID, err)
+				continue
+			}
+			workflowID := fmt.Sprintf("preagg-refresh-%s-%s", tenantID, preAggID)
+			_, err := temporalClient.ExecuteWorkflow(ctx, temporalclient.StartWorkflowOptions{
+				ID:        workflowID,
+				TaskQueue: "analytics-worker",
+			}, preaggworkflows.RefreshPreAggWorkflow, preaggworkflows.RefreshPreAggInput{
+				PreAggID:    preAggID,
+				TenantID:    tenantID,
+				StarRocksMV: starrocksMV,
+			})
+			if err != nil {
+				log.Printf("[CalcRefresh] failed to start RefreshPreAggWorkflow for preagg %s: %v", preAggID, err)
+				continue
+			}
+			log.Printf("[CalcRefresh] started RefreshPreAggWorkflow %s for calc %s -> preagg %s", workflowID, calcID, preAggID)
+		}
+		return rows.Err()
 	})
 }
 
