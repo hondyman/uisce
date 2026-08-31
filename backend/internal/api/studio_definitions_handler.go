@@ -10,12 +10,17 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	"github.com/hondyman/uisce/backend/internal/semantic"
 	"github.com/jmoiron/sqlx"
 )
 
 // StudioDefinitionsHandler persists Page Studio page definitions and fires
 // the page_save trigger_types event on every committed write, following the
-// same tenant-scoped emit pattern as BOCRUDHandler.emitBORowEvent.
+// same tenant-scoped emit pattern as BOCRUDHandler.emitBORowEvent. Every
+// save also records a "page_definition" version through the same
+// semantic.SemanticVersionStore that apistudio.Service already uses for
+// "api_endpoint" — this is the tier-3 metadata-change audit trail
+// (backend/internal/semantic/version_store.go), not a new mechanism.
 //
 // API Studio endpoint definitions are handled separately by
 // APIStudioHandler (apistudio_handler.go), which wires the existing
@@ -23,12 +28,35 @@ import (
 // semantic.api_endpoints table) rather than a parallel table — see that
 // file for why.
 type StudioDefinitionsHandler struct {
-	db      *sqlx.DB
-	trigger *TriggerEngine
+	db       *sqlx.DB
+	trigger  *TriggerEngine
+	versions *semantic.SemanticVersionStore
 }
 
 func NewStudioDefinitionsHandler(db *sqlx.DB, trigger *TriggerEngine) *StudioDefinitionsHandler {
-	return &StudioDefinitionsHandler{db: db, trigger: trigger}
+	return &StudioDefinitionsHandler{db: db, trigger: trigger, versions: semantic.NewSemanticVersionStore(db)}
+}
+
+// recordPageVersion records the saved page as a new "page_definition"
+// version. Failures are logged, not surfaced to the caller: metadata
+// versioning must never block a page save from succeeding.
+func (h *StudioDefinitionsHandler) recordPageVersion(ctx context.Context, tenantID uuid.UUID, page pageDefinition, actor string) {
+	payload, err := json.Marshal(page)
+	if err != nil {
+		log.Printf("[WARN] failed marshaling page %s for versioning: %v", page.ID, err)
+		return
+	}
+	tenantIDStr := tenantID.String()
+	err = h.versions.SaveObject(ctx, semantic.SemanticObject{
+		ID:       page.ID,
+		Env:      "default",
+		TenantID: &tenantIDStr,
+		Type:     "page_definition",
+		Payload:  payload,
+	}, actor)
+	if err != nil {
+		log.Printf("[WARN] failed recording page_definition version for %s: %v", page.ID, err)
+	}
 }
 
 func (h *StudioDefinitionsHandler) emitStudioEvent(triggerKey string, tenantID uuid.UUID, targetEntity, entityID string, eventData map[string]interface{}) {
@@ -171,6 +199,7 @@ func (h *StudioDefinitionsHandler) upsertPage(w http.ResponseWriter, r *http.Req
 	h.emitStudioEvent("page_save", tenantID, "page_definition", page.ID, map[string]interface{}{
 		"id": page.ID, "name": page.Name, "slug": page.Slug, "version": page.Version,
 	})
+	h.recordPageVersion(r.Context(), tenantID, page, actorFromRequest(r))
 
 	writeJSON(w, http.StatusOK, page)
 }
