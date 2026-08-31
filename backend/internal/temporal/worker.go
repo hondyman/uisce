@@ -5,12 +5,17 @@ import (
 	"fmt"
 	"log"
 
+	_ "github.com/go-sql-driver/mysql"
+	"github.com/jmoiron/sqlx"
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/worker"
 	"go.uber.org/zap"
 
+	"github.com/hondyman/uisce/backend/internal/analytics"
 	"github.com/hondyman/uisce/backend/internal/temporal/activities"
 	"github.com/hondyman/uisce/backend/internal/temporal/workflows"
+	preaggactivities "github.com/hondyman/uisce/backend/temporal/activities"
+	preaggworkflows "github.com/hondyman/uisce/backend/temporal/workflows"
 )
 
 // WorkerConfig wraps configuration for starting a Temporal worker
@@ -22,6 +27,12 @@ type WorkerConfig struct {
 	DB                    *sql.DB
 	ControlDB             *sql.DB
 	Logger                *zap.SugaredLogger
+	// StarRocksDSN, if set, enables RefreshPreAggWorkflow's StarRocks
+	// materialized-view refresh activity. DSN format matches
+	// go-sql-driver/mysql, e.g. "user:pass@tcp(host:9030)/". Left empty,
+	// the workflow still registers and runs, but its StarRocks refresh
+	// step is a no-op (see RefreshStarRocksMVActivity's nil-conn guard).
+	StarRocksDSN string
 }
 
 // StartWorker creates and starts a Temporal worker with all workflows and activities registered
@@ -54,6 +65,7 @@ func StartWorker(cfg WorkerConfig) (worker.Worker, error) {
 
 	// Register all activities with dependencies
 	registerActivities(w, cfg.DB, cfg.ControlDB, cfg.Logger)
+	registerPreAggRefresh(w, cfg.DB, cfg.StarRocksDSN)
 
 	log.Printf("Temporal worker initialized: TaskQueue=%s, Namespace=%s", cfg.TaskQueue, cfg.Namespace)
 
@@ -117,4 +129,44 @@ func registerActivities(w worker.Worker, db *sql.DB, controlDB *sql.DB, logger *
 	}
 
 	log.Println("Activities registered: RunDataFusionQueryActivity, RunSparkJobActivity, RunPythonScriptActivity, PublishEventActivity, TenantActivities, TenantProvisioningActivities")
+}
+
+// registerPreAggRefresh registers RefreshPreAggWorkflow and its activities.
+// This workflow previously existed but was never registered with any
+// Temporal worker, so nothing could ever execute it — see
+// PLAN_STUDIO_EVENTS_AUDIT.md item 8. db is required (activities need it
+// for lifecycle state transitions); starrocksDSN is optional and, left
+// empty, makes the StarRocks refresh step a documented no-op rather than
+// an error.
+func registerPreAggRefresh(w worker.Worker, db *sql.DB, starrocksDSN string) {
+	if db == nil {
+		log.Println("registerPreAggRefresh: no DB configured, skipping RefreshPreAggWorkflow registration")
+		return
+	}
+	sqlxDB := sqlx.NewDb(db, "postgres")
+
+	var starrocksConn *sqlx.DB
+	if starrocksDSN != "" {
+		conn, err := sqlx.Open("mysql", starrocksDSN)
+		if err != nil {
+			log.Printf("registerPreAggRefresh: failed to open StarRocks connection, refresh step will no-op: %v", err)
+		} else {
+			starrocksConn = conn
+		}
+	}
+
+	lifecycleSvc := analytics.NewPreAggLifecycleService(sqlxDB)
+	// preAggSvc and trinoConn are unused by the activities RefreshPreAggWorkflow
+	// actually calls (Iceberg/Trino refresh is disabled) — nil is safe here.
+	preaggActs := preaggactivities.NewPreAggRefreshActivities(sqlxDB, nil, lifecycleSvc, nil, starrocksConn)
+
+	w.RegisterWorkflow(preaggworkflows.RefreshPreAggWorkflow)
+	w.RegisterActivity(preaggActs.MarkPreAggRefreshingActivity)
+	w.RegisterActivity(preaggActs.RefreshStarRocksMVActivity)
+	w.RegisterActivity(preaggActs.MarkPreAggFailedActivity)
+	w.RegisterActivity(preaggActs.MarkPreAggActiveActivity)
+	w.RegisterActivity(preaggActs.FetchPreAggStatsActivity)
+	w.RegisterActivity(preaggActs.ScheduleNextRefreshActivity)
+
+	log.Printf("RefreshPreAggWorkflow registered (StarRocks refresh %s)", map[bool]string{true: "enabled", false: "disabled: no STARROCKS_DSN configured"}[starrocksConn != nil])
 }

@@ -83,6 +83,7 @@ func main() {
 		DB:                    db,
 		ControlDB:             controlDB,
 		Logger:                logger,
+		StarRocksDSN:          os.Getenv("STARROCKS_DSN"),
 	})
 	if err != nil {
 		log.Fatalf("Failed to start worker: %v", err)
