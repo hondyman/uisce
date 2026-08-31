@@ -9,11 +9,14 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/hondyman/uisce/backend/internal/platform_intelligence/exceptions"
 )
 
 // AnomalyDetector identifies unusual job behavior patterns
 type AnomalyDetector struct {
-	logger *slog.Logger
+	logger       *slog.Logger
+	exceptionHub *exceptions.ExceptionAggregator
+	tenantID     uuid.UUID
 }
 
 // NewAnomalyDetector creates a new anomaly detector
@@ -21,6 +24,15 @@ func NewAnomalyDetector(logger *slog.Logger) *AnomalyDetector {
 	return &AnomalyDetector{
 		logger: logger,
 	}
+}
+
+// SetExceptionHub wires this in-memory detector into the shared platform
+// exception hub, scoped to a single tenant (this detector runs per-tenant
+// job history, unlike the ASO/services detectors which are already
+// multi-tenant aware).
+func (d *AnomalyDetector) SetExceptionHub(hub *exceptions.ExceptionAggregator, tenantID uuid.UUID) {
+	d.exceptionHub = hub
+	d.tenantID = tenantID
 }
 
 // JobExecutionMetric represents metrics from a job execution
@@ -206,7 +218,38 @@ func (d *AnomalyDetector) DetectAnomalies(
 		"anomaly_rate", fmt.Sprintf("%.2f%%", report.AnomalyRate*100),
 	)
 
+	d.publishToExceptionHub(ctx, allAnomalies)
+
 	return report, nil
+}
+
+// publishToExceptionHub forwards each detected anomaly into the shared
+// platform exception hub, keeping this detector's own in-memory
+// AnomalyReport/Pattern logic untouched. No-op when SetExceptionHub was
+// never called (e.g. in tests).
+func (d *AnomalyDetector) publishToExceptionHub(ctx context.Context, anomalies []Anomaly) {
+	if d.exceptionHub == nil || d.tenantID == uuid.Nil {
+		return
+	}
+	for _, a := range anomalies {
+		evidence := []string{
+			fmt.Sprintf("metric:%s", a.Metric),
+			fmt.Sprintf("expected:%.2f", a.ExpectedValue),
+			fmt.Sprintf("actual:%.2f", a.ActualValue),
+			fmt.Sprintf("deviation:%.2f", a.Deviation),
+		}
+		_, err := d.exceptionHub.Publish(ctx, exceptions.Exception{
+			TenantID:    d.tenantID,
+			Type:        exceptions.ExceptionSLOBreach,
+			Severity:    a.Severity,
+			Source:      fmt.Sprintf("job:%s", a.JobName),
+			Description: a.Description,
+			Evidence:    evidence,
+		})
+		if err != nil {
+			d.logger.Warn("failed to publish exception hub signal", "error", err, "job", a.JobName)
+		}
+	}
 }
 
 // calculateBaseline computes statistical baseline

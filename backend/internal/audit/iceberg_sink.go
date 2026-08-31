@@ -295,6 +295,9 @@ func (c *IcebergSinkConsumer) getTopicForEvent(eventType string) string {
 		return TopicComplianceViolations
 	case EventTypeAINarrativeGenerated:
 		return TopicAISuggestions
+	case EventTypeExceptionCreated, EventTypeExceptionAutofixAttempted, EventTypeExceptionAutoFixed,
+		EventTypeExceptionEscalated, EventTypeExceptionClosed:
+		return TopicExceptionLifecycle
 	default:
 		return "unknown"
 	}
