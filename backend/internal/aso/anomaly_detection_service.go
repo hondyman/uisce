@@ -3,9 +3,11 @@ package aso
 import (
 	"context"
 	"encoding/json"
+	"log"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/hondyman/uisce/backend/internal/platform_intelligence/exceptions"
 	"github.com/jmoiron/sqlx"
 )
 
@@ -131,10 +133,11 @@ type AnomalyDetectionService interface {
 
 // anomalyDetectionService implements AnomalyDetectionService
 type anomalyDetectionService struct {
-	db        *sqlx.DB
-	optRepo   ASOOptimizationRepository
-	telemetry TelemetryService
-	config    *ASOConfig
+	db           *sqlx.DB
+	optRepo      ASOOptimizationRepository
+	telemetry    TelemetryService
+	config       *ASOConfig
+	exceptionHub *exceptions.ExceptionAggregator
 }
 
 // NewAnomalyDetectionService creates a new anomaly detection service
@@ -148,6 +151,13 @@ func NewAnomalyDetectionService(db *sqlx.DB, optRepo ASOOptimizationRepository, 
 		telemetry: telemetry,
 		config:    config,
 	}
+}
+
+// SetExceptionHub wires this detector into the shared platform exception hub
+// (backend/internal/platform_intelligence/exceptions). Optional: when unset,
+// persistSignal keeps writing only to semantic.drift_signal as before.
+func (s *anomalyDetectionService) SetExceptionHub(hub *exceptions.ExceptionAggregator) {
+	s.exceptionHub = hub
 }
 
 // ScanForAnomalies checks all optimizations for drift
@@ -406,7 +416,34 @@ func (s *anomalyDetectionService) persistSignal(ctx context.Context, signal *Dri
 		signal.TenantID, signal.Env, signal.SignalType, signal.Severity,
 		signal.Status, signal.Evidence, signal.Recommendation, signal.DetectedAt)
 
-	return err
+	if err != nil {
+		return err
+	}
+
+	// Also publish into the shared, tenant-isolated platform exception hub
+	// so drift signals show up alongside every other exception type and get
+	// deduped/auto-fix-eligible like the rest. Keeps semantic.drift_signal
+	// as the detector's own detailed record; this is additive, not a
+	// replacement.
+	if s.exceptionHub != nil && signal.TenantID != nil {
+		var evidence []string
+		if len(signal.Evidence) > 0 {
+			evidence = append(evidence, string(signal.Evidence))
+		}
+		_, pubErr := s.exceptionHub.Publish(ctx, exceptions.Exception{
+			TenantID:    *signal.TenantID,
+			Type:        exceptions.ExceptionSemanticDrift,
+			Severity:    string(signal.Severity),
+			Source:      string(signal.TargetType) + ":" + signal.TargetName,
+			Description: signal.Recommendation,
+			Evidence:    evidence,
+		})
+		if pubErr != nil {
+			log.Printf("[aso] failed to publish exception hub signal: %v", pubErr)
+		}
+	}
+
+	return nil
 }
 
 // GetOpenSignals returns unresolved drift signals

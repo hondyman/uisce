@@ -58,6 +58,7 @@ func main() {
 		audit.TopicOrchestrationEvents,
 		audit.TopicComplianceViolations,
 		audit.TopicAISuggestions,
+		audit.TopicExceptionLifecycle,
 	}
 
 	log.Printf("[Audit-Sink] Kafka Brokers: %s", kafkaBrokers)

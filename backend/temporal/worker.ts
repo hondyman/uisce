@@ -38,6 +38,13 @@ export async function createWorker() {
       autoApproveStep: activities.autoApproveStep,
       autoRejectStep: activities.autoRejectStep,
       logEscalationEvent: activities.logEscalationEvent,
+
+      // Exception remediation activities
+      attemptAutoFix: activities.attemptAutoFix,
+      verifyResolved: activities.verifyResolved,
+      recordAttempt: activities.recordAttempt,
+      closeExceptionAsFixed: activities.closeExceptionAsFixed,
+      notifyHumans: activities.notifyHumans,
     },
 
     // Activity execution settings

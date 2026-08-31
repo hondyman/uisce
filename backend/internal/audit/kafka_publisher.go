@@ -19,7 +19,23 @@ type AuditPublisher interface {
 	PublishSemanticSnapshot(ctx context.Context, event SemanticSnapshotEvent) error
 	PublishOrchestrationEvent(ctx context.Context, event OrchestrationWorkflowEvent) error
 	PublishComplianceViolation(ctx context.Context, event ComplianceViolationEvent) error
+	PublishExceptionLifecycle(ctx context.Context, event ExceptionLifecycleEvent) error
 	Close() error
+}
+
+// ExceptionLifecycleEvent captures one step of a platform exception's
+// lifecycle (created, autofix_attempted, auto_fixed, escalated, closed) for
+// the tier-1 per-tenant Iceberg audit trail.
+type ExceptionLifecycleEvent struct {
+	ExceptionID string    `json:"exceptionId"`
+	TenantID    string    `json:"tenantId"`
+	Type        string    `json:"type"`   // ExceptionType
+	Stage       string    `json:"stage"`  // created, autofix_attempted, auto_fixed, escalated, closed
+	Status      string    `json:"status"` // ExceptionStatus at the time of this event
+	Severity    string    `json:"severity"`
+	Source      string    `json:"source"`
+	Detail      string    `json:"detail,omitempty"`
+	OccurredAt  time.Time `json:"occurredAt"`
 }
 
 // RedpandaAuditPublisher publishes audit events to Redpanda topics
@@ -205,6 +221,51 @@ func (p *RedpandaAuditPublisher) PublishComplianceViolation(ctx context.Context,
 	}
 
 	return p.publishToRedpanda(ctx, TopicComplianceViolations, &envelope, event.TenantID)
+}
+
+// exceptionEventTypeForStage maps a lifecycle stage to its Kafka event type
+// so getTopicForEvent routes it to TopicExceptionLifecycle.
+func exceptionEventTypeForStage(stage string) string {
+	switch stage {
+	case "autofix_attempted":
+		return EventTypeExceptionAutofixAttempted
+	case "auto_fixed":
+		return EventTypeExceptionAutoFixed
+	case "escalated":
+		return EventTypeExceptionEscalated
+	case "closed":
+		return EventTypeExceptionClosed
+	default:
+		return EventTypeExceptionCreated
+	}
+}
+
+// PublishExceptionLifecycle publishes one exception lifecycle event (see
+// ExceptionAggregator.Publish/AppendAutofixAttempt/Close and the
+// ExceptionRemediationWorkflow, all of which call this at each stage
+// transition) into TopicExceptionLifecycle for IcebergSinkConsumer to batch
+// into the tenant's Iceberg bucket.
+func (p *RedpandaAuditPublisher) PublishExceptionLifecycle(ctx context.Context, event ExceptionLifecycleEvent) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+
+	payload, err := json.Marshal(event)
+	if err != nil {
+		return fmt.Errorf("failed to marshal exception lifecycle event: %w", err)
+	}
+
+	envelope := KafkaEventEnvelope{
+		EventID:   uuid.New().String(),
+		EventType: exceptionEventTypeForStage(event.Stage),
+		Version:   "1.0",
+		Timestamp: time.Now().UTC(),
+		TenantID:  event.TenantID,
+		Source:    "platform_intelligence.exceptions",
+		Payload:   payload,
+	}
+
+	return p.publishToRedpanda(ctx, TopicExceptionLifecycle, &envelope, event.TenantID)
 }
 
 // publishToRedpanda sends an event to Redpanda with tenant-based partitioning

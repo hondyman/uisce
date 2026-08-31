@@ -173,6 +173,7 @@ const (
 	TopicOrchestrationEvents  = "audit.orchestration.events"
 	TopicComplianceViolations = "audit.compliance.violations"
 	TopicAISuggestions        = "audit.ai.suggestions"
+	TopicExceptionLifecycle   = "audit.platform.exceptions"
 )
 
 // Event types for routing
@@ -188,4 +189,13 @@ const (
 	EventTypeWorkflowFailed       = "WORKFLOW_FAILED"
 	EventTypeComplianceViolation  = "COMPLIANCE_VIOLATION"
 	EventTypeAINarrativeGenerated = "AI_NARRATIVE_GENERATED"
+
+	// Exception lifecycle events, published to TopicExceptionLifecycle and
+	// consumed by IcebergSinkConsumer into the tier-1 per-tenant audit
+	// store, same as every other audit event.
+	EventTypeExceptionCreated          = "EXCEPTION_CREATED"
+	EventTypeExceptionAutofixAttempted = "EXCEPTION_AUTOFIX_ATTEMPTED"
+	EventTypeExceptionAutoFixed        = "EXCEPTION_AUTO_FIXED"
+	EventTypeExceptionEscalated        = "EXCEPTION_ESCALATED"
+	EventTypeExceptionClosed           = "EXCEPTION_CLOSED"
 )
