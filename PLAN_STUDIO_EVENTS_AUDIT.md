@@ -98,3 +98,16 @@ Mapping back to the original request: "semantic layer audit datalake" = tier 1 (
 
 - No new expression engine, no new workflow engine, no new StarRocks client, no new exception-tracking data model — all reused/fixed in place.
 - No cross-tenant raw-data AI analysis — isolation is a hard requirement, not a nice-to-have.
+
+## Progress log
+
+1. ✅ Tier-1/tier-2 tenant isolation (commit a506651f0)
+2. ✅ trigger_types migration for page/api categories + api_endpoint_save (a506651f0, 8685c3400)
+3. ✅ Studio save/submit handler wiring — Page Studio page_definitions (a4c5bc897, corrected 8685c3400); API Studio wired to pre-existing apistudio package (8685c3400)
+4. ✅ Expression builder surfaced in both Studios (618fc163d)
+5. ✅ Tier-3 metadata versioning for Page Studio via existing semantic.SemanticVersionStore (1dd769b45)
+6. ⏳ watermark_router — next
+7. ⏳ Audit interceptor for Studio expression execution into tier 1
+8. ⏳ StarRocks fan-out on calculation impact
+9. ⏳ Make exceptions/aggregator.go real
+10. ⏳ GSIFI completeness pass against compliance_reporter.go
