@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"os"
 	"regexp"
 	"sort"
 	"strconv"
@@ -773,13 +774,47 @@ func (m *DataIntegrityManager) validateRowCounts(expected, actual int64) bool {
 	return diff <= m.config.RowCountMismatchThreshold
 }
 
+// safeIdentifierRE allowlists the characters permitted in a table name,
+// tenant ID, or datasource ID before they are interpolated into StarRocks
+// EXPORT/DELETE statements. StarRocks does not support bind parameters for
+// identifiers or for its EXPORT DDL, so this allowlist is the injection
+// defense for exportToParquet/deleteFromHot.
+var safeIdentifierRE = regexp.MustCompile(`^[a-zA-Z0-9_-]+$`)
+
+func validateIdentifier(kind, value string) error {
+	if !safeIdentifierRE.MatchString(value) {
+		return fmt.Errorf("invalid %s %q: only alphanumerics, '-' and '_' are allowed", kind, value)
+	}
+	return nil
+}
+
+// coldStorageBucket returns the per-tenant cold-storage bucket name. Tenant
+// data must not share physical storage with any other tenant's cold tier
+// (same GSIFI isolation requirement as the audit Iceberg sinks in
+// backend/internal/audit/iceberg_sink.go).
+func coldStorageBucket(tenantID string) string {
+	base := os.Getenv("COLD_STORAGE_BUCKET")
+	if base == "" {
+		base = "semantic-cold"
+	}
+	return fmt.Sprintf("%s-%s", base, tenantID)
+}
+
 func (m *DataIntegrityManager) exportToParquet(ctx context.Context, tableName, tenantID, datasourceID string, startDate, endDate time.Time) error {
-	// StarRocks EXPORT TABLE command to write Parquet to S3
+	for kind, v := range map[string]string{"table name": tableName, "tenant ID": tenantID, "datasource ID": datasourceID} {
+		if err := validateIdentifier(kind, v); err != nil {
+			return err
+		}
+	}
+
+	// StarRocks EXPORT TABLE command to write Parquet to S3. StarRocks'
+	// EXPORT statement doesn't support bind parameters, so identifiers are
+	// validated above and only well-formed date strings are interpolated.
 	exportSQL := fmt.Sprintf(`
 		EXPORT TABLE semantic_hot.%s
 		WHERE tenant_id = '%s' AND datasource_id = '%s'
 		  AND as_of_date >= '%s' AND as_of_date < '%s'
-		TO 's3://your-bucket/semantic_cold/%s/%s/%s/%s/'
+		TO 's3://%s/%s/%s/%s/'
 		PROPERTIES (
 			"format" = "parquet",
 			"column_separator" = ",",
@@ -787,13 +822,19 @@ func (m *DataIntegrityManager) exportToParquet(ctx context.Context, tableName, t
 		)
 	`, tableName, tenantID, datasourceID,
 		startDate.Format("2006-01-02"), endDate.Format("2006-01-02"),
-		tableName, tenantID, datasourceID, endDate.Format("2006"))
+		coldStorageBucket(tenantID), tableName, datasourceID, endDate.Format("2006"))
 
 	_, err := m.db.ExecContext(ctx, exportSQL)
 	return err
 }
 
 func (m *DataIntegrityManager) deleteFromHot(ctx context.Context, tableName, tenantID, datasourceID string, startDate, endDate time.Time) error {
+	for kind, v := range map[string]string{"table name": tableName, "tenant ID": tenantID, "datasource ID": datasourceID} {
+		if err := validateIdentifier(kind, v); err != nil {
+			return err
+		}
+	}
+
 	deleteSQL := fmt.Sprintf(`
 		DELETE FROM semantic_hot.%s
 		WHERE tenant_id = '%s' AND datasource_id = '%s'
