@@ -3601,6 +3601,9 @@ func (s *Server) registerBOCRUDRoutes(r chi.Router, sqlxDB *sqlx.DB) {
 
 	studioHandler := NewStudioDefinitionsHandler(sqlxDB, triggerEngine)
 	studioHandler.RegisterRoutes(r)
+
+	apiStudioHandler := NewAPIStudioHandler(sqlxDB, triggerEngine)
+	apiStudioHandler.RegisterRoutes(r)
 }
 
 // registerNBAEngineRoutes mounts next-best-action and recommendation engine endpoints
