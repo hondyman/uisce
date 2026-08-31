@@ -106,16 +106,11 @@ Mapping back to the original request: "semantic layer audit datalake" = tier 1 (
 3. ✅ Studio save/submit handler wiring — Page Studio page_definitions (a4c5bc897, corrected 8685c3400); API Studio wired to pre-existing apistudio package (8685c3400)
 4. ✅ Expression builder surfaced in both Studios (618fc163d)
 5. ✅ Tier-3 metadata versioning for Page Studio via existing semantic.SemanticVersionStore (1dd769b45)
-6. ⏳ watermark_router — next
-7. ⏳ Audit interceptor for Studio expression execution into tier 1
-8. ✅ StarRocks fan-out on calculation impact
-9. ⏳ Make exceptions/aggregator.go real
-10. ⏳ GSIFI completeness pass against compliance_reporter.go
 6. ✅ watermark_router (was already DataIntegrityManager, not missing) — hardened for tenant isolation + SQL injection (024ce65f7)
 7. ✅ Audit interceptor for Studio expression execution — already fires via auditTriggerExecution; fixed the real gap (UserID never populated) (21fb3422f)
 8. ✅ StarRocks fan-out on calc impact — RefreshPreAggWorkflow registered (18c32f2f2); Debezium extended to semantic.objects/semantic.heads, calculation_preagg_map reverse index, and startCalcRefreshWorker CDC consumer completing the pipeline (ea1f07d74). CDC-driven, no Postgres/app-level triggers; StarRocks stays one shared cluster with row-level tenant_id isolation.
-9. ⏳ Make exceptions/aggregator.go real
-10. ⏳ GSIFI completeness pass against compliance_reporter.go
+9. ⏳ Make exceptions/aggregator.go real (on hold per user)
+10. ⏳ GSIFI completeness pass against compliance_reporter.go (on hold per user)
 
 ## Deferred: non-trivial Postgres triggers on financial write paths
 
