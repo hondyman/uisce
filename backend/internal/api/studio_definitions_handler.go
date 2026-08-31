@@ -59,13 +59,14 @@ func (h *StudioDefinitionsHandler) recordPageVersion(ctx context.Context, tenant
 	}
 }
 
-func (h *StudioDefinitionsHandler) emitStudioEvent(triggerKey string, tenantID uuid.UUID, targetEntity, entityID string, eventData map[string]interface{}) {
+func (h *StudioDefinitionsHandler) emitStudioEvent(triggerKey string, tenantID uuid.UUID, userID, targetEntity, entityID string, eventData map[string]interface{}) {
 	if h.trigger == nil {
 		return
 	}
 	go func() {
 		_, err := h.trigger.EvaluateTriggers(context.Background(), &TriggerContext{
 			TenantID:     tenantID.String(),
+			UserID:       userID,
 			TriggerKey:   triggerKey,
 			TargetEntity: targetEntity,
 			EntityID:     entityID,
@@ -196,10 +197,11 @@ func (h *StudioDefinitionsHandler) upsertPage(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	h.emitStudioEvent("page_save", tenantID, "page_definition", page.ID, map[string]interface{}{
+	actor := actorFromRequest(r)
+	h.emitStudioEvent("page_save", tenantID, actor, "page_definition", page.ID, map[string]interface{}{
 		"id": page.ID, "name": page.Name, "slug": page.Slug, "version": page.Version,
 	})
-	h.recordPageVersion(r.Context(), tenantID, page, actorFromRequest(r))
+	h.recordPageVersion(r.Context(), tenantID, page, actor)
 
 	writeJSON(w, http.StatusOK, page)
 }

@@ -56,13 +56,14 @@ func (h *BOCRUDHandler) resolveWritableColumns(ctx context.Context, drivingTable
 // emitBORowEvent fires a best-effort trigger evaluation after a committed write.
 // Failures are logged, never surfaced to the caller — trigger evaluation must not
 // roll back or fail an otherwise-successful BO mutation.
-func (h *BOCRUDHandler) emitBORowEvent(triggerKey string, tenantID uuid.UUID, boKey, recordID string, eventData map[string]interface{}) {
+func (h *BOCRUDHandler) emitBORowEvent(triggerKey string, tenantID uuid.UUID, userID, boKey, recordID string, eventData map[string]interface{}) {
 	if h.trigger == nil {
 		return
 	}
 	go func() {
 		_, err := h.trigger.EvaluateTriggers(context.Background(), &TriggerContext{
 			TenantID:     tenantID.String(),
+			UserID:       userID,
 			TriggerKey:   triggerKey,
 			TargetEntity: boKey,
 			EntityID:     recordID,
@@ -290,7 +291,7 @@ func (h *BOCRUDHandler) HandleUpdateBORecord(w http.ResponseWriter, r *http.Requ
 	// Clean byte arrays or UUIDs for JSON serialization
 	cleanScanResult(result)
 
-	h.emitBORowEvent("row_update", tenantID, boKey, recordID, result)
+	h.emitBORowEvent("row_update", tenantID, actorFromRequest(r), boKey, recordID, result)
 
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(result)
@@ -371,7 +372,7 @@ func (h *BOCRUDHandler) HandleCreateBORecord(w http.ResponseWriter, r *http.Requ
 	cleanScanResult(result)
 
 	newRecordID := fmt.Sprintf("%v", result[boMeta.KeyColumn])
-	h.emitBORowEvent("row_insert", tenantID, boKey, newRecordID, result)
+	h.emitBORowEvent("row_insert", tenantID, actorFromRequest(r), boKey, newRecordID, result)
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
@@ -531,7 +532,7 @@ func (h *BOCRUDHandler) HandleDeleteBORecord(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	h.emitBORowEvent("row_delete", tenantID, boKey, recordID, nil)
+	h.emitBORowEvent("row_delete", tenantID, actorFromRequest(r), boKey, recordID, nil)
 
 	w.WriteHeader(http.StatusNoContent)
 }

@@ -55,13 +55,14 @@ func NewAPIStudioHandler(db *sqlx.DB, trigger *TriggerEngine) *APIStudioHandler 
 	return &APIStudioHandler{svc: svc, repo: repo, trigger: trigger}
 }
 
-func (h *APIStudioHandler) emitEndpointSaveEvent(tenantID uuid.UUID, ep *apistudio.APIEndpoint) {
+func (h *APIStudioHandler) emitEndpointSaveEvent(tenantID uuid.UUID, userID string, ep *apistudio.APIEndpoint) {
 	if h.trigger == nil {
 		return
 	}
 	go func() {
 		_, err := h.trigger.EvaluateTriggers(context.Background(), &TriggerContext{
 			TenantID:     tenantID.String(),
+			UserID:       userID,
 			TriggerKey:   "api_endpoint_save",
 			TargetEntity: "api_definition",
 			EntityID:     ep.ID.String(),
@@ -151,7 +152,7 @@ func (h *APIStudioHandler) HandleSaveEndpoint(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	h.emitEndpointSaveEvent(tenantID, &ep)
+	h.emitEndpointSaveEvent(tenantID, actor, &ep)
 	writeJSON(w, http.StatusOK, ep)
 }
 
